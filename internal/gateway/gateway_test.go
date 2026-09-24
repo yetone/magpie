@@ -354,6 +354,50 @@ func TestResponsesClientChatUpstream(t *testing.T) {
 	}
 }
 
+// Parallel tool calls each keep their own call_id: a repeated one makes
+// the next turn fail upstream with "Duplicate value for 'tool_call_id'".
+func TestResponsesClientParallelToolCalls(t *testing.T) {
+	f := &fake{t: t, reply: sse(
+		`data: {"id":"c1","model":"m1","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"shell","arguments":""}}]}}]}`,
+		`data: {"id":"c1","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"cmd\":\"ls\"}"}}]}}]}`,
+		`data: {"id":"c1","choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_b","function":{"name":"shell","arguments":""}}]}}]}`,
+		`data: {"id":"c1","choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"cmd\":\"pwd\"}"}}]}}]}`,
+		`data: {"id":"c1","choices":[{"delta":{"tool_calls":[{"index":2,"id":"call_c","function":{"name":"shell","arguments":"{\"cmd\":\"date\"}"}}]}}]}`,
+		`data: {"id":"c1","choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+		`data: [DONE]`)}
+	setup(t, provider.Chat, f)
+	code, body := post(t, "/v1/responses", `{"model":"m1","stream":true,
+	  "input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"run three"}]}],
+	  "tools":[{"type":"function","name":"shell","parameters":{"type":"object"}}]}`)
+	if code != 200 {
+		t.Fatalf("status %d: %s", code, body)
+	}
+	var got []string
+	for _, e := range events(body) {
+		switch e["type"] {
+		case "response.function_call_arguments.done":
+			got = append(got, fmt.Sprintf("args.done %v %v", e["call_id"], e["arguments"]))
+		case "response.output_item.done":
+			item := e["item"].(map[string]any)
+			got = append(got, fmt.Sprintf("item.done %v %v", item["call_id"], item["arguments"]))
+		case "response.completed":
+			for _, it := range e["response"].(map[string]any)["output"].([]any) {
+				item := it.(map[string]any)
+				got = append(got, fmt.Sprintf("output %v %v", item["call_id"], item["arguments"]))
+			}
+		}
+	}
+	want := []string{
+		`args.done call_a {"cmd":"ls"}`, `item.done call_a {"cmd":"ls"}`,
+		`args.done call_b {"cmd":"pwd"}`, `item.done call_b {"cmd":"pwd"}`,
+		`args.done call_c {"cmd":"date"}`, `item.done call_c {"cmd":"date"}`,
+		`output call_a {"cmd":"ls"}`, `output call_b {"cmd":"pwd"}`, `output call_c {"cmd":"date"}`,
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("tool calls:\n got %s\nwant %s", strings.Join(got, "\n     "), strings.Join(want, "\n     "))
+	}
+}
+
 func TestPassthroughRewritesModel(t *testing.T) {
 	f := &fake{t: t, ctype: "application/json", reply: `{"id":"msg","type":"message","content":[]}`}
 	setup(t, provider.Anthropic, f)
