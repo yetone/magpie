@@ -505,7 +505,33 @@ func TestCodexAccountUpstream(t *testing.T) {
 		`data: {"type":"response.created","response":{"id":"r1","model":"gpt-5.5"}}`,
 		`data: {"type":"response.output_text.delta","delta":"pong"}`,
 		`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":7,"output_tokens":1}}}`)}
-	up := httptest.NewServer(f)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var request struct {
+			Input []struct {
+				Role string `json:"role"`
+			} `json:"input"`
+		}
+		if err := json.Unmarshal(body, &request); err != nil {
+			t.Error(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		for _, item := range request.Input {
+			if item.Role == "system" {
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprint(w, `{"detail":"System messages are not allowed"}`)
+				return
+			}
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		f.ServeHTTP(w, r)
+	}))
 	defer up.Close()
 	old := provider.CodexBase
 	provider.CodexBase = up.URL + "/backend-api/codex"
@@ -541,6 +567,41 @@ func TestCodexAccountUpstream(t *testing.T) {
 	}
 	if _, isList := upstream["input"].([]any); !isList {
 		t.Fatalf("relayed input not a list: %s", f.got)
+	}
+
+	for _, tc := range []struct {
+		name string
+		path string
+		body string
+	}{
+		{"anthropic", "/v1/messages", `{"model":"codex/gpt-5.5","max_tokens":20,"system":"Top-level instructions","messages":[{"role":"system","content":"First instruction"},{"role":"user","content":"ping"},{"role":"system","content":"Later instruction"}]}`},
+		{"responses passthrough", "/v1/responses", `{"model":"codex/gpt-5.5","stream":true,"instructions":"Top-level instructions","input":[{"type":"message","role":"system","content":[{"type":"input_text","text":"First instruction"}]},{"role":"user","content":"ping"},{"role":"system","content":"Later instruction"}]}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, body := post(t, tc.path, tc.body)
+			if code != http.StatusOK || !strings.Contains(body, "pong") {
+				t.Fatalf("system instructions rejected: %d %s", code, body)
+			}
+			var request struct {
+				Instructions string `json:"instructions"`
+				Input        []struct {
+					Role    string          `json:"role"`
+					Content json.RawMessage `json:"content"`
+				} `json:"input"`
+			}
+			if err := json.Unmarshal(f.got, &request); err != nil {
+				t.Fatal(err)
+			}
+			if request.Instructions != "Top-level instructions" || len(request.Input) != 3 {
+				t.Fatalf("instructions lost or reordered: %s", f.got)
+			}
+			for i, want := range []struct{ role, text string }{{"developer", "First instruction"}, {"user", "ping"}, {"developer", "Later instruction"}} {
+				item := request.Input[i]
+				if item.Role != want.role || stringOrText(item.Content) != want.text {
+					t.Errorf("input[%d]: role=%q content=%s, want %s %q", i, item.Role, item.Content, want.role, want.text)
+				}
+			}
+		})
 	}
 }
 

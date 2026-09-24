@@ -740,6 +740,16 @@ func codexBody(body []byte) []byte {
 		m["input"] = []any{map[string]any{"type": "message", "role": "user",
 			"content": []any{map[string]any{"type": "input_text", "text": s}}}}
 	}
+	// Codex rejects system messages in input; developer preserves their
+	// instruction role without moving them out of conversation order.
+	if input, ok := m["input"].([]any); ok {
+		for _, item := range input {
+			msg, ok := item.(map[string]any)
+			if ok && msg["role"] == "system" && (msg["type"] == nil || msg["type"] == "message") {
+				msg["role"] = "developer"
+			}
+		}
+	}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return body
