@@ -16,6 +16,7 @@ let state = { agents: [], profiles: [], catalog: "", settings: {} };
 let prefs = null; // the settings page: theme, lang, version, dir, gateway
 let providers = null; // { providers, presets, gateway }
 let view = "agents";
+let showAllAgents = false; // the agents no one has set anything on, folded away
 let period = "30d"; // usage window
 let usage = null;   // last usage summary
 let pick = null; // { agent, field, options, items, cursor, anchor }
@@ -131,7 +132,11 @@ function renderAgents() {
     e.append(el("b", "", t("No agents found")), el("span", "", t("Install Claude Code, Codex, Gemini CLI, OpenCode… and magpie will list them here.")));
     list.append(e);
   }
-  for (const a of state.agents) {
+  // An agent no one has set anything on is noise in a picker: fold it away,
+  // unless that is all of them (a fresh magpie has nothing to show otherwise).
+  const used = state.agents.filter((a) => a.fields.some((f) => f.value));
+  const rows = showAllAgents || !used.length ? state.agents : used;
+  for (const a of rows) {
     const row = el("div", "row agent");
     row.dataset.id = a.id;
     row.title = a.path;
@@ -163,6 +168,12 @@ function renderAgents() {
     }
     row.append(icon(a.icon), who, fields);
     list.append(row);
+  }
+  if (used.length && used.length < state.agents.length) {
+    const n = state.agents.length - used.length;
+    const more = el("button", "agent-more", showAllAgents ? t("Show less") : t("Show {n} more", { n }));
+    more.onclick = () => { showAllAgents = !showAllAgents; renderAgents(); };
+    list.append(more);
   }
 
   const chips = $("#profiles");

@@ -169,6 +169,10 @@ body.window .row .ic { width: 22px; height: 22px; }
 .empty-state { padding: 36px 20px; text-align: center; color: var(--muted); }
 .empty-state b { display: block; color: var(--fg); font-weight: 500; margin-bottom: 4px; }
 
+/* the last row of the list: the agents nothing is set on, folded away */
+.agent-more { display: block; width: 100%; border: 0; border-top: 1px solid var(--line-2); background: none; font: inherit; font-size: 12px; color: var(--muted); padding: 9px; cursor: pointer; }
+.agent-more:hover { color: var(--fg); background: var(--card-2); }
+
 /* an agent row: logo, name, then one pop-up button per setting */
 /* two columns: the model, then the smaller setting; single controls sit at the end.
    Fixed widths keep every chevron on the same vertical line down the list. */

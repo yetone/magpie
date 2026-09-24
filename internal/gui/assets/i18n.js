@@ -19,6 +19,8 @@ const I18N = {
     // agents
     "No agents found": "没有找到 Agent",
     "Install Claude Code, Codex, Gemini CLI, OpenCode… and magpie will list them here.": "安装 Claude Code、Codex、Gemini CLI、OpenCode…… 之后，magpie 会在这里列出它们。",
+    "Show {n} more": "显示其余 {n} 个",
+    "Show less": "收起",
     "model": "模型",
     "effort": "推理强度",
     "thinking": "思考",
