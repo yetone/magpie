@@ -67,8 +67,8 @@ func TestDevinOptionsListFamiliesThenVariants(t *testing.T) {
 	if len(opts) != 3 || opts[0].Value != "swe-2" || opts[1].Value != "swe-2-max" {
 		t.Fatalf("options: %v", opts)
 	}
-	if opts[0].Group != "SWE-2" || opts[2].Group != "SWE-2" {
-		t.Fatalf("groups: %v", opts)
+	if opts[0].Group != "" || opts[2].Group != "" {
+		t.Fatalf("devin's own models sit flat, like every agent's own list: %v", opts)
 	}
 	// a current value Devin knows but the list predates is still offered
 	opts = devinOptions("gone-model")

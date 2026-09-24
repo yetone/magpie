@@ -30,6 +30,7 @@ import (
 var (
 	claudeAuthorizeURL = "https://claude.com/cai/oauth/authorize"
 	codexAuthorizeURL  = "https://auth.openai.com/oauth/authorize"
+	devinAuthorizeURL  = "https://app.devin.ai/auth/cli/continue"
 	// codexCallbackAddr is fixed: OpenAI only sends Codex's client back to
 	// port 1455.
 	codexCallbackAddr = "127.0.0.1:1455"
@@ -132,10 +133,19 @@ func StartSignIn(agent string) (SignInState, error) {
 			return SignInState{}, err
 		}
 	case "devin":
-		// Devin's too: `devin auth login` opens its own link
-		if err := startDevinSignIn(s); err != nil {
+		// `devin auth login` is a TUI over this same PKCE + localhost
+		// callback, so magpie runs the round itself
+		if ln, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
 			return SignInState{}, err
 		}
+		s.redirect = fmt.Sprintf("http://127.0.0.1:%d/callback", ln.Addr().(*net.TCPAddr).Port)
+		q.Set("redirect_uri", s.redirect)
+		q.Set("state", s.state)
+		q.Set("prompt", "select_account")
+		q.Set("code_challenge", challenge)
+		q.Set("code_challenge_method", "S256")
+		q.Set("cli_pkce_marker", "1")
+		s.st.URL = devinAuthorizeURL + "?" + q.Encode()
 	case "copilot":
 		// GitHub's device code, as Copilot's editors sign in
 		if err := startCopilotSignIn(s); err != nil {
@@ -299,6 +309,13 @@ func (s *signInFlow) callback(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	l, err := s.exchange(ctx, q.Get("code"))
+	if err == nil && s.st.Agent == "devin" {
+		// devin keeps the one account it is signed in to: the exchange
+		// already wrote it; there is nothing beside it to keep
+		s.finish(SignInState{State: "done", User: l.User, Plan: l.Plan, Using: true})
+		signInPage(w, true, "You're signed in", fmt.Sprintf("%s is added to magpie. You can close this tab.", l.User))
+		return
+	}
 	if err == nil {
 		var using bool
 		if using, err = addLogin(l); err == nil {
@@ -313,8 +330,11 @@ func (s *signInFlow) callback(w http.ResponseWriter, r *http.Request) {
 
 // exchange trades the code for tokens and makes them into a login.
 func (s *signInFlow) exchange(ctx context.Context, code string) (savedLogin, error) {
-	if s.st.Agent == "codex" {
+	switch s.st.Agent {
+	case "codex":
 		return codexExchange(ctx, code, s.verifier, s.redirect)
+	case "devin":
+		return devinExchange(ctx, code, s.verifier, s.redirect)
 	}
 	return claudeExchange(ctx, code, s.verifier, s.redirect, s.state)
 }
@@ -336,9 +356,17 @@ func postToken(ctx context.Context, tokenURL, ctype string, body []byte, out any
 		var e struct {
 			Error            any    `json:"error"`
 			ErrorDescription string `json:"error_description"`
+			Detail           string `json:"detail"`
+			Message          string `json:"message"` // Connect RPC errors
 		}
 		_ = json.Unmarshal(b, &e)
 		msg := e.ErrorDescription
+		if msg == "" {
+			msg = e.Detail
+		}
+		if msg == "" {
+			msg = e.Message
+		}
 		if msg == "" {
 			if m, ok := e.Error.(map[string]any); ok {
 				msg, _ = m["message"].(string)

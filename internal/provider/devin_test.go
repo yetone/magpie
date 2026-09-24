@@ -1,9 +1,14 @@
 package provider
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -81,4 +86,83 @@ func TestDevinCredentialsPath(t *testing.T) {
 		t.Fatalf("default path: %q", got)
 	}
 	_ = os.Getenv("HOME")
+}
+
+func TestDevinCredentials(t *testing.T) {
+	b := string(devinCredentials(`k"ey`, "", "", ""))
+	for _, want := range []string{
+		`windsurf_api_key = "k\"ey"`,
+		`api_server_url = "https://server.codeium.com"`,
+		`devin_webapp_host = "app.devin.ai"`,
+		`devin_api_url = "https://api.devin.ai"`,
+	} {
+		if !strings.Contains(b, want) {
+			t.Fatalf("credentials %s", b)
+		}
+	}
+}
+
+func TestDevinSignIn(t *testing.T) {
+	home := claudeHome(t)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+
+	// a CLI that answers `auth status` once the exchange wrote its file
+	exe := filepath.Join(home, "devin")
+	os.WriteFile(exe, []byte("#!/bin/sh\ncat <<'X'\nLogged in (via Devin).\n\nUser:\n  Email:             dev@example.com\n\nAccount:\n  Tier:              Devin Pro\nX\n"), 0o755)
+	oldExe := DevinExecutable
+	DevinExecutable = func() string { return exe }
+	t.Cleanup(func() { DevinExecutable = oldExe })
+
+	var gotCode, gotVerifier, gotRedirect string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		json.NewDecoder(r.Body).Decode(&body)
+		gotCode, gotVerifier, gotRedirect = body["code"], body["code_verifier"], body["redirect_uri"]
+		json.NewEncoder(w).Encode(map[string]any{
+			"sessionToken":    "devin-session-token$sk-test",
+			"devinWebappHost": "app.devin.ai", "devinApiUrl": "https://api.devin.ai",
+		})
+	}))
+	defer fake.Close()
+	oldTok := devinExchangeURL
+	devinExchangeURL = fake.URL
+	t.Cleanup(func() { devinExchangeURL = oldTok })
+
+	st, err := StartSignIn("devin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(st.URL)
+	if u.Host != "app.devin.ai" || u.Path != "/auth/cli/continue" {
+		t.Fatalf("url %s", st.URL)
+	}
+	q := u.Query()
+	if q.Get("prompt") != "select_account" || q.Get("code_challenge") == "" ||
+		q.Get("code_challenge_method") != "S256" || q.Get("redirect_uri") == "" || q.Get("state") == "" {
+		t.Fatalf("params %s", st.URL)
+	}
+	page := finishInBrowser(t, st, "dv-code")
+	if !strings.Contains(page, "signed in") {
+		t.Fatalf("page %s", page)
+	}
+	if st = waitDone(t, st.ID); st.State != "done" || st.User != "dev@example.com" || st.Plan != "Devin Pro" || !st.Using {
+		t.Fatalf("state %+v", st)
+	}
+	if gotCode != "dv-code" || gotVerifier == "" || gotRedirect == "" {
+		t.Fatalf("exchange code=%q verifier=%q redirect=%q", gotCode, gotVerifier, gotRedirect)
+	}
+	// credentials.toml as `devin auth login` would write it
+	b, err := os.ReadFile(DevinCredentialsPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`windsurf_api_key = "devin-session-token$sk-test"`, `api_server_url = "https://server.codeium.com"`} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("credentials %s", b)
+		}
+	}
+	// devin keeps the one account it is signed in to: nothing beside it
+	if ls := Logins("devin"); len(ls) != 0 {
+		t.Fatalf("logins %v", ls)
+	}
 }

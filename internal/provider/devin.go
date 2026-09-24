@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -269,15 +270,73 @@ func parseDevinModels(b []byte) []DevinFamily {
 	return out
 }
 
-// startDevinSignIn runs `devin auth login`, hands the link it prints to the
-// window, and finishes when the CLI says the account is in.
-func startDevinSignIn(s *signInFlow) error {
-	path := DevinExecutable()
-	if path == "" {
-		return errorf("install Devin's CLI first: https://docs.devin.ai/cli")
+// devinAPIServer is where the CLI's Connect RPCs live; devinExchangeURL is
+// where the callback's code trades for the credentials `devin auth login`
+// would write — a var so tests can point it elsewhere.
+const devinAPIServer = "https://server.codeium.com"
+
+var devinExchangeURL = devinAPIServer + "/exa.seat_management_pb.SeatManagementService/ExchangeDevinCLIPKCECode"
+
+// devinExchange trades the code for the credentials file `devin auth login`
+// writes, then asks the CLI who signed in. The CLI's own login makes the same
+// Connect call: the answer's sessionToken — already shaped
+// "devin-session-token$<jwt>" — is the windsurf_api_key the file wants.
+func devinExchange(ctx context.Context, code, verifier, redirect string) (savedLogin, error) {
+	body, _ := json.Marshal(map[string]string{"code": code,
+		"code_verifier": verifier, "redirect_uri": redirect})
+	var res struct {
+		SessionToken    string `json:"sessionToken"`
+		SessionTokenAlt string `json:"session_token"`
+		DevinWebappHost string `json:"devinWebappHost"`
+		DevinAPIURL     string `json:"devinApiUrl"`
 	}
-	return runCLISignIn(s, "devin auth login", os.Environ(), true, nil, func() (string, string, bool) {
-		forgetDevinStatus()
-		return askDevinIdentity()
-	}, path, "auth", "login")
+	if err := postToken(ctx, devinExchangeURL, "application/json", body, &res); err != nil {
+		return savedLogin{}, err
+	}
+	key := res.SessionToken
+	if key == "" {
+		key = res.SessionTokenAlt
+	}
+	if key == "" {
+		return savedLogin{}, errors.New("Devin's exchange returned no session token")
+	}
+	creds := devinCredentials(key, devinAPIServer, res.DevinWebappHost, res.DevinAPIURL)
+	// devin keeps the one account it is signed in to: writing the file is
+	// signing it in, and puts the file where `devin auth status` reads it
+	if err := writePrivate(DevinCredentialsPath(), creds); err != nil {
+		return savedLogin{}, err
+	}
+	forgetDevinStatus()
+	user, plan, _ := askDevinIdentity()
+	return savedLogin{Agent: "devin", User: user, Plan: plan}, nil
+}
+
+// devinCredentials formats credentials.toml the way `devin auth login`
+// writes it, with the hosts the exchange left out defaulted.
+func devinCredentials(key, server, webapp, api string) []byte {
+	if server == "" {
+		server = "https://server.codeium.com"
+	}
+	if webapp == "" {
+		webapp = "app.devin.ai"
+	}
+	if api == "" {
+		api = "https://api.devin.ai"
+	}
+	var b strings.Builder
+	for _, kv := range [][2]string{
+		{"windsurf_api_key", key},
+		{"api_server_url", server},
+		{"devin_webapp_host", webapp},
+		{"devin_api_url", api},
+	} {
+		fmt.Fprintf(&b, "%s = %s\n", kv[0], tomlString(kv[1]))
+	}
+	return []byte(b.String())
+}
+
+// tomlString quotes a TOML basic string; the values are plain ASCII tokens
+// and URLs, so only the string's own delimiters need escaping.
+func tomlString(s string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }

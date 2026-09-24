@@ -1585,7 +1585,7 @@ const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["respon
 // renderEditor: an existing provider (p), a new preset (presetID), or custom.
 function renderEditor(p, presetID) {
   const pr = presetID ? providers.presets.find((x) => x.id === presetID) : p?.preset ? providers.presets.find((x) => x.id === p.preset) : null;
-  const isNew = !p, custom = !pr;
+  const isNew = !p, custom = !pr && !p?.account;
   draft = draft || (p
     ? { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, catalog: p.catalog, key: "", api: p.anthropic && !p.chat ? "anthropic" : "openai", chosen: p.models.filter((m) => m.on).map((m) => m.id), extra: [], headers: headerRows(p.headers), icon: p.icon || "", fallback: [...(p.fallback || [])], balanceURL: p.balanceURL || "", balancePath: p.balancePath || "" }
     : pr
@@ -1599,7 +1599,7 @@ function renderEditor(p, presetID) {
     h.append(icon(p?.icon || pr?.icon || "generic"), el("b", "", p ? p.name : pr ? pr.name : t("Custom provider")));
     if (pr?.note) h.append(el("span", "note", pr.note));
     h.append(el("span", "grow"));
-    const site = pr?.website || (p?.host ? "https://" + p.host : "");
+    const site = pr?.website || p?.website || (p?.host ? "https://" + p.host : "");
     if (site) { const b = el("button", "link", hostOf(site) + " ↗"); b.onclick = () => api("open", { url: site }); h.append(b); }
     ed.append(h);
   }
@@ -1656,7 +1656,7 @@ function renderEditor(p, presetID) {
     }
     ed.append(...field(t("Models"), renderModels(p), ""));
     ed.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
-    ed.append(...field(t("Endpoints"), renderEndpoints(p, p)));
+    if (p.chat || p.responses || p.anthropic) ed.append(...field(t("Endpoints"), renderEndpoints(p, p)));
     const bar = el("div", "bar");
     // removing only hides it from magpie; the agent stays signed in
     const del = el("button", "text danger", t("Remove"));

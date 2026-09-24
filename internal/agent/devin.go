@@ -50,7 +50,9 @@ var providerDevinFamilies = func(ctx context.Context) ([]provider.DevinFamily, e
 }
 
 // devinOptions offers the families first (a pick that follows the family's
-// newest model), then every variant under its family.
+// newest model), then every variant under its family. They are Devin's own
+// models, not borrowed ones, so like every agent's own list they sit flat —
+// a group each would only crowd the picker's rail with one icon per family.
 func devinOptions(cur string) []Option {
 	families, err := providerDevinFamilies(context.Background())
 	if err != nil {
@@ -61,9 +63,9 @@ func devinOptions(cur string) []Option {
 	}
 	out := make([]Option, 0, len(families))
 	for _, f := range families {
-		out = append(out, Option{Value: f.UID, Label: f.Label, Note: "the family's newest", Icon: "devin", Group: f.Label})
+		out = append(out, Option{Value: f.UID, Label: f.Label, Note: "the family's newest", Icon: "devin"})
 		for _, m := range f.Models {
-			out = append(out, Option{Value: m.ID, Label: m.Name, Icon: "devin", Group: f.Label})
+			out = append(out, Option{Value: m.ID, Label: m.Name, Icon: "devin"})
 		}
 	}
 	if cur != "" {
