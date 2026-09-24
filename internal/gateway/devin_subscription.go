@@ -363,12 +363,16 @@ func (c *devinConn) read(rd io.Reader) {
 		}
 	}
 	// the process ended or its stream broke: free whatever waits
+	err := s.Err()
+	if err == nil {
+		err = errors.New("devin ended without an answer")
+	}
 	c.mu.Lock()
 	pending := c.pending
 	c.pending = map[int64]chan devinReply{}
 	c.mu.Unlock()
 	for _, ch := range pending {
-		ch <- devinReply{err: errors.New("devin ended without an answer")}
+		ch <- devinReply{err: err}
 	}
 }
 
