@@ -120,7 +120,7 @@
     <h3 id="presets">Presets</h3>
     <p>Vendors magpie already knows. <code>magpie presets</code> prints the current list.</p>
     <div class="chips">
-      <span class="chip"><code>anthropic</code></span><span class="chip"><code>openai</code></span><span class="chip"><code>google</code></span><span class="chip"><code>deepseek</code></span><span class="chip"><code>xai</code></span><span class="chip"><code>moonshot</code><span>Kimi</span></span><span class="chip"><code>moonshot-cn</code></span><span class="chip"><code>zhipu</code><span>GLM</span></span><span class="chip"><code>zai</code></span><span class="chip"><code>minimax</code></span><span class="chip"><code>minimax-cn</code></span><span class="chip"><code>qwen</code></span><span class="chip"><code>qwen-cn</code></span><span class="chip"><code>mistral</code></span><span class="chip"><code>groq</code></span><span class="chip"><code>openrouter</code></span><span class="chip"><code>opencode-go</code></span><span class="chip"><code>opencode-zen</code></span><span class="chip"><code>together</code></span><span class="chip"><code>fireworks</code></span><span class="chip"><code>siliconflow</code></span><span class="chip"><code>aihubmix</code></span><span class="chip"><code>302ai</code></span><span class="chip"><code>yylx</code><span>auto · global · cn</span></span><span class="chip"><code>ollama</code></span><span class="chip"><code>lmstudio</code></span>
+      <span class="chip"><code>anthropic</code></span><span class="chip"><code>openai</code></span><span class="chip"><code>google</code></span><span class="chip"><code>deepseek</code></span><span class="chip"><code>xai</code></span><span class="chip"><code>moonshot</code><span>Kimi</span></span><span class="chip"><code>moonshot-cn</code></span><span class="chip"><code>zhipu</code><span>GLM</span></span><span class="chip"><code>zai</code></span><span class="chip"><code>minimax</code></span><span class="chip"><code>minimax-cn</code></span><span class="chip"><code>qwen</code></span><span class="chip"><code>qwen-cn</code></span><span class="chip"><code>mistral</code></span><span class="chip"><code>groq</code></span><span class="chip"><code>openrouter</code></span><span class="chip"><code>requesty</code><span>global · eu · us · ap</span></span><span class="chip"><code>opencode-go</code></span><span class="chip"><code>opencode-zen</code></span><span class="chip"><code>together</code></span><span class="chip"><code>fireworks</code></span><span class="chip"><code>siliconflow</code></span><span class="chip"><code>aihubmix</code></span><span class="chip"><code>302ai</code></span><span class="chip"><code>yylx</code><span>auto · global · cn</span></span><span class="chip"><code>ollama</code></span><span class="chip"><code>lmstudio</code></span>
     </div>
     <p>A vendor with a preset only needs to add the key: <code>magpie://import?preset=deepseek&amp;key=sk-…</code>. Want yours on the list? <a href="https://github.com/yetone/magpie/issues">Open an issue</a>.</p>
 
@@ -275,12 +275,15 @@ href = <span class="s">"https://usemagpie.ai/import#"</span> + urlencode({
     ["anthropic", "Anthropic"], ["openai", "OpenAI"], ["google", "Google Gemini"], ["deepseek", "DeepSeek"],
     ["xai", "xAI"], ["moonshot", "Kimi"], ["moonshot-cn", "Kimi (China)"], ["zhipu", "Zhipu GLM"], ["zai", "Z.ai"],
     ["minimax", "MiniMax"], ["minimax-cn", "MiniMax (China)"], ["qwen", "Qwen"], ["qwen-cn", "Qwen (China)"],
-    ["mistral", "Mistral"], ["groq", "Groq"], ["openrouter", "OpenRouter"], ["opencode-go", "OpenCode Go"],
+    ["mistral", "Mistral"], ["groq", "Groq"], ["openrouter", "OpenRouter"], ["requesty", "Requesty"], ["opencode-go", "OpenCode Go"],
     ["opencode-zen", "OpenCode Zen"], ["together", "Together AI"], ["fireworks", "Fireworks"],
     ["siliconflow", "SiliconFlow"], ["aihubmix", "AiHubMix"], ["302ai", "302.AI"], ["yylx", "鱼鱼连线"],
     ["ollama", "Ollama"], ["lmstudio", "LM Studio"],
   ];
-  const REGIONS = { yylx: [["", "Default"], ["auto", "Auto"], ["global", "Global"], ["cn", "China Mainland"]] };
+  const REGIONS = {
+    requesty: [["", "Default"], ["global", "Global"], ["eu", "EU"], ["us", "US"], ["ap", "Asia Pacific"]],
+    yylx: [["", "Default"], ["auto", "Auto"], ["global", "Global"], ["cn", "China Mainland"]],
+  };
   const f = document.getElementById("b");
   const el = (n) => f.elements[n];
   el("preset").innerHTML = PRESETS.map(([id, n]) => `<option value="${id}">${n} · ${id}</option>`).join("");
