@@ -402,23 +402,44 @@ func devinHome() (string, error) {
 	if err := os.MkdirAll(filepath.Dir(link), 0o700); err != nil {
 		return "", err
 	}
-	if _, err := os.Stat(src); err == nil {
-		if cur, err := os.Readlink(link); err != nil || cur != src {
-			_ = os.Remove(link)
-			_ = os.Symlink(src, link)
-		}
-	} else {
+	if _, err := os.Stat(src); err != nil {
 		return "", errors.New("Devin is not signed in; run `devin auth login`")
+	}
+	// The sign-in reaches the home through a link where the OS grants one —
+	// Windows gives symlinks only to developers and admins — and through a
+	// copy, refreshed when the source is newer, where it doesn't.
+	fresh := false
+	if cur, err := os.Readlink(link); err == nil {
+		fresh = cur == src // a link sees the live file
+	} else if lst, err := os.Lstat(link); err == nil && lst.Mode().IsRegular() {
+		if sst, err := os.Stat(src); err == nil {
+			fresh = !lst.ModTime().Before(sst.ModTime())
+		}
+	}
+	if !fresh {
+		_ = os.Remove(link)
+		if err := os.Symlink(src, link); err != nil {
+			b, err := os.ReadFile(src)
+			if err != nil {
+				return "", err
+			}
+			if err := os.WriteFile(link, b, 0o600); err != nil {
+				return "", err
+			}
+		}
 	}
 	// Only the caller's tools: nothing of devin's own (files, shell, web,
 	// other MCP servers or the settings it borrows from other agents). The
-	// deny names are the built-in tools' own; the scoped rules cover what
-	// they reach. mcp__* is not denied — it would beat the magpie allow.
+	// deny names are the built-in tools' own (read/edit/grep/glob/exec), the
+	// scoped rules cover the same ground wherever a name doesn't reach —
+	// Read(**) and Write(**) are relative to the working directory, so the
+	// /** forms are what cover absolute paths. mcp__* is not denied — it
+	// would beat the magpie allow.
 	cfg, _ := json.Marshal(map[string]any{
 		"version": 1,
 		"permissions": map[string]any{
 			"deny": []string{"read", "edit", "write", "exec", "grep", "glob", "fetch",
-				"Read(**)", "Write(**)", "Fetch(*)", "Fetch(**)"},
+				"Read(/**)", "Read(**)", "Write(/**)", "Write(**)", "Fetch(*)", "Fetch(**)"},
 			"allow": []string{"mcp__magpie__*"},
 		},
 		"read_config_from":  map[string]bool{"agents_standard": false, "claude": false, "codex": false, "copilot": false, "cursor": false, "opencode": false, "windsurf": false, "zed": false},
