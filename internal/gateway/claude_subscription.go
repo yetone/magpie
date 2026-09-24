@@ -63,8 +63,10 @@ type subscriptionRun struct {
 	// patience, when set, is how long a tool call may park before the agent
 	// is told it is still running (its MCP client gives up on a call at a
 	// minute); the result is then collected with waitTool, from late.
-	patience time.Duration
-	late     map[string]chan mcpToolResult
+	patience      time.Duration
+	late          map[string]chan mcpToolResult
+	segmentInput  int
+	segmentOutput int
 }
 
 // waitTool collects a tool result that took longer than an agent's patience.
@@ -254,7 +256,14 @@ func (r *subscriptionRun) attach() chan Event {
 	defer r.mu.Unlock()
 	ch := make(chan Event, 64)
 	r.segment = ch
+	r.segmentOutput = 0
 	return ch
+}
+
+func (r *subscriptionRun) setSegmentInput(req *Request) {
+	r.mu.Lock()
+	r.segmentInput = localRequestTokenCount(req)
+	r.mu.Unlock()
 }
 
 func (r *subscriptionRun) attached() bool {
@@ -266,6 +275,14 @@ func (r *subscriptionRun) attached() bool {
 func (r *subscriptionRun) emit(ev Event) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	switch ev.Kind {
+	case KText, KThink:
+		r.segmentOutput += localTokenCount(ev.Text)
+	case KToolStart:
+		r.segmentOutput += localTokenCount(ev.Name)
+	case KToolArgs:
+		r.segmentOutput += localTokenCount(ev.Text)
+	}
 	if r.segment != nil {
 		r.segment <- ev
 	}
@@ -664,6 +681,7 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	run, results := s.subscription.findRun(req)
 	var events <-chan Event
 	if run != nil {
+		run.setSegmentInput(req)
 		events, err = run.continueWith(results)
 	} else {
 		run, events, err = start(r.Context(), req)

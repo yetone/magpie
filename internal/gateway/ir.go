@@ -106,14 +106,21 @@ type Event struct {
 
 // Usage counts tokens.
 type Usage struct {
-	Input      int `json:"input"`
-	Output     int `json:"output"`
-	CacheRead  int `json:"cache_read"`
-	CacheWrite int `json:"cache_write"`
-	Reasoning  int `json:"reasoning"`
+	Input      int    `json:"input"`
+	Output     int    `json:"output"`
+	CacheRead  int    `json:"cache_read"`
+	CacheWrite int    `json:"cache_write"`
+	Reasoning  int    `json:"reasoning"`
+	State      string `json:"-"` // provisional | final, for Cursor usage only
 }
 
 func (u *Usage) add(v Usage) {
+	if v.State == "final" {
+		u.Input, u.Output = v.Input, v.Output
+		u.CacheRead, u.CacheWrite = v.CacheRead, v.CacheWrite
+		u.Reasoning, u.State = v.Reasoning, v.State
+		return
+	}
 	if v.Input > 0 {
 		u.Input = v.Input
 	}
@@ -128,6 +135,9 @@ func (u *Usage) add(v Usage) {
 	}
 	if v.Reasoning > 0 {
 		u.Reasoning = v.Reasoning
+	}
+	if v.State != "" {
+		u.State = v.State
 	}
 }
 
