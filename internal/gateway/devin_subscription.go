@@ -407,7 +407,11 @@ func devinHome() (string, error) {
 	}
 	// The sign-in reaches the home through a link where the OS grants one —
 	// Windows gives symlinks only to developers and admins — and through a
-	// copy, refreshed when the source is newer, where it doesn't.
+	// copy, refreshed when the source is newer, where it doesn't. Only
+	// freshness from the source matters: the credential is a session token
+	// (no exp claim, no refresh token), and devin writes the file at login
+	// and never during a session — observed: inode, mtime and hash unchanged
+	// across a run — so nothing inside the home flows back to it.
 	fresh := false
 	if cur, err := os.Readlink(link); err == nil {
 		fresh = cur == src // a link sees the live file
