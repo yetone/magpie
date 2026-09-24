@@ -213,7 +213,7 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	p, model, ok := provider.Resolve(modelOf(body))
 	// Claude Subscription generations run through the Claude Code binary. Its
 	// OAuth token must not take a direct HTTP side path just for token counting.
-	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok") {
+	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok" || p.Account.Agent == "devin") {
 		req, err := parseAnthropic(body)
 		if err != nil {
 			writeError(w, provider.Anthropic, 400, err.Error())
@@ -420,6 +420,14 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 			return s.subscription.startGrok(ctx, req, model, p.Account.Home)
 		}
 		return s.serveSubscription(w, r, from, "Grok", model, body, &call.Usage, start)
+	}
+	// and Devin's, which the CLI serves over ACP
+	if p.Account != nil && p.Account.Agent == "devin" {
+		call.To = from
+		start := func(ctx context.Context, req *Request) (*subscriptionRun, <-chan Event, error) {
+			return s.subscription.startDevin(ctx, req, model)
+		}
+		return s.serveSubscription(w, r, from, "Devin", model, body, &call.Usage, start)
 	}
 	// a backend that only streams gets a non-streaming request translated
 	// (the provider is always streamed on that path) rather than relayed

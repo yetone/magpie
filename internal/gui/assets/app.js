@@ -2277,6 +2277,8 @@ const SUBS = [
   { agent: "grok", name: "Grok", icon: "xai", plans: "SuperGrok · X Premium+", own: true },
   // signed in with GitHub's device code; the editors' own sign-in stays theirs
   { agent: "copilot", name: "Copilot", icon: "githubcopilot", plans: "Pro · Pro+ · Business", own: true },
+  // devin's credentials.toml keeps one account too
+  { agent: "devin", name: "Devin", icon: "devin", plans: "Pro · Enterprise", single: true },
 ];
 const subOf = (agent) => SUBS.find((x) => x.agent === agent);
 let signing = null; // the sign-in under way: { id, agent, url, state, error }

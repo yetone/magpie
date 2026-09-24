@@ -251,7 +251,7 @@ func Save(p Provider) error {
 }
 
 // accountIDs are the ids of the subscriptions magpie can list (account.go).
-var accountIDs = []string{"claude", "codex", "copilot", "cursor", "grok"}
+var accountIDs = []string{"claude", "codex", "copilot", "cursor", "devin", "grok"}
 
 func stored(id string) bool {
 	for _, p := range load().Providers {

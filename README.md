@@ -76,6 +76,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | DeepSeek Harness (dsh) | `~/.dsh/config.yaml` (`$DSH_HOME`) | model |
 | Command Code | `~/.commandcode/settings.json` (+ `providers.json`) | model |
 | omp (oh-my-pi) | `~/.omp/agent/config.yml` (+ `models.yml`) | model |
+| Devin        | `~/.config/devin/config.json` (`%APPDATA%\devin\config.json` on Windows) | model |
 
 Provider-scoped agents (OpenCode, Pi, Goose, Crush, omp) take `provider/model`.
 Only agents that are installed or configured are shown.
@@ -112,11 +113,12 @@ be overridden the same way.
 An agent you have signed in to is a subscription with models behind it, so
 magpie offers it as a provider too. Claude Code (an OAuth login in the macOS
 Keychain or `~/.claude/.credentials.json`), Codex (a ChatGPT login in
-`~/.codex/auth.json`) and Copilot (a GitHub login in
-`~/.config/github-copilot/apps.json`) appear in `magpie providers` and in the
-Providers tab as *signed in as …*, with their models spelled
-`claude/claude-sonnet-5`, `codex/gpt-5.5` or `copilot/claude-sonnet-4.5` in
-every other agent's picker. magpie reads the agent's own credentials each
+`~/.codex/auth.json`), Copilot (a GitHub login in
+`~/.config/github-copilot/apps.json`) and Devin (`devin auth login`, kept in
+`~/.local/share/devin/credentials.toml`) appear in `magpie providers` and in
+the Providers tab as *signed in as …*, with their models spelled
+`claude/claude-sonnet-5`, `codex/gpt-5.5`, `copilot/claude-sonnet-4.5` or
+`devin/swe-2-max` in every other agent's picker. magpie reads the agent's own credentials each
 time, refreshes tokens the way the agent does — writing a rotated token
 back where the agent will find it — and stores nothing but your model
 picks; sign out of the agent and the provider is gone. The model list is
@@ -132,7 +134,12 @@ bridged into that live turn over MCP, and tool results resume the same Claude
 Code process; Pi, OpenCode and every other agent use this path automatically.
 The generated harness stays out of Anthropic's system-prompt classifier while
 its instructions remain part of the user context. This requires Claude Code
-to be installed and signed in. A Gemini CLI Google login is planned.
+to be installed and signed in.
+Cursor, Grok and Devin subscriptions likewise run through their own CLIs —
+none of them has an endpoint a borrowed key can be sent to — with Devin
+driven over ACP (`devin acp`) in a home of magpie's own that keeps only the
+caller's MCP tools and shares just the sign-in. A Gemini CLI Google login is
+planned.
 
 ### Connecting anything else
 

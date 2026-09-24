@@ -131,6 +131,11 @@ func StartSignIn(agent string) (SignInState, error) {
 		if err := startGrokSignIn(s); err != nil {
 			return SignInState{}, err
 		}
+	case "devin":
+		// Devin's too: `devin auth login` opens its own link
+		if err := startDevinSignIn(s); err != nil {
+			return SignInState{}, err
+		}
 	case "copilot":
 		// GitHub's device code, as Copilot's editors sign in
 		if err := startCopilotSignIn(s); err != nil {
