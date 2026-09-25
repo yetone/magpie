@@ -102,11 +102,14 @@ func TestSmartRouting(t *testing.T) {
 
 	// the week decides, not the five hours in it; the five hours only
 	// between weeks renewing in the same hour
+	// Keep the weekly resets in one hour: time.Now() near an hour
+	// boundary made this tie-breaker test flaky in CI.
+	routingNow := now.Truncate(time.Hour).Add(20 * time.Minute)
 	week, day := 7*24*time.Hour, 24*time.Hour
 	both := func(five, weekly time.Duration) provider.Allowance {
 		return provider.Allowance{
-			{Used: 30, Resets: now.Add(five), Span: 5 * time.Hour},
-			{Used: 30, Resets: now.Add(weekly), Span: week},
+			{Used: 30, Resets: routingNow.Add(five), Span: 5 * time.Hour},
+			{Used: 30, Resets: routingNow.Add(weekly), Span: week},
 		}
 	}
 	share = map[string]provider.Allowance{
