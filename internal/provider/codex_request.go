@@ -167,8 +167,15 @@ func saveCodexPrompts(b []byte) {
 		all[k] = v
 	}
 	out, _ := json.Marshal(all)
-	os.MkdirAll(filepath.Dir(path), 0o755)
-	os.WriteFile(path, out, 0o644)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		return
+	}
+	// Two writes in one tick share an mtime, and promptFile.get would
+	// keep the first account's list. Drop it under the cache's lock.
+	savedPrompts.drop()
 }
 
 // promptFile is a file of instructions by model, read again when it changes.
@@ -177,6 +184,14 @@ type promptFile struct {
 	path string
 	mod  time.Time
 	m    map[string]string
+}
+
+// drop forgets the cached copy so the next get reads the file again even
+// when its mtime has not moved.
+func (f *promptFile) drop() {
+	f.Lock()
+	f.path, f.mod, f.m = "", time.Time{}, nil
+	f.Unlock()
 }
 
 func (f *promptFile) get(path, model string, parse func([]byte) map[string]string) (string, bool) {

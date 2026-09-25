@@ -154,3 +154,29 @@ func TestCodexInstructionsSaved(t *testing.T) {
 		t.Fatal("a second account's list replaced the first's")
 	}
 }
+
+// Two saves that share an mtime both stay visible. The cache re-reads only
+// when ModTime changes, and two writes in one tick do not change it. After
+// the second save, Chtimes puts the first mtime back, so the collision is
+// certain on every run.
+func TestCodexPromptsSameMtime(t *testing.T) {
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	saveCodexPrompts([]byte(`{"models":[{"slug":"gpt-4","base_instructions":"base"}]}`))
+	if got := codexInstructions("gpt-4"); got != "base" {
+		t.Fatalf("first account: %q", got)
+	}
+	path := codexPromptsPath()
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev := st.ModTime()
+	saveCodexPrompts([]byte(`{"models":[{"slug":"gpt-6","model_messages":{"instructions_template":"six"}}]}`))
+	if err := os.Chtimes(path, prev, prev); err != nil {
+		t.Fatal(err)
+	}
+	if codexInstructions("gpt-4") != "base" || codexInstructions("gpt-6") != "six" {
+		t.Fatal("a second account's list replaced the first's")
+	}
+}
