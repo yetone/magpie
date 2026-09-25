@@ -106,6 +106,96 @@ func TestFetchedKeysKeepUnknownImageCapabilityFromOldCache(t *testing.T) {
 	}
 }
 
+// A key marked off is not asked when the model list is refreshed, and what
+// it would have listed stays out of the picker — including a same-named
+// model whose weaker capabilities would otherwise win. Turning it back on
+// fetches it and brings its models in.
+func TestOffKeyIsNotFetched(t *testing.T) {
+	isolate(t)
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	t.Setenv("PATH", h)
+	for _, v := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME"} {
+		t.Setenv(v, "")
+	}
+
+	var onHits, offHits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Header.Get("Authorization") {
+		case "Bearer sk-on":
+			onHits++
+			w.Write([]byte(`{"data":[{"id":"vision","modalities":{"input":["text","image"]}},{"id":"on-only"}]}`))
+		case "Bearer sk-off":
+			offHits++
+			w.Write([]byte(`{"data":[{"id":"vision","modalities":{"input":["text"]}},{"id":"off-only"}]}`))
+		default:
+			http.Error(w, "no", http.StatusUnauthorized)
+		}
+	}))
+	defer srv.Close()
+
+	if err := Save(Provider{
+		ID: "relay", Name: "Relay", Chat: srv.URL + "/v1", Key: "sk-on",
+		Keys: []KeyAccount{{Name: "spare", Key: "sk-off", Off: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := Find("relay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if onHits != 1 || offHits != 0 {
+		t.Fatalf("requests: on %d, off %d", onHits, offHits)
+	}
+	got := p.Exposed()
+	if _, ok := modelNamed(got, "off-only"); ok {
+		t.Fatalf("off key's model is in the picker: %+v", got)
+	}
+	vision, ok := modelNamed(got, "vision")
+	if !ok || vision.ImageInput == nil || !*vision.ImageInput || !vision.Images {
+		t.Fatalf("vision downgraded: %+v", vision)
+	}
+	if _, ok := modelNamed(got, "on-only"); !ok {
+		t.Fatalf("on key's model missing: %+v", got)
+	}
+
+	if err := SetKeyOn("relay", KeyID("sk-off"), true); err != nil {
+		t.Fatal(err)
+	}
+	p, err = Find("relay")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if offHits != 1 {
+		t.Fatalf("off key requests after re-enable: %d", offHits)
+	}
+	if _, ok := modelNamed(p.Exposed(), "off-only"); !ok {
+		t.Fatalf("re-enabled key's model missing: %+v", p.Exposed())
+	}
+}
+
+func modelNamed(ms []catalog.Model, id string) (catalog.Model, bool) {
+	for _, m := range ms {
+		if m.ID == id {
+			return m, true
+		}
+	}
+	return catalog.Model{}, false
+}
+
 func TestRejectsTemperatureFromFetchedList(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

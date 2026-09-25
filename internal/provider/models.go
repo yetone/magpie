@@ -68,7 +68,9 @@ func (p Provider) Fetch(ctx context.Context) ([]catalog.Model, error) {
 	if p.Account != nil && p.Account.fetch != nil {
 		return p.Account.fetch(ctx)
 	}
-	if keys := p.allKeys(); len(keys) > 1 {
+	// Only keys in use. An off key is not asked, and its list does not
+	// join the catalog or take capabilities off a key that is on.
+	if keys := p.KeysOn(); len(keys) > 1 {
 		return p.fetchPerKey(ctx, keys)
 	}
 	ms, base, err := p.fetchOne(ctx)
@@ -201,20 +203,6 @@ func sharedImageInput(a, b *bool) *bool {
 		return nil
 	}
 	return a
-}
-
-// allKeys is every key the provider has, on or not, the first first.
-func (p Provider) allKeys() []KeyAccount {
-	if p.Key == "" {
-		return nil
-	}
-	out := []KeyAccount{p.first()}
-	for _, k := range p.Keys {
-		if k.Key != "" {
-			out = append(out, k)
-		}
-	}
-	return out
 }
 
 // Serves reports whether key k can be asked for model: false only when the
