@@ -860,7 +860,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	if stream {
 		enc := encoder(from, newSSEWriter(w), request.Model)
 		var failed string
-		readSSE(rd, func(_, data string) error {
+		serr := readSSE(rd, func(_, data string) error {
 			return dec(data, func(ev Event) {
 				switch ev.Kind {
 				case KError:
@@ -871,13 +871,25 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 				enc.event(ev)
 			})
 		})
-		enc.finish()
+		if serr != nil && failed == "" {
+			// the upstream died mid-reply: say so in the client's own
+			// protocol instead of finishing as if all went well
+			failed = p.Name + ": " + serr.Error()
+			enc.event(Event{Kind: KError, Text: failed})
+		}
+		if failed == "" {
+			enc.finish()
+		}
 		return 200, failed
 	}
 	var col collector
-	readSSE(rd, func(_, data string) error {
+	if err := readSSE(rd, func(_, data string) error {
 		return dec(data, col.add)
-	})
+	}); err != nil {
+		// a partial answer is not an answer
+		msg := p.Name + ": " + err.Error()
+		return writeError(w, from, 502, msg), msg
+	}
 	if col.err != "" && len(col.res.Parts) == 0 {
 		return writeError(w, from, 502, p.Name+": "+col.err), col.err
 	}
