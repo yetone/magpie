@@ -1039,20 +1039,7 @@ func copilotToken(ctx context.Context, github string) (copilotSession, error) {
 
 // copilotAPIs names the APIs of Copilot's supported_endpoints; the
 // websocket one is left out, as is anything magpie doesn't speak.
-func copilotAPIs(endpoints []string) []string {
-	var out []string
-	for _, e := range endpoints {
-		switch e {
-		case "/chat/completions":
-			out = append(out, string(Chat))
-		case "/responses":
-			out = append(out, string(Responses))
-		case "/v1/messages":
-			out = append(out, string(Anthropic))
-		}
-	}
-	return out
-}
+func copilotAPIs(endpoints []string) []string { return catalog.EndpointAPIs(endpoints) }
 
 // internal is a Copilot model id nobody picks by hand.
 var copilotInternal = regexp.MustCompile(`^(copilot-search|exec-agent|trajectory)|-(secondary|tertiary|4th|free-auto)$`)

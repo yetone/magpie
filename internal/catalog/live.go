@@ -202,7 +202,7 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 			name = id
 		}
 		input := imageInput(r.Modalities.Input)
-		m := Model{ID: id, Name: name, ImageInput: input}
+		m := Model{ID: id, Name: name, ImageInput: input, APIs: EndpointAPIs(r.Endpoints)}
 		if input != nil {
 			m.Images = *input
 		}
@@ -218,6 +218,32 @@ type liveModel struct {
 	Modalities  struct {
 		Input []string `json:"input"`
 	} `json:"modalities"`
+	// the paths the model is served on, where the vendor says: Command
+	// Code's Claude models on /messages alone, its open ones on
+	// /chat/completions and /responses
+	Endpoints []string `json:"supported_endpoints"`
+}
+
+// EndpointAPIs names the APIs of a model list's supported_endpoints —
+// "chat", "responses", "anthropic" — leaving out any magpie doesn't speak
+// (Copilot's websocket one); nil when it names none of them.
+func EndpointAPIs(endpoints []string) []string {
+	var out []string
+	for _, e := range endpoints {
+		var api string
+		switch strings.TrimPrefix(strings.TrimSuffix(e, "/"), "/v1") {
+		case "/chat/completions":
+			api = "chat"
+		case "/responses":
+			api = "responses"
+		case "/messages":
+			api = "anthropic"
+		}
+		if api != "" && !slices.Contains(out, api) {
+			out = append(out, api)
+		}
+	}
+	return out
 }
 
 // Decorate fills in names and reasoning levels for live models from the
