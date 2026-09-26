@@ -53,7 +53,9 @@ func TestSummarizeTellsPlacesApart(t *testing.T) {
 	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "https://new.example/v1"}); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now()
+	// noon, so the calls hours before are today's whenever this runs
+	y, m, d := time.Now().Date()
+	now := time.Date(y, m, d, 12, 0, 0, 0, time.Local)
 	recs := []Record{
 		{Time: now.Add(-3 * time.Hour), Provider: "relay", Model: "m", Input: 5},                        // kept before hosts were
 		{Time: now.Add(-2 * time.Hour), Provider: "relay", Host: "old.example", Model: "m", Input: 100}, // the id's earlier place
