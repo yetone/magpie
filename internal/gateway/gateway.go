@@ -752,6 +752,11 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// a backend that only streams gets a non-streaming request translated
 	// (the provider is always streamed on that path) rather than relayed
 	relay := slices.Contains(s.usable(p, model), from) && (p.Account == nil || !p.Account.Stream || streamOf(body))
+	// a web search offered is done by the provider, or by magpie for it,
+	// which a relayed request can't
+	if relay && searchAsked(from, body) && (from == provider.Chat || !searchesItself(p, from)) {
+		relay = false
+	}
 	if relay {
 		call.To = from
 		if status, msg, done := s.passthrough(w, r, p, from, model, body, &call.Usage); done {
@@ -951,7 +956,13 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.Effort, req = e, &r
 		}
 	}
+	web := req.WebSearch
 	for {
+		// only a provider that searches by itself is asked to
+		if want := web && searchesItself(p, to); want != req.WebSearch {
+			r := *req
+			r.WebSearch, req = want, &r
+		}
 		body := build(to, req, model, p.Host(), p.RejectsTemperature(model))
 		if to == provider.CodeAssist && p.Account != nil {
 			body = buildCodeAssist(req, model, p.Account.Agent)
@@ -1013,6 +1024,19 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	request, err := parse(from, body)
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
+	}
+	if request.WebSearch && !searching(r.Context()) {
+		// an API on which the provider searches by itself comes first;
+		// without one, its model is given magpie's search
+		for _, t := range s.usable(p, model) {
+			if searchesItself(p, t) {
+				to = t
+				break
+			}
+		}
+		if _, _, ok := searcher(); ok && !searchesItself(p, to) {
+			return s.searchReply(w, r, from, p.Name, request, u, s.askTranslated(p, to, model, r.Header, w.Header()))
+		}
 	}
 	stream := request.Stream
 	request.Stream = true
@@ -1129,7 +1153,8 @@ func decoder(proto provider.Protocol) func(data string, emit func(Event)) error 
 		d := &codeAssistDecoder{}
 		return d.decode
 	}
-	return decodeAnthropic
+	d := &anthropicDecoder{server: map[int]bool{}}
+	return d.decode
 }
 
 type streamEncoder interface {

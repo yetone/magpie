@@ -37,6 +37,7 @@ type cRequest struct {
 		} `json:"function"`
 	} `json:"tools,omitempty"`
 	ToolChoice          json.RawMessage `json:"tool_choice,omitempty"`
+	WebSearchOptions    json.RawMessage `json:"web_search_options,omitempty"`
 	MaxTokens           int             `json:"max_tokens,omitempty"`
 	MaxCompletionTokens int             `json:"max_completion_tokens,omitempty"`
 	Temperature         *float64        `json:"temperature,omitempty"`
@@ -88,7 +89,11 @@ func parseChat(body []byte) (*Request, error) {
 		}
 	}
 	r.System = strings.Join(sys, "\n\n")
+	r.WebSearch = len(c.WebSearchOptions) > 0 && string(c.WebSearchOptions) != "null"
 	for _, t := range c.Tools {
+		if strings.HasPrefix(t.Type, "web_search") {
+			r.WebSearch = true
+		}
 		if t.Type != "" && t.Type != "function" {
 			continue
 		}
@@ -271,6 +276,10 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 		if r.Parallel != nil {
 			out["parallel_tool_calls"] = *r.Parallel
 		}
+	}
+	if r.WebSearch && host == "openrouter.ai" {
+		// OpenRouter's own search, for any of its models
+		out["plugins"] = []map[string]any{{"id": "web"}}
 	}
 	b, _ := json.Marshal(out)
 	return b

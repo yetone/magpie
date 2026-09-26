@@ -33,6 +33,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -83,8 +84,13 @@ type subscriptionRun struct {
 	// learns of them here, as the MCP helper hands each one over, and opens
 	// each answer with a message start of its own.
 	onCall func(id, name string, args json.RawMessage)
-	begin  func() Event
-	resume func() // after a resumed turn has its segment
+
+	// search answers magpie's web search tool, searchName, which the
+	// client never sees
+	search     func(ctx context.Context, query string) (string, error)
+	searchName string
+	begin      func() Event
+	resume     func() // after a resumed turn has its segment
 
 	// patience, when set, is how long a tool call may park before the agent
 	// is told it is still running (its MCP client gives up on a call at a
@@ -777,6 +783,25 @@ func (b *subscriptionBridge) mcpCall(w http.ResponseWriter, r *http.Request) {
 		run.await(w, r, call.Arguments)
 		return
 	}
+	run.mu.Lock()
+	search, searchName := run.search, run.searchName
+	run.mu.Unlock()
+	if search != nil && call.Name == searchName {
+		var a struct {
+			Query string `json:"query"`
+		}
+		_ = json.Unmarshal(call.Arguments, &a)
+		// within the minute its MCP client waits for a call
+		ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
+		defer cancel()
+		found, err := search(ctx, a.Query)
+		if err != nil {
+			writeJSON(w, 200, mcpToolResult{Content: []map[string]any{{"type": "text", "text": "search failed: " + err.Error()}}, IsError: true})
+			return
+		}
+		writeJSON(w, 200, mcpToolResult{Content: []map[string]any{{"type": "text", "text": found}}})
+		return
+	}
 	waiter := make(chan mcpToolResult, 1)
 	run.mu.Lock()
 	if result, ok := run.early[call.ToolCallID]; ok {
@@ -930,6 +955,14 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
 	req.Model = model
+	// its model searches the web with magpie's tool, which magpie answers
+	var search Tool
+	if req.WebSearch && !searching(r.Context()) {
+		if _, _, ok := searcher(); ok {
+			search = searchTool(req.Tools)
+			req.Tools = append(slices.Clone(req.Tools), search)
+		}
+	}
 
 	run, results := s.subscription.findRun(req)
 	var events <-chan Event
@@ -937,6 +970,11 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 		events, err = run.continueWith(results)
 	} else {
 		run, events, err = start(r.Context(), req)
+		if err == nil && search.Name != "" {
+			run.mu.Lock()
+			run.search, run.searchName = s.webSearch, search.Name
+			run.mu.Unlock()
+		}
 	}
 	if err != nil {
 		return writeError(w, from, 502, name+": "+err.Error()), err.Error()

@@ -106,6 +106,9 @@ func parseResponses(body []byte) (*Request, error) {
 	}
 	r.Messages = mergeTurns(r.Messages)
 	for _, t := range q.Tools {
+		if strings.HasPrefix(t.Type, "web_search") {
+			r.WebSearch = true
+		}
 		if t.Type != "function" {
 			continue
 		}
@@ -229,7 +232,7 @@ func buildResponses(r *Request, model string, rejectTemp bool) []byte {
 	} else if r.Thinking {
 		out["reasoning"] = map[string]any{"summary": "auto"}
 	}
-	if len(r.Tools) > 0 {
+	if len(r.Tools) > 0 || r.WebSearch {
 		var tools []map[string]any
 		for _, t := range r.Tools {
 			tool := map[string]any{"type": "function", "name": t.Name, "description": t.Description}
@@ -237,6 +240,9 @@ func buildResponses(r *Request, model string, rejectTemp bool) []byte {
 				tool["parameters"] = t.Schema
 			}
 			tools = append(tools, tool)
+		}
+		if r.WebSearch {
+			tools = append(tools, map[string]any{"type": "web_search"})
 		}
 		out["tools"] = tools
 		switch {

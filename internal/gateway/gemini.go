@@ -57,6 +57,8 @@ type gRequest struct {
 			Parameters           json.RawMessage `json:"parameters,omitempty"`
 			ParametersJSONSchema json.RawMessage `json:"parametersJsonSchema,omitempty"`
 		} `json:"functionDeclarations,omitempty"`
+		GoogleSearch json.RawMessage `json:"googleSearch,omitempty"`
+		GoogleSnake  json.RawMessage `json:"google_search,omitempty"`
 	} `json:"tools,omitempty"`
 	ToolConfig *struct {
 		FunctionCallingConfig *struct {
@@ -158,6 +160,9 @@ func parseGemini(body []byte) (*Request, error) {
 		}
 	}
 	for _, t := range g.Tools {
+		if t.GoogleSearch != nil || t.GoogleSnake != nil {
+			r.WebSearch = true
+		}
 		for _, f := range t.FunctionDeclarations {
 			schema := f.ParametersJSONSchema
 			if len(schema) == 0 {

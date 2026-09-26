@@ -40,40 +40,54 @@ func (s *Server) serveKiro(w http.ResponseWriter, r *http.Request, from provider
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
 	req.Model = model
-	ctx, cancel := context.WithCancel(r.Context())
-	auth, err := kiroAuth(ctx, p.Key, false)
-	if err != nil {
-		cancel()
-		return writeError(w, from, 401, "Kiro: "+err.Error()), err.Error()
-	}
-	window, _ := provider.KiroModel(model)
-	thinking := kiroThinks(req, model)
-	res, err := s.sendKiro(ctx, auth, buildKiro(req, model, auth.Profile, thinking))
-	if err == nil && res.StatusCode == http.StatusForbidden {
-		// an expired or revoked token: refreshed, it goes once more
-		res.Body.Close()
-		if auth, err = kiroAuth(ctx, p.Key, true); err == nil {
-			res, err = s.sendKiro(ctx, auth, buildKiro(req, model, auth.Profile, thinking))
+	ask := s.askKiro(p, model)
+	if req.WebSearch && !searching(r.Context()) {
+		if _, _, ok := searcher(); ok {
+			return s.searchReply(w, r, from, "Kiro", req, usage, ask)
 		}
 	}
-	if err != nil {
-		cancel()
-		return writeError(w, from, 502, "Kiro: "+err.Error()), err.Error()
-	}
-	if res.StatusCode/100 != 2 {
-		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-		res.Body.Close()
-		cancel()
-		status, msg := kiroFailure(res.StatusCode, b)
-		return writeError(w, from, status, "Kiro: "+msg), msg
-	}
-	events := make(chan Event, 16)
-	go func() {
-		defer res.Body.Close()
-		decodeKiro(ctx, res.Body, events, model, window, thinking)
-	}()
+	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	events, status, msg := ask(ctx, req)
+	if events == nil {
+		return writeError(w, from, status, msg), msg
+	}
 	return relay(w, r, from, "Kiro", req, events, usage, cancel, func(string, string, bool) {})
+}
+
+// askKiro is a round for Kiro's API.
+func (s *Server) askKiro(p provider.Provider, model string) round {
+	return func(ctx context.Context, req *Request) (<-chan Event, int, string) {
+		auth, err := kiroAuth(ctx, p.Key, false)
+		if err != nil {
+			return nil, 401, "Kiro: " + err.Error()
+		}
+		window, _ := provider.KiroModel(model)
+		thinking := kiroThinks(req, model)
+		res, err := s.sendKiro(ctx, auth, buildKiro(req, model, auth.Profile, thinking))
+		if err == nil && res.StatusCode == http.StatusForbidden {
+			// an expired or revoked token: refreshed, it goes once more
+			res.Body.Close()
+			if auth, err = kiroAuth(ctx, p.Key, true); err == nil {
+				res, err = s.sendKiro(ctx, auth, buildKiro(req, model, auth.Profile, thinking))
+			}
+		}
+		if err != nil {
+			return nil, 502, "Kiro: " + err.Error()
+		}
+		if res.StatusCode/100 != 2 {
+			b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+			res.Body.Close()
+			status, msg := kiroFailure(res.StatusCode, b)
+			return nil, status, "Kiro: " + msg
+		}
+		events := make(chan Event, 16)
+		go func() {
+			defer res.Body.Close()
+			decodeKiro(ctx, res.Body, events, model, window, thinking)
+		}()
+		return events, 0, ""
+	}
 }
 
 func (s *Server) sendKiro(ctx context.Context, auth provider.KiroAuth, body []byte) (*http.Response, error) {

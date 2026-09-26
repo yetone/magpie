@@ -283,7 +283,7 @@ func buildAnthropic(r *Request, model string) []byte {
 	if len(r.Stop) > 0 {
 		out["stop_sequences"] = r.Stop
 	}
-	if len(r.Tools) > 0 {
+	if len(r.Tools) > 0 || r.WebSearch {
 		var tools []map[string]any
 		for _, t := range r.Tools {
 			schema := t.Schema
@@ -291,6 +291,9 @@ func buildAnthropic(r *Request, model string) []byte {
 				schema = json.RawMessage(`{"type":"object","properties":{}}`)
 			}
 			tools = append(tools, map[string]any{"name": t.Name, "description": t.Description, "input_schema": schema})
+		}
+		if r.WebSearch {
+			tools = append(tools, map[string]any{"type": "web_search_20250305", "name": "web_search", "max_uses": 5})
 		}
 		out["tools"] = tools
 		var tc map[string]any
@@ -315,6 +318,31 @@ func buildAnthropic(r *Request, model string) []byte {
 	}
 	b, _ := json.Marshal(out)
 	return b
+}
+
+// anthropicDecoder leaves out the blocks of Anthropic's own server tools —
+// a web search it ran — whose input is no call of the client's.
+type anthropicDecoder struct{ server map[int]bool }
+
+func (d *anthropicDecoder) decode(data string, emit func(Event)) error {
+	var ev struct {
+		Type         string `json:"type"`
+		Index        int    `json:"index"`
+		ContentBlock struct {
+			Type string `json:"type"`
+		} `json:"content_block"`
+	}
+	if json.Unmarshal([]byte(data), &ev) == nil {
+		switch ev.Type {
+		case "content_block_start":
+			d.server[ev.Index] = ev.ContentBlock.Type == "server_tool_use"
+		case "content_block_delta", "content_block_stop":
+			if d.server[ev.Index] {
+				return nil
+			}
+		}
+	}
+	return decodeAnthropic(data, emit)
 }
 
 // decodeAnthropic turns an Anthropic event stream into events.
