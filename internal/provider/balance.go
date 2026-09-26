@@ -35,7 +35,10 @@ type balanceSource struct {
 func balanceSourceOf(p Provider) (balanceSource, bool) {
 	if p.BalanceURL != "" {
 		path := p.BalancePath
-		return balanceSource{p.BalanceURL, func(b []byte) (string, error) { return readBalancePath(b, path) }, ""}, true
+		// a token saved beside it (a new-api relay's access token, its
+		// /api/user/self telling the account's quota) is asked with
+		// instead of the key
+		return balanceSource{p.BalanceURL, func(b []byte) (string, error) { return readBalancePath(b, path) }, p.BalanceToken}, true
 	}
 	hosts := []string{hostOf(p.Chat), hostOf(p.Responses), hostOf(p.Anthropic)}
 	for _, h := range hosts {
@@ -65,6 +68,9 @@ func balanceSourceOf(p Provider) (balanceSource, bool) {
 // TakesBalanceToken says the provider's vendor tells the account's balance
 // to a token of its own (BalanceToken), which the editor then asks for.
 func TakesBalanceToken(p Provider) bool {
+	if p.BalanceURL != "" {
+		return true
+	}
 	for _, h := range []string{hostOf(p.Chat), hostOf(p.Responses), hostOf(p.Anthropic)} {
 		if h == "aihubmix.com" {
 			return true
@@ -482,6 +488,13 @@ func Balance(ctx context.Context, p Provider) (amount string, ok bool, err error
 		return "", true, err
 	}
 	if src.token != "" {
+		// a named endpoint still gets the provider's headers, which is
+		// where a new-api relay's New-Api-User goes
+		if p.BalanceURL != "" {
+			for k, v := range p.Headers {
+				req.Header.Set(k, v)
+			}
+		}
 		req.Header.Set("Authorization", src.token)
 	} else {
 		for k, v := range AuthHeaders(p, Chat) {

@@ -100,7 +100,9 @@ type Provider struct {
 	BalancePath string `json:"balancePath,omitempty"`
 	// BalanceToken is what a vendor tells the whole account's balance to,
 	// where a key is told only what is left on itself: AiHubMix's system
-	// access token (see TakesBalanceToken). It is asked with nothing else.
+	// access token, or a new-api relay's for its /api/user/self named in
+	// BalanceURL (see TakesBalanceToken). It is asked with nothing else but
+	// the provider's headers, when the endpoint is one named.
 	BalanceToken string `json:"balanceToken,omitempty"`
 
 	// ModelsURL, when set, is where the vendor lists its models, for one

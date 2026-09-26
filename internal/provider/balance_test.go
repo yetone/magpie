@@ -173,3 +173,28 @@ func TestAiHubMixAccountBalance(t *testing.T) {
 		t.Fatalf("with a token: %+v", src)
 	}
 }
+
+// A new-api relay tells the account's quota at /api/user/self to its
+// access token and the user's id in New-Api-User, not to a key.
+func TestNamedBalanceWithAccessToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/user/self" || r.Header.Get("Authorization") != "tok" || r.Header.Get("New-Api-User") != "42" {
+			http.Error(w, `{"success":false}`, http.StatusUnauthorized)
+			return
+		}
+		w.Write([]byte(`{"success":true,"data":{"quota":1500000,"used_quota":10}}`))
+	}))
+	defer srv.Close()
+	p := Provider{ID: "relay", Chat: srv.URL + "/v1", Key: "sk-one", Headers: map[string]string{"New-Api-User": "42"},
+		BalanceURL: srv.URL + "/api/user/self", BalancePath: "$data.quota / 500000"}
+	if !TakesBalanceToken(p) {
+		t.Fatal("a named endpoint takes a token")
+	}
+	if _, _, err := Balance(context.Background(), p); err == nil {
+		t.Fatal("the key was taken for the access token")
+	}
+	p.BalanceToken = "tok"
+	if got, ok, err := Balance(context.Background(), p); err != nil || !ok || got != "$3.00" {
+		t.Fatalf("balance = %q %v %v", got, ok, err)
+	}
+}
