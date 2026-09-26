@@ -198,6 +198,12 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 					t = "output_text"
 				}
 				content = append(content, map[string]any{"type": t, "text": p.Text})
+			case File:
+				t := "input_text"
+				if m.Role == "assistant" {
+					t = "output_text"
+				}
+				content = append(content, map[string]any{"type": t, "text": attachmentText(p)})
 			case Image:
 				if m.Role != "assistant" {
 					content = append(content, map[string]any{"type": "input_image", "image_url": dataURL(p)})

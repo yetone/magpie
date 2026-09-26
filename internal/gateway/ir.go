@@ -20,6 +20,7 @@ type Kind string
 const (
 	Text       Kind = "text"
 	Image      Kind = "image"
+	File       Kind = "file"
 	ToolCall   Kind = "tool_call"
 	ToolResult Kind = "tool_result"
 	Thinking   Kind = "thinking"
@@ -31,7 +32,7 @@ type Part struct {
 	Kind Kind
 	Text string // text, thinking, or a tool result's output
 
-	// image
+	// image or file
 	MediaType string
 	Data      string // base64
 	URL       string
@@ -56,6 +57,15 @@ type Part struct {
 type Hit struct {
 	Title string `json:"title"`
 	URL   string `json:"url"`
+}
+
+// attachmentText is the fallback when a protocol cannot carry a Gemini file.
+// Inline data has no URL to show and must not be relabeled as an image.
+func attachmentText(p Part) string {
+	if p.URL != "" {
+		return "[attachment " + p.MediaType + ": " + p.URL + "]"
+	}
+	return "[attachment " + p.MediaType + "]"
 }
 
 // Message is one turn.

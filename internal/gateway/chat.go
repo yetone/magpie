@@ -222,6 +222,8 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 			switch p.Kind {
 			case Text:
 				content = append(content, map[string]any{"type": "text", "text": p.Text})
+			case File:
+				content = append(content, map[string]any{"type": "text", "text": attachmentText(p)})
 			case Image:
 				plain = false
 				content = append(content, map[string]any{"type": "image_url", "image_url": map[string]any{"url": dataURL(p)}})

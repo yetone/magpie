@@ -224,6 +224,8 @@ func buildAnthropic(r *Request, model string) []byte {
 				if strings.TrimSpace(p.Text) != "" {
 					rest = append(rest, aBlock{Type: "text", Text: p.Text})
 				}
+			case File:
+				rest = append(rest, aBlock{Type: "text", Text: attachmentText(p)})
 			case Image:
 				b := aBlock{Type: "image"}
 				b.Source = &struct {

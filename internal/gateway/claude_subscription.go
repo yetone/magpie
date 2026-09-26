@@ -351,6 +351,8 @@ func turnKey(owner string, req *Request, msgs []Message) string {
 				fmt.Fprintf(&b, "\x01call %s %s ", p.Name, p.ID)
 			case ToolResult:
 				fmt.Fprintf(&b, "\x01result %s %s ", p.CallID, p.Text)
+			case File:
+				fmt.Fprintf(&b, "\x01file %s %d %s ", p.MediaType, len(p.Data), p.URL)
 			case Image:
 				fmt.Fprintf(&b, "\x01image %d %s ", len(p.Data), p.URL)
 			}

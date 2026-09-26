@@ -46,7 +46,7 @@ func buildCodeAssist(r *Request, model, agent string) []byte {
 				if p.Text != "" {
 					parts = append(parts, map[string]any{"text": p.Text})
 				}
-			case Image:
+			case Image, File:
 				if p.Data != "" {
 					parts = append(parts, map[string]any{"inlineData": map[string]any{"mimeType": p.MediaType, "data": p.Data}})
 				} else if p.URL != "" {

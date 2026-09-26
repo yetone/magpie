@@ -436,6 +436,21 @@ func TestGeminiNonImageFileTranslation(t *testing.T) {
 			if strings.Contains(string(chat), `"image_url"`) || !strings.Contains(string(chat), "[attachment "+tc.mime) {
 				t.Fatalf("non-image attachment translated as an image or lost: %s", chat)
 			}
+			// Code Assist speaks Gemini's file format and must keep the data.
+			assist := buildCodeAssist(r, "gemini-2.5-pro", "gemini")
+			if !strings.Contains(string(assist), `"`+tc.field+`"`) || !strings.Contains(string(assist), tc.value) {
+				t.Fatalf("Gemini attachment lost in Code Assist: %s", assist)
+			}
+			if strings.Contains(string(assist), "[attachment ") {
+				t.Fatalf("Code Assist received a placeholder instead of the file: %s", assist)
+			}
+			responses := buildResponses(r, "text", false)
+			anthropic := buildAnthropic(r, "text")
+			for protocol, out := range map[string][]byte{"Responses": responses, "Anthropic": anthropic} {
+				if strings.Contains(string(out), `"image_url"`) || strings.Contains(string(out), `"type":"image"`) || !strings.Contains(string(out), "[attachment "+tc.mime) {
+					t.Errorf("%s lost or mislabeled file: %s", protocol, out)
+				}
+			}
 		})
 	}
 }

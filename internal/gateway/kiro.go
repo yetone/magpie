@@ -284,6 +284,8 @@ func buildKiro(r *Request, model, profile string, thinking bool) []byte {
 				if p.Text != "" {
 					texts = append(texts, p.Text)
 				}
+			case File:
+				texts = append(texts, attachmentText(p))
 			case Image:
 				if p.Data != "" {
 					img := kiroImage{Format: kiroImageFormat(p.MediaType)}

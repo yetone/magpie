@@ -88,7 +88,7 @@ func turnIn(req *Request) (turn int, within bool) {
 		text, result := false, false
 		for _, p := range m.Parts {
 			switch p.Kind {
-			case Text, Image:
+			case Text, Image, File:
 				text = true
 			case ToolResult:
 				result = true
