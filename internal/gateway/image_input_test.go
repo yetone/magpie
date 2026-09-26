@@ -390,3 +390,25 @@ func TestFailedKeyFetchKeepsUnknownImageCapabilityAtGateway(t *testing.T) {
 		t.Fatalf("image after failed key fetch: %d %s; upstream got %d images", rec.Code, rec.Body.String(), sent)
 	}
 }
+
+// Gemini fileData also carries documents and audio. A text-only model must
+// reject images, but it must not silently discard a non-image file part.
+func TestGeminiTextOnlyBodyKeepsNonImageFileData(t *testing.T) {
+	for _, tc := range []struct {
+		mime    string
+		blocked bool
+	}{
+		{"application/pdf", false},
+		{"audio/wav", false},
+		{"image/png", true},
+	} {
+		source := `{"contents":[{"role":"user","parts":[{"text":"read this"},{"fileData":{"mimeType":"` + tc.mime + `","fileUri":"gs://bucket/file"}}]}]}`
+		body, blocked := textOnlyBody(provider.Gemini, []byte(source))
+		if blocked != tc.blocked {
+			t.Errorf("%s blocked=%v, want %v", tc.mime, blocked, tc.blocked)
+		}
+		if !tc.blocked && !strings.Contains(string(body), "gs://bucket/file") {
+			t.Errorf("%s was stripped: %s", tc.mime, body)
+		}
+	}
+}
