@@ -30,7 +30,7 @@ func TestClaudeSubscriptionPromptKeepsForeignHarnessOutOfSystem(t *testing.T) {
 	// renderClaudePrompt is the user content passed to the genuine CLI. The
 	// foreign harness is never supplied through --system-prompt, where
 	// Anthropic's subscription classifier rejects it.
-	args := strings.Join(claudeCLIArgs("claude-sonnet-5", `{}`, "medium"), " ")
+	args := strings.Join(claudeCLIArgs("claude-sonnet-5", `{}`, "medium", false), " ")
 	if strings.Contains(args, "system-prompt") {
 		t.Fatal("Claude bridge must retain the genuine Claude Code preset")
 	}
@@ -153,5 +153,67 @@ func TestSubscriptionStreamErrorIsTheEnd(t *testing.T) {
 				t.Fatalf("%s: %s after the error:\n%s", from, end, out)
 			}
 		}
+	}
+}
+
+// Claude Code's own WebSearch runs inside the turn: the client hears one
+// message, with no call it did not offer, and the args ask for WebSearch
+// only when the client offered a web search.
+func TestClaudeOwnWebSearchStaysInside(t *testing.T) {
+	body := `{"model":"claude-sonnet-5","max_tokens":10,"messages":[{"role":"user","content":"hi"}],"tools":[{"type":"web_search_20250305","name":"web_search","max_uses":8}]}`
+	req, err := parseAnthropic([]byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !req.WebSearch || len(req.Tools) != 0 {
+		t.Fatalf("web search not noted: %+v", req)
+	}
+	on := strings.Join(claudeCLIArgs("m", `{}`, "", true), "\x00")
+	off := strings.Join(claudeCLIArgs("m", `{}`, "", false), "\x00")
+	if !strings.Contains(on, "--tools\x00WebSearch\x00") || !strings.Contains(off, "--tools\x00\x00") {
+		t.Fatalf("tools: %q / %q", on, off)
+	}
+
+	ev := func(e string) string { return `{"type":"stream_event","event":` + e + `}` }
+	lines := []string{
+		ev(`{"type":"message_start","message":{"id":"m1","model":"x","usage":{"input_tokens":10}}}`),
+		ev(`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		ev(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Let me look. "}}`),
+		ev(`{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"WebSearch"}}`),
+		ev(`{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"go\"}"}}`),
+		ev(`{"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":5}}`),
+		ev(`{"type":"message_stop"}`),
+		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"results"}]}}`,
+		ev(`{"type":"message_start","message":{"id":"m2","model":"x","usage":{"input_tokens":30}}}`),
+		ev(`{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		ev(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Go 1.27.1"}}`),
+		ev(`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":7}}`),
+		ev(`{"type":"message_stop"}`),
+	}
+	run := &subscriptionRun{}
+	seg := run.attach()
+	go run.readOutput(strings.NewReader(strings.Join(lines, "\n") + "\n"))
+	var got []string
+	var usage Usage
+	for e := range seg {
+		switch e.Kind {
+		case KStart:
+			got = append(got, "start:"+e.MsgID)
+			usage.add(e.Usage)
+		case KText:
+			got = append(got, "text:"+e.Text)
+		case KToolStart, KToolArgs:
+			got = append(got, "tool:"+e.Name+e.Text)
+		case KStop:
+			got = append(got, "stop:"+e.Stop)
+		case KUsage:
+			usage.add(e.Usage)
+		}
+	}
+	if s := strings.Join(got, "|"); s != "start:m1|text:Let me look. |text:Go 1.27.1|stop:stop" {
+		t.Fatalf("events: %s", s)
+	}
+	if usage.Input != 40 || usage.Output != 12 {
+		t.Fatalf("usage: %+v", usage)
 	}
 }

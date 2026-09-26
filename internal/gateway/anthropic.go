@@ -107,7 +107,12 @@ func parseAnthropic(body []byte) (*Request, error) {
 	}
 	for _, t := range a.Tools {
 		if t.Type != "" && t.Type != "custom" && len(t.InputSchema) == 0 {
-			continue // server-side tools (web search…) mean nothing elsewhere
+			// server-side tools mean nothing elsewhere; web search is
+			// noted for those that can search by themselves
+			if strings.HasPrefix(t.Type, "web_search") {
+				r.WebSearch = true
+			}
+			continue
 		}
 		r.Tools = append(r.Tools, Tool{Name: t.Name, Description: t.Description, Schema: t.InputSchema})
 	}

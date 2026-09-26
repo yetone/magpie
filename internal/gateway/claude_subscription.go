@@ -178,7 +178,7 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, oau
 	mcpConfig, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{
 		"magpie": map[string]any{"command": exe, "args": []string{"claude-mcp-helper", callback, toolsPath}},
 	}})
-	args := claudeCLIArgs(model, string(mcpConfig), req.Effort)
+	args := claudeCLIArgs(model, string(mcpConfig), req.Effort, req.WebSearch)
 	cmd := proc.CommandContext(context.Background(), binary, args...)
 	cmd.Dir = tmp
 	cmd.Env = netproxy.Env(cleanClaudeEnv(os.Environ()))
@@ -330,7 +330,7 @@ func (r *subscriptionRun) ended(req *Request, said, stop string, ok bool) {
 func turnKey(owner string, req *Request, msgs []Message) string {
 	h := sha256.New()
 	tools, _ := json.Marshal(req.Tools)
-	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\x00%s", owner, req.Model, req.Effort, req.ToolChoice, req.System, tools)
+	fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%t", owner, req.Model, req.Effort, req.ToolChoice, req.System, tools, req.WebSearch)
 	role := ""
 	for _, m := range msgs {
 		var b strings.Builder
@@ -359,11 +359,18 @@ func turnKey(owner string, req *Request, msgs []Message) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func claudeCLIArgs(model, mcpConfig, effort string) []string {
+// claudeCLIArgs runs Claude Code with none of its own tools but, when the
+// client offered a web search (Claude Code's own WebSearch tool asks for
+// Anthropic's), its WebSearch, which searches as the subscription does.
+func claudeCLIArgs(model, mcpConfig, effort string, web bool) []string {
+	own := ""
+	if web {
+		own = "WebSearch"
+	}
 	args := []string{
 		"-p", "--output-format", "stream-json", "--input-format", "stream-json",
 		"--include-partial-messages", "--verbose", "--model", model,
-		"--tools", "", "--strict-mcp-config", "--mcp-config", mcpConfig,
+		"--tools", own, "--strict-mcp-config", "--mcp-config", mcpConfig,
 		"--setting-sources", "", "--dangerously-skip-permissions",
 	}
 	if effort != "" {
@@ -437,6 +444,20 @@ func (r *subscriptionRun) endSegment() {
 func (r *subscriptionRun) readOutput(rd io.Reader) {
 	s := bufio.NewScanner(rd)
 	s.Buffer(make([]byte, 64<<10), 64<<20)
+	// A call to one of Claude Code's own tools (WebSearch) is run by Claude
+	// Code, not the client: its block is left out, and the message it ends
+	// goes on in the next one, so the client hears one reply.
+	own := map[int]bool{} // this message's blocks that are such calls
+	theirs := false       // this message calls a client's tool
+	inside := false       // a message goes on after Claude Code's own call
+	// what the messages before cost, as each message's usage counts only
+	// itself and the client keeps the last it is told
+	var before, this Usage
+	usage := func(u cliUsage) Usage {
+		v := u.gateway()
+		this.add(v)
+		return v.plus(before, true)
+	}
 	for s.Scan() {
 		var envelope struct {
 			Type    string `json:"type"`
@@ -483,11 +504,25 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 		e := envelope.Event
 		switch e.Type {
 		case "message_start":
-			r.emit(Event{Kind: KStart, MsgID: e.Message.ID, Model: e.Message.Model, Usage: e.Message.Usage.gateway()})
+			own, theirs = map[int]bool{}, false
+			if inside {
+				inside = false
+				before, this = before.plus(this, false), Usage{}
+				r.emit(Event{Kind: KUsage, Usage: usage(e.Message.Usage)})
+				continue
+			}
+			before, this = Usage{}, Usage{}
+			r.emit(Event{Kind: KStart, MsgID: e.Message.ID, Model: e.Message.Model, Usage: usage(e.Message.Usage)})
 		case "content_block_start":
 			switch e.ContentBlock.Type {
 			case "tool_use":
-				r.emit(Event{Kind: KToolStart, ID: e.ContentBlock.ID, Name: strings.TrimPrefix(e.ContentBlock.Name, "mcp__magpie__")})
+				name, ok := strings.CutPrefix(e.ContentBlock.Name, "mcp__magpie__")
+				if !ok {
+					own[e.Index] = true
+					continue
+				}
+				theirs = true
+				r.emit(Event{Kind: KToolStart, ID: e.ContentBlock.ID, Name: name})
 			case "text":
 				if e.ContentBlock.Text != "" {
 					r.emit(Event{Kind: KText, Text: e.ContentBlock.Text})
@@ -502,15 +537,21 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			case "signature_delta":
 				r.emit(Event{Kind: KSig, Text: e.Delta.Signature})
 			case "input_json_delta":
-				r.emit(Event{Kind: KToolArgs, Text: e.Delta.PartialJSON})
+				if !own[e.Index] {
+					r.emit(Event{Kind: KToolArgs, Text: e.Delta.PartialJSON})
+				}
 			}
 		case "message_delta":
-			r.emit(Event{Kind: KUsage, Usage: e.Usage.gateway()})
-			if e.Delta.StopReason != "" {
+			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage)})
+			if e.Delta.StopReason == "tool_use" && len(own) > 0 && !theirs {
+				inside = true
+			} else if e.Delta.StopReason != "" {
 				r.emit(Event{Kind: KStop, Stop: stopFromAnthropic(e.Delta.StopReason)})
 			}
 		case "message_stop":
-			r.endSegment()
+			if !inside {
+				r.endSegment()
+			}
 		}
 	}
 	if err := s.Err(); err != nil {
@@ -526,6 +567,17 @@ type cliUsage struct {
 	OutputDetails struct {
 		Thinking int `json:"thinking_tokens"`
 	} `json:"output_tokens_details"`
+}
+
+// plus adds v's counts to u's; only to those u has, when it only updates
+// what the client was told.
+func (u Usage) plus(v Usage, only bool) Usage {
+	for _, f := range []struct{ a, b *int }{{&u.Input, &v.Input}, {&u.Output, &v.Output}, {&u.CacheRead, &v.CacheRead}, {&u.CacheWrite, &v.CacheWrite}, {&u.Reasoning, &v.Reasoning}} {
+		if *f.a > 0 || !only {
+			*f.a += *f.b
+		}
+	}
+	return u
 }
 
 func (u cliUsage) gateway() Usage {
