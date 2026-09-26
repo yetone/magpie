@@ -63,6 +63,11 @@ func (s *usageSniffer) line(line []byte) {
 			s.data = append(s.data, '\n')
 		}
 		s.data = append(s.data, rest...)
+		// Relays also send one JSON event per data line without blank separators.
+		// Parse a complete value now, but keep incomplete multiline JSON.
+		if json.Valid(bytes.TrimSpace(s.data)) {
+			s.flushEvent()
+		}
 	}
 }
 

@@ -65,3 +65,14 @@ func TestSniffResponsesMultilineAndUnterminatedSSE(t *testing.T) {
 		}
 	}
 }
+
+// Some relays separate complete events with a single newline, not a blank line.
+// This case worked on main and must remain counted after multiline support.
+func TestSniffSingleNewlineEvents(t *testing.T) {
+	payload := "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":7}}}\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":3}}\n"
+	s := newSniffer(provider.Anthropic, "text/event-stream")
+	s.write([]byte(payload))
+	if got := s.usage(); got.Input != 7 || got.Output != 3 {
+		t.Errorf("usage %+v", got)
+	}
+}
