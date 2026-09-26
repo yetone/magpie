@@ -3669,7 +3669,7 @@ function quotaWindows(sub) {
     const quota = el("div", "quota");
     const labels = el("div", "quota-labels");
     const n = el("button", "quota-n", quotaText(w));
-    n.title = t(quotaLeft ? "Show how much of each window is used" : "Show how much of each window is left");
+    n.title = quotaText(w) + "\n" + t(quotaLeft ? "Show how much of each window is used" : "Show how much of each window is left");
     n.onclick = () => setQuotaLeft(!quotaLeft);
     labels.append(el("span", "", t(w.name)), n);
     const track = el("div", "quota-track");

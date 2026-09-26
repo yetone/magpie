@@ -401,8 +401,11 @@ body.window .field.solo { grid-column: auto; }
 .subscription-account .plan { margin-left: auto; flex: none; font-size: 10.5px; color: var(--muted); text-transform: capitalize; }
 .subscription-head .plan { margin-left: auto; font-size: 10.5px; color: var(--muted); text-transform: capitalize; }
 .quota-windows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 14px; }
-.quota-labels { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; font-size: 10.5px; color: var(--muted); }
-.quota-labels .quota-n { margin-left: auto; padding: 0; color: var(--fg-2); font-size: inherit; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* a narrow card puts the count under the window's name rather than
+   squeezing the name a character a line and the count past the edge */
+.quota-labels { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin-bottom: 4px; font-size: 10.5px; color: var(--muted); }
+.quota-labels > span { white-space: nowrap; }
+.quota-labels .quota-n { margin-left: auto; max-width: 100%; padding: 0; overflow: hidden; text-overflow: ellipsis; color: var(--fg-2); font-size: inherit; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .quota-labels .quota-n:hover { color: var(--fg); }
 .quota-track { height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; }
 .quota-track i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
