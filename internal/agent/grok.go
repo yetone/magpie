@@ -65,20 +65,27 @@ func grok(home string) *Agent {
 		dir = filepath.Join(home, ".grok")
 	}
 	path := filepath.Join(dir, "config.toml")
-	get := func(k string) string { return edit.GetTOMLTable(path, "models")[k] }
-	wired := func() bool {
-		for _, t := range edit.TOMLTables(path) {
+	get := func(k string) (string, error) {
+		models, err := edit.GetTOMLTable(path, "models")
+		return models[k], err
+	}
+	wired := func() (bool, error) {
+		tables, err := edit.TOMLTables(path)
+		if err != nil {
+			return false, err
+		}
+		for _, t := range tables {
 			if strings.HasPrefix(t, grokModelTable) {
-				return true
+				return true, nil
 			}
 		}
-		return false
+		return false, nil
 	}
 	writeMagpie := func() error { return edit.SetTOMLTables(path, []string{grokModelTable}, grokModelTables()) }
 	dropMagpie := func() error { return edit.SetTOMLTables(path, []string{grokModelTable}, nil) }
 	// the default model is the user's, not a campaign's
-	ownDefault := func() error {
-		if edit.GetTOMLTable(path, "features")["campaigns"] == "false" {
+	ownDefault := func(features map[string]string) error {
+		if features["campaigns"] == "false" {
 			return nil
 		}
 		return edit.SetTOMLKey(path, "features", "campaigns", false)
@@ -96,11 +103,20 @@ func grok(home string) *Agent {
 		UA:  []string{"grok-shell", "grok-pager", "xai-grok-build"}, // grok-pager: its terminal front end
 		Dir: dir, Path: path,
 		Sync: func() error {
-			if !wired() {
-				return nil
+			ok, err := wired()
+			if err != nil || !ok {
+				return err
 			}
-			if get("default") != "" {
-				if err := ownDefault(); err != nil {
+			model, err := get("default")
+			if err != nil {
+				return err
+			}
+			if model != "" {
+				features, err := edit.GetTOMLTable(path, "features")
+				if err != nil {
+					return err
+				}
+				if err := ownDefault(features); err != nil {
 					return err
 				}
 			}
@@ -113,11 +129,17 @@ func grok(home string) *Agent {
 			return ""
 		},
 		Check: func() string {
-			v := get("default")
+			v, err := get("default")
+			if err != nil {
+				return err.Error()
+			}
 			if !usesMagpie(v) {
 				return ""
 			}
-			t := edit.GetTOMLTable(path, "model."+strconv.Quote(v))
+			t, err := edit.GetTOMLTable(path, "model."+strconv.Quote(v))
+			if err != nil {
+				return err.Error()
+			}
 			if t == nil {
 				return "Grok Build's [model." + strconv.Quote(v) + "] (config.toml) is gone, so it no longer reaches magpie"
 			}
@@ -127,8 +149,16 @@ func grok(home string) *Agent {
 		Fields: []Field{
 			{
 				Key: "model", Label: "model",
-				Get: func() string { return get("default") },
+				Get: func() string { v, _ := get("default"); return v },
 				Set: func(v string) error {
+					e, err := get("default_reasoning_effort")
+					if err != nil {
+						return err
+					}
+					features, err := edit.GetTOMLTable(path, "features")
+					if err != nil {
+						return err
+					}
 					if v == "" {
 						if err := edit.DelTOMLKey(path, "models", "default"); err != nil {
 							return err
@@ -145,14 +175,14 @@ func grok(home string) *Agent {
 					} else if err := dropMagpie(); err != nil {
 						return err
 					}
-					if e := get("default_reasoning_effort"); e != "" {
+					if e != "" {
 						if es := efforts(v); es != nil && !contains(es, e) {
 							if err := edit.DelTOMLKey(path, "models", "default_reasoning_effort"); err != nil {
 								return err
 							}
 						}
 					}
-					if err := ownDefault(); err != nil {
+					if err := ownDefault(features); err != nil {
 						return err
 					}
 					return edit.SetTOMLKey(path, "models", "default", v)
@@ -165,7 +195,7 @@ func grok(home string) *Agent {
 				// the effort new sessions start with; Grok applies it to a
 				// model that supports it and ignores it otherwise
 				Key: "effort", Label: "effort",
-				Get: func() string { return get("default_reasoning_effort") },
+				Get: func() string { v, _ := get("default_reasoning_effort"); return v },
 				Set: func(v string) error {
 					if v == "" {
 						return edit.DelTOMLKey(path, "models", "default_reasoning_effort")

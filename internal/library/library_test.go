@@ -9,10 +9,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/tidwall/jsonc"
 )
 
@@ -177,6 +179,113 @@ func TestServerKeepsUsersKeys(t *testing.T) {
 	}
 	if s := read(t, gm); !strings.Contains(s, `"trust":true`) || !strings.Contains(s, `"uvx"`) {
 		t.Errorf("gemini:\n%s", s)
+	}
+}
+
+func TestDelCodexRemovesServerSubtables(t *testing.T) {
+	const before = `[user]
+note = '''
+[mcp_servers.x.fake]
+'''
+
+`
+	const server = "[mcp_servers.x]\ncommand = \"runner\"\n\n"
+	const env = "[mcp_servers.x.env]\nTOKEN = \"value\"\n\n"
+	const arrays = `[[mcp_servers.x.env_vars]]
+name = "FIRST"
+source = "local"
+
+[[mcp_servers.x.env_vars]]
+name = "SECOND"
+source = "local"
+
+`
+	const after = `[[skills.config]]
+path = "/keep-the-skill"
+
+[mcp_servers.xy]
+command = "same prefix but another server"
+
+[mcp_servers.y]
+command = "keep"
+`
+	for _, self := range []bool{false, true} {
+		path := filepath.Join(t.TempDir(), "config.toml")
+		write(t, path, before+server+env+arrays+after)
+		if err := delCodex(path, "x", self); err != nil {
+			t.Fatal(err)
+		}
+		want := before + after
+		if !self {
+			want = before + server + after
+		}
+		if got := read(t, path); got != want {
+			t.Fatalf("self=%v, got:\n%s\nwant:\n%s", self, got, want)
+		}
+		var document map[string]any
+		if err := toml.Unmarshal([]byte(read(t, path)), &document); err != nil {
+			t.Fatal(err)
+		}
+		if self && document["mcp_servers"].(map[string]any)["x"] != nil {
+			t.Fatal("removed server was implicitly recreated by a child table")
+		}
+	}
+}
+
+func TestDelCodexParseErrorLeavesFileUntouched(t *testing.T) {
+	const input = "[mcp_servers.x]\ncommand = \"runner\"\n\n[mcp_servers.x.env]\nTOKEN = \"value\"\n\n[other]\ninvalid = [\n"
+	for _, self := range []bool{false, true} {
+		path := filepath.Join(t.TempDir(), "config.toml")
+		write(t, path, input)
+		if err := delCodex(path, "x", self); err == nil || !strings.HasPrefix(err.Error(), path+": ") {
+			t.Fatalf("expected a parse error naming the file, got %v", err)
+		}
+		if got := read(t, path); got != input {
+			t.Fatalf("changed file after a parse error:\n%s", got)
+		}
+	}
+}
+
+func TestPutCodexPreservesChildArrayValues(t *testing.T) {
+	const other = "[mcp_servers.other]\ncommand = \"keep\"\n"
+	const input = `[mcp_servers.x]
+command = "old"
+
+[[mcp_servers.x.env_vars]]
+name = "FIRST"
+source = "local"
+
+[[mcp_servers.x.env_vars]]
+name = "SECOND"
+source = "local"
+
+`
+	path := filepath.Join(t.TempDir(), "config.toml")
+	write(t, path, input+other)
+	f := &mcpFile{Path: path, Format: fmtCodex}
+	before, err := f.entries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.put(&Server{Name: "x", Transport: "stdio", Command: "new"}, before["x"]); err != nil {
+		t.Fatal(err)
+	}
+	after, err := f.entries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after["x"]["command"] != "new" || !reflect.DeepEqual(after["x"]["env_vars"], before["x"]["env_vars"]) {
+		t.Fatalf("lost the user's array values while saving: %v", after["x"])
+	}
+	if !strings.HasSuffix(read(t, path), other) {
+		t.Fatal("changed the other server")
+	}
+	if err := f.del("x"); err != nil {
+		t.Fatal(err)
+	}
+	after, err = f.entries()
+	if err != nil || after["x"] != nil || read(t, path) != other {
+		t.Fatalf("server was not completely removed: %v, %v\n%s", after, err, read(t, path))
 	}
 }
 

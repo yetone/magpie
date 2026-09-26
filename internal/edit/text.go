@@ -52,7 +52,7 @@ func SetTOMLTop(path string, kvs ...KV) error {
 			return strings.Trim(m[1], `"`), true
 		})
 	}
-	return WriteAtomic(path, []byte(joinLines(lines)))
+	return writeTOML(path, lines)
 }
 
 // GetYAMLTop reads a top-level scalar key from a YAML file.

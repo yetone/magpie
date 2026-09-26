@@ -49,7 +49,7 @@ func RenameLegacy() {
 		case "pi":
 			_ = edit.DelJSON(filepath.Join(a.Dir, "models.json"), "providers."+legacyID)
 		case "codex":
-			if slices.Contains(edit.TOMLTables(a.Path), "model_providers."+legacyID) {
+			if tables, err := edit.TOMLTables(a.Path); err == nil && slices.Contains(tables, "model_providers."+legacyID) {
 				_ = edit.DelTOMLTable(a.Path, "model_providers."+legacyID)
 			}
 			os.Remove(filepath.Join(a.Dir, legacyID+"-models.json"))

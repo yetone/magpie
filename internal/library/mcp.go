@@ -490,14 +490,12 @@ func (f *mcpFile) del(name string) error {
 
 // delCodex takes out the server's table and the tables under it ([…env]),
 // or only those under it, which putCodex writes inline instead.
+// Include child array tables (such as env_vars), which would otherwise
+// implicitly recreate the removed server.
 func delCodex(path, name string, self bool) error {
 	table := "mcp_servers." + name
-	for _, t := range edit.TOMLTables(path) {
-		if strings.HasPrefix(t, table+".") {
-			if err := edit.DelTOMLTable(path, t); err != nil {
-				return err
-			}
-		}
+	if err := edit.SetTOMLTables(path, []string{table + "."}, nil); err != nil {
+		return err
 	}
 	if !self {
 		return nil

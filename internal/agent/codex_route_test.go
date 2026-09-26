@@ -167,3 +167,45 @@ func TestCodexSubagentModel(t *testing.T) {
 		t.Fatalf("\n%s", cfg)
 	}
 }
+
+func TestCodexSubagentReadErrorStopsChanges(t *testing.T) {
+	const input = "model = \"fake/m1\"\nmodel_provider = \"magpie\"\n\n[agents]\ndefault_subagent_model = [\n"
+	for _, model := range []string{"", "gpt-native"} {
+		t.Run("model="+model, func(t *testing.T) {
+			home := t.TempDir()
+			path := filepath.Join(home, ".codex", "config.toml")
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(input), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := codex(home).Field("model").Set(model)
+			if err == nil || !strings.HasPrefix(err.Error(), path+": ") {
+				t.Fatalf("expected the config path in the error, got %v", err)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != input {
+				t.Fatalf("changed config after a subagent read error:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestCodexCheckReportsTOMLParseErrors(t *testing.T) {
+	for _, profile := range []string{"", "profile = \"work\"\n"} {
+		input := "model = \"fake/m1\"\nmodel_provider = \"magpie\"\n" + profile + "\n[model_providers.magpie]\ninvalid = [\n"
+		home, read := codexHome(t, "", input)
+		path := filepath.Join(home, ".codex", "config.toml")
+		message := codex(home).Check()
+		if !strings.HasPrefix(message, path+": line ") || !strings.Contains(message, "column") || !strings.Contains(message, "array is incomplete") {
+			t.Fatalf("check did not report the parse location: %q", message)
+		}
+		if read() != input {
+			t.Fatal("check changed the config")
+		}
+	}
+}

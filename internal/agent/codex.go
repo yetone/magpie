@@ -77,9 +77,16 @@ func codex(home string) *Agent {
 	}
 	// the model spawned subagents start on, when not the parent's; one of
 	// magpie's goes when magpie steps out, as Codex could no longer find it
-	subagent := func() string { return edit.GetTOMLTable(path, "agents")["default_subagent_model"] }
+	subagent := func() (string, error) {
+		agents, err := edit.GetTOMLTable(path, "agents")
+		return agents["default_subagent_model"], err
+	}
 	dropSubagent := func() error {
-		if !isMagpie(subagent()) {
+		model, err := subagent()
+		if err != nil {
+			return err
+		}
+		if !isMagpie(model) {
 			return nil
 		}
 		return edit.DelTOMLKey(path, "agents", "default_subagent_model")
@@ -164,13 +171,13 @@ func codex(home string) *Agent {
 			return settle()
 		}
 		if routed() {
+			if err := dropSubagent(); err != nil {
+				return err
+			}
 			if err := dropBase(); err != nil {
 				return err
 			}
 			if err := dropProvider(); err != nil {
-				return err
-			}
-			if err := dropSubagent(); err != nil {
 				return err
 			}
 			unstash("codex.model")
@@ -228,7 +235,10 @@ func codex(home string) *Agent {
 			}
 			// a profile's settings win over the top level's, magpie's included
 			if p := get("profile"); p != "" {
-				t := edit.GetTOMLTable(path, "profiles."+p)
+				t, err := edit.GetTOMLTable(path, "profiles."+p)
+				if err != nil {
+					return err.Error()
+				}
 				for _, k := range []string{"model", "model_provider", "openai_base_url", "model_catalog_json"} {
 					if v, ok := t[k]; ok && v != get(k) {
 						return "Codex's profile " + p + " sets its own " + k + " (" + v + "), which Codex takes over magpie's"
@@ -237,7 +247,10 @@ func codex(home string) *Agent {
 			}
 			switch {
 			case asProvider():
-				t := edit.GetTOMLTable(path, "model_providers."+magpieID)
+				t, err := edit.GetTOMLTable(path, "model_providers."+magpieID)
+				if err != nil {
+					return err.Error()
+				}
 				if t["base_url"] != gatewayV1() || t["experimental_bearer_token"] != gateway.Token || t["wire_api"] != "responses" {
 					return "Codex's [model_providers.magpie] no longer points at magpie's gateway (" + gatewayV1() + ")"
 				}
@@ -310,7 +323,7 @@ func codex(home string) *Agent {
 				// subagent is put on one of magpie's here, where it can't be
 				// by the model unless asked by name
 				Key: "subagent", Label: "subagents", Quiet: true,
-				Get: subagent,
+				Get: func() string { v, _ := subagent(); return v },
 				Set: func(v string) error {
 					if v == "" {
 						return edit.DelTOMLKey(path, "agents", "default_subagent_model")
