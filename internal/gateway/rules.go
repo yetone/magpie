@@ -234,7 +234,7 @@ func outgrown(g provider.Group, ctx map[string]int, held *RuleHit, q provider.Ru
 // the group, the least any of its models takes.
 func memberContexts(ms []provider.Member) map[string]int {
 	out := map[string]int{}
-	cat := provider.Catalog()
+	cat := provider.Served() // unlisted models still serve routing groups
 	for _, m := range ms {
 		for _, e := range cat {
 			if e.Group == "" && e.Provider.ID == m.Provider.ID && e.Model == m.Model {

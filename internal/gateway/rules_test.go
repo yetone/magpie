@@ -476,3 +476,26 @@ func TestTurnInPastTrailingSystem(t *testing.T) {
 		}
 	}
 }
+
+// An unlisted provider is still served through a group. Its context must
+// count when a long tool turn needs the group's larger model.
+func TestRuleTurnOutgrowsUnlistedMember(t *testing.T) {
+	s, _, _ := ruled(t, provider.Rule{Use: "b/big", Tokens: 50000})
+	p, err := provider.Find("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Unlisted = true
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	if _, out := postAs(t, s, "sess", chat("hi", nil, 0, "")); !strings.Contains(out, "from ka") {
+		t.Fatal(out)
+	}
+	body := strings.Replace(chat("hi", nil, 1, ""), `"file.txt"`, quote(long(61000)), 1)
+	_, out := postAs(t, s, "sess", body)
+	r := lastRoute(s)
+	if !strings.Contains(out, "from kb") || !r.Rule.Grown {
+		t.Fatalf("unlisted member failed to grow: %s %+v", out, r.Rule)
+	}
+}
