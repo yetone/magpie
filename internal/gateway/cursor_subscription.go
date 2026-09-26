@@ -113,10 +113,17 @@ func (b *subscriptionBridge) startCursor(ctx context.Context, req *Request, mode
 
 	run := &subscriptionRun{bridge: b, token: token, model: model, cmd: cmd, tmp: tmp, pending: map[string]chan mcpToolResult{},
 		patience: cursorPatience, late: map[string]chan mcpToolResult{}}
+	run.setSegmentInput(req)
 	c := &cursorTurn{run: run}
 	run.onCall = c.called
 	run.resume = c.resumed
-	run.begin = func() Event { return Event{Kind: KStart, MsgID: "msg_" + randomToken()[:24], Model: model} }
+	run.begin = func() Event {
+		run.mu.Lock()
+		input := run.segmentInput
+		run.mu.Unlock()
+		return Event{Kind: KStart, MsgID: "msg_" + randomToken()[:24], Model: model,
+			Usage: Usage{Input: input, State: "provisional"}}
+	}
 	run.timer = time.AfterFunc(30*time.Minute, run.abort)
 	segment := run.attach()
 	run.emit(run.begin())
@@ -302,6 +309,10 @@ func (c *cursorTurn) handOverLocked() {
 			return
 		}
 		c.handed = 0
+		c.run.mu.Lock()
+		input, output := c.run.segmentInput, c.run.segmentOutput
+		c.run.mu.Unlock()
+		c.run.emit(Event{Kind: KUsage, Usage: Usage{Input: input, Output: output, State: "provisional"}})
 		c.run.emit(Event{Kind: KStop, Stop: "tool"})
 		c.run.endSegment()
 	})
@@ -358,7 +369,7 @@ func (c *cursorTurn) read(rd io.Reader) {
 			if e.IsError {
 				c.run.emit(Event{Kind: KError, Text: e.Result})
 			} else {
-				c.run.emit(Event{Kind: KUsage, Usage: Usage{Input: e.Usage.Input, Output: e.Usage.Output, CacheRead: e.Usage.CacheRead, CacheWrite: e.Usage.CacheWrite}})
+				c.run.emit(Event{Kind: KUsage, Usage: Usage{Input: e.Usage.Input, Output: e.Usage.Output, CacheRead: e.Usage.CacheRead, CacheWrite: e.Usage.CacheWrite, State: "final"}})
 				c.run.emit(Event{Kind: KStop, Stop: "stop"})
 			}
 			c.run.endSegment()

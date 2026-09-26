@@ -36,7 +36,7 @@ func TestCursorHandsToolCallsOverOneAnswerAtATime(t *testing.T) {
 	for ev := range seg {
 		kinds = append(kinds, ev.Kind)
 	}
-	if len(kinds) != 3 || kinds[0] != KToolStart || kinds[2] != KStop {
+	if len(kinds) != 4 || kinds[0] != KToolStart || kinds[2] != KUsage || kinds[3] != KStop {
 		t.Fatalf("first answer = %v", kinds)
 	}
 	// made while the caller runs the first: it opens the next answer
