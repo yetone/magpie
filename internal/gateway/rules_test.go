@@ -559,3 +559,49 @@ func TestImageRuleFallbackOmitsOlderImages(t *testing.T) {
 		t.Fatalf("the text-only member was sent the image %d times", a.seen)
 	}
 }
+
+// A group may have two of its models on one account (Opus and Sonnet on
+// one Claude sign-in): the turn a rule sent to one stays on that one for
+// its tool rounds, not on the account's first member.
+func TestRuleTurnHoldsItsModelOnASharedAccount(t *testing.T) {
+	fresh(t)
+	var mu sync.Mutex
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var q struct {
+			Model string `json:"model"`
+		}
+		b, _ := io.ReadAll(r.Body)
+		json.Unmarshal(b, &q)
+		mu.Lock()
+		got = append(got, q.Model)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"from `+q.Model+`"},"finish_reason":"stop"}],`+
+			`"usage":{"prompt_tokens":3000,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":2500}}}`)
+	}))
+	t.Cleanup(srv.Close)
+	if err := provider.Save(provider.Provider{ID: "c", Name: "C", Key: "kc", Models: []string{"small", "big"}, Chat: srv.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SaveGroup(provider.Group{Name: "R", Members: []string{"c/small", "c/big"}, Routing: provider.Ordered,
+		Rules: []provider.Rule{{Use: "c/big", Tokens: 20000}}}); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	if code, out := postAs(t, s, "sess", chat("hello", nil, 0, "")); code != 200 || !strings.Contains(out, "from small") {
+		t.Fatalf("turn 1: %d %s", code, out)
+	}
+	if code, out := postAs(t, s, "sess", chat("hello", []string{long(25000)}, 0, "")); code != 200 || !strings.Contains(out, "from big") {
+		t.Fatalf("turn 2: %d %s", code, out)
+	}
+	for n := 1; n <= 2; n++ {
+		code, out := postAs(t, s, "sess", chat("hello", []string{long(25000)}, n, ""))
+		if r := lastRoute(s); code != 200 || !strings.Contains(out, "from big") || !r.Rule.Held || !r.Affinity.Kept {
+			t.Fatalf("turn 2 round %d: %d %s %+v %+v", n, code, out, r.Rule, r.Affinity)
+		}
+	}
+	if strings.Join(got, ",") != "small,big,big,big" {
+		t.Fatalf("asked %v", got)
+	}
+}

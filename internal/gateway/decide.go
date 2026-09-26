@@ -113,7 +113,7 @@ func effortAsk(prev before) string {
 
 // readJev is the verdict in a System One reply to jevBody, the answer
 // without "none of these" counting when the intents are levels.
-func readJev(b []byte, intents []string, levels bool) (verdict, error) {
+func readJev(b []byte, intents []string, levels bool, prev before) (verdict, error) {
 	var out struct {
 		Model   string `json:"model"`
 		Answers map[string]struct {
@@ -130,18 +130,21 @@ func readJev(b []byte, intents []string, levels bool) (verdict, error) {
 		return verdict{}, answerError{fmt.Errorf("not a System One answer")}
 	}
 	var v verdict
-	q := "intent"
-	if levels {
-		q = "level" // every message is at one of them
-	}
-	if a, ok := out.Answers[q]; ok && len(intents) > 0 {
+	if a, ok := out.Answers["intent"]; ok && len(intents) > 0 && !levels {
 		v.Sure = a.Confidence
 		if a.Choice != noIntent && a.Confidence >= jevSure {
-			for _, in := range intents {
-				if in == a.Choice {
-					v.Intent = in
-				}
-			}
+			v.Intent = intentNamed(intents, a.Choice)
+		}
+	}
+	if a, ok := out.Answers["level"]; ok && len(intents) > 0 && levels {
+		// every message is at one of them, however unsure Jev is: when it
+		// is torn, the conversation stays at the level of the turn before
+		// (继续，再加一个基准测试 after a 复杂任务 came out 0.54 to 0.46),
+		// and a turn with none before takes the likelier
+		v.Sure = a.Confidence
+		v.Intent = intentNamed(intents, a.Choice)
+		if was := intentNamed(intents, prev.Intent); a.Confidence < jevSure && was != "" {
+			v.Intent = was
 		}
 	}
 	if a, ok := out.Answers["effort"]; ok {
@@ -150,6 +153,16 @@ func readJev(b []byte, intents []string, levels bool) (verdict, error) {
 		v.Effort, v.Score = jevLevels[i].effort, a.Score
 	}
 	return v, nil
+}
+
+// intentNamed is the one of intents named, or "".
+func intentNamed(intents []string, name string) string {
+	for _, in := range intents {
+		if in == name {
+			return in
+		}
+	}
+	return ""
 }
 
 // levelled is what Jev said of each set of intents: whether they are
@@ -216,7 +229,7 @@ func (s *Server) askJev(p provider.Provider, model string, intents []string, pre
 	if err != nil {
 		return verdict{}, err
 	}
-	return readJev(b, intents, levels)
+	return readJev(b, intents, levels, prev)
 }
 
 // systemOne posts body to p's System One API and returns the answer,

@@ -56,6 +56,7 @@ type Affinity struct {
 type stick struct {
 	rest      string
 	who       string // the key or account, however many were on
+	model     string // the model it answered as: a group may have several on one account
 	turn      int
 	at        time.Time
 	cacheRead int
@@ -116,11 +117,19 @@ func affine(scope, mode string, rotate bool, in http.Header, from provider.Proto
 	if had {
 		a.Last, a.LastTurn, a.At, a.CacheRead = st.rest, st.turn, st.at, st.cacheRead
 	}
+	// the account and the model that answered: a group with Opus and
+	// Sonnet both on one Claude account, a rule sending the turn to Opus,
+	// had the turn's next request kept to the account and so to Sonnet,
+	// its first member there; the account alone when the model is gone
 	at := -1
-	for i, c := range cs {
-		if had && c.who() == st.who {
-			at, a.Last = i, c.rest // as it goes by now
-			break
+	for _, same := range []func(candidate) bool{
+		func(c candidate) bool { return c.who() == st.who && c.model == st.model },
+		func(c candidate) bool { return c.who() == st.who },
+	} {
+		for i, c := range cs {
+			if had && at < 0 && same(c) {
+				at, a.Last = i, c.rest // as it goes by now
+			}
 		}
 	}
 	switch {
@@ -192,7 +201,7 @@ func answered(key string, c candidate, turn, cacheRead int) {
 	now := time.Now()
 	sticks.Lock()
 	defer sticks.Unlock()
-	sticks.m[key] = stick{rest: c.rest, who: c.who(), turn: turn, at: now, cacheRead: cacheRead}
+	sticks.m[key] = stick{rest: c.rest, who: c.who(), model: c.model, turn: turn, at: now, cacheRead: cacheRead}
 	if len(sticks.m) > 4096 {
 		for k, st := range sticks.m {
 			if now.Sub(st.at) > stickKeep {

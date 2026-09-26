@@ -232,3 +232,39 @@ func TestJevIsToldTheTurnBefore(t *testing.T) {
 		t.Errorf("first turn: %v %q", got.State, got.Questions["intent"].Instructions)
 	}
 }
+
+// Levels have every message at one of them however torn Jev is: a torn
+// one stays at the turn before's level, or with none before takes the
+// likelier.
+func TestJevTornLevel(t *testing.T) {
+	in := []string{"简单任务", "复杂任务"}
+	b := []byte(`{"model":"jev-1.13.0","answers":{` +
+		`"intent":{"type":"choice","choice":"复杂任务","confidence":0.43},` +
+		`"level":{"type":"choice","choice":"复杂任务","confidence":0.09}}}`)
+	for _, c := range []struct {
+		prev before
+		want string
+	}{
+		{before{}, "复杂任务"},
+		{before{Intent: "复杂任务"}, "复杂任务"},
+		{before{Intent: "简单任务"}, "简单任务"},
+		{before{Intent: "gone"}, "复杂任务"},
+	} {
+		if v, err := readJev(b, in, true, c.prev); err != nil || v.Intent != c.want || v.Sure != 0.09 {
+			t.Fatalf("after %q: %+v %v, want %s", c.prev.Intent, v, err, c.want)
+		}
+	}
+	// a sure level is taken over the turn before's
+	sure := []byte(`{"answers":{"level":{"type":"choice","choice":"简单任务","confidence":0.86}}}`)
+	if v, _ := readJev(sure, in, true, before{Intent: "复杂任务"}); v.Intent != "简单任务" {
+		t.Fatalf("sure: %+v", v)
+	}
+	// topics still need Jev sure, and may be none
+	if v, _ := readJev(b, in, false, before{Intent: "复杂任务"}); v.Intent != "复杂任务" {
+		t.Fatalf("topic sure enough: %+v", v)
+	}
+	unsure := []byte(`{"answers":{"intent":{"type":"choice","choice":"复杂任务","confidence":0.2}}}`)
+	if v, _ := readJev(unsure, in, false, before{Intent: "复杂任务"}); v.Intent != "" {
+		t.Fatalf("topic unsure: %+v", v)
+	}
+}
