@@ -10,6 +10,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexcat"
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -196,5 +197,41 @@ func TestOpenCodeModelsCarryContextAndSyncRestores(t *testing.T) {
 	}
 	if s := readFile(cfg); s != body {
 		t.Fatalf("%s", s)
+	}
+}
+
+// A model of magpie's chosen for OpenCode that a provider of the file's own
+// already sends to magpie is named there, and magpie's flat provider isn't
+// added beside it with the same models again.
+func TestOpenCodeKeepsItsOwnGatewayProviders(t *testing.T) {
+	home := syncHome(t)
+	cfg := filepath.Join(home, ".config", "opencode", "opencode.json")
+	writeFile(t, cfg, `{
+  "provider": {
+    "magpie-relay": {"npm": "@ai-sdk/openai-compatible", "options": {"baseURL": "http://localhost:3425/v1/"}, "models": {"relay/glm-4.6": {}}},
+    "elsewhere": {"options": {"baseURL": "https://example.com/v1"}, "models": {"relay/glm-4.6": {}}}
+  },
+  "model": "magpie-relay/relay/glm-4.6"
+}`)
+	oc := opencode(home, filepath.Join(home, ".config"))
+	if err := oc.Fields[0].Set("magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetJSON(cfg, "model"); v != "magpie-relay/relay/glm-4.6" {
+		t.Fatalf("model = %q", v)
+	}
+	if _, ok := edit.GetJSON(cfg, "provider.magpie"); ok {
+		t.Fatal("magpie's provider added beside the file's own")
+	}
+	// a model none of them lists still gets magpie's provider
+	os.WriteFile(cfg, []byte(`{"provider": {"magpie-relay": {"options": {"baseURL": "http://127.0.0.1:3425/v1"}, "models": {}}}}`), 0o644)
+	if err := oc.Fields[0].Set("magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetJSON(cfg, "model"); v != "magpie/relay/glm-4.6" {
+		t.Fatalf("model = %q", v)
+	}
+	if _, ok := edit.GetJSON(cfg, "provider.magpie"); !ok {
+		t.Fatal("magpie's provider not added")
 	}
 }

@@ -290,6 +290,12 @@ func opencode(home, cfg string) *Agent {
 				return edit.DelJSON(path, "provider."+magpieID)
 			}
 			if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
+				// a provider of the file's own already sends this model to
+				// magpie: name it there, rather than add a second list of
+				// the same models under magpie's
+				if own := ownGatewayProvider(path, ref); own != "" {
+					return edit.SetJSON(path, edit.KV{Path: key, Value: own + "/" + ref})
+				}
 				if err := edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: magpieProviderJSON("opencode")}); err != nil {
 					return err
 				}
@@ -321,6 +327,48 @@ func opencode(home, cfg string) *Agent {
 			{Key: "small", Label: "small", Get: jsonGet(path, "small_model"), Set: set("small_model"), Options: opts("small")},
 		},
 	}
+}
+
+// ownGatewayProvider is the provider in an OpenCode config, other than
+// magpie's own, whose baseURL is magpie's gateway and that lists the model
+// ref, as a layout of one provider per family of magpie's models has; ""
+// when there is none.
+func ownGatewayProvider(path, ref string) string {
+	raw, ok := edit.GetJSON(path, "provider")
+	if !ok {
+		return ""
+	}
+	var ps map[string]struct {
+		Options struct {
+			BaseURL string `json:"baseURL"`
+		} `json:"options"`
+		Models map[string]json.RawMessage `json:"models"`
+	}
+	if json.Unmarshal([]byte(raw), &ps) != nil {
+		return ""
+	}
+	names := make([]string, 0, len(ps))
+	for name := range ps {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		p := ps[name]
+		if _, has := p.Models[ref]; name != magpieID && has && sameGateway(p.Options.BaseURL) {
+			return name
+		}
+	}
+	return ""
+}
+
+// sameGateway reports whether a base URL is magpie's gateway's, its host
+// spelled 127.0.0.1 or localhost.
+func sameGateway(base string) bool {
+	norm := func(u string) string {
+		u = strings.TrimRight(strings.TrimSpace(u), "/")
+		return strings.Replace(u, "://localhost:", "://127.0.0.1:", 1)
+	}
+	return base != "" && norm(base) == norm(gatewayV1())
 }
 
 func pi(home string) *Agent {
