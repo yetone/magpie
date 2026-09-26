@@ -665,6 +665,8 @@ func renderParts(blocks []map[string]any, text *strings.Builder, parts []Part) [
 		switch p.Kind {
 		case Text:
 			text.WriteString(p.Text)
+		case File:
+			text.WriteString(attachmentText(p))
 		case Thinking:
 			text.WriteString(p.Text)
 		case ToolCall:

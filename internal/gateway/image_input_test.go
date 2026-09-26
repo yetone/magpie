@@ -432,6 +432,17 @@ func TestGeminiNonImageFileTranslation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			claude, err := renderClaudePrompt(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prompt, err := json.Marshal(claude)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(prompt), "[attachment "+tc.mime) || strings.Contains(string(prompt), `"type":"image"`) {
+				t.Fatalf("Claude subscription lost or mislabeled file: %s", prompt)
+			}
 			chat := buildChat(r, "text", "", false)
 			if strings.Contains(string(chat), `"image_url"`) || !strings.Contains(string(chat), "[attachment "+tc.mime) {
 				t.Fatalf("non-image attachment translated as an image or lost: %s", chat)
@@ -444,7 +455,7 @@ func TestGeminiNonImageFileTranslation(t *testing.T) {
 			if strings.Contains(string(assist), "[attachment ") {
 				t.Fatalf("Code Assist received a placeholder instead of the file: %s", assist)
 			}
-			responses := buildResponses(r, "text", false)
+			responses := buildResponses(r, "text", "", false)
 			anthropic := buildAnthropic(r, "text")
 			for protocol, out := range map[string][]byte{"Responses": responses, "Anthropic": anthropic} {
 				if strings.Contains(string(out), `"image_url"`) || strings.Contains(string(out), `"type":"image"`) || !strings.Contains(string(out), "[attachment "+tc.mime) {
