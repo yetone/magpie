@@ -78,6 +78,27 @@ func TestCodexSignedInLeavesProviderTable(t *testing.T) {
 	}
 }
 
+// A provider table the user wrote with spaces around the dots — valid TOML —
+// is the same table to magpie: it is reused in place, and taken away again
+// when Codex steps back to its own models, as if magpie had written it.
+func TestCodexSpacedProviderTable(t *testing.T) {
+	home, read := codexHome(t, "", "model = \"gpt-5.5\"\n\n[ model_providers . magpie ]\nname = \"magpie\"\nbase_url = \"http://127.0.0.1:1/v1\"\n\n[[skills.config]]\npath = \"/skill\"\n")
+	cx := codex(home)
+	if err := cx.Fields[0].Set("fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := read()
+	if strings.Count(cfg, "model_providers") != 1 || !strings.Contains(cfg, `model_provider = "magpie"`) {
+		t.Fatalf("provider table was not reused:\n%s", cfg)
+	}
+	if err := cx.Fields[0].Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if cfg = read(); strings.Contains(cfg, "magpie") || !strings.Contains(cfg, "[[skills.config]]") {
+		t.Fatalf("reset:\n%s", cfg)
+	}
+}
+
 // Not signed in, Codex's OpenAI provider can't run, so magpie is a provider
 // of its own.
 func TestCodexSignedOutUsesProvider(t *testing.T) {

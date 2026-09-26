@@ -15,7 +15,9 @@ import (
 // other line of the file stays untouched.
 
 // TOMLTables lists explicit ordinary table headers in file order, excluding
-// array-table headers. Missing files return (nil, nil); errors include the path.
+// array-table headers. A name is the header's key path: a quoted part keeps its
+// quotes, and whitespace around the dots is not part of it, so `[ a . b ]` is
+// the name `a.b`. Missing files return (nil, nil); errors include the path.
 func TOMLTables(path string) ([]string, error) {
 	raw, err := Read(path)
 	if err != nil || raw == nil {
@@ -299,7 +301,7 @@ func parseTOMLTables(lines []string) ([]tomlTableSpan, error) {
 	for p.NextExpression() {
 		expr := p.Expression()
 		keyRange := expr.Raw
-		var parts []string
+		var parts, rawParts []string
 		if expr.Kind != unstable.Comment {
 			for keys := expr.Key(); keys.Next(); {
 				key := keys.Node()
@@ -307,6 +309,10 @@ func parseTOMLTables(lines []string) ([]tomlTableSpan, error) {
 					keyRange = key.Raw
 				}
 				parts = append(parts, string(key.Data))
+				// A table's name is the parser's own key text, so a quoted part keeps
+				// its quotes, while the whitespace a header may put around its dots,
+				// as in `[ a . b ]`, is not part of the name.
+				rawParts = append(rawParts, string(p.Raw(key.Raw)))
 				keyRange.Length = key.Raw.Offset + key.Raw.Length - keyRange.Offset
 			}
 		}
@@ -321,7 +327,7 @@ func parseTOMLTables(lines []string) ([]tomlTableSpan, error) {
 				tables[len(tables)-1].to = i
 			}
 			tables = append(tables, tomlTableSpan{
-				from: i, to: len(lines), name: string(p.Raw(keyRange)),
+				from: i, to: len(lines), name: strings.Join(rawParts, "."),
 				column: shape.Start.Column,
 				array:  expr.Kind == unstable.ArrayTable,
 			})

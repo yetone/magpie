@@ -89,6 +89,59 @@ enabled = true
 	}
 }
 
+// Spaces and tabs around the dots of a header are not part of the name (TOML
+// allows them), so `[ a . b ]` is the table a caller knows as a.b — while
+// whitespace inside a quoted key is part of that key and stays.
+func TestTOMLTableWithSpacedDots(t *testing.T) {
+	const input = `top = 1
+
+[ model_providers . magpie ] # keep the spaces
+name = "old"
+wire_api = "responses"
+
+[[ skills . config ]]
+path = "/skill"
+
+[ "a . b" ]
+note = "spaces are the key"
+`
+	p := tmpFile(t, "config.toml", input)
+	if got := strings.Join(readTOMLTables(t, p), ","); got != `model_providers.magpie,"a . b"` {
+		t.Fatalf("tables = %q", got)
+	}
+	if got := readTOMLTable(t, p, "model_providers.magpie"); !maps.Equal(got, map[string]string{"name": "old", "wire_api": "responses"}) {
+		t.Fatalf("table = %v", got)
+	}
+	if got := readTOMLTable(t, p, `"a . b"`); !maps.Equal(got, map[string]string{"note": "spaces are the key"}) {
+		t.Fatalf("quoted key table = %v", got)
+	}
+	if _, err := GetTOMLTable(p, "skills.config"); err == nil || !strings.Contains(err.Error(), "array table") {
+		t.Fatalf("array table lookup: %v", err)
+	}
+	assertTOMLContent(t, p, input)
+	// tabs around the dots are the same to the parser
+	tabs := tmpFile(t, "config.toml", "[b\t.\tc]\nx = 1\n")
+	if got := strings.Join(readTOMLTables(t, tabs), ","); got != "b.c" {
+		t.Fatalf("tabbed header = %q", got)
+	}
+
+	// an edit finds the table it names instead of appending a second one
+	if err := SetTOMLKey(p, "model_providers.magpie", "name", "new"); err != nil {
+		t.Fatal(err)
+	}
+	assertTOMLContent(t, p, strings.Replace(input, `"old"`, `"new"`, 1))
+	if err := SetTOMLTable(p, "model_providers.magpie", KV{Path: "name", Value: "DeepSeek"}); err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Replace(input, "[ model_providers . magpie ] # keep the spaces\nname = \"old\"\nwire_api = \"responses\"\n", "[model_providers.magpie]\nname = \"DeepSeek\"\n", 1)
+	assertTOMLContent(t, p, want)
+	// and an array table under a spaced header is owned by its normalised name
+	if err := SetTOMLTables(p, []string{"skills."}, nil); err != nil {
+		t.Fatal(err)
+	}
+	assertTOMLContent(t, p, strings.Replace(want, "[[ skills . config ]]\npath = \"/skill\"\n\n", "", 1))
+}
+
 func TestDelTOMLTableKeepsChildArrayTables(t *testing.T) {
 	const array = "[[a.b]]\ny = 2\n"
 	p := tmpFile(t, "config.toml", "[a]\nx = 1\n\n"+array)
