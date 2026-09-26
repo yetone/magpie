@@ -66,6 +66,9 @@ type subscriptionRun struct {
 	cmd    *exec.Cmd
 	tmp    string
 
+	// the tools it was started with: its agent is told them once
+	tools map[string]bool
+
 	mu      sync.Mutex
 	segment chan Event
 	pending map[string]chan mcpToolResult
@@ -710,6 +713,19 @@ func (b *subscriptionBridge) findRun(req *Request) (*subscriptionRun, []Part) {
 	return nil, nil
 }
 
+// offers says the run's agent was told every one of tools.
+func (r *subscriptionRun) offers(tools []Tool) bool {
+	if r.tools == nil {
+		return true
+	}
+	for _, t := range tools {
+		if !r.tools[t.Name] {
+			return false
+		}
+	}
+	return true
+}
+
 // continueWith hands the agent its tool results: at once for the calls it
 // is waiting on, the others kept until it makes them.
 func (r *subscriptionRun) continueWith(results []Part) (<-chan Event, error) {
@@ -965,15 +981,28 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	}
 
 	run, results := s.subscription.findRun(req)
+	if run != nil && !run.offers(req.Tools) {
+		// the client offers a tool the run's agent was never told of, as
+		// Claude Code's ToolSearch loads a deferred one (WebSearch) mid-turn:
+		// a run started now has it, the conversation told over
+		run.abort()
+		run = nil
+	}
 	var events <-chan Event
 	if run != nil {
 		events, err = run.continueWith(results)
 	} else {
 		run, events, err = start(r.Context(), req)
-		if err == nil && search.Name != "" {
-			run.mu.Lock()
-			run.search, run.searchName = s.webSearch, search.Name
-			run.mu.Unlock()
+		if err == nil {
+			run.tools = map[string]bool{}
+			for _, t := range req.Tools {
+				run.tools[t.Name] = true
+			}
+			if search.Name != "" {
+				run.mu.Lock()
+				run.search, run.searchName = s.webSearch, search.Name
+				run.mu.Unlock()
+			}
 		}
 	}
 	if err != nil {

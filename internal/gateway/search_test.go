@@ -253,3 +253,30 @@ func TestAnthropicServerToolLeftOut(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// Claude Code with ENABLE_TOOL_SEARCH defers WebSearch and loads it by a
+// ToolSearch whose result is a tool_reference: the model elsewhere is told
+// the tool is there, and the placeholder that keeps deferring on is dropped.
+func TestToolSearchReferenceIsTold(t *testing.T) {
+	body := `{"model":"m","max_tokens":10,"tools":[
+		{"name":"ToolSearch","input_schema":{"type":"object"}},
+		{"name":"WebSearch","input_schema":{"type":"object"},"defer_loading":true},
+		{"name":"DeferredToolPlaceholder","input_schema":{"type":"object"},"defer_loading":true}],
+		"messages":[{"role":"user","content":"search"},
+		{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"ToolSearch","input":{"query":"select:WebSearch"}}]},
+		{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"tool_reference","tool_name":"WebSearch"}]}]}]}`
+	r, err := parseAnthropic([]byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, tl := range r.Tools {
+		names = append(names, tl.Name)
+	}
+	if strings.Join(names, ",") != "ToolSearch,WebSearch" {
+		t.Fatalf("tools = %v", names)
+	}
+	if got := r.Messages[2].Parts[0].Text; !strings.Contains(got, "WebSearch is loaded") {
+		t.Fatalf("tool result = %q", got)
+	}
+}

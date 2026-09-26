@@ -283,14 +283,24 @@ func stringOrText(raw json.RawMessage) string {
 		return s
 	}
 	var blocks []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type     string `json:"type"`
+		Text     string `json:"text"`
+		ToolName string `json:"tool_name"`
 	}
 	if json.Unmarshal(raw, &blocks) == nil {
 		var b strings.Builder
 		for _, x := range blocks {
-			if x.Type == "text" || x.Type == "input_text" || x.Type == "output_text" {
+			switch x.Type {
+			case "text", "input_text", "output_text":
 				b.WriteString(x.Text)
+			case "tool_reference":
+				// Claude Code's ToolSearch loads a deferred tool by naming
+				// it; every tool is already offered to a model elsewhere, so
+				// it is told the tool is there, not handed an empty result
+				if b.Len() > 0 {
+					b.WriteString("\n")
+				}
+				b.WriteString("Tool " + x.ToolName + " is loaded and can be called now.")
 			}
 		}
 		return b.String()
