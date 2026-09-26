@@ -278,7 +278,7 @@
   // ruleWhy tells what the group's rules did with a request. With lead,
   // only when a rule put the first where it is.
   function ruleWhy(r, lead) {
-    if (!r.rule) return null;
+    if (!r.rule || r.rule.bare) return null;
     const x = { ...r.rule, use: useName(r, r.rule.use) };
     const when = (x.when || []).map(condText).join(", ");
     if (x.use && !x.unready) {
@@ -337,14 +337,22 @@
   // for its rule step x
   function classWhy(x) {
     const c = x?.classified;
-    if (!c) return null;
+    if (!c) return x?.pick ? t("Turn {turn} reasons at {level}, as Jev picked when it began.", { turn: x.turn, level: x.pick }) : null;
     const r = { rule: x };
     const by = c.by || t("the classifier"), kinds = (c.intents || []).map((x) => `“${x}”`).join(", ");
-    if (c.error) return t("{by} was to tell which of {kinds} turn {turn} is, but couldn't — {err} — so no rule with an intent matches it.", { by, kinds, turn: r.rule.turn, err: c.error });
+    if (c.error) return c.intents?.length
+      ? t("{by} was to tell which of {kinds} turn {turn} is, but couldn't — {err} — so no rule with an intent matches it.", { by, kinds, turn: r.rule.turn, err: c.error })
+      : t("{by} was to rate how hard turn {turn} is, but couldn't — {err} — so it reasons as the agent asked.", { by, turn: r.rule.turn, err: c.error });
     const when = c.cached ? t("said before, for the same message") : t("in {ms}", { ms: took(c.ms) });
     const told = c.after ? " " + t("It was told turn {prev} was “{after}”, which a message that only carries on from it is too.", { prev: r.rule.turn - 1, after: c.after }) : "";
-    if (!c.intent) return t("{by} was asked which of {kinds} turn {turn} is, and said none ({took}).", { by, kinds, turn: r.rule.turn, took: when }) + told;
-    return t("{by} was asked which of {kinds} turn {turn} is, and said “{intent}” ({took}).", { by, kinds, turn: r.rule.turn, intent: c.intent, took: when }) + told;
+    const toldEffort = c.afterEffort ? " " + t("It was told turn {prev} reasoned at {level}, which a message that only carries on from it needs too.", { prev: r.rule.turn - 1, level: c.afterEffort }) : "";
+    const effort = c.effort ? t("{by} rated turn {turn} {score} of 3, so it picks {level} reasoning for the turn — each model gets the level it has nearest.", { by, turn: r.rule.turn, score: (c.score || 0).toFixed(1), level: c.effort }) + toldEffort : "";
+    if (!c.intents?.length) return effort ? `${effort} (${when})` : null;
+    const sure = c.sure ? t(", {n} sure", { n: Math.round(c.sure * 100) + "%" }) : "";
+    const said = (!c.intent
+      ? t("{by} was asked which of {kinds} turn {turn} is, and said none ({took}).", { by, kinds, turn: r.rule.turn, took: when + sure })
+      : t("{by} was asked which of {kinds} turn {turn} is, and said “{intent}” ({took}).", { by, kinds, turn: r.rule.turn, intent: c.intent, took: when + sure })) + told;
+    return effort ? `${said} ${effort}` : said;
   }
   // a rule's condition as the gateway writes it, in the page's words
   function condText(c) {
@@ -360,7 +368,8 @@
 
   function tryWhy(r, i) {
     const tr = r.tries[i], w = tried(r, tr), agent = agentName(r.agent);
-    const name = w ? `${who(w)} (${w.model})` : tr.id;
+    let name = w ? `${who(w)} (${w.model})` : tr.id;
+    if (tr.effort) name += " " + t("at {level} reasoning", { level: tr.effort });
     if (!tr.done) return t("{who} is answering…", { who: name });
     if (tr.status < 400) {
       const tk = r.tokens ? " · " + t("{n} tokens", { n: tokens(r.tokens) }) : "";
@@ -1349,7 +1358,7 @@
     if (!g.ready) tags.append(el("span", "tag bad", t("no member ready")));
     const edit = el("button", "text", t("Edit"));
     edit.onclick = (e) => { e.stopPropagation(); open(); };
-    const open = () => { gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], routing: g.routing || "", affinity: g.affinity || "", classifier: g.classifier || "", rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])] })) } }; renderGroups(); };
+    const open = () => { gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], routing: g.routing || "", affinity: g.affinity || "", classifier: g.classifier || "", effort: g.effort || "", rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])] })) } }; renderGroups(); };
     row.onclick = open;
     row.append(ics, main, tags, edit);
     return row;
@@ -1527,26 +1536,57 @@
       drawClassifier();
     };
     rAdd.onclick = () => { d.rules.push({ use: d.members[d.members.length - 1], tokens: 0, images: false, effort: "", agents: [], intent: "" }); drawRules(); };
-    // the classifier, once a rule has an intent: the model asked which
-    // intent a turn's message is
+    // the classifier, once a rule has an intent or Jev picks the effort:
+    // the model asked which intent a turn's message is. Jev (a decision
+    // provider's model) answers both in one call.
     const cls = el("div", "rt-classifier");
+    const clabel = el("label", "");
+    const deciders = groups.deciders || [];
+    const isJev = (id) => deciders.some((x) => x.id === id);
     const drawClassifier = () => {
-      const on = d.rules.some((r) => r.intent?.trim());
-      cls.hidden = !on;
+      const auto = d.effort === "auto";
+      const on = auto || d.rules.some((r) => r.intent?.trim());
+      cls.hidden = clabel.hidden = !on;
       if (!on) return;
-      const m = groups.models.find((x) => x.id === d.classifier);
+      const intents = d.rules.some((r) => r.intent?.trim());
+      clabel.textContent = t(auto && !intents ? "Decided by" : "Intent told by");
+      const m = [...deciders, ...groups.models].find((x) => x.id === d.classifier);
       const cb = el("button", "rt-cond" + (d.classifier ? " on" : ""));
       if (d.classifier) cb.append(icon(m?.icon || "generic"), el("span", "", m ? `${m.name || m.id} · ${m.providerName}` : d.classifier));
       else cb.append(el("span", "", t("choose a model")));
-      cb.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "classifier", label: "model", value: d.classifier, options: groups.models.map((x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id })),
+      const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id });
+      cb.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "classifier", label: "model", value: d.classifier, options: [...deciders.map(opt), ...(auto ? [] : groups.models.map(opt))],
         onPick: (id) => { if (id) d.classifier = id; drawClassifier(); } }, cb, ev);
-      cls.replaceChildren(el("span", "w", t("Intent told by")), cb,
-        el("div", "hint", t("As a turn begins, this model is asked which of the intents the message is — once; a small, fast one without reasoning is best. If it fails or can't say, no intent matches. Its calls show in the usage as magpie’s own.")));
+      cls.replaceChildren(cb,
+        el("div", "hint", t(isJev(d.classifier) && !intents
+          ? "Jev is asked once as each turn begins, with the message and what it said of the turn before. Its calls show in the usage as magpie’s own."
+          : isJev(d.classifier)
+          ? "As a turn begins, Jev is asked once which of the intents the message is, and how hard the turn is when it picks the effort. An intent it isn't sure of matches no rule. Its calls show in the usage as magpie’s own."
+          : "As a turn begins, this model is asked which of the intents the message is — once; a small, fast one without reasoning is best. If it fails or can't say, no intent matches. Its calls show in the usage as magpie’s own.")));
     };
     rbox.append(rlist, rAdd);
     const rw2 = el("div");
-    rw2.append(rbox, cls, rHint2);
+    rw2.append(rbox, rHint2);
     ed.append(el("label", "", t("Rules")), rw2);
+    // the effort: the agent's, or Jev's pick for each turn
+    const eHint = el("div", "hint");
+    const ew = el("div");
+    const drawEffort = () => {
+      eHint.textContent = t(d.effort === "auto"
+        ? "As a turn begins, Jev rates how hard it is and the turn's requests ask their model for low, medium, high or xhigh reasoning — the level each model has nearest. Only where the agent asked for reasoning: a request without any (a session title) stays without."
+        : deciders.length ? "Each request reasons as much as the agent asked." : "Each request reasons as much as the agent asked. Add TypeSafe Jev in Providers to have it pick each turn's effort.");
+    };
+    ew.append(segs([["", t("Agent's")], ["auto", t("Jev picks")]], d.effort, (v) => {
+      if (v === "auto" && !deciders.length) { status(t("Add TypeSafe Jev in Providers first"), "warn"); v = ""; }
+      d.effort = v;
+      if (v === "auto" && !isJev(d.classifier)) d.classifier = deciders[0].id;
+      drawEffort(); drawClassifier();
+    }), eHint);
+    drawEffort();
+    ed.append(el("label", "", t("Effort")), ew);
+    const cw = el("div");
+    cw.append(cls);
+    ed.append(clabel, cw);
     drawRules();
 
     const bar = el("div", "bar");
@@ -1565,8 +1605,9 @@
       const bare = d.rules.findIndex((r) => !r.tokens && !r.images && !r.effort && !r.agents.length && !r.intent);
       if (bare >= 0) return status(t("Rule {n} needs a condition", { n: bare + 1 }), "warn");
       if (d.rules.some((r) => r.intent) && !d.classifier) return status(t("Choose the model that tells which intent a message is"), "warn");
+      if (d.effort === "auto" && !isJev(d.classifier)) return status(t("Only Jev picks the effort: choose it as the group's classifier"), "warn");
       saveBtn.classList.add("busy");
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: d.members, routing: d.routing, affinity: d.affinity, rules: d.rules, classifier: d.rules.some((r) => r.intent) ? d.classifier : "", context: g?.context || 0 }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }));
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: d.members, routing: d.routing, affinity: d.affinity, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: g?.context || 0 }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }));
     };
     saveBtn.onclick = save;
     bar.append(cancel, saveBtn);

@@ -22,6 +22,7 @@ type ruleUp struct {
 	fail  int
 	calls []string // "stream" or "json"
 	seen  int      // requests that carried an image
+	last  string   // the last request's body
 }
 
 func (u *ruleUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -29,6 +30,7 @@ func (u *ruleUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	stream := strings.Contains(string(b), `"stream":true`)
 	u.mu.Lock()
 	u.calls = append(u.calls, map[bool]string{true: "stream", false: "json"}[stream])
+	u.last = string(b)
 	if strings.Contains(string(b), "image_url") {
 		u.seen++
 	}

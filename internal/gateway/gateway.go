@@ -429,6 +429,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		s.record(call)
 		return
 	}
+	if p.Decides() {
+		// Jev answers questions about a message, not the message
+		call.Status, call.Error = 400, "a decision model"
+		writeError(w, from, 400, fmt.Sprintf("%s only decides a routing group's model and effort; it holds no conversation", call.Model))
+		finishCapture()
+		s.record(call)
+		return
+	}
 	// a routing group's rules pick the member that goes first, looked at
 	// before any image is taken out of the request: one may be for images
 	g, ms, isGroup := provider.FindGroup(asked)
@@ -437,13 +445,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	var ruleAt, words string
 	var ruleReq *Request // parsed for the rules of the group or a group in it
 	if isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool {
-		return len(g.Rules) > 0 || slices.ContainsFunc(m.Via, func(v provider.Group) bool { return len(v.Rules) > 0 })
+		return g.Ruled() || slices.ContainsFunc(m.Via, provider.Group.Ruled)
 	}) {
 		if req, err := parse(from, body); err == nil {
 			ruleReq, ruleAt, words = req, ruleKey(g, r.Header, req), firstWords(req)
 		}
 	}
-	if ruleReq != nil && len(g.Rules) > 0 {
+	if ruleReq != nil && g.Ruled() {
 		hit = ruleFor(ruleAt, g, ms, ruleReq, call.Agent, s.askClassifier)
 		ruled = ruleMembers(hit, ms)
 	}
@@ -536,6 +544,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if ruleReq != nil {
 		nested, nestedAt, cands, pl = s.nestedRules(ruleAt, ruleReq, call.Agent, ms, cands, pl, aff)
 	}
+	// the effort a group's decision model picked for the turn: the
+	// outermost group's that did
+	effort := ""
+	if hit != nil {
+		effort = hit.Pick
+	}
+	for _, n := range nested {
+		if effort == "" && n.Rule != nil {
+			effort = n.Rule.Pick
+		}
+	}
 	// A vision rule may choose a vision model even when the group has
 	// text-only fallbacks. A failure must not send a current user image to
 	// one of them. Historical images and tool results are omitted per
@@ -587,11 +606,25 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				attemptBody, _ = textOnlyBody(from, body) // omit images in prior turns and tool results
 			}
 		}
+		sent := "" // the effort asked for in place of the agent's
+		if effort != "" {
+			// the level this model has nearest to the one picked; one whose
+			// levels aren't known isn't asked for more than high, which
+			// every vendor with levels takes
+			level := fitEffort(effort, c.p.Efforts(c.model))
+			if len(c.p.Efforts(c.model)) == 0 && level == "xhigh" {
+				level = "high"
+			}
+			if b := withEffort(from, attemptBody, level); !bytes.Equal(b, attemptBody) {
+				attemptBody, sent = b, level
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1].Effort = level })
+			}
+		}
 		call.Status, call.Error = s.attempt(hw, r, from, c.p, c.model, attemptBody, &call)
 		if hw.failure != 0 { // the stream failed before any of it was sent
 			call.Status, call.Error = hw.failure, c.p.Name+": "+hw.failMsg
 		}
-		try := Try{ID: c.rest, Model: c.model, Start: began, Done: true, Status: call.Status, Millis: time.Since(began).Milliseconds(), Error: call.Error}
+		try := Try{ID: c.rest, Model: c.model, Effort: sent, Start: began, Done: true, Status: call.Status, Millis: time.Since(began).Milliseconds(), Error: call.Error}
 		if r.Context().Err() != nil && !hw.ended {
 			// the agent went away: nobody failed, and nobody else is asked
 			call.Status, call.Error = 499, "the agent canceled the request"

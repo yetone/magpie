@@ -37,10 +37,28 @@ var (
 	classifyRest    = 30 * time.Second // after a failure, before the classifier is asked again
 )
 
-// classifier asks a model which of intents text is: the intent, or "" for
-// none of them. prev is what the conversation's turn before was said to
-// be, "" when nothing: a message that only carries on from it is the same.
-type classifier func(model string, intents []string, prev, text string) (string, error)
+// classifier asks a model which of intents text is — the intent, or ""
+// for none of them — and, when effort, how much reasoning the turn wants
+// (only a decision provider's model says; see decide.go). prev is what
+// the conversation's turn before was said to be: a message that only
+// carries on from it is the same.
+type classifier func(model string, intents []string, prev before, effort bool, text string) (verdict, error)
+
+// before is what the classifier said of a conversation's turn before.
+type before struct {
+	Intent string // one of the intents asked about now, or ""
+	Effort string // the reasoning picked for it, or ""
+}
+
+// verdict is what a classifier said.
+type verdict struct {
+	Intent string  // "" for none
+	Effort string  // the reasoning the turn wants; "" when not asked
+	Score  float64 // how hard Jev took the turn to be, from 0 (low) to 3 (xhigh)
+	Sure   float64 // how confident Jev was of the intent, from 0 to 1
+	in     int     // the tokens it read, for the usage
+	out    int
+}
 
 var classified = struct {
 	sync.Mutex
@@ -49,8 +67,8 @@ var classified = struct {
 }{m: map[string]classifiedAs{}, failed: map[string]classifyFailure{}}
 
 type classifiedAs struct {
-	intent string
-	at     time.Time
+	v  verdict
+	at time.Time
 }
 
 type classifyFailure struct {
@@ -66,32 +84,32 @@ type answerError struct{ error }
 // when it can be: the same message and intents within classifyKeep. A
 // classifier that failed is left to rest for classifyRest rather than
 // making every turn wait out its timeout.
-func classify(ask classifier, model string, intents []string, prev, text string) (intent string, cached bool, err error) {
+func classify(ask classifier, model string, intents []string, prev before, effort bool, text string) (v verdict, cached bool, err error) {
 	h := sha256.New()
-	h.Write([]byte(model + "\x00" + strings.ToLower(strings.Join(intents, "\x00")) + "\x00" + prev + "\x00" + text))
+	h.Write([]byte(model + "\x00" + strings.ToLower(strings.Join(intents, "\x00")) + "\x00" + prev.Intent + "\x00" + prev.Effort + "\x00" + strconv.FormatBool(effort) + "\x00" + text))
 	key := hex.EncodeToString(h.Sum(nil))
 	now := time.Now()
 	classified.Lock()
 	if c, ok := classified.m[key]; ok && now.Sub(c.at) < classifyKeep {
 		classified.Unlock()
-		return c.intent, true, nil
+		return c.v, true, nil
 	}
 	if f, ok := classified.failed[model]; ok && now.Sub(f.at) < classifyRest {
 		classified.Unlock()
-		return "", false, fmt.Errorf("%s failed %s ago (%s); not asked again for now", model, now.Sub(f.at).Round(time.Second), f.err)
+		return verdict{}, false, fmt.Errorf("%s failed %s ago (%s); not asked again for now", model, now.Sub(f.at).Round(time.Second), f.err)
 	}
 	classified.Unlock()
-	intent, err = ask(model, intents, prev, text)
+	v, err = ask(model, intents, prev, effort, text)
 	classified.Lock()
 	defer classified.Unlock()
 	if err != nil {
 		if !errors.As(err, new(answerError)) {
 			classified.failed[model] = classifyFailure{err: err.Error(), at: time.Now()}
 		}
-		return "", false, err
+		return verdict{}, false, err
 	}
 	delete(classified.failed, model)
-	classified.m[key] = classifiedAs{intent: intent, at: time.Now()}
+	classified.m[key] = classifiedAs{v: v, at: time.Now()}
 	if len(classified.m) > 4096 {
 		for k, c := range classified.m {
 			if time.Since(c.at) > classifyKeep {
@@ -99,7 +117,7 @@ func classify(ask classifier, model string, intents []string, prev, text string)
 			}
 		}
 	}
-	return intent, false, nil
+	return v, false, nil
 }
 
 var reminders = regexp.MustCompile(`(?s)<system-reminder>.*?</system-reminder>`)
@@ -205,8 +223,22 @@ func classifyEffort(model string) string {
 	return fitEffort("none", levels)
 }
 
-// askClassifier asks model through the gateway itself, as a client would.
-func (s *Server) askClassifier(model string, intents []string, prev, text string) (string, error) {
+// askClassifier asks a decision provider's model through its own API, and
+// any other model through the gateway itself, as a client would. Only the
+// former says what effort a turn wants.
+func (s *Server) askClassifier(model string, intents []string, prev before, effort bool, text string) (verdict, error) {
+	if p, m, ok := provider.Resolve(model); ok && p.Decides() {
+		return s.askJev(p, m, intents, prev, effort, text)
+	}
+	if len(intents) == 0 {
+		return verdict{}, nil
+	}
+	intent, err := s.askChat(model, intents, prev.Intent, text)
+	return verdict{Intent: intent}, err
+}
+
+// askChat asks a chat model which of intents text is.
+func (s *Server) askChat(model string, intents []string, prev, text string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), classifyTimeout)
 	defer cancel()
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://magpie/v1/chat/completions", nil)

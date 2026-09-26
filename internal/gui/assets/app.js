@@ -102,9 +102,9 @@ function icon(name) {
     return e;
   }
   if (name) {
-    if (name.endsWith("-color") || name === "crush" || name === "zcode" || name === "alma") {
+    if (name.endsWith("-color") || name === "crush" || name === "zcode" || name === "alma" || name === "typesafe") {
       const img = el("img");
-      img.src = `icons/${name}.${name === "crush" || name === "zcode" || name === "alma" ? "png" : "svg"}`;
+      img.src = `icons/${name}.${name === "crush" || name === "zcode" || name === "alma" || name === "typesafe" ? "png" : "svg"}`;
       img.alt = "";
       img.draggable = false;
       e.append(img);
@@ -2099,12 +2099,12 @@ function slide(box, key) {
   thumbs.set(key, { ...to, at: performance.now(), from: from || to });
 }
 
-const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["responses", "Responses", "OpenAI Responses — what Codex speaks"], ["anthropic", "Anthropic", "Anthropic Messages — what Claude Code speaks"]];
+const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["responses", "Responses", "OpenAI Responses — what Codex speaks"], ["anthropic", "Anthropic", "Anthropic Messages — what Claude Code speaks"], ["decide", "Jev", "TypeSafe's decision API — what a routing group asks as a turn begins"]];
 
 // renderEditor: an existing provider (p), a new preset (presetID), or custom.
 function renderEditor(p, presetID) {
   const pr = presetID ? providers.presets.find((x) => x.id === presetID) : p?.preset ? providers.presets.find((x) => x.id === p.preset) : null;
-  const isNew = !p, custom = !pr && !p?.account;
+  const isNew = !p, custom = !pr && !p?.account, decides = !!(p?.decide || pr?.decide);
   // a preset already added is added again only through "Add another": one
   // more provider of it, under a name and id of its own
   const another = isNew && !!pr?.added;
@@ -2163,7 +2163,7 @@ function renderEditor(p, presetID) {
     const hint = el("div", "hint");
     const idOf = () => slug(draft.id) || p.id;
     const show = () => {
-      hint.textContent = t("Agents pick its models as {id}", { id: idOf() + "/…" }) +
+      hint.textContent = t(decides ? "Routing groups name its models as {id} for their classifier" : "Agents pick its models as {id}", { id: idOf() + "/…" }) +
         (idOf() !== p.id ? " · " + t("agents and routing groups on {id} move to it", { id: p.id + "/…" }) : "");
     };
     idIn.oninput = () => { draft.id = idIn.value; show(); };
@@ -2321,9 +2321,9 @@ function renderEditor(p, presetID) {
     // models.dev says: one for all of them, and model=size for one
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
     cx.oninput = () => { draft.contexts = cx.value; };
-    ed.append(...field(t("Context window"), cx, t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
+    if (!decides) ed.append(...field(t("Context window"), cx, t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
   }
-  if (p) ed.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
+  if (p && !decides) ed.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
   else if (custom) {
     const ex = input(draft.extra.join(", "), t("model ids, comma separated · e.g. gpt-5.5, claude-sonnet-5"));
     ex.oninput = () => { draft.extra = ex.value.split(/[,\s]+/).filter(Boolean); };
@@ -2334,7 +2334,7 @@ function renderEditor(p, presetID) {
     const ebox = el("div");
     refreshEndpoints = () => {
       const base = p || pr || {};
-      const src = { chat: draft.chat || base.chat || "", responses: draft.responses || base.responses || "", anthropic: draft.anthropic || base.anthropic || "" };
+      const src = { chat: draft.chat || base.chat || "", responses: draft.responses || base.responses || "", anthropic: draft.anthropic || base.anthropic || "", decide: base.decide || "" };
       ebox.replaceChildren(renderEndpoints(p, src));
     };
     refreshEndpoints();
@@ -2796,7 +2796,8 @@ function renderModels(p) {
     }
     if (!p.models.length && !draft.chosen.length) chips.append(el("span", "hint", t("The vendor's list is empty. Refresh, or type a model id.")));
     drawNames();
-    why.textContent = draft.unlisted ? t("Agents don't see them: only the routing groups they are in use them.")
+    why.textContent = p.decide ? t("Agents never see them: a routing group picks one as its classifier.")
+      : draft.unlisted ? t("Agents don't see them: only the routing groups they are in use them.")
       : t(draft.chosen.length ? "Agents see the models picked." : "None picked: agents see the vendor's list, up to {n}.", { n: 24 });
   };
   // the names and reasoning levels of the models agents see: saved at once,
@@ -2882,7 +2883,7 @@ function renderModels(p) {
   foot.append(add, refresh, rename);
   if (p.fetched) foot.append(el("span", "hint", t("vendor list · {when}", { when: p.fetched })));
   // a signed-in account's list, until the vendor gives one, is magpie's own
-  else if (p.models.length) foot.append(el("span", "hint", t(p.account ? "magpie's list · Refresh asks the vendor" : "from models.dev · Refresh asks the vendor")));
+  else if (p.models.length) foot.append(el("span", "hint", t(p.account ? "magpie's list · Refresh asks the vendor" : p.decide ? "Jev's names · Refresh asks the vendor" : "from models.dev · Refresh asks the vendor")));
   if (p.fetched && !p.account) {
     // the fetched list stands in for the picks when none are made
     const forget = el("button", "text action", t("Forget"));
@@ -2899,7 +2900,7 @@ function renderModels(p) {
   const [tk, cb] = tick(t("Only through routing groups"), !!draft.unlisted);
   cb.onchange = () => { draft.unlisted = cb.checked; draw(); };
   tk.title = t("Its models leave the list agents pick from; the routing groups they are in still use them");
-  box.append(tk);
+  if (!p.decide) box.append(tk);
   box.append(why);
   draw();
   return box;

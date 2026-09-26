@@ -216,7 +216,10 @@ func TestIntentNotAskedWhenItCantMatter(t *testing.T) {
 	g, ms, _ := provider.FindGroup("group/r")
 	img := &Request{Messages: []Message{{Role: "user", Parts: []Part{{Kind: Image}}}}}
 	asked := 0
-	hit := ruleFor("img", g, ms, img, "claude", func(string, []string, string, string) (string, error) { asked++; return "debugging", nil })
+	hit := ruleFor("img", g, ms, img, "claude", func(string, []string, before, bool, string) (verdict, error) {
+		asked++
+		return verdict{Intent: "debugging"}, nil
+	})
 	if hit.N != 0 || hit.Classified == nil || !strings.Contains(hit.Classified.Error, "no words") || asked != 0 {
 		t.Fatalf("image: %+v %+v", hit, hit.Classified)
 	}

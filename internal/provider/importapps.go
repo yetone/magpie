@@ -235,7 +235,7 @@ func sameProvider(a, b Provider) bool {
 		return false
 	}
 	hosts := map[string]bool{}
-	for _, u := range []string{a.Chat, a.Responses, a.Anthropic} {
+	for _, u := range []string{a.Chat, a.Responses, a.Anthropic, a.Decide} {
 		if h := hostOf(u); h != "" {
 			hosts[h] = true
 		}

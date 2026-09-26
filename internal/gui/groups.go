@@ -17,6 +17,9 @@ type groupsJSON struct {
 	Groups []groupJSON `json:"groups"`
 	Models []modelRef  `json:"models"`
 	Pools  []poolJSON  `json:"pools"`
+	// Deciders: the decision providers' models (Jev), which may only be a
+	// group's classifier
+	Deciders []modelRef `json:"deciders"`
 }
 
 type groupJSON struct {
@@ -108,7 +111,10 @@ func keyPools(p provider.Provider) []poolJSON {
 }
 
 func groupsState() groupsJSON {
-	out := groupsJSON{Groups: []groupJSON{}, Models: []modelRef{}, Pools: []poolJSON{}}
+	out := groupsJSON{Groups: []groupJSON{}, Models: []modelRef{}, Pools: []poolJSON{}, Deciders: []modelRef{}}
+	for _, e := range provider.Deciders() {
+		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon})
+	}
 	served := provider.Served()
 	for _, e := range served {
 		if e.Group == "" {

@@ -41,6 +41,11 @@ type RuleHit struct {
 	// Classified: the group's classifier was asked which intent the
 	// turn's first message is
 	Classified *Classified `json:"classified,omitempty"`
+	// Pick: the reasoning the group's decision model picked for the turn,
+	// which its requests ask their model for (provider.EffortAuto)
+	Pick string `json:"pick,omitempty"`
+	// Bare: the group has no rules, only its effort picked
+	Bare bool `json:"bare,omitempty"`
 }
 
 // Classified is what the classifier was asked as a turn began, and said.
@@ -49,9 +54,15 @@ type Classified struct {
 	Intents []string `json:"intents"`          // what it chose among
 	Intent  string   `json:"intent,omitempty"` // what it said the message is; "" for none
 	After   string   `json:"after,omitempty"`  // what it said the turn before was, which it was told
+	Effort  string   `json:"effort,omitempty"` // the reasoning it said the turn wants
+	Score   float64  `json:"score,omitempty"`  // how hard it took the turn to be, 0 (low) to 3 (xhigh)
+	Sure    float64  `json:"sure,omitempty"`   // how confident it was of the intent, 0 to 1
 	Cached  bool     `json:"cached,omitempty"` // said before, for the same message
 	Ms      int      `json:"ms,omitempty"`     // how long asking it took
 	Error   string   `json:"error,omitempty"`  // why it couldn't say: no intent matches then
+
+	// AfterEffort: the reasoning picked for the turn before, which it was told
+	AfterEffort string `json:"afterEffort,omitempty"`
 }
 
 type turnRule struct {
@@ -62,6 +73,7 @@ type turnRule struct {
 	input int // the tokens the vendor counted the conversation's last request as
 	// intent is what the classifier said the turn's first message is
 	intent string
+	effort string // the reasoning it picked for the turn
 }
 
 var turnRules = struct {
@@ -100,10 +112,12 @@ func firstWords(req *Request) string {
 // first when a rule that may match has an intent; within the turn — the
 // agent handing tool results back — what was decided when it began, unless
 // the conversation has grown past what that model can take and a rule
-// sends it to one with more room. It returns nil for a group without
-// rules.
+// sends it to one with more room. A group whose decision model picks the
+// effort (provider.EffortAuto) has it pick as the turn begins, when the
+// agent asked for reasoning, and the turn keeps it. It returns nil for a
+// group that decides nothing.
 func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, agent string, ask classifier) *RuleHit {
-	if len(g.Rules) == 0 || req == nil {
+	if !g.Ruled() || req == nil {
 		return nil
 	}
 	turn, within := turnIn(req)
@@ -124,7 +138,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 	if had && tr.input > q.Tokens {
 		q.Tokens = tr.input // what the vendor counted last, a floor: the conversation only grew since
 	}
-	hit := &RuleHit{Turn: turn, Tokens: q.Tokens, Images: q.Images, Effort: q.Effort}
+	hit := &RuleHit{Turn: turn, Tokens: q.Tokens, Images: q.Images, Effort: q.Effort, Bare: len(g.Rules) == 0}
 	if hit.Effort == "" && q.Thinking {
 		hit.Effort = "on"
 	}
@@ -147,9 +161,12 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 		default:
 			hit.Waits = true
 		}
+		if !hit.Waits && hit.Effort != "" {
+			hit.Pick = tr.effort
+		}
 		if grown, ok := outgrown(g, ctx, hit, q); ok {
 			hit = grown
-			turnRules.m[key] = turnRule{turn: turn, use: hit.Use, n: hit.N, at: now, input: tr.input, intent: q.Intent}
+			turnRules.m[key] = turnRule{turn: turn, use: hit.Use, n: hit.N, at: now, input: tr.input, intent: q.Intent, effort: tr.effort}
 			return hit
 		}
 		if had {
@@ -161,11 +178,19 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 		return hit
 	}
 	// a new turn: the classifier is asked only when a rule that could be
-	// the first to match waits on its intent
-	if intents := provider.Intents(g.Rules, q); len(intents) > 0 {
+	// the first to match waits on its intent, or it picks the effort of a
+	// turn the agent asked to reason in
+	intents := provider.Intents(g.Rules, q)
+	effort := g.Effort == provider.EffortAuto && hit.Effort != ""
+	if len(intents) > 0 || effort {
 		c := &Classified{By: g.Classifier, Intents: intents}
 		if had && slices.Contains(intents, tr.intent) {
 			c.After = tr.intent // a message that only carries on is of its kind
+		}
+		prev := before{Intent: c.After}
+		if had && effort {
+			prev.Effort = tr.effort // and needs the reasoning it had
+			c.AfterEffort = tr.effort
 		}
 		text := userText(req)
 		switch {
@@ -177,14 +202,20 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 			c.Error = "the message has no words to classify"
 		default:
 			t0 := time.Now()
-			intent, cached, err := classify(ask, g.Classifier, intents, c.After, text)
-			c.Intent, c.Cached, c.Ms = intent, cached, int(time.Since(t0).Milliseconds())
+			v, cached, err := classify(ask, g.Classifier, intents, prev, effort, text)
+			c.Intent, c.Cached, c.Ms = v.Intent, cached, int(time.Since(t0).Milliseconds())
+			if effort {
+				c.Effort, c.Score = v.Effort, v.Score
+			}
+			if len(intents) > 0 {
+				c.Sure = v.Sure
+			}
 			if err != nil {
 				c.Error = err.Error()
 			}
 		}
 		q.Intent = c.Intent
-		hit.Classified = c
+		hit.Classified, hit.Pick = c, c.Effort
 	}
 	if i := provider.MatchRule(g.Rules, q); i >= 0 {
 		hit.N, hit.Use, hit.When = i+1, g.Rules[i].Use, g.Rules[i].Conditions()
@@ -195,7 +226,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 	if cur, ok := turnRules.m[key]; ok {
 		input = cur.input // answered while the classifier was asked
 	}
-	turnRules.m[key] = turnRule{turn: turn, use: hit.Use, n: hit.N, at: now, input: input, intent: q.Intent}
+	turnRules.m[key] = turnRule{turn: turn, use: hit.Use, n: hit.N, at: now, input: input, intent: q.Intent, effort: hit.Pick}
 	if len(turnRules.m) > 4096 {
 		for k, tr := range turnRules.m {
 			if now.Sub(tr.at) > stickKeep {
@@ -283,7 +314,7 @@ func (s *Server) nestedRules(at string, req *Request, agent string, ms []provide
 		lead := ms[i]
 		sub := lead.Via[depth]
 		at += ">" + sub.ID
-		if len(sub.Rules) == 0 {
+		if !sub.Ruled() {
 			continue
 		}
 		var subMs []provider.Member

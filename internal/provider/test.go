@@ -28,6 +28,9 @@ type Result struct {
 // serves, signed with a key made for it and asking for a model that key
 // sees, and reports what came back.
 func (p Provider) Test(ctx context.Context) []Result {
+	if p.Decides() {
+		return p.testDecide(ctx)
+	}
 	p.Fetch(ctx)
 	var out []Result
 	for _, proto := range p.Speaks() {
@@ -169,8 +172,12 @@ func APIError(b []byte, fallback string) string {
 	var v struct {
 		Error   json.RawMessage `json:"error"`
 		Message string          `json:"message"`
+		Detail  json.RawMessage `json:"detail"` // FastAPI's (TypeSafe)
 	}
 	if json.Unmarshal(b, &v) == nil {
+		if len(v.Detail) > 0 {
+			v.Error = v.Detail
+		}
 		var e struct {
 			Message string `json:"message"`
 		}

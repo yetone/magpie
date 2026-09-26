@@ -487,6 +487,11 @@ func announce(id string) error {
 		fmt.Println(green.Render("✓"), len(ms), "models from", fetchedFrom(*saved))
 	}
 	n := len(saved.Exposed())
+	if saved.Decides() {
+		fmt.Println("  it routes groups: magpie group set <id> effort=auto classifier="+saved.ID+"/"+provider.JevLatest,
+			muted.Render("· or a rule's intent=…"))
+		return nil
+	}
 	if n == 0 {
 		fmt.Println(amber.Render("!"), "no models exposed yet ·", "magpie provider models", saved.ID, "<ids…>")
 	} else {

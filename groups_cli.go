@@ -26,7 +26,9 @@ const groupUsage = `usage:
                                           its shortest model's), family (a tag: magpie visible shows agents
                                           families, not each group),
                                           id (what agents pick it as: id=gpt-6-astra drops auto-; the groups
-                                          it is in follow; an agent set to the old id needs setting again)
+                                          it is in follow; an agent set to the old id needs setting again),
+                                          effort=auto (Jev picks each turn's reasoning; needs classifier=),
+                                          effort=agent (the agent's again), classifier=<provider/model>
   magpie group rm <id>                    remove a group (one magpie found is hidden instead)
   magpie group restore <id>               bring back a group magpie found that you removed
   magpie group rule add|rm|mv <id> …      rules: which model a turn goes to first, by its length, an image,
@@ -47,11 +49,16 @@ const groupUsage = `usage:
            session for the whole session
            turn    within a turn only; routing decides afresh when you speak again
            off     every request routed afresh
+  effort   agent   (default) each request reasons as much as the agent asked
+           auto    as a turn begins, the group's classifier — Jev, from a TypeSafe provider
+                   (magpie provider add typesafe key=…) — rates how hard it is, and the turn's requests
+                   reason at low, medium, high or xhigh; only those the agent asked to reason
 
   e.g. magpie group add "Opus anywhere" models=claude/claude-opus-5-5,copilot/claude-opus-5.5 routing=order
        magpie group set opus-anywhere stays=session models+=openrouter/anthropic/claude-opus-5.5
        magpie group set auto-gpt-6-astra id=gpt-6-astra
        magpie group add Everything models=group/opus-anywhere,deepseek/deepseek-v4-flash routing=order
+       magpie group set opus-anywhere effort=auto classifier=typesafe/jev-latest
        magpie claude group/opus-anywhere`
 
 // routingNames: each routing's value in the file, what the CLI calls it,
@@ -293,8 +300,19 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			}
 		case "family", "tag":
 			g.Family = strings.TrimSpace(v)
+		case "effort", "reasoning":
+			switch strings.ToLower(strings.TrimSpace(v)) {
+			case "auto", "jev":
+				g.Effort = provider.EffortAuto
+			case "", "agent", "off":
+				g.Effort = ""
+			default:
+				err = fmt.Errorf("effort=auto (Jev picks each turn's) or effort=agent (the agent's), not %q", v)
+			}
+		case "classifier", "classify":
+			g.Classifier = strings.TrimPrefix(strings.TrimSpace(v), "magpie/")
 		default:
-			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, stays, context, family; magpie group help)", k)
+			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, stays, context, family, effort, classifier; magpie group help)", k)
 		}
 		if err != nil {
 			return err
@@ -700,8 +718,15 @@ func showGroup(g provider.Group) error {
 		}
 		kv(k, fmt.Sprintf("%d %s", i+1, ruleLine(r)))
 	}
+	if g.Effort == provider.EffortAuto {
+		kv("effort", "auto"+muted.Render("  the classifier picks each turn's reasoning"))
+	}
 	if g.Classifier != "" {
-		kv("classifier", g.Classifier+muted.Render("  tells which intent a message is"))
+		what := "  tells which intent a message is"
+		if !slices.ContainsFunc(g.Rules, func(r provider.Rule) bool { return r.Intent != "" }) {
+			what = "  rates how hard each turn is"
+		}
+		kv("classifier", g.Classifier+muted.Render(what))
 	}
 	if u := groupUses()[g.ID]; len(u) > 0 {
 		kv("used by", green.Render(strings.Join(u, ", ")))

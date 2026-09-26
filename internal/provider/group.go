@@ -40,6 +40,14 @@ const (
 	AffinityOff     = "off"
 )
 
+// EffortAuto is a group whose classifier picks each turn's reasoning
+// effort (Group.Effort).
+const EffortAuto = "auto"
+
+// Ruled reports whether the group decides anything as a user's turn
+// begins: a rule to put a member first, or the turn's effort.
+func (g Group) Ruled() bool { return len(g.Rules) > 0 || g.Effort == EffortAuto }
+
 // Group is a routing group.
 type Group struct {
 	ID       string   `json:"id"`
@@ -54,6 +62,11 @@ type Group struct {
 	// of the rules' intents a user's message is. Rules with an intent need
 	// one; a small, fast model without reasoning does.
 	Classifier string `json:"classifier,omitempty"`
+	// Effort "auto" has the classifier — a decision provider's model, as
+	// Jev — judge how hard each turn is to think about as it begins, and
+	// the turn asks its model for that much reasoning, where the agent
+	// asked for some (see EffortAuto).
+	Effort string `json:"effort,omitempty"`
 	// Context is how long a request the user says the group takes, in
 	// tokens: agents are told it rather than its shortest member's.
 	Context int `json:"context,omitempty"`
@@ -360,6 +373,11 @@ func SaveGroup(g Group) error {
 	if err := groupsInGroup(g, groupsIn(providerEntries())); err != nil {
 		return err
 	}
+	for _, m := range g.Members {
+		if IsDecider(m) {
+			return fmt.Errorf("%s decides a group's model and effort; it holds no conversation, so it can only be the group's classifier", m)
+		}
+	}
 	if g.Routing != Ordered && g.Routing != Rotate && g.Routing != LeastUsed {
 		g.Routing = ""
 	}
@@ -372,18 +390,27 @@ func SaveGroup(g Group) error {
 	}
 	g.Rules = rules
 	g.Classifier = strings.TrimPrefix(strings.TrimSpace(g.Classifier), "magpie/")
+	g.Effort = strings.ToLower(strings.TrimSpace(g.Effort))
 	intents := slices.ContainsFunc(g.Rules, func(r Rule) bool { return r.Intent != "" })
 	switch {
+	case g.Effort != "" && g.Effort != EffortAuto:
+		return fmt.Errorf("a group's effort is %q or left to the agent, not %q", EffortAuto, g.Effort)
 	case strings.HasPrefix(g.Classifier, GroupPrefix):
 		return fmt.Errorf("the classifier is a model, not a group (%s)", g.Classifier)
 	case intents && g.Classifier == "":
 		return errors.New("a rule with an intent needs the group's classifier: the model that tells which intent a message is")
-	case !intents:
+	case g.Effort == EffortAuto && g.Classifier == "":
+		return errors.New("effort picked per turn needs the group's classifier to be Jev (a TypeSafe provider's model)")
+	case !intents && g.Effort == "":
 		g.Classifier = "" // nothing to ask it
 	}
 	if g.Classifier != "" {
-		if _, _, ok := Resolve(g.Classifier); !ok {
+		p, _, ok := Resolve(g.Classifier)
+		if !ok {
 			return fmt.Errorf("magpie knows no model %q to classify with", g.Classifier)
+		}
+		if g.Effort == EffortAuto && !p.Decides() {
+			return fmt.Errorf("effort picked per turn needs the group's classifier to be Jev (a TypeSafe provider's model), not %s", g.Classifier)
 		}
 	}
 	g.Auto, g.Hidden = false, false

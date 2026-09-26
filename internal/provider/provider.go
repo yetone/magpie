@@ -59,6 +59,10 @@ type Provider struct {
 	Chat      string `json:"chat,omitempty"`
 	Responses string `json:"responses,omitempty"`
 	Anthropic string `json:"anthropic,omitempty"`
+	// Decide is the base of a decision API (TypeSafe's System One, which
+	// Jev answers): a provider with it serves no conversation, only the
+	// routing groups' choices of model and effort (see decide.go).
+	Decide string `json:"decide,omitempty"`
 
 	// Fallback is where a request goes when this provider can't take it —
 	// out of quota, rate limited, overloaded or down — before any of the
@@ -189,7 +193,7 @@ func All() []Provider {
 	var out []Provider
 	for _, p := range stored {
 		p = normalize(p)
-		if p.Chat == "" && p.Responses == "" && p.Anthropic == "" {
+		if p.Chat == "" && p.Responses == "" && p.Anthropic == "" && p.Decide == "" {
 			picks[p.ID] = p
 			continue
 		}
@@ -287,7 +291,7 @@ func Save(p Provider) error {
 			// taken, it would hide that subscription once signed in
 			return fmt.Errorf("%q is the id of the %s subscription; pick another name", p.ID, p.ID)
 		}
-		if p.Chat == "" && p.Responses == "" && p.Anthropic == "" {
+		if p.Chat == "" && p.Responses == "" && p.Anthropic == "" && p.Decide == "" {
 			return errors.New("a provider needs a base URL")
 		}
 		if p.Key == "" && !keyOptional(p) {
@@ -426,7 +430,7 @@ func normalize(p Provider) Provider {
 	p.ID = strings.ToLower(strings.TrimSpace(p.ID))
 	p.Name = strings.TrimSpace(p.Name)
 	p.Key = strings.TrimSpace(p.Key)
-	for _, u := range []*string{&p.Chat, &p.Responses, &p.Anthropic, &p.Website, &p.KeysURL} {
+	for _, u := range []*string{&p.Chat, &p.Responses, &p.Anthropic, &p.Decide, &p.Website, &p.KeysURL} {
 		*u = strings.TrimRight(strings.TrimSpace(*u), "/")
 		if *u != "" && !strings.Contains(*u, "://") {
 			*u = "https://" + *u
@@ -540,6 +544,9 @@ func (p Provider) Host() string {
 		if u := p.Base(pr); u != "" {
 			return HostOf(u)
 		}
+	}
+	if p.Decide != "" {
+		return HostOf(p.Decide)
 	}
 	return ""
 }

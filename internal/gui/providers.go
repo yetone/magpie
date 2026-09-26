@@ -39,6 +39,7 @@ type providerJSON struct {
 	Chat      string            `json:"chat"`
 	Responses string            `json:"responses"`
 	Anthropic string            `json:"anthropic"`
+	Decide    string            `json:"decide,omitempty"` // a decision API: it only routes groups
 	Catalog   string            `json:"catalog"`
 	Website   string            `json:"website"`
 	KeysURL   string            `json:"keysUrl"`
@@ -165,7 +166,7 @@ func agentUses(agents []*agent.Agent, findGroup func(string) (provider.Group, []
 func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 	out := providerJSON{
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
-		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic,
+		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Decide: p.Decide,
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
 		Headers: p.Headers, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Models, Models: []modelJSON{}, Agents: []providerAgent{},

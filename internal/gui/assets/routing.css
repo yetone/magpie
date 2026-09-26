@@ -259,7 +259,7 @@
 .rt-cond.tk { cursor: text; }
 .rt-cond.in { cursor: text; }
 .rt-cond.in input { width: 24ch; }
-.rt-classifier { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 8px; }
+.rt-classifier { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .rt-classifier[hidden] { display: none; }
 .rt-classifier .w { color: var(--muted); font-size: 12px; }
 .rt-classifier .hint { flex-basis: 100%; }

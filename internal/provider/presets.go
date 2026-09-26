@@ -20,6 +20,7 @@ type PresetDef struct {
 	Chat      string   `json:"chat,omitempty"`
 	Responses string   `json:"responses,omitempty"`
 	Anthropic string   `json:"anthropic,omitempty"`
+	Decide    string   `json:"decide,omitempty"` // a decision API: the provider only routes (see decide.go)
 	Catalog   string   `json:"catalog,omitempty"`
 	Website   string   `json:"website,omitempty"`
 	KeysURL   string   `json:"keysUrl,omitempty"`
@@ -158,6 +159,12 @@ var presets = []PresetDef{
 			{ID: "cn", Name: "China Mainland", Chat: "https://cn.yylx.io/v1", Anthropic: "https://cn.yylx.io"},
 		}},
 
+	// Jev answers no conversation: it decides which of a routing group's
+	// models takes a turn, and how hard it thinks
+	{ID: "typesafe", Name: "TypeSafe Jev", Icon: "typesafe", Kind: KindVendor,
+		Decide:  "https://api.typesafe.ai/v1",
+		Note:    "routes groups · picks model and effort",
+		Website: "https://typesafe.ai", KeysURL: "https://console.typesafe.ai/keys"},
 	{ID: "ollama", Name: "Ollama", Icon: "ollama", Kind: KindLocal, NoKey: true,
 		Chat: "http://localhost:11434/v1", Anthropic: "http://localhost:11434",
 		Note: "your local models", Website: "https://ollama.com"},
@@ -200,7 +207,7 @@ func FromPreset(id string) (Provider, error) {
 	}
 	return Provider{
 		ID: pr.ID, Name: pr.Name, Icon: pr.Icon, Preset: pr.ID,
-		Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic,
+		Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic, Decide: pr.Decide,
 		Catalog: pr.Catalog, Website: pr.Website, KeysURL: pr.KeysURL,
 	}, nil
 }

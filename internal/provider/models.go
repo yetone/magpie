@@ -21,6 +21,9 @@ const manyModels = 24
 // from the vendor itself when there is one, over the models.dev catalog (or,
 // for an account, whatever the agent's own sign-in can see).
 func (p Provider) Available() []catalog.Model {
+	if p.Decides() {
+		return p.decideModels()
+	}
 	signedIn := p.Account != nil && p.Account.models != nil
 	var known []catalog.Model
 	if signedIn {
@@ -69,6 +72,9 @@ func (p Provider) Fetched() (time.Time, bool) {
 
 // Fetch asks the vendor which models it serves and remembers the answer.
 func (p Provider) Fetch(ctx context.Context) ([]catalog.Model, error) {
+	if p.Decides() {
+		return p.fetchDecide(ctx)
+	}
 	if p.Account != nil && p.Account.fetch != nil {
 		return p.Account.fetch(ctx)
 	}
@@ -353,7 +359,7 @@ func providerEntries() []Entry {
 	var out []Entry
 	s := settings.Load()
 	for _, p := range All() {
-		if !p.Ready() {
+		if !p.Ready() || p.Decides() { // a decision API only routes
 			continue
 		}
 		for _, m := range p.Exposed() {
@@ -428,7 +434,7 @@ func resolveIn(entries []Entry, id string) (Provider, string, bool) {
 	// not exposed, but some provider lists it
 	var found []Provider
 	for _, p := range All() {
-		if !p.Ready() {
+		if !p.Ready() || p.Decides() {
 			continue
 		}
 		for _, m := range p.Available() {

@@ -132,7 +132,8 @@ type Weighed struct {
 // Try is one candidate trying the request.
 type Try struct {
 	ID     string    `json:"id"`
-	Model  string    `json:"model,omitempty"` // the model it was asked for: a group's members may share a provider's keys
+	Model  string    `json:"model,omitempty"`  // the model it was asked for: a group's members may share a provider's keys
+	Effort string    `json:"effort,omitempty"` // the reasoning it was asked for in place of the agent's, as its model takes the turn's pick
 	Start  time.Time `json:"start"`
 	Done   bool      `json:"done"`
 	Status int       `json:"status,omitempty"`
