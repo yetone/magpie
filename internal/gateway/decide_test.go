@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"cmp"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,6 +18,8 @@ import (
 type jevUp struct {
 	mu     sync.Mutex
 	choice string
+	level  string  // its choice without "none of these"; choice when ""
+	levels float64 // whether the intents are levels
 	sure   float64
 	score  float64
 	asked  []map[string]any
@@ -39,10 +42,29 @@ func (u *jevUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if _, ok := qs["intent"]; ok {
 		answers["intent"] = map[string]any{"type": "choice", "choice": u.choice, "confidence": u.sure}
 	}
+	if _, ok := qs["level"]; ok {
+		answers["level"] = map[string]any{"type": "choice", "choice": cmp.Or(u.level, u.choice), "confidence": u.sure}
+	}
+	if _, ok := qs["levels"]; ok {
+		answers["levels"] = map[string]any{"type": "noul", "noul": u.levels}
+	}
 	if _, ok := qs["effort"]; ok {
 		answers["effort"] = map[string]any{"type": "score", "score": u.score, "confidence": 0.8}
 	}
 	json.NewEncoder(w).Encode(map[string]any{"model": "jev-1.13.0", "answers": answers, "usage": map[string]int{"input_tokens": 120, "output_tokens": 0}})
+}
+
+// turns is what it was asked about messages, not about the intents.
+func (u *jevUp) turns() []map[string]any {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	var out []map[string]any
+	for _, q := range u.asked {
+		if _, ok := q["state"].(map[string]any)["message"]; ok {
+			out = append(out, q)
+		}
+	}
+	return out
 }
 
 func (u *jevUp) n() int {
@@ -79,15 +101,16 @@ func TestJevPicksTheIntent(t *testing.T) {
 	if !strings.Contains(out, "from kb") || r.Rule.N != 1 || r.Rule.Classified.Intent != "debugging" || r.Rule.Classified.Sure != 0.7 {
 		t.Fatalf("%s %+v", out, r.Rule.Classified)
 	}
-	if j.auth != "Bearer kts" || j.asked[0]["model"] != "jev-latest" {
-		t.Fatalf("asked %v with %q", j.asked[0], j.auth)
+	asked := j.turns()[0]
+	if j.auth != "Bearer kts" || asked["model"] != "jev-latest" {
+		t.Fatalf("asked %v with %q", asked, j.auth)
 	}
-	qs := j.asked[0]["questions"].(map[string]any)
+	qs := asked["questions"].(map[string]any)
 	crit := qs["intent"].(map[string]any)["criteria"].(map[string]any)
 	if _, ok := crit["debugging"]; !ok || qs["effort"] != nil {
 		t.Fatalf("questions %v", qs)
 	}
-	if st := j.asked[0]["state"].(map[string]any); st["message"] != "why does this crash?" {
+	if st := asked["state"].(map[string]any); st["message"] != "why does this crash?" {
 		t.Fatalf("state %v", st)
 	}
 	// not sure enough: no rule
@@ -99,6 +122,29 @@ func TestJevPicksTheIntent(t *testing.T) {
 	// Jev's call is magpie's own; it holds no conversation itself
 	if code, out := postAs(t, s, "s3", `{"model":"ts/jev-latest","messages":[{"role":"user","content":"hi"}]}`); code != 400 || !strings.Contains(out, "only decides") {
 		t.Fatalf("chat to Jev: %d %s", code, out)
+	}
+}
+
+// Intents that are levels (how hard a request is) leave no message out:
+// Jev's answer without "none of these" counts for them, and whether they
+// are is asked once for the set.
+func TestJevLevels(t *testing.T) {
+	s, _, _, j := jevved(t, "", provider.Rule{Use: "b/big", Intent: "simple task"}, provider.Rule{Use: "a/small", Intent: "complex task"})
+	j.choice, j.level, j.sure, j.levels = noIntent, "simple task", 0.9, 0.7
+	_, r := postOK(t, s, "s1", chat("who are you?", nil, 0, ""))
+	if r.Rule.N != 1 || r.Rule.Classified.Intent != "simple task" {
+		t.Fatalf("levels: %+v", r.Rule.Classified)
+	}
+	_, r = postOK(t, s, "s2", chat("hello", nil, 0, ""))
+	if r.Rule.N != 1 || j.n() != 3 { // the intents asked about once, two turns
+		t.Fatalf("again: %+v, %d calls", r.Rule.Classified, j.n())
+	}
+	// topics: "none of these" stands
+	s, _, _, j = jevved(t, "", provider.Rule{Use: "b/big", Intent: "debugging"})
+	j.choice, j.level, j.sure, j.levels = noIntent, "debugging", 0.9, 0.1
+	_, r = postOK(t, s, "s3", chat("write me a poem", nil, 0, ""))
+	if r.Rule.N != 0 || r.Rule.Classified.Intent != "" {
+		t.Fatalf("topics: %+v", r.Rule.Classified)
 	}
 }
 
@@ -115,7 +161,7 @@ func TestJevPicksTheEffort(t *testing.T) {
 	if !strings.Contains(a.last, `"reasoning_effort":"high"`) {
 		t.Fatalf("sent %s", a.last)
 	}
-	if qs := j.asked[0]["questions"].(map[string]any); qs["intent"] != nil || qs["effort"] == nil {
+	if qs := j.turns()[0]["questions"].(map[string]any); qs["intent"] != nil || qs["effort"] == nil {
 		t.Fatalf("questions %v", qs)
 	}
 	// the turn's tool rounds keep it, without asking again

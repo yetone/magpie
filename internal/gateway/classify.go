@@ -56,8 +56,6 @@ type verdict struct {
 	Effort string  // the reasoning the turn wants; "" when not asked
 	Score  float64 // how hard Jev took the turn to be, from 0 (low) to 3 (xhigh)
 	Sure   float64 // how confident Jev was of the intent, from 0 to 1
-	in     int     // the tokens it read, for the usage
-	out    int
 }
 
 var classified = struct {

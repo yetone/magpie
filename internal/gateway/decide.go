@@ -18,6 +18,8 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -48,15 +50,20 @@ var jevLevels = []struct{ effort, what string }{
 func jevBody(model string, intents []string, prev before, effort bool, text string) []byte {
 	qs := map[string]any{}
 	if len(intents) > 0 {
+		// Kinds may be topics, which a message can be none of, or levels
+		// (how hard or big a request is), which every message has one
+		// of. Jev takes "none of these" over any level for a greeting,
+		// and without it puts a poem in some topic, sure of it; so it is
+		// asked both ways, and whether the kinds are levels (jevLevelled)
+		// says which answer counts (readJev).
 		criteria := map[string]any{noIntent: "The message is none of the other kinds"}
+		levels := map[string]any{}
 		for _, in := range intents {
-			criteria[in] = nil
+			criteria[in], levels[in] = nil, nil
 		}
-		qs["intent"] = map[string]any{
-			"type":         "choice",
-			"instructions": intentAsk(prev),
-			"criteria":     criteria,
-		}
+		qs["intent"] = map[string]any{"type": "choice", "instructions": intentAsk(prev), "criteria": criteria}
+		qs["level"] = map[string]any{"type": "choice", "instructions": intentAsk(prev), "criteria": levels}
+
 	}
 	if effort {
 		levels := make([]string, len(jevLevels))
@@ -89,7 +96,7 @@ func jevState(prev before, effort bool, text string) map[string]string {
 }
 
 func intentAsk(prev before) string {
-	q := "The `message` is what a user asked a coding assistant. Which kind of request is it?"
+	q := "The `message` is what a user asked a coding assistant. Which kind of request fits it best?"
 	if prev.Intent != "" {
 		q += " A message that only carries on from the user's message before it (go on, yes, do it, fix that) is of `previous_message_kind`; one that asks for something of its own is of the kind that fits it."
 	}
@@ -104,8 +111,9 @@ func effortAsk(prev before) string {
 	return q
 }
 
-// readJev is the verdict in a System One reply.
-func readJev(b []byte, intents []string) (verdict, error) {
+// readJev is the verdict in a System One reply to jevBody, the answer
+// without "none of these" counting when the intents are levels.
+func readJev(b []byte, intents []string, levels bool) (verdict, error) {
 	var out struct {
 		Model   string `json:"model"`
 		Answers map[string]struct {
@@ -122,8 +130,11 @@ func readJev(b []byte, intents []string) (verdict, error) {
 		return verdict{}, answerError{fmt.Errorf("not a System One answer")}
 	}
 	var v verdict
-	v.in, v.out = out.Usage.Input, out.Usage.Output
-	if a, ok := out.Answers["intent"]; ok && len(intents) > 0 {
+	q := "intent"
+	if levels {
+		q = "level" // every message is at one of them
+	}
+	if a, ok := out.Answers[q]; ok && len(intents) > 0 {
 		v.Sure = a.Confidence
 		if a.Choice != noIntent && a.Confidence >= jevSure {
 			for _, in := range intents {
@@ -141,6 +152,52 @@ func readJev(b []byte, intents []string) (verdict, error) {
 	return v, nil
 }
 
+// levelled is what Jev said of each set of intents: whether they are
+// levels every message is at (jevLevelled). It holds as long as the
+// intents do.
+var levelled = struct {
+	sync.Mutex
+	m map[string]bool
+}{m: map[string]bool{}}
+
+// jevLevelled asks Jev whether intents are levels of one scale — how hard
+// or big a request is — rather than topics a message may be none of,
+// once for each set of them.
+func (s *Server) jevLevelled(ctx context.Context, p provider.Provider, model string, intents []string) (bool, error) {
+	key := model + "\x00" + strings.ToLower(strings.Join(intents, "\x00"))
+	levelled.Lock()
+	l, ok := levelled.m[key]
+	levelled.Unlock()
+	if ok {
+		return l, nil
+	}
+	body, _ := json.Marshal(map[string]any{
+		"model": model,
+		"state": map[string]any{"kinds": intents},
+		"questions": map[string]any{"levels": map[string]any{"type": "noul",
+			"instructions": "Are these `kinds` levels of one scale that every request to a coding assistant is at, such as how hard, how big or how urgent it is — rather than topics or tasks that a request may be none of?"}},
+	})
+	b, err := s.systemOne(ctx, p, model, body)
+	if err != nil {
+		return false, err
+	}
+	var out struct {
+		Answers struct {
+			Levels *struct {
+				Noul float64 `json:"noul"`
+			} `json:"levels"`
+		} `json:"answers"`
+	}
+	if json.Unmarshal(b, &out) != nil || out.Answers.Levels == nil {
+		return false, answerError{fmt.Errorf("not a System One answer")}
+	}
+	l = out.Answers.Levels.Noul >= 0.5
+	levelled.Lock()
+	levelled.m[key] = l
+	levelled.Unlock()
+	return l, nil
+}
+
 // askJev asks a decision provider's model through its System One API.
 func (s *Server) askJev(p provider.Provider, model string, intents []string, prev before, effort bool, text string) (verdict, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), classifyTimeout)
@@ -148,36 +205,55 @@ func (s *Server) askJev(p provider.Provider, model string, intents []string, pre
 	if model == "" {
 		model = provider.JevLatest
 	}
-	start := time.Now()
-	body := jevBody(model, intents, prev, effort, text)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.Decide+"/systemone", bytes.NewReader(body))
+	levels := false
+	if len(intents) > 0 {
+		var err error
+		if levels, err = s.jevLevelled(ctx, p, model, intents); err != nil {
+			return verdict{}, err
+		}
+	}
+	b, err := s.systemOne(ctx, p, model, jevBody(model, intents, prev, effort, text))
 	if err != nil {
 		return verdict{}, err
+	}
+	return readJev(b, intents, levels)
+}
+
+// systemOne posts body to p's System One API and returns the answer,
+// counting it in the usage as magpie's own.
+func (s *Server) systemOne(ctx context.Context, p provider.Provider, model string, body []byte) ([]byte, error) {
+	start := time.Now()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.Decide+"/systemone", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", RouterAgent)
 	if err := p.Sign(ctx, req, provider.Chat, body); err != nil {
-		return verdict{}, err
+		return nil, err
 	}
 	res, err := s.client.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
-			return verdict{}, fmt.Errorf("%s gave no answer in %s", p.Name, classifyTimeout)
+			return nil, fmt.Errorf("%s gave no answer in %s", p.Name, classifyTimeout)
 		}
-		return verdict{}, fmt.Errorf("%s: %v", p.Name, err)
+		return nil, fmt.Errorf("%s: %v", p.Name, err)
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if res.StatusCode >= 300 {
-		return verdict{}, fmt.Errorf("%s: %s", p.Name, provider.APIError(b, res.Status))
+		return nil, fmt.Errorf("%s: %s", p.Name, provider.APIError(b, res.Status))
 	}
-	v, err := readJev(b, intents)
-	if err != nil {
-		return v, err
+	var u struct {
+		Usage struct {
+			Input  int `json:"input_tokens"`
+			Output int `json:"output_tokens"`
+		} `json:"usage"`
 	}
+	_ = json.Unmarshal(b, &u)
 	usage.Append(usage.Record{Time: start, Agent: usage.AgentOf(RouterAgent), Provider: p.ID, Host: p.Where(), Model: model,
-		Input: v.in, Output: v.out, Millis: time.Since(start).Milliseconds(), Status: res.StatusCode})
-	return v, nil
+		Input: u.Usage.Input, Output: u.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: res.StatusCode})
+	return b, nil
 }
 
 // withEffort asks a request, in the client's own API, for reasoning at
