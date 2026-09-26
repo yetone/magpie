@@ -92,7 +92,15 @@ func omitImageBlocks(proto provider.Protocol, raw json.RawMessage) (json.RawMess
 				MimeType string `json:"mimeType"`
 			}
 			json.Unmarshal(block["inlineData"], &data)
-			isImage = strings.HasPrefix(data.MimeType, "image/") || len(block["fileData"]) > 0
+			isImage = strings.HasPrefix(data.MimeType, "image/")
+			if len(block["fileData"]) > 0 {
+				var file struct {
+					MimeType string `json:"mimeType"`
+				}
+				if json.Unmarshal(block["fileData"], &file) != nil || file.MimeType == "" || strings.HasPrefix(file.MimeType, "image/") {
+					isImage = true // unknown file types may be images; fail closed
+				}
+			}
 		}
 		if isImage {
 			blocks[i] = imagePlaceholder(proto)
