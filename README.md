@@ -203,6 +203,10 @@ with the app; `magpie serve` runs it alone. It exposes:
 | `/v1beta/models/{model}:generateContent` | Google Gemini (also `:streamGenerateContent`, `:countTokens`) |
 | `/v1/models`, `/v1beta/models` | the catalog            |
 
+Each `/v1/models` entry includes `reasoning` and `supported_reasoning_levels`
+(`[{"effort":"low"}, ...]`). A routing group lists only the levels every
+member supports.
+
 Requests pass straight through when the vendor speaks the agent's API and
 are translated otherwise, streaming, tool calls and reasoning included. The
 key is `magpie` (any value works; the gateway only listens on loopback), and

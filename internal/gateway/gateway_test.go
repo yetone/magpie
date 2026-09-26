@@ -519,6 +519,68 @@ func TestModelsList(t *testing.T) {
 	}
 }
 
+func TestModelsListReasoning(t *testing.T) {
+	fresh(t)
+	if err := os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"a":{"models":{
+		"sol":{"id":"sol","reasoning_options":[{"type":"effort","values":["low","medium","high","max"]}]},
+		"mixed":{"id":"mixed","reasoning_options":[{"type":"effort","values":["low","high"]}]},
+		"plain":{"id":"plain"}}},
+		"b":{"models":{
+		"sol":{"id":"sol","reasoning_options":[{"type":"effort","values":["medium","high"]}]},
+		"mixed":{"id":"mixed"}}}}`
+	if err := os.WriteFile(catalog.CachePath(), []byte(data), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	for _, id := range []string{"a", "b"} {
+		if err := provider.Save(provider.Provider{ID: id, Name: id, Catalog: id, Key: "k", Chat: "http://127.0.0.1:1/v1"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := httptest.NewRecorder()
+	New().Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/v1/models", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var response struct {
+		Data []struct {
+			ID        string `json:"id"`
+			Reasoning *bool  `json:"reasoning"`
+			Levels    []struct {
+				Effort string `json:"effort"`
+			} `json:"supported_reasoning_levels"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{
+		"a/sol": "low,medium,high,max", "b/sol": "medium,high", "group/auto-sol": "medium,high",
+		"a/mixed": "low,high", "b/mixed": "", "group/auto-mixed": "", "a/plain": "",
+	}
+	for _, m := range response.Data {
+		expected, ok := want[m.ID]
+		if !ok {
+			continue
+		}
+		delete(want, m.ID)
+		var levels []string
+		for _, level := range m.Levels {
+			levels = append(levels, level.Effort)
+		}
+		if m.Reasoning == nil || *m.Reasoning != (expected != "") || strings.Join(levels, ",") != expected {
+			t.Errorf("%s: reasoning %v, levels %v; want %q", m.ID, m.Reasoning, levels, expected)
+		}
+	}
+	if len(want) > 0 {
+		t.Errorf("missing models: %v", want)
+	}
+}
+
 func TestGeminiClientChatUpstream(t *testing.T) {
 	f := &fake{t: t, reply: sse(
 		`data: {"id":"c1","model":"m1","choices":[{"delta":{"role":"assistant","reasoning_content":"think"}}]}`,

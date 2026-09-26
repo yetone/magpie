@@ -191,8 +191,15 @@ func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 }
 
 func modelObject(e provider.Entry) map[string]any {
+	type reasoningLevel struct {
+		Effort string `json:"effort"`
+	}
+	levels := make([]reasoningLevel, 0, len(e.Efforts))
+	for _, effort := range e.Efforts {
+		levels = append(levels, reasoningLevel{Effort: effort})
+	}
 	return map[string]any{"id": e.ID, "object": "model", "type": "model", "created": 0, "created_at": "2025-01-01T00:00:00Z",
-		"owned_by": e.Provider.ID, "display_name": e.Name}
+		"owned_by": e.Provider.ID, "display_name": e.Name, "reasoning": len(levels) > 0, "supported_reasoning_levels": levels}
 }
 
 func (s *Server) models(w http.ResponseWriter, r *http.Request) {
