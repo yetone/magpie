@@ -516,3 +516,19 @@ func TestRuleImagesUnlistedMember(t *testing.T) {
 		t.Fatalf("%d %s, a %d b %d", code, out, a.n(), b.n())
 	}
 }
+// A vision rule cannot fall back to a text-only member with the image still
+// attached when the vision provider fails.
+func TestImageRuleDoesNotLeakImageToTextOnlyFallback(t *testing.T) {
+	s, a, b := ruled(t, provider.Rule{Use: "b/big", Images: true})
+	b.mu.Lock()
+	b.fail = 503
+	b.mu.Unlock()
+	img := `{"model":"group/r","messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,aGVsbG8="}}]}]}`
+	code, _ := postAs(t, s, "image-fallback", img)
+	if code != 503 {
+		t.Fatalf("vision provider failed with status %d, want 503", code)
+	}
+	if a.n() != 0 {
+		t.Fatalf("image was sent to text-only fallback %d times", a.n())
+	}
+}

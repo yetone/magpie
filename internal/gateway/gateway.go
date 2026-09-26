@@ -518,6 +518,33 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if ruleReq != nil {
 		nested, nestedAt, cands, pl = s.nestedRules(ruleAt, ruleReq, call.Agent, ms, cands, pl, aff)
 	}
+	// A vision rule may choose a vision model even when the group has
+	// text-only fallbacks. A failure must not send a current user image to
+	// one of them. Historical images and tool results are omitted per
+	// candidate below, so a text-only fallback can still answer those.
+	if isGroup {
+		_, currentImage := textOnlyBody(from, body)
+		if currentImage {
+			var kept []candidate
+			var order []Weighed
+			for i, c := range cands {
+				in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}}, nil)
+				if in != nil && !*in {
+					continue
+				}
+				kept = append(kept, c)
+				order = append(order, pl.order[i])
+			}
+			cands, pl.order = kept, order
+			if len(cands) == 0 {
+				call.Status, call.Error = 400, "model does not support image input"
+				writeError(w, from, 400, fmt.Sprintf("model %q does not support image input", call.Model))
+				finishCapture()
+				s.record(call)
+				return
+			}
+		}
+	}
 	shown := aff
 	if len(cands) == 1 {
 		shown = nil // nobody else to stay away from
@@ -534,7 +561,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		call.Provider, call.To, call.Usage = c.p.ID, "", Usage{}
 		began := time.Now()
 		s.trace.update(tr, func(t *Route) { t.Tries = append(t.Tries, Try{ID: c.rest, Model: c.model, Start: began}) })
-		call.Status, call.Error = s.attempt(hw, r, from, c.p, c.model, body, &call)
+		attemptBody := body
+		if isGroup {
+			if in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}}, nil); in != nil && !*in {
+				attemptBody, _ = textOnlyBody(from, body) // omit images in prior turns and tool results
+			}
+		}
+		call.Status, call.Error = s.attempt(hw, r, from, c.p, c.model, attemptBody, &call)
 		if hw.failure != 0 { // the stream failed before any of it was sent
 			call.Status, call.Error = hw.failure, c.p.Name+": "+hw.failMsg
 		}
