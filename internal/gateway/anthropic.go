@@ -377,7 +377,9 @@ func (u Usage) anthropic() aUsage {
 
 func stopFromAnthropic(s string) string {
 	switch s {
-	case "max_tokens":
+	case "max_tokens", "model_context_window_exceeded":
+		// the second is Claude 4.5+ running into its context window
+		// before max_tokens: the reply is cut short all the same
 		return "length"
 	case "tool_use":
 		return "tool"
