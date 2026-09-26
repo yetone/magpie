@@ -8,7 +8,6 @@ package tui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/library"
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // libRow is one line of the page.
@@ -325,7 +325,7 @@ func editInstructions() tea.Cmd {
 	}
 	// the editor may come with flags: code -w
 	words := strings.Fields(ed)
-	c := exec.Command(words[0], append(words[1:], f.Name())...)
+	c := proc.Command(words[0], append(words[1:], f.Name())...)
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		defer os.Remove(f.Name())
 		if err != nil {
