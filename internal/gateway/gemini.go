@@ -148,7 +148,12 @@ func parseGemini(body []byte) (*Request, error) {
 					msg.Parts = append(msg.Parts, Part{Kind: Text, Text: "[attachment " + p.InlineData.MimeType + "]"})
 				}
 			case p.FileData != nil:
-				msg.Parts = append(msg.Parts, Part{Kind: Image, MediaType: p.FileData.MimeType, URL: p.FileData.FileURI})
+				if strings.HasPrefix(p.FileData.MimeType, "image/") {
+					msg.Parts = append(msg.Parts, Part{Kind: Image, MediaType: p.FileData.MimeType, URL: p.FileData.FileURI})
+				} else {
+					// Other protocols cannot carry Gemini file references as image URLs.
+					msg.Parts = append(msg.Parts, Part{Kind: Text, Text: "[attachment " + p.FileData.MimeType + ": " + p.FileData.FileURI + "]"})
+				}
 			case p.Thought:
 				msg.Parts = append(msg.Parts, Part{Kind: Thinking, Text: p.Text, Signature: p.Signature})
 			case p.Text != "":

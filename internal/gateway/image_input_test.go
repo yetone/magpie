@@ -412,3 +412,30 @@ func TestGeminiTextOnlyBodyKeepsNonImageFileData(t *testing.T) {
 		}
 	}
 }
+
+// A non-image Gemini file must not become image_url when routed to Chat.
+func TestGeminiNonImageFileTranslation(t *testing.T) {
+	for _, tc := range []struct {
+		name, mime, field, value string
+	}{
+		{"file-pdf", "application/pdf", "fileData", `"fileUri":"gs://bucket/file.pdf"`},
+		{"file-audio", "audio/wav", "fileData", `"fileUri":"gs://bucket/file.wav"`},
+		{"inline-pdf", "application/pdf", "inlineData", `"data":"cGRm"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			source := `{"contents":[{"role":"user","parts":[{"text":"read this"},{"` + tc.field + `":{"mimeType":"` + tc.mime + `",` + tc.value + `}}]}]}`
+			body, blocked := textOnlyBody(provider.Gemini, []byte(source))
+			if blocked {
+				t.Fatal("non-image attachment blocked as image")
+			}
+			r, err := parseGemini(body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			chat := buildChat(r, "text", "", false)
+			if strings.Contains(string(chat), `"image_url"`) || !strings.Contains(string(chat), "[attachment "+tc.mime) {
+				t.Fatalf("non-image attachment translated as an image or lost: %s", chat)
+			}
+		})
+	}
+}
