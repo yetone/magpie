@@ -44,3 +44,35 @@ func TestSniffResponsesJSON(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+// SSE permits data to be split over multiple data lines, and the final event
+// need not end with a newline. Both shapes occur in proxy streams.
+func TestSniffResponsesMultilineAndUnterminatedSSE(t *testing.T) {
+	for _, payload := range []string{
+		"event: response.completed\ndata: {\"response\":\ndata: {\"usage\":{\"input_tokens\":7,\"output_tokens\":3}}}\n\n",
+		"event: response.completed\ndata: {\"response\":{\"usage\":{\"input_tokens\":7,\"output_tokens\":3}}}",
+	} {
+		s := newSniffer(provider.Responses, "text/event-stream")
+		for i := 0; i < len(payload); i += 9 {
+			end := i + 9
+			if end > len(payload) {
+				end = len(payload)
+			}
+			s.write([]byte(payload[i:end]))
+		}
+		if got := s.usage(); got != (Usage{Input: 7, Output: 3}) {
+			t.Errorf("usage %+v from %q", got, payload)
+		}
+	}
+}
+
+// Some relays separate complete events with a single newline, not a blank line.
+// This case worked on main and must remain counted after multiline support.
+func TestSniffSingleNewlineEvents(t *testing.T) {
+	payload := "data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":7}}}\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":3}}\n"
+	s := newSniffer(provider.Anthropic, "text/event-stream")
+	s.write([]byte(payload))
+	if got := s.usage(); got.Input != 7 || got.Output != 3 {
+		t.Errorf("usage %+v", got)
+	}
+}

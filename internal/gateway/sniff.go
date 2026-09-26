@@ -15,7 +15,8 @@ type usageSniffer struct {
 	proto provider.Protocol
 	sse   bool
 	buf   []byte
-	over  bool // the JSON body outgrew the cap; give up on it
+	data  []byte // SSE data lines of the event in progress
+	over  bool   // the JSON body outgrew the cap; give up on it
 	u     Usage
 }
 
@@ -38,16 +39,42 @@ func (s *usageSniffer) write(b []byte) {
 		if i < 0 {
 			break
 		}
-		line := bytes.TrimSpace(s.buf[:i])
+		s.line(bytes.TrimSuffix(s.buf[:i], []byte{'\r'}))
 		s.buf = s.buf[i+1:]
-		if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
-			if rest = bytes.TrimSpace(rest); len(rest) > 0 && rest[0] == '{' {
-				s.parse(rest)
-			}
-		}
 	}
 	if len(s.buf) > 1<<20 { // a runaway line is not one we can use
-		s.buf = s.buf[:0]
+		s.buf = nil
+		s.data = nil
+	}
+}
+
+func (s *usageSniffer) line(line []byte) {
+	if len(line) == 0 {
+		s.flushEvent()
+		return
+	}
+	if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
+		rest = bytes.TrimPrefix(rest, []byte{' '})
+		if len(s.data)+len(rest)+1 > 1<<20 {
+			s.data = nil // never let an unbounded event accumulate
+			return
+		}
+		if len(s.data) > 0 {
+			s.data = append(s.data, '\n')
+		}
+		s.data = append(s.data, rest...)
+		// Relays also send one JSON event per data line without blank separators.
+		// Parse a complete value now, but keep incomplete multiline JSON.
+		if json.Valid(bytes.TrimSpace(s.data)) {
+			s.flushEvent()
+		}
+	}
+}
+
+func (s *usageSniffer) flushEvent() {
+	if len(s.data) > 0 {
+		s.parse(bytes.TrimSpace(s.data))
+		s.data = nil
 	}
 }
 
@@ -94,6 +121,13 @@ func (s *usageSniffer) parse(b []byte) {
 
 // usage is what the reply reported; call it once the body has ended.
 func (s *usageSniffer) usage() Usage {
+	if s.sse {
+		if len(s.buf) > 0 {
+			s.line(bytes.TrimSuffix(s.buf, []byte{'\r'}))
+			s.buf = nil
+		}
+		s.flushEvent()
+	}
 	if !s.sse && !s.over && len(s.buf) > 0 {
 		s.parse(bytes.TrimSpace(s.buf))
 		s.buf = nil
