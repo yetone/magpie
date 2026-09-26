@@ -212,9 +212,7 @@ func stopFromACP(s string) string {
 // devinConn is the JSON-RPC side of a devin acp process: calls out over
 // stdin, and from stdout — responses, session/update notifications, and the
 // odd request devin asks of its client (permission prompts, which are
-// declined, and anything else, which is unsupported). Kiro's ACP is the same
-// protocol, so kiro_subscription.go uses it too, with a say on permission
-// prompts and a look at the notifications of Kiro's own.
+// declined, and anything else, which is unsupported).
 type devinConn struct {
 	stdin   io.Writer
 	run     *subscriptionRun
@@ -222,12 +220,6 @@ type devinConn struct {
 	seq     atomic.Int64
 	mu      sync.Mutex
 	pending map[int64]chan devinReply
-
-	// permit, when set, answers session/request_permission; unset, every
-	// prompt is declined
-	permit func(params json.RawMessage) any
-	// notify, when set, sees the notifications other than session/update
-	notify func(method string, params json.RawMessage)
 }
 
 type devinReply struct {
@@ -241,8 +233,8 @@ type devinRPCError struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-// Error is the message, and the data with it when that says more: Kiro puts
-// the reason in data under a bare "Internal error".
+// Error is the message, and the data with it when that says more, as an
+// agent may put the reason there under a bare "Internal error".
 func (e *devinRPCError) Error() string {
 	var data string
 	if json.Unmarshal(e.Data, &data) != nil {
@@ -327,16 +319,10 @@ func (c *devinConn) read(rd io.Reader) {
 		case msg.Method != "" && len(msg.ID) > 0:
 			// a request devin asks of its client: permission prompts are
 			// declined, the rest (fs, terminal, …) unimplemented
-			if msg.Method == "session/request_permission" && c.permit != nil {
-				c.answer(msg.ID, c.permit(msg.Params))
-			} else if msg.Method == "session/request_permission" {
+			if msg.Method == "session/request_permission" {
 				c.answer(msg.ID, map[string]any{"outcome": map[string]any{"outcome": "cancelled"}})
 			} else {
 				c.refuse(msg.ID, -32601, "magpie does not implement "+msg.Method)
-			}
-		case msg.Method != "" && msg.Method != "session/update":
-			if c.notify != nil {
-				c.notify(msg.Method, msg.Params)
 			}
 		case msg.Method == "session/update":
 			var p struct {
@@ -513,18 +499,13 @@ func devinEnv(env []string, home string) []string {
 // renderDevinPrompt is the conversation as ACP content blocks: the caller's
 // tools are named as they come over MCP.
 func renderDevinPrompt(req *Request, tools bool) ([]map[string]any, error) {
-	return renderACPPrompt(req, tools, "Devin")
-}
-
-// renderACPPrompt is renderDevinPrompt for any ACP agent, named by who.
-func renderACPPrompt(req *Request, tools bool, who string) ([]map[string]any, error) {
 	blocks, err := renderClaudePrompt(req)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]map[string]any, 0, len(blocks)+1)
 	if tools {
-		out = append(out, map[string]any{"type": "text", "text": "<external_system_instructions>\nThe only tools in this session are those of the magpie MCP server; " + who + "'s own tools (shell, reading, editing and searching files, the web) are turned off, and this workspace is empty. Call a magpie tool whenever the conversation needs one.\n</external_system_instructions>"})
+		out = append(out, map[string]any{"type": "text", "text": "<external_system_instructions>\nThe only tools in this session are those of the magpie MCP server; Devin's own tools (shell, reading, editing and searching files, the web) are turned off, and this workspace is empty. Call a magpie tool whenever the conversation needs one.\n</external_system_instructions>"})
 	}
 	for _, b := range blocks {
 		switch b["type"] {

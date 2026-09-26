@@ -271,11 +271,11 @@ func Save(p Provider) error {
 	if p.Name == "" {
 		p.Name = p.ID
 	}
-	if _, ok := find(Accounts(), p.ID); ok || p.ID == "kiro" && (p.Key != "" && KiroExecutable() != "" || stored(p.ID)) {
+	if _, ok := find(Accounts(), p.ID); ok || p.ID == "kiro" && (p.Key != "" || stored(p.ID)) {
 		// an account keeps only the user's model picks; the rest is the
 		// agent's own sign-in. One the user removed stays removed: only
 		// ShowAccount brings it back. Kiro's alone also keeps a key, which
-		// its CLI takes in place of a sign-in — so saving one is how a Kiro
+		// it takes in place of a sign-in — so saving one is how a Kiro
 		// that isn't signed in is added.
 		key := ""
 		if p.ID == "kiro" {

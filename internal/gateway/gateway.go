@@ -710,14 +710,11 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		}
 		return s.serveSubscription(w, r, from, "Devin", model, body, &call.Usage, start)
 	}
-	// and Kiro's, whose CLI speaks the same ACP; a key saved on the
-	// provider is the CLI's to use in place of its sign-in
+	// Kiro's is served through its own API, with kiro-cli's or the Kiro
+	// IDE's sign-in, or a Kiro API key saved on the provider
 	if p.Account != nil && p.Account.Agent == "kiro" {
 		call.To = from
-		start := func(ctx context.Context, req *Request) (*subscriptionRun, <-chan Event, error) {
-			return s.subscription.startKiro(ctx, req, model, p.Key)
-		}
-		return s.serveSubscription(w, r, from, "Kiro", model, body, &call.Usage, start)
+		return s.serveKiro(w, r, from, p, model, body, &call.Usage)
 	}
 	// a backend that only streams gets a non-streaming request translated
 	// (the provider is always streamed on that path) rather than relayed

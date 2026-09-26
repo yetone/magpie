@@ -199,8 +199,8 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 			// cursor-agent runs behind the gateway, not as an agent magpie configures
 			out.Account.Name, out.Account.Icon = "Cursor CLI", "cursor"
 		} else if a.Agent == "kiro" {
-			// so does kiro-cli, which has no icon of magpie's
-			out.Account.Name = "Kiro CLI"
+			// Kiro's sign-in is kiro-cli's or the Kiro IDE's
+			out.Account.Name, out.Account.Icon = "Kiro", "kiro-color"
 		} else if a.Agent == "antigravity" {
 			out.Account.Name, out.Account.Icon = "Antigravity", "antigravity-color"
 		}

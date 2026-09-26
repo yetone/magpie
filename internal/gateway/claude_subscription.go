@@ -877,7 +877,6 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
-	stream := req.Stream
 	req.Model = model
 
 	run, results := s.subscription.findRun(req)
@@ -890,7 +889,15 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	if err != nil {
 		return writeError(w, from, 502, name+": "+err.Error()), err.Error()
 	}
+	return relay(w, r, from, name, req, events, usage, run.abort, func(said, stop string, ok bool) { run.ended(req, said, stop, ok) })
+}
 
+// relay answers the client with a reply's events: abort is called when
+// there is no answer to give, ended when one was given, before its last
+// event goes out.
+func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, events <-chan Event, usage *Usage,
+	abort func(), ended func(said, stop string, ok bool)) (int, string) {
+	stream := req.Stream
 	if stream {
 		// an error before any of the answer — out of quota, rate limited —
 		// is a status, not a stream, so another account can take over
@@ -906,7 +913,7 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 			if n > 0 {
 				msg = head[n-1].Text
 			}
-			run.abort()
+			abort()
 			code := 502
 			if quotaWords.MatchString(msg) {
 				code = 429
@@ -935,7 +942,7 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 			see(ev)
 		}
 		// before the reply's last event, which the agent may answer at once
-		run.ended(req, said, stop, failed == "" && r.Context().Err() == nil)
+		ended(said, stop, failed == "" && r.Context().Err() == nil)
 		// an error event already ended the reply in the client's protocol
 		if failed == "" {
 			enc.finish()
@@ -954,10 +961,10 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 		col.add(ev)
 	}
 	if col.err != "" && len(col.res.Parts) == 0 {
-		run.abort()
+		abort()
 		return writeError(w, from, 502, name+": "+col.err), col.err
 	}
-	run.ended(req, said, stop, col.err == "" && r.Context().Err() == nil)
+	ended(said, stop, col.err == "" && r.Context().Err() == nil)
 	res := col.finish()
 	usage.add(res.Usage)
 	w.Header().Set("Content-Type", "application/json")
