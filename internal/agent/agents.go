@@ -234,6 +234,11 @@ func magpieProviderJSON(shape string) any {
 			if m.Context > 0 {
 				e["contextWindow"] = m.Context
 			}
+			// without it Pi caps every reply at 16384 tokens, a model
+			// that can write 128K included
+			if m.Output > 0 {
+				e["maxTokens"] = m.Output
+			}
 			ms = append(ms, e)
 		}
 		if ms == nil {

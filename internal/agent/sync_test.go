@@ -74,6 +74,25 @@ func TestPiModelsCarryContextWindow(t *testing.T) {
 	}
 }
 
+// Pi is handed how long a reply may be: without it Pi caps every model at
+// 16384 tokens. A model whose output isn't known leaves Pi its default.
+func TestPiModelsCarryMaxTokens(t *testing.T) {
+	syncHome(t)
+	os.WriteFile(catalog.CachePath(), []byte(`{"zai":{"models":{"glm-4.6":{"id":"glm-4.6","name":"GLM-4.6","limit":{"context":204800,"output":131072}}}}}`), 0o644)
+	catalog.Reset()
+	b, _ := json.Marshal(magpieProviderJSON("pi"))
+	if !strings.Contains(string(b), `"maxTokens":131072`) {
+		t.Fatalf("%s", b)
+	}
+
+	os.WriteFile(catalog.CachePath(), []byte(`{"zai":{"models":{"glm-4.6":{"id":"glm-4.6","name":"GLM-4.6","limit":{"context":204800}}}}}`), 0o644)
+	catalog.Reset()
+	b, _ = json.Marshal(magpieProviderJSON("pi"))
+	if strings.Contains(string(b), "maxTokens") {
+		t.Fatalf("unknown output sent: %s", b)
+	}
+}
+
 // A provider added after a magpie model was picked reaches the lists agents
 // keep of magpie's models; a file magpie wrote nothing into stays as it is.
 func TestSyncCatalogRewritesAgentLists(t *testing.T) {
