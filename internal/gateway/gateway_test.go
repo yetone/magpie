@@ -1097,3 +1097,83 @@ func TestUsagePromptCountsCacheWrites(t *testing.T) {
 		t.Errorf("gemini: %v", g)
 	}
 }
+
+// Reject invalid envelopes before routing, including on passthrough APIs.
+func TestRequestValidationBeforeRouting(t *testing.T) {
+	f := &fake{t: t}
+	setup(t, provider.Responses, f)
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("invalid request reached OpenAI")
+		w.WriteHeader(400)
+	})
+	cases := []struct{ name, body string }{
+		{"empty", ""},
+		{"truncated", `{"model":"fake/m1","input":`},
+		{"null", `null`},
+		{"array", `[]`},
+		{"missing_model", `{}`},
+		{"null_model", `{"model":null}`},
+		{"wrong_model_type", `{"model":7}`},
+		{"blank_model", `{"model":"  "}`},
+		{"empty_provider", `{"model":"/m1"}`},
+		{"empty_vendor_model", `{"model":"fake/"}`},
+		{"trailing_junk", `{"model":"fake/m1"}garbage`},
+		{"second_object", `{"model":"fake/m1"}{}`},
+	}
+	for _, path := range []string{"/v1/responses", "/v1/chat/completions", "/v1/messages", "/v1/messages/count_tokens", CodexPath + "/responses", CodexPath + "/responses/compact"} {
+		t.Run(path, func(t *testing.T) {
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					code, body := post(t, path, tc.body)
+					if code != 400 || !json.Valid([]byte(body)) {
+						t.Fatalf("status %d: %s", code, body)
+					}
+					if f.calls != 0 {
+						t.Fatalf("invalid request reached provider: %d calls", f.calls)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestGeminiRequestValidation(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	f := &fake{t: t, reply: sse(
+		`data: {"id":"c1","choices":[{"delta":{"content":"OK"},"finish_reason":"stop"}]}`,
+		`data: [DONE]`)}
+	setup(t, provider.Chat, f)
+	for _, method := range []string{"generateContent", "streamGenerateContent", "countTokens"} {
+		t.Run(method, func(t *testing.T) {
+			for _, body := range []string{"", `null`, `[]`, `{"contents":`, `{"contents":[]}junk`, `{"contents":[]}{}`} {
+				code, reply := post(t, "/v1beta/models/fake/m1:"+method, body)
+				if code != 400 || !strings.Contains(reply, `"INVALID_ARGUMENT"`) {
+					t.Fatalf("body %q: %d %s", body, code, reply)
+				}
+			}
+		})
+	}
+	if f.calls != 0 {
+		t.Fatalf("invalid request reached provider: %d calls", f.calls)
+	}
+	// Gemini gets its model from the URL, not a required body field.
+	code, body := post(t, "/v1beta/models/fake/m1:generateContent", `{"contents":[{"parts":[{"text":"hi"}]}]}`)
+	if code != 200 || f.calls != 1 || !strings.Contains(body, "OK") {
+		t.Fatalf("URL model: %d %s, calls %d", code, body, f.calls)
+	}
+}
+
+func TestRequestValidationPreservesPayload(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	f := &fake{t: t, ctype: "application/json", reply: `{"id":"r1","output":[]}`}
+	setup(t, provider.Responses, f)
+	code, body := post(t, "/v1/responses", `{"model":"  fake/vendor/new-model  ","input":"hi","extension":{"number":9007199254740993}}`)
+	if code != 200 || f.calls != 1 || modelOf(f.got) != "vendor/new-model" || !strings.Contains(string(f.got), "9007199254740993") {
+		t.Fatalf("%d %s; upstream %s, calls %d", code, body, f.got, f.calls)
+	}
+	// Valid unknown models can still use the existing local token estimate.
+	code, body = post(t, "/v1/messages/count_tokens", `{"model":"unknown","messages":[{"role":"user","content":"hello"}]}`)
+	if code != 200 || !strings.Contains(body, `"input_tokens"`) || f.calls != 1 {
+		t.Fatalf("token estimate: %d %s, calls %d", code, body, f.calls)
+	}
+}

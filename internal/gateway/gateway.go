@@ -291,7 +291,13 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Anthropic, 400, err.Error())
 		return
 	}
-	p, model, ok := provider.Resolve(modelOf(body))
+	var model string
+	body, model, err = requestModel(body)
+	if err != nil {
+		writeError(w, provider.Anthropic, 400, err.Error())
+		return
+	}
+	p, model, ok := provider.Resolve(model)
 	// Claude Subscription generations run through the Claude Code binary. Its
 	// OAuth token must not take a direct HTTP side path just for token counting.
 	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok" || p.Account.Agent == "devin" || p.Account.Agent == "kiro" || p.Account.Agent == "gemini" || p.Account.Agent == "antigravity") {
@@ -343,6 +349,11 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 			writeError(w, from, 400, err.Error())
 			return
 		}
+		body, _, err = requestModel(body)
+		if err != nil {
+			writeError(w, from, 400, err.Error())
+			return
+		}
 		s.serve(w, r, from, body)
 	}
 }
@@ -359,6 +370,15 @@ func (s *Server) gemini(w http.ResponseWriter, r *http.Request) {
 	}
 	model, method := call[:i], call[i+1:]
 	body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	if err != nil {
+		writeError(w, provider.Gemini, 400, err.Error())
+		return
+	}
+	if err := decodeRequest(body, &struct{}{}); err != nil {
+		writeError(w, provider.Gemini, 400, err.Error())
+		return
+	}
+	model, err = validateModel(model)
 	if err != nil {
 		writeError(w, provider.Gemini, 400, err.Error())
 		return
@@ -1224,6 +1244,49 @@ func streamOf(body []byte) bool {
 	}
 	json.Unmarshal(body, &v)
 	return v.Stream
+}
+
+// decodeRequest requires one complete JSON object before fields are rewritten
+// or a request is routed. In particular, null is not an empty object.
+func decodeRequest(body []byte, dst any) error {
+	body = bytes.TrimSpace(body)
+	if len(body) == 0 || body[0] != '{' {
+		return errors.New("invalid request: expected a JSON object")
+	}
+	if err := json.Unmarshal(body, dst); err != nil {
+		return fmt.Errorf("invalid request: %w", err)
+	}
+	return nil
+}
+
+func validateModel(model string) (string, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return "", errors.New("invalid request: model must be a nonempty string")
+	}
+	if p, m, ok := strings.Cut(model, "/"); ok && (p == "" || m == "") {
+		return "", errors.New("invalid request: expected provider/model with both parts nonempty")
+	}
+	return model, nil
+}
+
+// requestModel checks the envelope without restricting vendor-specific fields.
+// Only a model with surrounding whitespace needs its body rewritten.
+func requestModel(body []byte) ([]byte, string, error) {
+	var q struct {
+		Model string `json:"model"`
+	}
+	if err := decodeRequest(body, &q); err != nil {
+		return nil, "", err
+	}
+	model, err := validateModel(q.Model)
+	if err != nil {
+		return nil, "", err
+	}
+	if model != q.Model {
+		body = withModel(body, model)
+	}
+	return body, model, nil
 }
 
 func modelOf(body []byte) string {

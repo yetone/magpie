@@ -65,8 +65,20 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && rest == "/models":
 		s.codexModels(w, r)
 		return
-	case r.Method == http.MethodPost && rest == "/responses":
-		if model := modelOf(body); isCatalogID(model) {
+	case r.Method == http.MethodPost && (rest == "/responses" || rest == "/responses/compact"):
+		var model string
+		body, model, err = requestModel(body)
+		if err != nil {
+			writeError(w, provider.Responses, 400, err.Error())
+			return
+		}
+		// The namespace owns the route even if a model is not in the catalog.
+		// Unknown providers/groups must fail locally, never fall through to OpenAI.
+		if strings.Contains(model, "/") {
+			if rest == "/responses/compact" {
+				writeError(w, provider.Responses, 400, "/responses/compact is not supported for Magpie models; use a compaction_trigger on /responses")
+				return
+			}
 			body, compact := codexInput(body, true)
 			if compact {
 				s.codexCompact(w, r, body)
@@ -75,8 +87,11 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			s.serve(w, r, provider.Responses, body)
 			return
 		}
+		if rest == "/responses/compact" {
+			break // preserve native compaction's existing passthrough
+		}
 		body, _ = codexInput(body, false)
-		if id, ok := codexAccounts(r.Header, modelOf(body)); ok {
+		if id, ok := codexAccounts(r.Header, model); ok {
 			s.serve(w, r, provider.Responses, withModel(body, id))
 			return
 		}
@@ -108,20 +123,6 @@ func codexBody(r *http.Request) ([]byte, error) {
 	}
 	r.Header.Del("Content-Encoding")
 	return io.ReadAll(io.LimitReader(rd, 64<<20))
-}
-
-// isCatalogID reports whether a model is one of magpie's, by its id.
-// Codex's own models are bare slugs; magpie's are provider/model.
-func isCatalogID(model string) bool {
-	if !strings.Contains(model, "/") {
-		return false
-	}
-	for _, e := range provider.Served() {
-		if e.ID == model {
-			return true
-		}
-	}
-	return false
 }
 
 // codexAccounts is what a request for one of Codex's own models is served

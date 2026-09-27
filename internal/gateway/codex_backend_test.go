@@ -282,7 +282,11 @@ func TestCodexCompactsMagpieModel(t *testing.T) {
 		`data: {"id":"c1","choices":[{"delta":{"content":"ARY"},"finish_reason":"stop"}]}`,
 		`data: [DONE]`)}
 	setup(t, provider.Chat, f)
-	code, body := codexPost(t, `{"model":"fake/m1","stream":true,
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("third-party compaction reached OpenAI")
+		w.WriteHeader(400)
+	})
+	code, body := codexPost(t, `{"model":"fake/new-model","stream":true,
 	  "tools":[{"type":"function","name":"shell","parameters":{"type":"object"}}],
 	  "input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"fix the bug"}]},
 	    {"type":"compaction_trigger"}]}`)
@@ -307,7 +311,7 @@ func TestCodexCompactsMagpieModel(t *testing.T) {
 	if item["type"] != "compaction" || !strings.HasPrefix(enc, magpieCompaction) || string(b) != "SUMMARY" || !completed {
 		t.Errorf("events: %s", body)
 	}
-	code, _ = codexPost(t, `{"model":"fake/m1","stream":true,"input":[{"type":"compaction","encrypted_content":"`+enc+`"},{"type":"message","role":"user","content":"continue"}]}`)
+	code, _ = codexPost(t, `{"model":"fake/new-model","stream":true,"input":[{"type":"compaction","encrypted_content":"`+enc+`"},{"type":"message","role":"user","content":"continue"}]}`)
 	if code != 200 || !strings.Contains(string(f.got), "SUMMARY") || !strings.Contains(string(f.got), codexSummaryPrefix) || strings.Contains(string(f.got), magpieCompaction) {
 		t.Errorf("compacted conversation was not restored: %d %s", code, f.got)
 	}
@@ -439,5 +443,109 @@ func TestCodexOwnModelKeyRefused(t *testing.T) {
 	body := rec.Body.String()
 	if rec.Code != 401 || !strings.Contains(body, "Incorrect API key provided") || !strings.Contains(body, "pick one of magpie's models") {
 		t.Fatalf("%d %s", rec.Code, body)
+	}
+}
+
+// Catalog visibility must not decide whether a namespaced model goes to OpenAI.
+func TestCodexNamespacedRouting(t *testing.T) {
+	for _, tc := range []struct{ name, model, wantModel string }{
+		{"known", "fake/m1", "m1"},
+		{"outside_catalog", "fake/new-model", "new-model"},
+		{"renamed_provider", "old-fake/m1", "m1"},
+		{"nested_model", "fake/vendor/model", "vendor/model"},
+		{"whitespace", " fake/m1 ", "m1"},
+		{"group", "group/audit", "m1"},
+		{"unknown_provider", "missing/m1", ""},
+		{"unknown_group", "group/missing", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fake{t: t, ctype: "application/json", reply: `{"id":"r1","output":[]}`}
+			setup(t, provider.Responses, f)
+			p, err := provider.Find("fake")
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Was, p.Unlisted = []string{"old-fake"}, true
+			if err := provider.Save(*p); err != nil {
+				t.Fatal(err)
+			}
+			if err := provider.SaveGroup(provider.Group{ID: "audit", Members: []string{"fake/m1"}}); err != nil {
+				t.Fatal(err)
+			}
+			up := chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+				t.Error("namespaced request reached OpenAI")
+				w.WriteHeader(400)
+			})
+			was := codexAPIBase
+			codexAPIBase = up.URL + "/v1"
+			t.Cleanup(func() { codexAPIBase = was })
+			for _, auth := range []string{"Bearer chatgpt-token", "Bearer sk-test"} {
+				f.calls = 0
+				r := httptest.NewRequest("POST", CodexPath+"/responses", bytes.NewReader(mustJSON(map[string]any{"model": tc.model, "input": "hi"})))
+				r.Header.Set("Authorization", auth)
+				w := httptest.NewRecorder()
+				New().Handler().ServeHTTP(w, r)
+				if tc.wantModel == "" {
+					if w.Code != 404 || f.calls != 0 {
+						t.Fatalf("%d %s, calls %d", w.Code, w.Body, f.calls)
+					}
+				} else if w.Code != 200 || f.calls != 1 || modelOf(f.got) != tc.wantModel {
+					t.Fatalf("%d %s, upstream %s, calls %d", w.Code, w.Body, f.got, f.calls)
+				}
+			}
+		})
+	}
+}
+
+func TestCodexNativeModelStaysNative(t *testing.T) {
+	f := &fake{t: t}
+	setup(t, provider.Responses, f)
+	p, err := provider.Find("fake")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A third party also serves this bare slug. Codex still means its own model.
+	p.Models = []string{"gpt-future"}
+	if err := provider.Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	var calls int
+	up := chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		b, _ := io.ReadAll(r.Body)
+		if modelOf(b) != "gpt-future" {
+			t.Errorf("upstream model: %s", b)
+		}
+		io.WriteString(w, `{"id":"r1","output":[]}`)
+	})
+	was := codexAPIBase
+	codexAPIBase = up.URL + "/v1"
+	t.Cleanup(func() { codexAPIBase = was })
+	for _, auth := range []string{"Bearer chatgpt-token", "Bearer sk-test"} {
+		for _, path := range []string{"/responses", "/responses/compact"} {
+			r := httptest.NewRequest("POST", CodexPath+path, strings.NewReader(`{"model":" gpt-future ","input":"hi"}`))
+			r.Header.Set("Authorization", auth)
+			w := httptest.NewRecorder()
+			New().Handler().ServeHTTP(w, r)
+			if w.Code != 200 {
+				t.Fatalf("%d %s", w.Code, w.Body)
+			}
+		}
+	}
+	if calls != 4 || f.calls != 0 {
+		t.Fatalf("OpenAI calls %d, third-party calls %d", calls, f.calls)
+	}
+}
+
+func TestCodexThirdPartyCompactEndpointRejected(t *testing.T) {
+	f := &fake{t: t}
+	setup(t, provider.Responses, f)
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Error("third-party compaction reached OpenAI")
+		w.WriteHeader(400)
+	})
+	code, body := post(t, CodexPath+"/responses/compact", `{"model":"fake/m1","input":[]}`)
+	if code != 400 || !strings.Contains(body, "not supported") || f.calls != 0 {
+		t.Fatalf("%d %s, calls %d", code, body, f.calls)
 	}
 }
