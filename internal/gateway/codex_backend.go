@@ -122,7 +122,7 @@ func codexBody(r *http.Request) ([]byte, error) {
 		return nil, fmt.Errorf("magpie can't read a %s body", enc)
 	}
 	r.Header.Del("Content-Encoding")
-	return io.ReadAll(io.LimitReader(rd, 64<<20))
+	return io.ReadAll(rd)
 }
 
 // codexAccounts is what a request for one of Codex's own models is served

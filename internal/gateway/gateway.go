@@ -321,7 +321,7 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 // it implements counting, else a rough estimate. A failed connection or
 // limited key yields to the next key; other failures reach the client.
 func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, provider.Anthropic, 400, err.Error())
 		return
@@ -428,7 +428,7 @@ func unsupportedCount(status int, body []byte) bool {
 // handle is the request path of one client API.
 func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			writeError(w, from, 400, err.Error())
 			return
@@ -453,7 +453,7 @@ func (s *Server) gemini(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	model, method := call[:i], call[i+1:]
-	body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, provider.Gemini, 400, err.Error())
 		return
