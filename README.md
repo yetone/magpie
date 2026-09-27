@@ -19,6 +19,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
     Codex         gpt-6-astra   effort medium
     Gemini CLI    gemini-3.1-pro
     OpenCode      anthropic/claude-sonnet-5   small anthropic/claude-haiku-4-5
+    MiMo Code     anthropic/claude-sonnet-5
     Pi            openrouter/z-ai/glm-5.2:batch
     Goose         anthropic/claude-sonnet-5
     Cursor        auto
@@ -68,6 +69,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | Codex        | `~/.codex/config.toml`            | provider, model, effort |
 | Gemini CLI   | `~/.gemini/settings.json`, `~/.gemini/.env` | auth, model |
 | OpenCode     | `~/.config/opencode/opencode.json(c)` | model, small |
+| MiMo Code    | `~/.config/mimocode/mimocode.json(c)` | model, small |
 | Pi           | `~/.pi/agent/settings.json`       | model           |
 | Goose        | `~/.config/goose/config.yaml`     | model           |
 | Cursor CLI   | `~/.cursor/cli-config.json`       | model           |
@@ -85,7 +87,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | ZCode        | `~/.zcode/v2/config.json`         | provider (magpie's models in ZCode's picker) |
 | Alma         | Alma's local API (`localhost:23001`, while Alma runs) | model (Alma's default; magpie's models as a provider) |
 
-Provider-scoped agents (OpenCode, Pi, Goose, Crush, omp, Hermes Agent) take `provider/model`.
+Provider-scoped agents (OpenCode, MiMo Code, Pi, Goose, Crush, omp, Hermes Agent) take `provider/model`.
 Only agents that are installed or configured are shown.
 
 ## Providers and the gateway
@@ -359,6 +361,7 @@ magpie claude haiku ""          # back to the main model
 magpie gemini auth api-key
 magpie opencode anthropic/claude-sonnet-5
 magpie oc small anthropic/claude-haiku-4-5
+magpie mimo anthropic/claude-sonnet-5
 
 magpie save work                # snapshot everything as a profile
 magpie use work                 # switch back

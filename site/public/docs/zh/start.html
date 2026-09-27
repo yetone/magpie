@@ -115,7 +115,7 @@
     <p>密钥保存在 <code>~/.config/magpie/providers.json</code>，只有你自己可读。magpie 从不读取 shell 环境变量里的密钥：你添加什么，它就用什么。</p>
 
     <h2 id="agents"><a class="anchor" href="#agents">2 · 给每个 Agent 选模型</a></h2>
-    <p><span class="ui">Agent</span> 标签页里，本机装了或配置过的每个 Agent 各占一行。magpie 支持 Claude Code、Codex、Gemini CLI、OpenCode、Pi、Goose、Cursor、Copilot CLI、Crush、DeepSeek Harness、Command Code、omp、Devin、Hermes Agent、Grok Build、ZCode 和 Alma。</p>
+    <p><span class="ui">Agent</span> 标签页里，本机装了或配置过的每个 Agent 各占一行。magpie 支持 Claude Code、Codex、Gemini CLI、OpenCode、MiMo Code、Pi、Goose、Cursor、Copilot CLI、Crush、DeepSeek Harness、Command Code、omp、Devin、Hermes Agent、Grok Build、ZCode 和 Alma。</p>
 
     <figure class="figure">
       <img class="for-light" src="/img/agents-zh-light.png" width="2080" height="1058" loading="lazy" alt="Agent 页：每个 Agent 一行，显示当前模型，底部是保存的方案">
@@ -132,7 +132,7 @@
       <tr><th>Agent</th><th>通过 magpie 选模型时写入什么</th></tr>
       <tr><td>Claude Code</td><td><code>~/.claude/settings.json</code>：<code>env</code> 里的 <code>ANTHROPIC_BASE_URL</code>、<code>ANTHROPIC_AUTH_TOKEN</code> 和模型变量</td></tr>
       <tr><td>Codex</td><td><code>~/.codex/config.toml</code>：一个 <code>[model_providers.magpie]</code> 表和模型，模型列表写在 <code>magpie-models.json</code>。你的 ChatGPT 登录不受影响</td></tr>
-      <tr><td>OpenCode、Pi、Crush</td><td>一个 <code>magpie</code> 供应商条目，以及 <code>magpie/provider/model</code></td></tr>
+      <tr><td>OpenCode、MiMo Code、Pi、Crush</td><td>一个 <code>magpie</code> 供应商条目，以及 <code>magpie/provider/model</code></td></tr>
       <tr><td>Gemini CLI</td><td><code>GOOGLE_GEMINI_BASE_URL</code> 指向网关、API 密钥认证，以及模型</td></tr>
     </table></div>
     <p><b>已在运行的会话保持它启动时的模型。</b>Agent 启动时读取配置，所以改动从下一个会话生效。Codex 也在启动时生成模型列表：切换后请重启 Codex 应用和已打开的 <code>codex</code> 会话。</p>

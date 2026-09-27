@@ -53,6 +53,7 @@ func All() []*Agent {
 		codex(home),
 		gemini(home),
 		opencode(home, cfg),
+		mimocode(home, cfg),
 		pi(home),
 		goose(home, cfg),
 		cursor(home),
@@ -187,7 +188,14 @@ func ownOptions(authFile string, cur string, extra ...string) []Option {
 
 // magpieProviderJSON is the provider block agents with JSON configs get.
 func magpieProviderJSON(shape string) any {
-	models := magpieModels(shape) // the shape is the agent's
+	return magpieProviderJSONFor(shape, shape)
+}
+
+// magpieProviderJSONFor is magpieProviderJSON for an agent whose catalog is
+// narrowed under a different id than its config shape (mimocode shares
+// OpenCode's shape but is seen as itself by magpie visible).
+func magpieProviderJSONFor(shape, catalog string) any {
+	models := magpieModels(catalog) // the catalog is the agent's
 	switch shape {
 	case "opencode":
 		ms := map[string]any{}
@@ -268,16 +276,18 @@ func piThinkingLevels(efforts []string) map[string]any {
 	return levels
 }
 
-func opencode(home, cfg string) *Agent {
-	dir := filepath.Join(cfg, "opencode")
-	path := filepath.Join(dir, "opencode.json")
-	if _, err := os.Stat(filepath.Join(dir, "opencode.jsonc")); err == nil {
-		path = filepath.Join(dir, "opencode.jsonc")
+// openCodeLike is OpenCode and the forks that keep its config shape
+// (mimocode): a provider block with npm/@ai-sdk/openai-compatible, model and
+// small_model fields, and its own auth file beside its config.
+func openCodeLike(id, name, icon, bin, dir, auth string, ua []string, aliases ...string) *Agent {
+	path := filepath.Join(dir, id+".json")
+	if _, err := os.Stat(filepath.Join(dir, id+".jsonc")); err == nil {
+		path = filepath.Join(dir, id+".jsonc")
 	}
-	auth := filepath.Join(home, ".local", "share", "opencode", "auth.json")
+	provider := func() any { return magpieProviderJSONFor("opencode", id) }
 	opts := func(key string) func(map[string]string) []Option {
 		return func(cur map[string]string) []Option {
-			return append(ownOptions(auth, cur[key]), viaMagpie("opencode", magpieID+"/")...)
+			return append(ownOptions(auth, cur[key]), viaMagpie(id, magpieID+"/")...)
 		}
 	}
 	get := func(k string) string { v, _ := edit.GetJSON(path, k); return v }
@@ -299,7 +309,7 @@ func opencode(home, cfg string) *Agent {
 				if own := ownGatewayProvider(path, ref); own != "" {
 					return edit.SetJSON(path, edit.KV{Path: key, Value: own + "/" + ref})
 				}
-				if err := edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: magpieProviderJSON("opencode")}); err != nil {
+				if err := edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: provider()}); err != nil {
 					return err
 				}
 			}
@@ -307,23 +317,23 @@ func opencode(home, cfg string) *Agent {
 		}
 	}
 	return &Agent{
-		ID: "opencode", Name: "OpenCode", Icon: "opencode", Aliases: []string{"oc"},
-		UA:  []string{"opencode"},
-		Bin: "opencode", Dir: dir, Path: path,
+		ID: id, Name: name, Icon: icon, Aliases: aliases,
+		UA:  ua,
+		Bin: bin, Dir: dir, Path: path,
 		Check: func() string {
 			if !usesMagpie(get("model"), get("small_model")) {
 				return ""
 			}
-			return wiringOff("OpenCode", path, func(k string) (string, bool) { return edit.GetJSON(path, "provider."+magpieID+".options."+k) },
+			return wiringOff(name, path, func(k string) (string, bool) { return edit.GetJSON(path, "provider."+magpieID+".options."+k) },
 				"baseURL", gatewayV1(), "apiKey", gateway.Token)
 		},
 		Sync: func() error {
 			// a model of magpie's chosen, but its provider gone from the
-			// file: put it back, or OpenCode has nothing to send it to
+			// file: put it back, or the agent has nothing to send it to
 			if _, ok := edit.GetJSON(path, "provider."+magpieID); !ok && usesMagpie(get("model"), get("small_model")) {
-				return edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: magpieProviderJSON("opencode")})
+				return edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: provider()})
 			}
-			return syncJSON(path, "provider."+magpieID, func() any { return magpieProviderJSON("opencode") })
+			return syncJSON(path, "provider."+magpieID, provider)
 		},
 		Fields: []Field{
 			{Key: "model", Label: "model", Get: jsonGet(path, "model"), Set: set("model"), Options: opts("model")},
@@ -372,6 +382,18 @@ func sameGateway(base string) bool {
 		return strings.Replace(u, "://localhost:", "://127.0.0.1:", 1)
 	}
 	return base != "" && norm(base) == norm(gatewayV1())
+}
+
+func opencode(home, cfg string) *Agent {
+	return openCodeLike("opencode", "OpenCode", "opencode", "opencode",
+		filepath.Join(cfg, "opencode"), filepath.Join(home, ".local", "share", "opencode", "auth.json"),
+		[]string{"opencode"}, "oc")
+}
+
+func mimocode(home, cfg string) *Agent {
+	return openCodeLike("mimocode", "MiMo Code", "mimocode", "mimo",
+		filepath.Join(cfg, "mimocode"), filepath.Join(home, ".local", "share", "mimocode", "auth.json"),
+		[]string{"mimocode"}, "mimo")
 }
 
 func pi(home string) *Agent {

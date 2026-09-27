@@ -12,6 +12,7 @@ import (
 	"github.com/yetone/magpie/internal/codexcat"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // syncHome is a sandbox home with a models.dev catalog that knows glm-4.6's
@@ -233,5 +234,48 @@ func TestOpenCodeKeepsItsOwnGatewayProviders(t *testing.T) {
 	}
 	if _, ok := edit.GetJSON(cfg, "provider.magpie"); !ok {
 		t.Fatal("magpie's provider not added")
+	}
+}
+
+// MiMo Code shares OpenCode's config shape: a sync writes magpie's provider
+// into its own mimocode.json, and reads its own model list.
+func TestMiMoCodeMirrorsOpenCode(t *testing.T) {
+	home := syncHome(t)
+	cfg := filepath.Join(home, ".config", "mimocode", "mimocode.json")
+	writeFile(t, cfg, `{"model":"magpie/relay/glm-4.6","provider":{"mine":{"name":"mine"}}}`)
+	if err := mimocode(home, filepath.Join(home, ".config")).Sync(); err != nil {
+		t.Fatal(err)
+	}
+	s := readFile(cfg)
+	if !strings.Contains(s, `"magpie"`) || !strings.Contains(s, `"mine"`) || !strings.Contains(s, `204800`) {
+		t.Fatalf("%s", s)
+	}
+	// one that doesn't use magpie gets nothing
+	body := `{"model":"mine/x","provider":{"mine":{"name":"mine"}}}`
+	writeFile(t, cfg, body)
+	if err := mimocode(home, filepath.Join(home, ".config")).Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if s := readFile(cfg); s != body {
+		t.Fatalf("%s", s)
+	}
+}
+
+// magpieProviderJSONFor reads the catalog narrowed under the agent's own id,
+// while the config shape stays OpenCode's: a visibility on mimocode narrows
+// its provider block and leaves OpenCode's alone.
+func TestMiMoCodeCatalogNarrowedSeparately(t *testing.T) {
+	syncHome(t)
+	if err := settings.Save(settings.Settings{Visible: map[string][]string{"mimocode": {"relay"}}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { settings.Save(settings.Settings{}) })
+	mimo := magpieProviderJSONFor("opencode", "mimocode").(map[string]any)["models"].(map[string]any)
+	oc := magpieProviderJSON("opencode").(map[string]any)["models"].(map[string]any)
+	if len(mimo) != 1 || mimo["relay/glm-4.6"] == nil {
+		t.Fatalf("mimocode catalog: %v", mimo)
+	}
+	if oc["relay/glm-4.6"] == nil {
+		t.Fatalf("opencode catalog was narrowed too: %v", oc)
 	}
 }

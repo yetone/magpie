@@ -900,7 +900,7 @@ const I18N = {
     "{agent} is on — it gets the shared instructions once there are some": "{agent} 已开启 — 有共享指令后就会写入",
     "{agent} reads the shared instructions now": "{agent} 现在读取共享指令",
     "{agent} reads {file} instead of this file while it has anything in it.": "只要 {file} 有内容，{agent} 就会读它而不是这个文件。",
-    "OpenCode reads Claude Code's CLAUDE.md when it has no AGENTS.md of its own.": "OpenCode 在没有自己的 AGENTS.md 时会读取 Claude Code 的 CLAUDE.md。",
+    "{agent} reads Claude Code's CLAUDE.md when it has no AGENTS.md of its own.": "{agent} 在没有自己的 AGENTS.md 时会读取 Claude Code 的 CLAUDE.md。",
     "Only for {agent}, after the shared text": "仅给 {agent}，接在共享内容之后",
     "Anything only {agent} should be told": "只需告诉 {agent} 的内容",
     "Switch {agent} on for it to read this.": "开启 {agent} 后它才会读到这些。",

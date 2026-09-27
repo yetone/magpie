@@ -83,6 +83,14 @@ func targetOf(a *agent.Agent) *Target {
 		t.MCP = &mcpFile{Path: a.Path, Format: fmtOpenCode}
 		t.Skills = filepath.Join(d, "skills")
 		t.SkillsAlso = []string{"claude"}
+	case "mimocode":
+		// MiMo Code is OpenCode's config shape; it reads Claude Code's
+		// CLAUDE.md but its own skills only (a flag opens .claude's), so the
+		// shared skills go into its own folder, not Claude Code's.
+		d := filepath.Dir(a.Path)
+		t.Instructions = filepath.Join(d, "AGENTS.md")
+		t.MCP = &mcpFile{Path: a.Path, Format: fmtOpenCode}
+		t.Skills = filepath.Join(d, "skills")
 	case "pi":
 		d := os.Getenv("PI_CODING_AGENT_DIR")
 		if d == "" {

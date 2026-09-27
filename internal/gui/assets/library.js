@@ -479,7 +479,7 @@
       w.append(el("span", "", t("{agent} reads {file} instead of this file while it has anything in it.", { agent: a.name, file: tilde(a.override) }) + " "), pathLink(a.override));
       det.append(w);
     }
-    if (a.agent === "opencode") det.append(el("p", "lib-aside", t("OpenCode reads Claude Code's CLAUDE.md when it has no AGENTS.md of its own.")));
+    if (a.agent === "opencode" || a.agent === "mimocode") det.append(el("p", "lib-aside", t("{agent} reads Claude Code's CLAUDE.md when it has no AGENTS.md of its own.", { agent: a.name })));
     const lab = el("label", "lib-lab", t("Only for {agent}, after the shared text", { agent: a.name }));
     const ta = el("textarea", "lib-text small");
     ta.dataset.lib = "extra:" + a.agent;

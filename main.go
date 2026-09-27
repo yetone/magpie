@@ -74,7 +74,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie agents                   list every supported agent
   magpie update [check]           install the newest release (check: only say if there is one)
 
-agents: claude (cc), codex, gemini, opencode (oc), pi, goose, cursor, copilot, crush
+agents: claude (cc), codex, gemini, opencode (oc), mimocode, pi, goose, cursor, copilot, crush
 `
 
 var (
