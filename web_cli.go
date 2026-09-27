@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/yetone/magpie/internal/gateway"
@@ -49,7 +50,11 @@ func webCmd(args []string) error {
 		}
 		fmt.Println(amber.Render("!"), "anyone with the link can change magpie and see its keys, and the network carries it unencrypted")
 	}
-	fmt.Println(muted.Render("  the link carries this run's key · gateway " + gateway.URL() + " · Ctrl-C to stop"))
+	carries := "this run's key"
+	if os.Getenv("MAGPIE_WEB_KEY") != "" {
+		carries = "MAGPIE_WEB_KEY"
+	}
+	fmt.Println(muted.Render("  the link carries " + carries + " · gateway " + gateway.URL() + " · Ctrl-C to stop"))
 	if open {
 		openInBrowser(w.Link)
 	}

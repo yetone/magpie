@@ -5,8 +5,11 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"sync"
 	"time"
 )
@@ -43,13 +46,18 @@ type Web struct {
 // send with a POST (every change is one), so neither a page elsewhere nor
 // anyone else on the network reaches the settings and keys behind it.
 func StartWeb(addr string) (*Web, error) {
+	key, fixed, err := webKey()
+	if err != nil {
+		return nil, err
+	}
+	var keep time.Duration
+	if fixed {
+		keep = webCookieAge
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
 	}
-	b := make([]byte, 16)
-	rand.Read(b)
-	key := hex.EncodeToString(b)
 	w := &Web{Addr: ln.Addr().String(), quit: make(chan struct{})}
 	host, port, _ := net.SplitHostPort(w.Addr)
 	if ip := net.ParseIP(host); ip == nil || ip.IsUnspecified() {
@@ -57,9 +65,9 @@ func StartWeb(addr string) (*Web, error) {
 	}
 	var once sync.Once
 	quit := func() { once.Do(func() { close(w.quit) }) }
-	w.Link = "http://" + net.JoinHostPort(host, port) + "/?k=" + key
+	w.Link = "http://" + net.JoinHostPort(host, port) + "/?k=" + url.QueryEscape(key)
 	w.srv = &http.Server{
-		Handler:           webGuard("magpie_web_"+port, key, Handler(webHost{quit}, startBackend())),
+		Handler:           webGuard("magpie_web_"+port, key, keep, Handler(webHost{quit}, startBackend())),
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 	go w.srv.Serve(ln)
@@ -73,9 +81,34 @@ func (w *Web) Wait() {
 	w.srv.Close()
 }
 
+// webKeyMin is the shortest MAGPIE_WEB_KEY taken: it is all that stands
+// between the network and the keys behind the page.
+const webKeyMin = 16
+
+// webCookieAge is how long a browser keeps a fixed key's cookie (the most
+// Chrome allows); a run's own key lives in a cookie that goes with the
+// browser session, as the key goes with the run.
+const webCookieAge = 400 * 24 * time.Hour
+
+// webKey is the key the link carries: a new one each run, unless
+// MAGPIE_WEB_KEY names one — for a page kept running as a service, which
+// browsers then stay signed in to across restarts. fixed says which.
+func webKey() (key string, fixed bool, err error) {
+	if k := os.Getenv("MAGPIE_WEB_KEY"); k != "" {
+		if len(k) < webKeyMin {
+			return "", false, fmt.Errorf("MAGPIE_WEB_KEY is %d characters; it needs at least %d", len(k), webKeyMin)
+		}
+		return k, true, nil
+	}
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b), false, nil
+}
+
 // webGuard lets through requests with the key: in the link's k, which it
-// trades for a cookie and a clean address, or in that cookie.
-func webGuard(cookie, key string, next http.Handler) http.Handler {
+// trades for a cookie (kept for keep, or the browser session when 0) and
+// a clean address, or in that cookie.
+func webGuard(cookie, key string, keep time.Duration, next http.Handler) http.Handler {
 	same := func(v string) bool { return subtle.ConstantTimeCompare([]byte(v), []byte(key)) == 1 }
 	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		if q := r.URL.Query(); q.Has("k") {
@@ -83,7 +116,7 @@ func webGuard(cookie, key string, next http.Handler) http.Handler {
 				http.Error(rw, "this link's key is not this magpie web's: use the link it printed when it started", http.StatusUnauthorized)
 				return
 			}
-			http.SetCookie(rw, &http.Cookie{Name: cookie, Value: key, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode})
+			http.SetCookie(rw, &http.Cookie{Name: cookie, Value: key, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode, MaxAge: int(keep / time.Second)})
 			q.Del("k")
 			u := *r.URL
 			u.RawQuery = q.Encode()
