@@ -3804,7 +3804,7 @@ function closeProtoMenu() {
   protoMenu.box.remove();
   document.removeEventListener("mousedown", protoMenu.outside, true);
   document.removeEventListener("keydown", protoMenu.keys, true);
-  document.removeEventListener("scroll", closeProtoMenu, true);
+  document.removeEventListener("scroll", protoMenu.scroll, true);
   removeEventListener("resize", closeProtoMenu);
   protoMenu = null;
 }
@@ -3837,6 +3837,8 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   box.style.top = Math.max(pad, y) + "px";
   anchor.classList.add("open");
   const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
+  // Scrolling the menu keeps it open; scrolling outside moves its anchor.
+  const scroll = (e) => { if (!box.contains(e.target)) closeProtoMenu(); };
   const keys = (e) => {
     const i = items.indexOf(document.activeElement);
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeProtoMenu(); anchor.focus(); }
@@ -3848,9 +3850,9 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   };
   document.addEventListener("mousedown", outside, true);
   document.addEventListener("keydown", keys, true);
-  document.addEventListener("scroll", closeProtoMenu, true); // it is pinned to the window; the dialog moving under it would strand it
+  document.addEventListener("scroll", scroll, true);
   addEventListener("resize", closeProtoMenu);
-  protoMenu = { box, anchor, outside, keys };
+  protoMenu = { box, anchor, outside, keys, scroll };
   (items.find((b) => b.classList.contains("on")) || items[0]).focus({ preventScroll: true });
 }
 

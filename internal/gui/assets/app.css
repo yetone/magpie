@@ -482,7 +482,7 @@ body.window .field.solo { grid-column: auto; }
 .sess-pick:hover { background: var(--pill); }
 .sess-pick.set { color: var(--fg); border-color: var(--line-2); background: var(--pill); }
 .sess-pick.open svg { transform: rotate(180deg); }
-.pop.proto-menu.sess-menu { width: 300px; max-height: min(360px, 70vh); overflow-y: auto; }
+.pop.proto-menu.sess-menu { width: 300px; max-height: min(360px, 70vh); overflow-y: auto; overscroll-behavior: contain; }
 .sess-menu .pm-name, .sess-menu .pm-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sess-chart-head { display: flex; align-items: center; gap: 8px; margin: -2px 0 8px; }
 .sess-chart-head .label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
