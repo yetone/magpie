@@ -362,6 +362,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		ID      string `json:"id"`
 		Model   string `json:"model"`
 		Choices []struct {
+			Index int `json:"index"`
 			Delta struct {
 				Content          *string     `json:"content"`
 				ReasoningContent string      `json:"reasoning_content"`
@@ -387,6 +388,11 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		emit(Event{Kind: KStart, MsgID: ch.ID, Model: ch.Model})
 	}
 	for _, c := range ch.Choices {
+		// Translation has one reply; keep only choice 0. Passthrough leaves
+		// every upstream choice intact for clients that ask for several.
+		if c.Index != 0 {
+			continue
+		}
 		// Some relays send the same thought under both names; one is enough.
 		t := c.Delta.ReasoningContent
 		if t == "" {
