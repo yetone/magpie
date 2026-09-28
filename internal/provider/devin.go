@@ -54,25 +54,33 @@ func DevinCredentialsPath() string {
 	return filepath.Join(base, "devin", "credentials.toml")
 }
 
-var devinStatus = &cliIdentity{name: "devin", exe: func() string { return DevinExecutable() }, ask: func() (string, string, bool) { return askDevinIdentity() }}
+var devinStatus = &cliIdentity{name: "devin", exe: func() string { return DevinExecutable() }, ask: func() (string, string, bool, error) { return askDevinIdentity() }}
 
 // devinIdentity is who Devin's CLI says is signed in; see cliIdentity.
 func devinIdentity() (user, plan string, ok bool) { return devinStatus.get() }
 
 func forgetDevinStatus() { devinStatus.forget() }
 
-func askDevinIdentity() (user, plan string, ok bool) {
+// askDevinIdentity asks `devin auth status`; an error is a CLI that didn't
+// answer, not one saying nobody is signed in — signed in, it asks Devin's
+// server who, which takes seconds and can outrun the timeout on a slow
+// network; signed out, it says "Not logged in." from its credentials file.
+func askDevinIdentity() (user, plan string, ok bool, err error) {
 	path := DevinExecutable()
 	if path == "" {
-		return "", "", false
+		return "", "", false, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	out, err := agentCommand(ctx, path, "auth", "status").Output()
 	if err != nil {
-		return "", "", false
+		return "", "", false, fmt.Errorf("devin auth status: %w", err)
 	}
-	return parseDevinStatus(string(out))
+	if !strings.Contains(string(out), "Logged in") && !strings.Contains(string(out), "Not logged in") {
+		return "", "", false, errors.New("devin auth status: says neither signed in nor out")
+	}
+	user, plan, ok = parseDevinStatus(string(out))
+	return user, plan, ok, nil
 }
 
 // parseDevinStatus reads `devin auth status`'s report:
@@ -413,7 +421,7 @@ func devinExchange(ctx context.Context, code, verifier, redirect string) (savedL
 	}
 	forgetDevinStatus()
 	forgetAccountCaches()
-	user, plan, ok := askDevinIdentity()
+	user, plan, ok, _ := askDevinIdentity()
 	if !ok {
 		// the account is only ever seen through the CLI: without it
 		// answering, magpie has nothing to show and nothing to run

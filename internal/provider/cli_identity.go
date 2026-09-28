@@ -15,11 +15,15 @@ import (
 // one is fetched behind it. The answer is kept on disk too: a magpie just
 // started serves the last one at once rather than holding everything for
 // the CLIs (#123), and asks them again behind it.
+//
+// A CLI that didn't answer — timed out, failed, or said something that is
+// neither signed in nor out — is not a CLI saying nobody is signed in: ask
+// returns an error then, and what was served before is kept, on disk too.
 type cliIdentity struct {
 	sync.Mutex
 	name       string
 	exe        func() string
-	ask        func() (user, plan string, ok bool)
+	ask        func() (user, plan string, ok bool, err error)
 	at         time.Time
 	refreshing bool
 	done       chan struct{} // closed when the ask under way has answered
@@ -110,15 +114,19 @@ func (c *cliIdentity) refresh() chan struct{} {
 	c.refreshing, c.done = true, make(chan struct{})
 	gen, done := c.gen, c.done
 	go func() {
-		u, p, ok := c.ask()
+		u, p, ok, err := c.ask()
 		c.Lock()
 		defer c.Unlock()
 		defer close(done)
 		if gen != c.gen {
 			return
 		}
-		c.user, c.plan, c.ok = u, p, ok
 		c.at, c.refreshing = time.Now(), false
+		if err != nil {
+			// no answer: what was served stays, asked again in a minute
+			return
+		}
+		c.user, c.plan, c.ok = u, p, ok
 		c.keep()
 	}()
 	return done

@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,17 +49,20 @@ func isCursorAgent(path string) bool {
 	return err == nil && strings.Contains(real, "cursor-agent")
 }
 
-var cursorStatus = &cliIdentity{name: "cursor", exe: func() string { return CursorExecutable() }, ask: func() (string, string, bool) { return askCursorIdentity() }}
+var cursorStatus = &cliIdentity{name: "cursor", exe: func() string { return CursorExecutable() }, ask: func() (string, string, bool, error) { return askCursorIdentity() }}
 
 // cursorIdentity is who Cursor's CLI says is signed in; see cliIdentity.
 func cursorIdentity() (user, plan string, ok bool) { return cursorStatus.get() }
 
 func forgetCursorStatus() { cursorStatus.forget() }
 
-func askCursorIdentity() (user, plan string, ok bool) {
+// askCursorIdentity asks `cursor-agent about`; an error is a CLI that
+// didn't answer — timed out or failed before its report — not one saying
+// nobody is signed in, which it does with a report whose userEmail is null.
+func askCursorIdentity() (user, plan string, ok bool, err error) {
 	path := CursorExecutable()
 	if path == "" {
-		return "", "", false
+		return "", "", false, nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -67,10 +71,13 @@ func askCursorIdentity() (user, plan string, ok bool) {
 		SubscriptionTier string `json:"subscriptionTier"`
 		UserEmail        string `json:"userEmail"`
 	}
-	if json.Unmarshal(out, &about) != nil || strings.TrimSpace(about.UserEmail) == "" {
-		return "", "", false
+	if err := json.Unmarshal(out, &about); err != nil {
+		return "", "", false, fmt.Errorf("cursor-agent about: %w", err)
 	}
-	return strings.TrimSpace(about.UserEmail), strings.TrimSpace(about.SubscriptionTier), true
+	if strings.TrimSpace(about.UserEmail) == "" {
+		return "", "", false, nil
+	}
+	return strings.TrimSpace(about.UserEmail), strings.TrimSpace(about.SubscriptionTier), true, nil
 }
 
 func cursorAccount() (Provider, bool) {
@@ -187,7 +194,8 @@ func startCursorSignIn(s *signInFlow) error {
 	}
 	return runCLISignIn(s, "cursor-agent login", append(os.Environ(), "NO_OPEN_BROWSER=1"), true, nil, func() (string, string, bool) {
 		forgetCursorStatus()
-		return askCursorIdentity()
+		user, plan, ok, _ := askCursorIdentity()
+		return user, plan, ok
 	}, path, "login")
 }
 
