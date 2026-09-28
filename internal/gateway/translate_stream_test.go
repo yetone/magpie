@@ -34,6 +34,41 @@ func chatToResponses(t *testing.T, chunks ...string) []map[string]any {
 	return out
 }
 
+// The translated reply has just one choice. Interleaved choices must not
+// mix text, thinking, tool calls, or a finish reason into choice 0.
+func TestChatTranslationKeepsFirstChoice(t *testing.T) {
+	var d chatDecoder
+	var got []Event
+	for _, chunk := range []string{
+		`{"id":"x","choices":[{"index":1,"delta":{"reasoning_content":"Other thought","content":"Beta","tool_calls":[{"index":0,"id":"other","function":{"name":"wrong","arguments":"{}"}}]},"finish_reason":"tool_calls"},{"index":0,"delta":{"reasoning_content":"First thought","content":"Alpha","tool_calls":[{"index":0,"id":"first","function":{"name":"right","arguments":"{\"ok\":true}"}}]}}]}`,
+		`{"id":"x","choices":[{"index":1,"delta":{"content":" again","tool_calls":[{"index":0,"function":{"arguments":"not mine"}}]},"finish_reason":"stop"},{"index":0,"delta":{"content":" done","tool_calls":[{"index":0,"function":{"arguments":" more"}}]},"finish_reason":"tool_calls"}]}`,
+		// Relays that omit index still mean the first choice.
+		`{"id":"x","choices":[{"delta":{"content":"!"}}]}`,
+	} {
+		if err := d.decode(chunk, func(ev Event) { got = append(got, ev) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var text, think, toolID, toolName, args, stop string
+	for _, ev := range got {
+		switch ev.Kind {
+		case KText:
+			text += ev.Text
+		case KThink:
+			think += ev.Text
+		case KToolStart:
+			toolID, toolName = ev.ID, ev.Name
+		case KToolArgs:
+			args += ev.Text
+		case KStop:
+			stop = ev.Stop
+		}
+	}
+	if text != "Alpha done!" || think != "First thought" || toolID != "first" || toolName != "right" || args != `{"ok":true} more` || stop != "tool" {
+		t.Fatalf("mixed choices: text=%q think=%q tool=%q/%q args=%q stop=%q", text, think, toolID, toolName, args, stop)
+	}
+}
+
 // #18: with parallel tool calls each function_call item kept the next call's
 // id, and the last two shared one — upstreams then refused the history.
 func TestParallelToolCallIDs(t *testing.T) {
