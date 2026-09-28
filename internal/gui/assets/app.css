@@ -458,7 +458,7 @@ body.window .field.solo { grid-column: auto; }
 .chart .bar i.in { opacity: .38; }
 .chart .labels { display: flex; gap: 3px; margin-top: 5px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chart .labels span { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: visible; }
-.chart .labels span:last-child { text-align: right; }
+.chart .labels span:last-child { flex: 0 0 auto; margin-left: auto; text-align: right; }
 .row.stat .who { flex: 0 0 180px; }
 .row.stat .share { flex: 1 1 auto; height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; margin: 0 6px; }
 .row.stat .share i { display: block; height: 100%; border-radius: 2px; background: var(--accent); opacity: .7; }
