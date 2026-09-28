@@ -1412,13 +1412,6 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
-	// An allowlisted required choice that leaves no callable function must
-	// not be forwarded as a plain-text request. Web search remains a valid
-	// callable tool when offered and allowed by the request.
-	if request.ToolChoice == "required" && len(request.Tools) == 0 && !request.WebSearch {
-		msg := "required tool choice has no callable tools after filtering"
-		return writeError(w, from, 400, msg), msg
-	}
 	if request.WebSearch && !searching(r.Context()) {
 		// an API on which the provider searches by itself comes first;
 		// without one, its model is given magpie's search
@@ -1516,16 +1509,50 @@ func pathOf(proto provider.Protocol) string {
 	return "/v1/messages"
 }
 
+// parse is shared by translated routes and account/subscription backends.
+// Only the allowlist contracts below promise a required callable function:
+// other protocols have server, custom and MCP tools the IR cannot render.
 func parse(proto provider.Protocol, body []byte) (*Request, error) {
+	var req *Request
+	var err error
 	switch proto {
 	case provider.Chat:
-		return parseChat(body)
+		req, err = parseChat(body)
 	case provider.Responses:
-		return parseResponses(body)
+		req, err = parseResponses(body)
 	case provider.Gemini:
-		return parseGemini(body)
+		req, err = parseGemini(body)
+	default:
+		req, err = parseAnthropic(body)
 	}
-	return parseAnthropic(body)
+	if err != nil {
+		return nil, err
+	}
+	if req.ToolChoice == "required" && len(req.Tools) == 0 && !req.WebSearch && requiredAllowlist(proto, body) {
+		return nil, fmt.Errorf("required tool choice has no callable tools after filtering")
+	}
+	return req, nil
+}
+
+func requiredAllowlist(proto provider.Protocol, body []byte) bool {
+	switch proto {
+	case provider.Responses:
+		var q struct {
+			ToolChoice struct{ Type, Mode string } `json:"tool_choice"`
+		}
+		return json.Unmarshal(body, &q) == nil && q.ToolChoice.Type == "allowed_tools" && q.ToolChoice.Mode == "required"
+	case provider.Gemini:
+		var q struct {
+			ToolConfig struct {
+				FunctionCallingConfig struct {
+					Mode                 string   `json:"mode"`
+					AllowedFunctionNames []string `json:"allowedFunctionNames"`
+				} `json:"functionCallingConfig"`
+			} `json:"toolConfig"`
+		}
+		return json.Unmarshal(body, &q) == nil && strings.EqualFold(q.ToolConfig.FunctionCallingConfig.Mode, "ANY") && len(q.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0
+	}
+	return false
 }
 
 func build(proto provider.Protocol, r *Request, model, host string, rejectTemp bool) []byte {
@@ -1725,7 +1752,8 @@ func conversationID(in http.Header, body []byte) string {
 	// An undecodable body still gets an id: the hash of the whole body.
 	_ = json.Unmarshal(body, &m)
 	items := m.Messages
-	if len(items) == 0 {
+	geminiContents := len(items) == 0 && len(m.Contents) > 0
+	if geminiContents {
 		items = m.Contents // Gemini generateContent repeats the first user turn.
 	}
 	if len(items) == 0 && len(m.Input) > 0 && m.Input[0] == '[' {
@@ -1740,7 +1768,8 @@ func conversationID(in http.Header, body []byte) string {
 		var r struct {
 			Role string `json:"role"`
 		}
-		if json.Unmarshal(it, &r) == nil && r.Role == "user" {
+		// Gemini treats an omitted role as user; Chat and Responses do not.
+		if json.Unmarshal(it, &r) == nil && (r.Role == "user" || (geminiContents && r.Role == "")) {
 			first = it
 			break
 		}
