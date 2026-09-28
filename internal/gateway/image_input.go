@@ -36,6 +36,20 @@ func hasImage(proto provider.Protocol, body []byte) bool {
 	return err == found
 }
 
+// hasUnportableCurrentImage reports a current Responses image with no URL to
+// carry to another protocol. A file_id belongs to the Responses provider that
+// stored it; translating it as a URL or dropping it would mislead the model.
+func hasUnportableCurrentImage(body []byte) bool {
+	missing := errors.New("current image has no portable source")
+	_, err := walkImages(provider.Responses, body, func(im imageAt) (json.RawMessage, error) {
+		if im.Current() && im.Src == "" {
+			return nil, missing
+		}
+		return nil, nil
+	})
+	return err == missing
+}
+
 // imageAt is an image in a request, where it is.
 type imageAt struct {
 	// Src is the image as a URL, a data: URL for one sent inline; empty for
