@@ -93,6 +93,16 @@
     return s;
   }
 
+  // An agent's icon, made once and copied: a list of hundreds of skills has
+  // a chip for each agent on every row, and making each icon afresh (its
+  // image, and a probe of whether it loads) was most of drawing the list.
+  const icons = new Map();
+  function agentIcon(name) {
+    let i = icons.get(name);
+    if (!i) icons.set(name, (i = icon(name)));
+    return i.cloneNode(true);
+  }
+
   // Agent chips for a server or a skill: each agent that could have it, lit
   // when it does. A chip whose agent couldn't be given it says why.
   function agentChips(all, on, onChange, opts = {}) {
@@ -102,7 +112,7 @@
       const has = on.includes(a.id);
       const c = el("button", "lib-ag" + (has ? " on" : ""));
       c.dataset.agent = a.id;
-      c.append(icon(a.icon));
+      c.append(agentIcon(a.icon));
       if (opts.names) c.append(el("span", "n", a.name));
       const problem = opts.problems?.[a.id];
       const blocked = opts.blocked?.(a);
@@ -997,8 +1007,10 @@
     if (lib.skills.length) {
       const rh = el("div", "row-head");
       rh.append(el("span", "label", t("In the library")));
+      const box = el("div", "lib-groups");
+      if (lib.skills.length > 8) rh.append(skillFilter(box, all));
       const fresh = lib.skills.filter((s) => s.kind === "github" || s.origin);
-      if (fresh.length) rh.append(el("span", "grow"));
+      rh.append(el("span", "grow"));
       if (lib.skills.some((s) => s.kind === "github")) {
         const c = button(checking ? t("Checking…") : t("Check for updates"), "lib-updall", () => checkSkills());
         c.title = t("Ask GitHub which skills changed since they were installed");
@@ -1029,9 +1041,8 @@
         rh.append(u);
       }
       body.append(rh);
-      const list = el("div", "list lib-list");
-      for (const s of lib.skills) list.append(skillRow(s, all));
-      body.append(list);
+      drawSkills(box, all);
+      body.append(box);
     }
     if (lib.foundSkills.length) {
       const rh = el("div", "row-head");
@@ -1045,6 +1056,131 @@
     const skip = shownAgents().filter((a) => !a.skills);
     if (skip.length) body.append(el("p", "lib-aside", t("{agents} has no skills folder.", { agents: skip.map((a) => a.name).join(", ") })));
     body.append(discover("skills"));
+  }
+
+  // ---------- the library's skills, by where they came from ----------
+
+  // Hundreds of skills were one list of rows, every one of them drawn with
+  // a chip for each agent — thousands of icons laid out and painted on each
+  // redraw, scroll and hover. They're grouped by the GitHub repository they
+  // came from (the ones on this computer together): a folded group draws
+  // only its heading, and a filter or a fold draws the groups again, not
+  // the page.
+  let skillQuery = "";         // what the filter over the skills holds
+  const unfiltered = new Set(); // groups folded while filtering, till the filter changes
+  let folds = {};              // group → true when folded, false when opened by hand
+  try { folds = JSON.parse(localStorage.getItem("magpie.libSkillFolds") || "{}") || {}; } catch {}
+  function saveFolds() { try { localStorage.setItem("magpie.libSkillFolds", JSON.stringify(folds)); } catch {} }
+  const repoOf = (u) => (u || "").replace(/^https:\/\/github\.com\//, "").split("/").slice(0, 2).join("/");
+
+  function skillGroups() {
+    const by = new Map();
+    for (const s of lib.skills) {
+      const repo = s.kind === "github" ? repoOf(s.source) : s.origin ? repoOf(s.origin) : "";
+      const key = repo ? "gh:" + repo.toLowerCase() : "local";
+      let g = by.get(key);
+      if (!g) by.set(key, (g = { key, repo, skills: [] }));
+      g.skills.push(s);
+    }
+    const out = [...by.values()].sort((a, b) => (a.key === "local") - (b.key === "local") || a.repo.localeCompare(b.repo));
+    for (const g of out) g.skills.sort((a, b) => a.name.localeCompare(b.name));
+    return out;
+  }
+
+  function skillFilter(box, all) {
+    const f = el("input", "lib-filter lib-skillq");
+    f.type = "search";
+    f.dataset.lib = "skillq";
+    f.placeholder = t("Filter {n} skills…", { n: lib.skills.length });
+    f.spellcheck = false;
+    f.autocomplete = "off";
+    f.value = skillQuery;
+    f.oninput = () => { skillQuery = f.value; unfiltered.clear(); drawSkills(box, all); };
+    f.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape" && f.value) { e.preventDefault(); f.value = ""; f.oninput(); }
+    };
+    return f;
+  }
+
+  function drawSkills(box, all) {
+    const groups = skillGroups();
+    const q = skillQuery.trim().toLowerCase();
+    const hitsOf = (g) => (q ? g.skills.filter((s) => (s.name + " " + (s.description || "") + " " + g.repo).toLowerCase().includes(q)) : g.skills);
+    box.replaceChildren();
+    let shown = 0;
+    if (groups.length === 1) {
+      // from one place only: the list as it always was
+      const hits = hitsOf(groups[0]);
+      if (hits.length) {
+        const list = el("div", "list lib-list");
+        for (const s of hits) list.append(skillRow(s, all));
+        box.append(list);
+        shown = hits.length;
+      }
+    } else {
+      // many skills from several places start folded, each group a line
+      const many = lib.skills.length > 40;
+      for (const g of groups) {
+        const hits = hitsOf(g);
+        if (!hits.length) continue;
+        shown++;
+        box.append(groupCard(g, hits, all, q ? unfiltered.has(g.key) : folds[g.key] ?? many, !!q));
+      }
+    }
+    if (!shown) box.append(el("div", "list lib-none", t("No skill matches “{q}”.", { q: skillQuery.trim() })));
+  }
+
+  function groupCard(g, hits, all, folded, filtering) {
+    const card = el("div", "list lib-card lib-group");
+    card.dataset.group = g.key;
+    const head = el("div", "row lib-row click lib-grouphead" + (folded ? "" : " open"));
+    const who = el("div", "who");
+    who.append(el("div", "name" + (g.repo ? " mono" : ""), g.repo || t("On this computer")));
+    const n = g.skills.length;
+    who.append(el("div", "sub", filtering && hits.length !== n ? t("{n} of {total} skills", { n: hits.length, total: n })
+      : n === 1 ? t("1 skill") : t("{n} skills", { n })));
+    const tags = el("div", "lib-tags");
+    const stale = g.skills.filter((s) => s.check?.status === "update");
+    if (stale.length) {
+      const u = button(t("Update {n}", { n: stale.length }), "action lib-updall", async (e, b) => {
+        b.classList.add("busy");
+        b.textContent = t("Updating…");
+        await updateAllSkills(stale.map((s) => s.name));
+      });
+      u.title = stale.length === 1 ? t("Fetch {name} from GitHub again", { name: stale[0].name }) : t("Fetch the {n} skills GitHub changed again", { n: stale.length });
+      tags.append(u);
+    }
+    // which agents have its skills, all of them or some
+    const have = el("div", "lib-have");
+    for (const a of all) {
+      const k = g.skills.filter((s) => s.agents.includes(a.id)).length;
+      if (!k) continue;
+      const i = agentIcon(a.icon);
+      i.title = k === n ? t("{agent} has all of them", { agent: a.name }) : t("{agent} has {n} of them", { agent: a.name, n: k });
+      if (k < n) i.classList.add("some");
+      have.append(i);
+    }
+    const acts = el("div", "lib-rowacts");
+    if (g.repo) {
+      const o = button("", "lib-icon", () => browse("https://github.com/" + g.repo));
+      o.append(svg(GLYPH.out, 13, 1.4));
+      o.title = t("Open {repo} on GitHub", { repo: g.repo });
+      acts.append(o);
+    }
+    const chev = el("span", "chev");
+    chev.append(svg(CHEV_R, 11, 1.7));
+    const pic = g.repo ? mark(g.skills.find((s) => s.icon)?.icon, GLYPH.skill) : glyph(GLYPH.folder);
+    head.append(pic, who, tags, have, acts, chev);
+    head.title = folded ? t("Show its skills") : t("Hide its skills");
+    head.onclick = () => {
+      if (filtering) { if (folded) unfiltered.delete(g.key); else unfiltered.add(g.key); }
+      else { folds[g.key] = !folded; saveFolds(); }
+      card.replaceWith(groupCard(g, hits, all, !folded, filtering));
+    };
+    card.append(head);
+    if (!folded) for (const s of hits) card.append(skillRow(s, all));
+    return card;
   }
 
   // ---------- projects ----------
@@ -1468,7 +1604,7 @@
     who.append(sub);
     if (f.link) { const src = el("div", "lib-src"); src.append(el("span", "", t("linked from")), pathLink(f.link)); who.append(src); }
     const have = el("div", "lib-have");
-    for (const id of f.agents) { const a = agentOf(id); if (a) { const i = icon(a.icon); i.title = a.name; have.append(i); } }
+    for (const id of f.agents) { const a = agentOf(id); if (a) { const i = agentIcon(a.icon); i.title = a.name; have.append(i); } }
     row.append(glyph(GLYPH.skill), who, have);
     if (f.others?.length) row.append(tag(t("differs in {agents}", { agents: f.others.map(nameOf).join(", ") }), "warn", t("{agents} has another skill by this name; bringing this one in leaves that one as it is", { agents: f.others.map(nameOf).join(", ") })));
     const b = button(t("Bring in"), "action", () => change("skills/import", { name: f.name }, t("{name} is in the library now", { name: f.name })));

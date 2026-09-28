@@ -311,3 +311,16 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-project .lib-projskill { border-top: 1px solid var(--line-2); }
 .lib-projfoot { margin: 0; padding: 8px 12px 10px 49px; border-top: 1px solid var(--line-2); }
 .lib-projfoot + .lib-projfoot { border-top: 0; padding-top: 0; }
+
+/* the library's skills: a card for each GitHub repository they came from,
+   and one for those on this computer, folded to its heading line */
+.lib-groups { display: flex; flex-direction: column; gap: 8px; }
+.lib-grouphead .sub { font-size: 11px; }
+.lib-grouphead > .lib-logo, .lib-grouphead > .lib-glyph { align-self: center; margin-top: 0; }
+.lib-grouphead .lib-updall { height: 24px; padding: 0 9px; font-size: 12px; }
+.lib-have .ic.some { opacity: .4; }
+#view-library .row-head .lib-skillq { width: 190px; height: 24px; margin: 0; flex: 0 1 auto; min-width: 90px; }
+.lib-skillq::-webkit-search-cancel-button { -webkit-appearance: none; }
+/* a skill row out of view is neither laid out nor painted until it nears it */
+.lib-skill, .lib-projskill { content-visibility: auto; contain-intrinsic-size: auto 76px; }
+.lib-grouphead .lib-rowacts { min-width: 26px; }

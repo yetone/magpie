@@ -124,6 +124,16 @@ var presets = []PresetDef{
 			{ID: "plan", Name: "Step Plan", Chat: "https://api.stepfun.com/step_plan/v1", Anthropic: "https://api.stepfun.com/step_plan"},
 			{ID: "api", Name: "Pay as you go", Chat: "https://api.stepfun.com/v1", Anthropic: "https://api.stepfun.com"},
 		}},
+	// Tencent Cloud's Token Plan (TokenHub): a general and a Hy plan on one
+	// sk-tp- key, served at their own endpoints under /plan, chat completions
+	// and Anthropic messages only (its Codex page asks for wire_api "chat").
+	// models.dev lists just its Hy models, so the plan's are given here.
+	{ID: "tencent-token-plan", Name: "Tencent Cloud Token Plan", Icon: "tencentcloud-color", Kind: KindVendor,
+		Chat: "https://api.lkeap.cloud.tencent.com/plan/v3", Anthropic: "https://api.lkeap.cloud.tencent.com/plan/anthropic",
+		Note:    "TokenHub · subscription",
+		Website: "https://cloud.tencent.com/document/product/1823/130060", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
+		Models: []string{"tc-code-latest", "glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3", "kimi-k2.7-code",
+			"deepseek-v4-pro-202606", "deepseek-v4-flash-202605", "minimax-m3", "minimax-m2.7", "hy4-preview", "hy3"}},
 	{ID: "qwen", Name: "Qwen", Icon: "qwen-color", Kind: KindVendor, Catalog: "alibaba",
 		Chat: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", Anthropic: "https://dashscope-intl.aliyuncs.com/apps/anthropic",
 		Note:    "DashScope · intl",

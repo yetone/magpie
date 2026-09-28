@@ -3998,42 +3998,47 @@ function renderPanelQuota() {
   fit();
 }
 
+// A row is the account, then two cells in columns shared down the list: a
+// window's name and share over its bar, and when it starts again under that.
+// One window takes the last column, beside the others' second; a balance
+// is a cell there too, and what went wrong spans both.
 function panelQuotaRow(q) {
   const row = el("div", "pq-row");
-  let who = el("span", "pq-who", q.user || q.name);
+  const who = el("span", "pq-who");
+  who.append(el("span", "pq-user", q.user || q.name));
+  // when the plan's paid time ends, under the account
+  if (q.until) who.append(el("span", "pq-term" + (q.renew === "off" ? " ends" : ""), planTerm(q)));
   row.title = [q.name, q.user, q.plan, planTerm(q)].filter(Boolean).join(" · ");
-  if (q.until) {
-    // when the plan's paid time ends, under the account, the meters kept their width
-    who = el("span", "pq-who two");
-    who.append(el("span", "", q.user || q.name), el("span", "pq-term" + (q.renew === "off" ? " ends" : ""), planTerm(q)));
-  }
   row.append(icon(q.icon), who);
-  const ws = el("span", "pq-ws");
   if (q.balance) {
-    ws.append(el("span", "pq-bal", t("Balance")), el("b", "", q.balance));
+    const c = el("span", "pq-w last");
+    const line = el("span", "pq-line");
+    line.append(el("span", "pq-n", t("Balance")), el("b", "", q.balance));
+    c.append(line);
+    row.append(c);
   } else if (q.error) {
-    ws.append(el("span", "pq-none", quotaError(q.error)));
+    row.append(el("span", "pq-none", quotaError(q.error)));
     row.title += "\n" + q.error;
   } else {
-    for (const w of q.windows.slice(0, 2)) {
+    const ws = q.windows.slice(0, 2);
+    for (const w of ws) {
       const used = Math.max(0, Math.min(100, w.used));
-      const m = el("span", "pq-w" + (used >= 90 ? " full" : ""));
+      const m = el("span", "pq-w" + (used >= 90 ? " full" : "") + (ws.length === 1 ? " last" : ""));
+      const line = el("span", "pq-line");
+      line.append(el("span", "pq-n", t(w.name)), el("b", "", quotaFill(w) + "%"));
       const track = el("span", "pq-track");
       const fill = el("i");
       fill.style.width = quotaFill(w) + "%";
       track.append(fill);
-      const line = el("span", "pq-line");
-      line.append(el("span", "pq-n", t(w.name)), track, el("b", "", quotaFill(w) + "%"));
-      m.append(line);
+      m.append(line, track);
       if (w.resetsAt) m.append(el("span", "pq-r", "↻ " + resetClock(new Date(w.resetsAt))));
       m.title = t(w.name) + " · " + quotaText(w) + (w.resetsAt ? "\n" + t("Resets {when}", { when: new Date(w.resetsAt).toLocaleString() }) + " · " + untilText(new Date(w.resetsAt)) : "")
         + "\n" + t(quotaLeft ? "Show how much of each window is used" : "Show how much of each window is left");
       // used or left turns here too, as on the Usage page (#124)
       m.onclick = () => setQuotaLeft(!quotaLeft);
-      ws.append(m);
+      row.append(m);
     }
   }
-  row.append(ws);
   return row;
 }
 

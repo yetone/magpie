@@ -45,8 +45,9 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
   use its models through the gateway, with nothing copied and no key to
   paste.
 - **Providers with one field.** Pick a preset (Anthropic, OpenAI, Gemini,
-  DeepSeek, Kimi, GLM, MiniMax, StepFun, Qwen, Mistral, Groq, xAI, OpenRouter,
-  Together, Fireworks, SiliconFlow, AiHubMix, 302.AI, Ollama, LM Studio…),
+  DeepSeek, Kimi, GLM, MiniMax, StepFun, Qwen, Tencent Cloud Token Plan,
+  Mistral, Groq, xAI, OpenRouter, Together, Fireworks, SiliconFlow,
+  AiHubMix, 302.AI, Ollama, LM Studio…),
   paste a key, done. Custom vendors need a name and a base URL. magpie never
   reads keys from your shell environment.
 - **Real model lists, nothing compiled in.** With a key in hand magpie asks

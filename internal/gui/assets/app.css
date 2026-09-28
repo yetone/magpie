@@ -531,26 +531,28 @@ body.window .field.solo { grid-column: auto; }
 .pq-head { display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; background: none; border: 0; color: var(--muted); cursor: default; }
 .pq-head .chev { display: inline-flex; transform: rotate(-90deg); transition: transform .2s; }
 .pq-head.open .chev { transform: none; }
-.pq-list { display: flex; flex-direction: column; gap: 1px; padding-top: 4px; }
-.pq-row { display: flex; align-items: center; gap: 8px; min-height: 24px; font-size: 12px; }
+/* one grid down the list, so every account's windows sit in the same two
+   columns, bars and counts lined up whatever the names */
+.pq-list { display: grid; grid-template-columns: 16px minmax(0, 1fr) 92px 92px; column-gap: 10px; row-gap: 6px; padding-top: 6px; }
+.pq-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; min-height: 24px; font-size: 12px; }
 .pq-row .ic { flex: none; }
-.pq-who { flex: 1 1 0; min-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); }
-.pq-who.two { display: flex; flex-direction: column; line-height: 1.25; padding: 2px 0; }
-.pq-who.two > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pq-who { grid-column: 2; display: flex; flex-direction: column; min-width: 0; line-height: 1.25; color: var(--fg-2); }
+.pq-who > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pq-term { font-size: 10px; color: var(--faint); }
 .pq-term.ends { color: var(--muted); }
-.pq-ws { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 14px; font-size: 10.5px; color: var(--muted); }
-.pq-w { display: inline-flex; flex-direction: column; align-items: stretch; min-width: 0; cursor: pointer; }
-.pq-line { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; min-width: 0; }
-.pq-r { font-size: 9.5px; line-height: 1.2; color: var(--faint); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.pq-n { max-width: 84px; overflow: hidden; text-overflow: ellipsis; }
-.pq-track { width: 44px; height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; }
+.pq-w { display: flex; flex-direction: column; gap: 3px; align-self: start; min-width: 0; font-size: 10.5px; color: var(--muted); cursor: pointer; }
+.pq-w.last { grid-column: 4; }
+.pq-line { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; white-space: nowrap; min-width: 0; line-height: 1.2; }
+.pq-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pq-track { display: block; height: 3px; border-radius: 2px; background: var(--pill); overflow: hidden; }
 .pq-track i { display: block; height: 100%; border-radius: inherit; background: var(--fg-2); }
-.pq-w b, .pq-ws > b { min-width: 28px; text-align: right; color: var(--fg-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pq-w b { flex: none; color: var(--fg-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pq-r { font-size: 9.5px; line-height: 1.2; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .pq-w.full b { color: var(--fg); }
 .pq-w.full .pq-track i { background: var(--fg); }
-.pq-none { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pq-row .skeleton.sk-aq { width: 110px; height: 8px; border-radius: 4px; }
+.pq-none { grid-column: 3 / 5; font-size: 10.5px; line-height: 1.25; color: var(--faint); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.pq-row .skeleton.sk-aq { grid-column: 2; width: 110px; height: 8px; border-radius: 4px; }
+.pq-row .skeleton.sk-aq + .sk-aq { grid-column: 3 / 5; width: 100%; }
 #view-agents.loading .panel-quota { visibility: hidden; }
 
 /* ---- profiles ------------------------------------------------------------- */
