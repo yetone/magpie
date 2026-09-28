@@ -2205,7 +2205,7 @@ $("#modal").onclick = (e) => { if (e.target === e.currentTarget) cancelEdit(); }
 // ---------- sliding thumb ----------
 // Pills (the nav, every segmented control) have one thumb that glides to the
 // selected option instead of each option lighting up on its own.
-const thumbs = new Map(); // control position → last selected position after a re-render
+const thumbs = new Map(); // control position → where a re-rendered thumb resumes its slide
 function thumbKey(box, choices) {
   const path = [];
   for (let node = box; node?.parentElement; node = node.parentElement) {
@@ -2223,15 +2223,18 @@ function slide(box, key) {
   th.style.opacity = "";
   const to = { x: on.offsetLeft, w: on.offsetWidth };
   const control = thumbKey(box, key);
+  const last = control && thumbs.get(control);
+  let from = to;
   const put = (p) => { th.style.transform = `translateX(${p.x}px)`; th.style.width = p.w + "px"; };
   if (fresh) {
+    from = last ? (performance.now() - last.at < 300 ? last.from : last) : to;
     th.classList.add("still");
-    put((control && thumbs.get(control)) || to);
+    put(from);
     void th.offsetWidth;
     th.classList.remove("still");
-  }
+  } else if (last) from = { x: last.x, w: last.w };
   put(to);
-  if (control) thumbs.set(control, to);
+  if (control) thumbs.set(control, { ...to, from, at: performance.now() });
 }
 
 const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["responses", "Responses", "OpenAI Responses — what Codex speaks"], ["anthropic", "Anthropic", "Anthropic Messages — what Claude Code speaks"], ["decide", "Jev", "Jev's decision API (TypeSafe's, or a gateway's) — what a routing group asks as a turn begins"]];
