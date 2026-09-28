@@ -351,7 +351,8 @@ func (u Usage) chat() map[string]any {
 // as indexed fragments; it tracks which one is open.
 type chatDecoder struct {
 	started bool
-	tool    int // index of the open tool call, -1 for none
+	tool    int    // index of the open tool call, -1 for none
+	choice  string // index of the first choice seen; an empty string means none yet
 }
 
 func (d *chatDecoder) decode(data string, emit func(Event)) error {
@@ -362,7 +363,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		ID      string `json:"id"`
 		Model   string `json:"model"`
 		Choices []struct {
-			Index int `json:"index"`
+			Index json.RawMessage `json:"index"`
 			Delta struct {
 				Content          *string     `json:"content"`
 				ReasoningContent string      `json:"reasoning_content"`
@@ -388,9 +389,26 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		emit(Event{Kind: KStart, MsgID: ch.ID, Model: ch.Model})
 	}
 	for _, c := range ch.Choices {
-		// Translation has one reply; keep only choice 0. Passthrough leaves
-		// every upstream choice intact for clients that ask for several.
-		if c.Index != 0 {
+		// A translated reply has one choice. Use the first index the upstream
+		// sends, since some relays number even their only choice as 1. Missing,
+		// null, and non-numeric indexes are accepted without dropping chunks.
+		// Passthrough still relays every choice unchanged.
+		index := "0"
+		if len(c.Index) > 0 && string(c.Index) != "null" {
+			var n int
+			if json.Unmarshal(c.Index, &n) == nil {
+				index = fmt.Sprint(n)
+			} else {
+				var text string
+				if json.Unmarshal(c.Index, &text) == nil && text != "" {
+					index = text
+				}
+			}
+		}
+		if d.choice == "" {
+			d.choice = index
+		}
+		if index != d.choice {
 			continue
 		}
 		// Some relays send the same thought under both names; one is enough.
