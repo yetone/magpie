@@ -198,7 +198,10 @@ func parseGemini(body []byte) (*Request, error) {
 		case "NONE":
 			r.ToolChoice = "none"
 		case "ANY":
-			if len(fc.AllowedFunctionNames) == 1 {
+			// A name is only forcible when its declaration survived filtering.
+			// Otherwise retain required so translated routes reject an empty
+			// callable set instead of silently returning plain text.
+			if len(fc.AllowedFunctionNames) == 1 && len(r.Tools) == 1 && r.Tools[0].Name == fc.AllowedFunctionNames[0] {
 				r.ToolChoice = "name:" + fc.AllowedFunctionNames[0]
 			} else {
 				r.ToolChoice = "required"
