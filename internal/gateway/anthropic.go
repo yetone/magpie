@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -629,6 +630,15 @@ func searchResultBlock(id string, hits []Hit) map[string]any {
 	return map[string]any{"type": "web_search_tool_result", "tool_use_id": id, "content": results}
 }
 
+// idSeq keeps ids made within one tick of the clock apart: Windows'
+// clock moves in steps of up to 15.6ms and macOS's in microseconds, so
+// the parallel calls of one Gemini chunk all got the same id.
+var idSeq atomic.Uint32
+
+// idClock is where newID reads the time; a test holds it still to stand in
+// for a coarse clock.
+var idClock = time.Now
+
 func newID() string {
-	return fmt.Sprintf("%x", time.Now().UnixNano())
+	return fmt.Sprintf("%x%08x", idClock().UnixNano(), idSeq.Add(1))
 }
