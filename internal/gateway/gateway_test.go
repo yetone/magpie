@@ -939,6 +939,25 @@ func TestConversationID(t *testing.T) {
 	if g1 != g2 || g1 == gOther || !strings.HasPrefix(g1, "magpie-") {
 		t.Errorf("gemini derived ids: %q %q %q", g1, g2, gOther)
 	}
+	// Gemini accepts an omitted role on a user content. When history adds an
+	// explicit user turn, affinity must still use the first role-less content.
+	rolelessFirst := `{"parts":[{"text":"fix the bug"}]}`
+	gRoleless1 := conversationID(http.Header{}, []byte(`{"contents":[`+rolelessFirst+`]}`))
+	gRoleless2 := conversationID(http.Header{}, []byte(`{"contents":[`+rolelessFirst+`,{"role":"model","parts":[{"text":"done"}]},{"role":"user","parts":[{"text":"thanks"}]}]}`))
+	gRolelessOther := conversationID(http.Header{}, []byte(`{"contents":[{"parts":[{"text":"write docs"}]},{"role":"user","parts":[{"text":"thanks"}]}]}`))
+	if gRoleless1 != gRoleless2 || gRoleless1 == gRolelessOther {
+		t.Errorf("role-less gemini derived ids: %q %q %q", gRoleless1, gRoleless2, gRolelessOther)
+	}
+	// A role-less item is Gemini-specific. Chat and Responses still look for
+	// the first explicitly marked user turn.
+	for name, pair := range map[string][2]string{
+		"chat":      {`{"messages":[{"content":"preface"},{"role":"user","content":"hi"}]}`, `{"messages":[{"role":"user","content":"hi"}]}`},
+		"responses": {`{"input":[{"content":"preface"},{"role":"user","content":"hi"}]}`, `{"input":[{"role":"user","content":"hi"}]}`},
+	} {
+		if got, want := conversationID(http.Header{}, []byte(pair[0])), conversationID(http.Header{}, []byte(pair[1])); got != want {
+			t.Errorf("%s changed explicit-user selection: %q != %q", name, got, want)
+		}
+	}
 }
 
 func TestSessionOf(t *testing.T) {
