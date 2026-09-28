@@ -98,7 +98,14 @@ type Request struct {
 	Parallel   *bool  // parallel tool calls allowed
 	WebSearch  bool   // the client offered its provider's own web search
 	Fast       bool   // the client asked for priority processing (Codex's Fast mode)
+	// Namespaced are the tools a Responses client offered inside a
+	// namespace, by the flat name the model is offered them under.
+	Namespaced map[string]nsTool
 }
+
+// nsTool is a tool as a Responses client knows it: by its namespace and its
+// name in it (Codex's collaboration.spawn_agent).
+type nsTool struct{ Namespace, Name string }
 
 // EventKind is what a streamed event carries.
 type EventKind int

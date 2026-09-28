@@ -1276,7 +1276,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		return writeError(w, from, 502, msg), msg
 	}
 	if stream {
-		enc := encoder(from, newSSEWriter(w), request.Model)
+		enc := encoder(from, newSSEWriter(w), request)
 		var failed string
 		serr := readSSE(rd, func(_, data string) error {
 			return dec(data, func(ev Event) {
@@ -1313,7 +1313,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	}
 	res2 := col.finish()
 	u.add(res2.Usage)
-	out := render(from, res2, request.Model)
+	out := render(from, res2, request)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 	w.Write(out)
@@ -1377,24 +1377,26 @@ type streamEncoder interface {
 	finish()
 }
 
-func encoder(proto provider.Protocol, w *sseWriter, model string) streamEncoder {
+func encoder(proto provider.Protocol, w *sseWriter, r *Request) streamEncoder {
+	model := r.Model
 	switch proto {
 	case provider.Chat:
 		return &chatEncoder{w: w, model: model}
 	case provider.Responses:
-		return &responsesEncoder{w: w, model: model}
+		return &responsesEncoder{w: w, model: model, named: r.Namespaced}
 	case provider.Gemini:
 		return &geminiEncoder{w: w, model: model}
 	}
 	return &anthropicEncoder{w: w, model: model}
 }
 
-func render(proto provider.Protocol, res Result, model string) []byte {
+func render(proto provider.Protocol, res Result, r *Request) []byte {
+	model := r.Model
 	switch proto {
 	case provider.Chat:
 		return renderChat(res, model)
 	case provider.Responses:
-		return renderResponses(res, model)
+		return renderResponses(res, model, r.Namespaced)
 	case provider.Gemini:
 		return renderGemini(res, model)
 	}

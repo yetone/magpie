@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -17,6 +19,7 @@ type rItem struct {
 	ID        string          `json:"id,omitempty"`
 	CallID    string          `json:"call_id,omitempty"`
 	Name      string          `json:"name,omitempty"`
+	Namespace string          `json:"namespace,omitempty"`
 	Arguments string          `json:"arguments,omitempty"`
 	Output    json.RawMessage `json:"output,omitempty"`
 	Status    string          `json:"status,omitempty"`
@@ -37,16 +40,32 @@ type rText struct {
 	Text string `json:"text"`
 }
 
+type rTool struct {
+	Type        string          `json:"type"`
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Tools       []rTool         `json:"tools,omitempty"` // a namespace's
+}
+
+// flatName is the name a namespaced tool is offered to a model under, which
+// takes one flat name: namespace__name, as Codex names an MCP server's tools.
+// A name longer than the 64 characters APIs allow is cut and made unique by
+// a hash of the whole.
+func flatName(namespace, name string) string {
+	flat := namespace + "__" + name
+	if len(flat) <= 64 {
+		return flat
+	}
+	sum := sha256.Sum256([]byte(namespace + "\x00" + name))
+	return flat[:55] + "_" + hex.EncodeToString(sum[:4])
+}
+
 type rRequest struct {
-	Model        string          `json:"model"`
-	Instructions string          `json:"instructions,omitempty"`
-	Input        json.RawMessage `json:"input"`
-	Tools        []struct {
-		Type        string          `json:"type"`
-		Name        string          `json:"name"`
-		Description string          `json:"description,omitempty"`
-		Parameters  json.RawMessage `json:"parameters,omitempty"`
-	} `json:"tools,omitempty"`
+	Model             string          `json:"model"`
+	Instructions      string          `json:"instructions,omitempty"`
+	Input             json.RawMessage `json:"input"`
+	Tools             []rTool         `json:"tools,omitempty"`
 	ToolChoice        json.RawMessage `json:"tool_choice,omitempty"`
 	MaxOutputTokens   int             `json:"max_output_tokens,omitempty"`
 	Temperature       *float64        `json:"temperature,omitempty"`
@@ -98,7 +117,11 @@ func parseResponses(body []byte) (*Request, error) {
 				}
 				r.Messages = append(r.Messages, Message{Role: role, Parts: parts})
 			case it.Type == "function_call":
-				r.Messages = append(r.Messages, Message{Role: "assistant", Parts: []Part{{Kind: ToolCall, ID: it.CallID, Name: it.Name, Args: parseArgs(it.Arguments)}}})
+				name := it.Name
+				if it.Namespace != "" {
+					name = flatName(it.Namespace, it.Name)
+				}
+				r.Messages = append(r.Messages, Message{Role: "assistant", Parts: []Part{{Kind: ToolCall, ID: it.CallID, Name: name, Args: parseArgs(it.Arguments)}}})
 			case it.Type == "function_call_output":
 				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: it.CallID, Text: stringOrText(it.Output)}}})
 			case it.Type == "reasoning":
@@ -117,10 +140,24 @@ func parseResponses(body []byte) (*Request, error) {
 		if strings.HasPrefix(t.Type, "web_search") {
 			r.WebSearch = true
 		}
-		if t.Type != "function" {
-			continue
+		switch t.Type {
+		case "function":
+			r.Tools = append(r.Tools, Tool{Name: t.Name, Description: t.Description, Schema: t.Parameters})
+		case "namespace":
+			// offered flat, as few models know namespaces; a call is given
+			// its namespace back on the way out
+			for _, nt := range t.Tools {
+				if nt.Type != "function" {
+					continue
+				}
+				flat := flatName(t.Name, nt.Name)
+				if r.Namespaced == nil {
+					r.Namespaced = map[string]nsTool{}
+				}
+				r.Namespaced[flat] = nsTool{Namespace: t.Name, Name: nt.Name}
+				r.Tools = append(r.Tools, Tool{Name: flat, Description: nt.Description, Schema: nt.Parameters})
+			}
 		}
-		r.Tools = append(r.Tools, Tool{Name: t.Name, Description: t.Description, Schema: t.Parameters})
 	}
 	var tc string
 	if json.Unmarshal(q.ToolChoice, &tc) == nil {
@@ -418,6 +455,19 @@ type responsesEncoder struct {
 	text    strings.Builder // text of the open message / reasoning
 	output  []map[string]any
 	col     collector
+	named   map[string]nsTool // the request's namespaced tools
+}
+
+// callTo names the tool a function_call item is to as the client knows it:
+// a namespaced tool by its name and namespace, not the flat name the model
+// used.
+func callTo(item map[string]any, name string, named map[string]nsTool) map[string]any {
+	if q, ok := named[name]; ok {
+		item["name"], item["namespace"] = q.Name, q.Namespace
+	} else {
+		item["name"] = name
+	}
+	return item
 }
 
 func (e *responsesEncoder) send(typ string, fields map[string]any) {
@@ -482,8 +532,8 @@ func (e *responsesEncoder) closeItem() {
 			args = "{}"
 		}
 		p := e.col.last(ToolCall)
-		e.send("response.function_call_arguments.done", map[string]any{"item_id": e.itemID, "output_index": e.item, "call_id": p.ID, "name": p.Name, "arguments": args})
-		item = map[string]any{"id": e.itemID, "type": "function_call", "status": "completed", "call_id": p.ID, "name": p.Name, "arguments": args}
+		e.send("response.function_call_arguments.done", callTo(map[string]any{"item_id": e.itemID, "output_index": e.item, "call_id": p.ID, "arguments": args}, p.Name, e.named))
+		item = callTo(map[string]any{"id": e.itemID, "type": "function_call", "status": "completed", "call_id": p.ID, "arguments": args}, p.Name, e.named)
 	}
 	e.send("response.output_item.done", map[string]any{"output_index": e.item, "item": item})
 	e.output = append(e.output, item)
@@ -534,7 +584,7 @@ func (e *responsesEncoder) event(ev Event) {
 		}
 		// Open (and so close the previous item) before recording this call:
 		// closeItem reads the call ID from e.col.last(ToolCall).
-		e.openItem(ToolCall, "fc_", map[string]any{"type": "function_call", "call_id": ev.ID, "name": ev.Name, "arguments": ""})
+		e.openItem(ToolCall, "fc_", callTo(map[string]any{"type": "function_call", "call_id": ev.ID, "arguments": ""}, ev.Name, e.named))
 		e.col.add(ev)
 		return
 	case KToolArgs:
@@ -569,7 +619,7 @@ func (e *responsesEncoder) finish() {
 }
 
 // renderResponses is the non-streaming reply.
-func renderResponses(res Result, model string) []byte {
+func renderResponses(res Result, model string, named map[string]nsTool) []byte {
 	output := []map[string]any{}
 	for _, p := range res.Parts {
 		switch p.Kind {
@@ -584,8 +634,8 @@ func renderResponses(res Result, model string) []byte {
 			if id == "" {
 				id = "call_" + newID()
 			}
-			output = append(output, map[string]any{"id": "fc_" + newID(), "type": "function_call", "status": "completed",
-				"call_id": id, "name": p.Name, "arguments": argsString(p)})
+			output = append(output, callTo(map[string]any{"id": "fc_" + newID(), "type": "function_call", "status": "completed",
+				"call_id": id, "arguments": argsString(p)}, p.Name, named))
 		}
 	}
 	id := res.ID

@@ -32,7 +32,7 @@ func TestContextWindowStopIsTruncation(t *testing.T) {
 	var resp struct {
 		Status string `json:"status"`
 	}
-	json.Unmarshal(renderResponses(res, "m"), &resp)
+	json.Unmarshal(renderResponses(res, "m", nil), &resp)
 	if resp.Status != "incomplete" {
 		t.Errorf("responses status = %q, want incomplete", resp.Status)
 	}
