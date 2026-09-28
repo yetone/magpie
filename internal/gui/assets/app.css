@@ -533,24 +533,27 @@ body.window .field.solo { grid-column: auto; }
 .pq-head.open .chev { transform: none; }
 /* one grid down the list, so every account's windows sit in the same two
    columns, bars and counts lined up whatever the names */
-.pq-list { display: grid; grid-template-columns: 16px minmax(0, 1fr) 92px 92px; column-gap: 10px; row-gap: 6px; padding-top: 6px; }
-.pq-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; min-height: 24px; font-size: 12px; }
+/* one grid down the list, every row the same height, so every account's
+   windows sit in the same two columns, bars and counts lined up */
+.pq-list { display: grid; grid-template-columns: 16px minmax(0, 1fr) 88px 88px; column-gap: 12px; padding-top: 4px; }
+.pq-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; height: 34px; font-size: 12px; }
+.pq-row + .pq-row { border-top: 1px solid var(--line); }
 .pq-row .ic { flex: none; }
-.pq-who { grid-column: 2; display: flex; flex-direction: column; min-width: 0; line-height: 1.25; color: var(--fg-2); }
+.pq-who { grid-column: 2; display: flex; flex-direction: column; gap: 1px; min-width: 0; line-height: 1.25; color: var(--fg-2); }
 .pq-who > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pq-term { font-size: 10px; color: var(--faint); }
-.pq-term.ends { color: var(--muted); }
-.pq-w { display: flex; flex-direction: column; gap: 3px; align-self: start; min-width: 0; font-size: 10.5px; color: var(--muted); cursor: pointer; }
+.pq-sub { font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pq-sub.ends, .pq-sub.err { color: var(--muted); }
+.pq-w { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 10.5px; color: var(--muted); cursor: pointer; }
 .pq-w.last { grid-column: 4; }
+.pq-w.bal { grid-column: 3 / 5; }
+.pq-w.bal .pq-line { justify-content: flex-end; gap: 6px; }
 .pq-line { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; white-space: nowrap; min-width: 0; line-height: 1.2; }
 .pq-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pq-track { display: block; height: 3px; border-radius: 2px; background: var(--pill); overflow: hidden; }
 .pq-track i { display: block; height: 100%; border-radius: inherit; background: var(--fg-2); }
 .pq-w b { flex: none; color: var(--fg-2); font-weight: 600; font-variant-numeric: tabular-nums; }
-.pq-r { font-size: 9.5px; line-height: 1.2; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .pq-w.full b { color: var(--fg); }
 .pq-w.full .pq-track i { background: var(--fg); }
-.pq-none { grid-column: 3 / 5; font-size: 10.5px; line-height: 1.25; color: var(--faint); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .pq-row .skeleton.sk-aq { grid-column: 2; width: 110px; height: 8px; border-radius: 4px; }
 .pq-row .skeleton.sk-aq + .sk-aq { grid-column: 3 / 5; width: 100%; }
 #view-agents.loading .panel-quota { visibility: hidden; }

@@ -1580,15 +1580,27 @@ function gatewayModels() {
   return out;
 }
 
+let segsMade = 0;
 function segs(items, current, onPick) {
   const box = el("div", "segs");
-  const key = items.map(([id]) => id).join("|");
+  const kind = items.map(([id]) => id).join("|");
+  box.dataset.kind = kind;
+  // where its thumb was is remembered per control, not per set of options:
+  // every Off/On on the settings page has the same, and each would slide in
+  // from where the one clicked was as the page redraws. A control is known
+  // by its place: the nearest element with an id, and which of the same
+  // options it is there; one not in the page yet by itself only.
+  let key = kind + "#" + ++segsMade;
   for (const [id, name] of items) {
     const b = el("button", "opt" + (id === current ? " on" : ""), name);
     b.onclick = () => { for (const x of box.querySelectorAll(".opt")) x.classList.toggle("on", x === b); slide(box, key); onPick(id); };
     box.append(b);
   }
-  queueMicrotask(() => slide(box, key)); // once it is in the page
+  queueMicrotask(() => { // once it is in the page
+    const home = box.isConnected && box.parentElement.closest("[id]");
+    if (home) key = kind + "@" + home.id + ":" + [...home.querySelectorAll(".segs")].filter((x) => x.dataset.kind === kind).indexOf(box);
+    slide(box, key);
+  });
   return box;
 }
 
@@ -4001,29 +4013,33 @@ function renderPanelQuota() {
   fit();
 }
 
-// A row is the account, then two cells in columns shared down the list: a
-// window's name and share over its bar, and when it starts again under that.
-// One window takes the last column, beside the others' second; a balance
-// is a cell there too, and what went wrong spans both.
+// Every row is the same height: the account over one quiet line (when the
+// plan ends, when the fullest window starts again, or what went wrong), and
+// in two columns shared down the list each window's name and share over its
+// bar. One window takes the last column, a balance the two, right-aligned;
+// the times are in the tooltips and on the Usage page.
 function panelQuotaRow(q) {
   const row = el("div", "pq-row");
   const who = el("span", "pq-who");
   who.append(el("span", "pq-user", q.user || q.name));
-  // when the plan's paid time ends, under the account
-  if (q.until) who.append(el("span", "pq-term" + (q.renew === "off" ? " ends" : ""), planTerm(q)));
   row.title = [q.name, q.user, q.plan, planTerm(q)].filter(Boolean).join(" · ");
   row.append(icon(q.icon), who);
+  const sub = [];
+  if (q.until) sub.push(planTerm(q));
   if (q.balance) {
-    const c = el("span", "pq-w last");
+    const c = el("span", "pq-w bal");
     const line = el("span", "pq-line");
     line.append(el("span", "pq-n", t("Balance")), el("b", "", q.balance));
     c.append(line);
     row.append(c);
   } else if (q.error) {
-    row.append(el("span", "pq-none", quotaError(q.error)));
+    who.append(el("span", "pq-sub err", quotaError(q.error)));
     row.title += "\n" + q.error;
   } else {
     const ws = q.windows.slice(0, 2);
+    // the window that runs out first says when it comes back
+    const tight = ws.filter((w) => w.used > 0 && w.resetsAt).sort((x, y) => y.used - x.used)[0];
+    if (tight) sub.push("↻ " + resetClock(new Date(tight.resetsAt)));
     for (const w of ws) {
       const used = Math.max(0, Math.min(100, w.used));
       const m = el("span", "pq-w" + (used >= 90 ? " full" : "") + (ws.length === 1 ? " last" : ""));
@@ -4034,7 +4050,6 @@ function panelQuotaRow(q) {
       fill.style.width = quotaFill(w) + "%";
       track.append(fill);
       m.append(line, track);
-      if (w.resetsAt) m.append(el("span", "pq-r", "↻ " + resetClock(new Date(w.resetsAt))));
       m.title = t(w.name) + " · " + quotaText(w) + (w.resetsAt ? "\n" + t("Resets {when}", { when: new Date(w.resetsAt).toLocaleString() }) + " · " + untilText(new Date(w.resetsAt)) : "")
         + "\n" + t(quotaLeft ? "Show how much of each window is used" : "Show how much of each window is left");
       // used or left turns here too, as on the Usage page (#124)
@@ -4042,6 +4057,7 @@ function panelQuotaRow(q) {
       row.append(m);
     }
   }
+  if (sub.length && !q.error) who.append(el("span", "pq-sub" + (q.renew === "off" ? " ends" : ""), sub.join(" · ")));
   return row;
 }
 
