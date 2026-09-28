@@ -236,3 +236,31 @@ func TestDevinSignIn(t *testing.T) {
 		t.Fatalf("logins %v", ls)
 	}
 }
+
+// `devin auth status` failing, or saying neither, is a CLI that didn't
+// answer; "Not logged in." is one that did
+func TestAskDevinIdentity(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the CLI is a shell script here")
+	}
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "devin")
+	oldExe := DevinExecutable
+	DevinExecutable = func() string { return exe }
+	t.Cleanup(func() { DevinExecutable = oldExe })
+	for _, c := range []struct {
+		name, script string
+		ok, answered bool
+	}{
+		{"signed in", "cat <<'X'\nLogged in (via Devin).\n\nUser:\n  Email:  dev@example.com\nX\n", true, true},
+		{"signed out", "echo 'Not logged in.'\n", false, true},
+		{"failed", "echo 'network error' >&2; exit 1\n", false, false},
+		{"neither", "echo 'Updating devin…'\n", false, false},
+	} {
+		os.WriteFile(exe, []byte("#!/bin/sh\n"+c.script), 0o755)
+		_, _, ok, err := askDevinIdentity()
+		if ok != c.ok || (err == nil) != c.answered {
+			t.Errorf("%s: ok=%v err=%v", c.name, ok, err)
+		}
+	}
+}
