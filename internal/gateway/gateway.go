@@ -1404,6 +1404,10 @@ func wrongEndpoint(status int, body []byte) bool {
 // one to it. The provider is always streamed; the client gets whichever
 // it asked for.
 func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Provider, from, to provider.Protocol, model string, body []byte, u *Usage) (int, string) {
+	if from == provider.Responses && hasUnportableCurrentImage(body) {
+		msg := "input_image without image_url cannot be translated; send an image_url or use a native Responses route"
+		return writeError(w, from, 400, msg), msg
+	}
 	request, err := parse(from, body)
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
