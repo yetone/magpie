@@ -1412,6 +1412,13 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
+	// An allowlisted required choice that leaves no callable function must
+	// not be forwarded as a plain-text request. Web search remains a valid
+	// callable tool when offered and allowed by the request.
+	if request.ToolChoice == "required" && len(request.Tools) == 0 && !request.WebSearch {
+		msg := "required tool choice has no callable tools after filtering"
+		return writeError(w, from, 400, msg), msg
+	}
 	if request.WebSearch && !searching(r.Context()) {
 		// an API on which the provider searches by itself comes first;
 		// without one, its model is given magpie's search
