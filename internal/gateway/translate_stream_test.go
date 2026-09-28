@@ -35,12 +35,12 @@ func chatToResponses(t *testing.T, chunks ...string) []map[string]any {
 }
 
 // The translated reply has just one choice. Interleaved choices must not
-// mix text, thinking, tool calls, or a finish reason into choice 0.
+// mix text, thinking, tool calls, or a finish reason into the first choice.
 func TestChatTranslationKeepsFirstChoice(t *testing.T) {
 	var d chatDecoder
 	var got []Event
 	for _, chunk := range []string{
-		`{"id":"x","choices":[{"index":1,"delta":{"reasoning_content":"Other thought","content":"Beta","tool_calls":[{"index":0,"id":"other","function":{"name":"wrong","arguments":"{}"}}]},"finish_reason":"tool_calls"},{"index":0,"delta":{"reasoning_content":"First thought","content":"Alpha","tool_calls":[{"index":0,"id":"first","function":{"name":"right","arguments":"{\"ok\":true}"}}]}}]}`,
+		`{"id":"x","choices":[{"index":0,"delta":{"reasoning_content":"First thought","content":"Alpha","tool_calls":[{"index":0,"id":"first","function":{"name":"right","arguments":"{\"ok\":true}"}}]}},{"index":1,"delta":{"reasoning_content":"Other thought","content":"Beta","tool_calls":[{"index":0,"id":"other","function":{"name":"wrong","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}`,
 		`{"id":"x","choices":[{"index":1,"delta":{"content":" again","tool_calls":[{"index":0,"function":{"arguments":"not mine"}}]},"finish_reason":"stop"},{"index":0,"delta":{"content":" done","tool_calls":[{"index":0,"function":{"arguments":" more"}}]},"finish_reason":"tool_calls"}]}`,
 		// Relays that omit index still mean the first choice.
 		`{"id":"x","choices":[{"delta":{"content":"!"}}]}`,
@@ -66,6 +66,61 @@ func TestChatTranslationKeepsFirstChoice(t *testing.T) {
 	}
 	if text != "Alpha done!" || think != "First thought" || toolID != "first" || toolName != "right" || args != `{"ok":true} more` || stop != "tool" {
 		t.Fatalf("mixed choices: text=%q think=%q tool=%q/%q args=%q stop=%q", text, think, toolID, toolName, args, stop)
+	}
+}
+
+// A relay can number its only choice 1. Translation must keep that reply,
+// including on later chunks, instead of returning a successful empty answer.
+func TestChatTranslationKeepsOnlyChoiceIndexedOne(t *testing.T) {
+	out := chatToResponses(t,
+		`{"id":"x","choices":[{"index":1,"delta":{"content":"Hel"}}]}`,
+		`{"id":"x","choices":[{"index":0,"delta":{"content":"not mine"}},{"index":1,"delta":{"content":"lo"},"finish_reason":"stop"}]}`,
+	)
+	var text string
+	for _, ev := range out {
+		if ev["type"] == "response.output_text.delta" {
+			text += ev["delta"].(string)
+		}
+	}
+	if text != "Hello" {
+		t.Fatalf("translated text = %q; want Hello", text)
+	}
+}
+
+// Some relays spell the choice index as a string. Decoding the rest of the
+// chunk must not fail or silently drop content on these responses.
+func TestChatTranslationAcceptsStringChoiceIndex(t *testing.T) {
+	out := chatToResponses(t,
+		`{"id":"x","choices":[{"index":"0","delta":{"content":"Hel"}}]}`,
+		`{"id":"x","choices":[{"index":"1","delta":{"content":"not mine"}},{"index":0,"delta":{"content":"lo"},"finish_reason":"stop"}]}`,
+	)
+	var text string
+	for _, ev := range out {
+		if ev["type"] == "response.output_text.delta" {
+			text += ev["delta"].(string)
+		}
+	}
+	if text != "Hello" {
+		t.Fatalf("translated text = %q; want Hello", text)
+	}
+}
+
+// A usage-only chunk cannot choose which answer is kept. An unindexed
+// one-choice relay continues to work when index is omitted or null.
+func TestChatTranslationUsageBeforeUnindexedChoice(t *testing.T) {
+	out := chatToResponses(t,
+		`{"id":"x","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":2}}`,
+		`{"id":"x","choices":[{"index":null,"delta":{"content":"Hel"}}]}`,
+		`{"id":"x","choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}`,
+	)
+	var text string
+	for _, ev := range out {
+		if ev["type"] == "response.output_text.delta" {
+			text += ev["delta"].(string)
+		}
+	}
+	if text != "Hello" {
+		t.Fatalf("translated text = %q; want Hello", text)
 	}
 }
 
