@@ -42,7 +42,7 @@ func TestChatTranslationKeepsFirstChoice(t *testing.T) {
 	for _, chunk := range []string{
 		`{"id":"x","choices":[{"index":0,"delta":{"reasoning_content":"First thought","content":"Alpha","tool_calls":[{"index":0,"id":"first","function":{"name":"right","arguments":"{\"ok\":true}"}}]}},{"index":1,"delta":{"reasoning_content":"Other thought","content":"Beta","tool_calls":[{"index":0,"id":"other","function":{"name":"wrong","arguments":"{}"}}]},"finish_reason":"tool_calls"}]}`,
 		`{"id":"x","choices":[{"index":1,"delta":{"content":" again","tool_calls":[{"index":0,"function":{"arguments":"not mine"}}]},"finish_reason":"stop"},{"index":0,"delta":{"content":" done","tool_calls":[{"index":0,"function":{"arguments":" more"}}]},"finish_reason":"tool_calls"}]}`,
-		// Relays that omit index still mean the first choice.
+		// An omitted index continues the choice already selected.
 		`{"id":"x","choices":[{"delta":{"content":"!"}}]}`,
 	} {
 		if err := d.decode(chunk, func(ev Event) { got = append(got, ev) }); err != nil {
@@ -112,6 +112,64 @@ func TestChatTranslationUsageBeforeUnindexedChoice(t *testing.T) {
 		`{"id":"x","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":2}}`,
 		`{"id":"x","choices":[{"index":null,"delta":{"content":"Hel"}}]}`,
 		`{"id":"x","choices":[{"delta":{"content":"lo"},"finish_reason":"stop"}]}`,
+	)
+	var text string
+	for _, ev := range out {
+		if ev["type"] == "response.output_text.delta" {
+			text += ev["delta"].(string)
+		}
+	}
+	if text != "Hello" {
+		t.Fatalf("translated text = %q; want Hello", text)
+	}
+}
+
+// A role-only chunk with no index must not select index 0 before the relay
+// sends the actual answer under its sole indexed choice.
+func TestChatTranslationUnindexedRoleBeforeIndexedChoice(t *testing.T) {
+	out := chatToResponses(t,
+		`{"id":"x","choices":[{"delta":{"role":"assistant"}}]}`,
+		`{"id":"x","choices":[{"index":1,"delta":{"content":"Hel"}}]}`,
+		`{"id":"x","choices":[{"index":1,"delta":{"content":"lo"},"finish_reason":"stop"}]}`,
+	)
+	var text string
+	for _, ev := range out {
+		if ev["type"] == "response.output_text.delta" {
+			text += ev["delta"].(string)
+		}
+	}
+	if text != "Hello" {
+		t.Fatalf("translated text = %q; want Hello", text)
+	}
+}
+
+// Missing and null indexes after an indexed first chunk continue that
+// choice; malformed indexes should not turn an ordinary reply into a 200/empty.
+func TestChatTranslationUnindexedChunksContinueIndexedChoice(t *testing.T) {
+	out := chatToResponses(t,
+		`{"id":"x","choices":[{"index":1,"delta":{"content":"H"}}]}`,
+		`{"id":"x","choices":[{"delta":{"content":"e"}}]}`,
+		`{"id":"x","choices":[{"index":null,"delta":{"content":"l"}}]}`,
+		`{"id":"x","choices":[{"index":{},"delta":{"content":"l"}}]}`,
+		`{"id":"x","choices":[{"index":1,"delta":{"content":"o"},"finish_reason":"stop"}]}`,
+	)
+	var text string
+	for _, ev := range out {
+		if ev["type"] == "response.output_text.delta" {
+			text += ev["delta"].(string)
+		}
+	}
+	if text != "Hello" {
+		t.Fatalf("translated text = %q; want Hello", text)
+	}
+}
+
+// JSON numeric 1.0 and 1 name the same upstream choice. The normalized
+// index must not vary across chunks of that one answer.
+func TestChatTranslationEquivalentNumericIndexes(t *testing.T) {
+	out := chatToResponses(t,
+		`{"id":"x","choices":[{"index":1.0,"delta":{"content":"Hel"}}]}`,
+		`{"id":"x","choices":[{"index":1,"delta":{"content":"lo"},"finish_reason":"stop"}]}`,
 	)
 	var text string
 	for _, ev := range out {
