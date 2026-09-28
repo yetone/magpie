@@ -377,3 +377,47 @@ func TestKeyPoolsByProtocol(t *testing.T) {
 		t.Fatalf("aside key: %d %s, tried %v", code, body, v.tried)
 	}
 }
+
+// A Gemini client without a recognized session header keeps its provider key
+// across turns even when the request's contents, model and instructions grow.
+func TestGeminiFallbackSessionAffinity(t *testing.T) {
+	fresh(t)
+	v := &geminiKeyed{}
+	serveOn(t, "aff", "k1", []string{"m"}, v, "k2")
+	provider.SetAffinity("aff", provider.AffinitySession)
+	s := New()
+	for _, body := range []string{
+		`{"contents":[{"role":"user","parts":[{"text":"fix the bug"}]}]}`,
+		`{"systemInstruction":{"parts":[{"text":"help"}]},"contents":[{"role":"user","parts":[{"text":"fix the bug"}]},{"role":"model","parts":[{"text":"done"}]},{"role":"user","parts":[{"text":"thanks"}]}]}`,
+	} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/v1beta/models/aff/m:generateContent", strings.NewReader(body))
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("Gemini request: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+	if len(v.tried) != 2 || v.tried[0] != v.tried[1] {
+		t.Fatalf("Gemini turns changed key: %v", v.tried)
+	}
+	r := s.trace.routes[len(s.trace.routes)-1]
+	if r.Affinity == nil || !r.Affinity.Kept || r.Affinity.Why != "session" {
+		t.Fatalf("Gemini turn did not keep session affinity: %+v", r.Affinity)
+	}
+}
+
+// Gemini is translated to a streamed Chat response by the gateway.
+type geminiKeyed struct{ tried []string }
+
+func (k *geminiKeyed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	io.Copy(io.Discard, r.Body)
+	key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	k.tried = append(k.tried, key)
+	w.Header().Set("Content-Type", "text/event-stream")
+	io.WriteString(w, sse(
+		`data: {"id":"x","choices":[{"delta":{"content":"from `+key+`"}}]}`,
+		`data: {"id":"x","choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		`data: {"id":"x","choices":[],"usage":{"prompt_tokens":3000,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":2500}}}`,
+		`data: [DONE]`,
+	))
+}
