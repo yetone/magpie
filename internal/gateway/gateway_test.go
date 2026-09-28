@@ -931,6 +931,14 @@ func TestConversationID(t *testing.T) {
 	if r1 != r2 {
 		t.Errorf("responses ids: %q %q", r1, r2)
 	}
+	// Gemini requests have contents, not messages or input. Later turns repeat
+	// the first user content even as the system instruction and history grow.
+	g1 := conversationID(http.Header{}, []byte(`{"model":"m","contents":[{"role":"user","parts":[{"text":"fix the bug"}]}]}`))
+	g2 := conversationID(http.Header{}, []byte(`{"model":"m","systemInstruction":{"parts":[{"text":"help"}]},"contents":[{"role":"user","parts":[{"text":"fix the bug"}]},{"role":"model","parts":[{"text":"done"}]},{"role":"user","parts":[{"text":"thanks"}]}]}`))
+	gOther := conversationID(http.Header{}, []byte(`{"model":"m","contents":[{"role":"user","parts":[{"text":"write docs"}]}]}`))
+	if g1 != g2 || g1 == gOther || !strings.HasPrefix(g1, "magpie-") {
+		t.Errorf("gemini derived ids: %q %q %q", g1, g2, gOther)
+	}
 }
 
 func TestSessionOf(t *testing.T) {
