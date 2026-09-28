@@ -164,11 +164,27 @@ func parseGemini(body []byte) (*Request, error) {
 			r.Messages = append(r.Messages, msg)
 		}
 	}
+	// A Gemini ANY request can require a subset of the declarations it offers.
+	// The shared request has only required/forced choices, so omit disallowed
+	// declarations before translating to upstream protocols.
+	var allowed map[string]bool
+	if g.ToolConfig != nil && g.ToolConfig.FunctionCallingConfig != nil {
+		fc := g.ToolConfig.FunctionCallingConfig
+		if strings.EqualFold(fc.Mode, "ANY") && len(fc.AllowedFunctionNames) > 0 {
+			allowed = make(map[string]bool, len(fc.AllowedFunctionNames))
+			for _, name := range fc.AllowedFunctionNames {
+				allowed[name] = true
+			}
+		}
+	}
 	for _, t := range g.Tools {
 		if t.GoogleSearch != nil || t.GoogleSnake != nil {
 			r.WebSearch = true
 		}
 		for _, f := range t.FunctionDeclarations {
+			if allowed != nil && !allowed[f.Name] {
+				continue
+			}
 			schema := f.ParametersJSONSchema
 			if len(schema) == 0 {
 				schema = jsonSchema(f.Parameters)
