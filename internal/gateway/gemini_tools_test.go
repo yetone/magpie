@@ -17,6 +17,9 @@ func TestParseGeminiAllowedFunctionNames(t *testing.T) {
 		{"any subset", "ANY", []string{"safeA", "safeB"}, []string{"safeA", "safeB"}, "required"},
 		{"any one", "ANY", []string{"safeB"}, []string{"safeB"}, "name:safeB"},
 		{"any all", "ANY", nil, []string{"safeA", "forbidden", "safeB"}, "required"},
+		{"validated subset", "VALIDATED", []string{"safeA", "safeB"}, []string{"safeA", "safeB"}, "auto"},
+		{"validated one", "VALIDATED", []string{"safeB"}, []string{"safeB"}, "auto"},
+		{"validated no list", "VALIDATED", nil, []string{"safeA", "forbidden", "safeB"}, "auto"},
 		{"auto ignores list", "AUTO", []string{"safeA"}, []string{"safeA", "forbidden", "safeB"}, "auto"},
 		{"none ignores list", "NONE", []string{"safeA"}, []string{"safeA", "forbidden", "safeB"}, "none"},
 	}
