@@ -426,7 +426,7 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	p, model, ok := provider.Resolve(unprefixed(model))
 	// Claude Subscription generations run through the Claude Code binary. Its
 	// OAuth token must not take a direct HTTP side path just for token counting.
-	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok" || p.Account.Agent == "devin" || p.Account.Agent == "kiro" || p.Account.Agent == "gemini" || p.Account.Agent == "antigravity") {
+	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok" || p.Account.Agent == "devin" || p.Account.Agent == "kiro" || p.Account.Agent == "qoder" || p.Account.Agent == "gemini" || p.Account.Agent == "antigravity") {
 		req, err := parseAnthropic(body)
 		if err != nil {
 			writeError(w, provider.Anthropic, 400, err.Error())
@@ -985,6 +985,12 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if p.Account != nil && p.Account.Agent == "kiro" {
 		call.To = from
 		return s.serveKiro(w, r, from, p, model, body, &call.Usage)
+	}
+	// Qoder is served through the API the client talks to, signed with the
+	// COSY envelope, with the account magpie signed in to.
+	if p.Account != nil && p.Account.Agent == "qoder" {
+		call.To = from
+		return s.serveQoder(w, r, from, model, body, &call.Usage)
 	}
 	// a backend that only streams gets a non-streaming request translated
 	// (the provider is always streamed on that path) rather than relayed

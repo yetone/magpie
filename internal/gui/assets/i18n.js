@@ -4,6 +4,7 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose.": "Qoder 没有公开的 API；magpie 会按照其桌面客户端的方式签发请求，Qoder 可能将其视为第三方使用并采取措施。请使用一个即使失去也能接受的账号，例如你自己的账号。",
     // header, nav, footer
     "Agents": "Agent",
     "Providers": "供应商",

@@ -243,6 +243,11 @@ func (s *signInFlow) begin() error {
 		if err := startCommandCodeSignIn(s); err != nil {
 			return err
 		}
+	case "qoder":
+		// Qoder's device flow, run by magpie and kept in its own store
+		if err := startQoderSignIn(s); err != nil {
+			return err
+		}
 	case "zcode":
 		// Z.ai's sign-in, as ZCode makes it
 		if err := startZCodeSignIn(s); err != nil {

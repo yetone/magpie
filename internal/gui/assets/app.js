@@ -1596,6 +1596,7 @@ function accountPlan(a) {
   if (a.agent === "workbuddy") return a.plan || "WorkBuddy";
   if (a.agent === "workbuddy-ai") return a.plan || "WorkBuddy AI";
   if (a.agent === "commandcode-plan") return "Command Code" + (a.plan ? " " + t(a.plan) : "");
+  if (a.agent === "qoder") return a.user || "Qoder";
   return t("signed in");
 }
 
@@ -3546,6 +3547,8 @@ const SUBS = [
   { agent: "workbuddy-ai", get name() { return t("WorkBuddy AI (international)"); }, icon: "workbuddy-color", plans: "Free · Pro", own: true },
   // a commandcode.ai plan, signed in as its CLI does; the CLI's own key is read too
   { agent: "commandcode-plan", name: "Command Code", icon: "commandcode", plans: "Pro · GOAT · Max · Ultra", own: true },
+  { agent: "qoder", name: "Qoder", icon: "qoder", plans: "Pro", single: true, risk: true,
+    riskNote: "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose." },
   // devin's credentials.toml keeps one account too
   { agent: "devin", name: "Devin", icon: "devin", plans: "Pro · Enterprise", single: true },
   // Google's sign-ins; Gemini CLI's own account is read too
@@ -3625,7 +3628,7 @@ function renderSigning(sub) {
   if (signing.state === "risk") {
     box.append(el("span", "mark", "!"));
     tt.append(el("span", "n", t("{name} accounts can be suspended", { name: sub.name })),
-      el("span", "s", t("Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose.")));
+      el("span", "s", t(sub.riskNote || "Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose.")));
     box.append(tt);
     const go = el("button", "text primary", t("Sign in anyway"));
     go.onclick = () => startSignIn(sub.agent, true);
