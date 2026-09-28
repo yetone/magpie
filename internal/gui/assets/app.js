@@ -2205,23 +2205,33 @@ $("#modal").onclick = (e) => { if (e.target === e.currentTarget) cancelEdit(); }
 // ---------- sliding thumb ----------
 // Pills (the nav, every segmented control) have one thumb that glides to the
 // selected option instead of each option lighting up on its own.
-const thumbs = new Map(); // pill key → where its thumb is, so a re-rendered pill takes over mid-slide
+const thumbs = new Map(); // control position → last selected position after a re-render
+function thumbKey(box, choices) {
+  const path = [];
+  for (let node = box; node?.parentElement; node = node.parentElement) {
+    if (node.id) return node.id + "/" + path.reverse().join("/") + ":" + choices;
+    path.push(Array.prototype.indexOf.call(node.parentElement.children, node));
+  }
+  return null;
+}
 function slide(box, key) {
   let th = box.querySelector(":scope > .thumb");
-  if (!th) { th = el("span", "thumb"); box.prepend(th); }
+  const fresh = !th;
+  if (fresh) { th = el("span", "thumb"); box.prepend(th); }
   const on = box.querySelector(":scope > .on");
   if (!on) { th.style.opacity = "0"; return; }
   th.style.opacity = "";
   const to = { x: on.offsetLeft, w: on.offsetWidth };
-  const last = thumbs.get(key);
-  const from = last && performance.now() - last.at < 300 ? last.from : last; // re-rendered mid-slide: start where the old one started
+  const control = thumbKey(box, key);
   const put = (p) => { th.style.transform = `translateX(${p.x}px)`; th.style.width = p.w + "px"; };
-  th.classList.add("still");
-  put(from || to);
-  void th.offsetWidth;
-  th.classList.remove("still");
+  if (fresh) {
+    th.classList.add("still");
+    put((control && thumbs.get(control)) || to);
+    void th.offsetWidth;
+    th.classList.remove("still");
+  }
   put(to);
-  thumbs.set(key, { ...to, at: performance.now(), from: from || to });
+  if (control) thumbs.set(control, to);
 }
 
 const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["responses", "Responses", "OpenAI Responses — what Codex speaks"], ["anthropic", "Anthropic", "Anthropic Messages — what Claude Code speaks"], ["decide", "Jev", "Jev's decision API (TypeSafe's, or a gateway's) — what a routing group asks as a turn begins"]];
@@ -5283,7 +5293,7 @@ if (mode === "window") new ResizeObserver(() => {
   th.classList.add("still");
   th.style.transform = `translateX(${on.offsetLeft}px)`;
   th.style.width = on.offsetWidth + "px";
-  thumbs.set("nav", { x: on.offsetLeft, w: on.offsetWidth, at: 0 });
+  thumbs.set(thumbKey($("#nav"), "nav"), { x: on.offsetLeft, w: on.offsetWidth });
   requestAnimationFrame(() => th.classList.remove("still"));
 }).observe($("#nav"));
 document.fonts?.ready.then(fitTop);
