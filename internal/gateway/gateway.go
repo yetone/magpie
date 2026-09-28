@@ -1709,10 +1709,14 @@ func conversationID(in http.Header, body []byte) string {
 	var m struct {
 		Messages []json.RawMessage `json:"messages"`
 		Input    json.RawMessage   `json:"input"`
+		Contents []json.RawMessage `json:"contents"`
 	}
 	// An undecodable body still gets an id: the hash of the whole body.
 	_ = json.Unmarshal(body, &m)
 	items := m.Messages
+	if len(items) == 0 {
+		items = m.Contents // Gemini generateContent repeats the first user turn.
+	}
 	if len(items) == 0 && len(m.Input) > 0 && m.Input[0] == '[' {
 		// A malformed input array leaves items empty, and the whole body is hashed.
 		_ = json.Unmarshal(m.Input, &items)
