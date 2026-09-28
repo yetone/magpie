@@ -1718,7 +1718,8 @@ func conversationID(in http.Header, body []byte) string {
 	// An undecodable body still gets an id: the hash of the whole body.
 	_ = json.Unmarshal(body, &m)
 	items := m.Messages
-	if len(items) == 0 {
+	geminiContents := len(items) == 0 && len(m.Contents) > 0
+	if geminiContents {
 		items = m.Contents // Gemini generateContent repeats the first user turn.
 	}
 	if len(items) == 0 && len(m.Input) > 0 && m.Input[0] == '[' {
@@ -1733,7 +1734,8 @@ func conversationID(in http.Header, body []byte) string {
 		var r struct {
 			Role string `json:"role"`
 		}
-		if json.Unmarshal(it, &r) == nil && r.Role == "user" {
+		// Gemini treats an omitted role as user; Chat and Responses do not.
+		if json.Unmarshal(it, &r) == nil && (r.Role == "user" || (geminiContents && r.Role == "")) {
 			first = it
 			break
 		}
