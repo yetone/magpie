@@ -362,7 +362,9 @@ body.panel .field.open { box-shadow: inset 0 0 0 1px var(--accent), var(--pill-s
 /* a field that follows the model unless set: a square in a third column */
 #agents { --extras: 1; --extras-w: calc(var(--extras) * 29px - 5px); }
 #agents.extras .fields { width: calc(355px + var(--extras-w)); grid-template-columns: minmax(0, 1fr) 124px var(--extras-w); }
-body.panel #agents.extras .fields { width: calc(277px + var(--extras-w)); grid-template-columns: minmax(0, 1fr) 118px var(--extras-w); }
+/* the panel has no width to give: a second square is taken from the model's
+   column, as the names were left three letters when the row grew with it */
+body.panel #agents.extras .fields { width: 301px; grid-template-columns: minmax(0, 1fr) 118px var(--extras-w); }
 .extras-cell { grid-column: 3; display: flex; justify-content: flex-end; gap: 5px; }
 #agents.extras .field.solo { grid-column: 1 / 3; }
 body.window #agents.extras .field.solo { grid-column: 1 / 3; }
