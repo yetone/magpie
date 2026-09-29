@@ -162,9 +162,6 @@ func TestZCodeAccounts(t *testing.T) {
 		t.Fatalf("usage: %+v", q)
 	}
 
-	if err := ForgetLogin("zcode", "13800000000"); err == nil {
-		t.Fatal("forgot the one in use")
-	}
 	if err := SwitchLogin("zcode", "two@example.com"); err != nil {
 		t.Fatal(err)
 	}

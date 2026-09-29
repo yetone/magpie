@@ -178,11 +178,81 @@ func effortsKept(all, kept []string) []string {
 	return out
 }
 
-// renameModelPrefs moves the names and levels given to a provider's models
-// to the id it has now.
+// SetModelImage says whether a provider's model takes images, in place
+// of what its vendor's list says. nil gives that answer back.
+func SetModelImage(ref string, images *bool) error {
+	p, model, err := splitRef(ref)
+	if err != nil {
+		return err
+	}
+	if images != nil && !p.serves(model) {
+		return fmt.Errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
+	}
+	if images != nil {
+		if vendor, known := vendorSees(p, model); known && *images == vendor {
+			images = nil
+		}
+	}
+	s := settings.Load()
+	key := p.ID + "/" + model
+	if images == nil {
+		if _, ok := s.ModelImages[key]; !ok {
+			return nil
+		}
+		delete(s.ModelImages, key)
+	} else {
+		if cur, ok := s.ModelImages[key]; ok && cur == *images {
+			return nil
+		}
+		if s.ModelImages == nil {
+			s.ModelImages = map[string]bool{}
+		}
+		s.ModelImages[key] = *images
+	}
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
+// ImageOverride is the user's answer for whether pid's model takes images.
+func ImageOverride(pid, model string) (bool, bool) {
+	v, ok := settings.Load().ModelImages[pid+"/"+model]
+	return v, ok
+}
+
+// ApplyImage is what magpie tells of model: the user's answer when they
+// gave one, else images as the vendor's list has it (known is that list's
+// explicit answer, nil when it didn't say).
+func ApplyImage(pid, model string, images bool, known *bool) (bool, *bool) {
+	if v, ok := ImageOverride(pid, model); ok {
+		return v, &v
+	}
+	return images, known
+}
+
+// vendorSees is whether p's list says model takes images, and whether it
+// said so at all.
+func vendorSees(p *Provider, model string) (bool, bool) {
+	for _, m := range p.Available() {
+		if m.ID != model {
+			continue
+		}
+		if m.ImageInput != nil {
+			return *m.ImageInput, true
+		}
+		return m.Images || catalog.SeesImages(m.ID), false
+	}
+	return false, false
+}
+
+// renameModelPrefs moves the names, levels and image answers given to a
+// provider's models to the id it has now.
 func renameModelPrefs(s *settings.Settings, from, to string) bool {
 	named := renameKeys(s.ModelNames, from, to)
-	return renameKeys(s.ModelEfforts, from, to) || named
+	imaged := renameKeys(s.ModelImages, from, to)
+	return renameKeys(s.ModelEfforts, from, to) || named || imaged
 }
 
 func renameKeys[V any](m map[string]V, from, to string) bool {

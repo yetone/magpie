@@ -276,7 +276,7 @@ func setGoogleLoginOn(agent, user string, on bool) error {
 }
 
 func forgetGoogleLogin(agent, user string) error {
-	return forgetSideLogin(agent, user, "Gemini CLI's own sign-in; sign out there (/auth)", googleSide(agent), nil)
+	return forgetSideLogin(agent, user, googleSide(agent), nil)
 }
 
 // addGoogleLogin keeps an account magpie just signed in.

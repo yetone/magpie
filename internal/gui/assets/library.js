@@ -159,8 +159,11 @@
       // filter, which is a sum over each colour (blending and gradients
       // mix colours in sRGB, as the filter does, so they come out the same)
       // and drawn as sharp as the drawing itself
-      const s = (await r.text()).replace(/(?<![\w-])(fill|stroke|stop-color|flood-color|lighting-color|color)(\s*=\s*)(["'])([^"']*)\3/g, (_, k, eq, q, v) => k + eq + q + greyColour(v) + q)
-        .replace(/(?<![\w-])(fill|stroke|stop-color|flood-color|lighting-color|color)(\s*:\s*)([^;"'}]+)/g, (_, k, eq, v) => k + eq + greyColour(v));
+      // (a name inside another, as data-fill, is left: checked by hand, as a
+      // lookbehind in the pattern is a syntax error before Safari 16.4, #220)
+      const inWord = (s, at) => /[\w-]/.test(s[at - 1] || "");
+      const s = (await r.text()).replace(/(fill|stroke|stop-color|flood-color|lighting-color|color)(\s*=\s*)(["'])([^"']*)\3/g, (all, k, eq, q, v, at, s) => inWord(s, at) ? all : k + eq + q + greyColour(v) + q)
+        .replace(/(fill|stroke|stop-color|flood-color|lighting-color|color)(\s*:\s*)([^;"'}]+)/g, (all, k, eq, v, at, s) => inWord(s, at) ? all : k + eq + greyColour(v));
       if (/<(image|feColorMatrix|feComponentTransfer|feTurbulence)\b/.test(s)) return null; // a colour the sum can't reach
       blob = new Blob([s], { type: "image/svg+xml" });
     } else {
@@ -2408,7 +2411,7 @@
   // ---------- the dialog ----------
 
   function openLib(content) { openModal(content); $("#modal").classList.add("lib"); }
-  function closeLibModal() { modal = null; closeModal(); setTimeout(() => { if (!modal) $("#modal").classList.remove("lib"); }, 200); }
+  function closeLibModal() { modal = null; closeModal().then(() => { if (!modal) $("#modal").classList.remove("lib"); }); }
   // The dialog is the providers page's; while the library has it, its
   // backdrop and Escape close it here.
   $("#modal").addEventListener("click", (e) => {

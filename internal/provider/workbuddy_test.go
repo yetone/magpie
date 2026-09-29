@@ -148,9 +148,6 @@ func TestWorkBuddyAccounts(t *testing.T) {
 		t.Fatalf("usage: %+v", q)
 	}
 
-	if err := ForgetLogin("workbuddy", "旅行者"); err == nil {
-		t.Fatal("forgot the one in use")
-	}
 	if err := SwitchLogin("workbuddy", "Two"); err != nil {
 		t.Fatal(err)
 	}

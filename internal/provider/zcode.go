@@ -237,7 +237,7 @@ func setZCodeLoginOn(user string, on bool) error {
 }
 
 func forgetZCodeLogin(user string) error {
-	return forgetSideLogin("zcode", user, "ZCode's own sign-in; sign out in ZCode", zcodeSide(), nil)
+	return forgetSideLogin("zcode", user, zcodeSide(), nil)
 }
 
 func zcodeAccount() (Provider, bool) {

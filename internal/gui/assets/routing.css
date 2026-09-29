@@ -290,7 +290,8 @@
 .rt-classifier .w { color: var(--muted); font-size: 12px; }
 .rt-classifier .hint { flex-basis: 100%; }
 /* the field is the pill: the editor's boxed input (its border and focus ring) stays off it */
-.rt-cond input, .editor .rt-cond input[type="text"], .editor .rt-cond input:focus, .editor .rt-cond input:focus-visible { box-shadow: none; border-radius: 0; }
+.rt-cond input, .editor .rt-cond input[type="text"], .editor .rt-cond input:focus { box-shadow: none; border-radius: 0; }
+.editor .rt-cond input:focus-visible { box-shadow: none; border-radius: 0; }
 .rt-cond:focus-within { border-style: solid; border-color: var(--accent); color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .rt-cond input, .editor .rt-cond input[type="text"] { width: 7ch; height: 20px; padding: 0 2px; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; outline: none; -moz-appearance: textfield; }
 .rt-cond input::-webkit-outer-spin-button, .rt-cond input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
@@ -388,3 +389,30 @@
 .pr-to .swap { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; line-height: 16px; padding: 0 5px; border-radius: 5px; color: var(--amber); background: var(--amber-soft); white-space: nowrap; }
 .pr-req .meta { justify-self: end; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
 @media (prefers-reduced-motion: reduce) { .pr-req.wait .pr-to > i, .ps-dst.wait > i, .ps-hub.busy, .ps-dot.wait { animation: none; } }
+/* Safari before 16 (macOS 12's, #220) has neither container queries nor
+   subgrid: there the narrow layouts above go by the window's width (the
+   tray panel is narrower than any of them), and a request's row sets out
+   its own columns */
+@supports not (container-type: inline-size) {
+  @media (max-width: 560px) {
+    .rt-stage { grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 26px; padding: 16px 0; }
+    .rt-accts { grid-column: 1 / -1; padding-left: 22px; }
+    .rt-accts li { grid-template-columns: 10px minmax(0, 1fr); }
+    .rt-accts em { grid-column: 2; white-space: normal; }
+    .rt-accts .bar { grid-column: 2; }
+    .rt-stats { gap: 14px; }
+    .rt-gsec .row-head .note { display: none; }
+    .rt-gedit { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .rt-gedit label { text-align: left; padding-top: 8px; }
+    .rt-gedit .segs .opt { padding-left: 9px; padding-right: 9px; }
+  }
+}
+@supports not (grid-template-columns: subgrid) {
+  .rt-req { grid-template-columns: auto fit-content(36%) minmax(0, 1fr) auto; }
+  @media (max-width: 560px) {
+    .rt-reqs { grid-template-columns: auto minmax(0, 1fr); }
+    .rt-req { grid-template-columns: auto minmax(0, 1fr); row-gap: 2px; }
+    .rt-req .to { grid-column: 2; }
+    .rt-req .meta { grid-column: 2; text-align: left; }
+  }
+}

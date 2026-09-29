@@ -118,6 +118,9 @@ type Settings struct {
 	// by "<provider id>/<model id>": the lists magpie hands out offer only
 	// those (see provider.SetModelEfforts).
 	ModelEfforts map[string][]string `json:"modelEfforts,omitempty"`
+	// ModelImages is whether the user said a model takes images, by
+	// "<provider id>/<model id>". Absent leaves it to the vendor's list.
+	ModelImages map[string]bool `json:"modelImages,omitempty"`
 	// The main window's size when it was last resized, width and height,
 	// so it opens at it again after a restart.
 	Window []int `json:"window,omitempty"`

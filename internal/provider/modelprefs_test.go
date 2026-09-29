@@ -222,3 +222,44 @@ func TestModelEffortsGiven(t *testing.T) {
 		t.Fatal("sol took xhigh")
 	}
 }
+
+// Whether a model takes images is the vendor's answer until the user says
+// otherwise. That answer is what agents and a group's image check see.
+func TestModelImage(t *testing.T) {
+	prefsHome(t)
+	yes := true
+	if err := SetModelImage("a/sol", &yes); err != nil {
+		t.Fatal(err)
+	}
+	if e := entry(t, "a/sol"); !e.Images || e.ImageInput == nil || !*e.ImageInput {
+		t.Fatalf("a sees %+v", e.ImageInput)
+	}
+	if e := entry(t, "b/sol"); e.Images || (e.ImageInput != nil && *e.ImageInput) {
+		t.Fatalf("b changed %+v images %v", e.ImageInput, e.Images)
+	}
+	no := false
+	if err := SetModelImage("a/sol", &no); err != nil {
+		t.Fatal(err)
+	}
+	if e := entry(t, "a/sol"); e.Images || e.ImageInput == nil || *e.ImageInput {
+		t.Fatalf("a text %+v", e.ImageInput)
+	}
+	if err := SetModelImage("a/sol", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := settings.Load().ModelImages["a/sol"]; ok {
+		t.Fatal("override kept")
+	}
+	if err := Save(Provider{ID: "c", Name: "C", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"mystery-7"}}); err != nil {
+		t.Fatal(err)
+	}
+	if e := entry(t, "c/mystery-7"); e.ImageInput != nil {
+		t.Fatalf("unknown said %v", *e.ImageInput)
+	}
+	if err := SetModelImage("c/mystery-7", &yes); err != nil {
+		t.Fatal(err)
+	}
+	if e := entry(t, "c/mystery-7"); !e.Images || e.ImageInput == nil || !*e.ImageInput {
+		t.Fatalf("given %+v", e.ImageInput)
+	}
+}

@@ -335,6 +335,38 @@ func PriceOf(providerID, modelID string) (Price, bool) {
 	return Price{}, false
 }
 
+// PricedBy is the list price the first of providers (models.dev ids)
+// pricing a model of this id gives it: by its own key first, then by its
+// id without a path or case ("openai/GPT-6-Sol" is gpt-6-sol), a Bedrock
+// profile's geography, a "(variant)" or a ":tag".
+func PricedBy(providers []string, id string) (Price, bool) {
+	all := load()
+	for _, pid := range providers {
+		if m, ok := all[pid].Models[id]; ok && m.Cost != nil {
+			return *m.Cost, true
+		}
+	}
+	b := bareID(id)
+	if r, ok := unprofiled(b); ok {
+		b = r
+	}
+	for _, want := range []string{b, cutAt(b, '('), cutAt(b, ':')} {
+		for _, pid := range providers {
+			keys := make([]string, 0, len(all[pid].Models))
+			for key, m := range all[pid].Models {
+				if m.Cost != nil && bareID(key) == want {
+					keys = append(keys, key)
+				}
+			}
+			if len(keys) > 0 {
+				slices.Sort(keys)
+				return *all[pid].Models[keys[0]].Cost, true
+			}
+		}
+	}
+	return Price{}, false
+}
+
 // APIOf is the API a models.dev provider's model is served on, when the
 // catalog says it's one of its own: "responses" or "anthropic" for a model
 // OpenCode serves through OpenAI's or Anthropic's SDK, not the

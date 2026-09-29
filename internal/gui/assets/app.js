@@ -438,6 +438,7 @@ function renderProfiles() {
   const chips = $("#profiles");
   chips.replaceChildren();
   $(".profiles > .chip-input")?.remove(); // a name field open goes with the list it was for
+  $(".profiles").classList.remove("naming");
   $("#save").textContent = t("＋ Save current");
   if (!state.profiles.length) chips.append(el("span", "hint", t("none yet · save the setup to switch back in one click")));
   for (const p of state.profiles) {
@@ -1629,7 +1630,7 @@ const saveCurrent = $("#save");
 const saveField = () => $(".profiles > .chip-input");
 const closeSave = (input) => {
   input.remove();
-  if (!saveField()) saveCurrent.textContent = t("＋ Save current");
+  if (!saveField()) { saveCurrent.textContent = t("＋ Save current"); $(".profiles").classList.remove("naming"); }
 };
 saveCurrent.onmousedown = (e) => { if (saveField()) e.preventDefault(); }; // the field keeps focus
 saveCurrent.onclick = () => {
@@ -1648,6 +1649,7 @@ saveCurrent.onclick = () => {
   };
   input.onblur = () => setTimeout(() => closeSave(input), 100);
   saveCurrent.before(input);
+  $(".profiles").classList.add("naming"); // for the panel's hint: :has() came in Safari 15.4 (#220)
   saveCurrent.textContent = t("Save");
   input.focus({ preventScroll: true });
 };
@@ -1765,8 +1767,8 @@ function renderProviders() {
   dialog = renderAdd() || dialog;
   if (importing) dialog = renderImport(importing);
   if (importingApps) dialog = renderImportApps(importingApps);
+  view.scrollTop = top; // first: a closing dialog folds into its row where it is
   if (dialog) openModal(dialog); else closeModal();
-  view.scrollTop = top;
 }
 
 // providerSwitch turns a provider off and on (#163): off, it stays with its
@@ -2164,11 +2166,23 @@ const KEYWORDS = {
 function highlight(code, lang) {
   const re = lang === "node"
     ? /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\/\/.*)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)(?=\s*\()|([A-Za-z_$][\w$]*)|(\s+|.)/g
-    : /("(?:[^"\\]|\\.)*"|'[^']*'|(?<==)\S+)|(#.*)|(\b\d+(?:\.\d+)?\b(?=[,\s\]}]))|(-{1,2}[A-Za-z][\w-]*)|([A-Z][A-Z0-9_]+)(?==)|([A-Za-z_][\w.]*)(?=\s*\()|([A-Za-z_][\w.]*)|(\\\n|`\n)|(\s+|.)/g;
+    : /("(?:[^"\\]|\\.)*"|'[^']*')|(#.*)|(\b\d+(?:\.\d+)?\b(?=[,\s\]}]))|(-{1,2}[A-Za-z][\w-]*)|([A-Z][A-Z0-9_]+)(?==)|([A-Za-z_][\w.]*)(?=\s*\()|([A-Za-z_][\w.]*)|(\\\n|`\n)|(\s+|.)/g;
   const out = document.createDocumentFragment();
   const kw = KEYWORDS[lang] || KEYWORDS.shell;
   let m;
   while ((m = re.exec(code))) {
+    // an unquoted value after "=" is a string too; found here, as a
+    // lookbehind in the pattern is a syntax error before Safari 16.4 (#220)
+    if (lang !== "node" && !m[1] && code[m.index - 1] === "=") {
+      const v = /\S+/y;
+      v.lastIndex = m.index;
+      const s = v.exec(code);
+      if (s) {
+        out.append(el("span", "tk-s", s[0]));
+        re.lastIndex = m.index + s[0].length;
+        continue;
+      }
+    }
     let cls = "";
     if (lang === "node") {
       if (m[1]) cls = "s"; else if (m[2]) cls = "c"; else if (m[3]) cls = "n";
@@ -2402,11 +2416,13 @@ function renderAdd() {
       }
     }
     for (const [kind, title, hint] of [["vendor", "Vendors", "the makers' own APIs"], ["relay", "Relays", "one key, many vendors"], ["local", "On this machine", ""]]) {
-      const ps = providers.presets.filter((p) => p.kind === kind && hit(p));
-      if (!ps.length) continue;
+      // a vendor's China endpoint is a preset of its own: one row with the global one
+      const rows = providers.presets.filter((p) => p.kind === kind && !globalOf(p))
+        .map((p) => [p, chinaOf(p)]).filter(([p, cn]) => hit(p) || (cn && hit(cn)));
+      if (!rows.length) continue;
       any = true;
       const grid = section(title, hint);
-      for (const pr of ps) grid.append(tile(pr));
+      for (const [pr, cn] of rows) grid.append(cn ? pairTile(pr, cn) : tile(pr));
     }
     if (!any) {
       const none = el("div", "none");
@@ -2420,6 +2436,7 @@ function renderAdd() {
       const foot = el("div", "custom-foot");
       const c = el("button", "custom" + (editing?.custom ? " on" : ""));
       c.append(svg(PLUS, 13, 1.8), el("span", "", t("Custom provider")));
+      c.dataset.pick = "custom";
       c.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
       foot.append(c, el("span", "hint", t("any OpenAI or Anthropic compatible URL")));
       tiles.append(foot);
@@ -2433,41 +2450,74 @@ function renderAdd() {
 // them; what more there is to say goes in its title.
 function pickRow(ic, name, cls = "") {
   const b = el("button", "tile" + cls);
-  const n = el("span", "n", name);
-  b.append(icon(ic), n);
+  b.dataset.pick = name; // the dialog it opens folds back into it, re-rendered
+  const nm = el("span", "nm");
+  nm.append(el("span", "n", name));
+  b.append(icon(ic), nm);
   return b;
 }
 
-// the green mark on a row already added: a check and a word
-function addedMark(text) {
-  const m = el("span", "st added");
-  m.append(svg(CHECK, 10, 2), el("span", "", text));
-  return m;
+// a row already added: a green dot after its name, and how many accounts
+// when a subscription has more than one
+function markAdded(b, n = 1) {
+  b.classList.add("added");
+  const nm = b.querySelector(".nm");
+  nm.append(el("span", "have"));
+  if (n > 1) nm.append(el("span", "cnt", String(n)));
 }
+
+// the add sheet names a row without what its title tells: a subscription's
+// plan in brackets, a preset's long name
+const shortName = (name) => name.replace(/\s*[(（][^()（）]*[)）]\s*$/, "") || name;
+
+// a vendor's China endpoint is a preset of its own, id-cn beside the global id
+const chinaOf = (pr) => providers.presets.find((x) => x.id === pr.id + "-cn");
+const globalOf = (pr) => pr.id.endsWith("-cn") ? providers.presets.find((x) => x.id === pr.id.slice(0, -3)) : null;
+
+// pairTile is a vendor's global and China presets as one row; the editor
+// switches between them. A click adds the one not added yet, or opens the
+// provider when both are.
+function pairTile(pr, cn) {
+  const both = [pr, cn];
+  const b = pickRow(pr.icon || "generic", shortName(pr.short || pr.name), both.some((x) => editing?.preset === x.id) ? " on" : "");
+  b.append(el("span", "st", t("Global") + " · " + t("China")));
+  const added = both.filter((x) => x.added);
+  b.title = both.map((x) => t(x === pr ? "Global" : "China") + " " + hostOf(x.chat || x.responses || x.anthropic) + (x.added ? " · " + t("Added") : "")).join("\n");
+  if (added.length) markAdded(b);
+  const next = both.find((x) => !x.added);
+  b.onclick = () => {
+    if (next) { editing = { preset: next.id }; draft = null; }
+    else { editing = presetProvider(pr)?.id ?? pr.id; draft = null; }
+    renderProviders();
+  };
+  return b;
+}
+
+// the first provider made from a preset, which may not have the preset's id
+const presetProvider = (pr) => providers.providers.find((p) => p.preset === pr.id) || providers.providers.find((p) => p.id === pr.id);
 
 // subTile adds a subscription: one more account when the agent has some.
 function subTile(x) {
   const have = providers.providers.find((p) => p.account?.agent === x.agent);
   const n = have ? (have.account.logins?.length || 1) : 0;
-  const b = pickRow(x.icon, x.name, signing?.agent === x.agent ? " on" : "");
+  const b = pickRow(x.icon, shortName(x.name), signing?.agent === x.agent ? " on" : "");
   b.title = t("{name} subscription", { name: x.name }) + " · " + x.plans;
   if (n) {
-    b.append(addedMark(x.single ? t("Signed in") : t(n === 1 ? "1 account" : "{n} accounts", { n })));
-    b.title += " — " + t(x.single ? "signed in · click to switch account" : "click to add another account");
+    markAdded(b, x.single ? 1 : n);
+    b.title += "\n" + (x.single ? t("Signed in") : t(n === 1 ? "1 account" : "{n} accounts", { n })) + " · " + t(x.single ? "signed in · click to switch account" : "click to add another account");
   }
   b.onclick = () => startSignIn(x.agent);
   return b;
 }
 
 function tile(pr) {
-  const b = pickRow(pr.icon || "generic", pr.name, editing?.preset === pr.id ? " on" : "");
-  if (pr.sponsored) b.querySelector(".n").append(el("span", "badge", t("sponsored")));
-  b.title = pr.note ? t(pr.note) : hostOf(pr.chat || pr.responses || pr.anthropic);
+  const b = pickRow(pr.icon || "generic", pr.short || pr.name, editing?.preset === pr.id ? " on" : "");
+  if (pr.sponsored) b.querySelector(".nm").append(el("span", "badge", t("sponsored")));
+  b.title = (pr.short ? pr.name + " · " : "") + (pr.note ? t(pr.note) : hostOf(pr.chat || pr.responses || pr.anthropic));
   if (pr.added) {
-    b.append(addedMark(t("Added")));
+    markAdded(b);
     b.title = t("{name} is already added — open it", { name: pr.name });
-    // the first provider made from it, which may not have the preset's id
-    const have = providers.providers.find((p) => p.preset === pr.id) || providers.providers.find((p) => p.id === pr.id);
+    const have = presetProvider(pr);
     b.onclick = () => { editing = have?.id ?? pr.id; draft = null; renderProviders(); };
   } else {
     b.onclick = () => { editing = { preset: pr.id }; draft = null; renderProviders(); };
@@ -2707,20 +2757,60 @@ function iconPicker(ed) {
 
 // ---------- modal ----------
 // The provider editor opens as a dialog over the page; Escape, the backdrop
-// or Cancel close it.
-let modalTimer = 0;
+// or Cancel close it. As on iOS it grows out of what was pressed, on a
+// spring, and closing folds it back into that (still there, re-rendered or
+// not); with nothing pressed it rises from a little below.
+const SPRING = CSS.supports?.("animation-timing-function", "linear(0, 1)")
+  // a damped spring (response .42 s, damping .8): 1.5% over, settled at 570 ms
+  ? "linear(0, 0.0203, 0.0723, 0.1448, 0.2292, 0.3188, 0.4086, 0.4951, 0.576, 0.6498, 0.7157, 0.7735, 0.8232, 0.8654, 0.9005, 0.9293, 0.9525, 0.9708, 0.9849, 0.9956, 1.0033, 1.0087, 1.0122, 1.0142, 1.015, 1.0151, 1.0146, 1.0136, 1.0124, 1.0111, 1.0097, 1.0084, 1.0071, 1.0059, 1.0049, 1.0039, 1.0031, 1.0024, 1.0018, 1.0013, 1)"
+  : "cubic-bezier(.2, .9, .25, 1.02)";
+const IOS_EASE = "cubic-bezier(.32, .72, 0, 1)";
+const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+// what was last pressed, and a way to find it again once re-rendered
+let pressed = null;
+document.addEventListener("pointerdown", (e) => {
+  const at = e.target.closest?.("[data-pick], .row.provider[data-id], button");
+  if (!at || at.closest("#modal")) return;
+  const find = at.dataset.pick ? `[data-pick="${CSS.escape(at.dataset.pick)}"]` : at.matches(".row.provider") ? `.row.provider[data-id="${CSS.escape(at.dataset.id)}"]` : null;
+  pressed = { el: at, find, time: performance.now() };
+}, true);
+let modalOrigin = null, modalDone = null;
+// originRect: where the dialog came from, as it is now, or null when it's gone
+function originRect(o) {
+  const at = o && (o.el.isConnected ? o.el : o.find ? document.querySelector(o.find) : null);
+  if (!at || at.closest("[hidden]")) return null;
+  const r = at.getBoundingClientRect();
+  return r.width && r.height && r.bottom > 0 && r.top < innerHeight ? r : null;
+}
+// fromRect: the transform putting the dialog (at `to`) over the rect `from`
+function fromRect(from, to) {
+  const s = Math.max(.3, Math.min(1, from.width / to.width));
+  const dx = from.left + from.width / 2 - (to.left + to.width / 2), dy = from.top + from.height / 2 - (to.top + to.height / 2);
+  return `translate(${dx}px, ${dy}px) scale(${s})`;
+}
 function openModal(content) {
   const m = $("#modal"), d = m.firstElementChild;
-  clearTimeout(modalTimer);
+  const fresh = m.hidden || m.classList.contains("out");
+  const top = m.hidden ? 0 : d.querySelector(".ebody")?.scrollTop || 0;
   m.classList.remove("out");
   d.classList.remove("swap");
-  const top = m.hidden ? 0 : d.querySelector(".ebody")?.scrollTop || 0;
-  if (!m.hidden) { void d.offsetWidth; d.classList.add("swap"); } // content changed: a soft refresh, not a re-entrance
+  if (!fresh) { void d.offsetWidth; d.classList.add("swap"); } // content changed: a soft refresh, not a re-entrance
   frame(content);
   d.replaceChildren(content);
   m.hidden = false;
   const body = content.querySelector(":scope > .ebody");
   if (body) body.scrollTop = top; // a re-render keeps the place
+  if (!fresh) return;
+  for (const a of [...m.getAnimations(), ...d.getAnimations()]) a.cancel();
+  d.style.opacity = d.style.transform = m.style.opacity = "";
+  modalDone = null;
+  modalOrigin = pressed && performance.now() - pressed.time < 1000 ? pressed : null;
+  pressed = null;
+  m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 280, easing: "ease-out" });
+  if (calm()) { d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160 }); return; }
+  const to = d.getBoundingClientRect(), from = originRect(modalOrigin);
+  d.animate([{ transform: from ? fromRect(from, to) : "translateY(24px) scale(.94)" }, { transform: "none" }], { duration: 570, easing: SPRING });
+  d.animate([{ opacity: 0 }, { opacity: 1 }], { duration: from ? 200 : 240, easing: "ease-out" });
 }
 // frame holds an editor's head and its buttons still while the fields
 // between them scroll.
@@ -2732,10 +2822,34 @@ function frame(ed) {
   ed.classList.add("framed");
 }
 function closeModal() {
-  const m = $("#modal");
-  if (m.hidden || m.classList.contains("out")) return;
+  const m = $("#modal"), d = m.firstElementChild;
+  if (m.hidden) return Promise.resolve();
+  if (m.classList.contains("out")) return modalDone || Promise.resolve();
   m.classList.add("out");
-  modalTimer = setTimeout(() => { m.hidden = true; m.classList.remove("out"); m.firstElementChild.replaceChildren(); }, 170);
+  for (const a of [...m.getAnimations(), ...d.getAnimations()]) a.commitStyles?.(), a.cancel();
+  // where it would sit at rest, whatever an opening cut short left it at
+  const was = d.style.transform;
+  d.style.transform = "none";
+  const to = d.getBoundingClientRect(), from = calm() ? null : originRect(modalOrigin);
+  d.style.transform = was;
+  const shape = { duration: from ? 380 : 260, easing: IOS_EASE, fill: "forwards" };
+  const moves = [
+    m.animate([{ opacity: 0 }], { ...shape, easing: "ease-out" }),
+    calm() ? d.animate([{ opacity: 0 }], { duration: 140, fill: "forwards" })
+      : d.animate([{ transform: from ? fromRect(from, to) : "translateY(14px) scale(.95)" }], shape),
+  ];
+  // it fades as it lands, the last part of the way
+  if (!calm()) moves.push(d.animate([{ offset: from ? .45 : .2, opacity: getComputedStyle(d).opacity }, { opacity: 0 }], shape));
+  const done = modalDone = Promise.all(moves.map((a) => a.finished)).then(() => {
+    if (modalDone !== done) return;
+    modalDone = null;
+    m.hidden = true;
+    m.classList.remove("out");
+    d.replaceChildren();
+    for (const a of [...m.getAnimations(), ...d.getAnimations()]) a.cancel();
+    d.style.opacity = d.style.transform = m.style.opacity = "";
+  }, () => {});
+  return done;
 }
 $("#modal").onclick = (e) => { if (e.target === e.currentTarget) cancelEdit(); };
 
@@ -2801,6 +2915,26 @@ function renderEditor(p, presetID) {
     if (p) h.append(providerSwitch(p));
     ed.append(h);
     if (p?.off) ed.append(el("div", "hint off-note", t("Switched off: agents aren't given its models and no request goes to it. Its keys and settings are kept; switch it on to use it again.")));
+  }
+
+  // a vendor's global and China endpoints are presets of their own, one row
+  // in the add sheet: here the new provider picks between them, the key kept
+  const pair = isNew && pr ? (globalOf(pr) ? [globalOf(pr), pr] : chinaOf(pr) ? [pr, chinaOf(pr)] : null) : null;
+  if (pair) {
+    const seg = el("div", "segs area");
+    pair.forEach((x, i) => {
+      const b = el("button", "opt" + (x.id === pr.id ? " on" : ""), t(i ? "China" : "Global"));
+      b.title = hostOf(x.chat || x.responses || x.anthropic) + (x.added ? " · " + t("Added") : "");
+      b.onclick = () => {
+        if (x.id === pr.id) return;
+        editing = { preset: x.id };
+        draft = { id: x.id, name: x.name, preset: x.id, key: draft.key, chosen: [], extra: [], headers: [] };
+        renderProviders();
+      };
+      seg.append(b);
+    });
+    queueMicrotask(() => slide(seg, "area"));
+    ed.append(...field(t("Region"), seg, ""));
   }
 
   // who uses it: just the agents already pointed here, so a click changes
@@ -3666,6 +3800,11 @@ function renderModels(p) {
       const who = el("div", "mwho");
       who.append(name, el("code", "", m.id));
       row.append(who);
+      const [img, imgCb] = tick(t("Accepts images"), !!m.images);
+      img.title = t("Whether agents are told {id} can see images", { id: m.id });
+      imgCb.onchange = () => accountAction("provider/images", { id: p.id, model: m.id, images: imgCb.checked },
+        imgCb.checked ? t("{id} accepts images", { id: m.id }) : t("{id} does not accept images", { id: m.id }));
+      row.append(img);
       const levels = m.efforts || [];
       // a model whose levels aren't known (m.given) can be given any
       // of them, and none again
@@ -3685,13 +3824,15 @@ function renderModels(p) {
         }
         row.append(lv);
       }
-      if (m.default || m.kept?.length) {
+      if (m.default || m.kept?.length || m.imageSet) {
         const reset = el("button", "text action", t("Restore default"));
-        reset.title = t("Its own name and every reasoning level it has");
+        reset.title = t("Its own name, every reasoning level it has, and whether it sees images");
         reset.onclick = async () => {
           reset.classList.add("busy");
-          try { if (m.default) await api("provider/name", { id: p.id, model: m.id, modelName: "" }); }
-          catch (e) { status(e.message, "err"); reset.classList.remove("busy"); return; }
+          try {
+            if (m.default) await api("provider/name", { id: p.id, model: m.id, modelName: "" });
+            if (m.imageSet) await api("provider/images", { id: p.id, model: m.id, images: null });
+          } catch (e) { status(e.message, "err"); reset.classList.remove("busy"); return; }
           accountAction("provider/efforts", { id: p.id, model: m.id, efforts: [] }, t("{id} is as its provider has it again", { id: m.id }));
         };
         row.append(reset);
@@ -4187,6 +4328,12 @@ function renderSigning(sub) {
 // can be ticked: the gateway moves to the next ticked account when the
 // first is out of quota. Each shows how much of its allowance is used, so
 // which one to go to next is plain to see.
+// forgetOwnTitle: what Remove does to the agent's own sign-in, which magpie
+// only reads — it is hidden, and shows again when the agent signs in anew.
+function forgetOwnTitle(a) {
+  return t("magpie stops showing and using {agent}'s own sign-in; its files are left as they are, and it shows again when {agent} signs in anew", { agent: a.agentName });
+}
+
 function renderAccounts(a) {
   const sub = subOf(a.agent);
   const list = el("div", "accts");
@@ -4209,14 +4356,15 @@ function renderAccounts(a) {
     row.append(dot, el("span", "n", l.user), el("span", "plan", accountPlan({ agent: a.agent, plan: l.plan })), el("span", "grow"));
     if (l.active) {
       row.append(el("span", "using", several ? t("First") : t("In use")));
-      if (a.agent === "qoder") {
+      if (a.agent === "qoder" || l.own) {
         const forget = el("button", "text quiet", t("Remove"));
+        if (l.own) forget.title = forgetOwnTitle(a);
         forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
         row.append(forget);
       }
     } else {
       const forget = el("button", "text quiet", t("Remove"));
-      forget.title = t("magpie forgets this account's sign-in; the account itself is untouched");
+      forget.title = l.own ? forgetOwnTitle(a) : t("magpie forgets this account's sign-in; the account itself is untouched");
       forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
       const use = el("button", "text", on ? t("Make first") : t("Use"));
       use.title = sub?.own ? t("The gateway uses this account first") : t("Sign {agent} in to this account", { agent: a.agentName });
@@ -4224,6 +4372,7 @@ function renderAccounts(a) {
       row.append(forget, use);
     }
     row.append(accountQuota(l.lapsed ? { [l.user]: { error: l.lapsed } } : quota, l.user));
+    row.classList.add("with-aq"); // not :has(.aq), which Safari 15.0 lacks (#220)
     list.append(row);
   }
   if (a.agent === "codex" && providers?.codexDaemon) list.append(renderCodexDaemon(providers.codexDaemon));
@@ -5366,8 +5515,7 @@ function askCodexReset(q) {
 function closeResetAsk() {
   if (!resetAsk) return;
   resetAsk = null;
-  closeModal();
-  setTimeout(() => { if (!resetAsk) $("#modal").classList.remove("lib"); }, 200);
+  closeModal().then(() => { if (!resetAsk) $("#modal").classList.remove("lib"); });
 }
 // the dialog is the providers page's: while this asks, its backdrop and
 // Escape close only this (in the panel, Escape would hide the window)
@@ -7055,6 +7203,63 @@ const prefsSettled = (since) => !prefsBusy && since === prefsWrites;
 const GITHUB_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>';
 const DISCORD_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>';
 
+// The Settings page's warm-ups and check-in are one section whose heading
+// is a tab per service (Codex, Claude Code, WorkBuddy), the card under it
+// showing the picked one's rows. The tab is remembered; WorkBuddy's, there
+// only while an account is signed in or the check-in is on, falls back to
+// Codex's when it is not. A click on a tab leaves the page where it is, as
+// every click does (see "where the reader is"): a shorter card under it at
+// the page's end gets room kept at the view's foot.
+const WARM_TABS = { codex: "codexWarmList", claude: "claudeWarmList", wb: "wbList" };
+let warmTab = "codex";
+try { const k = localStorage.getItem("magpie.warmTab"); if (k in WARM_TABS) warmTab = k; } catch {}
+function setWarmTab(tab, remember) {
+  if (remember) {
+    warmTab = tab;
+    try { localStorage.setItem("magpie.warmTab", tab); } catch {}
+  }
+  if (!(tab in WARM_TABS) || $("#warmTab-" + tab).hidden) tab = "codex";
+  for (const [id, list] of Object.entries(WARM_TABS)) {
+    const b = $("#warmTab-" + id), on = id === tab;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-selected", String(on));
+    b.tabIndex = on ? 0 : -1;
+    $("#" + list).hidden = !on;
+    // a pill drawn while its card was hidden measured nothing: its thumb is
+    // put under the option picked, still, once the card is shown
+    if (on) for (const th of $("#" + list).querySelectorAll(".segs > .thumb")) {
+      const opt = th.parentElement.querySelector(":scope > .on");
+      if (!opt || parseFloat(th.style.width) === opt.offsetWidth) continue;
+      th.classList.add("still");
+      th.style.transform = `translateX(${opt.offsetLeft}px)`;
+      th.style.width = opt.offsetWidth + "px";
+      void th.offsetWidth;
+      th.classList.remove("still");
+    }
+  }
+}
+{
+  const tabs = $("#warmTabs");
+  tabs.onclick = (e) => {
+    const b = e.target.closest("button[data-warm]");
+    if (b) setWarmTab(b.dataset.warm, true);
+  };
+  // the arrows, Home and End move along the tabs, as a tab list's do: the
+  // tab reached is clicked, so the page is held as for a click
+  tabs.onkeydown = (e) => {
+    const shown = [...tabs.querySelectorAll("button[data-warm]:not([hidden])")];
+    const i = shown.indexOf(document.activeElement);
+    if (i < 0) return;
+    const j = { ArrowLeft: i - 1, ArrowRight: i + 1, Home: 0, End: shown.length - 1 }[e.key];
+    if (j === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const b = shown[(j + shown.length) % shown.length];
+    b.focus({ preventScroll: true });
+    b.click();
+  };
+}
+
 function renderSettings() {
   const s = prefs;
   const keep = prefsKeep(s);
@@ -7070,8 +7275,8 @@ function renderSettings() {
   // the system's record, set on its own, not with the other choices
   $("#loginSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.login ? "on" : "off", (v) =>
     writingPrefs(api("settings/login", { on: v === "on" })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); })));
-  // Codex's and Claude Code's warm-ups and WorkBuddy's check-in, each under
-  // its service's heading, the rows' names not saying the service again.
+  // Codex's and Claude Code's warm-ups and WorkBuddy's check-in, one tab
+  // each over one card, the rows' names not saying the service again.
   // A ChatGPT account's next window started as soon as the last resets
   $("#warmSegs").replaceChildren(segs([["off", t("Off")], ["week", t("Weekly")], ["all", t("Weekly and 5-hour")]],
     s.codexWarmup || "off", (v) => savePrefs({ ...keep, codexWarmup: v === "off" ? "" : v })));
@@ -7087,9 +7292,11 @@ function renderSettings() {
     (v) => savePrefs({ ...keep, codexWarmAt: v }));
   renderWarmAt($("#claudeWarmAtSegs"), $("#claudeWarmAtSub"), s.claudeWarmAt, s.claudeWarmup, t("Sent through Claude Code."),
     (v) => savePrefs({ ...keep, claudeWarmAt: v }));
-  // WorkBuddy's daily check-in pressed for each account, its group shown
+  // WorkBuddy's daily check-in pressed for each account, its tab shown
   // while one is signed in
-  $("#wbHead").hidden = $("#wbList").hidden = !s.workbuddy && !s.workbuddyCheckin;
+  $("#warmTab-wb").hidden = !s.workbuddy && !s.workbuddyCheckin;
+  $("#warmTabs").setAttribute("aria-label", t("Warm-up and check-in"));
+  setWarmTab(warmTab);
   $("#wbCheckinSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.workbuddyCheckin ? "on" : "off",
     (v) => savePrefs({ ...keep, workbuddyCheckin: v === "on" })));
   $("#wbCheckinSub").textContent = [t("Claims each signed-in China account's check-in credits once a day"),
@@ -7877,9 +8084,41 @@ addEventListener("keydown", (e) => {
   if (e.key === "Tab" || (!typing && SCROLL_KEYS.has(e.key))) readerScrolls(400);
 }, true);
 const readerAt = new WeakMap();
+// Where the reader is is a number, the view's scrollTop, unless the view
+// names a part of itself to keep in place (keepInView): a part under others
+// that redraw on their own (the Routing page's groups, under the live stage
+// and lists), which the number alone lets slide as what's above it grows or
+// shrinks. Then where the reader is is where that part is on the screen,
+// taken as the reader leaves it (a scroll of theirs, a click held), and the
+// view follows it wherever the parts above take it: scroll anchoring, which
+// WebKit lacked and which putting the number back undid.
+const pinOf = new Map(), pinAt = new WeakMap();
+function keepInView(v, part) {
+  pinOf.set(v, part);
+  v.style.overflowAnchor = "none"; // the browser's own would anchor on another part, and fight this
+  pinSizes.observe(v);
+  for (const c of v.children) pinSizes.observe(c);
+}
+function readerLeaves(v) {
+  readerAt.set(v, v.scrollTop);
+  // a view at its top stays at its top: nothing in it is kept in place
+  const p = pinOf.has(v) && v.scrollTop >= 1 ? pinOf.get(v)() : null;
+  pinAt.set(v, p ? [p, onScreen(p, v)] : null);
+}
+function pinnedAt(v) {
+  const a = pinAt.get(v);
+  return a && a[0].isConnected && a[0].offsetParent ? v.scrollTop + onScreen(a[0], v) - a[1] : null;
+}
+// laid out, not yet painted: a view with a part kept in place follows it
+// as soon as what's above it has changed size, before the reader sees it
+const pinSizes = new ResizeObserver(() => {
+  for (const v of pinOf.keys()) if (!v.hidden && held?.v !== v && performance.now() >= purposeUntil) backToReader(v);
+});
 function backToReader(v) {
   if (v.hidden) return;
-  const want = Math.min(readerAt.get(v) || 0, Math.max(0, v.scrollHeight - v.clientHeight));
+  const pinned = pinnedAt(v);
+  const want = Math.max(0, Math.min(pinned ?? readerAt.get(v) ?? 0, v.scrollHeight - v.clientHeight));
+  if (pinned != null) readerAt.set(v, want);
   if (Math.abs(v.scrollTop - want) < 1) return;
   v.scrollTop = want;
   // a field focused out of sight still comes into view, no further than needed
@@ -7940,7 +8179,7 @@ function hold(h) {
     v.scrollTop = want;
   }
   fitRoom(v);
-  readerAt.set(v, v.scrollTop);
+  readerLeaves(v);
 }
 let holding = false; // one frame loop, whatever the clicks
 // A part that grows or shrinks as it plays (the agents' scroll unrolling
@@ -7973,7 +8212,7 @@ addEventListener("click", (e) => {
 for (const v of document.querySelectorAll(".view")) {
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
-    if (performance.now() < purposeUntil) { fitRoom(v); readerAt.set(v, v.scrollTop); }
+    if (performance.now() < purposeUntil) { fitRoom(v); readerLeaves(v); }
     else if (held?.v === v) hold(held);
     else backToReader(v);
   }, { passive: true });

@@ -97,9 +97,9 @@ func setDevinLoginOn(user string, on bool) error {
 }
 
 // forgetDevinLogin drops an account magpie signed in, with its home. The
-// CLI's own is signed out in the CLI.
+// CLI's own is only hidden (forgetSideLogin).
 func forgetDevinLogin(user string) error {
-	return forgetSideLogin("devin", user, "the devin CLI's own sign-in; run `devin auth logout` to sign it out", devinSide(),
+	return forgetSideLogin("devin", user, devinSide(),
 		func(l savedLogin) { removeDevinHome(l.Home) })
 }
 

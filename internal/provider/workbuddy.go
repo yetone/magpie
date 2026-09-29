@@ -296,7 +296,7 @@ func setWorkBuddyLoginOn(w *wbSite, user string, on bool) error {
 }
 
 func forgetWorkBuddyLogin(w *wbSite, user string) error {
-	return forgetSideLogin(w.id, user, w.name+"'s own sign-in; sign out in "+w.name, wbSide(w), nil)
+	return forgetSideLogin(w.id, user, wbSide(w), nil)
 }
 
 func workBuddyAccount(w *wbSite) (Provider, bool) {

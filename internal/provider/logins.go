@@ -35,6 +35,9 @@ type Login struct {
 	// Lapsed says the vendor refused to refresh a saved account's sign-in:
 	// it has to be signed in again before it can be used.
 	Lapsed string `json:"lapsed,omitempty"`
+	// Own is the agent's own sign-in, which magpie only reads: removed, it
+	// is hidden rather than deleted (side_logins.go).
+	Own bool `json:"own,omitempty"`
 }
 
 type savedLogin struct {
@@ -63,6 +66,10 @@ type savedLogin struct {
 	// Lapsed why the vendor last refused to (logins_on.go, keepalive.go).
 	Renewed time.Time `json:"renewed,omitzero"`
 	Lapsed  string    `json:"lapsed,omitempty"`
+	// Hidden is the agent's own sign-in removed in magpie, with the mark
+	// of the sign-in it was (side_logins.go): it is listed and tried no
+	// more until the agent signs in anew. The agent's files stay as they are.
+	Hidden string `json:"hidden,omitempty"`
 }
 
 var (

@@ -22,16 +22,18 @@ import (
 // with one key, the gateway that fronts them, and who is routed where.
 
 type modelJSON struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`              // the user's name for it, if they gave one
-	Default string   `json:"default,omitempty"` // its own name, when the user gave it another
-	Kept    []string `json:"kept,omitempty"`    // the reasoning levels the user keeps of Efforts, when not all
-	Efforts []string `json:"efforts,omitempty"`
-	Given   bool     `json:"given,omitempty"` // its levels aren't known: Efforts are those it can be given, Kept those it was
-	On      bool     `json:"on"`              // exposed to agents
-	Context int      `json:"context,omitempty"`
-	Max     int      `json:"max,omitempty"`  // the most its context may be set to, above Context
-	Free    bool     `json:"free,omitempty"` // costs the subscription nothing
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`              // the user's name for it, if they gave one
+	Default  string   `json:"default,omitempty"` // its own name, when the user gave it another
+	Kept     []string `json:"kept,omitempty"`    // the reasoning levels the user keeps of Efforts, when not all
+	Efforts  []string `json:"efforts,omitempty"`
+	Given    bool     `json:"given,omitempty"`    // its levels aren't known: Efforts are those it can be given, Kept those it was
+	Images   bool     `json:"images"`             // agents are told it can see images
+	ImageSet bool     `json:"imageSet,omitempty"` // the user said so, rather than its vendor
+	On       bool     `json:"on"`                 // exposed to agents
+	Context  int      `json:"context,omitempty"`
+	Max      int      `json:"max,omitempty"`  // the most its context may be set to, above Context
+	Free     bool     `json:"free,omitempty"` // costs the subscription nothing
 }
 
 type providerJSON struct {
@@ -257,7 +259,13 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		most = catalog.Codex()
 	}
 	named := func(m catalog.Model, on bool) modelJSON {
-		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: m.Context, Max: m.MaxContext, Free: m.Free}
+		images := m.Images || catalog.SeesImages(m.ID)
+		if m.ImageInput != nil {
+			images = *m.ImageInput
+		}
+		images, _ = provider.ApplyImage(p.ID, m.ID, images, m.ImageInput)
+		_, imageSet := provider.ImageOverride(p.ID, m.ID)
+		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: m.Context, Max: m.MaxContext, Free: m.Free, Images: images, ImageSet: imageSet}
 		if i := slices.IndexFunc(most, func(c catalog.Model) bool { return c.ID == m.ID }); j.Max == 0 && i >= 0 {
 			j.Max = most[i].MaxContext
 		}
@@ -451,6 +459,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// Efforts, for efforts: the reasoning levels it offers, none
 			// for all it has
 			Efforts []string `json:"efforts"`
+			// Images, for images: whether the model takes images. Nil
+			// gives the vendor's answer back.
+			Images *bool `json:"images"`
 			// Test, for test: models to send a request each, in place of
 			// one per endpoint
 			Test []string `json:"test"`
@@ -572,6 +583,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 		case "efforts":
 			if err := provider.SetModelEfforts(in.ID+"/"+req.Model, req.Efforts); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "images":
+			if err := provider.SetModelImage(in.ID+"/"+req.Model, req.Images); err != nil {
 				fail(rw, err)
 				return
 			}

@@ -90,9 +90,6 @@ func TestCopilotAccounts(t *testing.T) {
 		t.Fatalf("hubot signs with its own: %v %s", err, req.Header.Get("Authorization"))
 	}
 
-	if err := ForgetLogin("copilot", "octocat"); err == nil {
-		t.Fatal("forgot the one in use")
-	}
 	if err := SwitchLogin("copilot", "hubot"); err != nil {
 		t.Fatal(err)
 	}
@@ -104,9 +101,6 @@ func TestCopilotAccounts(t *testing.T) {
 	}
 	if err := SwitchLogin("copilot", "octocat"); err != nil {
 		t.Fatal(err)
-	}
-	if err := ForgetLogin("copilot", "octocat"); err == nil || !strings.Contains(err.Error(), "first") {
-		t.Fatalf("forgot the first: %v", err)
 	}
 	if err := ForgetLogin("copilot", "hubot"); err != nil {
 		t.Fatal(err)

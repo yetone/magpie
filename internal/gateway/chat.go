@@ -310,7 +310,19 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 	if len(r.Stop) > 0 {
 		out["stop"] = r.Stop
 	}
-	if r.Effort != "" {
+	if host == aiStudioHost {
+		// Gemini thinks silently unless asked for its thoughts, and a long
+		// think read as the first word coming late (Claude Desktop waited
+		// 20 s for 你好); reasoning_effort can't be sent with them
+		if tc := aiStudioThinking(r, model); tc != nil {
+			out["extra_body"] = map[string]any{"google": map[string]any{"thinking_config": tc}}
+		} else if r.ThinkOff {
+			// Gemini 3 can't stop thinking; it thinks least at minimal
+			out["reasoning_effort"] = "minimal"
+		} else if r.Effort != "" {
+			out["reasoning_effort"] = r.Effort
+		}
+	} else if r.Effort != "" {
 		out["reasoning_effort"] = r.Effort
 	}
 	if len(r.Tools) > 0 {
@@ -339,6 +351,35 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 	}
 	b, _ := json.Marshal(out)
 	return b
+}
+
+// aiStudioHost is Google AI Studio's Gemini API, whose OpenAI-compatible
+// endpoint gives the model's thoughts only when asked for them.
+const aiStudioHost = "generativelanguage.googleapis.com"
+
+// aiStudioThinking is the thinking_config asking Gemini for its thoughts at
+// the effort the client asked, for a client that asked to see them: a level
+// for Gemini 3 and later, a budget for 2.x (the steps Google maps
+// reasoning_effort to).
+func aiStudioThinking(r *Request, model string) map[string]any {
+	if !r.Thinking || r.ThinkOff || r.Effort == "none" {
+		return nil
+	}
+	tc := map[string]any{"include_thoughts": true}
+	level := r.Effort
+	switch level {
+	case "xhigh", "max":
+		level = "high"
+	case "minimal", "low", "medium", "high":
+	default:
+		return tc // the model's own
+	}
+	if strings.Contains(strings.ToLower(model), "gemini-2") {
+		tc["thinking_budget"] = map[string]int{"minimal": 1024, "low": 1024, "medium": 8192, "high": 24576}[level]
+	} else {
+		tc["thinking_level"] = level
+	}
+	return tc
 }
 
 type cUsage struct {
@@ -401,6 +442,74 @@ type chatDecoder struct {
 	started bool
 	tool    int    // index of the open tool call, -1 for none
 	choice  string // index of the first choice seen; an empty string means none yet
+	// Gemini's OpenAI-compatible API, asked for thoughts, may give them
+	// in the text as a leading <thought>…</thought>: lead holds the text
+	// while it could still be that tag's start, thought is being inside it
+	lead    string
+	thought bool
+	past    bool // the reply's text has begun; no tag is looked for now
+}
+
+const thoughtOpen, thoughtClose = "<thought>", "</thought>"
+
+// text sends a piece of the reply's text, a leading <thought> block of it
+// as thinking.
+func (d *chatDecoder) text(s string, emit func(Event)) {
+	if !d.past && !d.thought {
+		d.lead += s
+		lead := strings.TrimLeft(d.lead, " \n")
+		if len(lead) < len(thoughtOpen) && strings.HasPrefix(thoughtOpen, lead) {
+			return
+		}
+		if !strings.HasPrefix(lead, thoughtOpen) {
+			d.past = true
+			s, d.lead = d.lead, ""
+			emit(Event{Kind: KText, Text: s})
+			return
+		}
+		s, d.lead, d.thought = strings.TrimPrefix(lead, thoughtOpen), "", true
+	}
+	if d.thought {
+		s = d.lead + s
+		d.lead = ""
+		if i := strings.Index(s, thoughtClose); i >= 0 {
+			if i > 0 {
+				emit(Event{Kind: KThink, Text: s[:i]})
+			}
+			d.thought, d.past = false, true
+			s = strings.TrimLeft(s[i+len(thoughtClose):], "\n")
+		} else {
+			// the end of it may be the close tag begun
+			keep := 0
+			for n := min(len(thoughtClose)-1, len(s)); n > 0; n-- {
+				if strings.HasSuffix(s, thoughtClose[:n]) {
+					keep = n
+					break
+				}
+			}
+			if t := s[:len(s)-keep]; t != "" {
+				emit(Event{Kind: KThink, Text: t})
+			}
+			d.lead = s[len(s)-keep:]
+			return
+		}
+	}
+	if s != "" {
+		emit(Event{Kind: KText, Text: s})
+	}
+}
+
+// end gives back what text was held to see whether a tag began.
+func (d *chatDecoder) end(emit func(Event)) {
+	if d.lead == "" {
+		return
+	}
+	k := KText
+	if d.thought {
+		k = KThink
+	}
+	emit(Event{Kind: k, Text: d.lead})
+	d.lead = ""
 }
 
 func (d *chatDecoder) decode(data string, emit func(Event)) error {
@@ -457,7 +566,10 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 			emit(Event{Kind: KThink, Text: t})
 		}
 		if c.Delta.Content != nil && *c.Delta.Content != "" {
-			emit(Event{Kind: KText, Text: *c.Delta.Content})
+			d.text(*c.Delta.Content, emit)
+		}
+		if len(c.Delta.ToolCalls) > 0 {
+			d.end(emit)
 		}
 		for i, tc := range c.Delta.ToolCalls {
 			idx := i
@@ -475,6 +587,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 			}
 		}
 		if c.FinishReason != "" {
+			d.end(emit)
 			emit(Event{Kind: KStop, Stop: stopFromChat(c.FinishReason)})
 		}
 	}

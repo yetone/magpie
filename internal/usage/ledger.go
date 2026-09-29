@@ -103,7 +103,8 @@ func ledger(since time.Time, f Filter, recs []Record) (rows []Row, sum Totals, a
 	return rows, sum, agents
 }
 
-// pricer looks up each call's list price, once per provider and model.
+// pricer looks up each call's list price, once per provider and model: its
+// provider's models.dev entry's, else its maker's (a subscription's, #224).
 func pricer() func(Record) *catalog.Price {
 	prices := map[string]*catalog.Price{}
 	all := provider.All()
@@ -113,16 +114,15 @@ func pricer() func(Record) *catalog.Price {
 			return pr
 		}
 		var pr *catalog.Price
+		v, ok := provider.MakerPrice(r.Model)
 		for _, p := range all {
 			if p.ID == r.Provider {
-				for _, c := range p.Catalogs() {
-					if v, ok := catalog.PriceOf(c, r.Model); ok {
-						pr = &v
-						break
-					}
-				}
+				v, ok = p.ListPrice(r.Model)
 				break
 			}
+		}
+		if ok {
+			pr = &v
 		}
 		prices[k] = pr
 		return pr

@@ -67,9 +67,9 @@ func setGrokLoginOn(user string, on bool) error {
 }
 
 // forgetGrokLogin drops an account magpie signed in, with its home. The
-// CLI's own is signed out in the CLI.
+// CLI's own is only hidden (forgetSideLogin).
 func forgetGrokLogin(user string) error {
-	return forgetSideLogin("grok", user, "the Grok CLI's own sign-in; run `grok logout` to sign it out", grokSide(),
+	return forgetSideLogin("grok", user, grokSide(),
 		func(l savedLogin) { removeGrokHome(l.Home) })
 }
 

@@ -147,9 +147,6 @@ func TestCommandCodePlan(t *testing.T) {
 		t.Fatalf("no plan: %+v", q)
 	}
 
-	if err := ForgetLogin(CommandCodePlanID, "ownuser"); err == nil {
-		t.Fatal("forgot the CLI's own")
-	}
 	if err := SwitchLogin(CommandCodePlanID, "two"); err != nil {
 		t.Fatal(err)
 	}

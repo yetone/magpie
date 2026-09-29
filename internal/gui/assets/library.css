@@ -377,3 +377,5 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-subhead .sub { margin: 0; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .lib-subhead .lib-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
 .lib-row.lib-subhead:hover { background: color-mix(in srgb, var(--card-2) 70%, var(--pill)); }
+/* no color-mix() before Safari 16.2 (#220): the sticky head stays opaque */
+@supports not (color: color-mix(in srgb, red 50%, blue)) { .lib-head { background: var(--bg); } }

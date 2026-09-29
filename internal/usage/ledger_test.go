@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,5 +88,69 @@ func TestLedger(t *testing.T) {
 		rows[2].Time.Format(time.RFC3339) + ",codex,fast,relay,relay.example,sol,luna,true,high,2000,500,1000,4000,0,0.012500,3200,400,200,false,s1,\n"
 	if b.String() != want {
 		t.Fatalf("csv:\n%s\nwant:\n%s", b.String(), want)
+	}
+}
+
+// A call a subscription served — Codex's ChatGPT account, Copilot — or a
+// relay with no models.dev id of its own is priced at its model's maker's
+// list price, as a Claude account's is at Anthropic's (#224); a model
+// named with its maker's path is the same model; one no maker lists stays
+// unpriced.
+func TestSubscriptionListPrice(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	os.WriteFile(catalog.CachePath(), []byte(`{
+	  "openai":{"id":"openai","models":{
+	    "gpt-6-astra":{"id":"gpt-6-astra","cost":{"input":10,"output":50,"cache_read":1,"cache_write":12.5}},
+	    "gpt-6-luna":{"id":"gpt-6-luna","cost":{"input":0.1,"output":0.5,"cache_read":0.01,"cache_write":0.125}}}},
+	  "google":{"id":"google","models":{
+	    "gemini-3.8-flash":{"id":"gemini-3.8-flash","cost":{"input":0.75,"output":3.75,"cache_read":0.075}}}},
+	  "anthropic":{"id":"anthropic","models":{
+	    "claude-opus-5-5":{"id":"claude-opus-5-5","cost":{"input":4,"output":20,"cache_read":0.2,"cache_write":5}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "https://relay.example/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	calls := []struct {
+		prov, model string
+		want        float64
+	}{
+		{"codex", "gpt-6-astra", (1e6*10 + 1e5*50 + 1e6*1) / 1e6},
+		{"codex", "gpt-6-luna", (1e6*0.1 + 1e5*0.5 + 1e6*0.01) / 1e6},
+		{"copilot", "gemini-3.8-flash", (1e6*0.75 + 1e5*3.75 + 1e6*0.075) / 1e6},
+		{"copilot", "gpt-6-luna", (1e6*0.1 + 1e5*0.5 + 1e6*0.01) / 1e6},
+		{"claude", "claude-opus-5-5", (1e6*4 + 1e5*20 + 1e6*0.2) / 1e6},
+		{"relay", "openai/gpt-6-astra", (1e6*10 + 1e5*50 + 1e6*1) / 1e6},
+		{"relay", "mystery-1", 0},
+	}
+	for i, c := range calls {
+		Append(Record{Time: now.Add(-time.Duration(len(calls)-i) * time.Minute), Agent: "codex", Provider: c.prov, Model: c.model,
+			Input: 1_000_000, Output: 100_000, CacheRead: 1_000_000, Status: 200})
+	}
+	rows, sum, _ := Ledger(Month, Filter{})
+	if len(rows) != len(calls) {
+		t.Fatalf("rows %d", len(rows))
+	}
+	total := 0.0
+	for i, c := range calls {
+		r := rows[len(calls)-1-i]
+		if r.Model != c.model || r.Priced != (c.want > 0) || math.Abs(r.Cost-c.want) > 1e-9 {
+			t.Errorf("%s/%s: priced=%v cost=%v, want %v", c.prov, c.model, r.Priced, r.Cost, c.want)
+		}
+		total += c.want
+	}
+	s := Summarize(Month)
+	if s.Unpriced != 1 || math.Abs(s.Cost-total) > 1e-9 || math.Abs(sum.Cost-total) > 1e-9 {
+		t.Fatalf("summary cost %v unpriced %d, ledger %v; want %v and 1", s.Cost, s.Unpriced, sum.Cost, total)
+	}
+	for _, m := range s.Models {
+		if m.Model != "mystery-1" && (m.Unpriced != 0 || m.Cost == 0) {
+			t.Errorf("model %s unpriced: %+v", m.ID, m.Totals)
+		}
 	}
 }

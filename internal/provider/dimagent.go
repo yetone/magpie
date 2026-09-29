@@ -115,7 +115,7 @@ func setDimAgentLoginOn(user string, on bool) error {
 }
 
 func forgetDimAgentLogin(user string) error {
-	return forgetSideLogin("dimagent", user, "DimAgent's own sign-in; sign out in DimAgent", dimagentSide(), nil)
+	return forgetSideLogin("dimagent", user, dimagentSide(), nil)
 }
 
 // ---- keeping the sign-in --------------------------------------------------

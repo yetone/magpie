@@ -329,10 +329,6 @@ Account:
 	if p, _ := devinAccount(); p.Account.User != "two@example.com" || p.Account.Home != ls[1].Home {
 		t.Fatalf("switched %+v", p.Account)
 	}
-	// the CLI's own is signed out in the CLI, not here
-	if err := ForgetLogin("devin", "dev@example.com"); err == nil || !strings.Contains(err.Error(), "devin auth logout") {
-		t.Fatalf("forget own: %v", err)
-	}
 	if err := SwitchLogin("devin", "dev@example.com"); err != nil {
 		t.Fatal(err)
 	}

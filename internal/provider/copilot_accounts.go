@@ -90,7 +90,7 @@ func setCopilotLoginOn(user string, on bool) error {
 }
 
 func forgetCopilotLogin(user string) error {
-	return forgetSideLogin("copilot", user, "the Copilot sign-in of your editor or the Copilot CLI; sign out there", copilotSide(), nil)
+	return forgetSideLogin("copilot", user, copilotSide(), nil)
 }
 
 // addCopilotLogin keeps an account magpie just signed in.

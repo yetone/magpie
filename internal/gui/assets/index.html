@@ -197,8 +197,13 @@
       <div id="proxySegs" class="proxy-segs"></div>
     </div>
   </div>
-  <div class="row-head"><span class="label">Codex</span></div>
-  <div class="list prefs" id="codexWarmList">
+  <div class="row-head warm-head"><div class="warm-tabs" id="warmTabs" role="tablist">
+    <button type="button" role="tab" id="warmTab-codex" data-warm="codex" aria-controls="codexWarmList">Codex</button>
+    <button type="button" role="tab" id="warmTab-claude" data-warm="claude" aria-controls="claudeWarmList">Claude Code</button>
+    <button type="button" role="tab" id="warmTab-wb" data-warm="wb" aria-controls="wbList" hidden>WorkBuddy</button>
+  </div></div>
+  <div class="warm-panes">
+  <div class="list prefs" id="codexWarmList" role="tabpanel" aria-labelledby="warmTab-codex">
     <div class="row pref">
       <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="warmSub"></div></div>
       <div id="warmSegs"></div>
@@ -208,8 +213,7 @@
       <div id="warmAtSegs" class="warm-at"></div>
     </div>
   </div>
-  <div class="row-head"><span class="label">Claude Code</span></div>
-  <div class="list prefs" id="claudeWarmList">
+  <div class="list prefs" id="claudeWarmList" role="tabpanel" aria-labelledby="warmTab-claude">
     <div class="row pref">
       <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="claudeWarmSub"></div></div>
       <div id="claudeWarmSegs"></div>
@@ -219,12 +223,12 @@
       <div id="claudeWarmAtSegs" class="warm-at"></div>
     </div>
   </div>
-  <div class="row-head" id="wbHead" hidden><span class="label">WorkBuddy</span></div>
-  <div class="list prefs" id="wbList" hidden>
+  <div class="list prefs" id="wbList" role="tabpanel" aria-labelledby="warmTab-wb">
     <div class="row pref" id="wbCheckinRow">
       <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="wbCheckinSub"></div></div>
       <div id="wbCheckinSegs"></div>
     </div>
+  </div>
   </div>
   <div class="row-head"><span class="label" data-t>Local network</span></div>
   <div class="list prefs" id="lanList"></div>
@@ -267,6 +271,7 @@
   </div>
 </div>
 
+<script src="compat.js"></script>
 <script src="i18n.js"></script>
 <script src="app.js"></script>
 <script src="routing.js"></script>

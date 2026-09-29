@@ -1177,7 +1177,20 @@
       row.title = w.id;
       out.push(row);
     }
-    acts.replaceChildren(...out);
+    patch(acts, out);
+  }
+
+  // patch puts a list's new rows in, keeping each old one that is the same
+  // (and has no button, whose handler is the new one's): the accounts list
+  // emptied and filled again each second (its countdowns) had WebKit scroll
+  // the page, a frame at a time, as if the list had been shorter
+  function patch(box, rows) {
+    const old = [...box.children];
+    const same = (r, o) => o && !r.querySelector("button") && r.isEqualNode(o);
+    if (old.length === rows.length && rows.every((r, i) => same(r, old[i]))) return;
+    rows = rows.map((r, i) => (same(r, old[i]) ? old[i] : r));
+    rows.forEach((r, i) => { if (box.children[i] !== r) box.insertBefore(r, box.children[i] || null); });
+    while (box.children.length > rows.length) box.lastElementChild.remove();
   }
 
   function renderAll() { render(); renderLog(); renderHist(); }
@@ -2098,6 +2111,22 @@
   new MutationObserver(() => { if (!$("#view-routing").hidden) loadGroups(); }).observe($("#view-routing"), { attributes: true, attributeFilter: ["hidden"] });
   window.addEventListener("focus", () => { if (shown()) loadGroups(); });
   loadGroups();
+
+  // ---------- where the reader is, as requests come ----------
+  // Every request redraws what is above the routing groups: the stage gains
+  // or loses a row, the story a line, the lists theirs. The view kept its
+  // scrollTop, so all of it pushed the groups down or pulled them up under
+  // the reader, a group being edited too (Jerell.OvO on Discord). The view
+  // keeps a part of itself where it is on the screen instead (keepInView in
+  // app.js): the groups, while they are in the upper half of the view or a
+  // field in them has the focus, else the lists, while they are; with
+  // neither (the stage in sight at the top), the view stays as it is.
+  const rv = $("#view-routing");
+  keepInView(rv, () => {
+    const mid = rv.getBoundingClientRect().top + rv.clientHeight / 2;
+    if (gsec.contains(document.activeElement) && gsec.offsetParent) return gsec;
+    return [gsec, hist].find((p) => p.offsetParent && p.getBoundingClientRect().top <= mid) || null;
+  });
 
   // ---------- the tray panel's Routing tab ----------
   // The gateway's latest requests, as they come, from the same trace the

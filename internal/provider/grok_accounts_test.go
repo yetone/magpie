@@ -123,9 +123,6 @@ func TestGrokAccounts(t *testing.T) {
 	if err := ForgetLogin("grok", "two@x.ai"); err == nil {
 		t.Fatal("forgot the account in use first")
 	}
-	if err := ForgetLogin("grok", "me@x.ai"); err == nil {
-		t.Fatal("forgot the CLI's own sign-in")
-	}
 	if err := SetLoginOn("grok", "me@x.ai", false); err != nil {
 		t.Fatal(err)
 	}

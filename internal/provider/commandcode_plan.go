@@ -138,7 +138,7 @@ func setCommandCodeLoginOn(user string, on bool) error {
 }
 
 func forgetCommandCodeLogin(user string) error {
-	return forgetSideLogin(CommandCodePlanID, user, "Command Code's own sign-in; sign out with cmd auth logout", cmdSide(), nil)
+	return forgetSideLogin(CommandCodePlanID, user, cmdSide(), nil)
 }
 
 func commandCodeAccount() (Provider, bool) {

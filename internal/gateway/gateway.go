@@ -730,12 +730,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// the member a rule put first, or what every member takes
 		imageInput = membersImageInput(ms, ruled)
 	} else {
+		var known *bool
 		for _, m := range p.Available() {
 			if m.ID == model {
-				imageInput = m.ImageInput
+				known = m.ImageInput
 				break
 			}
 		}
+		_, imageInput = provider.ApplyImage(p.ID, model, false, known)
 	}
 	// Unless a model that sees describes them to it (vision.go).
 	seeing := sync.OnceValues(func() (string, bool) {

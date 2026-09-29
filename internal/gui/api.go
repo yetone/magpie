@@ -424,9 +424,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		cur := settings.Load()
 		in.AgentOrder, in.AgentsHidden, in.AgentsShown = cur.AgentOrder, cur.AgentsHidden, cur.AgentsShown
 		in.Window = cur.Window // the window's own, as it was last resized
-		// and what other pages keep here: the models' names, levels and
+		// and what other pages keep here: the models' names, levels, images and
 		// who sees them, and sharing on the network, set on its own
-		in.Visible, in.ModelNames, in.ModelEfforts = cur.Visible, cur.ModelNames, cur.ModelEfforts
+		in.Visible, in.ModelNames, in.ModelEfforts, in.ModelImages = cur.Visible, cur.ModelNames, cur.ModelEfforts, cur.ModelImages
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
 		in.RedactRules = cur.RedactRules // the masking rules, set on their own
 		// used or left is the Usage page's toggle as much as Settings', set on its own

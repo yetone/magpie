@@ -113,9 +113,9 @@ func setKiroLoginOn(user string, on bool) error {
 }
 
 // forgetKiroLogin drops an account magpie signed in, with its home.
-// kiro-cli's or the IDE's own is signed out there.
+// kiro-cli's or the IDE's own is only hidden (forgetSideLogin).
 func forgetKiroLogin(user string) error {
-	return forgetSideLogin("kiro", user, "kiro-cli's or the Kiro IDE's own sign-in; run `kiro-cli logout` or sign out in the IDE", kiroSide(),
+	return forgetSideLogin("kiro", user, kiroSide(),
 		func(l savedLogin) { removeKiroHome(l.Home) })
 }
 

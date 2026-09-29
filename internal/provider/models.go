@@ -511,6 +511,25 @@ var makerCatalogs = sync.OnceValue(func() []string {
 	return out
 })
 
+// ListPrice is a model's list price as its vendor's models.dev entry gives
+// it, else as its maker's does (#224): a subscription (Codex's ChatGPT
+// account, Copilot) or a relay with no models.dev id of its own is priced
+// at gpt-6-astra's or gemini-3.8-flash's maker's price, as a Claude
+// account is at Anthropic's.
+func (p Provider) ListPrice(model string) (catalog.Price, bool) {
+	if pr, ok := catalog.PricedBy(p.Catalogs(), model); ok {
+		return pr, true
+	}
+	return MakerPrice(model)
+}
+
+// MakerPrice is a model's list price as the first vendor among the presets
+// that makes the models it serves lists it; for a call whose provider has
+// gone since.
+func MakerPrice(model string) (catalog.Price, bool) {
+	return catalog.PricedBy(makerCatalogs(), model)
+}
+
 // Chosen reports whether a model is exposed.
 func (p Provider) Chosen(id string) bool {
 	for _, m := range p.Exposed() {
@@ -597,8 +616,9 @@ func providerEntries() []Entry {
 			if m.ImageInput != nil {
 				images = *m.ImageInput
 			}
+			images, imageInput := ApplyImage(p.ID, m.ID, images, m.ImageInput)
 			e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Family: p.Family, Name: m.Name, Efforts: effortsOf(m), Provider: p,
-				Images: images, ImageInput: m.ImageInput, Context: ctx, Output: output, Free: m.Free}
+				Images: images, ImageInput: imageInput, Context: ctx, Output: output, Free: m.Free}
 			if n, ok := modelNameIn(s.ModelNames, p.ID, m.ID); ok {
 				e.Name, e.Default = n, m.Name
 			}

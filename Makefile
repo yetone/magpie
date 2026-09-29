@@ -5,9 +5,10 @@ TARGETS  = darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windo
 
 # The GUI links the platform webview through cgo, so it is built natively.
 # `nogui` builds the terminal-only magpie, which cross-compiles anywhere.
+# macOS 12 is the oldest Go (1.25 and later) runs on; Info.plist says so too.
 ifeq ($(shell uname -s),Darwin)
-  export CGO_CFLAGS  = -mmacosx-version-min=11.0
-  export CGO_LDFLAGS = -mmacosx-version-min=11.0
+  export CGO_CFLAGS  = -mmacosx-version-min=12.0
+  export CGO_LDFLAGS = -mmacosx-version-min=12.0
 endif
 # On Linux, GTK 3 and WebKitGTK 4.1: older distributions have them, where
 # Wails' default GTK 4 and WebKitGTK 6 would leave them out.

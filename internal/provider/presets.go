@@ -27,6 +27,7 @@ type PresetDef struct {
 	NoKey     bool     `json:"noKey,omitempty"`     // local servers: a key is optional
 	Sponsored bool     `json:"sponsored,omitempty"` // shown first, with a tag
 	Note      string   `json:"note,omitempty"`      // one line under the name
+	Short     string   `json:"short,omitempty"`     // the add sheet's name for it, when Name is long
 	Regions   []Region `json:"regions,omitempty"`   // base-URL choices (a relay's regional endpoints, a vendor's plans)
 	// RegionLabel names what the Regions choose between, "Region" if unset.
 	RegionLabel string `json:"regionLabel,omitempty"`
@@ -173,7 +174,7 @@ var presets = []PresetDef{
 	// sk-tp- key, served at their own endpoints under /plan, chat completions
 	// and Anthropic messages only (its Codex page asks for wire_api "chat").
 	// models.dev lists just its Hy models, so the plan's are given here.
-	{ID: "tencent-token-plan", Name: "Tencent Cloud Token Plan", Icon: "tencentcloud-color", Kind: KindVendor,
+	{ID: "tencent-token-plan", Name: "Tencent Cloud Token Plan", Short: "Tencent Cloud", Icon: "tencentcloud-color", Kind: KindVendor,
 		Chat: "https://api.lkeap.cloud.tencent.com/plan/v3", Anthropic: "https://api.lkeap.cloud.tencent.com/plan/anthropic",
 		Note:    "TokenHub · subscription",
 		Website: "https://cloud.tencent.com/document/product/1823/130060", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
@@ -183,7 +184,7 @@ var presets = []PresetDef{
 	// quota spent only at the plan's own endpoints under /plan (v2 for chat
 	// completions, anthropic for messages; its Claude Code, OpenClaw, Cherry
 	// Studio and CodeArts pages), a MaaS key to either. No Responses.
-	{ID: "huaweicloud", Name: "Huawei Cloud MaaS", Icon: "huaweicloud-color", Kind: KindVendor,
+	{ID: "huaweicloud", Name: "Huawei Cloud MaaS", Short: "Huawei Cloud", Icon: "huaweicloud-color", Kind: KindVendor,
 		Chat: "https://api.modelarts-maas.com/plan/v2", Anthropic: "https://api.modelarts-maas.com/plan/anthropic",
 		Note:    "Token Plan · 西南-贵阳一",
 		Website: "https://support.huaweicloud.com/Token-plan-maas/tokenplan-maas-0001.html", KeysURL: "https://console.huaweicloud.com/modelarts/?#/model-studio/authmanage",
