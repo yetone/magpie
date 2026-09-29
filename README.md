@@ -177,8 +177,10 @@ magpie offers it as a provider too. Claude Code (an OAuth login in the macOS
 Keychain or `~/.claude/.credentials.json`), Codex (a ChatGPT login in
 `~/.codex/auth.json`), Copilot (a GitHub login in
 `~/.config/github-copilot/apps.json`), Devin (`devin auth login`, kept in
-`~/.local/share/devin/credentials.toml`) and Qoder (signed in from magpie with
-its OAuth device flow, kept in magpie's own config) appear in `magpie providers` and in
+`~/.local/share/devin/credentials.toml`), Qoder (signed in from magpie with
+its OAuth device flow) and DimAgent (signed in from magpie with its OAuth code
+and PKCE, on the callback its desktop client registers) — the last two kept in
+magpie's own config — appear in `magpie providers` and in
 the Providers tab as *signed in as …*, with their models spelled
 `claude/claude-sonnet-5`, `codex/gpt-5.5`, `copilot/claude-sonnet-4.5` or
 `devin/swe-2-max` in every other agent's picker. magpie reads the agent's own credentials each

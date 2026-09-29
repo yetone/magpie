@@ -406,7 +406,7 @@ func freeName(name string) string {
 }
 
 // accountIDs are the ids of the subscriptions magpie can list (account.go).
-var accountIDs = []string{"antigravity", "claude", "codex", CommandCodePlanID, "copilot", "cursor", "devin", "gemini", "grok", "kiro", "qoder", "workbuddy", WorkBuddyAIID, "zcode"}
+var accountIDs = []string{"antigravity", "claude", "codex", CommandCodePlanID, "copilot", "cursor", "devin", "dimagent", "gemini", "grok", "kiro", "qoder", "workbuddy", WorkBuddyAIID, "zcode"}
 
 func stored(id string) bool {
 	for _, p := range load().Providers {

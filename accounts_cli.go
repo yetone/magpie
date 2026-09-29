@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,7 +24,7 @@ import (
 // — the subscriptions magpie remembers, how much of each one's allowance is
 // used, and switching the agent between them.
 func accountsCmd(args []string) error {
-	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity] [--json] | magpie accounts add <claude|codex|gemini|antigravity> | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
+	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|dimagent] [--json] | magpie accounts add <claude|codex|gemini|antigravity|dimagent> | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|dimagent> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
 	agentID := func(s string) (string, error) {
 		switch strings.ToLower(s) {
 		case "claude", "cc":
@@ -34,8 +35,10 @@ func accountsCmd(args []string) error {
 			return "gemini", nil
 		case "antigravity", "ag":
 			return "antigravity", nil
+		case "dimagent":
+			return "dimagent", nil
 		}
-		return "", fmt.Errorf("%q: only Claude Code, Codex, Gemini CLI and Antigravity accounts can be added and switched\n%s", s, usage)
+		return "", fmt.Errorf("%q: only Claude Code, Codex, Gemini CLI, Antigravity and DimAgent accounts can be added and switched\n%s", s, usage)
 	}
 	if len(args) > 1 && args[1] == "project" {
 		if len(args) != 5 {
@@ -288,6 +291,23 @@ func addAccount(agentID string) error {
 	openInBrowser(st.URL)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+	if st.PasteCallback {
+		fmt.Println("If the browser cannot return to magpie, paste its final callback URL here and press Enter:")
+		id := st.ID
+		go func() {
+			lines := bufio.NewScanner(os.Stdin)
+			for lines.Scan() {
+				if current, ok := provider.SignInStatus(id); !ok || current.State != "waiting" {
+					return
+				}
+				if err := provider.SubmitSignInCallback(id, lines.Text()); err != nil {
+					fmt.Println(err)
+					continue
+				}
+				return
+			}
+		}()
+	}
 	st, err = provider.WaitSignIn(ctx, st.ID)
 	if err != nil {
 		return err

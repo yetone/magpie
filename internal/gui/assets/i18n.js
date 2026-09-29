@@ -222,6 +222,7 @@ const I18N = {
 
     // providers
     "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose.": "Qoder 没有公开的 API；magpie 会按照其桌面客户端的方式签发请求，Qoder 可能将其视为第三方使用并采取措施。请用一个丢了也不心疼的账号。",
+    "DimAgent serves this API to its own desktop client; magpie signs requests as that client would, which DimAgent may treat as third-party use and act on. Use an account you can afford to lose.": "DimAgent 只向其桌面客户端提供这个 API；magpie 会按照该客户端的方式签发请求，DimAgent 可能将其视为第三方使用并采取措施。请用一个丢了也不心疼的账号。",
     "sponsored": "赞助",
     "free": "免费",
     "free: it doesn't use the plan's credits": "免费：不消耗套餐积分",
@@ -370,6 +371,9 @@ const I18N = {
     "Open again": "重新打开",
     "Copy link": "复制链接",
     "Sign-in link": "登录链接",
+    "If the browser cannot return to magpie, paste its final callback URL here.": "如果浏览器无法返回 magpie，请在此粘贴浏览器最终跳转的回调 URL。",
+    "Callback URL": "回调 URL",
+    "Finish sign-in": "完成登录",
     "1 provider to bring over": "有 1 个供应商可导入",
     "{n} providers to bring over": "有 {n} 个供应商可导入",
     "magpie opened GitHub's device page. Enter this code there; the account shows up here as soon as you're done.": "magpie 已打开 GitHub 的设备登录页，请在那里输入下面的验证码；完成后账号会立即出现在这里。",

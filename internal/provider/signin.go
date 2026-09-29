@@ -47,11 +47,12 @@ var signInTimeout = 10 * time.Minute
 
 // SignInState is where a sign-in stands, for the window to show.
 type SignInState struct {
-	ID    string `json:"id"`
-	Agent string `json:"agent"`
-	URL   string `json:"url"`            // the vendor's page, to open or copy
-	Code  string `json:"code,omitempty"` // what to type there, for a device code
-	State string `json:"state"`          // installing, waiting, done, failed or canceled
+	ID            string `json:"id"`
+	Agent         string `json:"agent"`
+	URL           string `json:"url"`                     // the vendor's page, to open or copy
+	Code          string `json:"code,omitempty"`          // what to type there, for a device code
+	State         string `json:"state"`                   // installing, waiting, done, failed or canceled
+	PasteCallback bool   `json:"pasteCallback,omitempty"` // a callback URL can also finish this sign-in
 	// Installing is the CLI being installed before the sign-in can start
 	Installing string `json:"installing,omitempty"`
 	User       string `json:"user,omitempty"`  // the account, once done
@@ -61,15 +62,17 @@ type SignInState struct {
 }
 
 type signInFlow struct {
-	mu       sync.Mutex
-	st       SignInState
-	verifier string
-	state    string
-	redirect string
-	srv      *http.Server
-	stop     func() // ends an agent's own login command, when that is the sign-in
-	kiro     *kiroFlow
-	done     chan struct{}
+	mu                sync.Mutex
+	st                SignInState
+	verifier          string
+	state             string
+	redirect          string
+	srv               *http.Server
+	stop              func() // ends an agent's own login command, when that is the sign-in
+	kiro              *kiroFlow
+	dimagentDone      chan dimagentCallback
+	dimagentSubmitted bool
+	done              chan struct{}
 }
 
 var signIns = struct {
@@ -254,6 +257,11 @@ func (s *signInFlow) begin() error {
 		if err := startQoderSignIn(s); err != nil {
 			return err
 		}
+	case "dimagent":
+		// DimAgent's OAuth + PKCE, on the callback port its client registered
+		if err := startDimAgentSignIn(s); err != nil {
+			return err
+		}
 	case "zcode":
 		// Z.ai's sign-in, as ZCode makes it
 		if err := startZCodeSignIn(s); err != nil {
@@ -320,6 +328,22 @@ func CancelSignIn(id string) {
 	if ok {
 		s.finish(SignInState{State: "canceled"})
 	}
+}
+
+// SubmitSignInCallback finishes a browser sign-in whose callback could not
+// reach this machine. Invalid input leaves the pending sign-in open to retry.
+func SubmitSignInCallback(id, raw string) error {
+	signIns.Lock()
+	s, ok := signIns.m[id]
+	signIns.Unlock()
+	if !ok {
+		return errors.New("no such sign-in")
+	}
+	got, err := dimAgentCallbackFromPaste(raw)
+	if err != nil {
+		return err
+	}
+	return s.submitDimAgentCallback(got)
 }
 
 // WaitSignIn blocks until a sign-in is over, for the command line.

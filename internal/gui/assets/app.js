@@ -116,9 +116,9 @@ function icon(name) {
     return e;
   }
   if (name) {
-    if (name.endsWith("-color") || name === "crush" || name === "zcode" || name === "alma" || name === "hanako" || name === "cindy" || name === "typesafe") {
+    if (name.endsWith("-color") || name === "crush" || name === "zcode" || name === "alma" || name === "hanako" || name === "cindy" || name === "typesafe" || name === "dimagent") {
       const img = el("img");
-      img.src = `icons/${name}.${name === "crush" || name === "zcode" || name === "alma" || name === "hanako" || name === "cindy" || name === "typesafe" ? "png" : "svg"}`;
+      img.src = `icons/${name}.${name === "crush" || name === "zcode" || name === "alma" || name === "hanako" || name === "cindy" || name === "typesafe" || name === "dimagent" ? "png" : "svg"}`;
       img.alt = "";
       img.draggable = false;
       e.append(img);
@@ -3898,6 +3898,9 @@ const SUBS = [
     riskNote: "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose." },
   // the devin CLI's own account is read; more are signed in beside it, each in a data folder of magpie's
   { agent: "devin", name: "Devin", icon: "devin", plans: "Pro · Enterprise", own: true },
+  // DimAgent's own subscription: the browser's sign-in at dimagent.cn, its relay serving the vendor's models
+  { agent: "dimagent", name: "DimAgent", icon: "dimagent", plans: "Credits", own: true, risk: true,
+    riskNote: "DimAgent serves this API to its own desktop client; magpie signs requests as that client would, which DimAgent may treat as third-party use and act on. Use an account you can afford to lose." },
   // Kiro's own sign-in page (Google, GitHub, Builder ID, Identity Center); kiro-cli's or the IDE's is read too
   { agent: "kiro", name: "Kiro", icon: "kiro-color", plans: "Free · Pro · Pro+ · Power", own: true },
   // Google's sign-ins; Gemini CLI's own account is read too
@@ -4110,6 +4113,44 @@ function renderSigning(sub) {
     cp.onclick = () => copy(signing.url, t("Sign-in link"), cp);
     acts.append(open, cp);
     tt.append(acts);
+  }
+  if (signing.pasteCallback) {
+    const flow = signing;
+    tt.append(el("span", "s", t("If the browser cannot return to magpie, paste its final callback URL here.")));
+    const form = el("form", "callback-form");
+    const url = input(flow.callbackURL || "", t("Callback URL"));
+    url.setAttribute("aria-label", t("Callback URL"));
+    url.autocomplete = "off";
+    url.disabled = !!flow.callbackSubmitted || !!flow.callbackSubmitting;
+    const submit = el("button", "text primary", t("Finish sign-in"));
+    submit.type = "submit";
+    submit.disabled = url.disabled || !url.value.trim();
+    const why = el("span", "s why", flow.callbackError || "");
+    url.oninput = () => { flow.callbackURL = url.value; submit.disabled = !!flow.callbackSubmitted || !!flow.callbackSubmitting || !url.value.trim(); };
+    const finish = async (e) => {
+      e.preventDefault();
+      if (flow.callbackSubmitted || flow.callbackSubmitting || signing !== flow) return;
+      flow.callbackSubmitting = true;
+      submit.disabled = true;
+      url.disabled = true;
+      why.textContent = "";
+      try {
+        await api("signin/" + flow.id + "/callback", { url: url.value });
+        flow.callbackSubmitted = true;
+        url.disabled = true;
+      } catch (err) {
+        if (signing !== flow) return;
+        flow.callbackError = why.textContent = err.message;
+        url.disabled = false;
+        submit.disabled = !url.value.trim();
+      } finally {
+        flow.callbackSubmitting = false;
+      }
+    };
+    form.onsubmit = finish;
+    submit.onclick = finish;
+    form.append(url, submit);
+    tt.append(form, why);
   }
   if (sub.importable) {
     // an account another tool is signed in to comes in from its file

@@ -13,6 +13,10 @@ shared helper; a control under what it unrolls (`data-unrolls`) going down
 with it; a click that asks to go somewhere with `scrollOnPurpose(e)`;
 the room kept at the foot going as the reader scrolls back; and the wheel.
 
+`signin-callback.test.cjs` checks DimAgent's pasted callback in a narrow Chinese
+dark window: invalid input remains editable, retry reaches the callback route,
+and a pending or accepted submission cannot be submitted twice.
+
 `panel-fold.test.cjs` expands and collapses on the Agents page with the list
 scrolled to its end, in the tray panel (one agent open) and in the window:
 "Show {n} more" unrolls the rest under the button, the view going down with
@@ -104,12 +108,16 @@ With Node.js and Playwright available:
 
 ```sh
 node --test internal/gui/tests/menu-scroll.test.cjs internal/gui/tests/click-scroll.test.cjs internal/gui/tests/panel-fold.test.cjs internal/gui/tests/panel-routing.test.cjs internal/gui/tests/gateway-fold.test.cjs internal/gui/tests/routing-kind.test.cjs internal/gui/tests/balance-fix.test.cjs internal/gui/tests/cli-update.test.cjs internal/gui/tests/login-import.test.cjs internal/gui/tests/agy-launch.test.cjs internal/gui/tests/currency.test.cjs internal/gui/tests/usage-ledger.test.cjs
+node --test internal/gui/tests/signin-callback.test.cjs
 ```
 
 If Playwright is installed outside the repository, set `NODE_PATH` to the
 directory containing its package. The suite uses Playwright's Chromium and
 WebKit binaries (`playwright install chromium webkit`). No frontend dependency
 is needed by the app itself. Tested with Playwright 1.63.0.
+
+For the callback test, `PLAYWRIGHT_CHANNEL=chrome` uses an installed Chrome
+instead of Playwright's Chromium.
 
 Set `BROWSER=chromium` or `BROWSER=webkit` for one engine. Set `ARTIFACT_DIR` to
 an external directory to retain screenshots and Playwright traces, including

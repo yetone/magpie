@@ -471,6 +471,8 @@ func Logins(agent string) []Login {
 		return cmdLoginList()
 	case "qoder":
 		return loginsOf(qoderLogins())
+	case "dimagent":
+		return dimagentLoginList()
 	case "gemini", "antigravity":
 		return googleLoginList(agent)
 	case "":
@@ -482,6 +484,7 @@ func Logins(agent string) []Login {
 		side = append(side, wbLoginList(wbAI)...)
 		side = append(side, cmdLoginList()...)
 		side = append(side, loginsOf(qoderLogins())...)
+		side = append(side, dimagentLoginList()...)
 		side = append(side, googleLoginList("gemini")...)
 		side = append(side, googleLoginList("antigravity")...)
 	}
@@ -531,6 +534,8 @@ func SwitchLogin(agent, user string) error {
 		return switchCommandCodeLogin(user)
 	case "qoder":
 		return switchSideLogin("qoder", user, qoderLogins())
+	case "dimagent":
+		return switchDimAgentLogin(user)
 	case "gemini", "antigravity":
 		return switchGoogleLogin(agent, user)
 	}
@@ -665,6 +670,8 @@ func ForgetLogin(agent, user string) error {
 		return forgetCommandCodeLogin(user)
 	case "qoder":
 		return forgetQoderLogin(user)
+	case "dimagent":
+		return forgetDimAgentLogin(user)
 	case "gemini", "antigravity":
 		return forgetGoogleLogin(agent, user)
 	}
