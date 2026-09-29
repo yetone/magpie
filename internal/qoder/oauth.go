@@ -183,7 +183,7 @@ func postJobRefresh(ctx context.Context, client *http.Client, endpoint, refreshT
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("qoder job token refresh: status %d", resp.StatusCode)
+		return nil, &JobTokenRefreshHTTPError{StatusCode: resp.StatusCode}
 	}
 	var t JobToken
 	if err := json.Unmarshal(raw, &t); err != nil {
@@ -193,6 +193,15 @@ func postJobRefresh(ctx context.Context, client *http.Client, endpoint, refreshT
 		return nil, fmt.Errorf("qoder job token refresh: incomplete token pair")
 	}
 	return &t, nil
+}
+
+// JobTokenRefreshHTTPError preserves a rejected job-token refresh status.
+type JobTokenRefreshHTTPError struct {
+	StatusCode int
+}
+
+func (e *JobTokenRefreshHTTPError) Error() string {
+	return fmt.Sprintf("qoder job token refresh: status %d", e.StatusCode)
 }
 
 // DeviceTokenRefreshHTTPError preserves a rejected refresh status without response data.

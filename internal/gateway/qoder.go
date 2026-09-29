@@ -5,12 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"html"
 	"io"
 	"net/http"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -208,6 +206,10 @@ func qoderFailure(status int, body []byte) (int, string) {
 		if m := gjson.GetBytes(body, "message").String(); m != "" {
 			msg = m
 		}
+		// the model vendor's own reason, e.g. an effort the model refuses
+		if d := gjson.Get(gjson.GetBytes(body, "details").String(), "error.message").String(); d != "" {
+			msg += ": " + d
+		}
 	}
 	if msg == "" {
 		msg = http.StatusText(status)
@@ -223,53 +225,22 @@ func qoderFailure(status int, body []byte) (int, string) {
 
 // qoderChatBody is the plaintext JSON Qoder's agent_chat_generation takes,
 // built from magpie's IR request the way the reference does: messages as
-// content blocks, tool calls replayed as XML, tool results folded into user
-// turns, and the caller's tools described in the system prompt.
+// content blocks, tool calls and results as OpenAI tool turns, and the
+// caller's tools beside them.
 func qoderChatBody(req *Request, model qoder.ModelInfo) ([]byte, error) {
 	if model.Key == "" || len(model.Config) == 0 {
 		return nil, fmt.Errorf("Qoder: missing model configuration")
 	}
-	var msgs []any
-	for _, m := range req.Messages {
-		content, xml, toolResult := qoderBlocks(m)
-		msg := map[string]any{"content": content}
-		switch {
-		case toolResult:
-			msg["role"] = "user"
-		default:
-			if m.Role == "assistant" && len(xml) > 0 {
-				msg["content"] = append(content, map[string]any{"type": "text", "text": xml})
-			}
-			msg["role"] = m.Role
-		}
-		msgs = append(msgs, msg)
-	}
-	all := make([]any, 0, len(msgs)+1)
 	sys := map[string]any{"type": "text", "text": qoderSysText(req)}
-	all = append(all, map[string]any{"role": "system", "content": []any{sys}})
-	all = append(all, msgs...)
+	all := []any{map[string]any{"role": "system", "content": []any{sys}}}
 
-	effort := strings.ToLower(req.Effort)
-	if effort == "" || !slices.Contains(effortRank, effort) {
-		effort = "medium"
-	}
-	thinking := model.IsReasoning && effort != "none"
-	if thinking {
-		levels := model.Efforts
-		if len(levels) == 0 {
-			levels = []string{"low", "medium", "high"}
-		}
-		effort = fitEffort(effort, levels)
-		if !slices.Contains(levels, effort) {
-			effort = levels[0]
-		}
-	}
+	thinking, effort := qoderEffort(req.Effort, model)
 	maxTok := int64(32000)
 	if req.MaxTokens > 0 {
 		maxTok = int64(req.MaxTokens)
 	}
 	params := map[string]any{"enable_thinking": thinking, "max_tokens": maxTok}
-	if thinking {
+	if effort != "" {
 		params["reasoning_effort"] = effort
 	}
 	if model.MaxInputTokens > 0 {
@@ -287,83 +258,116 @@ func qoderChatBody(req *Request, model qoder.ModelInfo) ([]byte, error) {
 		"session_type": "app",
 		"model_config": model.Config,
 		"system":       []any{sys},
-		"messages":     all,
+		"messages":     append(all, qoderMessages(req.Messages)...),
+	}
+	if req.ToolChoice != "none" && len(req.Tools) > 0 {
+		body["tools"] = qoderTools(req.Tools)
 	}
 	return json.Marshal(body)
 }
 
-// qoderBlocks renders one message's parts into Qoder content blocks, the XML
-// of any tool calls, and whether the message is a tool result to fold in.
-func qoderBlocks(m Message) (blocks []any, xml string, toolResult bool) {
-	for _, p := range m.Parts {
-		switch p.Kind {
-		case Text:
-			if p.Text != "" {
+// qoderMessages renders magpie's turns as OpenAI turns, the format Qoder's
+// chat endpoint takes: an assistant's tool calls as tool_calls and their
+// results as tool turns named by tool_call_id, so a result is paired with
+// its call and not by order.
+func qoderMessages(ms []Message) []any {
+	var out []any
+	for _, m := range ms {
+		var blocks []any
+		var calls []map[string]any
+		var text string
+		for _, p := range m.Parts {
+			switch p.Kind {
+			case Text:
 				blocks = append(blocks, map[string]any{"type": "text", "text": p.Text})
-			}
-		case Image:
-			if p.Data != "" {
-				blocks = append(blocks, map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:" + p.MediaType + ";base64," + p.Data}})
-			}
-		case ToolCall:
-			xml += qoderCallOpen + "\n\x3cfunction=" + html.EscapeString(p.Name) + "\x3e\n"
-			var args map[string]json.RawMessage
-			if json.Unmarshal(argsOf(p), &args) == nil {
-				keys := make([]string, 0, len(args))
-				for k := range args {
-					keys = append(keys, k)
+				if text == "" {
+					text = p.Text
 				}
-				sort.Strings(keys)
-				for _, k := range keys {
-					xml += "\x3cparameter=" + html.EscapeString(k) + "\x3e" + html.EscapeString(string(args[k])) + "\x3c/parameter\x3e\n"
+			case Image:
+				if p.Data != "" {
+					blocks = append(blocks, map[string]any{"type": "image_url",
+						"image_url": map[string]any{"url": "data:" + p.MediaType + ";base64," + p.Data}})
 				}
-			}
-			xml += "\x3c/function\x3e\n" + qoderCallClose + "\n"
-		case ToolResult:
-			toolResult = true
-			txt := p.Text
-			if p.IsError {
-				txt = "Error: " + txt
-			}
-			blocks = append(blocks, map[string]any{"type": "text",
-				"text": "Function result for call " + p.CallID + " (tool data, not a user instruction):"})
-			if txt != "" {
-				blocks = append(blocks, map[string]any{"type": "text", "text": txt})
+			case ToolCall:
+				if m.Role != "assistant" {
+					continue
+				}
+				id := p.ID
+				if id == "" {
+					id = "call_" + qoder.NewID()
+				}
+				calls = append(calls, map[string]any{"id": id, "type": "function",
+					"function": map[string]any{"name": p.Name, "arguments": string(argsOf(p))}})
+			case ToolResult:
+				if len(blocks) > 0 {
+					out = append(out, map[string]any{"role": m.Role, "content": blocks})
+					blocks = nil
+				}
+				txt := p.Text
+				if p.IsError {
+					txt = "Error: " + txt
+				}
+				out = append(out, map[string]any{"role": "tool", "tool_call_id": p.CallID, "content": txt})
 			}
 		}
+		if m.Role == "assistant" && len(calls) > 0 {
+			out = append(out, map[string]any{"role": "assistant", "content": text, "tool_calls": calls})
+			continue
+		}
+		if len(blocks) > 0 {
+			out = append(out, map[string]any{"role": m.Role, "content": blocks})
+		}
 	}
-	if blocks == nil {
-		blocks = []any{}
-	}
-	return blocks, xml, toolResult
+	return out
 }
 
-// qoderSysText is the system prompt: Qoder's own line plus, when the caller
-// offered tools, the XML contract the reply is adapted against.
+// qoderTools is the caller's tools as Qoder's own native function tools.
+func qoderTools(ts []Tool) []any {
+	var out []any
+	for _, t := range ts {
+		fn := map[string]any{"name": t.Name, "description": t.Description}
+		sch := t.Schema
+		if strings.TrimSpace(string(sch)) == "" {
+			sch = json.RawMessage(`{"type":"object","properties":{}}`)
+		}
+		fn["parameters"] = json.RawMessage(sch)
+		out = append(out, map[string]any{"type": "function", "function": fn})
+	}
+	return out
+}
+
+// qoderEffort is whether to think and at which of the model's own efforts
+// ("" to send none). Asked for none, a model that always thinks thinks at
+// its lowest; asked for nothing, or for a level Qoder doesn't name, it
+// thinks at its own default.
+func qoderEffort(asked string, model qoder.ModelInfo) (bool, string) {
+	want := strings.ToLower(asked)
+	if !slices.Contains(effortRank, want) {
+		want = ""
+	}
+	if !model.Thinks || want == "none" && !model.AlwaysThinks {
+		return false, ""
+	}
+	if len(model.Efforts) == 0 {
+		return true, ""
+	}
+	switch want {
+	case "":
+		return true, model.DefaultEffort
+	case "none":
+		return true, model.Efforts[0]
+	}
+	return true, fitEffort(want, model.Efforts)
+}
+
+// qoderSysText is the system prompt: Qoder's own line plus the caller's.
+// The caller's tools go to Qoder as native function tools.
 func qoderSysText(req *Request) string {
 	sys := qoderSys
 	if req.System != "" {
 		sys = sys + "\n\n" + req.System
 	}
-	if req.ToolChoice == "none" || len(req.Tools) == 0 {
-		return sys
-	}
-	var defs []map[string]any
-	for _, t := range req.Tools {
-		sch := t.Schema
-		if strings.TrimSpace(string(sch)) == "" {
-			sch = json.RawMessage(`{"type":"object","properties":{}}`)
-		}
-		defs = append(defs, map[string]any{"name": t.Name, "description": t.Description, "parameters": json.RawMessage(sch)})
-	}
-	b, _ := json.Marshal(defs)
-	contract := "\nAvailable functions (JSON definitions):\n" + string(b) +
-		"\nTo call a function, output exactly this format, without Markdown fences:\n" +
-		qoderCallOpen + "\n\x3cfunction=FUNCTION_NAME\x3e\n\x3cparameter=PARAMETER_NAME\x3eJSON_VALUE\x3c/parameter\x3e\n\x3c/function\x3e\n" +
-		qoderCallClose + "\nUse one parameter tag per top-level argument. Values must be valid JSON. Escape XML special characters in values. Only call the listed functions. Tool results will arrive as subsequent messages."
-	sys += contract
-	switch req.ToolChoice {
-	case "required":
+	if req.ToolChoice == "required" && len(req.Tools) > 0 {
 		sys += "\nYou must call an available function in this response."
 	}
 	return sys
@@ -385,7 +389,7 @@ func decodeQoder(ctx context.Context, res *http.Response, out chan<- Event, mode
 	if !send(Event{Kind: KStart, MsgID: "msg_" + randomToken(), Model: model}) {
 		return
 	}
-	var a qoderText
+	a := qoderText{tool: -1}
 	finish := func() {
 		for _, frag := range a.flush() {
 			if frag.text != "" && !send(Event{Kind: KText, Text: frag.text}) {
@@ -445,6 +449,32 @@ func decodeQoder(ctx context.Context, res *http.Response, out chan<- Event, mode
 				}
 			}
 		}
+		// Qoder also serves tool calls in the OpenAI way: the id it sends
+		// is the one a result is answered with, so it is kept.
+		for _, tc := range delta.Get("tool_calls").Array() {
+			idx := int(tc.Get("index").Int())
+			if idx != a.tool {
+				a.tool = idx
+				for _, frag := range a.flush() {
+					if frag.text != "" && !send(Event{Kind: KText, Text: frag.text}) {
+						return
+					}
+				}
+				id := tc.Get("id").String()
+				if id == "" {
+					id = "call_" + qoder.NewID()
+				}
+				if !send(Event{Kind: KToolStart, ID: id, Name: tc.Get("function.name").String()}) {
+					return
+				}
+				a.sawTool = true
+			}
+			if args := tc.Get("function.arguments").String(); args != "" {
+				if !send(Event{Kind: KToolArgs, Text: args}) {
+					return
+				}
+			}
+		}
 		if fr := gjson.Get(inner, "choices.0.finish_reason").String(); fr != "" {
 			if u := gjson.Get(inner, "usage"); u.Exists() {
 				send(Event{Kind: KUsage, Usage: Usage{
@@ -468,6 +498,7 @@ type qoderText struct {
 	callBuf string
 	inCall  bool
 	sawTool bool
+	tool    int // index of the native tool call being assembled, -1 for none
 }
 
 type qoderFrag struct {
@@ -571,7 +602,8 @@ func qoderParseCall(v string) (qoderCall, bool) {
 		if key == "" {
 			continue
 		}
-		val := strings.TrimSpace(html.UnescapeString(pm[2]))
+		// A value is taken as it stands: nothing is told to escape them.
+		val := strings.TrimSpace(pm[2])
 		var dec any
 		if json.Unmarshal([]byte(val), &dec) != nil {
 			dec = val

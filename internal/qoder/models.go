@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -23,6 +24,60 @@ type ModelInfo struct {
 	MaxInputTokens int             `json:"max_input_tokens,omitempty"`
 	Efforts        []string        `json:"reasoning_efforts,omitempty"`
 	Config         json.RawMessage `json:"-"`
+	// From thinking_config: whether the model can think, whether it can't
+	// stop, and the effort it thinks at unless asked for another.
+	Thinks        bool   `json:"-"`
+	AlwaysThinks  bool   `json:"-"`
+	DefaultEffort string `json:"-"`
+}
+
+// effortOrder ranks Qoder's effort names, lowest first.
+var effortOrder = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+
+// thinking reads the listing's thinking_config, where Qoder keeps the
+// efforts a model offers and its default; is_reasoning alone stands for a
+// model listed without one.
+func (m *ModelInfo) thinking(raw json.RawMessage) {
+	var v struct {
+		Config *struct {
+			Disabled json.RawMessage `json:"disabled"`
+			Enabled  *struct {
+				Efforts map[string]struct {
+					IsDefault bool `json:"is_default"`
+				} `json:"efforts"`
+			} `json:"enabled"`
+		} `json:"thinking_config"`
+	}
+	m.Thinks = m.IsReasoning
+	if json.Unmarshal(raw, &v) != nil || v.Config == nil {
+		return
+	}
+	m.Thinks = v.Config.Enabled != nil
+	m.AlwaysThinks = m.Thinks && len(v.Config.Disabled) == 0
+	m.Efforts = nil
+	if !m.Thinks {
+		return
+	}
+	for name, e := range v.Config.Enabled.Efforts {
+		m.Efforts = append(m.Efforts, name)
+		if e.IsDefault {
+			m.DefaultEffort = name
+		}
+	}
+	rank := func(s string) int {
+		for i, e := range effortOrder {
+			if e == s {
+				return i
+			}
+		}
+		return len(effortOrder)
+	}
+	sort.Slice(m.Efforts, func(i, j int) bool {
+		if rank(m.Efforts[i]) != rank(m.Efforts[j]) {
+			return rank(m.Efforts[i]) < rank(m.Efforts[j])
+		}
+		return m.Efforts[i] < m.Efforts[j]
+	})
 }
 
 // FetchModels retrieves the raw model listing for a signed-in user. The
@@ -109,6 +164,7 @@ func ModelConfigs(body []byte) ([]ModelInfo, error) {
 			continue
 		}
 		m.Config = raw
+		m.thinking(raw)
 		out = append(out, m)
 	}
 	return out, nil

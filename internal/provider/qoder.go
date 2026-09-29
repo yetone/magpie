@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -40,21 +41,84 @@ func qoderCurrent(l savedLogin) (qoder.Credential, bool, bool) {
 	return c, ok, false
 }
 
-// The caller holds qoderMu and loginsMu through rotation and persistence.
-func qoderPersist(ls []savedLogin, i int, c qoder.Credential) error {
+// qoderRefreshTimeout bounds a token refresh, which runs apart from the
+// request that needed it: once Qoder has rotated the pair, the reply must be
+// kept even if that request is gone.
+const qoderRefreshTimeout = 20 * time.Second
+
+// qoderLookup reads one saved account. loginsMu is held only for the read, so
+// a Qoder refresh never stalls the other subscriptions; qoderMu, held by the
+// caller, keeps every Qoder auth write out while it is refreshed.
+func qoderLookup(user string) (savedLogin, bool) {
+	loginsMu.Lock()
+	defer loginsMu.Unlock()
+	for _, l := range readLogins() {
+		if l.Agent == "qoder" && strings.EqualFold(l.User, user) {
+			return l, true
+		}
+	}
+	return savedLogin{}, false
+}
+
+// qoderPersist writes c back into the account l as logins.json is now. The
+// caller holds qoderMu, so l.Auth is still what is saved; the rest of the
+// file is re-read under loginsMu so changes made meanwhile are kept.
+func qoderPersist(l savedLogin, c qoder.Credential, renewed bool) error {
 	auth, err := json.Marshal(c)
 	if err != nil {
 		return err
 	}
-	key := qoderPendingKey(ls[i].User)
-	before := ls[i].Auth
-	ls[i].Auth = auth
-	if err := writeLogins(ls); err != nil {
-		qoderPending[key] = struct{ before, after json.RawMessage }{before, auth}
+	key := qoderPendingKey(l.User)
+	loginsMu.Lock()
+	defer loginsMu.Unlock()
+	ls := readLogins()
+	err = fmt.Errorf("Qoder: couldn't read the saved sign-in of %s back", l.User)
+	for i := range ls {
+		if ls[i].Agent != "qoder" || !strings.EqualFold(ls[i].User, l.User) {
+			continue
+		}
+		ls[i].Auth = auth
+		if renewed {
+			ls[i].Renewed, ls[i].Lapsed = time.Now().UTC(), ""
+		}
+		err = writeLogins(ls)
+		break
+	}
+	if err != nil {
+		qoderPending[key] = struct{ before, after json.RawMessage }{l.Auth, auth}
 		return err
 	}
 	delete(qoderPending, key)
 	return nil
+}
+
+// qoderRefreshFailed marks the account lapsed when Qoder refused its refresh
+// token: that sign-in is gone and has to be made again. A refresh that never
+// got an answer marks nothing.
+func qoderRefreshFailed(user string, err error) error {
+	var job *qoder.JobTokenRefreshHTTPError
+	var device *qoder.DeviceTokenRefreshHTTPError
+	status := 0
+	switch {
+	case errors.As(err, &job):
+		status = job.StatusCode
+	case errors.As(err, &device):
+		status = device.StatusCode
+	}
+	if status != http.StatusUnauthorized && status != http.StatusForbidden {
+		return err
+	}
+	msg := user + "'s Qoder sign-in has expired — sign in again"
+	loginsMu.Lock()
+	defer loginsMu.Unlock()
+	ls := readLogins()
+	for i := range ls {
+		if ls[i].Agent == "qoder" && strings.EqualFold(ls[i].User, user) {
+			ls[i].Lapsed = msg
+		}
+	}
+	_ = writeLogins(ls)
+	return fmt.Errorf("%s (%w)", msg, err)
 }
 
 func qoderWho(c qoder.Credential) string { return firstNonEmpty(c.Email, c.UID) }
@@ -67,10 +131,15 @@ func qoderSaved(l savedLogin) (qoder.Credential, bool) {
 
 // migrateQoder moves the old single-account file exactly once. A newer
 // logins.json entry takes precedence; failed writes leave the old file intact.
+// With nothing to move it takes no lock, so listing accounts doesn't wait
+// behind a refresh.
 func migrateQoder() error {
+	path := filepath.Join(filepath.Dir(Path()), "qoder.json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
 	qoderMu.Lock()
 	defer qoderMu.Unlock()
-	path := filepath.Join(filepath.Dir(Path()), "qoder.json")
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil
@@ -118,7 +187,11 @@ func qoderLogins() []sideLogin {
 	if migrateQoder() != nil {
 		return nil
 	}
-	return sideLogins("qoder", "", func(l savedLogin) bool { _, ok := qoderSaved(l); return ok })
+	ls := sideLogins("qoder", "", func(l savedLogin) bool { _, ok := qoderSaved(l); return ok })
+	for i := range ls {
+		ls[i].Lapsed = ls[i].saved.Lapsed // a refused refresh shows on the account
+	}
+	return ls
 }
 
 func QoderSignedIn() bool { return len(qoderLogins()) > 0 }
@@ -137,41 +210,37 @@ func QoderCredential(ctx context.Context, user string) (*qoder.Credential, error
 	}
 	qoderMu.Lock()
 	defer qoderMu.Unlock()
-	loginsMu.Lock()
-	defer loginsMu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	ls := readLogins()
-	for i := range ls {
-		if ls[i].Agent != "qoder" || !strings.EqualFold(ls[i].User, user) {
-			continue
-		}
-		c, ok, changed := qoderCurrent(ls[i])
-		if !ok {
-			return nil, fmt.Errorf("Qoder: unreadable sign-in")
-		}
-		if c.MachineID == "" {
-			c.MachineID = qoder.NewMachineID()
-			changed = true
-		}
-		if !c.Valid() {
-			var err error
-			c, err = c.Refresh(ctx, qoderClient)
-			if err != nil {
-				return nil, err
-			}
-			changed = true
-			ls[i].Renewed, ls[i].Lapsed = time.Now().UTC(), ""
-		}
-		if changed {
-			if err := qoderPersist(ls, i, c); err != nil {
-				return nil, err
-			}
-		}
-		return &c, nil
+	l, found := qoderLookup(user)
+	if !found {
+		return nil, fmt.Errorf("no Qoder account %q", user)
 	}
-	return nil, fmt.Errorf("no Qoder account %q", user)
+	c, ok, changed := qoderCurrent(l)
+	if !ok {
+		return nil, fmt.Errorf("Qoder: unreadable sign-in")
+	}
+	if c.MachineID == "" {
+		c.MachineID = qoder.NewMachineID()
+		changed = true
+	}
+	renewed := false
+	if !c.Valid() {
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), qoderRefreshTimeout)
+		fresh, err := c.Refresh(rctx, qoderClient)
+		cancel()
+		if err != nil {
+			return nil, qoderRefreshFailed(l.User, err)
+		}
+		c, changed, renewed = fresh, true, true
+	}
+	if changed {
+		if err := qoderPersist(l, c, renewed); err != nil {
+			return nil, err
+		}
+	}
+	return &c, nil
 }
 
 func qoderUser(c *qoder.Credential) *qoder.User {

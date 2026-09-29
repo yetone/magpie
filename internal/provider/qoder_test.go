@@ -145,6 +145,115 @@ func TestQoderRefreshSaveFailureKeepsRotatedPair(t *testing.T) {
 	}
 }
 
+// An aborted request must not drop a pair Qoder has already rotated.
+func TestQoderRefreshOutlivesAbortedRequest(t *testing.T) {
+	signIn(t)
+	var current atomic.Value
+	current.Store("rt-one")
+	var hits atomic.Int32
+	qoderTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		hits.Add(1)
+		if b["refresh_token"] != current.Load().(string) {
+			w.WriteHeader(401)
+			return
+		}
+		current.Store("rt-new")
+		time.Sleep(300 * time.Millisecond)
+		_, _ = w.Write([]byte(`{"token":"jt-new","refresh_token":"rt-new","expires_in":3600000}`))
+	}))
+	c := qoderTestCredential("one")
+	c.ExpiresAt = time.Now().Add(time.Minute).UnixMilli()
+	if err := qoderSave(c); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if fresh, err := QoderCredential(ctx, "one@x"); err != nil || fresh.RefreshToken != "rt-new" {
+		t.Fatalf("aborted refresh: %+v %v", fresh, err)
+	}
+	fresh, err := QoderCredential(context.Background(), "one@x")
+	if err != nil || fresh.Token != "jt-new" || hits.Load() != 1 {
+		t.Fatalf("rotated pair lost: %+v %v hits %d", fresh, err, hits.Load())
+	}
+}
+
+func TestQoderRefusedRefreshLapses(t *testing.T) {
+	signIn(t)
+	qoderTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(401) }))
+	c := qoderTestCredential("one")
+	c.ExpiresAt = time.Now().Add(time.Minute).UnixMilli()
+	c.DeviceRefresh = "drt"
+	if err := qoderSave(c); err != nil {
+		t.Fatal(err)
+	}
+	lapsed := func() string {
+		for _, l := range Logins("qoder") {
+			return l.Lapsed
+		}
+		return ""
+	}
+	if _, err := qoderRefreshDevice(context.Background(), "one@x", c.DeviceToken); err == nil || lapsed() == "" {
+		t.Fatalf("device refresh refused: %v lapsed %q", err, lapsed())
+	}
+	if err := qoderSave(c); err != nil || lapsed() != "" {
+		t.Fatalf("sign-in again keeps lapsed: %v", err)
+	}
+	if _, err := QoderCredential(context.Background(), "one@x"); err == nil || lapsed() == "" {
+		t.Fatalf("job refresh refused: %v lapsed %q", err, lapsed())
+	}
+}
+
+// A Qoder refresh in flight must not hold the logins every provider shares.
+func TestQoderRefreshDoesNotBlockLogins(t *testing.T) {
+	signIn(t)
+	release := make(chan struct{})
+	started := make(chan struct{})
+	var once sync.Once
+	qoderTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { close(started) })
+		<-release
+		_, _ = w.Write([]byte(`{"token":"jt-new","refresh_token":"rt-new","expires_in":3600000}`))
+	}))
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(unblock)
+	c := qoderTestCredential("one")
+	c.ExpiresAt = time.Now().Add(time.Minute).UnixMilli()
+	if err := qoderSave(c); err != nil {
+		t.Fatal(err)
+	}
+	if err := qoderSave(qoderTestCredential("two")); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := QoderCredential(context.Background(), "one@x"); done <- err }()
+	<-started
+	begin := time.Now()
+	_ = Logins("workbuddy")
+	_ = Logins("qoder")
+	if err := SetLoginOn("qoder", "two@x", false); err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(begin); d > 500*time.Millisecond {
+		t.Fatalf("logins blocked %v behind a Qoder refresh", d)
+	}
+	unblock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	// the refresh wrote back into the file as it is now, keeping the change made meanwhile
+	for _, l := range Logins("qoder") {
+		if l.User == "two@x" && l.On {
+			t.Fatal("write-back undid a change made during the refresh")
+		}
+	}
+	if fresh, err := QoderCredential(context.Background(), "one@x"); err != nil || fresh.Token != "jt-new" {
+		t.Fatalf("refreshed pair not saved: %+v %v", fresh, err)
+	}
+}
+
 func TestQoderAccountsAndMigration(t *testing.T) {
 	signIn(t)
 	legacy := filepath.Join(filepath.Dir(Path()), "qoder.json")

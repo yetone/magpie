@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/yetone/magpie/internal/qoder"
 )
@@ -41,36 +40,34 @@ func qoderLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 func qoderRefreshDevice(ctx context.Context, user, attempted string) (string, error) {
 	qoderMu.Lock()
 	defer qoderMu.Unlock()
-	loginsMu.Lock()
-	defer loginsMu.Unlock()
-	ls := readLogins()
-	for i := range ls {
-		if ls[i].Agent != "qoder" || !strings.EqualFold(ls[i].User, user) {
-			continue
-		}
-		c, ok, pending := qoderCurrent(ls[i])
-		if !ok {
-			return "", fmt.Errorf("Qoder: unreadable sign-in")
-		}
-		if c.DeviceToken != attempted {
-			if pending {
-				if err := qoderPersist(ls, i, c); err != nil {
-					return "", err
-				}
+	l, found := qoderLookup(user)
+	if !found {
+		return "", fmt.Errorf("no Qoder account %q", user)
+	}
+	c, ok, pending := qoderCurrent(l)
+	if !ok {
+		return "", fmt.Errorf("Qoder: unreadable sign-in")
+	}
+	if c.DeviceToken != attempted {
+		if pending {
+			if err := qoderPersist(l, c, false); err != nil {
+				return "", err
 			}
-			return c.DeviceToken, nil
-		}
-		dt, err := qoder.RefreshDeviceToken(ctx, qoderClient, "", c.DeviceRefresh)
-		if err != nil {
-			return "", err
-		}
-		c.DeviceToken, c.DeviceRefresh = dt.Token, dt.RefreshToken
-		if err := qoderPersist(ls, i, c); err != nil {
-			return "", err
 		}
 		return c.DeviceToken, nil
 	}
-	return "", fmt.Errorf("no Qoder account %q", user)
+	// the device refresh token rotates too: keep its reply past the caller
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), qoderRefreshTimeout)
+	dt, err := qoder.RefreshDeviceToken(rctx, qoderClient, "", c.DeviceRefresh)
+	cancel()
+	if err != nil {
+		return "", qoderRefreshFailed(l.User, err)
+	}
+	c.DeviceToken, c.DeviceRefresh = dt.Token, dt.RefreshToken
+	if err := qoderPersist(l, c, false); err != nil {
+		return "", err
+	}
+	return c.DeviceToken, nil
 }
 
 func parseQoderQuota(raw []byte, q SubscriptionQuota) (SubscriptionQuota, error) {

@@ -18,7 +18,8 @@ import (
 
 func testQoderModel(t *testing.T) qoder.ModelInfo {
 	t.Helper()
-	ms, err := qoder.ModelConfigs([]byte(`{"chat":[{"key":"qfmodel","enable":true,"display_name":"Qwen3.8-Flash","format":"openai","source":"system","is_vl":true,"is_reasoning":true,"max_input_tokens":200000}]}`))
+	ms, err := qoder.ModelConfigs([]byte(`{"chat":[{"key":"qfmodel","enable":true,"display_name":"Qwen3.8-Flash","format":"openai","source":"system","is_vl":true,"is_reasoning":true,"max_input_tokens":200000,
+	 "thinking_config":{"disabled":{"description":"Disable thinking"},"enabled":{"is_default":true,"efforts":{"xhigh":{},"medium":{"is_default":true},"low":{}}}}}]}`))
 	if err != nil || len(ms) != 1 {
 		t.Fatalf("model fixture: %v", err)
 	}
@@ -106,14 +107,18 @@ func TestQoderSelectedModel(t *testing.T) {
 	}
 }
 
+// Qoder's efforts come from thinking_config; asked for nothing, or for one
+// the model doesn't offer, it thinks at its own default.
 func TestQoderReasoning(t *testing.T) {
 	model := testQoderModel(t)
-	model.Efforts = []string{"low", "high"}
+	if model.DefaultEffort != "medium" || !model.Thinks || model.AlwaysThinks {
+		t.Fatalf("thinking_config read: %+v", model)
+	}
 	for _, tt := range []struct {
 		want, got string
 		thinking  bool
 	}{
-		{"medium", "high", true}, {"max", "high", true}, {"none", "", false}, {"", "high", true}, {"invalid", "high", true},
+		{"", "medium", true}, {"xhigh", "xhigh", true}, {"max", "xhigh", true}, {"none", "", false}, {"invalid", "medium", true},
 	} {
 		b, err := qoderChatBody(&Request{Effort: tt.want}, model)
 		if err != nil {
@@ -123,19 +128,98 @@ func TestQoderReasoning(t *testing.T) {
 			t.Fatalf("effort %q: %s", tt.want, b)
 		}
 	}
+	// a model that can't stop thinking thinks at its lowest when asked for none
+	always, err := qoder.ModelConfigs([]byte(`{"chat":[{"key":"gf","enable":true,"is_reasoning":true,"thinking_config":{"enabled":{"is_default":true,"efforts":{"max":{"is_default":true},"high":{},"low":{}}}}}]}`))
+	if err != nil || !always[0].AlwaysThinks {
+		t.Fatalf("always-thinking model: %+v %v", always, err)
+	}
+	b, _ := qoderChatBody(&Request{Effort: "none"}, always[0])
+	if !gjson.GetBytes(b, "parameters.enable_thinking").Bool() || gjson.GetBytes(b, "parameters.reasoning_effort").String() != "low" {
+		t.Fatalf("always-thinking asked for none: %s", b)
+	}
 }
 
-func TestQoderMultipleToolResults(t *testing.T) {
-	blocks, _, result := qoderBlocks(Message{Role: "user", Parts: []Part{
-		{Kind: ToolResult, CallID: "A", Text: "result A"}, {Kind: ToolResult, CallID: "B", Text: "result B", IsError: true},
-	}})
-	if !result || len(blocks) != 4 {
-		t.Fatalf("blocks %+v", blocks)
+// A tool call and its result are sent as OpenAI tool turns, so the result is
+// paired with the call by id, not by order.
+func TestQoderToolTurns(t *testing.T) {
+	msgs := qoderMessages([]Message{
+		{Role: "user", Parts: []Part{{Kind: Text, Text: "read it"}}},
+		{Role: "assistant", Parts: []Part{
+			{Kind: ToolCall, ID: "call_A", Name: "read", Args: json.RawMessage(`{"path":"/tmp/x & y"}`)},
+			{Kind: ToolCall, ID: "call_B", Name: "bash", Args: json.RawMessage(`{"command":"ls"}`)}}},
+		{Role: "user", Parts: []Part{
+			{Kind: ToolResult, CallID: "call_B", Text: "second result"},
+			{Kind: ToolResult, CallID: "call_A", Text: "first result", IsError: true}}},
+	})
+	b, _ := json.Marshal(msgs)
+	if len(msgs) != 4 {
+		t.Fatalf("turns %s", b)
 	}
-	for i, want := range []string{"Function result for call A", "result A", "Function result for call B", "Error: result B"} {
-		if !strings.HasPrefix(blocks[i].(map[string]any)["text"].(string), want) {
-			t.Fatalf("block %d: %+v", i, blocks[i])
+	got := gjson.ParseBytes(b)
+	if got.Get("1.tool_calls.0.id").String() != "call_A" || got.Get("1.tool_calls.1.id").String() != "call_B" {
+		t.Fatalf("tool_calls %s", got.Get("1").Raw)
+	}
+	// arguments reach Qoder as they stand, not HTML-escaped
+	if got.Get("1.tool_calls.0.function.arguments").String() != `{"path":"/tmp/x & y"}` {
+		t.Fatalf("arguments %s", got.Get("1.tool_calls.0").Raw)
+	}
+	if got.Get("2.role").String() != "tool" || got.Get("2.tool_call_id").String() != "call_B" ||
+		got.Get("2.content").String() != "second result" {
+		t.Fatalf("tool turn %s", got.Get("2").Raw)
+	}
+}
+
+// The caller's tools go to Qoder as native function tools.
+func TestQoderNativeTools(t *testing.T) {
+	b, err := qoderChatBody(&Request{Tools: []Tool{{Name: "read", Description: "Read a file",
+		Schema: json.RawMessage(`{"type":"object"}`)}}}, testQoderModel(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gjson.GetBytes(b, "tools.0.type").String() != "function" || gjson.GetBytes(b, "tools.0.function.name").String() != "read" {
+		t.Fatalf("tools %s", b)
+	}
+	none, _ := qoderChatBody(&Request{ToolChoice: "none", Tools: []Tool{{Name: "read"}}}, testQoderModel(t))
+	if gjson.GetBytes(none, "tools").Exists() {
+		t.Fatalf("tools sent for tool_choice none: %s", none)
+	}
+}
+
+// Qoder's own tool_calls come back with the id they are answered with.
+func TestQoderNativeToolCall(t *testing.T) {
+	calls := []string{
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_up1","type":"function","function":{"name":"read","arguments":""}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"path\": \"/tmp/x"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":" \\u0026 y\"}"}}]}}]}`,
+		`{"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_up2","type":"function","function":{"name":"bash","arguments":"{\"command\":\"ls\"}"}}]}}]}`,
+		`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`,
+	}
+	var env []string
+	for _, c := range calls {
+		env = append(env, qoderChunk(c))
+	}
+	events := qoderDecoded(env...)
+	var ids []string
+	var args, stop string
+	for _, ev := range events {
+		switch ev.Kind {
+		case KToolStart:
+			ids = append(ids, ev.ID)
+		case KToolArgs:
+			args += ev.Text
+		case KStop:
+			stop = ev.Stop
 		}
+	}
+	if len(ids) != 2 || ids[0] != "call_up1" || ids[1] != "call_up2" {
+		t.Fatalf("call ids %v", ids)
+	}
+	// arguments are handed on as they arrive: nothing is unescaped twice
+	if args != `{"path": "/tmp/x \u0026 y"}{"command":"ls"}` {
+		t.Fatalf("arguments %q", args)
+	}
+	if stop != "tool" {
+		t.Fatalf("stop %q", stop)
 	}
 }
 
@@ -286,20 +370,20 @@ func TestQoderChatBody(t *testing.T) {
 	if gjson.GetBytes(b, "model_config.key").String() != "qfmodel" {
 		t.Fatalf("model key")
 	}
-	if !strings.Contains(gjson.GetBytes(b, "system.0.text").String(), "Read a file") {
-		t.Fatalf("tool contract missing: %s", gjson.GetBytes(b, "system.0.text").String())
+	// the caller's tools go as Qoder's own function tools, not in the prompt
+	if gjson.GetBytes(b, "tools.0.function.name").String() != "read" ||
+		!strings.Contains(gjson.GetBytes(b, "system.0.text").String(), "Be terse.") {
+		t.Fatalf("system/tools: %s", b)
 	}
 	msgs := gjson.GetBytes(b, "messages")
 	if msgs.Get("0.role").String() != "system" {
 		t.Fatalf("first message is %s, want system", msgs.Get("0.role").String())
 	}
-	// assistant tool call replayed as XML in its content, tool result as a
-	// user turn naming the call id
-	body := string(b)
-	for _, kw := range []string{"Function result for call c1", "the file"} {
-		if !strings.Contains(body, kw) {
-			t.Fatalf("missing %q in body", kw)
-		}
+	// assistant tool call and tool result are tool turns named by id
+	if msgs.Get("2.tool_calls.0.id").String() != "c1" ||
+		msgs.Get("3.role").String() != "tool" || msgs.Get("3.tool_call_id").String() != "c1" ||
+		msgs.Get("3.content").String() != "the file" {
+		t.Fatalf("tool turns: %s", msgs.Raw)
 	}
 }
 
