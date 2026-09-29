@@ -237,8 +237,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // Export CSV posts the filters shown, no page, and says where it went
         await page.locator("#ledExport").click();
         await lastAsked(page, asked, (q) => q.method === "POST");
-        const ex = asked.at(-1);
+        const ex = asked.findLast((q) => q.method === "POST"); // a refresh may ask after it
         assert.equal(ex.get("period"), "today");
+        assert.equal(asked.filter((q) => q.method === "POST").length, 1, "one export");
         assert(!ex.has("offset") && !ex.has("limit"), "every page is exported");
         await page.waitForFunction((s) => document.querySelector("#status").textContent === s, w.saved);
         assert.deepEqual(errors, []);

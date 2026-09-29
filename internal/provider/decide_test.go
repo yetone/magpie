@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // A decision provider (TypeSafe's Jev) is only ever a group's classifier:
@@ -152,6 +155,241 @@ func TestCloudflareNoAccount(t *testing.T) {
 	defer up.Close()
 	p := Provider{ID: "g", Name: "G", Key: "workers-ai-only", Decide: up.URL + "/client/v4"}
 	if _, err := p.DecideURL(context.Background()); err == nil || !strings.Contains(err.Error(), "/accounts/<account ID>/ai/run") {
+		t.Fatal(err)
+	}
+}
+
+// TypeSafe names every model in {"models":[{"name"}]}. A gateway in
+// front of it answers OpenAI's {"data":[{"id"}]} instead, which is
+// every model it serves; an id is kept only as jev* or */jev*.
+func TestFetchDecideOpenAIJevIDs(t *testing.T) {
+	isolate(t)
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	var auth string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		auth = r.Header.Get("Authorization")
+		w.Write([]byte(`{"object":"list","data":[
+			{"id":"gemini-3.8-flash"},
+			{"id":"jev-latest"},
+			{"id":"jev-preview"},
+			{"id":"Jev-1.13.0"},
+			{"id":"typesafe/jev"},
+			{"id":"typesafe-ai/jev"},
+			{"id":"org/typesafe/jev-preview"},
+			{"id":"notjev"},
+			{"id":"foo/notjev"},
+			{"id":"foo/jevx"},
+			{"id":"jevons"},
+			{"id":"my-jev"},
+			{"id":"jev-latest"}
+		]}`))
+	}))
+	defer up.Close()
+	p := Provider{ID: "gptload-jev", Name: "TypeSafe Jev", Key: "sk-test", Decide: up.URL + "/v1"}
+	ms, err := p.fetchDecide(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := make([]string, len(ms))
+	for i, m := range ms {
+		got[i] = m.ID
+		if m.Name != m.ID {
+			t.Errorf("name %q id %q", m.Name, m.ID)
+		}
+	}
+	want := []string{"jev-latest", "jev-preview", "Jev-1.13.0", "typesafe/jev", "typesafe-ai/jev", "org/typesafe/jev-preview"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %v", got)
+	}
+	if auth != "Bearer sk-test" {
+		t.Errorf("auth %q", auth)
+	}
+	if r := p.Test(context.Background()); len(r) != 1 || !r[0].OK || r[0].Model != "jev-latest" {
+		t.Fatalf("test %+v", r)
+	}
+
+	names, err := listedDecide([]byte(`{"models":[{"name":"jev-latest"},{"name":"other-model"}],"data":[{"id":"gemini-3"}]}`))
+	if err != nil || len(names) != 2 || names[0].ID != "jev-latest" || names[1].ID != "other-model" {
+		t.Fatalf("names %+v %v", names, err)
+	}
+	byID, err := listedDecide([]byte(`{"models":[{"id":"jev-preview"},{"id":"gemini-3"}]}`))
+	if err != nil || len(byID) != 1 || byID[0].ID != "jev-preview" {
+		t.Fatalf("id %+v %v", byID, err)
+	}
+	if ms, err := listedDecide([]byte(`{"data":[{"id":"gemini-3.8-flash"}]}`)); err != nil || len(ms) != 0 {
+		t.Fatalf("unrelated %+v %v", ms, err)
+	}
+	if _, err := listedDecide([]byte(`<html>`)); err == nil || err.Error() != "not a model list" {
+		t.Fatal(err)
+	}
+	if ms, err := listedDecide([]byte(`{"data":[{"id":"jevons"},{"id":"foo/jevx"}]}`)); err != nil || len(ms) != 0 {
+		t.Fatalf("jevons %+v %v", ms, err)
+	}
+}
+
+// A System One model's prefix is the Jev provider. The rest is what that
+// provider is asked. A bare Jev id needs exactly one provider that can
+// answer it.
+func TestRouteDecider(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	if _, _, err := RouteDecider(""); err == nil || !strings.Contains(err.Error(), "names no model") {
+		t.Fatal(err)
+	}
+	if _, _, err := RouteDecider("jev-latest"); err == nil || !strings.Contains(err.Error(), "no Jev provider") {
+		t.Fatal(err)
+	}
+	for _, p := range []Provider{
+		{ID: "gptload-jev", Name: "Load", Key: "k", Decide: "http://127.0.0.1:9/v1"},
+		{ID: "typesafe", Name: "TypeSafe", Key: "k2", Decide: "https://api.typesafe.ai/v1"},
+		{ID: "off-jev", Name: "Off", Key: "k3", Decide: "http://127.0.0.1:9/v1", Off: true},
+	} {
+		if err := Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := catalog.SaveLive("typesafe", "", []catalog.Model{
+		{ID: "sys1-mini", Name: "Mini"},
+		{ID: JevLatest, Name: "Jev"},
+		{ID: "jev-preview", Name: "Jev (preview)"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("gptload-jev", "", []catalog.Model{
+		{ID: JevLatest, Name: "Jev"},
+		{ID: "jev-1.13.0", Name: "Jev 1.13"},
+		{ID: "typesafe-ai/jev", Name: "Jev"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	p, model, err := RouteDecider("gptload-jev/jev-1.13.0")
+	if err != nil || p.ID != "gptload-jev" || model != "jev-1.13.0" {
+		t.Fatalf("%s %s %v", p.ID, model, err)
+	}
+	p, model, err = RouteDecider("gptload-jev/typesafe-ai/jev")
+	if err != nil || p.ID != "gptload-jev" || model != "typesafe-ai/jev" {
+		t.Fatalf("nested %s %s %v", p.ID, model, err)
+	}
+	p, model, err = RouteDecider("typesafe/sys1-mini")
+	if err != nil || p.ID != "typesafe" || model != "sys1-mini" {
+		t.Fatalf("listed %s %s %v", p.ID, model, err)
+	}
+	if _, _, err := RouteDecider("gptload-jev/gemini-3.8-flash"); err == nil || !strings.Contains(err.Error(), "is not a model of") || DecideRouteStatus(err) != http.StatusBadRequest {
+		t.Fatal(err)
+	}
+	if _, _, err := RouteDecider("gptload-jev/jev-bogus-9"); err == nil || !strings.Contains(err.Error(), "is not a model of") || DecideRouteStatus(err) != http.StatusBadRequest {
+		t.Fatal(err)
+	}
+	if _, _, err := RouteDecider("gptload-jev/jev-preview"); err == nil || !strings.Contains(err.Error(), "is not a model of") {
+		t.Fatal(err)
+	}
+	p, model, err = RouteDecider("typesafe")
+	if err != nil || p.ID != "typesafe" || model != JevLatest {
+		t.Fatalf("bare provider %s %s %v", p.ID, model, err)
+	}
+	_, _, err = RouteDecider("jev-latest")
+	if err == nil || DecideRouteStatus(err) != http.StatusBadRequest || !strings.Contains(err.Error(), "more than one") || !strings.Contains(err.Error(), "gptload-jev/jev-latest") || !strings.Contains(err.Error(), "typesafe/jev-latest") {
+		t.Fatal(err)
+	}
+	if _, _, err := RouteDecider("off-jev/jev-latest"); err == nil || !strings.Contains(err.Error(), "switched off") {
+		t.Fatal(err)
+	}
+	if _, _, err := RouteDecider("missing/jev-latest"); err == nil || !strings.Contains(err.Error(), "knows no Jev model") {
+		t.Fatal(err)
+	}
+}
+
+// A lone Vercel Jev is asked as it names Jev, even when the request said
+// TypeSafe's jev-latest.
+func TestRouteDeciderVercelAlias(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	if err := Save(Provider{ID: "vercel-jev", Name: "Vercel", Key: "k", Decide: "https://ai-gateway.vercel.sh/typesafe"}); err != nil {
+		t.Fatal(err)
+	}
+	p, model, err := RouteDecider("jev-latest")
+	if err != nil || p.ID != "vercel-jev" || model != "typesafe-ai/jev" {
+		t.Fatalf("bare %s %s %v", p.ID, model, err)
+	}
+	p, model, err = RouteDecider("vercel-jev/jev-latest")
+	if err != nil || p.ID != "vercel-jev" || model != "typesafe-ai/jev" {
+		t.Fatalf("prefix %s %s %v", p.ID, model, err)
+	}
+	p, model, err = RouteDecider("vercel-jev/typesafe-ai/jev")
+	if err != nil || model != "typesafe-ai/jev" {
+		t.Fatalf("own name %s %v", model, err)
+	}
+	if _, _, err := RouteDecider("vercel-jev/jev-preview"); err == nil || !strings.Contains(err.Error(), "is not a model of") {
+		t.Fatal(err)
+	}
+	if _, _, err := RouteDecider("vercel-jev/jev-bogus-9"); err == nil || !strings.Contains(err.Error(), "is not a model of") {
+		t.Fatal(err)
+	}
+}
+
+// Cloudflare's one Jev is typesafe/jev; jev-latest is that name, preview is not.
+func TestRouteDeciderCloudflareAlias(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	if err := Save(Provider{ID: "cloudflare-jev", Name: "CF", Key: "k", Decide: "https://api.cloudflare.com/client/v4"}); err != nil {
+		t.Fatal(err)
+	}
+	p, model, err := RouteDecider("jev-latest")
+	if err != nil || p.ID != "cloudflare-jev" || model != "typesafe/jev" {
+		t.Fatalf("bare %s %s %v", p.ID, model, err)
+	}
+	if _, _, err := RouteDecider("cloudflare-jev/jev-preview"); err == nil || !strings.Contains(err.Error(), "is not a model of") {
+		t.Fatal(err)
+	}
+}
+
+// Two gateways that have not fetched a list both take jev-latest as their
+// one Jev; a bare id must not pick one of them (404) as if none served it.
+func TestRouteDeciderUnfetchedAmbiguous(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	for _, p := range []Provider{
+		{ID: "vercel-a", Name: "VA", Key: "k", Decide: "https://ai-gateway.vercel.sh/typesafe"},
+		{ID: "vercel-b", Name: "VB", Key: "k2", Decide: "https://ai-gateway.vercel.sh/typesafe"},
+	} {
+		if err := Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _, err := RouteDecider("jev-latest")
+	if err == nil || DecideRouteStatus(err) != http.StatusBadRequest || !strings.Contains(err.Error(), "more than one") {
+		t.Fatal(err)
+	}
+	// two System One providers, catalogs not fetched, both default to jev-latest
+	h2 := t.TempDir()
+	t.Setenv("HOME", h2)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h2, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h2, ".cache"))
+	for _, p := range []Provider{
+		{ID: "s1a", Name: "A", Key: "k", Decide: "http://127.0.0.1:9/v1"},
+		{ID: "s1b", Name: "B", Key: "k2", Decide: "http://127.0.0.1:8/v1"},
+	} {
+		if err := Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _, err = RouteDecider("jev-latest")
+	if err == nil || DecideRouteStatus(err) != http.StatusBadRequest || !strings.Contains(err.Error(), "more than one") {
 		t.Fatal(err)
 	}
 }

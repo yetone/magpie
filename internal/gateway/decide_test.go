@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -72,6 +74,159 @@ func (u *jevUp) turns() []map[string]any {
 		}
 	}
 	return out
+}
+
+// Magpie's own /v1/systemone sends the call to the Jev provider named by
+// the model prefix, with that prefix taken off the model. /systemone is
+// not served.
+func TestSystemOneRoutesByPrefix(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	type hit struct {
+		path, auth, model, state string
+	}
+	serve := func() (*httptest.Server, *[]hit, *sync.Mutex, *int, *string, *string) {
+		var mu sync.Mutex
+		var hits []hit
+		status := http.StatusOK
+		ctype, failBody := "", ""
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			var q struct {
+				Model string            `json:"model"`
+				State map[string]string `json:"state"`
+			}
+			json.Unmarshal(b, &q)
+			mu.Lock()
+			hits = append(hits, hit{r.URL.Path, r.Header.Get("Authorization"), q.Model, q.State["message"]})
+			code, ct, fb := status, ctype, failBody
+			mu.Unlock()
+			if code != http.StatusOK {
+				if ct != "" {
+					w.Header().Set("Content-Type", ct)
+					w.WriteHeader(code)
+					io.WriteString(w, fb)
+					return
+				}
+				http.Error(w, `{"detail":{"message":"nope"}}`, code)
+				return
+			}
+			if r.URL.Path != "/v1/systemone" {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"model": q.Model, "answers": map[string]any{"intent": map[string]any{"choice": "bug"}}})
+		}))
+		return srv, &hits, &mu, &status, &ctype, &failBody
+	}
+	a, aHits, aMu, aStatus, aCtype, aBody := serve()
+	defer a.Close()
+	b, bHits, _, _, _, _ := serve()
+	defer b.Close()
+	for _, p := range []provider.Provider{
+		{ID: "load-a", Name: "A", Key: "ka", Decide: a.URL + "/v1"},
+		{ID: "load-b", Name: "B", Key: "kb", Decide: b.URL + "/v1"},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := New()
+	call := func(path, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer magpie")
+		s.Handler().ServeHTTP(rec, req)
+		return rec
+	}
+	rec := call("/v1/systemone", `{"model":"load-a/jev-latest","state":{"message":"hi"},"questions":{"intent":{"type":"choice"}}}`)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"choice":"bug"`) {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if n := len(s.trace.routes); n != 1 {
+		t.Fatalf("traced %d", n)
+	}
+	if r := s.trace.routes[0]; r.Provider != "load-a" || r.Model != "load-a/jev-latest" || !r.Done || r.Status != 200 || len(r.Tries) != 1 || r.Tries[0].Model != "jev-latest" || r.Tries[0].ID != "load-a" {
+		t.Fatalf("route %+v", r)
+	}
+	aMu.Lock()
+	if len(*aHits) != 1 || (*aHits)[0].path != "/v1/systemone" || (*aHits)[0].auth != "Bearer ka" || (*aHits)[0].model != "jev-latest" || (*aHits)[0].state != "hi" {
+		t.Fatalf("a %+v", *aHits)
+	}
+	aMu.Unlock()
+	if len(*bHits) != 0 {
+		t.Fatalf("b %+v", *bHits)
+	}
+	if err := catalog.SaveLive("load-a", "", []catalog.Model{{ID: "sys1-mini", Name: "Mini"}, {ID: "jev-latest", Name: "Jev"}, {ID: "jev-preview", Name: "Jev (preview)"}}); err != nil {
+		t.Fatal(err)
+	}
+	rec = call("/v1/systemone", `{"model":"load-a/sys1-mini","state":{"message":"mini"},"questions":{}}`)
+	if rec.Code != 200 {
+		t.Fatalf("sys1-mini %d %s", rec.Code, rec.Body)
+	}
+	aMu.Lock()
+	if got := (*aHits)[len(*aHits)-1]; got.model != "sys1-mini" || got.state != "mini" {
+		t.Fatalf("sys1-mini hit %+v", got)
+	}
+	aMu.Unlock()
+	if err := catalog.SaveLive("load-b", "", []catalog.Model{{ID: "typesafe/jev", Name: "Jev"}, {ID: "jev-latest", Name: "Jev"}}); err != nil {
+		t.Fatal(err)
+	}
+	rec = call("/v1/systemone", `{"model":"load-b/typesafe/jev","state":{"message":"there"},"questions":{}}`)
+	if rec.Code != 200 {
+		t.Fatalf("b route %d %s", rec.Code, rec.Body)
+	}
+	if got := (*bHits)[0]; got.auth != "Bearer kb" || got.model != "typesafe/jev" || got.state != "there" {
+		t.Fatalf("b hit %+v", got)
+	}
+	if rec := call("/systemone", `{"model":"load-a/jev-latest"}`); rec.Code != 404 || !strings.Contains(rec.Body.String(), "/v1/systemone") {
+		t.Fatalf("/systemone %d %s", rec.Code, rec.Body)
+	}
+	if rec := call("/v1/systemone", `{"model":"load-a/gemini-3.8-flash","state":{},"questions":{}}`); rec.Code != 400 {
+		t.Fatalf("gemini %d %s", rec.Code, rec.Body)
+	}
+	if rec := call("/v1/systemone", `{"model":"nobody/jev-latest"}`); rec.Code != 404 {
+		t.Fatalf("nobody %d %s", rec.Code, rec.Body)
+	}
+	if rec := call("/v1/systemone", `{"model":"load-a/jev-bogus-9"}`); rec.Code != 400 || !strings.Contains(rec.Body.String(), "is not a model of") {
+		t.Fatalf("bogus %d %s", rec.Code, rec.Body)
+	}
+	if rec := call("/v1/systemone", `{"model":"jev-latest"}`); rec.Code != 400 || !strings.Contains(rec.Body.String(), "more than one") {
+		t.Fatalf("ambiguous %d %s", rec.Code, rec.Body)
+	}
+	if n := len(s.trace.routes); n != 3 {
+		t.Fatalf("traced %d after misses", n)
+	}
+	*aStatus = http.StatusForbidden
+	if rec := call("/v1/systemone", `{"model":"load-a/jev-preview","questions":{}}`); rec.Code != 403 || !strings.Contains(rec.Body.String(), "nope") {
+		t.Fatalf("upstream %d %s", rec.Code, rec.Body)
+	}
+	if r := s.trace.routes[len(s.trace.routes)-1]; r.Model != "load-a/jev-preview" || r.Status != 403 || r.Tries[0].Fail == "" {
+		t.Fatalf("403 route %+v", r)
+	}
+	*aStatus, *aCtype, *aBody = http.StatusBadGateway, "text/html; charset=utf-8", "<html>bad gateway</html>"
+	if rec := call("/v1/systemone", `{"model":"load-a/jev-preview","questions":{}}`); rec.Code != 502 || rec.Header().Get("Content-Type") != "text/html; charset=utf-8" || !strings.Contains(rec.Body.String(), "<html>") {
+		t.Fatalf("html 502 %d %s %q", rec.Code, rec.Header().Get("Content-Type"), rec.Body)
+	}
+	big := `{"model":"load-a/jev-latest","pad":"` + strings.Repeat("x", maxSystemOneBody) + `"}`
+	if rec := call("/v1/systemone", big); rec.Code != http.StatusRequestEntityTooLarge || strings.Contains(rec.Body.String(), "not a System One request") {
+		t.Fatalf("413 %d %s", rec.Code, rec.Body)
+	}
+}
+
+// A Cloudflare DecideURL error is named once, not "CF: CF: …".
+func TestSystemOneDecideURLErrorOnce(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"success":false,"errors":[{"code":9109,"message":"Unauthorized"}]}`, 403)
+	}))
+	defer up.Close()
+	p := provider.Provider{ID: "cf", Name: "CF", Key: "k", Decide: up.URL + "/client/v4"}
+	_, err := New().systemOne(context.Background(), p, "typesafe/jev", []byte(`{}`))
+	if err == nil || strings.Count(err.Error(), "CF:") != 1 {
+		t.Fatal(err)
+	}
 }
 
 func (u *jevUp) n() int {

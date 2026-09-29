@@ -171,3 +171,96 @@ func TestSum(t *testing.T) {
 		t.Fatal(Duration(20), Duration(300))
 	}
 }
+
+// The active time is kept by the hour it was put on too, and each session
+// in the range comes with what it spent in it and the days it was at work.
+func TestStatsHoursAndSessions(t *testing.T) {
+	inZone(t, 8)
+	claude, _ := setup(t)
+	path := filepath.Join(claude, "projects", "-work-night", "33333333-2222-3333-4444-555555555555.jsonl")
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, []byte(ccMsg("m1", "2026-09-20T15:56:00.000Z", 100, 10)+ // 23:56
+		ccMsg("m2", "2026-09-20T15:59:00.000Z", 200, 20)+ // 23:59
+		ccMsg("m3", "2026-09-20T16:03:00.000Z", 400, 40)), 0o644) // 00:03
+
+	hours := func(s Stats, date string) []int64 {
+		for _, d := range s.Days {
+			for _, a := range d.Active {
+				if d.Date == date && a.Cwd == "/work/night" {
+					return a.Hours
+				}
+			}
+		}
+		return nil
+	}
+	s := statsAt(0, statsNow)
+	if h := hours(s, "2026-09-20"); len(h) != 24 || h[23] != 180 {
+		t.Fatalf("the 20th by hour: %v", h)
+	}
+	if h := hours(s, "2026-09-21"); len(h) != 24 || h[0] != 240 || h[23] != 0 {
+		t.Fatalf("the 21st by hour: %v", h)
+	}
+
+	key := "claude:33333333-2222-3333-4444-555555555555"
+	find := func(s Stats) *Summary {
+		for i := range s.Sessions {
+			if s.Sessions[i].Key == key {
+				return &s.Sessions[i]
+			}
+		}
+		return nil
+	}
+	x := find(s)
+	if x == nil || x.Agent != "claude" || x.Cwd != "/work/night" || x.Active != 420 ||
+		x.Tokens != (Tokens{700, 70, 30, 0}) || !x.Priced || x.Cost <= 0 ||
+		len(x.Models) != 1 || len(x.Days) != 2 || x.Days[0] != 0 || x.Days[1] != 1 {
+		t.Fatalf("summary %+v", x)
+	}
+	if !sortedByLast(s.Sessions) || len(s.Sessions) < 3 {
+		t.Fatalf("sessions %+v", s.Sessions)
+	}
+	// a range counts only its own days
+	day := statsAt(1, time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC))
+	if x := find(day); x == nil || x.Tokens != (Tokens{400, 40, 10, 0}) || x.Active != 240 || len(x.Days) != 1 || x.Days[0] != 0 {
+		t.Fatalf("the 21st alone: %+v", x)
+	}
+	if len(day.Sessions) != 1 {
+		t.Fatalf("the 21st: %d sessions", len(day.Sessions))
+	}
+
+	// Get reads a session by its key, as Find does past the listed ones
+	if g, ok := Get(key); !ok || g.Cwd != "/work/night" || g.Tokens != (Tokens{700, 70, 30, 0}) {
+		t.Fatalf("get %+v %v", g, ok)
+	}
+	if _, ok := Get("claude:nope"); ok {
+		t.Fatal("got a session that isn't there")
+	}
+	if f, ok := Find("claude", "33333333-2222-3333-4444-555555555555"); !ok || f.Cwd != "/work/night" {
+		t.Fatalf("find %+v", f)
+	}
+	// the overview: all, then one folder, then one model
+	o := s.Overview("", "", "", 2)
+	if o.Count != len(s.Sessions) || len(o.Days) != 9 || o.Days[0] < 2 || o.Days[1] != 1 ||
+		len(o.Top["tokens"]) != 2 || o.Top["tokens"][0].Input+o.Top["tokens"][0].Output < o.Top["tokens"][1].Input+o.Top["tokens"][1].Output ||
+		o.Top["active"][0].Key != key || o.Median == 0 || o.P90 < o.Median {
+		t.Fatalf("overview %+v", o)
+	}
+	if o := s.Overview("claude", "", "/work/night", 5); o.Count != 1 || o.Median != 770 || o.P90 != 770 || o.Days[0] != 1 || o.Days[1] != 1 || len(o.Top["cost"]) != 1 {
+		t.Fatalf("one folder %+v", o)
+	}
+	if o := s.Overview("", "no-such-model", "", 5); o.Count != 0 || o.Median != 0 || len(o.Top["tokens"]) != 0 {
+		t.Fatalf("no model %+v", o)
+	}
+	if clip("abcdef", 4) != "abc…" || clip("abc", 4) != "abc" {
+		t.Fatal("clip")
+	}
+}
+
+func sortedByLast(ss []Summary) bool {
+	for i := 1; i < len(ss); i++ {
+		if ss[i].Last.After(ss[i-1].Last) {
+			return false
+		}
+	}
+	return true
+}

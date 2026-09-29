@@ -79,7 +79,7 @@ func TestQianfanTokenPlanRoutes(t *testing.T) {
 	up := &qianfan{}
 	srv := httptest.NewServer(up)
 	t.Cleanup(srv.Close)
-	p, err := provider.FromPreset("qianfan-token-plan")
+	p, err := provider.FromPreset("baidu-qianfan")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,16 +96,16 @@ func TestQianfanTokenPlanRoutes(t *testing.T) {
 		bearer                                bool
 	}{
 		{"flash on responses", "/v1/responses",
-			`{"model":"qianfan-token-plan/deepseek-v4.1-flash","input":"hi","stream":true}`,
+			`{"model":"baidu-qianfan/deepseek-v4.1-flash","input":"hi","stream":true}`,
 			"/v2/tokenplan/personal/responses", "deepseek-v4.1-flash", "from responses", true},
 		{"pro on responses", "/v1/responses",
-			`{"model":"qianfan-token-plan/deepseek-v4-pro","input":"hi","stream":true}`,
+			`{"model":"baidu-qianfan/deepseek-v4-pro","input":"hi","stream":true}`,
 			"/v2/tokenplan/personal/responses", "deepseek-v4-pro", "from responses", true},
 		{"flash on messages", "/v1/messages",
-			`{"model":"qianfan-token-plan/deepseek-v4.1-flash","max_tokens":20,"stream":true,"messages":[{"role":"user","content":"hi"}]}`,
+			`{"model":"baidu-qianfan/deepseek-v4.1-flash","max_tokens":20,"stream":true,"messages":[{"role":"user","content":"hi"}]}`,
 			"/anthropic/tokenplan/personal/v1/messages", "deepseek-v4.1-flash", "from messages", false},
 		{"pro on chat", "/v1/chat/completions",
-			`{"model":"qianfan-token-plan/deepseek-v4-pro","stream":true,"messages":[{"role":"user","content":"hi"}]}`,
+			`{"model":"baidu-qianfan/deepseek-v4-pro","stream":true,"messages":[{"role":"user","content":"hi"}]}`,
 			"/v2/tokenplan/personal/chat/completions", "deepseek-v4-pro", "from chat", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

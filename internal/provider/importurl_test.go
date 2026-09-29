@@ -19,6 +19,18 @@ func TestParseImportPreset(t *testing.T) {
 	}
 }
 
+// A region with a key page of its own (Qianfan's pay as you go, on the
+// IAM page) names it in the parsed provider, before it is ever saved.
+func TestParseImportRegionKeys(t *testing.T) {
+	p, err := ParseImport("magpie://import?preset=baidu-qianfan&region=api")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Chat != "https://qianfan.baidubce.com/v2" || p.KeysURL != "https://console.bce.baidu.com/iam/#/iam/apikey/list" {
+		t.Fatalf("got %q %q", p.Chat, p.KeysURL)
+	}
+}
+
 func TestParseImportCustom(t *testing.T) {
 	q := url.Values{
 		"name":      {"My Relay"},

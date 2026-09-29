@@ -12,10 +12,12 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -219,6 +221,153 @@ func IsDecider(id string) bool {
 	return ok && p.Decides()
 }
 
+// RouteDecider is the decision provider a System One model names, and the
+// model that provider is asked with. The name's prefix is the provider
+// (gptload-jev/jev-latest, vercel-jev/typesafe-ai/jev). A bare Jev id goes
+// to the only provider that can answer it, as that provider names Jev.
+func RouteDecider(model string) (Provider, string, error) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return Provider{}, "", decideBadRequest("a System One request names no model")
+	}
+	var on []Provider
+	for _, p := range All() {
+		if p.Decides() && p.On() {
+			on = append(on, p)
+		}
+	}
+	if pid, rest, ok := strings.Cut(model, "/"); ok && rest != "" {
+		if p, ok := deciderByID(pid); ok {
+			if !p.On() {
+				return Provider{}, "", decideBadRequest("%s is switched off in magpie", p.Name)
+			}
+			m, ok := resolveDecideModel(p, rest)
+			if !ok {
+				return Provider{}, "", decideBadRequest("%s is not a model of %s", rest, p.Name)
+			}
+			return p, m, nil
+		}
+	}
+	if p, ok := deciderByID(model); ok {
+		if !p.On() {
+			return Provider{}, "", decideBadRequest("%s is switched off in magpie", p.Name)
+		}
+		return p, p.Jev(), nil
+	}
+	var listed []Provider
+	for _, p := range on {
+		for _, m := range p.Available() {
+			if m.ID == model {
+				listed = append(listed, p)
+				break
+			}
+		}
+	}
+	switch len(listed) {
+	case 1:
+		return listed[0], model, nil
+	case 0:
+	default:
+		return Provider{}, "", decideAmbiguous(model, listed)
+	}
+	type hit struct {
+		p Provider
+		m string
+	}
+	var hits []hit
+	for _, p := range on {
+		if m, ok := resolveDecideModel(p, model); ok {
+			hits = append(hits, hit{p, m})
+		}
+	}
+	switch len(hits) {
+	case 1:
+		return hits[0].p, hits[0].m, nil
+	case 0:
+		if len(on) == 0 {
+			return Provider{}, "", decideNotFound("magpie has no Jev provider")
+		}
+		return Provider{}, "", decideNotFound("magpie knows no Jev model %q; name the provider before it, like %s/%s", model, on[0].ID, on[0].Jev())
+	default:
+		ps := make([]Provider, len(hits))
+		for i, h := range hits {
+			ps[i] = h.p
+		}
+		return Provider{}, "", decideAmbiguous(model, ps)
+	}
+}
+
+func decideAmbiguous(model string, ps []Provider) error {
+	names := make([]string, len(ps))
+	for i, p := range ps {
+		names[i] = p.ID + "/" + model
+	}
+	sort.Strings(names)
+	return decideBadRequest("%s is served by more than one Jev provider; name it %s", model, strings.Join(names, " or "))
+}
+
+// decideRouteError is a System One routing failure, with the HTTP status
+// magpie answers.
+type decideRouteError struct {
+	msg    string
+	status int
+}
+
+func (e *decideRouteError) Error() string { return e.msg }
+
+func decideBadRequest(format string, a ...any) error {
+	return &decideRouteError{fmt.Sprintf(format, a...), http.StatusBadRequest}
+}
+
+func decideNotFound(format string, a ...any) error {
+	return &decideRouteError{fmt.Sprintf(format, a...), http.StatusNotFound}
+}
+
+// DecideRouteStatus is the HTTP status a System One request gets for err
+// from RouteDecider: 400 when the model is named badly, 404 when magpie
+// has no such Jev provider.
+func DecideRouteStatus(err error) int {
+	var e *decideRouteError
+	if errors.As(err, &e) {
+		return e.status
+	}
+	if err == nil {
+		return http.StatusOK
+	}
+	return http.StatusNotFound
+}
+
+// resolveDecideModel is the model p is asked with for name: one it lists,
+// else the one name a gateway serves Jev as when the request used TypeSafe's
+// jev-latest (Vercel: typesafe-ai/jev, Cloudflare: typesafe/jev). Preview
+// and other unlisted names are none: the channel has no such model.
+func resolveDecideModel(p Provider, name string) (string, bool) {
+	for _, m := range p.Available() {
+		if m.ID == name {
+			return name, true
+		}
+	}
+	if name == p.Jev() {
+		return name, true
+	}
+	// a gateway lists one Jev, named its own way; jev-latest is that model
+	if p.DecideVia() != ViaSystemOne && strings.EqualFold(name, JevLatest) {
+		return p.Jev(), true
+	}
+	return "", false
+}
+
+// deciderByID is the decision provider whose id is id, on or off.
+func deciderByID(id string) (Provider, bool) {
+	id = strings.ToLower(strings.TrimSpace(id))
+	for _, p := range All() {
+		if p.Decides() && p.ID == id {
+			return p, true
+		}
+	}
+	return Provider{}, false
+}
+
 // fetchDecide lists the models a decision provider's key can use:
 // {"models":[{"name":…,"description":…}]}. A gateway lists Jev among
 // every other model, so its key is checked instead (Vercel's by its
@@ -265,14 +414,33 @@ func (p Provider) fetchDecide(ctx context.Context) ([]catalog.Model, error) {
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s: %s", p.Name, APIError(b, res.Status))
 	}
+	ms, err := listedDecide(b)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %s", p.Name, err)
+	}
+	if len(ms) == 0 {
+		return nil, fmt.Errorf("%s lists no models", p.Name)
+	}
+	return ms, catalog.SaveLive(p.ID, p.Decide, ms)
+}
+
+// listedDecide reads a decision provider's model list. TypeSafe's is
+// {"models":[{"name":…}]}. A gateway in front of Jev often answers
+// OpenAI's instead, {"data":[{"id":…}]}, and that list is every model
+// it serves, so an id counts only when it is Jev's: "jev…" or "…/jev…".
+// Names, when the list has any, are kept as they are.
+func listedDecide(b []byte) ([]catalog.Model, error) {
 	var out struct {
 		Models []struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
+			Name string `json:"name"`
+			ID   string `json:"id"`
 		} `json:"models"`
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(b, &out); err != nil {
-		return nil, fmt.Errorf("%s: not a model list", p.Name)
+		return nil, fmt.Errorf("not a model list")
 	}
 	var ms []catalog.Model
 	for _, m := range out.Models {
@@ -280,10 +448,40 @@ func (p Provider) fetchDecide(ctx context.Context) ([]catalog.Model, error) {
 			ms = append(ms, catalog.Model{ID: m.Name, Name: m.Name})
 		}
 	}
-	if len(ms) == 0 {
-		return nil, fmt.Errorf("%s lists no models", p.Name)
+	if len(ms) > 0 {
+		return ms, nil
 	}
-	return ms, catalog.SaveLive(p.ID, p.Decide, ms)
+	seen := map[string]bool{}
+	take := func(id string) {
+		if id == "" || seen[id] || !jevID(id) {
+			return
+		}
+		seen[id] = true
+		ms = append(ms, catalog.Model{ID: id, Name: id})
+	}
+	for _, m := range out.Data {
+		take(m.ID)
+	}
+	for _, m := range out.Models {
+		take(m.ID)
+	}
+	return ms, nil
+}
+
+// jevID reports whether id names Jev: a path segment that is "jev" or
+// "jev-…" (jev-latest, typesafe/jev, typesafe-ai/jev), not jevons or jevx.
+func jevID(id string) bool {
+	id = strings.ToLower(id)
+	for {
+		seg, rest, ok := strings.Cut(id, "/")
+		if seg == "jev" || strings.HasPrefix(seg, "jev-") {
+			return true
+		}
+		if !ok {
+			return false
+		}
+		id = rest
+	}
 }
 
 // checkKey gets u with p's key, which answers only a key that works.

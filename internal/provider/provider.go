@@ -523,6 +523,12 @@ func normalize(p Provider) Provider {
 	}
 	p.Models = cleanList(p.Models)
 	p.Fallback = cleanList(p.Fallback)
+	// a provider saved under the id the qianfan preset carried its first
+	// day (qianfan-token-plan, v0.1.394) is the preset since renamed:
+	// its own id stays, so whatever the agents wired to it keeps routing
+	if p.Preset == "qianfan-token-plan" {
+		p.Preset = "baidu-qianfan"
+	}
 	if p.Routing != Ordered && p.Routing != Rotate && p.Routing != LeastUsed {
 		p.Routing = ""
 	}
@@ -551,6 +557,14 @@ func normalize(p Provider) Provider {
 		}
 		if p.KeysURL == "" {
 			p.KeysURL = pr.KeysURL
+		}
+		// a region's own key page goes with its endpoints (Qianfan's pay
+		// as you go makes its keys on the IAM page, the plans at the
+		// plan console)
+		for _, r := range pr.Regions {
+			if r.KeysURL != "" && p.atRegion(r) {
+				p.KeysURL = r.KeysURL
+			}
 		}
 	}
 	return p

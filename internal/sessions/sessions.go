@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -125,6 +127,35 @@ type day struct {
 	// again next week) counts nothing. A subagent's file counts none, as
 	// it runs while its session's own file goes on.
 	Active int64 `json:"a,omitempty"`
+	// Hours is Active again, by the local hour of the day it was put on
+	// (24 of them, or none)
+	Hours []int64 `json:"h,omitempty"`
+	// Prompts are the messages typed in the session's own file, Replies
+	// the agent's messages back (Claude Code and Codex alone tell them)
+	Prompts int `json:"u,omitempty"`
+	Replies int `json:"r,omitempty"`
+	// Tools are the tool calls made, by the tool's name, and Skills the
+	// skills called up, by the skill's (subagents' files included)
+	Tools  map[string]int `json:"t,omitempty"`
+	Skills map[string]int `json:"k,omitempty"`
+}
+
+// tool counts a call of a tool, and of a skill when it calls one up.
+func (s *state) tool(at time.Time, name, skill string) {
+	if name == "" {
+		return
+	}
+	d := s.day(dateOf(at))
+	if d.Tools == nil {
+		d.Tools = map[string]int{}
+	}
+	d.Tools[name]++
+	if skill != "" {
+		if d.Skills == nil {
+			d.Skills = map[string]int{}
+		}
+		d.Skills[skill]++
+	}
 }
 
 // idleGap is the longest pause between two lines still counted as work.
@@ -195,7 +226,12 @@ func (s *state) saw(t time.Time, main bool) {
 	}
 	if t.After(s.Last) {
 		if gap := t.Sub(s.Last); main && !s.Last.IsZero() && gap < idleGap {
-			s.day(dateOf(t)).Active += gap.Milliseconds()
+			d := s.day(dateOf(t))
+			d.Active += gap.Milliseconds()
+			if d.Hours == nil {
+				d.Hours = make([]int64, 24)
+			}
+			d.Hours[t.In(time.Local).Hour()] += gap.Milliseconds()
 		}
 		s.Last = t
 	}
@@ -213,7 +249,16 @@ func (s *state) clone() *state {
 	}
 	c.Days = make(map[string]*day, len(s.Days))
 	for k, v := range s.Days {
-		d := &day{Active: v.Active, Models: make(map[string]Tokens, len(v.Models))}
+		d := &day{Active: v.Active, Models: make(map[string]Tokens, len(v.Models)), Prompts: v.Prompts, Replies: v.Replies}
+		if v.Hours != nil {
+			d.Hours = append([]int64(nil), v.Hours...)
+		}
+		if v.Tools != nil {
+			d.Tools = maps.Clone(v.Tools)
+		}
+		if v.Skills != nil {
+			d.Skills = maps.Clone(v.Skills)
+		}
 		for m, t := range v.Models {
 			d.Models[m] = t
 		}
@@ -361,7 +406,8 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // cacheVersion changes when a parse would come out differently, so the
 // parses kept by an older magpie are read again.
 // 2: each file's usage by day, and its active time
-const cacheVersion = 2
+// 3: the active time by hour of the day
+const cacheVersion = 4
 
 type cacheFile struct {
 	Version int               `json:"version"`
@@ -442,10 +488,21 @@ func refresh(want, all []file) {
 		}
 		return
 	}
+	// the biggest first, so no long file is left to run on alone at the
+	// end; and twice the cores, as the reading waits on the disk
+	sort.Slice(todo, func(i, j int) bool { return todo[i].size-offOf(todo[i]) > todo[j].size-offOf(todo[j]) })
+	left := make(map[string]int64, len(todo))
+	var total int64
+	for _, f := range todo {
+		left[f.path] = f.size - offOf(f)
+		total += left[f.path]
+	}
+	progress.start(len(todo), total)
+	defer progress.on.Store(false)
 	var wg sync.WaitGroup
 	var put sync.Mutex
 	ch := make(chan file)
-	for i := 0; i < min(max(4, runtime.NumCPU()/2), len(todo)); i++ {
+	for i := 0; i < min(max(8, 2*runtime.NumCPU()), 32, len(todo)); i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -454,6 +511,8 @@ func refresh(want, all []file) {
 				old := cache[f.path]
 				put.Unlock()
 				s := parse(f, old)
+				progress.files.Add(1)
+				progress.read.Add(left[f.path])
 				put.Lock()
 				cache[f.path] = s
 				put.Unlock()
@@ -466,6 +525,48 @@ func refresh(want, all []file) {
 	close(ch)
 	wg.Wait()
 	saveCache()
+}
+
+// progress is how far the reading of changed files has got, for the page to
+// show while it waits: files and bytes read of those to read.
+var progress indexing
+
+type indexing struct {
+	on          atomic.Bool
+	files, read atomic.Int64
+	todo, bytes atomic.Int64
+}
+
+func (p *indexing) start(n int, total int64) {
+	p.files.Store(0)
+	p.read.Store(0)
+	p.todo.Store(int64(n))
+	p.bytes.Store(total)
+	p.on.Store(n > 0)
+}
+
+// Progress is how far the sessions being read have got; Indexing is false
+// when none are.
+type Progress struct {
+	Indexing bool  `json:"indexing"`
+	Files    int64 `json:"files"`
+	Done     int64 `json:"done"`
+	Bytes    int64 `json:"bytes"`
+	Read     int64 `json:"read"`
+}
+
+// Indexing is the reading's progress.
+func Indexing() Progress {
+	p := &progress
+	return Progress{Indexing: p.on.Load(), Files: p.todo.Load(), Done: p.files.Load(), Bytes: p.bytes.Load(), Read: min(p.read.Load(), p.bytes.Load())}
+}
+
+// offOf is where the parse kept of f left off.
+func offOf(f file) int64 {
+	if s := cache[f.path]; s != nil && s.Off <= f.size {
+		return s.Off
+	}
+	return 0
 }
 
 // pricer looks up the price of each model once.
@@ -652,7 +753,13 @@ func parse(f file, old *state) *state {
 	case "workbuddy":
 		line = workbuddyLine
 	}
-	off, err := scan(f.path, s.Off, func(b []byte) { line(s, b, f.main) })
+	var head func([]byte) bool
+	if f.agent == "codex" {
+		// a Codex line is read only when its start says it is wanted
+		line = codexBody
+		head = func(b []byte) bool { return codexHead(s, b, f.main) }
+	}
+	off, err := scanHead(f.path, s.Off, head, func(b []byte) { line(s, b, f.main) })
 	if err == nil {
 		s.Off = off
 	}
@@ -669,6 +776,15 @@ const maxLine = 32 << 20
 // scan calls fn on each whole line of the file from off, and returns the
 // offset after the last one. A line still being written is left for later.
 func scan(path string, off int64, fn func([]byte)) (int64, error) {
+	return scanHead(path, off, nil, fn)
+}
+
+// scanHead is scan with a look at each line's start first: head is given
+// the line, or its first megabyte when it is longer, and a line it says no
+// to is stepped over without being gathered (most of a Codex rollout's
+// bytes are lines no one reads: compactions, tool output). A nil head
+// wants every line.
+func scanHead(path string, off int64, head func([]byte) bool, fn func([]byte)) (int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return off, err
@@ -680,11 +796,15 @@ func scan(path string, off int64, fn func([]byte)) (int64, error) {
 	r := bufio.NewReaderSize(f, 1<<20)
 	var long []byte
 	var n int64 // bytes of the line so far
-	skip := false
+	skip, seen := false, false
 	for {
 		chunk, err := r.ReadSlice('\n')
 		n += int64(len(chunk))
 		if errors.Is(err, bufio.ErrBufferFull) {
+			if !seen && head != nil {
+				seen = true
+				skip = skip || !head(chunk)
+			}
 			if !skip && len(long)+len(chunk) <= maxLine {
 				long = append(long, chunk...)
 			} else {
@@ -704,12 +824,12 @@ func scan(path string, off int64, fn func([]byte)) (int64, error) {
 			b = long
 		}
 		if !skip {
-			if b = bytes.TrimSpace(b); len(b) > 0 {
+			if b = bytes.TrimSpace(b); len(b) > 0 && (seen || head == nil || head(b)) {
 				fn(b)
 			}
 		}
 		off += n
-		n, skip, long = 0, false, long[:0]
+		n, skip, seen, long = 0, false, false, long[:0]
 	}
 }
 
@@ -842,12 +962,37 @@ func ResumeCommand(agent, id, cwd string) string {
 
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
-// Find is a listed session by agent and id.
+// Find is a session by agent and id: a listed one, else one Get finds
+// under agent:id.
 func Find(agent, id string) (Session, bool) {
 	for _, s := range List(0) {
 		if s.Agent == agent && s.ID == id {
 			return s, true
 		}
 	}
+	if s, ok := Get(agent + ":" + id); ok && s.ID == id {
+		return s, true
+	}
 	return Session{}, false
+}
+
+// Get is the session whose files are grouped under key (a Summary's Key),
+// however long ago it was at work.
+func Get(key string) (Session, bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	loadCache()
+	defer closeDBs()
+	files := allFiles()
+	var fs []file
+	for _, f := range files {
+		if f.key == key {
+			fs = append(fs, f)
+		}
+	}
+	if len(fs) == 0 {
+		return Session{}, false
+	}
+	refresh(fs, files)
+	return assemble(fs, pricer())
 }

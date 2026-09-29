@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 // Codex writes a rollout file per session (a session picked up again later
@@ -64,14 +65,97 @@ var (
 	cxSettings = []byte(`"type":"thread_settings_applied"`)
 	cxUserMsg  = []byte(`"type":"user_message"`)
 	cxUserRole = []byte(`"role":"user"`)
+	cxRole     = []byte(`"role":"`)
+	cxType     = []byte(`"type":"`)
+	cxPayload  = []byte(`"payload":{"type":"`)
+	cxText     = []byte(`,"text":"`)
 )
 
 func codexLine(s *state, b []byte, main bool) {
-	at := tsAt(b, false)
+	if codexHead(s, b, main) {
+		codexBody(s, b, main)
+	}
+}
+
+// codexHead notes the time of a line, from its start, and says whether the
+// rest of it is worth reading: from its type and its payload's, which a
+// rollout writes first, so the megabytes of a compaction or a tool's output
+// are never searched. A line whose start is laid out otherwise is read.
+func codexHead(s *state, b []byte, main bool) bool {
+	at := tsAt(b[:min(len(b), 256)], false)
+	if at.IsZero() {
+		at = tsAt(b, false)
+	}
 	s.saw(at, main)
+	h := b[:min(len(b), 1024)]
+	top := typeAfter(h, cxType)
+	switch top {
+	case "":
+		return true
+	case "session_meta":
+		return s.ID == ""
+	case "turn_context":
+		return true
+	case "event_msg", "response_item":
+	default:
+		return false
+	}
+	payload := typeAfter(h, cxPayload)
+	switch {
+	case payload == "":
+		return true
+	case top == "event_msg":
+		return payload == "token_count" || payload == "thread_settings_applied" || payload == "user_message" && s.Title == ""
+	case cxCalls[payload]:
+		// a tool call, named in its head
+		name := typeAfter(h, cxName)
+		if payload != "function_call" && payload != "custom_tool_call" || name == "" {
+			name = payload
+		}
+		s.tool(at, name, "")
+		return false
+	case payload == "message" && typeAfter(h, cxRole) == "assistant":
+		if main {
+			s.day(dateOf(at)).Replies++
+		}
+		return false
+	default:
+		return payload == "message" && (main || s.Title == "") && (!bytes.Contains(h, cxRole) || bytes.Contains(h, cxUserRole))
+	}
+}
+
+// cxCalls are the kinds of response item that call a tool.
+var cxCalls = map[string]bool{"function_call": true, "custom_tool_call": true, "local_shell_call": true, "web_search_call": true, "tool_search_call": true, "image_generation_call": true}
+
+var cxName = []byte(`"name":"`)
+
+// typeAfter is the word in quotes after the first key in b, or "".
+func typeAfter(b, key []byte) string {
+	i := bytes.Index(b, key)
+	if i < 0 {
+		return ""
+	}
+	rest := b[i+len(key):]
+	j := bytes.IndexByte(rest, '"')
+	if j < 0 {
+		return ""
+	}
+	return string(rest[:j])
+}
+
+// codexBody reads a line codexHead let through.
+func codexBody(s *state, b []byte, main bool) {
+	at := tsAt(b[:min(len(b), 256)], false)
+	if at.IsZero() {
+		at = tsAt(b, false)
+	}
+	// the two kinds of line most read, each told from its head
+	if cxFastCount(s, at, b) || cxFastPrompt(s, at, b, main) {
+		return
+	}
 	want := s.ID == "" && bytes.Contains(b, cxMeta) ||
 		bytes.Contains(b, cxTurn) || bytes.Contains(b, cxCount) || bytes.Contains(b, cxSettings) ||
-		s.Title == "" && (bytes.Contains(b, cxUserMsg) || bytes.Contains(b, cxUserRole))
+		s.Title == "" && bytes.Contains(b, cxUserMsg) || (main || s.Title == "") && bytes.Contains(b, cxUserRole)
 	if !want {
 		return
 	}
@@ -107,33 +191,149 @@ func codexLine(s *state, b []byte, main bool) {
 			s.First = untagged(p.Message)
 		}
 	case l.Type == "response_item" && p.Type == "message" && p.Role == "user":
+		typed := false
 		for _, c := range p.Content {
-			if s.Title == "" && (c.Type == "input_text" || c.Type == "text") {
-				s.Title = cxPrompt(c.Text)
+			if c.Type == "input_text" || c.Type == "text" {
+				t := cxPrompt(c.Text)
+				typed = typed || t != ""
+				if s.Title == "" {
+					s.Title = t
+				}
 			}
 		}
+		if typed && main {
+			s.day(dateOf(at)).Prompts++
+		}
+	case l.Type == "response_item" && p.Type == "message" && p.Role == "assistant":
+		if main {
+			s.day(dateOf(at)).Replies++
+		}
 	case l.Type == "event_msg" && p.Type == "token_count":
-		if p.Info == nil || p.Info.Total == nil {
-			return
+		if p.Info != nil {
+			cxCounted(s, at, p.Info.Total, p.Info.Last)
 		}
-		total := p.Info.Total.raw()
-		var d Tokens
-		switch prev := s.Total; {
-		case prev != nil && total.Input >= prev.Input && total.Output >= prev.Output && total.CacheRead >= prev.CacheRead:
-			// the same total told again adds nothing
-			d = total
-			d.sub(*prev)
-			d.CacheWrite = max(0, d.CacheWrite)
-		case p.Info.Last != nil:
-			// the first count in the file (whose total may run on from an
-			// earlier file), or a total that started over
-			d = p.Info.Last.raw()
-		default:
-			d = total
-		}
-		s.Total = &total
-		s.use(dateOf(at), s.Model, spent(d))
 	}
+}
+
+// cxFastPrompt reads a prompt's texts out of a user message without decoding
+// the images it may carry: a content part's type and text are written in
+// that order, and the key can't be in a string, where its quotes would be
+// escaped. A message laid out otherwise is left to be read whole.
+func cxFastPrompt(s *state, at time.Time, b []byte, main bool) bool {
+	h := b[:min(len(b), 1024)]
+	if typeAfter(h, cxType) != "response_item" || typeAfter(h, cxPayload) != "message" || typeAfter(h, cxRole) != "user" {
+		return false
+	}
+	found, typed := false, false
+	for rest := b; ; {
+		i := bytes.Index(rest, cxType)
+		if i < 0 {
+			if typed && main {
+				s.day(dateOf(at)).Prompts++
+			}
+			// no text at all (an image alone) is read as such too
+			return found || !bytes.Contains(b, cxText[1:])
+		}
+		rest = rest[i+len(cxType):]
+		t := ""
+		if j := bytes.IndexByte(rest, '"'); j >= 0 {
+			t, rest = string(rest[:j]), rest[j+1:]
+		}
+		if t != "input_text" && t != "text" {
+			continue
+		}
+		if !bytes.HasPrefix(rest, cxText) {
+			return false
+		}
+		found = true
+		text := strAt(rest[:len(cxText)+strEnd(rest[len(cxText):])], cxText)
+		p := cxPrompt(text)
+		typed = typed || p != ""
+		if s.Title == "" {
+			s.Title = p
+		}
+	}
+}
+
+// strEnd is the length of a JSON string's body and its closing quote.
+func strEnd(b []byte) int {
+	for j := 0; j < len(b); j++ {
+		switch b[j] {
+		case '\\':
+			j++
+		case '"':
+			return j + 1
+		}
+	}
+	return len(b)
+}
+
+// cxCounted counts a token_count event's usage: what its total adds to the
+// one before, or its last turn's when the total started over.
+func cxCounted(s *state, at time.Time, tot, last *cxUsage) {
+	if tot == nil {
+		return
+	}
+	total := tot.raw()
+	var d Tokens
+	switch prev := s.Total; {
+	case prev != nil && total.Input >= prev.Input && total.Output >= prev.Output && total.CacheRead >= prev.CacheRead:
+		// the same total told again adds nothing
+		d = total
+		d.sub(*prev)
+		d.CacheWrite = max(0, d.CacheWrite)
+	case last != nil:
+		// the first count in the file (whose total may run on from an
+		// earlier file), or a total that started over
+		d = last.raw()
+	default:
+		d = total
+	}
+	s.Total = &total
+	s.use(dateOf(at), s.Model, spent(d))
+}
+
+var (
+	cxTotal = []byte(`"total_token_usage":{`)
+	cxLast  = []byte(`"last_token_usage":{`)
+	cxInfo  = []byte(`"info":null`)
+)
+
+// cxUsageIn reads the usage object after key in b, which holds no other
+// object, without decoding the rest of the line.
+func cxUsageIn(b, key []byte) (*cxUsage, bool) {
+	i := bytes.Index(b, key)
+	if i < 0 {
+		return nil, false
+	}
+	obj := b[i+len(key)-1:]
+	j := bytes.IndexByte(obj, '}')
+	if j < 0 {
+		return nil, false
+	}
+	var u cxUsage
+	if json.Unmarshal(obj[:j+1], &u) != nil {
+		return nil, false
+	}
+	return &u, true
+}
+
+// cxFastCount counts a token_count line from its usage objects alone; false
+// when the line is laid out otherwise and wants decoding.
+func cxFastCount(s *state, at time.Time, b []byte) bool {
+	if h := b[:min(len(b), 1024)]; typeAfter(h, cxType) != "event_msg" || typeAfter(h, cxPayload) != "token_count" {
+		return false
+	}
+	if bytes.Contains(b[:min(len(b), 1024)], cxInfo) {
+		return true
+	}
+	tot, ok := cxUsageIn(b, cxTotal)
+	if !ok {
+		return false
+	}
+	last, _ := cxUsageIn(b, cxLast)
+	cxCounted(s, at, tot, last)
+	return true
 }
 
 // cxPrompt is the words of a prompt, or "" for what Codex put in itself

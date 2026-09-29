@@ -1112,7 +1112,9 @@ function placePop(anchor, w, h) {
 // options (the providers page offers one vendor's models at a time).
 function openPicker(agent, field, anchor, ev, only) {
   ev.stopPropagation();
+  const again = pick?.anchor === anchor;
   closePicker();
+  if (again) return;
   const cur = field.value;
   let options = field.options.filter((o) => !only || only(o));
   // routing groups come first, before the agent's own models and each
@@ -1556,7 +1558,9 @@ $("#q").addEventListener("keydown", (e) => {
   else if (e.key === "Enter") { e.preventDefault(); commit(pick?.items[pick.cursor]?.value); }
   else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePicker(); }
 });
-document.addEventListener("mousedown", (e) => { if (pick && !$("#pop").contains(e.target)) closePicker(); });
+document.addEventListener("mousedown", (e) => {
+    if (pick && !$("#pop").contains(e.target) && !pick.anchor.contains(e.target)) closePicker();
+});
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || pick) return;
   if (editing !== null || importingApps) cancelEdit();
@@ -2368,50 +2372,41 @@ function renderAdd() {
     tiles.replaceChildren();
     const f = presetQuery.trim().toLowerCase();
     const hit = (pr) => !f || pr.name.toLowerCase().includes(f) || pr.id.includes(f) || hostOf(pr.chat || pr.responses || pr.anthropic).includes(f) || (pr.note || "").toLowerCase().includes(f);
+    // a section: its name, what it is in a word, and its rows, three to a line
+    const section = (title, hint) => {
+      const k = el("div", "kind");
+      k.append(el("b", "", t(title)));
+      if (hint) k.append(el("span", "", t(hint)));
+      const grid = el("div", "grid");
+      tiles.append(k, grid);
+      return grid;
+    };
     let any = false;
     const subs = SUBS.filter((x) => !f || x.name.toLowerCase().includes(f) || x.agent.includes(f) || "subscription".includes(f));
     if (subs.length) {
       any = true;
-      tiles.append(el("div", "kind", t("Subscriptions · sign in, no key")));
-      const grid = el("div", "grid");
+      const grid = section("Subscriptions", "sign in, no key");
       for (const x of subs) grid.append(subTile(x));
-      tiles.append(grid);
       const w = subs.find((x) => signing?.agent === x.agent);
       if (w) tiles.append(renderSigning(w));
     }
-    const gone = providers.excluded.filter((x) => x.quiet && x.provider && (!f || x.agentName.toLowerCase().includes(f) || x.agent.includes(f)));
+    const gone = (providers.excluded || []).filter((x) => x.quiet && x.provider && (!f || x.agentName.toLowerCase().includes(f) || x.agent.includes(f)));
     if (gone.length) {
       any = true;
-      tiles.append(el("div", "kind", t("Removed from magpie · still signed in")));
-      const grid = el("div", "grid");
+      const grid = section("Removed from magpie", "still signed in");
       for (const x of gone) {
-        const b = el("button", "tile");
-        b.append(icon(x.agentIcon));
-        const tt = el("span", "tt");
-        tt.append(el("span", "n", x.agentName), el("span", "s", t("Add it back")));
-        b.append(tt);
+        const b = pickRow(x.agentIcon, x.agentName);
+        b.append(el("span", "st", t("Add it back")));
         b.onclick = () => providerAction("show", { id: x.provider }, t("{name} added back", { name: x.agentName }));
         grid.append(b);
       }
-      tiles.append(grid);
     }
-    for (const [kind, title] of [["vendor", "Vendors"], ["relay", "Relays · many vendors behind one key"], ["local", "On this machine"]]) {
+    for (const [kind, title, hint] of [["vendor", "Vendors", "the makers' own APIs"], ["relay", "Relays", "one key, many vendors"], ["local", "On this machine", ""]]) {
       const ps = providers.presets.filter((p) => p.kind === kind && hit(p));
-      if (!ps.length && !(kind === "local" && !f)) continue;
+      if (!ps.length) continue;
       any = true;
-      tiles.append(el("div", "kind", t(title)));
-      const grid = el("div", "grid");
+      const grid = section(title, hint);
       for (const pr of ps) grid.append(tile(pr));
-      if (kind === "local" && !f) {
-        const c = el("button", "tile custom" + (editing?.custom ? " on" : ""));
-        const ic = el("span", "ic plus");
-        ic.append(svg(PLUS, 13, 1.8));
-        c.append(ic, el("span", "tt"));
-        c.lastChild.append(el("span", "n", t("Custom")), el("span", "s", t("any compatible URL")));
-        c.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
-        grid.append(c);
-      }
-      tiles.append(grid);
     }
     if (!any) {
       const none = el("div", "none");
@@ -2420,38 +2415,56 @@ function renderAdd() {
       b.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
       none.append(b);
       tiles.append(none);
+    } else if (!f) {
+      // a vendor not listed: one line under them all
+      const foot = el("div", "custom-foot");
+      const c = el("button", "custom" + (editing?.custom ? " on" : ""));
+      c.append(svg(PLUS, 13, 1.8), el("span", "", t("Custom provider")));
+      c.onclick = () => { editing = { custom: true }; draft = null; renderProviders(); };
+      foot.append(c, el("span", "hint", t("any OpenAI or Anthropic compatible URL")));
+      tiles.append(foot);
     }
   };
   drawTiles();
   return editing && typeof editing === "object" ? renderEditor(null, editing.preset) : null;
 }
 
+// pickRow is one row of the add sheet: an icon and a name, nothing framing
+// them; what more there is to say goes in its title.
+function pickRow(ic, name, cls = "") {
+  const b = el("button", "tile" + cls);
+  const n = el("span", "n", name);
+  b.append(icon(ic), n);
+  return b;
+}
+
+// the green mark on a row already added: a check and a word
+function addedMark(text) {
+  const m = el("span", "st added");
+  m.append(svg(CHECK, 10, 2), el("span", "", text));
+  return m;
+}
+
 // subTile adds a subscription: one more account when the agent has some.
 function subTile(x) {
   const have = providers.providers.find((p) => p.account?.agent === x.agent);
   const n = have ? (have.account.logins?.length || 1) : 0;
-  const b = el("button", "tile" + (signing?.agent === x.agent ? " on" : ""));
-  b.append(icon(x.icon));
-  const tt = el("span", "tt");
-  tt.append(el("span", "n", t("{name} subscription", { name: x.name })),
-    el("span", "s", !n ? x.plans : x.single ? t("signed in · switch account") : t(n === 1 ? "1 account · add another" : "{n} accounts · add another", { n })));
-  b.append(tt);
+  const b = pickRow(x.icon, x.name, signing?.agent === x.agent ? " on" : "");
+  b.title = t("{name} subscription", { name: x.name }) + " · " + x.plans;
+  if (n) {
+    b.append(addedMark(x.single ? t("Signed in") : t(n === 1 ? "1 account" : "{n} accounts", { n })));
+    b.title += " — " + t(x.single ? "signed in · click to switch account" : "click to add another account");
+  }
   b.onclick = () => startSignIn(x.agent);
   return b;
 }
 
 function tile(pr) {
-  const b = el("button", "tile" + (pr.added ? " added" : "") + (editing?.preset === pr.id ? " on" : ""));
-  b.append(icon(pr.icon || "generic"));
-  const tt = el("span", "tt");
-  const n = el("span", "n", pr.name);
-  if (pr.sponsored) n.append(el("span", "badge", t("sponsored")));
-  tt.append(n, el("span", "s", pr.note || hostOf(pr.chat || pr.responses || pr.anthropic)));
-  b.append(tt);
+  const b = pickRow(pr.icon || "generic", pr.name, editing?.preset === pr.id ? " on" : "");
+  if (pr.sponsored) b.querySelector(".n").append(el("span", "badge", t("sponsored")));
+  b.title = pr.note ? t(pr.note) : hostOf(pr.chat || pr.responses || pr.anthropic);
   if (pr.added) {
-    const ck = el("span", "check");
-    ck.append(svg(CHECK, 10, 2));
-    b.append(ck);
+    b.append(addedMark(t("Added")));
     b.title = t("{name} is already added — open it", { name: pr.name });
     // the first provider made from it, which may not have the preset's id
     const have = providers.providers.find((p) => p.preset === pr.id) || providers.providers.find((p) => p.id === pr.id);
@@ -2771,7 +2784,7 @@ function renderEditor(p, presetID) {
   // more provider of it, under a name and id of its own
   const another = isNew && !!pr?.added;
   draft = draft || (p
-    ? { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, catalog: p.catalog, key: "", api: p.chat ? "openai" : p.anthropic ? "anthropic" : p.responses ? "responses" : "openai", chosen: p.models.filter((m) => m.on).map((m) => m.id), extra: [], headers: headerRows(p.headers), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts) }
+    ? { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, catalog: p.catalog, key: "", api: p.chat ? "openai" : p.anthropic ? "anthropic" : p.responses ? "responses" : "openai", chosen: p.models.filter((m) => m.on).map((m) => m.id), extra: [], headers: headerRows(p.headers), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), keysUrl: p.keysUrl || "" }
     : pr
       ? { id: pr.id, name: pr.name, preset: pr.id, key: "", chosen: [], extra: [], headers: [] }
       : { id: "", name: "", preset: "", chat: "", responses: "", anthropic: "", catalog: "", key: "", api: "openai", chosen: [], extra: [], headers: [], icon: "" });
@@ -2781,7 +2794,7 @@ function renderEditor(p, presetID) {
   {
     const h = el("div", "ehead");
     h.append(icon(p?.icon || pr?.icon || "generic"), el("b", "", p ? p.name : pr ? pr.name : t("Custom provider")));
-    if (pr?.note) h.append(el("span", "note", pr.note));
+    if (pr?.note) h.append(el("span", "note", t(pr.note)));
     h.append(el("span", "grow"));
     const site = pr?.website || p?.website || (p?.host ? "https://" + p.host : "");
     if (site) { const b = el("button", "link", hostOf(site) + " ↗"); b.onclick = () => api("open", { url: site }); h.append(b); }
@@ -2937,7 +2950,9 @@ function renderEditor(p, presetID) {
   };
   side.append(eye);
   const keysUrl = p?.keysUrl || pr?.keysUrl;
-  if (keysUrl) { const b = el("button", "link", t("Get a key ↗")); b.onclick = () => api("open", { url: keysUrl }); side.append(b); }
+  // the link follows the plan picked: a region's keysUrl goes with its
+  // endpoints, and one without falls back to the preset's own page
+  if (keysUrl) { const b = el("button", "link", t("Get a key ↗")); b.onclick = () => api("open", { url: draft?.keysUrl || pr?.keysUrl || p?.keysUrl }); side.append(b); }
   const keyWrap = el("div", "pair");
   keyWrap.append(key, side);
   if (p?.keyList?.length) ed.append(...field(t("Accounts"), renderKeyAccounts(p), p.routing ? t("Tick every key to use; Routing says how requests spread over them.") : t("Tick every key to use. Requests go to the first; when it runs out of quota or hits a rate limit, the next ticked key takes over.")));
@@ -3006,6 +3021,7 @@ function renderEditor(p, presetID) {
       const b = el("button", "opt" + (r.id === cur.id ? " on" : ""), t(r.name));
       b.onclick = () => {
         draft.chat = r.chat || ""; draft.responses = r.responses || ""; draft.anthropic = r.anthropic || "";
+        draft.keysUrl = r.keysUrl || "";
         for (const x of seg.querySelectorAll(".opt")) x.classList.toggle("on", x === b);
         slide(seg, "regions");
         refreshEndpoints();
@@ -5781,16 +5797,32 @@ let sessQuery = "";
 // list is the latest sessions within it. [id, name, days (0: all)]
 const SESS_RANGES = [["today", "Today", 1], ["7d", "7 days", 7], ["30d", "30 days", 30], ["90d", "90 days", 90], ["all", "All", 0]];
 let sessRange = "30d";
-let sessMetric = "tokens"; // what the chart's bars are: tokens or cost
+// what the activity chart counts each day
+const SESS_METRICS = [["tokens", "Tokens"], ["output", "Output tokens"], ["messages", "Messages"], ["sessions", "Sessions"], ["cost", "Cost"], ["active", "Active"]];
+let sessMetric = "tokens";
+// what the top sessions are the top by
+const SESS_TOPS = [["tokens", "Tokens"], ["cost", "Cost"], ["active", "Active"]];
+let sessTopBy = "tokens";
 try {
   const r = localStorage.getItem("magpie.sessRange");
   if (SESS_RANGES.some(([id]) => id === r)) sessRange = r;
-  if (localStorage.getItem("magpie.sessMetric") === "cost") sessMetric = "cost";
+  const m = localStorage.getItem("magpie.sessMetric");
+  if (SESS_METRICS.some(([id]) => id === m)) sessMetric = m;
+  const b = localStorage.getItem("magpie.sessTop");
+  if (SESS_TOPS.some(([id]) => id === b)) sessTopBy = b;
 } catch {}
 let sessStats = null; // { from, to, days: [{ date, usage, active }], agents } for sessRange
 let sessModel = ""; // "" for every model
 let sessFolder = ""; // "" for every folder
 const sessOpen = new Set(); // agent:id of the sessions opened to their details
+// the sessions of the range summed up under the filters, by the server:
+// { count, median, p90, days, top: { tokens, cost, active } }, and the
+// query it answers
+let sessOver = null;
+let sessOverAt = "";
+let sessOverLoading = "";
+let sessTopOpen = ""; // the top session opened to its details
+const sessFull = new Map(); // a top session's key → the session read whole, or "…" while it is read
 
 function renderUsageTab() {
   const seg = $("#usageTab");
@@ -5817,14 +5849,40 @@ function renderUsageTab() {
 
 const sessDays = () => SESS_RANGES.find(([id]) => id === sessRange)[2];
 async function loadSessions() {
-  if (!sessions || !sessStats) renderSessionsLoading();
-  const range = sessRange;
-  const [s, st] = await Promise.all([api("sessions"), api("sessions/stats?days=" + sessDays())]);
+  const first = !sessions || !sessStats;
+  if (first) renderSessionsLoading();
+  const range = sessRange, q = sessOverQ();
+  const stop = first ? sessWatchIndex() : () => {};
+  let s, st, o;
+  try {
+    [s, st, o] = await Promise.all([api("sessions"), api("sessions/stats?days=" + sessDays()), api("sessions/overview?" + q)]);
+  } finally { stop(); }
   if (range !== sessRange) return; // another range was picked meanwhile; its load draws
-  if (sessions && sessStats && JSON.stringify(s) === JSON.stringify(sessions) && JSON.stringify(st) === JSON.stringify(sessStats)) return;
+  const fresh = q === sessOverQ(); // no filter changed meanwhile
+  if (sessions && sessStats && JSON.stringify(s) === JSON.stringify(sessions) && JSON.stringify(st) === JSON.stringify(sessStats) &&
+    (!fresh || JSON.stringify(o) === JSON.stringify(sessOver))) return;
   sessions = s;
   sessStats = st;
+  if (fresh) { sessOver = o; sessOverAt = q; }
   if (view === "usage" && usageTab === "sessions") renderSessions();
+}
+
+// the overview's query: the range and the filters
+const sessOverQ = () => new URLSearchParams({ days: sessDays(), agent: sessAgent === "all" ? "" : sessAgent, model: sessModel, cwd: sessFolder }).toString();
+// loadSessOverview reads the overview again when a filter changes, and draws
+// the page once it is in; one read at a time for a query
+function loadSessOverview() {
+  const q = sessOverQ();
+  if (sessOverLoading === q) return;
+  sessOverLoading = q;
+  const done = () => { if (sessOverLoading === q) sessOverLoading = ""; };
+  api("sessions/overview?" + q).then((o) => {
+    done();
+    if (q !== sessOverQ()) return;
+    sessOver = o;
+    sessOverAt = q;
+    if (view === "usage" && usageTab === "sessions" && sessions && sessStats) renderSessions();
+  }, (e) => { done(); status(e.message, "err"); });
 }
 
 function renderSessionsLoading() {
@@ -5836,10 +5894,13 @@ function renderSessionsLoading() {
   $("#sessAgent").replaceChildren();
   $("#sessModel").hidden = $("#sessFolder").hidden = true;
   $("#sessChart").hidden = true;
+  $("#sessGrid").hidden = true;
+  $("#sessListHead").hidden = true;
   const stats = $("#sessStats");
   stats.classList.remove("empty");
+  stats.classList.add("six");
   stats.replaceChildren();
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 6; i++) {
     const tile = el("div", "kpi loading-kpi");
     tile.append(el("span", "skeleton sk-number"), el("span", "skeleton sk-label"));
     stats.append(tile);
@@ -5853,6 +5914,195 @@ function renderSessionsLoading() {
     list.append(r);
   }
   $("#sessNote").textContent = t("Reading the agents' session files…");
+}
+
+// sessWatchIndex asks how far the reading of the session files has got
+// while the page waits on it; a read of the kept index, over in a moment,
+// shows the skeleton alone, and one that takes a while the indexing show.
+// It returns the stop.
+function sessWatchIndex() {
+  let on = true, timer = 0, shown = false;
+  const started = Date.now();
+  const tick = async () => {
+    if (!on) return;
+    let p = null;
+    try { p = await api("sessions/progress"); } catch {}
+    if (!on) return;
+    if (p && (p.indexing || Date.now() - started > 700) && view === "usage" && usageTab === "sessions") {
+      const stats = $("#sessStats");
+      let hero = stats.querySelector(".sess-indexing");
+      if (!hero) {
+        hero = sessIndexHero();
+        stats.classList.add("indexing");
+        stats.replaceChildren(hero);
+        shown = true;
+      }
+      hero.update(p);
+    }
+    timer = setTimeout(tick, 350);
+  };
+  timer = setTimeout(tick, 150);
+  return () => {
+    on = false;
+    clearTimeout(timer);
+    if (shown) $("#sessStats").classList.remove("indexing");
+  };
+}
+
+// sessIndexHero is the show put on while the session files are read: specks
+// of the files drawn in along spirals to a glowing core, around it a ring of
+// how much is read, the files and bytes under it. Still with reduced motion.
+const SESS_TIPS = [
+  "Read once, kept: after this the page opens from the index in a blink",
+  "Only what changed is read again, from where it was left",
+  "Every session is read on this computer; nothing leaves it",
+  "The biggest files go first, so none is left running on alone",
+];
+function sessIndexHero() {
+  const hero = el("div", "sess-indexing");
+  hero.setAttribute("role", "status");
+  const stage = el("div", "si-stage");
+  const cv = el("canvas", "si-canvas");
+  const pct = el("div", "si-pct");
+  const num = el("b", "", "");
+  pct.append(num, el("span", "", ""));
+  stage.append(cv, pct);
+  const words = el("div", "si-words");
+  const title = el("div", "si-title", t("Indexing your sessions"));
+  const line = el("div", "si-line", t("Looking for session files…"));
+  const bar = el("div", "si-bar");
+  const fill = el("i", "");
+  bar.append(fill);
+  const tip = el("div", "si-tip", t(SESS_TIPS[0]));
+  words.append(title, line, bar, tip);
+  hero.append(stage, words);
+
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let frac = 0, shown = 0, known = false, tipAt = Date.now(), tipI = 0, rate = 0, last = null;
+  hero.update = (p) => {
+    known = !!p.indexing && p.bytes > 0;
+    const f = known ? Math.min(1, p.read / p.bytes) : 0;
+    // a steady speed, for the time left
+    if (known && last && p.read > last.read) {
+      const r = (p.read - last.read) / ((Date.now() - last.at) / 1000);
+      rate = rate ? rate * 0.8 + r * 0.2 : r;
+    }
+    if (known) last = { read: p.read, at: Date.now() };
+    frac = Math.max(frac, f);
+    hero.classList.toggle("known", known);
+    fill.style.width = known ? (frac * 100).toFixed(1) + "%" : "";
+    if (known) {
+      line.textContent = t("{done} of {files} files · {read} of {bytes}", { done: fmtN(p.done), files: fmtN(p.files), read: fmtBytes(p.read), bytes: fmtBytes(p.bytes) });
+      const left = rate > 0 ? (p.bytes - p.read) / rate : 0;
+      if (left > 3) line.textContent += " · " + t("about {t} left", { t: left < 60 ? t("{n}s", { n: Math.ceil(left) }) : t("{n} min", { n: Math.ceil(left / 60) }) });
+    } else line.textContent = t("Reading the kept index…");
+    pct.lastChild.textContent = known ? "%" : "";
+    if (Date.now() - tipAt > 4500) {
+      tipAt = Date.now();
+      tipI = (tipI + 1) % SESS_TIPS.length;
+      tip.classList.remove("in");
+      void tip.offsetWidth;
+      tip.textContent = t(SESS_TIPS[tipI]);
+      tip.classList.add("in");
+    }
+    if (reduced) paint(0);
+  };
+
+  // the drawing
+  const ctx = cv.getContext("2d");
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue("--accent").trim() || "#4f46e5";
+  const hues = [accent, "#06b6d4", "#a855f7", "#ec4899"];
+  const N = 70;
+  const specks = Array.from({ length: N }, () => spawn(Math.random()));
+  function spawn(age = 0) {
+    return { a: Math.random() * Math.PI * 2, r: 1, v: 0.0028 + Math.random() * 0.004, spin: 1.6 + Math.random() * 1.4, c: hues[Math.floor(Math.random() * hues.length)], s: 0.8 + Math.random() * 1.6, life: age };
+  }
+  let W = 0, H = 0, dpr = 1;
+  const size = () => {
+    dpr = devicePixelRatio || 1;
+    const r = cv.getBoundingClientRect();
+    if (!r.width) return false;
+    if (r.width !== W || r.height !== H) {
+      W = r.width; H = r.height;
+      cv.width = W * dpr; cv.height = H * dpr;
+    }
+    return true;
+  };
+  function paint(now) {
+    if (!size()) return;
+    const cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 4, ring = R * 0.62;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // trails fade rather than clear
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = reduced ? "rgba(0,0,0,1)" : "rgba(0,0,0,.2)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "lighter";
+    if (!reduced) {
+      for (let i = 0; i < specks.length; i++) {
+        const p = specks[i];
+        p.r -= p.v * (0.6 + (1 - p.r) * 1.2);
+        p.a += p.v * p.spin * (2.2 - p.r);
+        if (p.r <= 0.18) { specks[i] = spawn(); continue; }
+        const dist = ring * 0.28 + (p.r) * (R - ring * 0.28);
+        const x = cx + Math.cos(p.a) * dist, y = cy + Math.sin(p.a) * dist;
+        ctx.globalAlpha = Math.min(1, (1 - p.r) * 2.2) * 0.9;
+        ctx.fillStyle = p.c;
+        ctx.beginPath();
+        ctx.arc(x, y, p.s * (0.5 + (1 - p.r)), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    // the core, breathing
+    const breath = reduced ? 0.5 : 0.5 + 0.5 * Math.sin(now / 520);
+    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, ring * 0.9);
+    core.addColorStop(0, hexA(accent, 0.34 + 0.16 * breath));
+    core.addColorStop(0.55, hexA(accent, 0.1));
+    core.addColorStop(1, hexA(accent, 0));
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(cx, cy, ring * 0.9, 0, Math.PI * 2); ctx.fill();
+    // the ring's track, and what is read on it
+    ctx.lineWidth = 5;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = hexA(accent, 0.12);
+    ctx.beginPath(); ctx.arc(cx, cy, ring, 0, Math.PI * 2); ctx.stroke();
+    shown += (frac - shown) * (reduced ? 1 : 0.08);
+    const g = ctx.createLinearGradient(cx - ring, cy - ring, cx + ring, cy + ring);
+    g.addColorStop(0, "#06b6d4"); g.addColorStop(0.5, accent); g.addColorStop(1, "#ec4899");
+    ctx.strokeStyle = g;
+    ctx.shadowColor = hexA(accent, 0.6);
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    if (known) ctx.arc(cx, cy, ring, -Math.PI / 2, -Math.PI / 2 + Math.max(0.02, shown) * Math.PI * 2);
+    else { const a = reduced ? 0 : now / 380; ctx.arc(cx, cy, ring, a, a + Math.PI * 0.55); }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    num.textContent = known ? String(Math.floor(shown * 100)) : "";
+  }
+  // it runs until the page takes it away
+  const loop = (now) => {
+    if (!hero.isConnected) return;
+    paint(now);
+    requestAnimationFrame(loop);
+  };
+  if (!reduced) requestAnimationFrame(loop);
+  else requestAnimationFrame(() => paint(0));
+  return hero;
+}
+// hexA is a #rrggbb colour at an alpha
+function hexA(hex, a) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return `rgba(79,70,229,${a})`;
+  const n = parseInt(m[1], 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+}
+function fmtBytes(n) {
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+  return (i && n < 10 ? n.toFixed(1) : Math.round(n)) + " " + u[i];
 }
 
 const sessKey = (s) => s.agent + ":" + s.id;
@@ -5917,8 +6167,88 @@ function sessPick(btn, all, value, opts, head, choose) {
   btn.onclick = (e) => {
     e.stopPropagation();
     if (btn.classList.contains("open")) return closeProtoMenu();
-    openProtoMenu(btn, [{ v: "", name: all, note: "" }, ...opts], value, choose, head, "sess-menu");
+    openSessCombo(btn, all, opts, value, choose, head);
   };
+}
+
+// openSessCombo is a filter's menu with a search field over it: thousands of
+// folders open at once, as only the first matches are drawn, and a few
+// letters of a name or path find the one wanted.
+const SESS_COMBO_MAX = 150;
+function openSessCombo(anchor, all, opts, value, choose, head) {
+  closeProtoMenu();
+  const box = el("div", "pop proto-menu sess-menu");
+  box.setAttribute("role", "menu");
+  const top = el("div", "sc-top");
+  const q = el("input", "sc-q");
+  q.type = "search";
+  q.placeholder = t("Search {n}…", { n: fmtN(opts.length) });
+  q.setAttribute("aria-label", t(head));
+  q.autocomplete = "off";
+  q.spellcheck = false;
+  top.append(el("div", "pm-head", t(head)), q);
+  const list = el("div", "sc-list");
+  box.append(top, list);
+  let items = [];
+  const item = (o) => {
+    const b = el("button", "pm-item" + (o.v === value ? " on" : ""));
+    b.type = "button";
+    b.setAttribute("role", "menuitemradio");
+    b.setAttribute("aria-checked", o.v === value);
+    const tick = el("span", "pm-tick");
+    if (o.v === value) tick.append(svg(CHECK, 12, 1.9));
+    const words = el("span", "pm-words");
+    words.append(el("span", "pm-name", o.name), el("span", "pm-note", o.note));
+    b.title = o.v;
+    b.append(tick, words);
+    b.onclick = (e) => { e.stopPropagation(); closeProtoMenu(); choose(o.v); };
+    b.onmouseenter = () => b.focus({ preventScroll: true });
+    return b;
+  };
+  const draw = () => {
+    const words = q.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const hit = !words.length ? opts : opts.filter((o) => { const h = (o.name + " " + o.v).toLowerCase(); return words.every((w) => h.includes(w)); });
+    const shown = hit.slice(0, SESS_COMBO_MAX);
+    // the one picked stays in reach when it is past the first ones
+    const cur = !words.length && value && !shown.some((o) => o.v === value) && opts.find((o) => o.v === value);
+    items = [...(words.length ? [] : [{ v: "", name: t(all), note: "" }]), ...(cur ? [cur] : []), ...shown].map(item);
+    list.replaceChildren(...items);
+    if (!hit.length) list.append(el("div", "sc-none", t("No match")));
+    else if (hit.length > shown.length) list.append(el("div", "sc-more", t("{n} more — type to narrow", { n: fmtN(hit.length - shown.length) })));
+  };
+  draw();
+  q.oninput = () => { draw(); box.scrollTop = 0; };
+  document.body.append(box);
+  const r = anchor.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight, pad = 8;
+  let y = r.bottom + 5;
+  if (y + h > innerHeight - pad && r.top - 5 - h >= pad) { y = r.top - 5 - h; box.classList.add("up"); }
+  box.style.left = Math.max(pad, Math.min(r.left, innerWidth - w - pad)) + "px";
+  box.style.top = Math.max(pad, y) + "px";
+  anchor.classList.add("open");
+  const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
+  const scroll = (e) => { if (!box.contains(e.target)) closeProtoMenu(); };
+  const keys = (e) => {
+    const i = items.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeProtoMenu(); anchor.focus(); }
+    else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && items.length) {
+      e.preventDefault(); e.stopPropagation();
+      const n = items.length, from = i < 0 ? (e.key === "ArrowDown" ? n - 1 : 0) : i;
+      items[(from + (e.key === "ArrowDown" ? 1 : n - 1)) % n].focus();
+    } else if (e.key === "Enter" && document.activeElement === q) {
+      e.preventDefault();
+      const o = items[0];
+      if (o) o.click();
+    } else if (i >= 0 && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // typing on a row goes on in the search
+      q.focus({ preventScroll: true });
+    }
+  };
+  document.addEventListener("mousedown", outside, true);
+  document.addEventListener("keydown", keys, true);
+  document.addEventListener("scroll", scroll, true);
+  addEventListener("resize", closeProtoMenu);
+  protoMenu = { box, anchor, outside, keys, scroll };
+  q.focus({ preventScroll: true });
 }
 
 function renderSessions() {
@@ -5987,34 +6317,65 @@ function renderSessions() {
     cost.title = unpricedNote;
   }
 
+  // the overview is read again for the filters as they are now; until it is
+  // in, the last one stands, dimmed
+  if (sessOverAt !== sessOverQ()) loadSessOverview();
+  const ov = sessOver || {};
+  const stale = sessOverAt !== sessOverQ();
+
   const stats = $("#sessStats");
   stats.replaceChildren();
   const box = $("#sessList");
   box.replaceChildren();
   const chart = $("#sessChart");
+  const grid = $("#sessGrid");
+  const head = $("#sessListHead");
   if (!used.length && !list.length) {
+    stats.classList.remove("six");
     stats.classList.add("empty");
     const filtered = sessAgent !== "all" || sessModel || sessFolder || q;
     stats.append(el("div", "none", !all.length && !rows.length ? t("No sessions yet. Claude Code's, Codex's, OpenCode's and Pi's sessions on this computer show up here, with what each cost and the command that resumes it.") : filtered ? t("No session matches.") : t("Nothing in this range.")));
     box.hidden = true;
     chart.hidden = true;
+    grid.hidden = true;
+    head.hidden = true;
   } else {
     stats.classList.remove("empty");
-    const tile = (n, label, sub, title) => {
-      const e = el("div", "kpi");
+    stats.classList.add("six");
+    const tile = (n, label, sub, title, cls) => {
+      const e = el("div", "kpi" + (cls ? " " + cls : ""));
       if (title) e.title = title;
       e.append(el("b", "", n), el("span", "", label));
       if (sub) e.append(el("small", "", sub));
       stats.append(e);
     };
     const days = new Set(used.map((r) => r.date)).size;
-    tile(c ? "≈" + c : "—", t("cost"), t("at list price"), unpricedNote);
+    // how many sessions, and what the middle one and the one in ten spent
+    tile(ov.count == null ? "—" : fmtN(ov.count), t("sessions"), ov.count ? t("median {m} · p90 {p}", { m: fmtN(ov.median), p: fmtN(ov.p90) }) : "",
+      t("Tokens in and out per session: the middle session's, and what nine in ten stay under"), stale ? "stale" : "");
     tile(fmtN(tot.input + tot.output), t("tokens"), t("{a} in · {b} out", { a: fmtN(tot.input), b: fmtN(tot.output) }));
+    tile(c ? "≈" + c : "—", t("cost"), t("at list price"), unpricedNote);
     const prompt = tot.input + tot.cache_read;
     tile(fmtN(tot.cache_read), t("cache read"), tot.cache_read && prompt ? t("hit rate {p}", { p: Math.round(100 * tot.cache_read / prompt) + "%" }) : "", tot.cache_write ? t("{n} written", { n: fmtN(tot.cache_write) }) : "");
     tile(active == null ? "—" : fmtDur(active), t("active"), active == null ? t("not kept by model") : t(days === 1 ? "on {n} day" : "on {n} days", { n: days }),
       t("The time the sessions were at work: the pauses between one message and the next, each under five minutes"));
-    renderSessChart(chart, st, used);
+    // how many folders, and how much of it the first took
+    const byCwd = sessSums(used, "cwd");
+    const lead = byCwd[0], spentAll = byCwd.reduce((n, f) => n + f.n, 0);
+    tile(String(byCwd.length), t("projects"), !lead ? "" : byCwd.length > 1 && spentAll ? t("{p} in {name}", { p: Math.round(100 * lead.n / spentAll) + "%", name: baseName(lead.v) }) : baseName(lead.v), lead?.v || "");
+
+    const actsIn = sessModel ? null : acts.filter((a) => byAgent(a) && byFolder(a));
+    renderSessChart(chart, st, used, ov, actsIn);
+    grid.hidden = false;
+    // the folders and models to pick from, as the pickers offer them
+    sessBars($("#sessProjects"), "Projects", sessSums(rows.filter((r) => byAgent(r) && byModel(r)), "cwd"), sessFolder, (v) => { sessFolder = v; renderSessions(); }, baseName);
+    sessBars($("#sessModels"), "Models", sessSums(rows.filter((r) => byAgent(r) && byFolder(r)), "model"), sessModel, (v) => { sessModel = v; renderSessions(); }, (v) => v);
+    renderSessHours($("#sessHours"), actsIn);
+    renderSessTop();
+    renderSessShape();
+    renderSessTools();
+    renderSessSkills();
+    head.hidden = !list.length;
     box.hidden = !list.length;
     for (const s of list) box.append(sessionItem(s));
   }
@@ -6022,71 +6383,506 @@ function renderSessions() {
   $("#sessNote").textContent = t("Totals count every session in the agents' own files; the list is the latest {n} by activity · {dirs}", { n: all.length, dirs });
 }
 
-// renderSessChart draws the range day by day (week by week past 92 days):
-// tokens, output on top of input as on the Overview, or cost.
-function renderSessChart(chart, st, used) {
-  const first = sessDate(st.from), last = sessDate(st.to);
-  const n = Math.round((last - first) / 864e5) + 1;
-  chart.hidden = n < 2;
-  if (chart.hidden) return;
-  const step = n > 92 ? 7 : 1;
-  const buckets = [];
-  const at = new Map();
-  for (let d = new Date(first); d <= last; d.setDate(d.getDate() + step)) {
-    const b = { day: new Date(d), input: 0, output: 0, cost: 0, unpriced: 0 };
-    for (let i = 0; i < step; i++) { const x = new Date(d); x.setDate(x.getDate() + i); at.set(sessISO(x), b); }
-    buckets.push(b);
+// sessSums adds up usage rows by one of their fields, the most tokens first
+function sessSums(list, key) {
+  const m = new Map();
+  for (const r of list) {
+    if (!r[key]) continue;
+    const s = m.get(r[key]) || { v: r[key], n: 0, cost: 0, unpriced: 0 };
+    s.n += r.input + r.output;
+    s.cost += r.cost;
+    if (!r.priced) s.unpriced++;
+    m.set(r[key], s);
   }
-  for (const r of used) {
-    const b = at.get(r.date);
-    if (!b) continue;
-    b.input += r.input; b.output += r.output; b.cost += r.cost;
-    if (!r.priced) b.unpriced++;
-  }
-  const byCost = sessMetric === "cost";
-  const value = (b) => byCost ? b.cost : b.input + b.output;
-  const peak = Math.max(byCost ? 0.001 : 1, ...buckets.map(value));
+  return [...m.values()].sort((a, b) => b.n - a.n);
+}
 
-  chart.replaceChildren();
-  const head = el("div", "sess-chart-head");
+// sessLevels grades values 0 (none) to 4 by the quartiles of those above 0,
+// as a calendar of contributions does
+function sessLevels(values) {
+  const nz = values.filter((v) => v > 0).sort((a, b) => a - b);
+  if (!nz.length) return () => 0;
+  const q = (p) => nz[Math.min(nz.length - 1, Math.floor(p * nz.length))];
+  const [a, b, c, top] = [q(0.25), q(0.5), q(0.75), nz[nz.length - 1]];
+  return (v) => v <= 0 ? 0 : v >= top ? 4 : v <= a ? 1 : v <= b ? 2 : v <= c ? 3 : 4;
+}
+function sessLegend() {
+  const l = el("span", "sess-legend");
+  l.append(el("span", "", t("Less")));
+  for (let i = 0; i <= 4; i++) l.append(el("i", "l" + i));
+  l.append(el("span", "", t("More")));
+  return l;
+}
+// the short names of the days of the week, Monday first
+function sessWeekdays() {
+  const loc = locale === "zh" ? "zh-CN" : "en";
+  return Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(loc, { weekday: "short" }));
+}
+function sessCardHead(title) {
+  const h = el("div", "sess-card-head");
+  h.append(el("span", "label", t(title)));
+  return h;
+}
+function sessSegs(opts, cur, choose) {
   const seg = el("div", "segs");
-  for (const [id, name] of [["tokens", "Tokens"], ["cost", "Cost"]]) {
-    const b = el("button", "opt" + (id === sessMetric ? " on" : ""), t(name));
-    b.onclick = () => {
-      if (id === sessMetric) return;
-      sessMetric = id;
-      try { localStorage.setItem("magpie.sessMetric", id); } catch {}
-      renderSessChart(chart, st, used);
-    };
+  for (const [id, name, off] of opts) {
+    const b = el("button", "opt" + (id === cur ? " on" : ""), t(name));
+    if (off) { b.disabled = true; b.title = off; }
+    b.onclick = () => { if (id !== cur) choose(id); };
     seg.append(b);
   }
-  head.append(el("span", "label", t(step === 7 ? "By week" : "By day")), seg, el("span", "grow"),
-    el("span", "peak", byCost ? "≈" + fmtCost({ cost: peak }) : fmtN(peak)));
+  return seg;
+}
+
+// renderSessChart draws the range's activity: day by day as bars up to a
+// hundred days, as a calendar up to a year, week by week past that. It counts
+// tokens (output on top of input, as on the Overview), output tokens alone,
+// messages, sessions at work, cost or active time.
+function renderSessChart(chart, st, used, ov, acts) {
+  const perDay = ov.days, msgs = ov.messages;
+  const first = sessDate(st.from), last = sessDate(st.to);
+  const n = Math.round((last - first) / 864e5) + 1;
+  chart.hidden = !(n >= 2);
+  if (chart.hidden) return;
+  const days = [], at = new Map();
+  for (let i = 0, d = new Date(first); i < n; i++, d.setDate(d.getDate() + 1)) {
+    const x = { day: new Date(d), input: 0, output: 0, cost: 0, unpriced: 0, sessions: perDay?.length === n ? perDay[i] : 0,
+      messages: msgs?.length === n ? msgs[i] : 0, active: 0 };
+    days.push(x);
+    at.set(sessISO(d), x);
+  }
+  for (const r of used) {
+    const x = at.get(r.date);
+    if (!x) continue;
+    x.input += r.input; x.output += r.output; x.cost += r.cost;
+    if (!r.priced) x.unpriced++;
+  }
+  for (const a of acts || []) { const x = at.get(a.date); if (x) x.active += a.seconds; }
+  const off = { sessions: perDay?.length === n ? "" : t("Still counting"), messages: msgs?.length === n ? "" : t("Still counting"), active: acts ? "" : t("not kept by model") };
+  const metric = off[sessMetric] ? "tokens" : sessMetric;
+  const value = (x) => metric === "cost" ? x.cost : metric === "sessions" ? x.sessions : metric === "messages" ? x.messages :
+    metric === "active" ? x.active : metric === "output" ? x.output : x.input + x.output;
+  const show = (v) => metric === "cost" ? "≈" + fmtCost({ cost: v }) : metric === "active" ? fmtDur(v) : fmtN(v);
+  const tip = (x, when) => {
+    const parts = [x.input + x.output ? t("{n} tokens", { n: fmtN(x.input + x.output) }) : "", x.cost && fmtCost(x) ? "≈" + fmtCost(x) : "",
+      x.messages ? t(x.messages === 1 ? "{n} message" : "{n} messages", { n: fmtN(x.messages) }) : "",
+      x.sessions ? t(x.sessions === 1 ? "{n} session" : "{n} sessions", { n: x.sessions }) : "", x.active ? t("{d} active", { d: fmtDur(x.active) }) : ""].filter(Boolean);
+    return parts.length ? when + " · " + parts.join(" · ") : t("{when} · nothing", { when });
+  };
+  const shape = n <= 100 ? "day" : n <= 371 ? "calendar" : "week";
+
+  chart.replaceChildren();
+  chart.classList.toggle("cal", shape === "calendar");
+  const head = el("div", "sess-chart-head");
+  const seg = sessSegs(SESS_METRICS.map(([id, name]) => [id, name, off[id]]), metric, (id) => {
+    sessMetric = id;
+    try { localStorage.setItem("magpie.sessMetric", id); } catch {}
+    renderSessChart(chart, st, used, ov, acts);
+  });
+  head.append(el("span", "label", t(shape === "week" ? "By week" : shape === "day" ? "By day" : "Activity")), seg, el("span", "grow"));
+  chart.append(head);
+  slide(seg, "sessMetric");
+
+  if (shape === "calendar") {
+    const wrap = el("div", "sess-cal-wrap");
+    wrap.append(sessCalendar(days, value, tip), sessCalSide(days, value, show));
+    chart.append(wrap);
+    head.append(sessLegend());
+    return;
+  }
+  // bars: a day each, or a week
+  const step = shape === "week" ? 7 : 1;
+  const buckets = [];
+  for (let i = 0; i < n; i += step) {
+    const b = { day: days[i].day, input: 0, output: 0, cost: 0, unpriced: 0, sessions: 0, messages: 0, active: 0 };
+    for (const x of days.slice(i, i + step)) for (const k of ["input", "output", "cost", "unpriced", "sessions", "messages", "active"]) b[k] += x[k];
+    buckets.push(b);
+  }
+  const peak = Math.max(metric === "cost" ? 0.001 : 1, ...buckets.map(value));
+  head.append(el("span", "peak", show(peak)));
   const bars = el("div", "bars");
   const labels = el("div", "labels");
   const k = buckets.length;
   const every = k <= 8 ? 1 : k <= 31 ? Math.ceil(k / 6) : Math.ceil(k / 5);
   buckets.forEach((b, i) => {
     const bar = el("div", "bar");
-    if (byCost) {
-      const c = el("i", "out");
-      c.style.height = (100 * b.cost / peak).toFixed(1) + "%";
-      bar.append(c);
-    } else {
+    if (metric === "tokens") {
       const inp = el("i", "in"), out = el("i", "out");
       inp.style.height = (100 * b.input / peak).toFixed(1) + "%";
       out.style.height = (100 * b.output / peak).toFixed(1) + "%";
       bar.append(out, inp);
+    } else {
+      const c = el("i", "out");
+      c.style.height = (100 * value(b) / peak).toFixed(1) + "%";
+      bar.append(c);
     }
     const label = sessDay(b.day);
-    const when = step === 7 ? t("week of {label}", { label }) : label;
-    bar.title = b.input + b.output ? t("{when} · {tokens} tokens", { when, tokens: fmtN(b.input + b.output) }) + (fmtCost(b) ? " · ≈" + fmtCost(b) : "") : t("{when} · nothing", { when });
+    bar.title = tip(b, step === 7 ? t("week of {label}", { label }) : label);
     bars.append(bar);
     const end = i === k - 1 && (k - 1) % every >= every / 2;
     labels.append(el("span", "", i % every === 0 || end ? label : ""));
   });
-  chart.append(head, bars, labels);
-  slide(seg, "sessMetric");
+  chart.append(bars, labels);
+}
+
+// sessCalendar is the range as weeks of days, Monday on top, each day as
+// dark as it is busy among the others
+function sessCalendar(days, value, tip) {
+  const lv = sessLevels(days.map(value));
+  const lead = (days[0].day.getDay() + 6) % 7;
+  const weeks = Math.ceil((lead + days.length) / 7);
+  const cal = el("div", "sess-cal");
+  cal.style.gridTemplateColumns = `auto repeat(${weeks}, minmax(0, 1fr))`;
+  cal.style.maxWidth = `calc(2.6em + ${weeks * 20}px)`;
+  const names = sessWeekdays();
+  for (const i of [0, 2, 4]) {
+    const l = el("span", "wd", names[i]);
+    l.style.gridArea = `${i + 2} / 1`;
+    cal.append(l);
+  }
+  const loc = locale === "zh" ? "zh-CN" : "en";
+  let month = -1, labelAt = -9;
+  days.forEach((x, i) => {
+    const k = lead + i, w = Math.floor(k / 7), wd = k % 7;
+    if ((wd === 0 || i === 0) && x.day.getMonth() !== month) {
+      month = x.day.getMonth();
+      if (w - labelAt >= 3) {
+        const m = el("span", "mo", x.day.toLocaleDateString(loc, month === 0 && weeks > 20 ? { month: "short", year: "numeric" } : { month: "short" }));
+        m.style.gridArea = `1 / ${w + 2}`;
+        cal.append(m);
+        labelAt = w;
+      }
+    }
+    const c = el("i", "l" + lv(value(x)));
+    c.style.gridArea = `${wd + 2} / ${w + 2}`;
+    c.title = tip(x, sessDay(x.day));
+    cal.append(c);
+  });
+  return cal;
+}
+
+// beside the calendar: the days at work, the longest run of them, the busiest
+function sessCalSide(days, value, show) {
+  const side = el("div", "sess-cal-side");
+  const fact = (label, v, sub) => {
+    const f = el("div", "fact");
+    f.append(el("b", "", v), el("span", "", label));
+    if (sub) f.append(el("small", "", sub));
+    side.append(f);
+  };
+  const busy = (x) => x.input + x.output || x.active || x.sessions;
+  let run = 0, streak = 0, best = null;
+  for (const x of days) {
+    run = busy(x) ? run + 1 : 0;
+    streak = Math.max(streak, run);
+    if (value(x) > 0 && (!best || value(x) > value(best))) best = x;
+  }
+  fact(t("days at work"), `${days.filter(busy).length} / ${days.length}`);
+  fact(t("longest streak"), t(streak === 1 ? "{n} day" : "{n} days", { n: streak }));
+  if (best) fact(t("busiest day"), sessDay(best.day), show(value(best)));
+  return side;
+}
+
+// renderSessHours lays the range's active time out by day of the week and
+// hour of the day, in this computer's time zone
+function renderSessHours(box, acts) {
+  box.replaceChildren();
+  const head = sessCardHead("By hour");
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  head.append(el("span", "grow"), el("span", "tz", tz));
+  box.append(head);
+  if (!acts) return box.append(el("div", "sess-none", t("Active time isn't kept by model.")));
+  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  let total = 0;
+  for (const a of acts) {
+    if (!a.hours) continue;
+    const wd = (sessDate(a.date).getDay() + 6) % 7;
+    a.hours.forEach((s, h) => { grid[wd][h] += s; total += s; });
+  }
+  if (!total) return box.append(el("div", "sess-none", t("No active time in this range.")));
+  const lv = sessLevels(grid.flat());
+  const names = sessWeekdays();
+  const hh = (h) => String(h).padStart(2, "0") + ":00";
+  const map = el("div", "sess-hours");
+  let best = [0, 0];
+  grid.forEach((row, wd) => {
+    map.append(el("span", "wd", names[wd]));
+    row.forEach((s, h) => {
+      const c = el("i", "l" + lv(s));
+      c.title = `${names[wd]} ${hh(h)} · ` + (s ? fmtDur(s) : t("nothing"));
+      if (s > grid[best[0]][best[1]]) best = [wd, h];
+      map.append(c);
+    });
+  });
+  map.append(el("span", ""));
+  for (let h = 0; h < 24; h++) map.append(el("span", "hr", h % 6 === 0 ? String(h) : ""));
+  box.append(map);
+  const foot = el("div", "sess-card-foot");
+  foot.append(el("span", "", t("Busiest at {when}", { when: `${names[best[0]]} ${hh(best[1])}` })), el("span", "grow"), sessLegend());
+  box.append(foot);
+}
+
+// renderSessTop lists the sessions that spent the most in the range, under
+// the filters; a click opens one to its details, read whole from its files
+function renderSessTop() {
+  const box = $("#sessTop");
+  const ov = sessOver || {};
+  box.replaceChildren();
+  box.classList.toggle("stale", sessOverAt !== sessOverQ());
+  const head = sessCardHead("Top sessions");
+  const seg = sessSegs(SESS_TOPS, sessTopBy, (id) => {
+    sessTopBy = id;
+    try { localStorage.setItem("magpie.sessTop", id); } catch {}
+    renderSessTop();
+  });
+  head.append(el("span", "grow"), seg);
+  box.append(head);
+  slide(seg, "sessTop");
+  const list = ov.top?.[sessTopBy] || [];
+  const body = el("div", "sess-tops");
+  if (!list.length) body.append(el("div", "sess-none", ov.top ? t("Nothing in this range.") : "…"));
+  const icons = new Map((sessions?.sessions || []).map((s) => [s.agent, s.icon]));
+  const names = sessStats?.agents || {};
+  for (const s of list) {
+    const open = sessTopOpen === s.key;
+    const item = el("div", "sess-item" + (open ? " open" : ""));
+    const r = el("div", "row sess sess-top");
+    r.append(icon(icons.get(s.agent) || "generic"));
+    const who = el("div", "who");
+    who.append(el("div", "name", s.title || t("(no prompt)")));
+    const sub = el("div", "sub", [s.cwd ? baseName(s.cwd) : "", names[s.agent] || s.agent, s.models?.[0], ago(s.last)].filter(Boolean).join(" · "));
+    sub.title = s.cwd || "";
+    who.append(sub);
+    r.append(who);
+    const fc = fmtCost({ cost: s.cost, unpriced: !s.priced });
+    const v = sessTopBy === "cost" ? (fc ? "≈" + fc : "—") : sessTopBy === "active" ? fmtDur(s.active) : fmtN(s.input + s.output);
+    r.append(el("div", "v", v));
+    r.onclick = () => {
+      if (window.getSelection()?.toString()) return;
+      sessTopOpen = open ? "" : s.key;
+      const had = sessFull.get(s.key);
+      if (!open && (!had || had.error)) {
+        sessFull.set(s.key, "…");
+        api("sessions/one?key=" + encodeURIComponent(s.key)).then((full) => sessFull.set(s.key, full), (e) => sessFull.set(s.key, { error: e.message }))
+          .then(() => { if (sessTopOpen === s.key && view === "usage" && usageTab === "sessions") renderSessTop(); });
+      }
+      renderSessTop();
+    };
+    item.append(r);
+    if (open) {
+      const full = sessFull.get(s.key);
+      item.append(!full || full === "…" ? el("div", "sess-detail sess-wait", t("Reading the session…")) : full.error ? el("div", "sess-detail sess-wait", full.error) : sessionDetail(full));
+    }
+    body.append(item);
+  }
+  box.append(body);
+}
+
+// the ways a session's shape is told, and the one shown
+const SESS_SHAPES = [["messages", "Messages"], ["minutes", "Length"], ["autonomy", "Autonomy"]];
+let sessShapeBy = "messages";
+try { const v = localStorage.getItem("magpie.sessShape"); if (SESS_SHAPES.some(([id]) => id === v)) sessShapeBy = v; } catch {}
+
+// renderSessShape counts the range's sessions by how long they ran: by
+// messages, by minutes at work, or by tool calls a prompt
+function renderSessShape() {
+  const box = $("#sessShape");
+  const ov = sessOver || {};
+  box.replaceChildren();
+  box.classList.toggle("stale", sessOverAt !== sessOverQ());
+  const sh = ov.shape?.[sessShapeBy];
+  const head = sessCardHead("Session shape");
+  const seg = sessSegs(SESS_SHAPES, sessShapeBy, (id) => {
+    sessShapeBy = id;
+    try { localStorage.setItem("magpie.sessShape", id); } catch {}
+    renderSessShape();
+  });
+  head.append(seg, el("span", "grow"), el("span", "tz", sh ? t(sh.total === 1 ? "{n} session" : "{n} sessions", { n: fmtN(sh.total) }) : ""));
+  box.append(head);
+  slide(seg, "sessShape");
+  if (!sh?.total) return box.append(el("div", "sess-none", ov.shape ? t("Nothing in this range.") : "…"));
+  const label = (i) => {
+    const lo = sh.edges[i], hi = sh.edges[i + 1];
+    if (sessShapeBy === "autonomy" && lo === 0) return "<1";
+    const r = hi == null ? lo + "+" : hi - 1 === lo ? String(lo) : `${lo}–${hi - 1}`;
+    return sessShapeBy === "minutes" ? t("{r}m", { r }) : r;
+  };
+  const what = { messages: "{r} messages", minutes: "{r} minutes at work", autonomy: "{r} tool calls a prompt" }[sessShapeBy];
+  const peak = Math.max(1, ...sh.counts);
+  const bars = el("div", "sess-shape");
+  sh.counts.forEach((c, i) => {
+    const col = el("div", "col");
+    const pct = Math.round(100 * c / sh.total);
+    col.title = t(what, { r: label(i) }) + " · " + t(c === 1 ? "{n} session" : "{n} sessions", { n: fmtN(c) }) + ` (${pct}%)`;
+    const track = el("div", "track");
+    const fill = el("i");
+    fill.style.height = (c ? Math.max(3, 100 * c / peak) : 0).toFixed(1) + "%";
+    track.append(fill);
+    col.append(el("b", "", c ? fmtN(c) : ""), track, el("span", "", label(i)));
+    bars.append(col);
+  });
+  box.append(bars);
+  const note = { messages: "Messages each session: prompts typed and replies", minutes: "Minutes each session was at work", autonomy: "Tool calls each session made for every prompt typed" }[sessShapeBy];
+  const foot = el("div", "sess-card-foot");
+  foot.append(el("span", "", t(note)));
+  box.append(foot);
+}
+
+// the colours of the kinds of tool, as the calls are told apart
+const TOOL_CATS = { Bash: "#e0823d", Edit: "#4f8cf0", Read: "#2fb087", Write: "#9b6cf0", Grep: "#e0608f", Glob: "#d4a72c", Task: "#35a9c7", Tool: "#7c83f2", Other: "#9aa0a8" };
+const toolColor = (c) => TOOL_CATS[c] || TOOL_CATS.Other;
+// a kind's name, as its tools are named, "Other" aside
+const toolKind = (c) => c === "Other" ? t("Other") : c;
+function toolDot(c) {
+  const d = el("i", "dot");
+  d.style.background = toolColor(c);
+  return d;
+}
+
+// renderSessTools is what the sessions called their tools for: the most
+// called, by kind, and week by week
+function renderSessTools() {
+  const box = $("#sessTools");
+  const tu = sessOver?.tools;
+  box.replaceChildren();
+  box.classList.toggle("stale", sessOverAt !== sessOverQ());
+  const head = sessCardHead("Tool use");
+  head.append(el("span", "grow"));
+  if (tu?.calls) head.append(el("span", "tz", t("{n} calls", { n: fmtN(tu.calls) }) + " · " + t(tu.sessions === 1 ? "{n} session" : "{n} sessions", { n: fmtN(tu.sessions) })));
+  box.append(head);
+  if (!tu?.calls) return box.append(el("div", "sess-none", tu ? t("No tool calls in this range.") : "…"));
+  const cols = el("div", "sess-tools-cols");
+
+  // the most called, each with its kind's dot, calls, sessions and share
+  const top = el("div", "sess-bars");
+  const peak = Math.max(1, ...tu.top.map((x) => x.calls));
+  for (const x of tu.top) {
+    const r = el("div", "sess-bar tool");
+    r.title = `${x.name} · ${toolKind(x.category)}`;
+    const n = el("span", "n");
+    n.append(toolDot(x.category), el("span", "", x.name));
+    const track = el("span", "track");
+    const fill = el("i");
+    fill.style.width = Math.max(1.5, 100 * x.calls / peak).toFixed(1) + "%";
+    fill.style.background = toolColor(x.category);
+    track.append(fill);
+    r.append(n, track, el("span", "v", fmtN(x.calls)), el("span", "s", t(x.sessions === 1 ? "{n} session" : "{n} sessions", { n: fmtN(x.sessions) })),
+      el("span", "p", Math.round(100 * x.calls / tu.calls) + "%"));
+    top.append(r);
+  }
+  cols.append(top);
+
+  const side = el("div", "sess-tools-side");
+  // by kind: one bar of every call, and each kind's count
+  const mix = el("div", "sess-mix");
+  const kinds = el("div", "sess-kinds");
+  for (const c of tu.categories) {
+    const seg = el("i");
+    seg.style.flexGrow = c.calls;
+    seg.style.background = toolColor(c.name);
+    seg.title = `${toolKind(c.name)} · ${t("{n} calls", { n: fmtN(c.calls) })} (${Math.round(100 * c.calls / tu.calls)}%)`;
+    mix.append(seg);
+    const k = el("span", "kind");
+    k.title = seg.title;
+    k.append(toolDot(c.name), el("span", "", toolKind(c.name)), el("b", "", fmtN(c.calls)));
+    kinds.append(k);
+  }
+  side.append(mix, kinds);
+
+  // week by week, the last sixteen, each kind stacked
+  const weeks = tu.weeks.slice(-16);
+  if (weeks.length > 1) {
+    side.append(el("div", "sess-sub", t("By week")));
+    const order = tu.categories.map((c) => c.name);
+    const total = (w) => Object.values(w.calls).reduce((a, b) => a + b, 0);
+    const wpeak = Math.max(1, ...weeks.map(total));
+    const bars = el("div", "sess-weeks");
+    for (const w of weeks) {
+      const bar = el("div", "bar");
+      const n = total(w);
+      bar.title = t("week of {label}", { label: sessDay(sessDate(w.start)) }) + " · " + t("{n} calls", { n: fmtN(n) });
+      const stack = el("div", "stack");
+      stack.style.height = (n ? Math.max(2, 100 * n / wpeak) : 0).toFixed(1) + "%";
+      for (const c of order) {
+        if (!w.calls[c]) continue;
+        const part = el("i");
+        part.style.flexGrow = w.calls[c];
+        part.style.background = toolColor(c);
+        stack.append(part);
+      }
+      bar.append(stack);
+      bars.append(bar);
+    }
+    const labels = el("div", "sess-weeks-labels");
+    labels.append(el("span", "", sessDay(sessDate(weeks[0].start))), el("span", "", sessDay(sessDate(weeks[weeks.length - 1].start))));
+    side.append(bars, labels);
+  }
+  cols.append(side);
+  box.append(cols);
+}
+
+// renderSessSkills lists the skills the sessions called up, the most first
+function renderSessSkills() {
+  const box = $("#sessSkills");
+  const su = sessOver?.skills;
+  box.replaceChildren();
+  box.classList.toggle("stale", sessOverAt !== sessOverQ());
+  const head = sessCardHead("Top skills");
+  head.append(el("span", "grow"));
+  if (su?.calls) head.append(el("span", "tz", t("{n} calls", { n: fmtN(su.calls) }) + " · " + t(su.count === 1 ? "{n} skill" : "{n} skills", { n: fmtN(su.count) })));
+  box.append(head);
+  if (!su?.calls) return box.append(el("div", "sess-none", su ? t("No skill was called up in this range.") : "…"));
+  const names = sessStats?.agents || {};
+  const peak = Math.max(1, ...su.top.map((x) => x.calls));
+  const body = el("div", "sess-skills");
+  for (const x of su.top) {
+    const r = el("div", "sess-skill");
+    const line = el("div", "line");
+    const track = el("span", "track");
+    const fill = el("i");
+    fill.style.width = Math.max(1.5, 100 * x.calls / peak).toFixed(1) + "%";
+    track.append(fill);
+    line.append(el("span", "n", x.name), track, el("span", "v", fmtN(x.calls)));
+    const agents = Object.entries(x.agents || {}).sort((a, b) => b[1] - a[1]);
+    const share = agents.map(([a, c]) => `${names[a] || a} ${Math.round(100 * c / x.calls)}%`).join(" · ");
+    const where = (x.projects || []).map((p) => baseName(p.name)).join(", ");
+    const sub = el("div", "sub", [t(x.sessions === 1 ? "{n} session" : "{n} sessions", { n: fmtN(x.sessions) }),
+      x.last ? t("last {when}", { when: sessDay(sessDate(x.last)) }) : "", share, where].filter(Boolean).join(" · "));
+    sub.title = (x.projects || []).map((p) => `${p.name} · ${t("{n} calls", { n: fmtN(p.calls) })}`).join("\n");
+    r.append(line, sub);
+    body.append(r);
+  }
+  if (su.count > su.top.length) body.append(el("div", "sess-more", t("+{n} more", { n: su.count - su.top.length })));
+  box.append(body);
+}
+
+// sessBars is a card of folders or models as bars of the tokens each took;
+// a click shows that one alone, and a click on it again every one
+const SESS_BARS = 6;
+function sessBars(box, title, items, cur, choose, name) {
+  box.replaceChildren();
+  box.append(sessCardHead(title));
+  const body = el("div", "sess-bars");
+  let shown = items.slice(0, SESS_BARS);
+  const picked = cur && items.find((x) => x.v === cur);
+  if (picked && !shown.includes(picked)) shown = [...shown.slice(0, SESS_BARS - 1), picked];
+  const peak = Math.max(1, ...items.map((x) => x.n));
+  for (const x of shown) {
+    const r = el("button", "sess-bar" + (x.v === cur ? " on" : ""));
+    r.type = "button";
+    r.title = [name(x.v) !== x.v ? x.v : "", x.v === cur ? t("Click again to show every one") : t("Click to show only this")].filter(Boolean).join("\n");
+    const track = el("span", "track");
+    const fill = el("i");
+    fill.style.width = Math.max(1.5, 100 * x.n / peak).toFixed(1) + "%";
+    track.append(fill);
+    const fc = x.cost ? fmtCost(x) : "";
+    r.append(el("span", "n", name(x.v)), track, el("span", "v", fmtN(x.n)), el("span", "c", fc ? "≈" + fc : ""));
+    r.onclick = () => choose(x.v === cur ? "" : x.v);
+    body.append(r);
+  }
+  if (!items.length) body.append(el("div", "sess-none", t("Nothing in this range.")));
+  if (items.length > shown.length) body.append(el("div", "sess-more", t("+{n} more", { n: items.length - shown.length })));
+  box.append(body);
 }
 
 function sessionItem(s) {
@@ -6154,7 +6950,7 @@ function sessionDetail(s) {
     if (extra) l.append(extra);
     d.append(l);
   };
-  line(t("When"), stamp(s.start) + " – " + stamp(s.last));
+  line(t("Time"), stamp(s.start) + " – " + stamp(s.last));
   if (s.cwd) line(t("Folder"), s.cwd);
   line(t("Session"), s.id, copyBtn(s.id, t("Session id")));
   if (s.resume) {
@@ -6174,7 +6970,7 @@ function sessionDetail(s) {
   }
   // what the gateway sent the session's calls to, at what reasoning
   (s.via || []).forEach((v, i) => line(i ? "" : t("Routed"), viaText(v) + " · " + t("{n} tokens", { n: fmtN(v.tokens) })));
-  line(t("File"), s.path);
+  if (s.path) line(t("File"), s.path);
   return d;
 }
 
@@ -6879,18 +7675,53 @@ function renderLAN(s) {
 
 // renderUpdate fills in the version row: whether a newer magpie is out.
 // The app checks and downloads on its own, so usually the row just offers
-// the restart; a check can also be asked for.
+// the restart; a check can also be asked for. That check leaves the button
+// where it is, dimmed, and a second click does nothing. A read still out
+// from before the answer is not drawn over it. A row drawn again reads the
+// current state, and keeps asking while a check or a download is under way.
+let updateBusy = false;
+const updateSeq = new WeakMap();
+
 async function renderUpdate(r, u) {
-  u = u || await api("update").catch(() => null);
-  if (!u || !r.isConnected) return;
+  const seq = updateSeq.get(r) || 0;
+  if (u == null) {
+    u = await api("update").catch(() => null);
+    if (!u || !r.isConnected || (updateSeq.get(r) || 0) !== seq) return;
+  } else if (!r.isConnected) return;
   const who = r.querySelector(".who"), val = r.querySelector(".val");
   const sub = who.querySelector(".sub") || who.appendChild(el("div", "sub"));
   sub.title = "";
   for (const b of val.querySelectorAll("button")) b.remove();
-  const btn = (label, fn) => { const b = el("button", "text", label); b.onclick = fn; val.append(b); };
+  const btn = (label, fn, dim) => {
+    const b = el("button", "text" + (dim ? " busy" : ""), label);
+    if (dim) b.disabled = true;
+    b.onclick = fn;
+    val.append(b);
+    return b;
+  };
+  // one check at a time. The button stays; the click only dims it until the
+  // answer, and a second click is ignored rather than drawn as "checking".
   const check = async () => {
+    if (updateBusy) return;
+    updateBusy = true;
+    const mine = (updateSeq.get(r) || 0) + 1;
+    updateSeq.set(r, mine);
     sub.textContent = t("Checking for updates…");
-    renderUpdate(r, await api("update/check", {}).catch((e) => ({ state: "error", error: e.message })));
+    for (const b of val.querySelectorAll("button")) {
+      b.disabled = true;
+      b.classList.add("busy");
+    }
+    let next;
+    try { next = await api("update/check", {}); }
+    catch (e) { next = { state: "error", error: e.message }; }
+    updateBusy = false;
+    if (!r.isConnected || (updateSeq.get(r) || 0) !== mine) return;
+    updateSeq.set(r, mine + 1); // the answer stands; a read still out is older
+    renderUpdate(r, next);
+  };
+  const again = (ms) => {
+    const seen = updateSeq.get(r) || 0;
+    setTimeout(() => { if (r.isConnected && (updateSeq.get(r) || 0) === seen) renderUpdate(r); }, ms);
   };
   switch (u.state) {
     case "ready":
@@ -6912,11 +7743,12 @@ async function renderUpdate(r, u) {
       sub.textContent = t("Downloading {v}…", { v: u.latest });
       if (u.total) sub.textContent += " " + Math.floor((u.done / u.total) * 100) + "% · " + t("{done} of {total} MB", { done: (u.done / 1e6).toFixed(1), total: (u.total / 1e6).toFixed(1) });
       else if (u.done) sub.textContent += " " + t("{done} MB", { done: (u.done / 1e6).toFixed(1) });
-      setTimeout(() => renderUpdate(r), 700);
+      again(700);
       break;
     case "checking":
       sub.textContent = t("Checking for updates…");
-      setTimeout(() => renderUpdate(r), 1000);
+      btn(t("Check"), check, true);
+      again(1000);
       break;
     case "latest":
       sub.textContent = t("Up to date");

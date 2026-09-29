@@ -320,15 +320,43 @@ func (s *Server) askJev(p provider.Provider, model string, intents []string, pre
 // and answers in its own way (decideAsk, decideAnswer).
 func (s *Server) systemOne(ctx context.Context, p provider.Provider, model string, body []byte) ([]byte, error) {
 	start := time.Now()
+	status, b, _, err := s.postDecide(ctx, p, model, body)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("%s gave no answer in %s", p.Name, classifyTimeout)
+		}
+		return nil, err
+	}
+	if status >= 300 {
+		return nil, fmt.Errorf("%s: %s", p.Name, provider.APIError(b, fmt.Sprintf("%d %s", status, http.StatusText(status))))
+	}
+	var use struct {
+		Model string `json:"model"` // the one that answered, when the reply says
+		Usage struct {
+			Input  int `json:"input_tokens"`
+			Output int `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	_ = json.Unmarshal(b, &use)
+	usage.Append(usage.Record{Time: start, Agent: usage.AgentOf(RouterAgent), Provider: p.ID, Host: p.Where(), Model: model, Requested: model, Served: use.Model,
+		Input: use.Usage.Input, Output: use.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: status})
+	return b, nil
+}
+
+// postDecide posts body to p's decision API and returns the status, body
+// and Content-Type. A success is rewritten into System One's shape when
+// the provider answers in another one. DecideURL and Sign errors are as
+// they are; a transport error is named with p.
+func (s *Server) postDecide(ctx context.Context, p provider.Provider, model string, body []byte) (int, []byte, string, error) {
 	u, err := p.DecideURL(ctx)
 	if err != nil {
-		return nil, err
+		return 0, nil, "", err
 	}
 	via := p.DecideVia()
 	body = decideAsk(via, model, body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return 0, nil, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", RouterAgent)
@@ -340,21 +368,77 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 		req.Header.Set("ai-evaluation-model-specification-version", "4")
 	}
 	if err := p.Sign(ctx, req, provider.Chat, body); err != nil {
-		return nil, err
+		return 0, nil, "", err
 	}
 	res, err := s.client.Do(req)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("%s gave no answer in %s", p.Name, classifyTimeout)
-		}
-		return nil, fmt.Errorf("%s: %v", p.Name, err)
+		return 0, nil, "", fmt.Errorf("%s: %v", p.Name, err)
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if res.StatusCode >= 300 {
-		return nil, fmt.Errorf("%s: %s", p.Name, provider.APIError(b, res.Status))
+	if res.StatusCode < 300 {
+		b = decideAnswer(via, b)
 	}
-	b = decideAnswer(via, b)
+	return res.StatusCode, b, res.Header.Get("Content-Type"), nil
+}
+
+// maxSystemOneBody is the most a System One request may be; larger is 413
+// rather than a truncated body parsed as not a System One request.
+const maxSystemOneBody = 1 << 20
+
+// serveSystemOne is magpie's own System One API. The model's prefix names
+// the Jev provider (gptload-jev/jev-latest); the rest is what that provider
+// is asked, at its /v1/systemone. The call is a route of its own, as a
+// conversation is: the Routing view and the day's jsonl would otherwise
+// never see Jev, which answers no /v1/chat/completions.
+func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxSystemOneBody+1))
+	if err != nil {
+		writeError(w, provider.Chat, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(body) > maxSystemOneBody {
+		writeError(w, provider.Chat, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+	var q struct {
+		Model string `json:"model"`
+	}
+	if json.Unmarshal(body, &q) != nil {
+		writeError(w, provider.Chat, http.StatusBadRequest, "not a System One request")
+		return
+	}
+	p, model, err := provider.RouteDecider(q.Model)
+	if err != nil {
+		writeError(w, provider.Chat, provider.DecideRouteStatus(err), err.Error())
+		return
+	}
+	body = withModel(body, model)
+	start := time.Now()
+	asked := q.Model
+	if asked == "" {
+		asked = p.ID + "/" + model
+	}
+	seat := decideSeat(p, model)
+	tr := s.trace.begin(Route{Time: start, Agent: agentOf(r), Model: asked, Provider: p.ID,
+		Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Start: start}}})
+	end := func(status int, msg string, tokens int) {
+		ms := time.Since(start).Milliseconds()
+		s.trace.update(tr, func(t *Route) {
+			try := &t.Tries[0]
+			try.Done, try.Status, try.Millis, try.Error = true, status, ms, msg
+			if status >= 400 {
+				try.Fail = failure(status, []byte(msg))
+			}
+			t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, ms, tokens
+		})
+	}
+	status, b, ctype, err := s.postDecide(r.Context(), p, model, body)
+	if err != nil {
+		writeError(w, provider.Chat, http.StatusBadGateway, err.Error())
+		end(http.StatusBadGateway, err.Error(), 0)
+		return
+	}
 	var use struct {
 		Model string `json:"model"` // the one that answered, when the reply says
 		Usage struct {
@@ -363,9 +447,33 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 		} `json:"usage"`
 	}
 	_ = json.Unmarshal(b, &use)
-	usage.Append(usage.Record{Time: start, Agent: usage.AgentOf(RouterAgent), Provider: p.ID, Host: p.Where(), Model: model, Requested: model, Served: use.Model,
-		Input: use.Usage.Input, Output: use.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: res.StatusCode})
-	return b, nil
+	errMsg := ""
+	if status >= 300 {
+		errMsg = provider.APIError(b, fmt.Sprintf("%d %s", status, http.StatusText(status)))
+	}
+	tokens := use.Usage.Input + use.Usage.Output
+	usage.Append(usage.Record{Time: start, Agent: agentOf(r), Provider: p.ID, Host: p.Where(), Model: model, Requested: asked, Served: use.Model,
+		Input: use.Usage.Input, Output: use.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: status})
+	end(status, errMsg, tokens)
+	if ctype == "" || status < 300 {
+		ctype = "application/json"
+	}
+	w.Header().Set("Content-Type", ctype)
+	w.WriteHeader(status)
+	w.Write(b)
+}
+
+// decideSeat is the one account a System One request is sent to: a decision
+// provider has no pool of conversation keys, only the key it is asked with.
+func decideSeat(p provider.Provider, model string) Weighed {
+	w := Weighed{ID: p.ID, Provider: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Model: model, Kind: "provider"}
+	if p.Key != "" {
+		w.Kind, w.Who = "key", p.KeyName
+		if w.Who == "" {
+			w.Who = provider.Mask(p.Key)
+		}
+	}
+	return w
 }
 
 // decideAsk is a System One request (body) as via takes it: Vercel's

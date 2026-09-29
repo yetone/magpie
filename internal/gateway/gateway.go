@@ -323,6 +323,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /responses", s.handle(provider.Responses))
 	mux.HandleFunc("POST /v1/messages", s.handle(provider.Anthropic))
 	mux.HandleFunc("POST /messages", s.handle(provider.Anthropic))
+	mux.HandleFunc("POST /v1/systemone", s.serveSystemOne)
 	mux.HandleFunc("POST /v1/messages/count_tokens", s.countTokens)
 	mux.HandleFunc("POST /v1/images/generations", s.images(false))
 	mux.HandleFunc("POST /images/generations", s.images(false))
@@ -333,14 +334,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1beta/models", s.geminiModels)
 	mux.HandleFunc("POST /v1beta/models/{call...}", s.gemini)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages, /v1/images/generations, /v1/images/edits and /v1beta/models/*")
+		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages, /v1/systemone, /v1/images/generations, /v1/images/edits and /v1beta/models/*")
 	})
 	return mux
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"name": "magpie", "version": Version, "models": len(provider.Catalog()), "window": Window,
-		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/magpie/quotas"}})
+		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1/systemone", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/magpie/quotas"}})
 }
 
 // quotas is what is left of every subscription, plan and key magpie has,

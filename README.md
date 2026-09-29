@@ -45,7 +45,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
   use its models through the gateway, with nothing copied and no key to
   paste.
 - **Providers with one field.** Pick a preset (Anthropic, OpenAI, Gemini,
-  DeepSeek, Kimi, GLM, MiniMax, StepFun, Qwen, Baidu Qianfan Token Plan, Tencent Cloud Token Plan,
+  DeepSeek, Kimi, GLM, MiniMax, StepFun, Qwen, Baidu Qianfan, Tencent Cloud Token Plan,
   Huawei Cloud MaaS, Volcengine Ark, Mistral, Groq, xAI, OpenRouter, Together,
   Fireworks, SiliconFlow, NVIDIA NIM, ModelScope, AiHubMix, 302.AI, Ollama, LM Studio…),
   paste a key, done. Custom vendors need a name and a base URL. magpie never
@@ -123,15 +123,14 @@ separate Responses endpoint, `catalog=` to borrow a models.dev list, and
 `models=` to name the models to expose. Anything a preset does not know can
 be overridden the same way.
 
-Baidu Qianfan's [Token Plan Personal](https://cloud.baidu.com/doc/qianfan/s/Dmrabu8b6)
-is available as `qianfan-token-plan`, with its dedicated Chat Completions,
-Responses and Anthropic Messages endpoints. Add it with
-`magpie provider add qianfan-token-plan <personal-plan-api-key>`.
-`qianfan-code-latest` follows the model selected in the Qianfan console;
-explicit model IDs such as `glm-5.3` select that model directly. The preset
-uses the documented plan models because the plan has no model-list endpoint;
-new model IDs can also be entered by hand. Use a Token Plan Personal key:
-Coding Plan and enterprise plans have different endpoints.
+Baidu Qianfan's [Token Plans](https://cloud.baidu.com/doc/qianfan/s/Dmrabu8b6)
+are available as `baidu-qianfan`: a personal (个人版) and an enterprise (企业版)
+plan and pay as you go, each with its own Chat Completions, Responses and
+Anthropic Messages endpoints, and a key that works only on its own plan. Add
+it with `magpie provider add baidu-qianfan <api-key>` — the id it carried its
+first day, `qianfan-token-plan`, is taken too. The plans serve no model list,
+so the preset carries their documented models; pay as you go serves its own
+at `/v2/models`.
 
 ### Routing groups
 

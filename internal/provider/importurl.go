@@ -60,6 +60,12 @@ func ParseImport(link string) (Provider, error) {
 			for _, reg := range Preset(p.Preset).Regions {
 				if reg.ID == r {
 					p.Chat, p.Responses, p.Anthropic, found = reg.Chat, reg.Responses, reg.Anthropic, true
+					// a region with a key page of its own (Qianfan's pay
+					// as you go, on the IAM page) shows it before the
+					// provider is saved
+					if reg.KeysURL != "" {
+						p.KeysURL = reg.KeysURL
+					}
 				}
 			}
 			if !found {
