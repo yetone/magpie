@@ -216,8 +216,10 @@ func dimagentFresh(ctx context.Context, user string) (dimagentCreds, error) {
 	tok, err := dimagent.Refresh(rctx, dimagentClient, dimagentAPI, c.Refresh)
 	cancel()
 	if err != nil {
-		if c.Access != "" && !dimagentNearExpiry(c.ExpiresAt) {
-			return c, nil // a hiccup: what it has may still work
+		// a hiccup inside the lead time: the token it has still runs, so the
+		// request goes on with it and the renewal is tried again next time
+		if !isExpiredRefusal(err) && c.Access != "" && c.ExpiresAt > 0 && time.Now().UnixMilli() < c.ExpiresAt {
+			return c, nil
 		}
 		return dimagentCreds{}, dimagentLapse(l.User, err)
 	}

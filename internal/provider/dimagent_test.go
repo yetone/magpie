@@ -275,9 +275,12 @@ func TestDimAgentRefusedRefreshLapses(t *testing.T) {
 			signIn(t)
 			dimagentRefused(t, c.status)
 			dimagentAdd(t, user, "acc", "ref", time.Now().Add(time.Minute))
-			_, err := dimagentFresh(context.Background(), user)
-			if err == nil {
+			got, err := dimagentFresh(context.Background(), user)
+			if c.lapse && err == nil {
 				t.Fatal("the upstream refused and the account answered")
+			}
+			if !c.lapse && (err != nil || got.Access != "acc") {
+				t.Fatalf("a hiccup failed a token that still runs: %v", err)
 			}
 			_, _, lapses := dimagentKept(t, user)
 			if (lapses != "") != c.lapse {
