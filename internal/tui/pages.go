@@ -150,6 +150,13 @@ func (m model) updateProviders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			what = "serves only through routing groups"
 		}
 		return m, saveProvider(p.ID, func(p *provider.Provider) { p.Unlisted = on }, p.Name+" "+what)
+	case "o":
+		off := !p.Off
+		what := "switched on"
+		if off {
+			what = "switched off: agents are given none of its models"
+		}
+		return m, saveProvider(p.ID, func(p *provider.Provider) { p.Off = off }, p.Name+" "+what)
 	case "t":
 		m.flash, m.flashOK = "testing "+p.Name+"…", true
 		return m, testCmd(p)
@@ -362,6 +369,8 @@ func (m model) viewProviders() string {
 	for _, p := range m.provs {
 		r := row{name: p.Name, id: p.ID}
 		switch {
+		case p.Off:
+			r.key = "○ switched off"
 		case p.Account != nil:
 			r.key = "● " + p.Account.User
 		case p.Key != "":

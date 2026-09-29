@@ -45,15 +45,27 @@ func (p Provider) Test(ctx context.Context) []Result {
 			continue
 		}
 		url, body := tiny(q, proto, model)
-		out = append(out, probe(ctx, q, proto, url, q.Prepare([]byte(body)), model))
+		out = append(out, probe(ctx, q, proto, url, q.Prepare([]byte(body)), model, testWait))
 	}
 	return out
 }
 
-// tiny is the smallest request for model on proto's endpoint.
+// tiny is the smallest request for model on proto's endpoint, streamed
+// to a backend that only streams.
 func tiny(q Provider, proto Protocol, model string) (url, body string) {
+	url, body = tinyBody(q, proto, model)
+	if q.Account != nil && q.Account.Stream && body != "" {
+		body = strings.TrimSuffix(body, "}") + `,"stream":true}`
+	}
+	return url, body
+}
+
+func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
 	switch proto {
 	case Chat:
+		if q.IsBedrock() {
+			return q.Chat + "/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_completion_tokens":16}`, model)
+		}
 		return q.Chat + "/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_tokens":16}`, model)
 	case Responses:
 		return q.Responses + "/responses", fmt.Sprintf(`{"model":%q,"input":"hi","max_output_tokens":16}`, model)
@@ -61,6 +73,32 @@ func tiny(q Provider, proto Protocol, model string) (url, body string) {
 		return q.Anthropic + "/v1/messages", fmt.Sprintf(`{"model":%q,"max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
 	}
 	return "", ""
+}
+
+// testWait is how long a probe waits for an answer; drawWait, for a
+// picture, which takes an images API longer than a word takes chat.
+const (
+	testWait = 20 * time.Second
+	drawWait = 2 * time.Minute
+)
+
+// drawsOnImages is whether model is asked on p's images API, as the
+// gateway draws with it there: chat would be turned away, or answered in
+// no shape a chat test knows. OpenRouter draws everything in chat.
+func (p Provider) drawsOnImages(model string) bool {
+	return p.Account == nil && p.Chat != "" && HostOf(p.Chat) != "openrouter.ai" && catalog.ImagesAPI(model)
+}
+
+// tinyDrawing is the smallest images request for model: one picture of
+// next to nothing, at the lowest quality gpt-image offers, at the size
+// the vendor draws by default (the smallest one takes differs by model).
+func tinyDrawing(q Provider, model string) (url, body string) {
+	req := map[string]any{"model": model, "prompt": "a dot", "n": 1}
+	if m := strings.ToLower(model); strings.Contains(m, "gpt-image") || strings.Contains(m, "chatgpt-image") {
+		req["quality"] = "low"
+	}
+	b, _ := json.Marshal(req)
+	return strings.TrimRight(q.Chat, "/") + "/images/generations", string(b)
 }
 
 // TestModels sends each of models the smallest request, a few at a time,
@@ -94,9 +132,13 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 		return Result{Model: model, Error: "this provider can't be sent a test request"}
 	}
 	// the endpoint the vendor's list says serves it, else Anthropic's for a
-	// Claude model, else the one it prefers
+	// Claude model, else the one it prefers; an image model draws on the
+	// chat endpoint's images API
 	proto := protos[0]
-	if apis := p.APIs(model); apis != nil {
+	draws := p.drawsOnImages(model) && slices.Contains(protos, Chat)
+	if draws {
+		proto = Chat
+	} else if apis := p.APIs(model); apis != nil {
 		if i := slices.IndexFunc(protos, func(pr Protocol) bool { return slices.Contains(apis, pr) }); i >= 0 {
 			proto = protos[i]
 		}
@@ -120,8 +162,21 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 	if !ok {
 		return Result{Protocol: proto, Model: model, Error: "no key that's on sees this model"}
 	}
+	if draws {
+		// as the gateway does, one the images API doesn't serve is tried
+		// in chat, and only its answer said when that fails too
+		url, body := tinyDrawing(q, model)
+		r := probe(ctx, q, proto, url, []byte(body), model, drawWait)
+		if !r.OK && (r.Status == 404 || r.Status == 405) {
+			url, body := tiny(q, proto, model)
+			if c := probe(ctx, q, proto, url, q.Prepare([]byte(body)), model, testWait); c.OK {
+				return c
+			}
+		}
+		return r
+	}
 	url, body := tiny(q, proto, model)
-	return probe(ctx, q, proto, url, q.Prepare([]byte(body)), model)
+	return probe(ctx, q, proto, url, q.Prepare([]byte(body)), model, testWait)
 }
 
 // keyFor is p using the first key on that works with proto: one made for
@@ -143,7 +198,8 @@ func (p Provider) keyFor(proto Protocol) (Provider, bool) {
 
 // testModel is the model a probe of proto's endpoint asks for: the first
 // exposed one q's key sees, else the first it sees at all — preferring a
-// Claude model on the Anthropic endpoint.
+// Claude model on the Anthropic endpoint, and one that chats to one that
+// draws on an images API.
 func (p Provider) testModel(q Provider, proto Protocol) string {
 	k := q.first()
 	var pools [][]catalog.Model
@@ -153,6 +209,9 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 	pools = append(pools, p.Available())
 	for _, want := range []func(string) bool{
 		func(id string) bool {
+			if p.drawsOnImages(id) {
+				return false
+			}
 			if apis := p.APIs(id); apis != nil {
 				return slices.Contains(apis, proto)
 			}
@@ -180,13 +239,14 @@ func isClaude(id string) bool {
 }
 
 // AuthHeaders is how a request to the vendor proves who it is. Anthropic's
-// own API wants x-api-key alone; compatible vendors take either, so both.
+// own API wants x-api-key alone, and so does Bedrock's, which turns away a
+// request with both (#176); other compatible vendors take either, so both.
 func AuthHeaders(p Provider, proto Protocol) map[string]string {
 	if p.Key == "" {
 		return map[string]string{}
 	}
 	if proto == Anthropic {
-		if strings.HasSuffix(p.Host(), "anthropic.com") {
+		if strings.HasSuffix(p.Host(), "anthropic.com") || p.IsBedrock() {
 			return map[string]string{"x-api-key": p.Key}
 		}
 		return map[string]string{"x-api-key": p.Key, "Authorization": "Bearer " + p.Key}
@@ -194,13 +254,13 @@ func AuthHeaders(p Provider, proto Protocol) map[string]string {
 	return map[string]string{"Authorization": "Bearer " + p.Key}
 }
 
-func probe(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string) Result {
+func probe(ctx context.Context, p Provider, proto Protocol, url string, body []byte, model string, wait time.Duration) Result {
 	r := Result{Protocol: proto, Model: model}
 	if model == "" {
 		r.Error = "no model to try: expose one, or refresh the model list"
 		return r
 	}
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, wait)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -314,6 +374,7 @@ func apiError(b []byte, fallback string) string {
 	var v struct {
 		Error   json.RawMessage `json:"error"`
 		Message string          `json:"message"`
+		Msg     string          `json:"msg"`    // Tencent's (WorkBuddy): {code, msg}
 		Detail  json.RawMessage `json:"detail"` // FastAPI's (TypeSafe)
 		Errors  []struct {
 			Message string `json:"message"`
@@ -336,12 +397,18 @@ func apiError(b []byte, fallback string) string {
 		if json.Unmarshal(v.Error, &s) == nil && s != "" {
 			return s
 		}
-		if v.Message != "" {
-			return v.Message
+		if m := cmp.Or(v.Message, v.Msg); m != "" {
+			return m
 		}
 	}
-	if s := strings.TrimSpace(string(b)); s != "" && len(s) < 200 && !strings.HasPrefix(s, "<") {
-		return fallback + ": " + s
+	// a body in no shape known is shown as it is, cut short, so what the
+	// vendor said isn't lost; an HTML page says nothing worth showing
+	s := strings.Join(strings.Fields(string(b)), " ")
+	if s == "" || strings.HasPrefix(s, "<") {
+		return fallback
 	}
-	return fallback
+	if r := []rune(s); len(r) > 300 {
+		s = string(r[:300]) + "…"
+	}
+	return fallback + ": " + s
 }

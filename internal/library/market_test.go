@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -279,5 +280,26 @@ func TestInstallFromRegistry(t *testing.T) {
 	}
 	if list, _ := MarketServers("acme"); !slices.ContainsFunc(list, func(m MarketServer) bool { return m.Have == "acme" }) {
 		t.Fatalf("not marked as added: %+v", list)
+	}
+}
+
+func TestMagpieImageIsOptIn(t *testing.T) {
+	sandbox(t)
+	ok(t)(InstallServer("magpie-image", nil, nil))
+	list, err := MarketServers("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := slices.IndexFunc(list, func(m MarketServer) bool { return m.ID == "magpie-image" })
+	if i < 0 || !list[i].OptIn || list[i].Have != "magpie-image" {
+		t.Fatalf("market: %+v", list)
+	}
+	l, err := load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := l.server("magpie-image")
+	if s == nil || len(s.Agents) != 0 || !filepath.IsAbs(s.Command) || strings.Join(s.Args, " ") != "mcp image" {
+		t.Fatalf("added as %+v", s)
 	}
 }

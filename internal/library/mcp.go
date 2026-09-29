@@ -115,8 +115,13 @@ type mcpFile struct {
 	Path   string
 	Format mcpFormat
 	// Also are files given the same servers, read from Path: dsh's other
-	// profiles.
+	// profiles, pi-mcp-extension's mcp.json beside pi-mcp-adapter's file
+	// (each with the user's own fields in its entry kept).
 	Also []string
+	// Extra are files servers are found in too, for bringing into the
+	// library, but not written: Pi's mcp.json that pi-mcp-adapter no longer
+	// reads, with what couldn't be moved from it.
+	Extra []string
 }
 
 // files are every file the servers are written into.
@@ -482,7 +487,45 @@ func (f *mcpFile) read() (map[string]*Server, error) {
 			out[name] = s
 		}
 	}
+	if f.Format == fmtPi && err == nil {
+		// Pi's other files, the one magpie writes first winning a name
+		for _, p := range append(slices.Clone(f.Also), f.Extra...) {
+			more, _ := (&mcpFile{Path: p, Format: f.Format}).read()
+			for name, s := range more {
+				if out[name] == nil {
+					out[name] = s
+				}
+			}
+		}
+	}
 	return out, err
+}
+
+// also is the file of each of Also, for formats written file by file.
+func (f *mcpFile) also() []*mcpFile {
+	if f.Format != fmtPi {
+		return nil
+	}
+	var out []*mcpFile
+	for _, p := range f.Also {
+		out = append(out, &mcpFile{Path: p, Format: f.Format})
+	}
+	return out
+}
+
+// has says whether every file of Also has the server as it is.
+func (f *mcpFile) has(s *Server) bool {
+	for _, a := range f.also() {
+		es, err := a.entries()
+		if err != nil {
+			continue
+		}
+		cur, ok := a.decode(s.Name, es[s.Name])
+		if es[s.Name] == nil || !ok || !cur.same(s) {
+			return false
+		}
+	}
+	return true
 }
 
 // owned are the keys of an entry that say what the server is: magpie
@@ -544,6 +587,15 @@ func (f *mcpFile) put(s *Server, old map[string]any) error {
 		}
 		return nil
 	}
+	for _, a := range f.also() {
+		es, err := a.entries()
+		if err != nil {
+			return err
+		}
+		if err := a.put(s, es[s.Name]); err != nil {
+			return err
+		}
+	}
 	return edit.SetJSON(f.Path, edit.KV{Path: f.key() + "." + s.Name, Value: o})
 }
 
@@ -561,6 +613,11 @@ func (f *mcpFile) del(name string) error {
 		return delCodex(f.Path, name, true)
 	case fmtGoose:
 		return edit.DelYAML(f.Path, "extensions."+name)
+	}
+	for _, a := range f.also() {
+		if err := a.del(name); err != nil {
+			return err
+		}
 	}
 	return edit.DelJSON(f.Path, f.key()+"."+name)
 }

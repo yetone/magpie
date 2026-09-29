@@ -211,7 +211,7 @@ func devinUpstream(t *testing.T, reply []byte) func() {
 		w.Write(reply)
 	}))
 	auth, variant := devinAuth, devinVariant
-	devinAuth = func() (string, string, error) { return "devin-session-token$k", up.URL, nil }
+	devinAuth = func(string) (string, string, error) { return "devin-session-token$k", up.URL, nil }
 	devinVariant = func(ctx context.Context, model, effort string) string { return model + "-high" }
 	return func() { up.Close(); devinAuth, devinVariant = auth, variant }
 }
@@ -222,7 +222,7 @@ func serveDevinOnce(t *testing.T, from provider.Protocol, body string) *httptest
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/", strings.NewReader(body))
 	var u Usage
-	s.serveDevin(w, r, from, "swe-2", []byte(body), &u)
+	s.serveDevin(w, r, from, "", "swe-2", []byte(body), &u)
 	return w
 }
 

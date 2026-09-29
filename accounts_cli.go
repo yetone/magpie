@@ -22,7 +22,7 @@ import (
 // — the subscriptions magpie remembers, how much of each one's allowance is
 // used, and switching the agent between them.
 func accountsCmd(args []string) error {
-	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity] [--json] | magpie accounts add <claude|codex|gemini|antigravity> | magpie accounts refresh [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
+	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity] [--json] | magpie accounts add <claude|codex|gemini|antigravity> | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
 	agentID := func(s string) (string, error) {
 		switch strings.ToLower(s) {
 		case "claude", "cc":
@@ -57,6 +57,9 @@ func accountsCmd(args []string) error {
 	if len(args) > 1 && args[1] == "refresh" {
 		return refreshAccounts(len(args) > 2 && args[2] == "--json")
 	}
+	if len(args) > 1 && args[1] == "checkin" {
+		return checkinWorkBuddy(len(args) > 2 && args[2] == "--json")
+	}
 	if len(args) > 1 && args[1] == "add" {
 		if len(args) != 3 {
 			return fmt.Errorf("%s", usage)
@@ -75,6 +78,9 @@ func accountsCmd(args []string) error {
 		if err != nil {
 			return err
 		}
+		if args[3], err = accountNamed(id, args[3]); err != nil {
+			return err
+		}
 		if args[1] == "forget" {
 			if err := provider.ForgetLogin(id, args[3]); err != nil {
 				return err
@@ -90,6 +96,12 @@ func accountsCmd(args []string) error {
 			return nil
 		}
 		fmt.Println(green.Render("✓"), id, "is now signed in as", args[3], muted.Render("· sessions already running keep their account until restarted"))
+		if id == "codex" {
+			if was := provider.CodexDaemonStale(); was != "" {
+				fmt.Println(" ", "Codex's background service is still signed in as", was+"; restart it to use", args[3]+":", provider.CodexDaemonRestart)
+				fmt.Println(" ", muted.Render("running Codex sessions will be interrupted"))
+			}
+		}
 		return nil
 	}
 	which, asJSON := "", false
@@ -334,8 +346,96 @@ func refreshAccounts(asJSON bool) error {
 	if !asJSON && len(rs) == 0 {
 		fmt.Println(muted.Render("no saved Claude or ChatGPT accounts besides the ones the agents are signed in to"))
 	}
+	if !asJSON {
+		for _, a := range []string{"claude", "codex"} {
+			for _, l := range provider.Logins(a) {
+				if l.Active {
+					fmt.Println(muted.Render("·"), a, l.User, muted.Render("signed in now · "+a+" renews it itself"))
+				}
+			}
+		}
+	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d accounts couldn't be renewed", failed, len(rs))
 	}
 	return nil
+}
+
+// checkinWorkBuddy: `magpie accounts checkin` — WorkBuddy's daily check-in
+// (签到) for each WorkBuddy (China) account not in yet today, now, and how
+// each stands. The setting does it on its own once a day.
+func checkinWorkBuddy(asJSON bool) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	rs := provider.CheckInWorkBuddy(ctx)
+	if rs == nil {
+		rs = []provider.WorkBuddyCheckin{}
+	}
+	if asJSON {
+		b, _ := json.MarshalIndent(rs, "", "  ")
+		fmt.Println(string(b))
+	}
+	failed := 0
+	for _, r := range rs {
+		if r.Outcome == provider.CheckinFailed {
+			failed++
+		}
+		if asJSON {
+			continue
+		}
+		switch r.Outcome {
+		case provider.CheckinClaimed, provider.CheckinDone:
+			line := fmt.Sprint(green.Render("✓"), " ", r.User, " checked in today")
+			if r.Credit > 0 {
+				line += fmt.Sprintf(" +%g", r.Credit)
+			}
+			if r.Streak > 0 {
+				line += muted.Render(fmt.Sprintf(" · a %d-day streak", r.Streak))
+			}
+			if r.Outcome == provider.CheckinDone || !r.Asked {
+				line += muted.Render(" · already")
+			}
+			fmt.Println(line)
+		case provider.CheckinIneligible:
+			fmt.Println(muted.Render("·"), r.User, muted.Render("not eligible for the check-in"))
+		case provider.CheckinInactive:
+			fmt.Println(muted.Render("·"), r.User, muted.Render("no check-in event now"))
+		default:
+			fmt.Println(muted.Render("✗"), r.User, muted.Render(r.Msg))
+		}
+	}
+	if !asJSON && len(rs) == 0 {
+		fmt.Println(muted.Render("no WorkBuddy (China) account is signed in"))
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d of %d WorkBuddy accounts couldn't check in", failed, len(rs))
+	}
+	return nil
+}
+
+// accountNamed is the saved account of agent that user names: its name as
+// magpie lists it ("a@b.com · Team"), or the email alone when only one of
+// the agent's accounts has it.
+func accountNamed(agent, user string) (string, error) {
+	user = strings.TrimSpace(user)
+	ls := provider.Logins(agent)
+	var names, same []string
+	for _, l := range ls {
+		if strings.EqualFold(l.User, user) {
+			return l.User, nil
+		}
+		names = append(names, l.User)
+		if email, _, _ := strings.Cut(l.User, " · "); strings.EqualFold(strings.TrimSpace(email), user) {
+			same = append(same, l.User)
+		}
+	}
+	switch {
+	case len(same) == 1:
+		return same[0], nil
+	case len(same) > 1:
+		return "", fmt.Errorf("%s has %d accounts of %s: %q — name one in full", agent, len(same), user, same)
+	case len(names) == 0:
+		return "", fmt.Errorf("no saved %s accounts · add one: magpie accounts add %s", agent, agent)
+	}
+	return "", fmt.Errorf("no saved %s account %q · its accounts: %q", agent, user, names)
 }

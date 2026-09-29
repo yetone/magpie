@@ -16,6 +16,7 @@ import (
 
 func TestKnownTextOnlyModelRejectsImagesBeforeUpstream(t *testing.T) {
 	fresh(t)
+	noVision(t)
 	var sent int
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sent++

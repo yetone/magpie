@@ -8,6 +8,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"mime"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -119,12 +121,24 @@ type settingsJSON struct {
 	ProxySource string `json:"proxySource"`
 	// whether magpie opens at login: the system's record, not a setting
 	Login bool `json:"login"`
+	// the model that describes images when Vision names none, and those
+	// that can be named
+	VisionAuto   string     `json:"visionAuto,omitempty"`
+	VisionModels []modelRef `json:"visionModels"`
+	// the model magpie's generate_image tool draws with when ImageGen
+	// names none, and those that can be named
+	ImageGenAuto   string     `json:"imageGenAuto,omitempty"`
+	ImageGenModels []modelRef `json:"imageGenModels"`
 	// where other machines reach the gateway while it is shared
 	LANURLs []string `json:"lanURLs,omitempty"`
 	// when the Codex warm-up last started an account's window
 	CodexWarmed *time.Time `json:"codexWarmed,omitempty"`
 	// and the Claude warm-up
 	ClaudeWarmed *time.Time `json:"claudeWarmed,omitempty"`
+	// whether a WorkBuddy (China) account is signed in, and each one's
+	// last daily check-in
+	WorkBuddy         bool                        `json:"workbuddy"`
+	WorkBuddyCheckins []provider.WorkBuddyCheckin `json:"workbuddyCheckins,omitempty"`
 }
 
 func settingsState() settingsJSON {
@@ -135,6 +149,30 @@ func settingsState() settingsJSON {
 		s.LANURLs = gateway.LANURLs()
 	}
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
+	s.WorkBuddy, s.WorkBuddyCheckins = provider.HasWorkBuddy(), provider.WorkBuddyCheckins()
+	s.VisionAuto, s.VisionModels = gateway.AutoVision(), []modelRef{}
+	for _, e := range provider.Served() {
+		if e.Images && (e.ImageInput == nil || *e.ImageInput) && (e.Group != "" || e.Provider.Ready()) {
+			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
+			if e.Group != "" {
+				m.Provider, m.PName = "", e.Group
+			}
+			s.VisionModels = append(s.VisionModels, m)
+		}
+	}
+	s.ImageGenAuto, s.ImageGenModels = gateway.AutoDrawer(), []modelRef{}
+	for _, p := range provider.All() {
+		if !p.On() || p.Decides() {
+			continue
+		}
+		for _, m := range gateway.Drawers(p) {
+			name := m.Name
+			if name == "" {
+				name = m.ID
+			}
+			s.ImageGenModels = append(s.ImageGenModels, modelRef{ID: p.ID + "/" + m.ID, Name: name, Provider: p.ID, PName: p.Name, Icon: p.Icon})
+		}
+	}
 	return s
 }
 
@@ -332,8 +370,21 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// who sees them, and sharing on the network, set on its own
 		in.Visible, in.ModelNames, in.ModelEfforts = cur.Visible, cur.ModelNames, cur.ModelEfforts
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
+		in.RedactRules = cur.RedactRules // the masking rules, set on their own
 		// used or left is the Usage page's toggle as much as Settings', set on its own
 		in.QuotaLeft = cur.QuotaLeft
+		if v := strings.TrimSpace(in.Vision); v != "" && v != "off" && v != cur.Vision {
+			if _, _, ok := provider.Resolve(v); !ok {
+				fail(rw, fmt.Errorf("no model %s to describe images", v))
+				return
+			}
+		}
+		if v := strings.TrimSpace(in.ImageGen); v != "" && v != "off" && v != cur.ImageGen {
+			if _, _, ok := provider.Resolve(v); !ok {
+				fail(rw, fmt.Errorf("no model %s to generate images", v))
+				return
+			}
+		}
 		if err := settings.Save(in); err != nil {
 			fail(rw, err)
 			return
@@ -415,6 +466,22 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 				fail(rw, err)
 				return
 			}
+		}
+		writeJSON(rw, settingsState())
+	})
+	// the user's own masking rules, all of them each time: set on their own,
+	// so a pattern that doesn't compile is said and the rest are kept (#195)
+	mux.HandleFunc("POST /api/settings/redact-rules", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Rules []redact.Rule }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		s.RedactRules = in.Rules
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
 		}
 		writeJSON(rw, settingsState())
 	})

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -538,6 +539,15 @@ func goose(home, cfg string) *Agent {
 	return &Agent{
 		ID: "goose", Name: "Goose", Icon: "goose", Bin: "goose", Dir: filepath.Dir(path), Path: path,
 		UA: []string{"goose"},
+		// a goose on PATH may be pressly's database migration tool, a Go
+		// program; Block's goose is Rust, so a Go goose is not the agent
+		detect: func() bool {
+			if _, err := os.Stat(filepath.Dir(path)); err == nil {
+				return true
+			}
+			bin, err := exec.LookPath("goose")
+			return err == nil && !goProgram(bin)
+		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
 			Get: pairGet(get, "GOOSE_PROVIDER", "GOOSE_MODEL"),

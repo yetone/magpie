@@ -1,7 +1,7 @@
 package provider
 
 // What is left on an API key, as the vendor's own balance endpoint tells
-// it: DeepSeek, Kimi, OpenRouter, SiliconFlow, Command Code and AiHubMix are known by their hosts
+// it: DeepSeek, Kimi, OpenRouter, SiliconFlow, StepFun, Command Code and AiHubMix are known by their hosts
 // (AiHubMix tells the whole account's to its access token, BalanceToken);
 // any other provider can name an endpoint and where the amount sits in its
 // reply (BalanceURL, BalancePath), the way a relay's own usage query does.
@@ -55,6 +55,10 @@ func balanceSourceOf(p Provider) (balanceSource, bool) {
 			return balanceSource{"https://api.siliconflow.cn/v1/user/info", readSiliconFlow("¥"), ""}, true
 		case "api.siliconflow.com":
 			return balanceSource{"https://api.siliconflow.com/v1/user/info", readSiliconFlow("$"), ""}, true
+		case "api.stepfun.com":
+			return balanceSource{"https://api.stepfun.com/v1/accounts", readStepFun("¥"), ""}, true
+		case "api.stepfun.ai":
+			return balanceSource{"https://api.stepfun.ai/v1/accounts", readStepFun("$"), ""}, true
 		case "api.commandcode.ai":
 			return balanceSource{"https://api.commandcode.ai/alpha/billing/credits", readCommandCode, ""}, true
 		case "aihubmix.com":
@@ -186,6 +190,27 @@ func readSiliconFlow(sign string) func([]byte) (string, error) {
 			return "", err
 		}
 		v, ok := number(r.Data.Total)
+		if !ok {
+			return "", errors.New("no balance in the reply")
+		}
+		return money(sign, v), nil
+	}
+}
+
+// readStepFun: {"object":"account","type":"prepaid","balance":26.00,
+// "total_cash_balance":0.00,"total_voucher_balance":26.00}, balance being
+// what is left to spend, vouchers included, and the totals what was ever
+// paid in and given. A Step Plan key tells it too: the plan's key is the
+// account's, and the account's balance is what it spends past the plan.
+func readStepFun(sign string) func([]byte) (string, error) {
+	return func(b []byte) (string, error) {
+		var r struct {
+			Balance any `json:"balance"`
+		}
+		if err := json.Unmarshal(b, &r); err != nil {
+			return "", err
+		}
+		v, ok := number(r.Balance)
 		if !ok {
 			return "", errors.New("no balance in the reply")
 		}
@@ -578,7 +603,7 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 	}
 	var jobs []job
 	for _, p := range All() {
-		if p.Hidden || p.Account != nil || p.Key == "" {
+		if p.Hidden || p.Off || p.Account != nil || p.Key == "" {
 			continue
 		}
 		src, ok := balanceSourceOf(p)

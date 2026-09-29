@@ -25,17 +25,26 @@ func kiroSandbox(t *testing.T) string {
 	kiroCLIDB = func() string { return filepath.Join(home, "kiro-cli", "data.sqlite3") }
 	kiroIDEDir = func() string { return filepath.Join(home, ".aws", "sso", "cache") }
 	KiroExecutable = func() string { return "" }
-	askKiroIdentity = func(string) (string, string) { return "", "" }
+	askKiroIdentity = func(string, string) (string, string) { return "", "" }
+	kiroForget()
 	t.Cleanup(func() {
 		kiroCLIDB, kiroIDEDir, KiroExecutable, askKiroIdentity = db, ide, exe, ask
-		kiroAuthCache.Lock()
-		kiroAuthCache.ok = false
-		kiroAuthCache.Unlock()
-		kiroStatus.Lock()
-		kiroStatus.key, kiroStatus.at = "\x00", time.Time{}
-		kiroStatus.Unlock()
+		kiroForget()
 	})
 	return home
+}
+
+// kiroForget drops what was known of Kiro's accounts.
+func kiroForget() {
+	kiroAuthCache.Lock()
+	kiroAuthCache.m = nil
+	kiroAuthCache.Unlock()
+	kiroStatus.Lock()
+	kiroStatus.m = nil
+	kiroStatus.Unlock()
+	kiroAdopt.Lock()
+	kiroAdopt.tried = time.Time{}
+	kiroAdopt.Unlock()
 }
 
 // writeKiroCLI makes a kiro-cli database holding rows of auth_kv.
@@ -88,7 +97,7 @@ func TestKiroReadsKiroCLIsSignIn(t *testing.T) {
 	if !ok || c.method != "social" || c.access != "at" || c.refresh != "rt" || c.region != "us-east-1" || !c.fresh() || c.dbKey != "kirocli:social:token" {
 		t.Fatalf("social = %+v %v", c, ok)
 	}
-	a, err := KiroAuthOf(context.Background(), "", false)
+	a, err := KiroAuthOf(context.Background(), "", "", false)
 	if err != nil || a.Token != "at" || a.Profile != "arn:aws:codewhisperer:us-east-1:1:profile/P" || a.Region != "us-east-1" || a.TokenType != "" {
 		t.Fatalf("auth = %+v %v", a, err)
 	}
@@ -146,7 +155,7 @@ func TestKiroRefreshesAndWritesBack(t *testing.T) {
 	kiroRefreshURL = func(string) string { return srv.URL }
 	defer func() { kiroRefreshURL = was }()
 
-	a, err := KiroAuthOf(context.Background(), "", false)
+	a, err := KiroAuthOf(context.Background(), "", "", false)
 	if err != nil || a.Token != "new" {
 		t.Fatalf("auth = %+v %v", a, err)
 	}
@@ -161,7 +170,7 @@ func TestKiroRefreshesAndWritesBack(t *testing.T) {
 		t.Fatalf("expires_at = %v", row["expires_at"])
 	}
 	// turned down later, it is refreshed again even though it hasn't expired
-	a, err = KiroAuthOf(context.Background(), "", true)
+	a, err = KiroAuthOf(context.Background(), "", "", true)
 	if err != nil || a.Token != "new" || got["refreshToken"] != "rt2" {
 		t.Fatalf("stale = %+v %v %v", a, err, got)
 	}
@@ -170,7 +179,7 @@ func TestKiroRefreshesAndWritesBack(t *testing.T) {
 func TestKiroExpiredWithNoWayToRefresh(t *testing.T) {
 	kiroSandbox(t)
 	writeKiroCLI(t, map[string]any{"kirocli:social:token": map[string]any{"access_token": "old", "expires_at": "2020-01-01T00:00:00Z"}})
-	if _, err := KiroAuthOf(context.Background(), "", false); err == nil || !strings.Contains(err.Error(), "kiro-cli login") {
+	if _, err := KiroAuthOf(context.Background(), "", "", false); err == nil || !strings.Contains(err.Error(), "kiro-cli login") {
 		t.Fatalf("err = %v", err)
 	}
 }

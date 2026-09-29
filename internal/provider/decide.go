@@ -202,7 +202,7 @@ func (p Provider) cloudflareAccount(ctx context.Context) (string, error) {
 func Deciders() []Entry {
 	var out []Entry
 	for _, p := range All() {
-		if !p.Decides() || !p.Ready() {
+		if !p.Decides() || !p.On() {
 			continue
 		}
 		for _, m := range p.Exposed() {

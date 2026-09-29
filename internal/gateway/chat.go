@@ -88,7 +88,8 @@ func parseChat(body []byte) (*Request, error) {
 			}
 			r.Messages = append(r.Messages, msg)
 		case "tool":
-			r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: m.ToolCallID, Text: stringOrText(m.Content)}}})
+			out, images := toolOutput(m.Content)
+			r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: m.ToolCallID, Text: out, Images: images}}})
 		}
 	}
 	r.System = strings.Join(sys, "\n\n")
@@ -173,8 +174,36 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 		msgs = append(msgs, map[string]any{"role": "system", "content": r.System})
 	}
 	deepseek := strings.Contains(host, "deepseek")
+	// A tool message holds text only, so the images tools returned go to
+	// the model in a user message after the tool messages, as the start of
+	// the user's own message when one comes next: some models' chat
+	// templates turn away two user messages in a row.
+	names := map[string]string{}
+	var seen []map[string]any
+	seeLater := func(p Part) {
+		if len(p.Images) == 0 {
+			return
+		}
+		of := "tool call " + p.CallID
+		if name := names[p.CallID]; name != "" {
+			of = name + " (" + of + ")"
+		} else if p.Name != "" {
+			of = p.Name + " (" + of + ")"
+		}
+		seen = append(seen, map[string]any{"type": "text", "text": "[From the result of " + of + ":]"})
+		for _, im := range p.Images {
+			seen = append(seen, map[string]any{"type": "image_url", "image_url": map[string]any{"url": dataURL(im)}})
+		}
+	}
+	showSeen := func() {
+		if len(seen) > 0 {
+			msgs = append(msgs, map[string]any{"role": "user", "content": seen})
+			seen = nil
+		}
+	}
 	for _, m := range r.Messages {
 		if m.Role == "assistant" {
+			showSeen()
 			am := map[string]any{"role": "assistant"}
 			var calls []map[string]any
 			var think string
@@ -185,6 +214,7 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 					if id == "" {
 						id = "call_" + newID()
 					}
+					names[id] = p.Name
 					calls = append(calls, map[string]any{"id": id, "type": "function",
 						"function": map[string]any{"name": p.Name, "arguments": argsString(p)}})
 				case Thinking:
@@ -210,6 +240,10 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 			if len(content) == 0 {
 				return
 			}
+			if len(seen) > 0 {
+				content, plain = append(seen, content...), false
+				seen = nil
+			}
 			if plain {
 				var b strings.Builder
 				for _, c := range content {
@@ -232,11 +266,24 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 				content = append(content, map[string]any{"type": "image_url", "image_url": map[string]any{"url": dataURL(p)}})
 			case ToolResult:
 				flush()
-				msgs = append(msgs, map[string]any{"role": "tool", "tool_call_id": p.CallID, "content": p.Text})
+				out := p.Text
+				if n := len(p.Images); n > 0 {
+					note := fmt.Sprintf("[The tool returned %d images; they follow in the next message.]", n)
+					if n == 1 {
+						note = "[The tool returned an image; it follows in the next message.]"
+					}
+					if strings.TrimSpace(out) != "" {
+						out += "\n\n"
+					}
+					out += note
+				}
+				msgs = append(msgs, map[string]any{"role": "tool", "tool_call_id": p.CallID, "content": out})
+				seeLater(p)
 			}
 		}
 		flush()
 	}
+	showSeen()
 	out := map[string]any{"model": model, "messages": msgs, "stream": r.Stream}
 	if r.CacheKey != "" {
 		out["prompt_cache_key"] = r.CacheKey
@@ -351,7 +398,8 @@ func (u Usage) chat() map[string]any {
 // as indexed fragments; it tracks which one is open.
 type chatDecoder struct {
 	started bool
-	tool    int // index of the open tool call, -1 for none
+	tool    int    // index of the open tool call, -1 for none
+	choice  string // index of the first choice seen; an empty string means none yet
 }
 
 func (d *chatDecoder) decode(data string, emit func(Event)) error {
@@ -362,6 +410,7 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		ID      string `json:"id"`
 		Model   string `json:"model"`
 		Choices []struct {
+			Index json.RawMessage `json:"index"`
 			Delta struct {
 				Content          *string     `json:"content"`
 				ReasoningContent string      `json:"reasoning_content"`
@@ -387,6 +436,17 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		emit(Event{Kind: KStart, MsgID: ch.ID, Model: ch.Model})
 	}
 	for _, c := range ch.Choices {
+		// Translation has one reply: lock onto the first readable choice
+		// index. A missing, null, or malformed index says nothing about
+		// which choice this chunk belongs to, so it cannot select or reject
+		// one. Passthrough still relays every choice unchanged.
+		if index, ok := chatChoiceIndex(c.Index); ok {
+			if d.choice == "" {
+				d.choice = index
+			} else if index != d.choice {
+				continue
+			}
+		}
 		// Some relays send the same thought under both names; one is enough.
 		t := c.Delta.ReasoningContent
 		if t == "" {
@@ -421,6 +481,35 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		emit(Event{Kind: KUsage, Usage: ch.Usage.usage()})
 	}
 	return nil
+}
+
+// chatChoiceIndex accepts numeric indexes and numeric strings without
+// changing how a missing or unreadable index is handled. JSON numbers such
+// as 1.0 and 1 are the same choice.
+func chatChoiceIndex(raw json.RawMessage) (string, bool) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", false
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		raw = json.RawMessage(text)
+	}
+	var n json.Number
+	if json.Unmarshal(raw, &n) != nil {
+		return "", false
+	}
+	index, err := n.Int64()
+	if err != nil {
+		var f float64
+		if json.Unmarshal(raw, &f) != nil || f < 0 || f != float64(int64(f)) {
+			return "", false
+		}
+		index = int64(f)
+	}
+	if index < 0 {
+		return "", false
+	}
+	return fmt.Sprint(index), true
 }
 
 func stopFromChat(s string) string {

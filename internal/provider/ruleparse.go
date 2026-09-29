@@ -94,14 +94,19 @@ func ParseRule(g Group, words []string) (r Rule, at int, classifier string, err 
 }
 
 // GroupMember is the group's member a typed model names: its id, its
-// model id without the provider, or the model's last name.
+// model id without the provider, or the model's last name — each with the
+// effort fixed on the member ("m:high") or, when only one member is of
+// that model, without it.
 func GroupMember(g Group, in string) (string, error) {
 	in = strings.TrimPrefix(strings.TrimSpace(in), "magpie/")
+	plain := func(m string) string { model, _ := MemberEffort(m); return model }
 	for _, match := range []func(string) bool{
 		func(m string) bool { return m == in },
 		func(m string) bool { return strings.EqualFold(m, in) },
 		func(m string) bool { _, bare, _ := strings.Cut(m, "/"); return strings.EqualFold(bare, in) },
 		func(m string) bool { return strings.EqualFold(m[strings.LastIndex(m, "/")+1:], in) },
+		func(m string) bool { return strings.EqualFold(plain(m), in) },
+		func(m string) bool { _, bare, _ := strings.Cut(plain(m), "/"); return strings.EqualFold(bare, in) },
 	} {
 		var hits []string
 		for _, m := range g.Members {

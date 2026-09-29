@@ -103,6 +103,9 @@
 .rt-steps li.why { color: var(--fg); }
 .rt-steps li.why::before { background: var(--fg); }
 .rt-steps li.aside { color: var(--muted); }
+.rt-steps li.said { font-family: var(--mono, ui-monospace, monospace); font-size: 11.5px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.rt-stats > span.rt-errs { cursor: pointer; }
+.rt-stats > span.rt-errs:hover b { color: var(--red); }
 .rt-steps li.aside::before { background: none; border: 1px solid var(--muted); width: 4px; height: 4px; }
 .rt-steps li.ok::before { background: var(--green); }
 .rt-steps li.bad::before { background: var(--red); }
@@ -168,6 +171,10 @@
 .rt-req .meta { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
 @container (max-width: 520px) { .rt-reqs { grid-template-columns: auto minmax(0, 1fr); } .rt-req { row-gap: 2px; } .rt-req .to { grid-column: 2; } .rt-req .meta { grid-column: 2; text-align: left; } }
 .rt-acts { padding: 4px 0; }
+.rt-cols.solo { grid-template-columns: minmax(0, 1fr); }
+.rt-reqs.none { display: block; background: none; border-color: transparent; }
+.rt-reqs.none .empty-state { padding: 14px 12px 18px; font-size: 12px; line-height: 1.6; }
+.rt-reqs.none .empty-state b { font-size: 13px; }
 .rt-prov { display: flex; align-items: center; gap: 7px; padding: 8px 12px 4px; font-size: 12px; }
 .rt-prov .ic, .rt-prov .ic img, .rt-prov .ic svg { width: 14px; height: 14px; }
 .rt-prov > span:last-child { margin-left: auto; font-size: 10.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
@@ -234,6 +241,8 @@
 .rt-gedit .fbrow .n { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt-gedit .fbrow .n small { color: var(--muted); font-size: 11.5px; }
 .rt-gedit .fbrow.off .n { color: var(--muted); text-decoration: line-through; }
+/* a member's own reasoning, beside its Up and Remove */
+.rt-gedit .fbrow .rt-fixed { height: 24px; padding: 0 9px; font-size: 11.5px; flex: none; }
 .rt-gadd {
   justify-self: start; display: inline-flex; align-items: center; gap: 6px;
   height: 28px; padding: 0 11px 0 9px; border-radius: 8px;
@@ -262,14 +271,53 @@
 .rt-cond.on { border-style: solid; color: var(--fg); background: var(--card-2); }
 .rt-cond .ic { width: 14px; height: 14px; flex: none; }
 .rt-cond > span { overflow: hidden; text-overflow: ellipsis; }
+/* a group's logos overlap in discs whose rings sit outside them: clipped, the first lost its edge */
+.rt-cond > .ic-stack { overflow: visible; }
 .rt-cond.tk { cursor: text; }
 .rt-cond.in { cursor: text; }
-.rt-cond.in input { width: 24ch; }
+.rt-cond.in input, .editor .rt-cond.in input[type="text"] { width: 24ch; }
 .rt-classifier { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .rt-classifier[hidden] { display: none; }
 .rt-classifier .w { color: var(--muted); font-size: 12px; }
 .rt-classifier .hint { flex-basis: 100%; }
-.rt-cond input { width: 7ch; height: 20px; padding: 0 2px; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; outline: none; -moz-appearance: textfield; }
+/* the field is the pill: the editor's boxed input (its border and focus ring) stays off it */
+.rt-cond input, .editor .rt-cond input[type="text"], .editor .rt-cond input:focus, .editor .rt-cond input:focus-visible { box-shadow: none; border-radius: 0; }
+.rt-cond:focus-within { border-style: solid; border-color: var(--accent); color: var(--fg); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.rt-cond input, .editor .rt-cond input[type="text"] { width: 7ch; height: 20px; padding: 0 2px; border: 0; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; outline: none; -moz-appearance: textfield; }
 .rt-cond input::-webkit-outer-spin-button, .rt-cond input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .rt-rwarn { color: var(--amber, var(--muted)); font-size: 11.5px; }
 .rt-rwarn:empty { display: none; }
+
+/* a replay: the time it is replaying, what is in flight then, and a track */
+.rt-replay { margin: 10px 0 2px; padding: 8px 10px 10px; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 6px; }
+.rp-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.rp-tag { font-size: 11px; font-weight: 600; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.rp-tag::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: rppulse 1.2s ease-in-out infinite; }
+@keyframes rppulse { 50% { opacity: .3; } }
+.rp-clock { font-size: 22px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--fg); }
+.rp-day { font-size: 11px; color: var(--muted); }
+.rp-skip { font-size: 11px; color: var(--accent); }
+.rp-top .grow { flex: 1; }
+.rp-what { display: grid; gap: 3px; min-height: 20px; }
+.rp-req { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; cursor: pointer; }
+.rp-req b { color: var(--fg); font-weight: 600; }
+.rp-req.on .rp-n { color: var(--fg); }
+.rp-req i.ag { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--agent); }
+.rp-req .rp-to { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rp-req .rp-at { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; color: var(--faint); }
+.rp-n { flex: none; font-variant-numeric: tabular-nums; }
+.rp-wait { font-size: 12px; color: var(--faint); }
+.rp-track { position: relative; height: 16px; cursor: pointer; }
+.rp-track::before { content: ""; position: absolute; left: 0; right: 0; top: 7px; height: 2px; border-radius: 1px; background: var(--line); }
+.rp-mark { position: absolute; top: 4px; width: 3px; height: 8px; margin-left: -1.5px; border-radius: 1.5px; background: var(--agent); opacity: .45; transition: opacity .2s, transform .2s; }
+.rp-mark.on { opacity: 1; transform: scaleY(1.5); }
+.rp-head { position: absolute; top: 1px; width: 2px; height: 14px; margin-left: -1px; border-radius: 1px; background: var(--fg); pointer-events: none; }
+@media (max-width: 520px) { .rp-req .rp-at { display: none; } }
+
+/* the days the routing history keeps: live, then each day, newest first */
+.rt-days { display: flex; gap: 4px; overflow-x: auto; padding: 0 2px 6px; scrollbar-width: none; }
+.rt-days::-webkit-scrollbar { display: none; }
+.rt-day { flex: none; display: inline-flex; align-items: baseline; gap: 5px; font-size: 12px; color: var(--muted); padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: none; white-space: nowrap; }
+.rt-day small { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.rt-day:hover { color: var(--fg); }
+.rt-day.on { color: var(--fg); border-color: var(--fg); }

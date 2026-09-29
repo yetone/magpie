@@ -58,20 +58,81 @@ func desktopAccepts(id string) bool {
 // its display_name and description carry the model's name and magpie id.
 const desktopAlias = "anthropic/magpie-"
 
-func aliasFor(id string) string {
+// Claude Desktop offers a thinking-effort picker only for a model it knows:
+// in a gateway's mode it reads no effort from /v1/models (IIt keeps id,
+// display_name, description, supports_1m and anthropic_family_tier), and
+// its signed model catalog can't be a gateway's, so its levels come from
+// tIt in its app.asar (index.chunk-D3OyLXgG.js, 2.7032):
+//
+//	let t=IC(e), n=HFt[t] ?? (UFt.test(t) ? VFt : void 0)
+//
+// HFt its table of Claude models (claude-sonnet-4-6, claude-opus-4-8, …),
+// UFt /^(?:claude-)?(?:fable|mythos)(?:-|$)/ with VFt low, medium, high,
+// xhigh and max (high recommended, thinking always on), and IC the id
+// lowercased with a Bedrock-style "<profile>.anthropic." prefix and a date
+// taken off. No provider/model id is either, so no model magpie served had
+// the picker (ARNO). A model with reasoning levels is listed by one of
+// these instead:
+//
+//   - a Claude model (claude-opus-4-8 at any provider):
+//     magpie-<number>.anthropic.claude-opus-4-8, which IC reads as
+//     claude-opus-4-8 and Claude Code as Claude Opus 4.8, as before;
+//   - any other: mythos-magpie-<number>, which UFt matches. Nothing in it
+//     says haiku, sonnet or opus, so Desktop's small_fast pick is as it
+//     was, and Claude Code (which knows claude-mythos-… only) takes it for
+//     a model it doesn't know and sends its effort as output_config.effort.
+//
+// The effort chosen reaches the gateway as thinking plus
+// output_config.effort and is fitted to the model's own levels there.
+const (
+	desktopEffortAlias = "mythos-magpie-"
+	desktopClaudeInfix = ".anthropic."
+)
+
+// desktopClaude is a model id that is Anthropic's own Claude model, as tIt
+// knows it: claude-<tier>-<version>, a date taken off.
+var (
+	desktopClaude = regexp.MustCompile(`^claude-(?:opus|sonnet|haiku|fable|mythos)-\d+(?:-\d+)?$`)
+	desktopDated  = regexp.MustCompile(`-\d{8}$`)
+)
+
+func aliasNumber(id string) string {
 	h := fnv.New64a()
 	h.Write([]byte(id))
-	return fmt.Sprintf("%s%010d", desktopAlias, h.Sum64()%1e10)
+	return fmt.Sprintf("%010d", h.Sum64()%1e10)
 }
 
-// claudeLooking is a model's id as Claude Desktop is shown it: as it is when
-// it already reads as a Claude model's, else its alias (unprefixed serves it
-// again).
-func claudeLooking(id string) string {
-	if desktopAccepts(id) && !strings.HasPrefix(id, desktopAlias) {
-		return id
+func aliasFor(id string) string { return desktopAlias + aliasNumber(id) }
+
+// claudeModel is the Claude model an entry is, lowercased and without a
+// date or a vendor's "anthropic/" in front, or "" when it is none.
+func claudeModel(e provider.Entry) string {
+	m := strings.ToLower(e.Model)
+	if i := strings.LastIndex(m, "/"); i >= 0 {
+		m = m[i+1:]
 	}
-	return aliasFor(id)
+	m = desktopDated.ReplaceAllString(m, "")
+	if desktopClaude.MatchString(m) {
+		return m
+	}
+	return ""
+}
+
+// claudeLooking is a model's id as Claude Desktop is shown it: one that
+// gets its effort picker when the model has reasoning levels, else as it is
+// when it already reads as a Claude model's, else its alias (unprefixed
+// serves each again).
+func claudeLooking(e provider.Entry) string {
+	if len(e.Efforts) > 0 {
+		if m := claudeModel(e); m != "" {
+			return "magpie-" + aliasNumber(e.ID) + desktopClaudeInfix + m
+		}
+		return desktopEffortAlias + aliasNumber(e.ID)
+	}
+	if desktopAccepts(e.ID) && !strings.HasPrefix(e.ID, desktopAlias) {
+		return e.ID
+	}
+	return aliasFor(e.ID)
 }
 
 // desktopModels is /v1/models as Claude Desktop is shown it: every model by
@@ -90,7 +151,7 @@ func desktopModels(entries []provider.Entry) []map[string]any {
 			name += " (" + e.ID + ")"
 		}
 		m["display_name"] = name
-		if m["id"] = claudeLooking(e.ID); m["id"] != e.ID {
+		if m["id"] = claudeLooking(e); m["id"] != e.ID {
 			m["description"] = e.ID + " in magpie"
 		}
 		data = append(data, m)
@@ -105,14 +166,27 @@ func desktopName(e provider.Entry) string {
 	return e.ID
 }
 
-// aliased is the catalog id an anthropic/magpie-<number> alias stands for.
+// aliased is the catalog id an alias Claude Desktop was given stands for:
+// anthropic/magpie-<number> (as it was listed before too),
+// mythos-magpie-<number> or magpie-<number>.anthropic.<claude model>, with
+// or without Claude Code's "[1m]".
 func aliased(id string) (string, bool) {
 	id = strings.TrimSuffix(id, "[1m]")
-	if !strings.HasPrefix(id, desktopAlias) {
+	var number string
+	if n, ok := strings.CutPrefix(id, desktopAlias); ok {
+		number = n
+	} else if n, ok := strings.CutPrefix(id, desktopEffortAlias); ok {
+		number = n
+	} else if rest, ok := strings.CutPrefix(id, "magpie-"); ok {
+		if i := strings.Index(rest, desktopClaudeInfix); i > 0 {
+			number = rest[:i]
+		}
+	}
+	if len(number) != 10 {
 		return "", false
 	}
 	for _, e := range provider.Catalog() {
-		if aliasFor(e.ID) == id {
+		if aliasNumber(e.ID) == number {
 			return e.ID, true
 		}
 	}
@@ -141,8 +215,9 @@ func isClaudeDesktop(r *http.Request) bool {
 // the user picked. A small tool-less request (a title's max_tokens is 200,
 // a turn's tens of thousands) for a model whose id reads as Claude's, and
 // any request for a model magpie doesn't serve, goes to that model instead,
-// so a chat the user started on a Claude model of their own stays on it. It is kept on disk, so a title asked for before the first
-// turn after a restart goes there too.
+// so a chat the user started on a Claude model of their own stays on it. It is
+// kept on disk, so a title asked for before the first turn after a restart
+// goes there too; before any turn at all it goes to desktopDefault.
 var desktopPicked struct {
 	sync.Mutex
 	model string
@@ -171,6 +246,9 @@ func desktopTurn(asked string, body []byte) string {
 		if picked != "" {
 			return picked
 		}
+		if m := desktopDefault(asked); m != "" {
+			return m
+		}
 		return asked
 	}
 	if tools {
@@ -180,6 +258,27 @@ func desktopTurn(asked string, body []byte) string {
 		}
 	}
 	return asked
+}
+
+// desktopDefault is the model a request Desktop sends before any turn has
+// named one goes to: a new session's first message is titled before it is
+// sent (ARNO), so nothing is picked yet when the title is asked for. It is
+// the model the agent is set to stand in for asked if there is one, else
+// the model a new Desktop session starts on — the first row of /v1/models
+// (resolveDefaultSessionModel in its app.asar takes the first model it
+// doesn't restrict), which is magpie's first model shown to it. "" when
+// that is asked itself or magpie shows Desktop no model.
+func desktopDefault(asked string) string {
+	if StandIn != nil {
+		if m := StandIn("claude-desktop", asked); m != "" && m != asked {
+			return m
+		}
+	}
+	shown, _ := provider.CatalogFor("claude-desktop")
+	if len(shown) == 0 || shown[0].ID == asked {
+		return ""
+	}
+	return shown[0].ID
 }
 
 // small: the request asks for a short answer (max_tokens at most 4096), as

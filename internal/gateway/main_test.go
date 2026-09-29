@@ -57,5 +57,8 @@ func isolatedTests(m *testing.M) (int, error) {
 	if err := os.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH")); err != nil {
 		return 1, err
 	}
+	// no route is written to disk behind a test's back; the history's own
+	// tests call saveRoute themselves
+	keepRoutes = false
 	return m.Run(), nil
 }

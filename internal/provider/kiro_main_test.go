@@ -12,7 +12,7 @@ func TestMain(m *testing.M) {
 	dir, _ := os.MkdirTemp("", "magpie-kiro")
 	kiroCLIDB = func() string { return filepath.Join(dir, "kiro-cli", "data.sqlite3") }
 	kiroIDEDir = func() string { return filepath.Join(dir, "sso") }
-	askKiroIdentity = func(string) (string, string) { return "", "" }
+	askKiroIdentity = func(string, string) (string, string) { return "", "" }
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

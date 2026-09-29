@@ -314,6 +314,7 @@ func TestRuleUnreadyMember(t *testing.T) {
 func TestRuleImages(t *testing.T) {
 	img := `{"model":"group/r","messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,aGVsbG8="}}]}]}`
 	s, _, b := ruled(t)
+	noVision(t)
 	if code, _ := postAs(t, s, "x", img); code != 400 || b.n() != 0 {
 		t.Fatalf("no rules: %d, b %d", code, b.n())
 	}
@@ -521,6 +522,7 @@ func TestRuleTurnOutgrowsUnlistedMember(t *testing.T) {
 func TestRuleImagesUnlistedMember(t *testing.T) {
 	img := `{"model":"group/r","messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,aGVsbG8="}}]}]}`
 	s, a, b := ruled(t)
+	noVision(t)
 	p, err := provider.Find("a")
 	if err != nil {
 		t.Fatal(err)
@@ -538,6 +540,7 @@ func TestRuleImagesUnlistedMember(t *testing.T) {
 // attached when the vision provider fails.
 func TestImageRuleDoesNotLeakImageToTextOnlyFallback(t *testing.T) {
 	s, a, b := ruled(t, provider.Rule{Use: "b/big", Images: true})
+	noVision(t)
 	b.mu.Lock()
 	b.fail = 503
 	b.mu.Unlock()
@@ -548,6 +551,20 @@ func TestImageRuleDoesNotLeakImageToTextOnlyFallback(t *testing.T) {
 	}
 	if a.n() != 0 {
 		t.Fatalf("image was sent to text-only fallback %d times", a.n())
+	}
+}
+
+// With the vision member down, nothing is left to describe the image: the
+// text-only fallback isn't sent it, or a turn without it.
+func TestImageRuleFallbackCantHaveTheImageDescribedByTheFailedMember(t *testing.T) {
+	s, a, b := ruled(t, provider.Rule{Use: "b/big", Images: true})
+	b.mu.Lock()
+	b.fail = 503
+	b.mu.Unlock()
+	img := `{"model":"group/r","messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,aGVsbG8="}}]}]}`
+	code, out := postAs(t, s, "image-fallback", img)
+	if code != 502 || !strings.Contains(out, "couldn't describe the image") || a.n() != 0 {
+		t.Fatalf("%d %s, a %d", code, out, a.n())
 	}
 }
 
@@ -622,6 +639,7 @@ func TestRuleTurnHoldsItsModelOnASharedAccount(t *testing.T) {
 // text-only first; and once the first rests, the second's goes first.
 func TestRuleFailsOverToTheNextRule(t *testing.T) {
 	_, a, b := ruled(t)
+	noVision(t)
 	c := &ruleUp{key: "kc"}
 	srv := httptest.NewServer(c)
 	t.Cleanup(srv.Close)

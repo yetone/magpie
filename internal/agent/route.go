@@ -37,7 +37,7 @@ func viaMagpie(agent, prefix string) []Option {
 			note = a.User + " · via magpie"
 		}
 		out = append(out, Option{Value: prefix + e.ID, Label: e.Name, Note: note,
-			Icon: e.Provider.Icon, Group: e.Provider.Name, Ref: e.ID})
+			Icon: e.Provider.Icon, Group: e.Provider.Name, Ref: e.ID, Free: e.Free, Context: e.Context})
 	}
 	return append(groups, out...)
 }

@@ -321,7 +321,7 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 	}
 	var jobs []job
 	for _, p := range All() {
-		if p.Hidden || p.Account != nil || p.Key == "" {
+		if p.Hidden || p.Off || p.Account != nil || p.Key == "" {
 			continue
 		}
 		src, ok := planQuotaSourceOf(p)

@@ -39,9 +39,13 @@ func TestClaudeDesktopAuxiliaryModel(t *testing.T) {
 	}
 	desktop, other := Token+"-claude-desktop", Token+"-claude"
 
-	// nothing picked yet: as asked
-	if got := send(desktop, "claude-sonnet-5-thinking", false); got != "claude-sonnet-5-thinking" {
-		t.Fatalf("before any turn: sent %q", got)
+	// nothing picked yet: the title of a new session's first message goes to
+	// the model a new session starts on, the first one listed (ARNO)
+	if got := send(desktop, "claude-sonnet-5-thinking", false); got != "m1" {
+		t.Fatalf("before any turn: sent %q, want m1", got)
+	}
+	if _, err := os.Stat(desktopPickedPath()); err == nil {
+		t.Fatal("a title picked a model")
 	}
 	// a turn (tools) on a non-Claude model, listed to Desktop by its alias
 	if got := send(desktop, aliasFor("fake/m1"), true); got != "m1" {
@@ -105,5 +109,46 @@ func TestHasTools(t *testing.T) {
 		if hasTools([]byte(body)) != want {
 			t.Errorf("hasTools(%s) = %v", body, !want)
 		}
+	}
+}
+
+// before any turn, a title goes to the model the agent is set to stand in
+// for it if there is one, else to the first model listed to Desktop; a
+// request for that first model itself, or a real Claude model asked for
+// with tools, is as asked
+func TestClaudeDesktopDefault(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	desktopPicked.Lock()
+	desktopPicked.model, desktopPicked.from = "", ""
+	desktopPicked.Unlock()
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Anthropic: "http://127.0.0.1:1",
+		Models: []string{"m1", "claude-opus-4-8"}}); err != nil {
+		t.Fatal(err)
+	}
+	title := []byte(`{"max_tokens":200,"messages":[{"role":"user","content":"hi"}]}`)
+	turn := []byte(`{"max_tokens":32000,"tools":[{"name":"Bash"}],"messages":[{"role":"user","content":"hi"}]}`)
+	if got := desktopDefault("claude-sonnet-5"); got != "fake/m1" {
+		t.Fatalf("default = %q", got)
+	}
+	if got := desktopDefault("fake/m1"); got != "" {
+		t.Fatalf("default for the first model itself = %q", got)
+	}
+	if got := desktopTurn("claude-haiku-4-5", title); got != "fake/m1" {
+		t.Fatalf("title = %q", got)
+	}
+	StandIn = func(agent, model string) string {
+		if agent == "claude-desktop" {
+			return "fake/claude-opus-4-8"
+		}
+		return ""
+	}
+	t.Cleanup(func() { StandIn = nil })
+	if got := desktopTurn("claude-haiku-4-5", title); got != "fake/claude-opus-4-8" {
+		t.Fatalf("title with a stand-in = %q", got)
+	}
+	// a session on a real Claude model magpie serves keeps it
+	if got := desktopTurn("fake/claude-opus-4-8", turn); got != "fake/claude-opus-4-8" {
+		t.Fatalf("turn = %q", got)
 	}
 }

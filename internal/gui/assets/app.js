@@ -168,11 +168,15 @@ function renderAgentsLoading() {
     const row = el("div", "row agent ag-sk-row");
     const who = el("div", "who");
     who.append(el("span", "skeleton ag-sk-name"));
-    const fields = el("div", "fields");
-    fields.append(el("span", "skeleton ag-sk-field"), el("span", "skeleton ag-sk-field"));
-    row.append(el("span", "skeleton ag-sk-icon"), who, fields);
+    // the panel says what is set in words at the right; the window has two
+    // setting columns
+    const rest = el("div", mode === "panel" ? "ag-sk-sum" : "fields");
+    if (mode === "panel") rest.append(el("span", "skeleton ag-sk-value"), el("span", "skeleton ag-sk-bars"));
+    else rest.append(el("span", "skeleton ag-sk-field"), el("span", "skeleton ag-sk-field"));
+    row.append(el("span", "skeleton ag-sk-icon"), who, rest);
     list.append(row);
   }
+  fit(); // the panel as tall as the rows, not as it was
 }
 
 function renderAgents() {
@@ -820,9 +824,17 @@ if (mode === "panel") {
 
 // extra is room about to be taken (or given back), e.g. by agents unrolling;
 // glide moves the panel's edge there over time instead of at once.
+// The panel is as tall as its tallest tab, not the one showing, so it keeps
+// its height as the tabs change and a shorter tab leaves room below (#124):
+// every tab is laid out at once for the measure, before anything is drawn.
 function fit(extra = 0, glide) {
   if (mode !== "panel") return;
-  const h = $(".top").offsetHeight + $("#ptabs").offsetHeight + $("#agents").offsetHeight + $(".profiles").offsetHeight + $("#panelQuota").offsetHeight + $(".foot").offsetHeight + 4 + extra;
+  const body = document.body, tab = body.dataset.ptab;
+  delete body.dataset.ptab;
+  // extra is only ever the agents' (a row opening, the scroll unrolling)
+  const tallest = Math.max($("#agents").offsetHeight + extra, $(".profiles").offsetHeight, $("#panelQuota").offsetHeight);
+  if (tab) body.dataset.ptab = tab;
+  const h = $(".top").offsetHeight + $("#ptabs").offsetHeight + tallest + $(".foot").offsetHeight + 4;
   if (h === fit.last) return;
   fit.last = h;
   const still = !glide || matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -982,8 +994,9 @@ function openPicker(agent, field, anchor, ev, only) {
   closePicker();
   const cur = field.value;
   let options = field.options.filter((o) => !only || only(o));
-  // routing groups come first, before the agent's own models and each provider's
-  options = [...options.filter((o) => o.group === ROUTING_GROUPS), ...options.filter((o) => o.group !== ROUTING_GROUPS)];
+  // routing groups come first, before the agent's own models and each
+  // provider's; only the picker's own choices (Automatic, Off) above them
+  options = [...options.filter((o) => o.reset), ...options.filter((o) => !o.reset && o.group === ROUTING_GROUPS), ...options.filter((o) => !o.reset && o.group !== ROUTING_GROUPS)];
   const effortPicker = !only && (field.key === "effort" || field.label === "effort" || field.label === "thinking");
   // Current model first, then the rest in catalog order. Effort levels keep
   // their natural low → high order because their position is meaningful.
@@ -1275,6 +1288,31 @@ function renderPickerRail() {
   queueMicrotask(updatePickerRailSelection);
 }
 
+// namedFree: a model its vendor names free (OpenRouter's foo/bar:free, a
+// free-model), "free" as a word of its id or name, not freedom-7b (#185)
+function namedFree(...names) {
+  return names.some((n) => /(^|[^a-z])free($|[^a-z])/i.test(n || ""));
+}
+
+// freeBadge: the green FREE by a model, and why it is free
+function freeBadge(plan) {
+  const f = el("span", "badge free", t("free"));
+  f.title = t(plan ? "free: it doesn't use the plan's credits" : "free: so its name says");
+  return f;
+}
+
+// contextTag: the small grey 1M by a model that holds a million tokens or
+// more (Cursor's names said it, and no longer do); the usual 128K–400K
+// aren't marked, as nearly every model has one of those; nor is a name
+// that says it itself ("GPT-5.5 Mini (1M)", kept to tell it from another)
+function contextTag(n, name) {
+  if (!(n >= 1e6) || /\b\d+M\b/.test(name || "")) return null;
+  const m = n / 1e6;
+  const tag = el("span", "badge ctx", (Number.isInteger(m) ? m : m.toFixed(1)) + "M");
+  tag.title = t("holds {n} tokens", { n: n.toLocaleString() });
+  return tag;
+}
+
 function renderList() {
   const list = $("#list");
   list.replaceChildren();
@@ -1292,6 +1330,9 @@ function renderList() {
     // a choice of magpie's own (Codex's sign-in) reads in the page's language
     const own = pick.field.label === "sign-in";
     words.append(el("span", "v", own ? t(o.label || o.value) : o.label || o.value));
+    if (o.free || (pick.modelPicker && o.value && namedFree(o.value, o.label))) words.append(freeBadge(o.free));
+    const ctx = contextTag(o.context, o.label);
+    if (ctx) words.append(ctx);
     let note = o.note && o.note !== (o.label || o.value) ? (own ? t(o.note) : o.note) : "";
     if (q && o.group && !note) note = o.group;
     if (note) words.append(el("span", "n", note));
@@ -1516,13 +1557,16 @@ function renderProviders() {
   let dialog = null; // the editor, if one is open
   for (const p of providers.providers) {
     const open = editing === p.id;
-    const row = el("div", "row provider" + (open ? " selected" : ""));
+    const row = el("div", "row provider" + (open ? " selected" : "") + (p.off ? " off" : ""));
     row.dataset.id = p.id;
     const who = el("div", "who");
     const name = el("div", "name", p.name);
     if (p.sponsored) name.append(el("span", "badge", t("sponsored")));
+    if (p.off) name.append(el("span", "badge off", t("Switched off")));
     const n = p.models.filter((m) => m.on).length;
-    const models = n ? t(n === 1 ? "{n} model" : "{n} models", { n }) : t("no models exposed");
+    // a provider that only draws images (Settings → Image generation) says so
+    const models = n ? t(n === 1 ? "{n} model" : "{n} models", { n })
+      : p.draws ? t(p.draws === 1 ? "{n} image model" : "{n} image models", { n: p.draws }) : t("no models exposed");
     who.append(name, el("div", "sub", (p.account ? t("signed in as {user}", { user: p.account.user }) : p.host) + " · " + models));
     const using = p.agents.filter((a) => a.current);
     const uses = el("div", "uses");
@@ -1549,7 +1593,7 @@ function renderProviders() {
     if (!key.title.includes(label)) key.title = label + " · " + key.title;
     const chev = el("span", "chev");
     chev.append(svg(CHEV_R, 11, 1.7));
-    row.append(icon(p.icon || "generic"), who, uses, key, chev);
+    row.append(icon(p.icon || "generic"), who, uses, key, providerSwitch(p), chev);
     row.onclick = () => { editing = open ? null : p.id; draft = null; renderProviders(); }; // the preset sheet stays as it is under the dialog
     list.append(row);
     if (open) dialog = renderEditor(p);
@@ -1560,6 +1604,37 @@ function renderProviders() {
   if (importingApps) dialog = renderImportApps(importingApps);
   if (dialog) openModal(dialog); else closeModal();
   view.scrollTop = top;
+}
+
+// providerSwitch turns a provider off and on (#163): off, it stays with its
+// keys and settings, but agents are given none of its models and no request
+// goes to it (a key out of quota, say), without removing it.
+function providerSwitch(p) {
+  const on = !p.off;
+  const s = el("button", "lib-switch pswitch" + (on ? " on" : ""));
+  s.setAttribute("role", "switch");
+  s.setAttribute("aria-checked", on ? "true" : "false");
+  s.setAttribute("aria-label", t("Use {name}", { name: p.name }));
+  s.title = on ? t("On · switch it off and agents no longer get its models; its keys and settings are kept") : t("Off · switch it on and agents get its models again");
+  s.append(el("i"));
+  s.onclick = (e) => { e.stopPropagation(); switchProvider(p, !on, s); };
+  return s;
+}
+
+// switchProvider saves it on or off at once, leaving an editor open as it
+// was; the agents' own model lists follow.
+async function switchProvider(p, on, s) {
+  s?.classList.toggle("on", on);
+  try {
+    providers = await api("provider/" + (on ? "on" : "off"), { id: p.id });
+    renderProviders();
+    state = await api("state");
+    renderAgents();
+    status(t(on ? "{name} is on" : "{name} is off: agents no longer get its models", { name: p.name }), "ok");
+  } catch (e) {
+    s?.classList.toggle("on", !on);
+    status(e.message, "err");
+  }
 }
 
 // Sign-ins magpie found but leaves alone, so nobody wonders why an agent that
@@ -1825,7 +1900,7 @@ function gatewayModels() {
   // the routing groups first, as the agents' pickers list them
   const out = (providers.gateway.groups || []).map((g) => ({ id: g.id, name: g.name, icons: g.icons, group: true,
     provider: { name: [t("routing group"), g.providers.join(", ")].filter(Boolean).join(" · ") } }));
-  for (const p of providers.providers) for (const m of p.models) if (m.on) out.push({ id: `${p.id}/${m.id}`, name: m.name, provider: p });
+  for (const p of providers.providers) for (const m of p.models) if (m.on) out.push({ id: `${p.id}/${m.id}`, name: m.name, provider: p, context: m.context });
   return out;
 }
 
@@ -1979,7 +2054,11 @@ function renderGatewayModels() {
   for (const m of models) {
     const row = el("div", "row model" + (m.id === exampleModel ? " selected" : ""));
     const who = el("div", "who");
-    who.append(el("div", "name", m.id), el("div", "sub", m.name && m.name !== m.id.split("/")[1] ? `${m.name} · ${m.provider.name}` : m.provider.name));
+    const name = el("div", "name", m.id);
+    if (namedFree(m.id, m.name)) name.append(freeBadge(false));
+    const ctx = contextTag(m.context, m.name);
+    if (ctx) name.append(ctx);
+    who.append(name, el("div", "sub", m.name && m.name !== m.id.split("/")[1] ? `${m.name} · ${m.provider.name}` : m.provider.name));
     row.append(m.group ? stackIcon(m.icons) : icon(m.provider.icon || "generic"), who, copyBtn(m.id, t("Model id")));
     row.title = t("Use this model in the snippets");
     row.onclick = () => { exampleModel = m.id; localStorage.setItem("magpie.model", m.id); renderConnect(); renderGatewayModels(); };
@@ -2099,7 +2178,7 @@ function renderAdd() {
   head.append(imp);
   if (providers.providers.length) {
     const x = el("button", "text", t("Close"));
-    x.onclick = () => { adding = false; editing = null; draft = null; presetQuery = ""; renderProviders(); };
+    x.onclick = () => rollUpSheet(sheet, () => { adding = false; editing = null; draft = null; presetQuery = ""; renderProviders(); });
     head.append(x);
   }
   sheet.append(head);
@@ -2526,7 +2605,9 @@ function renderEditor(p, presetID) {
     h.append(el("span", "grow"));
     const site = pr?.website || p?.website || (p?.host ? "https://" + p.host : "");
     if (site) { const b = el("button", "link", hostOf(site) + " ↗"); b.onclick = () => api("open", { url: site }); h.append(b); }
+    if (p) h.append(providerSwitch(p));
     ed.append(h);
+    if (p?.off) ed.append(el("div", "hint off-note", t("Switched off: agents aren't given its models and no request goes to it. Its keys and settings are kept; switch it on to use it again.")));
   }
 
   // who uses it: just the agents already pointed here, so a click changes
@@ -2631,6 +2712,7 @@ function renderEditor(p, presetID) {
       ed.append(...field(t("Account"), acct, t("{agent}'s sign-in, read from its own files. Sign out there and this provider goes away.", { agent: a.agentName })));
     }
     ed.append(...field(t("Models"), renderModels(p), ""));
+    if (p.drawIds?.length) ed.append(...renderDrawers(p));
     // a subscription's window too: Codex's backend says 272K for models
     // that take 872K (#120)
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
@@ -2720,7 +2802,8 @@ function renderEditor(p, presetID) {
   // are served at their own: one selector, and the provider's base URLs follow it
   let refreshEndpoints = () => {};
   if (pr?.regions?.length) {
-    const seg = el("div", "segs");
+    // Bedrock's ten regions don't fit the editor's width: they scroll
+    const seg = el("div", "segs regions");
     const cur = pr.regions.find((r) => r.chat && r.chat === (draft.chat || pr.chat)) || pr.regions[0];
     for (const r of pr.regions) {
       const b = el("button", "opt" + (r.id === cur.id ? " on" : ""), t(r.name));
@@ -2732,11 +2815,17 @@ function renderEditor(p, presetID) {
       };
       seg.append(b);
     }
-    queueMicrotask(() => slide(seg, "regions"));
+    queueMicrotask(() => {
+      slide(seg, "regions");
+      // the region in use in view, where they scroll
+      const on = seg.querySelector(":scope > .on");
+      if (on && seg.scrollWidth > seg.clientWidth) seg.scrollLeft = on.offsetLeft - (seg.clientWidth - on.offsetWidth) / 2;
+    });
     ed.append(...field(t(pr.regionLabel || "Region"), seg, t("which endpoint {p} is reached through", { p: pr.name })));
   }
 
   if (p) ed.append(...field(t("Models"), renderModels(p), ""));
+  if (p?.drawIds?.length) ed.append(...renderDrawers(p));
   {
     // the window agents are told a model has, over what the vendor or
     // models.dev says: one for all of them, and model=size for one
@@ -3176,7 +3265,11 @@ function renderImport(im) {
   ed.append(...field(t("Endpoints"), renderEndpoints(null, p), ""));
   if (p.models?.length) {
     const chips = el("div", "mchips");
-    for (const m of p.models) chips.append(el("span", "mchip on", m));
+    for (const m of p.models) {
+      const c = el("span", "mchip on", m);
+      if (namedFree(m)) c.append(freeBadge(false));
+      chips.append(c);
+    }
     ed.append(...field(t("Models"), chips, ""));
   }
   if (im.replaces) ed.append(el("div", "warnbox soft", t("Replaces your {name}, key and all.", { name: im.replaces })));
@@ -3269,20 +3362,28 @@ function renderModels(p) {
     chips.replaceChildren();
     const f = (q?.value || "").trim().toLowerCase();
     let shown = 0;
+    // a filter is a search: what it doesn't match is left out, picked or not
     for (const m of p.models) {
       const on = draft.chosen.includes(m.id);
-      if (f && !m.id.toLowerCase().includes(f) && !(m.name || "").toLowerCase().includes(f) && !(m.default || "").toLowerCase().includes(f) && !on) continue;
+      if (f && !m.id.toLowerCase().includes(f) && !(m.name || "").toLowerCase().includes(f) && !(m.default || "").toLowerCase().includes(f)) continue;
       const c = el("button", "mchip" + (on ? " on" : ""));
       c.append(el("span", "", m.name && m.name !== m.id ? m.name : m.id));
+      // one the plan serves at no cost to it (WorkBuddy's x0.00 credits)
+      // or one its vendor names free (#185)
+      const free = m.free || namedFree(m.id, m.name);
+      if (free) c.append(el("span", "badge free", t("free")));
+      const ctx = contextTag(m.context, m.name);
+      if (ctx) c.append(ctx);
       if (m.default) c.title = `${m.id} · ${m.default}`;
       else if (m.name && m.name !== m.id) c.title = m.id;
+      if (free) c.title = (c.title || m.id) + " · " + t(m.free ? "free: it doesn't use the plan's credits" : "free: so its name says");
       tested(c, m.id);
       c.onclick = () => { draft.chosen = on ? draft.chosen.filter((x) => x !== m.id) : [...draft.chosen, m.id]; draw(); };
       chips.append(c);
       if (++shown >= 80 && !f) { chips.append(el("span", "hint", t("… {n} more, filter to find them", { n: p.models.length - shown }))); break; }
     }
     for (const id of draft.chosen) {
-      if (p.models.some((m) => m.id === id)) continue;
+      if (p.models.some((m) => m.id === id) || (f && !id.toLowerCase().includes(f))) continue;
       const c = el("button", "mchip on own");
       c.append(el("span", "", id));
       c.title = t("Added by hand");
@@ -3291,6 +3392,9 @@ function renderModels(p) {
       chips.append(c);
     }
     if (!p.models.length && !draft.chosen.length) chips.append(el("span", "hint", t("The vendor's list is empty. Refresh, or type a model id.")));
+    // the list is of models agents chat with: image, embedding and speech
+    // models are left out of it, and an image model is set in Settings
+    else if (f && !chips.children.length) chips.append(el("span", "hint", t("No model here matches “{q}”. Image, embedding and speech models aren't listed, as agents can't chat with them: pick an image model in Settings → Images.", { q: q.value.trim() })));
     drawNames();
     why.textContent = p.decide ? t("Agents never see them: a routing group picks one as its classifier.")
       : draft.unlisted ? t("Agents don't see them: only the routing groups they are in use them.")
@@ -3445,6 +3549,15 @@ function renderModels(p) {
   return box;
 }
 
+// renderDrawers: the provider's image models. Agents don't chat with them,
+// so they aren't among its Models; they are listed to say they are there,
+// and one is picked in Settings → Images.
+function renderDrawers(p) {
+  const chips = el("div", "mchips");
+  for (const id of p.drawIds) chips.append(el("span", "mchip ro", id));
+  return field(t("Image models"), chips, t("Agents don't chat with these, so they aren't among its models: the one that draws is picked in Settings → Images."));
+}
+
 // renderRouting: how the gateway spreads requests over the keys or
 // accounts a provider has on. It takes effect at once, like ticking one.
 const ROUTINGS = [
@@ -3549,11 +3662,14 @@ const SUBS = [
   { agent: "commandcode-plan", name: "Command Code", icon: "commandcode", plans: "Pro · GOAT · Max · Ultra", own: true },
   { agent: "qoder", name: "Qoder", icon: "qoder", plans: "Pro", own: true, risk: true,
     riskNote: "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose." },
-  // devin's credentials.toml keeps one account too
-  { agent: "devin", name: "Devin", icon: "devin", plans: "Pro · Enterprise", single: true },
+  // the devin CLI's own account is read; more are signed in beside it, each in a data folder of magpie's
+  { agent: "devin", name: "Devin", icon: "devin", plans: "Pro · Enterprise", own: true },
+  // Kiro's own sign-in page (Google, GitHub, Builder ID, Identity Center); kiro-cli's or the IDE's is read too
+  { agent: "kiro", name: "Kiro", icon: "kiro-color", plans: "Free · Pro · Pro+ · Power", own: true },
   // Google's sign-ins; Gemini CLI's own account is read too
   { agent: "gemini", name: "Gemini CLI", icon: "geminicli-color", plans: "Code Assist Standard · Enterprise", own: true },
-  { agent: "antigravity", name: "Antigravity", icon: "antigravity-color", plans: "Google AI Pro · Ultra · free", risk: true },
+  // accounts can also come from another tool's export (Antigravity Cockpit, Antigravity Manager, CLIProxyAPI)
+  { agent: "antigravity", name: "Antigravity", icon: "antigravity-color", plans: "Google AI Pro · Ultra · free", risk: true, importable: true },
 ];
 const subOf = (agent) => SUBS.find((x) => x.agent === agent);
 let signing = null; // the sign-in under way: { id, agent, url, state, installing, error }
@@ -3634,9 +3750,15 @@ function renderSigning(sub) {
     go.onclick = () => startSignIn(sub.agent, true);
     const close = el("button", "text", t("Cancel"));
     close.onclick = cancelSignIn;
-    box.append(close, go);
+    if (sub.importable) {
+      const imp = el("button", "text", t("Import instead…"));
+      imp.title = t("Bring in accounts exported from Antigravity Cockpit, Antigravity Manager or CLIProxyAPI");
+      imp.onclick = () => startImport(sub.agent);
+      box.append(close, imp, go);
+    } else box.append(close, go);
     return box;
   }
+  if (signing.state === "import" || signing.state === "importing" || signing.state === "imported") return renderImport(sub);
   if (signing.state === "failed") {
     box.append(el("span", "mark", "!"));
     tt.append(el("span", "n", t("Sign-in didn't finish")), el("span", "s", signing.error || ""));
@@ -3725,6 +3847,7 @@ function renderAccounts(a) {
     row.append(accountQuota(l.lapsed ? { [l.user]: { error: l.lapsed } } : quota, l.user));
     list.append(row);
   }
+  if (a.agent === "codex" && providers?.codexDaemon) list.append(renderCodexDaemon(providers.codexDaemon));
   if (signing?.agent === a.agent) list.append(renderSigning(sub));
   else {
     const add = el("button", "acc add");
@@ -3733,8 +3856,152 @@ function renderAccounts(a) {
     add.append(ic, el("span", "n", t(sub.single ? "Sign in to another {name} account" : "Add another {name} account", { name: sub.name })));
     add.onclick = () => startSignIn(a.agent);
     list.append(add);
+    if (sub.importable) {
+      const imp = el("button", "acc add");
+      const ic2 = el("span", "dot");
+      ic2.append(svg(PLUS, 10, 1.8));
+      imp.append(ic2, el("span", "n", t("Import accounts from a file…")));
+      imp.title = t("Bring in accounts exported from Antigravity Cockpit, Antigravity Manager or CLIProxyAPI");
+      imp.onclick = () => startImport(a.agent);
+      list.append(imp);
+    }
   }
   return list;
+}
+
+// renderCodexDaemon: Codex's background app-server read the sign-in when it
+// started, so after a switch the Codex sessions that attach to it are still
+// on the account before (user) until it restarts. magpie doesn't restart it
+// unasked: that ends the Codex sessions running on it.
+function renderCodexDaemon(user) {
+  const box = el("div", "signing daemon");
+  box.append(el("span", "mark", "!"));
+  const tt = el("span", "tt");
+  tt.append(el("span", "n", t("Codex's background service is still signed in as {user}", { user })),
+    el("span", "s", t("Restart it to use the new account. Running Codex sessions will be interrupted.")));
+  box.append(tt);
+  const later = el("button", "text", t("Later"));
+  later.onclick = () => accountAction("codex/daemon/dismiss", {});
+  const go = el("button", "text primary", t("Restart"));
+  go.title = "codex app-server daemon restart";
+  go.onclick = () => { go.classList.add("busy"); accountAction("codex/daemon/restart", {}, t("Codex's background service restarted")); };
+  box.append(later, go);
+  return box;
+}
+
+// Accounts brought in from another tool's export instead of signing in
+// again: the files' text (or what is pasted) goes to magpie, which checks
+// each account with the vendor before keeping it, and says what became of
+// each. What is read stays here only until it is sent; the box masks it.
+function startImport(agent) {
+  if (signingOpen()) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+  signing = { agent, state: "import", text: "", files: [] };
+  renderProviders();
+  document.querySelector(".signing.import textarea")?.focus();
+}
+
+async function runImport(agent) {
+  const files = signing.files.map((f) => f.text);
+  if (signing.text.trim()) files.push(signing.text);
+  if (!files.length) return;
+  signing = { agent, state: "importing" };
+  renderProviders();
+  try {
+    const r = await api("signin/import", { agent, files });
+    if (signing?.agent !== agent) return;
+    providers = r.providers;
+    const added = r.results.filter((x) => x.status === "added" || x.status === "updated");
+    signing = { agent, state: "imported", results: r.results };
+    delete loginUsage[agent];
+    const p = providers.providers.find((x) => x.account?.agent === agent);
+    if (p && added.length) {
+      editing = p.id; draft = null; adding = false; presetQuery = "";
+      justAdded = added[0].user;
+      setTimeout(() => { justAdded = ""; }, 2000);
+    }
+    renderProviders();
+    const failed = r.results.filter((x) => x.status === "failed").length;
+    status(t("{n} added, {m} not added", { n: added.length, m: failed }), added.length || !failed ? "ok" : "err");
+    state = await api("state");
+    renderAgents();
+  } catch (e) {
+    if (signing?.agent !== agent) return;
+    signing = { agent, state: "import", text: "", files: [], error: e.message };
+    renderProviders();
+  }
+}
+
+const importStatus = { added: "Added", updated: "Updated with this sign-in", exists: "Already in magpie", failed: "Not added" };
+
+function renderImport(sub) {
+  const box = el("div", "signing import");
+  const tt = el("span", "tt");
+  if (signing.state === "importing") {
+    box.append(el("span", "spinner"));
+    tt.append(el("span", "n", t("Checking the accounts with Google…")),
+      el("span", "s", t("Each account's sign-in is refreshed and its project looked up, as signing in does.")));
+    box.append(tt);
+    return box;
+  }
+  if (signing.state === "imported") {
+    box.append(el("span", "mark", "✓"));
+    tt.append(el("span", "n", t("Import finished")));
+    const rs = el("span", "results");
+    for (const r of signing.results || []) {
+      const row = el("span", "res " + r.status);
+      row.append(el("span", "u", r.user), el("span", "st", t(importStatus[r.status] || r.status)));
+      if (r.error) { row.title = r.error; row.append(el("span", "why", r.error)); }
+      rs.append(row);
+    }
+    tt.append(rs);
+    box.append(tt);
+    const done = el("button", "text", t("Done"));
+    done.onclick = cancelSignIn;
+    box.append(done);
+    return box;
+  }
+  box.append(el("span", "mark", "↑"));
+  tt.append(el("span", "n", t("Import {name} accounts", { name: sub.name })),
+    el("span", "s", t("Choose or paste an export from Antigravity Cockpit, Antigravity Manager or CLIProxyAPI — JSON, or refresh tokens one a line. Each account is checked with Google before it is added.")));
+  if (sub.risk) tt.append(el("span", "s", t("Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose.")));
+  const area = el("textarea");
+  area.rows = 3;
+  area.spellcheck = false;
+  area.autocomplete = "off";
+  area.placeholder = t("…or paste it here");
+  area.value = signing.text || "";
+  const file = el("input");
+  file.type = "file";
+  file.multiple = true;
+  file.accept = ".json,.txt,application/json,text/plain";
+  file.hidden = true;
+  const names = el("span", "fname", signing.files.map((f) => f.name).join(", "));
+  const go = el("button", "text primary", t("Import"));
+  const ready = () => { go.disabled = !(signing.files.length || signing.text.trim()); };
+  area.oninput = () => { signing.text = area.value; ready(); };
+  file.onchange = async () => {
+    const picked = [];
+    for (const f of file.files) {
+      if (f.size > 4 << 20) { status(t("{name} is too big to be an export", { name: f.name }), "err"); continue; }
+      picked.push({ name: f.name, text: await f.text() });
+    }
+    signing.files = picked;
+    names.textContent = picked.map((f) => f.name).join(", ");
+    ready();
+  };
+  const pick = el("button", "link", t("Choose files…"));
+  pick.onclick = () => file.click();
+  const acts = el("span", "acts");
+  acts.append(pick, names, file);
+  tt.append(acts, area);
+  if (signing.error) tt.append(el("span", "s why", signing.error));
+  box.append(tt);
+  go.onclick = () => runImport(sub.agent);
+  ready();
+  const close = el("button", "text", t("Cancel"));
+  close.onclick = cancelSignIn;
+  box.append(close, go);
+  return box;
 }
 
 // Each account's allowance comes from the vendor and takes a moment, so it
@@ -3747,7 +4014,7 @@ function loginUsageOf(agent) {
       .then((d) => { u.data = d || {}; }, () => { u.data = u.data || {}; })
       .finally(() => {
         u.at = Date.now(); u.loading = null;
-        if (providers?.providers.find((p) => p.id === editing)?.account?.agent === agent && !document.querySelector(".editor .rename-in, .editor input:focus")) renderProviders();
+        if (providers?.providers.find((p) => p.id === editing)?.account?.agent === agent && !document.querySelector(".editor .rename-in, .editor input:focus, .signing.import textarea:focus")) renderProviders();
       });
   }
   return u.data;
@@ -3825,6 +4092,9 @@ function quotaText(w) {
 async function setQuotaLeft(on) {
   quotaLeft = on;
   renderQuotas();
+  // the panel's "used"/"left" lights up a moment, so a click on a ring is
+  // seen to have turned every ring, not to have done nothing (#184)
+  for (const m of document.querySelectorAll(".pq-mode")) m.classList.add("flash");
   try {
     prefs = await writingPrefs(api("settings/quota-left", { on }));
     state.settings = prefs;
@@ -3835,15 +4105,16 @@ async function setQuotaLeft(on) {
 }
 
 // resetClock is when a window starts again, on the clock: "14:30" today,
-// "tomorrow 09:00", "Thu 14:30" within the week, else "Oct 12 08:05".
-function resetClock(at) {
+// "tomorrow 09:00", "Thu 14:30" later this week (Monday to Sunday), else
+// "Oct 12 08:05": a bare weekday in next week read as this week's (#181).
+function resetClock(at, now = new Date()) {
   const lang = locale === "zh" ? "zh-CN" : undefined;
   const time = at.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", hour12: false });
   const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const days = Math.round((day(at) - day(new Date())) / 864e5);
+  const days = Math.round((day(at) - day(now)) / 864e5);
   if (days <= 0) return time;
   if (days === 1) return t("tomorrow {time}", { time });
-  if (days < 7) return at.toLocaleDateString(lang, { weekday: "short" }) + " " + time;
+  if (days <= 6 - ((now.getDay() + 6) % 7)) return at.toLocaleDateString(lang, { weekday: "short" }) + " " + time;
   return at.toLocaleDateString(lang, { month: "short", day: "numeric" }) + " " + time;
 }
 
@@ -4120,12 +4391,67 @@ function editorError(msg, kind = "err") {
 function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
 function hostOf(u) { try { return new URL(u.includes("://") ? u : "https://" + u).host; } catch { return ""; } }
 
-// the sheet opens below the list: the view goes down to its top with it
-$("#addProvider").onclick = () => {
+// the sheet opens below the list: it unrolls on the rows' spring and the
+// view goes down with it
+$("#addProvider").onclick = (e) => {
   adding = true; editing = null; draft = null; renderProviders();
-  const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
-  requestAnimationFrame(() => $("#addSheet").scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" }));
+  unrollSheet($("#view-providers"), $("#addSheet"), e);
 };
+
+// unrollSheet opens a sheet just drawn at the foot of a view from nothing to
+// its height, what's in it easing down into place, and takes the view down
+// with it until the sheet's top is 12px under the view's. The scroll is led
+// by the height, frame by frame, from when the sheet reaches the view's foot
+// to when it is whole: it scrolls only into room the sheet has made, so it
+// never runs ahead to be held back and jump, nor stops short; and it is
+// the view's own scrollTop, which WebKit animates where it won't a smooth
+// scrollIntoView. The reader scrolling meanwhile has the view from then on.
+function unrollSheet(view, sheet, e) {
+  const from = view.scrollTop, room = view.scrollHeight - view.clientHeight;
+  const to = Math.max(from, Math.min(from + sheet.getBoundingClientRect().top - view.getBoundingClientRect().top - 12, room));
+  const h = sheet.offsetHeight;
+  // how tall the sheet is when it reaches the view's foot, where the view
+  // can start to move: from there the view goes down as it grows
+  const x0 = Math.max(0, h - (room - from));
+  const go = scrollOnPurpose(e, ROW_OPEN.ms + 300); // opened by a click, not by code
+  if (!h || matchMedia("(prefers-reduced-motion: reduce)").matches) { if (go) view.scrollTop = to; return; }
+  const pad = getComputedStyle(sheet);
+  sheet.style.overflow = "hidden";
+  const grow = sheet.animate([
+    { height: "0px", paddingTop: "0px", paddingBottom: "0px" },
+    { height: h + "px", paddingTop: pad.paddingTop, paddingBottom: pad.paddingBottom },
+  ], { duration: ROW_OPEN.ms + 60, easing: `cubic-bezier(${ROW_OPEN.ease})` });
+  for (const c of sheet.children) {
+    c.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
+      { duration: 340, delay: 60, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
+  }
+  let set = from;
+  const follow = () => {
+    if (!go || Math.abs(view.scrollTop - set) > 2) return; // the reader took it
+    const done = grow.playState === "finished";
+    view.scrollTop = Math.round(from + (to - from) * (done ? 1 : Math.min(1, Math.max(0, sheet.offsetHeight - x0) / (h - x0))));
+    set = view.scrollTop; // as far as there was room for
+    if (!done) requestAnimationFrame(follow);
+  };
+  const end = () => { sheet.style.overflow = ""; };
+  grow.finished.then(() => { end(); follow(); }, end);
+  requestAnimationFrame(follow);
+}
+
+// rollUpSheet closes it the other way, quicker, and then does what closing
+// it does.
+function rollUpSheet(sheet, then) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return then();
+  const pad = getComputedStyle(sheet);
+  sheet.style.overflow = "hidden";
+  const a = sheet.animate([
+    { height: sheet.offsetHeight + "px", paddingTop: pad.paddingTop, paddingBottom: pad.paddingBottom, opacity: 1 },
+    { height: "0px", paddingTop: "0px", paddingBottom: "0px", opacity: 0 },
+  ], { duration: ROLLUP.ms - 80, easing: `cubic-bezier(${ROLLUP.ease})`, fill: "forwards" });
+  // held shut until it is hidden, then let go, so it is never seen whole again
+  const done = () => { then(); a.cancel(); sheet.style.overflow = ""; };
+  a.finished.then(done, done);
+}
 
 // ---------- usage ----------
 
@@ -4373,6 +4699,14 @@ function renderPanelQuota() {
     } else {
       const note = [qs[0].plan, qs[0].until ? planTerm(qs[0]) : "", qs[0].balance].filter(Boolean).join(" · ");
       head.append(el("span", "pq-gnote" + (qs[0].renew === "off" ? " ends" : ""), note));
+    }
+    // whether the rings say what is used or what is left, once above them,
+    // turned here as by a ring (#184)
+    if (qs.some((q) => !q.error && q.windows?.length)) {
+      const m = el("button", "pq-mode", t(quotaLeft ? "Left" : "Used"));
+      m.title = t(quotaLeft ? "Show how much of each window is used" : "Show how much of each window is left");
+      m.onclick = () => setQuotaLeft(!quotaLeft);
+      head.append(m);
     }
     g.append(head);
     for (const q of qs) g.append(panelQuotaCard(q));
@@ -5209,6 +5543,7 @@ async function writingPrefs(p) {
 }
 const prefsSettled = (since) => !prefsBusy && since === prefsWrites;
 
+const GITHUB_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>';
 const DISCORD_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>';
 
 function renderSettings() {
@@ -5243,8 +5578,15 @@ function renderSettings() {
   renderWarmAt($("#claudeWarmAtSegs"), $("#claudeWarmAtSub"), s.claudeWarmAt, s.claudeWarmup,
     t("Start each Claude account's 5-hour window at this time every day, through Claude Code: 06:00 gives three by 21:00"),
     (v) => savePrefs({ ...keep, claudeWarmAt: v }));
+  // WorkBuddy's daily check-in pressed for each account, shown while one is signed in
+  $("#wbCheckinRow").hidden = !s.workbuddy && !s.workbuddyCheckin;
+  $("#wbCheckinSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.workbuddyCheckin ? "on" : "off",
+    (v) => savePrefs({ ...keep, workbuddyCheckin: v === "on" })));
+  $("#wbCheckinSub").textContent = [t("Claim the daily check-in credits for each signed-in WorkBuddy (China) account once a day, as pressing 签到 in WorkBuddy does"),
+    ...(s.workbuddyCheckins || []).map(wbCheckinLine)].filter(Boolean).join(" · ");
   renderTrayUsage(s, keep);
   renderProxy(s, keep);
+  renderImages(s, keep);
   renderRedact(s, keep);
   renderLAN(s);
   renderSync();
@@ -5273,7 +5615,13 @@ function renderSettings() {
   join.append(el("span", "", t("Join Discord")));
   join.title = "discord.gg/vGSnD3ZKQF";
   join.onclick = () => api("open", { url: "https://discord.gg/vGSnD3ZKQF" }).catch(() => {});
-  row(t("Community"), t("questions, ideas and feedback, on Discord"), "", join);
+  // issues and the code are on GitHub, for those who'd rather not use Discord
+  const repo = el("button", "github");
+  repo.innerHTML = GITHUB_SVG;
+  repo.append(el("span", "", "GitHub"));
+  repo.title = "github.com/yetone/magpie";
+  repo.onclick = () => api("open", { url: "https://github.com/yetone/magpie" }).catch(() => {});
+  row(t("Community"), t("questions, ideas and feedback, on Discord or GitHub"), "", join, repo);
 }
 
 // renderSync: the Settings page's sync and backup — WebDAV keeping the
@@ -5589,6 +5937,83 @@ function renderWarmAt(box, sub, at, onReset, what, save) {
   box.append(segs([["off", t("Off")], ["on", t("On")]], at ? "on" : "off", (v) => save(v === "on" ? at || "06:00" : "")));
 }
 
+// renderImages: the model that describes images to a model that can't see
+// them — the one magpie picks, one named, or none, and then such an image
+// is turned away.
+function renderImages(s, keep) {
+  const box = $("#imagesList");
+  box.replaceChildren();
+  const models = s.visionModels || [];
+  const named = (id) => {
+    const m = models.find((x) => x.id === id);
+    return m ? `${m.name || m.id} · ${m.providerName}` : id;
+  };
+  const r = el("div", "row pref");
+  const who = el("div", "who");
+  const v = s.vision || "";
+  who.append(el("div", "name", t("Image recognition")), el("div", "sub",
+    v === "off" ? t("A model that can't see images is sent none: a request with one in its latest message is turned away")
+    : t("When the model in use can't see images, this one describes them to it, once for each image")));
+  const b = el("button", "rt-cond on");
+  const icOf = (id) => models.find((x) => x.id === id)?.icon;
+  if (v === "off") b.append(el("span", "", t("Off")));
+  else if (v) b.append(icon(icOf(v) || "generic"), el("span", "", named(v)));
+  else {
+    if (s.visionAuto) b.append(icon(icOf(s.visionAuto) || "generic"));
+    b.append(el("span", "", s.visionAuto ? t("Automatic") + " · " + named(s.visionAuto) : t("Automatic") + " · " + t("no model that sees")));
+  }
+  // a routing group (no provider of its own) goes with the others, as in
+  // an agent's picker, not in a group of its own with its own rail button
+  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
+  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "vision", label: "model", value: v, options: [
+    { value: "", label: t("Automatic"), note: s.visionAuto ? named(s.visionAuto) : t("no model that sees"), reset: true },
+    { value: "off", label: t("Off"), note: t("images turned away"), reset: true },
+    ...models.map(opt)],
+  onPick: (id) => { if (id !== v) savePrefs({ ...keep, vision: id }); } }, b, ev);
+  const val = el("div", "val");
+  val.append(b);
+  r.append(who, val);
+  box.append(r);
+  renderImageGen(s, keep, box);
+}
+
+// renderImageGen: the model magpie's generate_image tool draws with — the
+// one magpie picks, one named, or none — and where agents are given the tool.
+function renderImageGen(s, keep, box) {
+  const models = s.imageGenModels || [];
+  const named = (id) => {
+    const m = models.find((x) => x.id === id);
+    return m ? `${m.name || m.id} · ${m.providerName}` : id;
+  };
+  const icOf = (id) => models.find((x) => x.id === id)?.icon;
+  const v = s.imageGen || "";
+  const r = el("div", "row pref");
+  const who = el("div", "who");
+  const sub = el("div", "sub",
+    v === "off" ? t("Agents given Magpie Image can't generate images: the tool says it is off")
+    : t("The model Magpie Image draws with. Give an agent the tool from Library → MCP servers → Discover → Magpie Image; images are saved in its project"));
+  who.append(el("div", "name", t("Image generation")), sub);
+  const b = el("button", "rt-cond on");
+  if (v === "off") b.append(el("span", "", t("Off")));
+  else if (v) b.append(icon(icOf(v) || "generic"), el("span", "", named(v)));
+  else {
+    if (s.imageGenAuto) b.append(icon(icOf(s.imageGenAuto) || "generic"));
+    b.append(el("span", "", s.imageGenAuto ? t("Automatic") + " · " + named(s.imageGenAuto) : t("Automatic") + " · " + t("no model that draws")));
+  }
+  // a routing group (no provider of its own) goes with the others, as in
+  // an agent's picker, not in a group of its own with its own rail button
+  const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
+  b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "imageGen", label: "model", value: v, options: [
+    { value: "", label: t("Automatic"), note: s.imageGenAuto ? named(s.imageGenAuto) : t("no model that draws"), reset: true },
+    { value: "off", label: t("Off"), note: t("no images generated"), reset: true },
+    ...models.map(opt)],
+  onPick: (id) => { if (id !== v) savePrefs({ ...keep, imageGen: id }); } }, b, ev);
+  const val = el("div", "val");
+  val.append(b);
+  r.append(who, val);
+  box.append(r);
+}
+
 // renderRedact: what the gateway masks before a request goes to a vendor —
 // secrets, personal data, the user's own words — and puts back in what the
 // vendor answers.
@@ -5620,8 +6045,51 @@ function renderRedact(s, keep) {
   i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { i.value = words; i.blur(); } };
   i.onblur = save;
   row(t("Masked words"), t("Your own words to keep from vendors, separated by commas"), i);
+  renderRedactRules(s, row);
   row(t("Count me as a user"), t("Once a day, a random id for this computer with magpie's version and system — nothing you use magpie for"),
     onOff(!s.noStats, (on) => savePrefs({ ...keep, noStats: !on })));
+}
+
+// renderRedactRules: the user's own rules for secrets magpie's don't know, a
+// gateway's oc_sk_… key say (#195) — one row each, and a row to add one by a
+// prefix or a regular expression. They are set on their own, all of them each
+// time, so one magpie can't use (a pattern that doesn't compile) is said in
+// the row, what was typed kept, and the rest stay as they were.
+let ruleDraft = { kind: "", by: "prefix", match: "", err: "" };
+function renderRedactRules(s, row) {
+  const rules = s.redactRules || [];
+  const set = (next, done) => writingPrefs(api("settings/redact-rules", { rules: next }))
+    .then((ns) => { prefs = ns; ruleDraft.err = ""; done?.(); renderSettings(); status(t("Saved"), "ok", 1500); })
+    .catch((e) => { ruleDraft.err = e.message; status(e.message, "err"); renderSettings(); });
+  const d = ruleDraft;
+  const kind = input(d.kind, "API_KEY");
+  const match = input(d.match, d.by === "prefix" ? "oc_sk_" : "oc_sk_[A-Za-z0-9]{20,}");
+  kind.className = "words rule-kind";
+  match.className = "words rule-match";
+  const by = segs([["prefix", t("Prefix")], ["regex", t("Regex")]], d.by, (v) => { d.by = v; match.placeholder = v === "prefix" ? "oc_sk_" : "oc_sk_[A-Za-z0-9]{20,}"; });
+  const add = el("button", "text", t("Add"));
+  add.onclick = () => {
+    d.kind = kind.value; d.match = match.value.trim();
+    if (!d.match) return match.focus();
+    const r = { kind: d.kind.trim(), [d.by === "prefix" ? "prefix" : "regex"]: d.match };
+    d.err = "";
+    set([...rules, r], () => { ruleDraft = { kind: "", by: d.by, match: "", err: "" }; });
+  };
+  for (const i of [kind, match]) {
+    i.oninput = () => { d.kind = kind.value; d.match = match.value; };
+    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") add.onclick(); };
+  }
+  row(t("Masking rules"), d.err || t("Secrets magpie doesn't know, such as a gateway's own keys: what they start with, or a regular expression. Masked while Mask secrets is on"),
+    kind, by, match, add);
+  const head = $("#redactList").lastElementChild;
+  head.querySelector(".val").classList.add("rule-add");
+  if (d.err) head.querySelector(".sub").classList.add("err");
+  // and the rules under it, each by the name its placeholders have
+  rules.forEach((r, n) => {
+    const x = el("button", "text", t("Remove"));
+    x.onclick = () => set(rules.filter((_, i) => i !== n));
+    row(r.kind, r.prefix ? t("Starts with {p}", { p: r.prefix }) : t("Matches {re}", { re: r.regex }), x);
+  });
 }
 
 // renderLAN: the gateway shared on the local network, for agents on other
@@ -5710,12 +6178,33 @@ async function renderUpdate(r, u) {
   }
 }
 
+// wbCheckinLine is how an account's last WorkBuddy check-in went: today's
+// (a Beijing day) with the credits and the streak, an earlier one by its day.
+function wbCheckinLine(r) {
+  const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  if (r.day !== today) {
+    return r.outcome === "claimed" || r.outcome === "done" ? t("{user} checked in {day}", { user: r.user, day: r.day }) : "";
+  }
+  switch (r.outcome) {
+    case "claimed":
+    case "done":
+      return t("{user} checked in today", { user: r.user }) + (r.credit ? " +" + r.credit : "")
+        + (r.streak ? ", " + t("{n}-day streak", { n: r.streak }) : "");
+    case "ineligible":
+      return t("{user} is not eligible", { user: r.user });
+    case "inactive":
+      return t("{user}: no check-in event now", { user: r.user });
+    default:
+      return t("{user} couldn't check in, tried again later", { user: r.user });
+  }
+}
+
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
   return { theme: s.theme, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, proxy: s.proxy || "",
     redact: !!s.redact, redactPersonal: !!s.redactPersonal, redactWords: s.redactWords || [], codexWarmup: s.codexWarmup || "",
-    claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "", noStats: !!s.noStats,
-    trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3 };
+    claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "", workbuddyCheckin: !!s.workbuddyCheckin, noStats: !!s.noStats,
+    trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, vision: s.vision || "", imageGen: s.imageGen || "" };
 }
 
 // savePrefs sends what the page was drawn with (prefsBase) and the choice
@@ -5751,23 +6240,49 @@ function savePrefs(body) {
 // ---------- header / footer ----------
 
 // ---------- where the reader is ----------
-// Each view stays scrolled where the reader put it. Only the reader moves it
-// — the wheel or trackpad, a touch, the keys that scroll, Tab, a drag — or
-// code that says so first with scrollOnPurpose(). Anything else that moves
-// it is put back before it's painted: a part of the page redrawn, and
-// measured while it was briefly shorter, pulls the page up to what was left
-// of it (WebKit has no scroll anchoring), and WebKit scrolls a field it
-// focuses to the middle of the view. Never set a view's scrollTop, or
-// scrollIntoView inside one, without scrollOnPurpose().
-let purposeUntil = 0;
-function scrollOnPurpose(ms = 1000) { purposeUntil = Math.max(purposeUntil, performance.now() + ms); }
+// Two rules keep the page under the reader, held here for every view so no
+// part of the app has to remember them:
+//
+// - A view moves only for the reader: the wheel or trackpad, a touch, the
+//   keys that scroll, Tab, a drag. Anything else that scrolls it is put
+//   back before it's painted: a part redrawn and measured while briefly
+//   shorter pulls the page up to what was left of it (WebKit has no scroll
+//   anchoring), WebKit scrolls a field it focuses to the middle of the view,
+//   and code sets scrollTop.
+// - What the reader clicks stays where it is on the screen while what the
+//   click does redraws around it — the part above it grown or shrunk, the
+//   control itself drawn again, a load come in — till the reader scrolls or
+//   clicks again, or it has settled. A click is never a scroll: a tab, a
+//   filter, a day, a toggle leaves the page where it was. When what it does
+//   leaves the page shorter under it (a list emptied), the view keeps room
+//   at its foot for it to stay, room that goes as the reader scrolls back.
+//
+// Code moves a view only in answer to a click that asks to go somewhere, and
+// shows that with the reader's event: scrollOnPurpose(e). Called without one
+// (from a load, a timer, a helper that other clicks share) it is refused,
+// and whatever scroll follows is put back.
+let purposeUntil = 0, held = null;
+const readerScrolls = (ms) => { purposeUntil = Math.max(purposeUntil, performance.now() + ms); held = null; };
+function scrollOnPurpose(e, ms = 1000) {
+  if (!e?.isTrusted || performance.now() - e.timeStamp > 1000) {
+    console.warn("magpie: a scroll not asked for by the reader was refused");
+    return false;
+  }
+  readerScrolls(ms);
+  return true;
+}
 const SCROLL_KEYS = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "]);
-addEventListener("wheel", () => scrollOnPurpose(250), { capture: true, passive: true });
-addEventListener("touchmove", () => scrollOnPurpose(250), { capture: true, passive: true });
-addEventListener("pointermove", (e) => { if (e.buttons) scrollOnPurpose(250); }, { capture: true, passive: true });
+addEventListener("wheel", () => readerScrolls(250), { capture: true, passive: true });
+addEventListener("touchmove", () => readerScrolls(250), { capture: true, passive: true });
+// a drag, not the tremble of a click
+let downAt = null;
+addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; }, { capture: true, passive: true });
+addEventListener("pointermove", (e) => {
+  if (e.buttons && downAt && Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) readerScrolls(250);
+}, { capture: true, passive: true });
 addEventListener("keydown", (e) => {
   const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
-  if (e.key === "Tab" || (!typing && SCROLL_KEYS.has(e.key))) scrollOnPurpose(400);
+  if (e.key === "Tab" || (!typing && SCROLL_KEYS.has(e.key))) readerScrolls(400);
 }, true);
 const readerAt = new WeakMap();
 function backToReader(v) {
@@ -5779,13 +6294,71 @@ function backToReader(v) {
   const f = document.activeElement;
   if (f && f !== document.body && v.contains(f)) {
     const r = f.getBoundingClientRect(), b = v.getBoundingClientRect();
-    if (r.bottom > b.bottom || r.top < b.top) { scrollOnPurpose(); f.scrollIntoView({ block: "nearest" }); }
+    if (r.bottom > b.bottom || r.top < b.top) { readerScrolls(1000); f.scrollIntoView({ block: "nearest" }); }
   }
 }
+// Where an element is on the screen in its view. What's held is the element
+// clicked or, once it's gone or hidden (drawn again), the nearest still
+// there of its neighbours, its parents and theirs; one moving as it plays
+// (a row springing open) is passed over, so the page doesn't follow the play.
+const onScreen = (n, v) => n.getBoundingClientRect().top - v.getBoundingClientRect().top;
+const atRest = (n) => n.isConnected && n.offsetParent && !n.getAnimations().some((a) => a.playState === "running");
+// The room is an empty block last in the view (padding at its foot would
+// count in its height only a frame later), put back when a redraw of the
+// view takes it out.
+const room = new WeakMap(); // px kept at a view's foot, past its content
+const roomOf = (v) => (v.querySelector(":scope > .view-room") ? room.get(v) || 0 : 0);
+function setRoom(v, px) {
+  px = Math.max(0, Math.round(px));
+  let r = v.querySelector(":scope > .view-room");
+  if (!px) { r?.remove(); room.delete(v); return; }
+  if (!r) { r = document.createElement("div"); r.className = "view-room"; r.setAttribute("aria-hidden", "true"); }
+  if (r !== v.lastElementChild) v.append(r);
+  r.style.height = px + "px";
+  room.set(v, px);
+}
+// only as much room as keeps the view where it is: none once the content
+// reaches the view's foot again
+function fitRoom(v) {
+  const r = roomOf(v);
+  if (r) setRoom(v, Math.min(r, v.scrollTop + v.clientHeight - (v.scrollHeight - r)));
+}
+function hold(h) {
+  const a = h.chain.find(([n]) => atRest(n));
+  if (!a) return;
+  const v = h.v, d = onScreen(a[0], v) - a[1];
+  if (Math.abs(d) >= 1) {
+    const want = v.scrollTop + d, max = v.scrollHeight - v.clientHeight;
+    if (want > max) setRoom(v, roomOf(v) + want - max);
+    v.scrollTop = want;
+  }
+  fitRoom(v);
+  readerAt.set(v, v.scrollTop);
+}
+let holding = false; // one frame loop, whatever the clicks
+function keepHeld() {
+  const h = held;
+  if (h && (h.v.hidden || performance.now() > h.until)) held = null;
+  if (!held) { holding = false; return; }
+  hold(held);
+  requestAnimationFrame(keepHeld);
+}
+addEventListener("click", (e) => {
+  purposeUntil = 0; // what came before the click (Space pressed on a button, a tremble) is no scroll
+  const v = e.target.closest?.(".view");
+  if (!v || v.hidden) { held = null; return; }
+  const chain = [];
+  for (let n = e.target; n && n !== v; n = n.parentElement) {
+    for (const m of [n, n.previousElementSibling, n.nextElementSibling]) if (m instanceof HTMLElement && m.offsetParent) chain.push([m, onScreen(m, v)]);
+  }
+  held = chain.length ? { v, chain, until: performance.now() + 4000 } : null;
+  if (held && !holding) { holding = true; requestAnimationFrame(keepHeld); }
+}, true);
 for (const v of document.querySelectorAll(".view")) {
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
-    if (performance.now() < purposeUntil) readerAt.set(v, v.scrollTop);
+    if (performance.now() < purposeUntil) { fitRoom(v); readerAt.set(v, v.scrollTop); }
+    else if (held?.v === v) hold(held);
     else backToReader(v);
   }, { passive: true });
 }

@@ -45,9 +45,9 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
   use its models through the gateway, with nothing copied and no key to
   paste.
 - **Providers with one field.** Pick a preset (Anthropic, OpenAI, Gemini,
-  DeepSeek, Kimi, GLM, MiniMax, StepFun, Qwen, Tencent Cloud Token Plan,
-  Huawei Cloud MaaS, Mistral, Groq, xAI, OpenRouter, Together, Fireworks,
-  SiliconFlow, AiHubMix, 302.AI, Ollama, LM Studio…),
+  DeepSeek, Kimi, GLM, MiniMax, StepFun, Qwen, Baidu Qianfan Token Plan, Tencent Cloud Token Plan,
+  Huawei Cloud MaaS, Volcengine Ark, Mistral, Groq, xAI, OpenRouter, Together,
+  Fireworks, SiliconFlow, AiHubMix, 302.AI, Ollama, LM Studio…),
   paste a key, done. Custom vendors need a name and a base URL. magpie never
   reads keys from your shell environment.
 - **Real model lists, nothing compiled in.** With a key in hand magpie asks
@@ -121,6 +121,16 @@ Anthropic-compatible base), or both, plus `responses=` when the vendor has a
 separate Responses endpoint, `catalog=` to borrow a models.dev list, and
 `models=` to name the models to expose. Anything a preset does not know can
 be overridden the same way.
+
+Baidu Qianfan's [Token Plan Personal](https://cloud.baidu.com/doc/qianfan/s/Dmrabu8b6)
+is available as `qianfan-token-plan`, with its dedicated Chat Completions,
+Responses and Anthropic Messages endpoints. Add it with
+`magpie provider add qianfan-token-plan <personal-plan-api-key>`.
+`qianfan-code-latest` follows the model selected in the Qianfan console;
+explicit model IDs such as `glm-5.3` select that model directly. The preset
+uses the documented plan models because the plan has no model-list endpoint;
+new model IDs can also be entered by hand. Use a Token Plan Personal key:
+Coding Plan and enterprise plans have different endpoints.
 
 ### Routing groups
 

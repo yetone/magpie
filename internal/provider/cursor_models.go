@@ -9,6 +9,7 @@ package provider
 // way to ask for it.
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 
@@ -165,6 +166,36 @@ func collapseCursorModels(raw []catalog.Model) []catalog.Model {
 			continue
 		}
 		out = append(out, f.model())
+	}
+	return out
+}
+
+// cursorCapacity is the context Cursor puts in a model's name ("Claude
+// Opus 5.5 1M", "GPT-5.5 (1M)").
+var cursorCapacity = regexp.MustCompile(`\(\s*\d+M\s*\)|\b\d+M\b`)
+
+// withoutCursorCapacity is Cursor's list, collapsed, with the context taken
+// out of each name: it is the model's Context, shown apart. A name that
+// would then be another model's ("GPT-5.5 1M" beside a "GPT-5.5") keeps
+// it, as that is what tells the two apart. Ids stay as they are.
+func withoutCursorCapacity(ms []catalog.Model) []catalog.Model {
+	strip := func(name string) string {
+		return strings.Join(strings.Fields(cursorCapacity.ReplaceAllString(name, " ")), " ")
+	}
+	names := map[string]int{} // each name, as listed or stripped, by how many models have it
+	for _, m := range ms {
+		names[strings.ToLower(m.Name)]++
+		if s := strip(m.Name); s != m.Name {
+			names[strings.ToLower(s)]++
+		}
+	}
+	out := slices.Clone(ms)
+	for i, m := range out {
+		s := strip(m.Name)
+		if s == m.Name || s == "" || names[strings.ToLower(s)] > 1 {
+			continue
+		}
+		out[i].Name = s
 	}
 	return out
 }

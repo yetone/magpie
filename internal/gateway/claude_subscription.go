@@ -639,8 +639,12 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			continue
 		}
 		if envelope.Type == "result" {
+			// a turn that failed — out of quota, rate limited — ends with
+			// this and no message_stop, the CLI waiting on its next input:
+			// the reply ends here, or it would wait with it (#177)
 			if envelope.IsError {
 				r.emit(Event{Kind: KError, Text: envelope.Result})
+				r.endSegment()
 			}
 			continue
 		}
@@ -1323,7 +1327,12 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 	}
 	if col.err != "" && len(col.res.Parts) == 0 {
 		abort()
-		return writeError(w, from, 502, name+": "+col.err), col.err
+		// a status, as in a stream, so another account can take over
+		code := 502
+		if quotaWords.MatchString(col.err) {
+			code = 429
+		}
+		return writeError(w, from, code, name+": "+col.err), col.err
 	}
 	ended(said, stop, col.err == "" && r.Context().Err() == nil)
 	res := col.finish()

@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tidwall/gjson"
+
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/redact"
@@ -95,6 +97,12 @@ func unserved(asked string) bool {
 		}
 	}
 	return true
+}
+
+// switchedOff says a request for model went nowhere because p, which
+// serves it, is switched off in magpie (provider.Provider.Off).
+func switchedOff(p provider.Provider, model string) string {
+	return fmt.Sprintf("%s is switched off in Magpie, so %q is not served; switch it on again in Magpie's Providers to use it", p.Name, model)
 }
 
 // Version is set by main.
@@ -177,6 +185,10 @@ type Server struct {
 	// taken off it (see Relisten)
 	lnMu sync.Mutex
 	ln   net.Listener
+	// the images described for models that can't see them (vision.go)
+	sightMu    sync.Mutex
+	sights     map[string]*sight
+	sightOrder []string
 }
 
 // New makes a gateway.
@@ -246,6 +258,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	// and, when settings say to, starts its accounts' next windows as the last reset
 	go provider.KeepCodexWindowsWarm(ctx)
 	go provider.KeepClaudeWindowsWarm(ctx, warmClaude)
+	// and checks the WorkBuddy accounts in for the day's credits
+	go provider.KeepWorkBuddyCheckedIn(ctx)
 	for _, f := range WhileServing {
 		go f(ctx)
 	}
@@ -299,19 +313,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/messages", s.handle(provider.Anthropic))
 	mux.HandleFunc("POST /messages", s.handle(provider.Anthropic))
 	mux.HandleFunc("POST /v1/messages/count_tokens", s.countTokens)
+	mux.HandleFunc("POST /v1/images/generations", s.images(false))
+	mux.HandleFunc("POST /images/generations", s.images(false))
+	mux.HandleFunc("POST /v1/images/edits", s.images(true))
+	mux.HandleFunc("POST /images/edits", s.images(true))
 	mux.HandleFunc("POST /_magpie/claude-mcp/{token}", s.subscription.mcpCall)
 	mux.HandleFunc(CodexPath+"/", s.codexBackend)
 	mux.HandleFunc("GET /v1beta/models", s.geminiModels)
 	mux.HandleFunc("POST /v1beta/models/{call...}", s.gemini)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages and /v1beta/models/*")
+		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages, /v1/images/generations, /v1/images/edits and /v1beta/models/*")
 	})
 	return mux
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"name": "magpie", "version": Version, "models": len(provider.Catalog()), "window": Window,
-		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1beta/models/{model}:generateContent", "/v1/magpie/quotas"}})
+		"apis": []string{"/v1/chat/completions", "/v1/responses", "/v1/messages", "/v1beta/models/{model}:generateContent", "/v1/images/generations", "/v1/images/edits", "/v1/magpie/quotas"}})
 }
 
 // quotas is what is left of every subscription, plan and key magpie has,
@@ -385,7 +403,8 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 }
 
 // unprefixed is the model magpie serves by an id Claude Desktop was given
-// for it (claudeLooking): anthropic/magpie-<number>, or, as it listed them
+// for it (claudeLooking): anthropic/magpie-<number>, mythos-magpie-<number>,
+// magpie-<number>.anthropic.<Claude model>, or, as it listed them
 // before, "anthropic/" put in front of magpie's id. An id that is magpie's
 // as it stands (a provider named anthropic) is left alone.
 func unprefixed(id string) string {
@@ -641,6 +660,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	p, model, ok := provider.Resolve(asked)
 	if !ok {
 		call.Status, call.Error = 404, "unknown model"
+		if off, isOff := provider.SwitchedOff(asked); isOff {
+			call.Error = "provider switched off"
+			writeError(w, from, 404, switchedOff(off, call.Model))
+			finishCapture()
+			s.record(call)
+			return
+		}
 		msg := fmt.Sprintf("magpie knows no model %q", call.Model)
 		if ids := provider.IDs(); len(ids) > 0 {
 			msg += "; it has " + strings.Join(ids, ", ")
@@ -667,6 +693,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	var ruled []provider.Member
 	var ruleAt, words string
 	var ruleReq *Request // parsed for the rules of the group or a group in it
+	// a classifier's own call to a group (a group's classifier may be one)
+	// asks no classifier in turn: one that is, however far round, the group
+	// asking would ask itself for ever
+	ask := s.askClassifier
+	if r.Header.Get("User-Agent") == RouterAgent {
+		ask = nil
+	}
 	if isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool {
 		return g.Ruled() || slices.ContainsFunc(m.Via, provider.Group.Ruled)
 	}) {
@@ -675,7 +708,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 	}
 	if ruleReq != nil && g.Ruled() {
-		hit = ruleFor(ruleAt, g, ms, ruleReq, call.Agent, s.askClassifier)
+		hit = ruleFor(ruleAt, g, ms, ruleReq, call.Agent, ask)
 		ruled = ruleMembers(hit, ms)
 	}
 	// Some clients send images even when the selected model is known to
@@ -692,9 +725,28 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 		}
 	}
+	// Unless a model that sees describes them to it (vision.go).
+	seeing := sync.OnceValues(func() (string, bool) {
+		if describing(r.Context()) {
+			return "", false
+		}
+		return seer()
+	})
 	if imageInput != nil && !*imageInput {
 		var currentImage bool
-		body, currentImage = textOnlyBody(from, body)
+		if see, ok := seeing(); ok && hasImage(from, body) {
+			seen, err := s.seenBody(r.Context(), from, body, see)
+			if err != nil {
+				call.Status, call.Error = 502, "image not described"
+				writeError(w, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v", call.Model, see, err))
+				finishCapture()
+				s.record(call)
+				return
+			}
+			body = seen
+		} else {
+			body, currentImage = textOnlyBody(from, body)
+		}
 		if req, err := parse(from, body); err == nil && !currentImage {
 			for _, msg := range req.Messages {
 				if slices.ContainsFunc(msg.Parts, func(part Part) bool { return part.Kind == Image }) {
@@ -762,7 +814,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	var nested []NestedRule
 	var nestedAt []string
 	if ruleReq != nil {
-		nested, nestedAt, cands, pl = s.nestedRules(ruleAt, ruleReq, call.Agent, ms, cands, pl, aff)
+		nested, nestedAt, cands, pl = s.nestedRules(ruleAt, ruleReq, call.Agent, ask, ms, cands, pl, aff)
 	}
 	// the effort a group's decision model picked for the turn: the
 	// outermost group's that did
@@ -779,7 +831,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// text-only fallbacks. A failure must not send a current user image to
 	// one of them. Historical images and tool results are omitted per
 	// candidate below, so a text-only fallback can still answer those.
-	if isGroup {
+	// With a model to describe them, a text-only member is given the images
+	// described instead.
+	// Described only when such a member is tried: a rule that sends the
+	// images to a model that sees asks for no description.
+	var seenGroup func() ([]byte, error)
+	if isGroup && hasImage(from, body) {
+		if see, ok := seeing(); ok {
+			seenGroup = sync.OnceValues(func() ([]byte, error) { return s.seenBody(r.Context(), from, body, see) })
+		}
+	}
+	if isGroup && seenGroup == nil {
 		_, currentImage := textOnlyBody(from, body)
 		if currentImage {
 			var kept []candidate
@@ -830,26 +892,44 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if isGroup {
 			if in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}}, nil); in != nil && !*in {
-				attemptBody, _ = textOnlyBody(from, body) // omit images in prior turns and tool results
+				if seenGroup != nil {
+					b, err := seenGroup()
+					if err != nil {
+						// only an image of the latest turn fails to be described
+						call.Error = "image not described"
+						if !last {
+							skipped = append(skipped, c.label()+": "+call.Error)
+							continue
+						}
+						see, _ := seeing()
+						call.Status = 502
+						writeError(w, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v", c.p.ID+"/"+c.model, see, err))
+						break
+					}
+					attemptBody = b
+				} else {
+					attemptBody, _ = textOnlyBody(from, body) // omit images in prior turns and tool results
+				}
 			}
 		}
 		picked := false // the effort asked for in place of the agent's
-		if effort != "" {
+		if c.effort != "" {
+			// a member fixed at an effort (#189) is asked for it, at the
+			// level its model has nearest, whatever the agent asked or the
+			// turn's pick: even a request that asked for no reasoning
+			attemptBody = withFixedEffort(from, attemptBody, fitLevel(c.effort, c.p.Efforts(c.model)))
+		} else if effort != "" {
 			// the level this model has nearest to the one picked; one whose
 			// levels aren't known isn't asked for more than high, which
 			// every vendor with levels takes
-			level := fitEffort(effort, c.p.Efforts(c.model))
-			if len(c.p.Efforts(c.model)) == 0 && level == "xhigh" {
-				level = "high"
-			}
-			if b := withEffort(from, attemptBody, level); !bytes.Equal(b, attemptBody) {
+			if b := withEffort(from, attemptBody, fitLevel(effort, c.p.Efforts(c.model))); !bytes.Equal(b, attemptBody) {
 				attemptBody, picked = b, true
 			}
 		}
 		// the reasoning the model is asked for, whoever chose it
 		sent = sentEffort(from, attemptBody, c.p, c.model)
 		s.trace.update(tr, func(t *Route) {
-			t.Tries = append(t.Tries, Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Start: began})
+			t.Tries = append(t.Tries, Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Fixed: c.effort, Start: began})
 		})
 		held := false // answered as its vendor did a moment ago, without asking
 		if said, ok := verifyHeld(c.restKey()); ok && last {
@@ -864,7 +944,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if hw.failure != 0 { // the stream failed before any of it was sent
 			call.Status, call.Error = hw.failure, c.p.Name+": "+hw.failMsg
 		}
-		try := Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Start: began, Done: true, Status: call.Status, Millis: time.Since(began).Milliseconds(), Error: call.Error}
+		try := Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Fixed: c.effort, Start: began, Done: true, Status: call.Status, Millis: time.Since(began).Milliseconds(), Error: call.Error}
 		if r.Context().Err() != nil && !hw.ended {
 			// the agent went away: nobody failed, and nobody else is asked
 			call.Status, call.Error = 499, "the agent canceled the request"
@@ -975,10 +1055,11 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		call.To = from
 		return s.serveCursor(w, r, from, model, body, &call.Usage)
 	}
-	// Devin's through the API its CLI talks to, with the CLI's sign-in
+	// Devin's through the API its CLI talks to, with the CLI's sign-in or
+	// one magpie keeps beside it
 	if p.Account != nil && p.Account.Agent == "devin" {
 		call.To = from
-		return s.serveDevin(w, r, from, model, body, &call.Usage)
+		return s.serveDevin(w, r, from, p.Account.Home, model, body, &call.Usage)
 	}
 	// Kiro's is served through its own API, with kiro-cli's or the Kiro
 	// IDE's sign-in, or a Kiro API key saved on the provider
@@ -1043,6 +1124,16 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 				req.Header.Set(h, v)
 			}
 		}
+		if p.Account == nil && fromClaudeCode(in) {
+			// a relay that serves only Claude Code (#179: "only accessible
+			// via the official Claude CLI") knows it by its own headers,
+			// which go on as it sent them; its key to magpie never does
+			for k, vs := range in {
+				if claudeCodeHeader(k) {
+					req.Header[k] = slices.Clone(vs)
+				}
+			}
+		}
 	}
 	if p.IsOpenCode() {
 		req.Header.Set("x-opencode-session", conversationID(in, body))
@@ -1051,6 +1142,28 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 		return nil, err
 	}
 	return s.client.Do(req)
+}
+
+// fromClaudeCode is a request Claude Code sent, by the User-Agent it gives
+// (claude-cli/2.1.0 (external, cli)).
+func fromClaudeCode(in http.Header) bool {
+	return strings.HasPrefix(in.Get("User-Agent"), "claude-cli/")
+}
+
+// claudeCodeHeader is one of the headers Claude Code tells itself by: its
+// User-Agent, x-app, the anthropic- ones, its SDK's X-Stainless- ones and
+// its x-claude-code- ones. Never the key it was given.
+func claudeCodeHeader(k string) bool {
+	k = strings.ToLower(k)
+	if k == "user-agent" || k == "x-app" {
+		return true
+	}
+	for _, p := range []string{"anthropic-", "x-stainless-", "x-claude-code-"} {
+		if strings.HasPrefix(k, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // passthrough relays a request the provider understands as-is, with the
@@ -1066,8 +1179,18 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		if strings.HasSuffix(p.Host(), "openai.com") {
 			body = withoutFields(body, "enable_thinking")
 		}
+		if p.IsBedrock() {
+			body = asCompletionTokens(body)
+		}
 	case provider.Anthropic:
-		body = thinkingOffUnlessAsked(body)
+		if p.IsBedrock() {
+			// Claude Code's metadata.user_id, a JSON string these days, is
+			// not the plain id Bedrock checks it against (#176)
+			body = withoutFields(body, "metadata")
+		}
+		if !anthropicModel.MatchString(model) {
+			body = thinkingOffUnlessAsked(body)
+		}
 		if effortInOutputConfig.MatchString(model) {
 			body = withOutputEffort(body, p.Efforts(model))
 		}
@@ -1078,7 +1201,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if e := fitEffort(asked, p.Efforts(model)); asked != "" && e != asked {
 		body = withBodyEffort(proto, body, e)
 	}
-	res, err := s.forward(r.Context(), p, proto, pathOf(proto), p.Prepare(body), r.Header)
+	path := pathOf(proto)
+	if proto == provider.Anthropic && p.Account == nil && fromClaudeCode(r.Header) && r.URL.Query().Get("beta") == "true" {
+		path += "?beta=true" // as Claude Code asks it
+	}
+	res, err := s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header)
 	if err != nil {
 		return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 	}
@@ -1089,7 +1216,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
 		if effortLevelsNamed.Match(b) {
-			if res, err = s.forward(r.Context(), p, proto, pathOf(proto), p.Prepare(withBodyEffort(proto, body, "low")), r.Header); err != nil {
+			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(withBodyEffort(proto, body, "low")), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
 		}
@@ -1101,7 +1228,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
 		if nb, ok := withoutThinkingOff(body); ok && alwaysThinks.Match(b) {
-			if res, err = s.forward(r.Context(), p, proto, pathOf(proto), p.Prepare(nb), r.Header); err != nil {
+			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(nb), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
 		}
@@ -1137,12 +1264,20 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	f, _ := w.(http.Flusher)
 	sniff := newSniffer(proto, res.Header.Get("Content-Type"))
 	defer func() { u.add(sniff.usage()) }()
+	var tidy *chatTidy
+	if proto == provider.Chat && sse {
+		tidy = &chatTidy{}
+	}
 	buf := make([]byte, 32<<10)
 	for {
 		n, err := rd.Read(buf)
 		if n > 0 {
 			sniff.write(buf[:n])
-			if _, werr := w.Write(buf[:n]); werr != nil {
+			out := buf[:n]
+			if tidy != nil {
+				out = tidy.write(out)
+			}
+			if _, werr := w.Write(out); werr != nil {
 				return res.StatusCode, "", true
 			}
 			if f != nil {
@@ -1152,6 +1287,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		if err != nil {
 			break
 		}
+	}
+	if tidy != nil {
+		w.Write(tidy.flush())
 	}
 	return res.StatusCode, "", true
 }
@@ -1238,6 +1376,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.CacheKey, req = "", &r
 		}
 		body := build(to, req, model, p.Host(), p.RejectsTemperature(model))
+		if to == provider.Chat && p.IsBedrock() {
+			body = asCompletionTokens(body)
+		}
 		if to == provider.CodeAssist && p.Account != nil {
 			body = buildCodeAssist(req, model, p.Account.Agent)
 		}
@@ -1331,6 +1472,10 @@ func wrongEndpoint(status int, body []byte) bool {
 // one to it. The provider is always streamed; the client gets whichever
 // it asked for.
 func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Provider, from, to provider.Protocol, model string, body []byte, u *Usage) (int, string) {
+	if from == provider.Responses && hasUnportableCurrentImage(body) {
+		msg := "input_image without image_url cannot be translated; send an image_url or use a native Responses route"
+		return writeError(w, from, 400, msg), msg
+	}
 	request, err := parse(from, body)
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
@@ -1432,16 +1577,50 @@ func pathOf(proto provider.Protocol) string {
 	return "/v1/messages"
 }
 
+// parse is shared by translated routes and account/subscription backends.
+// Only the allowlist contracts below promise a required callable function:
+// other protocols have server, custom and MCP tools the IR cannot render.
 func parse(proto provider.Protocol, body []byte) (*Request, error) {
+	var req *Request
+	var err error
 	switch proto {
 	case provider.Chat:
-		return parseChat(body)
+		req, err = parseChat(body)
 	case provider.Responses:
-		return parseResponses(body)
+		req, err = parseResponses(body)
 	case provider.Gemini:
-		return parseGemini(body)
+		req, err = parseGemini(body)
+	default:
+		req, err = parseAnthropic(body)
 	}
-	return parseAnthropic(body)
+	if err != nil {
+		return nil, err
+	}
+	if req.ToolChoice == "required" && len(req.Tools) == 0 && !req.WebSearch && requiredAllowlist(proto, body) {
+		return nil, fmt.Errorf("required tool choice has no callable tools after filtering")
+	}
+	return req, nil
+}
+
+func requiredAllowlist(proto provider.Protocol, body []byte) bool {
+	switch proto {
+	case provider.Responses:
+		var q struct {
+			ToolChoice struct{ Type, Mode string } `json:"tool_choice"`
+		}
+		return json.Unmarshal(body, &q) == nil && q.ToolChoice.Type == "allowed_tools" && q.ToolChoice.Mode == "required"
+	case provider.Gemini:
+		var q struct {
+			ToolConfig struct {
+				FunctionCallingConfig struct {
+					Mode                 string   `json:"mode"`
+					AllowedFunctionNames []string `json:"allowedFunctionNames"`
+				} `json:"functionCallingConfig"`
+			} `json:"toolConfig"`
+		}
+		return json.Unmarshal(body, &q) == nil && strings.EqualFold(q.ToolConfig.FunctionCallingConfig.Mode, "ANY") && len(q.ToolConfig.FunctionCallingConfig.AllowedFunctionNames) > 0
+	}
+	return false
 }
 
 func build(proto provider.Protocol, r *Request, model, host string, rejectTemp bool) []byte {
@@ -1562,9 +1741,23 @@ func modelOf(body []byte) string {
 	return v.Model
 }
 
-// rewriteModel swaps the model field, keeping every other field as it was.
+// rewriteModel swaps the model field, keeping every other byte as it was:
+// the fields in their order, and the text unescaped. A relay that only lets
+// Claude Code in (packy) takes a body with its fields sorted and its < and >
+// escaped, as re-encoding leaves it, for one tampered with (#179).
 func rewriteModel(body []byte, model string) []byte {
-	return withFields(body, map[string]any{"model": model})
+	v := gjson.GetBytes(body, "model")
+	if v.Type == gjson.String && v.Str == model {
+		return body
+	}
+	if v.Type != gjson.String || v.Index <= 0 || !gjson.ValidBytes(body) {
+		return withFields(body, map[string]any{"model": model})
+	}
+	name, _ := json.Marshal(model)
+	out := make([]byte, 0, len(body)+len(name))
+	out = append(out, body[:v.Index]...)
+	out = append(out, name...)
+	return append(out, body[v.Index+len(v.Raw):]...)
 }
 
 // developerAsSystem turns "developer" messages into "system" ones. Agents
@@ -1636,10 +1829,15 @@ func conversationID(in http.Header, body []byte) string {
 	var m struct {
 		Messages []json.RawMessage `json:"messages"`
 		Input    json.RawMessage   `json:"input"`
+		Contents []json.RawMessage `json:"contents"`
 	}
 	// An undecodable body still gets an id: the hash of the whole body.
 	_ = json.Unmarshal(body, &m)
 	items := m.Messages
+	geminiContents := len(items) == 0 && len(m.Contents) > 0
+	if geminiContents {
+		items = m.Contents // Gemini generateContent repeats the first user turn.
+	}
 	if len(items) == 0 && len(m.Input) > 0 && m.Input[0] == '[' {
 		// A malformed input array leaves items empty, and the whole body is hashed.
 		_ = json.Unmarshal(m.Input, &items)
@@ -1652,7 +1850,8 @@ func conversationID(in http.Header, body []byte) string {
 		var r struct {
 			Role string `json:"role"`
 		}
-		if json.Unmarshal(it, &r) == nil && r.Role == "user" {
+		// Gemini treats an omitted role as user; Chat and Responses do not.
+		if json.Unmarshal(it, &r) == nil && (r.Role == "user" || (geminiContents && r.Role == "")) {
 			first = it
 			break
 		}
@@ -1669,13 +1868,17 @@ func conversationID(in http.Header, body []byte) string {
 // "low"|"medium"|"high"|"xhigh"|"max"`.
 var effortLevelsNamed = regexp.MustCompile(`(?i)\blow\b\W+(?:medium|high)\b`)
 
-// bodyEffort is the reasoning effort a Chat or Responses request asks for.
+// bodyEffort is the reasoning effort a Chat or Responses request asks for,
+// or an Anthropic one in its output_config.
 func bodyEffort(proto provider.Protocol, body []byte) string {
 	var v struct {
 		ReasoningEffort string `json:"reasoning_effort"`
 		Reasoning       *struct {
 			Effort string `json:"effort"`
 		} `json:"reasoning"`
+		OutputConfig *struct {
+			Effort string `json:"effort"`
+		} `json:"output_config"`
 	}
 	if json.Unmarshal(body, &v) != nil {
 		return ""
@@ -1685,14 +1888,27 @@ func bodyEffort(proto provider.Protocol, body []byte) string {
 		return v.ReasoningEffort
 	case proto == provider.Responses && v.Reasoning != nil:
 		return v.Reasoning.Effort
+	case proto == provider.Anthropic && v.OutputConfig != nil:
+		return v.OutputConfig.Effort
 	}
 	return ""
 }
 
-// withBodyEffort asks a Chat or Responses request for effort instead,
-// keeping the rest of its reasoning settings.
+// withBodyEffort asks a Chat, Responses or Anthropic request for effort
+// instead, keeping the rest of its reasoning settings. Anthropic's is
+// output_config.effort, which Claude Desktop sends at any of low…max
+// whatever the model takes.
 func withBodyEffort(proto provider.Protocol, body []byte, effort string) []byte {
 	switch proto {
+	case provider.Anthropic:
+		var v struct {
+			OutputConfig map[string]any `json:"output_config"`
+		}
+		if json.Unmarshal(body, &v) != nil || v.OutputConfig == nil {
+			return body
+		}
+		v.OutputConfig["effort"] = effort
+		return withFields(body, map[string]any{"output_config": v.OutputConfig})
 	case provider.Chat:
 		return withFields(body, map[string]any{"reasoning_effort": effort})
 	case provider.Responses:
@@ -1719,6 +1935,39 @@ func withFields(body []byte, fields map[string]any) []byte {
 	for k, v := range fields {
 		m[k] = v
 	}
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false) // <, > and & as the agent wrote them
+	if enc.Encode(m) != nil {
+		return body
+	}
+	return bytes.TrimSuffix(out.Bytes(), []byte("\n"))
+}
+
+// withoutFields drops fields the vendor refuses to see: Qoder asks every
+// model for Qwen's enable_thinking, which OpenAI turns away as an
+// unrecognized argument.
+// asCompletionTokens asks a chat request's reply length as
+// max_completion_tokens in place of max_tokens, as Bedrock's OpenAI
+// endpoint takes it: its GPT models turn max_tokens away (#176).
+func asCompletionTokens(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"max_tokens"`)) {
+		return body
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var m map[string]any
+	if dec.Decode(&m) != nil {
+		return body
+	}
+	n, ok := m["max_tokens"]
+	if !ok {
+		return body
+	}
+	delete(m, "max_tokens")
+	if _, has := m["max_completion_tokens"]; !has {
+		m["max_completion_tokens"] = n
+	}
 	out, err := json.Marshal(m)
 	if err != nil {
 		return body
@@ -1726,9 +1975,6 @@ func withFields(body []byte, fields map[string]any) []byte {
 	return out
 }
 
-// withoutFields drops fields the vendor refuses to see: Qoder asks every
-// model for Qwen's enable_thinking, which OpenAI turns away as an
-// unrecognized argument.
 func withoutFields(body []byte, fields ...string) []byte {
 	found := false
 	for _, f := range fields {

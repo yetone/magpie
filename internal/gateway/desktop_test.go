@@ -45,7 +45,7 @@ func TestAnthropicPrefixedModel(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"id":"`+aliasFor("fake/m1")+`"`) {
 		t.Fatalf("Claude Desktop's list: %s", rec.Body)
 	}
-	if claudeLooking("devin/claude-opus-5-5") != "devin/claude-opus-5-5" {
+	if claudeLooking(provider.Entry{ID: "devin/claude-opus-5-5"}) != "devin/claude-opus-5-5" {
 		t.Fatal("a Claude id was prefixed")
 	}
 	if got := unprefixed("claude-sonnet-4-5"); got != "claude-sonnet-4-5" {
@@ -67,8 +67,8 @@ func TestClaudeDesktopAliases(t *testing.T) {
 		}
 	}
 	for _, id := range []string{"deepseek/deepseek-flash", "moonshot/kimi-k2.5", "openai/gpt-5.5", "codex/gpt-5-codex", "zai/glm-5"} {
-		a := claudeLooking(id)
-		if !desktopAccepts(a) || !strings.HasPrefix(a, desktopAlias) || a != claudeLooking(id) {
+		a := claudeLooking(provider.Entry{ID: id})
+		if !desktopAccepts(a) || !strings.HasPrefix(a, desktopAlias) || a != claudeLooking(provider.Entry{ID: id}) {
 			t.Errorf("%s listed as %s", id, a)
 		}
 	}

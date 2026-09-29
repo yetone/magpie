@@ -224,12 +224,12 @@ func (m *model) openMemberPicker(p pickMsg) {
 }
 
 // openClassifier picks the model that tells which intent a message is:
-// a model, not a group.
+// a model, or another group whose models are tried in turn.
 func (m *model) openClassifier(g provider.Group) {
 	var items []agent.Option
 	for _, e := range provider.Catalog() {
-		if e.Group != "" {
-			continue
+		if e.Group == g.ID {
+			continue // it can't classify for itself
 		}
 		note := e.Name
 		if e.ID == g.Classifier {

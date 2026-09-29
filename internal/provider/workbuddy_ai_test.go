@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -103,6 +104,25 @@ func TestWorkBuddyAI(t *testing.T) {
 	if err := p.Sign(context.Background(), req, Chat, []byte(`{}`)); err != nil ||
 		req.Header.Get("Authorization") != "Bearer ai-access" || req.Header.Get("X-Domain") != "www.codebuddy.ai" {
 		t.Fatalf("sign: %v %v", err, req.Header)
+	}
+	// a chat with no system prompt is given one (#124)
+	if got := string(p.Prepare([]byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`))); !strings.HasPrefix(got, `{"messages":[{"content":"`+wbSystem+`","role":"system"},{"content":"hi","role":"user"}]`) {
+		t.Errorf("prepare: %s", got)
+	}
+	// what WorkBuddy's own chats carry besides the account's
+	for h, want := range map[string]string{"X-Requested-With": "XMLHttpRequest", "X-Agent-Intent": "craft",
+		"X-IDE-Type": "WorkBuddy", "X-IDE-Name": "WorkBuddy", "X-IDE-Version": wbUAVersion, "X-Product": "SaaS"} {
+		if got := req.Header.Get(h); got != want {
+			t.Errorf("%s: %q, want %q", h, got, want)
+		}
+	}
+	for _, h := range []string{"X-Conversation-ID", "X-Conversation-Request-ID", "X-Conversation-Message-ID", "X-Request-ID"} {
+		if len(req.Header.Get(h)) != 32 {
+			t.Errorf("%s: %q", h, req.Header.Get(h))
+		}
+	}
+	if req.Header.Get("X-Request-ID") == req.Header.Get("X-Conversation-ID") {
+		t.Error("the request id is the conversation's")
 	}
 	if also := p.AlsoOn(); len(also) != 1 || also[0].Account.User != "Second" || also[0].ID != WorkBuddyAIID {
 		t.Fatalf("also on: %+v", also)

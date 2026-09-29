@@ -23,6 +23,7 @@ const libraryUsage = `magpie library                     what the library gives 
   magpie library rtk                 which agents run their shell commands through RTK (rtk-ai.app), to save tokens
   magpie library rtk on|off <agent>  switch it (on with RTK's own installer; off works with RTK gone)
   magpie library rtk install         install RTK (Homebrew, winget, or RTK's own script)
+  magpie library rtk upgrade         bring RTK up to its latest release, the way it was installed
 `
 
 // libraryCmd is magpie library …: the instructions, MCP servers and skills
@@ -265,6 +266,12 @@ func rtkCmd(args []string) error {
 		if v, err = library.InstallRTK(); err != nil {
 			return err
 		}
+	case len(args) == 1 && args[0] == "upgrade":
+		fmt.Println(muted.Render("upgrading rtk…"))
+		var err error
+		if v, err = library.UpgradeRTK(); err != nil {
+			return err
+		}
 	case len(args) == 2 && (args[0] == "on" || args[0] == "off"):
 		id, err := library.RTKTakes(args[1])
 		if err != nil {
@@ -283,6 +290,19 @@ func rtkCmd(args []string) error {
 		}
 	} else {
 		fmt.Println(bold.Render("RTK"), muted.Render(v.Version+" · "+v.Path))
+		v.CheckLatest()
+		switch {
+		case v.Note != "":
+			fmt.Println(amber.Render("  " + v.Note))
+		case v.Latest != "" && v.Version != "" && library.RTKNewer(v.Latest, v.Version):
+			up := "update it the way it was installed"
+			if v.Upgrade != "" {
+				up = "magpie library rtk upgrade runs: " + v.Upgrade
+			}
+			fmt.Println(amber.Render("  RTK "+v.Latest+" is out"), muted.Render("— "+up))
+		case len(args) == 1 && args[0] == "upgrade":
+			fmt.Println(green.Render("  up to date"))
+		}
 		if g := v.Gain; g != nil {
 			fmt.Printf("  %d tokens saved over %d commands (%.0f%% on average)\n", g.Saved, g.Commands, g.Pct)
 		}

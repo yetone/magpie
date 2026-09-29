@@ -16,6 +16,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/redact"
 )
 
 // Settings is what the user chose. "" and "system" both mean "follow the OS".
@@ -38,10 +40,13 @@ type Settings struct {
 	// tokens, passwords) from the vendors behind magpie: they go as
 	// placeholders, and come back as they were. RedactPersonal does the same
 	// for emails, phone numbers and ID and bank card numbers, and
-	// RedactWords for the user's own words.
-	Redact         bool     `json:"redact,omitempty"`
-	RedactPersonal bool     `json:"redactPersonal,omitempty"`
-	RedactWords    []string `json:"redactWords,omitempty"`
+	// RedactWords for the user's own words. RedactRules are the user's own
+	// rules for secrets magpie's don't know (a gateway's oc_sk_… key), a
+	// prefix or a pattern each, masked with the secrets while Redact is on.
+	Redact         bool          `json:"redact,omitempty"`
+	RedactPersonal bool          `json:"redactPersonal,omitempty"`
+	RedactWords    []string      `json:"redactWords,omitempty"`
+	RedactRules    []redact.Rule `json:"redactRules,omitempty"`
 	// LAN shares the gateway on the local network, for agents on other
 	// machines; a request from one must carry LANKey as its API key, a
 	// key magpie makes when LAN is first turned on.
@@ -63,9 +68,21 @@ type Settings struct {
 	// with CodexWarmup or without it. ClaudeWarmAt is the Claude accounts'.
 	CodexWarmAt  string `json:"codexWarmAt,omitempty"`
 	ClaudeWarmAt string `json:"claudeWarmAt,omitempty"`
+	// WorkBuddyCheckin presses WorkBuddy's daily check-in (签到) for each
+	// signed-in WorkBuddy (China) account once a Beijing day, claiming the
+	// credits it gives while its event runs.
+	WorkBuddyCheckin bool `json:"workbuddyCheckin,omitempty"`
 	// NoStats stops the one event a day that counts magpie's users (see
 	// internal/stats).
 	NoStats bool `json:"noStats,omitempty"`
+	// Vision is the model that describes an image to a model that can't see
+	// it: a model's id (provider/model, group/<id>), "off" to turn such an
+	// image away, or empty for one magpie picks (see gateway.seer).
+	Vision string `json:"vision,omitempty"`
+	// ImageGen is the model magpie's generate_image tool draws with (the
+	// gateway's /v1/images/generations when a request names no model): a
+	// model's id, "off", or empty for one magpie picks (gateway.drawer).
+	ImageGen string `json:"imageGen,omitempty"`
 	// TrayUsage is the subscription or plan whose windows are shown beside
 	// the tray icon, by its provider and account ("claude|a@b.c"); "" none.
 	TrayUsage string `json:"trayUsage,omitempty"`
@@ -203,6 +220,19 @@ func Save(s Settings) error {
 			return fmt.Errorf("proxy must look like http://127.0.0.1:7890 or socks5://127.0.0.1:1080, not %q", s.Proxy)
 		}
 	}
+	s.Vision = strings.TrimSpace(s.Vision)
+	if s.Vision != "" && s.Vision != "off" && !strings.Contains(s.Vision, "/") {
+		return fmt.Errorf("the vision model must be a model's id such as openai/gpt-5-mini, or off, not %q", s.Vision)
+	}
+	s.ImageGen = strings.TrimSpace(s.ImageGen)
+	if s.ImageGen != "" && s.ImageGen != "off" && !strings.Contains(s.ImageGen, "/") {
+		return fmt.Errorf("the image generation model must be a model's id such as openai/gpt-image-1, or off, not %q", s.ImageGen)
+	}
+	rules, err := redact.CheckRules(s.RedactRules)
+	if err != nil {
+		return err
+	}
+	s.RedactRules = rules
 	s.AgentOrder, s.AgentsHidden, s.AgentsShown = ids(s.AgentOrder), ids(s.AgentsHidden), ids(s.AgentsShown)
 	if err := os.MkdirAll(Dir(), 0o755); err != nil {
 		return err

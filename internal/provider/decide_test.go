@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -152,5 +153,42 @@ func TestCloudflareNoAccount(t *testing.T) {
 	p := Provider{ID: "g", Name: "G", Key: "workers-ai-only", Decide: up.URL + "/client/v4"}
 	if _, err := p.DecideURL(context.Background()); err == nil || !strings.Contains(err.Error(), "/accounts/<account ID>/ai/run") {
 		t.Fatal(err)
+	}
+}
+
+// A vendor's words are shown whatever shape they come in: Tencent's
+// {code, msg}, and a long body in no shape known cut short, not dropped.
+func TestAPIErrorShapes(t *testing.T) {
+	if got := APIError([]byte(`{"code":11001,"msg":"model not supported"}`), "400 Bad Request"); got != "model not supported" {
+		t.Fatal(got)
+	}
+	long := `{"code":400,"data":null,"trace":"` + strings.Repeat("x", 400) + `"}`
+	got := APIError([]byte(long), "400 Bad Request")
+	if !strings.HasPrefix(got, `400 Bad Request: {"code":400`) || !strings.HasSuffix(got, "…") || len([]rune(got)) > 320 {
+		t.Fatal(got)
+	}
+	if got := APIError([]byte("<html><body>bad</body></html>"), "400 Bad Request"); got != "400 Bad Request" {
+		t.Fatal(got)
+	}
+	if got := APIError(nil, "400 Bad Request"); got != "400 Bad Request" {
+		t.Fatal(got)
+	}
+}
+
+// A backend that only streams is tested with a streamed request: WorkBuddy
+// refuses any other with 400 (#124).
+func TestTinyStreamsStreamOnly(t *testing.T) {
+	p := Provider{Chat: "https://x/v1", Responses: "https://x/v1", Anthropic: "https://x"}
+	for _, proto := range []Protocol{Chat, Responses, Anthropic} {
+		if _, b := tiny(p, proto, "m"); strings.Contains(b, "stream") {
+			t.Errorf("%s: %s", proto, b)
+		}
+		p.Account = &Account{Stream: true}
+		_, b := tiny(p, proto, "m")
+		var v map[string]any
+		if err := json.Unmarshal([]byte(b), &v); err != nil || v["stream"] != true || v["model"] != "m" {
+			t.Errorf("%s: %s", proto, b)
+		}
+		p.Account = nil
 	}
 }

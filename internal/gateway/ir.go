@@ -45,6 +45,7 @@ type Part struct {
 	// tool_result
 	CallID  string
 	IsError bool
+	Images  []Part // the images the tool returned beside its text
 
 	// thinking
 	Signature string
@@ -344,6 +345,51 @@ func stringOrText(raw json.RawMessage) string {
 		return b.String()
 	}
 	return ""
+}
+
+// toolOutput reads a tool's result: its text, as stringOrText reads it,
+// and the images in it. Anthropic's tool_result holds image blocks, a
+// Responses function_call_output input_image parts and a Chat tool message,
+// from clients that send them, image_url parts. An image named only by a
+// vendor's file id has nothing to carry and is left out.
+func toolOutput(raw json.RawMessage) (string, []Part) {
+	text := stringOrText(raw)
+	var blocks []struct {
+		Type   string `json:"type"`
+		Source *struct {
+			MediaType string `json:"media_type"`
+			Data      string `json:"data"`
+			URL       string `json:"url"`
+		} `json:"source"`
+		ImageURL json.RawMessage `json:"image_url"`
+	}
+	if len(raw) == 0 || raw[0] != '[' || json.Unmarshal(raw, &blocks) != nil {
+		return text, nil
+	}
+	var images []Part
+	for _, b := range blocks {
+		switch b.Type {
+		case "image":
+			if s := b.Source; s != nil && s.Data != "" {
+				images = append(images, Part{Kind: Image, MediaType: s.MediaType, Data: s.Data})
+			} else if s != nil && s.URL != "" {
+				images = append(images, Part{Kind: Image, URL: s.URL})
+			}
+		case "input_image", "image_url":
+			var u string
+			if json.Unmarshal(b.ImageURL, &u) != nil {
+				var o struct {
+					URL string `json:"url"`
+				}
+				json.Unmarshal(b.ImageURL, &o)
+				u = o.URL
+			}
+			if u != "" {
+				images = append(images, imagePart(u))
+			}
+		}
+	}
+	return text, images
 }
 
 // effortOf normalises the reasoning effort names the APIs use.

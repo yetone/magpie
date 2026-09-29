@@ -3,6 +3,7 @@ package sessions
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +22,24 @@ import (
 // assistant message carries its model and its tokens, input without the
 // cache and output without the reasoning. A subagent's work is a session
 // of its own whose parent is the session it ran in, and counts there.
+//
+// OpenCode 2 keeps its sessions in the same database but in tables of its
+// own (packages/core/src/session/sql.ts): session_v2, the session row as
+// before (directory, a title that may be null, parent_id, time_created and
+// _updated), and session_message, one row a message with its kind in type
+// (user, assistant, synthetic, system, compaction, idle, …), its order in
+// seq and the rest in data. A user message's data is its prompt, {text,
+// files, …}, with no parts of its own; an assistant's has model {id,
+// providerID, variant}, content (its text, reasoning and tools), cost,
+// tokens {input, output, reasoning, cache {read, write}} counted as before,
+// and time {created, completed} (packages/schema/src/session-message.ts,
+// token-usage.ts). A compaction's data has its own tokens. On its first
+// start OpenCode 2 copies every old session into these tables
+// (packages/core/src/database/v1-migration.bun.ts, which records kv
+// migration.v1-v2 {"phase":"completed"} when done) and leaves the old
+// tables behind unwritten, so once it has, only the new tables are read;
+// while it is under way, an old session not yet copied is read from the
+// old ones.
 
 // OpenCodeDir is OpenCode's data folder: $XDG_DATA_HOME/opencode, else
 // ~/.local/share/opencode — on Windows too, where OpenCode keeps it there.
@@ -171,18 +190,37 @@ func openCodeDBFiles(agent, path string) []file {
 	if db == nil {
 		return nil
 	}
-	rows, err := db.Query(`SELECT s.id, COALESCE(s.parent_id, ''), s.time_updated, COUNT(m.id), COALESCE(MAX(m.time_updated), 0)
-		FROM session s LEFT JOIN message m ON m.session_id = s.id GROUP BY s.id`)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
 	var store ocStore = ocDB{db}
 	if agent == "zcode" {
 		store = zcDB{ocDB{db}}
 	}
-	var out []file
+	const q = `SELECT s.id, COALESCE(s.parent_id, ''), s.time_updated, COUNT(m.id), COALESCE(MAX(m.time_updated), 0)
+		FROM %s s LEFT JOIN %s m ON m.session_id = s.id %s GROUP BY s.id`
 	parent := map[string]string{}
+	old := fmt.Sprintf(q, "session", "message", "")
+	var out []file
+	if agent == "opencode" && ocHasTable(db, "session_v2") {
+		out = ocDBRows(db, fmt.Sprintf(q, "session_v2", "session_message", ""), agent, path, ocV2DB{db}, parent)
+		switch {
+		case !ocHasTable(db, "session") || ocMigrated(db):
+			old = ""
+		default: // being copied over: what isn't yet
+			old = fmt.Sprintf(q, "session", "message", "WHERE s.id NOT IN (SELECT id FROM session_v2)")
+		}
+	}
+	if old != "" {
+		out = append(out, ocDBRows(db, old, agent, path, store, parent)...)
+	}
+	return ocRoots(out, parent)
+}
+
+func ocDBRows(db *sql.DB, query, agent, path string, store ocStore, parent map[string]string) []file {
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []file
 	for rows.Next() {
 		var id, par string
 		var updated, n, last int64
@@ -192,7 +230,24 @@ func openCodeDBFiles(agent, path string) []file {
 		parent[id] = par
 		out = append(out, file{agent: agent, path: path + "#" + id, sid: id, oc: store, size: n, mod: ms(max(updated, last))})
 	}
-	return ocRoots(out, parent)
+	return out
+}
+
+func ocHasTable(db *sql.DB, name string) bool {
+	var n int
+	return db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, name).Scan(&n) == nil && n > 0
+}
+
+// ocMigrated is whether OpenCode 2 has copied every old session over.
+func ocMigrated(db *sql.DB) bool {
+	var b []byte
+	if db.QueryRow(`SELECT value FROM kv WHERE key = 'migration.v1-v2'`).Scan(&b) != nil {
+		return false
+	}
+	var v struct {
+		Phase string `json:"phase"`
+	}
+	return json.Unmarshal(b, &v) == nil && v.Phase == "completed"
 }
 
 func (s ocDB) info(sid string) (ocInfo, bool) {
@@ -224,6 +279,79 @@ func (s ocDB) messages(sid string) [][]byte {
 
 func (s ocDB) parts(mid string) [][]byte {
 	return s.rows(`SELECT data FROM part WHERE message_id = ? ORDER BY id`, mid)
+}
+
+// ---- OpenCode 2's tables ------------------------------------------------------
+
+// ocV2DB is OpenCode 2's session_v2 and session_message. Its messages are
+// given as the older ones are, to be read the same way.
+type ocV2DB struct{ db *sql.DB }
+
+func (s ocV2DB) info(sid string) (ocInfo, bool) {
+	var i ocInfo
+	err := s.db.QueryRow(`SELECT id, COALESCE(parent_id, ''), directory, COALESCE(title, ''), time_created, time_updated FROM session_v2 WHERE id = ?`, sid).
+		Scan(&i.ID, &i.ParentID, &i.Directory, &i.Title, &i.Time.Created, &i.Time.Updated)
+	return i, err == nil
+}
+
+// messages are a session's prompts, replies and compactions: a reply's
+// model is its model's id, a compaction's (which may name none) the one
+// last replied with.
+func (s ocV2DB) messages(sid string) [][]byte {
+	rows, err := s.db.Query(`SELECT id, type, data FROM session_message
+		WHERE session_id = ? AND type IN ('user', 'assistant', 'compaction') ORDER BY seq`, sid)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out [][]byte
+	last := ""
+	for rows.Next() {
+		var id, typ string
+		var b []byte
+		if rows.Scan(&id, &typ, &b) != nil {
+			continue
+		}
+		var m ocMessage
+		var v struct {
+			Model *struct {
+				ID string `json:"id"`
+			} `json:"model"`
+		}
+		if json.Unmarshal(b, &m) != nil || json.Unmarshal(b, &v) != nil {
+			continue
+		}
+		m.ID, m.Role, m.ModelID = id, "assistant", last
+		if v.Model != nil && v.Model.ID != "" {
+			m.ModelID = v.Model.ID
+		}
+		switch typ {
+		case "user":
+			m.Role, m.ModelID, m.Tokens = "user", "", nil
+		case "assistant":
+			last = m.ModelID
+		}
+		if o, err := json.Marshal(m); err == nil {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// parts are a prompt's words, which OpenCode 2 keeps in the prompt itself.
+func (s ocV2DB) parts(mid string) [][]byte {
+	var b []byte
+	if s.db.QueryRow(`SELECT data FROM session_message WHERE id = ? AND type = 'user'`, mid).Scan(&b) != nil {
+		return nil
+	}
+	var u struct {
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(b, &u) != nil {
+		return nil
+	}
+	p, _ := json.Marshal(ocPart{Type: "text", Text: u.Text})
+	return [][]byte{p}
 }
 
 // ---- the files ----------------------------------------------------------------

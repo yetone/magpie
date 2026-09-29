@@ -318,7 +318,7 @@ func kiroUpstream(t *testing.T, status int, reply []byte) (*[]string, func()) {
 		w.Write(reply)
 	}))
 	auth, runtime := kiroAuth, kiroRuntime
-	kiroAuth = func(ctx context.Context, key string, stale bool) (provider.KiroAuth, error) {
+	kiroAuth = func(ctx context.Context, key, home string, stale bool) (provider.KiroAuth, error) {
 		tok := "old"
 		if stale {
 			tok = "new"

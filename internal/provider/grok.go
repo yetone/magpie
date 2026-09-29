@@ -32,16 +32,62 @@ import (
 // GrokExecutable finds the Grok Build CLI; a var so tests can fake it.
 var GrokExecutable = func() string {
 	home, _ := os.UserHomeDir()
-	if p := filepath.Join(GrokHome(), "bin", "grok"); isFile(p) {
-		return p
-	}
-	if p, err := exec.LookPath("grok"); err == nil && isGrokBuild(p) {
-		return p
-	}
-	if p := filepath.Join(home, ".local", "bin", "grok"); isFile(p) && isGrokBuild(p) {
-		return p
+	path := append(filepath.SplitList(os.Getenv("PATH")), registryPath()...)
+	for _, c := range grokCandidates(runtime.GOOS, home, GrokHome(), os.Getenv("GROK_BIN_DIR"), path) {
+		if isFile(c.path) && (c.own || isGrokBuild(c.path)) {
+			return c.path
+		}
 	}
 	return ""
+}
+
+// grokCandidate is a place the CLI may be; own when only its installer
+// puts a grok there.
+type grokCandidate struct {
+	path string
+	own  bool
+}
+
+// grokCandidates are the places to look for the CLI, first to last: the
+// installer's bin (GROK_BIN_DIR, else ~/.grok/bin), each folder on PATH,
+// then ~/.local/bin. On Windows it is grok.exe — looking for a bare grok
+// there missed ~/.grok/bin, and a grok.cmd npm put on PATH first hid it
+// (#180). path is the process' PATH and, on Windows, the registry's, which
+// has what was installed since magpie started.
+func grokCandidates(goos, home, grokHome, binDir string, path []string) []grokCandidate {
+	name := "grok"
+	if goos == "windows" {
+		name = "grok.exe"
+	}
+	var out []grokCandidate
+	seen := map[string]bool{}
+	add := func(dir string, own bool) {
+		if dir == "" || !filepath.IsAbs(dir) {
+			return
+		}
+		p := filepath.Join(dir, name)
+		k := p
+		if goos == "windows" {
+			k = strings.ToLower(p)
+		}
+		if !seen[k] {
+			seen[k] = true
+			out = append(out, grokCandidate{p, own})
+		}
+	}
+	add(binDir, true)
+	add(filepath.Join(grokHome, "bin"), true)
+	if home != "" {
+		// the installer puts it under ~/.grok whatever GROK_HOME says
+		add(filepath.Join(home, ".grok", "bin"), true)
+	}
+	for _, d := range path {
+		add(strings.TrimSpace(d), false)
+	}
+	if home != "" {
+		add(filepath.Join(home, ".local", "bin"), false)
+	}
+	return out
 }
 
 func isFile(p string) bool {
@@ -53,7 +99,12 @@ func isFile(p string) bool {
 // installer keeps it under the grok home.
 func isGrokBuild(path string) bool {
 	real, err := filepath.EvalSymlinks(path)
-	return err == nil && strings.Contains(filepath.ToSlash(real), "/.grok/")
+	if err != nil {
+		// Windows can't resolve some real paths (a subst drive, a folder
+		// OneDrive keeps); the path itself still says where it is
+		real = path
+	}
+	return strings.Contains(strings.ToLower(filepath.ToSlash(real)), "/.grok/")
 }
 
 // GrokHome is where the CLI keeps its sign-in and settings.
@@ -376,7 +427,12 @@ func grokOwnEnv(env []string, home string) []string {
 func startGrokSignIn(s *signInFlow) error {
 	path := GrokExecutable()
 	if path == "" {
-		return errorf("install Grok Build first: curl -fsSL https://x.ai/cli/install.sh | bash")
+		c, _ := cliFor("grok")
+		manual := c.sh
+		if runtime.GOOS == "windows" {
+			manual = c.ps
+		}
+		return errorf("install Grok Build first: %s", manual)
 	}
 	if _, ok := readGrokCredential(GrokHome()); !ok {
 		return runCLISignIn(s, "grok login", nil, true, nil, func() (string, string, bool) {

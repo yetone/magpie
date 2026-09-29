@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -173,6 +174,8 @@ func TestCountTokensRedacted(t *testing.T) {
 		{"secrets", settings.Settings{Redact: true}, key, "{{API_KEY_"},
 		{"personal", settings.Settings{RedactPersonal: true}, "13812345678", "{{PHONE_"},
 		{"words", settings.Settings{RedactWords: []string{"Nightjar"}}, "Nightjar", "{{TERM_"},
+		{"rules", settings.Settings{Redact: true, RedactRules: []redact.Rule{{Kind: "GW_KEY", Prefix: "acme-"}}}, "acme-Zx9ab12cdEF", "{{GW_KEY_"},
+		{"rules_off", settings.Settings{RedactRules: []redact.Rule{{Kind: "GW_KEY", Prefix: "acme-"}}}, "acme-Zx9ab12cdEF", ""},
 		{"off", settings.Settings{}, key, ""},
 	}
 	for _, tc := range cases {

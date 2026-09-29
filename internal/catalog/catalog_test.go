@@ -130,6 +130,29 @@ func TestContextOf(t *testing.T) {
 	}
 }
 
+// A Bedrock inference profile of a geography models.dev doesn't list the
+// model in (apac.) takes the model id's window, output and levels.
+func TestBedrockProfiles(t *testing.T) {
+	writeCatalog(t, `{
+	  "amazon-bedrock": {"models": {
+	    "anthropic.claude-opus-5-5": {"id":"anthropic.claude-opus-5-5","limit":{"context":1000000,"output":128000},"reasoning_options":[{"type":"effort","values":["low","high"]}]},
+	    "global.anthropic.claude-opus-5-5": {"id":"global.anthropic.claude-opus-5-5","limit":{"context":1000000,"output":128000}}
+	  }}
+	}`)
+	for _, id := range []string{"apac.anthropic.claude-opus-5-5", "us-gov.anthropic.claude-opus-5-5", "global.anthropic.claude-opus-5-5"} {
+		if ContextOf(id) != 1000000 || OutputOf(id) != 128000 {
+			t.Errorf("%s: %d %d", id, ContextOf(id), OutputOf(id))
+		}
+	}
+	if got := strings.Join(EffortsOf("apac.anthropic.claude-opus-5-5"), ","); got != "low,high" {
+		t.Errorf("efforts: %q", got)
+	}
+	// not a profile: a model named with a dot
+	if ContextOf("us.") != 0 || ContextOf("eu.unknown") != 0 {
+		t.Error("a bare geography taken for a profile")
+	}
+}
+
 // A vendor models.dev doesn't list takes the levels the providers serving
 // the model give; one that gives none (a toggle, nothing) doesn't vote.
 func TestEffortsOf(t *testing.T) {

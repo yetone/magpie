@@ -231,8 +231,118 @@ func TestDevinSignIn(t *testing.T) {
 			t.Fatalf("credentials %s", b)
 		}
 	}
-	// devin keeps the one account it is signed in to: nothing beside it
-	if ls := Logins("devin"); len(ls) != 0 {
+	// the CLI's own account, the one in use
+	if ls := Logins("devin"); len(ls) != 1 || ls[0].User != "dev@example.com" || !ls[0].Active {
 		t.Fatalf("logins %v", ls)
+	}
+}
+
+// TestDevinSeveralAccounts signs a second Devin account in beside the CLI's
+// own: it gets a home of magpie's, the CLI's file is left alone, and the
+// gateway can use either.
+func TestDevinSeveralAccounts(t *testing.T) {
+	home := claudeHome(t)
+	data := filepath.Join(home, "data")
+	t.Setenv("XDG_DATA_HOME", data)
+	os.MkdirAll(filepath.Join(data, "devin"), 0o700)
+	own := string(devinCredentials("devin-session-token$own", "", "", ""))
+	os.WriteFile(filepath.Join(data, "devin", "credentials.toml"), []byte(own), 0o600)
+
+	// a CLI that says whose key is in the credentials.toml of its data folder
+	exe := filepath.Join(home, "devin")
+	os.WriteFile(exe, []byte(`#!/bin/sh
+f="$XDG_DATA_HOME/devin/credentials.toml"
+[ -f "$f" ] || { echo "Not logged in"; exit 1; }
+if grep -q own "$f"; then who=dev@example.com; tier="Devin Pro"; else who=two@example.com; tier="Devin Max"; fi
+printf 'Logged in (via Devin).
+
+User:
+  Email:             %s
+
+Account:
+  Tier:              %s
+' "$who" "$tier"
+`), 0o755)
+	oldExe := DevinExecutable
+	DevinExecutable = func() string { return exe }
+	t.Cleanup(func() { DevinExecutable = oldExe })
+	forgetDevinStatus()
+	t.Cleanup(forgetDevinStatus)
+
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"sessionToken":    "devin-session-token$two",
+			"devinWebappHost": "app.devin.ai", "devinApiUrl": "https://api.devin.ai",
+		})
+	}))
+	defer fake.Close()
+	oldTok := devinExchangeURL
+	devinExchangeURL = fake.URL
+	t.Cleanup(func() { devinExchangeURL = oldTok })
+
+	signIn := func() SignInState {
+		st, err := StartSignIn("devin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		finishInBrowser(t, st, "dv-code")
+		return waitDone(t, st.ID)
+	}
+	if st := signIn(); st.State != "done" || st.User != "two@example.com" || st.Plan != "Devin Max" || st.Using {
+		t.Fatalf("state %+v", st)
+	}
+	// the CLI's own sign-in is as it was
+	if b, _ := os.ReadFile(DevinCredentialsPath()); string(b) != own {
+		t.Fatalf("CLI credentials %s", b)
+	}
+	ls := devinLogins()
+	if len(ls) != 2 || ls[0].User != "dev@example.com" || ls[0].Home != "" || !ls[0].Active ||
+		ls[1].User != "two@example.com" || ls[1].Home == "" || !ls[1].On {
+		t.Fatalf("logins %+v", ls)
+	}
+	if key, _, err := DevinAuthAt(ls[1].Home); err != nil || key != "devin-session-token$two" {
+		t.Fatalf("second key %q %v", key, err)
+	}
+	p, ok := devinAccount()
+	if !ok || p.Account.User != "dev@example.com" || p.Account.Plan != "Devin Pro" {
+		t.Fatalf("account %+v", p.Account)
+	}
+	also := p.AlsoOn()
+	if len(also) != 1 || also[0].Account.User != "two@example.com" || also[0].Account.Home != ls[1].Home {
+		t.Fatalf("also on %+v", also)
+	}
+
+	// signed in again, it is still the one account, in its newer home
+	first := ls[1].Home
+	signIn()
+	if ls = devinLogins(); len(ls) != 2 || ls[1].Home == first {
+		t.Fatalf("again %+v", ls)
+	}
+	if _, err := os.Stat(first); !os.IsNotExist(err) {
+		t.Fatalf("old home kept: %v", err)
+	}
+
+	// switched, the gateway uses it first
+	if err := SwitchLogin("devin", "two@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := devinAccount(); p.Account.User != "two@example.com" || p.Account.Home != ls[1].Home {
+		t.Fatalf("switched %+v", p.Account)
+	}
+	// the CLI's own is signed out in the CLI, not here
+	if err := ForgetLogin("devin", "dev@example.com"); err == nil || !strings.Contains(err.Error(), "devin auth logout") {
+		t.Fatalf("forget own: %v", err)
+	}
+	if err := SwitchLogin("devin", "dev@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ForgetLogin("devin", "two@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(ls[1].Home); !os.IsNotExist(err) {
+		t.Fatalf("home kept: %v", err)
+	}
+	if ls = devinLogins(); len(ls) != 1 || ls[0].User != "dev@example.com" {
+		t.Fatalf("after forget %+v", ls)
 	}
 }

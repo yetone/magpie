@@ -30,7 +30,8 @@ type modelJSON struct {
 	Given   bool     `json:"given,omitempty"` // its levels aren't known: Efforts are those it can be given, Kept those it was
 	On      bool     `json:"on"`              // exposed to agents
 	Context int      `json:"context,omitempty"`
-	Max     int      `json:"max,omitempty"` // the most its context may be set to, above Context
+	Max     int      `json:"max,omitempty"`  // the most its context may be set to, above Context
+	Free    bool     `json:"free,omitempty"` // costs the subscription nothing
 }
 
 type providerJSON struct {
@@ -69,7 +70,10 @@ type providerJSON struct {
 	Affinity  string             `json:"affinity"`           // how long a conversation stays with who answered it
 	Models    []modelJSON        `json:"models"`             // everything the vendor lists, exposed ones flagged
 	Exposed   int                `json:"exposed"`            // how many reach the agents
+	Draws     int                `json:"draws,omitempty"`    // how many of its models draw images (gateway.Drawers)
+	DrawIDs   []string           `json:"drawIds,omitempty"`  // those models' ids, listed apart in its editor
 	Unlisted  bool               `json:"unlisted"`           // its models serve only through routing groups
+	Off       bool               `json:"off"`                // switched off: kept, but agents get none of its models
 	Contexts  map[string]int     `json:"contexts,omitempty"` // the windows the user set, "*" for all its models
 	Fetched   string             `json:"fetched"`            // "3h ago" when the list came from the vendor
 	Agents    []providerAgent    `json:"agents"`             // detected agents, current ones flagged
@@ -130,6 +134,10 @@ type providersJSON struct {
 	Presets   []presetJSON   `json:"presets"`
 	Excluded  []excludedJSON `json:"excluded"` // sign-ins magpie found but will not share
 	Gateway   gatewayJSON    `json:"gateway"`
+	// CodexDaemon is the account Codex's background app-server is still
+	// signed in to after Codex was switched to another; "" when none is
+	// left behind (provider.CodexDaemonStale).
+	CodexDaemon string `json:"codexDaemon,omitempty"`
 }
 
 // agentModel is the model an agent is on, as magpie's catalog names it.
@@ -174,7 +182,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
 		Headers: p.Headers, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Models, Models: []modelJSON{}, Agents: []providerAgent{},
-		Fallback: p.Fallback, Routing: p.Routing, Affinity: p.Affinity, Unlisted: p.Unlisted, Contexts: p.Contexts,
+		Fallback: p.Fallback, Routing: p.Routing, Affinity: p.Affinity, Unlisted: p.Unlisted, Off: p.Off, Contexts: p.Contexts,
 	}
 	if out.Fallback == nil {
 		out.Fallback = []string{}
@@ -204,7 +212,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 			// a Cursor subscription is served by the gateway, not an agent magpie configures
 			out.Account.Name, out.Account.Icon = "Cursor CLI", "cursor"
 		} else if a.Agent == "kiro" {
-			// Kiro's sign-in is kiro-cli's or the Kiro IDE's
+			// Kiro's sign-in is magpie's own, kiro-cli's or the Kiro IDE's
 			out.Account.Name, out.Account.Icon = "Kiro", "kiro-color"
 		} else if a.Agent == "antigravity" {
 			out.Account.Name, out.Account.Icon = "Antigravity", "antigravity-color"
@@ -230,7 +238,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		most = catalog.Codex()
 	}
 	named := func(m catalog.Model, on bool) modelJSON {
-		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: m.Context, Max: m.MaxContext}
+		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: m.Context, Max: m.MaxContext, Free: m.Free}
 		if i := slices.IndexFunc(most, func(c catalog.Model) bool { return c.ID == m.ID }); j.Max == 0 && i >= 0 {
 			j.Max = most[i].MaxContext
 		}
@@ -257,6 +265,12 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		}
 	}
 	out.Exposed = len(exposed)
+	// its image models aren't among those agents chat with; the editor
+	// lists them apart, as Settings → Images is where one is picked
+	for _, m := range gateway.Drawers(p) {
+		out.DrawIDs = append(out.DrawIDs, m.ID)
+	}
+	out.Draws = len(out.DrawIDs)
 	if t, ok := p.Fetched(); ok {
 		out.Fetched = ago(t)
 	}
@@ -318,6 +332,7 @@ func providersState() providersJSON {
 	} else {
 		s.Gateway.Running, s.Gateway.Window = gateway.Serving()
 	}
+	s.CodexDaemon = provider.CodexDaemonStale()
 	return s
 }
 
@@ -486,6 +501,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					// the other keys are kept apart, in the Accounts list
 					in.Keys = old.Keys
 					in.Routing = old.Routing // set on its own, with route
+					in.Off = old.Off         // and this with off and on
 					if in.Contexts == nil {
 						in.Contexts = old.Contexts // a save that doesn't say
 					}
@@ -541,6 +557,15 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				fail(rw, err)
 				return
 			}
+		case "off", "on":
+			// switched off, it stays with its keys, but agents are given
+			// none of its models; the files they keep them in follow,
+			// through catalog.Changed
+			if err := provider.SetOff(in.ID, r.PathValue("action") == "off"); err != nil {
+				fail(rw, err)
+				return
+			}
+			provider.ForgetBalances()
 		case "affinity":
 			if err := provider.SetAffinity(in.ID, in.Affinity); err != nil {
 				fail(rw, err)
@@ -558,7 +583,8 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 			if len(req.Test) > 0 {
-				ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+				// an image model's test draws a picture, which takes longer
+				ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
 				defer cancel()
 				writeJSON(rw, map[string]any{"results": p.TestModels(ctx, req.Test)})
 				return
@@ -633,6 +659,25 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		// an agent on its own models goes through magpie while more of
 		// its accounts are on, and straight to its vendor again once not
 		agent.SyncCatalog()
+		writeJSON(rw, providersState())
+	})
+	// Codex's background app-server, left on the account before a switch:
+	// restarting it (which ends the Codex sessions on it), or letting it be.
+	mux.HandleFunc("POST /api/codex/daemon/{action}", func(rw http.ResponseWriter, r *http.Request) {
+		switch r.PathValue("action") {
+		case "restart":
+			ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+			defer cancel()
+			if err := provider.RestartCodexDaemon(ctx); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "dismiss":
+			provider.DismissCodexDaemon()
+		default:
+			http.NotFound(rw, r)
+			return
+		}
 		writeJSON(rw, providersState())
 	})
 	// A provider's several keys: add one, put one in use, name or remove it.
@@ -711,6 +756,31 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("POST /api/signin/{id}/cancel", func(rw http.ResponseWriter, r *http.Request) {
 		provider.CancelSignIn(r.PathValue("id"))
 		rw.WriteHeader(http.StatusNoContent)
+	})
+	// Accounts brought in from another tool's export (Antigravity's, from
+	// Antigravity Cockpit, Antigravity Manager, CLIProxyAPI), each file's
+	// text as it is; each checked with the vendor before it is kept.
+	mux.HandleFunc("POST /api/signin/import", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Agent string
+			Files []string
+		}
+		if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+		defer cancel()
+		res, err := provider.ImportGoogleAccounts(ctx, in.Agent, in.Files)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		agent.SyncCatalog()
+		writeJSON(rw, struct {
+			Results   []provider.ImportedAccount `json:"results"`
+			Providers providersJSON              `json:"providers"`
+		}{res, providersState()})
 	})
 	// the page copies through here first: in the app's window the
 	// clipboard API is refused or missing, depending on the system

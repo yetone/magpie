@@ -18,6 +18,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -43,11 +44,63 @@ var jevLevels = []struct{ effort, what string }{
 	{"xhigh", "Deep thought: a subtle bug (concurrency, performance, security), an architecture or algorithm to design, a long multi-step plan"},
 }
 
+// levelWork is how much work a request is, least first: what a level of
+// intents is told to be for (levelsOf), as Jev rated each level.
+var levelWork = []string{
+	"little work: a question, an explanation, a one-line or mechanical change, a command to run",
+	"some work: an ordinary bug fix or a small feature in code already understood",
+	"much work: a change across several files, a bug whose cause is not known yet, a design choice",
+	"the most work: a new program, app or game, an architecture, a long multi-step plan",
+}
+
+// levelsOf is what each of intents, levels of one scale, is for: each of
+// levelWork goes to the level Jev rated nearest it (scores, 0 to 3), so
+// that two levels share them all. Told only their names, Jev was torn
+// over short messages: 写个纸牌游戏 came out 复杂任务 at 0.62, too unsure
+// to hold, and after a 简单任务 turn 简单任务 at 0.57, so it stayed there;
+// told this, 复杂任务 at 0.99 either way.
+func levelsOf(intents []string, scores []float64) map[string]string {
+	if len(intents) < 2 || len(scores) != len(intents) {
+		return nil
+	}
+	order := make([]int, len(intents))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool { return scores[order[a]] < scores[order[b]] })
+	owns := make([][]string, len(intents))
+	for w, what := range levelWork {
+		near := 0
+		for i := range intents {
+			if math.Abs(scores[i]-float64(w)) < math.Abs(scores[near]-float64(w)) {
+				near = i
+			}
+		}
+		owns[near] = append(owns[near], what)
+	}
+	out := map[string]string{}
+	for pos, i := range order {
+		at := fmt.Sprintf("Level %d of %d, lowest first", pos+1, len(intents))
+		switch pos {
+		case 0:
+			at = "The lowest level"
+		case len(intents) - 1:
+			at = "The highest level"
+		}
+		if len(owns[i]) > 0 {
+			at += ": " + strings.Join(owns[i], "; ")
+		}
+		out[intents[i]] = at
+	}
+	return out
+}
+
 // jevBody is the System One request asking which of intents text is
 // (when there are any) and, when effort, how hard it is. What was said of
 // the turn before (prev) is in the state: a message that only carries on
-// from it is of its kind and wants its reasoning.
-func jevBody(model string, intents []string, prev before, effort bool, text string) []byte {
+// from it is of its kind and wants its reasoning. work is what each
+// intent is for when they are levels (levelsOf), nil when not known.
+func jevBody(model string, intents []string, work map[string]string, prev before, effort bool, text string) []byte {
 	qs := map[string]any{}
 	if len(intents) > 0 {
 		// Kinds may be topics, which a message can be none of, or levels
@@ -60,9 +113,12 @@ func jevBody(model string, intents []string, prev before, effort bool, text stri
 		levels := map[string]any{}
 		for _, in := range intents {
 			criteria[in], levels[in] = nil, nil
+			if w, ok := work[in]; ok {
+				levels[in] = w
+			}
 		}
 		qs["intent"] = map[string]any{"type": "choice", "instructions": intentAsk(prev), "criteria": criteria}
-		qs["level"] = map[string]any{"type": "choice", "instructions": intentAsk(prev), "criteria": levels}
+		qs["level"] = map[string]any{"type": "choice", "instructions": levelAsk(prev, work != nil), "criteria": levels}
 
 	}
 	if effort {
@@ -99,6 +155,16 @@ func intentAsk(prev before) string {
 	q := "The `message` is what a user asked a coding assistant. Which kind of request fits it best?"
 	if prev.Intent != "" {
 		q += " A message that only carries on from the user's message before it (go on, yes, do it, fix that) is of `previous_message_kind`; one that asks for something of its own is of the kind that fits it."
+	}
+	return q
+}
+
+// levelAsk is intentAsk for levels, which, told what each is for, are
+// judged by the work asked for.
+func levelAsk(prev before, work bool) string {
+	q := intentAsk(prev)
+	if work {
+		q += " The kinds are levels of how much work a request is: judge the work the message asks for, not how short it is — a few words can ask for a whole program."
 	}
 	return q
 }
@@ -166,17 +232,23 @@ func intentNamed(intents []string, name string) string {
 }
 
 // levelled is what Jev said of each set of intents: whether they are
-// levels every message is at (jevLevelled). It holds as long as the
-// intents do.
+// levels every message is at, and what each is for (jevLevelled). It
+// holds as long as the intents do.
 var levelled = struct {
 	sync.Mutex
-	m map[string]bool
-}{m: map[string]bool{}}
+	m map[string]levelling
+}{m: map[string]levelling{}}
+
+type levelling struct {
+	levels bool
+	work   map[string]string // levelsOf; nil when Jev didn't rate them
+}
 
 // jevLevelled asks Jev whether intents are levels of one scale — how hard
-// or big a request is — rather than topics a message may be none of,
-// once for each set of them.
-func (s *Server) jevLevelled(ctx context.Context, p provider.Provider, model string, intents []string) (bool, error) {
+// or big a request is — rather than topics a message may be none of, and
+// in the same call how much work a request at each is, once for each set
+// of them.
+func (s *Server) jevLevelled(ctx context.Context, p provider.Provider, model string, intents []string) (levelling, error) {
 	key := model + "\x00" + strings.ToLower(strings.Join(intents, "\x00"))
 	levelled.Lock()
 	l, ok := levelled.m[key]
@@ -184,27 +256,37 @@ func (s *Server) jevLevelled(ctx context.Context, p provider.Provider, model str
 	if ok {
 		return l, nil
 	}
-	body, _ := json.Marshal(map[string]any{
-		"model": model,
-		"state": map[string]any{"kinds": intents},
-		"questions": map[string]any{"levels": map[string]any{"type": "noul",
-			"instructions": "Are these `kinds` levels of one scale that every request to a coding assistant is at, such as how hard, how big or how urgent it is — rather than topics or tasks that a request may be none of?"}},
-	})
+	qs := map[string]any{"levels": map[string]any{"type": "noul",
+		"instructions": "Are these `kinds` levels of one scale that every request to a coding assistant is at, such as how hard, how big or how urgent it is — rather than topics or tasks that a request may be none of?"}}
+	for i := range intents {
+		qs[fmt.Sprintf("work%d", i)] = map[string]any{"type": "score",
+			"instructions": fmt.Sprintf("Taking `kinds` as levels of one scale for requests to a coding assistant, how much work is a request at the level `kinds[%d]`?", i),
+			"criteria":     levelWork}
+	}
+	body, _ := json.Marshal(map[string]any{"model": model, "state": map[string]any{"kinds": intents}, "questions": qs})
 	b, err := s.systemOne(ctx, p, model, body)
 	if err != nil {
-		return false, err
+		return levelling{}, err
 	}
 	var out struct {
-		Answers struct {
-			Levels *struct {
-				Noul float64 `json:"noul"`
-			} `json:"levels"`
+		Answers map[string]struct {
+			Noul  *float64 `json:"noul"`
+			Score *float64 `json:"score"`
 		} `json:"answers"`
 	}
-	if json.Unmarshal(b, &out) != nil || out.Answers.Levels == nil {
-		return false, answerError{fmt.Errorf("not a System One answer")}
+	if json.Unmarshal(b, &out) != nil || out.Answers["levels"].Noul == nil {
+		return levelling{}, answerError{fmt.Errorf("not a System One answer")}
 	}
-	l = out.Answers.Levels.Noul >= 0.5
+	l.levels = *out.Answers["levels"].Noul >= 0.5
+	if l.levels {
+		scores := make([]float64, 0, len(intents))
+		for i := range intents {
+			if a := out.Answers[fmt.Sprintf("work%d", i)]; a.Score != nil {
+				scores = append(scores, *a.Score)
+			}
+		}
+		l.work = levelsOf(intents, scores)
+	}
 	levelled.Lock()
 	levelled.m[key] = l
 	levelled.Unlock()
@@ -218,18 +300,18 @@ func (s *Server) askJev(p provider.Provider, model string, intents []string, pre
 	if model == "" {
 		model = p.Jev()
 	}
-	levels := false
+	var l levelling
 	if len(intents) > 0 {
 		var err error
-		if levels, err = s.jevLevelled(ctx, p, model, intents); err != nil {
+		if l, err = s.jevLevelled(ctx, p, model, intents); err != nil {
 			return verdict{}, err
 		}
 	}
-	b, err := s.systemOne(ctx, p, model, jevBody(model, intents, prev, effort, text))
+	b, err := s.systemOne(ctx, p, model, jevBody(model, intents, l.work, prev, effort, text))
 	if err != nil {
 		return verdict{}, err
 	}
-	return readJev(b, intents, levels, prev)
+	return readJev(b, intents, l.levels, prev)
 }
 
 // systemOne posts body to p's System One API and returns the answer,
@@ -471,4 +553,68 @@ func sentEffort(proto provider.Protocol, body []byte, p provider.Provider, model
 		return ""
 	}
 	return fitEffort(e, p.Efforts(model))
+}
+
+// fitLevel is the level of the model's own nearest the one picked for it
+// (fitEffort); one whose levels aren't known isn't asked for more than
+// high, which every vendor with levels takes.
+func fitLevel(want string, levels []string) string {
+	level := fitEffort(want, levels)
+	if len(levels) == 0 && level == "xhigh" {
+		level = "high"
+	}
+	return level
+}
+
+// withFixedEffort asks a request, in the client's own API, for reasoning
+// at effort — that of a group's member fixed at it (#189) — whatever the
+// agent asked: unlike withEffort, a request that asked for none is asked
+// for it too, and "none" turns reasoning off.
+func withFixedEffort(proto provider.Protocol, body []byte, effort string) []byte {
+	if effort == "" {
+		return body
+	}
+	switch proto {
+	case provider.Chat:
+		return withFields(body, map[string]any{"reasoning_effort": effort})
+	case provider.Responses:
+		var v struct {
+			Reasoning map[string]any `json:"reasoning"`
+		}
+		if json.Unmarshal(body, &v) != nil {
+			return body
+		}
+		if v.Reasoning == nil {
+			v.Reasoning = map[string]any{}
+		}
+		v.Reasoning["effort"] = effort
+		return withFields(body, map[string]any{"reasoning": v.Reasoning})
+	case provider.Anthropic:
+		var v struct {
+			Thinking *struct {
+				Type string `json:"type"`
+			} `json:"thinking"`
+			MaxTokens int `json:"max_tokens"`
+		}
+		if json.Unmarshal(body, &v) != nil {
+			return body
+		}
+		if effort == "none" {
+			return withFields(body, map[string]any{"thinking": map[string]any{"type": "disabled"}})
+		}
+		level := effortOf(effort) // in Anthropic's words: minimal is low
+		if v.Thinking != nil && (v.Thinking.Type == "enabled" || v.Thinking.Type == "adaptive") {
+			return withEffort(proto, body, level)
+		}
+		// asked to think, with room left for the answer
+		budget := budgetOf(level)
+		if v.MaxTokens > 0 {
+			budget = min(budget, v.MaxTokens-1)
+		}
+		if budget < 1024 {
+			return body
+		}
+		return withFields(body, map[string]any{"thinking": map[string]any{"type": "enabled", "budget_tokens": budget}})
+	}
+	return body
 }

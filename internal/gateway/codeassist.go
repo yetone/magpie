@@ -126,6 +126,15 @@ func buildCodeAssist(r *Request, model, agent string) []byte {
 					res["id"] = id
 				}
 				parts = append(parts, map[string]any{"functionResponse": res})
+				// the images a tool returned follow its response, as Gemini
+				// CLI sends a file it read
+				for _, im := range p.Images {
+					if im.Data != "" {
+						parts = append(parts, map[string]any{"inlineData": map[string]any{"mimeType": im.MediaType, "data": im.Data}})
+					} else if im.URL != "" {
+						parts = append(parts, map[string]any{"fileData": map[string]any{"mimeType": im.MediaType, "fileUri": im.URL}})
+					}
+				}
 			}
 			// thinking isn't sent back: its signatures belong to whoever
 			// made them, and Google turns away ones it didn't
@@ -348,9 +357,16 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 			out := map[string]any{}
 			for k, v := range x {
 				switch k {
-				case "$schema", "$defs", "definitions", "$id", "$comment", "additionalProperties", "format", "default",
-					"examples", "example", "title", "patternProperties", "enumDescriptions", "prefill", "deprecated",
-					"propertyNames", "unevaluatedProperties", "readOnly", "writeOnly", "const":
+				case "description", "nullable", "required", "pattern", "minimum", "maximum", "minLength", "maxLength",
+					"minItems", "maxItems", "minProperties", "maxProperties", "propertyOrdering":
+					out[k] = v
+				case "exclusiveMinimum", "exclusiveMaximum":
+					// a bound it takes only as inclusive (draft 6 on: a number)
+					if n, ok := v.(float64); ok {
+						if b := "m" + strings.TrimPrefix(k, "exclusiveM"); x[b] == nil {
+							out[b] = n
+						}
+					}
 				case "type":
 					if ts, ok := v.([]any); ok {
 						for _, t := range ts {
@@ -387,7 +403,9 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 						}
 					}
 				default:
-					out[k] = walk(v, depth+1)
+					// a keyword outside its subset (format, default, title,
+					// additionalProperties, const…): Antigravity refuses the
+					// request over any it doesn't know (#187)
 				}
 			}
 			if c, ok := x["const"]; ok {

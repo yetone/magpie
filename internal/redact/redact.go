@@ -33,6 +33,7 @@ type Options struct {
 	Secrets  bool     // API keys, private keys, tokens, passwords
 	Personal bool     // emails, phone numbers, ID and bank card numbers
 	Words    []string // the user's own: names, codenames, hosts
+	Rules    []Rule   // the user's own rules, masked with the secrets
 }
 
 // rule finds one kind of value. The match is group 1 when the pattern has
@@ -56,6 +57,8 @@ const (
 var rules = []rule{
 	{kind: "PRIVATE_KEY", re: regexp.MustCompile(`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----[\s\S]+?-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----`), markers: []string{"PRIVATE KEY"}},
 	{kind: "API_KEY", re: regexp.MustCompile(`sk-(?:ant-|proj-|or-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}`), markers: []string{"sk-"}, bound: tokenCh},
+	// a gateway's or a relay's own: oc_sk_…, or_sk_… (#195)
+	{kind: "API_KEY", re: regexp.MustCompile(`[a-z]{2,4}_sk_[A-Za-z0-9_-]{20,}`), markers: []string{"_sk_"}, bound: tokenCh, ok: secretValue},
 	{kind: "API_KEY", re: regexp.MustCompile(`(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|glpat-[A-Za-z0-9_-]{20,})`), markers: []string{"gh", "github_pat_", "glpat-"}, bound: tokenCh},
 	{kind: "API_KEY", re: regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`), markers: []string{"AIza"}, bound: tokenCh},
 	{kind: "API_KEY", re: regexp.MustCompile(`xox[abposr]-[0-9A-Za-z-]{10,}`), markers: []string{"xox"}, bound: tokenCh},
@@ -67,8 +70,13 @@ var rules = []rule{
 	// the password of user:password@host
 	{kind: "PASSWORD", re: regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s:@/?#"'<>]+:([^\s@/?#"'<>]{3,})@`), markers: []string{"://"}, ok: notAVariable},
 	// password = …, API_KEY: "…", as .env files and configs have them
-	{kind: "SECRET", re: regexp.MustCompile(`(?i)[A-Za-z0-9_.-]*(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)[A-Za-z0-9_.-]*["']?[ \t]*[:=][ \t]*["']?([A-Za-z0-9_\-./+=~!@#%^&*]{8,})`),
-		markers: []string{"pass", "PASS", "Pass", "secret", "SECRET", "Secret", "token", "TOKEN", "Token", "key", "KEY", "Key", "credential", "CREDENTIAL", "Credential"}, ok: secretValue},
+	{kind: "SECRET", re: regexp.MustCompile(`(?i)[A-Za-z0-9_.-]*(?:` + secretNames.pattern() + `)[A-Za-z0-9_.-]*` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{8,})`),
+		markers: secretNames.markers(), ok: secretValue},
+	// a field called key and nothing more, as providers.json has one: "key":
+	// "oc_sk_…" (#195). Only a long value of letters and digits both, since
+	// code calls anything a key: a map's "key": "value", sort_key, keyboard.
+	{kind: "SECRET", re: regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_.-])` + quote + `key` + quote + `[ \t]*[:=][ \t]*` + quote + `(` + secretCh + `{16,})`),
+		markers: fieldNames{{"key", "key"}}.markers(), ok: secretValue},
 
 	{kind: "EMAIL", re: regexp.MustCompile(`[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`), markers: []string{"@"}, bound: alnum + "._%+-", ok: realEmail, personal: true},
 	{kind: "ID_CARD", re: regexp.MustCompile(`[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx]`), bound: alnum, ok: chineseID, personal: true},
@@ -76,8 +84,53 @@ var rules = []rule{
 	{kind: "BANK_CARD", re: regexp.MustCompile(`[3-6]\d{3}(?:[ -]?\d{4}){2,3}(?:[ -]?\d{1,3})?`), bound: digits, ok: luhn, personal: true},
 }
 
+// fieldNames are what a field that holds a secret is called: a pattern for
+// each name, and text that any match of it has in it, so a rule's markers
+// and the names its pattern takes come from one list and can't drift apart.
+type fieldNames []struct{ re, marker string }
+
+// secretNames are what a field holding a secret has in its name:
+// DB_PASSWORD, apiKey, x-api-key, client_secret.
+var secretNames = fieldNames{
+	{"password", "pass"}, {"passwd", "pass"},
+	{"secret", "secret"},
+	{"token", "token"},
+	{`api[_-]?key`, "key"}, {`access[_-]?key`, "key"}, {`private[_-]?key`, "key"},
+	{"credential", "credential"},
+}
+
+func (f fieldNames) pattern() string {
+	res := make([]string, len(f))
+	for i, n := range f {
+		res[i] = n.re
+	}
+	return strings.Join(res, "|")
+}
+
+// markers are each name's marker as a name is written in lower case, in
+// upper case and capitalised: password, PASSWORD, Password, apiKey.
+func (f fieldNames) markers() []string {
+	var out []string
+	for _, n := range f {
+		for _, m := range []string{n.marker, strings.ToUpper(n.marker), strings.ToUpper(n.marker[:1]) + n.marker[1:]} {
+			if !slices.Contains(out, m) {
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}
+
+const (
+	// quote is a field's or a value's quote, if it has one: " or ', or \"
+	// in JSON written inside a string
+	quote = `(?:\\?["'])?`
+	// secretCh are the characters of a secret's value
+	secretCh = `[A-Za-z0-9_\-./+=~!@#%^&*]`
+)
+
 // placeholderRe is a placeholder as Mask writes it.
-var placeholderRe = regexp.MustCompile(`\{\{[A-Z][A-Z_]*_[a-z2-7]{8}\}\}`)
+var placeholderRe = regexp.MustCompile(`\{\{[A-Z][A-Z0-9_]*_[a-z2-7]{8}\}\}`)
 
 // notAVariable turns away what stands in for a value: ${PASS}, <password>, ****.
 func notAVariable(v string) bool {
@@ -250,7 +303,13 @@ func Mask(s string, o Options) (string, int) {
 			i += j + len(w)
 		}
 	}
-	for _, r := range rules {
+	all := rules
+	if o.Secrets && len(o.Rules) > 0 {
+		// the user's first: where one of theirs and one of magpie's find
+		// the same value, it goes by the name they gave it
+		all = append(customRules(o.Rules), rules...)
+	}
+	for _, r := range all {
 		if r.personal && !o.Personal || !r.personal && !o.Secrets {
 			continue
 		}
@@ -261,6 +320,9 @@ func Mask(s string, o Options) (string, int) {
 			a, b := m[0], m[1]
 			if len(m) >= 4 && m[2] >= 0 {
 				a, b = m[2], m[3]
+			}
+			if b <= a {
+				continue
 			}
 			if r.bound != "" && (a > 0 && strings.IndexByte(r.bound, s[a-1]) >= 0 || b < len(s) && strings.IndexByte(r.bound, s[b]) >= 0) {
 				continue
@@ -283,8 +345,10 @@ func Mask(s string, o Options) (string, int) {
 			return s, 0
 		}
 	}
-	// the first to start, and of those the longest, wins where they overlap
-	sort.Slice(found, func(i, j int) bool {
+	// the first to start, and of those the longest, wins where they overlap;
+	// of two the same, the rule found first, so a value's placeholder is the
+	// same every time (an API key in API_KEY=… is an API_KEY, not a SECRET)
+	sort.SliceStable(found, func(i, j int) bool {
 		if found[i].start != found[j].start {
 			return found[i].start < found[j].start
 		}
@@ -363,7 +427,7 @@ func partialTail(s string) int {
 	}
 	for j := 0; j < len(body); j++ {
 		c := body[j]
-		if !(c >= 'A' && c <= 'Z' || c == '_' || c >= 'a' && c <= 'z' || c >= '2' && c <= '7') {
+		if !(c >= 'A' && c <= 'Z' || c == '_' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9') {
 			return 0
 		}
 	}

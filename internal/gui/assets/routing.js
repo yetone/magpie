@@ -54,6 +54,15 @@
     const s = el("span"), b = el("b", "", "0");
     s.append(b, el("span", "", k));
     s.dataset.label = k;
+    if (k === "errors your agent saw") {
+      // the newest request whose agent got an error, to see what it got
+      s.classList.add("rt-errs");
+      s.title = t("Show the latest request that failed");
+      s.addEventListener("click", (e) => {
+        const r = listed().find((x) => x.done && x.status >= 400);
+        if (r) pick(r, e);
+      });
+    }
     statB.push(b);
     stats.append(s);
   }
@@ -63,18 +72,31 @@
   const steps = el("ol", "rt-steps");
   log.append(logHead, steps);
   const off = el("div", "none rt-off");
-  box.append(top, stage, foot, log, off);
+  // over the stage while a replay plays: the time it is replaying, which
+  // requests are in flight then, and where it is among them
+  const rbar = el("div", "rt-replay");
+  const rTop = el("div", "rp-top"), rClock = el("b", "rp-clock"), rDay = el("small", "rp-day"), rSkip = el("span", "rp-skip");
+  const rSpeed = el("button", "text"), rStop = el("button", "text");
+  rTop.append(el("span", "rp-tag"), rClock, rDay, rSkip, el("span", "grow"), rSpeed, rStop);
+  const rWhat = el("div", "rp-what");
+  const rTrack = el("div", "rp-track"), rHead = el("i", "rp-head");
+  rTrack.append(rHead);
+  rbar.append(rTop, rWhat, rTrack);
+  rbar.hidden = true;
+  box.append(top, rbar, stage, foot, log, off);
 
   // under the stage: every request the gateway keeps, and each account or
   // key as those requests found it
   const more = $("#rtMore");
   const reqHead = el("div", "row-head"), reqNote = el("span", "note");
   const reqs = el("div", "list rt-reqs");
+  // the days the history keeps on disk, to look back at one: see listed
+  const dayBar = el("div", "rt-days");
   const actHead = el("div", "row-head"), actNote = el("span", "note");
   const acts = el("div", "list rt-acts");
   const hist = el("div", "rt-cols");
   const colA = el("div", "rt-col"), colB = el("div", "rt-col");
-  colA.append(reqHead, reqs);
+  colA.append(reqHead, dayBar, reqs);
   colB.append(actHead, acts);
   hist.append(colA, colB);
   more.append(hist);
@@ -85,7 +107,8 @@
   // ---------- words ----------
 
   let skew = 0; // the gateway's clock less this page's
-  const now = () => Date.now() + skew;
+  // now is the gateway's time — or, in a replay, the time it is replaying
+  const now = () => rp ? rp.real : Date.now() + skew;
   const at = (s) => new Date(s).getTime();
   const known0 = (s) => s && !s.startsWith("0001-");
   function dur(ms) {
@@ -376,6 +399,10 @@
   // how the reasoning a try was sent at came to be
   function effortNote(r, tr) {
     const agent = agentName(r.agent);
+    // a group's member fixed at an effort is sent it whatever was asked
+    if (tr.fixed) return r.effort && r.effort !== tr.effort
+      ? t("{level} reasoning, fixed on this model in the group; {agent} asked for {asked}", { level: tr.effort, agent, asked: r.effort })
+      : t("{level} reasoning, fixed on this model in the group", { level: tr.effort });
     if (tr.picked) return r.effort && r.effort !== tr.effort
       ? t("{level} reasoning, picked for the turn; {agent} asked for {asked}", { level: tr.effort, agent, asked: r.effort })
       : t("{level} reasoning, picked for the turn", { level: tr.effort });
@@ -389,7 +416,9 @@
     const tr = r.tries[i], said = trySaid(r, i);
     if (!tr.effort || !r.effort || r.effort === tr.effort) return said;
     const agent = agentName(r.agent);
-    return said + (/[。！？]$/.test(said) ? "" : " ") + (tr.picked
+    return said + (/[。！？]$/.test(said) ? "" : " ") + (tr.fixed
+      ? t("The group fixes this model at {fixed} reasoning, in place of the {asked} {agent} asked for.", { fixed: tr.fixed, asked: r.effort, agent })
+      : tr.picked
       ? t("The turn's pick replaced the {asked} {agent} asked for.", { asked: r.effort, agent })
       : t("{level} is the model's nearest to the {asked} {agent} asked for.", { level: tr.effort, asked: r.effort, agent }));
   }
@@ -430,14 +459,17 @@
   // ---------- state ----------
 
   const routes = new Map(); // id → the latest of each route
-  let seq = 0, mine = true, loaded = false;
+  let seq = 0, mine = true, loaded = false, daysAt = 0;
   let cur = null;           // the route the header and the log tell of: the newest played
   let pinned = null;        // a past route picked from the strip
   let rows = new Map();     // id → { li, wire, st, bi, tg, w, rid, up }
   const subs = new Map();   // a group in the group's way down → its heading { li, wire, key, up }
   const agents = new Map(); // agent → { node, ic, name, sub, wire }
   let sets = [];            // the account sets on the stage, in the order they came
-  const playing = new Set(); // the routes being played
+  const playing = new Map(); // the routes being played → the gen playing each
+  let rp = null;            // a replay playing: see replay
+  let day = "", days = [], past = [], pastCut = false; // a kept day looked at ("" for live), the days kept, its routes
+  const src = () => rp ? rp.routes : routes; // the routes the stage plays from
   const LINGER = 12e3;      // how long an agent's last request stays on the stage
   let gen = 0, trips = [], waiters = [];
   let capQ = [], capAt = -1e9, capLo = false, flipUntil = 0;
@@ -546,7 +578,7 @@
   function seated(r) {
     const members = r.group?.members || [];
     const key = (w) => {
-      let m = members.indexOf(w.provider + "/" + w.model);
+      let m = members.indexOf(w.provider + "/" + w.model + (w.fixed ? ":" + w.fixed : ""));
       if (m < 0) m = members.findIndex((x) => x.startsWith(w.provider + "/"));
       return [w.fallback ? 1 : 0, m < 0 ? members.length : m, w.name || w.provider, w.aside ? 1 : 0, w.who || "", w.id];
     };
@@ -560,7 +592,8 @@
 
   // a seat is one of a route's keys or accounts for one model: two of a
   // group's models on one provider go over the same keys, and are two seats
-  const seat = (x) => x.id + "\u0000" + (x.model || "");
+  // — as is one model a group has twice, each at an effort of its own
+  const seat = (x) => x.id + "\u0000" + (x.model || "") + (x.fixed ? ":" + x.fixed : "");
   // tried is the seat a try went to
   const tried = (r, tr) => r.order.find((x) => seat(x) === seat(tr)) || r.order.find((x) => x.id === tr.id);
   const setOf = (r) => r.order.map(seat).sort().join("\n");
@@ -569,11 +602,11 @@
   // playing, and each agent's latest while it lingers, a few agents at most
   function staged() {
     if (pinned) return [pinned];
-    const n = now(), last = new Map();
-    const rs = [...routes.values()].sort((a, b) => a.id - b.id);
+    const n = now(), last = new Map(), map = src();
+    const rs = [...map.values()].sort((a, b) => a.id - b.id);
     for (const r of rs) last.set(r.agent, r);
     const out = rs.filter((r) => playing.has(r.id) || (last.get(r.agent) === r && (!r.done || at(r.time) + (r.ms || 0) > n - LINGER)));
-    const c = cur && routes.get(cur.id);
+    const c = cur && map.get(cur.id);
     if (c && !out.includes(c)) out.push(c);
     const ags = [...new Set(out.map((r) => r.agent))].slice(-4);
     return out.filter((r) => ags.includes(r.agent)).sort((a, b) => a.id - b.id);
@@ -639,7 +672,8 @@
     const name = el("span", "who", who(w));
     // the provider's name heads the card; a row names what differs
     const sub = el("span", "", w.fallback ? w.name : w.kind === "provider" ? "" : w.plan || "");
-    b.append(name, " ", sub, el("code", "mdl", w.model));
+    b.append(name, " ", sub, el("code", "mdl", w.fixed ? `${w.model}:${w.fixed}` : w.model));
+    if (w.fixed) b.title = t("{level} reasoning, fixed on this model in the group", { level: w.fixed });
     if (w.fallback) b.append(el("small", "fb", t("fallback")));
     const st = el("em"), bar = el("div", "bar"), bi = el("i"), tg = el("span", "tag");
     bar.append(bi);
@@ -659,7 +693,7 @@
     rebuild(rs, false);
   }
   function rebuild(rs, force) {
-    cur = routes.get((pinned || rs[rs.length - 1]).id) || pinned || rs[rs.length - 1];
+    cur = src().get((pinned || rs[rs.length - 1]).id) || pinned || rs[rs.length - 1];
     if (force) {
       for (const row of rows.values()) row.wire.remove();
       rows = new Map();
@@ -776,7 +810,7 @@
     for (const f of flying.values()) { onWire.add(f.id); busy.add(f.agent); }
     for (const [id, row] of rows) {
       // each row as the latest staged request that weighed it found it
-      const r = routes.get(row.rid) || pinned || cur, answered = new Set(), rests = new Map(), gave = new Map();
+      const r = src().get(row.rid) || pinned || cur, answered = new Set(), rests = new Map(), gave = new Map();
       for (const w of r.order) if (w.rest) rests.set(w.id, w.rest);
       for (const tr of r.tries) {
         if (tr.done && tr.status < 400) answered.add(seat(tr));
@@ -788,7 +822,9 @@
       let s;
       if (w.unlisted) s = unlistedWord(w);
       else if (resting) s = `${failWord(rest.why)} · ${restWhen(rest)}`;
-      else if (trying.has(id)) s = t("answering…");
+      // a row another request weighed, answering that one: the header
+      // tells of this request, so it says the answer is not this one's
+      else if (trying.has(id)) s = r.id !== cur.id && agents.size <= 1 ? t("answering another request…") : t("answering…");
       else if (answered.has(id)) s = agents.size > 1 ? t("answered {agent}", { agent: agentName(r.agent) }) : t("answered this request");
       else if (gave.has(id)) s = t("{status} · {fail} · passed to {agent}", { status: gave.get(id).status, fail: failWord(gave.get(id).fail), agent: agentName(r.agent) });
       else if (w.kind === "account" && w.known) {
@@ -830,11 +866,24 @@
     log.hidden = !r;
     if (!r) return;
     logHead.replaceChildren(
-      el("span", "", pinned ? t("How the request at {time} was routed", { time: clock(r.time) }) : t("How the last request was routed")),
+      el("span", "", rp ? t("How the request at {time} was routed", { time: clock(r.time) })
+        : pinned ? t("How the request at {time} was routed", { time: clock(r.time) }) : t("How the last request was routed")),
       el("span", "grow"));
-    if (pinned) {
+    if (!rp && r.done) {
+      const again = el("button", "text", t("Replay"));
+      again.onclick = () => replay([r], pinned);
+      logHead.append(again);
+      // and on from it: the requests listed after it, as they came
+      const on = listed().filter((x) => x.id >= r.id);
+      if (pinned && on.length > 1) {
+        const from = el("button", "text", t("Replay from here"));
+        from.onclick = () => replay(on, pinned);
+        logHead.append(from);
+      }
+    }
+    if (pinned && !rp) {
       const live = el("button", "text", t("Back to live"));
-      live.onclick = () => { pinned = null; cur = newest(); sync(true); renderAll(); };
+      live.onclick = () => { if (day) lookAt(""); else { pinned = null; cur = newest(); sync(true); renderAll(); } };
       logHead.append(live);
     }
     const items = [];
@@ -847,20 +896,26 @@
     items.push([affWhy(r, true) || ruleWhy(r, true) || firstWhy(r), "why"]);
     for (const s of nestedWhy(r)) items.push([s, "why"]);
     for (const a of asides(r)) items.push([a, "aside"]);
-    r.tries.forEach((_, i) => items.push([tryWhy(r, i), r.tries[i].done ? (r.tries[i].status < 400 ? "ok" : "bad") : "wait"]));
+    r.tries.forEach((tr, i) => {
+      items.push([tryWhy(r, i), tr.done ? (tr.status < 400 ? "ok" : "bad") : "wait"]);
+      // what the vendor said, word for word: the why above is magpie's reading of it
+      if (tr.done && tr.status >= 400 && tr.error) items.push([t("It said: {error}", { error: tr.error.length > 600 ? tr.error.slice(0, 600) + "…" : tr.error }), "aside said"]);
+    });
     if (r.done && !r.tries.length) items.push([t("Nothing was tried: {error}", { error: r.error || r.status }), "bad"]);
     steps.replaceChildren(...items.map(([s, c]) => el("li", c, s)));
   }
 
-  // pick sets the stage to a past request, or back to live with the newest
-  function pick(r) {
+  // pick sets the stage to a past request, or back to live with the newest;
+  // the page goes up to the stage only for a request the reader clicked in
+  // the list (e, that click), never for a day or Live picked in its bar
+  function pick(r, e) {
     pinned = r.id === newest()?.id ? null : r;
-    gen++; trips = []; flying.clear(); playing.clear();
-    for (const p of sky.querySelectorAll(".pkt, .rt-flier")) p.remove();
+    if (rp) { rp = null; rbar.hidden = true; }
+    stopPlays();
     cur = r;
     sync(true); renderAll();
     say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r));
-    if (pinned) { scrollOnPurpose(); box.scrollIntoView({ block: "nearest", behavior: still() ? "auto" : "smooth" }); }
+    if (pinned && e && scrollOnPurpose(e)) { box.scrollIntoView({ block: "nearest", behavior: still() ? "auto" : "smooth" }); }
   }
 
   // who answered a request, or what its agent got
@@ -876,11 +931,75 @@
   }
 
   // the requests the gateway keeps, newest first: pick one to see how it was routed
+  // listed: the requests the list shows, newest first — the gateway's last
+  // few, or a day the history keeps
+  const listed = () => (day ? past : [...routes.values()]).slice().sort((a, b) => b.id - a.id);
+  const dayName = (d) => {
+    const x = new Date(d + "T12:00:00"), n = new Date(), y = new Date(n.getTime() - 864e5);
+    return x.toDateString() === n.toDateString() ? t("today") : x.toDateString() === y.toDateString() ? t("yesterday")
+      : x.toLocaleDateString([], { month: "short", day: "numeric", weekday: "short" });
+  };
+  async function loadDays(d) {
+    try {
+      const res = await (await fetch("/api/gateway/history?day=" + encodeURIComponent(d || ""))).json();
+      days = res.days || [];
+      if (d && d === day) { past = res.routes || []; pastCut = !!res.cut; }
+    } catch {}
+    renderHist(); // shown once there are days, though none are live
+  }
+  async function lookAt(d) {
+    if (rp) endReplay(true);
+    day = d;
+    past = [];
+    if (d) await loadDays(d);
+    pinned = null;
+    const r = d ? listed()[0] : newest();
+    if (r && d) pick(r);
+    else if (r) { stopPlays(); cur = r; sync(true); say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r)); }
+    renderAll();
+  }
+  function renderDays() {
+    const b = (d, label, n) => {
+      const x = el("button", "rt-day" + (d === day ? " on" : ""));
+      x.append(el("span", "", label), ...(n != null ? [el("small", "", String(n))] : []));
+      x.setAttribute("aria-pressed", String(d === day));
+      x.onclick = () => { if (d !== day) lookAt(d); };
+      return x;
+    };
+    const key = day + "|" + days.map((d) => d.day + ":" + d.requests).join(",");
+    if (dayBar.dataset.key === key) return;
+    dayBar.dataset.key = key;
+    dayBar.replaceChildren(b("", t("Live")), ...days.map((d) => b(d.day, dayName(d.day), d.requests)));
+    dayBar.hidden = !days.length && !day;
+  }
   function renderHist() {
-    const rs = [...routes.values()].sort((a, b) => b.id - a.id);
-    hist.hidden = !rs.length;
+    const rs = listed();
+    hist.hidden = !rs.length && !day && !days.length;
     reqHead.replaceChildren(el("span", "label", t("Requests")), el("span", "grow"), reqNote);
-    reqNote.textContent = t("the last {n} the gateway keeps", { n: rs.length });
+    if (rs.filter((r) => r.done).length > 1 && !rp) {
+      const all = el("button", "text", t("Replay them all"));
+      all.onclick = () => replay(rs, pinned);
+      reqHead.append(all);
+    }
+    reqNote.textContent = day ? t(pastCut ? "the last {n} of {day}" : "{n} on {day}", { n: rs.length, day: dayName(day) })
+      : t("the last {n} the gateway keeps", { n: rs.length });
+    renderDays();
+    // none yet: what the list is for in its place, and no accounts column
+    // to tally nothing
+    const none = !rs.length;
+    reqNote.hidden = none;
+    reqs.classList.toggle("none", none);
+    colB.hidden = none;
+    hist.classList.toggle("solo", none);
+    if (none) {
+      const p = el("div", "empty-state");
+      p.append(el("b", "", day ? t("Nothing on {day}", { day: dayName(day) }) : t("No requests since magpie started")),
+        t("Each request an agent sends through magpie shows up here: who answered it, why, and each try."));
+      if (!day && days.length) p.append(" " + t("Earlier ones are kept by day, in the bar above."));
+      reqs.replaceChildren(p);
+      renderActs(rs);
+      return;
+    }
     reqs.replaceChildren(...rs.map((r) => {
       const [said, how, tr] = outcome(r);
       const b = el("button", "rt-req " + how);
@@ -908,7 +1027,7 @@
       if (r.tokens) meta.push(t("{n} tokens", { n: tokens(r.tokens) }));
       b.append(when, asked, to, el("span", "meta", meta.join(" · ")));
       b.title = `${agentName(r.agent)} · ${r.model} → ${r.provider}`;
-      b.onclick = () => pick(r);
+      b.onclick = (e) => pick(r, e);
       return b;
     }));
     renderActs(rs);
@@ -1046,9 +1165,10 @@
   // picks up the answer and brings it back — a failure only as far as
   // magpie, where the first takes the request on to the next.
   async function play(id) {
+    const routes = src(); // a replay's, if it is one
     let r = routes.get(id);
     const g = gen;
-    playing.add(id);
+    playing.set(id, g);
     cur = r;
     sync();
     say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r));
@@ -1140,7 +1260,7 @@
       away(back);
       flying.delete(dot);
       dot.remove();
-      playing.delete(id);
+      if (playing.get(id) === g) playing.delete(id);
       renderAll();
     }
   }
@@ -1150,6 +1270,163 @@
     const ws = wiresTo(row);
     return [...[...ws].reverse().map((p) => ({ p, rev: true })), via(tip(ws[0], false, true), tip(A.wire, true, true)), { p: A.wire, rev: true }];
   };
+
+  // stopPlays ends whatever is flying: each play sees its gen gone and
+  // clears up after itself
+  function stopPlays() {
+    gen++; flying.clear(); playing.clear();
+    for (const p of sky.querySelectorAll(".pkt, .rt-flier")) p.remove();
+    wake();
+  }
+
+  // ---------- replay ----------
+
+  // replay plays kept requests again as they happened, from the trace the
+  // gateway kept: each at its time, each try as long as it took, and the
+  // stage — every agent, account, rest and sentence — as it was then. A
+  // wait longer than GAP is cut to GAP, so a minute's answer or a quiet
+  // hour doesn't hold it up; the clock over the stage still tells the time
+  // it is replaying, running fast through what was cut.
+  const GAP = 1800, LEAD = 500;
+  const ends = (r) => Math.max(at(r.time) + (r.ms || 0), ...r.tries.map((tr) => at(tr.start) + (tr.ms || 0)));
+  function replay(list, back) {
+    list = list.filter((r) => r.done).sort((a, b) => a.id - b.id);
+    if (!list.length) return;
+    const all = [];
+    for (const r of list) { all.push(at(r.time), ends(r)); for (const tr of r.tries) all.push(at(tr.start), at(tr.start) + (tr.ms || 0)); }
+    const ts = [...new Set(all)].sort((a, b) => a - b), vs = [];
+    let v = 0;
+    ts.forEach((x, i) => { if (i) v += Math.min(x - ts[i - 1], GAP); vs.push(v); });
+    const vOf = (x) => vs[ts.indexOf(x)];
+    const plan = list.map((r, i) => ({ r, n: i + 1, s: vOf(at(r.time)), e: vOf(ends(r)),
+      tries: r.tries.map((tr) => ({ s: vOf(at(tr.start)), e: vOf(at(tr.start) + (tr.ms || 0)) })) }));
+    const speed = rp?.speed || 1;
+    rp = null; // the old one, if one was playing, stops here
+    stopPlays();
+    pinned = null;
+    rp = { routes: new Map(), plan, ts, vs, v: -LEAD, total: v, speed, back: back || null, t: performance.now(), real: ts[0] - LEAD };
+    rTrack.replaceChildren(rHead, ...plan.map((g) => {
+      const m = el("i", "rp-mark");
+      m.style.left = (g.s / (v || 1)) * 100 + "%";
+      m.style.setProperty("--agent", hueOf(g.r.agent));
+      m.title = `${clock(g.r.time)} · ${agentName(g.r.agent)} · ${g.r.model}`;
+      g.mark = m;
+      return m;
+    }));
+    rbar.hidden = false;
+    renderAll();
+    requestAnimationFrame(step);
+  }
+  // ghost is a request as it was v into the replay
+  function ghost(g, v) {
+    const tries = [];
+    g.r.tries.forEach((tr, i) => {
+      const x = g.tries[i];
+      if (x.s <= v) tries.push(x.e <= v ? tr : { ...tr, done: false, status: 0, rest: null, again: false });
+    });
+    return { ...g.r, tries, done: g.e <= v };
+  }
+  // realAt is the time it was v into the replay, and how much faster than
+  // time it runs there
+  function realAt(p, v) {
+    const { ts, vs } = p;
+    if (v <= 0) return [ts[0] + v, 1];
+    for (let k = 1; k < ts.length; k++) {
+      if (v > vs[k]) continue;
+      const dv = vs[k] - vs[k - 1], dt = ts[k] - ts[k - 1];
+      return [dv ? ts[k - 1] + (v - vs[k - 1]) * dt / dv : ts[k], dv ? dt / dv : 1];
+    }
+    return [ts[ts.length - 1], 1];
+  }
+  const same = (a, b) => a.done === b.done && a.tries.length === b.tries.length && a.tries.every((x, i) => x.done === b.tries[i].done);
+  function step(ts) {
+    const p = rp;
+    if (!p) return;
+    p.v += (ts - p.t) * p.speed;
+    p.t = ts;
+    let fast;
+    [p.real, fast] = realAt(p, p.v);
+    let moved = false;
+    for (const g of p.plan) {
+      if (g.s > p.v) continue;
+      const was = p.routes.get(g.r.id), is = ghost(g, p.v);
+      if (was && same(was, is)) continue;
+      p.routes.set(g.r.id, is);
+      moved = true;
+      if (!was) play(g.r.id);
+    }
+    wake();
+    // as the gateway's own trace would: a try begun or ended shows at once
+    if (moved) { if (cur && p.routes.has(cur.id)) cur = p.routes.get(cur.id); renderAll(); }
+    replayBar(p, fast);
+    if (p.v > p.total && !playing.size) { endReplay(); return; }
+    requestAnimationFrame(step);
+  }
+  const setText = (e, s) => { if (e.textContent !== s) e.textContent = s; };
+  function replayBar(p, fast) {
+    const d = new Date(p.real);
+    rClock.textContent = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) + "." + Math.floor(d.getMilliseconds() / 100);
+    const day = d.toDateString() === new Date().toDateString() ? t("today") : d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    setText(rDay, day);
+    // a quiet stretch cut short: the clock runs fast through it, whatever
+    // the speed picked
+    const skip = fast > 1.5 ? t("skipping a quiet stretch · clock {n}×", { n: Math.round(fast) }) : "";
+    // written only when it changes: WebKit sends no click to a button whose
+    // text was replaced between the press and the release, and this runs
+    // every frame, so Stop and the speed did nothing when clicked
+    setText(rSkip, skip);
+    setText(rSpeed, t("{n}× speed", { n: p.speed }));
+    setText(rStop, t("Stop replay"));
+    setText(rTop.firstChild, t("Replaying"));
+    rHead.style.left = Math.max(0, Math.min(100, (p.v / (p.total || 1)) * 100)) + "%";
+    // the requests in flight at this moment of the replay, else the last one
+    const on = p.plan.filter((g) => playing.has(g.r.id) || (p.routes.has(g.r.id) && !p.routes.get(g.r.id).done));
+    const shown_ = on.length ? on : p.plan.filter((g) => p.routes.has(g.r.id)).slice(-1);
+    for (const g of p.plan) g.mark.classList.toggle("on", on.includes(g));
+    const key = shown_.map((g) => g.r.id + ":" + p.routes.get(g.r.id)?.tries.length + ":" + p.routes.get(g.r.id)?.done).join(",") + (shown_.length ? "" : "-");
+    if (rWhat.dataset.key === key) return;
+    rWhat.dataset.key = key;
+    rWhat.replaceChildren(...(shown_.length ? shown_.map((g) => {
+      const r = p.routes.get(g.r.id) || g.r, row = el("div", "rp-req" + (on.includes(g) ? " on" : ""));
+      const sw = el("i", "ag");
+      sw.style.setProperty("--agent", hueOf(r.agent));
+      const [said] = outcome(r);
+      row.append(el("span", "rp-n", t("request {i} of {n}", { i: g.n, n: p.plan.length })), sw,
+        el("b", "", agentName(r.agent)), el("code", "mdl", r.model), el("span", "rp-to", "→ " + said),
+        el("span", "rp-at", t("sent {time}", { time: new Date(r.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }) })));
+      row.onclick = () => { cur = r; renderLog(); };
+      return row;
+    }) : [el("span", "rp-wait", t("starting…"))]));
+  }
+  // seek plays the replay on from where on its track was clicked
+  function seek(frac) {
+    const p = rp;
+    if (!p) return;
+    const v = Math.max(0, Math.min(1, frac)) * p.total;
+    stopPlays(); // the flights end; the replay goes on
+    p.v = v; p.t = performance.now(); p.routes.clear();
+    for (const g of p.plan) if (g.s <= v) p.routes.set(g.r.id, ghost(g, v));
+    // one in flight there flies on from where it was; the rest are done
+    for (const g of p.plan) if (p.routes.has(g.r.id) && !p.routes.get(g.r.id).done) play(g.r.id);
+    const last = [...p.routes.values()].pop();
+    if (last) { cur = last; sync(true); }
+    rWhat.dataset.key = "";
+    renderAll();
+  }
+  function endReplay(stop) {
+    const p = rp;
+    if (!p) return;
+    rp = null;
+    rbar.hidden = true;
+    if (stop) stopPlays();
+    const b = p.back && (routes.get(p.back.id) || (day && past.find((x) => x.id === p.back.id)));
+    pinned = b || null;
+    cur = b || newest();
+    if (cur) { sync(true); renderAll(); }
+  }
+  rSpeed.onclick = () => { if (rp) { rp.speed = rp.speed >= 8 ? 1 : rp.speed * 2; replayBar(rp, 1); } };
+  rStop.onclick = () => endReplay(true);
+  rTrack.onclick = (e) => { const b = rTrack.getBoundingClientRect(); seek((e.clientX - b.left) / b.width); };
 
   // ---------- the loop ----------
 
@@ -1206,7 +1483,7 @@
     requestAnimationFrame(frame);
   }
   // countdowns tick once a second
-  setInterval(() => { if (shown()) { if (!pinned && loaded && cur) sync(); render(); renderActs([...routes.values()].sort((a, b) => b.id - a.id)); } }, 1000);
+  setInterval(() => { if (shown()) { if (!pinned && loaded && cur) sync(); render(); renderActs(listed()); } }, 1000);
 
   function offline(msg) {
     off.textContent = msg;
@@ -1234,7 +1511,8 @@
     hubText();
     list.replaceChildren(el("li", "idle", t("No request yet")));
     say(t("Every request an agent sends to magpie shows up here, routed for real."));
-    log.hidden = hist.hidden = true;
+    log.hidden = true;
+    renderHist(); // none live, but the days the history keeps are still there to look at
     layout();
   }
 
@@ -1269,6 +1547,8 @@
         }
         for (const id of [...routes.keys()].sort((a, b) => a - b).slice(0, -60)) routes.delete(id);
         loaded = true;
+        // a request done is a day's count grown: heard of now and then
+        if (first || (d.routes.some((r) => r.done) && performance.now() - daysAt > 15e3)) { daysAt = performance.now(); loadDays(); }
         if (first) {
           offline("");
           // the agents' names come with the app's state, which may not be here yet
@@ -1276,9 +1556,9 @@
           const r = newest();
           if (r) { cur = r; sync(true); say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r)); renderAll(); } else empty();
         } else {
-          if (cur && routes.has(cur.id)) cur = routes.get(cur.id);
+          if (cur && routes.has(cur.id) && !rp) cur = routes.get(cur.id);
           if (pinned && routes.has(pinned.id)) pinned = routes.get(pinned.id);
-          for (const id of fresh) if (!pinned) play(id);
+          for (const id of fresh) if (!pinned && !rp) play(id);
           wake();
           renderAll();
         }
@@ -1351,18 +1631,31 @@
       load(); // the gateway's model list, the agents' pickers
     } catch (e) { status(e.message, "err"); }
   }
-  const modelOf = (id) => groups?.models.find((m) => m.id === id);
+  // a member may be a model at an effort of its own, "provider/model:low" —
+  // unless the whole is a model's own id (a :free, a :7b); see
+  // provider.MemberEffort
+  const LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]; // provider.MemberEfforts
+  function splitMember(id) {
+    id = id || "";
+    if (id.startsWith("group/") || groups?.models.some((m) => m.id === id)) return [id, ""];
+    const m = /^(.+):(none|minimal|low|medium|high|xhigh|max)$/i.exec(id);
+    return m ? [m[1], m[2].toLowerCase()] : [id, ""];
+  }
+  const modelOf = (id) => groups?.models.find((m) => m.id === id) || groups?.models.find((m) => m.id === splitMember(id)[0]);
+  const fixedOf = (id) => subOf(id) ? "" : splitMember(id)[1];
+  const fixedWords = (level) => t("{level} reasoning", { level });
   // a routing group among a group's members: group/<id>
   const subOf = (id) => id?.startsWith("group/") ? groups?.groups.find((x) => "group/" + x.id === id && !x.hidden) : null;
   const groupIcons = (g) => [...new Map((g.memberInfo || []).filter((i) => i.icon).map((i) => [i.provider || i.icon, i.icon])).values()];
   const memberIcon = (id) => { const s = subOf(id); return s ? stackIcon(groupIcons(s)) : icon(modelOf(id)?.icon || "generic"); };
   const memberName = (id) => { const s = subOf(id), m = modelOf(id); return s ? s.name : m ? m.name || m.id : id; };
-  const memberNote = (id) => subOf(id) ? t("routing group") : modelOf(id)?.providerName;
+  const memberNote = (id) => subOf(id) ? t("routing group") : [modelOf(id)?.providerName, fixedOf(id) && fixedWords(fixedOf(id))].filter(Boolean).join(" · ");
   function memberLabel(g, id) {
-    const i = g.memberInfo?.find((x) => x.id === id), m = modelOf(id), s = subOf(id);
+    const i = g.memberInfo?.find((x) => x.id === id), m = modelOf(id), s = subOf(id), f = fixedOf(id);
     if (s) return `${t("routing group")} · ${s.name}`;
-    if (m) return `${m.providerName} · ${m.name || m.id}`;
-    return i?.name ? `${i.name} · ${i.model}` : id;
+    const at = f ? ` · ${fixedWords(f)}` : "";
+    if (m) return `${m.providerName} · ${m.name || m.id}${at}`;
+    return i?.name ? `${i.name} · ${i.model}${at}` : id;
   }
   function renderGroups() {
     if (groups) steady(drawGroups);
@@ -1459,6 +1752,8 @@
 
     // members, in order: the first is what an agent is told the model can do.
     // More are picked with the model picker the agents use.
+    const infoOf = (id) => g?.memberInfo?.find((x) => x.id === id);
+    const pickFrom = (label, anchor, ev, options, onPick, value = "") => openPicker({ id: "", name: "", fields: [] }, { key: "rule", label, value, menu: true, options, onPick }, anchor, ev);
     const box = el("div", "fallback");
     const list = el("div", "fbl");
     const addBtn = el("button", "rt-gadd");
@@ -1470,8 +1765,29 @@
         const row = el("div", "fbrow");
         const n = el("span", "n");
         n.append(el("span", "", memberName(id)));
-        if (m || s) n.append(el("small", "", memberNote(id)));
+        if (m || s) n.append(el("small", "", subOf(id) ? memberNote(id) : m.providerName));
         row.append(el("span", "i", String(i + 1)), memberIcon(id), n, el("span", "grow"));
+        // the reasoning the model is sent at in this group: the group's
+        // (blank), or one of its own whatever the agent asks. A group in
+        // it reasons as it says.
+        if (!s) {
+          const [base, fixed] = splitMember(id);
+          const fx = el("button", "rt-cond rt-fixed" + (fixed ? " on" : ""), fixed ? fixedWords(fixed) : t("Group's reasoning"));
+          fx.title = fixed ? t("Sent at {level} reasoning whatever the agent asks, at the model's nearest level", { level: fixed }) : t("Reasons as the group's effort says");
+          const levels = m?.efforts?.length ? m.efforts.filter((v) => LEVELS.includes(v)) : LEVELS.filter((v) => v !== "none" && v !== "minimal");
+          fx.onclick = (ev) => pickFrom("reasoning", fx, ev, [
+            { value: "", label: t("Follow the group"), note: t("as the group's effort says") },
+            ...levels.map((v) => ({ value: v, label: fixedWords(v), note: t("whatever the agent asks") })),
+          ], (v) => {
+            const to = v ? `${base}:${v}` : base;
+            if (to === id) return;
+            if (d.members.includes(to)) { status(t("{name} at that reasoning is in the group already", { name: memberName(id) }), "err"); return; }
+            d.members[i] = to;
+            for (const r of d.rules) if (r.use === id) r.use = to;
+            draw(); drawRules();
+          }, fixed);
+          row.append(fx);
+        }
         if (s) row.title = s.members.map((x) => memberLabel(s, x)).join(s.routing === "order" ? " → " : " · ");
         if (!m && !s) { row.classList.add("off"); row.title = t("No provider serves {id} now; it is skipped", { id }); }
         if (i) { const up = el("button", "text", t("Up")); up.onclick = () => { d.members.splice(i - 1, 0, d.members.splice(i, 1)[0]); draw(); }; row.append(up); }
@@ -1488,7 +1804,7 @@
       const subs = groups.groups.filter((x) => !x.hidden && x.id !== g?.id && !(g && x.holds?.includes(g.id)) && !d.members.includes("group/" + x.id))
         .map((x) => ({ value: "group/" + x.id, label: x.name, note: "group/" + x.id, icons: groupIcons(x), group: ROUTING_GROUPS, ref: "group/" + x.id }));
       const options = [...subs, ...groups.models.filter((x) => !d.members.includes(x.id))
-        .map((x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id }))];
+        .map((x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id, context: x.context }))];
       openPicker({ id: "", name: "", fields: [] }, { key: "member", label: "model", value: "", options, onPick: (id) => {
         if (id && !d.members.includes(id)) d.members.push(id);
         draw(); drawRules();
@@ -1514,8 +1830,6 @@
     const rlist = el("div", "fbl");
     const rAdd = el("button", "rt-gadd");
     rAdd.append(svg(PLUS, 11, 1.8), el("span", "", t("Add a rule")));
-    const infoOf = (id) => g?.memberInfo?.find((x) => x.id === id);
-    const pickFrom = (label, anchor, ev, options, onPick) => openPicker({ id: "", name: "", fields: [] }, { key: "rule", label, value: "", menu: true, options, onPick }, anchor, ev);
     const rHint2 = el("div", "hint");
     const drawRules = () => {
       rlist.replaceChildren();
@@ -1606,14 +1920,21 @@
       if (!on) return;
       const intents = d.rules.some((r) => r.intent?.trim());
       clabel.textContent = t(auto && !intents ? "Decided by" : "Intent told by");
-      const m = [...deciders, ...groups.models].find((x) => x.id === d.classifier);
+      // a model, or another group: its models are asked in turn, failing
+      // over as any request to it does (never this group: it would ask
+      // itself)
+      const m = [...deciders, ...groups.models].find((x) => x.id === d.classifier), sg = subOf(d.classifier);
       const cb = el("button", "rt-cond" + (d.classifier ? " on" : ""));
-      if (d.classifier) cb.append(icon(m?.icon || "generic"), el("span", "", m ? `${m.name || m.id} · ${m.providerName}` : d.classifier));
+      if (sg) cb.append(stackIcon(groupIcons(sg)), el("span", "", `${sg.name} · ${t("routing group")}`));
+      else if (d.classifier) cb.append(icon(m?.icon || "generic"), el("span", "", m ? `${m.name || m.id} · ${m.providerName}` : d.classifier));
       else cb.append(el("span", "", t("choose a model")));
-      const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id });
-      cb.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "classifier", label: "model", value: d.classifier, options: [...deciders.map(opt), ...groups.models.map(opt)],
+      const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id, context: x.context });
+      const subs = groups.groups.filter((x) => !x.hidden && x.id !== g?.id)
+        .map((x) => ({ value: "group/" + x.id, label: x.name, note: "group/" + x.id, icons: groupIcons(x), group: ROUTING_GROUPS, ref: "group/" + x.id }));
+      cb.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "classifier", label: "model", value: d.classifier, options: [...deciders.map(opt), ...subs, ...groups.models.map(opt)],
         onPick: (id) => { if (id) d.classifier = id; drawClassifier(); } }, cb, ev);
       cls.replaceChildren(cb,
+        ...(sg ? [el("div", "hint", t("A routing group classifies as any request to it goes: if its first model fails, the next is asked."))] : []),
         el("div", "hint", t(isJev(d.classifier) && !intents
           ? "Jev is asked once as each turn begins, with the message and what it said of the turn before. Its calls show in the usage as magpie’s own."
           : isJev(d.classifier)

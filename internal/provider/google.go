@@ -103,7 +103,7 @@ func googleAppOf(agent string) (googleApp, bool) {
 const AntigravityRisk = "Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose."
 
 // geminiCLIVersion is the Gemini CLI magpie says it is.
-const geminiCLIVersion = "0.54.4"
+const geminiCLIVersion = "0.61.0"
 
 // googleAuth is a Google sign-in as logins.json keeps it; Gemini CLI's
 // oauth_creds.json has the same fields.
@@ -326,7 +326,8 @@ var googleState = struct {
 	sync.Mutex
 	tokens   map[string]googleAuth // by refresh token
 	projects map[string]googleProject
-}{tokens: map[string]googleAuth{}, projects: map[string]googleProject{}}
+	flags    map[string]geminiFlags // by refresh token and project
+}{tokens: map[string]googleAuth{}, projects: map[string]googleProject{}, flags: map[string]geminiFlags{}}
 
 type googleProject struct {
 	id, plan string
@@ -683,16 +684,151 @@ func (g googleAccount) onboard(ctx context.Context, base string, req map[string]
 
 // ---- models -------------------------------------------------------------------
 
-// geminiModels are the models Gemini CLI offers, when Code Assist doesn't
-// say which this account has.
+// geminiModels are the models Gemini CLI (0.61) offers, when Code Assist
+// doesn't say which this account has; which it has is
+// geminiFlags.offered.
 var geminiModels = []catalog.Model{
 	{ID: "gemini-3.1-pro-preview", Name: "Gemini 3.1 Pro Preview"},
 	{ID: "gemini-3-pro-preview", Name: "Gemini 3 Pro Preview"},
 	{ID: "gemini-3-flash-preview", Name: "Gemini 3 Flash Preview"},
-	{ID: "gemini-3.1-flash-lite-preview", Name: "Gemini 3.1 Flash Lite Preview"},
+	{ID: "gemini-3.8-flash", Name: "Gemini 3.8 Flash"},
+	{ID: "gemini-3.5-flash", Name: "Gemini 3.5 Flash"},
+	{ID: "gemini-3.5-flash-lite", Name: "Gemini 3.5 Flash Lite"},
+	{ID: "gemini-3.1-flash-lite", Name: "Gemini 3.1 Flash Lite"},
 	{ID: "gemini-2.5-pro", Name: "Gemini 2.5 Pro"},
 	{ID: "gemini-2.5-flash", Name: "Gemini 2.5 Flash"},
 	{ID: "gemini-2.5-flash-lite", Name: "Gemini 2.5 Flash Lite"},
+}
+
+// geminiFlags are the experiments Code Assist has an account in that
+// decide which models Gemini CLI offers it, and the id each goes out as.
+type geminiFlags struct {
+	gemini31        bool // Gemini 3.1 Pro launched to it
+	noPro           bool // it has no Pro model
+	latestFlash     bool // Gemini 3.8 Flash in place of 3.5 Flash
+	latestFlashLite bool // Gemini 3.5 Flash Lite in place of 3.1 Flash Lite
+	at              time.Time
+}
+
+// Gemini CLI's ids of those experiments (its ExperimentFlags).
+const (
+	flagGemini31Pro     = 45760185
+	flagProNoAccess     = 45768879
+	flagLatestFlash     = 45842815
+	flagLatestFlashLite = 45827489
+)
+
+// flags asks Code Assist which experiments the account is in, as Gemini
+// CLI does when it starts, at most every hour; none is on when it can't
+// say, as in the CLI.
+func (g googleAccount) flags(ctx context.Context, project string) geminiFlags {
+	key := g.auth.RefreshToken + "\x00" + project
+	googleState.Lock()
+	f, ok := googleState.flags[key]
+	googleState.Unlock()
+	if ok && time.Since(f.at) < time.Hour {
+		return f
+	}
+	platform := map[string]string{"darwin/amd64": "DARWIN_AMD64", "darwin/arm64": "DARWIN_ARM64", "linux/amd64": "LINUX_AMD64",
+		"linux/arm64": "LINUX_ARM64", "windows/amd64": "WINDOWS_AMD64"}[runtime.GOOS+"/"+runtime.GOARCH]
+	if platform == "" {
+		platform = "PLATFORM_UNSPECIFIED"
+	}
+	meta := map[string]any{"ideName": "IDE_UNSPECIFIED", "pluginType": "GEMINI", "ideVersion": geminiCLIVersion,
+		"platform": platform, "updateChannel": "stable", "duetProject": project}
+	var res struct {
+		Flags []struct {
+			FlagID    int64 `json:"flagId"`
+			BoolValue bool  `json:"boolValue"`
+		} `json:"flags"`
+	}
+	f = geminiFlags{at: time.Now()}
+	if err := g.call(ctx, g.app.base, "listExperiments", map[string]any{"project": project, "metadata": meta}, &res, nil); err == nil {
+		for _, fl := range res.Flags {
+			switch fl.FlagID {
+			case flagGemini31Pro:
+				f.gemini31 = fl.BoolValue
+			case flagProNoAccess:
+				f.noPro = fl.BoolValue
+			case flagLatestFlash:
+				f.latestFlash = fl.BoolValue
+			case flagLatestFlashLite:
+				f.latestFlashLite = fl.BoolValue
+			}
+		}
+	}
+	googleState.Lock()
+	googleState.flags[key] = f
+	googleState.Unlock()
+	return f
+}
+
+// offered is what Gemini CLI's /model offers the account (its
+// getAvailableModelOptions): previews only to one with quota for one,
+// 3.1 Pro in place of 3 Pro once launched to it, and one Flash and one
+// Flash Lite, the latest where Google has rolled it out to it.
+func (f geminiFlags) offered(preview bool) []catalog.Model {
+	skip := map[string]bool{
+		"gemini-3.1-pro-preview": !f.gemini31 || !preview || f.noPro,
+		"gemini-3-pro-preview":   f.gemini31 || !preview || f.noPro,
+		"gemini-3-flash-preview": !preview,
+		"gemini-3.8-flash":       !f.latestFlash,
+		"gemini-3.5-flash":       f.latestFlash,
+		"gemini-3.5-flash-lite":  !f.latestFlashLite,
+		"gemini-3.1-flash-lite":  f.latestFlashLite,
+		"gemini-2.5-pro":         f.noPro,
+		"gemini-2.5-flash":       f.latestFlash, // the CLI's 2.5 Flash is 3.8 Flash then
+	}
+	var out []catalog.Model
+	for _, m := range geminiModels {
+		if !skip[m.ID] {
+			m.Images = true
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// wire is the id Gemini CLI sends Code Assist a model as (its
+// getBackendModelMappings): 3.5 Flash goes as 3.8 Flash where that is
+// rolled out, else as gemini-3-flash, and 3.1 Flash Lite as 3.5 Flash
+// Lite where that is; 3.8 Flash and 3.5 Flash Lite where they aren't go
+// as the account's Flash and Flash Lite.
+func (f geminiFlags) wire(model string) string {
+	switch {
+	case f.latestFlash && (model == "gemini-3.5-flash" || model == "gemini-3-flash"):
+		return "gemini-3.8-flash"
+	case !f.latestFlash && model == "gemini-3.5-flash":
+		return "gemini-3-flash"
+	case f.latestFlashLite && model == "gemini-3.1-flash-lite":
+		return "gemini-3.5-flash-lite"
+	case !f.latestFlash && model == "gemini-3.8-flash":
+		// asked for by an account it isn't rolled out to (picked from the
+		// list magpie falls back on): Code Assist may not serve it that
+		// account, so it goes as the Flash the account has (蒙面人: 502)
+		return "gemini-3-flash"
+	case !f.latestFlashLite && model == "gemini-3.5-flash-lite":
+		return "gemini-3.1-flash-lite"
+	}
+	return model
+}
+
+// shown is the model Gemini CLI takes a quota bucket to be for (its
+// refreshUserQuota): Code Assist's gemini-3-flash is 3.5 or 3.8 Flash.
+func (f geminiFlags) shown(model string) string {
+	switch model {
+	case "gemini-3-flash", "gemini-3.5-flash", "gemini-3.8-flash":
+		if f.latestFlash {
+			return "gemini-3.8-flash"
+		}
+		return "gemini-3.5-flash"
+	case "gemini-3.1-flash-lite", "gemini-3.5-flash-lite":
+		if f.latestFlashLite {
+			return "gemini-3.5-flash-lite"
+		}
+		return "gemini-3.1-flash-lite"
+	}
+	return model
 }
 
 // antigravityModels are the models Antigravity offers, when it doesn't say.
@@ -767,13 +903,15 @@ func (g googleAccount) modelInfo(ctx context.Context) ([]googleModelInfo, error)
 		if err := g.call(ctx, g.app.base, "retrieveUserQuota", map[string]any{"project": p.id}, &res, nil); err != nil {
 			return nil, err
 		}
+		f := g.flags(ctx, p.id)
 		seen := map[string]bool{}
 		for _, b := range res.Buckets {
-			if b.ModelID == "" || seen[b.ModelID] || strings.HasSuffix(b.ModelID, "_vertex") {
+			id := f.shown(b.ModelID)
+			if id == "" || seen[id] || strings.HasSuffix(id, "_vertex") {
 				continue
 			}
-			seen[b.ModelID] = true
-			mi := googleModelInfo{Model: catalog.Model{ID: b.ModelID}, remaining: -1}
+			seen[id] = true
+			mi := googleModelInfo{Model: catalog.Model{ID: id}, remaining: -1}
 			if b.RemainingFraction != nil {
 				mi.remaining = *b.RemainingFraction
 			}
@@ -786,11 +924,26 @@ func (g googleAccount) modelInfo(ctx context.Context) ([]googleModelInfo, error)
 }
 
 // models is the account's models for the catalog, named as magpie knows
-// them where Code Assist doesn't name them.
+// them where Code Assist doesn't name them. Gemini CLI's are the ones the
+// CLI offers the account, not its quota's buckets: those name the models
+// it has an allowance of, by Code Assist's ids (gemini-3-flash is the
+// CLI's 3.5 Flash), and the CLI doesn't list by them.
 func (g googleAccount) models(ctx context.Context) ([]catalog.Model, error) {
 	infos, err := g.modelInfo(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if g.app.agent != "antigravity" {
+		p, err := g.project(ctx)
+		if err != nil {
+			return nil, err
+		}
+		// previews only once a bucket is for one, as in the CLI
+		preview := false
+		for _, mi := range infos {
+			preview = preview || strings.Contains(mi.ID, "-preview")
+		}
+		return g.flags(ctx, p.id).offered(preview), nil
 	}
 	fallback := g.fallbackModels()
 	names := map[string]string{}
@@ -868,7 +1021,11 @@ func googleProvider(g googleAccount, plan string) Provider {
 		if err != nil {
 			return err
 		}
-		out, model, err := codeAssistEnvelope(g.app.agent, body, p.id)
+		var f geminiFlags
+		if g.app.agent != "antigravity" {
+			f = g.flags(ctx, p.id)
+		}
+		out, model, err := codeAssistEnvelope(g.app.agent, body, p.id, f)
 		if err != nil {
 			return err
 		}
@@ -892,9 +1049,9 @@ func googleProvider(g googleAccount, plan string) Provider {
 }
 
 // codeAssistEnvelope finishes a request the gateway built — {model,
-// request} — with what only the account knows: its project, and the ids
-// the app sends along.
-func codeAssistEnvelope(agent string, body []byte, project string) ([]byte, string, error) {
+// request} — with what only the account knows: its project, the ids the
+// app sends along, and (Gemini CLI's) the id the model goes out as.
+func codeAssistEnvelope(agent string, body []byte, project string, flags geminiFlags) ([]byte, string, error) {
 	var env map[string]any
 	if err := json.Unmarshal(body, &env); err != nil {
 		return nil, "", err
@@ -911,6 +1068,10 @@ func codeAssistEnvelope(agent string, body []byte, project string) ([]byte, stri
 		}
 	} else {
 		env["user_prompt_id"] = id
+		// the User-Agent keeps the model asked for, as the CLI's does
+		if model != "" {
+			env["model"] = flags.wire(model)
+		}
 	}
 	out, err := json.Marshal(env)
 	return out, model, err
@@ -1010,24 +1171,11 @@ func googleExchange(ctx context.Context, app googleApp, code, verifier, redirect
 	}
 	g := googleAccount{app: app, auth: googleAuth{AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken,
 		Expiry: time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second).UnixMilli()}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleUserInfoURL, nil)
+	who, err := googleWho(ctx, tok.AccessToken)
 	if err != nil {
 		return googleAccount{}, "", err
 	}
-	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return googleAccount{}, "", err
-	}
-	defer res.Body.Close()
-	var who struct {
-		Email string `json:"email"`
-	}
-	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	if res.StatusCode != http.StatusOK || json.Unmarshal(b, &who) != nil || who.Email == "" {
-		return googleAccount{}, "", errors.New("Google didn't say whose account this is")
-	}
-	g.user = who.Email
+	g.user = who
 	// kept even when Code Assist has no project for it yet: a Standard
 	// account gets one named afterwards
 	plan := ""
@@ -1035,4 +1183,26 @@ func googleExchange(ctx context.Context, app googleApp, code, verifier, redirect
 		g.auth.Project, plan = p.id, p.plan
 	}
 	return g, plan, nil
+}
+
+// googleWho is whose Google account an access token is.
+func googleWho(ctx context.Context, access string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, googleUserInfoURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+access)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	var who struct {
+		Email string `json:"email"`
+	}
+	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if res.StatusCode != http.StatusOK || json.Unmarshal(b, &who) != nil || who.Email == "" {
+		return "", errors.New("Google didn't say whose account this is")
+	}
+	return who.Email, nil
 }

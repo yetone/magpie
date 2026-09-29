@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/redact"
 )
 
 func TestRoundTrip(t *testing.T) {
@@ -63,6 +65,20 @@ func TestRoundTrip(t *testing.T) {
 	}
 	if Save(Settings{TrayUsageEvery: 7}) == nil {
 		t.Fatal("bad tray refresh accepted")
+	}
+	// the user's masking rules: kept tidied, and one that doesn't compile
+	// said, not saved and left out (#195)
+	if err := Save(Settings{RedactRules: []redact.Rule{{Kind: "gw key", Prefix: " oc_sk_ "}, {Kind: "ns", Regex: `ns-[0-9a-f]{12}`}}}); err != nil {
+		t.Fatal(err)
+	}
+	if r := Load().RedactRules; len(r) != 2 || r[0] != (redact.Rule{Kind: "GW_KEY", Prefix: "oc_sk_"}) || r[1].Kind != "NS" {
+		t.Fatalf("rules not kept: %+v", r)
+	}
+	if err := Save(Settings{RedactRules: []redact.Rule{{Kind: "bad", Regex: `ns-[0-9a-f`}}}); err == nil || !strings.Contains(err.Error(), "BAD") {
+		t.Fatalf("bad regex: %v", err)
+	}
+	if len(Load().RedactRules) != 2 {
+		t.Fatal("a failed save changed the rules")
 	}
 }
 

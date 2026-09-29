@@ -29,6 +29,10 @@ func sandbox(t *testing.T) string {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("PATH", "")
+	// never the machine's global node_modules
+	roots := piGlobalRoots
+	piGlobalRoots = func() []string { return nil }
+	t.Cleanup(func() { piGlobalRoots = roots })
 	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR", "COPILOT_HOME", "APPDATA", "LOCALAPPDATA", "DSH_HOME"} {
 		t.Setenv(k, "")
 	}

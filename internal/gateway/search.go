@@ -93,10 +93,10 @@ func searcher() (provider.Provider, string, bool) {
 	top := -1
 	for _, p := range provider.All() {
 		r := rank(p)
-		if r < 0 || !p.Ready() || (top >= 0 && r >= top) {
+		if r < 0 || !p.On() || (top >= 0 && r >= top) {
 			continue
 		}
-		if m := smallModel(p); m != "" {
+		if m := smallModel(p, nil); m != "" {
 			best, model, top = p, m, r
 		}
 	}
@@ -104,10 +104,14 @@ func searcher() (provider.Provider, string, bool) {
 }
 
 // smallModel is the provider's cheapest small model of a vendor that
-// searches well, or its cheapest, or its first.
-func smallModel(p provider.Provider) string {
+// searches well, or its cheapest, or its first; only among those keep
+// holds, when it is given.
+func smallModel(p provider.Provider, keep func(catalog.Model) bool) string {
 	var ms []catalog.Model
 	for _, m := range p.Available() {
+		if keep != nil && !keep(m) {
+			continue
+		}
 		l := strings.ToLower(m.ID)
 		// a subscription's list can have what magpie wrote into its agent
 		if strings.HasPrefix(m.ID, provider.GroupPrefix) || (p.Account != nil && strings.Contains(m.ID, "/")) ||

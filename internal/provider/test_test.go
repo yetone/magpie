@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -104,5 +105,66 @@ func TestTestModels(t *testing.T) {
 	}
 	if seen["gpt-6-sol"] != "/v1/chat/completions Bearer sk-chat" || seen["claude-opus-5"] != "/v1/messages Bearer sk-anthropic" {
 		t.Fatalf("seen %v", seen)
+	}
+}
+
+// An image model is tested as the gateway draws with it, on the images
+// API with one small picture — a chat request it would turn away — while a
+// chat model is still asked in chat. The vendor-wide Test picks the chat one.
+func TestTestModelsDraws(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	var mu sync.Mutex
+	seen := map[string]string{} // model → path it was asked on
+	bodies := map[string]map[string]any{}
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		model, _ := in["model"].(string)
+		mu.Lock()
+		seen[model] = r.URL.Path
+		bodies[model] = in
+		mu.Unlock()
+		draws := strings.Contains(model, "image") || strings.Contains(model, "flux")
+		switch {
+		case r.URL.Path == "/v1/images/generations" && draws:
+			_, _ = rw.Write([]byte(`{"data":[{"url":"https://img.example/1.png"}]}`))
+		case r.URL.Path == "/v1/chat/completions" && !draws:
+			_, _ = rw.Write([]byte(`{"choices":[{"message":{"content":"hi"}}]}`))
+		default:
+			rw.WriteHeader(http.StatusBadRequest)
+			_, _ = rw.Write([]byte(`{"error":{"message":"wrong endpoint for ` + model + `"}}`))
+		}
+	}))
+	defer srv.Close()
+	p := Provider{ID: "custom", Name: "Custom", Chat: srv.URL + "/v1", Key: "sk-x",
+		Models: []string{"gpt-image-1", "flux-kontext-pro", "gpt-6-sol"}}
+	rs := p.TestModels(context.Background(), []string{"gpt-image-1", "flux-kontext-pro", "gpt-6-sol"})
+	for _, r := range rs {
+		if !r.OK {
+			t.Fatalf("results %+v", rs)
+		}
+	}
+	if seen["gpt-image-1"] != "/v1/images/generations" || seen["flux-kontext-pro"] != "/v1/images/generations" || seen["gpt-6-sol"] != "/v1/chat/completions" {
+		t.Fatalf("seen %v", seen)
+	}
+	if b := bodies["gpt-image-1"]; b["n"] != float64(1) || b["quality"] != "low" || b["prompt"] == "" {
+		t.Fatalf("gpt-image body %v", b)
+	}
+	if b := bodies["flux-kontext-pro"]; b["quality"] != nil || b["messages"] != nil {
+		t.Fatalf("flux body %v", b)
+	}
+	// the vendor-wide Test asks the chat model, though an image one is first
+	mu.Lock()
+	clear(seen)
+	mu.Unlock()
+	if rs := p.Test(context.Background()); len(rs) != 1 || !rs[0].OK || rs[0].Model != "gpt-6-sol" {
+		t.Fatalf("Test %+v", rs)
 	}
 }

@@ -57,8 +57,12 @@ func (s *Server) serveKiro(w http.ResponseWriter, r *http.Request, from provider
 
 // askKiro is a round for Kiro's API.
 func (s *Server) askKiro(p provider.Provider, model string) round {
+	home := ""
+	if p.Account != nil {
+		home = p.Account.Home
+	}
 	return func(ctx context.Context, req *Request) (<-chan Event, int, string) {
-		auth, err := kiroAuth(ctx, p.Key, false)
+		auth, err := kiroAuth(ctx, p.Key, home, false)
 		if err != nil {
 			return nil, 401, "Kiro: " + err.Error()
 		}
@@ -68,7 +72,7 @@ func (s *Server) askKiro(p provider.Provider, model string) round {
 		if err == nil && res.StatusCode == http.StatusForbidden {
 			// an expired or revoked token: refreshed, it goes once more
 			res.Body.Close()
-			if auth, err = kiroAuth(ctx, p.Key, true); err == nil {
+			if auth, err = kiroAuth(ctx, p.Key, home, true); err == nil {
 				res, err = s.sendKiro(ctx, auth, buildKiro(req, model, auth.Profile, thinking))
 			}
 		}

@@ -369,7 +369,7 @@
       ["mcp", t("MCP servers") + (counts.mcp ? " · " + counts.mcp : "")],
       ["skills", t("Skills") + (counts.skills ? " · " + counts.skills : "")],
       ["rtk", "RTK"],
-    ], tab, (id) => { tab = id; try { localStorage.setItem("magpie.libTab", id); } catch {} render(); page.scrollTop = 0; syncLists(); });
+    ], tab, (id) => { tab = id; try { localStorage.setItem("magpie.libTab", id); } catch {} render(); syncLists(); });
     tabs.classList.add("lib-tabs");
     head.append(tabs, el("span", "grow"));
     const more = button("", "lib-more", () => reveal(lib.dir));
@@ -453,11 +453,24 @@
     ttl.append(logo, el("b", "", "RTK"), el("span", "grow"));
     if (rtk.path) {
       ttl.append(el("span", "note mono", rtk.version ? "v" + rtk.version : tilde(rtk.path)));
+      // a newer release: upgraded the way this rtk was installed
+      const behind = rtk.latest && rtk.version && vNewer(rtk.latest, rtk.version);
+      if (rtkUpgrading) ttl.append(tag(t("Upgrading…"), "lib-new"));
+      else if (behind) ttl.append(tag(t("v{v} is out", { v: rtk.latest }), "lib-new", t("RTK {v} is the latest release; this one is {have}", { v: rtk.latest, have: rtk.version })));
+      else if (rtk.latest && rtk.version) ttl.append(tag(t("Up to date"), "", t("RTK {v} is the latest release", { v: rtk.latest })));
+      if (behind || rtkUpgrading) {
+        const ub = button(rtkUpgrading ? t("Upgrading…") : t("Upgrade"), "action", upgradeRTK);
+        ub.disabled = rtkUpgrading || !rtk.upgrade;
+        ub.title = rtk.upgrade ? t("Runs {cmd}", { cmd: rtk.upgrade }) : t("magpie can't tell how this RTK was installed — update it the way you installed it");
+        ttl.append(ub);
+      }
       card.append(ttl);
+      if (rtk.note) card.append(el("p", "lib-rtk-note", rtk.note));
       const g = rtk.gain;
       card.append(el("p", "lib-rtk-gain", g
         ? t("{saved} tokens saved over {n} commands — {pct}% on average", { saved: tokens(g.saved), n: g.commands.toLocaleString(), pct: Math.round(g.pct) })
         : t("Nothing saved yet: the agents' commands go through RTK once it's switched on and the agent is restarted.")));
+      if (rtk.days?.length) card.append(rtkChart(rtk.days));
     } else {
       card.append(ttl);
       card.append(el("p", "lib-rtk-gain", rtkInstalling
@@ -493,7 +506,7 @@
         ? t("RTK's plugin is written for OpenCode 1, and OpenCode 2 refuses to load it. Switch this off until RTK supports OpenCode 2.")
         : t("RTK's plugin is written for OpenCode 1, and OpenCode 2 refuses to load it. It can be switched on once RTK supports OpenCode 2.")));
       const sw = toggle(a.on, t("{agent} runs its commands through RTK", { agent: a.name }), (on) => setRTK(a, on));
-      if ((!rtk.path && !a.on) || (a.blocked && !a.on) || rtkBusy.has(a.id) || rtkInstalling) sw.disabled = true;
+      if ((!rtk.path && !a.on) || (a.blocked && !a.on) || rtkBusy.has(a.id) || rtkInstalling || rtkUpgrading) sw.disabled = true;
       row.append(sw);
       list.append(row);
     }
@@ -511,6 +524,89 @@
       status(e.message, "err", 8000);
     }
     rtkBusy.delete(a.id);
+    render();
+  }
+  // what rtk saved day by day (week by week past 92 days), over the last
+  // 30 or 90 days or since it first ran: each bar the commands' whole
+  // output, the part RTK kept from the model on top of what still went
+  let rtkRange = 0; // days; 0 all
+  try { rtkRange = +(localStorage.getItem("magpie.rtkRange") ?? 0) || 0; } catch {}
+  const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const dayOf = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  function rtkChart(days) {
+    const chart = el("div", "chart lib-rtk-chart");
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let first = dayOf(days[0].date);
+    if (rtkRange) { first = new Date(today); first.setDate(first.getDate() - rtkRange + 1); }
+    if (first > today) first = new Date(today);
+    const n = Math.round((today - first) / 864e5) + 1;
+    const step = n > 92 ? 7 : 1;
+    const buckets = [], at = new Map();
+    for (let d = new Date(first); d <= today; d.setDate(d.getDate() + step)) {
+      const b = { day: new Date(d), commands: 0, input: 0, saved: 0 };
+      for (let i = 0; i < step; i++) { const x = new Date(d); x.setDate(x.getDate() + i); at.set(isoDay(x), b); }
+      buckets.push(b);
+    }
+    const sum = { commands: 0, input: 0, saved: 0 };
+    for (const r of days) {
+      const b = at.get(r.date);
+      if (!b) continue;
+      b.commands += r.commands; b.input += r.input; b.saved += r.saved;
+      sum.commands += r.commands; sum.input += r.input; sum.saved += r.saved;
+    }
+    const peak = Math.max(1, ...buckets.map((b) => b.input));
+    const head = el("div", "sess-chart-head");
+    const seg = segs([[30, t("30 days")], [90, t("90 days")], [0, t("All")]], rtkRange, (r) => {
+      rtkRange = r;
+      try { localStorage.setItem("magpie.rtkRange", String(r)); } catch {}
+      chart.replaceWith(rtkChart(days));
+    });
+    head.append(el("span", "label", t(step === 7 ? "Saved by week" : "Saved by day")), seg, el("span", "grow"), el("span", "peak", tokens(peak)));
+    const bars = el("div", "bars"), labels = el("div", "labels");
+    const k = buckets.length;
+    const every = k <= 8 ? 1 : k <= 31 ? Math.ceil(k / 6) : Math.ceil(k / 5);
+    const short = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
+    buckets.forEach((b, i) => {
+      const bar = el("div", "bar");
+      const saved = el("i", "out"), kept = el("i", "in");
+      saved.style.height = (100 * b.saved / peak).toFixed(1) + "%";
+      kept.style.height = (100 * Math.max(0, b.input - b.saved) / peak).toFixed(1) + "%";
+      bar.append(saved, kept);
+      const when = step === 7 ? t("week of {label}", { label: short(b.day) }) : short(b.day);
+      bar.title = b.commands
+        ? t("{when} · {saved} tokens saved over {n} commands — {pct}%", { when, saved: tokens(b.saved), n: b.commands.toLocaleString(), pct: b.input ? Math.round(100 * b.saved / b.input) : 0 })
+        : t("{when} · nothing", { when });
+      bars.append(bar);
+      const end = i === k - 1 && (k - 1) % every >= every / 2;
+      labels.append(el("span", "", i % every === 0 || end ? short(b.day) : ""));
+    });
+    const foot = el("div", "lib-rtk-foot");
+    const key = (cls, text) => { const x = el("span", "lib-rtk-key"); x.append(el("i", cls), el("span", "", text)); return x; };
+    foot.append(key("out", t("saved")), key("in", t("still sent")), el("span", "grow"),
+      el("span", "", sum.commands
+        ? t("{saved} tokens saved over {n} commands — {pct}%", { saved: tokens(sum.saved), n: sum.commands.toLocaleString(), pct: sum.input ? Math.round(100 * sum.saved / sum.input) : 0 })
+        : t("Nothing run through RTK in this time")));
+    chart.append(head, bars, labels, foot);
+    return chart;
+  }
+  // vNewer: version a is after b
+  function vNewer(a, b) {
+    const x = a.split(/[.-]/).map((n) => parseInt(n, 10) || 0), y = b.split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+    return false;
+  }
+  let rtkUpgrading = false;
+  async function upgradeRTK() {
+    rtkUpgrading = true;
+    render();
+    try {
+      rtk = await api("library/rtk/upgrade", {});
+      if (rtk.note) status(rtk.note, "", 10000);
+      else status(t("RTK is now {v}", { v: rtk.version }), "ok", 6000);
+    } catch (e) {
+      status(e.message, "err", 10000);
+    }
+    rtkUpgrading = false;
     render();
   }
   let rtkInstalling = false;
@@ -2152,7 +2248,7 @@
     const d = el("p", "mk-desc", about(x));
     d.title = about(x);
     const foot = el("div", "mk-foot");
-    foot.append(el("span", "mk-id mono", x.name), el("span", "grow"), needsKey(x) && !x.have ? button(t("Add…"), "action mk-add", () => serverSheet(x)) : addButton(x, () => addServer(x, {}, null)));
+    foot.append(el("span", "mk-id mono", x.name), el("span", "grow"), (needsKey(x) || x.optIn) && !x.have ? button(t("Add…"), "action mk-add", () => serverSheet(x)) : addButton(x, () => addServer(x, {}, null)));
     c.append(top, d, foot);
     c.onclick = () => serverSheet(x);
     c.title = t("About {name}", { name: x.title || x.name });
@@ -2170,7 +2266,9 @@
   // A market server up close: what it is, what it needs, and who gets it.
   function serverSheet(x) {
     const all = mcpAgents();
-    let agents = all.filter(reaches(x)).map((a) => a.id);
+    // an opt-in one (magpie's image generation costs what its model does)
+    // goes only to the agents picked for it
+    let agents = x.optIn ? [] : all.filter(reaches(x)).map((a) => a.id);
     const values = {};
     const ed = el("div", "editor lib-editor mk-sheet");
     const head = el("div", "mk-sheethead");
@@ -2185,6 +2283,7 @@
     ed.append(head);
     if (x.description) ed.append(el("p", "mk-about", about(x)));
     if (x.signIn) ed.append(el("p", "mk-hint", t("Each agent asks you to sign in, in the browser, the first time it uses it.")));
+    if (x.optIn) ed.append(el("p", "mk-hint", t("Pick the agents that may generate images: each image costs what the model set in Settings → Images charges.")));
     const firsts = [];
     for (const i of x.inputs || []) {
       const f = field2("", i.placeholder || (i.where === "env" ? i.key : ""), (v) => { values[i.key] = v.trim(); });

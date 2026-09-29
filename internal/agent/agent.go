@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"debug/buildinfo"
 	"fmt"
 	"os"
 	"os/exec"
@@ -26,7 +27,11 @@ type Option struct {
 	// GroupIcon is the group's own logo in the picker's rail, when it is
 	// not the first model's (a provider serving other vendors' models)
 	GroupIcon string `json:"groupIcon,omitempty"`
-	Ref       string `json:"ref,omitempty"` // the catalog model, the same in every agent
+	Ref       string `json:"ref,omitempty"`  // the catalog model, the same in every agent
+	Free      bool   `json:"free,omitempty"` // costs its subscription nothing
+	// Context is the tokens the model takes, when known; the picker marks
+	// the large ones
+	Context int `json:"context,omitempty"`
 }
 
 // Field is one tunable setting of an agent. Set with an empty value puts
@@ -122,6 +127,13 @@ func (a *Agent) Detected() bool {
 		}
 	}
 	return false
+}
+
+// goProgram reports whether bin was built by Go: another tool of the same
+// name, not the agent, when the agent is not written in Go.
+func goProgram(bin string) bool {
+	_, err := buildinfo.ReadFile(bin)
+	return err == nil
 }
 
 // Field looks a field up by key.

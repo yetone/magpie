@@ -52,7 +52,7 @@ type GroupRef struct {
 	Routing  string   `json:"routing"`
 	Affinity string   `json:"affinity"`
 	Auto     bool     `json:"auto,omitempty"`
-	Members  []string `json:"members"` // those ready, as provider/model
+	Members  []string `json:"members"` // those ready, as provider/model[:effort fixed on it]
 	// Subs: the groups in the group, at any depth, outermost first
 	Subs []SubGroup `json:"subs,omitempty"`
 	// Via: for each of Members, the groups in the group it is of, as
@@ -81,7 +81,7 @@ func groupRef(g provider.Group, ms []provider.Member) *GroupRef {
 	ref := &GroupRef{ID: g.ID, Name: g.Name, Routing: g.Routing, Affinity: g.Affinity, Auto: g.Auto}
 	seen := map[string]bool{}
 	for _, m := range ms {
-		ref.Members = append(ref.Members, m.Provider.ID+"/"+m.Model)
+		ref.Members = append(ref.Members, provider.WithMemberEffort(m.Provider.ID+"/"+m.Model, m.Effort))
 		ref.Via = append(ref.Via, strings.Join(m.Groups(), ">"))
 		in := g.ID
 		for _, v := range m.Via {
@@ -110,7 +110,8 @@ type Weighed struct {
 	Agent    string            `json:"agent,omitempty"`
 	Plan     string            `json:"plan,omitempty"`
 	Model    string            `json:"model"`
-	Routing  string            `json:"routing"` // its provider's: "", order, rotate, usage
+	Fixed    string            `json:"fixed,omitempty"` // the effort the group's member it is of is fixed at
+	Routing  string            `json:"routing"`         // its provider's: "", order, rotate, usage
 	Fallback bool              `json:"fallback,omitempty"`
 	Shared   bool              `json:"shared,omitempty"` // its provider has more than one on
 	Known    bool              `json:"known,omitempty"`  // the vendor said what the account has left
@@ -133,10 +134,13 @@ type Weighed struct {
 
 // Try is one candidate trying the request.
 type Try struct {
-	ID     string    `json:"id"`
-	Model  string    `json:"model,omitempty"`  // the model it was asked for: a group's members may share a provider's keys
-	Effort string    `json:"effort,omitempty"` // the reasoning it was sent at, fitted to its model's levels; "" for none
-	Picked bool      `json:"picked,omitempty"` // Effort is the turn's pick, in place of the agent's
+	ID     string `json:"id"`
+	Model  string `json:"model,omitempty"`  // the model it was asked for: a group's members may share a provider's keys
+	Effort string `json:"effort,omitempty"` // the reasoning it was sent at, fitted to its model's levels; "" for none
+	Picked bool   `json:"picked,omitempty"` // Effort is the turn's pick, in place of the agent's
+	// Fixed: the effort the group's member it went to is fixed at, which
+	// Effort is (fitted to the model's levels) whatever was asked
+	Fixed  string    `json:"fixed,omitempty"`
 	Start  time.Time `json:"start"`
 	Done   bool      `json:"done"`
 	Status int       `json:"status,omitempty"`
@@ -152,7 +156,7 @@ type planned struct {
 }
 
 func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from provider.Protocol) Weighed {
-	w := Weighed{ID: c.rest, Provider: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Model: c.model,
+	w := Weighed{ID: c.rest, Provider: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Model: c.model, Fixed: c.effort,
 		Routing: p.Routing, Fallback: fallback, Shared: c.rest != p.ID}
 	switch {
 	case c.p.Account != nil:
@@ -212,6 +216,11 @@ func (t *trace) changed() {
 func (t *trace) begin(r Route) *Route {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if t.ids == 0 {
+		// ids go on from one run to the next, the history keeping them
+		// all: counted on from the time the gateway began
+		t.ids = time.Now().UnixMilli()
+	}
 	t.ids++
 	r.ID = t.ids
 	if r.Tries == nil {
@@ -245,6 +254,13 @@ func (t *trace) update(r *Route, f func(r *Route)) {
 		}
 		if r.Status >= 400 {
 			t.totals.Errors++
+		}
+		if keepRoutes {
+			c := *r
+			c.Order = append([]Weighed(nil), r.Order...)
+			c.Left = append([]Weighed(nil), r.Left...)
+			c.Tries = append([]Try{}, r.Tries...)
+			go saveRoute(c)
 		}
 	}
 	t.changed()

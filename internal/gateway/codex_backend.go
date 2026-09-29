@@ -35,6 +35,8 @@ var codexAPIBase = "https://api.openai.com/v1"
 // only magpie reads back.
 const magpieCompaction = "magpie1:"
 
+var nativeSealedAgentPayload = regexp.MustCompile(`^gAAAAA[A-Za-z0-9_-]+={0,2}$`)
+
 // codexCompactPrompt and codexSummaryPrefix are Codex's own (Apache-2.0,
 // openai/codex, prompts/templates/compact).
 const codexCompactPrompt = `You are performing a CONTEXT CHECKPOINT COMPACTION. Create a handoff summary for another LLM that will resume the task.
@@ -79,6 +81,10 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 				writeError(w, provider.Responses, 400, "/responses/compact is not supported for Magpie models; use a compaction_trigger on /responses")
 				return
 			}
+			if hasSealedAgentMessage(body) {
+				writeError(w, provider.Responses, 400, "An OpenAI lead sent a sealed subagent task that a Magpie-served model cannot read. Use a Magpie-served model for the lead, or choose an OpenAI subagent.")
+				return
+			}
 			body, compact := codexInput(body, true)
 			if compact {
 				s.codexCompact(w, r, body)
@@ -97,6 +103,38 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.codexUpstream(w, r, rest, body)
+}
+
+// Only native sealed agent tasks need this guidance. Other encrypted_content
+// fields (including ordinary model history) keep their existing handling.
+func hasSealedAgentMessage(body []byte) bool {
+	var request map[string]json.RawMessage
+	if json.Unmarshal(body, &request) != nil {
+		return false
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(request["input"], &items) != nil {
+		return false
+	}
+	for _, raw := range items {
+		var item struct {
+			Type    string            `json:"type"`
+			Content []json.RawMessage `json:"content"`
+		}
+		if json.Unmarshal(raw, &item) != nil || item.Type != "agent_message" {
+			continue
+		}
+		for _, content := range item.Content {
+			var part struct {
+				Type             string `json:"type"`
+				EncryptedContent string `json:"encrypted_content"`
+			}
+			if json.Unmarshal(content, &part) == nil && part.Type == "encrypted_content" && nativeSealedAgentPayload.MatchString(part.EncryptedContent) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // codexBody reads a request's body as it was before Codex compressed it

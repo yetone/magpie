@@ -209,7 +209,7 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 		case g.Classifier == "":
 			c.Error = "the group has no classifier"
 		case ask == nil:
-			c.Error = "nothing to ask the classifier with"
+			c.Error = "nothing to ask the classifier with: this is a classifier's own call"
 		case text == "":
 			c.Error = "the message has no words to classify"
 		default:
@@ -313,9 +313,10 @@ func ruleAnswered(key string, u Usage) {
 // nestedRules looks at the rules of each group in the group that the one
 // going first is of, outermost first: a group's rules pick among its own
 // members as the group's do, keeping what they decided for the turn by
-// their own key (at, the group's, and the group's way down). It gives
-// what each decided and their keys.
-func (s *Server) nestedRules(at string, req *Request, agent string, ms []provider.Member, cands []candidate, pl planned, aff *Affinity) ([]NestedRule, []string, []candidate, planned) {
+// their own key (at, the group's, and the group's way down), asking ask
+// of the message as the group's own rules do. It gives what each decided
+// and their keys.
+func (s *Server) nestedRules(at string, req *Request, agent string, ask classifier, ms []provider.Member, cands []candidate, pl planned, aff *Affinity) ([]NestedRule, []string, []candidate, planned) {
 	var out []NestedRule
 	var keys []string
 	for depth := 0; ; depth++ { // as deep as the one going first is
@@ -335,7 +336,7 @@ func (s *Server) nestedRules(at string, req *Request, agent string, ms []provide
 				subMs = append(subMs, m.Below(depth+1))
 			}
 		}
-		h := ruleFor(at, sub, subMs, req, agent, s.askClassifier)
+		h := ruleFor(at, sub, subMs, req, agent, ask)
 		keys = append(keys, at)
 		out = append(out, NestedRule{Group: sub.ID, Name: sub.Name, Rule: h})
 		if h == nil || h.Use == "" || h.Held && aff != nil && aff.Kept {
@@ -440,10 +441,11 @@ func applyRule(hit *RuleHit, ms []provider.Member, cs []candidate, pl planned) (
 
 // ofMember reports whether a candidate is one of the member's keys or
 // accounts: its rest is the provider's id, or that with the key ("#") or
-// the account ("@") after it.
+// the account ("@") after it, for the member's model at the member's
+// effort.
 func ofMember(c candidate, m provider.Member) bool {
 	id := m.Provider.ID
-	return c.model == m.Model && (c.rest == id || strings.HasPrefix(c.rest, id+"#") || strings.HasPrefix(c.rest, id+"@"))
+	return c.model == m.Model && c.effort == m.Effort && (c.rest == id || strings.HasPrefix(c.rest, id+"#") || strings.HasPrefix(c.rest, id+"@"))
 }
 
 // membersImageInput is whether a group request may carry images: the

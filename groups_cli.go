@@ -28,7 +28,7 @@ const groupUsage = `usage:
                                           id (what agents pick it as: id=gpt-6-astra drops auto-; the groups
                                           it is in follow; an agent set to the old id needs setting again),
                                           effort=auto (the classifier picks each turn's reasoning; needs classifier=),
-                                          effort=agent (the agent's again), classifier=<provider/model>
+                                          effort=agent (the agent's again), classifier=<provider/model>|group/<id>
   magpie group rm <id>                    remove a group (one magpie found is hidden instead)
   magpie group restore <id>               bring back a group magpie found that you removed
   magpie group rule add|rm|mv <id> …      rules: which model a turn goes to first, by its length, an image,
@@ -41,6 +41,10 @@ const groupUsage = `usage:
   models   provider/model ids as magpie models lists them; a bare model id works when one provider serves it;
            group/<id> puts another group in it, routed by its own routing and rules in its place —
            never one the group is in already (that would put it in itself), at most 8 groups deep
+           provider/model:<effort> fixes the member's reasoning — none, minimal, low, medium, high, xhigh
+           or max — sent whatever the agent asks or effort=auto picks, at the level the model has nearest;
+           without one it reasons as the group's effort says. The same model at two efforts is two members
+           (a rule can send to either). A model whose own id ends so (a :free, :7b or :0) stays as it is
   routing  smart   (default) of the subscriptions with quota to spare, the one renewing soonest first
            order   the first model until it can't answer, then the next
            rotate  each conversation's next turn goes to the next member's account or key
@@ -49,7 +53,7 @@ const groupUsage = `usage:
            session for the whole session
            turn    within a turn only; routing decides afresh when you speak again
            off     every request routed afresh
-  effort   agent   (default) each request reasons as much as the agent asked
+  effort   agent   (default) each request reasons as much as the agent asked, but at a member's own :<effort>
            auto    as a turn begins, the group's classifier — Jev, from a TypeSafe provider
                    (magpie provider add typesafe key=…), or any model, as Jev Router on OpenRouter,
                    asked in words — rates how hard it is, and the turn's requests
@@ -60,6 +64,8 @@ const groupUsage = `usage:
        magpie group set auto-gpt-6-astra id=gpt-6-astra
        magpie group add Everything models=group/opus-anywhere,deepseek/deepseek-v4-flash routing=order
        magpie group set opus-anywhere effort=auto classifier=typesafe/jev-latest
+       magpie group add Fast models=codex/gpt-5.6-luna:low,deepseek/deepseek-v4-flash,glm/glm-5.3-flash:high
+       magpie group set fast models+=gcloud/gemini-3.8-flash:medium
        magpie claude group/opus-anywhere`
 
 // routingNames: each routing's value in the file, what the CLI calls it,
@@ -132,8 +138,10 @@ func splitList(v string) []string {
 
 // memberResolver spells a model the user typed as the catalog's
 // provider/model id: the id itself, or a bare model id one provider
-// serves. keep are ids the group has already, kept though no provider
-// serves them now (the Routing view keeps them too, skipped).
+// serves — with the effort it is fixed at after it, when one was typed
+// ("glm/glm-5.3-flash:high"; see provider.MemberEffort). keep are ids the
+// group has already, kept though no provider serves them now (the Routing
+// view keeps them too, skipped).
 func memberResolver(keep []string) func(string) (string, error) {
 	var ids []string
 	byModel := map[string][]string{}
@@ -144,8 +152,23 @@ func memberResolver(keep []string) func(string) (string, error) {
 		ids = append(ids, e.ID)
 		byModel[strings.ToLower(e.Model)] = append(byModel[strings.ToLower(e.Model)], e.ID)
 	}
-	return func(in string) (string, error) {
+	var resolve func(string) (string, error)
+	resolve = func(in string) (string, error) {
 		id := strings.TrimPrefix(strings.TrimSpace(in), "magpie/")
+		if slices.Contains(keep, id) {
+			return id, nil
+		}
+		if model, effort := provider.MemberEffort(id); effort != "" {
+			// a model at an effort of its own: the model as any other is
+			if strings.HasPrefix(model, provider.GroupPrefix) {
+				return "", fmt.Errorf("%s is a group: its models reason as it says, so it takes no :%s", model, effort)
+			}
+			m, err := resolve(model)
+			if err != nil {
+				return "", err
+			}
+			return provider.WithMemberEffort(m, effort), nil
+		}
 		if gid, ok := strings.CutPrefix(id, provider.GroupPrefix); ok {
 			// a group in the group: SaveGroup refuses one it would be in itself through
 			for _, g := range provider.Groups() {
@@ -176,6 +199,7 @@ func memberResolver(keep []string) func(string) (string, error) {
 		}
 		return "", fmt.Errorf("%s (magpie models lists them)", msg)
 	}
+	return resolve
 }
 
 // closeMatches are the ids most like what was typed: those containing it,
@@ -586,10 +610,14 @@ func memberLabel(id string, names map[string]provider.Entry) (string, bool) {
 		}
 		return "", false
 	}
-	if e, ok := names[id]; ok {
+	model, effort := provider.MemberEffort(id)
+	if e, ok := names[model]; ok {
 		n := e.Name
 		if n == "" {
 			n = e.Model
+		}
+		if effort != "" {
+			n += " · " + effort + " reasoning, whatever the agent asks"
 		}
 		return e.Provider.Name + " · " + n, true
 	}
@@ -647,7 +675,7 @@ func groups() error {
 		}
 		var ms []string
 		for _, id := range g.Members {
-			if _, ok := names[id]; ok {
+			if model, _ := provider.MemberEffort(id); names[model].ID != "" {
 				ready = true
 				ms = append(ms, id)
 			} else {

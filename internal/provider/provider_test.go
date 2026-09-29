@@ -30,6 +30,32 @@ func TestPresetHeaderHints(t *testing.T) {
 	}
 }
 
+// A provider named in Chinese, whose name slugs to nothing, is added under
+// its host's name, and a second one beside it (mamba on Discord: 第二个会提示
+// id重复).
+func TestAddNameWithoutLatin(t *testing.T) {
+	isolate(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, c := range []struct{ name, url, key, want string }{
+		{"中转站", "https://api.relay-one.com/v1", "sk-1", "relay-one"},
+		{"中转站", "https://api.relay-one.com/v1", "sk-2", "relay-one-2"},
+		{"另一个", "https://gw.example.cn:8443/v1", "sk-3", "gw-example"},
+		{"本地", "http://127.0.0.1:8080/v1", "sk-4", "custom"},
+		{"本地二", "http://[::1]:8080/v1", "sk-5", "custom-2"},
+	} {
+		id, err := Add(Provider{Name: c.name, Chat: c.url, Key: c.key, Models: []string{"m"}})
+		if err != nil || id != c.want {
+			t.Fatalf("%s at %s: %q %v, want %q", c.name, c.url, id, err, c.want)
+		}
+	}
+	if p, err := Find("relay-one-2"); err != nil || p.Name != "中转站 2" {
+		t.Fatalf("second: %+v %v", p, err)
+	}
+}
+
 // Adding a preset a second time adds another provider of it, the preset
 // kept, beside the first rather than over it.
 func TestAddSecondOfPreset(t *testing.T) {

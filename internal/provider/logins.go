@@ -292,6 +292,23 @@ func claudeProfileAccount() (map[string]any, bool) {
 	return acct, err == nil && acct != nil
 }
 
+// claudeSignedInUser names the account Claude Code is signed in to, by the
+// one name both the account (claudeAccount) and its saved login (liveLogin)
+// go by: ~/.claude.json's, or status, what `claude auth status` said, when
+// that has none. plan is the credentials', or else the CLI's; acct is the
+// profile it was named from.
+func claudeSignedInUser(plan, statusPlan, status string) (user string, acct map[string]any) {
+	if plan == "" {
+		plan = statusPlan
+	}
+	if acct, ok := claudeProfileAccount(); ok {
+		if email, _ := acct["emailAddress"].(string); strings.TrimSpace(email) != "" {
+			return claudeUser(strings.TrimSpace(email), plan, acct), acct
+		}
+	}
+	return status, nil
+}
+
 // savedButSignedOut is, for each agent with accounts saved in magpie that
 // isn't signed in where magpie looks, why none of them is offered: they
 // are served beside the account the agent is signed in to, and there is
@@ -309,18 +326,39 @@ func savedButSignedOut() []Exclusion {
 		if _, ok := liveLogin(a); ok {
 			continue
 		}
-		where, signIn := codexAuthPath(), "codex login"
+		why, signIn := "nothing at "+codexAuthPath(), "codex login"
 		if a == "claude" {
-			where, signIn = claudeCredentialsPath(), "claude, then /login"
+			why, signIn = claudeNotSignedInWhy(), "claude, then /login"
 		}
 		n := "1 account is"
 		if saved[a] > 1 {
 			n = fmt.Sprintf("%d accounts are", saved[a])
 		}
 		out = append(out, Exclusion{Agent: a, SignedOut: true,
-			Why: fmt.Sprintf("%s saved in magpie, but it isn't signed in here (nothing at %s), and they are only offered beside the account it is signed in to. Sign in (%s) with this HOME.", n, where, signIn)})
+			Why: fmt.Sprintf("%s saved in magpie, but it isn't signed in here (%s), and they are only offered beside the account it is signed in to. Sign in (%s) with this HOME.", n, why, signIn)})
 	}
 	return out
+}
+
+// claudeNotSignedInWhy says which of liveLogin's checks found no Claude Code
+// sign-in: its credentials (on a Mac, the keychain first), what
+// `claude auth status` says, or the account's name.
+func claudeNotSignedInWhy() string {
+	c, _, ok := claudeCredential()
+	if !ok {
+		if claudeKeychain {
+			return `no "Claude Code-credentials" in the keychain magpie could read, and nothing at ` + claudeCredentialsPath()
+		}
+		return "nothing at " + claudeCredentialsPath()
+	}
+	user, plan, signedOut := claudeIdentity()
+	if signedOut {
+		return "its credentials are there, but claude auth status says no one is signed in"
+	}
+	if u, _ := claudeSignedInUser(c.OAuth.SubscriptionType, plan, user); u == "" {
+		return "its credentials are there, but neither " + claudeProfilePath() + " nor claude auth status names the account"
+	}
+	return "its sign-in could not be read"
 }
 
 // liveLogin reads the account an agent is signed in to now.
@@ -356,18 +394,14 @@ func liveLogin(agent string) (savedLogin, bool) {
 		}
 		// credentials a logout left behind are not a sign-in: Claude Code
 		// says so, and the account is not a provider either (claudeAccount)
-		user, _, signedOut := claudeIdentity()
+		user, plan, signedOut := claudeIdentity()
 		if signedOut {
 			return savedLogin{}, false
 		}
 		l := savedLogin{Agent: agent, Plan: c.OAuth.SubscriptionType, Auth: b}
-		if acct, ok := claudeProfileAccount(); ok {
-			email, _ := acct["emailAddress"].(string)
-			l.User = claudeUser(email, l.Plan, acct)
+		var acct map[string]any
+		if l.User, acct = claudeSignedInUser(l.Plan, plan, user); acct != nil {
 			l.Profile, _ = json.Marshal(acct)
-		}
-		if l.User == "" {
-			l.User = user
 		}
 		if l.User == "" {
 			return savedLogin{}, false
@@ -423,6 +457,10 @@ func Logins(agent string) []Login {
 		return copilotLoginList()
 	case "zcode":
 		return zcodeLoginList()
+	case "kiro":
+		return kiroLoginList()
+	case "devin":
+		return devinLoginList()
 	case "workbuddy", WorkBuddyAIID:
 		return wbLoginList(wbSiteOf(agent))
 	case CommandCodePlanID:
@@ -434,6 +472,8 @@ func Logins(agent string) []Login {
 	case "":
 		side = append(grokLoginList(), copilotLoginList()...)
 		side = append(side, zcodeLoginList()...)
+		side = append(side, kiroLoginList()...)
+		side = append(side, devinLoginList()...)
 		side = append(side, wbLoginList(wbCN)...)
 		side = append(side, wbLoginList(wbAI)...)
 		side = append(side, cmdLoginList()...)
@@ -467,7 +507,8 @@ func Logins(agent string) []Login {
 
 // SwitchLogin signs an agent in to a remembered account. Sessions of the
 // agent that are already running keep the account they started with until
-// they restart.
+// they restart; so does Codex's background app-server, which new Codex
+// sessions attach to (CodexDaemonStale says when it is).
 func SwitchLogin(agent, user string) error {
 	switch agent {
 	case "grok":
@@ -476,6 +517,10 @@ func SwitchLogin(agent, user string) error {
 		return switchCopilotLogin(user)
 	case "zcode":
 		return switchZCodeLogin(user)
+	case "kiro":
+		return switchKiroLogin(user)
+	case "devin":
+		return switchDevinLogin(user)
 	case "workbuddy", WorkBuddyAIID:
 		return switchWorkBuddyLogin(wbSiteOf(agent), user)
 	case CommandCodePlanID:
@@ -485,6 +530,17 @@ func SwitchLogin(agent, user string) error {
 	case "gemini", "antigravity":
 		return switchGoogleLogin(agent, user)
 	}
+	from, err := switchSavedLogin(agent, user)
+	if err == nil && agent == "codex" && from != "" {
+		noteCodexSwitch(from, user)
+	}
+	return err
+}
+
+// switchSavedLogin puts a Codex or Claude Code account magpie saved into
+// the agent's own store, and answers the account it replaced: "" when there
+// was none, or the agent was on that one already.
+func switchSavedLogin(agent, user string) (from string, _ error) {
 	// not while a saved account is being refreshed: the agent would be
 	// given the refresh token that refresh is spending
 	savedTokenMu.Lock()
@@ -499,13 +555,14 @@ func SwitchLogin(agent, user string) error {
 		}
 	}
 	if target == nil {
-		return fmt.Errorf("no saved %s account %q", agent, user)
+		return "", fmt.Errorf("no saved %s account %q", agent, user)
 	}
 	want := *target
 	if live, ok := liveLogin(agent); ok {
 		if strings.EqualFold(live.User, want.User) {
-			return nil
+			return "", nil
 		}
+		from = live.User
 		// the credentials being replaced, as fresh as the agent has them;
 		// in use still if the one taking over was: it is next in line now
 		live.Seen = time.Now().UTC().Truncate(time.Second)
@@ -516,7 +573,7 @@ func SwitchLogin(agent, user string) error {
 			}
 		}
 		if err := writeLogins(ls); err != nil {
-			return err
+			return "", err
 		}
 	}
 	var err error
@@ -529,11 +586,11 @@ func SwitchLogin(agent, user string) error {
 		err = fmt.Errorf("%s accounts can't be switched", agent)
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	loginsSeenAt = time.Time{}
 	forgetAccountCaches()
-	return nil
+	return from, nil
 }
 
 func putClaudeLogin(l savedLogin) error {
@@ -591,6 +648,10 @@ func ForgetLogin(agent, user string) error {
 		return forgetCopilotLogin(user)
 	case "zcode":
 		return forgetZCodeLogin(user)
+	case "kiro":
+		return forgetKiroLogin(user)
+	case "devin":
+		return forgetDevinLogin(user)
 	case "workbuddy", WorkBuddyAIID:
 		return forgetWorkBuddyLogin(wbSiteOf(agent), user)
 	case CommandCodePlanID:
@@ -619,6 +680,15 @@ func ForgetLogin(agent, user string) error {
 		return fmt.Errorf("no saved %s account %q", agent, user)
 	}
 	return writeLogins(out)
+}
+
+// ForgetAccounts makes the next look at the accounts read them afresh, for
+// a caller that changed a sign-in behind magpie's back (a test's home).
+func ForgetAccounts() {
+	loginsMu.Lock()
+	loginsSeenAt = time.Time{}
+	loginsMu.Unlock()
+	forgetAccountCaches()
 }
 
 // forgetAccountCaches makes the next look at the accounts read them afresh.

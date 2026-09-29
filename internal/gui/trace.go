@@ -34,6 +34,12 @@ func traceRoutes(mux *http.ServeMux) {
 		out.Now = time.Now()
 		writeJSON(rw, out)
 	})
+	// the routes of a day gone by, from the history the gateway keeps on
+	// disk — read whichever magpie serves the gateway
+	mux.HandleFunc("GET /api/gateway/history", func(rw http.ResponseWriter, r *http.Request) {
+		days, routes, cut := gateway.History(r.URL.Query().Get("day"))
+		writeJSON(rw, map[string]any{"days": days, "routes": routes, "cut": cut})
+	})
 	// an account's rest lifted by hand: verified with its vendor, say
 	mux.HandleFunc("POST /api/gateway/unrest", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {

@@ -164,11 +164,26 @@ func parseGemini(body []byte) (*Request, error) {
 			r.Messages = append(r.Messages, msg)
 		}
 	}
+	// ANY and VALIDATED can limit declarations to named functions. Keep
+	// VALIDATED's auto choice, while ANY still requires a call.
+	var allowed map[string]bool
+	if g.ToolConfig != nil && g.ToolConfig.FunctionCallingConfig != nil {
+		fc := g.ToolConfig.FunctionCallingConfig
+		if (strings.EqualFold(fc.Mode, "ANY") || strings.EqualFold(fc.Mode, "VALIDATED")) && len(fc.AllowedFunctionNames) > 0 {
+			allowed = make(map[string]bool, len(fc.AllowedFunctionNames))
+			for _, name := range fc.AllowedFunctionNames {
+				allowed[name] = true
+			}
+		}
+	}
 	for _, t := range g.Tools {
 		if t.GoogleSearch != nil || t.GoogleSnake != nil {
 			r.WebSearch = true
 		}
 		for _, f := range t.FunctionDeclarations {
+			if allowed != nil && !allowed[f.Name] {
+				continue
+			}
 			schema := f.ParametersJSONSchema
 			if len(schema) == 0 {
 				schema = jsonSchema(f.Parameters)
@@ -182,7 +197,10 @@ func parseGemini(body []byte) (*Request, error) {
 		case "NONE":
 			r.ToolChoice = "none"
 		case "ANY":
-			if len(fc.AllowedFunctionNames) == 1 {
+			// A name is only forcible when its declaration survived filtering.
+			// Otherwise retain required so translated routes reject an empty
+			// callable set instead of silently returning plain text.
+			if len(fc.AllowedFunctionNames) == 1 && len(r.Tools) == 1 && r.Tools[0].Name == fc.AllowedFunctionNames[0] {
 				r.ToolChoice = "name:" + fc.AllowedFunctionNames[0]
 			} else {
 				r.ToolChoice = "required"

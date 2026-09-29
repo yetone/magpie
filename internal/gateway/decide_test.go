@@ -3,6 +3,7 @@ package gateway
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,8 +19,9 @@ import (
 type jevUp struct {
 	mu     sync.Mutex
 	choice string
-	level  string  // its choice without "none of these"; choice when ""
-	levels float64 // whether the intents are levels
+	level  string    // its choice without "none of these"; choice when ""
+	levels float64   // whether the intents are levels
+	work   []float64 // how much work a request at each level is, 0 to 3
 	sure   float64
 	score  float64
 	asked  []map[string]any
@@ -47,6 +49,11 @@ func (u *jevUp) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, ok := qs["levels"]; ok {
 		answers["levels"] = map[string]any{"type": "noul", "noul": u.levels}
+	}
+	for i, w := range u.work {
+		if _, ok := qs[fmt.Sprintf("work%d", i)]; ok {
+			answers[fmt.Sprintf("work%d", i)] = map[string]any{"type": "score", "score": w, "confidence": 0.9}
+		}
 	}
 	if _, ok := qs["effort"]; ok {
 		answers["effort"] = map[string]any{"type": "score", "score": u.score, "confidence": 0.8}
@@ -219,7 +226,7 @@ func TestJevIsToldTheTurnBefore(t *testing.T) {
 		} `json:"questions"`
 	}
 	intents := []string{"simple task", "complex task"}
-	if err := json.Unmarshal(jevBody("jev-latest", intents, before{Intent: "complex task", Effort: "xhigh"}, true, "go on"), &got); err != nil {
+	if err := json.Unmarshal(jevBody("jev-latest", intents, nil, before{Intent: "complex task", Effort: "xhigh"}, true, "go on"), &got); err != nil {
 		t.Fatal(err)
 	}
 	if got.State["previous_message_kind"] != "complex task" || got.State["previous_message_reasoning"] != "xhigh" {
@@ -232,7 +239,7 @@ func TestJevIsToldTheTurnBefore(t *testing.T) {
 	}
 	// a first turn has nothing of the kind
 	got.State, got.Questions = nil, nil
-	if err := json.Unmarshal(jevBody("jev-latest", intents, before{}, true, "hi"), &got); err != nil {
+	if err := json.Unmarshal(jevBody("jev-latest", intents, nil, before{}, true, "hi"), &got); err != nil {
 		t.Fatal(err)
 	}
 	if len(got.State) != 1 || strings.Contains(got.Questions["intent"].Instructions, "carries on") {
@@ -309,6 +316,36 @@ func TestJevOnVercelTypeSafe(t *testing.T) {
 	if len(j.asked) != 2 || j.auth != "Bearer kj" || j.asked[1]["model"] != "typesafe-ai/jev" ||
 		j.asked[0]["questions"].(map[string]any)["levels"].(map[string]any)["type"] != "noul" {
 		t.Fatalf("asked %v as %q", j.asked, j.auth)
+	}
+}
+
+// Levels are told what each is for, as Jev rated them: a short message
+// asking for a whole program (写个纸牌游戏) was torn between two bare names
+// and fell back to the turn before's level.
+func TestJevLevelsSayWhatFor(t *testing.T) {
+	s, _, _, j := jevved(t, "", provider.Rule{Use: "a/small", Intent: "简单任务"}, provider.Rule{Use: "b/big", Intent: "复杂任务"})
+	j.choice, j.level, j.sure, j.levels, j.work = noIntent, "复杂任务", 0.99, 0.7, []float64{0.03, 2.7}
+	postOK(t, s, "s1", chat("写个纸牌游戏", nil, 0, ""))
+	lv := j.turns()[0]["questions"].(map[string]any)["level"].(map[string]any)
+	c := lv["criteria"].(map[string]any)
+	easy, hard := fmt.Sprint(c["简单任务"]), fmt.Sprint(c["复杂任务"])
+	if !strings.HasPrefix(easy, "The lowest level: little work") || !strings.Contains(easy, "some work") || strings.Contains(easy, "game") ||
+		!strings.HasPrefix(hard, "The highest level: much work") || !strings.Contains(hard, "game") ||
+		!strings.Contains(lv["instructions"].(string), "not how short it is") {
+		t.Fatalf("level asked as %v", lv)
+	}
+	if q := j.asked[0]["questions"].(map[string]any); q["work0"].(map[string]any)["type"] != "score" || q["work1"] == nil {
+		t.Fatalf("levels asked as %v", q)
+	}
+	// three levels, rated out of order: each gets the work nearest it
+	w := levelsOf([]string{"hard", "easy", "medium"}, []float64{2.66, 0.01, 1.06})
+	if !strings.HasPrefix(w["easy"], "The lowest level: little work") || !strings.HasPrefix(w["medium"], "Level 2 of 3, lowest first: some work") ||
+		!strings.HasPrefix(w["hard"], "The highest level: much work") || !strings.Contains(w["hard"], "the most work") {
+		t.Fatalf("%v", w)
+	}
+	// not rated: bare names, as before
+	if levelsOf([]string{"a", "b"}, []float64{1}) != nil {
+		t.Fatal("unrated levels described")
 	}
 }
 

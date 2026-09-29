@@ -10,6 +10,21 @@ import (
 // refreshPath takes up the PATH an installer just wrote to the registry,
 // which this process, started before it, doesn't have.
 func refreshPath() {
+	seen := map[string]bool{}
+	var path []string
+	for _, d := range append(strings.Split(os.Getenv("PATH"), ";"), registryPath()...) {
+		if l := strings.ToLower(d); d != "" && !seen[l] {
+			seen[l] = true
+			path = append(path, d)
+		}
+	}
+	os.Setenv("PATH", strings.Join(path, ";"))
+}
+
+// registryPath is the PATH the registry has now, the machine's then the
+// user's: what a terminal opened now gets, and what a magpie started
+// before a CLI was installed doesn't.
+func registryPath() []string {
 	var dirs []string
 	for _, k := range []struct {
 		root registry.Key
@@ -36,13 +51,5 @@ func refreshPath() {
 		}
 		key.Close()
 	}
-	seen := map[string]bool{}
-	var path []string
-	for _, d := range append(strings.Split(os.Getenv("PATH"), ";"), dirs...) {
-		if l := strings.ToLower(d); d != "" && !seen[l] {
-			seen[l] = true
-			path = append(path, d)
-		}
-	}
-	os.Setenv("PATH", strings.Join(path, ";"))
+	return dirs
 }

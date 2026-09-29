@@ -123,7 +123,9 @@ func (h *host) ChooseFolder(title string) (string, error) {
 		SetTitle(title).AttachToWindow(h.main).PromptForSingleSelection()
 }
 
-const panelWidth, panelMin, panelMax = 440, 220, 720
+// panelMax keeps the panel a drop-down, not most of the screen: longer
+// content (the usage of many accounts) scrolls in it (#124)
+const panelWidth, panelMin, panelMax = 440, 220, 560
 
 // FitPanel grows or shrinks the panel to its content and keeps it anchored
 // under the tray icon; a shown panel glides there when g says how.

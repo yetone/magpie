@@ -15,6 +15,7 @@ import (
 	"github.com/yetone/magpie/internal/claudebridge"
 	"github.com/yetone/magpie/internal/davsync"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/imagemcp"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/settings"
@@ -69,9 +70,11 @@ const usage = `magpie — one place to pick every agent's model
   magpie accounts add <agent>     sign in to one more Claude, ChatGPT or Google (Gemini CLI, Antigravity) subscription
   magpie accounts switch <agent> <email>   sign the agent in to another of them
   magpie accounts refresh         renew the saved Claude and ChatGPT sign-ins now (the gateway does it daily)
+  magpie accounts checkin         WorkBuddy's daily check-in (签到) for each WorkBuddy account, now (Settings can do it daily)
   magpie accounts project <gemini|antigravity> <email> <project>   the Google Cloud project a Google account's requests go to
 
   magpie serve                    run the gateway alone (the app runs it too)
+  magpie mcp image                the image generation MCP server an agent is given from the library (stdio)
   magpie usage [today|7d|30d|all] tokens and cost per agent and model (30d)
   magpie sessions [--model <m>] [--folder <f>] [--json]   the latest Claude Code, Codex, OpenCode and Pi sessions, with what each cost
   magpie sessions --days N|today|all [--model <m>] [--folder <f>] [--json]
@@ -200,6 +203,8 @@ func run(args []string) error {
 		return restoreCmd(args[1:])
 	case "webdav", "dav":
 		return webdavCmd(args[1:])
+	case "mcp":
+		return imagemcp.Run(args[1:])
 	case "claude-mcp-helper": // internal: stdio MCP subprocess spawned by Claude Code
 		return claudebridge.RunMCP(args[1:])
 	}

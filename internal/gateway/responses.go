@@ -131,7 +131,8 @@ func parseResponses(body []byte) (*Request, error) {
 				}
 				r.Messages = append(r.Messages, Message{Role: "assistant", Parts: []Part{{Kind: ToolCall, ID: it.CallID, Name: name, Args: parseArgs(it.Arguments)}}})
 			case it.Type == "function_call_output":
-				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: it.CallID, Text: stringOrText(it.Output)}}})
+				out, images := toolOutput(it.Output)
+				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: it.CallID, Text: out, Images: images}}})
 			case it.Type == "reasoning":
 				var b strings.Builder
 				for _, s := range it.Summary {
@@ -172,11 +173,54 @@ func parseResponses(body []byte) (*Request, error) {
 		r.ToolChoice = tc
 	} else {
 		var o struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
+			Type  string `json:"type"`
+			Name  string `json:"name"`
+			Mode  string `json:"mode"`
+			Tools []struct {
+				Type      string `json:"type"`
+				Name      string `json:"name"`
+				Namespace string `json:"namespace"`
+			} `json:"tools"`
 		}
-		if json.Unmarshal(q.ToolChoice, &o) == nil && o.Name != "" {
-			r.ToolChoice = "name:" + o.Name
+		if json.Unmarshal(q.ToolChoice, &o) == nil {
+			switch o.Type {
+			case "allowed_tools":
+				if o.Mode != "auto" && o.Mode != "required" {
+					return nil, fmt.Errorf("invalid allowed_tools mode %q", o.Mode)
+				}
+				r.ToolChoice = o.Mode
+				allowed := make(map[string]bool, len(o.Tools))
+				webSearch := false
+				for _, tool := range o.Tools {
+					switch {
+					case tool.Type == "function" && tool.Name != "":
+						if tool.Namespace != "" {
+							allowed[flatName(tool.Namespace, tool.Name)] = true
+						} else {
+							allowed[tool.Name] = true
+						}
+					case strings.HasPrefix(tool.Type, "web_search"):
+						webSearch = true
+					}
+				}
+				r.WebSearch = r.WebSearch && webSearch
+				var tools []Tool
+				for _, tool := range r.Tools {
+					if allowed[tool.Name] {
+						tools = append(tools, tool)
+					}
+				}
+				r.Tools = tools
+				for name := range r.Namespaced {
+					if !allowed[name] {
+						delete(r.Namespaced, name)
+					}
+				}
+			case "function":
+				if o.Name != "" {
+					r.ToolChoice = "name:" + o.Name
+				}
+			}
 		}
 	}
 	return r, nil
@@ -263,7 +307,19 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 				input = append(input, map[string]any{"type": "function_call", "call_id": id, "name": p.Name, "arguments": argsString(p)})
 			case ToolResult:
 				flushMsg()
-				input = append(input, map[string]any{"type": "function_call_output", "call_id": p.CallID, "output": p.Text})
+				var output any = p.Text
+				if len(p.Images) > 0 {
+					// an output can be a list of text and images
+					var items []map[string]any
+					if strings.TrimSpace(p.Text) != "" {
+						items = append(items, map[string]any{"type": "input_text", "text": p.Text})
+					}
+					for _, im := range p.Images {
+						items = append(items, map[string]any{"type": "input_image", "image_url": dataURL(im)})
+					}
+					output = items
+				}
+				input = append(input, map[string]any{"type": "function_call_output", "call_id": p.CallID, "output": output})
 			}
 		}
 		flushMsg()

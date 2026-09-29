@@ -15,7 +15,7 @@ func redacted(w http.ResponseWriter, body []byte) (http.ResponseWriter, []byte, 
 	if !st.Redact && !st.RedactPersonal && len(st.RedactWords) == 0 {
 		return w, body, func() {}
 	}
-	masked, n := redact.MaskJSON(body, redact.Options{Secrets: st.Redact, Personal: st.RedactPersonal, Words: st.RedactWords})
+	masked, n := redact.MaskJSON(body, redact.Options{Secrets: st.Redact, Personal: st.RedactPersonal, Words: st.RedactWords, Rules: st.RedactRules})
 	if n == 0 {
 		return w, body, func() {}
 	}

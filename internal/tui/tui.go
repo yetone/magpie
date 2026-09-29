@@ -663,7 +663,7 @@ func (m model) View() string {
 		switch m.page {
 		case pageProviders:
 			body = m.viewProviders()
-			footer = hints("↑↓", "provider", "↵", "models", "e", "key", "a", "add", "f", "family", "u", "list/groups only", "t", "test", "b", "balances", "d", "remove", "1–6", "pages")
+			footer = hints("↑↓", "provider", "↵", "models", "e", "key", "a", "add", "f", "family", "u", "list/groups only", "o", "on/off", "t", "test", "b", "balances", "d", "remove", "1–6", "pages")
 		case pageGroups:
 			body = m.viewGroups()
 			footer = hints("↑↓", "group", "↵", "open", "n", "new", "o", "routing", "d", "remove", "u", "bring back", "1–6", "pages", "q", "quit")

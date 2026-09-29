@@ -52,15 +52,17 @@ func (g Group) Ruled() bool { return len(g.Rules) > 0 || g.Effort == EffortAuto 
 type Group struct {
 	ID       string   `json:"id"`
 	Name     string   `json:"name"`
-	Members  []string `json:"members"`            // "provider/model" or "group/<id>", in order
+	Members  []string `json:"members"`            // "provider/model[:effort]" or "group/<id>", in order (see MemberEffort)
 	Routing  string   `json:"routing,omitempty"`  // as Provider.Routing, over all the members' keys and accounts
 	Affinity string   `json:"affinity,omitempty"` // as Provider.Affinity
 	// Rules send the requests they match to one member first, in order:
 	// the first that matches decides (see Rule).
 	Rules []Rule `json:"rules,omitempty"`
-	// Classifier is the model ("provider/model", not a group) asked which
-	// of the rules' intents a user's message is. Rules with an intent need
-	// one; a small, fast model without reasoning does.
+	// Classifier is the model ("provider/model") asked which of the rules'
+	// intents a user's message is, or a group ("group/<id>", never this
+	// one) whose models are asked in turn, failing over as for any request.
+	// Rules with an intent need one; a small, fast model without reasoning
+	// does.
 	Classifier string `json:"classifier,omitempty"`
 	// Effort "auto" has the classifier — Jev, from TypeSafe's decision API,
 	// or any model, asked in words — judge how hard each turn is to think
@@ -92,6 +94,10 @@ type Member struct {
 	Via      []Group
 	Provider Provider
 	Model    string // what the vendor is asked for
+	// Effort is the reasoning the member is fixed at ("provider/model:low"),
+	// asked of the model whatever the agent or the group's classifier
+	// asked; "" follows the group.
+	Effort string
 }
 
 // Groups are the ids of the groups in the group the model is of, the
@@ -107,7 +113,7 @@ func (m Member) Groups() []string {
 // Below is the member as the group at depth (0 the group itself, 1 the
 // group in it Path[0] names, …) has it.
 func (m Member) Below(depth int) Member {
-	return Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model}
+	return Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort}
 }
 
 // maxNest is how deep groups in groups may go.
@@ -268,7 +274,8 @@ func groupOf(all []Group, id string) (Group, bool) {
 
 // membersIn are a group's models, ready now, in its order: a group in it
 // gives its own there, as deep as they go. A model met again is left
-// where it was first, and a group that would be in itself is cut there.
+// where it was first — the same model at another effort is another
+// member — and a group that would be in itself is cut there.
 func membersIn(entries []Entry, all []Group, g Group) []Member {
 	var out []Member
 	seen := map[string]bool{}
@@ -284,12 +291,14 @@ func membersIn(entries []Entry, all []Group, g Group) []Member {
 				walk(sub, at, append(slices.Clone(via), sub), append(slices.Clone(in), gid))
 				continue
 			}
-			p, m, ok := resolveIn(entries, id)
-			if !ok || seen[p.ID+"/"+m] {
+			model, effort := memberEffortIn(entries, id)
+			p, m, ok := resolveIn(entries, model)
+			key := WithMemberEffort(p.ID+"/"+m, effort)
+			if !ok || seen[key] {
 				continue
 			}
-			seen[p.ID+"/"+m] = true
-			out = append(out, Member{ID: at[0], Path: at, Via: via, Provider: p, Model: m})
+			seen[key] = true
+			out = append(out, Member{ID: at[0], Path: at, Via: via, Provider: p, Model: m, Effort: effort})
 		}
 	}
 	walk(g, nil, nil, []string{g.ID})
@@ -299,7 +308,9 @@ func membersIn(entries []Entry, all []Group, g Group) []Member {
 // groupEntries are the catalog's groups: each with a member ready, named
 // as the user named it, answering for its first member when an agent asks
 // what the model can do, and offering only the reasoning levels every
-// member has.
+// member has — but for those fixed at an effort of their own, which take
+// whatever the agent asks. With every member fixed, the group offers the
+// levels they are fixed at, so that an agent still asks it to reason.
 func groupEntries(entries []Entry) []Entry {
 	var out []Entry
 	all := groupsIn(entries)
@@ -312,6 +323,8 @@ func groupEntries(entries []Entry) []Entry {
 			continue
 		}
 		e := Entry{ID: GroupPrefix + g.ID, Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Images: true}
+		var fixed []string // the efforts members are fixed at
+		levelled := false  // a member that follows the agent's effort was met
 		for i, m := range ms {
 			if !slices.ContainsFunc(ms[:i], func(o Member) bool { return o.Provider.ID == m.Provider.ID }) {
 				e.Icons = append(e.Icons, m.Provider.Icon) // each provider once, "" for one without
@@ -332,12 +345,24 @@ func groupEntries(entries []Entry) []Entry {
 				e.Context = ctx
 			}
 			if i == 0 {
-				e.Efforts = efforts
 				e.ImageInput = imageInput
+			} else {
+				e.ImageInput = sharedImageInput(e.ImageInput, imageInput)
+			}
+			if m.Effort != "" {
+				if !slices.Contains(fixed, m.Effort) {
+					fixed = append(fixed, m.Effort)
+				}
+				continue
+			}
+			if !levelled {
+				e.Efforts, levelled = efforts, true
 				continue
 			}
 			e.Efforts = slices.DeleteFunc(slices.Clone(e.Efforts), func(v string) bool { return !slices.Contains(efforts, v) })
-			e.ImageInput = sharedImageInput(e.ImageInput, imageInput)
+		}
+		if !levelled {
+			e.Efforts = fixedLevels(fixed)
 		}
 		if e.ImageInput != nil && !*e.ImageInput {
 			e.Images = false
@@ -370,7 +395,18 @@ func SaveGroup(g Group) error {
 	if len(g.Members) == 0 {
 		return errors.New("a group needs a model in it")
 	}
-	if err := groupsInGroup(g, groupsIn(providerEntries())); err != nil {
+	entries := providerEntries()
+	for i, m := range g.Members {
+		if model, effort := memberEffortIn(entries, m); effort != "" && strings.HasPrefix(model, GroupPrefix) {
+			return fmt.Errorf("%s is a group: its models reason as it says, so it takes no effort of its own (:%s)", model, effort)
+		}
+		g.Members[i] = cleanMember(entries, m)
+	}
+	g.Members = cleanList(g.Members)
+	for i := range g.Rules {
+		g.Rules[i].Use = cleanMember(entries, strings.TrimSpace(g.Rules[i].Use))
+	}
+	if err := groupsInGroup(g, groupsIn(entries)); err != nil {
 		return err
 	}
 	for _, m := range g.Members {
@@ -395,8 +431,8 @@ func SaveGroup(g Group) error {
 	switch {
 	case g.Effort != "" && g.Effort != EffortAuto:
 		return fmt.Errorf("a group's effort is %q or left to the agent, not %q", EffortAuto, g.Effort)
-	case strings.HasPrefix(g.Classifier, GroupPrefix):
-		return fmt.Errorf("the classifier is a model, not a group (%s)", g.Classifier)
+	case g.Classifier == GroupPrefix+g.ID:
+		return fmt.Errorf("%s can't be its own classifier: asking it would ask it again", g.Name)
 	case intents && g.Classifier == "":
 		return errors.New("a rule with an intent needs the group's classifier: the model that tells which intent a message is")
 	case g.Effort == EffortAuto && g.Classifier == "":
@@ -404,7 +440,11 @@ func SaveGroup(g Group) error {
 	case !intents && g.Effort == "":
 		g.Classifier = "" // nothing to ask it
 	}
-	if g.Classifier != "" {
+	if gid, ok := strings.CutPrefix(g.Classifier, GroupPrefix); ok {
+		if _, ok := groupOf(groupsIn(providerEntries()), gid); !ok {
+			return fmt.Errorf("magpie has no group %q to classify with", gid)
+		}
+	} else if g.Classifier != "" {
 		if _, _, ok := Resolve(g.Classifier); !ok {
 			return fmt.Errorf("magpie knows no model %q to classify with", g.Classifier)
 		}
@@ -496,8 +536,8 @@ func GroupsWith(id string) []Group {
 }
 
 // DeleteGroup removes a group of the user's; one magpie found is hidden,
-// to come back with ShowGroup. A group another has in it stays until it is
-// taken out of that one.
+// to come back with ShowGroup. A group another has in it, or classifies
+// with, stays until it is taken out of that one.
 func DeleteGroup(id string) error {
 	if in := GroupsWith(id); len(in) > 0 {
 		var names []string
@@ -505,6 +545,11 @@ func DeleteGroup(id string) error {
 			names = append(names, g.Name)
 		}
 		return fmt.Errorf("%s is in %s: take it out first", id, strings.Join(names, ", "))
+	}
+	for _, g := range groupsIn(providerEntries()) {
+		if !g.Hidden && g.Classifier == GroupPrefix+id {
+			return fmt.Errorf("%s is %s's classifier: choose another first", id, g.Name)
+		}
 	}
 	f := load()
 	found := false
@@ -586,6 +631,9 @@ func RenameGroup(from, to string) error {
 			if r.Use == old {
 				f.Groups[i].Rules[j].Use = now
 			}
+		}
+		if f.Groups[i].Classifier == old {
+			f.Groups[i].Classifier = now
 		}
 	}
 	return store(f)

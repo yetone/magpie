@@ -58,6 +58,7 @@ type stick struct {
 	rest      string
 	who       string // the key or account, however many were on
 	model     string // the model it answered as: a group may have several on one account
+	effort    string // the effort the group's member it answered as is fixed at
 	turn      int
 	at        time.Time
 	cacheRead int
@@ -124,6 +125,7 @@ func affine(scope, mode string, rotate bool, in http.Header, from provider.Proto
 	// its first member there; the account alone when the model is gone
 	at := -1
 	for _, same := range []func(candidate) bool{
+		func(c candidate) bool { return c.who() == st.who && c.model == st.model && c.effort == st.effort },
 		func(c candidate) bool { return c.who() == st.who && c.model == st.model },
 		func(c candidate) bool { return c.who() == st.who },
 	} {
@@ -202,7 +204,7 @@ func answered(key string, c candidate, turn, cacheRead int) {
 	now := time.Now()
 	sticks.Lock()
 	defer sticks.Unlock()
-	sticks.m[key] = stick{rest: c.rest, who: c.who(), model: c.model, turn: turn, at: now, cacheRead: cacheRead}
+	sticks.m[key] = stick{rest: c.rest, who: c.who(), model: c.model, effort: c.effort, turn: turn, at: now, cacheRead: cacheRead}
 	if len(sticks.m) > 4096 {
 		for k, st := range sticks.m {
 			if now.Sub(st.at) > stickKeep {

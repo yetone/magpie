@@ -27,21 +27,22 @@ import (
 // devinAuth and devinVariant are the sign-in and the model the API is
 // asked for; vars so tests can stand in for them.
 var (
-	devinAuth    = provider.DevinAuth
+	devinAuth    = provider.DevinAuthAt
 	devinVariant = provider.DevinVariant
 )
 
 // devinCLIVersion is the CLI the requests say they come from.
 const devinCLIVersion = "3000.11.3"
 
-// serveDevin answers a request through Devin's API.
-func (s *Server) serveDevin(w http.ResponseWriter, r *http.Request, from provider.Protocol, model string, body []byte, usage *Usage) (int, string) {
+// serveDevin answers a request through Devin's API, as the account signed
+// in in home ("" for the CLI's own).
+func (s *Server) serveDevin(w http.ResponseWriter, r *http.Request, from provider.Protocol, home, model string, body []byte, usage *Usage) (int, string) {
 	req, err := parse(from, body)
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
 	req.Model = model
-	ask := s.askDevin(model)
+	ask := s.askDevin(home, model)
 	if req.WebSearch && !searching(r.Context()) {
 		if _, _, ok := searcher(); ok {
 			return s.searchReply(w, r, from, "Devin", req, usage, ask)
@@ -57,9 +58,9 @@ func (s *Server) serveDevin(w http.ResponseWriter, r *http.Request, from provide
 }
 
 // askDevin is a round for Devin's API.
-func (s *Server) askDevin(model string) round {
+func (s *Server) askDevin(home, model string) round {
 	return func(ctx context.Context, req *Request) (<-chan Event, int, string) {
-		key, server, err := devinAuth()
+		key, server, err := devinAuth(home)
 		if err != nil {
 			return nil, 401, "Devin: " + err.Error()
 		}

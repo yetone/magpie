@@ -50,6 +50,13 @@ type Model struct {
 	// Fast is set on a model Codex may ask for priority processing (its
 	// Fast mode): one a ChatGPT account serves.
 	Fast bool `json:",omitempty"`
+	// Draws is set on a vendor-listed model that makes images (gpt-image-1,
+	// a relay's flux): kept with the list for Settings → Images, never
+	// offered to agents as a model to talk to.
+	Draws bool `json:",omitempty"`
+	// Free is set on a model a subscription serves at no cost to its
+	// allowance: WorkBuddy's "credits": "x0.00".
+	Free bool `json:",omitempty"`
 }
 
 func imageInput(modalities []string) *bool {
@@ -392,6 +399,9 @@ func ContextOf(id string) int {
 	if w, ok := windows[b]; ok {
 		return w
 	}
+	if r, ok := unprofiled(b); ok {
+		return ContextOf(r)
+	}
 	if i := strings.IndexByte(b, '('); i > 0 && strings.HasSuffix(b, ")") {
 		b = b[:i]
 		if w, ok := windows[b]; ok {
@@ -412,6 +422,9 @@ func OutputOf(id string) int {
 	if o, ok := outputs[b]; ok {
 		return o
 	}
+	if r, ok := unprofiled(b); ok {
+		return OutputOf(r)
+	}
 	if i := strings.IndexAny(b, "(:"); i > 0 {
 		return outputs[b[:i]]
 	}
@@ -429,6 +442,9 @@ func EffortsOf(id string) []string {
 	b := bareID(id)
 	if e, ok := efforts[b]; ok {
 		return slices.Clone(e)
+	}
+	if r, ok := unprofiled(b); ok {
+		return EffortsOf(r)
 	}
 	if i := strings.IndexByte(b, '('); i > 0 && strings.HasSuffix(b, ")") {
 		b = b[:i]
@@ -475,6 +491,22 @@ func bareID(id string) string {
 	return id
 }
 
+// bedrockGeos are the geographies a Bedrock inference profile's id starts
+// with.
+var bedrockGeos = []string{"global.", "us.", "us-gov.", "eu.", "apac.", "jp.", "au.", "ca.", "in."}
+
+// unprofiled is a Bedrock inference profile's id without its geography
+// (apac.anthropic.claude-opus-5-5 is anthropic.claude-opus-5-5): models.dev
+// lists each model in only some of them, the model id in all.
+func unprofiled(b string) (string, bool) {
+	for _, g := range bedrockGeos {
+		if r, ok := strings.CutPrefix(b, g); ok && strings.Contains(r, ".") {
+			return r, true
+		}
+	}
+	return "", false
+}
+
 func textModel(m mdModel) bool {
 	if len(m.Modalities.Output) > 0 {
 		text := false
@@ -494,6 +526,71 @@ func textModel(m mdModel) bool {
 		}
 	}
 	return true
+}
+
+// draws is whether a models.dev row is a model that makes images: one
+// whose only output is images (gpt-image-1, imagen, flux), or that answers
+// in text and images and is named for them (gemini-2.5-flash-image,
+// gpt-5-image) — not a text model that can also put a chart in its answer
+// (deep-research, openrouter/auto).
+func draws(m mdModel) bool {
+	if !slices.Contains(m.Modalities.Output, "image") {
+		return false
+	}
+	id := strings.ToLower(m.ID)
+	if strings.Contains(id, "deep-research") || strings.HasSuffix(id, "/auto") {
+		return false
+	}
+	return !slices.Contains(m.Modalities.Output, "text") || DrawsID(id)
+}
+
+// DrawsID is whether a model's id names one that makes images, for a model
+// the catalog doesn't know (one typed in, or a vendor's own list's).
+func DrawsID(id string) bool {
+	id = strings.ToLower(id)
+	for _, w := range []string{"image", "imagen", "imagine", "dall-e", "flux", "seedream", "cogview", "stable-diffusion", "sdxl", "wanx", "kolors", "hidream"} {
+		if strings.Contains(id, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// ImagesAPI is whether a model draws on an images API (/images/generations)
+// rather than answering in chat with pictures: gpt-image, dall-e, imagen,
+// flux, seedream… — not gemini-*-image or gpt-5-image, which chat.
+func ImagesAPI(id string) bool {
+	id = strings.ToLower(id)
+	for _, w := range []string{"gpt-image", "chatgpt-image", "dall-e", "imagen", "imagine", "qwen-image", "wanx", "wan2", "seedream", "cogview", "flux", "stable-diffusion", "sdxl", "kolors", "hidream"} {
+		if strings.Contains(id, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// Drawers are the models of one models.dev provider that make images,
+// newest first.
+func Drawers(id string) []Model {
+	p, ok := load()[id]
+	if !ok {
+		return nil
+	}
+	var out []Model
+	for _, m := range p.Models {
+		if !draws(m) {
+			continue
+		}
+		out = append(out, Model{ID: m.ID, Name: m.Name, Provider: id, Released: m.ReleaseDate, Price: m.Cost,
+			Images: slices.Contains(m.Modalities.Input, "image"), ImageInput: imageInput(m.Modalities.Input)})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Released != out[j].Released {
+			return out[i].Released > out[j].Released
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
 }
 
 // Providers returns models.dev provider ids known to the catalog.

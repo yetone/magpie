@@ -32,17 +32,53 @@ type liveFile struct {
 	Models  []Model   `json:"models"`
 }
 
-// Live returns the model list last fetched from the provider, if any.
-func Live(provider string) (models []Model, fetched time.Time, ok bool) {
-	f, err := filememo.Read("live models", LivePath(provider), func(b []byte) (liveFile, error) {
+func readLive(provider string) (liveFile, error) {
+	return filememo.Read("live models", LivePath(provider), func(b []byte) (liveFile, error) {
 		var f liveFile
 		err := json.Unmarshal(b, &f)
 		return f, err
 	})
-	if err != nil || len(f.Models) == 0 {
+}
+
+// Live returns the model list last fetched from the provider, if any: the
+// models to talk to, without the ones that draw (LiveDrawers).
+func Live(provider string) (models []Model, fetched time.Time, ok bool) {
+	f, err := readLive(provider)
+	if err != nil {
 		return nil, time.Time{}, false
 	}
-	return slices.Clone(f.Models), f.Fetched, true
+	ms := Chat(f.Models)
+	if len(ms) == 0 {
+		return nil, time.Time{}, false
+	}
+	return ms, f.Fetched, true
+}
+
+// LiveDrawers are the models in the provider's fetched list that make
+// images, in the list's order.
+func LiveDrawers(provider string) []Model {
+	f, err := readLive(provider)
+	if err != nil {
+		return nil
+	}
+	var out []Model
+	for _, m := range f.Models {
+		if m.Draws {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// Chat is ms without the models that draw.
+func Chat(ms []Model) []Model {
+	out := make([]Model, 0, len(ms))
+	for _, m := range ms {
+		if !m.Draws {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // SaveLive stores a fetched list; an empty list forgets it.
@@ -93,7 +129,14 @@ func Fetch(ctx context.Context, base, key string, anthropic bool, headers map[st
 	return ms, err
 }
 
-// FetchAt is Fetch, and says which URL answered.
+// FetchAt is Fetch, and says which URL answered. An OpenAI-style base
+// with a version in its path (…/v1, …/api/plan/v3, …/api/paas/v4,
+// …/v1beta/openai) names the vendor's API as it is and is asked only as
+// written, at base/models: a /v1 is looked for only around a base without
+// one (a bare host, a relay's …/api), where it may have been left out. An
+// Anthropic base is the root /v1/messages is asked at, so /v1/models
+// under it is its own list. When no URL answers, the error names each one
+// asked and what it said.
 func FetchAt(ctx context.Context, base, key string, anthropic bool, headers map[string]string) ([]Model, string, error) {
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	if base == "" {
@@ -109,33 +152,53 @@ func FetchAt(ctx context.Context, base, key string, anthropic bool, headers map[
 		urls = append(urls, u)
 	}
 	add(base + "/models")
-	add(base + "/v1/models")
-	root := base
-	for _, suffix := range []string{"/anthropic", "/apps/anthropic", "/api/anthropic", "/v1", "/api", "/api/v1"} {
-		if strings.HasSuffix(root, suffix) {
-			root = strings.TrimSuffix(root, suffix)
+	if anthropic || !Versioned(base) {
+		add(base + "/v1/models")
+		root := base
+		for _, suffix := range []string{"/anthropic", "/apps/anthropic", "/api/anthropic", "/v1", "/api", "/api/v1"} {
+			if strings.HasSuffix(root, suffix) {
+				root = strings.TrimSuffix(root, suffix)
+			}
 		}
+		add(root + "/v1/models")
+		add(root + "/models")
 	}
-	add(root + "/v1/models")
-	add(root + "/models")
 
-	var lastErr error
+	var errs []string
 	for _, u := range urls {
 		ms, err := fetchOne(ctx, u, key, anthropic, headers)
 		if err == nil && len(ms) > 0 {
 			return ms, u, nil
 		}
-		if err != nil {
-			lastErr = err
+		if err == nil {
+			err = errors.New(u + ": no models listed")
 		}
+		errs = append(errs, err.Error())
 		if ctx.Err() != nil {
 			break
 		}
 	}
-	if lastErr == nil {
-		lastErr = errors.New("no model list at " + base)
+	return nil, "", errors.New("no model list: " + strings.Join(errs, "; "))
+}
+
+// Versioned reports whether an API base URL has a version in its path — a
+// segment like v1, v3, v4 or v1beta — and so names the vendor's API as it
+// is, with no /v1 left out of it.
+func Versioned(base string) bool {
+	rest := base
+	if _, after, ok := strings.Cut(base, "://"); ok {
+		rest = after
 	}
-	return nil, "", lastErr
+	_, path, _ := strings.Cut(rest, "/")
+	if i := strings.IndexAny(path, "?#"); i >= 0 {
+		path = path[:i]
+	}
+	for _, seg := range strings.Split(path, "/") {
+		if len(seg) >= 2 && (seg[0] == 'v' || seg[0] == 'V') && seg[1] >= '0' && seg[1] <= '9' {
+			return true
+		}
+	}
+	return false
 }
 
 // FetchURL asks for the model list at exactly url.
@@ -175,6 +238,9 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 	if res.StatusCode != http.StatusOK {
+		if msg := errorMessage(b); msg != "" {
+			return nil, fmt.Errorf("%s: %s (%s)", url, res.Status, msg)
+		}
 		return nil, fmt.Errorf("%s: %s", url, res.Status)
 	}
 	var v struct {
@@ -194,7 +260,13 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		if id == "" {
 			id = r.Name
 		}
-		if id == "" || !textModel(mdModel{ID: id}) {
+		if id == "" {
+			continue
+		}
+		// a model that draws is kept, marked, for Settings → Images; any
+		// other that isn't for text (embeddings, speech) is left out
+		drawer := DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research")
+		if !drawer && !textModel(mdModel{ID: id}) {
 			continue
 		}
 		name := r.DisplayName
@@ -202,7 +274,7 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 			name = id
 		}
 		input := imageInput(r.Modalities.Input)
-		m := Model{ID: id, Name: name, ImageInput: input, APIs: EndpointAPIs(r.Endpoints)}
+		m := Model{ID: id, Name: name, ImageInput: input, APIs: EndpointAPIs(r.Endpoints), Draws: drawer}
 		if n, ok := r.ContextLength.(float64); ok && n > 0 {
 			m.Context = int(n)
 		}
@@ -212,6 +284,33 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		out = append(out, m)
 	}
 	return out, nil
+}
+
+// errorMessage is the message of a vendor's JSON error reply
+// ({"error":{"message":…}}, {"error":"…"}, {"message":…}), cut short.
+func errorMessage(b []byte) string {
+	var v struct {
+		Error   json.RawMessage `json:"error"`
+		Message string          `json:"message"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return ""
+	}
+	msg := v.Message
+	var e struct {
+		Message string `json:"message"`
+	}
+	var s string
+	if json.Unmarshal(v.Error, &e) == nil && e.Message != "" {
+		msg = e.Message
+	} else if json.Unmarshal(v.Error, &s) == nil && s != "" {
+		msg = s
+	}
+	msg = strings.TrimSpace(msg)
+	if r := []rune(msg); len(r) > 160 {
+		msg = string(r[:160]) + "…"
+	}
+	return msg
 }
 
 type liveModel struct {

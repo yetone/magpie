@@ -461,11 +461,30 @@ type RTKGain struct {
 	Pct      float64 `json:"pct"`
 }
 
+// RTKDay is what rtk saved on one day it ran commands.
+type RTKDay struct {
+	Date     string  `json:"date"` // 2006-01-02, local
+	Commands int     `json:"commands"`
+	Input    int64   `json:"input"`
+	Saved    int64   `json:"saved"`
+	Pct      float64 `json:"pct"`
+}
+
 // RTKView is the RTK part of the Library page.
 type RTKView struct {
-	Path    string     `json:"path,omitempty"` // "" when rtk isn't installed
-	Version string     `json:"version,omitempty"`
-	Gain    *RTKGain   `json:"gain,omitempty"`
+	Path    string   `json:"path,omitempty"` // "" when rtk isn't installed
+	Version string   `json:"version,omitempty"`
+	Gain    *RTKGain `json:"gain,omitempty"`
+	// Days are what it saved each day it ran commands, oldest first
+	Days []RTKDay `json:"days,omitempty"`
+	// Latest is rtk's latest release, "" when it isn't known (see
+	// CheckLatest); Upgrade the command Upgrade RTK runs, "" when magpie
+	// doesn't know how this rtk was installed
+	Latest  string `json:"latest,omitempty"`
+	Upgrade string `json:"upgrade,omitempty"`
+	// Note is what an upgrade left to say: Homebrew's rtk behind rtk's
+	// own release
+	Note    string     `json:"note,omitempty"`
 	Agents  []RTKAgent `json:"agents"`
 	URL     string     `json:"url"`
 	// Install is the command Install RTK runs, shown before it is clicked
@@ -543,10 +562,7 @@ func ReadRTK() *RTKView {
 	v := &RTKView{Agents: []RTKAgent{}, URL: RTKURL, Path: rtkPath()}
 	if v.Path == "" {
 		if c := rtkInstaller(); c != nil {
-			v.Install = strings.Join(c, " ")
-			if c[0] == "sh" {
-				v.Install = c[2]
-			}
+			v.Install = shown(c)
 		}
 	}
 	for _, a := range rtkAgents() {
@@ -563,7 +579,11 @@ func ReadRTK() *RTKView {
 	if out, err := rtkRun(v.Path, "--version"); err == nil {
 		v.Version = strings.TrimSpace(strings.TrimPrefix(out, "rtk"))
 	}
-	if out, err := rtkRun(v.Path, "gain", "--format", "json"); err == nil {
+	if c := rtkUpgrader(v.Path); c != nil {
+		v.Upgrade = shown(c)
+	}
+	// --daily adds the days to the summary (rtk 0.28 on)
+	if out, err := rtkRun(v.Path, "gain", "--daily", "--format", "json"); err == nil {
 		var g struct {
 			Summary struct {
 				Commands int     `json:"total_commands"`
@@ -571,13 +591,32 @@ func ReadRTK() *RTKView {
 				Saved    int64   `json:"total_saved"`
 				Pct      float64 `json:"avg_savings_pct"`
 			} `json:"summary"`
+			Daily []struct {
+				Date     string  `json:"date"`
+				Commands int     `json:"commands"`
+				Input    int64   `json:"input_tokens"`
+				Saved    int64   `json:"saved_tokens"`
+				Pct      float64 `json:"savings_pct"`
+			} `json:"daily"`
 		}
 		if json.Unmarshal([]byte(out), &g) == nil && g.Summary.Commands > 0 {
 			s := g.Summary
 			v.Gain = &RTKGain{Commands: s.Commands, Input: s.Input, Saved: s.Saved, Pct: s.Pct}
+			for _, d := range g.Daily {
+				v.Days = append(v.Days, RTKDay{Date: d.Date, Commands: d.Commands, Input: d.Input, Saved: d.Saved, Pct: d.Pct})
+			}
+			slices.SortFunc(v.Days, func(a, b RTKDay) int { return strings.Compare(a.Date, b.Date) })
 		}
 	}
 	return v
+}
+
+// shown is a command as the page shows it: a script's own line.
+func shown(c []string) string {
+	if c[0] == "sh" {
+		return c[2]
+	}
+	return strings.Join(c, " ")
 }
 
 // SetRTK gives rtk to an agent with rtk's own installer, or takes it away
@@ -696,18 +735,9 @@ func InstallRTK() (*RTKView, error) {
 	if c == nil {
 		return nil, fmt.Errorf("no way to install rtk here — get it from %s", RTKURL)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	cmd := proc.CommandContext(ctx, c[0], c[1:]...)
-	cmd.Stdin = nil
-	cmd.Env = append(os.Environ(), "HOMEBREW_NO_AUTO_UPDATE=1", "NONINTERACTIVE=1")
-	out, err := cmd.CombinedOutput()
+	out, err := runInstaller(c, 5*time.Minute, "HOMEBREW_NO_AUTO_UPDATE=1")
 	if err != nil {
-		text := strings.TrimSpace(string(out))
-		if text == "" {
-			text = err.Error()
-		}
-		return nil, fmt.Errorf("%s: %s", strings.Join(c, " "), lastLines(text, 4))
+		return nil, err
 	}
 	v := ReadRTK()
 	if v.Path == "" {

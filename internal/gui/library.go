@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/yetone/magpie/internal/library"
 )
@@ -154,7 +155,18 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 	// RTK:which agents have its hook, switching one on or off, and
 	// installing rtk when the page is asked to
 	mux.HandleFunc("GET /api/library/rtk", func(rw http.ResponseWriter, r *http.Request) {
-		writeJSON(rw, library.ReadRTK())
+		v := library.ReadRTK()
+		// its latest release, when GitHub answers in time: the page is
+		// drawn without it otherwise, and has it next time
+		if v.Path != "" {
+			latest := make(chan string, 1)
+			go func() { latest <- library.RTKLatest() }()
+			select {
+			case v.Latest = <-latest:
+			case <-time.After(3 * time.Second):
+			}
+		}
+		writeJSON(rw, v)
 	})
 	mux.HandleFunc("POST /api/library/rtk", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
@@ -166,6 +178,14 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		v, err := library.SetRTK(in.Agent, in.On)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, v)
+	})
+	mux.HandleFunc("POST /api/library/rtk/upgrade", func(rw http.ResponseWriter, r *http.Request) {
+		v, err := library.UpgradeRTK()
 		if err != nil {
 			fail(rw, err)
 			return

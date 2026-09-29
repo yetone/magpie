@@ -381,3 +381,47 @@ func TestChatClassifierPicksTheEffort(t *testing.T) {
 		t.Fatalf("both: %+v %+v %d", r.Rule, r.Rule.Classified, c.n())
 	}
 }
+
+// A group classifies as any request to it goes: its first model down, the
+// next answers. One whose classifier is, round about, the group asking
+// isn't asked again from within its own call: it goes by its other rules.
+func TestIntentClassifierGroup(t *testing.T) {
+	s, _, _, c := intented(t, provider.Rule{Use: "b/big", Intent: "refactoring"})
+	d := &clsUp{}
+	d.set("", 500)
+	srv := httptest.NewServer(d)
+	t.Cleanup(srv.Close)
+	if err := provider.Save(provider.Provider{ID: "d", Name: "D", Key: "kd", Models: []string{"cls"}, Chat: srv.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive("d", srv.URL+"/v1", []catalog.Model{{ID: "cls", Context: 32000}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SaveGroup(provider.Group{Name: "Cls", Members: []string{"d/cls", "c/cls"}, Routing: provider.Ordered}); err != nil {
+		t.Fatal(err)
+	}
+	g, _, _ := provider.FindGroup("group/r")
+	g.Classifier = "group/cls"
+	if err := provider.SaveGroup(g); err != nil {
+		t.Fatal(err)
+	}
+	c.set("1", 0)
+	out, r := postOK(t, s, "g1", chat("rename this package", nil, 0, ""))
+	if !strings.Contains(out, "from kb") || r.Rule.N != 1 || r.Rule.Classified.By != "group/cls" || r.Rule.Classified.Error != "" {
+		t.Fatalf("failover: %s %+v %+v", out, r.Rule, r.Rule.Classified)
+	}
+	if d.n() == 0 || c.n() != 1 {
+		t.Fatalf("asked d %d, c %d times", d.n(), c.n())
+	}
+	// cls classifies with r, r with cls: cls's own call for r asks nobody
+	cg, _, _ := provider.FindGroup("group/cls")
+	cg.Rules, cg.Classifier = []provider.Rule{{Use: "c/cls", Intent: "anything"}}, "group/r"
+	if err := provider.SaveGroup(cg); err != nil {
+		t.Fatal(err)
+	}
+	t0 := time.Now()
+	out, r = postOK(t, s, "g2", chat("rename that package", nil, 0, ""))
+	if !strings.Contains(out, "from kb") || r.Rule.N != 1 || r.Rule.Classified.Error != "" || c.n() != 2 || time.Since(t0) > 3*time.Second {
+		t.Fatalf("loop: %s %+v %+v %d %s", out, r.Rule, r.Rule.Classified, c.n(), time.Since(t0))
+	}
+}

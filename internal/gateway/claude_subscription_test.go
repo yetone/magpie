@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -396,4 +397,37 @@ func TestSweepBridgeProjectsTakesOnlyTheBridgesFolders(t *testing.T) {
 		}
 	}
 	sweepBridgeProjects(filepath.Join(base, "missing"), real) // no projects folder: nothing to do
+}
+
+// Out of quota, Claude Code ends the turn with an error result and no
+// message_stop, then waits on its next input: the reply is a 429 at once,
+// streamed or not, so another account can take over (#177).
+func TestClaudeQuotaResultEndsTheReply(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+while read -r line; do
+  echo '{"type":"result","subtype":"success","is_error":true,"result":"You'"'"'ve hit your limit · resets 3am"}'
+done
+`
+	os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	s := New()
+	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
+	for _, stream := range []string{"true", "false"} {
+		body := `{"model":"claude-sonnet-5","max_tokens":100,"stream":` + stream + `,"messages":[{"role":"user","content":"ping"}]}`
+		done := make(chan int, 1)
+		go func() {
+			var u Usage
+			code, _ := s.serveClaudeSubscription(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body)), provider.Anthropic, p, "claude-sonnet-5", []byte(body), &u)
+			done <- code
+		}()
+		select {
+		case code := <-done:
+			if code != 429 {
+				t.Fatalf("stream=%s: status %d", stream, code)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatalf("stream=%s: the reply waited on the CLI", stream)
+		}
+	}
 }

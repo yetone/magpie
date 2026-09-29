@@ -40,6 +40,10 @@ type memberJSON struct {
 	Model    string `json:"model,omitempty"` // what the vendor is asked for
 	On       int    `json:"on"`              // its keys or accounts on
 	Group    bool   `json:"group,omitempty"` // a routing group in the group; Name is its
+	// Of is the model's id without the effort the member is fixed at, and
+	// Effort that effort ("provider/model:low"); "" for one without
+	Of     string `json:"of,omitempty"`
+	Effort string `json:"effort,omitempty"`
 	// what a rule may send it: the tokens it takes, when known, and images
 	Context int  `json:"context,omitempty"`
 	Images  bool `json:"images,omitempty"`
@@ -51,6 +55,10 @@ type modelRef struct {
 	Provider string `json:"provider"`
 	PName    string `json:"providerName"`
 	Icon     string `json:"icon,omitempty"`
+	Context  int    `json:"context,omitempty"` // the tokens it takes, when known
+	// Efforts: the model's reasoning levels, when known — those a group's
+	// member of it may be fixed at
+	Efforts []string `json:"efforts,omitempty"`
 }
 
 type poolJSON struct {
@@ -118,7 +126,7 @@ func groupsState() groupsJSON {
 	served := provider.Served()
 	for _, e := range served {
 		if e.Group == "" {
-			out.Models = append(out.Models, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon})
+			out.Models = append(out.Models, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon, Context: e.Context, Efforts: e.Efforts})
 		}
 	}
 	for _, g := range provider.Groups() {
@@ -152,7 +160,9 @@ func groupsState() groupsJSON {
 				gj.Info = append(gj.Info, m)
 				continue
 			}
-			if p, model, ok := provider.Resolve(id); ok {
+			of, effort := provider.MemberEffort(id)
+			m.Of, m.Effort = of, effort
+			if p, model, ok := provider.Resolve(of); ok {
 				_, who := onOf(p)
 				m.Ready, m.Provider, m.Name, m.Icon, m.Model, m.On = true, p.ID, p.Name, p.Icon, model, max(len(who), 1)
 				for _, e := range served {
@@ -168,7 +178,7 @@ func groupsState() groupsJSON {
 		out.Groups = append(out.Groups, gj)
 	}
 	for _, p := range provider.All() {
-		if !p.Ready() {
+		if !p.On() {
 			continue
 		}
 		if kind, who := onOf(p); kind == "account" && len(who) > 1 {

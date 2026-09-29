@@ -32,6 +32,9 @@ type candidate struct {
 	p     provider.Provider
 	model string
 	rest  string // what rests after a failure: the provider, or one of its keys
+	// effort is the reasoning the group's member it is of is fixed at
+	// ("provider/model:low"); "" for one that follows the agent or the group
+	effort string
 }
 
 // label names a candidate in a call's record: the provider, and the key
@@ -57,6 +60,12 @@ func (c candidate) restKey() string {
 		return c.p.ID + "@" + strings.ToLower(a.User)
 	}
 	return c.rest
+}
+
+// seat is the candidate as one of a group's members has it: its key or
+// account, the model, and the effort the member is fixed at.
+func (c candidate) seat() string {
+	return provider.WithMemberEffort(c.rest+"/"+c.model, c.effort)
 }
 
 func (c candidate) isOpenRouterFree() bool {
@@ -101,9 +110,9 @@ func perKey(p provider.Provider, model string, from provider.Protocol) []candida
 // after them, in the order they suit it.
 func perKeyOf(p provider.Provider, model string, from provider.Protocol) (out, aside, left []candidate) {
 	if p.Account != nil {
-		all := []candidate{{p, model, p.ID}}
+		all := []candidate{{p: p, model: model, rest: p.ID}}
 		for _, q := range p.AlsoOn() {
-			all = append(all, candidate{q, model, p.ID + "@" + q.Account.User})
+			all = append(all, candidate{p: q, model: model, rest: p.ID + "@" + q.Account.User})
 		}
 		// an account whose plan lacks the model (a Free one behind a Plus)
 		// would only answer 400; it is tried only when none lists it
@@ -132,16 +141,16 @@ func perKeyOf(p provider.Provider, model string, from provider.Protocol) (out, a
 		}
 		if !p.Serves(k, model) {
 			// the vendor lists the model to another key only
-			unlisted = append(unlisted, candidate{q, model, rest})
+			unlisted = append(unlisted, candidate{p: q, model: model, rest: rest})
 			continue
 		}
-		out = append(out, candidate{q, model, rest})
+		out = append(out, candidate{p: q, model: model, rest: rest})
 	}
 	if len(out) == 0 {
 		out, unlisted = unlisted, nil // no key lists it: try them all the same
 	}
 	if len(out) == 0 {
-		return []candidate{{p, model, p.ID}}, nil, nil
+		return []candidate{{p: p, model: model, rest: p.ID}}, nil, nil
 	}
 	sort.SliceStable(out, func(i, j int) bool { return keyFit(out[i].p, model, from) < keyFit(out[j].p, model, from) })
 	pool := out[:0:0]
@@ -262,6 +271,13 @@ func (s *Server) planGroup(g provider.Group, ms []provider.Member, from provider
 func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.Protocol, pl *planned, asides *[]candidate, wAsides *[]Weighed) []candidate {
 	keys := func(m provider.Member) []candidate {
 		cs, aside, left := perKeyOf(m.Provider, m.Model, from)
+		// the effort the member is fixed at goes with each of its keys:
+		// the same model at another effort is another member's
+		for _, l := range [][]candidate{cs, aside, left} {
+			for i := range l {
+				l[i].effort = m.Effort
+			}
+		}
 		*asides = append(*asides, aside...)
 		for _, w := range asideOf(aside, m.Provider, false, from) {
 			w.Via = m.Groups()
@@ -280,13 +296,13 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		for _, m := range ms {
 			cs := keys(m)
 			for _, c := range cs {
-				of[c.rest+"/"+c.model] = m
+				of[c.seat()] = m
 			}
 			all = append(all, cs...)
 		}
 		cs, wg := weigh(provider.Provider{ID: provider.GroupPrefix + g.ID, Routing: g.Routing}, all, "", from)
 		for i, c := range cs {
-			m := of[c.rest+"/"+c.model]
+			m := of[c.seat()]
 			w := weighed(c, m.Provider, wg, false, from)
 			w.Routing, w.Via = g.Routing, m.Groups()
 			w.Turn = i == 0 && g.Routing == provider.Rotate && len(cs) > 1
@@ -685,6 +701,12 @@ func streamEvent(ev []byte) (kind, status int, msg string) {
 	case len(v.Error) > 0 && string(v.Error) != "null":
 		return errOf(v.Error)
 	case typ == "ping", typ == "message_start", typ == "response.created", typ == "response.in_progress", typ == "response.queued":
+		return eventLead, 0, ""
+	case strings.HasPrefix(typ, "codex."):
+		// the ChatGPT backend's word on the account (codex.rate_limits),
+		// ahead of the reply: taken for content, it let the stream
+		// through, and a refusal after it (response.failed) went to the
+		// agent rather than tried again
 		return eventLead, 0, ""
 	case typ == "" && v.Choices != nil:
 		// a Chat chunk: the first says only who speaks

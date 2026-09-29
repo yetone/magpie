@@ -55,9 +55,11 @@ type MarketServer struct {
 	Runs string `json:"runs,omitempty"`
 	// SignIn is a remote one that has the agent sign in, in the browser,
 	// the first time it's used
-	SignIn   bool    `json:"signIn,omitempty"`
-	Featured bool    `json:"featured,omitempty"`
-	Inputs   []Input `json:"inputs"`
+	SignIn   bool `json:"signIn,omitempty"`
+	Featured bool `json:"featured,omitempty"`
+	// OptIn is one no agent is given unless it is picked for it
+	OptIn  bool    `json:"optIn,omitempty"`
+	Inputs []Input `json:"inputs"`
 	// Have is the library's server that is this one
 	Have   string `json:"have,omitempty"`
 	server Server
@@ -82,6 +84,7 @@ func secretEnv(key, label, where string) Input {
 // featured are the servers magpie offers first. Every one was checked: its
 // package is published, its endpoint answers.
 var featured = []MarketServer{
+	selfServer(),
 	remoteServer("context7", "Context7", "Upstash", gh("upstash"), "https://mcp.context7.com/mcp",
 		"Up-to-date documentation and code examples for any library, straight into the prompt.", false,
 		Input{Key: "CONTEXT7_API_KEY", Where: "header", Label: "API key", Description: "Optional — raises the rate limit. From context7.com/dashboard", Secret: true, format: "{}"}),
@@ -140,6 +143,41 @@ var featured = []MarketServer{
 	localServer("tavily", "Tavily", "Tavily", gh("tavily-ai"), "https://github.com/tavily-ai/tavily-mcp",
 		"Search and extract from the web with Tavily.", "npx", []string{"-y", "tavily-mcp"},
 		secretEnv("TAVILY_API_KEY", "API key", "app.tavily.com")),
+}
+
+// magpieCommand stands for this magpie's own binary in a featured server's
+// command, which InstallServer puts in when it is added.
+const magpieCommand = "magpie"
+
+// selfServer is magpie's own image generation server: generate_image makes
+// an image with the model Settings → Images → Image generation names, saved
+// in the project. It costs what the model does, so it is given only to the
+// agents picked for it.
+func selfServer() MarketServer {
+	m := localServer("magpie-image", "Magpie Image", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
+		"Generate and edit images with the image model set in Magpie (Settings → Images), saved in the project.", magpieCommand, []string{"mcp", "image"})
+	m.OptIn = true
+	return m
+}
+
+// selfCommand is the server's command and env for this magpie: its binary
+// by full path, and the gateway's address when it isn't the default one.
+func selfCommand(s *Server) {
+	if s.Command != magpieCommand {
+		return
+	}
+	if exe, err := os.Executable(); err == nil {
+		if r, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = r
+		}
+		s.Command = exe
+	}
+	if a := os.Getenv("MAGPIE_ADDR"); a != "" {
+		if s.Env == nil {
+			s.Env = map[string]string{}
+		}
+		s.Env["MAGPIE_ADDR"] = a
+	}
 }
 
 // homepages are the remote servers' pages, where their endpoints aren't.
@@ -219,6 +257,9 @@ func MarketServers(q string) ([]MarketServer, error) {
 func serverKey(s *Server) string {
 	if s.Remote() {
 		return strings.TrimSuffix(strings.ToLower(s.URL), "/")
+	}
+	if len(s.Args) == 2 && s.Args[0] == "mcp" && s.Args[1] == "image" {
+		return "magpie mcp image" // magpie's own, wherever its binary is
 	}
 	for _, a := range s.Args {
 		if a == "" || strings.HasPrefix(a, "-") || a == "run" {
@@ -535,6 +576,7 @@ func InstallServer(id string, values map[string]string, agents []string) (*Resul
 	s := m.server
 	s.Args = slices.Clone(s.Args)
 	s.Env, s.Headers = maps.Clone(s.Env), maps.Clone(s.Headers)
+	selfCommand(&s)
 	for _, in := range m.Inputs {
 		v := strings.TrimSpace(values[in.Key])
 		if v == "" {
@@ -561,6 +603,9 @@ func InstallServer(id string, values map[string]string, agents []string) (*Resul
 		case "arg":
 			s.Args = append(s.Args, expand(v))
 		}
+	}
+	if agents == nil && m.OptIn {
+		agents = []string{}
 	}
 	if agents == nil {
 		for _, t := range Targets() {

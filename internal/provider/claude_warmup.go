@@ -54,6 +54,25 @@ func warmClaudeLogin(send func(ctx context.Context, oauth string) error) func(co
 	}
 }
 
+// claudeWindowsExpected is the windows every Claude account has: Anthropic
+// leaves them out (null) for an account never used.
+var claudeWindowsExpected = []QuotaWindow{{Name: "5 hours", Span: 5 * time.Hour}, {Name: "7 days", Span: 7 * 24 * time.Hour}}
+
+// claudeWarmedNow has what the Claude account user has left read again,
+// not taken from the last few minutes' read: the window a warm-up started
+// has its reset known, and routing ranks the account by it at once.
+func claudeWarmedNow(user string) {
+	key := strings.ToLower(user)
+	c := &claudeUsage
+	c.Lock()
+	if e, ok := c.m[key]; ok {
+		e.at = time.Time{}
+		c.m[key] = e
+	}
+	c.Unlock()
+	StaleAllowance("claude", user)
+}
+
 // ClaudeWarmed is when magpie last started a window of each Claude account,
 // by user as kept (lower-cased).
 func ClaudeWarmed() map[string]time.Time { return codexWarmedIn(claudeWarmPath()) }
@@ -61,6 +80,7 @@ func ClaudeWarmed() map[string]time.Time { return codexWarmedIn(claudeWarmPath()
 // KeepClaudeWindowsWarm starts the Claude accounts' windows as they reset,
 // while settings say to, each with one request send makes.
 func KeepClaudeWindowsWarm(ctx context.Context, send func(ctx context.Context, oauth string) error) {
-	w := codexWarmer{path: claudeWarmPath(), now: time.Now, usage: claudeWarmUsage, send: warmClaudeLogin(send)}
+	w := codexWarmer{path: claudeWarmPath(), now: time.Now, usage: claudeWarmUsage, send: warmClaudeLogin(send),
+		expect: claudeWindowsExpected, warmed: claudeWarmedNow}
 	keepWarm(ctx, "claude", w, func() (string, string) { s := settings.Load(); return s.ClaudeWarmup, s.ClaudeWarmAt })
 }

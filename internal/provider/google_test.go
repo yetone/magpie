@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // fakeGoogle is Google's token endpoint and Code Assist, as far as magpie
@@ -26,6 +28,9 @@ type fakeGoogle struct {
 	onboards  []map[string]any
 	load      string // loadCodeAssist's reply
 	onboard   string // onboardUser's reply
+	quota     string // retrieveUserQuota's reply
+	flags     string // listExperiments' reply
+	exps      []map[string]any
 	heads     map[string]http.Header
 }
 
@@ -54,6 +59,11 @@ func (f *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasSuffix(r.URL.Path, ":onboardUser"):
 		f.onboards = append(f.onboards, body)
 		io.WriteString(w, f.onboard)
+	case strings.HasSuffix(r.URL.Path, ":retrieveUserQuota") && f.quota != "":
+		io.WriteString(w, f.quota)
+	case strings.HasSuffix(r.URL.Path, ":listExperiments") && f.flags != "":
+		f.exps = append(f.exps, body)
+		io.WriteString(w, f.flags)
 	case strings.HasSuffix(r.URL.Path, "latest-arm64-mac.yml"):
 		io.WriteString(w, "version: 3.1.4\npath: x.zip\n")
 	default:
@@ -83,6 +93,7 @@ func resetGoogleState() {
 	googleState.Lock()
 	googleState.tokens = map[string]googleAuth{}
 	googleState.projects = map[string]googleProject{}
+	googleState.flags = map[string]geminiFlags{}
 	googleState.Unlock()
 	antigravityVer.Lock()
 	antigravityVer.v, antigravityVer.at = "", time.Time{}
@@ -230,6 +241,95 @@ func TestSetGoogleProject(t *testing.T) {
 	}
 	if err := SetGoogleProject("gemini", "nobody@example.com", "x"); err == nil {
 		t.Error("set a project on an account that isn't there")
+	}
+}
+
+// A Gemini CLI account lists the models Gemini CLI 0.61 offers it — one
+// Flash and one Flash Lite, the latest where Code Assist's experiments
+// roll it out to the account, previews where its quota has one — and each
+// goes to Code Assist by the id the CLI sends.
+func TestGeminiModelsAsTheCLIOffersThem(t *testing.T) {
+	ids := func(ms []catalog.Model) string {
+		var s []string
+		for _, m := range ms {
+			if m.Name == "" {
+				t.Errorf("%s has no name", m.ID)
+			}
+			s = append(s, m.ID)
+		}
+		return strings.Join(s, " ")
+	}
+	sent := func(p Provider, model string) (string, string) {
+		body := `{"model":"` + model + `","request":{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}}`
+		req, _ := http.NewRequest("POST", p.Base(CodeAssist)+"/v1internal:streamGenerateContent?alt=sse", strings.NewReader(body))
+		if err := p.Sign(context.Background(), req, CodeAssist, []byte(body)); err != nil {
+			t.Fatal(err)
+		}
+		var env map[string]any
+		b, _ := io.ReadAll(req.Body)
+		json.Unmarshal(b, &env)
+		return env["model"].(string), req.Header.Get("User-Agent")
+	}
+	quota := `{"buckets":[{"modelId":"gemini-2.5-pro","remainingFraction":1},{"modelId":"gemini-3-flash","remainingFraction":0.5},
+		{"modelId":"gemini-3-pro-preview","remainingFraction":1},{"modelId":"gemini-3.1-flash-lite","remainingFraction":1}]}`
+	for _, c := range []struct {
+		name, flags, quota, models string
+		wire                       map[string]string
+	}{
+		{"no experiments", "", quota,
+			"gemini-3-pro-preview gemini-3-flash-preview gemini-3.5-flash gemini-3.1-flash-lite gemini-2.5-pro gemini-2.5-flash gemini-2.5-flash-lite",
+			map[string]string{"gemini-3.5-flash": "gemini-3-flash", "gemini-3.1-flash-lite": "gemini-3.1-flash-lite", "gemini-2.5-pro": "gemini-2.5-pro",
+				"gemini-3.8-flash": "gemini-3-flash", "gemini-3.5-flash-lite": "gemini-3.1-flash-lite"}},
+		{"latest rolled out", `{"flags":[{"flagId":45842815,"boolValue":true},{"flagId":45827489,"boolValue":true},{"flagId":45760185,"boolValue":true}]}`, quota,
+			"gemini-3.1-pro-preview gemini-3-flash-preview gemini-3.8-flash gemini-3.5-flash-lite gemini-2.5-pro gemini-2.5-flash-lite",
+			map[string]string{"gemini-3.8-flash": "gemini-3.8-flash", "gemini-3.5-flash": "gemini-3.8-flash", "gemini-3-flash": "gemini-3.8-flash",
+				"gemini-3.1-flash-lite": "gemini-3.5-flash-lite", "gemini-3.5-flash-lite": "gemini-3.5-flash-lite"}},
+		{"no preview, no pro", `{"flags":[{"flagId":45768879,"boolValue":true}]}`, `{"buckets":[{"modelId":"gemini-2.5-flash","remainingFraction":1}]}`,
+			"gemini-3.5-flash gemini-3.1-flash-lite gemini-2.5-flash gemini-2.5-flash-lite", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := &fakeGoogle{load: `{"currentTier":{"id":"standard-tier","name":"Gemini Code Assist Standard"},"cloudaicompanionProject":"proj"}`,
+				quota: c.quota, flags: c.flags}
+			googleSandbox(t, f)
+			auth := googleAuth{AccessToken: "a", RefreshToken: "rt-m", Expiry: time.Now().Add(time.Hour).UnixMilli()}
+			if err := addGoogleLogin("gemini", "work@example.com", "", auth); err != nil {
+				t.Fatal(err)
+			}
+			p, _ := googleAccountOf("gemini")
+			if _, err := p.Fetch(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if got := ids(p.Available()); got != c.models {
+				t.Errorf("models = %s\nwant     %s", got, c.models)
+			}
+			for asked, want := range c.wire {
+				if got, ua := sent(p, asked); got != want || !strings.Contains(ua, "GeminiCLI/0.61.0/"+asked+" ") {
+					t.Errorf("%s went as %s (User-Agent %q), want %s", asked, got, ua, want)
+				}
+			}
+			if c.flags != "" {
+				meta, _ := f.exps[0]["metadata"].(map[string]any)
+				if len(f.exps) != 1 || f.exps[0]["project"] != "proj" || meta["duetProject"] != "proj" || meta["ideVersion"] != "0.61.0" {
+					t.Errorf("experiments asked %d times: %v", len(f.exps), f.exps)
+				}
+			}
+			// the quota's gemini-3-flash is the Flash the CLI shows
+			if c.quota == quota {
+				flash := map[bool]string{false: "gemini-3.5-flash", true: "gemini-3.8-flash"}[c.flags != ""]
+				found := false
+				for _, w := range googleLogins("gemini")[0].acct.quota(context.Background(), "").Windows {
+					found = found || w.Model == flash && w.Used == 50
+				}
+				if !found {
+					t.Errorf("no %s quota window", flash)
+				}
+			}
+		})
+	}
+	// Antigravity's ids go as they are
+	out, _, _ := codeAssistEnvelope("antigravity", []byte(`{"model":"gemini-3.5-flash","request":{}}`), "p", geminiFlags{})
+	if !strings.Contains(string(out), `"model":"gemini-3.5-flash"`) {
+		t.Errorf("antigravity envelope = %s", out)
 	}
 }
 

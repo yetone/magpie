@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -108,5 +109,92 @@ func TestGrokBodyDropsNullReasoningContent(t *testing.T) {
 	same := []byte(`{"input":[{"type":"reasoning","content":[],"encrypted_content":"x"}]}`)
 	if string(grokBody(same)) != string(same) {
 		t.Fatal("reasoning with content was changed")
+	}
+}
+
+// On Windows the CLI is grok.exe, looked for in the installer's bin first,
+// then on PATH, then ~/.local/bin; only the installer's own folders are
+// taken on trust (#180).
+func TestGrokCandidates(t *testing.T) {
+	home := t.TempDir()
+	npm := filepath.Join(home, "AppData", "Roaming", "npm")
+	custom := filepath.Join(home, "tools")
+	for _, c := range []struct {
+		goos, binDir, grokHome string
+		want                   []grokCandidate
+	}{
+		{"windows", "", filepath.Join(home, ".grok"), []grokCandidate{
+			{filepath.Join(home, ".grok", "bin", "grok.exe"), true},
+			{filepath.Join(npm, "grok.exe"), false},
+			{filepath.Join(home, ".local", "bin", "grok.exe"), false},
+		}},
+		{"windows", custom, filepath.Join(home, "gh"), []grokCandidate{
+			{filepath.Join(custom, "grok.exe"), true},
+			{filepath.Join(home, "gh", "bin", "grok.exe"), true},
+			{filepath.Join(home, ".grok", "bin", "grok.exe"), true},
+			{filepath.Join(npm, "grok.exe"), false},
+			{filepath.Join(home, ".local", "bin", "grok.exe"), false},
+		}},
+		{"darwin", "", filepath.Join(home, ".grok"), []grokCandidate{
+			{filepath.Join(home, ".grok", "bin", "grok"), true},
+			{filepath.Join(npm, "grok"), false},
+			{filepath.Join(home, ".local", "bin", "grok"), false},
+		}},
+	} {
+		// the registry's PATH repeats the process' and has a relative entry
+		path := []string{npm, "", "relative", filepath.Join(home, ".grok", "bin"), npm}
+		got := grokCandidates(c.goos, home, c.grokHome, c.binDir, path)
+		if len(got) != len(c.want) {
+			t.Fatalf("%s %q: %+v", c.goos, c.binDir, got)
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s %q: [%d] = %+v, want %+v", c.goos, c.binDir, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
+// An installed Grok Build is found where its installer put it even with
+// another grok ahead of it on PATH, and one on PATH is taken only when it
+// lives under a .grok folder.
+func TestGrokExecutableFinds(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("GROK_HOME", "")
+	t.Setenv("GROK_BIN_DIR", "")
+	name := "grok"
+	if runtime.GOOS == "windows" {
+		name = "grok.exe"
+	}
+	put := func(p string) string {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	npm := filepath.Join(home, "npm")
+	put(filepath.Join(npm, name))
+	t.Setenv("PATH", npm)
+	if p := GrokExecutable(); p != "" && !strings.Contains(p, ".grok") {
+		t.Fatalf("another grok taken: %s", p)
+	}
+	pathed := put(filepath.Join(home, ".grok", "versions", "1", name))
+	t.Setenv("PATH", npm+string(os.PathListSeparator)+filepath.Dir(pathed))
+	if p := GrokExecutable(); p != pathed {
+		t.Fatalf("on PATH: %q", p)
+	}
+	installed := put(filepath.Join(home, ".grok", "bin", name))
+	if p := GrokExecutable(); p != installed {
+		t.Fatalf("installed: %q", p)
+	}
+	custom := put(filepath.Join(home, "tools", name))
+	t.Setenv("GROK_BIN_DIR", filepath.Dir(custom))
+	if p := GrokExecutable(); p != custom {
+		t.Fatalf("GROK_BIN_DIR: %q", p)
 	}
 }

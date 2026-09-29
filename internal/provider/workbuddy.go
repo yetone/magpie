@@ -320,7 +320,10 @@ func workBuddyAlsoOn(w *wbSite) []Provider {
 
 func wbProvider(a wbAccount) Provider {
 	w := a.site
-	acct := &Account{Agent: w.id, User: a.User, Plan: a.Plan}
+	// WorkBuddy refuses a request that doesn't stream: "Non-stream chat
+	// request is currently not supported" (#124)
+	acct := &Account{Agent: w.id, User: a.User, Plan: a.Plan, Stream: true}
+	acct.body = wbBody
 	acct.sign = func(ctx context.Context, req *http.Request, body []byte) error {
 		c, err := wbFresh(ctx, a)
 		if err != nil {
@@ -333,6 +336,9 @@ func wbProvider(a wbAccount) Provider {
 		req.Header.Set("X-Product", "SaaS")
 		req.Header.Set("X-IDE-Type", "WorkBuddy")
 		req.Header.Set("User-Agent", "WorkBuddy/"+wbUAVersion)
+		if w.id == WorkBuddyAIID {
+			wbClientHeaders(req)
+		}
 		return nil
 	}
 	acct.models = func() []catalog.Model { return w.models }
@@ -344,6 +350,73 @@ func wbProvider(a wbAccount) Provider {
 		return ms, catalog.SaveLive(w.id, w.api()+"/v2", ms)
 	}
 	return Provider{ID: w.id, Name: w.name, Icon: "workbuddy-color", Chat: w.api() + "/v2", Website: w.website, Account: acct}
+}
+
+// wbSystem is the system message a chat that has none is sent with.
+const wbSystem = "You are a helpful assistant."
+
+// wbBody starts a chat with a system message when it has none: WorkBuddy
+// refuses one whose first message isn't the system prompt ("first message
+// is not system prompt"), and scripts and plain chat clients often send
+// none.
+func wbBody(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"messages"`)) {
+		return body
+	}
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var m map[string]any
+	if dec.Decode(&m) != nil || m == nil {
+		return body
+	}
+	msgs, ok := m["messages"].([]any)
+	if !ok || len(msgs) == 0 {
+		return body
+	}
+	if first, ok := msgs[0].(map[string]any); ok && first["role"] == "system" {
+		return body
+	}
+	m["messages"] = append([]any{map[string]any{"role": "system", "content": wbSystem}}, msgs...)
+	var out bytes.Buffer
+	enc := json.NewEncoder(&out)
+	enc.SetEscapeHTML(false)
+	if enc.Encode(m) != nil {
+		return body
+	}
+	return bytes.TrimSuffix(out.Bytes(), []byte("\n"))
+}
+
+// wbClientHeaders are the rest of what WorkBuddy's own chats carry to its
+// /v2/chat/completions, as its desktop app lists them for that gateway
+// (x-requested-with is "the gateway's admission convention"): the request
+// marked as an XHR, the agent's intent, the client's name and version, and
+// the conversation and request ids. They were added for WorkBuddy AI's
+// "illegal API invocation from an unapproved channel", but that answer
+// turned out to come from what the prompt says, not the headers: both
+// builds give it to a chat whose system prompt is Claude Code's or Codex's
+// own (#182). Only WorkBuddy AI gets them, as its own client sends them.
+func wbClientHeaders(req *http.Request) {
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("X-Agent-Intent", "craft")
+	req.Header.Set("X-Agent-Type", "main")
+	req.Header.Set("X-IDE-Name", "WorkBuddy")
+	req.Header.Set("X-IDE-Version", wbUAVersion)
+	id := wbRequestID()
+	for _, h := range []string{"X-Conversation-ID", "X-Conversation-Request-ID"} {
+		if req.Header.Get(h) == "" {
+			req.Header.Set(h, id)
+		}
+	}
+	id = wbRequestID()
+	req.Header.Set("X-Conversation-Message-ID", id)
+	req.Header.Set("X-Request-ID", id)
+}
+
+// wbRequestID is a new id as WorkBuddy makes them: 32 hex digits.
+func wbRequestID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // wbDomain is the X-Domain a request carries: the account's own domain, or

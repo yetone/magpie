@@ -225,6 +225,88 @@ func TestSubscriptionAccountsTakeOver(t *testing.T) {
 	}
 }
 
+// Two Claude Max accounts ticked (#177): the one Claude Code is signed in to
+// is out of quota, and the request goes to the saved spare, streamed or not.
+// With magpie wired into Claude Code, `claude auth status` tells of magpie's
+// token and no email: the account is still named from ~/.claude.json, so it
+// is the saved me@example.com, not a "Claude Max" served beside it.
+func TestClaudeAccountsTakeOver(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	far := time.Now().Add(24 * time.Hour).UnixMilli()
+	oauth := func(tok string) map[string]any {
+		return map[string]any{"claudeAiOauth": map[string]any{"accessToken": tok, "refreshToken": "r-" + tok, "expiresAt": far, "subscriptionType": "max"}}
+	}
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
+	os.WriteFile(filepath.Join(home, ".claude", ".credentials.json"), mustJSON(oauth("tok-primary")), 0o600)
+	os.WriteFile(filepath.Join(home, ".claude.json"), mustJSON(map[string]any{
+		"oauthAccount": map[string]any{"emailAddress": "me@example.com", "accountUuid": "u-me"}}), 0o600)
+	os.MkdirAll(filepath.Dir(provider.Path()), 0o755)
+	os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), mustJSON([]map[string]any{
+		{"agent": "claude", "user": "me@example.com", "plan": "max", "on": true, "seen": time.Now(), "auth": oauth("tok-me")},
+		{"agent": "claude", "user": "spare@example.com", "plan": "max", "on": true, "seen": time.Now(), "auth": oauth("tok-spare")},
+	}), 0o600)
+	dir := t.TempDir()
+	log := filepath.Join(dir, "log")
+	// out of quota, the CLI says so in a result and waits on its next input
+	script := `#!/bin/sh
+if [ "$1" = auth ]; then echo '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}'; exit 0; fi
+echo "${CLAUDE_CODE_OAUTH_TOKEN:-own}" >> ` + log + `
+while read -r line; do
+  if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ "$CLAUDE_CODE_OAUTH_TOKEN" = tok-me ]; then
+    echo '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","rateLimitType":"five_hour","resetsAt":1790700000}}'
+    echo '{"type":"assistant","message":{"id":"x","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"You'"'"'ve hit your limit · resets 3am"}]},"error":"rate_limit"}'
+    echo '{"type":"result","subtype":"success","is_error":true,"result":"You'"'"'ve hit your limit · resets 3am"}'
+  else
+    echo '{"type":"stream_event","event":{"type":"message_start","message":{"id":"m","model":"claude-sonnet-5","usage":{"input_tokens":1}}}}'
+    echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"pong"}}}'
+    echo '{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}}'
+    echo '{"type":"stream_event","event":{"type":"message_stop"}}'
+    echo '{"type":"result","subtype":"success","is_error":false,"result":"pong"}'
+  fi
+done
+`
+	os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755)
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	provider.ForgetAccounts()
+	t.Cleanup(provider.ForgetAccounts)
+
+	for _, stream := range []string{"true", "false"} {
+		restingUntil.Lock()
+		restingUntil.m = map[string]time.Time{}
+		restingUntil.Unlock()
+		os.Remove(log)
+		done := make(chan struct{})
+		var code int
+		var body string
+		go func() {
+			defer close(done)
+			code, body = post(t, "/v1/messages", `{"model":"claude/claude-sonnet-5","max_tokens":50,"stream":`+stream+`,"messages":[{"role":"user","content":"ping"}]}`)
+		}()
+		select {
+		case <-done:
+		case <-time.After(20 * time.Second):
+			t.Fatalf("stream=%s: no answer", stream)
+		}
+		b, _ := os.ReadFile(log)
+		if code != 200 || !strings.Contains(body, "pong") {
+			t.Fatalf("stream=%s: status %d: %s (runs %q)", stream, code, body, b)
+		}
+		// the signed-in account once, then the spare: never it again under
+		// its saved name
+		if runs := strings.Fields(string(b)); strings.Join(runs, ",") != "own,tok-spare" && strings.Join(runs, ",") != "tok-spare" {
+			t.Fatalf("stream=%s: runs %v", stream, runs)
+		}
+	}
+	for _, p := range provider.All() {
+		if p.Account != nil && p.Account.Agent == "claude" && p.Account.User != "me@example.com" {
+			t.Fatalf("Claude Code's own account named %q", p.Account.User)
+		}
+	}
+}
+
 // A relay that hands out one key for Anthropic and another for OpenAI:
 // each key is used on its own endpoint only, and the one that suits the
 // model goes first whatever the order.

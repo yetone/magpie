@@ -17,11 +17,13 @@ const ruleUsage = `usage:
   magpie group rule add <group> use=<model> [tokens=<n>] [images] [effort=on|low|medium|high|xhigh|max] [agents=a,b…]
                         [intent="<what the message asks for>"] [classifier=<model>] [at=<n>]
                                           a rule: a turn that matches it goes to <model>, one of the group's
-                                          (or group/<id>, a group in it), first
+                                          (or group/<id>, a group in it), first; a model in the group at an
+                                          effort of its own is named with it (use=glm/glm-5.3-flash:high)
   magpie group rule rm <group> <n>        remove rule n
   magpie group rule mv <group> <n> <to>   move rule n to place <to>
   magpie group rule classifier <group> <model>
-                                          the model that tells which intent a message is
+                                          the model that tells which intent a message is, or
+                                          group/<id>: another group, its models tried in turn
 
   Rules are looked at top first when you send a message (a new turn); the first that
   matches puts its model first, and the group's others stay behind it if it fails.
@@ -34,11 +36,12 @@ const ruleUsage = `usage:
   agents   it comes from one of these agents (claude, codex, opencode, … as magpie usage names them)
   intent   the user's message is of this kind, in your words ("writing or fixing tests", "a quick
            question"): as the turn begins, the group's classifier — any model magpie has, best a small
-           fast one without reasoning — is asked which of the intents that may match the message is,
+           fast one without reasoning, or another group of them to fail over — is asked which of the intents that may match the message is,
            once; if it fails or can't say, no intent matches. Its call shows in the usage as magpie's own
 
   e.g. magpie group rule add opus-anywhere use=openrouter/google/gemini-3-pro tokens=200k
        magpie group rule add opus-anywhere use=a/vision-model images
+       magpie group rule add fast use=codex/gpt-5.6-sol:xhigh effort=high
        magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash intent="a quick question" classifier=groq/llama-3.1-8b-instant`
 
 // parseTokens reads 200000, 200k, 1.5m.
