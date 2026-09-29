@@ -44,9 +44,18 @@ func startDimAgentSignIn(s *signInFlow) error {
 	if err != nil {
 		return fmt.Errorf("DimAgent sign-in: %w", err)
 	}
+	// An earlier DimAgent sign-in (its tab closed, "Sign in" clicked again)
+	// still holds the port: StartSignIn replaces it only after this one has
+	// begun, so let it go now, or the browser would find nobody there.
+	released := releaseDimAgentSignIns(s)
 	// A busy port still permits the OAuth round: the user can paste the
 	// browser's final callback URL instead of delivering it to our listener.
-	ln, _ := net.Listen("tcp", dimagentCallbackAddr)
+	ln, err := net.Listen("tcp", dimagentCallbackAddr)
+	// a listener just closed may not have let go of the port yet
+	for i := 0; err != nil && released && i < 20; i++ {
+		time.Sleep(50 * time.Millisecond)
+		ln, err = net.Listen("tcp", dimagentCallbackAddr)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.mu.Lock()
 	s.st.URL, s.stop = authURL, cancel
@@ -111,6 +120,29 @@ func startDimAgentSignIn(s *signInFlow) error {
 		s.finish(SignInState{State: "done", User: user, Using: strings.EqualFold(activeOf(ls), user)})
 	}()
 	return nil
+}
+
+// releaseDimAgentSignIns ends every other DimAgent sign-in and closes its
+// callback listener at once, rather than after finish's grace second.
+func releaseDimAgentSignIns(s *signInFlow) bool {
+	var olds []*signInFlow
+	signIns.Lock()
+	for _, o := range signIns.m {
+		if o != s && o.status().Agent == "dimagent" {
+			olds = append(olds, o)
+		}
+	}
+	signIns.Unlock()
+	for _, o := range olds {
+		o.finish(SignInState{State: "canceled"})
+		o.mu.Lock()
+		srv := o.srv
+		o.mu.Unlock()
+		if srv != nil {
+			_ = srv.Close()
+		}
+	}
+	return len(olds) > 0
 }
 
 type dimagentCallback struct{ Code, State, Error string }

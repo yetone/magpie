@@ -102,3 +102,33 @@ func TestReview226LoginUsage(t *testing.T) {
 		t.Fatalf("%+v", q)
 	}
 }
+
+// Starting the sign-in again (the first tab closed) must still get the
+// callback port: the older flow is replaced, and its listener with it.
+func TestReview226RestartKeepsListener(t *testing.T) {
+	signIn(t)
+	addr := dimagentSignInPort(t, false)
+	dimagentSite(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(500) })
+	first, err := StartSignIn("dimagent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := StartSignIn("dimagent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { CancelSignIn(second.ID) })
+	if st, _ := SignInStatus(first.ID); st.State == "waiting" {
+		t.Fatal("first still waiting")
+	}
+	time.Sleep(1500 * time.Millisecond) // the old server's delayed shutdown
+	res, err := http.Get("http://" + addr + "/auth/callback?state=x&code=y")
+	if err != nil {
+		t.Fatalf("second sign-in has no listener: %v", err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), "another sign-in") {
+		t.Fatalf("callback answered by the wrong flow: %s", body)
+	}
+}
