@@ -17,6 +17,12 @@ package provider
 // from that time: a window that would still be running at it isn't started
 // on its reset (the one ending at 2 is left, not started to run past 6),
 // and the time starts the day's first.
+//
+// A weekly window's warm-up waits for the time as well while the 5-hour
+// window isn't running and, started then, would run past it: the one
+// request starts every window not running, the 5-hour one with it.
+// Started with the day's first, the weekly window resets at the time from
+// then on, clear of the wait.
 
 import (
 	"time"

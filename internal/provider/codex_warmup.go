@@ -130,7 +130,8 @@ func (c codexWarmer) warmNow(ctx context.Context, which, at string) []CodexWarm 
 		prev, next := st[key], map[string]warmWindow{}
 		var due []string
 		onReset, days := map[string]bool{}, map[string]string{}
-		unstarted := map[string]bool{}
+		unstarted, long := map[string]bool{}, map[string]bool{}
+		waitDay := false
 		for _, w := range withExpected(q.Windows, c.expect) {
 			// the weekly windows on their reset while it is on, the 5-hour
 			// ones with "all" and for the day's start
@@ -159,6 +160,11 @@ func (c codexWarmer) warmNow(ctx context.Context, which, at string) []CodexWarm 
 				// it waits for the day's start, kept as it was till then
 				reset = false
 			}
+			if short && unstarted[w.Name] && !daily && heldForDay(at, w.Span, now) {
+				// any request now would start it, to run past the day's start
+				waitDay = true
+			}
+			long[w.Name] = !short
 			if reset || daily {
 				due = append(due, w.Name)
 				onReset[w.Name] = reset
@@ -171,6 +177,10 @@ func (c codexWarmer) warmNow(ctx context.Context, which, at string) []CodexWarm 
 				n = p
 			}
 			next[w.Name] = n
+		}
+		if waitDay {
+			// the weekly windows wait for the day's start too, kept as they were
+			due = slices.DeleteFunc(due, func(name string) bool { return long[name] })
 		}
 		if len(due) > 0 {
 			r := CodexWarm{User: user, Windows: due}
