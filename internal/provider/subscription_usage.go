@@ -239,6 +239,9 @@ func fetchSubscriptionUsage() []SubscriptionQuota {
 	if !hidden[CommandCodePlanID] {
 		fetches = append(fetches, perLogin(ctx, cmdLoginList(), "Command Code", "commandcode")...)
 	}
+	if !hidden["qoder"] {
+		fetches = append(fetches, perLogin(ctx, loginsOf(qoderLogins()), "Qoder", "qoder")...)
+	}
 	for _, agent := range []string{"gemini", "antigravity"} {
 		if hidden[agent] {
 			continue

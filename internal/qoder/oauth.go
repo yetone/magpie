@@ -46,8 +46,9 @@ func (r JobToken) Expiry() time.Duration {
 // models. It is a helper, not a state machine: the caller owns the browser and
 // the waiting, and calls these one at a time.
 type DeviceFlow struct {
-	client   *http.Client
-	clientID string
+	client    *http.Client
+	clientID  string
+	machineID string
 }
 
 // NewDeviceFlow makes a flow; a nil client is a 20-second-timeout one.
@@ -55,11 +56,13 @@ func NewDeviceFlow(client *http.Client) *DeviceFlow {
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
-	return &DeviceFlow{client: client, clientID: ClientID}
+	return &DeviceFlow{client: client, clientID: ClientID, machineID: newUUID()}
 }
 
 // Client is the flow's HTTP client, reused for the model fetch after sign-in.
 func (f *DeviceFlow) Client() *http.Client { return f.client }
+
+func (f *DeviceFlow) MachineID() string { return f.machineID }
 
 // Authorization returns the page to open and the (verifier, nonce) the poll
 // needs. It is a PKCE device flow: a random verifier is kept, its S256 digest
@@ -77,7 +80,7 @@ func (f *DeviceFlow) Authorization() (authURL, verifier, nonce string, err error
 	q.Set("challenge", challenge)
 	q.Set("challenge_method", "S256")
 	q.Set("nonce", nonce)
-	q.Set("machine_id", newUUID())
+	q.Set("machine_id", f.machineID)
 	q.Set("client_id", f.clientID)
 	q.Set("redirect_uri", RedirectURI)
 	return DeviceFlowHost + DeviceSelectAccountsPath + "?" + q.Encode(), verifier, nonce, nil
@@ -190,4 +193,55 @@ func postJobRefresh(ctx context.Context, client *http.Client, endpoint, refreshT
 		return nil, fmt.Errorf("qoder job token refresh: incomplete token pair")
 	}
 	return &t, nil
+}
+
+// DeviceTokenRefreshHTTPError preserves a rejected refresh status without response data.
+type DeviceTokenRefreshHTTPError struct {
+	StatusCode int
+}
+
+func (e *DeviceTokenRefreshHTTPError) Error() string {
+	return fmt.Sprintf("qoder device token refresh: upstream HTTP %d", e.StatusCode)
+}
+
+// RefreshDeviceToken rotates the device token used by account endpoints.
+func RefreshDeviceToken(ctx context.Context, client *http.Client, endpoint, refreshToken string) (*DeviceToken, error) {
+	if strings.TrimSpace(refreshToken) == "" {
+		return nil, fmt.Errorf("qoder device token refresh: missing refresh token; sign in again")
+	}
+	if client == nil {
+		client = &http.Client{Timeout: 20 * time.Second}
+	}
+	if endpoint == "" {
+		endpoint = openAPIHost + DeviceTokenRefreshPath
+	}
+	body, err := json.Marshal(map[string]string{"refresh_token": refreshToken})
+	if err != nil {
+		return nil, fmt.Errorf("qoder device token refresh: marshal: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
+	if err != nil {
+		return nil, fmt.Errorf("qoder device token refresh: create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("qoder device token refresh: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, &DeviceTokenRefreshHTTPError{StatusCode: resp.StatusCode}
+	}
+	var token DeviceToken
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&token); err != nil {
+		return nil, fmt.Errorf("qoder device token refresh: decode: %w", err)
+	}
+	if token.Token == "" {
+		token.Token = token.DeviceToken
+	}
+	if strings.TrimSpace(token.Token) == "" || strings.TrimSpace(token.RefreshToken) == "" {
+		return nil, fmt.Errorf("qoder device token refresh: incomplete token pair")
+	}
+	return &token, nil
 }

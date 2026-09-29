@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -29,10 +30,11 @@ XcW+ML9FoCI6AOvOzwIDAQAB
 
 // User is the signed-in Qoder account a COSY envelope is built for.
 type User struct {
-	UID   string // the Qoder user id (x-gw-user-id / Cosy-User value)
-	Name  string // display name, may be empty
-	Email string // account email, may be empty
-	Token string // the jt- Bearer token (security_oauth_token)
+	UID       string // the Qoder user id (x-gw-user-id / Cosy-User value)
+	Name      string // display name, may be empty
+	Email     string // account email, may be empty
+	Token     string // the jt- Bearer token (security_oauth_token)
+	MachineID string // generated once at sign-in, saved with the account
 }
 
 var qoderRSAKey *rsa.PublicKey
@@ -119,6 +121,9 @@ func urlPathname(rawURL string) string {
 // BuildCosyHeaders builds the full set of COSY request headers for a Qoder
 // call to rawURL with body already in its wire (encoded) form.
 func BuildCosyHeaders(rawURL string, user *User, body string, timestamp int64) (map[string]string, error) {
+	if user == nil || user.MachineID == "" {
+		return nil, fmt.Errorf("qoder: missing account machine id")
+	}
 	infoB64, keyB64, err := generateUserBlob(user)
 	if err != nil {
 		return nil, err
@@ -141,12 +146,10 @@ func BuildCosyHeaders(rawURL string, user *User, body string, timestamp int64) (
 	payload := base64.StdEncoding.EncodeToString(payloadJSON)
 
 	path := urlPathname(rawURL)
-	sigInput := payload + "\n" + keyB64 + "\n" + fmt.Sprintf("%d", timestamp) + "\n" + body + "\n" + path
-	sigSum := md5.Sum([]byte(sigInput))
-	sig := hex.EncodeToString(sigSum[:])
+	sig := cosySignature(payload, keyB64, timestamp, body, path)
 
 	auth := "Bearer COSY." + payload + "." + sig
-	machineID := newUUID()
+	machineID := user.MachineID
 
 	return map[string]string{
 		"Accept":                "application/json",
@@ -163,10 +166,33 @@ func BuildCosyHeaders(rawURL string, user *User, body string, timestamp int64) (
 		"Cosy-MachineId":        machineID,
 		"Cosy-MachineToken":     machineID,
 		"Cosy-MachineType":      "5",
-		"Cosy-MachineOS":        "x86_64_win32",
+		"Cosy-MachineOS":        MachineOS(),
 		"Cosy-Scene":            "app",
 		"Cosy-User":             user.UID,
 		"Cosy-Version":          "1.1.49",
 		"Login-Version":         "v2",
 	}, nil
+}
+
+func cosySignature(payload, key string, timestamp int64, body, path string) string {
+	sum := md5.Sum([]byte(payload + "\n" + key + "\n" + fmt.Sprintf("%d", timestamp) + "\n" + body + "\n" + path))
+	return hex.EncodeToString(sum[:])
+}
+
+// MachineOS uses the architecture and platform names used by desktop clients.
+func MachineOS() string {
+	arch := runtime.GOARCH
+	switch arch {
+	case "amd64":
+		arch = "x86_64"
+	case "386":
+		arch = "x86"
+	case "arm64":
+		arch = "aarch64"
+	}
+	os := runtime.GOOS
+	if os == "windows" {
+		os = "win32"
+	}
+	return arch + "_" + os
 }

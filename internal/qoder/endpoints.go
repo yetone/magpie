@@ -4,10 +4,11 @@
 // protocol (endpoints, the COSY request envelope, the body codec and the
 // device-flow sign-in) is ported from CLIProxyAPI's qoder support, which
 // reverse-engineered it from the client and verified it against live captures.
+// Source: https://github.com/ufec/CLIProxyAPI (MIT); see LICENSE in this directory.
+// Copyright (c) 2025-2005.9 Luis Pater
+// Copyright (c) 2025.9-present Router-For.ME
 //
-// Two builds are known to Qoder: the global client and the China one. This
-// package holds the global one's defaults; a build's hosts and paths are
-// passed to the requests, so both are served.
+// This package supports the global Qoder client.
 package qoder
 
 // OAuth device-flow configuration (verified against live captures).
@@ -53,6 +54,3 @@ const ProviderKey = "qoder"
 
 // ChatURL is the full chat endpoint on the inference host.
 func ChatURL() string { return APIHost + ChatPath }
-
-// ModelsURL is the full model-listing endpoint on the inference host.
-func ModelsURL() string { return APIHost + ListModelsPath }

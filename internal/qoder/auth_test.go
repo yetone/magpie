@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -13,20 +14,30 @@ import (
 // TestAuthorizationURL checks the device-flow page carries PKCE S256 and the
 // client id, and returns the verifier+nonce the later poll needs.
 func TestAuthorizationURL(t *testing.T) {
-	url, verifier, nonce, err := NewDeviceFlow(nil).Authorization()
+	f := NewDeviceFlow(nil)
+	authURL, verifier, nonce, err := f.Authorization()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(url, DeviceFlowHost+DeviceSelectAccountsPath) {
-		t.Fatalf("url %q", url)
+	if !strings.HasPrefix(authURL, DeviceFlowHost+DeviceSelectAccountsPath) {
+		t.Fatalf("url %q", authURL)
 	}
 	for _, q := range []string{"challenge=", "challenge_method=S256", "client_id=" + ClientID, "nonce=", "redirect_uri="} {
-		if !strings.Contains(url, strings.TrimSuffix(q, "=")) {
-			t.Fatalf("url missing %q: %s", q, url)
+		if !strings.Contains(authURL, strings.TrimSuffix(q, "=")) {
+			t.Fatalf("url missing %q: %s", q, authURL)
 		}
 	}
 	if verifier == "" || nonce == "" {
 		t.Fatal("no verifier/nonce")
+	}
+	u, _ := url.Parse(authURL)
+	if u.Query().Get("machine_id") != f.MachineID() {
+		t.Fatal("login machine id differs from flow")
+	}
+	second, _, _, _ := f.Authorization()
+	u, _ = url.Parse(second)
+	if u.Query().Get("machine_id") != f.MachineID() {
+		t.Fatal("flow changed its machine id")
 	}
 }
 
@@ -128,31 +139,6 @@ func TestFetchUserInfo(t *testing.T) {
 	}
 	if _, err := FetchUserInfo(context.Background(), srv.Client(), ""); err == nil {
 		t.Fatal("empty device token should error")
-	}
-}
-
-// TestStoreSaveLoad checks the credential store saves and reads back the
-// account, and the Valid() lead treats a near-expired token as needing a refresh.
-func TestStoreSaveLoad(t *testing.T) {
-	s := NewStore(t.TempDir())
-	if err := s.Save(Credential{UID: "u1", Email: "a@b", Token: "jt-old", RefreshToken: "rt1",
-		ExpiresAt: time.Now().Add(time.Minute).UnixMilli()}); err != nil {
-		t.Fatal(err)
-	}
-	c, err := s.Load()
-	if err != nil || c == nil || c.Token != "jt-old" {
-		t.Fatalf("load: %+v %v", c, err)
-	}
-	if c.Valid() {
-		t.Fatal("a token a minute from expiry should not be valid (lead is 5m)")
-	}
-	if err := s.Save(Credential{UID: "u1", Token: "jt-old", RefreshToken: "rt1",
-		ExpiresAt: time.Now().Add(time.Hour).UnixMilli()}); err != nil {
-		t.Fatal(err)
-	}
-	c2, _ := s.Load()
-	if !c2.Valid() {
-		t.Fatal("an hour-fresh token should be valid")
 	}
 }
 

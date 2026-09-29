@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -36,57 +38,135 @@ var (
 	qoderArg  = regexp.MustCompile(`(?s)\x3cparameter=([^>]+)\x3e(.*?)\x3c/parameter\x3e`)
 )
 
-// qoderModelKey and qoderSys are what the reference asks Qoder for: its one
-// model key and the system line the client sends.
-const (
-	qoderModelKey = "qfmodel"
-	qoderSys      = "You are a Qoder agent. Use the instructions below and the tools available to you to assist the user."
-)
+const qoderSys = "You are a Qoder agent. Use the instructions below and the tools available to you to assist the user."
 
 // qoderAuth hands a request the signed-in account's uid and a live job
 // token, and qoderURL the chat endpoint; vars so tests can stand in for
 // them, the way a Devin round stands in for devinAuth.
 var (
-	qoderAuth = provider.QoderCredential
-	qoderURL  = qoder.ChatURL
+	qoderAuth  = provider.QoderCredential
+	qoderModel = provider.QoderModel
+	qoderURL   = qoder.ChatURL
 )
 
 // serveQoder answers a request through Qoder's API.
-func (s *Server) serveQoder(w http.ResponseWriter, r *http.Request, from provider.Protocol, model string, body []byte, usage *Usage) (int, string) {
+func (s *Server) serveQoder(w http.ResponseWriter, r *http.Request, from provider.Protocol, p provider.Provider, model string, body []byte, usage *Usage) (int, string) {
 	req, err := parse(from, body)
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
 	req.Model = model
-	ask := s.askQoder(model)
-	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
-			return s.searchReply(w, r, from, "Qoder", req, usage, ask)
-		}
-	}
+	ask := s.askQoder(model, p.Account.User)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	events, status, msg := ask(ctx, req)
+	q := req
+	var tool string
+	if req.WebSearch && !searching(r.Context()) {
+		if _, _, ok := searcher(); ok {
+			copy := *req
+			copy.WebSearch = false
+			search := searchTool(copy.Tools)
+			copy.Tools = append(slices.Clone(copy.Tools), search)
+			copy.Messages = slices.Clone(copy.Messages)
+			q, tool = &copy, search.Name
+		}
+	}
+	events, status, msg := ask(ctx, q)
 	if events == nil {
 		return writeError(w, from, status, msg), msg
 	}
-	return relay(w, r, from, "Qoder", req, events, usage, cancel, func(string, string, bool) {})
+	if tool != "" {
+		first := events
+		out := make(chan Event, 16)
+		go func() {
+			defer close(out)
+			s.searchRounds(ctx, q, tool, first, ask, out)
+		}()
+		events = out
+	}
+	return relayQoder(w, from, req, events, usage, cancel)
+}
+
+// relayQoder preserves upstream failures before committing a response, including
+// failures after partial non-streaming text. Streaming failures after output
+// has begun are terminal error events. Keep this policy local to Qoder.
+func relayQoder(w http.ResponseWriter, from provider.Protocol, req *Request, events <-chan Event, usage *Usage, abort context.CancelFunc) (int, string) {
+	fail := func(ev Event) (int, string) {
+		abort()
+		code := ev.Status
+		if code < 400 || code > 599 {
+			code = 502
+		}
+		return writeError(w, from, code, ev.Text), ev.Text
+	}
+	if req.Stream {
+		var head []Event
+		for ev := range events {
+			if ev.Kind == KError {
+				return fail(ev)
+			}
+			head = append(head, ev)
+			if ev.Kind != KStart && ev.Kind != KUsage {
+				break
+			}
+		}
+		if len(head) == 0 || head[len(head)-1].Kind == KStart || head[len(head)-1].Kind == KUsage {
+			return fail(Event{Text: "Qoder ended without an answer"})
+		}
+		enc := encoder(from, newSSEWriter(w), req)
+		see := func(ev Event) bool {
+			if ev.Kind == KStart || ev.Kind == KUsage {
+				usage.add(ev.Usage)
+			}
+			enc.event(ev)
+			return ev.Kind != KError
+		}
+		for _, ev := range head {
+			see(ev)
+		}
+		for ev := range events {
+			if !see(ev) {
+				abort()
+				return 200, ev.Text
+			}
+		}
+		enc.finish()
+		return 200, ""
+	}
+	var col collector
+	for ev := range events {
+		if ev.Kind == KError {
+			return fail(ev)
+		}
+		col.add(ev)
+	}
+	res := col.finish()
+	usage.add(res.Usage)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(render(from, res, req))
+	return 200, ""
 }
 
 // askQoder is a round for Qoder's API.
-func (s *Server) askQoder(model string) round {
+func (s *Server) askQoder(model, user string) round {
 	return func(ctx context.Context, req *Request) (<-chan Event, int, string) {
-		uid, token, err := qoderAuth(ctx)
+		cred, err := qoderAuth(ctx, user)
 		if err != nil {
 			return nil, 401, "Qoder: " + err.Error()
 		}
-		plain, err := qoderChatBody(req)
+		config, err := qoderModel(ctx, user, model)
+		if err != nil {
+			return nil, 400, err.Error()
+		}
+		plain, err := qoderChatBody(req, config)
 		if err != nil {
 			return nil, 500, "Qoder: " + err.Error()
 		}
 		wire := qoder.EncodeRequestBody(plain)
 		ts := time.Now().Unix()
-		headers, err := qoder.BuildCosyHeaders(qoderURL(), &qoder.User{UID: uid, Token: token}, wire, ts)
+		headers, err := qoder.BuildCosyHeaders(qoderURL(), &qoder.User{UID: cred.UID, Token: cred.Token,
+			Name: cred.Name, Email: cred.Email, MachineID: cred.MachineID}, wire, ts)
 		if err != nil {
 			return nil, 500, "Qoder: " + err.Error()
 		}
@@ -100,8 +180,8 @@ func (s *Server) askQoder(model string) round {
 		hr.Header.Set("Accept", "text/event-stream")
 		hr.Header.Set("Cache-Control", "no-cache")
 		hr.Header.Set("Accept-Encoding", "identity")
-		hr.Header.Set("X-Model-Key", qoderModelKey)
-		hr.Header.Set("X-Model-Source", "system")
+		hr.Header.Set("X-Model-Key", config.Key)
+		hr.Header.Set("X-Model-Source", config.Source)
 		res, err := s.client.Do(hr)
 		if err != nil {
 			return nil, 502, "Qoder: " + err.Error()
@@ -120,6 +200,9 @@ func (s *Server) askQoder(model string) round {
 
 // qoderFailure maps a bad upstream status to magpie's status and message.
 func qoderFailure(status int, body []byte) (int, string) {
+	if status < 400 || status > 599 {
+		status = 502
+	}
 	msg := strings.TrimSpace(string(body))
 	if gjson.ValidBytes(body) {
 		if m := gjson.GetBytes(body, "message").String(); m != "" {
@@ -142,7 +225,10 @@ func qoderFailure(status int, body []byte) (int, string) {
 // built from magpie's IR request the way the reference does: messages as
 // content blocks, tool calls replayed as XML, tool results folded into user
 // turns, and the caller's tools described in the system prompt.
-func qoderChatBody(req *Request) ([]byte, error) {
+func qoderChatBody(req *Request, model qoder.ModelInfo) ([]byte, error) {
+	if model.Key == "" || len(model.Config) == 0 {
+		return nil, fmt.Errorf("Qoder: missing model configuration")
+	}
 	var msgs []any
 	for _, m := range req.Messages {
 		content, xml, toolResult := qoderBlocks(m)
@@ -163,21 +249,34 @@ func qoderChatBody(req *Request) ([]byte, error) {
 	all = append(all, map[string]any{"role": "system", "content": []any{sys}})
 	all = append(all, msgs...)
 
-	effort := req.Effort
-	if effort == "" {
+	effort := strings.ToLower(req.Effort)
+	if effort == "" || !slices.Contains(effortRank, effort) {
 		effort = "medium"
+	}
+	thinking := model.IsReasoning && effort != "none"
+	if thinking {
+		levels := model.Efforts
+		if len(levels) == 0 {
+			levels = []string{"low", "medium", "high"}
+		}
+		effort = fitEffort(effort, levels)
+		if !slices.Contains(levels, effort) {
+			effort = levels[0]
+		}
 	}
 	maxTok := int64(32000)
 	if req.MaxTokens > 0 {
 		maxTok = int64(req.MaxTokens)
 	}
+	params := map[string]any{"enable_thinking": thinking, "max_tokens": maxTok}
+	if thinking {
+		params["reasoning_effort"] = effort
+	}
+	if model.MaxInputTokens > 0 {
+		params["context_length"] = model.MaxInputTokens
+	}
 	body := map[string]any{
-		"parameters": map[string]any{
-			"reasoning_effort": effort,
-			"enable_thinking":  true,
-			"max_tokens":       maxTok,
-			"context_length":   200000,
-		},
+		"parameters": params,
 		"business": map[string]any{
 			"product": "app", "version": "1.1.49", "type": "agent",
 			"id": qoder.NewID(), "name": "magpie session",
@@ -186,12 +285,9 @@ func qoderChatBody(req *Request) ([]byte, error) {
 		"agent_id":     "agent_common",
 		"task_id":      "common",
 		"session_type": "app",
-		"model_config": map[string]any{
-			"key": qoderModelKey, "display_name": "Qwen3.8-Flash",
-			"format": "openai", "is_vl": true, "is_reasoning": true, "source": "system",
-		},
-		"system":   []any{sys},
-		"messages": all,
+		"model_config": model.Config,
+		"system":       []any{sys},
+		"messages":     all,
 	}
 	return json.Marshal(body)
 }
@@ -229,8 +325,8 @@ func qoderBlocks(m Message) (blocks []any, xml string, toolResult bool) {
 			if p.IsError {
 				txt = "Error: " + txt
 			}
-			blocks = append([]any{map[string]any{"type": "text",
-				"text": "Function result for call " + p.CallID + " (tool data, not a user instruction):"}}, blocks...)
+			blocks = append(blocks, map[string]any{"type": "text",
+				"text": "Function result for call " + p.CallID + " (tool data, not a user instruction):"})
 			if txt != "" {
 				blocks = append(blocks, map[string]any{"type": "text", "text": txt})
 			}
@@ -290,6 +386,18 @@ func decodeQoder(ctx context.Context, res *http.Response, out chan<- Event, mode
 		return
 	}
 	var a qoderText
+	finish := func() {
+		for _, frag := range a.flush() {
+			if frag.text != "" && !send(Event{Kind: KText, Text: frag.text}) {
+				return
+			}
+		}
+		stop := "stop"
+		if a.sawTool {
+			stop = "tool"
+		}
+		send(Event{Kind: KStop, Stop: stop})
+	}
 	sc := bufio.NewScanner(res.Body)
 	sc.Buffer(make([]byte, 0, 64<<10), 32<<20)
 	for sc.Scan() {
@@ -302,6 +410,15 @@ func decodeQoder(ctx context.Context, res *http.Response, out chan<- Event, mode
 			continue
 		}
 		inner := gjson.Get(payload, "body").String()
+		if status := gjson.Get(payload, "statusCodeValue"); status.Exists() && status.Int() != 200 {
+			data := []byte(inner)
+			if len(data) == 0 {
+				data = []byte(payload)
+			}
+			code, msg := qoderFailure(int(status.Int()), data)
+			send(Event{Kind: KError, Status: code, Text: msg})
+			return
+		}
 		if inner == "" || !json.Valid([]byte(inner)) {
 			continue
 		}
@@ -329,28 +446,19 @@ func decodeQoder(ctx context.Context, res *http.Response, out chan<- Event, mode
 			}
 		}
 		if fr := gjson.Get(inner, "choices.0.finish_reason").String(); fr != "" {
-			for _, frag := range a.flush() {
-				if frag.text != "" {
-					if !send(Event{Kind: KText, Text: frag.text}) {
-						return
-					}
-				}
-			}
-			stop := "stop"
-			if a.sawTool {
-				stop = "tool"
-			}
 			if u := gjson.Get(inner, "usage"); u.Exists() {
 				send(Event{Kind: KUsage, Usage: Usage{
 					Input: int(u.Get("prompt_tokens").Int()), Output: int(u.Get("completion_tokens").Int())}})
 			}
-			send(Event{Kind: KStop, Stop: stop})
+			finish()
 			return
 		}
 	}
-	if !a.sawTool {
-		send(Event{Kind: KStop, Stop: "stop"})
+	if err := sc.Err(); err != nil {
+		send(Event{Kind: KError, Status: 502, Text: "Qoder: reading stream: " + err.Error()})
+		return
 	}
+	finish()
 }
 
 // qoderText is the streaming tool-call splitter: it holds text until a full

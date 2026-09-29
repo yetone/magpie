@@ -990,7 +990,7 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// COSY envelope, with the account magpie signed in to.
 	if p.Account != nil && p.Account.Agent == "qoder" {
 		call.To = from
-		return s.serveQoder(w, r, from, model, body, &call.Usage)
+		return s.serveQoder(w, r, from, p, model, body, &call.Usage)
 	}
 	// a backend that only streams gets a non-streaming request translated
 	// (the provider is always streamed on that path) rather than relayed

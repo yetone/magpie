@@ -129,15 +129,16 @@ const (
 
 // Event is one thing a streaming reply said.
 type Event struct {
-	Kind  EventKind
-	Text  string
-	ID    string
-	Name  string
-	MsgID string
-	Model string
-	Stop  string // stop | length | tool | filter
-	Usage Usage
-	Hits  []Hit
+	Kind   EventKind
+	Status int // upstream HTTP status for KError, when known
+	Text   string
+	ID     string
+	Name   string
+	MsgID  string
+	Model  string
+	Stop   string // stop | length | tool | filter
+	Usage  Usage
+	Hits   []Hit
 }
 
 // Usage counts tokens.

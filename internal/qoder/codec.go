@@ -18,10 +18,6 @@ import "strings"
 const (
 	// BodyAlphabet is the custom base64 alphabet.
 	BodyAlphabet = "_doRTgHZBKcGVjlvpC,@aFSx#DPuNJme&i*MzLOEn)sUrthbf%Y^w.(kIQyXqWA!"
-	// BodyPad is the pad character: occupies a slot, contributes no data.
-	BodyPad = "$"
-	// BodyPadValue is the 6-bit value '!' stands for.
-	BodyPadValue = 63
 )
 
 var bodyAlphabetIndex = func() [256]int8 {
@@ -43,11 +39,7 @@ func groupBytes(grp string) []byte {
 		if c == '$' {
 			continue
 		}
-		if c == '!' {
-			vals = append(vals, BodyPadValue)
-		} else {
-			vals = append(vals, int(bodyAlphabetIndex[c]))
-		}
+		vals = append(vals, int(bodyAlphabetIndex[c]))
 	}
 	nv := len(vals)
 	if nv == 0 {
@@ -73,13 +65,7 @@ func groupBytes(grp string) []byte {
 func segmentEncode(data []byte) string {
 	var sb strings.Builder
 	acc, nb := 0, 0
-	emit := func(v int) {
-		if v == BodyPadValue {
-			sb.WriteByte('!')
-		} else {
-			sb.WriteByte(BodyAlphabet[v])
-		}
-	}
+	emit := func(v int) { sb.WriteByte(BodyAlphabet[v]) }
 	for _, b := range data {
 		acc = (acc << 8) | int(b)
 		nb += 8

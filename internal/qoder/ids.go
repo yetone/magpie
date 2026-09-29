@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 )
 
+// NewMachineID generates the stable identity kept with one account.
+func NewMachineID() string { return newUUID() }
+
 // newUUID returns a random v4 UUID in the dashed 8-4-4-4-12 form Qoder's
 // machine_id and nonce carry. A UUID source is kept local so magpie's Qoder
 // support needs no new dependency.
