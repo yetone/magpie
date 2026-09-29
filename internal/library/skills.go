@@ -165,12 +165,86 @@ func unlink(p string) error {
 	return os.RemoveAll(p)
 }
 
-// realDir is where a folder really is, links followed.
+// realDir is where a folder really is, links followed: symlinks, and on
+// Windows junctions too, which filepath.EvalSymlinks leaves as they are
+// (a skill junctioned into two agents from ~/.agents/skills is one folder).
 func realDir(p string) string {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
+	p = filepath.Clean(p)
+	if r, ok := resolve(p, 0); ok {
 		return r
 	}
-	return filepath.Clean(p)
+	return p
+}
+
+// resolve follows every link on the way to p, a part at a time; not ok
+// when a part of it isn't there or the links go round.
+func resolve(p string, depth int) (string, bool) {
+	if depth > 40 {
+		return "", false
+	}
+	vol := filepath.VolumeName(p)
+	cur := vol
+	if filepath.IsAbs(p) {
+		cur = vol + string(filepath.Separator)
+	}
+	parts := strings.FieldsFunc(p[len(vol):], func(r rune) bool { return r < 128 && os.IsPathSeparator(uint8(r)) })
+	for i, part := range parts {
+		next := part
+		if cur != "" {
+			next = filepath.Join(cur, part)
+		}
+		if to, ok := linkTarget(next); ok {
+			if !filepath.IsAbs(to) {
+				to = filepath.Join(filepath.Dir(next), to)
+			}
+			return resolve(filepath.Join(append([]string{to}, parts[i+1:]...)...), depth+1)
+		}
+		if _, err := os.Lstat(next); err != nil {
+			return "", false
+		}
+		cur = next
+	}
+	if cur == "" {
+		cur = "."
+	}
+	return cur, true
+}
+
+// linkTarget is where the entry at p points when it is a link: a symlink,
+// or on Windows a junction (a mount point, which Go since 1.23 reports as
+// irregular, not as a symlink).
+func linkTarget(p string) (string, bool) {
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return "", false
+	}
+	if fi.Mode()&fs.ModeSymlink == 0 && (runtime.GOOS != "windows" || fi.Mode()&fs.ModeIrregular == 0) {
+		return "", false
+	}
+	to, err := os.Readlink(p)
+	if err != nil || to == "" {
+		return "", false
+	}
+	return to, true
+}
+
+// linked is whether the entry at p is a link to a folder elsewhere rather
+// than a folder of its own: taking it away leaves that folder as it is.
+func linked(p string) bool {
+	_, ok := linkTarget(p)
+	return ok
+}
+
+// sharedSkillsDir is the user-wide shared skills folder, the cross-agent
+// convention a project's .agents/skills is the project's own of (#227):
+// the library finds skills there but never moves one out of it, and gives
+// none to it (no agent magpie knows is said to read it user-wide).
+func sharedSkillsDir() string { return filepath.Join(home(), ".agents", "skills") }
+
+// within is whether p is dir or inside it.
+func within(p, dir string) bool {
+	rel, err := filepath.Rel(dir, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
 func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
@@ -835,21 +909,31 @@ type FoundSkill struct {
 	Agents      []string `json:"agents"`           // the agents that have this very folder
 	Others      []string `json:"others,omitempty"` // agents with another by that name
 	Link        string   `json:"link,omitempty"`   // where it really is, when it's a link
-	real        string
-	at          string // the entry in the first agent's folder
+	// Shared is its entry in the user-wide ~/.agents/skills, when it is
+	// there; the agents that have it are those whose entry is a link (or a
+	// junction) to the very same folder
+	Shared string `json:"shared,omitempty"`
+	real   string
+	at     string // the entry in the first agent's folder
 }
 
 func foundSkills(l *Library) []FoundSkill {
 	var out []*FoundSkill
 	byName := map[string]*FoundSkill{}
+	// the shared folder first, so a skill there is the row the agents'
+	// links to it join
+	type place struct{ dir, agent string }
+	places := []place{{dir: sharedSkillsDir()}}
 	for _, t := range Targets() {
-		if t.Skills == "" {
-			continue
+		if t.Skills != "" {
+			places = append(places, place{t.Skills, t.Agent.ID})
 		}
-		es, _ := os.ReadDir(t.Skills)
+	}
+	for _, pl := range places {
+		es, _ := os.ReadDir(pl.dir)
 		for _, e := range es {
 			name := e.Name()
-			p := filepath.Join(t.Skills, name)
+			p := filepath.Join(pl.dir, name)
 			if strings.HasPrefix(name, ".") || ours(p, name) || l.skill(name) != nil || !nameRe.MatchString(name) {
 				continue
 			}
@@ -861,18 +945,23 @@ func foundSkills(l *Library) []FoundSkill {
 			f := byName[name]
 			switch {
 			case f == nil:
-				f = &FoundSkill{Name: name, Description: m.Description, Agents: []string{t.Agent.ID}, real: r, at: p}
-				if fi, err := os.Lstat(p); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
+				f = &FoundSkill{Name: name, Description: m.Description, Agents: []string{}, real: r, at: p}
+				if pl.agent == "" {
+					f.Shared = p
+				} else {
+					f.Agents = append(f.Agents, pl.agent)
+				}
+				if linked(p) {
 					f.Link = r
 				}
 				byName[name] = f
 				out = append(out, f)
 			case f.real == r:
-				if !slices.Contains(f.Agents, t.Agent.ID) {
-					f.Agents = append(f.Agents, t.Agent.ID)
+				if pl.agent != "" && !slices.Contains(f.Agents, pl.agent) {
+					f.Agents = append(f.Agents, pl.agent)
 				}
 			default:
-				f.Others = append(f.Others, t.Agent.ID)
+				f.Others = append(f.Others, pl.agent)
 			}
 		}
 	}
@@ -898,7 +987,10 @@ func ImportSkill(name string) (*Result, error) {
 			return err
 		}
 		src := &Source{Kind: "folder", Dir: f.real}
-		if f.Link != "" {
+		// one in the shared ~/.agents/skills (or a link into it) stays
+		// there, linked to: the shared folder is the user's, never emptied
+		shared := f.Shared != "" || within(f.real, realDir(sharedSkillsDir()))
+		if f.Link != "" || shared {
 			if err := os.Symlink(f.real, skillDir(name)); err != nil {
 				return err
 			}
@@ -910,8 +1002,7 @@ func ImportSkill(name string) (*Result, error) {
 		}
 		for _, id := range f.Agents { // links to what was moved, or to the folder elsewhere
 			if t := targetByID(id); t != nil {
-				p := filepath.Join(t.Skills, name)
-				if fi, err := os.Lstat(p); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
+				if p := filepath.Join(t.Skills, name); linked(p) {
 					os.Remove(p)
 				}
 			}

@@ -134,7 +134,7 @@ func UseCodexReset(ctx context.Context, user string) (ResetOutcome, error) {
 	if credit == "" {
 		return ResetOutcome{Code: "no_credit"}, nil
 	}
-	out, err := consumeCodexReset(ctx, base, tok, accountID, credit, newRedeemID())
+	out, err := consumeCodexReset(Via(ctx, "codex"), base, tok, accountID, credit, newRedeemID())
 	if err != nil {
 		return out, err
 	}

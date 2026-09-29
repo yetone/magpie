@@ -1,6 +1,7 @@
 package netproxy
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -136,3 +137,57 @@ func TestEnv(t *testing.T) {
 
 var farFuture = time.Now().Add(time.Hour)
 var zero time.Time
+
+// A provider's own proxy (#237) wins over the global one, "direct" over
+// both, and each proxy is given one transport of its own, kept.
+func TestWith(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	settings.Save(settings.Settings{Proxy: "127.0.0.1:6152"})
+	u := &url.URL{Scheme: "https", Host: "api.openai.com"}
+	req := func(choice string) *http.Request {
+		return (&http.Request{URL: u}).WithContext(With(context.Background(), choice))
+	}
+	if p, _ := Func(req("")); p == nil || p.String() != "http://127.0.0.1:6152" {
+		t.Fatalf("follow: %v", p)
+	}
+	if p, _ := Func(req("socks5://127.0.0.1:1080")); p == nil || p.String() != "socks5://127.0.0.1:1080" {
+		t.Fatalf("own: %v", p)
+	}
+	if p, _ := Func(req("direct")); p != nil {
+		t.Fatalf("direct: %v", p)
+	}
+	local := (&http.Request{URL: &url.URL{Scheme: "http", Host: "127.0.0.1:3425"}}).WithContext(With(context.Background(), "127.0.0.1:1"))
+	if p, _ := Func(local); p != nil {
+		t.Fatalf("loopback: %v", p)
+	}
+
+	d := Dispatch(&http.Transport{Proxy: Func}).(*dispatch)
+	a, b := d.transport("127.0.0.1:1"), d.transport("direct")
+	if a == b || d.transport("127.0.0.1:1") != a || len(d.own) != 2 {
+		t.Fatalf("transports: %d kept", len(d.own))
+	}
+	if p, _ := a.Proxy(req("")); p == nil || p.Host != "127.0.0.1:1" {
+		t.Fatalf("own transport: %v", p)
+	}
+	if p, _ := b.Proxy(req("")); p != nil {
+		t.Fatalf("direct transport: %v", p)
+	}
+
+	get := func(env []string, k string) string {
+		for _, e := range env {
+			if key, val, _ := strings.Cut(e, "="); key == k {
+				return val
+			}
+		}
+		return ""
+	}
+	if env := EnvWith("socks5://127.0.0.1:1080", []string{"PATH=/bin"}); get(env, "HTTPS_PROXY") != "socks5://127.0.0.1:1080" {
+		t.Fatalf("own env: %v", env)
+	}
+	if env := EnvWith("direct", []string{"HTTPS_PROXY=http://x:1", "PATH=/bin"}); len(env) != 1 {
+		t.Fatalf("direct env: %v", env)
+	}
+	if env := EnvWith("", []string{"PATH=/bin"}); get(env, "HTTPS_PROXY") != "http://127.0.0.1:6152" {
+		t.Fatalf("follow env: %v", env)
+	}
+}

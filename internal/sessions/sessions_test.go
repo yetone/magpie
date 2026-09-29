@@ -172,6 +172,7 @@ func TestIncremental(t *testing.T) {
 
 	// kept on disk: a new process reads the parse back, not the file (here
 	// changed in place, same size and time, so a re-read would show it)
+	saved()
 	b, err := os.ReadFile(CachePath())
 	if err != nil {
 		t.Fatal(err)

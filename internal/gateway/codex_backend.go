@@ -242,7 +242,7 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 	}
 	var res *http.Response
 	for tries := 0; ; tries++ {
-		req, err := http.NewRequestWithContext(r.Context(), r.Method, u, bytes.NewReader(body))
+		req, err := http.NewRequestWithContext(provider.Via(r.Context(), "codex"), r.Method, u, bytes.NewReader(body))
 		if err != nil {
 			writeError(w, provider.Responses, 502, err.Error())
 			end(502, err.Error(), 0, 0)
@@ -482,7 +482,7 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
 		u += "?" + r.URL.RawQuery
 	}
-	if req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil); err == nil {
+	if req, err := http.NewRequestWithContext(provider.Via(r.Context(), "codex"), http.MethodGet, u, nil); err == nil {
 		copyHeaders(req.Header, r.Header)
 		req.Header.Del("Accept-Encoding")
 		if res, err := s.client.Do(req); err == nil {

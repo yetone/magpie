@@ -50,6 +50,9 @@ type providerJSON struct {
 	Website   string            `json:"website"`
 	KeysURL   string            `json:"keysUrl"`
 	Headers   map[string]string `json:"headers,omitempty"`
+	// the proxy its requests go through: "" the global one, "direct"
+	// none, or an address (#237)
+	Proxy string `json:"proxy"`
 	// where a custom provider's balance is asked (see provider.Balance)
 	BalanceURL  string `json:"balanceURL,omitempty"`
 	BalancePath string `json:"balancePath,omitempty"`
@@ -198,7 +201,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Decide: p.Decide,
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Headers: p.Headers, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, Headers: p.Headers, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Models, Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Affinity: p.Affinity, Unlisted: p.Unlisted, Off: p.Off, Contexts: p.Contexts,
 	}
@@ -444,6 +447,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("POST /api/provider/{action}", func(rw http.ResponseWriter, r *http.Request) {
 		var req struct {
 			provider.Provider
+			// Proxy is the proxy its requests go through (#237), "" to
+			// follow the global one; a save that leaves it out keeps it
+			Proxy *string `json:"proxy"`
 			// New is set by the editor's Add: the provider is one more, never
 			// one replacing the provider that has its id or name
 			New bool `json:"new"`
@@ -507,6 +513,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			if req.New {
 				// a second one of a preset, or a name already in use, is
 				// added beside the first under the next free id
+				if req.Proxy != nil {
+					in.Proxy = *req.Proxy
+				}
 				id, err := provider.Add(in)
 				if err != nil {
 					fail(rw, err)
@@ -525,6 +534,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 					in.ID = req.From
 				}
 				old, _ = provider.Find(in.ID)
+				if req.Proxy != nil {
+					in.Proxy = *req.Proxy
+				} else if old != nil {
+					in.Proxy = old.Proxy
+				}
 				if in.Key == "" && old != nil {
 					in.Key = old.Key
 				}

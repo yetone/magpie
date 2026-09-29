@@ -108,6 +108,7 @@ func (p Provider) APIs(model string) []Protocol {
 // Sign authenticates a request to the provider, refreshing what needs it.
 // Plain providers get their key; accounts get the agent's tokens.
 func (p Provider) Sign(ctx context.Context, req *http.Request, proto Protocol, body []byte) error {
+	ctx = p.Via(ctx) // a sign-in refreshed on the way goes through its proxy
 	if p.Account != nil && p.Account.sign != nil {
 		return p.Account.sign(ctx, req, body)
 	}

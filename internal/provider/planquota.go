@@ -353,7 +353,7 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 		go func() {
 			defer wg.Done()
 			q := SubscriptionQuota{Provider: j.p.ID, Name: j.p.Name, Icon: j.p.Icon, User: j.user, Windows: []QuotaWindow{}}
-			plan, ws, err := planWindows(ctx, j.src, j.key)
+			plan, ws, err := planWindows(j.p.Via(ctx), j.src, j.key)
 			switch {
 			case err != nil && !j.src.sure, err == nil && len(ws) == 0:
 				return // a key with no plan

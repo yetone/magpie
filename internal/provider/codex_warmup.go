@@ -336,7 +336,7 @@ func warmCodexLogin(ctx context.Context, user string) error {
 	if err != nil {
 		return err
 	}
-	return warmCodex(ctx, codexSign(token), model, effort)
+	return warmCodex(Via(ctx, "codex"), codexSign(token), model, effort)
 }
 
 // warmModel is the model a warm-up asks, and at what effort: the account's

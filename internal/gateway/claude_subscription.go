@@ -253,7 +253,7 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, oau
 	args := claudeCLIArgs(model, string(mcpConfig), req.Effort, req.WebSearch)
 	cmd := proc.CommandContext(context.Background(), binary, args...)
 	cmd.Dir = tmp
-	cmd.Env = netproxy.Env(cleanClaudeEnv(os.Environ()))
+	cmd.Env = netproxy.EnvWith(provider.ProxyOf("claude"), cleanClaudeEnv(os.Environ()))
 	if oauth != "" {
 		// a saved account in use beside the one Claude Code is signed in to
 		cmd.Env = append(cmd.Env, "CLAUDE_CODE_OAUTH_TOKEN="+oauth)

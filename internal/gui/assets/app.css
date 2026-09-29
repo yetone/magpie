@@ -1319,6 +1319,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .fbrow .grow { flex: 1; }
 .fallback .mchips:empty { display: none; }
 .after-list { display: flex; align-items: center; gap: 8px; padding: 8px 4px 0; flex: none; }
+/* the Providers page's add button stays at the view's foot over a long list */
+#view-providers .after-list { position: sticky; bottom: -8px; z-index: 2; margin: 0 -12px -8px; padding: 14px 16px 12px; background: linear-gradient(to bottom, transparent, var(--bg) 12px); transition: opacity .18s ease, visibility .18s; }
+#view-providers .after-list.away { opacity: 0; visibility: hidden; }
 .excluded { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px 2px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
 .excluded .ic { width: 16px; height: 16px; margin-top: 1px; opacity: .7; }
 .excluded b { font-weight: 500; color: var(--fg-2); }
@@ -1350,7 +1353,6 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .tile .nm .badge { flex: none; }
 .tile .have { flex: none; width: 6px; height: 6px; border-radius: 3px; background: var(--green); }
 .tile .cnt { flex: none; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.tile .st { flex: none; font-size: 11px; color: var(--faint); white-space: nowrap; }
 .sheet .custom-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 10px 2px 0; border-top: 1px solid var(--line-2); }
 .sheet .custom-foot .custom { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px 0 6px; border-radius: 8px; color: var(--accent); font-size: 13px; }
 .sheet .custom-foot .custom:hover, .sheet .custom-foot .custom.on { background: var(--accent-soft); }
@@ -1371,6 +1373,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .ehead .note { font-size: 12px; color: var(--muted); }
 .editor label { font-size: 12px; color: var(--muted); text-align: right; padding-top: 5px; }
 .editor .hint { font-size: 11px; color: var(--faint); margin-top: 4px; }
+/* a provider's own proxy (#237): the address beside the options, its room
+   kept while it is hidden so a pick never changes the dialog's height */
+.editor .proxy-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.editor .proxy-row .proxy-mode { flex: none; }
+.editor .proxy-row input.proxy-url { flex: 1 1 auto; width: auto; min-width: 0; }
+.editor .proxy-row input.proxy-url.off { visibility: hidden; }
 /* what a balance token's URL wants instead, and a balance checked in the form */
 .editor .bal-fix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; font-size: 12px; line-height: 1.45; color: var(--muted); }
 .editor .bal-fix:empty { display: none; }

@@ -98,8 +98,22 @@ const COPY_ICON = "M5.5 5.5V3.5h7v7h-2M3.5 5.5h7v7h-7z";
 // A brand icon: colour logos are images, mono logos take the text colour.
 // Nothing is ever invented: a model with no known vendor keeps the slot
 // empty, and a custom provider shows a plain outline ("generic").
+// A page redrawn whole (the Providers page, as a dialog opens or closes)
+// hands its icons to keptIcons first and the new rows take them back: a
+// logo made afresh loads its picture again and blinks out for a moment.
+let keptIcons = null;
+function keepIcons(...roots) {
+  keptIcons = new Map();
+  for (const r of roots) for (const e of r.querySelectorAll(".ic[data-icon]")) {
+    if (!keptIcons.has(e.dataset.icon)) keptIcons.set(e.dataset.icon, []);
+    keptIcons.get(e.dataset.icon).push(e);
+  }
+}
 function icon(name) {
+  const kept = keptIcons?.get(name || "")?.shift();
+  if (kept) { kept.removeAttribute("title"); return kept; }
   const e = el("span", "ic");
+  e.dataset.icon = name || "";
   if (name === "generic") {
     e.classList.add("generic");
     e.append(svg("M8 2.2 13.2 5.1v5.8L8 13.8 2.8 10.9V5.1Z M8 8v5.8 M2.8 5.1 8 8l5.2-2.9", 16, 1.4));
@@ -978,7 +992,7 @@ async function load() {
     state = next;
     load.done = true;
     // the library may have drawn itself before the saved language was known
-    if (applyPrefs(state.settings) && view === "library") window.loadLibrary?.();
+    if (applyPrefs(state.settings, state.fx) && view === "library") window.loadLibrary?.();
     tintPanel();
     renderAgents();
     loadCLIs(); // after the rows, never holding them up
@@ -1714,6 +1728,7 @@ function renderProviders() {
   // scroll to the top; put it back so closing the editor leaves the reader
   // where they were.
   const view = $("#view-providers"), top = view.scrollTop;
+  keepIcons($("#providers"), $("#addSheet"), $("#excluded"));
   view.classList.remove("loading");
   view.removeAttribute("aria-busy");
   closeProtoMenu();
@@ -1769,6 +1784,7 @@ function renderProviders() {
   dialog = renderAdd() || dialog;
   if (importing) dialog = renderImport(importing);
   if (importingApps) dialog = renderImportApps(importingApps);
+  keptIcons = null;
   view.scrollTop = top; // first: a closing dialog folds into its row where it is
   if (dialog) openModal(dialog); else closeModal();
 }
@@ -2364,7 +2380,6 @@ function renderAdd() {
   const sheet = $("#addSheet");
   sheet.replaceChildren();
   sheet.hidden = !adding;
-  $("#addProvider").hidden = adding;
   if (!adding) return null;
   const head = el("div", "row-head");
   head.append(el("span", "label", t(providers.providers.length ? "Add a provider" : "Add your first provider")), el("span", "grow"));
@@ -2482,7 +2497,6 @@ const globalOf = (pr) => pr.id.endsWith("-cn") ? providers.presets.find((x) => x
 function pairTile(pr, cn) {
   const both = [pr, cn];
   const b = pickRow(pr.icon || "generic", shortName(pr.short || pr.name), both.some((x) => editing?.preset === x.id) ? " on" : "");
-  b.append(el("span", "st", t("Global") + " · " + t("China")));
   const added = both.filter((x) => x.added);
   b.title = both.map((x) => t(x === pr ? "Global" : "China") + " " + hostOf(x.chat || x.responses || x.anthropic) + (x.added ? " · " + t("Added") : "")).join("\n");
   if (added.length) markAdded(b);
@@ -2545,6 +2559,49 @@ function input(value, placeholder, type = "text") {
   return i;
 }
 function cancelEdit() { editing = null; draft = null; importing = null; importingApps = null; renderProviders(); }
+
+// proxyPicker: the proxy one provider's requests go through (#237) — the
+// one in Settings, none, or its own — so Codex can go through a proxy
+// while a vendor at home goes direct. The draft keeps the choice as
+// proxyMode ("" global, "direct", "custom") and the address as proxyURL;
+// proxyOfDraft is what is saved.
+const PROXY_HINT = {
+  "": "Follows the proxy in Settings",
+  direct: "Requests to it go direct, whatever the proxy in Settings",
+  custom: "Requests to it go through this proxy: http://, https:// or socks5://",
+};
+function proxyPicker() {
+  const box = el("div", "stack proxy-pick");
+  const hint = el("div", "hint", t(PROXY_HINT[draft.proxyMode || ""]));
+  const addr = input(draft.proxyURL || "", "http://127.0.0.1:7890");
+  addr.className = "proxy-url";
+  addr.classList.toggle("off", draft.proxyMode !== "custom");
+  addr.oninput = () => { draft.proxyURL = addr.value; };
+  const seg = segs([["", t("Global proxy")], ["direct", t("Direct")], ["custom", t("Custom")]], draft.proxyMode || "", (v) => {
+    draft.proxyMode = v;
+    addr.classList.toggle("off", v !== "custom");
+    hint.textContent = t(PROXY_HINT[v]);
+  });
+  seg.classList.add("proxy-mode");
+  // the address sits beside the options, its room kept while it is not
+  // asked for, so picking one never changes the dialog's height (a
+  // centred dialog would move under the pointer)
+  const row = el("div", "proxy-row");
+  row.append(seg, addr);
+  box.append(row, hint);
+  return box;
+}
+function proxyDraft(p) {
+  const v = (p?.proxy || "").trim();
+  return { proxyMode: !v ? "" : v === "direct" ? "direct" : "custom", proxyURL: v && v !== "direct" ? v : "" };
+}
+// proxyOfDraft is the draft's proxy as it is saved, or null when Custom
+// has no address yet.
+function proxyOfDraft() {
+  if (draft.proxyMode === "direct") return "direct";
+  if (draft.proxyMode !== "custom") return "";
+  return (draft.proxyURL || "").trim() || null;
+}
 
 // Custom request headers: the draft keeps them as an ordered [name, value,
 // json?] list so a half-typed row (and its open JSON editor) survives a
@@ -2894,13 +2951,19 @@ const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["respon
 
 // renderEditor: an existing provider (p), a new preset (presetID), or custom.
 function renderEditor(p, presetID) {
+  // its own icons, not the page's kept ones, which the rows after it take back
+  const kept = keptIcons;
+  keptIcons = null;
+  try { return drawEditor(p, presetID); } finally { keptIcons = kept; }
+}
+function drawEditor(p, presetID) {
   const pr = presetID ? providers.presets.find((x) => x.id === presetID) : p?.preset ? providers.presets.find((x) => x.id === p.preset) : null;
   const isNew = !p, custom = !pr && !p?.account, decides = !!(p?.decide || pr?.decide);
   // a preset already added is added again only through "Add another": one
   // more provider of it, under a name and id of its own
   const another = isNew && !!pr?.added;
   draft = draft || (p
-    ? { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, catalog: p.catalog, key: "", api: p.chat ? "openai" : p.anthropic ? "anthropic" : p.responses ? "responses" : "openai", chosen: p.models.filter((m) => m.on).map((m) => m.id), extra: [], headers: headerRows(p.headers), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), keysUrl: p.keysUrl || "" }
+    ? { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, catalog: p.catalog, key: "", api: p.chat ? "openai" : p.anthropic ? "anthropic" : p.responses ? "responses" : "openai", chosen: p.models.filter((m) => m.on).map((m) => m.id), extra: [], headers: headerRows(p.headers), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), keysUrl: p.keysUrl || "", ...proxyDraft(p) }
     : pr
       ? { id: pr.id, name: pr.name, preset: pr.id, key: "", chosen: [], extra: [], headers: [] }
       : { id: "", name: "", preset: "", chat: "", responses: "", anthropic: "", catalog: "", key: "", api: "openai", chosen: [], extra: [], headers: [], icon: "" });
@@ -3047,6 +3110,7 @@ function renderEditor(p, presetID) {
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
     ed.append(...field(t("Context window"), contextPicks(p, cx), t("How long a request the models take, told to the agents; empty leaves it to the vendor and models.dev")));
     ed.append(...field(t("Fallback"), renderFallback(p), fallbackHint(p)));
+    ed.append(...field(t("Proxy"), proxyPicker()));
     if (p.chat || p.responses || p.anthropic) ed.append(...field(t("Endpoints"), renderEndpoints(p, p)));
     const bar = el("div", "bar");
     // removing only hides it from magpie; the agent stays signed in
@@ -3060,10 +3124,24 @@ function renderEditor(p, presetID) {
     saveBtn.onclick = () => {
       const cx = parseContexts(draft.contexts || "");
       if (cx.error) return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn");
-      saveBtn.classList.add("busy"); providerAction("save", { id: p.id, models: chosenIds(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map }, t("{name} saved", { name: p.name })); };
+      const proxy = proxyOfDraft();
+      if (proxy === null) { ed.querySelector(".proxy-url")?.focus(); return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn"); }
+      saveBtn.classList.add("busy"); providerAction("save", { id: p.id, models: chosenIds(), unlisted: draft.unlisted, fallback: draft.fallback, contexts: cx.map, proxy }, t("{name} saved", { name: p.name })); };
     bar.append(cancel, saveBtn);
     ed.append(bar);
     return ed;
+  }
+
+  // a vendor reached at the user's own resource (Azure OpenAI): no URL of
+  // the preset's, the one the resource is at is typed or pasted here, and
+  // magpie puts it on the API the preset speaks when it is saved
+  let endpoint = null;
+  if (pr?.endpoint) {
+    if (draft.chat === undefined) { draft.chat = p?.chat || ""; draft.responses = p?.responses || ""; }
+    endpoint = input(draft.chat || draft.responses || "", pr.endpoint, "url");
+    endpoint.classList.add("endpoint");
+    endpoint.oninput = () => { draft.chat = draft.responses = endpoint.value.trim(); refreshEndpoints(); };
+    ed.append(...field(t("Endpoint"), endpoint, pr.endpointHint ? t(pr.endpointHint) : ""));
   }
 
   const key = input(draft.key || "", p?.key.set ? t("{masked} · paste a new key to replace it", { masked: p.key.masked }) : t(pr?.noKey || p?.key.optional ? "optional for local servers" : "paste an API key"), "password");
@@ -3107,6 +3185,7 @@ function renderEditor(p, presetID) {
   } else {
     ed.append(...field(t("Headers"), headerEditor(pr?.headerHints || []), t("Optional headers sent with every request to {p}, applied after auth.", { p: pr?.name || p?.name })));
   }
+  ed.append(...field(t("Proxy"), proxyPicker()));
 
   // a vendor that tells the whole account's balance only to a token of its
   // own (AiHubMix's system access token), where a key knows just its own
@@ -3300,10 +3379,13 @@ function renderEditor(p, presetID) {
     const cx = parseContexts(draft.contexts || "");
     if (cx.error) return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn");
     body.contexts = cx.map;
+    body.proxy = proxyOfDraft();
+    if (body.proxy === null) { ed.querySelector(".proxy-url")?.focus(); return editorError(t("Proxy: type its address, like http://127.0.0.1:7890"), "warn"); }
     if (draft.balanceToken) body.balanceToken = draft.balanceToken;
     else if (draft.clearBalanceToken) body.clearBalanceToken = true;
     if (isNew && custom && !body.name) { name.focus(); return editorError(t("Give it a name"), "warn"); }
     if (isNew && custom && !body.chat && !body.anthropic && !body.responses) { url.focus(); return editorError(t("A base URL is needed"), "warn"); }
+    if (endpoint && !body.chat && !body.responses) { endpoint.focus(); return editorError(t("Your resource's endpoint is needed"), "warn"); }
     editorError("");
     saveBtn.classList.add("busy");
     providerAction("save", body, t(isNew ? "{name} added" : "{name} saved", { name: draft.name || draft.id }));
@@ -3311,7 +3393,7 @@ function renderEditor(p, presetID) {
   saveBtn.onclick = save;
   bar.append(cancel, saveBtn);
   ed.append(bar);
-  setTimeout(() => (isNew ? (custom || another ? name : key) : null)?.focus(), 0);
+  setTimeout(() => (isNew ? (custom || another ? name : endpoint || key) : null)?.focus(), 0);
   return ed;
 }
 
@@ -4998,11 +5080,33 @@ function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^
 function hostOf(u) { try { return new URL(u.includes("://") ? u : "https://" + u).host; } catch { return ""; } }
 
 // the sheet opens below the list: it unrolls on the rows' spring and the
-// view goes down with it
+// view goes down with it. The button stays at the view's foot however long
+// the list is; with the sheet already open it takes the view down to it,
+// and it steps aside while the sheet's head is in sight.
 $("#addProvider").onclick = (e) => {
-  adding = true; editing = null; draft = null; renderProviders();
-  unrollSheet($("#view-providers"), $("#addSheet"), e);
+  const view = $("#view-providers"), sheet = $("#addSheet");
+  if (!adding) {
+    adding = true; editing = null; draft = null; renderProviders();
+    return unrollSheet(view, sheet, e);
+  }
+  if (!scrollOnPurpose(e, 700)) return;
+  const from = view.scrollTop;
+  const to = Math.min(from + sheet.getBoundingClientRect().top - view.getBoundingClientRect().top - 12, view.scrollHeight - view.clientHeight);
+  if (calm()) { view.scrollTop = to; return; }
+  const t0 = performance.now(), ease = (x) => 1 - Math.pow(1 - x, 3);
+  let set = from;
+  const step = (now) => {
+    if (Math.abs(view.scrollTop - set) > 2) return; // the reader took it
+    const x = Math.min(1, (now - t0) / 520);
+    view.scrollTop = Math.round(from + (to - from) * ease(x));
+    set = view.scrollTop;
+    if (x < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 };
+new IntersectionObserver(([en]) => {
+  $("#view-providers .after-list").classList.toggle("away", !en.target.hidden && en.isIntersecting);
+}, { root: $("#view-providers") }).observe($("#addSheet"));
 
 // unrollSheet opens a sheet just drawn at the foot of a view from nothing to
 // its height, what's in it easing down into place, and takes the view down
@@ -5031,7 +5135,9 @@ function unrollSheet(view, sheet, e) {
     c.animate([{ opacity: 0, transform: "translateY(-6px)" }, { opacity: 1, transform: "none" }],
       { duration: 340, delay: 60, easing: "cubic-bezier(.22, 1, .36, 1)", fill: "backwards" });
   }
-  let set = from;
+  // what the view is at once the sheet starts at no height: a page that
+  // was scrolled to its end is clamped shorter (WebKit), not moved by the reader
+  let set = view.scrollTop;
   const follow = () => {
     if (!go || Math.abs(view.scrollTop - set) > 2) return; // the reader took it
     const done = grow.playState === "finished";
@@ -7207,9 +7313,10 @@ const LOCALES = [["system", "System"], ["en", "English"], ["zh", "中文"]];
 const TRAYS = [["panel", "Quick panel"], ["window", "Main window"]];
 const CURRENCIES = [["usd", "$ USD"], ["cny", "¥ CNY"]];
 
-// applyPrefs paints and speaks as the saved settings say. A ?theme= or
-// ?locale= in the URL wins, so a forced look stays forced.
-function applyPrefs(s) {
+// applyPrefs paints and speaks as the saved settings say, costs at the
+// exchange rate given (rate, /api/state's fx) or the settings' own. A
+// ?theme= or ?locale= in the URL wins, so a forced look stays forced.
+function applyPrefs(s, rate) {
   s = s || {};
   const root = document.documentElement;
   if (!params.get("theme")) {
@@ -7233,8 +7340,15 @@ function applyPrefs(s) {
     quotaLeft = !!s.quotaLeft;
     if (applyPrefs.painted) renderQuotas();
   }
-  if (s.fx) fx = s.fx;
-  if (currency !== (s.currency || "usd")) {
+  // the rate comes in /api/settings' answer (s.fx) or, from /api/state,
+  // beside the settings rather than in them (rate): a cost drawn at start,
+  // before Settings is ever opened, needs it from there (#212: cny still
+  // picked after a restart, yet every cost back in $, the rate being 0).
+  // A rate of 0 is state's for usd, which never looks one up: kept out.
+  const got = rate?.rate > 0 ? rate : s.fx?.rate > 0 ? s.fx : null;
+  const moved = !!got && got.rate !== fx.rate;
+  if (got) fx = got;
+  if (currency !== (s.currency || "usd") || (moved && currency === "cny")) {
     currency = s.currency || "usd";
     if (applyPrefs.painted) renderCosts();
   }

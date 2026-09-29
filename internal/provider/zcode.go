@@ -12,6 +12,9 @@ package provider
 // accounts are signed in by magpie with ZCode's own polling sign-in
 // (zcode.z.ai/api/v1/oauth/cli/…), and their key is kept in logins.json.
 //
+// An account with no Coding Plan uses ZCode's free Start Plan instead,
+// with ZCode's own session token (zcode_start.go).
+//
 // The plan's models are ZCode's, as its built-in config lists them for the
 // coding plan (zcode_models.go); zcodeModels are them before that is read.
 
@@ -62,8 +65,9 @@ var zcodeModels = []catalog.Model{
 
 // zcodeKey is a coding plan's key and where it is served.
 type zcodeKey struct {
-	Key  string `json:"apiKey"`
+	Key  string `json:"apiKey,omitempty"`
 	Base string `json:"base"`
+	JWT  string `json:"jwt,omitempty"` // ZCode's session token, the Start Plan's key (zcode_start.go)
 }
 
 // ---- ZCode's own account ------------------------------------------------------
@@ -124,8 +128,9 @@ func zcodeDecrypt(secret []byte, v string) (string, bool) {
 	return string(out), err == nil
 }
 
-// zcodeOwn is the account ZCode is signed in to and its coding plan's key;
-// ok is false when it has none.
+// zcodeOwn is the account ZCode is signed in to, its coding plan's key and
+// ZCode's session token (the Start Plan's key); ok is false when it has
+// neither.
 func zcodeOwn() (who string, k zcodeKey, ok bool) {
 	var store map[string]string
 	if !readJSON(zcodeCredentialsPath(), &store) {
@@ -150,17 +155,27 @@ func zcodeOwn() (who string, k zcodeKey, ok bool) {
 			k = zcodeKey{Key: key, Base: base}
 		}
 	}
-	if k.Key == "" {
+	if v, ok := store["zcodejwttoken"]; ok {
+		if s, ok := zcodeDecrypt(secret, v); ok {
+			k.JWT = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "Bearer "))
+		}
+	}
+	if k.Key == "" && k.JWT == "" {
 		return "", zcodeKey{}, false
+	}
+	if k.Base == "" {
+		k.Base = ZCodeZaiBase
 	}
 	var info struct {
 		Email string `json:"email"`
 		Name  string `json:"name"`
 		ID    string `json:"user_id"`
 	}
-	if v, ok := store["oauth:zai:user_info"]; ok {
-		if s, ok := zcodeDecrypt(secret, v); ok {
-			_ = json.Unmarshal([]byte(s), &info)
+	for _, name := range []string{"oauth:zai:user_info", "oauth:bigmodel:user_info"} {
+		if v, ok := store[name]; ok && info.Email+info.Name+info.ID == "" {
+			if s, ok := zcodeDecrypt(secret, v); ok {
+				_ = json.Unmarshal([]byte(s), &info)
+			}
 		}
 	}
 	return zcodeWho(info.Email, info.Name, info.ID), k, true
@@ -191,7 +206,7 @@ type zcodeLoginKey struct {
 
 func zcodeSaved(l savedLogin) (zcodeKey, bool) {
 	var k zcodeKey
-	if json.Unmarshal(l.Auth, &k) != nil || k.Key == "" {
+	if json.Unmarshal(l.Auth, &k) != nil || k.Key == "" && k.JWT == "" {
 		return zcodeKey{}, false
 	}
 	if k.Base == "" {
@@ -261,21 +276,45 @@ func zcodeAlsoOn() []Provider {
 
 func zcodeProvider(who, plan string, k zcodeKey) Provider {
 	acct := &Account{Agent: "zcode", User: who, Plan: plan}
+	// the plan the account is on: its Coding Plan, or ZCode's Start Plan
+	// when it has none (zcode_start.go)
+	base := func(start bool) string {
+		if start {
+			return zcodeStartBase()
+		}
+		return k.Base
+	}
 	acct.sign = func(ctx context.Context, req *http.Request, body []byte) error {
+		start := zcodeOnStart(ctx, k)
+		zcodeRebase(req, base(!start), base(start))
+		key := k.Key
+		if start {
+			if zcodeJWTExpired(k.JWT) {
+				return errZCodeExpired
+			}
+			key = k.JWT
+			zcodeSourceHeaders(req)
+		}
 		req.Header.Del("Authorization")
-		req.Header.Set("x-api-key", k.Key)
-		req.Header.Set("Authorization", "Bearer "+k.Key)
+		req.Header.Set("x-api-key", key)
+		req.Header.Set("Authorization", "Bearer "+key)
 		return nil
 	}
-	acct.models = func() []catalog.Model { return zcodeModels }
+	acct.models = func() []catalog.Model {
+		if zcodeOnStart(nil, k) {
+			return zcodeStartModels
+		}
+		return zcodeModels
+	}
 	acct.fetch = func(ctx context.Context) ([]catalog.Model, error) {
-		ms, err := zcodeFetchModels(ctx, k.Base)
+		b := base(zcodeOnStart(ctx, k))
+		ms, err := zcodeFetchModels(ctx, b)
 		if err != nil {
 			return nil, err
 		}
-		return ms, catalog.SaveLive("zcode", k.Base, ms)
+		return ms, catalog.SaveLive("zcode", b, ms)
 	}
-	return Provider{ID: "zcode", Name: "ZCode", Icon: "zcode", Anthropic: k.Base, Website: "https://zcode.z.ai", Account: acct}
+	return Provider{ID: "zcode", Name: "ZCode", Icon: "zcode", Anthropic: base(zcodeOnStart(nil, k)), Website: "https://zcode.z.ai", Account: acct}
 }
 
 // ---- allowance ----------------------------------------------------------------
@@ -283,6 +322,9 @@ func zcodeProvider(who, plan string, k zcodeKey) Provider {
 // zcodeQuota is a coding plan's allowance: credits per five hours and per
 // week, as ZCode shows them.
 func zcodeQuota(ctx context.Context, l Login, k zcodeKey) SubscriptionQuota {
+	if zcodeOnStart(ctx, k) { // no Coding Plan: ZCode's Start Plan
+		return zcodeStartQuota(ctx, l, k.JWT)
+	}
 	q := SubscriptionQuota{Provider: "zcode", Name: "ZCode", Icon: "zcode", Plan: l.Plan, User: l.User, Windows: []QuotaWindow{}}
 	var data struct {
 		Limits []struct {
@@ -553,6 +595,7 @@ func startZCodeSignIn(s *signInFlow) error {
 			}
 			var got struct {
 				Status string `json:"status"`
+				Token  string `json:"token"` // ZCode's own session: the Start Plan's key
 				Zai    struct {
 					AccessToken string `json:"access_token"`
 				} `json:"zai"`
@@ -583,7 +626,7 @@ func startZCodeSignIn(s *signInFlow) error {
 				return
 			}
 			who := zcodeWho(got.User.Email, got.User.Name, got.User.ID)
-			k, plan, err := zcodeMintKey(ctx, got.Zai.AccessToken)
+			k, plan, err := zcodeSignedIn(ctx, got.Zai.AccessToken, strings.TrimSpace(got.Token))
 			if err != nil {
 				fail(err.Error())
 				return
@@ -602,6 +645,32 @@ func startZCodeSignIn(s *signInFlow) error {
 		}
 	}()
 	return nil
+}
+
+// zcodeSignedIn is what a sign-in gives magpie: the account's coding plan
+// key and plan; or, with no Coding Plan, ZCode's token for its Start Plan
+// while the account has one.
+func zcodeSignedIn(ctx context.Context, zaiToken, jwt string) (zcodeKey, string, error) {
+	k, plan, err := zcodeMintKey(ctx, zaiToken)
+	if err == nil && plan != "" {
+		k.JWT = jwt
+		return k, plan, nil
+	}
+	if jwt != "" {
+		if b, berr := zcodeStartBalance(ctx, jwt); berr == nil {
+			if name, _, ok := b.active(); ok {
+				if err != nil { // no key made: the Start Plan alone
+					k = zcodeKey{Base: ZCodeZaiBase}
+				}
+				k.JWT = jwt
+				return k, name, nil
+			}
+		}
+	}
+	if err != nil {
+		return zcodeKey{}, "", err
+	}
+	return zcodeKey{}, "", errors.New("this Z.ai account has no GLM Coding Plan, and ZCode's Start Plan has ended or was never started — subscribe at z.ai/subscribe, then add it again")
 }
 
 // zcodeMintKey turns a Z.ai sign-in into its coding plan key: Z.ai's
@@ -697,10 +766,7 @@ func zcodeMintKey(ctx context.Context, zaiToken string) (zcodeKey, string, error
 	if err != nil {
 		return zcodeKey{}, "", fmt.Errorf("GLM Coding Plan: %w", err)
 	}
-	if plan == "" {
-		return zcodeKey{}, "", errors.New("this Z.ai account has no GLM Coding Plan — subscribe at z.ai/subscribe, then add it again")
-	}
-	return k, plan, nil
+	return k, plan, nil // plan "" when it has none: zcodeSignedIn looks for the Start Plan
 }
 
 func firstErr(err error, otherwise string) string {

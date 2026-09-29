@@ -281,7 +281,11 @@ func imported(name, key string, e endpoints, models []string) (Provider, string)
 		return Provider{}, "it has no base URL"
 	}
 	p := Provider{ID: Slug(name), Name: name, Key: key, Chat: e.chat, Responses: e.responses, Anthropic: e.anthropic, Models: models}
-	if pr, exact := presetAt(e); pr != nil {
+	if p.IsAzure() {
+		// an Azure OpenAI resource, from any app: the preset's, its
+		// endpoints on the resource's v1 API
+		p = asAzure(p)
+	} else if pr, exact := presetAt(e); pr != nil {
 		p.ID, p.Icon, p.Catalog = pr.ID, pr.Icon, pr.Catalog
 		if exact {
 			p.Preset, p.Website, p.KeysURL = pr.ID, pr.Website, pr.KeysURL
@@ -723,7 +727,15 @@ func readAlma(path string) ([]AppImport, error) {
 		case almaSignIns[typ]:
 			skip = "it is a sign-in, not a key; add the subscription in magpie"
 		case typ == "azure":
-			skip = "magpie doesn't support Azure OpenAI yet"
+			// the resource's endpoint (or only its name); one behind a
+			// gateway of the user's is kept as it is, asked as Azure's
+			if b, ok := AzureBase(base); ok {
+				eps.chat = b
+			} else if base != "" {
+				eps.chat = base
+			} else {
+				skip = "it has no Azure OpenAI endpoint"
+			}
 		case base == "" && Preset(almaPresets[typ]) != nil:
 			pr := Preset(almaPresets[typ])
 			eps = endpoints{pr.Chat, pr.Responses, pr.Anthropic}
@@ -738,6 +750,9 @@ func readAlma(path string) ([]AppImport, error) {
 		}
 		if skip == "" {
 			it.Provider, skip = imported(name, key, eps, models)
+			if skip == "" && typ == "azure" {
+				it.Provider = asAzure(it.Provider)
+			}
 		}
 		if skip != "" {
 			it.Provider, it.Skip = Provider{Name: name}, skip

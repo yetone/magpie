@@ -433,18 +433,83 @@ func loadCache() {
 	}
 	loaded, cacheZone = true, z
 	cache = map[string]*state{}
+	saved() // the kept file as the last save left it
 	var c cacheFile
 	if b, err := os.ReadFile(CachePath()); err == nil && json.Unmarshal(b, &c) == nil && c.Version == cacheVersion && c.Zone == z && c.Files != nil {
 		cache = c.Files
 	}
 }
 
+// saveCache keeps the parses on disk. Writing the whole index (tens of MB
+// for a long history) takes a second or more, so it is done behind the
+// request: the parses in the cache are never changed once put there (a new
+// parse starts from a clone), so a copy of the map is a snapshot; saves in a
+// row are folded into the latest.
 func saveCache() {
-	b, err := json.Marshal(cacheFile{Version: cacheVersion, Zone: zone(), Files: cache})
+	snap := save{cacheFile{Version: cacheVersion, Zone: zone(), Files: maps.Clone(cache)}, CachePath()}
+	saving.Lock()
+	defer saving.Unlock()
+	saving.next = &snap
+	if saving.running {
+		return
+	}
+	saving.running = true
+	go func() {
+		for {
+			saving.Lock()
+			f := saving.next
+			saving.next = nil
+			if f == nil {
+				saving.running = false
+				saving.Broadcast()
+				saving.Unlock()
+				return
+			}
+			saving.Unlock()
+			writeCache(f)
+		}
+	}()
+}
+
+var saving struct {
+	sync.Mutex
+	*sync.Cond
+	running bool
+	next    *save
+}
+
+type save struct {
+	cacheFile
+	path string
+}
+
+func init() { saving.Cond = sync.NewCond(&saving.Mutex) }
+
+// Saved waits for the index being saved, so a process about to end leaves
+// it on disk.
+func Saved() { saved() }
+
+// saved waits for the saves under way.
+func saved() {
+	saving.Lock()
+	for saving.running {
+		saving.Wait()
+	}
+	saving.Unlock()
+}
+
+// saveHook, when a test sets it, runs before each save is written.
+var saveHook func()
+
+func writeCache(c *save) {
+	if saveHook != nil {
+		saveHook()
+	}
+	b, err := json.Marshal(c.cacheFile)
 	if err != nil {
 		return
 	}
-	dir := filepath.Dir(CachePath())
+	dir := filepath.Dir(c.path)
 	if os.MkdirAll(dir, 0o755) != nil {
 		return
 	}
@@ -456,7 +521,7 @@ func saveCache() {
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}
-	if err != nil || os.Rename(tmp.Name(), CachePath()) != nil {
+	if err != nil || os.Rename(tmp.Name(), c.path) != nil {
 		os.Remove(tmp.Name())
 	}
 }
@@ -500,7 +565,6 @@ func refresh(want, all []file) {
 		total += left[f.path]
 	}
 	progress.start(len(todo), total)
-	defer progress.on.Store(false)
 	var wg sync.WaitGroup
 	var put sync.Mutex
 	ch := make(chan file)
@@ -526,6 +590,7 @@ func refresh(want, all []file) {
 	}
 	close(ch)
 	wg.Wait()
+	progress.on.Store(false)
 	saveCache()
 }
 
@@ -591,6 +656,7 @@ func pricer() func(string) *catalog.Price {
 func Reset() {
 	mu.Lock()
 	defer mu.Unlock()
+	saved()
 	cache, loaded = nil, false
 }
 
@@ -896,7 +962,8 @@ func priceOf(model string) (catalog.Price, bool) {
 		}
 	}
 	bare := strings.ToLower(m[strings.LastIndexByte(m, '/')+1:])
-	for _, id := range []string{bare, dated.ReplaceAllString(bare, "")} {
+	// a Grok id at an effort (grok-4.7-high) at its model's price
+	for _, id := range []string{bare, dated.ReplaceAllString(bare, ""), provider.PricedName(bare)} {
 		for _, c := range makers(id) {
 			if pr, ok := catalog.PriceOf(c, id); ok {
 				return pr, true

@@ -348,6 +348,7 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 // the provider answers in another one. DecideURL and Sign errors are as
 // they are; a transport error is named with p.
 func (s *Server) postDecide(ctx context.Context, p provider.Provider, model string, body []byte) (int, []byte, string, error) {
+	ctx = p.Via(ctx)
 	u, err := p.DecideURL(ctx)
 	if err != nil {
 		return 0, nil, "", err

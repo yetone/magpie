@@ -90,6 +90,9 @@ func zcodeEfforts(values []string) []string {
 // zcodePlanID is ZCode's providerId for the coding plan served at base.
 // A team's plan has the individual one's models.
 func zcodePlanID(base string) string {
+	if strings.Contains(base, "/zcode-plan/") { // ZCode's Start Plan (zcode_start.go)
+		return "account:zai-start-plan"
+	}
 	if strings.Contains(base, "bigmodel.cn") {
 		return "account:bigmodel-individual-coding-plan"
 	}

@@ -1,8 +1,10 @@
 package gateway
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 )
@@ -310,7 +312,7 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 	if len(r.Stop) > 0 {
 		out["stop"] = r.Stop
 	}
-	if host == aiStudioHost {
+	if r.GeminiCompat {
 		// Gemini thinks silently unless asked for its thoughts, and a long
 		// think read as the first word coming late (Claude Desktop waited
 		// 20 s for 你好); reasoning_effort can't be sent with them
@@ -356,6 +358,43 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 // aiStudioHost is Google AI Studio's Gemini API, whose OpenAI-compatible
 // endpoint gives the model's thoughts only when asked for them.
 const aiStudioHost = "generativelanguage.googleapis.com"
+
+// geminiCompat reports whether a Chat upstream at host serving model is
+// Gemini's OpenAI-compatible API: AI Studio's own, or for a Gemini model a
+// proxy on this machine or the LAN, which is most often one in front of it
+// (X @saoyan25's). A relay elsewhere is not assumed to pass thinking_config
+// on, or to take it.
+func geminiCompat(host, model string) bool {
+	if host == aiStudioHost {
+		return true
+	}
+	if !strings.Contains(strings.ToLower(model), "gemini") {
+		return false
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	if host == "localhost" || strings.HasSuffix(host, ".local") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && (ip.IsLoopback() || ip.IsPrivate())
+}
+
+// thinkingConfigField is Gemini's thinking_config as unfit remembers a
+// provider that refused it.
+const thinkingConfigField = "thinking_config"
+
+// refusesThinkingConfig recognizes an upstream turning a request away for
+// the thinking_config it was sent, by its error naming it.
+func refusesThinkingConfig(status int, body []byte) bool {
+	if !badRequest(status) {
+		return false
+	}
+	b := bytes.ToLower(body)
+	return bytes.Contains(b, []byte("extra_body")) || bytes.Contains(b, []byte("thinking")) || bytes.Contains(b, []byte("include_thoughts"))
+}
 
 // aiStudioThinking is the thinking_config asking Gemini for its thoughts at
 // the effort the client asked, for a client that asked to see them: a level

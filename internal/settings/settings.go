@@ -199,6 +199,26 @@ func Load() Settings {
 	return s.normal()
 }
 
+// CheckProxy says whether p is a proxy setting magpie takes: "" (follow),
+// "direct", or an http://, https:// or socks5:// address (host:port
+// meaning http). The global Proxy and a provider's own are both checked
+// with it.
+func CheckProxy(p string) error {
+	p = strings.TrimSpace(p)
+	if p == "" || p == "direct" {
+		return nil
+	}
+	raw := p
+	if !strings.Contains(raw, "://") {
+		raw = "http://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || !slices.Contains([]string{"http", "https", "socks5", "socks5h"}, u.Scheme) {
+		return fmt.Errorf("proxy must look like http://127.0.0.1:7890 or socks5://127.0.0.1:1080, not %q", p)
+	}
+	return nil
+}
+
 // Save validates and writes the settings.
 func Save(s Settings) error {
 	s = s.normal()
@@ -232,15 +252,8 @@ func Save(s Settings) error {
 		return fmt.Errorf("the menu bar's usage is refreshed every %v minutes, not %d", TrayEvery, s.TrayUsageEvery)
 	}
 	s.Proxy = strings.TrimSpace(s.Proxy)
-	if s.Proxy != "" && s.Proxy != "direct" {
-		raw := s.Proxy
-		if !strings.Contains(raw, "://") {
-			raw = "http://" + raw
-		}
-		u, err := url.Parse(raw)
-		if err != nil || u.Host == "" || !slices.Contains([]string{"http", "https", "socks5", "socks5h"}, u.Scheme) {
-			return fmt.Errorf("proxy must look like http://127.0.0.1:7890 or socks5://127.0.0.1:1080, not %q", s.Proxy)
-		}
+	if err := CheckProxy(s.Proxy); err != nil {
+		return err
 	}
 	s.Vision = strings.TrimSpace(s.Vision)
 	if s.Vision != "" && s.Vision != "off" && !strings.Contains(s.Vision, "/") {

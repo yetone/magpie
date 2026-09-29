@@ -104,6 +104,7 @@ func (p Provider) vercelTypeSafe() string {
 // AI's is under an account: the one its base names, else the one the
 // token belongs to, looked up once.
 func (p Provider) DecideURL(ctx context.Context) (string, error) {
+	ctx = p.Via(ctx)
 	switch p.DecideVia() {
 	case ViaVercel:
 		return p.vercelTypeSafe() + "/v1/systemone", nil

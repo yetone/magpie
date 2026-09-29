@@ -107,6 +107,10 @@ type Request struct {
 	// id), which OpenAI, and relays in front of it, route a conversation by
 	// to where its prompt is cached.
 	CacheKey string
+	// GeminiCompat is the upstream being Gemini's OpenAI-compatible API
+	// (AI Studio's, or a proxy in front of it on this machine or the LAN),
+	// which gives the model's thoughts only when asked in thinking_config.
+	GeminiCompat bool
 	// Namespaced are the tools a Responses client offered inside a
 	// namespace, by the flat name the model is offered them under.
 	Namespaced map[string]nsTool

@@ -203,25 +203,7 @@ func Run(version string, showMain bool, link string) error {
 		e.Cancel()
 	})
 
-	h.panel = h.app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name:            "panel",
-		Title:           "magpie",
-		URL:             "/?mode=panel" + theme,
-		Width:           panelWidth,
-		Height:          520,
-		Hidden:          true,
-		Frameless:       true,
-		AlwaysOnTop:     true,
-		DisableResize:   true,
-		HideOnEscape:    true,
-		HideOnFocusLost: true,
-		BackgroundType:  application.BackgroundTypeTranslucent,
-		Mac: application.MacWindow{
-			Backdrop:     application.MacBackdropTranslucent,
-			CornerRadius: 12,
-		},
-		Windows: application.WindowsWindow{HiddenOnTaskbar: true},
-	})
+	h.panel = h.app.Window.NewWithOptions(panelOptions(runtime.GOOS, theme))
 
 	// the window opens at the size it was last given
 	width, height := 660, 600
@@ -413,4 +395,41 @@ func (h *host) flap() {
 		time.Sleep(30 * time.Millisecond)
 	}
 	h.tray.SetTemplateIcon(trayIcon)
+}
+
+// panelOptions: the tray panel's window, frameless and see-through. On
+// Windows, Wails creates a frameless window as WS_OVERLAPPEDWINDOW with
+// DWM's frame extended into the whole client area (for the shadow and the
+// round corners), and with the close button left enabled (WS_SYSMENU) DWM
+// draws the caption's close X into that extended frame at the top right,
+// where it shows through the panel's translucent page over the Settings
+// gear (#238). Hiding the caption buttons there takes WS_SYSMENU and the
+// minimise and maximise boxes off, so DWM has nothing to draw; the shadow
+// and corners stay. The Mac and Linux keep what they had.
+func panelOptions(goos, theme string) application.WebviewWindowOptions {
+	o := application.WebviewWindowOptions{
+		Name:            "panel",
+		Title:           "magpie",
+		URL:             "/?mode=panel" + theme,
+		Width:           panelWidth,
+		Height:          520,
+		Hidden:          true,
+		Frameless:       true,
+		AlwaysOnTop:     true,
+		DisableResize:   true,
+		HideOnEscape:    true,
+		HideOnFocusLost: true,
+		BackgroundType:  application.BackgroundTypeTranslucent,
+		Mac: application.MacWindow{
+			Backdrop:     application.MacBackdropTranslucent,
+			CornerRadius: 12,
+		},
+		Windows: application.WindowsWindow{HiddenOnTaskbar: true},
+	}
+	if goos == "windows" {
+		o.MinimiseButtonState = application.ButtonHidden
+		o.MaximiseButtonState = application.ButtonHidden
+		o.CloseButtonState = application.ButtonHidden
+	}
+	return o
 }

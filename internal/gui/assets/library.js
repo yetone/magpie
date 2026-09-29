@@ -2053,13 +2053,15 @@
     const sub = el("div", "sub", f.description || "");
     sub.title = f.description || "";
     who.append(sub);
+    if (f.shared) { const src = el("div", "lib-src"); src.append(el("span", "", t("shared in")), pathLink(f.shared)); who.append(src); }
     if (f.link) { const src = el("div", "lib-src"); src.append(el("span", "", t("linked from")), pathLink(f.link)); who.append(src); }
     const have = el("div", "lib-have");
     for (const id of f.agents) { const a = agentOf(id); if (a) { const i = agentIcon(a.icon); i.title = a.name; have.append(i); } }
     row.append(glyph(GLYPH.skill), who, have);
     if (f.others?.length) row.append(tag(t("differs in {agents}", { agents: f.others.map(nameOf).join(", ") }), "warn", t("{agents} has another skill by this name; bringing this one in leaves that one as it is", { agents: f.others.map(nameOf).join(", ") })));
     const b = button(t("Bring in"), "action", () => change("skills/import", { name: f.name }, t("{name} is in the library now", { name: f.name })));
-    b.title = f.link ? t("Keeps a link to where it is: {agents} go on having it, and you can give it to the others", { agents: f.agents.map(nameOf).join(", ") })
+    b.title = f.shared ? t("Keeps it where it is in the shared skills folder and links to it: you can give it to any agent")
+      : f.link ? t("Keeps a link to where it is: {agents} go on having it, and you can give it to the others", { agents: f.agents.map(nameOf).join(", ") })
       : t("Moves it into the library and links it back: {agents} go on having it, and you can give it to the others", { agents: f.agents.map(nameOf).join(", ") });
     row.append(b);
     return row;

@@ -65,7 +65,7 @@ func revealable(v *library.View) []string {
 		}
 	}
 	for _, s := range v.FoundSkills {
-		out = append(out, s.Link)
+		out = append(out, s.Link, s.Shared)
 	}
 	for _, p := range v.Projects {
 		out = append(out, p.Dir)

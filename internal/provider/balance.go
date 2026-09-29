@@ -585,6 +585,7 @@ func (e *balanceExpr) at(path string) (any, error) {
 // Balance asks the vendor what is left on the provider's key in use. ok is
 // false when there is no way to ask it.
 func Balance(ctx context.Context, p Provider) (amount string, ok bool, err error) {
+	ctx = p.Via(ctx)
 	src, ok := balanceSourceOf(p)
 	if !ok || p.Account != nil || p.Key == "" {
 		return "", false, nil

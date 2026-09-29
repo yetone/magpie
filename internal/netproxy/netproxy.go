@@ -9,6 +9,7 @@
 package netproxy
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"net/url"
@@ -21,19 +22,113 @@ import (
 )
 
 // Install routes http.DefaultTransport (and so http.DefaultClient) through
-// Func.
+// Func, and http.DefaultClient's requests made on a provider's behalf
+// (With) through a transport of that provider's proxy (Dispatch).
 func Install() {
 	if t, ok := http.DefaultTransport.(*http.Transport); ok {
 		t.Proxy = Func
+		http.DefaultClient.Transport = Dispatch(t)
 	}
 }
 
-// Func is an http.Transport Proxy function.
+// Func is an http.Transport Proxy function: the proxy the request's
+// context names (With), or else the global one.
 func Func(req *http.Request) (*url.URL, error) {
 	if loopback(req.URL.Hostname()) {
 		return nil, nil
 	}
+	if c := choiceOf(req.Context()); c != "" {
+		return forChoice(c)
+	}
 	return For(req.URL)
+}
+
+type choiceKey struct{}
+
+// With is ctx for requests made on behalf of one provider, whose own proxy
+// is choice (issue #237: Codex through a proxy, a vendor at home without):
+// "" follows the global one (ctx is returned as it is), "direct" goes
+// through none, anything else is the proxy's address (http://, https://,
+// socks5://; host:port means http). Requests made with it through Func,
+// or through a transport Dispatch made, take that proxy.
+func With(ctx context.Context, choice string) context.Context {
+	if choice = strings.TrimSpace(choice); choice == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, choiceKey{}, choice)
+}
+
+func choiceOf(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	c, _ := ctx.Value(choiceKey{}).(string)
+	return c
+}
+
+// forChoice is the proxy a provider's own choice names; nil for "direct".
+func forChoice(c string) (*url.URL, error) {
+	if c == "direct" {
+		return nil, nil
+	}
+	return Parse(c)
+}
+
+// Dispatch is a RoundTripper sending a request through base, unless its
+// context names a provider's own proxy (With): then through a clone of
+// base kept for that proxy alone. Connections are so reused among the
+// requests going through one proxy and never carried to another — HTTP/2
+// ones, which a transport shares by host whatever proxy they were dialled
+// through, among them.
+func Dispatch(base *http.Transport) http.RoundTripper {
+	return &dispatch{base: base, own: map[string]*http.Transport{}}
+}
+
+type dispatch struct {
+	base *http.Transport
+	mu   sync.Mutex
+	own  map[string]*http.Transport
+}
+
+func (d *dispatch) RoundTrip(req *http.Request) (*http.Response, error) {
+	c := choiceOf(req.Context())
+	if c == "" {
+		return d.base.RoundTrip(req)
+	}
+	return d.transport(c).RoundTrip(req)
+}
+
+func (d *dispatch) transport(c string) *http.Transport {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if t, ok := d.own[c]; ok {
+		return t
+	}
+	if len(d.own) >= 32 { // choices come and go as they are edited
+		for k, t := range d.own {
+			t.CloseIdleConnections()
+			delete(d.own, k)
+		}
+	}
+	t := d.base.Clone()
+	t.Proxy = func(req *http.Request) (*url.URL, error) {
+		if loopback(req.URL.Hostname()) {
+			return nil, nil
+		}
+		return forChoice(c)
+	}
+	d.own[c] = t
+	return t
+}
+
+// CloseIdleConnections closes base's and every proxy's own.
+func (d *dispatch) CloseIdleConnections() {
+	d.base.CloseIdleConnections()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for _, t := range d.own {
+		t.CloseIdleConnections()
+	}
 }
 
 // For is the proxy a request to u goes through; nil means direct.
@@ -63,13 +158,21 @@ func For(u *url.URL) (*url.URL, error) {
 // proxy set in magpie replaces any in env and "direct" drops them; the
 // system's is only added where env names none. Loopback never goes
 // through it, since a CLI calls back to magpie there.
-func Env(env []string) []string {
+func Env(env []string) []string { return EnvWith("", env) }
+
+// EnvWith is Env for a CLI run on one provider's behalf, whose own proxy
+// is choice (see With): "" is Env's.
+func EnvWith(choice string, env []string) []string {
 	if env == nil {
 		env = os.Environ()
 	}
 	var p string
 	var bypass []string
-	switch s := strings.TrimSpace(settings.Load().Proxy); s {
+	s := strings.TrimSpace(choice)
+	if s == "" {
+		s = strings.TrimSpace(settings.Load().Proxy)
+	}
+	switch s {
 	case "direct":
 		return withProxy(env, "", nil)
 	case "":

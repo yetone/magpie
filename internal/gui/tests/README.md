@@ -125,8 +125,8 @@ what it is; rows with no border, no second line and no overflow, three to a
 line at 900px; an added provider not faded but marked by a small green dot
 after its name, a grey count only past one account (the Claude subscription's
 2); short names with the full name, plans and host in the title; a vendor's
-global and China presets one row marked "Global · China", its editor picking
-the region with the key typed kept; the custom provider a line at the foot,
+global and China presets one row with no tag, the regions' hosts in its
+title, its editor picking the region with the key typed kept; the custom provider a line at the foot,
 gone while searching; the dialog growing out of the row clicked on a spring
 and folding back into it on close; in English and Chinese.
 
@@ -151,6 +151,14 @@ with those built-ins deleted, the panel's tabs and the window's pages are
 drawn with no page error. It cannot run an old engine, so syntax is judged
 by the parse, not by running it.
 
+`add-button.test.cjs` keeps the Providers page's "Add provider" at the
+view's foot over a long list, at the top and at the end alike; one click
+with the list scrolled to its end opens the sheet and takes the view down to
+it (in WebKit too); the button steps aside while the sheet's head is in
+sight and, scrolled back up, takes the view to the sheet again; and a dialog
+opened and closed over the page keeps every logo it drew rather than making
+them afresh; in English and Chinese.
+
 `usage-ledger.test.cjs` opens the Usage page's Requests, a row per request
 from a faked `/api/usage/requests`: the columns, the model asked for, the
 provider and account, the model sent, "gpt-6-luna" amber by the one a vendor
@@ -174,6 +182,13 @@ messages and output tokens, the session shape by messages, minutes and
 autonomy (remembered, the page left where it was), tool use (the top tools,
 their kinds and weeks) and the top skills with their last use, agents and
 projects.
+
+`shared-skills.test.cjs` opens the Library's Skills tab with skills found in
+the user-wide `~/.agents/skills` (#227): one row for a skill there that
+agents link or junction to, "shared in ~/.agents/skills/…" with those
+agents' icons and no "differs in"; a link in the shared folder also saying
+where it points; a copy of an agent's own still "differs in ZCode"; Bring in
+saying it stays where it is and posting the name; in English and Chinese.
 
 With Node.js and Playwright available:
 

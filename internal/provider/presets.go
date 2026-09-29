@@ -42,6 +42,12 @@ type PresetDef struct {
 	// NoList: the vendor has no list of models to ask for (Bedrock's
 	// runtime serves no /models), so Models are its list
 	NoList bool `json:"noList,omitempty"`
+	// Endpoint, for a vendor reached at the user's own resource (Azure
+	// OpenAI), is an example of its address: the preset gives no URL, and
+	// the editor asks for the one the user's resource is at, with
+	// EndpointHint under it.
+	Endpoint     string `json:"endpoint,omitempty"`
+	EndpointHint string `json:"endpointHint,omitempty"`
 	// Hosts: a vendor serving other makers' models as well as its own
 	// (Groq, Ollama Cloud), whose list is no maker's word on theirs
 	Hosts bool `json:"-"`
@@ -251,6 +257,14 @@ var presets = []PresetDef{
 			"global.openai.gpt-6-astra", "global.openai.gpt-6-sol", "global.openai.gpt-6-luna",
 			"openai.gpt-oss-120b-1:0", "openai.gpt-oss-20b-1:0", "qwen.qwen3-coder-480b-a35b-v1:0", "deepseek.v3.2",
 			"moonshotai.kimi-k2.5", "zai.glm-5", "minimax.minimax-m2.5"}},
+	// Azure OpenAI, at the user's own resource (azure.go): its v1 API under
+	// /openai/v1 for chat completions and Responses, the key in api-key,
+	// its deployments' names as the model ids
+	{ID: AzurePreset, Name: "Azure OpenAI", Icon: "azure-color", Kind: KindVendor, Catalog: "azure, openai",
+		Note:         "your resource's endpoint and key",
+		Endpoint:     "https://<resource>.openai.azure.com",
+		EndpointHint: "Your resource's endpoint, from Keys and Endpoint in the Azure portal. magpie asks its v1 API; the model ids are your deployments' names.",
+		Website:      "https://ai.azure.com", KeysURL: "https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI"},
 	// Ollama's own hosted models: the local server's API, at ollama.com with a key
 	{ID: "ollama-cloud", Name: "Ollama Cloud", Icon: "ollama", Kind: KindVendor, Catalog: "ollama-cloud", Hosts: true,
 		Chat: "https://ollama.com/v1", Anthropic: "https://ollama.com",

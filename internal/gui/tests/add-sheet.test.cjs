@@ -6,8 +6,9 @@
 // (the plans, a long name and the host are in the row's title). One already
 // added is not faded and says no word: a small green dot after its name, a
 // subscription's account count beside it when more than one. A vendor's
-// global and China presets are one row marked "Global · China", its editor
-// switching between them with the key kept. A custom provider is one line
+// global and China presets are one row with nothing added to it, the
+// regions' hosts in its title, its editor switching between them with
+// the key kept. A custom provider is one line
 // under them all, gone while searching. English and Chinese; no backend,
 // the API is faked here.
 const assert = require("node:assert/strict");
@@ -56,11 +57,11 @@ function server(lang) {
 const L = {
   en: {
     kinds: [["Subscriptions", "sign in, no key"], ["Vendors", "the makers' own APIs"], ["Relays", "one key, many vendors"], ["On this machine", ""]],
-    region: "Global · China", regionField: "Region", china: "China", custom: "Custom provider", customHint: "any OpenAI or Anthropic compatible URL",
+    regionField: "Region", china: "China", custom: "Custom provider", customHint: "any OpenAI or Anthropic compatible URL",
   },
   zh: {
     kinds: [["订阅", "登录即可，无需密钥"], ["供应商", "模型厂商的 API"], ["中转", "一个密钥，多家模型"], ["本机", ""]],
-    region: "国际 · 中国", regionField: "区域", china: "中国", custom: "自定义供应商", customHint: "任意 OpenAI / Anthropic 兼容的 URL",
+    regionField: "区域", china: "中国", custom: "自定义供应商", customHint: "任意 OpenAI / Anthropic 兼容的 URL",
   },
 };
 
@@ -118,8 +119,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await row("Tencent Cloud").getAttribute("title"), /Tencent Cloud Token Plan/);
         // a vendor's global and China presets: one row
         assert.equal(await sheet.locator(".tile .n", { hasText: "China" }).count(), 0);
-        assert.equal(await row("Kimi").locator(".st").textContent(), w.region);
-        assert.match(await row("Kimi").getAttribute("title"), /api\.moonshot\.cn/);
+        // with nothing added to the row (B1): the regions and hosts are in its title
+        assert.equal(await row("Kimi").locator(".st").count(), 0);
+        assert.equal((await row("Kimi").textContent()).trim(), "Kimi");
+        const kt = await row("Kimi").getAttribute("title");
+        assert.match(kt, new RegExp(w.china + " api\\.moonshot\\.cn"));
+        assert.match(kt, /api\.moonshot\.example\.com/);
 
         // the custom provider: one line at the foot, gone while searching
         const foot = sheet.locator(".custom-foot");

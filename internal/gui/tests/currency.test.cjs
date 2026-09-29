@@ -131,3 +131,57 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     }
   });
 }
+
+// After a restart with ¥ CNY already chosen (#212 follow-up): /api/state
+// carries the settings (currency: "cny") and, beside them rather than in
+// them, the rate (fx), as the Go side sends it. The Usage page, opened
+// straight away and before Settings ever is, must show ¥ at that rate —
+// it once read the rate only from inside the settings, found none, and
+// fell back to $ while the Settings row still showed ¥ CNY picked.
+function restartedServer(lang) {
+  const cur = settingsPayload({ lang, currency: "cny" });
+  const base = server(lang);
+  return async (route) => {
+    const req = route.request(), url = new URL(req.url());
+    if (url.pathname === "/api/state") {
+      return route.fulfill({ json: { agents: [], profiles: [], settings: { theme: "light", lang, currency: "cny" }, fx: cur.fx } });
+    }
+    if (url.pathname === "/api/settings" && req.method() === "GET") return route.fulfill({ json: cur });
+    return base(route);
+  };
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": a currency chosen before a restart is the one costs show in", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    for (const [lang, cny] of [["en", "¥ CNY"], ["zh", "¥ 人民币"]]) {
+      await t.test(lang, async () => {
+        const errors = [];
+        const context = await browser.newContext({ viewport: { width: 900, height: 420 }, reducedMotion: "reduce" });
+        const page = await context.newPage();
+        page.setDefaultTimeout(5000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.route("**/*", restartedServer(lang));
+
+        // no visit to Settings first: the Usage page at start is in ¥
+        await page.goto("http://magpie.test/?view=usage");
+        await page.locator("#usageCost b").waitFor();
+        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "≈¥88.85", "cny at the rate state gave");
+
+        // Settings agrees
+        await page.locator("#prefs").click();
+        await page.locator("#currencySegs .opt").first().waitFor();
+        assert.equal(await page.locator("#currencySegs .opt", { hasText: cny }).evaluate((b) => b.classList.contains("on")), true);
+
+        // and back on Usage, still ¥
+        await page.locator('[data-view="usage"]').click();
+        await page.waitForTimeout(200);
+        assert.equal((await page.locator("#usageCost b").textContent()).trim(), "≈¥88.85");
+
+        assert.deepEqual(errors, []);
+        await context.close();
+      });
+    }
+  });
+}

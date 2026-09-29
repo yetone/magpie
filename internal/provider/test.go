@@ -32,6 +32,7 @@ type Result struct {
 // serves, signed with a key made for it and asking for a model that key
 // sees, and reports what came back.
 func (p Provider) Test(ctx context.Context) []Result {
+	ctx = p.Via(ctx)
 	if p.Decides() {
 		return p.testDecide(ctx)
 	}
@@ -63,7 +64,7 @@ func tiny(q Provider, proto Protocol, model string) (url, body string) {
 func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
 	switch proto {
 	case Chat:
-		if q.IsBedrock() {
+		if q.IsBedrock() || q.IsAzure() {
 			return q.Chat + "/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_completion_tokens":16}`, model)
 		}
 		return q.Chat + "/chat/completions", fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"hi"}],"max_tokens":16}`, model)
@@ -105,6 +106,7 @@ func tinyDrawing(q Provider, model string) (url, body string) {
 // on the endpoint it's served on and with a key that sees it: whether each
 // answers, not only whether the vendor does. Results are in models' order.
 func (p Provider) TestModels(ctx context.Context, models []string) []Result {
+	ctx = p.Via(ctx)
 	out := make([]Result, len(models))
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
@@ -241,9 +243,17 @@ func isClaude(id string) bool {
 // AuthHeaders is how a request to the vendor proves who it is. Anthropic's
 // own API wants x-api-key alone, and so does Bedrock's, which turns away a
 // request with both (#176); other compatible vendors take either, so both.
+// Azure OpenAI takes a key in api-key alone: a Bearer there is an Entra ID
+// token, and the key sent as one is turned away.
 func AuthHeaders(p Provider, proto Protocol) map[string]string {
 	if p.Key == "" {
 		return map[string]string{}
+	}
+	if p.IsAzure() {
+		if proto == Anthropic {
+			return map[string]string{"x-api-key": p.Key}
+		}
+		return map[string]string{"api-key": p.Key}
 	}
 	if proto == Anthropic {
 		if strings.HasSuffix(p.Host(), "anthropic.com") || p.IsBedrock() {

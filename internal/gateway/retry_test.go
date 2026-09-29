@@ -90,6 +90,7 @@ func TestGroupFailsOverAnUnservedModel(t *testing.T) {
 		{400, `{"error":{"message":"The model gpt-x does not exist"}}`, true},
 		{400, `{"error":{"message":"messages: field required"}}`, false},
 		{400, `{"error":{"message":"This model's maximum context length is 128000 tokens"}}`, false},
+		{400, `{"error":{"message":"Illegal API invocation from an unapproved channel"}}`, true},
 	} {
 		if got := retryable(x.status, []byte(x.body)); got != x.want {
 			t.Errorf("retryable(%d, %s) = %v", x.status, x.body, got)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -54,6 +55,11 @@ func (p Provider) Available() []catalog.Model {
 		}
 		return catalog.Decorate(live, known)
 	}
+	if p.IsAzure() {
+		// an Azure resource serves its deployments alone, named as the
+		// user likes: the catalog only names the ones its list gave
+		return nil
+	}
 	if signedIn {
 		if p.ID == "devin" { // with the variants the user picked
 			return withDevinContexts(devinCollapse(known, nil, p.Models))
@@ -90,6 +96,7 @@ func (p Provider) Fetched() (time.Time, bool) {
 
 // Fetch asks the vendor which models it serves and remembers the answer.
 func (p Provider) Fetch(ctx context.Context) ([]catalog.Model, error) {
+	ctx = p.Via(ctx)
 	if p.Decides() {
 		return p.fetchDecide(ctx)
 	}
@@ -168,6 +175,10 @@ func (p Provider) fetchOne(ctx context.Context) ([]catalog.Model, string, error)
 			return nil, u, err
 		}
 		return catalog.WithDrawers(p.planModels(ms), catalog.PublicDrawers(ctx, u)), u, nil
+	}
+	if p.IsAzure() && (p.Chat != "" || p.Responses != "") {
+		// its deployments, asked with the key in api-key
+		return p.azureModels(ctx)
 	}
 	var errs []string
 	for _, proto := range p.Speaks() {
@@ -517,17 +528,54 @@ var makerCatalogs = sync.OnceValue(func() []string {
 // at gpt-6-astra's or gemini-3.8-flash's maker's price, as a Claude
 // account is at Anthropic's.
 func (p Provider) ListPrice(model string) (catalog.Price, bool) {
-	if pr, ok := catalog.PricedBy(p.Catalogs(), model); ok {
-		return pr, true
+	for _, m := range pricedNames(model) {
+		if pr, ok := catalog.PricedBy(p.Catalogs(), m); ok {
+			return pr, true
+		}
+		if pr, ok := catalog.PricedBy(makerCatalogs(), m); ok {
+			return pr, true
+		}
 	}
-	return MakerPrice(model)
+	return catalog.Price{}, false
 }
 
 // MakerPrice is a model's list price as the first vendor among the presets
 // that makes the models it serves lists it; for a call whose provider has
 // gone since.
 func MakerPrice(model string) (catalog.Price, bool) {
-	return catalog.PricedBy(makerCatalogs(), model)
+	for _, m := range pricedNames(model) {
+		if pr, ok := catalog.PricedBy(makerCatalogs(), m); ok {
+			return pr, true
+		}
+	}
+	return catalog.Price{}, false
+}
+
+// grokEffort is a reasoning effort a Grok id is named at ("grok-4.7-low",
+// "grok-4.7-xhigh"): the levels Grok's own model list gives grok-4.7, the
+// words Cursor spells its ids in. A fast one ("grok-4.7-low-fast") doesn't
+// match: fast is a model of its own (cursor_models.go), and no catalog
+// prices it.
+var grokEffort = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/]*?)-(?:minimal|low|medium|high|xhigh|extra-high)$`)
+
+// pricedNames are the ids a model is priced by, in order: its own, then,
+// for a Grok id named at an effort, the model it is that effort of — the
+// same model, at the same price (#224). Nothing else is renamed: a name no
+// catalog prices stays unpriced (grok-4.7-build, grok-4.7-mini,
+// grok-4.7-fast).
+func pricedNames(model string) []string {
+	out := []string{model}
+	if m := grokEffort.FindStringSubmatch(strings.ToLower(strings.TrimSpace(model))); m != nil {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+// PricedName is the id a model is priced by where it's looked up by
+// maker directly (the Sessions page): a Grok id at an effort is its model.
+func PricedName(model string) string {
+	n := pricedNames(model)
+	return n[len(n)-1]
 }
 
 // Chosen reports whether a model is exposed.

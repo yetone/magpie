@@ -482,6 +482,7 @@ func (s *Server) drawOn(ctx context.Context, p provider.Provider, model string, 
 // send posts to the vendor and reads its answer; a failure's code is the
 // vendor's, with its own message.
 func (s *Server) send(ctx context.Context, p provider.Provider, url, contentType string, body []byte, sign bool) ([]byte, int, error) {
+	ctx = p.Via(ctx)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, 500, err

@@ -10,6 +10,7 @@ import (
 
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // warmClaude sends a Claude account one "hi" through Claude Code, as the
@@ -30,7 +31,7 @@ func warmClaude(ctx context.Context, oauth string) error {
 	cmd := proc.CommandContext(ctx, binary, claudeWarmArgs()...)
 	cmd.Dir = tmp
 	cmd.Stdin = strings.NewReader("hi")
-	cmd.Env = netproxy.Env(cleanClaudeEnv(os.Environ()))
+	cmd.Env = netproxy.EnvWith(provider.ProxyOf("claude"), cleanClaudeEnv(os.Environ()))
 	if oauth != "" {
 		cmd.Env = append(cmd.Env, "CLAUDE_CODE_OAUTH_TOKEN="+oauth)
 	}

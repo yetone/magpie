@@ -411,6 +411,12 @@ var quotaWords = regexp.MustCompile(`(?i)quota|insufficient|balance|credit|billi
 // key, or this way — words another provider, or key, may not answer with.
 var unservedWords = regexp.MustCompile(`(?i)model.{0,80}(not (supported|accessible|available|found|enabled|allowed)|unsupported|does ?n[o']t exist|unknown|invalid)|(no such|unknown|invalid|unsupported) model|model_not_found|模型.{0,12}(不存在|不支持|无权|未开通)`)
 
+// refusedWords are how a vendor says it won't take requests from this
+// client at all — WorkBuddy's "Illegal API invocation from an unapproved
+// channel" to a chat opening with another agent's own system prompt — a
+// refusal of the provider, not of the request, another member may serve.
+var refusedWords = regexp.MustCompile(`(?i)unapproved channel|illegal api invocation`)
+
 // retryable says whether another provider may do better with a request
 // that failed this way: the vendor was busy, out of quota or failing, or
 // this key or provider can't serve it — not the request itself at fault.
@@ -419,7 +425,7 @@ func retryable(status int, body []byte) bool {
 	case status == 401, status == 402, status == 403, status == 404, status == 408, status == 429, status >= 500:
 		return true
 	case status == 400, status == 422:
-		return quotaWords.Match(body) || unservedWords.Match(body)
+		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body)
 	}
 	return false
 }
