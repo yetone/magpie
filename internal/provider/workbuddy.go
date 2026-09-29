@@ -355,10 +355,59 @@ func wbProvider(a wbAccount) Provider {
 // wbSystem is the system message a chat that has none is sent with.
 const wbSystem = "You are a helpful assistant."
 
-// wbBody starts a chat with a system message when it has none: WorkBuddy
-// refuses one whose first message isn't the system prompt ("first message
-// is not system prompt"), and scripts and plain chat clients often send
-// none.
+// wbRefused are what WorkBuddy turns a chat away for ("illegal API
+// invocation from an unapproved channel"): its own client's system prompt
+// never opens with another agent's identity, so a chat that starts with
+// Claude Code's does — the billing line its CLI puts first, or its "You
+// are Claude Code, Anthropic's official CLI for Claude." (#182, and the
+// same on the China build). Only the very start of the first system
+// message counts, and case-insensitively: any one character in front, a
+// leading newline, the words on a later line, or in a second system
+// message, are all answered as usual. Codex's, Hermes's, Cline's,
+// Cursor's, Qoder's and Kimi's own identities are served as they are.
+var wbRefused = []string{
+	"x-anthropic-billing-header",
+	"you are claude code, anthropic's official cli for claude",
+}
+
+// wbRefuses says whether a first system message opens with one of them.
+func wbRefuses(text string) bool {
+	t := strings.ToLower(text)
+	for _, p := range wbRefused {
+		if strings.HasPrefix(t, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// wbText is a message's content as text: the string itself, or the text of
+// its blocks (Claude Code sends its system prompt as blocks).
+func wbText(content any) string {
+	switch c := content.(type) {
+	case string:
+		return c
+	case []any:
+		var b strings.Builder
+		for _, blk := range c {
+			if m, ok := blk.(map[string]any); ok {
+				if s, ok := m["text"].(string); ok {
+					b.WriteString(s)
+				}
+			}
+		}
+		return b.String()
+	}
+	return ""
+}
+
+// wbBody starts a chat with a system message when it has none, or when the
+// one it has is one WorkBuddy refuses: a neutral line goes in front and the
+// agent's own prompt stays, second, so the agent is still told who it is
+// while the gate sees a chat its own client could have sent. WorkBuddy
+// refuses a chat whose first message isn't the system prompt ("first
+// message is not system prompt"), and scripts and plain chat clients often
+// send none.
 func wbBody(body []byte) []byte {
 	if !bytes.Contains(body, []byte(`"messages"`)) {
 		return body
@@ -373,7 +422,7 @@ func wbBody(body []byte) []byte {
 	if !ok || len(msgs) == 0 {
 		return body
 	}
-	if first, ok := msgs[0].(map[string]any); ok && first["role"] == "system" {
+	if first, ok := msgs[0].(map[string]any); ok && first["role"] == "system" && !wbRefuses(wbText(first["content"])) {
 		return body
 	}
 	m["messages"] = append([]any{map[string]any{"role": "system", "content": wbSystem}}, msgs...)
