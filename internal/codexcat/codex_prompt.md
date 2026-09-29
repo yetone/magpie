@@ -76,5 +76,5 @@ You are producing plain text that will later be styled by the CLI. Follow these 
   * Accepted: absolute, workspace‑relative, a/ or b/ diff prefixes, or bare filename/suffix.
   * Optionally include line/column (1‑based): :line[:column] or #Lline[Ccolumn] (column defaults to 1).
   * Do not use URIs like file://, vscode://, or https://.
-  * Do not provide range of lines
+  * Do not provide a range of lines
   * Examples: src/app.ts, src/app.ts:42, b/server/index.js#L10, C:\repo\project\main.rs:12:5
