@@ -108,3 +108,22 @@ func TestStatsToolsAndSkills(t *testing.T) {
 		t.Fatalf("messages %v output %v", o.Messages, o.Output)
 	}
 }
+
+// TestShapesMinutesWithoutMessages: a session whose agent tells no messages
+// (pi, grok…) still counts by its minutes at work, and only there.
+func TestShapesMinutesWithoutMessages(t *testing.T) {
+	sh := shapes([]Summary{
+		{Agent: "claude", Prompts: 2, Replies: 3, ToolCalls: 4, Active: 600},
+		{Agent: "pi", Active: 1200},
+		{Agent: "grok"},
+	})
+	if m := sh["minutes"]; m.Total != 2 || m.Counts[1] != 1 || m.Counts[2] != 1 {
+		t.Fatalf("minutes %+v", m)
+	}
+	if m := sh["messages"]; m.Total != 1 || m.Counts[0] != 1 {
+		t.Fatalf("messages %+v", m)
+	}
+	if a := sh["autonomy"]; a.Total != 1 || a.Counts[1] != 1 {
+		t.Fatalf("autonomy %+v", a)
+	}
+}

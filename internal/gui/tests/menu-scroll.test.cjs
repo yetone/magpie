@@ -142,7 +142,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await reset();
         await anchor.click();
         await page.locator(".sess-menu").waitFor();
-        if (dismiss === "outside") await page.locator("#sessQ").click();
+        if (dismiss === "outside") { const bar = await page.locator("#sessionsPane .sess-tools").boundingBox(); await page.mouse.click(bar.x + bar.width - 6, bar.y + bar.height / 2); }
         else if (dismiss === "page scroll") {
           await page.mouse.move(1000, 650);
           await page.mouse.wheel(0, 200);

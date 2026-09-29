@@ -6099,27 +6099,36 @@ function renderSessionsLoading() {
   $("#sessNote").textContent = t("Reading the agents' session files…");
 }
 
+const SESS_INDEX_SHOW = 700;
+
 // sessWatchIndex asks how far the reading of the session files has got
 // while the page waits on it; a read of the kept index, over in a moment,
 // shows the skeleton alone, and one that takes a while the indexing show.
 // It returns the stop.
 function sessWatchIndex() {
-  let on = true, timer = 0, shown = false;
-  const started = Date.now();
+  let on = true, timer = 0, shown = false, since = 0;
   const tick = async () => {
     if (!on) return;
     let p = null;
     try { p = await api("sessions/progress"); } catch {}
     if (!on) return;
-    if (p && (p.indexing || Date.now() - started > 700) && view === "usage" && usageTab === "sessions") {
+    // only a real indexing run is shown: a read of the kept index, however
+    // long, keeps the skeleton, and so does the catch-up read of the few
+    // files the agents wrote to since (every reload has some, while an agent
+    // is at work), over well before SESS_INDEX_SHOW; the show would play
+    // again from nought for it
+    since = p?.indexing ? since || Date.now() : 0;
+    const long = since && Date.now() - since >= SESS_INDEX_SHOW;
+    if (p && (long || shown) && view === "usage" && usageTab === "sessions") {
       const stats = $("#sessStats");
       let hero = stats.querySelector(".sess-indexing");
       if (!hero) {
         hero = sessIndexHero();
-        stats.classList.add("indexing");
         stats.replaceChildren(hero);
-        shown = true;
       }
+      // an earlier watch's stop may have taken the class off the hero kept
+      stats.classList.add("indexing");
+      shown = true;
       hero.update(p);
     }
     timer = setTimeout(tick, 350);
@@ -6132,9 +6141,10 @@ function sessWatchIndex() {
   };
 }
 
-// sessIndexHero is the show put on while the session files are read: specks
-// of the files drawn in along spirals to a glowing core, around it a ring of
-// how much is read, the files and bytes under it. Still with reduced motion.
+// sessIndexHero is the show put on while the session files are read: the
+// words and how far it has got on the left, on the right a field of dots, the
+// heatmap's cells, that light up as the files land, a wave running through
+// them; a hairline along the foot. Still with reduced motion.
 const SESS_TIPS = [
   "Read once, kept: after this the page opens from the index in a blink",
   "Only what changed is read again, from where it was left",
@@ -6144,25 +6154,41 @@ const SESS_TIPS = [
 function sessIndexHero() {
   const hero = el("div", "sess-indexing");
   hero.setAttribute("role", "status");
-  const stage = el("div", "si-stage");
+  const field = el("div", "si-field");
   const cv = el("canvas", "si-canvas");
+  cv.setAttribute("aria-hidden", "true");
+  field.append(cv);
+  const words = el("div", "si-words");
+  const head = el("div", "si-head");
+  head.append(el("i", "si-spin"), el("span", "si-title", t("Indexing your sessions")));
   const pct = el("div", "si-pct");
   const num = el("b", "", "");
-  pct.append(num, el("span", "", ""));
-  stage.append(cv, pct);
-  const words = el("div", "si-words");
-  const title = el("div", "si-title", t("Indexing your sessions"));
+  pct.append(num, el("span", "", "%"));
   const line = el("div", "si-line", t("Looking for session files…"));
+  const tip = el("div", "si-tip", t(SESS_TIPS[0]));
+  words.append(head, pct, line, tip);
   const bar = el("div", "si-bar");
   const fill = el("i", "");
   bar.append(fill);
-  const tip = el("div", "si-tip", t(SESS_TIPS[0]));
-  words.append(title, line, bar, tip);
-  hero.append(stage, words);
+  hero.append(words, field, bar);
 
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let frac = 0, shown = 0, known = false, tipAt = Date.now(), tipI = 0, rate = 0, last = null;
+  let done = false;
   hero.update = (p) => {
+    if (!(p.indexing && p.bytes > 0) && known) {
+      // the run is over while the page is put together: held full, never
+      // back to the unknown state or a second run from nought
+      if (!done) {
+        done = true;
+        frac = 1;
+        fill.style.width = "100%";
+        hero.classList.add("done");
+        line.textContent = t("Indexed · putting the page together…");
+      }
+      return;
+    }
+    if (done) return;
     known = !!p.indexing && p.bytes > 0;
     const f = known ? Math.min(1, p.read / p.bytes) : 0;
     // a steady speed, for the time left
@@ -6179,7 +6205,6 @@ function sessIndexHero() {
       const left = rate > 0 ? (p.bytes - p.read) / rate : 0;
       if (left > 3) line.textContent += " · " + t("about {t} left", { t: left < 60 ? t("{n}s", { n: Math.ceil(left) }) : t("{n} min", { n: Math.ceil(left / 60) }) });
     } else line.textContent = t("Reading the kept index…");
-    pct.lastChild.textContent = known ? "%" : "";
     if (Date.now() - tipAt > 4500) {
       tipAt = Date.now();
       tipI = (tipI + 1) % SESS_TIPS.length;
@@ -6191,77 +6216,76 @@ function sessIndexHero() {
     if (reduced) paint(0);
   };
 
-  // the drawing
+  // the drawing: each dot has its turn, mostly left to right, a little
+  // scattered, so the edge of what is read is ragged like rain landing
   const ctx = cv.getContext("2d");
-  const css = getComputedStyle(document.documentElement);
-  const accent = css.getPropertyValue("--accent").trim() || "#4f46e5";
-  const hues = [accent, "#06b6d4", "#a855f7", "#ec4899"];
-  const N = 70;
-  const specks = Array.from({ length: N }, () => spawn(Math.random()));
-  function spawn(age = 0) {
-    return { a: Math.random() * Math.PI * 2, r: 1, v: 0.0028 + Math.random() * 0.004, spin: 1.6 + Math.random() * 1.4, c: hues[Math.floor(Math.random() * hues.length)], s: 0.8 + Math.random() * 1.6, life: age };
-  }
-  let W = 0, H = 0, dpr = 1;
+  const GAP = 14;
+  let W = 0, H = 0, dpr = 1, dots = [], ink = "#1c1c21", accent = "#4f46e5", frame = 0;
+  const colours = () => {
+    const c = getComputedStyle(hero);
+    ink = c.getPropertyValue("--fg").trim() || ink;
+    accent = c.getPropertyValue("--accent").trim() || accent;
+  };
   const size = () => {
     dpr = devicePixelRatio || 1;
     const r = cv.getBoundingClientRect();
-    if (!r.width) return false;
+    if (!r.width || !r.height) return false;
     if (r.width !== W || r.height !== H) {
       W = r.width; H = r.height;
-      cv.width = W * dpr; cv.height = H * dpr;
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      const cols = Math.max(1, Math.floor((W - 4) / GAP)), rows = Math.max(1, Math.floor((H - 4) / GAP));
+      const ox = (W - (cols - 1) * GAP) / 2, oy = (H - (rows - 1) * GAP) / 2;
+      dots = [];
+      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+        const seed = Math.random();
+        dots.push({ x: ox + i * GAP, y: oy + j * GAP, nx: cols > 1 ? i / (cols - 1) : 0, ny: rows > 1 ? j / (rows - 1) : 0, seed, turn: (cols > 1 ? i / (cols - 1) : 0) * 0.86 + seed * 0.14 });
+      }
     }
     return true;
   };
   function paint(now) {
     if (!size()) return;
-    const cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 - 4, ring = R * 0.62;
+    if (frame++ % 30 === 0) colours();
+    const T = now / 1000;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // trails fade rather than clear
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.fillStyle = reduced ? "rgba(0,0,0,1)" : "rgba(0,0,0,.2)";
+    ctx.clearRect(0, 0, W, H);
+    shown += (frac - shown) * (reduced ? 1 : 0.06);
+    // unknown: a band of light sweeps across and on again
+    const scan = ((T * 0.32) % 1.4) - 0.2;
+    // a faint glow where the reading is
+    const gx = (known ? shown * 0.86 + 0.07 : scan) * W;
+    const glow = ctx.createRadialGradient(gx, H / 2, 0, gx, H / 2, H * 0.9);
+    glow.addColorStop(0, hexA(accent, reduced ? 0.06 : 0.1));
+    glow.addColorStop(1, hexA(accent, 0));
+    ctx.fillStyle = glow;
     ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = "lighter";
-    if (!reduced) {
-      for (let i = 0; i < specks.length; i++) {
-        const p = specks[i];
-        p.r -= p.v * (0.6 + (1 - p.r) * 1.2);
-        p.a += p.v * p.spin * (2.2 - p.r);
-        if (p.r <= 0.18) { specks[i] = spawn(); continue; }
-        const dist = ring * 0.28 + (p.r) * (R - ring * 0.28);
-        const x = cx + Math.cos(p.a) * dist, y = cy + Math.sin(p.a) * dist;
-        ctx.globalAlpha = Math.min(1, (1 - p.r) * 2.2) * 0.9;
-        ctx.fillStyle = p.c;
-        ctx.beginPath();
-        ctx.arc(x, y, p.s * (0.5 + (1 - p.r)), 0, Math.PI * 2);
-        ctx.fill();
+    for (const d of dots) {
+      const wave = reduced ? 0.5 : 0.5 + 0.5 * Math.sin(d.nx * 7 + d.ny * 2.4 - T * 1.5 + d.seed * 0.8);
+      let a = 0.08 + 0.05 * wave, r = 1.05 + 0.2 * wave, c = ink;
+      if (known) {
+        const since = shown - d.turn;
+        if (since >= 0) {
+          // read: resting in the accent, just landed brighter and bigger
+          const fresh = Math.max(0, 1 - since / 0.07);
+          c = accent;
+          a = 0.4 + 0.32 * wave * (0.3 + d.seed) + 0.5 * fresh;
+          r = 1.25 + 0.25 * wave + 1.1 * fresh * fresh;
+        } else if (since > -0.035 && !reduced) {
+          // about to land: a flicker
+          const near = 1 + since / 0.035;
+          if (Math.sin(T * 9 + d.seed * 40) > 0.3) { c = accent; a = 0.1 + 0.35 * near; }
+        }
+      } else if (!reduced) {
+        const g = Math.exp(-(((d.nx - scan) / 0.07) ** 2));
+        if (g > 0.02) { c = accent; a = Math.max(a, 0.9 * g * (0.55 + 0.45 * d.seed)); r += 1 * g; }
       }
+      ctx.globalAlpha = Math.min(1, a);
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, r, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = "source-over";
-    // the core, breathing
-    const breath = reduced ? 0.5 : 0.5 + 0.5 * Math.sin(now / 520);
-    const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, ring * 0.9);
-    core.addColorStop(0, hexA(accent, 0.34 + 0.16 * breath));
-    core.addColorStop(0.55, hexA(accent, 0.1));
-    core.addColorStop(1, hexA(accent, 0));
-    ctx.fillStyle = core;
-    ctx.beginPath(); ctx.arc(cx, cy, ring * 0.9, 0, Math.PI * 2); ctx.fill();
-    // the ring's track, and what is read on it
-    ctx.lineWidth = 5;
-    ctx.lineCap = "round";
-    ctx.strokeStyle = hexA(accent, 0.12);
-    ctx.beginPath(); ctx.arc(cx, cy, ring, 0, Math.PI * 2); ctx.stroke();
-    shown += (frac - shown) * (reduced ? 1 : 0.08);
-    const g = ctx.createLinearGradient(cx - ring, cy - ring, cx + ring, cy + ring);
-    g.addColorStop(0, "#06b6d4"); g.addColorStop(0.5, accent); g.addColorStop(1, "#ec4899");
-    ctx.strokeStyle = g;
-    ctx.shadowColor = hexA(accent, 0.6);
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    if (known) ctx.arc(cx, cy, ring, -Math.PI / 2, -Math.PI / 2 + Math.max(0.02, shown) * Math.PI * 2);
-    else { const a = reduced ? 0 : now / 380; ctx.arc(cx, cy, ring, a, a + Math.PI * 0.55); }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
     num.textContent = known ? String(Math.floor(shown * 100)) : "";
   }
   // it runs until the page takes it away
@@ -6521,7 +6545,8 @@ function renderSessions() {
     box.hidden = true;
     chart.hidden = true;
     grid.hidden = true;
-    head.hidden = true;
+    // the search stays where it was typed, to be cleared
+    head.hidden = !q;
   } else {
     stats.classList.remove("empty");
     stats.classList.add("six");
@@ -6558,9 +6583,10 @@ function renderSessions() {
     renderSessShape();
     renderSessTools();
     renderSessSkills();
-    head.hidden = !list.length;
-    box.hidden = !list.length;
+    head.hidden = !list.length && !q;
+    box.hidden = !list.length && !q;
     for (const s of list) box.append(sessionItem(s));
+    if (!list.length && q) box.append(el("div", "empty-state", t("No session matches.")));
   }
   const dirs = (sessions?.dirs || []).join(" · ");
   $("#sessNote").textContent = t("Totals count every session in the agents' own files; the list is the latest {n} by activity · {dirs}", { n: all.length, dirs });
@@ -6862,7 +6888,7 @@ function renderSessTop() {
 }
 
 // the ways a session's shape is told, and the one shown
-const SESS_SHAPES = [["messages", "Messages"], ["minutes", "Length"], ["autonomy", "Autonomy"]];
+const SESS_SHAPES = [["messages", "Messages"], ["minutes", "Length"], ["autonomy", "Tool calls"]];
 let sessShapeBy = "messages";
 try { const v = localStorage.getItem("magpie.sessShape"); if (SESS_SHAPES.some(([id]) => id === v)) sessShapeBy = v; } catch {}
 
@@ -6897,17 +6923,22 @@ function renderSessShape() {
     const col = el("div", "col");
     const pct = Math.round(100 * c / sh.total);
     col.title = t(what, { r: label(i) }) + " · " + t(c === 1 ? "{n} session" : "{n} sessions", { n: fmtN(c) }) + ` (${pct}%)`;
-    const track = el("div", "track");
-    const fill = el("i");
-    fill.style.height = (c ? Math.max(3, 100 * c / peak) : 0).toFixed(1) + "%";
-    track.append(fill);
-    col.append(el("b", "", c ? fmtN(c) : ""), track, el("span", "", label(i)));
+    // a bar as tall as its share of the busiest bin, on a baseline; an
+    // empty bin a stub, so no grey column reads as a bar of its own
+    const plot = el("div", "plot");
+    const fill = el("i", c ? "" : "none");
+    fill.style.height = c ? `max(4px, calc((100% - 20px) * ${(c / peak).toFixed(3)}))` : "";
+    plot.append(el("b", c ? "" : "zero", fmtN(c)), fill);
+    // the busiest bin in full, when one is busiest
+    col.classList.toggle("peak", c === peak && c > 0 && sh.counts.filter((n) => n === peak).length === 1);
+    col.append(plot, el("span", "", label(i)));
     bars.append(col);
   });
   box.append(bars);
-  const note = { messages: "Messages each session: prompts typed and replies", minutes: "Minutes each session was at work", autonomy: "Tool calls each session made for every prompt typed" }[sessShapeBy];
+  // what the two axes are, said plainly
+  const axis = { messages: "messages in a session, prompts and replies", minutes: "minutes a session was at work", autonomy: "tool calls the agent made on its own for each prompt" }[sessShapeBy];
   const foot = el("div", "sess-card-foot");
-  foot.append(el("span", "", t(note)));
+  foot.append(el("span", "", t("Across: {axis} · Height: sessions", { axis: t(axis) })));
   box.append(foot);
 }
 

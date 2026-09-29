@@ -45,7 +45,7 @@ const full = (key) => ({
 });
 const sessions = [0, 1, 2].map((i) => ({ ...full("claude:s" + i), title: "Latest " + i }));
 
-function serve(lang, seen) {
+function serve(lang, seen, ctl = {}) {
   const state = { agents: [{ id: "claude", name: "Claude Code", path: "/test/settings.json", fields: [] }], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -54,10 +54,11 @@ function serve(lang, seen) {
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state);
-    if (url.pathname === "/api/sessions/progress") return json({ indexing: false });
+    if (url.pathname === "/api/sessions/progress") return json(ctl.progress ? ctl.progress() : { indexing: false });
     if (url.pathname === "/api/sessions") return json({ sessions, dirs: ["/test/sessions"] });
     const n = +q.get("days") || allDays.length;
     const days = allDays.slice(-n);
+    if (url.pathname === "/api/sessions/stats" && ctl.delay) await new Promise((r) => setTimeout(r, ctl.delay));
     if (url.pathname === "/api/sessions/stats") return json({ from: days[0].date, to: iso(to), days, agents: { claude: "Claude Code", codex: "Codex" } });
     if (url.pathname === "/api/sessions/overview") {
       seen.push(q.toString());
@@ -106,9 +107,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const context = await browser.newContext({ viewport: { width: 1100, height: 760 }, reducedMotion: "reduce", timezoneId: "Asia/Shanghai" });
       const page = await context.newPage();
       page.setDefaultTimeout(5000);
-      const errors = [], seen = [];
+      const errors = [], seen = [], ctl = {};
       page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", serve(lang, seen));
+      await page.route("**/*", serve(lang, seen, ctl));
       await page.addInitScript(() => { localStorage.setItem("magpie.usageTab", "sessions"); localStorage.setItem("magpie.sessRange", "all"); });
       t.after(async () => {
         if (process.env.ARTIFACT_DIR) {
@@ -157,12 +158,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await page.locator("#sessHours .sess-card-foot > span").first().innerText(), want[lang].busiest);
       });
 
-      await t.test("session shape, by messages, time and autonomy", async () => {
+      await t.test("session shape, by messages, time and tool calls", async () => {
         const shape = page.locator("#sessShape");
         assert.equal(await shape.locator(".label").innerText(), lang === "en" ? "SESSION SHAPE" : "会话形态");
         assert.equal(await shape.locator(".tz").innerText(), lang === "en" ? "42 sessions" : "42 个会话");
         assert.deepEqual(await shape.locator(".col > span").allInnerTexts(), ["1–5", "6–15", "16–30", "31–60", "61–120", "121+"]);
-        assert.deepEqual(await shape.locator(".col > b").allInnerTexts(), ["3", "10", "14", "9", "4", "2"]);
+        assert.deepEqual(await shape.locator(".col .plot > b").allInnerTexts(), ["3", "10", "14", "9", "4", "2"]);
+        // no grey column behind the bars, the busiest bin in full, the axes said
+        assert.equal(await shape.locator(".track").count(), 0);
+        assert.deepEqual(await shape.locator(".col").evaluateAll((cs) => cs.map((c) => c.classList.contains("peak"))), [false, false, true, false, false, false]);
+        assert.equal((await shape.locator(".sess-card-foot").innerText()).trim(), lang === "en" ? "Across: messages in a session, prompts and replies · Height: sessions" : "横轴：一个会话里的消息数（提示加回复） · 柱高：会话数");
+        const hs = await shape.locator(".plot > i").evaluateAll((is) => is.map((i) => i.getBoundingClientRect().height));
+        assert.ok(hs[2] > hs[1] && hs[1] > hs[3] && hs[3] > hs[0], String(hs));
         // wheeled to, as a person would: WebKit paints a scroll set from script late
         await page.mouse.move(500, 400);
         for (let i = 0; i < 20 && (await shape.boundingBox()).y > 300; i++) await page.mouse.wheel(0, 200);
@@ -170,10 +177,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const y = (await shape.boundingBox()).y;
         await shape.locator(".segs .opt").nth(2).click();
         assert.equal(await shape.locator(".col > span").first().innerText(), "<1");
-        assert.deepEqual(await shape.locator(".col > b").allInnerTexts(), ["5", "7", "10", "12", "6", "2"]);
+        assert.equal(await shape.locator(".segs .opt").nth(2).innerText(), lang === "en" ? "Tool calls" : "工具调用");
+        assert.match(await shape.locator(".sess-card-foot").innerText(), lang === "en" ? /tool calls the agent made on its own for each prompt/ : /你每发一条提示，Agent 自己调用工具的次数/);
+        assert.deepEqual(await shape.locator(".col .plot > b").allInnerTexts(), ["5", "7", "10", "12", "6", "2"]);
         await shape.locator(".segs .opt").nth(1).click();
         assert.equal(await shape.locator(".col > span").first().innerText(), lang === "en" ? "1–5m" : "1–5 分钟");
-        assert.equal(await shape.locator(".col > b").last().innerText(), "");
+        // an empty bin says 0 over a stub
+        assert.equal(await shape.locator(".col .plot > b").last().innerText(), "0");
+        assert.equal(await shape.locator(".plot > i").last().getAttribute("class"), "none");
         assert.equal(await page.evaluate(() => localStorage.getItem("magpie.sessShape")), "minutes");
         assert.equal((await shape.boundingBox()).y, y);
         await shape.locator(".segs .opt").nth(0).click();
@@ -261,6 +272,51 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForFunction(() => document.querySelectorAll("#sessChart .bars .bar").length === 90);
         await page.locator("#sessRange .opt").nth(4).click();
         await page.waitForFunction(() => document.querySelectorAll("#sessChart .sess-cal i").length === 200);
+      });
+
+      await t.test("the search sits by the latest sessions it filters, and stays with no match", async () => {
+        const q = page.locator("#sessListHead #sessQ");
+        assert.equal(await q.count(), 1);
+        assert.equal(await page.locator(".sess-tools #sessQ").count(), 0);
+        const head = await page.locator("#sessListHead").boundingBox();
+        const box = await q.boundingBox();
+        assert(box.x + box.width >= head.x + head.width - 4, "at the heading's right: " + JSON.stringify([box, head]));
+        assert(Math.abs((box.y + box.height / 2) - (head.y + head.height / 2)) <= 2, "on the heading's line");
+        assert.equal(await page.locator("#sessList .row.sess").count(), 3);
+        await q.fill("latest 1");
+        await page.waitForFunction(() => document.querySelectorAll("#sessList .row.sess").length === 1);
+        await q.fill("nothing like it");
+        await page.locator("#sessList .empty-state").waitFor();
+        assert.equal(await page.locator("#sessList .empty-state").innerText(), lang === "en" ? "No session matches." : "没有匹配的会话。");
+        assert(await q.isVisible());
+        await q.press("Escape");
+        await page.waitForFunction(() => document.querySelectorAll("#sessList .row.sess").length === 3);
+      });
+
+      await t.test("the indexing show: not for a catch-up read, once for a long one", async () => {
+        // how many times the show is put on the page
+        await page.evaluate(() => {
+          window.heroes = 0;
+          new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.classList?.contains("sess-indexing")) window.heroes++; })
+            .observe(document.querySelector("#sessStats"), { childList: true });
+        });
+        // a range picked while an agent writes: a few changed files read again
+        const started = Date.now();
+        ctl.delay = 450;
+        ctl.progress = () => ({ indexing: Date.now() - started < 400, files: 2, done: 1, bytes: 40000, read: 20000 });
+        await page.locator("#sessRange .opt").nth(1).click();
+        await page.waitForFunction(() => document.querySelectorAll("#sessChart .bars .bar").length === 7);
+        assert.equal(await page.evaluate(() => window.heroes), 0);
+        // a first index, a while long: shown once, up to its end, never again from nought
+        const at = Date.now();
+        ctl.delay = 2200;
+        ctl.progress = () => { const f = Math.min(1, (Date.now() - at) / 2000); return { indexing: f < 1, files: 300, done: Math.round(300 * f), bytes: 4e9, read: 4e9 * f }; };
+        await page.locator("#sessRange .opt").nth(4).click();
+        await page.locator("#sessStats .sess-indexing").waitFor();
+        await page.waitForFunction(() => document.querySelectorAll("#sessChart .sess-cal i").length === 200, null, { timeout: 8000 });
+        assert.equal(await page.evaluate(() => window.heroes), 1);
+        delete ctl.delay;
+        delete ctl.progress;
       });
 
       await t.test("nothing overflows, wide or narrow", async () => {

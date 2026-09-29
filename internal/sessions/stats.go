@@ -108,13 +108,15 @@ func statsAt(days int, now time.Time) Stats {
 	loadCache()
 	defer closeDBs()
 	files := allFiles()
+	// every changed file, whatever the range, so a wider range picked later
+	// finds them read rather than starting another run
+	refresh(files, files)
 	var want []file
 	for _, f := range files {
 		if !f.mod.Before(since) {
 			want = append(want, f)
 		}
 	}
-	refresh(want, files)
 
 	// a subagent's file counts in the folder of its session's own file
 	folder := map[string]string{}
@@ -478,21 +480,28 @@ func (st Stats) Overview(agent, model, cwd string, n int) Overview {
 	return out
 }
 
-// shapes buckets the sessions that told their messages.
+// shapes buckets the sessions that told their messages, or for minutes
+// those that were at work.
 func shapes(in []Summary) map[string]Shape {
 	out := map[string]Shape{}
 	for by, edges := range shapeEdges {
 		sh := Shape{Edges: edges, Counts: make([]int, len(edges))}
 		for _, s := range in {
-			msgs := s.Prompts + s.Replies
-			if msgs == 0 {
-				continue
-			}
-			v := msgs
+			v := s.Prompts + s.Replies
 			switch by {
 			case "minutes":
+				// every agent's sessions tell their time, not all their
+				// messages
+				if s.Active <= 0 {
+					continue
+				}
 				v = int(max(1, (s.Active+30)/60))
-			case "autonomy":
+			case "messages", "autonomy":
+				if v == 0 {
+					continue
+				}
+			}
+			if by == "autonomy" {
 				v = s.ToolCalls / max(1, s.Prompts)
 			}
 			i := len(edges) - 1

@@ -1281,15 +1281,21 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if err != nil {
 		return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 	}
-	if e := bodyEffort(proto, body); (e == "none" || e == "minimal") && res.StatusCode == http.StatusBadRequest {
-		// a model whose levels magpie doesn't know, refusing no reasoning
-		// with the levels it takes: asked again at the lowest of them
+	if e := bodyEffort(proto, body); res.StatusCode == http.StatusBadRequest && (e == "none" || e == "minimal" || proto == provider.Chat && hasReasoningDisabled(body)) {
+		// A model can refuse reasoning turned off. If it names its levels,
+		// try low; if OpenRouter requires reasoning, leave the level to it.
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
-		if effortLevelsNamed.Match(b) {
+		if (e == "none" || e == "minimal") && effortLevelsNamed.Match(b) {
 			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(withBodyEffort(proto, body, "low")), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+			}
+		} else if proto == provider.Chat && mandatoryReasoning.Match(b) {
+			if nb, ok := withoutReasoningOff(body); ok {
+				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(nb), r.Header); err != nil {
+					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+				}
 			}
 		}
 	}
@@ -1311,7 +1317,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
-		if nb, ok := withoutThinkingOff(body); ok && alwaysThinks.Match(b) {
+		if nb, ok := withoutThinkingOff(body); ok && (alwaysThinks.Match(b) || mandatoryReasoning.Match(b)) {
 			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(nb), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
@@ -1518,6 +1524,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 // /v1/chat/completions. To use function tools, use /v1/responses or set
 // reasoning_effort to 'none'.").
 var toolsWithoutEffort = regexp.MustCompile(`(?is)tools with reasoning_effort are not supported.*reasoning_effort to .?none`)
+
+// OpenRouter rejects an explicit reasoning-off request for some endpoints.
+var mandatoryReasoning = regexp.MustCompile(`(?i)reasoning is mandatory for this endpoint and cannot be disabled`)
 
 // servesElsewhere reports whether p serves model on an API besides proto
 // that hasn't turned it away.
@@ -2030,6 +2039,49 @@ func withBodyEffort(proto provider.Protocol, body []byte, effort string) []byte 
 		return withFields(body, map[string]any{"reasoning": v.Reasoning})
 	}
 	return body
+}
+
+func hasReasoningDisabled(body []byte) bool {
+	_, ok := withoutReasoningOff(body)
+	return ok
+}
+
+// withoutReasoningOff removes only explicit Chat reasoning-off settings.
+// Leaving the effort to the model avoids guessing which nonzero level it
+// accepts when OpenRouter says reasoning is mandatory.
+func withoutReasoningOff(body []byte) ([]byte, bool) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(body, &fields) != nil {
+		return nil, false
+	}
+	changed := false
+	var effort string
+	if json.Unmarshal(fields["reasoning_effort"], &effort) == nil && strings.EqualFold(effort, "none") {
+		delete(fields, "reasoning_effort")
+		changed = true
+	}
+	var reasoning map[string]json.RawMessage
+	if json.Unmarshal(fields["reasoning"], &reasoning) == nil && reasoning != nil {
+		var enabled bool
+		if json.Unmarshal(reasoning["enabled"], &enabled) == nil && !enabled {
+			delete(reasoning, "enabled")
+			changed = true
+		}
+		if json.Unmarshal(reasoning["effort"], &effort) == nil && strings.EqualFold(effort, "none") {
+			delete(reasoning, "effort")
+			changed = true
+		}
+		if len(reasoning) == 0 {
+			delete(fields, "reasoning")
+		} else if changed {
+			fields["reasoning"], _ = json.Marshal(reasoning)
+		}
+	}
+	if !changed {
+		return nil, false
+	}
+	out, err := json.Marshal(fields)
+	return out, err == nil
 }
 
 // withFields sets top-level fields, keeping every other field as it was.

@@ -564,6 +564,56 @@ func TestAnthropicPassthroughModelThatAlwaysThinks(t *testing.T) {
 	}
 }
 
+func TestOpenRouterMandatoryReasoningRetries(t *testing.T) {
+	const refusal = `{"error":{"message":"OpenRouter: Reasoning is mandatory for this endpoint and cannot be disabled.","type":"invalid_request_error"},"type":"error"}`
+	for _, tc := range []struct {
+		name  string
+		proto provider.Protocol
+		path  string
+		body  string
+		calls int
+	}{
+		{"chat effort none", provider.Chat, "/v1/chat/completions", `{"model":"m1","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"none"}`, 2},
+		{"chat enabled false", provider.Chat, "/v1/chat/completions", `{"model":"m1","messages":[{"role":"user","content":"hi"}],"reasoning":{"enabled":false,"summary":"auto"}}`, 2},
+		{"chat reasoning effort none", provider.Chat, "/v1/chat/completions", `{"model":"m1","messages":[{"role":"user","content":"hi"}],"reasoning":{"effort":"none"}}`, 2},
+		{"anthropic explicit disabled", provider.Anthropic, "/v1/messages", `{"model":"m1","max_tokens":5,"messages":[{"role":"user","content":"hi"}],"thinking":{"type":"disabled"}}`, 2},
+		{"anthropic omitted", provider.Anthropic, "/v1/messages", `{"model":"m1","max_tokens":5,"messages":[{"role":"user","content":"hi"}]}`, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &fake{t: t, ctype: "application/json", reply: `{"id":"ok","choices":[],"content":[]}`}
+			f.refuse = func(b []byte) (int, string) {
+				var q map[string]json.RawMessage
+				if json.Unmarshal(b, &q) != nil {
+					t.Fatalf("invalid upstream body: %s", b)
+				}
+				if tc.proto == provider.Chat && hasReasoningDisabled(b) || tc.proto == provider.Anthropic && bytes.Contains(q["thinking"], []byte(`"disabled"`)) {
+					return 400, refusal
+				}
+				return 0, ""
+			}
+			setup(t, tc.proto, f)
+			p, err := provider.Find("fake")
+			if err != nil {
+				t.Fatal(err)
+			}
+			p.Preset = "openrouter"
+			if err := provider.Save(*p); err != nil {
+				t.Fatal(err)
+			}
+			code, body := post(t, tc.path, tc.body)
+			if code != 200 || f.calls != tc.calls {
+				t.Fatalf("%d %s after %d calls, last sent %s", code, body, f.calls, f.got)
+			}
+			if tc.proto == provider.Chat && hasReasoningDisabled(f.got) || tc.proto == provider.Anthropic && bytes.Contains(f.got, []byte(`"disabled"`)) {
+				t.Fatalf("retry still disables reasoning: %s", f.got)
+			}
+			if tc.name == "chat enabled false" && !bytes.Contains(f.got, []byte(`"summary":"auto"`)) {
+				t.Fatalf("retry dropped unrelated reasoning setting: %s", f.got)
+			}
+		})
+	}
+}
+
 // Qoder asks "none" for its permission checks, which Command Code turns
 // away with the levels it takes: asked again at the lowest, once
 func TestPassthroughEffortNoneRefused(t *testing.T) {

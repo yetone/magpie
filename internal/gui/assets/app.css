@@ -630,10 +630,12 @@ body.window .field.solo { grid-column: auto; }
 .sess-card.stale .sess-shape, .sess-card.stale .sess-tools-cols, .sess-card.stale .sess-skills { opacity: .55; transition: opacity .2s; }
 .sess-shape { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; height: 150px; }
 .sess-shape .col { display: flex; flex-direction: column; align-items: stretch; min-width: 0; gap: 4px; }
-.sess-shape .col b { font-size: 11px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; color: var(--fg-2); min-height: 14px; }
-.sess-shape .track { flex: 1; display: flex; align-items: flex-end; border-radius: 6px; background: var(--pill); overflow: hidden; }
-.sess-shape .track i { display: block; width: 100%; border-radius: 6px 6px 0 0; background: var(--accent); opacity: .8; transition: height .25s ease; }
-.sess-shape .col:hover .track i { opacity: 1; }
+.sess-shape .plot { flex: 1; position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: 4px; border-bottom: 1px solid var(--line); }
+.sess-shape .plot b { font-size: 11px; font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; color: var(--fg-2); }
+.sess-shape .plot b.zero { color: var(--faint); font-weight: 500; }
+.sess-shape .plot i { display: block; margin: 0 14%; border-radius: 5px 5px 0 0; background: color-mix(in srgb, var(--accent) 55%, transparent); transition: height .25s ease, background .15s; }
+.sess-shape .plot i.none { height: 2px; border-radius: 1px; background: var(--line); }
+.sess-shape .col.peak .plot i, .sess-shape .col:hover .plot i:not(.none) { background: var(--accent); }
 .sess-shape .col span { font-size: 10.5px; color: var(--muted); text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sess-tools-cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; }
 @container (max-width: 700px) { .sess-tools-cols { grid-template-columns: minmax(0, 1fr); } }
@@ -1721,47 +1723,52 @@ body.panel .modal { padding: 16px 12px; }
 .cxpick:hover { border-color: var(--accent); color: var(--accent); }
 .cxpick.on { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); font-weight: 500; }
 
-/* the show while the session files are indexed: a vortex of specks around
-   a ring of what is read, the files and bytes beside it */
+/* the show while the session files are indexed: the words on the left, a
+   field of dots that light up as the files land on the right, a hairline
+   along the foot. The hero holds its own layout (:has) whatever the class,
+   which another watch's stop may take off. */
 .stats.indexing { display: block; background: var(--card); }
-.sess-indexing { position: relative; display: flex; align-items: center; gap: 22px; padding: 18px 22px; overflow: hidden; }
-.sess-indexing::before { content: ""; position: absolute; inset: -40% -10%; pointer-events: none;
-  background: radial-gradient(40% 60% at 12% 50%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%),
-              radial-gradient(35% 55% at 85% 20%, rgba(6, 182, 212, .10), transparent 70%),
-              radial-gradient(35% 55% at 70% 100%, rgba(236, 72, 153, .08), transparent 70%);
-  animation: si-drift 9s ease-in-out infinite alternate; }
-@keyframes si-drift { to { transform: translate3d(3%, -4%, 0) rotate(3deg); } }
-.si-stage { position: relative; width: 150px; height: 150px; flex: none; }
+.sess-indexing { position: relative; display: grid; grid-template-columns: minmax(250px, 34%) 1fr; align-items: center; gap: 8px; min-height: 164px; padding: 0 0 0 26px; overflow: hidden; }
+.si-words { position: relative; z-index: 1; display: grid; gap: 4px; min-width: 0; padding: 22px 0; }
+.si-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--fg); }
+.si-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.si-spin { width: 12px; height: 12px; border-radius: 50%; flex: none; background: conic-gradient(from 0deg, transparent 0 8%, var(--accent) 100%); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.75px), #000 calc(100% - 1.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 1.75px), #000 calc(100% - 1.5px)); animation: si-spin .9s linear infinite; }
+@keyframes si-spin { to { transform: rotate(1turn); } }
+.sess-indexing.done .si-spin { animation: none; background: var(--accent); }
+.si-pct { display: flex; align-items: baseline; gap: 2px; margin-top: 6px; font-variant-numeric: tabular-nums; line-height: 1; }
+.si-pct b { font-size: 38px; font-weight: 600; letter-spacing: -.035em; color: var(--fg); }
+.si-pct span { font-size: 15px; font-weight: 500; color: var(--muted); }
+.sess-indexing:not(.known) .si-pct { display: none; }
+.si-line { margin-top: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.si-tip { font-size: 11.5px; color: var(--faint, var(--muted)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.si-tip.in { animation: si-tip .6s ease-out; }
+@keyframes si-tip { from { opacity: 0; transform: translateY(3px); } }
+.si-field { position: relative; align-self: stretch; min-width: 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 94%, transparent); }
 .si-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-.si-pct { position: absolute; inset: 0; display: flex; align-items: baseline; justify-content: center; padding-top: 60px; box-sizing: border-box; font-variant-numeric: tabular-nums; }
-.si-pct b { font-size: 24px; font-weight: 650; letter-spacing: -.02em; }
-.si-pct span { font-size: 12px; color: var(--muted); margin-left: 1px; }
-.si-words { position: relative; display: grid; gap: 7px; min-width: 0; flex: 1; }
-.si-title { font-size: 16px; font-weight: 650; letter-spacing: -.01em;
-  background: linear-gradient(90deg, var(--fg) 0%, var(--fg) 35%, var(--accent) 50%, var(--fg) 65%, var(--fg) 100%);
-  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: si-shine 2.8s linear infinite; }
-@keyframes si-shine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
-.si-line { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.si-bar { position: relative; height: 4px; border-radius: 4px; background: var(--pill); overflow: hidden; max-width: 420px; }
-.si-bar i { position: absolute; inset: 0 auto 0 0; width: 38%; border-radius: inherit;
-  background: linear-gradient(90deg, transparent, #06b6d4, var(--accent), #ec4899, transparent);
-  animation: si-sweep 1.4s cubic-bezier(.45, 0, .2, 1) infinite; }
-@keyframes si-sweep { from { transform: translateX(-100%); } to { transform: translateX(280%); } }
-.si-tip { font-size: 11.5px; color: var(--muted); }
-.si-tip.in { animation: si-tip .5s ease-out; }
-@keyframes si-tip { from { opacity: 0; transform: translateY(4px); } }
-@container (max-width: 420px) { .sess-indexing { flex-direction: column; text-align: center; } .si-bar { margin: 0 auto; width: 100%; } }
+.si-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.si-bar i { position: absolute; inset: 0 auto 0 0; width: 22%; background: linear-gradient(90deg, transparent, var(--accent));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: si-sweep 2.2s cubic-bezier(.5, 0, .3, 1) infinite; }
+@keyframes si-sweep { from { transform: translateX(-100%); } to { transform: translateX(560%); } }
+.sess-indexing.known .si-bar i { animation: none; transform: none; transition: width .5s ease-out; background: var(--accent); }
+@container (max-width: 560px) {
+  .sess-indexing { display: block; padding: 0 20px; }
+  .si-field { position: absolute; inset: 0; opacity: .4; -webkit-mask-image: none; mask-image: none; }
+}
 /* Safari before 16 (macOS 12's, #220) has no container queries: the window's width instead */
 @supports not (container-type: inline-size) {
-  @media (max-width: 480px) { .sess-indexing { flex-direction: column; text-align: center; } .si-bar { margin: 0 auto; width: 100%; } }
+  @media (max-width: 620px) {
+    .sess-indexing { display: block; padding: 0 20px; }
+    .si-field { position: absolute; inset: 0; opacity: .4; -webkit-mask-image: none; mask-image: none; }
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sess-indexing::before, .si-title, .si-bar i, .si-tip.in { animation: none; }
-  .si-title { color: var(--fg); background: none; }
-  .si-bar i { width: 100%; opacity: .5; }
+  .si-spin, .si-tip.in, .si-bar i { animation: none; }
+  .si-spin { background: conic-gradient(var(--accent) 0 70%, color-mix(in srgb, var(--accent) 20%, transparent) 0); }
+  .sess-indexing:not(.known) .si-bar i { width: 100%; opacity: .35; }
 }
-.sess-indexing.known .si-bar i { animation: none; transform: none; opacity: 1; transition: width .4s ease-out; background: linear-gradient(90deg, #06b6d4, var(--accent), #ec4899); }
 /* Safari before 16.2 (macOS 12's, #220) has no color-mix(): a declaration
    with one is dropped, and where nothing else is under it the page would go
    clear. The panel's paint (which tintPanel hands the system), and the

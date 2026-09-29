@@ -407,7 +407,9 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // parses kept by an older magpie are read again.
 // 2: each file's usage by day, and its active time
 // 3: the active time by hour of the day
-const cacheVersion = 4
+// 4: the tool calls and skills a day
+// 5: again, for the prompts and replies a day, which an early 4 left out
+const cacheVersion = 5
 
 type cacheFile struct {
 	Version int               `json:"version"`
@@ -625,11 +627,10 @@ func List(limit int) []Session {
 	if len(keys) > limit {
 		keys = keys[:limit]
 	}
-	var want []file
-	for _, k := range keys {
-		want = append(want, groups[k]...)
-	}
-	refresh(want, files)
+	// every changed file, not just the latest sessions': the first read
+	// indexes them all in one run the page can show, and the stats read
+	// after it has nothing left to do
+	refresh(files, files)
 
 	price := pricer()
 	out := []Session{}
