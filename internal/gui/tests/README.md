@@ -1,5 +1,11 @@
 # Dropdown browser regression
 
+`session-terminal.test.cjs` checks the macOS Settings choice for installed
+`.command` handlers in English and Chinese. The system default appears once
+and is selected at first. It selects Ghostty, changes the theme, then returns
+to the system default, reloading to verify both saved choices.
+The API is faked and no terminal app is launched.
+
 `menu-scroll.test.cjs` loads the real HTML, CSS and JavaScript with isolated API
 fixtures. It checks session folder/model filters and the main model picker in
 Chromium and WebKit, including wheel, scrollbar track/thumb, keyboard selection

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -25,6 +26,9 @@ type Settings struct {
 	Theme string `json:"theme,omitempty"` // system | light | dark
 	Lang  string `json:"lang,omitempty"`  // system | en | zh
 	Tray  string `json:"tray,omitempty"`  // what clicking the tray icon opens: panel | window
+	// SessionTerminal is the Mac app that opens a resumed session, by bundle
+	// id. "" and "system" follow the .command file association.
+	SessionTerminal string `json:"sessionTerminal,omitempty"`
 	// Currency is what a cost — the Usage page's, the tray panel's, the
 	// TUI's and the CLI's — is shown converted to: usd (its native
 	// currency, list prices being in dollars) or cny, at a live exchange
@@ -172,6 +176,8 @@ var (
 	TrayEvery = []int{1, 3, 5, 10, 30}
 )
 
+var validTerminalBundleID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$`)
+
 // Path is the settings file.
 func Path() string {
 	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
@@ -204,6 +210,9 @@ func Save(s Settings) error {
 	}
 	if !slices.Contains(Trays, s.Tray) {
 		return fmt.Errorf("tray must be one of %v, not %q", Trays, s.Tray)
+	}
+	if s.SessionTerminal != "" && s.SessionTerminal != "system" && !validTerminalBundleID.MatchString(s.SessionTerminal) {
+		return fmt.Errorf("session terminal must be an app bundle id or system, not %q", s.SessionTerminal)
 	}
 	if !slices.Contains(Currencies, s.Currency) {
 		return fmt.Errorf("currency must be one of %v, not %q", Currencies, s.Currency)

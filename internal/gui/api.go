@@ -148,6 +148,9 @@ type settingsJSON struct {
 	Version string `json:"version"`
 	Dir     string `json:"dir"`     // where magpie keeps its files, as shown
 	Gateway string `json:"gateway"` // the local endpoint
+	// Mac apps that explicitly handle .command files, for resumed sessions.
+	TerminalApps    []terminalChoice `json:"terminalApps,omitempty"`
+	TerminalDefault string           `json:"terminalDefault,omitempty"`
 	// the proxy vendor requests go through now, and where it came from:
 	// settings, environment, system, off or none
 	ProxyNow    string `json:"proxyNow"`
@@ -178,6 +181,12 @@ type settingsJSON struct {
 
 func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Gateway: gateway.URL()}
+	if found, err := discoverTerminals(); err == nil {
+		for _, app := range found.Apps {
+			s.TerminalApps = append(s.TerminalApps, terminalChoice{ID: app.ID, Name: app.Name})
+		}
+		s.TerminalDefault = found.Default
+	}
 	s.FX = currentFX()
 	s.ProxyNow, s.ProxySource = netproxy.Describe()
 	s.Login = autostart.Enabled()

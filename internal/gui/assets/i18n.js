@@ -756,8 +756,8 @@ const I18N = {
     "Launch command": "启动命令",
     "Copied — run it to start {name} on magpie": "已复制，运行它即可让 {name} 走 magpie",
     "Copy the command that resumes it: {cmd}": "复制继续这个会话的命令：{cmd}",
-    "Open in Terminal": "在终端中打开",
-    "Opened in Terminal": "已在终端中打开",
+    "Open in session terminal": "在所选终端中打开",
+    "Opening in session terminal": "正在所选终端中打开",
     "Session id": "会话 ID",
     "(no prompt)": "（无提示词）",
     "session": "个会话",
@@ -941,6 +941,12 @@ const I18N = {
 
     // settings
     "Preferences": "偏好",
+    "Session terminal": "会话终端",
+    "Used by the terminal button in Sessions; only apps registered for .command files appear": "用于会话列表中的终端按钮；仅显示已注册处理 .command 文件的应用",
+    "System default ({name})": "系统默认（{name}）",
+    "System default (unavailable)": "系统默认（不可用）",
+    "{name} (fixed)": "固定使用 {name}",
+    "Unavailable app ({id})": "应用不可用（{id}）",
     "Appearance": "外观",
     "Light or dark, or whatever the system is showing": "浅色、深色，或跟随系统",
     "Language": "语言",

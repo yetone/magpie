@@ -400,6 +400,12 @@ each; click a row to change the key or the exposed models, *Test* it, or
 click an agent icon to point that agent at one of its models. *Add
 provider* shows the presets as tiles: pick one, paste the key.
 
+On macOS, *Settings → Preferences → Session terminal* chooses which installed
+app opens a session from the terminal button in *Usage → Sessions*. The list
+contains apps registered to open `.command` files, with the current system
+default listed once. With no saved choice, magpie follows that default. The
+*Resume* button still copies the command.
+
 Keys in the terminal version:
 
 | Key        | Action                                |

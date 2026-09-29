@@ -7104,11 +7104,11 @@ function sessionItem(s) {
     r.append(res);
     if (sessions?.terminal) {
       const term = el("button", "copy sess-term");
-      term.title = t("Open in Terminal");
+      term.title = t("Open in session terminal");
       term.append(svg("M3 4.5 6 7.5 3 10.5M7.5 11.5h5.5", 13, 1.6));
       term.onclick = (ev) => {
         ev.stopPropagation();
-        api("sessions/terminal", { agent: s.agent, id: s.id }).then(() => status(t("Opened in Terminal"), "ok"), (e) => status(e.message, "err"));
+        api("sessions/terminal", { agent: s.agent, id: s.id }).then(() => status(t("Opening in session terminal"), "ok"), (e) => status(e.message, "err"));
       };
       r.append(term);
     }
@@ -7307,6 +7307,7 @@ function renderSettings() {
   $("#traySegs").parentElement.hidden = $("#loginSegs").parentElement.hidden = web;
   $("#dockSegs").replaceChildren(segs([["off", t("Hide")], ["window", t("With window")], ["on", t("Show")]],
     s.dock ? "on" : s.dockWindow ? "window" : "off", (v) => savePrefs({ ...keep, dock: v === "on", dockWindow: v === "window" })));
+  renderSessionTerminal(s, keep);
   // the system's record, set on its own, not with the other choices
   $("#loginSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.login ? "on" : "off", (v) =>
     writingPrefs(api("settings/login", { on: v === "on" })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); })));
@@ -7375,6 +7376,32 @@ function renderSettings() {
   repo.title = "github.com/yetone/magpie";
   repo.onclick = () => api("open", { url: "https://github.com/yetone/magpie" }).catch(() => {});
   row(t("Community"), t("questions, ideas and feedback, on Discord or GitHub"), "", join, repo);
+}
+
+function renderSessionTerminal(s, keep) {
+  const row = $("#sessionTerminalRow");
+  row.hidden = !document.body.classList.contains("mac");
+  if (row.hidden) return;
+  const select = $("#sessionTerminalSelect");
+  const apps = [...(s.terminalApps || [])];
+  if (!apps.some((app) => app.id === "com.apple.Terminal")) apps.unshift({ id: "com.apple.Terminal", name: "Terminal" });
+  const chosen = s.sessionTerminal || "system";
+  const defaultApp = apps.find((app) => app.id === s.terminalDefault);
+  const options = [{ id: "system", name: defaultApp ? t("System default ({name})", { name: defaultApp.name }) : t("System default (unavailable)") }];
+  for (const app of apps) {
+    if (app.id === defaultApp?.id && app.id !== chosen) continue;
+    options.push({ id: app.id, name: app.id === defaultApp?.id ? t("{name} (fixed)", { name: app.name }) : app.name });
+  }
+  if (!options.some((app) => app.id === chosen)) {
+    options.push({ id: chosen, name: t("Unavailable app ({id})", { id: chosen }) });
+  }
+  select.replaceChildren(...options.map((app) => {
+    const option = el("option", "", app.name);
+    option.value = app.id;
+    return option;
+  }));
+  select.value = chosen;
+  select.onchange = () => savePrefs({ ...keep, sessionTerminal: select.value === "system" ? "" : select.value });
 }
 
 // renderSync: the Settings page's sync and backup — WebDAV keeping the
@@ -8031,6 +8058,7 @@ function wbCheckinLine(r) {
 // prefsKeep is what the settings page sends of s, all of it each time.
 function prefsKeep(s) {
   return { theme: s.theme, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, proxy: s.proxy || "",
+    sessionTerminal: s.sessionTerminal || "",
     redact: !!s.redact, redactPersonal: !!s.redactPersonal, redactWords: s.redactWords || [], codexWarmup: s.codexWarmup || "",
     claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "", workbuddyCheckin: !!s.workbuddyCheckin, noStats: !!s.noStats,
     trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, vision: s.vision || "", imageGen: s.imageGen || "", currency: s.currency || "usd" };

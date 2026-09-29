@@ -39,6 +39,18 @@ func TestRoundTrip(t *testing.T) {
 	if Save(Settings{Currency: "eur"}) == nil {
 		t.Fatal("bad currency accepted")
 	}
+	if Load().SessionTerminal != "" {
+		t.Fatal("the system handler should be the default")
+	}
+	if err := Save(Settings{SessionTerminal: "com.mitchellh.ghostty"}); err != nil || Load().SessionTerminal != "com.mitchellh.ghostty" {
+		t.Fatalf("session terminal not kept: %v", err)
+	}
+	if err := Save(Settings{SessionTerminal: "system"}); err != nil || Load().SessionTerminal != "system" {
+		t.Fatalf("system terminal not kept: %v", err)
+	}
+	if Save(Settings{SessionTerminal: "Ghostty; rm -rf /"}) == nil {
+		t.Fatal("bad terminal app id accepted")
+	}
 	if filepath.Base(Path()) != "settings.json" {
 		t.Fatal(Path())
 	}

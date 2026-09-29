@@ -15,6 +15,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -145,7 +146,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, errors.New("no such session"))
 			return
 		}
-		if err := openTerminal(s.Resume); err != nil {
+		if err := openTerminal(s.Resume, settings.Load().SessionTerminal); err != nil {
 			fail(rw, err)
 			return
 		}
@@ -211,10 +212,22 @@ func warmSessions() {
 	}()
 }
 
-// openTerminal runs a command in a new Terminal window, through a .command
-// file Terminal opens as it would a double-click: no Automation consent.
+// openTerminal runs a command in the chosen Mac terminal through a .command
+// file, as it would open from Finder: no Automation consent.
 // The shell is left open when the agent quits.
-func openTerminal(command string) error {
+func openTerminal(command, choice string) error {
+	var found terminalDiscovery
+	if choice != terminalBundleID {
+		var err error
+		found, err = discoverTerminals()
+		if err != nil {
+			return err
+		}
+	}
+	args, err := terminalOpenArgs(choice, found)
+	if err != nil {
+		return err
+	}
 	f, err := os.CreateTemp("", "magpie-resume-*.command")
 	if err != nil {
 		return err
@@ -231,7 +244,8 @@ func openTerminal(command string) error {
 		os.Remove(f.Name())
 		return err
 	}
-	if err := proc.Command("open", "-a", "Terminal", f.Name()).Run(); err != nil {
+	args = append(args, f.Name())
+	if err := proc.Command("open", args...).Run(); err != nil {
 		os.Remove(f.Name())
 		return err
 	}
