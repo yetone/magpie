@@ -1,7 +1,9 @@
+//go:build darwin && cgo
+
 package gui
 
 /*
-#cgo LDFLAGS: -framework AppKit -framework CoreServices -framework UniformTypeIdentifiers
+#cgo LDFLAGS: -framework AppKit -framework UniformTypeIdentifiers
 #include <stdlib.h>
 char *magpieTerminalAppsJSON(void);
 */

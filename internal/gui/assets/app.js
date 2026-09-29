@@ -7417,11 +7417,12 @@ function renderSessionTerminal(s, keep) {
   const apps = [...(s.terminalApps || [])];
   if (!apps.some((app) => app.id === "com.apple.Terminal")) apps.unshift({ id: "com.apple.Terminal", name: "Terminal" });
   const chosen = s.sessionTerminal || "system";
-  const defaultApp = apps.find((app) => app.id === s.terminalDefault);
-  const options = [{ id: "system", name: defaultApp ? t("System default ({name})", { name: defaultApp.name }) : t("System default (unavailable)") }];
+  // a default that is not a terminal opens Terminal, as the server does
+  const defaultApp = apps.find((app) => app.id === s.terminalDefault) || apps.find((app) => app.id === "com.apple.Terminal");
+  const options = [{ id: "system", name: t("System default ({name})", { name: defaultApp.name }) }];
   for (const app of apps) {
-    if (app.id === defaultApp?.id && app.id !== chosen) continue;
-    options.push({ id: app.id, name: app.id === defaultApp?.id ? t("{name} (fixed)", { name: app.name }) : app.name });
+    if (app.id === defaultApp.id && app.id !== chosen) continue;
+    options.push({ id: app.id, name: app.id === defaultApp.id ? t("{name} (fixed)", { name: app.name }) : app.name });
   }
   if (!options.some((app) => app.id === chosen)) {
     options.push({ id: chosen, name: t("Unavailable app ({id})", { id: chosen }) });

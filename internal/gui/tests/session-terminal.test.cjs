@@ -12,10 +12,10 @@ const terminalApps = [
   { id: "com.mitchellh.ghostty", name: "Ghostty" },
 ];
 
-function serve(lang, posts) {
+function serve(lang, posts, terminalDefault = "com.apple.Terminal") {
   let settings = {
     theme: "light", lang, tray: "panel", sessionTerminal: "", terminalApps,
-    terminalDefault: "com.apple.Terminal", version: "test", dir: "/tmp/magpie",
+    terminalDefault, version: "test", dir: "/tmp/magpie",
     gateway: "http://127.0.0.1:3425", visionModels: [], imageGenModels: [],
     fx: { rate: 7.2, stale: false },
   };
@@ -90,6 +90,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.setViewportSize({ width: 520, height: 700 });
       assert.equal(await row.evaluate((element) => element.scrollWidth > element.clientWidth), false);
       assert.deepEqual(errors, []);
+    });
+
+    // an editor as the .command default: the server opens Terminal, and says so
+    test(`${engine} ${lang}: an editor as the default reads as Terminal`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const context = await browser.newContext({ viewport: { width: 900, height: 700 }, reducedMotion: "reduce" });
+      await context.addInitScript(() => Object.defineProperty(navigator, "platform", { get: () => "MacIntel" }));
+      const page = await context.newPage();
+      await page.route("**/*", serve(lang, [], "com.apple.TextEdit"));
+      await page.goto("http://magpie.test/");
+      await page.locator("#prefs").click();
+      await page.locator("#sessionTerminalRow").waitFor({ state: "visible" });
+      assert.deepEqual(await page.locator("#sessionTerminalSelect option").allTextContents(),
+        lang === "zh" ? ["系统默认（Terminal）", "Ghostty"] : ["System default (Terminal)", "Ghostty"]);
     });
   }
 }

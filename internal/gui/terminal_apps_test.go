@@ -38,7 +38,10 @@ func TestTerminalOpenArgs(t *testing.T) {
 		t.Fatalf("Terminal as system default: %q, %v", got, err)
 	}
 	found.Default = "org.editor"
-	if _, err := terminalOpenArgs("", found); err == nil || !strings.Contains(err.Error(), "not a supported terminal") {
-		t.Fatalf("editor as default: %v", err)
+	if got, err := terminalOpenArgs("", found); err != nil || !reflect.DeepEqual(got, []string{"-a", "Terminal"}) {
+		t.Fatalf("editor as default: %q, %v", got, err)
+	}
+	if got, err := terminalOpenArgs("", terminalDiscovery{}); err != nil || !reflect.DeepEqual(got, []string{"-a", "Terminal"}) {
+		t.Fatalf("nothing found: %q, %v", got, err)
 	}
 }

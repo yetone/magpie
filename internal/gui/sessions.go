@@ -219,8 +219,8 @@ func openTerminal(command, choice string) error {
 	var found terminalDiscovery
 	if choice != terminalBundleID {
 		var err error
-		found, err = discoverTerminals()
-		if err != nil {
+		// the system default falls back to Terminal when nothing is found
+		if found, err = discoverTerminals(); err != nil && choice != "" && choice != "system" {
 			return err
 		}
 	}

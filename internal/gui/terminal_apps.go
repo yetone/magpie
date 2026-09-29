@@ -1,9 +1,6 @@
 package gui
 
-import (
-	"errors"
-	"fmt"
-)
+import "fmt"
 
 const terminalBundleID = "com.apple.Terminal"
 
@@ -35,7 +32,9 @@ func terminalOpenArgs(choice string, found terminalDiscovery) ([]string, error) 
 				return []string{"-a", app.Path}, nil
 			}
 		}
-		return nil, errors.New("the default app for .command files is not a supported terminal")
+		// no default, or one that is not a terminal (an editor): Terminal,
+		// as before there was a choice
+		return []string{"-a", "Terminal"}, nil
 	}
 	for _, app := range found.Apps {
 		if app.ID == choice {
