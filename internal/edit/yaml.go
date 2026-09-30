@@ -44,8 +44,68 @@ func GetYAMLMap(path, keyPath string) map[string]string {
 	return out
 }
 
+// GetYAMLList reads the scalar items of the list at a key path.
+func GetYAMLList(path, keyPath string) []string {
+	root, err := loadYAML(path)
+	if err != nil || root == nil {
+		return nil
+	}
+	n := lookupYAML(root, strings.Split(keyPath, "."))
+	if n == nil || n.Kind != yaml.SequenceNode {
+		return nil
+	}
+	var out []string
+	for _, c := range n.Content {
+		if c.Kind == yaml.ScalarNode {
+			out = append(out, c.Value)
+		}
+	}
+	return out
+}
+
+// GetYAMLText reads the value at a key path as the YAML it is written in —
+// a list flow ("[a, b]") or block as it is — for SetYAML to put back as a
+// YAMLText.
+func GetYAMLText(path, keyPath string) (string, bool) {
+	root, err := loadYAML(path)
+	if err != nil || root == nil {
+		return "", false
+	}
+	n := lookupYAML(root, strings.Split(keyPath, "."))
+	if n == nil {
+		return "", false
+	}
+	b, err := yaml.Marshal(n)
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSuffix(string(b), "\n"), true
+}
+
+// YAMLText, as a KV's value, is set as the YAML it reads as rather than as
+// a string: a list read with GetYAMLText goes back written as it was.
+type YAMLText string
+
+// EditYAMLTextStrings is EditYAMLStrings on YAML text (a YAMLText) rather
+// than a file: fn's answers in place of every string in it.
+func EditYAMLTextStrings(text YAMLText, fn func(string) string) (YAMLText, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(text), &doc); err != nil || len(doc.Content) == 0 {
+		return text, err
+	}
+	if !mapStrings(doc.Content[0], fn) {
+		return text, nil
+	}
+	b, err := yaml.Marshal(doc.Content[0])
+	if err != nil {
+		return text, err
+	}
+	return YAMLText(strings.TrimSuffix(string(b), "\n")), nil
+}
+
 // SetYAML sets key paths in a YAML file; a value may be a scalar, a map,
-// a slice or a struct with yaml tags. Missing files and parents are created.
+// a slice, a struct with yaml tags or YAMLText. Missing files and parents
+// are created.
 func SetYAML(path string, kvs ...KV) error {
 	root, err := loadYAML(path)
 	if err != nil {
@@ -56,7 +116,13 @@ func SetYAML(path string, kvs ...KV) error {
 	}
 	for _, kv := range kvs {
 		var v yaml.Node
-		if err := v.Encode(kv.Value); err != nil {
+		if t, ok := kv.Value.(YAMLText); ok {
+			var doc yaml.Node
+			if err := yaml.Unmarshal([]byte(t), &doc); err != nil || len(doc.Content) == 0 {
+				return fmt.Errorf("%s: %s: not YAML: %q", path, kv.Path, string(t))
+			}
+			v = *doc.Content[0]
+		} else if err := v.Encode(kv.Value); err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 		setYAML(root, strings.Split(kv.Path, "."), &v)
@@ -105,26 +171,30 @@ func EditYAMLStrings(path string, keyPaths []string, fn func(string) string) err
 		return err
 	}
 	changed := false
-	var walk func(*yaml.Node)
-	walk = func(n *yaml.Node) {
-		if n.Kind == yaml.ScalarNode && n.ShortTag() == "!!str" {
-			if v := fn(n.Value); v != n.Value {
-				n.Value, changed = v, true
-			}
-		}
-		for _, c := range n.Content {
-			walk(c)
-		}
-	}
 	for _, kp := range keyPaths {
 		if n := lookupYAML(root, strings.Split(kp, ".")); n != nil {
-			walk(n)
+			changed = mapStrings(n, fn) || changed
 		}
 	}
 	if !changed {
 		return nil
 	}
 	return writeYAML(path, root)
+}
+
+// mapStrings puts fn's answer in place of every string under n, and says
+// whether any differs.
+func mapStrings(n *yaml.Node, fn func(string) string) bool {
+	changed := false
+	if n.Kind == yaml.ScalarNode && n.ShortTag() == "!!str" {
+		if v := fn(n.Value); v != n.Value {
+			n.Value, changed = v, true
+		}
+	}
+	for _, c := range n.Content {
+		changed = mapStrings(c, fn) || changed
+	}
+	return changed
 }
 
 // JSONToYAML writes a JSON or JSONC file out as block-style YAML, key

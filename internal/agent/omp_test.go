@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 	"gopkg.in/yaml.v3"
@@ -74,7 +75,8 @@ func TestOmp(t *testing.T) {
 		t.Fatalf("own: %v %v", c, m)
 	}
 
-	// another role through magpie keeps it in models.yml
+	// another role through magpie keeps it in models.yml; the reset puts
+	// back the model default had before magpie took it over
 	f.Set("magpie/deepseek/flash")
 	os.WriteFile(configPath, []byte("modelRoles:\n  default: magpie/deepseek/flash\n  smol: magpie/deepseek/pro\n"), 0o644)
 	if err := f.Set(""); err != nil {
@@ -82,11 +84,11 @@ func TestOmp(t *testing.T) {
 	}
 	c, _ = read(configPath)
 	m, _ = read(modelsPath)
-	if roles(c)["default"] != nil || roles(c)["smol"] != "magpie/deepseek/pro" || providers(m)["magpie"] == nil {
+	if roles(c)["default"] != "moonshotai/kimi-k3" || roles(c)["smol"] != "magpie/deepseek/pro" || providers(m)["magpie"] == nil {
 		t.Fatalf("reset with smol: %v %v", c, m)
 	}
 
-	// reset: only default goes, and magpie with it
+	// reset with nothing stashed: only default goes, and magpie with it
 	os.WriteFile(configPath, []byte("theme: dark\nmodelRoles:\n  default: magpie/deepseek/flash\n  smol: openai/gpt-6-mini\n"), 0o644)
 	if err := f.Set(""); err != nil {
 		t.Fatal(err)
@@ -226,5 +228,379 @@ func TestOmpNamedToTheGateway(t *testing.T) {
 	}
 	if usage.AgentOf("Bun/1.3.14") == "omp" {
 		t.Fatal("Bun's own User-Agent is taken for omp's, so the header proves nothing")
+	}
+}
+
+// omp's own agents pick their models apart from the main one: through
+// magpie on its own, a role brings magpie's provider in, has its wiring
+// checked, and takes the provider out again when it is the last.
+func TestOmpRoles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath, modelsPath := filepath.Join(dir, "config.yml"), filepath.Join(dir, "models.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5\n"), 0o644)
+	roles := func() map[string]any {
+		var c map[string]any
+		b, _ := os.ReadFile(configPath)
+		yaml.Unmarshal(b, &c)
+		r, _ := c["modelRoles"].(map[string]any)
+		return r
+	}
+	magpieIn := func() bool { v, ok := edit.GetYAML(modelsPath, "providers.magpie.baseUrl"); return ok && v != "" }
+
+	a := omp(home)
+	sub, small := a.Field("subagent"), a.Field("small")
+	if small.Label != "smol" || a.Field("designer") != nil {
+		t.Fatalf("small labelled %q; designer: %+v", small.Label, a.Field("designer"))
+	}
+	for _, k := range []string{"subagent", "small", "slow"} {
+		if f := a.Field(k); f == nil || !f.Quiet {
+			t.Fatalf("field %s: %+v", k, f)
+		}
+	}
+	if err := sub.Set("magpie/deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	if r := roles(); r["task"] != "magpie/deepseek/flash" || r["default"] != "anthropic/claude-opus-5" || !magpieIn() {
+		t.Fatalf("subagent on magpie: %v, magpie in models.yml: %v", r, magpieIn())
+	}
+	if sub.Get() != "magpie/deepseek/flash" {
+		t.Fatalf("get: %q", sub.Get())
+	}
+	// the main model isn't magpie's, the subagents' is: its wiring is checked
+	if a.Check() != "" {
+		t.Fatalf("check, wired: %q", a.Check())
+	}
+	edit.SetYAML(modelsPath, edit.KV{Path: "providers.magpie.baseUrl", Value: "http://127.0.0.1:1/v1"})
+	if a.Check() == "" {
+		t.Fatal("check missed the subagents' broken wiring")
+	}
+	a.Sync()
+
+	if err := small.Set("openai/gpt-6-mini"); err != nil {
+		t.Fatal(err)
+	}
+	if r := roles(); r["smol"] != "openai/gpt-6-mini" || !magpieIn() {
+		t.Fatalf("small, own: %v", r)
+	}
+	// the last role on magpie goes: so does magpie's provider
+	if err := sub.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if r := roles(); r["task"] != nil || r["smol"] != "openai/gpt-6-mini" || r["default"] != "anthropic/claude-opus-5" || magpieIn() {
+		t.Fatalf("subagent reset: %v, magpie in models.yml: %v", r, magpieIn())
+	}
+}
+
+// A role's thinking level ("…:max") stays with it when another model is
+// picked, and the model the user had before magpie comes back, level and
+// all, when the role is reset.
+func TestOmpLevels(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("PATH", t.TempDir())
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	for _, p := range []provider.Provider{
+		{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}},
+		{ID: "other", Name: "Other", Chat: "https://other.example/v1", Key: "k", Models: []string{"pro"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath := filepath.Join(dir, "config.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5:max\n  slow: openai/gpt-6:auto\n"), 0o644)
+	a := omp(home)
+	get := func(k string) string { return a.Field(k).Get() }
+	apply := func(k, v, want string) {
+		t.Helper()
+		if err := a.Apply(k, v); err != nil {
+			t.Fatal(err)
+		}
+		if got := get(k); got != want {
+			t.Fatalf("%s set to %q: %q, want %q", k, v, got, want)
+		}
+	}
+
+	// deepseek/pro has no max of its own: omp clamps it, so it stays
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro:max")
+	if d := a.Drift(); d != nil {
+		t.Fatalf("drift on what magpie set: %+v", d)
+	}
+	apply("model", "magpie/deepseek/flash", "magpie/deepseek/flash:max")
+	apply("model", "magpie/deepseek/pro:low", "magpie/deepseek/pro:low") // its own level wins
+	// offered at its level beside the model: that keeps the level, the
+	// model alone clears it
+	var at, plain bool
+	for _, o := range a.Field("model").Options(a.Values()) {
+		at = at || o.Value == "magpie/deepseek/pro:low" && strings.HasSuffix(o.Label, " · low")
+		plain = plain || o.Value == "magpie/deepseek/pro"
+	}
+	if !at || !plain {
+		t.Fatalf("options: at its level %v, the model %v", at, plain)
+	}
+	apply("model", "magpie/deepseek/pro:low", "magpie/deepseek/pro:low")
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro")
+	apply("model", "magpie/deepseek/flash", "magpie/deepseek/flash")
+	apply("model", "magpie/deepseek/pro:low", "magpie/deepseek/pro:low")
+	apply("slow", "magpie/deepseek/pro", "magpie/deepseek/pro:auto")
+
+	// the first model stashed, not the magpie ones after it
+	apply("model", "", "anthropic/claude-opus-5:max")
+	apply("slow", "", "openai/gpt-6:auto")
+	// a colon that is no level is the model's
+	apply("model", "ollama/qwen3:8b", "ollama/qwen3:8b:max")
+
+	// a model of the user's own in between is the one put back
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro:max")
+	apply("model", "openai/gpt-6", "openai/gpt-6:max")
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro:max")
+	apply("model", "", "openai/gpt-6:max")
+
+	// a provider removed moves the role to the same model elsewhere, level
+	// and all
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro:max")
+	if _, err := Reseat(func() error { return provider.Delete("deepseek") }); err != nil {
+		t.Fatal(err)
+	}
+	if got := get("model"); got != "magpie/other/pro:max" {
+		t.Fatalf("reseated: %q", got)
+	}
+}
+
+// A role on one of magpie's models with a thinking level is that model
+// wherever magpie matches a value against the picker: offered once, typed
+// at a level on the command line, missed when omp puts it back to its own,
+// and moved, level and all, when its provider is renamed.
+func TestOmpLevelSuffix(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("PATH", t.TempDir())
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath := filepath.Join(dir, "config.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5:max\n"), 0o644)
+	a := omp(home)
+	f := a.Field("model")
+
+	v, err := a.Spell("model", "magpie/deepseek/pro:high")
+	if err != nil || v != "magpie/deepseek/pro:high" {
+		t.Fatalf("spell at a level: %q %v", v, err)
+	}
+	if err := a.Apply("model", v); err != nil {
+		t.Fatal(err)
+	}
+	// the subagents on the same model at another level: moved with it too
+	if err := a.Apply("subagent", "magpie/deepseek/pro:max"); err != nil {
+		t.Fatal(err)
+	}
+	if d := a.Drift(); d != nil {
+		t.Fatalf("drift on what magpie set: %+v", d)
+	}
+	// omp's own /model puts the role back on the user's model
+	edit.SetYAML(configPath, edit.KV{Path: "modelRoles.default", Value: "anthropic/claude-opus-5:high"})
+	if d := a.Drift(); d == nil || d.Kind != "replaced" || d.Want != "magpie/deepseek/pro:high" {
+		t.Fatalf("drift, replaced: %+v", d)
+	}
+	if err := a.Reapply(); err != nil || f.Get() != "magpie/deepseek/pro:high" {
+		t.Fatalf("reapplied: %q %v", f.Get(), err)
+	}
+
+	if _, err := RenameProvider("deepseek", "ds"); err != nil {
+		t.Fatal(err)
+	}
+	if f.Get() != "magpie/ds/pro:high" || a.Field("subagent").Get() != "magpie/ds/pro:max" {
+		t.Fatalf("renamed: %q, subagent %q", f.Get(), a.Field("subagent").Get())
+	}
+}
+
+// A role omp falls back through, a list of models (a YAML list or the
+// comma-separated string omp also takes), is the user's to have back when
+// magpie lets go of the role; a level on its last model is no role's level.
+func TestOmpRoleList(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath := filepath.Join(dir, "config.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  slow:\n    - openai/gpt-6\n    - anthropic/claude-opus-5:high\n  task: openai/gpt-6,anthropic/claude-opus-5:high\n"), 0o644)
+	a := omp(home)
+	for _, k := range []string{"slow", "subagent"} {
+		if got := a.Field(k).Get(); got != "openai/gpt-6,anthropic/claude-opus-5:high" {
+			t.Fatalf("%s reads %q", k, got)
+		}
+		if err := a.Apply(k, "magpie/deepseek/pro"); err != nil {
+			t.Fatal(err)
+		}
+		if got := a.Field(k).Get(); got != "magpie/deepseek/pro" {
+			t.Fatalf("%s on magpie: %q", k, got)
+		}
+		if err := a.Apply(k, ""); err != nil {
+			t.Fatal(err)
+		}
+		if got := a.Field(k).Get(); got != "openai/gpt-6,anthropic/claude-opus-5:high" {
+			t.Fatalf("%s reset: %q", k, got)
+		}
+	}
+}
+
+// A role on magpie at a thinking level that a fallback chain names too: a
+// provider renamed moves each once, the level kept. The role back on omp's
+// own, the chain alone keeps magpie's provider, has its wiring checked, and
+// applying again mends it.
+func TestOmpRoleAndChain(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath, modelsPath := filepath.Join(dir, "config.yml"), filepath.Join(dir, "models.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5\nretry:\n  fallbackChains:\n    slow:\n      - magpie/deepseek/pro:max\n      - openai/gpt-6\n"), 0o644)
+	a := omp(home)
+	if err := a.Apply("slow", "magpie/deepseek/pro:max"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RenameProvider("deepseek", "ds"); err != nil {
+		t.Fatal(err)
+	}
+	chain := edit.GetYAMLList(configPath, "retry.fallbackChains.slow")
+	if s := a.Field("slow").Get(); s != "magpie/ds/pro:max" || !slices.Equal(chain, []string{"magpie/ds/pro:max", "openai/gpt-6"}) {
+		t.Fatalf("renamed: slow %q, chain %v", s, chain)
+	}
+
+	if err := a.Apply("slow", ""); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetYAML(modelsPath, "providers.magpie.baseUrl"); v == "" || a.Field("slow").Get() != "" {
+		t.Fatalf("the chain lost magpie's provider, or slow stayed: %q", a.Field("slow").Get())
+	}
+	edit.SetYAML(modelsPath, edit.KV{Path: "providers.magpie.baseUrl", Value: "http://127.0.0.1:1/v1"})
+	if d := a.Drift(); d == nil || d.Kind != "unwired" {
+		t.Fatalf("a chain's broken wiring: %+v", d)
+	}
+	if err := a.Reapply(); err != nil {
+		t.Fatal(err)
+	}
+	if c := a.Check(); c != "" {
+		t.Fatalf("applying again left: %s", c)
+	}
+}
+
+// A role that is a list of models omp falls back through is the user's own,
+// even when it starts on one of magpie's: magpie taking the role over
+// stashes it, and a reset puts it back written as it was — a YAML list or a
+// comma-separated string.
+func TestOmpListRole(t *testing.T) {
+	for _, slow := range []string{
+		" [magpie/deepseek/flash, openai/gpt-6]",
+		" magpie/deepseek/flash, openai/gpt-6",
+		"\n    - magpie/deepseek/flash\n    - openai/gpt-6",
+	} {
+		t.Run(slow, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+			t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+			for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+				t.Setenv(k, "")
+			}
+			if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(home, ".omp", "agent")
+			configPath := filepath.Join(dir, "config.yml")
+			os.MkdirAll(dir, 0o755)
+			before := "modelRoles:\n  default: anthropic/claude-opus-5\n  slow:" + slow + "\n"
+			os.WriteFile(configPath, []byte(before), 0o644)
+			a := omp(home)
+			if err := a.Apply("slow", "magpie/deepseek/pro"); err != nil {
+				t.Fatal(err)
+			}
+			if err := a.Apply("slow", ""); err != nil {
+				t.Fatal(err)
+			}
+			b, _ := os.ReadFile(configPath)
+			if string(b) != before {
+				t.Fatalf("reset:\n%s\nwant:\n%s", b, before)
+			}
+		})
+	}
+}
+
+// A provider renamed moves the magpie models in a list role once, the list
+// written as it was, and in the list the stash keeps for a role magpie took
+// over, which a reset then puts back.
+func TestOmpListRoleRenamed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath := filepath.Join(dir, "config.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5\n  slow: [magpie/deepseek/flash, openai/gpt-6]\n  task: [magpie/deepseek/pro:high, openai/gpt-6]\n"), 0o644)
+	a := omp(home)
+	if err := a.Apply("slow", "magpie/deepseek/pro:max"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RenameProvider("deepseek", "ds"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(configPath)
+	task := edit.GetYAMLList(configPath, "modelRoles.task")
+	if s := a.Field("slow").Get(); s != "magpie/ds/pro:max" || !slices.Equal(task, []string{"magpie/ds/pro:high", "openai/gpt-6"}) || !strings.Contains(string(b), "task: [") {
+		t.Fatalf("renamed: slow %q\n%s", s, b)
+	}
+	if err := a.Apply("slow", ""); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = os.ReadFile(configPath)
+	if !strings.Contains(string(b), "slow: [magpie/ds/flash, openai/gpt-6]") {
+		t.Fatalf("reset:\n%s", b)
 	}
 }
