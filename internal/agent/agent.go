@@ -113,7 +113,11 @@ type Agent struct {
 	// picker (drift, Reseat, RenameProvider, Spell) matches the model and
 	// puts the suffix back after the one it moves to. A mark that is always
 	// the same for a model (Claude Code's [1m]) rides on the option instead.
-	SplitSuffix func(v string) (model, suffix string)
+	// one is false for a value that is no one model but a list the agent
+	// falls back through (omp's "a,b"): that is the user's own whatever it
+	// names, never taken for one of magpie's models nor moved by what
+	// matches the picker (RenameRefs moves the names in it).
+	SplitSuffix func(v string) (model, suffix string, one bool)
 	// detect, when set, says whether the agent is here in place of looking
 	// for its files and binary: a distro's, probed once.
 	detect func() bool
@@ -284,13 +288,17 @@ func ids(as []*Agent) []string {
 // stays, and so does one it doesn't know (a model the agent reaches on its
 // own that isn't listed); a "magpie/…" value the catalog doesn't have is an
 // error rather than a model the agent would ask its own vendor for. The
-// agent's suffix after the model (SplitSuffix) stays as typed.
+// agent's suffix after the model (SplitSuffix) stays as typed, and so does
+// a list of models, the user's own.
 func (a *Agent) Spell(key, v string) (string, error) {
 	f := a.Field(key)
 	if f == nil || f.Options == nil || v == "" {
 		return v, nil
 	}
-	model, suffix := a.split(v)
+	model, suffix, one := a.split(v)
+	if !one {
+		return v, nil
+	}
 	opts := f.Options(a.Values())
 	for _, o := range opts {
 		if o.Value == model {
@@ -317,10 +325,11 @@ func (a *Agent) Spell(key, v string) (string, error) {
 }
 
 // split is v as the model the picker offers and the agent's suffix after
-// it (SplitSuffix); the whole of v for an agent without one.
-func (a *Agent) split(v string) (model, suffix string) {
+// it (SplitSuffix), one false for a list of models; the whole of v for an
+// agent without one.
+func (a *Agent) split(v string) (model, suffix string, one bool) {
 	if a.SplitSuffix == nil {
-		return v, ""
+		return v, "", true
 	}
 	return a.SplitSuffix(v)
 }

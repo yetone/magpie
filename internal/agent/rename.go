@@ -29,10 +29,15 @@ func RenameProvider(from, to string) ([]string, error) {
 				if v == "" {
 					continue
 				}
+				// the agent's suffix after the model (SplitSuffix) stays; a
+				// list of models is the user's own, its names moved by
+				// RenameRefs where the agent has one
+				model, suffix, one := a.split(v)
+				if !one {
+					continue
+				}
 				nv := ""
 				if f.Options != nil {
-					// the agent's suffix after the model (SplitSuffix) stays
-					model, suffix := a.split(v)
 					for _, o := range f.Options(vals) {
 						if o.Value == model && strings.HasPrefix(o.Ref, from+"/") {
 							now := to + "/" + strings.TrimPrefix(o.Ref, from+"/")

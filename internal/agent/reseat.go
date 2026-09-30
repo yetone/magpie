@@ -58,7 +58,11 @@ func picks() []pick {
 			if v == "" || f.Options == nil {
 				continue
 			}
-			model, _ := a.split(v)
+			// a list of models is the user's own, left as it is
+			model, _, one := a.split(v)
+			if !one {
+				continue
+			}
 			for _, o := range f.Options(vals) {
 				if o.Value == model && o.Ref != "" {
 					out = append(out, pick{a, f.Key, v, o.Ref})
@@ -105,7 +109,7 @@ func Reseat(change func() error) ([]Move, error) {
 		// the same model elsewhere keeps the agent's suffix after it (omp's
 		// thinking level); the agent's own default has none
 		if to.Value != "" {
-			_, suffix := p.a.split(p.val)
+			_, suffix, _ := p.a.split(p.val)
 			to.Value += suffix
 		}
 		if err := p.a.Apply(p.key, to.Value); err != nil {

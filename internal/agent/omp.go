@@ -60,6 +60,27 @@ func ompLevel(v string) (model, level string) {
 	return v, ""
 }
 
+// ompSplit is omp's SplitSuffix: a role's model and its thinking level
+// (ompLevel), one false for a list of models omp falls back through ("a,b",
+// or a YAML list, read as one), which is the user's own whatever it names.
+func ompSplit(v string) (model, level string, one bool) {
+	if strings.Contains(v, ",") {
+		return v, "", false
+	}
+	model, level = ompLevel(v)
+	return model, level, true
+}
+
+// ompOnMagpie: a role's value is one of magpie's models, at a level or not.
+func ompOnMagpie(v string) bool {
+	_, _, one := ompSplit(v)
+	return one && usesMagpie(v)
+}
+
+// ompYAMLList: a value the stash keeps is a list as the YAML it was written
+// in ("[a, b]", "- a"), which no model reads as.
+func ompYAMLList(v string) bool { return strings.HasPrefix(v, "[") || strings.HasPrefix(v, "- ") }
+
 // ompProfileName is a profile name omp takes (pi-utils dirs.ts,
 // normalizeProfileName); it refuses any other.
 var ompProfileName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
@@ -146,22 +167,33 @@ func omp(home string) *Agent {
 		}
 		return edit.DelYAML(pick("models"), "providers."+magpieID)
 	}
+	// was are the stash's keys for the roles, one each
+	var was []string
 	// role is the field for one of omp's model roles: one of magpie's brings
 	// magpie's provider into models.yml, and it goes once nothing is on it.
-	// The model the user had there before magpie took the role over is
-	// stashed, and resetting the role puts it back.
+	// What the user had there before magpie took the role over is stashed,
+	// and resetting the role puts it back: a list of models as the YAML it
+	// was written in, a flow list flow and a block one block.
 	role := func(key, label, name string, quiet bool) Field {
 		k := "modelRoles." + name
 		get := roleGet(name)
-		was := "omp:" + path + ":" + k
+		w := "omp:" + path + ":" + k
+		was = append(was, w)
+		kept := func() string {
+			if v, ok := edit.GetYAML(path, k); ok {
+				return v
+			}
+			v, _ := edit.GetYAMLText(path, k)
+			return v
+		}
 		return Field{
 			Key: key, Label: label, Quiet: quiet,
 			Get: get,
 			Set: func(v string) error {
 				cur := get()
 				if v == "" {
-					if usesMagpie(cur) {
-						v = unstash(was)
+					if ompOnMagpie(cur) {
+						v = unstash(w)
 					}
 					if v == "" {
 						if err := edit.DelYAML(path, k); err != nil {
@@ -169,7 +201,13 @@ func omp(home string) *Agent {
 						}
 						return dropMagpie()
 					}
-				} else if _, level := ompLevel(v); level == "" {
+					if ompYAMLList(v) {
+						if err := edit.SetYAML(path, edit.KV{Path: k, Value: edit.YAMLText(v)}); err != nil {
+							return err
+						}
+						return dropMagpie()
+					}
+				} else if _, level, one := ompSplit(v); one && level == "" {
 					// another model keeps the role's thinking level; omp
 					// clamps one the model lacks to the highest it has below
 					// it (its lowest when none is) and drops it for a model
@@ -181,17 +219,17 @@ func omp(home string) *Agent {
 						v += level
 					}
 				}
-				model, _ := ompLevel(v)
-				if ref, ok := strings.CutPrefix(model, magpieID+"/"); ok && isMagpie(ref) {
-					if !usesMagpie(cur) {
-						stash(map[string]string{was: cur})
+				model, _, one := ompSplit(v)
+				if ref, ok := strings.CutPrefix(model, magpieID+"/"); one && ok && isMagpie(ref) {
+					if !ompOnMagpie(cur) {
+						stash(map[string]string{w: kept()})
 					}
 					if err := writeMagpie(); err != nil {
 						return err
 					}
 					return edit.SetYAML(path, edit.KV{Path: k, Value: v})
 				}
-				forget(was)
+				forget(w)
 				if err := edit.SetYAML(path, edit.KV{Path: k, Value: v}); err != nil {
 					return err
 				}
@@ -217,26 +255,49 @@ func omp(home string) *Agent {
 		ID: "omp", Name: "omp", Icon: "omp", Aliases: []string{"oh-my-pi"},
 		UA:  []string{"oh-my-pi"},
 		Bin: "omp", Dir: dir, Path: path,
-		// a role's thinking level is omp's, after whichever model it is on
-		SplitSuffix: ompLevel,
+		// a role's thinking level is omp's, after whichever model it is on;
+		// a list of models is the user's own
+		SplitSuffix: ompSplit,
 		Sync: func() error {
 			return syncYAML(pick("models"), "providers."+magpieID, func() any { return ompProvider() })
 		},
 		// a provider renamed takes its models' ids in models.yml with it; a
-		// name left on the old one omp would pass over, with a warning
+		// name left on the old one omp would pass over, with a warning. So
+		// does what a role had before magpie (a list may name magpie's
+		// models), which a reset puts back
 		RenameRefs: func(from, to string) (bool, error) {
 			old, now := magpieID+"/"+from+"/", magpieID+"/"+to+"/"
-			moved := false
-			err := edit.EditYAMLStrings(path, ompRefKeys, func(v string) string {
+			move := func(v string) string {
 				return ompRefs(v, func(m string) string {
 					if rest, ok := strings.CutPrefix(m, old); ok {
-						moved = true
 						return now + rest
 					}
 					return m
 				})
-			})
-			return moved, err
+			}
+			moved := false
+			if err := edit.EditYAMLStrings(path, ompRefKeys, func(v string) string {
+				nv := move(v)
+				moved = moved || nv != v
+				return nv
+			}); err != nil {
+				return moved, err
+			}
+			for _, w := range was {
+				s := stashLoad()[w]
+				ns := move(s)
+				if ompYAMLList(s) {
+					t, err := edit.EditYAMLTextStrings(edit.YAMLText(s), move)
+					if err != nil {
+						return moved, err
+					}
+					ns = string(t)
+				}
+				if ns != s {
+					stash(map[string]string{w: ns})
+				}
+			}
+			return moved, nil
 		},
 		Notice: func() string {
 			if Running(`(^|/)omp( |$)`, `@oh-my-pi/pi-coding-agent`) {
