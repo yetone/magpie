@@ -292,7 +292,7 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 			// without it Pi caps every reply at 16384 tokens, a model
 			// that can write 128K included
 			if m.Output > 0 {
-				e["maxTokens"] = m.Output
+				e["maxTokens"] = maxTokens(m)
 			}
 			ms = append(ms, e)
 		}

@@ -405,7 +405,7 @@ func dshProviderLines(modern bool, effort string) []string {
 			lines = append(lines, fmt.Sprintf("        contextWindow: %d", m.Context))
 		}
 		if m.Output > 0 {
-			lines = append(lines, fmt.Sprintf("        maxTokens: %d", m.Output))
+			lines = append(lines, fmt.Sprintf("        maxTokens: %d", maxTokens(m)))
 		}
 		if m.Images {
 			lines = append(lines, "        inputModalities: [text, image]")

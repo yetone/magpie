@@ -375,7 +375,7 @@ func clineModels(model string) map[string]any {
 			e["contextWindow"] = m.Context
 		}
 		if m.Output > 0 {
-			e["maxTokens"] = m.Output
+			e["maxTokens"] = maxTokens(m)
 		}
 		ms[m.ID] = e
 	}

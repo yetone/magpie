@@ -86,6 +86,17 @@ func magpieModels(agent string) []catalog.Model {
 	return out
 }
 
+// maxTokens is the output limit an agent is handed for m, kept within the
+// context window it is handed with it: models.dev lists some models' output
+// above their window (deepseek-chat's 384000 against 128000). An unknown
+// window leaves the output as it is.
+func maxTokens(m catalog.Model) int {
+	if m.Context > 0 && m.Output > m.Context {
+		return m.Context
+	}
+	return m.Output
+}
+
 // group tags every option with a group name.
 func group(name string, opts []Option) []Option {
 	for i := range opts {

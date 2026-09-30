@@ -13,6 +13,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"gopkg.in/yaml.v3"
 )
 
 // syncHome is a sandbox home with a models.dev catalog that knows glm-4.6's
@@ -101,6 +102,29 @@ func TestPiModelsCarryMaxTokens(t *testing.T) {
 	if strings.Contains(string(b), "maxTokens") {
 		t.Fatalf("unknown output sent: %s", b)
 	}
+}
+
+// An output limit above the model's window (models.dev lists deepseek-chat's
+// 384000 against 128000 of context) is cut to the window for every agent
+// magpie hands maxTokens; one whose window isn't known keeps its output.
+func TestMaxTokensWithinContextWindow(t *testing.T) {
+	syncHome(t)
+	check := func(limit, want string) {
+		t.Helper()
+		os.WriteFile(catalog.CachePath(), []byte(`{"zai":{"models":{"glm-4.6":{"id":"glm-4.6","name":"GLM-4.6","limit":{`+limit+`}}}}}`), 0o644)
+		catalog.Reset()
+		pi, _ := json.Marshal(magpieProviderJSON("pi"))
+		cline, _ := json.Marshal(clineModels(""))
+		omp, _ := yaml.Marshal(ompProvider())
+		dsh := strings.Join(dshProviderLines(true, ""), "\n")
+		if !strings.Contains(string(pi), `"maxTokens":`+want) || !strings.Contains(string(cline), `"maxTokens":`+want) ||
+			!strings.Contains(string(omp), "maxTokens: "+want) || !strings.Contains(dsh, "maxTokens: "+want) {
+			t.Fatalf("want maxTokens %s:\npi %s\ncline %s\nomp %s\ndsh %s", want, pi, cline, omp, dsh)
+		}
+	}
+	check(`"context":128000,"output":384000`, "128000")
+	check(`"output":384000`, "384000")
+	check(`"context":204800,"output":131072`, "131072")
 }
 
 // A provider added after a magpie model was picked reaches the lists agents

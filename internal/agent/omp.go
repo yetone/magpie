@@ -184,7 +184,7 @@ type ompProviderEntry struct {
 func ompProvider() ompProviderEntry {
 	ms := []ompModel{}
 	for _, m := range magpieModels("omp") {
-		e := ompModel{ID: m.ID, Name: m.Name, Context: m.Context, MaxTokens: m.Output}
+		e := ompModel{ID: m.ID, Name: m.Name, Context: m.Context, MaxTokens: maxTokens(m)}
 		mode := "effort"
 		switch {
 		case slices.Contains(m.APIs, string(provider.Responses)):
