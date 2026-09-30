@@ -31,14 +31,13 @@ type usageJSON struct {
 	usage.Summary
 	Agents     []usageGroup `json:"agents"`
 	Models     []usageGroup `json:"models"`
-	Keys       []usageGroup `json:"keys"`
 	CallerKeys []usageGroup `json:"callerKeys"`
 	Path       string       `json:"path"`
 }
 
 func usageState(p usage.Period) usageJSON {
 	s := usage.Summarize(p)
-	out := usageJSON{Summary: s, Agents: []usageGroup{}, Models: []usageGroup{}, Keys: []usageGroup{}, Path: tilde(usage.Path())}
+	out := usageJSON{Summary: s, Agents: []usageGroup{}, Models: []usageGroup{}, Path: tilde(usage.Path())}
 	agents := map[string]*agent.Agent{}
 	for _, a := range agent.Clients() {
 		agents[a.ID] = a
@@ -67,9 +66,6 @@ func usageState(p usage.Period) usageJSON {
 		}
 		out.Models = append(out.Models, ug)
 	}
-	for _, g := range s.Keys {
-		out.Keys = append(out.Keys, keyUsageGroup(g, providers))
-	}
 	out.CallerKeys = callerUsageGroups(s)
 	return out
 }
@@ -94,32 +90,6 @@ func callerUsageGroups(s usage.Summary) []usageGroup {
 	return keys
 }
 
-func keyUsageGroup(g usage.Group, providers map[string]provider.Provider) usageGroup {
-	ug := usageGroup{Group: g, Name: g.KeyName, Sub: g.Provider, Icon: "generic"}
-	if g.KeyID == "" {
-		ug.Name = "Key not recorded"
-	} else if ug.Name == "" {
-		ug.Name = g.KeyID
-	}
-	if p, ok := providers[g.Provider]; ok {
-		ug.Sub = p.Name
-		if p.Icon != "" {
-			ug.Icon = p.Icon
-		}
-		for _, k := range p.KeyList() {
-			if k.ID == g.KeyID {
-				ug.KeyName = k.Name
-				ug.Name = k.Name
-				if ug.Name == "" {
-					ug.Name = k.Masked
-				}
-				break
-			}
-		}
-	}
-	return ug
-}
-
 func periodOf(s string) usage.Period {
 	switch p := usage.Period(s); p {
 	case usage.Today, usage.Week, usage.Month, usage.All:
@@ -129,7 +99,7 @@ func periodOf(s string) usage.Period {
 }
 
 func ledgerFilter(q url.Values) usage.Filter {
-	return usage.Filter{Agent: q.Get("agent"), Key: q.Get("key"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
+	return usage.Filter{Agent: q.Get("agent"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
 }
 
 // ledgerRow is a usage.Row with the names the page shows it by.
@@ -138,7 +108,6 @@ type ledgerRow struct {
 	AgentName      string `json:"agentName"`
 	Icon           string `json:"icon"` // the agent's
 	ProviderName   string `json:"providerName"`
-	KeyLabel       string `json:"keyLabel,omitempty"`
 	CallerKeyLabel string `json:"callerKeyLabel,omitempty"`
 }
 
@@ -150,7 +119,6 @@ type ledgerJSON struct {
 	usage.Totals
 	// Agents: the agents with calls in the period, for the filter
 	Agents     []ledgerAgent `json:"agents"`
-	Keys       []usageGroup  `json:"keys"`
 	CallerKeys []usageGroup  `json:"callerKeys"`
 }
 
@@ -164,7 +132,6 @@ type ledgerAgent struct {
 // given, 500 at most) from offset.
 func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 	rows, sum, ids, summary := usage.LedgerWithCallers(p, f)
-	keys := summary.Keys
 	if limit <= 0 {
 		limit = 100
 	}
@@ -176,10 +143,8 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 		agents[a.ID] = a
 	}
 	names := map[string]string{}
-	providers := map[string]provider.Provider{}
 	for _, pr := range provider.All() {
 		names[pr.ID] = pr.Name
-		providers[pr.ID] = pr
 	}
 	who := func(id string) ledgerAgent {
 		if a := agents[id]; a != nil {
@@ -187,17 +152,11 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 		}
 		return ledgerAgent{ID: id, Name: id, Icon: "generic"}
 	}
-	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: len(rows), Totals: sum, Agents: []ledgerAgent{}, Keys: []usageGroup{}}
+	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: len(rows), Totals: sum, Agents: []ledgerAgent{}}
 	out.CallerKeys = callerUsageGroups(summary)
 	callerLabels := map[string]string{}
 	for _, g := range out.CallerKeys {
 		callerLabels[g.CallerKeyID] = g.Name
-	}
-	keyLabels := map[string]string{}
-	for _, g := range keys {
-		ug := keyUsageGroup(g, providers)
-		out.Keys = append(out.Keys, ug)
-		keyLabels[g.ID] = ug.Name
 	}
 	for _, r := range page {
 		a := who(r.Agent)
@@ -205,7 +164,6 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 		if lr.ProviderName == "" {
 			lr.ProviderName = r.Provider
 		}
-		lr.KeyLabel = keyLabels[r.Provider+"#"+r.KeyID]
 		lr.CallerKeyLabel = callerLabels[r.CallerKeyID]
 		out.Rows = append(out.Rows, lr)
 	}

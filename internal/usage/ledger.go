@@ -35,7 +35,6 @@ type Row struct {
 // session hold Query (any case).
 type Filter struct {
 	Agent     string
-	Key       string // provider#fingerprint; an empty fingerprint selects unattributed calls
 	CallerKey string
 	Failed    bool
 	Query     string
@@ -109,14 +108,6 @@ func (p Period) Since(now time.Time) time.Time {
 // for.
 func Ledger(p Period, f Filter) (rows []Row, sum Totals, agents []string) {
 	return ledger(p.Since(time.Now()), f, Load(time.Time{}))
-}
-
-// LedgerWithKeys also lists the period's keys before filtering, so a page
-// can change its key filter without losing the other choices.
-func LedgerWithKeys(p Period, f Filter) (rows []Row, sum Totals, agents []string, keys []Group) {
-	now, recs := time.Now(), Load(time.Time{})
-	rows, sum, agents = ledger(p.Since(now), f, recs)
-	return rows, sum, agents, summarize(p, now, recs).Keys
 }
 
 func LedgerWithCallers(p Period, f Filter) (rows []Row, sum Totals, agents []string, summary Summary) {

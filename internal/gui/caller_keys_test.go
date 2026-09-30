@@ -46,9 +46,9 @@ func TestCallerKeyManagementAndUsageRoutes(t *testing.T) {
 		t.Fatal("list leaked credentials")
 	}
 	for _, rec := range []usage.Record{
-		{CallerKeyID: laptop, CallerKeyName: "Laptop", KeyID: "upstream-a", Input: 100},
-		{CallerKeyID: laptop, CallerKeyName: "Laptop", KeyID: "upstream-b", Input: 10},
-		{CallerKeyID: server, CallerKeyName: "Server", KeyID: "upstream-a", Input: 200},
+		{CallerKeyID: laptop, CallerKeyName: "Laptop", Input: 100},
+		{CallerKeyID: laptop, CallerKeyName: "Laptop", Input: 10},
+		{CallerKeyID: server, CallerKeyName: "Server", Input: 200},
 		{Input: 40},
 	} {
 		rec.Time, rec.Provider, rec.Model, rec.Status = time.Now(), "relay", "unknown", 200
@@ -73,7 +73,7 @@ func TestCallerKeyManagementAndUsageRoutes(t *testing.T) {
 	}
 	raw := request("GET", "/api/usage/requests.csv"+query, "", nil)
 	cells, err := csv.NewReader(strings.NewReader(raw)).ReadAll()
-	if err != nil || len(cells) != 3 || cells[1][23] != laptop || cells[2][23] != laptop || strings.Contains(raw, secret) {
+	if err != nil || len(cells) != 3 || cells[1][21] != laptop || cells[2][21] != laptop || strings.Contains(raw, secret) {
 		t.Fatal("CSV", err, raw)
 	}
 	request("POST", "/api/caller-keys/rotate-key", `{"key":"`+laptop+`"}`, &s)

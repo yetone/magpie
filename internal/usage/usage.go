@@ -31,8 +31,6 @@ type Record struct {
 	ProviderKeyName string    `json:"providerKeyName,omitempty"`
 	Model           string    `json:"model"` // the provider's model id
 
-	KeyID         string    `json:"keyId,omitempty"`   // fingerprint of the API key actually used
-	KeyName       string    `json:"keyName,omitempty"` // name when the call was made
 	CallerKeyID   string    `json:"callerKeyId,omitempty"`
 	CallerKeyName string    `json:"callerKeyName,omitempty"`
 	// Requested is the model id the agent asked for (a magpie alias, a
@@ -277,8 +275,6 @@ type Group struct {
 	ProviderKeyID   string `json:"providerKeyId,omitempty"`
 	ProviderKeyName string `json:"providerKeyName,omitempty"`
 
-	KeyID         string `json:"keyId,omitempty"`
-	KeyName       string `json:"keyName,omitempty"`
 	CallerKeyID   string `json:"callerKeyId,omitempty"`
 	CallerKeyName string `json:"callerKeyName,omitempty"`
 	// Host is where the calls went, when the provider's id has gone to
@@ -319,7 +315,6 @@ type Summary struct {
 	Agents       []Group `json:"agents"`
 	Models       []Group `json:"models"`
 	ProviderKeys []Group `json:"providerKeys"`
-	Keys       []Group `json:"keys"`
 	CallerKeys []Group `json:"callerKeys"`
 	// Sessions are the calls that named their session, by session.
 	Sessions []Group `json:"sessions"`
@@ -341,7 +336,7 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 		}
 	}
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	s := Summary{Period: p, Bucket: "day", Agents: []Group{}, Models: []Group{}, ProviderKeys: []Group{}, Keys: []Group{}, CallerKeys: []Group{}, Sessions: []Group{}, Series: []Point{}}
+	s := Summary{Period: p, Bucket: "day", Agents: []Group{}, Models: []Group{}, ProviderKeys: []Group{}, CallerKeys: []Group{}, Sessions: []Group{}, Series: []Point{}}
 	var n int
 	switch p {
 	case Today:

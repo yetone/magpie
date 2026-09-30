@@ -7596,9 +7596,8 @@ function renderLedger() {
     who.append(icon(r.icon || "generic"), el("span", "", [r.via ? t("{agent} · via {host}", { agent: name, host: r.via }) : name, r.callerKeyLabel || r.callerKeyName].filter(Boolean).join(" · ")));
     td(who, "", [r.kind, r.session && t("session {id}", { id: r.session })].filter(Boolean).join(" · "));
     td(r.req || "—", "model" + (r.req ? "" : " faint"), r.req || t("Not kept for requests before this version"));
-    const key = !r.keyId && r.keyLabel ? t("Key not recorded") : (r.keyLabel || r.keyName || r.keyId || "");
-    const where = r.providerName + (key ? " · " + key : r.host ? " · " + r.host : "");
-    td(where, "where", [r.providerName, key, r.keyId, r.host].filter(Boolean).join(" · "));
+    const where = r.providerName + (r.host ? " · " + r.host : "");
+    td(where, "where", where);
     td(r.model || "—", "model", r.model);
     td(ledServed(r), "model");
     td(r.effort || "—", r.effort ? "" : "faint");

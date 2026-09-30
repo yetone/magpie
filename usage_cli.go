@@ -126,7 +126,7 @@ func usageTo(out io.Writer, args []string) error {
 		})
 	}
 	if len(s.CallerKeys) > 0 {
-		table("caller keys", s.CallerKeys, func(g stats.Group) string {
+		table("gateway keys", s.CallerKeys, func(g stats.Group) string {
 			if g.CallerKeyName != "" {
 				return g.CallerKeyName
 			}

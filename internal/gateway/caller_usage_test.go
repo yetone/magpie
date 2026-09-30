@@ -68,7 +68,7 @@ func TestCallerUsageAcrossKeys(t *testing.T) {
 		t.Fatalf("attribution: %+v", recs)
 	}
 	for _, rec := range recs {
-		if rec.KeyID != provider.KeyID("upstream-secret") || rec.Input != 30 || rec.Output != 5 {
+		if rec.Input != 30 || rec.Output != 5 {
 			t.Fatal(rec)
 		}
 	}
@@ -236,7 +236,7 @@ func TestCallerIdentitySurvivesStreamingFailover(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	rec := lastUsage(t)
-	if rec.CallerKeyID != keys[0].ID || rec.KeyID != provider.KeyID("backup") || rec.Input != 100 || rec.Output != 20 {
+	if rec.CallerKeyID != keys[0].ID || rec.Input != 100 || rec.Output != 20 {
 		t.Fatal(rec)
 	}
 }
