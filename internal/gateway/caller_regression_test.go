@@ -9,12 +9,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 func TestLoopbackRemainsPermissive(t *testing.T) {
@@ -134,5 +136,51 @@ func TestCallerUsageCodexOwnModel(t *testing.T) {
 	}
 	if rec := lastUsage(t); rec.CallerKeyID != "desk" || rec.CallerKeyName != "Desk" || rec.Input != 9 || rec.Output != 2 {
 		t.Fatal(rec)
+	}
+}
+
+func TestConcurrentCallerAttribution(t *testing.T) {
+	fresh(t)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer upstream" {
+			t.Error("caller credential leaked upstream")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":5}}`)
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Key: "upstream", Chat: up.URL + "/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	keys, secrets := newCaller(t, "Desk", "Server")
+	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
+		t.Fatal(err)
+	}
+	h := lanGuard(New().Handler())
+	var wg sync.WaitGroup
+	for i := range 120 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(chatReq))
+			r.RemoteAddr = "192.168.1.9:5000"
+			r.Header.Set("Authorization", "Bearer "+secrets[i%len(secrets)])
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != 200 {
+				t.Error(w.Code, w.Body)
+			}
+		}()
+	}
+	wg.Wait()
+	counts := map[string]int{}
+	for _, rec := range usage.Load(time.Time{}) {
+		counts[rec.CallerKeyID]++
+		if rec.CallerKeyName != keys[0].Name && rec.CallerKeyName != keys[1].Name {
+			t.Error("lost caller name", rec)
+		}
+	}
+	if len(counts) != 2 || counts[keys[0].ID] != 60 || counts[keys[1].ID] != 60 {
+		t.Fatal("concurrent calls mixed identities", counts)
 	}
 }
