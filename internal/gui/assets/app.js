@@ -2535,8 +2535,7 @@ function renderGatewayView() {
   page.classList.remove("loading");
   page.removeAttribute("aria-busy");
   renderGateway();
-  if (gatewayKeys === null) loadGatewayKeys();
-  else if (gatewayKeyDraft === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
+  if (gatewayKeyDraft === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
   renderConnect();
   renderGatewayModels();
   renderActivity();
@@ -2570,19 +2569,19 @@ const FLAVORS = {
   openai: {
     name: "OpenAI", base: (u) => u + "/v1", baseEnv: "OPENAI_BASE_URL", keyEnv: "OPENAI_API_KEY",
     note: "Chat Completions, the API most tools speak. Anything with an OpenAI base-URL setting works.",
-    curl: (b, m) => ({ url: `${b}/chat/completions`, headers: ["Authorization: Bearer magpie"],
+    curl: (b, m, k = "magpie") => ({ url: `${b}/chat/completions`, headers: [`Authorization: Bearer ${k}`],
       body: `{"model": "${m}",\n "messages": [{"role": "user", "content": "hi"}]}` }),
-    python: (b, m) => `from openai import OpenAI
+    python: (b, m, k = "magpie") => `from openai import OpenAI
 
-client = OpenAI(base_url="${b}", api_key="magpie")
+client = OpenAI(base_url="${b}", api_key="${k}")
 r = client.chat.completions.create(
     model="${m}",
     messages=[{"role": "user", "content": "hi"}],
 )
 print(r.choices[0].message.content)`,
-    node: (b, m) => `import OpenAI from "openai";
+    node: (b, m, k = "magpie") => `import OpenAI from "openai";
 
-const client = new OpenAI({ baseURL: "${b}", apiKey: "magpie" });
+const client = new OpenAI({ baseURL: "${b}", apiKey: "${k}" });
 const r = await client.chat.completions.create({
   model: "${m}",
   messages: [{ role: "user", content: "hi" }],
@@ -2592,28 +2591,28 @@ console.log(r.choices[0].message.content);`,
   responses: {
     name: "Responses", base: (u) => u + "/v1", baseEnv: "OPENAI_BASE_URL", keyEnv: "OPENAI_API_KEY",
     note: "OpenAI's newer API: reasoning, built-in tool items, encrypted reasoning. Codex speaks this.",
-    curl: (b, m) => ({ url: `${b}/responses`, headers: ["Authorization: Bearer magpie"],
+    curl: (b, m, k = "magpie") => ({ url: `${b}/responses`, headers: [`Authorization: Bearer ${k}`],
       body: `{"model": "${m}", "input": "hi"}` }),
-    python: (b, m) => `from openai import OpenAI
+    python: (b, m, k = "magpie") => `from openai import OpenAI
 
-client = OpenAI(base_url="${b}", api_key="magpie")
+client = OpenAI(base_url="${b}", api_key="${k}")
 r = client.responses.create(model="${m}", input="hi")
 print(r.output_text)`,
-    node: (b, m) => `import OpenAI from "openai";
+    node: (b, m, k = "magpie") => `import OpenAI from "openai";
 
-const client = new OpenAI({ baseURL: "${b}", apiKey: "magpie" });
+const client = new OpenAI({ baseURL: "${b}", apiKey: "${k}" });
 const r = await client.responses.create({ model: "${m}", input: "hi" });
 console.log(r.output_text);`,
   },
   anthropic: {
     name: "Anthropic", base: (u) => u, baseEnv: "ANTHROPIC_BASE_URL", keyEnv: "ANTHROPIC_API_KEY",
     note: "Messages API. Claude Code reads ANTHROPIC_AUTH_TOKEN instead of the key; the Agents tab sets that for you.",
-    curl: (b, m) => ({ url: `${b}/v1/messages`, headers: ["x-api-key: magpie", "anthropic-version: 2023-06-01"],
+    curl: (b, m, k = "magpie") => ({ url: `${b}/v1/messages`, headers: [`x-api-key: ${k}`, "anthropic-version: 2023-06-01"],
       body: `{"model": "${m}", "max_tokens": 1024,\n "messages": [{"role": "user", "content": "hi"}]}` }),
-    python: (b, m) => `import anthropic
+    python: (b, m, k = "magpie") => `import anthropic
 
 client = anthropic.Anthropic(
-    base_url="${b}", api_key="magpie",
+    base_url="${b}", api_key="${k}",
 )
 m = client.messages.create(
     model="${m}",
@@ -2621,9 +2620,9 @@ m = client.messages.create(
     messages=[{"role": "user", "content": "hi"}],
 )
 print(m.content[0].text)`,
-    node: (b, m) => `import Anthropic from "@anthropic-ai/sdk";
+    node: (b, m, k = "magpie") => `import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic({ baseURL: "${b}", apiKey: "magpie" });
+const client = new Anthropic({ baseURL: "${b}", apiKey: "${k}" });
 const m = await client.messages.create({
   model: "${m}",
   max_tokens: 1024,
@@ -2634,17 +2633,17 @@ console.log(m.content[0].text);`,
   gemini: {
     name: "Gemini", base: (u) => u, baseEnv: "GOOGLE_GEMINI_BASE_URL", keyEnv: "GEMINI_API_KEY",
     note: "Google's generateContent API, v1beta. Gemini CLI and the google-genai SDKs speak this.",
-    curl: (b, m) => ({ url: `${b}/v1beta/models/${m}:generateContent`, headers: ["x-goog-api-key: magpie"],
+    curl: (b, m, k = "magpie") => ({ url: `${b}/v1beta/models/${m}:generateContent`, headers: [`x-goog-api-key: ${k}`],
       body: `{"contents": [{"parts": [{"text": "hi"}]}]}` }),
-    python: (b, m) => `from google import genai
+    python: (b, m, k = "magpie") => `from google import genai
 
-client = genai.Client(api_key="magpie", http_options={"base_url": "${b}"})
+client = genai.Client(api_key="${k}", http_options={"base_url": "${b}"})
 r = client.models.generate_content(model="${m}", contents="hi")
 print(r.text)`,
-    node: (b, m) => `import { GoogleGenAI } from "@google/genai";
+    node: (b, m, k = "magpie") => `import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
-  apiKey: "magpie",
+  apiKey: "${k}",
   httpOptions: { baseUrl: "${b}" },
 });
 const r = await ai.models.generateContent({ model: "${m}", contents: "hi" });
@@ -2719,7 +2718,20 @@ function renderConnect() {
   if (!models.some((m) => m.id === exampleModel)) exampleModel = models[0]?.id || "";
   const model = exampleModel || "provider/model";
   const f = FLAVORS[flavor] || FLAVORS.openai;
-  const base = f.base(g.url);
+  const urls = [g.url, ...(g.lanURLs || [])];
+  if (!urls.includes(connectURL)) connectURL = g.url;
+  const remote = connectURL !== g.url;
+  const keys = (gatewayKeys || []).filter((k) => !k.off);
+  if (!keys.some((k) => k.id === connectKeyID)) {
+    connectKeyID = "";
+    connectSecret = null;
+  }
+  if (remote && !connectKeyID && keys.length) {
+    queueMicrotask(() => selectConnectKey(keys[0].id));
+  }
+  const key = keys.find((k) => k.id === connectKeyID);
+  const secret = key ? (connectSecret?.id === key.id ? connectSecret.secret : "") : remote ? "" : "magpie";
+  const base = f.base(connectURL);
   const fold = $("#foldConnect");
   fold.setAttribute("aria-expanded", String(!connectFolded));
   fold.title = t(connectFolded ? "Show how to connect" : "Fold Connect away");
@@ -2729,18 +2741,28 @@ function renderConnect() {
   note.replaceChildren();
   note.classList.toggle("brief", connectFolded);
   if (connectFolded) note.append(el("code", "", base), copyBtn(base, "Base URL"));
-  else note.textContent = t(gatewayKeys?.length ? "Use an API key to track usage" : "Loopback only · the key can be anything");
+  else note.textContent = t(remote ? "Local network · an enabled API key is required" : gatewayKeys?.length ? "Use an API key to track usage" : "Loopback only · the key can be anything");
 
   box.append(...field("API", segs(Object.entries(FLAVORS).map(([k, v]) => [k, v.name]), flavor, (id) => { flavor = id; localStorage.setItem("magpie.flavor", id); renderConnect(); }), t(f.note)));
 
   const b = el("div", "val");
-  b.append(el("code", "", base), copyBtn(base, "Base URL"));
+  if (urls.length > 1) b.append(connectPick("connectAddress", "Address", base,
+    urls.map((u) => ({ v: u, name: f.base(u), note: t(u === g.url ? "This computer" : "Local network") })), connectURL,
+    (u) => { connectURL = u; renderConnect(); }));
+  else b.append(el("code", "", base));
+  b.append(copyBtn(base, "Base URL"));
   box.append(...field("Base URL", b, t("What {env} takes.", { env: f.baseEnv })));
 
   const k = el("div", "val");
-  k.append(el("code", "", "magpie"), copyBtn("magpie", t("Key")));
-  box.append(...field(t("API key"), k, t(gatewayKeys?.length
-    ? "Use an API key above as {env} to track usage by key."
+  const options = keys.map((k) => ({ v: k.id, name: k.name, note: k.masked }));
+  if (!remote) options.unshift({ v: "", name: "magpie", note: t("This computer · no key attribution") });
+  if (options.length) k.append(connectPick("connectKey", "API key", key ? key.name : remote ? t("Choose an API key") : "magpie",
+    options, connectKeyID, selectConnectKey));
+  else k.append(el("code", "", t("Create an API key above to connect")));
+  if (key) k.append(copyCallerKeyBtn(key));
+  else if (!remote) k.append(copyBtn("magpie", t("Key")));
+  box.append(...field(t("API key"), k, t(remote || gatewayKeys?.length
+    ? "Choose an API key to use as {env}; usage is tracked by key."
     : "{env}=magpie. The gateway trusts everything on loopback, so any value works.", { env: f.keyEnv })));
 
   const m = el("div", "val");
@@ -2749,16 +2771,18 @@ function renderConnect() {
 
   const ex = el("div", "stack");
   ex.append(segs(LANGS, lang, (id) => { lang = id; localStorage.setItem("magpie.lang", id); renderConnect(); }));
-  const code = lang === "shell" ? envSnippet([[f.baseEnv, base], [f.keyEnv, "magpie"]])
-    : lang === "curl" ? curlSnippet(f.curl(base, model))
-    : f[lang](base, model);
+  const code = !secret ? t(key ? "Loading API key…" : "Create an API key above to connect")
+    : lang === "shell" ? envSnippet([[f.baseEnv, base], [f.keyEnv, secret]])
+    : lang === "curl" ? curlSnippet(f.curl(base, model, secret))
+    : f[lang](base, model, secret);
   const pre = el("pre", "snip");
   const c = el("code");
   c.append(highlight(code, lang));
   pre.append(c);
   // the button sits outside the scrolling box, so a long line doesn't carry it off
   const wrap = el("div", "snip-wrap");
-  wrap.append(pre, copyBtn(code, t("Snippet")));
+  wrap.append(pre);
+  if (secret) wrap.append(copyBtn(code, t("Snippet")));
   ex.append(wrap);
   box.append(...field(t("Example"), ex, lang === "shell" ? t("Put these in the shell (or the tool's settings) and the tool talks to magpie instead of the vendor.") : ""));
 }
@@ -9814,7 +9838,7 @@ function renderRedactRules(s, row) {
 }
 
 // renderLAN: the gateway shared on the local network, for agents on other
-// machines — the addresses they use it at and the key they must send.
+// machines. API keys and connection examples live together in Gateway.
 let lanSelectedURL = "", lanProtocol = "openai";
 function renderLAN(s) {
   const box = $("#lanList");
@@ -9833,7 +9857,7 @@ function renderLAN(s) {
   };
   const set = (body) => writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; renderSettings(); })
     .catch((e) => { status(t(e.message), "err"); renderSettings(); });
-  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models, with the API key below"), "",
+  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models with an API key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
   if (!s.lan) return;
   let urls = s.lanURLs || [], sub = "";
@@ -9881,13 +9905,6 @@ function renderLAN(s) {
     update();
   }
   if (sub) row(t("In a container"), sub, "").classList.add("lan-container");
-  const key = s.lanCallerKey;
-  const again = el("button", "text", t("New key"));
-  again.onclick = () => set({ on: true, newKey: true });
-  const sub = key?.off ? t("This key is disabled in Gateway") : key
-    ? t("Also listed in Gateway as {name}; a new one stops the old from working", { name: key.name })
-    : t("Create a new key here, or use a named key from Gateway");
-  row(t("API key"), sub, key?.masked || "", ...(key ? [copyCallerKeyBtn(key)] : []), again);
 }
 
 // renderUpdate fills in the version row: whether a newer magpie is out.
@@ -10258,6 +10275,7 @@ function show(v) {
   closePicker();
   closeAgentModels();
   if (v !== "providers" && editing !== null) cancelEdit();
+  if (v === "gateway") loadGatewayKeys();
   if (v === "providers" || v === "gateway" || v === "routing") loadProviders().then(back, (e) => status(e.message, "err"));
   if (v === "usage") loadUsage(true).then(back, (e) => status(e.message, "err"));
   if (v === "settings") loadSettings().then(back, (e) => status(e.message, "err"));

@@ -163,9 +163,12 @@ existing base URL. Rename, disable, or remove keys independently; changes
 apply to the running gateway immediately, while calls already in progress
 finish. Other computers still require **Settings → Local network → Share on
 local network** to be enabled; they authenticate with these same named keys.
-Settings keeps its existing copy and **New key** controls: its LAN key is
-an ordinary named entry in Gateway. Rotating it invalidates only that
-credential, preserving its name and usage history; other keys are unchanged.
+Keys are managed only in Gateway; Settings controls sharing and lists the
+network addresses. Each key's **New key** action invalidates only that
+credential, preserving its name, enabled state and usage history; other
+keys are unchanged. **Gateway → Connect** lets you choose a loopback or
+shared network address and an enabled API key; all examples and copy
+buttons use those choices. The untracked `magpie` token is loopback-only.
 
 **Usage → Overview → API keys** groups calls by the API key used by the
 client, not the provider's credentials. **Usage → Requests** uses the same

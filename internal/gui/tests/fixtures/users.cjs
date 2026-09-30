@@ -17,8 +17,10 @@ function fixture(lang, theme, events) {
   let serial = 0;
   let lan = false;
   let lanKeyID = "", rotations = 0, lanSecret = "";
+  const secrets = new Map([["laptop", "fixture-laptop"], ["server", "fixture-server"], ["work", "fixture-work"]]);
+  const lanURLs = ["http://192.168.1.10:3999", "http://10.0.0.10:3999"];
   const lanState = () => ({ lang, theme, lan, lanCallerKey: keys.find((k) => k.id === lanKeyID),
-    lanURLs: ["http://192.168.1.10:3999"], fx: { rate: 7.2, at: new Date().toISOString() } });
+    lanURLs: lan ? lanURLs : [], fx: { rate: 7.2, at: new Date().toISOString() } });
   const rows = [
     { callerKeyId: "laptop", callerKeyName: "Laptop", in: 100, out: 10, cost: 0.1 },
     { callerKeyId: "server", callerKeyName: "Server", in: 200, out: 20, cost: 0.2 },
@@ -51,7 +53,7 @@ function fixture(lang, theme, events) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme } });
     if (url.pathname === "/api/providers") return json({
       providers: [{ id: "relay", name: "Relay", icon: "generic", models: [{ id: "m", name: "Model", on: true }], agents: [] }],
-      gateway: { running: true, window: true, mine: true, url: "http://127.0.0.1:3999", calls: [], groups: [] },
+      gateway: { running: true, window: true, mine: true, url: "http://127.0.0.1:3999", lanURLs: lan ? lanURLs : [], calls: [], groups: [] },
     });
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/settings/lan") {
@@ -86,13 +88,21 @@ function fixture(lang, theme, events) {
       let secret = "";
       if (action === "add-key") {
         if (!body.name.trim()) return route.fulfill({ status: 400, json: { error: "Use a name between 1 and 120 characters" } });
-        secret = "sk-magpie-user-test-created";
-        keys.push({ id: "new-key-" + (++serial), name: body.name, masked: "sk-magpie-key-…created" });
+        const id = "new-key-" + (++serial);
+        secret = "fixture-created-" + serial;
+        secrets.set(id, secret);
+        keys.push({ id, name: body.name, masked: "sk-magpie-key-…created" });
       }
       if (action === "rename-key") k.name = body.name;
+      if (action === "rotate-key") {
+        secret = "fixture-rotated-" + (++rotations);
+        secrets.set(k.id, secret);
+        if (k.id === lanKeyID) lanSecret = secret;
+        k.masked = "sk-magpie-key-…" + secret.slice(-6);
+      }
       if (action === "remove-key") keys = keys.filter((v) => v !== k);
       if (action === "on-key" || action === "off-key") k.off = action === "off-key";
-      if (action === "copy-key") secret = k.id === lanKeyID ? lanSecret : "sk-magpie-user-test-copy";
+      if (action === "copy-key") secret = k.id === lanKeyID ? lanSecret : secrets.get(k.id) || "sk-magpie-user-test-copy";
       return json({ keys, secret });
     }
     if (url.pathname === "/api/copy") { events.push({ action: "clipboard", body: req.postDataJSON() }); return json({}); }

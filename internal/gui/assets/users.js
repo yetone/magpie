@@ -1,12 +1,47 @@
 // Caller keys use the same account list and edit controls as provider keys.
 let gatewayKeys = null, gatewayKeyDraft = null, gatewayKeysBusy = false;
+let gatewayKeysRead = 0;
+let connectURL = "", connectKeyID = "", connectSecret = null;
+
+function connectPick(id, label, text, options, value, choose) {
+  const b = el("button", "val");
+  b.id = id;
+  b.type = "button";
+  b.setAttribute("aria-label", t(label));
+  b.append(el("code", "", text), svg(CHEV, 11, 1.6));
+  b.onclick = () => {
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, options, value, choose, label);
+  };
+  return b;
+}
+
+async function selectConnectKey(id) {
+  connectKeyID = id;
+  connectSecret = null;
+  renderConnect();
+  if (!id) return;
+  const key = gatewayKeys?.find((k) => k.id === id && !k.off);
+  if (!key) return;
+  try {
+    const out = await api("caller-keys/copy-key", { key: id });
+    if (connectKeyID !== id || gatewayKeys?.find((k) => k.id === id) !== key) return;
+    connectSecret = { id, secret: out.secret };
+    if (view === "gateway") renderConnect();
+  } catch (e) { status(t(e.message), "err"); }
+}
 async function loadGatewayKeys() {
+  const read = ++gatewayKeysRead;
   try {
     const out = await api("caller-keys");
+    if (read !== gatewayKeysRead) return;
+    // A fresh list also refreshes a selected credential, which may have rotated.
+    connectSecret = null;
     gatewayKeys = out.keys || [];
     renderGatewayKeys();
-    if (view === "gateway" && providers) renderConnect();
+    if (view === "gateway" && providers) selectConnectKey(connectKeyID);
   } catch (e) {
+    if (read !== gatewayKeysRead) return;
     $("#gatewayKeys").replaceChildren(el("div", "none", t(e.message)));
   }
 }
@@ -14,12 +49,15 @@ async function loadGatewayKeys() {
 async function gatewayKeyAction(action, body) {
   if (gatewayKeysBusy) return null;
   gatewayKeysBusy = true;
+  gatewayKeysRead++;
   try {
     const out = await api("caller-keys/" + action, body);
+    gatewayKeysRead++;
+    connectSecret = null;
     gatewayKeys = out.keys || [];
     gatewayKeyDraft = null;
     renderGatewayKeys();
-    if (view === "gateway" && providers) renderConnect();
+    if (view === "gateway" && providers) selectConnectKey(connectKeyID);
     return out;
   } catch (e) {
     status(t(e.message), "err");
@@ -108,7 +146,11 @@ function renderGatewayKeys() {
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
     const rm = el("button", "text quiet", t("Remove"));
     rm.onclick = () => gatewayKeyAction("remove-key", { key: k.id });
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), el("span", "grow"), copyCallerKeyBtn(k), rm);
+    const rotate = el("button", "text quiet", t("New key"));
+    rotate.onclick = async () => {
+      if (await gatewayKeyAction("rotate-key", { key: k.id })) status(t("API key rotated. The old key no longer works."), "ok");
+    };
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), el("span", "grow"), copyCallerKeyBtn(k), rotate, rm);
     list.append(row);
   }
   if (gatewayKeyDraft !== null) list.append(gatewayKeyForm());

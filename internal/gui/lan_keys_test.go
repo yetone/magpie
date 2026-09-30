@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
@@ -131,5 +133,23 @@ func TestSettingsMigratesOldLANCredentialToManagedKey(t *testing.T) {
 	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/caller-keys", nil))
 	if w.Code != 200 || strings.Contains(w.Body.String(), old) {
 		t.Fatal("list exposed credential", w.Code, w.Body)
+	}
+}
+
+func TestGatewayConnectionAddressesFollowLANSharing(t *testing.T) {
+	sandboxHome(t)
+	s := settings.Load()
+	for _, on := range []bool{false, true, false} {
+		s.LAN = on
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+		g := providersState().Gateway
+		if !on && len(g.LANURLs) != 0 {
+			t.Fatal("shared addresses remain after sharing is off", g.LANURLs)
+		}
+		if on && !slices.Equal(g.LANURLs, gateway.LANURLs()) {
+			t.Fatal("Connect does not list the gateway's network addresses", g.LANURLs)
+		}
 	}
 }

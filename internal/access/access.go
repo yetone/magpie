@@ -241,8 +241,8 @@ func migrateLegacyLANKey() error {
 	return settings.Save(s)
 }
 
-// ConfigureLAN keeps Settings' copy/rotate shortcut on an ordinary named key.
-// Rotation preserves its ID, name and enabled state, and leaves other keys alone.
+// ConfigureLAN ensures sharing starts with an ordinary named key. The rotate
+// parameter supports older clients; new clients manage keys in Gateway.
 func ConfigureLAN(on, rotate bool) error {
 	mu.Lock()
 	defer mu.Unlock()

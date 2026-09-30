@@ -42,7 +42,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.mouse.move(500, 20);
       const gatewaySelectors = { card: "#gatewayKeys .accts", enabled: '#gatewayKeys .acc[data-key="work"] .dot',
         disabled: "#gatewayKeys .acc.off .dot", masked: "#gatewayKeys .acc .plan", form: "#gatewayKeys .adding",
-        input: "#gatewayKeys .adding input", rename: "#gatewayKeys .rename-in", create: "#gatewayKeys .primary" };
+        input: "#gatewayKeys .adding input", rename: "#gatewayKeys .rename-in", create: "#gatewayKeys .primary", rotate: '#gatewayKeys .acc[data-key="work"] .text', keyPick: "#connectKey" };
       const gatewayPaints = [];
       for (const scheme of ["light", "dark"]) {
         await page.emulateMedia({ colorScheme: scheme });
@@ -60,6 +60,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(input.bg, c.card, "key inputs must not use the browser's default background");
           assert.equal(input.color, c.fg);
         }
+        assert.equal(e.rotate.color, c.muted);
+        assert.equal(e.keyPick.bg, "rgba(0, 0, 0, 0)");
         assert.equal(e.create.bg, c.accent);
         assert.equal(e.create.color, c["accent-fg"]);
         gatewayPaints.push(c.bg);
@@ -77,18 +79,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.mouse.move(500, 400);
       await page.mouse.wheel(0, bounds.y - 250);
       await on.click();
-      await page.locator("#lanList .row.pref:last-child code").waitFor();
+      await page.locator("#lanList .lan-url").waitFor();
       await page.mouse.move(500, 20);
       for (const scheme of ["light", "dark"]) {
         await page.emulateMedia({ colorScheme: scheme });
         await page.waitForTimeout(200);
         const { colors: c, elements: e } = await palette(page, { card: "#lanList", text: "#lanList .row.pref:last-child .name",
-          key: "#lanList .row.pref:last-child code", copy: "#lanList .row.pref:last-child .copy", rotate: "#lanList .row.pref:last-child .text" });
+          key: "#lanList .lan-url", copy: "#lanList .row.pref:last-child .copy" });
         assert.equal(e.card.bg, c.card);
         assert.equal(e.text.color, c.fg);
         assert.equal(e.key.color, c["fg-2"]);
         assert.equal(e.copy.color, c.muted);
-        assert.equal(e.rotate.color, c.muted);
       }
       if (theme === "system") {
         await page.mouse.move(500, 400);
@@ -97,7 +98,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await page.locator("#themeSegs").getByRole("button", { name: choice, exact: true }).click();
           await page.waitForFunction((want) => (document.documentElement.dataset.theme || "system") === want, choice.toLowerCase());
           await page.waitForFunction(() => !document.documentElement.classList.contains("theming"));
-          const { colors: c, elements: e } = await palette(page, { card: "#lanList", key: "#lanList .row.pref:last-child code" });
+          const { colors: c, elements: e } = await palette(page, { card: "#lanList", key: "#lanList .lan-url" });
           assert.equal(e.card.bg, c.card);
           assert.equal(e.key.color, c["fg-2"]);
         }

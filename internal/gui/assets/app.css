@@ -1152,8 +1152,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .connect .hint { font-size: 11px; color: var(--faint); margin-top: 4px; line-height: 1.4; }
 .connect .val { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 4px 0 9px; border-radius: 7px; background: var(--pill); box-shadow: inset 0 0 0 1px var(--line-2); max-width: 100%; }
 .connect .val code { font-size: 12px; color: var(--fg); user-select: text; -webkit-user-select: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.connect .val > .val { min-width: 0; height: auto; padding: 0; background: none; box-shadow: none; }
 .connect .segs { margin-top: -1px; }
 .connect .stack { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+@media (max-width: 520px) {
+  .connect { grid-template-columns: 48px minmax(0, 1fr); column-gap: 8px; padding-left: 10px; padding-right: 10px; }
+}
 .copy { width: 22px; height: 22px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: none; transition: background .12s, color .12s; }
 .copy:hover { background: var(--pill-hover); color: var(--fg); }
 .copy.done { color: var(--green); background: var(--green-soft); animation: copy-pop .36s var(--ease); }
@@ -1306,6 +1310,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .proto:hover, .acc .proto.open { color: var(--fg); background: var(--pill-hover); }
 .acc .n, .acc .rename { flex: 0 1 auto; }
 .acc .plan { flex: none; }
+#gatewayKeys .acc { min-width: 0; }
+#gatewayKeys .acc .plan { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* the Settings row's picker: the key row's badge, always shown */
 .row.pref .proto.pick { flex: none; margin-left: auto; display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 6px 0 9px; font: inherit; font-size: 12px; color: var(--fg-2); border: 0; border-radius: 7px; background: var(--pill); white-space: nowrap; cursor: default; transition: background .12s, color .12s; }
 .row.pref .proto.pick svg { opacity: .7; transition: transform .15s var(--ease); }

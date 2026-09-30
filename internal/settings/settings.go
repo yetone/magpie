@@ -64,7 +64,7 @@ type Settings struct {
 	// named caller keys. LANKey is read only to migrate older installations.
 	LAN    bool   `json:"lan,omitempty"`
 	LANKey string `json:"lanKey,omitempty"`
-	// LANKeyID is the named caller key shown by Settings' copy/rotate row.
+	// LANKeyID remembers the default named key created when sharing is enabled.
 	LANKeyID string `json:"lanKeyId,omitempty"`
 	// CodexWarmup starts a ChatGPT account's next window as soon as the
 	// last one resets, with one tiny request, so it counts from then (a
