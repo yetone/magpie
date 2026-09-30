@@ -2,9 +2,9 @@
 // files — Claude Code's projects/*/<id>.jsonl (and Qoder's, the same kind),
 // Codex's rollout files, OpenCode's database (or its older JSON files) and
 // ZCode's, Pi's session files and omp's, DeepSeek Harness's, Cline's, Grok
-// Build's and WorkBuddy's — with the
-// tokens each spent, what that cost at list price, and the command that
-// resumes it. It only ever reads the agents' folders.
+// Build's and WorkBuddy's — with the tokens each spent, what that cost at the
+// effective price, and the command that resumes it. It only ever reads the
+// agents' folders.
 //
 // The files grow long (hundreds of MB), so each one's parse is kept by path,
 // size and time, and a file that only grew is read on from where it was left.
@@ -31,6 +31,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Tokens is a count of tokens. Input excludes what was read from cache.
@@ -75,13 +76,15 @@ type Session struct {
 	Last   time.Time `json:"last"`
 	Models []Model   `json:"models"`
 	Tokens
-	Cost     float64 `json:"cost"`     // USD at list price, for the priced models
+	Cost     float64 `json:"cost"`     // USD at the effective price, for the priced models
 	Unpriced int     `json:"unpriced"` // models that spent tokens but have no known price
 	Resume   string  `json:"resume"`   // the command that picks the session up again
 	Path     string  `json:"path"`     // its (main) file
 }
 
-// PriceOf is the list price of a model as a session names it. Tests swap it.
+// PriceOf is the effective price of a model as a session names it, at the
+// settings given. Tests swap it; the settings are the ones the listing read,
+// so a swapped one prices against the same copy as the default does.
 var PriceOf = priceOf
 
 // Limit is how many sessions, the latest by last activity, List reads.
@@ -637,15 +640,22 @@ func offOf(f file) int64 {
 	return 0
 }
 
-// pricer looks up the price of each model once.
+// pricer looks up the price of each model once, out of one read of the
+// settings: a listing names the same handful of models over and over, and
+// each of them otherwise read the file and parsed it again. Every model is
+// priced against the copy read here, so a listing is one snapshot of the
+// prices rather than a reading per row, and a price changed while it is
+// read takes effect in the next listing rather than halfway through this
+// one.
 func pricer() func(string) *catalog.Price {
 	prices := map[string]*catalog.Price{}
+	s := settings.Load()
 	return func(model string) *catalog.Price {
 		if p, ok := prices[model]; ok {
 			return p
 		}
 		var pp *catalog.Price
-		if p, ok := PriceOf(model); ok {
+		if p, ok := PriceOf(s, model); ok {
 			pp = &p
 		}
 		prices[model] = pp
@@ -943,23 +953,23 @@ func title(s string) string {
 var dated = regexp.MustCompile(`-\d{8}$`)
 
 // priceOf prices a model as a session names it: one through magpie as
-// "<provider>/<model>" at the price the gateway counts it at, else the bare
-// id at its maker's list price on models.dev.
-func priceOf(model string) (catalog.Price, bool) {
+// "<provider>/<model>" at the price the gateway counts it at — what the user
+// set for that provider and model, else that provider's own list price, else
+// its maker's on models.dev — and a bare id only ever at its maker's, which is
+// a different question from what one provider charges.
+//
+// The settings are the ones passed in rather than read here: a listing reads
+// them once and prices every model of it against that same copy, so a
+// listing is one snapshot of the prices and reads the file once, not once
+// per model.
+func priceOf(s settings.Settings, model string) (catalog.Price, bool) {
 	m := strings.TrimSpace(model)
 	if m == "" {
 		return catalog.Price{}, false
 	}
 	if pid, rest, ok := strings.Cut(m, "/"); ok {
-		for _, p := range provider.All() {
-			if p.ID == pid {
-				for _, c := range p.Catalogs() {
-					if pr, ok := catalog.PriceOf(c, rest); ok {
-						return pr, true
-					}
-				}
-				break
-			}
+		if pr, ok := provider.EffectivePriceIn(s, pid, rest); ok {
+			return pr, true
 		}
 	}
 	bare := strings.ToLower(m[strings.LastIndexByte(m, '/')+1:])

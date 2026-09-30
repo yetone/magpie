@@ -551,6 +551,66 @@ func MakerPrice(model string) (catalog.Price, bool) {
 	return catalog.Price{}, false
 }
 
+// EffectivePrice is what a call to a provider's model costs the user: the
+// price they set for that model, or for every model of that provider
+// (settings' ModelPrices), else the provider's own list price, else its
+// maker's. The second return is false only when no price is known at all,
+// which is not the same as a price of zero: that one is set, deliberately.
+//
+// A price here is the provider's tariff, not the model's: the same model
+// through two relays is two prices, and neither is what models.dev lists.
+func EffectivePrice(providerID, model string) (catalog.Price, bool) {
+	return EffectivePriceIn(settings.Load(), providerID, model)
+}
+
+// EffectivePriceIn is EffectivePrice at the settings given, for a caller
+// pricing a whole list of models at one read of the file rather than one
+// read per model: every model of that list is priced at the same copy, so
+// the list is one snapshot of the prices rather than a reading per row, and
+// a price changed while it is read takes effect in the next call.
+func EffectivePriceIn(s settings.Settings, providerID, model string) (catalog.Price, bool) {
+	// A price is keyed by the id the provider has now, so one written before
+	// a rename is read under the id it has. Only an id, or one the provider
+	// was renamed from, resolves; anything else is looked up as given, so a
+	// key under a display name counts only for a caller naming that name
+	// too. Nothing writes such a key — SetModelPrice re-keys the way
+	// SetModelName does — which is what keeps the two from drifting.
+	id := providerID
+	p, known := byIDOrWas(providerID)
+	if known {
+		id = p.ID
+	}
+	for _, key := range [...]string{id + "/" + model, id + "/*"} {
+		if m, ok := s.ModelPrices[key]; ok {
+			if pr, bad := m.Price(); bad == "" {
+				return pr, true
+			}
+		}
+	}
+	if known {
+		if pr, ok := p.ListPrice(model); ok {
+			return pr, true
+		}
+	}
+	return MakerPrice(model)
+}
+
+// byIDOrWas is the provider with that id, else the one it was renamed from.
+// Find would answer a display name as well, which is not how a price is
+// keyed.
+func byIDOrWas(id string) (Provider, bool) {
+	all := All()
+	if p, ok := find(all, id); ok {
+		return p, true
+	}
+	for _, p := range all {
+		if slices.Contains(p.Was, id) {
+			return p, true
+		}
+	}
+	return Provider{}, false
+}
+
 // grokEffort is a reasoning effort a Grok id is named at ("grok-4.7-low",
 // "grok-4.7-xhigh"): the levels Grok's own model list gives grok-4.7, the
 // words Cursor spells its ids in. A fast one ("grok-4.7-low-fast") doesn't

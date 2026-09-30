@@ -93,6 +93,115 @@ func SetModelName(ref, name string) error {
 	return nil
 }
 
+// SetModelPrice is what a provider's model costs the user, in USD per million
+// tokens, kept in settings' ModelPrices the way a name is. A nil price takes
+// the user's away, leaving the model at what its provider lists and only then
+// at its maker's on models.dev; a price of zero is not that, but a model
+// served at no cost. A price no vendor could charge is refused, naming the
+// part that is wrong.
+//
+// Unlike the other model preferences this does not tell the agents. What a
+// call costs is not what an agent picks a model by, and the model lists
+// magpie keeps in the agents' own files are not its to rewrite over a number
+// in a cost report.
+func SetModelPrice(id string, p *catalog.Price) error {
+	if p == nil {
+		_, err := DropModelPrice(id)
+		return err
+	}
+	pr, model, err := splitRef(id)
+	if err != nil {
+		return err
+	}
+	// a price for a model the provider does not serve is a price that never
+	// applies and nothing later says so; the same refusal `magpie model
+	// name` makes for the same id.
+	if model != "*" && !pr.serves(model) {
+		return fmt.Errorf("%s has no model %s (magpie provider %s lists them)", pr.ID, model, pr.ID)
+	}
+	// the entry is written under the id the provider has now, the way a name
+	// is: a key under a display name is a price the provider is never asked
+	// for, and nothing later would say so.
+	key := pr.ID + "/" + model
+	s := settings.Load()
+	m := settings.ModelPrice{
+		Input: new(p.Input), Output: new(p.Output),
+		CacheRead: new(p.CacheRead), CacheWrite: new(p.CacheWrite),
+	}
+	if err := settings.CheckModelPrice(key, m); err != nil {
+		return err
+	}
+	if s.ModelPrices == nil {
+		s.ModelPrices = map[string]settings.ModelPrice{}
+	}
+	s.ModelPrices[key] = m
+	return settings.Save(s)
+}
+
+// PriceKey is the key a price for pid's model is stored at, and whether the
+// provider naming that key is still there at all.
+//
+// The spelling that was given comes first, because a price outlives the
+// provider it was set for and nothing rewrites the key when that provider
+// goes: "b/vendor/m" can still be where a price is held while a provider of
+// some other id answers to "b" as its display name. Resolving that name
+// first would take the second provider's price away instead — none is stored
+// under it, so nothing would change, the caller would be told it had, and
+// the price the user meant would stay in the file to be counted at. Only
+// where nothing is stored under the spelling is the provider looked for, by
+// the id it has or the one it was renamed from: that is where SetModelPrice
+// keeps a price set through a display name, and the same resolution
+// EffectivePrice reads it back under.
+func PriceKey(pid, model string) (string, bool) {
+	key := pid + "/" + model
+	if _, under := settings.Load().ModelPrices[key]; under {
+		_, there := byIDOrWas(pid)
+		return key, there
+	}
+	if p, ok := byIDOrWas(pid); ok {
+		return p.ID + "/" + model, true
+	}
+	// and last a display name, which is what a provider of the user's is
+	// often asked by. Nothing writes a price under one — SetModelPrice
+	// re-keys the way SetModelName does — but the spelling above is the only
+	// thing that could have pointed at another provider's key, and a key
+	// nothing is stored under reaches no price at all without this.
+	if p, err := Find(pid); err == nil {
+		return p.ID + "/" + model, true
+	}
+	return key, false
+}
+
+// DropModelPrice takes a user's price away under the key it is stored at,
+// without asking whether the provider is still there, and reports whether
+// there was one there to take away. A price outlives the provider it was set
+// for: that provider can be deleted, and `magpie model prices` still lists
+// the price and usage is still counted at it, so a removal that resolved the
+// provider first would leave the user no way to take it away. Which of the
+// keys a price is ever kept under this one is, is PriceKey's to say.
+//
+// A key holding no price is still no error — there is nothing there to take
+// away, which is the state it is left in either way — but saying so is what
+// tells a mistyped id from a price that was cleared: `magpie model price --
+// reset` over a price still in the file would have the user believe it gone.
+func DropModelPrice(key string) (bool, error) {
+	key = strings.TrimPrefix(strings.TrimSpace(key), "magpie/")
+	if strings.HasPrefix(key, GroupPrefix) {
+		return false, errors.New("that is a routing group, not a provider's model")
+	}
+	pid, model, ok := strings.Cut(key, "/")
+	if !ok || pid == "" || model == "" {
+		return false, fmt.Errorf("name a model as provider/model, not %q", key)
+	}
+	key, _ = PriceKey(pid, model)
+	s := settings.Load()
+	if _, ok := s.ModelPrices[key]; !ok {
+		return false, nil
+	}
+	delete(s.ModelPrices, key)
+	return true, settings.Save(s)
+}
+
 // Levels are the reasoning levels a model whose own aren't known can be
 // given.
 var Levels = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}

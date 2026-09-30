@@ -158,6 +158,46 @@ magpie plugin off opencode-gemini-auth  # on brings it back; rm removes it; upda
 A provider id magpie already has (google, openai, anthropic) is
 `<id>-plugin`. In the app, Settings → Plugins adds and removes them, and
 the providers they sign in to are in Add provider → From plugins.
+### What a model costs
+
+A call is counted at its **effective price**: what you set for that provider
+and model if you did, otherwise what the provider's own catalogue lists, and
+otherwise what models.dev lists for the model's maker. Out of the box that
+last one is the whole story, and it is the wrong number for any provider that
+does not charge list price — a relay reselling at a discount or a multiplier
+is counted at whatever the model's maker charges. Say what a provider
+actually charges, and the usage ledger and the session totals use that:
+
+```sh
+magpie model price relay-a/gpt-5.5                        # what it is counted at, and where that came from
+magpie model price relay-a/gpt-5.5 0.12,0.60,0.01,0.15   # input,output,cache read,cache write
+magpie model price relay-a/gpt-5.5 --reset                # take your price off this model
+magpie model prices                                       # every model you priced
+```
+
+The four numbers are USD per million tokens. All four are asked for, because
+a price missing one would understate the rest of every call; `0` is a model
+served at no cost, which is a price, not the absence of one.
+
+The order a price is looked for in is: **the price for this model → the price
+for `<provider id>/*`, which covers every model of that provider → what the
+provider's own catalogue lists → what models.dev lists for the maker.**
+`--reset` removes the first, and says so when a `<provider id>/*` price is
+still in force; reset that one by name to take it away too.
+
+A price is **one provider's tariff for one model**, not the model's own: the
+same model through two providers is two prices, and each keeps its own.
+Nothing an agent can see changes. The model list, the agents' own settings
+and the pickers that choose a model for a background task — an image, a web
+search, a description — all still work from the catalogue; only the cost
+reports read the effective price.
+
+Two things worth knowing. The ledger and the session totals re-price when they
+are read, so adding or changing a price restates earlier figures: they are
+estimates at the effective price, not settled charges. And a price is per
+provider and model — usage records do not retain which key or account served
+a call, so a provider charging different tariffs per account cannot be costed
+exactly from a single provider-wide price.
 
 ### Routing groups
 

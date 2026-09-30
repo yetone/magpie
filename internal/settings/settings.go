@@ -10,6 +10,7 @@ package settings
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/redact"
 )
 
@@ -146,9 +148,76 @@ type Settings struct {
 	// ModelImages is whether the user said a model takes images, by
 	// "<provider id>/<model id>". Absent leaves it to the vendor's list.
 	ModelImages map[string]bool `json:"modelImages,omitempty"`
+	// ModelPrices is what a model costs the user, in USD per million
+	// tokens, by "<provider id>/<model id>", and "*" for every model of
+	// that provider: a provider models.dev does not list, or one that
+	// resells at a multiplier, is otherwise priced at whatever its maker's
+	// list price is.
+	ModelPrices map[string]ModelPrice `json:"modelPrices,omitempty"`
 	// The main window's size when it was last resized, width and height,
 	// so it opens at it again after a restart.
 	Window []int `json:"window,omitempty"`
+}
+
+// ModelPrice is the price of one model as the user states it. Each part is a
+// pointer so that a file leaving one out is told so rather than billing that
+// part of the call at zero: a model is priced whole or not at all.
+type ModelPrice struct {
+	Input      *float64 `json:"input,omitempty"`
+	Output     *float64 `json:"output,omitempty"`
+	CacheRead  *float64 `json:"cache_read,omitempty"`
+	CacheWrite *float64 `json:"cache_write,omitempty"`
+}
+
+// priceParts are the parts of a price, in the order they are asked for and
+// in the order ModelPrice holds them, named as a message about one says
+// them: "cache read" and "cache write", the words the CLI and the README
+// use, not the cache_read and cache_write of the file's own keys, which
+// are the disk format and stay as they are.
+var priceParts = [...]string{"input", "output", "cache read", "cache write"}
+
+// Price is the price the user stated, when every part of it is given and is a
+// number a vendor could charge. The second return names the first part that is
+// not, empty when the price is usable.
+func (m ModelPrice) Price() (catalog.Price, string) {
+	parts := []*float64{m.Input, m.Output, m.CacheRead, m.CacheWrite}
+	for i, v := range parts {
+		if v == nil || math.IsNaN(*v) || math.IsInf(*v, 0) || *v < 0 {
+			return catalog.Price{}, priceParts[i]
+		}
+	}
+	return catalog.Price{
+		Input: *m.Input, Output: *m.Output,
+		CacheRead: *m.CacheRead, CacheWrite: *m.CacheWrite,
+	}, ""
+}
+
+// CheckModelPrice is whether a price the user gives is one magpie will bill a
+// call at: the key names a model the way the per-model maps key one, and
+// every part of the price is a number a vendor could charge, naming the first
+// that is not. It is where a price is checked rather than in Save: one a hand
+// edit left broken in the file is skipped where it is read, and must not stop
+// an unrelated setting from being saved. That covers a part that is missing,
+// which is what a file can be edited into: JSON has no NaN or Infinity, and
+// Load discards the whole file rather than half of it, so neither reaches
+// here. Both are still refused, from a price typed in or passed in.
+func CheckModelPrice(key string, m ModelPrice) error {
+	if err := CheckModelKey("price", key); err != nil {
+		return err
+	}
+	if _, bad := m.Price(); bad != "" {
+		return fmt.Errorf("the price of %q needs %s %s price that is present, finite and not negative", key, anArticle(bad), bad)
+	}
+	return nil
+}
+
+// anArticle is the article a word takes where a message names it, so that an
+// input price is not "a input price".
+func anArticle(word string) string {
+	if strings.ContainsRune("aeiou", rune(word[0])) {
+		return "an"
+	}
+	return "a"
 }
 
 // Arrange puts items in the order the user gave the agents, those named

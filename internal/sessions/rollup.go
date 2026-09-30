@@ -14,7 +14,7 @@ type Rollup struct {
 	Model  string `json:"model,omitempty"`
 	Folder string `json:"folder,omitempty"`
 	Tokens
-	Cost     float64  `json:"cost"`     // USD at list price, of the priced models
+	Cost     float64  `json:"cost"`     // USD at the effective price, of the priced models
 	Unpriced []string `json:"unpriced"` // models that spent tokens and have no known price
 	// Active is the seconds the sessions were at work; -1 under a model,
 	// as active time isn't kept by model.

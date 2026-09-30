@@ -2,7 +2,7 @@ package usage
 
 // The ledger: every call of a period, one row each, newest first — what
 // the agent asked for, where it went, what model answered, the tokens and
-// what they cost at list price — to set beside a vendor's own bill.
+// what they cost at the effective price — to set beside a vendor's own bill.
 
 import (
 	"encoding/csv"
@@ -19,7 +19,7 @@ import (
 // Row is one call as the ledger lists it.
 type Row struct {
 	Record
-	// Cost is the call's list price in USD, when its model's is known
+	// Cost is the call's price in USD, when its model's is known
 	// (Priced); Swapped: the reply named another model than Model
 	Cost    float64 `json:"cost"`
 	Priced  bool    `json:"priced"`
@@ -103,24 +103,18 @@ func ledger(since time.Time, f Filter, recs []Record) (rows []Row, sum Totals, a
 	return rows, sum, agents
 }
 
-// pricer looks up each call's list price, once per provider and model: its
-// provider's models.dev entry's, else its maker's (a subscription's, #224).
+// pricer looks up what each call cost the user, once per provider and model:
+// the price they set for it, else its provider's models.dev entry's, else its
+// maker's (a subscription's, #224).
 func pricer() func(Record) *catalog.Price {
 	prices := map[string]*catalog.Price{}
-	all := provider.All()
 	return func(r Record) *catalog.Price {
 		k := r.Provider + "/" + r.Model
 		if pr, ok := prices[k]; ok {
 			return pr
 		}
 		var pr *catalog.Price
-		v, ok := provider.MakerPrice(r.Model)
-		for _, p := range all {
-			if p.ID == r.Provider {
-				v, ok = p.ListPrice(r.Model)
-				break
-			}
-		}
+		v, ok := provider.EffectivePrice(r.Provider, r.Model)
 		if ok {
 			pr = &v
 		} else {
@@ -137,7 +131,7 @@ var CSVHeader = []string{"time", "agent", "requested_model", "provider", "host",
 	"cost_usd", "duration_ms", "ttft_ms", "status", "error", "session", "kind"}
 
 // WriteCSV writes rows as CSV, a header first: times in RFC 3339 with
-// their offset, the cost in USD at list price (empty when unknown), error
+// their offset, the cost in USD at the effective price (empty when unknown), error
 // "true" for a call answered with a status of 400 or more.
 func WriteCSV(w io.Writer, rows []Row) error {
 	cw := csv.NewWriter(w)

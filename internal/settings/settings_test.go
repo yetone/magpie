@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -405,5 +406,80 @@ func TestCheckModelKey(t *testing.T) {
 		if !strings.Contains(err.Error(), "a price") {
 			t.Errorf("%q: the error does not say what was being checked: %v", key, err)
 		}
+	}
+}
+
+// A price is usable only when every part is a number a vendor could charge.
+// JSON has no NaN or Infinity, so nothing reaches here from the file with
+// one; a price typed in, or passed in by a caller, still can, and a NaN
+// would sail past a < 0 check and poison every total it reached.
+func TestModelPriceNeedsEveryPartToBeAFiniteNumber(t *testing.T) {
+	nan, inf, ninf := math.NaN(), math.Inf(1), math.Inf(-1)
+	full := func(in, out, cr, cw *float64) ModelPrice {
+		return ModelPrice{Input: in, Output: out, CacheRead: cr, CacheWrite: cw}
+	}
+	ok := full(new(2.0), new(10.0), new(0.25), new(2.5))
+	if _, bad := ok.Price(); bad != "" {
+		t.Errorf("a price with every part given: named %q as bad", bad)
+	}
+	for _, tc := range []struct {
+		what string
+		m    ModelPrice
+		part string
+	}{
+		{"input missing", full(nil, new(1.0), new(0.1), new(0.1)), "input"},
+		{"output missing", full(new(1.0), nil, new(0.1), new(0.1)), "output"},
+		{"cache read missing", full(new(1.0), new(1.0), nil, new(0.1)), "cache read"},
+		{"cache write missing", full(new(1.0), new(1.0), new(0.1), nil), "cache write"},
+		{"input NaN", full(&nan, new(1.0), new(0.1), new(0.1)), "input"},
+		{"output NaN", full(new(1.0), &nan, new(0.1), new(0.1)), "output"},
+		{"input infinite", full(&inf, new(1.0), new(0.1), new(0.1)), "input"},
+		{"cache read infinite", full(new(1.0), new(1.0), &inf, new(0.1)), "cache read"},
+		{"cache write negative infinite", full(new(1.0), new(1.0), new(0.1), &ninf), "cache write"},
+		{"input negative", full(new(-1.0), new(1.0), new(0.1), new(0.1)), "input"},
+		{"output negative", full(new(1.0), new(-1.0), new(0.1), new(0.1)), "output"},
+	} {
+		if _, bad := tc.m.Price(); bad != tc.part {
+			t.Errorf("%s: named %q as the bad part, want %q", tc.what, bad, tc.part)
+		}
+	}
+	// zero is a price: a free model is one the vendor charges nothing for.
+	if _, bad := full(new(0.0), new(0.0), new(0.0), new(0.0)).Price(); bad != "" {
+		t.Errorf("a price of zero: named %q as bad", bad)
+	}
+}
+
+// A price's parts are named one way on disk and another in a message about
+// one: the file's cache_read and cache_write are its own keys and every
+// price already written is under them, so they stay, while a message names
+// the parts as the CLI and the README say them, "cache read" and "cache
+// write". Naming the file's keys in a message reads as a JSON key leaking
+// into prose, and there is nothing in the CLI that says "cache_write".
+func TestModelPriceKeysStayTheFilesOwnWhileMessagesSayTheParts(t *testing.T) {
+	m := ModelPrice{Input: new(0.5), Output: new(1.5), CacheRead: new(0.05), CacheWrite: new(0.1)}
+	b, err := json.Marshal(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{`"input":0.5`, `"output":1.5`, `"cache_read":0.05`, `"cache_write":0.1`} {
+		if !strings.Contains(string(b), key) {
+			t.Errorf("a price is written %s; want %s among its keys", b, key)
+		}
+	}
+	// and a file written that way is read back whole, and the message a
+	// half-given one leaves behind says the parts as prose does
+	var back ModelPrice
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatal(err)
+	}
+	if p, bad := back.Price(); bad != "" || p.Input != 0.5 || p.CacheRead != 0.05 || p.CacheWrite != 0.1 {
+		t.Errorf("read back as %+v, %q; want the whole price and no part named", p, bad)
+	}
+	back.CacheRead = nil
+	if _, bad := back.Price(); bad != "cache read" {
+		t.Errorf("a part left out is named %q; want %q, as the CLI and the README say it", bad, "cache read")
+	}
+	if err := CheckModelPrice("relay/sol", back); !strings.Contains(err.Error(), "a cache read price") {
+		t.Errorf("refusing a price: %v; want it to ask for a cache read price", err)
 	}
 }

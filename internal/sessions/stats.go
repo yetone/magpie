@@ -67,7 +67,7 @@ type Usage struct {
 	Cwd   string `json:"cwd"`
 	Model string `json:"model"`
 	Tokens
-	Cost   float64 `json:"cost"` // USD at list price, when priced
+	Cost   float64 `json:"cost"` // USD at the effective price, when priced
 	Priced bool    `json:"priced"`
 }
 

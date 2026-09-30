@@ -62,6 +62,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	if !sent["theme"] || !sent["proxy"] {
 		t.Fatalf("prefsKeep not read from app.js: %v", sent)
 	}
+	one, two := 1.0, 2.0
 	was := settings.Settings{
 		AgentOrder:   []string{"codex"},
 		AgentsHidden: []string{"goose"},
@@ -71,6 +72,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		ModelNames:   map[string]string{"p/m": "Mine"},
 		ModelEfforts: map[string][]string{"p/m": {"low"}},
 		ModelImages:  map[string]bool{"p/m": true},
+		ModelPrices:  map[string]settings.ModelPrice{"p/m": {Input: &one, Output: &two}},
 		RedactRules:  []redact.Rule{{Kind: "prefix", Prefix: "oc_sk_"}},
 		LAN:          true,
 		LANKey:       "sk-lan",

@@ -10,6 +10,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // sessionsHome puts the sessions package's fixtures where Claude Code and
@@ -26,7 +27,7 @@ func sessionsHome(t *testing.T) {
 	}
 	oldZone, oldPrice := time.Local, sessions.PriceOf
 	time.Local = time.UTC
-	sessions.PriceOf = func(m string) (catalog.Price, bool) {
+	sessions.PriceOf = func(_ settings.Settings, m string) (catalog.Price, bool) {
 		switch m {
 		case "claude-opus-5-5":
 			return catalog.Price{Input: 4, Output: 20, CacheRead: 0.2, CacheWrite: 5}, true

@@ -10,6 +10,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // The ledger lists a period's calls newest first, each with the model
@@ -152,5 +153,43 @@ func TestSubscriptionListPrice(t *testing.T) {
 		if m.Model != "mystery-1" && (m.Unpriced != 0 || m.Cost == 0) {
 			t.Errorf("model %s unpriced: %+v", m.ID, m.Totals)
 		}
+	}
+}
+
+// A call is counted at the price the user set for that provider and model,
+// all four token tiers included: the ledger is where a wrong price becomes a
+// wrong number, and a tier left at the catalogue's price would not show in
+// the input and output columns alone.
+func TestLedgerUsesTheStatedPrice(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	os.WriteFile(catalog.CachePath(), []byte(`{"openai":{"id":"openai","models":{"sol":{"id":"sol",`+
+		`"cost":{"input":2,"output":8,"cache_read":0.5,"cache_write":2.5}}}}}`), 0o644)
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "https://relay.example/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	// all four parts distinct from the catalogue's, so a tier counted at the
+	// catalogue's price instead would move the total
+	if err := settings.Save(settings.Settings{ModelPrices: map[string]settings.ModelPrice{
+		"relay/sol": {Input: new(float64(0.2)), Output: new(float64(1)),
+			CacheRead: new(float64(0.05)), CacheWrite: new(float64(0.25))},
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Dir(Path()), 0o755)
+	Append(Record{Time: time.Now(), Agent: "codex", Provider: "relay", Host: "relay.example",
+		Model: "sol", Input: 1000, Output: 100, CacheRead: 2000, CacheWrite: 400, Status: 200})
+
+	rows, sum, _ := Ledger(Month, Filter{})
+	if len(rows) != 1 || !rows[0].Priced {
+		t.Fatalf("rows %+v", rows)
+	}
+	// (1000*0.2 + 100*1 + 2000*0.05 + 400*0.25) / 1e6
+	const want = 0.0005
+	if math.Abs(rows[0].Cost-want) > 1e-12 || math.Abs(sum.Cost-want) > 1e-12 {
+		t.Fatalf("row cost %v, total %v; want %v", rows[0].Cost, sum.Cost, want)
 	}
 }

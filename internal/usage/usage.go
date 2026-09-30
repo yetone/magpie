@@ -176,7 +176,7 @@ type Totals struct {
 	CacheRead  int     `json:"cache_read"`
 	CacheWrite int     `json:"cache_write"`
 	Reasoning  int     `json:"reasoning"`
-	Cost       float64 `json:"cost"`     // USD at list prices, for the priced calls
+	Cost       float64 `json:"cost"`     // USD at the effective price, for the priced calls
 	Unpriced   int     `json:"unpriced"` // calls with tokens but no known price
 	// Timed: the answered calls whose first token was timed (streamed),
 	// TTFT the sum of their ttft_ms; DecodeMs the time from it to the end
@@ -208,7 +208,7 @@ func (t Totals) Speed() float64 {
 	return float64(t.DecodeOut) / (float64(t.DecodeMs) / 1000)
 }
 
-// FormatCost renders a list-price cost, kept in USD everywhere it's
+// FormatCost renders an effective-price cost, kept in USD everywhere it's
 // stored, as the CLI and TUI show it: at amountUSD's own price when
 // currency isn't "cny", else converted at rate (CNY per one USD, from
 // internal/fx; a rate of 0 or below also falls back to USD, a stale or
