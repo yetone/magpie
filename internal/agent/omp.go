@@ -149,6 +149,8 @@ type ompModel struct {
 	Reasoning bool         `yaml:"reasoning"`
 	Thinking  *ompThinking `yaml:"thinking,omitempty"`
 	Context   int          `yaml:"contextWindow,omitempty"`
+	MaxTokens int          `yaml:"maxTokens,omitempty"`
+	Input     []string     `yaml:"input,omitempty"`
 }
 
 type ompThinking struct {
@@ -168,7 +170,16 @@ type ompProviderEntry struct {
 func ompProvider() ompProviderEntry {
 	ms := []ompModel{}
 	for _, m := range magpieModels("omp") {
-		e := ompModel{ID: m.ID, Name: m.Name, Context: m.Context}
+		e := ompModel{ID: m.ID, Name: m.Name, Context: m.Context, MaxTokens: m.Output}
+		// Without input omp takes it from a bundled model its fuzzy id match
+		// finds, else text only; a model the source never answered for is
+		// left to that guess.
+		switch {
+		case m.Images:
+			e.Input = []string{"text", "image"}
+		case m.ImageInput != nil:
+			e.Input = []string{"text"}
+		}
 		var efforts []string
 		for _, x := range ompEfforts { // in omp's order
 			if slices.Contains(m.Efforts, x) {
