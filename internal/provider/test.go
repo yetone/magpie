@@ -48,7 +48,7 @@ func (p Provider) Test(ctx context.Context) []Result {
 			out = append(out, Result{Protocol: proto, Model: model, Error: "no key is on for this endpoint"})
 			continue
 		}
-		url, body := tiny(q, proto, model)
+		url, body := tiny(q, proto, UpstreamName(p, model))
 		out = append(out, probe(ctx, q, proto, url, q.Prepare([]byte(body)), model, testWait))
 	}
 	return out
@@ -172,7 +172,12 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 	}
 	if draws {
 		// as the gateway does, one the images API doesn't serve is tried
-		// in chat, and only its answer said when that fails too
+		// in chat, and only its answer said when that fails too. Both go
+		// out under the name magpie knows the model by: the gateway builds
+		// those bodies itself and an upstream name is never written into
+		// one, so asking for the model's own here is what tests a drawing
+		// the way a real one is made — a name the vendor serves drawings
+		// by is not one magpie sends them as
 		url, body := tinyDrawing(q, model)
 		r := probe(ctx, q, proto, url, []byte(body), model, drawWait)
 		if !r.OK && (r.Status == 404 || r.Status == 405) {
@@ -183,7 +188,7 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 		}
 		return r
 	}
-	url, body := tiny(q, proto, model)
+	url, body := tiny(q, proto, UpstreamName(p, model))
 	return probe(ctx, q, proto, url, q.Prepare([]byte(body)), model, testWait)
 }
 

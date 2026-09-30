@@ -247,6 +247,72 @@ at start-up. A session already running therefore keeps the window it began with,
 while the gateway's own `/models` and every request from then on are right at
 once.
 
+### The name a vendor knows a model by
+
+A relay often serves a model under an id of its own — a prefix it namespaces
+with, a dated name, a `-latest` that is not what models.dev calls it. Say
+which name to ask for:
+
+```sh
+magpie model wire relay-b/model-2                           # what the vendor is asked for
+magpie model wire relay-b/model-2 vendor-c/model-2-preview  # ask for it by this
+magpie model wire 'relay-b/*' 'vendor-c/*'                  # every model, * being the model
+magpie model wire relay-b/model-2 --reset                   # ask for it by its own name again
+magpie model wires                                          # every name your vendors are asked for models by
+```
+
+Quote the arguments with a `*` in them: zsh reads a bare `*` as a glob and
+answers `no matches found`. In the name, `*` stands for the model itself, so
+`'relay-b/*' 'vendor-c/*'` sends `vendor-c/model-3` for `model-3` and
+`vendor-c/model-2` for `model-2` — one name for a relay that namespaces its
+models, each still asked for by its own. A name with no `*` in it sends every
+model of that key under that one name, which is the right answer only for a
+relay that does serve them all alike. The model's own key wins over the
+provider's, and `--reset` takes away only the one it is given, so resetting
+`relay-b/model-2` while `'relay-b/*'` is set leaves the provider's name in
+force — the CLI says which of the two is in force after every change, naming
+the models a name for the whole provider leaves to their own, and
+`--reset` over a name that was never given says so rather than ticking a
+removal that took nothing away.
+
+Only the request that goes out carries that name, in the model field of a
+chat, Responses or Anthropic Messages request and of an Anthropic token
+count; image requests are left with the name magpie knows the model by.
+Gemini CLI and Antigravity sign-ins go on Code Assist, and there the model
+an effort picks is a variant of the model magpie knows — `gemini-3.7-flash`
+at `high` is sent as `gemini-3.7-flash-high` — so a `*` in the name is that
+variant: `'antigravity/*' 'vendor-c/*'` asks for `vendor-c/gemini-3.7-flash-high`
+and `vendor-c/gemini-3.7-flash-low` each by its own, as it does everywhere
+else. A name with no `*` in it, or one given for `antigravity/gemini-3.7-flash`
+itself, is that one name at every level.
+
+Everything else keeps the name magpie knows the model by: the catalog agents
+pick from, the routing groups' membership, `GET /models`, and what a call is
+recorded and priced as. What the vendor's own reply said answered is kept
+beside that, in the ledger's `served_model`, which is what it is for, and it
+is compared with the name the vendor was asked for — so a model answered
+under the relay's own id is not read as a swap. That is against the names
+in force when the ledger is read, since a record keeps what the vendor
+answered and not the name the request went out under: naming a model after
+the call re-judges that call, which is then left reading as a swap. What a
+provider *supports* — whether it takes a temperature, which reasoning levels
+fit — is still asked about the model magpie knows, so a rename upstream does
+not change how magpie behaves towards the model.
+
+An upstream name is **one provider's**, not the model's: another provider
+serving the same id is asked for it under its own name, or this one. The
+model it is given for has to be one that provider serves — `<provider>/*`
+is the way to say one for every model — because a name for a model magpie
+would never ask the provider for is not a name of its own: the model is
+asked for by the name magpie knows it by, and nothing anywhere would say the
+name given for it is not the one in force. A relay that serves a model under
+an id of its own *and* lists it does get the name; what is refused is a
+model the provider's list does not have at all. The model test uses the name
+too, so a relay that only knows its own ids does not report a working model
+as broken. An image model is the exception that follows the rule above: it is
+tested by the name magpie knows it by, on the images API and on the chat it
+falls back to, because that is how a drawing is asked for.
+
 ### Routing groups
 
 A routing group is several models, from one provider or many, that an agent

@@ -14,6 +14,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Row is one call as the ledger lists it.
@@ -67,12 +68,47 @@ func (p Period) Since(now time.Time) time.Time {
 // Ledger is the calls of a period that the filter keeps, newest first,
 // with their sum, and the agents that made any call in the period (their
 // ids, for a filter to offer).
+//
+// A row's swapped is judged by the upstream names in force now, not by the
+// one its call went out under: the names are read from the settings here,
+// once, so a name given or changed since a call was recorded re-judges that
+// call — one recorded under the name magpie knows the model by, and read
+// after a name was set for it, reads as a swap although the vendor answered
+// with the very model that was asked for. A record keeps the canonical id
+// and the name the vendor's own reply gave (served_model) and not the name
+// the request was sent under, so this is the only name there is to judge by
+// — read as the name that went out, which the effort a record keeps of
+// makes exact: an Antigravity account is asked for the variant of the model
+// that level picks, so a reply naming that one is the model that was asked
+// for and not another, whatever the family it is a level of.
+// It is how the loop below already treats the rest of a row: a provider
+// renamed since is put back to the id it has now, and the names in force now
+// are what the catalog lists the models under as well.
+//
+// Storing the name that was sent would judge each call by what it was
+// really sent under, and it is the better answer, but it is not this
+// function's to make: it is a field on every record the gateway writes, and
+// so a change to the file's format — a column a row written by an older
+// magpie has no value for, and a decision about whether an empty one means
+// "no upstream name" or "unknown" — rather than a row of a report. The rows
+// here are what a reader sets beside a bill, and a name in force today is
+// the one whose reply a bill's model column is read against.
+//
+// The names are read here, once for the lot, rather than asked for a row
+// at a time, so a caller already holding them — a report over the
+// provider/model it was given — reads them the same way and reaches the
+// same judgement: what a row says is the same however the rows were asked
+// for.
 func Ledger(p Period, f Filter) (rows []Row, sum Totals, agents []string) {
 	return ledger(p.Since(time.Now()), f, Load(time.Time{}))
 }
 
 func ledger(since time.Time, f Filter, recs []Record) (rows []Row, sum Totals, agents []string) {
 	renamed := provider.Renamed()
+	// the upstream names in force now, read once for the lot: a row is
+	// judged by the names standing today, which is what Ledger says, and
+	// the rows here are what a reader compares a bill against
+	wires := settings.Load().ModelWires
 	priceOf := pricer()
 	rows = []Row{}
 	agents = []string{}
@@ -92,7 +128,7 @@ func ledger(since time.Time, f Filter, recs []Record) (rows []Row, sum Totals, a
 		}
 		pr := priceOf(r)
 		sum.add(r, pr)
-		row := Row{Record: r, Swapped: r.Served != "" && Swapped(r.Model, r.Served)}
+		row := Row{Record: r, Swapped: r.Served != "" && Swapped(provider.SentNameIn(wires, r.Provider, r.Model, r.Effort), r.Served)}
 		if pr != nil && r.Input+r.Output > 0 {
 			row.Cost, row.Priced = pr.Cost(r.Input, r.Output, r.CacheRead, r.CacheWrite), true
 		}

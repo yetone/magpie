@@ -62,6 +62,33 @@ func agentOf(r *http.Request) string {
 // "" leaves the model as asked. Set by main.
 var StandIn func(agent, model string) string
 
+// wiresKey carries the upstream names in force on a request's context: read
+// once where the request comes in rather than once per place a name is
+// looked up, since settings.Load reads and parses the whole file every call
+// and one chat request looks names up in several places — the id a try went
+// out under, the body the vendor is sent, the token count asked of it. The
+// names of one request are then one set, the way the ledger reads them once
+// for a whole report.
+type wiresKey struct{}
+
+// withWires carries the names in force on r's context, read at most once and
+// only where something asks for one: a request refused before any name is
+// looked up pays for nothing.
+func withWires(r *http.Request) *http.Request {
+	load := sync.OnceValue(func() map[string]string { return settings.Load().ModelWires })
+	return r.WithContext(context.WithValue(r.Context(), wiresKey{}, load))
+}
+
+// wiresOf is the names in force for ctx: the ones withWires read, or the
+// ones in force now for a request magpie made for itself and never carried
+// them on.
+func wiresOf(ctx context.Context) map[string]string {
+	if load, ok := ctx.Value(wiresKey{}).(func() map[string]string); ok {
+		return load()
+	}
+	return settings.Load().ModelWires
+}
+
 // standIn is StandIn's model for one magpie shows no entry for: not a
 // catalog id or model, nor a ready provider's "provider/model".
 func standIn(agent, asked string) string {
@@ -529,8 +556,11 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// the names in force, read at most once however many candidates are
+	// counted, and not at all where there are none
+	wires := sync.OnceValue(func() map[string]string { return settings.Load().ModelWires })
 	for i, c := range counts {
-		res, err := s.forward(r.Context(), c.p, provider.Anthropic, "/v1/messages/count_tokens", rewriteModel(body, model), r.Header)
+		res, err := s.forward(r.Context(), c.p, provider.Anthropic, "/v1/messages/count_tokens", rewriteModel(body, provider.UpstreamNameIn(wires(), c.p.ID, model)), r.Header)
 		if err != nil {
 			if r.Context().Err() == nil {
 				s.restAfter(c, http.StatusBadGateway, nil, []byte(err.Error()))
@@ -697,6 +727,9 @@ func estimate(req *Request) int {
 // serve routes one parsed-enough request to its provider.
 func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Protocol, body []byte) {
 	start := time.Now()
+	// the upstream names in force for this request, read once here rather
+	// than once per place a name is looked up below
+	r = withWires(r)
 	// secrets go as placeholders and come back as they were; the log has
 	// what the vendor saw and said
 	w, body, unmask := redacted(w, body)
@@ -1039,7 +1072,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			call.Error = refusedError(c.p, c.model, hw.failMsg)
 		}
 		try := Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Fixed: c.effort, Start: began, Done: true, Status: call.Status, Millis: time.Since(began).Milliseconds(), Error: call.Error,
-			Served: call.Usage.Served, Swapped: swapped(c.model, call.Usage.Served)}
+			Served: call.Usage.Served, Swapped: swapped(provider.SentNameOnIn(wiresOf(r.Context()), c.p.ID, accountAgent(c.p), c.model, sent), call.Usage.Served)}
 		try.TTFT, try.FirstText = hw.first.ms()
 		// the request's, from when it came as its ms are: the time before
 		// this try, the ones that failed first, is in it
@@ -1508,7 +1541,7 @@ func codexClientHeader(k string) bool {
 // written, when the provider serves the model on another of its endpoints
 // but not this one.
 func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.Provider, proto provider.Protocol, model string, body []byte, u *Usage) (status int, msg string, done bool) {
-	body = rewriteModel(body, model)
+	body = rewriteModel(body, provider.UpstreamNameIn(wiresOf(r.Context()), p.ID, model))
 	searchFn := false // Codex's tool search sent as a function
 	switch proto {
 	case provider.Responses:
@@ -1797,6 +1830,9 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r.Effort, req = e, &r
 		}
 	}
+	// the names in force, read once however many endpoints the request is
+	// built for below
+	wires := wiresOf(ctx)
 	web := req.WebSearch
 	// the cache key was left out to see if it was what the upstream refused
 	dropped := false
@@ -1824,7 +1860,16 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			body = asCompletionTokens(body)
 		}
 		if to == provider.CodeAssist && p.Account != nil {
-			body = buildCodeAssist(req, model, p.Account.Agent)
+			// the envelope is named in there, where the id it carries is
+			// known: on Antigravity that is the variant the effort picked,
+			// not the model magpie knows
+			body = codeAssistBody(p, req, model, wires)
+		} else if wire := provider.UpstreamNameIn(wires, p.ID, model); wire != model {
+			// the vendor's own name for the model goes in the model field
+			// and nowhere else: everything above shaped the request from
+			// the model magpie knows, which is what those decisions are
+			// about
+			body = rewriteModel(body, wire)
 		}
 		res, err := s.forward(ctx, p, to, pathOf(to), p.Prepare(body), in)
 		if err != nil || res.StatusCode < 400 {

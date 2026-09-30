@@ -23,59 +23,77 @@ const skipSignature = "skip_thought_signature_validator"
 
 var unsafeToolID = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
-// antigravityVariants are the ids of Antigravity's a model magpie offers
-// stands for, by level, and antigravityBaseOf the model and level one of
-// those ids is; vars so tests can stand in for them.
-var (
-	antigravityVariants = provider.AntigravityVariants
-	antigravityBaseOf   = provider.AntigravityBase
-)
+// antigravityBaseOf is the model an id of Antigravity's own is one level
+// of; a var so tests can stand in for it.
+var antigravityBaseOf = provider.AntigravityBase
 
-// antigravityModelID is Antigravity's id for a model magpie offers, at
-// the effort asked for: the family's variant at it, or at the nearest
-// level it has; with none asked, the family's default. One of
-// Antigravity's own ids at a level (gemini-3.7-flash-low, one an agent
-// was set to before) goes as it is when no effort is asked, and else is
-// the family's variant at the effort asked for: the effort the client
-// picks wins, as it does for the family. Any other id goes as it is.
-func antigravityModelID(model, effort string) string {
-	if base, _, ok := antigravityBaseOf(model); ok {
-		if effort == "" {
-			return model
-		}
-		model = base
+// accountAgent is the agent behind p's account, and "" where p is one of the
+// user's own and has none: the question a rule keyed by the account has to be
+// able to answer for, and one a provider's id cannot answer — a relay added
+// under a built-in's id is that relay and not that account.
+func accountAgent(p provider.Provider) string {
+	if p.Account == nil {
+		return ""
 	}
-	vs, ok := antigravityVariants(model)
-	if !ok {
-		return model
+	return p.Account.Agent
+}
+
+// codeAssistID is the id a request on the account's app goes out under: on
+// Antigravity the variant the effort picks for a model that is a family of
+// levels, and elsewhere the model magpie knows. It is keyed by the account
+// (accountAgent) rather than by the provider's id, since that is the account
+// the variants belong to, and it is the id a ledger judges what the vendor
+// answered against (provider.AntigravitySentID), so the gateway and the
+// ledger read one rule rather than one each.
+// The envelope is built under it and named with it, so it is worked out
+// once where both of those are and handed down.
+func codeAssistID(model, effort, agent string) string {
+	if agent == "antigravity" {
+		return provider.AntigravitySentID(model, effort)
 	}
-	if effort == "" {
-		return vs[""]
+	return model
+}
+
+// codeAssistBody is the envelope for a request on p's account, with the
+// vendor's own name for the model in its model field, over the names in
+// force (wires). It is named with the id the envelope carries, which on
+// Antigravity is the variant the effort picked (codeAssistID): a name given
+// for the whole provider then asks for each level by its own id instead of
+// one id for every level, so the effort keeps choosing and the relay is
+// asked for the model it serves at that level.
+//
+// The id is worked out once here and handed to the builder, since the name
+// in force is looked up against the very id the envelope is addressed to:
+// asking twice reads the vendor's catalogue twice over for one answer.
+func codeAssistBody(p provider.Provider, r *Request, model string, wires map[string]string) []byte {
+	sent := codeAssistID(model, r.Effort, p.Account.Agent)
+	body := buildCodeAssistSent(r, sent, p.Account.Agent)
+	if wire := provider.UpstreamNameAsIn(wires, p.ID, model, sent); wire != sent {
+		body = rewriteModel(body, wire)
 	}
-	var levels []string
-	for _, l := range effortRank {
-		if vs[l] != "" {
-			levels = append(levels, l)
-		}
-	}
-	if id := vs[fitEffort(effort, levels)]; id != "" {
-		return id
-	}
-	return vs[""]
+	return body
 }
 
 // buildCodeAssist builds the Code Assist envelope for a request, for the
 // app the account belongs to: "gemini" or "antigravity". On Antigravity a
 // model that is a family of levels is asked for as the variant the effort
-// picks (antigravityModelID).
+// picks (codeAssistID).
 func buildCodeAssist(r *Request, model, agent string) []byte {
+	return buildCodeAssistSent(r, codeAssistID(model, r.Effort, agent), agent)
+}
+
+// buildCodeAssistSent is buildCodeAssist with the id the envelope is
+// addressed to already worked out, for the caller that names the envelope
+// with that same id and would otherwise work it out a second time. There is
+// no model but that id in here: on Antigravity the two differ, and the one
+// the request goes out under is the one everything below is shaped from.
+func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 	ag := agent == "antigravity"
 	fixed := false // the id says the level it thinks at
 	if ag {
-		model = antigravityModelID(model, r.Effort)
-		_, _, fixed = antigravityBaseOf(model)
+		_, _, fixed = antigravityBaseOf(sent)
 	}
-	claude := strings.Contains(strings.ToLower(model), "claude")
+	claude := strings.Contains(strings.ToLower(sent), "claude")
 	toolID := func(id string) string {
 		if !ag || id == "" {
 			return id
@@ -201,7 +219,7 @@ func buildCodeAssist(r *Request, model, agent string) []byte {
 	if len(r.Stop) > 0 {
 		gen["stopSequences"] = r.Stop
 	}
-	if tc := thinkingConfig(r, model, claude, fixed); tc != nil {
+	if tc := thinkingConfig(r, sent, claude, fixed); tc != nil {
 		gen["thinkingConfig"] = tc
 		// Claude's answer has to have room past its thinking
 		if b, ok := tc["thinkingBudget"].(int); ok && claude && gen["maxOutputTokens"] == nil {
@@ -211,7 +229,7 @@ func buildCodeAssist(r *Request, model, agent string) []byte {
 	if len(gen) > 0 {
 		req["generationConfig"] = gen
 	}
-	b, _ := json.Marshal(map[string]any{"model": model, "request": req})
+	b, _ := json.Marshal(map[string]any{"model": sent, "request": req})
 	return b
 }
 

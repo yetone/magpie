@@ -191,6 +191,15 @@ type Settings struct {
 	// provider's, and the agents' own files are told of either
 	// (see provider.SetModelOutput).
 	ModelOutputs map[string]int `json:"modelOutputs,omitempty"`
+	// ModelWires is the name to send a vendor for a model magpie knows by
+	// another, by "<provider id>/<model id>", and "*" for every model of that
+	// provider. A "*" in the name is the model itself, so one name covers a
+	// relay that namespaces its models — vendor-c/* asks for model-3 as
+	// vendor-c/model-3 — while a name with no "*" in it sends every model of
+	// that key under that one name. Everything else — the catalog agents see,
+	// the routing groups, the usage records and what a call is priced at —
+	// keeps the name magpie knows the model by.
+	ModelWires map[string]string `json:"modelWires,omitempty"`
 	// The main window's size when it was last resized, width and height,
 	// so it opens at it again after a restart.
 	Window []int `json:"window,omitempty"`
