@@ -176,12 +176,10 @@ API key filter, and CSV export includes
 `caller_key_id` and `caller_key_name`. Deleted keys keep historical usage.
 The usual local `magpie` token and older records have no caller-key
 attribution. An existing LAN key is migrated into the named list as
-**Local network**, keeping remote clients working and allowing
+**Magpie**, keeping remote clients working and allowing
 its usage to be tracked, renamed, disabled or revoked. Credentials stay in
 `~/.config/magpie/caller-keys.json` (XDG-aware, mode `0600`), never in
-usage records or list responses. Existing credentials from `users.json`
-remain valid and are flattened into the new store on the first change;
-the old file remains as a backup.
+usage records or list responses.
 
 Baidu Qianfan's [Token Plans](https://cloud.baidu.com/doc/qianfan/s/Dmrabu8b6)
 are available as `baidu-qianfan`: a personal (个人版) and an enterprise (企业版)
@@ -628,7 +626,7 @@ published on the host's loopback only; Docker's `-p 3425:3425` would put it
 on every interface of the host, past its firewall. To reach it from other
 machines, turn on Settings → Share on local network in the browser UI (or
 put `"lan": true` in `/config/magpie/settings.json`). Turning it on in Settings
-creates a named **Local network** key; alternatively create a named caller
+creates a named **Magpie** key; alternatively create a named caller
 key in Gateway. A request from outside the container must carry one of
 those keys as its API key. Only then publish the port beyond 127.0.0.1.
 Inside the container

@@ -76,8 +76,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('#gatewayKeys .acc.off[data-key="work"]').waitFor();
       await page.locator("#connectKey").click();
       assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^Work$/ }).count(), 0);
-      assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^Local network$/ }).count(), 1,
-        "key names are user data, not translated interface labels");
+      assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^Magpie$/ }).count(), 1,
+        "the default key is named Magpie");
       assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^magpie$/ }).count(), 0, "arbitrary loopback tokens cannot be selected for LAN");
       await page.keyboard.press("Escape");
       await row("server").getByRole("button", { name: w.disable, exact: true }).click();
@@ -99,9 +99,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert(!code.includes('"magpie"'), "named key examples never fall back to magpie");
         }
       }
+      await row("server").locator(".rename").click();
+      await page.locator("#gatewayKeys .rename-in").fill("Local network");
+      await page.locator("#gatewayKeys .rename-in").press("Enter");
+      await row("server").getByRole("button", { name: "Local network", exact: true }).waitFor();
+      await page.locator("#connectKey").click();
+      assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^Local network$/ }).count(), 1,
+        "custom key names are not translated as interface labels");
+      await page.keyboard.press("Escape");
       await row("server").getByRole("button", { name: w.rotate, exact: true }).click();
       await expectSecret("fixture-rotated-2");
-      assert.equal(await row("server").locator(".rename").textContent(), "Server");
+      assert.equal(await row("server").locator(".rename").textContent(), "Local network");
       assert(!(await snippet.textContent()).includes("fixture-server"), "rotation refreshes the selected secret");
       const code = await snippet.textContent();
       await page.locator("#connect .snip-wrap .copy").click();

@@ -37,7 +37,7 @@ func TestLANSettingSharesCallerKeyStore(t *testing.T) {
 	}
 	key := s["lanCallerKey"].(map[string]any)
 	id := key["id"].(string)
-	if keys, _ := access.List(); len(keys) != 1 || keys[0].ID != id || keys[0].Name != "Local network" {
+	if keys, _ := access.List(); len(keys) != 1 || keys[0].ID != id || keys[0].Name != "Magpie" {
 		t.Fatal("LAN shortcut is not a named key", keys)
 	}
 	old, err := access.Update("copy-key", access.Change{Key: id})
@@ -61,7 +61,7 @@ func TestLANSettingSharesCallerKeyStore(t *testing.T) {
 		t.Fatal("toggling sharing replaced the LAN key")
 	}
 	post("/api/caller-keys/rename-key", `{"key":"`+id+`","name":"Desk"}`)
-	usage.Append(usage.Record{Time: time.Now(), CallerKeyID: id, CallerKeyName: "Local network", Input: 30, Status: 200})
+	usage.Append(usage.Record{Time: time.Now(), CallerKeyID: id, CallerKeyName: "Magpie", Input: 30, Status: 200})
 	rotated := post("/api/settings/lan", `{"on":true,"newKey":true}`)
 	key = rotated["lanCallerKey"].(map[string]any)
 	if key["id"] != id || key["name"] != "Desk" || key["secret"] != nil {
@@ -122,7 +122,7 @@ func TestSettingsMigratesOldLANCredentialToManagedKey(t *testing.T) {
 		t.Fatal("old credential remained in settings")
 	}
 	keys, _ := access.List()
-	if len(keys) != 1 || keys[0].Name != "Local network" || settings.Load().LANKeyID != keys[0].ID {
+	if len(keys) != 1 || keys[0].Name != "Magpie" || settings.Load().LANKeyID != keys[0].ID {
 		t.Fatal(keys)
 	}
 	who, ok := access.Authenticate(old)

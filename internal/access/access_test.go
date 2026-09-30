@@ -3,7 +3,6 @@ package access
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -11,63 +10,45 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-func TestNamedKeysAndLegacyMigration(t *testing.T) {
+func TestNamedKeys(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if _, err := Update("add-key", Change{Name: "   "}); err == nil {
 		t.Fatal("accepted empty name")
 	}
-	old := filepath.Join(filepath.Dir(Path()), "users.json")
-	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	legacy := []byte(`[{"id":"old","name":"Old user","off":true,"keys":[{"id":"disabled","name":"Legacy off","secret":"sk-magpie-user-disabled"}]},{"id":"active","name":"Other user","keys":[{"id":"legacy","name":"Legacy","secret":"sk-magpie-user-legacy"}]}]`)
-	if err := os.WriteFile(old, legacy, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	keys, err := List()
-	if err != nil || len(keys) != 2 || !keys[0].Off || keys[0].Secret != "" {
+	if err != nil || len(keys) != 0 {
 		t.Fatal(keys, err)
-	}
-	if _, ok := Authenticate("sk-magpie-user-disabled"); ok {
-		t.Fatal("disabled legacy key works")
-	}
-	if who, ok := Authenticate("sk-magpie-user-legacy"); !ok || who.KeyID != "legacy" {
-		t.Fatal(who, ok)
 	}
 	secret, err := Update("add-key", Change{Name: "Laptop"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	keys, _ = List()
-	if len(keys) != 3 || keys[2].Name != "Laptop" || keys[2].Secret != "" || !strings.Contains(keys[2].Masked, "…") {
-		t.Fatal(keys)
+	keys, err = List()
+	if err != nil || len(keys) != 1 || keys[0].Name != "Laptop" || keys[0].Secret != "" || !strings.HasPrefix(keys[0].Masked, Prefix+"…") {
+		t.Fatal(keys, err)
 	}
-	who, ok := Authenticate(secret)
-	if !ok || who.KeyID != keys[2].ID || who.KeyName != "Laptop" {
+	id := keys[0].ID
+	if who, ok := Authenticate(secret); !ok || who.KeyID != id || who.KeyName != "Laptop" {
 		t.Fatal(who, ok)
 	}
 	if _, ok := Authenticate(secret + "x"); ok {
 		t.Fatal("accepted invalid key")
 	}
-	id := keys[2].ID
-	Update("rename-key", Change{Key: id, Name: "Travel"})
-	if who, ok := Authenticate(secret); !ok || who.KeyName != "Travel" {
-		t.Fatal(who, ok)
+	for _, step := range []struct {
+		action, name string
+		valid        bool
+	}{
+		{"rename-key", "Travel", true}, {"off-key", "", false}, {"on-key", "", true},
+	} {
+		if _, err := Update(step.action, Change{Key: id, Name: step.name}); err != nil {
+			t.Fatal(err)
+		}
+		if who, ok := Authenticate(secret); ok != step.valid || (ok && who.KeyName != "Travel") {
+			t.Fatal(step.action, who, ok)
+		}
 	}
-	Update("off-key", Change{Key: id})
-	if _, ok := Authenticate(secret); ok {
-		t.Fatal("disabled key works")
-	}
-	Update("on-key", Change{Key: id})
 	if got, err := Update("copy-key", Change{Key: id}); err != nil || got != secret {
 		t.Fatal("copy", err)
-	}
-	Update("remove-key", Change{Key: id})
-	if _, ok := Authenticate(secret); ok {
-		t.Fatal("removed key works")
-	}
-	if _, ok := Authenticate("sk-magpie-user-legacy"); !ok {
-		t.Fatal("lost legacy key")
 	}
 	st, err := os.Stat(Path())
 	if err != nil || st.Mode().Perm() != 0o600 {
@@ -75,8 +56,14 @@ func TestNamedKeysAndLegacyMigration(t *testing.T) {
 	}
 	var persisted []Key
 	b, _ := os.ReadFile(Path())
-	if err := json.Unmarshal(b, &persisted); err != nil || len(persisted) != 2 {
-		t.Fatal(err, persisted)
+	if err := json.Unmarshal(b, &persisted); err != nil || len(persisted) != 1 || persisted[0].ID != id || persisted[0].Secret != secret {
+		t.Fatal("key was not persisted", err)
+	}
+	if _, err := Update("remove-key", Change{Key: id}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := Authenticate(secret); ok {
+		t.Fatal("removed key works")
 	}
 }
 
@@ -118,7 +105,7 @@ func TestLegacyLANKeyMigrationIsIdempotentAndRevocable(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys, err := List()
-	if err != nil || len(keys) != 1 || keys[0].Name != "Local network" || !strings.HasPrefix(keys[0].Masked, "sk-magpie-…") {
+	if err != nil || len(keys) != 1 || keys[0].Name != "Magpie" || !strings.HasPrefix(keys[0].Masked, "sk-magpie-…") {
 		t.Fatal(keys, err)
 	}
 	if settings.Load().LANKey != "" || !settings.Load().LAN {
@@ -148,28 +135,28 @@ func TestLegacyLANKeyMigrationIsIdempotentAndRevocable(t *testing.T) {
 	}
 }
 
-func TestLegacyLANKeyMigrationPreservesUserKeys(t *testing.T) {
+func TestLegacyLANKeyMigrationPreservesNamedKeys(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	secret, err := Update("add-key", Change{Name: "Client"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := List()
+	id := keys[0].ID
 	s := settings.Load()
 	s.LANKey = "sk-magpie-legacy"
 	if err := settings.Save(s); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(filepath.Dir(Path()), "users.json"), []byte(`[{"name":"Old","keys":[{"id":"client","name":"Client","secret":"sk-magpie-user-old"}]}]`), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	if err := MigrateLegacyLANKey(); err != nil {
 		t.Fatal(err)
 	}
-	keys, _ := List()
-	if len(keys) != 2 || keys[0].ID != "client" {
+	keys, _ = List()
+	if len(keys) != 2 || keys[0].ID != id || keys[1].Name != "Magpie" {
 		t.Fatal(keys)
 	}
-	if _, ok := Authenticate("sk-magpie-user-old"); !ok {
-		t.Fatal("lost old caller key")
+	if _, ok := Authenticate(secret); !ok {
+		t.Fatal("lost named key")
 	}
 	if _, ok := Authenticate(s.LANKey); !ok {
 		t.Fatal("lost LAN key")
@@ -211,8 +198,8 @@ func TestLegacyLANKeyMigrationRetryAndFailure(t *testing.T) {
 	}
 }
 
-func TestLANDefaultNameUpgrade(t *testing.T) {
-	for _, name := range []string{"Local network (legacy)", "Desk"} {
+func TestNamedLANKeyKeepsItsName(t *testing.T) {
+	for _, name := range []string{"Local network", "Magpie", "Desk"} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 			s := settings.Load()
@@ -221,7 +208,8 @@ func TestLANDefaultNameUpgrade(t *testing.T) {
 				t.Fatal(err)
 			}
 			original := []Key{{ID: "lan", Name: name, Off: true, Secret: Prefix + "original"},
-				{ID: "other", Name: "Local network (legacy)", Secret: Prefix + "other"}}
+				{ID: "other", Name: "Other", Secret: Prefix + "other"},
+				{ID: "named", Name: "Local network", Secret: Prefix + "named"}}
 			if err := save(original); err != nil {
 				t.Fatal(err)
 			}
@@ -230,12 +218,9 @@ func TestLANDefaultNameUpgrade(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if name == "Local network (legacy)" {
-				original[0].Name = "Local network"
-			}
 			keys, err := load()
-			if err != nil || len(keys) != 2 || keys[0] != original[0] || keys[1] != original[1] {
-				t.Fatal("name upgrade changed identity, credentials, state or another key", keys, err)
+			if err != nil || len(keys) != 3 || keys[0] != original[0] || keys[1] != original[1] || keys[2] != original[2] {
+				t.Fatal("migration changed an existing named key", keys, err)
 			}
 		})
 	}

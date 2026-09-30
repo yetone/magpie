@@ -21,7 +21,6 @@ import (
 )
 
 const Prefix = "sk-magpie-key-"
-const legacyPrefix = "sk-magpie-user-"
 const legacyLANPrefix = "sk-magpie-"
 
 func Managed(secret string) bool {
@@ -48,39 +47,17 @@ var mu sync.Mutex
 
 func Path() string { return filepath.Join(settings.Dir(), "caller-keys.json") }
 
-// load reads legacy user/key data only until the first write of the flat store.
 func load() ([]Key, error) {
 	b, err := os.ReadFile(Path())
-	if err == nil {
-		var keys []Key
-		err = json.Unmarshal(b, &keys)
-		return keys, err
-	}
-	if !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	b, err = os.ReadFile(filepath.Join(settings.Dir(), "users.json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return []Key{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var users []struct {
-		Off  bool  `json:"off"`
-		Keys []Key `json:"keys"`
-	}
-	if err := json.Unmarshal(b, &users); err != nil {
-		return nil, err
-	}
-	keys := []Key{}
-	for _, u := range users {
-		for _, k := range u.Keys {
-			k.Off = k.Off || u.Off
-			keys = append(keys, k)
-		}
-	}
-	return keys, nil
+	var keys []Key
+	err = json.Unmarshal(b, &keys)
+	return keys, err
 }
 
 // List never returns credentials; only the administrator's copy action does.
@@ -97,8 +74,6 @@ func List() ([]Key, error) {
 			prefix := legacyLANPrefix
 			if strings.HasPrefix(k.Secret, Prefix) {
 				prefix = Prefix
-			} else if strings.HasPrefix(k.Secret, legacyPrefix) {
-				prefix = legacyPrefix
 			}
 			k.Masked = prefix + "…" + k.Secret[len(k.Secret)-6:]
 		}
@@ -120,8 +95,7 @@ type Change struct {
 	Name string `json:"name"`
 }
 
-// Update writes the flat store atomically. The old user store is left intact
-// as a backup; all subsequent reads use the flat store.
+// Update writes the named key store atomically.
 func Update(action string, in Change) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -203,19 +177,6 @@ func MigrateLegacyLANKey() error {
 func migrateLegacyLANKey() error {
 	s := settings.Load()
 	if s.LANKey == "" {
-		if s.LANKeyID == "" {
-			return nil
-		}
-		keys, err := load()
-		if err != nil {
-			return err
-		}
-		for i := range keys {
-			if keys[i].ID == s.LANKeyID && keys[i].Name == "Local network (legacy)" {
-				keys[i].Name = "Local network"
-				return save(keys)
-			}
-		}
 		return nil
 	}
 	keys, err := load()
@@ -230,7 +191,7 @@ func migrateLegacyLANKey() error {
 		if err != nil {
 			return err
 		}
-		keys = append(keys, Key{ID: id, Name: "Local network", Secret: s.LANKey})
+		keys = append(keys, Key{ID: id, Name: "Magpie", Secret: s.LANKey})
 		if err := save(keys); err != nil {
 			return err
 		}
@@ -241,8 +202,8 @@ func migrateLegacyLANKey() error {
 	return settings.Save(s)
 }
 
-// ConfigureLAN ensures sharing starts with an ordinary named key. The rotate
-// parameter supports older clients; new clients manage keys in Gateway.
+// ConfigureLAN starts sharing with a named key. Rotation preserves the key's
+// identity, name and enabled state.
 func ConfigureLAN(on, rotate bool) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -266,7 +227,7 @@ func ConfigureLAN(on, rotate bool) error {
 				if err != nil {
 					return err
 				}
-				keys = append(keys, Key{ID: id, Name: "Local network"})
+				keys = append(keys, Key{ID: id, Name: "Magpie"})
 				i = len(keys) - 1
 			}
 			keys[i].Secret = Prefix + token

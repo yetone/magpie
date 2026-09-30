@@ -63,7 +63,7 @@ function fixture(lang, theme, events) {
       let key = keys.find((k) => k.id === lanKeyID);
       if (lan && (!key || body.newKey)) {
         if (!key) {
-          key = { id: "lan-key-" + (++serial), name: "Local network" };
+          key = { id: "lan-key-" + (++serial), name: "Magpie" };
           lanKeyID = key.id;
           keys.push(key);
         }
