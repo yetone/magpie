@@ -10,15 +10,28 @@ package agent
 // like may name them as well (ompRefKeys); magpie stays while any does.
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
+	"sync"
+	"testing"
+	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
+	"gopkg.in/yaml.v3"
 )
 
 // ompEfforts are the thinking levels omp knows.
@@ -164,7 +177,7 @@ func omp(home string) *Agent {
 				return dropMagpie()
 			},
 			Options: func(cur map[string]string) []Option {
-				return append(ownOptions("", cur["model"]), viaMagpie("omp", magpieID+"/")...)
+				return append(ompOwnOptions(pick("models"), cur["model"]), viaMagpie("omp", magpieID+"/")...)
 			},
 		}, {
 			// the thinking level sessions start with, as omp's settings save
@@ -258,4 +271,188 @@ func ompProvider() ompProviderEntry {
 		ms = append(ms, e)
 	}
 	return ompProviderEntry{BaseURL: gatewayV1(), API: "openai-completions", Auth: "none", Models: ms}
+}
+
+// ompListedModel is a model as `omp models --json` lists it; that lists chat
+// models only, unless asked for another kind.
+type ompListedModel struct {
+	Provider string `json:"provider"`
+	ID       string `json:"id"`
+	Selector string `json:"selector"`
+	Name     string `json:"name"`
+}
+
+// ompOwnOptions lists the models omp says it can use, by provider, then the
+// ones models.dev knows for the current value's provider, spelled as
+// ownOptions spells them (the model's name as the note). omp's own list has
+// the providers built into it that are signed in (an Anthropic or ChatGPT
+// sign-in, Cursor), the user's from models.yml and the models it
+// discovered; magpie's entry is left out, its models are offered as
+// magpie's. With no answer from omp (not yet, not installed, failed,
+// something else printed) the providers of models.yml are read instead,
+// where one with only discovery offers none. A value offered twice is
+// offered once, with the name and icon either one had.
+func ompOwnOptions(modelsFile, cur string) []Option {
+	ms, ok := ompListed(modelsFile)
+	if !ok {
+		ms = ompFileModels(modelsFile)
+	}
+	var opts []Option
+	for _, m := range ms {
+		p, v := m.Provider, m.Selector
+		if v == "" {
+			v = p + "/" + m.ID
+		}
+		if p == magpieID || m.ID == "" {
+			continue
+		}
+		name := catalog.ProviderName(p)
+		if name == "" {
+			name = p
+		}
+		opts = append(opts, Option{Value: v, Note: m.Name, Icon: modelIcon(p, m.ID), Group: name, GroupIcon: providerIcon(p)})
+	}
+	at := map[string]int{}
+	var out []Option
+	for _, o := range append(opts, ownOptions("", cur)...) {
+		i, dup := at[o.Value]
+		if !dup {
+			at[o.Value] = len(out)
+			out = append(out, o)
+			continue
+		}
+		if out[i].Note == "" {
+			out[i].Note = o.Note
+		}
+		if out[i].Icon == "" {
+			out[i].Icon = o.Icon
+		}
+		if out[i].GroupIcon == "" {
+			out[i].GroupIcon = o.GroupIcon
+		}
+	}
+	return out
+}
+
+// ompFileModels are the models of the providers in models.yml, by provider.
+func ompFileModels(modelsFile string) []ompListedModel {
+	var f struct {
+		Providers map[string]struct {
+			Models []struct {
+				ID   string `yaml:"id"`
+				Name string `yaml:"name"`
+			} `yaml:"models"`
+		} `yaml:"providers"`
+	}
+	if b, err := os.ReadFile(modelsFile); err == nil {
+		yaml.Unmarshal(b, &f)
+	}
+	providers := make([]string, 0, len(f.Providers))
+	for p := range f.Providers {
+		providers = append(providers, p)
+	}
+	sort.Strings(providers)
+	var out []ompListedModel
+	for _, p := range providers {
+		for _, m := range f.Providers[p].Models {
+			out = append(out, ompListedModel{Provider: p, ID: m.ID, Name: m.Name})
+		}
+	}
+	return out
+}
+
+// ompLists keeps what `omp models --json` said, by agent folder (the one
+// models.yml is in). omp takes a few seconds to answer (it starts Bun and
+// loads every provider) and the picker's options are read at every look at
+// the agents, so, as with the CLIs' sign-ins (provider/cli_identity.go),
+// what was said is served at once and omp is asked again behind it: once
+// models.yml changes (a provider added or taken out), else ten minutes on (a
+// sign-in; it lands in agent.db, which omp writes at every run, this one's
+// too, so its time tells nothing). Until omp first answers the picker has
+// models.yml's models; an ask that fails leaves the last answer.
+var ompLists struct {
+	sync.Mutex
+	m map[string]*ompList
+}
+
+type ompList struct {
+	models []ompListedModel
+	ok     bool // omp answered once
+	stamp  string
+	at     time.Time
+	asking chan struct{} // closed when the ask under way has answered
+}
+
+const ompListFor = 10 * time.Minute
+
+func ompListed(modelsFile string) ([]ompListedModel, bool) {
+	dir := filepath.Dir(modelsFile)
+	stamp := ""
+	if st, err := os.Stat(modelsFile); err == nil {
+		stamp = fmt.Sprint(st.Size(), st.ModTime().UnixNano())
+	}
+	ompLists.Lock()
+	if ompLists.m == nil {
+		ompLists.m = map[string]*ompList{}
+	}
+	l := ompLists.m[dir]
+	if l == nil {
+		l = &ompList{}
+		ompLists.m[dir] = l
+	}
+	if l.asking == nil && (l.at.IsZero() || l.stamp != stamp || time.Since(l.at) > ompListFor) {
+		done := make(chan struct{})
+		l.asking = done
+		run := runOmpModels // the one of when it was asked, a test's fake too
+		go func() {
+			ms, err := askOmpModels(run)
+			ompLists.Lock()
+			if err == nil {
+				l.models, l.ok = ms, true
+			}
+			l.stamp, l.at, l.asking = stamp, time.Now(), nil
+			ompLists.Unlock()
+			close(done)
+		}()
+	}
+	ms, ok := l.models, l.ok
+	ompLists.Unlock()
+	return ms, ok
+}
+
+// runOmpModels runs `omp models --json` and gives what it printed; a var so
+// tests can fake it, and none under test runs a real omp.
+var runOmpModels = func() ([]byte, error) {
+	if testing.Testing() {
+		return nil, errors.New("no omp under test")
+	}
+	bin, err := exec.LookPath("omp")
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	// in the environment magpie has, so omp takes the same OMP_PROFILE,
+	// PI_CONFIG_DIR and PI_CODING_AGENT_DIR ompDir followed, and from the
+	// home folder rather than magpie's (omp adds the settings of the project
+	// it runs in)
+	cmd := proc.CommandContext(ctx, bin, "models", "--json")
+	cmd.Stdin = nil
+	cmd.Dir, _ = os.UserHomeDir()
+	cmd.Env = netproxy.Env(nil) // it may fetch a provider's model list
+	return cmd.Output()
+}
+
+func askOmpModels(run func() ([]byte, error)) ([]ompListedModel, error) {
+	out, err := run()
+	if err != nil {
+		return nil, err
+	}
+	var r struct {
+		Models []ompListedModel `json:"models"`
+	}
+	if err := json.Unmarshal(out, &r); err != nil {
+		return nil, err
+	}
+	return r.Models, nil
 }
