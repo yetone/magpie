@@ -171,7 +171,7 @@ func omp(home string) *Agent {
 			// it; unset omp takes high. auto has omp pick a level each turn:
 			// not a level a model lists, so it is offered here and kept out of
 			// ompEfforts, which a model's thinking levels are filtered by. First,
-			// as omp's own picker has it (omp 18.4.4, session/settings.ts)
+			// as omp's own picker has it (16.3.5 and 18.4.4 alike)
 			Key: "effort", Label: "thinking",
 			Get: func() string { v, _ := edit.GetYAML(path, "defaultThinkingLevel"); return v },
 			Set: func(v string) error {
