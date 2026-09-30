@@ -506,7 +506,7 @@ func (u cUsage) usage() Usage {
 func (u Usage) chat() map[string]any {
 	in := u.prompt()
 	return map[string]any{"prompt_tokens": in, "completion_tokens": u.Output, "total_tokens": in + u.Output,
-		"prompt_tokens_details":     map[string]any{"cached_tokens": u.CacheRead},
+		"prompt_tokens_details":     map[string]any{"cached_tokens": u.CacheRead, "cache_write_tokens": u.CacheWrite},
 		"completion_tokens_details": map[string]any{"reasoning_tokens": u.Reasoning}}
 }
 
