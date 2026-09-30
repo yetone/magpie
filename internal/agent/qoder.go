@@ -268,7 +268,7 @@ func qoderProvider(agent, model string) map[string]any {
 			e["contextWindow"] = m.Context
 		}
 		if m.Output > 0 {
-			e["maxOutputTokens"] = m.Output
+			e["maxOutputTokens"] = maxTokens(m)
 		}
 		ms = append(ms, e)
 	}

@@ -234,7 +234,7 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 			// group's context (magpie group set … context=) never reaches
 			// it; an output of 0 is OpenCode's own default
 			if m.Context > 0 {
-				e["limit"] = map[string]any{"context": m.Context, "output": m.Output}
+				e["limit"] = map[string]any{"context": m.Context, "output": maxTokens(m)}
 			}
 			e["variants"] = openCodeVariants(m.Efforts)
 			ms[m.ID] = e

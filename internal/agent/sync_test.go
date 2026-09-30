@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -106,25 +107,58 @@ func TestPiModelsCarryMaxTokens(t *testing.T) {
 
 // An output limit above the model's window (models.dev lists deepseek-chat's
 // 384000 against 128000 of context) is cut to the window for every agent
-// magpie hands maxTokens; one whose window isn't known keeps its output.
+// magpie hands an output limit; one whose window isn't known keeps its
+// output. ZCode and WorkBuddy cap it at zcodeMaxOutput besides, and OpenCode
+// is handed no limit without a window.
 func TestMaxTokensWithinContextWindow(t *testing.T) {
-	syncHome(t)
-	check := func(limit, want string) {
+	home := syncHome(t)
+	check := func(limit string, want int) {
 		t.Helper()
 		os.WriteFile(catalog.CachePath(), []byte(`{"zai":{"models":{"glm-4.6":{"id":"glm-4.6","name":"GLM-4.6","limit":{`+limit+`}}}}}`), 0o644)
 		catalog.Reset()
 		pi, _ := json.Marshal(magpieProviderJSON("pi"))
 		cline, _ := json.Marshal(clineModels(""))
 		omp, _ := yaml.Marshal(ompProvider())
-		dsh := strings.Join(dshProviderLines(true, ""), "\n")
-		if !strings.Contains(string(pi), `"maxTokens":`+want) || !strings.Contains(string(cline), `"maxTokens":`+want) ||
-			!strings.Contains(string(omp), "maxTokens: "+want) || !strings.Contains(dsh, "maxTokens: "+want) {
-			t.Fatalf("want maxTokens %s:\npi %s\ncline %s\nomp %s\ndsh %s", want, pi, cline, omp, dsh)
+		droid, _ := json.Marshal(droidEntries())
+		qoder, _ := json.Marshal(qoderProvider("qoder", ""))
+		hanako, _ := json.Marshal(hanakoProvider())
+		opencode, _ := json.Marshal(magpieProviderJSON("opencode"))
+		zc, _ := json.Marshal(zcodeProviderJSON(filepath.Join(home, "none.json")))
+		rules, wb := filepath.Join(t.TempDir(), "provider_config.json"), filepath.Join(t.TempDir(), "models.json")
+		if err := zcodeRules(rules, true); err != nil {
+			t.Fatal(err)
+		}
+		if err := workbuddyWrite(wb, true); err != nil {
+			t.Fatal(err)
+		}
+		zcRules, _ := os.ReadFile(rules)
+		wbModels, _ := os.ReadFile(wb)
+		n, capped := strconv.Itoa(want), strconv.Itoa(min(want, zcodeMaxOutput))
+		wants := map[string][2]string{
+			"pi":          {string(pi), `"maxTokens":` + n},
+			"cline":       {string(cline), `"maxTokens":` + n},
+			"omp":         {string(omp), "maxTokens: " + n},
+			"dsh":         {strings.Join(dshProviderLines(true, ""), "\n"), "maxTokens: " + n},
+			"droid":       {string(droid), `"maxOutputTokens":` + n},
+			"qoder":       {string(qoder), `"maxOutputTokens":` + n},
+			"hanako":      {string(hanako), `"maxOutput":` + n},
+			"zcode":       {string(zc), `"output":` + capped},
+			"zcode rules": {string(zcRules), `"max":` + capped},
+			"workbuddy":   {string(wbModels), `"maxOutputTokens": ` + capped},
+		}
+		if strings.Contains(limit, "context") {
+			wants["opencode"] = [2]string{string(opencode), `"output":` + n}
+		}
+		for agent, w := range wants {
+			if !strings.Contains(w[0], w[1]) {
+				t.Errorf("%s: want %s in %s", agent, w[1], w[0])
+			}
 		}
 	}
-	check(`"context":128000,"output":384000`, "128000")
-	check(`"output":384000`, "384000")
-	check(`"context":204800,"output":131072`, "131072")
+	check(`"context":128000,"output":384000`, 128000)
+	check(`"output":384000`, 384000)
+	check(`"context":204800,"output":131072`, 131072)
+	check(`"context":64000,"output":384000`, 64000)
 }
 
 // A provider added after a magpie model was picked reaches the lists agents

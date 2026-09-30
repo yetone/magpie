@@ -64,7 +64,7 @@ func droidEntries() []droidEntry {
 	var out []droidEntry
 	for _, m := range magpieModels("droid") {
 		e := droidEntry{Model: m.ID, ID: droidID + m.ID, BaseURL: gatewayV1(), APIKey: gateway.Token,
-			Provider: "generic-chat-completion-api", MaxContextLimit: m.Context, MaxOutputTokens: m.Output, NoImageSupport: !m.Images}
+			Provider: "generic-chat-completion-api", MaxContextLimit: m.Context, MaxOutputTokens: maxTokens(m), NoImageSupport: !m.Images}
 		switch {
 		case slices.Contains(m.APIs, string(provider.Responses)):
 			e.Provider = "openai"

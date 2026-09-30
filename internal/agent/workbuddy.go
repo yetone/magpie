@@ -139,7 +139,7 @@ func workbuddyWrite(path string, on bool) error {
 	var ids []string
 	if on {
 		for _, m := range magpieModels("workbuddy") {
-			e := workbuddyModel(m.ID, m.Name, m.Context, m.Output, m.Images, m.Efforts)
+			e := workbuddyModel(m.ID, m.Name, m.Context, maxTokens(m), m.Images, m.Efforts)
 			if off[m.ID] {
 				e["disabled"] = true
 			}
