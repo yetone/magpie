@@ -475,3 +475,41 @@ func TestOmpRoleList(t *testing.T) {
 		}
 	}
 }
+
+// A role on magpie at a thinking level that a fallback chain names too: a
+// provider renamed moves each once, the level kept. The role back on omp's
+// own, the chain still keeps magpie's provider.
+func TestOmpRoleAndChain(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath, modelsPath := filepath.Join(dir, "config.yml"), filepath.Join(dir, "models.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5\nretry:\n  fallbackChains:\n    slow:\n      - magpie/deepseek/pro:max\n      - openai/gpt-6\n"), 0o644)
+	a := omp(home)
+	if err := a.Apply("slow", "magpie/deepseek/pro:max"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RenameProvider("deepseek", "ds"); err != nil {
+		t.Fatal(err)
+	}
+	chain := edit.GetYAMLList(configPath, "retry.fallbackChains.slow")
+	if s := a.Field("slow").Get(); s != "magpie/ds/pro:max" || !slices.Equal(chain, []string{"magpie/ds/pro:max", "openai/gpt-6"}) {
+		t.Fatalf("renamed: slow %q, chain %v", s, chain)
+	}
+
+	if err := a.Apply("slow", ""); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetYAML(modelsPath, "providers.magpie.baseUrl"); v == "" || a.Field("slow").Get() != "" {
+		t.Fatalf("the chain lost magpie's provider, or slow stayed: %q", a.Field("slow").Get())
+	}
+}

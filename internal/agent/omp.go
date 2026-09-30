@@ -112,17 +112,18 @@ func omp(home string) *Agent {
 			return strings.Join(edit.GetYAMLList(path, k), ",")
 		}
 	}
-	// viaMagpieAnywhere: a role, a fallback chain, … still goes through
-	// magpie, which keeps its provider in models.yml
-	viaMagpieAnywhere := func() (used bool, err error) {
-		err = edit.EditYAMLStrings(path, ompRefKeys, func(v string) string {
+	// onMagpie: a model named under the keys (ompRefKeys, or some of them)
+	// still goes through magpie
+	onMagpie := func(keys ...string) (used bool, err error) {
+		err = edit.EditYAMLStrings(path, keys, func(v string) string {
 			ompRefs(v, func(m string) string { used = used || usesMagpie(m); return m })
 			return v
 		})
 		return used, err
 	}
 	dropMagpie := func() error {
-		if used, err := viaMagpieAnywhere(); err != nil || used {
+		// another role, a fallback chain, … may still go through magpie
+		if used, err := onMagpie(ompRefKeys...); err != nil || used {
 			return err
 		}
 		return edit.DelYAML(pick("models"), "providers."+magpieID)
@@ -139,7 +140,7 @@ func omp(home string) *Agent {
 		return edit.SetYAML(models, edit.KV{Path: "providers." + magpieID, Value: ompProvider()})
 	}
 	// role is the field for one of omp's model roles: one of magpie's brings
-	// magpie's provider into models.yml, and it goes once no role is on it.
+	// magpie's provider into models.yml, and it goes once nothing is on it.
 	// The model the user had there before magpie took the role over is
 	// stashed, and resetting the role puts it back.
 	role := func(key, label, name string, quiet bool) Field {
@@ -237,7 +238,9 @@ func omp(home string) *Agent {
 			return ""
 		},
 		Check: func() string {
-			if used, _ := viaMagpieAnywhere(); !used {
+			// a role on magpie has its wiring checked; a fallback chain or
+			// the like alone keeps the provider but isn't checked
+			if used, _ := onMagpie("modelRoles"); !used {
 				return ""
 			}
 			models := pick("models")
