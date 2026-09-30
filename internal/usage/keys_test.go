@@ -81,7 +81,7 @@ func TestKeyUsageKeepsIdentityAndPrices(t *testing.T) {
 		t.Fatal(err)
 	}
 	cells, err := csv.NewReader(strings.NewReader(b.String())).ReadAll()
-	if err != nil || len(cells) != 3 || cells[1][len(CSVHeader)-2] != team || cells[1][len(CSVHeader)-1] != "Team" {
+	if err != nil || len(cells) != 3 || cells[1][21] != team || cells[1][22] != "Team" {
 		t.Fatalf("CSV: %v, %s", err, b.String())
 	}
 	encoded, _ := json.Marshal(s)

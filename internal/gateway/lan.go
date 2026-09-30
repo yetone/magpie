@@ -13,7 +13,10 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // The gateway listens on loopback and takes any token, which is safe only
@@ -164,6 +167,14 @@ func (s *Server) Relisten() error {
 // Settings page is open, as it has always been.
 func lanGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		managed := strings.HasPrefix(callerKey(r), access.Prefix)
+		if managed {
+			var ok bool
+			r, ok = identifyCaller(w, r)
+			if !ok {
+				return
+			}
+		}
 		if local(r) {
 			next.ServeHTTP(w, r)
 			return
@@ -180,7 +191,7 @@ func lanGuard(next http.Handler) http.Handler {
 			http.Error(w, "magpie isn't shared on the local network", http.StatusForbidden)
 			return
 		}
-		if subtle.ConstantTimeCompare([]byte(callerKey(r)), []byte(key)) != 1 {
+		if !managed && subtle.ConstantTimeCompare([]byte(callerKey(r)), []byte(key)) != 1 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":{"type":"authentication_error","message":"use the API key shown in magpie's Settings, under Share on local network"}}`))
@@ -210,6 +221,50 @@ type lanKeyed struct{}
 func sharedWith(r *http.Request) bool {
 	ok, _ := r.Context().Value(lanKeyed{}).(bool)
 	return ok
+}
+
+// callerGuard also covers embedded handlers used by the web app and tests.
+func callerGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if access.Caller(r.Context()).UserID == "" && strings.HasPrefix(callerKey(r), access.Prefix) {
+			var ok bool
+			r, ok = identifyCaller(w, r)
+			if !ok {
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
+	who, ok := access.Authenticate(callerKey(r))
+	if !ok {
+		writeError(w, provider.Chat, http.StatusUnauthorized, "User or API key is disabled, removed or invalid")
+		return r, false
+	}
+	r = r.WithContext(access.WithIdentity(r.Context(), who))
+	r.Header = r.Header.Clone()
+	r.Header.Set("Authorization", "Bearer "+Token)
+	for _, h := range []string{"x-api-key", "x-goog-api-key"} {
+		if r.Header.Get(h) != "" {
+			r.Header.Set(h, Token)
+		}
+	}
+	if q := r.URL.Query(); q.Get("key") != "" {
+		q.Set("key", Token)
+		u := *r.URL
+		u.RawQuery = q.Encode()
+		r.URL = &u
+	}
+	return r, true
+}
+
+func appendUsage(r *http.Request, rec usage.Record) {
+	who := access.Caller(r.Context())
+	rec.UserID, rec.UserName = who.UserID, who.UserName
+	rec.CallerKeyID, rec.CallerKeyName = who.KeyID, who.KeyName
+	usage.Append(rec)
 }
 
 // callerKey is the API key a request carries, however its client sends one.

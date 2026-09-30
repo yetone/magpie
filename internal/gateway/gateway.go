@@ -378,7 +378,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages, /v1/systemone, /v1/images/generations, /v1/images/edits, /v1/videos and /v1beta/models/*")
 	})
-	return withCaller(mux)
+	return callerGuard(withCaller(mux))
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
@@ -1178,7 +1178,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			skipped = append(skipped, c.label()+": "+call.Error)
 			matesFirst(cands[i+1:], c)
 			if call.To != "" {
-				usage.Append(usage.Record{Time: began, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Host: where, Model: c.model,
+				appendUsage(r, usage.Record{Time: began, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Host: where, Model: c.model,
 					ProviderKeyID: providerKeyID, ProviderKeyName: providerKeyName,
 					Requested: call.Model, Served: call.Usage.Served,
 					Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
@@ -1330,7 +1330,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	})
 	s.record(call)
 	if call.To != "" {
-		usage.Append(usage.Record{Time: start, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Host: where, Model: model,
+		appendUsage(r, usage.Record{Time: start, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Host: where, Model: model,
 			ProviderKeyID: providerKeyID, ProviderKeyName: providerKeyName,
 			Requested: call.Model, Served: call.Usage.Served,
 			Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,

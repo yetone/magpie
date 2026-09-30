@@ -30,6 +30,13 @@ type Record struct {
 	ProviderKeyID   string    `json:"providerKeyId,omitempty"` // fingerprint of the API key actually used
 	ProviderKeyName string    `json:"providerKeyName,omitempty"`
 	Model           string    `json:"model"` // the provider's model id
+
+	KeyID         string    `json:"keyId,omitempty"`   // fingerprint of the API key actually used
+	KeyName       string    `json:"keyName,omitempty"` // name when the call was made
+	UserID        string    `json:"userId,omitempty"`
+	UserName      string    `json:"userName,omitempty"`
+	CallerKeyID   string    `json:"callerKeyId,omitempty"`
+	CallerKeyName string    `json:"callerKeyName,omitempty"`
 	// Requested is the model id the agent asked for (a magpie alias, a
 	// routing group, provider/model…), and Served the model the vendor's
 	// reply says answered, when it named one: a ledger to set beside the
@@ -271,6 +278,13 @@ type Group struct {
 	Model           string `json:"model,omitempty"`
 	ProviderKeyID   string `json:"providerKeyId,omitempty"`
 	ProviderKeyName string `json:"providerKeyName,omitempty"`
+
+	KeyID         string `json:"keyId,omitempty"`
+	KeyName       string `json:"keyName,omitempty"`
+	UserID        string `json:"userId,omitempty"`
+	UserName      string `json:"userName,omitempty"`
+	CallerKeyID   string `json:"callerKeyId,omitempty"`
+	CallerKeyName string `json:"callerKeyName,omitempty"`
 	// Host is where the calls went, when the provider's id has gone to
 	// more than one place, or elsewhere than the provider goes now: its
 	// calls are then told apart by it, not summed under the id.
@@ -309,6 +323,9 @@ type Summary struct {
 	Agents       []Group `json:"agents"`
 	Models       []Group `json:"models"`
 	ProviderKeys []Group `json:"providerKeys"`
+	Keys       []Group `json:"keys"`
+	Users      []Group `json:"users"`
+	CallerKeys []Group `json:"callerKeys"`
 	// Sessions are the calls that named their session, by session.
 	Sessions []Group `json:"sessions"`
 }
@@ -329,7 +346,7 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 		}
 	}
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	s := Summary{Period: p, Bucket: "day", Agents: []Group{}, Models: []Group{}, ProviderKeys: []Group{}, Sessions: []Group{}, Series: []Point{}}
+	s := Summary{Period: p, Bucket: "day", Agents: []Group{}, Models: []Group{}, ProviderKeys: []Group{}, Keys: []Group{}, Users: []Group{}, CallerKeys: []Group{}, Sessions: []Group{}, Series: []Point{}}
 	var n int
 	switch p {
 	case Today:
@@ -398,6 +415,8 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 	agents := map[string]*Group{}
 	models := map[string]*Group{}
 	keys := map[string]*Group{}
+	users := map[string]*Group{}
+	callerKeys := map[string]*Group{}
 	sessions := map[string]*Group{}
 	for _, r := range recs {
 		t := r.Time.In(now.Location())
@@ -435,6 +454,22 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 			models[k] = m
 		}
 		m.add(r, pr)
+		user := users[r.UserID]
+		if user == nil {
+			user = &Group{ID: r.UserID, UserID: r.UserID}
+			users[r.UserID] = user
+		}
+		user.UserName = r.UserName
+		user.add(r, pr)
+		if r.CallerKeyID != "" {
+			g := callerKeys[r.CallerKeyID]
+			if g == nil {
+				g = &Group{ID: r.CallerKeyID, UserID: r.UserID, CallerKeyID: r.CallerKeyID}
+				callerKeys[r.CallerKeyID] = g
+			}
+			g.UserName, g.CallerKeyName = r.UserName, r.CallerKeyName
+			g.add(r, pr)
+		}
 		if keyProviders[r.Provider] {
 			id := r.Provider + "#" + r.ProviderKeyID
 			g := keys[id]
@@ -477,6 +512,14 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 		s.ProviderKeys = append(s.ProviderKeys, *g)
 	}
 	byTokens(s.ProviderKeys)
+	for _, g := range users {
+		s.Users = append(s.Users, *g)
+	}
+	for _, g := range callerKeys {
+		s.CallerKeys = append(s.CallerKeys, *g)
+	}
+	byTokens(s.Users)
+	byTokens(s.CallerKeys)
 	for _, g := range sessions {
 		s.Sessions = append(s.Sessions, *g)
 	}

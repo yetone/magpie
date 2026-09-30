@@ -125,6 +125,25 @@ func usageTo(out io.Writer, args []string) error {
 			return g.Provider + " / " + name
 		})
 	}
+	if len(s.CallerKeys) > 0 {
+		userName := func(g stats.Group) string {
+			if g.UserID == "" {
+				return "local / unassigned"
+			}
+			if g.UserName != "" {
+				return g.UserName
+			}
+			return g.UserID
+		}
+		table("users", s.Users, userName)
+		table("caller keys", s.CallerKeys, func(g stats.Group) string {
+			name := g.CallerKeyName
+			if name == "" {
+				name = g.CallerKeyID
+			}
+			return userName(g) + " / " + name
+		})
+	}
 	if len(s.Sessions) > 0 {
 		top := s.Sessions[:min(len(s.Sessions), 10)]
 		head := "sessions"
