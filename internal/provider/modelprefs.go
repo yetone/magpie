@@ -247,11 +247,17 @@ func vendorSees(p *Provider, model string) (bool, bool) {
 	return false, false
 }
 
-// renameModelPrefs moves the names, levels and image answers given to a
-// provider's models to the id it has now.
+// renameModelPrefs moves the names, levels, image answers and everything
+// else the user said of a provider's models to the id it has now. The
+// settings walk their per-model maps themselves — settings.RenamePerModel,
+// by the convention a Model* field of type map[string]X — and move each of
+// them whether or not the ones before it moved anything, so a map added to
+// them later is moved as well and there is nothing here to write for it.
 func renameModelPrefs(s *settings.Settings, from, to string) bool {
-	named := renameKeys(s.ModelNames, from, to)
-	imaged := renameKeys(s.ModelImages, from, to)
+	moved := s.RenamePerModel(from, to)
+	// the models a user has hidden from a picker are keyed by provider as
+	// well, and are not one of the per-model preference maps: they say
+	// which models are shown, not what a model is called or costs
 	hidden := false
 	for _, ids := range s.HiddenModels {
 		for i, id := range ids {
@@ -260,21 +266,7 @@ func renameModelPrefs(s *settings.Settings, from, to string) bool {
 			}
 		}
 	}
-	return renameKeys(s.ModelEfforts, from, to) || named || imaged || hidden
-}
-
-func renameKeys[V any](m map[string]V, from, to string) bool {
-	moved := map[string]V{}
-	for k, v := range m {
-		if rest, ok := strings.CutPrefix(k, from+"/"); ok {
-			delete(m, k)
-			moved[to+"/"+rest] = v
-		}
-	}
-	for k, v := range moved {
-		m[k] = v
-	}
-	return len(moved) > 0
+	return moved || hidden
 }
 
 // Label is how an agent's list names the entry: its name (the user's own,

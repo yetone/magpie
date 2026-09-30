@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -122,6 +123,18 @@ type Settings struct {
 	// or a group's) taken out of an agent's lists one by one, by agent id,
 	// after Visible: a model not named here, a new one among them, is shown.
 	HiddenModels map[string][]string `json:"hiddenModels,omitempty"`
+
+	// The three maps below, and every one added beside them, are the
+	// per-model ones: a field named Model* whose type is a map[string]X,
+	// keyed "<provider id>/<model id>" (or "<provider id>/*", for all of
+	// that provider's models — CheckModelKey). That is the whole of the
+	// convention, and it is what RenamePerModel and the GUI's saving of
+	// the settings go by, each of them walking the fields by it rather
+	// than by a list kept up to date by hand: a map added here later is
+	// moved when a provider is renamed and kept when another page saves
+	// the settings, with no line written for it in either place. A field
+	// whose keys are not a model's is not one of these, and is not named
+	// Model* — Visible, which is by agent id, among them.
 	// ModelNames are the names the user gave models, by "<provider
 	// id>/<model id>": agents, the gateway's model list and magpie itself
 	// show them for the vendor's (see provider.SetModelName).
@@ -188,6 +201,110 @@ var (
 )
 
 var validTerminalBundleID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$`)
+
+// providerID is how a provider's id is spelled: lower-case letters, digits
+// and dashes, as provider.Slug derives it (a custom provider's id is the
+// same, the site it is on when its name has none).
+var providerID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// CheckModelKey is whether a key of one of the per-model maps names a model
+// the way all of them do: "<provider id>/<model id>" — or "<provider id>/*"
+// for all of that provider's models. A model id may have slashes of its own
+// (vendor/model), so only the first one ends the provider's id. what names
+// the setting being checked, for the error.
+//
+// Nothing in this change calls it yet: it is the entry point for the three
+// changes stacked on this one — a model's price, its output limit, its wire
+// name — which take model keys from the user and check them here rather than
+// each spelling the key's shape out again. It is kept here, on the branch
+// they build on, so that it stays one rule and not three.
+func CheckModelKey(what, key string) error {
+	pid, model, ok := strings.Cut(key, "/")
+	if !ok || model == "" {
+		return fmt.Errorf("%s must be a model as <provider>/<model>, such as openai/gpt-5-mini, or <provider>/*, not %q", what, key)
+	}
+	if !providerID.MatchString(pid) {
+		return fmt.Errorf("%s must name a provider before the model's id, such as openai/gpt-5-mini, not %q", what, key)
+	}
+	return nil
+}
+
+// perModelFields are the fields of t that are per-model: those named Model*
+// whose type is a map[string]X (see ModelNames). The name and the type are
+// all that is looked at, so a field the caller means by another key is taken
+// for a per-model map all the same, and a field of a type that is not
+// map[string]X is left out however it is named.
+func perModelFields(t reflect.Type) []reflect.StructField {
+	var out []reflect.StructField
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if strings.HasPrefix(f.Name, "Model") && f.Type.Kind() == reflect.Map && f.Type.Key().Kind() == reflect.String {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// PerModelKeys calls fn with the name of every per-model map of s and the
+// map itself, the settings' own values and not copies, so fn may change them
+// (see ModelNames). A field that is not per-model is not passed; the name
+// comes with the map so a caller that reports on the maps it was given can
+// tell them apart.
+func PerModelKeys(s *Settings, fn func(name string, m reflect.Value)) {
+	v := reflect.ValueOf(s).Elem()
+	for _, f := range perModelFields(v.Type()) {
+		fn(f.Name, v.FieldByIndex(f.Index))
+	}
+}
+
+// CarryPerModel puts cur's per-model maps into in's, whole as they are: the
+// ones a page that sends only its own choices would otherwise save as
+// nothing, and so lose. Every per-model map is carried, whichever page wrote
+// it, so a map added to the settings later needs nothing said of it here.
+func CarryPerModel(in, cur *Settings) {
+	dst, src := reflect.ValueOf(in).Elem(), reflect.ValueOf(cur).Elem()
+	for _, f := range perModelFields(dst.Type()) {
+		dst.FieldByIndex(f.Index).Set(src.FieldByIndex(f.Index))
+	}
+}
+
+// RenamePerModel moves what the user said of a provider's models to the id
+// it has now: in every per-model map (see ModelNames) each key beginning
+// with from+"/" is rewritten to to+"/", and it says whether any key moved at
+// all. A provider that changes its id keeps the names, levels, image
+// answers and everything else given to its models, each map moved whether or
+// not the ones before it moved anything.
+func (s *Settings) RenamePerModel(from, to string) bool {
+	moved := false
+	PerModelKeys(s, func(_ string, m reflect.Value) {
+		if renameInMap(m, from, to) {
+			moved = true
+		}
+	})
+	return moved
+}
+
+// renameInMap is RenamePerModel for one of the maps: every key of from+"/..."
+// is written as to+"/...", and it says whether one moved. The new key is
+// built as a string and then converted to the map's own key type, because a
+// field keyed by a named string type (map[modelKey]X) is per-model all the
+// same, and a plain string is not assignable to one. Every per-model field
+// the settings have today is keyed by string, so nothing but a test on such
+// a type reaches that conversion.
+func renameInMap(m reflect.Value, from, to string) bool {
+	moved := false
+	for _, k := range m.MapKeys() {
+		rest, ok := strings.CutPrefix(k.String(), from+"/")
+		if !ok {
+			continue
+		}
+		v := m.MapIndex(k)
+		m.SetMapIndex(k, reflect.Value{})
+		m.SetMapIndex(reflect.ValueOf(to+"/"+rest).Convert(m.Type().Key()), v)
+		moved = true
+	}
+	return moved
+}
 
 // Path is the settings file.
 func Path() string {

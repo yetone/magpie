@@ -3,6 +3,7 @@ package provider
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -261,5 +262,55 @@ func TestModelImage(t *testing.T) {
 	}
 	if e := entry(t, "c/mystery-7"); !e.Images || e.ImageInput == nil || !*e.ImageInput {
 		t.Fatalf("given %+v", e.ImageInput)
+	}
+}
+
+// Renaming a provider moves what the user gave its models in every
+// per-model map. The settings walk them by the convention themselves — each
+// map[string]X of Settings named Model*, the three there are now and any
+// added later — and this holds the provider's own call to it: a map that
+// walk leaves out, or skips as soon as an earlier one has moved something,
+// is caught here instead of by a user whose overrides went on answering for
+// the id the provider had. A map that isn't per-model — Visible, which is by
+// agent id — is left as it was.
+func TestRenameMovesEveryPerModelMap(t *testing.T) {
+	const atLeast = 3 // the per-model maps there are: names, efforts, images
+	s := settings.Settings{Visible: map[string][]string{"code": {"old/model", "old"}}}
+	v := reflect.ValueOf(&s).Elem()
+	typ := v.Type()
+	var perModel []reflect.StructField
+	for i := range typ.NumField() {
+		f := typ.Field(i)
+		if strings.HasPrefix(f.Name, "Model") && f.Type.Kind() == reflect.Map && f.Type.Key().Kind() == reflect.String {
+			perModel = append(perModel, f)
+		}
+	}
+	if len(perModel) < atLeast {
+		t.Fatalf("%d per-model maps in the settings, expected at least %d", len(perModel), atLeast)
+	}
+	for _, f := range perModel {
+		m := reflect.MakeMap(f.Type)
+		m.SetMapIndex(reflect.ValueOf("old/model"), reflect.New(f.Type.Elem()).Elem())
+		v.FieldByIndex(f.Index).Set(m)
+	}
+	if !renameModelPrefs(&s, "old", "new") {
+		t.Fatal("renaming moved nothing")
+	}
+	keys := func(m reflect.Value) []string {
+		var out []string
+		for _, k := range m.MapKeys() {
+			out = append(out, k.String())
+		}
+		slices.Sort(out)
+		return out
+	}
+	for _, f := range perModel {
+		m := v.FieldByIndex(f.Index)
+		if !m.MapIndex(reflect.ValueOf("new/model")).IsValid() || m.MapIndex(reflect.ValueOf("old/model")).IsValid() {
+			t.Errorf("%s holds %v", f.Name, keys(m))
+		}
+	}
+	if got := s.Visible["code"]; !slices.Equal(got, []string{"old/model", "old"}) {
+		t.Errorf("Visible, which is by agent id, was moved to %v", got)
 	}
 }
