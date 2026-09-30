@@ -80,12 +80,13 @@ var cliSpecs = map[string]cliSpec{
 			}
 			return nil
 		}},
-	"pi":      {npm: []string{"@earendil-works/pi-coding-agent", "@mariozechner/pi-coding-agent"}},
-	"omp":     {npm: []string{"@oh-my-pi/pi-coding-agent"}},
-	"copilot": {npm: []string{"@github/copilot"}, brew: []string{"copilot-cli"}},
-	"crush":   {npm: []string{"@charmland/crush"}, brew: []string{"crush"}},
-	"cline":   {npm: []string{"cline"}},
-	"goose":   {brew: []string{"block-goose-cli"}},
+	"pi":       {npm: []string{"@earendil-works/pi-coding-agent", "@mariozechner/pi-coding-agent"}},
+	"omp":      {npm: []string{"@oh-my-pi/pi-coding-agent"}},
+	"copilot":  {npm: []string{"@github/copilot"}, brew: []string{"copilot-cli"}},
+	"crush":    {npm: []string{"@charmland/crush"}, brew: []string{"crush"}},
+	"cline":    {npm: []string{"cline"}},
+	"dimagent": {npm: []string{"dimcode"}},
+	"goose":    {brew: []string{"block-goose-cli"}},
 	// omo update, however it was installed: OmO's own updater, which moves
 	// the engine it pins (senpi) with it
 	"omo": {npm: []string{"omo-ai"},

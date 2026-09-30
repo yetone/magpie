@@ -23,6 +23,7 @@ func TestAgentOf(t *testing.T) {
 		"grok-pager/0.2.1":                         "grok",
 		"ZCode/3.10.1":                             "zcode",
 		"Alma/1.2.0":                               "alma",
+		"DimAgent/0.9.32":                          "dimagent",
 		"HanaAgent/1.0":                            "hanako",
 		"hanako":                                   "hanako", // its key
 		"cline ai-sdk/openai-compatible/3.0.37":    "cline",

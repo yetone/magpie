@@ -96,12 +96,25 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | Qoder CN (CLI) | `~/.qoder-cn/settings.json` (`$QODERCN_CONFIG_DIR`) | model, effort (as Qoder; its own accounts, a Qoder CN plan with BYOK) |
 | Grok Build   | `~/.grok/config.toml` (`$GROK_HOME`) | model, effort |
 | ZCode        | `~/.zcode/v2/config.json`         | provider (magpie's models in ZCode's picker) |
+| DimAgent     | `~/.dimcode/v2/dimcode.sqlite` (`$DIMCODE_HOME/dimcode.sqlite` when set) | model, reasoning effort (global defaults; restart DimAgent) |
 | WorkBuddy    | `~/.workbuddy/models.json` (`$WORKBUDDY_CONFIG_DIR`) | provider (magpie's models in WorkBuddy's picker) |
 | OpenHanako   | `~/.hanako/provider-catalog.json` + `agents/<id>/config.yaml` (`$HANA_HOME`; its local API while it runs) | model (the primary agent's; magpie's models as a provider) |
 | Alma         | Alma's local API (`localhost:23001`, while Alma runs) | model (Alma's default; magpie's models as a provider) |
 
 Provider-scoped agents (OpenCode, MiMo Code, Pi, OmO, Goose, Crush, omp, Hermes Agent) take `provider/model`.
 Only agents that are installed or configured are shown.
+
+DimAgent's model selection in magpie changes its **global fallback default**;
+reasoning effort is saved as the selected provider/model's default. These
+controls do not select a workspace or session scope, or force the next new
+thread to use that model. Existing sessions, workspace selections and valid
+unsent draft choices retain their own choices. DimAgent's **New thread** button
+can inherit the previous session's choice, including across workspaces.
+Provider/model catalog edits update magpie's managed provider too.
+Ordinary DimAgent launches load these database changes after a restart.
+
+The integration writes SQLite transactions and requires no special DimAgent
+startup flags. Database paths use the platform's home directory or `DIMCODE_HOME`.
 
 ## Providers and the gateway
 

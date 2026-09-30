@@ -18,6 +18,8 @@ const I18N = {
     "Filter…": "筛选…",
 
     // agents
+    "Restart DimAgent to load changes to its providers, models and global defaults. Existing sessions and drafts keep their own choices.": "重启 DimAgent 以加载供应商、模型和全局默认配置的修改。已有会话和草稿保留各自的选择。",
+    "DimAgent global default. Sessions, workspace choices and valid drafts take precedence; new threads may inherit the previous session.": "DimAgent 全局默认配置。会话、工作区和有效草稿的选择优先；新建会话可能继承上一会话的选择。",
     "No agents found": "没有找到 Agent",
     "Install Claude Code, Codex, Gemini CLI, OpenCode… and magpie will list them here.": "安装 Claude Code、Codex、Gemini CLI、OpenCode…… 之后，magpie 会在这里列出它们。",
     "Show {n} more": "显示其余 {n} 个",

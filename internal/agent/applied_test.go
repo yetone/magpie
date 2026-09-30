@@ -122,6 +122,10 @@ func TestCodexDriftProfile(t *testing.T) {
 // and setting it again puts it back.
 func TestDriftUnwiredEveryAgent(t *testing.T) {
 	home, _ := codexHome(t, "", "")
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir uses this on Windows
+	dimDir := filepath.Join(home, ".dimcode", "v2")
+	t.Setenv("DIMCODE_HOME", dimDir)
+	dimDB := dimagentFixture(t, filepath.Join(dimDir, "dimcode.sqlite"))
 	managed := claudeManaged
 	claudeManaged = func() string { return filepath.Join(home, "managed-settings.json") }
 	t.Cleanup(func() { claudeManaged = managed })
@@ -171,7 +175,7 @@ func TestDriftUnwiredEveryAgent(t *testing.T) {
 			// something else points the agent at another server
 			n := 0
 			filepath.WalkDir(home, func(p string, e os.DirEntry, err error) error {
-				if err != nil || e.IsDir() {
+				if err != nil || e.IsDir() || strings.HasPrefix(p, dimDir+string(filepath.Separator)) {
 					return nil
 				}
 				b, _ := os.ReadFile(p)
@@ -181,6 +185,13 @@ func TestDriftUnwiredEveryAgent(t *testing.T) {
 				}
 				return nil
 			})
+			if a.ID == "dimagent" {
+				// SQLite/WAL cannot be edited with a byte-string replacement.
+				if _, err := dimDB.Exec("UPDATE providers SET baseUrl = ? WHERE providerId = ?", "http://127.0.0.1:9/v1", dimagentProviderID); err != nil {
+					t.Fatal(err)
+				}
+				n++
+			}
 			n += almaApp.repoint(gateway.URL(), "http://127.0.0.1:9")
 			if n == 0 {
 				t.Fatal("no file holds the gateway's URL")
