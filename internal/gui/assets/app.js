@@ -2754,7 +2754,7 @@ function renderConnect() {
   box.append(...field("Base URL", b, t("What {env} takes.", { env: f.baseEnv })));
 
   const k = el("div", "val");
-  const options = keys.map((k) => ({ v: k.id, name: k.name, note: k.masked }));
+  const options = keys.map((k) => ({ v: k.id, name: k.name, literalName: true, note: k.masked }));
   if (!remote) options.unshift({ v: "", name: "magpie", note: t("This computer · no key attribution") });
   if (options.length) k.append(connectPick("connectKey", "API key", key ? key.name : remote ? t("Choose an API key") : "magpie",
     options, connectKeyID, selectConnectKey));
@@ -6326,7 +6326,7 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
     b.type = "button";
     b.setAttribute("role", multi && o.v && o.v !== "\x00" ? "menuitemcheckbox" : "menuitemradio");
     const words = el("span", "pm-words");
-    words.append(el("span", "pm-name", t(o.name)), el("span", "pm-note", t(o.note)));
+    words.append(el("span", "pm-name", o.literalName ? o.name : t(o.name)), el("span", "pm-note", t(o.note)));
     b.append(el("span", "pm-tick"), words);
     tick(b, o);
     b.onclick = (e) => {

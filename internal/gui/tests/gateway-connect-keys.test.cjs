@@ -76,6 +76,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('#gatewayKeys .acc.off[data-key="work"]').waitFor();
       await page.locator("#connectKey").click();
       assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^Work$/ }).count(), 0);
+      assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^Local network$/ }).count(), 1,
+        "key names are user data, not translated interface labels");
       assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^magpie$/ }).count(), 0, "arbitrary loopback tokens cannot be selected for LAN");
       await page.keyboard.press("Escape");
       await row("server").getByRole("button", { name: w.disable, exact: true }).click();
