@@ -177,12 +177,16 @@ func (s *Server) askQoder(model, user string) round {
 		}
 		wire := qoder.EncodeRequestBody(plain)
 		ts := time.Now().Unix()
-		headers, err := qoder.BuildCosyHeaders(qoderURL(), &qoder.User{UID: cred.UID, Token: cred.Token,
+		endpoint := qoderURL()
+		if cred.VPCEndpoint != "" {
+			endpoint = qoder.ChatURLFor(cred.VPCEndpoint)
+		}
+		headers, err := qoder.BuildCosyHeaders(endpoint, &qoder.User{UID: cred.UID, Token: cred.Token,
 			Name: cred.Name, Email: cred.Email, MachineID: cred.MachineID}, wire, ts)
 		if err != nil {
 			return nil, 500, "Qoder: " + err.Error()
 		}
-		hr, err := http.NewRequestWithContext(ctx, http.MethodPost, qoderURL(), strings.NewReader(wire))
+		hr, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(wire))
 		if err != nil {
 			return nil, 500, "Qoder: " + err.Error()
 		}

@@ -30,13 +30,18 @@ type UserInfo struct {
 // token is short-lived but outlasts the sign-in that just made it, so this
 // runs during the flow while it is fresh.
 func FetchUserInfo(ctx context.Context, client *http.Client, deviceToken string) (*UserInfo, error) {
+	return FetchUserInfoAt(ctx, client, deviceToken, "")
+}
+
+// FetchUserInfoAt asks the public or enterprise account endpoint.
+func FetchUserInfoAt(ctx context.Context, client *http.Client, deviceToken, vpcEndpoint string) (*UserInfo, error) {
 	if strings.TrimSpace(deviceToken) == "" {
 		return nil, fmt.Errorf("qoder userinfo: missing device token")
 	}
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, openAPIHost+UserInfoPath, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, BaseURL(vpcEndpoint, openAPIHost)+UserInfoPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("qoder userinfo: create request: %w", err)
 	}

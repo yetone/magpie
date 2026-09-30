@@ -20,6 +20,7 @@ type Credential struct {
 	ExpiresAt     int64           `json:"expires_at"`
 	MachineID     string          `json:"machine_id"`
 	Models        json.RawMessage `json:"models,omitempty"`
+	VPCEndpoint   string          `json:"vpc_endpoint,omitempty"`
 }
 
 const refreshLead = 5 * time.Minute
@@ -34,7 +35,7 @@ func (c Credential) Refresh(ctx context.Context, client *http.Client) (Credentia
 	if c.RefreshToken == "" {
 		return Credential{}, fmt.Errorf("qoder: the sign-in lapsed; sign in again")
 	}
-	jt, err := RefreshJobToken(ctx, client, c.RefreshToken)
+	jt, err := RefreshJobTokenAt(ctx, client, c.RefreshToken, c.VPCEndpoint)
 	if err != nil {
 		return Credential{}, err
 	}

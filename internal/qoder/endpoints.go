@@ -11,6 +11,12 @@
 // This package supports the global Qoder client.
 package qoder
 
+import (
+	"fmt"
+	"net/url"
+	"strings"
+)
+
 // OAuth device-flow configuration (verified against live captures).
 const (
 	// ClientID is Qoder's device-flow client id.
@@ -54,3 +60,37 @@ const ProviderKey = "qoder"
 
 // ChatURL is the full chat endpoint on the inference host.
 func ChatURL() string { return APIHost + ChatPath }
+
+// NormalizeVPCEndpoint validates an optional enterprise access domain and
+// returns its canonical base URL. Empty means the public Qoder service.
+func NormalizeVPCEndpoint(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "", fmt.Errorf("invalid Qoder enterprise access domain")
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return "", fmt.Errorf("Qoder enterprise access domain must use http or https")
+	}
+	if u.User != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.Fragment != "" {
+		return "", fmt.Errorf("Qoder enterprise access domain must not include a path, query, or credentials")
+	}
+	return strings.TrimRight(u.Scheme+"://"+u.Host, "/"), nil
+}
+
+// BaseURL returns the enterprise base URL, or fallback for a public account.
+func BaseURL(vpcEndpoint, fallback string) string {
+	if strings.TrimSpace(vpcEndpoint) != "" {
+		return strings.TrimRight(vpcEndpoint, "/")
+	}
+	return fallback
+}
+
+// ChatURLFor returns the per-account inference endpoint.
+func ChatURLFor(vpcEndpoint string) string { return BaseURL(vpcEndpoint, APIHost) + ChatPath }

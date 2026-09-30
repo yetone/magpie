@@ -4606,7 +4606,7 @@ const SUBS = [
   // said on X may get an account banned when used from other tools
   { agent: "commandcode-plan", name: "Command Code", icon: "commandcode", plans: "Go · Pro · GOAT · Max · Ultra", own: true, risk: true,
     riskNote: "A Go plan account is used through Command Code's private interface, which Command Code may treat as a breach of its terms and ban the account for. Pro, Max and the other plans use its Provider API. Use a Go account you can afford to lose." },
-  { agent: "qoder", name: "Qoder", icon: "qoder", plans: "Pro", own: true, risk: true,
+  { agent: "qoder", name: "Qoder", icon: "qoder", plans: "Pro · Enterprise", own: true, risk: true, endpoint: true,
     riskNote: "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose." },
   // the devin CLI's own account is read; more are signed in beside it, each in a data folder of magpie's
   { agent: "devin", name: "Devin", icon: "devin", plans: "Pro · Enterprise", own: true },
@@ -4659,6 +4659,12 @@ async function startSignIn(agent, risky, site) {
   // an account Google may suspend is added only once that is said
   if (subOf(agent)?.risk && !risky) {
     signing = { agent, state: "risk" };
+    renderProviders();
+    return;
+  }
+  // an enterprise-capable provider asks for an optional access domain first
+  if (subOf(agent)?.endpoint && site === undefined) {
+    signing = { agent, state: "site" };
     renderProviders();
     return;
   }
@@ -4801,6 +4807,23 @@ function renderSigning(sub) {
     return box;
   }
   if (signing.state === "site") {
+    if (sub.endpoint) {
+      tt.append(el("span", "n", t("Qoder service address")),
+        el("span", "s", t("Leave blank for Qoder official, or enter the enterprise access domain supplied by your administrator.")));
+      box.append(tt);
+      const input = el("input", "input");
+      input.placeholder = "example.vpc.qoder.com.cn";
+      input.autocomplete = "off";
+      box.append(input);
+      const close = el("button", "text", t("Cancel"));
+      close.onclick = cancelSignIn;
+      const official = el("button", "text", t("Qoder official"));
+      official.onclick = () => startSignIn(sub.agent, true, "");
+      const enterprise = el("button", "text primary", t("Enterprise VPC"));
+      enterprise.onclick = () => startSignIn(sub.agent, true, input.value.trim());
+      box.append(close, official, enterprise);
+      return box;
+    }
     // ZCode: a Z.ai account or a BigModel (智谱) one, a team's seat included
     tt.append(el("span", "n", t("Where is your {name} account?", { name: sub.name })),
       el("span", "s", t("Sign in where your GLM Coding Plan was bought, a team's plan too: z.ai, or bigmodel.cn for 智谱.")));

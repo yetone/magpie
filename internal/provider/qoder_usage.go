@@ -18,13 +18,13 @@ func qoderLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 		q.Error = err.Error()
 		return q
 	}
-	raw, err := qoder.FetchUsage(ctx, qoderClient, "", c.DeviceToken)
+	raw, err := qoder.FetchUsage(ctx, qoderClient, qoder.BaseURL(c.VPCEndpoint, qoder.OpenAPIHost), c.DeviceToken)
 	var status *qoder.UsageHTTPError
 	if errors.As(err, &status) && (status.StatusCode == 401 || status.StatusCode == 403) {
 		var token string
 		token, err = qoderRefreshDevice(ctx, l.User, c.DeviceToken)
 		if err == nil {
-			raw, err = qoder.FetchUsage(ctx, qoderClient, "", token)
+			raw, err = qoder.FetchUsage(ctx, qoderClient, qoder.BaseURL(c.VPCEndpoint, qoder.OpenAPIHost), token)
 		}
 	}
 	if err != nil {
@@ -59,7 +59,7 @@ func qoderRefreshDevice(ctx context.Context, user, attempted string) (string, er
 	}
 	// the device refresh token rotates too: keep its reply past the caller
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), qoderRefreshTimeout)
-	dt, err := qoder.RefreshDeviceToken(rctx, qoderClient, "", c.DeviceRefresh)
+	dt, err := qoder.RefreshDeviceToken(rctx, qoderClient, qoder.BaseURL(c.VPCEndpoint, qoder.OpenAPIHost)+qoder.DeviceTokenRefreshPath, c.DeviceRefresh)
 	cancel()
 	if err != nil {
 		// The device token serves only the account pages (usage); chat
