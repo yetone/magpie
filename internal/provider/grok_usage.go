@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// grokBase is the CLI's backend; a var so tests can point it elsewhere.
-var grokBase = "https://cli-chat-proxy.grok.com/v1"
+// GrokBase is the CLI's backend; a var so tests can point it elsewhere.
+var GrokBase = "https://cli-chat-proxy.grok.com/v1"
 
 func grokSubscriptionUsage(ctx context.Context) SubscriptionQuota {
 	q := SubscriptionQuota{Provider: "grok", Name: "Grok (SuperGrok)", Icon: "xai", Windows: []QuotaWindow{}}
@@ -47,7 +47,7 @@ func grokWindows(ctx context.Context, token string) ([]QuotaWindow, error) {
 			OnDemandUsed     grokAmount `json:"onDemandUsed"`
 		} `json:"config"`
 	}
-	if err := accountJSON(ctx, grokBase+"/billing?format=credits", token, nil, &data); err != nil {
+	if err := accountJSON(ctx, GrokBase+"/billing?format=credits", token, nil, &data); err != nil {
 		return []QuotaWindow{}, err
 	}
 	cfg := data.Config

@@ -6,9 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
@@ -318,5 +321,89 @@ func TestCodexAccountDraws(t *testing.T) {
 	mu.Lock()
 	if code != 200 || paths[1] != "/backend-api/codex/images/edits" || head.Get("Content-Type") != "application/json" || !strings.Contains(bodies[1], `"images":[{"image_url":"data:image/png;base64,`) {
 		t.Fatalf("%d %s; asked %v %s", code, raw, paths, head.Get("Content-Type"))
+	}
+}
+
+// grokSignedIn gives the test's HOME the Grok CLI's sign-in, and a CLI to find.
+func grokSignedIn(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("GROK_HOME", filepath.Join(home, ".grok"))
+	os.MkdirAll(filepath.Join(home, ".grok"), 0o755)
+	os.WriteFile(filepath.Join(home, ".grok", "auth.json"), mustJSON(map[string]any{
+		"https://auth.x.ai": map[string]any{"key": "k-me", "email": "me@x.ai", "expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)}}), 0o600)
+	was := provider.GrokExecutable
+	provider.GrokExecutable = func() string { return "/nonexistent/grok" }
+	t.Cleanup(func() { provider.GrokExecutable = was })
+}
+
+// A Grok subscription draws at the Imagine API of the backend Grok Build talks
+// to: the aspect ratio replaces the size, the image comes back as base64, an
+// edit is JSON with the images as data URLs.
+func TestGrokAccountDraws(t *testing.T) {
+	grokSignedIn(t)
+	var mu sync.Mutex
+	var paths, bodies []string
+	var head http.Header
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		paths, bodies, head = append(paths, r.URL.Path), append(bodies, string(b)), r.Header.Clone()
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"data":[{"b64_json":"`+base64.StdEncoding.EncodeToString(pngBytes)+`"}]}`)
+	}))
+	defer up.Close()
+	was := provider.GrokBase
+	provider.GrokBase = up.URL + "/v1"
+	defer func() { provider.GrokBase = was }()
+	p, err := provider.Find("grok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ds := Drawers(*p); len(ds) != 2 || ds[0].ID != "grok-imagine-image" || ds[1].ID != "grok-imagine-image-quality" || ds[0].Provider != "grok" {
+		t.Fatalf("drawers %v", ds)
+	}
+	if m, ok := drawer(); !ok || m != "grok/grok-imagine-image" {
+		t.Fatalf("drawer = %q %v", m, ok)
+	}
+	s := New()
+	code, a, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"grok/grok-imagine-image","prompt":"a magpie","size":"1792x1024"}`)
+	if code != 200 || len(a.Data) != 1 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if paths[0] != "/v1/images/generations" || !strings.Contains(bodies[0], `"model":"grok-imagine-image"`) ||
+		!strings.Contains(bodies[0], `"response_format":"b64_json"`) || !strings.Contains(bodies[0], `"aspect_ratio":"16:9"`) || strings.Contains(bodies[0], `"size"`) {
+		t.Fatalf("asked %v %v", paths, bodies)
+	}
+	if head.Get("Authorization") != "Bearer k-me" || head.Get("x-grok-client-identifier") != "grok-shell" || !strings.HasPrefix(head.Get("User-Agent"), "grok-shell/") {
+		t.Fatalf("headers %v", head)
+	}
+	mu.Unlock()
+	img := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
+	code, _, raw = postImages(t, s, "/v1/images/edits", "application/json", `{"model":"grok/grok-imagine-image","prompt":"bluer","images":[{"image_url":"`+img+`"}]}`)
+	mu.Lock()
+	if code != 200 || paths[1] != "/v1/images/edits" || head.Get("Content-Type") != "application/json" || !strings.Contains(bodies[1], `"images":[{"type":"image_url","url":"data:image/png;base64,`) {
+		t.Fatalf("%d %s; asked %v %s", code, raw, paths, bodies[1])
+	}
+}
+
+func TestAspectAmong(t *testing.T) {
+	for size, want := range map[string]string{
+		"1792x1024": "16:9", "1024x1792": "9:16", "1024x1024": "1:1", "2048x1024": "2:1", "1536x1024": "3:2",
+		"16:9": "16:9", "garbage": "", "": "", "0x10": "",
+	} {
+		if got := aspectAmong(size, grokAspects); got != want {
+			t.Errorf("aspectAmong(%q, grok) = %q, want %q", size, got, want)
+		}
+	}
+	// the ratios the other vendors take are unchanged
+	if got := aspectOf("1024x1280"); got != "4:5" {
+		t.Errorf("aspectOf(1024x1280) = %q, want 4:5", got)
 	}
 }

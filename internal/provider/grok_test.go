@@ -34,9 +34,9 @@ func TestGrokSigns(t *testing.T) {
 		w.Write([]byte(`{"data":[{"id":"grok-4.7","api_backend":"responses"}]}`))
 	}))
 	defer up.Close()
-	base := grokBase
-	grokBase = up.URL
-	defer func() { grokBase = base }()
+	base := GrokBase
+	GrokBase = up.URL
+	defer func() { GrokBase = base }()
 	home := t.TempDir()
 	grokSignedIn(t, home, "me@x.ai")
 	acct := &Account{Agent: "grok"}

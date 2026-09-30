@@ -68,6 +68,20 @@ var codexDrawers = []catalog.Model{
 	{ID: "gpt-image-2.5", Name: "GPT Image 2.5", Released: "2026-06-01"},
 }
 
+// grokDrawers are the image models a Grok subscription (SuperGrok, X Premium+)
+// draws with, at the Imagine API of the backend Grok Build's image_gen tool
+// calls: cli-chat-proxy.grok.com/v1/images/generations.
+var grokDrawers = []catalog.Model{
+	{ID: "grok-imagine-image", Name: "Grok Imagine"},
+	{ID: "grok-imagine-image-quality", Name: "Grok Imagine Quality"},
+}
+
+// drawsGrok is whether p is a Grok subscription, which draws at the Imagine
+// API of the backend Grok Build talks to.
+func drawsGrok(p provider.Provider) bool {
+	return p.Account != nil && p.Account.Agent == "grok" && p.Base(provider.Responses) != ""
+}
+
 // drawsCodex is whether p is a ChatGPT account, which draws at its Codex
 // backend's images API.
 func drawsCodex(p provider.Provider) bool {
@@ -76,10 +90,14 @@ func drawsCodex(p provider.Provider) bool {
 
 // Drawers are the models a provider can draw with: its catalogs' models
 // that make images, those its own model list names that do, and those of
-// its own picks named for images; a ChatGPT account's GPT Image.
+// its own picks named for images; a ChatGPT account's GPT Image, a Grok
+// subscription's Grok Imagine.
 func Drawers(p provider.Provider) []catalog.Model {
-	if drawsCodex(p) {
+	if drawsCodex(p) || drawsGrok(p) {
 		out := slices.Clone(codexDrawers)
+		if drawsGrok(p) {
+			out = slices.Clone(grokDrawers)
+		}
 		for i := range out {
 			out[i].Provider = p.ID
 		}
@@ -129,8 +147,8 @@ func AutoDrawer() string {
 		for _, m := range Drawers(p) {
 			cost := 1e9
 			switch {
-			case drawsCodex(p):
-				cost = 0 // a ChatGPT plan's images come with it
+			case drawsCodex(p), drawsGrok(p):
+				cost = 0 // a ChatGPT or Grok plan's images come with it
 			case m.Price != nil:
 				cost = m.Price.Input + m.Price.Output
 			}
@@ -449,7 +467,7 @@ func viaFor(p provider.Provider, model string) drawVia {
 // draw asks the provider for d's images, on the API model draws on there,
 // and on the other when that one isn't served.
 func (s *Server) draw(ctx context.Context, p provider.Provider, model string, d drawing) (drawn, int, error) {
-	if drawsCodex(p) {
+	if drawsCodex(p) || drawsGrok(p) {
 		return s.drawImages(ctx, p, model, d)
 	}
 	if p.Base(provider.Chat) == "" {
@@ -547,13 +565,30 @@ func vendorMessage(b []byte) string {
 // sent along.
 func (s *Server) drawImages(ctx context.Context, p provider.Provider, model string, d drawing) (drawn, int, error) {
 	base := strings.TrimRight(p.Base(provider.Chat), "/")
-	if drawsCodex(p) {
+	if drawsCodex(p) || drawsGrok(p) {
 		base = strings.TrimRight(p.Base(provider.Responses), "/")
 	}
 	var body []byte
 	var ct, url string
 	m := strings.ToLower(model)
-	if len(d.Images) == 0 {
+	if drawsGrok(p) {
+		// Grok's Imagine API takes an aspect ratio, not a size or a quality
+		req := map[string]any{"model": model, "prompt": d.Prompt, "n": d.N, "response_format": "b64_json"}
+		if ar := aspectAmong(d.Size, grokAspects); ar != "" {
+			req["aspect_ratio"] = ar
+		}
+		if len(d.Images) > 0 {
+			var imgs []map[string]string
+			for _, pic := range d.Images {
+				imgs = append(imgs, map[string]string{"url": pic.dataURL(), "type": "image_url"})
+			}
+			req["images"] = imgs
+			ct, url = "application/json", base+"/images/edits"
+		} else {
+			ct, url = "application/json", base+"/images/generations"
+		}
+		body, _ = json.Marshal(req)
+	} else if len(d.Images) == 0 {
 		req := map[string]any{"model": model, "prompt": d.Prompt, "n": d.N}
 		for k, v := range map[string]string{"size": d.Size, "quality": d.Quality, "background": d.Background, "output_format": d.Format} {
 			if v != "" {
@@ -912,6 +947,15 @@ func (s *Server) eachDrawing(n int, ask func() (drawn, int, error)) (drawn, int,
 // that take a ratio name it: the nearest of those they take. "" for none
 // or "auto".
 func aspectOf(size string) string {
+	return aspectAmong(size, []string{"1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"})
+}
+
+// grokAspects are the aspect ratios Grok's Imagine API takes.
+var grokAspects = []string{"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3", "2:1", "1:2", "19.5:9", "9:19.5", "20:9", "9:20"}
+
+// aspectAmong is size as the nearest of the aspect ratios in ratios: a
+// ratio given as one passes through, WIDTHxHEIGHT is matched to the closest.
+func aspectAmong(size string, ratios []string) string {
 	w, h, ok := strings.Cut(strings.ToLower(strings.TrimSpace(size)), "x")
 	if !ok {
 		if strings.Contains(size, ":") {
@@ -925,7 +969,7 @@ func aspectOf(size string) string {
 		return ""
 	}
 	best, bestD := "", math.Inf(1)
-	for _, r := range []string{"1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"} {
+	for _, r := range ratios {
 		a, b, _ := strings.Cut(r, ":")
 		ra, _ := strconv.ParseFloat(a, 64)
 		rb, _ := strconv.ParseFloat(b, 64)

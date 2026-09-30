@@ -165,9 +165,9 @@ func grokAccount() (Provider, bool) {
 		if err != nil {
 			return nil, err
 		}
-		return ms, catalog.SaveLive("grok", grokBase, ms)
+		return ms, catalog.SaveLive("grok", GrokBase, ms)
 	}
-	return Provider{ID: "grok", Name: "Grok (SuperGrok)", Icon: "xai", Website: "https://x.ai/cli", Responses: grokBase, Account: acct}, true
+	return Provider{ID: "grok", Name: "Grok (SuperGrok)", Icon: "xai", Website: "https://x.ai/cli", Responses: GrokBase, Account: acct}, true
 }
 
 // grokSigned has the account's requests signed with the sign-in in home.
@@ -316,7 +316,7 @@ func grokVersion() string {
 // grokModels lists what the account can use, with each model's context
 // window and efforts, as the CLI's backend lists them.
 func grokModels(ctx context.Context, sign func(context.Context, *http.Request, []byte) error) ([]catalog.Model, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, grokBase+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, GrokBase+"/models", nil)
 	if err != nil {
 		return nil, err
 	}
