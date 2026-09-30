@@ -112,21 +112,14 @@ func omp(home string) *Agent {
 			return strings.Join(edit.GetYAMLList(path, k), ",")
 		}
 	}
-	// onMagpie: a model named under the keys (ompRefKeys, or some of them)
-	// still goes through magpie
-	onMagpie := func(keys ...string) (used bool, err error) {
-		err = edit.EditYAMLStrings(path, keys, func(v string) string {
+	// onMagpie: a role, a fallback chain, … (ompRefKeys) still names one of
+	// magpie's models
+	onMagpie := func() (used bool, err error) {
+		err = edit.EditYAMLStrings(path, ompRefKeys, func(v string) string {
 			ompRefs(v, func(m string) string { used = used || usesMagpie(m); return m })
 			return v
 		})
 		return used, err
-	}
-	dropMagpie := func() error {
-		// another role, a fallback chain, … may still go through magpie
-		if used, err := onMagpie(ompRefKeys...); err != nil || used {
-			return err
-		}
-		return edit.DelYAML(pick("models"), "providers."+magpieID)
 	}
 	writeMagpie := func() error {
 		models := pick("models")
@@ -138,6 +131,20 @@ func omp(home string) *Agent {
 			}
 		}
 		return edit.SetYAML(models, edit.KV{Path: "providers." + magpieID, Value: ompProvider()})
+	}
+	// dropMagpie takes magpie's provider out of models.yml once nothing in
+	// the config is on magpie; while something is (a fallback chain, another
+	// role), it writes it afresh instead, so a role set off magpie — applying
+	// again what Check found — mends the wiring that is left.
+	dropMagpie := func() error {
+		used, err := onMagpie()
+		switch {
+		case err != nil:
+			return err
+		case used:
+			return writeMagpie()
+		}
+		return edit.DelYAML(pick("models"), "providers."+magpieID)
 	}
 	// role is the field for one of omp's model roles: one of magpie's brings
 	// magpie's provider into models.yml, and it goes once nothing is on it.
@@ -238,9 +245,9 @@ func omp(home string) *Agent {
 			return ""
 		},
 		Check: func() string {
-			// a role on magpie has its wiring checked; a fallback chain or
-			// the like alone keeps the provider but isn't checked
-			if used, _ := onMagpie("modelRoles"); !used {
+			// whatever keeps magpie's provider in models.yml has its wiring
+			// checked, a fallback chain alone as much as a role
+			if used, _ := onMagpie(); !used {
 				return ""
 			}
 			models := pick("models")

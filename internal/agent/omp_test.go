@@ -478,7 +478,8 @@ func TestOmpRoleList(t *testing.T) {
 
 // A role on magpie at a thinking level that a fallback chain names too: a
 // provider renamed moves each once, the level kept. The role back on omp's
-// own, the chain still keeps magpie's provider.
+// own, the chain alone keeps magpie's provider, has its wiring checked, and
+// applying again mends it.
 func TestOmpRoleAndChain(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -511,5 +512,15 @@ func TestOmpRoleAndChain(t *testing.T) {
 	}
 	if v, _ := edit.GetYAML(modelsPath, "providers.magpie.baseUrl"); v == "" || a.Field("slow").Get() != "" {
 		t.Fatalf("the chain lost magpie's provider, or slow stayed: %q", a.Field("slow").Get())
+	}
+	edit.SetYAML(modelsPath, edit.KV{Path: "providers.magpie.baseUrl", Value: "http://127.0.0.1:1/v1"})
+	if d := a.Drift(); d == nil || d.Kind != "unwired" {
+		t.Fatalf("a chain's broken wiring: %+v", d)
+	}
+	if err := a.Reapply(); err != nil {
+		t.Fatal(err)
+	}
+	if c := a.Check(); c != "" {
+		t.Fatalf("applying again left: %s", c)
 	}
 }
