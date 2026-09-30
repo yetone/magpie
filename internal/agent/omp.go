@@ -168,7 +168,10 @@ func omp(home string) *Agent {
 			},
 		}, {
 			// the thinking level sessions start with, as omp's settings save
-			// it; unset omp takes high (it also knows auto, its own pick)
+			// it; unset omp takes high. auto has omp pick a level each turn:
+			// not a level a model lists, so it is offered here and kept out of
+			// ompEfforts, which a model's thinking levels are filtered by. First,
+			// as omp's own picker has it (omp 18.4.4, session/settings.ts)
 			Key: "effort", Label: "thinking",
 			Get: func() string { v, _ := edit.GetYAML(path, "defaultThinkingLevel"); return v },
 			Set: func(v string) error {
@@ -177,7 +180,7 @@ func omp(home string) *Agent {
 				}
 				return edit.SetYAML(path, edit.KV{Path: "defaultThinkingLevel", Value: v})
 			},
-			Options: func(map[string]string) []Option { return static(ompEfforts...) },
+			Options: func(map[string]string) []Option { return static(append([]string{"auto"}, ompEfforts...)...) },
 		}},
 	}
 }

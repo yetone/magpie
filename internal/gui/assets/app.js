@@ -1536,7 +1536,10 @@ function effortBars(f) {
 // shows at once, bars and all; the write follows, in order, so a slow agent
 // config never holds the thumb (巨卡).
 function effortSeg(a, f) {
-  const options = f.options;
+  // a value that isn't one of the levels (unset, or one magpie doesn't list)
+  // is a stop of its own, as the picker's current value is: shown as the
+  // lowest level, a touch wrote that level over it
+  const options = f.options.some((o) => o.value === f.value) ? f.options : [{ value: f.value }, ...f.options];
   const last = Math.max(1, options.length - 1);
   const box = el("div", "effort-control");
   const head = el("div", "effort-head");
@@ -1562,7 +1565,7 @@ function effortSeg(a, f) {
   ends.setAttribute("aria-hidden", "true");
   ends.append(el("span", "", effortName(options[0])), el("span", "", effortName(options[options.length - 1])));
   box.append(head, track, ends);
-  let at = Math.max(0, options.findIndex((o) => o.value === f.value));
+  let at = options.findIndex((o) => o.value === f.value);
   const show = (i) => {
     at = i;
     track.style.setProperty("--p", i / last);

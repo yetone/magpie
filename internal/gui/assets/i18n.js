@@ -198,6 +198,7 @@ const I18N = {
     "high": "高",
     "xhigh": "很高",
     "max": "最高",
+    "auto": "自动",
     "{label}: {value}": "{label}：{value}",
     "Profiles": "方案",
     "＋ Save current": "＋ 保存当前",
