@@ -126,22 +126,11 @@ func usageTo(out io.Writer, args []string) error {
 		})
 	}
 	if len(s.CallerKeys) > 0 {
-		userName := func(g stats.Group) string {
-			if g.UserID == "" {
-				return "local / unassigned"
-			}
-			if g.UserName != "" {
-				return g.UserName
-			}
-			return g.UserID
-		}
-		table("users", s.Users, userName)
 		table("caller keys", s.CallerKeys, func(g stats.Group) string {
-			name := g.CallerKeyName
-			if name == "" {
-				name = g.CallerKeyID
+			if g.CallerKeyName != "" {
+				return g.CallerKeyName
 			}
-			return userName(g) + " / " + name
+			return g.CallerKeyID
 		})
 	}
 	if len(s.Sessions) > 0 {
