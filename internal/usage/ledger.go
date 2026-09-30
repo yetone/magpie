@@ -106,6 +106,14 @@ func Ledger(p Period, f Filter) (rows []Row, sum Totals, agents []string) {
 	return ledger(p.Since(time.Now()), f, Load(time.Time{}))
 }
 
+// LedgerWithKeys also lists the period's keys before filtering, so a page
+// can change its key filter without losing the other choices.
+func LedgerWithKeys(p Period, f Filter) (rows []Row, sum Totals, agents []string, keys []Group) {
+	now, recs := time.Now(), Load(time.Time{})
+	rows, sum, agents = ledger(p.Since(now), f, recs)
+	return rows, sum, agents, summarize(p, now, recs).Keys
+}
+
 func ledger(since time.Time, f Filter, recs []Record) (rows []Row, sum Totals, agents []string) {
 	renamed := provider.Renamed()
 	// the upstream names in force now, read once for the lot: a row is

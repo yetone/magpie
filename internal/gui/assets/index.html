@@ -123,11 +123,14 @@
     <div class="list" id="usageAgents"></div>
     <div class="row-head"><span class="label" data-t>Models</span></div>
     <div class="list" id="usageModels"></div>
+    <div class="row-head" id="usageKeysHead" hidden><span class="label" data-t>API keys</span></div>
+    <div class="list" id="usageKeys" hidden></div>
     <p class="usage-note" id="usageNote"></p>
   </div>
   <div class="usage-pane" id="ledgerPane" hidden>
     <div class="sess-tools">
       <button class="sess-pick" id="ledAgent" type="button" hidden></button>
+      <button class="sess-pick" id="ledKey" type="button" hidden></button>
       <div class="segs" id="ledStatus"></div>
       <span class="grow"></span>
       <input class="sess-filter" id="ledQ" type="search" spellcheck="false" autocomplete="off" placeholder="Search models, providers, sessions" data-tp>

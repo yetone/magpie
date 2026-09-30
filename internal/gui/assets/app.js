@@ -6705,7 +6705,7 @@ function renderUsageLoading() {
     stats.append(tile);
   }
   $("#chart").hidden = true;
-  for (const id of ["usageAgents", "usageModels"]) $("#" + id).hidden = true;
+  for (const id of ["usageAgents", "usageModels", "usageKeys"]) $("#" + id).hidden = true;
   for (const h of $$("#view-usage .row-head")) h.hidden = true;
   $("#usageNote").textContent = "";
 }
@@ -7319,6 +7319,7 @@ function renderUsage() {
   $("#chart").hidden = empty;
   for (const id of ["usageAgents", "usageModels"]) $("#" + id).hidden = empty;
   for (const h of $$("#view-usage .row-head")) h.hidden = empty;
+  $("#usageKeysHead").hidden = $("#usageKeys").hidden = empty || !u.keys?.length;
   if (empty) {
     stats.classList.add("empty");
     const none = { today: "No calls today.", "7d": "No calls in the last 7 days.", "30d": "No calls in the last 30 days.", all: "No calls yet." }[period];
@@ -7375,7 +7376,7 @@ function renderUsage() {
       const r = el("div", "row stat");
       r.append(icon(g.icon || "generic"));
       const who = el("div", "who");
-      who.append(el("div", "name", g.name));
+      who.append(el("div", "name", id === "usageKeys" && !g.keyId ? t("Key not recorded") : g.name));
       const sub = [];
       if (g.sub) sub.push(g.sub);
       sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
@@ -7404,6 +7405,7 @@ function renderUsage() {
   };
   list("usageAgents", u.agents);
   list("usageModels", u.models);
+  list("usageKeys", u.keys || []);
   $("#usageNote").textContent = t("Counted from the providers' own usage reports on every call through the gateway · {path}", { path: u.path });
 }
 
@@ -7416,12 +7418,13 @@ function renderUsage() {
 // server pages it (/api/usage/requests) and saves it whole as CSV.
 
 let ledger = null; // the page shown: { rows, offset, total, agents, …totals }
-let ledOffset = 0, ledAgent = "", ledFailed = false, ledQuery = "";
+let ledOffset = 0, ledAgent = "", ledKey = "", ledFailed = false, ledQuery = "";
 const LED_PAGE = 100;
 
 function ledParams(extra) {
   const q = new URLSearchParams({ period });
   if (ledAgent) q.set("agent", ledAgent);
+  if (ledKey) q.set("key", ledKey);
   if (ledFailed) q.set("failed", "1");
   if (ledQuery.trim()) q.set("q", ledQuery.trim());
   if (extra) for (const k in extra) q.set(k, extra[k]);
@@ -7505,6 +7508,9 @@ function renderLedger() {
   // the filters: the agents with calls in the period, and failures alone
   if (ledAgent && !l.agents.some((a) => a.id === ledAgent)) ledAgent = "";
   sessPick($("#ledAgent"), "All agents", ledAgent, l.agents.map((a) => ({ v: a.id, name: a.name, note: "" })), "Agent", (v) => { ledAgent = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
+  sessPick($("#ledKey"), "All API keys", ledKey, (l.keys || []).map((k) => ({
+    v: k.id, name: k.sub + " · " + (k.keyId ? k.name : t("Key not recorded")), note: k.keyId || "",
+  })), "API keys", (v) => { ledKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   const seg = $("#ledStatus");
   seg.replaceChildren();
   for (const [on, name] of [[false, "All"], [true, "Failed"]]) {
@@ -7532,7 +7538,7 @@ function renderLedger() {
   const pager = $("#ledPager");
   if (!l.total) {
     wrap.classList.add("none");
-    const filtered = ledAgent || ledFailed || ledQuery.trim();
+    const filtered = ledAgent || ledKey || ledFailed || ledQuery.trim();
     const none = { today: "No calls today.", "7d": "No calls in the last 7 days.", "30d": "No calls in the last 30 days.", all: "No calls yet." }[period];
     wrap.replaceChildren(el("div", "led-none", filtered ? t("No requests match these filters.") : t(none)));
     pager.hidden = true;
@@ -7562,8 +7568,9 @@ function renderLedger() {
     who.append(icon(r.icon || "generic"), el("span", "", r.via ? t("{agent} · via {host}", { agent: name, host: r.via }) : name));
     td(who, "", [r.kind, r.session && t("session {id}", { id: r.session })].filter(Boolean).join(" · "));
     td(r.req || "—", "model" + (r.req ? "" : " faint"), r.req || t("Not kept for requests before this version"));
-    const where = r.providerName + (r.host ? " · " + r.host : "");
-    td(where, "where", where);
+    const key = !r.keyId && r.keyLabel ? t("Key not recorded") : (r.keyLabel || r.keyName || r.keyId || "");
+    const where = r.providerName + (key ? " · " + key : r.host ? " · " + r.host : "");
+    td(where, "where", [r.providerName, key, r.keyId, r.host].filter(Boolean).join(" · "));
     td(r.model || "—", "model", r.model);
     td(ledServed(r), "model");
     td(r.effort || "—", r.effort ? "" : "faint");
