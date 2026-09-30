@@ -156,30 +156,39 @@ Its list is the models the shared magpie's agents are shown, each named with
 its provider there (`Claude Sonnet 5 · Relay A · office`), and its image
 models are listed under Settings → Images and draw through it.
 
-The gateway also issues **named caller keys**, independent of a provider's
-upstream API keys. Open **Gateway → API keys → New key** to create a key
-for each client, then copy it from its row and use it with the gateway's
-existing base URL. Rename, disable, or remove keys independently; changes
-apply to the running gateway immediately, while calls already in progress
-finish. Other computers still require **Settings → Local network → Share on
-local network** to be enabled; they authenticate with these same named keys.
-Keys are managed only in Gateway; Settings controls sharing and lists the
-network addresses. Each key's **New key** action invalidates only that
-credential, preserving its name, enabled state and usage history; other
-keys are unchanged. **Gateway → Connect** lets you choose a loopback or
-shared network address and an enabled API key; all examples and copy
-buttons use those choices. The untracked `magpie` token is loopback-only.
+The gateway issues **gateway keys** for clients, separate from a provider's
+upstream API keys. Turn on **Settings → Share on local network**, then open
+**Gateway → Gateway keys → Add gateway key**. This block appears only while
+sharing is on. Create a named key for each client and copy it from its row.
+Rename, disable, rotate or remove keys independently; rotation and removal
+ask for confirmation. Rotation keeps the name, enabled state and usage
+history; other keys are unchanged. **Gateway → Connect** offers the loopback
+and shared addresses, plus enabled gateway keys, for all connection examples.
 
-**Usage → Overview → API keys** groups calls by the API key used by the
-client, not the provider's credentials. **Usage → Requests** uses the same
-API key filter, and CSV export includes
-`caller_key_id` and `caller_key_name`. Deleted keys keep historical usage.
-The usual local `magpie` token and older records have no caller-key
-attribution. An existing LAN key is migrated into the named list as
-**Magpie**, keeping remote clients working and allowing
-its usage to be tracked, renamed, disabled or revoked. Credentials stay in
-`~/.config/magpie/caller-keys.json` (XDG-aware, mode `0600`), never in
-usage records or list responses.
+For a headless gateway, use the CLI before exposing the port:
+
+```sh
+magpie gateway-key add "Remote laptop" # prints the new credential once
+magpie gateway-key list                # ids, names, enabled state and masked keys
+magpie gateway-key rotate <id>         # prints the replacement; identity stays the same
+magpie gateway-key remove <id>         # revokes remote access
+```
+
+Remote requests require sharing to be enabled and an enabled gateway key
+sent as Bearer, `x-api-key`, `x-goog-api-key` or `?key=`. Loopback remains
+permissive: any token works, including a stale or disabled gateway key.
+Only a valid, enabled key is attributed to its named identity.
+
+**Usage → Overview → Gateway keys** groups calls by the client's key, never
+the provider's credential. **Usage → Requests** offers the same filter;
+CSV includes `caller_key_id` and `caller_key_name`. Deleted keys keep their
+history. The usual local `magpie` token and older records stay unattributed.
+An existing LAN key becomes **Magpie** without changing the credential.
+`lanKey` remains in settings for older Magpie versions, while `lanKeyId`
+marks migration complete so removing a key cannot reimport the old secret.
+A migration write failure is logged and does not prevent gateway startup.
+Gateway credentials stay in `~/.config/magpie/caller-keys.json` (XDG-aware,
+mode `0600`), never in usage records or list responses.
 
 Baidu Qianfan's [Token Plans](https://cloud.baidu.com/doc/qianfan/s/Dmrabu8b6)
 are available as `baidu-qianfan`: a personal (个人版) and an enterprise (企业版)
@@ -626,8 +635,9 @@ published on the host's loopback only; Docker's `-p 3425:3425` would put it
 on every interface of the host, past its firewall. To reach it from other
 machines, turn on Settings → Share on local network in the browser UI (or
 put `"lan": true` in `/config/magpie/settings.json`). Turning it on in Settings
-creates a named **Magpie** key; alternatively create a named caller
-key in Gateway. A request from outside the container must carry one of
+creates a named **Magpie** key. With settings edited by hand, run
+`magpie gateway-key add "Docker client"` in the container to create a key
+without the browser UI. A request from outside the container must carry one of
 those keys as its API key. Only then publish the port beyond 127.0.0.1.
 Inside the container
 magpie only sees the container's own address (Docker's 172.17.x), so set

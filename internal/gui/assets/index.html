@@ -85,9 +85,11 @@
   <div class="list gwcard">
     <div class="row gw" id="gateway"></div>
   </div>
-  <div class="row-head"><span class="label" data-t>API keys</span><span class="grow"></span><button class="text" id="addGatewayKey" data-t>＋ New key</button></div>
-  <p class="usage-note" data-t>Create an API key for each client. Usage is counted separately for each key.</p>
-  <section id="gatewayKeys"></section>
+  <section id="gatewayKeysBlock" hidden>
+    <div class="row-head"><span class="label" data-t>Gateway keys</span><span class="grow"></span><button class="text" id="addGatewayKey" data-t>Add gateway key</button></div>
+    <p class="usage-note" data-t>Create a gateway key for each client. Usage is counted separately for each key.</p>
+    <section id="gatewayKeys"></section>
+  </section>
   <div class="row-head"><button class="fold" id="foldConnect" aria-expanded="true" aria-controls="connect"><span class="label" data-t>Connect</span></button><span class="grow"></span><span class="note" id="connectNote"></span></div>
   <section class="list connect" id="connect"></section>
   <div class="row-head"><button class="fold" id="foldModels" aria-expanded="true" aria-controls="gwModels"><span class="label" data-t>Models</span><span class="note" id="modelsCount"></span></button><span class="grow"></span><button class="text" id="copyModels" data-t>Copy all ids</button></div>
@@ -126,7 +128,7 @@
     <div class="list" id="usageAgents"></div>
     <div class="row-head"><span class="label" data-t>Models</span></div>
     <div class="list" id="usageModels"></div>
-    <div class="row-head" id="usageKeysHead" hidden><span class="label" data-t>API keys</span></div>
+    <div class="row-head" id="usageKeysHead" hidden><span class="label" data-t>Gateway keys</span></div>
     <div class="list" id="usageKeys" hidden></div>
     <p class="usage-note" id="usageNote"></p>
   </div>

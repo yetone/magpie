@@ -148,6 +148,9 @@ func TestGatewayConnectionAddressesFollowLANSharing(t *testing.T) {
 			t.Fatal(err)
 		}
 		g := providersState().Gateway
+		if g.LAN != on {
+			t.Fatal("key block visibility does not follow sharing", g.LAN)
+		}
 		if !on && len(g.LANURLs) != 0 {
 			t.Fatal("shared addresses remain after sharing is off", g.LANURLs)
 		}

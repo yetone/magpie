@@ -3,7 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { fixture } = require("./fixtures/caller-keys.cjs");
+const { fixture, confirmKeyAction } = require("./fixtures/caller-keys.cjs");
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
@@ -14,13 +14,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.setDefaultTimeout(6000);
       const events = [], errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", fixture(lang, "light", events));
+      await page.route("**/*", fixture(lang, "light", events, { lan: true }));
       const w = lang === "zh"
-        ? { create: "创建密钥", name: "密钥名称", remove: "移除", copy: "复制 API 密钥", disable: "停用密钥", enable: "启用密钥", requests: "请求", usage: "用量" }
-        : { create: "Create key", name: "API key name", remove: "Remove", copy: "Copy API key", disable: "Disable key", enable: "Enable key", requests: "Requests", usage: "Usage" };
+        ? { create: "创建", name: "网关密钥名称", remove: "移除", copy: "复制网关密钥", disable: "停用密钥", enable: "启用密钥", requests: "请求", usage: "用量" }
+        : { create: "Create", name: "Gateway key name", remove: "Remove", copy: "Copy gateway key", disable: "Disable key", enable: "Enable key", requests: "Requests", usage: "Usage" };
       await page.goto("http://magpie.test/?view=gateway");
       await page.locator("#gatewayKeys .acc[data-key]").last().waitFor();
       assert.equal(await page.locator("#gatewayKeys .accts").count(), 1);
+      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), true);
+      assert.equal(await page.locator("#gatewayKeys .acc.add").count(), 0, "creation is offered once, in the header");
       await page.locator("#addGatewayKey").click();
       await page.getByRole("button", { name: w.create, exact: true }).click();
       await page.waitForFunction(() => document.querySelector("#gatewayKeys .adding .primary")?.disabled === false);
@@ -45,7 +47,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#usageKeys .row").last().waitFor();
       assert.equal(await page.locator("#usageKeys .row").count(), 3);
       assert.match(await page.locator("#usageKeys").textContent(), /Laptop/);
-      assert.equal(await page.locator("#usageKeysHead").textContent(), lang === "zh" ? "API 密钥" : "API keys");
+      assert.equal(await page.locator("#usageKeysHead").textContent(), lang === "zh" ? "网关密钥" : "Gateway keys");
       assert.equal(await page.locator("#usageCallerKeys").count(), 0, "there is only one API key section");
       await page.locator("#usageTab").getByRole("button", { name: w.requests, exact: true }).click();
       await page.locator("#ledKey").click();
@@ -75,13 +77,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await lanRow.getByRole("button", { name: w.copy, exact: true }).click();
       await page.waitForFunction(() => document.querySelector("#gatewayKeys .copy.done"));
       assert(events.some((e) => e.action === "clipboard" && e.body.text === "fixture-lan-1"));
-      await lanRow.getByRole("button", { name: lang === "zh" ? "换新 Key" : "New key", exact: true }).click();
+      const rotateLabel = lang === "zh" ? "轮换密钥" : "Rotate key";
+      const cancelLabel = lang === "zh" ? "取消" : "Cancel";
+      await lanRow.getByRole("button", { name: rotateLabel, exact: true }).click();
+      await page.locator("#modal").getByRole("button", { name: cancelLabel, exact: true }).click();
+      await page.locator("#modal").waitFor({ state: "hidden" });
+      assert.equal(events.filter((e) => e.action === "rotate-key").length, 0);
+      await confirmKeyAction(page, lanRow, rotateLabel);
       await page.waitForFunction((masked) => document.querySelector('#gatewayKeys .acc[data-key^="lan-key"] .plan')?.textContent !== masked, before);
       assert.equal(await lanRow.getAttribute("data-key"), lanID, "rotation keeps the key's identity");
       await lanRow.getByRole("button", { name: w.copy, exact: true }).click();
       await page.waitForFunction(() => document.querySelector("#gatewayKeys .copy.done"));
       assert(events.some((e) => e.action === "clipboard" && e.body.text === "fixture-rotated-2"));
       await lanRow.getByRole("button", { name: w.remove, exact: true }).click();
+      await page.keyboard.press("Escape");
+      await page.locator("#modal").waitFor({ state: "hidden" });
+      assert.equal(events.filter((e) => e.action === "remove-key").length, 0);
+      await confirmKeyAction(page, lanRow, w.remove);
       await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 4);
       await page.locator("#prefs").click();
       await page.locator("#lanList .lan-address-row").waitFor();
@@ -96,7 +108,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(`#gatewayKeys .acc[data-key="${lanID}"]`).count(), 0);
       tablet = page.locator("#gatewayKeys .acc[data-key]", { hasText: "Travel" });
       await tablet.waitFor();
-      await tablet.getByRole("button", { name: w.remove, exact: true }).click();
+      await confirmKeyAction(page, tablet, w.remove);
       await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 4);
       await page.setViewportSize({ width: 560, height: 740 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);

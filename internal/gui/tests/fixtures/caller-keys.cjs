@@ -8,18 +8,18 @@ const sum = (rows) => ({
   cache_read: 0, cache_write: 0, reasoning: 0, cost: rows.reduce((n, r) => n + r.cost, 0), unpriced: 0,
 });
 
-function fixture(lang, theme, events) {
+function fixture(lang, theme, events, options = {}) {
   let keys = [
     { id: "laptop", name: "Laptop", masked: "sk-magpie-key-…111111" },
     { id: "server", name: "Server", masked: "sk-magpie-key-…222222" },
     { id: "work", name: "Work", masked: "sk-magpie-key-…333333" },
   ];
   let serial = 0;
-  let lan = false;
+  let lan = !!options.lan;
   let lanKeyID = "", rotations = 0, lanSecret = "";
   const secrets = new Map([["laptop", "fixture-laptop"], ["server", "fixture-server"], ["work", "fixture-work"]]);
   const lanURLs = ["http://192.168.1.10:3999", "http://10.0.0.10:3999"];
-  const lanState = () => ({ lang, theme, lan, lanCallerKey: keys.find((k) => k.id === lanKeyID),
+  const lanState = () => ({ lang, theme, lan,
     lanURLs: lan ? lanURLs : [], fx: { rate: 7.2, at: new Date().toISOString() } });
   const rows = [
     { callerKeyId: "laptop", callerKeyName: "Laptop", in: 100, out: 10, cost: 0.1 },
@@ -41,7 +41,7 @@ function fixture(lang, theme, events) {
     let rs = rows;
     if (q.get("callerKey")) rs = rs.filter((r) => r.callerKeyId === q.get("callerKey"));
     if (q.get("failed") === "1") rs = rs.filter((r) => r.status >= 400);
-    return { ...sum(rs), ...groups(), total: rs.length, offset: 0, keys: [], agents: [{ id: "codex", name: "Codex" }],
+    return { ...sum(rs), ...groups(), total: rs.length, offset: 0, agents: [{ id: "codex", name: "Codex" }],
       rows: rs.map((r) => ({ ...r, callerKeyLabel: keyName(r) })) };
   };
   return async (route) => {
@@ -53,7 +53,7 @@ function fixture(lang, theme, events) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme } });
     if (url.pathname === "/api/providers") return json({
       providers: [{ id: "relay", name: "Relay", icon: "generic", models: [{ id: "m", name: "Model", on: true }], agents: [] }],
-      gateway: { running: true, window: true, mine: true, url: "http://127.0.0.1:3999", lanURLs: lan ? lanURLs : [], calls: [], groups: [] },
+      gateway: { running: true, window: true, mine: true, url: "http://127.0.0.1:3999", lan, lanURLs: lan ? lanURLs : [], calls: [], groups: [] },
     });
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/settings/lan") {
@@ -106,7 +106,7 @@ function fixture(lang, theme, events) {
       return json({ keys, secret });
     }
     if (url.pathname === "/api/copy") { events.push({ action: "clipboard", body: req.postDataJSON() }); return json({}); }
-    if (url.pathname === "/api/usage") return json({ ...sum(rows), ...groups(), keys: [], agents: [], models: [], series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });
+    if (url.pathname === "/api/usage") return json({ ...sum(rows), ...groups(), agents: [], models: [], series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });
     if (url.pathname === "/api/usage/requests") { events.push({ action: "ledger", query: url.search }); return json(ledger(url.searchParams)); }
     if (url.pathname === "/api/usage/requests/export") { events.push({ action: "export", query: url.search }); return json({ path: "~/Downloads/keys.csv", rows: ledger(url.searchParams).total }); }
     if (url.pathname === "/api/usage/quotas") return json([]);
@@ -115,4 +115,9 @@ function fixture(lang, theme, events) {
     await route.fulfill({ body: await fs.readFile(file), contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)] });
   };
 }
-module.exports = { fixture };
+async function confirmKeyAction(page, row, label) {
+  await row.getByRole("button", { name: label, exact: true }).click();
+  await page.locator("#modal").getByRole("button", { name: label, exact: true }).click();
+  await page.locator("#modal").waitFor({ state: "hidden" });
+}
+module.exports = { fixture, confirmKeyAction };

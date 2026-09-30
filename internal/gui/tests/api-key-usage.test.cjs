@@ -1,5 +1,5 @@
 // The real provider editor and Usage page, with isolated API fixtures.
-// Provider keys stay manageable; Usage's API keys identify the calling client.
+// Provider keys stay manageable; Usage's gateway keys identify the calling client.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -28,29 +28,22 @@ function fixture(lang, theme, posts, requests) {
   };
   const providers = { providers: [relay], presets: [], excluded: [], gateway: { running: true, window: true } };
   const rows = [
-    { callerKeyId: "server", callerKeyName: "Server", keyId: TEAM, keyName: "Team", in: 2000, out: 200, cost: 0.4, cache_read: 1000, status: 200, agent: "claude", agentName: "Claude Code" },
-    { callerKeyId: "laptop", callerKeyName: "Laptop", keyId: PERSONAL, keyName: "Personal", in: 1000, out: 100, cost: 0.2, status: 200, agent: "codex", agentName: "Codex" },
-    { callerKeyId: "laptop", callerKeyName: "Laptop", keyId: TEAM, keyName: "Team", in: 0, out: 0, cost: 0, status: 429, agent: "codex", agentName: "Codex" },
+    { callerKeyId: "server", callerKeyName: "Server", in: 2000, out: 200, cost: 0.4, cache_read: 1000, status: 200, agent: "claude", agentName: "Claude Code" },
+    { callerKeyId: "laptop", callerKeyName: "Laptop", in: 1000, out: 100, cost: 0.2, status: 200, agent: "codex", agentName: "Codex" },
+    { callerKeyId: "laptop", callerKeyName: "Laptop", in: 0, out: 0, cost: 0, status: 429, agent: "codex", agentName: "Codex" },
     { in: 50, out: 5, cost: 0.01, status: 200, agent: "codex", agentName: "Codex" },
   ].map((r, i) => ({ t: new Date(Date.now() - i * 60e3).toISOString(), provider: "relay", providerName: "Relay", host: "relay.example",
     model: "m", req: "relay/m", ms: 1000, priced: true, icon: "generic", ...r }));
-  const keys = () => [TEAM, PERSONAL, ""].map((id) => {
-    const rs = rows.filter((r) => (r.keyId || "") === id);
-    const current = relay.keyList.find((k) => k.id === id);
-    return { id: "relay#" + id, keyId: id, keyName: current?.name || rs[0]?.keyName || "", provider: "relay",
-      name: current?.name || rs[0]?.keyName || "Key not recorded", sub: "Relay", icon: "generic", ...totals(rs) };
-  });
   const ledger = (q) => {
     let filtered = rows;
     if (q.get("callerKey")) filtered = filtered.filter((r) => r.callerKeyId === q.get("callerKey"));
-    if (q.get("key")) filtered = filtered.filter((r) => "relay#" + (r.keyId || "") === q.get("key"));
     if (q.get("agent")) filtered = filtered.filter((r) => r.agent === q.get("agent"));
     if (q.get("failed") === "1") filtered = filtered.filter((r) => r.status >= 400);
-    if (q.get("q")) filtered = filtered.filter((r) => (r.keyName || r.model).toLowerCase().includes(q.get("q").toLowerCase()));
+    if (q.get("q")) filtered = filtered.filter((r) => (r.callerKeyName || r.model).toLowerCase().includes(q.get("q").toLowerCase()));
     const offset = +q.get("offset") || 0;
     return { ...totals(filtered), total: filtered.length, offset, period: q.get("period"),
-      rows: filtered.slice(offset, offset + (+q.get("limit") || 100)).map((r) => ({ ...r, keyLabel: keys().find((k) => k.keyId === (r.keyId || ""))?.name })),
-      keys: keys(), callerKeys: callerKeys(), agents: [{ id: "codex", name: "Codex" }, { id: "claude", name: "Claude Code" }] };
+      rows: filtered.slice(offset, offset + (+q.get("limit") || 100)),
+      callerKeys: callerKeys(), agents: [{ id: "codex", name: "Codex" }, { id: "claude", name: "Claude Code" }] };
   };
   const callerKeys = () => ["server", "laptop"].map((id) => {
     const rs = rows.filter((r) => r.callerKeyId === id);
@@ -76,7 +69,7 @@ function fixture(lang, theme, posts, requests) {
       return json(providers);
     }
     if (url.pathname === "/api/usage/quotas") return json([]);
-    if (url.pathname === "/api/usage") return json({ ...totals(rows), keys: keys(), callerKeys: callerKeys(), agents: [], models: [], series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });
+    if (url.pathname === "/api/usage") return json({ ...totals(rows), callerKeys: callerKeys(), agents: [], models: [], series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });
     if (url.pathname === "/api/usage/requests") { requests.push(url.searchParams); return json(ledger(url.searchParams)); }
     if (url.pathname === "/api/usage/requests/export") {
       requests.push(Object.assign(url.searchParams, { method: req.method() }));
@@ -99,8 +92,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", fixture(lang, "light", posts, requests));
       const w = lang === "zh"
-        ? { addButton: "添加", first: "设为首选", remove: "移除", failed: "失败", all: "全部 API 密钥", legacy: "未记录密钥" }
-        : { addButton: "Add", first: "Make first", remove: "Remove", failed: "Failed", all: "All API keys", legacy: "Key not recorded" };
+        ? { addButton: "添加", first: "设为首选", remove: "移除", failed: "失败", all: "全部网关密钥" }
+        : { addButton: "Add", first: "Make first", remove: "Remove", failed: "Failed", all: "All gateway keys" };
       await page.goto("http://magpie.test/?view=providers");
       await page.locator(".row.provider", { hasText: "Relay" }).click();
       assert.equal(await page.locator(".accts .acc:not(.add)").count(), 2);
@@ -137,8 +130,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(!/Workspace|Personal/.test(await page.locator("#usageKeys").textContent()));
       await page.locator("#usageTab .opt").nth(1).click();
       await page.locator(".led tbody tr").first().waitFor();
-      assert.equal(await page.locator(".led tbody tr").first().locator("td").nth(3).textContent(), "Relay · Workspace");
-      assert((await page.locator(".led tbody tr").first().locator("td").nth(3).getAttribute("title")).includes(TEAM));
+      assert.equal(await page.locator(".led tbody tr").first().locator("td").nth(3).textContent(), "Relay · relay.example");
+      assert((await page.locator(".led tbody tr").first().locator("td").nth(3).getAttribute("title")).includes("relay.example"));
       await page.locator("#ledKey").click();
       await page.locator(".sess-menu .pm-item", { hasText: "Laptop" }).click();
       await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 2);
@@ -161,7 +154,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".sess-menu .pm-item", { hasText: w.all }).click();
       await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 4);
       assert(!requests.at(-1).has("key") && !requests.at(-1).has("callerKey"));
-      assert.equal(await page.locator(".led tbody tr").last().locator("td").nth(3).textContent(), "Relay · " + w.legacy);
+      assert.equal(await page.locator(".led tbody tr").last().locator("td").nth(3).textContent(), "Relay · relay.example");
       await page.setViewportSize({ width: 560, height: 700 });
       assert(await page.locator("#view-usage").evaluate((v) => v.scrollWidth <= v.clientWidth));
       if (process.env.ARTIFACT_DIR) {

@@ -2402,13 +2402,13 @@ function askForgetSaved(x) {
         return;
       }
     }
-    closeResetAsk();
+    closeConfirmAsk();
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeResetAsk(); };
+  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
-  resetAsk = ed;
+  confirmAsk = ed;
   openModal(ed);
   $("#modal").classList.add("lib");
   cancel.focus();
@@ -2535,6 +2535,8 @@ function renderGatewayView() {
   page.classList.remove("loading");
   page.removeAttribute("aria-busy");
   renderGateway();
+  $("#gatewayKeysBlock").hidden = !providers.gateway.lan;
+  if (!providers.gateway.lan) gatewayKeyDraft = null;
   if (gatewayKeyDraft === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
   renderConnect();
   renderGatewayModels();
@@ -2741,7 +2743,7 @@ function renderConnect() {
   note.replaceChildren();
   note.classList.toggle("brief", connectFolded);
   if (connectFolded) note.append(el("code", "", base), copyBtn(base, "Base URL"));
-  else note.textContent = t(remote ? "Local network · an enabled API key is required" : gatewayKeys?.length ? "Use an API key to track usage" : "Loopback only · the key can be anything");
+  else note.textContent = t(remote ? "Local network · an enabled gateway key is required" : gatewayKeys?.length ? "Use a gateway key to track usage" : "Loopback only · the key can be anything");
 
   box.append(...field("API", segs(Object.entries(FLAVORS).map(([k, v]) => [k, v.name]), flavor, (id) => { flavor = id; localStorage.setItem("magpie.flavor", id); renderConnect(); }), t(f.note)));
 
@@ -2756,13 +2758,13 @@ function renderConnect() {
   const k = el("div", "val");
   const options = keys.map((k) => ({ v: k.id, name: k.name, literalName: true, note: k.masked }));
   if (!remote) options.unshift({ v: "", name: "magpie", note: t("This computer · no key attribution") });
-  if (options.length) k.append(connectPick("connectKey", "API key", key ? key.name : remote ? t("Choose an API key") : "magpie",
+  if (options.length) k.append(connectPick("connectKey", "Gateway key", key ? key.name : remote ? t("Choose a gateway key") : "magpie",
     options, connectKeyID, selectConnectKey));
-  else k.append(el("code", "", t("Create an API key above to connect")));
+  else k.append(el("code", "", t("Create a gateway key above to connect")));
   if (key) k.append(copyCallerKeyBtn(key));
   else if (!remote) k.append(copyBtn("magpie", t("Key")));
-  box.append(...field(t("API key"), k, t(remote || gatewayKeys?.length
-    ? "Choose an API key to use as {env}; usage is tracked by key."
+  box.append(...field(t("Gateway key"), k, t(remote || gatewayKeys?.length
+    ? "Choose a gateway key to use as {env}; usage is tracked by key."
     : "{env}=magpie. The gateway trusts everything on loopback, so any value works.", { env: f.keyEnv })));
 
   const m = el("div", "val");
@@ -2771,7 +2773,7 @@ function renderConnect() {
 
   const ex = el("div", "stack");
   ex.append(segs(LANGS, lang, (id) => { lang = id; localStorage.setItem("magpie.lang", id); renderConnect(); }));
-  const code = !secret ? t(key ? "Loading API key…" : "Create an API key above to connect")
+  const code = !secret ? t(key ? "Loading gateway key…" : "Create a gateway key above to connect")
     : lang === "shell" ? envSnippet([[f.baseEnv, base], [f.keyEnv, secret]])
     : lang === "curl" ? curlSnippet(f.curl(base, model, secret))
     : f[lang](base, model, secret);
@@ -7154,7 +7156,7 @@ function autoResetButton(q, cls) {
 // askReset: spending a Codex account's reset can't be taken
 // back, so it asks first; then it says what came of it and reads the
 // usage again.
-let resetAsk = null;
+let confirmAsk = null;
 function askReset(q) {
   const ed = el("div", "editor reset-ask");
   const head = el("div", "ehead");
@@ -7175,7 +7177,7 @@ function askReset(q) {
     go.classList.add("busy");
     try {
       const out = await api("usage/codex-reset", { user: q.user || "" });
-      closeResetAsk();
+      closeConfirmAsk();
       status(who + ": " + resetOutcome(out), out.code === "reset" ? "ok" : "err");
       loadQuotas();
     } catch (err) {
@@ -7185,26 +7187,26 @@ function askReset(q) {
     }
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeResetAsk(); };
+  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
-  resetAsk = ed;
+  confirmAsk = ed;
   openModal(ed);
   $("#modal").classList.add("lib");
   go.focus();
 }
-function closeResetAsk() {
-  if (!resetAsk) return;
-  resetAsk = null;
-  closeModal().then(() => { if (!resetAsk) $("#modal").classList.remove("lib"); });
+function closeConfirmAsk() {
+  if (!confirmAsk) return;
+  confirmAsk = null;
+  closeModal().then(() => { if (!confirmAsk) $("#modal").classList.remove("lib"); });
 }
 // the dialog is the providers page's: while this asks, its backdrop and
-// Escape close only this (in the panel, Escape would hide the window)
+// Escape closes only the confirmation (in the panel it would hide the window)
 $("#modal").addEventListener("click", (e) => {
-  if (resetAsk && e.target === e.currentTarget) { e.stopImmediatePropagation(); closeResetAsk(); }
+  if (confirmAsk && e.target === e.currentTarget) { e.stopImmediatePropagation(); closeConfirmAsk(); }
 }, true);
 document.addEventListener("keydown", (e) => {
-  if (resetAsk && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeResetAsk(); }
+  if (confirmAsk && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeConfirmAsk(); }
 }, true);
 function resetOutcome(out) {
   switch (out.code) {
@@ -7404,7 +7406,7 @@ function renderUsage() {
       const r = el("div", "row stat");
       r.append(icon(g.icon || "generic"));
       const who = el("div", "who");
-      who.append(el("div", "name", id === "usageKeys" && !g.callerKeyId ? t("Key not recorded") : g.name));
+      who.append(el("div", "name", g.name));
       const sub = [];
       if (g.sub) sub.push(g.sub);
       sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
@@ -7536,9 +7538,9 @@ function renderLedger() {
   // the filters: the agents with calls in the period, and failures alone
   if (ledAgent && !l.agents.some((a) => a.id === ledAgent)) ledAgent = "";
   sessPick($("#ledAgent"), "All agents", ledAgent, l.agents.map((a) => ({ v: a.id, name: a.name, note: "" })), "Agent", (v) => { ledAgent = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
-  sessPick($("#ledKey"), "All API keys", ledKey, (l.callerKeys || []).map((k) => ({
+  sessPick($("#ledKey"), "All gateway keys", ledKey, (l.callerKeys || []).map((k) => ({
     v: k.id, name: k.name, note: "",
-  })), "API keys", (v) => { ledKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
+  })), "Gateway keys", (v) => { ledKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   const seg = $("#ledStatus");
   seg.replaceChildren();
   for (const [on, name] of [[false, "All"], [true, "Failed"]]) {
@@ -9837,7 +9839,7 @@ function renderRedactRules(s, row) {
 }
 
 // renderLAN: the gateway shared on the local network, for agents on other
-// machines. API keys and connection examples live together in Gateway.
+// machines. Gateway keys and connection examples live together in Gateway.
 let lanSelectedURL = "", lanProtocol = "openai";
 function renderLAN(s) {
   const box = $("#lanList");
@@ -9856,7 +9858,7 @@ function renderLAN(s) {
   };
   const set = (body) => writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; renderSettings(); })
     .catch((e) => { status(t(e.message), "err"); renderSettings(); });
-  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models with an API key from Gateway"), "",
+  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
   if (!s.lan) return;
   let urls = s.lanURLs || [], sub = "";

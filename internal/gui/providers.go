@@ -149,6 +149,7 @@ type presetJSON struct {
 
 type gatewayJSON struct {
 	URL     string         `json:"url"`
+	LAN     bool           `json:"lan"`
 	LANURLs []string       `json:"lanURLs,omitempty"`
 	Running bool           `json:"running"`
 	Mine    bool           `json:"mine"`   // this process serves it
@@ -408,7 +409,8 @@ func providersState() providersJSON {
 	}
 	cat := provider.Catalog()
 	s.Gateway = gatewayJSON{URL: gateway.URL(), Models: len(cat), Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
-	if settings.Load().LAN {
+	s.Gateway.LAN = settings.Load().LAN
+	if s.Gateway.LAN {
 		s.Gateway.LANURLs = gateway.LANURLs()
 	}
 	for _, e := range cat {

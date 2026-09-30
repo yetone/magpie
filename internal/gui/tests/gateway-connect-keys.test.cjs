@@ -3,7 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { fixture } = require("./fixtures/caller-keys.cjs");
+const { fixture, confirmKeyAction } = require("./fixtures/caller-keys.cjs");
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const locale of ["en", "zh"]) {
@@ -15,8 +15,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const events = [], errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", fixture(locale, "dark", events));
-      const w = locale === "zh" ? { on: "开启", off: "关闭", gateway: "网关", disable: "停用密钥", enable: "启用密钥", remove: "移除", rotate: "换新 Key", create: "创建密钥", name: "密钥名称" }
-        : { on: "On", off: "Off", gateway: "Gateway", disable: "Disable key", enable: "Enable key", remove: "Remove", rotate: "New key", create: "Create key", name: "API key name" };
+      const w = locale === "zh" ? { on: "开启", off: "关闭", gateway: "网关", disable: "停用密钥", enable: "启用密钥", remove: "移除", rotate: "轮换密钥", create: "创建", name: "网关密钥名称" }
+        : { on: "On", off: "Off", gateway: "Gateway", disable: "Disable key", enable: "Enable key", remove: "Remove", rotate: "Rotate key", create: "Create", name: "Gateway key name" };
       const snippet = page.locator("#connect .snip");
       const pick = async (id, name) => {
         await page.locator(id).click();
@@ -27,9 +27,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=gateway");
       await page.locator("#connectKey").waitFor();
       assert.equal(await page.locator("#connectAddress").count(), 0, "no LAN addresses before sharing is on");
+      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), false, "most users never share");
       await pick("#connectKey", "Server");
       await expectSecret("fixture-server");
 
+      await page.locator("#prefs").click();
+      const on = page.locator("#lanList").getByRole("button", { name: w.on, exact: true });
+      await on.waitFor();
+      const bounds = await on.boundingBox();
+      await page.mouse.move(500, 400);
+      await page.mouse.wheel(0, bounds.y - 250);
+      await on.click();
+      await page.locator("#lanList .lan-address-row").waitFor();
+      await page.locator("#nav").getByRole("button", { name: w.gateway, exact: true }).click();
+      await page.locator("#gatewayKeysBlock").waitFor({ state: "visible" });
       const staleKeys = await page.locator("#gatewayKeys .acc[data-key]").evaluateAll((rows) => rows.map((r) => ({
         id: r.dataset.key, name: r.querySelector(".rename").textContent, masked: r.querySelector(".plan").textContent,
       })));
@@ -60,15 +71,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await pick("#connectKey", "Server");
       await expectSecret("fixture-server");
 
-      await page.locator("#prefs").click();
-      const on = page.locator("#lanList").getByRole("button", { name: w.on, exact: true });
-      await on.waitFor();
-      const bounds = await on.boundingBox();
-      await page.mouse.move(500, 400);
-      await page.mouse.wheel(0, bounds.y - 250);
-      await on.click();
-      await page.locator("#lanList .lan-address-row").waitFor();
-      await page.locator("#nav").getByRole("button", { name: w.gateway, exact: true }).click();
       await page.locator("#connectAddress").waitFor();
       await pick("#connectAddress", "10.0.0.10");
       await expectSecret("fixture-server");
@@ -107,7 +109,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^Local network$/ }).count(), 1,
         "custom key names are not translated as interface labels");
       await page.keyboard.press("Escape");
-      await row("server").getByRole("button", { name: w.rotate, exact: true }).click();
+      await confirmKeyAction(page, row("server"), w.rotate);
       await expectSecret("fixture-rotated-2");
       assert.equal(await row("server").locator(".rename").textContent(), "Local network");
       assert(!(await snippet.textContent()).includes("fixture-server"), "rotation refreshes the selected secret");
@@ -132,16 +134,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         }
       }
       await page.setViewportSize({ width: 1000, height: 760 });
-      await row("server").getByRole("button", { name: w.remove, exact: true }).click();
+      await confirmKeyAction(page, row("server"), w.remove);
       await expectSecret("fixture-laptop");
       assert(!(await snippet.textContent()).includes("fixture-rotated-2"), "removal clears the selected credential");
       // A remote connection without enabled keys must not copy a broken command.
       for (const id of ["laptop", "work"]) {
-        await row(id).getByRole("button", { name: w.remove, exact: true }).click();
+        await confirmKeyAction(page, row(id), w.remove);
         await row(id).waitFor({ state: "detached" });
       }
       const lan = page.locator('#gatewayKeys .acc[data-key^="lan-key"]');
-      await lan.getByRole("button", { name: w.remove, exact: true }).click();
+      await confirmKeyAction(page, lan, w.remove);
       await lan.waitFor({ state: "detached" });
       assert.equal(await page.locator("#connect .snip-wrap .copy").count(), 0);
       assert.equal(await page.locator("#connectKey").count(), 0);
@@ -156,6 +158,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#lanList .lan-address-row").waitFor({ state: "detached" });
       await page.locator("#nav").getByRole("button", { name: w.gateway, exact: true }).click();
       await page.locator("#connectAddress").waitFor({ state: "detached" });
+      assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), false);
       assert((await snippet.textContent()).includes("http://127.0.0.1:3999"));
       assert.deepEqual(errors, []);
     });
