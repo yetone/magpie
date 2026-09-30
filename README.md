@@ -162,13 +162,18 @@ for each client, then copy it from its row and use it with the gateway's
 existing base URL. Rename, disable, or remove keys independently; changes
 apply to the running gateway immediately, while calls already in progress
 finish. Other computers still require **Settings → Local network → Share on
-local network** to be enabled.
+local network** to be enabled; they authenticate with these same named keys.
+Settings keeps its existing copy and **New key** controls: its LAN key is
+an ordinary named entry in Gateway. Rotating it invalidates only that
+credential, preserving its name and usage history; other keys are unchanged.
 
 **Usage → Overview** shows caller keys separately from provider keys.
 **Usage → Requests** filters by caller key, and CSV export includes
 `caller_key_id` and `caller_key_name`. Deleted keys keep historical usage.
-The usual `magpie` token, legacy shared LAN key, and older records have
-no caller-key attribution. Credentials stay in
+The usual local `magpie` token and older records have no caller-key
+attribution. An existing LAN key is migrated into the named list as
+**Local network (legacy)**, keeping remote clients working and allowing
+its usage to be tracked, renamed, disabled or revoked. Credentials stay in
 `~/.config/magpie/caller-keys.json` (XDG-aware, mode `0600`), never in
 usage records or list responses. Existing credentials from `users.json`
 remain valid and are flattened into the new store on the first change;
@@ -618,9 +623,11 @@ docker run -d --name magpie -p 127.0.0.1:3425:3425 -p 127.0.0.1:3430:3430 -v mag
 published on the host's loopback only; Docker's `-p 3425:3425` would put it
 on every interface of the host, past its firewall. To reach it from other
 machines, turn on Settings → Share on local network in the browser UI (or
-put `"lan": true, "lanKey": "sk-magpie-…"` in `/config/magpie/settings.json`):
-from then on a request from outside the container must carry that key as its
-API key, and only then publish the port beyond 127.0.0.1. Inside the container
+put `"lan": true` in `/config/magpie/settings.json`). Turning it on in Settings
+creates a named **Local network** key; alternatively create a named caller
+key in Gateway. A request from outside the container must carry one of
+those keys as its API key. Only then publish the port beyond 127.0.0.1.
+Inside the container
 magpie only sees the container's own address (Docker's 172.17.x), so set
 `-e MAGPIE_PUBLIC_URL=http://<the host's or NAS's address>:3425` (the port
 published on the host) for the address it shows and prints to be the one

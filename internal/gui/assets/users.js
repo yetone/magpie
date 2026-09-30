@@ -80,6 +80,18 @@ function gatewayKeyForm() {
   return box;
 }
 
+function copyCallerKeyBtn(k) {
+  const cp = copyBtn("", t("Caller key"));
+  cp.setAttribute("aria-label", t("Copy caller key"));
+  cp.onclick = async () => {
+    try {
+      const out = await api("caller-keys/copy-key", { key: k.id });
+      await copy(out.secret, t("Caller key"), cp);
+    } catch (e) { status(t(e.message), "err"); }
+  };
+  return cp;
+}
+
 function renderGatewayKeys() {
   const box = $("#gatewayKeys");
   box.replaceChildren();
@@ -94,17 +106,9 @@ function renderGatewayKeys() {
     tick.setAttribute("aria-label", tick.title);
     if (!k.off) tick.append(svg(CHECK, 10, 2.2));
     tick.onclick = () => gatewayKeyAction(k.off ? "on-key" : "off-key", { key: k.id });
-    const cp = copyBtn("", t("Caller key"));
-    cp.setAttribute("aria-label", t("Copy caller key"));
-    cp.onclick = async () => {
-      try {
-        const out = await api("caller-keys/copy-key", { key: k.id });
-        await copy(out.secret, t("Caller key"), cp);
-      } catch (e) { status(t(e.message), "err"); }
-    };
     const rm = el("button", "text quiet", t("Remove"));
     rm.onclick = () => gatewayKeyAction("remove-key", { key: k.id });
-    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), el("span", "grow"), cp, rm);
+    row.append(tick, gatewayRename(k), el("span", "plan mono", k.masked), el("span", "grow"), copyCallerKeyBtn(k), rm);
     list.append(row);
   }
   if (gatewayKeyDraft !== null) list.append(gatewayKeyForm());

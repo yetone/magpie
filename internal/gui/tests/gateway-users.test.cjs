@@ -54,11 +54,53 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(150);
       assert(events.some((e) => e.action === "export" && e.query.includes("callerKey=laptop") && !e.query.includes("user=")));
       await page.reload();
+      await page.locator("#prefs").click();
+      const share = page.locator("#lanList").getByRole("button", { name: lang === "zh" ? "开启" : "On", exact: true });
+      await share.waitFor();
+      // Real wheel input lets the page remember the reader's scroll position.
+      const bounds = await share.boundingBox();
+      await page.mouse.move(500, 400);
+      await page.mouse.wheel(0, bounds.y - 250);
+      await share.click();
+      await page.locator("#lanList .lan-address-row").waitFor();
+      const keyRow = page.locator("#lanList .row.pref").last();
+      const before = await keyRow.locator("code").textContent();
+      assert.match(await keyRow.textContent(), /Local network/);
+      await keyRow.getByRole("button", { name: w.copy, exact: true }).click();
+      await page.waitForFunction(() => document.querySelector("#lanList .copy.done"));
+      assert(events.some((e) => e.action === "clipboard" && e.body.text === "fixture-lan-1"));
+      await keyRow.getByRole("button", { name: lang === "zh" ? "换新 Key" : "New key", exact: true }).click();
+      await page.waitForFunction((masked) => {
+        const code = document.querySelector("#lanList .row.pref:last-child code");
+        return code && code.textContent !== masked;
+      }, before);
+      const rotated = await keyRow.locator("code").textContent();
+      await keyRow.getByRole("button", { name: w.copy, exact: true }).click();
+      await page.waitForFunction(() => document.querySelector("#lanList .copy.done"));
+      assert(events.some((e) => e.action === "clipboard" && e.body.text === "fixture-lan-2"));
+      assert(events.some((e) => e.action === "lan" && e.body.on && e.body.newKey));
+      if (process.env.ARTIFACT_DIR) {
+        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-lan-keys.png`) });
+      }
+      await page.setViewportSize({ width: 560, height: 740 });
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+      if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-lan-keys-narrow.png`) });
+      await page.setViewportSize({ width: 1000, height: 760 });
+      await page.locator("#lanList").getByRole("button", { name: lang === "zh" ? "关闭" : "Off", exact: true }).click();
+      await page.locator("#lanList .lan-address-row").waitFor({ state: "detached" });
+      await share.click();
+      await page.locator("#lanList .lan-address-row").waitFor();
+      assert.equal(await keyRow.locator("code").textContent(), rotated, "toggling sharing must not rotate the key");
       await page.locator("#nav").getByRole("button", { name: lang === "zh" ? "网关" : "Gateway", exact: true }).click();
+      await page.locator("#gatewayKeys .acc[data-key]").last().waitFor();
+      assert.equal(await page.locator("#gatewayKeys .acc[data-key]").count(), 5);
+      assert.equal(await page.locator("#gatewayKeys .acc[data-key]", { hasText: "Local network" }).locator(".plan").textContent(), rotated);
+      assert(events.some((e) => e.action === "lan" && e.body.on === true && !e.body.newKey));
       tablet = page.locator("#gatewayKeys .acc[data-key]", { hasText: "Travel" });
       await tablet.waitFor();
       await tablet.getByRole("button", { name: w.remove, exact: true }).click();
-      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 3);
+      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 4);
       await page.setViewportSize({ width: 560, height: 740 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
       assert.deepEqual(errors, []);

@@ -15,6 +15,10 @@ function fixture(lang, theme, events) {
     { id: "work", name: "Work", masked: "sk-magpie-key-…333333" },
   ];
   let serial = 0;
+  let lan = false;
+  let lanKeyID = "", rotations = 0, lanSecret = "";
+  const lanState = () => ({ lang, theme, lan, lanCallerKey: keys.find((k) => k.id === lanKeyID),
+    lanURLs: ["http://192.168.1.10:3999"], fx: { rate: 7.2, at: new Date().toISOString() } });
   const rows = [
     { callerKeyId: "laptop", callerKeyName: "Laptop", in: 100, out: 10, cost: 0.1 },
     { callerKeyId: "server", callerKeyName: "Server", in: 200, out: 20, cost: 0.2 },
@@ -50,6 +54,23 @@ function fixture(lang, theme, events) {
       gateway: { running: true, window: true, mine: true, url: "http://127.0.0.1:3999", calls: [], groups: [] },
     });
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
+    if (url.pathname === "/api/settings/lan") {
+      const body = req.postDataJSON();
+      events.push({ action: "lan", body });
+      lan = body.on;
+      let key = keys.find((k) => k.id === lanKeyID);
+      if (lan && (!key || body.newKey)) {
+        if (!key) {
+          key = { id: "lan-key-" + (++serial), name: "Local network" };
+          lanKeyID = key.id;
+          keys.push(key);
+        }
+        lanSecret = "fixture-lan-" + (++rotations);
+        key.masked = "sk-magpie-key-…" + lanSecret.slice(-6);
+      }
+      return json(lanState());
+    }
+    if (url.pathname === "/api/settings") return json(lanState());
     if (url.pathname === "/api/caller-keys") return json({ keys });
     if (url.pathname.startsWith("/api/caller-keys/")) {
       const action = url.pathname.split("/").at(-1), body = req.postDataJSON();
@@ -64,7 +85,7 @@ function fixture(lang, theme, events) {
       if (action === "rename-key") k.name = body.name;
       if (action === "remove-key") keys = keys.filter((v) => v !== k);
       if (action === "on-key" || action === "off-key") k.off = action === "off-key";
-      if (action === "copy-key") secret = "sk-magpie-user-test-copy";
+      if (action === "copy-key") secret = k.id === lanKeyID ? lanSecret : "sk-magpie-user-test-copy";
       return json({ keys, secret });
     }
     if (url.pathname === "/api/copy") { events.push({ action: "clipboard", body: req.postDataJSON() }); return json({}); }

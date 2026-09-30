@@ -9887,10 +9887,13 @@ function renderLAN(s) {
     update();
   }
   if (sub) row(t("In a container"), sub, "").classList.add("lan-container");
+  const key = s.lanCallerKey;
   const again = el("button", "text", t("New key"));
   again.onclick = () => set({ on: true, newKey: true });
-  row(t("API key"), t("Other computers send it as their API key; a new one stops the old from working"),
-    s.lanKey.slice(0, 14) + "…", copyBtn(s.lanKey, t("API key")), again);
+  const sub = key?.off ? t("This key is disabled in Gateway") : key
+    ? t("Also listed in Gateway as {name}; a new one stops the old from working", { name: key.name })
+    : t("Create a new key here, or use a named key from Gateway");
+  row(t("API key"), sub, key?.masked || "", ...(key ? [copyCallerKeyBtn(key)] : []), again);
 }
 
 // renderUpdate fills in the version row: whether a newer magpie is out.

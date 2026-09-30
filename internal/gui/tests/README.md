@@ -1,5 +1,22 @@
 # Dropdown browser regression
 
+`gateway-users.test.cjs` checks the flat named caller-key list on the
+Gateway page, including creation, copying, renaming, disabling, enabling,
+and deletion. It verifies key-level usage overview, request filtering and
+CSV export in Chinese and English on Chromium and WebKit. The fixtures do
+not access local credentials. Settings keeps the LAN key's original copy
+and rotate controls, using the same named entry as Gateway. The test
+checks that rotation updates both pages and toggling sharing retains the
+key, including the narrow Settings layout.
+
+`api-key-usage.test.cjs` exercises the existing provider key list: adding,
+enabling and disabling, choosing the first key, renaming and removing.
+The Usage page reuses the statistics rows for each key's calls, tokens,
+cache traffic and cost, and the request filters for key-specific rows and
+CSV exports. It checks current names, unattributed historical records,
+Chinese and English, and the narrow window in Chromium and WebKit.
+The API fixtures use test keys and never read local user configuration.
+
 `session-terminal.test.cjs` checks the macOS Settings choice for installed
 `.command` handlers in English and Chinese. The system default appears once
 and is selected at first. It selects Ghostty, changes the theme, then returns
