@@ -151,7 +151,6 @@ type ledgerJSON struct {
 	// Agents: the agents with calls in the period, for the filter
 	Agents     []ledgerAgent `json:"agents"`
 	Keys       []usageGroup  `json:"keys"`
-	Users      []usageGroup  `json:"users"`
 	CallerKeys []usageGroup  `json:"callerKeys"`
 }
 
