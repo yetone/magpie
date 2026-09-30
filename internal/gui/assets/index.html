@@ -85,9 +85,9 @@
   <div class="list gwcard">
     <div class="row gw" id="gateway"></div>
   </div>
-  <div class="row-head"><span class="label" data-t>Users and caller keys</span><span class="grow"></span><button class="text" id="addGatewayUser" data-t>＋ New user</button></div>
-  <p class="usage-note" data-t>Create a user, then issue a separate key for each client. Usage is counted by user and key.</p>
-  <section id="gatewayUsers"></section>
+  <div class="row-head"><span class="label" data-t>Caller keys</span><span class="grow"></span><button class="text" id="addGatewayKey" data-t>＋ New key</button></div>
+  <p class="usage-note" data-t>Create a named key for each client. Usage is counted separately for each key.</p>
+  <section id="gatewayKeys"></section>
   <div class="row-head"><button class="fold" id="foldConnect" aria-expanded="true" aria-controls="connect"><span class="label" data-t>Connect</span></button><span class="grow"></span><span class="note" id="connectNote"></span></div>
   <section class="list connect" id="connect"></section>
   <div class="row-head"><button class="fold" id="foldModels" aria-expanded="true" aria-controls="gwModels"><span class="label" data-t>Models</span><span class="note" id="modelsCount"></span></button><span class="grow"></span><button class="text" id="copyModels" data-t>Copy all ids</button></div>
@@ -128,8 +128,6 @@
     <div class="list" id="usageModels"></div>
     <div class="row-head" id="usageKeysHead" hidden><span class="label" data-t>API keys</span></div>
     <div class="list" id="usageKeys" hidden></div>
-    <div class="row-head" id="usageUsersHead" hidden><span class="label" data-t>Users</span></div>
-    <div class="list" id="usageUsers" hidden></div>
     <div class="row-head" id="usageCallerKeysHead" hidden><span class="label" data-t>Caller keys</span></div>
     <div class="list" id="usageCallerKeys" hidden></div>
     <p class="usage-note" id="usageNote"></p>
@@ -138,7 +136,6 @@
     <div class="sess-tools">
       <button class="sess-pick" id="ledAgent" type="button" hidden></button>
       <button class="sess-pick" id="ledKey" type="button" hidden></button>
-      <button class="sess-pick" id="ledUser" type="button" hidden></button>
       <button class="sess-pick" id="ledCallerKey" type="button" hidden></button>
       <div class="segs" id="ledStatus"></div>
       <span class="grow"></span>

@@ -156,25 +156,23 @@ Its list is the models the shared magpie's agents are shown, each named with
 its provider there (`Claude Sonnet 5 · Relay A · office`), and its image
 models are listed under Settings → Images and draw through it.
 
-The gateway also issues **caller keys**, independent of a provider's keys.
-Open **Gateway → Users and caller keys → New user**, create a user, then
-choose **Create key** for each of their clients. A user can own several keys.
-Copy a key from its row and use it as the client's API key with the gateway's
-existing base URL. User and key names can be edited; disabling or removing a
-user revokes all their keys, and disabling or removing one key leaves their
-other keys available. Changes apply to the running gateway immediately; calls
-already in progress finish. Other computers still require **Settings →
-Local network → Share on local network** to be enabled.
+The gateway also issues **named caller keys**, independent of a provider's
+upstream API keys. Open **Gateway → Caller keys → New key** to create a key
+for each client, then copy it from its row and use it with the gateway's
+existing base URL. Rename, disable, or remove keys independently; changes
+apply to the running gateway immediately, while calls already in progress
+finish. Other computers still require **Settings → Local network → Share on
+local network** to be enabled.
 
-**Usage → Overview** shows users and caller keys separately from provider
-keys. **Usage → Requests** filters by user and caller key, and CSV export
-keeps both filters and adds `user_id`, `user_name`, `caller_key_id` and
-`caller_key_name`. Deleted users and keys retain their historical usage.
-Local clients using the usual `magpie` token, the legacy shared LAN key and
-older records appear under **Local / unassigned**. These are gateway caller
-identities, not application login accounts. Credentials stay in
-`~/.config/magpie/users.json` (XDG-aware, mode `0600`), and never go into
-usage records or list responses.
+**Usage → Overview** shows caller keys separately from provider keys.
+**Usage → Requests** filters by caller key, and CSV export includes
+`caller_key_id` and `caller_key_name`. Deleted keys keep historical usage.
+The usual `magpie` token, legacy shared LAN key, and older records have
+no caller-key attribution. Credentials stay in
+`~/.config/magpie/caller-keys.json` (XDG-aware, mode `0600`), never in
+usage records or list responses. Existing credentials from `users.json`
+remain valid and are flattened into the new store on the first change;
+the old file remains as a backup.
 
 Baidu Qianfan's [Token Plans](https://cloud.baidu.com/doc/qianfan/s/Dmrabu8b6)
 are available as `baidu-qianfan`: a personal (个人版) and an enterprise (企业版)
