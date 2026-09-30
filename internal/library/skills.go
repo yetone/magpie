@@ -154,6 +154,37 @@ func link(p, name string) error {
 	return os.WriteFile(filepath.Join(p, marker), []byte("copied from "+skillDir(name)+"\n"), 0o644)
 }
 
+// refresh makes magpie's copy of a skill at p again when the library's has
+// changed since it was made, as a link would show the change; true when it
+// did. A link, or a library skill that can't be read, is left as it is.
+func refresh(p, name string) (bool, error) {
+	fi, err := os.Lstat(p)
+	if err != nil || !fi.IsDir() {
+		return false, nil
+	}
+	lib := realDir(skillDir(name))
+	want := hashDir(lib)
+	if want == "" || hashDir(p) == want {
+		return false, nil
+	}
+	// the new copy is made beside and put in the old one's place
+	next := filepath.Join(filepath.Dir(p), "."+name+".magpie-next")
+	os.RemoveAll(next)
+	if err := copyDir(lib, next); err != nil {
+		os.RemoveAll(next)
+		return false, err
+	}
+	if err := os.WriteFile(filepath.Join(next, marker), []byte("copied from "+skillDir(name)+"\n"), 0o644); err != nil {
+		os.RemoveAll(next)
+		return false, err
+	}
+	if err := os.RemoveAll(p); err != nil {
+		os.RemoveAll(next)
+		return false, err
+	}
+	return true, os.Rename(next, p)
+}
+
 func unlink(p string) error {
 	fi, err := os.Lstat(p)
 	if err != nil {
@@ -287,6 +318,12 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		}
 		p := filepath.Join(t.Skills, s.Name)
 		if ours(p, s.Name) {
+			// a copy (where magpie can't link) is kept up with the library's
+			if again, err := refresh(p, s.Name); err != nil {
+				res.fail(id, "skill:"+s.Name, err)
+			} else if again {
+				res.changed(id)
+			}
 			mine = append(mine, s.Name)
 			continue
 		}
