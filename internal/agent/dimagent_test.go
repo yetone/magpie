@@ -3,6 +3,7 @@ package agent
 import (
 	"database/sql"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -53,7 +54,14 @@ func dimagentFixture(t *testing.T, path string) *sql.DB {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	db, err := sql.Open("sqlite", path)
+	// A raw SQLite DSN treats ? as the start of its options, even in a
+	// filename on Unix. Escape the fixture's path just like a file URL.
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	u := url.URL{Scheme: "file", Path: p}
+	db, err := sql.Open("sqlite", u.String())
 	if err != nil {
 		t.Fatal(err)
 	}
