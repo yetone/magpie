@@ -180,3 +180,191 @@ func TestTarget(t *testing.T) {
 		}
 	}
 }
+
+// mp4 is the start of a real MP4: the gateway's content has to be a video.
+var mp4 = append([]byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"), []byte("-the rest of the video")...)
+
+// vgw is a gateway that makes videos: a request starts one, it is in
+// progress for `polls` asks and then done, or failed, or never ready.
+type vgw struct {
+	mu      sync.Mutex
+	path    []string
+	body    []string
+	polls   int
+	asked   int
+	ending  string // completed (default), failed, stuck
+	content []byte
+}
+
+func (g *vgw) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	b, _ := io.ReadAll(r.Body)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.path, g.body = append(g.path, r.Method+" "+r.URL.Path), append(g.body, string(b))
+	w.Header().Set("Content-Type", "application/json")
+	switch {
+	case r.Method == "POST" && r.URL.Path == "/v1/videos":
+		if strings.Contains(string(b), "REFUSED") {
+			w.WriteHeader(400)
+			io.WriteString(w, `{"error":{"message":"Duration must be between 1 and 15 seconds"}}`)
+			return
+		}
+		io.WriteString(w, `{"id":"video_grok.r1.1","object":"video","status":"queued","model":"grok/grok-imagine-video"}`)
+	case r.URL.Path == "/v1/videos/video_grok.r1.1":
+		g.asked++
+		switch {
+		case g.ending == "stuck" || g.asked <= g.polls:
+			io.WriteString(w, `{"id":"video_grok.r1.1","status":"in_progress","progress":40}`)
+		case g.ending == "failed":
+			io.WriteString(w, `{"id":"video_grok.r1.1","status":"failed","error":{"code":"invalid_argument","message":"image_url must either be a base64-encoded image or a URL."}}`)
+		default:
+			io.WriteString(w, `{"id":"video_grok.r1.1","status":"completed","progress":100,"seconds":"6","model":"grok/grok-imagine-video"}`)
+		}
+	case r.URL.Path == "/v1/videos/video_grok.r1.1/content":
+		w.Header().Set("Content-Type", "video/mp4")
+		if g.content != nil {
+			w.Write(g.content)
+		} else {
+			w.Write(mp4)
+		}
+	default:
+		w.WriteHeader(404)
+		io.WriteString(w, `{"error":{"message":"not here"}}`)
+	}
+}
+
+func startVideo(t *testing.T, g *vgw, root string) *client {
+	t.Helper()
+	was := videoPollEvery
+	videoPollEvery = time.Millisecond
+	t.Cleanup(func() { videoPollEvery = was })
+	up := httptest.NewServer(g)
+	t.Cleanup(up.Close)
+	inR, inW := io.Pipe()
+	outR, outW := io.Pipe()
+	s := &server{gateway: up.URL, client: http.DefaultClient, enc: json.NewEncoder(outW), agent: "magpie-image/1", pending: map[string]chan rpc{}}
+	go s.serve(inR)
+	t.Cleanup(func() { inW.Close(); outW.Close() })
+	c := &client{t: t, in: inW, out: bufio.NewScanner(outR), root: root}
+	c.out.Buffer(make([]byte, 64<<10), 16<<20)
+	c.call("initialize", map[string]any{"protocolVersion": "2025-06-18", "capabilities": map[string]any{"roots": map[string]any{}}, "clientInfo": map[string]any{"name": "claude-code", "version": "2.1.0"}})
+	return c
+}
+
+func film(c *client, args map[string]any) map[string]any {
+	return c.call("tools/call", map[string]any{"name": "generate_video", "arguments": args})
+}
+
+func TestBothToolsAreListed(t *testing.T) {
+	c := startVideo(t, &vgw{}, t.TempDir())
+	b, _ := json.Marshal(c.call("tools/list", map[string]any{}))
+	if !strings.Contains(string(b), `"generate_image"`) || !strings.Contains(string(b), `"generate_video"`) {
+		t.Fatalf("tools %s", b)
+	}
+}
+
+func TestGenerateVideoWaitsAndSavesTheMP4(t *testing.T) {
+	g := &vgw{polls: 2}
+	project := t.TempDir()
+	c := startVideo(t, g, project)
+	r := film(c, map[string]any{"prompt": "A kite sways, gently!", "seconds": 6, "size": "16:9"})
+	out := text(r)
+	if r["isError"] == true || !strings.Contains(out, "6-second video with grok/grok-imagine-video") || !strings.Contains(out, filepath.Join(project, VideoFolder)) {
+		t.Fatalf("%v", r)
+	}
+	files, _ := filepath.Glob(filepath.Join(project, VideoFolder, "a-kite-sways-gently-*.mp4"))
+	if len(files) != 1 {
+		t.Fatalf("saved %v", files)
+	}
+	if b, _ := os.ReadFile(files[0]); string(b) != string(mp4) {
+		t.Fatalf("file %q", b)
+	}
+	if g.path[0] != "POST /v1/videos" || !strings.Contains(g.body[0], `"seconds":"6"`) || !strings.Contains(g.body[0], `"size":"16:9"`) || !strings.Contains(g.body[0], `"prompt":"A kite sways, gently!"`) {
+		t.Fatalf("asked %v %v", g.path, g.body)
+	}
+	// started, asked after until done (2 in progress + 1 done), then fetched
+	if g.asked != 3 || g.path[len(g.path)-1] != "GET /v1/videos/video_grok.r1.1/content" {
+		t.Fatalf("polled %d times: %v", g.asked, g.path)
+	}
+}
+
+func TestGenerateVideoFromAnImage(t *testing.T) {
+	g := &vgw{}
+	project := t.TempDir()
+	os.WriteFile(filepath.Join(project, "first.png"), png, 0o644)
+	c := startVideo(t, g, project)
+	r := film(c, map[string]any{"prompt": "it moves", "image": "first.png", "reference_images": []string{"https://example.com/a.png", "first.png"}, "path": "clips/intro.mp4"})
+	if r["isError"] == true || !strings.Contains(text(r), filepath.Join(project, "clips", "intro.mp4")) {
+		t.Fatalf("%v", r)
+	}
+	var sent struct {
+		In   map[string]string   `json:"input_reference"`
+		Refs []map[string]string `json:"reference_images"`
+	}
+	json.Unmarshal([]byte(g.body[0]), &sent)
+	if !strings.HasPrefix(sent.In["image_url"], "data:image/png;base64,") || len(sent.Refs) != 2 || sent.Refs[0]["image_url"] != "https://example.com/a.png" {
+		t.Fatalf("asked %s", g.body[0])
+	}
+	// the same path again is not written over; a path with no extension is a folder, as for images; another video extension becomes .mp4
+	r = film(c, map[string]any{"prompt": "it moves", "path": "clips/intro.mp4"})
+	r2 := film(c, map[string]any{"prompt": "it moves", "path": "clips/outro"})
+	r3 := film(c, map[string]any{"prompt": "it moves", "path": "clips/end.mov"})
+	if !strings.Contains(text(r), filepath.Join(project, "clips", "intro-2.mp4")) || !strings.Contains(text(r2), filepath.Join(project, "clips", "outro")+string(filepath.Separator)+"it-moves-") || !strings.Contains(text(r3), filepath.Join(project, "clips", "end.mp4")) {
+		t.Fatalf("%q %q %q", text(r), text(r2), text(r3))
+	}
+}
+
+func TestGenerateVideoSaysWhyItFailed(t *testing.T) {
+	project := t.TempDir()
+	c := startVideo(t, &vgw{ending: "failed", polls: 1}, project)
+	r := film(c, map[string]any{"prompt": "x"})
+	if r["isError"] != true || !strings.Contains(text(r), "the video failed: image_url must either be a base64-encoded image or a URL.") {
+		t.Fatalf("%v", r)
+	}
+	if files, _ := filepath.Glob(filepath.Join(project, VideoFolder, "*")); len(files) != 0 {
+		t.Fatalf("a failed video was saved: %v", files)
+	}
+	c = startVideo(t, &vgw{}, project)
+	r = film(c, map[string]any{"prompt": "REFUSED", "seconds": 99})
+	if r["isError"] != true || !strings.Contains(text(r), "no video: Duration must be between 1 and 15 seconds") {
+		t.Fatalf("%v", r)
+	}
+}
+
+func TestGenerateVideoGivesUpWaiting(t *testing.T) {
+	was := videoWait
+	videoWait = 30 * time.Millisecond
+	defer func() { videoWait = was }()
+	c := startVideo(t, &vgw{ending: "stuck"}, t.TempDir())
+	r := film(c, map[string]any{"prompt": "x"})
+	if r["isError"] != true || !strings.Contains(text(r), "video_grok.r1.1") || !strings.Contains(text(r), "wasn't ready") {
+		t.Fatalf("%v", r)
+	}
+}
+
+func TestGenerateVideoRefusesWhatIsNotAVideo(t *testing.T) {
+	c := startVideo(t, &vgw{content: []byte("<html>not a video</html>")}, t.TempDir())
+	r := film(c, map[string]any{"prompt": "x"})
+	if r["isError"] != true || !strings.Contains(text(r), "isn't a video") {
+		t.Fatalf("%v", r)
+	}
+}
+
+func TestGenerateVideoChecksItsArguments(t *testing.T) {
+	c := startVideo(t, &vgw{}, t.TempDir())
+	for name, args := range map[string]map[string]any{
+		"no prompt":            {"prompt": "  "},
+		"fractional seconds":   {"prompt": "x", "seconds": 2.5},
+		"zero seconds":         {"prompt": "x", "seconds": 0.0},
+		"seconds not a number": {"prompt": "x", "seconds": "a few"},
+		"a missing image":      {"prompt": "x", "image": "nope.png"},
+	} {
+		if r := film(c, args); r["isError"] != true {
+			t.Errorf("%s: %v", name, r)
+		}
+	}
+	// seconds may come as a string
+	if r := film(c, map[string]any{"prompt": "x", "seconds": "6"}); r["isError"] == true {
+		t.Errorf("seconds \"6\": %v", r)
+	}
+}

@@ -407,3 +407,46 @@ func TestAspectAmong(t *testing.T) {
 		t.Errorf("aspectOf(1024x1280) = %q, want 4:5", got)
 	}
 }
+
+// What a Grok account's image requests meet beyond the first drawing: several
+// images at once, fields its Imagine API has no use for, and the ways the
+// vendor says no.
+func TestGrokDrawsSeveralAndIgnoresWhatItHasNoFieldFor(t *testing.T) {
+	grokSignedIn(t)
+	up := newGrokMedia(t)
+	s := New()
+	code, a, raw := postImages(t, s, "/v1/images/generations", "application/json",
+		`{"model":"grok/grok-imagine-image","prompt":"two magpies","n":2,"quality":"high","background":"transparent","output_format":"png","size":"1024x1024"}`)
+	if code != 200 || len(a.Data) != 2 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	sent := up.body("/v1/images/generations", 0)
+	for _, no := range []string{`"quality"`, `"background"`, `"output_format"`, `"size"`} {
+		if strings.Contains(sent, no) {
+			t.Fatalf("Grok was sent %s: %s", no, sent)
+		}
+	}
+	if !strings.Contains(sent, `"n":2`) || !strings.Contains(sent, `"aspect_ratio":"1:1"`) {
+		t.Fatalf("asked %s", sent)
+	}
+}
+
+func TestGrokVendorFailuresAreSaid(t *testing.T) {
+	grokSignedIn(t)
+	newGrokMedia(t)
+	s := New()
+	for _, c := range []struct {
+		prompt string
+		code   int
+		want   string
+	}{
+		{"RATELIMITED", 429, "image generation limit"},
+		{"REFUSED", 400, "content moderation"},
+		{"BROKEN", 500, "upstream exploded"},
+	} {
+		code, _, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"grok/grok-imagine-image","prompt":"`+c.prompt+`"}`)
+		if code != c.code || !strings.Contains(raw, c.want) {
+			t.Errorf("%s: %d %s", c.prompt, code, raw)
+		}
+	}
+}

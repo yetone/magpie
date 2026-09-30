@@ -1,7 +1,8 @@
 // Package imagemcp is `magpie mcp image`: a stdio MCP server an agent is
 // given, when it is picked for it in the Library, to make images with the
-// model the Settings' Image generation names. It asks the gateway, which
-// knows the providers, and saves what comes back in the project.
+// model the Settings' Image generation names, and videos with a Grok
+// subscription. It asks the gateway, which knows the providers, and saves
+// what comes back in the project.
 package imagemcp
 
 import (
@@ -19,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,10 +28,42 @@ import (
 	"github.com/yetone/magpie/internal/gateway"
 )
 
-// Folder is where images go in the project when no path is given.
-const Folder = "generated-images"
+// Folder is where images go in the project when no path is given, and
+// VideoFolder where videos do.
+const (
+	Folder      = "generated-images"
+	VideoFolder = "generated-videos"
+)
 
-const tool = "generate_image"
+const (
+	tool      = "generate_image"
+	videoTool = "generate_video"
+)
+
+// How often a video is asked after, and how long it is waited for.
+var (
+	videoPollEvery = 3 * time.Second
+	videoWait      = 10 * time.Minute
+)
+
+var videoSchema = map[string]any{
+	"name": videoTool,
+	"description": "Generate a short video from a text prompt, optionally starting from an image to animate, with a Grok subscription signed in to Magpie " +
+		"(it has no other video model yet). It takes from ten seconds to a few minutes, then the video is saved as an mp4 file in the project (" + VideoFolder +
+		"/ unless path says where) and its path is returned. Describe the subject, the motion and the camera: what moves, how, and what the shot is.",
+	"inputSchema": map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"prompt":           map[string]any{"type": "string", "description": "What happens in the video: the subject, its motion, the camera."},
+			"path":             map[string]any{"type": "string", "description": "Where to save it: a file (e.g. assets/intro.mp4) or a folder, relative to the project or absolute. Never written over."},
+			"seconds":          map[string]any{"type": "integer", "minimum": 1, "maximum": 15, "description": "Length in whole seconds (1-15). Default: the model's (about 8)."},
+			"size":             map[string]any{"type": "string", "description": "An aspect ratio (16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3) or WIDTHxHEIGHT (1280x720; its shorter side picks 480p, 720p or 1080p). Default: the model's."},
+			"image":            map[string]any{"type": "string", "description": "An image to animate, the video's first frame: a file path (relative to the project or absolute) or an http(s) URL."},
+			"reference_images": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Images the video's subjects are drawn from: file paths or http(s) URLs."},
+		},
+		"required": []string{"prompt"},
+	},
+}
 
 var schema = map[string]any{
 	"name": tool,
@@ -157,17 +191,21 @@ func (s *server) handle(req rpc) {
 	case "ping":
 		result = map[string]any{}
 	case "tools/list":
-		result = map[string]any{"tools": []any{schema}}
+		result = map[string]any{"tools": []any{schema, videoSchema}}
 	case "tools/call":
 		var p struct {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
 		}
-		if err := json.Unmarshal(req.Params, &p); err != nil || p.Name != tool {
+		if err := json.Unmarshal(req.Params, &p); err != nil || (p.Name != tool && p.Name != videoTool) {
 			rpcErr = map[string]any{"code": -32602, "message": "unknown tool " + p.Name}
 			break
 		}
-		text, err := s.generate(p.Arguments)
+		generate := s.generate
+		if p.Name == videoTool {
+			generate = s.film
+		}
+		text, err := generate(p.Arguments)
 		if err != nil {
 			result = map[string]any{"content": []any{map[string]any{"type": "text", "text": err.Error()}}, "isError": true}
 			break
@@ -409,7 +447,7 @@ var unslug = regexp.MustCompile(`[^a-z0-9]+`)
 // n > 1) or a folder, else generated-images/<words of the prompt>-<time>.
 // A name that is taken is given a number, never written over.
 func target(project, path, prompt, ext string, i, n int) (string, error) {
-	dir, name := filepath.Join(project, Folder), ""
+	dir, name := filepath.Join(project, folderFor(ext)), ""
 	if path != "" {
 		p := path
 		if strings.HasPrefix(p, "~/") {
@@ -440,7 +478,7 @@ func target(project, path, prompt, ext string, i, n int) (string, error) {
 	// hero.v2, is given one
 	switch l := strings.ToLower(e); {
 	case l == ".jpeg" && ext == ".jpg", l == ext:
-	case imageExt[l]:
+	case imageExt[l], videoExt[l]:
 		e = ext
 	default:
 		base, e = name, ext
@@ -457,8 +495,20 @@ func target(project, path, prompt, ext string, i, n int) (string, error) {
 	}
 }
 
-// imageExt are the extensions of the formats an image comes back in.
-var imageExt = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true, ".gif": true}
+// imageExt are the extensions of the formats an image comes back in, videoExt
+// those a video may be given.
+var (
+	imageExt = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".webp": true, ".gif": true}
+	videoExt = map[string]bool{".mp4": true, ".mov": true, ".webm": true, ".m4v": true}
+)
+
+// folderFor is where a file of ext goes when no path says.
+func folderFor(ext string) string {
+	if videoExt[ext] {
+		return VideoFolder
+	}
+	return Folder
+}
 
 func extOf(mt string) string {
 	switch mt {
@@ -470,4 +520,184 @@ func extOf(mt string) string {
 		return ".gif"
 	}
 	return ".png"
+}
+
+type filmArgs struct {
+	Prompt     string   `json:"prompt"`
+	Path       string   `json:"path"`
+	Seconds    any      `json:"seconds"`
+	Size       string   `json:"size"`
+	Image      string   `json:"image"`
+	References []string `json:"reference_images"`
+}
+
+// wholeSeconds is a clip length as an agent may give it: 6, 6.0 or "6".
+func wholeSeconds(v any) (int, error) {
+	switch n := v.(type) {
+	case nil:
+		return 0, nil
+	case float64:
+		if n != float64(int(n)) || n < 1 {
+			return 0, fmt.Errorf("seconds is a whole number from 1 to 15, not %v", n)
+		}
+		return int(n), nil
+	case string:
+		if strings.TrimSpace(n) == "" {
+			return 0, nil
+		}
+		i, err := strconv.Atoi(strings.TrimSpace(n))
+		if err != nil || i < 1 {
+			return 0, fmt.Errorf("seconds is a whole number from 1 to 15, not %q", n)
+		}
+		return i, nil
+	}
+	return 0, fmt.Errorf("seconds is a whole number from 1 to 15, not %v", v)
+}
+
+// call asks the gateway, as the agent.
+func (s *server) call(method, path string, body []byte) ([]byte, int, error) {
+	r, _ := http.NewRequest(method, s.gateway+path, bytes.NewReader(body))
+	if body != nil {
+		r.Header.Set("Content-Type", "application/json")
+	}
+	r.Header.Set("Authorization", "Bearer "+gateway.Token)
+	s.mu.Lock()
+	r.Header.Set("User-Agent", s.agent)
+	s.mu.Unlock()
+	res, err := s.client.Do(r)
+	if err != nil {
+		return nil, 0, fmt.Errorf("magpie isn't answering at %s (is it running?): %w", s.gateway, err)
+	}
+	defer res.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(res.Body, 512<<20))
+	return data, res.StatusCode, nil
+}
+
+// gatewaySaid is what the gateway's error answer says, or its body.
+func gatewaySaid(data []byte) string {
+	var e struct {
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(data, &e) == nil && e.Error != nil && e.Error.Message != "" {
+		return e.Error.Message
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// film asks the gateway to make a video, waits for it and saves it; what
+// it says is where it is.
+func (s *server) film(raw json.RawMessage) (string, error) {
+	var a filmArgs
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(a.Prompt) == "" {
+		return "", errors.New("prompt is required")
+	}
+	secs, err := wholeSeconds(a.Seconds)
+	if err != nil {
+		return "", err
+	}
+	project := s.project()
+	req := map[string]any{"prompt": a.Prompt}
+	if secs > 0 {
+		req["seconds"] = strconv.Itoa(secs)
+	}
+	if a.Size != "" {
+		req["size"] = a.Size
+	}
+	if a.Image != "" {
+		src, err := reference(project, a.Image)
+		if err != nil {
+			return "", err
+		}
+		req["input_reference"] = map[string]string{"image_url": src}
+	}
+	if len(a.References) > 0 {
+		var refs []map[string]string
+		for _, ref := range a.References {
+			src, err := reference(project, ref)
+			if err != nil {
+				return "", err
+			}
+			refs = append(refs, map[string]string{"image_url": src})
+		}
+		req["reference_images"] = refs
+	}
+	body, _ := json.Marshal(req)
+	data, code, err := s.call(http.MethodPost, "/v1/videos", body)
+	if err != nil {
+		return "", err
+	}
+	if code != 200 {
+		return "", fmt.Errorf("no video: %s", gatewaySaid(data))
+	}
+	var v struct {
+		ID      string `json:"id"`
+		Status  string `json:"status"`
+		Model   string `json:"model"`
+		Seconds string `json:"seconds"`
+		Error   *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(data, &v) != nil || v.ID == "" {
+		return "", fmt.Errorf("no video: the gateway's answer has no id: %s", gatewaySaid(data))
+	}
+	id, deadline := v.ID, time.Now().Add(videoWait)
+	for v.Status != "completed" {
+		if v.Status == "failed" {
+			msg := "it gave no reason"
+			if v.Error != nil && v.Error.Message != "" {
+				msg = v.Error.Message
+			}
+			return "", fmt.Errorf("the video failed: %s", msg)
+		}
+		if time.Now().After(deadline) {
+			return "", fmt.Errorf("the video (%s) wasn't ready after %s; ask the gateway for GET /v1/videos/%s later", id, videoWait, id)
+		}
+		time.Sleep(videoPollEvery)
+		data, code, err = s.call(http.MethodGet, "/v1/videos/"+id, nil)
+		if err != nil {
+			return "", err
+		}
+		if code != 200 {
+			return "", fmt.Errorf("asking after the video (%s): %s", id, gatewaySaid(data))
+		}
+		prev := v.Model
+		v.Error = nil
+		if json.Unmarshal(data, &v) != nil {
+			return "", fmt.Errorf("asking after the video (%s): the answer isn't JSON", id)
+		}
+		if v.Model == "" {
+			v.Model = prev
+		}
+	}
+	mp4, code, err := s.call(http.MethodGet, "/v1/videos/"+id+"/content", nil)
+	if err != nil {
+		return "", err
+	}
+	if code != 200 {
+		return "", fmt.Errorf("fetching the video (%s): %s", id, gatewaySaid(mp4))
+	}
+	if ct := http.DetectContentType(mp4); !strings.HasPrefix(ct, "video/") {
+		return "", fmt.Errorf("what came back for the video (%s) isn't a video (%s)", id, ct)
+	}
+	path, err := target(project, a.Path, a.Prompt, ".mp4", 0, 1)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(path, mp4, 0o644); err != nil {
+		return "", err
+	}
+	length := ""
+	if v.Seconds != "" {
+		length = v.Seconds + "-second "
+	}
+	return fmt.Sprintf("Generated a %svideo with %s, saved to:\n- %s\n", length, v.Model, path), nil
 }

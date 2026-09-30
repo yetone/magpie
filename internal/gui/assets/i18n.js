@@ -116,7 +116,7 @@ const I18N = {
     "Agents given Magpie Image can't generate images: the tool says it is off": "装了 Magpie Image 的 Agent 不能生图：工具会告诉它生图已关闭",
     "no model that draws": "没有能生图的模型",
     "no images generated": "不生成图片",
-    "Generate and edit images with the image model set in Magpie (Settings → Images), saved in the project.": "用 Magpie 里设置的生图模型（设置 → 图像）生成和编辑图片，存在项目目录里。",
+    "Generate and edit images with the image model set in Magpie (Settings → Images), and make short videos with a Grok subscription, saved in the project.": "用 Magpie 里设置的生图模型（设置 → 图像）生成和编辑图片，也可以用 Grok 订阅生成短视频，存在项目目录里。",
     "Pick the agents that may generate images: each image costs what the model set in Settings → Images charges.": "选择可以生图的 Agent：每张图按 设置 → 图像 里所选模型的价格计费。",
     "Privacy": "隐私",
     "Mask secrets": "脱敏密钥",

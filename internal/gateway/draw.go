@@ -500,12 +500,19 @@ func (s *Server) drawOn(ctx context.Context, p provider.Provider, model string, 
 // send posts to the vendor and reads its answer; a failure's code is the
 // vendor's, with its own message.
 func (s *Server) send(ctx context.Context, p provider.Provider, url, contentType string, body []byte, sign bool) ([]byte, int, error) {
+	return s.sendAs(ctx, p, http.MethodPost, url, contentType, body, sign)
+}
+
+// sendAs is send with the method: a video's progress is asked with a GET.
+func (s *Server) sendAs(ctx context.Context, p provider.Provider, method, url, contentType string, body []byte, sign bool) ([]byte, int, error) {
 	ctx = p.Via(ctx)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, 500, err
 	}
-	req.Header.Set("Content-Type", contentType)
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
 	if sign {
 		if err := p.Sign(ctx, req, provider.Chat, body); err != nil {
 			return nil, 502, err

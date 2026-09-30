@@ -79,7 +79,7 @@ const usage = `magpie — one place to pick every agent's model
                                   OpenCode provider plugins: subscriptions signed in to, and served, through a plugin
 
   magpie serve                    run the gateway alone (the app runs it too)
-  magpie mcp image                the image generation MCP server an agent is given from the library (stdio)
+  magpie mcp image                the image and video generation MCP server an agent is given from the library (stdio)
   magpie usage [today|7d|30d|all] tokens and cost per agent and model (30d)
   magpie usage --csv [today|7d|30d|all]   every request as CSV: the model asked for, sent and served, tokens, cost, time, status
   magpie sessions [--model <m>] [--folder <f>] [--json]   the latest Claude Code, Codex, OpenCode and Pi sessions, with what each cost
