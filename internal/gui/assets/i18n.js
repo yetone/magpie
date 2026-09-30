@@ -237,6 +237,10 @@ const I18N = {
 
     // providers
     "Qoder has no public API for this; magpie signs requests as its desktop client would, which Qoder may treat as third-party use and act on. Use an account you can afford to lose.": "Qoder 没有公开的 API；magpie 会按照其桌面客户端的方式签发请求，Qoder 可能将其视为第三方使用并采取措施。请用一个丢了也不心疼的账号。",
+    "Qoder service address": "Qoder 服务地址",
+    "Leave blank for Qoder official, or enter the enterprise access domain supplied by your administrator.": "留空使用 Qoder 官方服务，或填写管理员提供的企业接入域名。",
+    "Qoder official": "Qoder 官方",
+    "Enterprise VPC": "企业 VPC",
     "Zed serves these models to its own editor; magpie signs requests as the editor would, which Zed may treat as third-party use and act on. Use an account you can afford to lose.": "Zed 只向自己的编辑器提供这些模型；magpie 会按照编辑器的方式签发请求，Zed 可能将其视为第三方使用并采取措施。请用一个丢了也不心疼的账号。",
     "Factory serves these models to its own Droid CLI; magpie signs requests as Droid would, which Factory may treat as third-party use and act on. Use an account you can afford to lose.": "Factory 只向自己的 Droid CLI 提供这些模型；magpie 会按照 Droid 的方式签发请求，Factory 可能将其视为第三方使用并采取措施。请用一个丢了也不心疼的账号。",
     "A Go plan account is used through Command Code's private interface, which Command Code may treat as a breach of its terms and ban the account for. Pro, Max and the other plans use its Provider API. Use a Go account you can afford to lose.": "Go 套餐的账号要通过 Command Code 的私有接口使用，Command Code 可能将其视为违反服务条款并封禁该账号。Pro、Max 等其他套餐走的是它的 Provider API。请用一个丢了也不心疼的 Go 账号。",

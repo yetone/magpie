@@ -243,6 +243,13 @@ func QoderCredential(ctx context.Context, user string) (*qoder.Credential, error
 	return &c, nil
 }
 
+func qoderAPIFor(c *qoder.Credential) string {
+	if c != nil && c.VPCEndpoint != "" {
+		return qoder.BaseURL(c.VPCEndpoint, qoder.APIHost)
+	}
+	return qoderAPI
+}
+
 func qoderUser(c *qoder.Credential) *qoder.User {
 	return &qoder.User{UID: c.UID, Token: c.Token, Name: c.Name, Email: c.Email, MachineID: c.MachineID}
 }
@@ -291,7 +298,7 @@ func qoderFetchModels(ctx context.Context, user string) ([]catalog.Model, error)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	raw, err := qoder.FetchModels(ctx, qoderClient, qoderAPI, qoderUser(c))
+	raw, err := qoder.FetchModels(ctx, qoderClient, qoderAPIFor(c), qoderUser(c))
 	if err != nil {
 		return nil, err
 	}
@@ -400,17 +407,24 @@ type qoderFlow struct {
 	verifier, nonce string
 	client          *qoder.DeviceFlow
 	deadline        time.Time
+	vpcEndpoint     string
 }
 
 const qoderSignInTimeout = 15 * time.Minute
 
-func QoderAuthURL() (url string, flow *qoderFlow, err error) {
-	f := qoder.NewDeviceFlow(qoderClient)
+func QoderAuthURL() (url string, flow *qoderFlow, err error) { return QoderAuthURLAt("") }
+
+func QoderAuthURLAt(rawEndpoint string) (url string, flow *qoderFlow, err error) {
+	endpoint, err := qoder.NormalizeVPCEndpoint(rawEndpoint)
+	if err != nil {
+		return "", nil, err
+	}
+	f := qoder.NewDeviceFlowAt(qoderClient, endpoint)
 	url, verifier, nonce, err := f.Authorization()
 	if err != nil {
 		return "", nil, err
 	}
-	return url, &qoderFlow{verifier: verifier, nonce: nonce, client: f, deadline: time.Now().Add(qoderSignInTimeout)}, nil
+	return url, &qoderFlow{verifier: verifier, nonce: nonce, client: f, deadline: time.Now().Add(qoderSignInTimeout), vpcEndpoint: endpoint}, nil
 }
 
 func QoderCompleteSignIn(ctx context.Context, fl *qoderFlow) (user string, err error) {
@@ -429,9 +443,9 @@ func QoderCompleteSignIn(ctx context.Context, fl *qoderFlow) (user string, err e
 		life = 24 * time.Hour
 	}
 	cred := qoder.Credential{UID: dt.UserID, Token: jt.Token, RefreshToken: jt.RefreshToken,
-		DeviceToken: dt.Token, DeviceRefresh: dt.RefreshToken, MachineID: fl.client.MachineID(),
+		DeviceToken: dt.Token, DeviceRefresh: dt.RefreshToken, MachineID: fl.client.MachineID(), VPCEndpoint: fl.vpcEndpoint,
 		ExpiresAt: time.Now().Add(life).UnixMilli()}
-	if ui, err := qoder.FetchUserInfo(ctx, qoderClient, dt.Token); err == nil && ui != nil {
+	if ui, err := qoder.FetchUserInfoAt(ctx, qoderClient, dt.Token, fl.vpcEndpoint); err == nil && ui != nil {
 		cred.Email, cred.Name = ui.Email, ui.Name
 	}
 	if err := ctx.Err(); err != nil {
@@ -446,7 +460,7 @@ func QoderCompleteSignIn(ctx context.Context, fl *qoderFlow) (user string, err e
 }
 
 func startQoderSignIn(s *signInFlow) error {
-	authURL, fl, err := QoderAuthURL()
+	authURL, fl, err := QoderAuthURLAt(s.site)
 	if err != nil {
 		return fmt.Errorf("Qoder sign-in: %w", err)
 	}

@@ -46,17 +46,21 @@ func (r JobToken) Expiry() time.Duration {
 // models. It is a helper, not a state machine: the caller owns the browser and
 // the waiting, and calls these one at a time.
 type DeviceFlow struct {
-	client    *http.Client
-	clientID  string
-	machineID string
+	client      *http.Client
+	clientID    string
+	machineID   string
+	vpcEndpoint string
 }
 
 // NewDeviceFlow makes a flow; a nil client is a 20-second-timeout one.
-func NewDeviceFlow(client *http.Client) *DeviceFlow {
+func NewDeviceFlow(client *http.Client) *DeviceFlow { return NewDeviceFlowAt(client, "") }
+
+// NewDeviceFlowAt creates a device flow for a public or enterprise account.
+func NewDeviceFlowAt(client *http.Client, vpcEndpoint string) *DeviceFlow {
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
-	return &DeviceFlow{client: client, clientID: ClientID, machineID: newUUID()}
+	return &DeviceFlow{client: client, clientID: ClientID, machineID: newUUID(), vpcEndpoint: vpcEndpoint}
 }
 
 // Client is the flow's HTTP client, reused for the model fetch after sign-in.
@@ -83,7 +87,7 @@ func (f *DeviceFlow) Authorization() (authURL, verifier, nonce string, err error
 	q.Set("machine_id", f.machineID)
 	q.Set("client_id", f.clientID)
 	q.Set("redirect_uri", RedirectURI)
-	return DeviceFlowHost + DeviceSelectAccountsPath + "?" + q.Encode(), verifier, nonce, nil
+	return BaseURL(f.vpcEndpoint, DeviceFlowHost) + DeviceSelectAccountsPath + "?" + q.Encode(), verifier, nonce, nil
 }
 
 // PollDeviceToken asks for the device token until the user has authorized it,
@@ -92,7 +96,7 @@ func (f *DeviceFlow) PollDeviceToken(ctx context.Context, nonce, verifier string
 	if interval <= 0 {
 		interval = 2 * time.Second
 	}
-	endpoint := openAPIHost + DeviceTokenPollPath
+	endpoint := BaseURL(f.vpcEndpoint, openAPIHost) + DeviceTokenPollPath
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("qoder device poll: %w", err)
@@ -130,7 +134,7 @@ func (f *DeviceFlow) PollDeviceToken(ctx context.Context, nonce, verifier string
 // JobToken trades a device token for the job token the model calls use.
 func (f *DeviceFlow) JobToken(ctx context.Context, deviceToken string) (*JobToken, error) {
 	body, _ := json.Marshal(map[string]string{"clientId": f.clientID})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, openAPIHost+JobTokenPath, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, BaseURL(f.vpcEndpoint, openAPIHost)+JobTokenPath, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("qoder job token: create request: %w", err)
 	}
@@ -159,13 +163,18 @@ func (f *DeviceFlow) JobToken(ctx context.Context, deviceToken string) (*JobToke
 // RefreshJobToken trades a job token's refresh token for a new pair. The old
 // refresh token is spent, so the caller must keep the new one.
 func RefreshJobToken(ctx context.Context, client *http.Client, refreshToken string) (*JobToken, error) {
+	return RefreshJobTokenAt(ctx, client, refreshToken, "")
+}
+
+// RefreshJobTokenAt refreshes a public or enterprise account's job token.
+func RefreshJobTokenAt(ctx context.Context, client *http.Client, refreshToken, vpcEndpoint string) (*JobToken, error) {
 	if strings.TrimSpace(refreshToken) == "" {
 		return nil, fmt.Errorf("qoder job token refresh: missing refresh token; sign in again")
 	}
 	if client == nil {
 		client = &http.Client{Timeout: 20 * time.Second}
 	}
-	return postJobRefresh(ctx, client, openAPIHost+JobTokenRefreshPath, refreshToken)
+	return postJobRefresh(ctx, client, BaseURL(vpcEndpoint, openAPIHost)+JobTokenRefreshPath, refreshToken)
 }
 
 func postJobRefresh(ctx context.Context, client *http.Client, endpoint, refreshToken string) (*JobToken, error) {
