@@ -108,8 +108,8 @@ func TestLegacyLANKeyMigrationIsIdempotentAndRevocable(t *testing.T) {
 	if err != nil || len(keys) != 1 || keys[0].Name != "Magpie" || !strings.HasPrefix(keys[0].Masked, "sk-magpie-…") {
 		t.Fatal(keys, err)
 	}
-	if settings.Load().LANKey != "" || !settings.Load().LAN {
-		t.Fatal("LAN sharing lost or old secret still in settings")
+	if settings.Load().LANKey != s.LANKey || !settings.Load().LAN {
+		t.Fatal("migration broke older Magpie's sharing settings")
 	}
 	if who, ok := Authenticate(s.LANKey); !ok || who.KeyID != keys[0].ID {
 		t.Fatal(who, ok)
@@ -132,6 +132,12 @@ func TestLegacyLANKeyMigrationIsIdempotentAndRevocable(t *testing.T) {
 	}
 	if _, ok := Authenticate(s.LANKey); ok {
 		t.Fatal("removed LAN key still works")
+	}
+	if err := MigrateLegacyLANKey(); err != nil {
+		t.Fatal(err)
+	}
+	if keys, _ := List(); len(keys) != 0 {
+		t.Fatal("retained legacy credential resurrected a removed key", keys)
 	}
 }
 
@@ -170,7 +176,7 @@ func TestLegacyLANKeyMigrationRetryAndFailure(t *testing.T) {
 	if err := settings.Save(s); err != nil {
 		t.Fatal(err)
 	}
-	// The key write succeeded but clearing Settings was interrupted.
+	// The key write succeeded but saving the migration marker was interrupted.
 	mu.Lock()
 	err := save([]Key{{ID: "migrated", Name: "Remote", Off: true, Secret: s.LANKey}})
 	mu.Unlock()
@@ -265,5 +271,32 @@ func TestCallerKeyRotationPreservesIdentityAndState(t *testing.T) {
 	}
 	if _, err := Update("rotate-key", Change{Key: "missing"}); err == nil {
 		t.Fatal("rotated a missing key")
+	}
+}
+
+func TestLANRotationKeepsOlderMagpieWorking(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := ConfigureLAN(true, false); err != nil {
+		t.Fatal(err)
+	}
+	before := settings.Load()
+	if before.LANKey == "" {
+		t.Fatal("older Magpie has no sharing key")
+	}
+	next, err := Update("rotate-key", Change{Key: before.LANKeyID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Load().LANKey != next {
+		t.Fatal("rotation left the old version with a stale key")
+	}
+	if err := MigrateLegacyLANKey(); err != nil {
+		t.Fatal(err)
+	}
+	if keys, _ := List(); len(keys) != 1 || keys[0].ID != before.LANKeyID {
+		t.Fatal("rotation duplicated the default key", keys)
+	}
+	if _, ok := Authenticate(before.LANKey); ok {
+		t.Fatal("old key resurrected")
 	}
 }

@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -16,7 +17,7 @@ import (
 )
 
 // The gateway accepts named caller keys locally and, while shared, remotely.
-// Loopback clients may still use the usual magpie token.
+// Loopback clients may still use any token, including a stale named key.
 
 // listenAddr is where the gateway listens: every interface while it is
 // shared, on its port, else its address.
@@ -83,6 +84,12 @@ func inContainer(root string) bool {
 	return false
 }
 
+func migrateLANKeyBestEffort() {
+	if err := migrateLANKey(); err != nil {
+		log.Printf("magpie: could not migrate LAN key: %v", err)
+	}
+}
+
 // LANURLs are the addresses other machines on the network reach the
 // gateway at: MAGPIE_PUBLIC_URL when set, else one per IPv4 address this
 // computer has there.
@@ -111,9 +118,7 @@ func LANURLs() []string {
 // Relisten moves the gateway to where settings now say it listens — onto
 // the network or back to loopback. Requests in flight finish.
 func (s *Server) Relisten() error {
-	if err := migrateLANKey(); err != nil {
-		return err
-	}
+	migrateLANKeyBestEffort()
 	s.lnMu.Lock()
 	defer s.lnMu.Unlock()
 	if s.ln == nil {
@@ -188,11 +193,13 @@ func callerGuard(next http.Handler) http.Handler {
 
 func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
 	who, ok := access.Authenticate(callerKey(r))
-	if !ok {
+	if !ok && !local(r) {
 		writeError(w, provider.Chat, http.StatusUnauthorized, "API key is disabled, removed or invalid")
 		return r, false
 	}
-	r = r.WithContext(access.WithIdentity(r.Context(), who))
+	if ok {
+		r = r.WithContext(access.WithIdentity(r.Context(), who))
+	}
 	r.Header = r.Header.Clone()
 	r.Header.Set("Authorization", "Bearer "+Token)
 	for _, h := range []string{"x-api-key", "x-goog-api-key"} {

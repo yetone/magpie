@@ -146,7 +146,19 @@ func Update(action string, in Change) (string, error) {
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
 	}
-	return secret, save(keys)
+	if err := save(keys); err != nil {
+		return "", err
+	}
+	if action == "rotate-key" {
+		s := settings.Load()
+		if s.LANKeyID == in.Key {
+			s.LANKey = secret
+			if err := settings.Save(s); err != nil {
+				return "", err
+			}
+		}
+	}
+	return secret, nil
 }
 
 // Authenticate reloads the store so revocation takes effect in running gateways.
@@ -166,8 +178,8 @@ func Authenticate(secret string) (Identity, bool) {
 }
 
 // MigrateLegacyLANKey makes the old Settings key a normal, revocable caller
-// key. Persist the key before clearing Settings so a failed migration never
-// silently revokes a working client. Repeating it after a partial write is safe.
+// key. Keep LANKey for older Magpie versions; LANKeyID marks a completed
+// migration so the retained credential cannot resurrect a removed key.
 func MigrateLegacyLANKey() error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -176,7 +188,7 @@ func MigrateLegacyLANKey() error {
 
 func migrateLegacyLANKey() error {
 	s := settings.Load()
-	if s.LANKey == "" {
+	if s.LANKey == "" || s.LANKeyID != "" {
 		return nil
 	}
 	keys, err := load()
@@ -198,7 +210,6 @@ func migrateLegacyLANKey() error {
 		i = len(keys) - 1
 	}
 	s.LANKeyID = keys[i].ID
-	s.LANKey = ""
 	return settings.Save(s)
 }
 
@@ -236,6 +247,7 @@ func ConfigureLAN(on, rotate bool) error {
 			}
 			s.LANKeyID = keys[i].ID
 		}
+		s.LANKey = keys[i].Secret
 	}
 	s.LAN = on
 	return settings.Save(s)

@@ -61,7 +61,7 @@ type Settings struct {
 	RedactWords    []string      `json:"redactWords,omitempty"`
 	RedactRules    []redact.Rule `json:"redactRules,omitempty"`
 	// LAN shares the gateway on the local network; remote callers must use
-	// named caller keys. LANKey is read only to migrate older installations.
+	// named caller keys. LANKey is retained for older Magpie versions.
 	LAN    bool   `json:"lan,omitempty"`
 	LANKey string `json:"lanKey,omitempty"`
 	// LANKeyID remembers the default named key created when sharing is enabled.
