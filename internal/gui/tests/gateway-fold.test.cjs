@@ -80,6 +80,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     // remembered across a reload
     await page.reload();
     await page.locator("#activity .call").first().waitFor();
+    // Reduced-motion animations can still be on their first frame when
+    // fast fixtures return. Compare the settled heading position.
+    await page.locator(view).evaluate(async (v) => {
+      await Promise.all(v.getAnimations().map((a) => a.finished.catch(() => {})));
+    });
     assert.equal(await page.locator("#foldConnect").getAttribute("aria-expanded"), "false", "the fold is remembered");
     assert(await page.locator("#connect").evaluate((c) => c.hidden));
 

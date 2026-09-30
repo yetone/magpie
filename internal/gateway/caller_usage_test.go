@@ -144,3 +144,35 @@ func TestImageUsageIncludesCaller(t *testing.T) {
 		t.Fatal(rec)
 	}
 }
+
+func TestCallerIdentitySurvivesStreamingFailover(t *testing.T) {
+	fresh(t)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer first" {
+			w.WriteHeader(429)
+			io.WriteString(w, `{"error":{"message":"rate limited"}}`)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, "data: "+`{"choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}`+"\n\n")
+		io.WriteString(w, "data: "+`{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":20}}`+"\n\ndata: [DONE]\n\n")
+	}))
+	defer up.Close()
+	p := provider.Provider{ID: "plan", Name: "Plan", Key: "first", Chat: up.URL + "/v1", Models: []string{"m1"},
+		Keys: []provider.KeyAccount{{Key: "backup", Name: "Backup"}}}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	u, secrets := newCaller(t, "Streaming user", "Stream")
+	r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"plan/m1","messages":[{"role":"user","content":"hi"}],"stream":true}`))
+	r.Header.Set("Authorization", "Bearer "+secrets[0])
+	w := httptest.NewRecorder()
+	New().Handler().ServeHTTP(w, r)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "[DONE]") {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	rec := lastUsage(t)
+	if rec.UserID != u.ID || rec.CallerKeyID != u.Keys[0].ID || rec.KeyID != provider.KeyID("backup") || rec.Input != 100 || rec.Output != 20 {
+		t.Fatal(rec)
+	}
+}
