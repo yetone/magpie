@@ -87,7 +87,7 @@ func TestUsageKeyRoutes(t *testing.T) {
 		t.Fatalf("filtered CSV: %v, %s", err, w.Body)
 	}
 	for _, row := range rows[1:] {
-		if row[len(usage.CSVHeader)-2] != team || row[len(usage.CSVHeader)-1] != "Team" {
+		if row[21] != team || row[22] != "Team" {
 			t.Fatalf("CSV key: %v", row)
 		}
 	}
