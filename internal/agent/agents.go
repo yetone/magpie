@@ -248,7 +248,15 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 			if window == 0 {
 				window = 200000
 			}
-			ms = append(ms, map[string]any{"id": m.ID, "name": m.Name, "context_window": window, "default_max_tokens": 16384,
+			// without it Crush caps every reply at 16384 tokens, a model
+			// that can write more of them never asked for it; an output
+			// above the window is cut to it, as it is for every other
+			// agent magpie hands a limit to
+			tokens := maxTokens(m)
+			if tokens == 0 {
+				tokens = 16384
+			}
+			ms = append(ms, map[string]any{"id": m.ID, "name": m.Name, "context_window": window, "default_max_tokens": tokens,
 				"can_reason": len(m.Efforts) > 0})
 		}
 		if ms == nil {

@@ -518,6 +518,67 @@ func TestRuleTurnOutgrowsUnlistedMember(t *testing.T) {
 	}
 }
 
+// A window the user gave a member is the one a turn outgrows: the 95% is
+// taken of the number the user set, not of the catalogue's. A turn that
+// fitted nothing over the catalogue's window stays on the member once the
+// user has raised it — the price of overstating a window, which is why the
+// CLI has to say which number it is reporting.
+func TestRuleTurnOutgrowsAnOverriddenWindow(t *testing.T) {
+	s, _, _ := ruled(t, provider.Rule{Use: "b/big", Tokens: 50000})
+	p, err := provider.Find("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetContext(*p, "small", 128000); err != nil {
+		t.Fatal(err)
+	}
+	if _, out := postAs(t, s, "sess", chat("hi", nil, 0, "")); !strings.Contains(out, "from ka") {
+		t.Fatal(out)
+	}
+	// a 100k turn is over the 60.8k the catalogue's own 64k window moves a
+	// turn at, and under the 121.6k the 128k the user set does: it stays
+	body := strings.Replace(chat("hi", nil, 1, ""), `"file.txt"`, quote(long(100000)), 1)
+	if _, out := postAs(t, s, "sess", body); !strings.Contains(out, "from ka") || !lastRoute(s).Rule.Held {
+		t.Fatalf("a 100k turn moved on a 128k window: %s %+v", out, lastRoute(s).Rule)
+	}
+	// and at 95% of the window the user did set, to b
+	body = strings.Replace(chat("hi", nil, 2, ""), `"file.txt"`, quote(long(130000)), 1)
+	_, out := postAs(t, s, "sess", body)
+	if r := lastRoute(s); !strings.Contains(out, "from kb") || !r.Rule.Grown {
+		t.Fatalf("a 130k turn stayed on a 128k window: %s %+v", out, r.Rule)
+	}
+}
+
+// A turn moves a little over 95% of its model's window, not only once the
+// whole window is used: 122k is past the 121.6k that 95% of the 128k a
+// user set is, and under the 128k itself. A turn that only moved at the
+// window's own end would carry a sixth of a window past it first.
+func TestRuleTurnOutgrowsNinetyFivePercentOfAnOverriddenWindow(t *testing.T) {
+	s, _, _ := ruled(t, provider.Rule{Use: "b/big", Tokens: 50000})
+	p, err := provider.Find("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetContext(*p, "small", 128000); err != nil {
+		t.Fatal(err)
+	}
+	if _, out := postAs(t, s, "sess", chat("hi", nil, 0, "")); !strings.Contains(out, "from ka") {
+		t.Fatal(out)
+	}
+	// a 121k turn is under the 121.6k 95% of the window the user did set
+	// is: it stays
+	body := strings.Replace(chat("hi", nil, 1, ""), `"file.txt"`, quote(long(121000)), 1)
+	if _, out := postAs(t, s, "sess", body); !strings.Contains(out, "from ka") || !lastRoute(s).Rule.Held {
+		t.Fatalf("a 121k turn moved on a 128k window: %s %+v", out, lastRoute(s).Rule)
+	}
+	// and at 122k, over the 95% though under the window: to b
+	body = strings.Replace(chat("hi", nil, 2, ""), `"file.txt"`, quote(long(122000)), 1)
+	_, out := postAs(t, s, "sess", body)
+	if r := lastRoute(s); !strings.Contains(out, "from kb") || !r.Rule.Grown {
+		t.Fatalf("a 122k turn stayed on a 128k window: %s %+v", out, r.Rule)
+	}
+}
+
 // An unlisted text-only member still keeps images out of its group.
 func TestRuleImagesUnlistedMember(t *testing.T) {
 	img := `{"model":"group/r","messages":[{"role":"user","content":[{"type":"text","text":"look"},{"type":"image_url","image_url":{"url":"data:image/png;base64,aGVsbG8="}}]}]}`

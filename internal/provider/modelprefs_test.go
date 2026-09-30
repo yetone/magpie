@@ -267,31 +267,28 @@ func TestModelImage(t *testing.T) {
 
 // Renaming a provider moves what the user gave its models in every
 // per-model map. The settings walk them by the convention themselves — each
-// map[string]X of Settings named Model*, the three there are now and any
+// map[string]X of Settings named Model*, the ones there are now and any
 // added later — and this holds the provider's own call to it: a map that
 // walk leaves out, or skips as soon as an earlier one has moved something,
 // is caught here instead of by a user whose overrides went on answering for
 // the id the provider had. A map that isn't per-model — Visible, which is by
 // agent id — is left as it was.
+//
+// The maps come from that walk and not from the convention written out
+// again here: a copy keeps passing while the walk it copies goes on
+// changing, so a map added to the settings later would be held to the copy
+// and to nothing else.
 func TestRenameMovesEveryPerModelMap(t *testing.T) {
-	const atLeast = 3 // the per-model maps there are: names, efforts, images
+	const atLeast = 3 // only a floor against a walk that found nothing at all
 	s := settings.Settings{Visible: map[string][]string{"code": {"old/model", "old"}}}
-	v := reflect.ValueOf(&s).Elem()
-	typ := v.Type()
-	var perModel []reflect.StructField
-	for i := range typ.NumField() {
-		f := typ.Field(i)
-		if strings.HasPrefix(f.Name, "Model") && f.Type.Kind() == reflect.Map && f.Type.Key().Kind() == reflect.String {
-			perModel = append(perModel, f)
-		}
-	}
-	if len(perModel) < atLeast {
-		t.Fatalf("%d per-model maps in the settings, expected at least %d", len(perModel), atLeast)
-	}
-	for _, f := range perModel {
-		m := reflect.MakeMap(f.Type)
-		m.SetMapIndex(reflect.ValueOf("old/model"), reflect.New(f.Type.Elem()).Elem())
-		v.FieldByIndex(f.Index).Set(m)
+	tables := map[string]reflect.Value{}
+	settings.PerModelKeys(&s, func(name string, m reflect.Value) {
+		m.Set(reflect.MakeMap(m.Type()))
+		m.SetMapIndex(reflect.ValueOf("old/model").Convert(m.Type().Key()), reflect.New(m.Type().Elem()).Elem())
+		tables[name] = m
+	})
+	if len(tables) < atLeast {
+		t.Fatalf("%d per-model maps in the settings, expected at least %d", len(tables), atLeast)
 	}
 	if !renameModelPrefs(&s, "old", "new") {
 		t.Fatal("renaming moved nothing")
@@ -304,10 +301,10 @@ func TestRenameMovesEveryPerModelMap(t *testing.T) {
 		slices.Sort(out)
 		return out
 	}
-	for _, f := range perModel {
-		m := v.FieldByIndex(f.Index)
-		if !m.MapIndex(reflect.ValueOf("new/model")).IsValid() || m.MapIndex(reflect.ValueOf("old/model")).IsValid() {
-			t.Errorf("%s holds %v", f.Name, keys(m))
+	for name, m := range tables {
+		old, now := reflect.ValueOf("old/model").Convert(m.Type().Key()), reflect.ValueOf("new/model").Convert(m.Type().Key())
+		if !m.MapIndex(now).IsValid() || m.MapIndex(old).IsValid() {
+			t.Errorf("%s holds %v", name, keys(m))
 		}
 	}
 	if got := s.Visible["code"]; !slices.Equal(got, []string{"old/model", "old"}) {

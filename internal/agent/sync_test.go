@@ -105,11 +105,34 @@ func TestPiModelsCarryMaxTokens(t *testing.T) {
 	}
 }
 
+// Crush is handed how long a reply may be beside the window it is handed
+// with it: without it Crush caps every model at 16384 tokens, one the
+// catalogue says can write far more of them included. A model whose output
+// isn't known keeps Crush's own default.
+func TestCrushModelsCarryMaxTokens(t *testing.T) {
+	syncHome(t)
+	os.WriteFile(catalog.CachePath(), []byte(`{"zai":{"models":{"glm-4.6":{"id":"glm-4.6","name":"GLM-4.6","limit":{"context":204800,"output":131072}}}}}`), 0o644)
+	catalog.Reset()
+	b, _ := json.Marshal(magpieProviderJSON("crush"))
+	if !strings.Contains(string(b), `"id":"relay/glm-4.6"`) || !strings.Contains(string(b), `"context_window":204800`) ||
+		!strings.Contains(string(b), `"default_max_tokens":131072`) {
+		t.Fatalf("%s", b)
+	}
+
+	os.WriteFile(catalog.CachePath(), []byte(`{"zai":{"models":{"glm-4.6":{"id":"glm-4.6","name":"GLM-4.6","limit":{"context":204800}}}}}`), 0o644)
+	catalog.Reset()
+	b, _ = json.Marshal(magpieProviderJSON("crush"))
+	if !strings.Contains(string(b), `"default_max_tokens":16384`) {
+		t.Fatalf("unknown output took Crush's default away: %s", b)
+	}
+}
+
 // An output limit above the model's window (models.dev lists deepseek-chat's
 // 384000 against 128000 of context) is cut to the window for every agent
 // magpie hands an output limit; one whose window isn't known keeps its
-// output. ZCode and WorkBuddy cap it at zcodeMaxOutput besides, and OpenCode
-// is handed no limit without a window.
+// output. ZCode and WorkBuddy cap it at zcodeMaxOutput besides, Crush falls
+// back to 16384 without a known output, and OpenCode is handed no limit
+// without a window.
 func TestMaxTokensWithinContextWindow(t *testing.T) {
 	home := syncHome(t)
 	check := func(limit string, want int) {
@@ -124,6 +147,7 @@ func TestMaxTokensWithinContextWindow(t *testing.T) {
 		hanako, _ := json.Marshal(hanakoProvider())
 		opencode, _ := json.Marshal(magpieProviderJSON("opencode"))
 		zc, _ := json.Marshal(zcodeProviderJSON(filepath.Join(home, "none.json")))
+		crush, _ := json.Marshal(magpieProviderJSON("crush"))
 		rules, wb := filepath.Join(t.TempDir(), "provider_config.json"), filepath.Join(t.TempDir(), "models.json")
 		if err := zcodeRules(rules, true); err != nil {
 			t.Fatal(err)
@@ -143,6 +167,7 @@ func TestMaxTokensWithinContextWindow(t *testing.T) {
 			"qoder":       {string(qoder), `"maxOutputTokens":` + n},
 			"hanako":      {string(hanako), `"maxOutput":` + n},
 			"zcode":       {string(zc), `"output":` + capped},
+			"crush":       {string(crush), `"default_max_tokens":` + n},
 			"zcode rules": {string(zcRules), `"max":` + capped},
 			"workbuddy":   {string(wbModels), `"maxOutputTokens": ` + capped},
 		}

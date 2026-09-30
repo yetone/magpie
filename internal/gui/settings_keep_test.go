@@ -72,6 +72,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		ModelNames:      map[string]string{"p/m": "Mine"},
 		ModelEfforts:    map[string][]string{"p/m": {"low"}},
 		ModelImages:     map[string]bool{"p/m": true},
+		ModelOutputs:    map[string]int{"p/m": 131072},
 		ModelPrices:     map[string]settings.ModelPrice{"p/m": {Input: &one, Output: &two}},
 		RedactRules:     []redact.Rule{{Kind: "prefix", Prefix: "oc_sk_"}},
 		LAN:             true,

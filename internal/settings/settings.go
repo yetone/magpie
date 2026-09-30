@@ -173,6 +173,13 @@ type Settings struct {
 	// resells at a multiplier, is otherwise priced at whatever its maker's
 	// list price is.
 	ModelPrices map[string]ModelPrice `json:"modelPrices,omitempty"`
+	// ModelOutputs is the most a reply of a model may hold, by "<provider
+	// id>/<model id>", and "*" for every model of that provider. Absent
+	// leaves it to the vendor's own list and to models.dev, as a context
+	// the user has not set is. A model's own value wins over its
+	// provider's, and the agents' own files are told of either
+	// (see provider.SetModelOutput).
+	ModelOutputs map[string]int `json:"modelOutputs,omitempty"`
 	// The main window's size when it was last resized, width and height,
 	// so it opens at it again after a restart.
 	Window []int `json:"window,omitempty"`
@@ -301,11 +308,11 @@ var providerID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 // (vendor/model), so only the first one ends the provider's id. what names
 // the setting being checked, for the error.
 //
-// Nothing in this change calls it yet: it is the entry point for the three
-// changes stacked on this one — a model's price, its output limit, its wire
-// name — which take model keys from the user and check them here rather than
-// each spelling the key's shape out again. It is kept here, on the branch
-// they build on, so that it stays one rule and not three.
+// It is the one rule a model key is held to, and it lives here, beside the
+// maps it keys. Every change that takes such a key from the user checks it
+// here rather than spelling the shape out again, so what is written into a
+// map and what is refused come out of the same rule — one rule, and not one
+// each branch can drift from on its own.
 func CheckModelKey(what, key string) error {
 	pid, model, ok := strings.Cut(key, "/")
 	if !ok || model == "" {

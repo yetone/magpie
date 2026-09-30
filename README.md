@@ -200,6 +200,42 @@ provider and model — usage records do not retain which key or account served
 a call, so a provider charging different tariffs per account cannot be costed
 exactly from a single provider-wide price.
 
+### What a model takes
+
+A provider that serves a model models.dev does not list, or lists at the
+wrong size, has a window and a reply limit magpie cannot know. Say what they
+are:
+
+```sh
+magpie model context relay-a/gpt-5.5 262144    # the window a request may hold, or 1m
+magpie model output  relay-a/gpt-5.5 131072    # the most a reply may hold, or 128k
+magpie model context "relay-a/*" 200000        # every model of that provider
+magpie model output  relay-a/gpt-5.5 --reset   # take your limit off this model
+```
+
+The `*` is quoted because zsh treats a name it cannot expand as a command
+that failed, rather than passing the name on as bash does.
+
+Both are looked for in this order: **this model → this provider's `*` → the
+provider's own list → models.dev.** `--reset` removes only the value this
+model has of its own.
+
+A provider you keep unlisted, or switch off, takes them like any other: the
+numbers are kept, and are what its models take once it is serving again.
+
+A window is a number agents are shown **and a routing input**: at 95% of the
+window a request held on a routing-group member moves to one that takes more,
+so overstating a window makes that move happen too late. A reply limit is
+advertised in `/models` and is what a group advertises the smallest of; the
+gateway does not itself cap a reply by it.
+
+Saving a window or a reply limit writes that number into the model lists magpie
+keeps in the agents' own files — Pi's `contextWindow` and `maxTokens`, OpenCode's
+`limit`, and Crush's, droid's, Cline's, Qoder's and Zcode's — which an agent reads
+at start-up. A session already running therefore keeps the window it began with,
+while the gateway's own `/models` and every request from then on are right at
+once.
+
 ### Routing groups
 
 A routing group is several models, from one provider or many, that an agent

@@ -596,8 +596,10 @@ func EffectivePriceIn(s settings.Settings, providerID, model string) (catalog.Pr
 }
 
 // byIDOrWas is the provider with that id, else the one it was renamed from.
-// Find would answer a display name as well, which is not how a price is
-// keyed.
+// Find would answer a display name as well, which is not how a price or a
+// reply limit is keyed: both are stored under the id the provider has now, and
+// both outlive the provider they were set for, so the spelling the user typed
+// is the one that has to be checked before a name is resolved at all.
 func byIDOrWas(id string) (Provider, bool) {
 	all := All()
 	if p, ok := find(all, id); ok {
@@ -710,34 +712,90 @@ func providerEntries() []Entry {
 			continue
 		}
 		for _, m := range p.Exposed() {
-			// a vendor models.dev doesn't list (a custom provider, a proxy)
-			// serves models it knows from others
-			ctx := m.Context
-			if ctx == 0 {
-				ctx = catalog.ContextOf(m.ID)
-			}
-			if n := p.ContextOf(m.ID); n > 0 {
-				ctx = n
-			}
-			output := m.Output
-			if output == 0 {
-				output = catalog.OutputOf(m.ID)
-			}
-			images := m.Images || catalog.SeesImages(m.ID)
-			if m.ImageInput != nil {
-				images = *m.ImageInput
-			}
-			images, imageInput := ApplyImage(p.ID, m.ID, images, m.ImageInput)
-			e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Family: p.Family, Name: m.Name, Efforts: effortsOf(m), Provider: p,
-				Images: images, ImageInput: imageInput, Context: ctx, Output: output, Free: m.Free}
-			if n, ok := modelNameIn(s.ModelNames, p.ID, m.ID); ok {
-				e.Name, e.Default = n, m.Name
-			}
-			e.Efforts = effortsKept(e.Efforts, s.ModelEfforts[e.ID])
-			out = append(out, e)
+			out = append(out, entryFor(p, m, s))
 		}
 	}
 	return out
+}
+
+// entryFor is one of a provider's models as the catalog carries it: the
+// window and the reply limit a request on it is routed and metered against,
+// with what the user set taken over the vendor's list and models.dev.
+func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
+	// a vendor models.dev doesn't list (a custom provider, a proxy)
+	// serves models it knows from others
+	ctx := m.Context
+	if ctx == 0 {
+		ctx = catalog.ContextOf(m.ID)
+	}
+	if n := p.ContextOf(m.ID); n > 0 {
+		ctx = n
+	}
+	output := m.Output
+	if output == 0 {
+		output = catalog.OutputOf(m.ID)
+	}
+	if n := outputOf(s, p.ID, m.ID); n > 0 {
+		output = n
+	}
+	images := m.Images || catalog.SeesImages(m.ID)
+	if m.ImageInput != nil {
+		images = *m.ImageInput
+	}
+	images, imageInput := ApplyImage(p.ID, m.ID, images, m.ImageInput)
+	e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Family: p.Family, Name: m.Name, Efforts: effortsOf(m), Provider: p,
+		Images: images, ImageInput: imageInput, Context: ctx, Output: output, Free: m.Free}
+	if n, ok := modelNameIn(s.ModelNames, p.ID, m.ID); ok {
+		e.Name, e.Default = n, m.Name
+	}
+	e.Efforts = effortsKept(e.Efforts, s.ModelEfforts[e.ID])
+	return e
+}
+
+// EntryOf is the model as the agents see it, by the id they ask for. It is
+// the catalog's own entry, so the window and reply limit it carries are the
+// ones a request is routed and metered against, with whatever the user set
+// already applied.
+func EntryOf(id string) (Entry, bool) {
+	return entryIn(Catalog(), id)
+}
+
+// ServedEntryOf is the model a limit may be set on, by the id the user
+// typed: any model its provider serves, not only the catalog's own entry.
+// The setters ask serves — the provider's own models deciding, switched off
+// or not — so a provider kept unlisted, still served through a routing
+// group, takes a window and a reply limit all the same, and a provider
+// switched off is served again as soon as it is on, keeping what it was
+// given. Both keep it in the entry they answer with, so a query that said
+// "is not a model this provider serves" about such an id would contradict
+// the command run right after it, which stores one.
+func ServedEntryOf(id string) (Entry, bool) {
+	pid, model, ok := strings.Cut(id, "/")
+	if !ok {
+		return Entry{}, false
+	}
+	p, err := Find(pid)
+	if err != nil || !p.serves(model) {
+		return Entry{}, false
+	}
+	s := settings.Load()
+	for _, ms := range [][]catalog.Model{p.Available(), p.Exposed()} {
+		for _, m := range ms {
+			if m.ID == model {
+				return entryFor(*p, m, s), true
+			}
+		}
+	}
+	return Entry{}, false
+}
+
+func entryIn(entries []Entry, id string) (Entry, bool) {
+	for _, e := range entries {
+		if e.ID == id {
+			return e, true
+		}
+	}
+	return Entry{}, false
 }
 
 // Resolve maps an id an agent sent to a provider and the vendor's model id.
@@ -815,4 +873,224 @@ func (p Provider) ContextOf(model string) int {
 		return n
 	}
 	return p.Contexts["*"]
+}
+
+// outputOf is the most a reply of a model may hold, as the user said it: the
+// model's own, else the one given for every model of its provider, else 0 for
+// the vendor's own list and models.dev to answer. It mirrors ContextOf, which
+// the user sets on the provider itself.
+func outputOf(s settings.Settings, providerID, model string) int {
+	if n := s.ModelOutputs[providerID+"/"+model]; n > 0 {
+		return n
+	}
+	return s.ModelOutputs[providerID+"/*"]
+}
+
+// SetModelOutput is the most a reply of a provider's model may hold, in
+// tokens, over what the vendor's list and models.dev say; 0 takes the user's
+// away, which DropModelOutput does. The id is spelled "provider/model", or
+// "provider/*" for every model of that provider; setting one has to name a
+// model the provider serves, as one no lookup would ever match reads as set
+// and is not. A removal may name a model that has since gone, or a provider
+// that has: that is the entry left to be cleared.
+//
+// The agents are told of it (catalog.Touched), as for any change of the
+// catalog: a reply limit is a number they keep in files of their own — Pi's
+// maxTokens, OpenCode's limit — and read at start-up, so one only the
+// gateway knew would leave every agent a reply limit behind.
+func SetModelOutput(id string, n int) error {
+	if n < 0 {
+		return errorf("an output limit is a number of tokens, not %d", n)
+	}
+	if n == 0 {
+		// a removal is not this function's own work: it has to reach an
+		// entry whose provider is gone, and resolving the ref is the very
+		// step that refuses one
+		_, _, err := DropModelOutput(id)
+		return err
+	}
+	p, model, err := splitRef(id)
+	if err != nil {
+		return err
+	}
+	// the id given is not always the provider's own: an agent still
+	// running on a config written before a rename names its provider by
+	// the id the provider had, and Find takes that id, so a key under it
+	// is a reply limit no lookup will ever match — every read asks for the
+	// id the provider has now (outputOf, entryFor, the gateway's /models).
+	// It would sit in the settings reading as set and answer no reply ever,
+	// and a removal would clear an entry nobody reads instead of the one in
+	// force. The key is the provider's id as it is now, as every other
+	// per-model setter's is.
+	key := p.ID + "/" + model
+	if err := settings.CheckModelKey("an output limit", key); err != nil {
+		return err
+	}
+
+	// a limit for a model the provider does not serve is one that never
+	// applies and nothing later says so; the same refusal `magpie model
+	// name` makes for the same id.
+	if model != "*" && !p.serves(model) {
+		return errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
+	}
+	s := settings.Load()
+	if s.ModelOutputs == nil {
+		s.ModelOutputs = map[string]int{}
+	}
+	s.ModelOutputs[key] = n
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
+// DropModelOutput takes a user's reply limit away under the key it is
+// stored at, and hands that key back, so a caller left without a provider
+// to name it by can still say which entry it cleared. It does not ask
+// whether the provider is still there: a reply limit outlives the provider
+// it was set for, and that provider can be deleted — the entry then sits in
+// the settings answering for a model nothing serves, and a removal that
+// resolved the provider first would leave the user no way to take it away,
+// the file being the only other place it is in. Which key that is comes
+// from the spelling as given before anything is looked up (outputKeyOf),
+// so that a provider which has since taken the name of one that is gone is
+// not the one the entry is cleared under. A key holding no limit is no
+// error: there is nothing there to take away, which is the state the entry is
+// left in either way, and writing it out again would rewrite the settings and
+// every agent's model lists over a limit that did not change.
+//
+// It reports whether there was a limit there to take away, as DropModelPrice
+// does, and by neither saving nor telling the agents when there was none:
+// only the caller can put that to the user, and a ✓ over a limit that was
+// never set says the model had one.
+func DropModelOutput(id string) (string, bool, error) {
+	key, err := outputKeyOf(id)
+	if err != nil {
+		return "", false, err
+	}
+	if err := settings.CheckModelKey("an output limit", key); err != nil {
+		return "", false, err
+	}
+	s := settings.Load()
+	if _, ok := s.ModelOutputs[key]; !ok {
+		return key, false, nil
+	}
+	delete(s.ModelOutputs, key)
+	if err := settings.Save(s); err != nil {
+		return "", false, err
+	}
+	// the agents are told as they are of a limit being set: the number they
+	// keep in files of their own goes back to the vendor's list only if
+	// they hear of it
+	catalog.Touched()
+	return key, true, nil
+}
+
+// outputKeyOf is the "provider/model" a caller spelled, as the key the reply
+// limits are written under, and what the spelling has to be for it to name
+// a model at all. It is half of splitRef, which goes on to resolve the
+// provider's own id: a limit set by a name the provider is listed under
+// needs that, and one removed by the same name has nothing left to resolve
+// it against, so there the key as given is the one the entry is under.
+//
+// The spelling that was given comes first, because a reply limit outlives
+// the provider it was set for and nothing rewrites its key when that
+// provider goes: "b/sol" can still be where a limit is held while a
+// provider of some other id has since been given the display name "b".
+// Resolving that name first would take the second provider's key away
+// instead — a limit of its own is stored under it, so the user is told the
+// entry they asked for has gone, and the entry they meant stays in the
+// settings to go on answering with. Only where nothing is stored under the
+// spelling is the provider looked for, by the id it has or the one it was
+// renamed from: that is where SetModelOutput keeps a limit set through a
+// display name, and the same resolution outputOf reads it back under.
+func outputKeyOf(id string) (string, error) {
+	r := strings.TrimPrefix(strings.TrimSpace(id), "magpie/")
+	if strings.HasPrefix(r, GroupPrefix) {
+		return "", errorf("that is a routing group, not a provider's model")
+	}
+	pid, model, ok := strings.Cut(r, "/")
+	if !ok || pid == "" || model == "" {
+		return "", errorf("name a model as provider/model, not %q", id)
+	}
+	key := pid + "/" + model
+	if _, under := settings.Load().ModelOutputs[key]; under {
+		return key, nil
+	}
+	if p, ok := byIDOrWas(pid); ok {
+		return p.ID + "/" + model, nil
+	}
+	// and last a display name, which is what a provider of the user's is
+	// often asked by. Nothing writes a reply limit under one —
+	// SetModelOutput re-keys it as it does a name — but the spelling above
+	// is the only thing that could have pointed at another provider's key,
+	// and a key nothing is stored under reaches no limit at all without
+	// this.
+	if p, err := Find(pid); err == nil {
+		return p.ID + "/" + model, nil
+	}
+	return key, nil
+}
+
+// SetContext is how long a request one of a provider's models takes, in
+// tokens, over what the vendor's list and models.dev say; 0 takes the user's
+// away, which DropContext does, and "*" is every model of that provider. As
+// with a reply limit, setting one has to name a model the provider serves, and
+// a removal may name one it no longer does.
+//
+// This is the provider's own Contexts, kept as the one value both the gateway
+// advertises and the routing rules read — a context is a routing input, not
+// only a number agents are shown: at 95% of a held member's window a request
+// moves to a member that takes more (internal/gateway/rules.go). Saving it
+// tells the agents (catalog.Touched), as for any change of the catalog: a
+// window is a number they keep in files of their own — Pi's contextWindow,
+// OpenCode's limit — and read at start-up, so a session already running
+// keeps the window it began with while the gateway's own /models is right at
+// once.
+func SetContext(p Provider, model string, n int) error {
+	if n < 0 {
+		return errorf("a window is a number of tokens, not %d", n)
+	}
+
+	// a window for a model the provider does not serve is one that never
+	// applies and nothing later says so. A removal is exempt, so an entry
+	// left for a model that has since gone can still be taken away.
+	if n > 0 && model != "*" && !p.serves(model) {
+		return fmt.Errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
+	}
+	if n > 0 {
+		if p.Contexts == nil {
+			p.Contexts = map[string]int{}
+		}
+		p.Contexts[model] = n
+		return Save(p)
+	}
+	// a removal goes the way DropModelOutput's does: the provider is not
+	// saved over a window that is not there, so nothing is written and the
+	// agents are not told over a limit that did not change
+	_, err := DropContext(p, model)
+	return err
+}
+
+// DropContext takes a window off one of a provider's models and reports
+// whether there was one there to take away, as DropModelPrice and
+// DropModelOutput do: a removal over a window that is not there leaves the
+// provider in the state it was already in, but only the caller can tell the
+// user so, and a ✓ over a window that was never set says there was one.
+// Nothing is saved in that case, and so the agents are not told either — a
+// provider saved over a window that did not change rewrites every agent's
+// model lists for nothing, which is the one round the removal itself earns.
+//
+// Save is what tells the agents here (store), so it is the save, and not a
+// Touched of its own, that has to happen exactly once.
+func DropContext(p Provider, model string) (bool, error) {
+	if _, ok := p.Contexts[model]; !ok {
+		return false, nil
+	}
+	delete(p.Contexts, model)
+	if err := Save(p); err != nil {
+		return false, err
+	}
+	return true, nil
 }
