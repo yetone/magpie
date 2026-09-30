@@ -36,16 +36,12 @@ type Row struct {
 type Filter struct {
 	Agent     string
 	Key       string // provider#fingerprint; an empty fingerprint selects unattributed calls
-	User      string // "-" selects local, shared-key and legacy calls without a user
 	CallerKey string
 	Failed    bool
 	Query     string
 }
 
 func (f Filter) keeps(r Record) bool {
-	if f.User != "" && ((f.User == "-" && r.UserID != "") || (f.User != "-" && r.UserID != f.User)) {
-		return false
-	}
 	if f.CallerKey != "" && r.CallerKeyID != f.CallerKey {
 		return false
 	}
@@ -56,7 +52,7 @@ func (f Filter) keeps(r Record) bool {
 		return false
 	}
 	if q := strings.ToLower(strings.TrimSpace(f.Query)); q != "" {
-		return slices.ContainsFunc([]string{r.Requested, r.Model, r.Served, r.Provider, r.Host, r.Session, r.Effort, r.ProviderKeyID, r.ProviderKeyName, r.UserID, r.UserName, r.CallerKeyID, r.CallerKeyName}, func(s string) bool {
+		return slices.ContainsFunc([]string{r.Requested, r.Model, r.Served, r.Provider, r.Host, r.Session, r.Effort, r.ProviderKeyID, r.ProviderKeyName, r.CallerKeyID, r.CallerKeyName}, func(s string) bool {
 			return strings.Contains(strings.ToLower(s), q)
 		})
 	}
@@ -191,7 +187,7 @@ func pricer() func(Record) *catalog.Price {
 // CSVHeader is the ledger's columns, as WriteCSV writes them.
 var CSVHeader = []string{"time", "agent", "requested_model", "provider", "host", "model", "served_model", "swapped",
 	"effort", "input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens", "reasoning_tokens",
-	"cost_usd", "duration_ms", "ttft_ms", "status", "error", "session", "kind", "provider_key_id", "provider_key_name", "user_id", "user_name", "caller_key_id", "caller_key_name"}
+	"cost_usd", "duration_ms", "ttft_ms", "status", "error", "session", "kind", "provider_key_id", "provider_key_name", "caller_key_id", "caller_key_name"}
 
 // WriteCSV writes rows as CSV, a header first: times in RFC 3339 with
 // their offset, the cost in USD at the effective price (empty when unknown), error
@@ -211,7 +207,7 @@ func WriteCSV(w io.Writer, rows []Row) error {
 		}
 		cw.Write([]string{r.Time.Format(time.RFC3339), r.Agent, r.Requested, r.Provider, r.Host, r.Model, r.Served,
 			strconv.FormatBool(r.Swapped), r.Effort, n(r.Input), n(r.Output), n(r.CacheWrite), n(r.CacheRead), n(r.Reasoning),
-			cost, strconv.FormatInt(r.Millis, 10), ttft, n(r.Status), strconv.FormatBool(r.Status >= 400), r.Session, r.Kind, r.ProviderKeyID, r.ProviderKeyName, r.UserID, r.UserName, r.CallerKeyID, r.CallerKeyName})
+			cost, strconv.FormatInt(r.Millis, 10), ttft, n(r.Status), strconv.FormatBool(r.Status >= 400), r.Session, r.Kind, r.ProviderKeyID, r.ProviderKeyName, r.CallerKeyID, r.CallerKeyName})
 	}
 	cw.Flush()
 	return cw.Error()

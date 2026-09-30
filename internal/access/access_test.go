@@ -1,123 +1,106 @@
 package access
 
 import (
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 )
 
-func TestUsersAndKeyLifecycle(t *testing.T) {
+func TestNamedKeysAndLegacyMigration(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if _, err := Update("add-user", Change{Name: "   "}); err == nil {
-		t.Fatal("accepted empty user")
+	if _, err := Update("add-key", Change{Name: "   "}); err == nil {
+		t.Fatal("accepted empty name")
 	}
-	for _, name := range []string{"Alice", "Bob"} {
-		if _, err := Update("add-user", Change{Name: name}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	users, _ := List()
-	alice, bob := users[0].ID, users[1].ID
-	var secrets []string
-	for _, in := range []Change{{User: alice, Name: "Laptop"}, {User: alice, Name: "Server"}, {User: bob, Name: "Work"}} {
-		key, err := Update("add-key", in)
-		if err != nil {
-			t.Fatal(err)
-		}
-		secrets = append(secrets, key)
-	}
-	users, _ = List()
-	if len(users[0].Keys) != 2 || len(users[1].Keys) != 1 {
-		t.Fatal(users)
-	}
-	for _, u := range users {
-		for _, k := range u.Keys {
-			if k.Secret != "" || !strings.Contains(k.Masked, "…") {
-				t.Fatal("unmasked credential", k.ID)
-			}
-		}
-	}
-	who, ok := Authenticate(secrets[0])
-	if !ok || who.UserID != alice || who.UserName != "Alice" || who.KeyName != "Laptop" {
-		t.Fatal(who, ok)
-	}
-	if _, ok := Authenticate(secrets[0] + "x"); ok {
-		t.Fatal("accepted invalid key")
-	}
-	key := users[0].Keys[0].ID
-	if _, err := Update("rename-user", Change{User: alice, Name: "Alice renamed"}); err != nil {
+	old := filepath.Join(filepath.Dir(Path()), "users.json")
+	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	Update("rename-key", Change{User: alice, Key: key, Name: "Main"})
-	who, ok = Authenticate(secrets[0])
-	if !ok || who.UserName != "Alice renamed" || who.KeyName != "Main" {
-		t.Fatal(who)
+	legacy := []byte(`[{"id":"old","name":"Old user","off":true,"keys":[{"id":"disabled","name":"Legacy off","secret":"sk-magpie-user-disabled"}]},{"id":"active","name":"Other user","keys":[{"id":"legacy","name":"Legacy","secret":"sk-magpie-user-legacy"}]}]`)
+	if err := os.WriteFile(old, legacy, 0o600); err != nil {
+		t.Fatal(err)
 	}
-	Update("off-key", Change{User: alice, Key: key})
-	if _, ok := Authenticate(secrets[0]); ok {
+	keys, err := List()
+	if err != nil || len(keys) != 2 || !keys[0].Off || keys[0].Secret != "" {
+		t.Fatal(keys, err)
+	}
+	if _, ok := Authenticate("sk-magpie-user-disabled"); ok {
+		t.Fatal("disabled legacy key works")
+	}
+	if who, ok := Authenticate("sk-magpie-user-legacy"); !ok || who.KeyID != "legacy" {
+		t.Fatal(who, ok)
+	}
+	secret, err := Update("add-key", Change{Name: "Laptop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, _ = List()
+	if len(keys) != 3 || keys[2].Name != "Laptop" || keys[2].Secret != "" || !strings.Contains(keys[2].Masked, "…") {
+		t.Fatal(keys)
+	}
+	who, ok := Authenticate(secret)
+	if !ok || who.KeyID != keys[2].ID || who.KeyName != "Laptop" {
+		t.Fatal(who, ok)
+	}
+	if _, ok := Authenticate(secret + "x"); ok {
+		t.Fatal("accepted invalid key")
+	}
+	id := keys[2].ID
+	Update("rename-key", Change{Key: id, Name: "Travel"})
+	if who, ok := Authenticate(secret); !ok || who.KeyName != "Travel" {
+		t.Fatal(who, ok)
+	}
+	Update("off-key", Change{Key: id})
+	if _, ok := Authenticate(secret); ok {
 		t.Fatal("disabled key works")
 	}
-	if _, ok := Authenticate(secrets[1]); !ok {
-		t.Fatal("other key disabled")
-	}
-	Update("on-key", Change{User: alice, Key: key})
-	Update("off-user", Change{User: alice})
-	for _, secret := range secrets[:2] {
-		if _, ok := Authenticate(secret); ok {
-			t.Fatal("disabled user's key works")
-		}
-	}
-	if _, ok := Authenticate(secrets[2]); !ok {
-		t.Fatal("other user disabled")
-	}
-	Update("on-user", Change{User: alice})
-	got, err := Update("copy-key", Change{User: alice, Key: key})
-	if err != nil || got != secrets[0] {
+	Update("on-key", Change{Key: id})
+	if got, err := Update("copy-key", Change{Key: id}); err != nil || got != secret {
 		t.Fatal("copy", err)
 	}
-	if _, err := Update("remove-key", Change{User: bob, Key: key}); err == nil {
-		t.Fatal("accepted another user's key")
+	Update("remove-key", Change{Key: id})
+	if _, ok := Authenticate(secret); ok {
+		t.Fatal("removed key works")
 	}
-	Update("remove-key", Change{User: alice, Key: key})
-	if _, ok := Authenticate(secrets[0]); ok {
-		t.Fatal("deleted key works")
-	}
-	Update("remove-user", Change{User: alice})
-	if _, ok := Authenticate(secrets[1]); ok {
-		t.Fatal("deleted user's key works")
+	if _, ok := Authenticate("sk-magpie-user-legacy"); !ok {
+		t.Fatal("lost legacy key")
 	}
 	st, err := os.Stat(Path())
 	if err != nil || st.Mode().Perm() != 0o600 {
-		t.Fatal("credential file permissions", err)
+		t.Fatal("permissions", err)
+	}
+	var persisted []Key
+	b, _ := os.ReadFile(Path())
+	if err := json.Unmarshal(b, &persisted); err != nil || len(persisted) != 2 {
+		t.Fatal(err, persisted)
 	}
 }
 
 func TestConcurrentKeyCreationAndCorruptStore(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	Update("add-user", Change{Name: "Team"})
-	users, _ := List()
 	var wg sync.WaitGroup
 	for i := 0; i < 12; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, err := Update("add-key", Change{User: users[0].ID, Name: "Key"}); err != nil {
+			if _, err := Update("add-key", Change{Name: "Key"}); err != nil {
 				t.Error(err)
 			}
 		}()
 	}
 	wg.Wait()
-	users, _ = List()
-	if len(users[0].Keys) != 12 {
+	keys, _ := List()
+	if len(keys) != 12 {
 		t.Fatal("lost concurrent changes")
 	}
-	secret, _ := Update("copy-key", Change{User: users[0].ID, Key: users[0].Keys[0].ID})
+	secret, _ := Update("copy-key", Change{Key: keys[0].ID})
 	os.WriteFile(Path(), []byte("broken"), 0o600)
 	if _, ok := Authenticate(secret); ok {
 		t.Fatal("corrupt store accepted a key")
 	}
-	if _, err := Update("add-user", Change{Name: "New"}); err == nil {
+	if _, err := Update("add-key", Change{Name: "New"}); err == nil {
 		t.Fatal("overwrote corrupt store")
 	}
 }

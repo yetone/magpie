@@ -1,4 +1,4 @@
-// Package access keeps the users and API keys issued by the gateway.
+// Package access keeps the named API keys issued by the gateway.
 package access
 
 import (
@@ -20,7 +20,12 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-const Prefix = "sk-magpie-user-"
+const Prefix = "sk-magpie-key-"
+const legacyPrefix = "sk-magpie-user-"
+
+func Managed(secret string) bool {
+	return strings.HasPrefix(secret, Prefix) || strings.HasPrefix(secret, legacyPrefix)
+}
 
 type Key struct {
 	ID     string `json:"id"`
@@ -30,60 +35,73 @@ type Key struct {
 	Masked string `json:"masked,omitempty"`
 }
 
-type User struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-	Off  bool   `json:"off,omitempty"`
-	Keys []Key  `json:"keys"`
-}
-
-type Identity struct {
-	UserID, UserName, KeyID, KeyName string
-}
-
+type Identity struct{ KeyID, KeyName string }
 type contextKey struct{}
 
 func WithIdentity(ctx context.Context, who Identity) context.Context {
 	return context.WithValue(ctx, contextKey{}, who)
 }
-
-func Caller(ctx context.Context) Identity {
-	who, _ := ctx.Value(contextKey{}).(Identity)
-	return who
-}
+func Caller(ctx context.Context) Identity { who, _ := ctx.Value(contextKey{}).(Identity); return who }
 
 var mu sync.Mutex
 
-func Path() string { return filepath.Join(settings.Dir(), "users.json") }
+func Path() string { return filepath.Join(settings.Dir(), "caller-keys.json") }
 
-func load() ([]User, error) {
+// load reads legacy user/key data only until the first write of the flat store.
+func load() ([]Key, error) {
 	b, err := os.ReadFile(Path())
+	if err == nil {
+		var keys []Key
+		err = json.Unmarshal(b, &keys)
+		return keys, err
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	b, err = os.ReadFile(filepath.Join(settings.Dir(), "users.json"))
 	if errors.Is(err, os.ErrNotExist) {
-		return []User{}, nil
+		return []Key{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var users []User
-	err = json.Unmarshal(b, &users)
-	return users, err
+	var users []struct {
+		Off  bool  `json:"off"`
+		Keys []Key `json:"keys"`
+	}
+	if err := json.Unmarshal(b, &users); err != nil {
+		return nil, err
+	}
+	keys := []Key{}
+	for _, u := range users {
+		for _, k := range u.Keys {
+			k.Off = k.Off || u.Off
+			keys = append(keys, k)
+		}
+	}
+	return keys, nil
 }
 
 // List never returns credentials; only the administrator's copy action does.
-func List() ([]User, error) {
+func List() ([]Key, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	users, err := load()
-	for i := range users {
-		for j := range users[i].Keys {
-			k := &users[i].Keys[j]
-			if len(k.Secret) > 8 {
-				k.Masked = Prefix + "…" + k.Secret[len(k.Secret)-6:]
-			}
-			k.Secret = ""
-		}
+	keys, err := load()
+	if err != nil {
+		return nil, err
 	}
-	return users, err
+	for i := range keys {
+		k := &keys[i]
+		if len(k.Secret) > 8 {
+			prefix := Prefix
+			if strings.HasPrefix(k.Secret, legacyPrefix) {
+				prefix = legacyPrefix
+			}
+			k.Masked = prefix + "…" + k.Secret[len(k.Secret)-6:]
+		}
+		k.Secret = ""
+	}
+	return keys, nil
 }
 
 func random(n int) (string, error) {
@@ -95,82 +113,59 @@ func random(n int) (string, error) {
 }
 
 type Change struct {
-	User string `json:"user"`
 	Key  string `json:"key"`
 	Name string `json:"name"`
 }
 
-// Update modifies one user or key atomically. A new key's secret is returned
-// to the administrator, never to the usage ledger.
+// Update writes the flat store atomically. The old user store is left intact
+// as a backup; all subsequent reads use the flat store.
 func Update(action string, in Change) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	users, err := load()
+	keys, err := load()
 	if err != nil {
 		return "", err
 	}
 	name := strings.TrimSpace(in.Name)
-	if action == "add-user" || action == "rename-user" || action == "add-key" || action == "rename-key" {
+	if action == "add-key" || action == "rename-key" {
 		if name == "" || utf8.RuneCountInString(name) > 120 {
 			return "", errors.New("Use a name between 1 and 120 characters")
 		}
 	}
 	var secret string
-	if action == "add-user" {
+	if action == "add-key" {
 		id, err := random(12)
 		if err != nil {
 			return "", err
 		}
-		users = append(users, User{ID: id, Name: name, Keys: []Key{}})
-	} else {
-		i := slices.IndexFunc(users, func(u User) bool { return u.ID == in.User })
-		if i < 0 {
-			return "", errors.New("User not found")
+		token, err := random(24)
+		if err != nil {
+			return "", err
 		}
-		u := &users[i]
+		secret = Prefix + token
+		keys = append(keys, Key{ID: id, Name: name, Secret: secret})
+	} else {
+		i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == in.Key })
+		if i < 0 {
+			return "", errors.New("Key not found")
+		}
 		switch action {
-		case "rename-user":
-			u.Name = name
-		case "on-user", "off-user":
-			u.Off = action == "off-user"
-		case "remove-user":
-			users = slices.Delete(users, i, i+1)
-		case "add-key":
-			id, err := random(12)
-			if err != nil {
-				return "", err
-			}
-			token, err := random(24)
-			if err != nil {
-				return "", err
-			}
-			secret = Prefix + token
-			u.Keys = append(u.Keys, Key{ID: id, Name: name, Secret: secret})
-		case "rename-key", "on-key", "off-key", "remove-key", "copy-key":
-			j := slices.IndexFunc(u.Keys, func(k Key) bool { return k.ID == in.Key })
-			if j < 0 {
-				return "", errors.New("Key not found")
-			}
-			switch action {
-			case "rename-key":
-				u.Keys[j].Name = name
-			case "on-key", "off-key":
-				u.Keys[j].Off = action == "off-key"
-			case "remove-key":
-				u.Keys = slices.Delete(u.Keys, j, j+1)
-			case "copy-key":
-				return u.Keys[j].Secret, nil
-			}
+		case "rename-key":
+			keys[i].Name = name
+		case "on-key", "off-key":
+			keys[i].Off = action == "off-key"
+		case "remove-key":
+			keys = slices.Delete(keys, i, i+1)
+		case "copy-key":
+			return keys[i].Secret, nil
 		default:
-			return "", fmt.Errorf("unknown user action %q", action)
+			return "", fmt.Errorf("unknown key action %q", action)
 		}
 	}
-	b, err := json.MarshalIndent(users, "", "  ")
+	b, err := json.MarshalIndent(keys, "", "  ")
 	if err != nil {
 		return "", err
 	}
-	// WriteAtomic preserves the existing mode; pre-create with 0600 so a
-	// fresh credential file is private from the first write.
 	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
 		return "", err
 	}
@@ -178,27 +173,26 @@ func Update(action string, in Change) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+		return "", err
+	}
 	if err := os.Chmod(Path(), 0o600); err != nil {
 		return "", err
 	}
 	return secret, edit.WriteAtomic(Path(), append(b, '\n'))
 }
 
-// Authenticate reloads the file so disabling or deleting a key takes effect
-// in a gateway already running, including one in a separate process.
+// Authenticate reloads the store so revocation takes effect in running gateways.
 func Authenticate(secret string) (Identity, bool) {
 	mu.Lock()
 	defer mu.Unlock()
-	users, err := load()
+	keys, err := load()
 	if err != nil || secret == "" {
 		return Identity{}, false
 	}
-	for _, u := range users {
-		for _, k := range u.Keys {
-			if subtle.ConstantTimeCompare([]byte(secret), []byte(k.Secret)) == 1 && !u.Off && !k.Off {
-				return Identity{u.ID, u.Name, k.ID, k.Name}, true
-			}
+	for _, k := range keys {
+		if subtle.ConstantTimeCompare([]byte(secret), []byte(k.Secret)) == 1 && !k.Off {
+			return Identity{k.ID, k.Name}, true
 		}
 	}
 	return Identity{}, false

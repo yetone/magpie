@@ -14,26 +14,24 @@ import (
 	"github.com/yetone/magpie/internal/usage"
 )
 
-func newCaller(t *testing.T, name string, keyNames ...string) (access.User, []string) {
+func newCaller(t *testing.T, names ...string) ([]access.Key, []string) {
 	t.Helper()
-	if _, err := access.Update("add-user", access.Change{Name: name}); err != nil {
-		t.Fatal(err)
-	}
-	users, _ := access.List()
-	u := users[len(users)-1]
 	var secrets []string
-	for _, name := range keyNames {
-		secret, err := access.Update("add-key", access.Change{User: u.ID, Name: name})
+	for _, name := range names {
+		secret, err := access.Update("add-key", access.Change{Name: name})
 		if err != nil {
 			t.Fatal(err)
 		}
 		secrets = append(secrets, secret)
 	}
-	users, _ = access.List()
-	return users[len(users)-1], secrets
+	keys, err := access.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return keys[len(keys)-len(names):], secrets
 }
 
-func TestCallerUsageAcrossUsersAndKeys(t *testing.T) {
+func TestCallerUsageAcrossKeys(t *testing.T) {
 	fresh(t)
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer upstream-secret" {
@@ -46,8 +44,7 @@ func TestCallerUsageAcrossUsersAndKeys(t *testing.T) {
 	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Key: "upstream-secret", Chat: up.URL + "/v1", Models: []string{"m1"}}); err != nil {
 		t.Fatal(err)
 	}
-	alice, aKeys := newCaller(t, "Alice", "Laptop", "Server")
-	bob, bKeys := newCaller(t, "Bob", "Work")
+	keys, secrets := newCaller(t, "Laptop", "Server", "Work")
 	h := New().Handler()
 	call := func(secret, header string) int {
 		r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(chatReq))
@@ -59,15 +56,14 @@ func TestCallerUsageAcrossUsersAndKeys(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w.Code
 	}
-	for i, secret := range append(aKeys, bKeys...) {
+	for i, secret := range secrets {
 		header := []string{"Authorization", "x-api-key", "x-goog-api-key"}[i]
 		if code := call(secret, header); code != 200 {
 			t.Fatal("request", code)
 		}
 	}
 	recs := usage.Load(time.Time{})
-	if len(recs) != 3 || recs[0].UserID != alice.ID || recs[1].UserID != alice.ID || recs[2].UserID != bob.ID ||
-		recs[0].CallerKeyID == recs[1].CallerKeyID || recs[2].CallerKeyName != "Work" {
+	if len(recs) != 3 || recs[0].CallerKeyID != keys[0].ID || recs[1].CallerKeyID != keys[1].ID || recs[2].CallerKeyName != "Work" {
 		t.Fatalf("attribution: %+v", recs)
 	}
 	for _, rec := range recs {
@@ -76,26 +72,26 @@ func TestCallerUsageAcrossUsersAndKeys(t *testing.T) {
 		}
 	}
 	s := usage.Summarize(usage.All)
-	if len(s.Users) != 2 || len(s.CallerKeys) != 3 || s.Calls != 3 || s.Users[0].Calls != 2 {
+	if len(s.CallerKeys) != 3 || s.Calls != 3 {
 		t.Fatalf("summary: %+v", s)
 	}
-	rows, totals, _ := usage.Ledger(usage.All, usage.Filter{User: alice.ID, CallerKey: alice.Keys[1].ID})
+	rows, totals, _ := usage.Ledger(usage.All, usage.Filter{CallerKey: keys[1].ID})
 	if len(rows) != 1 || totals.Input != 30 || rows[0].CallerKeyName != "Server" {
 		t.Fatal(rows, totals)
 	}
-	access.Update("off-user", access.Change{User: alice.ID})
-	if code := call(aKeys[0], "Authorization"); code != 401 {
-		t.Fatal("disabled user", code)
+	access.Update("off-key", access.Change{Key: keys[0].ID})
+	if code := call(secrets[0], "Authorization"); code != 401 {
+		t.Fatal("disabled key", code)
 	}
-	if code := call(bKeys[0], "Authorization"); code != 200 {
-		t.Fatal("other user", code)
+	if code := call(secrets[2], "Authorization"); code != 200 {
+		t.Fatal("other key", code)
 	}
-	access.Update("remove-key", access.Change{User: bob.ID, Key: bob.Keys[0].ID})
-	if code := call(bKeys[0], "Authorization"); code != 401 {
+	access.Update("remove-key", access.Change{Key: keys[2].ID})
+	if code := call(secrets[2], "Authorization"); code != 401 {
 		t.Fatal("deleted key", code)
 	}
 	log, _ := os.ReadFile(usage.Path())
-	for _, secret := range append(aKeys, bKeys...) {
+	for _, secret := range secrets {
 		if strings.Contains(string(log), secret) {
 			t.Fatal("caller credential in ledger")
 		}
@@ -104,13 +100,13 @@ func TestCallerUsageAcrossUsersAndKeys(t *testing.T) {
 
 func TestManagedLANGuard(t *testing.T) {
 	fresh(t)
-	u, secrets := newCaller(t, "LAN user", "Remote")
+	keys, secrets := newCaller(t, "Remote")
 	legacy := "legacy-shared-secret"
 	lanKey.Store(&legacy)
 	t.Cleanup(func() { empty := ""; lanKey.Store(&empty) })
 	h := lanGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := access.Caller(r.Context())
-		if who.UserID != u.ID || r.URL.Query().Get("key") != Token {
+		if who.KeyID != keys[0].ID || r.URL.Query().Get("key") != Token {
 			t.Fatal("query key or user not normalized", who)
 		}
 	}))
@@ -121,7 +117,7 @@ func TestManagedLANGuard(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code)
 	}
-	access.Update("off-key", access.Change{User: u.ID, Key: u.Keys[0].ID})
+	access.Update("off-key", access.Change{Key: keys[0].ID})
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != 401 {
@@ -131,7 +127,7 @@ func TestManagedLANGuard(t *testing.T) {
 
 func TestImageUsageIncludesCaller(t *testing.T) {
 	s, _ := easeled(t)
-	u, secrets := newCaller(t, "Artist", "Drawing")
+	keys, secrets := newCaller(t, "Drawing")
 	r := httptest.NewRequest("POST", "/v1/images/generations", strings.NewReader(`{"model":"art/gpt-image-1","prompt":"a bird"}`))
 	r.Header.Set("Authorization", "Bearer "+secrets[0])
 	w := httptest.NewRecorder()
@@ -140,7 +136,7 @@ func TestImageUsageIncludesCaller(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	rec := lastUsage(t)
-	if rec.UserID != u.ID || rec.CallerKeyID != u.Keys[0].ID || rec.Input != 7 {
+	if rec.CallerKeyID != keys[0].ID || rec.Input != 7 {
 		t.Fatal(rec)
 	}
 }
@@ -163,7 +159,7 @@ func TestCallerIdentitySurvivesStreamingFailover(t *testing.T) {
 	if err := provider.Save(p); err != nil {
 		t.Fatal(err)
 	}
-	u, secrets := newCaller(t, "Streaming user", "Stream")
+	keys, secrets := newCaller(t, "Stream")
 	r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"plan/m1","messages":[{"role":"user","content":"hi"}],"stream":true}`))
 	r.Header.Set("Authorization", "Bearer "+secrets[0])
 	w := httptest.NewRecorder()
@@ -172,7 +168,7 @@ func TestCallerIdentitySurvivesStreamingFailover(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	rec := lastUsage(t)
-	if rec.UserID != u.ID || rec.CallerKeyID != u.Keys[0].ID || rec.KeyID != provider.KeyID("backup") || rec.Input != 100 || rec.Output != 20 {
+	if rec.CallerKeyID != keys[0].ID || rec.KeyID != provider.KeyID("backup") || rec.Input != 100 || rec.Output != 20 {
 		t.Fatal(rec)
 	}
 }

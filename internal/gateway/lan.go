@@ -167,7 +167,7 @@ func (s *Server) Relisten() error {
 // Settings page is open, as it has always been.
 func lanGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		managed := strings.HasPrefix(callerKey(r), access.Prefix)
+		managed := access.Managed(callerKey(r))
 		if managed {
 			var ok bool
 			r, ok = identifyCaller(w, r)
@@ -226,7 +226,7 @@ func sharedWith(r *http.Request) bool {
 // callerGuard also covers embedded handlers used by the web app and tests.
 func callerGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if access.Caller(r.Context()).UserID == "" && strings.HasPrefix(callerKey(r), access.Prefix) {
+		if access.Caller(r.Context()).KeyID == "" && access.Managed(callerKey(r)) {
 			var ok bool
 			r, ok = identifyCaller(w, r)
 			if !ok {
@@ -240,7 +240,7 @@ func callerGuard(next http.Handler) http.Handler {
 func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
 	who, ok := access.Authenticate(callerKey(r))
 	if !ok {
-		writeError(w, provider.Chat, http.StatusUnauthorized, "User or API key is disabled, removed or invalid")
+		writeError(w, provider.Chat, http.StatusUnauthorized, "API key is disabled, removed or invalid")
 		return r, false
 	}
 	r = r.WithContext(access.WithIdentity(r.Context(), who))
@@ -262,7 +262,6 @@ func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool
 
 func appendUsage(r *http.Request, rec usage.Record) {
 	who := access.Caller(r.Context())
-	rec.UserID, rec.UserName = who.UserID, who.UserName
 	rec.CallerKeyID, rec.CallerKeyName = who.KeyID, who.KeyName
 	usage.Append(rec)
 }
