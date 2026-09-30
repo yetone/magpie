@@ -75,7 +75,8 @@ func TestOmp(t *testing.T) {
 		t.Fatalf("own: %v %v", c, m)
 	}
 
-	// another role through magpie keeps it in models.yml
+	// another role through magpie keeps it in models.yml; the reset puts
+	// back the model default had before magpie took it over
 	f.Set("magpie/deepseek/flash")
 	os.WriteFile(configPath, []byte("modelRoles:\n  default: magpie/deepseek/flash\n  smol: magpie/deepseek/pro\n"), 0o644)
 	if err := f.Set(""); err != nil {
@@ -83,11 +84,11 @@ func TestOmp(t *testing.T) {
 	}
 	c, _ = read(configPath)
 	m, _ = read(modelsPath)
-	if roles(c)["default"] != nil || roles(c)["smol"] != "magpie/deepseek/pro" || providers(m)["magpie"] == nil {
+	if roles(c)["default"] != "moonshotai/kimi-k3" || roles(c)["smol"] != "magpie/deepseek/pro" || providers(m)["magpie"] == nil {
 		t.Fatalf("reset with smol: %v %v", c, m)
 	}
 
-	// reset: only default goes, and magpie with it
+	// reset with nothing stashed: only default goes, and magpie with it
 	os.WriteFile(configPath, []byte("theme: dark\nmodelRoles:\n  default: magpie/deepseek/flash\n  smol: openai/gpt-6-mini\n"), 0o644)
 	if err := f.Set(""); err != nil {
 		t.Fatal(err)
@@ -230,9 +231,9 @@ func TestOmpNamedToTheGateway(t *testing.T) {
 	}
 }
 
-// Subagents and the small role pick their models apart from the main one:
-// through magpie on its own, a role brings magpie's provider in, has its
-// wiring checked, and takes the provider out again when it is the last.
+// omp's own agents pick their models apart from the main one: through
+// magpie on its own, a role brings magpie's provider in, has its wiring
+// checked, and takes the provider out again when it is the last.
 func TestOmpRoles(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -259,8 +260,10 @@ func TestOmpRoles(t *testing.T) {
 
 	a := omp(home)
 	sub, small := a.Field("subagent"), a.Field("small")
-	if sub == nil || small == nil || !sub.Quiet || !small.Quiet {
-		t.Fatalf("fields: %+v %+v", sub, small)
+	for _, k := range []string{"subagent", "small", "slow", "designer"} {
+		if f := a.Field(k); f == nil || !f.Quiet {
+			t.Fatalf("field %s: %+v", k, f)
+		}
 	}
 	if err := sub.Set("magpie/deepseek/flash"); err != nil {
 		t.Fatal(err)
@@ -293,5 +296,75 @@ func TestOmpRoles(t *testing.T) {
 	}
 	if r := roles(); r["task"] != nil || r["smol"] != "openai/gpt-6-mini" || r["default"] != "anthropic/claude-opus-5" || magpieIn() {
 		t.Fatalf("subagent reset: %v, magpie in models.yml: %v", r, magpieIn())
+	}
+}
+
+// A role's thinking level ("…:max") stays with it when another model is
+// picked, and the model the user had before magpie comes back, level and
+// all, when the role is reset.
+func TestOmpLevels(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("PATH", t.TempDir())
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	for _, p := range []provider.Provider{
+		{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}},
+		{ID: "other", Name: "Other", Chat: "https://other.example/v1", Key: "k", Models: []string{"pro"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath := filepath.Join(dir, "config.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5:max\n  slow: openai/gpt-6:auto\n"), 0o644)
+	a := omp(home)
+	get := func(k string) string { return a.Field(k).Get() }
+	apply := func(k, v, want string) {
+		t.Helper()
+		if err := a.Apply(k, v); err != nil {
+			t.Fatal(err)
+		}
+		if got := get(k); got != want {
+			t.Fatalf("%s set to %q: %q, want %q", k, v, got, want)
+		}
+	}
+
+	// deepseek/pro has no max of its own: omp clamps it, so it stays
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro:max")
+	if d := a.Drift(); d != nil {
+		t.Fatalf("drift on what magpie set: %+v", d)
+	}
+	apply("model", "magpie/deepseek/flash", "magpie/deepseek/flash:max")
+	apply("model", "magpie/deepseek/pro:low", "magpie/deepseek/pro:low") // its own level wins
+	apply("slow", "magpie/deepseek/pro", "magpie/deepseek/pro:auto")
+	apply("designer", "magpie/deepseek/flash", "magpie/deepseek/flash")
+
+	// the first model stashed, not the magpie ones after it
+	apply("model", "", "anthropic/claude-opus-5:max")
+	apply("slow", "", "openai/gpt-6:auto")
+	apply("designer", "", "")
+	// a colon that is no level is the model's
+	apply("model", "ollama/qwen3:8b", "ollama/qwen3:8b:max")
+
+	// a model of the user's own in between is the one put back
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro:max")
+	apply("model", "openai/gpt-6", "openai/gpt-6:max")
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro:max")
+	apply("model", "", "openai/gpt-6:max")
+
+	// a provider removed moves the role to the same model elsewhere, level
+	// and all
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro:max")
+	if _, err := Reseat(func() error { return provider.Delete("deepseek") }); err != nil {
+		t.Fatal(err)
+	}
+	if got := get("model"); got != "magpie/other/pro:max" {
+		t.Fatalf("reseated: %q", got)
 	}
 }

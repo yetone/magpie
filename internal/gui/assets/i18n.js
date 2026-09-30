@@ -73,6 +73,8 @@ const I18N = {
     "large": "大模型",
     "tiers": "分档",
     "subagents": "子 agent",
+    "slow": "慢模型",
+    "designer": "设计 agent",
     "sign-in": "登录方式",
     "magpie's models join Codex's own; Codex stays signed in to ChatGPT": "默认。Codex 保持 ChatGPT 登录，magpie 的模型和 Codex 自带的模型一起出现",
     "magpie is Codex's provider; the Codex app is in its API state, with magpie's models only": "magpie 作为 Codex 的供应商，Codex 应用显示为 API 登录状态，只列出 magpie 的模型",

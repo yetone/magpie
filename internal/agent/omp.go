@@ -42,6 +42,19 @@ func ompRefs(v string, fn func(string) string) string {
 	return strings.Join(parts, ",")
 }
 
+// ompLevel splits a role's model from the thinking level omp reads off its
+// end, "provider/model:level" (model-resolver.ts): one of the efforts, off,
+// or auto, omp's own pick each turn. Anything else after a colon is part of
+// the model id (ollama's qwen3:8b).
+func ompLevel(v string) (model, level string) {
+	if i := strings.LastIndexByte(v, ':'); i > 0 {
+		if l := v[i+1:]; l == "off" || l == "auto" || slices.Contains(ompEfforts, l) {
+			return v[:i], l
+		}
+	}
+	return v, ""
+}
+
 // ompProfileName is a profile name omp takes (pi-utils dirs.ts,
 // normalizeProfileName); it refuses any other.
 var ompProfileName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
@@ -112,32 +125,65 @@ func omp(home string) *Agent {
 		return edit.SetYAML(models, edit.KV{Path: "providers." + magpieID, Value: ompProvider()})
 	}
 	// role is the field for one of omp's model roles: one of magpie's brings
-	// magpie's provider into models.yml, and it goes once no role is on it
+	// magpie's provider into models.yml, and it goes once no role is on it.
+	// The model the user had there before magpie took the role over is
+	// stashed, and resetting the role puts it back.
 	role := func(key, label, name string, quiet bool) Field {
 		k := "modelRoles." + name
+		get := roleGet(name)
+		was := "omp:" + path + ":" + k
 		return Field{
 			Key: key, Label: label, Quiet: quiet,
-			Get: roleGet(name),
+			Get: get,
 			Set: func(v string) error {
+				cur := get()
 				if v == "" {
-					if err := edit.DelYAML(path, k); err != nil {
-						return err
+					if usesMagpie(cur) {
+						v = unstash(was)
 					}
-					return dropMagpie()
+					if v == "" {
+						if err := edit.DelYAML(path, k); err != nil {
+							return err
+						}
+						return dropMagpie()
+					}
+				} else if _, level := ompLevel(v); level == "" {
+					// another model keeps the role's thinking level; omp
+					// clamps one the model lacks to the nearest it has and
+					// drops it for a model that doesn't reason, never fails
+					if _, level = ompLevel(cur); level != "" {
+						v += ":" + level
+					}
 				}
-				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
+				model, _ := ompLevel(v)
+				if ref, ok := strings.CutPrefix(model, magpieID+"/"); ok && isMagpie(ref) {
+					if !usesMagpie(cur) {
+						stash(map[string]string{was: cur})
+					}
 					if err := writeMagpie(); err != nil {
 						return err
 					}
 					return edit.SetYAML(path, edit.KV{Path: k, Value: v})
 				}
+				forget(was)
 				if err := edit.SetYAML(path, edit.KV{Path: k, Value: v}); err != nil {
 					return err
 				}
 				return dropMagpie()
 			},
 			Options: func(cur map[string]string) []Option {
-				return append(ownOptions("", cur[key]), viaMagpie("omp", magpieID+"/")...)
+				opts := append(ownOptions("", cur[key]), viaMagpie("omp", magpieID+"/")...)
+				// a catalog model with a thinking level is still that model:
+				// offered as it reads, what matches the value against the
+				// picker (drift, a provider going away) knows it for magpie's
+				if model, level := ompLevel(cur[key]); level != "" {
+					if i := slices.IndexFunc(opts, func(o Option) bool { return o.Ref != "" && o.Value == model }); i >= 0 {
+						o := opts[i]
+						o.Value, o.Label = cur[key], o.Label+" · "+level
+						opts = slices.Insert(opts, i+1, o)
+					}
+				}
+				return opts
 			},
 		}
 	}
@@ -180,11 +226,15 @@ func omp(home string) *Agent {
 		},
 		Fields: []Field{
 			role("model", "model", "default", false),
-			// omp's task subagents run on @task, its scout, sonic and
-			// librarian on @smol (src/task/agents.ts, prompts/agents); a
-			// role left unset gives them the parent's model
+			// omp's own agents run on its roles (src/task/agents.ts,
+			// prompts/agents): task on @task; scout, sonic and librarian on
+			// @smol; reviewer on @slow, also the eval tool's "slow" tier;
+			// designer on @designer. A role left unset gives them the
+			// parent's model
 			role("subagent", "subagents", "task", true),
 			role("small", "small", "smol", true),
+			role("slow", "slow", "slow", true),
+			role("designer", "designer", "designer", true),
 			{
 				// the thinking level sessions start with, as omp's settings save
 				// it; unset omp takes high. auto has omp pick a level each turn:
