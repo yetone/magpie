@@ -1144,16 +1144,20 @@ function openRowMenu(anchor, acts) {
 // once it runs through magpie. They share one button, which lists the four;
 // picking one opens the model picker for it.
 const TIERS = ["opus", "sonnet", "haiku", "fable"];
-// fields that fall back to the agent's model when unset
-const FOLLOWS_MODEL = [...TIERS, "subagents"];
+// fields that fall back to the agent's model when unset: omp's slow and
+// designer roles take the session's, as its subagents do
+const FOLLOWS_MODEL = [...TIERS, "subagents", "slow", "designer"];
 
 // A field that follows the model unless set — Codex's subagents, Claude
-// Code's tiers — is a small square after the pickers rather than a third
-// picker, which a row has no room for: it wrapped onto a line of its own.
-// So is Codex's sign-in, ChatGPT or magpie as its provider.
+// Code's tiers, omp's roles — is a small square after the pickers rather
+// than a third picker, which a row has no room for: it wrapped onto a line
+// of its own. So is Codex's sign-in, ChatGPT or magpie as its provider.
 const extra = (f) => f.key === "tiers" || FOLLOWS_MODEL.includes(f.label) || f.label === "sign-in";
 const EXTRA_GLYPH = {
   subagents: "M4.5 2.75v10.5M4.5 9.25c0-2.2 1.6-3.75 3.9-3.75h3.35M9.9 3.6l1.9 1.9-1.9 1.9",
+  // an hourglass for the slow role, a pen for the designer's
+  slow: "M4.5 2.5h7M4.5 13.5h7M5.25 2.5c0 3 5.5 3 5.5 5.5s-5.5 2.5-5.5 5.5M10.75 2.5c0 3-5.5 3-5.5 5.5s5.5 2.5 5.5 5.5",
+  designer: "M10.75 2.75l2.5 2.5-7.5 7.5-3.25.75.75-3.25zM9.25 4.25l2.5 2.5",
   tiers: "M8 2.6 2.75 5.4 8 8.2l5.25-2.8zM2.75 8.1 8 10.9l5.25-2.8M2.75 10.8 8 13.6l5.25-2.8",
   "sign-in": "M8 2.5a2.75 2.75 0 1 1 0 5.5 2.75 2.75 0 0 1 0-5.5zM3 13.5c.4-2.4 2.4-3.9 5-3.9s4.6 1.5 5 3.9",
 };
