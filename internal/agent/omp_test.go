@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 	"gopkg.in/yaml.v3"
@@ -226,5 +227,71 @@ func TestOmpNamedToTheGateway(t *testing.T) {
 	}
 	if usage.AgentOf("Bun/1.3.14") == "omp" {
 		t.Fatal("Bun's own User-Agent is taken for omp's, so the header proves nothing")
+	}
+}
+
+// Subagents and the small role pick their models apart from the main one:
+// through magpie on its own, a role brings magpie's provider in, has its
+// wiring checked, and takes the provider out again when it is the last.
+func TestOmpRoles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath, modelsPath := filepath.Join(dir, "config.yml"), filepath.Join(dir, "models.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5\n"), 0o644)
+	roles := func() map[string]any {
+		var c map[string]any
+		b, _ := os.ReadFile(configPath)
+		yaml.Unmarshal(b, &c)
+		r, _ := c["modelRoles"].(map[string]any)
+		return r
+	}
+	magpieIn := func() bool { v, ok := edit.GetYAML(modelsPath, "providers.magpie.baseUrl"); return ok && v != "" }
+
+	a := omp(home)
+	sub, small := a.Field("subagent"), a.Field("small")
+	if sub == nil || small == nil || !sub.Quiet || !small.Quiet {
+		t.Fatalf("fields: %+v %+v", sub, small)
+	}
+	if err := sub.Set("magpie/deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	if r := roles(); r["task"] != "magpie/deepseek/flash" || r["default"] != "anthropic/claude-opus-5" || !magpieIn() {
+		t.Fatalf("subagent on magpie: %v, magpie in models.yml: %v", r, magpieIn())
+	}
+	if sub.Get() != "magpie/deepseek/flash" {
+		t.Fatalf("get: %q", sub.Get())
+	}
+	// the main model isn't magpie's, the subagents' is: its wiring is checked
+	if a.Check() != "" {
+		t.Fatalf("check, wired: %q", a.Check())
+	}
+	edit.SetYAML(modelsPath, edit.KV{Path: "providers.magpie.baseUrl", Value: "http://127.0.0.1:1/v1"})
+	if a.Check() == "" {
+		t.Fatal("check missed the subagents' broken wiring")
+	}
+	a.Sync()
+
+	if err := small.Set("openai/gpt-6-mini"); err != nil {
+		t.Fatal(err)
+	}
+	if r := roles(); r["smol"] != "openai/gpt-6-mini" || !magpieIn() {
+		t.Fatalf("small, own: %v", r)
+	}
+	// the last role on magpie goes: so does magpie's provider
+	if err := sub.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if r := roles(); r["task"] != nil || r["smol"] != "openai/gpt-6-mini" || r["default"] != "anthropic/claude-opus-5" || magpieIn() {
+		t.Fatalf("subagent reset: %v, magpie in models.yml: %v", r, magpieIn())
 	}
 }

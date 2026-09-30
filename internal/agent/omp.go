@@ -82,14 +82,20 @@ func omp(home string) *Agent {
 		return yml
 	}
 	path := pick("config")
-	get := func() string { v, _ := edit.GetYAML(path, "modelRoles.default"); return v }
-	dropMagpie := func() error {
-		// another role, a fallback chain, … may still go through magpie
-		used := false
-		if err := edit.EditYAMLStrings(path, ompRefKeys, func(v string) string {
+	roleGet := func(name string) func() string {
+		return func() string { v, _ := edit.GetYAML(path, "modelRoles."+name); return v }
+	}
+	// viaMagpieAnywhere: a role, a fallback chain, … still goes through
+	// magpie, which keeps its provider in models.yml
+	viaMagpieAnywhere := func() (used bool, err error) {
+		err = edit.EditYAMLStrings(path, ompRefKeys, func(v string) string {
 			ompRefs(v, func(m string) string { used = used || usesMagpie(m); return m })
 			return v
-		}); err != nil || used {
+		})
+		return used, err
+	}
+	dropMagpie := func() error {
+		if used, err := viaMagpieAnywhere(); err != nil || used {
 			return err
 		}
 		return edit.DelYAML(pick("models"), "providers."+magpieID)
@@ -104,6 +110,36 @@ func omp(home string) *Agent {
 			}
 		}
 		return edit.SetYAML(models, edit.KV{Path: "providers." + magpieID, Value: ompProvider()})
+	}
+	// role is the field for one of omp's model roles: one of magpie's brings
+	// magpie's provider into models.yml, and it goes once no role is on it
+	role := func(key, label, name string, quiet bool) Field {
+		k := "modelRoles." + name
+		return Field{
+			Key: key, Label: label, Quiet: quiet,
+			Get: roleGet(name),
+			Set: func(v string) error {
+				if v == "" {
+					if err := edit.DelYAML(path, k); err != nil {
+						return err
+					}
+					return dropMagpie()
+				}
+				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
+					if err := writeMagpie(); err != nil {
+						return err
+					}
+					return edit.SetYAML(path, edit.KV{Path: k, Value: v})
+				}
+				if err := edit.SetYAML(path, edit.KV{Path: k, Value: v}); err != nil {
+					return err
+				}
+				return dropMagpie()
+			},
+			Options: func(cur map[string]string) []Option {
+				return append(ownOptions("", cur[key]), viaMagpie("omp", magpieID+"/")...)
+			},
+		}
 	}
 	return &Agent{
 		ID: "omp", Name: "omp", Icon: "omp", Aliases: []string{"oh-my-pi"},
@@ -135,53 +171,37 @@ func omp(home string) *Agent {
 			return ""
 		},
 		Check: func() string {
-			if !usesMagpie(get()) {
+			if used, _ := viaMagpieAnywhere(); !used {
 				return ""
 			}
 			models := pick("models")
 			return wiringOff("omp", models, func(k string) (string, bool) { return edit.GetYAML(models, "providers."+magpieID+"."+k) },
 				"baseUrl", gatewayV1())
 		},
-		Fields: []Field{{
-			Key: "model", Label: "model",
-			Get: get,
-			Set: func(v string) error {
-				if v == "" {
-					if err := edit.DelYAML(path, "modelRoles.default"); err != nil {
-						return err
+		Fields: []Field{
+			role("model", "model", "default", false),
+			// omp's task subagents run on @task, its scout, sonic and
+			// librarian on @smol (src/task/agents.ts, prompts/agents); a
+			// role left unset gives them the parent's model
+			role("subagent", "subagents", "task", true),
+			role("small", "small", "smol", true),
+			{
+				// the thinking level sessions start with, as omp's settings save
+				// it; unset omp takes high. auto has omp pick a level each turn:
+				// not a level a model lists, so it is offered here and kept out of
+				// ompEfforts, which a model's thinking levels are filtered by. First,
+				// as omp's own picker has it (16.3.5 and 18.4.4 alike)
+				Key: "effort", Label: "thinking",
+				Get: func() string { v, _ := edit.GetYAML(path, "defaultThinkingLevel"); return v },
+				Set: func(v string) error {
+					if v == "" {
+						return edit.DelYAML(path, "defaultThinkingLevel")
 					}
-					return dropMagpie()
-				}
-				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
-					if err := writeMagpie(); err != nil {
-						return err
-					}
-					return edit.SetYAML(path, edit.KV{Path: "modelRoles.default", Value: v})
-				}
-				if err := edit.SetYAML(path, edit.KV{Path: "modelRoles.default", Value: v}); err != nil {
-					return err
-				}
-				return dropMagpie()
+					return edit.SetYAML(path, edit.KV{Path: "defaultThinkingLevel", Value: v})
+				},
+				Options: func(map[string]string) []Option { return static(append([]string{"auto"}, ompEfforts...)...) },
 			},
-			Options: func(cur map[string]string) []Option {
-				return append(ownOptions("", cur["model"]), viaMagpie("omp", magpieID+"/")...)
-			},
-		}, {
-			// the thinking level sessions start with, as omp's settings save
-			// it; unset omp takes high. auto has omp pick a level each turn:
-			// not a level a model lists, so it is offered here and kept out of
-			// ompEfforts, which a model's thinking levels are filtered by. First,
-			// as omp's own picker has it (16.3.5 and 18.4.4 alike)
-			Key: "effort", Label: "thinking",
-			Get: func() string { v, _ := edit.GetYAML(path, "defaultThinkingLevel"); return v },
-			Set: func(v string) error {
-				if v == "" {
-					return edit.DelYAML(path, "defaultThinkingLevel")
-				}
-				return edit.SetYAML(path, edit.KV{Path: "defaultThinkingLevel", Value: v})
-			},
-			Options: func(map[string]string) []Option { return static(append([]string{"auto"}, ompEfforts...)...) },
-		}},
+		},
 	}
 }
 
