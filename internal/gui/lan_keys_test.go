@@ -120,7 +120,7 @@ func TestSettingsMigratesOldLANCredentialToManagedKey(t *testing.T) {
 		t.Fatal("old credential remained in settings")
 	}
 	keys, _ := access.List()
-	if len(keys) != 1 || keys[0].Name != "Local network (legacy)" || settings.Load().LANKeyID != keys[0].ID {
+	if len(keys) != 1 || keys[0].Name != "Local network" || settings.Load().LANKeyID != keys[0].ID {
 		t.Fatal(keys)
 	}
 	who, ok := access.Authenticate(old)

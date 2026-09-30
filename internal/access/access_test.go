@@ -118,7 +118,7 @@ func TestLegacyLANKeyMigrationIsIdempotentAndRevocable(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys, err := List()
-	if err != nil || len(keys) != 1 || keys[0].Name != "Local network (legacy)" || !strings.HasPrefix(keys[0].Masked, "sk-magpie-…") {
+	if err != nil || len(keys) != 1 || keys[0].Name != "Local network" || !strings.HasPrefix(keys[0].Masked, "sk-magpie-…") {
 		t.Fatal(keys, err)
 	}
 	if settings.Load().LANKey != "" || !settings.Load().LAN {
@@ -208,5 +208,77 @@ func TestLegacyLANKeyMigrationRetryAndFailure(t *testing.T) {
 	}
 	if settings.Load().LANKey != s.LANKey {
 		t.Fatal("failed migration cleared the old credential")
+	}
+}
+
+func TestLANDefaultNameUpgrade(t *testing.T) {
+	for _, name := range []string{"Local network (legacy)", "Desk"} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			s := settings.Load()
+			s.LANKeyID = "lan"
+			if err := settings.Save(s); err != nil {
+				t.Fatal(err)
+			}
+			original := []Key{{ID: "lan", Name: name, Off: true, Secret: Prefix + "original"},
+				{ID: "other", Name: "Local network (legacy)", Secret: Prefix + "other"}}
+			if err := save(original); err != nil {
+				t.Fatal(err)
+			}
+			for range 2 {
+				if err := MigrateLegacyLANKey(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if name == "Local network (legacy)" {
+				original[0].Name = "Local network"
+			}
+			keys, err := load()
+			if err != nil || len(keys) != 2 || keys[0] != original[0] || keys[1] != original[1] {
+				t.Fatal("name upgrade changed identity, credentials, state or another key", keys, err)
+			}
+		})
+	}
+}
+
+func TestCallerKeyRotationPreservesIdentityAndState(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	old, err := Update("add-key", Change{Name: "Desk"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := Update("add-key", Change{Name: "Other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := List()
+	id := keys[0].ID
+	for _, off := range []bool{false, true} {
+		if off {
+			if _, err := Update("off-key", Change{Key: id}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		secret, err := Update("rotate-key", Change{Key: id})
+		if err != nil || secret == old || !strings.HasPrefix(secret, Prefix) {
+			t.Fatal("key was not rotated", err)
+		}
+		if _, ok := Authenticate(old); ok {
+			t.Fatal("old key still authenticates")
+		}
+		if who, ok := Authenticate(secret); ok == off || (!off && (who.KeyID != id || who.KeyName != "Desk")) {
+			t.Fatal("rotation changed identity or enabled state", who, ok)
+		}
+		keys, _ = List()
+		if keys[0].ID != id || keys[0].Name != "Desk" || keys[0].Off != off || keys[0].Secret != "" {
+			t.Fatal(keys)
+		}
+		if _, ok := Authenticate(other); !ok {
+			t.Fatal("rotation revoked another key")
+		}
+		old = secret
+	}
+	if _, err := Update("rotate-key", Change{Key: "missing"}); err == nil {
+		t.Fatal("rotated a missing key")
 	}
 }

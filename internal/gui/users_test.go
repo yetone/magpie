@@ -76,6 +76,17 @@ func TestCallerKeyManagementAndUsageRoutes(t *testing.T) {
 	if err != nil || len(cells) != 3 || cells[1][23] != laptop || cells[2][23] != laptop || strings.Contains(raw, secret) {
 		t.Fatal("CSV", err, raw)
 	}
+	request("POST", "/api/caller-keys/rotate-key", `{"key":"`+laptop+`"}`, &s)
+	if s.Secret == "" || s.Secret == secret || s.Keys[0].ID != laptop || s.Keys[0].Name != "Main" {
+		t.Fatal("rotation lost identity")
+	}
+	if _, ok := access.Authenticate(secret); ok {
+		t.Fatal("rotated key still authenticates")
+	}
+	request("GET", "/api/usage/requests"+query, "", &ledger)
+	if ledger.Total != 2 || ledger.Input != 110 || ledger.Rows[0].CallerKeyLabel != "Main" {
+		t.Fatal("rotation lost usage history", ledger)
+	}
 	request("POST", "/api/caller-keys/remove-key", `{"key":"`+laptop+`"}`, &s)
 	ledger = ledgerJSON{}
 	request("GET", "/api/usage/requests"+query, "", &ledger)

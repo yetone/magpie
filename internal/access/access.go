@@ -153,6 +153,13 @@ func Update(action string, in Change) (string, error) {
 			return "", errors.New("Key not found")
 		}
 		switch action {
+		case "rotate-key":
+			token, err := random(24)
+			if err != nil {
+				return "", err
+			}
+			secret = Prefix + token
+			keys[i].Secret = secret
 		case "rename-key":
 			keys[i].Name = name
 		case "on-key", "off-key":
@@ -196,6 +203,19 @@ func MigrateLegacyLANKey() error {
 func migrateLegacyLANKey() error {
 	s := settings.Load()
 	if s.LANKey == "" {
+		if s.LANKeyID == "" {
+			return nil
+		}
+		keys, err := load()
+		if err != nil {
+			return err
+		}
+		for i := range keys {
+			if keys[i].ID == s.LANKeyID && keys[i].Name == "Local network (legacy)" {
+				keys[i].Name = "Local network"
+				return save(keys)
+			}
+		}
 		return nil
 	}
 	keys, err := load()
@@ -210,7 +230,7 @@ func migrateLegacyLANKey() error {
 		if err != nil {
 			return err
 		}
-		keys = append(keys, Key{ID: id, Name: "Local network (legacy)", Secret: s.LANKey})
+		keys = append(keys, Key{ID: id, Name: "Local network", Secret: s.LANKey})
 		if err := save(keys); err != nil {
 			return err
 		}

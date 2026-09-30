@@ -173,7 +173,7 @@ API key filter, and CSV export includes
 `caller_key_id` and `caller_key_name`. Deleted keys keep historical usage.
 The usual local `magpie` token and older records have no caller-key
 attribution. An existing LAN key is migrated into the named list as
-**Local network (legacy)**, keeping remote clients working and allowing
+**Local network**, keeping remote clients working and allowing
 its usage to be tracked, renamed, disabled or revoked. Credentials stay in
 `~/.config/magpie/caller-keys.json` (XDG-aware, mode `0600`), never in
 usage records or list responses. Existing credentials from `users.json`
