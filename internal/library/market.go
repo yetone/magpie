@@ -149,12 +149,16 @@ var featured = []MarketServer{
 // command, which InstallServer puts in when it is added.
 const magpieCommand = "magpie"
 
+// selfServerName is the name magpie's own image generation server is written
+// under, in every agent's config.
+const selfServerName = "magpie-image"
+
 // selfServer is magpie's own image generation server: generate_image makes
 // an image with the model Settings → Images → Image generation names, saved
 // in the project. It costs what the model does, so it is given only to the
 // agents picked for it.
 func selfServer() MarketServer {
-	m := localServer("magpie-image", "Magpie Image", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
+	m := localServer(selfServerName, "Magpie Image", "Magpie", "https://usemagpie.ai/favicon.png", "https://usemagpie.ai",
 		"Generate and edit images with the image model set in Magpie (Settings → Images), and make short videos with a Grok subscription, saved in the project.", magpieCommand, []string{"mcp", "image"})
 	m.OptIn = true
 	return m

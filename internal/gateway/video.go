@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,8 @@ import (
 	"math"
 	"mime"
 	"net/http"
+	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +20,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -55,6 +60,17 @@ func Videomakers(p provider.Provider) []catalog.Model {
 	return out
 }
 
+// videomaker is the model a request that names none makes its video with:
+// AutoVideomaker's, unless the Settings turned image generation off, which
+// turns video off with it. None when it is off or no provider makes videos.
+func videomaker() (string, bool) {
+	if settings.Load().ImageGen == "off" {
+		return "", false
+	}
+	m := AutoVideomaker()
+	return m, m != ""
+}
+
 // AutoVideomaker is the model a request that names none makes its video
 // with: the first model of the first provider that makes any. "" when none
 // can.
@@ -68,6 +84,26 @@ func AutoVideomaker() string {
 		}
 	}
 	return ""
+}
+
+// bareVideomaker is the provider that makes videos with model named without
+// its provider: grok-imagine-video, as the vendor names it, not only
+// grok/grok-imagine-video.
+func bareVideomaker(name string) (provider.Provider, string, bool) {
+	if strings.Contains(name, "/") {
+		return provider.Provider{}, "", false
+	}
+	for _, p := range provider.All() {
+		if !p.On() || p.Decides() {
+			continue
+		}
+		for _, m := range Videomakers(p) {
+			if m.ID == name {
+				return p, name, true
+			}
+		}
+	}
+	return provider.Provider{}, "", false
 }
 
 // filming is one videos request, whichever shape it came in.
@@ -153,8 +189,18 @@ func readFilming(r *http.Request) (filming, error) {
 }
 
 // videoResolution is the resolution Grok's video API is asked for when size
-// says WIDTHxHEIGHT: by the shorter side. "" when size names no pixels.
-func videoResolution(size string) string {
+// says WIDTHxHEIGHT: by the shorter side, and no more than the model makes
+// (grok-imagine-video stops at 720p, which the vendor turns 1080p away for;
+// 1.5 makes 1080p). "" when size names no pixels.
+func videoResolution(model, size string) string {
+	res := pixelResolution(size)
+	if res == "1080p" && model == "grok-imagine-video" {
+		return "720p"
+	}
+	return res
+}
+
+func pixelResolution(size string) string {
 	w, h, ok := strings.Cut(strings.ToLower(strings.TrimSpace(size)), "x")
 	if !ok {
 		return ""
@@ -180,16 +226,16 @@ func videoResolution(size string) string {
 func grokVideoBody(model string, f filming) ([]byte, error) {
 	req := map[string]any{"model": model, "prompt": f.Prompt}
 	if f.Seconds != "" {
-		n, err := strconv.Atoi(f.Seconds)
-		if err != nil {
+		n, err := strconv.ParseFloat(f.Seconds, 64)
+		if err != nil || n != math.Trunc(n) || n > math.MaxInt32 || n < math.MinInt32 {
 			return nil, fmt.Errorf("seconds is a whole number, not %q", f.Seconds)
 		}
-		req["duration"] = n
+		req["duration"] = int(n)
 	}
 	if ar := aspectAmong(f.Size, grokVideoAspects); ar != "" {
 		req["aspect_ratio"] = ar
 	}
-	if res := videoResolution(f.Size); res != "" {
+	if res := videoResolution(model, f.Size); res != "" {
 		req["resolution"] = res
 	}
 	if f.Start != nil {
@@ -205,26 +251,41 @@ func grokVideoBody(model string, f filming) ([]byte, error) {
 	return json.Marshal(req)
 }
 
-// videoID is the id of a video p is making for vendorID, started at t.
+// videoID is the id of a video p is making for vendorID, started at t. It
+// names the provider, the vendor's id, the start and whose sign-in started it.
 func videoID(p provider.Provider, vendorID string, t time.Time) string {
-	return "video_" + p.ID + "." + vendorID + "." + strconv.FormatInt(t.Unix(), 10)
+	return "video_" + p.ID + "." + vendorID + "." + strconv.FormatInt(t.Unix(), 10) + "." + signer(p)
 }
 
-// parseVideoID is the provider, vendor id and start of a video's id.
-func parseVideoID(id string) (providerID, vendorID string, started time.Time, ok bool) {
+// signer is a short mark of the account p signs in as, so a video can be
+// told from those of the account signed in before a switch.
+func signer(p provider.Provider) string {
+	if p.Account == nil {
+		return "0"
+	}
+	sum := sha256.Sum256([]byte(p.Account.User))
+	return hex.EncodeToString(sum[:3])
+}
+
+// idPart is what a provider id or a vendor's request id is made of; an id
+// is put in a URL, so nothing that would change its path gets through.
+var idPart = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// parseVideoID is the provider, vendor id, start and signer of a video's id.
+func parseVideoID(id string) (providerID, vendorID string, started time.Time, by string, ok bool) {
 	rest, found := strings.CutPrefix(id, "video_")
 	if !found {
 		return
 	}
 	parts := strings.Split(rest, ".")
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" {
+	if len(parts) != 4 || !idPart.MatchString(parts[0]) || !idPart.MatchString(parts[1]) || !idPart.MatchString(parts[3]) {
 		return
 	}
 	sec, err := strconv.ParseInt(parts[2], 10, 64)
 	if err != nil {
 		return
 	}
-	return parts[0], parts[1], time.Unix(sec, 0), true
+	return parts[0], parts[1], time.Unix(sec, 0), parts[3], true
 }
 
 // videoState is how the vendor says a video is going.
@@ -268,9 +329,6 @@ func videoObject(id, model string, started time.Time, st videoState, f filming) 
 	case f.Seconds != "":
 		obj["seconds"] = f.Seconds
 	}
-	if status == "completed" {
-		obj["completed_at"] = time.Now().Unix()
-	}
 	if status == "failed" {
 		code, msg := st.Error.Code, st.Error.Message
 		if st.Status == "expired" {
@@ -286,7 +344,7 @@ func videoObject(id, model string, started time.Time, st videoState, f filming) 
 
 // videoMaker is the provider a video's id names, when it makes videos.
 func videoMaker(id string) (p provider.Provider, vendorID string, started time.Time, err error) {
-	pid, vendorID, started, ok := parseVideoID(id)
+	pid, vendorID, started, by, ok := parseVideoID(id)
 	if !ok {
 		return p, "", started, fmt.Errorf("%q isn't the id of a video magpie is making", id)
 	}
@@ -294,13 +352,16 @@ func videoMaker(id string) (p provider.Provider, vendorID string, started time.T
 	if ferr != nil || !drawsGrok(*found) {
 		return p, "", started, fmt.Errorf("no provider %q makes videos here", pid)
 	}
+	if signer(*found) != by {
+		return p, "", started, fmt.Errorf("this video was started with another %s account than the one signed in now: sign back in to it to get the video", found.Name)
+	}
 	return *found, vendorID, started, nil
 }
 
 // videoStatus asks the vendor how a video is going.
 func (s *Server) videoStatus(ctx context.Context, p provider.Provider, vendorID string) (videoState, int, error) {
 	var st videoState
-	b, code, err := s.sendAs(ctx, p, http.MethodGet, strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/"+vendorID, "", nil, true)
+	b, code, err := s.sendAs(ctx, p, http.MethodGet, strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/"+url.PathEscape(vendorID), "", nil, true)
 	if err != nil {
 		return st, code, err
 	}
@@ -326,14 +387,17 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		s.record(call)
 	}
 	if f.Model == "" {
-		m := AutoVideomaker()
-		if m == "" {
-			fail(400, "no model to make videos with: sign in to a Grok subscription, or name one")
+		m, ok := videomaker()
+		if !ok {
+			fail(400, "no model to make videos with: sign in to a Grok subscription and leave Settings → Images → Image generation on, or name one")
 			return
 		}
 		f.Model, call.Model = m, m
 	}
 	p, model, ok := provider.Resolve(f.Model)
+	if !ok {
+		p, model, ok = bareVideomaker(f.Model)
+	}
 	if !ok {
 		if off, isOff := provider.SwitchedOff(f.Model); isOff {
 			fail(404, switchedOff(off, f.Model))

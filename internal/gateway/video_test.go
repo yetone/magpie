@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // grokMedia is the backend a Grok subscription's images and videos are
@@ -139,14 +140,15 @@ func TestVideomakersAreAGrokSubscriptions(t *testing.T) {
 
 func TestVideoIDsRoundTrip(t *testing.T) {
 	id := videoID(provider.Provider{ID: "grok"}, "0ab-12", time.Unix(1790000000, 0))
-	if id != "video_grok.0ab-12.1790000000" {
+	if id != "video_grok.0ab-12.1790000000.0" {
 		t.Fatalf("id %q", id)
 	}
-	if pid, vid, at, ok := parseVideoID(id); !ok || pid != "grok" || vid != "0ab-12" || at.Unix() != 1790000000 {
-		t.Fatalf("parsed %q %q %v %v", pid, vid, at, ok)
+	if pid, vid, at, by, ok := parseVideoID(id); !ok || pid != "grok" || vid != "0ab-12" || at.Unix() != 1790000000 || by != "0" {
+		t.Fatalf("parsed %q %q %v %q %v", pid, vid, at, by, ok)
 	}
-	for _, bad := range []string{"", "video_", "video_grok", "video_grok.x", "video_grok.x.y", "video_.x.1", "video_grok..1", "grok.x.1", "video_grok.x.1.2"} {
-		if _, _, _, ok := parseVideoID(bad); ok {
+	for _, bad := range []string{"", "video_", "video_grok", "video_grok.x", "video_grok.x.y", "video_grok.x.1", "video_.x.1.0", "video_grok..1.0", "grok.x.1.0", "video_grok.x.1.2.3",
+		"video_grok.x?a=1.1.0", "video_grok.x/y.1.0", "video_grok.x y.1.0", "video_grok.%2e%2e.1.0", "video_grok.x#.1.0", "video_gr/ok.x.1.0"} {
+		if _, _, _, _, ok := parseVideoID(bad); ok {
 			t.Errorf("%q parsed", bad)
 		}
 	}
@@ -154,8 +156,14 @@ func TestVideoIDsRoundTrip(t *testing.T) {
 
 func TestVideoResolutionAndAspect(t *testing.T) {
 	for size, want := range map[string]string{"1280x720": "720p", "720x1280": "720p", "1920x1080": "1080p", "854x480": "480p", "640x640": "480p", "1024x1024": "720p", "16:9": "", "": "", "junk": "", "0x5": ""} {
-		if got := videoResolution(size); got != want {
-			t.Errorf("videoResolution(%q) = %q, want %q", size, got, want)
+		if got := videoResolution("grok-imagine-video-1.5", size); got != want {
+			t.Errorf("videoResolution(1.5, %q) = %q, want %q", size, got, want)
+		}
+	}
+	// grok-imagine-video stops at 720p: the vendor turns 1080p away for it
+	for size, want := range map[string]string{"1920x1080": "720p", "1080x1920": "720p", "1280x720": "720p", "854x480": "480p", "16:9": ""} {
+		if got := videoResolution("grok-imagine-video", size); got != want {
+			t.Errorf("videoResolution(base, %q) = %q, want %q", size, got, want)
 		}
 	}
 	for size, want := range map[string]string{"1280x720": "16:9", "720x1280": "9:16", "1024x1024": "1:1", "1600x1200": "4:3", "9:16": "9:16"} {
@@ -175,7 +183,7 @@ func TestVideoIsStartedPolledAndFetched(t *testing.T) {
 		t.Fatalf("%d %s", code, raw)
 	}
 	id, _ := obj["id"].(string)
-	if pid, vid, _, ok := parseVideoID(id); !ok || pid != "grok" || vid != "req-1" {
+	if pid, vid, _, by, ok := parseVideoID(id); !ok || pid != "grok" || vid != "req-1" || by == "0" || by != signer(mustFind(t, "grok")) {
 		t.Fatalf("id %q", id)
 	}
 	var sent map[string]any
@@ -198,6 +206,10 @@ func TestVideoIsStartedPolledAndFetched(t *testing.T) {
 	}
 	if obj["seconds"] != "6" || obj["model"] != "grok/grok-imagine-video" {
 		t.Fatalf("done: %v", obj)
+	}
+	// the vendor doesn't say when it finished, so nothing that changes from one poll to the next is made up
+	if _, ok := obj["completed_at"]; ok {
+		t.Fatalf("completed_at %v", obj["completed_at"])
 	}
 	code, _, raw, head := request(t, s, "GET", "/v1/videos/"+id+"/content", "", "")
 	if code != 200 || string(raw) != "fake-mp4-bytes" || head.Get("Content-Type") != "video/mp4" || head.Get("Content-Length") != "14" {
@@ -291,7 +303,7 @@ func TestVideoRequestsAreTurnedAway(t *testing.T) {
 		{"the vendor's limit is said", "POST", "/v1/videos", `{"prompt":"TOOLONG","seconds":"99"}`, 400, "Duration must be between 1 and 15 seconds"},
 		{"the vendor sent no id", "POST", "/v1/videos", `{"prompt":"NOID"}`, 502, "no request_id"},
 		{"an id that isn't one", "GET", "/v1/videos/nonsense", ``, 404, "isn't the id of a video"},
-		{"a provider that makes none", "GET", "/v1/videos/video_nobody.x.1", ``, 404, "no provider"},
+		{"a provider that makes none", "GET", "/v1/videos/video_nobody.x.1.0", ``, 404, "no provider"},
 		{"content of an id that isn't one", "GET", "/v1/videos/nonsense/content", ``, 404, "isn't the id of a video"},
 	} {
 		code, obj, raw, _ := request(t, s, c.method, c.path, "application/json", c.body)
@@ -307,5 +319,152 @@ func TestVideoNeedsAMaker(t *testing.T) {
 	code, obj, raw, _ := request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite"}`)
 	if code != 400 || !strings.Contains(errorOf(obj), "no model to make videos with") {
 		t.Fatalf("%d %s", code, raw)
+	}
+}
+
+func mustFind(t *testing.T, id string) provider.Provider {
+	t.Helper()
+	p, err := provider.Find(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return *p
+}
+
+// An id is put in the vendor's URL with the account's token: what would
+// change the path is turned away before anything is sent.
+func TestVideoIDCannotChangeTheUpstreamPath(t *testing.T) {
+	grokSignedIn(t)
+	up := newGrokMedia(t)
+	s := New()
+	by := signer(mustFind(t, "grok"))
+	for _, vendor := range []string{"x%3Fa=1", "x%2Fy", "..%2F..%2Fother", "x%23y", "x%20y", "%2e%2e"} {
+		for _, suffix := range []string{"", "/content"} {
+			code, obj, raw, _ := request(t, s, "GET", "/v1/videos/video_grok."+vendor+".1."+by+suffix, "", "")
+			if code != 404 || !strings.Contains(errorOf(obj), "isn't the id of a video") {
+				t.Errorf("%s%s: %d %s", vendor, suffix, code, raw)
+			}
+		}
+	}
+	if len(up.paths) != 0 {
+		t.Fatalf("the vendor was asked: %v", up.paths)
+	}
+}
+
+// A video is told from those of the account signed in before a switch.
+func TestVideoOfAnotherAccountSaysSo(t *testing.T) {
+	grokSignedIn(t)
+	up := newGrokMedia(t)
+	s := New()
+	other := mustFind(t, "grok")
+	acct := *other.Account
+	acct.User = "someone-else@x.ai"
+	other.Account = &acct
+	id := videoID(other, "req-1", time.Now())
+	for _, suffix := range []string{"", "/content"} {
+		code, obj, raw, _ := request(t, s, "GET", "/v1/videos/"+id+suffix, "", "")
+		if code != 404 || !strings.Contains(errorOf(obj), "another") || !strings.Contains(errorOf(obj), "account") {
+			t.Errorf("%q: %d %s", suffix, code, raw)
+		}
+	}
+	if len(up.paths) != 0 {
+		t.Fatalf("the vendor was asked: %v", up.paths)
+	}
+}
+
+// Turning image generation off in the Settings turns the video a request
+// that names no model gets off with it; one that names its model is its own.
+func TestVideoFollowsImageGenOff(t *testing.T) {
+	grokSignedIn(t)
+	up := newGrokMedia(t)
+	s := New()
+	st := settings.Load()
+	st.ImageGen = "off"
+	if err := settings.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := videomaker(); ok || m != "" {
+		t.Fatalf("videomaker = %q %v", m, ok)
+	}
+	code, obj, raw, _ := request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite"}`)
+	if code != 400 || !strings.Contains(errorOf(obj), "no model to make videos with") {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if len(up.paths) != 0 {
+		t.Fatalf("the vendor was asked: %v", up.paths)
+	}
+	code, _, raw, _ = request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite","model":"grok/grok-imagine-video"}`)
+	if code != 200 {
+		t.Fatalf("a named model: %d %s", code, raw)
+	}
+	// on again, or set to an image model of another vendor, video keeps its own default
+	for _, v := range []string{"", "art/painter-image-preview"} {
+		st.ImageGen = v
+		settings.Save(st)
+		if m, ok := videomaker(); !ok || m != "grok/grok-imagine-video" {
+			t.Fatalf("ImageGen %q: videomaker = %q %v", v, m, ok)
+		}
+	}
+}
+
+// The vendor names its models without a provider; so may a request.
+func TestVideoModelByItsBareName(t *testing.T) {
+	grokSignedIn(t)
+	up := newGrokMedia(t)
+	s := New()
+	for name, want := range map[string]string{"grok-imagine-video": "grok/grok-imagine-video", "grok-imagine-video-1.5": "grok/grok-imagine-video-1.5"} {
+		code, obj, raw, _ := request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite","model":"`+name+`"}`)
+		if code != 200 || obj["model"] != want {
+			t.Errorf("%s: %d %s", name, code, raw)
+		}
+	}
+	if !strings.Contains(up.body("/v1/videos/generations", 1), `"model":"grok-imagine-video-1.5"`) {
+		t.Fatalf("asked %s", up.body("/v1/videos/generations", 1))
+	}
+	for name, c := range map[string]struct {
+		code int
+		want string
+	}{"nothing": {404, "knows no model"}, "grok-4.7": {400, "can't make videos"}} {
+		code, obj, raw, _ := request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite","model":"`+name+`"}`)
+		if code != c.code || !strings.Contains(errorOf(obj), c.want) {
+			t.Errorf("%s: %d %s", name, code, raw)
+		}
+	}
+}
+
+// seconds is a whole number however JSON writes it; 1080p goes only where
+// the model makes it.
+func TestVideoSecondsAndResolutionAsAsked(t *testing.T) {
+	grokSignedIn(t)
+	up := newGrokMedia(t)
+	s := New()
+	n := 0
+	ask := func(body string) map[string]any {
+		t.Helper()
+		code, _, raw, _ := request(t, s, "POST", "/v1/videos", "application/json", body)
+		if code != 200 {
+			t.Fatalf("%s: %d %s", body, code, raw)
+		}
+		var sent map[string]any
+		json.Unmarshal([]byte(up.body("/v1/videos/generations", n)), &sent)
+		n++
+		return sent
+	}
+	for _, sec := range []string{`6`, `6.0`, `"6"`, `"6.0"`, `6e0`} {
+		if sent := ask(`{"prompt":"a kite","seconds":` + sec + `}`); sent["duration"] != float64(6) {
+			t.Errorf("seconds %s: asked %v", sec, sent)
+		}
+	}
+	for _, sec := range []string{`6.5`, `"six"`, `1e99`} {
+		code, obj, raw, _ := request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite","seconds":`+sec+`}`)
+		if code != 400 || !strings.Contains(errorOf(obj), "whole number") {
+			t.Errorf("seconds %s: %d %s", sec, code, raw)
+		}
+	}
+	if sent := ask(`{"prompt":"a kite","size":"1920x1080"}`); sent["resolution"] != "720p" || sent["aspect_ratio"] != "16:9" {
+		t.Errorf("1080p on the base model: %v", sent)
+	}
+	if sent := ask(`{"prompt":"a kite","model":"grok/grok-imagine-video-1.5","size":"1920x1080"}`); sent["resolution"] != "1080p" {
+		t.Errorf("1080p on 1.5: %v", sent)
 	}
 }

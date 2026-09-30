@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/imagemcp"
 )
 
 // Server is one MCP server: a command magpie's agents start, or a URL they
@@ -259,6 +260,15 @@ func (o ordered) MarshalYAML() (any, error) {
 	return n, nil
 }
 
+// selfTimeout is the seconds an agent waits for a tool of s: what
+// magpie-image's video tool needs, else def.
+func selfTimeout(s *Server, def int) int {
+	if s.Name == selfServerName && s.Command != "" {
+		return int(imagemcp.ToolTimeout().Seconds())
+	}
+	return def
+}
+
 // encode is the server as this agent writes it.
 func (f *mcpFile) encode(s *Server) ordered {
 	var o ordered
@@ -341,7 +351,7 @@ func (f *mcpFile) encode(s *Server) ordered {
 			add("args", list(s.Args))
 			optional("envs", s.Env)
 		}
-		add("timeout", 300)
+		add("timeout", selfTimeout(s, 300))
 	case fmtPi:
 		// pi-mcp-extension reads the transport from "transport",
 		// pi-mcp-adapter from "httpTransport"; each ignores the other's
@@ -471,6 +481,10 @@ func (f *mcpFile) encode(s *Server) ordered {
 			add("command", s.Command)
 			add("args", list(s.Args))
 			optional("env", s.Env)
+		}
+		// Codex gives a tool a minute unless its entry says more
+		if t := selfTimeout(s, 0); t > 0 {
+			add("tool_timeout_sec", t)
 		}
 	case fmtDsh:
 		add("serverName", s.Name)

@@ -113,7 +113,7 @@ const I18N = {
     "images turned away": "带图的请求被拒绝",
     "Image generation": "生图模型",
     "The model Magpie Image draws with. Give an agent the tool from Library → MCP servers → Discover → Magpie Image; images are saved in its project": "Magpie Image 用来生图的模型。在 资源库 → MCP 服务器 → 发现 → Magpie Image 里把这个工具给 Agent，生成的图片存在它的项目目录里",
-    "Agents given Magpie Image can't generate images: the tool says it is off": "装了 Magpie Image 的 Agent 不能生图：工具会告诉它生图已关闭",
+    "Agents given Magpie Image can't generate images or videos: the tool says it is off": "装了 Magpie Image 的 Agent 不能生图或生成视频：工具会告诉它已关闭",
     "no model that draws": "没有能生图的模型",
     "no images generated": "不生成图片",
     "Generate and edit images with the image model set in Magpie (Settings → Images), and make short videos with a Grok subscription, saved in the project.": "用 Magpie 里设置的生图模型（设置 → 图像）生成和编辑图片，也可以用 Grok 订阅生成短视频，存在项目目录里。",

@@ -104,6 +104,8 @@ type Settings struct {
 	// ImageGen is the model magpie's generate_image tool draws with (the
 	// gateway's /v1/images/generations when a request names no model): a
 	// model's id, "off", or empty for one magpie picks (gateway.drawer).
+	// "off" turns the video a request that names no model gets off too
+	// (gateway.videomaker).
 	ImageGen string `json:"imageGen,omitempty"`
 	// TrayUsages are the subscriptions and plans whose windows are shown
 	// beside the tray icon, in the order shown, each by its provider and

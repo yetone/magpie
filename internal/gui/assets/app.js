@@ -9049,7 +9049,7 @@ function renderImageGen(s, keep, box) {
   const r = el("div", "row pref");
   const who = el("div", "who");
   const sub = el("div", "sub",
-    v === "off" ? t("Agents given Magpie Image can't generate images: the tool says it is off")
+    v === "off" ? t("Agents given Magpie Image can't generate images or videos: the tool says it is off")
     : t("The model Magpie Image draws with. Give an agent the tool from Library → MCP servers → Discover → Magpie Image; images are saved in its project"));
   who.append(el("div", "name", t("Image generation")), sub);
   const b = el("button", "rt-cond on");
