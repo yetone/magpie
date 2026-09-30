@@ -43,7 +43,7 @@ func kiroEvent(kind, payload string) []byte {
 func kiroEvents(t *testing.T, thinking bool, frames ...[]byte) []Event {
 	t.Helper()
 	out := make(chan Event, 256)
-	decodeKiro(context.Background(), bytes.NewReader(bytes.Join(frames, nil)), out, "claude-sonnet-4.5", 200000, thinking)
+	decodeKiro(context.Background(), bytes.NewReader(bytes.Join(frames, nil)), out, "claude-sonnet-4.5", 200000, thinking, nil)
 	var evs []Event
 	for ev := range out {
 		evs = append(evs, ev)
@@ -259,6 +259,45 @@ func TestBuildKiro(t *testing.T) {
 	// with the tools offered and a stand-in for one used but no longer offered
 	if cur.Context == nil || len(cur.Context.Tools) != 2 || cur.Context.Tools[0].Spec.Name != "read" || cur.Context.Tools[1].Spec.Name != "grep" {
 		t.Fatalf("tools = %+v", cur.Context)
+	}
+}
+
+func TestBuildKiroToolImagesAndLongNames(t *testing.T) {
+	long := "mcp__plugin_vercel_vercel__create_sandboxes_sessions_by_session_id_snapshot_v2"
+	r := &Request{
+		Tools: []Tool{{Name: long, Description: "Snapshot", Schema: json.RawMessage(`{"type":"object"}`)}, {Name: "Read", Schema: json.RawMessage(`{"type":"object"}`)}},
+		Messages: []Message{
+			{Role: "user", Parts: []Part{{Kind: Text, Text: "look"}}},
+			{Role: "assistant", Parts: []Part{{Kind: ToolCall, ID: "c1", Name: "Read", Args: json.RawMessage(`{}`)}, {Kind: ToolCall, ID: "c2", Name: long, Args: json.RawMessage(`{}`)}}},
+			{Role: "user", Parts: []Part{
+				{Kind: ToolResult, CallID: "c1", Images: []Part{{Kind: Image, MediaType: "image/png", Data: "PNG"}}},
+				{Kind: ToolResult, CallID: "c2", Text: "ok"},
+			}},
+		},
+	}
+	b := buildKiroBody(t, r, false)
+	cur := b.ConversationState.CurrentMessage.UserInputMessage
+	// the image a tool read goes with the message answering it
+	if len(cur.Images) != 1 || cur.Images[0].Format != "png" || cur.Images[0].Source.Bytes != "PNG" {
+		t.Fatalf("images = %+v", cur.Images)
+	}
+	short := kiroToolName(long)
+	if len(short) > 64 || !kiroToolNameRe.MatchString(short) || short != kiroToolName(long) {
+		t.Fatalf("short = %q", short)
+	}
+	if calls := b.ConversationState.History[1].Asst.ToolUses; calls[0].Name != "Read" || calls[1].Name != short {
+		t.Fatalf("calls = %+v", calls)
+	}
+	if tools := cur.Context.Tools; len(tools) != 2 || tools[0].Spec.Name != short || tools[1].Spec.Name != "Read" {
+		t.Fatalf("tools = %+v", tools)
+	}
+	// and a call Kiro makes by the short name comes back by the caller's
+	out := make(chan Event, 16)
+	decodeKiro(context.Background(), bytes.NewReader(kiroEvent("toolUseEvent", `{"toolUseId":"t1","name":"`+short+`","input":"{}"}`)), out, "claude-sonnet-4.5", 200000, false, kiroNames(r))
+	for ev := range out {
+		if ev.Kind == KToolStart && ev.Name != long {
+			t.Fatalf("name = %q", ev.Name)
+		}
 	}
 }
 
