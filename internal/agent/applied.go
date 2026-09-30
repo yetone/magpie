@@ -193,11 +193,13 @@ func bypassed(used, applied, seen time.Time) bool {
 		time.Since(used) > grace && seen.Before(used.Add(-2*time.Second))
 }
 
-// magpieValue: the value is one of magpie's models as this agent spells it.
+// magpieValue: the value is one of magpie's models as this agent spells it,
+// its suffix after the model (SplitSuffix) aside.
 func magpieValue(a *Agent, f Field, v string, vals map[string]string) bool {
 	if v == "" {
 		return false
 	}
+	v, _ = a.split(v)
 	if isMagpie(v) {
 		return true
 	}

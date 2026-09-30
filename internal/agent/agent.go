@@ -106,6 +106,14 @@ type Agent struct {
 	// environment (agy), is the command that starts it on magpie, while
 	// it is on one of magpie's models; "" otherwise.
 	Launch func() string
+	// SplitSuffix, for an agent whose model values carry something of its
+	// own after the model that varies from value to value (omp's thinking
+	// level, "…:max"), splits a value into the model the picker offers and
+	// that suffix, "" when there is none. What matches a value against the
+	// picker (drift, Reseat, RenameProvider, Spell) matches the model and
+	// puts the suffix back after the one it moves to. A mark that is always
+	// the same for a model (Claude Code's [1m]) rides on the option instead.
+	SplitSuffix func(v string) (model, suffix string)
 	// detect, when set, says whether the agent is here in place of looking
 	// for its files and binary: a distro's, probed once.
 	detect func() bool
@@ -275,19 +283,21 @@ func ids(as []*Agent) []string {
 // in others, and either is taken in both. A value the picker offers as is
 // stays, and so does one it doesn't know (a model the agent reaches on its
 // own that isn't listed); a "magpie/…" value the catalog doesn't have is an
-// error rather than a model the agent would ask its own vendor for.
+// error rather than a model the agent would ask its own vendor for. The
+// agent's suffix after the model (SplitSuffix) stays as typed.
 func (a *Agent) Spell(key, v string) (string, error) {
 	f := a.Field(key)
 	if f == nil || f.Options == nil || v == "" {
 		return v, nil
 	}
+	model, suffix := a.split(v)
 	opts := f.Options(a.Values())
 	for _, o := range opts {
-		if o.Value == v {
+		if o.Value == model {
 			return v, nil
 		}
 	}
-	ref, prefixed := strings.CutPrefix(v, magpieID+"/")
+	ref, prefixed := strings.CutPrefix(model, magpieID+"/")
 	// a provider renamed since (a profile saved before) is the same one
 	refs := []string{ref}
 	if r := provider.RenamedRef(ref); r != ref {
@@ -296,7 +306,7 @@ func (a *Agent) Spell(key, v string) (string, error) {
 	for _, r := range refs {
 		for _, o := range opts {
 			if o.Ref != "" && o.Ref == r {
-				return o.Value, nil
+				return o.Value + suffix, nil
 			}
 		}
 	}
@@ -304,6 +314,15 @@ func (a *Agent) Spell(key, v string) (string, error) {
 		return "", fmt.Errorf("%s isn't a model in magpie's catalog (magpie models lists them)", ref)
 	}
 	return v, nil
+}
+
+// split is v as the model the picker offers and the agent's suffix after
+// it (SplitSuffix); the whole of v for an agent without one.
+func (a *Agent) split(v string) (model, suffix string) {
+	if a.SplitSuffix == nil {
+		return v, ""
+	}
+	return a.SplitSuffix(v)
 }
 
 // atomic makes each of an agent's field sets, and its Sync, one edit of the

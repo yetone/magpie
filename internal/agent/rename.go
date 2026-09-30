@@ -31,10 +31,12 @@ func RenameProvider(from, to string) ([]string, error) {
 				}
 				nv := ""
 				if f.Options != nil {
+					// the agent's suffix after the model (SplitSuffix) stays
+					model, suffix := a.split(v)
 					for _, o := range f.Options(vals) {
-						if o.Value == v && strings.HasPrefix(o.Ref, from+"/") {
+						if o.Value == model && strings.HasPrefix(o.Ref, from+"/") {
 							now := to + "/" + strings.TrimPrefix(o.Ref, from+"/")
-							nv = strings.Replace(v, o.Ref, now, 1)
+							nv = strings.Replace(model, o.Ref, now, 1) + suffix
 							break
 						}
 					}

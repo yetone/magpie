@@ -304,6 +304,11 @@ func set(a *agent.Agent, key, value string) error {
 
 func fieldForValue(a *agent.Agent, v string) *agent.Field {
 	vals := a.Values()
+	// the agent's suffix after a model (omp's ":max") aside: a role on the
+	// same model at that level offers it as typed, and would take it
+	if a.SplitSuffix != nil {
+		v, _ = a.SplitSuffix(v)
+	}
 	// a model stays with the model, even where other fields offer it too
 	// (Claude Code's opus/sonnet/haiku/fable)
 	for _, o := range a.Fields[0].Options(vals) {

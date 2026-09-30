@@ -260,7 +260,10 @@ func TestOmpRoles(t *testing.T) {
 
 	a := omp(home)
 	sub, small := a.Field("subagent"), a.Field("small")
-	for _, k := range []string{"subagent", "small", "slow", "designer"} {
+	if small.Label != "smol" || a.Field("designer") != nil {
+		t.Fatalf("small labelled %q; designer: %+v", small.Label, a.Field("designer"))
+	}
+	for _, k := range []string{"subagent", "small", "slow"} {
 		if f := a.Field(k); f == nil || !f.Quiet {
 			t.Fatalf("field %s: %+v", k, f)
 		}
@@ -342,13 +345,25 @@ func TestOmpLevels(t *testing.T) {
 	}
 	apply("model", "magpie/deepseek/flash", "magpie/deepseek/flash:max")
 	apply("model", "magpie/deepseek/pro:low", "magpie/deepseek/pro:low") // its own level wins
+	// offered at its level beside the model: that keeps the level, the
+	// model alone clears it
+	var at, plain bool
+	for _, o := range a.Field("model").Options(a.Values()) {
+		at = at || o.Value == "magpie/deepseek/pro:low" && strings.HasSuffix(o.Label, " · low")
+		plain = plain || o.Value == "magpie/deepseek/pro"
+	}
+	if !at || !plain {
+		t.Fatalf("options: at its level %v, the model %v", at, plain)
+	}
+	apply("model", "magpie/deepseek/pro:low", "magpie/deepseek/pro:low")
+	apply("model", "magpie/deepseek/pro", "magpie/deepseek/pro")
+	apply("model", "magpie/deepseek/flash", "magpie/deepseek/flash")
+	apply("model", "magpie/deepseek/pro:low", "magpie/deepseek/pro:low")
 	apply("slow", "magpie/deepseek/pro", "magpie/deepseek/pro:auto")
-	apply("designer", "magpie/deepseek/flash", "magpie/deepseek/flash")
 
 	// the first model stashed, not the magpie ones after it
 	apply("model", "", "anthropic/claude-opus-5:max")
 	apply("slow", "", "openai/gpt-6:auto")
-	apply("designer", "", "")
 	// a colon that is no level is the model's
 	apply("model", "ollama/qwen3:8b", "ollama/qwen3:8b:max")
 
@@ -366,5 +381,97 @@ func TestOmpLevels(t *testing.T) {
 	}
 	if got := get("model"); got != "magpie/other/pro:max" {
 		t.Fatalf("reseated: %q", got)
+	}
+}
+
+// A role on one of magpie's models with a thinking level is that model
+// wherever magpie matches a value against the picker: offered once, typed
+// at a level on the command line, missed when omp puts it back to its own,
+// and moved, level and all, when its provider is renamed.
+func TestOmpLevelSuffix(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("PATH", t.TempDir())
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath := filepath.Join(dir, "config.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  default: anthropic/claude-opus-5:max\n"), 0o644)
+	a := omp(home)
+	f := a.Field("model")
+
+	v, err := a.Spell("model", "magpie/deepseek/pro:high")
+	if err != nil || v != "magpie/deepseek/pro:high" {
+		t.Fatalf("spell at a level: %q %v", v, err)
+	}
+	if err := a.Apply("model", v); err != nil {
+		t.Fatal(err)
+	}
+	// the subagents on the same model at another level: moved with it too
+	if err := a.Apply("subagent", "magpie/deepseek/pro:max"); err != nil {
+		t.Fatal(err)
+	}
+	if d := a.Drift(); d != nil {
+		t.Fatalf("drift on what magpie set: %+v", d)
+	}
+	// omp's own /model puts the role back on the user's model
+	edit.SetYAML(configPath, edit.KV{Path: "modelRoles.default", Value: "anthropic/claude-opus-5:high"})
+	if d := a.Drift(); d == nil || d.Kind != "replaced" || d.Want != "magpie/deepseek/pro:high" {
+		t.Fatalf("drift, replaced: %+v", d)
+	}
+	if err := a.Reapply(); err != nil || f.Get() != "magpie/deepseek/pro:high" {
+		t.Fatalf("reapplied: %q %v", f.Get(), err)
+	}
+
+	if _, err := RenameProvider("deepseek", "ds"); err != nil {
+		t.Fatal(err)
+	}
+	if f.Get() != "magpie/ds/pro:high" || a.Field("subagent").Get() != "magpie/ds/pro:max" {
+		t.Fatalf("renamed: %q, subagent %q", f.Get(), a.Field("subagent").Get())
+	}
+}
+
+// A role omp falls back through, a list of models (a YAML list or the
+// comma-separated string omp also takes), is the user's to have back when
+// magpie lets go of the role; a level on its last model is no role's level.
+func TestOmpRoleList(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(home, ".omp", "agent")
+	configPath := filepath.Join(dir, "config.yml")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(configPath, []byte("modelRoles:\n  slow:\n    - openai/gpt-6\n    - anthropic/claude-opus-5:high\n  task: openai/gpt-6,anthropic/claude-opus-5:high\n"), 0o644)
+	a := omp(home)
+	for _, k := range []string{"slow", "subagent"} {
+		if got := a.Field(k).Get(); got != "openai/gpt-6,anthropic/claude-opus-5:high" {
+			t.Fatalf("%s reads %q", k, got)
+		}
+		if err := a.Apply(k, "magpie/deepseek/pro"); err != nil {
+			t.Fatal(err)
+		}
+		if got := a.Field(k).Get(); got != "magpie/deepseek/pro" {
+			t.Fatalf("%s on magpie: %q", k, got)
+		}
+		if err := a.Apply(k, ""); err != nil {
+			t.Fatal(err)
+		}
+		if got := a.Field(k).Get(); got != "openai/gpt-6,anthropic/claude-opus-5:high" {
+			t.Fatalf("%s reset: %q", k, got)
+		}
 	}
 }

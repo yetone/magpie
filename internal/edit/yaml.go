@@ -44,6 +44,25 @@ func GetYAMLMap(path, keyPath string) map[string]string {
 	return out
 }
 
+// GetYAMLList reads the scalar items of the list at a key path.
+func GetYAMLList(path, keyPath string) []string {
+	root, err := loadYAML(path)
+	if err != nil || root == nil {
+		return nil
+	}
+	n := lookupYAML(root, strings.Split(keyPath, "."))
+	if n == nil || n.Kind != yaml.SequenceNode {
+		return nil
+	}
+	var out []string
+	for _, c := range n.Content {
+		if c.Kind == yaml.ScalarNode {
+			out = append(out, c.Value)
+		}
+	}
+	return out
+}
+
 // SetYAML sets key paths in a YAML file; a value may be a scalar, a map,
 // a slice or a struct with yaml tags. Missing files and parents are created.
 func SetYAML(path string, kvs ...KV) error {
