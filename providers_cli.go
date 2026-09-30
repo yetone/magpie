@@ -29,7 +29,7 @@ const providerUsage = `usage:
   magpie provider <id>                    show one provider and its models
   magpie provider add <preset> <key>      add a preset vendor   e.g. magpie provider add deepseek sk-…
                                           again, it adds another (deepseek-2); k=v pairs too: id, name, header.X-Foo
-  magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.token, models.url
+  magpie provider add <name> k=v…         add a custom vendor   k: url, anthropic, responses, key, models, catalog, icon, header.X-Foo, balance, balance.path, balance.token, models.url, search
   magpie provider set <id> k=v…           change a provider's settings, with the same k=v pairs as add
   magpie provider key <id> <key>          change the API key
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
@@ -48,6 +48,9 @@ const providerUsage = `usage:
                                     groups as office/…, each request sent on in the API the agent spoke)
        magpie provider add anthropic sk-… id=anthropic-ws2 name="Anthropic WS2" header.anthropic-workspace-id=wrkspc_…
        magpie provider set my-relay models.url=https://relay.example.com/api/models catalog=
+       magpie provider set my-relay search=yes
+                                   (the relay answers Claude Code's WebSearch and Codex's web_search itself:
+                                    those go to it as sent, not through magpie's own search)
        magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… balance=https://relay.example.com/api/usage/token balance.path='$data.total_available / 500000'
        magpie provider set my-relay balance.path='(1 - credits.monthlyCredits / 70) %'
        magpie provider set my-relay balance=https://relay.example.com/api/user/self balance.path='$data.quota / 500000' balance.token=<access token> header.New-Api-User=<user id>
@@ -561,6 +564,9 @@ func showProvider(p provider.Provider) error {
 	kv("chat", p.Chat)
 	kv("responses", p.Responses)
 	kv("anthropic", p.Anthropic)
+	if p.Searches {
+		kv("search", "by itself"+muted.Render("  a client's web search goes to it as sent"))
+	}
 	switch {
 	case p.Account != nil:
 		who := p.Account.User
@@ -663,6 +669,14 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			p.BalanceToken = v
 		case "models.url":
 			p.ModelsURL = v
+		case "search":
+			// yes: the vendor searches the web by itself, a web search a
+			// client offers going to it as it was sent (a relay in front of
+			// Anthropic's or OpenAI's API)
+			if v != "yes" && v != "no" {
+				return fmt.Errorf("search=yes|no, not %q", v)
+			}
+			p.Searches = v == "yes"
 		case "context":
 			if err := setContext(p, "*", v); err != nil {
 				return err

@@ -3542,7 +3542,7 @@ const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["respon
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, catalog: p.catalog, key: "", api: p.chat ? "openai" : p.anthropic ? "anthropic" : p.responses ? "responses" : "openai", chosen: p.models.filter((m) => m.on).map((m) => m.id), extra: [], headers: headerRows(p.headers), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), keysUrl: p.keysUrl || "", ...proxyDraft(p) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, catalog: p.catalog, key: "", api: p.chat ? "openai" : p.anthropic ? "anthropic" : p.responses ? "responses" : "openai", chosen: p.models.filter((m) => m.on).map((m) => m.id), extra: [], headers: headerRows(p.headers), icon: p.icon || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, searches: !!p.searches, balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), keysUrl: p.keysUrl || "", ...proxyDraft(p) };
 }
 
 // duplicateProvider opens the Add form on a copy of p (#268): its URLs,
@@ -3662,6 +3662,9 @@ function drawEditor(p, presetID) {
   };
   if (p && !p.account && !custom) idField();
   let fillEndpoints = () => {};
+  // the Web search row, shown while there is an API it can search on
+  const searchable = () => !!((draft.anthropic || "").trim() || (draft.responses || "").trim());
+  let showSearch = () => {};
   if (custom) {
     name = input(draft.name, t("e.g. My Relay"));
     name.oninput = () => { draft.name = name.value; if (isNew) draft.id = slug(name.value); };
@@ -3692,12 +3695,13 @@ function drawEditor(p, presetID) {
         slide(seg, "api");
         url.placeholder = v === "anthropic" ? "https://…" : "https://…/v1";
         fillEndpoints();
+        showSearch();
       };
       seg.append(b);
     }
     queueMicrotask(() => slide(seg, "api"));
     url = input(draft[apiField[draft.api]], draft.api === "anthropic" ? "https://…" : "https://…/v1", "url");
-    url.oninput = () => { draft[apiField[draft.api]] = url.value; };
+    url.oninput = () => { draft[apiField[draft.api]] = url.value; showSearch(); };
     const urlWrap = el("div", "stack");
     urlWrap.append(seg, url);
     ed.append(...field("Base URL", urlWrap));
@@ -3815,6 +3819,19 @@ function drawEditor(p, presetID) {
     ed.append(...field(t("Headers"), headerEditor(pr?.headerHints || []), t("Optional headers sent with every request to {p}, applied after auth.", { p: pr?.name || p?.name })));
   }
   ed.append(...field(t("Proxy"), proxyPicker()));
+
+  // a relay in front of Anthropic's or OpenAI's API searches the web as
+  // they do, which magpie can't tell from its host (#359): a client's web
+  // search goes to it as sent, rather than through magpie's own. Only its
+  // Anthropic or Responses API can be asked to: a Chat one has no such tool
+  if (custom) {
+    const [stk, scb] = tick(t("Searches the web by itself"), !!draft.searches);
+    scb.onchange = () => { draft.searches = scb.checked; };
+    const row = field(t("Web search"), stk, t("For a relay in front of Anthropic's or OpenAI's own API: Claude Code's WebSearch and Codex's web_search go to it as they were sent, not through magpie's search. magpie doesn't search with it for other models."));
+    showSearch = () => { for (const e of row) e.style.display = searchable() ? "" : "none"; };
+    showSearch();
+    ed.append(...row);
+  }
 
   // a vendor that tells the whole account's balance only to a token of its
   // own (AiHubMix's system access token), where a key knows just its own
@@ -3943,7 +3960,7 @@ function drawEditor(p, presetID) {
       const add = (label, key, ph, hint) => {
         if (apiField[draft.api] === key) return;
         const i = input(draft[key], ph, "url");
-        i.oninput = () => { draft[key] = i.value; };
+        i.oninput = () => { draft[key] = i.value; showSearch(); };
         eps.append(...field(t(label), i, t(hint)));
       };
       add("OpenAI URL", "chat", "https://…/v1", "if the vendor also serves chat completions");
@@ -4027,6 +4044,7 @@ function drawEditor(p, presetID) {
     if (decides) body.decide = (draft.decide || "").trim();
     if (custom) { body.icon = draft.icon || "generic"; body.balanceURL = (draft.balanceURL || "").trim(); body.balancePath = (draft.balancePath || "").trim(); body.modelsURL = (draft.modelsURL || "").trim(); }
     if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; }
+    body.searches = !!draft.searches && searchable();
     const cx = parseContexts(draft.contexts || "");
     if (cx.error) return editorError(t("Context window: {v} is not a length like 128k or 1m", { v: cx.error }), "warn");
     body.contexts = cx.map;

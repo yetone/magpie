@@ -336,3 +336,113 @@ func TestMovedGrokSearchesItself(t *testing.T) {
 		t.Error("another plugin's provider searches by itself")
 	}
 }
+
+// A relay in front of Anthropic's API searches as Anthropic does, which
+// magpie can't tell from its host (#359). One that serves only Claude Code
+// refuses a request without Claude Code's metadata.user_id. Set as
+// searching by itself, it is sent Claude Code's WebSearch as it was sent;
+// not set, the request built again for it keeps the metadata.
+func TestWebSearchOfARelayThatSearches(t *testing.T) {
+	var mu sync.Mutex
+	var got []map[string]json.RawMessage
+	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			io.WriteString(w, `{"data":[{"id":"claude-haiku-4-5"}]}`)
+			return
+		}
+		if r.URL.Path != "/v1/messages" {
+			http.NotFound(w, r)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		var q map[string]json.RawMessage
+		json.Unmarshal(b, &q)
+		mu.Lock()
+		got = append(got, q)
+		mu.Unlock()
+		var md struct {
+			UserID string `json:"user_id"`
+		}
+		if json.Unmarshal(q["metadata"], &md); md.UserID == "" {
+			w.WriteHeader(http.StatusForbidden)
+			io.WriteString(w, `{"type":"error","error":{"type":"permission_error","message":"This group is restricted to the official Claude Code client."}}`)
+			return
+		}
+		if string(q["stream"]) == "true" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			io.WriteString(w, sse(`event: message_start`+"\n"+`data: {"type":"message_start","message":{"id":"m","type":"message","role":"assistant","model":"claude-haiku-4-5","content":[],"usage":{"input_tokens":5}}}`,
+				`event: content_block_start`+"\n"+`data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`,
+				`event: content_block_delta`+"\n"+`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Go 1.27.1 is out."}}`,
+				`event: content_block_stop`+"\n"+`data: {"type":"content_block_stop","index":0}`,
+				`event: message_delta`+"\n"+`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}`,
+				`event: message_stop`+"\n"+`data: {"type":"message_stop"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"id":"m","type":"message","role":"assistant","model":"claude-haiku-4-5","content":[{"type":"text","text":"Go 1.27.1 is out."}],"stop_reason":"end_turn","usage":{"input_tokens":5,"output_tokens":5}}`)
+	}))
+	defer relay.Close()
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir()) // no signed-in agent searches for it
+	// Claude Code 2.1.285's WebSearch
+	body := `{"model":"relay/claude-haiku-4-5","max_tokens":32000,"stream":false,
+		"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.285.3c7; cc_entrypoint=cli;"},{"type":"text","text":"You are Claude Code, Anthropic's official CLI for Claude."},{"type":"text","text":"You are an assistant for performing a web search tool use"}],
+		"messages":[{"role":"user","content":"Perform a web search for the query: latest go"}],
+		"tools":[{"type":"web_search_20250305","name":"web_search","max_uses":8}],
+		"metadata":{"user_id":"{\"device_id\":\"d\",\"session_id\":\"s\"}"}}`
+	ask := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
+		req.Header.Set("User-Agent", "claude-cli/2.1.285 (external, cli)")
+		req.Header.Set("x-app", "cli")
+		New().Handler().ServeHTTP(rec, req)
+		return rec
+	}
+
+	p := provider.Provider{ID: "relay", Name: "Relay", Key: "k", Anthropic: relay.URL, Models: []string{"claude-haiku-4-5"}, Searches: true}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	// it searches for Claude Code, not for magpie's other models: it would
+	// spend the relay's quota, and refuse magpie's request without metadata
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if sp, _, ok := searcher(); ok {
+		t.Fatalf("magpie searches with %s", sp.ID)
+	}
+	if rec := ask(); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Go 1.27.1 is out.") {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	var tools []map[string]any
+	var system []any
+	json.Unmarshal(got[0]["tools"], &tools)
+	json.Unmarshal(got[0]["system"], &system)
+	if len(tools) != 1 || tools[0]["type"] != "web_search_20250305" || tools[0]["max_uses"] != float64(8) || len(system) != 3 {
+		t.Fatalf("sent %s %s", got[0]["tools"], got[0]["system"])
+	}
+
+	// not said to search, it is given no search of its own: magpie has no
+	// searcher here, so the request is built again, without the tool
+	got = nil
+	p.Searches = false
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	if rec := ask(); rec.Code != 200 || !strings.Contains(rec.Body.String(), "Go 1.27.1 is out.") {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(string(got[0]["metadata"]), `device_id`) || strings.Contains(string(got[0]["tools"]), "web_search") {
+		t.Fatalf("sent %s %s", got[0]["metadata"], got[0]["tools"])
+	}
+
+	// said to search with only a Chat address, it has no API to search on
+	chat := provider.Provider{ID: "chatrelay", Chat: relay.URL + "/v1", Searches: true}
+	for _, proto := range []provider.Protocol{provider.Anthropic, provider.Responses, provider.Chat} {
+		if searchesItself(chat, proto) {
+			t.Errorf("a Chat-only relay searches by itself on %s", proto)
+		}
+	}
+}
