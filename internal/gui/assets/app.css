@@ -1465,14 +1465,14 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .stepplan .steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
 .stepplan .steps .pair { margin-top: 2px; }
 .stepplan .bookmarklet { display: inline-block; padding: 1px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); background: var(--pill); text-decoration: none; cursor: grab; white-space: nowrap; }
-.editor input[type="text"], .editor input[type="password"], .editor input[type="url"] {
+.editor input[type="text"], .editor input[type="password"], .editor input[type="url"], .acc .kf input, .acc input.rename-in {
   height: 27px; padding: 0 9px; border-radius: 7px;
   border: 1px solid var(--line); background: var(--card);
   font-size: 12.5px; outline: none; width: 100%; min-width: 0;
   transition: border-color .12s, box-shadow .12s;
 }
-.editor input:focus, .editor .headers textarea.json:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); outline: none; }
-.editor input::placeholder { color: var(--faint); }
+.editor input:focus, .editor .headers textarea.json:focus, .acc input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); outline: none; }
+.editor input::placeholder, .acc input::placeholder { color: var(--faint); }
 .editor .pair { display: flex; gap: 8px; align-items: center; }
 .editor .pair input:first-child { flex: 1; }
 .editor .side { display: flex; gap: 4px; align-items: center; flex: none; min-width: 52px; justify-content: flex-end; }

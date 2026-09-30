@@ -70,7 +70,14 @@ function fixture(lang, theme, events) {
       }
       return json(lanState());
     }
-    if (url.pathname === "/api/settings") return json(lanState());
+    if (url.pathname === "/api/settings") {
+      if (req.method() === "POST") {
+        const body = req.postDataJSON();
+        events.push({ action: "settings", body });
+        theme = body.theme;
+      }
+      return json(lanState());
+    }
     if (url.pathname === "/api/caller-keys") return json({ keys });
     if (url.pathname.startsWith("/api/caller-keys/")) {
       const action = url.pathname.split("/").at(-1), body = req.postDataJSON();
