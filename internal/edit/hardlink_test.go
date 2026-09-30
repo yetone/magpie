@@ -4,7 +4,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 )
 
 // hardLink makes link another name of target, skipping where the file
@@ -100,5 +102,80 @@ func TestAtomicallyKeepsHardLink(t *testing.T) {
 	sameFile(t, p, other)
 	if got := read(t, other); got != "{}" {
 		t.Errorf("other name %q", got)
+	}
+}
+
+// A hard-linked file that can't be opened for writing (mode 0444) is
+// replaced by rename, as before in-place writes: the write goes through,
+// and that name stops being a link of the other.
+func TestWriteAtomicReadOnlyHardLink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows renames over no read-only file, linked or not")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root writes a 0444 file")
+	}
+	d := t.TempDir()
+	other := filepath.Join(d, "other.yml")
+	if err := os.WriteFile(other, []byte("old\n"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(d, "models.yml")
+	hardLink(t, other, p)
+	if err := WriteAtomic(p, []byte("new\n")); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, p); got != "new\n" {
+		t.Fatalf("got %q", got)
+	}
+	if st, _ := os.Stat(p); st.Mode().Perm() != 0o444 {
+		t.Errorf("mode %v", st.Mode().Perm())
+	}
+}
+
+// A temp file a crashed write left beside a config goes at the next write
+// of it, whether that write renames or writes in place. A fresh one, which
+// a write going on now may be using, stays, and so do other files' temps.
+func TestWriteAtomicClearsStaleTemps(t *testing.T) {
+	for _, linked := range []bool{false, true} {
+		t.Run(map[bool]string{false: "plain", true: "hardlink"}[linked], func(t *testing.T) {
+			d := t.TempDir()
+			p := filepath.Join(d, "models.yml")
+			if err := os.WriteFile(p, []byte("old\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if linked {
+				hardLink(t, p, filepath.Join(d, "overlay.yml"))
+			}
+			old := time.Now().Add(-time.Hour)
+			temps := []struct {
+				name         string
+				stale, stays bool
+			}{
+				{".models.yml.123.tmp", true, false},
+				{".models.yml.456.tmp", false, true},
+				{".models.yml.x.789.tmp", true, true}, // models.yml.x's
+			}
+			for _, tt := range temps {
+				f := filepath.Join(d, tt.name)
+				if err := os.WriteFile(f, []byte("half"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if tt.stale {
+					if err := os.Chtimes(f, old, old); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if err := WriteAtomic(p, []byte("new\n")); err != nil {
+				t.Fatal(err)
+			}
+			for _, tt := range temps {
+				_, err := os.Stat(filepath.Join(d, tt.name))
+				if stays := err == nil; stays != tt.stays {
+					t.Errorf("%s: stays %v, want %v", tt.name, stays, tt.stays)
+				}
+			}
+		})
 	}
 }

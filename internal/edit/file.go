@@ -10,6 +10,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 // Read returns the file contents, or (nil, nil) when the file does not exist.
@@ -25,14 +27,29 @@ func Read(path string) ([]byte, error) {
 // never leave a half-written config behind. File mode is preserved. When
 // path is a symlink (a config kept in a dotfiles repo) the file it points
 // at is written and the link stays; a file with other hard links is
-// written in place, see writeInPlace.
+// written in place, see writeInPlace. Once written, temp files earlier
+// writes of path left behind go, see removeStaleTemps.
 func WriteAtomic(path string, data []byte) error {
 	path, err := Target(path)
 	if err != nil {
 		return err
 	}
 	if hardLinked(path) {
-		return writeInPlace(path, data)
+		f, err := os.OpenFile(path, os.O_WRONLY, 0)
+		if err == nil {
+			if err := writeInPlace(f, data); err != nil {
+				return err
+			}
+			removeStaleTemps(path)
+			return nil
+		}
+		// A file that can't be opened for writing (mode 0444, or read-only
+		// on Windows) is renamed over as before hard links were written in
+		// place, which splits this name from the others; opened first, so
+		// nothing is made beside it on the way.
+		if !errors.Is(err, fs.ErrPermission) {
+			return err
+		}
 	}
 	mode := fs.FileMode(0o644)
 	if st, err := os.Stat(path); err == nil {
@@ -66,24 +83,26 @@ func WriteAtomic(path string, data []byte) error {
 		cleanup()
 		return err
 	}
+	removeStaleTemps(path)
 	return nil
 }
 
-// writeInPlace writes data into the file at path itself, for a file that
-// has other names too (a hard link, as Orca keeps omp's models.yml in its
-// overlay): a new file renamed over one name would split it from the
-// others, each left with its own text. Writing in place is not atomic, so
-// the text first goes to a temp file beside it, synced to disk, and only
-// then into the file: a crash part way leaves the whole new text in that
-// temp file, and a write that fails part way keeps it there and names it
-// in the error. The file keeps its mode, its owner and all its names.
-func writeInPlace(path string, data []byte) error {
-	// opened first, so a file that can't be written fails before anything
-	// is made beside it
-	f, err := os.OpenFile(path, os.O_WRONLY, 0)
-	if err != nil {
-		return err
-	}
+// writeInPlace writes data into f, opened for writing, and closes it: for
+// a file that has other names too (a hard link, as Orca keeps omp's
+// models.yml in its overlay), where a new file renamed over one name would
+// split it from the others, each left with its own text. Every name sees
+// the write, so does a copy a backup tool made as a hard link (rsnapshot,
+// cp -al, rsync --link-dest): that copy changes with it. It is the trade
+// vim makes with backupcopy=auto, which also writes a file with other
+// links in place: the link the user made is kept over such a backup.
+//
+// Writing in place is not atomic, so the text first goes to a temp file
+// beside it, synced to disk, and only then into the file: a crash part way
+// leaves the whole new text in that temp file, and a write that fails part
+// way keeps it there and names it in the error. The file keeps its mode,
+// its owner and all its names.
+func writeInPlace(f *os.File, data []byte) error {
+	path := f.Name()
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
 		f.Close()
@@ -101,8 +120,14 @@ func writeInPlace(path string, data []byte) error {
 		_ = os.Remove(tmp.Name())
 		return err
 	}
-	// written over and then cut to length rather than emptied first: a new
-	// text no longer than the old needs no more room on the disk
+	// Written over and then cut to length, so while it is under way a
+	// reader can see the new text's head over the old text, or, when the
+	// new text is shorter, the whole new text with the old one's tail after
+	// it. Emptying the file first would not close that window, only change
+	// what shows through it: an empty or half-written file, which a tool
+	// may load as a config with nothing set and act on, where a mangled one
+	// fails to parse. Written over, a text no longer than the old also
+	// needs no more room on the disk.
 	_, err = f.Write(data)
 	if err == nil {
 		err = f.Truncate(int64(len(data)))
@@ -118,6 +143,41 @@ func writeInPlace(path string, data []byte) error {
 	}
 	_ = os.Remove(tmp.Name())
 	return nil
+}
+
+// staleTemp is how long a temp file beside a config goes untouched before
+// the next write of that config takes it for one a crash left. A write
+// takes milliseconds, so a temp file that old belongs to no write still
+// going on.
+const staleTemp = 10 * time.Minute
+
+// removeStaleTemps removes the temp files that earlier writes of path left
+// beside it when they crashed or failed part way, once a later write has
+// gone through: the file then holds newer text than any of them. One
+// younger than staleTemp stays, as another write may still be using it.
+// Should a write stall longer than that (a laptop asleep mid-write) and
+// lose its temp file here, its rename fails and leaves the file as it was,
+// or, writing in place, it only loses the spare copy of its text.
+func removeStaleTemps(path string) {
+	dir, prefix := filepath.Dir(path), "."+filepath.Base(path)+"."
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range es {
+		mid, ok := strings.CutPrefix(e.Name(), prefix)
+		if ok {
+			mid, ok = strings.CutSuffix(mid, ".tmp")
+		}
+		// os.CreateTemp puts digits for the *; anything else is another
+		// file's, say .models.yml.bak.1.tmp is models.yml.bak's
+		if !ok || mid == "" || strings.Trim(mid, "0123456789") != "" {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && time.Since(fi.ModTime()) > staleTemp {
+			_ = os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 }
 
 // Target is the file a write to path should replace: path itself, or,
@@ -156,8 +216,10 @@ func IsLink(path string) bool {
 // Remove takes away a file magpie has emptied. A symlink stays and the
 // file it points at is emptied instead, when there is one: deleting the
 // link would leave the old text in its target. A file with other hard
-// links is emptied and kept for the same reason: deleting this name would
-// leave the old text under the others.
+// links is emptied and kept for the same reason, so every name comes out
+// empty: with AGENTS.md and CLAUDE.md one file under two names, clearing
+// AGENTS.md empties CLAUDE.md too, where deleting the one name would leave
+// the text magpie is taking back under the other.
 func Remove(path string) error {
 	if !IsLink(path) && !hardLinked(path) {
 		return os.Remove(path)
