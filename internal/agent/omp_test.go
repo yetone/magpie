@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 	"gopkg.in/yaml.v3"
 )
 
@@ -190,5 +191,40 @@ task:
 	}
 	if !slices.Contains(moved, "omp") {
 		t.Fatalf("moved: %v", moved)
+	}
+}
+
+// omp 16.x asks with Bun's User-Agent (Bun/1.3.14), which the gateway can't
+// tell for omp's; magpie's provider names it, and the gateway knows that
+// name for omp.
+func TestOmpNamedToTheGateway(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, k := range []string{"PI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE"} {
+		t.Setenv(k, "")
+	}
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := omp(home).Field("model").Set("magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	var m struct {
+		Providers map[string]struct {
+			Headers map[string]string `yaml:"headers"`
+		} `yaml:"providers"`
+	}
+	b, _ := os.ReadFile(filepath.Join(home, ".omp", "agent", "models.yml"))
+	if err := yaml.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	ua := m.Providers[magpieID].Headers["User-Agent"]
+	if ua == "" || usage.AgentOf(ua) != "omp" {
+		t.Fatalf("magpie's provider names omp as %q, which the gateway takes for %q:\n%s", ua, usage.AgentOf(ua), b)
+	}
+	if usage.AgentOf("Bun/1.3.14") == "omp" {
+		t.Fatal("Bun's own User-Agent is taken for omp's, so the header proves nothing")
 	}
 }

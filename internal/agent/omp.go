@@ -200,10 +200,14 @@ type ompThinking struct {
 }
 
 type ompProviderEntry struct {
-	BaseURL string     `yaml:"baseUrl"`
-	API     string     `yaml:"api"`
-	Auth    string     `yaml:"auth"`
-	Models  []ompModel `yaml:"models"`
+	BaseURL string `yaml:"baseUrl"`
+	API     string `yaml:"api"`
+	Auth    string `yaml:"auth"`
+	// Headers name omp to the gateway: omp 16.x asks with Bun's User-Agent
+	// and only a later one with its own (omp/18.4.4), so its requests went
+	// to "Bun" in usage and past omp's own rules and stand-ins
+	Headers map[string]string `yaml:"headers,omitempty"`
+	Models  []ompModel        `yaml:"models"`
 }
 
 // ompProvider is magpie's entry in models.yml. The thinking efforts are the
@@ -257,5 +261,6 @@ func ompProvider() ompProviderEntry {
 		}
 		ms = append(ms, e)
 	}
-	return ompProviderEntry{BaseURL: gatewayV1(), API: "openai-completions", Auth: "none", Models: ms}
+	return ompProviderEntry{BaseURL: gatewayV1(), API: "openai-completions", Auth: "none",
+		Headers: map[string]string{"User-Agent": "omp"}, Models: ms}
 }
