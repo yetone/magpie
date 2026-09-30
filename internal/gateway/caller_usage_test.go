@@ -128,6 +128,71 @@ func TestManagedLANGuard(t *testing.T) {
 	}
 }
 
+func TestMigratedLANKeyUsageAndRevocation(t *testing.T) {
+	fresh(t)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer upstream-secret" {
+			t.Error("caller credential reached provider")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":5}}`)
+	}))
+	defer up.Close()
+	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Key: "upstream-secret", Chat: up.URL + "/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Load()
+	s.LAN, s.LANKey = true, "sk-magpie-test-legacy-lan"
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := access.MigrateLegacyLANKey(); err != nil {
+		t.Fatal(err)
+	}
+	keys, err := access.List()
+	if err != nil || len(keys) != 1 {
+		t.Fatal(keys, err)
+	}
+	h := lanGuard(New().Handler())
+	call := func() int {
+		r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(chatReq))
+		r.RemoteAddr = "192.168.1.9:5000"
+		r.Header.Set("Authorization", "Bearer "+s.LANKey)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	if code := call(); code != http.StatusOK {
+		t.Fatal("migrated remote caller", code)
+	}
+	rec := lastUsage(t)
+	if rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != keys[0].Name || rec.Input != 30 || rec.Output != 5 {
+		t.Fatal("remote usage attribution", rec)
+	}
+	if err := access.ConfigureLAN(true, true); err != nil {
+		t.Fatal(err)
+	}
+	if code := call(); code != http.StatusUnauthorized {
+		t.Fatal("rotated LAN credential still works", code)
+	}
+	s.LANKey, err = access.Update("copy-key", access.Change{Key: keys[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code := call(); code != http.StatusOK || lastUsage(t).CallerKeyID != keys[0].ID {
+		t.Fatal("rotation changed remote usage identity", code)
+	}
+	if _, err := access.Update("remove-key", access.Change{Key: keys[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if code := call(); code != http.StatusUnauthorized {
+		t.Fatal("revoked old LAN credential still works", code)
+	}
+	if recs := usage.Load(time.Time{}); len(recs) != 2 {
+		t.Fatal("unauthorized request counted as usage", recs)
+	}
+}
+
 func TestImageUsageIncludesCaller(t *testing.T) {
 	s, _ := easeled(t)
 	keys, secrets := newCaller(t, "Drawing")

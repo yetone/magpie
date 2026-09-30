@@ -6,9 +6,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 func TestLANSettingSharesCallerKeyStore(t *testing.T) {
@@ -31,8 +33,14 @@ func TestLANSettingSharesCallerKeyStore(t *testing.T) {
 	if s["lan"] != true || s["lanKey"] != nil {
 		t.Fatal("setting generated separate key", s)
 	}
-	if keys, _ := access.List(); len(keys) != 0 {
-		t.Fatal("generated a key without a name", keys)
+	key := s["lanCallerKey"].(map[string]any)
+	id := key["id"].(string)
+	if keys, _ := access.List(); len(keys) != 1 || keys[0].ID != id || keys[0].Name != "Local network" {
+		t.Fatal("LAN shortcut is not a named key", keys)
+	}
+	old, err := access.Update("copy-key", access.Change{Key: id})
+	if err != nil || strings.Contains(key["masked"].(string), old) {
+		t.Fatal("LAN settings leaked secret", key, err)
 	}
 	created := post("/api/caller-keys/add-key", `{"name":"Remote laptop"}`)
 	secret := created["secret"].(string)
@@ -45,6 +53,52 @@ func TestLANSettingSharesCallerKeyStore(t *testing.T) {
 	}
 	if _, ok := access.Authenticate(secret); !ok {
 		t.Fatal("toggling sharing revoked a key")
+	}
+	post("/api/settings/lan", `{"on":true}`)
+	if _, ok := access.Authenticate(old); !ok || settings.Load().LANKeyID != id {
+		t.Fatal("toggling sharing replaced the LAN key")
+	}
+	post("/api/caller-keys/rename-key", `{"key":"`+id+`","name":"Desk"}`)
+	usage.Append(usage.Record{Time: time.Now(), CallerKeyID: id, CallerKeyName: "Local network", Input: 30, Status: 200})
+	rotated := post("/api/settings/lan", `{"on":true,"newKey":true}`)
+	key = rotated["lanCallerKey"].(map[string]any)
+	if key["id"] != id || key["name"] != "Desk" || key["secret"] != nil {
+		t.Fatal("rotation lost key identity or leaked secret", key)
+	}
+	if _, ok := access.Authenticate(old); ok {
+		t.Fatal("rotated credential still works")
+	}
+	next, err := access.Update("copy-key", access.Change{Key: id})
+	if err != nil || next == old {
+		t.Fatal("key was not rotated", err)
+	}
+	if who, ok := access.Authenticate(next); !ok || who.KeyID != id {
+		t.Fatal("rotated key is invalid", who, ok)
+	}
+	if _, ok := access.Authenticate(secret); !ok {
+		t.Fatal("rotating LAN revoked another named key")
+	}
+	if recs := usage.Load(time.Time{}); len(recs) != 1 || recs[0].CallerKeyID != id || recs[0].Input != 30 {
+		t.Fatal("rotation changed historical usage", recs)
+	}
+	post("/api/settings", `{"theme":"dark"}`)
+	if settings.Load().LANKeyID != id {
+		t.Fatal("saving unrelated preferences lost LAN key reference")
+	}
+	post("/api/caller-keys/off-key", `{"key":"`+id+`"}`)
+	disabled := post("/api/settings/lan", `{"on":true,"newKey":true}`)
+	if disabled["lanCallerKey"].(map[string]any)["off"] != true {
+		t.Fatal("rotation re-enabled a disabled key")
+	}
+	post("/api/caller-keys/remove-key", `{"key":"`+id+`"}`)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/settings", nil))
+	if strings.Contains(w.Body.String(), `"lanCallerKey"`) {
+		t.Fatal("settings resurrected a deleted key", w.Body)
+	}
+	createdLAN := post("/api/settings/lan", `{"on":true,"newKey":true}`)
+	if createdLAN["lanCallerKey"].(map[string]any)["id"] == id {
+		t.Fatal("replacement reused a deleted identity")
 	}
 }
 
@@ -66,7 +120,7 @@ func TestSettingsMigratesOldLANCredentialToManagedKey(t *testing.T) {
 		t.Fatal("old credential remained in settings")
 	}
 	keys, _ := access.List()
-	if len(keys) != 1 || keys[0].Name != "Local network (legacy)" {
+	if len(keys) != 1 || keys[0].Name != "Local network (legacy)" || settings.Load().LANKeyID != keys[0].ID {
 		t.Fatal(keys)
 	}
 	who, ok := access.Authenticate(old)

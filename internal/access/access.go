@@ -190,6 +190,10 @@ func Authenticate(secret string) (Identity, bool) {
 func MigrateLegacyLANKey() error {
 	mu.Lock()
 	defer mu.Unlock()
+	return migrateLegacyLANKey()
+}
+
+func migrateLegacyLANKey() error {
 	s := settings.Load()
 	if s.LANKey == "" {
 		return nil
@@ -198,9 +202,10 @@ func MigrateLegacyLANKey() error {
 	if err != nil {
 		return err
 	}
-	if !slices.ContainsFunc(keys, func(k Key) bool {
+	i := slices.IndexFunc(keys, func(k Key) bool {
 		return subtle.ConstantTimeCompare([]byte(k.Secret), []byte(s.LANKey)) == 1
-	}) {
+	})
+	if i < 0 {
 		id, err := random(12)
 		if err != nil {
 			return err
@@ -209,8 +214,49 @@ func MigrateLegacyLANKey() error {
 		if err := save(keys); err != nil {
 			return err
 		}
+		i = len(keys) - 1
 	}
+	s.LANKeyID = keys[i].ID
 	s.LANKey = ""
+	return settings.Save(s)
+}
+
+// ConfigureLAN keeps Settings' copy/rotate shortcut on an ordinary named key.
+// Rotation preserves its ID, name and enabled state, and leaves other keys alone.
+func ConfigureLAN(on, rotate bool) error {
+	mu.Lock()
+	defer mu.Unlock()
+	if err := migrateLegacyLANKey(); err != nil {
+		return err
+	}
+	s := settings.Load()
+	if on {
+		keys, err := load()
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == s.LANKeyID })
+		if i < 0 || rotate {
+			token, err := random(24)
+			if err != nil {
+				return err
+			}
+			if i < 0 {
+				id, err := random(12)
+				if err != nil {
+					return err
+				}
+				keys = append(keys, Key{ID: id, Name: "Local network"})
+				i = len(keys) - 1
+			}
+			keys[i].Secret = Prefix + token
+			if err := save(keys); err != nil {
+				return err
+			}
+			s.LANKeyID = keys[i].ID
+		}
+	}
+	s.LAN = on
 	return settings.Save(s)
 }
 

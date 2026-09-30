@@ -175,3 +175,38 @@ func TestLegacyLANKeyMigrationPreservesUserKeys(t *testing.T) {
 		t.Fatal("lost LAN key")
 	}
 }
+
+func TestLegacyLANKeyMigrationRetryAndFailure(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := settings.Load()
+	s.LANKey = "sk-magpie-test-legacy-lan"
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	// The key write succeeded but clearing Settings was interrupted.
+	mu.Lock()
+	err := save([]Key{{ID: "migrated", Name: "Remote", Off: true, Secret: s.LANKey}})
+	mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateLegacyLANKey(); err != nil {
+		t.Fatal(err)
+	}
+	keys, err := List()
+	if err != nil || len(keys) != 1 || keys[0].ID != "migrated" || !keys[0].Off || settings.Load().LANKeyID != "migrated" {
+		t.Fatal("retry duplicated or re-enabled a key", keys, err)
+	}
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(Path(), []byte("broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateLegacyLANKey(); err == nil {
+		t.Fatal("migration accepted a corrupt store")
+	}
+	if settings.Load().LANKey != s.LANKey {
+		t.Fatal("failed migration cleared the old credential")
+	}
+}

@@ -109,8 +109,7 @@ func LANURLs() []string {
 }
 
 // Relisten moves the gateway to where settings now say it listens — onto
-// the network or back to loopback — and takes up the key; requests in
-// flight finish.
+// the network or back to loopback. Requests in flight finish.
 func (s *Server) Relisten() error {
 	if err := migrateLANKey(); err != nil {
 		return err

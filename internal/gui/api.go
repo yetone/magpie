@@ -181,6 +181,8 @@ type settingsJSON struct {
 	// LANURLs are a container's own addresses, not the host's: the page
 	// offers the one it was opened at instead, or says how to set it
 	LANContainer bool `json:"lanContainer,omitempty"`
+	// The same masked entry as Gateway, never a separate sharing credential.
+	LANCallerKey *access.Key `json:"lanCallerKey,omitempty"`
 	// when the Codex warm-up last started an account's window
 	CodexWarmed *time.Time `json:"codexWarmed,omitempty"`
 	// and the Claude warm-up
@@ -212,6 +214,13 @@ func settingsState() settingsJSON {
 	s.Login = autostart.Enabled()
 	if s.LAN {
 		s.LANURLs, s.LANContainer = gateway.LANURLs(), gateway.ContainerAddrs()
+		keys, _ := access.List()
+		for _, k := range keys {
+			if k.ID == s.LANKeyID {
+				s.LANCallerKey = &k
+				break
+			}
+		}
 	}
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
 	s.WorkBuddy, s.WorkBuddyCheckins = provider.HasWorkBuddy(), provider.WorkBuddyCheckins()
@@ -486,6 +495,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.Visible, in.HiddenModels = cur.Visible, cur.HiddenModels
 		settings.CarryPerModel(&in, &cur)
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
+		in.LANKeyID = cur.LANKeyID
 		in.RedactRules = cur.RedactRules // the masking rules, set on their own
 		// used or left is the Usage page's toggle as much as Settings', set on its own
 		in.QuotaLeft = cur.QuotaLeft
@@ -662,18 +672,12 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	// Sharing controls exposure; the gateway's named caller keys authenticate
 	// remote clients just as they do local ones.
 	mux.HandleFunc("POST /api/settings/lan", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ On bool }
+		var in struct{ On, NewKey bool }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
 			return
 		}
-		if err := access.MigrateLegacyLANKey(); err != nil {
-			fail(rw, err)
-			return
-		}
-		s := settings.Load()
-		s.LAN = in.On
-		if err := settings.Save(s); err != nil {
+		if err := access.ConfigureLAN(in.On, in.NewKey); err != nil {
 			fail(rw, err)
 			return
 		}
