@@ -102,7 +102,7 @@ function fixture(lang, theme, events) {
       }
       if (action === "remove-key") keys = keys.filter((v) => v !== k);
       if (action === "on-key" || action === "off-key") k.off = action === "off-key";
-      if (action === "copy-key") secret = k.id === lanKeyID ? lanSecret : secrets.get(k.id) || "sk-magpie-user-test-copy";
+      if (action === "copy-key") secret = k.id === lanKeyID ? lanSecret : secrets.get(k.id);
       return json({ keys, secret });
     }
     if (url.pathname === "/api/copy") { events.push({ action: "clipboard", body: req.postDataJSON() }); return json({}); }

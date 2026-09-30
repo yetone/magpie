@@ -1,13 +1,18 @@
 # Dropdown browser regression
 
-`gateway-users.test.cjs` checks the flat named caller-key list on the
+`gateway-caller-keys.test.cjs` checks the named caller-key list on the
 Gateway page, including creation, copying, renaming, disabling, enabling,
-and deletion. It verifies key-level usage overview, request filtering and
+rotation and deletion. It verifies key-level usage overview, request filtering and
 CSV export in Chinese and English on Chromium and WebKit. The fixtures do
-not access local credentials. Settings keeps the LAN key's original copy
-and rotate controls, using the same named entry as Gateway. The test
-checks that rotation updates both pages and toggling sharing retains the
-key, including the narrow Settings layout.
+not access local credentials. Gateway is the only key-management page;
+Settings controls sharing and shows addresses. The test checks that toggling
+sharing retains the key, and that a removed default key is recreated as
+Magpie and appears in Gateway without a reload.
+
+`gateway-connect-keys.test.cjs` selects loopback and LAN addresses and enabled
+caller keys for Shell, curl, Python and Node examples across all four APIs.
+It checks rotation, disabling, removal, stale list responses, empty states,
+literal custom names and narrow layouts in Chinese and English on both engines.
 
 `api-key-usage.test.cjs` exercises the existing provider key list: adding,
 enabling and disabling, choosing the first key, renaming and removing.
@@ -19,7 +24,8 @@ and the narrow window in Chromium and WebKit.
 The API fixtures use test keys and never read local user configuration.
 
 `api-key-theme.test.cjs` checks Gateway's enabled and disabled keys, creation
-and renaming inputs, and the LAN key controls against the global palette.
+and renaming inputs, rotation and key picker, plus Settings' LAN address
+controls against the global palette.
 Light and Dark override the OS; System follows live OS palette changes.
 The settings theme picker is also switched and reloaded in Chromium and
 WebKit. No separate colours are defined for API keys.

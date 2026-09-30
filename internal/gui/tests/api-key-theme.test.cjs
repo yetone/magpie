@@ -3,7 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
-const { fixture } = require("./fixtures/users.cjs");
+const { fixture } = require("./fixtures/caller-keys.cjs");
 
 async function palette(page, selectors) {
   return page.evaluate((selectors) => {
