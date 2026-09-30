@@ -224,6 +224,13 @@ func ruledEntry(e *Entry, g Group, ms []Member, entries []Entry) {
 				if x.Provider.ID != m.Provider.ID || x.Model != m.Model {
 					continue
 				}
+				if input := m.DeclaredInput(); input != nil {
+					x.Images = slices.Contains(input, "image")
+					x.ImageInput = nil
+					if !x.Images {
+						x.ImageInput = &x.Images
+					}
+				}
 				if !found {
 					out, found = x, true
 					break

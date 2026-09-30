@@ -128,7 +128,8 @@ type Group struct {
 	Family string `json:"family,omitempty"`
 	// Auto is set on a group magpie found: one model served by several
 	// providers. It is derived, never stored.
-	Auto bool `json:"auto,omitempty"`
+	Input []string `json:"input,omitempty"` // nil follows members; otherwise "text" and optionally "image"
+	Auto  bool     `json:"auto,omitempty"`
 	// Hidden is stored for a found group the user removed.
 	Hidden bool `json:"hidden,omitempty"`
 }
@@ -139,7 +140,8 @@ type Member struct {
 	// Path is the members from the group's own down to the model: [ID] for
 	// a model the group names itself, ["group/fast", "a/m"] for one of
 	// its group fast, and so on down.
-	Path []string
+	Path     []string
+	rootPath []string // retained when Below presents a nested group's view
 	// Via are the groups in the group it is of, the outermost first: the
 	// group each of Path's members but the last names.
 	Via      []Group
@@ -161,10 +163,44 @@ func (m Member) Groups() []string {
 	return out
 }
 
+// DeclaredInput is the route's explicit input boundary, the same rule image
+// dispatch uses. A text-only declaration anywhere along the path wins;
+// otherwise it is the outermost explicit declaration. Nil means every group
+// on the path infers from its members.
+func (m Member) DeclaredInput() []string {
+	var declared []string
+	for _, g := range m.Via {
+		if g.Input == nil {
+			continue
+		}
+		if !slices.Contains(g.Input, "image") {
+			return g.Input
+		}
+		if declared == nil {
+			declared = g.Input
+		}
+	}
+	return declared
+}
+
+// RoutePath retains the original membership route when a subgroup views it.
+func (m Member) RoutePath() []string {
+	if m.rootPath != nil {
+		return m.rootPath
+	}
+	return m.Path
+}
+
+// TextOnlyPath reports an explicit text boundary anywhere along the route.
+func (m Member) TextOnlyPath() bool {
+	input := m.DeclaredInput()
+	return input != nil && !slices.Contains(input, "image")
+}
+
 // Below is the member as the group at depth (0 the group itself, 1 the
 // group in it Path[0] names, …) has it.
 func (m Member) Below(depth int) Member {
-	return Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort}
+	return Member{ID: m.Path[depth], Path: m.Path[depth:], rootPath: m.RoutePath(), Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort}
 }
 
 // maxNest is how deep groups in groups may go.
@@ -328,9 +364,14 @@ func groupOf(all []Group, id string) (Group, bool) {
 // where it was first — the same model at another effort is another
 // member — and a group that would be in itself is cut there. A manual
 // group has only the member picked (see Manual), however deep.
+// Distinct image boundaries are kept until the gateway knows the request's input.
 func membersIn(entries []Entry, all []Group, g Group) []Member {
 	var out []Member
-	seen := map[string]bool{}
+	type inputMember struct {
+		model    string
+		textOnly bool
+	}
+	seen := map[inputMember]bool{}
 	var walk func(g Group, path []string, via []Group, in []string)
 	walk = func(g Group, path []string, via []Group, in []string) {
 		for _, id := range g.routes() {
@@ -345,7 +386,7 @@ func membersIn(entries []Entry, all []Group, g Group) []Member {
 			}
 			model, effort := memberEffortIn(entries, id)
 			p, m, ok := resolveIn(entries, model)
-			key := WithMemberEffort(p.ID+"/"+m, effort)
+			key := inputMember{WithMemberEffort(p.ID+"/"+m, effort), (Member{Via: via}).TextOnlyPath()}
 			if !ok || seen[key] {
 				continue
 			}
@@ -396,6 +437,13 @@ func groupEntries(entries []Entry) []Entry {
 					efforts, images, ctx, output, imageInput = x.Efforts, x.Images, x.Context, x.Output, x.ImageInput
 				}
 			}
+			if input := m.DeclaredInput(); input != nil {
+				images = slices.Contains(input, "image")
+				imageInput = nil
+				if !images {
+					imageInput = &images
+				}
+			}
 			if output > 0 && (e.Output == 0 || output < e.Output) {
 				e.Output = output
 			}
@@ -439,6 +487,14 @@ func groupEntries(entries []Entry) []Entry {
 			e.Images = false
 		}
 		ruledEntry(&e, g.Live(), ms, entries)
+		if g.Input != nil {
+			e.Input = slices.Clone(g.Input)
+			e.Images = slices.Contains(g.Input, "image")
+			e.ImageInput = nil // Image permits dispatch; leaves remain authoritative
+			if !e.Images {
+				e.ImageInput = &e.Images
+			}
+		}
 		if g.Context > 0 {
 			e.Context = g.Context
 		}
@@ -446,6 +502,34 @@ func groupEntries(entries []Entry) []Entry {
 		out = append(out, e)
 	}
 	return out
+}
+
+// cleanGroupInput normalizes the two input types supported by Pi. A nil
+// declaration means infer from the group as before; a set declaration is
+// explicit, and text is always required.
+func cleanGroupInput(g *Group) error {
+	if g.Input == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, input := range g.Input {
+		input = strings.ToLower(strings.TrimSpace(input))
+		if input != "text" && input != "image" {
+			return fmt.Errorf("group input %q is unsupported (use text and image)", input)
+		}
+		seen[input] = true
+	}
+	if len(g.Input) == 0 {
+		return errors.New("group input needs text")
+	}
+	if !seen["text"] {
+		return errors.New("group input needs text")
+	}
+	g.Input = []string{"text"}
+	if seen["image"] {
+		g.Input = append(g.Input, "image")
+	}
+	return nil
 }
 
 // SaveGroup adds or replaces a group of the user's. Changing one magpie
@@ -461,6 +545,11 @@ func SaveGroup(g Group) error {
 	}
 	if g.Name == "" {
 		g.Name = g.ID
+	}
+	if g.Input != nil {
+		if err := cleanGroupInput(&g); err != nil {
+			return err
+		}
 	}
 	g.Members = cleanList(g.Members)
 	if len(g.Members) == 0 {

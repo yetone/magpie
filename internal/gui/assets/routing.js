@@ -1855,6 +1855,8 @@
   const fixedWords = (level) => t("{level} reasoning", { level });
   // a routing group among a group's members: group/<id>
   const subOf = (id) => id?.startsWith("group/") ? groups?.groups.find((x) => "group/" + x.id === id && !x.hidden) : null;
+  const inputWords = (types) => t(types?.includes("image") ? "Text + Image" : "Text only");
+  const groupInputNote = (g) => t("Input: {types}", { types: inputWords(g.effectiveInput || g.input) });
   const groupIcons = (g) => [...new Map((g.memberInfo || []).filter((i) => i.icon).map((i) => [i.provider || i.icon, i.icon])).values()];
   const memberIcon = (id) => { const s = subOf(id); return s ? stackIcon(groupIcons(s)) : icon(modelOf(id)?.icon || "generic"); };
   const memberName = (id) => { const s = subOf(id), m = modelOf(id); return s ? s.name : m ? m.name || m.id : id; };
@@ -1871,7 +1873,7 @@
   }
   function drawGroups() {
     const newBtn = el("button", "text", t("New group"));
-    newBtn.onclick = () => { gEdit = { id: "", draft: { name: "", members: [], routing: "", affinity: "", rules: [] } }; renderGroups(); };
+    newBtn.onclick = () => { gEdit = { id: "", draft: { name: "", members: [], routing: "", affinity: "", rules: [], family: "", context: 0, input: null } }; renderGroups(); };
     gHead.replaceChildren(el("span", "label", t("Routing groups")), el("span", "grow"), el("span", "note", t("models agents pick as one")), newBtn);
     const rows = [];
     if (gEdit && !gEdit.id) rows.push(groupEditor(null));
@@ -1903,7 +1905,7 @@
     const manual = g.routing === "manual";
     const sep = g.routing === "order" ? " → " : " · ";
     const mem = manual ? pickRow(g) : el("div", "mem", g.members.map((id) => memberLabel(g, id)).join(sep));
-    main.append(nm, mem);
+    main.append(nm, mem, el("div", "rt-ginput-summary", groupInputNote(g)));
     const m = GROUP_ROUTE_OPTS.find(([id]) => id === (g.routing || "")) || ROUTE_OPTS[0];
     const tags = el("span", "tags");
     tags.append(el("span", "tag", t(m[1])));
@@ -1916,7 +1918,7 @@
     if (!g.ready) tags.append(el("span", "tag bad", t("no member ready")));
     const edit = el("button", "text", t("Edit"));
     edit.onclick = (e) => { e.stopPropagation(); open(); };
-    const open = () => { gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", classifier: g.classifier || "", effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])] })) } }; renderGroups(); };
+    const open = () => { gEdit = { id: g.id, draft: { name: g.name, family: g.family || "", context: g.context || 0, input: g.input ? [...g.input] : null, members: [...g.members], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", classifier: g.classifier || "", effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])] })) } }; renderGroups(); };
     row.onclick = open;
     row.append(ics, main, tags, edit);
     return row;
@@ -2044,7 +2046,7 @@
       // a group in it may be any other, but never one it is in already:
       // that would put it in itself
       const subs = groups.groups.filter((x) => !x.hidden && x.id !== g?.id && !(g && x.holds?.includes(g.id)) && !d.members.includes("group/" + x.id))
-        .map((x) => ({ value: "group/" + x.id, label: x.name, note: "group/" + x.id, icons: groupIcons(x), group: ROUTING_GROUPS, ref: "group/" + x.id }));
+        .map((x) => ({ value: "group/" + x.id, label: x.name, note: "group/" + x.id + " · " + groupInputNote(x), icons: groupIcons(x), group: ROUTING_GROUPS, ref: "group/" + x.id }));
       const options = [...subs, ...groups.models.filter((x) => !d.members.includes(x.id))
         .map((x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id, context: x.context }))];
       openPicker({ id: "", name: "", fields: [] }, { key: "member", label: "model", value: "", options, onPick: (id) => {
@@ -2057,6 +2059,37 @@
     const mw = el("div");
     mw.append(box, el("div", "hint", t("The first answers for what the model can do. In order, they are tried top first.")));
     ed.append(el("label", "", t("Models")), mw);
+
+    const inputs = el("div", "rt-ginputs");
+    inputs.setAttribute("role", "group");
+    inputs.setAttribute("aria-label", t("Input types"));
+    const autoTypes = el("div", "mchips");
+    const manualTypes = el("div", "mchips");
+    manualTypes.setAttribute("role", "group");
+    manualTypes.setAttribute("aria-label", t("Manual input types"));
+    const automatic = el("button", "mchip", t("Automatic"));
+    const textType = el("button", "mchip", t("Text (required)"));
+    const imageType = el("button", "mchip", t("Image"));
+    const inputHint = el("div", "hint");
+    const drawInput = () => {
+      const auto = !d.input;
+      for (const [button, on] of [[automatic, auto], [textType, !auto], [imageType, !!d.input?.includes("image")]]) {
+        button.classList.toggle("on", on);
+        button.setAttribute("aria-pressed", String(on));
+      }
+      textType.setAttribute("aria-disabled", String(!auto));
+      inputHint.textContent = t(auto
+        ? "Automatic follows the members' input capabilities. Select Text for a manual text-only declaration."
+        : "Text is required. Image declares image understanding to agents; it does not enable image generation or make a text-only member see images.");
+    };
+    automatic.onclick = () => { d.input = null; drawInput(); };
+    textType.onclick = () => { if (!d.input) d.input = ["text"]; drawInput(); };
+    imageType.onclick = () => { d.input = d.input?.includes("image") ? ["text"] : ["text", "image"]; drawInput(); };
+    autoTypes.append(automatic);
+    manualTypes.append(textType, imageType);
+    inputs.append(autoTypes, manualTypes, inputHint);
+    drawInput();
+    ed.append(el("label", "", t("Input types")), inputs);
 
     const rHint = el("div", "hint", t(GROUP_HINT[d.routing] || GROUP_HINT[""]));
     const rw = el("div");
@@ -2093,7 +2126,9 @@
         tk.append(el("span", "", "≥"), ti, el("span", "", t("tokens")));
         // images
         const im = el("button", "rt-cond" + (r.images ? " on" : ""), t("has an image"));
-        im.onclick = () => { r.images = !r.images; im.classList.toggle("on", r.images); warn(); };
+        im.title = t("Matches a request containing an image; this rule does not declare input support or generate images.");
+        im.setAttribute("aria-pressed", String(!!r.images));
+        im.onclick = () => { r.images = !r.images; im.classList.toggle("on", r.images); im.setAttribute("aria-pressed", String(r.images)); warn(); };
         // reasoning
         const effortName = (v) => v === "on" ? t("reasoning on") : v ? t("reasoning ≥ {level}", { level: v }) : t("any reasoning");
         const ef = el("button", "rt-cond" + (r.effort ? " on" : ""), effortName(r.effort));
@@ -2181,7 +2216,7 @@
       else cb.append(el("span", "", t("choose a model")));
       const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.providerName, ref: x.id, context: x.context });
       const subs = groups.groups.filter((x) => !x.hidden && x.id !== g?.id)
-        .map((x) => ({ value: "group/" + x.id, label: x.name, note: "group/" + x.id, icons: groupIcons(x), group: ROUTING_GROUPS, ref: "group/" + x.id }));
+        .map((x) => ({ value: "group/" + x.id, label: x.name, note: "group/" + x.id + " · " + groupInputNote(x), icons: groupIcons(x), group: ROUTING_GROUPS, ref: "group/" + x.id }));
       cb.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "classifier", label: "model", value: d.classifier, options: [...deciders.map(opt), ...subs, ...groups.models.map(opt)],
         onPick: (id) => { if (id) d.classifier = id; drawClassifier(); } }, cb, ev);
       cls.replaceChildren(cb,
@@ -2273,7 +2308,7 @@
       if (d.effort === "auto" && !d.classifier) return status(t("Choose the model that rates how hard a turn is"), "warn");
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
       saveBtn.classList.add("busy");
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: d.members, routing: d.routing, pick: d.pick || "", affinity: d.affinity, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: g?.context || 0, levels: own ? d.levels : [], family: g?.family || "" }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }));
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: d.members, routing: d.routing, pick: d.pick || "", affinity: d.affinity, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: d.context, levels: own ? d.levels : [], family: d.family, input: d.input }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }));
     };
     saveBtn.onclick = save;
     bar.append(cancel, saveBtn);

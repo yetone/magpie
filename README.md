@@ -227,6 +227,16 @@ the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
 `models=` replaces the whole list, in order; a bare model id works when only
 one provider serves it.
 
+`magpie group set <id> input=auto` follows the members (the default): the
+group takes an image only when one of them can, and a text-only declaration
+anywhere on the way to a member blocks it. `input=text` says text only.
+`input=text,image` says the group takes an image. One in a request goes only
+to a member that can take it; a text-only member is skipped, or handed the
+image described when a model is set to describe images. With no such member,
+the gateway answers 400. Text is required — audio, video and PDF are refused.
+Declaring an image does not make a text-only member see, and it is not image
+generation.
+
 The app's Import from other apps dialog can copy providers from Claude Code's
 `settings.json` (`CLAUDE_CONFIG_DIR` when set) and Codex's `config.toml`
 (`CODEX_HOME` when set) into magpie. Codex imports custom

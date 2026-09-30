@@ -239,6 +239,10 @@
 .rt-group .nm code.mdl { font: 500 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--fg-2); background: var(--card-2); border-radius: 5px; padding: 0 5px; white-space: nowrap; }
 .rt-group .nm small.auto { font-size: 11px; color: var(--faint); white-space: nowrap; }
 .rt-group .mem { margin-top: 2px; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rt-ginput-summary { margin-top: 3px; font-size: 11.5px; color: var(--fg-2); }
+.rt-ginputs { display: grid; gap: 6px; min-width: 0; }
+.rt-ginputs .mchips { overflow: visible; }
+.rt-ginputs .mchip[aria-disabled="true"] { cursor: default; }
 .rt-group .tags { display: flex; gap: 4px; flex: none; }
 .rt-group .tag { font-size: 11px; line-height: 18px; padding: 0 8px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); color: var(--muted); white-space: nowrap; }
 .rt-group .tag.bad { color: var(--red); }

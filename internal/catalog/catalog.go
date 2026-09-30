@@ -37,6 +37,9 @@ type Model struct {
 	APIs []string `json:",omitempty"`
 	// Images is set on a model that takes images as input.
 	Images bool `json:",omitempty"`
+	// Input is an explicitly declared routing group's input, not upstream
+	// evidence that its members accept those inputs.
+	Input []string `json:",omitempty"`
 	// ImageInput is the source's explicit answer; nil means it did not say.
 	ImageInput *bool `json:",omitempty"`
 	// Context is how many tokens a prompt may hold, when known: models.dev's

@@ -750,6 +750,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		_, imageInput = provider.ApplyImage(p.ID, model, false, known)
 	}
+	if isGroup && g.Input != nil {
+		imageInput = nil // Image permits dispatch without altering leaf capability
+		if !slices.Contains(g.Input, "image") {
+			textOnly := false
+			imageInput = &textOnly
+		}
+	}
 	// Unless a model that sees describes them to it (vision.go).
 	seeing := sync.OnceValues(func() (string, bool) {
 		if describing(r.Context()) {
@@ -866,13 +873,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			seenGroup = sync.OnceValues(func() ([]byte, error) { return s.seenBody(r.Context(), from, body, see) })
 		}
 	}
-	if isGroup && seenGroup == nil {
+	if isGroup && hasImage(from, body) {
 		_, currentImage := textOnlyBody(from, body)
-		if currentImage {
+		if currentImage && seenGroup == nil {
 			var kept []candidate
 			var order []Weighed
 			for i, c := range cands {
-				in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}}, nil)
+				in := candidateImageInput(c)
 				if in != nil && !*in {
 					continue
 				}
@@ -881,13 +888,36 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 			cands, pl.order = kept, order
 			if len(cands) == 0 {
-				call.Status, call.Error = 400, "model does not support image input"
-				writeError(w, from, 400, fmt.Sprintf("model %q does not support image input", call.Model))
+				call.Status, call.Error = 400, "no member can take an image"
+				writeError(w, from, 400, fmt.Sprintf("none of %s's members can take an image", call.Model))
 				finishCapture()
 				s.record(call)
 				return
 			}
 		}
+	}
+	if isGroup {
+		// Expansion retains different boundaries until eligibility is known.
+		// Try equivalent payloads only once; described/omitted versus native
+		// image payloads remain distinct when the request contains images.
+		seen := map[inputSeat]bool{}
+		var kept []candidate
+		var order []Weighed
+		images := hasImage(from, body)
+		for i, c := range cands {
+			key := inputSeat{seat: c.seat()}
+			if images {
+				in := candidateImageInput(c)
+				key.textOnly = in != nil && !*in
+			}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			kept = append(kept, c)
+			order = append(order, pl.order[i])
+		}
+		cands, pl.order = kept, order
 	}
 	pin := strings.TrimSpace(r.Header.Get(AccountHeader))
 	if pin != "" {
@@ -933,7 +963,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 		}
 		if isGroup {
-			if in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}}, nil); in != nil && !*in {
+			if in := candidateImageInput(c); in != nil && !*in {
 				if seenGroup != nil {
 					b, err := seenGroup()
 					if err != nil {

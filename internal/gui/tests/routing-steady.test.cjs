@@ -50,12 +50,12 @@ const groups = {
   pools: [1, 2, 3].map((n) => ({ provider: `prov${n}`, name: `Provider ${n}`, kind: "account", who: ["a", "b"], routing: "", affinity: "" })),
 };
 
-function serve(feed) {
-  const state = { agents: agentsOf.map((id) => ({ id, name: id[0].toUpperCase() + id.slice(1), path: `/test/${id}`, fields: [] })), profiles: [], settings: { lang: "en", theme: "light" } };
+function serve(feed, lang) {
+  const state = { agents: agentsOf.map((id) => ({ id, name: id[0].toUpperCase() + id.slice(1), path: `/test/${id}`, fields: [] })), profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: 'window.bootPrefs = {lang:"en",theme:"light",web:true};' });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state);
     if (url.pathname === "/api/gateway/trace") {
@@ -77,8 +77,8 @@ function serve(feed) {
 
 const view = "#view-routing";
 
-for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  test(`${engine}: requests coming in leave the routing groups where they are`, async (t) => {
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) for (const lang of ["en", "zh"]) {
+  test(`${engine} ${lang}: requests coming in leave the routing groups where they are`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     const context = await browser.newContext({ viewport: { width: 1100, height: 760 } });
     const page = await context.newPage();
@@ -86,11 +86,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     const feed = { next: null };
-    await page.route("**/*", serve(feed));
+    await page.route("**/*", serve(feed, lang));
     t.after(async () => {
       if (process.env.ARTIFACT_DIR) {
         await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
-        await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-steady.png`) });
+        await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-steady.png`) });
       }
       feed.next?.(req(999, "codex", [1], 0));
       await browser.close();
@@ -112,7 +112,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.waitForTimeout(400);
     const scrolled = await page.locator(view).evaluate((v) => v.scrollTop);
     assert(scrolled > 200, `the view must be scrolled down to the groups (${scrolled})`);
-    await page.locator(".rt-group").first().locator("button", { hasText: "Edit" }).click();
+    await page.locator(".rt-group").first().locator("button", { hasText: lang === "zh" ? "编辑" : "Edit" }).click();
     const name = page.locator(".rt-gedit input").first();
     await name.click();
     await name.press("End");

@@ -27,6 +27,7 @@ const groupUsage = `usage:
                                           levels=none,low,medium,high,xhigh,max; empty is those every model has —
                                           a model without the one asked is sent its nearest),
                                           family (a tag: magpie visible shows agents families, not each group),
+                                          input=auto|text|text,image,
                                           id (what agents pick it as: id=gpt-6-astra drops auto-; the groups
                                           it is in follow; an agent set to the old id needs setting again),
                                           effort=auto (the classifier picks each turn's reasoning; needs classifier=),
@@ -341,6 +342,12 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			}
 		case "family", "tag":
 			g.Family = strings.TrimSpace(v)
+		case "input":
+			if strings.EqualFold(strings.TrimSpace(v), "auto") {
+				g.Input = nil
+			} else {
+				g.Input = splitList(v)
+			}
 		case "effort", "reasoning":
 			switch strings.ToLower(strings.TrimSpace(v)) {
 			case "auto", "jev":
@@ -358,7 +365,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			g.Pick, err = pickMember(g.Members, v)
 			g.Routing = provider.Manual
 		default:
-			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier; magpie group help)", k)
+			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, input, effort, classifier; magpie group help)", k)
 		}
 		if err != nil {
 			return err
@@ -793,6 +800,11 @@ func showGroup(g provider.Group) error {
 		kv("routing", routingName(g.Routing))
 	}
 	kv("stays", staysName(g.Affinity))
+	input := "auto"
+	if g.Input != nil {
+		input = strings.Join(g.Input, ",")
+	}
+	kv("input", input)
 	names := catalogByID()
 	for i, id := range g.Members {
 		k := ""

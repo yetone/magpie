@@ -37,6 +37,17 @@ type candidate struct {
 	// effort is the reasoning the group's member it is of is fixed at
 	// ("provider/model:low"); "" for one that follows the agent or the group
 	effort string
+	via    []provider.Group // subgroup boundaries along this candidate's path
+	path   []string         // original route, including in a subgroup's view
+}
+
+type inputSeat struct {
+	seat     string
+	textOnly bool
+}
+
+func (c candidate) inputSeat() inputSeat {
+	return inputSeat{c.seat(), (provider.Member{Via: c.via}).TextOnlyPath()}
 }
 
 // label names a candidate in a call's record: the provider, and the key
@@ -287,6 +298,8 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		for _, l := range [][]candidate{cs, aside, left} {
 			for i := range l {
 				l[i].effort = m.Effort
+				l[i].via = m.Via
+				l[i].path = m.RoutePath()
 			}
 		}
 		*asides = append(*asides, aside...)
@@ -302,12 +315,12 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		return cs
 	}
 	if g.Routing != provider.Ordered {
-		of := map[string]provider.Member{} // candidate → its model
+		of := map[inputSeat]provider.Member{} // candidate and boundary → its model
 		var all []candidate
 		for _, m := range ms {
 			cs := keys(m)
 			for _, c := range cs {
-				of[c.seat()] = m
+				of[c.inputSeat()] = m
 			}
 			all = append(all, cs...)
 		}
@@ -317,7 +330,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		}
 		cs, wg := weigh(provider.Provider{ID: provider.GroupPrefix + g.ID, Routing: routing}, all, "", from)
 		for i, c := range cs {
-			m := of[c.seat()]
+			m := of[c.inputSeat()]
 			w := weighed(c, m.Provider, wg, false, from)
 			w.Routing, w.Via = g.Routing, m.Groups()
 			w.Turn = i == 0 && g.Routing == provider.Rotate && len(cs) > 1

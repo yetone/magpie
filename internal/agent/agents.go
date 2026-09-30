@@ -230,6 +230,10 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 				e["attachment"] = true
 				e["modalities"] = map[string]any{"input": []string{"text", "image"}, "output": []string{"text"}}
 			}
+			if m.Input != nil {
+				e["attachment"] = slices.Contains(m.Input, "image")
+				e["modalities"] = map[string]any{"input": slices.Clone(m.Input), "output": []string{"text"}}
+			}
 			// without it OpenCode doesn't know when to compact, and a
 			// group's context (magpie group set … context=) never reaches
 			// it; an output of 0 is OpenCode's own default
@@ -280,6 +284,9 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 			}
 			if m.Images {
 				e["input"] = []string{"text", "image"}
+			}
+			if m.Input != nil {
+				e["input"] = slices.Clone(m.Input)
 			}
 			if levels := piThinkingLevels(m.Efforts, e["api"] == "anthropic-messages"); levels != nil {
 				e["thinkingLevelMap"] = levels

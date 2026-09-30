@@ -665,6 +665,7 @@ type Entry struct {
 	Group      string   `json:"group,omitempty"`  // set on a routing group (group.go)
 	Icons      []string `json:"-"`                // a group's: its providers' icons, one per provider
 	Images     bool     `json:"images,omitempty"` // takes images as input (a group's: every member does)
+	Input      []string `json:"input,omitempty"`  // an explicitly declared group's input, nil when automatic
 	ImageInput *bool    `json:"-"`                // explicit answer, nil when unknown
 	// Context is the tokens a prompt may hold, when known (a group's: the
 	// least of its members')

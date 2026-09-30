@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -73,7 +74,7 @@ func magpieModels(agent string) []catalog.Model {
 	var out []catalog.Model
 	shown, _ := provider.CatalogFor(agent)
 	for _, e := range shown {
-		m := catalog.Model{ID: e.ID, Name: e.Label(), Provider: firstOf(e.Provider.Catalogs()), Efforts: e.Efforts, Images: e.Images, ImageInput: e.ImageInput, Context: e.Context, Output: e.Output}
+		m := catalog.Model{ID: e.ID, Name: e.Label(), Provider: firstOf(e.Provider.Catalogs()), Efforts: e.Efforts, Images: e.Images, Input: slices.Clone(e.Input), ImageInput: e.ImageInput, Context: e.Context, Output: e.Output}
 		// APIs is the one to ask it on for the gateway to relay the request
 		// as it is; none for a group, whose members may each want another
 		if e.Group == "" {

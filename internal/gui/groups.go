@@ -24,8 +24,9 @@ type groupsJSON struct {
 
 type groupJSON struct {
 	provider.Group
-	Ready bool         `json:"ready"` // a member is: agents can pick it
-	Info  []memberJSON `json:"memberInfo"`
+	Ready          bool         `json:"ready"` // a member is: agents can pick it
+	EffectiveInput []string     `json:"effectiveInput"`
+	Info           []memberJSON `json:"memberInfo"`
 	// Holds: the groups in it, at any depth — none of which can have it in
 	// turn
 	Holds []string `json:"holds"`
@@ -136,7 +137,17 @@ func groupsState() groupsJSON {
 		}
 	}
 	for _, g := range provider.Groups() {
-		gj := groupJSON{Group: g, Info: []memberJSON{}, Holds: []string{}, Offers: []string{}, Shared: []string{}}
+		effective := slices.Clone(g.Input)
+		if effective == nil {
+			effective = []string{"text"}
+			for _, e := range served {
+				if e.Group == g.ID && e.Images {
+					effective = append(effective, "image")
+					break
+				}
+			}
+		}
+		gj := groupJSON{Group: g, Info: []memberJSON{}, Holds: []string{}, EffectiveInput: effective, Offers: []string{}, Shared: []string{}}
 		for _, e := range served {
 			if e.ID == provider.GroupPrefix+g.ID {
 				gj.Offers, gj.Shared = append(gj.Offers, e.Efforts...), append(gj.Shared, e.Shared...)

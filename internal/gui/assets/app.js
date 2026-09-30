@@ -9456,6 +9456,15 @@ const atRest = (n) => n.isConnected && n.offsetParent && !n.getAnimations().some
 // view takes it out.
 const room = new WeakMap(); // px kept at a view's foot, past its content
 const roomOf = (v) => (v.querySelector(":scope > .view-room") ? room.get(v) || 0 : 0);
+// Measure the content independently of the room. WebKit can still report
+// scrollHeight before a room's new height was laid out; adding that room
+// again would count it twice, but sizing it from the content is idempotent.
+function contentHeight(v) {
+  const last = [...v.children].reverse().find((n) => !n.classList.contains("view-room") && n.offsetParent);
+  const bottom = last ? last.getBoundingClientRect().bottom - v.getBoundingClientRect().top + v.scrollTop
+    + (parseFloat(getComputedStyle(last).marginBottom) || 0) : 0;
+  return bottom + (parseFloat(getComputedStyle(v).paddingBottom) || 0);
+}
 function setRoom(v, px) {
   px = Math.max(0, Math.round(px));
   let r = v.querySelector(":scope > .view-room");
@@ -9467,26 +9476,27 @@ function setRoom(v, px) {
 }
 // only as much room as keeps the view where it is: none once the content
 // reaches the view's foot again
-function fitRoom(v) {
+function fitRoom(v, at = v.scrollTop) {
   const r = roomOf(v);
-  if (r) setRoom(v, Math.min(r, v.scrollTop + v.clientHeight - (v.scrollHeight - r)));
+  if (r) setRoom(v, Math.min(r, at + v.clientHeight - contentHeight(v)));
 }
 function hold(h) {
   const a = h.chain.find(([n]) => atRest(n));
   if (!a) return;
   const v = h.v, d = onScreen(a[0], v) - a[1];
+  let want = v.scrollTop;
   if (Math.abs(d) >= 1) {
-    let want = v.scrollTop + d;
+    want += d;
     const max = v.scrollHeight - v.clientHeight;
     // a view at its top when clicked stays there rather than be given room
     // to scroll down: a chip saved in the panel's Profiles came in above the
     // button held, and room made for the button slid the chip up under the
     // tabs, out of sight
     if (want > max && h.top) want = max;
-    if (want > max) setRoom(v, roomOf(v) + want - max);
+    if (want > max) setRoom(v, want + v.clientHeight - contentHeight(v));
     v.scrollTop = want;
   }
-  fitRoom(v);
+  fitRoom(v, want);
   readerLeaves(v);
 }
 let holding = false; // one frame loop, whatever the clicks

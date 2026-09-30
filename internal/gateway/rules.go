@@ -470,6 +470,9 @@ func applyRule(hit *RuleHit, ms []provider.Member, cs []candidate, pl planned) (
 // effort.
 func ofMember(c candidate, m provider.Member) bool {
 	id := m.Provider.ID
+	if len(c.path) > 0 && len(m.RoutePath()) > 0 && !slices.Equal(c.path, m.RoutePath()) {
+		return false
+	}
 	return c.model == m.Model && c.effort == m.Effort && (c.rest == id || strings.HasPrefix(c.rest, id+"#") || strings.HasPrefix(c.rest, id+"@"))
 }
 
@@ -490,6 +493,13 @@ func membersImageInput(ms []provider.Member, ruled []provider.Member) *bool {
 				break
 			}
 		}
+		if input := m.DeclaredInput(); input != nil {
+			in = nil
+			if !slices.Contains(input, "image") {
+				textOnly := false
+				in = &textOnly
+			}
+		}
 		if i == 0 {
 			out = in
 			continue
@@ -497,6 +507,17 @@ func membersImageInput(ms []provider.Member, ruled []provider.Member) *bool {
 		out = sharedImageInput(out, in)
 	}
 	return out
+}
+
+// candidateImageInput uses DeclaredInput: a text-only declaration anywhere
+// on the path blocks a native image, and an Image declaration never changes
+// the leaf.
+func candidateImageInput(c candidate) *bool {
+	if (provider.Member{Via: c.via}).TextOnlyPath() {
+		textOnly := false
+		return &textOnly
+	}
+	return membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}}, nil)
 }
 
 // sharedImageInput is provider's: an explicit text-only answer wins, and

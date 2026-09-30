@@ -337,7 +337,10 @@ func codexListed(shown []Entry, members func(id string) []Member) []catalog.Mode
 		if e.Group == "" && e.Provider.Account != nil && e.Provider.Account.Agent == "codex" {
 			continue
 		}
-		m := catalog.Model{ID: e.ID, Name: e.Label(), Efforts: e.Efforts, Images: e.Images, Context: e.Context}
+		m := catalog.Model{ID: e.ID, Name: e.Label(), Efforts: e.Efforts, Images: e.Images, Input: slices.Clone(e.Input), Context: e.Context}
+		if e.Input != nil {
+			m.Images = slices.Contains(e.Input, "image")
+		}
 		if e.Group != "" {
 			for _, mb := range members(e.ID) {
 				if a := mb.Provider.Account; a != nil && a.Agent == "codex" && strings.HasPrefix(mb.Model, "gpt-") {

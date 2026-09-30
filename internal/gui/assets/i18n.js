@@ -4,6 +4,16 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Input types": "输入类型",
+    "Manual input types": "手动输入类型",
+    "Text (required)": "文本（必选）",
+    "Image": "图片",
+    "Text only": "仅文本",
+    "Text + Image": "文本 + 图片",
+    "Input: {types}": "输入：{types}",
+    "Automatic follows the members' input capabilities. Select Text for a manual text-only declaration.": "自动模式跟随成员的输入能力。选择文本可手动声明仅支持文本输入。",
+    "Text is required. Image declares image understanding to agents; it does not enable image generation or make a text-only member see images.": "文本为必选。图片向 Agent 声明图片理解能力；它不会启用图片生成，也不会让仅支持文本的成员看懂图片。",
+    "Matches a request containing an image; this rule does not declare input support or generate images.": "匹配包含图片的请求；此规则不声明输入能力，也不生成图片。",
     // header, nav, footer
     "Agents": "Agent",
     "Providers": "供应商",
