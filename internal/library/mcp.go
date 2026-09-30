@@ -269,6 +269,42 @@ func selfTimeout(s *Server, def int) int {
 	return def
 }
 
+// gooseOldTimeout is the timeout magpie wrote for every Goose server before
+// magpie-image was given a longer one.
+const gooseOldTimeout = 300
+
+// behind says whether an entry magpie wrote before lacks the timeout it
+// gives s now: Codex's tool_timeout_sec is missing, or Goose's timeout is
+// still the gooseOldTimeout every server had. A value the user chose is
+// neither, so it is left as it is.
+func (f *mcpFile) behind(s *Server, old map[string]any) bool {
+	if selfTimeout(s, 0) == 0 {
+		return false
+	}
+	switch f.Format {
+	case fmtCodex:
+		_, ok := old["tool_timeout_sec"]
+		return !ok
+	case fmtGoose:
+		return isNumber(old["timeout"], gooseOldTimeout)
+	}
+	return false
+}
+
+func isNumber(v any, n float64) bool {
+	switch x := v.(type) {
+	case int:
+		return float64(x) == n
+	case int64:
+		return float64(x) == n
+	case uint64:
+		return float64(x) == n
+	case float64:
+		return x == n
+	}
+	return false
+}
+
 // encode is the server as this agent writes it.
 func (f *mcpFile) encode(s *Server) ordered {
 	var o ordered
@@ -813,8 +849,9 @@ var owned = map[mcpFormat][]string{
 func (f *mcpFile) merged(s *Server, old map[string]any) ordered {
 	o := f.encode(s)
 	mine := owned[f.Format]
+	behind := f.behind(s, old)
 	for i, e := range o {
-		if v, ok := old[e.k]; ok && !slices.Contains(mine, e.k) {
+		if v, ok := old[e.k]; ok && !slices.Contains(mine, e.k) && !(behind && f.Format == fmtGoose && e.k == "timeout") {
 			o[i].v = v
 		}
 	}

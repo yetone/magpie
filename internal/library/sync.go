@@ -127,7 +127,7 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 		}
 		old := entries[s.Name]
 		if old != nil {
-			if cur, ok := t.MCP.decode(s.Name, old); ok && cur.same(s) && t.MCP.has(s) {
+			if cur, ok := t.MCP.decode(s.Name, old); ok && cur.same(s) && t.MCP.has(s) && !t.MCP.behind(s, old) {
 				mine = append(mine, s.Name)
 				continue
 			}

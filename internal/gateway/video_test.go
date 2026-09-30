@@ -298,6 +298,7 @@ func TestVideoRequestsAreTurnedAway(t *testing.T) {
 		{"no prompt", "POST", "/v1/videos", `{"model":"grok/grok-imagine-video"}`, 400, "say what to film"},
 		{"not JSON", "POST", "/v1/videos", `nope`, 400, "isn't JSON"},
 		{"seconds not a number", "POST", "/v1/videos", `{"prompt":"x","seconds":"a few"}`, 400, "whole number"},
+		{"seconds below one", "POST", "/v1/videos", `{"prompt":"x","seconds":0}`, 400, "at least 1"},
 		{"a chat model", "POST", "/v1/videos", `{"prompt":"x","model":"grok/grok-4.7"}`, 400, "can't make videos"},
 		{"no such model", "POST", "/v1/videos", `{"prompt":"x","model":"nobody/nothing"}`, 404, "knows no model"},
 		{"the vendor's limit is said", "POST", "/v1/videos", `{"prompt":"TOOLONG","seconds":"99"}`, 400, "Duration must be between 1 and 15 seconds"},
@@ -456,12 +457,17 @@ func TestVideoSecondsAndResolutionAsAsked(t *testing.T) {
 			t.Errorf("seconds %s: asked %v", sec, sent)
 		}
 	}
-	for _, sec := range []string{`6.5`, `"six"`, `1e99`} {
+	for _, sec := range []string{`6.5`, `"six"`, `1e99`, `"0x1p3"`, `-5`, `"-5"`, `0`, `"+6"`, `"6_0"`, `"inf"`, `"nan"`, `"1e3.5"`} {
 		code, obj, raw, _ := request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite","seconds":`+sec+`}`)
 		if code != 400 || !strings.Contains(errorOf(obj), "whole number") {
 			t.Errorf("seconds %s: %d %s", sec, code, raw)
 		}
 	}
+	// the object says 6, as the video is, not the 6.0 that was written
+	if _, obj, _, _ := request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite","seconds":6.0}`); obj["seconds"] != "6" {
+		t.Errorf("seconds echoed as %v", obj["seconds"])
+	}
+	n++
 	if sent := ask(`{"prompt":"a kite","size":"1920x1080"}`); sent["resolution"] != "720p" || sent["aspect_ratio"] != "16:9" {
 		t.Errorf("1080p on the base model: %v", sent)
 	}

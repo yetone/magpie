@@ -185,7 +185,37 @@ func readFilming(r *http.Request) (filming, error) {
 	if strings.TrimSpace(f.Prompt) == "" {
 		return f, errors.New("say what to film in prompt")
 	}
+	if f.Seconds != "" {
+		n, err := parseSeconds(f.Seconds)
+		if err != nil {
+			return f, err
+		}
+		f.Seconds = strconv.Itoa(n)
+	}
 	return f, nil
+}
+
+// decimalNumber is a number as JSON writes it, not as Go's ParseFloat also
+// takes it (hex, inf, nan, underscores).
+var decimalNumber = regexp.MustCompile(`^[0-9]+(\.[0-9]*)?([eE][+-]?[0-9]+)?$`)
+
+// parseSeconds is a duration in whole seconds, however it was written: 6,
+// "6", 6.0, 6e0. What the vendor's limit makes of a length it says itself.
+func parseSeconds(v string) (int, error) {
+	whole := func() (int, bool) {
+		if !decimalNumber.MatchString(v) {
+			return 0, false
+		}
+		n, err := strconv.ParseFloat(v, 64)
+		if err != nil || n != math.Trunc(n) || n < 1 || n > math.MaxInt32 {
+			return 0, false
+		}
+		return int(n), true
+	}
+	if n, ok := whole(); ok {
+		return n, nil
+	}
+	return 0, fmt.Errorf("seconds is a whole number of at least 1, not %q", v)
 }
 
 // videoResolution is the resolution Grok's video API is asked for when size
@@ -226,11 +256,11 @@ func pixelResolution(size string) string {
 func grokVideoBody(model string, f filming) ([]byte, error) {
 	req := map[string]any{"model": model, "prompt": f.Prompt}
 	if f.Seconds != "" {
-		n, err := strconv.ParseFloat(f.Seconds, 64)
-		if err != nil || n != math.Trunc(n) || n > math.MaxInt32 || n < math.MinInt32 {
-			return nil, fmt.Errorf("seconds is a whole number, not %q", f.Seconds)
+		n, err := parseSeconds(f.Seconds)
+		if err != nil {
+			return nil, err
 		}
-		req["duration"] = int(n)
+		req["duration"] = n
 	}
 	if ar := aspectAmong(f.Size, grokVideoAspects); ar != "" {
 		req["aspect_ratio"] = ar

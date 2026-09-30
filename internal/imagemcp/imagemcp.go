@@ -107,7 +107,6 @@ type server struct {
 	nextCall int
 }
 
-// Run serves MCP on stdin/stdout until stdin closes.
 // ToolTimeout is how long an agent has to wait for a tool of this server:
 // generate_video waits up to videoWait for its video, and a minute more.
 // Agents that cut a tool call short (Codex's default is a minute) are given
@@ -115,6 +114,7 @@ type server struct {
 // made and ask for it again.
 func ToolTimeout() time.Duration { return videoWait + time.Minute }
 
+// Run serves MCP on stdin/stdout until stdin closes.
 func Run(args []string) error {
 	if len(args) > 0 && args[0] != "image" {
 		return fmt.Errorf("unknown MCP server %q (there is: image)", args[0])
