@@ -24,11 +24,15 @@ func Read(path string) ([]byte, error) {
 // WriteAtomic writes data to path via a temp file + rename so a crash can
 // never leave a half-written config behind. File mode is preserved. When
 // path is a symlink (a config kept in a dotfiles repo) the file it points
-// at is written and the link stays.
+// at is written and the link stays; a file with other hard links is
+// written in place, see writeInPlace.
 func WriteAtomic(path string, data []byte) error {
 	path, err := Target(path)
 	if err != nil {
 		return err
+	}
+	if hardLinked(path) {
+		return writeInPlace(path, data)
 	}
 	mode := fs.FileMode(0o644)
 	if st, err := os.Stat(path); err == nil {
@@ -62,6 +66,57 @@ func WriteAtomic(path string, data []byte) error {
 		cleanup()
 		return err
 	}
+	return nil
+}
+
+// writeInPlace writes data into the file at path itself, for a file that
+// has other names too (a hard link, as Orca keeps omp's models.yml in its
+// overlay): a new file renamed over one name would split it from the
+// others, each left with its own text. Writing in place is not atomic, so
+// the text first goes to a temp file beside it, synced to disk, and only
+// then into the file: a crash part way leaves the whole new text in that
+// temp file, and a write that fails part way keeps it there and names it
+// in the error. The file keeps its mode, its owner and all its names.
+func writeInPlace(path string, data []byte) error {
+	// opened first, so a file that can't be written fails before anything
+	// is made beside it
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		f.Close()
+		return err
+	}
+	_, err = tmp.Write(data)
+	if err == nil {
+		err = tmp.Sync()
+	}
+	if e := tmp.Close(); err == nil {
+		err = e
+	}
+	if err != nil {
+		f.Close()
+		_ = os.Remove(tmp.Name())
+		return err
+	}
+	// written over and then cut to length rather than emptied first: a new
+	// text no longer than the old needs no more room on the disk
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Truncate(int64(len(data)))
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if e := f.Close(); err == nil {
+		err = e
+	}
+	if err != nil {
+		return fmt.Errorf("%w; the new text is kept in %s", err, tmp.Name())
+	}
+	_ = os.Remove(tmp.Name())
 	return nil
 }
 
@@ -100,9 +155,11 @@ func IsLink(path string) bool {
 
 // Remove takes away a file magpie has emptied. A symlink stays and the
 // file it points at is emptied instead, when there is one: deleting the
-// link would leave the old text in its target.
+// link would leave the old text in its target. A file with other hard
+// links is emptied and kept for the same reason: deleting this name would
+// leave the old text under the others.
 func Remove(path string) error {
-	if !IsLink(path) {
+	if !IsLink(path) && !hardLinked(path) {
 		return os.Remove(path)
 	}
 	if _, err := os.Stat(path); err != nil {
