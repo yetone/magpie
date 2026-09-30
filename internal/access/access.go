@@ -22,9 +22,10 @@ import (
 
 const Prefix = "sk-magpie-key-"
 const legacyPrefix = "sk-magpie-user-"
+const legacyLANPrefix = "sk-magpie-"
 
 func Managed(secret string) bool {
-	return strings.HasPrefix(secret, Prefix) || strings.HasPrefix(secret, legacyPrefix)
+	return strings.HasPrefix(secret, legacyLANPrefix)
 }
 
 type Key struct {
@@ -93,8 +94,10 @@ func List() ([]Key, error) {
 	for i := range keys {
 		k := &keys[i]
 		if len(k.Secret) > 8 {
-			prefix := Prefix
-			if strings.HasPrefix(k.Secret, legacyPrefix) {
+			prefix := legacyLANPrefix
+			if strings.HasPrefix(k.Secret, Prefix) {
+				prefix = Prefix
+			} else if strings.HasPrefix(k.Secret, legacyPrefix) {
 				prefix = legacyPrefix
 			}
 			k.Masked = prefix + "…" + k.Secret[len(k.Secret)-6:]
@@ -162,24 +165,7 @@ func Update(action string, in Change) (string, error) {
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
 	}
-	b, err := json.MarshalIndent(keys, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
-		return "", err
-	}
-	f, err := os.OpenFile(Path(), os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return "", err
-	}
-	if err := f.Close(); err != nil {
-		return "", err
-	}
-	if err := os.Chmod(Path(), 0o600); err != nil {
-		return "", err
-	}
-	return secret, edit.WriteAtomic(Path(), append(b, '\n'))
+	return secret, save(keys)
 }
 
 // Authenticate reloads the store so revocation takes effect in running gateways.
@@ -196,4 +182,55 @@ func Authenticate(secret string) (Identity, bool) {
 		}
 	}
 	return Identity{}, false
+}
+
+// MigrateLegacyLANKey makes the old Settings key a normal, revocable caller
+// key. Persist the key before clearing Settings so a failed migration never
+// silently revokes a working client. Repeating it after a partial write is safe.
+func MigrateLegacyLANKey() error {
+	mu.Lock()
+	defer mu.Unlock()
+	s := settings.Load()
+	if s.LANKey == "" {
+		return nil
+	}
+	keys, err := load()
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(keys, func(k Key) bool {
+		return subtle.ConstantTimeCompare([]byte(k.Secret), []byte(s.LANKey)) == 1
+	}) {
+		id, err := random(12)
+		if err != nil {
+			return err
+		}
+		keys = append(keys, Key{ID: id, Name: "Local network (legacy)", Secret: s.LANKey})
+		if err := save(keys); err != nil {
+			return err
+		}
+	}
+	s.LANKey = ""
+	return settings.Save(s)
+}
+
+func save(keys []Key) error {
+	b, err := json.MarshalIndent(keys, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(Path(), os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(Path(), 0o600); err != nil {
+		return err
+	}
+	return edit.WriteAtomic(Path(), append(b, '\n'))
 }

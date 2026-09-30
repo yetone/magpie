@@ -11,6 +11,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -101,9 +102,11 @@ func TestCallerUsageAcrossKeys(t *testing.T) {
 func TestManagedLANGuard(t *testing.T) {
 	fresh(t)
 	keys, secrets := newCaller(t, "Remote")
-	legacy := "legacy-shared-secret"
-	lanKey.Store(&legacy)
-	t.Cleanup(func() { empty := ""; lanKey.Store(&empty) })
+	shared := settings.Load()
+	shared.LAN = true
+	if err := settings.Save(shared); err != nil {
+		t.Fatal(err)
+	}
 	h := lanGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		who := access.Caller(r.Context())
 		if who.KeyID != keys[0].ID || r.URL.Query().Get("key") != Token {

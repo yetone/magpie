@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 func TestNamedKeysAndLegacyMigration(t *testing.T) {
@@ -102,5 +104,74 @@ func TestConcurrentKeyCreationAndCorruptStore(t *testing.T) {
 	}
 	if _, err := Update("add-key", Change{Name: "New"}); err == nil {
 		t.Fatal("overwrote corrupt store")
+	}
+}
+
+func TestLegacyLANKeyMigrationIsIdempotentAndRevocable(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := settings.Load()
+	s.LAN, s.LANKey = true, "sk-magpie-legacy-lan-secret"
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateLegacyLANKey(); err != nil {
+		t.Fatal(err)
+	}
+	keys, err := List()
+	if err != nil || len(keys) != 1 || keys[0].Name != "Local network (legacy)" || !strings.HasPrefix(keys[0].Masked, "sk-magpie-…") {
+		t.Fatal(keys, err)
+	}
+	if settings.Load().LANKey != "" || !settings.Load().LAN {
+		t.Fatal("LAN sharing lost or old secret still in settings")
+	}
+	if who, ok := Authenticate(s.LANKey); !ok || who.KeyID != keys[0].ID {
+		t.Fatal(who, ok)
+	}
+	if err := MigrateLegacyLANKey(); err != nil {
+		t.Fatal(err)
+	}
+	keys, _ = List()
+	if len(keys) != 1 {
+		t.Fatal("duplicate migration", keys)
+	}
+	if _, err := Update("off-key", Change{Key: keys[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := Authenticate(s.LANKey); ok {
+		t.Fatal("disabled LAN key still works")
+	}
+	if _, err := Update("remove-key", Change{Key: keys[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := Authenticate(s.LANKey); ok {
+		t.Fatal("removed LAN key still works")
+	}
+}
+
+func TestLegacyLANKeyMigrationPreservesUserKeys(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := settings.Load()
+	s.LANKey = "sk-magpie-legacy"
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(Path()), "users.json"), []byte(`[{"name":"Old","keys":[{"id":"client","name":"Client","secret":"sk-magpie-user-old"}]}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := MigrateLegacyLANKey(); err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := List()
+	if len(keys) != 2 || keys[0].ID != "client" {
+		t.Fatal(keys)
+	}
+	if _, ok := Authenticate("sk-magpie-user-old"); !ok {
+		t.Fatal("lost old caller key")
+	}
+	if _, ok := Authenticate(s.LANKey); !ok {
+		t.Fatal("lost LAN key")
 	}
 }

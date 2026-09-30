@@ -60,9 +60,8 @@ type Settings struct {
 	RedactPersonal bool          `json:"redactPersonal,omitempty"`
 	RedactWords    []string      `json:"redactWords,omitempty"`
 	RedactRules    []redact.Rule `json:"redactRules,omitempty"`
-	// LAN shares the gateway on the local network, for agents on other
-	// machines; a request from one must carry LANKey as its API key, a
-	// key magpie makes when LAN is first turned on.
+	// LAN shares the gateway on the local network; remote callers must use
+	// named caller keys. LANKey is read only to migrate older installations.
 	LAN    bool   `json:"lan,omitempty"`
 	LANKey string `json:"lanKey,omitempty"`
 	// CodexWarmup starts a ChatGPT account's next window as soon as the

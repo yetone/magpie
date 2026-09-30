@@ -284,7 +284,9 @@ var WhileServing []func(context.Context)
 // long as a stream takes. A bind error means another magpie is already
 // serving, which is fine for the caller to ignore.
 func (s *Server) ListenAndServe(ctx context.Context) error {
-	loadLANKey()
+	if err := migrateLANKey(); err != nil {
+		return err
+	}
 	ln, err := Listen(listenAddr())
 	if err != nil {
 		return err

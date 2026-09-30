@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/catalog"
@@ -457,6 +458,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	libraryRoutes(mux, w)
 	updateRoutes(mux, w)
 	mux.HandleFunc("GET /api/settings", func(rw http.ResponseWriter, r *http.Request) {
+		if err := access.MigrateLegacyLANKey(); err != nil {
+			fail(rw, err)
+			return
+		}
 		writeJSON(rw, settingsState())
 	})
 	mux.HandleFunc("POST /api/settings", func(rw http.ResponseWriter, r *http.Request) {
@@ -654,19 +659,20 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
-	// sharing the gateway on the local network: on makes its key the first
-	// time, new asks for another (the old one stops working)
+	// Sharing controls exposure; the gateway's named caller keys authenticate
+	// remote clients just as they do local ones.
 	mux.HandleFunc("POST /api/settings/lan", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ On, NewKey bool }
+		var in struct{ On bool }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := access.MigrateLegacyLANKey(); err != nil {
 			fail(rw, err)
 			return
 		}
 		s := settings.Load()
 		s.LAN = in.On
-		if s.LANKey == "" || in.NewKey {
-			s.LANKey = gateway.NewLANKey()
-		}
 		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return
