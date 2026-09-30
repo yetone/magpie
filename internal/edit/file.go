@@ -22,8 +22,14 @@ func Read(path string) ([]byte, error) {
 }
 
 // WriteAtomic writes data to path via a temp file + rename so a crash can
-// never leave a half-written config behind. File mode is preserved.
+// never leave a half-written config behind. File mode is preserved. A path
+// that is a symlink keeps being one: the file it points at is the one
+// replaced, so a config kept in a dotfiles repo and linked in stays linked.
 func WriteAtomic(path string, data []byte) error {
+	path, err := resolve(path)
+	if err != nil {
+		return err
+	}
 	mode := fs.FileMode(0o644)
 	if st, err := os.Stat(path); err == nil {
 		mode = st.Mode().Perm()
@@ -57,6 +63,42 @@ func WriteAtomic(path string, data []byte) error {
 		return err
 	}
 	return nil
+}
+
+// Remove takes the file at path away. A symlink is the user's, not magpie's:
+// it stays, and the file it points at is emptied instead.
+func Remove(path string) error {
+	real, err := resolve(path)
+	if err != nil {
+		return err
+	}
+	if real == path {
+		return os.Remove(path)
+	}
+	if _, err := os.Stat(real); errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return WriteAtomic(real, nil)
+}
+
+// resolve follows the symlinks at path to the file they end at, which need
+// not exist yet. A path that isn't a symlink is itself.
+func resolve(path string) (string, error) {
+	for range 255 {
+		st, err := os.Lstat(path)
+		if err != nil || st.Mode()&fs.ModeSymlink == 0 {
+			return path, nil
+		}
+		to, err := os.Readlink(path)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(to) {
+			to = filepath.Join(filepath.Dir(path), to)
+		}
+		path = to
+	}
+	return "", fmt.Errorf("%s: too many levels of symbolic links", path)
 }
 
 // Atomically runs fn, which may write the files at paths in several steps,

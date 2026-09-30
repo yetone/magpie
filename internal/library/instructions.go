@@ -187,7 +187,7 @@ func (l *Library) syncInstructions(t *Target, b *backups, res *Result) {
 		return
 	}
 	if strings.TrimSpace(next) == "" && len(raw) > 0 && own(file) == "" {
-		err = os.Remove(t.Instructions)
+		err = edit.Remove(t.Instructions)
 	} else if next != "" {
 		err = edit.WriteAtomic(t.Instructions, []byte(next))
 	}
@@ -348,7 +348,7 @@ func ImportInstructions(id string) (*Result, error) {
 			next = withBlock("", block)
 		}
 		if next == "" {
-			err = os.Remove(t.Instructions)
+			err = edit.Remove(t.Instructions)
 		} else {
 			err = edit.WriteAtomic(t.Instructions, []byte(next))
 		}

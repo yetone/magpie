@@ -460,6 +460,50 @@ func TestImportInstructions(t *testing.T) {
 	}
 }
 
+// An instructions file linked in from a dotfiles repo stays a link through
+// writing, importing and turning off; only the file it points at changes.
+func TestInstructionsThroughSymlink(t *testing.T) {
+	h := sandbox(t)
+	real := filepath.Join(h, "dotfiles/AGENTS.md")
+	write(t, real, "# Mine\n")
+	cx := filepath.Join(h, ".codex/AGENTS.md")
+	os.MkdirAll(filepath.Dir(cx), 0o755)
+	if err := os.Symlink(real, cx); err != nil {
+		t.Skipf("can't make symlinks here: %v", err)
+	}
+	linked := func(when string) {
+		t.Helper()
+		if st, err := os.Lstat(cx); err != nil || st.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("%s: the link is gone (%v)", when, err)
+		}
+	}
+
+	shared := "Use tabs."
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"codex"}}))
+	linked("on")
+	if s := read(t, real); s != "# Mine\n\n"+blockBegin+"\nUse tabs.\n"+blockEnd+"\n" {
+		t.Errorf("on:\n%q", s)
+	}
+	ok(t)(SaveInstructions(InstructionsChange{Agents: []string{}}))
+	linked("off")
+	if s := read(t, real); s != "# Mine\n" {
+		t.Errorf("off:\n%q", s)
+	}
+
+	// imported, all of it is magpie's; off, the link stays and what it
+	// points at is emptied, the text kept in the library and the backup
+	ok(t)(ImportInstructions("codex"))
+	linked("imported")
+	ok(t)(SaveInstructions(InstructionsChange{Agents: []string{}}))
+	linked("imported, off")
+	if s := read(t, real); s != "" {
+		t.Errorf("imported, off:\n%q", s)
+	}
+	if iv, _ := ReadInstructions(); !strings.Contains(iv.Shared, "# Mine") {
+		t.Errorf("shared: %q", iv.Shared)
+	}
+}
+
 func skill(t *testing.T, dir, name, desc string) {
 	write(t, filepath.Join(dir, "SKILL.md"), "---\nname: "+name+"\ndescription: "+desc+"\n---\n\n# "+name+"\n")
 	write(t, filepath.Join(dir, "scripts/run.sh"), "echo hi\n")
