@@ -25,10 +25,13 @@ import (
 var ompEfforts = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
 
 // ompRefKeys are where omp's config names models: each role (a list to try
-// in order, "a,b" or a sequence), the retry fallback chains (model keys and
-// their entries), the models it cycles through (enabledModels, also scoped
-// to paths) and the models of task agents. An entry may end in a thinking
-// level ("magpie/deepseek/pro:max").
+// in order, "a,b" or a sequence), the retry fallback chains (a list of
+// models under each key; the key is a role's name, the only kind omp 16
+// takes (agent-session.ts), or from omp 18 a model selector as well
+// (retry-fallback-chains.ts) — a role's name read with them is no model of
+// magpie's and is passed over), the models it cycles through (enabledModels,
+// also scoped to paths) and the models of task agents. An entry may end in a
+// thinking level ("magpie/deepseek/pro:max").
 var ompRefKeys = []string{"modelRoles", "retry.fallbackChains", "enabledModels", "task.agentModelOverrides"}
 
 // ompRefs calls fn on each model of a value under ompRefKeys, the spaces
