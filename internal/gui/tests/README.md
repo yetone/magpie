@@ -11,11 +11,18 @@ key, including the narrow Settings layout.
 
 `api-key-usage.test.cjs` exercises the existing provider key list: adding,
 enabling and disabling, choosing the first key, renaming and removing.
-The Usage page reuses the statistics rows for each key's calls, tokens,
-cache traffic and cost, and the request filters for key-specific rows and
-CSV exports. It checks current names, unattributed historical records,
-Chinese and English, and the narrow window in Chromium and WebKit.
+The Usage page's API key rows, request filter and CSV exports identify
+client keys, not those provider credentials. A client using different
+upstream keys stays grouped together; renaming an upstream key does not
+rename the client. It also checks historical records, Chinese and English,
+and the narrow window in Chromium and WebKit.
 The API fixtures use test keys and never read local user configuration.
+
+`api-key-theme.test.cjs` checks Gateway's enabled and disabled keys, creation
+and renaming inputs, and the LAN key controls against the global palette.
+Light and Dark override the OS; System follows live OS palette changes.
+The settings theme picker is also switched and reloaded in Chromium and
+WebKit. No separate colours are defined for API keys.
 
 `session-terminal.test.cjs` checks the macOS Settings choice for installed
 `.command` handlers in English and Chinese. The system default appears once

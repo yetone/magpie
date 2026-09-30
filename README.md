@@ -157,7 +157,7 @@ its provider there (`Claude Sonnet 5 · Relay A · office`), and its image
 models are listed under Settings → Images and draw through it.
 
 The gateway also issues **named caller keys**, independent of a provider's
-upstream API keys. Open **Gateway → Caller keys → New key** to create a key
+upstream API keys. Open **Gateway → API keys → New key** to create a key
 for each client, then copy it from its row and use it with the gateway's
 existing base URL. Rename, disable, or remove keys independently; changes
 apply to the running gateway immediately, while calls already in progress
@@ -167,8 +167,9 @@ Settings keeps its existing copy and **New key** controls: its LAN key is
 an ordinary named entry in Gateway. Rotating it invalidates only that
 credential, preserving its name and usage history; other keys are unchanged.
 
-**Usage → Overview** shows caller keys separately from provider keys.
-**Usage → Requests** filters by caller key, and CSV export includes
+**Usage → Overview → API keys** groups calls by the API key used by the
+client, not the provider's credentials. **Usage → Requests** uses the same
+API key filter, and CSV export includes
 `caller_key_id` and `caller_key_name`. Deleted keys keep historical usage.
 The usual local `magpie` token and older records have no caller-key
 attribution. An existing LAN key is migrated into the named list as

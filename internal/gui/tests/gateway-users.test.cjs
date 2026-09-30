@@ -16,8 +16,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", fixture(lang, "light", events));
       const w = lang === "zh"
-        ? { create: "创建 Key", name: "调用 Key 名称", remove: "移除", copy: "复制调用 Key", disable: "停用 Key", enable: "启用 Key", requests: "请求", usage: "用量" }
-        : { create: "Create key", name: "Caller key name", remove: "Remove", copy: "Copy caller key", disable: "Disable key", enable: "Enable key", requests: "Requests", usage: "Usage" };
+        ? { create: "创建密钥", name: "密钥名称", remove: "移除", copy: "复制 API 密钥", disable: "停用密钥", enable: "启用密钥", requests: "请求", usage: "用量" }
+        : { create: "Create key", name: "API key name", remove: "Remove", copy: "Copy API key", disable: "Disable key", enable: "Enable key", requests: "Requests", usage: "Usage" };
       await page.goto("http://magpie.test/?view=gateway");
       await page.locator("#gatewayKeys .acc[data-key]").last().waitFor();
       assert.equal(await page.locator("#gatewayKeys .accts").count(), 1);
@@ -42,17 +42,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       tablet = page.locator("#gatewayKeys .acc[data-key]", { hasText: "Travel" });
       await tablet.waitFor();
       await page.locator("#nav").getByRole("button", { name: w.usage, exact: true }).click();
-      await page.locator("#usageCallerKeys .row").last().waitFor();
-      assert.equal(await page.locator("#usageCallerKeys .row").count(), 3);
-      assert.match(await page.locator("#usageCallerKeys").textContent(), /Laptop/);
+      await page.locator("#usageKeys .row").last().waitFor();
+      assert.equal(await page.locator("#usageKeys .row").count(), 3);
+      assert.match(await page.locator("#usageKeys").textContent(), /Laptop/);
+      assert.equal(await page.locator("#usageKeysHead").textContent(), lang === "zh" ? "API 密钥" : "API keys");
+      assert.equal(await page.locator("#usageCallerKeys").count(), 0, "there is only one API key section");
       await page.locator("#usageTab").getByRole("button", { name: w.requests, exact: true }).click();
-      await page.locator("#ledCallerKey").click();
+      await page.locator("#ledKey").click();
       await page.locator(".sess-menu .pm-item", { hasText: "Laptop" }).click();
       await page.waitForFunction(() => document.querySelectorAll("#ledWrap tbody tr").length === 1);
       assert.match(await page.locator("#ledWrap").textContent(), /Laptop/);
       await page.locator("#ledExport").click();
       await page.waitForTimeout(150);
-      assert(events.some((e) => e.action === "export" && e.query.includes("callerKey=laptop") && !e.query.includes("user=")));
+      assert(events.some((e) => e.action === "export" && e.query.includes("callerKey=laptop") && !e.query.includes("key=") && !e.query.includes("user=")));
       await page.reload();
       await page.locator("#prefs").click();
       const share = page.locator("#lanList").getByRole("button", { name: lang === "zh" ? "开启" : "On", exact: true });

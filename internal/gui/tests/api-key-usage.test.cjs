@@ -1,5 +1,5 @@
 // The real provider editor and Usage page, with isolated API fixtures.
-// Several keys stay manageable; usage, filters and CSV keep each identity.
+// Provider keys stay manageable; Usage's API keys identify the calling client.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -28,9 +28,9 @@ function fixture(lang, theme, posts, requests) {
   };
   const providers = { providers: [relay], presets: [], excluded: [], gateway: { running: true, window: true } };
   const rows = [
-    { keyId: TEAM, keyName: "Team", in: 2000, out: 200, cost: 0.4, cache_read: 1000, status: 200, agent: "claude", agentName: "Claude Code" },
-    { keyId: PERSONAL, keyName: "Personal", in: 1000, out: 100, cost: 0.2, status: 200, agent: "codex", agentName: "Codex" },
-    { keyId: TEAM, keyName: "Team", in: 0, out: 0, cost: 0, status: 429, agent: "codex", agentName: "Codex" },
+    { callerKeyId: "server", callerKeyName: "Server", keyId: TEAM, keyName: "Team", in: 2000, out: 200, cost: 0.4, cache_read: 1000, status: 200, agent: "claude", agentName: "Claude Code" },
+    { callerKeyId: "laptop", callerKeyName: "Laptop", keyId: PERSONAL, keyName: "Personal", in: 1000, out: 100, cost: 0.2, status: 200, agent: "codex", agentName: "Codex" },
+    { callerKeyId: "laptop", callerKeyName: "Laptop", keyId: TEAM, keyName: "Team", in: 0, out: 0, cost: 0, status: 429, agent: "codex", agentName: "Codex" },
     { in: 50, out: 5, cost: 0.01, status: 200, agent: "codex", agentName: "Codex" },
   ].map((r, i) => ({ t: new Date(Date.now() - i * 60e3).toISOString(), provider: "relay", providerName: "Relay", host: "relay.example",
     model: "m", req: "relay/m", ms: 1000, priced: true, icon: "generic", ...r }));
@@ -42,6 +42,7 @@ function fixture(lang, theme, posts, requests) {
   });
   const ledger = (q) => {
     let filtered = rows;
+    if (q.get("callerKey")) filtered = filtered.filter((r) => r.callerKeyId === q.get("callerKey"));
     if (q.get("key")) filtered = filtered.filter((r) => "relay#" + (r.keyId || "") === q.get("key"));
     if (q.get("agent")) filtered = filtered.filter((r) => r.agent === q.get("agent"));
     if (q.get("failed") === "1") filtered = filtered.filter((r) => r.status >= 400);
@@ -49,8 +50,12 @@ function fixture(lang, theme, posts, requests) {
     const offset = +q.get("offset") || 0;
     return { ...totals(filtered), total: filtered.length, offset, period: q.get("period"),
       rows: filtered.slice(offset, offset + (+q.get("limit") || 100)).map((r) => ({ ...r, keyLabel: keys().find((k) => k.keyId === (r.keyId || ""))?.name })),
-      keys: keys(), agents: [{ id: "codex", name: "Codex" }, { id: "claude", name: "Claude Code" }] };
+      keys: keys(), callerKeys: callerKeys(), agents: [{ id: "codex", name: "Codex" }, { id: "claude", name: "Claude Code" }] };
   };
+  const callerKeys = () => ["server", "laptop"].map((id) => {
+    const rs = rows.filter((r) => r.callerKeyId === id);
+    return { id, callerKeyId: id, name: rs[0].callerKeyName, icon: "generic", ...totals(rs) };
+  });
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
@@ -71,7 +76,7 @@ function fixture(lang, theme, posts, requests) {
       return json(providers);
     }
     if (url.pathname === "/api/usage/quotas") return json([]);
-    if (url.pathname === "/api/usage") return json({ ...totals(rows), keys: keys(), agents: [], models: [], series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });
+    if (url.pathname === "/api/usage") return json({ ...totals(rows), keys: keys(), callerKeys: callerKeys(), agents: [], models: [], series: [], bucket: "day", path: "~/.config/magpie/usage.jsonl" });
     if (url.pathname === "/api/usage/requests") { requests.push(url.searchParams); return json(ledger(url.searchParams)); }
     if (url.pathname === "/api/usage/requests/export") {
       requests.push(Object.assign(url.searchParams, { method: req.method() }));
@@ -94,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", fixture(lang, "light", posts, requests));
       const w = lang === "zh"
-        ? { addButton: "添加", first: "设为首选", remove: "移除", failed: "失败", all: "全部 API Key", legacy: "未记录 Key" }
+        ? { addButton: "添加", first: "设为首选", remove: "移除", failed: "失败", all: "全部 API 密钥", legacy: "未记录密钥" }
         : { addButton: "Add", first: "Make first", remove: "Remove", failed: "Failed", all: "All API keys", legacy: "Key not recorded" };
       await page.goto("http://magpie.test/?view=providers");
       await page.locator(".row.provider", { hasText: "Relay" }).click();
@@ -126,38 +131,37 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await page.locator('nav [data-view="usage"]').click();
       await page.locator("#usageKeys .row").first().waitFor();
-      assert.deepEqual(await page.locator("#usageKeys .name").allTextContents(), ["Workspace", "Personal", w.legacy]);
-      assert.deepEqual(await page.locator("#usageKeys .num b").allTextContents(), ["2.2K", "1.1K", "55"]);
-      assert.deepEqual(await page.locator("#usageKeys .cost").allTextContents(), ["≈$0.400", "≈$0.200", "≈$0.010"]);
+      assert.deepEqual(await page.locator("#usageKeys .name").allTextContents(), ["Server", "Laptop"]);
+      assert.deepEqual(await page.locator("#usageKeys .num b").allTextContents(), ["2.2K", "1.1K"]);
+      assert.deepEqual(await page.locator("#usageKeys .cost").allTextContents(), ["≈$0.400", "≈$0.200"]);
+      assert(!/Workspace|Personal/.test(await page.locator("#usageKeys").textContent()));
       await page.locator("#usageTab .opt").nth(1).click();
       await page.locator(".led tbody tr").first().waitFor();
       assert.equal(await page.locator(".led tbody tr").first().locator("td").nth(3).textContent(), "Relay · Workspace");
       assert((await page.locator(".led tbody tr").first().locator("td").nth(3).getAttribute("title")).includes(TEAM));
       await page.locator("#ledKey").click();
-      await page.locator(".sess-menu .pm-item", { hasText: "Relay · Workspace" }).click();
+      await page.locator(".sess-menu .pm-item", { hasText: "Laptop" }).click();
       await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 2);
-      assert.equal(requests.at(-1).get("key"), "relay#" + TEAM);
+      assert.equal(requests.at(-1).get("callerKey"), "laptop");
+      assert(!requests.at(-1).has("key"));
       assert.equal(requests.at(-1).get("offset"), "0");
       await page.locator("#ledStatus .opt", { hasText: w.failed }).click();
       await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 1);
-      assert.equal(requests.at(-1).get("key"), "relay#" + TEAM);
+      assert.equal(requests.at(-1).get("callerKey"), "laptop");
       assert.equal(requests.at(-1).get("failed"), "1");
       await page.locator("#ledExport").click();
       await page.waitForFunction(() => document.querySelector("#status").textContent.includes("keys.csv"));
       const exported = requests.findLast((q) => q.method === "POST");
-      assert.equal(exported.get("key"), "relay#" + TEAM);
+      assert.equal(exported.get("callerKey"), "laptop");
+      assert(!exported.has("key"));
       assert.equal(exported.get("failed"), "1");
       assert(!exported.has("offset") && !exported.has("limit"));
       await page.locator("#ledStatus .opt").first().click();
       await page.locator("#ledKey").click();
-      await page.locator(".sess-menu .pm-item", { hasText: w.legacy }).click();
-      await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 1 && document.querySelector(".led tbody tr td:nth-child(8)").textContent === "50");
-      assert.equal(requests.at(-1).get("key"), "relay#");
-      assert.equal(await page.locator(".led tbody tr td").nth(3).textContent(), "Relay · " + w.legacy);
-      await page.locator("#ledKey").click();
       await page.locator(".sess-menu .pm-item", { hasText: w.all }).click();
       await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 4);
-      assert(!requests.at(-1).has("key"));
+      assert(!requests.at(-1).has("key") && !requests.at(-1).has("callerKey"));
+      assert.equal(await page.locator(".led tbody tr").last().locator("td").nth(3).textContent(), "Relay · " + w.legacy);
       await page.setViewportSize({ width: 560, height: 700 });
       assert(await page.locator("#view-usage").evaluate((v) => v.scrollWidth <= v.clientWidth));
       if (process.env.ARTIFACT_DIR) {

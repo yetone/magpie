@@ -2729,7 +2729,7 @@ function renderConnect() {
   note.replaceChildren();
   note.classList.toggle("brief", connectFolded);
   if (connectFolded) note.append(el("code", "", base), copyBtn(base, "Base URL"));
-  else note.textContent = t(gatewayKeys?.length ? "Use a named caller key to track usage" : "Loopback only · the key can be anything");
+  else note.textContent = t(gatewayKeys?.length ? "Use an API key to track usage" : "Loopback only · the key can be anything");
 
   box.append(...field("API", segs(Object.entries(FLAVORS).map(([k, v]) => [k, v.name]), flavor, (id) => { flavor = id; localStorage.setItem("magpie.flavor", id); renderConnect(); }), t(f.note)));
 
@@ -2740,7 +2740,7 @@ function renderConnect() {
   const k = el("div", "val");
   k.append(el("code", "", "magpie"), copyBtn("magpie", t("Key")));
   box.append(...field(t("API key"), k, t(gatewayKeys?.length
-    ? "Use a named caller key above as {env} to track usage by key."
+    ? "Use an API key above as {env} to track usage by key."
     : "{env}=magpie. The gateway trusts everything on loopback, so any value works.", { env: f.keyEnv })));
 
   const m = el("div", "val");
@@ -7323,8 +7323,7 @@ function renderUsage() {
   $("#chart").hidden = empty;
   for (const id of ["usageAgents", "usageModels"]) $("#" + id).hidden = empty;
   for (const h of $$("#view-usage .row-head")) h.hidden = empty;
-  $("#usageKeysHead").hidden = $("#usageKeys").hidden = empty || !u.keys?.length;
-  $("#usageCallerKeysHead").hidden = $("#usageCallerKeys").hidden = empty || !u.callerKeys?.length;
+  $("#usageKeysHead").hidden = $("#usageKeys").hidden = empty || !u.callerKeys?.length;
   if (empty) {
     stats.classList.add("empty");
     const none = { today: "No calls today.", "7d": "No calls in the last 7 days.", "30d": "No calls in the last 30 days.", all: "No calls yet." }[period];
@@ -7381,7 +7380,7 @@ function renderUsage() {
       const r = el("div", "row stat");
       r.append(icon(g.icon || "generic"));
       const who = el("div", "who");
-      who.append(el("div", "name", id === "usageKeys" && !g.keyId ? t("Key not recorded") : g.name));
+      who.append(el("div", "name", id === "usageKeys" && !g.callerKeyId ? t("Key not recorded") : g.name));
       const sub = [];
       if (g.sub) sub.push(g.sub);
       sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
@@ -7410,8 +7409,7 @@ function renderUsage() {
   };
   list("usageAgents", u.agents);
   list("usageModels", u.models);
-  list("usageKeys", u.keys || []);
-  list("usageCallerKeys", u.callerKeys || []);
+  list("usageKeys", u.callerKeys || []);
   $("#usageNote").textContent = t("Counted from the providers' own usage reports on every call through the gateway · {path}", { path: u.path });
 }
 
@@ -7424,14 +7422,13 @@ function renderUsage() {
 // server pages it (/api/usage/requests) and saves it whole as CSV.
 
 let ledger = null; // the page shown: { rows, offset, total, agents, …totals }
-let ledOffset = 0, ledAgent = "", ledKey = "", ledCallerKey = "", ledFailed = false, ledQuery = "";
+let ledOffset = 0, ledAgent = "", ledKey = "", ledFailed = false, ledQuery = "";
 const LED_PAGE = 100;
 
 function ledParams(extra) {
   const q = new URLSearchParams({ period });
   if (ledAgent) q.set("agent", ledAgent);
-  if (ledKey) q.set("key", ledKey);
-  if (ledCallerKey) q.set("callerKey", ledCallerKey);
+  if (ledKey) q.set("callerKey", ledKey);
   if (ledFailed) q.set("failed", "1");
   if (ledQuery.trim()) q.set("q", ledQuery.trim());
   if (extra) for (const k in extra) q.set(k, extra[k]);
@@ -7515,12 +7512,9 @@ function renderLedger() {
   // the filters: the agents with calls in the period, and failures alone
   if (ledAgent && !l.agents.some((a) => a.id === ledAgent)) ledAgent = "";
   sessPick($("#ledAgent"), "All agents", ledAgent, l.agents.map((a) => ({ v: a.id, name: a.name, note: "" })), "Agent", (v) => { ledAgent = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
-  sessPick($("#ledKey"), "All API keys", ledKey, (l.keys || []).map((k) => ({
-    v: k.id, name: k.sub + " · " + (k.keyId ? k.name : t("Key not recorded")), note: k.keyId || "",
-  })), "API keys", (v) => { ledKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
-  sessPick($("#ledCallerKey"), "All caller keys", ledCallerKey, (l.callerKeys || []).map((k) => ({
+  sessPick($("#ledKey"), "All API keys", ledKey, (l.callerKeys || []).map((k) => ({
     v: k.id, name: k.name, note: "",
-  })), "Caller keys", (v) => { ledCallerKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
+  })), "API keys", (v) => { ledKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   const seg = $("#ledStatus");
   seg.replaceChildren();
   for (const [on, name] of [[false, "All"], [true, "Failed"]]) {
@@ -7548,7 +7542,7 @@ function renderLedger() {
   const pager = $("#ledPager");
   if (!l.total) {
     wrap.classList.add("none");
-    const filtered = ledAgent || ledKey || ledCallerKey || ledFailed || ledQuery.trim();
+    const filtered = ledAgent || ledKey || ledFailed || ledQuery.trim();
     const none = { today: "No calls today.", "7d": "No calls in the last 7 days.", "30d": "No calls in the last 30 days.", all: "No calls yet." }[period];
     wrap.replaceChildren(el("div", "led-none", filtered ? t("No requests match these filters.") : t(none)));
     pager.hidden = true;

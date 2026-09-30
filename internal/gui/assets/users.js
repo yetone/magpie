@@ -54,14 +54,14 @@ function gatewayRename(k) {
 function gatewayKeyForm() {
   const box = el("div", "acc adding");
   const name = input(gatewayKeyDraft, t("Key name, e.g. Laptop"));
-  name.setAttribute("aria-label", t("Caller key name"));
+  name.setAttribute("aria-label", t("API key name"));
   name.oninput = () => { gatewayKeyDraft = name.value; };
   const add = el("button", "text primary", t("Create key"));
   const go = async () => {
     add.disabled = true;
     const out = await gatewayKeyAction("add-key", { name: name.value });
     if (!out) { add.disabled = false; return; }
-    status(t("Key created. Use Copy on its row to connect a client."), "ok");
+    status(t("API key created. Use Copy on its row to connect a client."), "ok");
   };
   add.onclick = go;
   name.onkeydown = (e) => {
@@ -81,12 +81,12 @@ function gatewayKeyForm() {
 }
 
 function copyCallerKeyBtn(k) {
-  const cp = copyBtn("", t("Caller key"));
-  cp.setAttribute("aria-label", t("Copy caller key"));
+  const cp = copyBtn("", t("API key"));
+  cp.setAttribute("aria-label", t("Copy API key"));
   cp.onclick = async () => {
     try {
       const out = await api("caller-keys/copy-key", { key: k.id });
-      await copy(out.secret, t("Caller key"), cp);
+      await copy(out.secret, t("API key"), cp);
     } catch (e) { status(t(e.message), "err"); }
   };
   return cp;

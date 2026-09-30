@@ -45,14 +45,19 @@ func TestCallerKeyManagementAndUsageRoutes(t *testing.T) {
 	if strings.Contains(list, secret) || strings.Contains(list, `"secret"`) {
 		t.Fatal("list leaked credentials")
 	}
-	for _, rec := range []usage.Record{{CallerKeyID: laptop, CallerKeyName: "Laptop", Input: 100}, {CallerKeyID: server, CallerKeyName: "Server", Input: 200}, {Input: 40}} {
+	for _, rec := range []usage.Record{
+		{CallerKeyID: laptop, CallerKeyName: "Laptop", KeyID: "upstream-a", Input: 100},
+		{CallerKeyID: laptop, CallerKeyName: "Laptop", KeyID: "upstream-b", Input: 10},
+		{CallerKeyID: server, CallerKeyName: "Server", KeyID: "upstream-a", Input: 200},
+		{Input: 40},
+	} {
 		rec.Time, rec.Provider, rec.Model, rec.Status = time.Now(), "relay", "unknown", 200
 		usage.Append(rec)
 	}
 	request("POST", "/api/caller-keys/rename-key", `{"key":"`+laptop+`","name":"Main"}`, &s)
 	var summary usageJSON
 	request("GET", "/api/usage?period=all", "", &summary)
-	if len(summary.CallerKeys) != 2 || summary.Calls != 3 {
+	if len(summary.CallerKeys) != 2 || summary.Calls != 4 {
 		t.Fatal(summary.CallerKeys)
 	}
 	for _, g := range summary.CallerKeys {
@@ -63,18 +68,18 @@ func TestCallerKeyManagementAndUsageRoutes(t *testing.T) {
 	var ledger ledgerJSON
 	query := "?period=all&callerKey=" + laptop
 	request("GET", "/api/usage/requests"+query, "", &ledger)
-	if ledger.Total != 1 || ledger.Input != 100 || ledger.Rows[0].CallerKeyLabel != "Main" || len(ledger.CallerKeys) != 2 {
+	if ledger.Total != 2 || ledger.Input != 110 || ledger.Rows[0].CallerKeyLabel != "Main" || len(ledger.CallerKeys) != 2 {
 		t.Fatal(ledger)
 	}
 	raw := request("GET", "/api/usage/requests.csv"+query, "", nil)
 	cells, err := csv.NewReader(strings.NewReader(raw)).ReadAll()
-	if err != nil || len(cells) != 2 || cells[1][23] != laptop || strings.Contains(raw, secret) {
+	if err != nil || len(cells) != 3 || cells[1][23] != laptop || cells[2][23] != laptop || strings.Contains(raw, secret) {
 		t.Fatal("CSV", err, raw)
 	}
 	request("POST", "/api/caller-keys/remove-key", `{"key":"`+laptop+`"}`, &s)
 	ledger = ledgerJSON{}
 	request("GET", "/api/usage/requests"+query, "", &ledger)
-	if ledger.Total != 1 || ledger.Rows[0].CallerKeyLabel != "Laptop" {
+	if ledger.Total != 2 || ledger.Rows[0].CallerKeyLabel != "Laptop" {
 		t.Fatal("historical name", ledger)
 	}
 	w := httptest.NewRecorder()
