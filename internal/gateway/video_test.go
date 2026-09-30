@@ -412,9 +412,10 @@ func TestVideoModelByItsBareName(t *testing.T) {
 	grokSignedIn(t)
 	up := newGrokMedia(t)
 	s := New()
-	for name, want := range map[string]string{"grok-imagine-video": "grok/grok-imagine-video", "grok-imagine-video-1.5": "grok/grok-imagine-video-1.5"} {
+	// in this order: the second request is the one the upstream's body is checked for
+	for _, name := range []string{"grok-imagine-video", "grok-imagine-video-1.5"} {
 		code, obj, raw, _ := request(t, s, "POST", "/v1/videos", "application/json", `{"prompt":"a kite","model":"`+name+`"}`)
-		if code != 200 || obj["model"] != want {
+		if code != 200 || obj["model"] != "grok/"+name {
 			t.Errorf("%s: %d %s", name, code, raw)
 		}
 	}
