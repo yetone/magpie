@@ -6,7 +6,8 @@ package agent
 // of the user's own in models.yml beside it. magpie adds itself there as the
 // provider "magpie", keyless (auth: none), with the catalog as its models; a
 // model through magpie is "magpie/<provider>/<model>", which omp matches
-// whole against provider/id.
+// whole against provider/id. The other roles, the fallback chains and the
+// like may name them as well (ompRefKeys); magpie stays while any does.
 
 import (
 	"os"
@@ -20,6 +21,24 @@ import (
 
 // ompEfforts are the thinking levels omp knows.
 var ompEfforts = []string{"minimal", "low", "medium", "high", "xhigh", "max"}
+
+// ompRefKeys are where omp's config names models: each role (a list to try
+// in order, "a,b" or a sequence), the retry fallback chains (model keys and
+// their entries), the models it cycles through (enabledModels, also scoped
+// to paths) and the models of task agents. An entry may end in a thinking
+// level ("magpie/deepseek/pro:max").
+var ompRefKeys = []string{"modelRoles", "retry.fallbackChains", "enabledModels", "task.agentModelOverrides"}
+
+// ompRefs calls fn on each model of a value under ompRefKeys, the spaces
+// after a comma kept, and answers the value with fn's answers in place.
+func ompRefs(v string, fn func(string) string) string {
+	parts := strings.Split(v, ",")
+	for i, p := range parts {
+		lead := len(p) - len(strings.TrimLeft(p, " \t"))
+		parts[i] = p[:lead] + fn(p[lead:])
+	}
+	return strings.Join(parts, ",")
+}
 
 // ompProfileName is a profile name omp takes (pi-utils dirs.ts,
 // normalizeProfileName); it refuses any other.
@@ -63,11 +82,13 @@ func omp(home string) *Agent {
 	path := pick("config")
 	get := func() string { v, _ := edit.GetYAML(path, "modelRoles.default"); return v }
 	dropMagpie := func() error {
-		// another role may still go through magpie
-		for _, v := range edit.GetYAMLMap(path, "modelRoles") {
-			if usesMagpie(v) {
-				return nil
-			}
+		// another role, a fallback chain, … may still go through magpie
+		used := false
+		if err := edit.EditYAMLStrings(path, ompRefKeys, func(v string) string {
+			ompRefs(v, func(m string) string { used = used || usesMagpie(m); return m })
+			return v
+		}); err != nil || used {
+			return err
 		}
 		return edit.DelYAML(pick("models"), "providers."+magpieID)
 	}
@@ -88,6 +109,22 @@ func omp(home string) *Agent {
 		Bin: "omp", Dir: dir, Path: path,
 		Sync: func() error {
 			return syncYAML(pick("models"), "providers."+magpieID, func() any { return ompProvider() })
+		},
+		// a provider renamed takes its models' ids in models.yml with it; a
+		// name left on the old one omp would pass over, with a warning
+		RenameRefs: func(from, to string) (bool, error) {
+			old, now := magpieID+"/"+from+"/", magpieID+"/"+to+"/"
+			moved := false
+			err := edit.EditYAMLStrings(path, ompRefKeys, func(v string) string {
+				return ompRefs(v, func(m string) string {
+					if rest, ok := strings.CutPrefix(m, old); ok {
+						moved = true
+						return now + rest
+					}
+					return m
+				})
+			})
+			return moved, err
 		},
 		Notice: func() string {
 			if Running(`(^|/)omp( |$)`, `@oh-my-pi/pi-coding-agent`) {

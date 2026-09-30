@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -8,7 +9,8 @@ import (
 
 // RenameProvider gives a provider another id (provider.Rename) and moves
 // the agents on one of its models to the same model by the new id, each
-// spelled the way the agent spells it. It answers the agents it moved.
+// spelled the way the agent spells it, and what else in their configs names
+// it (RenameRefs). It answers the agents it moved.
 func RenameProvider(from, to string) ([]string, error) {
 	from = strings.ToLower(strings.TrimSpace(from))
 	to = strings.ToLower(strings.TrimSpace(to))
@@ -56,6 +58,20 @@ func RenameProvider(from, to string) ([]string, error) {
 		}
 		if len(moved) == 0 || moved[len(moved)-1] != m.a.Name {
 			moved = append(moved, m.a.Name)
+		}
+	}
+	if from != to {
+		for _, a := range Detected() {
+			if a.RenameRefs == nil {
+				continue
+			}
+			ok, err := a.RenameRefs(from, to)
+			if err != nil {
+				return moved, err
+			}
+			if ok && !slices.Contains(moved, a.Name) {
+				moved = append(moved, a.Name)
+			}
 		}
 	}
 	SyncCatalog()

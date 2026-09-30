@@ -71,6 +71,11 @@ type Agent struct {
 	// rather than asking the gateway, rewrites that list as the catalog is
 	// now — where magpie wrote one; nothing else changes (see SyncCatalog).
 	Sync func() error
+	// RenameRefs, for an agent whose config names magpie's models beyond
+	// its fields (omp's other roles and fallback chains), moves those names
+	// off provider from onto to, the rest of each kept; it answers whether
+	// any moved. The fields themselves are RenameProvider's.
+	RenameRefs func(from, to string) (bool, error)
 	// Check, for an agent magpie wires in beyond its model field, says what
 	// of that wiring is gone while the model is still one of magpie's —
 	// something else rewrote the config — or "" when it is all there

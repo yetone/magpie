@@ -95,6 +95,38 @@ func DelYAML(path string, keyPaths ...string) error {
 	return writeYAML(path, root)
 }
 
+// EditYAMLStrings calls fn on every string under the key paths — mapping
+// keys and values, sequence items, at any depth — and puts fn's answer in
+// its place, comments and quoting kept. The file is written only when an
+// answer differs, so an fn that answers what it is given only reads.
+func EditYAMLStrings(path string, keyPaths []string, fn func(string) string) error {
+	root, err := loadYAML(path)
+	if err != nil || root == nil {
+		return err
+	}
+	changed := false
+	var walk func(*yaml.Node)
+	walk = func(n *yaml.Node) {
+		if n.Kind == yaml.ScalarNode && n.ShortTag() == "!!str" {
+			if v := fn(n.Value); v != n.Value {
+				n.Value, changed = v, true
+			}
+		}
+		for _, c := range n.Content {
+			walk(c)
+		}
+	}
+	for _, kp := range keyPaths {
+		if n := lookupYAML(root, strings.Split(kp, ".")); n != nil {
+			walk(n)
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return writeYAML(path, root)
+}
+
 // JSONToYAML writes a JSON or JSONC file out as block-style YAML, key
 // order kept, for agents that moved from one to the other.
 func JSONToYAML(src, dst string) error {
