@@ -7920,6 +7920,7 @@ function applyPrefs(s, rate) {
   if (!prefsBusy && (s.textSize || 100) !== textSize) { textSize = s.textSize || 100; applyZoom(textSize); }
   const was = locale;
   setLocale(s.lang);
+  window.refreshPrivacy?.();
   if (was !== locale && mode === "window") queueMicrotask(() => slide($("#nav"), "nav"));
   return was !== locale;
 }
@@ -9159,94 +9160,7 @@ setInterval(async () => {
 }, 5000);
 window.addEventListener("focus", load);
 setInterval(renderUpdateBadge, 15 * 60 * 1000); // a window left open still hears of a new version
-// ---------- hiding emails, for a screenshot to share ----------
-// Routing and Usage each have a Hide emails button, one setting for both.
-// Each email address on the page — an account's, in a row, a sentence,
-// a tooltip — is swapped for blurred stand-in letters while it's on, as the
-// page redraws too; the address itself is kept aside to put back.
-(() => {
-  const EYE = "M2 12s3.5-8 10-8 10 8 10 8-3.5 8-10 8-10-8-10-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z";
-  const EYE_OFF = "M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20";
-  // an address a vendor has half masked itself (Zhipu's abc***gh@…) is one
-  // address still, the letters before its stars hidden too
-  const EMAIL = /[\w.+*•-]+@[\w*•-]+(?:\.[\w*•-]+)+/g, IS_EMAIL = new RegExp(EMAIL.source);
-  // stand-in letters of the address's shape, the same each time it's drawn:
-  // blurred, they read as a name without being one
-  const dots = (s) => { let h = 7; return s.replace(/[^@.]/g, (c) => (h = (h * 31 + c.charCodeAt(0)) >>> 0, "aeiounrstlcmdh"[h % 14])); };
-  // what a page redraws is masked before it's painted; masking isn't
-  // itself watched, so it can't set itself off again
-  const OBS = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["title"] };
-  let masked = false;
-  try { masked = localStorage.getItem("magpie.maskEmails") === "1"; } catch {}
-  const pages = [["#view-routing", "#rtMask"], ["#view-usage", "#usageMask"]].map(([v, b]) => {
-    const view = $(v), btn = $(b);
-    function mask() {
-      const walk = document.createTreeWalker(view, NodeFilter.SHOW_TEXT), found = [];
-      for (let n; (n = walk.nextNode());) if (n.data.includes("@") && IS_EMAIL.test(n.data) && !n.parentElement?.closest(".pii")) found.push(n);
-      for (const n of found) {
-        const bits = [];
-        let last = 0;
-        for (const m of n.data.matchAll(EMAIL)) {
-          if (m.index > last) bits.push(n.data.slice(last, m.index));
-          const s = el("span", "pii", dots(m[0]));
-          s.dataset.raw = m[0];
-          bits.push(s);
-          last = m.index + m[0].length;
-        }
-        if (!last) continue;
-        if (last < n.data.length) bits.push(n.data.slice(last));
-        // one piece still, where the text was: in a flex row each would
-        // otherwise stand as an item of its own
-        if (bits.length > 1) { const run = el("span", "pii-run"); run.append(...bits); n.replaceWith(run); }
-        else n.replaceWith(...bits);
-      }
-      for (const e of view.querySelectorAll("[title]")) {
-        // one masked already reads as an address too, its stars and all
-        if ("piiTitle" in e.dataset || !e.title.includes("@") || !IS_EMAIL.test(e.title)) continue;
-        e.dataset.piiTitle = e.title;
-        e.title = e.title.replace(EMAIL, (m) => m.replace(/[^@.]/g, "•")); // a tooltip can't blur
-      }
-    }
-    function unmask() {
-      for (const s of view.querySelectorAll(".pii")) s.replaceWith(s.dataset.raw);
-      for (const r of view.querySelectorAll(".pii-run")) r.replaceWith(r.textContent);
-      view.normalize();
-      for (const e of view.querySelectorAll("[data-pii-title]")) { e.title = e.dataset.piiTitle; delete e.dataset.piiTitle; }
-    }
-    const watch = new MutationObserver(() => {
-      if (!masked) return;
-      watch.disconnect();
-      mask();
-      watch.observe(view, OBS);
-    });
-    btn.onclick = () => {
-      setMasked(!masked);
-      // pixelated in when asked for, not again each time the page redraws
-      view.classList.add("masking");
-      clearTimeout(btn._t);
-      btn._t = setTimeout(() => view.classList.remove("masking"), 450);
-    };
-    return (on) => {
-      btn.setAttribute("aria-pressed", String(on));
-      // what it is now, in its icon and its words: an open eye while the
-      // addresses show, struck through once they're hidden
-      btn.querySelector("path").setAttribute("d", on ? EYE_OFF : EYE);
-      const label = btn.querySelector("[data-t]");
-      label.dataset.en = on ? "Emails hidden" : "Hide emails";
-      label.textContent = t(label.dataset.en);
-      view.classList.toggle("masked", on);
-      if (on) { mask(); watch.observe(view, OBS); }
-      else { watch.disconnect(); unmask(); }
-    };
-  });
-  function setMasked(on) {
-    masked = on;
-    try { localStorage.setItem("magpie.maskEmails", on ? "1" : "0"); } catch {}
-    for (const set of pages) set(on);
-  }
-  setMasked(masked);
-})();
-
+// Privacy mode is shared by the main window and tray panel.
 // Opened on a magpie://import link: fetch what it describes (once — the
 // id is spent) and ask before adding it.
 if (mode === "window" && params.get("import")) {

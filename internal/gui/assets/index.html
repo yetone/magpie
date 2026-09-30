@@ -31,6 +31,9 @@
       <svg viewBox="0 0 16 16" width="11" height="11"><path d="M8 13V3.5M3.75 7.5 8 3.25l4.25 4.25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span>Update</span>
     </button>
+    <button class="icon" id="privacyMode" data-privacy-toggle aria-pressed="false" aria-label="Privacy mode" title="Privacy mode" data-tt>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-8 10-8 10 8 10 8-3.5 8-10 8-10-8-10-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+    </button>
     <button class="icon" id="sync" title="Refresh model lists (models.dev and every vendor)" data-tt>
       <svg viewBox="0 0 16 16" width="14" height="14"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
@@ -86,7 +89,7 @@
 
 <main class="view" id="view-routing" hidden>
   <div class="row-head"><span class="label" data-t>Routing</span><span class="rt-livedot" aria-hidden="true"></span><span class="note" data-t>live, as the gateway decides</span><span class="grow"></span>
-    <button class="text rt-mask" id="rtMask" aria-pressed="false" data-tt="Mask the email addresses on this page, for a screenshot to share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Hide emails</span></button></div>
+    <button class="text rt-mask" id="rtMask" data-privacy-toggle aria-pressed="false" data-tt="Hide emails across the app and quick panel for screenshots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Privacy mode</span></button></div>
   <section class="rt" id="rt"></section>
   <div class="rt-more" id="rtMore"></div>
 </main>
@@ -97,13 +100,13 @@
     <div class="segs" id="period"></div>
     <div class="segs" id="sessRange" hidden></div>
     <span class="grow"></span>
+    <button class="icon" id="usageMask" data-privacy-toggle aria-pressed="false" aria-label="Privacy mode" data-tt="Hide emails across the app and quick panel for screenshots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg></button>
     <span class="usage-cost" id="usageCost"></span>
   </div>
   <div class="usage-pane" id="usagePane">
     <div class="row-head quota-head" id="quotaHead" hidden>
       <span class="label" data-t>Allowances</span>
       <span class="grow"></span>
-      <button class="text rt-mask" id="usageMask" aria-pressed="false" data-tt="Mask the email addresses on this page, for a screenshot to share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Hide emails</span></button>
       <div class="segs" id="quotaMode" hidden></div>
     </div>
     <section class="subscription-usage" id="subscriptionUsage"></section>
@@ -167,6 +170,10 @@
     <div class="row pref">
       <div class="who"><div class="name" data-t>Language</div><div class="sub" data-t>Applies at once, no restart</div></div>
       <div id="langSegs"></div>
+    </div>
+    <div class="row pref" id="privacyRow">
+      <div class="who"><div class="name" data-t>Privacy mode</div><div class="sub" data-t>Hide emails across the app and quick panel for screenshots</div></div>
+      <button class="text rt-mask" id="privacySetting" data-privacy-toggle aria-pressed="false" data-tt="Hide emails across the app and quick panel for screenshots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.2A10.4 10.4 0 0 1 12 4c6.5 0 10 8 10 8a17.6 17.6 0 0 1-2.2 3.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 8 10 8a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M2 2l20 20"/></svg><span data-t>Off</span></button>
     </div>
     <div class="row pref" id="textSizeRow">
       <div class="who"><div class="name" data-t>Text size</div><div class="sub" id="textSizeSub"></div></div>
@@ -290,6 +297,7 @@
 
 <script src="compat.js"></script>
 <script src="i18n.js"></script>
+<script src="privacy.js"></script>
 <script src="app.js"></script>
 <script src="routing.js"></script>
 <script src="library.js"></script>

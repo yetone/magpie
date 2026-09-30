@@ -140,8 +140,7 @@
 /* on, it says so in its struck eye and its words, a shade darker: a
    page tool, not a banner */
 .rt-mask[aria-pressed="true"] { color: var(--fg-2); }
-/* an email, hidden: stand-in letters of its shape, softly blurred —
-   coming in out of focus when asked for */
+/* Stand-in letters keep the familiar shape without putting the email in the DOM. */
 .pii { filter: blur(2.2px); opacity: .5; user-select: none; }
 .masking .pii { animation: rtpii .35s ease-out both; }
 @keyframes rtpii { from { filter: blur(0); opacity: 1; } }

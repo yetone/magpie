@@ -267,13 +267,14 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", devPage(http.FileServer(http.FS(staticFS()))))
 	devRoutes(mux)
+	privacyRoutes(mux)
 	// boot.js hands the page the saved language and theme before it paints:
 	// they came only with the settings, so the tabs showed English first
 	mux.HandleFunc("GET /boot.js", func(rw http.ResponseWriter, r *http.Request) {
 		s := settings.Load()
 		// and the text size, which the Mac's header measures against the
 		// traffic lights
-		boot := map[string]any{"lang": s.Lang, "theme": s.Theme, "textSize": s.TextSize, "web": isWeb(w)}
+		boot := map[string]any{"lang": s.Lang, "theme": s.Theme, "textSize": s.TextSize, "privacyMode": s.PrivacyMode, "web": isWeb(w)}
 		// on Omarchy the page takes its theme's look before it paints
 		if th, ok := omarchyTheme(); ok {
 			boot["omarchy"] = th
@@ -468,6 +469,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.QuotaLeft = cur.QuotaLeft
 		// and the text size, which the keyboard changes too (text-size below)
 		in.TextSize = cur.TextSize
+		in.PrivacyMode = cur.PrivacyMode // the shared screenshot toggle has its own endpoint
 		if v := strings.TrimSpace(in.Vision); v != "" && v != "off" && v != cur.Vision {
 			if _, _, ok := provider.Resolve(v); !ok {
 				fail(rw, fmt.Errorf("no model %s to describe images", v))

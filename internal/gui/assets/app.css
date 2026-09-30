@@ -429,6 +429,7 @@ body.window .field.solo { grid-column: auto; }
 @keyframes flash { 0%, 35% { box-shadow: inset 0 0 0 1px var(--green); background: var(--green-soft); } 100% {} }
 
 /* ---- usage ---------------------------------------------------------------- */
+.usage-head > .icon { flex: none; }
 .usage-head { display: flex; align-items: center; gap: 10px; height: 34px; margin: 4px 0 6px; flex: none; }
 .subscription-usage { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 7px; margin-bottom: 8px; flex: none; }
 .subscription-card { padding: 10px 12px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); min-width: 0; }
@@ -489,7 +490,8 @@ body.window .field.solo { grid-column: auto; }
    sum give way, never the page sideways */
 .usage-cost span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 640px) {
-  .usage-head { gap: 7px; }
+  .usage-head { gap: 7px; flex-wrap: wrap; height: auto; min-height: 34px; row-gap: 2px; }
+  .usage-cost { flex: none; margin-left: auto; }
   .usage-cost span:not(.skeleton) { display: none; }
   .usage-cost b { font-size: 14px; }
 }
@@ -1876,3 +1878,9 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-reset:hover:not(:disabled) { color: var(--accent); }
 .am-reset:disabled { color: var(--faint); cursor: default; }
 .am-dot { color: var(--faint); }
+
+/* Screenshot privacy: field values remain intact for editing and submission. */
+.privacy-value { -webkit-text-security: disc; }
+body.window #privacyMode { display: none; }
+.icon[data-privacy-toggle] svg { width: 14px; height: 14px; }
+.icon[data-privacy-toggle][aria-pressed="true"] { background: var(--pill); color: var(--fg); }
