@@ -37,7 +37,7 @@ func SetEnvFile(path string, kvs ...KV) error {
 	for _, kv := range kvs {
 		v := toString(kv.Value)
 		if strings.ContainsAny(v, " #\"'$") {
-			v = `"` + strings.ReplaceAll(v, `"`, `\"`) + `"`
+			v = `"` + strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), `"`, `\"`) + `"`
 		}
 		lines = setLine(lines, kv.Path, kv.Path+"="+v, nil, func(l string) (string, bool) {
 			if m := envLine.FindStringSubmatch(l); m != nil {
