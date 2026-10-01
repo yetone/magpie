@@ -382,8 +382,15 @@ func TestPluginProxy(t *testing.T) {
 		t.Fatalf("usage with its own proxy: %+v, %v", u, err)
 	}
 	// a move's check of the account asks the vendor as its requests do
-	if ms, err := Check(mine, "fakeco", ""); err != nil || !slices.Contains(ms, "fake-own") || last(&own) != "http://vendor.invalid/models" {
-		t.Fatalf("a check with its own proxy: %v, %v", ms, err)
+	mu.Lock()
+	own = nil
+	mu.Unlock()
+	c, err := Check(mine, "fakeco", "")
+	mu.Lock()
+	asked := slices.Clone(own)
+	mu.Unlock()
+	if err != nil || !slices.Contains(c.Models, "fake-own") || !slices.Contains(asked, "http://vendor.invalid/models") || !slices.Contains(asked, "http://vendor.invalid/usage") {
+		t.Fatalf("a check with its own proxy: %+v, %v; the proxy saw %q", c, err, asked)
 	}
 	// direct: vendor.invalid can't be reached but through a proxy
 	mu.Lock()

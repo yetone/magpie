@@ -424,7 +424,7 @@ func factorySend(t *testing.T, p Provider) (int, string) {
 		return res.StatusCode, b
 	}
 	code, b := send()
-	if code == 403 && p.Retry(context.Background(), code, b) {
+	if code == 403 && p.Retry(context.Background(), nil, code, b) {
 		code, b = send()
 	}
 	return code, string(b)
@@ -550,8 +550,8 @@ func TestFactoryOrgRefused(t *testing.T) {
 	if c := factoryKept(t, "cy"); c.Active != "fac_A" {
 		t.Fatalf("cy kept active %q", c.Active)
 	}
-	if p.Retry(context.Background(), 403, []byte(`{"error":{"message":"model not allowed"}}`)) ||
-		p.Retry(context.Background(), 401, []byte(`Requested active organization is not accessible`)) {
+	if p.Retry(context.Background(), nil, 403, []byte(`{"error":{"message":"model not allowed"}}`)) ||
+		p.Retry(context.Background(), nil, 401, []byte(`Requested active organization is not accessible`)) {
 		t.Fatal("retried an unrelated refusal")
 	}
 }
@@ -636,7 +636,7 @@ func TestFactoryForbiddenWithoutOrg(t *testing.T) {
 			return res.StatusCode, b
 		}
 		code, b := do()
-		if code == 403 && p.Retry(context.Background(), code, b) {
+		if code == 403 && p.Retry(context.Background(), nil, code, b) {
 			code, b = do()
 		}
 		return code, string(b)

@@ -33,6 +33,26 @@ var movedCards = map[string]struct{ name, icon, site string }{
 	"devin":           {"Devin", "devin", "https://devin.ai"},
 }
 
+// builtinHost is the API host the built-in id shows when it served itself,
+// "" for those that show none (their requests go through their own code).
+func builtinHost(id string) string {
+	switch id {
+	case "grok":
+		return HostOf(GrokBase)
+	case CommandCodePlanID:
+		return HostOf(cmdAPI)
+	case "factory":
+		return HostOf(factoryAPI)
+	case "zcode":
+		return HostOf(ZCodeZaiBase)
+	case "workbuddy":
+		return HostOf(wbCN.api())
+	case WorkBuddyAIID:
+		return HostOf(wbAI.api())
+	}
+	return ""
+}
+
 // movedNames are the built-ins' provider names that aren't their card's.
 var movedNames = map[string]string{CommandCodePlanID: "Command Code Plan"}
 
@@ -45,7 +65,7 @@ func pluginCard(pp plugin.Provider) (string, string) {
 	if name == "" {
 		name = pp.ID
 	}
-	return name, plugin.Icon(pp.Spec, pp.ID)
+	return name, PluginIcon(pp)
 }
 
 // pluginUsageLogins are the accounts of pp whose allowance can be asked.

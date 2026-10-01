@@ -446,6 +446,7 @@ var periodNames = map[usage.Period]string{usage.Today: "today", usage.Week: "7 d
 type quotaMsg []provider.SubscriptionQuota
 
 func quotasCmd() tea.Msg {
+	provider.AskClaudeUsage() // the page opened, or r pressed
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
 	return quotaMsg(provider.Quotas(ctx))

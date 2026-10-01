@@ -140,6 +140,9 @@ routing groups (`office/group/…`) and usage are the shared one's. A request
 goes on in the API the agent spoke — Anthropic Messages, Responses, Chat
 Completions, token counting — and a model the shared magpie's provider serves
 on another API only is turned into that API once, never on both computers.
+Its list is the models the shared magpie's agents are shown, each named with
+its provider there (`Claude Sonnet 5 · Relay A · office`), and its image
+models are listed under Settings → Images and draw through it.
 
 Baidu Qianfan's [Token Plans](https://cloud.baidu.com/doc/qianfan/s/Dmrabu8b6)
 are available as `baidu-qianfan`: a personal (个人版) and an enterprise (企业版)
@@ -170,6 +173,39 @@ magpie plugin off opencode-gemini-auth  # on brings it back; rm removes it; upda
 A provider id magpie already has (google, openai, anthropic) is
 `<id>-plugin`. In the app, Settings → Plugins adds and removes them, and
 the providers they sign in to are in Add provider → From plugins.
+
+#### For plugin authors
+
+A plugin is an OpenCode plugin; magpie reads a few more fields, which
+OpenCode ignores:
+
+- **The provider's icon**: `icon` on the `auth` hook, or `"magpie": {
+  "icon": "…" }` in the plugin's `package.json` (for every provider it
+  signs in to that names none). An `https://` URL of a picture on a public
+  host, which magpie fetches once and keeps, or a `data:image/…` URI;
+  PNG, JPEG, GIF, WebP, ICO or SVG, at most 1 MB. Anything else is ignored,
+  and the icon the plugin market lists for the plugin is shown instead.
+- **An API key's field**: a `type: "api"` method's `label` titles the key's
+  field, as OpenCode's dialog does (one that only says "API key" reads
+  "<provider> API key"), and its `placeholder` is the hint inside the field
+  (and after the question in `magpie plugin login`). The method's `prompts`
+  are asked first, as in OpenCode, and reach `authorize(inputs)`.
+
+```js
+export const LemonPlugin = async () => ({
+  auth: {
+    provider: "lemon",
+    icon: "https://lemon.example/icon.png", // or "data:image/svg+xml;base64,…"
+    methods: [
+      { type: "api", label: "Lemon API key (lemon.example/keys)", placeholder: "sk-lemon-…" },
+    ],
+  },
+})
+```
+
+In TypeScript, `icon` and `placeholder` aren't in OpenCode's types: build
+the hook as a variable (or cast it), or put the icon in `package.json`.
+
 ### What a model costs
 
 A call is counted at its **effective price**: what you set for that provider
@@ -533,7 +569,14 @@ Windows uses the WebView2 runtime that ships with the OS.
 ### Docker
 
 `docker build` makes a server image: the terminal-only binary on
-distroless, run as nonroot, with magpie's files in a volume at `/config`.
+distroless (`cc`, for the glibc the plugins' Bun needs), run as nonroot,
+with everything it keeps in a volume at `/config`: magpie's own files
+(`/config/magpie`), the sign-ins kept where their agent keeps them (HOME is
+`/config/home`, so `~/.codex`, `~/.claude`… are in it) and the cache with the
+Bun plugins run on (`/config/cache`, downloaded once). A volume made by an
+older image keeps working: magpie adds these folders to it on start, and only
+sign-ins made with that older image, which lived outside the volume, have to
+be made again.
 
 ```sh
 docker build -t magpie .
@@ -547,7 +590,11 @@ on every interface of the host, past its firewall. To reach it from other
 machines, turn on Settings → Share on local network in the browser UI (or
 put `"lan": true, "lanKey": "sk-magpie-…"` in `/config/magpie/settings.json`):
 from then on a request from outside the container must carry that key as its
-API key, and only then publish the port beyond 127.0.0.1.
+API key, and only then publish the port beyond 127.0.0.1. Inside the container
+magpie only sees the container's own address (Docker's 172.17.x), so set
+`-e MAGPIE_PUBLIC_URL=http://<the host's or NAS's address>:3425` (the port
+published on the host) for the address it shows and prints to be the one
+other machines use.
 
 For the browser UI run the image with `magpie web --addr 0.0.0.0:3430 --no-open`
 in place of the default `serve`, and open
@@ -559,8 +606,14 @@ which is your own machine, not the container, so that page won't load: copy
 its whole address from the address bar and paste it into the sign-in's
 *Callback URL* field. `docker exec -it magpie /magpie accounts add codex`
 does the same in a terminal: open the link it prints, then paste the address
-the browser ended on. Keys and sign-ins live in the volume, so a restart
-keeps them.
+the browser ended on. Keys, sign-ins and plugins live in the volume, so a
+restart, or a new container on the same volume, keeps them.
+
+The image has a `HEALTHCHECK`: `magpie healthcheck` exits 0 while the gateway
+answers on `MAGPIE_ADDR`, under `serve` and `web` alike, so `docker ps` shows
+the container as healthy (Compose: `depends_on: condition: service_healthy`)
+with no curl in the image. Bind-mounting a folder at `/config` in place of a
+named volume works too; it has to be writable by uid 65532.
 
 ### Developing
 

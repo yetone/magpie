@@ -574,15 +574,25 @@ type anthropicEncoder struct {
 	col     collector
 }
 
+// anthropicID is a reply's id as Anthropic's API gives one, msg_…: an
+// OpenAI-shaped upstream's chatcmpl-… (a plugin's provider, a relay) reads
+// as a built-in's does.
+func anthropicID(id string) string {
+	if id == "" {
+		return "msg_" + newID()
+	}
+	if strings.HasPrefix(id, "msg_") {
+		return id
+	}
+	return "msg_" + strings.TrimPrefix(id, "chatcmpl-")
+}
+
 func (e *anthropicEncoder) start(ev Event) {
 	if e.started {
 		return
 	}
 	e.started = true
-	id := ev.MsgID
-	if id == "" {
-		id = "msg_" + newID()
-	}
+	id := anthropicID(ev.MsgID)
 	model := ev.Model
 	if model == "" {
 		model = e.model
@@ -714,10 +724,7 @@ func renderAnthropic(res Result, model string) []byte {
 				searchResultBlock(id, p.Hits))
 		}
 	}
-	id := res.ID
-	if id == "" {
-		id = "msg_" + newID()
-	}
+	id := anthropicID(res.ID)
 	if res.Model != "" {
 		model = res.Model
 	}

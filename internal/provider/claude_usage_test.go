@@ -2,65 +2,146 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func TestClaudeWindowsRateLimit(t *testing.T) {
-	var hits atomic.Int32
-	limited := atomic.Bool{}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		if limited.Load() {
-			w.Header().Set("Retry-After", "600")
-			w.WriteHeader(http.StatusTooManyRequests)
-			return
+// fakeClaudeUsage has Claude Code's /usage print out (or fail with err),
+// counting its runs, and fails the test on any request magpie makes to
+// Anthropic itself.
+func fakeClaudeUsage(t *testing.T, out *atomic.Value, fail *atomic.Bool) *atomic.Int32 {
+	t.Helper()
+	var runs atomic.Int32
+	old, oldAsked := claudeCLIUsage, claudeAsked.Load()
+	UsageClaudeVia(func(context.Context) (string, error) {
+		runs.Add(1)
+		if fail != nil && fail.Load() {
+			return "", errors.New("Claude Code: offline")
 		}
-		w.Write([]byte(`{"five_hour":{"utilization":40,"resets_at":"` + time.Now().Add(time.Hour).UTC().Format(time.RFC3339) +
-			`"},"seven_day":{"utilization":10,"resets_at":"` + time.Now().Add(48*time.Hour).UTC().Format(time.RFC3339) + `"}}`))
+		return out.Load().(string), nil
+	})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("magpie asked Anthropic itself: %s", r.URL)
 	}))
-	defer srv.Close()
-	old := claudeBase
+	oldBase := claudeBase
 	claudeBase = srv.URL
-	defer func() { claudeBase = old }()
+	claudeAsked.Store(0)
+	claudeUsage.Lock()
 	claudeUsage.m = nil
+	claudeUsage.Unlock()
+	t.Cleanup(func() {
+		claudeCLIUsage, claudeBase = old, oldBase
+		claudeAsked.Store(oldAsked)
+		srv.Close()
+		claudeUsage.Lock()
+		claudeUsage.m = nil
+		claudeUsage.Unlock()
+		subscriptionUsageCache.Lock()
+		subscriptionUsageCache.asked = false
+		subscriptionUsageCache.Unlock()
+	})
+	return &runs
+}
+
+// Claude's usage is Claude Code's /usage, run only when the user asks,
+// once an ask, and only for the account Claude Code is signed in to.
+func TestClaudeWindowsAsked(t *testing.T) {
+	var out atomic.Value
+	out.Store("Current session: 40% used · resets Oct 1 at 3:30pm (UTC)\nCurrent week (all models): 10% used · resets Oct 3 at 2pm (UTC)\n")
+	var fail atomic.Bool
+	runs := fakeClaudeUsage(t, &out, &fail)
 	ctx := context.Background()
 
-	ws, err := claudeWindows(ctx, "A@x", "t")
-	if err != nil || len(ws) != 2 || ws[0].Used != 40 {
-		t.Fatalf("first: %v %+v", err, ws)
+	// nobody asked: nothing is run
+	for range 3 {
+		if _, err := claudeWindows(ctx, "A@x", true); err != errClaudeNotAsked || runs.Load() != 0 {
+			t.Fatalf("unasked: %v %d", err, runs.Load())
+		}
 	}
-	// the Usage page and the switch list ask again: one request between them
-	if ws, err = claudeWindows(ctx, "a@x", "t2"); err != nil || len(ws) != 2 || hits.Load() != 1 {
-		t.Fatalf("cached: %v %d", err, hits.Load())
+	// a saved account is never read, asked or not
+	AskClaudeUsage()
+	if _, err := claudeWindows(ctx, "saved@x", false); err != errClaudeSaved || runs.Load() != 0 {
+		t.Fatalf("saved: %v %d", err, runs.Load())
 	}
 
-	// past the cache and turned away: what was known stays, a window that
-	// has reset since starting from nothing, and nothing is asked until
-	// the wait Anthropic named is over
-	limited.Store(true)
+	// asked: one run, then what it told
+	ws, err := claudeWindows(ctx, "A@x", true)
+	if err != nil || len(ws) != 2 || ws[0].Used != 40 || ws[1].Used != 10 || runs.Load() != 1 {
+		t.Fatalf("asked: %v %+v %d", err, ws, runs.Load())
+	}
+	for range 3 {
+		if ws, err = claudeWindows(ctx, "a@x", true); err != nil || len(ws) != 2 || runs.Load() != 1 {
+			t.Fatalf("kept: %v %d", err, runs.Load())
+		}
+	}
+	// asked again at once: still the one run
+	AskClaudeUsage()
+	if _, err = claudeWindows(ctx, "a@x", true); err != nil || runs.Load() != 1 {
+		t.Fatalf("too soon: %v %d", err, runs.Load())
+	}
+
+	// asked later: run again; a failed run isn't run again until asked
+	claudeUsage.Lock()
 	e := claudeUsage.m["a@x"]
-	e.at = e.at.Add(-2 * time.Hour)
-	past := time.Now().Add(-time.Minute)
-	e.ws[0].ResetsAt = &past
+	e.tried = e.tried.Add(-time.Hour)
 	claudeUsage.m["a@x"] = e
-	if ws, err = claudeWindows(ctx, "a@x", "t"); err != nil || len(ws) != 2 || ws[0].Used != 0 || ws[1].Used != 10 || hits.Load() != 2 {
-		t.Fatalf("limited: %v %+v %d", err, ws, hits.Load())
+	claudeUsage.Unlock()
+	fail.Store(true)
+	AskClaudeUsage()
+	if _, err = claudeWindows(ctx, "a@x", true); err == nil || runs.Load() != 2 {
+		t.Fatalf("failed: %v %d", err, runs.Load())
 	}
-	if _, err = claudeWindows(ctx, "a@x", "t"); err != nil || hits.Load() != 2 {
-		t.Fatalf("waiting: %v %d", err, hits.Load())
+	if _, err = claudeWindows(ctx, "a@x", true); runs.Load() != 2 {
+		t.Fatalf("ran again unasked: %v %d", err, runs.Load())
 	}
+}
 
-	// an account never read, turned away: said so, and not asked again
-	// until the wait is over
-	if _, err = claudeWindows(ctx, "b@x", "t"); err == nil || !strings.Contains(err.Error(), "10m") || hits.Load() != 3 {
-		t.Fatalf("new limited: %v %d", err, hits.Load())
+func TestParseClaudeUsage(t *testing.T) {
+	now := time.Date(2026, 10, 1, 4, 0, 0, 0, time.UTC)
+	text := `You are currently using your subscription to power your Claude Code usage
+
+Current session: 13% used · resets Oct 1 at 3:30pm (Asia/Shanghai)
+Current week (all models): 4% used · resets Oct 3 at 2pm (Asia/Shanghai)
+Current week (Opus): 12.5% used · resets Jan 2 at 2pm (Asia/Shanghai)
+Current week (Fable): 0% used
+
+What's contributing to your limits usage?
+  96% of your usage came from sessions active for 8+ hours`
+	ws, err := parseClaudeUsage(text, now)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err = claudeWindows(ctx, "b@x", "t"); err == nil || hits.Load() != 3 {
-		t.Fatalf("new waiting: %v %d", err, hits.Load())
+	sh, _ := time.LoadLocation("Asia/Shanghai")
+	want := []struct {
+		name, model string
+		used        float64
+		span        time.Duration
+		reset       time.Time
+	}{
+		{"5 hours", "", 13, 5 * time.Hour, time.Date(2026, 10, 1, 15, 30, 0, 0, sh)},
+		{"7 days", "", 4, 7 * 24 * time.Hour, time.Date(2026, 10, 3, 14, 0, 0, 0, sh)},
+		{"7 days · Opus", "opus", 12.5, 7 * 24 * time.Hour, time.Date(2027, 1, 2, 14, 0, 0, 0, sh)},
+		{"7 days · Fable", "fable", 0, 7 * 24 * time.Hour, time.Time{}},
+	}
+	if len(ws) != len(want) {
+		t.Fatalf("windows %+v", ws)
+	}
+	for i, w := range want {
+		g := ws[i]
+		if g.Name != w.name || g.Model != w.model || g.Used != w.used || g.Span != w.span ||
+			(w.reset.IsZero() != (g.ResetsAt == nil)) || (g.ResetsAt != nil && !g.ResetsAt.Equal(w.reset)) {
+			t.Errorf("%d: %+v, want %+v", i, g, w)
+		}
+	}
+	// a time alone is the next one
+	if r, ok := claudeResetTime("3am (UTC)", now); !ok || !r.Equal(time.Date(2026, 10, 2, 3, 0, 0, 0, time.UTC)) {
+		t.Fatalf("time alone: %v %v", r, ok)
+	}
+	if _, err := parseClaudeUsage("Error: not logged in", now); err == nil {
+		t.Fatal("nothing told, no error")
 	}
 }

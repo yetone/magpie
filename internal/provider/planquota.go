@@ -1,7 +1,8 @@
 package provider
 
 // A plan bought with an API key — Zhipu's GLM Coding Plan (and Z.ai's),
-// Kimi Code, OpenCode Go, a Command Code plan and StepFun's Step Plan —
+// Kimi Code, OpenCode Go, a Command Code plan, MiniMax's Coding (Token)
+// Plan and StepFun's Step Plan —
 // has windows of allowance like a subscription's, which the vendor tells
 // to the key (StepFun only to a sign-in, stepfun_plan.go): the Usage page
 // shows them beside the subscriptions'.
@@ -46,6 +47,10 @@ func planQuotaSourceOf(p Provider) (planQuotaSource, bool) {
 			// preset too, and is told the plan's 5-hour and weekly windows;
 			// a pay-as-you-go key has none, and no card
 			return planQuotaSource{"https://api.commandcode.ai/alpha/billing/credits", true, readCommandCodePlan, false}, true
+		case "api.minimaxi.com", "api.minimax.io":
+			// a Coding Plan key (sk-cp-…) is told its windows; a
+			// pay-as-you-go key isn't, and gets no card (#387)
+			return planQuotaSource{"https://" + hostOf(base) + "/v1/token_plan/remains", true, readMiniMaxPlan, false}, true
 		case "opencode.ai":
 			if u := strings.TrimSuffix(base, "/"); strings.HasSuffix(u, "/zen/go") || strings.Contains(u, "/zen/go/") {
 				return planQuotaSource{"https://opencode.ai/zen/go/v1/usage", true, readOpenCodeGo, true}, true
@@ -165,6 +170,113 @@ func readOpenCodeGo(b []byte) (string, []QuotaWindow, error) {
 	}
 	if len(out) == 0 {
 		return "", nil, fmt.Errorf("no usage in the reply")
+	}
+	return "", out, nil
+}
+
+// readMiniMaxPlan reads MiniMax's /v1/token_plan/remains (#387):
+//
+//	{"model_remains":[{"model_name":"general",
+//	   "start_time":…,"end_time":…,"current_interval_remaining_percent":100,
+//	   "current_interval_status":1,"current_interval_total_count":0,
+//	   "weekly_start_time":…,"weekly_end_time":…,"current_weekly_remaining_percent":100,
+//	   "current_weekly_status":1,"current_weekly_total_count":0},
+//	  {"model_name":"video",…}],
+//	 "base_resp":{"status_code":0,"status_msg":"success"}}
+//
+// Each bucket is a quota with a rolling interval and a week, told as what
+// remains. "general" is what the models draw on; another (video, image…)
+// is metered apart and doesn't stop them. A bucket the plan doesn't have
+// comes as both windows unlimited (status 3) with no totals, and is left
+// out; status 2 is used up, whatever the percentage says. MiniMax answers
+// 200 to a key it refuses, with the reason in base_resp.
+func readMiniMaxPlan(b []byte) (string, []QuotaWindow, error) {
+	type bucket struct {
+		Model      string   `json:"model_name"`
+		Start      int64    `json:"start_time"`
+		End        int64    `json:"end_time"`
+		Left       *float64 `json:"current_interval_remaining_percent"`
+		Status     int      `json:"current_interval_status"`
+		Total      *float64 `json:"current_interval_total_count"`
+		WeekStart  int64    `json:"weekly_start_time"`
+		WeekEnd    int64    `json:"weekly_end_time"`
+		WeekLeft   *float64 `json:"current_weekly_remaining_percent"`
+		WeekStatus int      `json:"current_weekly_status"`
+		WeekTotal  *float64 `json:"current_weekly_total_count"`
+	}
+	var r struct {
+		Remains []bucket `json:"model_remains"`
+		Base    *struct {
+			Code int    `json:"status_code"`
+			Msg  string `json:"status_msg"`
+		} `json:"base_resp"`
+	}
+	if err := json.Unmarshal(b, &r); err != nil {
+		return "", nil, err
+	}
+	if r.Base == nil {
+		return "", nil, fmt.Errorf("no plan in the reply")
+	}
+	if r.Base.Code != 0 {
+		if r.Base.Msg != "" {
+			return "", nil, fmt.Errorf("%s", r.Base.Msg)
+		}
+		return "", nil, fmt.Errorf("MiniMax said %d", r.Base.Code)
+	}
+	at := func(n int64) time.Time {
+		if n < 1e12 { // seconds
+			return time.Unix(n, 0)
+		}
+		return time.UnixMilli(n)
+	}
+	zero := func(f *float64) bool { return f != nil && *f == 0 }
+	out := []QuotaWindow{}
+	for _, k := range r.Remains {
+		name := strings.TrimSpace(k.Model)
+		if name == "" || k.Status == 3 && k.WeekStatus == 3 && zero(k.Total) && zero(k.WeekTotal) {
+			continue // not in the plan
+		}
+		general := strings.EqualFold(name, "general")
+		for _, x := range []struct {
+			left       *float64
+			status     int
+			start, end int64
+			week       bool
+		}{{k.Left, k.Status, k.Start, k.End, false}, {k.WeekLeft, k.WeekStatus, k.WeekStart, k.WeekEnd, true}} {
+			if x.status == 3 || x.left == nil && x.status != 2 {
+				continue // unlimited, or nothing told
+			}
+			w := QuotaWindow{Used: 100}
+			if x.status != 2 {
+				w.Used = max(0, min(100, 100-*x.left))
+			}
+			if x.start > 0 && x.end > x.start {
+				w.Span = at(x.end).Sub(at(x.start))
+			} else if x.week {
+				w.Span = 7 * 24 * time.Hour
+			}
+			if x.end > 0 {
+				t := at(x.end)
+				w.ResetsAt = &t
+			}
+			switch span := w.Span; {
+			case x.week:
+				w.Name = "7 days"
+			case span > 24*time.Hour && span%(24*time.Hour) == 0:
+				w.Name = fmt.Sprintf("%d days", span/(24*time.Hour))
+			case span >= time.Hour && span%time.Hour == 0:
+				w.Name = fmt.Sprintf("%d hours", span/time.Hour)
+			case span > 0:
+				w.Name = fmt.Sprintf("%d minutes", span/time.Minute)
+			default:
+				w.Name = "Allowance"
+			}
+			if !general {
+				w.Name = strings.ToUpper(name[:1]) + name[1:] + " · " + w.Name
+				w.Aside = true
+			}
+			out = append(out, w)
+		}
 	}
 	return "", out, nil
 }

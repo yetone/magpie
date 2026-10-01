@@ -99,6 +99,24 @@ func TestGrokBodyLeavesOutCustomTools(t *testing.T) {
 	}
 }
 
+// A tool_choice with no tools beside it goes: the backend turns the
+// request away over it, as it did Codex's compaction summary (#378).
+func TestGrokBodyDropsLoneToolChoice(t *testing.T) {
+	for _, in := range []string{
+		`{"model":"grok-4.7","reasoning":{"effort":"low"},"tool_choice":"auto","parallel_tool_calls":false,"input":[]}`,
+		`{"model":"grok-4.7","tool_choice":"auto"}`,
+		`{"model":"grok-4.7","tools":[{"type":"custom","name":"apply_patch"}],"tool_choice":"auto"}`,
+	} {
+		if got := string(grokBody([]byte(in))); strings.Contains(got, "tool_choice") {
+			t.Errorf("%s\n-> %s", in, got)
+		}
+	}
+	same := []byte(`{"tools":[{"type":"function","name":"x"}],"tool_choice":"required","reasoning":{"effort":"low"}}`)
+	if string(grokBody(same)) != string(same) {
+		t.Fatal("a tool_choice with tools was changed")
+	}
+}
+
 // Codex's reasoning, handed back with a null content, is sent without it.
 func TestGrokBodyDropsNullReasoningContent(t *testing.T) {
 	in := []byte(`{"input":[{"type":"reasoning","id":"rs_1","summary":[],"content":null,"encrypted_content":"a+b/c="},{"type":"message","role":"user","content":"hi"}]}`)

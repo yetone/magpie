@@ -97,6 +97,44 @@
       status(e.message, "err");
     }
   }
+  // the built-ins with accounts this plugin could run in their place
+  const movableOf = (pkg) => (market?.state.movable || []).filter((c) => c.package === pkg);
+  // move: a built-in's accounts onto its plugin, installing it if need be,
+  // as its editor's Runs on does
+  async function move(c) {
+    if (busy.size) return;
+    busy.set(c.package, "move");
+    asking = null;
+    draw();
+    try {
+      providers = await api("provider/move", { id: c.id });
+      busy.delete(c.package);
+      await refresh();
+      const now = providers.providers.find((x) => x.id === c.id);
+      const accts = now?.account?.logins?.length || c.accounts, models = (now?.models || []).filter((x) => x.on).length;
+      status(t("{name} now runs on its plugin — {accounts}, {models}. Its editor in Providers moves it back.", {
+        name: c.name,
+        accounts: t(accts === 1 ? "{n} account" : "{n} accounts", { n: accts }),
+        models: t(models === 1 ? "{n} model" : "{n} models", { n: models }),
+      }), "ok", 9000);
+    } catch (e) {
+      busy.delete(c.package);
+      draw();
+      // no editor here to sign in above: say where
+      const why = e.why?.code === "lapsed"
+        ? t("every {name} account needs signing in again. Sign one in under Providers, then move.", { name: c.name })
+        : moveWhy({ why: e.why, error: e.message }, { name: c.name });
+      status(t("It stays built-in: {error}", { error: why }), "err", 12000);
+    }
+  }
+  const moveButton = (b, c, here) => {
+    b.classList.add("go");
+    b.textContent = here ? t("Move {name} here", { name: c.name }) : t("Move my {name} accounts ({n})", { name: c.name, n: c.accounts });
+    b.title = t("Runs {name} on this plugin in place of the built-in, with the same accounts; nothing changes if one doesn't work through it", { name: c.name });
+    b.disabled = busy.size > 0;
+    b.onclick = (ev) => { ev.stopPropagation(); move(c); };
+    return b;
+  };
   const install = (pkg, nm) => act(pkg, "add", { spec: pkg }, () => {
     const subs = subsOf(pkg);
     status(subs.length ? t("{name} is installed — sign in to use it", { name: nm }) : t("{name} is installed", { name: nm }), "ok");
@@ -107,9 +145,9 @@
     const b = el("button", "pm-act");
     const e = entryOf(pkg);
     const op = busy.get(pkg);
-    if (op === "add" || op === "upgrade") {
+    if (op === "add" || op === "upgrade" || op === "move") {
       b.classList.add("busy");
-      b.append(el("span", "spin"), el("span", "", op === "upgrade" ? t("Updating…") : market?.state.bun ? t("Installing…") : t("Getting Bun…")));
+      b.append(el("span", "spin"), el("span", "", op === "move" ? t("Moving…") : op === "upgrade" ? t("Updating…") : market?.state.bun ? t("Installing…") : t("Getting Bun…")));
       b.disabled = true;
       if (!market?.state.bun) b.title = t("Plugins run on Bun {v}, downloaded once", { v: market?.state.bunVersion || "" });
       return b;
@@ -121,6 +159,8 @@
         b.title = t("Not on npm yet");
         return b;
       }
+      const c = movableOf(pkg)[0];
+      if (c) return moveButton(b, c);
       b.classList.add("get");
       b.textContent = t("Install");
       b.disabled = busy.size > 0;
@@ -134,6 +174,9 @@
     }
     const subs = subsOf(pkg);
     const out = subs.find((x) => !x.signedIn);
+    // signed in to nothing yet, with a built-in's accounts to bring
+    const c = !subs.some((x) => x.signedIn) && movableOf(pkg)[0];
+    if (c) return moveButton(b, c, true);
     if (out) {
       b.classList.add("go");
       b.textContent = t("Sign in");
@@ -410,8 +453,12 @@
     who.append(nm);
     const subs = subsOf(pkg);
     const sub = el("div", "sub");
-    const ask = asking?.pkg === pkg && moved.length && !busy.size ? asking.op : "";
-    if (ask) {
+    const cands = e.off ? [] : movableOf(pkg);
+    const ask = asking?.pkg === pkg && !busy.size && (asking.op === "move" ? cands.length : moved.length) ? asking.op : "";
+    if (ask === "move") {
+      sub.textContent = t("{names} can run on it again, with the same accounts.", { names: cands.map((c) => c.name).join(t(", ")) });
+      sub.classList.add("ask");
+    } else if (ask) {
       sub.textContent = t(ask === "remove" ? "{names} goes back to the built-in, with its accounts, before the plugin is removed." : "{names} goes back to the built-in, with its accounts, before the plugin is switched off.", { names });
       sub.classList.add("ask");
     } else if (e.off) sub.textContent = t("Off");
@@ -420,7 +467,10 @@
       for (const [i, x] of subs.entries()) {
         if (i) sub.append(el("span", "sep", " · "));
         const s = el("span", "pm-sub" + (x.signedIn ? " in" : ""));
-        s.append(el("span", "dot"), el("span", "", x.signedIn ? t("{name}: signed in", { name: x.name }) : t("{name}: not signed in", { name: x.name })));
+        // its built-in runs it, with its accounts: nothing to fix here
+        const builtin = !x.signedIn && cands.some((c) => c.id === x.pid);
+        s.append(el("span", "dot"), el("span", "", x.signedIn ? t("{name}: signed in", { name: x.name }) : builtin ? t("{name}: on magpie's built-in", { name: x.name }) : t("{name}: not signed in", { name: x.name })));
+        if (builtin) s.title = t("{name} runs on magpie's built-in, with your accounts; Move {name} here runs it on this plugin", { name: x.name });
         sub.append(s);
       }
     } else sub.textContent = e.providers.length ? t("Signs in to {names}", { names: e.providers.join(t(", ")) }) : t("Signs in to nothing magpie can use");
@@ -434,19 +484,30 @@
       up.onclick = () => act(pkg, "upgrade", { spec: e.spec }, () => status(t("{name} updated to v{v}", { name: l?.name || pkg, v: e.latest }), "ok"));
       val.append(up);
     }
+    const here = !e.off && !e.error && !subs.some((x) => x.signedIn) && cands[0];
+    if (here && !ask) {
+      const mv = el("button", "text primary", b === "move" ? t("Moving…") : t("Move {name} here", { name: here.name }));
+      mv.title = t("Runs {name} on this plugin in place of the built-in, with the same accounts; nothing changes if one doesn't work through it", { name: here.name });
+      mv.disabled = busy.size > 0;
+      mv.onclick = () => move(here);
+      val.append(mv);
+    }
     if (!e.off && !e.error && subs.some((x) => !x.signedIn)) {
-      const s = el("button", "text primary", t("Sign in"));
+      const s = el("button", "text" + (here ? "" : " primary"), t("Sign in"));
       s.onclick = () => pluginSignIn(subs.find((x) => !x.signedIn).id);
       val.append(s);
     }
     const back = () => { if (moved.length) status(t("{names} is back on the built-in", { names }), "ok"); };
-    const off = () => act(pkg, "off", { spec: e.spec, off: !e.off }, e.off ? null : back);
+    // switched on again: the built-ins that went back when it went off
+    // are offered its way again, in the row
+    const again = () => { if (movableOf(pkg).length) { asking = { pkg, op: "move" }; draw(); } };
+    const off = () => act(pkg, "off", { spec: e.spec, off: !e.off }, e.off ? again : back);
     const remove = () => act(pkg, "remove", { spec: e.spec }, () => { status(t("{name} removed", { name: l?.name || pkg }), "ok"); back(); });
     if (ask) {
       // asked in the row, not a dialog: the user sees which go back
-      const yes = el("button", "text primary", t(ask === "remove" ? "Remove" : "Switch off"));
-      yes.onclick = () => { asking = null; ask === "remove" ? remove() : off(); };
-      const no = el("button", "text", t("Cancel"));
+      const yes = el("button", "text primary", t(ask === "move" ? "Move" : ask === "remove" ? "Remove" : "Switch off"));
+      yes.onclick = () => { asking = null; ask === "move" ? move(cands[0]) : ask === "remove" ? remove() : off(); };
+      const no = el("button", "text", t(ask === "move" ? "Not now" : "Cancel"));
       no.onclick = () => { asking = null; draw(); };
       val.append(no, yes);
       r.append(val);
@@ -656,4 +717,8 @@
     for (const p of root.querySelectorAll("p")) if (!p.textContent.trim()) p.remove();
     return root;
   }
+
+  // opened on the Plugins tab (?view=plugins): app.js showed it before
+  // this file was here to load it
+  if (view === "plugins") load();
 })();

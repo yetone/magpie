@@ -138,15 +138,6 @@ func (o ResetOutcome) Text() string {
 		return "no reset left on the account"
 	case "already_redeemed", "already_used":
 		return "that reset was already used"
-	// Anthropic's words for a Claude reset (claude_resets.go)
-	case "not_limited":
-		return "nothing to reset — no window is used up yet, and the reset is kept"
-	case "cooldown":
-		return "a reset was used a short while ago — try again later"
-	case "ineligible":
-		return "the account can't use a reset"
-	case "unavailable":
-		return "resets can't be used right now — try again later"
 	}
 	return o.Code
 }

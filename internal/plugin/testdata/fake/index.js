@@ -69,6 +69,14 @@ export const FakePlugin = async ({ client }) => ({
       if (a.type !== "oauth") return { error: "an API key has no plan" }
       if (a.refresh === "r-gone") return { error: `${a.accountId}: the FakeCo sign-in has expired — sign in again` }
       if (a.refresh === "r-offline") throw new Error("fetch failed")
+      // the vendor unreachable, said as Zed's plugin says it
+      if (a.refresh === "r-unreachable") {
+        try {
+          await fetch("http://127.0.0.1:9/me")
+        } catch (e) {
+          return { error: e?.message ?? String(e), signIn: "kept" }
+        }
+      }
       if (a.refresh === "r-kept") return { error: "sign in again to see usage", signIn: "kept" }
       if (a.refresh === "r-renewed") return { error: "usage is down", signIn: "renewed" }
       const full = a.accountId === "full@fake"
@@ -93,6 +101,10 @@ export const FakePlugin = async ({ client }) => ({
     models: async (p, { auth }) => {
       if (auth?.refresh === "r-dead" || auth?.key === "dead") throw new Error("the vendor refused the sign-in")
       if (auth?.refresh === "r-models-gone") throw Object.assign(new Error("the vendor refused the sign-in"), { signIn: "expired" })
+      // a sign-in past its time, said in words only, as Grok's plugin says it
+      if (auth?.refresh === "r-models-expired") throw new Error("FakeCo's sign-in has expired; run `fake login`")
+      // the vendor unreachable: the list kept, as Zed's plugin keeps it
+      if (auth?.refresh === "r-unreachable") await fetch("http://127.0.0.1:9/models").catch(() => {})
       if (auth?.type === "oauth" && auth.refresh?.startsWith("rot-")) {
         await client.auth.set({ path: { id: ID }, body: { ...auth, refresh: auth.refresh + "+" } })
       }

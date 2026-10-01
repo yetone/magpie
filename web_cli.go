@@ -48,6 +48,9 @@ func webCmd(args []string) error {
 		for _, a := range gui.LANAddrs() {
 			fmt.Println(muted.Render("  on the network"), "http://"+net.JoinHostPort(a, port)+key)
 		}
+		if gateway.ContainerAddrs() {
+			fmt.Println(muted.Render("  " + containerNote))
+		}
 		fmt.Println(amber.Render("!"), "anyone with the link can change magpie and see its keys, and the network carries it unencrypted")
 	}
 	carries := "this run's key (MAGPIE_WEB_KEY keeps one across runs)"

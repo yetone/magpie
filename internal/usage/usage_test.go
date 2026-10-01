@@ -87,6 +87,29 @@ func TestSummarizeTellsPlacesApart(t *testing.T) {
 	}
 }
 
+// A built-in moved onto its plugin sends the same account's calls through
+// plugin://kiro: its history stays one, not split at the move.
+func TestSummarizeKeepsMovedAccountTogether(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	y, m, d := time.Now().Date()
+	now := time.Date(y, m, d, 12, 0, 0, 0, time.Local)
+	recs := []Record{
+		{Time: now.Add(-3 * time.Hour), Provider: "kiro", Host: "dee@example.com", Model: "m", Input: 100},      // the built-in
+		{Time: now.Add(-2 * time.Hour), Provider: "kiro", Host: "kiro as dee@example.com", Model: "m", Input: 10}, // its plugin
+		{Time: now.Add(-1 * time.Hour), Provider: "kiro", Host: "q.us-east-1.amazonaws.com as dee@example.com", Model: "m", Input: 1},
+		{Time: now.Add(-1 * time.Hour), Provider: "kiro", Host: "kiro as bo@example.com", Model: "m", Input: 7}, // another account
+	}
+	got := map[string]int{}
+	for _, g := range summarize(Today, now, recs).Models {
+		got[g.ID] = g.Input
+	}
+	if len(got) != 2 || got["kiro/m @ dee@example.com"] != 111 || got["kiro/m @ bo@example.com"] != 7 {
+		t.Fatalf("%v", got)
+	}
+}
+
 // Calls that name their session are summed per agent's session.
 func TestSummarizeSessions(t *testing.T) {
 	now := time.Date(2026, 9, 23, 15, 30, 0, 0, time.UTC)

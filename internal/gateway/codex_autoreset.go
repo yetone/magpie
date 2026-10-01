@@ -1,10 +1,9 @@
 package gateway
 
-// A Codex rate-limit reset, or a Claude usage-limit reset, spent by
-// itself: when everyone a request could go to is out of their allowance,
-// a ChatGPT or Claude account the user lets spend its resets, its weekly
-// window used up, spends one and is asked again
-// (provider.AutoUseCodexReset and AutoUseClaudeReset have the rules).
+// A Codex rate-limit reset spent by itself: when everyone a request could
+// go to is out of their allowance, a ChatGPT account the user lets spend
+// its resets, its weekly window used up, spends one and is asked again
+// (provider.AutoUseCodexReset has the rules).
 
 import (
 	"context"
@@ -18,7 +17,7 @@ import (
 // autoResetTimeout bounds the look at an account's week and the reset.
 var autoResetTimeout = 20 * time.Second
 
-// autoReset spends a reset of one of cands' Codex or Claude accounts, c — the last
+// autoReset spends a reset of one of cands' Codex accounts, c — the last
 // one, just out of its allowance — first: only when every other one of
 // them sits out too. It says which account it was and what spending did.
 func (s *Server) autoReset(ctx context.Context, cands []candidate, c candidate) (candidate, provider.ResetOutcome, bool) {
@@ -68,11 +67,7 @@ func (s *Server) autoResetSignedIn(ctx context.Context) (string, provider.ResetO
 func autoResetOf(ctx context.Context, agent, user string) (provider.ResetOutcome, bool) {
 	ctx, cancel := context.WithTimeout(ctx, autoResetTimeout)
 	defer cancel()
-	use := provider.AutoUseCodexReset
-	if agent == "claude" {
-		use = provider.AutoUseClaudeReset
-	}
-	out, err := use(ctx, user)
+	out, err := provider.AutoUseCodexReset(ctx, user)
 	switch {
 	case err != nil:
 		log.Printf("%s reset for %s not used: %v", agent, user, err)

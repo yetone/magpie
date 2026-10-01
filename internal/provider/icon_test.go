@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -123,6 +124,53 @@ func TestPublicIP(t *testing.T) {
 		if publicIP(net.ParseIP(s)) {
 			t.Errorf("%s judged public", s)
 		}
+	}
+}
+
+func TestIconIPsLoon(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		ips  []string
+		want []string // nil means the entire answer must be refused
+	}{
+		{"screenshot", []string{"fd27:712::c600:1061", "198.0.16.97"}, []string{"198.0.16.97"}},
+		{"ipv4 first", []string{"198.0.16.97", "fd27:712::c600:1061"}, []string{"198.0.16.97"}},
+		{"benchmark pool", []string{"fd27:712::c612:139", "198.18.1.57"}, []string{"198.18.1.57"}},
+		{"public dual stack", []string{"8.8.8.8", "2606:4700:4700::1111"}, []string{"8.8.8.8", "2606:4700:4700::1111"}},
+		{"unpaired", []string{"fd27:712::c600:1061"}, nil},
+		{"unrelated ipv4", []string{"fd27:712::c600:1061", "8.8.8.8"}, nil},
+		{"private pair", []string{"fd27:712::a00:1", "10.0.0.1"}, nil},
+		{"loopback pair", []string{"fd27:712::7f00:1", "127.0.0.1"}, nil},
+		{"other ula", []string{"fd27:712:1::c600:1061", "198.0.16.97"}, nil},
+		{"mixed private", []string{"fd27:712::c600:1061", "198.0.16.97", "192.168.1.1"}, nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var ips []net.IPAddr
+			for _, ip := range tt.ips {
+				ips = append(ips, net.IPAddr{IP: net.ParseIP(ip)})
+			}
+			allowed, err := iconIPs("api.example.com", ips)
+			if tt.want == nil {
+				if err == nil || len(allowed) != 0 {
+					t.Fatalf("private answer accepted: %v, %v", allowed, err)
+				}
+				return
+			}
+			var got []string
+			for _, ip := range allowed {
+				if !publicIP(ip.IP) {
+					t.Fatalf("private address passed to dial: %v", ip)
+				}
+				got = append(got, ip.IP.String())
+			}
+			if err != nil || !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("got %v, %v; want %v", got, err, tt.want)
+			}
+		})
+	}
+	// Explicit private-IP URLs remain invalid, including Loon-shaped ones.
+	if _, err := iconURL("https://[fd27:712::c600:1061]/favicon.ico"); err == nil {
+		t.Fatal("literal ULA icon URL accepted")
 	}
 }
 

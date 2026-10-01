@@ -198,7 +198,12 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 	// keys' balances come from the
 	// vendors, which can be slow or unreachable, so the page asks for them
 	// apart from the local log.
+	// ?asked=1 is the user opening or refreshing the page, the one time
+	// Claude Code's own /usage is run (provider.AskClaudeUsage).
 	mux.HandleFunc("GET /api/usage/quotas", func(rw http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("asked") != "" {
+			provider.AskClaudeUsage()
+		}
 		ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 		defer cancel()
 		writeJSON(rw, provider.Quotas(ctx))
@@ -214,22 +219,6 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 		ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 		defer cancel()
 		out, err := provider.UseCodexReset(ctx, in.User)
-		if err != nil {
-			fail(rw, err)
-			return
-		}
-		writeJSON(rw, out)
-	})
-	// and one of a Claude account's usage-limit resets, the same way
-	mux.HandleFunc("POST /api/usage/claude-reset", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ User string }
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			fail(rw, err)
-			return
-		}
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
-		out, err := provider.UseClaudeReset(ctx, in.User)
 		if err != nil {
 			fail(rw, err)
 			return

@@ -63,6 +63,7 @@ type rTool struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description,omitempty"`
 	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Strict      *bool           `json:"strict,omitempty"`
 	Tools       []rTool         `json:"tools,omitempty"` // a namespace's
 	Execution   string          `json:"execution,omitempty"`
 }
@@ -125,10 +126,20 @@ type rRequest struct {
 	ServiceTier       string          `json:"service_tier,omitempty"`
 	PromptCacheKey    string          `json:"prompt_cache_key,omitempty"`
 	Include           []string        `json:"include,omitempty"`
+	ClientMetadata    json.RawMessage `json:"client_metadata,omitempty"`
+	Text              json.RawMessage `json:"text,omitempty"`
 	Reasoning         *struct {
 		Effort  string `json:"effort,omitempty"`
 		Summary string `json:"summary,omitempty"`
 	} `json:"reasoning,omitempty"`
+}
+
+// sentRaw is a raw field the client sent, unless it sent null.
+func sentRaw(v json.RawMessage) json.RawMessage {
+	if t := strings.TrimSpace(string(v)); t == "" || t == "null" {
+		return nil
+	}
+	return v
 }
 
 func parseResponses(body []byte) (*Request, error) {
@@ -139,7 +150,8 @@ func parseResponses(body []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: q.Model, System: q.Instructions, MaxTokens: q.MaxOutputTokens, Temp: q.Temperature,
-		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority", CacheKey: q.PromptCacheKey, Include: q.Include}
+		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority", CacheKey: q.PromptCacheKey, Include: q.Include,
+		ClientMetadata: sentRaw(q.ClientMetadata), Text: sentRaw(q.Text)}
 	if q.Reasoning != nil {
 		r.Effort = effortOf(q.Reasoning.Effort)
 		r.Thinking = true
@@ -194,9 +206,20 @@ func parseResponses(body []byte) (*Request, error) {
 				out, images := toolOutput(it.Output)
 				r.Messages = append(r.Messages, Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: it.CallID, Text: out, Images: images}}})
 			case it.Type == "reasoning":
+				// the reasoning itself when the item carries it, else its
+				// summary (all magpie gives a client of a translated reply)
 				var b strings.Builder
-				for _, s := range it.Summary {
-					b.WriteString(s.Text)
+				var content []rText
+				_ = json.Unmarshal(it.Content, &content)
+				for _, c := range content {
+					if c.Type == "reasoning_text" {
+						b.WriteString(c.Text)
+					}
+				}
+				if b.Len() == 0 {
+					for _, s := range it.Summary {
+						b.WriteString(s.Text)
+					}
 				}
 				if b.Len() > 0 {
 					r.Messages = append(r.Messages, Message{Role: "assistant", Parts: []Part{{Kind: Thinking, Text: b.String()}}})
@@ -227,7 +250,7 @@ func parseResponses(body []byte) (*Request, error) {
 		}
 		switch t.Type {
 		case "function":
-			offer(i, Tool{Name: t.Name, Description: t.Description, Schema: t.Parameters}, nsTool{})
+			offer(i, Tool{Name: t.Name, Description: t.Description, Schema: t.Parameters, Strict: t.Strict != nil && *t.Strict}, nsTool{})
 		case "namespace":
 			// offered flat, as few models know namespaces; a call is given
 			// its namespace back on the way out
@@ -236,7 +259,7 @@ func parseResponses(body []byte) (*Request, error) {
 					continue
 				}
 				flat := flatName(t.Name, nt.Name)
-				offer(i, Tool{Name: flat, Description: nt.Description, Schema: nt.Parameters}, nsTool{Namespace: t.Name, Name: nt.Name})
+				offer(i, Tool{Name: flat, Description: nt.Description, Schema: nt.Parameters, Strict: nt.Strict != nil && *nt.Strict}, nsTool{Namespace: t.Name, Name: nt.Name})
 			}
 		case toolSearch:
 			if t.Execution == "client" {
@@ -346,6 +369,14 @@ func responsesParts(raw json.RawMessage) []Part {
 
 // buildResponses renders a request for a Responses upstream.
 func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
+	// A turn's reasoning goes back as a reasoning item, as a model that
+	// thinks between tool calls wants it (DeepSeek: "The reasoning_text in
+	// the thinking mode must be passed back", #388). Only a DeepSeek model
+	// gets it: OpenAI's and those in front of it read only their own
+	// sealed reasoning, and may refuse an item without it.
+	replay := strings.Contains(strings.ToLower(model), "deepseek") &&
+		!slices.Contains([]string{"chatgpt.com", "api.openai.com", "api.x.ai", "api.githubcopilot.com"}, host) &&
+		!strings.HasSuffix(host, ".openai.azure.com")
 	var input []map[string]any
 	for _, m := range r.Messages {
 		var content []map[string]any
@@ -373,6 +404,12 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 			case Image:
 				if m.Role != "assistant" {
 					content = append(content, map[string]any{"type": "input_image", "image_url": dataURL(p)})
+				}
+			case Thinking:
+				if replay && p.Text != "" {
+					flushMsg()
+					input = append(input, map[string]any{"type": "reasoning", "summary": []any{},
+						"content": []map[string]any{{"type": "reasoning_text", "text": p.Text}}})
 				}
 			case ToolCall:
 				flushMsg()
@@ -404,6 +441,12 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 		input = []map[string]any{}
 	}
 	out := map[string]any{"model": model, "input": input, "stream": r.Stream, "store": false}
+	if len(r.ClientMetadata) > 0 {
+		out["client_metadata"] = r.ClientMetadata
+	}
+	if len(r.Text) > 0 {
+		out["text"] = r.Text
+	}
 	if r.CacheKey != "" {
 		out["prompt_cache_key"] = r.CacheKey
 	}
@@ -446,7 +489,10 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	if len(r.Tools) > 0 || r.WebSearch {
 		var tools []map[string]any
 		for _, t := range r.Tools {
-			tool := map[string]any{"type": "function", "name": t.Name, "description": t.Description}
+			// strict is said, as Codex says it: left out, the ChatGPT
+			// backend holds the schema to strict mode's rules and refuses a
+			// pattern with a lookaround (MiniMax Code's path, #383)
+			tool := map[string]any{"type": "function", "name": t.Name, "description": t.Description, "strict": t.Strict}
 			if len(t.Schema) > 0 {
 				tool["parameters"] = t.Schema
 			}

@@ -138,10 +138,21 @@ const (
 	// failShape: the vendor couldn't read the request's shape (#350) — the
 	// next one is asked, and nobody rests
 	failShape = "shape"
+	// failProxy: the proxy magpie sends through (its own setting, the
+	// *_PROXY variables, the system's) didn't take the connection (#381) —
+	// nothing reached the vendor, so the next one is asked, and nobody rests
+	failProxy = "proxy"
 )
+
+// proxyDown is the error Go gives when the proxy itself can't be reached,
+// over HTTP (proxyconnect) or SOCKS (socks connect).
+var proxyDown = regexp.MustCompile(`proxyconnect |socks connect `)
 
 // failure says why a reply failed.
 func failure(status int, body []byte) string {
+	if status == http.StatusBadGateway && proxyDown.Match(body) {
+		return failProxy
+	}
 	if _, ok := provider.Verification(body); ok && (status == 401 || status == 403) {
 		return failVerify
 	}
@@ -275,6 +286,10 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	d := fallbackCooldown
 	why := failure(status, body)
 	r := Rest{Why: why, Status: status, By: "cooldown"}
+	if why == failProxy {
+		// the account is as good as it was; the proxy is the user's to start
+		return r
+	}
 	switch why {
 	case failCredit:
 		d, r.By = creditRest, "credit"

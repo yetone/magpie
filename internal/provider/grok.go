@@ -204,9 +204,12 @@ var grokTools = map[string]bool{"function": true, "web_search": true, "x_search"
 // reach the live web, which Grok's doesn't take either; it searches live.
 // And Codex hands reasoning back with "content": null, which the backend
 // can't read the encrypted reasoning beside ("Could not decode the
-// compaction blob"), so a null content goes.
+// compaction blob"), so a null content goes. A tool_choice with no tools
+// left goes too: the backend turns the request away over it ("A
+// tool_choice was set on the request but no tools were specified"), as it
+// would Codex's compaction summary, sent without tools (#378).
 func grokBody(body []byte) []byte {
-	if !bytes.Contains(body, []byte(`"tools"`)) && !bytes.Contains(body, []byte(`"reasoning"`)) {
+	if !bytes.Contains(body, []byte(`"tools"`)) && !bytes.Contains(body, []byte(`"reasoning"`)) && !bytes.Contains(body, []byte(`"tool_choice"`)) {
 		return body
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
@@ -238,6 +241,12 @@ func grokBody(body []byte) []byte {
 				delete(m, "tool_choice")
 				dirty = true
 			}
+		}
+	}
+	if tools, _ := m["tools"].([]any); len(tools) == 0 {
+		if _, ok := m["tool_choice"]; ok {
+			delete(m, "tool_choice")
+			dirty = true
 		}
 	}
 	input, _ := m["input"].([]any)

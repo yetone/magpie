@@ -20,7 +20,7 @@ import (
 func init() {
 	movers["zcode"] = &mover{
 		pkg:    "@magpie-community/opencode-zcode-auth",
-		min:    "0.1.4", // a failure's status and its sign-in mark as the built-in's
+		min:    "0.1.5", // a failure's status and its sign-in mark as the built-in's; MCP quota set aside as the built-in's
 		agents: []string{"zcode"},
 		out: func() ([]Moving, error) {
 			var out []Moving

@@ -582,9 +582,7 @@ func claudeCLIArgs(model, mcpConfig, effort string, web bool) []string {
 		"--no-session-persistence",
 	}
 	if effort != "" {
-		if effort == "xhigh" {
-			effort = "max"
-		}
+		// Claude Code takes xhigh as its own level, below max (#385)
 		args = append(args, "--effort", effort, "--thinking-display", "summarized")
 	}
 	return args

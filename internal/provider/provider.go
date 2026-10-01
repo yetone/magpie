@@ -792,6 +792,9 @@ func (p Provider) Native(model string) Protocol {
 
 // Host is the vendor's API host, for display.
 func (p Provider) Host() string {
+	if p.Account != nil && p.Account.moved {
+		return p.Account.wasHost // not plugin://<id>
+	}
 	for _, pr := range p.Speaks() {
 		if u := p.Base(pr); u != "" {
 			return HostOf(u)

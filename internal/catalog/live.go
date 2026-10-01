@@ -265,11 +265,14 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		}
 		// a model that draws is kept, marked, for Settings → Images; any
 		// other that isn't for text (embeddings, speech) is left out
-		drawer := DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research")
+		drawer := DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research") || r.Kind == "image"
 		if !drawer && !textModel(mdModel{ID: id}) {
 			continue
 		}
 		name := r.DisplayName
+		if r.Label != "" {
+			name = r.Label
+		}
 		if name == "" {
 			name = id
 		}
@@ -343,6 +346,10 @@ type liveModel struct {
 	Native []string `json:"native_endpoints"`
 	Output any      `json:"max_output_tokens"`
 	Levels any      `json:"supported_reasoning_levels"`
+	// another magpie's name for the model with its provider there after
+	// it, and "image" on one it draws with
+	Label string `json:"magpie_label"`
+	Kind  string `json:"kind"`
 }
 
 // levelsOf are the efforts of a list's supported_reasoning_levels, as

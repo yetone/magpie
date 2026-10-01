@@ -17,8 +17,9 @@ import (
 // Settings → Usage in the menu bar: the windows of the subscriptions and
 // plans ticked there, beside the tray icon, for keeping an eye on them
 // without opening magpie. The Mac's menu bar draws each as its logo with
-// its two windows stacked, "42%" over "18%", side by side (trayimage); a
-// tray elsewhere gets them as text ("42% · 18% | 10% · 5%"), Windows' in
+// its two windows stacked, "42%" over "18%", side by side (trayimage), or
+// as the windows alone, a thin line between cards, when Settings turns the
+// logos off; a tray elsewhere gets them as text ("42% · 18% | 10% · 5%"), Windows' in
 // the icon's tooltip only, having no room for any.
 
 // trayUsageEvery is how often the text is brought up to date, as Settings
@@ -192,7 +193,18 @@ type trayCell struct {
 	Icon   []byte // the logo as the Usage page has it (SVG or PNG); nil for none
 	Mono   bool   // a black glyph, drawn in the menu bar's text colour
 	Letter string // drawn in its place when there is no logo, or it can't be read
+	Plain  bool   // no logo nor letter, as Settings says: the rows alone, a line before
 	Rows   []string
+}
+
+// trayPlain are the cells without their logos (settings.TrayNoLogos):
+// each its rows alone, told from the one before it by a thin line.
+func trayPlain(cells []trayCell) []trayCell {
+	out := make([]trayCell, len(cells))
+	for i, c := range cells {
+		out[i] = trayCell{Plain: true, Rows: c.Rows}
+	}
+	return out
 }
 
 // trayUsageView is what the tray shows for the cards: a cell for each

@@ -196,6 +196,7 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	usage := map[string]map[string]provider.SubscriptionQuota{}
+	provider.AskClaudeUsage()
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, l := range ls {
@@ -267,8 +268,8 @@ func untilShort(d time.Duration) string {
 // addAccount signs in to one more subscription in the browser, the way the
 // window's "Add account" does.
 func addAccount(agentID string) error {
-	if agentID == "antigravity" {
-		fmt.Println(bold.Render("!"), provider.AntigravityRisk)
+	if risk := map[string]string{"antigravity": provider.AntigravityRisk, "claude": provider.ClaudeRisk}[agentID]; risk != "" {
+		fmt.Println(bold.Render("!"), risk)
 		fmt.Print("Sign in anyway? [y/N] ")
 		var yes string
 		fmt.Scanln(&yes)

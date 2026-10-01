@@ -94,7 +94,7 @@ func providers() error {
 			r.key = amber.Render("○ no key")
 		}
 		n := len(p.Exposed())
-		if t, ok := p.Fetched(); ok {
+		if t, ok := p.Listed(); ok {
 			r.models = fmt.Sprintf("%d of %d models", n, len(p.Available())) + muted.Render(" · fetched "+ago(t))
 		} else {
 			r.models = fmt.Sprintf("%d models", n)
@@ -609,7 +609,7 @@ func showProvider(p provider.Provider) error {
 	}
 	ms := p.Exposed()
 	src := "models.dev"
-	if t, ok := p.Fetched(); ok {
+	if t, ok := p.Listed(); ok {
 		src = fetchedFrom(p) + " · fetched " + ago(t)
 	}
 	kv("models", fmt.Sprintf("%d exposed of %d %s", len(ms), len(p.Available()), muted.Render("from "+src)))
@@ -794,6 +794,26 @@ func keyNote() string {
 	return "(anything works; the gateway only listens on localhost)"
 }
 
+// containerNote follows the addresses magpie finds for itself in a
+// container, which are the container's own.
+const containerNote = "these are the container's own addresses: other machines use the host's, and MAGPIE_PUBLIC_URL=http://<host>:<port> puts it here"
+
+// shareLines are where other machines reach the gateway while it is shared
+// from Settings, for the banner.
+func shareLines() []string {
+	if s := settings.Load(); !s.LAN || s.LANKey == "" {
+		return nil
+	}
+	var out []string
+	for _, u := range gateway.LANURLs() {
+		out = append(out, muted.Render("  network ")+" "+u)
+	}
+	if gateway.ContainerAddrs() {
+		out = append(out, muted.Render("  "+containerNote))
+	}
+	return out
+}
+
 // serve: `magpie serve` — the gateway alone, in the foreground.
 func serve() error {
 	s := gateway.New()
@@ -803,6 +823,9 @@ func serve() error {
 	fmt.Println(muted.Render("  OpenAI  "), gateway.URL()+"/v1/chat/completions", muted.Render("·"), gateway.URL()+"/v1/responses")
 	fmt.Println(muted.Render("  Anthropic"), gateway.URL()+"/v1/messages")
 	fmt.Println(muted.Render("  key     "), gateway.Token, muted.Render(keyNote()))
+	for _, l := range shareLines() {
+		fmt.Println(l)
+	}
 	n := len(provider.Catalog())
 	if n == 0 {
 		fmt.Println(amber.Render("!"), "no models yet ·", "magpie provider add deepseek sk-…")

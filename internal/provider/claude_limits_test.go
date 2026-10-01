@@ -2,16 +2,19 @@ package provider
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 // What Claude Code says as it answers is the account's allowance, without
-// the usage endpoint, which keeps the windows it alone tells.
+// its /usage, which keeps the windows it alone tells.
 func TestNoteClaudeLimits(t *testing.T) {
-	old := claudeBase
-	claudeBase = "http://127.0.0.1:1" // nothing answers there
-	defer func() { claudeBase = old }()
+	var out atomic.Value
+	out.Store("")
+	var fail atomic.Bool
+	fail.Store(true) // /usage fails
+	fakeClaudeUsage(t, &out, &fail)
 	reset := time.Now().Add(2 * time.Hour).Truncate(time.Second)
 	claudeUsage.Lock()
 	claudeUsage.m = map[string]claudeUsageEntry{"kev@example.com": {at: time.Now().Add(-time.Hour), ws: []QuotaWindow{
@@ -21,7 +24,7 @@ func TestNoteClaudeLimits(t *testing.T) {
 	defer func() { claudeUsage.Lock(); claudeUsage.m = nil; claudeUsage.Unlock() }()
 
 	NoteClaudeLimits("Kev@example.com", []ClaudeLimit{{Kind: "five_hour", Used: 0.42, ResetsAt: reset.Unix()}, {Kind: "seven_day", Used: 0.1}, {Kind: "overage", Used: 1}})
-	ws, err := claudeWindows(context.Background(), "kev@example.com", "tok")
+	ws, err := claudeWindows(context.Background(), "kev@example.com", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,21 +36,23 @@ func TestNoteClaudeLimits(t *testing.T) {
 		t.Fatalf("windows: %v %+v", names, ws)
 	}
 
-	// past the cache, the usage endpoint failing leaves what was heard
+	// asked, /usage failing leaves what was heard
+	AskClaudeUsage()
 	claudeUsage.Lock()
 	e := claudeUsage.m["kev@example.com"]
 	e.at = time.Now().Add(-10 * time.Minute)
 	claudeUsage.m["kev@example.com"] = e
 	claudeUsage.Unlock()
-	if ws, err := claudeWindows(context.Background(), "kev@example.com", "tok"); err != nil || len(ws) != 3 {
+	if ws, err := claudeWindows(context.Background(), "kev@example.com", true); err != nil || len(ws) != 3 {
 		t.Fatalf("after the endpoint failed: %v %v", ws, err)
 	}
 	// heard long ago, the failure is told
+	AskClaudeUsage()
 	claudeUsage.Lock()
 	e.heard = time.Now().Add(-2 * time.Hour)
 	claudeUsage.m["kev@example.com"] = e
 	claudeUsage.Unlock()
-	if _, err := claudeWindows(context.Background(), "kev@example.com", "tok"); err == nil {
+	if _, err := claudeWindows(context.Background(), "kev@example.com", true); err == nil {
 		t.Fatal("an old word hid the endpoint's failure")
 	}
 }

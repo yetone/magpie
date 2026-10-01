@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,5 +82,34 @@ func TestClaudeTestRunsClaudeCode(t *testing.T) {
 	b, _ := os.ReadFile(log)
 	if got := string(b); !strings.Contains(got, "[--model][claude-sonnet-4-5]") || !strings.Contains(got, "stdin:hi") {
 		t.Fatalf("run:\n%s", got)
+	}
+}
+
+// Claude's usage is Claude Code's own /usage, run with nothing of the
+// user's settings and nothing kept, as the account it is signed in to.
+func TestClaudeUsageRunsClaudeCode(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "log")
+	out := filepath.Join(dir, "out")
+	text := "You are currently using your subscription\n\nCurrent session: 13% used · resets Oct 1 at 3:30pm (Asia/Shanghai)\n"
+	b, _ := json.Marshal(map[string]any{"type": "result", "is_error": false, "num_turns": 0, "result": text})
+	os.WriteFile(out, b, 0o644)
+	script := "#!/bin/sh\n" +
+		"{ printf 'args:'; for a in \"$@\"; do printf '[%s]' \"$a\"; done; echo; echo \"token:$CLAUDE_CODE_OAUTH_TOKEN\"; } > " + log + "\n" +
+		"cat " + out + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "leaked")
+	got, err := claudeUsage(context.Background())
+	if err != nil || got != text {
+		t.Fatalf("usage %q %v", got, err)
+	}
+	b, _ = os.ReadFile(log)
+	for _, want := range []string{"[-p][/usage]", "[--setting-sources][]", "[--strict-mcp-config]", "[--no-session-persistence]", "token:\n"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("run lacks %q:\n%s", want, b)
+		}
 	}
 }

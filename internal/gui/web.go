@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/update"
 )
 
@@ -174,8 +175,12 @@ func webGuard(cookie, key string, keep time.Duration, next http.Handler) http.Ha
 }
 
 // LANAddrs are this computer's addresses on the local network, for the
-// links to print when the page is served there.
+// links to print when the page is served there: MAGPIE_PUBLIC_URL's host
+// when set (in a container, whose own addresses the network can't reach).
 func LANAddrs() []string {
+	if h := gateway.PublicHost(); h != "" {
+		return []string{h}
+	}
 	var out []string
 	as, _ := net.InterfaceAddrs()
 	for _, a := range as {

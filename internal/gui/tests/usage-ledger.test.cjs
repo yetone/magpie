@@ -19,11 +19,11 @@ const assets = path.resolve(__dirname, "../assets");
 const now = Date.now();
 
 // 130 requests, newest first: a swapped one, one under a dated name, a
-// failure, one from before Requested was kept, then plain ones
+// failure (passed on by another computer's magpie), one from before Requested was kept, then plain ones
 const ROWS = [
   { t: new Date(now - 60e3).toISOString(), agent: "codex", agentName: "Codex", icon: "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", served: "gpt-6-luna", swapped: true, effort: "high", in: 12840, out: 912, cache_read: 8192, reasoning: 300, ms: 4210, ttft_ms: 820, status: 200, session: "019a2b", cost: 0.0421, priced: true },
   { t: new Date(now - 120e3).toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color", provider: "anthropic", providerName: "Claude", host: "ann@example.com", req: "sonnet", model: "claude-sonnet-5", served: "claude-sonnet-5-20260801", effort: "", in: 3021, out: 440, cache_write: 2048, cache_read: 61000, ms: 2380, status: 200, cost: 0.0312, priced: true },
-  { t: new Date(now - 180e3).toISOString(), agent: "codex", agentName: "Codex", icon: "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", in: 0, out: 0, ms: 610, status: 429, cost: 0, priced: false },
+  { t: new Date(now - 180e3).toISOString(), agent: "codex", agentName: "Codex", via: "office-mac", icon: "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", in: 0, out: 0, ms: 610, status: 429, cost: 0, priced: false },
   { t: new Date(now - 240e3).toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color", provider: "deepseek", providerName: "DeepSeek", model: "deepseek-v4", in: 900, out: 120, ms: 1320, status: 200, cost: 0, priced: false },
 ];
 for (let i = 0; i < 126; i++) {
@@ -86,14 +86,14 @@ const L = {
     cols: ["Time", "Agent", "Requested", "Provider · account", "Sent", "Served", "Effort", "In", "Out", "Cache write", "Cache read", "Cost", "Duration", "Status"],
     sum: "130 requests", pager: "1–100 of 130", older: "Older", newer: "Newer", failed: "Failed", export: "Export CSV",
     why: "The vendor was asked for gpt-6-sol, and its reply says gpt-6-luna answered it", saved: "Saved 130 requests to ~/Downloads/magpie-requests-30d-2026-09-29.csv",
-    none: "No requests match these filters.", bad: "Failed: the agent was answered 429",
+    none: "No requests match these filters.", bad: "Failed: the agent was answered 429", via: "Codex · via office-mac",
   },
   zh: {
     tabs: ["概览", "请求", "会话"],
     cols: ["时间", "Agent", "请求模型", "供应商 · 账号", "发送模型", "实际模型", "推理强度", "输入", "输出", "缓存写入", "缓存读取", "费用", "耗时", "状态"],
     sum: "130 个请求", pager: "第 1–100 条，共 130 条", older: "较早", newer: "较新", failed: "失败", export: "导出 CSV",
     why: null, saved: "已将 130 个请求保存到 ~/Downloads/magpie-requests-30d-2026-09-29.csv",
-    none: "没有符合这些筛选条件的请求。", bad: "失败：Agent 收到的是 429",
+    none: "没有符合这些筛选条件的请求。", bad: "失败：Agent 收到的是 429", via: "Codex · 来自 office-mac",
   },
 };
 
@@ -160,6 +160,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const bad = page.locator(".led tr.bad td").last();
         assert.equal((await bad.textContent()).trim(), "429");
         assert.equal(await bad.getAttribute("title"), w.bad);
+        // its agent is on another computer, whose magpie passed it on (Jorben on Discord)
+        assert.equal(await page.locator(".led tr.bad td").nth(1).textContent(), w.via);
         const [dotBad, dotOk] = await page.evaluate(() => [
           getComputedStyle(document.querySelector(".led tr.bad .st .dot")).backgroundColor,
           getComputedStyle(document.querySelector(".led tbody tr:not(.bad) .st .dot")).backgroundColor,

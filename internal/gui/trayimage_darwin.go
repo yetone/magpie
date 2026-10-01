@@ -12,14 +12,18 @@ typedef struct {
 	const void *icon;
 	int iconLen;
 	int mono;
+	int plain; // no logo: the rows alone, a thin line before
 	const char *letter;
 	const char *rows; // one or two, a newline between
 } mpTrayCell;
 
 // Metrics, in points: the menu bar is 22 high (24 beside a notch), and a
 // cell is a 14pt logo with its two windows beside it, stacked as small
-// digits, each window's figures right-aligned over the other's.
-static const CGFloat mpLogo = 14, mpLogoGap = 3, mpCellGap = 8, mpBirdGap = 2, mpRowGap = 3.5;
+// digits, each window's figures right-aligned over the other's. A cell
+// without its logo is the digits alone, a hairline mpSepGap either side
+// between it and the one before.
+static const CGFloat mpLogo = 14, mpLogoGap = 3, mpCellGap = 8, mpBirdGap = 2, mpRowGap = 3.5,
+	mpPlainGap = 3, mpSepGap = 5, mpSep = 1, mpSepHigh = 13;
 
 static NSFont *mpRowFont(int rows) {
 	if (rows > 1) return [NSFont monospacedDigitSystemFontOfSize:9.5 weight:NSFontWeightSemibold];
@@ -38,6 +42,7 @@ static NSArray *mpCells(mpTrayCell *cells, int n) {
 			[im release];
 		}
 		c[@"mono"] = @(cells[i].mono != 0);
+		c[@"plain"] = @(cells[i].plain != 0);
 		c[@"letter"] = [NSString stringWithUTF8String:cells[i].letter ? cells[i].letter : ""];
 		NSArray *rows = [[NSString stringWithUTF8String:cells[i].rows ? cells[i].rows : ""] componentsSeparatedByString:@"\n"];
 		if (rows.count > 2) rows = [rows subarrayWithRange:NSMakeRange(0, 2)];
@@ -55,10 +60,22 @@ static CGFloat mpColumn(NSDictionary *c) {
 	return w;
 }
 
+// mpLead is the room before a cell's digits: its logo, and the gap from the
+// cell before (the bird's for the first); a cell without its logo has the
+// line between it and the one before instead.
+static CGFloat mpLead(NSDictionary *c, BOOL first) {
+	if ([c[@"plain"] boolValue]) return first ? mpPlainGap : mpSepGap + mpSep + mpSepGap;
+	return (first ? 0 : mpCellGap) + mpLogo + mpLogoGap;
+}
+
 static CGFloat mpWidth(NSArray *cells, CGFloat h) {
 	CGFloat w = h + mpBirdGap;
-	for (NSDictionary *c in cells) w += mpLogo + mpLogoGap + mpColumn(c) + mpCellGap;
-	return ceil(w - mpCellGap + 1);
+	BOOL first = YES;
+	for (NSDictionary *c in cells) {
+		w += mpLead(c, first) + mpColumn(c);
+		first = NO;
+	}
+	return ceil(w + 1);
 }
 
 // mpTinted draws a black glyph in the text colour of what it is drawn on
@@ -73,12 +90,44 @@ static void mpTinted(NSImage *im, NSRect r) {
 	CGContextEndTransparencyLayer(cg);
 }
 
+// mpRows draws a cell's digits in its column from x: the digits (cap
+// height) centred as a block, each row right-aligned; drawAtPoint takes the
+// line's top, its baseline an ascender below.
+static void mpRows(NSDictionary *c, CGFloat x, CGFloat h, NSColor *ink) {
+	NSArray *rows = c[@"rows"];
+	NSFont *f = mpRowFont((int)rows.count);
+	NSDictionary *a = @{NSFontAttributeName: f, NSForegroundColorAttributeName: ink};
+	CGFloat col = mpColumn(c);
+	CGFloat cap = f.capHeight;
+	CGFloat top = (h - (cap * rows.count + mpRowGap * (rows.count - 1))) / 2;
+	for (NSUInteger i = 0; i < rows.count; i++) {
+		NSString *r = rows[i];
+		CGFloat base = top + cap * (i + 1) + mpRowGap * i;
+		CGFloat w = [r sizeWithAttributes:a].width;
+		[r drawAtPoint:NSMakePoint(x + col - w, base - f.ascender) withAttributes:a];
+	}
+}
+
 // mpDraw draws the bird, then each cell, top down (a flipped context).
 static void mpDraw(NSArray *cells, NSImage *bird, CGFloat h) {
 	if (bird != nil) mpTinted(bird, NSMakeRect(0, 0, h, h));
 	CGFloat x = h + mpBirdGap;
 	NSColor *ink = [NSColor labelColor];
+	BOOL first = YES;
 	for (NSDictionary *c in cells) {
+		if ([c[@"plain"] boolValue]) {
+			if (!first) {
+				[[ink colorWithAlphaComponent:0.35] set];
+				NSRectFillUsingOperation(NSMakeRect(x + mpSepGap, round((h - mpSepHigh) / 2), mpSep, mpSepHigh), NSCompositingOperationSourceOver);
+			}
+			x += mpLead(c, first);
+			first = NO;
+			mpRows(c, x, h, ink);
+			x += mpColumn(c);
+			continue;
+		}
+		x += mpLead(c, first) - mpLogo - mpLogoGap;
+		first = NO;
 		NSRect logo = NSMakeRect(x, round((h - mpLogo) / 2), mpLogo, mpLogo);
 		NSImage *icon = c[@"icon"];
 		if (icon != nil && [c[@"mono"] boolValue]) {
@@ -97,21 +146,8 @@ static void mpDraw(NSArray *cells, NSImage *bird, CGFloat h) {
 			[l drawAtPoint:NSMakePoint(NSMidX(logo) - s.width / 2, NSMidY(logo) - s.height / 2) withAttributes:a];
 		}
 		x += mpLogo + mpLogoGap;
-		NSArray *rows = c[@"rows"];
-		NSFont *f = mpRowFont((int)rows.count);
-		NSDictionary *a = @{NSFontAttributeName: f, NSForegroundColorAttributeName: ink};
-		CGFloat col = mpColumn(c);
-		// the digits (cap height) centred as a block; drawAtPoint takes the
-		// line's top, its baseline an ascender below
-		CGFloat cap = f.capHeight;
-		CGFloat top = (h - (cap * rows.count + mpRowGap * (rows.count - 1))) / 2;
-		for (NSUInteger i = 0; i < rows.count; i++) {
-			NSString *r = rows[i];
-			CGFloat base = top + cap * (i + 1) + mpRowGap * i;
-			CGFloat w = [r sizeWithAttributes:a].width;
-			[r drawAtPoint:NSMakePoint(x + col - w, base - f.ascender) withAttributes:a];
-		}
-		x += col + mpCellGap;
+		mpRows(c, x, h, ink);
+		x += mpColumn(c);
 	}
 }
 
@@ -281,6 +317,9 @@ func withCells(cells []trayCell, f func(*C.mpTrayCell, C.int)) {
 		}
 		if c.Mono {
 			cs[i].mono = 1
+		}
+		if c.Plain {
+			cs[i].plain = 1
 		}
 	}
 	defer func() {

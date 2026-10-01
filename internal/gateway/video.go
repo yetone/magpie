@@ -409,8 +409,9 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, 400, err.Error())
 		return
 	}
-	call := Call{Time: start, From: provider.Chat, Agent: agentOf(r), Model: f.Model}
-	usage.Saw(call.Agent)
+	who := callerOf(r)
+	call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: f.Model}
+	usage.Saw(agentOf(r))
 	fail := func(code int, msg string) {
 		call.Status, call.Error, call.Millis = code, msg, time.Since(start).Milliseconds()
 		writeError(w, provider.Chat, code, msg)
@@ -460,7 +461,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 			call.Status = code
 		}
 	}
-	usage.Append(usage.Record{Time: start, Agent: call.Agent, Provider: p.ID, Host: p.Where(), Model: model, Requested: call.Model,
+	usage.Append(usage.Record{Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: model, Requested: call.Model,
 		Millis: call.Millis, Status: call.Status, Session: sessionOf(r.Header)})
 	if err != nil {
 		call.Error = err.Error()

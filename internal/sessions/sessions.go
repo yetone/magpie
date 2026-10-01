@@ -134,7 +134,7 @@ type day struct {
 	// (24 of them, or none)
 	Hours []int64 `json:"h,omitempty"`
 	// Prompts are the messages typed in the session's own file, Replies
-	// the agent's messages back (Claude Code and Codex alone tell them)
+	// the agent's messages back (Claude Code's, Codex's, Pi's and omp's)
 	Prompts int `json:"u,omitempty"`
 	Replies int `json:"r,omitempty"`
 	// Tools are the tool calls made, by the tool's name, and Skills the
@@ -143,16 +143,19 @@ type day struct {
 	Skills map[string]int `json:"k,omitempty"`
 }
 
-// tool counts a call of a tool, and of a skill when it calls one up.
+// tool counts a call of a tool, and of a skill when it calls one up; a
+// skill called up with no tool (Pi's /skill:name) has no name.
 func (s *state) tool(at time.Time, name, skill string) {
-	if name == "" {
+	if name == "" && skill == "" {
 		return
 	}
 	d := s.day(dateOf(at))
-	if d.Tools == nil {
-		d.Tools = map[string]int{}
+	if name != "" {
+		if d.Tools == nil {
+			d.Tools = map[string]int{}
+		}
+		d.Tools[name]++
 	}
-	d.Tools[name]++
 	if skill != "" {
 		if d.Skills == nil {
 			d.Skills = map[string]int{}
@@ -413,7 +416,8 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 3: the active time by hour of the day
 // 4: the tool calls and skills a day
 // 5: again, for the prompts and replies a day, which an early 4 left out
-const cacheVersion = 5
+// 6: Pi's and omp's prompts, replies, tool calls and skills
+const cacheVersion = 6
 
 type cacheFile struct {
 	Version int               `json:"version"`

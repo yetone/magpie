@@ -177,6 +177,9 @@ type settingsJSON struct {
 	ImageGenModels []modelRef `json:"imageGenModels"`
 	// where other machines reach the gateway while it is shared
 	LANURLs []string `json:"lanURLs,omitempty"`
+	// LANURLs are a container's own addresses, not the host's: the page
+	// offers the one it was opened at instead, or says how to set it
+	LANContainer bool `json:"lanContainer,omitempty"`
 	// when the Codex warm-up last started an account's window
 	CodexWarmed *time.Time `json:"codexWarmed,omitempty"`
 	// and the Claude warm-up
@@ -207,7 +210,7 @@ func settingsState() settingsJSON {
 	s.ProxyNow, s.ProxySource = netproxy.Describe()
 	s.Login = autostart.Enabled()
 	if s.LAN {
-		s.LANURLs = gateway.LANURLs()
+		s.LANURLs, s.LANContainer = gateway.LANURLs(), gateway.ContainerAddrs()
 	}
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
 	s.WorkBuddy, s.WorkBuddyCheckins = provider.HasWorkBuddy(), provider.WorkBuddyCheckins()
@@ -482,10 +485,12 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.QuotaLeft = cur.QuotaLeft
 		// how agents' lists name models, set on its own for the agents to be told
 		in.PlainNames = cur.PlainNames
-		// which Codex and Claude accounts spend a reset by themselves, set on the Usage card
-		in.CodexAutoReset, in.ClaudeAutoReset = cur.CodexAutoReset, cur.ClaudeAutoReset
+		// which Codex accounts spend a reset by themselves, set on the Usage card
+		in.CodexAutoReset = cur.CodexAutoReset
 		// and the text size, which the keyboard changes too (text-size below)
 		in.TextSize = cur.TextSize
+		// the version the Update pill was hidden for, set from the pill
+		in.UpdateSkip = cur.UpdateSkip
 		if v := strings.TrimSpace(in.Vision); v != "" && v != "off" && v != cur.Vision {
 			if _, _, ok := provider.Resolve(v); !ok {
 				fail(rw, fmt.Errorf("no model %s to describe images", v))
@@ -505,8 +510,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		if (in.Dock != cur.Dock || in.DockWindow != cur.DockWindow) && onDock != nil {
 			onDock(in)
 		}
-		// the cards the menu bar shows, any of them (TrayUsage is only the first)
-		if (!slices.Equal(settings.Load().TrayUsages, cur.TrayUsages) || in.TrayUsageEvery != cur.TrayUsageEvery) && onTrayUsage != nil {
+		// the cards the menu bar shows, any of them (TrayUsage is only the first),
+		// how often, and with their logos or not
+		if (!slices.Equal(settings.Load().TrayUsages, cur.TrayUsages) || in.TrayUsageEvery != cur.TrayUsageEvery ||
+			in.TrayNoLogos != cur.TrayNoLogos) && onTrayUsage != nil {
 			onTrayUsage()
 		}
 		// an alert turned on or moved is looked at now, the Mac asked for its
@@ -546,6 +553,24 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// the version the header's Update pill is hidden for, until a newer one
+	// is out: set from the pill, cleared ("") from Settings
+	mux.HandleFunc("POST /api/settings/update-skip", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Version string `json:"version"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		s.UpdateSkip = strings.TrimSpace(in.Version)
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// whether the agents' lists name a model with its provider's after it or
 	// alone (#335): their files are written again, and Codex asks again
 	mux.HandleFunc("POST /api/settings/plain-names", func(rw http.ResponseWriter, r *http.Request) {
@@ -576,26 +601,6 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		if err := provider.SetCodexAutoReset(in.User, in.On); err != nil {
-			fail(rw, err)
-			return
-		}
-		writeJSON(rw, settingsState())
-	})
-	// and a Claude account its usage-limit resets, the same toggle
-	mux.HandleFunc("POST /api/settings/claude-auto-reset", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct {
-			User string
-			On   bool
-		}
-		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-			fail(rw, err)
-			return
-		}
-		if strings.TrimSpace(in.User) == "" {
-			fail(rw, fmt.Errorf("which Claude account?"))
-			return
-		}
-		if err := provider.SetClaudeAutoReset(in.User, in.On); err != nil {
 			fail(rw, err)
 			return
 		}

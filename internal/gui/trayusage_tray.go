@@ -33,6 +33,9 @@ func (h *host) watchTrayUsage() {
 			s := settings.Load()
 			cells, label, tip := trayUsageView(trayUsageCards(ctx, s.TrayUsages), time.Now(), s.QuotaLeft)
 			cancel()
+			if s.TrayNoLogos {
+				cells = trayPlain(cells)
+			}
 			if tip == "" {
 				tip = "magpie"
 			}
@@ -46,6 +49,9 @@ func (h *host) watchTrayUsage() {
 			now := label + "\x00" + tip
 			for _, c := range cells {
 				now += "\x00" + c.Letter + strings.Join(c.Rows, "\x01")
+				if c.Plain {
+					now += "\x02"
+				}
 			}
 			if now != shown {
 				shown = now

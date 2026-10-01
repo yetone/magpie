@@ -88,7 +88,9 @@ func TestCodexSwitchedWhenUsedUp(t *testing.T) {
 
 // Claude Code signed in to an account Smart counts spent (98%) is signed
 // in to the next account that is on and has room — its credentials and
-// .claude.json's account both — and not before (#208, #209).
+// .claude.json's account both — and not before (#208, #209). What it
+// goes by is what Claude Code told as it answered: Anthropic's usage
+// endpoint isn't read for it.
 func TestClaudeSwitchedWhenSpent(t *testing.T) {
 	home := claudeHome(t)
 	cred := claudeSignIn(t, home, time.Now().Add(time.Hour)) // sk-ant-oat01-old
@@ -105,10 +107,9 @@ func TestClaudeSwitchedWhenSpent(t *testing.T) {
 	}
 	loginsMu.Unlock()
 
-	used := map[string]float64{"Bearer sk-ant-oat01-old": 97, "Bearer sk-ant-oat01-b": 10}
+	used := map[string]float64{"a@example.com": 97, "b@example.com": 10}
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"five_hour": map[string]any{"utilization": used[r.Header.Get("Authorization")],
-			"resets_at": time.Now().Add(time.Hour).Format(time.RFC3339)}})
+		t.Errorf("usage endpoint read: %s", r.URL)
 	}))
 	defer fake.Close()
 	claudeBase = fake.URL // isolate puts it back
@@ -120,6 +121,9 @@ func TestClaudeSwitchedWhenSpent(t *testing.T) {
 		claudeUsage.Lock()
 		claudeUsage.m = nil
 		claudeUsage.Unlock()
+		for user, u := range used {
+			NoteClaudeLimits(user, []ClaudeLimit{{Kind: "five_hour", Used: u / 100, ResetsAt: time.Now().Add(time.Hour).Unix()}})
+		}
 		to, err := SwitchWhenSpent(context.Background(), "claude")
 		if err != nil {
 			t.Fatal(err)
@@ -131,7 +135,7 @@ func TestClaudeSwitchedWhenSpent(t *testing.T) {
 	if to := switched(); to != "" {
 		t.Fatalf("switched to %s at 97%%", to)
 	}
-	used["Bearer sk-ant-oat01-old"] = 98
+	used["a@example.com"] = 98
 	if to := switched(); to != "b@example.com" {
 		t.Fatalf("switched to %q at 98%%", to)
 	}
@@ -153,7 +157,7 @@ func TestClaudeSwitchedWhenSpent(t *testing.T) {
 	if to := switched(); to != "" {
 		t.Fatalf("switched again, to %s", to)
 	}
-	used["Bearer sk-ant-oat01-b"] = 99
+	used["b@example.com"] = 99
 	if to := switched(); to != "" {
 		t.Fatalf("switched to %s, spent as well", to)
 	}

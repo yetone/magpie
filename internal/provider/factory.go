@@ -664,7 +664,7 @@ func factoryProvider(a factoryLogin) Provider {
 		}
 		return nil
 	}
-	acct.retry = func(ctx context.Context, status int, body []byte) bool {
+	acct.retry = func(ctx context.Context, _ string, status int, body []byte) bool {
 		return factoryMendOrg(ctx, user, status, body)
 	}
 	acct.explain = factoryExplain

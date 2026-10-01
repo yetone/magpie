@@ -511,6 +511,16 @@ func Logins(agent string) []Login {
 	case "gemini", "antigravity":
 		return googleLoginList(agent)
 	case "":
+		// a plugin's accounts go by its provider's id (a moved built-in's
+		// by the built-in's), the one in use first marked, as its own page
+		// lists them
+		byPlugin := map[string][]Login{}
+		for _, pp := range plugin.Cached() {
+			for _, l := range pluginLoginList(pp) {
+				l.Agent = PluginID(pp.ID)
+				byPlugin[pp.ID] = append(byPlugin[pp.ID], l)
+			}
+		}
 		// a built-in moved onto its plugin lists its accounts there (an
 		// agent's own sign-in, which the built-in still finds, too)
 		for _, b := range []struct {
@@ -527,16 +537,16 @@ func Logins(agent string) []Login {
 		} {
 			if !Moved(b.id) {
 				side = append(side, b.list()...)
+				continue
 			}
+			// a moved built-in's, from its plugin, where the built-in's stood
+			side = append(side, byPlugin[b.id]...)
+			delete(byPlugin, b.id)
 		}
-		// a plugin's accounts go by its provider's id (a moved built-in's
-		// by the built-in's), the one in use first marked, as its own page
-		// lists them
+		// the other plugins' after them
 		for _, pp := range plugin.Cached() {
-			for _, l := range pluginLoginList(pp) {
-				l.Agent = PluginID(pp.ID)
-				side = append(side, l)
-			}
+			side = append(side, byPlugin[pp.ID]...)
+			delete(byPlugin, pp.ID)
 		}
 	}
 	rememberLogins(false)

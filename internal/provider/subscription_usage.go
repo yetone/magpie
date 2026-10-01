@@ -9,11 +9,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/netproxy"
@@ -63,9 +63,8 @@ type SubscriptionQuota struct {
 	// AsOf is when an allowance shown in place of one that couldn't be
 	// read was read (see keepLast); nil for a reading just made.
 	AsOf *time.Time `json:"asOf,omitempty"`
-	// Resets are the rate-limit resets a Codex account holds, or the
-	// usage-limit resets a Claude account does, nil when it holds none
-	// (codex_resets.go, claude_resets.go).
+	// Resets are the rate-limit resets a Codex account holds, nil when it
+	// holds none (codex_resets.go).
 	Resets *ResetCredits `json:"resets,omitempty"`
 }
 
@@ -74,6 +73,7 @@ var subscriptionUsageCache struct {
 	at      time.Time
 	data    []SubscriptionQuota
 	pending chan struct{} // closed when the refresh in flight is done
+	asked   bool          // the user asked (AskClaudeUsage): wait for the refresh
 }
 
 // OnSubscriptionUsage is told when a refresh has landed, for what shows a
@@ -94,13 +94,20 @@ func SubscriptionUsage(ctx context.Context) []SubscriptionQuota {
 	c := &subscriptionUsageCache
 	c.Lock()
 	have, fresh := c.data != nil, time.Since(c.at) < time.Minute
+	if c.asked {
+		have, c.asked = false, false
+	}
 	if !fresh && c.pending == nil {
 		done := make(chan struct{})
 		c.pending = done
 		go func() {
+			start := time.Now()
 			out := fetchSubscriptionUsage()
 			c.Lock()
 			c.at, c.data, c.pending = time.Now(), out, nil
+			if claudeAsked.Load() > start.UnixNano() {
+				c.at = time.Time{} // asked meanwhile: read again
+			}
 			c.Unlock()
 			close(done)
 			if f := OnSubscriptionUsage; f != nil {
@@ -283,6 +290,9 @@ func fetchSubscriptionUsage() []SubscriptionQuota {
 	if !moved("zed") && !hidden["zed"] {
 		fetches = append(fetches, perLogin(via("zed"), zedLoginList(), "Zed", "zed")...)
 	}
+	if !moved("devin") && !hidden["devin"] {
+		fetches = append(fetches, perLogin(via("devin"), devinLoginList(), "Devin", "devin")...)
+	}
 	if !moved("factory") && !hidden["factory"] {
 		fetches = append(fetches, perLogin(via("factory"), factoryLoginList(), "Factory", "factory")...)
 	}
@@ -373,77 +383,96 @@ func (e *accountStatusError) Error() string { return http.StatusText(e.status) }
 
 func claudeSubscriptionUsage(ctx context.Context) SubscriptionQuota {
 	q := SubscriptionQuota{Provider: "claude", Name: "Claude Code", Icon: "claude-color", Windows: []QuotaWindow{}}
-	token, err := claudeToken(ctx)
-	if err != nil {
-		q.Error = err.Error()
+	if _, _, ok := claudeCredential(); !ok {
+		q.Error = "Claude Code is signed out; run claude auth login"
 		return q
 	}
 	user, plan, _ := claudeIdentity()
 	q.Plan = plan
-	q.Windows, err = claudeWindows(ctx, user, token)
-	q.Resets = claudeResetsOf(user)
+	var err error
+	q.Windows, err = claudeWindows(ctx, user, true)
 	if err != nil {
 		q.Error = err.Error()
 	}
 	return q
 }
 
-// claudeUsage keeps each Claude account's allowance as last read, by user.
-// Anthropic's usage endpoint turns away an account asked more than a few
-// times in a while (429, rate_limit_error), and the Usage page, the switch
-// list and routing all ask for it: they share what was read in the last
-// few minutes, and one turned away waits as long as it is told, or five
-// minutes, showing what was known until then.
+// claudeUsage keeps each Claude account's allowance as Claude Code last
+// told it: its /usage, run when the user asks (AskClaudeUsage) and only for
+// the account it is signed in to, or what it said as it answered
+// (NoteClaudeLimits). magpie never asks Anthropic for it itself; the Usage
+// page's timer, the switch list and routing show what is kept here.
 var claudeUsage struct {
 	sync.Mutex
 	m map[string]claudeUsageEntry
 }
 
 type claudeUsageEntry struct {
-	at, retry time.Time
-	ws        []QuotaWindow
-	heard     time.Time // when Claude Code last told it, answering
-	// grants: the usage-limit resets the reading told of, nil when it
-	// told of none (claude_resets.go)
-	grants *claudeGrants
+	at    time.Time
+	ws    []QuotaWindow
+	heard time.Time // when Claude Code last told it, answering
+	tried time.Time // when the endpoint was last asked, answered or not
 }
 
-const claudeUsageTTL = 3 * time.Minute
+// claudeAskFloor is the least time between two readings, however often the
+// user refreshes.
+const claudeAskFloor = 30 * time.Second
 
-// claudeWindows is the allowance of the Claude account user, token signs
-// in to.
-func claudeWindows(ctx context.Context, user, token string) ([]QuotaWindow, error) {
+// claudeAsked is when the user last asked to see Claude's usage (unix
+// nanoseconds; zero: never).
+var claudeAsked atomic.Int64
+
+// AskClaudeUsage is the user asking to see Claude's usage — opening the
+// Usage page, refreshing it, `magpie quota` — the one time Claude Code's
+// /usage is run; the next SubscriptionUsage waits for it.
+func AskClaudeUsage() {
+	claudeAsked.Store(time.Now().UnixNano())
+	c := &subscriptionUsageCache
+	c.Lock()
+	c.at, c.asked = time.Time{}, true
+	c.Unlock()
+	l := &loginUsageCache
+	l.Lock()
+	for k := range l.m {
+		if strings.HasPrefix(k, "claude/") {
+			delete(l.m, k)
+		}
+	}
+	l.Unlock()
+}
+
+// claudeWindows is the allowance of the Claude account user. Only the
+// account Claude Code is signed in to (active) is read, by Claude Code,
+// and only when the user asked since it last was; any other time it is
+// what was kept.
+func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow, error) {
 	key := strings.ToLower(user)
 	c := &claudeUsage
+	now := time.Now()
+	asked := claudeAsked.Load()
 	c.Lock()
 	e, ok := c.m[key]
-	c.Unlock()
-	now := time.Now()
-	if ok && e.ws != nil && (now.Sub(e.at) < claudeUsageTTL || now.Before(e.retry)) {
-		return elapsed(e.ws, now), nil
-	}
-	if ok && now.Before(e.retry) {
-		return []QuotaWindow{}, claudeLimited(e.retry.Sub(now))
-	}
-	ws, grants, err := readClaudeUsage(ctx, token)
-	var st *accountStatusError
-	if errors.As(err, &st) && st.status == http.StatusTooManyRequests {
-		wait := st.retryAfter
-		if wait <= 0 {
-			wait = 5 * time.Minute
-		}
-		c.Lock()
+	// one reading an ask, its first caller's; the others keep to it
+	read := active && asked != 0 && (e.tried.IsZero() || asked > e.tried.UnixNano()) && now.Sub(e.tried) >= claudeAskFloor
+	if read {
 		if c.m == nil {
 			c.m = map[string]claudeUsageEntry{}
 		}
-		e.retry = now.Add(wait)
+		e.tried = now
 		c.m[key] = e
-		c.Unlock()
-		if e.ws != nil {
-			return elapsed(e.ws, now), nil
-		}
-		return []QuotaWindow{}, claudeLimited(wait)
 	}
+	c.Unlock()
+	if !read {
+		switch {
+		case ok && e.ws != nil:
+			return elapsed(e.ws, now), nil
+		case active:
+			return []QuotaWindow{}, errClaudeNotAsked
+		default:
+			return []QuotaWindow{}, errClaudeSaved
+		}
+	}
+	ws, err := readClaudeUsage(ctx)
 	if err != nil {
 		if e.ws != nil && now.Sub(e.heard) < claudeHeard {
 			return elapsed(e.ws, now), nil // what Claude Code said stands
@@ -454,15 +483,15 @@ func claudeWindows(ctx context.Context, user, token string) ([]QuotaWindow, erro
 	if c.m == nil {
 		c.m = map[string]claudeUsageEntry{}
 	}
-	c.m[key] = claudeUsageEntry{at: now, ws: ws, heard: e.heard, grants: grants}
+	c.m[key] = claudeUsageEntry{at: now, ws: ws, heard: e.heard, tried: now}
 	c.Unlock()
 	return ws, nil
 }
 
-// claudeLimited is Anthropic turning the usage endpoint away for wait.
-func claudeLimited(wait time.Duration) error {
-	return fmt.Errorf("Anthropic is rate limiting its usage endpoint; magpie asks again in %s", wait.Round(time.Minute).String())
-}
+var (
+	errClaudeNotAsked = errors.New("not read yet: magpie reads Claude's usage when you open or refresh Usage")
+	errClaudeSaved    = errors.New("magpie doesn't read a saved account's usage; it shows what Claude Code reports while using it")
+)
 
 // elapsed is ws as of now: a window that has reset since it was read
 // starts again from nothing.
@@ -475,72 +504,6 @@ func elapsed(ws []QuotaWindow, now time.Time) []QuotaWindow {
 		out[i] = w
 	}
 	return out
-}
-
-// readClaudeWindows asks Anthropic for the allowance of the account token
-// signs in to.
-func readClaudeWindows(ctx context.Context, token string) ([]QuotaWindow, error) {
-	ws, _, err := readClaudeUsage(ctx, token)
-	return ws, err
-}
-
-// readClaudeUsage is readClaudeWindows with the usage-limit resets the
-// account holds, which Anthropic tells only when asked for them
-// (cedar_ember=1, as Claude Code asks), nil when it holds none.
-func readClaudeUsage(ctx context.Context, token string) ([]QuotaWindow, *claudeGrants, error) {
-	var data struct {
-		FiveHour       *quotaWire `json:"five_hour"`
-		SevenDay       *quotaWire `json:"seven_day"`
-		SevenDayOpus   *quotaWire `json:"seven_day_opus"`
-		SevenDaySonnet *quotaWire `json:"seven_day_sonnet"`
-		// a week's allowance per model (Fable), which the fields above
-		// don't carry; one with no scope is seven_day again
-		Limits []struct {
-			Kind     string   `json:"kind"`
-			Percent  *float64 `json:"percent"`
-			ResetsAt string   `json:"resets_at"`
-			Scope    *struct {
-				Model *struct {
-					DisplayName string `json:"display_name"`
-				} `json:"model"`
-			} `json:"scope"`
-		} `json:"limits"`
-		Grants *claudeGrants `json:"cedar_ember"`
-	}
-	err := accountJSON(ctx, claudeBase+claudeUsagePath, token, map[string]string{
-		"anthropic-beta": "oauth-2025-04-20", "user-agent": "magpie",
-	}, &data)
-	if err != nil {
-		return []QuotaWindow{}, nil, err
-	}
-	out := []QuotaWindow{}
-	const week = 7 * 24 * time.Hour
-	for _, x := range []struct {
-		name, model string
-		span        time.Duration
-		w           *quotaWire
-	}{{"5 hours", "", 5 * time.Hour, data.FiveHour}, {"7 days", "", week, data.SevenDay},
-		{"7 days · Opus", "opus", week, data.SevenDayOpus}, {"7 days · Sonnet", "sonnet", week, data.SevenDaySonnet}} {
-		if x.w != nil {
-			w := x.w.window(x.name)
-			w.Span, w.Model = x.span, x.model
-			out = append(out, w)
-		}
-	}
-	for _, l := range data.Limits {
-		if l.Kind != "weekly_scoped" || l.Scope == nil || l.Scope.Model == nil || l.Percent == nil {
-			continue
-		}
-		name := strings.TrimSpace(l.Scope.Model.DisplayName)
-		model := claudeScopeModel(name)
-		if model == "" || slices.ContainsFunc(out, func(w QuotaWindow) bool { return w.Model == model }) {
-			continue
-		}
-		w := quotaWire{Utilization: *l.Percent, ResetsAt: l.ResetsAt}.window("7 days · " + name)
-		w.Span, w.Model = week, model
-		out = append(out, w)
-	}
-	return out, data.Grants, nil
 }
 
 // claudeScopeModel is the word a model-scoped window counts models by, from

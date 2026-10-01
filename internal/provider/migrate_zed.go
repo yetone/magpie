@@ -13,7 +13,7 @@ import (
 func init() {
 	movers["zed"] = &mover{
 		pkg:    "@magpie-community/opencode-zed-auth",
-		min:    "0.1.5", // a failure's status and its sign-in mark as the built-in's
+		min:    "0.1.6", // a failure's status and its sign-in mark as the built-in's; a model token refused while listing marks the account
 		agents: []string{"zed"},
 		out: func() ([]Moving, error) {
 			var out []Moving
@@ -22,7 +22,7 @@ func init() {
 				out = append(out, Moving{User: l.User, First: l.Active, On: l.On, Lapsed: l.Lapsed != "", Plan: l.Plan, Auth: map[string]any{
 					"type":      "oauth",
 					"access":    c.Access,
-					"refresh":   jsonText(map[string]any{"userId": c.UserID, "systemId": c.SystemID, "org": c.Org, "plan": c.Plan, "login": c.Login, "name": c.Name}),
+					"refresh":   jsonText(zedRefresh(c)),
 					"expires":   0,
 					"accountId": l.User,
 				}})
@@ -31,12 +31,13 @@ func init() {
 		},
 		back: func(ls []savedLogin, user string, auth map[string]any) ([]savedLogin, string, error) {
 			var r struct {
-				UserID   any    `json:"userId"`
-				SystemID string `json:"systemId"`
-				Org      string `json:"org"`
-				Plan     string `json:"plan"`
-				Login    string `json:"login"`
-				Name     string `json:"name"`
+				UserID   any             `json:"userId"`
+				SystemID string          `json:"systemId"`
+				Org      string          `json:"org"`
+				Plan     string          `json:"plan"`
+				Login    string          `json:"login"`
+				Name     string          `json:"name"`
+				Models   json.RawMessage `json:"models"`
 			}
 			access := str(auth["access"])
 			if json.Unmarshal([]byte(str(auth["refresh"])), &r) != nil || r.UserID == nil || access == "" {
@@ -55,6 +56,9 @@ func init() {
 			if r.Name != "" {
 				c.Name = r.Name
 			}
+			if len(c.Models) == 0 && len(r.Models) > 0 {
+				c.Models = r.Models // its list is back before its first read
+			}
 			b, err := json.Marshal(c)
 			if err != nil {
 				return ls, "", err
@@ -63,6 +67,17 @@ func init() {
 			return ls, ls[i].User, nil
 		},
 	}
+}
+
+// zedRefresh is what the plugin keeps as the account's refresh: with the
+// list Zed last gave the account, so the plugin can serve that until it
+// reads its own, not the families it declares for a sign-in with none.
+func zedRefresh(c zedCreds) map[string]any {
+	r := map[string]any{"userId": c.UserID, "systemId": c.SystemID, "org": c.Org, "plan": c.Plan, "login": c.Login, "name": c.Name}
+	if json.Valid(c.Models) && len(c.Models) > 0 {
+		r["models"] = c.Models
+	}
+	return r
 }
 
 // backInto is the index in ls of agent's saved account user, added (on)

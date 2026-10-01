@@ -63,7 +63,7 @@ type devinLogin struct {
 // devinLogins lists the Devin accounts that are signed in, the first in
 // use first, then the rest as they were added.
 func devinLogins() []devinLogin {
-	own, _, ok := devinIdentity()
+	own, plan, ok := devinIdentity()
 	if !ok {
 		own = ""
 	}
@@ -72,6 +72,9 @@ func devinLogins() []devinLogin {
 		_, _, err := DevinAuthAt(l.Home)
 		return l.Home != "" && err == nil
 	}) {
+		if l.saved.own() && l.Plan == "" {
+			l.Plan = plan // the CLI's own, by the tier `devin auth status` says, as the plugin names it
+		}
 		out = append(out, devinLogin{l.Login, l.saved.Home})
 	}
 	return out

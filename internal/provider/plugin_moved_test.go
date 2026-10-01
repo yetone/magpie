@@ -251,3 +251,30 @@ func TestMovedSignInAsBuiltIn(t *testing.T) {
 		t.Fatalf("finished %+v", st)
 	}
 }
+
+// magpie accounts lists a moved built-in's accounts where the built-in's
+// stood, not after every other: Grok's before Zed's, whichever order the
+// plugins come in.
+func TestAllLoginsMovedKeepTheirPlace(t *testing.T) {
+	movedPlugin(t, "zed", map[string]map[string]any{
+		"zed":  {"type": "oauth", "access": "a", "refresh": "r", "expires": 0, "accountId": "me@zed"},
+		"grok": {"type": "oauth", "access": "b", "refresh": "s", "expires": 0, "accountId": "me@grok"},
+	})
+	b, _ := json.Marshal(map[string]any{"plugins": []map[string]any{{"spec": "opencode-zed-auth"}, {"spec": "opencode-grok-auth"}}})
+	if err := os.WriteFile(filepath.Join(settings.Dir(), "plugins.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plugin.UseCached([]plugin.Provider{{ID: "zed", Spec: "opencode-zed-auth", Name: "Zed"}, {ID: "grok", Spec: "opencode-grok-auth", Name: "Grok"}})
+	if err := setMigration("grok", func(m *Migration) { m.State, m.Package = MovePlugin, "opencode-grok-auth" }); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, l := range Logins("") {
+		if l.Agent == "zed" || l.Agent == "grok" {
+			got = append(got, l.Agent)
+		}
+	}
+	if strings.Join(got, ",") != "grok,zed" {
+		t.Fatalf("every agent's accounts: %v, want grok's before zed's", got)
+	}
+}

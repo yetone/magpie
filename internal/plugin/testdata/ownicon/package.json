@@ -1,0 +1,7 @@
+{
+  "name": "opencode-ownicon-auth",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "magpie": { "icon": "https://ownicon.example/icon.png" }
+}

@@ -27,6 +27,12 @@ func CodexAutoReset(user string) bool {
 	return user != "" && slices.Contains(settings.Load().CodexAutoReset, strings.ToLower(user))
 }
 
+// AutoResets says whether agent's account user spends its resets by
+// itself; only a Codex account does.
+func AutoResets(agent, user string) bool {
+	return agent == "codex" && CodexAutoReset(user)
+}
+
 // CodexSignedIn is the ChatGPT account Codex is signed in to now.
 func CodexSignedIn() (string, bool) {
 	l, ok := liveLogin("codex")

@@ -1,6 +1,9 @@
 package provider
 
-import "strings"
+import (
+	"maps"
+	"strings"
+)
 
 // A remote magpie is another computer's magpie gateway, shared on its
 // network (Settings → Share on local network), as a provider: the
@@ -12,6 +15,18 @@ import "strings"
 // model list tells, of each model, the APIs its own provider serves it on
 // (native_endpoints), and a request for one goes on one of those: turned
 // into another API once, here, when it must be, never on both computers.
+
+// Its list also has the image models the other magpie draws with, which
+// it gives only to a magpie that asks for them (DrawersHeader), each
+// marked "kind": "image": an older magpie would have taken one whose id
+// doesn't say it draws for a model to chat with. They go on to the other
+// magpie's images API, which asks their vendor as it would its own.
+// Each model's label is the other magpie's name for it, with its provider
+// there after it ("Claude Sonnet 5 · RelayA"), as its own agents see it:
+// two of its providers' models of one name are told apart here too.
+
+// DrawersHeader asks a magpie's model list for its image models as well.
+const DrawersHeader = "X-Magpie-Drawers"
 
 // RemoteMagpiePreset is the preset's id.
 const RemoteMagpiePreset = "remote-magpie"
@@ -46,4 +61,18 @@ func (p *Provider) remoteMagpieEndpoints() {
 		}
 	}
 	p.Chat, p.Responses, p.Anthropic = root+"/v1", root+"/v1", root
+}
+
+// listHeaders are the headers p's model list is asked with: a remote
+// magpie is asked for its image models too.
+func (p Provider) listHeaders() map[string]string {
+	if !p.IsRemoteMagpie() {
+		return p.Headers
+	}
+	h := maps.Clone(p.Headers)
+	if h == nil {
+		h = map[string]string{}
+	}
+	h[DrawersHeader] = "1"
+	return h
 }

@@ -96,6 +96,27 @@ func TestMovedAccountKeepsItsPlace(t *testing.T) {
 	}
 }
 
+// Two built-ins moved onto plugins keep the built-ins' order whatever
+// order the plugins list them in.
+func TestMovedAccountsKeepTheirOrder(t *testing.T) {
+	claudeHome(t)
+	var ps []Provider
+	for _, id := range []string{WorkBuddyAIID, "workbuddy"} {
+		if err := setMigration(id, func(m *Migration) { m.State = MovePlugin }); err != nil {
+			t.Fatal(err)
+		}
+		ps = append(ps, pluginProvider(plugin.Provider{ID: id, Name: id}, pluginLogin{}))
+	}
+	out := placeMoved([]Provider{{ID: "claude"}, {ID: CommandCodePlanID}, {ID: "zed"}}, ps)
+	var ids []string
+	for _, p := range out {
+		ids = append(ids, p.ID)
+	}
+	if want := []string{"claude", "workbuddy", WorkBuddyAIID, CommandCodePlanID, "zed"}; !slices.Equal(ids, want) {
+		t.Fatalf("accounts %v, want %v", ids, want)
+	}
+}
+
 // A moved provider's usage is asked through the proxy set for it, or for
 // the account: they are kept under its id, not its sign-ins' "plugin:grok".
 func TestMovedLoginProxy(t *testing.T) {

@@ -57,6 +57,10 @@ type Record struct {
 	// Kind is what the agent made the call for when it isn't a turn of
 	// the conversation: a Codex subagent's (review, compact, guardian…)
 	Kind string `json:"kind,omitempty"`
+	// Via is the computer whose magpie passed the call on to this one (a
+	// Remote magpie provider there), Agent being the agent's on it; "" for
+	// a call made on this computer
+	Via string `json:"via,omitempty"`
 }
 
 // Path is the log file: ~/.config/magpie/usage.jsonl (XDG-aware).
@@ -272,6 +276,18 @@ type Group struct {
 	Totals
 }
 
+// who is where a subscription's calls went as the account signed in
+// ("dee@example.com" of "api.factory.ai as dee@example.com"), the host
+// alone for the rest. The account is what tells one place from another: a
+// built-in moved onto its plugin sends the same account's calls through
+// plugin://…, which isn't another place.
+func who(where string) string {
+	if i := strings.LastIndex(where, " as "); i >= 0 {
+		return where[i+4:]
+	}
+	return where
+}
+
 // Point is one bar of the timeline.
 type Point struct {
 	Label string    `json:"label"`
@@ -360,12 +376,12 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 			if hosts[r.Provider] == nil {
 				hosts[r.Provider] = map[string]bool{}
 			}
-			hosts[r.Provider][r.Host] = true
+			hosts[r.Provider][who(r.Host)] = true
 		}
 	}
 	goesNow := map[string]string{}
 	for _, p := range provider.All() {
-		goesNow[p.ID] = p.Where()
+		goesNow[p.ID] = who(p.Where())
 	}
 	agents := map[string]*Group{}
 	models := map[string]*Group{}
@@ -397,8 +413,8 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 		}
 		a.add(r, pr)
 		k, host := r.Provider+"/"+r.Model, ""
-		if r.Host != "" && (len(hosts[r.Provider]) > 1 || r.Host != goesNow[r.Provider]) {
-			k, host = k+" @ "+r.Host, r.Host
+		if w := who(r.Host); w != "" && (len(hosts[r.Provider]) > 1 || w != goesNow[r.Provider]) {
+			k, host = k+" @ "+w, w
 		}
 		m := models[k]
 		if m == nil {
@@ -510,7 +526,7 @@ func LastSeen(agent string) time.Time {
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
 	for sc.Scan() {
 		var r Record
-		if json.Unmarshal(sc.Bytes(), &r) == nil && r.Agent == agent && r.Time.After(last) {
+		if json.Unmarshal(sc.Bytes(), &r) == nil && r.Agent == agent && r.Via == "" && r.Time.After(last) {
 			last = r.Time
 		}
 	}

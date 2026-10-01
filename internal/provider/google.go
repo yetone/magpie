@@ -102,6 +102,10 @@ func googleAppOf(agent string) (googleApp, bool) {
 // added.
 const AntigravityRisk = "Google may suspend an Antigravity account it sees used outside Antigravity. Use one you can afford to lose."
 
+// ClaudeRisk is what magpie says before a Claude account is added, as the
+// window does.
+const ClaudeRisk = "Anthropic may suspend or ban a Claude account it sees used outside its own apps. magpie sends requests through Claude Code, but Anthropic may still act on them; you use it at your own risk. Use an account you can afford to lose."
+
 // geminiCLIVersion is the Gemini CLI magpie says it is.
 const geminiCLIVersion = "0.61.0"
 

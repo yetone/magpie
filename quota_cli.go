@@ -61,6 +61,7 @@ func quotaCmd(args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	qs := []provider.Quota{}
+	provider.AskClaudeUsage()
 	for _, q := range provider.QuotaReport(ctx, time.Now()) {
 		if len(only) == 0 || quotaMatches(q, only) {
 			qs = append(qs, q)

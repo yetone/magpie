@@ -86,10 +86,6 @@ type Settings struct {
 	// used up and no other account can take the request: at most one a
 	// week each (see provider.AutoUseCodexReset).
 	CodexAutoReset []string `json:"codexAutoReset,omitempty"`
-	// ClaudeAutoReset are the Claude accounts (lower-case) that spend one
-	// of their usage-limit resets by themselves the same way (see
-	// provider.AutoUseClaudeReset).
-	ClaudeAutoReset []string `json:"claudeAutoReset,omitempty"`
 	// WorkBuddyCheckin presses WorkBuddy's daily check-in (签到) for each
 	// signed-in WorkBuddy (China) account once a Beijing day, claiming the
 	// credits it gives while its event runs.
@@ -97,6 +93,12 @@ type Settings struct {
 	// NoStats stops the one event a day that counts magpie's users (see
 	// internal/stats).
 	NoStats bool `json:"noStats,omitempty"`
+	// NoUpdatePill keeps the header's Update pill away when a newer magpie
+	// is out; UpdateSkip is the one version it was hidden for, and a newer
+	// one brings it back. Either way magpie still downloads the version and
+	// puts it in as it quits, and Settings' version row still offers it.
+	NoUpdatePill bool   `json:"noUpdatePill,omitempty"`
+	UpdateSkip   string `json:"updateSkip,omitempty"`
 	// Vision is the model that describes an image to a model that can't see
 	// it: a model's id (provider/model, group/<id>), "off" to turn such an
 	// image away, or empty for one magpie picks (see gateway.seer).
@@ -118,6 +120,10 @@ type Settings struct {
 	// TrayUsageEvery is how often, in minutes, that text is brought up to
 	// date; 0 is every 3 (one of TrayEvery).
 	TrayUsageEvery int `json:"trayUsageEvery,omitempty"`
+	// TrayNoLogos draws the Mac menu bar's cards without their logos: each
+	// is its windows stacked alone, a thin line between one card and the
+	// next.
+	TrayNoLogos bool `json:"trayNoLogos,omitempty"`
 	// QuotaLeft shows a subscription's windows by how much of each is left,
 	// not used: the Usage page, the tray panel and the menu bar alike.
 	QuotaLeft bool `json:"quotaLeft,omitempty"`
@@ -526,10 +532,6 @@ func Save(s Settings) error {
 		s.CodexAutoReset[i] = strings.ToLower(u)
 	}
 	s.CodexAutoReset = ids(s.CodexAutoReset)
-	for i, u := range s.ClaudeAutoReset {
-		s.ClaudeAutoReset[i] = strings.ToLower(u)
-	}
-	s.ClaudeAutoReset = ids(s.ClaudeAutoReset)
 	s.TrayUsage = ""
 	if len(s.TrayUsages) > 0 {
 		s.TrayUsage = s.TrayUsages[0]

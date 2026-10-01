@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -19,6 +20,20 @@ import (
 type Method struct {
 	Type  string `json:"type"`
 	Label string `json:"label"`
+	// Placeholder is the hint an "api" method gives in its key's field
+	// (magpie's own field: OpenCode's says "API key")
+	Placeholder string `json:"placeholder,omitempty"`
+}
+
+// KeyTitle is what an "api" method's key is asked as: its label, as
+// OpenCode's dialog titles it, unless that only says "API key" (or
+// nothing), when it is name's API key.
+func (m Method) KeyTitle(name string) string {
+	l := strings.TrimSpace(m.Label)
+	if l == "" || strings.EqualFold(l, "API key") {
+		return name + " API key"
+	}
+	return l
 }
 
 // Model is a model a plugin's provider serves, as OpenCode lists it.
@@ -55,6 +70,9 @@ type Provider struct {
 	NPM     string   `json:"npm"`
 	API     string   `json:"api"`
 	Methods []Method `json:"methods"`
+	// Icon is the picture the plugin gives the provider, as it said it:
+	// an https URL or a data:image URI (internal/provider keeps it)
+	Icon string `json:"icon,omitempty"`
 	// Usage says the plugin tells each account's allowance (auth.usage)
 	Usage     bool    `json:"usage"`
 	SignedIn  bool    `json:"signedIn"`
@@ -86,6 +104,16 @@ var (
 )
 
 func providersPath() string { return filepath.Join(settings.Dir(), "plugin-providers.json") }
+
+// ListedAt is when the plugins last listed their providers and models, as
+// a built-in's list is dated by when it was fetched.
+func ListedAt() (time.Time, bool) {
+	st, err := os.Stat(providersPath())
+	if err != nil {
+		return time.Time{}, false
+	}
+	return st.ModTime(), true
+}
 
 func forgetProviders() {
 	provMu.Lock()
@@ -487,17 +515,26 @@ func Import(ctx context.Context, provider string, auth map[string]any) (string, 
 	return r.Account, nil
 }
 
+// Checked is what trying an account gave: the model ids the plugin lists
+// for it, its usage read (nil when the plugin tells none), and why its
+// models hook said the vendor refused the sign-in, if it did.
+type Checked struct {
+	Models  []string `json:"models"`
+	Usage   *Usage   `json:"usage"`
+	Refused string   `json:"refused"`
+}
+
 // Check tries one of provider's accounts as a request would — its auth
-// loader, then its models as the plugin lists them for it — and gives the
-// model ids.
-func Check(ctx context.Context, provider, account string) ([]string, error) {
-	var r struct {
-		Models []string `json:"models"`
-	}
+// loader, then its models as the plugin lists them for it — and reads its
+// usage, which asks the vendor of the account itself. It fails when the
+// plugin reached none of the places it asked (the vendor offline): a
+// models hook falling back to a list it keeps proves nothing.
+func Check(ctx context.Context, provider, account string) (Checked, error) {
+	var r Checked
 	if err := Call(ctx, "check", map[string]any{"provider": provider, "account": account, "proxy": proxyOf(ctx)}, &r); err != nil {
-		return nil, err
+		return Checked{}, err
 	}
-	return r.Models, nil
+	return r, nil
 }
 
 // Auths are provider's sign-ins as plugin-auth.json keeps them, by key.

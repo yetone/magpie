@@ -43,6 +43,17 @@ func TestClaudeSubscriptionPromptKeepsForeignHarnessOutOfSystem(t *testing.T) {
 	}
 }
 
+// TestClaudeCLIEffortXHigh: xhigh is a level of Claude Code's own, sent as
+// output_config.effort "xhigh"; turned into max it used more of the plan (#385).
+func TestClaudeCLIEffortXHigh(t *testing.T) {
+	for _, e := range []string{"low", "medium", "high", "xhigh", "max"} {
+		args := strings.Join(claudeCLIArgs("claude-opus-5-5", `{}`, e, false), " ")
+		if !strings.Contains(args, "--effort "+e+" ") {
+			t.Fatalf("effort %s: %q", e, args)
+		}
+	}
+}
+
 func TestCleanClaudeEnvRemovesGatewayOverrides(t *testing.T) {
 	got := cleanClaudeEnv([]string{
 		"PATH=/bin", "ANTHROPIC_BASE_URL=http://127.0.0.1:3425",

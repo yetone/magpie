@@ -25,10 +25,10 @@ func TestKeepLast(t *testing.T) {
 	restart() // what was read is on disk
 
 	limited := SubscriptionQuota{Provider: "claude", Name: "Claude Code", User: "a@x.com", Windows: []QuotaWindow{},
-		Error: claudeLimited(5 * time.Minute).Error()}
+		Error: errClaudeNotAsked.Error()}
 	q := keepLast(limited, "")
 	if q.Error != "" || q.AsOf == nil || len(q.Windows) != 2 || q.Windows[0].Used != 40 || q.Windows[1].Model != "opus" || q.Windows[0].Span != 5*time.Hour {
-		t.Fatalf("rate limited: %+v", q)
+		t.Fatalf("not asked: %+v", q)
 	}
 
 	// the same through LoginUsage, which knows the user but not the name

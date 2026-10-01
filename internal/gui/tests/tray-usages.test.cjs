@@ -150,7 +150,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // another setting saved keeps them
         const sent = posts.length;
-        await page.locator("#currencySegs .opt").nth(1).click();
+        // clicked where it is: Playwright would scroll to it, under the footer
+        await page.locator("#currencySegs .opt").nth(1).evaluate((b) => b.click());
         for (let i = 0; i < 50 && posts.length === sent; i++) await page.waitForTimeout(50);
         assert.equal(posts.at(-1).currency, "cny");
         assert.deepEqual(posts.at(-1).trayUsages, ["claude|a@b.c", "codex|x@y.z"], "a save of another setting keeps the cards");
