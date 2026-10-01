@@ -13,3 +13,20 @@ func TestGoogleEnvInlineComment(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestEnvFileValueQuotedInlineComment(t *testing.T) {
+	for _, tc := range []struct{ name, line, want string }{
+		{"double quoted", `GOOGLE_CLOUD_PROJECT="my-proj" # work`, "my-proj"},
+		{"single quoted hash", `GOOGLE_CLOUD_PROJECT='a#b' # c`, "a#b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), ".env")
+			if err := os.WriteFile(p, []byte(tc.line+"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if got := envFileValue(p, "GOOGLE_CLOUD_PROJECT"); got != tc.want {
+				t.Fatalf("envFileValue = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

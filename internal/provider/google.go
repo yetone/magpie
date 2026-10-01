@@ -35,6 +35,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/edit"
 )
 
 // CodeAssist is Google's Code Assist API, which magpie only speaks
@@ -181,34 +182,8 @@ func googleClientOf(idToken string) string {
 
 // envFileValue is one KEY=value of a dotenv file.
 func envFileValue(path, key string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		line = strings.TrimPrefix(line, "export ")
-		k, v, ok := strings.Cut(line, "=")
-		if !ok || strings.TrimSpace(k) != key {
-			continue
-		}
-		v = strings.TrimSpace(v)
-		if uq, err := strconv.Unquote(v); err == nil {
-			v = uq
-		} else {
-			// an unquoted value ends at an inline comment, as dotenv reads it
-			if v == "" || (v[0] != '"' && v[0] != '\'') {
-				if i := strings.IndexByte(v, '#'); i >= 0 {
-					v = strings.TrimSpace(v[:i])
-				}
-			}
-			v = strings.Trim(v, `'`)
-		}
-		return v
-	}
-	return ""
+	v, _ := edit.GetEnvFile(path, key)
+	return v
 }
 
 // savedGoogleProject is the project the user named for the agent's own
