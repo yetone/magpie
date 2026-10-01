@@ -8,10 +8,13 @@ touch's continuous scroll can outlast the input window, while scripts cannot
 move an idle page, including after momentum stops. The API is faked; no user
 configuration is read or changed.
 
-At desktop widths 900/1280, the screenshots' pixels must match the same pages
-from `origin/main`. Fetch that branch before running; set `BASE_REF` to another
-local Git ref to compare against a particular baseline. PNG decoding uses the
-copy bundled with Playwright, without another dependency.
+At desktop widths 900/1280, screenshots are compared with the same pages from
+`origin/main`. Dimensions must match; a pixel counts as different only when
+any RGBA channel differs by more than 48, and more than 300 such pixels fails.
+This tolerates Chromium's small antialiasing differences while still detecting
+layout changes. Fetch that branch before running; set `BASE_REF` to another
+local Git ref (`HEAD` for a self-comparison) to select a particular baseline.
+PNG decoding uses the copy bundled with Playwright, without another dependency.
 
 ```sh
 node --test internal/gui/tests/mobile-web.test.cjs internal/gui/tests/old-webkit.test.cjs

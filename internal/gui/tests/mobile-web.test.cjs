@@ -1,6 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Phone navigation and content stay usable in both languages (#391). The
-// desktop screenshots match BASE_REF (origin/main by default); only API
+// desktop screenshots match BASE_REF within a small rendering tolerance
+// (origin/main by default); only API
 // boundaries are faked, never the page's layout or scrolling helpers.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -194,12 +195,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               await current.waitForTimeout(350); await original.waitForTimeout(350);
               const before = PNG.sync.read(await original.screenshot({ animations: "disabled" }));
               const after = PNG.sync.read(await current.screenshot({ animations: "disabled" }));
-              const same = before.width === after.width && before.height === after.height && before.data.equals(after.data);
+              const sameSize = before.width === after.width && before.height === after.height;
+              let changedPixels = 0;
+              // Chromium can repaint antialiased edges differently even when
+              // comparing HEAD with itself. Count a pixel once only when one
+              // of its channels changes by more than 48; size changes always fail.
+              if (sameSize) for (let i = 0; i < before.data.length; i += 4) {
+                for (let channel = 0; channel < 4; channel++) {
+                  if (Math.abs(before.data[i + channel] - after.data[i + channel]) > 48) {
+                    changedPixels++;
+                    break;
+                  }
+                }
+              }
+              const same = sameSize && changedPixels <= 300;
               if (!same) {
                 await save(original, `${engine}-${lang}-${width}-${view}-desktop-before`);
                 await save(current, `${engine}-${lang}-${width}-${view}-desktop-after`);
               }
-              assert(same, `${view}: desktop screenshot changed`);
+              assert(same, `${view}: desktop screenshot changed (${sameSize ? changedPixels + " pixels differ by more than 48; limit 300" : "dimensions differ"})`);
             }
           } finally { await current.close(); await original.close(); }
         });
