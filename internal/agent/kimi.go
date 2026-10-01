@@ -231,6 +231,8 @@ func kimiOwnOptions(path, cur string) []Option {
 		}
 		if u, err := strconv.Unquote(k); err == nil {
 			k = u
+		} else if len(k) >= 2 && k[0] == '\'' && k[len(k)-1] == '\'' {
+			k = k[1 : len(k)-1] // a TOML literal string: no escapes
 		} else if strings.Contains(k, ".") {
 			continue // a table under a model's, not one
 		}
