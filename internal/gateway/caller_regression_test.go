@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -116,6 +117,95 @@ func TestMigrationFailureDoesNotStopGateway(t *testing.T) {
 			t.Fatal("gateway did not bind after failed migration")
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestLegacyCallerWithReadOnlyConfiguration(t *testing.T) {
+	fresh(t)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer upstream" || r.URL.Query().Get("key") == "sk-magpie-readonly" {
+			t.Error("legacy caller credential leaked upstream")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":5}}`)
+	}))
+	t.Cleanup(up.Close)
+	if err := provider.Save(provider.Provider{ID: "plan", Name: "Plan", Key: "upstream", Chat: up.URL + "/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Settings{LAN: true, LANKey: "sk-magpie-readonly"}
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	// Existing logs remain appendable even if no new store can be created.
+	if err := os.WriteFile(usage.Path(), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(settings.Dir(), 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(settings.Dir(), 0o700) })
+	if err := migrateLANKey(); err == nil {
+		t.Skip("configuration directory remains writable")
+	} else if !errors.Is(err, os.ErrPermission) {
+		t.Fatal(err)
+	}
+	h := lanGuard(New().Handler())
+	call := func(secret, header string) int {
+		r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(chatReq))
+		r.RemoteAddr = "192.168.1.9:5000"
+		switch header {
+		case "Authorization":
+			r.Header.Set(header, "Bearer "+secret)
+		case "query":
+			r.URL.RawQuery = "key=" + secret
+		default:
+			r.Header.Set(header, secret)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	for _, header := range []string{"Authorization", "x-api-key", "query"} {
+		if code := call(s.LANKey, header); code != http.StatusOK {
+			t.Fatal("unmigrated legacy client lost access", header, code)
+		}
+		for _, secret := range []string{"", "wrong", Token} {
+			if code := call(secret, header); code != http.StatusUnauthorized {
+				t.Fatal("fallback accepted another credential", header, code)
+			}
+		}
+	}
+	recs := usage.Load(time.Time{})
+	if len(recs) != 3 || recs[0].CallerKeyID == "" {
+		t.Fatal("fallback attribution missing", recs)
+	}
+	for _, rec := range recs {
+		if rec.CallerKeyID != recs[0].CallerKeyID || rec.CallerKeyName != "Magpie" || rec.ProviderKeyID != provider.KeyID("upstream") {
+			t.Fatal("fallback attribution changed", rec)
+		}
+	}
+	if _, err := os.Stat(access.Path()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("fallback wrote a key store", err)
+	}
+	log, err := os.ReadFile(usage.Path())
+	if err != nil || strings.Contains(string(log), s.LANKey) {
+		t.Fatal("legacy credential in usage log", err)
+	}
+	if err := os.Chmod(settings.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateLANKey(); err != nil {
+		t.Fatal(err)
+	}
+	if code := call(s.LANKey, "Authorization"); code != 200 || lastUsage(t).CallerKeyID != recs[0].CallerKeyID {
+		t.Fatal("migration changed the fallback identity", code)
+	}
+	if _, err := access.Update("remove-key", access.Change{Key: recs[0].CallerKeyID}); err != nil {
+		t.Fatal(err)
+	}
+	if code := call(s.LANKey, "Authorization"); code != 401 {
+		t.Fatal("fallback resurrected a removed legacy key", code)
 	}
 }
 

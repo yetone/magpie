@@ -4,6 +4,7 @@ package access
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
@@ -215,11 +216,27 @@ func Authenticate(secret string) (Identity, bool) {
 		return Identity{}, false
 	}
 	for _, k := range keys {
-		if subtle.ConstantTimeCompare([]byte(secret), []byte(k.Secret)) == 1 && !k.Off {
+		if subtle.ConstantTimeCompare([]byte(secret), []byte(k.Secret)) == 1 {
+			if k.Off {
+				return Identity{}, false
+			}
 			return Identity{k.ID, k.Name}, true
 		}
 	}
+	s := settings.Load()
+	// A read-only config directory may prevent the first store write. Never
+	// fall back after either durable marker exists, or to a revoked mirror.
+	if s.LAN && s.LANKeyID == "" && s.LANKey != "" && !strings.HasPrefix(s.LANKey, revokedLANPrefix) && !slices.ContainsFunc(keys, func(k Key) bool { return k.LAN }) && subtle.ConstantTimeCompare([]byte(secret), []byte(s.LANKey)) == 1 {
+		k := legacyLANKey(s.LANKey)
+		return Identity{k.ID, k.Name}, true
+	}
 	return Identity{}, false
+}
+
+func legacyLANKey(secret string) Key {
+	// The fallback and eventual persisted key must share their usage identity.
+	sum := sha256.Sum256([]byte(secret))
+	return Key{ID: "lan-" + hex.EncodeToString(sum[:12]), Name: "Magpie", LAN: true, Secret: secret}
 }
 
 // MigrateLegacyLANKey makes the old Settings key a normal, revocable caller
@@ -253,11 +270,7 @@ func migrateLegacyLANKey() error {
 		return subtle.ConstantTimeCompare([]byte(k.Secret), []byte(s.LANKey)) == 1
 	})
 	if i < 0 {
-		id, err := random(12)
-		if err != nil {
-			return err
-		}
-		keys = append(keys, Key{ID: id, Name: "Magpie", Secret: s.LANKey})
+		keys = append(keys, legacyLANKey(s.LANKey))
 		i = len(keys) - 1
 	}
 	keys[i].LAN = true
