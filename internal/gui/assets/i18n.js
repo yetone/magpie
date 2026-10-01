@@ -10,7 +10,7 @@ const I18N = {
     "Use a gateway key to track usage": "使用网关密钥统计用量",
     "Choose a gateway key to use as {env}; usage is tracked by key.": "选择填入 {env} 的网关密钥，用量按密钥统计。",
     "This computer": "本机",
-    "This computer · no key attribution": "仅本机使用，不归属到具体密钥",
+    "Any key · no key attribution": "任意密钥 · 不归属到具体密钥",
     "Choose a gateway key": "选择网关密钥",
     "Create a gateway key above to connect": "请先在上方创建网关密钥",
     "Loading gateway key…": "正在读取网关密钥…",

@@ -20,7 +20,7 @@ async function selectConnectKey(id) {
   connectKeyID = id;
   connectSecret = null;
   renderConnect();
-  if (!id) return;
+  if (!id || !providers?.gateway.lan) return;
   const key = gatewayKeys?.find((k) => k.id === id && !k.off);
   if (!key) return;
   try {

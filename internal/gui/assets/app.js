@@ -2723,7 +2723,7 @@ function renderConnect() {
   const urls = [g.url, ...(g.lanURLs || [])];
   if (!urls.includes(connectURL)) connectURL = g.url;
   const remote = connectURL !== g.url;
-  const keys = (gatewayKeys || []).filter((k) => !k.off);
+  const keys = g.lan ? (gatewayKeys || []).filter((k) => !k.off) : [];
   if (!keys.some((k) => k.id === connectKeyID)) {
     connectKeyID = "";
     connectSecret = null;
@@ -2743,7 +2743,7 @@ function renderConnect() {
   note.replaceChildren();
   note.classList.toggle("brief", connectFolded);
   if (connectFolded) note.append(el("code", "", base), copyBtn(base, "Base URL"));
-  else note.textContent = t(remote ? "Local network · an enabled gateway key is required" : gatewayKeys?.length ? "Use a gateway key to track usage" : "Loopback only · the key can be anything");
+  else note.textContent = t(remote ? "Local network · an enabled gateway key is required" : g.lan && gatewayKeys?.length ? "Use a gateway key to track usage" : "Loopback only · the key can be anything");
 
   box.append(...field("API", segs(Object.entries(FLAVORS).map(([k, v]) => [k, v.name]), flavor, (id) => { flavor = id; localStorage.setItem("magpie.flavor", id); renderConnect(); }), t(f.note)));
 
@@ -2757,13 +2757,15 @@ function renderConnect() {
 
   const k = el("div", "val");
   const options = keys.map((k) => ({ v: k.id, name: k.name, literalName: true, note: k.masked }));
-  if (!remote) options.unshift({ v: "", name: "magpie", note: t("This computer · no key attribution") });
-  if (options.length) k.append(connectPick("connectKey", "Gateway key", key ? key.name : remote ? t("Choose a gateway key") : "magpie",
+  if (!remote) options.unshift({ v: "", name: "This computer", note: t("Any key · no key attribution") });
+  const keyLabel = remote || key ? "Gateway key" : "API key";
+  if (!g.lan) k.append(el("code", "", "magpie"));
+  else if (options.length) k.append(connectPick("connectKey", keyLabel, key ? key.name : remote ? t("Choose a gateway key") : t("This computer"),
     options, connectKeyID, selectConnectKey));
   else k.append(el("code", "", t("Create a gateway key above to connect")));
   if (key) k.append(copyCallerKeyBtn(key));
   else if (!remote) k.append(copyBtn("magpie", t("Key")));
-  box.append(...field(t("Gateway key"), k, t(remote || gatewayKeys?.length
+  box.append(...field(t(keyLabel), k, t(g.lan && (remote || gatewayKeys?.length)
     ? "Choose a gateway key to use as {env}; usage is tracked by key."
     : "{env}=magpie. The gateway trusts everything on loopback, so any value works.", { env: f.keyEnv })));
 

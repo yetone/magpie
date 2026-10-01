@@ -25,11 +25,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const expectSecret = (secret) => page.waitForFunction((secret) => document.querySelector("#connect .snip")?.textContent.includes(secret), secret);
       const row = (id) => page.locator(`#gatewayKeys .acc[data-key="${id}"]`);
       await page.goto("http://magpie.test/?view=gateway");
-      await page.locator("#connectKey").waitFor();
+      await snippet.waitFor();
       assert.equal(await page.locator("#connectAddress").count(), 0, "no LAN addresses before sharing is on");
       assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), false, "most users never share");
-      await pick("#connectKey", "Server");
-      await expectSecret("fixture-server");
+      assert.equal(await page.locator("#connectKey").count(), 0, "local-only users see no gateway key picker");
+      assert.equal(await page.locator("#connect").getByText(locale === "zh" ? "API 密钥" : "API key", { exact: true }).count(), 1);
+      await expectSecret('OPENAI_API_KEY=magpie');
+      if (process.env.ARTIFACT_DIR) {
+        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${locale}-local-connect.png`) });
+      }
 
       await page.locator("#prefs").click();
       const on = page.locator("#lanList").getByRole("button", { name: w.on, exact: true });
@@ -41,6 +46,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#lanList .lan-address-row").waitFor();
       await page.locator("#nav").getByRole("button", { name: w.gateway, exact: true }).click();
       await page.locator("#gatewayKeysBlock").waitFor({ state: "visible" });
+      await page.locator("#connectKey").click();
+      assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^Magpie$/ }).count(), 1);
+      assert.equal(await page.locator(".proto-menu .pm-name", { hasText: /^magpie$/ }).count(), 0,
+        "the arbitrary local token must not look like a second named Magpie key");
+      if (process.env.ARTIFACT_DIR) {
+        await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${locale}-shared-key-picker.png`) });
+      }
+      await page.keyboard.press("Escape");
       const staleKeys = await page.locator("#gatewayKeys .acc[data-key]").evaluateAll((rows) => rows.map((r) => ({
         id: r.dataset.key, name: r.querySelector(".rename").textContent, masked: r.querySelector(".plan").textContent,
       })));
@@ -159,7 +172,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#nav").getByRole("button", { name: w.gateway, exact: true }).click();
       await page.locator("#connectAddress").waitFor({ state: "detached" });
       assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), false);
+      assert.equal(await page.locator("#connectKey").count(), 0);
+      assert.equal(await page.locator("#connect").getByText(locale === "zh" ? "API 密钥" : "API key", { exact: true }).count(), 1);
       assert((await snippet.textContent()).includes("http://127.0.0.1:3999"));
+      assert(!(await snippet.textContent()).includes("fixture-created-2"), "sharing off clears the selected gateway credential");
       assert.deepEqual(errors, []);
     });
   }
