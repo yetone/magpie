@@ -20,6 +20,27 @@ const groups = [{ name: "Claude Code", icon: "claudecode-color", calls: 123, err
 const usage = { ...groups[0], path: "/test/usage.jsonl", bucket: "day", agents: groups,
   models: [{ ...groups[0], name: "a-model-with-a-long-name" }],
   series: Array.from({ length: 30 }, (_, i) => ({ ...groups[0], label: "09-" + String(i + 1).padStart(2, "0") })) };
+// Populated rows are essential: an empty Agents list cannot expose clipped
+// model/effort controls or make the desktop comparison cover those rows.
+const modelOptions = [{ value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", icon: "claude-color" },
+  { value: "gpt-6.1-sol", label: "GPT-6.1-Sol", icon: "openai" }];
+const modelField = (key, label, value = "") => ({ key, label, value, options: modelOptions });
+const agentRows = [
+  { id: "claude", name: "Claude Code", path: "/test/claude.json", icon: "claudecode-color", fields: [
+    modelField("model", "model", "claude-sonnet-4.5"),
+    { key: "effort", label: "thinking", value: "high", options: [{ value: "high", label: "High" }] },
+  ] },
+  { id: "codex", name: "Codex", path: "/test/codex.toml", icon: "codex-color", fields: [
+    modelField("model", "model", "gpt-6.1-sol"),
+    { key: "effort", label: "effort", value: "high", options: [{ value: "high", label: "High" }] },
+    modelField("subagent", "subagents"),
+    { key: "signin", label: "sign-in", value: "magpie", options: [{ value: "magpie", label: "magpie" }, { value: "chatgpt", label: "ChatGPT" }] },
+  ] },
+  { id: "omp", name: "omp", path: "/test/omp.json", icon: "omp", fields: [
+    modelField("model", "model", "gpt-6.1-sol"), modelField("subagent", "subagents"),
+    modelField("small", "smol"), modelField("slow", "slow"),
+  ] },
+];
 const views = ["agents", "providers", "gateway", "routing", "usage", "library", "plugins", "settings"];
 
 function server(lang, original = false, opened = []) {
@@ -28,10 +49,16 @@ function server(lang, original = false, opened = []) {
     const json = data => route.fulfill({ json: data });
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-    if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" } });
+    if (url.pathname === "/api/state") return json({ agents: agentRows, profiles: [], settings: { lang, theme: "light" } });
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, calls: [], groups: [] } });
     if (url.pathname === "/api/groups") return json({ groups: [], pools: [], models: [] });
-    if (url.pathname === "/api/usage/quotas") return json([]);
+    if (url.pathname === "/api/usage/quotas") {
+      // main's usage render can reveal the empty quota heading again if it
+      // finishes last. Deliver the empty allowances after the totals paint,
+      // so both screenshot pages compare the same completed API state.
+      await route.request().frame().page().locator("#usageAgents .row.stat").first().waitFor({ state: "attached", timeout: 30000 });
+      return json([]);
+    }
     if (url.pathname === "/api/usage") return json(usage);
     if (url.pathname === "/api/gateway/trace") return json({ mine: true, now: at, seq: 0, routes: [], totals: { requests: 0, rerouted: 0, errors: 0 } });
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
@@ -75,7 +102,10 @@ async function go(page, view) {
   await page.locator(`#view-${view}`).waitFor();
   if (view === "library") await page.locator("#view-library .lib-more:not(:disabled)").waitFor();
   if (view === "plugins") await page.locator("#view-plugins .pm-find").waitFor();
-  if (view === "usage") await page.locator("#usageAgents .row.stat").waitFor();
+  if (view === "usage") {
+    await page.locator("#usageAgents .row.stat").waitFor();
+    await page.locator("#quotaHead").waitFor({ state: "hidden" });
+  }
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(800); // let the tab's spring and content entrance settle
 }
@@ -92,6 +122,31 @@ async function fits(page, view) {
     document: [document.documentElement.scrollWidth, innerWidth],
   }));
   for (const [name, [actual, available]] of Object.entries(dimensions)) assert(actual <= available + 1, `${view}: ${name} scrolls sideways (${actual} > ${available})`);
+}
+
+async function agentsFit(page) {
+  for (const agent of agentRows) {
+    const row = page.locator(`.row.agent[data-id="${agent.id}"]`);
+    await row.waitFor();
+    const bad = await row.evaluate(row => {
+      const box = row.getBoundingClientRect(), bad = [];
+      for (const field of row.querySelectorAll(".field")) {
+        const b = field.getBoundingClientRect();
+        if (b.left < box.left - 1 || b.right > box.right + 1 || b.top < box.top - 1 || b.bottom > box.bottom + 1) bad.push("field cropped: " + field.dataset.key);
+      }
+      const model = row.querySelector('.field[data-key="model"] .v');
+      if (!model?.textContent || model.scrollWidth > model.clientWidth + 1) bad.push("model name cropped");
+      return bad;
+    });
+    assert.deepEqual(bad, [], agent.name + ": every control and model name must be visible");
+    for (const field of agent.fields) {
+      await row.locator(`.field[data-key="${field.key}"]`).click();
+      await page.locator("#pop").waitFor();
+      assert.equal(await page.locator("#pop").isVisible(), true, agent.name + ": " + field.key + " opens");
+      await page.locator('#nav [data-view="agents"]').click();
+      await page.locator("#pop").waitFor({ state: "hidden" });
+    }
+  }
 }
 
 async function usageFits(page) {
@@ -141,6 +196,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               await save(page, `${engine}-${lang}-${width}-${view}`);
               await fits(page, view);
               assert.equal(await page.locator(`#view-${view}`).isVisible(), true);
+              if (view === "agents") await agentsFit(page);
               if (view === "usage") await usageFits(page);
               if (view === "library") {
                 await Promise.all([

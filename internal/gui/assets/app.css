@@ -2049,6 +2049,17 @@ body.panel .modal { padding: 16px 12px; }
   body.web .fields { width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, 124px); }
   body.web .row.agent { flex-wrap: wrap; }
   body.web .row.agent > .fields { flex-basis: 100%; }
+  /* Extra controls must not keep the desktop's fixed grid width. The model
+     gets the full row; effort and squares wrap below it without clipping. */
+  body.web #agents .row.agent > .fields,
+  body.web #agents.extras .row.agent > .fields {
+    display: flex; flex-wrap: wrap; width: 100%; min-width: 0; margin-left: 0;
+  }
+  body.web #agents .fields > .field.main,
+  body.web #agents .fields > .field.solo { flex: 1 0 100%; }
+  body.web #agents .fields > .field.side { flex: 1 0 124px; }
+  body.web #agents .extras-cell { flex-wrap: wrap; max-width: 100%; }
+  body.web #agents .field.extra { width: 44px; min-width: 44px; }
   body.web .row.pref { flex-wrap: wrap; gap: 8px; padding: 12px; }
   body.web .row.pref > .who { flex-basis: 100%; }
   body.web .row.pref .sub { white-space: normal; }
