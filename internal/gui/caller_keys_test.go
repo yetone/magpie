@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -73,7 +74,7 @@ func TestCallerKeyManagementAndUsageRoutes(t *testing.T) {
 	}
 	raw := request("GET", "/api/usage/requests.csv"+query, "", nil)
 	cells, err := csv.NewReader(strings.NewReader(raw)).ReadAll()
-	if err != nil || len(cells) != 3 || cells[1][21] != laptop || cells[2][21] != laptop || strings.Contains(raw, secret) {
+	if err != nil || len(cells) != 3 || cells[1][slices.Index(usage.CSVHeader, "caller_key_id")] != laptop || cells[2][slices.Index(usage.CSVHeader, "caller_key_id")] != laptop || strings.Contains(raw, secret) {
 		t.Fatal("CSV", err, raw)
 	}
 	request("POST", "/api/caller-keys/rotate-key", `{"key":"`+laptop+`"}`, &s)
