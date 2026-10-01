@@ -1482,6 +1482,8 @@ function score(q, o) {
 function placePop(anchor, w, h) {
   const pop = $("#pop");
   const r = anchor.getBoundingClientRect(), pad = 8;
+  w = Math.min(w, innerWidth - pad * 2);
+  h = Math.min(h, innerHeight - pad * 2);
   pop.style.width = w + "px";
   let x = Math.max(pad, Math.min(r.left, innerWidth - w - pad));
   let y = r.bottom + 5;
@@ -1571,7 +1573,9 @@ function openPicker(agent, field, anchor, ev, only) {
   q.value = "";
   q.placeholder = modelPicker && extra(field) ? t("{field} — filter, or type any model id…", { field: t(field.label) }) : modelPicker ? t("Filter, or type any model id…") : t("Filter {field}…", { field: t(field.label) });
   filter();
-  q.focus();
+  // On touch screens leave the keyboard closed until the filter is tapped,
+  // so opening a model list leaves room to browse its choices.
+  if (!web || !matchMedia("(pointer: coarse)").matches) q.focus();
 }
 
 function effortName(option) {
@@ -10227,7 +10231,10 @@ addEventListener("click", (e) => {
 for (const v of document.querySelectorAll(".view")) {
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
-    if (performance.now() < purposeUntil) { fitRoom(v); readerLeaves(v); }
+    // Touch scrolling continues after the finger leaves the screen. Its
+    // events can reach a busy main thread after the touchmove window has
+    // expired, so a phone browser keeps its native scroll position.
+    if ((web && matchMedia("(pointer: coarse)").matches) || performance.now() < purposeUntil) { fitRoom(v); readerLeaves(v); }
     else if (held?.v === v) hold(held);
     else backToReader(v);
   }, { passive: true });
@@ -10315,6 +10322,12 @@ setTimeout(wag, 250);
 // centring and take the room between, and at the narrowest they draw in.
 function fitTop() {
   const top = $(".top"), nav = $("#nav"), brand = $(".brand"), actions = $(".actions");
+  // In a narrow browser the tabs have a row of their own; shrinking the
+  // desktop title bar would fight that layout and hide the name again.
+  if (web && matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").matches) {
+    top.classList.remove("tight", "cramped", "crowded");
+    return;
+  }
   const fits = () => {
     const a = actions.getBoundingClientRect();
     const left = brand.offsetParent ? brand.getBoundingClientRect().right

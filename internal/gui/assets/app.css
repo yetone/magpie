@@ -1767,6 +1767,64 @@ body.panel .modal { padding: 16px 12px; }
   .skeleton { animation: none !important; }
 }
 
+/* A browser on a phone: keep the desktop and tray's layout independent.
+   Tabs scroll on their own row, content keeps the available height, and
+   form controls are large enough to use without zooming the page. */
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+  body.web { height: 100dvh; font-size: 14px; }
+  body.web .top {
+    height: auto; min-height: 48px; flex-wrap: wrap; gap: 4px 8px;
+    padding: calc(6px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+  }
+  body.web .top .brand { min-height: 40px; }
+  body.web .top #nav {
+    position: relative; left: auto; top: auto; transform: none;
+    order: 3; flex: 0 0 100%; min-width: 0; max-width: 100%;
+    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  }
+  body.web .top #nav::-webkit-scrollbar { display: none; }
+  body.web .top #nav button { flex: none; height: 40px; padding: 0 14px; font-size: 14px; }
+  body.web .top .actions { gap: 4px; }
+  body.web .icon { width: 44px; height: 44px; }
+  body.web .update { min-height: 36px; }
+  body.web .view { padding: 2px max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left)); }
+  body.web .foot { padding-bottom: max(8px, env(safe-area-inset-bottom)); min-width: 0; }
+  body.web .foot .status { min-width: 0; overflow-wrap: anywhere; }
+  body.web .row-head { height: auto; min-height: 40px; flex-wrap: wrap; gap: 4px; }
+  body.web .text, body.web .field, body.web .segs .opt, body.web .copy { min-height: 44px; }
+  body.web .text { padding: 8px 10px; }
+  body.web .copy { min-width: 44px; }
+  body.web .fields { width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, 124px); }
+  body.web .row.agent { flex-wrap: wrap; }
+  body.web .row.agent > .fields { flex-basis: 100%; }
+  body.web .row.pref { flex-wrap: wrap; gap: 8px; padding: 12px; }
+  body.web .row.pref > .who { flex-basis: 100%; }
+  body.web .row.pref .sub { white-space: normal; }
+  body.web .row.pref .segs { margin-left: 0; max-width: 100%; flex-wrap: wrap; }
+  body.web .proxy-segs { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; }
+  body.web .usage-head { height: auto; min-height: 44px; flex-wrap: wrap; gap: 8px; }
+  body.web .usage-head > .segs { max-width: 100%; flex-wrap: wrap; }
+  body.web .usage-head > .grow, body.web .sess-tools > .grow { display: none; }
+  body.web .sess-filter { order: 1; flex: 1 1 100%; width: 100%; }
+  body.web .sess-pick { min-height: 44px; max-width: 100%; font-size: 14px; }
+  body.web .connect { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  body.web .connect label { text-align: left; margin-top: 6px; }
+  body.web .connect .segs { flex-wrap: wrap; }
+  body.web .connect .val { height: auto; min-height: 44px; }
+  body.web input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+  body.web textarea, body.web select { font-size: 16px; min-height: 44px; }
+  body.web .modal { padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+  body.web .modal .editor.framed > .ebody, body.web .editor { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px; }
+  body.web .editor label { text-align: left; padding-top: 8px; }
+  body.web .editor .segs { max-width: 100%; flex-wrap: wrap; }
+  body.web .editor .proxy-row { flex-wrap: wrap; }
+  body.web .editor .proxy-row input.proxy-url { flex-basis: 100%; }
+  body.web .editor .bar { flex-wrap: wrap; }
+  body.web .pop { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  body.web .pop .picker-body { min-height: 0; }
+  body.web .pop #list li { min-height: 44px; }
+}
+
 /* Import from other apps: a checklist per app */
 .editor.importapps { grid-template-columns: minmax(0, 1fr); }
 .editor.importapps .appnote { font-size: 12px; color: var(--muted); line-height: 1.5; }
