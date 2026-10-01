@@ -393,8 +393,29 @@ func PricedBy(providers []string, id string) (Price, bool) {
 			}
 		}
 	}
+	// and last with a dot and a dash taken for the same: Copilot and the
+	// relays spell Anthropic's models claude-opus-4.6, Anthropic's own entry
+	// claude-opus-4-6. Only where nothing above priced it, so a vendor that
+	// lists the id as given, at a price of its own, is still the one asked.
+	want := dashed(b)
+	for _, pid := range providers {
+		keys := []string{}
+		for key, m := range all[pid].Models {
+			if m.Cost != nil && dashed(bareID(key)) == want {
+				keys = append(keys, key)
+			}
+		}
+		if len(keys) > 0 {
+			slices.Sort(keys)
+			return *all[pid].Models[keys[0]].Cost, true
+		}
+	}
 	return Price{}, false
 }
+
+// dashed is an id with its dots as dashes: the spelling two ids are compared
+// in when one vendor writes a model's version 4.6 and another 4-6.
+func dashed(id string) string { return strings.ReplaceAll(id, ".", "-") }
 
 // APIOf is the API a models.dev provider's model is served on, when the
 // catalog says it's one of its own: "responses" or "anthropic" for a model

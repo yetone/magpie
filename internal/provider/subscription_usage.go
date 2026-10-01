@@ -420,11 +420,12 @@ type claudeUsageEntry struct {
 // user refreshes; between two that nobody asked for (a reading magpie keeps
 // up to date by itself, for the Usage page left open, the menu bar's
 // figures and routing) it is claudeUsageWait, drawn afresh after each run,
-// so /usage isn't run on a clock.
+// so /usage isn't run on a clock, and then only once Claude Code has been
+// used since (claudeUsedSince): an allowance nobody used hasn't moved.
 const (
 	claudeAskFloor     = 30 * time.Second
-	claudeUsageWaitMin = 3 * time.Minute
-	claudeUsageWaitMax = 10 * time.Minute
+	claudeUsageWaitMin = 5 * time.Minute
+	claudeUsageWaitMax = 15 * time.Minute
 )
 
 // claudeUsageWait is how long after a run of /usage the next unasked one is
@@ -432,6 +433,30 @@ const (
 // random. A var so tests can fix it.
 var claudeUsageWait = func() time.Duration {
 	return claudeUsageWaitMin + rand.N(claudeUsageWaitMax-claudeUsageWaitMin+time.Minute)/time.Minute*time.Minute
+}
+
+// claudeUsedSince says whether Claude Code was used since t: one of its
+// sessions (a .jsonl in a project's folder under its projects/) was written
+// to since. A var so tests can say.
+var claudeUsedSince = func(t time.Time) bool {
+	projects := filepath.Join(filepath.Dir(claudeCredentialsPath()), "projects")
+	dirs, _ := os.ReadDir(projects)
+	for _, d := range dirs {
+		root := filepath.Join(projects, d.Name())
+		if fi, err := os.Stat(root); err != nil || !fi.IsDir() {
+			continue
+		}
+		files, _ := os.ReadDir(root)
+		for _, f := range files {
+			if !strings.HasSuffix(f.Name(), ".jsonl") {
+				continue
+			}
+			if fi, err := f.Info(); err == nil && fi.ModTime().After(t) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // claudeAsked is when the user last asked to see Claude's usage (unix
@@ -461,7 +486,8 @@ func AskClaudeUsage() {
 // claudeWindows is the allowance of the Claude account user. Only the
 // account Claude Code is signed in to (active) is read, by Claude Code's
 // own /usage: when the user asked since it last was, or when the last
-// reading's claudeUsageWait is up; any other time it is what was kept.
+// reading's claudeUsageWait is up and Claude Code was used since; any other
+// time it is what was kept.
 // magpie itself never asks Anthropic.
 func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow, error) {
 	key := strings.ToLower(user)
@@ -470,10 +496,16 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	asked := claudeAsked.Load()
 	c.Lock()
 	e, ok := c.m[key]
+	c.Unlock()
+	due := e.tried.IsZero() || asked > e.tried.UnixNano() ||
+		active && now.Sub(e.tried) >= e.wait && (e.heard.After(e.tried) || claudeUsedSince(e.tried))
+	read := active && due && now.Sub(e.tried) >= claudeAskFloor
+	c.Lock()
 	// one reading an ask or a wait, its first caller's; the others keep
 	// to it
-	due := e.tried.IsZero() || now.Sub(e.tried) >= e.wait || asked > e.tried.UnixNano()
-	read := active && due && now.Sub(e.tried) >= claudeAskFloor
+	if f := c.m[key]; read && !f.tried.Equal(e.tried) {
+		read, e = false, f
+	}
 	if read {
 		if c.m == nil {
 			c.m = map[string]claudeUsageEntry{}

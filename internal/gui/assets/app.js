@@ -6843,7 +6843,7 @@ let quotas = null;
 let quotasAt = 0; // when they came in
 // asked: the reader opened the page, so a Claude account's usage is read
 // at once, by running Claude Code's own /usage, rather than when its last
-// reading is due (every 3 to 10 minutes, at random).
+// reading is due (every 5 to 15 minutes, at random, once Claude Code was used).
 async function loadUsage(asked) {
   renderUsageTab();
   if (asked) loadQuotas(true);

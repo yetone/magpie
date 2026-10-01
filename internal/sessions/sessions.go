@@ -1053,12 +1053,20 @@ func priceOf(s settings.Settings, model string) (catalog.Price, bool) {
 		}
 	}
 	bare := strings.ToLower(m[strings.LastIndexByte(m, '/')+1:])
-	// a Grok id at an effort (grok-4.7-high) at its model's price
+	// what the user said the model costs from any provider (*/model): the
+	// only price a bare id, or one models.dev has stopped listing, can take
+	// from them
+	if p, ok := s.ModelPrices[provider.AnyPriceKey(bare)]; ok {
+		if pr, bad := p.Price(); bad == "" {
+			return pr, true
+		}
+	}
+	// a Grok id at an effort (grok-4.7-high) at its model's price, and a
+	// version spelled with a dot (Copilot's claude-opus-4.6) at its maker's
+	// claude-opus-4-6
 	for _, id := range []string{bare, dated.ReplaceAllString(bare, ""), provider.PricedName(bare)} {
-		for _, c := range makers(id) {
-			if pr, ok := catalog.PriceOf(c, id); ok {
-				return pr, true
-			}
+		if pr, ok := catalog.PricedBy(makers(id), id); ok {
+			return pr, true
 		}
 	}
 	return catalog.Price{}, false

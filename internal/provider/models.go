@@ -586,8 +586,8 @@ func MakerPrice(model string) (catalog.Price, bool) {
 }
 
 // EffectivePrice is what a call to a provider's model costs the user: the
-// price they set for that model, or for every model of that provider
-// (settings' ModelPrices), else the provider's own list price, else its
+// price they set for that model, or for every model of that provider, or for
+// that model from any provider (settings' ModelPrices), else the provider's own list price, else its
 // maker's. The second return is false only when no price is known at all,
 // which is not the same as a price of zero: that one is set, deliberately.
 //
@@ -614,7 +614,9 @@ func EffectivePriceIn(s settings.Settings, providerID, model string) (catalog.Pr
 	if known {
 		id = p.ID
 	}
-	for _, key := range [...]string{id + "/" + model, id + "/*"} {
+	// then what they said the model costs from any provider (*/model):
+	// still the user's word, so before any list price
+	for _, key := range [...]string{id + "/" + model, id + "/*", AnyPriceKey(model)} {
 		if m, ok := s.ModelPrices[key]; ok {
 			if pr, bad := m.Price(); bad == "" {
 				return pr, true

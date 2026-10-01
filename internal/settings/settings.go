@@ -193,7 +193,10 @@ type Settings struct {
 	// tokens, by "<provider id>/<model id>", and "*" for every model of
 	// that provider: a provider models.dev does not list, or one that
 	// resells at a multiplier, is otherwise priced at whatever its maker's
-	// list price is.
+	// list price is. "*/<model id>" (AnyProvider) is that model from any
+	// provider not priced above, and a session's model named with no
+	// provider at all: one whose provider is gone, or one models.dev no
+	// longer lists.
 	ModelPrices map[string]ModelPrice `json:"modelPrices,omitempty"`
 	// ModelOutputs is the most a reply of a model may hold, by "<provider
 	// id>/<model id>", and "*" for every model of that provider. Absent
@@ -259,7 +262,11 @@ func (m ModelPrice) Price() (catalog.Price, string) {
 // Load discards the whole file rather than half of it, so neither reaches
 // here. Both are still refused, from a price typed in or passed in.
 func CheckModelPrice(key string, m ModelPrice) error {
-	if err := CheckModelKey("price", key); err != nil {
+	if model, every := strings.CutPrefix(key, AnyProvider); every {
+		if model == "" || model == "*" {
+			return fmt.Errorf("a price for every provider names one model, such as */claude-opus-4.6, not %q", key)
+		}
+	} else if err := CheckModelKey("price", key); err != nil {
 		return err
 	}
 	if _, bad := m.Price(); bad != "" {
@@ -267,6 +274,10 @@ func CheckModelPrice(key string, m ModelPrice) error {
 	}
 	return nil
 }
+
+// AnyProvider begins a ModelPrices key that prices a model whichever
+// provider it came through, its id lower-cased after it.
+const AnyProvider = "*/"
 
 // anArticle is the article a word takes where a message names it, so that an
 // input price is not "a input price".

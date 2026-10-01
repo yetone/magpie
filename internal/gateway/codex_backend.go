@@ -99,6 +99,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			s.serve(w, r, provider.Responses, body)
 			return
 		}
+		body = searchCallIDs(body)
 		if rest == "/responses/compact" {
 			break // preserve native compaction's existing passthrough
 		}
@@ -739,6 +740,57 @@ func codexInput(body []byte, magpieModel bool) (_ []byte, compact bool) {
 		return body, false
 	}
 	return nb, compact
+}
+
+// searchCallIDs is a Responses request whose tool_search_call items have
+// ids OpenAI takes. A vendor's reply that magpie, or the vendor, gave the
+// call as a function_call's (fc_…) came back to Codex as Codex's
+// tool_search_call with that id, and Codex hands it back on every later
+// turn: OpenAI's own models and the ChatGPT backend turn the whole request
+// away ("Invalid 'input[98].id': 'fc_…'. Expected an ID that begins with
+// 'tsc'"), Codex's compaction with it. Such an id goes as a tsc_ one; the
+// rest of the request goes byte for byte.
+func searchCallIDs(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"tool_search_call"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(q["input"], &items) != nil {
+		return body
+	}
+	changed := false
+	for i, raw := range items {
+		var it map[string]json.RawMessage
+		if json.Unmarshal(raw, &it) != nil || string(it["type"]) != `"tool_search_call"` {
+			continue
+		}
+		var id string
+		if json.Unmarshal(it["id"], &id) != nil || id == "" || strings.HasPrefix(id, "tsc_") {
+			continue
+		}
+		if _, rest, ok := strings.Cut(id, "_"); ok && rest != "" {
+			id = "tsc_" + rest
+		} else {
+			id = "tsc_" + id
+		}
+		it["id"], _ = json.Marshal(id)
+		if b, err := marshalPlain(it); err == nil {
+			items[i], changed = b, true
+		}
+	}
+	if !changed {
+		return body
+	}
+	q["input"], _ = marshalPlain(items)
+	nb, err := marshalPlain(q)
+	if err != nil {
+		return body
+	}
+	return nb
 }
 
 // openaiOnly are the parts of a Responses request Codex sends only to a
