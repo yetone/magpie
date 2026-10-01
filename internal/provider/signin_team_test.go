@@ -16,25 +16,8 @@ import (
 // brings back a Claude account that had been removed from magpie.
 func TestClaudeTeamSeatBesidePersonal(t *testing.T) {
 	home := claudeHome(t)
-	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/v1/oauth/token":
-			json.NewEncoder(w).Encode(map[string]any{
-				"access_token": "sk-ant-oat01-team", "refresh_token": "sk-ant-ort01-team", "expires_in": 3600,
-				"account":      map[string]any{"uuid": "u", "email_address": "same@example.com"},
-				"organization": map[string]any{"uuid": "o-team", "name": "Acme"},
-			})
-		case "/api/oauth/profile":
-			json.NewEncoder(w).Encode(map[string]any{
-				"account":      map[string]any{"email": "same@example.com"},
-				"organization": map[string]any{"organization_type": "claude_team"},
-			})
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer fake.Close()
-	claudeTokenURL, claudeBase = fake.URL+"/v1/oauth/token", fake.URL
+	noAnthropic(t)
+	fakeClaudeLogin(t, fakeClaudeAccount{email: "same@example.com", org: "Acme", orgUUID: "o-team", plan: "team", refresh: "sk-ant-ort01-team"}, "", true)
 
 	cred := claudeSignIn(t, home, time.Now().Add(time.Hour))
 	writeFile(t, filepath.Join(home, ".claude.json"), map[string]any{"oauthAccount": map[string]any{

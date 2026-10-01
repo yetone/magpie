@@ -236,12 +236,13 @@ func TestCallerIdentitySurvivesStreamingFailover(t *testing.T) {
 	r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"plan/m1","messages":[{"role":"user","content":"hi"}],"stream":true}`))
 	r.Header.Set("Authorization", "Bearer "+secrets[0])
 	w := httptest.NewRecorder()
-	New().Handler().ServeHTTP(w, r)
+	s := New()
+	s.Handler().ServeHTTP(w, r)
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "[DONE]") {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	rec := lastUsage(t)
-	if rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "Stream" || rec.ProviderKeyID != provider.KeyID("backup") || rec.ProviderKeyName != "Backup" || rec.Input != 100 || rec.Output != 20 {
+	if rec.RouteID == 0 || rec.RouteID != lastRoute(s).ID || rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "Stream" || rec.ProviderKeyID != provider.KeyID("backup") || rec.ProviderKeyName != "Backup" || rec.Input != 100 || rec.Output != 20 {
 		t.Fatal(rec)
 	}
 }

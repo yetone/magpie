@@ -227,6 +227,16 @@ var refreshing sync.WaitGroup
 func Settle() {
 	refreshing.Wait()
 	Restart()
+	// and no host goes on finishing its calls in a folder going away
+	hostMu.Lock()
+	hs := make([]*host, 0, len(retiring))
+	for h := range retiring {
+		hs = append(hs, h)
+	}
+	hostMu.Unlock()
+	for _, h := range hs {
+		h.stop()
+	}
 }
 
 // Cached is the plugins' providers as last asked, without starting the

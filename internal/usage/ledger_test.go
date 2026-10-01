@@ -37,7 +37,7 @@ func TestLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	Append(Record{Time: now.Add(-2 * time.Hour), Agent: "codex", Provider: "relay", Host: "relay.example", Model: "sol", Requested: "fast", Served: "luna",
-		Input: 2000, Output: 500, CacheRead: 4000, CacheWrite: 1000, Effort: "high", Millis: 3200, TTFT: 400, Status: 200, Session: "s1"})
+		Input: 2000, Output: 500, CacheRead: 4000, CacheWrite: 1000, Effort: "high", Millis: 3200, TTFT: 400, Status: 200, Session: "s1", RouteID: 123})
 	Append(Record{Time: now.Add(-1 * time.Hour), Agent: "codex", Provider: "relay", Host: "relay.example", Model: "sol", Requested: "relay/sol", Served: "sol-2026-01-01",
 		Input: 10, Output: 1, Millis: 100, Status: 200})
 	Append(Record{Time: now.Add(-30 * time.Minute), Agent: "codex", Provider: "relay", Host: "relay.example", Model: "sol", Requested: "fast", Millis: 50, Status: 429})
@@ -51,7 +51,7 @@ func TestLedger(t *testing.T) {
 		t.Fatalf("not newest first: %+v", rows)
 	}
 	sw := rows[2]
-	if sw.Requested != "fast" || sw.Model != "sol" || sw.Served != "luna" || !sw.Swapped || !sw.Priced {
+	if sw.RouteID != 123 || sw.Requested != "fast" || sw.Model != "sol" || sw.Served != "luna" || !sw.Swapped || !sw.Priced {
 		t.Fatalf("swapped row %+v", sw)
 	}
 	if want := (2000*2 + 500*8 + 4000*0.5 + 1000*2.5) / 1e6; sw.Cost != want {
@@ -60,7 +60,7 @@ func TestLedger(t *testing.T) {
 	if rows[1].Swapped || rows[1].Served != "sol-2026-01-01" {
 		t.Fatalf("a dated name is the same model: %+v", rows[1])
 	}
-	if rows[3].Requested != "" || rows[3].Served != "" || rows[3].Input != 1000 || !rows[3].Priced {
+	if rows[3].RouteID != 0 || rows[3].Requested != "" || rows[3].Served != "" || rows[3].Input != 1000 || !rows[3].Priced {
 		t.Fatalf("old record %+v", rows[3])
 	}
 	if rows[0].Priced || rows[0].Cost != 0 {
@@ -85,8 +85,8 @@ func TestLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := strings.Join(CSVHeader, ",") + "\n" +
-		rows[1].Time.Format(time.RFC3339) + ",codex,relay/sol,relay,relay.example,sol,sol-2026-01-01,false,,10,1,0,0,0,0.000028,100,,200,false,,,,,,\n" +
-		rows[2].Time.Format(time.RFC3339) + ",codex,fast,relay,relay.example,sol,luna,true,high,2000,500,1000,4000,0,0.012500,3200,400,200,false,s1,,,,,\n"
+		rows[1].Time.Format(time.RFC3339) + ",codex,relay/sol,relay,relay.example,sol,sol-2026-01-01,false,,10,1,0,0,0,0.000028,100,,200,false,,,,,,,\n" +
+		rows[2].Time.Format(time.RFC3339) + ",codex,fast,relay,relay.example,sol,luna,true,high,2000,500,1000,4000,0,0.012500,3200,400,200,false,s1,,,,123,,\n"
 	if b.String() != want {
 		t.Fatalf("csv:\n%s\nwant:\n%s", b.String(), want)
 	}

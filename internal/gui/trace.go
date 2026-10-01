@@ -27,6 +27,11 @@ func mainView(q url.Values) string {
 			view += "&req=" + strconv.FormatInt(id, 10)
 		}
 	}
+	// the panel's picker making a routing group of a model kept for groups
+	// and in none: the window opens on a new group of it
+	if m := q.Get("newgroup"); view == "routing" && m != "" {
+		view += "&newgroup=" + url.QueryEscape(m)
+	}
 	return view
 }
 
@@ -43,6 +48,31 @@ func argView(s string) string { return url.QueryEscape(s) }
 // waits up to 25 s for something to change after the seq it is given, so
 // the page hears of a request as it happens.
 func traceRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /api/gateway/route", func(rw http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
+		if err != nil || id <= 0 {
+			http.Error(rw, "invalid route id", http.StatusBadRequest)
+			return
+		}
+		if gw := served.Load(); gw != nil {
+			for _, route := range gw.Trace(r.Context(), 0, 0).Routes {
+				if route.ID == id {
+					writeJSON(rw, route)
+					return
+				}
+			}
+		}
+		day, err := time.Parse("2006-01-02", r.URL.Query().Get("day"))
+		if err != nil {
+			http.Error(rw, "invalid route day", http.StatusBadRequest)
+			return
+		}
+		if route, ok := gateway.HistoryRoute(id, day); ok {
+			writeJSON(rw, route)
+			return
+		}
+		http.Error(rw, "route history is no longer available", http.StatusNotFound)
+	})
 	mux.HandleFunc("GET /api/gateway/trace", func(rw http.ResponseWriter, r *http.Request) {
 		gw := served.Load()
 		out := traceJSON{TraceState: gateway.TraceState{Routes: []gateway.Route{}}, Mine: gw != nil}

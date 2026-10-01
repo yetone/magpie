@@ -57,6 +57,9 @@ type Model struct {
 	// Free is set on a model a subscription serves at no cost to its
 	// allowance: WorkBuddy's "credits": "x0.00".
 	Free bool `json:",omitempty"`
+	// Reasoning is set on a model that thinks, whether or not it takes
+	// levels: mimo-v2.6-flash thinks with a switch alone (#402).
+	Reasoning bool `json:",omitempty"`
 }
 
 func imageInput(modalities []string) *bool {
@@ -94,6 +97,7 @@ type mdModel struct {
 	Name        string `json:"name"`
 	ReleaseDate string `json:"release_date"`
 	Temperature *bool  `json:"temperature"` // false: rejects temperature/top_p
+	Thinks      bool   `json:"reasoning"`
 	Reasoning   []struct {
 		Type   string   `json:"type"`
 		Values []string `json:"values"`
@@ -154,6 +158,9 @@ var (
 	// efforts are the models' reasoning levels, by bare id, as most of the
 	// providers that give any for them give them
 	efforts map[string][]string
+	// thinks are the models, by bare id, most of the providers serving
+	// them say reason, levels or not
+	thinks map[string]bool
 
 	syncMu sync.Mutex
 )
@@ -196,7 +203,7 @@ func load() map[string]mdProvider {
 				var m map[string]mdProvider
 				if json.Unmarshal(b, &m) == nil && len(m) > 0 {
 					mdev = m
-					votes := map[string]int{}
+					votes, reasons := map[string]int{}, map[string]int{}
 					sizes, outs := map[string]map[int]int{}, map[string]map[int]int{}
 					levels := map[string]map[string]int{}
 					// one vote a provider for each list it gives a model: a
@@ -215,6 +222,11 @@ func load() map[string]mdProvider {
 									voted[k] = true
 									levels[bareID(id)][l]++
 								}
+							}
+							if x.Thinks || len(x.efforts()) > 0 {
+								reasons[bareID(id)]++
+							} else {
+								reasons[bareID(id)]--
 							}
 							if slices.Contains(x.Modalities.Input, "image") {
 								votes[bareID(id)]++
@@ -247,6 +259,12 @@ func load() map[string]mdProvider {
 					for id, by := range levels {
 						efforts[id] = strings.Split(mostListed(by), ",")
 					}
+					thinks = map[string]bool{}
+					for id, v := range reasons {
+						if v > 0 {
+							thinks[id] = true
+						}
+					}
 					images = map[string]bool{}
 					for id, v := range votes {
 						if v > 0 {
@@ -266,7 +284,7 @@ func Reset() {
 	loadMu.Lock()
 	defer loadMu.Unlock()
 	loaded = false
-	mdev, images, windows, outputs, efforts = nil, nil, nil, nil, nil
+	mdev, images, windows, outputs, efforts, thinks = nil, nil, nil, nil, nil, nil
 }
 
 // Sync downloads the models.dev catalog into CachePath. It serializes with
@@ -413,6 +431,7 @@ func Provider(id string) []Model {
 		mm := Model{ID: m.ID, Name: m.Name, Provider: id, Released: m.ReleaseDate, Price: m.Cost, Temperature: m.Temperature,
 			Images: slices.Contains(m.Modalities.Input, "image"), ImageInput: imageInput(m.Modalities.Input), Context: m.window(), Output: m.Limit.Output}
 		mm.Efforts = m.efforts()
+		mm.Reasoning = m.Thinks || len(mm.Efforts) > 0
 		out = append(out, mm)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -428,6 +447,15 @@ func Provider(id string) []Model {
 // for "github-copilot"), or "" when the catalog doesn't know it.
 func ProviderName(id string) string {
 	return load()[id].Name
+}
+
+// Thinks reports whether models.dev says a model of this id reasons, as
+// most of the providers it lists serving it do, whether or not they give
+// it levels; for a vendor it doesn't list, serving a model it knows from
+// others.
+func Thinks(id string) bool {
+	load()
+	return thinks[bareID(id)]
 }
 
 // SeesImages reports whether models.dev says a model of this id takes

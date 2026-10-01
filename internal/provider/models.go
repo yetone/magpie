@@ -715,6 +715,10 @@ type Entry struct {
 	// Shared are a group's levels its members have in common: its Efforts,
 	// unless the group names its own (Group.Levels).
 	Shared []string `json:"-"`
+	// Reasoning is set on a model that thinks, levels or not: one with a
+	// thinking switch alone has it and no Efforts (a group's: every
+	// member thinks).
+	Reasoning bool `json:"reasoning,omitempty"`
 }
 
 // Catalog lists the routing groups, then every exposed model of every ready
@@ -735,6 +739,19 @@ func Catalog() []Entry {
 func Served() []Entry {
 	entries := providerEntries()
 	return append(groupEntries(entries), entries...)
+}
+
+// Unlisted are the models Served has and Catalog doesn't: those of the
+// providers kept for routing groups (Provider.Unlisted), which agents
+// aren't offered.
+func Unlisted() []Entry {
+	var out []Entry
+	for _, e := range providerEntries() {
+		if e.Provider.Unlisted {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // providerEntries is the catalog without its groups.
@@ -782,6 +799,10 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	if n, ok := modelNameIn(s.ModelNames, p.ID, m.ID); ok {
 		e.Name, e.Default = n, m.Name
 	}
+	// a model that thinks still does with the levels the user kept or
+	// none at all; one its source says nothing of thinks as most of the
+	// providers serving it say (#402)
+	e.Reasoning = m.Reasoning || len(e.Efforts) > 0 || catalog.Thinks(m.ID)
 	e.Efforts = effortsKept(e.Efforts, s.ModelEfforts[e.ID])
 	return e
 }

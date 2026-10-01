@@ -242,9 +242,10 @@ func TestClaudeSubscriptionRefusalMovesToNextAccount(t *testing.T) {
 	log := filepath.Join(dir, "log")
 	script := `#!/bin/sh
 if [ "$1" = auth ]; then echo '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}'; exit 0; fi
-echo "${CLAUDE_CODE_OAUTH_TOKEN:-own}" >> ` + log + `
+TOK=; [ -n "$CLAUDE_CONFIG_DIR" ] && TOK=$(sed -n 's/.*"accessToken": *"\([^"]*\)".*/\1/p' "$CLAUDE_CONFIG_DIR/.credentials.json")
+echo "${TOK:-own}" >> ` + log + `
 while read -r line; do
-  if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ "$CLAUDE_CODE_OAUTH_TOKEN" = tok-me ]; then
+  if [ -z "$TOK" ] || [ "$TOK" = tok-me ]; then
     echo '{"type":"stream_event","event":{"type":"message_start","message":{"id":"m","model":"claude-sonnet-5","usage":{"input_tokens":1}}}}'
     echo '{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}'
     echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":""}}}'

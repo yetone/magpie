@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // The trace tells what routing did as it did it: who was to answer in what
@@ -52,6 +53,10 @@ func TestTraceTellsTheRoute(t *testing.T) {
 	if len(r.Tries) != 2 || r.Tries[0].Status != 429 || r.Tries[0].Fail != failRate || r.Tries[0].Rest == nil ||
 		r.Tries[0].Rest.By != "cooldown" || r.Tries[1].Status != 200 || r.Tries[1].Rest != nil {
 		t.Fatalf("tries %+v", r.Tries)
+	}
+
+	if recs := usage.Load(time.Time{}); len(recs) != 1 || recs[0].RouteID != r.ID || r.ID == 0 {
+		t.Fatalf("usage: %+v, route %d", recs, r.ID)
 	}
 
 	// the next finds the limited key resting, and says why

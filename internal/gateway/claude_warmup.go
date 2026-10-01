@@ -26,14 +26,16 @@ func claudeProxy(ctx context.Context) string {
 // warmClaude sends a Claude account one "hi" through Claude Code, as the
 // bridge runs it (claudeCLIArgs): none of its tools, settings or MCP
 // servers, nothing kept on disk, at Haiku, the least an account's window
-// is started by. oauth is a saved account's sign-in, "" for the one
-// Claude Code is signed in to.
-func warmClaude(ctx context.Context, oauth string) error { return askClaude(ctx, oauth, "haiku") }
+// is started by. configDir is a saved account's config directory, "" for
+// the one Claude Code is signed in to.
+func warmClaude(ctx context.Context, configDir string) error {
+	return askClaude(ctx, configDir, "haiku")
+}
 
 // askClaude has Claude Code answer one "hi" at model, as warmClaude does;
 // it is how a Claude account's model test runs (provider.ProbeClaudeVia),
 // so the test asks Anthropic as Claude Code does, through Claude Code.
-func askClaude(ctx context.Context, oauth, model string) error {
+func askClaude(ctx context.Context, configDir, model string) error {
 	binary, err := claudeBinary()
 	if err != nil {
 		return err
@@ -47,9 +49,7 @@ func askClaude(ctx context.Context, oauth, model string) error {
 	cmd.Dir = tmp
 	cmd.Stdin = strings.NewReader("hi")
 	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
-	if oauth != "" {
-		cmd.Env = append(cmd.Env, "CLAUDE_CODE_OAUTH_TOKEN="+oauth)
-	}
+	cmd.Env = inClaudeDir(cmd.Env, configDir)
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	runErr := cmd.Run()

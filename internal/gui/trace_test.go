@@ -1,8 +1,15 @@
 package gui
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/yetone/magpie/internal/gateway"
 )
 
 // The tray panel's Routing tab opens the window's Routing page on the
@@ -24,4 +31,42 @@ func TestMainView(t *testing.T) {
 			t.Errorf("%v: %q, want %q", c.q, got, c.want)
 		}
 	}
+}
+
+func TestRouteLookup(t *testing.T) {
+	sandboxHome(t)
+	old := served.Swap(nil)
+	t.Cleanup(func() { served.Store(old) })
+	if err := os.MkdirAll(gateway.HistoryDir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gateway.HistoryDir(), "2026-09-30.jsonl"), []byte(`{"id":123,"model":"wanted","done":true}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	traceRoutes(mux)
+	for _, c := range []struct {
+		id   string
+		code int
+	}{{"123", 200}, {"124", 404}, {"", 400}, {"-1", 400}, {"../123", 400}} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/gateway/route?id="+url.QueryEscape(c.id)+"&day=2026-09-30", nil))
+		if w.Code != c.code {
+			t.Fatalf("id %q: %d %s", c.id, w.Code, w.Body)
+		}
+		if c.code == 200 {
+			var route gateway.Route
+			if err := json.Unmarshal(w.Body.Bytes(), &route); err != nil || route.ID != 123 || route.Model != "wanted" {
+				t.Fatalf("route: %+v, %v", route, err)
+			}
+		}
+	}
+	for _, day := range []string{"", "../2026-09-30", "2026-02-30"} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/gateway/route?id=123&day="+url.QueryEscape(day), nil))
+		if w.Code != 400 {
+			t.Fatalf("invalid day %q: %d", day, w.Code)
+		}
+	}
+
 }

@@ -47,9 +47,9 @@ func TestCallerKeyManagementAndUsageRoutes(t *testing.T) {
 		t.Fatal("list leaked credentials")
 	}
 	for _, rec := range []usage.Record{
-		{CallerKeyID: laptop, CallerKeyName: "Laptop", Input: 100},
-		{CallerKeyID: laptop, CallerKeyName: "Laptop", Input: 10},
-		{CallerKeyID: server, CallerKeyName: "Server", Input: 200},
+		{RouteID: 123, ProviderKeyID: "upstream", ProviderKeyName: "Upstream", CallerKeyID: laptop, CallerKeyName: "Laptop", Input: 100},
+		{RouteID: 456, CallerKeyID: laptop, CallerKeyName: "Laptop", Input: 10},
+		{RouteID: 123, CallerKeyID: server, CallerKeyName: "Server", Input: 200},
 		{Input: 40},
 	} {
 		rec.Time, rec.Provider, rec.Model, rec.Status = time.Now(), "relay", "unknown", 200
@@ -76,6 +76,15 @@ func TestCallerKeyManagementAndUsageRoutes(t *testing.T) {
 	cells, err := csv.NewReader(strings.NewReader(raw)).ReadAll()
 	if err != nil || len(cells) != 3 || cells[1][slices.Index(usage.CSVHeader, "caller_key_id")] != laptop || cells[2][slices.Index(usage.CSVHeader, "caller_key_id")] != laptop || strings.Contains(raw, secret) {
 		t.Fatal("CSV", err, raw)
+	}
+	request("GET", "/api/usage/requests"+query+"&route=123", "", &ledger)
+	if ledger.Total != 1 || ledger.Input != 100 || ledger.Rows[0].RouteID != 123 || ledger.Rows[0].ProviderKeyID != "upstream" || ledger.Rows[0].CallerKeyID != laptop {
+		t.Fatal("combined route and caller filter", ledger)
+	}
+	raw = request("GET", "/api/usage/requests.csv"+query+"&route=123", "", nil)
+	cells, err = csv.NewReader(strings.NewReader(raw)).ReadAll()
+	if err != nil || len(cells) != 2 || cells[1][slices.Index(usage.CSVHeader, "route_id")] != "123" || cells[1][slices.Index(usage.CSVHeader, "provider_key_id")] != "upstream" || cells[1][slices.Index(usage.CSVHeader, "caller_key_id")] != laptop || strings.Contains(raw, secret) {
+		t.Fatal("combined-filter CSV", err, raw)
 	}
 	request("POST", "/api/caller-keys/rotate-key", `{"key":"`+laptop+`"}`, &s)
 	if s.Secret == "" || s.Secret == secret || s.Keys[0].ID != laptop || s.Keys[0].Name != "Main" {

@@ -136,11 +136,12 @@ func TestCallerUsageSystemOne(t *testing.T) {
 	r := httptest.NewRequest("POST", "/v1/systemone", strings.NewReader(`{"model":"jev/jev-latest","state":{"message":"hi"},"questions":{}}`))
 	r.Header.Set("Authorization", "Bearer "+secrets[0])
 	w := httptest.NewRecorder()
-	New().Handler().ServeHTTP(w, r)
+	s := New()
+	s.Handler().ServeHTTP(w, r)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body)
 	}
-	if rec := lastUsage(t); rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "System One client" || rec.ProviderKeyID != provider.KeyID("upstream") || rec.Input != 120 {
+	if rec := lastUsage(t); rec.RouteID == 0 || rec.RouteID != lastRoute(s).ID || rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "System One client" || rec.ProviderKeyID != provider.KeyID("upstream") || rec.Input != 120 {
 		t.Fatal(rec)
 	}
 }
@@ -158,11 +159,12 @@ func TestCallerUsageCodexOwnModel(t *testing.T) {
 	r.Header.Set("Authorization", "Bearer chatgpt-token")
 	r = r.WithContext(access.WithIdentity(r.Context(), access.Identity{KeyID: "desk", KeyName: "Desk"}))
 	w := httptest.NewRecorder()
-	New().Handler().ServeHTTP(w, r)
+	s := New()
+	s.Handler().ServeHTTP(w, r)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body)
 	}
-	if rec := lastUsage(t); rec.CallerKeyID != "desk" || rec.CallerKeyName != "Desk" || rec.Input != 9 || rec.Output != 2 {
+	if rec := lastUsage(t); rec.RouteID == 0 || rec.RouteID != lastRoute(s).ID || rec.CallerKeyID != "desk" || rec.CallerKeyName != "Desk" || rec.Input != 9 || rec.Output != 2 {
 		t.Fatal(rec)
 	}
 }

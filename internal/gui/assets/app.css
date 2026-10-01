@@ -197,6 +197,8 @@ body.window:not(.mac):not(.linux):not(.web) .brand { display: none; } /* Windows
 body.panel .seg { display: none; }
 .seg button { position: relative; z-index: 1; white-space: nowrap; height: 24px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--muted); transition: color .18s var(--ease), transform .14s var(--ease); }
 .seg button.on { color: var(--fg); }
+/* a plugin update waiting for the reader: a dot on Plugins */
+.seg button.has-dot::after { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
 .seg button:hover:not(.on) { color: var(--fg-2); }
 .actions { margin-left: auto; display: flex; gap: 2px; }
 .icon {
@@ -561,6 +563,12 @@ body.window .field.solo { grid-column: auto; }
 .led .faint { color: var(--faint); }
 .led .muted { color: var(--muted); }
 .led .when { color: var(--muted); }
+.led .when .text { padding: 0; font: inherit; }
+.led .when .led-route-link { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.led .when .led-route-link:hover { text-decoration-style: solid; }
+#ledRoute { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+#ledRoute[hidden] { display: none; }
+#ledRouteClear { font-size: 18px; padding: 2px 6px; }
 .led .model, .led .where { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 .led .where { color: var(--fg-2); }
 .led .cost { color: var(--green); }
@@ -1074,6 +1082,15 @@ body.window .foot { padding-left: 18px; }
 .pop li.reset .ic { opacity: .75; }
 .pop li.custom .v { color: var(--fg); }
 .pop li.custom .n { color: var(--muted); }
+/* a model kept for routing groups, found by the filter: why it isn't
+   offered, and what to do, below the choices */
+.pop li.kept, .pop.model-picker li.kept { height: auto; align-items: flex-start; padding: 8px; margin-top: 3px; border-top: 1px solid var(--line); border-radius: 0; white-space: normal; cursor: default; }
+.pop li.kept .ic { margin-top: 1px; flex: none; }
+.pop li.kept .kept-words { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.pop li.kept .kept-words b { color: var(--fg); font-weight: 500; font-size: 12.5px; }
+.pop li.kept .text.action { flex: none; align-self: center; height: 25px; }
+.model-hint.warn { color: var(--amber); }
+.model-hint .text { margin-left: 4px; }
 .pop .none { padding: 10px 12px; color: var(--muted); font-size: 12px; white-space: normal; line-height: 1.45; }
 .pop.keying .search { border-bottom-color: var(--accent); color: var(--accent); }
 .pop .none b { color: var(--fg); font-weight: 500; }

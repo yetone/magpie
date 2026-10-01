@@ -103,6 +103,9 @@ func TestCodexOwnModelTraced(t *testing.T) {
 	if st.Totals.Requests != 1 {
 		t.Errorf("totals %+v", st.Totals)
 	}
+	if recs := usage.Load(time.Time{}); len(recs) != 1 || recs[0].RouteID != r.ID || r.ID == 0 {
+		t.Fatalf("usage: %+v, route %d", recs, r.ID)
+	}
 }
 
 func TestCodexOwnModelOmitsNonemptyReasoning(t *testing.T) {

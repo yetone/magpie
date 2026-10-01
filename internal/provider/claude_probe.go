@@ -13,13 +13,14 @@ import (
 // Claude account comes to: such requests run Claude Code instead.
 var errClaudeViaCLI = errors.New("a Claude account is used through Claude Code, not by requests to Anthropic's API")
 
-// claudeCLIProbe has Claude Code answer one "hi" at model, with oauth the
-// sign-in of a saved account, "" for the one Claude Code is signed in to.
+// claudeCLIProbe has Claude Code answer one "hi" at model, with configDir
+// the config directory of a saved account (claude_dirs.go), "" for the one
+// Claude Code is signed in to.
 // The gateway, which runs Claude Code, sets it (ProbeClaudeVia).
-var claudeCLIProbe func(ctx context.Context, oauth, model string) error
+var claudeCLIProbe func(ctx context.Context, configDir, model string) error
 
 // ProbeClaudeVia sets how a Claude account's test runs Claude Code.
-func ProbeClaudeVia(f func(ctx context.Context, oauth, model string) error) { claudeCLIProbe = f }
+func ProbeClaudeVia(f func(ctx context.Context, configDir, model string) error) { claudeCLIProbe = f }
 
 // claudeWait is how long a test waits on Claude Code, which takes a few
 // seconds to start before it asks.
@@ -38,13 +39,13 @@ func (p Provider) testClaude(ctx context.Context, model string) Result {
 	}
 	ctx, cancel := context.WithTimeout(ctx, claudeWait)
 	defer cancel()
-	oauth, _, err := p.Account.Token(ctx)
+	dir, _, err := p.Account.Token(ctx)
 	if err != nil {
 		r.Error = err.Error()
 		return r
 	}
 	start := time.Now()
-	err = claudeCLIProbe(ctx, oauth, model)
+	err = claudeCLIProbe(ctx, dir, model)
 	r.Millis = time.Since(start).Milliseconds()
 	if err != nil {
 		r.Error = err.Error()

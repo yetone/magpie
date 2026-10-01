@@ -4,19 +4,24 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 func TestProviderAndCallerIdentitiesRemainIndependent(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
 	now := time.Now()
 	recs := []Record{
-		{Time: now.Add(-time.Minute), Provider: "relay", Model: "m", ProviderKeyID: "primary", ProviderKeyName: "Primary", CallerKeyID: "desk", CallerKeyName: "Desk", Input: 10, Status: 200},
-		{Time: now, Provider: "relay", Model: "m", ProviderKeyID: "backup", ProviderKeyName: "Backup", CallerKeyID: "desk", CallerKeyName: "Desk", Input: 20, Status: 200},
-		{Time: now, Provider: "relay", Model: "m", ProviderKeyID: "backup", ProviderKeyName: "Backup", CallerKeyID: "server", CallerKeyName: "Server", Input: 30, Status: 200},
+		{Time: now.Add(-time.Minute), RouteID: 123, Provider: "relay", Model: "m", ProviderKeyID: "primary", ProviderKeyName: "Primary", CallerKeyID: "desk", CallerKeyName: "Desk", Input: 10, Status: 200},
+		{Time: now, RouteID: 456, Provider: "relay", Model: "m", ProviderKeyID: "backup", ProviderKeyName: "Backup", CallerKeyID: "desk", CallerKeyName: "Desk", Input: 20, Status: 200},
+		{Time: now, RouteID: 456, Provider: "relay", Model: "m", ProviderKeyID: "backup", ProviderKeyName: "Backup", CallerKeyID: "server", CallerKeyName: "Server", Input: 30, Status: 200},
 	}
 	s := summarize(All, now, recs)
 	if len(s.ProviderKeys) != 2 || len(s.CallerKeys) != 2 || s.Input != 60 {
@@ -40,6 +45,15 @@ func TestProviderAndCallerIdentitiesRemainIndependent(t *testing.T) {
 	if len(rows) != 2 || total.Input != 30 {
 		t.Fatalf("caller filter across upstream keys: %+v, %+v", rows, total)
 	}
+	if rows, total, _ := ledger(All.Since(now), Filter{RouteID: 456}, recs); len(rows) != 2 || total.Input != 50 {
+		t.Fatalf("route filter across caller keys: %+v, %+v", rows, total)
+	}
+	if rows, total, _ := ledger(All.Since(now), Filter{RouteID: 456, CallerKey: "desk"}, recs); len(rows) != 1 || total.Input != 20 || rows[0].ProviderKeyID != "backup" || rows[0].CallerKeyID != "desk" {
+		t.Fatalf("combined route and caller filter: %+v, %+v", rows, total)
+	}
+	if rows, total, _ := ledger(All.Since(now), Filter{RouteID: 123, CallerKey: "server"}, recs); len(rows) != 0 || total.Calls != 0 {
+		t.Fatalf("combined filters must intersect: %+v, %+v", rows, total)
+	}
 	var out strings.Builder
 	if err := WriteCSV(&out, rows); err != nil {
 		t.Fatal(err)
@@ -48,12 +62,12 @@ func TestProviderAndCallerIdentitiesRemainIndependent(t *testing.T) {
 	if err != nil || len(cells) != 3 {
 		t.Fatalf("CSV: %v, %s", err, out.String())
 	}
-	if !slices.Equal(cells[0][len(cells[0])-4:], []string{"provider_key_id", "provider_key_name", "caller_key_id", "caller_key_name"}) {
+	if !slices.Equal(cells[0][len(cells[0])-5:], []string{"provider_key_id", "provider_key_name", "route_id", "caller_key_id", "caller_key_name"}) {
 		t.Fatal("provider columns must precede caller columns", cells[0])
 	}
 	for i, row := range rows {
-		want := []string{row.ProviderKeyID, row.ProviderKeyName, row.CallerKeyID, row.CallerKeyName}
-		if !slices.Equal(cells[i+1][len(cells[0])-4:], want) {
+		want := []string{row.ProviderKeyID, row.ProviderKeyName, strconv.FormatInt(row.RouteID, 10), row.CallerKeyID, row.CallerKeyName}
+		if !slices.Equal(cells[i+1][len(cells[0])-5:], want) {
 			t.Fatal("CSV lost an identity", cells[i+1], want)
 		}
 		encoded, err := json.Marshal(row)
@@ -64,7 +78,7 @@ func TestProviderAndCallerIdentitiesRemainIndependent(t *testing.T) {
 		if err := json.Unmarshal(encoded, &fields); err != nil {
 			t.Fatal(err)
 		}
-		if fields["providerKeyId"] != row.ProviderKeyID || fields["providerKeyName"] != row.ProviderKeyName || fields["callerKeyId"] != "desk" || fields["callerKeyName"] != "Desk" || fields["keyId"] != nil || fields["keyName"] != nil {
+		if fields["route_id"] != float64(row.RouteID) || fields["providerKeyId"] != row.ProviderKeyID || fields["providerKeyName"] != row.ProviderKeyName || fields["callerKeyId"] != "desk" || fields["callerKeyName"] != "Desk" || fields["keyId"] != nil || fields["keyName"] != nil {
 			t.Fatal("JSON identities must be explicit", fields)
 		}
 	}

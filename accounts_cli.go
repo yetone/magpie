@@ -302,8 +302,12 @@ func addAccount(agentID string) error {
 	openInBrowser(st.URL)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if st.PasteCallback {
-		fmt.Println("If the page the browser ends on won't load (magpie on a server or in Docker), paste its whole address here and press Enter:")
+	if st.PasteCallback || st.PasteCode {
+		if st.PasteCode {
+			fmt.Println("Paste the code the page shows here and press Enter:")
+		} else {
+			fmt.Println("If the page the browser ends on won't load (magpie on a server or in Docker), paste its whole address here and press Enter:")
+		}
 		id := st.ID
 		go func() {
 			lines := bufio.NewScanner(os.Stdin)

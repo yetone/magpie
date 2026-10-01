@@ -58,6 +58,7 @@
       failed = e.message;
     }
     draw();
+    window.renderPluginDot?.();
   }
   window.loadPlugins = load;
   // pluginQuery: Discover, looking for q (the add sheet found nothing by it)
@@ -80,6 +81,7 @@
       if (view === "providers") renderProviders();
     } catch (e) { status(e.message, "err"); }
     draw();
+    window.renderPluginDot?.();
   }
 
   async function act(pkg, op, body, done) {
@@ -446,6 +448,12 @@
     nm.append(el("span", "", l?.name || pkg));
     if (e.version) nm.append(el("span", "pm-ver", "v" + e.version));
     if (e.latest && e.version && newer(e.latest, e.version)) nm.append(el("span", "pm-chip up", t("v{v} out", { v: e.latest })));
+    else if (e.autoUpdated && e.autoUpdated.to === e.version) {
+      // magpie updated it by itself lately: the row says so, quietly
+      const c = el("span", "pm-chip soft", t("Auto-updated"));
+      c.title = t("magpie updated it from v{from} to v{to} on {date}", { from: e.autoUpdated.from, to: e.autoUpdated.to, date: new Date(e.autoUpdated.at).toLocaleDateString(document.documentElement.lang || undefined, { month: "short", day: "numeric" }) });
+      nm.append(c);
+    }
     // the built-in subscriptions moved onto it: taking it away moves them
     // back, so the row says it carries them
     const moved = (e.moved || []).map((id) => SUBS.find((x) => x.agent === id)?.name || id);

@@ -19,7 +19,7 @@ func fakeWarmClaude(t *testing.T, out string, code int) string {
 	log := filepath.Join(dir, "log")
 	script := "#!/bin/sh\n" +
 		"{ printf 'args:'; for a in \"$@\"; do printf '[%s]' \"$a\"; done; echo; " +
-		"echo \"token:$CLAUDE_CODE_OAUTH_TOKEN\"; echo \"base:$ANTHROPIC_BASE_URL\"; echo \"pwd:$(pwd)\"; printf 'stdin:'; cat; echo; } > " + log + "\n" +
+		"echo \"dir:$CLAUDE_CONFIG_DIR\"; echo \"base:$ANTHROPIC_BASE_URL\"; echo \"pwd:$(pwd)\"; printf 'stdin:'; cat; echo; } > " + log + "\n" +
 		"echo '" + out + "'\nexit " + string(rune('0'+code)) + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -31,13 +31,14 @@ func fakeWarmClaude(t *testing.T, out string, code int) string {
 
 func TestWarmClaudeAsksClaudeCodeOnce(t *testing.T) {
 	log := fakeWarmClaude(t, `{"type":"result","is_error":false,"result":"Hi!"}`, 0)
-	if err := warmClaude(context.Background(), "saved-token"); err != nil {
+	t.Setenv("CLAUDE_CONFIG_DIR", "/the/users/own")
+	if err := warmClaude(context.Background(), "/saved/account"); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(log)
 	got := string(b)
 	for _, want := range []string{"[-p]", "[--model][haiku]", "[--tools][]", "[--setting-sources][]", "[--no-session-persistence]",
-		"token:saved-token", "base:\n", "stdin:hi", "magpie-claude-"} {
+		"dir:/saved/account\n", "base:\n", "stdin:hi", "magpie-claude-"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("run lacks %q:\n%s", want, got)
 		}
@@ -50,12 +51,13 @@ func TestWarmClaudeAsksClaudeCodeOnce(t *testing.T) {
 			}
 		}
 	}
-	// the account Claude Code is signed in to is its own
+	// the account Claude Code is signed in to is its own, in its own
+	// config directory
 	if err := warmClaude(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(log); !strings.Contains(string(b), "token:\n") {
-		t.Errorf("a token given for Claude Code's own account:\n%s", b)
+	if b, _ := os.ReadFile(log); !strings.Contains(string(b), "dir:/the/users/own\n") {
+		t.Errorf("another config directory given for Claude Code's own account:\n%s", b)
 	}
 }
 

@@ -57,20 +57,29 @@ func TestRefusalAfterThinkingFailsOver(t *testing.T) {
 		reply string
 		path  string
 		ask   string
+		model string // a model whose vendor refuses after thinking
 	}{
-		{"claude to claude code", func(t *testing.T, s *scripted) { scriptedOn(t, "a", provider.Anthropic, s) }, anthropicThoughtThenRefused, "/v1/messages", claudeCodeAsk},
-		{"claude to codex", func(t *testing.T, s *scripted) { scriptedOn(t, "a", provider.Anthropic, s) }, anthropicThoughtThenRefused, "/v1/responses", codexAsk},
-		{"chat to claude code", func(t *testing.T, s *scripted) { scriptedOn(t, "a", provider.Chat, s) }, chatThought, "/v1/messages", claudeCodeAsk},
-		{"responses to codex", func(t *testing.T, s *scripted) { responsesOn(t, "a", s) }, responsesThought, "/v1/responses", codexAsk},
-		{"responses to claude code", func(t *testing.T, s *scripted) { responsesOn(t, "a", s) }, responsesThought, "/v1/messages", claudeCodeAsk},
+		{"claude to claude code", func(t *testing.T, s *scripted) { scriptedOn(t, "a", provider.Anthropic, s) }, anthropicThoughtThenRefused, "/v1/messages", claudeCodeAsk, "claude-opus-5-5"},
+		{"claude to codex", func(t *testing.T, s *scripted) { scriptedOn(t, "a", provider.Anthropic, s) }, anthropicThoughtThenRefused, "/v1/responses", codexAsk, "claude-opus-5-5"},
+		{"chat to claude code", func(t *testing.T, s *scripted) { scriptedOn(t, "a", provider.Chat, s) }, chatThought, "/v1/messages", claudeCodeAsk, "gpt-5.2"},
+		{"responses to codex", func(t *testing.T, s *scripted) { responsesOn(t, "a", s) }, responsesThought, "/v1/responses", codexAsk, "gpt-5.2"},
+		{"responses to claude code", func(t *testing.T, s *scripted) { responsesOn(t, "a", s) }, responsesThought, "/v1/messages", claudeCodeAsk, "gpt-5.2"},
 	} {
 		t.Run(x.name, func(t *testing.T) {
 			fresh(t)
 			a := &scripted{replies: []reply{{200, "text/event-stream", x.reply}}}
 			b := &scripted{replies: []reply{{200, "text/event-stream", anthropicAnswer}}}
 			x.setup(t, a)
+			pa, err := provider.Find("a")
+			if err != nil {
+				t.Fatal(err)
+			}
+			pa.Models = []string{x.model}
+			if err := provider.Save(*pa); err != nil {
+				t.Fatal(err)
+			}
 			scriptedOn(t, "b", provider.Anthropic, b)
-			refusalGroup(t, "a/m", "b/m")
+			refusalGroup(t, "a/"+x.model, "b/m")
 			s := New()
 			code, body := sendTo(s, x.path, x.ask)
 			if code != 200 || !strings.Contains(body, "from b") || strings.Contains(body, `"refusal"`) || strings.Contains(body, "Planning") ||

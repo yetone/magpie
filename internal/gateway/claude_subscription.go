@@ -244,7 +244,7 @@ func callbackBaseURL() string {
 	return "http://" + host + ":" + port
 }
 
-func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, oauth, owner string) (*subscriptionRun, <-chan Event, error) {
+func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, configDir, owner string) (*subscriptionRun, <-chan Event, error) {
 	binary, err := claudeBinary()
 	if err != nil {
 		return nil, nil, err
@@ -277,10 +277,7 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, oau
 	cmd := proc.CommandContext(context.Background(), binary, args...)
 	cmd.Dir = tmp
 	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
-	if oauth != "" {
-		// a saved account in use beside the one Claude Code is signed in to
-		cmd.Env = append(cmd.Env, "CLAUDE_CODE_OAUTH_TOKEN="+oauth)
-	}
+	cmd.Env = inClaudeDir(cmd.Env, configDir)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cleanup()
@@ -586,6 +583,26 @@ func claudeCLIArgs(model, mcpConfig, effort string, web bool) []string {
 		args = append(args, "--effort", effort, "--thinking-display", "summarized")
 	}
 	return args
+}
+
+// inClaudeDir is env for a Claude Code run on a saved account in use beside
+// the one it is signed in to: in the account's config directory
+// (provider's claude_dirs.go), where Claude Code keeps the sign-in fresh
+// itself. configDir "" is the account Claude Code is signed in to, and env
+// is kept as it is.
+func inClaudeDir(env []string, configDir string) []string {
+	if configDir == "" {
+		return env
+	}
+	out := make([]string, 0, len(env)+1)
+	for _, e := range env {
+		switch k, _, _ := strings.Cut(e, "="); k {
+		case "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR":
+			continue
+		}
+		out = append(out, e)
+	}
+	return append(out, "CLAUDE_CONFIG_DIR="+configDir)
 }
 
 func cleanClaudeEnv(env []string) []string {
@@ -1321,11 +1338,11 @@ func (s *Server) serveClaudeSubscription(w http.ResponseWriter, r *http.Request,
 			// effort can think past that (#250)
 			req.Effort = "low"
 		}
-		token, _, err := p.Account.Token(ctx)
+		dir, _, err := p.Account.Token(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
-		return s.subscription.start(ctx, req, model, token, owner)
+		return s.subscription.start(ctx, req, model, dir, owner)
 	}
 	return s.serveSubscription(w, r, from, "Claude Code", model, body, usage, start)
 }

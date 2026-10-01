@@ -99,7 +99,8 @@ func periodOf(s string) usage.Period {
 }
 
 func ledgerFilter(q url.Values) usage.Filter {
-	return usage.Filter{Agent: q.Get("agent"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
+	id, _ := strconv.ParseInt(q.Get("route"), 10, 64)
+	return usage.Filter{RouteID: id, Agent: q.Get("agent"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
 }
 
 // ledgerRow is a usage.Row with the names the page shows it by.

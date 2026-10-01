@@ -963,6 +963,9 @@
           : pinned ? t("How the request at {time} was routed", { time: clock(r.time) }) : t("How the last request was routed")),
         el("span", "grow"));
       if (!rp && r.done) {
+        const usage = el("button", "text", t("View usage"));
+        usage.onclick = () => window.openUsageRoute(logR);
+        logHead.append(usage);
         const again = el("button", "text", t("Replay"));
         again.onclick = () => replay([logR], pinned);
         logHead.append(again);
@@ -1024,13 +1027,31 @@
   // the pointer, and the stage and its story change above it (it used to
   // go up to the stage, which read as the page jumping to its top)
   function pick(r) {
-    pinned = r.id === newest()?.id ? null : r;
+    pinned = !day && r.id === newest()?.id ? null : r;
     if (rp) { rp = null; rbar.hidden = true; }
     stopPlays();
     cur = r;
     sync(true); renderAll();
     say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r));
   }
+
+  window.openRoute = async (id, time) => {
+    let r = routes.get(id);
+    if (!r) {
+      const res = await fetch("/api/gateway/route?id=" + encodeURIComponent(id) + "&day=" + encodeURIComponent(time.slice(0, 10)));
+      if (res.status === 404) throw new Error(t("Routing history for this request is no longer available."));
+      if (!res.ok) throw new Error(await res.text());
+      r = await res.json();
+    }
+    day = routes.has(id) ? "" : r.time.slice(0, 10);
+    if (day) {
+      await loadDays(day);
+      if (!past.some((x) => x.id === id)) past.push(r);
+    }
+    offline("");
+    window.show("routing");
+    pick(r);
+  };
 
   // what a call was for when it isn't a turn of the conversation, as
   // Codex names it (x-openai-subagent): its own guardian review of an
@@ -1802,7 +1823,7 @@
             : gw.window ? "Another magpie serves the gateway; its routing plays live in that magpie's window."
             // magpie serve: its routing isn't shown anywhere
             : "The gateway is served by a magpie without a window (magpie serve), so its routing can't be watched. Stop it and let this magpie serve the gateway to see routing live.";
-          offline(t(offMsg));
+          offline(pinned ? "" : t(offMsg));
           loaded = false;
           renderPanel();
           await new Promise((r) => setTimeout(r, 5000));
@@ -1828,7 +1849,7 @@
           for (let i = 0; i < 30 && !state.agents.length; i++) await new Promise((res) => setTimeout(res, 100));
           renderPanel();
           // the window opened from the tray panel's Routing tab on a request
-          const asked = wanted && routes.get(wanted), r = asked || newest();
+          const asked = wanted && routes.get(wanted), r = pinned || asked || newest();
           if (wanted) { wanted = 0; params.delete("req"); history.replaceState(null, "", params.size ? "?" + params : location.pathname); }
           if (asked && asked.id !== newest().id) pinned = asked;
           if (r) { cur = r; sync(true); say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r)); renderAll(); } else empty();
@@ -2449,7 +2470,24 @@
   // loaded when the view is shown, and again when the window comes back
   new MutationObserver(() => { if (!$("#view-routing").hidden) loadGroups(); }).observe($("#view-routing"), { attributes: true, attributeFilter: ["hidden"] });
   window.addEventListener("focus", () => { if (shown()) loadGroups(); });
-  loadGroups();
+  // newGroupWith: a new group's editor, opened with the model in it — a
+  // model of a provider kept for routing groups that no group has, which
+  // agents can reach no other way. The picker and the provider's editor
+  // ask it (and the tray panel, by ?newgroup= on the window it opens).
+  window.newGroupWith = async (id, name, ev) => {
+    // app.js's show, the page's: this one's own show is the stage's caption
+    if (document.body.classList.contains("window") && $("#view-routing").hidden) window.show("routing");
+    if (!groups) await loadGroups();
+    if (!groups) return;
+    gEdit = { id: "", draft: { name: name || modelOf(id)?.name || id.split("/").pop(), members: [id], routing: "", affinity: "", rules: [] } };
+    renderGroups();
+    const ed = gList.querySelector(".rt-gedit");
+    if (ed && window.scrollOnPurpose?.(ev)) ed.scrollIntoView({ block: "center", behavior: "smooth" });
+    ed?.querySelector("input")?.focus({ preventScroll: true });
+  };
+  const askedGroup = document.body.classList.contains("window") && params.get("newgroup");
+  if (askedGroup) loadGroups().then(() => window.newGroupWith(askedGroup, ""));
+  else loadGroups();
 
   // ---------- where the reader is, as requests come ----------
   // Every request redraws what is above the routing groups: the stage gains

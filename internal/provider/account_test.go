@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // fakeJWT is a token whose payload is the given claims; nobody checks the
@@ -67,7 +69,7 @@ func signIn(t *testing.T) string {
 // logins and forgets anything a previous test cached.
 func isolate(t *testing.T) {
 	t.Helper()
-	oldKeychain, oldURL, oldBase, oldExe := claudeKeychain, claudeTokenURL, claudeBase, claudeExecutable
+	oldKeychain, oldBase, oldExe := claudeKeychain, claudeBase, claudeExecutable
 	oldCursor, oldDevin := cursorKeychain, DevinExecutable
 	claudeKeychain, cursorKeychain = false, false
 	claudeExecutable = func() string { return "" }
@@ -77,7 +79,7 @@ func isolate(t *testing.T) {
 	forgetClaudeStatus()
 	forgetDevinStatus()
 	t.Cleanup(func() {
-		claudeKeychain, claudeTokenURL, claudeBase, claudeExecutable = oldKeychain, oldURL, oldBase, oldExe
+		claudeKeychain, claudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
 		cursorKeychain, DevinExecutable = oldCursor, oldDevin
 		forgetClaudeCredential()
 		forgetClaudeStatus()
@@ -234,19 +236,23 @@ func TestClaudeAccountIsProvider(t *testing.T) {
 	home := claudeHome(t)
 	creds := claudeSignIn(t, home, time.Now().Add(time.Hour))
 
-	// Anthropic lists its models live; magpie trusts that answer, not the binary.
-	models := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/models" || r.Header.Get("Authorization") != "Bearer sk-ant-oat01-old" {
-			w.WriteHeader(401)
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]any{"has_more": false, "data": []any{
-			map[string]any{"id": "claude-sonnet-5", "display_name": "Claude Sonnet 5"},
-			map[string]any{"id": "claude-opus-5-5", "display_name": "Claude Opus 5.5"},
-		}})
+	// Claude's models are the catalog's: magpie asks Anthropic nothing with
+	// the account's sign-in, not even its model list
+	asked := false
+	anthropic := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = true
+		w.WriteHeader(500)
 	}))
-	defer models.Close()
-	claudeBase = models.URL
+	defer anthropic.Close()
+	claudeBase = anthropic.URL
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{"anthropic": {"models": {
+	  "claude-sonnet-5": {"id":"claude-sonnet-5","name":"Claude Sonnet 5","modalities":{"input":["text"],"output":["text"]}},
+	  "claude-opus-5-5": {"id":"claude-opus-5-5","name":"Claude Opus 5.5","modalities":{"input":["text"],"output":["text"]}}}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
 
 	p, ok := find(All(), "claude")
 	if !ok || p.Account == nil || p.Account.User != "Claude Max" || p.Account.Plan != "max" || !p.Ready() {
@@ -256,13 +262,11 @@ func TestClaudeAccountIsProvider(t *testing.T) {
 		t.Fatalf("endpoints: %+v", p)
 	}
 
-	// nothing is compiled in: before a fetch there is nothing to show, and
-	// afterwards exactly what the vendor listed, "Opus 5.5" included
-	if got := len(p.Available()); got != 0 {
+	if got := len(p.Available()); got != 2 {
 		t.Fatalf("available before a fetch: %d", got)
 	}
-	if ms, err := p.Fetch(context.Background()); err != nil || len(ms) != 2 {
-		t.Fatalf("fetch: %v %v", ms, err)
+	if ms, err := p.Fetch(context.Background()); err != nil || len(ms) != 2 || asked {
+		t.Fatalf("fetch: %v %v asked Anthropic: %v", ms, err, asked)
 	}
 	p, _ = find(All(), "claude")
 	if at, ok := p.Fetched(); !ok || time.Since(at) > time.Minute {
@@ -308,47 +312,6 @@ func TestClaudeAccountIsProvider(t *testing.T) {
 	forgetClaudeCredential()
 	if _, ok := find(All(), "claude"); ok {
 		t.Fatal("claude still listed after sign-out")
-	}
-}
-
-func TestClaudeRefreshesToken(t *testing.T) {
-	home := claudeHome(t)
-	creds := claudeSignIn(t, home, time.Now().Add(-time.Minute))
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body map[string]string
-		json.NewDecoder(r.Body).Decode(&body)
-		if body["grant_type"] != "refresh_token" || body["client_id"] != claudeClientID || body["refresh_token"] != "sk-ant-ort01-old" {
-			w.WriteHeader(400)
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]any{"access_token": "sk-ant-oat01-new", "refresh_token": "sk-ant-ort01-new", "expires_in": 3600})
-	}))
-	defer srv.Close()
-	claudeTokenURL = srv.URL
-
-	if tok, err := claudeToken(context.Background()); err != nil || tok != "sk-ant-oat01-new" {
-		t.Fatalf("token: %q %v", tok, err)
-	}
-
-	// the rotated pair is written back where Claude Code will find it, and
-	// everything else in the file survives
-	var raw map[string]any
-	if !readJSON(creds, &raw) {
-		t.Fatalf("credentials unreadable: %s", creds)
-	}
-	oauth, _ := raw["claudeAiOauth"].(map[string]any)
-	if oauth["accessToken"] != "sk-ant-oat01-new" || oauth["refreshToken"] != "sk-ant-ort01-new" || oauth["subscriptionType"] != "max" {
-		t.Fatalf("oauth: %v", oauth)
-	}
-	if exp, _ := oauth["expiresAt"].(float64); exp <= float64(time.Now().UnixMilli()) {
-		t.Fatalf("expiry not advanced: %v", oauth["expiresAt"])
-	}
-	if mcp, _ := raw["mcpOAuth"].(map[string]any); mcp == nil {
-		t.Fatalf("mcpOAuth lost: %v", raw)
-	}
-	if b, _ := os.ReadFile(creds); strings.Contains(string(b), "sk-ant-ort01-old") {
-		t.Fatalf("old refresh token kept: %s", b)
 	}
 }
 

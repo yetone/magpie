@@ -1,9 +1,10 @@
 package provider
 
 // Adding a subscription from magpie itself. magpie runs the vendor's own
-// browser sign-in — the one Claude Code's /login and `codex login` run, with
-// their OAuth clients — takes the tokens at a callback on this machine, and
-// keeps the account with the others in logins.json. An agent that has no
+// browser sign-in — the one `codex login` runs, with its OAuth client —
+// takes the tokens at a callback on this machine, and keeps the account
+// with the others in logins.json. A Claude account is signed in by Claude
+// Code itself (claude_signin.go). An agent that has no
 // account yet is signed in to it straight away; otherwise it stays one
 // click away, beside the rest.
 
@@ -29,16 +30,12 @@ import (
 
 // The vendors' sign-in pages; vars so tests can point them elsewhere.
 var (
-	claudeAuthorizeURL = "https://claude.com/cai/oauth/authorize"
-	codexAuthorizeURL  = "https://auth.openai.com/oauth/authorize"
-	devinAuthorizeURL  = "https://app.devin.ai/auth/cli/continue"
+	codexAuthorizeURL = "https://auth.openai.com/oauth/authorize"
+	devinAuthorizeURL = "https://app.devin.ai/auth/cli/continue"
 	// codexCallbackAddr is fixed: OpenAI only sends Codex's client back to
 	// port 1455.
 	codexCallbackAddr = "127.0.0.1:1455"
 )
-
-// claudeScopes are what Claude Code asks for at /login.
-const claudeScopes = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload user:plugins"
 
 const codexScopes = "openid profile email offline_access api.connectors.read api.connectors.invoke"
 
@@ -73,8 +70,9 @@ type signInFlow struct {
 	srv      *http.Server
 	stop     func() // ends an agent's own login command, when that is the sign-in
 	kiro     *kiroFlow
-	site     string // where to sign in, for an agent with more than one (ZCode: "zai" or "bigmodel")
-	plugin   string // a plugin's sign-in session, finished with the code pasted back
+	site     string           // where to sign in, for an agent with more than one (ZCode: "zai" or "bigmodel")
+	plugin   string           // a plugin's sign-in session, finished with the code pasted back
+	claude   *claudeCLISignIn // Claude Code's own sign-in, run by magpie
 	// claimed is a callback being traded for the account: the browser's own
 	// or a pasted address, whichever came first
 	claimed bool
@@ -193,19 +191,10 @@ func (s *signInFlow) begin() error {
 	q := url.Values{}
 	switch agent {
 	case "claude":
-		if ln, err = net.Listen("tcp", "127.0.0.1:0"); err != nil {
+		// Claude Code's own `claude auth login`: magpie makes no part of it
+		if err := startClaudeSignIn(s); err != nil {
 			return err
 		}
-		s.redirect = fmt.Sprintf("http://localhost:%d/callback", ln.Addr().(*net.TCPAddr).Port)
-		q.Set("code", "true")
-		q.Set("client_id", claudeClientID)
-		q.Set("response_type", "code")
-		q.Set("redirect_uri", s.redirect)
-		q.Set("scope", claudeScopes)
-		q.Set("code_challenge", challenge)
-		q.Set("code_challenge_method", "S256")
-		q.Set("state", s.state)
-		s.st.URL = claudeAuthorizeURL + "?" + q.Encode()
 	case "codex":
 		if ln, err = listenCodexCallback(); err != nil {
 			return err
@@ -376,6 +365,9 @@ func SubmitSignInCallback(id, raw string) error {
 	}
 	if s.plugin != "" {
 		return s.pluginCode(raw)
+	}
+	if s.claude != nil {
+		return s.claudePaste(raw)
 	}
 	return s.pastedCallback(raw)
 }
@@ -651,10 +643,8 @@ func (s *signInFlow) exchange(ctx context.Context, code string) (savedLogin, err
 	switch s.st.Agent {
 	case "codex":
 		return codexExchange(ctx, code, s.verifier, s.redirect)
-	case "devin":
-		return devinExchange(ctx, code, s.verifier, s.redirect)
 	}
-	return claudeExchange(ctx, code, s.verifier, s.redirect, s.state)
+	return devinExchange(ctx, code, s.verifier, s.redirect)
 }
 
 func postToken(ctx context.Context, tokenURL, ctype string, body []byte, out any) error {
@@ -700,68 +690,6 @@ func postToken(ctx context.Context, tokenURL, ctype string, body []byte, out any
 	return json.Unmarshal(b, out)
 }
 
-func claudeExchange(ctx context.Context, code, verifier, redirect, state string) (savedLogin, error) {
-	body, _ := json.Marshal(map[string]string{"grant_type": "authorization_code", "code": code,
-		"redirect_uri": redirect, "client_id": claudeClientID, "code_verifier": verifier, "state": state})
-	var tok struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int64  `json:"expires_in"`
-		Scope        string `json:"scope"`
-		Account      struct {
-			UUID  string `json:"uuid"`
-			Email string `json:"email_address"`
-		} `json:"account"`
-		Organization struct {
-			UUID string `json:"uuid"`
-			Name string `json:"name"`
-		} `json:"organization"`
-	}
-	if err := postToken(ctx, claudeTokenURL, "application/json", body, &tok); err != nil {
-		return savedLogin{}, err
-	}
-	if tok.AccessToken == "" || tok.RefreshToken == "" {
-		return savedLogin{}, errors.New("Claude sent back no token")
-	}
-	acct := map[string]any{"accountUuid": tok.Account.UUID, "emailAddress": tok.Account.Email,
-		"organizationUuid": tok.Organization.UUID}
-	if tok.Organization.Name != "" {
-		acct["organizationName"] = tok.Organization.Name
-	}
-	c := claudeCredentials{raw: map[string]any{}, OAuth: claudeAuth{
-		AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken,
-		ExpiresAt: time.Now().Add(time.Duration(tok.ExpiresIn) * time.Second).UnixMilli(),
-		Scopes:    strings.Fields(tok.Scope),
-	}}
-	claudeProfileInto(ctx, &c, acct)
-	return claudeLogin(c, acct)
-}
-
-// claudeProfileInto asks Claude for the account's profile and puts it in
-// acct (Claude Code's oauthAccount) and its plan in c; the plan comes with
-// the profile, as it does for Claude Code. It says whether Claude answered.
-func claudeProfileInto(ctx context.Context, c *claudeCredentials, acct map[string]any) bool {
-	p, err := claudeProfile(ctx, c.OAuth.AccessToken)
-	if err != nil {
-		return false
-	}
-	c.OAuth.SubscriptionType = claudePlans[p.Organization.Type]
-	c.OAuth.RateLimitTier = p.Organization.RateLimitTier
-	set := func(k, v string) {
-		if v != "" {
-			acct[k] = v
-		}
-	}
-	set("accountUuid", p.Account.UUID)
-	set("emailAddress", p.Account.Email)
-	set("displayName", p.Account.DisplayName)
-	set("organizationUuid", p.Organization.UUID)
-	set("organizationName", p.Organization.Name)
-	set("billingType", p.Organization.BillingType)
-	acct["hasExtraUsageEnabled"] = p.Organization.ExtraUsage
-	return true
-}
-
 // claudeLogin is a Claude sign-in as magpie keeps it.
 func claudeLogin(c claudeCredentials, acct map[string]any) (savedLogin, error) {
 	email, _ := acct["emailAddress"].(string)
@@ -774,44 +702,6 @@ func claudeLogin(c claudeCredentials, acct map[string]any) (savedLogin, error) {
 	}
 	profile, _ := json.Marshal(acct)
 	return savedLogin{Agent: "claude", User: claudeUser(email, c.OAuth.SubscriptionType, acct), Plan: c.OAuth.SubscriptionType, Auth: auth, Profile: profile}, nil
-}
-
-// claudePlans names Claude's organization types the way Claude Code does.
-var claudePlans = map[string]string{"claude_max": "max", "claude_pro": "pro", "claude_enterprise": "enterprise", "claude_team": "team"}
-
-type claudeProfileInfo struct {
-	Account struct {
-		UUID        string `json:"uuid"`
-		Email       string `json:"email"`
-		DisplayName string `json:"display_name"`
-	} `json:"account"`
-	Organization struct {
-		UUID          string `json:"uuid"`
-		Name          string `json:"name"`
-		Type          string `json:"organization_type"`
-		RateLimitTier string `json:"rate_limit_tier"`
-		BillingType   string `json:"billing_type"`
-		ExtraUsage    bool   `json:"has_extra_usage_enabled"`
-	} `json:"organization"`
-}
-
-func claudeProfile(ctx context.Context, token string) (claudeProfileInfo, error) {
-	var p claudeProfileInfo
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, claudeBase+"/api/oauth/profile", nil)
-	if err != nil {
-		return p, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return p, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return p, fmt.Errorf("profile: %s", resp.Status)
-	}
-	return p, json.NewDecoder(resp.Body).Decode(&p)
 }
 
 func codexExchange(ctx context.Context, code, verifier, redirect string) (savedLogin, error) {
@@ -886,6 +776,11 @@ func addLogin(l savedLogin) (using bool, err error) {
 		if err != nil {
 			return false, err
 		}
+	}
+	if l.Agent == "claude" {
+		// signed in afresh: what Claude Code kept for it beside the
+		// agent's own is an older sign-in, and gives way
+		forgetClaudeDir(l.User)
 	}
 	loginsSeenAt = time.Time{}
 	forgetAccountCaches()

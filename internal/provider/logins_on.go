@@ -173,6 +173,11 @@ func (p Provider) AlsoOn() []Provider {
 			tok, _, err := savedLoginToken(ctx, agent, user)
 			return tok, err
 		}
+		if agent == "claude" {
+			// Claude Code runs on it in a config directory of its own
+			// (claude_dirs.go), and keeps the sign-in there itself
+			a.token = func(context.Context) (string, error) { return claudeSavedDir(user) }
+		}
 		if agent == "codex" {
 			a.sign = codexSign(func(ctx context.Context) (string, string, error) { return savedLoginToken(ctx, agent, user) })
 		}
@@ -184,7 +189,8 @@ func (p Provider) AlsoOn() []Provider {
 }
 
 // Token is the access token of a saved account in use beside the agent's
-// own; ok is false for the agent's own, which the agent signs itself.
+// own — for a Claude account, the config directory Claude Code runs on it
+// in; ok is false for the agent's own, which the agent signs itself.
 func (a *Account) Token(ctx context.Context) (tok string, ok bool, err error) {
 	if a == nil || a.token == nil {
 		return "", false, nil
@@ -221,21 +227,6 @@ func renewSavedLogin(ctx context.Context, agent, user string, force bool) (tok, 
 	}
 	var auth []byte
 	switch agent {
-	case "claude":
-		c, ok := parseClaudeCredentials(l.Auth)
-		if !ok {
-			return "", "", errors.New("the saved Claude sign-in of " + user + " is unreadable")
-		}
-		if !force && claudeFresh(c) {
-			return c.OAuth.AccessToken, "", nil
-		}
-		if err := claudeRefresh(ctx, &c); err != nil {
-			return "", "", savedRefreshFailed(agent, user, err)
-		}
-		tok = c.OAuth.AccessToken
-		if auth, err = c.marshal(); err != nil {
-			return "", "", err
-		}
 	case "codex":
 		var raw map[string]any
 		var a codexAuth

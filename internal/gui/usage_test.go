@@ -24,9 +24,9 @@ func TestUsageLedgerRoutes(t *testing.T) {
 	y, m, d := time.Now().Date()
 	at := time.Date(y, m, d, 0, 0, 1, 0, time.Local) // today, whenever the test runs
 	for i, r := range []usage.Record{
-		{Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Served: "gpt-6-luna", Input: 10, Output: 1, Status: 200},
+		{RouteID: 123, Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Served: "gpt-6-luna", Input: 10, Output: 1, Status: 200},
 		{Agent: "claude", Provider: "anthropic", Model: "claude-sonnet-5", Requested: "sonnet", Input: 20, Output: 2, Status: 200},
-		{Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Status: 429},
+		{RouteID: 123, Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Status: 429},
 	} {
 		r.Time = at.Add(time.Duration(i) * time.Second)
 		usage.Append(r)
@@ -44,7 +44,14 @@ func TestUsageLedgerRoutes(t *testing.T) {
 		return l
 	}
 
-	l := get("period=today&offset=1&limit=1")
+	l := get("period=all&route=123")
+	if l.Total != 2 || l.Rows[0].RouteID != 123 || l.Rows[1].RouteID != 123 {
+		t.Fatalf("route attempts: %+v", l)
+	}
+	if l = get("period=all&route=999"); l.Total != 0 {
+		t.Fatalf("missing route: %+v", l)
+	}
+	l = get("period=today&offset=1&limit=1")
 	if l.Total != 3 || l.Offset != 1 || len(l.Rows) != 1 || l.Rows[0].Requested != "sonnet" {
 		t.Fatalf("second page: %+v", l)
 	}

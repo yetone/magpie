@@ -119,16 +119,59 @@ func changed() {
 }
 
 // Restart stops the host, so the next call starts one with the plugins
-// as they are now.
+// as they are now. A host answering calls (a reply streaming, a sign-in
+// waiting for its browser) finishes them first, while the calls made
+// from now on go to the new one: a plugin updating never cuts a reply.
 func Restart() {
 	hostMu.Lock()
 	h := current
 	current = nil
 	hostMu.Unlock()
 	if h != nil {
-		h.stop()
+		h.retire()
 	}
 	changed()
+}
+
+// retireWait is how long a retired host may go on answering its calls.
+var retireWait = 10 * time.Minute
+
+// retiring are the hosts finishing their calls before they stop.
+var retiring = map[*host]bool{}
+
+// retire stops h now when it answers no call, else once it has answered
+// them (retireWait at most), in the background.
+func (h *host) retire() {
+	if !h.busy() {
+		h.stop()
+		return
+	}
+	hostMu.Lock()
+	retiring[h] = true
+	hostMu.Unlock()
+	go func() {
+		defer func() {
+			hostMu.Lock()
+			delete(retiring, h)
+			hostMu.Unlock()
+		}()
+		end := time.Now().Add(retireWait)
+		for h.busy() && time.Now().Before(end) {
+			select {
+			case <-h.dead:
+				return
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+		h.stop()
+	}()
+}
+
+// busy is whether h is answering a call.
+func (h *host) busy() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.calls) > 0
 }
 
 // Running is whether a host is up.
@@ -183,7 +226,7 @@ func get(ctx context.Context) (*host, error) {
 	hostMu.Lock()
 	defer hostMu.Unlock()
 	if hostStale.Swap(false) && current != nil {
-		go current.stop()
+		go current.retire()
 		current = nil
 	}
 	if current != nil && current.alive() {

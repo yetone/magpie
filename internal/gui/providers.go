@@ -91,6 +91,10 @@ type providerJSON struct {
 	Draws     int                `json:"draws,omitempty"`    // how many of its models draw images (gateway.Drawers)
 	DrawIDs   []string           `json:"drawIds,omitempty"`  // those models' ids, listed apart in its editor
 	Unlisted  bool               `json:"unlisted"`           // its models serve only through routing groups
+	// Groups are the routing groups ("group/<id>") each of its models is
+	// in, by model id: what an unlisted one is still used through, and the
+	// editor names those in none
+	Groups map[string][]string `json:"groups,omitempty"`
 	Off       bool               `json:"off"`                // switched off: kept, but agents get none of its models
 	Contexts  map[string]int     `json:"contexts,omitempty"` // the windows the user set, "*" for all its models
 	Fetched   *time.Time         `json:"fetched,omitempty"`  // when the list came from the vendor; the page says how long ago in its language
@@ -271,6 +275,14 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 	}
 	if !out.Key.Set && p.Ready() {
 		out.Key.Optional = true
+	}
+	for id, gs := range provider.MemberGroups() {
+		if m, ok := strings.CutPrefix(id, p.ID+"/"); ok {
+			if out.Groups == nil {
+				out.Groups = map[string][]string{}
+			}
+			out.Groups[m] = gs
+		}
 	}
 	if a := p.Account; a != nil {
 		out.Account = &accountJSON{Account: *a, Agent: a.Agent, Name: a.Agent, Icon: "generic"}

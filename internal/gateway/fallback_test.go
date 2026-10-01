@@ -253,9 +253,10 @@ func TestClaudeAccountsTakeOver(t *testing.T) {
 	// out of quota, the CLI says so in a result and waits on its next input
 	script := `#!/bin/sh
 if [ "$1" = auth ]; then echo '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}'; exit 0; fi
-echo "${CLAUDE_CODE_OAUTH_TOKEN:-own}" >> ` + log + `
+TOK=; [ -n "$CLAUDE_CONFIG_DIR" ] && TOK=$(sed -n 's/.*"accessToken": *"\([^"]*\)".*/\1/p' "$CLAUDE_CONFIG_DIR/.credentials.json")
+echo "${TOK:-own}" >> ` + log + `
 while read -r line; do
-  if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ "$CLAUDE_CODE_OAUTH_TOKEN" = tok-me ]; then
+  if [ -z "$TOK" ] || [ "$TOK" = tok-me ]; then
     echo '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","rateLimitType":"five_hour","resetsAt":1790700000}}'
     echo '{"type":"assistant","message":{"id":"x","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"You'"'"'ve hit your limit · resets 3am"}]},"error":"rate_limit"}'
     echo '{"type":"result","subtype":"success","is_error":true,"result":"You'"'"'ve hit your limit · resets 3am"}'

@@ -23,6 +23,7 @@ import (
 
 // Record is one call.
 type Record struct {
+	RouteID         int64     `json:"route_id,omitempty"` // the gateway Route, shared by its attempts
 	Time            time.Time `json:"t"`
 	Agent           string    `json:"agent"` // magpie agent id, or the client's product name
 	Provider        string    `json:"provider"`

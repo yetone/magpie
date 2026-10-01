@@ -169,11 +169,11 @@ func TestPastedAddressAndCallbackFinishOnce(t *testing.T) {
 
 // Every built-in sign-in that comes back to a port here takes the address
 // pasted instead; one that doesn't come back through the browser's address
-// bar doesn't offer it.
+// bar doesn't offer it. Claude's is Claude Code's own (signin_claude_test.go).
 func TestLoopbackSignInsTakePastedAddress(t *testing.T) {
 	claudeHome(t)
 	fakeCodexTokens(t, nil)
-	for _, agent := range []string{"claude", "codex", "gemini", "antigravity", "kiro", "zed"} {
+	for _, agent := range []string{"codex", "gemini", "antigravity", "kiro", "zed"} {
 		st, err := StartSignIn(agent)
 		if err != nil {
 			t.Fatalf("%s: %v", agent, err)

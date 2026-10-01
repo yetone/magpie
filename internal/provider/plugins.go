@@ -150,7 +150,7 @@ func pluginCatalog(pp plugin.Provider) []catalog.Model {
 			c.Name = m.ID
 		}
 		if m.Reasoning {
-			c.Efforts = m.Variants
+			c.Efforts, c.Reasoning = m.Variants, true
 		}
 		// a built-in moved onto its plugin keeps the levels it had for a
 		// model its vendor gives none: its maker's, as effortsOf borrows

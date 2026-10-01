@@ -658,6 +658,15 @@ func switchSavedLogin(agent, user string) (from string, _ error) {
 	if target == nil {
 		return "", fmt.Errorf("no saved %s account %q", agent, user)
 	}
+	if agent == "claude" {
+		// as Claude Code keeps it, if it has run on the account beside the
+		// one it is signed in to
+		if c, ok := readClaudeDir(claudeAccountDir(target.User)); ok {
+			if _, err := takeClaudeDir(target, c); err != nil {
+				return "", err
+			}
+		}
+	}
 	want := *target
 	if live, ok := liveLogin(agent); ok {
 		if strings.EqualFold(live.User, want.User) {
@@ -682,7 +691,10 @@ func switchSavedLogin(agent, user string) (from string, _ error) {
 	case "codex":
 		err = writePrivate(codexAuthPath(), append(bytes.TrimSpace(want.Auth), '\n'))
 	case "claude":
-		err = putClaudeLogin(want)
+		if err = putClaudeLogin(want); err == nil {
+			// Claude Code's own now: its only holder
+			forgetClaudeDir(want.User)
+		}
 	default:
 		err = fmt.Errorf("%s accounts can't be switched", agent)
 	}
@@ -791,6 +803,9 @@ func ForgetLogin(agent, user string) error {
 	}
 	if !found {
 		return fmt.Errorf("no saved %s account %q", agent, user)
+	}
+	if agent == "claude" {
+		forgetClaudeDir(user)
 	}
 	return writeLogins(out)
 }

@@ -72,7 +72,12 @@ type pluginEntryJSON struct {
 	// Moved are the built-in subscriptions moved onto it, which go back
 	// to themselves when it is removed or turned off
 	Moved []string `json:"moved"`
+	// AutoUpdated is the update magpie made to it by itself lately
+	AutoUpdated *plugin.Updated `json:"autoUpdated,omitempty"`
 }
+
+// autoUpdatedFor is how long a plugin's row says magpie updated it.
+const autoUpdatedFor = 3 * 24 * time.Hour
 
 type pluginsJSON struct {
 	Plugins []pluginEntryJSON `json:"plugins"`
@@ -107,6 +112,9 @@ func pluginsState(ctx context.Context) pluginsJSON {
 		j := pluginEntryJSON{Entry: e, Error: errs[e.Spec], Providers: names[e.Spec], Version: plugin.Installed(e.Spec)}
 		if j.Providers == nil {
 			j.Providers = []string{}
+		}
+		if u, ok := plugin.LastUpdated(plugin.Name(e.Spec), time.Now().Add(-autoUpdatedFor)); ok && !plugin.IsPath(e.Spec) {
+			j.AutoUpdated = &u
 		}
 		j.Moved = provider.MovedOnto(e.Spec)
 		if j.Moved == nil {
@@ -157,6 +165,10 @@ func pluginMarketState(ctx context.Context) pluginMarketJSON {
 }
 
 func pluginRoutes(mux *http.ServeMux, w Windows) {
+	// the updates waiting for the reader, which put a dot on Plugins
+	mux.HandleFunc("GET /api/plugins/updates", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, plugin.PendingUpdates())
+	})
 	mux.HandleFunc("GET /api/plugins/market", func(rw http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 		defer cancel()

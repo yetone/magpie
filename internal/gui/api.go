@@ -126,6 +126,37 @@ type stateJSON struct {
 	// here too (not only in settingsJSON) so a cost drawn before the reader
 	// ever opens Settings already converts, if cny was chosen last time.
 	FX fxJSON `json:"fx"`
+	// Unlisted are the models kept for routing groups, which the pickers
+	// don't offer: a filter that finds one of them says why it isn't there
+	Unlisted []unlistedJSON `json:"unlisted,omitempty"`
+}
+
+// unlistedJSON is a model of a provider kept for routing groups, and the
+// groups ("group/<id>") it is used through, none when it is in no group.
+type unlistedJSON struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Provider string   `json:"provider"`
+	Icon     string   `json:"icon,omitempty"`
+	Groups   []string `json:"groups"`
+}
+
+// unlistedModels lists provider.Unlisted for the page.
+func unlistedModels() []unlistedJSON {
+	es := provider.Unlisted()
+	if len(es) == 0 {
+		return nil
+	}
+	in := provider.MemberGroups()
+	out := make([]unlistedJSON, 0, len(es))
+	for _, e := range es {
+		gs := in[e.ID]
+		if gs == nil {
+			gs = []string{}
+		}
+		out = append(out, unlistedJSON{ID: e.ID, Name: e.Name, Provider: e.Provider.Name, Icon: e.Provider.Icon, Groups: gs})
+	}
+	return out
 }
 
 // fxJSON is a USD→CNY rate as the UI shows it: the number a cost is
@@ -740,6 +771,7 @@ func state() stateJSON {
 	if s.Settings.Currency == "cny" {
 		s.FX = currentFX()
 	}
+	s.Unlisted = unlistedModels()
 	for _, a := range agent.Clients() {
 		s.Clients = append(s.Clients, clientJSON{ID: a.ID, Name: a.Name, Icon: a.Icon})
 	}

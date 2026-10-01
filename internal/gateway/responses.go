@@ -1,13 +1,13 @@
 package gateway
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // ---- OpenAI Responses -------------------------------------------------------
@@ -99,17 +99,10 @@ func searchFound(tools []rTool) string {
 	return "These tools are now available to call: " + strings.Join(names, ", ")
 }
 
-// flatName is the name a namespaced tool is offered to a model under, which
-// takes one flat name: namespace__name, as Codex names an MCP server's tools.
-// A name longer than the 64 characters APIs allow is cut and made unique by
-// a hash of the whole.
+// flatName is the name a namespaced tool is offered to a model under,
+// namespace__name, the same a Grok subscription is offered it under.
 func flatName(namespace, name string) string {
-	flat := namespace + "__" + name
-	if len(flat) <= 64 {
-		return flat
-	}
-	sum := sha256.Sum256([]byte(namespace + "\x00" + name))
-	return flat[:55] + "_" + hex.EncodeToString(sum[:4])
+	return provider.FlatName(namespace, name)
 }
 
 type rRequest struct {
