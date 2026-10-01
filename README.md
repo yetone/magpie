@@ -188,8 +188,9 @@ access, including old `sk-magpie-…` tokens, without key authentication.
 the provider's credential. **Usage → Requests** offers the same filter;
 CSV includes `caller_key_id` and `caller_key_name`. Deleted keys keep their
 history. The usual local `magpie` token and older records stay unattributed.
-Chat, image, video creation and System One calls retain both provider and
-caller identities; CSV puts `provider_key_*` before `caller_key_*`.
+Caller attribution includes chat, images, video creation and System One.
+Provider attribution stays independent; CSV puts `provider_key_*` before
+`caller_key_*`.
 An existing LAN key becomes **Magpie** without changing the credential.
 `lanKey` remains in settings for older Magpie versions. Disabling or removing
 the default key replaces that mirror with a random non-empty revoked value;
