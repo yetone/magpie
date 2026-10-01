@@ -420,6 +420,11 @@ func (e *geminiEncoder) chunk(parts []map[string]any, finish string, usage map[s
 	e.w.event("", msg)
 }
 
+// keepalive sends nothing: Google's SDK takes a stream's "data: " lines
+// one after another from the front and gets stuck on anything else, a
+// comment too, and there is no event without content to send instead.
+func (e *geminiEncoder) keepalive() {}
+
 func (e *geminiEncoder) start(ev Event) {
 	if e.started {
 		return

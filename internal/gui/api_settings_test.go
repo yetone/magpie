@@ -24,6 +24,7 @@ import (
 func TestSettingsPageSaveCarriesEveryPerModelTable(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 
@@ -68,6 +69,7 @@ func TestSettingsPageSaveCarriesEveryPerModelTable(t *testing.T) {
 func TestSettingsPageSaveKeepsWhichModelsAnAgentIsShown(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 

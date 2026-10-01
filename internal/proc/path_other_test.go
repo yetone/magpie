@@ -16,6 +16,7 @@ import (
 func TestUserPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	npm := filepath.Join(home, ".npm-global", "bin")
 	os.MkdirAll(npm, 0o755)
 	os.WriteFile(filepath.Join(npm, "claude"), []byte("#!/bin/sh\n"), 0o755)

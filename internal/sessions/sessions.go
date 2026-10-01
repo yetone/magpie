@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
@@ -389,8 +390,12 @@ func Dirs() []string {
 	return out
 }
 
-// rollout-2026-09-20T15-48-28-<thread id>[_<segment>].jsonl
-var rolloutName = regexp.MustCompile(`^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-([0-9A-Za-z-]+?)(?:_[0-9A-Za-z-]+)?\.jsonl$`)
+// rollout-2026-09-20T15-48-28-<thread id>[_<segment>].jsonl, and .jsonl.zst
+// once the Codex app's "compress local chat history" has packed an older one
+var rolloutName = regexp.MustCompile(`^rollout-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-([0-9A-Za-z-]+?)(?:_[0-9A-Za-z-]+)?\.jsonl(?:\.zst)?$`)
+
+// zstSuffix ends a rollout the Codex app has compressed.
+const zstSuffix = ".zst"
 
 func codexFiles() []file {
 	var out []file
@@ -410,7 +415,31 @@ func codexFiles() []file {
 		out = append(out, file{agent: "codex", key: "codex:" + m[1], path: p, main: true, size: fi.Size(), mod: fi.ModTime()})
 		return nil
 	})
-	return out
+	// a rollout found both plain and compressed (the Codex app packing it)
+	// is read once, as the plain one: the other may be half written, and
+	// the two say the same
+	plain := map[string]bool{}
+	for _, f := range out {
+		if !strings.HasSuffix(f.path, zstSuffix) {
+			plain[f.path] = true
+		}
+	}
+	kept := out[:0]
+	for _, f := range out {
+		if q, ok := strings.CutSuffix(f.path, zstSuffix); !ok || !plain[q] {
+			kept = append(kept, f)
+		}
+	}
+	return kept
+}
+
+// rolloutTwin is a Codex rollout's file in its other form: the compressed
+// one of a plain one, the plain one of a compressed one.
+func rolloutTwin(p string) string {
+	if q, ok := strings.CutSuffix(p, zstSuffix); ok {
+		return q
+	}
+	return p + zstSuffix
 }
 
 var (
@@ -881,7 +910,7 @@ func parse(f file, old *state) *state {
 	}
 	headBytes := headOf(f.path)
 	var s *state
-	if old != nil && f.size >= old.Size && old.Off <= f.size && sameHead(headBytes, old.Head, old.HeadSize) && old.ContentHash != "" && prefixHash(f.path, old.Size) == old.ContentHash {
+	if old != nil && !packed(f.path) && f.size >= old.Size && old.Off <= f.size && sameHead(headBytes, old.Head, old.HeadSize) && old.ContentHash != "" && prefixHash(f.path, old.Size) == old.ContentHash {
 		s = old.clone()
 	} else {
 		s = &state{}
@@ -940,13 +969,22 @@ func scanHead(path string, off int64, head func([]byte) bool, fn func([]byte)) (
 // scanAt is scanHead telling fn where each line starts and ends in the file,
 // and stopping when fn says so; what it returns is where the last line it
 // handled ended.
+// A compressed file's places are those of its lines decompressed; it is read
+// from its start, what comes before off passed over.
 func scanAt(path string, off int64, head func([]byte) bool, fn func(b []byte, start, end int64) bool) (int64, error) {
-	f, err := os.Open(path)
+	f, err := openLines(path)
 	if err != nil {
 		return off, err
 	}
 	defer f.Close()
-	if _, err := f.Seek(off, io.SeekStart); err != nil {
+	if s, ok := f.(io.Seeker); ok {
+		if _, err := s.Seek(off, io.SeekStart); err != nil {
+			return off, err
+		}
+	} else if _, err := io.CopyN(io.Discard, f, off); err != nil {
+		if errors.Is(err, io.EOF) {
+			return off, nil
+		}
 		return off, err
 	}
 	r := bufio.NewReaderSize(f, 1<<20)
@@ -989,6 +1027,38 @@ func scanAt(path string, off int64, head func([]byte) bool, fn func(b []byte, st
 		off += n
 		n, skip, seen, long = 0, false, false, long[:0]
 	}
+}
+
+// packed says whether a session file is compressed: a Codex rollout the
+// Codex app has packed (.zst), a dsh session (.zstd). A packed rollout is
+// written whole, so it is read whole again whenever it changes.
+func packed(path string) bool {
+	return strings.HasSuffix(path, zstSuffix) || strings.HasSuffix(path, ".zstd")
+}
+
+// openLines opens a session file to read its lines, a packed one decompressed.
+func openLines(path string) (io.ReadCloser, error) {
+	f, err := os.Open(path)
+	if err != nil || !packed(path) {
+		return f, err
+	}
+	d, err := zstd.NewReader(f, zstd.WithDecoderConcurrency(1), zstd.WithDecoderLowmem(true))
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	return zstdFile{d.IOReadCloser(), f}, nil
+}
+
+// zstdFile is a packed file's lines, closed with the file.
+type zstdFile struct {
+	io.ReadCloser
+	f *os.File
+}
+
+func (z zstdFile) Close() error {
+	z.ReadCloser.Close()
+	return z.f.Close()
 }
 
 // tsAt reads the time of a line from its first (or last) "timestamp" key,

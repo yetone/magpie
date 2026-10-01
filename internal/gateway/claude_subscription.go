@@ -1478,7 +1478,8 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 			}
 			return writeError(w, from, code, name+": "+msg), msg
 		}
-		enc := encoder(from, newSSEWriter(w), req)
+		sw := newSSEWriter(w)
+		enc := encoder(from, sw, req)
 		var failed, said, stop string
 		see := func(ev Event) {
 			switch ev.Kind {
@@ -1497,9 +1498,12 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		for _, ev := range head {
 			see(ev)
 		}
-		for ev := range events {
+		// a client waiting on a reply that goes on is kept from its idle
+		// timeout while none of it comes (#436)
+		relayEvents(events, sw, enc, func(ev Event) bool {
 			see(ev)
-		}
+			return true
+		})
 		// before the reply's last event, which the agent may answer at once
 		ended(said, stop, failed == "" && r.Context().Err() == nil)
 		// an error event already ended the reply in the client's protocol

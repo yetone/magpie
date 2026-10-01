@@ -83,8 +83,10 @@ func forChoice(c string) (*url.URL, error) {
 // base kept for that proxy alone. Connections are so reused among the
 // requests going through one proxy and never carried to another — HTTP/2
 // ones, which a transport shares by host whatever proxy they were dialled
-// through, among them.
+// through, among them. A host whose IPv6 is taken but goes nowhere is
+// dialed over IPv4 (v4Fallback).
 func Dispatch(base *http.Transport) http.RoundTripper {
+	v4Fallback(base)
 	return &dispatch{base: base, own: map[string]*http.Transport{}}
 }
 
@@ -97,9 +99,9 @@ type dispatch struct {
 func (d *dispatch) RoundTrip(req *http.Request) (*http.Response, error) {
 	c := choiceOf(req.Context())
 	if c == "" {
-		return d.base.RoundTrip(req)
+		return v4Retry(d.base, req)
 	}
-	return d.transport(c).RoundTrip(req)
+	return v4Retry(d.transport(c), req)
 }
 
 func (d *dispatch) transport(c string) *http.Transport {

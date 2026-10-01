@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -44,7 +45,7 @@ func (f *fakeDAV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		b, ok := f.files[r.URL.Path]
-		if !ok && f.nutstore && !f.dirs[filepath.Dir(r.URL.Path)] {
+		if !ok && f.nutstore && !f.dirs[urlDir(r.URL.Path)] {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
@@ -55,7 +56,7 @@ func (f *fakeDAV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", f.etags[r.URL.Path])
 		w.Write(b)
 	case http.MethodPut:
-		if !f.dirs[filepath.Dir(r.URL.Path)] {
+		if !f.dirs[urlDir(r.URL.Path)] {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
@@ -81,6 +82,9 @@ func (f *fakeDAV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// urlDir is the folder a URL path is in: a URL's, with / on every system
+func urlDir(p string) string { return p[:max(strings.LastIndex(p, "/"), 1)] }
+
 // computer is one machine's magpie: its own home, which the test moves
 // between.
 type computer string
@@ -89,6 +93,7 @@ func newComputer(t *testing.T) computer { return computer(t.TempDir()) }
 
 func (c computer) use(t *testing.T) {
 	t.Setenv("HOME", string(c))
+	t.Setenv("USERPROFILE", string(c))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(string(c), ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(string(c), ".cache"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(string(c), ".claude"))
@@ -126,7 +131,7 @@ func TestSync(t *testing.T) {
 	a, b := newComputer(t), newComputer(t)
 	a.use(t)
 	provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k1"})
-	settings.Save(settings.Settings{Theme: "dark", Proxy: "http://127.0.0.1:7890", Window: []int{900, 700}})
+	settings.Save(settings.Settings{Theme: "dark", Proxy: "http://127.0.0.1:7890", Window: []int{900, 700}, TrayUsages: []string{"claude|a@b.c"}, TrayUsageEvery: 5, TrayNoLogos: true})
 	profile.Save("work", profile.Profile{Fields: map[string]string{"claude.model": "x"}})
 	same := cfg
 	same.Passphrase = cfg.Password
@@ -136,7 +141,7 @@ func TestSync(t *testing.T) {
 	if err := Configure(cfg); err != nil {
 		t.Fatal(err)
 	}
-	if fi, _ := os.Stat(path("sync.json")); fi.Mode().Perm() != 0o600 {
+	if fi, _ := os.Stat(path("sync.json")); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 { // Windows has no such bits
 		t.Fatalf("sync.json is %v", fi.Mode())
 	}
 	// the first: its setup goes up, sealed
@@ -168,6 +173,11 @@ func TestSync(t *testing.T) {
 	}
 	if s := settings.Load(); s.Theme != "dark" || s.Proxy != "direct" || !slices.Equal(s.Window, []int{1, 2}) {
 		t.Fatalf("b's settings: %+v", s)
+	}
+	// nor does a's menu bar: what shows beside the icon is b's own (yoooo
+	// on Discord)
+	if s := settings.Load(); len(s.TrayUsages) != 0 || s.TrayUsage != "" || s.TrayUsageEvery == 5 || s.TrayNoLogos {
+		t.Fatalf("b's menu bar: %+v", s)
 	}
 	if ps, _ := profile.Load(); len(ps) != 1 {
 		t.Fatalf("b's profiles: %v", ps)

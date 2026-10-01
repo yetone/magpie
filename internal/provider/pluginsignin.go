@@ -25,6 +25,8 @@ func StartPluginSignIn(id string, method int, inputs map[string]string) (SignInS
 	install := false
 	if Moved(s.st.Agent) {
 		cli, install = missingCLI(s.st.Agent)
+	} else if pluginRunsCLI[id] {
+		cli, install = missingCLI(id)
 	}
 	var installing context.Context
 	if install {
@@ -56,6 +58,13 @@ func StartPluginSignIn(id string, method int, inputs map[string]string) (SignInS
 	}
 	return s.status(), nil
 }
+
+// pluginRunsCLI are the plugins (by OpenCode's id) that sign in with the
+// vendor's CLI themselves, as the built-in did: the community Grok plugin
+// runs `grok login`. One installed beside the built-in, not moved onto,
+// said "install Grok Build first: curl … | bash", which a magpie in Docker
+// has no shell to run; its CLI is installed first, as a moved one's is.
+var pluginRunsCLI = map[string]bool{"grok": true}
 
 // pluginBegin asks the plugin for the page to open and waits for the
 // sign-in to finish there, or for the code the page shows.

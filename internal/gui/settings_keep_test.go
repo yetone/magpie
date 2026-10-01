@@ -19,6 +19,7 @@ import (
 func TestSettingsSaveKeepsModelChoices(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	if err := settings.Save(settings.Settings{
@@ -47,6 +48,7 @@ func TestSettingsSaveKeepsModelChoices(t *testing.T) {
 func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	js, err := os.ReadFile("assets/app.js")
@@ -64,28 +66,30 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 	}
 	one, two := 1.0, 2.0
 	was := settings.Settings{
-		AgentOrder:     []string{"codex"},
-		AgentsHidden:   []string{"goose"},
-		AgentsShown:    []string{"pi"},
-		Visible:        map[string][]string{"claude": {"anthropic"}},
-		HiddenModels:   map[string][]string{"claude": {"p/m"}, "codex": {"p/n", "group/g"}},
-		ModelNames:     map[string]string{"p/m": "Mine"},
-		ModelEfforts:   map[string][]string{"p/m": {"low"}},
-		ModelImages:    map[string]bool{"p/m": true},
-		ModelOutputs:   map[string]int{"p/m": 131072},
-		ModelPrices:    map[string]settings.ModelPrice{"p/m": {Input: &one, Output: &two}},
-		ModelWires:     map[string]string{"p/m": "vendor-c/m"},
-		RedactRules:    []redact.Rule{{Kind: "prefix", Prefix: "oc_sk_"}},
-		LAN:            true,
-		LANKey:         "sk-lan",
-		LANKeyID:       "lan-key-id",
-		RequestArchive: true,
-		QuotaLeft:      true,
-		PlainNames:     true,
-		CodexAutoReset: []string{"me@example.com"},
-		TextSize:       125,
-		UpdateSkip:     "0.1.500",
-		Window:         []int{900, 700},
+		AgentOrder:          []string{"codex"},
+		AgentsHidden:        []string{"goose"},
+		AgentsShown:         []string{"pi"},
+		Visible:             map[string][]string{"claude": {"anthropic"}},
+		HiddenModels:        map[string][]string{"claude": {"p/m"}, "codex": {"p/n", "group/g"}},
+		ModelNames:          map[string]string{"p/m": "Mine"},
+		ModelEfforts:        map[string][]string{"p/m": {"low"}},
+		ModelImages:         map[string]bool{"p/m": true},
+		ModelOutputs:        map[string]int{"p/m": 131072},
+		ModelPrices:         map[string]settings.ModelPrice{"p/m": {Input: &one, Output: &two}},
+		ModelWires:          map[string]string{"p/m": "vendor-c/m"},
+		RedactRules:         []redact.Rule{{Kind: "prefix", Prefix: "oc_sk_"}},
+		LAN:                 true,
+		LANKey:              "sk-lan",
+		LANKeyID:            "lan-key-id",
+		RequestArchive:      true,
+		RequestArchiveMaxMB: 64,
+		QuotaLeft:           true,
+		PlainNames:          true,
+		PlainOwnNames:       true,
+		CodexAutoReset:      []string{"me@example.com"},
+		TextSize:            125,
+		UpdateSkip:          "0.1.500",
+		Window:              []int{900, 700},
 	}
 	if err := settings.Save(was); err != nil {
 		t.Fatal(err)
@@ -121,6 +125,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 func TestUpdateSkip(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	post := func(path, body string) {

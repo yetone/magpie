@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -9,6 +10,7 @@ import (
 // magpie search add, with a key and an address in either order, and rm.
 func TestSearchCLI(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := searchCmd([]string{"add", "tavily"}); err == nil {
 		t.Error("tavily added without a key")

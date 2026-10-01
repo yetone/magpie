@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -156,6 +157,7 @@ func TestWebSearchBySearchAPI(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir()) // no signed-in agent searches
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	if err := provider.Save(provider.Provider{ID: "deep", Name: "Deep", Key: "k", Chat: model.URL, Models: []string{"deep-chat"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -234,6 +236,7 @@ func TestWebSearchBySearchAPI(t *testing.T) {
 func TestNoSearchAPINoTool(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	if canSearch() {
 		t.Fatal("can search with nothing set up")
 	}

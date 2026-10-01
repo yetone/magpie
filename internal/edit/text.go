@@ -7,76 +7,15 @@ import (
 	"strings"
 )
 
-// Top-level YAML keys are edited line by line. That keeps every comment and
-// every other line byte-for-byte intact, which a round trip through a parser
-// would not. TOML's are located by its parser (see toml.go), since a value
-// there can run over several lines.
+// TOML and top-level YAML entries are located by their parsers (toml.go and
+// yaml_top.go), then edited without reformatting the rest of the file.
 
 var (
 	// tomlTable and tomlKV only read a TOML file its parser refuses; see
 	// GetTOMLTop.
 	tomlTable = regexp.MustCompile(`^\s*\[`)
 	tomlKV    = regexp.MustCompile(`^\s*([A-Za-z0-9_.-]+|"[^"]*")\s*=\s*(.*?)\s*$`)
-	yamlKV    = regexp.MustCompile(`^([A-Za-z0-9_.-]+)\s*:\s*(.*?)\s*$`)
-	yamlPlain = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 )
-
-// GetYAMLTop reads a top-level scalar key from a YAML file.
-func GetYAMLTop(path, key string) (string, bool) {
-	raw, err := Read(path)
-	if err != nil || raw == nil {
-		return "", false
-	}
-	for _, line := range splitLines(string(raw)) {
-		if m := yamlKV.FindStringSubmatch(line); m != nil && m[1] == key {
-			return yamlValue(m[2]), true
-		}
-	}
-	return "", false
-}
-
-// SetYAMLTop sets top-level scalar keys in a YAML file.
-func SetYAMLTop(path string, kvs ...KV) error {
-	raw, err := Read(path)
-	if err != nil {
-		return err
-	}
-	lines := splitLines(string(raw))
-	for _, kv := range kvs {
-		v := toString(kv.Value)
-		if !yamlPlain.MatchString(v) {
-			v = strconv.Quote(v)
-		}
-		lines = setLine(lines, kv.Path, kv.Path+": "+v, nil, func(line string) (string, bool) {
-			m := yamlKV.FindStringSubmatch(line)
-			if m == nil {
-				return "", false
-			}
-			return m[1], true
-		})
-	}
-	return WriteAtomic(path, []byte(joinLines(lines)))
-}
-
-// DelYAMLTop removes top-level scalar keys from a YAML file.
-func DelYAMLTop(path string, keys ...string) error {
-	raw, err := Read(path)
-	if err != nil || raw == nil {
-		return err
-	}
-	drop := map[string]bool{}
-	for _, k := range keys {
-		drop[k] = true
-	}
-	var out []string
-	for _, line := range splitLines(string(raw)) {
-		if m := yamlKV.FindStringSubmatch(line); m != nil && drop[m[1]] {
-			continue
-		}
-		out = append(out, line)
-	}
-	return WriteAtomic(path, []byte(joinLines(out)))
-}
 
 // setLine replaces the line whose key matches, or inserts newLine after the
 // last key line in the header section (before the first line matching stop).
@@ -133,16 +72,6 @@ func tomlValue(v string) string {
 		return s
 	}
 	if i := strings.Index(v, "#"); i >= 0 {
-		v = strings.TrimSpace(v[:i])
-	}
-	return v
-}
-
-func yamlValue(v string) string {
-	if s, ok := unquote(v); ok {
-		return s
-	}
-	if i := strings.Index(v, " #"); i >= 0 {
 		v = strings.TrimSpace(v[:i])
 	}
 	return v

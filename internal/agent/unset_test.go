@@ -13,9 +13,12 @@ import (
 func TestUnsetAgentsReadEmpty(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	for _, a := range All() {
 		for _, f := range a.Fields {
 			if v := f.Get(); v != "" {
@@ -28,6 +31,7 @@ func TestUnsetAgentsReadEmpty(t *testing.T) {
 func TestGeminiAuthUnset(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := filepath.Join(home, ".gemini")
 	os.MkdirAll(dir, 0o755)
 	a := gemini(home)

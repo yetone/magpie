@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 func TestCline(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("CLINE_DIR", "")
 	t.Setenv("CLINE_DATA_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
@@ -176,7 +178,7 @@ func TestCline(t *testing.T) {
 	if c.Version != 1 || c.LastUsed != "openai-compatible" {
 		t.Fatalf("new file:\n%s", raw)
 	}
-	if st, _ := os.Stat(path); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(path); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 { // Windows has no such bits
 		t.Fatalf("mode %v", st.Mode())
 	}
 	if err := f.Set(""); err != nil {

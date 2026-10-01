@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -111,8 +112,9 @@ func TestProjectSkillsCopied(t *testing.T) {
 		t.Error("the copy wasn't made again")
 	}
 	// back to links: the copy becomes a link
+	// (not on Windows, where a copy as fresh as the library's stands for one)
 	ok(t)(ProjectCopy(proj, false))
-	if !isLink(t, p) {
+	if runtime.GOOS != "windows" && !isLink(t, p) {
 		t.Error("still a copy")
 	}
 }

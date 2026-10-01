@@ -122,7 +122,7 @@ func TestUsageLedgerRoutes(t *testing.T) {
 	p1, n := export()
 	p2, _ := export()
 	day := time.Now().Format("2006-01-02")
-	if n != 2 || p1 != "~/Downloads/magpie-requests-today-"+day+".csv" || p2 != "~/Downloads/magpie-requests-today-"+day+"-2.csv" {
+	if n != 2 || p1 != filepath.Join("~", "Downloads", "magpie-requests-today-"+day+".csv") || p2 != filepath.Join("~", "Downloads", "magpie-requests-today-"+day+"-2.csv") {
 		t.Fatalf("export: %s %s %d", p1, p2, n)
 	}
 	b, err := os.ReadFile(filepath.Join(home, "Downloads", "magpie-requests-today-"+day+".csv"))

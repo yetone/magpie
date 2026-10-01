@@ -49,9 +49,11 @@ const modelUsage = `usage:
                                                  and says when there was no name of its own to take away
   magpie model wires                             the names your vendors are asked for models by
   magpie model names                             the models you named or narrowed
-  magpie model suffix [on|off]                   whether the agents' lists name each model with its provider
+  magpie model suffix [on|own|off]               whether the agents' lists name each model with its provider
                                                  (or "routing group") after it: on, as by default, "Sol · OpenAI";
-                                                 off, "Sol" alone — but two a list would name the same keep it
+                                                 own, a name you gave a model just as you wrote it, "Opus 5.5",
+                                                 the others as on; off, "Sol" alone — but two a list would name
+                                                 the same keep it
 
   Each is looked for in this order: this model, then <provider id>/*, then the provider's own
   list, then models.dev. --reset removes only the first, and says so when a <provider id>/* value
@@ -474,30 +476,39 @@ func modelPrices() error {
 }
 
 // modelSuffix says whether the agents' lists name models with their
-// providers' after them, or sets it (#335).
+// providers' after them, all but the names the user gave (#92), or none
+// (#335), or sets it.
 func modelSuffix(args []string) error {
 	if len(args) == 0 {
-		if settings.Load().PlainNames {
-			fmt.Println("off", muted.Render("· agents' lists name a model alone, \"Sol\" · magpie model suffix on"))
-		} else {
-			fmt.Println("on", muted.Render("· agents' lists name a model with its provider, \"Sol · OpenAI\" · magpie model suffix off"))
+		switch provider.SuffixMode() {
+		case provider.SuffixOff:
+			fmt.Println("off", muted.Render("· agents' lists name a model alone, \"Sol\" · magpie model suffix on|own"))
+		case provider.SuffixOwn:
+			fmt.Println("own", muted.Render("· a name you gave a model just as you wrote it, \"Opus 5.5\"; the others \"Sol · OpenAI\" · magpie model suffix on|off"))
+		default:
+			fmt.Println("on", muted.Render("· agents' lists name a model with its provider, \"Sol · OpenAI\" · magpie model suffix own|off"))
 		}
 		return nil
 	}
-	var plain bool
+	mode := provider.SuffixOn
 	switch strings.ToLower(args[0]) {
 	case "on", "yes", "true":
+	case "own", "mine":
+		mode = provider.SuffixOwn
 	case "off", "no", "false":
-		plain = true
+		mode = provider.SuffixOff
 	default:
-		return fmt.Errorf("magpie model suffix on|off, not %q", args[0])
+		return fmt.Errorf("magpie model suffix on|own|off, not %q", args[0])
 	}
-	if err := provider.SetPlainNames(plain); err != nil {
+	if err := provider.SetSuffixMode(mode); err != nil {
 		return err
 	}
-	if plain {
+	switch mode {
+	case provider.SuffixOff:
 		fmt.Println(green.Render("✓"), "agents' lists name each model alone", muted.Render("· two that would read the same keep their provider's"))
-	} else {
+	case provider.SuffixOwn:
+		fmt.Println(green.Render("✓"), "agents' lists name a model you named just as you wrote it", muted.Render("· the others with their provider"))
+	default:
 		fmt.Println(green.Render("✓"), "agents' lists name each model with its provider again")
 	}
 	return nil

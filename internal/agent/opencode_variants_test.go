@@ -43,6 +43,7 @@ func TestOpenCodeVariants(t *testing.T) {
 func TestOpenCodeWritesVariants(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	if err := provider.Save(provider.Provider{
@@ -131,6 +132,7 @@ func TestOpenCodeWritesVariants(t *testing.T) {
 func TestOpenCodeNoResellerLevelsForSwitchModel(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)

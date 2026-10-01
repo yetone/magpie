@@ -82,6 +82,9 @@ func dshRead(path string) (*dshPatches, error) {
 		return nil, err
 	}
 	p := &dshPatches{}
+	if b, ok := edit.BlockList(string(raw)); ok { // [ {...} ]: read, and written back, as a block list
+		raw = []byte(b)
+	}
 	s := strings.TrimRight(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
 	if s == "" {
 		return p, nil

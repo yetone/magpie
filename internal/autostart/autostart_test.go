@@ -15,6 +15,7 @@ func TestSet(t *testing.T) {
 	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", home+"/.config")
 	t.Setenv("APPIMAGE", "/opt/my apps/magpie.AppImage")
 	if Enabled() {

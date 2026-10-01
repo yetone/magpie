@@ -170,14 +170,19 @@
 .rt-req .asked i.ag { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--agent); }
 .rt-req .asked .ic, .rt-req .asked .ic img, .rt-req .asked .ic svg { width: 14px; height: 14px; flex: none; }
 .rt-req .m, .rt-req .to span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rt-req .to { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--fg); }
+.rt-req .to { display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; color: var(--fg); }
+.rt-req .to .said { flex-shrink: 100000; }
 .rt-req .to i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 .rt-req.moved .to i { background: var(--accent); }
 .rt-req.bad .to { color: var(--red); }
 .rt-req.bad .to i { background: var(--red); }
 .rt-req.wait .to i { background: var(--muted); animation: rtlive 1.8s infinite; }
-.rt-req .to .ef { flex: none; overflow: visible; margin-left: -2px; color: var(--muted); }
-.rt-req .ef::before { content: "· "; }
+/* the reasoning keeps to its own box: what it was asked at is cut first,
+   then what it was sent at, never drawn over the numbers beside it (#435) */
+.rt-req .to .ef { flex: 0 1 auto; display: flex; min-width: 0; margin-left: -2px; color: var(--muted); }
+.rt-req .ef::before { content: "· "; flex: none; white-space: pre; }
+.rt-req .to .ef span { min-width: 0; white-space: pre; }
+.rt-req .to .ef .was { flex-shrink: 100000; }
 .rt-req .to .ef.picked { color: var(--fg-2); }
 .rt-req .ef .was { opacity: .75; }
 /* what a call was for (a Codex guardian review, a title…): a quiet grey tag by the model */

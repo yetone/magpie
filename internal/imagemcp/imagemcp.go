@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -396,7 +397,7 @@ func (s *server) root() string {
 		json.Unmarshal(m.Result, &r)
 		for _, root := range r.Roots {
 			if u, err := url.Parse(root.URI); err == nil && u.Scheme == "file" && u.Path != "" {
-				return filepath.FromSlash(u.Path)
+				return filePath(u)
 			}
 		}
 	case <-time.After(3 * time.Second):
@@ -407,6 +408,21 @@ func (s *server) root() string {
 	return ""
 }
 
+// filePath is the file a file:// URI names: on Windows file:///C:/p is C:\p
+// (not \C:\p, a path nowhere) and file://server/share/p is \\server\share\p.
+func filePath(u *url.URL) string {
+	p := u.Path
+	if runtime.GOOS == "windows" {
+		if u.Host != "" && u.Host != "localhost" {
+			return `\\` + u.Host + filepath.FromSlash(p)
+		}
+		if len(p) >= 3 && p[0] == '/' && p[2] == ':' {
+			p = p[1:]
+		}
+	}
+	return filepath.FromSlash(p)
+}
+
 // reference is ref as the gateway takes it: a URL as it is, a file as a
 // data URL.
 func reference(project, ref string) (string, error) {
@@ -414,6 +430,9 @@ func reference(project, ref string) (string, error) {
 		return ref, nil
 	}
 	path := strings.TrimPrefix(ref, "file://")
+	if u, err := url.Parse(ref); err == nil && u.Scheme == "file" {
+		path = filePath(u)
+	}
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(project, path)
 	}

@@ -22,6 +22,7 @@ func setupCalls(t *testing.T) callDirs {
 	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
 	t.Setenv("CLAUDE_CONFIG_DIR", d.claude)
 	t.Setenv("CODEX_HOME", d.codex)
+	t.Setenv("DSH_HOME", "")
 	t.Setenv("HOME", filepath.Join(dir, "home"))
 	t.Setenv("USERPROFILE", filepath.Join(dir, "home"))
 	callDesktopDirs = func() []string { return []string{d.desktop} }
@@ -427,6 +428,7 @@ func TestCallsResumed(t *testing.T) {
 
 func TestDesktopDataDirs(t *testing.T) {
 	t.Setenv("HOME", "/home/u")
+	t.Setenv("USERPROFILE", "/home/u")
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("LOCALAPPDATA", filepath.Join(t.TempDir(), "Local"))
 	ds := desktopDataDirs()

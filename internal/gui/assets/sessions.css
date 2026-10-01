@@ -1,0 +1,37 @@
+/* Sessions: every session of an agent, by folder, to resume or delete (sessions.js) */
+.sm-head { gap: 8px; }
+.sm-head .grow { flex: 1; }
+.sm-agents { min-width: 0; flex: 0 1 auto; }
+.sm-agents .opt { display: inline-flex; align-items: center; gap: 5px; }
+.sm-agents .opt .ic { width: 13px; height: 13px; }
+.sm-agents .opt em, .sm-trash-btn em { font-style: normal; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.sm-filter { width: 200px; flex: 0 1 200px; min-width: 110px; }
+.sm-trash-btn { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+.sm-trash-btn.on { background: var(--pill); color: var(--fg); }
+.sm-body { display: flex; flex-direction: column; gap: 8px; flex: none; }
+.sm-note { margin: 0 2px; }
+.sm-bar { gap: 8px; padding: 0 11px; }
+.sm-bar .grow { flex: 1; }
+.sm-bar .sm-delete { display: inline-flex; align-items: center; gap: 5px; }
+.sm-bar .sm-delete:disabled { opacity: .45; }
+.sm-count { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sm-check { flex: none; margin: 0; width: 14px; height: 14px; accent-color: var(--accent); }
+.sm-tree { display: flex; flex-direction: column; gap: 8px; }
+.sm-group .skeleton.sk-line { width: 60%; height: 12px; }
+.row.sm-folder { min-height: 34px; gap: 8px; }
+.row.sm-folder .fold { color: var(--fg-2); font-weight: 500; flex: none; max-width: 45%; }
+.row.sm-folder .fold .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.sm-folder .sm-path { flex: 0 1 auto; min-width: 0; margin: 0; font-family: var(--code); font-size: 10.5px; color: var(--faint); }
+.row.sm-folder .grow { flex: 1; }
+.row.sm-folder .note { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.row.sm-sess { min-height: 44px; }
+.sm-item .sess-detail { padding-left: 34px; }
+.row.sess .sm-del:hover { color: var(--red); background: var(--red-soft); }
+.sm-restore { display: inline-flex; align-items: center; gap: 5px; }
+.sm-ask-list { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--fg); line-height: 1.6; }
+.sm-ask-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-ask-list li.more { color: var(--muted); }
+@media (max-width: 560px) {
+  .sm-filter { width: 130px; flex-basis: 130px; }
+  .row.sm-folder .sm-path { display: none; }
+}

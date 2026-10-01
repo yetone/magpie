@@ -1344,6 +1344,7 @@ async function load() {
     if (applyPrefs(state.settings, state.fx)) {
       if (view === "library") window.loadLibrary?.();
       if (view === "plugins") window.loadPlugins?.();
+      if (view === "sessions") window.loadSessionsPage?.();
     }
     tintPanel();
     tintTitleBar();
@@ -2841,7 +2842,7 @@ function renderConnect() {
   note.replaceChildren();
   note.classList.toggle("brief", connectFolded);
   if (connectFolded) note.append(el("code", "", base), copyBtn(base, "Base URL"));
-  else note.textContent = t(remote ? "Local network · an enabled gateway key is required" : g.lan && gatewayKeys?.length ? "Use a gateway key to track usage" : "Loopback only · the key can be anything");
+  else note.textContent = t(g.open ? "Open to the network · anyone who reaches it can use any key" : remote ? "Local network · an enabled gateway key is required" : g.lan && gatewayKeys?.length ? "Use a gateway key to track usage" : "Loopback only · the key can be anything");
 
   box.append(...field("API", segs(Object.entries(FLAVORS).map(([k, v]) => [k, v.name]), flavor, (id) => { flavor = id; localStorage.setItem("magpie.flavor", id); renderConnect(); }), t(f.note)));
 
@@ -3167,7 +3168,7 @@ function sseBodyPanel(label, raw, truncated, id) {
   const panel = el("section", "call-body sse");
   const head = el("div", "call-body-head");
   head.append(el("span", "call-body-label", t(label)));
-  if (truncated) head.append(el("span", "call-body-truncated", t("first 256 KB")));
+  if (truncated) head.append(el("span", "call-body-truncated", typeof truncated === "string" ? truncated : t("first 256 KB")));
   const views = [["reply", t("Reply")], ["events", t("Events")], ["raw", t("Raw")]].filter(([v]) => v !== "reply" || reply);
   let view = views.some(([v]) => v === sseView) ? sseView : "events";
   const count = el("span", "call-body-count", t(events.length === 1 ? "1 event" : "{n} events", { n: events.length }));
@@ -3226,7 +3227,7 @@ function callBodyPanel(label, raw, truncated, id) {
   const panel = el("section", "call-body");
   const head = el("div", "call-body-head");
   head.append(el("span", "call-body-label", t(label)));
-  if (truncated) head.append(el("span", "call-body-truncated", t("first 256 KB")));
+  if (truncated) head.append(el("span", "call-body-truncated", typeof truncated === "string" ? truncated : t("first 256 KB")));
   const formatted = formatWireBody(raw);
   if (formatted) head.append(el("span", "grow"), copyBtn(raw, t(label)));
   panel.append(head);
@@ -3276,36 +3277,86 @@ function headersPanel(label, first, headers) {
   return panel;
 }
 
-function archivePanel(c, id) {
+// The archived file, whole, however large: to the browser in magpie web,
+// to Downloads in the app (#447).
+async function downloadArchive(name, b) {
+  const [date, aid] = name.split("/");
+  const q = `date=${encodeURIComponent(date)}&id=${encodeURIComponent(aid)}`;
+  if (web) {
+    const a = el("a");
+    a.href = "/api/archive/file?" + q;
+    a.download = "";
+    a.click();
+    return;
+  }
+  b.classList.add("busy");
+  b.disabled = true;
+  try {
+    const r = await api("archive/export?" + q, {});
+    status(t("Saved to {path}", { path: r.path }), "ok");
+  } catch (e) {
+    status(t(e.message), "err");
+  } finally {
+    b.classList.remove("busy");
+    b.disabled = false;
+  }
+}
+
+// one body read back from the archive: shown, or, past 256 KB, only its
+// size — the server leaves it out — for the file to be downloaded whole
+function archiveBodyPanel(label, part, id) {
+  if (part.omitted) {
+    const panel = el("section", "call-body");
+    const head = el("div", "call-body-head");
+    head.append(el("span", "call-body-label", t(label)), el("span", "call-body-count", fmtBytes(part.size)));
+    panel.append(head, el("p", "call-archive-big", t("Too long to show here. Download the archive to read it whole.")));
+    return panel;
+  }
+  // cut where the archive stops: its limit, or 256 KB in one from before #447
+  const cut = part.truncated && (part.size ? t("first {n} of {size}", { n: fmtBytes(new Blob([part.body]).size), size: fmtBytes(part.size) }) : true);
+  return callBodyPanel(label, part.body, cut, id);
+}
+
+// A call the archive kept, by "<date>/<id>": read back when asked, and its
+// file downloaded, drawn again by redraw as it is read — under a recent
+// call on the Gateway page, and a request's row on the Usage page.
+function archivePanel(name, id, redraw) {
   const box = el("section", "call-archive");
-  const [date, aid] = c.archive.split("/");
-  const got = archivedCalls.get(c.archive);
+  const [date, aid] = name.split("/");
+  const got = archivedCalls.get(name);
   const head = el("div", "call-body-head");
-  head.append(el("span", "call-body-label", t("Request archive")), el("code", "call-archive-id", c.archive), el("span", "grow"));
+  head.append(el("span", "call-body-label", t("Request archive")), el("code", "call-archive-id", name), el("span", "grow"));
   box.append(head);
+  const dl = el("button", "text call-archive-dl", t("Download"));
+  dl.onclick = (ev) => { ev.stopPropagation(); downloadArchive(name, dl); };
   if (!got || got.busy || got.error) {
     const b = el("button", "text", t(got?.busy ? "Fetching…" : "Fetch from archive"));
     b.disabled = !!got?.busy;
     b.onclick = (ev) => {
       ev.stopPropagation();
-      archivedCalls.set(c.archive, { busy: true });
-      renderActivity();
+      archivedCalls.set(name, { busy: true });
+      redraw();
       api(`archive?date=${encodeURIComponent(date)}&id=${encodeURIComponent(aid)}`)
-        .then((a) => archivedCalls.set(c.archive, a))
-        .catch((e) => archivedCalls.set(c.archive, { error: t(e.message) }))
-        .finally(renderActivity);
+        .then((a) => archivedCalls.set(name, a))
+        .catch((e) => archivedCalls.set(name, { error: t(e.message) }))
+        .finally(redraw);
     };
     head.append(b);
     if (got?.error) box.append(el("div", "call-archive-err", got.error));
+    else head.append(dl); // one not in the bucket has nothing to download
     return box;
   }
-  head.append(el("span", "call-body-truncated call-archive-note", t("Secrets taken out")));
+  head.append(el("span", "call-body-truncated call-archive-note", t("Secrets taken out")), dl);
+  if (got.large) {
+    box.append(el("p", "call-archive-big", t("This archive is {size}, too large to show here. Download it to read it.", { size: got.bytes > 0 ? fmtBytes(got.bytes) : t("very large") })));
+    return box;
+  }
   const grid = el("div", "call-details");
   grid.append(
     headersPanel(t("Request Headers"), `${got.request.method || ""} ${got.request.path || ""}`.trim(), got.request.headers),
     headersPanel(t("Response Headers"), got.response.status ? `HTTP ${got.response.status}` : "", got.response.headers),
-    callBodyPanel("Request Body", got.request.body, got.request.truncated),
-    callBodyPanel("Response Body", got.response.body, got.response.truncated, id + "|archive"),
+    archiveBodyPanel("Request Body", got.request),
+    archiveBodyPanel("Response Body", got.response, id + "|archive"),
   );
   box.append(grid);
   return box;
@@ -3354,7 +3405,7 @@ function renderActivity() {
         callBodyPanel("Request Body", c.requestBody, c.requestTruncated),
         callBodyPanel("Response Body", c.responseBody, c.responseTruncated, id),
       );
-      if (c.archive) details.append(archivePanel(c, id));
+      if (c.archive) details.append(archivePanel(c.archive, id, renderActivity));
       item.dataset.id = id;
       item.append(details);
     }
@@ -5874,12 +5925,23 @@ function renderSigning(sub) {
     acts.append(open);
     tt.append(acts);
   }
-  if (signing.pasteCallback || signing.pasteCode) {
+  if (signing.pasteCallback || signing.pasteCode || signing.pasteKey) {
     const flow = signing;
-    const what = flow.pasteCode ? t("Code") : t("Callback URL");
-    if (!flow.pasteCode) tt.append(el("span", "s", t("If the page the browser ends on won't load (magpie runs on a server or in Docker), copy its whole address and paste it here.")));
+    const what = flow.pasteCode ? t("Code") : flow.pasteKey ? t("API key") : t("Callback URL");
+    if (flow.pasteKey) {
+      // Command Code's page posts its key to magpie unseen: a browser that
+      // can't reach magpie (Docker) has no address to paste, so a key made
+      // on the keys page finishes it, as Command Code's CLI takes one
+      const s = el("span", "s", t("If the page can't reach magpie (it runs on a server or in Docker), make an API key on {name}'s keys page and paste it here.", { name: sub.name }) + " ");
+      if (flow.keysURL) {
+        const keys = el("button", "link", t("Open the keys page"));
+        keys.onclick = () => api("open", { url: flow.keysURL }).catch(() => {});
+        s.append(keys);
+      }
+      tt.append(s);
+    } else if (!flow.pasteCode) tt.append(el("span", "s", t("If the page the browser ends on won't load (magpie runs on a server or in Docker), copy its whole address and paste it here.")));
     const form = el("form", "callback-form");
-    const url = input(flow.callbackURL || "", what);
+    const url = input(flow.callbackURL || "", what, flow.pasteKey ? "password" : "text");
     url.setAttribute("aria-label", what);
     url.autocomplete = "off";
     url.disabled = !!flow.callbackSubmitted || !!flow.callbackSubmitting;
@@ -5912,6 +5974,21 @@ function renderSigning(sub) {
     submit.onclick = finish;
     form.append(url, submit);
     tt.append(form, why);
+  }
+  // a plugin's browser sign-in whose page can't reach magpie (Docker: the
+  // Command Code plugin's Studio posts its key to 127.0.0.1) can be left
+  // for the plugin's own API key way, without starting over
+  const keyWay = sub.plugin && signing.method != null && !signing.pasteCode && signing.state === "waiting"
+    ? (sub.plugin.methods || []).findIndex((m) => m.type === "api") : -1;
+  if (keyWay >= 0 && keyWay !== signing.method) {
+    const acts = tt.querySelector(".acts") || tt.appendChild(el("span", "acts"));
+    const k = el("button", "link", t("Use an API key instead"));
+    k.title = t("If the page can't reach magpie (it runs on a server or in Docker)");
+    k.onclick = () => {
+      if (signing?.id) api("signin/" + signing.id + "/cancel", {}).catch(() => {});
+      startPluginSignIn(sub, keyWay);
+    };
+    acts.append(k);
   }
   if (sub.importable) {
     // an account another tool is signed in to comes in from its file
@@ -8018,12 +8095,22 @@ function ledDetail(r, cols) {
   if (r.session_account) add("Session account", r.session_account);
   if (r.source === "log" && r.session_account && r.session_official_login) add("Login method", t("Official login"));
   if (r.pricing_model) add("API price reference", r.pricing_model);
+  // with the archive on, a request it has no copy of says so: from before
+  // it was on, or not through the gateway
+  if (!r.archive && (providers?.gateway?.archive?.on ?? state.settings?.requestArchive)) add("Request archive", t("Not archived"), "muted");
   if (r.source === "log") add("Data source", t("Read from the agent's session file. The account is shown only when local metadata identifies it; no service provider is inferred."), "muted");
   const tr = el("tr", "led-detail");
   const td = el("td");
   td.colSpan = cols;
   const box = el("div", "led-box");
   box.append(dl.childElementCount ? dl : el("span", "faint", t("Nothing more was kept of this request")));
+  // the call as the request archive kept it, when it was on (#447)
+  if (r.archive) {
+    const ab = el("div", "led-archive");
+    const draw = () => ab.replaceChildren(archivePanel(r.archive, "led|" + ledKey(r), draw));
+    draw();
+    box.append(ab);
+  }
   // what was said: read from the agent's session file, when the row is opened
   const cx = el("div", "led-cx");
   cx.append(el("p", "cx-none", t("Loading…")));
@@ -8127,8 +8214,10 @@ function ledContentBox(c) {
 // tab draws the same from the same answer.
 
 // a count as a short number: 1.33 亿, 68.1 万 in Chinese, 133M in English
+// and in Chinese with Settings' K/M/B units (westernUnits)
+let westernUnits = false;
 function ledShort(n) {
-  if (locale !== "zh") return fmtN(n);
+  if (locale !== "zh" || westernUnits) return fmtN(n);
   if (n >= 1e8) return +(n / 1e8).toFixed(2) + " 亿";
   if (n >= 1e4) return +(n / 1e4).toFixed(1) + " 万";
   return String(n);
@@ -8206,18 +8295,28 @@ function drawLedColumns(box, l, split, metric, compact) {
     return;
   }
   const topV = ledAxis(max);
-  const M = { l: compact ? 34 : 44, r: 6, t: 8, b: 22 };
-  const pw = W - M.l - M.r, ph = H - M.t - M.b, slot = pw / n, bw = Math.max(2, Math.min(compact ? 14 : 30, slot * 0.68));
-  const Y = (v) => M.t + ph - (ph * v) / topV;
   const g = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
   g.setAttribute("aria-label", t("Usage trend"));
-  for (let i = 0; i <= 4; i++) {
-    const y = M.t + (ph * i) / 4;
-    g.append(sv("line", { x1: M.l, x2: W - M.r, y1: y, y2: y, class: "grid" }));
-    const lab = sv("text", { x: M.l - 6, y: y + 3.5, "text-anchor": "end", class: "axis" });
+  // the side's labels, measured as drawn: the plot starts where the widest
+  // ends ("8000 万", "¥1250" are wider than "80M"), so none reaches past the
+  // card's padding
+  plot.append(g);
+  const labs = [0, 1, 2, 3, 4].map((i) => {
+    const lab = sv("text", { "text-anchor": "end", class: "axis" });
     lab.textContent = ledFormat(metric, topV * (1 - i / 4));
     g.append(lab);
-  }
+    return lab;
+  });
+  const widest = Math.max(0, ...labs.map((lab) => { try { return lab.getComputedTextLength(); } catch { return 0; } }));
+  const M = { l: widest > 0 ? Math.ceil(widest) + 6 : compact ? 34 : 44, r: 6, t: 8, b: 22 };
+  const pw = W - M.l - M.r, ph = H - M.t - M.b, slot = pw / n, bw = Math.max(2, Math.min(compact ? 14 : 30, slot * 0.68));
+  const Y = (v) => M.t + ph - (ph * v) / topV;
+  labs.forEach((lab, i) => {
+    const y = M.t + (ph * i) / 4;
+    lab.setAttribute("x", M.l - 6);
+    lab.setAttribute("y", y + 3.5);
+    g.insertBefore(sv("line", { x1: M.l, x2: W - M.r, y1: y, y2: y, class: "grid" }), lab);
+  });
   const room = Math.max(2, Math.floor(pw / (compact ? 46 : 62))), every = Math.ceil(n / room);
   pts.forEach((p, i) => {
     if (i % every) return;
@@ -9753,7 +9852,7 @@ function renderSessTools() {
   const cols = el("div", "sess-tools-cols");
 
   // the most called, each with its kind's dot, calls, sessions and share
-  const top = el("div", "sess-bars");
+  const top = el("div", "sess-bars tools");
   const peak = Math.max(1, ...tu.top.map((x) => x.calls));
   for (const x of tu.top) {
     const r = el("div", "sess-bar tool");
@@ -10071,6 +10170,10 @@ function applyPrefs(s, rate) {
     currency = s.currency || "usd";
     if (applyPrefs.painted) renderCosts();
   }
+  if (westernUnits !== !!s.westernUnits) {
+    westernUnits = !!s.westernUnits;
+    if (applyPrefs.painted) { renderCosts(); if (mode === "panel" && panelTab === "stats") renderPanelUse(); }
+  }
   applyPrefs.painted = true;
   if (!prefsBusy && (s.textSize || 100) !== textSize) { textSize = s.textSize || 100; applyZoom(textSize); }
   const was = locale;
@@ -10231,6 +10334,7 @@ function renderSettings() {
   renderImages(s, keep);
   renderSearch(s);
   renderRedact(s, keep);
+  renderOTel(s, keep);
   renderLAN(s);
   renderSync();
 
@@ -10593,11 +10697,17 @@ function renderTrayUsage(s, keep) {
   $("#quotaLeftSegs").replaceChildren(segs([[false, t("Used")], [true, t("Left")]], !!s.quotaLeft,
     (on) => { if (on !== quotaLeft) setQuotaLeft(on); }));
   $("#currencySegs").replaceChildren(segs(CURRENCIES.map(([id, name]) => [id, t(name)]), s.currency || "usd", (v) => savePrefs({ ...keep, currency: v })));
+  // 万 and 亿 are Chinese's alone: in English a count is always K, M and B
+  $("#unitsRow").hidden = locale !== "zh";
+  $("#unitsSegs").replaceChildren(segs([[false, t("万 / 亿")], [true, t("K / M / B")]], !!s.westernUnits,
+    (v) => savePrefs({ ...keep, westernUnits: v })));
   renderAlerts(s, keep);
-  // the agents' lists name a model with its provider's after it, or alone
-  // (#335): set on its own, so the agents are told
-  $("#plainNamesSegs").replaceChildren(segs([["off", t("Off")], ["on", t("On")]], s.plainNames ? "off" : "on", (v) =>
-    writingPrefs(api("settings/plain-names", { on: v === "off" })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); })));
+  // the agents' lists name a model with its provider's after it, all but
+  // the names the user gave (#92), or none (#335): set on its own, so the
+  // agents are told
+  const suffix = s.plainNames ? "off" : s.plainOwnNames ? "own" : "on";
+  $("#plainNamesSegs").replaceChildren(segs([["off", t("Off")], ["own", t("Not on names I set")], ["on", t("On")]], suffix, (v) =>
+    writingPrefs(api("settings/plain-names", { mode: v })).then((ns) => { prefs = ns; renderSettings(); }).catch((e) => { status(t(e.message), "err"); renderSettings(); })));
   const rate = s.fx?.rate;
   const currencySub = $("#currencySub");
   currencySub.textContent = t("What a cost — the Usage page's, the tray panel's, the TUI's and the CLI's — is shown as; a vendor's own balance, already in its own currency, is never converted");
@@ -10943,6 +11053,54 @@ function renderRedact(s, keep) {
     onOff(!s.noStats, (on) => savePrefs({ ...keep, noStats: !on })));
 }
 
+function renderOTel(s, keep) {
+  const box = $("#otelList");
+  box.replaceChildren();
+  let config = { ...(s.otel || {}) };
+  const row = (id, name, sub, control) => {
+    const r = el("div", "row pref");
+    r.id = id;
+    const who = el("div", "who");
+    who.append(el("div", "name", t(name)), el("div", "sub", t(sub)));
+    const val = el("div", "val");
+    val.append(control);
+    r.append(who, val);
+    box.append(r);
+  };
+  const save = (change) => {
+    config = { ...config, ...change };
+    savePrefs({ ...keep, otel: { ...config } });
+  };
+  row("otelExportRow", "OTLP export", "Send model, token, status and timing metadata to your collector. Prompts, replies and account credentials stay local",
+    segs([["off", t("Off")], ["on", t("On")]], config.enabled ? "on" : "off", (v) => save({ enabled: v === "on" })));
+  const endpoint = input(config.endpoint || "", "http://localhost:4318", "url");
+  endpoint.className = "words";
+  endpoint.setAttribute("aria-label", t("OTLP endpoint"));
+  endpoint.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") endpoint.blur(); };
+  endpoint.onchange = () => save({ endpoint: endpoint.value.trim().replace(/\/+$/, "") });
+  row("otelEndpointRow", "OTLP endpoint", "Base URL of your collector, or Langfuse's /api/public/otel endpoint", endpoint);
+  const headers = input(Object.entries(config.headers || {}).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join(","), "Authorization=Bearer%20token", "password");
+  headers.className = "words";
+  headers.setAttribute("aria-label", t("OTLP headers"));
+  headers.autocomplete = "off";
+  headers.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") headers.blur(); };
+  headers.onchange = () => {
+    const values = {};
+    try {
+      for (const part of headers.value.split(",").filter((p) => p.trim())) {
+        const i = part.indexOf("=");
+        if (i < 1) throw new Error(t("Use comma-separated name=value headers"));
+        values[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+      }
+      save({ headers: values });
+    } catch (e) { toast(e.message, true); }
+  };
+  row("otelHeadersRow", "OTLP headers", "Comma-separated name=value pairs; percent-encode spaces and commas in values", headers);
+  row("otelMetricsRow", "Export metrics", "Also send duration and token histograms. Leave off for a traces-only service such as Langfuse",
+    segs([["off", t("Off")], ["on", t("On")]], config.metrics ? "on" : "off", (v) => save({ metrics: v === "on" })));
+  if (s.otelEnv) box.append(el("div", "sub", t("Environment variables override these saved OTLP preferences")));
+}
+
 // renderRedactRules: the user's own rules for secrets magpie's don't know, a
 // gateway's oc_sk_… key say (#195) — one row each, and a row to add one by a
 // prefix or a regular expression. They are set on their own, all of them each
@@ -11174,12 +11332,13 @@ function wbCheckinLine(r) {
 function prefsKeep(s) {
   return { theme: s.theme, lang: s.lang, tray: s.tray, dock: !!s.dock, dockWindow: !!s.dockWindow, proxy: s.proxy || "",
     sessionTerminal: s.sessionTerminal || "",
+    otel: s.otel || {},
     trayUsages: s.trayUsages || [],
     redact: !!s.redact, redactPersonal: !!s.redactPersonal, redactWords: s.redactWords || [], codexWarmup: s.codexWarmup || "",
     claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "", workbuddyCheckin: !!s.workbuddyCheckin, noStats: !!s.noStats,
     noUpdatePill: !!s.noUpdatePill,
     trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, vision: s.vision || "", imageGen: s.imageGen || "", currency: s.currency || "usd",
-    usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0 };
+    westernUnits: !!s.westernUnits, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0 };
 }
 
 // savePrefs sends what the page was drawn with (prefsBase) and the choice
@@ -11435,7 +11594,7 @@ function show(v) {
   view = v;
   if (mode === "window") { for (const b of $("#nav").querySelectorAll("button")) b.classList.toggle("on", b.dataset.view === v); slide($("#nav"), "nav"); }
   $("#prefs").classList.toggle("on", v === "settings");
-  for (const id of ["agents", "providers", "gateway", "routing", "usage", "library", "plugins", "settings"]) $("#view-" + id).hidden = v !== id;
+  for (const id of ["agents", "providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"]) $("#view-" + id).hidden = v !== id;
   // back to where the reader was in it, and again once it has what it loads
   const back = () => backToReader($("#view-" + v));
   requestAnimationFrame(back);
@@ -11448,6 +11607,7 @@ function show(v) {
   if (v === "settings") loadSettings().then(back, (e) => status(e.message, "err"));
   if (v === "library") window.loadLibrary?.()?.then(back);
   if (v === "plugins") window.loadPlugins?.()?.then(back);
+  if (v === "sessions") window.loadSessionsPage?.()?.then(back);
   syncURL();
 }
 
@@ -11511,7 +11671,8 @@ setTimeout(wag, 250);
 
 // A narrow window has no room for the whole header: the name goes, leaving
 // the magpie, and Update becomes its arrow; narrower still, the tabs stop
-// centring and take the room between, and at the narrowest they draw in.
+// centring and take the room between, and at the narrowest they draw in,
+// further still when they don't fit (the 560px window at 150%).
 function fitTop() {
   const top = $(".top"), nav = $("#nav"), brand = $(".brand"), actions = $(".actions");
   // In a narrow browser the tabs have a row of their own; shrinking the
@@ -11529,12 +11690,17 @@ function fitTop() {
     const n = nav.getBoundingClientRect();
     return left + 8 <= n.left && n.right + 8 <= a.left;
   };
-  top.classList.remove("tight", "cramped", "crowded");
+  top.classList.remove("tight", "cramped", "inrow", "crowded", "packed");
   if (fits()) return;
   top.classList.add("tight");
   if (fits()) return;
+  // the tabs closer together are tried in the middle first (#442)
   top.classList.add("cramped");
-  if (!fits()) top.classList.add("crowded");
+  if (fits()) return;
+  top.classList.add("inrow");
+  if (fits()) return;
+  top.classList.add("crowded");
+  if (!fits()) top.classList.add("packed");
 }
 const topFit = new ResizeObserver(fitTop);
 for (const e of [".top", ".brand", ".actions"]) topFit.observe($(e));
@@ -11755,6 +11921,6 @@ if (mode === "window" && params.get("view") === "usage") {
   for (const k of ["tab", "provider", "agent"]) u.searchParams.delete(k);
   history.replaceState(null, "", u);
 }
-if (mode === "window" && ["providers", "gateway", "routing", "usage", "library", "plugins", "settings"].includes(params.get("view"))) show(params.get("view"));
+if (mode === "window" && ["providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"].includes(params.get("view"))) show(params.get("view"));
 else if (mode === "window") slide($("#nav"), "nav");
 load();

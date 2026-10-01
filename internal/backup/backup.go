@@ -132,6 +132,7 @@ func Collect(keys bool, app string) (Bundle, error) {
 		s := settings.Load()
 		if !keys {
 			s.LANKey, s.LANKeyID = "", ""
+			s.OTel.Headers = nil
 		}
 		b.Settings = &s
 	}
@@ -303,15 +304,19 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 		}
 	}
 	if parts.Settings && (b.Settings != nil || b.GatewayKeys != nil) {
-		// the window's size and the proxy are this machine's own
+		// the window's size, the proxy, the menu bar's usage are this machine's own
 		cur := settings.Load()
 		s := cur
 		if b.Settings != nil {
 			s = *b.Settings
 		}
-		s.Window, s.Proxy, s.Dock, s.DockWindow = cur.Window, cur.Proxy, cur.Dock, cur.DockWindow
+		s.KeepOwn(cur)
 		if !b.Keys {
 			s.LANKey, s.LANKeyID = cur.LANKey, cur.LANKeyID
+			s.OTel.Headers = nil
+			if strings.TrimRight(strings.TrimSpace(s.OTel.Endpoint), "/") == cur.OTel.Endpoint {
+				s.OTel.Headers = cur.OTel.Headers
+			}
 		} else if b.GatewayKeys == nil {
 			// An older backup may carry a marker without its named-key store.
 			s.LANKeyID = ""

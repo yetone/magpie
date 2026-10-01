@@ -15,6 +15,7 @@ func claudeSettings(t *testing.T, settings string) (home, path string) {
 	t.Helper()
 	home = t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	path = filepath.Join(home, ".claude", "settings.json")

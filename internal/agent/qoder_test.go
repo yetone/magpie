@@ -31,6 +31,7 @@ func TestQoder(t *testing.T) {
 func testQoder(t *testing.T, mk func(string) *Agent, rel string) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("QODER_CONFIG_DIR", "")
 	t.Setenv("QODERCN_CONFIG_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))

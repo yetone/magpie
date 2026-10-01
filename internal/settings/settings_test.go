@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -139,7 +140,7 @@ func TestMigrate(t *testing.T) {
 	}
 	Migrate()
 	fi, err := os.Stat(filepath.Join(cfg, "magpie", "providers.json"))
-	if err != nil || fi.Mode().Perm() != 0o600 {
+	if err != nil || runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 { // Windows has no such bits
 		t.Fatalf("providers.json not copied with its mode: %v %v", fi, err)
 	}
 	if _, err := os.Stat(filepath.Join(cfg, "magpie", "sub", "x")); err != nil {

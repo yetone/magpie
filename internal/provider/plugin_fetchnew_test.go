@@ -42,6 +42,10 @@ func TestFetchNewLeavesListedPlugins(t *testing.T) {
 	if p, err := Find("fakeco"); err != nil || !p.IsPlugin() || !p.Ready() {
 		t.Fatalf("Find(fakeco) = %+v, %v", p, err)
 	}
+	// signing in kicked off a refresh of the plugins' providers in the
+	// background (Cached, after the auth event); one still running
+	// rewrites the list below and reads as FetchNew asking again
+	plugin.Refreshed()
 	was := newFetchRetry
 	newFetchRetry = 0
 	t.Cleanup(func() { newFetchRetry = was })

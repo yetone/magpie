@@ -62,6 +62,7 @@ func bunHome(t *testing.T, latest string, published time.Time) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
 	t.Setenv("LOCALAPPDATA", filepath.Join(dir, "local"))

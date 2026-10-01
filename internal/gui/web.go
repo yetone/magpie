@@ -174,6 +174,22 @@ func webGuard(cookie, key string, keep time.Duration, next http.Handler) http.Ha
 	})
 }
 
+// NetworkLinks are the links to the page, served on port, that other
+// machines open; key is the link's "/?k=…". MAGPIE_PUBLIC_URL with a port
+// of its own names the host the container's ports are published on, so
+// the page is at that host on its own port; one without (a reverse proxy's
+// https://magpie.example.com, #372) is where the page is, path and all.
+func NetworkLinks(port, key string) []string {
+	if u, err := url.Parse(gateway.PublicURL()); err == nil && u.Host != "" && u.Port() == "" {
+		return []string{strings.TrimRight(u.String(), "/") + key}
+	}
+	var out []string
+	for _, a := range LANAddrs() {
+		out = append(out, "http://"+net.JoinHostPort(a, port)+key)
+	}
+	return out
+}
+
 // LANAddrs are this computer's addresses on the local network, for the
 // links to print when the page is served there: MAGPIE_PUBLIC_URL's host
 // when set (in a container, whose own addresses the network can't reach).

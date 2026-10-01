@@ -3,6 +3,7 @@ package gui
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 // have a fast mode, and which members are sent in it.
 func TestGroupSaveFast(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	for _, p := range []provider.Provider{

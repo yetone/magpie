@@ -15,6 +15,7 @@ import (
 func TestCodexCatalogKeepsOwnEntries(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	os.MkdirAll(filepath.Join(home, ".codex"), 0o755)
 	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"), []byte(`{"models":[
 		{"slug":"gpt-5.5","display_name":"GPT-5.5","priority":3,"visibility":"list","input_modalities":["text","image"],
@@ -51,6 +52,7 @@ func TestCodexCatalogKeepsOwnEntries(t *testing.T) {
 // A model that takes images says so, and Codex lets images be attached.
 func TestCodexCatalogImages(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	var got struct {
 		Models []struct {
 			Modalities []string `json:"input_modalities"`
@@ -70,6 +72,7 @@ func TestCodexCatalogImages(t *testing.T) {
 // neither code mode nor Responses Lite.
 func TestCodexCatalogToolSearch(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	var got struct {
 		Models []map[string]any `json:"models"`
 	}
@@ -94,6 +97,7 @@ func TestCodexCatalogToolSearch(t *testing.T) {
 // takes parallel tool calls (#298), and later Codex ask for them anyway.
 func TestCodexCatalogParallelToolCalls(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	var got struct {
 		Models []map[string]any `json:"models"`
 	}
@@ -113,6 +117,7 @@ func TestCodexCatalogParallelToolCalls(t *testing.T) {
 func TestCodexCatalogServiceTiers(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	os.MkdirAll(filepath.Join(home, ".codex"), 0o755)
 	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"), []byte(`{"models":[
 		{"slug":"gpt-6-astra","display_name":"GPT-6 Astra","service_tiers":[{"id":"priority","name":"Fast","description":"2x speed, increased usage"}]}]}`), 0o644)

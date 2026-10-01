@@ -23,6 +23,7 @@ import (
 func TestLedger(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	// a maker's API list price for sol: $2 in, $8 out, $0.5 a
@@ -102,6 +103,7 @@ func TestLedger(t *testing.T) {
 func TestSubscriptionListPrice(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
@@ -173,6 +175,7 @@ func TestSubscriptionListPrice(t *testing.T) {
 func TestLedgerWithSessionLogCalls(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	// a models.dev catalog pricing Claude Sonnet 5: $3 in, $15 out, $0.3 a cached read, $3.75 a cache write, per million
@@ -439,6 +442,7 @@ func TestLedgerLogModels(t *testing.T) {
 func TestLedgerUsesTheStatedPrice(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
@@ -474,6 +478,7 @@ func TestLedgerUsesTheStatedPrice(t *testing.T) {
 func TestLedgerConfiguredPricesAndRefresh(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	catalog.Reset()
@@ -547,6 +552,7 @@ func TestLedgerConfiguredPricesAndRefresh(t *testing.T) {
 func TestLedgerJudgesAnAntigravityCallByTheVariantItWentOutUnder(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	// Antigravity's ids of one model at three levels, as its fetch left them

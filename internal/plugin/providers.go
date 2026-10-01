@@ -250,6 +250,10 @@ func UseCached(ps []Provider) {
 // refreshing is Cached's refreshes in the background.
 var refreshing sync.WaitGroup
 
+// Refreshed waits for Cached's refreshes in the background to end, the
+// host left running: for tests that watch the providers' list on disk.
+func Refreshed() { refreshing.Wait() }
+
 // Settle waits for Cached's refreshes to end, then stops the host: for
 // tests, whose folders the host runs in go when they end.
 func Settle() {

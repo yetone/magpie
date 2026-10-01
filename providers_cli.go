@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net"
 	"os"
 	"slices"
 	"strings"
@@ -237,7 +236,7 @@ func models(args []string) error {
 	if agentID != "" {
 		explainHidden(agentID, hidden)
 	}
-	fmt.Println(faint.Render("  " + gateway.URL() + "/v1"))
+	fmt.Println(faint.Render("  " + advertisedURL() + "/v1"))
 	return bad
 }
 
@@ -797,7 +796,7 @@ func keyNote() string {
 	if s := settings.Load(); s.LAN {
 		return "(anything works from this machine; from others, an enabled gateway key — magpie gateway-key add <name>)"
 	}
-	if h, _, err := net.SplitHostPort(gateway.Addr()); err == nil && h != "localhost" && !net.ParseIP(h).IsLoopback() {
+	if gateway.OpenToAnyone() {
 		return "(anything works, from anyone who reaches it — share it from Settings to require a key)"
 	}
 	return "(anything works; the gateway only listens on localhost)"
@@ -823,14 +822,25 @@ func shareLines() []string {
 	return out
 }
 
+// advertisedURL is what the CLIs print for other machines: the public
+// address when MAGPIE_PUBLIC_URL is valid, otherwise the one reached from
+// this machine.
+func advertisedURL() string {
+	if u := gateway.PublicURL(); u != "" {
+		return u
+	}
+	return gateway.URL()
+}
+
 // serve: `magpie serve` — the gateway alone, in the foreground.
 func serve() error {
 	s := gateway.New()
 	go stats.Run(version, "serve")
 	go catalog.KeepFresh() // new models' prices, in a gateway left running
+	public := advertisedURL()
 	fmt.Println(green.Render("●"), "magpie gateway on", bold.Render(gateway.URL()))
-	fmt.Println(muted.Render("  OpenAI  "), gateway.URL()+"/v1/chat/completions", muted.Render("·"), gateway.URL()+"/v1/responses")
-	fmt.Println(muted.Render("  Anthropic"), gateway.URL()+"/v1/messages")
+	fmt.Println(muted.Render("  OpenAI  "), public+"/v1/chat/completions", muted.Render("·"), public+"/v1/responses")
+	fmt.Println(muted.Render("  Anthropic"), public+"/v1/messages")
 	fmt.Println(muted.Render("  key     "), gateway.Token, muted.Render(keyNote()))
 	for _, l := range shareLines() {
 		fmt.Println(l)

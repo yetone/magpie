@@ -67,7 +67,7 @@ function measure(rows) {
       const r = document.createRange();
       r.selectNodeContents(n);
       const b = clipped(row, n.parentElement, r.getBoundingClientRect());
-      if (b.right - b.left > 0.5 && b.bottom - b.top > 0.5) texts.push({ text: n.textContent, cls: n.parentElement.className, ...b });
+      if (b.right - b.left > 0.5 && b.bottom - b.top > 0.5) texts.push({ text: n.textContent, cls: n.parentElement.closest(".ef") ? "ef" : n.parentElement.className, ...b });
     }
     const ef = row.querySelector(".ef"), e = ef.getBoundingClientRect(), shown = clipped(row, ef, e), rb = row.getBoundingClientRect();
     // the effort's "· " comes from ::before, inside its box: the box stands for it

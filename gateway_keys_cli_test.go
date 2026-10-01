@@ -12,6 +12,7 @@ import (
 
 func TestGatewayKeyCLI(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if err := settings.Save(settings.Settings{LAN: true}); err != nil {
 		t.Fatal(err)

@@ -3,6 +3,7 @@ package access
 import (
 	"encoding/json"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -51,7 +52,7 @@ func TestNamedKeys(t *testing.T) {
 		t.Fatal("copy", err)
 	}
 	st, err := os.Stat(Path())
-	if err != nil || st.Mode().Perm() != 0o600 {
+	if err != nil || runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
 		t.Fatal("permissions", err)
 	}
 	var persisted []Key

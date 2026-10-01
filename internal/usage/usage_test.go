@@ -51,6 +51,7 @@ func TestSummarize(t *testing.T) {
 func TestSummarizeTellsPlacesApart(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "https://new.example/v1"}); err != nil {
 		t.Fatal(err)
@@ -92,6 +93,7 @@ func TestSummarizeTellsPlacesApart(t *testing.T) {
 func TestSummarizeKeepsMovedAccountTogether(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	y, m, d := time.Now().Date()
 	now := time.Date(y, m, d, 12, 0, 0, 0, time.Local)

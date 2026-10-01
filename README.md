@@ -508,7 +508,22 @@ adding one; use an account you can afford to lose.
 ### Connecting anything else
 
 The gateway listens on `127.0.0.1:3425` (`MAGPIE_ADDR` changes it) and starts
-with the app; `magpie serve` runs it alone. It exposes:
+with the app; `magpie serve` runs it alone. For reverse-proxied or container
+deployments, set `MAGPIE_PUBLIC_URL=https://magpie.example.com` to the base
+URL shown in the console and CLI, including connection examples. Local
+agent configs still use the local gateway address.
+
+A reverse proxy must enforce authentication itself, or you must enable
+Settings → Share on local network and use an enabled gateway key
+(Gateway → Gateway keys) for external clients. A public URL with no port of
+its own — a reverse proxy's `https://magpie.example.com` — is the address
+`magpie web` prints for its own page too, so the proxy must forward `/v1`
+and `/v1beta` to the gateway's port and the rest to the page's. When the
+proxy and magpie run on the same machine, requests forwarded over loopback
+are treated as local and need no key, so the proxy must authenticate those
+clients itself.
+
+It exposes:
 
 | Path                     | API                        |
 | ------------------------ | -------------------------- |
@@ -688,7 +703,9 @@ Inside the container
 magpie only sees the container's own address (Docker's 172.17.x), so set
 `-e MAGPIE_PUBLIC_URL=http://<the host's or NAS's address>:3425` (the port
 published on the host) for the address it shows and prints to be the one
-other machines use.
+other machines use; behind a reverse proxy, set it to that external base URL
+and follow the [authentication requirements above](#connecting-anything-else),
+especially when the proxy reaches magpie over loopback.
 
 For the browser UI run the image with `magpie web --addr 0.0.0.0:3430 --no-open`
 in place of the default `serve`, and open
@@ -856,6 +873,52 @@ For S3:
   needs to list the bucket.
 - A server without conditional writes is supported. There magpie checks the
   object's ETag just before each write.
+
+## OTLP export
+
+Settings → Observability can export gateway request metadata over OTLP/HTTP
+(JSON). Export is off by default. Set the collector's base URL and optional
+headers, then enable **OTLP export**. **Export metrics** is separately off by
+default; enable it for a collector that accepts duration and token histograms.
+No restart is needed for saved settings.
+
+For `magpie serve`, environment variables override the saved preferences:
+
+```sh
+MAGPIE_OTEL_ENABLED=true MAGPIE_OTEL_ENDPOINT=http://localhost:4318 magpie serve
+```
+
+- `MAGPIE_OTEL_ENABLED`: `true` or `false`; an endpoint alone does not enable export.
+- `MAGPIE_OTEL_ENDPOINT`: an HTTP(S) base URL; `/v1/traces` and `/v1/metrics` are appended.
+- `MAGPIE_OTEL_HEADERS`: comma-separated `name=value` pairs, for example
+  `Authorization=Bearer%20token`. Percent-encode spaces and commas in values.
+- `MAGPIE_OTEL_METRICS`: `true` or `false`, off by default.
+
+For Langfuse, use `https://<your-langfuse-host>/api/public/otel` as the base
+URL and `Authorization=Basic%20<base64(public-key:secret-key)>` as the header.
+Leave metrics off. This uses Langfuse's OTLP ingestion endpoint.
+
+Traces include agent, provider, model, token counts (including cache and
+reasoning), HTTP status, timing, and route ID. Attempts with the same route ID
+share a trace ID. Metrics group duration and input/output token histograms by
+agent, provider, model, operation and error status. Prompt/reply text, tool
+arguments, sessions and provider account names/keys are never exported.
+
+Export runs in the background with a bounded queue (128 records) and batches
+of up to 32 records, flushed every five seconds. A full queue drops telemetry
+without delaying gateway requests. Network errors and HTTP 429/502/503/504
+are retried up to two times, with retry delays capped at 60 seconds; other
+errors and partial rejection are logged
+without the collector's response body. Each HTTP attempt times out after
+three seconds. Graceful gateway shutdown allows at most three seconds to
+drain; `magpie serve` currently exits on SIGTERM without draining, so its last
+batch may be lost. This is best-effort export; local usage records remain
+available if it fails.
+Requests follow magpie's proxy setting, with loopback collectors going direct.
+Queued records are discarded if export is disabled or the destination or
+credentials change before sending. Redirects are not followed.
+Backups without keys omit OTLP headers; restoring one preserves this machine's
+headers only when the collector endpoint is unchanged.
 
 ## Files
 

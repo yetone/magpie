@@ -2,6 +2,7 @@ package gui
 
 import (
 	"net/url"
+	"os"
 	"slices"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 // new group of it.
 func TestUnlistedModelsSaid(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	if err := provider.Save(provider.Provider{ID: "hunyuan", Name: "Hunyuan", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"hy3", "hy4"}, Unlisted: true}); err != nil {

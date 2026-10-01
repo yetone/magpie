@@ -158,6 +158,7 @@ type gatewayJSON struct {
 	URL     string         `json:"url"`
 	LAN     bool           `json:"lan"`
 	LANURLs []string       `json:"lanURLs,omitempty"`
+	Open    bool           `json:"open,omitempty"` // listens beyond loopback with no key: anyone reaching it is let in
 	Running bool           `json:"running"`
 	Mine    bool           `json:"mine"`   // this process serves it
 	Window  bool           `json:"window"` // the magpie serving it shows its routing
@@ -431,7 +432,7 @@ func providersState() providersJSON {
 		s.Presets = append(s.Presets, presetJSON{PresetDef: pr, Added: have[pr.ID], ZhipuTeam: team})
 	}
 	cat := provider.Catalog()
-	s.Gateway = gatewayJSON{URL: gateway.URL(), Models: len(cat), Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
+	s.Gateway = gatewayJSON{URL: gateway.URL(), Open: gateway.OpenToAnyone(), Models: len(cat), Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
 	s.Gateway.LAN = settings.Load().LAN
 	if s.Gateway.LAN {
 		s.Gateway.LANURLs = gateway.LANURLs()

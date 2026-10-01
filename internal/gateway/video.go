@@ -461,7 +461,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 			call.Status = code
 		}
 	}
-	appendUsage(r, usage.Record{Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: model, Requested: call.Model,
+	appendUsage(r, usage.Record{Operation: "generate_content", Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: model, Requested: call.Model,
 		Millis: call.Millis, Status: call.Status, Session: sessionOf(r.Header)})
 	if err != nil {
 		call.Error = err.Error()

@@ -66,7 +66,7 @@ var client = &http.Client{Timeout: 10 * time.Minute, Transport: proxied()}
 func proxied() http.RoundTripper {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = netproxy.Func
-	return t
+	return netproxy.Dispatch(t)
 }
 
 // Latest asks the feed for the newest release.

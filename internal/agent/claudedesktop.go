@@ -163,10 +163,17 @@ func claudeDesktop(home string) *Agent {
 				return ""
 			},
 			Set: func(v string) error {
+				on := desktopOn
 				if v == "" {
-					return desktopOff(p)
+					on = desktopOff
 				}
-				return desktopOn(p)
+				if err := on(p); err != nil {
+					return err
+				}
+				// its Code tab is Claude Code, told what Desktop's ids for
+				// magpie's models can do while that one runs on magpie
+				_ = claude(home).Sync()
+				return nil
 			},
 			Options: func(map[string]string) []Option {
 				return []Option{{Value: magpieID, Label: "magpie", Icon: "magpie",

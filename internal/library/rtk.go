@@ -262,7 +262,7 @@ var openCodeVersion = func() string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := proc.CommandContext(ctx, bin, "--version")
+	cmd := proc.ProbeContext(ctx, bin, "--version")
 	cmd.Stdin = nil
 	out, err := cmd.Output()
 	if err != nil {

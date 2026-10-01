@@ -101,6 +101,7 @@ func TestRTK(t *testing.T) {
 func TestRTKRemove(t *testing.T) {
 	h := sandbox(t)
 	hook := func(key, matcher, cmd string) string {
+		quoted, _ := json.Marshal(cmd) // a Windows path has backslashes
 		return `"hooks": {
     "` + key + `": [
       {
@@ -108,7 +109,7 @@ func TestRTKRemove(t *testing.T) {
         "hooks": [
           {
             "type": "command",
-            "command": "` + cmd + `"
+            "command": ` + string(quoted) + `
           }
         ]
       }

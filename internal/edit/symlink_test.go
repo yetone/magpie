@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -49,7 +50,7 @@ func TestWriteAtomicFollowsSymlink(t *testing.T) {
 	if got := read(t, repo); got != "{\n  \"model\": \"new\"\n}\n" {
 		t.Fatalf("target: %q", got)
 	}
-	if st, _ := os.Stat(repo); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(repo); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 { // Windows has no such bits
 		t.Errorf("mode %v", st.Mode().Perm())
 	}
 	if es, _ := os.ReadDir(conf); len(es) != 1 {

@@ -11,6 +11,7 @@ import (
 func TestImportIsReadOnce(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", home)
 	mux := http.NewServeMux()
 	importRoutes(mux)
@@ -38,6 +39,7 @@ func TestImportIsReadOnce(t *testing.T) {
 func TestImportIconRoute(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", home)
 	mux := http.NewServeMux()
 	importRoutes(mux)

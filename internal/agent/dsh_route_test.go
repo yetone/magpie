@@ -13,6 +13,7 @@ func dshRouteHome(t *testing.T) (home, dir, web string) {
 	t.Helper()
 	home = t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("DSH_HOME", "")
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
@@ -66,7 +67,7 @@ func TestDshCustomProvider(t *testing.T) {
 		"- id: llm-deepseek\n  config:\n    apiKeyEnv: DEEPSEEK_API_KEY\n    thinking: enabled\n" +
 		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n" +
 		"      mine:\n        displayName: Mine\n        apiKeyEnv: MINE_API_KEY\n        api: openai-completions\n        baseURL: https://mine.example/v1\n        models:\n          - id: m1\n" +
-		"      magpie:\n        displayName: Magpie\n        apiKeyEnv: " + dshKeyRef + "\n        api: openai-completions\n        baseURL: " + gatewayV1() + "\n        reasoning: high\n        models:\n          - id: deepseek/pro\n            name: pro · DeepSeek\n" +
+		"      magpie:\n        displayName: Magpie\n        apiKeyEnv: " + dshKeyRef + "\n        api: openai-completions\n        baseURL: " + gatewayV1() + "\n        reasoning: high\n        models:\n          - id: deepseek/pro\n            name: pro · DeepSeek\n          - id: deepseek/flash\n            name: flash · DeepSeek\n" +
 		"      added:\n        displayName: Added\n        apiKeyEnv: ADDED_API_KEY\n        api: anthropic-messages\n        baseURL: https://added.example\n        models:\n          - id: a1\n" +
 		"- id: agent-default-model\n  config:\n    provider: magpie\n    model: deepseek/flash\n    reasoningEffort: high\n"
 	os.WriteFile(web, []byte(dshSaved), 0o644)
@@ -170,5 +171,92 @@ func TestDshMovesOffDeepSeekRow(t *testing.T) {
 	}
 	if d := a.Check(); d != "" {
 		t.Fatalf("check: %s", d)
+	}
+}
+
+// dsh counts a model its provider doesn't list as none at all and refuses the
+// turn: a profile whose route lists one of magpie's models while
+// agent-default-model names another — a catalog that moved on, or a file
+// written elsewhere — fails every session on a model magpie has. The check
+// says so, and the sync it asks for lists the model again.
+func TestDshCheckSaysTheModelItStartsOnIsNotInTheRoute(t *testing.T) {
+	home, dir, web := dshRouteHome(t)
+	env := filepath.Join(dir, ".env")
+	os.WriteFile(env, []byte(dshKeyRef+"=magpie\n"), 0o600)
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"+
+		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n"+
+		"      magpie:\n        displayName: Magpie\n        apiKeyEnv: "+dshKeyRef+"\n        api: openai-completions\n        baseURL: "+gatewayV1()+"\n        models:\n          - id: deepseek/pro\n            name: pro · DeepSeek\n"+
+		"- id: agent-default-model\n  config:\n    provider: magpie\n    model: deepseek/flash\n"), 0o644)
+	a := dsh(home)
+	if got := a.Field("model").Get(); got != "magpie/deepseek/flash" {
+		t.Fatalf("model: %q", got)
+	}
+	if d := a.Check(); !strings.Contains(d, "deepseek/flash") || !strings.Contains(d, web) || !strings.Contains(d, "Apply again") {
+		t.Fatalf("the model it starts on, the route, and the click that helps are not named: %q", d)
+	}
+	// what magpie writes: the route lists it, and the check is quiet
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if d := a.Check(); d != "" {
+		t.Fatalf("after a sync: %q", d)
+	}
+}
+
+// dsh runs whichever profile its session names — its desktop app reads the
+// desktop one — so a second profile whose route has not got the model it
+// starts on fails there too, even while the first profile is fine.
+func TestDshCheckSaysWhenAnotherProfilesRouteHasNotGotTheModel(t *testing.T) {
+	home, dir, web := dshRouteHome(t)
+	os.WriteFile(filepath.Join(dir, ".env"), []byte(dshKeyRef+"=magpie\n"), 0o600)
+	route := "# Your patch layer for this dsh profile.\n" +
+		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n" +
+		"      magpie:\n        displayName: Magpie\n        apiKeyEnv: " + dshKeyRef + "\n        api: openai-completions\n        baseURL: " + gatewayV1() + "\n        models:\n" +
+		"          - id: deepseek/pro\n            name: pro · DeepSeek\n"
+	os.WriteFile(web, []byte(route+
+		"          - id: deepseek/flash\n            name: flash · DeepSeek\n"+
+		"- id: agent-default-model\n  config:\n    provider: magpie\n    model: deepseek/flash\n"), 0o644)
+	desktop := filepath.Join(dir, "profiles", "desktop", "cordis.patch.yml")
+	os.MkdirAll(filepath.Dir(desktop), 0o755)
+	os.WriteFile(desktop, []byte(route+
+		"- id: agent-default-model\n  config:\n    provider: magpie\n    model: deepseek/flash\n"), 0o644)
+	a := dsh(home)
+	if d := a.Check(); !strings.Contains(d, desktop) {
+		t.Fatalf("the profile whose route has not got the model is not named: %q", d)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if d := a.Check(); d != "" {
+		t.Fatalf("after a sync: %q", d)
+	}
+}
+
+// a model magpie no longer gives dsh — its catalog moved on, the provider was
+// switched off — is one the route written again cannot list: the check says
+// so and asks for another model, not for a click that cannot help.
+func TestDshCheckSaysWhenTheModelItStartsOnIsOneMagpieNoLongerGives(t *testing.T) {
+	home, dir, web := dshRouteHome(t)
+	os.WriteFile(filepath.Join(dir, ".env"), []byte(dshKeyRef+"=magpie\n"), 0o600)
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"+
+		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n"+
+		"      magpie:\n        displayName: Magpie\n        apiKeyEnv: "+dshKeyRef+"\n        api: openai-completions\n        baseURL: "+gatewayV1()+"\n        models:\n"+
+		"          - id: deepseek/pro\n            name: pro · DeepSeek\n"+
+		"          - id: deepseek/flash\n            name: flash · DeepSeek\n"+
+		"- id: agent-default-model\n  config:\n    provider: magpie\n    model: deepseek/gone\n"), 0o644)
+	a := dsh(home)
+	if got := a.Field("model").Get(); got != "magpie/deepseek/gone" {
+		t.Fatalf("model: %q", got)
+	}
+	if d := a.Check(); !strings.Contains(d, "deepseek/gone") || !strings.Contains(d, "no longer gives") {
+		t.Fatalf("the model magpie no longer gives is not named: %q", d)
+	}
+	// the route already holds what magpie writes: a sync leaves the model it
+	// starts on alone, so the check still stands
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if d := a.Check(); d == "" {
+		t.Fatal("a sync that cannot list the model it starts on says nothing")
 	}
 }

@@ -691,6 +691,12 @@ func (e *anthropicEncoder) event(ev Event) {
 	e.col.add(ev)
 }
 
+// keepalive is Anthropic's own: a ping event, which its SDKs skip and
+// Claude Code's stream watchdog counts.
+func (e *anthropicEncoder) keepalive() {
+	e.w.event("ping", map[string]any{"type": "ping"})
+}
+
 func (e *anthropicEncoder) finish() {
 	if !e.started {
 		e.start(Event{})

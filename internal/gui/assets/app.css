@@ -244,13 +244,21 @@ body.panel .seg { display: none; }
 .update-hide:hover { color: var(--fg); }
 .update[hidden] + .update-hide, .update.busy + .update-hide { display: none; }
 /* a narrow header (fitTop): the magpie without its name, Update as its arrow,
-   and at the narrowest the tabs in the row rather than over it */
+   the tabs closer together, still in the middle of the window, and only when
+   they don't fit there, in the row rather than over it: halfway between what
+   is either side of them, not a third of the room their left and two thirds
+   their right (#442) */
 .top.tight .brand > span:not(.logo), .top.tight .update span { display: none; }
 .top.tight .update { width: 22px; padding: 0; justify-content: center; margin-right: 4px; }
-body.window .top.cramped .seg { position: relative; left: auto; top: auto; transform: none; margin: 0 auto; } /* relative still: its thumb sits in it, not over the whole header */
+body.window .top.inrow .seg { position: relative; left: auto; top: auto; transform: none; margin: 0 auto; } /* relative still: its thumb sits in it, not over the whole header */
+body.window .top.inrow .actions { margin-left: 0; }
 .top.cramped .seg button { padding: 0 8px; }
 .top.crowded .seg button { padding: 0 6px; font-size: 12px; }
 .top.crowded .brand { display: none; }
+.top.packed .seg button { padding: 0 3px; font-size: 11.5px; }
+/* and when even that doesn't fit, the tabs scroll sideways rather than push the page wider */
+.top.packed .seg { min-width: 0; flex: 0 1 auto; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.top.packed .seg::-webkit-scrollbar { display: none; }
 @keyframes update-in { from { opacity: 0; transform: translateY(-3px) scale(.94); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -437,6 +445,15 @@ body.window #agents.extras .field.solo { grid-column: 1 / 3; }
    up down the list and the model always sits in the same place */
 body.window .field.main, body.window .field.solo { justify-self: stretch; }
 body.window .field.solo { grid-column: auto; }
+/* When a window is narrow (or zoomed in), the fixed-width setting columns
+   leave too little room for the agent names. Put them on the next line. */
+@media (max-width: 600px) {
+  body.window .row.agent { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; row-gap: 3px; }
+  body.window .row.agent > .ag-handle { grid-column: 1; grid-row: 1; }
+  body.window .row.agent > .who { grid-column: 2; grid-row: 1; width: 100%; }
+  body.window .row.agent > .fields { grid-column: 2; grid-row: 2; width: 100%; min-width: 0; margin-left: 0; }
+  body.window #agents.extras .row.agent > .fields { grid-template-columns: minmax(0, 1fr) 124px var(--extras-w); }
+}
 .field:hover, .field.open { background: var(--pill-hover); }
 .field.open { box-shadow: inset 0 0 0 1px var(--accent); }
 .row .field .ic, body.window .row .field .ic { width: 14px; height: 14px; }
@@ -804,8 +821,13 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .sess-card-foot .grow { flex: 1; }
 .sess-none { color: var(--faint); font-size: 12px; padding: 18px 0; text-align: center; margin: auto 0; }
 .sess-more { font-size: 11px; color: var(--faint); padding: 4px 2px 0; }
-.sess-bars { display: flex; flex-direction: column; gap: 1px; }
-.sess-bar { display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 1fr) auto 4.2em; align-items: center; gap: 10px; height: 26px; padding: 0 6px; margin: 0 -6px; border: 0; border-radius: 6px; background: none; color: var(--fg-2); font: inherit; font-size: 12px; text-align: left; cursor: default; }
+/* a card of bars is one grid: its names take the width the longest needs
+   and the bars what is left, every row's bar starting at the same place;
+   a window too narrow for that shortens the names, never a bar past 5em */
+.sess-bars { display: grid; grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto 4.2em; column-gap: 10px; row-gap: 1px; }
+.sess-bars.tools { grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto auto 2.8em; }
+.sess-bars > * { grid-column: 1 / -1; }
+.sess-bar { display: grid; grid-template-columns: subgrid; align-items: center; gap: 10px; height: 26px; padding: 0 6px; margin: 0 -6px; border: 0; border-radius: 6px; background: none; color: var(--fg-2); font: inherit; font-size: 12px; text-align: left; cursor: default; }
 .sess-bar:hover { background: var(--pill); }
 .sess-bar.on { background: var(--pill); color: var(--fg); font-weight: 550; }
 .sess-bar .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -832,9 +854,8 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .sess-shape .col span { font-size: 10.5px; color: var(--muted); text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sess-tools-cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 22px; }
 @container (max-width: 700px) { .sess-tools-cols { grid-template-columns: minmax(0, 1fr); } }
-.sess-bar.tool { grid-template-columns: minmax(0, 10em) minmax(0, 1fr) auto auto 2.8em; }
 .sess-bar.tool .n { display: flex; align-items: center; gap: 7px; }
-.sess-bar.tool .n span { overflow: hidden; text-overflow: ellipsis; }
+.sess-bar.tool .n span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .sess-bar.tool .track i { opacity: .85; }
 .sess-bar.tool .s { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .sess-bar.tool .p { font-size: 11px; color: var(--faint); text-align: right; font-variant-numeric: tabular-nums; }
@@ -852,10 +873,20 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .sess-weeks .stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 3px; overflow: hidden; }
 .sess-weeks .stack i { min-height: 1px; }
 .sess-weeks-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--faint); }
-.sess-skills { display: flex; flex-direction: column; gap: 2px; }
-.sess-skill { padding: 4px 6px; margin: 0 -6px; border-radius: 6px; min-width: 0; }
+.sess-skills { display: grid; grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto; column-gap: 10px; row-gap: 2px; }
+.sess-skills > * { grid-column: 1 / -1; }
+.sess-skill { display: grid; grid-template-columns: subgrid; padding: 4px 6px; margin: 0 -6px; border-radius: 6px; min-width: 0; }
 .sess-skill:hover { background: var(--pill); }
-.sess-skill .line { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 12px; }
+.sess-skill .line, .sess-skill .sub { grid-column: 1 / -1; }
+.sess-skill .line { display: grid; grid-template-columns: subgrid; align-items: center; gap: 10px; font-size: 12px; }
+/* before subgrid (Safari 16) each row is a grid of its own, its name as
+   wide as it needs and its bar at least 5em */
+@supports not (grid-template-columns: subgrid) {
+  .sess-bar { grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto 4.2em; }
+  .sess-bar.tool { grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto auto 2.8em; }
+  .sess-skill { display: block; }
+  .sess-skill .line { grid-template-columns: minmax(0, max-content) minmax(5em, 1fr) auto; }
+}
 .sess-skill .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); font-weight: 550; }
 .sess-skill .track { height: 6px; border-radius: 3px; background: var(--pill); overflow: hidden; }
 .sess-skill:hover .track { background: var(--card); }
@@ -1395,6 +1426,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .call-archive-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--code); color: var(--faint); }
 .call-archive .call-body-head button.text { flex: none; }
 .call-archive-err { padding: 0 10px 9px; font-size: 11px; color: var(--red); overflow-wrap: anywhere; }
+.call-archive-big { margin: 0; padding: 9px 10px 11px; border-top: 1px solid var(--line-2); font-size: 11px; color: var(--muted); }
+/* a request's row on the Usage page: its archive under what is known of it */
+.led-archive { margin-top: 10px; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+.led-archive .call-details { grid-template-columns: minmax(0, 1fr); }
 #archiveList { margin-bottom: 8px; }
 /* a streamed reply: read as its reply, its events or as it came */
 .call-body-count { font-size: 9.5px; color: var(--faint); white-space: nowrap; }
@@ -1706,7 +1741,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
   pointer-events: none;
 }
 .segs .thumb { border-radius: 5px; }
-.segs.regions { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.segs.regions { max-width: 100%; overflow-x: auto; }
+/* no scrollbar-width here: Chromium (WebView2) then drops every
+   ::-webkit-scrollbar rule and draws Windows' classic bar, arrows and all,
+   under the strip; the app's thin thumb instead, slimmer still */
+:where(body:not(.mac)) .segs.regions::-webkit-scrollbar { height: 6px; }
+:where(body:not(.mac)) .segs.regions::-webkit-scrollbar-thumb { border-width: 1px; }
 .segs.regions .opt { flex: none; }
 .thumb.still { transition: none; }
 .link { font-size: 12px; color: var(--accent); padding: 3px 4px; white-space: nowrap; }

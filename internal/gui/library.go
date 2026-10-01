@@ -263,6 +263,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			Values map[string]string // what a market server needs
 			Dir    string            // a project's folder
 			Copy   bool              // a project gets copies, not links
+			On     bool              // every skill given to the agents, or taken from them
 			library.InstructionsChange
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -296,8 +297,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.UpdateSomeSkills(in.Names)
 		case "skills/agents":
 			res, err = library.SkillAgents(in.Name, in.Agents)
+		case "skills/agents-all":
+			res, err = library.EverySkillAgents(in.Agents, in.On)
 		case "skills/remove":
 			res, err = library.RemoveSkill(in.Name)
+		case "skills/remove-all":
+			res, err = library.RemoveSkills(in.Names)
 		case "skills/import":
 			res, err = library.ImportSkill(in.Name)
 		case "skills/import-all":

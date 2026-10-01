@@ -103,6 +103,9 @@ func TestStoreReplacesAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Windows reads a file's identity by its path when first compared: read
+	// it now, while the path is still the old file
+	os.SameFile(before, before)
 	if err := Save(Provider{ID: "new", Name: "New", Chat: "https://new.example.invalid/v1", Key: "synthetic-new"}); err != nil {
 		t.Fatal(err)
 	}

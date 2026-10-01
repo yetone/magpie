@@ -477,7 +477,7 @@ func hashes(b backup.Bundle) map[string]string {
 	if b.Settings != nil {
 		s = *b.Settings
 	}
-	s.Window, s.Proxy, s.Dock, s.DockWindow = nil, "", false, false // this computer's own: never synced
+	s.KeepOwn(settings.Settings{}) // this computer's own: never synced
 	providers := []any{b.Providers, b.Icons, b.Groups}
 	if b.Searches != nil && len(*b.Searches) > 0 { // as before them, without one
 		providers = append(providers, *b.Searches)

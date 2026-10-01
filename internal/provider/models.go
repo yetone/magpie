@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -159,8 +160,39 @@ var newFetches = struct {
 }{m: map[string]time.Time{}}
 
 // newFetchRetry is how long FetchNew leaves an account whose list it
-// couldn't get before asking again.
-var newFetchRetry = 10 * time.Minute
+// couldn't get before asking again. Short: until it has its list the
+// account offers magpie's fallback (Kiro's Auto alone), and one try that
+// failed — the first after an update, cut short by a page's 8 seconds, or
+// made before the network was up — left it so for ten minutes, while only
+// the Providers page asked again (#422: Auto alone until magpie was
+// restarted by hand).
+var newFetchRetry = time.Minute
+
+// fetchingNew is set while a FetchNewSoon runs; newSoonAt is when the last
+// one started.
+var (
+	fetchingNew atomic.Bool
+	newSoonAt   atomic.Int64
+)
+
+// newSoonEvery is how often FetchNewSoon starts at most.
+var newSoonEvery = 15 * time.Second
+
+// FetchNewSoon is FetchNew in the background, for a page that shouldn't
+// wait on vendors (the panel, whose model picker otherwise kept an
+// account's fallback list until the Providers page was opened). It does
+// nothing while one runs or within newSoonEvery of the last.
+func FetchNewSoon(timeout time.Duration) {
+	now := time.Now().UnixNano()
+	if now-newSoonAt.Load() < int64(newSoonEvery) || !fetchingNew.CompareAndSwap(false, true) {
+		return
+	}
+	newSoonAt.Store(now)
+	go func() {
+		defer fetchingNew.Store(false)
+		FetchNew(timeout)
+	}()
+}
 
 // FetchNew asks each signed-in account whose vendor list magpie hasn't
 // fetched yet for it, each for at most timeout. Start-up does this for the
@@ -267,12 +299,22 @@ func basePath(raw string) string {
 	return ""
 }
 
-// planModels keeps a plan's own models of a vendor's list (PresetDef.Only),
+// planModels leaves out the models a vendor serves its own client alone
+// (PresetDef.Drop), and keeps a plan's own models of a vendor's list (PresetDef.Only),
 // or gives the plan's when the list has none; a plan with models but no
 // Only gives them only when there is no list. Any other provider's list is
 // as it came.
 func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 	pr := Preset(p.Preset)
+	if pr != nil && pr.Drop != "" {
+		kept := ms[:0:0]
+		for _, m := range ms {
+			if !strings.HasSuffix(m.ID, pr.Drop) {
+				kept = append(kept, m)
+			}
+		}
+		ms = kept
+	}
 	if pr == nil || pr.Only == "" && (len(pr.Models) == 0 || len(ms) > 0) {
 		return ms
 	}

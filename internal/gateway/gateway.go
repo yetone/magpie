@@ -302,6 +302,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	s.lnMu.Lock()
 	s.ln = ln
 	s.lnMu.Unlock()
+	stopOTel := usage.StartOTel()
+	defer stopOTel()
 	srv := &http.Server{Handler: lanGuard(s.Handler()), ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 5 * time.Minute}
 	// the magpie serving the gateway, and only it, keeps the saved accounts
 	// signed in, so two never refresh one sign-in at once
@@ -504,12 +506,14 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 	if agentOf(r) == "claude-desktop" {
 		data = desktopModels(shown)
 	} else {
-		for _, e := range shown {
+		labels := provider.Labels(shown)
+		for i, e := range shown {
 			m := modelObject(e)
-			// for another magpie: its name with its provider here after
-			// it, so two providers' models of one name are told apart
+			// for another magpie: its name as the agents' lists here call
+			// it, with its provider's after it unless the user wants it
+			// plain, so two providers' models of one name are told apart
 			// there as they are here
-			m["magpie_label"] = e.Label()
+			m["magpie_label"] = labels[i]
 			data = append(data, m)
 		}
 	}
@@ -800,7 +804,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	who, agent := callerOf(r), agentOf(r)
 	metadata := requestSessionMetadata(r.Header, body)
 	call := Call{Time: start, From: from, Model: unprefixed(modelOf(body)), Agent: who.agent, Via: who.via, Kind: requestCallKind(r.Header, metadata),
-		RequestBody: requestBody, RequestTruncated: requestTruncated, wire: archiving(r, capture, start)}
+		RequestBody: requestBody, RequestTruncated: requestTruncated, wire: archiving(r, capture, start, body)}
+	defer discardArchive(capture)
 	if call.Kind == "web_search" {
 		call.For = searchFor(r.Context())
 	}
@@ -816,7 +821,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		call.Millis = time.Since(start).Milliseconds()
 		s.record(call)
 		rec := usage.Record{Time: start, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Model: call.Model, Requested: call.Model,
-			Millis: call.Millis, Status: call.Status, Rejected: true, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind, Endpoint: endpointOf(r, from, "")}
+			Millis: call.Millis, Status: call.Status, Rejected: true, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind, Endpoint: endpointOf(r, from, ""), Archive: call.archiveName()}
 		failedWith(&rec, call.Status, call.Error, "")
 		appendUsage(r, rec)
 	}
@@ -1069,6 +1074,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		hw := newHoldWriter(w, !last || again < lastRetries || other != nil)
 		hw.thinkingShown = !refusesAfterThinking(c.model)
 		call.Provider, call.To, call.Usage = c.p.ID, "", Usage{}
+		model = c.model
 		where = c.p.Where()
 		providerKeyID, providerKeyName = "", ""
 		if c.p.Account == nil && c.p.Key != "" {
@@ -1223,7 +1229,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 					CacheWrite: call.Usage.CacheWrite, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: time.Since(began).Milliseconds(), Status: call.Status,
 					TTFT: try.TTFT, FirstText: try.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
-					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To)}
+					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To), Archive: call.archiveName()}
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 				appendUsage(r, rec)
 			}
@@ -1329,7 +1335,6 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		} else {
 			hw.release()
 		}
-		model = c.model
 		if call.Status < 400 {
 			servedCandidate(c, call.Usage.Input+call.Usage.Output+call.Usage.CacheRead+call.Usage.CacheWrite)
 			// a compaction a rule sent to a model of its own leaves the
@@ -1381,7 +1386,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 			CacheWrite: call.Usage.CacheWrite, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: call.Millis, Status: call.Status,
 			TTFT: call.TTFT, FirstText: call.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
-			RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To)}
+			RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To), Archive: call.archiveName()}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 		appendUsage(r, rec)
 	}
@@ -2149,11 +2154,9 @@ func refusesField(status int, body []byte, field string) bool {
 var optionalFields = []string{"store", "metadata", "service_tier", cacheKeyField, "prompt_cache_retention",
 	"safety_identifier", "stream_options", "parallel_tool_calls", "verbosity", "thinking", "enable_thinking"}
 
-// refusedOptional lists the optional fields of body an upstream's error
-// names as what it turned the request away for: named quoted, as Mistral's
-// extra_forbidden (loc ["body","store"], each field it refused in one
-// reply), Gemini's Unknown name "store" and Groq's 'store' is unsupported
-// do.
+// refusedOptional lists optional fields an upstream explicitly rejects as
+// unsupported. An invalid value must reach the client without dropping the
+// field or caching it as unsupported for later requests.
 func refusedOptional(status int, msg, body []byte) []string {
 	if !badRequest(status) {
 		return nil
@@ -2162,19 +2165,115 @@ func refusedOptional(status int, msg, body []byte) []string {
 	if json.Unmarshal(body, &m) != nil {
 		return nil
 	}
+	var fault any
+	if json.Unmarshal(msg, &fault) != nil {
+		fault = string(msg)
+	}
 	var out []string
 	for _, f := range optionalFields {
 		if _, ok := m[f]; !ok {
 			continue
 		}
-		for _, q := range []string{`"` + f + `"`, `"` + f + `\"`, `'` + f + `'`, "`" + f + "`"} {
-			if bytes.Contains(msg, []byte(q)) {
-				out = append(out, f)
-				break
-			}
+		if unsupportedOptionalField(fault, f) {
+			out = append(out, f)
 		}
 	}
 	return out
+}
+
+var unknownOptionalField = regexp.MustCompile("(?i)\\b(?:unknown (?:name|field|parameter)|unsupported (?:parameter|field|property|argument)|unrecognized (?:request )?(?:argument|parameter)(?: supplied)?):?\\s*['\"\\x60]([a-z_]+)['\"\\x60]")
+var rejectedOptionalField = regexp.MustCompile("(?i)(?:^|\\b(?:parameter|field|property|argument)\\s+)['\"\\x60]([a-z_]+)['\"\\x60]\\s+(?:is\\s+)?(?:unsupported|not supported)\\b")
+
+func unsupportedOptionalField(fault any, field string) bool {
+	switch v := fault.(type) {
+	case string:
+		// A proxy can embed the vendor's JSON error in prose. Prefer its
+		// structure to text matching, which could mistake an input echo
+		// or a different parameter's error for a refusal.
+		rest := v
+		for {
+			i := strings.IndexAny(rest, "{[")
+			if i < 0 {
+				break
+			}
+			var inner any
+			dec := json.NewDecoder(strings.NewReader(rest[i:]))
+			if dec.Decode(&inner) != nil {
+				// not JSON there ([HTTP 400]): look on past the bracket
+				rest = rest[i+1:]
+				continue
+			}
+			if hasOptionalErrorObject(inner) {
+				return unsupportedOptionalField(inner, field)
+			}
+			// [400] can be a status prefix. Look past it for a JSON
+			// error object before falling back to the original prose.
+			rest = rest[i+int(dec.InputOffset()):]
+		}
+		for _, match := range unknownOptionalField.FindAllStringSubmatchIndex(v, -1) {
+			if v[match[2]:match[3]] != field {
+				continue
+			}
+			// Gemini names a nested field with "at 'path'"; only an
+			// absent or empty path identifies a top-level request field.
+			tail := strings.ToLower(strings.TrimSpace(v[match[1]:]))
+			if strings.HasPrefix(tail, "at ") && !strings.HasPrefix(tail, "at '':") && !strings.HasPrefix(tail, "at \"\":") {
+				continue
+			}
+			return true
+		}
+		for _, match := range rejectedOptionalField.FindAllStringSubmatch(v, -1) {
+			if match[1] == field {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range v {
+			if unsupportedOptionalField(item, field) {
+				return true
+			}
+		}
+	case map[string]any:
+		if v["type"] == "extra_forbidden" {
+			loc, _ := v["loc"].([]any)
+			return len(loc) == 1 && loc[0] == field || len(loc) == 2 && loc[0] == "body" && loc[1] == field
+		}
+		// A located validation error concerns the value, not support for
+		// the top-level field. Never inspect its input echo.
+		if _, located := v["loc"]; located {
+			return false
+		}
+		if v["code"] == "unsupported_value" || v["type"] == "unsupported_value" {
+			return false
+		}
+		param, _ := v["param"].(string)
+		if param != "" && param != field {
+			return false
+		}
+		if v["code"] == "unsupported_parameter" && param == field {
+			return true
+		}
+		for _, key := range []string{"error", "message", "detail", "details", "errors", "description", "metadata", "raw"} {
+			if unsupportedOptionalField(v[key], field) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasOptionalErrorObject(fault any) bool {
+	switch v := fault.(type) {
+	case map[string]any:
+		return true
+	case []any:
+		for _, item := range v {
+			if hasOptionalErrorObject(item) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // withoutRefused leaves out of body the optional fields the provider has
@@ -2288,9 +2387,10 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		return writeError(w, from, 502, msg), msg
 	}
 	if stream {
-		enc := encoder(from, newSSEWriter(w), request)
+		sw := newSSEWriter(w)
+		enc := encoder(from, sw, request)
 		var failed string
-		serr := readSSE(rd, func(_, data string) error {
+		serr := readSSEAlive(rd, func(_, data string) error {
 			return dec(data, func(ev Event) {
 				switch ev.Kind {
 				case KError:
@@ -2301,6 +2401,12 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 				}
 				enc.event(ev)
 			})
+		}, func() {
+			// the provider's keepalives aren't events to translate: while
+			// it is heard from, the client hears from magpie (#436)
+			if failed == "" && sw.quiet() >= keepaliveGap {
+				enc.keepalive()
+			}
 		})
 		if serr != nil && failed == "" {
 			// the upstream died mid-reply: say so in the client's own
@@ -2429,6 +2535,44 @@ func decoder(proto provider.Protocol) func(data string, emit func(Event)) error 
 type streamEncoder interface {
 	event(Event)
 	finish()
+	// keepalive tells the client the reply goes on, as its protocol does
+	// with no answer to give: one its idle timeout counts (#436)
+	keepalive()
+}
+
+// keepaliveGap is how long a translated reply's client may hear nothing
+// while its provider is heard from (a keepalive, an event that has nothing
+// for the client) before it is sent a keepalive of its own.
+var keepaliveGap = time.Second
+
+// keepaliveEvery is how often a relayed reply that has gone quiet is kept
+// alive, and keepaliveLongest how long it is kept so with no event: a
+// reply stuck longer is left for the client's own idle timeout to end.
+var keepaliveEvery, keepaliveLongest = 15 * time.Second, 5 * time.Minute
+
+// relayEvents hands see each of events until they end or see says stop,
+// keeping the client of sw alive while none comes (keepaliveEvery, for up
+// to keepaliveLongest since the last).
+func relayEvents(events <-chan Event, sw *sseWriter, enc streamEncoder, see func(Event) bool) {
+	tick := time.NewTicker(keepaliveEvery)
+	defer tick.Stop()
+	last := time.Now()
+	for {
+		select {
+		case ev, ok := <-events:
+			if !ok {
+				return
+			}
+			last = time.Now()
+			if !see(ev) {
+				return
+			}
+		case <-tick.C:
+			if time.Since(last) < keepaliveLongest && sw.quiet() >= keepaliveEvery/2 {
+				enc.keepalive()
+			}
+		}
+	}
 }
 
 func encoder(proto provider.Protocol, w *sseWriter, r *Request) streamEncoder {

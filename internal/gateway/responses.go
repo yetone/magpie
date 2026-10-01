@@ -827,6 +827,16 @@ func (e *responsesEncoder) event(ev Event) {
 	e.col.add(ev)
 }
 
+// keepalive is response.in_progress again: Codex's idle timeout counts
+// events only, an SSE comment never reaching it, and skips this one.
+func (e *responsesEncoder) keepalive() {
+	if !e.started {
+		e.start(Event{}) // response.created and response.in_progress
+		return
+	}
+	e.send("response.in_progress", map[string]any{"response": e.response("in_progress", nil)})
+}
+
 func (e *responsesEncoder) finish() {
 	if !e.started {
 		e.start(Event{})

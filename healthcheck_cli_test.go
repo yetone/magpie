@@ -14,6 +14,7 @@ import (
 // magpie gateway answers at MAGPIE_ADDR.
 func TestHealthcheck(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	magpie := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"name":"magpie","version":"dev"}`))

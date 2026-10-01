@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -146,7 +147,7 @@ func TestHanakoFiles(t *testing.T) {
 	if d, _ := json.Marshal(c["meta"].(map[string]any)["deletedProviders"]); string(d) != `["old"]` {
 		t.Fatalf("deletedProviders: %s", d)
 	}
-	if st, _ := os.Stat(catalogPath); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(catalogPath); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 { // Windows has no such bits
 		t.Fatalf("mode %v", st.Mode())
 	}
 	if _, err := os.Stat(filepath.Dir(filepath.Dir(stale))); !os.IsNotExist(err) {
@@ -260,7 +261,7 @@ func TestHanakoFresh(t *testing.T) {
 	if c["catalogVersion"] != float64(2) || len(c) != 2 {
 		t.Fatalf("catalog: %v", c)
 	}
-	if st, _ := os.Stat(path); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(path); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 { // Windows has no such bits
 		t.Fatalf("mode %v", st.Mode())
 	}
 	if chat, raw := hanakoChatOf(t, filepath.Join(dir, "agents", "a", "config.yaml")); chat["id"] != "relay/glm-4.6" || chat["provider"] != "magpie" {

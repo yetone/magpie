@@ -51,7 +51,12 @@ type SignInState struct {
 	State         string `json:"state"`                   // installing, waiting, done, failed or canceled
 	PasteCallback bool   `json:"pasteCallback,omitempty"` // a callback URL can also finish this sign-in
 	// PasteCode is a plugin's sign-in finished by the code its page shows
-	PasteCode    bool   `json:"pasteCode,omitempty"`
+	PasteCode bool `json:"pasteCode,omitempty"`
+	// PasteKey is a sign-in an API key made on KeysURL also finishes
+	// (Command Code's, whose page posts its key where a pasted address
+	// can't carry it)
+	PasteKey     bool   `json:"pasteKey,omitempty"`
+	KeysURL      string `json:"keysURL,omitempty"`
 	Instructions string `json:"instructions,omitempty"` // a plugin's words for its page
 	// Installing is the CLI being installed before the sign-in can start
 	Installing string `json:"installing,omitempty"`
@@ -371,6 +376,9 @@ func SubmitSignInCallback(id, raw string) error {
 	}
 	if s.claude != nil {
 		return s.claudePaste(raw)
+	}
+	if s.status().Agent == CommandCodePlanID {
+		return s.commandCodeKey(raw)
 	}
 	return s.pastedCallback(raw)
 }

@@ -138,9 +138,15 @@ type flashMsg struct {
 
 type syncedMsg struct{ err error }
 
-// Run starts magpie in the terminal.
-func Run() error {
+// Run starts magpie in the terminal. ready is called once the model is
+// made: making it asks agents' CLIs (claude auth status, up to seconds),
+// and a signal then is the caller's to handle, as bubbletea starts
+// listening only as the program runs.
+func Run(ready func()) error {
 	m := newModel()
+	if ready != nil {
+		ready()
+	}
 	if len(m.agents) == 0 {
 		return fmt.Errorf("no supported agents found on this machine")
 	}

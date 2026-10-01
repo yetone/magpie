@@ -16,8 +16,12 @@ func effortHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	// where Windows keeps Goose's, Crush's and Devin's: the sandbox's, never the machine's
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	t.Setenv("HERMES_HOME", "")
 	t.Setenv("MIMOCODE_HOME", "")
 	t.Setenv("HANA_HOME", "")
@@ -84,8 +88,8 @@ func TestEffortFields(t *testing.T) {
 	writeFile(t, filepath.Join(home, ".omp", "agent", "config.yml"), "modelRoles:\n  default: a/b\n")
 	setEffort(t, omp(home), "xhigh", "default: a/b")
 
-	writeFile(t, filepath.Join(cfg, "goose", "config.yaml"), "GOOSE_MODEL: m\nGOOSE_PROVIDER: p\n")
 	g := goose(home, cfg)
+	writeFile(t, g.Path, "GOOSE_MODEL: m\nGOOSE_PROVIDER: p\n")
 	setEffort(t, g, "max", "GOOSE_MODEL: m")
 	if v, _ := edit.GetYAMLTop(g.Path, "GOOSE_PROVIDER"); v != "p" {
 		t.Fatalf("goose provider: %q", v)

@@ -401,7 +401,7 @@ func installedVersion(bin string) string {
 var runVersion = func(bin string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	cmd := proc.CommandContext(ctx, bin, "--version")
+	cmd := proc.ProbeContext(ctx, bin, "--version")
 	cmd.Stdin = nil // /dev/null: one that would ask something gets nothing
 	cmd.Env = append(os.Environ(), "NO_COLOR=1")
 	out, _ := cmd.CombinedOutput()

@@ -7,8 +7,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -88,7 +90,7 @@ func (c *client) call(method string, params any) map[string]any {
 		var m map[string]any
 		json.Unmarshal([]byte(line), &m)
 		if m["method"] == "roots/list" {
-			ans, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": m["id"], "result": map[string]any{"roots": []any{map[string]any{"uri": "file://" + c.root, "name": "p"}}}})
+			ans, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": m["id"], "result": map[string]any{"roots": []any{map[string]any{"uri": fileURI(c.root), "name": "p"}}}})
 			go c.in.Write(append(ans, '\n'))
 			continue
 		}
@@ -366,5 +368,37 @@ func TestGenerateVideoChecksItsArguments(t *testing.T) {
 	// seconds may come as a string
 	if r := film(c, map[string]any{"prompt": "x", "seconds": "6"}); r["isError"] == true {
 		t.Errorf("seconds \"6\": %v", r)
+	}
+}
+
+// fileURI is p as a client names a root: file:///C:/p on Windows.
+func fileURI(p string) string {
+	p = filepath.ToSlash(p)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return (&url.URL{Scheme: "file", Path: p}).String()
+}
+
+// A root or a reference given as a file:// URI is the file it names, a
+// drive's or a share's on Windows.
+func TestFilePath(t *testing.T) {
+	cases := map[string]string{"file:///tmp/a%20b.png": "/tmp/a b.png"}
+	if runtime.GOOS == "windows" {
+		cases = map[string]string{
+			"file:///C:/Users/me/a%20b":    `C:\Users\me\a b`,
+			"file:///c%3A/Users/me/p":      `c:\Users\me\p`,
+			"file://server/share/p/i.png":  `\\server\share\p\i.png`,
+			"file://localhost/D:/work/one": `D:\work\one`,
+		}
+	}
+	for in, want := range cases {
+		u, err := url.Parse(in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := filePath(u); got != want {
+			t.Errorf("%s: %q, want %q", in, got, want)
+		}
 	}
 }

@@ -646,6 +646,9 @@ func startCommandCodeSignIn(s *signInFlow) error {
 	srv := &http.Server{Handler: http.HandlerFunc(s.commandCodeCallback), ReadHeaderTimeout: 10 * time.Second}
 	s.mu.Lock()
 	s.st.URL = cmdStudio + "/studio/auth/cli?" + q.Encode()
+	// Studio's post can't reach a magpie on a server or in Docker: a key
+	// made on its keys page and pasted finishes it instead
+	s.st.PasteKey, s.st.KeysURL = true, cmdKeysURL
 	s.srv = srv
 	s.mu.Unlock()
 	go func() { _ = srv.Serve(ln) }()
@@ -746,15 +749,31 @@ func (s *signInFlow) commandCodeCallback(w http.ResponseWriter, r *http.Request)
 		answer(false, "Command Code sent back no key")
 		return
 	}
+	if !s.claim() {
+		// a key was pasted too, and that one is being kept
+		answer(false, "this sign-in is already finishing")
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	who, plan, err := cmdSignedIn(ctx, got.cmdAuth)
-	if err != nil {
-		s.finish(SignInState{State: "failed", Error: err.Error()})
+	// the browser comes back for its page after this: the server stays up
+	// a while for it, where finish would close it within a second
+	if err := s.commandCodeKeep(ctx, got.cmdAuth, true); err != nil {
 		answer(false, err.Error())
 		return
 	}
-	a := got.cmdAuth
+	answer(true, "")
+}
+
+// commandCodeKeep names the account a key is Command Code's, keeps it beside
+// the others, and finishes the sign-in. keepServer leaves the callback
+// server up a while, for the browser to come back for its page.
+func (s *signInFlow) commandCodeKeep(ctx context.Context, a cmdAuth, keepServer bool) error {
+	who, plan, err := cmdSignedIn(ctx, a)
+	if err != nil {
+		s.finish(SignInState{State: "failed", Error: err.Error()})
+		return err
+	}
 	a.UserName = who
 	auth, _ := json.Marshal(a)
 	ownUser, _, hasOwn := cmdOwn()
@@ -763,20 +782,49 @@ func (s *signInFlow) commandCodeCallback(w http.ResponseWriter, r *http.Request)
 	}
 	if err := addSideLogin(savedLogin{Agent: CommandCodePlanID, User: who, Plan: plan, Auth: auth}, ownUser, func(savedLogin) {}); err != nil {
 		s.finish(SignInState{State: "failed", Error: err.Error()})
-		answer(false, err.Error())
-		return
+		return err
 	}
-	// the browser comes back for its page after this: the server stays up
-	// a while for it, where finish would close it within a second
-	s.mu.Lock()
-	srv := s.srv
-	s.srv = nil
-	s.mu.Unlock()
-	if srv != nil {
-		time.AfterFunc(10*time.Second, func() { _ = srv.Close() })
+	if keepServer {
+		s.mu.Lock()
+		srv := s.srv
+		s.srv = nil
+		s.mu.Unlock()
+		if srv != nil {
+			time.AfterFunc(10*time.Second, func() { _ = srv.Close() })
+		}
 	}
 	s.finish(SignInState{State: "done", User: who, Plan: plan, Using: hasOwn && strings.EqualFold(ownUser, who)})
-	answer(true, "")
+	return nil
+}
+
+// cmdKeysURL is Studio's page of API keys, where one is made to paste.
+var cmdKeysURL = "https://commandcode.ai/settings/keys"
+
+// commandCodeKey finishes a sign-in with a key pasted from Studio's keys
+// page, as the CLI takes one ("Authorize in browser, or paste API key
+// here"). It is how a magpie the browser can't reach — on a server, in
+// Docker — signs in: Studio posts the key to the callback on 127.0.0.1 in
+// the background, so the page the browser ends on has nothing in its
+// address to paste.
+func (s *signInFlow) commandCodeKey(raw string) error {
+	key := strings.TrimSpace(raw)
+	switch {
+	case key == "":
+		return errors.New("paste an API key from Command Code's keys page")
+	case strings.Contains(key, "://"):
+		return errors.New("that's an address: Command Code sends its key in the background, so make a key on its keys page and paste that")
+	case strings.ContainsAny(key, " \t\r\n"):
+		return errors.New("that doesn't look like a Command Code API key")
+	}
+	if s.status().State != "waiting" {
+		return errors.New("this sign-in is over; start it again")
+	}
+	if !s.claim() {
+		return errors.New("this sign-in is already finishing")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return s.commandCodeKeep(ctx, cmdAuth{APIKey: key}, false)
 }
 
 // cmdSignedIn names a new key's account with whoami, and reads its plan.

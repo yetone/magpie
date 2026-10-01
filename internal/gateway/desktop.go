@@ -135,6 +135,10 @@ func claudeLooking(e provider.Entry) string {
 	return aliasFor(e.ID)
 }
 
+// DesktopID is the id Claude Desktop is shown e by, and its Code tab hands
+// Claude Code (claudeLooking).
+func DesktopID(e provider.Entry) string { return claudeLooking(e) }
+
 // desktopModels is /v1/models as Claude Desktop is shown it: every model by
 // an id it keeps (claudeLooking), named so the picker tells them apart —
 // it shows the name, not the id, and folds rows of one name into one entry.

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="routing.css">
 <link rel="stylesheet" href="library.css">
 <link rel="stylesheet" href="plugins.css">
+<link rel="stylesheet" href="sessions.css">
 <link rel="stylesheet" href="omarchy.css">
 </head>
 <body>
@@ -25,6 +26,7 @@
     <button data-view="gateway" data-t>Gateway</button>
     <button data-view="routing" data-t>Routing</button>
     <button data-view="usage" data-t>Usage</button>
+    <button data-view="sessions" data-t>Sessions</button>
     <button data-view="library" data-t>Library</button>
     <button data-view="plugins" data-t>Plugins</button>
   </nav>
@@ -202,6 +204,8 @@
   </div>
 </main>
 
+<main class="view" id="view-sessions" hidden></main>
+
 <main class="view" id="view-library" hidden></main>
 
 <main class="view" id="view-plugins" hidden></main>
@@ -249,6 +253,10 @@
       <div class="who"><div class="name" data-t>Currency</div><div class="sub" id="currencySub"></div></div>
       <div id="currencySegs"></div>
     </div>
+    <div class="row pref" id="unitsRow" hidden>
+      <div class="who"><div class="name" data-t>Number units</div><div class="sub" data-t>How a large count of tokens or requests is shortened on the Usage page and the panel</div></div>
+      <div id="unitsSegs"></div>
+    </div>
     <div class="row pref" id="usageAlertRow">
       <div class="who"><div class="name" data-t>Usage alert</div><div class="sub" id="usageAlertSub"></div></div>
       <div id="usageAlertSegs" class="warm-at"></div>
@@ -258,7 +266,7 @@
       <div id="balanceAlertSegs" class="warm-at"></div>
     </div>
     <div class="row pref">
-      <div class="who"><div class="name" data-t>Provider in model names</div><div class="sub" data-t>Agents’ model lists name each model with its provider or “routing group” after it. Off, the name alone, unless two would read the same</div></div>
+      <div class="who"><div class="name" data-t>Provider in model names</div><div class="sub" data-t>Agents’ lists put each model’s provider after its name, or not after names you set</div></div>
       <div id="plainNamesSegs"></div>
     </div>
     <div class="row pref">
@@ -319,6 +327,8 @@
   <div class="list prefs" id="searchList"></div>
   <div class="row-head"><span class="label" data-t>Privacy</span></div>
   <div class="list prefs" id="redactList"></div>
+  <div class="row-head"><span class="label" data-t>Observability</span></div>
+  <div class="list prefs" id="otelList"></div>
   <div class="row-head"><span class="label" data-t>Sync and backup</span></div>
   <div class="list prefs" id="syncList"></div>
   <div class="row-head"><span class="label" data-t>About</span></div>
@@ -362,5 +372,6 @@
 <script src="routing.js"></script>
 <script src="library.js"></script>
 <script src="plugins.js"></script>
+<script src="sessions.js"></script>
 </body>
 </html>

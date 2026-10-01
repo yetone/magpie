@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
 	"strconv"
 	"strings"
 	"time"
@@ -33,7 +31,7 @@ func pluginCmd(args []string) error {
 		sub = args[1]
 	}
 	rest := args[min(len(args), 2):]
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := interruptContext()
 	defer stop()
 	switch sub {
 	case "list", "ls", "--json":

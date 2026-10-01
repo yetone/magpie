@@ -293,6 +293,9 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 #view-library .row-head { height: auto; min-height: 26px; margin: 18px 0 6px; padding: 0 2px; gap: 12px; }
 #view-library .row-head .note { min-width: 0; font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #view-library .row-head .lib-updall { height: 24px; padding: 0 9px; font-size: 12px; }
+/* every skill out of the library at once (#449): red from the start */
+#view-library .row-head .lib-everyrm { color: var(--red); }
+#view-library .row-head .lib-everyrm:hover { background: var(--red-soft); }
 
 /* the market: servers and skills to add, each with its own picture */
 .mk { display: flex; flex-direction: column; }

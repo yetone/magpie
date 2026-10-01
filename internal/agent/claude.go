@@ -15,6 +15,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // Claude Code reads its endpoint from the `env` block of settings.json.
@@ -133,6 +134,88 @@ var claudeAliases = []string{"default", "best", "opus", "sonnet", "haiku", "fabl
 // is 1M whatever it says.
 const claudeContextEnv = "CLAUDE_CODE_MAX_CONTEXT_TOKENS"
 
+// claudeCapsEnv tells Claude Code what a model it doesn't know can do, as
+// "<model>=effort,xhigh_effort;<model>=…" (a trailing * a prefix, [1m]
+// taken off the model first, the model lowercased, the pattern not). Run on
+// a gateway (CLAUDE_CODE_USE_GATEWAY, as Claude Desktop's Code tab runs it)
+// it otherwise takes no model of magpie's for one with effort, xhigh or max,
+// so "ultracode": true, which needs xhigh, did nothing (#430). Each magpie
+// model is said to have only the levels magpie knows it has.
+const claudeCapsEnv = "CLAUDE_CODE_MODEL_CAPABILITIES"
+
+// claudeCapsMax bounds claudeCapsEnv: the models Claude Code is set to go
+// first, and those that don't fit after them are left as Claude Code takes
+// them.
+const claudeCapsMax = 8000
+
+// claudeCaps is what Claude Code is told a model at these levels can do:
+// effort for any, xhigh_effort and max_effort for those levels.
+func claudeCaps(levels []string) string {
+	var caps []string
+	if slices.ContainsFunc(levels, func(l string) bool { return contains(claudeEfforts, l) }) {
+		caps = append(caps, "effort")
+		if contains(levels, "xhigh") {
+			caps = append(caps, "xhigh_effort")
+		}
+		if contains(levels, "max") {
+			caps = append(caps, "max_effort")
+		}
+	}
+	return strings.Join(caps, ",")
+}
+
+// claudeCapabilities is claudeCapsEnv's value for magpie's models as Claude
+// Code is shown them, and with desktop, as Claude Desktop hands them to it
+// (mythos-magpie-<number>); first are the models it is set to, which go in
+// before the rest. A model of Claude's it knows is said to have no more
+// than it gives it, one with no levels isn't named.
+func claudeCapabilities(first []string, desktop bool) string {
+	type seg struct{ id, caps string }
+	var segs []seg
+	add := func(id string, levels []string) {
+		id = strings.ToLower(strings.TrimSuffix(id, "[1m]"))
+		if id == "" || strings.ContainsAny(id, ";=,") || strings.HasSuffix(id, "*") {
+			return
+		}
+		levels = slices.DeleteFunc(slices.Clone(levels), func(l string) bool { return !contains(claudeEffortsFor(id), l) })
+		if c := claudeCaps(levels); c != "" && !slices.ContainsFunc(segs, func(s seg) bool { return s.id == id }) {
+			segs = append(segs, seg{id, c})
+		}
+	}
+	shown, _ := provider.CatalogFor("claude")
+	for _, e := range shown {
+		add(e.ID, e.Efforts)
+	}
+	if desktop {
+		shown, _ := provider.CatalogFor("claude-desktop")
+		for _, e := range shown {
+			// one named as a Claude model Claude Code knows on its own
+			if id := gateway.DesktopID(e); claudeName(id) == "" {
+				add(id, e.Efforts)
+			}
+		}
+	}
+	rank := func(s seg) int {
+		if slices.ContainsFunc(first, func(f string) bool { return strings.ToLower(strings.TrimSuffix(f, "[1m]")) == s.id }) {
+			return 0
+		}
+		return 1
+	}
+	slices.SortStableFunc(segs, func(a, b seg) int { return rank(a) - rank(b) })
+	var b strings.Builder
+	for _, s := range segs {
+		part := s.id + "=" + s.caps
+		if b.Len() > 0 {
+			part = ";" + part
+		}
+		if b.Len()+len(part) > claudeCapsMax {
+			break
+		}
+		b.WriteString(part)
+	}
+	return b.String()
+}
+
 func tierEnv(tier string) string { return "ANTHROPIC_DEFAULT_" + strings.ToUpper(tier) + "_MODEL" }
 
 func claude(home string) *Agent { return claudeIn(here(home)) }
@@ -169,6 +252,39 @@ func claudeIn(at place) *Agent {
 		}
 		return nil
 	}
+	// the capabilities magpie last wrote, kept apart from the user's own in
+	// the same way: theirs is left as it is, magpie's adds to nothing
+	capsKey := at.key("claude.capabilities")
+	capsOurs := func() bool {
+		cur := env(claudeCapsEnv)
+		return cur != "" && cur == stashLoad()[capsKey]
+	}
+	dropCaps := func() error {
+		defer forget(capsKey)
+		if capsOurs() {
+			return edit.DelJSON(path, "env."+claudeCapsEnv)
+		}
+		return nil
+	}
+	// writeCaps says what magpie's models can do, the ones in models first;
+	// Claude Desktop's ids too while it runs on magpie, its Code tab being
+	// Claude Code on this settings.json
+	writeCaps := func(models ...string) error {
+		if env(claudeCapsEnv) != "" && !capsOurs() {
+			forget(capsKey)
+			return nil
+		}
+		desktop := at.id == "" && at.sys == nil && desktopWired(desktopPathsOf(desktopDirs(runtime.GOOS, at.home, os.Getenv)))
+		v := claudeCapabilities(models, desktop)
+		if v == "" {
+			return dropCaps()
+		}
+		if v == env(claudeCapsEnv) {
+			return nil
+		}
+		stash(map[string]string{capsKey: v})
+		return edit.SetJSON(path, edit.KV{Path: "env." + claudeCapsEnv, Value: v})
+	}
 	// what was last written that an open Claude Code session doesn't see:
 	// it reads settings.json at start-up, only its env as it goes
 	stale := ""
@@ -182,6 +298,9 @@ func claudeIn(at place) *Agent {
 			}
 			forget(at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"))
 			if err := dropWindow(); err != nil {
+				return err
+			}
+			if err := dropCaps(); err != nil {
 				return err
 			}
 			return edit.DelJSON(path, keys...)
@@ -214,6 +333,9 @@ func claudeIn(at place) *Agent {
 			}
 		}
 		if err := dropWindow(); err != nil {
+			return err
+		}
+		if err := dropCaps(); err != nil {
 			return err
 		}
 		if routed() {
@@ -283,7 +405,14 @@ func claudeIn(at place) *Agent {
 		} else {
 			forget(windowKey)
 		}
-		return edit.SetJSON(path, kvs...)
+		if err := edit.SetJSON(path, kvs...); err != nil {
+			return err
+		}
+		models := []string{main}
+		for _, t := range claudeTiers {
+			models = append(models, tiers[t])
+		}
+		return writeCaps(models...)
 	}
 
 	fields := []Field{{
@@ -464,6 +593,18 @@ func claudeIn(at place) *Agent {
 		UA:  []string{"claude-cli", "claude-code"},
 		Bin: "claude", Dir: filepath.Dir(path), Path: path,
 		Fields: fields,
+		// the catalog's models, with their levels, as Claude Code is told
+		// them, while magpie's are the ones it has
+		Sync: func() error {
+			if !routed() {
+				return nil
+			}
+			models := []string{env("ANTHROPIC_MODEL")}
+			for _, t := range claudeTiers {
+				models = append(models, env(tierEnv(t)))
+			}
+			return writeCaps(models...)
+		},
 		Check: func() string {
 			if !isMagpie(get()) {
 				return ""

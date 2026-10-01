@@ -19,28 +19,32 @@ import (
 )
 
 // agentCLI is a CLI a subscription runs through: how to find it, and the
-// vendor's install one-liners for a POSIX shell and for PowerShell.
+// vendor's install one-liners for a POSIX shell and for PowerShell. native,
+// when there is one, does what the shell one does without a shell, for a
+// magpie with none (its Docker image has no bash, curl or wget).
 type agentCLI struct {
-	Name string
-	find func() string
-	sh   string
-	ps   string
+	Name   string
+	find   func() string
+	sh     string
+	ps     string
+	native func(ctx context.Context) error
 }
 
 func cliFor(agent string) (agentCLI, bool) {
 	switch agent {
 	case "devin":
-		return agentCLI{"Devin CLI", func() string { return DevinExecutable() },
-			"curl -fsSL https://cli.devin.ai/install.sh | bash",
-			"irm https://static.devin.ai/cli/setup.ps1 | iex"}, true
+		return agentCLI{Name: "Devin CLI", find: func() string { return DevinExecutable() },
+			sh: "curl -fsSL https://cli.devin.ai/install.sh | bash",
+			ps: "irm https://static.devin.ai/cli/setup.ps1 | iex"}, true
 	case "cursor":
-		return agentCLI{"Cursor CLI", func() string { return CursorExecutable() },
-			"curl https://cursor.com/install -fsS | bash",
-			"irm 'https://cursor.com/install?win32=true' | iex"}, true
+		return agentCLI{Name: "Cursor CLI", find: func() string { return CursorExecutable() },
+			sh: "curl https://cursor.com/install -fsS | bash",
+			ps: "irm 'https://cursor.com/install?win32=true' | iex"}, true
 	case "grok":
-		return agentCLI{"Grok Build", func() string { return GrokExecutable() },
-			"curl -fsSL https://x.ai/cli/install.sh | bash",
-			"irm https://x.ai/cli/install.ps1 | iex"}, true
+		return agentCLI{Name: "Grok Build", find: func() string { return GrokExecutable() },
+			sh:     "curl -fsSL https://x.ai/cli/install.sh | bash",
+			ps:     "irm https://x.ai/cli/install.ps1 | iex",
+			native: installGrokBuild}, true
 	}
 	return agentCLI{}, false
 }
@@ -59,6 +63,9 @@ var installTimeout = 10 * time.Minute
 
 // runInstaller runs a vendor's installer; a var so tests can fake it.
 var runInstaller = func(ctx context.Context, c agentCLI) ([]byte, error) {
+	if runtime.GOOS != "windows" && c.native != nil && !shellInstallerRuns() {
+		return nil, c.native(ctx)
+	}
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = proc.CommandContext(ctx, "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", c.ps)
@@ -69,6 +76,22 @@ var runInstaller = func(ctx context.Context, c agentCLI) ([]byte, error) {
 	cmd.Env = netproxy.Env(nil)
 	// no stdin: an installer that would ask something takes its default
 	return cmd.CombinedOutput()
+}
+
+// shellInstallerRuns is whether a vendor's `curl … | bash` can run here:
+// bash, and curl or wget for it to download with. magpie's Docker image
+// (distroless) has none of them, and the install failed there with "exec:
+// bash: not found". A var so tests can say there is none.
+var shellInstallerRuns = func() bool {
+	if _, err := exec.LookPath("bash"); err != nil {
+		return false
+	}
+	for _, d := range []string{"curl", "wget"} {
+		if _, err := exec.LookPath(d); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // installCLI installs c with its vendor's installer and makes sure magpie

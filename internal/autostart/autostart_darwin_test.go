@@ -29,6 +29,7 @@ const olderPlist = `<?xml version="1.0" encoding="UTF-8"?>
 func TestLaunchAgentLetsTheRelaunchLive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if err := Set(true); err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +50,7 @@ func TestLaunchAgentLetsTheRelaunchLive(t *testing.T) {
 func TestRefreshOlderLaunchAgent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if err := Refresh(); err != nil || Enabled() {
 		t.Fatalf("Refresh turned Open at login on: %v", err)
 	}

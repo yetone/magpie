@@ -1045,3 +1045,39 @@ func TestDshImportKeepsJS(t *testing.T) {
 		t.Errorf("patch list:\n%s", s)
 	}
 }
+
+// Every skill on for the agents named at once, and off again; an agent not
+// named keeps what it has (#443).
+func TestEverySkillAgents(t *testing.T) {
+	h := sandbox(t)
+	src := filepath.Join(h, "src/skills")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	skill(t, filepath.Join(src, "xlsx"), "xlsx", "Sheets")
+	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"gemini"}))
+	ok(t)(InstallSkills(src, []string{"xlsx"}, nil))
+	has := func(d string) bool { _, err := os.Stat(filepath.Join(h, d, "SKILL.md")); return err == nil }
+	ok(t)(EverySkillAgents([]string{"claude", "codex"}, true))
+	for _, d := range []string{".claude/skills/pdf", ".codex/skills/pdf", ".gemini/skills/pdf", ".claude/skills/xlsx", ".codex/skills/xlsx"} {
+		if !has(d) {
+			t.Errorf("%s isn't there", d)
+		}
+	}
+	ok(t)(EverySkillAgents([]string{"claude", "codex"}, false))
+	for _, d := range []string{".claude/skills/pdf", ".codex/skills/pdf", ".claude/skills/xlsx", ".codex/skills/xlsx"} {
+		if has(d) {
+			t.Errorf("%s is still there", d)
+		}
+	}
+	if !has(".gemini/skills/pdf") {
+		t.Error("gemini, not named, lost pdf")
+	}
+	v, _ := Read(nil)
+	for _, s := range v.Skills {
+		if want := map[string][]string{"pdf": {"gemini"}, "xlsx": {}}[s.Name]; !slices.Equal(s.Agents, want) {
+			t.Errorf("%s: %v, want %v", s.Name, s.Agents, want)
+		}
+	}
+	if _, err := EverySkillAgents(nil, true); err == nil {
+		t.Error("no agents named was taken")
+	}
+}

@@ -3,6 +3,7 @@ package gui
 import (
 	"net"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 // is gone (one left running from before an update, a magpie serve).
 func TestGatewayTakenOver(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	ln, err := net.Listen("tcp", "127.0.0.1:0")

@@ -38,6 +38,10 @@ type Settings struct {
 	// rate (see internal/fx). A vendor's own balance, already in its own
 	// currency (a Chinese relay's ¥), is never touched by this.
 	Currency string `json:"currency,omitempty"`
+	// WesternUnits shortens a large count in K, M and B even when magpie
+	// speaks Chinese, which otherwise says it in 万 and 亿 (8000 万
+	// rather than 80M). It means nothing in English.
+	WesternUnits bool `json:"westernUnits,omitempty"`
 	// Dock keeps magpie in the Mac's Dock as well as the menu bar, for a
 	// menu bar too full to show its icon.
 	Dock bool `json:"dock,omitempty"`
@@ -49,6 +53,7 @@ type Settings struct {
 	// environment and then the system, "direct" uses none, anything else
 	// is the proxy (http://, https:// or socks5://; host:port means http).
 	Proxy string `json:"proxy,omitempty"`
+	OTel  OTel   `json:"otel,omitempty"`
 	// Redact keeps secrets in what agents send (API keys, private keys,
 	// tokens, passwords) from the vendors behind magpie: they go as
 	// placeholders, and come back as they were. RedactPersonal does the same
@@ -70,6 +75,9 @@ type Settings struct {
 	// bodies both ways, secrets taken out — in the S3 bucket sync keeps
 	// its backup in (gateway/archive.go), for looking into a request later.
 	RequestArchive bool `json:"requestArchive,omitempty"`
+	// RequestArchiveMaxMB is how much of each body the archive keeps, in
+	// MiB: 0 for 32, at most 1024 (#447)
+	RequestArchiveMaxMB int `json:"requestArchiveMaxMB,omitempty"`
 	// CodexWarmup starts a ChatGPT account's next window as soon as the
 	// last one resets, with one tiny request, so it counts from then (a
 	// Codex window starts at its first use): "" off, "week" the weekly
@@ -146,6 +154,11 @@ type Settings struct {
 	// (#335) — but for two in one list that would read the same, which keep
 	// it (see provider.Labels).
 	PlainNames bool `json:"plainNames,omitempty"`
+	// PlainOwnNames, with PlainNames off, has those lists name a model the
+	// user gave a name of their own by that name alone, just as they wrote
+	// it (#92: "Opus 5.5", not "Opus 5.5 · Claude Code"), the vendor's names
+	// keeping their provider's after them (see provider.Labels).
+	PlainOwnNames bool `json:"plainOwnNames,omitempty"`
 	// TextSize is how large the window's and the tray panel's pages are
 	// drawn, in percent (one of TextSizes): the webviews' own zoom, as a
 	// browser's, so the text and everything around it grow together.
@@ -405,6 +418,16 @@ func CarryPerModel(in, cur *Settings) {
 	}
 }
 
+// KeepOwn puts back cur's settings that are this computer's own, which a
+// sync or a restored backup never brings from another: the window's size,
+// the proxy, the Dock, and what the menu bar or tray shows beside magpie's
+// icon (yoooo on Discord: usage turned off on a Mac came back from a
+// Windows box that shows it).
+func (s *Settings) KeepOwn(cur Settings) {
+	s.Window, s.Proxy, s.Dock, s.DockWindow = cur.Window, cur.Proxy, cur.Dock, cur.DockWindow
+	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos
+}
+
 // RenamePerModel moves what the user said of a provider's models to the id
 // it has now: in every per-model map (see ModelNames) each key beginning
 // with from+"/" is rewritten to to+"/", and it says whether any key moved at
@@ -525,6 +548,10 @@ func Save(s Settings) error {
 	if !slices.Contains(TextSizes, s.TextSize) {
 		return fmt.Errorf("text size must be one of %v percent, not %d", TextSizes, s.TextSize)
 	}
+	s.OTel.Endpoint = strings.TrimRight(strings.TrimSpace(s.OTel.Endpoint), "/")
+	if err := s.OTel.Check(); err != nil {
+		return err
+	}
 	s.Proxy = strings.TrimSpace(s.Proxy)
 	if err := CheckProxy(s.Proxy); err != nil {
 		return err
@@ -559,7 +586,13 @@ func Save(s Settings) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(Path(), append(b, '\n'), 0o644)
+	// Restrict existing settings without changing the owner's permissions.
+	if fi, err := os.Stat(Path()); err == nil && fi.Mode().Perm()&0o077 != 0 {
+		if err := os.Chmod(Path(), fi.Mode().Perm()&0o700); err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(Path(), append(b, '\n'), 0o600)
 }
 
 func (s Settings) normal() Settings {

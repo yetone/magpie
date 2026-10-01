@@ -22,7 +22,9 @@ func TestDevin(t *testing.T) {
 	home := t.TempDir()
 	cfg := filepath.Join(home, ".config")
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("APPDATA", cfg) // where Devin keeps it on Windows
 
 	dir := filepath.Join(cfg, "devin")
 	path := filepath.Join(dir, "config.json")
@@ -117,7 +119,9 @@ func TestDevinModelAndEffort(t *testing.T) {
 	home := t.TempDir()
 	cfg := filepath.Join(home, ".config")
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("APPDATA", cfg) // where Devin keeps it on Windows
 	path := filepath.Join(cfg, "devin", "config.json")
 	os.MkdirAll(filepath.Dir(path), 0o755)
 	os.WriteFile(path, []byte(`{"agent": {"model": "swe-2-max"}}`), 0o644)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -65,7 +66,7 @@ func TestGatewayKeysBackupRoundTrip(t *testing.T) {
 		t.Fatal("restored default key lost its legacy link")
 	}
 	info, err := os.Stat(access.Path())
-	if err != nil || info.Mode().Perm() != 0o600 {
+	if err != nil || runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatal("restored key-store permissions", info, err)
 	}
 }

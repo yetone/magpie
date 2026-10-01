@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -45,7 +46,7 @@ func TestCarry(t *testing.T) {
 		t.Fatalf("skills: %+v", b.Skills)
 	}
 	s := b.Skills[0]
-	if _, ok := s.Files["SKILL.md"]; !ok || string(s.Files["scripts/run.sh"]) != "echo hi\n" || len(s.Exec) != 1 || s.Exec[0] != "scripts/run.sh" {
+	if _, ok := s.Files["SKILL.md"]; !ok || string(s.Files["scripts/run.sh"]) != "echo hi\n" || runtime.GOOS != "windows" && (len(s.Exec) != 1 || s.Exec[0] != "scripts/run.sh") {
 		t.Fatalf("pdf: %+v", s)
 	}
 	if _, ok := s.Files["hosts"]; ok || len(s.Left) != 1 || s.Left[0] != "big.bin" {
@@ -87,7 +88,7 @@ func TestCarry(t *testing.T) {
 	if s := read(t, filepath.Join(h2, ".claude/skills/pdf/scripts/run.sh")); s != "echo hi\n" {
 		t.Errorf("pdf in claude: %q", s)
 	}
-	if fi, err := os.Stat(filepath.Join(SkillPath("pdf"), "scripts/run.sh")); err != nil || fi.Mode().Perm()&0o100 == 0 {
+	if fi, err := os.Stat(filepath.Join(SkillPath("pdf"), "scripts/run.sh")); err != nil || runtime.GOOS != "windows" && fi.Mode().Perm()&0o100 == 0 {
 		t.Errorf("run.sh: %v %v", fi, err)
 	}
 	if _, err := os.Lstat(filepath.Join(h2, ".claude/skills/old")); !os.IsNotExist(err) {

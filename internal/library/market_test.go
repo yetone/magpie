@@ -199,6 +199,8 @@ func skillsSh(t *testing.T) *atomic.Int64 {
 
 func TestSkillsShPages(t *testing.T) {
 	sandbox(t)
+	// the cache kept on disk, in what Windows keeps caches in (blank in a sandbox)
+	t.Setenv("LOCALAPPDATA", t.TempDir())
 	hits := skillsSh(t)
 	list, err := fetchPopular()
 	if err != nil || len(list) != 1 || list[0].Source != "o/r" || list[0].SkillID != "pdf" || list[0].Installs != 9 {
@@ -301,5 +303,26 @@ func TestMagpieImageIsOptIn(t *testing.T) {
 	s := l.server("magpie-image")
 	if s == nil || len(s.Agents) != 0 || !filepath.IsAbs(s.Command) || strings.Join(s.Args, " ") != "mcp image" {
 		t.Fatalf("added as %+v", s)
+	}
+}
+
+// A skill taken in from an agent's folder has no GitHub source, and adding
+// it from the market is turned away by its name; the market says it's had
+// by the same name (#444).
+func TestMarketSkillHadByName(t *testing.T) {
+	l := &Library{Skills: []*Skill{
+		{Name: "tdd", Source: &Source{Kind: "folder", Dir: "/home/u/.agents/skills/tdd"}},
+		{Name: "grill-me"},
+		{Name: "pdf", Source: &Source{Kind: "github", Repo: "anthropics/skills", Path: "skills/pdf"}},
+	}}
+	for _, c := range []struct{ source, id, name, want string }{
+		{"mattpocock/skills", "tdd", "tdd", "tdd"},
+		{"mattpocock/skills", "grill-me", "Grill Me", "grill-me"},
+		{"anthropics/skills", "pdf", "pdf", "pdf"},
+		{"anthropics/skills", "docx", "docx", ""},
+	} {
+		if got := l.haveSkill(c.source, c.id, c.name); got != c.want {
+			t.Errorf("haveSkill(%s, %s) = %q, want %q", c.source, c.id, got, c.want)
+		}
 	}
 }

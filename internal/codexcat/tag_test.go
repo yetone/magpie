@@ -2,6 +2,7 @@ package codexcat
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -11,6 +12,7 @@ import (
 // the size it assumes of any; one not known leaves it to Codex.
 func TestEntriesCarryContextWindow(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
 	var got struct {
 		Models []map[string]any `json:"models"`
 	}

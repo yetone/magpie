@@ -10,6 +10,7 @@ package gateway
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -299,12 +300,27 @@ func (t *trace) begin(r Route) *Route {
 	}
 	rp := &r
 	t.routes = append(t.routes, rp)
-	if len(t.routes) > traceKeep {
-		t.routes = t.routes[len(t.routes)-traceKeep:]
-	}
+	t.trim()
 	t.changed()
 	rp.Seq = t.seq
 	return rp
+}
+
+// trim keeps traceKeep routes, the oldest finished ones going first: a
+// request still going isn't dropped for those that came after it (#436),
+// as the history has only finished ones, unless more than twice traceKeep
+// are going at once.
+func (t *trace) trim() {
+	for len(t.routes) > traceKeep {
+		i := slices.IndexFunc(t.routes, func(r *Route) bool { return r.Done })
+		if i < 0 {
+			if len(t.routes) <= 2*traceKeep {
+				return
+			}
+			i = 0
+		}
+		t.routes = slices.Delete(t.routes, i, i+1)
+	}
 }
 
 // update changes a route under the lock.

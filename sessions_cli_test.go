@@ -20,6 +20,7 @@ func sessionsHome(t *testing.T) time.Time {
 	t.Helper()
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	// OpenCode's and Pi's folders in the sandbox too (HOME isn't the home
@@ -28,6 +29,7 @@ func sessionsHome(t *testing.T) time.Time {
 	t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(h, ".pi", "agent"))
 	t.Setenv("OPENCODE_DB", "")
 	t.Setenv("PI_CODING_AGENT_SESSION_DIR", "")
+	t.Setenv("DSH_HOME", "")
 	for from, env := range map[string]string{"claude": "CLAUDE_CONFIG_DIR", "codex": "CODEX_HOME"} {
 		dir := filepath.Join(h, "."+from)
 		if err := os.CopyFS(dir, os.DirFS(filepath.Join("internal", "sessions", "testdata", from))); err != nil {

@@ -56,6 +56,8 @@ func TestDesktopSessionAccountMetadata(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	root := sessions.DesktopDataDirs()[0]
 	root3p := sessions.DesktopDataDirs()[1]
@@ -101,6 +103,8 @@ func TestLedgerResolvesOAuthIdentityAndExportsIt(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	if err := os.MkdirAll(sessions.CodexDir(), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -136,6 +140,8 @@ func TestModelsNeverEstablishProviderOrAccount(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	at := time.Now()
 	logs := []sessions.Call{
 		{Time: at, Agent: "claude", Model: "claude-opus-5", Requested: "claude-opus-5[1m]"},
@@ -222,6 +228,8 @@ func TestLedgerKeepsLocalAccountsSeparateFromGatewayProviders(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 	if err := os.MkdirAll(sessions.CodexDir(), 0700); err != nil {
 		t.Fatal(err)
 	}

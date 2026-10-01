@@ -13,6 +13,7 @@ import (
 func TestGeminiNotAntigravity(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("PATH", t.TempDir())
 	dir := filepath.Join(home, ".gemini")
 	for _, d := range []string{"antigravity", "config", "antigravity-cli"} {

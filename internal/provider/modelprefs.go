@@ -414,10 +414,14 @@ func (e Entry) Label() string {
 // when the user wants names plain (settings' PlainNames, #335), by the
 // name alone — but for two or more the list would call the same, as a
 // routing group found for a model is called with that model left in the
-// list, which keep their provider's after it to tell them apart.
+// list, which keep their provider's after it to tell them apart. With
+// their own names plain (PlainOwnNames, #92), a name the user gave a model
+// is that name just as they wrote it, and the vendor's keep Label's.
 func Labels(es []Entry) []string {
 	out := make([]string, len(es))
-	plain := settings.Load().PlainNames
+	s := settings.Load()
+	plain := s.PlainNames
+	own := !plain && s.PlainOwnNames
 	same := map[string]int{}
 	if plain {
 		for _, e := range es {
@@ -426,26 +430,67 @@ func Labels(es []Entry) []string {
 	}
 	for i, e := range es {
 		out[i] = e.Label()
-		if plain && e.Name != "" && same[strings.ToLower(e.Name)] == 1 {
+		if plain && e.Name != "" && same[strings.ToLower(e.Name)] == 1 || own && e.Default != "" && e.Name != "" {
 			out[i] = e.Name
 		}
 	}
 	return out
 }
 
-// SetPlainNames has the agents' model lists name models by their names
-// alone (see Labels), or with their providers' again, and the agents told.
-func SetPlainNames(on bool) error {
+// The ways the agents' lists name models (SuffixMode): every name with its
+// provider's after it, as by default; all but the names the user gave
+// models (#92); or none (#335).
+const (
+	SuffixOn  = "on"
+	SuffixOwn = "own"
+	SuffixOff = "off"
+)
+
+// SuffixMode is how the agents' lists name models: SuffixOn, SuffixOwn or
+// SuffixOff.
+func SuffixMode() string {
 	s := settings.Load()
-	if s.PlainNames == on {
+	switch {
+	case s.PlainNames:
+		return SuffixOff
+	case s.PlainOwnNames:
+		return SuffixOwn
+	}
+	return SuffixOn
+}
+
+// SetSuffixMode has the agents' model lists name models as mode says (see
+// Labels), and the agents told when it changes.
+func SetSuffixMode(mode string) error {
+	plain, own := false, false
+	switch mode {
+	case SuffixOn:
+	case SuffixOwn:
+		own = true
+	case SuffixOff:
+		plain = true
+	default:
+		return fmt.Errorf("provider in model names: on, own or off, not %q", mode)
+	}
+	s := settings.Load()
+	if s.PlainNames == plain && s.PlainOwnNames == own {
 		return nil
 	}
-	s.PlainNames = on
+	s.PlainNames, s.PlainOwnNames = plain, own
 	if err := settings.Save(s); err != nil {
 		return err
 	}
 	catalog.Touched()
 	return nil
+}
+
+// SetPlainNames has the agents' model lists name models by their names
+// alone (see Labels), or with their providers' again, and the agents told.
+func SetPlainNames(on bool) error {
+	if on {
+		return SetSuffixMode(SuffixOff)
+	}
+	return SetSuffixMode(SuffixOn)
 }
 
 // ModelNames are the names the user gave the provider's models, by model id.
