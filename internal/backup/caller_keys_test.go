@@ -115,3 +115,22 @@ func TestOlderBackupRecoversLegacyGatewayCredential(t *testing.T) {
 		t.Fatal("old backup's migration marker lost its credential", who, ok)
 	}
 }
+
+func TestGatewayKeysBackupWithoutSettingsFile(t *testing.T) {
+	home(t)
+	secret, err := access.Update("add-key", access.Change{Name: "CLI client"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := Collect(true, "test")
+	if err != nil || b.Settings != nil {
+		t.Fatal("CLI-only key fixture unexpectedly has settings", err)
+	}
+	home(t)
+	if _, err := Restore(b, Parts{Settings: true}); err != nil {
+		t.Fatal(err)
+	}
+	if who, ok := access.Authenticate(secret); !ok || who.KeyName != "CLI client" {
+		t.Fatal("standalone CLI key was not restored", who, ok)
+	}
+}

@@ -1,37 +1,5 @@
 # Dropdown browser regression
 
-`gateway-caller-keys.test.cjs` checks the named caller-key list on the
-Gateway page, including creation, copying, renaming, disabling, enabling,
-rotation and deletion. It verifies key-level usage overview, request filtering and
-CSV export in Chinese and English on Chromium and WebKit. The fixtures do
-not access local credentials. Gateway keys appear only while sharing is on, with one create entry point
-and confirmation before rotation/removal (Cancel and Escape send no mutation).
-Gateway is the only key-management page;
-Settings controls sharing and shows addresses. The test checks that toggling
-sharing retains the key, and that a removed default key is recreated as
-Magpie and appears in Gateway without a reload.
-
-`gateway-connect-keys.test.cjs` selects loopback and LAN addresses and enabled
-caller keys for Shell, curl, Python and Node examples across all four APIs.
-It checks rotation, disabling, removal, stale list responses, empty states,
-literal custom names and narrow layouts in Chinese and English on both engines.
-
-`api-key-usage.test.cjs` exercises the existing provider key list: adding,
-enabling and disabling, choosing the first key, renaming and removing.
-The Usage page's Gateway key rows, request filter and CSV exports identify
-client keys, not those provider credentials. A client using different
-upstream keys stays grouped together; renaming an upstream key does not
-rename the client. It also checks historical records, Chinese and English,
-and the narrow window in Chromium and WebKit.
-The API fixtures use test keys and never read local user configuration.
-
-`api-key-theme.test.cjs` checks Gateway's enabled and disabled keys, creation
-and renaming inputs, rotation and key picker, plus Settings' LAN address
-controls against the global palette.
-Light and Dark override the OS; System follows live OS palette changes.
-The settings theme picker is also switched and reloaded in Chromium and
-WebKit. No separate colours are defined for gateway keys.
-
 `session-terminal.test.cjs` checks the macOS Settings choice for installed
 `.command` handlers in English and Chinese. The system default appears once
 and is selected at first. It selects Ghostty, changes the theme, then returns
@@ -679,7 +647,7 @@ with `/api/plugins` faked.
 With Node.js and Playwright available:
 
 ```sh
-node --test internal/gui/tests/menu-scroll.test.cjs internal/gui/tests/click-scroll.test.cjs internal/gui/tests/panel-fold.test.cjs internal/gui/tests/rollup-short.test.cjs internal/gui/tests/panel-routing.test.cjs internal/gui/tests/gateway-fold.test.cjs internal/gui/tests/routing-kind.test.cjs internal/gui/tests/balance-fix.test.cjs internal/gui/tests/cli-update.test.cjs internal/gui/tests/login-import.test.cjs internal/gui/tests/agy-launch.test.cjs internal/gui/tests/currency.test.cjs internal/gui/tests/usage-ledger.test.cjs internal/gui/tests/update-check.test.cjs internal/gui/tests/omarchy.test.cjs internal/gui/tests/brand.test.cjs internal/gui/tests/library-loading.test.cjs node --test internal/gui/tests/signin-callback.test.cjs internal/gui/tests/routing-steady.test.cjs internal/gui/tests/old-webkit.test.cjs internal/gui/tests/session-terminal.test.cjs internal/gui/tests/text-size.test.cjs internal/gui/tests/zcode-site.test.cjs internal/gui/tests/rail-tip.test.cjs internal/gui/tests/sync-update.test.cjs internal/gui/tests/plugin-signin.test.cjs internal/gui/tests/plugin-market.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/routing-wb-refused.test.cjs internal/gui/tests/routing-shape.test.cjs internal/gui/tests/market-have.test.cjs internal/gui/tests/sessions-today.test.cjs internal/gui/tests/routing-side-calls.test.cjs internal/gui/tests/import-all-skills.test.cjs internal/gui/tests/routing-flood.test.cjs internal/gui/tests/routing-busy.test.cjs internal/gui/tests/own-skill.test.cjs internal/gui/tests/routing-manual.test.cjs internal/gui/tests/tray-usages.test.cjs internal/gui/tests/provider-remove.test.cjs internal/gui/tests/signin-link.test.cjs internal/gui/tests/tray-inuse.test.cjs internal/gui/tests/codex-auto-reset.test.cjs internal/gui/tests/routing-auto-reset.test.cjs internal/gui/tests/claude-usage-asked.test.cjs internal/gui/tests/claude-risk.test.cjs internal/gui/tests/library-toggle-status.test.cjs internal/gui/tests/library-all.test.cjs internal/gui/tests/routing-reroute-title.test.cjs internal/gui/tests/plain-names.test.cjs internal/gui/tests/panel-effort.test.cjs internal/gui/tests/agent-models-all-hidden.test.cjs internal/gui/tests/omp-roles.test.cjs internal/gui/tests/claude-effort.test.cjs internal/gui/tests/remote-magpie.test.cjs internal/gui/tests/qoder-cn-tile.test.cjs internal/gui/tests/provider-levels-scroll.test.cjs internal/gui/tests/signin-paste-codex.test.cjs internal/gui/tests/usage-alert.test.cjs internal/gui/tests/quota-families.test.cjs internal/gui/tests/provider-search.test.cjs internal/gui/tests/webdav-settings-refresh.test.cjs internal/gui/tests/lan-docker.test.cjs internal/gui/tests/plugin-key-hint.test.cjs internal/gui/tests/update-hide.test.cjs internal/gui/tests/tray-logos.test.cjs internal/gui/tests/routing-proxy.test.cjs internal/gui/tests/sse-body.test.cjs internal/gui/tests/remote-group-served.test.cjs internal/gui/tests/plugin-move-overflow.test.cjs
+node --test --test-concurrency=1 internal/gui/tests/menu-scroll.test.cjs internal/gui/tests/click-scroll.test.cjs internal/gui/tests/panel-fold.test.cjs internal/gui/tests/rollup-short.test.cjs internal/gui/tests/panel-routing.test.cjs internal/gui/tests/gateway-fold.test.cjs internal/gui/tests/routing-kind.test.cjs internal/gui/tests/balance-fix.test.cjs internal/gui/tests/cli-update.test.cjs internal/gui/tests/login-import.test.cjs internal/gui/tests/agy-launch.test.cjs internal/gui/tests/currency.test.cjs internal/gui/tests/usage-ledger.test.cjs internal/gui/tests/update-check.test.cjs internal/gui/tests/omarchy.test.cjs internal/gui/tests/brand.test.cjs internal/gui/tests/library-loading.test.cjs internal/gui/tests/signin-callback.test.cjs internal/gui/tests/routing-steady.test.cjs internal/gui/tests/old-webkit.test.cjs internal/gui/tests/session-terminal.test.cjs internal/gui/tests/text-size.test.cjs internal/gui/tests/zcode-site.test.cjs internal/gui/tests/rail-tip.test.cjs internal/gui/tests/sync-update.test.cjs internal/gui/tests/plugin-signin.test.cjs internal/gui/tests/plugin-market.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/routing-wb-refused.test.cjs internal/gui/tests/routing-shape.test.cjs internal/gui/tests/market-have.test.cjs internal/gui/tests/sessions-today.test.cjs internal/gui/tests/routing-side-calls.test.cjs internal/gui/tests/import-all-skills.test.cjs internal/gui/tests/routing-flood.test.cjs internal/gui/tests/routing-busy.test.cjs internal/gui/tests/own-skill.test.cjs internal/gui/tests/routing-manual.test.cjs internal/gui/tests/tray-usages.test.cjs internal/gui/tests/provider-remove.test.cjs internal/gui/tests/signin-link.test.cjs internal/gui/tests/tray-inuse.test.cjs internal/gui/tests/codex-auto-reset.test.cjs internal/gui/tests/routing-auto-reset.test.cjs internal/gui/tests/claude-usage-asked.test.cjs internal/gui/tests/claude-risk.test.cjs internal/gui/tests/library-toggle-status.test.cjs internal/gui/tests/library-all.test.cjs internal/gui/tests/routing-reroute-title.test.cjs internal/gui/tests/plain-names.test.cjs internal/gui/tests/panel-effort.test.cjs internal/gui/tests/agent-models-all-hidden.test.cjs internal/gui/tests/omp-roles.test.cjs internal/gui/tests/claude-effort.test.cjs internal/gui/tests/remote-magpie.test.cjs internal/gui/tests/qoder-cn-tile.test.cjs internal/gui/tests/provider-levels-scroll.test.cjs internal/gui/tests/signin-paste-codex.test.cjs internal/gui/tests/usage-alert.test.cjs internal/gui/tests/quota-families.test.cjs internal/gui/tests/provider-search.test.cjs internal/gui/tests/webdav-settings-refresh.test.cjs internal/gui/tests/lan-docker.test.cjs internal/gui/tests/plugin-key-hint.test.cjs internal/gui/tests/update-hide.test.cjs internal/gui/tests/tray-logos.test.cjs internal/gui/tests/routing-proxy.test.cjs internal/gui/tests/sse-body.test.cjs internal/gui/tests/remote-group-served.test.cjs internal/gui/tests/plugin-move-overflow.test.cjs internal/gui/tests/gateway-caller-keys.test.cjs internal/gui/tests/gateway-connect-keys.test.cjs internal/gui/tests/api-key-usage.test.cjs internal/gui/tests/api-key-theme.test.cjs
 ```
 
 If Playwright is installed outside the repository, set `NODE_PATH` to the
@@ -693,3 +661,37 @@ instead of Playwright's Chromium.
 Set `BROWSER=chromium` or `BROWSER=webkit` for one engine. Set `ARTIFACT_DIR` to
 an external directory to retain screenshots and Playwright traces, including
 failed assertions. These browser checks run separately from `make test`.
+
+`gateway-caller-keys.test.cjs` checks the named caller-key list on the
+Gateway page, including creation, copying, renaming, disabling, enabling,
+rotation and deletion. It verifies key-level usage overview, request filtering and
+CSV export in Chinese and English on Chromium and WebKit. The fixtures do
+not access local credentials. Gateway keys appear only while sharing is on, with one create entry point
+and confirmation before rotation/removal (Cancel and Escape send no mutation).
+Gateway is the only key-management page;
+Settings controls sharing and shows addresses. The test checks that toggling
+sharing retains the key, and that a removed default key is recreated as
+Magpie and appears in Gateway without a reload.
+
+`gateway-connect-keys.test.cjs` selects loopback and LAN addresses and enabled
+caller keys for Shell, curl, Python and Node examples across all four APIs.
+It checks rotation, disabling, removal, stale list responses, empty states,
+literal custom names and narrow layouts in Chinese and English on both engines.
+Sharing off keeps the original API-key field and hides the gateway-key picker;
+sharing on names the arbitrary local option separately from the Magpie key.
+
+`api-key-usage.test.cjs` exercises the existing provider key list: adding,
+enabling and disabling, choosing the first key, renaming and removing.
+The Usage page's Gateway key rows, request filter and CSV exports identify
+client keys, not those provider credentials. A client using different
+upstream keys stays grouped together; renaming an upstream key does not
+rename the client. It also checks historical records, Chinese and English,
+and the narrow window in Chromium and WebKit.
+The API fixtures use test keys and never read local user configuration.
+
+`api-key-theme.test.cjs` checks Gateway's enabled and disabled keys, creation
+and renaming inputs, rotation and key picker, plus Settings' LAN address
+controls against the global palette.
+Light and Dark override the OS; System follows live OS palette changes.
+The settings theme picker is also switched and reloaded in Chromium and
+WebKit. No separate colours are defined for gateway keys.
