@@ -384,6 +384,9 @@ func stepfunTime(v any) (time.Time, bool) {
 //
 // what is left of each as a fraction. A plan without a window tells it
 // as 0 left and 0 for its reset, which is no window rather than one used up.
+// Credits that never reset (a monthly plan's, gone when the plan ends) tell
+// their reset as 0 too, but come with credit_buckets: those are a window
+// with no reset.
 func readStepPlan(b []byte) ([]QuotaWindow, error) {
 	var r struct {
 		FiveLeft    any `json:"five_hour_usage_left_rate"`
@@ -391,28 +394,33 @@ func readStepPlan(b []byte) ([]QuotaWindow, error) {
 		WeekLeft    any `json:"weekly_usage_left_rate"`
 		WeekReset   any `json:"weekly_usage_reset_time"`
 		CreditLimit struct {
-			Left  any `json:"subscription_credit_left_rate"`
-			Reset any `json:"subscription_credit_reset_time"`
+			Left    any               `json:"subscription_credit_left_rate"`
+			Reset   any               `json:"subscription_credit_reset_time"`
+			Buckets []json.RawMessage `json:"credit_buckets"`
 		} `json:"plan_credit_rate_limit"`
 	}
 	if err := json.Unmarshal(b, &r); err != nil {
 		return nil, err
 	}
 	var out []QuotaWindow
-	add := func(name string, span time.Duration, left, reset any) {
+	add := func(name string, span time.Duration, left, reset any, resetless bool) {
 		at, ok := stepfunTime(reset)
-		if !ok {
+		if !ok && !resetless {
 			return
 		}
-		l, ok := stepfunRate(left)
-		if !ok {
+		l, lok := stepfunRate(left)
+		if !lok {
 			return
 		}
-		out = append(out, QuotaWindow{Name: name, Span: span, Used: (1 - l) * 100, ResetsAt: &at})
+		w := QuotaWindow{Name: name, Span: span, Used: (1 - l) * 100}
+		if ok {
+			w.ResetsAt = &at
+		}
+		out = append(out, w)
 	}
-	add("5 hours", 5*time.Hour, r.FiveLeft, r.FiveReset)
-	add("7 days", 7*24*time.Hour, r.WeekLeft, r.WeekReset)
-	add("Credits", 0, r.CreditLimit.Left, r.CreditLimit.Reset)
+	add("5 hours", 5*time.Hour, r.FiveLeft, r.FiveReset, false)
+	add("7 days", 7*24*time.Hour, r.WeekLeft, r.WeekReset, false)
+	add("Credits", 0, r.CreditLimit.Left, r.CreditLimit.Reset, len(r.CreditLimit.Buckets) > 0)
 	return out, nil
 }
 
