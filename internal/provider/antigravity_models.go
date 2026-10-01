@@ -39,6 +39,14 @@ func splitAntigravityID(id string) (family, effort string) {
 	return id, ""
 }
 
+// EffortFamily is the model an id with an effort word after it is a level
+// of ("gemini-3.8-flash-medium" is gemini-3.8-flash), and the id itself
+// when it has none.
+func EffortFamily(id string) string {
+	f, _ := splitAntigravityID(id)
+	return f
+}
+
 // antigravityNameEffort is the level a name's last words in brackets say
 // ("Gemini 3.7 Flash (High)" is high), and the name without them.
 func antigravityNameEffort(name string) (string, string) {

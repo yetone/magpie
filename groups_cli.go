@@ -37,10 +37,15 @@ const groupUsage = `usage:
                                           (as clicking it on the group's card in the Routing view does)
   magpie group rm <id>                    remove a group (one magpie found is hidden instead)
   magpie group restore <id>               bring back a group magpie found that you removed
+  magpie group auto [on|off]              whether magpie finds groups on its own (on by default); off, none is
+                                          listed or served — yours, and found ones you changed, stay — and an
+                                          agent set to one is moved to its model from one provider; on brings
+                                          them back
   magpie group rule add|rm|mv <id> …      rules: which model a turn goes to first, by its length, an image,
                                           the reasoning asked for or the agent (magpie group rule help)
 
-  magpie finds a group for each model two or more providers serve (auto-<model>, never stored);
+  magpie finds a group for each model two or more providers serve (auto-<model>, never stored;
+  magpie group auto off stops it);
   removing one stores {"id":…,"hidden":true} in providers.json, which is what keeps it removed:
   take that record out of the file and the group is back
 
@@ -529,6 +534,8 @@ func groupCmd(args []string) error {
 			return err
 		}
 		return showGroup(g)
+	case "auto", "found":
+		return autoGroupsCmd(rest)
 	case "restore", "unhide":
 		if len(rest) != 1 {
 			return fmt.Errorf("magpie group restore <id>")
@@ -723,6 +730,42 @@ func catalogByID() map[string]provider.Entry {
 }
 
 // groups: `magpie groups`
+// autoGroupsCmd says whether magpie finds groups on its own, or turns
+// that on or off: off, the agents set to one are moved to its model from
+// one provider (agent.Reseat), as the Routing view's switch does.
+func autoGroupsCmd(args []string) error {
+	if len(args) == 0 {
+		if provider.AutoGroupsOn() {
+			fmt.Println("found groups are", green.Render("on"), muted.Render("· a model two or more providers serve is a group of them (auto-<model>); magpie group auto off turns them off"))
+		} else {
+			fmt.Println("found groups are", amber.Render("off"), muted.Render("· only the groups you made or changed; magpie group auto on brings the others back"))
+		}
+		return nil
+	}
+	var on bool
+	switch strings.ToLower(args[0]) {
+	case "on", "true", "yes", "1":
+		on = true
+	case "off", "false", "no", "0":
+	default:
+		return fmt.Errorf("magpie group auto [on|off]")
+	}
+	if len(args) > 1 {
+		return fmt.Errorf("magpie group auto [on|off]")
+	}
+	moved, err := agent.Reseat(func() error { return provider.SetAutoGroups(on) })
+	if err != nil {
+		return err
+	}
+	defer printMoved(moved)
+	if on {
+		fmt.Println(green.Render("✓"), "found groups are on", muted.Render("· a model two or more providers serve is a group of them again"))
+	} else {
+		fmt.Println(green.Render("✓"), "found groups are off", muted.Render("· the groups you made or changed stay; a request for an auto- group goes to its model from one provider"))
+	}
+	return nil
+}
+
 func groups() error {
 	all := provider.Groups()
 	var shown, hidden []provider.Group
@@ -735,6 +778,9 @@ func groups() error {
 	}
 	if len(shown) == 0 {
 		fmt.Println(muted.Render("no routing groups yet ·"), "magpie group add <name> models=<m1>,<m2>", muted.Render("· magpie group help"))
+	}
+	if !provider.AutoGroupsOn() {
+		defer fmt.Println(" ", muted.Render("found groups are off · magpie group auto on brings them back"))
 	}
 	names, uses := catalogByID(), groupUses()
 	for _, e := range provider.Served() {

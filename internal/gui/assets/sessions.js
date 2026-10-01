@@ -19,6 +19,7 @@
   let openedFor = "";         // the agent the folders were first unfolded for
   let detail = "";            // the session opened to its details
   let loading = 0;
+  let fitObserver = null;
 
   const TRASH = "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4";
   const TERM = "M3 4.5 6 7.5 3 10.5M7.5 11.5h5.5";
@@ -49,31 +50,81 @@
   };
 
   function draw() {
+    const keepFocus = page.querySelector(".sm-agent-pick:focus, .sm-agents .opt:focus");
+    fitObserver?.disconnect();
+    if (page.querySelector(".sm-agent-pick.open")) closeProtoMenu();
     page.classList.toggle("loading", !data?.sessions && !failed);
     page.replaceChildren(head(), body());
+    const wrap = page.querySelector(".sm-switch");
+    const tabs = wrap.querySelector(".sm-agents");
+    const pick = wrap.querySelector(".sm-agent-pick");
+    const fit = () => {
+      const room = parseFloat(getComputedStyle(wrap).width);
+      if (!room) return;
+      const focused = document.activeElement;
+      // Measure the actual labels, including language, font and text zoom,
+      // rather than guessing a breakpoint or a number of agents.
+      tabs.hidden = false;
+      const compact = tabs.scrollWidth > Math.floor(room);
+      tabs.hidden = compact || !data?.agents.length;
+      pick.hidden = !compact || !current();
+      if (!compact && pick.classList.contains("open")) closeProtoMenu();
+      if (compact && tabs.contains(focused)) pick.focus({ preventScroll: true });
+      else if (!compact && focused === pick) tabs.querySelector(".on")?.focus({ preventScroll: true });
+    };
+    fitObserver = new ResizeObserver(fit);
+    fitObserver.observe(wrap);
+    fit();
+    if (keepFocus) (pick.hidden ? tabs.querySelector(".on") : pick)?.focus({ preventScroll: true });
+  }
+
+  function chooseAgent(name) {
+    if (name === data.agent && !trashOn) return;
+    trashOn = false;
+    agent = name;
+    try { localStorage.setItem("magpie.sessionsAgent", name); } catch {}
+    picked.clear();
+    detail = "";
+    data = { ...data, agent: name, sessions: null };
+    draw();
+    load(name);
   }
 
   function head() {
     const h = el("div", "usage-head sm-head");
-    const seg = el("div", "segs regions sm-agents");
-    for (const a of data?.agents || []) {
-      const b = el("button", "opt" + (a.agent === data.agent && !trashOn ? " on" : ""));
+    const wrap = el("div", "sm-switch");
+    const tabs = el("div", "segs regions sm-agents");
+    for (const x of data?.agents || []) {
+      const on = x.agent === data.agent && !trashOn;
+      const b = el("button", "opt" + (on ? " on" : ""));
       b.type = "button";
-      b.append(icon(a.icon), el("span", "", a.name), el("em", "", String(a.count)));
-      b.onclick = () => {
-        if (a.agent === data.agent && !trashOn) return;
-        trashOn = false;
-        agent = a.agent;
-        try { localStorage.setItem("magpie.sessionsAgent", a.agent); } catch {}
-        picked.clear();
-        detail = "";
-        data = { ...data, agent: a.agent, sessions: null };
-        draw();
-        load(a.agent);
-      };
-      seg.append(b);
+      b.setAttribute("aria-pressed", String(on));
+      b.append(icon(x.icon), el("span", "", x.name), el("em", "", String(x.count)));
+      b.onclick = () => chooseAgent(x.agent);
+      tabs.append(b);
     }
-    h.append(seg, el("span", "grow"));
+    const a = current();
+    const pick = el("button", "sess-pick sm-agent-pick");
+    pick.type = "button";
+    pick.hidden = !a;
+    pick.disabled = (data?.agents.length || 0) < 2;
+    pick.setAttribute("aria-haspopup", "menu");
+    pick.setAttribute("aria-expanded", "false");
+    if (a) {
+      pick.title = a.name;
+      pick.append(icon(a.icon), el("span", "", a.name), el("em", "", String(a.count)), svg(CHEV, 11, 1.6));
+      pick.onclick = (e) => {
+        e.stopPropagation();
+        if (pick.classList.contains("open")) return closeProtoMenu();
+        const opts = data.agents.map((x) => ({ v: x.agent, name: x.name, note: String(x.count), literalName: true }));
+        openProtoMenu(pick, opts, data.agent, (name) => {
+          pick.focus({ preventScroll: true });
+          chooseAgent(name);
+        }, "Agent", "sm-agent-menu");
+      };
+    }
+    wrap.append(tabs, pick);
+    h.append(wrap);
     const q = el("input", "sess-filter sm-filter");
     q.type = "search";
     q.spellcheck = false;
@@ -257,7 +308,7 @@
     };
     line(t("Time"), stamp(s.start || s.last) + " – " + stamp(s.last));
     if (s.cwd) line(t("Folder"), s.cwd);
-    line(t("Session"), s.id, copyBtn(s.id, t("Session id")));
+    line(t("Session ID"), s.id, copyBtn(s.id, t("Session id")));
     if (s.resume) line(t("Resume"), el("code", "", s.resume), copyBtn(s.resume, t("Resume command")));
     if (s.path) line(t("File"), s.path + (s.files > 1 ? " " + t("+{n} more", { n: s.files - 1 }) : ""));
     return d;

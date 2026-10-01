@@ -5275,11 +5275,10 @@ function renderModels(p) {
     try {
       const r = await api("provider/models", { ...asTyped(), id: p.id });
       status(t("{p}: {n} models", { p: p.name, n: r.count }), "ok");
-      const chosen = draft.chosen;
+      // the redraw keeps the editor's draft, the picks in it with it: none
+      // are put back by hand, which put them in whichever editor was open
+      // by then, another provider's too (#464)
       await loadProviders();
-      draft = draft || {};
-      draft.chosen = chosen;
-      renderProviders();
     } catch (e) { status(e.message, "err"); refresh.classList.remove("busy"); }
   };
   // each model the agents see gets a tiny request of its own: a vendor
@@ -5330,7 +5329,7 @@ function renderModels(p) {
     forget.title = t("Drop the list fetched from the vendor; the models.dev one is used until Refresh");
     forget.onclick = async () => {
       forget.classList.add("busy");
-      try { await api("provider/unfetch", { id: p.id }); const chosen = draft.chosen; await loadProviders(); draft.chosen = chosen; renderProviders(); }
+      try { await api("provider/unfetch", { id: p.id }); await loadProviders(); } // the picks stay in the draft, as on a Refresh
       catch (e) { status(e.message, "err"); forget.classList.remove("busy"); }
     };
     foot.append(forget);
@@ -6597,6 +6596,7 @@ let protoMenu = null;
 function closeProtoMenu() {
   if (!protoMenu) return;
   protoMenu.anchor.classList.remove("open");
+  if (protoMenu.anchor.hasAttribute("aria-expanded")) protoMenu.anchor.setAttribute("aria-expanded", "false");
   protoMenu.box.remove();
   document.removeEventListener("mousedown", protoMenu.outside, true);
   document.removeEventListener("keydown", protoMenu.keys, true);
@@ -6651,6 +6651,7 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   box.style.left = Math.max(pad, Math.min(r.left, innerWidth - w - pad)) + "px";
   box.style.top = Math.max(pad, y) + "px";
   anchor.classList.add("open");
+  if (anchor.hasAttribute("aria-expanded")) anchor.setAttribute("aria-expanded", "true");
   const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
   // Scrolling the menu keeps it open; scrolling outside moves its anchor.
   const scroll = (e) => { if (!box.contains(e.target)) closeProtoMenu(); };
@@ -6802,11 +6803,11 @@ async function providerAction(action, body, okMsg, base = "provider/") {
 // saidMoved says what was done, and which agents it moved off models it
 // took away (a provider switched off or removed, the last account signed
 // out: #200), each to the same model elsewhere or back to its default.
-function saidMoved(okMsg) {
+function saidMoved(okMsg, list = providers?.moved) {
   // one magpie couldn't move (its file unwritable) is still on the model
   // gone, and the change made all the same
   let stuck = false;
-  const moved = (providers.moved || []).map((m) => {
+  const moved = (list || []).map((m) => {
     const who = m.field === "model" ? m.agent : m.agent + " " + m.field;
     if (m.error) { stuck = true; return t("{agent} is still on {model}, which magpie no longer serves: {error}", { agent: who, model: m.from, error: m.error }); }
     return m.to ? t("{agent} moved to {model}", { agent: who, model: m.to })
@@ -10050,7 +10051,7 @@ function sessionDetail(s) {
   };
   line(t("Time"), stamp(s.start) + " – " + stamp(s.last));
   if (s.cwd) line(t("Folder"), s.cwd);
-  line(t("Session"), s.id, copyBtn(s.id, t("Session id")));
+  line(t("Session ID"), s.id, copyBtn(s.id, t("Session id")));
   if (s.resume) {
     const code = el("code", "", s.resume);
     const l = el("div", "sess-line");

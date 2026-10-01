@@ -14,7 +14,7 @@ import (
 )
 
 const pluginUsage = `usage: magpie plugin [list] [--json]
-       magpie plugin add <npm package | path>      install an OpenCode provider plugin (opencode-gemini-auth, ./my-plugin.js)
+       magpie plugin add <npm | git | path>        install an OpenCode provider plugin (opencode-gemini-auth, github:owner/repo, ./my-plugin.js)
        magpie plugin rm <name>                     remove one
        magpie plugin update                        install the newest version of each
        magpie plugin on|off <name>                 turn one on or off
@@ -147,7 +147,7 @@ func listPlugins(ctx context.Context, asJSON bool) error {
 			fmt.Println("[]")
 			return nil
 		}
-		fmt.Println("No plugins. Add one: magpie plugin add <npm package | path>")
+		fmt.Println("No plugins. Add one: magpie plugin add <npm package | git repo | path>")
 		return nil
 	}
 	loaded, lerr := plugin.Plugins(ctx)
@@ -175,7 +175,12 @@ func listPlugins(ctx context.Context, asJSON bool) error {
 		case errs[e.Spec] != "":
 			state = "failed: " + errs[e.Spec]
 		}
-		fmt.Printf("%s  %s\n", bold.Render(e.Spec), state)
+		what := bold.Render(e.Spec)
+		// a git repository's package is named by its own package.json
+		if n := plugin.Name(e.Spec); plugin.IsGit(e.Spec) && n != e.Spec {
+			what += " " + muted.Render("("+strings.TrimSpace(n+" "+plugin.Installed(e.Spec))+")")
+		}
+		fmt.Printf("%s  %s\n", what, state)
 		for _, p := range ps {
 			if p.Spec != e.Spec {
 				continue

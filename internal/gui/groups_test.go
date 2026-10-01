@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,5 +50,43 @@ func TestGroupSaveRenames(t *testing.T) {
 	}
 	if g, _, _ := provider.FindGroup("group/gpt-6-astra"); g.Name != "Astra 2" {
 		t.Fatalf("%+v", g)
+	}
+}
+
+// The Routing view's switch turns found groups off and on (蓝猫 on
+// Discord): the state says which, and off lists none of them.
+func TestGroupsFoundSwitch(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	for _, id := range []string{"a", "b"} {
+		if err := provider.Save(provider.Provider{ID: id, Name: id, Key: "k" + id, Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mux := http.NewServeMux()
+	groupRoutes(mux)
+	found := func(body string) groupsJSON {
+		t.Helper()
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/groups/found", strings.NewReader(body)))
+		if w.Code != 200 {
+			t.Fatalf("%s: %d %s", body, w.Code, w.Body)
+		}
+		var st groupsJSON
+		if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
+			t.Fatal(err)
+		}
+		return st
+	}
+	if st := groupsState(); !st.Found || len(st.Groups) != 1 {
+		t.Fatalf("on: %v %+v", st.Found, st.Groups)
+	}
+	if st := found(`{"on":false}`); st.Found || len(st.Groups) != 0 || provider.AutoGroupsOn() {
+		t.Fatalf("off: %v %+v", st.Found, st.Groups)
+	}
+	if st := found(`{"on":true}`); !st.Found || len(st.Groups) != 1 || st.Groups[0].ID != "auto-m" {
+		t.Fatalf("on again: %v %+v", st.Found, st.Groups)
 	}
 }

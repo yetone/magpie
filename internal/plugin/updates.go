@@ -62,9 +62,10 @@ const (
 func Official(pkg string) bool { return strings.HasPrefix(pkg, "@magpie-community/") }
 
 // Pinned is whether spec names a version (or a range or a tag other than
-// latest): the user chose it, and it stays.
+// latest): the user chose it, and it stays. A git one's version is its
+// repository's, not npm's: it is never pinned, and never asked of npm.
 func Pinned(spec string) bool {
-	if IsPath(spec) {
+	if IsPath(spec) || IsGit(spec) {
 		return false
 	}
 	v := strings.TrimPrefix(spec, Name(spec))
@@ -139,7 +140,8 @@ func CheckUpdates(ctx context.Context) (Updates, error) {
 	var es []Entry
 	var names []string
 	for _, e := range Load().Plugins {
-		if !IsPath(e.Spec) {
+		// a git one's package may be on npm too, as someone else's
+		if !IsPath(e.Spec) && !IsGit(e.Spec) {
 			es = append(es, e)
 			names = append(names, Name(e.Spec))
 		}

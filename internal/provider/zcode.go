@@ -39,6 +39,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -77,6 +78,9 @@ type zcodeKey struct {
 	Token   string `json:"token,omitempty"`
 	Org     string `json:"org,omitempty"`
 	Project string `json:"project,omitempty"`
+	// UID is the account's user id, as ZCode's sign-in names it: with the
+	// site, which account this is (zcodeSame).
+	UID string `json:"uid,omitempty"`
 }
 
 // ---- ZCode's own account ------------------------------------------------------
@@ -192,6 +196,7 @@ func zcodeOwn() (who string, k zcodeKey, ok bool) {
 			}
 		}
 	}
+	k.UID = strings.TrimSpace(info.ID)
 	return zcodeWho(info.Email, info.Name, info.ID), k, true
 }
 
@@ -622,6 +627,57 @@ func zcodeGet(ctx context.Context, u, key string, dst any) error {
 	return zcodeCall(ctx, http.MethodGet, u, key, nil, dst)
 }
 
+// zcodeSite is the site a key's account is on: "bigmodel" or "zai".
+func zcodeSite(k zcodeKey) string {
+	if k.Base == ZCodeBigModelBase || strings.HasSuffix(hostOf(k.Base), "bigmodel.cn") {
+		return "bigmodel"
+	}
+	return "zai"
+}
+
+// zcodeSame says two keys are the same account: on the same site, with the
+// same user id; one kept before magpie kept ids is told by its key's id,
+// and taken for the same when it has none, as it was before.
+func zcodeSame(a, b zcodeKey) bool {
+	if zcodeSite(a) != zcodeSite(b) {
+		return false
+	}
+	if a.UID != "" && b.UID != "" {
+		return a.UID == b.UID
+	}
+	ia, _, _ := strings.Cut(a.Key, ".")
+	ib, _, _ := strings.Cut(b.Key, ".")
+	return ia == "" || ib == "" || ia == ib
+}
+
+// zcodeName is the name an account signed in is kept under: who, as ZCode
+// names it, unless another account is kept under that name, then who and
+// its site, numbered when that is taken too. Accounts are kept by name, so
+// a Z.ai and a BigModel account on the same phone number, or two ZCode
+// names alike, took each other's place (Bandit on Discord). The same
+// account signed in again keeps its name and is updated in place.
+func zcodeName(who, site string, k zcodeKey, have []zcodeLoginKey) string {
+	if k.UID != "" {
+		for _, l := range have {
+			if l.key.UID == k.UID && zcodeSite(l.key) == site {
+				return l.User
+			}
+		}
+	}
+	for n := 1; ; n++ {
+		name := who
+		if n == 2 {
+			name = who + " (" + zcodeSiteName(site) + ")"
+		} else if n > 2 {
+			name = fmt.Sprintf("%s (%s %d)", who, zcodeSiteName(site), n-1)
+		}
+		i := slices.IndexFunc(have, func(l zcodeLoginKey) bool { return strings.EqualFold(l.User, name) })
+		if i < 0 || zcodeSame(have[i].key, k) {
+			return name
+		}
+	}
+}
+
 // ---- signing in ---------------------------------------------------------------
 
 // startZCodeSignIn is ZCode's own polling sign-in: zcode.z.ai opens a flow,
@@ -723,17 +779,22 @@ func startZCodeSignIn(s *signInFlow, site string) error {
 				fail("ZCode sign-in: unexpected answer " + got.Status)
 				return
 			}
-			who := zcodeWho(got.User.Email, got.User.Name, got.User.ID)
 			k, plan, err := zcodeSignedIn(ctx, site, token, strings.TrimSpace(got.Token))
 			if err != nil {
 				fail(err.Error())
 				return
 			}
-			auth, _ := json.Marshal(k)
-			ownUser, _, ok := zcodeOwn()
+			k.UID = strings.TrimSpace(got.User.ID)
+			ownUser, own, ok := zcodeOwn()
 			if !ok {
 				ownUser = ""
 			}
+			have := zcodeLogins()
+			if ok && !slices.ContainsFunc(have, func(l zcodeLoginKey) bool { return strings.EqualFold(l.User, ownUser) }) {
+				have = append(have, zcodeLoginKey{Login{User: ownUser}, own}) // removed in magpie, still ZCode's
+			}
+			who := zcodeName(zcodeWho(got.User.Email, got.User.Name, got.User.ID), site, k, have)
+			auth, _ := json.Marshal(k)
 			if err := addSideLogin(savedLogin{Agent: "zcode", User: who, Plan: plan, Auth: auth}, ownUser, func(savedLogin) {}); err != nil {
 				fail(err.Error())
 				return

@@ -583,7 +583,11 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	// Count the same masked prompt that generation sends to the vendor.
 	w, body, unmask := redacted(w, body)
 	defer unmask()
-	p, model, ok := provider.Resolve(unprefixed(model))
+	id := unprefixed(model)
+	if sid, ok := provider.AutoStandIn(id); ok {
+		id = sid
+	}
+	p, model, ok := provider.Resolve(id)
 	s.countOn(w, r, p, model, ok, body)
 }
 
@@ -833,6 +837,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		asked = desktopTurn(asked, body)
 	}
 	if id, ok := provider.GroupFor(asked); ok {
+		asked = id
+	} else if id, ok := provider.AutoStandIn(asked); ok {
+		// a group magpie found, while the user has those off: its model
+		// from one provider, rather than refused
 		asked = id
 	} else if m := standIn(agent, asked); m != "" {
 		asked = m

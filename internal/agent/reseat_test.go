@@ -177,3 +177,33 @@ func TestReseatUnmovable(t *testing.T) {
 		t.Errorf("String: %q", s)
 	}
 }
+
+// Found groups turned off (蓝猫 on Discord) take every group/auto-… away:
+// an agent on one is moved to its model from the first provider still
+// serving it, however that one spells it, rather than to its own default.
+func TestReseatFoundGroupsOff(t *testing.T) {
+	reseatHome(t)
+	c, h := mustFind(t, "claude"), mustFind(t, "hermes")
+	mustApply(t, c, "model", "group/auto-gpt-5")
+	mustApply(t, c, "opus", "group/auto-claude-sonnet-4-5")
+	mustApply(t, h, "model", "magpie/group/auto-gpt-5")
+	moves, err := Reseat(func() error { return provider.SetAutoGroups(false) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, w := range map[string]string{"model": "cop/gpt-5", "opus": "cop/claude-sonnet-4.5"} {
+		if got := c.Field(k).Get(); got != w {
+			t.Errorf("claude %s: %q, want %q", k, got, w)
+		}
+	}
+	if got := h.Field("model").Get(); got != "magpie/cop/gpt-5" {
+		t.Errorf("hermes: %q", got)
+	}
+	if len(moves) != 3 || moves[0].From != "group/auto-gpt-5" || moves[0].To != "cop/gpt-5" {
+		t.Errorf("moves: %+v", moves)
+	}
+	// on again, nobody is moved back or elsewhere
+	if moves, err = Reseat(func() error { return provider.SetAutoGroups(true) }); err != nil || len(moves) != 0 {
+		t.Fatalf("on again: %+v %v", moves, err)
+	}
+}

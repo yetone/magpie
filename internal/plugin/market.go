@@ -358,9 +358,10 @@ type Page struct {
 }
 
 // Readme is the package's README, as npm has it, or — for a plugin added
-// from a folder on this computer — the one that folder carries.
+// from a folder on this computer or a git repository — the one its folder
+// carries.
 func Readme(ctx context.Context, name string) (Page, error) {
-	if IsPath(name) {
+	if IsPath(name) || IsGit(name) {
 		return folderReadme(Target(name))
 	}
 	if !pkgName.MatchString(name) {
@@ -437,9 +438,15 @@ func Installed(spec string) string {
 	return p.Version
 }
 
-// Upgrade installs the newest version of one plugin.
+// Upgrade installs the newest version of one plugin: npm's, or its git
+// repository's commit now.
 func Upgrade(ctx context.Context, name string) error {
 	for _, e := range Load().Plugins {
+		if (Name(e.Spec) == name || e.Spec == name) && IsGit(e.Spec) {
+			err := reinstall(ctx, e.Spec)
+			Restart()
+			return err
+		}
 		if Name(e.Spec) == name && !IsPath(e.Spec) {
 			_, err := Add(ctx, name)
 			return err

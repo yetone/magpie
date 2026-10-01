@@ -215,3 +215,14 @@ func TestClaudeRunEndsWhenTheClientLeaves(t *testing.T) {
 		t.Fatal("Claude Code still runs after its client left")
 	}
 }
+
+// A run waiting for its conversation's next turn is kept as long as the
+// prompt cache Claude Code writes on a subscription lasts, an hour: let go
+// at twenty minutes, a turn after half an hour went to a new run told the
+// whole conversation in one message, which wrote all of it to the cache
+// again while what the old run wrote was still there to read (#463).
+func TestClaudeIdleRunKeptWhileItsCacheLasts(t *testing.T) {
+	if claudeCacheTTL < time.Hour || idleLongest < claudeCacheTTL {
+		t.Fatalf("an idle run is let go after %s, before the cache it wrote, kept %s, expires", idleLongest, claudeCacheTTL)
+	}
+}

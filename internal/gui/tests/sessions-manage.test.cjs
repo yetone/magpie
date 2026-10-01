@@ -89,6 +89,7 @@ const words = {
     active: "still running is still being written to; close it in Claude Code and try again in a minute",
     restored: "fix the login form restored", picked: "2 selected", filter: "Filter sessions",
     cant: "magpie can list OpenCode's sessions and resume them, but not delete them: they aren't kept as files of their own.",
+    idLine: "Session ID",
   },
   zh: {
     nav: "会话", del: "删除", cancel: "取消", trash: "回收站", restore: "恢复", resume: "继续",
@@ -96,6 +97,7 @@ const words = {
     active: "「still running」仍在写入；请在 Claude Code 中关闭它，一分钟后再试",
     restored: "已恢复「fix the login form」", picked: "已选 2 个", filter: "筛选会话",
     cant: "magpie 可以列出并继续 OpenCode 的会话，但不能删除：它们没有各自独立的文件。",
+    idLine: "会话 ID",
   },
 };
 
@@ -162,6 +164,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await still(row("a-9"), "opening a row", () => row("a-9").locator(".who").click());
       assert(await view.locator(".sess-detail").isVisible(), "the row opened to its details");
       assert((await view.locator(".sess-detail").textContent()).includes("claude --resume a-9"));
+      // the id's line is named for it (#465: it read 整个会话, the routing option's word)
+      assert((await view.locator(".sess-detail .sess-line .k").allInnerTexts()).includes(w.idLine));
 
       // picking: two rows, the page held still
       await still(row("a-old"), "picking", () => row("a-old").locator(".sm-check").click());

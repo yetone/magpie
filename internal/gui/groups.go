@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -20,6 +21,11 @@ type groupsJSON struct {
 	// Deciders: the decision providers' models (Jev), which may only be a
 	// group's classifier
 	Deciders []modelRef `json:"deciders"`
+	// Found: magpie finds groups on its own (provider.AutoGroupsOn)
+	Found bool `json:"found"`
+	// Moved: the agents turning found groups off moved off one of them,
+	// to its model from one provider (agent.Reseat)
+	Moved []agent.Move `json:"moved,omitempty"`
 }
 
 type groupJSON struct {
@@ -132,7 +138,7 @@ func keyPools(p provider.Provider) []poolJSON {
 }
 
 func groupsState() groupsJSON {
-	out := groupsJSON{Groups: []groupJSON{}, Models: []modelRef{}, Pools: []poolJSON{}, Deciders: []modelRef{}}
+	out := groupsJSON{Groups: []groupJSON{}, Models: []modelRef{}, Pools: []poolJSON{}, Deciders: []modelRef{}, Found: provider.AutoGroupsOn()}
 	for _, e := range provider.Deciders() {
 		out.Deciders = append(out.Deciders, modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon})
 	}
@@ -234,6 +240,7 @@ func groupRoutes(mux *http.ServeMux) {
 		var body struct {
 			provider.Group
 			From string `json:"from"` // the id the group had: another is a rename
+			On   bool   `json:"on"`   // found: magpie finds groups on its own
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			fail(rw, err)
@@ -241,7 +248,13 @@ func groupRoutes(mux *http.ServeMux) {
 		}
 		in := body.Group
 		var err error
+		var moved []agent.Move
 		switch r.PathValue("action") {
+		case "found":
+			// off, an agent set to a found group is moved to its model
+			// from one provider; a request still naming one goes there too
+			// (provider.AutoStandIn)
+			moved, err = agent.Reseat(func() error { return provider.SetAutoGroups(body.On) })
 		case "save":
 			to := strings.ToLower(strings.TrimSpace(in.ID))
 			if body.From == "" || body.From == to {
@@ -268,6 +281,8 @@ func groupRoutes(mux *http.ServeMux) {
 			fail(rw, err)
 			return
 		}
-		writeJSON(rw, groupsState())
+		st := groupsState()
+		st.Moved = moved
+		writeJSON(rw, st)
 	})
 }

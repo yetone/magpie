@@ -69,6 +69,9 @@ type pluginEntryJSON struct {
 	Providers []string `json:"providers"`         // the names of those it signs in to
 	Version   string   `json:"version,omitempty"` // installed
 	Latest    string   `json:"latest,omitempty"`  // on npm, when the market asked
+	// Package is the package installed from a git repository, which its
+	// own package.json names
+	Package string `json:"package,omitempty"`
 	// Moved are the built-in subscriptions moved onto it, which go back
 	// to themselves when it is removed or turned off
 	Moved []string `json:"moved"`
@@ -116,6 +119,9 @@ func pluginsState(ctx context.Context, w Windows) pluginsJSON {
 		if j.Providers == nil {
 			j.Providers = []string{}
 		}
+		if plugin.IsGit(e.Spec) {
+			j.Package = plugin.Name(e.Spec)
+		}
 		if u, ok := plugin.LastUpdated(plugin.Name(e.Spec), time.Now().Add(-autoUpdatedFor)); ok && !plugin.IsPath(e.Spec) {
 			j.AutoUpdated = &u
 		}
@@ -152,7 +158,9 @@ func pluginMarketState(ctx context.Context, w Windows) pluginMarketJSON {
 	}
 	<-done
 	for _, e := range st.Plugins {
-		if !plugin.IsPath(e.Spec) {
+		// a plugin from a git repository is that repository's, whatever
+		// npm has under its name
+		if !plugin.IsPath(e.Spec) && !plugin.IsGit(e.Spec) {
 			names = append(names, plugin.Name(e.Spec))
 		}
 	}
@@ -162,7 +170,9 @@ func pluginMarketState(ctx context.Context, w Windows) pluginMarketJSON {
 		m.Listings = append(m.Listings, pluginListingJSON{Listing: l, NPM: info[l.Package]})
 	}
 	for i, e := range m.State.Plugins {
-		m.State.Plugins[i].Latest = info[plugin.Name(e.Spec)].Version
+		if !plugin.IsGit(e.Spec) {
+			m.State.Plugins[i].Latest = info[plugin.Name(e.Spec)].Version
+		}
 	}
 	return m
 }

@@ -2019,7 +2019,10 @@
   const gsec = el("div", "rt-gsec");
   const gHead = el("div", "row-head"), gList = el("div", "list rt-groups");
   const pHead = el("div", "row-head"), pList = el("div", "list rt-pools");
-  gsec.append(gHead, gList, pHead, pList);
+  // whether magpie finds groups on its own, by the list it fills (蓝猫 on
+  // Discord: they could only be removed one at a time)
+  const gFound = el("div", "rt-gfound");
+  gsec.append(gHead, gFound, gList, pHead, pList);
   // after the requests: a request picked in the list plays on the stage,
   // so the list sits right under it
   more.append(gsec);
@@ -2104,11 +2107,14 @@
     const newBtn = el("button", "text", t("New group"));
     newBtn.onclick = () => { gEdit = { id: "", draft: { name: "", members: [], fast: [], routing: "", affinity: "", rules: [] } }; renderGroups(); };
     gHead.replaceChildren(el("span", "label", t("Routing groups")), el("span", "grow"), el("span", "note", t("models agents pick as one")), newBtn);
+    drawFound();
     const rows = [];
     if (gEdit && !gEdit.id) rows.push(groupEditor(null));
     const shown = groups.groups.filter((g) => !g.hidden), hidden = groups.groups.filter((g) => g.hidden);
     for (const g of shown) rows.push(gEdit?.id === g.id ? groupEditor(g) : groupRow(g));
-    if (!rows.length) rows.push(el("div", "none rt-gnone", t("No group yet. A model two of your providers serve becomes one on its own; New group makes one of any models you like.")));
+    if (!rows.length) rows.push(el("div", "none rt-gnone", groups.found === false
+      ? t("No group yet. New group makes one of any models you like.")
+      : t("No group yet. A model two of your providers serve becomes one on its own; New group makes one of any models you like.")));
     if (hidden.length) {
       const h = el("div", "rt-ghidden");
       h.append(el("span", "", t("Removed:")));
@@ -2122,6 +2128,41 @@
     }
     gList.replaceChildren(...rows);
     renderPools();
+  }
+  // drawFound: the switch for the groups magpie finds on its own — a
+  // model two or more providers serve, as auto-<model> — all at once.
+  // Off, none is listed or served: the groups the user made or changed
+  // stay, and an agent set to a found one is moved to its model from one
+  // provider (agent.Reseat), as a request still naming one goes there.
+  function drawFound() {
+    const on = groups.found !== false;
+    const s = el("button", "lib-switch" + (on ? " on" : ""));
+    s.type = "button";
+    s.setAttribute("role", "switch");
+    s.setAttribute("aria-checked", String(on));
+    s.setAttribute("aria-label", t("Find groups on their own"));
+    s.append(el("i"));
+    s.onclick = (e) => { e.stopPropagation(); setFound(!on, s); };
+    const txt = el("div", "txt");
+    txt.append(el("b", "", t("Find groups on their own")), el("small", "", on
+      ? t("A model two or more of your providers serve becomes a group of them (auto-…). Switch it off to list and serve only the groups you made or changed.")
+      : t("Off: only the groups you made or changed are listed and served. An agent set to a found group is moved to its model from one provider, and a request still naming one goes there too.")));
+    gFound.replaceChildren(txt, s);
+  }
+  async function setFound(on, s) {
+    s.classList.toggle("on", on);
+    s.setAttribute("aria-checked", String(on));
+    try {
+      groups = await api("groups/found", { on });
+      gEdit = null;
+      renderGroups();
+      saidMoved(on ? t("Found groups are on") : t("Found groups are off: only yours are listed and served"), groups.moved);
+      load(); // the gateway's model list, the agents' pickers
+    } catch (e) {
+      s.classList.toggle("on", !on);
+      s.setAttribute("aria-checked", String(!on));
+      status(e.message, "err");
+    }
   }
   function groupRow(g) {
     const row = el("div", "rt-group" + (g.ready ? "" : " off"));

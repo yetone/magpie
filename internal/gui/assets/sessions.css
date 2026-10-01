@@ -1,10 +1,19 @@
 /* Sessions: every session of an agent, by folder, to resume or delete (sessions.js) */
-.sm-head { gap: 8px; }
-.sm-head .grow { flex: 1; }
-.sm-agents { min-width: 0; flex: 0 1 auto; }
+.sm-head { gap: 8px; height: auto; min-height: 34px; }
+.sm-switch { min-width: 0; flex: 1; display: flex; align-items: center; }
+.sm-agents { min-width: 0; max-width: 100%; }
+.segs.sm-agents { background: var(--seg-track); }
 .sm-agents .opt { display: inline-flex; align-items: center; gap: 5px; }
+.sm-agents .opt.on { background: var(--seg-thumb); box-shadow: var(--seg-edge); }
+.sm-agents .opt.on em { color: var(--muted); }
 .sm-agents .opt .ic { width: 13px; height: 13px; }
-.sm-agents .opt em, .sm-trash-btn em { font-style: normal; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.sm-agent-pick { min-width: 0; max-width: 220px; gap: 6px; color: var(--fg); }
+.sm-agent-pick .ic { width: 13px; height: 13px; flex: none; }
+.sm-agent-pick em, .sm-agents em, .sm-trash-btn em { font-style: normal; font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pop.proto-menu.sm-agent-menu { width: min(280px, calc(100vw - 16px)); max-height: min(360px, 70vh); overflow-y: auto; background: var(--card); }
+.sm-agent-menu .pm-words { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 1; }
+.sm-agent-menu .pm-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-agent-menu .pm-note { flex: none; font-variant-numeric: tabular-nums; }
 .sm-filter { width: 200px; flex: 0 1 200px; min-width: 110px; }
 .sm-trash-btn { display: inline-flex; align-items: center; gap: 5px; flex: none; }
 .sm-trash-btn.on { background: var(--pill); color: var(--fg); }
@@ -34,4 +43,11 @@
 @media (max-width: 560px) {
   .sm-filter { width: 130px; flex-basis: 130px; }
   .row.sm-folder .sm-path { display: none; }
+}
+@media (max-width: 420px) {
+  .sm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }
+  .sm-switch { grid-column: 1 / -1; }
+  .sm-agent-pick { max-width: 100%; }
+  .sm-filter { width: 100%; min-width: 0; }
+  .sm-trash-btn { grid-column: 2; justify-self: end; }
 }

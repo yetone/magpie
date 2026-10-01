@@ -195,6 +195,9 @@ func groupsIn(entries []Entry) []Group {
 		}
 		out = append(out, g)
 	}
+	if f.NoAutoGroups {
+		return out
+	}
 	for _, g := range autoGroups(entries) {
 		if slices.ContainsFunc(out, func(o Group) bool { return o.ID == g.ID }) {
 			continue // the user changed it: theirs now
@@ -203,6 +206,81 @@ func groupsIn(entries []Entry) []Group {
 		out = append(out, g)
 	}
 	return out
+}
+
+// AutoGroupsOn reports whether magpie finds groups on its own: a model
+// more than one provider serves is a group of them (autoGroups). It is on
+// until the user turns it off.
+func AutoGroupsOn() bool { return !load().NoAutoGroups }
+
+// SetAutoGroups turns the groups magpie finds on its own on or off, all of
+// them at once (蓝猫 on Discord: they could only be removed one by one).
+// Off, none is listed or served; the groups the user made or changed, one
+// found included, stay, and so do the records of those removed, so that
+// on again brings back the found groups as they were. A found group one
+// of the user's has in it, or classifies with, keeps them on until it is
+// taken out, as DeleteGroup keeps it: the user's group would lose it
+// unsaid.
+func SetAutoGroups(on bool) error {
+	f, err := read()
+	if err != nil {
+		return err
+	}
+	if f.NoAutoGroups == !on {
+		return nil
+	}
+	if !on {
+		all := groupsIn(providerEntries())
+		found := func(ref string) bool {
+			gid, ok := strings.CutPrefix(ref, GroupPrefix)
+			return ok && slices.ContainsFunc(all, func(o Group) bool { return o.ID == gid && o.Auto && !o.Hidden })
+		}
+		var held []string
+		for _, g := range all {
+			if g.Auto || g.Hidden {
+				continue
+			}
+			for _, m := range g.Members {
+				if found(m) {
+					held = append(held, fmt.Sprintf("%s is in %s", strings.TrimPrefix(m, GroupPrefix), g.Name))
+				}
+			}
+			if found(g.Classifier) {
+				held = append(held, fmt.Sprintf("%s is %s's classifier", strings.TrimPrefix(g.Classifier, GroupPrefix), g.Name))
+			}
+		}
+		if len(held) > 0 {
+			return fmt.Errorf("%s: take it out, or change it to make it yours, first", strings.Join(held, ", "))
+		}
+	}
+	f.NoAutoGroups = !on
+	return store(f)
+}
+
+// AutoGroupID is the id of the group magpie finds for a model, however a
+// vendor spells it: "auto-claude-opus-5-5" for claude-opus-5.5.
+func AutoGroupID(model string) string { return "auto-" + Slug(sameModel(model)) }
+
+// AutoStandIn is the model a request for a group magpie found goes to while
+// such groups are off (SetAutoGroups): its model, from the first provider
+// that serves it, as "provider/model". An agent set to the group, or a
+// session begun on it, keeps working, on one provider. ok is false for any
+// other id, a group the user has of that id, or while found groups are on.
+func AutoStandIn(id string) (string, bool) {
+	gid, ok := strings.CutPrefix(strings.TrimSuffix(strings.TrimSpace(id), "[1m]"), GroupPrefix)
+	if !ok || !strings.HasPrefix(gid, "auto-") || AutoGroupsOn() {
+		return "", false
+	}
+	entries := providerEntries()
+	if _, ok := groupOf(groupsIn(entries), gid); ok {
+		return "", false
+	}
+	for _, e := range entries {
+		if AutoGroupID(e.Model) == gid {
+			return e.ID, true
+		}
+	}
+	return "", false
 }
 
 // autoGroups are the models more than one ready provider serves under the

@@ -605,3 +605,53 @@ func TestLedgerJudgesAnAntigravityCallByTheVariantItWentOutUnder(t *testing.T) {
 		}
 	}
 }
+
+// Antigravity answers a call that went out as a level of a model with the
+// model's own name in modelVersion (#462: gemini-3.8-flash at medium went
+// out as gemini-3.8-flash-medium and the reply named gemini-3.8-flash),
+// which is the model asked for at the level asked for, not another one
+// swapped in; a reply naming another level still is.
+func TestLedgerAntigravityReplyNamingTheFamilyIsNoSwap(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	var raw []catalog.Model
+	for _, id := range []string{"flash-9-low", "flash-9-medium", "flash-9-high", "flash-9-extra-low"} {
+		raw = append(raw, catalog.Model{ID: id})
+	}
+	if err := catalog.SaveLive("antigravity", "", raw); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	os.MkdirAll(filepath.Dir(Path()), 0o755)
+	now := time.Now()
+	for i, c := range []struct{ effort, served string }{
+		{"medium", "flash-9"}, {"minimal", "flash-9"}, {"", "models/flash-9"}, {"low", "flash-9-low"},
+		{"medium", "flash-9-high"}, // another level answered: a swap
+	} {
+		Append(Record{Time: now.Add(time.Duration(i) * time.Minute), Provider: "antigravity",
+			Host: "antigravity.example", Model: "flash-9", Effort: c.effort,
+			Served: c.served, Input: 10, Output: 1, Status: 200})
+	}
+	rows, _, _ := Ledger(All, Filter{})
+	page := QueryPage(All, Filter{}, 0, 100)
+	for _, got := range [][]Row{rows, page.Rows} {
+		if len(got) != 5 {
+			t.Fatalf("rows %d: %+v", len(got), got)
+		}
+		if !got[0].Swapped {
+			t.Errorf("another level answering is a swap: %+v", got[0])
+		}
+		for _, row := range got[1:] {
+			if row.Swapped {
+				t.Errorf("flash-9 at %q answered as %q is the model asked for: %+v", row.Effort, row.Served, row)
+			}
+		}
+	}
+	if !Swapped("flash-9-medium", "flash-8") || !Swapped("flash-9-medium", "flash-9-high") {
+		t.Error("another model or level is still a swap")
+	}
+}

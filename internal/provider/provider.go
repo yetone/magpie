@@ -184,6 +184,9 @@ type file struct {
 	// Searches are the web search APIs a model's search goes to when no
 	// provider can search (see search_api.go).
 	Searches []SearchAPI `json:"searches,omitempty"`
+	// NoAutoGroups: the user turned off the groups magpie finds on its
+	// own (SetAutoGroups); the groups they made or changed stay.
+	NoAutoGroups bool `json:"noAutoGroups,omitempty"`
 }
 
 // Path is the file the user's providers live in.

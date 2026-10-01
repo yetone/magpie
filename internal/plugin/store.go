@@ -38,8 +38,9 @@ import (
 
 // Entry is one plugin the user added.
 type Entry struct {
-	// Spec is how it was added: an npm package (name, name@version) or a
-	// path to a file or folder.
+	// Spec is how it was added: an npm package (name, name@version), a git
+	// repository (github:owner/repo, git+https://…) or a path to a file
+	// or folder.
 	Spec string `json:"spec"`
 	// Off is set on a plugin the user turned off.
 	Off bool `json:"off,omitempty"`
@@ -161,10 +162,47 @@ func IsPath(spec string) bool {
 
 var pkgName = regexp.MustCompile(`^(@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$`)
 
+// gitSpec is a package bun fetches from a git repository, not npm:
+// github:owner/repo[#ref] (gitlab: and bitbucket: alike), a git+https://,
+// git+ssh://, git+file:// or git:// URL, a GitHub, GitLab or Bitbucket
+// page's URL, or owner/repo, GitHub's shorthand.
+var gitSpec = regexp.MustCompile(`^(?:(?:github|gitlab|bitbucket):|git\+[a-z]+://|git://)\S+$|^https?://(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.org)/\S+$|^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+(?:#\S+)?$`)
+
+// IsGit is whether spec names a git repository rather than an npm package
+// or a path. The package bun installs from it is named by its own
+// package.json, not by spec.
+func IsGit(spec string) bool { return !IsPath(spec) && gitSpec.MatchString(spec) }
+
+// gitName is the package bun installed from the git spec: the dependency
+// of plugins/package.json bun added it as (it keeps spec as given), ""
+// when there is none.
+func gitName(spec string) string {
+	var pj struct {
+		Dependencies map[string]string `json:"dependencies"`
+	}
+	b, err := os.ReadFile(filepath.Join(Dir(), "package.json"))
+	if err != nil || json.Unmarshal(b, &pj) != nil {
+		return ""
+	}
+	for name, s := range pj.Dependencies {
+		if s == spec {
+			return name
+		}
+	}
+	return ""
+}
+
 // Name is the package spec names, without its version: "@scope/x" of
-// "@scope/x@1.2", or the path.
+// "@scope/x@1.2", the package installed from a git repository (the spec
+// itself until it is), or the path.
 func Name(spec string) string {
 	if IsPath(spec) {
+		return spec
+	}
+	if IsGit(spec) {
+		if n := gitName(spec); n != "" {
+			return n
+		}
 		return spec
 	}
 	at := strings.LastIndex(spec, "@")
@@ -194,12 +232,25 @@ func Add(ctx context.Context, spec string) (Entry, error) {
 	if spec == "" {
 		return Entry{}, errors.New("no plugin given")
 	}
+	// the package each plugin is before the install, which may take a git
+	// one's name over (one repository in place of another, or of npm's)
+	was := map[string]string{}
+	for _, x := range Load().Plugins {
+		was[x.Spec] = Name(x.Spec)
+	}
 	if IsPath(spec) {
 		t := Target(spec)
 		if _, err := os.Stat(t); err != nil {
 			return Entry{}, err
 		}
 		spec = t
+	} else if IsGit(spec) {
+		if err := install(ctx, spec); err != nil {
+			return Entry{}, err
+		}
+		if Name(spec) == spec {
+			return Entry{}, fmt.Errorf("bun installed %s but plugins/package.json doesn't list it", spec)
+		}
 	} else {
 		if !pkgName.MatchString(Name(spec)) {
 			return Entry{}, fmt.Errorf("%q isn't an npm package name", spec)
@@ -215,7 +266,14 @@ func Add(ctx context.Context, spec string) (Entry, error) {
 	defer listMu.Unlock()
 	l := Load()
 	e := Entry{Spec: spec}
-	if i := slices.IndexFunc(l.Plugins, func(x Entry) bool { return Name(x.Spec) == Name(spec) }); i >= 0 {
+	name := Name(spec)
+	if i := slices.IndexFunc(l.Plugins, func(x Entry) bool {
+		n, ok := was[x.Spec]
+		if !ok {
+			n = Name(x.Spec)
+		}
+		return x.Spec == spec || n == name
+	}); i >= 0 {
 		e.Options = l.Plugins[i].Options
 		l.Plugins[i] = e
 	} else {
@@ -229,14 +287,14 @@ func Add(ctx context.Context, spec string) (Entry, error) {
 }
 
 // Update installs the version of each npm plugin its spec says now
-// (latest, for the most part).
+// (latest, for the most part), and fetches each git one again.
 func Update(ctx context.Context) error {
 	var errs []error
 	for _, e := range Load().Plugins {
 		if IsPath(e.Spec) {
 			continue
 		}
-		if err := install(ctx, e.Spec); err != nil {
+		if err := reinstall(ctx, e.Spec); err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", e.Spec, err))
 		}
 	}
@@ -318,6 +376,25 @@ func install(ctx context.Context, spec string) error {
 	out, err := bunCommand(ctx, bun, Dir(), "add", "--ignore-scripts", spec).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("bun add %s: %v: %s", spec, err, lastLines(string(out), 6))
+	}
+	return nil
+}
+
+// reinstall installs spec again: an npm one with bun add, a git one with
+// bun update, which fetches its branch's (or tag's) commit now where bun
+// add keeps the one bun.lock has.
+func reinstall(ctx context.Context, spec string) error {
+	name := Name(spec)
+	if !IsGit(spec) || name == spec {
+		return install(ctx, spec)
+	}
+	bun, err := Bun(ctx)
+	if err != nil {
+		return err
+	}
+	out, err := bunCommand(ctx, bun, Dir(), "update", "--ignore-scripts", name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("bun update %s: %v: %s", name, err, lastLines(string(out), 6))
 	}
 	return nil
 }

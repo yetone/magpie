@@ -129,9 +129,25 @@ func served(ref string) bool {
 
 // sameModel is the option for ref's model from another provider still
 // serving it: the same id, else one that differs only in how it is spelt
-// (claude-sonnet-4.5 and claude-sonnet-4-5-20250929). None for a routing
-// group, which is nobody else's.
+// (claude-sonnet-4.5 and claude-sonnet-4-5-20250929). For a group magpie
+// found (group/auto-…), gone as found groups are turned off or its model is
+// down to one provider, it is that model from the first provider still
+// serving it; none for any other routing group, which is nobody else's.
 func sameModel(opts []Option, ref string) Option {
+	if gid, ok := strings.CutPrefix(ref, provider.GroupPrefix); ok {
+		if !strings.HasPrefix(gid, "auto-") {
+			return Option{}
+		}
+		for _, o := range opts {
+			if o.Ref == "" || strings.HasPrefix(o.Ref, provider.GroupPrefix) || !served(o.Ref) {
+				continue
+			}
+			if _, m, _ := strings.Cut(o.Ref, "/"); provider.AutoGroupID(m) == gid {
+				return o
+			}
+		}
+		return Option{}
+	}
 	pid, model, ok := strings.Cut(ref, "/")
 	if !ok || pid+"/" == provider.GroupPrefix {
 		return Option{}

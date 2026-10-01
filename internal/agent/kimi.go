@@ -144,7 +144,7 @@ func kimi(home string) *Agent {
 	}
 	// ownModel reports whether Kimi has a model of the user's by this key
 	ownModel := func(k string) bool {
-		t, err := edit.GetTOMLTable(path, "models."+strconv.Quote(k))
+		t, err := kimiModelTableForKey(path, k)
 		return err == nil && t != nil
 	}
 	return atomic(&Agent{
@@ -169,7 +169,7 @@ func kimi(home string) *Agent {
 			if !usesMagpie(v) {
 				return ""
 			}
-			m, err := edit.GetTOMLTable(path, "models."+strconv.Quote(v))
+			m, err := kimiModelTableForKey(path, v)
 			if err != nil {
 				return err.Error()
 			}
@@ -225,14 +225,9 @@ func kimiOwnOptions(path, cur string) []Option {
 	seen := map[string]bool{}
 	var out []Option
 	for _, t := range tables {
-		k, ok := strings.CutPrefix(t, "models.")
+		k, ok := kimiModelKey(t)
 		if !ok {
 			continue
-		}
-		if u, err := strconv.Unquote(k); err == nil {
-			k = u
-		} else if strings.Contains(k, ".") {
-			continue // a table under a model's, not one
 		}
 		if seen[k] || strings.HasPrefix(k, magpieID+"/") {
 			continue
@@ -249,4 +244,33 @@ func kimiOwnOptions(path, cur string) []Option {
 		out = append([]Option{{Value: cur, Icon: modelIcon("", cur)}}, out...)
 	}
 	return group("Kimi Code", out)
+}
+
+// kimiModelKey decodes one model key, rejecting nested tables.
+func kimiModelKey(table string) (string, bool) {
+	k, ok := strings.CutPrefix(table, "models.")
+	if !ok {
+		return "", false
+	}
+	if u, err := strconv.Unquote(k); err == nil {
+		return u, true
+	}
+	if len(k) >= 2 && k[0] == '\'' && k[len(k)-1] == '\'' {
+		k = k[1 : len(k)-1]
+		return k, !strings.Contains(k, "'")
+	}
+	return k, k != "" && !strings.ContainsAny(k, ".\"'")
+}
+
+func kimiModelTableForKey(path, key string) (map[string]string, error) {
+	tables, err := edit.TOMLTables(path)
+	if err != nil {
+		return nil, err
+	}
+	for _, table := range tables {
+		if decoded, ok := kimiModelKey(table); ok && decoded == key {
+			return edit.GetTOMLTable(path, table)
+		}
+	}
+	return nil, nil
 }

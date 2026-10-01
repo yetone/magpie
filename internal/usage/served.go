@@ -42,12 +42,16 @@ func bareModel(m string) string {
 }
 
 // Swapped reports whether served is another model than sent: not the same
-// name, however dated, pinned or prefixed. A vendor's "auto" (Copilot's,
+// name, however dated, pinned or prefixed. A call that went out as one level
+// of a model (an Antigravity account's gemini-3.8-flash-medium) answered
+// under the model's own name is that model at that level: Antigravity's
+// reply names the family, not the variant (#462). Another level is another
+// model, as AntigravitySentID has it. A vendor's "auto" (Copilot's,
 // Cursor's) asked it to pick, so whichever answers wasn't swapped in, nor
 // is the member another magpie's routing group sent it to (GroupRouted).
 func Swapped(sent, served string) bool {
 	a, b := bareModel(sent), bareModel(served)
-	return a != "" && b != "" && a != b && a != "auto" && !GroupRouted(sent, served)
+	return a != "" && b != "" && a != b && a != "auto" && bareModel(provider.EffortFamily(a)) != b && !GroupRouted(sent, served)
 }
 
 // GroupRouted reports whether sent is a routing group of another magpie

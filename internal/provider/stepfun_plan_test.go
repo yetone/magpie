@@ -107,6 +107,18 @@ func TestReadStepPlan(t *testing.T) {
 	if len(ws) != 1 || ws[0].Name != "Credits" {
 		t.Errorf("no rolling windows: %+v", ws)
 	}
+	// a monthly Pro plan's credits never reset, they run out with the plan:
+	// its reset is "0" and its bucket says next_reset_at "0", yet the credits
+	// are there, 90% of them left
+	ws, _ = readStepPlan([]byte(`{"status":1,"desc":"","five_hour_usage_left_rate":0,"five_hour_usage_reset_time":"0","weekly_usage_left_rate":0,"weekly_usage_reset_time":"0","plan_family":2,"plan_credit_rate_limit":{"subscription_credit_left_rate":0.9019661,"subscription_credit_reset_time":"0","topup_credit_left_rate":0,"credit_buckets":[{"type":1,"credit_total":"8000000000","credit_residual":"7215728427","expire_at":"1792061262","next_reset_at":"0"}]}}`))
+	if len(ws) != 1 || ws[0].Name != "Credits" || ws[0].Used < 9.79 || ws[0].Used > 9.81 || ws[0].ResetsAt != nil {
+		t.Errorf("credits that don't reset: %+v", ws)
+	}
+	// a plan without credits tells them as 0 and 0 with no bucket: none
+	ws, _ = readStepPlan([]byte(`{"five_hour_usage_left_rate":0.6,"five_hour_usage_reset_time":"1790680000","weekly_usage_left_rate":0,"weekly_usage_reset_time":"0","plan_credit_rate_limit":{"subscription_credit_left_rate":0,"subscription_credit_reset_time":"0","credit_buckets":[]}}`))
+	if len(ws) != 1 || ws[0].Name != "5 hours" {
+		t.Errorf("no credits: %+v", ws)
+	}
 }
 
 // A page not signed in yet has an anonymous session, which isn't kept;
