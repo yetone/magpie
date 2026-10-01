@@ -116,6 +116,24 @@ func TestOlderBackupRecoversLegacyGatewayCredential(t *testing.T) {
 	}
 }
 
+func TestOlderBackupKeepsExistingGatewayKeyStore(t *testing.T) {
+	home(t)
+	if err := access.ConfigureLAN(true, false); err != nil {
+		t.Fatal(err)
+	}
+	cur := settings.Load()
+	b := Bundle{Version: 1, Keys: true, Settings: &settings.Settings{LAN: true, LANKey: "fixture-older-backup-key", LANKeyID: "old-marker"}}
+	if _, err := Restore(b, Parts{Settings: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := settings.Load(); got.LANKey != cur.LANKey || got.LANKeyID != cur.LANKeyID {
+		t.Fatal("backup without a key store detached the existing default key")
+	}
+	if _, ok := access.Authenticate(cur.LANKey); !ok {
+		t.Fatal("backup without a key store revoked the existing gateway key")
+	}
+}
+
 func TestGatewayKeysBackupWithoutSettingsFile(t *testing.T) {
 	home(t)
 	secret, err := access.Update("add-key", access.Change{Name: "CLI client"})

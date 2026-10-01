@@ -50,7 +50,7 @@ type Bundle struct {
 	Version     int                        `json:"version"`
 	Created     time.Time                  `json:"created"`
 	App         string                     `json:"app,omitempty"` // the magpie that made it
-	Keys        bool                       `json:"keys"`          // whether the providers carry their keys
+	Keys        bool                       `json:"keys"`          // whether credentials are included
 	Providers   []provider.Provider        `json:"providers"`
 	Icons       map[string][]byte          `json:"icons,omitempty"`  // pictures picked for providers, by file name
 	Groups      []provider.Group           `json:"groups,omitempty"` // the user's model groups
@@ -284,6 +284,14 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 		} else {
 			// An older backup may carry a marker without its named-key store.
 			s.LANKeyID = ""
+			keys, err := access.List()
+			if err != nil {
+				return r, err
+			}
+			if slices.ContainsFunc(keys, func(k access.Key) bool { return k.LAN }) {
+				// Its missing store must not detach this machine's default key.
+				s.LANKey, s.LANKeyID = cur.LANKey, cur.LANKeyID
+			}
 		}
 		if err := settings.Save(s); err != nil {
 			return r, err
