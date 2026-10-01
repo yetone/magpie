@@ -1333,8 +1333,9 @@ those same populated rows.
 It checks that Library's folder button is reachable, Usage tokens, costs and
 stat explanations are readable, and chart dates do not overlap. A released
 touch's continuous scroll can outlast the input window, while scripts cannot
-move an idle page, including after momentum stops. The API is faked; no user
-configuration is read or changed.
+move an idle page, including after momentum stops. This uses Settings → Usage
+at 390×600, where the real settings rows leave room to scroll. The API is faked;
+no user configuration is read or changed.
 
 At desktop widths 900/1280, screenshots are compared with the same pages from
 `origin/main`. Dimensions must match; a pixel counts as different only when

@@ -215,6 +215,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test(lang + ": idle scripts cannot scroll, touch momentum can, then protection returns", async () => {
         const page = await open(browser, lang, 390);
         try {
+          // Settings now has separate parts. Its Usage part in a short phone
+          // viewport has real content to scroll; General fits without scrolling.
+          await page.setViewportSize({ width: 390, height: 600 });
+          await page.goto("http://magpie.test/?view=settings&tab=usage");
           await go(page, "settings");
           await page.waitForTimeout(500);
           const view = page.locator("#view-settings");
