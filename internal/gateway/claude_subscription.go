@@ -112,6 +112,11 @@ type subscriptionRun struct {
 	idleAt  time.Time
 	convKey string
 
+	// told is the conversation as the client had it in its last request
+	// here (historyKey): tool results are the run's while the client's
+	// conversation goes on from that one.
+	told string
+
 	// An agent whose stream does not carry its tool calls in full (Cursor)
 	// learns of them here, as the MCP helper hands each one over, and opens
 	// each answer with a message start of its own.
@@ -530,6 +535,40 @@ func conversationKeys(owner string, msgs []Message) []string {
 		}
 	})
 	return keys
+}
+
+// historyKey is a conversation's messages, as hashMessages reads them.
+func historyKey(msgs []Message) string {
+	h := sha256.New()
+	hashMessages(h, msgs, nil)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// heard keeps the conversation of the request the run now answers.
+func (r *subscriptionRun) heard(msgs []Message) {
+	key := historyKey(msgs)
+	r.mu.Lock()
+	r.told = key
+	r.mu.Unlock()
+}
+
+// follows says msgs go on from the conversation the run last heard: that
+// one whole, then the reply and what came since. A client that rewrote it
+// meanwhile — Pi compacting between a tool call and its result, a rewind —
+// sends another, while the run's agent still holds the one it was told.
+func (r *subscriptionRun) follows(msgs []Message) bool {
+	r.mu.Lock()
+	told := r.told
+	r.mu.Unlock()
+	if told == "" {
+		return true // a run made in a test may have heard none
+	}
+	h := sha256.New()
+	found := false
+	hashMessages(h, msgs, func(int) {
+		found = found || hex.EncodeToString(h.Sum(nil)) == told
+	})
+	return found
 }
 
 // hashMessages writes the messages' words, tool calls and results to h,
@@ -1393,6 +1432,15 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	}
 
 	run, results := s.subscription.findRun(req)
+	// the client rewrote the conversation since the run's last reply, as Pi
+	// does compacting it mid-turn: the run's agent holds the one from before,
+	// would answer from it, and tell the client a context as large as ever,
+	// so the client compacts again at each tool call. It is let go, and a
+	// run started anew is told the conversation as the client now has it.
+	if run != nil && !run.follows(req.Messages) {
+		run.abort()
+		run = nil
+	}
 	// the client offers a tool the run's agent was never told of, as Claude
 	// Code's ToolSearch loads a deferred one mid-turn: the run is handed it
 	// with the results, as its MCP server's tools changed. A run started
@@ -1433,6 +1481,7 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	if err != nil {
 		return writeError(w, from, 502, name+": "+err.Error()), err.Error()
 	}
+	run.heard(req.Messages)
 	// a caller gone before the reply is whole won't carry it on: its agent
 	// is stopped at once, not left to answer no one and wait on tool calls
 	// it never handed over
