@@ -26,9 +26,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 	default:
 		return fmt.Errorf("unknown gateway-key command %q", action)
 	}
-	if err := access.MigrateLegacyLANKey(); err != nil {
-		return err
-	}
+	access.MigrateLegacyLANKeyBestEffort()
 	if action == "list" {
 		keys, err := access.List()
 		if err != nil {

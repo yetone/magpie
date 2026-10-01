@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 
@@ -56,5 +57,24 @@ func TestGatewayKeyCLI(t *testing.T) {
 		if err := gatewayKeysTo(&bytes.Buffer{}, append([]string{"gateway-key"}, args...)); err == nil {
 			t.Error("accepted", args)
 		}
+	}
+}
+
+func TestGatewayKeyListWithReadOnlyMigration(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := settings.Settings{LAN: true, LANKey: "sk-magpie-fixture-cli"}
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(settings.Path(), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(settings.Path(), 0o600) })
+	if err := settings.Save(s); err == nil {
+		t.Skip("settings.json remains writable")
+	}
+	var out bytes.Buffer
+	if err := gatewayKeysTo(&out, []string{"gateway-key", "list"}); err != nil || !strings.Contains(out.String(), "Magpie") {
+		t.Fatal("read-only migration blocked CLI list", out.String(), err)
 	}
 }

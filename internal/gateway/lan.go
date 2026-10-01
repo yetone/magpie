@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"context"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -38,6 +37,10 @@ func Port() string {
 }
 
 func migrateLANKey() error { return access.MigrateLegacyLANKey() }
+
+func migrateLANKeyBestEffort() {
+	access.MigrateLegacyLANKeyBestEffort()
+}
 
 // publicURL is MAGPIE_PUBLIC_URL, the base URL other machines are told to
 // reach the gateway at, without its trailing slashes: a magpie in a
@@ -82,12 +85,6 @@ func inContainer(root string) bool {
 		}
 	}
 	return false
-}
-
-func migrateLANKeyBestEffort() {
-	if err := migrateLANKey(); err != nil {
-		log.Printf("magpie: could not migrate LAN key: %v", err)
-	}
 }
 
 // LANURLs are the addresses other machines on the network reach the
@@ -153,34 +150,24 @@ func lanGuard(next http.Handler) http.Handler {
 			http.Error(w, "magpie isn't shared on the local network", http.StatusForbidden)
 			return
 		}
-		if (remote && shared) || access.Managed(callerKey(r)) {
+		if (remote && shared) || (!remote && access.Managed(callerKey(r))) {
 			var ok bool
 			r, ok = identifyCaller(w, r)
 			if !ok {
 				return
 			}
-		}
-		if remote && settings.Load().LAN {
-			r = r.WithContext(context.WithValue(r.Context(), lanKeyed{}, true))
+			if remote && shared {
+				r = r.WithContext(context.WithValue(r.Context(), lanKeyed{}, true))
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-// lanKeyed marks a request from another machine that carried the key.
-type lanKeyed struct{}
-
-// sharedWith: the request came from another machine with the key, the
-// gateway shared from the Settings page.
-func sharedWith(r *http.Request) bool {
-	ok, _ := r.Context().Value(lanKeyed{}).(bool)
-	return ok
-}
-
 // callerGuard also covers embedded handlers used by the web app and tests.
 func callerGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if access.Caller(r.Context()).KeyID == "" && access.Managed(callerKey(r)) {
+		if access.Caller(r.Context()).KeyID == "" && access.Managed(callerKey(r)) && (local(r) || settings.Load().LAN) {
 			var ok bool
 			r, ok = identifyCaller(w, r)
 			if !ok {
@@ -220,6 +207,16 @@ func appendUsage(r *http.Request, rec usage.Record) {
 	who := access.Caller(r.Context())
 	rec.CallerKeyID, rec.CallerKeyName = who.KeyID, who.KeyName
 	usage.Append(rec)
+}
+
+// lanKeyed marks a request from another machine that carried the key.
+type lanKeyed struct{}
+
+// sharedWith: the request came from another machine with the key, the
+// gateway shared from the Settings page.
+func sharedWith(r *http.Request) bool {
+	ok, _ := r.Context().Value(lanKeyed{}).(bool)
+	return ok
 }
 
 // callerKey is the API key a request carries, however its client sends one.

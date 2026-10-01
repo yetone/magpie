@@ -42,6 +42,34 @@ func TestLoopbackRemainsPermissive(t *testing.T) {
 	}
 }
 
+func TestExplicitOpenGatewayAcceptsAllRemoteTokens(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "0.0.0.0:3425")
+	if _, err := access.Update("add-key", access.Change{Name: "Unused"}); err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := access.List()
+	secret, _ := access.Update("copy-key", access.Change{Key: keys[0].ID})
+	for _, token := range []string{"", "anything", "sk-magpie-stale", secret} {
+		for _, header := range []string{"Authorization", "x-api-key", "query"} {
+			r := httptest.NewRequest("GET", "/v1/models", nil)
+			r.RemoteAddr = "192.168.1.9:5000"
+			if header == "query" {
+				r.URL.RawQuery = "key=" + token
+			} else if header == "Authorization" {
+				r.Header.Set(header, "Bearer "+token)
+			} else {
+				r.Header.Set(header, token)
+			}
+			w := httptest.NewRecorder()
+			lanGuard(New().Handler()).ServeHTTP(w, r)
+			if w.Code != 200 {
+				t.Fatalf("explicit open gateway rejected %s %q: %d", header, token, w.Code)
+			}
+		}
+	}
+}
+
 func TestMigrationFailureDoesNotStopGateway(t *testing.T) {
 	fresh(t)
 	t.Setenv("MAGPIE_ADDR", "127.0.0.1:0")
@@ -52,7 +80,7 @@ func TestMigrationFailureDoesNotStopGateway(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(settings.Path(), 0o600) })
-	if err := migrateLANKey(); err == nil {
+	if err := settings.Save(settings.Load()); err == nil {
 		t.Skip("settings.json remains writable on this platform")
 	}
 	var logs bytes.Buffer

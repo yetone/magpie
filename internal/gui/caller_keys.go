@@ -10,10 +10,7 @@ import (
 func callerKeyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/caller-keys", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		if err := access.MigrateLegacyLANKey(); err != nil {
-			fail(w, err)
-			return
-		}
+		access.MigrateLegacyLANKeyBestEffort()
 		keys, err := access.List()
 		if err != nil {
 			fail(w, err)
@@ -27,10 +24,7 @@ func callerKeyRoutes(mux *http.ServeMux) {
 			fail(w, err)
 			return
 		}
-		if err := access.MigrateLegacyLANKey(); err != nil {
-			fail(w, err)
-			return
-		}
+		access.MigrateLegacyLANKeyBestEffort()
 		secret, err := access.Update(r.PathValue("action"), in)
 		if err != nil {
 			fail(w, err)

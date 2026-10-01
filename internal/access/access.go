@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +23,7 @@ import (
 
 const Prefix = "sk-magpie-key-"
 const legacyLANPrefix = "sk-magpie-"
+const revokedLANPrefix = "sk-magpie-revoked-"
 
 func Managed(secret string) bool {
 	return strings.HasPrefix(secret, legacyLANPrefix)
@@ -31,6 +33,7 @@ type Key struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
 	Off    bool   `json:"off,omitempty"`
+	LAN    bool   `json:"lan,omitempty"` // default key and durable migration marker
 	Secret string `json:"secret,omitempty"`
 	Masked string `json:"masked,omitempty"`
 }
@@ -110,6 +113,7 @@ func Update(action string, in Change) (string, error) {
 		}
 	}
 	var secret string
+	var mirror *Key
 	if action == "add-key" {
 		id, err := random(12)
 		if err != nil {
@@ -126,6 +130,10 @@ func Update(action string, in Change) (string, error) {
 		if i < 0 {
 			return "", errors.New("Key not found")
 		}
+		defaultKey := keys[i].LAN || keys[i].ID == settings.Load().LANKeyID
+		if defaultKey {
+			keys[i].LAN = true
+		}
 		switch action {
 		case "rotate-key":
 			token, err := random(24)
@@ -139,26 +147,49 @@ func Update(action string, in Change) (string, error) {
 		case "on-key", "off-key":
 			keys[i].Off = action == "off-key"
 		case "remove-key":
+			if defaultKey {
+				k := keys[i]
+				k.Off = true
+				mirror = &k
+			}
 			keys = slices.Delete(keys, i, i+1)
 		case "copy-key":
 			return keys[i].Secret, nil
 		default:
 			return "", fmt.Errorf("unknown key action %q", action)
 		}
+		if defaultKey && action != "remove-key" && action != "rename-key" {
+			mirror = &keys[i]
+		}
+	}
+	if mirror != nil {
+		s := settings.Load()
+		if err := setLegacyMirror(&s, *mirror); err != nil {
+			return "", err
+		}
+		// Revoke the old-version mirror before changing the active key store.
+		if err := settings.Save(s); err != nil {
+			return "", err
+		}
 	}
 	if err := save(keys); err != nil {
 		return "", err
 	}
-	if action == "rotate-key" {
-		s := settings.Load()
-		if s.LANKeyID == in.Key {
-			s.LANKey = secret
-			if err := settings.Save(s); err != nil {
-				return "", err
-			}
-		}
-	}
 	return secret, nil
+}
+
+func setLegacyMirror(s *settings.Settings, k Key) error {
+	s.LANKeyID = k.ID
+	if !k.Off {
+		s.LANKey = k.Secret
+		return nil
+	}
+	token, err := random(24)
+	if err != nil {
+		return err
+	}
+	s.LANKey = revokedLANPrefix + token
+	return nil
 }
 
 // Authenticate reloads the store so revocation takes effect in running gateways.
@@ -186,14 +217,23 @@ func MigrateLegacyLANKey() error {
 	return migrateLegacyLANKey()
 }
 
+func MigrateLegacyLANKeyBestEffort() {
+	if err := MigrateLegacyLANKey(); err != nil {
+		log.Printf("magpie: could not migrate LAN key: %v", err)
+	}
+}
+
 func migrateLegacyLANKey() error {
 	s := settings.Load()
-	if s.LANKey == "" || s.LANKeyID != "" {
+	if s.LANKey == "" || s.LANKeyID != "" || strings.HasPrefix(s.LANKey, revokedLANPrefix) {
 		return nil
 	}
 	keys, err := load()
 	if err != nil {
 		return err
+	}
+	if slices.ContainsFunc(keys, func(k Key) bool { return k.LAN }) {
+		return nil // the key-store write succeeded, even if settings were read-only
 	}
 	i := slices.IndexFunc(keys, func(k Key) bool {
 		return subtle.ConstantTimeCompare([]byte(k.Secret), []byte(s.LANKey)) == 1
@@ -204,10 +244,11 @@ func migrateLegacyLANKey() error {
 			return err
 		}
 		keys = append(keys, Key{ID: id, Name: "Magpie", Secret: s.LANKey})
-		if err := save(keys); err != nil {
-			return err
-		}
 		i = len(keys) - 1
+	}
+	keys[i].LAN = true
+	if err := save(keys); err != nil {
+		return err
 	}
 	s.LANKeyID = keys[i].ID
 	return settings.Save(s)
@@ -227,7 +268,7 @@ func ConfigureLAN(on, rotate bool) error {
 		if err != nil {
 			return err
 		}
-		i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == s.LANKeyID })
+		i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == s.LANKeyID || k.LAN })
 		if i < 0 || rotate {
 			token, err := random(24)
 			if err != nil {
@@ -238,7 +279,7 @@ func ConfigureLAN(on, rotate bool) error {
 				if err != nil {
 					return err
 				}
-				keys = append(keys, Key{ID: id, Name: "Magpie"})
+				keys = append(keys, Key{ID: id, Name: "Magpie", LAN: true})
 				i = len(keys) - 1
 			}
 			keys[i].Secret = Prefix + token
@@ -247,7 +288,9 @@ func ConfigureLAN(on, rotate bool) error {
 			}
 			s.LANKeyID = keys[i].ID
 		}
-		s.LANKey = keys[i].Secret
+		if err := setLegacyMirror(&s, keys[i]); err != nil {
+			return err
+		}
 	}
 	s.LAN = on
 	return settings.Save(s)

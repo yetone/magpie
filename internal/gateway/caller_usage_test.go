@@ -17,6 +17,11 @@ import (
 
 func newCaller(t *testing.T, names ...string) ([]access.Key, []string) {
 	t.Helper()
+	s := settings.Load()
+	s.LAN = true
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
 	var secrets []string
 	for _, name := range names {
 		secret, err := access.Update("add-key", access.Change{Name: name})
