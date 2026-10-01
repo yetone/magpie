@@ -40,8 +40,13 @@ func SetEnvFile(path string, kvs ...KV) error {
 	lines := splitLines(string(raw))
 	for _, kv := range kvs {
 		v := toString(kv.Value)
-		if strings.ContainsAny(v, " #\"'$") {
-			v = `"` + strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), `"`, `\"`) + `"`
+		if strings.ContainsAny(v, " #\"'$\r\n") {
+			// Gemini CLI's dotenv keeps backslashes literal inside single quotes.
+			if !strings.ContainsAny(v, "'\r\n") {
+				v = "'" + v + "'"
+			} else {
+				v = `"` + strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), `"`, `\"`) + `"`
+			}
 		}
 		lines = setLine(lines, kv.Path, kv.Path+"="+v, nil, func(l string) (string, bool) {
 			if m := envLine.FindStringSubmatch(l); m != nil {

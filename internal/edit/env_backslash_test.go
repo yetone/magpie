@@ -13,7 +13,9 @@ func TestEnvBackslashRoundtrip(t *testing.T) {
 		t.Fatal(e)
 	}
 	b, _ := os.ReadFile(p)
-	t.Logf("written: %s", b)
+	if string(b) != "MODEL_DIR='"+v+"'\n" {
+		t.Fatalf("written %q, want a literal single-quoted value", b)
+	}
 	got, ok := GetEnvFile(p, "MODEL_DIR")
 	if !ok || got != v {
 		t.Fatalf("roundtrip %q -> %q (%v)", v, got, ok)
