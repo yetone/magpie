@@ -684,7 +684,7 @@ func (e *anthropicEncoder) event(ev Event) {
 		e.close()
 		failed := map[string]any{"type": "api_error", "message": ev.Text}
 		if ev.Code != "" {
-			failed["code"] = ev.Code // a refusal, for the next account to be asked
+			failed["code"] = ev.Code // preserve the upstream error type, including refusals
 		}
 		e.w.event("error", map[string]any{"type": "error", "error": failed})
 	}

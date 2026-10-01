@@ -44,6 +44,7 @@ func TestCallerUsageAcrossKeys(t *testing.T) {
 			t.Error("caller credential reached provider")
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-Id", "req-caller")
 		io.WriteString(w, `{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":5}}`)
 	}))
 	defer up.Close()
@@ -58,6 +59,8 @@ func TestCallerUsageAcrossKeys(t *testing.T) {
 			secret = "Bearer " + secret
 		}
 		r.Header.Set(header, secret)
+		r.Header.Set(SessionHeader, "override-session")
+		r.Header.Set("X-Session-Id", "native-session")
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		return w.Code
@@ -73,7 +76,7 @@ func TestCallerUsageAcrossKeys(t *testing.T) {
 		t.Fatalf("attribution: %+v", recs)
 	}
 	for _, rec := range recs {
-		if rec.Input != 30 || rec.Output != 5 {
+		if rec.Input != 30 || rec.Output != 5 || rec.RequestID != "req-caller" || rec.Endpoint != "/v1/chat/completions" || rec.Session != "override-session" || rec.NativeSession != "native-session" {
 			t.Fatal(rec)
 		}
 	}
@@ -101,6 +104,30 @@ func TestCallerUsageAcrossKeys(t *testing.T) {
 		if strings.Contains(string(log), secret) {
 			t.Fatal("caller credential in ledger")
 		}
+	}
+}
+
+func TestRejectedRequestRetainsCallerIdentity(t *testing.T) {
+	fresh(t)
+	keys, secrets := newCaller(t, "Rejected client")
+	r := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"nothing/here","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`))
+	r.Header.Set("Authorization", "Bearer "+secrets[0])
+	w := httptest.NewRecorder()
+	New().Handler().ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	rec := lastUsage(t)
+	if !rec.Rejected || rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "Rejected client" || rec.Endpoint != "/v1/messages" || rec.Error != "unknown model" || rec.ProviderKeyID != "" {
+		t.Fatalf("rejected request lost caller or failure metadata: %+v", rec)
+	}
+	page := usage.QueryPage(usage.All, usage.Filter{CallerKey: keys[0].ID}, 0, 100)
+	if page.Total != 1 || page.Sum.Calls != 0 || len(page.CallerKeys) != 0 || usage.Summarize(usage.All).Calls != 0 {
+		t.Fatalf("local rejection must stay visible without inflating usage: %+v", page)
+	}
+	log, err := os.ReadFile(usage.Path())
+	if err != nil || strings.Contains(string(log), secrets[0]) {
+		t.Fatal("caller credential in rejected request log", err)
 	}
 }
 

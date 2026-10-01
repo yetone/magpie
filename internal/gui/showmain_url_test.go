@@ -15,6 +15,7 @@ func TestMainURL(t *testing.T) {
 	}{
 		{mainView(url.Values{"view": {"routing"}, "req": {"42"}}), "/?view=routing&req=42&lang=en"},
 		{mainView(url.Values{"view": {"settings"}}), "/?view=settings&lang=en"},
+		{mainView(url.Values{"view": {"usage"}, "tab": {"requests"}, "provider": {"relay team"}, "agent": {"claude-desktop"}}), "/?view=usage&tab=requests&provider=relay+team&agent=claude-desktop&lang=en"},
 		{argView("settings"), "/?view=settings&lang=en"},
 		{argView("usage&tab=x"), "/?view=usage%26tab%3Dx&lang=en"},
 	} {

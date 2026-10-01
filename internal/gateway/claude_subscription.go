@@ -676,6 +676,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 	// what the messages before cost, as each message's usage counts only
 	// itself and the client keeps the last it is told
 	var before, this Usage
+	var reqID, errKind string // the last request's id, and how it failed
 	usage := func(u cliUsage) Usage {
 		v := u.gateway()
 		this.add(v)
@@ -687,6 +688,12 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			Subtype string `json:"subtype"`
 			IsError bool   `json:"is_error"`
 			Result  string `json:"result"`
+			// Anthropic's id for the request, on the messages it answered,
+			// and on a failure the HTTP status Claude Code got and its
+			// name for the kind of error (rate_limit, server_error…)
+			RequestID      string          `json:"request_id"`
+			APIErrorStatus int             `json:"api_error_status"`
+			ErrorKind      json.RawMessage `json:"error"`
 			// what Claude Code's WebSearch found, on the message that
 			// answers its call
 			ToolUseResult json.RawMessage `json:"tool_use_result"`
@@ -731,9 +738,20 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			// this and no message_stop, the CLI waiting on its next input:
 			// the reply ends here, or it would wait with it (#177)
 			if envelope.IsError {
-				r.emit(Event{Kind: KError, Text: envelope.Result})
+				r.emit(Event{Kind: KError, Text: envelope.Result, Status: envelope.APIErrorStatus, Code: errKind, RequestID: reqID})
 				r.endSegment()
 			}
+			continue
+		}
+		if envelope.Type == "assistant" {
+			// the whole message, whose id its stream's later events go
+			// out under; a failure says how it failed here, before its result
+			if envelope.RequestID != "" {
+				reqID = envelope.RequestID
+			}
+			var kind string
+			_ = json.Unmarshal(envelope.ErrorKind, &kind)
+			errKind = kind
 			continue
 		}
 		var searched struct {
@@ -808,7 +826,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 				}
 			}
 		case "message_delta":
-			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage)})
+			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage), RequestID: reqID})
 			if e.Delta.StopReason == "tool_use" && len(own) > 0 && !theirs {
 				inside = true
 			} else if e.Delta.StopReason != "" {
@@ -1433,8 +1451,14 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 			}
 			abort()
 			code := 502
-			if quotaWords.MatchString(msg) {
-				code = 429
+			if n > 0 {
+				usage.add(Usage{ErrType: head[n-1].Code, RequestID: head[n-1].RequestID})
+				// the status Claude Code got, else a guess from the words
+				if head[n-1].Status >= 400 {
+					code = head[n-1].Status
+				} else if quotaWords.MatchString(msg) {
+					code = 429
+				}
 			}
 			return writeError(w, from, code, name+": "+msg), msg
 		}
@@ -1446,7 +1470,7 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 				failed = ev.Text
 			case KStart, KUsage:
 				usage.add(ev.Usage)
-				usage.add(Usage{Served: ev.Model})
+				usage.add(Usage{Served: ev.Model, RequestID: ev.RequestID})
 			case KText:
 				said += ev.Text
 			case KStop:
@@ -1483,7 +1507,10 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		abort()
 		// a status, as in a stream, so another account can take over
 		code := 502
-		if quotaWords.MatchString(col.err) {
+		usage.add(Usage{ErrType: col.errCode})
+		if col.errStatus >= 400 {
+			code = col.errStatus
+		} else if quotaWords.MatchString(col.err) {
 			code = 429
 		}
 		return writeError(w, from, code, name+": "+col.err), col.err

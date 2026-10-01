@@ -92,17 +92,20 @@ const Limit = 200
 
 // state is what one file's parse has come to, enough to read on from Off.
 type state struct {
-	Size   int64             `json:"size"`
-	Mod    int64             `json:"mod"` // unix nanoseconds
-	Off    int64             `json:"off"` // after the last whole line read
-	ID     string            `json:"id,omitempty"`
-	Cwd    string            `json:"cwd,omitempty"`
-	Title  string            `json:"title,omitempty"`
-	Named  string            `json:"named,omitempty"` // the agent's own title for it
-	First  string            `json:"first,omitempty"` // the first message, when no prompt looked typed
-	Start  time.Time         `json:"start"`
-	Last   time.Time         `json:"last"`
-	Models map[string]Tokens `json:"models,omitempty"`
+	Head        string            `json:"head,omitempty"`
+	HeadSize    int               `json:"head_size,omitempty"`
+	ContentHash string            `json:"content_hash,omitempty"`
+	Size        int64             `json:"size"`
+	Mod         int64             `json:"mod"` // unix nanoseconds
+	Off         int64             `json:"off"` // after the last whole line read
+	ID          string            `json:"id,omitempty"`
+	Cwd         string            `json:"cwd,omitempty"`
+	Title       string            `json:"title,omitempty"`
+	Named       string            `json:"named,omitempty"` // the agent's own title for it
+	First       string            `json:"first,omitempty"` // the first message, when no prompt looked typed
+	Start       time.Time         `json:"start"`
+	Last        time.Time         `json:"last"`
+	Models      map[string]Tokens `json:"models,omitempty"`
 	// Days is Models again, split by the local date each message was
 	// written on: a session that runs past midnight counts on both days.
 	Days map[string]*day `json:"days,omitempty"`
@@ -324,18 +327,29 @@ func claudeFiles() []file { return ccFiles("claude", ClaudeDir()) }
 func ccFiles(agent, dir string) []file {
 	projects := filepath.Join(dir, "projects")
 	var out []file
-	mains, _ := filepath.Glob(filepath.Join(projects, "*", "*.jsonl"))
-	for _, p := range mains {
-		f := file{agent: agent, key: agent + ":" + strings.TrimSuffix(filepath.Base(p), ".jsonl"), path: p, main: true}
-		if stat(&f) {
-			out = append(out, f)
+	for _, project := range readDirectory(projects) {
+		if !project.IsDir() && project.Type()&os.ModeSymlink == 0 {
+			continue
 		}
-	}
-	subs, _ := filepath.Glob(filepath.Join(projects, "*", "*", "subagents", "*.jsonl"))
-	for _, p := range subs {
-		f := file{agent: agent, key: agent + ":" + filepath.Base(filepath.Dir(filepath.Dir(p))), path: p}
-		if stat(&f) {
-			out = append(out, f)
+		root := filepath.Join(projects, project.Name())
+		for _, e := range readDirectory(root) {
+			path := filepath.Join(root, e.Name())
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+				f := file{agent: agent, key: agent + ":" + strings.TrimSuffix(e.Name(), ".jsonl"), path: path, main: true}
+				if stat(&f) {
+					out = append(out, f)
+				}
+			} else if e.IsDir() || e.Type()&os.ModeSymlink != 0 {
+				for _, sub := range readDirectory(filepath.Join(path, "subagents")) {
+					if sub.IsDir() || !strings.HasSuffix(sub.Name(), ".jsonl") {
+						continue
+					}
+					f := file{agent: agent, key: agent + ":" + e.Name(), path: filepath.Join(path, "subagents", sub.Name())}
+					if stat(&f) {
+						out = append(out, f)
+					}
+				}
+			}
 		}
 	}
 	return out
@@ -344,7 +358,7 @@ func ccFiles(agent, dir string) []file {
 // allFiles are every agent's session files.
 func allFiles() []file {
 	var out []file
-	for _, fs := range [][]file{claudeFiles(), codexFiles(), openCodeFiles(), piFiles(),
+	for _, fs := range [][]file{callFiles(), openCodeFiles(), piFiles(),
 		zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
 		grokFiles(), workbuddyFiles(), ompFiles()} {
 		out = append(out, fs...)
@@ -400,9 +414,12 @@ func codexFiles() []file {
 }
 
 var (
-	mu     sync.Mutex
-	cache  map[string]*state // path → parse
-	loaded bool
+	// DB readers share connection lifetimes; call-file readers need only mu.
+	dbReadMu        sync.Mutex
+	mu              sync.Mutex
+	cache           map[string]*state // path → parse
+	loaded          bool
+	cacheGeneration uint64
 	// the zone the parses in memory date their days in
 	cacheZone string
 )
@@ -416,8 +433,12 @@ func CachePath() string { return filepath.Join(filepath.Dir(catalog.CachePath())
 // 3: the active time by hour of the day
 // 4: the tool calls and skills a day
 // 5: again, for the prompts and replies a day, which an early 4 left out
-// 6: Pi's and omp's prompts, replies, tool calls and skills
-const cacheVersion = 6
+// 6: per-call metadata and continuation share the session file scan
+// 7: Codex's recorded provider and creator identity
+// 8: keep only summaries here; request metadata has per-file shards.
+// 9: validate the previous full prefix before treating growth as an append.
+// 10: Pi's and omp's prompts, replies, tool calls and skills.
+const cacheVersion = 10
 
 type cacheFile struct {
 	Version int               `json:"version"`
@@ -440,6 +461,7 @@ func loadCache() {
 		return
 	}
 	loaded, cacheZone = true, z
+	cacheGeneration++
 	cache = map[string]*state{}
 	saved() // the kept file as the last save left it
 	var c cacheFile
@@ -573,33 +595,47 @@ func refresh(want, all []file) {
 		total += left[f.path]
 	}
 	progress.start(len(todo), total)
+	type job struct {
+		f      file
+		old    *state
+		parsed *state
+	}
+	jobs := make([]job, len(todo))
+	for i, f := range todo {
+		jobs[i] = job{f: f, old: cache[f.path]}
+	}
+	generation := cacheGeneration
+	mu.Unlock()
 	var wg sync.WaitGroup
-	var put sync.Mutex
-	ch := make(chan file)
+	ch := make(chan int)
 	for i := 0; i < min(max(8, 2*runtime.NumCPU()), 32, len(todo)); i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for f := range ch {
-				put.Lock()
-				old := cache[f.path]
-				put.Unlock()
-				s := parse(f, old)
+			for i := range ch {
+				j := &jobs[i]
+				j.parsed = parse(j.f, j.old)
 				progress.files.Add(1)
-				progress.read.Add(left[f.path])
-				put.Lock()
-				cache[f.path] = s
-				put.Unlock()
+				progress.read.Add(left[j.f.path])
 			}
 		}()
 	}
-	for _, f := range todo {
-		ch <- f
+	for i := range jobs {
+		ch <- i
 	}
 	close(ch)
 	wg.Wait()
-	progress.on.Store(false)
-	saveCache()
+	mu.Lock()
+	for _, j := range jobs {
+		// A concurrent read may already have published a newer parse.
+		if generation == cacheGeneration && cache[j.f.path] == j.old {
+			cache[j.f.path] = j.parsed
+		}
+	}
+	progress.finish()
+	if generation == cacheGeneration {
+		saveCache()
+	}
 }
 
 // progress is how far the reading of changed files has got, for the page to
@@ -607,17 +643,34 @@ func refresh(want, all []file) {
 var progress indexing
 
 type indexing struct {
+	guard       sync.Mutex
+	active      int
 	on          atomic.Bool
 	files, read atomic.Int64
 	todo, bytes atomic.Int64
 }
 
 func (p *indexing) start(n int, total int64) {
-	p.files.Store(0)
-	p.read.Store(0)
-	p.todo.Store(int64(n))
-	p.bytes.Store(total)
-	p.on.Store(n > 0)
+	p.guard.Lock()
+	defer p.guard.Unlock()
+	if p.active == 0 {
+		p.files.Store(0)
+		p.read.Store(0)
+		p.todo.Store(int64(n))
+		p.bytes.Store(total)
+	} else {
+		p.todo.Add(int64(n))
+		p.bytes.Add(total)
+	}
+	p.active++
+	p.on.Store(true)
+}
+
+func (p *indexing) finish() {
+	p.guard.Lock()
+	defer p.guard.Unlock()
+	p.active--
+	p.on.Store(p.active > 0)
 }
 
 // Progress is how far the sessions being read have got; Indexing is false
@@ -669,15 +722,22 @@ func pricer() func(string) *catalog.Price {
 
 // Reset forgets the kept parses, in memory only.
 func Reset() {
+	directoryCache.Lock()
+	directoryCache.entries = map[string]directoryEntry{}
+	directoryCache.Unlock()
+	resetCalls()
 	mu.Lock()
 	defer mu.Unlock()
 	saved()
 	cache, loaded = nil, false
+	cacheGeneration++
 }
 
 // List reads the latest sessions of every agent, the most recently active
 // first, at most limit of them (Limit when 0).
 func List(limit int) []Session {
+	dbReadMu.Lock()
+	defer dbReadMu.Unlock()
 	if limit <= 0 {
 		limit = Limit
 	}
@@ -819,13 +879,16 @@ func parse(f file, old *state) *state {
 	case "grok":
 		return parseGrok(f)
 	}
+	headBytes := headOf(f.path)
 	var s *state
-	if old != nil && f.size >= old.Size && old.Off <= f.size {
+	if old != nil && f.size >= old.Size && old.Off <= f.size && sameHead(headBytes, old.Head, old.HeadSize) && old.ContentHash != "" && prefixHash(f.path, old.Size) == old.ContentHash {
 		s = old.clone()
 	} else {
 		s = &state{}
 	}
 	s.Size, s.Mod = f.size, f.mod.UnixNano()
+	s.Head, s.HeadSize = hashHead(headBytes), len(headBytes)
+	s.ContentHash = prefixHash(f.path, f.size)
 	line := claudeLine
 	switch f.agent {
 	case "codex":
@@ -837,11 +900,15 @@ func parse(f file, old *state) *state {
 	}
 	var head func([]byte) bool
 	if f.agent == "codex" {
-		// a Codex line is read only when its start says it is wanted
 		line = codexBody
+	}
+	if f.agent == "codex" {
 		head = func(b []byte) bool { return codexHead(s, b, f.main) }
 	}
-	off, err := scanHead(f.path, s.Off, head, func(b []byte) { line(s, b, f.main) })
+	off, err := scanAt(f.path, s.Off, head, func(b []byte, _, _ int64) bool {
+		line(s, b, f.main)
+		return true
+	})
 	if err == nil {
 		s.Off = off
 	}
@@ -867,6 +934,13 @@ func scan(path string, off int64, fn func([]byte)) (int64, error) {
 // bytes are lines no one reads: compactions, tool output). A nil head
 // wants every line.
 func scanHead(path string, off int64, head func([]byte) bool, fn func([]byte)) (int64, error) {
+	return scanAt(path, off, head, func(b []byte, _, _ int64) bool { fn(b); return true })
+}
+
+// scanAt is scanHead telling fn where each line starts and ends in the file,
+// and stopping when fn says so; what it returns is where the last line it
+// handled ended.
+func scanAt(path string, off int64, head func([]byte) bool, fn func(b []byte, start, end int64) bool) (int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return off, err
@@ -907,7 +981,9 @@ func scanHead(path string, off int64, head func([]byte) bool, fn func([]byte)) (
 		}
 		if !skip {
 			if b = bytes.TrimSpace(b); len(b) > 0 && (seen || head == nil || head(b)) {
-				fn(b)
+				if !fn(b, off, off+n) {
+					return off + n, nil
+				}
 			}
 		}
 		off += n

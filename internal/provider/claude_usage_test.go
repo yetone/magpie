@@ -27,14 +27,15 @@ func fakeClaudeUsage(t *testing.T, out *atomic.Value, fail *atomic.Bool) *atomic
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("magpie asked Anthropic itself: %s", r.URL)
 	}))
-	oldBase := claudeBase
+	oldBase, oldWait := claudeBase, claudeUsageWait
 	claudeBase = srv.URL
+	claudeUsageWait = func() time.Duration { return usageTestWait }
 	claudeAsked.Store(0)
 	claudeUsage.Lock()
 	claudeUsage.m = nil
 	claudeUsage.Unlock()
 	t.Cleanup(func() {
-		claudeCLIUsage, claudeBase = old, oldBase
+		claudeCLIUsage, claudeBase, claudeUsageWait = old, oldBase, oldWait
 		claudeAsked.Store(oldAsked)
 		srv.Close()
 		claudeUsage.Lock()
@@ -82,7 +83,7 @@ func TestClaudeWindowsAsked(t *testing.T) {
 		t.Fatalf("too soon: %v %d", err, runs.Load())
 	}
 
-	// claudeEvery on, unasked: run again by itself, once
+	// its wait on, unasked: run again by itself, once
 	age := func(d time.Duration) {
 		claudeUsage.Lock()
 		e := claudeUsage.m["a@x"]
@@ -91,9 +92,9 @@ func TestClaudeWindowsAsked(t *testing.T) {
 		claudeUsage.Unlock()
 	}
 	claudeAsked.Store(0) // the ask above was answered by the run before it
-	age(claudeEvery - time.Minute)
+	age(usageTestWait - time.Minute)
 	if _, err = claudeWindows(ctx, "a@x", true); err != nil || runs.Load() != 1 {
-		t.Fatalf("ran before claudeEvery: %v %d", err, runs.Load())
+		t.Fatalf("ran before its wait: %v %d", err, runs.Load())
 	}
 	age(time.Minute)
 	out.Store("Current session: 55% used · resets Oct 1 at 3:30pm (UTC)\n")
@@ -103,9 +104,9 @@ func TestClaudeWindowsAsked(t *testing.T) {
 		}
 	}
 
-	// a failed run says why, and isn't run again until asked or claudeEvery on
+	// a failed run says why, and isn't run again until asked or its wait is up
 	claudeUsage.Lock()
-	claudeUsage.m["b@x"] = claudeUsageEntry{tried: time.Now().Add(-claudeEvery)}
+	claudeUsage.m["b@x"] = claudeUsageEntry{tried: time.Now().Add(-claudeUsageWaitMax)}
 	claudeUsage.Unlock()
 	fail.Store(true)
 	if _, err = claudeWindows(ctx, "b@x", true); err == nil || runs.Load() != 3 {
@@ -159,5 +160,24 @@ What's contributing to your limits usage?
 	}
 	if _, err := parseClaudeUsage("Error: not logged in", now); err == nil {
 		t.Fatal("nothing told, no error")
+	}
+}
+
+// usageTestWait is the wait between unasked runs of /usage in tests.
+const usageTestWait = 7 * time.Minute
+
+// An unasked run of /usage waits a whole number of minutes from 3 to 10,
+// drawn afresh each time, so it isn't run on a clock.
+func TestClaudeWaitRandom(t *testing.T) {
+	seen := map[time.Duration]bool{}
+	for range 2000 {
+		w := claudeUsageWait()
+		if w < claudeUsageWaitMin || w > claudeUsageWaitMax || w%time.Minute != 0 {
+			t.Fatalf("wait %v", w)
+		}
+		seen[w] = true
+	}
+	if len(seen) != 8 {
+		t.Fatalf("waits drawn: %v", seen)
 	}
 }

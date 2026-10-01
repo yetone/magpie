@@ -800,7 +800,7 @@ func (e *chatEncoder) event(ev Event) {
 	case KError:
 		failed := map[string]any{"message": ev.Text, "type": "api_error"}
 		if ev.Code != "" {
-			failed["code"] = ev.Code // a refusal, for the next account to be asked
+			failed["code"] = ev.Code // preserve the upstream error type, including refusals
 		}
 		e.w.event("", map[string]any{"error": failed})
 	}

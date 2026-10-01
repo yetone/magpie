@@ -56,6 +56,7 @@
 <nav class="ptabs" id="ptabs" hidden>
   <button type="button" data-ptab="agents"><span data-t>Agents</span><em id="ptabN"></em></button>
   <button type="button" data-ptab="usage"><span data-t>Allowances</span></button>
+  <button type="button" data-ptab="stats"><span data-t>Usage</span></button>
   <button type="button" data-ptab="routing"><span data-t>Routing</span></button>
 </nav>
 
@@ -68,6 +69,7 @@
   </section>
   <section class="panel-quota" id="panelQuota" hidden></section>
   <section class="panel-routing" id="panelRouting" hidden></section>
+  <section class="panel-usage" id="panelUsage" hidden></section>
 </main>
 
 <main class="view" id="view-providers" hidden>
@@ -114,6 +116,10 @@
     <div class="segs" id="period"></div>
     <div class="segs" id="sessRange" hidden></div>
     <span class="grow"></span>
+    <span class="usage-refresh" id="usageRefresh">
+      <button class="icon" id="usageReload" type="button" aria-label="Refresh now" data-tt><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3"/></svg></button>
+      <button class="sess-pick" id="usageEvery" type="button"></button>
+    </span>
     <span class="usage-cost" id="usageCost"></span>
   </div>
   <div class="usage-pane" id="usagePane">
@@ -125,6 +131,7 @@
       <div class="segs" id="quotaMode" hidden></div>
     </div>
     <section class="subscription-usage" id="subscriptionUsage"></section>
+    <p class="usage-note" id="usageScope" data-t>Gateway calls only; session-log calls are in Requests. Local rejections are excluded from totals.</p>
     <section class="stats" id="stats"></section>
     <section class="chart" id="chart"></section>
     <div class="row-head"><span class="label" data-t>Agents</span></div>
@@ -138,12 +145,30 @@
   <div class="usage-pane" id="ledgerPane" hidden>
     <div class="sess-tools">
       <button class="sess-pick" id="ledAgent" type="button" hidden></button>
+      <button class="sess-pick" id="ledProvider" type="button" hidden></button>
       <button class="sess-pick" id="ledKey" type="button" hidden></button>
       <div class="segs" id="ledStatus"></div>
       <span id="ledRoute" hidden><span id="ledRouteLabel"></span><button class="text" id="ledRouteClear" type="button" data-tt="Clear filter" aria-label="Clear filter">×</button></span>
       <span class="grow"></span>
       <input class="sess-filter" id="ledQ" type="search" spellcheck="false" autocomplete="off" placeholder="Search models, providers, sessions" data-tp>
       <button class="text" id="ledExport" type="button" title="Save every request listed, all pages, as a CSV file in Downloads" data-tt><span data-t>Export CSV</span></button>
+    </div>
+    <p class="usage-note" id="ledScope" data-t>Gateway and session-log calls; local rejections excluded from totals.</p>
+    <div class="led-dash" id="ledDash" hidden>
+      <div class="led-strip" id="ledKpi"></div>
+      <section class="led-trend">
+        <div class="led-bar">
+          <div class="segs" id="ledMetric"></div>
+          <span class="grow"></span>
+          <span class="led-by" data-t>Split by</span>
+          <div class="segs" id="ledSplit"></div>
+        </div>
+        <div class="led-body">
+          <div class="led-chart" id="ledChart"></div>
+          <div class="led-rank" id="ledRank"></div>
+          <div class="led-rail" id="ledRail" hidden><i></i></div>
+        </div>
+      </section>
     </div>
     <p class="led-sum" id="ledSum"></p>
     <div class="led-wrap" id="ledWrap"></div>

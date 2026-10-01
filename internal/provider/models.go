@@ -656,21 +656,32 @@ var grokEffort = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/]*?)-(?:minimal|low|
 
 // pricedNames are the ids a model is priced by, in order: its own, then,
 // for a Grok id named at an effort, the model it is that effort of — the
-// same model, at the same price (#224). Nothing else is renamed: a name no
-// catalog prices stays unpriced (grok-4.7-build, grok-4.7-mini,
+// same model, at the same price (#224). Codex Auto Review uses GPT-5.6 Luna
+// according to OpenAI's rate card (2026-09-30):
+// https://help.openai.com/en/articles/11481834-chatgpt-rate-card-business-enterpriseedu-credit-based-pricing
+// This is a list-price estimate, not evidence of a response's served model.
+// Other names without catalog prices stay unpriced (grok-4.7-build, grok-4.7-mini,
 // grok-4.7-fast).
 func pricedNames(model string) []string {
 	out := []string{model}
+	if model == "codex-auto-review" {
+		out = append(out, "gpt-5.6-luna")
+	}
 	if m := grokEffort.FindStringSubmatch(strings.ToLower(strings.TrimSpace(model))); m != nil {
 		out = append(out, m[1])
 	}
 	return out
 }
 
-// PricedName is the id a model is priced by where it's looked up by
-// maker directly (the Sessions page): a Grok id at an effort is its model.
+// PricedName is the catalog ID used for a list-price estimate. Prefer a
+// directly listed model before falling back to a documented alias.
 func PricedName(model string) string {
 	n := pricedNames(model)
+	for _, name := range n {
+		if _, ok := catalog.PricedBy(makerCatalogs(), name); ok {
+			return name
+		}
+	}
 	return n[len(n)-1]
 }
 

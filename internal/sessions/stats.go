@@ -103,6 +103,8 @@ func statsAt(days int, now time.Time) Stats {
 	}
 	out := Stats{From: from, To: today.Format(time.DateOnly), Days: []Day{}, Sessions: []Summary{}}
 
+	dbReadMu.Lock()
+	defer dbReadMu.Unlock()
 	mu.Lock()
 	defer mu.Unlock()
 	loadCache()

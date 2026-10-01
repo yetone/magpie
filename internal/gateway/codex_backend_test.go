@@ -645,6 +645,24 @@ func TestCodexThirdPartyCompactEndpointRejected(t *testing.T) {
 	}
 }
 
+func TestCodexBackendKeepsNativeSession(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(`data: {"type":"response.completed","response":{"usage":{"input_tokens":9,"output_tokens":2}}}`))
+	})
+	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":[]}`))
+	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	req.Header.Set("Session_id", "native-thread")
+	req.Header.Set(SessionHeader, "routing-override")
+	rec := httptest.NewRecorder()
+	New().Handler().ServeHTTP(rec, req)
+	rs := usage.Load(time.Time{})
+	if len(rs) != 1 || rs[0].NativeSession != "native-thread" || rs[0].Session != "routing-override" {
+		t.Fatalf("lost native session: %+v", rs)
+	}
+}
+
 // A codex provider switched off narrows nothing: it serves no agent
 // anything, so the account's own list is left whole, its picks kept for
 // when it is switched on again.

@@ -1,5 +1,50 @@
 # Dropdown browser regression
 
+## Gateway Caller Keys
+
+`gateway-caller-keys.test.cjs` checks the named caller-key list on the
+Gateway page, including creation, copying, renaming, disabling, enabling,
+rotation and deletion. It verifies key-level usage overview, request filtering and
+CSV export in Chinese and English on Chromium and WebKit. The fixtures do
+not access local credentials. Gateway keys appear only while sharing is on, with one create entry point
+and confirmation before rotation/removal (Cancel and Escape send no mutation).
+Gateway is the only key-management page;
+Settings controls sharing and shows addresses. The test checks that toggling
+sharing retains the key, and that a removed default key is recreated as
+Magpie and appears in Gateway without a reload.
+
+`gateway-connect-keys.test.cjs` selects loopback and LAN addresses and enabled
+caller keys for Shell, curl, Python and Node examples across all four APIs.
+It checks rotation, disabling, removal, stale list responses, empty states,
+literal custom names and narrow layouts in Chinese and English on both engines.
+Sharing off keeps the original API-key field and hides the gateway-key picker;
+sharing on names the arbitrary local option separately from the Magpie key.
+
+`api-key-usage.test.cjs` exercises the existing provider key list: adding,
+enabling and disabling, choosing the first key, renaming and removing.
+The Usage page's Gateway key rows, request filter and CSV exports identify
+client keys, not those provider credentials. A client using different
+upstream keys stays grouped together; renaming an upstream key does not
+rename the client. It also checks historical records, Chinese and English,
+and the narrow window in Chromium and WebKit.
+The API fixtures use test keys and never read local user configuration.
+The existing `usage-ledger.test.cjs` also checks request-route and caller-key
+filters together, CSV export, and restoring the previous caller filter when
+the request filter is cleared.
+
+`api-key-theme.test.cjs` checks Gateway's enabled and disabled keys, creation
+and renaming inputs, rotation and key picker, plus Settings' LAN address
+controls against the global palette.
+Light and Dark override the OS; System follows live OS palette changes.
+The settings theme picker is also switched and reloaded in Chromium and
+WebKit. No separate colours are defined for gateway keys.
+
+```sh
+node --test --test-concurrency=1 internal/gui/tests/gateway-caller-keys.test.cjs internal/gui/tests/gateway-connect-keys.test.cjs internal/gui/tests/api-key-usage.test.cjs internal/gui/tests/api-key-theme.test.cjs
+```
+
+## Other Browser Regressions
+
 `session-terminal.test.cjs` checks the macOS Settings choice for installed
 `.command` handlers in English and Chinese. The system default appears once
 and is selected at first. It selects Ghostty, changes the theme, then returns
@@ -398,6 +443,55 @@ autonomy (remembered, the page left where it was), tool use (the top tools,
 their kinds and weeks) and the top skills with their last use, agents and
 projects.
 
+`usage-ledger-detail.test.cjs` opens the Requests tab's rows: a failure the
+gateway logged shows its status and the vendor's error type in the row and,
+opened, what the vendor said with the request's id and endpoint; a call read
+from an agent's session file carries a "session log" mark, says "Succeeded" or
+the error that ended it, and says in its details that the file records no
+status; its models are the one asked for, the one sent as asked and the one that answered, its effort is there, and its time is about (≈) what the file's stamps tell. A click opens and closes a row without moving the page, Enter and Space
+do the same, text selected in the details is not a click, and the rows stay open
+when the list is asked for again; in English and Chinese.
+
+`usage-ledger-chart.test.cjs` opens the Requests tab on what its requests add
+up to: a strip of four totals (tokens, requests, cost, the cache hit rate),
+then the trend of one metric — tokens, cost or requests — as columns by the
+hour, each told apart by provider, agent or model and standing on the bottom
+line in its hour's slot, beside a ranking of the same that is the chart's
+legend. The pointer over a column shows what each had of it, over a ranked one
+the others fade; a click on a provider or an agent in the ranking, or the
+provider picker beside the agent's, lists only its requests while the ranking
+keeps the others in sight; the metric and the split are remembered; a click
+moves nothing. At 560 the ranking goes under the chart and the totals two to a
+row, a wider window redraws it, a metric with no price says so, and with no
+request listed there is nothing; in English and Chinese, light and dark.
+
+`panel-usage.test.cjs` opens the tray panel's Usage tab: the totals, a small
+chart and a ranking of five at most for today, seven or thirty days, the
+metric switch, and a click on a provider (or the picker) that switches to it —
+its models then tell the chart apart. A click on a control in sight leaves the
+panel where it is, Open Usage takes the window to that provider's requests,
+and the window opened so has the Requests tab with that provider and agent
+picked and an address without them. Nothing is cut off at 320, where the
+totals go two to a row; available allowances keep their tab; in English and Chinese.
+
+`usage-refresh.test.cjs` sets the Usage page's refresh period, with a clock in
+place of time: every 5 s to begin with and no read before that, the picker's
+five (off, 5 s, 10 s, 30 s, a minute), off reading no more, a minute reading at
+its end and not at half of it, the button beside it reading at once, turning
+while it does and saying when in its title, on Overview the summary and the
+allowances too, and the choice remembered by the next window; in English and
+Chinese.
+
+`usage-ledger-content.test.cjs` opens the rows of the Requests tab on what was
+said in them, read from the agent's session file when the row is opened: loading,
+then the input and the output as parts (who said each, a tool's call with its
+name), the reasoning and the agent's own context folded, a long part showing some
+of itself and unrolling, what is left off a part or the whole said; a gateway
+request is asked for by its session and the span it took, a call of a session file
+at its own time; a request the files can't tell says why (no session, an agent whose
+files aren't read, no such call); a row opened again, or the list read anew, asks no
+more; the details fit the table's box at 560; in English and Chinese.
+
 `shared-skills.test.cjs` opens the Library's Skills tab with skills found in
 the user-wide `~/.agents/skills` (#227): one row for a skill there that
 agents link or junction to, "shared in ~/.agents/skills/…" with those
@@ -721,13 +815,13 @@ doesn't move; English and Chinese, Chromium and WebKit.
 With Node.js and Playwright available:
 
 ```sh
-node --test --test-concurrency=1 internal/gui/tests/menu-scroll.test.cjs internal/gui/tests/click-scroll.test.cjs internal/gui/tests/panel-fold.test.cjs internal/gui/tests/rollup-short.test.cjs internal/gui/tests/panel-routing.test.cjs internal/gui/tests/gateway-fold.test.cjs internal/gui/tests/routing-kind.test.cjs internal/gui/tests/balance-fix.test.cjs internal/gui/tests/cli-update.test.cjs internal/gui/tests/login-import.test.cjs internal/gui/tests/agy-launch.test.cjs internal/gui/tests/currency.test.cjs internal/gui/tests/usage-ledger.test.cjs internal/gui/tests/update-check.test.cjs internal/gui/tests/omarchy.test.cjs internal/gui/tests/brand.test.cjs internal/gui/tests/library-loading.test.cjs internal/gui/tests/signin-callback.test.cjs internal/gui/tests/routing-steady.test.cjs internal/gui/tests/old-webkit.test.cjs internal/gui/tests/session-terminal.test.cjs internal/gui/tests/text-size.test.cjs internal/gui/tests/zcode-site.test.cjs internal/gui/tests/rail-tip.test.cjs internal/gui/tests/sync-update.test.cjs internal/gui/tests/plugin-signin.test.cjs internal/gui/tests/plugin-market.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/routing-wb-refused.test.cjs internal/gui/tests/routing-blocked.test.cjs internal/gui/tests/routing-shape.test.cjs internal/gui/tests/market-have.test.cjs internal/gui/tests/sessions-today.test.cjs internal/gui/tests/routing-side-calls.test.cjs internal/gui/tests/import-all-skills.test.cjs internal/gui/tests/routing-flood.test.cjs internal/gui/tests/routing-busy.test.cjs internal/gui/tests/own-skill.test.cjs internal/gui/tests/routing-manual.test.cjs internal/gui/tests/tray-usages.test.cjs internal/gui/tests/provider-remove.test.cjs internal/gui/tests/signin-link.test.cjs internal/gui/tests/tray-inuse.test.cjs internal/gui/tests/codex-auto-reset.test.cjs internal/gui/tests/routing-auto-reset.test.cjs internal/gui/tests/claude-usage-asked.test.cjs internal/gui/tests/claude-risk.test.cjs internal/gui/tests/library-toggle-status.test.cjs internal/gui/tests/library-all.test.cjs internal/gui/tests/routing-reroute-title.test.cjs internal/gui/tests/plain-names.test.cjs internal/gui/tests/panel-effort.test.cjs internal/gui/tests/agent-models-all-hidden.test.cjs internal/gui/tests/omp-roles.test.cjs internal/gui/tests/claude-effort.test.cjs internal/gui/tests/remote-magpie.test.cjs internal/gui/tests/qoder-cn-tile.test.cjs internal/gui/tests/provider-levels-scroll.test.cjs internal/gui/tests/signin-paste-codex.test.cjs internal/gui/tests/usage-alert.test.cjs internal/gui/tests/quota-families.test.cjs internal/gui/tests/provider-search.test.cjs internal/gui/tests/webdav-settings-refresh.test.cjs internal/gui/tests/lan-docker.test.cjs internal/gui/tests/plugin-key-hint.test.cjs internal/gui/tests/update-hide.test.cjs internal/gui/tests/tray-logos.test.cjs internal/gui/tests/routing-proxy.test.cjs internal/gui/tests/sse-body.test.cjs internal/gui/tests/remote-group-served.test.cjs internal/gui/tests/plugin-move-overflow.test.cjs internal/gui/tests/routing-time.test.cjs internal/gui/tests/unlisted-models.test.cjs internal/gui/tests/plugin-updates.test.cjs internal/gui/tests/request-archive.test.cjs internal/gui/tests/group-member-fast.test.cjs internal/gui/tests/providers-off-fold.test.cjs internal/gui/tests/account-return.test.cjs internal/gui/tests/gateway-caller-keys.test.cjs internal/gui/tests/gateway-connect-keys.test.cjs internal/gui/tests/api-key-usage.test.cjs internal/gui/tests/api-key-theme.test.cjs
+node --test internal/gui/tests/menu-scroll.test.cjs internal/gui/tests/click-scroll.test.cjs internal/gui/tests/panel-fold.test.cjs internal/gui/tests/rollup-short.test.cjs internal/gui/tests/panel-routing.test.cjs internal/gui/tests/gateway-fold.test.cjs internal/gui/tests/routing-kind.test.cjs internal/gui/tests/balance-fix.test.cjs internal/gui/tests/cli-update.test.cjs internal/gui/tests/login-import.test.cjs internal/gui/tests/agy-launch.test.cjs internal/gui/tests/currency.test.cjs internal/gui/tests/usage-ledger.test.cjs internal/gui/tests/update-check.test.cjs internal/gui/tests/omarchy.test.cjs internal/gui/tests/brand.test.cjs internal/gui/tests/library-loading.test.cjs node --test internal/gui/tests/signin-callback.test.cjs internal/gui/tests/routing-steady.test.cjs internal/gui/tests/old-webkit.test.cjs internal/gui/tests/session-terminal.test.cjs internal/gui/tests/text-size.test.cjs internal/gui/tests/zcode-site.test.cjs internal/gui/tests/rail-tip.test.cjs internal/gui/tests/sync-update.test.cjs internal/gui/tests/plugin-signin.test.cjs internal/gui/tests/plugin-market.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/routing-wb-refused.test.cjs internal/gui/tests/routing-blocked.test.cjs internal/gui/tests/routing-shape.test.cjs internal/gui/tests/market-have.test.cjs internal/gui/tests/sessions-today.test.cjs internal/gui/tests/routing-side-calls.test.cjs internal/gui/tests/import-all-skills.test.cjs internal/gui/tests/routing-flood.test.cjs internal/gui/tests/routing-busy.test.cjs internal/gui/tests/own-skill.test.cjs internal/gui/tests/routing-manual.test.cjs internal/gui/tests/tray-usages.test.cjs internal/gui/tests/provider-remove.test.cjs internal/gui/tests/signin-link.test.cjs internal/gui/tests/tray-inuse.test.cjs internal/gui/tests/codex-auto-reset.test.cjs internal/gui/tests/routing-auto-reset.test.cjs internal/gui/tests/claude-usage-asked.test.cjs internal/gui/tests/claude-risk.test.cjs internal/gui/tests/library-toggle-status.test.cjs internal/gui/tests/library-all.test.cjs internal/gui/tests/routing-reroute-title.test.cjs internal/gui/tests/plain-names.test.cjs internal/gui/tests/panel-effort.test.cjs internal/gui/tests/agent-models-all-hidden.test.cjs internal/gui/tests/omp-roles.test.cjs internal/gui/tests/claude-effort.test.cjs internal/gui/tests/remote-magpie.test.cjs internal/gui/tests/qoder-cn-tile.test.cjs internal/gui/tests/provider-levels-scroll.test.cjs internal/gui/tests/signin-paste-codex.test.cjs internal/gui/tests/usage-alert.test.cjs internal/gui/tests/quota-families.test.cjs internal/gui/tests/provider-search.test.cjs internal/gui/tests/webdav-settings-refresh.test.cjs internal/gui/tests/lan-docker.test.cjs internal/gui/tests/plugin-key-hint.test.cjs internal/gui/tests/update-hide.test.cjs internal/gui/tests/tray-logos.test.cjs internal/gui/tests/routing-proxy.test.cjs internal/gui/tests/sse-body.test.cjs internal/gui/tests/remote-group-served.test.cjs internal/gui/tests/plugin-move-overflow.test.cjs internal/gui/tests/routing-time.test.cjs internal/gui/tests/unlisted-models.test.cjs internal/gui/tests/plugin-updates.test.cjs internal/gui/tests/request-archive.test.cjs internal/gui/tests/group-member-fast.test.cjs internal/gui/tests/providers-off-fold.test.cjs internal/gui/tests/account-return.test.cjs internal/gui/tests/usage-ledger-detail.test.cjs internal/gui/tests/usage-ledger-chart.test.cjs internal/gui/tests/panel-usage.test.cjs internal/gui/tests/usage-refresh.test.cjs internal/gui/tests/usage-ledger-content.test.cjs
 ```
 
 If Playwright is installed outside the repository, set `NODE_PATH` to the
 directory containing its package. The suite uses Playwright's Chromium and
 WebKit binaries (`playwright install chromium webkit`). No frontend dependency
-is needed by the app itself. Tested with Playwright 1.63.0.
+is needed by the app itself. Tested with Playwright 1.62.1.
 
 For the callback test, `PLAYWRIGHT_CHANNEL=chrome` uses an installed Chrome
 instead of Playwright's Chromium.
@@ -736,39 +830,17 @@ Set `BROWSER=chromium` or `BROWSER=webkit` for one engine. Set `ARTIFACT_DIR` to
 an external directory to retain screenshots and Playwright traces, including
 failed assertions. These browser checks run separately from `make test`.
 
-`gateway-caller-keys.test.cjs` checks the named caller-key list on the
-Gateway page, including creation, copying, renaming, disabling, enabling,
-rotation and deletion. It verifies key-level usage overview, request filtering and
-CSV export in Chinese and English on Chromium and WebKit. The fixtures do
-not access local credentials. Gateway keys appear only while sharing is on, with one create entry point
-and confirmation before rotation/removal (Cancel and Escape send no mutation).
-Gateway is the only key-management page;
-Settings controls sharing and shows addresses. The test checks that toggling
-sharing retains the key, and that a removed default key is recreated as
-Magpie and appears in Gateway without a reload.
+The request-ledger review regressions also cover the explicit data-source notes
+(including the exclusion of local rejections), the local-session label, and native
+panel fitting including Usage (with the desktop's 560px maximum). The detail
+and content tests, along with ledger pagination and filters, bring controls into sight through real wheel input before a
+click, so WebKit's wheel steps and the app's scroll protection do not fight
+Playwright's automatic scrolling. Empty allowances hide their panel tab.
 
-`gateway-connect-keys.test.cjs` selects loopback and LAN addresses and enabled
-caller keys for Shell, curl, Python and Node examples across all four APIs.
-It checks rotation, disabling, removal, stale list responses, empty states,
-literal custom names and narrow layouts in Chinese and English on both engines.
-Sharing off keeps the original API-key field and hides the gateway-key picker;
-sharing on names the arbitrary local option separately from the Magpie key.
-
-`api-key-usage.test.cjs` exercises the existing provider key list: adding,
-enabling and disabling, choosing the first key, renaming and removing.
-The Usage page's Gateway key rows, request filter and CSV exports identify
-client keys, not those provider credentials. A client using different
-upstream keys stays grouped together; renaming an upstream key does not
-rename the client. It also checks historical records, Chinese and English,
-and the narrow window in Chromium and WebKit.
-The API fixtures use test keys and never read local user configuration.
-The existing `usage-ledger.test.cjs` also checks request-route and caller-key
-filters together, CSV export, and restoring the previous caller filter when
-the request filter is cleared.
-
-`api-key-theme.test.cjs` checks Gateway's enabled and disabled keys, creation
-and renaming inputs, rotation and key picker, plus Settings' LAN address
-controls against the global palette.
-Light and Dark override the OS; System follows live OS palette changes.
-The settings theme picker is also switched and reloaded in Chromium and
-WebKit. No separate colours are defined for gateway keys.
+`session-identity.test.cjs` checks historical emails and recorded official vendors
+on session-log rows. Models and current configuration do not establish historical
+routes; session rows without routing evidence display "Local session", including
+with a known session creator. Unknown gateway providers retain their own label.
+Creator emails and recorded provider IDs appear separately in request details.
+Third-party OpenCode gateway calls retain the actual relay. These regressions
+run in Chromium and WebKit, English and Chinese.

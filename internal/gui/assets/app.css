@@ -33,6 +33,8 @@
   --code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --logo-invert: 0;
   --tk-s: #1a7f45; --tk-k: #7c3aed; --tk-f: #1d4ed8; --tk-n: #b45309; --tk-v: #0e7490; --tk-o: #a21caf; --tk-c: #85858d;
+  /* what a chart tells apart: providers, agents, models */
+  --c1: #4f46e5; --c2: #0ea5e9; --c3: #10b981; --c4: #f59e0b; --c5: #ec4899; --c6: #8b5cf6; --c7: #64748b;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -66,6 +68,7 @@
     --shadow: 0 16px 44px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .3), 0 0 0 .5px rgba(255, 255, 255, .1);
     --logo-invert: 1;
     --tk-s: #98d8a4; --tk-k: #c4b5fd; --tk-f: #93c5fd; --tk-n: #f2b544; --tk-v: #67e8f9; --tk-o: #f0abfc; --tk-c: #8b8b94;
+    --c1: #a5b4fc; --c2: #7dd3fc; --c3: #6ee7b7; --c4: #fcd34d; --c5: #f9a8d4; --c6: #c4b5fd; --c7: #94a3b8;
   }
 }
 :root[data-theme="dark"] {
@@ -79,6 +82,7 @@
   --shadow: 0 16px 44px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .3), 0 0 0 .5px rgba(255, 255, 255, .1);
   --logo-invert: 1;
   --tk-s: #98d8a4; --tk-k: #c4b5fd; --tk-f: #93c5fd; --tk-n: #f2b544; --tk-v: #67e8f9; --tk-o: #f0abfc; --tk-c: #8b8b94;
+  --c1: #a5b4fc; --c2: #7dd3fc; --c3: #6ee7b7; --c4: #fcd34d; --c5: #f9a8d4; --c6: #c4b5fd; --c7: #94a3b8;
 }
 /* Windows' own text faces, and Chinese in YaHei UI, its UI face for it, not
    the webview's fallback; the Mac's and Linux's stack is the one above */
@@ -513,6 +517,14 @@ body.window .field.solo { grid-column: auto; }
   .usage-head { gap: 7px; }
   .usage-cost span:not(.skeleton) { display: none; }
   .usage-cost b { font-size: 14px; }
+  /* and the refresh's picker is its figure alone; where the tabs, the periods and
+     these are more than a line, the sum goes on a line of its own, at the right */
+  .usage-head { flex-wrap: wrap; height: auto; min-height: 34px; row-gap: 2px; }
+  .usage-cost { margin-left: auto; }
+  .usage-refresh { margin-right: 0; }
+  .usage-refresh .icon { width: 22px; }
+  .usage-refresh .sess-pick { padding: 0 7px; }
+  .usage-refresh .sess-pick svg { display: none; }
 }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; flex: none; }
 .stats.empty { display: block; background: var(--card); }
@@ -547,6 +559,82 @@ body.window .field.solo { grid-column: auto; }
 #ledgerPane { min-width: 0; }
 #ledgerPane .sess-tools .segs .opt { height: 22px; }
 #ledExport { flex: none; font-size: 12px; }
+/* the totals and the trend over the requests listed: a strip of four totals,
+   then a chart of them by the hour, day or week beside a ranking of who they
+   were of — by provider, agent or model — which is also the chart's legend */
+.led-dash { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.led-dash[hidden] { display: none; }
+.led-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.led-strip .blk { min-width: 0; padding: 11px 15px 10px; }
+.led-strip .blk + .blk { border-left: 1px solid var(--line-2); }
+.led-strip .k { display: block; font-size: 11px; color: var(--muted); }
+.led-strip .v { display: block; margin-top: 2px; font-size: 22px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+.led-strip .v.cost { color: var(--green); }
+.led-strip .sub { display: block; margin-top: 3px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.led-strip .sub b { font-weight: 600; color: var(--fg-2); }
+.led-strip .meter { height: 5px; margin-top: 8px; border-radius: 3px; background: var(--pill); overflow: hidden; }
+.led-strip .meter i { display: block; height: 100%; border-radius: 3px; background: var(--green); }
+.led-trend { padding: 10px 14px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.led-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.led-bar .grow { flex: 1; }
+.led-by { font-size: 11.5px; color: var(--muted); }
+.led-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 272px; gap: 18px; }
+.led-chart { min-width: 0; }
+.led-chart .plot { position: relative; height: 236px; }
+.led-chart svg { display: block; width: 100%; height: 100%; overflow: visible; font-family: var(--font); font-variant-numeric: tabular-nums; }
+.led-chart .grid { stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 2 3; }
+.led-chart .axis { fill: var(--muted); font-size: 10.5px; }
+.led-chart .hot { fill: var(--pill); }
+.led-chart rect.col { transition: opacity .12s; }
+.led-chart .tip { position: absolute; top: 2px; z-index: 2; min-width: 172px; max-width: 260px; padding: 8px 10px 7px; background: var(--pop-bg); border-radius: 9px; box-shadow: var(--shadow); font-size: 11.5px; pointer-events: none; }
+.led-chart .tip[hidden] { display: none; }
+.led-chart .tip b { display: block; margin-bottom: 4px; font-weight: 600; }
+.led-chart .tip div { display: flex; align-items: center; gap: 6px; line-height: 1.6; }
+.led-chart .tip div span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.led-chart .tip i { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.led-chart .tip em { margin-left: auto; padding-left: 12px; font-style: normal; font-variant-numeric: tabular-nums; }
+.led-chart .tip .sum { margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--line-2); color: var(--muted); }
+.led-chart .none { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); text-align: center; padding: 0 20px; }
+.led-rank { min-width: 0; display: flex; flex-direction: column; gap: 1px; align-content: start; }
+.led-rank .rk { display: block; width: 100%; padding: 6px 8px 7px; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.led-rank .rk:hover { background: var(--pill); }
+.led-rank .rk.on { background: var(--accent-soft); }
+.led-rank .rk.plain { cursor: default; }
+.led-rank .rk.plain:hover { background: transparent; }
+.led-rank .rk-a { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12px; }
+.led-rank .rk-sw { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.led-rank .rk-a .ic { width: 13px; height: 13px; flex: none; }
+.led-rank .rk-nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.led-rank .rk-val { margin-left: auto; padding-left: 8px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.led-rank .rk-bar { height: 4px; margin: 5px 0 4px 15px; border-radius: 2px; background: var(--pill); overflow: hidden; }
+.led-rank .rk.on .rk-bar { background: var(--card); }
+.led-rank .rk-bar i { display: block; height: 100%; border-radius: 2px; }
+.led-rank .rk-b { margin-left: 15px; font-size: 10.5px; line-height: 1.45; color: var(--muted); font-variant-numeric: tabular-nums; }
+.led-rank .rk-b .rk-bad { color: var(--red); }
+/* beside the chart, the ranking is as tall as the chart and scrolls in itself,
+   however many there are: the chart sizes the row, not the list. No scrollbar,
+   as the views have none: the edge with more beyond it fades out instead */
+@media (min-width: 861px) {
+  .led-body > .led-rank { height: 0; min-height: 100%; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; }
+  .led-body > .led-rank::-webkit-scrollbar { width: 0; height: 0; }
+  .led-body > .led-rank.more-below { -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent); mask-image: linear-gradient(#000 calc(100% - 28px), transparent); }
+  .led-body > .led-rank.more-above { -webkit-mask-image: linear-gradient(transparent, #000 28px); mask-image: linear-gradient(transparent, #000 28px); }
+  .led-body > .led-rank.more-above.more-below { -webkit-mask-image: linear-gradient(transparent, #000 28px, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(transparent, #000 28px, #000 calc(100% - 28px), transparent); }
+  /* where the ranking is scrolled to, and that there is more: a slim rail in
+     the card's margin beside it, its thumb dragged or the rail clicked */
+  .led-rail { position: absolute; right: -9px; width: 5px; border-radius: 3px; background: var(--pill); cursor: default; touch-action: none; }
+  .led-rail[hidden] { display: none; }
+  .led-rail i { position: absolute; left: 0; top: 0; width: 100%; min-height: 24px; border-radius: 3px; background: var(--faint); opacity: .7; transition: opacity .12s; }
+  .led-body:hover .led-rail i, .led-rail.drag i { opacity: 1; }
+  .led-rail.drag i, .led-rail i:hover { background: var(--muted); }
+}
+@media (max-width: 860px) {
+  .led-body { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .led-rail { display: none; }
+  .led-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .led-strip .blk:nth-child(3) { border-left: 0; }
+  .led-strip .blk:nth-child(n + 3) { border-top: 1px solid var(--line-2); }
+}
 .led-sum { margin: 0 2px 7px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* the table scrolls sideways in its own box, never the page */
 .led-wrap { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
@@ -562,7 +650,7 @@ body.window .field.solo { grid-column: auto; }
 .led .n { text-align: right; }
 .led .faint { color: var(--faint); }
 .led .muted { color: var(--muted); }
-.led .when { color: var(--muted); }
+.led th, .led .when, .led .model-value { color: var(--fg-2); }
 .led .when .text { padding: 0; font: inherit; }
 .led .when .led-route-link { text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
 .led .when .led-route-link:hover { text-decoration-style: solid; }
@@ -571,6 +659,9 @@ body.window .field.solo { grid-column: auto; }
 #ledRouteClear { font-size: 18px; padding: 2px 6px; }
 .led .model, .led .where { max-width: 200px; overflow: hidden; text-overflow: ellipsis; }
 .led .where { color: var(--fg-2); }
+.led .where-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.led .source-badges { display: flex; flex-wrap: nowrap; gap: 4px; margin-top: 4px; }
+.led .price-reference { font-size: 10px; color: var(--muted); }
 .led .cost { color: var(--green); }
 .led .cost.faint { color: var(--faint); }
 .led .who { display: inline-flex; align-items: center; gap: 6px; }
@@ -580,6 +671,52 @@ body.window .field.solo { grid-column: auto; }
 .led .st .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none; }
 .led tr.bad .st { color: var(--red); font-weight: 600; }
 .led tr.bad .st .dot { background: var(--red); }
+/* Source chips use identity/channel colors; latency alone uses traffic lights.
+   Existing theme tokens keep these legible in both native color schemes. */
+.led .source-badges .src { flex: none; }
+.led .src { --badge-ink: var(--tk-v); --badge-bg: color-mix(in srgb, var(--badge-ink) 10%, var(--card)); display: inline-flex; align-items: center; gap: 4px; font-size: 9.5px; font-weight: 550; line-height: 16px; padding: 0 6px; border: 1px solid color-mix(in srgb, var(--badge-ink) 19%, transparent); border-radius: 5px; color: var(--badge-ink); background: var(--badge-bg); vertical-align: 1px; }
+.led .src.official { --badge-ink: var(--tk-s); --badge-bg: color-mix(in srgb, var(--badge-ink) 7%, var(--card)); font-size: 9px; font-weight: 650; letter-spacing: .035em; }
+.led .src.official::before { content: ""; width: 6px; height: 3.5px; border-left: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-1px) rotate(-45deg); }
+.led .src.access-api { --badge-ink: var(--tk-f); }
+.led .src.access-subscription { --badge-ink: var(--tk-k); }
+.led .duration { font-weight: 550; }
+.led .duration-fast { color: var(--tk-s); }
+.led .duration-slow { color: var(--amber); }
+.led .duration-long { color: var(--red); }
+.led .duration.faint { font-weight: 400; }
+.led tr.led-row { cursor: pointer; }
+.led tr.led-row:focus-visible { outline: 2px solid var(--accent, var(--fg-2)); outline-offset: -2px; }
+.led tr.open td { background: var(--card-2, var(--pill)); }
+.led tr.led-detail td { padding: 0; white-space: normal; background: var(--card-2, var(--pill)); }
+.led-box { position: sticky; left: 0; box-sizing: border-box; width: min(100%, calc(var(--ledw, 720px) - 2px), 900px); padding: 8px 12px 11px; }
+.led-dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 11.5px; }
+.led-dl dt { color: var(--muted); }
+.led-dl dd { margin: 0; min-width: 0; color: var(--fg); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.led-dl dd.bad { color: var(--red); font-weight: 600; }
+.led-dl dd.said { color: var(--fg); white-space: pre-wrap; }
+.led-dl dd.muted { color: var(--muted); }
+/* what was said in a request, in its details */
+.led-cx { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line-2); }
+.cx-sec + .cx-sec { margin-top: 10px; }
+.cx-sec h4 { margin: 0 0 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.cx-part { margin: 0 0 6px; }
+.cx-h { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-size: 10.5px; color: var(--muted); }
+.cx-role { padding: 0 6px; border-radius: 5px; background: var(--pill); font-size: 10.5px; line-height: 16px; color: var(--fg-2); }
+.cx-role.user { color: var(--accent); background: var(--accent-soft); }
+.cx-role.assistant { color: var(--green); background: var(--green-soft); }
+.cx-name { font: 11px var(--code); color: var(--fg-2); }
+.cx-t { margin: 0; padding: 7px 9px; border-radius: 8px; background: var(--card); border: 1px solid var(--line-2); font: 11.5px/1.5 var(--code); color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.cx-cut { color: var(--muted); font-style: normal; }
+.cx-part.clamp .cx-t { max-height: 176px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 72%, transparent); mask-image: linear-gradient(#000 72%, transparent); }
+.cx-more { margin-top: 2px; font-size: 11px; }
+details.cx-part > summary { list-style: none; cursor: pointer; }
+details.cx-part > summary::-webkit-details-marker { display: none; }
+details.cx-part > summary .cx-h { margin-bottom: 0; }
+details.cx-part > summary .cx-h::after { content: "▸"; margin-left: 2px; color: var(--faint); }
+details.cx-part[open] > summary .cx-h::after { content: "▾"; }
+details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
+.cx-none { margin: 0; font-size: 11.5px; color: var(--muted); }
+.cx-src { margin: 8px 0 0; font-size: 10.5px; color: var(--faint); }
 .led-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 8px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .led-pager[hidden] { display: none; }
 .led-pager .text { font-size: 12px; }
@@ -762,9 +899,10 @@ body.panel .view { padding-top: 2px; }
 .ptabs button.on { color: var(--fg); font-weight: 550; }
 .ptabs button[hidden] { display: none; }
 .ptabs em { font-style: normal; font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums; }
-body.panel[data-ptab="usage"] :is(#agents, #panelRouting),
-body.panel[data-ptab="routing"] :is(#agents, #panelQuota),
-body.panel[data-ptab="agents"] :is(#panelQuota, #panelRouting) { display: none; }
+body.panel[data-ptab="usage"] :is(#agents, #panelRouting, #panelUsage),
+body.panel[data-ptab="stats"] :is(#agents, #panelRouting, #panelQuota),
+body.panel[data-ptab="routing"] :is(#agents, #panelQuota, #panelUsage),
+body.panel[data-ptab="agents"] :is(#panelQuota, #panelRouting, #panelUsage) { display: none; }
 
 /* ---- the panel's agents: one quiet line each, opened in place ------------ */
 /* icon · name · model · effort · chevron, the last three in columns of their
@@ -1905,10 +2043,48 @@ body.panel .modal { padding: 16px 12px; }
    clear. The panel's paint (which tintPanel hands the system), and the
    floating status, take a plain colour there instead. */
 @supports not (color: color-mix(in srgb, red 50%, blue)) {
+  .led .src, .led .src.official { --badge-bg: var(--card); border-color: var(--line); }
   body.panel { --panel-tint: var(--bg); }
   .status.ok, .status.err, .status.warn { background: var(--bg); }
   .status.lift { background: var(--card); }
 }
+/* ---- the panel's Usage tab: the window's Requests, made small ---------------- */
+.panel-usage { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 2px 2px 6px; }
+.pu-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-height: 24px; }
+.pu-bar .grow { flex: 1; }
+.pu-bar .segs .opt { height: 22px; padding: 0 9px; font-size: 11.5px; }
+.pu-bar .sess-pick { min-width: 0; max-width: 150px; }
+.pu-bar .text { flex: none; font-size: 12px; }
+.pu-tot { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-radius: 11px; background: var(--card); box-shadow: var(--card-edge); }
+.pu-tot .blk { min-width: 0; padding: 8px 10px 8px; }
+.pu-tot .blk + .blk { border-left: 1px solid var(--line-2); }
+.pu-tot .k { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pu-tot .v { display: block; margin-top: 1px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pu-tot .v.cost { color: var(--green); }
+.pu-tot .sub { display: block; margin-top: 1px; font-size: 10.5px; color: var(--muted); white-space: normal; overflow: visible; text-overflow: clip; }
+.pu-tot .sub.bad { color: var(--red); }
+.pu-card { padding: 8px 10px 6px; border-radius: 11px; background: var(--card); box-shadow: var(--card-edge); }
+.pu-card .led-bar { margin-bottom: 4px; }
+.pu-card .led-bar .segs .opt { height: 20px; padding: 0 8px; font-size: 11px; }
+.pu-card .led-chart .plot { height: 124px; }
+.pu-card .led-rank { margin-top: 4px; }
+.pu-none { margin: 0; padding: 12px; border-radius: 11px; background: var(--card); box-shadow: var(--card-edge); font-size: 12px; line-height: 1.55; color: var(--muted); }
+.pu-none b { display: block; color: var(--fg); font-weight: 550; }
+.skeleton.pu-sk { height: 52px; border-radius: 11px; }
+.panel-usage.pu-loading :is(.pu-tot, .pu-card) { opacity: .55; }
+.panel-usage :is(.pu-tot, .pu-card) { transition: opacity .15s; }
+@media (max-width: 400px) {
+  .pu-tot { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pu-tot .blk:nth-child(3) { border-left: 0; }
+  .pu-tot .blk:nth-child(n + 3) { border-top: 1px solid var(--line-2); }
+}
+
+/* how often the Usage page reads its numbers again, and a way to read them now */
+.usage-refresh { display: inline-flex; align-items: center; gap: 2px; margin-right: 10px; }
+.usage-refresh .icon { width: 24px; height: 24px; }
+.usage-refresh .icon.busy svg { animation: spin .8s linear infinite; }
+.usage-refresh .sess-pick { height: 24px; }
+.led-rank .rk .rk-b { overflow-wrap: anywhere; }
 
 /* ---- an agent's model list ------------------------------------------------ */
 /* the line under an agent's name: quiet words, a pill only on hover */

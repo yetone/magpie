@@ -414,6 +414,50 @@ func VerifyMessage(said, link string) string {
 	return said + " — " + verifyAdvice + ": open the Antigravity app (or Gemini CLI) signed in to it and do what it asks, then try again"
 }
 
+// ErrorType is the kind of error a vendor's body names — the error's type
+// (rate_limit_error, usage_limit_reached), else its code — or "" when it
+// names none: what to set beside the status when a request failed.
+func ErrorType(b []byte) string {
+	var v struct {
+		Error json.RawMessage `json:"error"`
+		Type  string          `json:"type"`
+		Code  json.RawMessage `json:"code"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return ""
+	}
+	name := func(raw json.RawMessage) string {
+		var s string
+		if json.Unmarshal(raw, &s) == nil {
+			return strings.TrimSpace(s)
+		}
+		var n json.Number
+		if json.Unmarshal(raw, &n) == nil {
+			return n.String()
+		}
+		return ""
+	}
+	var e struct {
+		Type string          `json:"type"`
+		Code json.RawMessage `json:"code"`
+	}
+	if json.Unmarshal(v.Error, &e) == nil {
+		if e.Type != "" {
+			return e.Type
+		}
+		if c := name(e.Code); c != "" {
+			return c
+		}
+	}
+	if c := name(v.Code); c != "" {
+		return c
+	}
+	if v.Type != "" && v.Type != "error" {
+		return v.Type
+	}
+	return ""
+}
+
 func apiError(b []byte, fallback string) string {
 	var v struct {
 		Error   json.RawMessage `json:"error"`

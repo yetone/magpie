@@ -352,12 +352,16 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 	}
 	f, _ := w.(http.Flusher)
 	buf := make([]byte, 32<<10)
+	var refusal []byte // what OpenAI said, of a request it turned away
 	for {
 		n, err := res.Body.Read(buf)
 		if n > 0 {
 			if sniff != nil {
 				sniff.write(buf[:n])
 				first.see(buf[:n])
+			}
+			if res.StatusCode >= 400 && len(refusal) < 8<<10 {
+				refusal = append(refusal, buf[:n]...)
 			}
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				break
@@ -380,15 +384,22 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 	var uu Usage
 	uu.add(sniff.usage())
 	call.Usage, served = uu, uu.Served
+	errType := ""
 	if res.StatusCode >= 400 {
-		call.Error = res.Status
+		// its words, the status in front when it said none: the log and
+		// the Routing view show why, not just that
+		call.Error = provider.APIError(refusal, res.Status)
+		errType = provider.ErrorType(refusal)
 	}
 	end(call.Status, call.Error, uu.Input+uu.Output+uu.CacheRead+uu.CacheWrite, uu.Output)
 	s.record(call)
-	appendUsage(r, usage.Record{RouteID: tr.ID, Time: start, Agent: call.Agent, Provider: call.Provider, Host: provider.HostOf(base), Model: call.Model,
+	rec := usage.Record{RouteID: tr.ID, Time: start, Agent: call.Agent, Provider: call.Provider, Host: provider.HostOf(base), Model: call.Model,
 		Requested: call.Model, Served: served,
 		Input: uu.Input, Output: uu.Output, CacheRead: uu.CacheRead, CacheWrite: uu.CacheWrite,
-		Reasoning: uu.Reasoning, Millis: call.Millis, TTFT: call.TTFT, FirstText: call.FirstText, Status: call.Status, Session: sessionOf(r.Header), Kind: call.Kind})
+		Reasoning: uu.Reasoning, Millis: call.Millis, TTFT: call.TTFT, FirstText: call.FirstText, Status: call.Status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
+		RequestID: requestID(res.Header), Endpoint: r.URL.Path}
+	failedWith(&rec, call.Status, call.Error, errType)
+	appendUsage(r, rec)
 }
 
 // unreadableItem is the item OpenAI's refusal names: sealed content it

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -409,19 +410,29 @@ var claudeUsage struct {
 type claudeUsageEntry struct {
 	at    time.Time
 	ws    []QuotaWindow
-	heard time.Time // when Claude Code last told it, answering
-	tried time.Time // when /usage was last run, answered or not
-	err   error     // what the last run said, when it failed
+	heard time.Time     // when Claude Code last told it, answering
+	tried time.Time     // when /usage was last run, answered or not
+	wait  time.Duration // how long after tried it runs again unasked
+	err   error         // what the last run said, when it failed
 }
 
 // claudeAskFloor is the least time between two readings, however often the
-// user refreshes; claudeEvery, between two that nobody asked for (a
-// reading magpie keeps up to date by itself, for the Usage page left open,
-// the menu bar's figures and routing).
+// user refreshes; between two that nobody asked for (a reading magpie keeps
+// up to date by itself, for the Usage page left open, the menu bar's
+// figures and routing) it is claudeUsageWait, drawn afresh after each run,
+// so /usage isn't run on a clock.
 const (
-	claudeAskFloor = 30 * time.Second
-	claudeEvery    = 10 * time.Minute
+	claudeAskFloor     = 30 * time.Second
+	claudeUsageWaitMin = 3 * time.Minute
+	claudeUsageWaitMax = 10 * time.Minute
 )
+
+// claudeUsageWait is how long after a run of /usage the next unasked one is
+// due: a whole minute from claudeUsageWaitMin to claudeUsageWaitMax, at
+// random. A var so tests can fix it.
+var claudeUsageWait = func() time.Duration {
+	return claudeUsageWaitMin + rand.N(claudeUsageWaitMax-claudeUsageWaitMin+time.Minute)/time.Minute*time.Minute
+}
 
 // claudeAsked is when the user last asked to see Claude's usage (unix
 // nanoseconds; zero: never).
@@ -429,8 +440,8 @@ var claudeAsked atomic.Int64
 
 // AskClaudeUsage is the user asking to see Claude's usage — opening the
 // Usage page, refreshing it, `magpie quota` — so Claude Code's /usage is
-// run at once rather than when the last reading is claudeEvery old; the
-// next SubscriptionUsage waits for it.
+// run at once rather than when the next unasked reading is due
+// (claudeUsageWait); the next SubscriptionUsage waits for it.
 func AskClaudeUsage() {
 	claudeAsked.Store(time.Now().UnixNano())
 	c := &subscriptionUsageCache
@@ -450,7 +461,7 @@ func AskClaudeUsage() {
 // claudeWindows is the allowance of the Claude account user. Only the
 // account Claude Code is signed in to (active) is read, by Claude Code's
 // own /usage: when the user asked since it last was, or when the last
-// reading is claudeEvery old; any other time it is what was kept.
+// reading's claudeUsageWait is up; any other time it is what was kept.
 // magpie itself never asks Anthropic.
 func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow, error) {
 	key := strings.ToLower(user)
@@ -459,15 +470,15 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	asked := claudeAsked.Load()
 	c.Lock()
 	e, ok := c.m[key]
-	// one reading an ask or a claudeEvery, its first caller's; the others
-	// keep to it
-	due := e.tried.IsZero() || now.Sub(e.tried) >= claudeEvery || asked > e.tried.UnixNano()
+	// one reading an ask or a wait, its first caller's; the others keep
+	// to it
+	due := e.tried.IsZero() || now.Sub(e.tried) >= e.wait || asked > e.tried.UnixNano()
 	read := active && due && now.Sub(e.tried) >= claudeAskFloor
 	if read {
 		if c.m == nil {
 			c.m = map[string]claudeUsageEntry{}
 		}
-		e.tried = now
+		e.tried, e.wait = now, claudeUsageWait()
 		c.m[key] = e
 	}
 	c.Unlock()
@@ -500,7 +511,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	if c.m == nil {
 		c.m = map[string]claudeUsageEntry{}
 	}
-	c.m[key] = claudeUsageEntry{at: now, ws: ws, heard: e.heard, tried: now}
+	c.m[key] = claudeUsageEntry{at: now, ws: ws, heard: e.heard, tried: now, wait: e.wait}
 	c.Unlock()
 	return ws, nil
 }
