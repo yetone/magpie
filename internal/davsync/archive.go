@@ -56,20 +56,33 @@ func (b *Bucket) Put(ctx context.Context, name string, data []byte) error {
 	return s.explain("write", readError(res))
 }
 
-// Get reads what is at name; ErrNoObject when there is nothing.
+// Get reads what is at name, its first 16 MiB; ErrNoObject when there is
+// nothing.
 func (b *Bucket) Get(ctx context.Context, name string) ([]byte, error) {
-	s := b.at(name)
-	res, err := s.send(ctx, http.MethodGet, nil, nil)
+	body, _, err := b.Open(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+	defer body.Close()
+	return io.ReadAll(io.LimitReader(body, 16<<20))
+}
+
+// Open is what is at name as it is read, however large, and its size (-1
+// when the server doesn't say); ErrNoObject when there is nothing. The
+// caller closes it.
+func (b *Bucket) Open(ctx context.Context, name string) (io.ReadCloser, int64, error) {
+	s := b.at(name)
+	res, err := s.send(ctx, http.MethodGet, nil, nil)
+	if err != nil {
+		return nil, 0, err
+	}
 	if res.StatusCode != http.StatusOK {
+		defer res.Body.Close()
 		e := readError(res)
 		if e.Status == http.StatusNotFound && e.Code != "NoSuchBucket" {
-			return nil, ErrNoObject
+			return nil, 0, ErrNoObject
 		}
-		return nil, s.explain("read", e)
+		return nil, 0, s.explain("read", e)
 	}
-	return io.ReadAll(io.LimitReader(res.Body, 16<<20))
+	return res.Body, res.ContentLength, nil
 }

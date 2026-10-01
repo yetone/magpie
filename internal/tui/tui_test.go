@@ -24,7 +24,7 @@ func home(t *testing.T) string {
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	t.Setenv("PATH", "")
 	t.Setenv("XDG_DATA_HOME", filepath.Join(h, ".local", "share"))
-	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "APPDATA", "VISUAL", "EDITOR", "OPENCODE_DB", "PI_CODING_AGENT_DIR", "OMO_CODING_AGENT_DIR", "SENPI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR"} {
+	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "APPDATA", "VISUAL", "EDITOR", "OPENCODE_DB", "PI_CODING_AGENT_DIR", "OMO_CODING_AGENT_DIR", "SENPI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR", "DSH_HOME"} {
 		t.Setenv(k, "")
 	}
 	for _, f := range []string{".claude/settings.json", ".codex/config.toml"} {

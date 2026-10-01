@@ -20,6 +20,9 @@ type Result struct {
 	// Unimported are, for skills brought in together, the ones that
 	// couldn't be (What is skill:<name>)
 	Unimported []Problem `json:"unimported,omitempty"`
+	// Unremoved are, for skills taken out together, the ones that couldn't
+	// be (What is skill:<name>)
+	Unremoved []Problem `json:"unremoved,omitempty"`
 }
 
 // Problem is one thing that couldn't be given to an agent.

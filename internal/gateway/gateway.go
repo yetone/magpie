@@ -802,7 +802,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	who, agent := callerOf(r), agentOf(r)
 	metadata := requestSessionMetadata(r.Header, body)
 	call := Call{Time: start, From: from, Model: unprefixed(modelOf(body)), Agent: who.agent, Via: who.via, Kind: requestCallKind(r.Header, metadata),
-		RequestBody: requestBody, RequestTruncated: requestTruncated, wire: archiving(r, capture, start)}
+		RequestBody: requestBody, RequestTruncated: requestTruncated, wire: archiving(r, capture, start, body)}
+	defer discardArchive(capture)
 	if call.Kind == "web_search" {
 		call.For = searchFor(r.Context())
 	}
@@ -818,7 +819,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		call.Millis = time.Since(start).Milliseconds()
 		s.record(call)
 		rec := usage.Record{Time: start, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Model: call.Model, Requested: call.Model,
-			Millis: call.Millis, Status: call.Status, Rejected: true, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind, Endpoint: endpointOf(r, from, "")}
+			Millis: call.Millis, Status: call.Status, Rejected: true, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind, Endpoint: endpointOf(r, from, ""), Archive: call.archiveName()}
 		failedWith(&rec, call.Status, call.Error, "")
 		appendUsage(r, rec)
 	}
@@ -1225,7 +1226,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 					CacheWrite: call.Usage.CacheWrite, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: time.Since(began).Milliseconds(), Status: call.Status,
 					TTFT: try.TTFT, FirstText: try.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
-					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To)}
+					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To), Archive: call.archiveName()}
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 				appendUsage(r, rec)
 			}
@@ -1383,7 +1384,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 			CacheWrite: call.Usage.CacheWrite, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: call.Millis, Status: call.Status,
 			TTFT: call.TTFT, FirstText: call.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
-			RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To)}
+			RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To), Archive: call.archiveName()}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 		appendUsage(r, rec)
 	}
@@ -2187,11 +2188,25 @@ func unsupportedOptionalField(fault any, field string) bool {
 		// A proxy can embed the vendor's JSON error in prose. Prefer its
 		// structure to text matching, which could mistake an input echo
 		// or a different parameter's error for a refusal.
-		if i := strings.IndexAny(v, "{["); i >= 0 {
+		rest := v
+		for {
+			i := strings.IndexAny(rest, "{[")
+			if i < 0 {
+				break
+			}
 			var inner any
-			if json.NewDecoder(strings.NewReader(v[i:])).Decode(&inner) == nil {
+			dec := json.NewDecoder(strings.NewReader(rest[i:]))
+			if dec.Decode(&inner) != nil {
+				// not JSON there ([HTTP 400]): look on past the bracket
+				rest = rest[i+1:]
+				continue
+			}
+			if hasOptionalErrorObject(inner) {
 				return unsupportedOptionalField(inner, field)
 			}
+			// [400] can be a status prefix. Look past it for a JSON
+			// error object before falling back to the original prose.
+			rest = rest[i+int(dec.InputOffset()):]
 		}
 		for _, match := range unknownOptionalField.FindAllStringSubmatchIndex(v, -1) {
 			if v[match[2]:match[3]] != field {
@@ -2238,6 +2253,20 @@ func unsupportedOptionalField(fault any, field string) bool {
 		}
 		for _, key := range []string{"error", "message", "detail", "details", "errors", "description", "metadata", "raw"} {
 			if unsupportedOptionalField(v[key], field) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasOptionalErrorObject(fault any) bool {
+	switch v := fault.(type) {
+	case map[string]any:
+		return true
+	case []any:
+		for _, item := range v {
+			if hasOptionalErrorObject(item) {
 				return true
 			}
 		}

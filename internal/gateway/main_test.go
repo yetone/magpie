@@ -37,7 +37,7 @@ func isolatedTests(m *testing.M) (int, error) {
 			return 1, err
 		}
 	}
-	for _, name := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "GROK_HOME"} {
+	for _, name := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "GROK_HOME", "DSH_HOME"} {
 		if err := os.Unsetenv(name); err != nil {
 			return 1, err
 		}

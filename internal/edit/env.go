@@ -20,7 +20,11 @@ func GetEnvFile(path, key string) (string, bool) {
 			if v, ok := unquote(m[2]); ok {
 				return v, true
 			}
-			return m[2], true
+			v := m[2]
+			if i := strings.IndexByte(v, '#'); i >= 0 {
+				v = strings.TrimSpace(v[:i])
+			}
+			return v, true
 		}
 	}
 	return "", false

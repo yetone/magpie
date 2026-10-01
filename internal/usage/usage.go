@@ -86,6 +86,10 @@ type Record struct {
 	// Remote magpie provider there), Agent being the agent's on it; "" for
 	// a call made on this computer
 	Via string `json:"via,omitempty"`
+	// Archive is where the request archive keeps the call, "<date>/<id>"
+	// (gateway/archive.go), when it was on: the Usage page reads it back
+	// by it long after Recent calls has let the call go (#447)
+	Archive string `json:"archive,omitempty"`
 }
 
 // Path is the log file: ~/.config/magpie/usage.jsonl (XDG-aware).

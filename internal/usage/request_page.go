@@ -41,7 +41,7 @@ type RequestPage struct {
 
 type packedRow struct {
 	Time                           time.Time
-	Text                           [23]uint32
+	Text                           [24]uint32
 	Tokens                         [5]int64
 	Millis, TTFT, FirstText, Order int64
 	RouteID                        int64
@@ -60,8 +60,11 @@ type rowChunk struct {
 	Used      uint64
 }
 
-func rowText(r *Row) [22]*string {
-	return [22]*string{&r.Agent, &r.Provider, &r.Host, &r.SessionProvider, &r.SessionAccount, &r.Model, &r.Requested, &r.Served, &r.Effort, &r.Error, &r.ErrType, &r.RequestID, &r.Endpoint, &r.Session, &r.NativeSession, &r.Kind, &r.Source, &r.Via, &r.ProviderKeyID, &r.ProviderKeyName, &r.CallerKeyID, &r.CallerKeyName}
+// rowMsg is the Text of a row's Claude message id, after rowText's
+const rowMsg = 23
+
+func rowText(r *Row) [23]*string {
+	return [23]*string{&r.Agent, &r.Provider, &r.Host, &r.SessionProvider, &r.SessionAccount, &r.Model, &r.Requested, &r.Served, &r.Effort, &r.Error, &r.ErrType, &r.RequestID, &r.Endpoint, &r.Session, &r.NativeSession, &r.Kind, &r.Source, &r.Via, &r.ProviderKeyID, &r.ProviderKeyName, &r.CallerKeyID, &r.CallerKeyName, &r.Archive}
 }
 func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	if c.dict == nil {
@@ -82,7 +85,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	for i, s := range rowText(&r) {
 		p.Text[i] = intern(*s)
 	}
-	p.Text[22] = intern(msg)
+	p.Text[rowMsg] = intern(msg)
 	if r.Priced {
 		p.Flags |= 1
 	}
@@ -437,7 +440,7 @@ func visibleLocal(chunks []*rowChunk) map[rowRef]bool {
 	seen := map[string]bool{}
 	for _, c := range chunks {
 		for i, p := range c.Rows {
-			msg := c.Strings[p.Text[22]]
+			msg := c.Strings[p.Text[rowMsg]]
 			if msg == "" {
 				continue
 			}

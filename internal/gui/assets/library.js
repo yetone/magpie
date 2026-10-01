@@ -1410,6 +1410,8 @@
       if (lib.skills.length > 8) rh.append(skillFilter(box, all));
       const fresh = lib.skills.filter((s) => s.kind === "github" || s.origin);
       rh.append(el("span", "grow"));
+      if (lib.skills.length > 1 && all.length) rh.append(...everySkillButtons(all));
+      if (lib.skills.length > 1) rh.append(removeEverySkillButton());
       if (lib.skills.some((s) => s.kind === "github")) {
         const c = button(checking ? t("Checking…") : t("Check for updates"), "lib-updall", () => checkSkills());
         c.title = t("Ask GitHub which skills changed since they were installed");
@@ -2054,6 +2056,100 @@
       render();
     } catch (e) {
       status(e.message, "err", 6000);
+    }
+  }
+
+  // Every skill on, or off, for every agent shown that can take skills, in
+  // one write rather than a row's All for each (#443); an agent not shown
+  // keeps what it has. Off asks first, in the page.
+  function everySkillButtons(all) {
+    const ids = all.map((a) => a.id), n = all.length;
+    const on = button(t("Turn all on"), "action lib-updall lib-everyon", () => everySkill(ids, true));
+    on.title = t("Give every skill to all {n} agents that can take skills", { n });
+    on.disabled = lib.skills.every((s) => ids.every((id) => s.agents?.includes(id)));
+    const off = button(t("Turn all off"), "action lib-updall lib-everyoff", () => confirmEveryOff(ids));
+    off.title = t("Take every skill from all {n} agents", { n });
+    off.disabled = !lib.skills.some((s) => ids.some((id) => s.agents?.includes(id)));
+    return [on, off];
+  }
+
+  function confirmEveryOff(ids) {
+    const ed = el("div", "editor lib-editor");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.skill), el("b", "", t("Turn off all {n} skills?", { n: lib.skills.length })));
+    ed.append(head);
+    ed.append(el("p", "lib-confirm", t("Every skill is taken out of {agents}. They stay in the library, to turn on again.", { agents: ids.map(nameOf).join(", ") })));
+    const bar = el("div", "bar");
+    const go = button(t("Turn all off"), "primary danger-fill", async () => { go.disabled = true; if (await everySkill(ids, false)) closeLibModal(); else go.disabled = false; });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
+  }
+
+  async function everySkill(ids, on) {
+    try {
+      const v = await api("library/skills/agents-all", { agents: ids, on });
+      take(v);
+      const n = lib.skills.length, m = ids.length;
+      report(v.result, on ? t("{n} skills are on for all {m} agents", { n, m }) : t("{n} skills are off for all {m} agents", { n, m }));
+      render();
+      return true;
+    } catch (e) {
+      status(e.message, "err", 6000);
+      return false;
+    }
+  }
+
+  // Every skill out of the library at once (#449), each as a row's Remove
+  // takes it: out of every agent and project, its folder moved to magpie's
+  // backups, or for one linked from a folder of the user's only the link
+  // taken away. It asks first, in the page, saying who loses what.
+  function removeEverySkillButton() {
+    const b = button(t("Remove all"), "action danger lib-updall lib-everyrm", () => confirmRemoveEverySkill());
+    b.title = t("Take all {n} skills out of the library", { n: lib.skills.length });
+    return b;
+  }
+
+  function confirmRemoveEverySkill() {
+    const skills = lib.skills.slice(), names = skills.map((s) => s.name), n = names.length;
+    const agents = [...new Set(skills.flatMap((s) => s.agents || []))];
+    const linked = skills.filter((s) => s.kind === "folder").length, kept = n - linked;
+    const projects = (lib.projects || []).filter((p) => names.some((x) => p.skills?.[x]?.length)).length;
+    const ed = el("div", "editor lib-editor");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.trash), el("b", "", t("Remove all {n} skills?", { n })));
+    ed.append(head);
+    ed.append(el("p", "lib-confirm", agents.length
+      ? t("They are taken out of the library and out of {agents}.", { agents: agents.map(nameOf).join(", ") })
+      : t("They are taken out of the library; no agent has any of them.")));
+    if (projects) ed.append(el("p", "lib-confirm", t("The skills magpie placed in {n} projects are taken away too.", { n: projects })));
+    const where = [];
+    if (kept) where.push(t("{n} folders are moved to magpie's backups (Backups, at the foot of the Library), not deleted.", { n: kept }));
+    if (linked) where.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
+    ed.append(el("p", "lib-confirm", where.join(" ")));
+    const bar = el("div", "bar");
+    const go = button(t("Remove all {n}", { n }), "primary danger-fill", async () => { go.disabled = true; if (await removeEverySkill(names)) closeLibModal(); else go.disabled = false; });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
+  }
+
+  async function removeEverySkill(names) {
+    try {
+      const v = await api("library/skills/remove-all", { names });
+      take(v);
+      const res = v.result || {}, no = res.unremoved || [];
+      if (no.length) {
+        const p = no[0];
+        status(t("{name} wasn't removed: {error}", { name: p.what.replace(/^skill:/, ""), error: p.error }) + (no.length > 1 ? " " + t("(and {n} more)", { n: no.length - 1 }) : ""), "warn", 8000);
+      } else report(res, t("{n} skills removed", { n: names.length }));
+      render();
+      return true;
+    } catch (e) {
+      status(e.message, "err", 6000);
+      return false;
     }
   }
 

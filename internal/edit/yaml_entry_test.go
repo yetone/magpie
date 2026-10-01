@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,12 +28,42 @@ func TestYAMLTopAfterBlockEntry(t *testing.T) {
 		{"sequence",
 			"GOOSE_MODEL: m\nlist:\n- a\n- b\nnested:\n  - c\n",
 			"GOOSE_MODEL: m\nlist:\n- a\n- b\nnested:\n  - c\nGOOSE_THINKING_EFFORT: off\n"},
+		{"flow mapping",
+			"GOOSE_MODEL: m\nextensions: {\n  dev: {enabled: true}\n}\n\n# the end\n",
+			"GOOSE_MODEL: m\nextensions: {\n  dev: {enabled: true}\n}\nGOOSE_THINKING_EFFORT: off\n\n# the end\n"},
+		{"flow sequence",
+			"extensions: [\n  {name: dev, enabled: true}\n]\n",
+			"extensions: [\n  {name: dev, enabled: true}\n]\nGOOSE_THINKING_EFFORT: off\n"},
+		{"document markers",
+			"---\nextensions: {\n  dev: {enabled: true}\n}\n...\n",
+			"---\nextensions: {\n  dev: {enabled: true}\n}\nGOOSE_THINKING_EFFORT: off\n...\n"},
+		{"document end comment",
+			"---\nextensions: {}\n...\t # end\n# footer\n",
+			"---\nextensions: {}\nGOOSE_THINKING_EFFORT: off\n...\t # end\n# footer\n"},
+		{"indented root",
+			"  GOOSE_MODEL: m\n  extensions: {}\n",
+			"  GOOSE_MODEL: m\n  extensions: {}\n  GOOSE_THINKING_EFFORT: off\n"},
+		{"key inside a quoted scalar",
+			"prompt: \"first\nGOOSE_THINKING_EFFORT: fake\nlast\"\n",
+			"prompt: \"first\nGOOSE_THINKING_EFFORT: fake\nlast\"\nGOOSE_THINKING_EFFORT: off\n"},
+		{"comment-like scalar ending",
+			"prompt: \"first\n# last\"\n# the end\n",
+			"prompt: \"first\n# last\"\nGOOSE_THINKING_EFFORT: off\n# the end\n"},
+		{"terminator-like scalar ending",
+			"prompt: \"first\n...# last\"\n# the end\n",
+			"prompt: \"first\n...# last\"\nGOOSE_THINKING_EFFORT: off\n# the end\n"},
 		{"block scalar",
 			"GOOSE_MODEL: m\nprompt: |\n  first\n\n  # not a comment\n",
 			"GOOSE_MODEL: m\nprompt: |\n  first\n\n  # not a comment\nGOOSE_THINKING_EFFORT: off\n"},
 		{"kept block scalar",
 			"prompt: |+\n  first\n\n\n",
 			"prompt: |+\n  first\n\n\nGOOSE_THINKING_EFFORT: off\n"},
+		{"nested kept block scalar",
+			"extensions:\n  prompt: |+\n    first\n\n\n# the end\n",
+			"extensions:\n  prompt: |+\n    first\n\n\nGOOSE_THINKING_EFFORT: off\n# the end\n"},
+		{"empty document",
+			"# my goose\n---\n...\n",
+			"# my goose\n---\nGOOSE_THINKING_EFFORT: off\n...\n"},
 		{"replace a block value",
 			"GOOSE_THINKING_EFFORT: >\n  long\n  text\nGOOSE_MODEL: m\n",
 			"GOOSE_THINKING_EFFORT: off\nGOOSE_MODEL: m\n"},
@@ -63,7 +94,7 @@ func TestYAMLTopAfterBlockEntry(t *testing.T) {
 				t.Fatalf("GOOSE_THINKING_EFFORT = %#v", after["GOOSE_THINKING_EFFORT"])
 			}
 			delete(after, "GOOSE_THINKING_EFFORT")
-			if !reflect.DeepEqual(before, after) {
+			if !maps.EqualFunc(before, after, reflect.DeepEqual) {
 				t.Fatalf("other keys changed:\n%#v\n%#v", before, after)
 			}
 			if err := DelYAMLTop(p, "GOOSE_THINKING_EFFORT"); err != nil {
@@ -73,7 +104,7 @@ func TestYAMLTopAfterBlockEntry(t *testing.T) {
 			if err := yaml.Unmarshal([]byte(read(t, p)), &again); err != nil {
 				t.Fatalf("after delete does not parse: %v\n%s", err, read(t, p))
 			}
-			if !reflect.DeepEqual(before, again) {
+			if !maps.EqualFunc(before, again, reflect.DeepEqual) {
 				t.Fatalf("after delete:\n%#v\n%#v", before, again)
 			}
 		})

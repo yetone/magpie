@@ -536,7 +536,7 @@ func askClaudeStatus() (user, plan string, signedOut, ok bool) {
 	// settings.json it applies itself (auth status takes no
 	// --setting-sources), and then answers with no email; claudeSignedInUser
 	// names the account from ~/.claude.json instead (#177).
-	cmd := proc.CommandContext(ctx, path, "auth", "status", "--json")
+	cmd := proc.ProbeContext(ctx, path, "auth", "status", "--json")
 	cmd.Env = withoutClaudeWiring(os.Environ())
 	out, _ := cmd.Output()
 	var status struct {

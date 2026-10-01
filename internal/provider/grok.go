@@ -379,7 +379,7 @@ func grokVersion() string {
 	v := grokClientVersion
 	if exe := GrokExecutable(); exe != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if out, err := proc.CommandContext(ctx, exe, "--version").Output(); err == nil { // "grok 1.0.41 (4220f3b224a6)"
+		if out, err := proc.ProbeContext(ctx, exe, "--version").Output(); err == nil { // "grok 1.0.41 (4220f3b224a6)"
 			if c := grokSemver.FindString(string(out)); c != "" && compareClaudeVersion(c, v) > 0 {
 				v = c
 			}
@@ -533,7 +533,15 @@ func startGrokSignIn(s *signInFlow) error {
 
 // agentCommand runs an agent's CLI with magpie's proxy.
 func agentCommand(ctx context.Context, path string, args ...string) *exec.Cmd {
-	cmd := proc.CommandContext(ctx, path, args...)
+	return withProxy(proc.CommandContext(ctx, path, args...))
+}
+
+// agentProbe is agentCommand for asking the CLI something (proc.ProbeContext).
+func agentProbe(ctx context.Context, path string, args ...string) *exec.Cmd {
+	return withProxy(proc.ProbeContext(ctx, path, args...))
+}
+
+func withProxy(cmd *exec.Cmd) *exec.Cmd {
 	cmd.Env = netproxy.Env(nil)
 	return cmd
 }

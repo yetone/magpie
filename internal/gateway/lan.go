@@ -2,12 +2,14 @@ package gateway
 
 import (
 	"context"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
@@ -42,26 +44,53 @@ func migrateLANKeyBestEffort() {
 	access.MigrateLegacyLANKeyBestEffort()
 }
 
-// publicURL is MAGPIE_PUBLIC_URL, the base URL other machines are told to
-// reach the gateway at, without its trailing slashes: a magpie in a
-// container sees only the container's own addresses, never the host's.
-func publicURL() string { return strings.TrimRight(os.Getenv("MAGPIE_PUBLIC_URL"), "/") }
+func logInvalidPublicURL() {
+	log.Printf("ignoring invalid MAGPIE_PUBLIC_URL: expected an HTTP or HTTPS address with a host")
+}
 
-// lanPublicURL is publicURL with a scheme, as a link needs.
-func lanPublicURL() string {
-	u := publicURL()
-	if u != "" && !strings.Contains(u, "://") {
+var warnInvalidPublicURL = sync.OnceFunc(logInvalidPublicURL)
+
+// publicURL is the validated MAGPIE_PUBLIC_URL, with a scheme and without
+// trailing slashes. An invalid value is treated as unset and warned once.
+func publicURL() string {
+	u := strings.TrimSpace(os.Getenv("MAGPIE_PUBLIC_URL"))
+	if u == "" {
+		return ""
+	}
+	// Keep a scheme-only value invalid after trimming its slashes.
+	hasScheme := strings.Contains(u, "://")
+	u = strings.TrimRight(u, "/")
+	if !hasScheme {
 		u = "http://" + u
+	}
+	parsed, err := url.Parse(u)
+	// A query, a fragment or credentials would be lost or shown when the
+	// address is joined with a path, so only a plain base URL is taken.
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") ||
+		parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+		warnInvalidPublicURL()
+		return ""
 	}
 	return u
 }
 
 // PublicURL is MAGPIE_PUBLIC_URL, with a scheme; "" when it isn't set.
-func PublicURL() string { return lanPublicURL() }
+func PublicURL() string { return publicURL() }
+
+// OpenToAnyone: the gateway listens beyond loopback (MAGPIE_ADDR) and isn't
+// shared, so anyone who reaches it is let in with any key. Shared, it asks
+// for an enabled gateway key instead.
+func OpenToAnyone() bool {
+	if settings.Load().LAN {
+		return false
+	}
+	h, _, err := net.SplitHostPort(Addr())
+	return err == nil && h != "localhost" && !net.ParseIP(h).IsLoopback()
+}
 
 // PublicHost is MAGPIE_PUBLIC_URL's host, "" when it isn't set.
 func PublicHost() string {
-	u, err := url.Parse(lanPublicURL())
+	u, err := url.Parse(publicURL())
 	if err != nil {
 		return ""
 	}
@@ -94,7 +123,7 @@ func inContainer(root string) bool {
 // gateway at: MAGPIE_PUBLIC_URL when set, else one per IPv4 address this
 // computer has there.
 func LANURLs() []string {
-	if u := lanPublicURL(); u != "" {
+	if u := publicURL(); u != "" {
 		return []string{u}
 	}
 	var out []string

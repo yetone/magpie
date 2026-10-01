@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
@@ -304,7 +303,7 @@ func addAccount(agentID string) error {
 		fmt.Println("and confirm the code", st.Code)
 	}
 	openInBrowser(st.URL)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := interruptContext()
 	defer stop()
 	if st.PasteCallback || st.PasteCode {
 		if st.PasteCode {

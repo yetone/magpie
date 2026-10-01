@@ -16,6 +16,7 @@ func TestOptionalFieldValueErrorNotRetried(t *testing.T) {
 		}{
 			{"metadata-type", "metadata", `"invalid"`, `{"session":"synthetic"}`, `{"error":{"message":"Invalid value for \"metadata\": expected an object","type":"invalid_request_error"}}`, 400},
 			{"metadata-dict", "metadata", `"invalid"`, `{"session":"synthetic"}`, `{"message":{"detail":[{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"invalid"}]}}`, 422},
+			{"metadata-dict-status-prefix", "metadata", `"Unknown name 'metadata': Cannot find field."`, `{"session":"synthetic"}`, `[400] {"detail":[{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"Unknown name 'metadata': Cannot find field."}]}`, 400},
 			{"metadata-dict-litellm", "metadata", `"invalid"`, `{"session":"synthetic"}`, optionalFieldProxyFault("litellm", `{"detail":[{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"invalid"}]}`), 400},
 			{"metadata-dict-openrouter", "metadata", `"invalid"`, `{"session":"synthetic"}`, optionalFieldProxyFault("openrouter", `{"detail":[{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"invalid"}]}`), 400},
 			{"tier-value", "service_tier", `"priority"`, `"default"`, `{"error":{"message":"Unsupported value: 'service_tier' does not support 'priority' with this model.","param":"service_tier","code":"unsupported_value"}}`, 400},
@@ -59,9 +60,12 @@ func TestOptionalFieldUnsupportedRetried(t *testing.T) {
 			status      int
 		}{
 			{"mistral", `{"message":{"detail":[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted","input":false}]}}`, 422},
+			{"mistral-status-prefix", `[400] {"detail":[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted","input":false}]}`, 400},
 			{"mistral-litellm", optionalFieldProxyFault("litellm", `{"object":"error","message":{"detail":[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted","input":false}]},"type":"invalid_request_error","param":null,"code":null}`), 400},
 			{"mistral-openrouter", optionalFieldProxyFault("openrouter", `{"object":"error","message":{"detail":[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted","input":false}]},"type":"invalid_request_error","param":null,"code":null}`), 400},
 			{"gemini", `{"error":{"message":"Invalid JSON payload received. Unknown name \"store\": Cannot find field.","code":400}}`, 400},
+			{"gemini-status-prefix", `{"error":{"message":"[400] Unknown name \"store\": Cannot find field.","code":400}}`, 400},
+			{"plain-status-prefix", `[400] Unknown name "store": Cannot find field.`, 400},
 			{"groq", `{"error":{"message":"The property 'store' is not supported","type":"invalid_request_error"}}`, 400},
 			{"openai", `{"error":{"message":"Unsupported parameter: 'store' is not supported with this model.","param":"store","code":"unsupported_parameter"}}`, 400},
 		} {
@@ -152,6 +156,14 @@ func TestRefusedOptionalNamesOnlyUnsupportedFields(t *testing.T) {
 	}{
 		{"mixed-errors", `{"message":{"detail":[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted","input":false},{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"invalid"}]}}`, 422, []string{"store"}},
 		{"input-echo", `{"detail":[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted","input":{"metadata":"Unknown name 'metadata': Cannot find field."}}]}`, 422, []string{"store"}},
+		{"array-extra", `[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted"}]`, 422, []string{"store"}},
+		{"array-input-echo", `[{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"Unknown name 'metadata': Cannot find field."}]`, 422, nil},
+		{"nested-array-input-echo", `[[{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"Unknown name 'metadata': Cannot find field."}]]`, 422, nil},
+		{"mixed-array-input-echo", `[400,{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"Unknown name 'metadata': Cannot find field."}]`, 422, nil},
+		{"status-prefixed-extra", `[400] {"detail":[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted"}]}`, 400, []string{"store"}},
+		{"status-prefixed-input-echo", `[400] {"detail":[{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"Unknown name 'metadata': Cannot find field."}]}`, 400, nil},
+		{"text-prefixed-extra", `[HTTP 400] {"detail":[{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted"}]}`, 400, []string{"store"}},
+		{"text-prefixed-input-echo", `[HTTP 400] {"detail":[{"type":"dict_type","loc":["body","metadata"],"msg":"Input should be a valid dictionary","input":"Unknown name 'metadata': Cannot find field."}]}`, 400, nil},
 		{"nested-extra", `{"detail":[{"type":"extra_forbidden","loc":["body","metadata","store"],"msg":"Extra inputs are not permitted"}]}`, 422, nil},
 		{"nested-unknown", `{"error":{"message":"Invalid JSON payload received. Unknown name \"store\" at 'metadata': Cannot find field."}}`, 400, nil},
 		{"other-parameter", `{"error":{"message":"'metadata' is unsupported","param":"model","code":"unsupported_value"}}`, 400, nil},
@@ -163,6 +175,11 @@ func TestRefusedOptionalNamesOnlyUnsupportedFields(t *testing.T) {
 		{"root-location", `{"detail":[{"type":"extra_forbidden","loc":["store"],"msg":"Extra inputs are not permitted"}]}`, 422, []string{"store"}},
 		{"unsupported-code", `{"error":{"message":"Not accepted here","code":"unsupported_parameter","param":"store"}}`, 400, []string{"store"}},
 		{"plain-error", `Unknown name "store": Cannot find field.`, 400, []string{"store"}},
+		{"status-prefix", `[400] Unknown name "store": Cannot find field.`, 400, []string{"store"}},
+		{"text-status-prefix", `[HTTP 400] Unknown name "store": Cannot find field.`, 400, []string{"store"}},
+		{"empty-array-prefix", `[] Unknown name "store": Cannot find field.`, 400, []string{"store"}},
+		{"string-array-prefix", `["upstream"] Unknown name "store": Cannot find field.`, 400, []string{"store"}},
+		{"nested-status-prefix", `[[400]] Unknown name "store": Cannot find field.`, 400, []string{"store"}},
 		{"quoted-error", `{"error":{"message":"'store' is unsupported"}}`, 400, []string{"store"}},
 		{"unrecognized-argument", `{"error":{"message":"Unrecognized request argument supplied: 'store'","param":null,"code":null}}`, 400, []string{"store"}},
 		{"unknown-root", `{"error":{"message":"Unknown name \"store\" at '': Cannot find field."}}`, 400, []string{"store"}},

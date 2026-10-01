@@ -29,6 +29,7 @@ func sessionsHome(t *testing.T) time.Time {
 	t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(h, ".pi", "agent"))
 	t.Setenv("OPENCODE_DB", "")
 	t.Setenv("PI_CODING_AGENT_SESSION_DIR", "")
+	t.Setenv("DSH_HOME", "")
 	for from, env := range map[string]string{"claude": "CLAUDE_CONFIG_DIR", "codex": "CODEX_HOME"} {
 		dir := filepath.Join(h, "."+from)
 		if err := os.CopyFS(dir, os.DirFS(filepath.Join("internal", "sessions", "testdata", from))); err != nil {

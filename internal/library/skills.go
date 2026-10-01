@@ -940,33 +940,93 @@ func SkillAgents(name string, agents []string) (*Result, error) {
 	})
 }
 
+// EverySkillAgents gives every skill in the library to the agents named, or
+// takes every one from them, in one write rather than one for each skill
+// (#443). An agent not named keeps what it has, as with a skill's All chip.
+func EverySkillAgents(agents []string, on bool) (*Result, error) {
+	if len(agents) == 0 {
+		return nil, fmt.Errorf("no agents to give the skills to")
+	}
+	return change(func(l *Library) error {
+		for _, s := range l.Skills {
+			kept := slices.DeleteFunc(slices.Clone(s.Agents), func(a string) bool { return slices.Contains(agents, a) })
+			if on {
+				kept = append(kept, agents...)
+			}
+			s.Agents = slices.Sorted(slices.Values(kept))
+		}
+		return nil
+	})
+}
+
 // RemoveSkill takes a skill out of the library and every agent; its folder
 // is kept aside with the backups, never just deleted.
 func RemoveSkill(name string) (*Result, error) {
 	return change(func(l *Library) error {
-		i := slices.IndexFunc(l.Skills, func(s *Skill) bool { return s.Name == name })
-		if i < 0 {
-			return fmt.Errorf("no skill called %s", name)
+		return removeSkill(l, name, time.Now().Format("2006-01-02_15-04-05.000"))
+	})
+}
+
+// RemoveSkills takes the skills named out of the library and every agent
+// in one write (#449), each as RemoveSkill does: the folders kept aside
+// together, in one backup, and a folder of the user's only unlinked. One
+// that can't be taken out stays, and is said in Unremoved.
+func RemoveSkills(names []string) (*Result, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("no skills to remove")
+	}
+	names = slices.Compact(slices.Sorted(slices.Values(names)))
+	var failed []Problem
+	res, err := change(func(l *Library) error {
+		stamp := time.Now().Format("2006-01-02_15-04-05.000")
+		for _, name := range names {
+			if err := removeSkill(l, name, stamp); err != nil {
+				failed = append(failed, Problem{What: "skill:" + name, Error: err.Error()})
+			}
 		}
-		l.Skills = slices.Delete(l.Skills, i, i+1)
-		forgetCheck(name)
-		for _, p := range l.Projects {
-			delete(p.Skills, name)
+		if len(failed) == len(names) {
+			return errors.New(failed[0].Error)
 		}
-		p := skillDir(name)
-		fi, err := os.Lstat(p)
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil // its folder is gone already: only the entry goes
+		return nil
+	})
+	if res != nil {
+		res.Unremoved = failed
+	}
+	return res, err
+}
+
+// removeSkill takes a skill out of l, its folder moved aside to the backup
+// stamped so, or its link to a folder of the user's taken away. The entry
+// goes only once its folder has.
+func removeSkill(l *Library, name, stamp string) error {
+	i := slices.IndexFunc(l.Skills, func(s *Skill) bool { return s.Name == name })
+	if i < 0 {
+		return fmt.Errorf("no skill called %s", name)
+	}
+	p := skillDir(name)
+	fi, err := os.Lstat(p)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		// its folder is gone already: only the entry goes
+	case err == nil && fi.Mode()&fs.ModeSymlink != 0:
+		if err := os.Remove(p); err != nil { // a folder of the user's: only the link goes
+			return err
 		}
-		if err == nil && fi.Mode()&fs.ModeSymlink != 0 {
-			return os.Remove(p) // a folder of the user's: only the link goes
-		}
-		aside := filepath.Join(BackupDir(), time.Now().Format("2006-01-02_15-04-05.000"), "skills", name)
+	default:
+		aside := filepath.Join(BackupDir(), stamp, "skills", name)
 		if err := os.MkdirAll(filepath.Dir(aside), 0o700); err != nil {
 			return err
 		}
-		return move(p, aside)
-	})
+		if err := move(p, aside); err != nil {
+			return err
+		}
+	}
+	l.Skills = slices.Delete(l.Skills, i, i+1)
+	forgetCheck(name)
+	for _, p := range l.Projects {
+		delete(p.Skills, name)
+	}
+	return nil
 }
 
 // UseLibrarySkill settles an agent's own skill that stands in the way of

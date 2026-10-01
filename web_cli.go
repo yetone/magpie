@@ -57,7 +57,7 @@ func webCmd(args []string) error {
 	if os.Getenv("MAGPIE_WEB_KEY") != "" {
 		carries = "MAGPIE_WEB_KEY"
 	}
-	fmt.Println(muted.Render("  the link carries " + carries + " · gateway " + gateway.URL() + " · Ctrl-C to stop"))
+	fmt.Println(muted.Render("  the link carries " + carries + " · gateway " + advertisedURL() + " · Ctrl-C to stop"))
 	if open {
 		openInBrowser(w.Link)
 	}

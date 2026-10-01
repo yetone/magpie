@@ -2838,7 +2838,7 @@ function renderConnect() {
   note.replaceChildren();
   note.classList.toggle("brief", connectFolded);
   if (connectFolded) note.append(el("code", "", base), copyBtn(base, "Base URL"));
-  else note.textContent = t(remote ? "Local network · an enabled gateway key is required" : g.lan && gatewayKeys?.length ? "Use a gateway key to track usage" : "Loopback only · the key can be anything");
+  else note.textContent = t(g.open ? "Open to the network · anyone who reaches it can use any key" : remote ? "Local network · an enabled gateway key is required" : g.lan && gatewayKeys?.length ? "Use a gateway key to track usage" : "Loopback only · the key can be anything");
 
   box.append(...field("API", segs(Object.entries(FLAVORS).map(([k, v]) => [k, v.name]), flavor, (id) => { flavor = id; localStorage.setItem("magpie.flavor", id); renderConnect(); }), t(f.note)));
 
@@ -3164,7 +3164,7 @@ function sseBodyPanel(label, raw, truncated, id) {
   const panel = el("section", "call-body sse");
   const head = el("div", "call-body-head");
   head.append(el("span", "call-body-label", t(label)));
-  if (truncated) head.append(el("span", "call-body-truncated", t("first 256 KB")));
+  if (truncated) head.append(el("span", "call-body-truncated", typeof truncated === "string" ? truncated : t("first 256 KB")));
   const views = [["reply", t("Reply")], ["events", t("Events")], ["raw", t("Raw")]].filter(([v]) => v !== "reply" || reply);
   let view = views.some(([v]) => v === sseView) ? sseView : "events";
   const count = el("span", "call-body-count", t(events.length === 1 ? "1 event" : "{n} events", { n: events.length }));
@@ -3223,7 +3223,7 @@ function callBodyPanel(label, raw, truncated, id) {
   const panel = el("section", "call-body");
   const head = el("div", "call-body-head");
   head.append(el("span", "call-body-label", t(label)));
-  if (truncated) head.append(el("span", "call-body-truncated", t("first 256 KB")));
+  if (truncated) head.append(el("span", "call-body-truncated", typeof truncated === "string" ? truncated : t("first 256 KB")));
   const formatted = formatWireBody(raw);
   if (formatted) head.append(el("span", "grow"), copyBtn(raw, t(label)));
   panel.append(head);
@@ -3273,36 +3273,86 @@ function headersPanel(label, first, headers) {
   return panel;
 }
 
-function archivePanel(c, id) {
+// The archived file, whole, however large: to the browser in magpie web,
+// to Downloads in the app (#447).
+async function downloadArchive(name, b) {
+  const [date, aid] = name.split("/");
+  const q = `date=${encodeURIComponent(date)}&id=${encodeURIComponent(aid)}`;
+  if (web) {
+    const a = el("a");
+    a.href = "/api/archive/file?" + q;
+    a.download = "";
+    a.click();
+    return;
+  }
+  b.classList.add("busy");
+  b.disabled = true;
+  try {
+    const r = await api("archive/export?" + q, {});
+    status(t("Saved to {path}", { path: r.path }), "ok");
+  } catch (e) {
+    status(t(e.message), "err");
+  } finally {
+    b.classList.remove("busy");
+    b.disabled = false;
+  }
+}
+
+// one body read back from the archive: shown, or, past 256 KB, only its
+// size — the server leaves it out — for the file to be downloaded whole
+function archiveBodyPanel(label, part, id) {
+  if (part.omitted) {
+    const panel = el("section", "call-body");
+    const head = el("div", "call-body-head");
+    head.append(el("span", "call-body-label", t(label)), el("span", "call-body-count", fmtBytes(part.size)));
+    panel.append(head, el("p", "call-archive-big", t("Too long to show here. Download the archive to read it whole.")));
+    return panel;
+  }
+  // cut where the archive stops: its limit, or 256 KB in one from before #447
+  const cut = part.truncated && (part.size ? t("first {n} of {size}", { n: fmtBytes(new Blob([part.body]).size), size: fmtBytes(part.size) }) : true);
+  return callBodyPanel(label, part.body, cut, id);
+}
+
+// A call the archive kept, by "<date>/<id>": read back when asked, and its
+// file downloaded, drawn again by redraw as it is read — under a recent
+// call on the Gateway page, and a request's row on the Usage page.
+function archivePanel(name, id, redraw) {
   const box = el("section", "call-archive");
-  const [date, aid] = c.archive.split("/");
-  const got = archivedCalls.get(c.archive);
+  const [date, aid] = name.split("/");
+  const got = archivedCalls.get(name);
   const head = el("div", "call-body-head");
-  head.append(el("span", "call-body-label", t("Request archive")), el("code", "call-archive-id", c.archive), el("span", "grow"));
+  head.append(el("span", "call-body-label", t("Request archive")), el("code", "call-archive-id", name), el("span", "grow"));
   box.append(head);
+  const dl = el("button", "text call-archive-dl", t("Download"));
+  dl.onclick = (ev) => { ev.stopPropagation(); downloadArchive(name, dl); };
   if (!got || got.busy || got.error) {
     const b = el("button", "text", t(got?.busy ? "Fetching…" : "Fetch from archive"));
     b.disabled = !!got?.busy;
     b.onclick = (ev) => {
       ev.stopPropagation();
-      archivedCalls.set(c.archive, { busy: true });
-      renderActivity();
+      archivedCalls.set(name, { busy: true });
+      redraw();
       api(`archive?date=${encodeURIComponent(date)}&id=${encodeURIComponent(aid)}`)
-        .then((a) => archivedCalls.set(c.archive, a))
-        .catch((e) => archivedCalls.set(c.archive, { error: t(e.message) }))
-        .finally(renderActivity);
+        .then((a) => archivedCalls.set(name, a))
+        .catch((e) => archivedCalls.set(name, { error: t(e.message) }))
+        .finally(redraw);
     };
     head.append(b);
     if (got?.error) box.append(el("div", "call-archive-err", got.error));
+    else head.append(dl); // one not in the bucket has nothing to download
     return box;
   }
-  head.append(el("span", "call-body-truncated call-archive-note", t("Secrets taken out")));
+  head.append(el("span", "call-body-truncated call-archive-note", t("Secrets taken out")), dl);
+  if (got.large) {
+    box.append(el("p", "call-archive-big", t("This archive is {size}, too large to show here. Download it to read it.", { size: got.bytes > 0 ? fmtBytes(got.bytes) : t("very large") })));
+    return box;
+  }
   const grid = el("div", "call-details");
   grid.append(
     headersPanel(t("Request Headers"), `${got.request.method || ""} ${got.request.path || ""}`.trim(), got.request.headers),
     headersPanel(t("Response Headers"), got.response.status ? `HTTP ${got.response.status}` : "", got.response.headers),
-    callBodyPanel("Request Body", got.request.body, got.request.truncated),
-    callBodyPanel("Response Body", got.response.body, got.response.truncated, id + "|archive"),
+    archiveBodyPanel("Request Body", got.request),
+    archiveBodyPanel("Response Body", got.response, id + "|archive"),
   );
   box.append(grid);
   return box;
@@ -3351,7 +3401,7 @@ function renderActivity() {
         callBodyPanel("Request Body", c.requestBody, c.requestTruncated),
         callBodyPanel("Response Body", c.responseBody, c.responseTruncated, id),
       );
-      if (c.archive) details.append(archivePanel(c, id));
+      if (c.archive) details.append(archivePanel(c.archive, id, renderActivity));
       item.dataset.id = id;
       item.append(details);
     }
@@ -8018,12 +8068,22 @@ function ledDetail(r, cols) {
   if (r.session_account) add("Session account", r.session_account);
   if (r.source === "log" && r.session_account && r.session_official_login) add("Login method", t("Official login"));
   if (r.pricing_model) add("API price reference", r.pricing_model);
+  // with the archive on, a request it has no copy of says so: from before
+  // it was on, or not through the gateway
+  if (!r.archive && (providers?.gateway?.archive?.on ?? state.settings?.requestArchive)) add("Request archive", t("Not archived"), "muted");
   if (r.source === "log") add("Data source", t("Read from the agent's session file. The account is shown only when local metadata identifies it; no service provider is inferred."), "muted");
   const tr = el("tr", "led-detail");
   const td = el("td");
   td.colSpan = cols;
   const box = el("div", "led-box");
   box.append(dl.childElementCount ? dl : el("span", "faint", t("Nothing more was kept of this request")));
+  // the call as the request archive kept it, when it was on (#447)
+  if (r.archive) {
+    const ab = el("div", "led-archive");
+    const draw = () => ab.replaceChildren(archivePanel(r.archive, "led|" + ledKey(r), draw));
+    draw();
+    box.append(ab);
+  }
   // what was said: read from the agent's session file, when the row is opened
   const cx = el("div", "led-cx");
   cx.append(el("p", "cx-none", t("Loading…")));
@@ -11529,11 +11589,14 @@ function fitTop() {
     const n = nav.getBoundingClientRect();
     return left + 8 <= n.left && n.right + 8 <= a.left;
   };
-  top.classList.remove("tight", "cramped", "crowded", "packed");
+  top.classList.remove("tight", "cramped", "inrow", "crowded", "packed");
   if (fits()) return;
   top.classList.add("tight");
   if (fits()) return;
+  // the tabs closer together are tried in the middle first (#442)
   top.classList.add("cramped");
+  if (fits()) return;
+  top.classList.add("inrow");
   if (fits()) return;
   top.classList.add("crowded");
   if (!fits()) top.classList.add("packed");

@@ -228,7 +228,7 @@ func claudeSignedIn(path, dir string) (savedLogin, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := proc.CommandContext(ctx, path, "auth", "status", "--json")
+	cmd := proc.ProbeContext(ctx, path, "auth", "status", "--json")
 	cmd.Dir = dir
 	cmd.Env = claudeSignInEnv(os.Environ(), dir)
 	b, _ := cmd.Output()

@@ -55,7 +55,7 @@ func fakeClaudeUsage(t *testing.T, out *atomic.Value, fail *atomic.Bool) *atomic
 // once an ask, and only for the account Claude Code is signed in to.
 func TestClaudeWindowsAsked(t *testing.T) {
 	var out atomic.Value
-	out.Store("Current session: 40% used · resets Oct 1 at 3:30pm (UTC)\nCurrent week (all models): 10% used · resets Oct 3 at 2pm (UTC)\n")
+	out.Store("Current session: 40% used · resets " + soon(1) + " at 3:30pm (UTC)\nCurrent week (all models): 10% used · resets " + soon(3) + " at 2pm (UTC)\n")
 	var fail atomic.Bool
 	runs := fakeClaudeUsage(t, &out, &fail)
 	ctx := context.Background()
@@ -100,7 +100,7 @@ func TestClaudeWindowsAsked(t *testing.T) {
 		t.Fatalf("ran before its wait: %v %d", err, runs.Load())
 	}
 	age(time.Minute)
-	out.Store("Current session: 55% used · resets Oct 1 at 3:30pm (UTC)\n")
+	out.Store("Current session: 55% used · resets " + soon(1) + " at 3:30pm (UTC)\n")
 	for range 3 {
 		if ws, err = claudeWindows(ctx, "a@x", true); err != nil || len(ws) != 1 || ws[0].Used != 55 || runs.Load() != 2 {
 			t.Fatalf("every: %v %+v %d", err, ws, runs.Load())
@@ -189,7 +189,7 @@ func TestClaudeWaitRandom(t *testing.T) {
 // it last was; asked, it is run whether it was or not.
 func TestClaudeUsageIdle(t *testing.T) {
 	var out atomic.Value
-	out.Store("Current session: 40% used · resets Oct 1 at 3:30pm (UTC)\n")
+	out.Store("Current session: 40% used · resets " + soon(1) + " at 3:30pm (UTC)\n")
 	runs := fakeClaudeUsage(t, &out, nil)
 	var used atomic.Bool
 	claudeUsedSince = func(time.Time) bool { return used.Load() }
@@ -253,3 +253,7 @@ func TestClaudeUsedSince(t *testing.T) {
 		t.Fatal("not used, with a session just written to")
 	}
 }
+
+// soon is the day n days from now as /usage writes it ("Oct 3"), so a
+// window the tests read hasn't reset whatever day they run.
+func soon(n int) string { return time.Now().UTC().AddDate(0, 0, n).Format("Jan 2") }

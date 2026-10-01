@@ -39,6 +39,10 @@ type PresetDef struct {
 	// Models are the plan's, for when the list has none of them.
 	Only   string   `json:"only,omitempty"`
 	Models []string `json:"models,omitempty"`
+	// Drop is what the ids of models the vendor lists but serves to its
+	// own client alone end with (OpenCode Zen's -free ones): they are left
+	// out of the list.
+	Drop string `json:"drop,omitempty"`
 	// NoList: the vendor has no list of models to ask for (Bedrock's
 	// runtime serves no /models), so Models are its list
 	NoList bool `json:"noList,omitempty"`
@@ -296,7 +300,10 @@ var presets = []PresetDef{
 			"cline-pass/muse-spark-1.3-contributor", "cline-pass/qwen3.8-max", "cline-pass/qwen3.7-max", "cline-pass/qwen3.7-plus"}},
 	{ID: "opencode-zen", Name: "OpenCode Zen", Icon: "opencode", Kind: KindRelay, Catalog: "opencode",
 		Chat: "https://opencode.ai/zen/v1", Responses: "https://opencode.ai/zen/v1", Anthropic: "https://opencode.ai/zen",
-		Website: "https://opencode.ai/docs/zen", KeysURL: "https://opencode.ai/auth"},
+		Website: "https://opencode.ai/docs/zen", KeysURL: "https://opencode.ai/auth",
+		// its free models answer 403 "OpenCode's free tier can only be used
+		// from within OpenCode" to anything else
+		Drop: "-free"},
 	// Command Code's Provider API: its Claude models on /messages alone, the
 	// rest on chat and Responses, as its model list says (#93)
 	{ID: "commandcode", Name: "Command Code", Icon: "commandcode", Kind: KindRelay,

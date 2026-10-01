@@ -42,6 +42,27 @@ func TestKeyNote(t *testing.T) {
 	}
 }
 
+// The CLIs print the address other machines are told to reach the gateway
+// at: a valid MAGPIE_PUBLIC_URL, otherwise the one reached from this
+// machine, so `magpie models` and the serve banner never print a bad one.
+func TestAdvertisedURL(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MAGPIE_ADDR", "127.0.0.1:3425")
+	for _, c := range []struct{ public, want string }{
+		{"", "http://127.0.0.1:3425"},
+		{"https://magpie.example.com", "https://magpie.example.com"},
+		{"nas.lan:3425/", "http://nas.lan:3425"},
+		{"ftp://magpie.example.com", "http://127.0.0.1:3425"},
+		{"https://magpie.example.com/magpie?x=1", "http://127.0.0.1:3425"},
+	} {
+		t.Setenv("MAGPIE_PUBLIC_URL", c.public)
+		if got := advertisedURL(); got != c.want {
+			t.Errorf("MAGPIE_PUBLIC_URL=%q: %q, want %q", c.public, got, c.want)
+		}
+	}
+}
+
 // Shared, the serve banner (docker logs) says where other machines reach
 // the gateway: MAGPIE_PUBLIC_URL when a container sets it.
 func TestShareLines(t *testing.T) {

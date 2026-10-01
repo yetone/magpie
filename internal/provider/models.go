@@ -299,12 +299,22 @@ func basePath(raw string) string {
 	return ""
 }
 
-// planModels keeps a plan's own models of a vendor's list (PresetDef.Only),
+// planModels leaves out the models a vendor serves its own client alone
+// (PresetDef.Drop), and keeps a plan's own models of a vendor's list (PresetDef.Only),
 // or gives the plan's when the list has none; a plan with models but no
 // Only gives them only when there is no list. Any other provider's list is
 // as it came.
 func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 	pr := Preset(p.Preset)
+	if pr != nil && pr.Drop != "" {
+		kept := ms[:0:0]
+		for _, m := range ms {
+			if !strings.HasSuffix(m.ID, pr.Drop) {
+				kept = append(kept, m)
+			}
+		}
+		ms = kept
+	}
 	if pr == nil || pr.Only == "" && (len(pr.Models) == 0 || len(ms) > 0) {
 		return ms
 	}

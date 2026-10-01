@@ -244,10 +244,14 @@ body.panel .seg { display: none; }
 .update-hide:hover { color: var(--fg); }
 .update[hidden] + .update-hide, .update.busy + .update-hide { display: none; }
 /* a narrow header (fitTop): the magpie without its name, Update as its arrow,
-   and at the narrowest the tabs in the row rather than over it */
+   the tabs closer together, still in the middle of the window, and only when
+   they don't fit there, in the row rather than over it: halfway between what
+   is either side of them, not a third of the room their left and two thirds
+   their right (#442) */
 .top.tight .brand > span:not(.logo), .top.tight .update span { display: none; }
 .top.tight .update { width: 22px; padding: 0; justify-content: center; margin-right: 4px; }
-body.window .top.cramped .seg { position: relative; left: auto; top: auto; transform: none; margin: 0 auto; } /* relative still: its thumb sits in it, not over the whole header */
+body.window .top.inrow .seg { position: relative; left: auto; top: auto; transform: none; margin: 0 auto; } /* relative still: its thumb sits in it, not over the whole header */
+body.window .top.inrow .actions { margin-left: 0; }
 .top.cramped .seg button { padding: 0 8px; }
 .top.crowded .seg button { padding: 0 6px; font-size: 12px; }
 .top.crowded .brand { display: none; }
@@ -1413,6 +1417,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .call-archive-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--code); color: var(--faint); }
 .call-archive .call-body-head button.text { flex: none; }
 .call-archive-err { padding: 0 10px 9px; font-size: 11px; color: var(--red); overflow-wrap: anywhere; }
+.call-archive-big { margin: 0; padding: 9px 10px 11px; border-top: 1px solid var(--line-2); font-size: 11px; color: var(--muted); }
+/* a request's row on the Usage page: its archive under what is known of it */
+.led-archive { margin-top: 10px; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+.led-archive .call-details { grid-template-columns: minmax(0, 1fr); }
 #archiveList { margin-bottom: 8px; }
 /* a streamed reply: read as its reply, its events or as it came */
 .call-body-count { font-size: 9.5px; color: var(--faint); white-space: nowrap; }
@@ -1724,7 +1732,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
   pointer-events: none;
 }
 .segs .thumb { border-radius: 5px; }
-.segs.regions { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.segs.regions { max-width: 100%; overflow-x: auto; }
+/* no scrollbar-width here: Chromium (WebView2) then drops every
+   ::-webkit-scrollbar rule and draws Windows' classic bar, arrows and all,
+   under the strip; the app's thin thumb instead, slimmer still */
+:where(body:not(.mac)) .segs.regions::-webkit-scrollbar { height: 6px; }
+:where(body:not(.mac)) .segs.regions::-webkit-scrollbar-thumb { border-width: 1px; }
 .segs.regions .opt { flex: none; }
 .thumb.still { transition: none; }
 .link { font-size: 12px; color: var(--accent); padding: 3px 4px; white-space: nowrap; }

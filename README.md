@@ -508,7 +508,22 @@ adding one; use an account you can afford to lose.
 ### Connecting anything else
 
 The gateway listens on `127.0.0.1:3425` (`MAGPIE_ADDR` changes it) and starts
-with the app; `magpie serve` runs it alone. It exposes:
+with the app; `magpie serve` runs it alone. For reverse-proxied or container
+deployments, set `MAGPIE_PUBLIC_URL=https://magpie.example.com` to the base
+URL shown in the console and CLI, including connection examples. Local
+agent configs still use the local gateway address.
+
+A reverse proxy must enforce authentication itself, or you must enable
+Settings → Share on local network and use an enabled gateway key
+(Gateway → Gateway keys) for external clients. A public URL with no port of
+its own — a reverse proxy's `https://magpie.example.com` — is the address
+`magpie web` prints for its own page too, so the proxy must forward `/v1`
+and `/v1beta` to the gateway's port and the rest to the page's. When the
+proxy and magpie run on the same machine, requests forwarded over loopback
+are treated as local and need no key, so the proxy must authenticate those
+clients itself.
+
+It exposes:
 
 | Path                     | API                        |
 | ------------------------ | -------------------------- |
@@ -688,7 +703,9 @@ Inside the container
 magpie only sees the container's own address (Docker's 172.17.x), so set
 `-e MAGPIE_PUBLIC_URL=http://<the host's or NAS's address>:3425` (the port
 published on the host) for the address it shows and prints to be the one
-other machines use.
+other machines use; behind a reverse proxy, set it to that external base URL
+and follow the [authentication requirements above](#connecting-anything-else),
+especially when the proxy reaches magpie over loopback.
 
 For the browser UI run the image with `magpie web --addr 0.0.0.0:3430 --no-open`
 in place of the default `serve`, and open

@@ -254,6 +254,10 @@ func sessionPaths(agent, id string, fs []file) []string {
 	for _, f := range fs {
 		if f.main {
 			add(f.path)
+			// the compressed form a rollout is read past while both are there
+			if agent == "codex" {
+				add(rolloutTwin(f.path))
+			}
 			// the folder beside it: a Claude Code session's subagents and
 			// tool results, an omp session's artifacts
 			if agent != "codex" && agent != "pi" {

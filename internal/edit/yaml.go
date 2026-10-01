@@ -320,3 +320,60 @@ func blockStyle(n *yaml.Node) {
 		blockStyle(c)
 	}
 }
+
+// BlockList is raw, a file whose one document is a top-level sequence
+// written in flow style ([ {id: a}, {id: b} ], what dsh's own writers keep
+// a file that starts as []), with that sequence written as a block list
+// instead: one "- " item after another, each entry's mappings and lists in
+// block style too, its scalars quoted as they were. The lines before the
+// sequence and the comment lines after it stay as written. ok is false, and
+// raw is left to the caller, for anything else: a block list, a mapping,
+// several documents, or text that isn't YAML.
+func BlockList(raw string) (string, bool) {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	dec := yaml.NewDecoder(strings.NewReader(raw))
+	var doc, more yaml.Node
+	if dec.Decode(&doc) != nil || dec.Decode(&more) == nil {
+		return "", false
+	}
+	if len(doc.Content) != 1 {
+		return "", false
+	}
+	seq := doc.Content[0]
+	if seq.Kind != yaml.SequenceNode || seq.Style&yaml.FlowStyle == 0 {
+		return "", false
+	}
+	lines := strings.Split(strings.TrimRight(raw, "\n"), "\n")
+	start := min(max(seq.Line-1, 0), len(lines))
+	end := len(lines)
+	for end > start {
+		if t := strings.TrimSpace(lines[end-1]); t != "" && !strings.HasPrefix(t, "#") {
+			break
+		}
+		end--
+	}
+	out := append([]string{}, lines[:start]...)
+	if len(seq.Content) == 0 {
+		out = append(out, "[]")
+	} else {
+		seq.HeadComment, seq.LineComment, seq.FootComment = "", "", ""
+		unflow(seq)
+		var buf bytes.Buffer
+		enc := yaml.NewEncoder(&buf)
+		enc.SetIndent(2)
+		if enc.Encode(seq) != nil || enc.Close() != nil {
+			return "", false
+		}
+		out = append(out, strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")...)
+	}
+	out = append(out, lines[end:]...)
+	return strings.Join(out, "\n") + "\n", true
+}
+
+// unflow writes n's mappings and sequences in block style.
+func unflow(n *yaml.Node) {
+	n.Style &^= yaml.FlowStyle
+	for _, c := range n.Content {
+		unflow(c)
+	}
+}
