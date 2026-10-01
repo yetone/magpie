@@ -188,6 +188,8 @@ access, including old `sk-magpie-…` tokens, without key authentication.
 the provider's credential. **Usage → Requests** offers the same filter;
 CSV includes `caller_key_id` and `caller_key_name`. Deleted keys keep their
 history. The usual local `magpie` token and older records stay unattributed.
+Chat, image, video creation and System One calls retain both provider and
+caller identities; CSV puts `provider_key_*` before `caller_key_*`.
 An existing LAN key becomes **Magpie** without changing the credential.
 `lanKey` remains in settings for older Magpie versions. Disabling or removing
 the default key replaces that mirror with a random non-empty revoked value;
@@ -195,6 +197,9 @@ rotation does not re-enable it. The key store records migration completion,
 even if `lanKeyId` cannot be saved, so reads do not keep retrying that write.
 A migration write failure is logged without preventing gateway startup,
 CLI key management, or the Settings and key-list pages from opening.
+If settings are read-only, changing the default key fails without changing
+it: make `settings.json` writable and retry so older versions cannot keep
+accepting its old credential. Independent named keys remain manageable.
 Gateway credentials stay in `~/.config/magpie/caller-keys.json` (XDG-aware,
 mode `0600`), never in usage records or list responses.
 

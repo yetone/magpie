@@ -140,7 +140,7 @@ func TestCallerUsageSystemOne(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body)
 	}
-	if rec := lastUsage(t); rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "System One client" || rec.Input != 120 {
+	if rec := lastUsage(t); rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "System One client" || rec.ProviderKeyID != provider.KeyID("upstream") || rec.Input != 120 {
 		t.Fatal(rec)
 	}
 }

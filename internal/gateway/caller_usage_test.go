@@ -209,7 +209,7 @@ func TestImageUsageIncludesCaller(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	rec := lastUsage(t)
-	if rec.CallerKeyID != keys[0].ID || rec.Input != 7 {
+	if rec.CallerKeyID != keys[0].ID || rec.ProviderKeyID != provider.KeyID("key") || rec.Input != 7 {
 		t.Fatal(rec)
 	}
 }
@@ -241,7 +241,7 @@ func TestCallerIdentitySurvivesStreamingFailover(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	rec := lastUsage(t)
-	if rec.CallerKeyID != keys[0].ID || rec.Input != 100 || rec.Output != 20 {
+	if rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "Stream" || rec.ProviderKeyID != provider.KeyID("backup") || rec.ProviderKeyName != "Backup" || rec.Input != 100 || rec.Output != 20 {
 		t.Fatal(rec)
 	}
 }

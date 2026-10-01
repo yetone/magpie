@@ -85,8 +85,8 @@ func TestLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := strings.Join(CSVHeader, ",") + "\n" +
-		rows[1].Time.Format(time.RFC3339) + ",codex,relay/sol,relay,relay.example,sol,sol-2026-01-01,false,,10,1,0,0,0,0.000028,100,,200,false,,,,\n" +
-		rows[2].Time.Format(time.RFC3339) + ",codex,fast,relay,relay.example,sol,luna,true,high,2000,500,1000,4000,0,0.012500,3200,400,200,false,s1,,,\n"
+		rows[1].Time.Format(time.RFC3339) + ",codex,relay/sol,relay,relay.example,sol,sol-2026-01-01,false,,10,1,0,0,0,0.000028,100,,200,false,,,,,,\n" +
+		rows[2].Time.Format(time.RFC3339) + ",codex,fast,relay,relay.example,sol,luna,true,high,2000,500,1000,4000,0,0.012500,3200,400,200,false,s1,,,,,\n"
 	if b.String() != want {
 		t.Fatalf("csv:\n%s\nwant:\n%s", b.String(), want)
 	}

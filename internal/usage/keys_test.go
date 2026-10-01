@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -81,7 +82,7 @@ func TestKeyUsageKeepsIdentityAndPrices(t *testing.T) {
 		t.Fatal(err)
 	}
 	cells, err := csv.NewReader(strings.NewReader(b.String())).ReadAll()
-	if err != nil || len(cells) != 3 || cells[1][len(CSVHeader)-2] != team || cells[1][len(CSVHeader)-1] != "Team" {
+	if err != nil || len(cells) != 3 || cells[1][slices.Index(CSVHeader, "provider_key_id")] != team || cells[1][slices.Index(CSVHeader, "provider_key_name")] != "Team" {
 		t.Fatalf("CSV: %v, %s", err, b.String())
 	}
 	encoded, _ := json.Marshal(s)

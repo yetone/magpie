@@ -29,10 +29,9 @@ type Record struct {
 	Host            string    `json:"host,omitempty"`          // where the call went: provider.Where then
 	ProviderKeyID   string    `json:"providerKeyId,omitempty"` // fingerprint of the API key actually used
 	ProviderKeyName string    `json:"providerKeyName,omitempty"`
+	CallerKeyID     string    `json:"callerKeyId,omitempty"`
+	CallerKeyName   string    `json:"callerKeyName,omitempty"`
 	Model           string    `json:"model"` // the provider's model id
-
-	CallerKeyID   string    `json:"callerKeyId,omitempty"`
-	CallerKeyName string    `json:"callerKeyName,omitempty"`
 	// Requested is the model id the agent asked for (a magpie alias, a
 	// routing group, provider/model…), and Served the model the vendor's
 	// reply says answered, when it named one: a ledger to set beside the
@@ -274,9 +273,8 @@ type Group struct {
 	Model           string `json:"model,omitempty"`
 	ProviderKeyID   string `json:"providerKeyId,omitempty"`
 	ProviderKeyName string `json:"providerKeyName,omitempty"`
-
-	CallerKeyID   string `json:"callerKeyId,omitempty"`
-	CallerKeyName string `json:"callerKeyName,omitempty"`
+	CallerKeyID     string `json:"callerKeyId,omitempty"`
+	CallerKeyName   string `json:"callerKeyName,omitempty"`
 	// Host is where the calls went, when the provider's id has gone to
 	// more than one place, or elsewhere than the provider goes now: its
 	// calls are then told apart by it, not summed under the id.
@@ -315,7 +313,7 @@ type Summary struct {
 	Agents       []Group `json:"agents"`
 	Models       []Group `json:"models"`
 	ProviderKeys []Group `json:"providerKeys"`
-	CallerKeys []Group `json:"callerKeys"`
+	CallerKeys   []Group `json:"callerKeys"`
 	// Sessions are the calls that named their session, by session.
 	Sessions []Group `json:"sessions"`
 }
