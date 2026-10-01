@@ -18,8 +18,10 @@ if (!web && /^Linux/.test(navigator.platform)) document.body.classList.add("linu
 if (/^Win/.test(navigator.platform)) document.documentElement.classList.add("win");
 // The window is dragged by its header, and only where the header says so
 // (--wails-draggable), so the tabs and buttons in it stay plain clicks.
-// Outside the app — a browser on the gateway's page — there is no runtime.
-const winRuntime = mode === "window" ? import("/wails/runtime.js").catch(() => null) : Promise.resolve(null);
+// Outside the app — a browser on the gateway's page, or on `magpie web` —
+// there is no runtime, and it isn't asked for (a 404 in the browser's
+// console, Jorben on Discord).
+const winRuntime = mode === "window" && !web ? import("/wails/runtime.js").catch(() => null) : Promise.resolve(null);
 if (params.get("theme")) document.documentElement.dataset.theme = params.get("theme");
 // the saved language and theme from boot.js, so the first paint is in them
 if (window.bootPrefs) {
@@ -186,6 +188,14 @@ function optionFor(field, value) {
   return field.options.find((o) => o.value === value);
 }
 
+// directSaid: a model the agent asks its own vendor for itself, magpie not
+// in the way (Claude Code on its own sign-in), so its config names no magpie
+// endpoint — which read as magpie having failed to set it up
+function directSaid(a, opt) {
+  if (!opt?.direct) return "";
+  return t("Not through magpie: {agent} asks {vendor} for it directly, with its own sign-in or key, so {path} has no magpie endpoint — that is expected.", { agent: a.name, vendor: opt.direct, path: a.path });
+}
+
 // Rows in the shape of the list while magpie first reads the agents; a
 // reload keeps the rows it has until the new ones are in.
 function renderAgentsLoading() {
@@ -249,6 +259,7 @@ function renderAgents() {
       const b = el("button", "field " + (plain === 1 ? "solo" : wide(f) ? "main" : "side"));
       const opt = optionFor(f, f.value);
       b.title = t("{label}: {value}", { label: t(f.label), value: f.value || t("agent default") }) + (opt?.note ? ` · ${opt.note}` : "");
+      if (f.value && opt?.direct) b.title += "\n" + directSaid(a, opt);
       const effort = f.key === "effort" || f.label === "effort" || f.label === "thinking";
       if (opt?.icon || opt?.icons?.length) b.append(optionIcon(opt));
       // a field with no logo of its own still leads with an icon: how much
@@ -2045,6 +2056,7 @@ async function commit(value) {
     flash();
     const shown = opt?.label || value;
     if (state.notice) status(`${agent.name} → ${shown}. ${state.notice}`, "warn", 9000);
+    else if (opt?.direct) status(`${agent.name} ${t(field.label)} → ${shown} · ${t("straight to {vendor}, not through magpie", { vendor: opt.direct })}`, "ok", 6000);
     else status(`${agent.name} ${t(field.label)} → ${shown}`, "ok");
     if (providers) loadProviders();
   } catch (e) {
@@ -2213,7 +2225,8 @@ async function loadProviders() {
   providers = await api("providers");
   // a reload's provider may be gone since
   if (typeof editing === "string" && !providers.providers.some((p) => p.id === editing)) editing = null;
-  if (!providers.providers.length && editing === null) adding = true;
+  // a providers.json that can't be read is not a first use: no Add sheet
+  if (!providers.providers.length && editing === null && !providers.fileError) adding = true;
   if (view === "gateway") {
     // the gateway page is looked at and left open: coming back to the window
     // redraws it only when something on it changed, and when only the calls
@@ -2338,6 +2351,7 @@ function renderProviders() {
     if (open) dialog = renderEditor(p);
   }
   renderExcluded();
+  renderFileError();
   renderMovable();
   dialog = renderAdd() || dialog;
   if (importing) dialog = renderImport(importing);
@@ -2376,6 +2390,26 @@ async function switchProvider(p, on, s) {
     s?.classList.toggle("on", !on);
     status(e.message, "err");
   }
+}
+
+// renderFileError: over the list, that providers.json is there but can't
+// be read, so the list is the signed-in accounts alone: magpie left the
+// file as it is, and nothing is saved over it until it is fixed or moved.
+function renderFileError() {
+  const box = $("#fileError");
+  if (!box) return;
+  box.replaceChildren();
+  box.hidden = !providers.fileError;
+  if (box.hidden) return;
+  const r = el("div", "signing file-error");
+  r.setAttribute("role", "alert");
+  r.append(el("span", "mark", "!"));
+  const tt = el("span", "tt");
+  tt.append(el("span", "n", t("Your providers file can't be read")),
+    el("span", "s", t("magpie left it unchanged and lists no providers from it. Fix the file or move it aside, then reopen this page; until then, changes to providers are refused.")),
+    el("span", "s", providers.fileError));
+  r.append(tt);
+  box.append(r);
 }
 
 // renderMovable: one quiet line over the list naming the built-in
@@ -3629,6 +3663,18 @@ function proxyDraft(p) {
   for (const [u, x] of Object.entries(p?.accountProxies || {})) accountProxies[u] = { mode: x === "direct" ? "direct" : "custom", url: x === "direct" ? "" : x };
   return { proxyMode: !v ? "" : v === "direct" ? "direct" : "custom", proxyURL: v && v !== "direct" ? v : "", accountProxies };
 }
+// asTyped: the editor's form as it stands, for Refresh and the Tests to
+// ask with before a Save — a key just pasted over the saved one is the one
+// tried, and nothing is saved by it. Outside the editor, nothing.
+function asTyped() {
+  if (!draft) return {};
+  const body = { typed: true, key: (draft.key || "").trim(), chat: (draft.chat || "").trim(), responses: (draft.responses || "").trim(), anthropic: (draft.anthropic || "").trim(), modelsURL: (draft.modelsURL || "").trim() };
+  if (draft.headers) body.headers = headersOf(draft.headers);
+  const proxy = draft.proxyMode === undefined ? null : proxyOfDraft();
+  if (proxy !== null) body.proxy = proxy;
+  return body;
+}
+
 // proxyOfDraft is the draft's proxy as it is saved, or null when Custom
 // has no address yet.
 function proxyOfDraft() {
@@ -4512,7 +4558,7 @@ function drawEditor(p, presetID) {
       balPair.append(res);
       balPair.classList.add("wrap");
     }
-    inner.append(...field(t("Balance field"), balPair, t("Where the amount is in the reply, e.g. data.balance; it can be a sum with + - * / and brackets, e.g. data.total / 500000 or (1 - credits.used / 70) %; \"$\" in front adds the sign, \"%\" after it shows a percent; several, each with a label, go apart by \";\", e.g. 5h: a.used / a.cap %; $credits.left")));
+    inner.append(...field(t("Balance field"), balPair, t("Where the amount is in the reply, e.g. data.balance; it can be a sum with + - * / and brackets, e.g. data.total / 500000 or (1 - credits.used / 70) %; \"$\" in front adds the sign, \"%\" after it shows a percent, with a bar; several, each with a label, go apart by \";\", e.g. 5h: a.used / a.cap %; $credits.left")));
     more.append(inner);
     ed.append(more);
   }
@@ -4954,7 +5000,7 @@ function renderEndpoints(p, src) {
       test.classList.add("busy");
       for (const s of Object.values(slots)) { s.className = "res wait"; s.textContent = "…"; }
       try {
-        const r = await api("provider/test", { id: p.id });
+        const r = await api("provider/test", { ...asTyped(), id: p.id });
         for (const x of r.results) {
           const s = slots[x.protocol];
           if (!s) continue;
@@ -5170,7 +5216,7 @@ function renderModels(p) {
   refresh.onclick = async () => {
     refresh.classList.add("busy");
     try {
-      const r = await api("provider/models", { id: p.id });
+      const r = await api("provider/models", { ...asTyped(), id: p.id });
       status(t("{p}: {n} models", { p: p.name, n: r.count }), "ok");
       const chosen = draft.chosen;
       await loadProviders();
@@ -5191,7 +5237,7 @@ function renderModels(p) {
     for (const id of ids) got[id] = null;
     draw();
     try {
-      const r = await api("provider/test", { id: p.id, test: ids });
+      const r = await api("provider/test", { ...asTyped(), id: p.id, test: ids });
       r.results.forEach((x, i) => { got[ids[i]] = x; });
       const bad = r.results.filter((x) => !x.ok).length;
       status(bad ? t("{n} of {all} models didn't answer", { n: bad, all: ids.length }) : t("All {n} models answered", { n: ids.length }), bad ? "err" : "ok");
@@ -5206,7 +5252,7 @@ function renderModels(p) {
     got[id] = null;
     draw();
     try {
-      const r = await api("provider/test", { id: p.id, test: [id] });
+      const r = await api("provider/test", { ...asTyped(), id: p.id, test: [id] });
       const x = got[id] = r.results[0];
       status(x.ok ? t("{model} answered in {ms} ms", { model: id, ms: x.ms }) : t("{model} didn't answer: {error}", { model: id, error: (x.status ? x.status + " · " : "") + x.error }), x.ok ? "ok" : "err");
     } catch (e) { delete got[id]; status(e.message, "err"); }
@@ -5521,6 +5567,8 @@ async function signedIn(st) {
   const who = st.user || subOf(st.agent)?.name || st.agent;
   // signed in but listed nowhere (#155): say so rather than "added"
   if (!p) status(t("{user} signed in, but magpie can't list it — please report this", { user: who }), "err");
+  // an account listed already is said to be, not added (#413)
+  else if (st.again) status(t("{user} is already listed — its sign-in was renewed", { user: who }), "ok");
   else status(st.using ? t("Signed in as {user}", { user: who }) : t("{user} added — switch to it any time", { user: who }), "ok");
   state = await api("state");
   renderAgents();
@@ -6387,7 +6435,8 @@ function renderKeyAccounts(p) {
   }
   if (addingKey?.id === p.id) {
     const box = el("div", "acc adding");
-    const name = input(addingKey.name, t("Name, e.g. Team"));
+    // the key is what's needed; a name is only for telling keys apart
+    const name = input(addingKey.name, t("Name (optional), e.g. Team"));
     name.oninput = () => { addingKey.name = name.value; };
     const key = input(addingKey.key, t("paste an API key"), "password");
     key.oninput = () => { addingKey.key = key.value; };
@@ -6412,7 +6461,7 @@ function renderKeyAccounts(p) {
     bar.append(el("span", "grow"), x, add);
     box.append(fields, bar);
     list.append(box);
-    queueMicrotask(() => (addingKey.name ? key : name).focus());
+    queueMicrotask(() => key.focus());
   } else {
     const add = el("button", "acc add");
     const ic = el("span", "dot");
@@ -6711,15 +6760,6 @@ function hostOf(u) { try { return new URL(u.includes("://") ? u : "https://" + u
 // view goes down with it. The button stays at the view's foot however long
 // the list is; with the sheet already open it takes the view down to it,
 // and it steps aside while the sheet's head is in sight.
-// moreSubs: beside Add provider, the reminder that more subscriptions are
-// a plugin away — three of them in a stack, and where to find them
-{
-  const b = $("#moreSubs");
-  for (const ic of ["cursor", "githubcopilot", "gemini-color"]) b.firstElementChild.append(icon(ic));
-  b.append(svg(CHEV_R, 10, 1.7));
-  b.onclick = () => { openPlugins(); b.blur(); };
-}
-
 $("#addProvider").onclick = (e) => {
   const view = $("#view-providers"), sheet = $("#addSheet");
   if (!adding) {
@@ -6998,7 +7038,11 @@ function renderQuotas() {
       } else if (every) head.append(every);
       card.append(meters);
       // what is left besides the windows, under them
-      if (sub.balance && sub.windows?.length && !sub.error) card.append(balanceRow(sub, "What is left on the account besides its windows"));
+      if (sub.balance && sub.windows?.length && !sub.error) card.append(balanceRow(sub, "What is left on the account besides its windows", false));
+      // windows standing in for ones that couldn't be read just now say
+      // when they were read (a balance alone says it in its row)
+      const read = sub.windows?.length && !sub.error && readWhen(sub);
+      if (read) card.append(read);
       if (sub.resets?.count) {
         const r = el("div", "quota-resets");
         r.append(resetsWords(sub.resets));
@@ -7329,7 +7373,29 @@ function renderPanelQuota() {
       // whose balance, at a glance: the provider's logo before its name
       const who = el("span", "pq-sub pq-bn");
       who.append(icon(q.icon || "generic"), el("span", "", q.name));
-      card.append(who, el("b", "pq-amt", q.balance));
+      card.append(who);
+      // a balance field with several amounts: the first as the figure,
+      // the others each a quiet line, a percent a meter (#420)
+      const parts = q.balanceParts?.length ? q.balanceParts : [{ text: q.balance }];
+      for (const [i, p] of parts.entries()) {
+        if (!i && !p.label) card.append(el("b", "pq-amt", p.text));
+        else if (!i) {
+          const lead = el("span", "pq-lead");
+          lead.append(el("b", "pq-amt", p.text), el("span", "", p.label));
+          card.append(lead);
+        } else {
+          const line = el("span", "pq-sub pq-bp");
+          line.append(el("span", "", p.label || ""), el("b", "", p.text));
+          card.append(line);
+        }
+        if (p.percent != null) card.append(balanceMeter(p.percent));
+      }
+      // standing in for a reading that failed just now: as of when
+      if (q.asOf) {
+        card.classList.add("stale");
+        card.title += "\n" + asOfText(q);
+        card.append(el("span", "pq-sub pq-asof", t("As of {when}", { when: stamp(q.asOf) })));
+      }
       grid.append(card);
     }
     g.append(grid);
@@ -7563,13 +7629,55 @@ const quotaFit = new ResizeObserver((es) => {
   }
 });
 
-// balanceRow: what is left on an account, as a figure.
-function balanceRow(sub, why) {
-  const b = el("div", "quota-balance");
+// balanceRow: what is left on an account, as a figure; a balance field
+// with several amounts, each on a line of its own, its label quiet and the
+// first the one that counts, a percent a meter (amber from 90%, as the
+// panel's rings) (#420). Under it, when it was read, unless the card
+// says that under its windows (when false).
+function balanceRow(sub, why, when = true) {
+  const parts = sub.balanceParts;
+  const b = el("div", "quota-balance" + (parts?.length ? " parts" : ""));
   b.title = t(why);
-  b.append(el("span", "", t("Balance")), el("b", "", sub.balance));
+  if (!parts?.length) b.append(el("span", "", t("Balance")), el("b", "", sub.balance));
+  for (const [i, p] of (parts || []).entries()) {
+    const row = el("div", "bal-part" + (i ? "" : " lead"));
+    row.append(el("span", "", p.label || (i ? "" : t("Balance"))), el("b", "", p.text));
+    if (p.percent != null) row.append(balanceMeter(p.percent));
+    b.append(row);
+  }
+  const read = when && readWhen(sub);
+  if (read) b.append(read);
   return b;
 }
+
+// balanceMeter: a balance field's percent, as a meter.
+function balanceMeter(percent) {
+  const share = Math.max(0, Math.min(100, percent));
+  const track = el("div", "quota-track" + (share >= 90 ? " full" : ""));
+  const fill = el("i");
+  fill.style.width = share + "%";
+  track.append(fill);
+  return track;
+}
+
+// readWhen: when a card's figures were read, quietly under them: "As of
+// …" for one standing in for a reading that failed just now, else how
+// long ago, kept current.
+function readWhen(q) {
+  if (q.asOf) {
+    const s = el("div", "quota-read stale", asOfText(q));
+    s.title = asOfText(q);
+    return s;
+  }
+  if (!q.readAt) return null;
+  const s = el("div", "quota-read", t("Updated {when}", { when: ago(q.readAt) }));
+  s.dataset.ago = q.readAt;
+  s.title = new Date(q.readAt).toLocaleString();
+  return s;
+}
+setInterval(() => {
+  for (const s of document.querySelectorAll(".quota-read[data-ago]")) s.textContent = t("Updated {when}", { when: ago(s.dataset.ago) });
+}, 30000);
 
 // familyQuota: an account's windows one a model family where they name
 // one, and "Every model", for above them, turning to each window and back
@@ -9264,8 +9372,10 @@ function renderSessChart(chart, st, used, ov, acts) {
       c.title = tip(days[i], sessDay(days[i].day));
     });
     chart.querySelector(".sess-cal-side").replaceWith(sessCalSide(days, value, show));
+    chart.fitCal = () => sessCalFit(chart, days, value, tip);
     return;
   }
+  chart.fitCal = null;
   if (shape === "calendar") {
     chart.replaceChildren();
     chart.classList.add("cal");
@@ -9274,6 +9384,9 @@ function renderSessChart(chart, st, used, ov, acts) {
     wrap.append(sessCalendar(days, value, tip), sessCalSide(days, value, show));
     chart.append(wrap);
     chart.querySelector(".sess-chart-head").append(sessLegend());
+    chart.fitCal = () => sessCalFit(chart, days, value, tip);
+    chart.fitCal();
+    sessCalWidth.observe(chart);
     return;
   }
 
@@ -9334,15 +9447,37 @@ function renderSessChart(chart, st, used, ov, acts) {
   }
 }
 
+// a week's column in the calendar, cell and gap: as wide as weeks are counted
+// by, and as wide as one may grow to take what is left over
+const SESS_WEEK = 20, SESS_WEEK_MAX = 24;
+
+// sessCalFit lays the calendar across its card (John on Discord: 这个活跃度怎么
+// 没有铺满全部宽度呢？): a range of a few months took a few hundred pixels of a
+// wide card and left the rest empty. The weeks before the range come in as
+// empty cells, GitHub's way, up to a year in all, and the cells grow a little
+// to take what is left; a narrow card gets none and its cells shrink.
+const sessCalWidth = new ResizeObserver((es) => { for (const e of es) e.target.fitCal?.(); });
+function sessCalFit(chart, days, value, tip) {
+  const wrap = chart.querySelector(".sess-cal-wrap"), cal = wrap?.querySelector(".sess-cal");
+  if (!cal || !wrap.clientWidth) return;
+  const ws = getComputedStyle(wrap), side = wrap.querySelector(".sess-cal-side");
+  const wd = Math.max(0, ...[...cal.querySelectorAll(".wd")].map((l) => l.getBoundingClientRect().width));
+  const room = wrap.clientWidth - wd - (ws.flexDirection === "row" ? side.getBoundingClientRect().width + (parseFloat(ws.columnGap) || 0) : 0);
+  const weeks = Math.ceil(((days[0].day.getDay() + 6) % 7 + days.length) / 7);
+  const pad = Math.max(0, Math.min(53, Math.floor(room / SESS_WEEK)) - weeks);
+  if (String(pad) !== cal.dataset.pad) cal.replaceWith(sessCalendar(days, value, tip, pad));
+}
+
 // sessCalendar is the range as weeks of days, Monday on top, each day as
-// dark as it is busy among the others
-function sessCalendar(days, value, tip) {
+// dark as it is busy among the others, after pad empty weeks before it
+function sessCalendar(days, value, tip, pad = 0) {
   const lv = sessLevels(days.map(value));
-  const lead = (days[0].day.getDay() + 6) % 7;
+  const lead = (days[0].day.getDay() + 6) % 7 + 7 * pad;
   const weeks = Math.ceil((lead + days.length) / 7);
   const cal = el("div", "sess-cal");
+  cal.dataset.pad = pad;
   cal.style.gridTemplateColumns = `auto repeat(${weeks}, minmax(0, 1fr))`;
-  cal.style.maxWidth = `calc(2.6em + ${weeks * 20}px)`;
+  cal.style.maxWidth = `calc(2.6em + ${weeks * (pad ? SESS_WEEK_MAX : SESS_WEEK)}px)`;
   const names = sessWeekdays();
   for (const i of [0, 2, 4]) {
     const l = el("span", "wd", names[i]);
@@ -9351,20 +9486,29 @@ function sessCalendar(days, value, tip) {
   }
   const loc = locale === "zh" ? "zh-CN" : "en";
   let month = -1, labelAt = -9;
-  days.forEach((x, i) => {
-    const k = lead + i, w = Math.floor(k / 7), wd = k % 7;
+  // the days before the range, from the Monday it is laid out from: their
+  // months named as the range's are, the days themselves left blank
+  const before = Array.from({ length: pad ? lead : 0 }, (_, i) => {
+    const d = new Date(days[0].day);
+    d.setDate(d.getDate() - lead + i);
+    return { day: d, before: true };
+  });
+  [...before, ...days].forEach((x, i) => {
+    const k = (pad ? 0 : lead) + i, w = Math.floor(k / 7), wd = k % 7;
     if ((wd === 0 || i === 0) && x.day.getMonth() !== month) {
       month = x.day.getMonth();
-      if (w - labelAt >= 3) {
+      // a month mostly gone when the weeks before begin is left unnamed, so
+      // as not to crowd out the next one's name
+      if (w - labelAt >= 3 && !(x.before && x.day.getDate() > 14)) {
         const m = el("span", "mo", x.day.toLocaleDateString(loc, month === 0 && weeks > 20 ? { month: "short", year: "numeric" } : { month: "short" }));
         m.style.gridArea = `1 / ${w + 2}`;
         cal.append(m);
         labelAt = w;
       }
     }
-    const c = el("i", "l" + lv(value(x)));
+    const c = x.before ? el("s") : el("i", "l" + lv(value(x)));
     c.style.gridArea = `${wd + 2} / ${w + 2}`;
-    c.title = tip(x, sessDay(x.day));
+    if (!x.before) c.title = tip(x, sessDay(x.day));
     cal.append(c);
   });
   return cal;
@@ -10044,6 +10188,7 @@ function renderSettings() {
   renderTrayUsage(s, keep);
   renderProxy(s, keep);
   renderImages(s, keep);
+  renderSearch(s);
   renderRedact(s, keep);
   renderLAN(s);
   renderSync();
@@ -10168,6 +10313,8 @@ async function renderSync(v) {
     const host = s3 ? [v.url, v.endpoint && hostOf(v.endpoint.includes("://") ? v.endpoint : "https://" + v.endpoint)].filter(Boolean).join(" · ") : hostOf(v.url);
     status = v.error ? t("Couldn't sync: {error}", { error: v.error })
       : v.last ? t("Synced {when} · {host}", { when: syncWhen(v.last), host }) : t("Not synced yet · {host}", { host });
+    // the other kind's server, kept from before sync moved here
+    if (v.other) status += " · " + t("{kind} settings kept", { kind: v.other.kind === "s3" ? "S3" : "WebDAV" });
   }
   const sub = row(t(s3 ? "S3 sync" : v.on ? "WebDAV sync" : "WebDAV or S3 sync"), status, ...(v.on
     ? [btn(t("Sync now"), async (e) => { e.target.classList.add("busy"); renderSync(await api("davsync/now", {}).catch((x) => ({ ...v, error: x.message }))); }),
@@ -10227,12 +10374,15 @@ function syncBar(ed, err, ...tools) {
 
 // davForm: the sync's settings, a WebDAV folder's or an S3 bucket's (#296).
 // Both sets of fields are made and the kind picked shows one, so what was
-// typed in the other is still there on going back.
+// typed in the other is still there on going back. The kind not synced to
+// shows the server kept from before sync moved from it (ARNO on Discord:
+// trying S3 wiped the WebDAV setup); saving it moves sync back there.
 function davForm(v) {
   const ed = el("div", "editor sync-form");
-  let kind = v.kind === "s3" ? "s3" : "webdav";
+  const active = v.on ? (v.kind === "s3" ? "s3" : "webdav") : "";
+  let kind = active || "webdav";
   const saved = t("saved · type a new one to replace it");
-  const dav = v.kind === "s3" ? {} : v, bk = v.kind === "s3" ? v : {};
+  const dav = v.kind === "s3" ? v.other || {} : v, bk = v.kind === "s3" ? v : v.other || {};
   const url = input(dav.url || "", "https://dav.jianguoyun.com/dav/");
   const user = input(dav.user || "", t("user name"));
   const pass = input("", dav.passwordSet ? saved : t("password, or an app password"), "password");
@@ -10261,16 +10411,26 @@ function davForm(v) {
     ...field(t("Access key"), keyID),
     ...field(t("Secret"), secret),
     ...field("", pathL, t("MinIO and most NAS servers need it."))];
+  const names = { webdav: "WebDAV", s3: "S3" };
+  // which one is synced to, and that the other's settings stay
+  const to = field(t("Sync to"), segs([["webdav", "WebDAV"], ["s3", "S3"]].map(([id, n]) => [id, id === active ? t("{kind} · on", { kind: n }) : n]), kind, (k) => { kind = k; show(); }), " ");
+  const where = to[1].querySelector(".hint");
+  const save = el("button", "text primary", "");
   const show = () => {
     for (const x of davFields) x.hidden = kind !== "webdav";
     for (const x of s3Fields) x.hidden = kind !== "s3";
+    const other = kind === "s3" ? "webdav" : "s3";
+    where.textContent = !active ? ""
+      : kind === active ? (v.other ? t("Syncing here now. The {other} settings are kept, not synced to: pick {other} to see them.", { other: names[other] }) : t("Syncing here now."))
+      : t("{active} is synced to now. Saving moves sync here; the {active} settings are kept for moving back.", { active: names[active] });
+    where.hidden = !active;
+    save.textContent = !active ? t("Turn on") : kind === active ? t("Save") : t("Move sync to {kind}", { kind: names[kind] });
   };
-  ed.append(...field(t("Sync to"), segs([["webdav", "WebDAV"], ["s3", "S3"]], kind, (k) => { kind = k; show(); })),
+  ed.append(...to,
     ...davFields, ...s3Fields,
     ...field(t("Passphrase"), phrase, t("The file is sealed with it on this computer; the server only ever sees it sealed. Keep it: without it the file can't be opened.")),
     ...field(t("Also sync"), what));
   show();
-  const save = el("button", "text primary", t(v.on ? "Save" : "Turn on"));
   const off = v.on ? el("button", "text danger", t("Turn off")) : el("span");
   const cancel = el("button", "text", t("Cancel"));
   const say = syncBar(ed, "", off, el("span", "grow"), cancel, save);
@@ -10627,6 +10787,83 @@ function renderImageGen(s, keep, box) {
   val.append(b);
   r.append(who, val);
   box.append(r);
+}
+
+// renderSearch: the web search APIs a model's search goes to when no
+// provider can search (#419) — one row each, in the order they are tried,
+// and a row to add one: which API, its key, and the address of one the user
+// runs (SearXNG). They are set on their own; one magpie refuses is said in
+// the row, what was typed kept.
+let searchDraft = { vendor: "tavily", key: "", url: "", err: "" };
+function renderSearch(s) {
+  const box = $("#searchList");
+  box.replaceChildren();
+  const row = (name, sub, ...tools) => {
+    const r = el("div", "row pref");
+    const who = el("div", "who");
+    who.append(el("div", "name", name), el("div", "sub", sub));
+    const val = el("div", "val");
+    val.append(...tools);
+    r.append(who, val);
+    box.append(r);
+    return r;
+  };
+  const set = (body, done) => writingPrefs(api("settings/search-api", body))
+    .then((ns) => { prefs = ns; searchDraft.err = ""; done?.(); renderSettings(); status(t("Saved"), "ok", 1500); })
+    .catch((e) => { searchDraft.err = e.message; status(e.message, "err"); renderSettings(); });
+  const vendors = s.searchVendors || [];
+  const d = searchDraft;
+  if (!vendors.some((v) => v.id === d.vendor)) d.vendor = vendors[0]?.id || "";
+  const vendor = () => vendors.find((v) => v.id === d.vendor) || {};
+  const pick = el("button", "proto pick search-vendor");
+  pick.type = "button";
+  pick.setAttribute("aria-label", t("Search API"));
+  const key = input(d.key, t("API key"), "password");
+  const url = input(d.url, "https://searx.example.com");
+  key.className = "words search-key";
+  url.className = "words search-url";
+  key.setAttribute("aria-label", t("API key"));
+  url.setAttribute("aria-label", t("Address"));
+  const get = el("button", "link", t("Get a key ↗"));
+  get.onclick = () => vendor().keysURL && api("open", { url: vendor().keysURL });
+  const draw = () => {
+    const v = vendor();
+    pick.replaceChildren(el("span", "", v.name || ""), svg(CHEV, 11, 1.6));
+    url.hidden = !v.needURL;
+    key.placeholder = v.needURL ? t("API key, if it needs one") : t("API key");
+    get.hidden = !v.keysURL;
+  };
+  pick.onclick = (e) => {
+    e.stopPropagation();
+    if (pick.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(pick, vendors.map((v) => ({ v: v.id, name: v.name, note: v.needURL ? t("your own") : "" })), d.vendor,
+      (id) => { d.vendor = id; draw(); }, "Search API");
+  };
+  const add = el("button", "text", t("Add"));
+  add.onclick = () => {
+    d.key = key.value.trim(); d.url = url.value.trim();
+    if (vendor().needURL ? !d.url : !d.key) return (vendor().needURL ? url : key).focus();
+    set({ vendor: d.vendor, key: d.key, url: vendor().needURL ? d.url : "" },
+      () => { searchDraft = { vendor: d.vendor, key: "", url: "", err: "" }; });
+  };
+  for (const i of [key, url]) {
+    i.oninput = () => { d.key = key.value; d.url = url.value; };
+    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") add.onclick(); };
+  }
+  draw();
+  const by = s.searchProvider ? t("Now done by {who}; these come after it", { who: s.searchProvider })
+    : t("No provider can search, so these are asked");
+  const head = row(t("Search APIs"), d.err || t("When a model can't search the web, magpie searches for it with these, in this order, and gives it what they found") + " · " + by,
+    pick, key, url, get, add);
+  head.classList.add("rule-row", "search-add");
+  head.querySelector(".val").classList.add("rule-add");
+  if (d.err) head.querySelector(".sub").classList.add("err");
+  (s.searchAPIs || []).forEach((a, n) => {
+    const x = el("button", "text", t("Remove"));
+    x.onclick = () => set({ vendor: a.vendor, remove: true });
+    const what = [a.key || (a.ready ? "" : t("needs its key")), a.url].filter(Boolean).join(" · ");
+    row(`${n + 1}. ${a.name}`, what, x).classList.add("search-api");
+  });
 }
 
 // renderRedact: what the gateway masks before a request goes to a vendor —

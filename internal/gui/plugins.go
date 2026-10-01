@@ -84,13 +84,16 @@ type pluginsJSON struct {
 	Bun     bool              `json:"bun"` // Bun is here; adding the first plugin downloads it otherwise
 	BunVer  string            `json:"bunVersion"`
 	Error   string            `json:"error,omitempty"` // the plugins couldn't be asked
+	// Picker is whether this magpie can show the system's folder picker:
+	// `magpie web` has none, and the page then offers no button for it
+	Picker bool `json:"picker"`
 	// Movable are the built-ins with accounts a plugin could run, which
 	// its card and its row offer to move
 	Movable []provider.MoveCandidate `json:"movable"`
 }
 
-func pluginsState(ctx context.Context) pluginsJSON {
-	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunVersion, Movable: provider.MoveCandidates()}
+func pluginsState(ctx context.Context, w Windows) pluginsJSON {
+	s := pluginsJSON{Plugins: []pluginEntryJSON{}, Bun: plugin.HasBun(), BunVer: plugin.BunInUse(), Movable: provider.MoveCandidates(), Picker: w != nil && !isWeb(w)}
 	l := plugin.Load()
 	errs := map[string]string{}
 	names := map[string][]string{}
@@ -137,11 +140,11 @@ type pluginListingJSON struct {
 	NPM plugin.NPM `json:"npm"`
 }
 
-func pluginMarketState(ctx context.Context) pluginMarketJSON {
+func pluginMarketState(ctx context.Context, w Windows) pluginMarketJSON {
 	var ls []plugin.Listing
 	var st pluginsJSON
 	done := make(chan struct{})
-	go func() { st = pluginsState(ctx); close(done) }()
+	go func() { st = pluginsState(ctx, w); close(done) }()
 	ls = plugin.Market(ctx)
 	names := []string{}
 	for _, l := range ls {
@@ -172,7 +175,7 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/plugins/market", func(rw http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 		defer cancel()
-		writeJSON(rw, pluginMarketState(ctx))
+		writeJSON(rw, pluginMarketState(ctx, w))
 	})
 	mux.HandleFunc("GET /api/plugins/search", func(rw http.ResponseWriter, r *http.Request) {
 		hits, err := plugin.Search(r.Context(), r.URL.Query().Get("q"))
@@ -193,7 +196,17 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/plugins", func(rw http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
 		defer cancel()
-		writeJSON(rw, pluginsState(ctx))
+		writeJSON(rw, pluginsState(ctx, w))
+	})
+	// a folder on this computer, from the system's picker; "" when the
+	// user cancels it
+	mux.HandleFunc("POST /api/plugins/choose", func(rw http.ResponseWriter, r *http.Request) {
+		dir, err := w.ChooseFolder("Choose a plugin folder")
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]string{"dir": dir})
 	})
 	// add, remove, update, turn on or off: each answers with the list
 	mux.HandleFunc("POST /api/plugins/{op}", func(rw http.ResponseWriter, r *http.Request) {
@@ -228,7 +241,7 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
-		writeJSON(rw, pluginsState(ctx))
+		writeJSON(rw, pluginsState(ctx, w))
 	})
 	// signing in to a plugin's provider: the method's questions one at a
 	// time, then a browser (OAuth) or a key

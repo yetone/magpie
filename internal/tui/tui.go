@@ -102,6 +102,7 @@ type model struct {
 	ask       ask
 	confirm   string // what a second d removes
 	provs     []provider.Provider
+	provsErr  error // providers.json can't be read: said, not "none yet"
 	prow      int
 	bal       map[string]string
 	asked     bool // balances were asked for

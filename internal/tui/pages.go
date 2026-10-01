@@ -57,6 +57,7 @@ type balanceMsg map[string]string
 
 func (m *model) reloadProviders() {
 	m.provs = provider.All()
+	m.provsErr = provider.FileError()
 	m.prow = clamp(m.prow, len(m.provs))
 }
 
@@ -377,8 +378,13 @@ func (m model) viewProviders() string {
 	var b strings.Builder
 	b.WriteString(m.header())
 	b.WriteString("\n\n")
+	if m.provsErr != nil {
+		b.WriteString(pad + "  " + sBad.Render("! "+m.provsErr.Error()) + "\n\n")
+	}
 	if len(m.provs) == 0 {
-		b.WriteString(pad + "  " + sMuted.Render("no providers yet · a adds one"))
+		if m.provsErr == nil {
+			b.WriteString(pad + "  " + sMuted.Render("no providers yet · a adds one"))
+		}
 		return b.String()
 	}
 	type row struct{ name, id, key, models, note string }

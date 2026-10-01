@@ -329,7 +329,9 @@ func addAccount(agentID string) error {
 	}
 	switch st.State {
 	case "done":
-		if st.Using {
+		if st.Again {
+			fmt.Println(green.Render("✓"), st.User, "is already listed — its sign-in was renewed")
+		} else if st.Using {
 			fmt.Println(green.Render("✓"), agentID, "is signed in as", st.User)
 		} else {
 			fmt.Println(green.Render("✓"), "added", st.User, muted.Render("· use it: magpie accounts switch "+agentID+" "+st.User))

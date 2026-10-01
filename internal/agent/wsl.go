@@ -187,8 +187,8 @@ var wslKinds = []wslKind{
 			switch key {
 			case "model":
 				// whether it has a base URL of its own is the distro's file
-				return func(map[string]string) []Option {
-					return append(group("Claude Code", claudeOwn()), claudeViaMagpie()...)
+				return func(cur map[string]string) []Option {
+					return append(group("Claude Code", claudeOwn(cur["model"], nil)), claudeViaMagpie()...)
 				}
 			case "effort":
 				return nil

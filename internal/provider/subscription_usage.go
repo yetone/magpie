@@ -55,6 +55,9 @@ type SubscriptionQuota struct {
 	User     string        `json:"user,omitempty"` // the account, so two of one vendor tell apart
 	Windows  []QuotaWindow `json:"windows"`
 	Balance  string        `json:"balance,omitempty"` // what is left on an API key, instead of windows
+	// BalanceParts are the Balance's amounts each apart, when the balance
+	// field the user wrote has several or a percent (cardParts)
+	BalanceParts []BalancePart `json:"balanceParts,omitempty"`
 	// Until is when the plan's paid time ends: it renews then when Renew
 	// is "auto", is over when "off", and either when "" (the vendor
 	// doesn't say which).
@@ -64,6 +67,9 @@ type SubscriptionQuota struct {
 	// AsOf is when an allowance shown in place of one that couldn't be
 	// read was read (see keepLast); nil for a reading just made.
 	AsOf *time.Time `json:"asOf,omitempty"`
+	// ReadAt is when a key's balance was read, which the minute it is
+	// kept for (KeyBalances) leaves behind the page's asking.
+	ReadAt *time.Time `json:"readAt,omitempty"`
 	// Resets are the rate-limit resets a Codex account holds, nil when it
 	// holds none (codex_resets.go).
 	Resets *ResetCredits `json:"resets,omitempty"`

@@ -167,6 +167,21 @@ func TestS3Cmd(t *testing.T) {
 		c.Endpoint != "" || c.Region != "" || c.PathStyle {
 		t.Fatalf("to WebDAV: %+v", c)
 	}
+	// and back, with nothing typed: the bucket, key and secret kept when
+	// sync moved from them (ARNO on Discord: S3 wiped the WebDAV setup)
+	if err := s3Cmd([]string{"on"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := davsync.Load(); !c.S3() || c.URL != "s3://bkt/other" || c.User != "AKID2" || c.Password != "s3cr3t2" || c.Endpoint != bucket.url ||
+		c.Other == nil || c.Other.URL != dav.url || c.Other.Password != "pw" {
+		t.Fatalf("back to S3: %+v", c)
+	}
+	if err := webdavCmd([]string{"on"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := davsync.Load(); c.S3() || c.URL != dav.url || c.User != "me" || c.Password != "pw" || c.Other == nil || c.Other.Password != "s3cr3t2" {
+		t.Fatalf("back to WebDAV: %+v", c)
+	}
 	if err := s3Cmd([]string{"off"}); err == nil || !strings.Contains(err.Error(), "magpie webdav off") {
 		t.Fatalf("s3 off while WebDAV is on: %v", err)
 	}

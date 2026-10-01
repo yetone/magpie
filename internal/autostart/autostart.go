@@ -31,6 +31,10 @@ func Set(on bool) error {
 	return enable(exe)
 }
 
+// Refresh brings the system's record up to date when magpie opens at
+// login, for a record an older version wrote; it never turns it on.
+func Refresh() error { return refresh() }
+
 // self is the program to start: this one, where it will be at login.
 func self() (string, error) {
 	// an AppImage runs from a folder mounted anew each time; the file

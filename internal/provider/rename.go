@@ -28,7 +28,10 @@ func Rename(from, to string) error {
 	if to == from {
 		return nil
 	}
-	f := load()
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	i := slices.IndexFunc(f.Providers, func(p Provider) bool { return p.ID == from })
 	// one of the user's own saved on a subscription's id before that was one
 	// (a "WorkBuddy" key before v0.1.261) can be moved off it; the

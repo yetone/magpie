@@ -42,7 +42,7 @@ func (s *Server) serveKiro(w http.ResponseWriter, r *http.Request, from provider
 	req.Model = model
 	ask := s.askKiro(p, model)
 	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
+		if canSearch() {
 			return s.searchReply(w, r, from, "Kiro", req, usage, ask)
 		}
 	}

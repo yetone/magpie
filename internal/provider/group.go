@@ -476,6 +476,10 @@ func SaveGroup(g Group) error {
 	if len(g.Members) == 0 {
 		return errors.New("a group needs a model in it")
 	}
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	entries := providerEntries()
 	if err := cleanFast(entries, &g); err != nil {
 		return err
@@ -546,7 +550,6 @@ func SaveGroup(g Group) error {
 		}
 	}
 	g.Auto, g.Hidden = false, false
-	f := load()
 	for i := range f.Groups {
 		if f.Groups[i].ID == g.ID {
 			f.Groups[i] = g
@@ -660,6 +663,10 @@ func MemberGroups() map[string][]string {
 // to come back with ShowGroup. A group another has in it, or classifies
 // with, stays until it is taken out of that one.
 func DeleteGroup(id string) error {
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	if in := GroupsWith(id); len(in) > 0 {
 		var names []string
 		for _, g := range in {
@@ -672,7 +679,6 @@ func DeleteGroup(id string) error {
 			return fmt.Errorf("%s is %s's classifier: choose another first", id, g.Name)
 		}
 	}
-	f := load()
 	found := false
 	f.Groups = slices.DeleteFunc(f.Groups, func(g Group) bool {
 		if g.ID == id {
@@ -706,7 +712,10 @@ func RemovedGroups() []string {
 
 // ShowGroup brings back a group magpie found that the user had removed.
 func ShowGroup(id string) error {
-	f := load()
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	f.Groups = slices.DeleteFunc(f.Groups, func(g Group) bool { return g.ID == id && g.Hidden })
 	return store(f)
 }
@@ -724,12 +733,15 @@ func RenameGroup(from, to string) error {
 	if to == from {
 		return nil
 	}
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	all := groupsIn(providerEntries())
 	g, ok := groupOf(all, from)
 	if !ok {
 		return fmt.Errorf("no group %q", from)
 	}
-	f := load()
 	if slices.ContainsFunc(all, func(o Group) bool { return o.ID == to }) ||
 		slices.ContainsFunc(f.Groups, func(o Group) bool { return o.ID == to }) {
 		return fmt.Errorf("there is a group %q already", to)

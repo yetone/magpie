@@ -77,9 +77,10 @@ var grokDrawers = []catalog.Model{
 }
 
 // drawsGrok is whether p is a Grok subscription, which draws at the Imagine
-// API of the backend Grok Build talks to.
+// API of the backend Grok Build talks to: the built-in's, or the Grok
+// plugin's, which signs what it is sent there as the built-in does.
 func drawsGrok(p provider.Provider) bool {
-	return p.Account != nil && p.Account.Agent == "grok" && p.Base(provider.Responses) != ""
+	return p.Account != nil && (p.Account.Agent == "grok" || p.PluginProvider() == "grok") && p.Base(provider.Responses) != ""
 }
 
 // drawsCodex is whether p is a ChatGPT account, which draws at its Codex
@@ -542,7 +543,7 @@ func (s *Server) sendAs(ctx context.Context, p provider.Provider, method, url, c
 			req.Header[k] = []string{v}
 		}
 	}
-	res, err := s.client.Do(req)
+	res, err := p.Do(s.client, req) // a plugin's through the plugin
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, 504, fmt.Errorf("%s didn't answer in %s", p.Name, drawTimeout)

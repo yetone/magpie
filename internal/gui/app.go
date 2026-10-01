@@ -20,6 +20,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
+	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/omarchy"
 	"github.com/yetone/magpie/internal/settings"
@@ -244,6 +245,11 @@ func Run(version string, showMain bool, link string) error {
 		}
 		// Windows has no installer to put magpie in the Start menu
 		shortcut.Ensure()
+		// Open at login as this version writes it (the Mac's, so a restart
+		// to update from a magpie opened at login comes back)
+		if err := autostart.Refresh(); err != nil {
+			log.Println("open at login:", err)
+		}
 	}()
 	// MAGPIE_THEME=light|dark forces the palette; handy for screenshots.
 	theme := ""

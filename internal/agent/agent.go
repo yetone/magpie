@@ -35,6 +35,10 @@ type Option struct {
 	// Context is the tokens the model takes, when known; the picker marks
 	// the large ones
 	Context int `json:"context,omitempty"`
+	// Direct names who the agent asks for this model itself, on its own
+	// sign-in or key, with magpie not in the way ("Anthropic"): its config
+	// then names no magpie endpoint, which is right, not a failed setup
+	Direct string `json:"direct,omitempty"`
 }
 
 // Field is one tunable setting of an agent. Set with an empty value puts

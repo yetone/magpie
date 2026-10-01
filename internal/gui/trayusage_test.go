@@ -69,6 +69,15 @@ func TestTrayUsageText(t *testing.T) {
 	if label, _ = trayUsageText(provider.SubscriptionQuota{Name: "DeepSeek", Balance: "¥12.30"}, now, false); label != "¥12.30" {
 		t.Errorf("balance label %q", label)
 	}
+	// one read a while ago, standing in for one that couldn't be read now,
+	// says when it was read (#420)
+	read := time.Date(2026, 9, 27, 9, 5, 0, 0, time.Local)
+	if label, tip = trayUsageText(provider.SubscriptionQuota{Name: "Relay", Balance: "$4.20", AsOf: &read}, now, false); label != "$4.20" || tip != "Relay · $4.20\nas of Sep 27 09:05, couldn't be read just now" {
+		t.Errorf("balance as of: %q %q", label, tip)
+	}
+	if _, tip = trayUsageText(provider.SubscriptionQuota{Name: "Kimi", AsOf: &read, Windows: []provider.QuotaWindow{{Name: "Weekly", Used: 10}}}, now, false); tip != "Kimi\nWeekly 10% used\nas of Sep 27 09:05, couldn't be read just now" {
+		t.Errorf("windows as of: %q", tip)
+	}
 	if label, tip = trayUsageText(provider.SubscriptionQuota{Name: "Codex", Error: "signed out"}, now, false); label != "" || tip != "Codex: signed out" {
 		t.Errorf("error: %q %q", label, tip)
 	}

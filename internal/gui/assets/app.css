@@ -459,7 +459,8 @@ body.window .field.solo { grid-column: auto; }
 .subscription-account { display: flex; align-items: baseline; gap: 7px; margin: 0 0 6px; font-size: 11px; color: var(--fg-2); }
 .subscription-card.several .quota-windows + .subscription-account,
 .subscription-card.several .subscription-error + .subscription-account,
-.subscription-card.several .quota-balance + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+.subscription-card.several .quota-balance + .subscription-account,
+.subscription-card.several .quota-read + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
 .subscription-account .user { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subscription-account .plan { margin-left: auto; flex: none; font-size: 10.5px; color: var(--muted); text-transform: capitalize; }
 .subscription-head .plan { margin-left: auto; font-size: 10.5px; color: var(--muted); text-transform: capitalize; }
@@ -497,6 +498,20 @@ body.window .field.solo { grid-column: auto; }
 .subscription-account .plan + .quota-every, .subscription-head .plan + .quota-every { margin-left: 4px; }
 .subscription-account .user + .quota-every, .subscription-head .quota-every { margin-left: auto; }
 .quota-balance b { margin-left: auto; font-size: 15px; color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* a balance field's several amounts (#420): a line each, the label quiet
+   at the left and the figure at the right, the first the larger; a
+   percent's meter under its line; when it was read under them all */
+.quota-balance { flex-wrap: wrap; }
+.quota-balance.parts { display: grid; gap: 7px; }
+.bal-part { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 8px; }
+.bal-part > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bal-part b { font-size: 12.5px; color: var(--fg-2); }
+.bal-part.lead b { font-size: 15px; color: var(--fg); }
+.bal-part .quota-track, .pq-card.bal .quota-track { grid-column: 1 / -1; margin-top: 4px; }
+.quota-track.full i { background: var(--amber); }
+.quota-read { flex-basis: 100%; margin-top: 2px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.quota-windows + .quota-read, .quota-balance + .quota-read { margin-top: 8px; }
+.quota-read.stale { color: var(--amber); }
 .skeleton { display: block; border-radius: 5px; background: linear-gradient(90deg, var(--skel, var(--pill)) 25%, var(--skel-hi, var(--pill-hover)) 45%, var(--skel, var(--pill)) 65%); background-size: 240% 100%; animation: skeleton-shift 1.4s ease-in-out infinite; }
 @keyframes skeleton-shift { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 .sk-cost { width: 72px; height: 15px; }
@@ -766,6 +781,7 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .sess-cal-wrap { display: flex; align-items: flex-start; gap: 18px; padding-bottom: 4px; }
 .sess-cal { flex: 1 1 auto; display: grid; grid-template-rows: auto repeat(7, auto); gap: 3px; min-width: 0; font-size: 10px; color: var(--muted); }
 .sess-cal i { aspect-ratio: 1; border-radius: 3px; min-width: 0; }
+.sess-cal s { aspect-ratio: 1; border-radius: 3px; min-width: 0; background: var(--pill); opacity: .45; }
 .sess-cal i:hover { outline: 1px solid var(--fg-2); outline-offset: -1px; }
 .sess-cal .wd { padding-right: 5px; line-height: 1; align-self: center; white-space: nowrap; }
 .sess-cal .mo { white-space: nowrap; overflow: visible; line-height: 1.2; padding-bottom: 1px; }
@@ -1052,6 +1068,14 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-bn > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pq-bn .ic { width: 14px; height: 14px; flex: none; }
 .pq-amt { font-size: 15px; font-weight: 600; letter-spacing: -.01em; color: var(--fg); font-variant-numeric: tabular-nums; }
+/* a balance field's several amounts on a balance's card (#420) */
+.pq-lead { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.pq-lead > span { min-width: 0; font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pq-bp { display: flex; align-items: baseline; gap: 6px; }
+.pq-bp > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pq-bp > b { margin-left: auto; flex: none; font-weight: 600; color: var(--fg-2); }
+.pq-card.bal .quota-track { margin-top: 0; }
+.pq-asof { color: var(--amber); }
 .pq-card .skeleton.sk-aq { width: 130px; height: 9px; border-radius: 4px; }
 .pq-card .skeleton.sk-ring { width: 34px; height: 34px; border-radius: 50%; }
 /* the panel's footer: a hairline over it, as much room above as below */
@@ -1554,6 +1578,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #view-providers .after-list { position: sticky; bottom: -8px; z-index: 2; margin: 0 -12px -8px; padding: 14px 16px 12px; background: linear-gradient(to bottom, transparent, var(--bg) 12px); transition: opacity .18s ease, visibility .18s; }
 #view-providers .after-list.away { opacity: 0; visibility: hidden; }
 #movable { margin: 0 0 8px; }
+#fileError { margin: 0 0 10px; }
+#fileError .signing { border: 1px solid var(--line); border-radius: 10px; }
+#fileError .signing .mark { background: var(--red); }
 .movable { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 4px; padding: 2px 14px; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
 .movable .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; margin-right: 4px; align-self: center; }
 .movable .link { font-size: 11.5px; padding: 0 2px; }
@@ -1732,8 +1759,18 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .mbulk { display: flex; align-items: center; gap: 6px; }
 .mbulk > input { max-width: 260px; flex: 1; }
 /* a long list scrolls on its own, not the editor with it past its ends */
-.mchips { display: flex; flex-wrap: wrap; gap: 4px; max-height: 132px; overflow-y: auto; overscroll-behavior: contain; padding: 1px; }
+.mchips { display: flex; flex-wrap: wrap; gap: 4px; max-height: min(132px, 28vh); overflow-y: auto; overscroll-behavior: contain; padding: 1px; }
 .mchips::-webkit-scrollbar { width: 0; }
+/* In a short window the editor's body shows little more than the list, so
+   the pointer is nearly always over it; held at its ends, the wheel could
+   never take the body on to what lies below (悠悠哥 on Discord: a small
+   window's WorkBuddy editor stopped part way down its models). There a
+   list's ends pass the wheel on to the body, and the names' list is held
+   to a part of the window as the chips are. */
+@media (max-height: 640px) {
+  .mchips { overscroll-behavior: auto; }
+  .mnames { max-height: min(240px, 40vh); }
+}
 .mchip {
   display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px;
   font-size: 11.5px; color: var(--muted); background: var(--card); border: 1px solid var(--line);
@@ -1804,6 +1841,7 @@ input.words { width: 240px; max-width: 100%; }
 .prefs .val.rule-add { flex: 1 1 100%; max-width: none; margin-left: 0; gap: 6px; }
 input.words.rule-kind { flex: none; width: 110px; }
 input.words.rule-match { flex: 1 1 auto; width: auto; min-width: 0; }
+input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; min-width: 0; }
 .prefs .val.rule-add .segs { margin-left: 0; }
 .row.pref .sub.err { color: var(--red); white-space: normal; }
 .warm-at { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }

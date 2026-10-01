@@ -28,8 +28,11 @@ type loginUsageEntry struct {
 func LoginUsage(ctx context.Context, agent string) map[string]SubscriptionQuota {
 	out := map[string]SubscriptionQuota{}
 	var logins []Login
+	// a plugin's accounts are asked for by the provider's id or as
+	// plugin:<id>, read once a minute whichever names them
+	known := agent
 	if pp, ok := pluginOfAgent(agent); ok {
-		logins = pluginUsageLogins(pp)
+		logins, known = pluginUsageLogins(pp), pluginAgent(pp)
 	} else if agent == "grok" {
 		return grokLoginUsage(ctx)
 	} else if logins, ok = builtinLogins(agent); !ok {
@@ -39,7 +42,7 @@ func LoginUsage(ctx context.Context, agent string) map[string]SubscriptionQuota 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, l := range logins {
-		key := agent + "/" + strings.ToLower(l.User)
+		key := known + "/" + strings.ToLower(l.User)
 		c.Lock()
 		e, ok := c.m[key]
 		c.Unlock()

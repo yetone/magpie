@@ -68,7 +68,13 @@ const providerUsage = `usage:
 // providers: `magpie providers`
 func providers() error {
 	all := provider.All()
+	// a providers.json that can't be read is not "no providers yet": what
+	// is listed is then the signed-in accounts alone, and it ends in why
+	bad := provider.FileError()
 	if len(all) == 0 && len(provider.Excluded()) == 0 {
+		if bad != nil {
+			return bad
+		}
 		fmt.Println(muted.Render("no providers yet ·"), "magpie provider add deepseek sk-…", muted.Render("· magpie presets lists the vendors"))
 		return nil
 	}
@@ -129,7 +135,7 @@ func providers() error {
 		}
 		fmt.Println(" ", muted.Render(name+" is signed in but not offered: "+x.Why+back))
 	}
-	return nil
+	return bad
 }
 
 // usesByProvider maps provider ids to the agents currently routed to them.
@@ -183,6 +189,7 @@ func presets() error {
 // one agent is shown and what is kept from it
 func models(args []string) error {
 	entries := provider.Catalog()
+	bad := provider.FileError() // as in providers: said, not "no models yet"
 	var hidden []provider.Entry
 	agentID := ""
 	if len(args) > 0 {
@@ -198,6 +205,8 @@ func models(args []string) error {
 	if len(entries) == 0 && agentID != "" {
 		names, _ := provider.VisibleTo(agentID)
 		fmt.Println(amber.Render("!"), agentID, "is shown none of them: nothing is in", strings.Join(names, ", "), muted.Render("· magpie visible "+agentID+" all shows it every model"))
+	} else if len(entries) == 0 && bad != nil {
+		return bad
 	} else if len(entries) == 0 {
 		fmt.Println(muted.Render("no models yet · add a provider first:"), "magpie provider add deepseek sk-…")
 		return nil
@@ -229,7 +238,7 @@ func models(args []string) error {
 		explainHidden(agentID, hidden)
 	}
 	fmt.Println(faint.Render("  " + gateway.URL() + "/v1"))
-	return nil
+	return bad
 }
 
 // providerCmd: `magpie provider <verb> …`
@@ -827,6 +836,9 @@ func serve() error {
 		fmt.Println(l)
 	}
 	n := len(provider.Catalog())
+	if err := provider.FileError(); err != nil {
+		fmt.Println(amber.Render("!"), err) // served without it, as no providers
+	}
 	if n == 0 {
 		fmt.Println(amber.Render("!"), "no models yet ·", "magpie provider add deepseek sk-…")
 	} else {

@@ -93,7 +93,7 @@ type subscriptionRun struct {
 	tree   *proc.Tree // cmd once started, with all it starts
 	tmp    string
 
-	// the tools it was started with: its agent is told them once
+	// the tools its agent was told of, as it started and since
 	tools map[string]bool
 
 	mu      sync.Mutex
@@ -148,6 +148,10 @@ const waitTool = "magpie_wait"
 type mcpToolResult struct {
 	Content []map[string]any `json:"content"`
 	IsError bool             `json:"is_error,omitempty"`
+	// Tools, when set, is the run's tools from now on: the MCP helper tells
+	// Claude Code its list changed, and answers the call once Claude Code
+	// has listed them again
+	Tools []bridgeTool `json:"tools,omitempty"`
 }
 
 type bridgeTool struct {
@@ -1046,6 +1050,8 @@ func (b *subscriptionBridge) findRun(req *Request) (*subscriptionRun, []Part) {
 
 // offers says the run's agent was told every one of tools.
 func (r *subscriptionRun) offers(tools []Tool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.tools == nil {
 		return true
 	}
@@ -1058,8 +1064,9 @@ func (r *subscriptionRun) offers(tools []Tool) bool {
 }
 
 // continueWith hands the agent its tool results: at once for the calls it
-// is waiting on, the others kept until it makes them.
-func (r *subscriptionRun) continueWith(results []Part) (<-chan Event, error) {
+// is waiting on, the others kept until it makes them. tools, when set, are
+// the agent's tools from now on, handed over with the results.
+func (r *subscriptionRun) continueWith(results []Part, tools []bridgeTool) (<-chan Event, error) {
 	if r.timer != nil {
 		r.timer.Reset(30 * time.Minute)
 	}
@@ -1073,6 +1080,7 @@ func (r *subscriptionRun) continueWith(results []Part) (<-chan Event, error) {
 	delivered := 0
 	for _, p := range results {
 		result := mcpResult(p)
+		result.Tools = tools
 		r.mu.Lock()
 		waiter := r.pending[p.CallID]
 		delete(r.pending, p.CallID)
@@ -1378,26 +1386,34 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	// its model searches the web with magpie's tool, which magpie answers
 	var search Tool
 	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
+		if canSearch() {
 			search = searchTool(req.Tools)
 			req.Tools = append(slices.Clone(req.Tools), search)
 		}
 	}
 
 	run, results := s.subscription.findRun(req)
+	// the client offers a tool the run's agent was never told of, as Claude
+	// Code's ToolSearch loads a deferred one mid-turn: the run is handed it
+	// with the results, as its MCP server's tools changed. A run started
+	// anew would be told the conversation in one message, its tool calls as
+	// text, and its model went on to write its own calls as text.
+	var more []bridgeTool
 	if run != nil && !run.offers(req.Tools) {
-		// the client offers a tool the run's agent was never told of, as
-		// Claude Code's ToolSearch loads a deferred one (WebSearch) mid-turn:
-		// a run started now has it, the conversation told over
-		run.abort()
-		run = nil
+		more = bridgeTools(req)
 	}
 	var events <-chan Event
 	if run != nil {
-		if events, err = run.continueWith(results); err != nil {
+		if events, err = run.continueWith(results, more); err != nil {
 			// it ended while it waited: a new one is told the whole
 			// conversation
 			run = nil
+		} else if more != nil {
+			run.mu.Lock()
+			for _, t := range req.Tools {
+				run.tools[t.Name] = true
+			}
+			run.mu.Unlock()
 		}
 	}
 	if run == nil {

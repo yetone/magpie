@@ -67,6 +67,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie model efforts <provider/model> <l>,<l>|--reset   the reasoning levels a model offers (magpie model help)
   magpie visible [<agent> <family|provider|group>,… | all]
                                   which models an agent is shown: families (magpie provider/group set <id> family=…)
+  magpie search [add <api> <key>|rm <api>]   Tavily, Brave, Exa, Firecrawl or SearXNG for web search when no provider can search
   magpie groups                   routing groups: several models agents pick as one, group/<id>
   magpie group add <name> models=<m1>,<m2> [routing=smart|order|rotate|usage] [stays=auto|session|turn|off]
   magpie group <id> | set <id> k=v… | rm <id>   show, change or remove one (magpie group help for more)
@@ -220,6 +221,8 @@ func run(args []string) error {
 		return modelCmd(args[1:])
 	case "visible":
 		return visibleCmd(args[1:])
+	case "search":
+		return searchCmd(args[1:])
 	case "groups":
 		return groups()
 	case "group":

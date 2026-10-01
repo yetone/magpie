@@ -73,6 +73,7 @@
 </main>
 
 <main class="view" id="view-providers" hidden>
+  <div id="fileError" hidden></div>
   <div id="movable" hidden></div>
   <div class="list" id="providers"></div>
   <div class="row-head off-head" id="offHead" hidden><button class="fold" id="foldOff" aria-expanded="false" aria-controls="offProviders"><span class="label" data-t>Turned off</span><span class="note" id="offCount"></span></button></div>
@@ -80,7 +81,6 @@
   <div id="excluded"></div>
   <div class="after-list">
     <button class="text" id="addProvider" data-t>＋ Add provider</button>
-    <button class="more-subs" id="moreSubs" type="button" title="Cursor, Copilot, Gemini and others, each signed in to by a plugin you install from the Plugins tab" data-tt><span class="stack"></span><span class="say"><span data-t>More subscriptions</span><span class="in" data-t>in Plugins</span></span></button>
   </div>
   <section class="sheet" id="addSheet" hidden></section>
 </main>
@@ -315,6 +315,8 @@
   <div class="list prefs" id="lanList"></div>
   <div class="row-head"><span class="label" data-t>Images</span></div>
   <div class="list prefs" id="imagesList"></div>
+  <div class="row-head"><span class="label" data-t>Web search</span></div>
+  <div class="list prefs" id="searchList"></div>
   <div class="row-head"><span class="label" data-t>Privacy</span></div>
   <div class="list prefs" id="redactList"></div>
   <div class="row-head"><span class="label" data-t>Sync and backup</span></div>

@@ -101,7 +101,8 @@ func (c computer) use(t *testing.T) {
 
 func ids() []string {
 	var out []string
-	for _, p := range provider.Stored() {
+	ps, _ := provider.Stored()
+	for _, p := range ps {
 		out = append(out, p.ID+"="+p.Key)
 	}
 	slices.Sort(out)
@@ -252,7 +253,7 @@ func TestSync(t *testing.T) {
 	now(t)
 	a.use(t)
 	now(t)
-	if ps := provider.Stored(); len(ps) != 1 || ps[0].Name != "Kimi 2" || ps[0].Key != "k2" {
+	if ps, _ := provider.Stored(); len(ps) != 1 || ps[0].Name != "Kimi 2" || ps[0].Key != "k2" {
 		t.Fatalf("a after c renamed: %+v", ps)
 	}
 	remote, _ := backup.Open(fake.files["/dav/magpie/magpie.magpie-backup"], "correct horse")

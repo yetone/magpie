@@ -19,6 +19,7 @@ func home(t *testing.T) {
 	t.Helper()
 	h := t.TempDir()
 	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	t.Setenv("PATH", h)
@@ -36,9 +37,10 @@ func setUp(t *testing.T) {
 	}
 	for _, p := range []provider.Provider{
 		{ID: "acme", Name: "Acme", Chat: "https://acme.example.com/v1", Key: "sk-acme", Icon: icon,
-			Keys:    []provider.KeyAccount{{Name: "second", Key: "sk-acme-2"}},
-			Headers: map[string]string{"X-Team": "a", "X-Api-Key": "hdr-secret"}},
-		{ID: "beta", Name: "Beta", Chat: "https://beta.example.com/v1", Key: "sk-beta"},
+			BalanceToken: "balance-acme",
+			Keys:         []provider.KeyAccount{{Name: "second", Key: "sk-acme-2"}},
+			Headers:      map[string]string{"X-Team": "a", "X-Api-Key": "hdr-secret"}},
+		{ID: "beta", Name: "Beta", Chat: "https://beta.example.com/v1", Key: "sk-beta", BalanceToken: "balance-beta"},
 	} {
 		if err := provider.Save(p); err != nil {
 			t.Fatal(err)
@@ -63,7 +65,7 @@ func TestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, secret := range []string{"sk-acme", "hdr-secret", "acme.example.com", "work"} {
+	for _, secret := range []string{"sk-acme", "balance-acme", "hdr-secret", "acme.example.com", "work"} {
 		if strings.Contains(string(data), secret) {
 			t.Fatalf("%q readable in the file", secret)
 		}
@@ -85,7 +87,7 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatalf("result: %+v", r)
 	}
 	p, err := provider.Find("acme")
-	if err != nil || p.Key != "sk-acme" || len(p.Keys) != 1 || p.Headers["X-Api-Key"] != "hdr-secret" {
+	if err != nil || p.Key != "sk-acme" || len(p.Keys) != 1 || p.BalanceToken != "balance-acme" || p.Headers["X-Api-Key"] != "hdr-secret" {
 		t.Fatalf("acme: %+v %v", p, err)
 	}
 	name, _ := strings.CutPrefix(p.Icon, "file:")
@@ -110,17 +112,23 @@ func TestNoKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range b.Providers {
-		if p.Key != "" || len(p.Keys) != 0 {
+		if p.Key != "" || len(p.Keys) != 0 || p.BalanceToken != "" {
 			t.Fatalf("key in a keyless backup: %+v", p)
 		}
 		if _, ok := p.Headers["X-Api-Key"]; ok {
 			t.Fatalf("auth header in a keyless backup: %+v", p.Headers)
 		}
 	}
-	data, _ := Seal(b, "pw")
+	if p, _ := provider.Find("acme"); p.Key != "sk-acme" || p.BalanceToken != "balance-acme" || p.Headers["X-Api-Key"] != "hdr-secret" {
+		t.Fatalf("export changed the stored credentials: %+v", p)
+	}
+	data, err := Seal(b, "pw")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	home(t)
-	if err := provider.Save(provider.Provider{ID: "acme", Name: "Acme old", Chat: "https://old.example.com/v1", Key: "sk-here"}); err != nil {
+	if err := provider.Save(provider.Provider{ID: "acme", Name: "Acme old", Chat: "https://old.example.com/v1", Key: "sk-here", BalanceToken: "balance-here"}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Open(data, "pw")
@@ -134,8 +142,11 @@ func TestNoKeys(t *testing.T) {
 	if r.Added != 1 || r.Replaced != 1 || !slices.Equal(r.NeedKey, []string{"Beta"}) || r.Settings || r.Profiles != 0 {
 		t.Fatalf("result: %+v", r)
 	}
-	if p, _ := provider.Find("acme"); p.Key != "sk-here" || p.Chat != "https://acme.example.com/v1" || p.Headers["X-Team"] != "a" {
+	if p, _ := provider.Find("acme"); p.Key != "sk-here" || p.BalanceToken != "balance-here" || p.Chat != "https://acme.example.com/v1" || p.Headers["X-Team"] != "a" {
 		t.Fatalf("acme: %+v", p)
+	}
+	if p, _ := provider.Find("beta"); p.BalanceToken != "" {
+		t.Fatalf("balance token reached a new machine: %+v", p)
 	}
 }
 

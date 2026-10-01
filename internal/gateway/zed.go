@@ -39,7 +39,7 @@ func (s *Server) serveZed(w http.ResponseWriter, r *http.Request, from provider.
 	req.Model = model
 	ask := s.askZed(p.Account.User, model)
 	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
+		if canSearch() {
 			return s.searchReply(w, r, from, "Zed", req, usage, ask)
 		}
 	}

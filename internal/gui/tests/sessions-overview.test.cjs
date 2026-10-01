@@ -87,6 +87,7 @@ function serve(lang, seen, ctl = {}) {
     }
     if (url.pathname === "/api/sessions/one") { seen.push("one " + q.get("key")); return json(full(q.get("key"))); }
     if (url.pathname === "/api/groups") return json({ groups: [] });
+    if (url.pathname === "/api/usage/quotas") return json([]); // an array, as the Go side writes it
     if (url.pathname.startsWith("/api/")) return json({});
     const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
     const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];

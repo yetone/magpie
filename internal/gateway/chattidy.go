@@ -24,6 +24,13 @@ import (
 // "Tool not found", so the empty duplicate is dropped and the real name
 // is only sent once.
 //
+// And every delta carries "tool_calls": [], text and thinking too. An
+// empty list says nothing, but Qoder (qodercli 1.1.65's stream adapter
+// tests delta.tool_calls for being there, not for holding any) closes its
+// text block on each one, so each piece of text after it opened a block
+// of its own and a reply read a word to a line ("我来 / 看 / 一下 / …");
+// the empty list is left out.
+//
 // Lines pass whole, as they came, unless one has any of them.
 type chatTidy struct {
 	buf []byte
@@ -33,6 +40,7 @@ var (
 	emptyReasoning    = []byte(`"reasoning_content":""`)
 	emptyFinishReason = []byte(`"finish_reason":""`)
 	emptyToolName     = []byte(`"name":""`)
+	emptyToolCalls    = []byte(`"tool_calls":[]`)
 )
 
 // write takes what was read and gives back what to send on: every line
@@ -77,7 +85,8 @@ func tidyLines(b []byte) []byte {
 func needsTidy(line []byte) bool {
 	return bytes.Contains(line, emptyReasoning) ||
 		bytes.Contains(line, emptyFinishReason) ||
-		bytes.Contains(line, emptyToolName)
+		bytes.Contains(line, emptyToolName) ||
+		bytes.Contains(line, emptyToolCalls)
 }
 
 func tidyLine(line []byte) []byte {
@@ -113,7 +122,10 @@ func tidyLine(line []byte) []byte {
 			delete(delta, "reasoning_content")
 			inDelta = true
 		}
-		if calls, ok := delta["tool_calls"]; ok {
+		if calls, ok := delta["tool_calls"]; ok && string(calls) == "[]" {
+			delete(delta, "tool_calls")
+			inDelta = true
+		} else if ok {
 			if mended, chg := withoutEmptyNames(calls); chg {
 				delta["tool_calls"] = mended
 				inDelta = true

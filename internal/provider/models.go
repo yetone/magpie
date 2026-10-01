@@ -175,7 +175,8 @@ func FetchNew(timeout time.Duration) {
 		if p.Account == nil || !p.Ready() {
 			continue
 		}
-		if _, ok := p.Fetched(); ok {
+		// a plugin's accounts were listed with the plugin's providers
+		if _, ok := p.Listed(); ok {
 			continue
 		}
 		if t, ok := newFetches.m[p.ID]; ok && time.Since(t) < newFetchRetry {
@@ -313,7 +314,10 @@ func (p Provider) fixV1(base, at string) string {
 		return base
 	}
 	fixed := base + "/v1"
-	f := load()
+	f, err := read()
+	if err != nil {
+		return base
+	}
 	for i := range f.Providers {
 		q := &f.Providers[i]
 		if q.ID != p.ID {

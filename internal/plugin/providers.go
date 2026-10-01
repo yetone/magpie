@@ -130,7 +130,7 @@ func forgetProviders() {
 // need be, and keeps the answer for Cached.
 func Providers(ctx context.Context) ([]Provider, error) {
 	var ps []Provider
-	if err := Call(ctx, "providers", nil, &ps); err != nil {
+	if err := Call(ctx, "providers", map[string]any{"proxies": listingProxies()}, &ps); err != nil {
 		return nil, err
 	}
 	provMu.Lock()
@@ -142,6 +142,34 @@ func Providers(ctx context.Context) ([]Provider, error) {
 		_ = writeWhole(providersPath(), b)
 	}
 	return ps, nil
+}
+
+// ProxyFor is the proxy choice (netproxy.With's) of the provider's
+// account at key, or of the provider for key "": set by the providers
+// magpie keeps, which know them.
+var ProxyFor func(provider, key string) string
+
+// listingProxies are the proxies each provider's model list is asked
+// through, by provider and account key ("" the provider's own): a
+// built-in's list is fetched through the account's proxy, so a plugin's
+// is too.
+func listingProxies() map[string]map[string]string {
+	out := map[string]map[string]string{}
+	if ProxyFor == nil {
+		return out
+	}
+	var m map[string]json.RawMessage
+	if b, err := steady.ReadFile(AuthPath()); err == nil {
+		_ = json.Unmarshal(b, &m)
+	}
+	for k := range m {
+		id := ProviderOf(k)
+		if out[id] == nil {
+			out[id] = map[string]string{"": forHost(ProxyFor(id, ""))}
+		}
+		out[id][k] = forHost(ProxyFor(id, k))
+	}
+	return out
 }
 
 // keepListed is ps with a list a plugin fell back to replaced by the one
@@ -534,7 +562,7 @@ func LoaderOptions(ctx context.Context, provider, account string) (Options, erro
 	if ok {
 		return o, nil
 	}
-	if err := Call(ctx, "load", map[string]any{"provider": provider, "account": account}, &o); err != nil {
+	if err := Call(ctx, "load", map[string]any{"provider": provider, "account": account, "proxy": proxyOf(ctx)}, &o); err != nil {
 		return Options{}, err
 	}
 	optMu.Lock()

@@ -2073,12 +2073,16 @@
   }
   function groupEditor(g) {
     const d = gEdit.draft;
+    // whoever opened it, a draft has what the editor and Add read: a group
+    // made from a model (newGroupWith) had no fast, and Add threw on it
+    // and did nothing (悠悠哥 on Discord)
+    for (const k of ["members", "fast", "rules"]) if (!Array.isArray(d[k])) d[k] = [];
     const ed = el("div", "editor rt-gedit");
     const h = el("div", "ehead");
     h.append(el("b", "", g ? g.name : t("New group")));
     if (g?.auto) h.append(el("span", "note", t("found by magpie — saving a change makes it yours")));
     ed.append(h);
-    const keys = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { gEdit = null; renderGroups(); } else if (e.key === "Enter" && i === name) save(); }; return i; };
+    const keys = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { gEdit = null; renderGroups(); } else if (e.key === "Enter" && i === name) saveBtn.onclick(); }; return i; };
     const name = keys(input(d.name, t("e.g. Opus anywhere")));
     const idHint = el("div", "hint");
     // an existing group's id can change (an auto- one found by magpie too);
@@ -2335,12 +2339,17 @@
     // call; any other model is asked each in words.
     const cls = el("div", "rt-classifier");
     const clabel = el("label", "");
+    // its cell in the editor's grid: hidden with the label, or the rows
+    // after it would each slip one cell (Levels' label at the right, its
+    // choices under the labels)
+    const cw = el("div");
+    cw.append(cls);
     const deciders = groups.deciders || [];
     const isJev = (id) => deciders.some((x) => x.id === id);
     const drawClassifier = () => {
       const auto = d.effort === "auto";
       const on = auto || d.rules.some((r) => r.intent?.trim());
-      cls.hidden = clabel.hidden = !on;
+      cls.hidden = cw.hidden = clabel.hidden = !on;
       if (!on) return;
       const intents = d.rules.some((r) => r.intent?.trim());
       clabel.textContent = t(auto && !intents ? "Decided by" : "Intent told by");
@@ -2388,8 +2397,6 @@
     }), eHint);
     drawEffort();
     ed.append(el("label", "", t("Effort")), ew);
-    const cw = el("div");
-    cw.append(cls);
     ed.append(clabel, cw);
     drawRules();
     // the levels agents are offered: those every model has, or ones the
@@ -2462,9 +2469,14 @@
       if (d.effort === "auto" && !d.classifier) return status(t("Choose the model that rates how hard a turn is"), "warn");
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
       saveBtn.classList.add("busy");
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: d.members, routing: d.routing, pick: d.pick || "", affinity: d.affinity, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: g?.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)) }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }));
+      // refused, Add can be pressed again (busy, it takes no clicks)
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: d.members, routing: d.routing, pick: d.pick || "", affinity: d.affinity, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: g?.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)) }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
+        .then(() => saveBtn.classList.remove("busy"));
     };
-    saveBtn.onclick = save;
+    // what goes wrong is said where it is seen, never a click that does nothing
+    saveBtn.onclick = () => {
+      try { save(); } catch (e) { saveBtn.classList.remove("busy"); status(t("Couldn't save the group: {error}", { error: e.message }), "err"); }
+    };
     bar.append(cancel, saveBtn);
     ed.append(bar);
     if (!g) setTimeout(() => name.focus({ preventScroll: true }), 0); // WebKit would scroll the page to put it mid-view

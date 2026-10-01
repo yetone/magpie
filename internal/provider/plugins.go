@@ -48,6 +48,15 @@ func PluginID(id string) string {
 // IsPlugin is whether the provider is a plugin's.
 func (p Provider) IsPlugin() bool { return p.Account != nil && p.Account.plugin != nil }
 
+// PluginProvider is the id OpenCode knows the plugin's provider p is by
+// (grok, kiro), whatever magpie names it; "" for one no plugin gives.
+func (p Provider) PluginProvider() string {
+	if !p.IsPlugin() {
+		return ""
+	}
+	return p.Account.plugin.ID
+}
+
 // PluginOf is the plugin provider magpie's provider id is, when it is one.
 func PluginOf(id string) (plugin.Provider, bool) {
 	for _, pp := range plugin.Cached() {
@@ -192,6 +201,11 @@ func pluginProvider(pp plugin.Provider, l pluginLogin) Provider {
 		name = pp.ID
 	}
 	a := &Account{Agent: "plugin", User: user, Plan: l.Plan, Stream: true, plugin: &pp, pluginKey: acct.Key}
+	if pp.ID == "grok" {
+		// Codex's namespaced tools go to Grok flat, as the built-in sends
+		// them (#404): the plugin's own rewrite would leave them out
+		a.body = grokBody
+	}
 	a.models = func() []catalog.Model {
 		if cur, ok := PluginOf(id); ok {
 			return pluginAccountCatalog(cur, acct.Key)
@@ -365,6 +379,20 @@ func notePluginSaid(pp plugin.Provider, account, said string, status int) {
 }
 
 func init() {
+	// a plugin's model list is asked through the proxy of the account it
+	// is the list of, as a built-in's is fetched through the account's
+	plugin.ProxyFor = func(id, key string) string {
+		mid := PluginID(id)
+		if key == "" {
+			return ProxyOf(mid)
+		}
+		for _, l := range readLogins() {
+			if l.Agent == "plugin:"+id && l.Home == key {
+				return ProxyOfLogin(mid, l.User)
+			}
+		}
+		return ProxyOf(mid)
+	}
 	// a models hook saying its account's sign-in expired marks it, as a
 	// built-in whose model list the vendor refused marked the account
 	plugin.OnSignIn(func(id, account, said string) {

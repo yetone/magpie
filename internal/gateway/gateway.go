@@ -316,8 +316,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go provider.KeepWorkBuddyCheckedIn(ctx)
 	// and moves the built-in subscriptions being retired onto their plugins
 	go provider.KeepRetiringMoved(ctx)
-	// and keeps the community's plugins up to date, noting others' updates
+	// and keeps the community's plugins up to date, noting others' updates, and the Bun they run on
 	go plugin.KeepUpdated(ctx)
+	go plugin.KeepBunUpdated(ctx)
 	for _, f := range WhileServing {
 		go f(ctx)
 	}
@@ -556,8 +557,8 @@ func unprefixed(id string) string {
 }
 
 // estimatedMoved are the built-ins that estimated a count, as their
-// plugins do once moved; Command Code's whatever its plan, as the plugin
-// alone knows a Go key.
+// plugins do, moved or beside the built-in (kiro-plugin); Command Code's
+// whatever its plan, as the plugin alone knows a Go key.
 var estimatedMoved = []string{"cursor", "grok", "devin", "kiro", "qoder", "zed", "factory", "zcode", provider.CommandCodePlanID}
 
 // countTokens answers Anthropic's count_tokens: through the provider when
@@ -591,7 +592,7 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 		// with an error every time: one more request its firewall weighs
 		p.Account.Agent == "zcode") ||
 		ok && p.Account != nil && p.Account.Agent == provider.CommandCodePlanID && cmdGoing(r.Context(), p) ||
-		ok && p.IsPlugin() && slices.Contains(estimatedMoved, p.ID) {
+		ok && p.IsPlugin() && (slices.Contains(estimatedMoved, p.ID) || slices.Contains(estimatedMoved, p.PluginProvider())) {
 		req, err := parseAnthropic(body)
 		if err != nil {
 			writeError(w, provider.Anthropic, 400, err.Error())
@@ -1720,7 +1721,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	// a Grok subscription is given Codex's namespaced functions flat
 	// (grokBody); a call to one goes back under its namespace (#404)
 	var named map[string]nsTool
-	if proto == provider.Responses && p.Account != nil && p.Account.Agent == "grok" {
+	if proto == provider.Responses && p.Account != nil && (p.Account.Agent == "grok" || p.PluginProvider() == "grok") {
 		named = namespacedIn(body)
 	}
 	res, err := s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header)
@@ -2246,7 +2247,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 				break
 			}
 		}
-		if _, _, ok := searcher(); ok && !searchesItself(p, to) {
+		if canSearch() && !searchesItself(p, to) {
 			return s.searchReply(w, r, from, p.Name, request, u, s.askTranslated(p, to, model, r.Header, w.Header()))
 		}
 	}

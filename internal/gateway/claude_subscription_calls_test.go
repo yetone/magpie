@@ -58,7 +58,7 @@ func TestResultForACallNotMadeYetWaitsForIt(t *testing.T) {
 	if found != run || len(results) != 2 {
 		t.Fatalf("findRun = %v, %d results", found == run, len(results))
 	}
-	if _, err := run.continueWith(results); err != nil {
+	if _, err := run.continueWith(results, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := <-first; got != "one" {

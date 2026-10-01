@@ -58,7 +58,10 @@ type SignInState struct {
 	User       string `json:"user,omitempty"`  // the account, once done
 	Plan       string `json:"plan,omitempty"`  //
 	Using      bool   `json:"using,omitempty"` // the agent was signed in to it too
-	Error      string `json:"error,omitempty"`
+	// Again is an account listed already: its sign-in was renewed rather
+	// than a new account added (#413)
+	Again bool   `json:"again,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 type signInFlow struct {

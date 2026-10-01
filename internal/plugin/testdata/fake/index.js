@@ -3,6 +3,13 @@
 // built-in's plugin does.
 const ID = process.env.FAKE_ID || "fakeco"
 
+// fakeWho is who a team signs in as: team@fake, and a team named name/uid
+// is name@fake with that uid, as WorkBuddy's plugin keeps one
+function fakeWho(team) {
+  const [name, uid] = (team ?? "me").split("/")
+  return uid ? { accountId: name + "@fake", uid } : { accountId: name + "@fake" }
+}
+
 export const FakePlugin = async ({ client }) => ({
   config: async (cfg) => {
     cfg.provider = cfg.provider ?? {}
@@ -16,6 +23,8 @@ export const FakePlugin = async ({ client }) => ({
         "fake-gemini": { name: "Fake Gemini", provider: { npm: "@ai-sdk/google" }, reasoning: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 3000, output: 300 } },
       },
     }
+    // $FAKE_RESPONSES: one model more, on OpenAI's Responses (Grok's)
+    if (process.env.FAKE_RESPONSES) cfg.provider[ID].models["fake-resp"] = { name: "Fake Responses", provider: { npm: "@ai-sdk/openai" }, limit: { context: 4000, output: 400 } }
   },
   auth: {
     provider: ID,
@@ -34,7 +43,7 @@ export const FakePlugin = async ({ client }) => ({
           method: "code",
           callback: async (code) =>
             code === "good"
-              ? { type: "success", refresh: "r-" + (inputs.team ?? "none"), access: "stale", expires: 0, accountId: (inputs.team ?? "me") + "@fake" }
+              ? { type: "success", refresh: "r-" + (inputs.team ?? "none"), access: "stale", expires: 0, ...fakeWho(inputs.team) }
               : code === "expired"
                 ? { type: "failed", error: "the sign-in page expired" }
                 : { type: "failed" },
@@ -46,6 +55,8 @@ export const FakePlugin = async ({ client }) => ({
       baseURL: process.env.FAKE_BASE,
       async fetch(url, init) {
         let a = await getAuth()
+        // "r-revoked": the vendor turned the refresh away, said as Zed's says it
+        if (a.type === "oauth" && a.refresh === "r-revoked") throw Object.assign(new Error("FakeCo turned the sign-in away"), { signIn: "expired" })
         if (a.type === "oauth" && a.expires < Date.now()) {
           a = { ...a, access: "fresh-" + a.refresh, expires: Date.now() + 3600e3 }
           await client.auth.set({ path: { id: ID }, body: a })
