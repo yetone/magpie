@@ -41,6 +41,7 @@ func TestNoteClaudeLimits(t *testing.T) {
 	claudeUsage.Lock()
 	e := claudeUsage.m["kev@example.com"]
 	e.at = time.Now().Add(-10 * time.Minute)
+	e.tried = time.Now().Add(-time.Hour) // past the floor
 	claudeUsage.m["kev@example.com"] = e
 	claudeUsage.Unlock()
 	if ws, err := claudeWindows(context.Background(), "kev@example.com", true); err != nil || len(ws) != 3 {
@@ -50,6 +51,7 @@ func TestNoteClaudeLimits(t *testing.T) {
 	AskClaudeUsage()
 	claudeUsage.Lock()
 	e.heard = time.Now().Add(-2 * time.Hour)
+	e.tried = time.Now().Add(-time.Hour)
 	claudeUsage.m["kev@example.com"] = e
 	claudeUsage.Unlock()
 	if _, err := claudeWindows(context.Background(), "kev@example.com", true); err == nil {

@@ -545,7 +545,7 @@ func unprefixed(id string) string {
 // estimatedMoved are the built-ins that estimated a count, as their
 // plugins do once moved; Command Code's whatever its plan, as the plugin
 // alone knows a Go key.
-var estimatedMoved = []string{"cursor", "grok", "devin", "kiro", "qoder", "zed", "factory", provider.CommandCodePlanID}
+var estimatedMoved = []string{"cursor", "grok", "devin", "kiro", "qoder", "zed", "factory", "zcode", provider.CommandCodePlanID}
 
 // countTokens answers Anthropic's count_tokens: through the provider when
 // it implements counting, else a rough estimate. A failed connection or
@@ -566,9 +566,17 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	w, body, unmask := redacted(w, body)
 	defer unmask()
 	p, model, ok := provider.Resolve(unprefixed(model))
+	s.countOn(w, r, p, model, ok, body)
+}
+
+// countOn counts body's tokens for model on p, resolved when ok.
+func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Provider, model string, ok bool, body []byte) {
 	// Claude Subscription generations run through the Claude Code binary. Its
 	// OAuth token must not take a direct HTTP side path just for token counting.
-	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok" || p.Account.Agent == "devin" || p.Account.Agent == "kiro" || p.Account.Agent == "qoder" || p.Account.Agent == provider.QoderCNID || p.Account.Agent == "zed" || p.Account.Agent == "factory" || p.Account.Agent == "gemini" || p.Account.Agent == "antigravity") ||
+	if ok && p.Account != nil && (p.Account.Agent == "claude" || p.Account.Agent == "cursor" || p.Account.Agent == "grok" || p.Account.Agent == "devin" || p.Account.Agent == "kiro" || p.Account.Agent == "qoder" || p.Account.Agent == provider.QoderCNID || p.Account.Agent == "zed" || p.Account.Agent == "factory" || p.Account.Agent == "gemini" || p.Account.Agent == "antigravity" ||
+		// ZCode itself never counts, and zcode.z.ai answers count_tokens
+		// with an error every time: one more request its firewall weighs
+		p.Account.Agent == "zcode") ||
 		ok && p.Account != nil && p.Account.Agent == provider.CommandCodePlanID && cmdGoing(r.Context(), p) ||
 		ok && p.IsPlugin() && slices.Contains(estimatedMoved, p.ID) {
 		req, err := parseAnthropic(body)

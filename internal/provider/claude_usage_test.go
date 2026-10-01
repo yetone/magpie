@@ -56,11 +56,9 @@ func TestClaudeWindowsAsked(t *testing.T) {
 	runs := fakeClaudeUsage(t, &out, &fail)
 	ctx := context.Background()
 
-	// nobody asked: nothing is run
-	for range 3 {
-		if _, err := claudeWindows(ctx, "A@x", true); err != errClaudeNotAsked || runs.Load() != 0 {
-			t.Fatalf("unasked: %v %d", err, runs.Load())
-		}
+	// a saved account is never read, asked or not
+	if _, err := claudeWindows(ctx, "saved@x", false); err != errClaudeSaved || runs.Load() != 0 {
+		t.Fatalf("saved unasked: %v %d", err, runs.Load())
 	}
 	// a saved account is never read, asked or not
 	AskClaudeUsage()
@@ -84,19 +82,37 @@ func TestClaudeWindowsAsked(t *testing.T) {
 		t.Fatalf("too soon: %v %d", err, runs.Load())
 	}
 
-	// asked later: run again; a failed run isn't run again until asked
+	// claudeEvery on, unasked: run again by itself, once
+	age := func(d time.Duration) {
+		claudeUsage.Lock()
+		e := claudeUsage.m["a@x"]
+		e.tried = e.tried.Add(-d)
+		claudeUsage.m["a@x"] = e
+		claudeUsage.Unlock()
+	}
+	claudeAsked.Store(0) // the ask above was answered by the run before it
+	age(claudeEvery - time.Minute)
+	if _, err = claudeWindows(ctx, "a@x", true); err != nil || runs.Load() != 1 {
+		t.Fatalf("ran before claudeEvery: %v %d", err, runs.Load())
+	}
+	age(time.Minute)
+	out.Store("Current session: 55% used · resets Oct 1 at 3:30pm (UTC)\n")
+	for range 3 {
+		if ws, err = claudeWindows(ctx, "a@x", true); err != nil || len(ws) != 1 || ws[0].Used != 55 || runs.Load() != 2 {
+			t.Fatalf("every: %v %+v %d", err, ws, runs.Load())
+		}
+	}
+
+	// a failed run says why, and isn't run again until asked or claudeEvery on
 	claudeUsage.Lock()
-	e := claudeUsage.m["a@x"]
-	e.tried = e.tried.Add(-time.Hour)
-	claudeUsage.m["a@x"] = e
+	claudeUsage.m["b@x"] = claudeUsageEntry{tried: time.Now().Add(-claudeEvery)}
 	claudeUsage.Unlock()
 	fail.Store(true)
-	AskClaudeUsage()
-	if _, err = claudeWindows(ctx, "a@x", true); err == nil || runs.Load() != 2 {
+	if _, err = claudeWindows(ctx, "b@x", true); err == nil || runs.Load() != 3 {
 		t.Fatalf("failed: %v %d", err, runs.Load())
 	}
-	if _, err = claudeWindows(ctx, "a@x", true); runs.Load() != 2 {
-		t.Fatalf("ran again unasked: %v %d", err, runs.Load())
+	if _, err = claudeWindows(ctx, "b@x", true); err == nil || err == errClaudeNotAsked || runs.Load() != 3 {
+		t.Fatalf("after a failure: %v %d", err, runs.Load())
 	}
 }
 

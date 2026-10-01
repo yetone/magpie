@@ -315,10 +315,33 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 	return r
 }
 
+// BlockedHint is what a vendor's edge firewall blocking magpie's address
+// means, in plain words: Alibaba Cloud's (ESA, in front of zcode.z.ai)
+// answers a 405 HTML page, "Sorry, your request has been blocked due to
+// unusual activity", linking errors.aliyun.com. Nothing in the request is
+// at fault and magpie changes nothing about it: the address is.
+const BlockedHint = "the provider's network firewall blocked requests from this IP; wait a while, or switch to another network or proxy"
+
+// edgeBlocked matches such a block page, whoever's firewall served it.
+var edgeBlocked = regexp.MustCompile(`(?i)request has been blocked|errors\.aliyun\.com`)
+
+// EdgeBlocked says whether an error body is a firewall's block page rather
+// than the vendor's API answering, or one already put in plain words.
+func EdgeBlocked(b []byte) bool {
+	return edgeBlocked.Match(b) || bytes.Contains(b, []byte(BlockedHint))
+}
+
 // APIError pulls the human message out of an error body when there is one.
-// Google's "verify your account" refusal also says what to do about it,
-// with the link it gave.
+// A firewall's block page is put in plain words (BlockedHint); Google's
+// "verify your account" refusal also says what to do about it, with the
+// link it gave.
 func APIError(b []byte, fallback string) string {
+	if edgeBlocked.Match(b) {
+		if fallback == "" {
+			return BlockedHint
+		}
+		return fallback + " — " + BlockedHint
+	}
 	if link, ok := Verification(b); ok {
 		return VerifyMessage(apiError(b, fallback), link)
 	}

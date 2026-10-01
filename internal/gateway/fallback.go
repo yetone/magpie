@@ -465,6 +465,10 @@ func retryable(status int, body []byte) bool {
 	switch {
 	case status == 401, status == 402, status == 403, status == 404, status == 408, status == 429, status >= 500:
 		return true
+	case status >= 400 && provider.EdgeBlocked(body):
+		// the vendor's firewall blocked this address (Alibaba Cloud's 405
+		// in front of zcode.z.ai): another provider goes another way
+		return true
 	case status == 400, status == 422:
 		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body)
 	}

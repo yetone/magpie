@@ -15,7 +15,8 @@ import (
 const ruleUsage = `usage:
   magpie group rule <group>               the group's rules
   magpie group rule add <group> use=<model> [tokens=<n>] [images] [effort=on|low|medium|high|xhigh|max] [agents=a,b…]
-                        [intent="<what the message asks for>"] [compact] [classifier=<model>] [at=<n>]
+                        [intent="<what the message asks for>"] [compact] [time=HH:MM-HH:MM] [days=mon-fri]
+                        [classifier=<model>] [at=<n>]
                                           a rule: a turn that matches it goes to <model>, one of the group's
                                           (or group/<id>, a group in it), first; a model in the group at an
                                           effort of its own is named with it (use=glm/glm-5.3-flash:high)
@@ -42,11 +43,16 @@ const ruleUsage = `usage:
            OpenCode's, Pi's, Gemini CLI's, Qwen Code's, Kimi's): a cheaper, faster model can write the
            summary. The request is as long as the conversation, so a model known to take less is passed
            over; it is not the turn's model, and the requests after it go on as before
+  time     the turn begins within these hours, on this computer's clock (09:00-18:00; 22:00-08:00
+           runs past midnight) — a provider's peak-price hours sent to another, say
+  days     only on these days (mon-fri, sat,sun); with time, a window past midnight is of the day it
+           begins on. Days alone hold all day
 
   e.g. magpie group rule add opus-anywhere use=openrouter/google/gemini-3-pro tokens=200k
        magpie group rule add opus-anywhere use=a/vision-model images
        magpie group rule add fast use=codex/gpt-5.6-sol:xhigh effort=high
        magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash compact
+       magpie group rule add cheap use=glm/glm-5.3 time=14:00-18:00 days=mon-fri
        magpie group rule add opus-anywhere use=deepseek/deepseek-v4-flash intent="a quick question" classifier=groq/llama-3.1-8b-instant`
 
 // parseTokens reads 200000, 200k, 1.5m.

@@ -326,6 +326,11 @@
 .rt-cond.tk { cursor: text; }
 .rt-cond.in { cursor: text; }
 .rt-cond.in input, .editor .rt-cond.in input[type="text"] { width: 24ch; }
+/* a rule's hours: two times in the pill, typed; one that isn't a time is marked */
+.rt-cond.tm { cursor: text; }
+.rt-cond.tm input.clock, .editor .rt-cond.tm input.clock[type="text"] { width: 5.5ch; text-align: center; }
+.rt-cond.tm.bad { border-style: solid; border-color: var(--amber, var(--muted)); }
+.rt-cond[hidden] { display: none; }
 .rt-classifier { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .rt-classifier[hidden] { display: none; }
 .rt-classifier .w { color: var(--muted); font-size: 12px; }

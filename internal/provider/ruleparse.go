@@ -1,10 +1,12 @@
 package provider
 
 // A rule as it is typed: use=<model> tokens=200k images effort=high
-// agents=a,b intent="…" compact — by magpie group rule and the TUI's routing page.
+// agents=a,b intent="…" compact time=09:00-18:00 days=mon-fri — by magpie
+// group rule and the TUI's routing page.
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -24,6 +26,50 @@ func ParseTokens(v string) (int, error) {
 		return 0, fmt.Errorf("tokens %q is not a length (200000, 200k, 1m)", v)
 	}
 	return int(f * mul), nil
+}
+
+// ParseDays reads days of the week: "mon-fri", "sat,sun", "mon,wed-fri";
+// a range may run past Sunday (fri-mon).
+func ParseDays(v string) ([]string, error) {
+	var out []string
+	for _, part := range strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ' ' }) {
+		a, b, isRange := strings.Cut(strings.ReplaceAll(part, "–", "-"), "-")
+		from, ok := ParseDay(a)
+		if !ok {
+			return nil, fmt.Errorf("days: %q is not a day of the week (mon … sun)", a)
+		}
+		to := from
+		if isRange {
+			if to, ok = ParseDay(b); !ok {
+				return nil, fmt.Errorf("days: %q is not a day of the week (mon … sun)", b)
+			}
+		}
+		for i := slices.Index(Weekdays, from); ; i = (i + 1) % 7 {
+			if !slices.Contains(out, Weekdays[i]) {
+				out = append(out, Weekdays[i])
+			}
+			if Weekdays[i] == to {
+				break
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("days names the days of the week it holds on: days=mon-fri")
+	}
+	return out, nil
+}
+
+// ParseTimeWindow reads hours of the day: 09:00-18:00, 22:00-08:00.
+func ParseTimeWindow(v string) (*TimeWindow, error) {
+	from, to, ok := strings.Cut(strings.ReplaceAll(strings.TrimSpace(v), "–", "-"), "-")
+	if !ok {
+		return nil, fmt.Errorf("time is hours of the day, local time: time=09:00-18:00 (or 22:00-08:00, past midnight), not %q", v)
+	}
+	w := &TimeWindow{From: strings.TrimSpace(from), To: strings.TrimSpace(to)}
+	if err := w.clean(); err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
 // UnknownRuleWord starts the error for a word ParseRule doesn't know.
@@ -79,6 +125,24 @@ func ParseRule(g Group, words []string) (r Rule, at int, classifier string, err 
 			if r.Intent == "" {
 				return r, 0, "", fmt.Errorf(`intent says what the message asks for: intent="writing or fixing tests"`)
 			}
+		case "time", "hours", "between":
+			w, err := ParseTimeWindow(v)
+			if err != nil {
+				return r, 0, "", err
+			}
+			if r.Time != nil {
+				w.Days = r.Time.Days
+			}
+			r.Time = w
+		case "days", "day":
+			days, err := ParseDays(v)
+			if err != nil {
+				return r, 0, "", err
+			}
+			if r.Time == nil {
+				r.Time = &TimeWindow{From: "00:00", To: "00:00"} // the whole day, unless time= says
+			}
+			r.Time.Days = days
 		case "classifier", "classify", "by":
 			if classifier = strings.TrimSpace(v); classifier == "" {
 				return r, 0, "", fmt.Errorf("classifier=<model>: the model that tells which intent a message is")
@@ -90,7 +154,7 @@ func ParseRule(g Group, words []string) (r Rule, at int, classifier string, err 
 			}
 			at = n
 		default:
-			return r, 0, "", fmt.Errorf(UnknownRuleWord+"%q (use, tokens, images, effort, agents, intent, compact, classifier, at)", w)
+			return r, 0, "", fmt.Errorf(UnknownRuleWord+"%q (use, tokens, images, effort, agents, intent, compact, time, days, classifier, at)", w)
 		}
 	}
 	if r.Use == "" {
@@ -182,6 +246,14 @@ func (r Rule) Line() string {
 	}
 	if r.Compact {
 		out = append(out, "compact")
+	}
+	if r.Time != nil {
+		if r.Time.From != r.Time.To || len(r.Time.Days) == 0 {
+			out = append(out, "time="+r.Time.From+"-"+r.Time.To)
+		}
+		if len(r.Time.Days) > 0 {
+			out = append(out, "days="+strings.ReplaceAll(strings.ToLower(r.Time.DaysText()), "–", "-"))
+		}
 	}
 	return strings.Join(out, " ")
 }

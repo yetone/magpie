@@ -415,8 +415,43 @@
     if (c === "compacting") return t("compacting");
     if ((m = /^effort ≥ (\w+)$/.exec(c))) return t("reasoning ≥ {level}", { level: m[1] });
     if ((m = /^agent (.+)$/.exec(c))) return m[1].split("|").map(agentName).join(" / ");
+    if ((m = /^time (all day|(\d\d:\d\d)–(\d\d:\d\d))(?: (.+))?$/.exec(c))) {
+      // the days as the gateway writes them: Mon–Fri, Sat,Sun, Mon,Wed–Fri
+      const days = [];
+      for (const part of (m[4] || "").split(",").filter(Boolean)) {
+        const [a, b] = part.split("–").map((d) => WEEK.indexOf(d.toLowerCase()));
+        for (let i = a; i >= 0 && i <= (b >= 0 ? b : a); i++) days.push(WEEK[i]);
+      }
+      return timeText({ from: m[2] || "00:00", to: m[3] || "00:00", days });
+    }
     return c;
   }
+  // a rule's hours (provider.TimeWindow): local time, past midnight when
+  // they end before they begin, on the days named or every day
+  const WEEK = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+  const DAY_NAMES = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+  function daysText(days) {
+    const on = WEEK.map((d) => (days || []).includes(d)), out = [];
+    for (let i = 0; i < 7; i++) {
+      if (!on[i]) continue;
+      let j = i;
+      while (j + 1 < 7 && on[j + 1]) j++;
+      if (j - i >= 2) out.push(t("{from}–{to}", { from: t(DAY_NAMES[WEEK[i]]), to: t(DAY_NAMES[WEEK[j]]) }));
+      else for (let k = i; k <= j; k++) out.push(t(DAY_NAMES[WEEK[k]]));
+      i = j;
+    }
+    return out.length === 7 || !out.length ? "" : out.join(t(", "));
+  }
+  function timeText(w) {
+    const hours = w.from === w.to ? t("all day") : t("{from}–{to}", { from: w.from, to: w.to });
+    const days = daysText(w.days);
+    return days ? t("{hours} {days}", { hours, days }) : hours;
+  }
+  // "9:5" is no time; "9:05" is 09:05
+  const clockOf = (s) => {
+    const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(s || "");
+    return m && +m[1] < 24 && +m[2] < 60 ? m[1].padStart(2, "0") + ":" + m[2] : "";
+  };
 
   // how the reasoning a try was sent at came to be
   function effortNote(r, tr) {
@@ -449,6 +484,9 @@
   // (provider.WBRefusedHint, #182): the agent gets it in English, the page
   // says it apart from the vendor's words, in its own language
   const WB_REFUSED = "WorkBuddy refuses chats from Codex and Claude Code (their system prompt); use it from Hermes, OpenCode or Pi, or add another provider to this group";
+  // what it adds to a vendor's edge firewall's block page (provider.BlockedHint)
+  const BLOCKED = "the provider's network firewall blocked requests from this IP; wait a while, or switch to another network or proxy";
+  const HINTS = [WB_REFUSED, BLOCKED];
 
   function trySaid(r, i) {
     const tr = r.tries[i], w = tried(r, tr), agent = agentName(r.agent);
@@ -959,10 +997,10 @@
       items.push([tryWhy(r, i), tr.done ? (tr.status < 400 ? "ok" : "bad") : "wait"]);
       // what the vendor said, word for word: the why above is magpie's reading of it
       if (tr.done && tr.status >= 400 && tr.error) {
-        const hinted = tr.error.endsWith(" — " + WB_REFUSED);
-        const said = hinted ? tr.error.slice(0, -(WB_REFUSED.length + 3)) : tr.error;
+        const hint = HINTS.find((h) => tr.error.endsWith(" — " + h));
+        const said = hint ? tr.error.slice(0, -(hint.length + 3)) : tr.error;
         items.push([t("It said: {error}", { error: said.length > 600 ? said.slice(0, 600) + "…" : said }), "aside said"]);
-        if (hinted) items.push([t(WB_REFUSED), "aside"]);
+        if (hint) items.push([t(hint), "aside"]);
       }
       // the reply said another model answered it
       if (tr.done && tr.status < 400 && tr.swapped) items.push([swapWhy(tr), "swap", tr]);
@@ -1867,6 +1905,7 @@
     if (r.agents?.length) bits.push(r.agents.map((id) => (state.clients || state.agents || []).find((a) => a.id === id)?.name || id).join(" / "));
     if (r.intent) bits.push(t("asks for “{intent}”", { intent: r.intent }));
     if (r.compact) bits.push(t("compacting"));
+    if (r.time) bits.push(timeText(r.time));
     return bits.join(" · ");
   }
   const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -1960,7 +1999,7 @@
     if (!g.ready) tags.append(el("span", "tag bad", t("no member ready")));
     const edit = el("button", "text", t("Edit"));
     edit.onclick = (e) => { e.stopPropagation(); open(); };
-    const open = () => { gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", classifier: g.classifier || "", effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])] })) } }; renderGroups(); };
+    const open = () => { gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", classifier: g.classifier || "", effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } }; renderGroups(); };
     row.onclick = open;
     row.append(ics, main, tags, edit);
     return row;
@@ -2170,7 +2209,47 @@
         const cp = el("button", "rt-cond" + (r.compact ? " on" : ""), t("compacting"));
         cp.title = t("The agent summarizes the conversation to go on in less room (Claude Code's /compact, Codex, OpenCode…): a cheaper, faster model can do it");
         cp.onclick = () => { r.compact = !r.compact; cp.classList.toggle("on", r.compact); warn(); };
-        when.append(tk, im, ef, ag, it, cp);
+        // hours of the day, on this computer's clock (a vendor's peak
+        // hours, say): typed as 09:00 and 18:00, past midnight when the
+        // second comes first; the days are picked like the agents
+        const tm = el("span", "rt-cond tm");
+        const tw = () => r.time || (r.time = { from: "", to: "", days: [] });
+        const tFrom = input(r.time?.from || "", "09:00"), tTo = input(r.time?.to || "", "18:00");
+        tm.title = t("The turn begins within these hours, on this computer's clock — a provider's peak-price hours sent to another, say");
+        tm.onclick = (e) => { if (e.target === tm || e.target.tagName === "SPAN") (tFrom.value ? tTo : tFrom).focus({ preventScroll: true }); };
+        const dayBtn = el("button", "rt-cond");
+        const drawTime = () => {
+          const w = r.time, from = clockOf(w?.from), to = clockOf(w?.to);
+          const typed = !!(w && (w.from || w.to));
+          tm.classList.toggle("on", !!(from && to));
+          // a time typed that isn't one, once its field is left
+          tm.classList.toggle("bad", [[tFrom, w?.from], [tTo, w?.to]].some(([b, v]) => v && !clockOf(v) && document.activeElement !== b));
+          dayBtn.hidden = !typed && !w?.days?.length;
+          dayBtn.textContent = daysText(w?.days) || t("every day");
+          dayBtn.classList.toggle("on", !!daysText(w?.days));
+        };
+        for (const [box, key] of [[tFrom, "from"], [tTo, "to"]]) {
+          box.className = "clock";
+          box.maxLength = 5;
+          box.inputMode = "numeric";
+          box.oninput = () => { tw()[key] = box.value.trim(); drawTime(); warn(); };
+          box.onblur = () => { const v = clockOf(box.value); if (v) { box.value = v; tw()[key] = v; } drawTime(); warn(); };
+          box.onkeydown = (e) => e.stopPropagation();
+        }
+        tm.append(el("span", "", t("from")), tFrom, el("span", "", t("to")), tTo);
+        const presets = [["", "every day", []], ["weekdays", "weekdays", WEEK.slice(0, 5)], ["weekends", "weekends", WEEK.slice(5)]];
+        dayBtn.onclick = (ev) => pickFrom("days", dayBtn, ev, [
+          ...presets.map(([v, label, ds]) => ({ value: "=" + v, label: t(label), note: ds.length ? daysText(ds) : t("not a condition") })),
+          ...WEEK.map((d) => ({ value: d, label: t(DAY_NAMES[d]), note: r.time?.days?.includes(d) ? "✓" : "" })),
+        ], (v) => {
+          const w = tw();
+          if (v.startsWith("=")) w.days = [...presets.find(([id]) => "=" + id === v)[2]];
+          else w.days = w.days.includes(v) ? w.days.filter((x) => x !== v) : WEEK.filter((x) => x === v || w.days.includes(x));
+          if (w.days.length === 7) w.days = [];
+          drawTime(); warn();
+        });
+        drawTime();
+        when.append(tk, im, ef, ag, it, cp, tm, dayBtn);
         // the member it sends to
         const use = el("div", "rt-use");
         const ub = el("button", "rt-cond on");
@@ -2185,6 +2264,8 @@
           if (r.tokens && m?.context && m.context < r.tokens) bits.push(t("it takes {n} tokens", { n: m.context.toLocaleString() }));
           // a summary longer than it takes goes by the next rule, or the group
           if (r.compact && m?.context && d.members.some((id) => (infoOf(id)?.context || 0) > m.context)) bits.push(t("longer conversations skip it: it takes {n} tokens", { n: m.context.toLocaleString() }));
+          const from = clockOf(r.time?.from), to = clockOf(r.time?.to);
+          if (from && to && to < from) bits.push(t("runs past midnight, into the next day"));
           hint.textContent = bits.join(" · ");
         };
         warn();
@@ -2199,7 +2280,7 @@
       });
       drawClassifier();
     };
-    rAdd.onclick = () => { d.rules.push({ use: d.members[d.members.length - 1], tokens: 0, images: false, effort: "", agents: [], intent: "", compact: false }); drawRules(); };
+    rAdd.onclick = () => { d.rules.push({ use: d.members[d.members.length - 1], tokens: 0, images: false, effort: "", agents: [], intent: "", compact: false, time: null }); drawRules(); };
     // the classifier, once a rule has an intent or the effort is picked
     // per turn: the model asked which intent a turn's message is and how
     // hard it is. Jev (a decision provider's model) answers both in one
@@ -2311,7 +2392,23 @@
     const save = () => {
       if (!d.members.length) { addBtn.focus({ preventScroll: true }); return status(t("A group needs a model in it"), "warn"); }
       d.rules.forEach((r) => { r.intent = (r.intent || "").trim(); });
-      const bare = d.rules.findIndex((r) => !r.tokens && !r.images && !r.effort && !r.agents.length && !r.intent && !r.compact);
+      // hours: both times, or none and no days; days alone are all day
+      const badTime = d.rules.findIndex((r) => {
+        const w = r.time;
+        if (!w || !w.from && !w.to && !w.days?.length) return r.time = null, false;
+        if (!w.from && !w.to) { w.from = w.to = "00:00"; return false; }
+        const from = clockOf(w.from), to = clockOf(w.to);
+        if (!from || !to) return true;
+        w.from = from; w.to = to;
+        return from === to && !w.days?.length;
+      });
+      if (badTime >= 0) {
+        const w = d.rules[badTime].time;
+        return status(clockOf(w.from) && clockOf(w.from) === clockOf(w.to)
+          ? t("Rule {n}: its hours are the whole day — pick days, or other hours", { n: badTime + 1 })
+          : t("Rule {n}: the hours are two times like 09:00 and 18:00", { n: badTime + 1 }), "warn");
+      }
+      const bare = d.rules.findIndex((r) => !r.tokens && !r.images && !r.effort && !r.agents.length && !r.intent && !r.compact && !r.time);
       if (bare >= 0) return status(t("Rule {n} needs a condition", { n: bare + 1 }), "warn");
       if (d.rules.some((r) => r.intent) && !d.classifier) return status(t("Choose the model that tells which intent a message is"), "warn");
       if (d.effort === "auto" && !d.classifier) return status(t("Choose the model that rates how hard a turn is"), "warn");

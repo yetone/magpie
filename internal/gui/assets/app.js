@@ -6675,8 +6675,9 @@ const PERIODS = [["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["all
 // never waits for them. They don't depend on the period either.
 let quotas = null;
 let quotasAt = 0; // when they came in
-// asked: the reader opened the page, the one time a Claude account's
-// usage is read, by running Claude Code's own /usage (never on a timer).
+// asked: the reader opened the page, so a Claude account's usage is read
+// at once, by running Claude Code's own /usage, rather than when its last
+// reading is ten minutes old.
 async function loadUsage(asked) {
   renderUsageTab();
   if (asked) loadQuotas(true);

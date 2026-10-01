@@ -4,7 +4,8 @@ package provider
 // seen in the request itself — how long it is, whether it carries an
 // image, how hard the agent asked the model to think, which agent sent it.
 // Those are never guessed: the same request is always routed the same way,
-// and the trace tells which rule did it. The one exception is a rule with
+// and the trace tells which rule did it. A rule may also hold only at some
+// hours of the day (a vendor's peak-price hours, say), on magpie's clock. The one exception is a rule with
 // an intent (what the user asks for, in the user's words): as a turn
 // begins, a model the group names (its Classifier) is asked which of the
 // intents the user's message is, once, and the trace tells what it said.
@@ -18,7 +19,9 @@ package provider
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Efforts are the reasoning levels a rule can ask for, lowest first.
@@ -48,6 +51,151 @@ type Rule struct {
 	// Codex's, OpenCode's, Pi's…) — which a cheaper, faster model can do
 	// in place of the one the conversation is on.
 	Compact bool `json:"compact,omitempty"`
+	// Time: the turn begins within these hours of the day, local time — a
+	// vendor's peak-price hours sent to another, say.
+	Time *TimeWindow `json:"time,omitempty"`
+}
+
+// TimeWindow is hours of the day, local time: From until To, "HH:MM" each,
+// past midnight when To comes before From (22:00–08:00), the whole day
+// when they are the same. Days, when set, are the days it holds on ("mon"
+// … "sun"); a window past midnight is of the day it begins on, so Friday's
+// 22:00–08:00 takes Saturday's early hours too.
+type TimeWindow struct {
+	From string   `json:"from"`
+	To   string   `json:"to"`
+	Days []string `json:"days,omitempty"`
+}
+
+// Weekdays are the days a TimeWindow names, as time.Weekday counts them.
+var Weekdays = []string{"sun", "mon", "tue", "wed", "thu", "fri", "sat"}
+
+// dayOrder is the week as a window shows it, Monday first.
+var dayOrder = []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+// clockMinutes reads "HH:MM" (or "H:MM") as minutes past midnight.
+func clockMinutes(s string) (int, bool) {
+	h, m, ok := strings.Cut(strings.TrimSpace(s), ":")
+	if !ok || len(h) < 1 || len(h) > 2 || len(m) != 2 {
+		return 0, false
+	}
+	hh, err1 := strconv.Atoi(h)
+	mm, err2 := strconv.Atoi(m)
+	if err1 != nil || err2 != nil || hh < 0 || hh > 23 || mm < 0 || mm > 59 || h[0] == '+' || m[0] == '+' {
+		return 0, false
+	}
+	return hh*60 + mm, true
+}
+
+// ParseDay reads a day of the week, "mon" or "Monday", as Weekdays has it.
+func ParseDay(s string) (string, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if len(s) < 3 {
+		return "", false
+	}
+	for i, d := range Weekdays {
+		if strings.HasPrefix(strings.ToLower(time.Weekday(i).String()), s) {
+			return d, true
+		}
+	}
+	return "", false
+}
+
+// clean checks a window and puts it the one way: "09:00", days known,
+// each once in the week's order, none when it is every day.
+func (w *TimeWindow) clean() error {
+	from, ok := clockMinutes(w.From)
+	if !ok {
+		return fmt.Errorf("the time %q is not HH:MM (09:00)", w.From)
+	}
+	to, ok := clockMinutes(w.To)
+	if !ok {
+		return fmt.Errorf("the time %q is not HH:MM (18:00)", w.To)
+	}
+	w.From, w.To = fmt.Sprintf("%02d:%02d", from/60, from%60), fmt.Sprintf("%02d:%02d", to/60, to%60)
+	var days []string
+	for _, d := range w.Days {
+		v, ok := ParseDay(d)
+		if !ok {
+			return fmt.Errorf("%q is not a day of the week (mon … sun)", d)
+		}
+		days = append(days, v)
+	}
+	w.Days = nil
+	for _, d := range dayOrder {
+		if slices.Contains(days, d) {
+			w.Days = append(w.Days, d)
+		}
+	}
+	if len(w.Days) == len(dayOrder) {
+		w.Days = nil
+	}
+	return nil
+}
+
+// Holds reports whether at is within the window, on the machine's clock.
+func (w TimeWindow) Holds(at time.Time) bool {
+	from, ok1 := clockMinutes(w.From)
+	to, ok2 := clockMinutes(w.To)
+	if at.IsZero() || !ok1 || !ok2 {
+		return false
+	}
+	at = at.Local()
+	m, day := at.Hour()*60+at.Minute(), at.Weekday()
+	switch {
+	case from == to: // the whole day
+	case from < to:
+		if m < from || m >= to {
+			return false
+		}
+	default: // past midnight
+		if m >= to && m < from {
+			return false
+		}
+		if m < to {
+			day = (day + 6) % 7 // the window began the day before
+		}
+	}
+	return len(w.Days) == 0 || slices.Contains(w.Days, Weekdays[day])
+}
+
+// DaysText is the window's days for a list: "Mon–Fri", "Sat,Sun",
+// "Mon,Wed–Fri"; "" for every day.
+func (w TimeWindow) DaysText() string {
+	name := func(d string) string { return strings.ToUpper(d[:1]) + d[1:] }
+	var out []string
+	for i := 0; i < len(dayOrder); {
+		if !slices.Contains(w.Days, dayOrder[i]) {
+			i++
+			continue
+		}
+		j := i
+		for j+1 < len(dayOrder) && slices.Contains(w.Days, dayOrder[j+1]) {
+			j++
+		}
+		switch j - i {
+		case 0:
+			out = append(out, name(dayOrder[i]))
+		case 1:
+			out = append(out, name(dayOrder[i]), name(dayOrder[j]))
+		default:
+			out = append(out, name(dayOrder[i])+"–"+name(dayOrder[j]))
+		}
+		i = j + 1
+	}
+	return strings.Join(out, ",")
+}
+
+// Text is the window as a rule's conditions show it: "09:00–18:00 Mon–Fri".
+func (w TimeWindow) Text() string {
+	s := w.From + "–" + w.To
+	if w.From == w.To {
+		s = "all day"
+	}
+	if d := w.DaysText(); d != "" {
+		s += " " + d
+	}
+	return s
 }
 
 // MaxIntent is how long an intent may be, in characters.
@@ -78,6 +226,9 @@ func (r Rule) Conditions() []string {
 	if r.Compact {
 		out = append(out, "compacting")
 	}
+	if r.Time != nil {
+		out = append(out, "time "+r.Time.Text())
+	}
 	return out
 }
 
@@ -92,6 +243,16 @@ func cleanRules(rules []Rule, members []string) ([]Rule, error) {
 			r.Agents[j] = strings.ToLower(r.Agents[j])
 		}
 		n := i + 1
+		if r.Time != nil {
+			w := *r.Time
+			if err := w.clean(); err != nil {
+				return nil, fmt.Errorf("rule %d: %w", n, err)
+			}
+			if w.From == w.To && len(w.Days) == 0 {
+				return nil, fmt.Errorf("rule %d: its hours are the whole day, every day: give days or other hours", n)
+			}
+			r.Time = &w
+		}
 		switch {
 		case r.Use == "":
 			return nil, fmt.Errorf("rule %d: which model it sends to is missing", n)
@@ -104,7 +265,7 @@ func cleanRules(rules []Rule, members []string) ([]Rule, error) {
 		case len([]rune(r.Intent)) > MaxIntent:
 			return nil, fmt.Errorf("rule %d: an intent is at most %d characters", n, MaxIntent)
 		case len(r.Conditions()) == 0:
-			return nil, fmt.Errorf("rule %d: it needs a condition (tokens, images, effort, agents, intent or compacting)", n)
+			return nil, fmt.Errorf("rule %d: it needs a condition (tokens, images, effort, agents, intent, compacting or time)", n)
 		}
 		if len(r.Agents) == 0 {
 			r.Agents = nil
@@ -126,6 +287,9 @@ type RuleRequest struct {
 	Intent string
 	// Compact: the request is the agent compacting its conversation.
 	Compact bool
+	// At is when the request came, for a rule's hours; a zero time is in
+	// none.
+	At time.Time
 }
 
 // Matches reports whether the request is one the rule is for.
@@ -146,6 +310,9 @@ func (r Rule) MatchesBesidesIntent(q RuleRequest) bool {
 		return false
 	}
 	if r.Compact && !q.Compact {
+		return false
+	}
+	if r.Time != nil && !r.Time.Holds(q.At) {
 		return false
 	}
 	switch r.Effort {
@@ -244,11 +411,11 @@ func ruledEntry(e *Entry, g Group, ms []Member, entries []Entry) {
 		if !ok {
 			continue
 		}
-		if r.Images && r.Tokens == 0 && r.Effort == "" && len(r.Agents) == 0 && r.Intent == "" && !r.Compact && sees(x) && !e.Images &&
+		if r.Images && r.Tokens == 0 && r.Effort == "" && len(r.Agents) == 0 && r.Intent == "" && !r.Compact && r.Time == nil && sees(x) && !e.Images &&
 			!slices.ContainsFunc(g.Rules[:i], func(b Rule) bool { y, ok := of(b.Use); return !ok || !sees(y) }) {
 			e.Images, e.ImageInput = true, x.ImageInput
 		}
-		if r.Tokens == 0 || r.Images || r.Effort != "" || len(r.Agents) > 0 || r.Intent != "" || r.Compact || x.Context <= e.Context {
+		if r.Tokens == 0 || r.Images || r.Effort != "" || len(r.Agents) > 0 || r.Intent != "" || r.Compact || r.Time != nil || x.Context <= e.Context {
 			continue // only a rule of length alone takes every long request
 		}
 		// every request up to the rule's length must fit whoever may get

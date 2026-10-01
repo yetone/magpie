@@ -410,20 +410,27 @@ type claudeUsageEntry struct {
 	at    time.Time
 	ws    []QuotaWindow
 	heard time.Time // when Claude Code last told it, answering
-	tried time.Time // when the endpoint was last asked, answered or not
+	tried time.Time // when /usage was last run, answered or not
+	err   error     // what the last run said, when it failed
 }
 
 // claudeAskFloor is the least time between two readings, however often the
-// user refreshes.
-const claudeAskFloor = 30 * time.Second
+// user refreshes; claudeEvery, between two that nobody asked for (a
+// reading magpie keeps up to date by itself, for the Usage page left open,
+// the menu bar's figures and routing).
+const (
+	claudeAskFloor = 30 * time.Second
+	claudeEvery    = 10 * time.Minute
+)
 
 // claudeAsked is when the user last asked to see Claude's usage (unix
 // nanoseconds; zero: never).
 var claudeAsked atomic.Int64
 
 // AskClaudeUsage is the user asking to see Claude's usage — opening the
-// Usage page, refreshing it, `magpie quota` — the one time Claude Code's
-// /usage is run; the next SubscriptionUsage waits for it.
+// Usage page, refreshing it, `magpie quota` — so Claude Code's /usage is
+// run at once rather than when the last reading is claudeEvery old; the
+// next SubscriptionUsage waits for it.
 func AskClaudeUsage() {
 	claudeAsked.Store(time.Now().UnixNano())
 	c := &subscriptionUsageCache
@@ -441,9 +448,10 @@ func AskClaudeUsage() {
 }
 
 // claudeWindows is the allowance of the Claude account user. Only the
-// account Claude Code is signed in to (active) is read, by Claude Code,
-// and only when the user asked since it last was; any other time it is
-// what was kept.
+// account Claude Code is signed in to (active) is read, by Claude Code's
+// own /usage: when the user asked since it last was, or when the last
+// reading is claudeEvery old; any other time it is what was kept.
+// magpie itself never asks Anthropic.
 func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow, error) {
 	key := strings.ToLower(user)
 	c := &claudeUsage
@@ -451,8 +459,10 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	asked := claudeAsked.Load()
 	c.Lock()
 	e, ok := c.m[key]
-	// one reading an ask, its first caller's; the others keep to it
-	read := active && asked != 0 && (e.tried.IsZero() || asked > e.tried.UnixNano()) && now.Sub(e.tried) >= claudeAskFloor
+	// one reading an ask or a claudeEvery, its first caller's; the others
+	// keep to it
+	due := e.tried.IsZero() || now.Sub(e.tried) >= claudeEvery || asked > e.tried.UnixNano()
+	read := active && due && now.Sub(e.tried) >= claudeAskFloor
 	if read {
 		if c.m == nil {
 			c.m = map[string]claudeUsageEntry{}
@@ -465,6 +475,8 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 		switch {
 		case ok && e.ws != nil:
 			return elapsed(e.ws, now), nil
+		case ok && e.err != nil:
+			return []QuotaWindow{}, e.err
 		case active:
 			return []QuotaWindow{}, errClaudeNotAsked
 		default:
@@ -473,6 +485,12 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	}
 	ws, err := readClaudeUsage(ctx)
 	if err != nil {
+		c.Lock()
+		if f, ok := c.m[key]; ok && f.tried.Equal(now) {
+			f.err = err
+			c.m[key] = f
+		}
+		c.Unlock()
 		if e.ws != nil && now.Sub(e.heard) < claudeHeard {
 			return elapsed(e.ws, now), nil // what Claude Code said stands
 		}
@@ -488,7 +506,7 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 }
 
 var (
-	errClaudeNotAsked = errors.New("not read yet: magpie reads Claude's usage when you open or refresh Usage")
+	errClaudeNotAsked = errors.New("not read yet: magpie reads Claude's usage by running Claude Code's /usage")
 	errClaudeSaved    = errors.New("magpie doesn't read a saved account's usage; it shows what Claude Code reports while using it")
 )
 
