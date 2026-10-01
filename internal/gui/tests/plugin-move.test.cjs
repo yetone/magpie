@@ -73,12 +73,12 @@ const L = {
     move: "Move to the plugin", busy: "Installing the plugin and checking each account…", again: "Try again", back: "Use the built-in again",
     failed: "It stays built-in: magpie couldn't reach npm to install the plugin. Check the network or proxy, then try again.",
     onPlugin: "The community Zed plugin", builtin: "magpie's built-in · or the community Zed plugin", done: "Zed now runs on its plugin — 2 accounts, 1 model.",
-    subs: "Subscriptions", card: "Move my Zed accounts (2)", own: "Zed itself stays signed in as it is." },
+    subs: "Subscriptions", card: "Move my 2 Zed accounts", own: "Zed itself stays signed in as it is." },
   zh: { runs: "运行方式", line: "Zed 可以改由社区插件运行，账号不变。", look: "看看",
     move: "迁移到插件", busy: "正在安装插件并逐个检查账号…", again: "重试", back: "改回内置",
     failed: "仍使用内置：无法连接 npm 安装插件，请检查网络或代理后重试。",
     onPlugin: "社区 Zed 插件", builtin: "magpie 内置 · 也可改用社区 Zed 插件", done: "Zed 现在由插件运行——2 个账号，1 个模型。",
-    subs: "订阅", card: "迁移我的 Zed 账号（2）", own: "Zed 本身的登录保持不变。" },
+    subs: "订阅", card: "迁移我的 2 个 Zed 账号", own: "Zed 本身的登录保持不变。" },
 };
 
 const launch = (engine) => engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" });

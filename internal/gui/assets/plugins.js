@@ -128,8 +128,8 @@
     }
   }
   const moveButton = (b, c, here) => {
-    b.classList.add("go");
-    b.textContent = here ? t("Move {name} here", { name: c.name }) : t("Move my {name} accounts ({n})", { name: c.name, n: c.accounts });
+    b.classList.add("go", "move");
+    b.textContent = here ? t("Move {name} here", { name: c.name }) : t(c.accounts === 1 ? "Move my {n} {name} account" : "Move my {n} {name} accounts", { name: c.name, n: c.accounts });
     b.title = t("Runs {name} on this plugin in place of the built-in, with the same accounts; nothing changes if one doesn't work through it", { name: c.name });
     b.disabled = busy.size > 0;
     b.onclick = (ev) => { ev.stopPropagation(); move(c); };
@@ -147,6 +147,7 @@
     const op = busy.get(pkg);
     if (op === "add" || op === "upgrade" || op === "move") {
       b.classList.add("busy");
+      if (op === "move") b.classList.add("move");
       b.append(el("span", "spin"), el("span", "", op === "move" ? t("Moving…") : op === "upgrade" ? t("Updating…") : market?.state.bun ? t("Installing…") : t("Getting Bun…")));
       b.disabled = true;
       if (!market?.state.bun) b.title = t("Plugins run on Bun {v}, downloaded once", { v: market?.state.bunVersion || "" });
@@ -217,7 +218,11 @@
       by.append(v);
     } else by.append(el("span", "", l.npm?.publisher || l.package));
     who.append(by);
-    top.append(logo(l.icon), who, actionFor(l.package, l.name, l));
+    const act = actionFor(l.package, l.name, l);
+    // a move says whose accounts: too long for the top row, it has one of its own
+    const own = act.classList.contains("move");
+    top.append(logo(l.icon), who);
+    if (!own) top.append(act);
     const sum = el("p", "pm-sum", summary(l));
     const meta = el("div", "pm-meta");
     if (l.npm?.weekly) {
@@ -236,6 +241,7 @@
       meta.append(b);
     }
     c.append(top, sum, meta);
+    if (own) c.append(act);
     c.onclick = () => detail(l);
     c.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); detail(l); } };
     return c;

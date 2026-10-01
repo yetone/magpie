@@ -88,6 +88,7 @@
 .pm-act.done:hover:not(:disabled) { background: var(--green-soft); color: var(--green); }
 .pm-act.busy { color: var(--muted); font-weight: 500; }
 .pm-act:disabled:not(.busy):not(.done) { opacity: .55; }
+.pm-card > .pm-act.move { height: auto; min-height: 26px; padding: 4px 12px; white-space: normal; text-align: center; }
 .pm-act .spin { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; }
 
 /* loading: cards drawn as grey bars */
