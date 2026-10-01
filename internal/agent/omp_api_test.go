@@ -19,6 +19,9 @@ import (
 // group's stay on the provider's openai-completions, keyless.
 func TestOmpModelsAskedOnTheirNativeAPI(t *testing.T) {
 	home := syncHome(t)
+	was := ompVersion
+	ompVersion = func() string { return "16.3.5" }
+	t.Cleanup(func() { ompVersion = was })
 	for _, p := range []provider.Provider{
 		{ID: "resp", Name: "Resp", Key: "k", Responses: "http://127.0.0.1:1/v1", Models: []string{"grok-5", "gpt-5.5"}},
 		{ID: "openai", Name: "OpenAI", Key: "k", Chat: "https://api.openai.com/v1", Responses: "https://api.openai.com/v1", Models: []string{"gpt-5.5"}},
@@ -77,8 +80,8 @@ func TestOmpModelsAskedOnTheirNativeAPI(t *testing.T) {
 		if e["baseUrl"] != gateway.URL() {
 			t.Errorf("%s: baseUrl %v, want %s", id, e["baseUrl"], gateway.URL())
 		}
-		// and its efforts stop at xhigh, the gateway's way to max: omp
-		// 16.3.5 turns the whole models.yml away over a max
+		// and, for omp 16.3.5, its efforts stop at xhigh, the gateway's way
+		// to max: it turns the whole models.yml away over a max
 		th, _ := e["thinking"].(map[string]any)
 		if th["mode"] != mode || fmt.Sprint(th["efforts"]) != "[low high xhigh]" {
 			t.Errorf("%s: thinking %v, want mode %s, efforts [low high xhigh]", id, e["thinking"], mode)

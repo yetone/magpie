@@ -47,6 +47,10 @@ type Login struct {
 	// Returns is the account magpie signed the agent out of when it was
 	// spent, and signs it back in to once it has room again (#408).
 	Returns bool `json:"returns,omitempty"`
+
+	// first is the saved Claude account served in the place of Claude
+	// Code's own while it is signed out (claudeStandIn).
+	first bool
 }
 
 type savedLogin struct {
@@ -356,16 +360,15 @@ func savedButSignedOut() []Exclusion {
 	}
 	var out []Exclusion
 	for _, a := range loginAgents {
-		if saved[a] == 0 {
+		// Claude Code signed out, its saved accounts are served all the
+		// same (claudeStandIn)
+		if saved[a] == 0 || a == "claude" {
 			continue
 		}
 		if _, ok := liveLogin(a); ok {
 			continue
 		}
 		why, signIn := "nothing at "+codexAuthPath(), "codex login"
-		if a == "claude" {
-			why, signIn = claudeNotSignedInWhy(), "claude, then /login"
-		}
 		n := "1 account is"
 		if saved[a] > 1 {
 			n = fmt.Sprintf("%d accounts are", saved[a])
@@ -374,27 +377,6 @@ func savedButSignedOut() []Exclusion {
 			Why: fmt.Sprintf("%s saved in magpie, but it isn't signed in here (%s), and they are only offered beside the account it is signed in to. Sign in (%s) with this HOME.", n, why, signIn)})
 	}
 	return out
-}
-
-// claudeNotSignedInWhy says which of liveLogin's checks found no Claude Code
-// sign-in: its credentials (on a Mac, the keychain first), what
-// `claude auth status` says, or the account's name.
-func claudeNotSignedInWhy() string {
-	c, _, ok := claudeCredential()
-	if !ok {
-		if claudeKeychain {
-			return `no "Claude Code-credentials" in the keychain magpie could read, and nothing at ` + claudeCredentialsPath()
-		}
-		return "nothing at " + claudeCredentialsPath()
-	}
-	user, plan, signedOut := claudeIdentity()
-	if signedOut {
-		return "its credentials are there, but claude auth status says no one is signed in"
-	}
-	if u, _ := claudeSignedInUser(c.OAuth.SubscriptionType, plan, user); u == "" {
-		return "its credentials are there, but neither " + claudeProfilePath() + " nor claude auth status names the account"
-	}
-	return "its sign-in could not be read"
 }
 
 // liveLogin reads the account an agent is signed in to now.
@@ -564,6 +546,10 @@ func Logins(agent string) []Login {
 	}
 	var out []Login
 	ls := readLogins()
+	standIn := ""
+	if _, ok := active["claude"]; !ok {
+		standIn = claudeStandIn(ls)
+	}
 	back := map[string]string{}
 	for a, user := range active {
 		if r, ok := loginReturnOf(a, user); ok {
@@ -575,10 +561,14 @@ func Logins(agent string) []Login {
 			continue
 		}
 		using := strings.EqualFold(active[l.Agent], l.User)
-		lg := Login{Agent: l.Agent, User: l.User, Plan: l.Plan, Seen: l.Seen, Active: using, On: using || l.On,
-			Paused: using && pausedOwn(ls, l.Agent, l.User)}
+		first := l.Agent == "claude" && strings.EqualFold(standIn, l.User)
+		lg := Login{Agent: l.Agent, User: l.User, Plan: l.Plan, Seen: l.Seen, Active: using, On: using || first || l.On,
+			Paused: (using || first) && pausedOwn(ls, l.Agent, l.User), first: first}
 		if !using {
 			lg.Lapsed = l.Lapsed
+			if lg.Lapsed == "" && l.Agent == "claude" {
+				lg.Lapsed = claudeSignedOut(l)
+			}
 			lg.Returns = l.On && strings.EqualFold(back[l.Agent], l.User)
 		}
 		out = append(out, lg)
@@ -595,7 +585,7 @@ func InUseLogin(agent string) string {
 
 func inUseOf(ls []Login) string {
 	for _, l := range ls {
-		if l.Active && !l.Paused {
+		if (l.Active || l.first) && !l.Paused {
 			return l.User
 		}
 	}

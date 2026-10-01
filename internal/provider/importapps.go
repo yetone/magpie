@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/tidwall/jsonc"
+	"github.com/yetone/magpie/internal/plugin"
 	_ "modernc.org/sqlite"
 )
 
@@ -148,6 +149,9 @@ func freeID(id string) string {
 	taken := map[string]bool{"magpie": true}
 	for _, id := range accountIDs {
 		taken[id] = true
+	}
+	for _, pp := range plugin.Cached() { // signed in or not, as a built-in's
+		taken[PluginID(pp.ID)] = true
 	}
 	for _, p := range All() {
 		taken[p.ID] = true

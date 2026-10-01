@@ -9,6 +9,7 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -145,4 +146,57 @@ func takeClaudeDir(l *savedLogin, c claudeCredentials) (bool, error) {
 	l.Renewed = time.Now().UTC().Truncate(time.Second)
 	l.Lapsed = ""
 	return true, nil
+}
+
+// claudeStandIn is the saved account served in the place of Claude Code's
+// own while Claude Code is signed out — the user logged out of it, as it
+// tells them to when magpie's token is set beside a claude.ai sign-in. It
+// is the account seen last, which is the one Claude Code was signed in to
+// until then (rememberLogins sees that one every 30s), passing over one
+// whose saved sign-in is gone while another has one; "" when none is
+// saved. magpie keeps every account's sign-in itself, so a logout signs
+// none of them out of magpie: the stand-in runs Claude Code in a config
+// directory of its own, as the others on do.
+func claudeStandIn(ls []savedLogin) string {
+	user, signedIn := "", false
+	var seen time.Time
+	for _, l := range ls {
+		if l.Agent != "claude" {
+			continue
+		}
+		_, ok := parseClaudeCredentials(l.Auth)
+		if user == "" || ok && !signedIn || ok == signedIn && l.Seen.After(seen) {
+			user, seen, signedIn = l.User, l.Seen, ok
+		}
+	}
+	return user
+}
+
+// claudeSignedOut is why a saved Claude account can't be used: its saved
+// sign-in is gone, and it has to be signed in again; "" when it has one.
+func claudeSignedOut(l savedLogin) string {
+	if _, ok := parseClaudeCredentials(l.Auth); ok {
+		return ""
+	}
+	return "its sign-in is gone; sign in again"
+}
+
+// claudeStandInAccount is the Claude Code provider while Claude Code is
+// signed out, on claudeStandIn's account; false with no account saved.
+func claudeStandInAccount() (Provider, bool) {
+	loginsMu.Lock()
+	ls := readLogins()
+	loginsMu.Unlock()
+	user := claudeStandIn(ls)
+	if user == "" {
+		return Provider{}, false
+	}
+	acct := &Account{Agent: "claude", User: user, standIn: true}
+	for _, l := range ls {
+		if l.Agent == "claude" && strings.EqualFold(l.User, user) {
+			acct.Plan = l.Plan
+		}
+	}
+	acct.token = func(context.Context) (string, error) { return claudeSavedDir(user) }
+	return claudeProvider(acct), true
 }

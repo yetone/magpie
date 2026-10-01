@@ -52,6 +52,16 @@ func (g Group) IsFast(id string) bool {
 // A Claude subscription runs Claude Code itself, and a relay or a cloud
 // (Bedrock, Vertex) may refuse the field, so neither is.
 func CanFast(p Provider, model string) bool {
+	if p.IsPlugin() {
+		// Cursor's plugin, as the built-in, asks for the model's -fast one
+		// when the chat request says service_tier "priority"
+		pp, ok := PluginOf(p.ID)
+		if !ok || p.PluginProvider() != "cursor" || strings.HasSuffix(model, "-fast") {
+			return false
+		}
+		_, ok = pluginModel(pp, model+"-fast")
+		return ok
+	}
 	if p.Account != nil {
 		switch p.Account.Agent {
 		case "codex":

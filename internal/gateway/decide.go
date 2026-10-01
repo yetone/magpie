@@ -426,7 +426,8 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 		asked = p.ID + "/" + model
 	}
 	seat := decideSeat(p, model)
-	tr := s.trace.begin(Route{Time: start, Agent: agentOf(r), Model: asked, Provider: p.ID,
+	var used Usage
+	tr := s.trace.begin(Route{Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), Model: asked, Provider: p.ID,
 		Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Start: start}}})
 	end := func(status int, msg string, tokens int) {
 		ms := time.Since(start).Milliseconds()
@@ -437,6 +438,7 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 				try.Fail = failure(status, []byte(msg))
 			}
 			t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, ms, tokens
+			t.Usage = routeUsage(p.ID, model, used)
 		})
 	}
 	status, b, ctype, err := s.postDecide(r.Context(), p, model, body)
@@ -458,6 +460,7 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 		errMsg = provider.APIError(b, fmt.Sprintf("%d %s", status, http.StatusText(status)))
 	}
 	tokens := use.Usage.Input + use.Usage.Output
+	used = Usage{Input: use.Usage.Input, Output: use.Usage.Output}
 	var keyID, keyName string
 	if p.Account == nil && p.Key != "" {
 		keyID, keyName = provider.KeyID(p.Key), p.KeyName

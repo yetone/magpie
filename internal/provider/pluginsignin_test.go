@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -72,14 +73,18 @@ func TestPluginSignIn(t *testing.T) {
 	if p, err := Find("fakeco"); err != nil || !p.IsPlugin() {
 		t.Fatalf("Find = %+v, %v", p, err)
 	}
+	// removed, it is hidden as a built-in is, still signed in
 	if err := Delete("fakeco"); err != nil {
 		t.Fatal(err)
 	}
-	if plugin.SignedIn("fakeco") {
-		t.Fatal("removing the account didn't sign out")
+	if !plugin.SignedIn("fakeco") {
+		t.Fatal("removing the provider signed out")
 	}
 	if _, err := Find("fakeco"); err == nil {
 		t.Fatal("fakeco is a provider after it was removed")
+	}
+	if h := Hidden(); len(h) != 1 || h[0].ID != "fakeco" {
+		t.Fatalf("Hidden = %+v", h)
 	}
 
 	if _, err := PluginAPIKey(ctx, "fakeco", 0, nil, "  "); err == nil {
@@ -217,11 +222,18 @@ func TestPluginAccounts(t *testing.T) {
 		t.Fatalf("keys listed as %v", us)
 	}
 
-	// removing the provider signs every account out
+	// removing the provider hides it, as a built-in's, every account kept;
+	// shown again, they are all there
 	if err := Delete("fakeco"); err != nil {
 		t.Fatal(err)
 	}
-	if plugin.SignedIn("fakeco") || len(Logins("fakeco")) != 0 {
-		t.Fatalf("still signed in: %v", users())
+	if _, err := Find("fakeco"); err == nil || !plugin.SignedIn("fakeco") {
+		t.Fatalf("removed: %v, signed in %v", err, plugin.SignedIn("fakeco"))
+	}
+	if err := ShowAccount("fakeco"); err != nil {
+		t.Fatal(err)
+	}
+	if got := users(); !slices.Equal(got, us) {
+		t.Fatalf("shown again with %v, was %v", got, us)
 	}
 }

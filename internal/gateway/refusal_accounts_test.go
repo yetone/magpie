@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -218,8 +219,12 @@ func TestClaudeRefusalMovesToNextKey(t *testing.T) {
 // Claude Code's own "unable to respond" result), and the spare answers —
 // streamed to Codex and to an Anthropic client, and not streamed.
 func TestClaudeSubscriptionRefusalMovesToNextAccount(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	restingUntil.Lock()

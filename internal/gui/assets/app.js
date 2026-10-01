@@ -2508,6 +2508,8 @@ function askForgetSaved(x) {
 // accountPlan is the account's chip: its vendor and plan, the plan alone
 // when it already names the vendor (a plugin's own "Zed Pro").
 function accountPlan(a) {
+  // a plugin beside a built-in (cursor-plugin) by the built-in's
+  const agent = a.builtin || a.agent;
   const cap = (s) => s[0].toUpperCase() + s.slice(1);
   // "Xiaomi MiMo" and "MiMo 高阶" overlap in "MiMo": said once
   const named = (name, plan) => {
@@ -2518,20 +2520,20 @@ function accountPlan(a) {
     }
     return name + " " + plan;
   };
-  if (a.agent === "codex") return named("ChatGPT", a.plan && cap(a.plan));
-  if (a.agent === "copilot") return "GitHub";
-  if (a.agent === "claude") return named("Claude", a.plan && cap(a.plan));
-  if (a.agent === "cursor") return named("Cursor", a.plan && cap(a.plan));
-  if (a.agent === "grok") return a.plan || "SuperGrok";
-  if (a.agent === "gemini" || a.agent === "antigravity") return a.plan || "Google";
-  if (a.agent === "zcode") return a.plan || "GLM Coding Plan";
-  if (a.agent === "workbuddy") return a.plan || "WorkBuddy";
-  if (a.agent === "workbuddy-ai") return a.plan || "WorkBuddy AI";
-  if (a.agent === "commandcode-plan") return named("Command Code", a.plan && t(a.plan));
-  if (a.agent === "qoder") return named("Qoder", a.plan && t(a.plan));
-  if (a.agent === "qoder-cn") return named("Qoder CN", a.plan && t(a.plan));
-  if (a.agent === "zed") return named("Zed", a.plan && t(a.plan));
-  if (a.agent === "mimo-app") return named("Xiaomi MiMo", a.plan && t(a.plan));
+  if (agent === "codex") return named("ChatGPT", a.plan && cap(a.plan));
+  if (agent === "copilot") return "GitHub";
+  if (agent === "claude") return named("Claude", a.plan && cap(a.plan));
+  if (agent === "cursor") return named("Cursor", a.plan && cap(a.plan));
+  if (agent === "grok") return a.plan || "SuperGrok";
+  if (agent === "gemini" || agent === "antigravity") return a.plan || "Google";
+  if (agent === "zcode") return a.plan || "GLM Coding Plan";
+  if (agent === "workbuddy") return a.plan || "WorkBuddy";
+  if (agent === "workbuddy-ai") return a.plan || "WorkBuddy AI";
+  if (agent === "commandcode-plan") return named("Command Code", a.plan && t(a.plan));
+  if (agent === "qoder") return named("Qoder", a.plan && t(a.plan));
+  if (agent === "qoder-cn") return named("Qoder CN", a.plan && t(a.plan));
+  if (agent === "zed") return named("Zed", a.plan && t(a.plan));
+  if (agent === "mimo-app") return named("Xiaomi MiMo", a.plan && t(a.plan));
   return a.plan || t("signed in");
 }
 
@@ -5961,7 +5963,7 @@ function renderAccounts(a) {
       dot.title = on ? t("Stop using this account") : t("Use this account too");
       dot.onclick = () => accountAction("login/" + (on ? "off" : "on"), { agent: a.agent, user: l.user });
     }
-    row.append(dot, el("span", "n", l.user), el("span", "plan", accountPlan({ agent: a.agent, plan: l.plan })), el("span", "grow"));
+    row.append(dot, el("span", "n", l.user), el("span", "plan", accountPlan({ agent: a.agent, builtin: a.builtin, plan: l.plan })), el("span", "grow"));
     if (l.active) {
       const using = el("span", "using", l.paused ? t("Paused") : back ? t("First for now") : several ? t("First") : t("Current"));
       if (back && !l.paused) using.title = t("{user} was nearly used up, so magpie signed {agent} in to this one; it goes back to {user} once that has room again", { user: back.user, agent: a.agentName });
@@ -6977,6 +6979,7 @@ function renderCosts() {
   if (usage) renderUsage();
   if (ledger && usageTab === "requests") renderLedger();
   if (sessions) renderSessions();
+  document.dispatchEvent(new Event("magpie-costs-changed"));
 }
 const tokensOf = (t) => t.input + t.output;
 
@@ -7049,7 +7052,9 @@ function renderQuotas() {
         const use = el("button", "text", t("Use a reset"));
         use.title = resetUseTitle(sub);
         use.onclick = () => askReset(sub);
-        if (!sub.resets.byWindow) { // a GLM team's are spent on bigmodel.cn
+        // only Codex's are spent from here: a GLM team's are spent on
+        // bigmodel.cn, a plugin's wherever its vendor spends them
+        if (!sub.resets.byWindow && sub.provider === "codex") {
           const auto = autoResetButton(sub, "text auto-reset");
           if (auto) r.append(auto);
           r.append(use);
@@ -7456,7 +7461,7 @@ function panelQuotaCard(q) {
     const use = el("button", "pq-use", t("Use one…"));
     use.title = resetUseTitle(q);
     use.onclick = () => askReset(q);
-    if (!q.resets.byWindow) {
+    if (!q.resets.byWindow && q.provider === "codex") { // as on the Usage page
       const auto = autoResetButton(q, "pq-use pq-auto");
       if (auto) r.append(auto);
       r.append(use);

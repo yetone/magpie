@@ -9,6 +9,22 @@ import (
 	"time"
 )
 
+func TestHistoryKeepsSessionAndTokenTiers(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	now := time.Now()
+	records := routeUsage("relay", "m", Usage{Input: 20, Output: 5, CacheRead: 100, CacheWrite: 40})
+	saveRoute(Route{ID: 1, Time: now, Session: "conversation", ParentSession: "parent-conversation", Kind: "thread_title", Usage: records, Done: true})
+	saveRoute(Route{ID: 2, Time: now, Tokens: 1000, Done: true}) // legacy route
+	pruneHistory(HistoryDir(), now.AddDate(0, 0, 1))
+	_, routes, _ := History(now.Format(dayForm))
+	if len(routes) != 2 || routes[0].Session != "conversation" || routes[0].ParentSession != "parent-conversation" || len(routes[0].Usage) != 1 || routes[0].Usage[0] != (RouteUsage{Provider: "relay", Model: "m", Input: 20, Output: 5, CacheRead: 100, CacheWrite: 40}) {
+		t.Fatalf("compressed history lost accounting: %+v", routes)
+	}
+	if routes[1].Session != "" || len(routes[1].Usage) != 0 {
+		t.Fatalf("invented legacy accounting: %+v", routes[1])
+	}
+}
+
 // A done route is kept on disk by its day, a day that is over gzipped and
 // still read, and a day too old or past the size kept dropped.
 func TestHistoryKeepsDaysAndDropsOld(t *testing.T) {
@@ -49,6 +65,36 @@ func TestHistoryKeepsDaysAndDropsOld(t *testing.T) {
 	want := []string{now.AddDate(0, 0, -4).Format(dayForm), now.AddDate(0, 0, -3).Format(dayForm), yday.Format(dayForm), now.Format(dayForm)}
 	if strings.Join(left, ",") != strings.Join(want, ",") {
 		t.Fatalf("kept %v, want %v", left, want)
+	}
+}
+
+func TestRouteUsageCompactAndLegacyJSON(t *testing.T) {
+	// Ignore fields that full ledger records wrote into earlier route history.
+	var old Route
+	if err := json.Unmarshal([]byte(`{"usage":[{"t":"0001-01-01T00:00:00Z","agent":"","ms":0,"status":0,"provider":"relay","model":"m","in":20,"out":5,"cache_read":100,"cache_write":40,"reasoning":3}]}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	want := RouteUsage{Provider: "relay", Model: "m", Input: 20, Output: 5, CacheRead: 100, CacheWrite: 40, Reasoning: 3}
+	if len(old.Usage) != 1 || old.Usage[0] != want {
+		t.Fatalf("legacy accounting: %+v", old.Usage)
+	}
+	data, err := json.Marshal(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved struct {
+		Usage []map[string]json.RawMessage `json:"usage"`
+	}
+	if err := json.Unmarshal(data, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Usage) != 1 || len(saved.Usage[0]) != 7 {
+		t.Fatalf("unexpected accounting fields: %s", data)
+	}
+	for _, key := range []string{"t", "agent", "ms", "status"} {
+		if _, ok := saved.Usage[0][key]; ok {
+			t.Fatalf("unneeded field %q: %s", key, data)
+		}
 	}
 }
 

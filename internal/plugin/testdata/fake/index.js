@@ -24,6 +24,8 @@ export const FakePlugin = async ({ client }) => ({
       },
     }
     // $FAKE_RESPONSES: one model more, on OpenAI's Responses (Grok's)
+    // $FAKE_FAST: fake-1 has a fast one, as a Cursor model has its -fast
+    if (process.env.FAKE_FAST) cfg.provider[ID].models["fake-1-fast"] = { name: "Fake One Fast", limit: { context: 1000, output: 100 } }
     if (process.env.FAKE_RESPONSES) cfg.provider[ID].models["fake-resp"] = { name: "Fake Responses", provider: { npm: "@ai-sdk/openai" }, limit: { context: 4000, output: 400 } }
   },
   auth: {

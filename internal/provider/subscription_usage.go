@@ -238,7 +238,9 @@ func fetchSubscriptionUsage() []SubscriptionQuota {
 		return true
 	}
 	if p, ok := claudeAccount(); ok && !hidden["claude"] {
-		if ls := accountsOf("claude"); len(ls) > 1 {
+		// signed out, Claude Code's own allowance is none: the account in
+		// its place is a saved one, read as the others are
+		if ls := accountsOf("claude"); len(ls) > 1 || p.Account.standIn {
 			fetches = append(fetches, perLogin(via("claude"), ls, "Claude Code", "claude-color")...)
 		} else {
 			fetches = append(fetches, withUser(p.Account.User, func() SubscriptionQuota { return claudeSubscriptionUsage(viaLogin("claude", p.Account.User)) }))

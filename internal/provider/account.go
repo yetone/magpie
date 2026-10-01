@@ -56,6 +56,10 @@ type Account struct {
 	// logins_on.go): the access token to run the agent's binary with.
 	token func(ctx context.Context) (string, error)
 
+	// standIn is a saved Claude account served in the place of Claude
+	// Code's own while Claude Code is signed out (claude_dirs.go).
+	standIn bool
+
 	// codeAssist is where a Gemini CLI or Antigravity account's requests
 	// go (google.go).
 	codeAssist string
@@ -190,6 +194,11 @@ func (p Provider) Explain(msg string, status int, body []byte) string {
 		return msg
 	}
 	if more := p.Account.explain(status, body); more != "" {
+		// an account's reading of a block page that names the network
+		// block itself (ZCodeStartBlockedHint) takes the generic one's place
+		if more == ZCodeStartBlockedHint {
+			msg = strings.TrimSuffix(msg, " — "+BlockedHint)
+		}
 		return msg + " — " + more
 	}
 	return msg
@@ -561,11 +570,11 @@ func withoutClaudeWiring(env []string) []string {
 func claudeAccount() (Provider, bool) {
 	c, _, ok := claudeCredential()
 	if !ok {
-		return Provider{}, false
+		return claudeStandInAccount()
 	}
 	user, statusPlan, signedOut := claudeIdentity()
 	if signedOut {
-		return Provider{}, false
+		return claudeStandInAccount()
 	}
 	plan := c.OAuth.SubscriptionType
 	if statusPlan != "" {
@@ -581,7 +590,11 @@ func claudeAccount() (Provider, bool) {
 			user = "Claude " + strings.ToUpper(plan[:1]) + plan[1:]
 		}
 	}
-	acct := &Account{Agent: "claude", User: user, Plan: plan}
+	return claudeProvider(&Account{Agent: "claude", User: user, Plan: plan}), true
+}
+
+// claudeProvider is the Claude Code provider of acct.
+func claudeProvider(acct *Account) Provider {
 	// nothing is sent to Anthropic in Claude Code's name: a request on the
 	// account runs Claude Code itself (the gateway's bridge, a test), so
 	// one that would go straight to the API with its sign-in is refused
@@ -594,7 +607,7 @@ func claudeAccount() (Provider, bool) {
 		return ms, catalog.SaveLive("claude", claudeBase, ms)
 	}
 	return Provider{ID: "claude", Name: "Claude Code", Icon: "claudecode-color", Anthropic: claudeBase,
-		Catalog: "anthropic", Website: "https://claude.ai", Account: acct}, true
+		Catalog: "anthropic", Website: "https://claude.ai", Account: acct}
 }
 
 // refreshRefused is a refresh the vendor answered and turned down: the

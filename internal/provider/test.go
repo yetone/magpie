@@ -328,7 +328,7 @@ var edgeBlocked = regexp.MustCompile(`(?i)request has been blocked|errors\.aliyu
 // EdgeBlocked says whether an error body is a firewall's block page rather
 // than the vendor's API answering, or one already put in plain words.
 func EdgeBlocked(b []byte) bool {
-	return edgeBlocked.Match(b) || bytes.Contains(b, []byte(BlockedHint))
+	return edgeBlocked.Match(b) || bytes.Contains(b, []byte(BlockedHint)) || bytes.Contains(b, []byte(ZCodeStartBlockedHint))
 }
 
 // APIError pulls the human message out of an error body when there is one.

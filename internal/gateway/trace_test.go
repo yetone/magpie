@@ -31,7 +31,10 @@ func TestTraceTellsTheRoute(t *testing.T) {
 	}
 	s := New()
 	send := func() {
-		s.Handler().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(chatReq)))
+		req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(chatReq))
+		req.Header.Set("session_id", "native-session")
+		req.Header.Set(SessionHeader, "chosen-session")
+		s.Handler().ServeHTTP(httptest.NewRecorder(), req)
 	}
 
 	// one waiting for a route hears of it
@@ -47,6 +50,9 @@ func TestTraceTellsTheRoute(t *testing.T) {
 
 	st := s.Trace(context.Background(), 0, 0)
 	r := st.Routes[len(st.Routes)-1]
+	if r.Session != "chosen-session" {
+		t.Fatalf("session %q", r.Session)
+	}
 	if !r.Done || r.Status != 200 || r.Provider != "plan" || len(r.Order) != 2 || r.Order[0].Who != "Personal" || r.Order[1].Kind != "key" {
 		t.Fatalf("route %+v", r)
 	}

@@ -17,7 +17,7 @@ import (
 // copied before, with the plain token, still gets an answer, recorded as
 // the SDK's as it was.
 func TestAgyAgent(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setHome(t, t.TempDir())
 	f := &fake{t: t, reply: sse(
 		`data: {"id":"c1","choices":[{"delta":{"content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":2}}`,
 		`data: [DONE]`)}

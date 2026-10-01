@@ -8,7 +8,6 @@
 package provider
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,10 +17,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
-	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/steady"
 )
@@ -390,7 +387,7 @@ func Save(p Provider) error {
 		p = Provider{ID: p.ID, Key: key, Models: p.Models, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Affinity: p.Affinity, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID)}
 	} else {
 		p.AccountProxies = nil // a provider of a key has no accounts to proxy apart
-		if slices.Contains(accountIDs, p.ID) && !stored(p.ID) {
+		if subscriptionID(p.ID) && !stored(p.ID) {
 			// taken, it would hide that subscription once signed in
 			return fmt.Errorf("%q is the id of the %s subscription; pick another name", p.ID, p.ID)
 		}
@@ -597,17 +594,10 @@ func ShowAccount(id string) error {
 	return nil
 }
 
-// Delete removes a provider. An account is only hidden from magpie (its
-// model picks kept); signing out is the agent's job.
+// Delete removes a provider. An account, a built-in's or a plugin's, is
+// only hidden from magpie (its accounts and model picks kept, shown again
+// from Hidden or by signing in); signing out is each account's Remove.
 func Delete(id string) error {
-	if p, ok := find(Accounts(), id); ok && p.IsPlugin() && !Moved(p.Account.plugin.ID) {
-		// a plugin's sign-in is magpie's own: removing it signs out. A
-		// built-in moved onto its plugin is only hidden, as the built-in
-		// was, its accounts and model picks kept.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		return plugin.SignOut(ctx, p.Account.plugin.ID, "")
-	}
 	f, err := read()
 	if err != nil {
 		return err

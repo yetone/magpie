@@ -34,7 +34,9 @@ func (k *keyed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func fresh(t *testing.T) {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir()) // no agent signed in
+	home := t.TempDir() // no agent signed in
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows finds the home there
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	restingUntil.Lock()
@@ -49,6 +51,13 @@ func fresh(t *testing.T) {
 	classified.Lock()
 	classified.m, classified.failed = map[string]classifiedAs{}, map[string]classifyFailure{}
 	classified.Unlock()
+}
+
+// setHome makes dir the home, where Windows (USERPROFILE) finds it too.
+func setHome(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("HOME", dir)
+	t.Setenv("USERPROFILE", dir)
 }
 
 func serveOn(t *testing.T, id, key string, models []string, v http.Handler, keys ...string) {

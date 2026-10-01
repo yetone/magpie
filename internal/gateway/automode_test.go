@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -199,6 +200,9 @@ func TestAutoModeServerSideReviewRelayed(t *testing.T) {
 // isn't kept waiting for a next turn it will never have, which would push
 // the conversations' own runs out.
 func TestAutoModeClassifierOnTheClaudeBridge(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	args := filepath.Join(dir, "args")
 	script := `#!/bin/sh

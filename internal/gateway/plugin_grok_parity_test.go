@@ -164,3 +164,16 @@ func TestPluginBesideBuiltinCountsByEstimate(t *testing.T) {
 		t.Fatalf("the vendor was asked to count: %v, %d", up.asked(), n)
 	}
 }
+
+// Grok's plugin beside the built-in Grok (grok-plugin) searches by itself
+// as the built-in does, on Responses only.
+func TestGrokPluginSearchesItself(t *testing.T) {
+	pid := besideFake(t, "grok", http.NotFoundHandler())
+	p, err := provider.Find(pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pid != "grok-plugin" || !searchesItself(*p, provider.Responses) || searchesItself(*p, provider.Chat) {
+		t.Fatalf("%s searches by itself: %v on Responses, %v on Chat", pid, searchesItself(*p, provider.Responses), searchesItself(*p, provider.Chat))
+	}
+}

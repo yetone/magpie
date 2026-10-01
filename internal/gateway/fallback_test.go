@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -169,6 +170,7 @@ func TestSeveralKeysOnTakeOverFromEachOther(t *testing.T) {
 func TestSubscriptionAccountsTakeOver(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	restingUntil.Lock()
@@ -231,8 +233,12 @@ func TestSubscriptionAccountsTakeOver(t *testing.T) {
 // token and no email: the account is still named from ~/.claude.json, so it
 // is the saved me@example.com, not a "Claude Max" served beside it.
 func TestClaudeAccountsTakeOver(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	far := time.Now().Add(24 * time.Hour).UnixMilli()

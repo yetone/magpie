@@ -92,13 +92,29 @@
   const reqs = el("div", "list rt-reqs");
   // the days the history keeps on disk, to look back at one: see listed
   const dayBar = el("div", "rt-days");
+  const groupBar = el("div", "rt-group-by");
+  let bySession = false;
+  try { bySession = localStorage.getItem("magpie.routingBySession") === "1"; } catch {}
+  const groupButtons = [[false, "By request"], [true, "By session"]].map(([on, label]) => {
+    const b = el("button", "rt-day");
+    b.dataset.label = label;
+    b.onclick = () => {
+      bySession = on;
+      try { localStorage.setItem("magpie.routingBySession", on ? "1" : "0"); } catch {}
+      steady(renderHist);
+    };
+    groupBar.append(b);
+    return b;
+  });
   const actHead = el("div", "row-head"), actNote = el("span", "note");
   const acts = el("div", "list rt-acts");
   const actLabel = el("span", "label");
   actHead.append(actLabel, el("span", "grow"), actNote);
   const hist = el("div", "rt-cols");
   const colA = el("div", "rt-col"), colB = el("div", "rt-col");
-  colA.append(reqHead, dayBar, reqs);
+  const filters = el("div", "rt-filters");
+  filters.append(dayBar, groupBar);
+  colA.append(reqHead, filters, reqs);
   colB.append(actHead, acts);
   hist.append(colA, colB);
   more.append(hist);
@@ -486,7 +502,10 @@
   const WB_REFUSED = "WorkBuddy refuses chats from Codex and Claude Code (their system prompt); use it from Hermes, OpenCode or Pi, or add another provider to this group";
   // what it adds to a vendor's edge firewall's block page (provider.BlockedHint)
   const BLOCKED = "the provider's network firewall blocked requests from this IP; wait a while, or switch to another network or proxy";
-  const HINTS = [WB_REFUSED, BLOCKED];
+  // what it says of ZCode's Start Plan turning a request away (#425,
+  // provider.ZCodeStartBlockedHint), in place of BLOCKED
+  const ZCODE_BLOCKED = "ZCode's Start Plan turns away requests that don't come from the ZCode app itself, and magpie doesn't pretend to be it; it can also be a network block of this IP. Use an account with a GLM Coding Plan, or add another provider to this group";
+  const HINTS = [WB_REFUSED, BLOCKED, ZCODE_BLOCKED];
 
   function trySaid(r, i) {
     const tr = r.tries[i], w = tried(r, tr), agent = agentName(r.agent);
@@ -1184,6 +1203,82 @@
   // is redrawn on every trace update, and made again whole each time it
   // was most of what a busy gateway cost the page (#308)
   const reqRows = new Map(); // id → { b, sig, r }
+  const sessionRows = new Map(); // agent + session → persistent heading
+  const closedSessions = new Set();
+  const groupSession = (r) => r.parentSession || r.session || "";
+  const sessionKey = (r) => groupSession(r) ? JSON.stringify([r.agent || "other", groupSession(r)]) : "";
+  let namesBusy = false;
+  async function refreshSessionNames() {
+    if (namesBusy || !shown()) return;
+    const rs = listed(), ids = [...new Set(rs.filter((r) => r.agent === "codex").map(groupSession).filter(Boolean))];
+    if (!ids.length) return;
+    namesBusy = true;
+    try {
+      const res = await fetch("/api/gateway/session-titles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+      if (!res.ok) return;
+      const names = await res.json();
+      let changed = false;
+      for (const r of listed()) {
+        const id = groupSession(r);
+        if (r.agent !== "codex" || !ids.includes(id)) continue;
+        const name = typeof names[id] === "string" ? names[id] : "";
+        if ((r.sessionTitle || "") !== name) { r.sessionTitle = name; changed = true; }
+      }
+      if (changed) steady(renderHist);
+    } catch {} finally { namesBusy = false; }
+  }
+  setInterval(refreshSessionNames, 15000);
+  window.addEventListener("focus", refreshSessionNames);
+  const costNote = () => t("Estimated at effective model prices, including cache reads and writes; subscription billing may differ. Totals cover only the requests listed here.");
+  function routeCost(r) {
+    if (!r.priced) return "—";
+    return "≈" + fmtCost({ cost: r.cost || 0, unpriced: 0 }) + (r.unpriced ? "+" : "");
+  }
+  function groupedRows(rs, rowEls) {
+    const groups = new Map();
+    rs.forEach((r, i) => {
+      const key = sessionKey(r);
+      if (!groups.has(key)) groups.set(key, { key, r, rows: [], els: [] });
+      const g = groups.get(key);
+      g.rows.push(r); g.els.push(rowEls[i]);
+    });
+    const els = [];
+    for (const g of groups.values()) {
+      let x = sessionRows.get(g.key);
+      if (!x) {
+        const b = el(g.key ? "button" : "div", "rt-session"), name = el("span", "nm"), meta = el("span", "summary"), cost = el("span", "cost"), arrow = el("span", "arrow");
+        b.append(arrow, name, meta, cost);
+        x = { b, name, meta, cost, arrow };
+        if (g.key) b.onclick = () => {
+          if (closedSessions.has(g.key)) closedSessions.delete(g.key); else closedSessions.add(g.key);
+          steady(renderHist);
+        };
+        sessionRows.set(g.key, x);
+      }
+      const open = !closedSessions.has(g.key);
+      const total = g.rows.reduce((s, r) => {
+        s.tokens += r.tokens || 0;
+        if (r.priced) { s.cost += r.cost || 0; s.priced++; }
+        if (!r.priced || r.unpriced) s.unpriced++;
+        if (!r.done) s.running++;
+        return s;
+      }, { cost: 0, tokens: 0, priced: 0, unpriced: 0, running: 0 });
+      setText(x.arrow, g.key ? open ? "▾" : "▸" : "");
+      const name = g.rows.find((r) => r.sessionTitle)?.sessionTitle;
+      setText(x.name, g.key ? agentName(g.r.agent) + " · " + (name || groupSession(g.r)) : t("No session ID"));
+      x.name.title = g.key ? (name ? name + "\n" : "") + t("Session id") + ": " + groupSession(g.r) : t("These requests did not provide a session ID; they are not treated as one conversation.");
+      const bits = [t(g.rows.length === 1 ? "{n} request" : "{n} requests", { n: g.rows.length }), t("{n} tokens", { n: tokens(total.tokens) })];
+      if (total.running) bits.push(t("{n} in progress", { n: total.running }));
+      setText(x.meta, bits.join(" · "));
+      setText(x.cost, total.priced ? "≈" + fmtCost({ cost: total.cost, unpriced: 0 }) + (total.unpriced ? "+" : "") : "—");
+      x.cost.title = costNote();
+      if (g.key) x.b.setAttribute("aria-expanded", String(open));
+      els.push(x.b);
+      if (open) els.push(...g.els);
+    }
+    for (const key of sessionRows.keys()) if (!groups.has(key)) { sessionRows.delete(key); closedSessions.delete(key); }
+    return els;
+  }
   function renderHist() {
     const rs = listed();
     hist.hidden = !rs.length && !day && !days.length;
@@ -1193,6 +1288,12 @@
     setText(reqNote, day ? t(pastCut ? "the last {n} of {day}" : "{n} on {day}", { n: rs.length, day: dayName(day) })
       : t("the last {n} the gateway keeps", { n: rs.length }));
     renderDays();
+    groupButtons.forEach((b, i) => {
+      setText(b, t(b.dataset.label));
+      b.classList.toggle("on", bySession === !!i);
+      b.setAttribute("aria-pressed", String(bySession === !!i));
+    });
+    groupBar.hidden = !rs.length;
     if (!reqs.style.maxHeight) requestAnimationFrame(fitReqs); // first shown
     // none yet: what the list is for in its place, and no accounts column
     // to tally nothing
@@ -1208,11 +1309,13 @@
       if (!day && days.length) p.append(" " + t("Earlier ones are kept by day, in the bar above."));
       reqs.replaceChildren(p);
       reqRows.clear();
+      sessionRows.clear();
+      closedSessions.clear();
       renderActs(rs);
       return;
     }
     const lang = document.documentElement.lang, ids = new Set();
-    const els = rs.map((r) => {
+    const rowEls = rs.map((r) => {
       const [said, how, tr] = outcome(r);
       const sel = String(pinned ? pinned.id === r.id : cur?.id === r.id);
       const ag = agentOf(r.agent);
@@ -1224,7 +1327,7 @@
       // all the row says, and its titles
       const title = reqTitle(r, how, tr);
       const sig = JSON.stringify([lang, said, how, title, r.time, r.agent, agentName(r.agent), ag?.icon, r.model, r.provider, r.kind, r.effort,
-        tr?.effort, tr?.picked, tr?.fixed, tr?.fast, tr?.swapped && tr.done && tr.status < 400 ? [tr.model, tr.served] : 0, tr?.routed && tr.done && tr.status < 400 ? tr.served : 0, meta]);
+        tr?.effort, tr?.picked, tr?.fixed, tr?.fast, tr?.swapped && tr.done && tr.status < 400 ? [tr.model, tr.served] : 0, tr?.routed && tr.done && tr.status < 400 ? tr.served : 0, meta, routeCost(r)]);
       ids.add(r.id);
       let x = reqRows.get(r.id);
       if (!x || x.sig !== sig) {
@@ -1237,6 +1340,7 @@
       return x.b;
     });
     for (const id of reqRows.keys()) if (!ids.has(id)) reqRows.delete(id);
+    const els = bySession && rs.some((r) => r.session) ? groupedRows(rs, rowEls) : rowEls;
     // the rows moved only where they changed; the list scrolls on its own,
     // and WebKit, a row taken out for a moment, would send it back to its
     // top from under the row just picked
@@ -1280,7 +1384,11 @@
     }
     if (tr?.swapped && tr.done && tr.status < 400) to.append(swapTag(tr, true)); // beside the model asked for
     else if (tr?.routed && tr.done && tr.status < 400) to.append(routedTag(tr));
-    b.append(when, asked, to, el("span", "meta", meta.join(" · ")));
+    const info = el("span", "meta");
+    info.append(el("span", "", meta.join(" · ")), el("span", "cost", routeCost(r)));
+    info.lastChild.title = r.priced ? costNote() : t("No known price or token counts for this request");
+    b.append(when, asked, to, info);
+
     b.title = title;
     return b;
   }
@@ -1896,6 +2004,7 @@
     renderPanel();
   }
   new MutationObserver(words).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+  document.addEventListener("magpie-costs-changed", () => steady(renderHist));
 
   // ---------- routing groups ----------
   // The groups agents can pick as one model (group/<id>): the user's, and

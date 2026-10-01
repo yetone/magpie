@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -15,6 +16,9 @@ import (
 // answers as out says.
 func fakeWarmClaude(t *testing.T, out string, code int) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log")
 	script := "#!/bin/sh\n" +
@@ -90,6 +94,9 @@ func TestClaudeTestRunsClaudeCode(t *testing.T) {
 // Claude's usage is Claude Code's own /usage, run with nothing of the
 // user's settings and nothing kept, as the account it is signed in to.
 func TestClaudeUsageRunsClaudeCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log")
 	out := filepath.Join(dir, "out")
@@ -113,5 +120,30 @@ func TestClaudeUsageRunsClaudeCode(t *testing.T) {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("run lacks %q:\n%s", want, b)
 		}
+	}
+}
+
+// With Claude Code's verbose output on (its /config, kept in .claude.json),
+// claude -p --output-format json prints every message as an array, the
+// system init first and the result last (KevinXC on Discord: usage
+// couldn't be read; the tooltip began [{"type":"system","subtype":"init")
+func TestClaudeVerboseOutput(t *testing.T) {
+	text := "Current session: 13% used"
+	b, _ := json.Marshal([]map[string]any{
+		{"type": "system", "subtype": "init", "tools": []string{}},
+		{"type": "result", "subtype": "success", "is_error": false, "result": text},
+	})
+	fakeWarmClaude(t, string(b), 0)
+	got, err := claudeUsage(context.Background())
+	if err != nil || got != text {
+		t.Fatalf("usage %q %v", got, err)
+	}
+	b, _ = json.Marshal([]map[string]any{
+		{"type": "system", "subtype": "init"},
+		{"type": "result", "is_error": true, "result": "Invalid API key · Please run /login"},
+	})
+	fakeWarmClaude(t, string(b), 1)
+	if err := warmClaude(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "Please run /login") || strings.Contains(err.Error(), "init") {
+		t.Fatalf("got %v", err)
 	}
 }

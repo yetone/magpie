@@ -53,11 +53,7 @@ func askClaude(ctx context.Context, configDir, model string) error {
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	runErr := cmd.Run()
-	var res struct {
-		IsError bool   `json:"is_error"`
-		Result  string `json:"result"`
-	}
-	if json.Unmarshal(out.Bytes(), &res) == nil && res.IsError {
+	if res, ok := claudeResult(out.Bytes()); ok && res.IsError {
 		return errors.New("Claude Code: " + clip(res.Result))
 	}
 	if runErr != nil {
@@ -98,11 +94,7 @@ func claudeUsage(ctx context.Context) (string, error) {
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	runErr := cmd.Run()
-	var res struct {
-		IsError bool   `json:"is_error"`
-		Result  string `json:"result"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &res); err == nil {
+	if res, ok := claudeResult(out.Bytes()); ok {
 		if res.IsError {
 			return "", errors.New("Claude Code: " + clip(res.Result))
 		}
@@ -116,6 +108,35 @@ func claudeUsage(ctx context.Context) (string, error) {
 		return "", runErr
 	}
 	return "", errors.New("Claude Code: " + clip(msg))
+}
+
+// claudeRun is the result Claude Code prints for a -p run with
+// --output-format json.
+type claudeRun struct {
+	Type    string `json:"type"`
+	IsError bool   `json:"is_error"`
+	Result  string `json:"result"`
+}
+
+// claudeResult reads the result from what claude -p --output-format json
+// printed: one object, or, when the user turned on Claude Code's verbose
+// output (its own config, which --setting-sources leaves on), an array of
+// every message, the result last.
+func claudeResult(b []byte) (claudeRun, bool) {
+	var res claudeRun
+	if json.Unmarshal(b, &res) == nil {
+		return res, true
+	}
+	var all []claudeRun
+	if json.Unmarshal(b, &all) != nil {
+		return claudeRun{}, false
+	}
+	for i := len(all) - 1; i >= 0; i-- {
+		if all[i].Type == "result" {
+			return all[i], true
+		}
+	}
+	return claudeRun{}, false
 }
 
 func claudeUsageArgs() []string {

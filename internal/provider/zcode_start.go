@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -46,6 +47,25 @@ var zcodeStartModels = func() []catalog.Model {
 	}
 	return out
 }()
+
+// ZCodeStartBlockedHint is what the Start Plan's "request has been blocked
+// due to unusual activity" (HTTP 405, code 3012 "method not allowed")
+// means (#425): zcode.z.ai looks at what a request carries and turns away
+// one that isn't the ZCode app's own, its system prompt and all, as
+// zcode2api found; it can still be Alibaba Cloud's firewall blocking the
+// address (BlockedHint). magpie sends the agent's request as it is.
+const ZCodeStartBlockedHint = "ZCode's Start Plan turns away requests that don't come from the ZCode app itself, and magpie doesn't pretend to be it; it can also be a network block of this IP. Use an account with a GLM Coding Plan, or add another provider to this group"
+
+// zcodeStartRefused matches that refusal: the block page, or its code.
+var zcodeStartRefused = regexp.MustCompile(`(?i)unusual activity|"code"\s*:\s*"?3012\b`)
+
+// zcodeStartExplain gives ZCodeStartBlockedHint for the Start Plan's block.
+func zcodeStartExplain(status int, body []byte) string {
+	if status >= 400 && (status == http.StatusMethodNotAllowed || EdgeBlocked(body) || zcodeStartRefused.Match(body)) {
+		return ZCodeStartBlockedHint
+	}
+	return ""
+}
 
 // ---- which plan -----------------------------------------------------------------
 

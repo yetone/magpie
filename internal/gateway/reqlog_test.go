@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -121,6 +122,9 @@ func TestTurnedAwayRequestIsLogged(t *testing.T) {
 // its name for the error and the id of the request. The reply is that
 // status, not one guessed from the words, and the log has all three.
 func TestClaudeFailureKeepsClaudeCodesStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	script := `#!/bin/sh
 while read -r line; do
@@ -158,6 +162,9 @@ done
 // The id of an answered Claude Code request is the one on its messages,
 // given with its stream's usage.
 func TestClaudeAnswerKeepsClaudeCodesRequestID(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	script := `#!/bin/sh
 while read -r line; do

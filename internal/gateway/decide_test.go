@@ -82,7 +82,7 @@ func (u *jevUp) turns() []map[string]any {
 // the model prefix, with that prefix taken off the model. /systemone is
 // not served.
 func TestSystemOneRoutesByPrefix(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	type hit struct {
@@ -119,7 +119,7 @@ func TestSystemOneRoutesByPrefix(t *testing.T) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{"model": q.Model, "answers": map[string]any{"intent": map[string]any{"choice": "bug"}}})
+			json.NewEncoder(w).Encode(map[string]any{"model": q.Model, "answers": map[string]any{"intent": map[string]any{"choice": "bug"}}, "usage": map[string]int{"input_tokens": 10, "output_tokens": 2}})
 		}))
 		return srv, &hits, &mu, &status, &ctype, &failBody
 	}
@@ -140,6 +140,7 @@ func TestSystemOneRoutesByPrefix(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("POST", path, strings.NewReader(body))
 		req.Header.Set("Authorization", "Bearer magpie")
+		req.Header.Set(SessionHeader, "decision-session")
 		s.Handler().ServeHTTP(rec, req)
 		return rec
 	}
@@ -149,6 +150,9 @@ func TestSystemOneRoutesByPrefix(t *testing.T) {
 	}
 	if n := len(s.trace.routes); n != 1 {
 		t.Fatalf("traced %d", n)
+	}
+	if r := s.trace.routes[0]; r.Session != "decision-session" || len(r.Usage) != 1 || r.Usage[0].Provider != "load-a" || r.Usage[0].Model != "jev-latest" {
+		t.Fatalf("decision accounting: %+v", r)
 	}
 	if recs := usage.Load(time.Time{}); len(recs) != 1 || recs[0].RouteID == 0 || recs[0].RouteID != s.trace.routes[0].ID {
 		t.Fatalf("usage route: %+v", recs)

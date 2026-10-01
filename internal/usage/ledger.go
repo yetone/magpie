@@ -366,6 +366,23 @@ func pricer() func(Record) *catalog.Price {
 	}
 }
 
+// NewPricer totals requests' token-bearing attempts at one snapshot of the
+// effective prices used by the ledger. Reuse it for one page of routes;
+// make it again on the next read so a changed tariff re-prices history.
+func NewPricer() func([]Record) Totals {
+	priceOf, renamed := pricer(), provider.Renamed()
+	return func(recs []Record) Totals {
+		var sum Totals
+		for _, r := range recs {
+			if id, ok := renamed[r.Provider]; ok {
+				r.Provider = id
+			}
+			sum.add(r, priceOf(r))
+		}
+		return sum
+	}
+}
+
 // CSVHeader is the ledger's columns, as WriteCSV writes them.
 var CSVHeader = []string{"time", "agent", "requested_model", "provider", "host", "model", "served_model", "swapped",
 	"effort", "input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens", "reasoning_tokens",

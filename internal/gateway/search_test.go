@@ -87,7 +87,7 @@ func TestWebSearchForAModelThatCannot(t *testing.T) {
 
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir()) // no signed-in agent searches first
+	setHome(t, t.TempDir()) // no signed-in agent searches first
 	hosts := searchHosts[provider.Anthropic]
 	searchHosts[provider.Anthropic] = append(hosts, provider.HostOf(search.URL))
 	defer func() { searchHosts[provider.Anthropic] = hosts }()
@@ -385,7 +385,7 @@ func TestWebSearchOfARelayThatSearches(t *testing.T) {
 
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir()) // no signed-in agent searches for it
+	setHome(t, t.TempDir()) // no signed-in agent searches for it
 	// Claude Code 2.1.285's WebSearch
 	body := `{"model":"relay/claude-haiku-4-5","max_tokens":32000,"stream":false,
 		"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.285.3c7; cc_entrypoint=cli;"},{"type":"text","text":"You are Claude Code, Anthropic's official CLI for Claude."},{"type":"text","text":"You are an assistant for performing a web search tool use"}],

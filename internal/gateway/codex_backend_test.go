@@ -20,7 +20,7 @@ import (
 // chatgpt stands in for the ChatGPT backend behind CodexBase.
 func chatgpt(t *testing.T, h http.HandlerFunc) *httptest.Server {
 	t.Helper()
-	t.Setenv("HOME", t.TempDir()) // no sign-ins but the test's
+	setHome(t, t.TempDir()) // no sign-ins but the test's
 	up := httptest.NewServer(h)
 	t.Cleanup(up.Close)
 	was := provider.CodexBase
@@ -90,12 +90,17 @@ func TestCodexOwnModelTraced(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":"hi"}`))
 	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	req.Header.Set("session_id", "codex-conversation")
+	req.Header.Set("x-codex-turn-metadata", `{"thread_source":"thread_title","forked_from_thread_id":"main-conversation"}`)
 	s.Handler().ServeHTTP(rec, req)
 	st := s.Trace(t.Context(), 0, 0)
 	if len(st.Routes) != 1 {
 		t.Fatalf("routes %+v", st.Routes)
 	}
 	r := st.Routes[0]
+	if r.Session != "codex-conversation" || r.ParentSession != "main-conversation" || r.Kind != "thread_title" || len(r.Usage) != 1 || r.Usage[0].Provider != "openai" || r.Usage[0].Input != 9 || r.Usage[0].Output != 2 {
+		t.Fatalf("session accounting: %+v", r)
+	}
 	if !r.Done || r.Status != 200 || r.Model != "gpt-5.5" || r.Tokens != 11 ||
 		len(r.Order) != 1 || r.Order[0].Who != "Codex's own sign-in" || len(r.Tries) != 1 || !r.Tries[0].Done || r.Tries[0].Status != 200 {
 		t.Errorf("route %+v", r)
@@ -705,5 +710,45 @@ func TestCodexModelListNotNarrowedWhileOff(t *testing.T) {
 	}
 	if got := native(); len(got) != 1 || got[0] != "gpt-6-sol" {
 		t.Errorf("switched on, the picks narrow again = %v (want just gpt-6-sol)", got)
+	}
+}
+
+// Body-only title metadata and ordinary Luna Reserve turns have the same kind
+// in the native Codex trace, request log and usage ledger.
+func TestCodexOwnModelKindAccounting(t *testing.T) {
+	for _, tc := range []struct{ name, metadata, reserve, kind, parent string }{
+		{"reserve", `{"thread_source":"user"}`, "1", "luna_reserve", ""},
+		{"body title", `{"thread_source":"thread_title","parent_thread_id":"main"}`, "", "thread_title", "main"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setup(t, provider.Chat, &fake{t: t})
+			chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				io.WriteString(w, sse(`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":9,"output_tokens":2}}}`))
+			})
+			body, _ := json.Marshal(map[string]any{"model": "gpt-5.5", "stream": true, "input": "hi",
+				"client_metadata": map[string]string{"x-codex-turn-metadata": tc.metadata}})
+			s := New()
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", CodexPath+"/responses", bytes.NewReader(body))
+			req.Header.Set("Authorization", "Bearer test-token")
+			req.Header.Set("session_id", "child")
+			req.Header.Set("x-openai-codex-luna-reserve", tc.reserve)
+			s.Handler().ServeHTTP(rec, req)
+			if rec.Code != 200 {
+				t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+			}
+			routes := s.Trace(t.Context(), 0, 0).Routes
+			if len(routes) != 1 || routes[0].Kind != tc.kind || routes[0].ParentSession != tc.parent {
+				t.Fatalf("trace: %+v", routes)
+			}
+			if calls := s.Recent(); len(calls) != 1 || calls[0].Kind != tc.kind {
+				t.Fatalf("request log: %+v", calls)
+			}
+			recs := usage.Load(time.Time{})
+			if len(recs) != 1 || recs[0].Kind != tc.kind {
+				t.Fatalf("usage: %+v", recs)
+			}
+		})
 	}
 }

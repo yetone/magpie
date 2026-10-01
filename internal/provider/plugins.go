@@ -45,6 +45,17 @@ func PluginID(id string) string {
 	return id
 }
 
+// subscriptionID is whether id is a subscription's, a built-in's or an
+// installed plugin's, signed in or not: a provider of the user's own never
+// takes it, or it would hide that subscription once signed in.
+func subscriptionID(id string) bool {
+	if slices.Contains(accountIDs, id) {
+		return true
+	}
+	_, ok := PluginOf(id)
+	return ok
+}
+
 // IsPlugin is whether the provider is a plugin's.
 func (p Provider) IsPlugin() bool { return p.Account != nil && p.Account.plugin != nil }
 
@@ -189,6 +200,21 @@ func pluginAccountCatalog(pp plugin.Provider, key string) []catalog.Model {
 		}
 	}
 	return all
+}
+
+// pluginLists is whether a plugin's account serves model, as the plugin
+// last told its list; one it told none of serves all of the provider's.
+func (a *Account) pluginLists(model string) bool {
+	pp := *a.plugin
+	if cur, ok := PluginOf(PluginID(pp.ID)); ok {
+		pp = cur
+	}
+	for _, ac := range pp.Accounts {
+		if ac.Key == a.pluginKey && ac.Models != nil {
+			return slices.Contains(ac.Models, model)
+		}
+	}
+	return true
 }
 
 // pluginProvider is the provider as one of its accounts, l as the

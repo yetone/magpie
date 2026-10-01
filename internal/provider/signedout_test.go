@@ -45,41 +45,49 @@ func TestSavedButSignedOut(t *testing.T) {
 	}
 }
 
-// A Claude account saved in magpie but not offered says which check found
-// no sign-in: no credentials, or credentials Claude Code says are signed out.
-func TestSavedButSignedOutClaudeSaysWhy(t *testing.T) {
+// Claude accounts saved in magpie are offered while Claude Code is signed
+// out — no credentials, or credentials Claude Code says are signed out —
+// and are not said to be left out; one whose saved sign-in is gone is
+// listed as signed out, not dropped.
+func TestSavedButSignedOutClaudeServed(t *testing.T) {
 	home := claudeHome(t)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
-	if err := writeLogins([]savedLogin{{Agent: "claude", User: "a@x.com", Auth: []byte(`{}`)}}); err != nil {
+	if err := writeLogins([]savedLogin{
+		{Agent: "claude", User: "a@x.com", Auth: []byte(`{}`)},
+		{Agent: "claude", User: "b@x.com", Auth: []byte(`{"claudeAiOauth":{"accessToken":"tok-b","refreshToken":"r-b"}}`)},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	why := func() string {
+	check := func(state string) {
+		t.Helper()
 		forgetClaudeCredential()
 		forgetClaudeStatus()
 		for _, x := range Excluded() {
-			if x.Agent == "claude" && x.SignedOut {
-				return x.Why
+			if x.Agent == "claude" {
+				t.Fatalf("%s: excluded %+v", state, x)
 			}
 		}
-		return ""
+		if p, ok := claudeAccount(); !ok || p.Account.User != "b@x.com" {
+			t.Fatalf("%s: account %v %+v", state, ok, p.Account)
+		}
+		ls := Logins("claude")
+		if len(ls) != 2 || ls[0].User != "a@x.com" || ls[0].Lapsed == "" || ls[1].Lapsed != "" || !ls[1].On {
+			t.Fatalf("%s: logins %+v", state, ls)
+		}
 	}
-	if w := why(); !strings.Contains(w, "nothing at "+filepath.Join(home, ".claude", ".credentials.json")) {
-		t.Fatalf("no credentials: %q", w)
-	}
+	check("no credentials")
 	shellFakes(t)
 	claudeSignIn(t, home, time.Now().Add(time.Hour))
 	exe := filepath.Join(home, "claude")
 	os.WriteFile(exe, []byte("#!/bin/sh\necho '{\"loggedIn\": false}'\n"), 0o755)
 	claudeExecutable = func() string { return exe }
-	if w := why(); !strings.Contains(w, "claude auth status says no one is signed in") {
-		t.Fatalf("signed out: %q", w)
-	}
+	check("auth status signed out")
 }
 
 // A saved Claude account whose Claude Code is signed out (a banned account
-// logged out, say) names its accounts, so they can be removed from magpie
-// while none is offered; removing one drops it from magpie's store and
-// leaves Claude Code's own files as they are.
+// logged out, say) is listed, so it can be removed from magpie; removing
+// one drops it from magpie's store and leaves Claude Code's own files as
+// they are.
 func TestSavedButSignedOutCanBeRemoved(t *testing.T) {
 	home := claudeHome(t)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
@@ -89,22 +97,14 @@ func TestSavedButSignedOutCanBeRemoved(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	var claude *Exclusion
-	for _, x := range Excluded() {
-		if x.Agent == "claude" && x.SignedOut {
-			claude = &x
-		}
-	}
-	if claude == nil || len(claude.Users) != 1 || claude.Users[0] != "banned@x.com" {
-		t.Fatalf("claude: %+v", claude)
+	if ls := Logins("claude"); len(ls) != 1 || ls[0].User != "banned@x.com" {
+		t.Fatalf("claude: %+v", ls)
 	}
 	if err := ForgetLogin("claude", "banned@x.com"); err != nil {
 		t.Fatal(err)
 	}
-	for _, x := range Excluded() {
-		if x.Agent == "claude" {
-			t.Errorf("removed, yet: %+v", x)
-		}
+	if _, ok := claudeAccount(); ok {
+		t.Error("removed, yet served")
 	}
 	if ls := readLogins(); len(ls) != 1 || ls[0].Agent != "codex" {
 		t.Errorf("logins: %+v", ls)

@@ -72,7 +72,7 @@ func TestWebSearchCallSaysWhose(t *testing.T) {
 
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
+	setHome(t, t.TempDir())
 	hosts := searchHosts[provider.Anthropic]
 	searchHosts[provider.Anthropic] = append(hosts, provider.HostOf(search.URL))
 	defer func() { searchHosts[provider.Anthropic] = hosts }()

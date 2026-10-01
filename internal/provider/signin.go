@@ -756,8 +756,20 @@ func addLogin(l savedLogin) (using bool, err error) {
 	defer loginsMu.Unlock()
 	l.Seen = time.Now().UTC().Truncate(time.Second)
 	live, signedIn := liveLogin(l.Agent)
-	using = !signedIn || sameLogin(live, l)
 	ls := readLogins()
+	using = !signedIn || sameLogin(live, l)
+	if first := claudeStandIn(ls); !signedIn && l.Agent == "claude" && first != "" {
+		// logged out of Claude Code with accounts in magpie: it stays so,
+		// as the user left it (a claude.ai sign-in beside magpie's token
+		// has Claude Code warn), and the account is magpie's alone. The
+		// one served first till now, seen last, stays on behind it.
+		using = false
+		for i := range ls {
+			if ls[i].Agent == "claude" && strings.EqualFold(ls[i].User, first) && !ls[i].Paused && !sameLogin(ls[i], l) {
+				ls[i].On = true
+			}
+		}
+	}
 	if signedIn && !using {
 		// the current account, as fresh as the agent has it
 		live.Seen = l.Seen

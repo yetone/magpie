@@ -132,6 +132,9 @@ type accountJSON struct {
 	Icon  string `json:"agentIcon"`
 	// Logins are the agent's accounts magpie remembers, to switch between
 	Logins []provider.Login `json:"logins,omitempty"`
+	// Builtin is a plugin's provider id, for a plugin beside a built-in
+	// subscription (cursor-plugin's cursor): its plan named as the built-in's
+	Builtin string `json:"builtin,omitempty"`
 }
 
 type providerAgent struct {
@@ -318,7 +321,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		if pp, ok := provider.PluginOf(p.ID); ok && p.IsPlugin() {
 			// a plugin's sign-in: named for the provider it signs in to,
 			// the page following it by the provider's id
-			out.Account.Agent, out.Account.Name, out.Account.Icon = p.ID, pp.Name, pluginIcon(pp)
+			out.Account.Agent, out.Account.Name, out.Account.Icon, out.Account.Builtin = p.ID, pp.Name, pluginIcon(pp), pp.ID
 			if provider.Moved(pp.ID) {
 				out.Account.Icon = p.Icon // the built-in's, as it was
 			}

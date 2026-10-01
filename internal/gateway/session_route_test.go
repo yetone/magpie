@@ -104,7 +104,7 @@ func TestSessionRoute(t *testing.T) {
 	}
 	seq := int64(out["seq"].(float64))
 
-	// a long poll hears the turn end
+	// a long poll hears updates, including the turn end
 	polled := make(chan map[string]any, 1)
 	go func() {
 		_, o := get(here, "/v1/magpie/route?session=pi-1&wait=5&after="+strconv.FormatInt(seq, 10))
@@ -116,6 +116,12 @@ func TestSessionRoute(t *testing.T) {
 		t.Fatal("the turn got", c)
 	}
 	o := <-polled
+	// A try ending can wake the poll before the whole route is done.
+	// The handler has returned now; ask past that update for its end.
+	if rt, _ := o["route"].(map[string]any); rt != nil && rt["done"] == false {
+		after := int64(o["seq"].(float64))
+		_, o = get(here, "/v1/magpie/route?session=pi-1&wait=5&after="+strconv.FormatInt(after, 10))
+	}
 	if rt, _ := o["route"].(map[string]any); rt == nil || rt["done"] != true || rt["status"] != float64(200) || rt["model"] != "rb/m" {
 		t.Fatalf("polled: %v", o)
 	}
