@@ -71,6 +71,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(events.some((e) => e.action === "export" && e.query.includes("callerKey=laptop") && !e.query.includes("key=") && !e.query.includes("user=")));
       await page.reload();
       await page.locator("#prefs").click();
+      await page.locator("#setTab-network").click();
       const share = page.locator("#lanList").getByRole("button", { name: lang === "zh" ? "开启" : "On", exact: true });
       await share.waitFor();
       // Real wheel input lets the page remember the reader's scroll position.
@@ -109,6 +110,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await confirmKeyAction(page, lanRow, w.remove);
       await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 4);
       await page.locator("#prefs").click();
+      await page.locator("#setTab-network").click();
       await page.locator("#lanList .lan-address-row").waitFor();
       await page.locator("#lanList").getByRole("button", { name: lang === "zh" ? "关闭" : "Off", exact: true }).click();
       await page.locator("#lanList .lan-address-row").waitFor({ state: "detached" });

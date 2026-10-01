@@ -62,7 +62,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const page = await context.newPage();
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, posts));
-        await page.goto("http://magpie.test/?view=settings");
+        await page.goto("http://magpie.test/?view=settings&tab=otel");
         await page.locator("#otelExportRow").waitFor();
         const off = lang === "zh" ? "关闭" : "Off";
         assert.equal(await page.locator("#otelExportRow .opt.on").textContent(), off);
@@ -99,6 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         p = await saved(() => page.locator("#otelMetricsRow .opt").nth(1).click(), 4);
         assert.equal(p.otel.metrics, true);
         assert.equal(await scroll(), before, "saving OTLP settings must not scroll");
+        await page.locator("#setTab-usage").click();
         for (let i = 0; i < 60; i++) {
           const box = await page.locator("#currencySegs").boundingBox();
           if (box && box.y > 100 && box.y < 750) break;
@@ -108,6 +109,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(p.otel.enabled, true);
         assert.equal(p.otel.endpoint, "https://collector.test/api/public/otel");
         assert.equal(p.otel.headers.Authorization, "Basic YWJjZA==");
+        await page.locator("#setTab-otel").click();
         for (let i = 0; i < 60; i++) {
           const box = await page.locator("#otelExportRow").boundingBox();
           if (box && box.y > 100 && box.y < 650) break;

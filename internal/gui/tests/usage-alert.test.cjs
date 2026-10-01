@@ -118,7 +118,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const posted = async (n) => { for (let i = 0; i < 100 && posts.length < n; i++) await page.waitForTimeout(20); assert.equal(posts.length, n, "posts"); return posts[n - 1]; };
         const settled = () => page.waitForTimeout(300);
 
-        await page.goto("http://magpie.test/?view=settings");
+        await page.goto("http://magpie.test/?view=settings&tab=usage");
         const usageSegs = page.locator("#usageAlertSegs .opt"), balSegs = page.locator("#balanceAlertSegs .opt");
         await usageSegs.first().waitFor();
 
@@ -204,7 +204,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultTimeout(5000);
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, posts, "denied"));
-        await page.goto("http://magpie.test/?view=settings");
+        await page.goto("http://magpie.test/?view=settings&tab=usage");
         await page.locator("#usageAlertSegs .opt").first().waitFor();
         await wheelTo(page);
         // nothing said while every alert is off

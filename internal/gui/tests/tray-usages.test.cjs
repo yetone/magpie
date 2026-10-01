@@ -92,6 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         await page.goto("http://magpie.test/?view=usage");
         await page.locator("#prefs").click();
+        await page.locator("#setTab-usage").click();
         const pill = page.locator("#trayUsagePick button");
         await pill.waitFor();
         await page.waitForFunction(() => document.querySelector("#trayUsagePick button").textContent.trim() === "Copilot");
@@ -99,7 +100,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // scrolled down with a real wheel, the pill still in sight
         await pill.hover();
-        for (let i = 0; i < 20 && !(await view(page)); i++) { await page.mouse.wheel(0, 120); await page.waitForTimeout(20); }
+        for (let i = 0; i < 20 && !(await view(page)); i++) { await page.mouse.wheel(0, 20); await page.waitForTimeout(20); }
         await pill.scrollIntoViewIfNeeded();
         const before = await view(page);
         assert(before > 0, "the settings list must be scrolled");

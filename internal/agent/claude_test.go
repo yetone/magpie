@@ -74,6 +74,70 @@ func TestClaudeTiers(t *testing.T) {
 	}
 }
 
+// Claude Code's subagents can have a model of their own (#468):
+// CLAUDE_CODE_SUBAGENT_MODEL, the model a subagent runs on when neither the
+// call nor its definition names one. Unset, magpie writes it as before;
+// set, it outlives a tier of its own and a new main model.
+func TestClaudeSubagentModel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash", "lite"}}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".claude", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := claude(home)
+	sub := a.Field("subagent")
+	if sub == nil {
+		t.Fatal("no subagent field")
+	}
+	env := func(k string) string { v, _ := edit.GetJSON(path, "env."+k); return v }
+	if err := sub.Set("deepseek/flash"); err == nil {
+		t.Fatal("a subagent model before Claude Code is routed should fail")
+	}
+	if err := a.Field("model").Set("deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	if sub.Get() != "" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/pro" {
+		t.Fatalf("subagents should follow the model: %v", a.Values())
+	}
+	if err := sub.Set("deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	if sub.Get() != "deepseek/flash" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/flash" || env("ANTHROPIC_DEFAULT_HAIKU_MODEL") != "deepseek/pro" {
+		t.Fatalf("subagents: %v", a.Values())
+	}
+	if err := a.Field("haiku").Set("deepseek/lite"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Field("model").Set("deepseek/lite"); err != nil {
+		t.Fatal(err)
+	}
+	if env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/flash" || env("ANTHROPIC_MODEL") != "deepseek/lite" {
+		t.Fatalf("own subagent model lost: %v", a.Values())
+	}
+	if err := sub.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if sub.Get() != "" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/lite" {
+		t.Fatalf("back to the model: %v", a.Values())
+	}
+	if err := a.Field("model").Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if env("CLAUDE_CODE_SUBAGENT_MODEL") != "" {
+		t.Fatal("reset left the subagent model behind")
+	}
+}
+
 // Claude Code's settings keep an effort up to xhigh; max is its
 // CLAUDE_CODE_EFFORT_LEVEL, which another level takes away again.
 func TestClaudeEffortMax(t *testing.T) {

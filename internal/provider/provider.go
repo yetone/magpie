@@ -113,6 +113,11 @@ type Provider struct {
 	// of its own, by its name in lower case, as Proxy takes one; an
 	// account not in it follows Proxy (see ProxyChoice).
 	AccountProxies map[string]string `json:"accountProxies,omitempty"`
+	// AccountModels is, for a provider holding several accounts or keys,
+	// the models each one the user narrowed serves, and no others (#474):
+	// an account by its name in lower case, a key by its KeyID. One not in
+	// it serves every model the provider does (see account_models.go).
+	AccountModels map[string][]string `json:"accountModels,omitempty"`
 
 	// BalanceURL, when set, is where the vendor tells what is left on a
 	// key, asked with the key the way a chat request carries it; BalancePath
@@ -288,7 +293,7 @@ func All() []Provider {
 		}
 		pk := picks[a.ID]
 		a.Models, a.Unlisted, a.Off, a.Fallback, a.Routing, a.Affinity, a.Contexts, a.Family = pk.Models, pk.Unlisted, pk.Off, pk.Fallback, pk.Routing, pk.Affinity, pk.Contexts, pk.Family
-		a.Proxy, a.AccountProxies = pk.Proxy, pk.AccountProxies
+		a.Proxy, a.AccountProxies, a.AccountModels = pk.Proxy, pk.AccountProxies, pk.AccountModels
 		if a.ID == "cursor" { // picked before its efforts were one model
 			a.Models = cursorPicks(a.Models)
 		}
@@ -387,7 +392,7 @@ func Save(p Provider) error {
 		if p.ID == "kiro" {
 			key = p.Key
 		}
-		p = Provider{ID: p.ID, Key: key, Models: p.Models, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Affinity: p.Affinity, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID)}
+		p = Provider{ID: p.ID, Key: key, Models: p.Models, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Affinity: p.Affinity, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID)}
 	} else {
 		p.AccountProxies = nil // a provider of a key has no accounts to proxy apart
 		if subscriptionID(p.ID) && !stored(p.ID) {
@@ -646,6 +651,7 @@ func normalize(p Provider) Provider {
 	p.Key = strings.TrimSpace(p.Key)
 	p.Proxy = strings.TrimSpace(p.Proxy)
 	p.AccountProxies = normalAccountProxies(p.AccountProxies)
+	p.AccountModels = normalAccountModels(p.AccountModels)
 	p.ZhipuTeam = p.ZhipuTeam.normal()
 	p.remoteMagpieEndpoints()
 	for _, u := range []*string{&p.Chat, &p.Responses, &p.Anthropic, &p.Decide, &p.Website, &p.KeysURL} {

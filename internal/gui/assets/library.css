@@ -279,6 +279,14 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-editor .lib-picks { grid-column: 1 / -1; max-height: 320px; }
 .lib-confirm { grid-column: 1 / -1; margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--fg-2); }
 .text.danger-fill { background: var(--red); color: #fff; }
+/* one agent's skills or servers on or off at once (#475) */
+.lib-byagent-sheet .lib-byagent-list { grid-column: 1 / -1; max-height: min(52vh, 420px); overflow: auto; }
+.lib-byagent-row { gap: 10px; }
+.lib-byagent-row > .ic { width: 20px; height: 20px; flex: none; }
+.lib-byagent-row .who { flex: 1; min-width: 0; }
+.lib-byagent-row .name { display: flex; align-items: center; gap: 6px; }
+.lib-byagent-row .lib-updall { height: 24px; padding: 0 9px; font-size: 12px; flex: none; }
+.lib-byagent-row .lib-updall:disabled { color: var(--faint); cursor: default; }
 .lib-reader { grid-template-columns: minmax(0, 1fr); }
 .lib-md { margin: 0; max-height: min(60vh, 520px); overflow: auto; font: 12px/1.6 var(--code); color: var(--fg-2); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--card-2); border-radius: 8px; padding: 12px 14px; user-select: text; -webkit-user-select: text; }
 .lib-reader .bar .lib-path { max-width: 70%; }
@@ -393,6 +401,10 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-grouphead > .lib-logo, .lib-grouphead > .lib-glyph { align-self: center; margin-top: 0; }
 .lib-grouphead .lib-updall { height: 24px; padding: 0 9px; font-size: 12px; }
 .lib-have .ic.some { opacity: .4; }
+/* the skills' heading has the most on it: in a narrow window it goes on
+   to a second line rather than past the page's side */
+#view-library .row-head.lib-skillshead { flex-wrap: wrap; row-gap: 6px; }
+#view-library .row-head.lib-skillshead .lib-skillq { flex: 1 1 90px; max-width: 190px; }
 #view-library .row-head .lib-skillq { width: 190px; height: 24px; margin: 0; flex: 0 1 auto; min-width: 90px; }
 .lib-skillq::-webkit-search-cancel-button { -webkit-appearance: none; }
 /* a project's skills out of view are neither laid out nor painted until they near it */

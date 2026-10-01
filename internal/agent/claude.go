@@ -288,6 +288,29 @@ func claudeIn(at place) *Agent {
 	// what was last written that an open Claude Code session doesn't see:
 	// it reads settings.json at start-up, only its env as it goes
 	stale := ""
+	// the model a subagent runs on when neither its definition nor the
+	// call names one, if the user gave it one of its own: Claude Code
+	// takes the Agent call's model, then the agent's frontmatter, then
+	// CLAUDE_CODE_SUBAGENT_MODEL, then the session's (2.1.287). Empty
+	// while it follows the main model, as magpie writes it by itself.
+	subagentOwn := func() string {
+		if w := env("CLAUDE_CODE_SUBAGENT_MODEL"); routed() && w != env("ANTHROPIC_MODEL") && isMagpie(w) {
+			return w
+		}
+		return ""
+	}
+	// the main model and each tier's, one that has none on the main one
+	curTiers := func() (string, map[string]string) {
+		main := env("ANTHROPIC_MODEL")
+		tiers := map[string]string{}
+		for _, t := range claudeTiers {
+			tiers[t] = env(tierEnv(t))
+			if tiers[t] == "" {
+				tiers[t] = main
+			}
+		}
+		return main, tiers
+	}
 	var writeTiers func(main string, tiers map[string]string) error
 	set := func(v string) error {
 		if v == "" {
@@ -385,7 +408,10 @@ func claudeIn(at place) *Agent {
 			kvs = append(kvs, edit.KV{Path: "env." + tierEnv(t), Value: tiers[t]})
 			same = same && tiers[t] == main
 		}
-		if !same {
+		// subagents given a model of their own keep it
+		if sub := subagentOwn(); sub != "" {
+			kvs = append(kvs, edit.KV{Path: "env.CLAUDE_CODE_SUBAGENT_MODEL", Value: mark(sub)})
+		} else if !same {
 			// one model for every subagent would override the tiers they ask for
 			if err := edit.DelJSON(path, "env.CLAUDE_CODE_SUBAGENT_MODEL"); err != nil {
 				return err
@@ -547,7 +573,7 @@ func claudeIn(at place) *Agent {
 	}}
 	for _, tier := range claudeTiers {
 		fields = append(fields, Field{
-			Key: tier, Label: tier, Quiet: true,
+			Key: tier, Label: tier, Quiet: true, Follows: "model",
 			// empty while the tier follows the main model
 			Get: func() string {
 				if w := env(tierEnv(tier)); routed() && w != env("ANTHROPIC_MODEL") {
@@ -565,14 +591,7 @@ func claudeIn(at place) *Agent {
 				if v != "" && !isMagpie(v) {
 					return fmt.Errorf("%s: %q is not a model magpie serves", tier, v)
 				}
-				main := env("ANTHROPIC_MODEL")
-				tiers := map[string]string{}
-				for _, t := range claudeTiers {
-					tiers[t] = env(tierEnv(t))
-					if tiers[t] == "" {
-						tiers[t] = main
-					}
-				}
+				main, tiers := curTiers()
 				tiers[tier] = v
 				if v == "" {
 					tiers[tier] = main
@@ -587,6 +606,38 @@ func claudeIn(at place) *Agent {
 			},
 		})
 	}
+	// subagents: the model one runs on when it names none (general-purpose,
+	// an agent of the user's without a model:). Unset, the session's, as
+	// before; an agent that names a tier (Explore's haiku) takes the tier's.
+	fields = append(fields, Field{
+		Key: "subagent", Label: "subagents", Quiet: true,
+		Get: subagentOwn,
+		Set: func(v string) error {
+			if !routed() {
+				if v == "" {
+					return nil
+				}
+				return fmt.Errorf("pick a model through magpie for Claude Code first; its subagents can then have one of their own")
+			}
+			if v != "" && !isMagpie(v) {
+				return fmt.Errorf("subagents: %q is not a model magpie serves", v)
+			}
+			if v == "" {
+				if err := edit.DelJSON(path, "env.CLAUDE_CODE_SUBAGENT_MODEL"); err != nil {
+					return err
+				}
+			} else if err := edit.SetJSON(path, edit.KV{Path: "env.CLAUDE_CODE_SUBAGENT_MODEL", Value: v}); err != nil {
+				return err
+			}
+			return writeTiers(curTiers())
+		},
+		Options: func(map[string]string) []Option {
+			if !routed() {
+				return nil
+			}
+			return claudeViaMagpie()
+		},
+	})
 
 	return &Agent{
 		ID: "claude", Name: "Claude Code", Icon: "claudecode-color", Aliases: []string{"cc", "claude-code"},

@@ -12,7 +12,7 @@ async function palette(page, selectors) {
       const hex = root.getPropertyValue(name).trim();
       return `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
     };
-    const colors = Object.fromEntries(["bg", "card", "card-2", "fg", "fg-2", "muted", "pill", "line", "accent", "accent-fg"]
+    const colors = Object.fromEntries(["bg", "card", "card-2", "fg", "fg-2", "muted", "ctl-fg", "pill", "line", "accent", "accent-fg"]
       .map((name) => [name, rgb("--" + name)]));
     const elements = Object.fromEntries(Object.entries(selectors).map(([name, selector]) => {
       const s = getComputedStyle(document.querySelector(selector));
@@ -60,7 +60,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(input.bg, c.card, "key inputs must not use the browser's default background");
           assert.equal(input.color, c.fg);
         }
-        assert.equal(e.rotate.color, c.muted);
+        assert.equal(e.rotate.color, c["ctl-fg"]); // a text button, in a control's quiet text (#477)
         assert.equal(e.keyPick.bg, "rgba(0, 0, 0, 0)");
         assert.equal(e.create.bg, c.accent);
         assert.equal(e.create.color, c["accent-fg"]);
@@ -92,7 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#modal").waitFor({ state: "hidden" });
       assert.equal(events.filter((e) => e.action === "rotate-key").length, 0);
 
-      await page.goto("http://magpie.test/?view=settings");
+      await page.goto("http://magpie.test/?view=settings&tab=network");
       const on = page.locator("#lanList").getByRole("button", { name: "On", exact: true });
       await on.waitFor();
       const bounds = await on.boundingBox();
@@ -115,15 +115,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.mouse.move(500, 400);
         await page.mouse.wheel(0, -5000);
         for (const choice of ["Dark", "Light", "System"]) {
+          await page.locator("#setTab-general").click();
           await page.locator("#themeSegs").getByRole("button", { name: choice, exact: true }).click();
           await page.waitForFunction((want) => (document.documentElement.dataset.theme || "system") === want, choice.toLowerCase());
           await page.waitForFunction(() => !document.documentElement.classList.contains("theming"));
+          await page.locator("#setTab-network").click();
           const { colors: c, elements: e } = await palette(page, { card: "#lanList", key: "#lanList .lan-url" });
           assert.equal(e.card.bg, c.card);
           assert.equal(e.key.color, c["fg-2"]);
         }
         await page.reload();
-        await page.locator("#themeSegs button.on").waitFor();
+        await page.locator("#themeSegs button.on").waitFor({ state: "attached" });
         assert.equal(await page.locator("#themeSegs button.on").textContent(), "System");
       }
       assert.deepEqual(errors, []);

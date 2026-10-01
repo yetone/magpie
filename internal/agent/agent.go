@@ -53,6 +53,9 @@ type Field struct {
 	// Quiet fields are left out of listings while empty: they follow
 	// another field until set (Claude Code's per-tier models).
 	Quiet bool
+	// Follows is the key of the field a Quiet one takes after while empty
+	// ("model" for Claude Code's tiers), for a profile's details to say so.
+	Follows string
 }
 
 // Agent is one supported coding agent.

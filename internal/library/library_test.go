@@ -1081,3 +1081,39 @@ func TestEverySkillAgents(t *testing.T) {
 		t.Error("no agents named was taken")
 	}
 }
+
+// Every server on for one agent at once, and off again; the others keep
+// theirs, and an agent isn't given a server it can't reach (#475).
+func TestEveryServerAgents(t *testing.T) {
+	h := sandbox(t)
+	ok(t)(SaveServer("", Server{Name: "fs", Transport: "stdio", Command: "fs", Agents: []string{"claude"}}))
+	ok(t)(SaveServer("", Server{Name: "web", Transport: "sse", URL: "http://localhost:9/sse", Agents: []string{"claude"}}))
+	ok(t)(EveryServerAgents([]string{"codex"}, true))
+	agents := func() map[string][]string {
+		v, _ := Read(nil)
+		m := map[string][]string{}
+		for _, s := range v.Servers {
+			m[s.Name] = s.Agents
+		}
+		return m
+	}
+	if m := agents(); !slices.Equal(m["fs"], []string{"claude", "codex"}) || !slices.Equal(m["web"], []string{"claude"}) {
+		t.Errorf("on for codex: %v", m)
+	}
+	if c := read(t, filepath.Join(h, ".codex/config.toml")); !strings.Contains(c, "[mcp_servers.fs]") || strings.Contains(c, "web") {
+		t.Errorf("codex's config:\n%s", c)
+	}
+	ok(t)(EveryServerAgents([]string{"claude"}, false))
+	if m := agents(); !slices.Equal(m["fs"], []string{"codex"}) || len(m["web"]) != 0 {
+		t.Errorf("off for claude: %v", m)
+	}
+	if c := read(t, filepath.Join(h, ".claude.json")); strings.Contains(c, `"fs"`) || strings.Contains(c, `"web"`) {
+		t.Errorf("claude still has them:\n%s", c)
+	}
+	if !strings.Contains(read(t, filepath.Join(h, ".codex/config.toml")), "[mcp_servers.fs]") {
+		t.Error("codex, not named, lost fs")
+	}
+	if _, err := EveryServerAgents(nil, false); err == nil {
+		t.Error("no agents named was taken")
+	}
+}

@@ -2,8 +2,10 @@
 // Number units (John on Discord): in Chinese a large count is said in 万 and
 // 亿 ("15.4 亿", an axis's "8000 万") unless Settings' Number units picks K /
 // M / B, which shortens it as English does ("1.54B", "80M") while the rest
-// stays Chinese — the Requests tab's totals and chart axis, and the tray
-// panel's, whose labels still end before the plot starts. The row is
+// stays Chinese — every count on the Usage page (#476: the Overview, the
+// Requests tab's totals, chart axis and summary line, the Sessions tab) and
+// in the tray panel (its Usage tab, Routing's "today"), the axes' labels
+// still ending before the plot starts. The row is
 // Chinese's alone: in English it is hidden and counts are K / M / B anyway.
 // Picking it saves westernUnits, never scrolls the settings page, and holds
 // after a reload. Chromium and WebKit; no backend, the API is faked.
@@ -36,6 +38,15 @@ function ledger() {
   };
 }
 
+// a day of sessions: 15.4 亿 (1.54B) tokens in and out, today
+function sessDay() {
+  const d = new Date(), date = [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, "0")).join("-");
+  return { date, usage: [{ agent: "claude", cwd: "/work/alpha", model: "glm-5", input: 1e9, output: 5.4e8, cache_read: 2e9, cache_write: 0, cost: 3, priced: true }], active: [] };
+}
+// the period's usage: 15.4 亿 (1.54B) tokens, 8000 万 (80M) at the busiest hour
+const overview = { calls: 900, errors: 0, input: 1e9, output: 5.4e8, cache_read: 2e9, cache_write: 3e7, reasoning: 2e8, unpriced: 0, cost: 1, bucket: "hour",
+  series: [{ label: "9", calls: 600, input: 6e7, output: 2e7, cost: 0.5 }, { label: "10", calls: 300, input: 9.4e8, output: 5.2e8, cost: 0.5 }], agents: [], models: [] };
+
 // the settings live here, across reloads of one context
 function serve(lang, store, web) {
   return async (route) => {
@@ -50,11 +61,14 @@ function serve(lang, store, web) {
     }
     if (url.pathname === "/api/usage/requests") return json(ledger());
     if (url.pathname === "/api/usage/quotas") return json([]);
-    if (url.pathname === "/api/usage") return json({ calls: 1, errors: 0, input: 1, output: 1, cache_read: 0, cache_write: 0, reasoning: 0, unpriced: 0, cost: 1, bucket: "day", series: [], agents: [], models: [] });
+    if (url.pathname === "/api/usage") return json(overview);
     if (url.pathname === "/api/sessions") return json({ sessions: [], dirs: [] });
-    if (url.pathname === "/api/sessions/stats") return json({ from: "", to: "", days: [], agents: {} });
+    if (url.pathname === "/api/sessions/stats") { const d = sessDay(); return json({ from: d.date, to: d.date, days: [d], agents: { claude: "Claude Code" } }); }
+    if (url.pathname === "/api/sessions/overview") return json({ count: 3, median: 5e8, p90: 9e8, days: [3], messages: [30], output: [0] });
     if (url.pathname === "/api/groups") return json({ groups: [], models: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
+    // the gateway's trace waits for a request, as it does: the panel isn't redrawn by one
+    if (url.pathname === "/api/gateway/trace" && url.searchParams.get("wait")) await new Promise((r) => setTimeout(r, 20e3));
     if (url.pathname === "/api/gateway/trace") return json({ mine: true, now: new Date().toISOString(), seq: 0, totals: { requests: 0, rerouted: 0, errors: 0 }, routes: [] });
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
     if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true, window: true } });
@@ -91,6 +105,31 @@ async function check(p, card, western, what) {
   }
 }
 
+// every other count the Usage page shows, in the one unit or the other
+const has = (x, western) => western ? !/[万亿]/.test(x) && /\d[KMB]\b/.test(x) : !/\d[KMB]\b/.test(x) && /[万亿]/.test(x);
+async function rest(p, western, what) {
+  await p.locator("#usageTab .opt").nth(0).click();
+  await p.locator("#stats .kpi b").first().waitFor();
+  const tiles = await p.locator("#stats .kpi").allInnerTexts();
+  assert.equal(tiles[0].split("\n")[0], western ? "1.54B" : "15.4 亿", what + ": the Overview's tokens");
+  for (const x of tiles) if (/\d/.test(x)) assert(has(x, western) || !/[万亿KMB]/.test(x), `${what}: Overview tile "${x}"`);
+  assert.equal((await p.locator("#chart .peak").textContent()).trim(), western ? "1.46B" : "14.6 亿", what + ": the Overview chart's peak");
+
+  await p.locator("#usageTab .opt").nth(1).click();
+  await p.locator("#ledChart svg").waitFor();
+  const sum = (await p.locator("#ledSum").textContent()).trim();
+  assert(has(sum, western), `${what}: the Requests summary "${sum}"`);
+  assert(sum.includes(western ? "15M" : "1540 万"), `${what}: the Requests summary "${sum}"`);
+
+  await p.locator("#usageTab .opt").nth(2).click();
+  await p.waitForFunction(() => !document.querySelector("#sessStats .kpi.stale") && /\d/.test(document.querySelectorAll("#sessStats .kpi b")[1]?.textContent || ""));
+  const st = await p.locator("#sessStats .kpi").allInnerTexts();
+  assert.equal(st[1].split("\n")[0], western ? "1.54B" : "15.4 亿", what + ": the Sessions tokens");
+  assert(st[0].includes(western ? "500M" : "5 亿"), `${what}: the Sessions median "${st[0]}"`);
+  assert(has(st[3], western), `${what}: the Sessions cache "${st[3]}"`);
+  await p.locator("#usageTab .opt").nth(1).click();
+}
+
 const settingsView = (p) => p.locator("#view-settings").evaluate((v) => v.scrollTop);
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -118,8 +157,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await requests();
         await check(p, ".led-trend", lang === "en", lang + " default");
         assert.equal(await kpi(p, "#ledKpi"), lang === "en" ? "1.54B" : "15.4 亿");
+        await rest(p, lang === "en", lang + " default");
 
         await p.locator("#prefs").click();
+
+        await p.locator("#setTab-usage").click();
         await p.locator("#currencySegs .opt").first().waitFor();
         if (lang === "en") {
           assert.equal(await p.locator("#unitsRow").isHidden(), true, "no Number units row in English");
@@ -145,6 +187,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await check(p, ".led-trend", true, "zh western");
           assert.equal(await kpi(p, "#ledKpi"), "1.54B");
           assert.equal((await p.locator("#ledKpi .blk .k").nth(1).textContent()).trim(), "请求", "the page stays Chinese");
+          await rest(p, true, "zh western");
 
           // and after a reload, from the settings magpie keeps
           await p.reload();
@@ -165,6 +208,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await pp.locator("#panelUsage .pu-card .led-chart svg").waitFor();
         await check(pp, "#panelUsage .pu-card", true, lang + " panel");
         assert.equal((await pp.locator("#panelUsage .pu-tot .blk .v").first().textContent()).trim(), "1.54B");
+        // Routing's "today" over its list, then in 万/亿 once Chinese's units are picked again
+        await pp.locator('[data-ptab="routing"]').click();
+        const today = () => pp.locator(".pr-today b").nth(1).textContent();
+        await pp.waitForFunction(() => /\d/.test(document.querySelectorAll(".pr-today b")[1]?.textContent || ""));
+        assert.equal(await today(), "1.54B", lang + " panel: Routing's today");
+        if (lang === "zh") {
+          // redrawn as the setting turns, not when a request next comes
+          const now = await pp.evaluate((s) => { applyPrefs({ ...s, westernUnits: false }); return document.querySelectorAll(".pr-today b")[1]?.textContent; }, store.cur);
+          assert.equal(now, "15.4 亿", "zh panel: Routing's today in 万/亿 again");
+          await pp.locator('[data-ptab="stats"]').click();
+          assert.equal((await pp.locator("#panelUsage .pu-tot .blk .v").first().textContent()).trim(), "15.4 亿");
+          await check(pp, "#panelUsage .pu-card", false, "zh panel, 万/亿");
+        }
         assert.deepEqual(errors, []);
         await pctx.close();
       });

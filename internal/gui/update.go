@@ -12,11 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 )
 
 // updater keeps the app current. It asks the feed at start-up and every six
-// hours; when a newer release is out and the app may replace itself — the
+// hours, or as often as Settings says, or only when asked (#472); when a newer release is out and the app may replace itself — the
 // bundle on a Mac, the binary elsewhere — the new one is downloaded
 // straight away, so all that is left is a restart. Quitting installs it too, and the next launch is
 // the new version. Where the app's folder isn't the user's to change, the
@@ -33,7 +34,8 @@ type updater struct {
 	self    os.FileInfo // exe as this process started from it
 	retry   bool        // error: the download failed, and may be tried again
 	staged  string
-	done    int64 // downloading: bytes so far, of total (0 when unknown)
+	asked   time.Time // when the feed was last asked, by the clock or a click
+	done    int64     // downloading: bytes so far, of total (0 when unknown)
 	total   int64
 	onReady func(version string)
 }
@@ -53,7 +55,13 @@ type updateJSON struct {
 
 var updates = &updater{}
 
-const updateEvery = 6 * time.Hour
+// updateDue is whether the feed is asked by itself now, the last time it
+// was asked at last: never with automatic updates off, otherwise once the
+// settings' interval is up. The settings are read again each minute, so
+// one changed (in Settings or the CLI) counts from the last check.
+func updateDue(s settings.Settings, last, now time.Time) bool {
+	return !s.NoAutoUpdate && now.Sub(last) >= time.Duration(s.UpdateEvery)*time.Minute
+}
 
 func (u *updater) start() {
 	if b := update.Bundle(); b != "" {
@@ -71,8 +79,13 @@ func (u *updater) start() {
 	go func() {
 		time.Sleep(5 * time.Second) // let the app settle first
 		for {
-			u.check()
-			time.Sleep(updateEvery)
+			u.mu.Lock()
+			last := u.asked
+			u.mu.Unlock()
+			if updateDue(settings.Load(), last, time.Now()) {
+				u.check()
+			}
+			time.Sleep(time.Minute)
 		}
 	}()
 }
@@ -111,7 +124,7 @@ func (u *updater) begin() bool {
 	if u.state == "checking" || u.state == "downloading" {
 		return false
 	}
-	u.state, u.err, u.retry = "checking", "", false
+	u.state, u.err, u.retry, u.asked = "checking", "", false, time.Now()
 	return true
 }
 
@@ -236,7 +249,8 @@ func (u *updater) json() updateJSON {
 		j.Done, j.Total = u.done, u.total
 	}
 	if u.latest != nil {
-		j.Latest, j.Notes, j.URL = u.latest.Version, u.latest.Notes, u.latest.URL
+		// the notes without their download links: magpie downloads it itself
+		j.Latest, j.Notes, j.URL = u.latest.Version, update.StripInstall(u.latest.Notes), u.latest.URL
 	}
 	return j
 }

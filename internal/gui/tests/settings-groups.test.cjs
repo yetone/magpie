@@ -1,7 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // The Settings page's warm-ups and check-in, one section with a tab per
-// service (#124 Mrhe525: tabs rather than three stacked groups): after the
-// Preferences list, where a heading would be, the tabs Codex, Claude Code
+// service (#124 Mrhe525: tabs rather than three stacked groups): in the
+// Settings page's Usage part (#471), after its list, where a heading would
+// be, the tabs Codex, Claude Code
 // and WorkBuddy, and under them one card with the picked service's rows —
 // Codex's and Claude Code's Warm up on reset and Daily warm-up, WorkBuddy's
 // Daily check-in — the lines under them short, with how the last warm-up and
@@ -61,11 +62,11 @@ function server(lang, posts, over) {
 
 const L = {
   en: {
-    prefs: "Preferences", lan: "Local network", reset: "Warm up on reset", daily: "Daily warm-up", checkin: "Daily check-in",
+    reset: "Warm up on reset", daily: "Daily warm-up", checkin: "Daily check-in",
     on: "On", off: "Off", started: "last started", checked: "Ann checked in today +2, 3-day streak", tabs: "Warm-up and check-in",
   },
   zh: {
-    prefs: "偏好", lan: "局域网", reset: "窗口重置时预热", daily: "每日定时预热", checkin: "每日自动签到",
+    reset: "窗口重置时预热", daily: "每日定时预热", checkin: "每日自动签到",
     on: "开启", off: "关闭", started: "上次启动于", checked: "Ann 今日已签到 +2, 连续 3 天", tabs: "预热与签到",
   },
 };
@@ -107,6 +108,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.route("**/*", server(lang, posts, over));
       const go = async () => {
         await page.locator("#prefs").click();
+        await page.locator("#setTab-usage").click();
         await page.locator("#warmSegs .opt").first().waitFor({ state: "attached" });
       };
       await page.goto("http://magpie.test/");
@@ -124,19 +126,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           workbuddyCheckins: [{ user: "Ann", day: today, at: new Date().toISOString(), outcome: "claimed", credit: 2, streak: 3 }],
         });
 
-        // the headings, in order: the tabs where a heading would be, after
-        // Preferences, before Local network
-        const heads = await page.evaluate(() => [...document.querySelectorAll("#view-settings > .row-head:not([hidden])")]
-          .map((h) => h.querySelector("#warmTabs") ? "tabs" : h.querySelector(".label")?.textContent));
-        const at = heads.indexOf(w.prefs);
-        assert(at >= 0, `Preferences heading: ${heads}`);
-        assert.deepEqual(heads.slice(at, at + 3), [w.prefs, "tabs", w.lan]);
+        // the Usage part: its list, then the tabs where a heading would be,
+        // then the card
+        const parts = await page.evaluate(() => [...document.querySelectorAll("#setPage-usage > *")]
+          .map((h) => h.querySelector("#warmTabs") ? "tabs" : h.querySelector("#currencySegs") ? "usage" : h.className));
+        assert.deepEqual(parts, ["usage", "tabs", "warm-panes"]);
         assert.deepEqual(await page.locator("#warmTabs [role=tab]:visible").allTextContents(), ["Codex", "Claude Code", "WorkBuddy"]);
         assert.equal(await page.locator("#warmTabs").getAttribute("role"), "tablist");
         assert.equal(await page.locator("#warmTabs").getAttribute("aria-label"), w.tabs);
         // no service rows left in Preferences
         for (const id of ["#warmSegs", "#warmAtSegs", "#claudeWarmSegs", "#claudeWarmAtSegs", "#wbCheckinSegs"]) {
-          assert.equal(await page.locator("#view-settings .list.prefs").first().locator(id).count(), 0, id + " is out of the Preferences list");
+          assert.equal(await page.locator("#setPage-usage > .list.prefs").first().locator(id).count(), 0, id + " is out of the Usage list");
         }
 
         // Codex to begin with, its rows alone
@@ -165,13 +165,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator("#warmAtSegs input.at").count(), 0);
         assert.equal(await page.locator("#claudeWarmAtSegs input.at").count(), 0);
 
-        // scrolled down (a real wheel) till the tabs are near the top: each
-        // tab shows its rows alone, each control posts its setting, and
-        // nothing moves the page
-        await page.setViewportSize({ width: 900, height: 560 });
+        // scrolled down (a real wheel), the Usage part not at its end (that
+        // is the next test's): each tab shows its rows alone, each control
+        // posts its setting, and nothing moves the page
+        // (a window a little shorter than the part, the card in sight)
+        const spare = await page.locator("#view-settings").evaluate((v) => v.scrollHeight - v.clientHeight);
+        await page.setViewportSize({ width: 900, height: page.viewportSize().height + spare - 40 });
         await page.mouse.move(450, 200);
-        const headTop = () => page.evaluate(() => document.querySelector("#warmTabs").getBoundingClientRect().top - document.querySelector("#view-settings").getBoundingClientRect().top);
-        for (let i = 0; i < 60 && (await headTop()) > 40; i++) { await page.mouse.wheel(0, 40); await page.waitForTimeout(15); }
+        await page.mouse.wheel(0, 20);
         await page.waitForTimeout(300);
         const before = await view(page);
         assert(before > 0, "the settings page must be long enough to scroll");

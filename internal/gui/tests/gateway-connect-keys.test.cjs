@@ -37,6 +37,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
 
       await page.locator("#prefs").click();
+
+      await page.locator("#setTab-network").click();
       const on = page.locator("#lanList").getByRole("button", { name: w.on, exact: true });
       await on.waitFor();
       const bounds = await on.boundingBox();
@@ -67,6 +69,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       };
       await page.route("**/api/caller-keys", lateList);
       await page.locator("#prefs").click();
+      await page.locator("#setTab-network").click();
       await page.locator("#lanList").waitFor();
       await page.locator("#nav").getByRole("button", { name: w.gateway, exact: true }).click();
       await started;
@@ -166,6 +169,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await expectSecret("fixture-created-2");
       assert.equal(await page.locator("#connectKey code").textContent(), "Replacement");
       await page.locator("#prefs").click();
+      await page.locator("#setTab-network").click();
       await page.locator("#lanList .lan-address-row").waitFor();
       await page.locator("#lanList").getByRole("button", { name: w.off, exact: true }).click();
       await page.locator("#lanList .lan-address-row").waitFor({ state: "detached" });

@@ -971,6 +971,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	} else {
 		cands, pl = s.plan(p, model, from)
 	}
+	if len(cands) == 0 && len(pl.left) > 0 && !slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred }) {
+		// every account or key there is was set not to serve the model
+		call.Status, call.Error = 403, "every account barred"
+		writeError(w, from, 403, barredError(call.Model, pl.left))
+		turnedAway()
+		return
+	}
 	if len(cands) == 0 {
 		call.Status, call.Error = 404, "no member ready"
 		writeError(w, from, 404, fmt.Sprintf("none of %s's models is ready", call.Model))
@@ -1153,7 +1160,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			held, call.Status, call.Error = true, http.StatusForbidden, said
 			writeError(hw, from, call.Status, said)
 		} else {
-			call.Status, call.Error = s.attempt(hw, r, from, c.p, c.model, attemptBody, &call)
+			// a stream that fails before anything is said is let go at
+			// once (hw.stop), not read on until the vendor hangs up
+			ctx, stop := context.WithCancel(r.Context())
+			hw.stop = stop
+			call.Status, call.Error = s.attempt(hw, r.WithContext(ctx), from, c.p, c.model, attemptBody, &call)
+			stop()
 		}
 		hw.settle()
 		if hw.failure != 0 { // the stream failed before any of it was sent
@@ -1853,6 +1865,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if proto == provider.Chat && sse {
 		tidy = &chatTidy{}
 	}
+	var whole *chatWhole
+	if proto == provider.Chat && !sse && strings.Contains(res.Header.Get("Content-Type"), "json") {
+		whole = &chatWhole{}
+	}
 	var search *searchTidy
 	if searchFn && sse {
 		search = &searchTidy{}
@@ -1870,6 +1886,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			out := buf[:n]
 			if tidy != nil {
 				out = tidy.write(out)
+			}
+			if whole != nil {
+				out = whole.write(out)
 			}
 			if search != nil {
 				out = search.write(out)
@@ -1892,6 +1911,13 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if tidy != nil {
 		w.Write(tidy.flush())
 	}
+	if whole != nil {
+		out := whole.flush()
+		if spaces != nil {
+			out = spaces.write(out)
+		}
+		w.Write(out)
+	}
 	if search != nil {
 		out := search.flush()
 		if spaces != nil {
@@ -1912,7 +1938,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		var failed string
 		switch {
 		case rerr != nil && rerr != io.EOF:
-			failed = p.Name + ": " + rerr.Error()
+			failed = cutMidReply(p.Name, rerr)
 		case proto == provider.Anthropic || proto == provider.Responses:
 			failed = p.Name + ": the reply ended before it was complete"
 		}
@@ -1925,6 +1951,14 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 	}
 	return res.StatusCode, "", true
+}
+
+// cutMidReply is what a stream whose read failed mid-reply is ended with:
+// the connection lost, said in so many words. Go's own "unexpected EOF"
+// (every stream on an HTTP/2 connection that dropped ends so) was taken by
+// dsh's pi-ai for an error it doesn't retry, and the turn failed (#470).
+func cutMidReply(name string, err error) string {
+	return name + ": connection lost mid-reply (" + err.Error() + ")"
 }
 
 // streamFailure is an error event ending a stream in proto, as each
@@ -2419,7 +2453,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		if serr != nil && failed == "" {
 			// the upstream died mid-reply: say so in the client's own
 			// protocol instead of finishing as if all went well
-			failed = p.Name + ": " + serr.Error()
+			failed = cutMidReply(p.Name, serr)
 			enc.event(Event{Kind: KError, Text: failed})
 		}
 		if failed == "" {

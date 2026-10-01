@@ -683,7 +683,7 @@ func quotaLines(qs []provider.SubscriptionQuota, asked, left bool, width int, no
 		// the windows follow the name, those that don't fit on lines below
 		// it, and a Codex account's resets after them
 		var cells []string
-		for _, w := range q.Windows {
+		for _, w := range provider.PooledWindows(q.Windows) {
 			cells = append(cells, quotaCell(w, left, now))
 		}
 		if r := q.Resets; r != nil {

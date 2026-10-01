@@ -114,6 +114,7 @@
 .pm-browse:disabled { opacity: .5; cursor: default; }
 
 /* Installed */
+.pm-listhead { margin: 0 0 -10px; padding: 0 2px; }
 .pm-list .row { min-height: 54px; padding: 8px 10px 8px 12px; gap: 11px; cursor: default; transition: background .14s var(--ease); }
 .pm-list .row:hover { background: var(--card-2); }
 .pm-list .row + .row { border-top: 1px solid var(--line-2); }

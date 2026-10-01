@@ -470,8 +470,16 @@
       body.append(none);
       return;
     }
+    // by name, in the order the reader picked (#481), not the order they
+    // were installed in
     const list = el("div", "list pm-list");
-    for (const e of es) list.append(installedRow(e));
+    const fill = () => list.replaceChildren(...[...es].sort(byName(sortOf("plugins"), shownName)).map(installedRow));
+    if (es.length > 1) {
+      const h = el("div", "row-head pm-listhead");
+      h.append(el("span", "grow"), sortBy("plugins", NAME_SORTS, fill));
+      body.append(h);
+    }
+    fill();
     body.append(list);
     const foot = el("div", "pm-foot");
     const outdated = es.filter((e) => e.latest && e.version && newer(e.latest, e.version));
@@ -485,13 +493,20 @@
     body.append(foot);
   }
 
+  // an installed plugin's name as its row shows it: the market's, else the
+  // package's or the folder's
+  function shownName(e) {
+    const pkg = name(e.spec);
+    return market.listings.find((x) => x.package === pkg)?.name || (isGit(e.spec) && e.package) || label(e.spec);
+  }
+
   function installedRow(e) {
     const pkg = name(e.spec);
     const l = market.listings.find((x) => x.package === pkg);
     const r = el("div", "row pm-row" + (e.off ? " off" : ""));
     const who = el("div", "who");
     const nm = el("div", "name");
-    nm.append(el("span", "", l?.name || (isGit(e.spec) && e.package) || label(e.spec)));
+    nm.append(el("span", "", shownName(e)));
     if (e.version) nm.append(el("span", "pm-ver", "v" + e.version));
     if (e.latest && e.version && newer(e.latest, e.version)) nm.append(el("span", "pm-chip up", t("v{v} out", { v: e.latest })));
     else if (e.autoUpdated && e.autoUpdated.to === e.version) {

@@ -64,7 +64,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       const posted = [];
       await page.route("**/*", serve(lang, posted));
-      await page.goto("http://magpie.test/?view=settings");
+      await page.goto("http://magpie.test/?view=settings&tab=models");
       const list = page.locator("#searchList");
       const head = list.locator(".row.search-add");
       await head.waitFor();

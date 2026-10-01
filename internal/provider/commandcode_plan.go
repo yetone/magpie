@@ -42,6 +42,22 @@ import (
 // CommandCodePlanID is the subscription's id, and its sign-in's.
 const CommandCodePlanID = "commandcode-plan"
 
+// CommandCodeMaxOutput is the most max_tokens Command Code takes at
+// /alpha/generate, for any model: more is refused ("Too big: expected
+// number to be <=200000 at params.max_tokens"). models.dev gives some of
+// its models more (DeepSeek V4's 384000, MiniMax M3's 512000).
+const CommandCodeMaxOutput = 200_000
+
+// CommandCodeOutputOf is the most a reply of a Command Code model may be
+// asked for: the model's own limit, as models.dev gives it, within
+// CommandCodeMaxOutput.
+func CommandCodeOutputOf(model string) int {
+	if n := catalog.OutputOf(model); n > 0 && n < CommandCodeMaxOutput {
+		return n
+	}
+	return CommandCodeMaxOutput
+}
+
 // Where Command Code's API and its sign-in page are; vars so tests can
 // point them elsewhere.
 var (

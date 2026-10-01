@@ -597,10 +597,10 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		Choices []struct {
 			Index json.RawMessage `json:"index"`
 			Delta struct {
-				Content          *string     `json:"content"`
-				ReasoningContent string      `json:"reasoning_content"`
-				Reasoning        string      `json:"reasoning"`
-				ToolCalls        []cToolCall `json:"tool_calls"`
+				Content          json.RawMessage `json:"content"`
+				ReasoningContent string          `json:"reasoning_content"`
+				Reasoning        string          `json:"reasoning"`
+				ToolCalls        []cToolCall     `json:"tool_calls"`
 			} `json:"delta"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
@@ -637,11 +637,20 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 		if t == "" {
 			t = c.Delta.Reasoning
 		}
+		// Mistral's content may be typed parts, its thinking among them
+		// (#483): a chunk that couldn't be read as a string lost both
+		var content string
+		if text, think, ok := partsText(c.Delta.Content); ok {
+			t += think
+			content = text
+		} else {
+			json.Unmarshal(c.Delta.Content, &content)
+		}
 		if t != "" {
 			emit(Event{Kind: KThink, Text: t})
 		}
-		if c.Delta.Content != nil && *c.Delta.Content != "" {
-			d.text(*c.Delta.Content, emit)
+		if content != "" {
+			d.text(content, emit)
 		}
 		if len(c.Delta.ToolCalls) > 0 {
 			d.end(emit)

@@ -32,6 +32,12 @@ type QuotaWindow struct {
 	// family, the tightest; each window is still here, and routing reads
 	// them one by one.
 	Family string `json:"family,omitempty"`
+	// Pool is the group of models that share one allowance (Antigravity's
+	// "Gemini", "Claude & GPT"): on the group's own windows, a 5-hour and
+	// a weekly, which name no Model, and on each per-model window drawing
+	// on it, for the GUI to show the group's windows in place of its
+	// models'.
+	Pool string `json:"pool,omitempty"`
 
 	// For routing (see Allowances): how long the window runs, zero when
 	// not known; the only models it counts, by a word in their ids
@@ -190,6 +196,7 @@ func exposedIDs() map[string]map[string]bool {
 // base, when not nil, is the model magpie offers for an id a quota names.
 func chosenWindows(ws []QuotaWindow, chosen map[string]bool, base func(string) string) []QuotaWindow {
 	var out []QuotaWindow
+	some := false // a model's window kept, not only a pool's
 	for _, w := range ws {
 		m := w.Model
 		if base != nil && m != "" {
@@ -197,9 +204,10 @@ func chosenWindows(ws []QuotaWindow, chosen map[string]bool, base func(string) s
 		}
 		if w.Model == "" || chosen[m] {
 			out = append(out, w)
+			some = some || w.Model != ""
 		}
 	}
-	if len(out) == 0 {
+	if !some {
 		return ws
 	}
 	return out

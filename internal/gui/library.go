@@ -263,7 +263,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			Values map[string]string // what a market server needs
 			Dir    string            // a project's folder
 			Copy   bool              // a project gets copies, not links
-			On     bool              // every skill given to the agents, or taken from them
+			On     bool              // every skill or server given to the agents, or taken from them
 			library.InstructionsChange
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -283,6 +283,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.SaveServer(in.Old, in.Server)
 		case "servers/agents":
 			res, err = library.ServerAgents(in.Name, in.Agents)
+		case "servers/agents-all":
+			res, err = library.EveryServerAgents(in.Agents, in.On)
 		case "servers/remove":
 			res, err = library.RemoveServer(in.Name)
 		case "servers/import":

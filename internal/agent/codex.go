@@ -84,6 +84,7 @@ func codexIn(at place) *Agent {
 		}
 		return catalog.Codex()
 	}
+	var dropSubEffort func() error
 	// keep the effort valid for the model; a fresh model gets its default.
 	// Routed, the Codex app offers magpie's models' efforts too (#310).
 	settle := func() error {
@@ -95,9 +96,11 @@ func codexIn(at place) *Agent {
 		ms := models()
 		model, effort := get("model"), get("model_reasoning_effort")
 		if e := catalog.Efforts(ms, model); len(e) > 0 && !contains(e, effort) {
-			return edit.SetTOMLTop(path, edit.KV{Path: "model_reasoning_effort", Value: codexcat.DefaultEffort(e)})
+			if err := edit.SetTOMLTop(path, edit.KV{Path: "model_reasoning_effort", Value: codexcat.DefaultEffort(e)}); err != nil {
+				return err
+			}
 		}
-		return nil
+		return dropSubEffort()
 	}
 	// magpie as a provider Codex can name; its threads started on magpie do
 	putProvider := func() error {
@@ -216,6 +219,31 @@ func codexIn(at place) *Agent {
 			return nil
 		}
 		return edit.DelTOMLKey(path, "agents", "default_subagent_model")
+	}
+	// the effort spawned subagents start at, when not the parent's
+	// (core/src/agent/child_config.rs): checked against the model they run
+	// on, theirs or the parent's, and a spawn at one it lacks fails, so one
+	// that model doesn't take goes
+	subEffort := func() (string, error) {
+		agents, err := edit.GetTOMLTable(path, "agents")
+		return agents["default_subagent_reasoning_effort"], err
+	}
+	subModel := func() string {
+		if m, _ := subagent(); m != "" {
+			return m
+		}
+		return get("model")
+	}
+	subEfforts := func() []string { return catalog.Efforts(models(), subModel()) }
+	dropSubEffort = func() error {
+		e, err := subEffort()
+		if err != nil || e == "" {
+			return err
+		}
+		if l := subEfforts(); len(l) > 0 && !contains(l, e) {
+			return edit.DelTOMLKey(path, "agents", "default_subagent_reasoning_effort")
+		}
+		return nil
 	}
 	// Codex on one of its own models goes through magpie too while more of
 	// its ChatGPT accounts are on there, so one out of its allowance hands
@@ -527,9 +555,34 @@ func codexIn(at place) *Agent {
 					if isMagpie(v) && !routed() {
 						return fmt.Errorf("pick a model through magpie for Codex first; its subagents can then have one of their own")
 					}
-					return edit.SetTOMLKey(path, "agents", "default_subagent_model", v)
+					if err := edit.SetTOMLKey(path, "agents", "default_subagent_model", v); err != nil {
+						return err
+					}
+					return dropSubEffort()
 				},
 				Options: func(map[string]string) []Option { return modelOptions(routed()) },
+			},
+			{
+				// [agents] default_subagent_reasoning_effort: unset, a
+				// subagent runs at the session's effort, or at its model's
+				// default when it has a model of its own
+				Key: "subagent_effort", Label: "subagent effort", Quiet: true,
+				Get: func() string { v, _ := subEffort(); return v },
+				Set: func(v string) error {
+					if v == "" {
+						return edit.DelTOMLKey(path, "agents", "default_subagent_reasoning_effort")
+					}
+					if l := subEfforts(); len(l) > 0 && !contains(l, v) {
+						return fmt.Errorf("Codex runs %s at %s, not %q: it would refuse to start a subagent", subModel(), strings.Join(l, ", "), v)
+					}
+					return edit.SetTOMLKey(path, "agents", "default_subagent_reasoning_effort", v)
+				},
+				Options: func(map[string]string) []Option {
+					if e := subEfforts(); len(e) > 0 {
+						return static(e...)
+					}
+					return static("low", "medium", "high", "xhigh")
+				},
 			},
 			{
 				// how Codex takes magpie's models: beside its ChatGPT

@@ -94,6 +94,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // Settings: the currency row, its rate in the tooltip
         await page.locator("#prefs").click();
+        await page.locator("#setTab-usage").click();
         await page.locator("#currencySegs .opt").first().waitFor();
         const segs = page.locator("#currencySegs .opt");
         assert.equal(await segs.count(), 2);
@@ -123,6 +124,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // and back to Settings, ¥ CNY is still picked after a reload
         await page.reload();
         await page.locator("#prefs").click();
+        await page.locator("#setTab-usage").click();
         await page.locator("#currencySegs .opt").first().waitFor();
         assert.equal(await page.locator('#currencySegs .opt', { hasText: cny }).evaluate((b) => b.classList.contains("on")), true);
 
@@ -171,6 +173,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // Settings agrees
         await page.locator("#prefs").click();
+        await page.locator("#setTab-usage").click();
         await page.locator("#currencySegs .opt").first().waitFor();
         assert.equal(await page.locator("#currencySegs .opt", { hasText: cny }).evaluate((b) => b.classList.contains("on")), true);
 

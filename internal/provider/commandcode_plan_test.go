@@ -12,6 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 func TestCommandCodePlan(t *testing.T) {
@@ -318,5 +321,22 @@ func TestCommandCodeSubscriptionUnread(t *testing.T) {
 	defer func() { cmdAPI = oldAPI }()
 	if _, plan, _, _, ok := cmdSubscription(context.Background(), cmdAuth{APIKey: "k"}); ok || plan != "" {
 		t.Fatalf("plan %q, ok %v: want it unread", plan, ok)
+	}
+}
+
+// A Command Code model is told to the agents with a reply limit within the
+// 200000 Command Code takes: models.dev gives DeepSeek V4 384000, and an
+// agent asking for that was refused. Another provider's is left as it is.
+func TestCommandCodeOutputCapped(t *testing.T) {
+	m := catalog.Model{ID: "deepseek/deepseek-v4-pro", Context: 1_000_000, Output: 384_000}
+	if got := entryFor(Provider{ID: CommandCodePlanID}, m, settings.Settings{}).Output; got != CommandCodeMaxOutput {
+		t.Errorf("Command Code: output %d, want %d", got, CommandCodeMaxOutput)
+	}
+	if got := entryFor(Provider{ID: "deepseek"}, m, settings.Settings{}).Output; got != 384_000 {
+		t.Errorf("deepseek: output %d, want 384000", got)
+	}
+	m.Output = 64_000
+	if got := entryFor(Provider{ID: CommandCodePlanID}, m, settings.Settings{}).Output; got != 64_000 {
+		t.Errorf("Command Code, within: output %d, want 64000", got)
 	}
 }

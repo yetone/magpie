@@ -3,6 +3,7 @@
 .sm-switch { min-width: 0; flex: 1; display: flex; align-items: center; }
 .sm-agents { min-width: 0; max-width: 100%; }
 .segs.sm-agents { background: var(--seg-track); }
+.sm-agents .opt:not(.on, :hover) { color: var(--ctl-fg); }
 .sm-agents .opt { display: inline-flex; align-items: center; gap: 5px; }
 .sm-agents .opt.on { background: var(--seg-thumb); box-shadow: var(--seg-edge); }
 .sm-agents .opt.on em { color: var(--muted); }

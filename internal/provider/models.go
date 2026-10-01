@@ -848,6 +848,11 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	if n := outputOf(s, p.ID, m.ID); n > 0 {
 		output = n
 	}
+	// an agent asks for the reply limit it is told, and Command Code
+	// refuses one above its own
+	if p.ID == CommandCodePlanID && output > CommandCodeMaxOutput {
+		output = CommandCodeMaxOutput
+	}
 	images := m.Images || catalog.SeesImages(m.ID)
 	if m.ImageInput != nil {
 		images = *m.ImageInput

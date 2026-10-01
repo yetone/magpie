@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -288,5 +289,23 @@ func TestCommandCodeGoFailures(t *testing.T) {
 				t.Fatalf("%d %q %s", status, msg, out)
 			}
 		})
+	}
+}
+
+// A reply is asked for within Command Code's 200000 tokens (Discord: every
+// model failed, "Too big: expected number to be <=200000 at
+// params.max_tokens"): an agent told a model gives more asks for more, and
+// /alpha/generate refused the whole request. Less is asked as it was.
+func TestCommandCodeGoMaxTokens(t *testing.T) {
+	for asked, want := range map[int]string{256000: "200000", 2048: "2048"} {
+		u := newCmdUpstream(t, cmdLines(`{"type":"text-delta","text":"ok"}`, cmdFinish))
+		body := fmt.Sprintf(`{"model":"zz/unlisted-model","max_tokens":%d,"stream":true,"messages":[{"role":"user","content":"hi"}]}`, asked)
+		status, msg, _, _ := cmdAttempt(t, cmdAccount(u, "go"), provider.Anthropic, "zz/unlisted-model", body)
+		if status != 200 {
+			t.Fatalf("%d: %d %q", asked, status, msg)
+		}
+		if got := gjson.GetBytes(u.body, "params.max_tokens").String(); got != want {
+			t.Errorf("max_tokens %d reached Command Code as %s, want %s", asked, got, want)
+		}
 	}
 }

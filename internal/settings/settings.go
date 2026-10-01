@@ -112,6 +112,12 @@ type Settings struct {
 	// puts it in as it quits, and Settings' version row still offers it.
 	NoUpdatePill bool   `json:"noUpdatePill,omitempty"`
 	UpdateSkip   string `json:"updateSkip,omitempty"`
+	// NoAutoUpdate stops magpie asking for a newer version by itself, and
+	// so downloading one (#472): only Settings' Check, or magpie update,
+	// asks then. UpdateEvery is how often it asks otherwise, in minutes:
+	// one of UpdateEveries, 0 for every six hours.
+	NoAutoUpdate bool `json:"noAutoUpdate,omitempty"`
+	UpdateEvery  int  `json:"updateEvery,omitempty"`
 	// Vision is the model that describes an image to a model that can't see
 	// it: a model's id (provider/model, group/<id>), "off" to turn such an
 	// image away, or empty for one magpie picks (see gateway.seer).
@@ -345,6 +351,8 @@ var (
 	Warmups = []string{"", "week", "all"}
 	// TrayEvery are TrayUsageEvery's values, in minutes.
 	TrayEvery = []int{1, 3, 5, 10, 30}
+	// UpdateEveries are UpdateEvery's values, in minutes.
+	UpdateEveries = []int{30, 60, 360, 1440}
 	// TextSizes are TextSize's values, in percent. None is under 100: the
 	// webviews' zoom on Windows and Linux (Wails' SetZoom) goes no lower.
 	TextSizes = []int{100, 110, 125, 150}
@@ -539,6 +547,9 @@ func Save(s Settings) error {
 	if !slices.Contains(TrayEvery, s.TrayUsageEvery) {
 		return fmt.Errorf("the menu bar's usage is refreshed every %v minutes, not %d", TrayEvery, s.TrayUsageEvery)
 	}
+	if !slices.Contains(UpdateEveries, s.UpdateEvery) {
+		return fmt.Errorf("magpie checks for updates every %v minutes, not %d", UpdateEveries, s.UpdateEvery)
+	}
 	if s.UsageAlert < 0 || s.UsageAlert > 100 {
 		return fmt.Errorf("a usage alert is at a percentage from 1 to 100, or 0 for off, not %d", s.UsageAlert)
 	}
@@ -616,6 +627,9 @@ func (s Settings) normal() Settings {
 	}
 	if s.TrayUsageEvery == 0 {
 		s.TrayUsageEvery = 3
+	}
+	if s.UpdateEvery == 0 {
+		s.UpdateEvery = 360
 	}
 	if s.TextSize == 0 {
 		s.TextSize = 100

@@ -166,12 +166,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(tight.up, true);
       assert.equal(tight.words, false, "the pill kept its words in a tight row");
       assert.equal(tight.label, "更新到 0.159.0");
-      // tighter still: the version goes too, the name last
-      await page.setViewportSize({ width: 540, height: 520 });
+      // tighter still: the version goes too, the name last (just above
+      // 600px, the narrowest the row gets beside its fields)
+      await page.setViewportSize({ width: 604, height: 520 });
       await page.waitForTimeout(100);
       const tighter = await look();
       assert.equal(tighter.cut, false, "the name was cut before the version");
       assert.equal(tighter.ver, false);
+      // at 600px or less the fields go under the name (#440), so the name's
+      // line has room again for everything
+      await page.setViewportSize({ width: 540, height: 520 });
+      await page.waitForTimeout(100);
+      assert.deepEqual(await look(), { cut: false, up: true, words: true, ver: true, label: "更新到 0.159.0" });
     });
 
     assert.deepEqual(errors, []);

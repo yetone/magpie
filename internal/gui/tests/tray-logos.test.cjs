@@ -68,6 +68,7 @@ async function open(browser, lang, posts, platform, over) {
   await page.route("**/*", server(lang, posts, over));
   await page.goto("http://magpie.test/?view=usage");
   await page.locator("#prefs").click();
+  await page.locator("#setTab-usage").click();
   await page.locator("#trayUsagePick button").waitFor();
   return { context, page };
 }

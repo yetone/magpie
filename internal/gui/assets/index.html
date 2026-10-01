@@ -6,6 +6,7 @@
 <title>magpie</title>
 <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
 <script src="boot.js"></script>
+<script src="theme.js"></script>
 <script src="omarchy.js"></script>
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="routing.css">
@@ -211,128 +212,153 @@
 <main class="view" id="view-plugins" hidden></main>
 
 <main class="view" id="view-settings" hidden>
-  <div class="row-head"><span class="label" data-t>Preferences</span></div>
-  <div class="list prefs">
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Appearance</div><div class="sub om-hide" data-t>Light or dark, or whatever the system is showing</div><div class="sub om-only" data-t>Follows the Omarchy theme, as picked in Omarchy's menu</div></div>
-      <div id="themeSegs" class="om-hide"></div><span class="om-only om-theme-name"></span>
-    </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Language</div><div class="sub" data-t>Applies at once, no restart</div></div>
-      <div id="langSegs"></div>
-    </div>
-    <div class="row pref" id="textSizeRow">
-      <div class="who"><div class="name" data-t>Text size</div><div class="sub" id="textSizeSub"></div></div>
-      <div id="textSizeSegs"></div>
-    </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Tray icon</div><div class="sub" data-t>What clicking magpie’s icon in the menu bar or tray opens</div></div>
-      <div id="traySegs"></div>
-    </div>
-    <div class="row pref" id="barIconRow" hidden>
-      <div class="who"><div class="name" data-t>Bar icon</div><div class="sub" data-t>magpie’s icon beside Omarchy’s own in the bar; right-click opens the window</div></div>
-      <div id="barIconSegs"></div>
-    </div>
-    <div class="row pref" id="trayUsageRow">
-      <div class="who"><div class="name" data-t>Usage in the menu bar</div><div class="sub" id="trayUsageSub"></div></div>
-      <div id="trayUsagePick"></div>
-    </div>
-    <div class="row pref" id="trayEveryRow" hidden>
-      <div class="who"><div class="name" data-t>Menu bar refresh</div><div class="sub" data-t>How often the usage beside the icon is asked for again</div></div>
-      <div id="trayEverySegs"></div>
-    </div>
-    <div class="row pref" id="trayLogosRow" hidden>
-      <div class="who"><div class="name" data-t>Menu bar logos</div><div class="sub" data-t>Each subscription's logo before its numbers; off, the numbers alone with a thin line between subscriptions</div></div>
-      <div id="trayLogosSegs"></div>
-    </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Usage shows</div><div class="sub" data-t>How much of each window is used, or how much is left, on the Usage page, the panel and the menu bar</div></div>
-      <div id="quotaLeftSegs"></div>
-    </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Currency</div><div class="sub" id="currencySub"></div></div>
-      <div id="currencySegs"></div>
-    </div>
-    <div class="row pref" id="unitsRow" hidden>
-      <div class="who"><div class="name" data-t>Number units</div><div class="sub" data-t>How a large count of tokens or requests is shortened on the Usage page and the panel</div></div>
-      <div id="unitsSegs"></div>
-    </div>
-    <div class="row pref" id="usageAlertRow">
-      <div class="who"><div class="name" data-t>Usage alert</div><div class="sub" id="usageAlertSub"></div></div>
-      <div id="usageAlertSegs" class="warm-at"></div>
-    </div>
-    <div class="row pref" id="balanceAlertRow">
-      <div class="who"><div class="name" data-t>Low balance alert</div><div class="sub" id="balanceAlertSub"></div></div>
-      <div id="balanceAlertSegs" class="warm-at"></div>
-    </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Provider in model names</div><div class="sub" data-t>Agents’ lists put each model’s provider after its name, or not after names you set</div></div>
-      <div id="plainNamesSegs"></div>
-    </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Open at login</div><div class="sub" data-t>Start magpie in the tray when you log in, so agents find the gateway from the start</div></div>
-      <div id="loginSegs"></div>
-    </div>
-    <div class="row pref" id="dockRow" hidden>
-      <div class="who"><div class="name" data-t>Dock</div><div class="sub" data-t>Keep magpie in the Dock too, always or while its window is open, for Cmd-Tab and a menu bar too full to show its icon</div></div>
-      <div id="dockSegs"></div>
-    </div>
-    <div class="row pref" id="sessionTerminalRow" hidden>
-      <div class="who"><div class="name" data-t>Session terminal</div><div class="sub" data-t>Used by the terminal button in Sessions; only apps registered for .command files appear</div></div>
-      <select id="sessionTerminalSelect" class="session-terminal-select" aria-label="Session terminal" data-ta></select>
-    </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Proxy</div><div class="sub" id="proxySub"></div></div>
-      <div id="proxySegs" class="proxy-segs"></div>
-    </div>
-  </div>
-  <div class="row-head warm-head"><div class="warm-tabs" id="warmTabs" role="tablist">
-    <button type="button" role="tab" id="warmTab-codex" data-warm="codex" aria-controls="codexWarmList">Codex</button>
-    <button type="button" role="tab" id="warmTab-claude" data-warm="claude" aria-controls="claudeWarmList">Claude Code</button>
-    <button type="button" role="tab" id="warmTab-wb" data-warm="wb" aria-controls="wbList" hidden>WorkBuddy</button>
+  <div class="row-head set-head"><div class="warm-tabs set-tabs" id="setTabs" role="tablist" aria-label="Settings">
+    <button type="button" role="tab" id="setTab-general" data-set="general" aria-controls="setPage-general" data-t>General</button>
+    <button type="button" role="tab" id="setTab-usage" data-set="usage" aria-controls="setPage-usage" data-t>Usage</button>
+    <button type="button" role="tab" id="setTab-network" data-set="network" aria-controls="setPage-network" data-t>Network and sharing</button>
+    <button type="button" role="tab" id="setTab-models" data-set="models" aria-controls="setPage-models" data-t>Models</button>
+    <button type="button" role="tab" id="setTab-privacy" data-set="privacy" aria-controls="setPage-privacy" data-t>Privacy</button>
+    <button type="button" role="tab" id="setTab-otel" data-set="otel" aria-controls="setPage-otel" data-t>Observability</button>
+    <button type="button" role="tab" id="setTab-sync" data-set="sync" aria-controls="setPage-sync" data-t>Sync and backup</button>
+    <button type="button" role="tab" id="setTab-about" data-set="about" aria-controls="setPage-about" data-t>About</button>
   </div></div>
-  <div class="warm-panes">
-  <div class="list prefs" id="codexWarmList" role="tabpanel" aria-labelledby="warmTab-codex">
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="warmSub"></div></div>
-      <div id="warmSegs"></div>
+  <section class="set-page" id="setPage-general" role="tabpanel" aria-labelledby="setTab-general">
+    <div class="list prefs">
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Appearance</div><div class="sub om-hide" data-t>Light or dark, or whatever the system is showing</div><div class="sub om-only" data-t>Follows the Omarchy theme, as picked in Omarchy's menu</div></div>
+        <div id="themeSegs" class="om-hide"></div><span class="om-only om-theme-name"></span>
+      </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Language</div><div class="sub" data-t>Applies at once, no restart</div></div>
+        <div id="langSegs"></div>
+      </div>
+      <div class="row pref" id="textSizeRow">
+        <div class="who"><div class="name" data-t>Text size</div><div class="sub" id="textSizeSub"></div></div>
+        <div id="textSizeSegs"></div>
+      </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Tray icon</div><div class="sub" data-t>What clicking magpie’s icon in the menu bar or tray opens</div></div>
+        <div id="traySegs"></div>
+      </div>
+      <div class="row pref" id="barIconRow" hidden>
+        <div class="who"><div class="name" data-t>Bar icon</div><div class="sub" data-t>magpie’s icon beside Omarchy’s own in the bar; right-click opens the window</div></div>
+        <div id="barIconSegs"></div>
+      </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Provider in model names</div><div class="sub" data-t>Agents’ lists put each model’s provider after its name, or not after names you set</div></div>
+        <div id="plainNamesSegs"></div>
+      </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Open at login</div><div class="sub" data-t>Start magpie in the tray when you log in, so agents find the gateway from the start</div></div>
+        <div id="loginSegs"></div>
+      </div>
+      <div class="row pref" id="dockRow" hidden>
+        <div class="who"><div class="name" data-t>Dock</div><div class="sub" data-t>Keep magpie in the Dock too, always or while its window is open, for Cmd-Tab and a menu bar too full to show its icon</div></div>
+        <div id="dockSegs"></div>
+      </div>
+      <div class="row pref" id="sessionTerminalRow" hidden>
+        <div class="who"><div class="name" data-t>Session terminal</div><div class="sub" data-t>Used by the terminal button in Sessions; only apps registered for .command files appear</div></div>
+        <select id="sessionTerminalSelect" class="session-terminal-select" aria-label="Session terminal" data-ta></select>
+      </div>
     </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Daily warm-up</div><div class="sub" id="warmAtSub"></div></div>
-      <div id="warmAtSegs" class="warm-at"></div>
+  </section>
+  <section class="set-page" id="setPage-usage" role="tabpanel" aria-labelledby="setTab-usage">
+    <div class="list prefs">
+      <div class="row pref" id="trayUsageRow">
+        <div class="who"><div class="name" data-t>Usage in the menu bar</div><div class="sub" id="trayUsageSub"></div></div>
+        <div id="trayUsagePick"></div>
+      </div>
+      <div class="row pref" id="trayEveryRow" hidden>
+        <div class="who"><div class="name" data-t>Menu bar refresh</div><div class="sub" data-t>How often the usage beside the icon is asked for again</div></div>
+        <div id="trayEverySegs"></div>
+      </div>
+      <div class="row pref" id="trayLogosRow" hidden>
+        <div class="who"><div class="name" data-t>Menu bar logos</div><div class="sub" data-t>Each subscription's logo before its numbers; off, the numbers alone with a thin line between subscriptions</div></div>
+        <div id="trayLogosSegs"></div>
+      </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Usage shows</div><div class="sub" data-t>How much of each window is used, or how much is left, on the Usage page, the panel and the menu bar</div></div>
+        <div id="quotaLeftSegs"></div>
+      </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Currency</div><div class="sub" id="currencySub"></div></div>
+        <div id="currencySegs"></div>
+      </div>
+      <div class="row pref" id="unitsRow" hidden>
+        <div class="who"><div class="name" data-t>Number units</div><div class="sub" data-t>How a large count of tokens or requests is shortened on the Usage page and the panel</div></div>
+        <div id="unitsSegs"></div>
+      </div>
+      <div class="row pref" id="usageAlertRow">
+        <div class="who"><div class="name" data-t>Usage alert</div><div class="sub" id="usageAlertSub"></div></div>
+        <div id="usageAlertSegs" class="warm-at"></div>
+      </div>
+      <div class="row pref" id="balanceAlertRow">
+        <div class="who"><div class="name" data-t>Low balance alert</div><div class="sub" id="balanceAlertSub"></div></div>
+        <div id="balanceAlertSegs" class="warm-at"></div>
+      </div>
     </div>
-  </div>
-  <div class="list prefs" id="claudeWarmList" role="tabpanel" aria-labelledby="warmTab-claude">
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="claudeWarmSub"></div></div>
-      <div id="claudeWarmSegs"></div>
+    <div class="row-head warm-head"><div class="warm-tabs" id="warmTabs" role="tablist">
+      <button type="button" role="tab" id="warmTab-codex" data-warm="codex" aria-controls="codexWarmList">Codex</button>
+      <button type="button" role="tab" id="warmTab-claude" data-warm="claude" aria-controls="claudeWarmList">Claude Code</button>
+      <button type="button" role="tab" id="warmTab-wb" data-warm="wb" aria-controls="wbList" hidden>WorkBuddy</button>
+    </div></div>
+    <div class="warm-panes">
+    <div class="list prefs" id="codexWarmList" role="tabpanel" aria-labelledby="warmTab-codex">
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="warmSub"></div></div>
+        <div id="warmSegs"></div>
+      </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Daily warm-up</div><div class="sub" id="warmAtSub"></div></div>
+        <div id="warmAtSegs" class="warm-at"></div>
+      </div>
     </div>
-    <div class="row pref">
-      <div class="who"><div class="name" data-t>Daily warm-up</div><div class="sub" id="claudeWarmAtSub"></div></div>
-      <div id="claudeWarmAtSegs" class="warm-at"></div>
+    <div class="list prefs" id="claudeWarmList" role="tabpanel" aria-labelledby="warmTab-claude">
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Warm up on reset</div><div class="sub" id="claudeWarmSub"></div></div>
+        <div id="claudeWarmSegs"></div>
+      </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Daily warm-up</div><div class="sub" id="claudeWarmAtSub"></div></div>
+        <div id="claudeWarmAtSegs" class="warm-at"></div>
+      </div>
     </div>
-  </div>
-  <div class="list prefs" id="wbList" role="tabpanel" aria-labelledby="warmTab-wb">
-    <div class="row pref" id="wbCheckinRow">
-      <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="wbCheckinSub"></div></div>
-      <div id="wbCheckinSegs"></div>
+    <div class="list prefs" id="wbList" role="tabpanel" aria-labelledby="warmTab-wb">
+      <div class="row pref" id="wbCheckinRow">
+        <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="wbCheckinSub"></div></div>
+        <div id="wbCheckinSegs"></div>
+      </div>
     </div>
-  </div>
-  </div>
-  <div class="row-head"><span class="label" data-t>Local network</span></div>
-  <div class="list prefs" id="lanList"></div>
-  <div class="row-head"><span class="label" data-t>Images</span></div>
-  <div class="list prefs" id="imagesList"></div>
-  <div class="row-head"><span class="label" data-t>Web search</span></div>
-  <div class="list prefs" id="searchList"></div>
-  <div class="row-head"><span class="label" data-t>Privacy</span></div>
-  <div class="list prefs" id="redactList"></div>
-  <div class="row-head"><span class="label" data-t>Observability</span></div>
-  <div class="list prefs" id="otelList"></div>
-  <div class="row-head"><span class="label" data-t>Sync and backup</span></div>
-  <div class="list prefs" id="syncList"></div>
-  <div class="row-head"><span class="label" data-t>About</span></div>
-  <div class="list prefs" id="about"></div>
+    </div>
+  </section>
+  <section class="set-page" id="setPage-network" role="tabpanel" aria-labelledby="setTab-network">
+    <div class="list prefs">
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Proxy</div><div class="sub" id="proxySub"></div></div>
+        <div id="proxySegs" class="proxy-segs"></div>
+      </div>
+    </div>
+    <div class="row-head"><span class="label" data-t>Local network</span></div>
+    <div class="list prefs" id="lanList"></div>
+  </section>
+  <section class="set-page" id="setPage-models" role="tabpanel" aria-labelledby="setTab-models">
+    <div class="row-head"><span class="label" data-t>Images</span></div>
+    <div class="list prefs" id="imagesList"></div>
+    <div class="row-head"><span class="label" data-t>Web search</span></div>
+    <div class="list prefs" id="searchList"></div>
+  </section>
+  <section class="set-page" id="setPage-privacy" role="tabpanel" aria-labelledby="setTab-privacy">
+    <div class="list prefs" id="redactList"></div>
+  </section>
+  <section class="set-page" id="setPage-otel" role="tabpanel" aria-labelledby="setTab-otel">
+    <div class="list prefs" id="otelList"></div>
+  </section>
+  <section class="set-page" id="setPage-sync" role="tabpanel" aria-labelledby="setTab-sync">
+    <div class="list prefs" id="syncList"></div>
+  </section>
+  <section class="set-page" id="setPage-about" role="tabpanel" aria-labelledby="setTab-about">
+    <div class="list prefs" id="about"></div>
+  </section>
 </main>
 
 <footer class="foot">

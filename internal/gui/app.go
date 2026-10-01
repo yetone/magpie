@@ -403,6 +403,7 @@ func Run(version string, showMain bool, link string) error {
 		})
 	}
 	updates.start()
+	news.start()
 	// the library written into the agents again, once: one installed or
 	// updated since (or an edit by hand) gets it without a visit to the page
 	go func() {

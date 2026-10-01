@@ -912,7 +912,8 @@
     rh.append(el("span", "label", t("Agents")), el("span", "grow"), el("span", "note", t("magpie writes its part between two marker lines — the rest of each file stays yours")));
     body.append(rh);
     const list = el("div", "list lib-list");
-    const rows = iv.agents.filter((a) => !isHidden({ id: a.agent }));
+    // a hidden agent still reading them is listed, to switch it off (#475)
+    const rows = iv.agents.filter((a) => !isHidden({ id: a.agent }) || a.on);
     for (const a of rows) list.append(...instructionsRow(a));
     if (!rows.length) list.append(el("div", "lib-none", t("None of your agents reads a user-wide instructions file magpie knows.")));
     body.append(list);
@@ -1023,6 +1024,7 @@
     who.append(sub);
     const tags = el("div", "lib-tags");
     const extra = extras[a.agent] ?? a.extra;
+    if (isHidden({ id: a.agent })) tags.append(tag(t("Hidden"), "", t("Hidden on the Agents page: switch it off here to take the shared instructions out of its file")));
     if (a.on && extra) tags.append(tag(t("+ its own"), "", t("{agent} gets something of its own after the shared text", { agent: a.name })));
     if (a.edited) tags.append(tag(t("edited in the file"), "warn", t("magpie's part of this file was changed there; magpie leaves it until the library's text changes")));
     if (a.own) tags.append(tag(a.own === 1 ? t("1 line of its own") : t("{n} lines of its own", { n: a.own }), "", t("The file has instructions besides magpie's part — they stay, and the agent reads both")));
@@ -1110,8 +1112,21 @@
       const add = button(t("＋ Add a server"), "action", () => editServer(null));
       body.append(empty(t("No servers in the library yet"), lib.foundServers.length ? t("Add one, or bring in those your agents already have, below.") : t("Paste a server's JSON from its README, or fill it in."), add));
     } else {
+      // one agent's servers on or off at once (#475), or out of a hidden one
+      if (byAgentRows("servers").length) {
+        const rh = el("div", "row-head");
+        rh.append(el("span", "label", t("In the library")), el("span", "grow"), byAgentButton("servers"));
+        body.append(rh);
+      }
       const list = el("div", "list lib-list");
-      for (const s of lib.servers) list.append(serverRow(s, all));
+      // in the order the reader picked (#481), A→Z till then
+      const fill = () => list.replaceChildren(...[...lib.servers].sort(byName(sortOf("libServers"))).map((s) => serverRow(s, all)));
+      if (lib.servers.length > 1) {
+        const rh = el("div", "row-head");
+        rh.append(el("span", "label", t("In the library")), el("span", "grow"), sortBy("libServers", NAME_SORTS, fill));
+        body.append(rh);
+      }
+      fill();
       body.append(list);
       const after = el("div", "after-list");
       after.append(button(t("＋ Add server"), "", () => editServer(null)));
@@ -1404,13 +1419,15 @@
     body.append(installCard());
     const all = skillAgents();
     if (lib.skills.length) {
-      const rh = el("div", "row-head");
+      const rh = el("div", "row-head lib-skillshead");
       rh.append(el("span", "label", t("In the library")));
       const box = el("div", "lib-groups");
       if (lib.skills.length > 8) rh.append(skillFilter(box, all));
       const fresh = lib.skills.filter((s) => s.kind === "github" || s.origin);
       rh.append(el("span", "grow"));
+      if (lib.skills.length > 1) rh.append(sortBy("libSkills", SKILL_SORTS(), () => { if (box.isConnected) drawSkills(box, all); }));
       if (lib.skills.length > 1 && all.length) rh.append(...everySkillButtons(all));
+      if (byAgentRows("skills").length) rh.append(byAgentButton("skills"));
       if (lib.skills.length > 1) rh.append(removeEverySkillButton());
       if (lib.skills.some((s) => s.kind === "github")) {
         const c = button(checking ? t("Checking…") : t("Check for updates"), "lib-updall", () => checkSkills());
@@ -1496,11 +1513,23 @@
   // without drawing it.
   const ROW_H = 51, ROW_SRC_H = 67, SUB_H = 36;
 
+  // By source (the groups, as they always were) or one flat list of every
+  // skill by name, A→Z or Z→A (#481)
+  const SKILL_SORTS = () => [["source", t("By source")], ...NAME_SORTS];
   // the groups, and each skill's text to filter by, worked out once for
-  // each answer from magpie
+  // each answer from magpie and each pick
   let grouped = null;
   function skillGroups() {
-    if (grouped?.lib === lib) return grouped.groups;
+    const pick = sortOf("libSkills", SKILL_SORTS());
+    if (grouped?.lib === lib && grouped.pick === pick) return grouped.groups;
+    if (pick !== "source") {
+      const skills = [...lib.skills].sort(byName(pick));
+      const repo = (s) => (s.kind === "github" ? repoOf(s.source) : s.origin ? repoOf(s.origin) : "");
+      const g = { key: "flat", repo: "", skills, parts: null,
+        text: new Map(skills.map((s) => [s, (s.name + " " + (s.description || "") + " " + repo(s)).toLowerCase()])) };
+      grouped = { lib, pick, groups: [g] };
+      return grouped.groups;
+    }
     const by = new Map();
     for (const s of lib.skills) {
       const repo = s.kind === "github" ? repoOf(s.source) : s.origin ? repoOf(s.origin) : "";
@@ -1515,7 +1544,7 @@
       g.text = new Map(g.skills.map((s) => [s, (s.name + " " + (s.description || "") + " " + g.repo).toLowerCase()]));
       g.parts = partsOf(g);
     }
-    grouped = { lib, groups };
+    grouped = { lib, pick, groups };
     return groups;
   }
 
@@ -2099,6 +2128,88 @@
       status(e.message, "err", 6000);
       return false;
     }
+  }
+
+  // One agent's skills, or servers, on or off at once (#475), rather than a
+  // chip on every row: the agents that can take them, each with how many it
+  // has, a button that gives it every one it can take and one that takes
+  // every one from it. Every other agent keeps what it has. An agent hidden
+  // on the Agents page (#71) has no chips, so it's listed here while it has
+  // any, to take them out of it; it isn't given more.
+  function byAgentButton(kind) {
+    const b = button(t("By agent"), "action lib-updall lib-byagent", () => openByAgent(kind));
+    b.title = kind === "skills" ? t("Turn every skill on or off for one agent") : t("Turn every server on or off for one agent");
+    return b;
+  }
+
+  // kept: agents listed when the sheet opened, which stay listed in it once
+  // a hidden one has nothing left
+  function byAgentRows(kind, kept) {
+    const items = kind === "skills" ? lib.skills : lib.servers;
+    const can = kind === "skills" ? () => true : (s, a) => reaches(s)(a);
+    return lib.agents.filter((a) => kind === "skills" ? a.skills : a.mcp).map((a) => {
+      const has = items.filter((x) => x.agents?.includes(a.id)).length;
+      const missing = items.filter((x) => can(x, a) && !x.agents?.includes(a.id)).length;
+      return { a, has, missing, hidden: isHidden(a) };
+    }).filter((r) => !r.hidden || r.has || kept?.has(r.a.id));
+  }
+
+  function openByAgent(kind) {
+    const skills = kind === "skills", items = () => skills ? lib.skills : lib.servers;
+    const ed = el("div", "editor lib-editor lib-byagent-sheet");
+    const head = el("div", "ehead");
+    head.append(glyph(skills ? GLYPH.skill : GLYPH.cmd), el("b", "", skills ? t("Skills by agent") : t("MCP servers by agent")));
+    ed.append(head);
+    ed.append(el("p", "lib-confirm", skills
+      ? t("Every skill on or off for one agent; the others keep theirs. Turned off, they stay in the library.")
+      : t("Every server on or off for one agent; the others keep theirs. Turned off, they stay in the library.")));
+    const list = el("div", "list lib-list lib-byagent-list");
+    let busy = false;
+    const listed = new Set(byAgentRows(kind).map((r) => r.a.id));
+    const draw = () => list.replaceChildren(...byAgentRows(kind, listed).map(({ a, has, missing, hidden }) => {
+      const row = el("div", "row lib-row lib-byagent-row");
+      row.dataset.agent = a.id;
+      const who = el("div", "who");
+      const name = el("div", "name", a.name);
+      if (hidden) name.append(tag(t("Hidden"), "", t("Hidden on the Agents page: it isn't given anything new, and what it has can be taken out here")));
+      who.append(name, el("div", "sub", skills ? t("{n} of {m} skills", { n: has, m: items().length }) : t("{n} of {m} servers", { n: has, m: items().length })));
+      const on = button(t("Turn all on"), "action lib-updall lib-agenton", (e, b) => everyFor(a, true, b));
+      on.disabled = busy || hidden || !missing;
+      const off = button(t("Turn all off"), "action lib-updall lib-agentoff", (e, b) => everyFor(a, false, b));
+      off.disabled = busy || !has;
+      on.title = skills ? t("Give {agent} every skill", { agent: a.name }) : t("Give {agent} every server it can reach", { agent: a.name });
+      off.title = skills ? t("Take every skill from {agent}", { agent: a.name }) : t("Take every server from {agent}", { agent: a.name });
+      row.append(agentIcon(a.icon), who, on, off);
+      return row;
+    }));
+    // what each button wrote is what the list then shows; the page under
+    // it is drawn again too, its chips with it
+    async function everyFor(a, on, b) {
+      busy = true;
+      for (const x of list.querySelectorAll("button")) x.disabled = true;
+      b.classList.add("busy");
+      try {
+        const v = await api("library/" + (skills ? "skills" : "servers") + "/agents-all", { agents: [a.id], on });
+        take(v);
+        const n = items().filter((x) => x.agents?.includes(a.id)).length;
+        report(v.result, skills
+          ? (on ? t(n === 1 ? "1 skill is on for {agent}" : "{n} skills are on for {agent}", { n, agent: a.name }) : t("Every skill is off for {agent}", { agent: a.name }))
+          : (on ? t(n === 1 ? "1 server is on for {agent}" : "{n} servers are on for {agent}", { n, agent: a.name }) : t("Every server is off for {agent}", { agent: a.name })));
+        render();
+      } catch (e) {
+        status(e.message, "err", 6000);
+      }
+      busy = false;
+      if (list.isConnected) draw();
+    }
+    draw();
+    ed.append(list);
+    const bar = el("div", "bar");
+    const done = button(t("Done"), "primary", closeLibModal);
+    bar.append(el("span", "grow"), done);
+    ed.append(bar);
+    modal = { save: () => done.click() };
+    openLib(ed);
   }
 
   // Every skill out of the library at once (#449), each as a row's Remove

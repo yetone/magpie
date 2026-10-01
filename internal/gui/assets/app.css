@@ -5,9 +5,14 @@
   --card-2: #f9f9fb;      /* expanded editor */
   --pill: #f1f1f4;
   --pill-hover: #e9e9ee;
-  --seg-track: var(--pill);   /* the header's view switch: its track and the thumb on the view shown */
+  /* the header's view switch: its track and the thumb on the view shown, the
+     track a shade deeper than a pill so the white thumb stands off it (#477) */
+  --seg-track: #e6e6eb;
   --seg-thumb: var(--card);
-  --seg-edge: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 .5px rgba(0, 0, 0, .06);
+  --seg-edge: 0 1px 2px rgba(0, 0, 0, .14), 0 0 0 .5px rgba(0, 0, 0, .08);
+  /* a control's quiet text (the switch's other views, a text button): darker
+     than --muted, so it reads at 4.5:1 or better on every surface it sits on */
+  --ctl-fg: #63636b;
   --line: #e3e3e8;
   --line-2: #ececf0;
   --fg: #1c1c21;
@@ -43,8 +48,8 @@
     --card-2: #1f1f23;
     --pill: #2d2d33;
     --pill-hover: #36363d;
-    --seg-track: rgba(255, 255, 255, .045);
-    --seg-thumb: rgba(255, 255, 255, .1);
+    --seg-track: rgba(255, 255, 255, .035);
+    --seg-thumb: rgba(255, 255, 255, .15);
     --seg-edge: inset 0 .5px 0 rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .3);
     --line: #333339;
     --line-2: #2c2c32;
@@ -52,6 +57,7 @@
     --fg-2: #b9b9c1;
     --muted: #8b8b94;
     --faint: #56565f;
+    --ctl-fg: #a1a1aa;
     --accent: #a5b4fc;
     --accent-soft: #2b2c47;
     --accent-fg: #14142a;
@@ -73,8 +79,8 @@
 }
 :root[data-theme="dark"] {
   --bg: #1a1a1e; --card: #232327; --card-2: #1f1f23; --pill: #2d2d33; --pill-hover: #36363d;
-  --seg-track: rgba(255, 255, 255, .045); --seg-thumb: rgba(255, 255, 255, .1); --seg-edge: inset 0 .5px 0 rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .3);
-  --line: #333339; --line-2: #2c2c32; --fg: #ededf1; --fg-2: #b9b9c1; --muted: #8b8b94; --faint: #56565f;
+  --seg-track: rgba(255, 255, 255, .035); --seg-thumb: rgba(255, 255, 255, .15); --seg-edge: inset 0 .5px 0 rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .3);
+  --line: #333339; --line-2: #2c2c32; --fg: #ededf1; --fg-2: #b9b9c1; --muted: #8b8b94; --faint: #56565f; --ctl-fg: #a1a1aa;
   --accent: #a5b4fc; --accent-soft: #2b2c47; --accent-fg: #14142a; --sel: #33345a;
   --green: #6fd99b; --green-soft: #1e3a2b; --red: #f28b82; --red-soft: #45272a; --amber: #f2b544; --amber-soft: #3f3220;
   --drift: #ff9592; --drift-soft: #3b1219;
@@ -199,7 +205,7 @@ body.window:not(.mac):not(.linux):not(.web) .brand { display: none; } /* Windows
 }
 .seg > .thumb { border-radius: 6px; background: var(--seg-thumb); box-shadow: var(--seg-edge); }
 body.panel .seg { display: none; }
-.seg button { position: relative; z-index: 1; white-space: nowrap; height: 24px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--muted); transition: color .18s var(--ease), transform .14s var(--ease); }
+.seg button { position: relative; z-index: 1; white-space: nowrap; height: 24px; padding: 0 12px; border-radius: 6px; font-size: 12.5px; color: var(--ctl-fg); transition: color .18s var(--ease), transform .14s var(--ease); }
 .seg button.on { color: var(--fg); }
 /* a plugin update waiting for the reader: a dot on Plugins */
 .seg button.has-dot::after { content: ""; position: absolute; top: 4px; right: 4px; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); }
@@ -318,6 +324,14 @@ body.window .ag-handle { width: 28px; height: 28px; }
 #agents > .row .ag-handle:focus-visible > .ic { opacity: 0; transform: scale(.8); }
 #agents > .row .ag-handle:is(:hover, .open) > .grip, #agents > .row.dragging .ag-handle > .grip { opacity: 1; transform: none; }
 #agents > .row .ag-handle:focus-visible > .grip { opacity: 1; transform: none; }
+/* the logo's grip comes up only on hover, so a row in the list also carries a
+   faint one in its left margin, always there, that says the row can be taken
+   hold of (#479): it is the handle's own, so a drag or a click on it does what
+   the logo does, and it takes no room from the row */
+#agents > .row .ag-handle { position: relative; }
+#agents > .row .ag-handle::before { content: ""; position: absolute; left: -6px; top: 50%; width: 5px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--grip-dot) .9px, transparent 1.2px) 0 0 / 3.5px 3.75px; --grip-dot: var(--faint); }
+body.panel #agents > .row .ag-handle::before { left: -9px; }
+#agents > .row:is(:hover, .dragging) .ag-handle::before { --grip-dot: var(--muted); }
 /* one hidden by hand reads as put away, with its way back beside its name */
 .agent-fold .row.put-away .ag-handle > .ic, .agent-fold .row.put-away .name { opacity: .6; }
 .agent-fold .row.put-away .who { display: flex; align-items: center; gap: 8px; }
@@ -325,12 +339,8 @@ body.window .ag-handle { width: 28px; height: 28px; }
 .agent-fold .row .ag-show { margin-left: auto; }
 .ag-show { display: inline-flex; align-items: center; gap: 4px; flex: none; height: 22px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--fg-2); font: inherit; font-size: 11.5px; cursor: pointer; transition: background-color .15s, color .15s, border-color .15s; }
 .ag-show:hover { background: var(--pill); color: var(--fg); }
-/* it comes up with the row under the pointer, or the keyboard on it; the
-   line over the rows already says why they are there */
-@media (hover: hover) {
-  .agent-fold .row .ag-show { opacity: 0; transform: translateX(3px); transition: opacity .15s, transform .2s cubic-bezier(.22, 1, .36, 1), background-color .15s, color .15s; }
-  .agent-fold .row:is(:hover, :focus-within) .ag-show { opacity: 1; transform: none; }
-}
+/* always there, not only under the pointer: it is the way back for a row
+   hidden by hand, and has to be seen to be found (#479) */
 .ag-show:focus-visible { outline: 1.5px solid var(--fg-2); outline-offset: 1px; }
 .ag-show svg { color: var(--muted); }
 /* an agent whose config was rewritten since magpie set it: a line under
@@ -388,9 +398,8 @@ body.window .agent-fold-cap { padding: 10px 14px 3px; }
 #agents.sorting { user-select: none; -webkit-user-select: none; }
 #agents.sorting > .row { transition: transform .22s cubic-bezier(.22, 1, .36, 1); }
 #agents.sorting .ag-handle { cursor: grabbing; }
-#agents > .row.dragging, #agents > .row.landing { position: relative; z-index: 2; background: var(--card); box-shadow: 0 6px 18px rgba(20, 22, 30, .12), 0 0 0 1px var(--line); border-radius: 8px; }
+#agents > .row.dragging { position: relative; z-index: 2; background: var(--card); box-shadow: 0 6px 18px rgba(20, 22, 30, .12), 0 0 0 1px var(--line); border-radius: 8px; }
 #agents > .row.dragging { transition: none; }
-#agents > .row.landing { transition: transform .16s cubic-bezier(.22, 1, .36, 1), box-shadow .16s; }
 
 .pop.row-menu { width: auto; min-width: 176px; max-height: none; padding: 4px; border: 1px solid var(--line); display: grid; gap: 1px; }
 .row-menu .rm-item { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: none; color: var(--fg); font: inherit; font-size: 12.5px; text-align: left; cursor: default; outline: none; }
@@ -1081,6 +1090,8 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-ring.full .pq-dial { background: conic-gradient(var(--amber) calc(var(--p) * 1%), color-mix(in srgb, var(--amber) 18%, transparent) 0); }
 .pq-ring.full b { color: var(--fg); }
 .pq-rn { max-width: 44px; font-size: 9.5px; line-height: 1.2; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pq-rn2 { display: flex; flex-direction: column; align-items: center; }
+.pq-rn2 > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* a Codex account's rate-limit resets, under a hairline across the card */
 .pq-resets { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-top: 5px; padding-top: 7px; border-top: 1px solid var(--line-2); font-size: 11px; font-variant-numeric: tabular-nums; }
 .resets-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1131,7 +1142,7 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 .profiles .chips .hint { line-height: 30px; }
 .row-head { display: flex; align-items: center; height: 26px; }
 .label { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
-.text { font-size: 12px; color: var(--muted); padding: 3px 7px; border-radius: 6px; transition: background .12s, color .12s; white-space: nowrap; }
+.text { font-size: 12px; color: var(--ctl-fg); padding: 3px 7px; border-radius: 6px; transition: background .12s, color .12s; white-space: nowrap; }
 .text:hover { color: var(--fg); background: var(--pill); }
 .text.action { height: 27px; padding: 0 10px; border: 1px solid var(--line); background: var(--card); color: var(--fg-2); box-shadow: 0 1px 1px rgba(0, 0, 0, .04); display: inline-flex; align-items: center; justify-content: center; }
 .text.action:hover { border-color: var(--muted); background: var(--card-2); color: var(--fg); }
@@ -1153,6 +1164,32 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 .chip .x { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; opacity: 0; transition: opacity .12s; }
 .chip:hover .x { opacity: .6; }
 .chip .x:hover { opacity: 1; background: rgba(127, 127, 127, .2); }
+.chip .x.arm { width: auto; padding: 0 7px; border-radius: 10px; font-size: 11.5px; opacity: 1; color: var(--red); background: var(--red-soft); white-space: nowrap; }
+.chip .x.arm:hover { background: var(--red-soft); }
+/* a profile's details: what it holds, by agent, and its Apply (#467) */
+.profiles .chip.on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.prof-detail {
+  flex: 1 1 100%; min-width: 0; box-sizing: border-box; padding: 9px 12px 10px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card); font-size: 12px;
+}
+.pd-head { display: flex; align-items: center; gap: 10px; }
+.pd-head.pd-foot { margin-top: 10px; }
+body.window .profiles.detailed { align-items: flex-start; }
+body.window .profiles.detailed > .label { line-height: 30px; }
+body.window .profiles.detailed > #save { margin-top: 4px; }
+.pd-name { flex: 1 1 auto; min-width: 0; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pd-apply { flex: none; height: 24px; padding: 0 12px; }
+.pd-close { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.pd-close:hover { color: var(--fg); background: rgba(127, 127, 127, .15); }
+.pd-agent { margin-top: 9px; }
+.pd-gh { display: flex; align-items: center; gap: 6px; font-weight: 500; color: var(--fg-2); }
+.pd-gh .ic { width: 14px; height: 14px; flex: none; }
+.pd-gn { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pd-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; margin: 4px 0 0 20px; line-height: 1.5; }
+.pd-fields dt { color: var(--muted); }
+.pd-fields dd { margin: 0; min-width: 0; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pd-fields dd.pd-default, .pd-fields dd.pd-hidden { color: var(--faint); }
+.pd-none { margin-top: 8px; font-size: 11.5px; line-height: 1.4; color: var(--muted); }
 /* its save, update or use on the way (profileAction) */
 .chip.pending { opacity: .55; pointer-events: none; }
 .chip-input {
@@ -1235,6 +1272,8 @@ body.window .foot { padding-left: 18px; }
 .pop li:hover .favorite, .pop li .favorite.on { display: inline-flex; }
 .pop li .favorite:hover { color: var(--amber); background: var(--pill-hover); }
 .pop li .favorite.on { color: var(--amber); }
+/* not a favourite: an outline star, on hover; a favourite: a filled one, always */
+.pop li .favorite.on path { fill: currentColor; }
 .pop.explained li { height: auto; padding: 7px 8px; white-space: normal; align-items: flex-start; }
 .pop.explained li .option-words { flex-direction: column; align-items: flex-start; gap: 2px; }
 .pop.explained li .n { flex: none; overflow: visible; line-height: 1.4; }
@@ -1495,7 +1534,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .dot { width: 16px; height: 16px; flex: none; border-radius: 50%; display: grid; place-items: center; box-shadow: inset 0 0 0 1.5px var(--faint); color: var(--muted); }
 .acc.in-use .dot { background: var(--fg); box-shadow: none; color: var(--card); }
 .acc .using { font-size: 11px; color: var(--fg-2); padding: 2px 8px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line); }
-.acc .text.quiet { color: var(--muted); opacity: 0; transition: opacity .15s; }
+.acc .text.quiet { opacity: 0; transition: opacity .15s; }
 .acc:hover .text.quiet { opacity: 1; }
 .acc .text.quiet:focus-visible { opacity: 1; }
 .acc.new { animation: sub-in .5s cubic-bezier(.2, .8, .2, 1); }
@@ -1531,6 +1570,19 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .proto:focus-visible { opacity: 1; }
 .acc .proto.set { color: var(--fg-2); }
 .acc .proto:hover, .acc .proto.open { color: var(--fg); background: var(--pill-hover); }
+/* an account's or key's own models (#474): a badge like the key's protocol,
+   shown always once it keeps some only, and its picker under the row */
+.acc .amodels { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 7px; font: inherit; font-size: 11px; color: var(--muted); border: 0; border-radius: 5px; background: var(--pill); white-space: nowrap; cursor: default; transition: opacity .15s, background .12s, color .12s; }
+.acc .amodels:not(.set) { opacity: 0; background: none; box-shadow: inset 0 0 0 1px var(--line); }
+.acc:hover .amodels, .acc .amodels.open { opacity: 1; }
+.acc .amodels:focus-visible { opacity: 1; }
+.acc .amodels.set { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
+.acc .amodels:hover, .acc .amodels.open { color: var(--fg); background: var(--pill-hover); }
+.accts .acc.with-am { flex-wrap: wrap; row-gap: 3px; }
+.acc .acct-models { flex-basis: 100%; display: grid; gap: 7px; padding: 6px 0 2px 25px; cursor: auto; }
+.acc .acct-models .acm-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.acc .acct-models .hint { font-size: 11px; color: var(--muted); line-height: 1.4; flex: 1 1 220px; }
+.acc .acct-models .acm-foot .grow { flex: 0 0 0; }
 .acc .n, .acc .rename { flex: 0 1 auto; }
 .acc .plan { flex: none; }
 #gatewayKeys .acc { min-width: 0; }
@@ -1559,6 +1611,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .aq-w.full b, .acc .aq-w.full .aq-r { color: var(--fg); }
 .acc .aq-w.full .aq-track i { background: var(--fg); }
 .acc .aq-r { color: var(--muted); }
+.acc .aq-k { color: var(--muted); font-variant-numeric: tabular-nums; }
 .acc .aq-none { color: var(--faint); }
 .acc .skeleton.sk-aq { width: 110px; height: 8px; border-radius: 4px; }
 .acc .dot.tick.fixed { cursor: default; }
@@ -1733,6 +1786,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .segs { position: relative; display: inline-flex; padding: 2px; border-radius: 7px; background: var(--pill); align-self: flex-start; }
 .opt { position: relative; z-index: 1; white-space: nowrap; height: 22px; padding: 0 10px; border-radius: 5px; font-size: 12px; color: var(--muted); transition: color .18s var(--ease), transform .14s var(--ease); }
 .opt.on { color: var(--fg); }
+/* how often magpie checks for updates, while it doesn't by itself */
+.update-every-row.off .segs { opacity: .55; }
 .opt:hover:not(.on) { color: var(--fg-2); }
 .thumb {
   position: absolute; top: 2px; bottom: 2px; left: 0; width: 0; border-radius: 6px;
@@ -1748,6 +1803,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 :where(body:not(.mac)) .segs.regions::-webkit-scrollbar { height: 6px; }
 :where(body:not(.mac)) .segs.regions::-webkit-scrollbar-thumb { border-width: 1px; }
 .segs.regions .opt { flex: none; }
+/* an installed list's order (#481): small, beside the list's heading */
+.segs.sortby { align-self: center; flex: none; }
+.segs.sortby .opt { height: 20px; padding: 0 8px; font-size: 11px; }
 .thumb.still { transition: none; }
 .link { font-size: 12px; color: var(--accent); padding: 3px 4px; white-space: nowrap; }
 .link:hover { text-decoration: underline; text-underline-offset: 2px; }
@@ -1862,6 +1920,15 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .warm-tabs button.on { color: var(--fg); background: var(--pill); }
 .warm-tabs button[hidden] { display: none; }
 .warm-panes { margin-bottom: 8px; }
+/* the page's parts (#471): a tab each at the top in the same look, a line
+   more when they don't fit across (a narrow window, a larger text size),
+   the part picked alone under them */
+#view-settings .set-head { height: auto; min-height: 26px; flex: none; }
+.set-tabs { flex-wrap: wrap; row-gap: 2px; min-width: 0; }
+.set-tabs button { flex: none; white-space: nowrap; }
+.set-page { flex: none; }
+.set-page[hidden] { display: none; }
+.set-page > .list:not(:last-child) { margin-bottom: 8px; }
 .row.pref { min-height: 50px; padding: 8px 12px 8px 14px; gap: 14px; }
 .row.pref .who { flex: 1 1 auto; }
 .row.pref .sub { margin-top: 2px; }
@@ -2002,6 +2069,22 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 .modal .editor.framed > .ehead { border-bottom: 1px solid var(--line-2); }
 .modal .editor.framed > .bar { border-top: 1px solid var(--line-2); }
 .modal .editor.framed > .editor-error { flex: none; padding: 8px 18px; border-top: 1px solid var(--line-2); }
+/* what's new after an update: each release's notes, one under another,
+   divided by a hairline, the text selectable */
+.modal .editor.whatsnew > .ebody { gap: 0; }
+.whatsnew .wn-rel { grid-column: 1 / -1; min-width: 0; }
+.whatsnew .wn-rel + .wn-rel { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.whatsnew .wn-ver { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.whatsnew .wn-ver b { font-weight: 600; }
+.whatsnew .wn-notes { font-size: 12.5px; line-height: 1.55; color: var(--fg-2); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.whatsnew .wn-h { margin: 10px 0 2px; font-size: 12px; font-weight: 600; color: var(--fg); }
+.whatsnew .wn-h1, .whatsnew .wn-h2 { font-size: 12.5px; }
+.whatsnew .wn-notes ul { margin: 2px 0; padding-left: 18px; }
+.whatsnew .wn-notes li + li { margin-top: 2px; }
+.whatsnew .wn-notes p { margin: 4px 0; }
+.whatsnew .wn-notes code { font: 11.5px/1.4 var(--mono, ui-monospace, monospace); padding: 0 4px; border-radius: 4px; background: var(--pill); }
+.whatsnew .wn-link { color: var(--accent); text-decoration: none; }
+.whatsnew .wn-link:hover { text-decoration: underline; }
 /* Keep native window chrome outside the scrim and dialog. In particular, the
    macOS traffic lights must never sit on top of modal content. */
 body.window.mac .modal { top: calc(50px / var(--zoom, 1)); padding: 16px 24px 24px; }
@@ -2152,6 +2235,16 @@ body.panel .modal { padding: 16px 12px; }
 .cxpick:hover { border-color: var(--accent); color: var(--accent); }
 .cxpick.on { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); font-weight: 500; }
 
+/* Account rows use the existing pointer sorter, without a visible handle. */
+.accts > [data-account-id] { user-select: text; -webkit-user-select: text; }
+.accts.reorderable > [data-account-id] { cursor: grab; touch-action: pan-y; }
+.accts.reorderable > [data-account-id]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.accts.sorting > [data-account-id] { animation: none; transition: transform .16s cubic-bezier(.22, 1, .36, 1); }
+.accts.sorting > .dragging { position: relative; z-index: 2; background: var(--card-2); box-shadow: 0 0 0 1px var(--line); cursor: grabbing; transition: none; will-change: transform; }
+.accts[aria-busy=true] > [data-account-id] { cursor: progress; }
+@media (prefers-reduced-motion: reduce) {
+  .accts.sorting > [data-account-id], #agents.sorting > .row { transition: none; }
+}
 /* the show while the session files are indexed: the words on the left, a
    field of dots that light up as the files land on the right, a hairline
    along the foot. The hero holds its own layout (:has) whatever the class,
@@ -2269,7 +2362,7 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .pop.am-pop .am-search input { flex: 1; min-width: 0; height: 28px; border: 0; outline: none; background: none; color: var(--fg); font: inherit; font-size: 12.5px; }
 .am-search:focus-within { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
 .am-seg { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--seg-track); }
-.am-seg button { height: 24px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; transition: background-color .15s, color .15s; }
+.am-seg button { height: 24px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: var(--ctl-fg); font: inherit; font-size: 12px; cursor: pointer; transition: background-color .15s, color .15s; }
 .am-seg button.on { background: var(--seg-thumb); color: var(--fg); box-shadow: var(--seg-edge); }
 .am-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 2px; }
 .am-gh { display: flex; align-items: center; margin: 6px 2px 0; }

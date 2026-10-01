@@ -315,6 +315,40 @@ func ServerAgents(name string, agents []string) (*Result, error) {
 	})
 }
 
+// EveryServerAgents gives every server in the library to the agents named,
+// or takes every one from them, in one write rather than one for each
+// server (#475). An agent not named keeps what it has, as with a server's
+// All chip; on gives an agent only the servers it can reach (no SSE for
+// Codex, no remote one for Claude Desktop), as its chips can't be lit for
+// the others.
+func EveryServerAgents(agents []string, on bool) (*Result, error) {
+	if len(agents) == 0 {
+		return nil, fmt.Errorf("no agents to give the servers to")
+	}
+	return change(func(l *Library) error {
+		mcp := map[string]*mcpFile{}
+		if on {
+			for _, t := range Targets() {
+				if t.MCP != nil {
+					mcp[t.Agent.ID] = t.MCP
+				}
+			}
+		}
+		for _, s := range l.MCP {
+			kept := slices.DeleteFunc(slices.Clone(s.Agents), func(a string) bool { return slices.Contains(agents, a) })
+			for _, a := range agents {
+				if on && mcp[a] != nil && mcp[a].supports(s) == nil {
+					kept = append(kept, a)
+				} else if on && slices.Contains(s.Agents, a) {
+					kept = append(kept, a) // one it has already stays, whatever it says of it
+				}
+			}
+			s.Agents = slices.Sorted(slices.Values(kept))
+		}
+		return nil
+	})
+}
+
 // RemoveServer takes a server out of the library and out of every agent
 // magpie gave it to.
 func RemoveServer(name string) (*Result, error) {

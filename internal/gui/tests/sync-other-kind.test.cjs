@@ -89,6 +89,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await page.goto("http://magpie.test/");
       await page.locator("#prefs").click();
+      await page.locator("#setTab-sync").click();
       const list = page.locator("#syncList");
       const first = list.locator(".row.pref").first();
       await first.waitFor({ state: "visible" });

@@ -131,7 +131,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await t.test(lang + ": Settings turns it off, and shows it again", async () => {
         const ctl = fresh({ skip: "0.1.401" });
-        const { page, errors } = await open(lang, ctl, "?view=settings");
+        const { page, errors } = await open(lang, ctl, "?view=settings&tab=about");
         const row = page.locator("#about .row.pref", { has: page.locator(".name", { hasText: w.pill }) });
         await row.locator(".sub", { hasText: w.hidden }).waitFor();
         // the version row still offers the update

@@ -224,7 +224,9 @@ func cmdRequest(req *Request, model string) []byte {
 		"max_tokens": cmdMaxTokens, "stream": true,
 	}
 	if req.MaxTokens > 0 {
-		params["max_tokens"] = req.MaxTokens
+		// within what the model gives and Command Code takes: more is
+		// refused, the whole request with it
+		params["max_tokens"] = min(req.MaxTokens, provider.CommandCodeOutputOf(model))
 	}
 	if req.Temp != nil {
 		params["temperature"] = *req.Temp

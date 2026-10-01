@@ -87,12 +87,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     const open = async (lang, ctl) => {
       const errors = [];
-      const page = await (await browser.newContext({ viewport: { width: 900, height: 420 }, reducedMotion: "reduce" })).newPage();
+      const page = await (await browser.newContext({ viewport: { width: 900, height: 300 }, reducedMotion: "reduce" })).newPage();
       pages.push(page);
       page.setDefaultTimeout(5000);
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", server(lang, ctl));
-      await page.goto("http://magpie.test/?view=settings");
+      await page.goto("http://magpie.test/?view=settings&tab=about");
       return { page, errors };
     };
 
@@ -104,8 +104,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 40; i++) {
         const box = await row.boundingBox();
         const view = await page.locator("#view-settings").boundingBox();
-        if (box && view && box.y >= view.y + 4 && box.y + box.height <= view.y + view.height - 4) break;
-        await page.mouse.wheel(0, 180);
+        if (box && view && box.y >= view.y + 4 && box.y + box.height <= view.y + view.height - 4 && (await viewTop(page)) > 0) break;
+        await page.mouse.wheel(0, 8);
         await page.waitForTimeout(16);
       }
       await page.waitForTimeout(250);

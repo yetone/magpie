@@ -114,10 +114,11 @@ func dsh(home string) *Agent {
 			Get: func() string { return dshGetEffort(dir) },
 			Set: func(v string) error { return dshSetEffort(dir, v) },
 			Options: func(cur map[string]string) []Option {
+				// a model through magpie that lists no levels has none in
+				// dsh (its route gives it no reasoningEfforts), so none is
+				// offered: dsh's own four were, and each was turned away
 				if ref, ok := strings.CutPrefix(cur["model"], magpieID+"/"); ok && len(dshProfiles(dir)) > 0 {
-					if levels := dshLevels(ref); len(levels) > 0 {
-						return static(levels...)
-					}
+					return static(dshLevels(ref)...)
 				}
 				return static(dshEfforts...)
 			},
@@ -1124,6 +1125,9 @@ func dshSetEffort(dir, v string) error {
 		levels := dshEfforts
 		if viaGateway {
 			levels = dshLevels(ref)
+		}
+		if v != "" && len(levels) == 0 {
+			return fmt.Errorf("DeepSeek Harness has no thinking levels for %s: magpie knows of none the model takes", ref)
 		}
 		if v != "" && !contains(levels, v) {
 			return fmt.Errorf("DeepSeek Harness takes an effort of %s for this model, not %q", strings.Join(levels, ", "), v)

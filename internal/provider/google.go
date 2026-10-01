@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -989,10 +990,127 @@ func (g googleAccount) quota(ctx context.Context, plan string) SubscriptionQuota
 		}
 		q.Windows = append(q.Windows, w)
 	}
+	if g.app.agent == "antigravity" {
+		q.Windows = append(q.Windows, g.pools(ctx, q.Windows)...)
+	}
 	if p, err := g.project(ctx); err == nil && q.Plan == "" {
 		q.Plan = p.plan
 	}
 	return q
+}
+
+// pools are an Antigravity account's shared allowances, a 5-hour and a
+// weekly one for each group of models drawing on one quota ("Gemini
+// Models", "Claude and GPT models"), as retrieveUserQuotaSummary reports
+// them; fetchAvailableModels gives each model only the 5-hour figure, the
+// same for every model of a group. Each per-model window in ws is given
+// its group's name as its Pool, so the GUI shows one row a group. None
+// when the summary can't be read: the per-model windows stand alone. They
+// are Aside: routing goes on reading the per-model windows, as before.
+func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindow {
+	p, err := g.project(ctx)
+	if err != nil {
+		return nil
+	}
+	var res struct {
+		Groups []struct {
+			DisplayName string `json:"displayName"`
+			Description string `json:"description"`
+			Buckets     []struct {
+				BucketID          string   `json:"bucketId"`
+				Window            string   `json:"window"`
+				RemainingFraction *float64 `json:"remainingFraction"`
+				ResetTime         string   `json:"resetTime"`
+				DisplayName       string   `json:"displayName"`
+				Disabled          bool     `json:"disabled"`
+			} `json:"buckets"`
+		} `json:"groups"`
+	}
+	if err := g.call(ctx, g.app.base, "retrieveUserQuotaSummary", map[string]any{"project": p.id}, &res, nil); err != nil {
+		return nil
+	}
+	var out []QuotaWindow
+	for _, gr := range res.Groups {
+		pool := poolName(gr.DisplayName)
+		if pool == "" {
+			continue
+		}
+		n := 0
+		for _, b := range gr.Buckets {
+			if b.Disabled {
+				continue
+			}
+			w := QuotaWindow{Pool: pool, Used: 100, Aside: true}
+			switch strings.ToLower(b.Window) {
+			case "5h":
+				w.Name, w.Span = "5 hours", 5*time.Hour
+			case "weekly":
+				w.Name, w.Span = "7 days", 7*24*time.Hour
+			default:
+				for _, s := range []string{b.DisplayName, b.Window, b.BucketID} {
+					if w.Name == "" {
+						w.Name = s
+					}
+				}
+			}
+			if w.Name == "" {
+				continue
+			}
+			if b.RemainingFraction != nil {
+				w.Used = (1 - *b.RemainingFraction) * 100
+			} // left out once none is left, as in fetchAvailableModels
+			if t, err := time.Parse(time.RFC3339, b.ResetTime); err == nil {
+				w.ResetsAt = &t
+				w.ResetSecs = int64(max(time.Until(t), 0) / time.Second)
+			}
+			out = append(out, w)
+			n++
+		}
+		if n == 0 {
+			continue
+		}
+		// a model is in the group its name or description names its
+		// family in ("Models within this group: Claude Opus, Claude
+		// Sonnet, GPT-OSS")
+		about := strings.ToLower(gr.DisplayName + " " + gr.Description)
+		for i := range ws {
+			if ws[i].Pool == "" && ws[i].Family != "" && strings.Contains(about, strings.ToLower(ws[i].Family)) {
+				ws[i].Pool = pool
+			}
+		}
+	}
+	return out
+}
+
+// PooledWindows are ws as a page of text shows them: a pool's own windows,
+// named with their pool ("Gemini · 7 days"), in place of the per-model
+// windows drawing on it; ws as it is when it has no pool.
+func PooledWindows(ws []QuotaWindow) []QuotaWindow {
+	if !slices.ContainsFunc(ws, func(w QuotaWindow) bool { return w.Pool != "" && w.Model == "" }) {
+		return ws
+	}
+	var out []QuotaWindow
+	for _, w := range ws {
+		switch {
+		case w.Pool == "":
+			out = append(out, w)
+		case w.Model == "":
+			w.Name = w.Pool + " · " + w.Name
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
+// poolName is a quota group's name without "models" at its end, its "and"
+// an ampersand: "Gemini Models" is Gemini, "Claude and GPT models" Claude
+// & GPT.
+func poolName(s string) string {
+	s = strings.TrimSpace(s)
+	if l := strings.ToLower(s); strings.HasSuffix(l, " models") {
+		s = strings.TrimSpace(s[:len(s)-len(" models")])
+	}
+	return strings.ReplaceAll(s, " and ", " & ")
 }
 
 // antigravityVendor is the family a model of Antigravity's is in — Gemini,
