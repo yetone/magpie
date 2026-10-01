@@ -381,6 +381,29 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.openClassifier(g)
+	case "E", "F":
+		// the model's own effort and fast mode, whatever the agent asks
+		if onRule || n == 0 || strings.HasPrefix(g.Members[m.gsel], provider.GroupPrefix) {
+			return m, nil
+		}
+		id := g.Members[m.gsel]
+		if key == "F" {
+			fast := !g.IsFast(id)
+			said := " not fast"
+			if fast {
+				said = " fast"
+			}
+			return m, saveGroup(g.ID, func(g *provider.Group) error {
+				g.SetMemberFast(id, fast)
+				return nil
+			}, id+said)
+		}
+		model, effort := provider.MemberEffort(id)
+		to := provider.WithMemberEffort(model, nextMemberEffort(effort))
+		return m, saveGroup(g.ID, func(g *provider.Group) error {
+			g.RenameMember(id, to)
+			return nil
+		}, to+" set")
 	case "o":
 		return m, saveGroup(g.ID, nextRouting, g.Name+" routing changed")
 	case "s":
@@ -483,6 +506,13 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// nextMemberEffort is the effort E sets a member at after effort: the
+// agent's (""), then low to max, then the agent's again.
+func nextMemberEffort(effort string) string {
+	cycle := []string{"", "low", "medium", "high", "xhigh", "max"}
+	return cycle[(slices.Index(cycle, effort)+1)%len(cycle)]
+}
+
 // renamedMsg is a group given another id: the page follows it.
 type renamedMsg struct{ from, to string }
 
@@ -567,6 +597,9 @@ func (m model) viewGroup() string {
 		marker, name := "  ", sText.Render(id)
 		if i == m.gsel {
 			marker, name = sCursor.Render("▸ "), sNameOn.Render(id)
+		}
+		if g.IsFast(id) {
+			name += sMuted.Render(" · fast")
 		}
 		b.WriteString(pad + marker + sFaint.Render(fmt.Sprintf("%d  ", i+1)) + name + "\n")
 	}

@@ -37,6 +37,9 @@ type candidate struct {
 	// effort is the reasoning the group's member it is of is fixed at
 	// ("provider/model:low"); "" for one that follows the agent or the group
 	effort string
+	// fast is set on a member the group sends in its vendor's fast mode
+	// (Group.Fast)
+	fast bool
 }
 
 // label names a candidate in a call's record: the provider, and the key
@@ -286,7 +289,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		// the same model at another effort is another member's
 		for _, l := range [][]candidate{cs, aside, left} {
 			for i := range l {
-				l[i].effort = m.Effort
+				l[i].effort, l[i].fast = m.Effort, m.Fast
 			}
 		}
 		*asides = append(*asides, aside...)

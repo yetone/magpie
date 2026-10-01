@@ -139,6 +139,13 @@ func run(args []string) error {
 	gateway.StandIn = agent.StandIn
 	// the setup kept the same on every computer, by whichever serves
 	gateway.WhileServing = append(gateway.WhileServing, davsync.Run)
+	// and the request archive, when it is on, goes to the bucket sync is to
+	gateway.ArchiveBucket = func() (gateway.Putter, bool) {
+		if b, ok := davsync.S3Bucket(); ok {
+			return b, true
+		}
+		return nil, false
+	}
 	if len(args) == 0 {
 		if hasGUI {
 			return runGUI(true, "")

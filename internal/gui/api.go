@@ -487,6 +487,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	callerKeyRoutes(mux)
 	sessionRoutes(mux, w)
 	backupRoutes(mux, w)
+	archiveRoutes(mux)
 	libraryRoutes(mux, w)
 	updateRoutes(mux, w)
 	mux.HandleFunc("GET /api/settings", func(rw http.ResponseWriter, r *http.Request) {
@@ -516,7 +517,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		settings.CarryPerModel(&in, &cur)
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
 		in.LANKeyID = cur.LANKeyID
-		in.RedactRules = cur.RedactRules // the masking rules, set on their own
+		in.RequestArchive = cur.RequestArchive // the Gateway page's, set on its own
+		in.RedactRules = cur.RedactRules       // the masking rules, set on their own
 		// used or left is the Usage page's toggle as much as Settings', set on its own
 		in.QuotaLeft = cur.QuotaLeft
 		// how agents' lists name models, set on its own for the agents to be told

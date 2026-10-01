@@ -168,8 +168,33 @@ func cmdGoFetch(ctx context.Context) ([]catalog.Model, error) {
 	if len(out) == 0 {
 		return nil, errors.New("Command Code listed no models for the Go plan")
 	}
+	cmdMarkFree(out)
 	return out, catalog.SaveLive(CommandCodePlanID, base, out)
 }
+
+// cmdFree are the models Command Code's CLI marks FREE in its picker
+// (1.73.2: badge:"free", "{name} is free and uses shared capacity"); its
+// API's list doesn't say so, and Space Bunny Alpha's and Pixel Canary's
+// ids name nothing free. Neither says a model is served at a discount.
+var cmdFree = map[string]bool{
+	"stealth/space-bunny-alpha": true, "stealth/pixel-canary": true,
+	"poolside/laguna-s-2.1-free": true, "inclusionai/ling-3.0-flash-free": true,
+	"inclusionai/ling-3.0-flash-sante:free": true, "inclusionai/ling-3.1-flash:free": true,
+	"MiniMaxAI/MiniMax-M3-Free": true, "minimax/minimax-m3-free": true,
+	"minimax/minimax-m2.7-free": true, "meituan/LongCat-2.0:free": true, "tencent/Hy3": true,
+}
+
+// cmdMarkFree marks the models of ms the CLI calls free, in place.
+func cmdMarkFree(ms []catalog.Model) []catalog.Model {
+	for i := range ms {
+		if cmdFree[ms[i].ID] {
+			ms[i].Free = true
+		}
+	}
+	return ms
+}
+
+func init() { cmdMarkFree(cmdGoModels) }
 
 // cmdAuth is an account's key, as auth.json and the sign-in name it.
 type cmdAuth struct {
@@ -303,7 +328,12 @@ func cmdProvider(who, plan string, a cmdAuth) Provider {
 		}
 		keyed := p
 		keyed.Account, keyed.Key = nil, a.APIKey
-		return keyed.Fetch(ctx)
+		ms, base, err := keyed.fetchOne(keyed.Via(ctx))
+		if err != nil {
+			return nil, err
+		}
+		cmdMarkFree(ms)
+		return catalog.Chat(ms), catalog.SaveLive(p.ID, base, ms)
 	}
 	acct.generate = func(ctx context.Context) (string, bool) {
 		return a.APIKey, cmdPlanNow(ctx, a, plan) == "Go"

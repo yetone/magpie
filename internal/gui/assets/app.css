@@ -1151,6 +1151,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #view-gateway .row-head, #view-usage .row-head { margin: 14px 0 6px; padding: 0 2px; }
 #view-usage .row-head.quota-head { margin: 6px 0 6px; }
 #view-gateway .row-head .note { font-size: 11px; color: var(--faint); }
+/* providers switched off, folded below the ones on */
+#view-providers .off-head { margin: 14px 0 6px; padding: 0 2px; flex: none; }
+#view-providers .off-head .note { font-size: 11px; color: var(--faint); }
 /* the Models head folds the list away: a chevron, the label, how many */
 .fold { display: inline-flex; align-items: center; gap: 5px; margin-left: -4px; padding: 3px 6px 3px 4px; border-radius: 6px; color: var(--faint); transition: background .12s, color .12s; }
 .fold:hover { background: var(--pill); color: var(--muted); }
@@ -1225,6 +1228,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .call-body code { display: block; font: 10.5px/1.5 var(--code); color: var(--fg-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; tab-size: 2; }
 .call-body code.empty { color: var(--faint); font-family: var(--font); }
 @media (max-width: 760px) { .call-details { grid-template-columns: 1fr; } }
+/* a call the request archive kept: read back under the bodies, the whole width */
+.call-archive { grid-column: 1 / -1; min-width: 0; background: var(--card); }
+.call-archive-id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--code); color: var(--faint); }
+.call-archive .call-body-head button.text { flex: none; }
+.call-archive-err { padding: 0 10px 9px; font-size: 11px; color: var(--red); overflow-wrap: anywhere; }
+#archiveList { margin-bottom: 8px; }
 /* a streamed reply: read as its reply, its events or as it came */
 .call-body-count { font-size: 9.5px; color: var(--faint); white-space: nowrap; }
 .call-body-head .sse-views { align-self: center; padding: 1.5px; border-radius: 6px; }

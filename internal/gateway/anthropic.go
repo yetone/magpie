@@ -75,6 +75,7 @@ type aRequest struct {
 		Effort string `json:"effort,omitempty"`
 	} `json:"output_config,omitempty"`
 	Metadata json.RawMessage `json:"metadata,omitempty"`
+	Speed    string          `json:"speed,omitempty"` // "fast": Claude's fast mode
 }
 
 func parseAnthropic(body []byte) (*Request, error) {
@@ -83,7 +84,7 @@ func parseAnthropic(body []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: a.Model, System: stringOrText(a.System), MaxTokens: a.MaxTokens,
-		Temp: a.Temperature, TopP: a.TopP, Stop: a.StopSequences, Stream: a.Stream}
+		Temp: a.Temperature, TopP: a.TopP, Stop: a.StopSequences, Stream: a.Stream, Fast: a.Speed == "fast"}
 	if len(a.Metadata) > 0 && string(a.Metadata) != "null" {
 		r.Metadata = a.Metadata
 	}

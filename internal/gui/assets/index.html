@@ -73,6 +73,8 @@
 <main class="view" id="view-providers" hidden>
   <div id="movable" hidden></div>
   <div class="list" id="providers"></div>
+  <div class="row-head off-head" id="offHead" hidden><button class="fold" id="foldOff" aria-expanded="false" aria-controls="offProviders"><span class="label" data-t>Turned off</span><span class="note" id="offCount"></span></button></div>
+  <div class="list" id="offProviders" hidden></div>
   <div id="excluded"></div>
   <div class="after-list">
     <button class="text" id="addProvider" data-t>＋ Add provider</button>
@@ -95,6 +97,7 @@
   <div class="row-head"><button class="fold" id="foldModels" aria-expanded="true" aria-controls="gwModels"><span class="label" data-t>Models</span><span class="note" id="modelsCount"></span></button><span class="grow"></span><button class="text" id="copyModels" data-t>Copy all ids</button></div>
   <div class="list" id="gwModels"></div>
   <div class="row-head"><span class="label" data-t>Recent calls</span><span class="grow"></span><span class="note" id="callsNote"></span></div>
+  <div class="list prefs" id="archiveList"></div>
   <div class="list activity" id="activity"></div>
 </main>
 

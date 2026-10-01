@@ -77,6 +77,9 @@ func Rename(from, to string) error {
 		for k, r := range g.Rules {
 			g.Rules[k].Use = renamedRef(r.Use, from, to)
 		}
+		for k, m := range g.Fast {
+			g.Fast[k] = renamedRef(m, from, to)
+		}
 		g.Classifier = renamedRef(g.Classifier, from, to)
 		g.Pick = renamedRef(g.Pick, from, to)
 	}

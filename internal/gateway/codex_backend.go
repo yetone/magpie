@@ -320,6 +320,21 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 		end(res.StatusCode, res.Status, 0, 0)
 		return
 	}
+	if rest == "/responses" && res.StatusCode >= 400 {
+		msg, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		res.Body = io.NopCloser(bytes.NewReader(msg))
+		if len(bytes.TrimSpace(msg)) == 0 {
+			// a failure with nothing said of it, which Codex shows as
+			// "Unknown error" alone (#409): said where the turn went
+			said := codexFailedEmpty(modelOf(body), res.Status)
+			writeError(w, provider.Responses, res.StatusCode, said)
+			s.record(Call{Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
+				Provider: "openai", Agent: agentOf(r), Kind: callKind(r.Header), Status: res.StatusCode,
+				Millis: time.Since(start).Milliseconds(), Error: said})
+			end(res.StatusCode, said, 0, 0)
+			return
+		}
+	}
 	for k, vs := range res.Header {
 		if !hopHeader(k) {
 			w.Header()[k] = vs
@@ -451,6 +466,16 @@ func codexUnreached(model string, err error) string {
 	return "OpenAI can't be reached (" + err.Error() + "). " + model + " is one of Codex's own models, " +
 		"which goes to OpenAI with Codex's own sign-in: pick one of magpie's models in Codex " +
 		"(provider/model, or set it in magpie's Agents view), or let Codex reach OpenAI"
+}
+
+// codexFailedEmpty says why a model of Codex's own failed when OpenAI gave
+// an error status and nothing else: where it went, and what to do — a
+// Codex left on its own model while magpie's Agents view picked another
+// for it sends the turn to OpenAI, not to that one (#409).
+func codexFailedEmpty(model, status string) string {
+	return "OpenAI answered " + status + " and said nothing more. " + model + " is one of Codex's own models, " +
+		"which goes to OpenAI with Codex's own sign-in, not to a provider in magpie: pick one of magpie's models in Codex " +
+		"(provider/model, or set it in magpie's Agents view), or try again later"
 }
 
 // apiKey reports whether Codex signed in with an API key rather than a

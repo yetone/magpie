@@ -30,8 +30,8 @@ func piDistroHome(t *testing.T, settings string) (root, home string) {
 
 // The probe asks after Pi as after Codex, and reads what it says.
 func TestWSLProbeFindsPi(t *testing.T) {
-	for _, want := range []string{`[ -d "$HOME/.pi" ] && echo dir:.pi`, `command -v pi >/dev/null 2>&1 && echo bin:pi`,
-		`[ -d "$HOME/.codex" ] && echo dir:.codex`, `command -v codex >/dev/null 2>&1 && echo bin:codex`} {
+	for _, want := range []string{`[ -d "$HOME/.pi" ] && echo dir:.pi`, `p=$(command -v pi 2>/dev/null) && echo "bin:pi $p"`,
+		`[ -d "$HOME/.codex" ] && echo dir:.codex`, `p=$(command -v codex 2>/dev/null) && echo "bin:codex $p"`} {
 		if !strings.Contains(wslProbeScript, want) {
 			t.Errorf("probe lacks %q:\n%s", want, wslProbeScript)
 		}

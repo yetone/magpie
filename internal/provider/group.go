@@ -123,6 +123,11 @@ type Group struct {
 	// sent the one it has nearest, as ever. Empty offers the members'
 	// shared levels.
 	Levels []string `json:"levels,omitempty"`
+	// Fast are the members (as Members spells them) sent in their
+	// vendor's fast mode, where the model has one (see CanFast). Kept
+	// beside Members, not in their ids, so a version before it still
+	// routes to them, only not fast.
+	Fast []string `json:"fast,omitempty"`
 	// Family is a tag the group goes by in which agents are shown it
 	// (settings' Visible), with its id.
 	Family string `json:"family,omitempty"`
@@ -149,6 +154,9 @@ type Member struct {
 	// asked of the model whatever the agent or the group's classifier
 	// asked; "" follows the group.
 	Effort string
+	// Fast is set on a member the group sends in its vendor's fast mode
+	// (Group.Fast), where its model has one.
+	Fast bool
 }
 
 // Groups are the ids of the groups in the group the model is of, the
@@ -164,7 +172,7 @@ func (m Member) Groups() []string {
 // Below is the member as the group at depth (0 the group itself, 1 the
 // group in it Path[0] names, …) has it.
 func (m Member) Below(depth int) Member {
-	return Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort}
+	return Member{ID: m.Path[depth], Path: m.Path[depth:], Via: m.Via[depth:], Provider: m.Provider, Model: m.Model, Effort: m.Effort, Fast: m.Fast}
 }
 
 // maxNest is how deep groups in groups may go.
@@ -350,7 +358,7 @@ func membersIn(entries []Entry, all []Group, g Group) []Member {
 				continue
 			}
 			seen[key] = true
-			out = append(out, Member{ID: at[0], Path: at, Via: via, Provider: p, Model: m, Effort: effort})
+			out = append(out, Member{ID: at[0], Path: at, Via: via, Provider: p, Model: m, Effort: effort, Fast: g.IsFast(id)})
 		}
 	}
 	walk(g, nil, nil, []string{g.ID})
@@ -469,6 +477,9 @@ func SaveGroup(g Group) error {
 		return errors.New("a group needs a model in it")
 	}
 	entries := providerEntries()
+	if err := cleanFast(entries, &g); err != nil {
+		return err
+	}
 	for i, m := range g.Members {
 		if model, effort := memberEffortIn(entries, m); effort != "" && strings.HasPrefix(model, GroupPrefix) {
 			return fmt.Errorf("%s is a group: its models reason as it says, so it takes no effort of its own (:%s)", model, effort)

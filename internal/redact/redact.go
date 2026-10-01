@@ -285,7 +285,10 @@ type span struct {
 }
 
 // Mask swaps what o covers in s for placeholders, and says how many.
-func Mask(s string, o Options) (string, int) {
+func Mask(s string, o Options) (string, int) { return mask(s, o, placeholder) }
+
+// mask swaps what o covers in s for what put makes of each value.
+func mask(s string, o Options, put func(kind, v string) string) (string, int) {
 	if len(s) < 3 {
 		return s, 0
 	}
@@ -361,7 +364,7 @@ func Mask(s string, o Options) (string, int) {
 			continue
 		}
 		b.WriteString(s[last:f.start])
-		b.WriteString(placeholder(f.kind, s[f.start:f.end]))
+		b.WriteString(put(f.kind, s[f.start:f.end]))
 		last, n = f.end, n+1
 	}
 	b.WriteString(s[last:])

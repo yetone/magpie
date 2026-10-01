@@ -246,3 +246,51 @@ func TestCallerIdentitySurvivesStreamingFailover(t *testing.T) {
 		t.Fatal(rec)
 	}
 }
+
+func TestCallerUsageWithRequestArchive(t *testing.T) {
+	for _, header := range []string{"Authorization", "x-api-key", "query"} {
+		t.Run(header, func(t *testing.T) {
+			fresh(t)
+			serveOn(t, "fake", "provider-secret", []string{"m1"}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("Authorization") != "Bearer provider-secret" {
+					t.Error("caller credential reached archived request upstream")
+				}
+				archiveVendor{}.ServeHTTP(w, r)
+			}))
+			keys, secrets := newCaller(t, "Archived client")
+			shared := settings.Load()
+			shared.RequestArchive = true
+			if err := settings.Save(shared); err != nil {
+				t.Fatal(err)
+			}
+			bucket := &memBucket{objs: map[string][]byte{}}
+			archiveTo(t, bucket)
+			r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"fake/m1","messages":[{"role":"user","content":"hi"}]}`))
+			r.RemoteAddr = "192.168.1.9:5000"
+			switch header {
+			case "Authorization":
+				r.Header.Set(header, "Bearer "+secrets[0])
+			case "query":
+				r.URL.RawQuery = "key=" + secrets[0]
+			default:
+				r.Header.Set(header, secrets[0])
+			}
+			s := New()
+			w := httptest.NewRecorder()
+			lanGuard(s.Handler()).ServeHTTP(w, r)
+			archivePending.Wait()
+			if w.Code != 200 || w.Header().Get(ArchiveHeader) == "" || len(bucket.objs) != 1 {
+				t.Fatal("named caller request was not archived", w.Code, w.Body)
+			}
+			for _, data := range bucket.objs {
+				if strings.Contains(string(data), secrets[0]) || strings.Contains(string(data), "provider-secret") {
+					t.Fatal("credential leaked into request archive")
+				}
+			}
+			rec := lastUsage(t)
+			if rec.RouteID == 0 || rec.RouteID != lastRoute(s).ID || rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != "Archived client" || rec.ProviderKeyID != provider.KeyID("provider-secret") || rec.Input != 3 {
+				t.Fatal("archive lost usage attribution", rec)
+			}
+		})
+	}
+}

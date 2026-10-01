@@ -91,6 +91,7 @@ type distro struct {
 	Home     string            `json:"home"`              // $HOME inside it, e.g. /home/me
 	Root     string            `json:"root"`              // where magpie opens its / from, e.g. \\wsl.localhost\Ubuntu
 	Has      map[string]bool   `json:"has"`               // "dir:.codex", "bin:pi": what the probe found
+	Probe    int               `json:"probe,omitempty"`   // the wslProbeVersion that found it
 	Gateway  string            `json:"gateway,omitempty"` // the Windows host as the distro reaches it, when not mirrored
 	Values   map[string]string `json:"values,omitempty"`  // its agents' fields as last read (wslKind.memo), shown while it is stopped
 	Mirrored bool              `json:"-"`
@@ -416,6 +417,7 @@ func wslDistros() []distro {
 		if b, err := os.ReadFile(wslStatePath()); err == nil {
 			json.Unmarshal(b, &wsl.seen)
 		}
+		wslForgetOldBins()
 	}
 	if time.Since(wsl.at) > wslListAge {
 		wsl.names, wsl.listed = wslList("-l", "-q")
@@ -466,6 +468,28 @@ func wslDistros() []distro {
 	}
 	wslSaveLocked()
 	return out
+}
+
+// wslForgetOldBins drops the commands a probe before wslProbeVersion
+// found: it took a Windows command on the PATH WSL inherits (Windows npm's
+// pi under /mnt/c, #406) for one in the distro. A distro then found by
+// nothing else is forgotten, until a probe of it while it runs says again.
+func wslForgetOldBins() {
+	for n, d := range wsl.seen {
+		if d == nil || d.Probe >= wslProbeVersion {
+			continue
+		}
+		for k := range d.Has {
+			if strings.HasPrefix(k, "bin:") {
+				delete(d.Has, k)
+				wsl.dirty = true
+			}
+		}
+		if !wslFound(*d) {
+			delete(wsl.seen, n)
+			wsl.dirty = true
+		}
+	}
 }
 
 // wslSave writes wsl.json if anything in it changed.
@@ -541,14 +565,21 @@ func wslList(args ...string) (names []string, ok bool) {
 	return parseDistros(b), true
 }
 
+// wslProbeVersion is that of wslProbeScript: 2 says where each command is,
+// so one from Windows' drives isn't taken for the distro's own.
+const wslProbeVersion = 2
+
 // wslProbeScript prints the distro's home, what of each of wslKinds it
-// has, and its default route (the Windows host under NAT).
+// has (each command with where it is), where Windows' drives are mounted,
+// and its default route (the Windows host under NAT).
 var wslProbeScript = func() string {
 	s := `echo "home:$HOME"; `
 	for _, k := range wslKinds {
 		s += `[ -d "$HOME/` + k.dir + `" ] && echo dir:` + k.dir + `; ` +
-			`command -v ` + k.bin + ` >/dev/null 2>&1 && echo bin:` + k.bin + `; `
+			`p=$(command -v ` + k.bin + ` 2>/dev/null) && echo "bin:` + k.bin + ` $p"; `
 	}
+	// a drive's source in /proc/mounts is C:\ (written C:\134), under any automount root
+	s += `awk '$1 ~ /^[A-Za-z]:/ {print "win:" $2}' /proc/mounts 2>/dev/null; `
 	return s + `ip route show default 2>/dev/null | head -n1 | sed 's/^/route:/'; ` +
 		`grep -m1 '^nameserver' /etc/resolv.conf 2>/dev/null | sed 's/^/ns:/'; true`
 }()
@@ -568,18 +599,30 @@ func wslProbe(name string) *distro {
 	return d
 }
 
-// parseProbe reads wslProbeScript's output.
+// parseProbe reads wslProbeScript's output. A command on one of Windows'
+// drives — WSL puts Windows' PATH on its own, so Windows npm's pi is
+// /mnt/c/Users/me/AppData/Roaming/npm/pi there — is Windows', not the
+// distro's.
 func parseProbe(name, out string) *distro {
-	d := &distro{Name: name, Has: map[string]bool{}}
+	d := &distro{Name: name, Has: map[string]bool{}, Probe: wslProbeVersion}
 	var ns string
+	bins := map[string]string{}
+	var win []string
 	sc := bufio.NewScanner(strings.NewReader(out))
 	for sc.Scan() {
 		l := strings.TrimSpace(sc.Text())
 		switch k, v, _ := strings.Cut(l, ":"); k {
 		case "home":
 			d.Home = strings.TrimRight(v, "/")
-		case "dir", "bin":
+		case "dir":
 			d.Has[l] = true
+		case "bin":
+			bin, path, _ := strings.Cut(v, " ")
+			bins[bin] = strings.TrimSpace(path)
+		case "win":
+			if v = strings.TrimRight(v, "/"); strings.HasPrefix(v, "/") {
+				win = append(win, v+"/")
+			}
 		case "route":
 			// default via 172.20.0.1 dev eth0 …
 			if f := strings.Fields(v); len(f) >= 3 && f[1] == "via" && net.ParseIP(f[2]) != nil {
@@ -594,10 +637,29 @@ func parseProbe(name, out string) *distro {
 	if !strings.HasPrefix(d.Home, "/") {
 		return nil
 	}
+	for bin, path := range bins {
+		if !onWindowsDrive(path, win) {
+			d.Has["bin:"+bin] = true
+		}
+	}
 	if d.Gateway == "" {
 		d.Gateway = ns
 	}
 	return d
+}
+
+// onWindowsDrive is whether path, inside a distro, is on one of Windows'
+// drives: under a mount win lists, or under /mnt/<letter>/ as WSL mounts
+// them unless told otherwise.
+func onWindowsDrive(path string, win []string) bool {
+	for _, w := range win {
+		if strings.HasPrefix(path, w) {
+			return true
+		}
+	}
+	rest, ok := strings.CutPrefix(path, "/mnt/")
+	return ok && len(rest) >= 2 && rest[1] == '/' &&
+		(rest[0] >= 'a' && rest[0] <= 'z' || rest[0] >= 'A' && rest[0] <= 'Z')
 }
 
 // parseDistros reads wsl.exe -l -q: UTF-16LE (with or without a BOM), or
