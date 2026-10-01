@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/library"
@@ -46,17 +47,18 @@ const (
 
 // Bundle is what a backup holds.
 type Bundle struct {
-	Version   int                        `json:"version"`
-	Created   time.Time                  `json:"created"`
-	App       string                     `json:"app,omitempty"` // the magpie that made it
-	Keys      bool                       `json:"keys"`          // whether the providers carry their keys
-	Providers []provider.Provider        `json:"providers"`
-	Icons     map[string][]byte          `json:"icons,omitempty"`  // pictures picked for providers, by file name
-	Groups    []provider.Group           `json:"groups,omitempty"` // the user's model groups
-	Settings  *settings.Settings         `json:"settings,omitempty"`
-	Profiles  map[string]profile.Profile `json:"profiles,omitempty"`
-	Agents    map[string]string          `json:"agents,omitempty"`  // every agent's fields as they are now
-	Library   *library.Bundle            `json:"library,omitempty"` // nil from a magpie before it, or with none
+	Version     int                        `json:"version"`
+	Created     time.Time                  `json:"created"`
+	App         string                     `json:"app,omitempty"` // the magpie that made it
+	Keys        bool                       `json:"keys"`          // whether the providers carry their keys
+	Providers   []provider.Provider        `json:"providers"`
+	Icons       map[string][]byte          `json:"icons,omitempty"`  // pictures picked for providers, by file name
+	Groups      []provider.Group           `json:"groups,omitempty"` // the user's model groups
+	Settings    *settings.Settings         `json:"settings,omitempty"`
+	GatewayKeys *[]access.Key              `json:"gatewayKeys,omitempty"`
+	Profiles    map[string]profile.Profile `json:"profiles,omitempty"`
+	Agents      map[string]string          `json:"agents,omitempty"`  // every agent's fields as they are now
+	Library     *library.Bundle            `json:"library,omitempty"` // nil from a magpie before it, or with none
 }
 
 type envelope struct {
@@ -77,6 +79,18 @@ var ErrPassphrase = errors.New("wrong passphrase, or the file was changed")
 // variable or header that looks like one (their names stay).
 func Collect(keys bool, app string) (Bundle, error) {
 	b := Bundle{Version: 1, Created: time.Now().UTC(), App: app, Keys: keys}
+	if keys {
+		access.MigrateLegacyLANKeyBestEffort()
+		if _, err := os.Stat(access.Path()); err == nil {
+			gatewayKeys, err := access.Export()
+			if err != nil {
+				return b, err
+			}
+			b.GatewayKeys = &gatewayKeys
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return b, err
+		}
+	}
 	for _, p := range provider.Stored() {
 		if !keys {
 			p = withoutKeys(p)
@@ -96,6 +110,9 @@ func Collect(keys bool, app string) (Bundle, error) {
 	b.Groups = provider.StoredGroups()
 	if _, err := os.Stat(settings.Path()); err == nil {
 		s := settings.Load()
+		if !keys {
+			s.LANKey, s.LANKeyID = "", ""
+		}
 		b.Settings = &s
 	}
 	ps, err := profile.Load()
@@ -250,12 +267,29 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 			}
 		}
 	}
-	if parts.Settings && b.Settings != nil {
+	if parts.Settings && (b.Settings != nil || b.GatewayKeys != nil) {
 		// the window's size and the proxy are this machine's own
-		s, cur := *b.Settings, settings.Load()
+		cur := settings.Load()
+		s := cur
+		if b.Settings != nil {
+			s = *b.Settings
+		}
 		s.Window, s.Proxy, s.Dock, s.DockWindow = cur.Window, cur.Proxy, cur.Dock, cur.DockWindow
+		if !b.Keys {
+			s.LANKey, s.LANKeyID = cur.LANKey, cur.LANKeyID
+		} else if b.GatewayKeys != nil {
+			if err := access.Restore(*b.GatewayKeys); err != nil {
+				return r, err
+			}
+		} else {
+			// An older backup may carry a marker without its named-key store.
+			s.LANKeyID = ""
+		}
 		if err := settings.Save(s); err != nil {
 			return r, err
+		}
+		if b.Keys && b.GatewayKeys == nil {
+			access.MigrateLegacyLANKeyBestEffort()
 		}
 		r.Settings = true
 	}

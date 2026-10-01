@@ -85,6 +85,20 @@ func List() ([]Key, error) {
 	return keys, nil
 }
 
+// Export returns credentials only for the encrypted backup bundle.
+func Export() ([]Key, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	return load()
+}
+
+// Restore replaces the gateway credentials when restoring their settings.
+func Restore(keys []Key) error {
+	mu.Lock()
+	defer mu.Unlock()
+	return save(slices.Clone(keys))
+}
+
 func random(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
