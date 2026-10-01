@@ -2506,7 +2506,7 @@
     if (document.body.classList.contains("window") && $("#view-routing").hidden) window.show("routing");
     if (!groups) await loadGroups();
     if (!groups) return;
-    gEdit = { id: "", draft: { name: name || modelOf(id)?.name || id.split("/").pop(), members: [id], routing: "", affinity: "", rules: [] } };
+    gEdit = { id: "", draft: { name: name || modelOf(id)?.name || id.split("/").pop(), members: [id], fast: [], routing: "", affinity: "", rules: [] } };
     renderGroups();
     const ed = gList.querySelector(".rt-gedit");
     if (ed && window.scrollOnPurpose?.(ev)) ed.scrollIntoView({ block: "center", behavior: "smooth" });

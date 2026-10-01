@@ -132,6 +132,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 40 && !posts.some((p) => p.path === "/api/groups/save"); i++) await page.waitForTimeout(50);
       const saved = posts.find((p) => p.path === "/api/groups/save")?.body;
       assert.deepEqual(saved?.members, ["hunyuan/hy4"], "a group of hy4 saved");
+      assert.deepEqual(saved.fast, [], "a model shortcut starts at standard speed");
       assert.equal(saved.id, "hy4");
 
       // the provider's editor names the model in no group under the tick
