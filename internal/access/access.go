@@ -183,7 +183,7 @@ func Update(action string, in Change) (string, error) {
 		}
 		// Revoke the old-version mirror before changing the active key store.
 		if err := settings.Save(s); err != nil {
-			return "", err
+			return "", fmt.Errorf("Cannot change the default gateway key without updating settings.json: older Magpie versions may still accept its old credential. Make the settings file writable and retry; the key is unchanged: %w", err)
 		}
 	}
 	if err := save(keys); err != nil {
