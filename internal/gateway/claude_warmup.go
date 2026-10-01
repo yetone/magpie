@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/netproxy"
@@ -90,7 +91,17 @@ func claudeUsage(ctx context.Context) (string, error) {
 	cmd := proc.CommandContext(ctx, binary, claudeUsageArgs()...)
 	cmd.Dir = tmp
 	cmd.Stdin = strings.NewReader("")
-	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
+	// CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC makes /usage skip its request
+	// and print only a reading another run left in the last hour, so it stays
+	// only when the user set it.
+	env := cleanClaudeEnv(os.Environ())
+	if os.Getenv("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") == "" {
+		env = slices.DeleteFunc(env, func(e string) bool {
+			return strings.HasPrefix(e, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=")
+		})
+	}
+	env = append(env, "DISABLE_TELEMETRY=1", "DISABLE_ERROR_REPORTING=1", "DISABLE_AUTOUPDATER=1")
+	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), env)
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	runErr := cmd.Run()

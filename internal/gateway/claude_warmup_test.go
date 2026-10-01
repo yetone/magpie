@@ -23,7 +23,9 @@ func fakeWarmClaude(t *testing.T, out string, code int) string {
 	log := filepath.Join(dir, "log")
 	script := "#!/bin/sh\n" +
 		"{ printf 'args:'; for a in \"$@\"; do printf '[%s]' \"$a\"; done; echo; " +
-		"echo \"dir:$CLAUDE_CONFIG_DIR\"; echo \"base:$ANTHROPIC_BASE_URL\"; echo \"pwd:$(pwd)\"; printf 'stdin:'; cat; echo; } > " + log + "\n" +
+		"echo \"dir:$CLAUDE_CONFIG_DIR\"; echo \"base:$ANTHROPIC_BASE_URL\"; echo \"pwd:$(pwd)\"; printf 'stdin:'; cat; echo; " +
+		"echo \"traffic:$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\"; echo \"telemetry:$DISABLE_TELEMETRY\"; " +
+		"echo \"errors:$DISABLE_ERROR_REPORTING\"; echo \"updater:$DISABLE_AUTOUPDATER\"; } > " + log + "\n" +
 		"echo '" + out + "'\nexit " + string(rune('0'+code)) + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -120,6 +122,38 @@ func TestClaudeUsageRunsClaudeCode(t *testing.T) {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("run lacks %q:\n%s", want, b)
 		}
+	}
+}
+
+// /usage runs without CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, which keeps
+// Claude Code from asking for the usage, unless the user set it; telemetry,
+// error reporting and autoupdate stay off. The warm-up keeps it.
+func TestClaudeUsageSendsItsRequest(t *testing.T) {
+	log := fakeWarmClaude(t, `{"type":"result","is_error":false,"result":"Current session: 13% used"}`, 0)
+	for _, k := range []string{"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING", "DISABLE_AUTOUPDATER"} {
+		t.Setenv(k, "")
+	}
+	if _, err := claudeUsage(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(log)
+	for _, want := range []string{"traffic:\n", "telemetry:1\n", "errors:1\n", "updater:1\n"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("/usage run lacks %q:\n%s", want, b)
+		}
+	}
+	if err := warmClaude(context.Background(), ""); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(log); !strings.Contains(string(b), "traffic:1\n") {
+		t.Errorf("warm-up lacks CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:\n%s", b)
+	}
+	t.Setenv("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")
+	if _, err := claudeUsage(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(log); !strings.Contains(string(b), "traffic:1\n") {
+		t.Errorf("/usage run dropped the user's CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:\n%s", b)
 	}
 }
 
