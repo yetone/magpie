@@ -12,6 +12,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       t.after(() => browser.close());
       const page = await (await browser.newContext({ viewport: { width: 1000, height: 760 }, reducedMotion: "reduce" })).newPage();
       page.setDefaultTimeout(6000);
+      await page.addInitScript(() => {
+        window.callerFocus = [];
+        const focus = HTMLElement.prototype.focus;
+        HTMLElement.prototype.focus = function (options) {
+          if (this.closest("#gatewayKeys") || this.closest("#modal")) {
+            callerFocus.push({ input: this.tagName === "INPUT", preventScroll: options?.preventScroll === true });
+          }
+          return focus.call(this, options);
+        };
+      });
       const events = [], errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", fixture(lang, "light", events, { lan: true }));
@@ -24,6 +34,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator("#gatewayKeysBlock").isVisible(), true);
       assert.equal(await page.locator("#gatewayKeys .acc.add").count(), 0, "creation is offered once, in the header");
       await page.locator("#addGatewayKey").click();
+      assert.equal(await page.evaluate(() => callerFocus.at(-1)?.preventScroll), true, "creating a key focuses without scrolling");
       await page.getByRole("button", { name: w.create, exact: true }).click();
       await page.waitForFunction(() => document.querySelector("#gatewayKeys .adding .primary")?.disabled === false);
       await page.getByRole("textbox", { name: w.name, exact: true }).fill("Tablet");
@@ -39,6 +50,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await tablet.getByRole("button", { name: w.enable, exact: true }).click();
       await tablet.getByRole("button", { name: w.disable, exact: true }).waitFor();
       await tablet.getByRole("button", { name: "Tablet", exact: true }).click();
+      assert.equal(await page.evaluate(() => callerFocus.at(-1)?.preventScroll), true, "renaming a key focuses without scrolling");
       await page.locator("#gatewayKeys .rename-in").fill("Travel");
       await page.locator("#gatewayKeys .rename-in").press("Enter");
       tablet = page.locator("#gatewayKeys .acc[data-key]", { hasText: "Travel" });
@@ -80,6 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const rotateLabel = lang === "zh" ? "轮换密钥" : "Rotate key";
       const cancelLabel = lang === "zh" ? "取消" : "Cancel";
       await lanRow.getByRole("button", { name: rotateLabel, exact: true }).click();
+      assert.equal(await page.evaluate(() => callerFocus.at(-1)?.preventScroll), true, "confirmation focuses without scrolling");
       await page.locator("#modal").getByRole("button", { name: cancelLabel, exact: true }).click();
       await page.locator("#modal").waitFor({ state: "hidden" });
       assert.equal(events.filter((e) => e.action === "rotate-key").length, 0);

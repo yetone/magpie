@@ -158,6 +158,28 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     for (const lang of ["en", "zh"]) {
       const w = L[lang];
+      await t.test(lang + ": an unavailable caller filter is cleared", async () => {
+        const asked = [];
+        const { page: tab, errors } = await open(lang, "light", asked);
+        await tab.locator("#ledKey").click();
+        await tab.locator(".sess-menu .pm-item", { hasText: "Laptop" }).click();
+        await lastAsked(tab, asked, q => q.get("callerKey") === "laptop");
+        await tab.route("**/api/usage/requests?**", async (route) => {
+          const q = new URL(route.request().url()).searchParams;
+          asked.push(q);
+          const data = page(q);
+          data.callerKeys = [{ id: "server", name: "Server" }];
+          data.rows = data.rows.filter(r => r.callerKeyId === "server");
+          data.total = data.rows.length;
+          await route.fulfill({ json: data });
+        });
+        await tab.locator("#usageReload").click();
+        await lastAsked(tab, asked, q => !q.has("callerKey") && q.get("offset") === "0");
+        assert.equal(await tab.locator("#ledKey").textContent(), lang === "zh" ? "全部网关密钥" : "All gateway keys");
+        assert(await tab.locator(".led-row").count() > 0, "stale filtered empty data must be reloaded");
+        assert.deepEqual(errors, []);
+        await tab.close();
+      });
       await t.test(lang, async () => {
         const asked = [];
         const { page, errors } = await open(lang, "light", asked);

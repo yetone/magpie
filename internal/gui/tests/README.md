@@ -8,6 +8,7 @@ rotation and deletion. It verifies key-level usage overview, request filtering a
 CSV export in Chinese and English on Chromium and WebKit. The fixtures do
 not access local credentials. Gateway keys appear only while sharing is on, with one create entry point
 and confirmation before rotation/removal (Cancel and Escape send no mutation).
+Creation, renaming and confirmation focus their controls without scrolling.
 Gateway is the only key-management page;
 Settings controls sharing and shows addresses. The test checks that toggling
 sharing retains the key, and that a removed default key is recreated as
@@ -30,7 +31,8 @@ and the narrow window in Chromium and WebKit.
 The API fixtures use test keys and never read local user configuration.
 The existing `usage-ledger.test.cjs` also checks request-route and caller-key
 filters together, CSV export, and restoring the previous caller filter when
-the request filter is cleared.
+the request filter is cleared. A caller absent from the period's options clears
+the filter and reloads the unfiltered rows from the first page.
 
 `api-key-theme.test.cjs` checks Gateway's enabled and disabled keys, creation
 and renaming inputs, rotation and key picker, plus Settings' LAN address

@@ -8423,6 +8423,14 @@ const LED_COLS = [
 
 function renderLedger() {
   const l = ledger;
+  const callers = l.callerKeys || [];
+  if (ledCallerKey && !callers.some((k) => k.id === ledCallerKey)) {
+    ledCallerKey = "";
+    ledOffset = 0;
+    // Reload the rows too: this response still belongs to the missing key.
+    loadLedger().catch((e) => status(e.message, "err"));
+    return;
+  }
   const view = $("#view-usage");
   view.classList.remove("loading");
   view.removeAttribute("aria-busy");
@@ -8443,7 +8451,7 @@ function renderLedger() {
   const providers = l.providers || [];
   if (ledProvider && !providers.some((p) => p.id === ledProvider)) ledProvider = "";
   sessPick($("#ledProvider"), "All providers", ledProvider, providers.map((p) => ({ v: p.id, name: t(p.name), note: "" })), "Provider", (v) => { ledProvider = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
-  sessPick($("#ledKey"), "All gateway keys", ledCallerKey, (l.callerKeys || []).map((k) => ({
+  sessPick($("#ledKey"), "All gateway keys", ledCallerKey, callers.map((k) => ({
     v: k.id, name: k.name, note: "",
   })), "Gateway keys", (v) => { ledCallerKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   const seg = $("#ledStatus");

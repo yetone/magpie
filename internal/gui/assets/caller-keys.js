@@ -85,7 +85,7 @@ function gatewayRename(k) {
     i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") done(true); else if (e.key === "Escape") done(false); };
     i.onblur = () => done(true);
     b.replaceWith(i);
-    i.focus();
+    i.focus({ preventScroll: true });
   };
   return b;
 }
@@ -115,7 +115,7 @@ function gatewayKeyForm() {
   const bar = el("div", "kb");
   bar.append(el("span", "grow"), cancel, add);
   box.append(fields, bar);
-  queueMicrotask(() => name.focus());
+  queueMicrotask(() => name.focus({ preventScroll: true }));
   return box;
 }
 
@@ -183,5 +183,5 @@ function askGatewayKey(k, rotate) {
   confirmAsk = ed;
   openModal(ed);
   $("#modal").classList.add("lib");
-  cancel.focus();
+  cancel.focus({ preventScroll: true });
 }
