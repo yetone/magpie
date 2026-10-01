@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Top-level YAML keys are edited line by line. That keeps every comment and
@@ -44,7 +46,9 @@ func SetYAMLTop(path string, kvs ...KV) error {
 	lines := splitLines(string(raw))
 	for _, kv := range kvs {
 		v := toString(kv.Value)
-		if !yamlPlain.MatchString(v) {
+		var decoded any
+		_, isString := kv.Value.(string)
+		if !yamlPlain.MatchString(v) || (isString && (yaml.Unmarshal([]byte(v), &decoded) != nil || decoded != v)) {
 			v = strconv.Quote(v)
 		}
 		lines = setLine(lines, kv.Path, kv.Path+": "+v, nil, func(line string) (string, bool) {
@@ -139,8 +143,9 @@ func tomlValue(v string) string {
 }
 
 func yamlValue(v string) string {
-	if s, ok := unquote(v); ok {
-		return s
+	var n yaml.Node
+	if err := yaml.Unmarshal([]byte(v), &n); err == nil && len(n.Content) > 0 && n.Content[0].Kind == yaml.ScalarNode {
+		return n.Content[0].Value
 	}
 	if i := strings.Index(v, " #"); i >= 0 {
 		v = strings.TrimSpace(v[:i])
