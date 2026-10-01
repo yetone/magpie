@@ -6,17 +6,22 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/settings"
 )
 
-// Shared on the network, a request from another machine needs the key, and
-// goes on with the gateway's own token; this computer's need none.
+// Sharing gates remote access; each authorized remote call carries the same
+// named identity as its local counterpart, so usage is attributed by key.
 func TestLANGuard(t *testing.T) {
-	var got string
+	fresh(t)
+	var got, id string
 	h := lanGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = r.Header.Get("Authorization") + "|" + r.Header.Get("x-api-key")
+		id = access.Caller(r.Context()).KeyID
 	}))
 	call := func(from string, hdr ...string) int {
-		got = ""
+		got, id = "", ""
 		r := httptest.NewRequest("POST", "/v1/messages", nil)
 		r.RemoteAddr = from
 		for i := 0; i+1 < len(hdr); i += 2 {
@@ -26,35 +31,52 @@ func TestLANGuard(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w.Code
 	}
-	key := "sk-magpie-k"
-	none := ""
-	t.Cleanup(func() { lanKey.Store(&none) })
-
-	lanKey.Store(&none)
+	secret, err := access.Update("add-key", access.Change{Name: "Laptop"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, _ := access.List()
+	keyID := keys[0].ID
 	t.Setenv("MAGPIE_ADDR", "")
-	if c := call("192.168.1.9:5000"); c != http.StatusForbidden {
-		t.Fatal("unshared, another machine got", c)
+	if c := call("192.168.1.9:5000", "x-api-key", secret); c != http.StatusForbidden {
+		t.Fatal("unshared remote", c)
 	}
-	if c := call("127.0.0.1:5000"); c != 200 {
-		t.Fatal("loopback got", c)
+	if c := call("127.0.0.1:5000", "Authorization", "Bearer anything"); c != 200 {
+		t.Fatal("loopback", c)
 	}
-	t.Setenv("MAGPIE_ADDR", "0.0.0.0:3425")
+	s := settings.Load()
+	s.LAN = true
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if addr := listenAddr(); addr != "0.0.0.0:"+Port() {
+		t.Fatal(addr)
+	}
+	for _, hdr := range [][]string{nil, {"Authorization", "Bearer magpie"}, {"x-api-key", "wrong"}} {
+		if c := call("192.168.1.9:5000", hdr...); c != http.StatusUnauthorized {
+			t.Fatal("unauthorized remote", hdr, c)
+		}
+	}
+	if c := call("192.168.1.9:5000", "x-api-key", secret); c != 200 || id != keyID || got != "Bearer magpie|magpie" {
+		t.Fatal(c, id, got)
+	}
+	if c := call("127.0.0.1:5000", "Authorization", "Bearer "+secret); c != 200 || id != keyID {
+		t.Fatal("local named key", c, id)
+	}
+	access.Update("off-key", access.Change{Key: keyID})
+	if c := call("192.168.1.9:5000", "x-api-key", secret); c != http.StatusUnauthorized {
+		t.Fatal("disabled key", c)
+	}
+	access.Update("on-key", access.Change{Key: keyID})
+	access.Update("remove-key", access.Change{Key: keyID})
+	if c := call("192.168.1.9:5000", "x-api-key", secret); c != http.StatusUnauthorized {
+		t.Fatal("removed key", c)
+	}
+	s.LAN = false
+	settings.Save(s)
+	t.Setenv("MAGPIE_ADDR", "0.0.0.0:3499")
 	if c := call("192.168.1.9:5000"); c != 200 {
-		t.Fatal("MAGPIE_ADDR's open gateway got", c)
-	}
-
-	lanKey.Store(&key)
-	if c := call("192.168.1.9:5000"); c != http.StatusUnauthorized {
-		t.Fatal("no key got", c)
-	}
-	if c := call("192.168.1.9:5000", "Authorization", "Bearer wrong"); c != http.StatusUnauthorized {
-		t.Fatal("a wrong key got", c)
-	}
-	if c := call("192.168.1.9:5000", "x-api-key", key); c != 200 || got != "Bearer magpie|magpie" {
-		t.Fatal(c, got)
-	}
-	if c := call("[::1]:5000", "Authorization", "Bearer anything"); c != 200 || got != "Bearer anything|" {
-		t.Fatal("loopback", c, got)
+		t.Fatal("explicit open gateway", c)
 	}
 }
 
@@ -70,8 +92,8 @@ func TestURLOfWildcard(t *testing.T) {
 	}
 }
 
-// An agent whose User-Agent is only the AI SDK's (Alma) is known by the
-// token it was given; the others still by their User-Agent.
+// An agent whose User-Agent is only the AI SDK's (Alma) is known by
+// the token it was given; the others still by their User-Agent.
 func TestAgentOf(t *testing.T) {
 	for _, c := range []struct{ auth, key, ua, want string }{
 		{"Bearer " + TokenFor("alma"), "", "ai-sdk/openai/2.0.52 ai-sdk/provider-utils/3.0.12 runtime/node.js/v22", "alma"},

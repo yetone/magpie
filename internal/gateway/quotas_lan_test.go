@@ -5,6 +5,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // GET /v1/magpie/quotas answers another machine with the key of the
@@ -12,7 +15,7 @@ import (
 // a wrong key, none, or a gateway not shared still get nothing, and the
 // refusal says how.
 func TestQuotasOverLAN(t *testing.T) {
-	setHome(t, t.TempDir())
+	fresh(t)
 	t.Setenv("MAGPIE_ADDR", "")
 	h := lanGuard(New().Handler())
 	call := func(from string, hdr ...string) (int, string) {
@@ -25,11 +28,8 @@ func TestQuotasOverLAN(t *testing.T) {
 		h.ServeHTTP(w, r)
 		return w.Code, w.Body.String()
 	}
-	key := "sk-magpie-k"
-	none := ""
-	t.Cleanup(func() { lanKey.Store(&none) })
-
-	lanKey.Store(&key)
+	keys, secrets := newCaller(t, "Quota client")
+	key := secrets[0]
 	if c, b := call("100.64.0.7:5000", "Authorization", "Bearer "+key); c != 200 || !strings.Contains(b, `"object":"list"`) {
 		t.Fatal("shared, with the key:", c, b)
 	}
@@ -46,7 +46,17 @@ func TestQuotasOverLAN(t *testing.T) {
 		t.Fatal("loopback got", c)
 	}
 
-	lanKey.Store(&none)
+	if _, err := access.Update("off-key", access.Change{Key: keys[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := call("192.168.1.9:5000", "Authorization", "Bearer "+key); c != http.StatusUnauthorized {
+		t.Fatal("disabled key got", c)
+	}
+	shared := settings.Load()
+	shared.LAN = false
+	if err := settings.Save(shared); err != nil {
+		t.Fatal(err)
+	}
 	if c, _ := call("192.168.1.9:5000", "Authorization", "Bearer "+key); c != http.StatusForbidden {
 		t.Fatal("not shared got", c)
 	}

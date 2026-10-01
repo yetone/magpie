@@ -33,6 +33,7 @@ type RequestPage struct {
 	Sum               Totals
 	Total             int
 	Agents, Providers []string
+	CallerKeys        []Group
 	Bucket            string
 	Series            []SeriesPoint
 	By                map[string][]Share
@@ -40,7 +41,7 @@ type RequestPage struct {
 
 type packedRow struct {
 	Time                           time.Time
-	Text                           [21]uint32
+	Text                           [23]uint32
 	Tokens                         [5]int64
 	Millis, TTFT, FirstText, Order int64
 	RouteID                        int64
@@ -59,8 +60,8 @@ type rowChunk struct {
 	Used      uint64
 }
 
-func rowText(r *Row) [20]*string {
-	return [20]*string{&r.Agent, &r.Provider, &r.Host, &r.SessionProvider, &r.SessionAccount, &r.Model, &r.Requested, &r.Served, &r.Effort, &r.Error, &r.ErrType, &r.RequestID, &r.Endpoint, &r.Session, &r.NativeSession, &r.Kind, &r.Source, &r.Via, &r.ProviderKeyID, &r.ProviderKeyName}
+func rowText(r *Row) [22]*string {
+	return [22]*string{&r.Agent, &r.Provider, &r.Host, &r.SessionProvider, &r.SessionAccount, &r.Model, &r.Requested, &r.Served, &r.Effort, &r.Error, &r.ErrType, &r.RequestID, &r.Endpoint, &r.Session, &r.NativeSession, &r.Kind, &r.Source, &r.Via, &r.ProviderKeyID, &r.ProviderKeyName, &r.CallerKeyID, &r.CallerKeyName}
 }
 func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	if c.dict == nil {
@@ -81,7 +82,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	for i, s := range rowText(&r) {
 		p.Text[i] = intern(*s)
 	}
-	p.Text[20] = intern(msg)
+	p.Text[22] = intern(msg)
 	if r.Priced {
 		p.Flags |= 1
 	}
@@ -436,7 +437,7 @@ func visibleLocal(chunks []*rowChunk) map[rowRef]bool {
 	seen := map[string]bool{}
 	for _, c := range chunks {
 		for i, p := range c.Rows {
-			msg := c.Strings[p.Text[20]]
+			msg := c.Strings[p.Text[22]]
 			if msg == "" {
 				continue
 			}
@@ -625,6 +626,7 @@ func buildRequestPage(p Period, f Filter, offset, limit int, gateway *rowChunk, 
 	}
 	out := RequestPage{Rows: []Row{}, Agents: []string{}, Providers: []string{}, By: map[string][]Share{}}
 	agents, providers := map[string]bool{}, map[string]bool{}
+	callers := map[string]*Group{}
 	groups := map[string]map[string]*Share{}
 	seriesGroups := map[string]map[string]*Share{}
 	for _, d := range Dimensions {
@@ -648,6 +650,7 @@ func buildRequestPage(p Period, f Filter, offset, limit int, gateway *rowChunk, 
 		if r.Provider != "" {
 			providers[r.Provider] = true
 		}
+		addCallerRow(callers, r)
 		keep := f.keeps(r.Record)
 		if keep {
 			out.Total++
@@ -719,6 +722,7 @@ func buildRequestPage(p Period, f Filter, offset, limit int, gateway *rowChunk, 
 		out.Providers = append(out.Providers, a)
 	}
 	slices.Sort(out.Providers)
+	out.CallerKeys = callerGroups(callers)
 	for _, d := range Dimensions {
 		out.By[d] = sharesOf(groups[d])
 	}
@@ -778,6 +782,11 @@ func buildRequestPage(p Period, f Filter, offset, limit int, gateway *rowChunk, 
 func pageFromLedger(p Period, f Filter, offset, limit int, all Ledgered) RequestPage {
 	l := all.Filtered(f)
 	out := RequestPage{Sum: l.Sum, Total: len(l.Rows), Agents: l.Agents, Providers: l.Providers, By: map[string][]Share{}}
+	callers := map[string]*Group{}
+	for i := len(all.Rows) - 1; i >= 0; i-- {
+		addCallerRow(callers, all.Rows[i])
+	}
+	out.CallerKeys = callerGroups(callers)
 	offset = min(offset, len(l.Rows))
 	out.Rows = l.Rows[offset:min(len(l.Rows), offset+limit)]
 	out.Bucket, out.Series = LedgerSeries(p, l.Rows)
@@ -794,5 +803,36 @@ func pageFromLedger(p Period, f Filter, offset, limit int, all Ledgered) Request
 		}
 		out.By[d] = Breakdown(all.Filtered(g).Rows, d)
 	}
+	return out
+}
+
+// Caller choices cover the period, not just the current page or selected key.
+func addCallerRow(groups map[string]*Group, r Row) {
+	if r.CallerKeyID == "" || r.IsRejected() {
+		return
+	}
+	g := groups[r.CallerKeyID]
+	if g == nil {
+		g = &Group{ID: r.CallerKeyID, CallerKeyID: r.CallerKeyID}
+		groups[r.CallerKeyID] = g
+	}
+	g.CallerKeyName = r.CallerKeyName
+	g.addRow(r)
+}
+
+func callerGroups(groups map[string]*Group) []Group {
+	out := make([]Group, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, *g)
+	}
+	slices.SortFunc(out, func(a, b Group) int {
+		if a.Tokens() != b.Tokens() {
+			return b.Tokens() - a.Tokens()
+		}
+		if a.Calls != b.Calls {
+			return b.Calls - a.Calls
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
 	return out
 }

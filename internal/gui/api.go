@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/autostart"
 	"github.com/yetone/magpie/internal/catalog"
@@ -269,6 +270,7 @@ func searchState(s *settingsJSON) {
 
 func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Gateway: gateway.URL()}
+	s.LANKey = "" // the retained credential belongs on disk, not in UI state
 	if found, err := discoverTerminals(); err == nil {
 		for _, app := range found.Apps {
 			s.TerminalApps = append(s.TerminalApps, terminalChoice{ID: app.ID, Name: app.Name})
@@ -546,12 +548,14 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	providerRoutes(mux, w)
 	importRoutes(mux)
 	usageRoutes(mux, w)
+	callerKeyRoutes(mux)
 	sessionRoutes(mux, w)
 	backupRoutes(mux, w)
 	archiveRoutes(mux)
 	libraryRoutes(mux, w)
 	updateRoutes(mux, w)
 	mux.HandleFunc("GET /api/settings", func(rw http.ResponseWriter, r *http.Request) {
+		access.MigrateLegacyLANKeyBestEffort()
 		writeJSON(rw, settingsState())
 	})
 	mux.HandleFunc("POST /api/settings", func(rw http.ResponseWriter, r *http.Request) {
@@ -576,6 +580,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.Visible, in.HiddenModels = cur.Visible, cur.HiddenModels
 		settings.CarryPerModel(&in, &cur)
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
+		in.LANKeyID = cur.LANKeyID
 		in.RequestArchive = cur.RequestArchive // the Gateway page's, set on its own
 		in.RedactRules = cur.RedactRules       // the masking rules, set on their own
 		// used or left is the Usage page's toggle as much as Settings', set on its own
@@ -750,20 +755,15 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
-	// sharing the gateway on the local network: on makes its key the first
-	// time, new asks for another (the old one stops working)
+	// Sharing controls exposure; the gateway's named caller keys authenticate
+	// remote clients just as they do local ones.
 	mux.HandleFunc("POST /api/settings/lan", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ On, NewKey bool }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
 			return
 		}
-		s := settings.Load()
-		s.LAN = in.On
-		if s.LANKey == "" || in.NewKey {
-			s.LANKey = gateway.NewLANKey()
-		}
-		if err := settings.Save(s); err != nil {
+		if err := access.ConfigureLAN(in.On, in.NewKey); err != nil {
 			fail(rw, err)
 			return
 		}

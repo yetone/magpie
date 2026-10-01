@@ -89,6 +89,11 @@
   <div class="list gwcard">
     <div class="row gw" id="gateway"></div>
   </div>
+  <section id="gatewayKeysBlock" hidden>
+    <div class="row-head"><span class="label" data-t>Gateway keys</span><span class="grow"></span><button class="text" id="addGatewayKey" data-t>Add gateway key</button></div>
+    <p class="usage-note" data-t>Create a gateway key for each client. Usage is counted separately for each key.</p>
+    <section id="gatewayKeys"></section>
+  </section>
   <div class="row-head"><button class="fold" id="foldConnect" aria-expanded="true" aria-controls="connect"><span class="label" data-t>Connect</span></button><span class="grow"></span><span class="note" id="connectNote"></span></div>
   <section class="list connect" id="connect"></section>
   <div class="row-head"><button class="fold" id="foldModels" aria-expanded="true" aria-controls="gwModels"><span class="label" data-t>Models</span><span class="note" id="modelsCount"></span></button><span class="grow"></span><button class="text" id="copyModels" data-t>Copy all ids</button></div>
@@ -133,12 +138,15 @@
     <div class="list" id="usageAgents"></div>
     <div class="row-head"><span class="label" data-t>Models</span></div>
     <div class="list" id="usageModels"></div>
+    <div class="row-head" id="usageKeysHead" hidden><span class="label" data-t>Gateway keys</span></div>
+    <div class="list" id="usageKeys" hidden></div>
     <p class="usage-note" id="usageNote"></p>
   </div>
   <div class="usage-pane" id="ledgerPane" hidden>
     <div class="sess-tools">
       <button class="sess-pick" id="ledAgent" type="button" hidden></button>
       <button class="sess-pick" id="ledProvider" type="button" hidden></button>
+      <button class="sess-pick" id="ledKey" type="button" hidden></button>
       <div class="segs" id="ledStatus"></div>
       <span id="ledRoute" hidden><span id="ledRouteLabel"></span><button class="text" id="ledRouteClear" type="button" data-tt="Clear filter" aria-label="Clear filter">×</button></span>
       <span class="grow"></span>
@@ -349,6 +357,7 @@
 
 <script src="compat.js"></script>
 <script src="i18n.js"></script>
+<script src="caller-keys.js"></script>
 <script src="app.js"></script>
 <script src="routing.js"></script>
 <script src="library.js"></script>

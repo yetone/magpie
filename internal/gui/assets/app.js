@@ -2497,13 +2497,13 @@ function askForgetSaved(x) {
         return;
       }
     }
-    closeResetAsk();
+    closeConfirmAsk();
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeResetAsk(); };
+  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
-  resetAsk = ed;
+  confirmAsk = ed;
   openModal(ed);
   $("#modal").classList.add("lib");
   cancel.focus();
@@ -2632,6 +2632,9 @@ function renderGatewayView() {
   page.classList.remove("loading");
   page.removeAttribute("aria-busy");
   renderGateway();
+  $("#gatewayKeysBlock").hidden = !providers.gateway.lan;
+  if (!providers.gateway.lan) gatewayKeyDraft = null;
+  if (gatewayKeyDraft === null && !$("#gatewayKeys .rename-in")) renderGatewayKeys();
   renderConnect();
   renderGatewayModels();
   renderArchive();
@@ -2666,19 +2669,19 @@ const FLAVORS = {
   openai: {
     name: "OpenAI", base: (u) => u + "/v1", baseEnv: "OPENAI_BASE_URL", keyEnv: "OPENAI_API_KEY",
     note: "Chat Completions, the API most tools speak. Anything with an OpenAI base-URL setting works.",
-    curl: (b, m) => ({ url: `${b}/chat/completions`, headers: ["Authorization: Bearer magpie"],
+    curl: (b, m, k = "magpie") => ({ url: `${b}/chat/completions`, headers: [`Authorization: Bearer ${k}`],
       body: `{"model": "${m}",\n "messages": [{"role": "user", "content": "hi"}]}` }),
-    python: (b, m) => `from openai import OpenAI
+    python: (b, m, k = "magpie") => `from openai import OpenAI
 
-client = OpenAI(base_url="${b}", api_key="magpie")
+client = OpenAI(base_url="${b}", api_key="${k}")
 r = client.chat.completions.create(
     model="${m}",
     messages=[{"role": "user", "content": "hi"}],
 )
 print(r.choices[0].message.content)`,
-    node: (b, m) => `import OpenAI from "openai";
+    node: (b, m, k = "magpie") => `import OpenAI from "openai";
 
-const client = new OpenAI({ baseURL: "${b}", apiKey: "magpie" });
+const client = new OpenAI({ baseURL: "${b}", apiKey: "${k}" });
 const r = await client.chat.completions.create({
   model: "${m}",
   messages: [{ role: "user", content: "hi" }],
@@ -2688,28 +2691,28 @@ console.log(r.choices[0].message.content);`,
   responses: {
     name: "Responses", base: (u) => u + "/v1", baseEnv: "OPENAI_BASE_URL", keyEnv: "OPENAI_API_KEY",
     note: "OpenAI's newer API: reasoning, built-in tool items, encrypted reasoning. Codex speaks this.",
-    curl: (b, m) => ({ url: `${b}/responses`, headers: ["Authorization: Bearer magpie"],
+    curl: (b, m, k = "magpie") => ({ url: `${b}/responses`, headers: [`Authorization: Bearer ${k}`],
       body: `{"model": "${m}", "input": "hi"}` }),
-    python: (b, m) => `from openai import OpenAI
+    python: (b, m, k = "magpie") => `from openai import OpenAI
 
-client = OpenAI(base_url="${b}", api_key="magpie")
+client = OpenAI(base_url="${b}", api_key="${k}")
 r = client.responses.create(model="${m}", input="hi")
 print(r.output_text)`,
-    node: (b, m) => `import OpenAI from "openai";
+    node: (b, m, k = "magpie") => `import OpenAI from "openai";
 
-const client = new OpenAI({ baseURL: "${b}", apiKey: "magpie" });
+const client = new OpenAI({ baseURL: "${b}", apiKey: "${k}" });
 const r = await client.responses.create({ model: "${m}", input: "hi" });
 console.log(r.output_text);`,
   },
   anthropic: {
     name: "Anthropic", base: (u) => u, baseEnv: "ANTHROPIC_BASE_URL", keyEnv: "ANTHROPIC_API_KEY",
     note: "Messages API. Claude Code reads ANTHROPIC_AUTH_TOKEN instead of the key; the Agents tab sets that for you.",
-    curl: (b, m) => ({ url: `${b}/v1/messages`, headers: ["x-api-key: magpie", "anthropic-version: 2023-06-01"],
+    curl: (b, m, k = "magpie") => ({ url: `${b}/v1/messages`, headers: [`x-api-key: ${k}`, "anthropic-version: 2023-06-01"],
       body: `{"model": "${m}", "max_tokens": 1024,\n "messages": [{"role": "user", "content": "hi"}]}` }),
-    python: (b, m) => `import anthropic
+    python: (b, m, k = "magpie") => `import anthropic
 
 client = anthropic.Anthropic(
-    base_url="${b}", api_key="magpie",
+    base_url="${b}", api_key="${k}",
 )
 m = client.messages.create(
     model="${m}",
@@ -2717,9 +2720,9 @@ m = client.messages.create(
     messages=[{"role": "user", "content": "hi"}],
 )
 print(m.content[0].text)`,
-    node: (b, m) => `import Anthropic from "@anthropic-ai/sdk";
+    node: (b, m, k = "magpie") => `import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic({ baseURL: "${b}", apiKey: "magpie" });
+const client = new Anthropic({ baseURL: "${b}", apiKey: "${k}" });
 const m = await client.messages.create({
   model: "${m}",
   max_tokens: 1024,
@@ -2730,17 +2733,17 @@ console.log(m.content[0].text);`,
   gemini: {
     name: "Gemini", base: (u) => u, baseEnv: "GOOGLE_GEMINI_BASE_URL", keyEnv: "GEMINI_API_KEY",
     note: "Google's generateContent API, v1beta. Gemini CLI and the google-genai SDKs speak this.",
-    curl: (b, m) => ({ url: `${b}/v1beta/models/${m}:generateContent`, headers: ["x-goog-api-key: magpie"],
+    curl: (b, m, k = "magpie") => ({ url: `${b}/v1beta/models/${m}:generateContent`, headers: [`x-goog-api-key: ${k}`],
       body: `{"contents": [{"parts": [{"text": "hi"}]}]}` }),
-    python: (b, m) => `from google import genai
+    python: (b, m, k = "magpie") => `from google import genai
 
-client = genai.Client(api_key="magpie", http_options={"base_url": "${b}"})
+client = genai.Client(api_key="${k}", http_options={"base_url": "${b}"})
 r = client.models.generate_content(model="${m}", contents="hi")
 print(r.text)`,
-    node: (b, m) => `import { GoogleGenAI } from "@google/genai";
+    node: (b, m, k = "magpie") => `import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({
-  apiKey: "magpie",
+  apiKey: "${k}",
   httpOptions: { baseUrl: "${b}" },
 });
 const r = await ai.models.generateContent({ model: "${m}", contents: "hi" });
@@ -2815,7 +2818,20 @@ function renderConnect() {
   if (!models.some((m) => m.id === exampleModel)) exampleModel = models[0]?.id || "";
   const model = exampleModel || "provider/model";
   const f = FLAVORS[flavor] || FLAVORS.openai;
-  const base = f.base(g.url);
+  const urls = [g.url, ...(g.lanURLs || [])];
+  if (!urls.includes(connectURL)) connectURL = g.url;
+  const remote = connectURL !== g.url;
+  const keys = g.lan ? (gatewayKeys || []).filter((k) => !k.off) : [];
+  if (!keys.some((k) => k.id === connectKeyID)) {
+    connectKeyID = "";
+    connectSecret = null;
+  }
+  if (remote && !connectKeyID && keys.length) {
+    queueMicrotask(() => selectConnectKey(keys[0].id));
+  }
+  const key = keys.find((k) => k.id === connectKeyID);
+  const secret = key ? (connectSecret?.id === key.id ? connectSecret.secret : "") : remote ? "" : "magpie";
+  const base = f.base(connectURL);
   const fold = $("#foldConnect");
   fold.setAttribute("aria-expanded", String(!connectFolded));
   fold.title = t(connectFolded ? "Show how to connect" : "Fold Connect away");
@@ -2825,17 +2841,31 @@ function renderConnect() {
   note.replaceChildren();
   note.classList.toggle("brief", connectFolded);
   if (connectFolded) note.append(el("code", "", base), copyBtn(base, "Base URL"));
-  else note.textContent = t("Loopback only · the key can be anything");
+  else note.textContent = t(remote ? "Local network · an enabled gateway key is required" : g.lan && gatewayKeys?.length ? "Use a gateway key to track usage" : "Loopback only · the key can be anything");
 
   box.append(...field("API", segs(Object.entries(FLAVORS).map(([k, v]) => [k, v.name]), flavor, (id) => { flavor = id; localStorage.setItem("magpie.flavor", id); renderConnect(); }), t(f.note)));
 
   const b = el("div", "val");
-  b.append(el("code", "", base), copyBtn(base, "Base URL"));
+  if (urls.length > 1) b.append(connectPick("connectAddress", "Address", base,
+    urls.map((u) => ({ v: u, name: f.base(u), note: t(u === g.url ? "This computer" : "Local network") })), connectURL,
+    (u) => { connectURL = u; renderConnect(); }));
+  else b.append(el("code", "", base));
+  b.append(copyBtn(base, "Base URL"));
   box.append(...field("Base URL", b, t("What {env} takes.", { env: f.baseEnv })));
 
   const k = el("div", "val");
-  k.append(el("code", "", "magpie"), copyBtn("magpie", t("Key")));
-  box.append(...field(t("API key"), k, t("{env}=magpie. The gateway trusts everything on loopback, so any value works.", { env: f.keyEnv })));
+  const options = keys.map((k) => ({ v: k.id, name: k.name, literalName: true, note: k.masked }));
+  if (!remote) options.unshift({ v: "", name: "This computer", note: t("Any key · no key attribution") });
+  const keyLabel = remote || key ? "Gateway key" : "API key";
+  if (!g.lan) k.append(el("code", "", "magpie"));
+  else if (options.length) k.append(connectPick("connectKey", keyLabel, key ? key.name : remote ? t("Choose a gateway key") : t("This computer"),
+    options, connectKeyID, selectConnectKey));
+  else k.append(el("code", "", t("Create a gateway key above to connect")));
+  if (key) k.append(copyCallerKeyBtn(key));
+  else if (!remote) k.append(copyBtn("magpie", t("Key")));
+  box.append(...field(t(keyLabel), k, t(g.lan && (remote || gatewayKeys?.length)
+    ? "Choose a gateway key to use as {env}; usage is tracked by key."
+    : "{env}=magpie. The gateway trusts everything on loopback, so any value works.", { env: f.keyEnv })));
 
   const m = el("div", "val");
   m.append(el("code", "", model), copyBtn(model, t("Model id")));
@@ -2843,16 +2873,18 @@ function renderConnect() {
 
   const ex = el("div", "stack");
   ex.append(segs(LANGS, lang, (id) => { lang = id; localStorage.setItem("magpie.lang", id); renderConnect(); }));
-  const code = lang === "shell" ? envSnippet([[f.baseEnv, base], [f.keyEnv, "magpie"]])
-    : lang === "curl" ? curlSnippet(f.curl(base, model))
-    : f[lang](base, model);
+  const code = !secret ? t(key ? "Loading gateway key…" : "Create a gateway key above to connect")
+    : lang === "shell" ? envSnippet([[f.baseEnv, base], [f.keyEnv, secret]])
+    : lang === "curl" ? curlSnippet(f.curl(base, model, secret))
+    : f[lang](base, model, secret);
   const pre = el("pre", "snip");
   const c = el("code");
   c.append(highlight(code, lang));
   pre.append(c);
   // the button sits outside the scrolling box, so a long line doesn't carry it off
   const wrap = el("div", "snip-wrap");
-  wrap.append(pre, copyBtn(code, t("Snippet")));
+  wrap.append(pre);
+  if (secret) wrap.append(copyBtn(code, t("Snippet")));
   ex.append(wrap);
   box.append(...field(t("Example"), ex, lang === "shell" ? t("Put these in the shell (or the tool's settings) and the tool talks to magpie instead of the vendor.") : ""));
 }
@@ -6519,7 +6551,7 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
     b.type = "button";
     b.setAttribute("role", multi && o.v && o.v !== "\x00" ? "menuitemcheckbox" : "menuitemradio");
     const words = el("span", "pm-words");
-    words.append(el("span", "pm-name", t(o.name)), el("span", "pm-note", t(o.note)));
+    words.append(el("span", "pm-name", o.literalName ? o.name : t(o.name)), el("span", "pm-note", t(o.note)));
     b.append(el("span", "pm-tick"), words);
     tick(b, o);
     b.onclick = (e) => {
@@ -6918,7 +6950,7 @@ function renderUsageLoading() {
     stats.append(tile);
   }
   $("#chart").hidden = true;
-  for (const id of ["usageAgents", "usageModels"]) $("#" + id).hidden = true;
+  for (const id of ["usageAgents", "usageModels", "usageKeys"]) $("#" + id).hidden = true;
   for (const h of $$("#view-usage .row-head")) h.hidden = true;
   $("#usageNote").textContent = "";
 }
@@ -7513,7 +7545,7 @@ function autoResetButton(q, cls) {
 // askReset: spending a Codex account's reset can't be taken
 // back, so it asks first; then it says what came of it and reads the
 // usage again.
-let resetAsk = null;
+let confirmAsk = null;
 function askReset(q) {
   const ed = el("div", "editor reset-ask");
   const head = el("div", "ehead");
@@ -7534,7 +7566,7 @@ function askReset(q) {
     go.classList.add("busy");
     try {
       const out = await api("usage/codex-reset", { user: q.user || "" });
-      closeResetAsk();
+      closeConfirmAsk();
       status(who + ": " + resetOutcome(out), out.code === "reset" ? "ok" : "err");
       loadQuotas();
     } catch (err) {
@@ -7544,26 +7576,26 @@ function askReset(q) {
     }
   };
   const cancel = el("button", "text", t("Cancel"));
-  cancel.onclick = (e) => { e.stopPropagation(); closeResetAsk(); };
+  cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);
-  resetAsk = ed;
+  confirmAsk = ed;
   openModal(ed);
   $("#modal").classList.add("lib");
   go.focus();
 }
-function closeResetAsk() {
-  if (!resetAsk) return;
-  resetAsk = null;
-  closeModal().then(() => { if (!resetAsk) $("#modal").classList.remove("lib"); });
+function closeConfirmAsk() {
+  if (!confirmAsk) return;
+  confirmAsk = null;
+  closeModal().then(() => { if (!confirmAsk) $("#modal").classList.remove("lib"); });
 }
 // the dialog is the providers page's: while this asks, its backdrop and
-// Escape close only this (in the panel, Escape would hide the window)
+// Escape closes only the confirmation (in the panel it would hide the window)
 $("#modal").addEventListener("click", (e) => {
-  if (resetAsk && e.target === e.currentTarget) { e.stopImmediatePropagation(); closeResetAsk(); }
+  if (confirmAsk && e.target === e.currentTarget) { e.stopImmediatePropagation(); closeConfirmAsk(); }
 }, true);
 document.addEventListener("keydown", (e) => {
-  if (resetAsk && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeResetAsk(); }
+  if (confirmAsk && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeConfirmAsk(); }
 }, true);
 function resetOutcome(out) {
   switch (out.code) {
@@ -7770,6 +7802,7 @@ function renderUsage() {
   $("#chart").hidden = empty;
   for (const id of ["usageAgents", "usageModels"]) $("#" + id).hidden = empty;
   for (const h of $$("#view-usage .row-head")) h.hidden = empty;
+  $("#usageKeysHead").hidden = $("#usageKeys").hidden = empty || !u.callerKeys?.length;
   if (empty) {
     stats.classList.add("empty");
     const none = { today: "No calls today.", "7d": "No calls in the last 7 days.", "30d": "No calls in the last 30 days.", all: "No calls yet." }[period];
@@ -7856,6 +7889,7 @@ function renderUsage() {
   };
   list("usageAgents", u.agents);
   list("usageModels", u.models);
+  list("usageKeys", u.callerKeys || []);
   $("#usageNote").textContent = t("Counted from the providers' own usage reports on every call through the gateway · {path}", { path: u.path });
 }
 
@@ -7868,7 +7902,7 @@ function renderUsage() {
 // server pages it (/api/usage/requests) and saves it whole as CSV.
 
 let ledger = null; // the page shown: { rows, offset, total, agents, …totals }
-let ledOffset = 0, ledAgent = "", ledProvider = "", ledFailed = false, ledQuery = "", ledModel = "", ledRoute = 0;
+let ledOffset = 0, ledAgent = "", ledProvider = "", ledCallerKey = "", ledFailed = false, ledQuery = "", ledModel = "", ledRoute = 0;
 const LED_PAGE = 100;
 // Remember the chart metric; start each app load split by model.
 let ledMetric = "tokens", ledSplit = "model";
@@ -7879,10 +7913,10 @@ try {
 
 let ledRouteInfo = null, ledBeforeRoute = null;
 window.openUsageRoute = (route) => {
-  if (!ledBeforeRoute) ledBeforeRoute = { period, ledOffset, ledAgent, ledProvider, ledFailed, ledQuery, ledModel };
+  if (!ledBeforeRoute) ledBeforeRoute = { period, ledOffset, ledAgent, ledProvider, ledCallerKey, ledFailed, ledQuery, ledModel };
   ledRoute = route.id;
   ledRouteInfo = route;
-  ledOffset = 0; ledAgent = ""; ledProvider = ""; ledFailed = false; ledQuery = ""; ledModel = "";
+  ledOffset = 0; ledAgent = ""; ledProvider = ""; ledCallerKey = ""; ledFailed = false; ledQuery = ""; ledModel = "";
   $("#ledQ").value = "";
   period = "all";
   usageTab = "requests";
@@ -7894,6 +7928,7 @@ function ledParams(extra) {
   const q = new URLSearchParams({ period });
   if (ledAgent) q.set("agent", ledAgent);
   if (ledProvider) q.set("provider", ledProvider);
+  if (ledCallerKey) q.set("callerKey", ledCallerKey);
   if (ledRoute) q.set("route", ledRoute);
   if (ledFailed) q.set("failed", "1");
   if (ledModel) q.set("model", ledModel);
@@ -8420,6 +8455,14 @@ const LED_COLS = [
 
 function renderLedger() {
   const l = ledger;
+  const callers = l.callerKeys || [];
+  if (ledCallerKey && !callers.some((k) => k.id === ledCallerKey)) {
+    ledCallerKey = "";
+    ledOffset = 0;
+    // Reload the rows too: this response still belongs to the missing key.
+    loadLedger().catch((e) => status(e.message, "err"));
+    return;
+  }
   const view = $("#view-usage");
   view.classList.remove("loading");
   view.removeAttribute("aria-busy");
@@ -8440,6 +8483,9 @@ function renderLedger() {
   const providers = l.providers || [];
   if (ledProvider && !providers.some((p) => p.id === ledProvider)) ledProvider = "";
   sessPick($("#ledProvider"), "All providers", ledProvider, providers.map((p) => ({ v: p.id, name: t(p.name), note: "" })), "Provider", (v) => { ledProvider = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
+  sessPick($("#ledKey"), "All gateway keys", ledCallerKey, callers.map((k) => ({
+    v: k.id, name: k.name, note: "",
+  })), "Gateway keys", (v) => { ledCallerKey = v; ledOffset = 0; loadLedger().catch((e) => status(e.message, "err")); });
   const seg = $("#ledStatus");
   seg.replaceChildren();
   for (const [on, name] of [[false, "All"], [true, "Failed"]]) {
@@ -8469,7 +8515,7 @@ function renderLedger() {
   $("#ledRouteClear").setAttribute("aria-label", t("Clear filter"));
   $("#ledRouteClear").onclick = () => {
     ledRoute = 0; ledRouteInfo = null;
-    if (ledBeforeRoute) ({ period, ledOffset, ledAgent, ledProvider, ledFailed, ledQuery, ledModel } = ledBeforeRoute);
+    if (ledBeforeRoute) ({ period, ledOffset, ledAgent, ledProvider, ledCallerKey, ledFailed, ledQuery, ledModel } = ledBeforeRoute);
     ledBeforeRoute = null;
     $("#ledQ").value = ledQuery;
     loadLedger().catch((e) => status(e.message, "err"));
@@ -8480,7 +8526,7 @@ function renderLedger() {
   const pager = $("#ledPager");
   if (!l.total) {
     wrap.classList.add("none");
-    const filtered = ledRoute || ledAgent || ledProvider || ledFailed || ledQuery.trim();
+    const filtered = ledRoute || ledAgent || ledProvider || ledCallerKey || ledModel || ledFailed || ledQuery.trim();
     const none = { today: "No calls today.", "7d": "No calls in the last 7 days.", "30d": "No calls in the last 30 days.", all: "No calls yet." }[period];
     wrap.replaceChildren(el("div", "led-none", filtered ? t("No requests match these filters.") : t(none)));
     pager.hidden = true;
@@ -8516,7 +8562,7 @@ function renderLedger() {
     const who = el("span", "who");
     // an agent on another computer, whose magpie passed the request on
     const name = r.agentName || r.agent;
-    who.append(icon(r.icon || "generic"), el("span", "", r.via ? t("{agent} · via {host}", { agent: name, host: r.via }) : name));
+    who.append(icon(r.icon || "generic"), el("span", "", [r.via ? t("{agent} · via {host}", { agent: name, host: r.via }) : name, r.callerKeyLabel || r.callerKeyName].filter(Boolean).join(" · ")));
     td(who, "", [r.kind, r.session && t("session {id}", { id: r.session })].filter(Boolean).join(" · "));
     td(r.req || "—", "model" + (r.req ? "" : " faint"), r.req || t("Not kept for requests before this version"));
     const local = r.source === "log";
@@ -10942,7 +10988,7 @@ function renderRedactRules(s, row) {
 }
 
 // renderLAN: the gateway shared on the local network, for agents on other
-// machines — the addresses they use it at and the key they must send.
+// machines. Gateway keys and connection examples live together in Gateway.
 let lanSelectedURL = "", lanProtocol = "openai";
 function renderLAN(s) {
   const box = $("#lanList");
@@ -10961,7 +11007,7 @@ function renderLAN(s) {
   };
   const set = (body) => writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; renderSettings(); })
     .catch((e) => { status(t(e.message), "err"); renderSettings(); });
-  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models, with the API key below"), "",
+  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
   if (!s.lan) return;
   let urls = s.lanURLs || [], sub = "";
@@ -11009,10 +11055,6 @@ function renderLAN(s) {
     update();
   }
   if (sub) row(t("In a container"), sub, "").classList.add("lan-container");
-  const again = el("button", "text", t("New key"));
-  again.onclick = () => set({ on: true, newKey: true });
-  row(t("API key"), t("Other computers send it as their API key; a new one stops the old from working"),
-    s.lanKey.slice(0, 14) + "…", copyBtn(s.lanKey, t("API key")), again);
 }
 
 // renderUpdate fills in the version row: whether a newer magpie is out.
@@ -11400,6 +11442,7 @@ function show(v) {
   closePicker();
   closeAgentModels();
   if (v !== "providers" && editing !== null) cancelEdit();
+  if (v === "gateway") loadGatewayKeys();
   if (v === "providers" || v === "gateway" || v === "routing") loadProviders().then(back, (e) => status(e.message, "err"));
   if (v === "usage") loadUsage(true).then(back, (e) => status(e.message, "err"));
   if (v === "settings") loadSettings().then(back, (e) => status(e.message, "err"));

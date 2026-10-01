@@ -28,8 +28,10 @@ func TestZhipuKeyTeamFields(t *testing.T) {
 	}
 	asked := map[string]http.Header{}
 	hosts := map[string][]string{} // where each key's team quota was asked
-	var recorded sync.Mutex
+	var mu sync.Mutex
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
 		key := r.Header.Get("Authorization")
 		switch r.Header.Get("X-Host") + r.URL.Path {
 		case "open.bigmodel.cn/api/monitor/usage/quota/limit", "bigmodel.cn/api/monitor/usage/quota/limit":
@@ -38,10 +40,8 @@ func TestZhipuKeyTeamFields(t *testing.T) {
 				w.Write([]byte(`{"code":500,"msg":"no plan","success":false}`))
 				return
 			}
-			recorded.Lock()
 			hosts[key] = append(hosts[key], r.Header.Get("X-Host"))
 			asked[key] = r.Header.Clone()
-			recorded.Unlock()
 			if r.Header.Get("Bigmodel-Organization") != "org-1" || r.Header.Get("Bigmodel-Project") != "proj-1" {
 				w.Write([]byte(`{"code":1001,"msg":"no team","success":false}`))
 				return
@@ -93,8 +93,8 @@ func TestZhipuKeyTeamFields(t *testing.T) {
 	for _, q := range PlanQuotas(context.Background()) {
 		got[q.Provider] = q
 	}
-	recorded.Lock()
-	defer recorded.Unlock()
+	mu.Lock()
+	defer mu.Unlock()
 	q, ok := got["team"]
 	if !ok || q.Error != "" || q.Plan != "GLM Coding Team" || len(q.Windows) != 2 ||
 		q.Windows[0].Name != "5 hours" || q.Windows[0].Used != 42 || q.Windows[0].Span != 5*time.Hour ||

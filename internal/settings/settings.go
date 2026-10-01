@@ -60,11 +60,12 @@ type Settings struct {
 	RedactPersonal bool          `json:"redactPersonal,omitempty"`
 	RedactWords    []string      `json:"redactWords,omitempty"`
 	RedactRules    []redact.Rule `json:"redactRules,omitempty"`
-	// LAN shares the gateway on the local network, for agents on other
-	// machines; a request from one must carry LANKey as its API key, a
-	// key magpie makes when LAN is first turned on.
+	// LAN shares the gateway on the local network; remote callers must use
+	// named caller keys. LANKey is retained for older Magpie versions.
 	LAN    bool   `json:"lan,omitempty"`
 	LANKey string `json:"lanKey,omitempty"`
+	// LANKeyID remembers the default named key created when sharing is enabled.
+	LANKeyID string `json:"lanKeyId,omitempty"`
 	// RequestArchive keeps each call the gateway serves — its headers and
 	// bodies both ways, secrets taken out — in the S3 bucket sync keeps
 	// its backup in (gateway/archive.go), for looking into a request later.

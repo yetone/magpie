@@ -2,34 +2,26 @@ package gateway
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/hex"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 
+	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
-// The gateway listens on loopback and takes any token, which is safe only
-// because nothing but this computer reaches it. Shared on the local network
-// (settings' LAN), it listens on every interface, and a request from
-// another machine must carry the key magpie made for it, as its API key;
-// this computer's agents go on as before.
-
-// lanKey is the key a request from another machine must carry, "" while
-// the gateway isn't shared.
-var lanKey atomic.Pointer[string]
+// The gateway accepts named caller keys locally and, while shared, remotely.
+// Loopback clients may still use any token, including a stale named key.
 
 // listenAddr is where the gateway listens: every interface while it is
 // shared, on its port, else its address.
 func listenAddr() string {
-	if s := settings.Load(); s.LAN && s.LANKey != "" {
+	if s := settings.Load(); s.LAN {
 		return "0.0.0.0:" + Port()
 	}
 	return Addr()
@@ -44,19 +36,10 @@ func Port() string {
 	return p
 }
 
-func loadLANKey() {
-	k := ""
-	if s := settings.Load(); s.LAN {
-		k = s.LANKey
-	}
-	lanKey.Store(&k)
-}
+func migrateLANKey() error { return access.MigrateLegacyLANKey() }
 
-// NewLANKey makes a key for sharing the gateway.
-func NewLANKey() string {
-	b := make([]byte, 20)
-	rand.Read(b)
-	return "sk-magpie-" + hex.EncodeToString(b)
+func migrateLANKeyBestEffort() {
+	access.MigrateLegacyLANKeyBestEffort()
 }
 
 // publicURL is MAGPIE_PUBLIC_URL, the base URL other machines are told to
@@ -130,10 +113,9 @@ func LANURLs() []string {
 }
 
 // Relisten moves the gateway to where settings now say it listens — onto
-// the network or back to loopback — and takes up the key; requests in
-// flight finish.
+// the network or back to loopback. Requests in flight finish.
 func (s *Server) Relisten() error {
-	loadLANKey()
+	migrateLANKeyBestEffort()
 	s.lnMu.Lock()
 	defer s.lnMu.Unlock()
 	if s.ln == nil {
@@ -158,48 +140,73 @@ func (s *Server) Relisten() error {
 	return nil
 }
 
-// lanGuard lets a request from another machine through only with the key,
-// and hands it on as though it came from here, with the gateway's token.
-// A gateway put on the network with MAGPIE_ADDR and not shared from the
-// Settings page is open, as it has always been.
+// lanGuard requires a named caller key on the local network. An explicit
+// MAGPIE_ADDR without LAN sharing retains its existing open-gateway behavior.
 func lanGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if local(r) {
-			next.ServeHTTP(w, r)
-			return
-		}
-		key := ""
-		if k := lanKey.Load(); k != nil {
-			key = *k
-		}
-		if key == "" {
-			if os.Getenv("MAGPIE_ADDR") != "" {
-				next.ServeHTTP(w, r)
-				return
-			}
+		remote := !local(r)
+		shared := settings.Load().LAN
+		if remote && !shared && os.Getenv("MAGPIE_ADDR") == "" {
 			http.Error(w, "magpie isn't shared on the local network", http.StatusForbidden)
 			return
 		}
-		if subtle.ConstantTimeCompare([]byte(callerKey(r)), []byte(key)) != 1 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"error":{"type":"authentication_error","message":"use the API key shown in magpie's Settings, under Share on local network"}}`))
-			return
-		}
-		r = r.WithContext(context.WithValue(r.Context(), lanKeyed{}, true))
-		r.Header.Set("Authorization", "Bearer "+Token)
-		if r.Header.Get("x-api-key") != "" {
-			r.Header.Set("x-api-key", Token)
-		}
-		if r.Header.Get("x-goog-api-key") != "" {
-			r.Header.Set("x-goog-api-key", Token)
-		}
-		if q := r.URL.Query(); q.Get("key") != "" {
-			q.Set("key", Token)
-			r.URL.RawQuery = q.Encode()
+		if (remote && shared) || (!remote && access.Managed(callerKey(r))) {
+			var ok bool
+			r, ok = identifyCaller(w, r)
+			if !ok {
+				return
+			}
+			if remote && shared {
+				r = r.WithContext(context.WithValue(r.Context(), lanKeyed{}, true))
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// callerGuard also covers embedded handlers used by the web app and tests.
+func callerGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if access.Caller(r.Context()).KeyID == "" && access.Managed(callerKey(r)) && (local(r) || settings.Load().LAN) {
+			var ok bool
+			r, ok = identifyCaller(w, r)
+			if !ok {
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
+	who, ok := access.Authenticate(callerKey(r))
+	if !ok && !local(r) {
+		writeError(w, provider.Chat, http.StatusUnauthorized, "API key is disabled, removed or invalid")
+		return r, false
+	}
+	if ok {
+		r = r.WithContext(access.WithIdentity(r.Context(), who))
+	}
+	r.Header = r.Header.Clone()
+	r.Header.Set("Authorization", "Bearer "+Token)
+	for _, h := range []string{"x-api-key", "x-goog-api-key"} {
+		if r.Header.Get(h) != "" {
+			r.Header.Set(h, Token)
+		}
+	}
+	if q := r.URL.Query(); q.Get("key") != "" {
+		q.Set("key", Token)
+		u := *r.URL
+		u.RawQuery = q.Encode()
+		r.URL = &u
+	}
+	return r, true
+}
+
+func appendUsage(r *http.Request, rec usage.Record) {
+	who := access.Caller(r.Context())
+	rec.CallerKeyID, rec.CallerKeyName = who.KeyID, who.KeyName
+	usage.Append(rec)
 }
 
 // lanKeyed marks a request from another machine that carried the key.

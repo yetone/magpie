@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
@@ -29,9 +30,10 @@ type usageGroup struct {
 
 type usageJSON struct {
 	usage.Summary
-	Agents []usageGroup `json:"agents"`
-	Models []usageGroup `json:"models"`
-	Path   string       `json:"path"`
+	Agents     []usageGroup `json:"agents"`
+	Models     []usageGroup `json:"models"`
+	CallerKeys []usageGroup `json:"callerKeys"`
+	Path       string       `json:"path"`
 }
 
 func usageState(p usage.Period) usageJSON {
@@ -65,7 +67,28 @@ func usageState(p usage.Period) usageJSON {
 		}
 		out.Models = append(out.Models, ug)
 	}
+	out.CallerKeys = callerUsageGroups(s)
 	return out
+}
+
+func callerUsageGroups(s usage.Summary) []usageGroup {
+	keys := []usageGroup{}
+	current, _ := access.List()
+	names := map[string]string{}
+	for _, k := range current {
+		names[k.ID] = k.Name
+	}
+	for _, g := range s.CallerKeys {
+		n := names[g.CallerKeyID]
+		if n == "" {
+			n = g.CallerKeyName
+		}
+		if n == "" {
+			n = g.CallerKeyID
+		}
+		keys = append(keys, usageGroup{Group: g, Name: n, Icon: "generic"})
+	}
+	return keys
 }
 
 func periodOf(s string) usage.Period {
@@ -78,24 +101,26 @@ func periodOf(s string) usage.Period {
 
 func ledgerFilter(q url.Values) usage.Filter {
 	id, _ := strconv.ParseInt(q.Get("route"), 10, 64)
-	return usage.Filter{RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
+	return usage.Filter{RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
 }
 
 // ledgerRow is a usage.Row with the names the page shows it by.
 type ledgerRow struct {
 	usage.Row
-	AgentName    string `json:"agentName"`
-	Icon         string `json:"icon"` // the agent's
-	ProviderName string `json:"providerName"`
-	Access       string `json:"access,omitempty"` // known account/route type, independent of model maker
-	PricingModel string `json:"pricing_model,omitempty"`
+	CallerKeyLabel string `json:"callerKeyLabel,omitempty"`
+	AgentName      string `json:"agentName"`
+	Icon           string `json:"icon"` // the agent's
+	ProviderName   string `json:"providerName"`
+	Access         string `json:"access,omitempty"` // known account/route type, independent of model maker
+	PricingModel   string `json:"pricing_model,omitempty"`
 }
 
 type ledgerJSON struct {
-	Period usage.Period `json:"period"`
-	Rows   []ledgerRow  `json:"rows"`
-	Offset int          `json:"offset"`
-	Total  int          `json:"total"` // the rows the filter keeps, on every page
+	CallerKeys []usageGroup `json:"callerKeys"`
+	Period     usage.Period `json:"period"`
+	Rows       []ledgerRow  `json:"rows"`
+	Offset     int          `json:"offset"`
+	Total      int          `json:"total"` // the rows the filter keeps, on every page
 	// Series: those rows by hour, day or week (Bucket), for the chart
 	Bucket string              `json:"bucket"`
 	Series []usage.SeriesPoint `json:"series"`
@@ -162,6 +187,11 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 	}
 	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: l.Total, Totals: l.Sum, Agents: []ledgerAgent{}, Providers: []ledgerAgent{}}
 	out.Bucket, out.Series = l.Bucket, l.Series
+	out.CallerKeys = callerUsageGroups(usage.Summary{CallerKeys: l.CallerKeys})
+	callerLabels := map[string]string{}
+	for _, g := range out.CallerKeys {
+		callerLabels[g.CallerKeyID] = g.Name
+	}
 	for _, r := range page {
 		a := who(r.Agent)
 		lr := ledgerRow{Row: r, AgentName: a.Name, Icon: a.Icon, ProviderName: names[r.Provider]}
@@ -176,6 +206,7 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 		if lr.ProviderName == "" {
 			lr.ProviderName = r.Provider
 		}
+		lr.CallerKeyLabel = callerLabels[r.CallerKeyID]
 		out.Rows = append(out.Rows, lr)
 	}
 	for _, id := range l.Agents {

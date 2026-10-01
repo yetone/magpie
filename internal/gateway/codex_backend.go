@@ -403,7 +403,7 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 		Reasoning: uu.Reasoning, Millis: call.Millis, TTFT: call.TTFT, FirstText: call.FirstText, Status: call.Status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 		RequestID: requestID(res.Header), Endpoint: r.URL.Path}
 	failedWith(&rec, call.Status, call.Error, errType)
-	usage.Append(rec)
+	appendUsage(r, rec)
 }
 
 // unreadableItem is the item OpenAI's refusal names: sealed content it

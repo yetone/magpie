@@ -294,7 +294,7 @@ var WhileServing []func(context.Context)
 // long as a stream takes. A bind error means another magpie is already
 // serving, which is fine for the caller to ignore.
 func (s *Server) ListenAndServe(ctx context.Context) error {
-	loadLANKey()
+	migrateLANKeyBestEffort()
 	ln, err := Listen(listenAddr())
 	if err != nil {
 		return err
@@ -392,7 +392,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, http.StatusNotFound, "magpie serves /v1/chat/completions, /v1/responses, /v1/messages, /v1/systemone, /v1/images/generations, /v1/images/edits, /v1/videos and /v1beta/models/*")
 	})
-	return withCaller(mux)
+	return callerGuard(withCaller(mux))
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) {
@@ -818,7 +818,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		rec := usage.Record{Time: start, Agent: call.Agent, Via: call.Via, Provider: call.Provider, Model: call.Model, Requested: call.Model,
 			Millis: call.Millis, Status: call.Status, Rejected: true, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind, Endpoint: endpointOf(r, from, "")}
 		failedWith(&rec, call.Status, call.Error, "")
-		usage.Append(rec)
+		appendUsage(r, rec)
 	}
 	// a model's id without a provider in it that names a routing group is
 	// the group's, as "group/<id>" is, rather than one provider's that
@@ -1225,7 +1225,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					TTFT: try.TTFT, FirstText: try.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To)}
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
-				usage.Append(rec)
+				appendUsage(r, rec)
 			}
 			continue
 		}
@@ -1383,7 +1383,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			TTFT: call.TTFT, FirstText: call.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 			RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To)}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
-		usage.Append(rec)
+		appendUsage(r, rec)
 	}
 }
 

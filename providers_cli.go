@@ -794,8 +794,8 @@ func refreshLive(ctx context.Context) {
 // unless MAGPIE_ADDR puts it on the network (a server, a Docker image)
 // without sharing it from Settings, when it is anyone who reaches it.
 func keyNote() string {
-	if s := settings.Load(); s.LAN && s.LANKey != "" {
-		return "(anything works from this machine; from others, the key under Settings → Share on local network)"
+	if s := settings.Load(); s.LAN {
+		return "(anything works from this machine; from others, an enabled gateway key — magpie gateway-key add <name>)"
 	}
 	if h, _, err := net.SplitHostPort(gateway.Addr()); err == nil && h != "localhost" && !net.ParseIP(h).IsLoopback() {
 		return "(anything works, from anyone who reaches it — share it from Settings to require a key)"

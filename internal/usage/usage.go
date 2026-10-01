@@ -29,6 +29,8 @@ type Record struct {
 	Host            string    `json:"host,omitempty"`          // where the call went: provider.Where then
 	ProviderKeyID   string    `json:"providerKeyId,omitempty"` // fingerprint of the API key actually used
 	ProviderKeyName string    `json:"providerKeyName,omitempty"`
+	CallerKeyID     string    `json:"callerKeyId,omitempty"`
+	CallerKeyName   string    `json:"callerKeyName,omitempty"`
 	// SessionProvider is the provider ID recorded by the agent. SessionAccount
 	// identifies the session's creator, not the account used for an API request.
 	// Neither field establishes an upstream route from today's configuration.
@@ -291,6 +293,8 @@ type Group struct {
 	Model           string `json:"model,omitempty"`
 	ProviderKeyID   string `json:"providerKeyId,omitempty"`
 	ProviderKeyName string `json:"providerKeyName,omitempty"`
+	CallerKeyID     string `json:"callerKeyId,omitempty"`
+	CallerKeyName   string `json:"callerKeyName,omitempty"`
 	// Host is where the calls went, when the provider's id has gone to
 	// more than one place, or elsewhere than the provider goes now: its
 	// calls are then told apart by it, not summed under the id.
@@ -329,6 +333,7 @@ type Summary struct {
 	Agents       []Group `json:"agents"`
 	Models       []Group `json:"models"`
 	ProviderKeys []Group `json:"providerKeys"`
+	CallerKeys   []Group `json:"callerKeys"`
 	// Sessions are the calls that named their session, by session.
 	Sessions []Group `json:"sessions"`
 }
@@ -348,7 +353,7 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 			}
 		}
 	}
-	s := Summary{Period: p, Bucket: "day", Agents: []Group{}, Models: []Group{}, ProviderKeys: []Group{}, Sessions: []Group{}, Series: []Point{}}
+	s := Summary{Period: p, Bucket: "day", Agents: []Group{}, Models: []Group{}, ProviderKeys: []Group{}, CallerKeys: []Group{}, Sessions: []Group{}, Series: []Point{}}
 	var first time.Time
 	for _, r := range recs {
 		if !r.IsRejected() && (first.IsZero() || r.Time.Before(first)) {
@@ -388,6 +393,7 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 	agents := map[string]*Group{}
 	models := map[string]*Group{}
 	keys := map[string]*Group{}
+	callerKeys := map[string]*Group{}
 	sessions := map[string]*Group{}
 	for _, r := range recs {
 		if r.IsRejected() {
@@ -420,6 +426,15 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 			models[k] = m
 		}
 		m.add(r, pr)
+		if r.CallerKeyID != "" {
+			g := callerKeys[r.CallerKeyID]
+			if g == nil {
+				g = &Group{ID: r.CallerKeyID, CallerKeyID: r.CallerKeyID}
+				callerKeys[r.CallerKeyID] = g
+			}
+			g.CallerKeyName = r.CallerKeyName
+			g.add(r, pr)
+		}
 		if keyProviders[r.Provider] {
 			id := r.Provider + "#" + r.ProviderKeyID
 			g := keys[id]
@@ -462,6 +477,10 @@ func summarize(p Period, now time.Time, recs []Record) Summary {
 		s.ProviderKeys = append(s.ProviderKeys, *g)
 	}
 	byTokens(s.ProviderKeys)
+	for _, g := range callerKeys {
+		s.CallerKeys = append(s.CallerKeys, *g)
+	}
+	byTokens(s.CallerKeys)
 	for _, g := range sessions {
 		s.Sessions = append(s.Sessions, *g)
 	}

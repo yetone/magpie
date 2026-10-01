@@ -125,6 +125,14 @@ func usageTo(out io.Writer, args []string) error {
 			return g.Provider + " / " + name
 		})
 	}
+	if len(s.CallerKeys) > 0 {
+		table("gateway keys", s.CallerKeys, func(g stats.Group) string {
+			if g.CallerKeyName != "" {
+				return g.CallerKeyName
+			}
+			return g.CallerKeyID
+		})
+	}
 	if len(s.Sessions) > 0 {
 		top := s.Sessions[:min(len(s.Sessions), 10)]
 		head := "sessions"

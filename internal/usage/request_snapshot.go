@@ -50,7 +50,7 @@ func (c *rowChunk) pack() *rowChunk {
 		for _, n := range p.Tokens {
 			put(uint64(n))
 		}
-		for _, n := range []int64{p.Millis, p.TTFT, p.FirstText, p.Order} {
+		for _, n := range []int64{p.Millis, p.TTFT, p.FirstText, p.Order, p.RouteID} {
 			put(uint64(n))
 		}
 		put(math.Float64bits(p.Cost))
@@ -130,6 +130,7 @@ func (c *rowChunk) unpack() *rowChunk {
 			p.Tokens[j] = int64(take())
 		}
 		p.Millis, p.TTFT, p.FirstText, p.Order = int64(take()), int64(take()), int64(take()), int64(take())
+		p.RouteID = int64(take())
 		p.Cost, p.Status, p.Flags = math.Float64frombits(take()), int32(take()), uint8(take())
 	}
 	if !valid || len(data) != 0 {

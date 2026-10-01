@@ -84,6 +84,7 @@ const usage = `magpie — one place to pick every agent's model
 
   magpie serve                    run the gateway alone (the app runs it too)
   magpie healthcheck              exit 0 when the gateway answers (a container's HEALTHCHECK)
+  magpie gateway-key list|add <name>|rotate <id>|remove <id>   manage the keys clients use to call a shared gateway
   magpie mcp image                the image and video generation MCP server an agent is given from the library (stdio)
   magpie usage [today|7d|30d|all] tokens and cost per agent and model (30d)
   magpie usage --csv [today|7d|30d|all]   every request as CSV: the model asked for, sent and served, tokens, cost, time, status
@@ -228,6 +229,8 @@ func run(args []string) error {
 		return groupCmd(args)
 	case "serve":
 		return serve()
+	case "gateway-key":
+		return gatewayKeys(args)
 	case "accounts", "account":
 		return accountsCmd(args)
 	case "usage":

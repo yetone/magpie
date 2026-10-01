@@ -16,6 +16,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // The providers page: the vendors the user added, the presets they can add
@@ -155,6 +156,8 @@ type presetJSON struct {
 
 type gatewayJSON struct {
 	URL     string         `json:"url"`
+	LAN     bool           `json:"lan"`
+	LANURLs []string       `json:"lanURLs,omitempty"`
 	Running bool           `json:"running"`
 	Mine    bool           `json:"mine"`   // this process serves it
 	Window  bool           `json:"window"` // the magpie serving it shows its routing
@@ -429,6 +432,10 @@ func providersState() providersJSON {
 	}
 	cat := provider.Catalog()
 	s.Gateway = gatewayJSON{URL: gateway.URL(), Models: len(cat), Calls: []gateway.Call{}, Groups: []gwGroupJSON{}}
+	s.Gateway.LAN = settings.Load().LAN
+	if s.Gateway.LAN {
+		s.Gateway.LANURLs = gateway.LANURLs()
+	}
 	for _, e := range cat {
 		if e.Group == "" {
 			continue

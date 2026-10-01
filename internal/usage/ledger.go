@@ -44,15 +44,19 @@ func (r Record) Failed() bool { return r.Status >= 400 || r.Error != "" }
 // one provider, to the failed calls, and to the rows whose models, provider, host or
 // session hold Query (any case).
 type Filter struct {
-	RouteID  int64
-	Model    string // exact model selected in the ranking
-	Agent    string
-	Provider string // a provider's id, as the ledger's rows have it
-	Failed   bool
-	Query    string
+	CallerKey string
+	RouteID   int64
+	Model     string // exact model selected in the ranking
+	Agent     string
+	Provider  string // a provider's id, as the ledger's rows have it
+	Failed    bool
+	Query     string
 }
 
 func (f Filter) keeps(r Record) bool {
+	if f.CallerKey != "" && r.CallerKeyID != f.CallerKey {
+		return false
+	}
 	if f.RouteID != 0 && r.RouteID != f.RouteID {
 		return false
 	}
@@ -69,7 +73,7 @@ func (f Filter) keeps(r Record) bool {
 		return false
 	}
 	if q := strings.ToLower(strings.TrimSpace(f.Query)); q != "" {
-		return slices.ContainsFunc([]string{r.Requested, r.Model, r.Served, r.Provider, r.Host, r.Session, r.Effort, r.SessionProvider, r.SessionAccount, r.ProviderKeyID, r.ProviderKeyName}, func(s string) bool {
+		return slices.ContainsFunc([]string{r.Requested, r.Model, r.Served, r.Provider, r.Host, r.Session, r.Effort, r.SessionProvider, r.SessionAccount, r.ProviderKeyID, r.ProviderKeyName, r.CallerKeyID, r.CallerKeyName}, func(s string) bool {
 			return strings.Contains(strings.ToLower(s), q)
 		})
 	}
@@ -383,7 +387,7 @@ func NewPricer() func([]Record) Totals {
 var CSVHeader = []string{"time", "agent", "requested_model", "provider", "host", "model", "served_model", "swapped",
 	"effort", "input_tokens", "output_tokens", "cache_write_tokens", "cache_read_tokens", "reasoning_tokens",
 	"cost_usd", "duration_ms", "ttft_ms", "status", "error", "session", "kind", "provider_key_id", "provider_key_name", "route_id",
-	"request_id", "endpoint", "error_message", "error_type", "source", "rejected", "session_provider", "session_account", "session_official_login"}
+	"request_id", "endpoint", "error_message", "error_type", "source", "rejected", "session_provider", "session_account", "session_official_login", "caller_key_id", "caller_key_name"}
 
 // WriteCSV writes rows as CSV, a header first: times in RFC 3339 with
 // their offset, the cost in USD at the effective price (empty when unknown), error
@@ -409,7 +413,7 @@ func WriteCSV(w io.Writer, rows []Row) error {
 		cw.Write([]string{r.Time.Format(time.RFC3339), r.Agent, r.Requested, r.Provider, r.Host, r.Model, r.Served,
 			strconv.FormatBool(r.Swapped), r.Effort, n(r.Input), n(r.Output), n(r.CacheWrite), n(r.CacheRead), n(r.Reasoning),
 			cost, strconv.FormatInt(r.Millis, 10), ttft, n(r.Status), strconv.FormatBool(r.Failed()), r.Session, r.Kind, r.ProviderKeyID, r.ProviderKeyName, routeID,
-			r.RequestID, r.Endpoint, r.Error, r.ErrType, r.Source, strconv.FormatBool(r.IsRejected()), r.SessionProvider, r.SessionAccount, strconv.FormatBool(r.SessionOfficialLogin)})
+			r.RequestID, r.Endpoint, r.Error, r.ErrType, r.Source, strconv.FormatBool(r.IsRejected()), r.SessionProvider, r.SessionAccount, strconv.FormatBool(r.SessionOfficialLogin), r.CallerKeyID, r.CallerKeyName})
 	}
 	cw.Flush()
 	return cw.Error()

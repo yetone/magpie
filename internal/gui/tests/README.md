@@ -1,24 +1,51 @@
 # Dropdown browser regression
 
-`mobile-web.test.cjs` checks all eight web pages and their navigation in
-Chromium and WebKit, English and Chinese, at touch widths 360/390/430/820.
-It checks that Library's folder button is reachable, Usage tokens, costs and
-stat explanations are readable, and chart dates do not overlap. A released
-touch's continuous scroll can outlast the input window, while scripts cannot
-move an idle page, including after momentum stops. The API is faked; no user
-configuration is read or changed.
+## Gateway Caller Keys
 
-At desktop widths 900/1280, screenshots are compared with the same pages from
-`origin/main`. Dimensions must match; a pixel counts as different only when
-any RGBA channel differs by more than 48, and more than 300 such pixels fails.
-This tolerates Chromium's small antialiasing differences while still detecting
-layout changes. Fetch that branch before running; set `BASE_REF` to another
-local Git ref (`HEAD` for a self-comparison) to select a particular baseline.
-PNG decoding uses the copy bundled with Playwright, without another dependency.
+`gateway-caller-keys.test.cjs` checks the named caller-key list on the
+Gateway page, including creation, copying, renaming, disabling, enabling,
+rotation and deletion. It verifies key-level usage overview, request filtering and
+CSV export in Chinese and English on Chromium and WebKit. The fixtures do
+not access local credentials. Gateway keys appear only while sharing is on, with one create entry point
+and confirmation before rotation/removal (Cancel and Escape send no mutation).
+Creation, renaming and confirmation focus their controls without scrolling.
+Gateway is the only key-management page;
+Settings controls sharing and shows addresses. The test checks that toggling
+sharing retains the key, and that a removed default key is recreated as
+Magpie and appears in Gateway without a reload.
+
+`gateway-connect-keys.test.cjs` selects loopback and LAN addresses and enabled
+caller keys for Shell, curl, Python and Node examples across all four APIs.
+It checks rotation, disabling, removal, stale list responses, empty states,
+literal custom names and narrow layouts in Chinese and English on both engines.
+Sharing off keeps the original API-key field and hides the gateway-key picker;
+sharing on names the arbitrary local option separately from the Magpie key.
+
+`api-key-usage.test.cjs` exercises the existing provider key list: adding,
+enabling and disabling, choosing the first key, renaming and removing.
+The Usage page's Gateway key rows, request filter and CSV exports identify
+client keys, not those provider credentials. A client using different
+upstream keys stays grouped together; renaming an upstream key does not
+rename the client. It also checks historical records, Chinese and English,
+and the narrow window in Chromium and WebKit.
+The API fixtures use test keys and never read local user configuration.
+The existing `usage-ledger.test.cjs` also checks request-route and caller-key
+filters together, CSV export, and restoring the previous caller filter when
+the request filter is cleared. A caller absent from the period's options clears
+the filter and reloads the unfiltered rows from the first page.
+
+`api-key-theme.test.cjs` checks Gateway's enabled and disabled keys, creation
+and renaming inputs, rotation and key picker, plus Settings' LAN address
+controls against the global palette.
+Light and Dark override the OS; System follows live OS palette changes.
+The settings theme picker is also switched and reloaded in Chromium and
+WebKit. No separate colours are defined for gateway keys.
 
 ```sh
-node --test internal/gui/tests/mobile-web.test.cjs internal/gui/tests/old-webkit.test.cjs
+node --test --test-concurrency=1 internal/gui/tests/gateway-caller-keys.test.cjs internal/gui/tests/gateway-connect-keys.test.cjs internal/gui/tests/api-key-usage.test.cjs internal/gui/tests/api-key-theme.test.cjs
 ```
+
+## Other Browser Regressions
 
 `routing-sessions.test.cjs` checks the Routing request list in Chromium and
 WebKit, English and Chinese: the list defaults to By request and remembers
@@ -941,3 +968,25 @@ with a known session creator. Unknown gateway providers retain their own label.
 Creator emails and recorded provider IDs appear separately in request details.
 Third-party OpenCode gateway calls retain the actual relay. These regressions
 run in Chromium and WebKit, English and Chinese.
+
+## Mobile Web
+
+`mobile-web.test.cjs` checks all eight web pages and their navigation in
+Chromium and WebKit, English and Chinese, at touch widths 360/390/430/820.
+It checks that Library's folder button is reachable, Usage tokens, costs and
+stat explanations are readable, and chart dates do not overlap. A released
+touch's continuous scroll can outlast the input window, while scripts cannot
+move an idle page, including after momentum stops. The API is faked; no user
+configuration is read or changed.
+
+At desktop widths 900/1280, screenshots are compared with the same pages from
+`origin/main`. Dimensions must match; a pixel counts as different only when
+any RGBA channel differs by more than 48, and more than 300 such pixels fails.
+This tolerates Chromium's small antialiasing differences while still detecting
+layout changes. Fetch that branch before running; set `BASE_REF` to another
+local Git ref (`HEAD` for a self-comparison) to select a particular baseline.
+PNG decoding uses the copy bundled with Playwright, without another dependency.
+
+```sh
+node --test internal/gui/tests/mobile-web.test.cjs internal/gui/tests/old-webkit.test.cjs
+```

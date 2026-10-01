@@ -30,10 +30,12 @@ const ROWS = [
 for (let i = 0; i < 126; i++) {
   ROWS.push({ t: new Date(now - (300 + i * 60) * 1e3).toISOString(), agent: i % 2 ? "claude" : "codex", agentName: i % 2 ? "Claude Code" : "Codex", icon: i % 2 ? "claudecode-color" : "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", served: "gpt-6-sol", in: 1000 + i, out: 100, ms: 900, status: 200, cost: 0.001, priced: true });
 }
+ROWS.forEach((r, i) => { r.callerKeyId = i % 2 ? "server" : "laptop"; });
 
 function page(q) {
   let rows = ROWS;
   if (q.get("route")) rows = rows.filter((r) => r.route_id === Number(q.get("route")));
+  if (q.get("callerKey")) rows = rows.filter((r) => r.callerKeyId === q.get("callerKey"));
   if (q.get("agent")) rows = rows.filter((r) => r.agent === q.get("agent"));
   if (q.get("failed") === "1") rows = rows.filter((r) => r.status >= 400);
   const s = (q.get("q") || "").toLowerCase();
@@ -46,6 +48,7 @@ function page(q) {
     input: sum("in"), output: sum("out"), cache_read: sum("cache_read"), cache_write: sum("cache_write"), reasoning: sum("reasoning"),
     cost: sum("cost"), unpriced: rows.filter((r) => !r.priced && r.in).length,
     agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color" }, { id: "codex", name: "Codex", icon: "codex-color" }],
+    callerKeys: [{ id: "laptop", name: "Laptop" }, { id: "server", name: "Server" }],
   };
 }
 
@@ -155,6 +158,28 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     for (const lang of ["en", "zh"]) {
       const w = L[lang];
+      await t.test(lang + ": an unavailable caller filter is cleared", async () => {
+        const asked = [];
+        const { page: tab, errors } = await open(lang, "light", asked);
+        await tab.locator("#ledKey").click();
+        await tab.locator(".sess-menu .pm-item", { hasText: "Laptop" }).click();
+        await lastAsked(tab, asked, q => q.get("callerKey") === "laptop");
+        await tab.route("**/api/usage/requests?**", async (route) => {
+          const q = new URL(route.request().url()).searchParams;
+          asked.push(q);
+          const data = page(q);
+          data.callerKeys = [{ id: "server", name: "Server" }];
+          data.rows = data.rows.filter(r => r.callerKeyId === "server");
+          data.total = data.rows.length;
+          await route.fulfill({ json: data });
+        });
+        await tab.locator("#usageReload").click();
+        await lastAsked(tab, asked, q => !q.has("callerKey") && q.get("offset") === "0");
+        assert.equal(await tab.locator("#ledKey").textContent(), lang === "zh" ? "全部网关密钥" : "All gateway keys");
+        assert(await tab.locator(".led-row").count() > 0, "stale filtered empty data must be reloaded");
+        assert.deepEqual(errors, []);
+        await tab.close();
+      });
       await t.test(lang, async () => {
         const asked = [];
         const { page, errors } = await open(lang, "light", asked);
@@ -331,12 +356,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const asked = [];
         const { page, errors } = await open(lang, "light", asked);
         await page.evaluate(() => {
-          period = "7d"; ledAgent = "codex"; ledFailed = true; ledQuery = "sol"; ledOffset = 100;
+          period = "7d"; ledAgent = "codex"; ledCallerKey = "server"; ledFailed = true; ledQuery = "sol"; ledOffset = 100;
           window.openUsageRoute({ id: 123, time: new Date().toISOString(), model: "gpt-6-sol" });
         });
-        await lastAsked(page, asked, q=>q.get("route") === "123");
+        await lastAsked(page, asked, q=>q.get("route") === "123" && !q.has("callerKey"));
+        assert.equal(await page.locator(".led tbody tr").count(), 2, "the previous caller filter must not hide this route");
+        await page.locator("#ledKey").click();
+        await page.locator(".sess-menu .pm-item", { hasText: "Laptop" }).click();
+        await lastAsked(page, asked, q=>q.get("route") === "123" && q.get("callerKey") === "laptop");
+        await page.locator("#ledExport").click();
+        await lastAsked(page, asked, q=>q.method === "POST" && q.get("route") === "123" && q.get("callerKey") === "laptop" && !q.has("offset") && !q.has("limit"));
         await page.locator("#ledRouteClear").click();
-        await lastAsked(page, asked, q=>!q.has("route") && q.get("period") === "7d" && q.get("agent") === "codex" && q.get("failed") === "1" && q.get("q") === "sol" && q.get("offset") === "100");
+        await lastAsked(page, asked, q=>!q.has("route") && q.get("period") === "7d" && q.get("agent") === "codex" && q.get("callerKey") === "server" && q.get("failed") === "1" && q.get("q") === "sol" && q.get("offset") === "100");
         assert.equal(await page.locator("#ledQ").inputValue(), "sol");
         assert.deepEqual(errors, []);
         await page.close();
