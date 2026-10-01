@@ -7301,6 +7301,28 @@ function quotaWindows(sub) {
   return windows;
 }
 
+// Keep the last date and as many earlier dates as fit, without clipping their
+// text. Visibility keeps each label aligned to its bar; resizing restores them.
+function fitChartLabels() {
+  const narrow = web && matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").matches;
+  for (const labels of document.querySelectorAll(".chart .labels")) {
+    const spans = [...labels.children];
+    for (const span of spans) span.style.visibility = "";
+    if (!narrow || !labels.offsetWidth) continue;
+    const box = labels.getBoundingClientRect();
+    let right = box.right + 8;
+    for (const span of spans.reverse()) {
+      if (!span.textContent) continue;
+      const range = document.createRange();
+      range.selectNodeContents(span);
+      const r = range.getBoundingClientRect();
+      if (r.right + 8 > right + 1 || r.left < box.left - 1) span.style.visibility = "hidden";
+      else right = r.left;
+    }
+  }
+}
+new ResizeObserver(fitChartLabels).observe($("#view-usage"));
+
 function renderUsage() {
   const u = usage;
   const view = $("#view-usage");
@@ -7370,6 +7392,7 @@ function renderUsage() {
     labels.append(el("span", "", i % every === 0 || last ? p.label : ""));
   });
   chart.append(el("div", "peak", fmtN(peak)), bars, labels);
+  fitChartLabels();
 
   const total = Math.max(1, tokensOf(u));
   const list = (id, groups) => {
@@ -8416,6 +8439,7 @@ function renderSessChart(chart, st, used, ov, acts) {
     labels.append(el("span", "", i % every === 0 || end ? label : ""));
   });
   chart.append(bars, labels);
+  fitChartLabels();
 
   function drawHead() {
     const head = el("div", "sess-chart-head");
@@ -10064,7 +10088,7 @@ function savePrefs(body) {
 // shows that with the reader's event: scrollOnPurpose(e). Called without one
 // (from a load, a timer, a helper that other clicks share) it is refused,
 // and whatever scroll follows is put back.
-let purposeUntil = 0, held = null;
+let purposeUntil = 0, held = null, touchView = null, touchInertia = null;
 const readerScrolls = (ms) => { purposeUntil = Math.max(purposeUntil, performance.now() + ms); held = null; };
 function scrollOnPurpose(e, ms = 1000) {
   if (!e?.isTrusted || performance.now() - e.timeStamp > 1000) {
@@ -10076,7 +10100,16 @@ function scrollOnPurpose(e, ms = 1000) {
 }
 const SCROLL_KEYS = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "]);
 addEventListener("wheel", () => readerScrolls(250), { capture: true, passive: true });
-addEventListener("touchmove", () => readerScrolls(250), { capture: true, passive: true });
+addEventListener("touchstart", () => { touchView = touchInertia = null; }, { capture: true, passive: true });
+addEventListener("touchmove", (e) => {
+  readerScrolls(250);
+  touchView = e.target.closest?.(".view");
+}, { capture: true, passive: true });
+addEventListener("touchend", () => {
+  if (touchView && web && matchMedia("(pointer: coarse)").matches) touchInertia = { v: touchView, at: performance.now() };
+  touchView = null;
+}, { capture: true, passive: true });
+addEventListener("touchcancel", () => { touchView = touchInertia = null; }, { capture: true, passive: true });
 // a drag, not the tremble of a click
 let downAt = null;
 addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; }, { capture: true, passive: true });
@@ -10215,6 +10248,7 @@ function keepHeld() {
   requestAnimationFrame(keepHeld);
 }
 addEventListener("click", (e) => {
+  touchInertia = null;
   purposeUntil = 0; // what came before the click (Space pressed on a button, a tremble) is no scroll
   const v = e.target.closest?.(".view");
   if (!v || v.hidden) { held = null; return; }
@@ -10231,10 +10265,14 @@ addEventListener("click", (e) => {
 for (const v of document.querySelectorAll(".view")) {
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
-    // Touch scrolling continues after the finger leaves the screen. Its
-    // events can reach a busy main thread after the touchmove window has
-    // expired, so a phone browser keeps its native scroll position.
-    if ((web && matchMedia("(pointer: coarse)").matches) || performance.now() < purposeUntil) { fitRoom(v); readerLeaves(v); }
+    // Only a released touch's continuous momentum can extend its permission.
+    // Once its events stop arriving, code is subject to the same guard again.
+    const now = performance.now();
+    if (touchInertia?.v === v) {
+      if (now - touchInertia.at <= 150) { touchInertia.at = now; readerScrolls(150); }
+      else touchInertia = null;
+    }
+    if (now < purposeUntil) { fitRoom(v); readerLeaves(v); }
     else if (held?.v === v) hold(held);
     else backToReader(v);
   }, { passive: true });

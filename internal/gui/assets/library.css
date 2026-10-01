@@ -12,6 +12,15 @@
 }
 /* the window's view is padded 2px at the top: the strip reaches over it */
 body.window .lib-head { top: -2px; margin: -2px -16px 0; padding: 8px 16px 4px; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+  body.web .lib-head {
+    flex-wrap: wrap;
+    margin: -2px calc(-1 * var(--view-right)) 0 calc(-1 * var(--view-left));
+    padding: 8px var(--view-right) 4px var(--view-left);
+  }
+  body.web .lib-tabs { max-width: 100%; flex-wrap: wrap; }
+  body.web .lib-more { flex: none; }
+}
 .lib-head.stuck { box-shadow: 0 1px 0 var(--line-2); }
 .lib-tabs .opt { height: 24px; padding: 0 12px; font-size: 12.5px; }
 .lib-more { display: inline-flex; align-items: center; gap: 5px; }

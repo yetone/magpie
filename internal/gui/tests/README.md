@@ -1,5 +1,22 @@
 # Dropdown browser regression
 
+`mobile-web.test.cjs` checks all eight web pages and their navigation in
+Chromium and WebKit, English and Chinese, at touch widths 360/390/430/820.
+It checks that Library's folder button is reachable, Usage tokens, costs and
+stat explanations are readable, and chart dates do not overlap. A released
+touch's continuous scroll can outlast the input window, while scripts cannot
+move an idle page, including after momentum stops. The API is faked; no user
+configuration is read or changed.
+
+At desktop widths 900/1280, the screenshots' pixels must match the same pages
+from `origin/main`. Fetch that branch before running; set `BASE_REF` to another
+local Git ref to compare against a particular baseline. PNG decoding uses the
+copy bundled with Playwright, without another dependency.
+
+```sh
+node --test internal/gui/tests/mobile-web.test.cjs internal/gui/tests/old-webkit.test.cjs
+```
+
 `session-terminal.test.cjs` checks the macOS Settings choice for installed
 `.command` handlers in English and Chinese. The system default appears once
 and is selected at first. It selects Ghostty, changes the theme, then returns
