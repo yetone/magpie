@@ -27,6 +27,7 @@ type Route struct {
 	ID       int64     `json:"id"`
 	Time     time.Time `json:"time"`
 	Agent    string    `json:"agent"`
+	Session  string    `json:"-"`                // the session it named (sessionOf), for GET /v1/magpie/route alone
 	Kind     string    `json:"kind,omitempty"`   // what the call is for, as Call's
 	For      *CallFor  `json:"for,omitempty"`    // the request it was made for, as Call's
 	Model    string    `json:"model"`            // as the agent asked

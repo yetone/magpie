@@ -3,7 +3,10 @@
 // a custom provider — opens its editor on a click (willz on Discord: the row
 // only toggled and WebKit said "undefined is not an object (evaluating
 // 'copied?.key.set')"). The key box says one is optional, and nothing throws.
-// The providers are what /api/providers gives for them. In English and Chinese.
+// The providers are what /api/providers gives for them. A plugin's provider,
+// its base plugin://<id>, has no website link in its head (Lemon on Discord:
+// CodeArts's said "codearts ↗" and opened https://codearts), while a local
+// server's keeps its address. In English and Chinese.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -19,7 +22,8 @@ const local = (id, name, preset, icon) => ({
   exposed: 1, unlisted: false, off: false, fetched: "just now", agents: [], sponsored: false, keyList: [],
 });
 const providers = {
-  providers: [local("ollama", "Ollama", "ollama", "ollama"), local("home-ollama", "Home Ollama", "", "")],
+  providers: [local("ollama", "Ollama", "ollama", "ollama"), local("home-ollama", "Home Ollama", "", ""),
+    { ...local("codearts", "CodeArts", "", ""), host: "codearts", chat: "plugin://codearts" }],
   presets: [{ id: "ollama", name: "Ollama", icon: "ollama", kind: "local", noKey: true, chat: "http://localhost:11434/v1", anthropic: "http://localhost:11434", note: "your local models", website: "https://ollama.com", added: true }],
   excluded: [], gateway: { running: true, window: true },
 };
@@ -55,12 +59,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang));
       await page.goto("http://magpie.test/?view=providers");
-      for (const name of ["Ollama", "Home Ollama"]) {
+      const links = { Ollama: "ollama.com ↗", "Home Ollama": "localhost:11434 ↗", CodeArts: null };
+      for (const name of ["Ollama", "Home Ollama", "CodeArts"]) {
         await page.locator(".row.provider", { has: page.locator(".name", { hasText: new RegExp(`^${name}$`) }) }).click();
         const ed = page.locator(".editor");
         await ed.waitFor();
         assert.equal(await ed.locator(".ehead b").textContent(), name);
         assert.equal(await ed.locator('input[type="password"]').first().getAttribute("placeholder"), w.optional);
+        const link = ed.locator(".ehead .link");
+        assert.equal(await link.count() ? await link.textContent() : null, links[name], `${name}: its head's link`);
         assert.deepEqual(errors, [], `${name}: nothing throws`);
         await ed.locator(".bar").getByRole("button", { name: w.cancel, exact: true }).click();
         await ed.waitFor({ state: "detached" });

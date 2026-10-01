@@ -44,6 +44,9 @@ type Login struct {
 	// Paused is the account the agent is signed in to, passed over by the
 	// gateway while another is on (savedLogin.Paused).
 	Paused bool `json:"paused,omitempty"`
+	// Returns is the account magpie signed the agent out of when it was
+	// spent, and signs it back in to once it has room again (#408).
+	Returns bool `json:"returns,omitempty"`
 }
 
 type savedLogin struct {
@@ -561,6 +564,12 @@ func Logins(agent string) []Login {
 	}
 	var out []Login
 	ls := readLogins()
+	back := map[string]string{}
+	for a, user := range active {
+		if r, ok := loginReturnOf(a, user); ok {
+			back[a] = r.Back
+		}
+	}
 	for _, l := range ls {
 		if (agent != "" && l.Agent != agent) || sideAgent(l.Agent) || strings.HasPrefix(l.Agent, "plugin:") {
 			continue
@@ -570,6 +579,7 @@ func Logins(agent string) []Login {
 			Paused: using && pausedOwn(ls, l.Agent, l.User)}
 		if !using {
 			lg.Lapsed = l.Lapsed
+			lg.Returns = l.On && strings.EqualFold(back[l.Agent], l.User)
 		}
 		out = append(out, lg)
 	}
@@ -602,6 +612,15 @@ func inUseOf(ls []Login) string {
 // they restart; so does Codex's background app-server, which new Codex
 // sessions attach to (CodexDaemonStale says when it is).
 func SwitchLogin(agent, user string) error {
+	// the user's own choice: magpie doesn't sign the agent back in to the
+	// account it moved it off
+	if slices.Contains(loginAgents, agent) {
+		setLoginReturn(agent, loginReturn{})
+	}
+	return switchLogin(agent, user)
+}
+
+func switchLogin(agent, user string) error {
 	if pp, ok := pluginOfAgent(agent); ok {
 		return switchPluginLogin(pp, user)
 	}

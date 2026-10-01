@@ -529,6 +529,23 @@ subscription with several: only it is tried, and an unknown account, one
 whose plan lacks the model, or one resting is an error rather than another
 account's reply. The header is not sent on to the vendor.
 
+A status bar can show where a turn went before its first token arrives:
+send `X-Magpie-Session: <id>` with the requests (an agent's own session
+header, such as Pi's or Claude Code's, works too) and read
+`GET /v1/magpie/route?session=<id>`. It answers the session's latest
+request as routing has it so far — `asked` (the model the agent named),
+`group`, `rule` (the group's rule that matched, and `rule.pick`, the
+effort its decision model picked), `model` and `effort` (the member being
+tried now, as `provider/model`, and the reasoning it was sent at), and
+`tries`, one per member tried, each failed one a fallback with its `fail`
+— then `done`, `status` and `served` once the reply is over; `route` is
+`null` before the session has one. The route appears once routing has
+decided, before the vendor is asked. `after=<seq>&wait=<seconds>` (up to 60)
+holds the answer until the route changes past the `seq` of the last one,
+so a UI can follow a turn with one request at a time. Only the session
+named is told; like `/v1/magpie/quotas`, it answers this machine, and
+another only with the key of a gateway shared on the local network.
+
 The *Gateway* tab in the app has this as copy buttons and ready-made
 snippets (shell, curl, Python, Node) for each API, the list of model ids,
 and the recent calls; `MAGPIE_DEBUG=1` logs every call to the terminal.

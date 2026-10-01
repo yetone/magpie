@@ -4087,7 +4087,9 @@ function drawEditor(p, presetID) {
     h.append(icon(p?.icon || (copyOf && draft.icon) || pr?.icon || "generic"), el("b", "", p ? p.name : copyOf ? t("Copy of {name}", { name: copyOf.name }) : pr ? pr.name : t("Custom provider")));
     if (pr?.note) h.append(el("span", "note", t(pr.note)));
     h.append(el("span", "grow"));
-    const site = pr?.website || p?.website || (p?.host ? "https://" + p.host : "");
+    // a plugin's provider has plugin://<id> for its base, and its id is no
+    // address to open: only a host with a dot or a port makes a link
+    const site = pr?.website || p?.website || (/[.:]/.test(p?.host || "") ? "https://" + p.host : "");
     if (site) { const b = el("button", "link", hostOf(site) + " ↗"); b.onclick = () => api("open", { url: site }); h.append(b); }
     if (p) h.append(providerSwitch(p));
     ed.append(h);
@@ -5267,10 +5269,11 @@ function renderRouting(p) {
   });
   // what Codex or Claude Code sends past magpie goes to the account it is
   // signed in to, which magpie moves on once Smart would count it spent
-  // (provider.KeepOnAnAccountWithRoom, #209)
+  // and back once the first has room (provider.KeepOnAnAccountWithRoom,
+  // #209, #408)
   const a = p.account;
   const own = a && (a.agent === "codex" || a.agent === "claude")
-    ? " " + t("Routing picks the account for each request through magpie; {agent} on its own uses the one it is signed in to, which magpie moves to the next ticked account with room once it is 98% used.", { agent: a.agentName })
+    ? " " + t("Routing picks the account for each request through magpie; {agent} on its own uses the one it is signed in to, which magpie moves to the next ticked account with room once it is 98% used, and back to the first once that has room again.", { agent: a.agentName })
     : "";
   return field(t("Routing"), pick, t(cur[2]) + own);
 }
@@ -5892,6 +5895,9 @@ function renderAccounts(a) {
   // to it (#263)
   const pausable = (a.agent === "claude" || a.agent === "codex") && ls.some((l) => !l.active && l.on);
   const quota = loginUsageOf(a.agent);
+  // the first, which magpie signed the agent out of while it was spent:
+  // it is signed back in once it has room (#408)
+  const back = ls.find((l) => l.returns && !l.active);
   for (const l of ls) {
     const on = !l.paused && (l.active || l.on);
     const row = el("div", "acc" + (on ? " in-use" : " off") + (l.user === justAdded ? " new" : ""));
@@ -5909,7 +5915,9 @@ function renderAccounts(a) {
     }
     row.append(dot, el("span", "n", l.user), el("span", "plan", accountPlan({ agent: a.agent, plan: l.plan })), el("span", "grow"));
     if (l.active) {
-      row.append(el("span", "using", l.paused ? t("Paused") : several ? t("First") : t("Current")));
+      const using = el("span", "using", l.paused ? t("Paused") : back ? t("First for now") : several ? t("First") : t("Current"));
+      if (back && !l.paused) using.title = t("{user} was nearly used up, so magpie signed {agent} in to this one; it goes back to {user} once that has room again", { user: back.user, agent: a.agentName });
+      row.append(using);
       if (a.agent === "qoder" || a.agent === "qoder-cn" || l.own) {
         const forget = el("button", "text quiet", t("Remove"));
         if (l.own) forget.title = forgetOwnTitle(a);
@@ -5920,6 +5928,11 @@ function renderAccounts(a) {
       const forget = el("button", "text quiet", t("Remove"));
       forget.title = l.own ? forgetOwnTitle(a) : t("magpie forgets this account's sign-in; the account itself is untouched");
       forget.onclick = () => accountAction("login/forget", { agent: a.agent, user: l.user }, t("{user} removed", { user: l.user }));
+      if (l === back) {
+        const again = el("span", "using", t("First again once it has room"));
+        again.title = t("magpie signs {agent} back in to this account once it has room again", { agent: a.agentName });
+        row.append(again);
+      }
       const use = el("button", "text", on ? t("Make first") : t("Use"));
       use.title = sub?.own ? t("The gateway uses this account first") : t("Sign {agent} in to this account", { agent: a.agentName });
       use.onclick = () => { use.classList.add("busy"); accountAction("login/switch", { agent: a.agent, user: l.user }, sub?.own ? t("The gateway now uses {user} first", { user: l.user }) : t("{agent} is now signed in as {user}", { agent: a.agentName, user: l.user })); };
