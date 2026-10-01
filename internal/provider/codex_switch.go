@@ -17,10 +17,20 @@ package provider
 // account the agent is signed in to and the one the gateway goes to agree
 // on which is out (#209): the sign-in follows Smart; Smart doesn't follow
 // the sign-in.
+//
+// The account it moved from is the one the user made first, and it stays
+// that: once it is no longer low (backShare) the agent is signed back in
+// to it, as Smart gives it requests again then (#408). A switch the user
+// makes meanwhile ends that.
 
 import (
 	"context"
+	"encoding/json"
 	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -33,6 +43,11 @@ const loginSwitchEvery = 5 * time.Minute
 // but used up: Smart routing keeps it for when no other can take a
 // request, and the agent signed in to it is signed in to another.
 const SpentShare = 98
+
+// backShare is the share below which the account magpie moved the agent
+// off is signed back in to: no longer low, as Smart counts it (the
+// gateway's lowShare), so it doesn't go back and forth at the edge.
+const backShare = 90
 
 // switchedAgents are the agents whose account magpie moves on.
 var switchedAgents = []string{"codex", "claude"}
@@ -59,52 +74,131 @@ func usedPast(q SubscriptionQuota, share float64) bool {
 }
 
 // NextLogin is the account agent should be signed in to instead of the
-// one it is on, when that one is spent: the first of its other accounts
-// that are on in magpie, in the order they were saved, whose allowance is
-// known and not spent. ok is false when the agent should stay.
-func NextLogin(ctx context.Context, agent string) (from, to string, ok bool) {
+// one it is on: the account magpie moved it off, once that has room again
+// (back); else, when the one it is on is spent, the first of its other
+// accounts that are on in magpie, in the order they were saved, whose
+// allowance is known and not spent. ok is false when the agent should stay.
+func NextLogin(ctx context.Context, agent string) (from, to string, back, ok bool) {
 	if accountRemoved(agent) {
-		return "", "", false // magpie has no say in its sign-in
+		return "", "", false, false // magpie has no say in its sign-in
 	}
 	var spares []Login
-	for _, l := range Logins(agent) {
+	var first *Login
+	ls := Logins(agent)
+	for i, l := range ls {
 		switch {
 		case l.Active:
 			from = l.User
-		case l.On && l.Lapsed == "":
+		case l.Returns:
+			first = &ls[i]
+		}
+		if !l.Active && l.On && l.Lapsed == "" {
 			spares = append(spares, l)
 		}
 	}
 	if from == "" || len(spares) == 0 {
-		return "", "", false
+		return "", "", false, false
 	}
 	u := LoginUsage(ctx, agent)
+	if first != nil && first.On && first.Lapsed == "" {
+		if q, known := u[first.User]; known && q.Error == "" && !usedPast(q, backShare) {
+			return from, first.User, true, true
+		}
+	}
 	if q, known := u[from]; !known || q.Error != "" || !spent(q) {
-		return "", "", false
+		return "", "", false, false
 	}
 	for _, l := range spares {
 		if q, known := u[l.User]; known && q.Error == "" && !spent(q) {
-			return from, l.User, true
+			return from, l.User, false, true
 		}
 	}
-	return "", "", false
+	return "", "", false, false
 }
 
 // SwitchWhenSpent signs agent in to the next of its accounts when the one
-// it is on is spent (NextLogin), and answers the account it signed it in
-// to, "" when it stayed.
+// it is on is spent, or back to the one it moved off once that has room
+// (NextLogin), and answers the account it signed it in to, "" when it
+// stayed.
 func SwitchWhenSpent(ctx context.Context, agent string) (string, error) {
-	from, to, ok := NextLogin(ctx, agent)
+	from, to, back, ok := NextLogin(ctx, agent)
 	if !ok {
 		return "", nil
 	}
-	if err := SwitchLogin(agent, to); err != nil {
+	// the first moved off, not one moved to on the way
+	r, _ := loginReturnOf(agent, from)
+	if err := switchLogin(agent, to); err != nil {
 		return "", err
 	}
-	log.Printf("%s: %s has used %d%% or more of its allowance; signed it in to %s", agent, from, SpentShare, to)
+	if back {
+		setLoginReturn(agent, loginReturn{})
+		log.Printf("%s: %s has room again; signed it back in to it", agent, to)
+	} else {
+		if r.Back == "" {
+			r.Back = from
+		}
+		r.To = to
+		setLoginReturn(agent, r)
+		log.Printf("%s: %s has used %d%% or more of its allowance; signed it in to %s", agent, from, SpentShare, to)
+	}
 	// the models the agent is offered are the new account's plan's
 	catalog.Touched()
 	return to, nil
+}
+
+// loginReturn is the account magpie signed an agent out of when it was
+// spent (Back), and the one it signed it in to (To): while the agent is
+// still on To, Back is signed in again once it has room.
+type loginReturn struct {
+	Back string `json:"back"`
+	To   string `json:"to"`
+}
+
+var loginReturnsMu sync.Mutex
+
+func loginReturnsPath() string { return filepath.Join(filepath.Dir(Path()), "login-returns.json") }
+
+func readLoginReturns() map[string]loginReturn {
+	m := map[string]loginReturn{}
+	if b, err := os.ReadFile(loginReturnsPath()); err == nil {
+		_ = json.Unmarshal(b, &m)
+	}
+	return m
+}
+
+// loginReturnOf is the account to sign agent back in to, when it is still
+// on the one magpie moved it to (active): one signed in otherwise since,
+// by the user or the agent itself, is the user's choice.
+func loginReturnOf(agent, active string) (loginReturn, bool) {
+	loginReturnsMu.Lock()
+	defer loginReturnsMu.Unlock()
+	r, ok := readLoginReturns()[agent]
+	if !ok || r.Back == "" || !strings.EqualFold(r.To, active) || strings.EqualFold(r.Back, active) {
+		return loginReturn{}, false
+	}
+	return r, true
+}
+
+// setLoginReturn keeps r for agent; an empty one forgets it.
+func setLoginReturn(agent string, r loginReturn) {
+	loginReturnsMu.Lock()
+	defer loginReturnsMu.Unlock()
+	m := readLoginReturns()
+	if _, had := m[agent]; !had && r.Back == "" {
+		return
+	}
+	if r.Back == "" {
+		delete(m, agent)
+	} else {
+		m[agent] = r
+	}
+	b, err := json.MarshalIndent(m, "", "  ")
+	if err == nil {
+		err = writePrivate(loginReturnsPath(), append(b, '\n'))
+	}
+	if err != nil {
+		log.Printf("%s: keeping the account to go back to: %v", agent, err)
+	}
 }
 
 // KeepOnAnAccountWithRoom runs SwitchWhenSpent for Codex and Claude Code a

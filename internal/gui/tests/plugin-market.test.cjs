@@ -96,10 +96,10 @@ function server(lang, asked) {
 
 const L = {
   en: { tab: "Plugins", ours: "magpie community", install: "Install", soon: "Coming soon", signIn: "Sign in", onNpm: "On npm",
-    installed: "Installed", failed: /Didn't load: Cannot find module/, update: "Update", remove: "Remove", more: "More subscriptions", moreTile: "More in Plugins",
+    installed: "Installed", failed: /Didn't load: Cannot find module/, update: "Update", remove: "Remove", moreTile: "More in Plugins",
     lookFor: "look for a plugin", week: "48k/week", readme: "Install", signing: "GitHub Copilot" },
   zh: { tab: "插件", ours: "magpie 社区", install: "安装", soon: "即将上线", signIn: "登录", onNpm: "npm 上的插件",
-    installed: "已安装", failed: /没有加载成功：Cannot find module/, update: "更新", remove: "移除", more: "更多订阅", moreTile: "插件中还有更多",
+    installed: "已安装", failed: /没有加载成功：Cannot find module/, update: "更新", remove: "移除", moreTile: "插件中还有更多",
     lookFor: "找找插件", week: "48k/周", readme: "Install", signing: "GitHub Copilot" },
 };
 
@@ -122,14 +122,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, asked));
 
-        // the providers list's button leads to the Plugins tab
+        // the providers list has no way of its own there: the add sheet's
+        // Subscriptions has it, as its last row
         await page.goto("http://magpie.test/?view=providers");
-        const more = page.locator("#moreSubs");
-        await more.waitFor();
-        assert.match(await more.innerText(), new RegExp(w.more));
-        assert.equal(await more.locator(".stack .ic").count(), 3);
-        await shot(page.locator("#view-providers .after-list"), `plugins-button-${engine}-${lang}`);
-        await more.click();
+        await page.locator("#addProvider").waitFor();
+        assert.equal(await page.locator("#view-providers .after-list .more-subs").count(), 0);
+        await page.locator("#addProvider").click();
+        const row = page.locator("#addSheet .tile.more-plugins");
+        await row.waitFor();
+        await shot(page.locator("#addSheet"), `plugins-row-${engine}-${lang}`);
+        await row.click();
         const view = page.locator("#view-plugins");
         await view.waitFor({ state: "visible" });
         assert.equal(await page.locator('#nav button[data-view="plugins"]').getAttribute("class"), "on");

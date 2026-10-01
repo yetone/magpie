@@ -152,7 +152,10 @@ func kiroOut(home, user, plan string) (map[string]any, error) {
 
 // setKiroKey sets (or, "", clears) the key saved on the Kiro provider.
 func setKiroKey(k string) error {
-	f := load()
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	for i := range f.Providers {
 		if f.Providers[i].ID == "kiro" {
 			if f.Providers[i].Key == k {

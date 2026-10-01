@@ -132,6 +132,17 @@ separate Responses endpoint, `catalog=` to borrow a models.dev list, and
 `models=` to name the models to expose. Anything a preset does not know can
 be overridden the same way.
 
+`magpie usage` also lists **upstream provider keys** to help check upstream bills.
+Each request records the fingerprint and saved name of the key that actually
+served it, including image calls and account/key failover. The CSV adds
+`provider_key_id` and `provider_key_name`. JSON uses `providerKeyId` and `providerKeyName`, distinct from gateway caller
+keys. System One calls use the same attribution. No raw credential is stored
+in usage records.
+Rotating the provider's first key does not move old usage to its replacement;
+deleted keys keep their historical identity. Older records appear as
+**key not recorded**, never inferred from today's configured key.
+These are upstream credentials, not keys clients use to call Magpie.
+
 One magpie can serve several computers (an office one, a personal one):
 share it on the network (Settings → Share on local network), and on each
 other computer add it as a **Remote magpie** — in the app's Add sheet, or
@@ -244,9 +255,9 @@ reports read the effective price.
 Two things worth knowing. The ledger and the session totals re-price when they
 are read, so adding or changing a price restates earlier figures: they are
 estimates at the effective price, not settled charges. And a price is per
-provider and model — usage records do not retain which key or account served
-a call, so a provider charging different tariffs per account cannot be costed
-exactly from a single provider-wide price.
+provider and model. Records now identify upstream API keys, but a provider
+charging different tariffs per key still cannot be costed exactly from a
+single provider-wide price.
 
 ### What a model takes
 
@@ -377,6 +388,20 @@ the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
 `models=` replaces the whole list, in order; a bare model id works when only
 one provider serves it.
 
+The Routing page's Requests list defaults to the time-ordered By request view.
+Choose By session to group calls by the agent's session ID; the page remembers
+your choice across reloads.
+Codex title helpers with an explicit parent or fork source join their originating
+chat, retaining their title badge and contributing to its cost. Titles without
+ancestry and ordinary forked chats stay separate.
+Codex chat names come from its local name index and follow renames. Unknown or
+remote-only names fall back to the ID; the full ID remains in the heading tooltip.
+Expand a session to see each request. Each request and session shows its estimated cost at the effective model
+prices, including cache reads and writes. Session totals cover the listed
+requests only (the live trace or the selected day's retained history), and a
+`+` marks a partial estimate. Calls without a session ID are listed separately;
+old history without token tiers, or a model without a known price, shows `—`.
+
 The app's Import from other apps dialog can copy providers from Claude Code's
 `settings.json` (`CLAUDE_CONFIG_DIR` when set) and Codex's `config.toml`
 (`CODEX_HOME` when set) into magpie. Codex imports custom
@@ -469,6 +494,23 @@ or login, or its id on the Routing page) pins a request to one account of a
 subscription with several: only it is tried, and an unknown account, one
 whose plan lacks the model, or one resting is an error rather than another
 account's reply. The header is not sent on to the vendor.
+
+A status bar can show where a turn went before its first token arrives:
+send `X-Magpie-Session: <id>` with the requests (an agent's own session
+header, such as Pi's or Claude Code's, works too) and read
+`GET /v1/magpie/route?session=<id>`. It answers the session's latest
+request as routing has it so far — `asked` (the model the agent named),
+`group`, `rule` (the group's rule that matched, and `rule.pick`, the
+effort its decision model picked), `model` and `effort` (the member being
+tried now, as `provider/model`, and the reasoning it was sent at), and
+`tries`, one per member tried, each failed one a fallback with its `fail`
+— then `done`, `status` and `served` once the reply is over; `route` is
+`null` before the session has one. The route appears once routing has
+decided, before the vendor is asked. `after=<seq>&wait=<seconds>` (up to 60)
+holds the answer until the route changes past the `seq` of the last one,
+so a UI can follow a turn with one request at a time. Only the session
+named is told; like `/v1/magpie/quotas`, it answers this machine, and
+another only with the key of a gateway shared on the local network.
 
 The *Gateway* tab in the app has this as copy buttons and ready-made
 snippets (shell, curl, Python, Node) for each API, the list of model ids,

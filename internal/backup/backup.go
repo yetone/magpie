@@ -57,6 +57,9 @@ type Bundle struct {
 	Profiles  map[string]profile.Profile `json:"profiles,omitempty"`
 	Agents    map[string]string          `json:"agents,omitempty"`  // every agent's fields as they are now
 	Library   *library.Bundle            `json:"library,omitempty"` // nil from a magpie before it, or with none
+	// Searches are the web search APIs (#419), their keys with the
+	// providers'; nil from a magpie before them.
+	Searches *[]provider.SearchAPI `json:"searches,omitempty"`
 }
 
 type envelope struct {
@@ -77,7 +80,17 @@ var ErrPassphrase = errors.New("wrong passphrase, or the file was changed")
 // variable or header that looks like one (their names stay).
 func Collect(keys bool, app string) (Bundle, error) {
 	b := Bundle{Version: 1, Created: time.Now().UTC(), App: app, Keys: keys}
-	for _, p := range provider.Stored() {
+	// a providers.json that can't be read stops the backup: carried as no
+	// providers, it would take them all away where it is put back, or where
+	// sync mirrors it
+	stored, err := provider.Stored()
+	if err != nil {
+		return b, err
+	}
+	if b.Groups, err = provider.StoredGroups(); err != nil {
+		return b, err
+	}
+	for _, p := range stored {
 		if !keys {
 			p = withoutKeys(p)
 		}
@@ -93,7 +106,14 @@ func Collect(keys bool, app string) (Bundle, error) {
 			}
 		}
 	}
-	b.Groups = provider.StoredGroups()
+	searches := []provider.SearchAPI{}
+	for _, a := range provider.StoredSearchAPIs() {
+		if !keys {
+			a.Key = ""
+		}
+		searches = append(searches, a)
+	}
+	b.Searches = &searches
 	if _, err := os.Stat(settings.Path()); err == nil {
 		s := settings.Load()
 		b.Settings = &s
@@ -125,6 +145,7 @@ func Secret(name string) bool { return secretHeader.MatchString(name) }
 
 func withoutKeys(p provider.Provider) provider.Provider {
 	p.Key, p.KeyName, p.Keys, p.KeyProtocol = "", "", nil, ""
+	p.BalanceToken = ""
 	if len(p.Headers) > 0 {
 		h := map[string]string{}
 		for k, v := range p.Headers {
@@ -244,7 +265,21 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 		if err := provider.RestoreGroups(b.Groups); err != nil {
 			return r, err
 		}
-		for _, p := range provider.Stored() {
+		if b.Searches != nil {
+			if err := provider.RestoreSearchAPIs(*b.Searches); err != nil {
+				return r, err
+			}
+			for _, a := range provider.StoredSearchAPIs() {
+				if !a.Ready() && slices.ContainsFunc(*b.Searches, func(x provider.SearchAPI) bool { return x.Vendor == a.Vendor }) {
+					r.NeedKey = append(r.NeedKey, a.Name())
+				}
+			}
+		}
+		stored, err := provider.Stored()
+		if err != nil {
+			return r, err
+		}
+		for _, p := range stored {
 			if !p.Ready() && slices.ContainsFunc(b.Providers, func(q provider.Provider) bool { return q.ID == p.ID }) {
 				r.NeedKey = append(r.NeedKey, p.Name)
 			}

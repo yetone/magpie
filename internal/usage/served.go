@@ -23,10 +23,14 @@ var versionTail = regexp.MustCompile(`(?:[-_@:](?:\d{4}-\d{2}-\d{2}|\d{2}-\d{2}|
 // (us.anthropic.claude-…).
 var vendorDot = regexp.MustCompile(`^(?:[a-z]{2,4}\.)?(?:anthropic|amazon|meta|mistral|cohere|ai21|deepseek|qwen|openai|google|moonshotai|minimax|zai)\.`)
 
-// bareModel is a model's name without its maker or path, its version or
-// its case.
+// contextTail is what Claude Code writes after a model's name for the size of
+// its context: claude-opus-5[1m].
+var contextTail = regexp.MustCompile(`\[[^\]]*\]$`)
+
+// bareModel is a model's name without its maker or path, its version, the
+// size of its context or its case.
 func bareModel(m string) string {
-	m = strings.ToLower(strings.TrimSpace(m))
+	m = contextTail.ReplaceAllString(strings.ToLower(strings.TrimSpace(m)), "")
 	if i := strings.LastIndexByte(m, '/'); i >= 0 {
 		m = m[i+1:]
 	}

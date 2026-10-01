@@ -119,16 +119,59 @@ func changed() {
 }
 
 // Restart stops the host, so the next call starts one with the plugins
-// as they are now.
+// as they are now. A host answering calls (a reply streaming, a sign-in
+// waiting for its browser) finishes them first, while the calls made
+// from now on go to the new one: a plugin updating never cuts a reply.
 func Restart() {
 	hostMu.Lock()
 	h := current
 	current = nil
 	hostMu.Unlock()
 	if h != nil {
-		h.stop()
+		h.retire()
 	}
 	changed()
+}
+
+// retireWait is how long a retired host may go on answering its calls.
+var retireWait = 10 * time.Minute
+
+// retiring are the hosts finishing their calls before they stop.
+var retiring = map[*host]bool{}
+
+// retire stops h now when it answers no call, else once it has answered
+// them (retireWait at most), in the background.
+func (h *host) retire() {
+	if !h.busy() {
+		h.stop()
+		return
+	}
+	hostMu.Lock()
+	retiring[h] = true
+	hostMu.Unlock()
+	go func() {
+		defer func() {
+			hostMu.Lock()
+			delete(retiring, h)
+			hostMu.Unlock()
+		}()
+		end := time.Now().Add(retireWait)
+		for h.busy() && time.Now().Before(end) {
+			select {
+			case <-h.dead:
+				return
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+		h.stop()
+	}()
+}
+
+// busy is whether h is answering a call.
+func (h *host) busy() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.calls) > 0
 }
 
 // Running is whether a host is up.
@@ -183,7 +226,7 @@ func get(ctx context.Context) (*host, error) {
 	hostMu.Lock()
 	defer hostMu.Unlock()
 	if hostStale.Swap(false) && current != nil {
-		go current.stop()
+		go current.retire()
 		current = nil
 	}
 	if current != nil && current.alive() {
@@ -202,12 +245,33 @@ func start(ctx context.Context) (*host, error) {
 	if err != nil {
 		return nil, err
 	}
-	js, err := hostFile()
-	if err != nil {
+	h, crashed, err := startOn(ctx, bun)
+	if err == nil || !crashed || os.Getenv("MAGPIE_BUN") != "" {
+		return h, err
+	}
+	// the Bun magpie last took died starting the host: the one before it,
+	// and the new one set aside when that one starts it
+	prev, ok := fallBack()
+	if !ok {
 		return nil, err
 	}
-	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+	h, _, perr := startOn(ctx, prev)
+	if perr != nil {
 		return nil, err
+	}
+	setAside(filepath.Base(filepath.Dir(bun)), fmt.Sprintf("the plugin host died on it: %s", err))
+	return h, nil
+}
+
+// startOn starts the host on the bun given; crashed is whether it died
+// before it started.
+func startOn(ctx context.Context, bun string) (*host, bool, error) {
+	js, err := hostFile()
+	if err != nil {
+		return nil, false, err
+	}
+	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+		return nil, false, err
 	}
 	if catalog.Source() == "" {
 		// a plugin's provider has the models models.dev lists for it, as in
@@ -221,18 +285,18 @@ func start(ctx context.Context) (*host, error) {
 	cmd.Env = hostEnv(cmd.Env)
 	in, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	out, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	h := &host{cmd: cmd, in: in, calls: map[int64]*call{}, dead: make(chan struct{})}
 	go func() {
@@ -270,8 +334,9 @@ func start(ctx context.Context) (*host, error) {
 		"plugins":       items,
 	}, &res)
 	if err != nil {
+		crashed := !h.alive()
 		h.stop()
-		return nil, fmt.Errorf("starting plugins: %w", err)
+		return nil, crashed, fmt.Errorf("starting plugins: %w", err)
 	}
 	h.loaded = res.Plugins
 	for _, p := range res.Plugins {
@@ -279,7 +344,7 @@ func start(ctx context.Context) (*host, error) {
 			log.Printf("plugin %s didn't load: %s", p.Spec, p.Error)
 		}
 	}
-	return h, nil
+	return h, false, nil
 }
 
 func (h *host) read(out io.Reader) {
@@ -446,14 +511,17 @@ type FetchRequest struct {
 }
 
 // proxyOf is the proxy ctx names for the host: "" when it names none,
-// "direct", or the proxy's URL.
-func proxyOf(ctx context.Context) string {
-	switch c := strings.TrimSpace(netproxy.Choice(ctx)); c {
+// "direct", or the proxy's URL (a SOCKS5 one bridged, as Bun can't use it).
+func proxyOf(ctx context.Context) string { return forHost(netproxy.Choice(ctx)) }
+
+// forHost is a proxy choice (netproxy.With's) as the host takes it.
+func forHost(choice string) string {
+	switch c := strings.TrimSpace(choice); c {
 	case "", "direct":
 		return c
 	default:
 		if u, err := netproxy.Parse(c); err == nil {
-			return u.String()
+			return netproxy.ForBun(u.String())
 		}
 		return c
 	}
@@ -462,13 +530,15 @@ func proxyOf(ctx context.Context) string {
 // hostEnv is env for the host, its *_PROXY named MAGPIE_*_PROXY: Bun
 // reads *_PROXY once and puts every fetch through them, so a provider set
 // to "direct" couldn't go around them. host.js gives each fetch the proxy
-// they name instead.
+// they name instead. A SOCKS5 one, which Bun can't use, is bridged.
 func hostEnv(env []string) []string {
 	out := make([]string, 0, len(env))
 	for _, e := range env {
 		k, v, _ := strings.Cut(e, "=")
 		switch strings.ToUpper(k) {
-		case "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY":
+		case "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY":
+			out = append(out, "MAGPIE_"+k+"="+netproxy.ForBun(v))
+		case "NO_PROXY":
 			out = append(out, "MAGPIE_"+k+"="+v)
 		default:
 			out = append(out, e)

@@ -2,6 +2,10 @@ package provider
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -117,5 +121,56 @@ func TestChosenWindows(t *testing.T) {
 	got = chosenWindows(ag, map[string]bool{"gemini-3.7-flash": true, "claude-opus-4-6-thinking": true}, base)
 	if len(got) != 3 || got[0].Model != "gemini-3.7-flash-high" || got[1].Model != "gemini-3.7-flash-low" || got[2].Model != "claude-opus-4-6-thinking" {
 		t.Fatalf("antigravity: %+v", got)
+	}
+}
+
+// A Copilot account magpie signed in itself gets its card even when the
+// editors' own sign-in isn't on the machine: every account magpie knows is
+// asked, not only the one the editors' or the CLI's token belongs to.
+func TestCopilotQuotaWithoutEditorsSignIn(t *testing.T) {
+	home := signIn(t)
+	t.Setenv("COPILOT_HOME", filepath.Join(home, ".copilot")) // not the machine's own CLI, when it has one
+	// the editors' own sign-in gone: what magpie keeps is all that's left
+	for _, dir := range []string{filepath.Join(home, ".config", "github-copilot"), filepath.Join(home, ".copilot")} {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, ok := copilotLogin(filepath.Join(home, ".config")); ok {
+		t.Fatal("the editors' own sign-in is still readable")
+	}
+	if err := addCopilotLogin("hubot", "Pro+", "ghu_hubot"); err != nil {
+		t.Fatal(err)
+	}
+	if ls := copilotLoginList(); len(ls) != 1 || ls[0].User != "hubot" {
+		t.Fatalf("copilotLoginList = %+v", ls)
+	}
+
+	old := CopilotUserURL
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "token ghu_hubot" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Write([]byte(`{"copilot_plan":"individual_pro","quota_snapshots":{"premium_interactions":{"has_quota":true,"entitlement":7000,"quota_remaining":6996}}}`))
+	}))
+	defer srv.Close()
+	CopilotUserURL = srv.URL
+	t.Cleanup(func() { CopilotUserURL = old })
+
+	var card *SubscriptionQuota
+	for _, q := range fetchSubscriptionUsage() {
+		if q.Provider == "copilot" {
+			card = &q
+		}
+	}
+	if card == nil {
+		t.Fatal("no Copilot card: an account signed in from magpie alone was left out")
+	}
+	if card.User != "hubot" || card.Plan != "individual_pro" || len(card.Windows) != 1 {
+		t.Fatalf("Copilot card = %+v", *card)
+	}
+	if w := card.Windows[0]; w.Name != "Premium requests" || w.Display != "4 / 7000" {
+		t.Fatalf("window = %+v", w)
 	}
 }

@@ -57,7 +57,14 @@ func SetLoginOn(agent, user string, on bool) error {
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
 	ls := readLogins()
-	if live, ok := liveLogin(agent); ok && strings.EqualFold(live.User, user) {
+	live, ok := liveLogin(agent)
+	if !ok && agent == "claude" {
+		// Claude Code signed out, the account served in its place is as its own
+		if u := claudeStandIn(ls); u != "" {
+			live, ok = savedLogin{Agent: agent, User: u}, true
+		}
+	}
+	if ok && strings.EqualFold(live.User, user) {
 		// the account the agent is signed in to stays so: off, it is
 		// paused, passed over while another is on (#263) — the user's
 		// own ChatGPT sign-in kept for Codex's remote control, a shared
@@ -108,7 +115,7 @@ func pausedOwn(ls []savedLogin, agent, user string) bool {
 // is signed in to, paused while another of its accounts is on (#263): the
 // gateway passes over it, the agent staying signed in to it.
 func (p Provider) OwnPaused() bool {
-	if p.Account == nil || p.Account.token != nil || !slices.Contains(loginAgents, p.Account.Agent) {
+	if p.Account == nil || p.Account.token != nil && !p.Account.standIn || !slices.Contains(loginAgents, p.Account.Agent) {
 		return false
 	}
 	loginsMu.Lock()
@@ -158,20 +165,25 @@ func (p Provider) AlsoOn() []Provider {
 	if p.Account != nil && (p.Account.Agent == "gemini" || p.Account.Agent == "antigravity") {
 		return googleAlsoOn(p.Account.Agent)
 	}
-	if p.Account == nil || p.Account.token != nil || (p.Account.Agent != "claude" && p.Account.Agent != "codex") {
+	if p.Account == nil || p.Account.token != nil && !p.Account.standIn || (p.Account.Agent != "claude" && p.Account.Agent != "codex") {
 		return nil
 	}
 	var out []Provider
 	for _, l := range Logins(p.Account.Agent) {
-		if l.Active || !l.On {
+		if l.Active || l.first || !l.On {
 			continue
 		}
 		agent, user := l.Agent, l.User
 		a := *p.Account
-		a.User, a.Plan = user, l.Plan
+		a.User, a.Plan, a.standIn = user, l.Plan, false
 		a.token = func(ctx context.Context) (string, error) {
 			tok, _, err := savedLoginToken(ctx, agent, user)
 			return tok, err
+		}
+		if agent == "claude" {
+			// Claude Code runs on it in a config directory of its own
+			// (claude_dirs.go), and keeps the sign-in there itself
+			a.token = func(context.Context) (string, error) { return claudeSavedDir(user) }
 		}
 		if agent == "codex" {
 			a.sign = codexSign(func(ctx context.Context) (string, string, error) { return savedLoginToken(ctx, agent, user) })
@@ -184,7 +196,8 @@ func (p Provider) AlsoOn() []Provider {
 }
 
 // Token is the access token of a saved account in use beside the agent's
-// own; ok is false for the agent's own, which the agent signs itself.
+// own — for a Claude account, the config directory Claude Code runs on it
+// in; ok is false for the agent's own, which the agent signs itself.
 func (a *Account) Token(ctx context.Context) (tok string, ok bool, err error) {
 	if a == nil || a.token == nil {
 		return "", false, nil
@@ -221,21 +234,6 @@ func renewSavedLogin(ctx context.Context, agent, user string, force bool) (tok, 
 	}
 	var auth []byte
 	switch agent {
-	case "claude":
-		c, ok := parseClaudeCredentials(l.Auth)
-		if !ok {
-			return "", "", errors.New("the saved Claude sign-in of " + user + " is unreadable")
-		}
-		if !force && claudeFresh(c) {
-			return c.OAuth.AccessToken, "", nil
-		}
-		if err := claudeRefresh(ctx, &c); err != nil {
-			return "", "", savedRefreshFailed(agent, user, err)
-		}
-		tok = c.OAuth.AccessToken
-		if auth, err = c.marshal(); err != nil {
-			return "", "", err
-		}
 	case "codex":
 		var raw map[string]any
 		var a codexAuth

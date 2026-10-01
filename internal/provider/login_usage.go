@@ -27,19 +27,20 @@ type loginUsageEntry struct {
 // rest is asked for at once, as long as ctx allows.
 func LoginUsage(ctx context.Context, agent string) map[string]SubscriptionQuota {
 	out := map[string]SubscriptionQuota{}
-	var logins []Login
-	if pp, ok := pluginOfAgent(agent); ok {
-		logins = pluginUsageLogins(pp)
-	} else if agent == "grok" {
-		return grokLoginUsage(ctx)
-	} else if logins, ok = builtinLogins(agent); !ok {
+	if agent == "grok" {
+		if _, ok := pluginOfAgent(agent); !ok {
+			return grokLoginUsage(ctx)
+		}
+	}
+	logins, known, ok := usageLogins(agent)
+	if !ok {
 		return out
 	}
 	c := &loginUsageCache
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, l := range logins {
-		key := agent + "/" + strings.ToLower(l.User)
+		key := known + "/" + strings.ToLower(l.User)
 		c.Lock()
 		e, ok := c.m[key]
 		c.Unlock()
@@ -70,6 +71,21 @@ func LoginUsage(ctx context.Context, agent string) map[string]SubscriptionQuota 
 	wg.Wait()
 	usageRead(agent, out) // a window not started: the warm-up looks now
 	return out
+}
+
+// usageLogins are the accounts whose allowance LoginUsage asks for, and
+// the agent they are read once a minute as: a plugin's accounts are asked
+// for by the provider's id or as plugin:<id>, whichever names them. False
+// for an agent that tells none, and for the built-in Grok, read by home.
+func usageLogins(agent string) (logins []Login, known string, ok bool) {
+	if pp, ok := pluginOfAgent(agent); ok {
+		return pluginUsageLogins(pp), pluginAgent(pp), true
+	}
+	if agent == "grok" {
+		return nil, agent, false
+	}
+	logins, ok = builtinLogins(agent)
+	return logins, agent, ok
 }
 
 // builtinLogins are the accounts of a built-in subscription whose

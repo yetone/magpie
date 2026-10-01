@@ -24,8 +24,13 @@
   const DOWN = "M8 3v7.5 M4.8 7.6 8 10.8l3.2-3.2 M3.5 13h9";
   const SHIELD = "M8 2.3 13 4v3.8c0 3-2.1 5.1-5 5.9-2.9-.8-5-2.9-5-5.9V4z M5.8 8l1.6 1.6 2.9-3";
   const OUTL = "M9.5 3.5h3v3 M12.5 3.5 7.5 8.5 M11 9.5v3H3.5V5h3";
+  const FOLDER = "M14.7 12.7a1.3 1.3 0 0 1-1.3 1.3H2.6a1.3 1.3 0 0 1-1.3-1.3V3.3A1.3 1.3 0 0 1 2.6 2h3.3l1.3 2h6.2a1.3 1.3 0 0 1 1.3 1.3z";
 
   const name = (spec) => { const i = spec.lastIndexOf("@"); return i > 0 && !spec.startsWith(".") && !spec.includes("/", i) ? spec.slice(0, i) : spec; };
+  // a plugin added from a folder is a folder's path, not a package name
+  const isPath = (p) => /^file:\/\//.test(p) || /^\./.test(p) || /^\//.test(p) || /^[A-Za-z]:[\\/]/.test(p);
+  // ...and is known by the folder's name, not its whole path
+  const label = (spec) => { const n = name(spec); return isPath(n) ? n.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || n : n; };
   const lang = () => (document.documentElement.lang || "").startsWith("zh") ? "zh" : "en";
   const summary = (l) => l.summary?.[lang()] || l.summary?.en || l.npm?.description || "";
   const count = (n) => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "k" : String(n || 0);
@@ -58,6 +63,7 @@
       failed = e.message;
     }
     draw();
+    window.renderPluginDot?.();
   }
   window.loadPlugins = load;
   // pluginQuery: Discover, looking for q (the add sheet found nothing by it)
@@ -80,6 +86,7 @@
       if (view === "providers") renderProviders();
     } catch (e) { status(e.message, "err"); }
     draw();
+    window.renderPluginDot?.();
   }
 
   async function act(pkg, op, body, done) {
@@ -128,8 +135,8 @@
     }
   }
   const moveButton = (b, c, here) => {
-    b.classList.add("go");
-    b.textContent = here ? t("Move {name} here", { name: c.name }) : t("Move my {name} accounts ({n})", { name: c.name, n: c.accounts });
+    b.classList.add("go", "move");
+    b.textContent = here ? t("Move {name} here", { name: c.name }) : t(c.accounts === 1 ? "Move my {n} {name} account" : "Move my {n} {name} accounts", { name: c.name, n: c.accounts });
     b.title = t("Runs {name} on this plugin in place of the built-in, with the same accounts; nothing changes if one doesn't work through it", { name: c.name });
     b.disabled = busy.size > 0;
     b.onclick = (ev) => { ev.stopPropagation(); move(c); };
@@ -147,6 +154,7 @@
     const op = busy.get(pkg);
     if (op === "add" || op === "upgrade" || op === "move") {
       b.classList.add("busy");
+      if (op === "move") b.classList.add("move");
       b.append(el("span", "spin"), el("span", "", op === "move" ? t("Moving…") : op === "upgrade" ? t("Updating…") : market?.state.bun ? t("Installing…") : t("Getting Bun…")));
       b.disabled = true;
       if (!market?.state.bun) b.title = t("Plugins run on Bun {v}, downloaded once", { v: market?.state.bunVersion || "" });
@@ -217,7 +225,11 @@
       by.append(v);
     } else by.append(el("span", "", l.npm?.publisher || l.package));
     who.append(by);
-    top.append(logo(l.icon), who, actionFor(l.package, l.name, l));
+    const act = actionFor(l.package, l.name, l);
+    // a move says whose accounts: too long for the top row, it has one of its own
+    const own = act.classList.contains("move");
+    top.append(logo(l.icon), who);
+    if (!own) top.append(act);
     const sum = el("p", "pm-sum", summary(l));
     const meta = el("div", "pm-meta");
     if (l.npm?.weekly) {
@@ -236,6 +248,7 @@
       meta.append(b);
     }
     c.append(top, sum, meta);
+    if (own) c.append(act);
     c.onclick = () => detail(l);
     c.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); detail(l); } };
     return c;
@@ -400,8 +413,38 @@
       if (!s || busy.size) return;
       act("+", "add", { spec: s }, () => status(t("{name} is installed", { name: s }), "ok"));
     };
-    box.append(spec, go);
+    box.append(spec);
+    // a folder is picked, not typed, where magpie can show the system's
+    // picker (`magpie web` can't, and the market says so)
+    if (market?.state.picker) box.append(browse(spec, go));
+    box.append(go);
     return box;
+  }
+
+  // the system's folder picker: what it answers goes in the field, for the
+  // Install beside it
+  function browse(spec, go) {
+    const b = el("button", "pm-browse");
+    b.type = "button";
+    b.append(glyph(FOLDER, 14, 1.5));
+    b.title = t("Choose a folder on this computer");
+    b.setAttribute("aria-label", t("Choose a folder"));
+    b.disabled = busy.size > 0 || spec.disabled;
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        const r = await api("plugins/choose", {});
+        if (r.dir) {
+          spec.value = r.dir;
+          spec.focus();
+        }
+      } catch (e) {
+        status(e.message, "err");
+      } finally {
+        b.disabled = busy.size > 0 || spec.disabled;
+      }
+    };
+    return b;
   }
 
   function drawInstalled() {
@@ -437,9 +480,15 @@
     const r = el("div", "row pm-row" + (e.off ? " off" : ""));
     const who = el("div", "who");
     const nm = el("div", "name");
-    nm.append(el("span", "", l?.name || pkg));
+    nm.append(el("span", "", l?.name || label(e.spec)));
     if (e.version) nm.append(el("span", "pm-ver", "v" + e.version));
     if (e.latest && e.version && newer(e.latest, e.version)) nm.append(el("span", "pm-chip up", t("v{v} out", { v: e.latest })));
+    else if (e.autoUpdated && e.autoUpdated.to === e.version) {
+      // magpie updated it by itself lately: the row says so, quietly
+      const c = el("span", "pm-chip soft", t("Auto-updated"));
+      c.title = t("magpie updated it from v{from} to v{to} on {date}", { from: e.autoUpdated.from, to: e.autoUpdated.to, date: new Date(e.autoUpdated.at).toLocaleDateString(document.documentElement.lang || undefined, { month: "short", day: "numeric" }) });
+      nm.append(c);
+    }
     // the built-in subscriptions moved onto it: taking it away moves them
     // back, so the row says it carries them
     const moved = (e.moved || []).map((id) => SUBS.find((x) => x.agent === id)?.name || id);
@@ -522,12 +571,14 @@
     rm.onclick = () => { if (moved.length) { asking = { pkg, op: "remove" }; draw(); } else remove(); };
     val.append(onoff, rm);
     r.append(val);
-    r.onclick = (ev) => { if (!ev.target.closest("button")) detail(l || { package: pkg, name: pkg, npm: { version: e.latest } }); };
+    r.onclick = (ev) => { if (!ev.target.closest("button")) detail(l || { package: pkg, name: label(e.spec), npm: { version: e.latest } }); };
     return r;
   }
 
   // the plugin's page: what it is, what npm says of it, and its README
   async function detail(l) {
+    // a folder plugin: what it is comes from the folder, not from npm
+    const local = isPath(l.package);
     const ed = el("div", "editor pm-detail");
     const hd = el("div", "ehead pm-dhead");
     hd.append(logo(l.icon, true));
@@ -570,7 +621,8 @@
       a.onclick = (ev) => { ev.preventDefault(); api("open", { url: href }).catch(() => {}); };
       links.append(a);
     };
-    link("npm", "https://www.npmjs.com/package/" + l.package);
+    // npm is where a package's page is; a folder on this computer has none
+    if (!local) link("npm", "https://www.npmjs.com/package/" + l.package);
     link(t("Source"), l.npm?.repository);
     if (l.npm?.homepage && l.npm.homepage !== l.npm.repository && !l.npm.homepage.startsWith(l.npm.repository + "#")) link(t("Homepage"), l.npm.homepage);
     main.append(links);
@@ -595,7 +647,7 @@
       readme.replaceChildren(markdown(p.readme || t("No README")));
     } catch (e) {
       upd.textContent = "—";
-      readme.replaceChildren(el("p", "pm-note", t("npm didn't answer: {error}", { error: e.message })));
+      readme.replaceChildren(el("p", "pm-note", t(local ? "Couldn't read the folder's README: {error}" : "npm didn't answer: {error}", { error: e.message })));
     }
   }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -15,11 +16,14 @@ import (
 // answers as out says.
 func fakeWarmClaude(t *testing.T, out string, code int) string {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log")
 	script := "#!/bin/sh\n" +
 		"{ printf 'args:'; for a in \"$@\"; do printf '[%s]' \"$a\"; done; echo; " +
-		"echo \"token:$CLAUDE_CODE_OAUTH_TOKEN\"; echo \"base:$ANTHROPIC_BASE_URL\"; echo \"pwd:$(pwd)\"; printf 'stdin:'; cat; echo; } > " + log + "\n" +
+		"echo \"dir:$CLAUDE_CONFIG_DIR\"; echo \"base:$ANTHROPIC_BASE_URL\"; echo \"pwd:$(pwd)\"; printf 'stdin:'; cat; echo; } > " + log + "\n" +
 		"echo '" + out + "'\nexit " + string(rune('0'+code)) + "\n"
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -31,13 +35,14 @@ func fakeWarmClaude(t *testing.T, out string, code int) string {
 
 func TestWarmClaudeAsksClaudeCodeOnce(t *testing.T) {
 	log := fakeWarmClaude(t, `{"type":"result","is_error":false,"result":"Hi!"}`, 0)
-	if err := warmClaude(context.Background(), "saved-token"); err != nil {
+	t.Setenv("CLAUDE_CONFIG_DIR", "/the/users/own")
+	if err := warmClaude(context.Background(), "/saved/account"); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(log)
 	got := string(b)
 	for _, want := range []string{"[-p]", "[--model][haiku]", "[--tools][]", "[--setting-sources][]", "[--no-session-persistence]",
-		"token:saved-token", "base:\n", "stdin:hi", "magpie-claude-"} {
+		"dir:/saved/account\n", "base:\n", "stdin:hi", "magpie-claude-"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("run lacks %q:\n%s", want, got)
 		}
@@ -50,12 +55,13 @@ func TestWarmClaudeAsksClaudeCodeOnce(t *testing.T) {
 			}
 		}
 	}
-	// the account Claude Code is signed in to is its own
+	// the account Claude Code is signed in to is its own, in its own
+	// config directory
 	if err := warmClaude(context.Background(), ""); err != nil {
 		t.Fatal(err)
 	}
-	if b, _ := os.ReadFile(log); !strings.Contains(string(b), "token:\n") {
-		t.Errorf("a token given for Claude Code's own account:\n%s", b)
+	if b, _ := os.ReadFile(log); !strings.Contains(string(b), "dir:/the/users/own\n") {
+		t.Errorf("another config directory given for Claude Code's own account:\n%s", b)
 	}
 }
 
@@ -88,6 +94,9 @@ func TestClaudeTestRunsClaudeCode(t *testing.T) {
 // Claude's usage is Claude Code's own /usage, run with nothing of the
 // user's settings and nothing kept, as the account it is signed in to.
 func TestClaudeUsageRunsClaudeCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log")
 	out := filepath.Join(dir, "out")
@@ -111,5 +120,30 @@ func TestClaudeUsageRunsClaudeCode(t *testing.T) {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("run lacks %q:\n%s", want, b)
 		}
+	}
+}
+
+// With Claude Code's verbose output on (its /config, kept in .claude.json),
+// claude -p --output-format json prints every message as an array, the
+// system init first and the result last (KevinXC on Discord: usage
+// couldn't be read; the tooltip began [{"type":"system","subtype":"init")
+func TestClaudeVerboseOutput(t *testing.T) {
+	text := "Current session: 13% used"
+	b, _ := json.Marshal([]map[string]any{
+		{"type": "system", "subtype": "init", "tools": []string{}},
+		{"type": "result", "subtype": "success", "is_error": false, "result": text},
+	})
+	fakeWarmClaude(t, string(b), 0)
+	got, err := claudeUsage(context.Background())
+	if err != nil || got != text {
+		t.Fatalf("usage %q %v", got, err)
+	}
+	b, _ = json.Marshal([]map[string]any{
+		{"type": "system", "subtype": "init"},
+		{"type": "result", "is_error": true, "result": "Invalid API key · Please run /login"},
+	})
+	fakeWarmClaude(t, string(b), 1)
+	if err := warmClaude(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "Please run /login") || strings.Contains(err.Error(), "init") {
+		t.Fatalf("got %v", err)
 	}
 }

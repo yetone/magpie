@@ -240,6 +240,9 @@ func (a *Account) Lists(model string) bool {
 	if a == nil {
 		return true
 	}
+	if a.plugin != nil {
+		return a.pluginLists(model)
+	}
 	live, _, ok := catalog.Live(accountModels(a.Agent, a.User))
 	if !ok {
 		return true

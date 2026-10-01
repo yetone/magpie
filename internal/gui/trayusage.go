@@ -70,7 +70,7 @@ func trayUsageText(q provider.SubscriptionQuota, now time.Time, left bool) (labe
 		if q.Balance == "" {
 			return "", ""
 		}
-		return q.Balance, q.Name + " · " + q.Balance
+		return q.Balance, q.Name + " · " + q.Balance + trayAsOf(q)
 	}
 	var short, long []string
 	for _, w := range ws {
@@ -99,7 +99,17 @@ func trayUsageText(q provider.SubscriptionQuota, now time.Time, left bool) (labe
 	if len(short) > 2 {
 		short = short[:2]
 	}
-	return strings.Join(short, " · "), q.Name + "\n" + strings.Join(long, "\n")
+	return strings.Join(short, " · "), q.Name + "\n" + strings.Join(long, "\n") + trayAsOf(q)
+}
+
+// trayAsOf is the tooltip's word that a card stands in for one that
+// couldn't be read just now, and when it was read (the Usage page's
+// "As of …"); nothing for a reading just made.
+func trayAsOf(q provider.SubscriptionQuota) string {
+	if q.AsOf == nil {
+		return ""
+	}
+	return "\nas of " + q.AsOf.Local().Format("Jan 2 15:04") + ", couldn't be read just now"
 }
 
 func resetAt(w provider.QuotaWindow, now time.Time) time.Time {

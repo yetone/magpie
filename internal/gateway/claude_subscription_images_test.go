@@ -83,7 +83,7 @@ func TestSubscriptionToolResultImages(t *testing.T) {
 			if found != run {
 				t.Fatal("no run for call_1")
 			}
-			if _, err := run.continueWith(results); err != nil {
+			if _, err := run.continueWith(results, nil); err != nil {
 				t.Fatal(err)
 			}
 			var got mcpToolResult

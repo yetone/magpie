@@ -42,6 +42,8 @@ const webdavUsage = `usage:
   keys        no: providers go without their API keys, and each computer keeps its own
   first sync  on a computer that had its own setup, each part that differs becomes the server's; what
               was here is kept in the sync folder beside magpie's files, and magpie webdav says so
+  moving      magpie webdav on with S3 sync on moves sync to the folder; the bucket, endpoint, access key
+              and secret are kept, and magpie s3 on alone moves back to them
 
   Piped in, the password (when asked) is the first line of stdin and the passphrase the next.
   An S3-compatible bucket instead: magpie s3 help.
@@ -75,6 +77,8 @@ const s3Usage = `usage:
               only used with the endpoint and access key it was given for: change either and it is asked
               for again
   keys        no: providers go without their API keys, and each computer keeps its own
+  moving      magpie s3 on with WebDAV sync on moves sync to the bucket; the WebDAV address, user and
+              password are kept, and magpie webdav on alone moves back to them
 
   Piped in, the secret (when asked) is the first line of stdin and the passphrase the next.
   A WebDAV folder instead: magpie webdav help.
@@ -152,7 +156,8 @@ func other(k syncKind) syncKind {
 }
 
 // syncSet turns sync on (on), or changes it (set): what is not given
-// stays as it was. On, with the other kind on, it moves there, keeping
+// stays as it was. On, with the other kind on, it moves there (to the
+// server of its kind kept from before, when nothing else is given), keeping
 // the passphrase and what is synced.
 func syncSet(k syncKind, args []string, on bool) error {
 	c, was := davsync.Load()
@@ -160,7 +165,11 @@ func syncSet(k syncKind, args []string, on bool) error {
 		if !on {
 			return fmt.Errorf("%s sync is on, not %s: magpie %s set changes it; %s", c.Kind(), k.name, other(k).cmd, k.turnOn())
 		}
-		c = davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library}
+		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library}
+		if o := c.Other; o != nil { // its server, as it was kept when sync moved from it
+			next.URL, next.User, next.Endpoint, next.Region, next.PathStyle = o.URL, o.User, o.Endpoint, o.Region, o.PathStyle
+		}
+		c = next
 	}
 	if !was {
 		if !on {
@@ -374,6 +383,13 @@ func syncShow(k syncKind) error {
 		what = append(what, "library")
 	}
 	fmt.Println("  syncs", strings.Join(what, ", "))
+	if o := v.Other; o != nil {
+		if o.Kind == "s3" {
+			fmt.Println(muted.Render("  S3 " + o.URL + " is kept, not synced to: magpie s3 on moves back to it"))
+		} else {
+			fmt.Println(muted.Render("  WebDAV " + o.URL + " is kept, not synced to: magpie webdav on moves back to it"))
+		}
+	}
 
 	switch {
 	case v.Error != "":

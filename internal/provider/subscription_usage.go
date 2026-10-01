@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,6 +55,9 @@ type SubscriptionQuota struct {
 	User     string        `json:"user,omitempty"` // the account, so two of one vendor tell apart
 	Windows  []QuotaWindow `json:"windows"`
 	Balance  string        `json:"balance,omitempty"` // what is left on an API key, instead of windows
+	// BalanceParts are the Balance's amounts each apart, when the balance
+	// field the user wrote has several or a percent (cardParts)
+	BalanceParts []BalancePart `json:"balanceParts,omitempty"`
 	// Until is when the plan's paid time ends: it renews then when Renew
 	// is "auto", is over when "off", and either when "" (the vendor
 	// doesn't say which).
@@ -63,6 +67,9 @@ type SubscriptionQuota struct {
 	// AsOf is when an allowance shown in place of one that couldn't be
 	// read was read (see keepLast); nil for a reading just made.
 	AsOf *time.Time `json:"asOf,omitempty"`
+	// ReadAt is when a key's balance was read, which the minute it is
+	// kept for (KeyBalances) leaves behind the page's asking.
+	ReadAt *time.Time `json:"readAt,omitempty"`
 	// Resets are the rate-limit resets a Codex account holds, nil when it
 	// holds none (codex_resets.go).
 	Resets *ResetCredits `json:"resets,omitempty"`
@@ -231,7 +238,9 @@ func fetchSubscriptionUsage() []SubscriptionQuota {
 		return true
 	}
 	if p, ok := claudeAccount(); ok && !hidden["claude"] {
-		if ls := accountsOf("claude"); len(ls) > 1 {
+		// signed out, Claude Code's own allowance is none: the account in
+		// its place is a saved one, read as the others are
+		if ls := accountsOf("claude"); len(ls) > 1 || p.Account.standIn {
 			fetches = append(fetches, perLogin(via("claude"), ls, "Claude Code", "claude-color")...)
 		} else {
 			fetches = append(fetches, withUser(p.Account.User, func() SubscriptionQuota { return claudeSubscriptionUsage(viaLogin("claude", p.Account.User)) }))
@@ -252,16 +261,15 @@ func fetchSubscriptionUsage() []SubscriptionQuota {
 				fetches = append(fetches, withUser(p.Account.User, func() SubscriptionQuota { return codexSubscriptionUsage(viaLogin("codex", p.Account.User), auth) }))
 			}
 		}
-		cfg := os.Getenv("XDG_CONFIG_HOME")
-		if cfg == "" {
-			cfg = filepath.Join(home, ".config")
-		}
-		if app, ok := copilotLogin(cfg); ok && !hidden["copilot"] {
-			if ls := copilotLoginList(); len(ls) > 1 {
-				fetches = append(fetches, perLogin(via("copilot"), ls, "Copilot", "githubcopilot")...)
-			} else {
-				fetches = append(fetches, withUser(app.User, func() SubscriptionQuota { return copilotSubscriptionUsage(viaLogin("copilot", app.User), app.Token) }))
-			}
+		// Every Copilot account magpie knows, the editors' or the CLI's own
+		// sign-in or not: one signed in from magpie alone is enough
+		// (copilotLoginList reads both, copilot_accounts.go). Asking only
+		// when copilotLogin found the editors' token left an account magpie
+		// signed in itself without a card on the Usage page, and out of the
+		// gateway's GET /v1/magpie/quotas, however fresh its reading was
+		// (subscription_usage_test.go, TestCopilotQuotaWithoutEditorsSignIn).
+		if ls := copilotLoginList(); len(ls) > 0 && !hidden["copilot"] {
+			fetches = append(fetches, perLogin(via("copilot"), ls, "Copilot", "githubcopilot")...)
 		}
 	}
 	if moved("kiro") {
@@ -410,21 +418,63 @@ var claudeUsage struct {
 type claudeUsageEntry struct {
 	at    time.Time
 	ws    []QuotaWindow
-	heard time.Time // when Claude Code last told it, answering
-	tried time.Time // when the endpoint was last asked, answered or not
+	heard time.Time     // when Claude Code last told it, answering
+	tried time.Time     // when /usage was last run, answered or not
+	wait  time.Duration // how long after tried it runs again unasked
+	err   error         // what the last run said, when it failed
 }
 
 // claudeAskFloor is the least time between two readings, however often the
-// user refreshes.
-const claudeAskFloor = 30 * time.Second
+// user refreshes; between two that nobody asked for (a reading magpie keeps
+// up to date by itself, for the Usage page left open, the menu bar's
+// figures and routing) it is claudeUsageWait, drawn afresh after each run,
+// so /usage isn't run on a clock, and then only once Claude Code has been
+// used since (claudeUsedSince): an allowance nobody used hasn't moved.
+const (
+	claudeAskFloor     = 30 * time.Second
+	claudeUsageWaitMin = 5 * time.Minute
+	claudeUsageWaitMax = 15 * time.Minute
+)
+
+// claudeUsageWait is how long after a run of /usage the next unasked one is
+// due: a whole minute from claudeUsageWaitMin to claudeUsageWaitMax, at
+// random. A var so tests can fix it.
+var claudeUsageWait = func() time.Duration {
+	return claudeUsageWaitMin + rand.N(claudeUsageWaitMax-claudeUsageWaitMin+time.Minute)/time.Minute*time.Minute
+}
+
+// claudeUsedSince says whether Claude Code was used since t: one of its
+// sessions (a .jsonl in a project's folder under its projects/) was written
+// to since. A var so tests can say.
+var claudeUsedSince = func(t time.Time) bool {
+	projects := filepath.Join(filepath.Dir(claudeCredentialsPath()), "projects")
+	dirs, _ := os.ReadDir(projects)
+	for _, d := range dirs {
+		root := filepath.Join(projects, d.Name())
+		if fi, err := os.Stat(root); err != nil || !fi.IsDir() {
+			continue
+		}
+		files, _ := os.ReadDir(root)
+		for _, f := range files {
+			if !strings.HasSuffix(f.Name(), ".jsonl") {
+				continue
+			}
+			if fi, err := f.Info(); err == nil && fi.ModTime().After(t) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // claudeAsked is when the user last asked to see Claude's usage (unix
 // nanoseconds; zero: never).
 var claudeAsked atomic.Int64
 
 // AskClaudeUsage is the user asking to see Claude's usage — opening the
-// Usage page, refreshing it, `magpie quota` — the one time Claude Code's
-// /usage is run; the next SubscriptionUsage waits for it.
+// Usage page, refreshing it, `magpie quota` — so Claude Code's /usage is
+// run at once rather than when the next unasked reading is due
+// (claudeUsageWait); the next SubscriptionUsage waits for it.
 func AskClaudeUsage() {
 	claudeAsked.Store(time.Now().UnixNano())
 	c := &subscriptionUsageCache
@@ -442,9 +492,11 @@ func AskClaudeUsage() {
 }
 
 // claudeWindows is the allowance of the Claude account user. Only the
-// account Claude Code is signed in to (active) is read, by Claude Code,
-// and only when the user asked since it last was; any other time it is
-// what was kept.
+// account Claude Code is signed in to (active) is read, by Claude Code's
+// own /usage: when the user asked since it last was, or when the last
+// reading's claudeUsageWait is up and Claude Code was used since; any other
+// time it is what was kept.
+// magpie itself never asks Anthropic.
 func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow, error) {
 	key := strings.ToLower(user)
 	c := &claudeUsage
@@ -452,13 +504,21 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	asked := claudeAsked.Load()
 	c.Lock()
 	e, ok := c.m[key]
-	// one reading an ask, its first caller's; the others keep to it
-	read := active && asked != 0 && (e.tried.IsZero() || asked > e.tried.UnixNano()) && now.Sub(e.tried) >= claudeAskFloor
+	c.Unlock()
+	due := e.tried.IsZero() || asked > e.tried.UnixNano() ||
+		active && now.Sub(e.tried) >= e.wait && (e.heard.After(e.tried) || claudeUsedSince(e.tried))
+	read := active && due && now.Sub(e.tried) >= claudeAskFloor
+	c.Lock()
+	// one reading an ask or a wait, its first caller's; the others keep
+	// to it
+	if f := c.m[key]; read && !f.tried.Equal(e.tried) {
+		read, e = false, f
+	}
 	if read {
 		if c.m == nil {
 			c.m = map[string]claudeUsageEntry{}
 		}
-		e.tried = now
+		e.tried, e.wait = now, claudeUsageWait()
 		c.m[key] = e
 	}
 	c.Unlock()
@@ -466,6 +526,8 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 		switch {
 		case ok && e.ws != nil:
 			return elapsed(e.ws, now), nil
+		case ok && e.err != nil:
+			return []QuotaWindow{}, e.err
 		case active:
 			return []QuotaWindow{}, errClaudeNotAsked
 		default:
@@ -474,6 +536,12 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	}
 	ws, err := readClaudeUsage(ctx)
 	if err != nil {
+		c.Lock()
+		if f, ok := c.m[key]; ok && f.tried.Equal(now) {
+			f.err = err
+			c.m[key] = f
+		}
+		c.Unlock()
 		if e.ws != nil && now.Sub(e.heard) < claudeHeard {
 			return elapsed(e.ws, now), nil // what Claude Code said stands
 		}
@@ -483,13 +551,13 @@ func claudeWindows(ctx context.Context, user string, active bool) ([]QuotaWindow
 	if c.m == nil {
 		c.m = map[string]claudeUsageEntry{}
 	}
-	c.m[key] = claudeUsageEntry{at: now, ws: ws, heard: e.heard, tried: now}
+	c.m[key] = claudeUsageEntry{at: now, ws: ws, heard: e.heard, tried: now, wait: e.wait}
 	c.Unlock()
 	return ws, nil
 }
 
 var (
-	errClaudeNotAsked = errors.New("not read yet: magpie reads Claude's usage when you open or refresh Usage")
+	errClaudeNotAsked = errors.New("not read yet: magpie reads Claude's usage by running Claude Code's /usage")
 	errClaudeSaved    = errors.New("magpie doesn't read a saved account's usage; it shows what Claude Code reports while using it")
 )
 

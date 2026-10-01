@@ -93,7 +93,7 @@ type subscriptionRun struct {
 	tree   *proc.Tree // cmd once started, with all it starts
 	tmp    string
 
-	// the tools it was started with: its agent is told them once
+	// the tools its agent was told of, as it started and since
 	tools map[string]bool
 
 	mu      sync.Mutex
@@ -148,6 +148,10 @@ const waitTool = "magpie_wait"
 type mcpToolResult struct {
 	Content []map[string]any `json:"content"`
 	IsError bool             `json:"is_error,omitempty"`
+	// Tools, when set, is the run's tools from now on: the MCP helper tells
+	// Claude Code its list changed, and answers the call once Claude Code
+	// has listed them again
+	Tools []bridgeTool `json:"tools,omitempty"`
 }
 
 type bridgeTool struct {
@@ -244,7 +248,7 @@ func callbackBaseURL() string {
 	return "http://" + host + ":" + port
 }
 
-func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, oauth, owner string) (*subscriptionRun, <-chan Event, error) {
+func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, configDir, owner string) (*subscriptionRun, <-chan Event, error) {
 	binary, err := claudeBinary()
 	if err != nil {
 		return nil, nil, err
@@ -277,10 +281,7 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, oau
 	cmd := proc.CommandContext(context.Background(), binary, args...)
 	cmd.Dir = tmp
 	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
-	if oauth != "" {
-		// a saved account in use beside the one Claude Code is signed in to
-		cmd.Env = append(cmd.Env, "CLAUDE_CODE_OAUTH_TOKEN="+oauth)
-	}
+	cmd.Env = inClaudeDir(cmd.Env, configDir)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cleanup()
@@ -588,6 +589,26 @@ func claudeCLIArgs(model, mcpConfig, effort string, web bool) []string {
 	return args
 }
 
+// inClaudeDir is env for a Claude Code run on a saved account in use beside
+// the one it is signed in to: in the account's config directory
+// (provider's claude_dirs.go), where Claude Code keeps the sign-in fresh
+// itself. configDir "" is the account Claude Code is signed in to, and env
+// is kept as it is.
+func inClaudeDir(env []string, configDir string) []string {
+	if configDir == "" {
+		return env
+	}
+	out := make([]string, 0, len(env)+1)
+	for _, e := range env {
+		switch k, _, _ := strings.Cut(e, "="); k {
+		case "CLAUDE_CONFIG_DIR", "CLAUDE_SECURESTORAGE_CONFIG_DIR":
+			continue
+		}
+		out = append(out, e)
+	}
+	return append(out, "CLAUDE_CONFIG_DIR="+configDir)
+}
+
 func cleanClaudeEnv(env []string) []string {
 	blocked := map[string]bool{
 		"ANTHROPIC_BASE_URL": true, "ANTHROPIC_API_KEY": true, "ANTHROPIC_AUTH_TOKEN": true,
@@ -659,6 +680,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 	// what the messages before cost, as each message's usage counts only
 	// itself and the client keeps the last it is told
 	var before, this Usage
+	var reqID, errKind string // the last request's id, and how it failed
 	usage := func(u cliUsage) Usage {
 		v := u.gateway()
 		this.add(v)
@@ -670,6 +692,12 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			Subtype string `json:"subtype"`
 			IsError bool   `json:"is_error"`
 			Result  string `json:"result"`
+			// Anthropic's id for the request, on the messages it answered,
+			// and on a failure the HTTP status Claude Code got and its
+			// name for the kind of error (rate_limit, server_error…)
+			RequestID      string          `json:"request_id"`
+			APIErrorStatus int             `json:"api_error_status"`
+			ErrorKind      json.RawMessage `json:"error"`
 			// what Claude Code's WebSearch found, on the message that
 			// answers its call
 			ToolUseResult json.RawMessage `json:"tool_use_result"`
@@ -714,9 +742,20 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			// this and no message_stop, the CLI waiting on its next input:
 			// the reply ends here, or it would wait with it (#177)
 			if envelope.IsError {
-				r.emit(Event{Kind: KError, Text: envelope.Result})
+				r.emit(Event{Kind: KError, Text: envelope.Result, Status: envelope.APIErrorStatus, Code: errKind, RequestID: reqID})
 				r.endSegment()
 			}
+			continue
+		}
+		if envelope.Type == "assistant" {
+			// the whole message, whose id its stream's later events go
+			// out under; a failure says how it failed here, before its result
+			if envelope.RequestID != "" {
+				reqID = envelope.RequestID
+			}
+			var kind string
+			_ = json.Unmarshal(envelope.ErrorKind, &kind)
+			errKind = kind
 			continue
 		}
 		var searched struct {
@@ -791,7 +830,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 				}
 			}
 		case "message_delta":
-			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage)})
+			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage), RequestID: reqID})
 			if e.Delta.StopReason == "tool_use" && len(own) > 0 && !theirs {
 				inside = true
 			} else if e.Delta.StopReason != "" {
@@ -1011,6 +1050,8 @@ func (b *subscriptionBridge) findRun(req *Request) (*subscriptionRun, []Part) {
 
 // offers says the run's agent was told every one of tools.
 func (r *subscriptionRun) offers(tools []Tool) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.tools == nil {
 		return true
 	}
@@ -1023,8 +1064,9 @@ func (r *subscriptionRun) offers(tools []Tool) bool {
 }
 
 // continueWith hands the agent its tool results: at once for the calls it
-// is waiting on, the others kept until it makes them.
-func (r *subscriptionRun) continueWith(results []Part) (<-chan Event, error) {
+// is waiting on, the others kept until it makes them. tools, when set, are
+// the agent's tools from now on, handed over with the results.
+func (r *subscriptionRun) continueWith(results []Part, tools []bridgeTool) (<-chan Event, error) {
 	if r.timer != nil {
 		r.timer.Reset(30 * time.Minute)
 	}
@@ -1038,6 +1080,7 @@ func (r *subscriptionRun) continueWith(results []Part) (<-chan Event, error) {
 	delivered := 0
 	for _, p := range results {
 		result := mcpResult(p)
+		result.Tools = tools
 		r.mu.Lock()
 		waiter := r.pending[p.CallID]
 		delete(r.pending, p.CallID)
@@ -1321,11 +1364,11 @@ func (s *Server) serveClaudeSubscription(w http.ResponseWriter, r *http.Request,
 			// effort can think past that (#250)
 			req.Effort = "low"
 		}
-		token, _, err := p.Account.Token(ctx)
+		dir, _, err := p.Account.Token(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
-		return s.subscription.start(ctx, req, model, token, owner)
+		return s.subscription.start(ctx, req, model, dir, owner)
 	}
 	return s.serveSubscription(w, r, from, "Claude Code", model, body, usage, start)
 }
@@ -1343,26 +1386,34 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	// its model searches the web with magpie's tool, which magpie answers
 	var search Tool
 	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
+		if canSearch() {
 			search = searchTool(req.Tools)
 			req.Tools = append(slices.Clone(req.Tools), search)
 		}
 	}
 
 	run, results := s.subscription.findRun(req)
+	// the client offers a tool the run's agent was never told of, as Claude
+	// Code's ToolSearch loads a deferred one mid-turn: the run is handed it
+	// with the results, as its MCP server's tools changed. A run started
+	// anew would be told the conversation in one message, its tool calls as
+	// text, and its model went on to write its own calls as text.
+	var more []bridgeTool
 	if run != nil && !run.offers(req.Tools) {
-		// the client offers a tool the run's agent was never told of, as
-		// Claude Code's ToolSearch loads a deferred one (WebSearch) mid-turn:
-		// a run started now has it, the conversation told over
-		run.abort()
-		run = nil
+		more = bridgeTools(req)
 	}
 	var events <-chan Event
 	if run != nil {
-		if events, err = run.continueWith(results); err != nil {
+		if events, err = run.continueWith(results, more); err != nil {
 			// it ended while it waited: a new one is told the whole
 			// conversation
 			run = nil
+		} else if more != nil {
+			run.mu.Lock()
+			for _, t := range req.Tools {
+				run.tools[t.Name] = true
+			}
+			run.mu.Unlock()
 		}
 	}
 	if run == nil {
@@ -1416,8 +1467,14 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 			}
 			abort()
 			code := 502
-			if quotaWords.MatchString(msg) {
-				code = 429
+			if n > 0 {
+				usage.add(Usage{ErrType: head[n-1].Code, RequestID: head[n-1].RequestID})
+				// the status Claude Code got, else a guess from the words
+				if head[n-1].Status >= 400 {
+					code = head[n-1].Status
+				} else if quotaWords.MatchString(msg) {
+					code = 429
+				}
 			}
 			return writeError(w, from, code, name+": "+msg), msg
 		}
@@ -1429,7 +1486,7 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 				failed = ev.Text
 			case KStart, KUsage:
 				usage.add(ev.Usage)
-				usage.add(Usage{Served: ev.Model})
+				usage.add(Usage{Served: ev.Model, RequestID: ev.RequestID})
 			case KText:
 				said += ev.Text
 			case KStop:
@@ -1466,7 +1523,10 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		abort()
 		// a status, as in a stream, so another account can take over
 		code := 502
-		if quotaWords.MatchString(col.err) {
+		usage.add(Usage{ErrType: col.errCode})
+		if col.errStatus >= 400 {
+			code = col.errStatus
+		} else if quotaWords.MatchString(col.err) {
 			code = 429
 		}
 		return writeError(w, from, code, name+": "+col.err), col.err

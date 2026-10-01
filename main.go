@@ -18,6 +18,7 @@ import (
 	"github.com/yetone/magpie/internal/imagemcp"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/profile"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/tui"
@@ -66,13 +67,14 @@ const usage = `magpie — one place to pick every agent's model
   magpie model efforts <provider/model> <l>,<l>|--reset   the reasoning levels a model offers (magpie model help)
   magpie visible [<agent> <family|provider|group>,… | all]
                                   which models an agent is shown: families (magpie provider/group set <id> family=…)
+  magpie search [add <api> <key>|rm <api>]   Tavily, Brave, Exa, Firecrawl or SearXNG for web search when no provider can search
   magpie groups                   routing groups: several models agents pick as one, group/<id>
   magpie group add <name> models=<m1>,<m2> [routing=smart|order|rotate|usage] [stays=auto|session|turn|off]
   magpie group <id> | set <id> k=v… | rm <id>   show, change or remove one (magpie group help for more)
   magpie accounts [agent] [--json]  every subscription magpie knows, with each one's allowance used and when it resets
   magpie accounts add <agent>     sign in to one more Claude, ChatGPT or Google (Gemini CLI, Antigravity) subscription
   magpie accounts switch <agent> <email>   sign the agent in to another of them
-  magpie accounts refresh         renew the saved Claude and ChatGPT sign-ins now (the gateway does it daily)
+  magpie accounts refresh         renew the saved ChatGPT sign-ins now (the gateway does it daily)
   magpie accounts checkin         WorkBuddy's daily check-in (签到) for each WorkBuddy account, now (Settings can do it daily)
   magpie accounts project <gemini|antigravity> <email> <project>   the Google Cloud project a Google account's requests go to
   magpie plugin [add <package>|rm|update|on|off|login <provider>|logout <provider>]
@@ -104,6 +106,10 @@ var (
 )
 
 func main() {
+	if provider.TookOpenedURL(os.Args[1:]) {
+		// Claude Code, signing in for magpie, handed over the page to open
+		return
+	}
 	gateway.Version = version
 	netproxy.Install()
 	update.GUI = hasGUI
@@ -133,6 +139,13 @@ func run(args []string) error {
 	gateway.StandIn = agent.StandIn
 	// the setup kept the same on every computer, by whichever serves
 	gateway.WhileServing = append(gateway.WhileServing, davsync.Run)
+	// and the request archive, when it is on, goes to the bucket sync is to
+	gateway.ArchiveBucket = func() (gateway.Putter, bool) {
+		if b, ok := davsync.S3Bucket(); ok {
+			return b, true
+		}
+		return nil, false
+	}
 	if len(args) == 0 {
 		if hasGUI {
 			return runGUI(true, "")
@@ -207,6 +220,8 @@ func run(args []string) error {
 		return modelCmd(args[1:])
 	case "visible":
 		return visibleCmd(args[1:])
+	case "search":
+		return searchCmd(args[1:])
 	case "groups":
 		return groups()
 	case "group":

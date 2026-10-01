@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -73,15 +74,31 @@ func TestRefusalFailsOverToTheNextMember(t *testing.T) {
 	fresh(t)
 	a := &scripted{replies: []reply{{200, "text/event-stream", anthropicRefusal}}}
 	b := &scripted{replies: []reply{{200, "text/event-stream", anthropicAnswer}}}
-	scriptedOn(t, "a", provider.Anthropic, a)
-	scriptedOn(t, "b", provider.Anthropic, b)
+	for id, script := range map[string]*scripted{"a": a, "b": b} {
+		up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Request-Id", "req-"+id)
+			script.ServeHTTP(w, r)
+		}))
+		t.Cleanup(up.Close)
+		if err := provider.Save(provider.Provider{ID: id, Name: id, Key: "k", Models: []string{"m"}, Anthropic: up.URL}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	refusalGroup(t, "a/m", "b/m")
 	s := New()
-	code, body := sendTo(s, "/v1/responses", codexAsk)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(codexAsk))
+	req.Header.Set(SessionHeader, "override-session")
+	req.Header.Set("Session_id", "native-session")
+	s.Handler().ServeHTTP(rec, req)
+	code, body := rec.Code, rec.Body.String()
 	if code != 200 || !strings.Contains(body, "from b") || strings.Contains(body, "content_filter") || a.n != 1 || b.n != 1 {
 		t.Fatalf("%d %s (a %d, b %d)", code, body, a.n, b.n)
 	}
 	r := s.trace.routes[len(s.trace.routes)-1]
+	if len(r.Usage) != 2 || r.Usage[0].Provider != "a" || r.Usage[0].CacheRead != 237000 || r.Usage[0].CacheWrite != 47000 || r.Usage[0].Output != 2 || r.Usage[1].Provider != "b" || r.Usage[1].Output != 4 {
+		t.Fatalf("refusal and answer accounting: %+v", r.Usage)
+	}
 	if len(r.Tries) != 2 || r.Tries[0].Fail != failRefused || r.Tries[0].Rest != nil || r.Tries[0].Status != 400 || r.Status != 200 {
 		t.Fatalf("tries: %+v", r.Tries)
 	}
@@ -92,6 +109,22 @@ func TestRefusalFailsOverToTheNextMember(t *testing.T) {
 	if len(recs) != 2 || recs[0].Provider != "a" || recs[0].Status != 400 || recs[0].CacheRead != 237000 || recs[0].Output != 2 ||
 		recs[1].Provider != "b" || recs[1].Status != 200 {
 		t.Fatalf("usage: %+v", recs)
+	}
+
+	if recs[0].Error == "" || recs[0].Error != keepMsg(r.Tries[0].Error) || recs[1].Error != "" {
+		t.Fatalf("refusal reason missing or leaked into the successful attempt: %+v", recs)
+	}
+
+	for i, r := range recs {
+		if r.Session != "override-session" || r.NativeSession != "native-session" || r.RequestID != []string{"req-a", "req-b"}[i] || r.Endpoint != "/v1/responses → /v1/messages" {
+			t.Fatalf("attempt %d lost request identity: %+v", i, r)
+		}
+	}
+
+	for _, rec := range recs {
+		if rec.RouteID != r.ID || rec.RouteID == 0 {
+			t.Fatalf("usage route %d, want %d", rec.RouteID, r.ID)
+		}
 	}
 
 	// and on an Anthropic client's own API, relayed as it came

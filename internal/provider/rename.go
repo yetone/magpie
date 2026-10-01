@@ -28,14 +28,17 @@ func Rename(from, to string) error {
 	if to == from {
 		return nil
 	}
-	f := load()
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	i := slices.IndexFunc(f.Providers, func(p Provider) bool { return p.ID == from })
 	// one of the user's own saved on a subscription's id before that was one
 	// (a "WorkBuddy" key before v0.1.261) can be moved off it; the
 	// subscription itself can't
 	custom := i >= 0 && hasEndpoint(f.Providers[i])
 	_, signedIn := find(Accounts(), from)
-	sub := slices.Contains(accountIDs, from)
+	sub := subscriptionID(from)
 	if (signedIn || sub) && !custom {
 		return fmt.Errorf("%s is a subscription: its id is its agent's", from)
 	}
@@ -44,7 +47,7 @@ func Rename(from, to string) error {
 		return errors.New(`"magpie" is what agents call the gateway itself; pick another id`)
 	case to == strings.TrimSuffix(GroupPrefix, "/"):
 		return errors.New(`"group" starts the ids of routing groups; pick another id`)
-	case slices.Contains(accountIDs, to):
+	case subscriptionID(to):
 		return fmt.Errorf("%q is the id of the %s subscription; pick another", to, to)
 	}
 	if i < 0 {
@@ -76,6 +79,9 @@ func Rename(from, to string) error {
 		}
 		for k, r := range g.Rules {
 			g.Rules[k].Use = renamedRef(r.Use, from, to)
+		}
+		for k, m := range g.Fast {
+			g.Fast[k] = renamedRef(m, from, to)
 		}
 		g.Classifier = renamedRef(g.Classifier, from, to)
 		g.Pick = renamedRef(g.Pick, from, to)

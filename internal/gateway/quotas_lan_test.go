@@ -12,7 +12,7 @@ import (
 // a wrong key, none, or a gateway not shared still get nothing, and the
 // refusal says how.
 func TestQuotasOverLAN(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setHome(t, t.TempDir())
 	t.Setenv("MAGPIE_ADDR", "")
 	h := lanGuard(New().Handler())
 	call := func(from string, hdr ...string) (int, string) {

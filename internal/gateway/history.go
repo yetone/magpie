@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -163,16 +164,17 @@ func History(day string) (days []HistoryDay, routes []Route, cut bool) {
 		c, ok := history.counts[d.path]
 		if d.day == day || !ok || c.size != d.size {
 			n := 0
-			readDay(d.path, func(line []byte) {
+			readDay(d.path, func(line []byte) bool {
 				n++
 				if d.day != day {
-					return
+					return true
 				}
 				var r Route
 				if json.Unmarshal(line, &r) == nil {
 					r.routedAgain()
 					routes = append(routes, r)
 				}
+				return true
 			})
 			c = counted{d.size, n}
 			history.counts[d.path] = c
@@ -203,7 +205,7 @@ func (r *Route) routedAgain() {
 }
 
 // readDay calls f with each line of a day's file.
-func readDay(path string, f func([]byte)) {
+func readDay(path string, f func([]byte) bool) {
 	file, err := os.Open(path)
 	if err != nil {
 		return
@@ -222,7 +224,36 @@ func readDay(path string, f func([]byte)) {
 	sc.Buffer(make([]byte, 64<<10), 16<<20)
 	for sc.Scan() {
 		if line := bytes.TrimSpace(sc.Bytes()); len(line) > 0 {
-			f(line)
+			if !f(line) {
+				return
+			}
 		}
 	}
+}
+
+// HistoryRoute searches the request's day and its neighbours (the browser and
+// gateway may use different time zones), without holding up history writes.
+func HistoryRoute(id int64, day time.Time) (Route, bool) {
+	needle := []byte(`"id":` + strconv.FormatInt(id, 10) + `,`)
+	for _, offset := range []int{0, -1, 1} {
+		name := filepath.Join(HistoryDir(), day.AddDate(0, 0, offset).Format(dayForm)+".jsonl")
+		for _, path := range []string{name, name + ".gz"} {
+			var found Route
+			readDay(path, func(line []byte) bool {
+				if !bytes.Contains(line, needle) {
+					return true
+				}
+				if json.Unmarshal(line, &found) != nil || found.ID != id {
+					found = Route{}
+					return true
+				}
+				found.routedAgain()
+				return false
+			})
+			if found.ID != 0 {
+				return found, true
+			}
+		}
+	}
+	return Route{}, false
 }

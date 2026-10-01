@@ -65,6 +65,38 @@ type Config struct {
 	// Library is whether the library goes too; nil, as in a setup made
 	// before it could, is yes
 	Library *bool `json:"library,omitempty"`
+	// Other is the other kind's server, kept when sync moved from it (a
+	// WebDAV folder's while an S3 bucket is synced to, or the other way):
+	// moving back finds it as it was, its password too. Nothing syncs to it.
+	Other *Server `json:"other,omitempty"`
+}
+
+// Server is where a Config syncs to, without what it syncs or the
+// passphrase: the other kind's, kept beside the one synced to.
+type Server struct {
+	URL       string `json:"url"`
+	User      string `json:"user,omitempty"`
+	Password  string `json:"password,omitempty"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	Region    string `json:"region,omitempty"`
+	PathStyle bool   `json:"pathStyle,omitempty"`
+}
+
+func (c Config) where() Server {
+	return Server{URL: c.URL, User: c.User, Password: c.Password, Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle}
+}
+
+func (s Server) config() Config {
+	return Config{URL: s.URL, User: s.User, Password: s.Password, Endpoint: s.Endpoint, Region: s.Region, PathStyle: s.PathStyle}
+}
+
+// saved is the setup whose password c may keep: old, or, for c of the
+// other kind, the server of c's kind kept beside it, when there is one.
+func (old Config) saved(c Config) Config {
+	if o := old.Other; o != nil && old.S3() != c.S3() && o.config().S3() == c.S3() {
+		return o.config()
+	}
+	return old
 }
 
 func (c Config) library() bool { return c.Library == nil || *c.Library }
@@ -119,6 +151,7 @@ func Load() (Config, bool) {
 // empty keeps the one set before — the password only for the same server
 // and user: it is never sent to another, and is asked for again there.
 func Configure(c Config) error {
+	c.Other = nil // kept here, never given
 	c.URL, c.User = strings.TrimSpace(c.URL), strings.TrimSpace(c.User)
 	c.Endpoint, c.Region = strings.TrimSpace(c.Endpoint), strings.TrimSpace(c.Region)
 	if !c.S3() { // WebDAV's own: nothing of an S3 setup left behind
@@ -134,9 +167,9 @@ func Configure(c Config) error {
 	// began with
 	return locked(func() error {
 		if old, ok := Load(); ok {
-			kept, needed := password(old, c)
+			kept, needed := password(old.saved(c), c)
 			if kept {
-				c.Password = old.Password
+				c.Password = old.saved(c).Password
 			}
 			if needed {
 				if c.S3() {
@@ -150,6 +183,13 @@ func Configure(c Config) error {
 			}
 			if c.Passphrase == "" {
 				c.Passphrase = old.Passphrase
+			}
+			// the other kind's server is kept: the one moved from, or the
+			// one kept before
+			c.Other = old.Other
+			if old.S3() != c.S3() {
+				o := old.where()
+				c.Other = &o
 			}
 		}
 		if c.S3() && c.Password == "" {
@@ -225,7 +265,7 @@ func SavedPassword(c Config) (kept, needed bool) {
 		return false, false
 	}
 	c.Password = ""
-	return password(old, c)
+	return password(old.saved(c), c)
 }
 
 // sameAccount is whether c and o are one user on one server: the password
@@ -275,6 +315,20 @@ type View struct {
 	Last          time.Time `json:"last,omitzero"`
 	Error         string    `json:"error,omitempty"`
 	Notice        *Notice   `json:"notice,omitempty"`
+	// Other is the other kind's server, kept for moving back to: not
+	// synced to
+	Other *OtherView `json:"other,omitempty"`
+}
+
+// OtherView is the other kind's server as the Settings page shows it.
+type OtherView struct {
+	Kind        string `json:"kind"` // "webdav" or "s3"
+	URL         string `json:"url"`
+	User        string `json:"user,omitempty"`
+	PasswordSet bool   `json:"passwordSet,omitempty"`
+	Endpoint    string `json:"endpoint,omitempty"`
+	Region      string `json:"region,omitempty"`
+	PathStyle   bool   `json:"pathStyle,omitempty"`
 }
 
 // Status is sync's setup and how the last sync went.
@@ -289,6 +343,10 @@ func Status() View {
 		Kind: strings.ToLower(c.Kind()), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle}
 	if st.Key == stateKey(c) {
 		v.Last = st.Last
+	}
+	if o := c.Other; o != nil {
+		v.Other = &OtherView{Kind: strings.ToLower(o.config().Kind()), URL: o.URL, User: o.User, PasswordSet: o.Password != "",
+			Endpoint: o.Endpoint, Region: o.Region, PathStyle: o.PathStyle}
 	}
 	return v
 }
@@ -420,8 +478,12 @@ func hashes(b backup.Bundle) map[string]string {
 		s = *b.Settings
 	}
 	s.Window, s.Proxy, s.Dock, s.DockWindow = nil, "", false, false // this computer's own: never synced
+	providers := []any{b.Providers, b.Icons, b.Groups}
+	if b.Searches != nil && len(*b.Searches) > 0 { // as before them, without one
+		providers = append(providers, *b.Searches)
+	}
 	return map[string]string{
-		"providers": h([]any{b.Providers, b.Icons, b.Groups}),
+		"providers": h(providers),
 		"settings":  h(s),
 		"profiles":  h(orEmpty(b.Profiles)),
 		"agents":    h(orEmpty(b.Agents)),
@@ -450,10 +512,27 @@ func take(to *backup.Bundle, from backup.Bundle, part string) {
 			for i, p := range ps {
 				if k, ok := keys[p.ID]; ok && p.Key == "" && len(p.Keys) == 0 {
 					ps[i].Key, ps[i].KeyName, ps[i].Keys, ps[i].KeyProtocol = k.Key, k.KeyName, k.Keys, k.KeyProtocol
+					if p.BalanceToken == "" {
+						ps[i].BalanceToken = k.BalanceToken
+					}
 				}
 			}
 		}
-		to.Providers, to.Icons, to.Groups = ps, from.Icons, from.Groups
+		searches := from.Searches
+		if searches != nil && !from.Keys && to.Keys && to.Searches != nil { // the same for the search APIs
+			keys := map[string]string{}
+			for _, a := range *to.Searches {
+				keys[a.Vendor] = a.Key
+			}
+			ss := slices.Clone(*searches)
+			for i, a := range ss {
+				if a.Key == "" {
+					ss[i].Key = keys[a.Vendor]
+				}
+			}
+			searches = &ss
+		}
+		to.Providers, to.Icons, to.Groups, to.Searches = ps, from.Icons, from.Groups, searches
 		to.Keys = to.Keys || from.Keys
 	case "settings":
 		to.Settings = from.Settings
@@ -510,7 +589,13 @@ func bring(b backup.Bundle, part string) error {
 				}
 			}
 		}
-		return provider.Mirror(b.Providers, b.Groups)
+		if err := provider.Mirror(b.Providers, b.Groups); err != nil {
+			return err
+		}
+		if b.Searches == nil { // from a magpie before them: the ones here stay
+			return nil
+		}
+		return provider.MirrorSearchAPIs(*b.Searches)
 	case "settings":
 		_, err := backup.Restore(b, backup.Parts{Settings: true})
 		return err

@@ -48,37 +48,8 @@ func waitDone(t *testing.T, id string) SignInState {
 
 func TestClaudeSignInAddsAnAccount(t *testing.T) {
 	home := claudeHome(t)
-	var gotVerifier string
-	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/v1/oauth/token":
-			var body map[string]string
-			json.NewDecoder(r.Body).Decode(&body)
-			if body["code"] != "the-code" || body["client_id"] != claudeClientID || body["grant_type"] != "authorization_code" {
-				w.WriteHeader(400)
-				return
-			}
-			gotVerifier = body["code_verifier"]
-			json.NewEncoder(w).Encode(map[string]any{
-				"access_token": "sk-ant-oat01-new", "refresh_token": "sk-ant-ort01-new", "expires_in": 3600,
-				"scope":   "user:inference user:profile",
-				"account": map[string]any{"uuid": "u-new", "email_address": "new@example.com"},
-			})
-		case "/api/oauth/profile":
-			if r.Header.Get("Authorization") != "Bearer sk-ant-oat01-new" {
-				w.WriteHeader(401)
-				return
-			}
-			json.NewEncoder(w).Encode(map[string]any{
-				"account":      map[string]any{"email": "new@example.com", "display_name": "New"},
-				"organization": map[string]any{"organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"},
-			})
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer fake.Close()
-	claudeTokenURL, claudeBase = fake.URL+"/v1/oauth/token", fake.URL
+	noAnthropic(t)
+	fakeClaudeLogin(t, fakeClaudeAccount{email: "new@example.com", name: "New", plan: "max", refresh: "sk-ant-ort01-new"}, "", true)
 
 	// signed in already, to someone else: the new account is added beside it
 	cred := claudeSignIn(t, home, time.Now().Add(time.Hour))
@@ -88,8 +59,9 @@ func TestClaudeSignInAddsAnAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(st.URL, claudeAuthorizeURL+"?") || !strings.Contains(st.URL, "code_challenge_method=S256") {
-		t.Fatalf("url %s", st.URL)
+	// the page Claude Code itself opens, coming back to it
+	if !strings.HasPrefix(st.URL, "https://claude.com/cai/oauth/authorize?") || !st.PasteCallback {
+		t.Fatalf("state %+v", st)
 	}
 	page := finishInBrowser(t, st, "the-code")
 	if !strings.Contains(page, "signed in") {
@@ -98,9 +70,6 @@ func TestClaudeSignInAddsAnAccount(t *testing.T) {
 	st = waitDone(t, st.ID)
 	if st.State != "done" || st.User != "new@example.com" || st.Plan != "max" || st.Using {
 		t.Fatalf("state %+v", st)
-	}
-	if gotVerifier == "" {
-		t.Fatal("no PKCE verifier sent")
 	}
 	users, active := loginUsers(Logins("claude"))
 	if strings.Join(users, ",") != "new@example.com,old@example.com" || active != "old@example.com" {
@@ -176,7 +145,12 @@ func TestCodexSignInSignsInWhenSignedOut(t *testing.T) {
 
 func TestSignInIgnoresAForeignCallback(t *testing.T) {
 	claudeHome(t)
-	st, err := StartSignIn("claude")
+	oldAddr := codexCallbackAddr
+	t.Cleanup(func() { codexCallbackAddr = oldAddr })
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	codexCallbackAddr = ln.Addr().String()
+	ln.Close()
+	st, err := StartSignIn("codex")
 	if err != nil {
 		t.Fatal(err)
 	}

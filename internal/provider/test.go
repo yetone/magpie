@@ -315,10 +315,33 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 	return r
 }
 
+// BlockedHint is what a vendor's edge firewall blocking magpie's address
+// means, in plain words: Alibaba Cloud's (ESA, in front of zcode.z.ai)
+// answers a 405 HTML page, "Sorry, your request has been blocked due to
+// unusual activity", linking errors.aliyun.com. Nothing in the request is
+// at fault and magpie changes nothing about it: the address is.
+const BlockedHint = "the provider's network firewall blocked requests from this IP; wait a while, or switch to another network or proxy"
+
+// edgeBlocked matches such a block page, whoever's firewall served it.
+var edgeBlocked = regexp.MustCompile(`(?i)request has been blocked|errors\.aliyun\.com`)
+
+// EdgeBlocked says whether an error body is a firewall's block page rather
+// than the vendor's API answering, or one already put in plain words.
+func EdgeBlocked(b []byte) bool {
+	return edgeBlocked.Match(b) || bytes.Contains(b, []byte(BlockedHint)) || bytes.Contains(b, []byte(ZCodeStartBlockedHint))
+}
+
 // APIError pulls the human message out of an error body when there is one.
-// Google's "verify your account" refusal also says what to do about it,
-// with the link it gave.
+// A firewall's block page is put in plain words (BlockedHint); Google's
+// "verify your account" refusal also says what to do about it, with the
+// link it gave.
 func APIError(b []byte, fallback string) string {
+	if edgeBlocked.Match(b) {
+		if fallback == "" {
+			return BlockedHint
+		}
+		return fallback + " — " + BlockedHint
+	}
 	if link, ok := Verification(b); ok {
 		return VerifyMessage(apiError(b, fallback), link)
 	}
@@ -389,6 +412,50 @@ func VerifyMessage(said, link string) string {
 		return said + " — " + verifyAdvice + ": open " + link + " in a browser signed in to it, verify it, then try again"
 	}
 	return said + " — " + verifyAdvice + ": open the Antigravity app (or Gemini CLI) signed in to it and do what it asks, then try again"
+}
+
+// ErrorType is the kind of error a vendor's body names — the error's type
+// (rate_limit_error, usage_limit_reached), else its code — or "" when it
+// names none: what to set beside the status when a request failed.
+func ErrorType(b []byte) string {
+	var v struct {
+		Error json.RawMessage `json:"error"`
+		Type  string          `json:"type"`
+		Code  json.RawMessage `json:"code"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return ""
+	}
+	name := func(raw json.RawMessage) string {
+		var s string
+		if json.Unmarshal(raw, &s) == nil {
+			return strings.TrimSpace(s)
+		}
+		var n json.Number
+		if json.Unmarshal(raw, &n) == nil {
+			return n.String()
+		}
+		return ""
+	}
+	var e struct {
+		Type string          `json:"type"`
+		Code json.RawMessage `json:"code"`
+	}
+	if json.Unmarshal(v.Error, &e) == nil {
+		if e.Type != "" {
+			return e.Type
+		}
+		if c := name(e.Code); c != "" {
+			return c
+		}
+	}
+	if c := name(v.Code); c != "" {
+		return c
+	}
+	if v.Type != "" && v.Type != "error" {
+		return v.Type
+	}
+	return ""
 }
 
 func apiError(b []byte, fallback string) string {

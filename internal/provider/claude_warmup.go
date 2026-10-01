@@ -33,9 +33,9 @@ func claudeWarmUsage(ctx context.Context) map[string]SubscriptionQuota {
 }
 
 // warmClaudeLogin is a warm-up's send for the Claude accounts: send asks
-// Claude Code, with oauth the sign-in of a saved account, "" for the one
-// Claude Code is signed in to.
-func warmClaudeLogin(send func(ctx context.Context, oauth string) error) func(context.Context, string) error {
+// Claude Code, with configDir the config directory of a saved account
+// (claude_dirs.go), "" for the one Claude Code is signed in to.
+func warmClaudeLogin(send func(ctx context.Context, configDir string) error) func(context.Context, string) error {
 	return func(ctx context.Context, user string) error {
 		// the account's own proxy, which send's Claude Code runs with too
 		ctx = ViaLogin(ctx, "claude", user)
@@ -44,15 +44,15 @@ func warmClaudeLogin(send func(ctx context.Context, oauth string) error) func(co
 		if i < 0 {
 			return fmt.Errorf("no Claude account %q", user)
 		}
-		oauth := ""
+		dir := ""
 		if !ls[i].Active {
-			tok, _, err := savedLoginToken(ctx, "claude", ls[i].User)
+			d, err := claudeSavedDir(ls[i].User)
 			if err != nil {
 				return err
 			}
-			oauth = tok
+			dir = d
 		}
-		return send(ctx, oauth)
+		return send(ctx, dir)
 	}
 }
 
@@ -81,7 +81,7 @@ func ClaudeWarmed() map[string]time.Time { return codexWarmedIn(claudeWarmPath()
 
 // KeepClaudeWindowsWarm starts the Claude accounts' windows as they reset,
 // while settings say to, each with one request send makes.
-func KeepClaudeWindowsWarm(ctx context.Context, send func(ctx context.Context, oauth string) error) {
+func KeepClaudeWindowsWarm(ctx context.Context, send func(ctx context.Context, configDir string) error) {
 	w := codexWarmer{path: claudeWarmPath(), now: time.Now, usage: claudeWarmUsage, send: warmClaudeLogin(send),
 		expect: claudeWindowsExpected, warmed: claudeWarmedNow}
 	keepWarm(ctx, "claude", w, func() (string, string) { s := settings.Load(); return s.ClaudeWarmup, s.ClaudeWarmAt })

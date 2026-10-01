@@ -78,7 +78,7 @@ func TestClaudeCodeWebSearchKeepsMetadata(t *testing.T) {
 
 	t.Run("no searcher", func(t *testing.T) {
 		f := &fake{t: t, reply: ccRelayReply, refuse: ccOnly}
-		t.Setenv("HOME", t.TempDir()) // no signed-in agent searches
+		setHome(t, t.TempDir()) // no signed-in agent searches
 		setup(t, provider.Anthropic, f)
 		if _, _, ok := searcher(); ok {
 			t.Fatal("a searcher is set up")
@@ -94,7 +94,7 @@ func TestClaudeCodeWebSearchKeepsMetadata(t *testing.T) {
 
 	t.Run("magpie searches", func(t *testing.T) {
 		f := &fake{t: t, reply: ccRelayReply, refuse: ccOnly}
-		t.Setenv("HOME", t.TempDir())
+		setHome(t, t.TempDir())
 		setup(t, provider.Anthropic, f)
 		srch := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			io.WriteString(w, `{"data":[{"id":"claude-haiku-4-5"}]}`)

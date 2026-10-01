@@ -320,6 +320,12 @@ func zcodeProvider(who, plan string, k zcodeKey) Provider {
 		req.Header.Set("Authorization", "Bearer "+key)
 		return nil
 	}
+	acct.explain = func(status int, body []byte) string {
+		if zcodeOnStart(nil, k) {
+			return zcodeStartExplain(status, body)
+		}
+		return ""
+	}
 	acct.models = func() []catalog.Model {
 		if zcodeOnStart(nil, k) {
 			return zcodeStartModels

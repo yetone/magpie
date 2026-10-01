@@ -43,7 +43,7 @@ func pluginCmd(args []string) error {
 			return errors.New(pluginUsage)
 		}
 		if !plugin.IsPath(rest[0]) && !plugin.HasBun() {
-			fmt.Println(muted.Render("Downloading Bun " + plugin.BunVersion + ", which plugins run on…"))
+			fmt.Println(muted.Render("Downloading Bun " + plugin.BunInUse() + ", which plugins run on…"))
 		}
 		e, err := plugin.Add(ctx, rest[0])
 		if err != nil {
@@ -116,7 +116,7 @@ func pluginCmd(args []string) error {
 			return fmt.Errorf("%s has no plugin to move to", rest[0])
 		}
 		if !plugin.HasBun() {
-			fmt.Println(muted.Render("Downloading Bun " + plugin.BunVersion + ", which plugins run on…"))
+			fmt.Println(muted.Render("Downloading Bun " + plugin.BunInUse() + ", which plugins run on…"))
 		}
 		if err := provider.Move(ctx, rest[0]); err != nil {
 			return fmt.Errorf("%s stays built-in: %w", rest[0], err)

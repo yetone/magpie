@@ -15,6 +15,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -76,7 +77,8 @@ func periodOf(s string) usage.Period {
 }
 
 func ledgerFilter(q url.Values) usage.Filter {
-	return usage.Filter{Agent: q.Get("agent"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
+	id, _ := strconv.ParseInt(q.Get("route"), 10, 64)
+	return usage.Filter{RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
 }
 
 // ledgerRow is a usage.Row with the names the page shows it by.
@@ -85,6 +87,8 @@ type ledgerRow struct {
 	AgentName    string `json:"agentName"`
 	Icon         string `json:"icon"` // the agent's
 	ProviderName string `json:"providerName"`
+	Access       string `json:"access,omitempty"` // known account/route type, independent of model maker
+	PricingModel string `json:"pricing_model,omitempty"`
 }
 
 type ledgerJSON struct {
@@ -92,9 +96,24 @@ type ledgerJSON struct {
 	Rows   []ledgerRow  `json:"rows"`
 	Offset int          `json:"offset"`
 	Total  int          `json:"total"` // the rows the filter keeps, on every page
+	// Series: those rows by hour, day or week (Bucket), for the chart
+	Bucket string              `json:"bucket"`
+	Series []usage.SeriesPoint `json:"series"`
+	// By: the rows told apart by provider, agent and model, the most tokens
+	// first. The one by a dimension the filter has picked is of the rows
+	// without that pick, so the others are still there to switch to.
+	By map[string][]ledgerShare `json:"by"`
 	usage.Totals
-	// Agents: the agents with calls in the period, for the filter
-	Agents []ledgerAgent `json:"agents"`
+	// Agents and Providers: those with calls in the period, for the filters
+	Agents    []ledgerAgent `json:"agents"`
+	Providers []ledgerAgent `json:"providers"`
+}
+
+// ledgerShare is a usage.Share with the name and logo the page shows it by.
+type ledgerShare struct {
+	usage.Share
+	Name string `json:"name"`
+	Icon string `json:"icon,omitempty"`
 }
 
 type ledgerAgent struct {
@@ -106,20 +125,24 @@ type ledgerAgent struct {
 // ledgerPage is one page of the ledger: limit rows (100 when none is
 // given, 500 at most) from offset.
 func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
-	rows, sum, ids := usage.Ledger(p, f)
-	if limit <= 0 {
-		limit = 100
-	}
-	limit = min(limit, 500)
-	offset = max(0, min(offset, len(rows)))
-	page := rows[offset:min(len(rows), offset+limit)]
+	l := usage.QueryPage(p, f, offset, limit)
+	offset = max(0, min(offset, l.Total))
+	page := l.Rows
 	agents := map[string]*agent.Agent{}
 	for _, a := range agent.Clients() {
 		agents[a.ID] = a
 	}
-	names := map[string]string{}
+	// A session file without route evidence is a local source, not a supplier.
+	names := map[string]string{usage.UnknownProvider: "Local session"}
+	icons := map[string]string{}
+	access := map[string]string{}
 	for _, pr := range provider.All() {
-		names[pr.ID] = pr.Name
+		names[pr.ID], icons[pr.ID] = pr.Name, pr.Icon
+		if pr.Account != nil {
+			access[pr.ID] = "subscription"
+		} else if pr.Key != "" {
+			access[pr.ID] = "api"
+		}
 	}
 	who := func(id string) ledgerAgent {
 		if a := agents[id]; a != nil {
@@ -127,17 +150,93 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 		}
 		return ledgerAgent{ID: id, Name: id, Icon: "generic"}
 	}
-	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: len(rows), Totals: sum, Agents: []ledgerAgent{}}
+	which := func(id string) ledgerAgent {
+		a := ledgerAgent{ID: id, Name: names[id], Icon: icons[id]}
+		if a.Name == "" {
+			a.Name = id
+		}
+		if a.Icon == "" {
+			a.Icon = "generic"
+		}
+		return a
+	}
+	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: l.Total, Totals: l.Sum, Agents: []ledgerAgent{}, Providers: []ledgerAgent{}}
+	out.Bucket, out.Series = l.Bucket, l.Series
 	for _, r := range page {
 		a := who(r.Agent)
 		lr := ledgerRow{Row: r, AgentName: a.Name, Icon: a.Icon, ProviderName: names[r.Provider]}
+		if r.Source != "log" {
+			lr.Access = access[r.Provider]
+		}
+		if r.Priced {
+			if model := provider.PricedName(r.Model); model != r.Model {
+				lr.PricingModel = model
+			}
+		}
 		if lr.ProviderName == "" {
 			lr.ProviderName = r.Provider
 		}
 		out.Rows = append(out.Rows, lr)
 	}
-	for _, id := range ids {
+	for _, id := range l.Agents {
 		out.Agents = append(out.Agents, who(id))
+	}
+	for _, id := range l.Providers {
+		out.Providers = append(out.Providers, which(id))
+	}
+	// what each is of: the rows of the filter, or, for the dimension the
+	// filter has picked, of the rows without that pick
+	out.By = map[string][]ledgerShare{}
+	for _, d := range usage.Dimensions {
+		shares := []ledgerShare{}
+		for _, s := range l.By[d] {
+			ls := ledgerShare{Share: s, Name: s.ID}
+			switch d {
+			case "provider":
+				a := which(s.ID)
+				ls.Name, ls.Icon = a.Name, a.Icon
+			case "agent":
+				a := who(s.ID)
+				ls.Name, ls.Icon = a.Name, a.Icon
+			}
+			shares = append(shares, ls)
+		}
+		out.By[d] = shares
+	}
+	return out
+}
+
+// contentJSON is what was said in a request, or why it can't be told.
+type contentJSON struct {
+	Found bool `json:"found"`
+	// Why not: "session" (the request named none), "agent" (magpie reads the session
+	// files of Claude Code, Claude Desktop and Codex only), "missing" (the files have no
+	// such call: deleted, moved, or not written yet) or "read" (the file wouldn't read)
+	Why   string `json:"why,omitempty"`
+	Model string `json:"model,omitempty"`
+	sessions.Content
+}
+
+// requestContent finds the call a request is in its agent's session files and reads it.
+func requestContent(agent, session string, from, to, at time.Time) contentJSON {
+	out := contentJSON{Content: sessions.Content{Input: []sessions.Part{}, Output: []sessions.Part{}}}
+	switch {
+	case session == "":
+		out.Why = "session"
+	case agent != "claude" && agent != "claude-desktop" && agent != "codex":
+		out.Why = "agent"
+	default:
+		c, ok := sessions.FindCall(session, from, to, at)
+		if !ok {
+			out.Why = "missing"
+			break
+		}
+		content, err := sessions.ContentOf(c)
+		if err != nil {
+			out.Why = "read"
+			break
+		}
+		out.Found, out.Model, out.Content = true, c.Model, content
 	}
 	return out
 }
@@ -158,6 +257,25 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 		offset, _ := strconv.Atoi(q.Get("offset"))
 		limit, _ := strconv.Atoi(q.Get("limit"))
 		writeJSON(rw, ledgerPage(periodOf(q.Get("period")), ledgerFilter(q), offset, limit))
+	})
+	// what was said in one request, read from the agent's session file when the
+	// row is opened, between two times (the call's own, or a gateway request's
+	// span): magpie keeps no copy
+	mux.HandleFunc("GET /api/usage/requests/content", func(rw http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		from, err1 := time.Parse(time.RFC3339Nano, q.Get("from"))
+		to, err2 := time.Parse(time.RFC3339Nano, q.Get("to"))
+		if err1 != nil || err2 != nil {
+			http.Error(rw, "from and to are times", http.StatusBadRequest)
+			return
+		}
+		// at: when the call should have ended (a gateway request's start and
+		// its time); none is the window's end
+		at, err := time.Parse(time.RFC3339Nano, q.Get("at"))
+		if err != nil {
+			at = to
+		}
+		writeJSON(rw, requestContent(q.Get("agent"), q.Get("session"), from, to, at))
 	})
 	// the same CSV to a browser (magpie web), which saves it itself
 	mux.HandleFunc("GET /api/usage/requests.csv", func(rw http.ResponseWriter, r *http.Request) {
@@ -198,8 +316,8 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 	// keys' balances come from the
 	// vendors, which can be slow or unreachable, so the page asks for them
 	// apart from the local log.
-	// ?asked=1 is the user opening or refreshing the page, the one time
-	// Claude Code's own /usage is run (provider.AskClaudeUsage).
+	// ?asked=1 is the user opening or refreshing the page: Claude Code's
+	// own /usage is run at once (provider.AskClaudeUsage).
 	mux.HandleFunc("GET /api/usage/quotas", func(rw http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("asked") != "" {
 			provider.AskClaudeUsage()

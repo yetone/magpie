@@ -47,6 +47,8 @@ function serve(lang, reads) {
       return json({ count: 3, median: 1000, p90: 2000, days: days.map(() => 1), messages: days.map(() => 10), output: days.map(() => 0), top: { tokens: [], cost: [], active: [] } });
     }
     if (url.pathname === "/api/groups") return json({ groups: [] });
+    // opening the page asks for the quotas too (an array, as the Go side writes it)
+    if (url.pathname === "/api/usage/quotas") return json([]);
     if (url.pathname.startsWith("/api/")) return json({});
     const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
     const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];

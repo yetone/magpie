@@ -99,6 +99,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			s.serve(w, r, provider.Responses, body)
 			return
 		}
+		body = searchCallIDs(body)
 		if rest == "/responses/compact" {
 			break // preserve native compaction's existing passthrough
 		}
@@ -230,6 +231,9 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 	var tr *Route
 	first := firstToken{start: start} // the reply's first tokens (#196), counted as ms are
 	served := ""                      // the model the reply says answered
+	var uu Usage
+	metadata := requestSessionMetadata(r.Header, body)
+	kind := requestCallKind(r.Header, metadata)
 	end := func(status int, msg string, tokens, out int) {}
 	if rest == "/responses" {
 		who := "Codex's own sign-in"
@@ -238,7 +242,7 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 		}
 		model := modelOf(body)
 		seat := Weighed{ID: "codex", Provider: "openai", Name: "OpenAI", Icon: "openai", Who: who, Kind: "account", Agent: "codex", Model: model}
-		tr = s.trace.begin(Route{Time: start, Agent: agentOf(r), Kind: callKind(r.Header), Model: model, Provider: "openai",
+		tr = s.trace.begin(Route{Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Provider: "openai",
 			Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Start: start}}})
 		end = func(status int, msg string, tokens, out int) {
 			ms := time.Since(start).Milliseconds()
@@ -248,6 +252,7 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 				t.Tries[0].TTFT, t.Tries[0].FirstText = ttft, text
 				t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, ms, tokens
 				t.Output, t.TTFT, t.FirstText = out, ttft, text
+				t.Usage = routeUsage("openai", model, uu)
 				t.Tries[0].Served, t.Tries[0].Swapped = served, swapped(model, served)
 				t.Served, t.Swapped = t.Tries[0].Served, t.Tries[0].Swapped
 			})
@@ -320,6 +325,21 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 		end(res.StatusCode, res.Status, 0, 0)
 		return
 	}
+	if rest == "/responses" && res.StatusCode >= 400 {
+		msg, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		res.Body = io.NopCloser(bytes.NewReader(msg))
+		if len(bytes.TrimSpace(msg)) == 0 {
+			// a failure with nothing said of it, which Codex shows as
+			// "Unknown error" alone (#409): said where the turn went
+			said := codexFailedEmpty(modelOf(body), res.Status)
+			writeError(w, provider.Responses, res.StatusCode, said)
+			s.record(Call{Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
+				Provider: "openai", Agent: agentOf(r), Kind: callKind(r.Header), Status: res.StatusCode,
+				Millis: time.Since(start).Milliseconds(), Error: said})
+			end(res.StatusCode, said, 0, 0)
+			return
+		}
+	}
 	for k, vs := range res.Header {
 		if !hopHeader(k) {
 			w.Header()[k] = vs
@@ -337,12 +357,16 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 	}
 	f, _ := w.(http.Flusher)
 	buf := make([]byte, 32<<10)
+	var refusal []byte // what OpenAI said, of a request it turned away
 	for {
 		n, err := res.Body.Read(buf)
 		if n > 0 {
 			if sniff != nil {
 				sniff.write(buf[:n])
 				first.see(buf[:n])
+			}
+			if res.StatusCode >= 400 && len(refusal) < 8<<10 {
+				refusal = append(refusal, buf[:n]...)
 			}
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				break
@@ -359,21 +383,27 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 		return
 	}
 	call := Call{Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
-		Provider: "openai", Agent: agentOf(r), Kind: callKind(r.Header), Status: res.StatusCode,
+		Provider: "openai", Agent: agentOf(r), Kind: kind, Status: res.StatusCode,
 		Millis: time.Since(start).Milliseconds(), Fallback: resetNote}
 	call.TTFT, call.FirstText = first.ms()
-	var uu Usage
 	uu.add(sniff.usage())
 	call.Usage, served = uu, uu.Served
+	errType := ""
 	if res.StatusCode >= 400 {
-		call.Error = res.Status
+		// its words, the status in front when it said none: the log and
+		// the Routing view show why, not just that
+		call.Error = provider.APIError(refusal, res.Status)
+		errType = provider.ErrorType(refusal)
 	}
 	end(call.Status, call.Error, uu.Input+uu.Output+uu.CacheRead+uu.CacheWrite, uu.Output)
 	s.record(call)
-	usage.Append(usage.Record{Time: start, Agent: call.Agent, Provider: call.Provider, Host: provider.HostOf(base), Model: call.Model,
+	rec := usage.Record{RouteID: tr.ID, Time: start, Agent: call.Agent, Provider: call.Provider, Host: provider.HostOf(base), Model: call.Model,
 		Requested: call.Model, Served: served,
 		Input: uu.Input, Output: uu.Output, CacheRead: uu.CacheRead, CacheWrite: uu.CacheWrite,
-		Reasoning: uu.Reasoning, Millis: call.Millis, TTFT: call.TTFT, FirstText: call.FirstText, Status: call.Status, Session: sessionOf(r.Header), Kind: call.Kind})
+		Reasoning: uu.Reasoning, Millis: call.Millis, TTFT: call.TTFT, FirstText: call.FirstText, Status: call.Status, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
+		RequestID: requestID(res.Header), Endpoint: r.URL.Path}
+	failedWith(&rec, call.Status, call.Error, errType)
+	usage.Append(rec)
 }
 
 // unreadableItem is the item OpenAI's refusal names: sealed content it
@@ -451,6 +481,16 @@ func codexUnreached(model string, err error) string {
 	return "OpenAI can't be reached (" + err.Error() + "). " + model + " is one of Codex's own models, " +
 		"which goes to OpenAI with Codex's own sign-in: pick one of magpie's models in Codex " +
 		"(provider/model, or set it in magpie's Agents view), or let Codex reach OpenAI"
+}
+
+// codexFailedEmpty says why a model of Codex's own failed when OpenAI gave
+// an error status and nothing else: where it went, and what to do — a
+// Codex left on its own model while magpie's Agents view picked another
+// for it sends the turn to OpenAI, not to that one (#409).
+func codexFailedEmpty(model, status string) string {
+	return "OpenAI answered " + status + " and said nothing more. " + model + " is one of Codex's own models, " +
+		"which goes to OpenAI with Codex's own sign-in, not to a provider in magpie: pick one of magpie's models in Codex " +
+		"(provider/model, or set it in magpie's Agents view), or try again later"
 }
 
 // apiKey reports whether Codex signed in with an API key rather than a
@@ -703,6 +743,57 @@ func codexInput(body []byte, magpieModel bool) (_ []byte, compact bool) {
 		return body, false
 	}
 	return nb, compact
+}
+
+// searchCallIDs is a Responses request whose tool_search_call items have
+// ids OpenAI takes. A vendor's reply that magpie, or the vendor, gave the
+// call as a function_call's (fc_…) came back to Codex as Codex's
+// tool_search_call with that id, and Codex hands it back on every later
+// turn: OpenAI's own models and the ChatGPT backend turn the whole request
+// away ("Invalid 'input[98].id': 'fc_…'. Expected an ID that begins with
+// 'tsc'"), Codex's compaction with it. Such an id goes as a tsc_ one; the
+// rest of the request goes byte for byte.
+func searchCallIDs(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"tool_search_call"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(q["input"], &items) != nil {
+		return body
+	}
+	changed := false
+	for i, raw := range items {
+		var it map[string]json.RawMessage
+		if json.Unmarshal(raw, &it) != nil || string(it["type"]) != `"tool_search_call"` {
+			continue
+		}
+		var id string
+		if json.Unmarshal(it["id"], &id) != nil || id == "" || strings.HasPrefix(id, "tsc_") {
+			continue
+		}
+		if _, rest, ok := strings.Cut(id, "_"); ok && rest != "" {
+			id = "tsc_" + rest
+		} else {
+			id = "tsc_" + id
+		}
+		it["id"], _ = json.Marshal(id)
+		if b, err := marshalPlain(it); err == nil {
+			items[i], changed = b, true
+		}
+	}
+	if !changed {
+		return body
+	}
+	q["input"], _ = marshalPlain(items)
+	nb, err := marshalPlain(q)
+	if err != nil {
+		return body
+	}
+	return nb
 }
 
 // openaiOnly are the parts of a Responses request Codex sends only to a

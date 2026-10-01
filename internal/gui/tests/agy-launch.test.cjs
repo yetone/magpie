@@ -12,7 +12,7 @@ const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
-const LAUNCH = "GEMINI_API_KEY=magpie GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3425 agy --model 'magpie/deepseek/pro'";
+const LAUNCH = "GEMINI_API_KEY=magpie-agy GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3425 agy --model 'magpie/deepseek/pro'";
 const models = ["magpie/deepseek/pro", "model-b"].map((m) => ({ value: m, label: m }));
 const agent = (id, name, launch) => ({
   id, name, path: "/test/" + id, launch,

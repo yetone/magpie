@@ -83,6 +83,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".editor .mchips .mchip").first().waitFor();
       const chip = (id) => page.locator(".editor .mchips .mchip", { hasText: id });
       const menu = page.locator(".pop.row-menu");
+      // which models, the editor's form aside (see provider-typed)
+      const asked = (b) => ({ id: b.id, test: b.test });
       const wait = async (n) => { for (let i = 0; i < 60 && tests.length < n; i++) await page.waitForTimeout(50); };
       const picked = () => page.locator(".editor .mchips .mchip.on").count();
 
@@ -104,7 +106,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await menu.getByRole("menuitem", { name: w.item }).click();
         await wait(n + 1);
         assert(await menu.count() === 0, "the menu closes");
-        return tests.at(-1);
+        return asked(tests.at(-1));
       };
 
       let sent = await tryOne("anthropic/claude-opus-4.5");
@@ -134,7 +136,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // Test models still asks every one
       await page.locator(".editor .mfoot").getByRole("button", { name: w.all, exact: true }).click();
       await wait(3);
-      assert.deepEqual(tests.at(-1), { id: "relay", test: IDS });
+      assert.deepEqual(asked(tests.at(-1)), { id: "relay", test: IDS });
 
       const missing = await page.evaluate(() => [
         "Test this model", "Right-click to test just this model", "Right-click a model to test just it",

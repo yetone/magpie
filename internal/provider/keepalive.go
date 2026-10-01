@@ -1,13 +1,15 @@
 package provider
 
-// Keeping saved accounts signed in. A Claude or ChatGPT account saved in
-// magpie but not the one the agent is signed in to is refreshed only when
-// it is used or its allowance looked at — and one waiting its turn (smart
+// Keeping saved accounts signed in. A ChatGPT account saved in magpie but
+// not the one Codex is signed in to is refreshed only when it is used or
+// its allowance looked at — and one waiting its turn (smart
 // routing leaves the accounts whose week resets later for days) could sit
 // unused past its refresh token's life, and be found signed out just when
 // it's needed. So whichever magpie runs the gateway renews each such
 // sign-in about once a day. The account the agent is signed in to is the
-// agent's own to refresh, and is left to it.
+// agent's own to refresh, and is left to it. A Claude account is never
+// refreshed by magpie: Claude Code refreshes it, whenever it runs on it
+// (claude_dirs.go).
 
 import (
 	"context"
@@ -32,7 +34,7 @@ type Renewal struct {
 	Lapsed  bool   `json:"lapsed,omitempty"`
 }
 
-// RenewLogins renews the saved Claude and ChatGPT sign-ins not in the
+// RenewLogins renews the saved ChatGPT sign-ins not in the
 // agent's hands that have gone every or longer without it; every 0 renews
 // all of them.
 func RenewLogins(ctx context.Context, every time.Duration) []Renewal {
@@ -48,7 +50,7 @@ func RenewLogins(ctx context.Context, every time.Duration) []Renewal {
 	loginsMu.Unlock()
 	out := []Renewal{}
 	for _, l := range ls {
-		if (l.Agent != "claude" && l.Agent != "codex") || strings.EqualFold(active[l.Agent], l.User) || accountRemoved(l.Agent) {
+		if l.Agent != "codex" || strings.EqualFold(active[l.Agent], l.User) || accountRemoved(l.Agent) {
 			continue
 		}
 		r := Renewal{Agent: l.Agent, User: l.User}
@@ -76,19 +78,11 @@ func renewalDue(l savedLogin, every time.Duration, now time.Time) bool {
 	if l.Seen.After(last) {
 		last = l.Seen
 	}
-	switch l.Agent {
-	case "claude":
-		if c, ok := parseClaudeCredentials(l.Auth); ok && c.OAuth.RefreshExpiresAt > 0 &&
-			claudeExpiry(c.OAuth.RefreshExpiresAt).Sub(now) < 2*every {
-			return true
-		}
-	case "codex":
-		var a struct {
-			LastRefresh time.Time `json:"last_refresh"`
-		}
-		if json.Unmarshal(l.Auth, &a) == nil && a.LastRefresh.After(last) {
-			last = a.LastRefresh
-		}
+	var a struct {
+		LastRefresh time.Time `json:"last_refresh"`
+	}
+	if json.Unmarshal(l.Auth, &a) == nil && a.LastRefresh.After(last) {
+		last = a.LastRefresh
 	}
 	return now.Sub(last) >= every
 }

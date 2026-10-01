@@ -78,6 +78,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		RedactRules:    []redact.Rule{{Kind: "prefix", Prefix: "oc_sk_"}},
 		LAN:            true,
 		LANKey:         "sk-lan",
+		RequestArchive: true,
 		QuotaLeft:      true,
 		PlainNames:     true,
 		CodexAutoReset: []string{"me@example.com"},

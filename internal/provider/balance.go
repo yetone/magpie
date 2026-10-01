@@ -36,12 +36,7 @@ type balanceSource struct {
 // the one its host is known to have.
 func balanceSourceOf(p Provider) (balanceSource, bool) {
 	if p.BalanceURL != "" {
-		path := p.BalancePath
-		if strings.TrimSpace(path) == "" && balanceURLPath(p.BalanceURL) == newAPIUserSelf {
-			// new-api's account query with its field left out: the quota,
-			// in new-api's units, as it reports it
-			path = newAPIQuotaPath
-		}
+		path := balancePathOf(p)
 		// a token saved beside it (a new-api relay's access token, its
 		// /api/user/self telling the account's quota) is asked with
 		// instead of the key
@@ -76,6 +71,17 @@ func balanceSourceOf(p Provider) (balanceSource, bool) {
 		}
 	}
 	return balanceSource{}, false
+}
+
+// balancePathOf is the balance field of a provider that named its Balance
+// URL.
+func balancePathOf(p Provider) string {
+	if strings.TrimSpace(p.BalancePath) == "" && balanceURLPath(p.BalanceURL) == newAPIUserSelf {
+		// new-api's account query with its field left out: the quota,
+		// in new-api's units, as it reports it
+		return newAPIQuotaPath
+	}
+	return p.BalancePath
 }
 
 // new-api's two balance queries: /api/usage/token tells a key what is left
@@ -357,10 +363,47 @@ func readAiHubMixAccount(b []byte) (string, error) {
 // windowLimits.fiveHour.cap %; week: …; $credits.monthlyCredits" is
 // "5h 0% · week 3.4% · $70.00".
 func readBalancePath(b []byte, path string) (string, error) {
-	if !strings.Contains(path, ";") && !strings.Contains(path, ":") {
-		return readBalanceOne(b, path)
+	parts, err := readBalanceParts(b, path)
+	if err != nil {
+		return "", err
 	}
-	var out []string
+	return joinBalanceParts(parts), nil
+}
+
+// BalancePart is one amount of a balance field, for a card to show each
+// of several on a line of its own, its label apart from its figure, rather
+// than all of them run together: Percent is its share, 0 to 100, when it
+// was asked as one ("%" after it), for a meter.
+type BalancePart struct {
+	Label   string   `json:"label,omitempty"`
+	Text    string   `json:"text"`
+	Percent *float64 `json:"percent,omitempty"`
+}
+
+// joinBalanceParts is the amounts on one line, as Balance tells them:
+// "5h 0% · week 3.4% · $70.00".
+func joinBalanceParts(parts []BalancePart) string {
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p.Label != "" {
+			out = append(out, p.Label+" "+p.Text)
+		} else {
+			out = append(out, p.Text)
+		}
+	}
+	return strings.Join(out, " · ")
+}
+
+// readBalanceParts is readBalancePath's amounts, each apart.
+func readBalanceParts(b []byte, path string) ([]BalancePart, error) {
+	if !strings.Contains(path, ";") && !strings.Contains(path, ":") {
+		v, pct, err := readBalanceOne(b, path)
+		if err != nil {
+			return nil, err
+		}
+		return []BalancePart{{Text: v, Percent: pct}}, nil
+	}
+	var out []BalancePart
 	for part := range strings.SplitSeq(path, ";") {
 		if strings.TrimSpace(part) == "" {
 			continue
@@ -370,26 +413,24 @@ func readBalancePath(b []byte, path string) (string, error) {
 			label, expr = "", part
 		}
 		label = strings.TrimSpace(label)
-		v, err := readBalanceOne(b, expr)
+		v, pct, err := readBalanceOne(b, expr)
 		if err != nil {
 			if label != "" {
 				err = fmt.Errorf("%s: %w", label, err)
 			}
-			return "", err
+			return nil, err
 		}
-		if label != "" {
-			v = label + " " + v
-		}
-		out = append(out, v)
+		out = append(out, BalancePart{Label: label, Text: v, Percent: pct})
 	}
 	if len(out) == 0 {
-		return "", errors.New("no balance path: where in the reply the amount is, e.g. data.balance")
+		return nil, errors.New("no balance path: where in the reply the amount is, e.g. data.balance")
 	}
-	return strings.Join(out, " · "), nil
+	return out, nil
 }
 
-// readBalanceOne is one amount of a balance path.
-func readBalanceOne(b []byte, path string) (string, error) {
+// readBalanceOne is one amount of a balance path, and its share in percent
+// when it was asked as one.
+func readBalanceOne(b []byte, path string) (string, *float64, error) {
 	path = strings.TrimSpace(path)
 	sign := ""
 	for _, s := range []string{"$", "¥", "€", "£"} {
@@ -403,38 +444,48 @@ func readBalanceOne(b []byte, path string) (string, error) {
 		percent, path = true, strings.TrimSpace(rest)
 	}
 	if path == "" {
-		return "", errors.New("no balance path: where in the reply the amount is, e.g. data.balance")
+		return "", nil, errors.New("no balance path: where in the reply the amount is, e.g. data.balance")
 	}
 	var reply any
 	if err := json.Unmarshal(b, &reply); err != nil {
-		return "", errors.New("the reply is not JSON")
+		return "", nil, errors.New("the reply is not JSON")
 	}
 	e := &balanceExpr{src: path, reply: reply}
 	if e.lone() {
 		// a path alone: its value, a number or not
 		v, err := e.at(path)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		if n, ok := number(v); ok {
-			return balanceAmount(sign, n, percent), nil
+			return balanceAmount(sign, n, percent), balanceShare(n, percent), nil
 		}
 		if s, ok := v.(string); ok && s != "" && !percent {
-			return sign + s, nil
+			return sign + s, nil, nil
 		}
-		return "", fmt.Errorf("%q in the reply is not an amount", path)
+		return "", nil, fmt.Errorf("%q in the reply is not an amount", path)
 	}
 	n, err := e.sum()
 	if err == nil && e.i < len(e.src) {
 		err = fmt.Errorf("the balance path has %q it can't read", e.src[e.i:])
 	}
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if math.IsInf(n, 0) || math.IsNaN(n) {
-		return "", fmt.Errorf("the balance path divides by nothing")
+		return "", nil, fmt.Errorf("the balance path divides by nothing")
 	}
-	return balanceAmount(sign, n, percent), nil
+	return balanceAmount(sign, n, percent), balanceShare(n, percent), nil
+}
+
+// balanceShare is an amount asked as a percent, 0.25 as 25; nil for one
+// that wasn't.
+func balanceShare(n float64, percent bool) *float64 {
+	if !percent {
+		return nil
+	}
+	p := n * 100
+	return &p
 }
 
 func balanceAmount(sign string, n float64, percent bool) string {
@@ -586,17 +637,24 @@ func (e *balanceExpr) at(path string) (any, error) {
 // Balance asks the vendor what is left on the provider's key in use. ok is
 // false when there is no way to ask it.
 func Balance(ctx context.Context, p Provider) (amount string, ok bool, err error) {
+	amount, _, ok, err = balanceParts(ctx, p)
+	return amount, ok, err
+}
+
+// balanceParts is Balance, with the amounts of a balance field the user
+// wrote each apart (nil for a vendor magpie reads itself).
+func balanceParts(ctx context.Context, p Provider) (amount string, parts []BalancePart, ok bool, err error) {
 	ctx = p.Via(ctx)
 	src, ok := balanceSourceOf(p)
 	if !ok || p.Account != nil || p.Key == "" {
-		return "", false, nil
+		return "", nil, false, nil
 	}
 	if src.token != "" && p.BalanceURL != "" && balanceURLPath(p.BalanceURL) == newAPIKeyUsage {
-		return "", true, errKeyUsageWithToken(p.BalanceURL)
+		return "", nil, true, errKeyUsageWithToken(p.BalanceURL)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, withBalanceKey(src.url, p.Key, true), nil)
 	if err != nil {
-		return "", true, err
+		return "", nil, true, err
 	}
 	if src.token != "" {
 		// a named endpoint still gets the provider's headers, which is
@@ -620,9 +678,9 @@ func Balance(ctx context.Context, p Provider) (amount string, ok bool, err error
 	if err != nil {
 		if k := url.QueryEscape(p.Key); k != "" && strings.Contains(err.Error(), k) {
 			// the URL in the error has the key in it: not shown on a card
-			return "", true, errors.New(strings.ReplaceAll(err.Error(), k, Mask(p.Key)))
+			return "", nil, true, errors.New(strings.ReplaceAll(err.Error(), k, Mask(p.Key)))
 		}
-		return "", true, err
+		return "", nil, true, err
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -633,21 +691,28 @@ func Balance(ctx context.Context, p Provider) (amount string, ok bool, err error
 		if res.StatusCode >= 300 {
 			msg = res.Status + ": " + msg
 		}
-		return "", true, errors.New(msg)
+		return "", nil, true, errors.New(msg)
 	}
 	if res.StatusCode >= 300 {
 		// what a JSON reply says, on one line; a page of HTML says nothing
 		msg := strings.Join(strings.Fields(string(b)), " ")
 		if !strings.HasPrefix(msg, "{") {
-			return "", true, errors.New(res.Status)
+			return "", nil, true, errors.New(res.Status)
 		}
 		if r := []rune(msg); len(r) > 200 {
 			msg = string(r[:200]) + "…"
 		}
-		return "", true, fmt.Errorf("%s: %s", res.Status, msg)
+		return "", nil, true, fmt.Errorf("%s: %s", res.Status, msg)
+	}
+	if p.BalanceURL != "" {
+		// the field the user wrote: its amounts each apart, as well
+		if parts, err = readBalanceParts(b, balancePathOf(p)); err != nil {
+			return "", nil, true, err
+		}
+		return joinBalanceParts(parts), parts, true, nil
 	}
 	amount, err = src.read(b)
-	return amount, true, err
+	return amount, nil, true, err
 }
 
 // balanceKeyNames are what a Balance URL or a header's value names the
@@ -748,11 +813,14 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		go func() {
 			defer wg.Done()
 			q := SubscriptionQuota{Provider: j.p.ID, Name: j.p.Name, Icon: j.p.Icon, User: j.user, Windows: []QuotaWindow{}}
-			amount, _, err := Balance(ctx, j.p)
+			amount, parts, _, err := balanceParts(ctx, j.p)
 			if err != nil {
 				q.Error = err.Error()
 			} else {
 				q.Balance = amount
+				q.BalanceParts = cardParts(parts)
+				now := time.Now()
+				q.ReadAt = &now
 			}
 			// the vendor failing a while shows the balance last read
 			out[i] = keepLast(q, keyTag("balance", j.p.Key))
@@ -765,6 +833,16 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		c.Unlock()
 	}
 	return out
+}
+
+// cardParts are the amounts a balance's card shows each apart, the
+// percent a meter: several, or one asked as a percent; nil for one amount
+// alone, the figure as it always was.
+func cardParts(parts []BalancePart) []BalancePart {
+	if len(parts) > 1 || len(parts) == 1 && parts[0].Percent != nil {
+		return parts
+	}
+	return nil
 }
 
 // balanceAuthorization is a balance token as its Authorization header: a

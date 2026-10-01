@@ -55,6 +55,7 @@ func TestDevinOwnMovesWithPlan(t *testing.T) {
 	home := claudeHome(t)
 	data := filepath.Join(home, "data")
 	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv("APPDATA", data) // where Windows' Devin CLI keeps it
 	os.MkdirAll(filepath.Join(data, "devin"), 0o700)
 	if err := os.WriteFile(filepath.Join(data, "devin", "credentials.toml"), devinCredentials("cog_own_key_1234", "", "", ""), 0o600); err != nil {
 		t.Fatal(err)

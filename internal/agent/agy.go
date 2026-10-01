@@ -32,12 +32,17 @@ import (
 const agyModels = "customModelsConfig.customModels"
 
 // AgyLaunch is the command that starts agy on magpie's gateway and one of
-// its custom models, in the shell of this system.
+// its custom models, in the shell of this system. Its key names agy: its
+// requests go out as Google's Gemini SDK's (User-Agent google-genai-sdk/…),
+// with nothing of agy's own, so the gateway knows them by the key
+// (x-goog-api-key) alone. A command copied before, with the plain token,
+// still reaches magpie.
 func AgyLaunch(model string) string {
+	key := gateway.TokenFor("agy")
 	if runtime.GOOS == "windows" {
-		return `$env:GEMINI_API_KEY="` + gateway.Token + `"; $env:GOOGLE_GEMINI_BASE_URL="` + gateway.URL() + `"; agy --model '` + strings.ReplaceAll(model, "'", "''") + `'`
+		return `$env:GEMINI_API_KEY="` + key + `"; $env:GOOGLE_GEMINI_BASE_URL="` + gateway.URL() + `"; agy --model '` + strings.ReplaceAll(model, "'", "''") + `'`
 	}
-	return "GEMINI_API_KEY=" + gateway.Token + " GOOGLE_GEMINI_BASE_URL=" + gateway.URL() + " agy --model '" + strings.ReplaceAll(model, "'", `'\''`) + "'"
+	return "GEMINI_API_KEY=" + key + " GOOGLE_GEMINI_BASE_URL=" + gateway.URL() + " agy --model '" + strings.ReplaceAll(model, "'", `'\''`) + "'"
 }
 
 // agyCustom reads customModels as it is, raw JSON by key.

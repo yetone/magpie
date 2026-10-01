@@ -45,8 +45,28 @@ func PluginID(id string) string {
 	return id
 }
 
+// subscriptionID is whether id is a subscription's, a built-in's or an
+// installed plugin's, signed in or not: a provider of the user's own never
+// takes it, or it would hide that subscription once signed in.
+func subscriptionID(id string) bool {
+	if slices.Contains(accountIDs, id) {
+		return true
+	}
+	_, ok := PluginOf(id)
+	return ok
+}
+
 // IsPlugin is whether the provider is a plugin's.
 func (p Provider) IsPlugin() bool { return p.Account != nil && p.Account.plugin != nil }
+
+// PluginProvider is the id OpenCode knows the plugin's provider p is by
+// (grok, kiro), whatever magpie names it; "" for one no plugin gives.
+func (p Provider) PluginProvider() string {
+	if !p.IsPlugin() {
+		return ""
+	}
+	return p.Account.plugin.ID
+}
 
 // PluginOf is the plugin provider magpie's provider id is, when it is one.
 func PluginOf(id string) (plugin.Provider, bool) {
@@ -150,7 +170,7 @@ func pluginCatalog(pp plugin.Provider) []catalog.Model {
 			c.Name = m.ID
 		}
 		if m.Reasoning {
-			c.Efforts = m.Variants
+			c.Efforts, c.Reasoning = m.Variants, true
 		}
 		// a built-in moved onto its plugin keeps the levels it had for a
 		// model its vendor gives none: its maker's, as effortsOf borrows
@@ -182,6 +202,21 @@ func pluginAccountCatalog(pp plugin.Provider, key string) []catalog.Model {
 	return all
 }
 
+// pluginLists is whether a plugin's account serves model, as the plugin
+// last told its list; one it told none of serves all of the provider's.
+func (a *Account) pluginLists(model string) bool {
+	pp := *a.plugin
+	if cur, ok := PluginOf(PluginID(pp.ID)); ok {
+		pp = cur
+	}
+	for _, ac := range pp.Accounts {
+		if ac.Key == a.pluginKey && ac.Models != nil {
+			return slices.Contains(ac.Models, model)
+		}
+	}
+	return true
+}
+
 // pluginProvider is the provider as one of its accounts, l as the
 // accounts list has it.
 func pluginProvider(pp plugin.Provider, l pluginLogin) Provider {
@@ -192,6 +227,11 @@ func pluginProvider(pp plugin.Provider, l pluginLogin) Provider {
 		name = pp.ID
 	}
 	a := &Account{Agent: "plugin", User: user, Plan: l.Plan, Stream: true, plugin: &pp, pluginKey: acct.Key}
+	if pp.ID == "grok" {
+		// Codex's namespaced tools go to Grok flat, as the built-in sends
+		// them (#404): the plugin's own rewrite would leave them out
+		a.body = grokBody
+	}
 	a.models = func() []catalog.Model {
 		if cur, ok := PluginOf(id); ok {
 			return pluginAccountCatalog(cur, acct.Key)
@@ -365,6 +405,20 @@ func notePluginSaid(pp plugin.Provider, account, said string, status int) {
 }
 
 func init() {
+	// a plugin's model list is asked through the proxy of the account it
+	// is the list of, as a built-in's is fetched through the account's
+	plugin.ProxyFor = func(id, key string) string {
+		mid := PluginID(id)
+		if key == "" {
+			return ProxyOf(mid)
+		}
+		for _, l := range readLogins() {
+			if l.Agent == "plugin:"+id && l.Home == key {
+				return ProxyOfLogin(mid, l.User)
+			}
+		}
+		return ProxyOf(mid)
+	}
 	// a models hook saying its account's sign-in expired marks it, as a
 	// built-in whose model list the vendor refused marked the account
 	plugin.OnSignIn(func(id, account, said string) {

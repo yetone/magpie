@@ -8,7 +8,6 @@
 package provider
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,11 +17,10 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
-	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/steady"
 )
 
 // Protocol is a wire API magpie can speak to an upstream.
@@ -183,6 +181,9 @@ type Provider struct {
 type file struct {
 	Providers []Provider `json:"providers"`
 	Groups    []Group    `json:"groups,omitempty"`
+	// Searches are the web search APIs a model's search goes to when no
+	// provider can search (see search_api.go).
+	Searches []SearchAPI `json:"searches,omitempty"`
 }
 
 // Path is the file the user's providers live in.
@@ -194,14 +195,57 @@ func Path() string {
 	return filepath.Join(home, ".config", "magpie", "providers.json")
 }
 
+// load is the file for a read that goes on without it: start-up, the
+// gateway, the catalog. One that can't be read is taken as empty there;
+// what lists the providers to the user says so (FileError), and an edit
+// refuses (read).
 func load() file {
-	var f file
-	if b, err := os.ReadFile(Path()); err == nil {
-		json.Unmarshal(b, &f)
-	}
+	f, _ := read()
 	return f
 }
 
+// ErrUnreadable is a providers.json that is there but can't be read or
+// decoded: never an empty catalog, to list as none, back up or write over.
+var ErrUnreadable = errors.New("providers.json can't be read")
+
+type unreadableError struct {
+	path string
+	err  error
+}
+
+func (e *unreadableError) Error() string {
+	return fmt.Sprintf("%s can't be read (%v); magpie left it unchanged — fix it or move it aside", e.path, e.err)
+}
+
+func (e *unreadableError) Unwrap() []error { return []error{ErrUnreadable, e.err} }
+
+// Reads used for an edit must keep errors: a broken file is not an empty
+// catalog to write over. Only a missing file is a first use.
+func read() (file, error) {
+	var f file
+	b, err := steady.ReadFile(Path())
+	if errors.Is(err, os.ErrNotExist) {
+		return f, nil
+	}
+	if err != nil {
+		return f, &unreadableError{Path(), err}
+	}
+	if err := json.Unmarshal(b, &f); err != nil {
+		return file{}, &unreadableError{Path(), err}
+	}
+	return f, nil
+}
+
+// FileError is why providers.json can't be read, nil when it can or isn't
+// there: for what lists the providers to say so, not "none yet".
+func FileError() error {
+	_, err := read()
+	return err
+}
+
+// store replaces providers.json whole, through a file renamed over it, so
+// that a read at that moment sees the old catalog or the new one, never a
+// file cut short.
 func store(f file) error {
 	p := Path()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -211,13 +255,10 @@ func store(f file) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(p, append(b, '\n'), 0o600); err != nil {
+	if err := writePrivate(p, append(b, '\n')); err != nil {
 		return err
 	}
 	pruneIcons(f)
-	if err := os.Chmod(p, 0o600); err != nil {
-		return err
-	}
 	// what agents were handed of the catalog may be out of date now
 	catalog.Touched()
 	return nil
@@ -346,7 +387,7 @@ func Save(p Provider) error {
 		p = Provider{ID: p.ID, Key: key, Models: p.Models, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Affinity: p.Affinity, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID)}
 	} else {
 		p.AccountProxies = nil // a provider of a key has no accounts to proxy apart
-		if slices.Contains(accountIDs, p.ID) && !stored(p.ID) {
+		if subscriptionID(p.ID) && !stored(p.ID) {
 			// taken, it would hide that subscription once signed in
 			return fmt.Errorf("%q is the id of the %s subscription; pick another name", p.ID, p.ID)
 		}
@@ -360,7 +401,10 @@ func Save(p Provider) error {
 			return fmt.Errorf("%s needs an API key", p.Name)
 		}
 	}
-	f := load()
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	for i := range f.Providers {
 		if f.Providers[i].ID == p.ID {
 			if p.Was == nil {
@@ -521,7 +565,10 @@ func quietAccount(id string) bool {
 // QuietAccount stops reminding the user of an account they removed: its
 // "Add it back" line goes, and it is offered only from the Add sheet.
 func QuietAccount(id string) error {
-	f := load()
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	for i := range f.Providers {
 		if f.Providers[i].ID == id && f.Providers[i].Hidden {
 			f.Providers[i].Quiet = true
@@ -534,7 +581,10 @@ func QuietAccount(id string) error {
 // ShowAccount brings back the signed-in account of an agent the user had
 // removed from magpie.
 func ShowAccount(id string) error {
-	f := load()
+	f, err := read()
+	if err != nil {
+		return err
+	}
 	for i := range f.Providers {
 		if f.Providers[i].ID == id && f.Providers[i].Hidden {
 			f.Providers[i].Hidden, f.Providers[i].Quiet = false, false
@@ -544,19 +594,15 @@ func ShowAccount(id string) error {
 	return nil
 }
 
-// Delete removes a provider. An account is only hidden from magpie (its
-// model picks kept); signing out is the agent's job.
+// Delete removes a provider. An account, a built-in's or a plugin's, is
+// only hidden from magpie (its accounts and model picks kept, shown again
+// from Hidden or by signing in); signing out is each account's Remove.
 func Delete(id string) error {
-	if p, ok := find(Accounts(), id); ok && p.IsPlugin() && !Moved(p.Account.plugin.ID) {
-		// a plugin's sign-in is magpie's own: removing it signs out. A
-		// built-in moved onto its plugin is only hidden, as the built-in
-		// was, its accounts and model picks kept.
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		return plugin.SignOut(ctx, p.Account.plugin.ID, "")
+	f, err := read()
+	if err != nil {
+		return err
 	}
 	if _, ok := find(Accounts(), id); ok {
-		f := load()
 		for i := range f.Providers {
 			if f.Providers[i].ID == id {
 				f.Providers[i].Hidden = true
@@ -566,7 +612,6 @@ func Delete(id string) error {
 		f.Providers = append(f.Providers, Provider{ID: id, Hidden: true})
 		return store(f)
 	}
-	f := load()
 	keep := f.Providers[:0]
 	found := false
 	for _, p := range f.Providers {

@@ -37,6 +37,9 @@ type candidate struct {
 	// effort is the reasoning the group's member it is of is fixed at
 	// ("provider/model:low"); "" for one that follows the agent or the group
 	effort string
+	// fast is set on a member the group sends in its vendor's fast mode
+	// (Group.Fast)
+	fast bool
 }
 
 // label names a candidate in a call's record: the provider, and the key
@@ -286,7 +289,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 		// the same model at another effort is another member's
 		for _, l := range [][]candidate{cs, aside, left} {
 			for i := range l {
-				l[i].effort = m.Effort
+				l[i].effort, l[i].fast = m.Effort, m.Fast
 			}
 		}
 		*asides = append(*asides, aside...)
@@ -465,6 +468,10 @@ func retryable(status int, body []byte) bool {
 	switch {
 	case status == 401, status == 402, status == 403, status == 404, status == 408, status == 429, status >= 500:
 		return true
+	case status >= 400 && provider.EdgeBlocked(body):
+		// the vendor's firewall blocked this address (Alibaba Cloud's 405
+		// in front of zcode.z.ai): another provider goes another way
+		return true
 	case status == 400, status == 422:
 		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body)
 	}
@@ -563,6 +570,9 @@ type holdWriter struct {
 	// thinking: the reply has reasoned but said nothing yet, which a
 	// refusal may still end: held longer (holdThinking)
 	thinking bool
+	// thinkingShown: the model's vendor never refuses after reasoning
+	// (refusesAfterThinking), so its reasoning goes through as it comes
+	thinkingShown bool
 
 	ended bool   // the stream's last event was written: the reply is whole
 	tail  []byte // the end of the last write, for a marker split across two
@@ -670,6 +680,23 @@ const holdBuffered = 4 * time.Minute
 // reasoning with it, as soon as it does.
 const holdThinking = 4 * time.Minute
 
+// refusesAfterThinking tells whether a model's vendor may end a reply that
+// has only reasoned with its safety filter's refusal: Claude's stop_reason
+// refusal, OpenAI's content_filter or bio_policy, Gemini's SAFETY (#248).
+// Anybody else's reasoning — GLM's, DeepSeek's, Kimi's… — is shown as it
+// comes: held, GLM on a ZCode account through a group showed Claude Code
+// its thinking only once the text began, all at once (悠悠哥 on Discord).
+func refusesAfterThinking(model string) bool {
+	if modelFamily(model) != "" {
+		return true
+	}
+	m := strings.ToLower(model)
+	if i := strings.LastIndex(m, "/"); i >= 0 {
+		m = m[i+1:]
+	}
+	return strings.HasPrefix(m, "gemini")
+}
+
 // scan reads the held stream's events so far: an error before any content
 // fails it; content, or waiting too long for it, lets it through.
 func (h *holdWriter) scan() {
@@ -687,6 +714,10 @@ func (h *holdWriter) scan() {
 			h.buffered = true
 			continue
 		case eventThinking:
+			if h.thinkingShown {
+				h.flow()
+				return
+			}
 			h.thinking = true
 			continue
 		case eventError:

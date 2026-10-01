@@ -14,7 +14,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"reflect"
 	"sync"
+	"time"
 )
 
 type tool struct {
@@ -39,7 +41,14 @@ type callbackRequest struct {
 type callbackResponse struct {
 	Content any  `json:"content"`
 	IsError bool `json:"is_error,omitempty"`
+	// Tools, when set, replace the tools offered: the client loaded one
+	// mid-turn (Claude Code's ToolSearch)
+	Tools []tool `json:"tools,omitempty"`
 }
+
+// listWait is how long a call's answer waits for Claude Code to list the
+// tools again, once told they changed.
+var listWait = 5 * time.Second
 
 // RunMCP runs the hidden stdio MCP subprocess. args are callback URL and tools
 // JSON path, or, for an agent whose MCP servers are set once for every run
@@ -72,6 +81,25 @@ func RunMCP(args []string) error {
 		_ = enc.Encode(v)
 		outMu.Unlock()
 	}
+	// listed is closed by the next tools/list, once the tools changed
+	var toolsMu sync.Mutex
+	var listed chan struct{}
+	retool := func(next []tool) {
+		toolsMu.Lock()
+		if reflect.DeepEqual(next, tools) {
+			toolsMu.Unlock()
+			return
+		}
+		tools = next
+		done := make(chan struct{})
+		listed = done
+		toolsMu.Unlock()
+		respond(map[string]any{"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+		select {
+		case <-done:
+		case <-time.After(listWait):
+		}
+	}
 
 	for in.Scan() {
 		var req rpcRequest
@@ -89,11 +117,18 @@ func RunMCP(args []string) error {
 			case "initialize":
 				result = map[string]any{
 					"protocolVersion": "2025-06-18",
-					"capabilities":    map[string]any{"tools": map[string]any{}},
+					"capabilities":    map[string]any{"tools": map[string]any{"listChanged": true}},
 					"serverInfo":      map[string]any{"name": "magpie", "version": "1"},
 				}
 			case "tools/list":
+				toolsMu.Lock()
 				result = map[string]any{"tools": tools}
+				if listed != nil {
+					// answered before the calls waiting on it go on
+					defer close(listed)
+					listed = nil
+				}
+				toolsMu.Unlock()
 			case "tools/call":
 				var p struct {
 					Name      string          `json:"name"`
@@ -128,6 +163,11 @@ func RunMCP(args []string) error {
 				if err := json.Unmarshal(body, &cb); err != nil {
 					rpcErr = map[string]any{"code": -32000, "message": err.Error()}
 					break
+				}
+				if len(cb.Tools) > 0 {
+					// Claude Code takes up the tools before the result: its
+					// next request offers them
+					retool(cb.Tools)
 				}
 				result = map[string]any{"content": cb.Content, "isError": cb.IsError}
 			default:

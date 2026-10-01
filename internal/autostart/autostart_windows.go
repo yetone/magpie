@@ -70,3 +70,6 @@ func disable() error {
 	}
 	return nil
 }
+
+// refresh: nothing an older magpie wrote here needs writing again
+func refresh() error { return nil }

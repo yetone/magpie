@@ -31,7 +31,8 @@ const groupUsage = `usage:
                                           it is in follow; an agent set to the old id needs setting again),
                                           effort=auto (the classifier picks each turn's reasoning; needs classifier=),
                                           effort=agent (the agent's again), classifier=<provider/model>|group/<id>,
-                                          pick=<model> (routing=manual, every request to that one of its models)
+                                          pick=<model> (routing=manual, every request to that one of its models),
+                                          fast=<m1>[,m2…] (the models sent in their vendor's fast mode; empty for none)
   magpie group pick <id> <model>          route the group manually, every request to that one of its models
                                           (as clicking it on the group's card in the Routing view does)
   magpie group rm <id>                    remove a group (one magpie found is hidden instead)
@@ -50,6 +51,9 @@ const groupUsage = `usage:
            or max — sent whatever the agent asks or effort=auto picks, at the level the model has nearest;
            without one it reasons as the group's effort says. The same model at two efforts is two members
            (a rule can send to either). A model whose own id ends so (a :free, :7b or :0) stays as it is
+           provider/model[:effort]:fast sends the member in its vendor's fast mode: priority processing on a
+           ChatGPT account (Codex's Fast) or an OpenAI key, Cursor's -fast model, Claude's fast mode on an
+           Anthropic key for Opus 4.8 and 5; a model without one is refused (codex/gpt-6.1-sol:high:fast)
   routing  smart   (default) of the subscriptions with quota to spare, the one renewing soonest first
            order   the first model until it can't answer, then the next
            rotate  each conversation's next turn goes to the next member's account or key
@@ -166,6 +170,15 @@ func memberResolver(keep []string) func(string) (string, error) {
 		id := strings.TrimPrefix(strings.TrimSpace(in), "magpie/")
 		if slices.Contains(keep, id) {
 			return id, nil
+		}
+		if member, fast := provider.MemberFast(id); fast {
+			// sent fast (Group.Fast): the member as any other, SaveGroup
+			// takes the :fast off
+			m, err := resolve(member)
+			if err != nil {
+				return "", err
+			}
+			return m + ":" + provider.FastWord, nil
 		}
 		if model, effort := provider.MemberEffort(id); effort != "" {
 			// a model at an effort of its own: the model as any other is
@@ -297,6 +310,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			g.Name = v
 		case "models", "members", "model":
 			g.Members, err = members(v)
+			g.Fast = nil // the list as typed: :fast on those sent fast
 		case "models+", "members+", "model+":
 			var add []string
 			if add, err = members(v); err == nil {
@@ -308,7 +322,7 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			}
 		case "models-", "members-", "model-":
 			for _, m := range splitList(v) {
-				m = strings.TrimPrefix(m, "magpie/")
+				m, _ = provider.MemberFast(strings.TrimPrefix(m, "magpie/"))
 				i := slices.IndexFunc(g.Members, func(x string) bool { return strings.EqualFold(x, m) })
 				if i < 0 { // a bare model id, as models= takes it
 					i = slices.IndexFunc(g.Members, func(x string) bool {
@@ -352,13 +366,25 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 			}
 		case "classifier", "classify":
 			g.Classifier = strings.TrimPrefix(strings.TrimSpace(v), "magpie/")
+		case "fast":
+			// the members sent in their vendor's fast mode, as they are in
+			// the group
+			g.Fast = nil
+			for _, m := range splitList(v) {
+				m, _ = provider.MemberFast(m)
+				id, perr := pickMember(g.Members, m)
+				if perr != nil {
+					return perr
+				}
+				g.Fast = append(g.Fast, id)
+			}
 		case "pick", "use":
 			// the one member a manual group sends to (#317): routing is
 			// manual then
 			g.Pick, err = pickMember(g.Members, v)
 			g.Routing = provider.Manual
 		default:
-			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier; magpie group help)", k)
+			return fmt.Errorf("unknown field %q (fields: name, models, models+, models-, routing, pick, stays, context, levels, family, effort, classifier, fast; magpie group help)", k)
 		}
 		if err != nil {
 			return err
@@ -677,6 +703,15 @@ func memberLabel(id string, names map[string]provider.Entry) (string, bool) {
 	return "", false
 }
 
+// typedMember is the group's member as it is typed: with :fast after it
+// when the group sends it fast.
+func typedMember(g provider.Group, id string) string {
+	if g.IsFast(id) {
+		return id + ":" + provider.FastWord
+	}
+	return id
+}
+
 func catalogByID() map[string]provider.Entry {
 	out := map[string]provider.Entry{}
 	for _, e := range provider.Served() {
@@ -734,15 +769,16 @@ func groups() error {
 			if served && (picked || g.Routing != provider.Manual) {
 				ready = true
 			}
+			shown := typedMember(g, id)
 			switch {
 			case !served:
-				ms = append(ms, faint.Render(id+" (not served)"))
+				ms = append(ms, faint.Render(shown+" (not served)"))
 			case picked:
-				ms = append(ms, green.Render("● "+id))
+				ms = append(ms, green.Render("● "+shown))
 			case g.Routing == provider.Manual:
-				ms = append(ms, faint.Render(id))
+				ms = append(ms, faint.Render(shown))
 			default:
-				ms = append(ms, id)
+				ms = append(ms, shown)
 			}
 		}
 		r.members = strings.Join(ms, sep)
@@ -799,11 +835,14 @@ func showGroup(g provider.Group) error {
 		if i == 0 {
 			k = "models"
 		}
-		line := fmt.Sprintf("%d %s", i+1, id)
+		line := fmt.Sprintf("%d %s", i+1, typedMember(g, id))
 		if g.Routing == provider.Manual && id == g.Picked() {
-			line = green.Render(fmt.Sprintf("%d %s ●", i+1, id))
+			line = green.Render(fmt.Sprintf("%d %s ●", i+1, typedMember(g, id)))
 		}
 		if l, ok := memberLabel(id, names); ok {
+			if g.IsFast(id) {
+				l += " · fast"
+			}
 			line += muted.Render("  " + l)
 		} else {
 			line = faint.Render(line) + amber.Render("  not served now, skipped")

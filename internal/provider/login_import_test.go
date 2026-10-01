@@ -111,37 +111,19 @@ func TestImportCodexLogins(t *testing.T) {
 	}
 }
 
-// With no Claude sign-in, the first imported account becomes Claude Code's.
+// With no Claude sign-in, the first imported account becomes Claude Code's,
+// kept as the file has it: nothing is asked of Anthropic to try it.
 func TestImportClaudeLogins(t *testing.T) {
-	home := claudeHome(t)
+	claudeHome(t)
+	asked := false
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/v1/oauth/token":
-			var body map[string]string
-			json.NewDecoder(r.Body).Decode(&body)
-			if body["client_id"] != claudeClientID || body["refresh_token"] != "sk-ant-ort01-cpa" {
-				w.WriteHeader(400)
-				json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
-				return
-			}
-			json.NewEncoder(w).Encode(map[string]any{"access_token": "sk-ant-oat01-fresh", "refresh_token": "sk-ant-ort01-fresh", "expires_in": 3600})
-		case "/api/oauth/profile":
-			if r.Header.Get("Authorization") != "Bearer sk-ant-oat01-fresh" {
-				w.WriteHeader(401)
-				return
-			}
-			json.NewEncoder(w).Encode(map[string]any{
-				"account":      map[string]any{"uuid": "u-1", "email": "max@example.com", "display_name": "Max"},
-				"organization": map[string]any{"uuid": "o-1", "name": "max@example.com's Organization", "organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x"},
-			})
-		default:
-			w.WriteHeader(404)
-		}
+		asked = true
+		w.WriteHeader(500)
 	}))
 	defer fake.Close()
-	oldTok, oldBase := claudeTokenURL, claudeBase
-	t.Cleanup(func() { claudeTokenURL, claudeBase = oldTok, oldBase })
-	claudeTokenURL, claudeBase = fake.URL+"/v1/oauth/token", fake.URL
+	oldBase := claudeBase
+	t.Cleanup(func() { claudeBase = oldBase })
+	claudeBase = fake.URL
 
 	cpa := `{"type":"claude","access_token":"sk-ant-oat01-old","refresh_token":"sk-ant-ort01-cpa","email":"max@example.com","expired":"2026-01-01T00:00:00Z"}`
 	creds := `{"claudeAiOauth":{"accessToken":"a","refreshToken":"sk-ant-ort01-gone","expiresAt":1}}`
@@ -149,15 +131,14 @@ func TestImportClaudeLogins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := importStatuses(rs); got != "max@example.com:added,#2:failed,#3:failed" || rs[0].Plan != "max" {
-		t.Fatalf("got %s %+v", got, rs)
+	if got := importStatuses(rs); got != "max@example.com:added,#2:failed,#3:failed" || asked {
+		t.Fatalf("got %s %+v asked Anthropic: %v", got, rs, asked)
 	}
 	c, _, ok := claudeCredential()
-	if !ok || c.OAuth.RefreshToken != "sk-ant-ort01-fresh" || c.OAuth.SubscriptionType != "max" || len(c.OAuth.Scopes) == 0 {
+	if !ok || c.OAuth.RefreshToken != "sk-ant-ort01-cpa" || c.OAuth.AccessToken != "sk-ant-oat01-old" || len(c.OAuth.Scopes) == 0 {
 		t.Fatalf("Claude Code's credentials %+v", c.OAuth)
 	}
 	if _, active := loginUsers(Logins("claude")); active != "max@example.com" {
 		t.Fatalf("active %q", active)
 	}
-	_ = home
 }

@@ -22,8 +22,10 @@
 
 import { AsyncLocalStorage } from "node:async_hooks"
 import fs from "node:fs"
+import net from "node:net"
 import path from "node:path"
 import readline from "node:readline"
+import tls from "node:tls"
 import { pathToFileURL } from "node:url"
 
 const rpcWrite = process.stdout.write.bind(process.stdout)
@@ -102,13 +104,89 @@ const reach = new AsyncLocalStorage()
 function sent(input, init) {
   if (init && "proxy" in init) return bunFetch(input, init)
   const p = proxyFor(input)
-  return p ? bunFetch(input, { ...init, proxy: p }) : bunFetch(input, init)
+  if (!p) return bunFetch(input, init)
+  return bunFetch(input, { ...init, proxy: p }).catch(async (e) => {
+    if (e?.name === "AbortError" || init?.signal?.aborted) throw e
+    const why = await proxyRefuses(p, input)
+    if (why) throw Object.assign(new Error(`proxyconnect tcp: ${why}`), { code: e?.code, cause: e })
+    throw e
+  })
+}
+
+// proxyRefuses is why the proxy p won't carry a request to input, "" when
+// it will: Bun says a proxy that is down, or that turns the tunnel away,
+// only as a connection that failed, which a vendor's own failure is too.
+// The tunnel is asked for again, as Go's transport asks for it, so a
+// failure is said in its words ("proxyconnect …") and the gateway takes it
+// for the proxy's, asking the next account rather than resting this one.
+function proxyRefuses(p, input) {
+  let pu, target
+  try {
+    pu = new URL(p)
+    const u = new URL(typeof input === "string" || input instanceof URL ? input : input.url)
+    target = `${u.hostname.includes(":") ? `[${u.hostname.replace(/^\[|\]$/g, "")}]` : u.hostname}:${u.port || (u.protocol === "http:" ? 80 : 443)}`
+  } catch {
+    return Promise.resolve("")
+  }
+  const host = pu.hostname.replace(/^\[|\]$/g, "")
+  const port = Number(pu.port || (pu.protocol === "https:" ? 443 : 80))
+  return new Promise((resolve) => {
+    let got = ""
+    let refused
+    const done = (why) => {
+      sock.destroy()
+      resolve(why)
+    }
+    const opts = { host, port, servername: net.isIP(host) ? undefined : host }
+    const sock = pu.protocol === "https:" ? tls.connect(opts) : net.connect(opts)
+    sock.setTimeout(10_000, () => done(`dial tcp ${host}:${port}: i/o timeout`))
+    sock.on("error", (e) => done(`dial tcp ${host}:${port}: ${e?.message ?? e}`))
+    sock.once(pu.protocol === "https:" ? "secureConnect" : "connect", () => {
+      let req = `CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n`
+      if (pu.username) {
+        const cred = `${decodeURIComponent(pu.username)}:${decodeURIComponent(pu.password)}`
+        req += `Proxy-Authorization: Basic ${Buffer.from(cred).toString("base64")}\r\n`
+      }
+      sock.write(req + "\r\n")
+    })
+    sock.on("data", (d) => {
+      got += d.toString("latin1")
+      const end = got.indexOf("\r\n\r\n")
+      if (end < 0 && got.length < 8192) return
+      const status = got.slice(0, got.indexOf("\r\n")).replace(/^HTTP\/\d(\.\d)?\s+/, "")
+      if (/^2\d\d/.test(status)) return done("")
+      // a bridge to a SOCKS proxy says why after its status
+      refused ??= () => {
+        const body = end < 0 ? "" : got.slice(end + 4, end + 304).trim()
+        return body ? `${status}: ${body}` : status
+      }
+      setTimeout(() => done(refused()), 50)
+    })
+    sock.on("end", () => done(refused ? refused() : got ? "" : `${host}:${port} closed the connection`))
+  })
+}
+
+// listing is what a models hook's fetches came to: whether it asked any,
+// and whether the last it asked answered
+const listing = new AsyncLocalStorage()
+
+function asked(input, init) {
+  const l = listing.getStore()
+  if (!l) return sent(input, init)
+  l.tried = true
+  return sent(input, init).then(
+    (res) => ((l.lastOk = res.ok), res),
+    (e) => {
+      l.lastOk = false
+      throw e
+    },
+  )
 }
 
 globalThis.fetch = Object.assign(function fetch(input, init) {
   const r = reach.getStore()
-  if (!r) return sent(input, init)
-  return sent(input, init).then(
+  if (!r) return asked(input, init)
+  return asked(input, init).then(
     (res) => ((r.reached = true), res),
     (e) => {
       r.failed ??= e
@@ -233,9 +311,16 @@ function secretOf(a) {
   return a?.type === "oauth" ? a.refresh ?? a.access ?? "" : a?.key ?? ""
 }
 
+// uidOf is the vendor's id a plugin keeps beside an account's name
+// (WorkBuddy's uid): two accounts of one name are told apart by it (#413).
+function uidOf(a) {
+  return typeof a?.uid === "string" ? a.uid : ""
+}
+
 // settle keeps a sign-in just saved at key once: one to an account already
-// signed in (the same account id, else the same secret) replaces that one's
-// and goes. It gives where it is kept.
+// signed in (the same account id and, where both have one, the same uid,
+// else the same secret) replaces that one's and goes. It gives where it is
+// kept.
 function settle(provider, key) {
   const all = readAuth()
   const now = all[key]
@@ -245,7 +330,8 @@ function settle(provider, key) {
   for (const k of accountsOf(all, provider)) {
     if (k === key) continue
     const was = all[k]
-    if ((who && whoOf(was) === who) || (!who && !whoOf(was) && secret && secretOf(was) === secret)) {
+    const other = uidOf(now) && uidOf(was) && uidOf(now) !== uidOf(was)
+    if ((who && whoOf(was) === who && !other) || (!who && !whoOf(was) && secret && secretOf(was) === secret)) {
       all[k] = now
       delete all[key]
       writeAuth(all)
@@ -533,7 +619,15 @@ async function info(id, key, strict) {
     const all = readAuth()
     const k = key ?? accountsOf(all, id)[0] ?? id
     try {
-      const next = await inScope(id, k, () => ph.models(JSON.parse(JSON.stringify(out)), { auth: all[k] }))
+      const given = JSON.parse(JSON.stringify(out))
+      const l = { tried: false, lastOk: false }
+      const next = await listing.run(l, () => inScope(id, k, () => ph.models(given, { auth: all[k] })))
+      // a hook that asked its vendor, got no list and gave back the one it
+      // was given fell back: magpie keeps the list it had, as a built-in
+      // whose fetch failed keeps the one it fetched last; so does one that
+      // says so, handing back a list of its own (Symbol.for("magpie.fellBack")
+      // on it: Command Code's Go table, ZCode's models)
+      out.fellBack = (next === given.models && l.tried && !l.lastOk) || next?.[Symbol.for("magpie.fellBack")] === true
       out.models = Object.fromEntries(Object.entries(next ?? {}).map(([k, m]) => [k, { ...m, id: k, providerID: id }]))
     } catch (e) {
       // an error the models hook throws may say what it means for the
@@ -546,6 +640,9 @@ async function info(id, key, strict) {
       if (strict && !(e?.signIn === "expired" && all[k])) throw e
       const r = reach.getStore()
       if (r && e?.signIn === "expired") r.refused ??= e?.message ?? String(e)
+      // a hook that threw on its vendor's failure has no list to tell:
+      // magpie keeps the one it had, as for one that gave its defaults back
+      out.fellBack = true
       send({ event: "log", level: "error", message: `${h.spec}: provider.models: ${e?.message ?? e}` })
     }
   }
@@ -584,16 +681,21 @@ function iconOf(a) {
   return ok(readJSON(path.join(dir, "package.json"))?.magpie?.icon)
 }
 
-async function providers() {
+// providers lists each provider and its accounts' models, each asked
+// through its proxy (proxies[provider][key], "" the provider's own), as a
+// built-in fetches each account's list through the account's.
+async function providers({ proxies } = {}) {
   const stored = readAuth()
   const out = []
   for (const [id, a] of auths()) {
     const keys = accountsOf(stored, id)
-    const p = await info(id)
+    const through = (k) => proxies?.[id]?.[k ?? keys[0] ?? ""] ?? proxies?.[id]?.[""] ?? ""
+    const p = await via.run(through(), () => info(id))
     // each account's own models, as the built-ins read each account's: a
     // plan may serve fewer, or others, than the first account's. One that
-    // can't be read is taken to have them all.
-    const own = await Promise.all(keys.slice(1).map((k) => info(id, k, true).catch(() => null)))
+    // can't be read is taken to have them all, or the ones it was last
+    // told to have, as a built-in account whose fetch failed keeps its own.
+    const own = await Promise.all(keys.slice(1).map((k) => via.run(through(k), () => info(id, k, true)).catch(() => ({ failed: true }))))
     const models = { ...p.models }
     for (const q of own) for (const [k, m] of Object.entries(q?.models ?? {})) models[k] ??= m
     const ids = (q) => Object.values(q.models).filter((m) => m.status !== "deprecated").map((m) => m.id)
@@ -610,12 +712,14 @@ async function providers() {
       signedIn: keys.length > 0,
       authType: first?.type ?? "",
       accountId: whoOf(first),
+      fellBack: keys.length > 0 && !!p.fellBack,
       accounts: keys.map((k, i) => ({
         key: k,
         type: stored[k]?.type ?? "",
         accountId: whoOf(stored[k]),
         hint: hintOf(stored[k]),
-        models: own.length === 0 ? undefined : i === 0 ? ids(p) : own[i - 1] ? ids(own[i - 1]) : undefined,
+        models: own.length === 0 ? undefined : i === 0 ? ids(p) : own[i - 1]?.models ? ids(own[i - 1]) : undefined,
+        fellBack: i === 0 ? !!p.fellBack : !!(own[i - 1]?.fellBack || own[i - 1]?.failed),
       })),
       models: Object.values(models)
         .filter((m) => m.status !== "deprecated")
@@ -767,9 +871,9 @@ async function options(provider, key) {
   return opts
 }
 
-async function load({ provider, account }) {
+async function load({ provider, account, proxy }) {
   const key = accountKey(provider, account)
-  const o = await inScope(provider, key, () => options(provider, key))
+  const o = await via.run(proxy ?? "", () => inScope(provider, key, () => options(provider, key)))
   return {
     baseURL: typeof o.baseURL === "string" ? o.baseURL : "",
     apiKey: typeof o.apiKey === "string" ? o.apiKey : "",
@@ -919,6 +1023,9 @@ async function fetchAs(id, key, { provider, model, npm, url, method, headers, bo
     }
     send({ id, result: null })
   } catch (e) {
+    // a fetch hook that threw on its sign-in (a refresh the vendor turned
+    // away) marks the account, as a built-in's refused refresh marked it
+    if (["expired", "kept", "renewed"].includes(e?.signIn) && key) send({ event: "signIn", provider, account: key, said: e.signIn })
     send({ id, error: { message: String(e?.message ?? e) } })
   } finally {
     inflight.delete(id)
@@ -936,7 +1043,7 @@ const handlers = {
     await loadPlugins(p.plugins ?? [])
     return { plugins: loaded }
   },
-  providers: () => providers(),
+  providers: (p) => providers(p ?? {}),
   prompt: (p) => ({ prompt: nextPrompt(p.provider, p.method, p.inputs ?? {}) }),
   validate: (p) => ({ error: validate(p.provider, p.method, p.key, p.value) }),
   authorize,

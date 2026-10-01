@@ -6,12 +6,16 @@ package gui
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"mime"
 	"net/http"
 	"os"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -125,6 +129,37 @@ type stateJSON struct {
 	// here too (not only in settingsJSON) so a cost drawn before the reader
 	// ever opens Settings already converts, if cny was chosen last time.
 	FX fxJSON `json:"fx"`
+	// Unlisted are the models kept for routing groups, which the pickers
+	// don't offer: a filter that finds one of them says why it isn't there
+	Unlisted []unlistedJSON `json:"unlisted,omitempty"`
+}
+
+// unlistedJSON is a model of a provider kept for routing groups, and the
+// groups ("group/<id>") it is used through, none when it is in no group.
+type unlistedJSON struct {
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Provider string   `json:"provider"`
+	Icon     string   `json:"icon,omitempty"`
+	Groups   []string `json:"groups"`
+}
+
+// unlistedModels lists provider.Unlisted for the page.
+func unlistedModels() []unlistedJSON {
+	es := provider.Unlisted()
+	if len(es) == 0 {
+		return nil
+	}
+	in := provider.MemberGroups()
+	out := make([]unlistedJSON, 0, len(es))
+	for _, e := range es {
+		gs := in[e.ID]
+		if gs == nil {
+			gs = []string{}
+		}
+		out = append(out, unlistedJSON{ID: e.ID, Name: e.Name, Provider: e.Provider.Name, Icon: e.Provider.Icon, Groups: gs})
+	}
+	return out
 }
 
 // fxJSON is a USD→CNY rate as the UI shows it: the number a cost is
@@ -175,6 +210,12 @@ type settingsJSON struct {
 	// names none, and those that can be named
 	ImageGenAuto   string     `json:"imageGenAuto,omitempty"`
 	ImageGenModels []modelRef `json:"imageGenModels"`
+	// the web search APIs a model's search goes to when no provider can
+	// search (#419), their keys masked; the ones that can be added; and
+	// the provider that searches first, if one does
+	SearchAPIs     []searchAPIJSON    `json:"searchAPIs"`
+	SearchVendors  []searchVendorJSON `json:"searchVendors"`
+	SearchProvider string             `json:"searchProvider,omitempty"`
 	// where other machines reach the gateway while it is shared
 	LANURLs []string `json:"lanURLs,omitempty"`
 	// LANURLs are a container's own addresses, not the host's: the page
@@ -193,6 +234,37 @@ type settingsJSON struct {
 	// NotifyProblem is why a usage alert set wouldn't be seen: "denied"
 	// (notifications turned off for magpie) or "unavailable"
 	NotifyProblem string `json:"notifyProblem,omitempty"`
+}
+
+// searchAPIJSON is a search API as the Settings page shows it.
+type searchAPIJSON struct {
+	Vendor string `json:"vendor"`
+	Name   string `json:"name"`
+	Key    string `json:"key,omitempty"` // masked
+	URL    string `json:"url,omitempty"`
+	Ready  bool   `json:"ready"`
+}
+
+type searchVendorJSON struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	KeysURL string `json:"keysURL,omitempty"`
+	NeedURL bool   `json:"needURL,omitempty"` // one the user runs
+}
+
+func searchState(s *settingsJSON) {
+	s.SearchAPIs, s.SearchVendors = []searchAPIJSON{}, []searchVendorJSON{}
+	for _, a := range provider.StoredSearchAPIs() {
+		j := searchAPIJSON{Vendor: a.Vendor, Name: a.Name(), URL: a.URL, Ready: a.Ready()}
+		if a.Key != "" {
+			j.Key = provider.Mask(a.Key)
+		}
+		s.SearchAPIs = append(s.SearchAPIs, j)
+	}
+	for _, v := range provider.SearchVendors {
+		s.SearchVendors = append(s.SearchVendors, searchVendorJSON{ID: v.ID, Name: v.Name, KeysURL: v.KeysURL, NeedURL: v.Base == ""})
+	}
+	s.SearchProvider = gateway.Searcher()
 }
 
 func settingsState() settingsJSON {
@@ -224,6 +296,7 @@ func settingsState() settingsJSON {
 			s.VisionModels = append(s.VisionModels, m)
 		}
 	}
+	searchState(&s)
 	s.ImageGenAuto, s.ImageGenModels = gateway.AutoDrawer(), []modelRef{}
 	for _, p := range provider.All() {
 		if !p.On() || p.Decides() {
@@ -267,6 +340,28 @@ func init() {
 	}
 }
 
+// revalidated serves the page's own files to be asked for again each time,
+// by their content's hash: an embedded file has no date, so they went out
+// with nothing to check them by, and a cache in front of `magpie web` (a
+// proxy, a CDN, a tunnel's) could keep an older version's app.js under the
+// new index.html after an update: a page without what that version added,
+// such as the request archive switch (Jorben on Discord). An unchanged
+// file is a 304.
+func revalidated(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+		if name == "" {
+			name = "index.html"
+		}
+		if b, err := fs.ReadFile(staticFS(), name); err == nil {
+			sum := sha256.Sum256(b)
+			rw.Header().Set("ETag", `"`+hex.EncodeToString(sum[:12])+`"`)
+			rw.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(rw, r)
+	})
+}
+
 // Handler serves the embedded UI and the JSON API.
 // gw is the gateway this process serves, or nil when another magpie has it
 // (for now: see startBackend).
@@ -275,7 +370,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		served.Store(gw)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/", devPage(http.FileServer(http.FS(staticFS()))))
+	mux.Handle("/", devPage(revalidated(http.FileServer(http.FS(staticFS())))))
 	devRoutes(mux)
 	// boot.js hands the page the saved language and theme before it paints:
 	// they came only with the settings, so the tabs showed English first
@@ -453,6 +548,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	usageRoutes(mux, w)
 	sessionRoutes(mux, w)
 	backupRoutes(mux, w)
+	archiveRoutes(mux)
 	libraryRoutes(mux, w)
 	updateRoutes(mux, w)
 	mux.HandleFunc("GET /api/settings", func(rw http.ResponseWriter, r *http.Request) {
@@ -480,7 +576,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.Visible, in.HiddenModels = cur.Visible, cur.HiddenModels
 		settings.CarryPerModel(&in, &cur)
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
-		in.RedactRules = cur.RedactRules // the masking rules, set on their own
+		in.RequestArchive = cur.RequestArchive // the Gateway page's, set on its own
+		in.RedactRules = cur.RedactRules       // the masking rules, set on their own
 		// used or left is the Usage page's toggle as much as Settings', set on its own
 		in.QuotaLeft = cur.QuotaLeft
 		// how agents' lists name models, set on its own for the agents to be told
@@ -694,6 +791,28 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// a web search API added, given a new key or address, or taken away
+	mux.HandleFunc("POST /api/settings/search-api", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Vendor, Key, URL string
+			Remove           bool
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		var err error
+		if in.Remove {
+			err = provider.RemoveSearchAPI(in.Vendor)
+		} else {
+			err = provider.SetSearchAPI(provider.SearchAPI{Vendor: in.Vendor, Key: in.Key, URL: in.URL})
+		}
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// the config folder only: the page names no path, so it can't open others
 	mux.HandleFunc("POST /api/settings/reveal", func(rw http.ResponseWriter, r *http.Request) {
 		if err := w.OpenFolder(settings.Dir()); err != nil {
@@ -740,6 +859,7 @@ func state() stateJSON {
 	if s.Settings.Currency == "cny" {
 		s.FX = currentFX()
 	}
+	s.Unlisted = unlistedModels()
 	for _, a := range agent.Clients() {
 		s.Clients = append(s.Clients, clientJSON{ID: a.ID, Name: a.Name, Icon: a.Icon})
 	}

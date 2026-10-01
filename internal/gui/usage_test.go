@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -24,9 +26,9 @@ func TestUsageLedgerRoutes(t *testing.T) {
 	y, m, d := time.Now().Date()
 	at := time.Date(y, m, d, 0, 0, 1, 0, time.Local) // today, whenever the test runs
 	for i, r := range []usage.Record{
-		{Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Served: "gpt-6-luna", Input: 10, Output: 1, Status: 200},
+		{RouteID: 123, Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Served: "gpt-6-luna", Input: 10, Output: 1, Status: 200},
 		{Agent: "claude", Provider: "anthropic", Model: "claude-sonnet-5", Requested: "sonnet", Input: 20, Output: 2, Status: 200},
-		{Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Status: 429},
+		{RouteID: 123, Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Status: 429},
 	} {
 		r.Time = at.Add(time.Duration(i) * time.Second)
 		usage.Append(r)
@@ -44,7 +46,14 @@ func TestUsageLedgerRoutes(t *testing.T) {
 		return l
 	}
 
-	l := get("period=today&offset=1&limit=1")
+	l := get("period=all&route=123")
+	if l.Total != 2 || l.Rows[0].RouteID != 123 || l.Rows[1].RouteID != 123 {
+		t.Fatalf("route attempts: %+v", l)
+	}
+	if l = get("period=all&route=999"); l.Total != 0 {
+		t.Fatalf("missing route: %+v", l)
+	}
+	l = get("period=today&offset=1&limit=1")
 	if l.Total != 3 || l.Offset != 1 || len(l.Rows) != 1 || l.Rows[0].Requested != "sonnet" {
 		t.Fatalf("second page: %+v", l)
 	}
@@ -54,6 +63,35 @@ func TestUsageLedgerRoutes(t *testing.T) {
 	l = get("period=today")
 	if len(l.Rows) != 3 || l.Rows[0].Status != 429 || !l.Rows[2].Swapped || l.Rows[2].Served != "gpt-6-luna" {
 		t.Fatalf("newest first, the swap marked: %+v", l.Rows)
+	}
+	// the chart over them: every row of the filter, by the hour, however the page is cut
+	series := func(l ledgerJSON) (calls, in int) {
+		for _, p := range l.Series {
+			calls, in = calls+p.Calls, in+p.Input
+		}
+		return
+	}
+	paged := get("period=today&offset=1&limit=1")
+	if calls, in := series(paged); paged.Bucket != "hour" || len(paged.Series) != 24 || calls != 3 || in != 30 {
+		t.Fatalf("the chart's hours: %s, %d points, %d calls, %d in", paged.Bucket, len(paged.Series), calls, in)
+	}
+	if calls, _ := series(get("period=today&agent=claude")); calls != 1 {
+		t.Fatalf("the chart follows the filter: %d calls", calls)
+	}
+	// switching to a provider: its rows and its chart, and every provider still
+	// there to switch to, in the filter and in the ranking by provider
+	l = get("period=today&provider=relay")
+	if l.Total != 2 || l.Calls != 2 || len(l.Providers) != 2 || l.Providers[1].Name != "relay" || l.Providers[1].Icon != "generic" {
+		t.Fatalf("one provider: %+v", l)
+	}
+	if calls, _ := series(l); calls != 2 || len(l.By["provider"]) != 2 || len(l.By["agent"]) != 1 || l.By["agent"][0].ID != "codex" {
+		t.Fatalf("its chart and rankings: %d calls, %+v", calls, l.By)
+	}
+	if by := get("period=today").By; len(by["provider"]) != 2 || by["provider"][0].ID != "anthropic" || by["provider"][0].Calls != 1 || len(by["model"]) != 2 {
+		t.Fatalf("the rankings: %+v", by)
+	}
+	if l = get("period=today&provider=nobody"); l.Total != 0 || len(l.Providers) != 2 || len(l.By["provider"]) != 2 {
+		t.Fatalf("an unknown provider: %+v", l)
 	}
 	if l = get("period=today&failed=1"); l.Total != 1 || l.Rows[0].Status != 429 {
 		t.Fatalf("failed only: %+v", l)
@@ -94,5 +132,95 @@ func TestUsageLedgerRoutes(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 	if len(lines) != 3 || !strings.HasPrefix(lines[0], "time,agent,requested_model,") || !strings.Contains(lines[2], ",sol,relay,,gpt-6-sol,gpt-6-luna,true,") {
 		t.Fatalf("csv:\n%s", b)
+	}
+}
+
+// What was said in a request comes from the agent's session file when the
+// row is opened: a call the file has by its time, or a gateway request by the
+// span it took; and why not when it can't be told — no session named, an agent
+// whose files magpie doesn't read, a call the files don't have.
+func TestUsageRequestContent(t *testing.T) {
+	home := sandboxHome(t)
+	dir := filepath.Join(home, ".claude", "projects", "-work-app")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	base := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
+	at := func(s int) string { return base.Add(time.Duration(s) * time.Second).Format("2006-01-02T15:04:05.000Z") }
+	lines := []string{
+		`{"type":"user","timestamp":"` + at(1) + `","sessionId":"sess1","message":{"role":"user","content":"What is 2+2?"}}`,
+		`{"type":"assistant","timestamp":"` + at(3) + `","sessionId":"sess1","requestId":"req_a","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"Four."}],"usage":{"input_tokens":5,"output_tokens":2}}}`,
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sess1.jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	usageRoutes(mux, folderOnly{})
+	get := func(agent, session string, from, to time.Time) (contentJSON, int) {
+		t.Helper()
+		q := url.Values{"agent": {agent}, "session": {session}, "from": {from.Format(time.RFC3339Nano)}, "to": {to.Format(time.RFC3339Nano)}}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/usage/requests/content?"+q.Encode(), nil))
+		var c contentJSON
+		if w.Code == 200 {
+			if err := json.Unmarshal(w.Body.Bytes(), &c); err != nil {
+				t.Fatalf("%s", w.Body)
+			}
+		}
+		return c, w.Code
+	}
+	call := base.Add(3 * time.Second)
+	// a call of the file, by its own time
+	c, _ := get("claude-desktop", "sess1", call.Add(-time.Millisecond), call.Add(time.Millisecond))
+	if !c.Found || c.Model != "claude-opus-5-5" || len(c.Input) != 1 || c.Input[0].Text != "What is 2+2?" || len(c.Output) != 1 || c.Output[0].Text != "Four." {
+		t.Fatalf("a call by its time: %+v", c)
+	}
+	// a request the gateway logged, began a little before the file wrote the call
+	if c, _ = get("claude", "sess1", base.Add(time.Second), base.Add(35*time.Second)); !c.Found || c.Output[0].Text != "Four." {
+		t.Fatalf("by the span of the request: %+v", c)
+	}
+	for _, x := range []struct {
+		agent, session, why string
+		from, to            time.Time
+	}{
+		{"claude", "", "session", call, call},
+		{"Bob", "sess1", "agent", call, call},
+		{"claude", "nobody", "missing", call, call},
+		{"claude", "sess1", "missing", call.Add(time.Hour), call.Add(2 * time.Hour)},
+	} {
+		if c, _ = get(x.agent, x.session, x.from, x.to); c.Found || c.Why != x.why || c.Input == nil || c.Output == nil {
+			t.Errorf("%s/%s: found %v, why %q, want %q", x.agent, x.session, c.Found, c.Why, x.why)
+		}
+	}
+	if _, code := get("claude", "sess1", call, call); code != 200 {
+		t.Fatal(code)
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/usage/requests/content?agent=claude&session=s&from=now&to=never", nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("times that are not: %d", w.Code)
+	}
+}
+
+// Provider/agent facets come from the same snapshot as rows, even with both
+// filters set. Calls without recorded routing are shown as local sessions.
+func TestLedgerSingleSnapshotAndLocalSession(t *testing.T) {
+	sandboxHome(t)
+	before := usage.LogCalls
+	reads := 0
+	usage.LogCalls = func(time.Time) []sessions.Call {
+		reads++
+		return []sessions.Call{{Time: time.Now(), Agent: "claude", Session: "s", Model: "claude-sonnet-5", Tokens: sessions.Tokens{Input: 10, Output: 2}}}
+	}
+	t.Cleanup(func() { usage.LogCalls = before })
+	l := ledgerPage(usage.Today, usage.Filter{Provider: usage.UnknownProvider, Agent: "claude"}, 0, 1)
+	if reads != 1 {
+		t.Fatalf("logs loaded %d times", reads)
+	}
+	if l.Total != 1 || l.Rows[0].ProviderName != "Local session" || len(l.Providers) != 1 || l.Providers[0].Name != "Local session" || l.By["provider"][0].Name != "Local session" {
+		t.Fatalf("local session names %+v", l)
+	}
+	if l.Rows[0].Provider != usage.UnknownProvider || l.Rows[0].Host != "" {
+		t.Fatalf("model must not establish route/account: %+v", l.Rows[0])
 	}
 }

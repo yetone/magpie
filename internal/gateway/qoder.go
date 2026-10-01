@@ -63,7 +63,7 @@ func (s *Server) serveQoder(w http.ResponseWriter, r *http.Request, from provide
 	q := req
 	var tool string
 	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
+		if canSearch() {
 			copy := *req
 			copy.WebSearch = false
 			search := searchTool(copy.Tools)

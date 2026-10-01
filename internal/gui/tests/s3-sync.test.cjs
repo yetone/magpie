@@ -149,7 +149,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 40 && (await under()); i++) { await page.mouse.wheel(0, -60); await page.waitForTimeout(30); }
       await edit.click();
       await form.waitFor({ state: "visible" });
-      assert.equal(await form.locator(".segs .opt.on").textContent(), "S3");
+      assert.equal(await form.locator(".segs .opt.on").textContent(), zh ? "S3 · 使用中" : "S3 · on");
       assert.equal(await box(L.bucket).inputValue(), "magpie-sync");
       assert.equal(await box(L.prefix).inputValue(), "team");
       assert.equal(await box(L.region).inputValue(), "auto");

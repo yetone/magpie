@@ -13,17 +13,26 @@ package gateway
 // conversation itself: within a turn always, and across turns while what
 // the vendor said it read from its cache the last time is worth keeping
 // and not yet gone cold.
+//
+// Who answered is kept on disk as well (affinity.json, next to the
+// providers), so a restart — an update's included — doesn't hand a
+// conversation to whoever routing puts first while the vendor still has
+// it cached at the one before (vincentzhang on Discord).
 
 import (
 	"crypto/sha256"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/steady"
 )
 
 const (
@@ -35,6 +44,8 @@ const (
 	cacheCold = 5 * time.Minute
 	// stickKeep is how long a conversation's last answerer is remembered.
 	stickKeep = 24 * time.Hour
+	// sticksKept is how many conversations, the latest, are kept on disk.
+	sticksKept = 512
 )
 
 // Affinity is what the trace tells of a request's conversation and whether
@@ -68,7 +79,113 @@ type stick struct {
 var sticks = struct {
 	sync.Mutex
 	m map[string]stick // scope|conversation → who answered it last
+	// the file as last read or written: another magpie's writes (the one
+	// handing over to this one) are read again when a conversation is missed
+	from string
+	mod  time.Time
 }{m: map[string]stick{}}
+
+// sticksSaving keeps one write of the file at a time, the latest last.
+var sticksSaving sync.Mutex
+
+// savedStick is a stick as the file has it.
+type savedStick struct {
+	Rest      string    `json:"rest"`
+	Who       string    `json:"who"`
+	Model     string    `json:"model,omitempty"`
+	Effort    string    `json:"effort,omitempty"`
+	Turn      int       `json:"turn,omitempty"`
+	At        time.Time `json:"at"`
+	CacheRead int       `json:"cacheRead,omitempty"`
+}
+
+func sticksPath() string { return filepath.Join(filepath.Dir(provider.Path()), "affinity.json") }
+
+// stickOf is who answered key last, read from the file again when it isn't
+// known here and the file changed since: after a restart, or written by
+// the magpie that handed over. Called with sticks held.
+func stickOf(key string) (stick, bool) {
+	if st, ok := sticks.m[key]; ok {
+		return st, true
+	}
+	path := sticksPath()
+	fi, err := os.Stat(path)
+	if err != nil || path == sticks.from && fi.ModTime().Equal(sticks.mod) {
+		return stick{}, false
+	}
+	sticks.from, sticks.mod = path, fi.ModTime()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return stick{}, false
+	}
+	var saved map[string]savedStick
+	if json.Unmarshal(b, &saved) != nil {
+		return stick{}, false
+	}
+	for k, v := range saved {
+		if time.Since(v.At) > stickKeep || v.Who == "" {
+			continue
+		}
+		if st, ok := sticks.m[k]; ok && !st.at.Before(v.At) {
+			continue
+		}
+		sticks.m[k] = stick{rest: v.Rest, who: v.Who, model: v.Model, effort: v.Effort, turn: v.Turn, at: v.At, cacheRead: v.CacheRead}
+	}
+	st, ok := sticks.m[key]
+	return st, ok
+}
+
+// saveSticks writes the latest conversations' answerers to the file, only
+// for this user to read.
+func saveSticks() {
+	sticksSaving.Lock()
+	defer sticksSaving.Unlock()
+	now := time.Now()
+	type kept struct {
+		k string
+		v savedStick
+	}
+	var ks []kept
+	sticks.Lock()
+	for k, st := range sticks.m {
+		if now.Sub(st.at) <= stickKeep {
+			ks = append(ks, kept{k, savedStick{st.rest, st.who, st.model, st.effort, st.turn, st.at, st.cacheRead}})
+		}
+	}
+	sticks.Unlock()
+	slices.SortFunc(ks, func(a, b kept) int { return b.v.At.Compare(a.v.At) })
+	ks = ks[:min(len(ks), sticksKept)]
+	out := make(map[string]savedStick, len(ks))
+	for _, k := range ks {
+		out[k.k] = k.v
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		return
+	}
+	path := sticksPath()
+	if os.MkdirAll(filepath.Dir(path), 0o700) != nil {
+		return
+	}
+	path, err = edit.Target(path) // a symlink stays, its target written
+	if err != nil {
+		return
+	}
+	tmp := path + ".magpie-tmp"
+	if os.WriteFile(tmp, b, 0o600) != nil {
+		return
+	}
+	if steady.Rename(tmp, path) != nil {
+		os.Remove(tmp)
+		return
+	}
+	if fi, err := os.Stat(path); err == nil {
+		sticks.Lock()
+		// what this magpie wrote isn't read back as another's
+		sticks.from, sticks.mod = sticksPath(), fi.ModTime()
+		sticks.Unlock()
+	}
+}
 
 // turnOf counts the user's turns in a request's conversation, and says
 // whether it is the agent handing tool results back within one.
@@ -112,7 +229,7 @@ func affine(scope, mode string, rotate bool, in http.Header, from provider.Proto
 	a := &Affinity{Mode: mode}
 	a.Turn, a.Within = turnOf(from, body)
 	sticks.Lock()
-	st, had := sticks.m[key]
+	st, had := stickOf(key)
 	sticks.Unlock()
 	if had && time.Since(st.at) > stickKeep {
 		had = false
@@ -204,7 +321,6 @@ func after(cs []candidate, pl planned, at int) ([]candidate, planned) {
 func answered(key string, c candidate, turn, cacheRead int) {
 	now := time.Now()
 	sticks.Lock()
-	defer sticks.Unlock()
 	sticks.m[key] = stick{rest: c.rest, who: c.who(), model: c.model, effort: c.effort, turn: turn, at: now, cacheRead: cacheRead}
 	if len(sticks.m) > 4096 {
 		for k, st := range sticks.m {
@@ -213,6 +329,8 @@ func answered(key string, c candidate, turn, cacheRead int) {
 			}
 		}
 	}
+	sticks.Unlock()
+	saveSticks()
 }
 
 // foreignReasoning is how a vendor refuses reasoning another account (or

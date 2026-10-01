@@ -175,7 +175,8 @@ func FetchNew(timeout time.Duration) {
 		if p.Account == nil || !p.Ready() {
 			continue
 		}
-		if _, ok := p.Fetched(); ok {
+		// a plugin's accounts were listed with the plugin's providers
+		if _, ok := p.Listed(); ok {
 			continue
 		}
 		if t, ok := newFetches.m[p.ID]; ok && time.Since(t) < newFetchRetry {
@@ -313,7 +314,10 @@ func (p Provider) fixV1(base, at string) string {
 		return base
 	}
 	fixed := base + "/v1"
-	f := load()
+	f, err := read()
+	if err != nil {
+		return base
+	}
 	for i := range f.Providers {
 		q := &f.Providers[i]
 		if q.ID != p.ID {
@@ -586,8 +590,8 @@ func MakerPrice(model string) (catalog.Price, bool) {
 }
 
 // EffectivePrice is what a call to a provider's model costs the user: the
-// price they set for that model, or for every model of that provider
-// (settings' ModelPrices), else the provider's own list price, else its
+// price they set for that model, or for every model of that provider, or for
+// that model from any provider (settings' ModelPrices), else the provider's own list price, else its
 // maker's. The second return is false only when no price is known at all,
 // which is not the same as a price of zero: that one is set, deliberately.
 //
@@ -614,7 +618,9 @@ func EffectivePriceIn(s settings.Settings, providerID, model string) (catalog.Pr
 	if known {
 		id = p.ID
 	}
-	for _, key := range [...]string{id + "/" + model, id + "/*"} {
+	// then what they said the model costs from any provider (*/model):
+	// still the user's word, so before any list price
+	for _, key := range [...]string{id + "/" + model, id + "/*", AnyPriceKey(model)} {
 		if m, ok := s.ModelPrices[key]; ok {
 			if pr, bad := m.Price(); bad == "" {
 				return pr, true
@@ -656,21 +662,32 @@ var grokEffort = regexp.MustCompile(`^((?:.*/)?grok-[0-9][^/]*?)-(?:minimal|low|
 
 // pricedNames are the ids a model is priced by, in order: its own, then,
 // for a Grok id named at an effort, the model it is that effort of — the
-// same model, at the same price (#224). Nothing else is renamed: a name no
-// catalog prices stays unpriced (grok-4.7-build, grok-4.7-mini,
+// same model, at the same price (#224). Codex Auto Review uses GPT-5.6 Luna
+// according to OpenAI's rate card (2026-09-30):
+// https://help.openai.com/en/articles/11481834-chatgpt-rate-card-business-enterpriseedu-credit-based-pricing
+// This is a list-price estimate, not evidence of a response's served model.
+// Other names without catalog prices stay unpriced (grok-4.7-build, grok-4.7-mini,
 // grok-4.7-fast).
 func pricedNames(model string) []string {
 	out := []string{model}
+	if model == "codex-auto-review" {
+		out = append(out, "gpt-5.6-luna")
+	}
 	if m := grokEffort.FindStringSubmatch(strings.ToLower(strings.TrimSpace(model))); m != nil {
 		out = append(out, m[1])
 	}
 	return out
 }
 
-// PricedName is the id a model is priced by where it's looked up by
-// maker directly (the Sessions page): a Grok id at an effort is its model.
+// PricedName is the catalog ID used for a list-price estimate. Prefer a
+// directly listed model before falling back to a documented alias.
 func PricedName(model string) string {
 	n := pricedNames(model)
+	for _, name := range n {
+		if _, ok := catalog.PricedBy(makerCatalogs(), name); ok {
+			return name
+		}
+	}
 	return n[len(n)-1]
 }
 
@@ -715,6 +732,10 @@ type Entry struct {
 	// Shared are a group's levels its members have in common: its Efforts,
 	// unless the group names its own (Group.Levels).
 	Shared []string `json:"-"`
+	// Reasoning is set on a model that thinks, levels or not: one with a
+	// thinking switch alone has it and no Efforts (a group's: every
+	// member thinks).
+	Reasoning bool `json:"reasoning,omitempty"`
 }
 
 // Catalog lists the routing groups, then every exposed model of every ready
@@ -735,6 +756,19 @@ func Catalog() []Entry {
 func Served() []Entry {
 	entries := providerEntries()
 	return append(groupEntries(entries), entries...)
+}
+
+// Unlisted are the models Served has and Catalog doesn't: those of the
+// providers kept for routing groups (Provider.Unlisted), which agents
+// aren't offered.
+func Unlisted() []Entry {
+	var out []Entry
+	for _, e := range providerEntries() {
+		if e.Provider.Unlisted {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // providerEntries is the catalog without its groups.
@@ -782,6 +816,10 @@ func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
 	if n, ok := modelNameIn(s.ModelNames, p.ID, m.ID); ok {
 		e.Name, e.Default = n, m.Name
 	}
+	// a model that thinks still does with the levels the user kept or
+	// none at all; one its source says nothing of thinks as most of the
+	// providers serving it say (#402)
+	e.Reasoning = m.Reasoning || len(e.Efforts) > 0 || catalog.Thinks(m.ID)
 	e.Efforts = effortsKept(e.Efforts, s.ModelEfforts[e.ID])
 	return e
 }

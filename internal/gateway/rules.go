@@ -18,6 +18,10 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
+// ruleClock is the time a turn's rules look at (a rule's hours), and its
+// decision is kept from; tests set it.
+var ruleClock = time.Now
+
 // RuleHit is what the trace tells of a group's rules for a request.
 type RuleHit struct {
 	N    int      `json:"n"`             // the rule, from 1; 0 when none matched
@@ -131,14 +135,14 @@ func ruleFor(key string, g provider.Group, ms []provider.Member, req *Request, a
 		return nil
 	}
 	turn, within := turnIn(req)
-	q := provider.RuleRequest{Tokens: estimate(req), Thinking: req.Thinking, Effort: req.Effort, Agent: agent}
+	now := ruleClock()
+	q := provider.RuleRequest{Tokens: estimate(req), Thinking: req.Thinking, Effort: req.Effort, Agent: agent, At: now}
 	for _, m := range req.Messages {
 		if slices.ContainsFunc(m.Parts, func(p Part) bool { return p.Kind == Image }) {
 			q.Images = true
 			break
 		}
 	}
-	now := time.Now()
 	turnRules.Lock()
 	tr, had := turnRules.m[key]
 	turnRules.Unlock()

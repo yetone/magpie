@@ -24,7 +24,7 @@ import (
 // — the subscriptions magpie remembers, how much of each one's allowance is
 // used, and switching the agent between them.
 func accountsCmd(args []string) error {
-	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo> | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
+	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
 	agentID := func(s string) (string, error) {
 		switch strings.ToLower(s) {
 		case "claude", "cc":
@@ -42,7 +42,11 @@ func accountsCmd(args []string) error {
 		case "mimo", "mimo-app", "xiaomi-mimo":
 			return provider.MiMoID, nil
 		}
-		return "", fmt.Errorf("%q: only Claude Code, Codex, Gemini CLI, Antigravity, Zed, Factory and Xiaomi MiMo accounts can be added and switched\n%s", s, usage)
+		// a plugin's subscription, by its provider's id or name, as a built-in's
+		if pp, err := pluginProvider(context.Background(), s); err == nil {
+			return provider.PluginID(pp.ID), nil
+		}
+		return "", fmt.Errorf("%q: only Claude Code, Codex, Gemini CLI, Antigravity, Zed, Factory, Xiaomi MiMo and plugins' accounts can be added and switched\n%s", s, usage)
 	}
 	if len(args) > 1 && args[1] == "project" {
 		if len(args) != 5 {
@@ -101,7 +105,7 @@ func accountsCmd(args []string) error {
 		if err := provider.SwitchLogin(id, args[3]); err != nil {
 			return err
 		}
-		if id == "gemini" || id == "antigravity" {
+		if _, plug := provider.PluginOf(id); plug || id == "gemini" || id == "antigravity" {
 			fmt.Println(green.Render("✓"), "magpie now uses", args[3], "for", id)
 			return nil
 		}
@@ -277,7 +281,7 @@ func addAccount(agentID string) error {
 			return fmt.Errorf("sign-in canceled")
 		}
 	}
-	if provider.Moved(agentID) {
+	if _, plug := provider.PluginOf(agentID); plug || provider.Moved(agentID) {
 		return pluginLogin(context.Background(), agentID, "")
 	}
 	st, err := provider.StartSignIn(agentID)
@@ -302,8 +306,12 @@ func addAccount(agentID string) error {
 	openInBrowser(st.URL)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if st.PasteCallback {
-		fmt.Println("If the page the browser ends on won't load (magpie on a server or in Docker), paste its whole address here and press Enter:")
+	if st.PasteCallback || st.PasteCode {
+		if st.PasteCode {
+			fmt.Println("Paste the code the page shows here and press Enter:")
+		} else {
+			fmt.Println("If the page the browser ends on won't load (magpie on a server or in Docker), paste its whole address here and press Enter:")
+		}
 		id := st.ID
 		go func() {
 			lines := bufio.NewScanner(os.Stdin)
@@ -325,7 +333,9 @@ func addAccount(agentID string) error {
 	}
 	switch st.State {
 	case "done":
-		if st.Using {
+		if st.Again {
+			fmt.Println(green.Render("✓"), st.User, "is already listed — its sign-in was renewed")
+		} else if st.Using {
 			fmt.Println(green.Render("✓"), agentID, "is signed in as", st.User)
 		} else {
 			fmt.Println(green.Render("✓"), "added", st.User, muted.Render("· use it: magpie accounts switch "+agentID+" "+st.User))

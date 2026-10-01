@@ -357,8 +357,12 @@ type Page struct {
 	Updated time.Time `json:"updated"`
 }
 
-// Readme is the package's README, as npm has it.
+// Readme is the package's README, as npm has it, or — for a plugin added
+// from a folder on this computer — the one that folder carries.
 func Readme(ctx context.Context, name string) (Page, error) {
+	if IsPath(name) {
+		return folderReadme(Target(name))
+	}
 	if !pkgName.MatchString(name) {
 		return Page{}, fmt.Errorf("%q isn't an npm package name", name)
 	}
@@ -380,6 +384,42 @@ func Readme(ctx context.Context, name string) (Page, error) {
 		d.Readme = d.Readme[:most]
 	}
 	return Page{Readme: d.Readme, Updated: d.Time["modified"]}, nil
+}
+
+// folderReadme is the README a plugin's own folder carries: README.md,
+// whatever its case, else a markdown or text one named beside it. A folder
+// without one says so, rather than answering with npm's silence.
+func folderReadme(dir string) (Page, error) {
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return Page{}, err
+	}
+	named := map[string]os.DirEntry{}
+	for _, e := range ents {
+		if !e.IsDir() {
+			named[strings.ToLower(e.Name())] = e
+		}
+	}
+	for _, want := range []string{"readme.md", "readme.markdown", "readme.txt", "readme"} {
+		e, ok := named[want]
+		if !ok {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return Page{}, err
+		}
+		const most = 200 << 10
+		if len(b) > most {
+			b = b[:most]
+		}
+		var at time.Time
+		if fi, err := e.Info(); err == nil {
+			at = fi.ModTime()
+		}
+		return Page{Readme: string(b), Updated: at}, nil
+	}
+	return Page{}, fmt.Errorf("%s has no README: add a README.md beside its package.json", dir)
 }
 
 // Installed is the version of the plugin spec installed, "" for a path or

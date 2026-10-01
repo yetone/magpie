@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -80,6 +81,9 @@ func TestCleanClaudeEnvRemovesGatewayOverrides(t *testing.T) {
 // how many turns that process has had, as Claude Code's stream-json does.
 func fakeClaude(t *testing.T) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	script := `#!/bin/sh
 n=0
@@ -414,6 +418,9 @@ func TestSweepBridgeProjectsTakesOnlyTheBridgesFolders(t *testing.T) {
 // message_stop, then waits on its next input: the reply is a 429 at once,
 // streamed or not, so another account can take over (#177).
 func TestClaudeQuotaResultEndsTheReply(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	dir := t.TempDir()
 	script := `#!/bin/sh
 while read -r line; do

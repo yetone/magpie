@@ -77,7 +77,7 @@ func TestAgy(t *testing.T) {
 		t.Fatalf("drift: %+v", d)
 	}
 	l := a.Launch()
-	if want := "GEMINI_API_KEY=" + gateway.Token + " GOOGLE_GEMINI_BASE_URL=" + gateway.URL() + " agy --model 'magpie/deepseek/pro'"; runtime.GOOS != "windows" && l != want {
+	if want := "GEMINI_API_KEY=" + gateway.TokenFor("agy") + " GOOGLE_GEMINI_BASE_URL=" + gateway.URL() + " agy --model 'magpie/deepseek/pro'"; runtime.GOOS != "windows" && l != want {
 		t.Fatalf("launch: %q", l)
 	}
 	if n := a.Notice(); !strings.Contains(n, l) {

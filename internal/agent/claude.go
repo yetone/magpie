@@ -290,12 +290,25 @@ func claudeIn(at place) *Agent {
 		Key: "model", Label: "model",
 		Get: get,
 		Set: set,
-		Options: func(map[string]string) []Option {
-			name := "Claude Code"
+		Options: func(cur map[string]string) []Option {
+			name, direct := "Claude Code", "Anthropic"
 			if u := env("ANTHROPIC_BASE_URL"); u != "" && !routed() {
 				name += " · " + hostOf(u)
+				direct = hostOf(u)
 			}
-			return append(group(name, claudeOwn()), claudeViaMagpie()...)
+			// an alias names the model the user's own env gives its tier,
+			// as Claude Code reads it; magpie's, while routed, isn't theirs
+			tier := func(t string) string {
+				if routed() {
+					return ""
+				}
+				return env(tierEnv(t))
+			}
+			own := claudeOwn(cur["model"], tier)
+			for i := range own {
+				own[i].Direct = direct
+			}
+			return append(group(name, own), claudeViaMagpie()...)
 		},
 	}, {
 		// the effort Claude Code starts with, as its /effort saves it: under
@@ -541,15 +554,79 @@ func claudeDropModelEffort(path, n string) error {
 
 // claudeOwn is Anthropic's models as Claude Code takes them: only the
 // catalog's; Claude Code's own short aliases are not something any API
-// lists, and a compiled-in copy would just go stale.
-func claudeOwn() []Option {
+// lists, and a compiled-in copy would just go stale. One the user's
+// settings.json names (cur: "model": "sonnet") comes first, said as the
+// model it stands for, so the row doesn't show a bare word; tier is the
+// model the user's env gives a tier, "" for none.
+func claudeOwn(cur string, tier func(string) string) []Option {
+	ms := catalog.Provider("anthropic")
 	var own []Option
-	for _, m := range catalog.Provider("anthropic") {
+	if o, ok := claudeAliasOption(cur, ms, tier); ok {
+		own = append(own, o)
+	}
+	for _, m := range ms {
 		if strings.HasPrefix(m.ID, "claude") {
 			own = append(own, Option{Value: m.ID, Note: m.Name, Icon: "claude-color"})
 		}
 	}
 	return own
+}
+
+// claudeAliasOption is the option for one of Claude Code's aliases, named
+// as it resolves it: sonnet is the newest Sonnet (the catalog's newest
+// claude-sonnet-…, or the model ANTHROPIC_DEFAULT_SONNET_MODEL gives), best
+// the newest Opus, [1m] the same at 1M, opusplan Opus in plan mode and
+// Sonnet otherwise. default is the one Claude Code picks by the account's
+// plan, which magpie doesn't say. ok is false for a value that is no alias.
+func claudeAliasOption(v string, ms []catalog.Model, tier func(string) string) (Option, bool) {
+	const mark = "[1m]"
+	w := strings.TrimSuffix(v, mark)
+	if w == "" || !contains(claudeAliases, w) {
+		return Option{}, false
+	}
+	// latest is the model a tier's alias stands for, and its name
+	latest := func(family string) (string, string) {
+		if tier != nil {
+			if m := tier(family); m != "" {
+				return m, m
+			}
+		}
+		for _, m := range ms {
+			if claudeName(m.ID) == m.ID && strings.HasPrefix(m.ID, "claude-"+family+"-") {
+				return m.ID, m.Name
+			}
+		}
+		return "", ""
+	}
+	o := Option{Value: v, Icon: "claude-color"}
+	family := w
+	switch w {
+	case "default":
+		return o, true
+	case "best":
+		family = "opus"
+	case "opusplan":
+		plan, planName := latest("opus")
+		work, workName := latest("sonnet")
+		if plan == "" || work == "" {
+			return o, true
+		}
+		o.Label = v + " · " + plan + " / " + work
+		o.Note = planName + " / " + workName
+		return o, true
+	}
+	id, name := latest(family)
+	if id == "" {
+		return o, true
+	}
+	if !strings.HasPrefix(id, "claude") {
+		o.Icon = modelIcon("", id)
+	}
+	if strings.HasSuffix(v, mark) && !strings.HasSuffix(id, mark) {
+		id += mark
+	}
+	o.Label, o.Note = v+" · "+id, name
+	return o, true
 }
 
 // claudeViaMagpie is what magpie serves Claude Code, a model with a window

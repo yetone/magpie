@@ -14,6 +14,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
+const { click, inView } = require("./reader.cjs");
 
 const assets = path.resolve(__dirname, "../assets");
 const now = Date.now();
@@ -21,9 +22,9 @@ const now = Date.now();
 // 130 requests, newest first: a swapped one, one under a dated name, a
 // failure (passed on by another computer's magpie), one from before Requested was kept, then plain ones
 const ROWS = [
-  { t: new Date(now - 60e3).toISOString(), agent: "codex", agentName: "Codex", icon: "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", served: "gpt-6-luna", swapped: true, effort: "high", in: 12840, out: 912, cache_read: 8192, reasoning: 300, ms: 4210, ttft_ms: 820, status: 200, session: "019a2b", cost: 0.0421, priced: true },
-  { t: new Date(now - 120e3).toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color", provider: "anthropic", providerName: "Claude", host: "ann@example.com", req: "sonnet", model: "claude-sonnet-5", served: "claude-sonnet-5-20260801", effort: "", in: 3021, out: 440, cache_write: 2048, cache_read: 61000, ms: 2380, status: 200, cost: 0.0312, priced: true },
-  { t: new Date(now - 180e3).toISOString(), agent: "codex", agentName: "Codex", via: "office-mac", icon: "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", in: 0, out: 0, ms: 610, status: 429, cost: 0, priced: false },
+  { route_id: 123, t: new Date(now - 60e3).toISOString(), agent: "codex", agentName: "Codex", icon: "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", served: "gpt-6-luna", swapped: true, effort: "high", in: 12840, out: 912, cache_read: 8192, reasoning: 300, ms: 4210, ttft_ms: 820, status: 200, session: "019a2b", cost: 0.0421, priced: true },
+  { route_id: 999, t: new Date(now - 120e3).toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color", provider: "anthropic", providerName: "Claude", host: "ann@example.com", req: "sonnet", model: "claude-sonnet-5", served: "claude-sonnet-5-20260801", effort: "", in: 3021, out: 440, cache_write: 2048, cache_read: 61000, ms: 2380, status: 200, cost: 0.0312, priced: true },
+  { route_id: 123, t: new Date(now - 180e3).toISOString(), agent: "codex", agentName: "Codex", via: "office-mac", icon: "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", in: 0, out: 0, ms: 610, status: 429, cost: 0, priced: false },
   { t: new Date(now - 240e3).toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color", provider: "deepseek", providerName: "DeepSeek", model: "deepseek-v4", in: 900, out: 120, ms: 1320, status: 200, cost: 0, priced: false },
 ];
 for (let i = 0; i < 126; i++) {
@@ -32,6 +33,7 @@ for (let i = 0; i < 126; i++) {
 
 function page(q) {
   let rows = ROWS;
+  if (q.get("route")) rows = rows.filter((r) => r.route_id === Number(q.get("route")));
   if (q.get("agent")) rows = rows.filter((r) => r.agent === q.get("agent"));
   if (q.get("failed") === "1") rows = rows.filter((r) => r.status >= 400);
   const s = (q.get("q") || "").toLowerCase();
@@ -53,6 +55,19 @@ function server(lang, theme, asked) {
     const json = (data) => route.fulfill({ json: data });
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"${theme}",web:false};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
+    if (url.pathname === "/api/gateway/trace") {
+      await new Promise((r) => setTimeout(r, 100));
+      return json({ mine: false, seq: 0, routes: [], totals: { requests: 0, rerouted: 0, errors: 0 }, now: new Date().toISOString() });
+    }
+    if (url.pathname === "/api/gateway/history") return json({ days: [], routes: [], cut: false });
+    if (url.pathname === "/api/gateway/route") {
+      if (url.searchParams.get("id") !== "123") return route.fulfill({ status: 404, body: "not found" });
+      return json({ id: 123, time: new Date(now - 86400e3).toISOString(), agent: "codex", model: "gpt-6-sol", provider: "relay",
+        order: [{ id: "relay", provider: "relay", name: "Relay", model: "gpt-6-sol", kind: "provider", routing: "order" }],
+        tries: [{ id: "relay", model: "gpt-6-sol", start: new Date(now - 86400e3).toISOString(), done: true, status: 200, ms: 50 }],
+        done: true, status: 200, ms: 50 });
+    }
+    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], models: [], gateway: { running: false } });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme }, fx: { rate: 7.2, at: new Date().toISOString() } });
     if (url.pathname === "/api/usage/requests") {
       asked.push(url.searchParams);
@@ -98,6 +113,18 @@ const L = {
 };
 
 const scrolled = (page) => page.locator("#view-usage").evaluate((v) => v.scrollTop);
+// the reader wheels a control out from under the header or the footer, as
+// a reader would: the dashboard above the table leaves its first rows low
+async function wheelTo(page, loc) {
+  await page.mouse.move(600, 300);
+  for (let i = 0; i < 50; i++) {
+    const b = await loc.boundingBox(), v = await page.locator("#view-usage").boundingBox();
+    if (b && b.y >= v.y && b.y + b.height < v.y + v.height - 40) return;
+    await page.mouse.wheel(0, b && b.y < v.y ? -120 : 120);
+    await page.waitForTimeout(30);
+  }
+  assert.fail("the row never came up");
+}
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(engine + ": the Usage page's Requests", async (t) => {
@@ -132,7 +159,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const asked = [];
         const { page, errors } = await open(lang, "light", asked);
         assert.deepEqual(await page.locator("#usageTab .opt").allTextContents(), w.tabs);
-        assert.equal(asked.at(-1).get("period"), "30d");
+        assert.equal(asked.at(-1).get("period"), "today");
         assert.equal(asked.at(-1).get("offset"), "0");
         assert.deepEqual(await page.locator(".led thead th").allTextContents(), w.cols);
         assert.equal(await page.locator(".led tbody tr").count(), 100, "a page of 100");
@@ -179,44 +206,46 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // scrolled to the pager: Older asks for the next page, a shorter
         // one, and the pager stays where it is on the screen (room kept at
         // the view's foot, not the page riding up); so does Newer
-        await page.locator("#ledWrap").hover({ position: { x: 40, y: 60 } });
+        const viewBox = await page.locator("#view-usage").boundingBox();
+        await page.mouse.move(viewBox.x + 40, viewBox.y + viewBox.height / 2);
         for (let i = 0; i < 200 && !(await page.locator("#ledPager").evaluate((p) => { const r = p.getBoundingClientRect(); return r.bottom < document.querySelector("#view-usage").getBoundingClientRect().bottom - 10; })); i++) {
           await page.mouse.wheel(0, 120);
-          await page.waitForTimeout(10);
+          await page.waitForTimeout(40);
         }
-        await page.waitForTimeout(250);
+        await page.waitForTimeout(300);
         assert(await scrolled(page) > 0, "the page must be scrolled");
         const pagerAt = () => page.locator("#ledPager").evaluate((p) => Math.round(p.getBoundingClientRect().top));
         const at = await pagerAt();
-        await page.locator("#ledPager button", { hasText: w.older }).click();
+        await click(page, page.locator("#ledPager button", { hasText: w.older }));
         await lastAsked(page, asked, (q) => q.get("offset") === "100");
         await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 30);
         await page.waitForTimeout(200);
-        assert.equal(await pagerAt(), at, "Older leaves the pager where it was");
+        assert(Math.abs(await pagerAt() - at) <= 1, "Older leaves the pager where it was, within pixel rounding");
         assert.equal(await page.locator("#ledPager > span").textContent(), lang === "en" ? "101–130 of 130" : "第 101–130 条，共 130 条");
-        await page.locator("#ledPager button", { hasText: w.newer }).click();
+        await click(page, page.locator("#ledPager button", { hasText: w.newer }));
         await lastAsked(page, asked, (q) => q.get("offset") === "0");
         await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 100);
         await page.waitForTimeout(200);
-        assert.equal(await pagerAt(), at, "Newer leaves the pager where it was");
+        assert(Math.abs(await pagerAt() - at) <= 1, "Newer leaves the pager where it was, within pixel rounding");
 
         // back up: the filters ask the server
         for (let i = 0; i < 200 && (await scrolled(page)) > 0; i++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(10); }
         await page.waitForTimeout(100);
-        await page.locator("#ledStatus .opt", { hasText: w.failed }).click();
+        await click(page, page.locator("#ledStatus .opt", { hasText: w.failed }));
         await lastAsked(page, asked, (q) => q.get("failed") === "1" && q.get("offset") === "0");
         await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 1);
         assert.equal(await page.locator(".led tr.bad").count(), 1);
         assert(await page.locator("#ledPager").isHidden(), "one page: no pager");
-        await page.locator("#ledStatus .opt").first().click();
+        await click(page, page.locator("#ledStatus .opt").first());
         await lastAsked(page, asked, (q) => !q.has("failed"));
 
-        await page.locator("#ledAgent").click();
+        await click(page, page.locator("#ledAgent"));
         await page.locator(".sess-menu .pm-item", { hasText: "Claude Code" }).click();
         await lastAsked(page, asked, (q) => q.get("agent") === "claude");
         await page.waitForFunction(() => [...document.querySelectorAll(".led tbody tr td:nth-child(2)")].every((c) => c.textContent === "Claude Code"));
         assert.equal(await page.locator("#ledAgent").textContent(), "Claude Code");
 
+        await inView(page, page.locator("#ledQ"));
         await page.locator("#ledQ").fill("sonnet");
         await lastAsked(page, asked, (q) => q.get("q") === "sonnet" && q.get("agent") === "claude");
         await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 1);
@@ -227,17 +256,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(await page.locator("#ledExport").isDisabled(), "nothing to export");
         await page.locator("#ledQ").press("Escape");
         await lastAsked(page, asked, (q) => !q.has("q") && q.get("agent") === "claude");
-        await page.locator("#ledAgent").click();
+        await click(page, page.locator("#ledAgent"));
         await page.locator(".sess-menu .pm-item").first().click();
         await lastAsked(page, asked, (q) => !q.has("agent"));
         await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 100);
 
         // the period: today, and the ledger asks again from the first page
-        await page.locator("#period .opt").first().click();
+        await click(page, page.locator("#period .opt").first());
         await lastAsked(page, asked, (q) => q.get("period") === "today" && q.get("offset") === "0");
 
         // Export CSV posts the filters shown, no page, and says where it went
-        await page.locator("#ledExport").click();
+        await click(page, page.locator("#ledExport"));
         await lastAsked(page, asked, (q) => q.method === "POST");
         const ex = asked.findLast((q) => q.method === "POST"); // a refresh may ask after it
         assert.equal(ex.get("period"), "today");
@@ -245,6 +274,88 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(!ex.has("offset") && !ex.has("limit"), "every page is exported");
         await page.waitForFunction((s) => document.querySelector("#status").textContent === s, w.saved);
         assert.deepEqual(errors, []);
+      });
+
+      await t.test(lang + ": request routing links", async () => {
+        const asked = [];
+        const { page, errors } = await open(lang, "light", asked);
+        const lookups = [];
+        page.on("request", req => { if (req.url().includes("/api/gateway/route?")) lookups.push(new URL(req.url())); });
+        const originalPeriod = asked.at(-1).get("period");
+        const routeTitle = lang === "en" ? "View routing" : "查看路由";
+        const usageTitle = lang === "en" ? "View usage" : "查看用量";
+        assert.equal(await page.locator(".led tbody tr").nth(3).locator("button").count(), 0, "old rows have no route link");
+        // the dashboard above the table can leave its first row below the fold:
+        // bring it up first, and the return must come back to where it was
+        const link = page.locator(".led tbody tr").first().getByTitle(routeTitle);
+        await wheelTo(page, link);
+        const left = await scrolled(page);
+        await link.click();
+        await page.locator("#view-routing").waitFor({ state: "visible" });
+        await page.locator(".rt-log-head").getByText(usageTitle, { exact: true }).waitFor();
+        assert.match(await page.locator(".rt-steps").textContent(), /gpt-6-sol/);
+        assert.equal(lookups[0].searchParams.get("day"), ROWS[0].t.slice(0,10));
+        // History stays usable even when another process serves the gateway.
+        await page.waitForTimeout(5200);
+        assert(await page.locator(".rt-off").isHidden());
+        assert.equal(await page.locator("#status").textContent(), "", "navigation reports no error");
+        if (shots) await page.screenshot({ path: path.join(shots, `${engine}-route-link-${lang}.png`) });
+        await page.locator(".rt-log-head").getByText(usageTitle, { exact: true }).click();
+        await lastAsked(page, asked, (q) => q.get("route") === "123" && q.get("period") === "all");
+        await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 2);
+        assert(await page.locator("#ledRoute").isVisible());
+        assert.match(await page.locator("#ledRouteLabel").textContent(), /^(Request: |请求：).*gpt-6-sol/);
+        assert(!await page.locator("#ledRouteLabel").textContent().then(text=>text.includes("#123")));
+        // the shorter page can't hold it all: the most it holds, then
+        await page.waitForFunction((left) => { const v = document.querySelector("#view-usage");
+          return v.scrollTop === Math.min(left, v.scrollHeight - v.clientHeight); }, left)
+          .catch(async () => assert.fail(`return keeps the Usage view position: left at ${left}, back at ${await scrolled(page)}, room ${await page.locator("#view-usage").evaluate((v) => v.scrollHeight - v.clientHeight)}`));
+        await wheelTo(page, page.locator("#ledExport"));
+        await page.locator("#ledExport").click();
+        await lastAsked(page, asked, (q) => q.method === "POST" && q.get("route") === "123");
+        await page.locator("#ledRouteClear").click();
+        await lastAsked(page, asked, (q) => !q.has("route") && q.get("period") === originalPeriod);
+        await page.waitForFunction(() => document.querySelectorAll(".led tbody tr").length === 100);
+        // A pruned request stays in Usage and explains why its route cannot open.
+        const pruned = page.locator(".led tbody tr").nth(1).getByTitle(routeTitle);
+        await wheelTo(page, pruned);
+        await pruned.click();
+        await page.waitForFunction((msg) => document.querySelector("#status").textContent === msg,
+          lang === "en" ? "Routing history for this request is no longer available." : "此请求的路由历史已不可用。");
+        assert(await page.locator("#view-usage").isVisible());
+        assert.deepEqual(errors, []);
+        await page.close();
+      });
+
+      await t.test(lang + ": clearing the route restores prior filters", async () => {
+        const asked = [];
+        const { page, errors } = await open(lang, "light", asked);
+        await page.evaluate(() => {
+          period = "7d"; ledAgent = "codex"; ledFailed = true; ledQuery = "sol"; ledOffset = 100;
+          window.openUsageRoute({ id: 123, time: new Date().toISOString(), model: "gpt-6-sol" });
+        });
+        await lastAsked(page, asked, q=>q.get("route") === "123");
+        await page.locator("#ledRouteClear").click();
+        await lastAsked(page, asked, q=>!q.has("route") && q.get("period") === "7d" && q.get("agent") === "codex" && q.get("failed") === "1" && q.get("q") === "sol" && q.get("offset") === "100");
+        assert.equal(await page.locator("#ledQ").inputValue(), "sol");
+        assert.deepEqual(errors, []);
+        await page.close();
+      });
+      await t.test(lang + ": newest live route needs no return-to-live button", async () => {
+        const asked = [];
+        const { page, errors } = await open(lang, "light", asked);
+        await page.route("**/api/gateway/trace?*", async route => {
+          await page.waitForTimeout(100);
+          await route.fulfill({json:{mine:true, seq:1, routes:[{id:123,time:ROWS[0].t,agent:"codex",model:"gpt-6-sol",provider:"relay",order:[],tries:[],done:true,status:200}],totals:{requests:1,rerouted:0,errors:0},now:new Date().toISOString()}}).catch(()=>{});
+        });
+        await page.waitForTimeout(5500);
+        const link = page.locator(".led tbody tr").first().getByTitle(lang === "en" ? "View routing" : "查看路由");
+        await wheelTo(page, link);
+        await link.click();
+        await page.locator("#view-routing").waitFor({state:"visible"});
+        assert.equal(await page.locator(".rt-log-head").getByText(lang === "en" ? "Back to live" : "回到实时", {exact:true}).count(), 0);
+        assert.deepEqual(errors, []);
+        await page.close();
       });
 
       await t.test(lang + ": dark, and narrow", async () => {

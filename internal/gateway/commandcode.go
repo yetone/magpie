@@ -70,7 +70,7 @@ func (s *Server) serveCommandCode(w http.ResponseWriter, r *http.Request, from p
 	}
 	ask := s.askCommandCode(api, key, model)
 	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
+		if canSearch() {
 			return s.searchReply(w, r, from, "Command Code", req, usage, ask)
 		}
 	}

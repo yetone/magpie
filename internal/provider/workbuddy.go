@@ -39,6 +39,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -812,22 +813,83 @@ func startWorkBuddySignIn(s *signInFlow, w *wbSite) error {
 			return
 		}
 		c.UID = acc.UID
-		who := wbWho(acc.Nickname, acc.PhoneNumber, acc.UID)
-		auth, _ := json.Marshal(c)
-		ownUser, _, hasOwn := wbOwn(w)
-		if !hasOwn {
-			ownUser = ""
-		}
-		if err := addSideLogin(savedLogin{Agent: w.id, User: who, Auth: auth}, ownUser, func(savedLogin) {}); err != nil {
+		who, again, using, err := wbKeepSignIn(w, c, wbWho(acc.Nickname, acc.PhoneNumber, acc.UID))
+		if err != nil {
 			fail(err.Error())
 			return
 		}
 		wbTokens.Lock()
 		wbTokens.m[w.id+"|"+c.UID] = c
 		wbTokens.Unlock()
-		s.finish(SignInState{State: "done", User: who, Using: hasOwn && strings.EqualFold(ownUser, who)})
+		s.finish(SignInState{State: "done", User: who, Using: using, Again: again})
 	}()
 	return nil
+}
+
+// wbKeepSignIn keeps an account magpie just signed in, told from the
+// others by its WorkBuddy uid, never by its name: two accounts can share a
+// nickname, and the second took the first one's place (#413). The same
+// account again renews its sign-in where it is listed (again). The one
+// WorkBuddy itself is signed in to becomes magpie's own sign-in of it, so
+// it stays listed once WorkBuddy signs in to another: WorkBuddy's page
+// offers the account the app is signed in to, and accounts added one by
+// one that way each pushed the last off the list (#413). using says
+// WorkBuddy is signed in to it too.
+func wbKeepSignIn(w *wbSite, c wbCreds, name string) (who string, again, using bool, err error) {
+	ownUser, own, hasOwn := wbOwn(w)
+	auth, err := json.Marshal(c)
+	if err != nil {
+		return "", false, false, err
+	}
+	using = hasOwn && own.UID == c.UID
+	loginsMu.Lock()
+	defer loginsMu.Unlock()
+	ls := readLogins()
+	// uidOf is a saved account's uid, "" where it isn't known: WorkBuddy's
+	// own while WorkBuddy can't be read, a sign-in that can't be read
+	uidOf := func(l savedLogin) string {
+		if l.own() {
+			if hasOwn && strings.EqualFold(l.User, ownUser) {
+				return own.UID
+			}
+			return ""
+		}
+		sc, _ := wbSavedCreds(l)
+		return sc.UID
+	}
+	same := slices.IndexFunc(ls, func(l savedLogin) bool { return l.Agent == w.id && uidOf(l) == c.UID })
+	if same < 0 {
+		// one of the same name whose uid isn't known is taken to be it, as
+		// before (#155); one whose uid is another's is another account
+		same = slices.IndexFunc(ls, func(l savedLogin) bool {
+			return l.Agent == w.id && strings.EqualFold(l.User, name) && uidOf(l) == ""
+		})
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	if same >= 0 {
+		l := &ls[same]
+		again = l.Hidden == ""
+		if l.own() {
+			// WorkBuddy's own is first unless another was put first: it
+			// stays first as magpie's
+			if !slices.ContainsFunc(ls, func(m savedLogin) bool { return m.Agent == w.id && m.First }) {
+				l.First = true
+			}
+			l.On = true
+		}
+		l.Auth, l.Seen, l.Lapsed, l.Hidden = auth, now, "", ""
+		return l.User, again, using, writeLogins(ls)
+	}
+	// another account of the same name is told apart by the end of its uid
+	who = name + " (" + c.UID + ")"
+	tail := c.UID[max(0, len(c.UID)-4):]
+	for _, n := range []string{name, name + " (" + tail + ")"} {
+		if !slices.ContainsFunc(ls, func(l savedLogin) bool { return l.Agent == w.id && strings.EqualFold(l.User, n) }) {
+			who = n
+			break
+		}
+	}
+	return who, false, using, writeLogins(append(ls, savedLogin{Agent: w.id, User: who, Auth: auth, Seen: now, On: true}))
 }
 
 // wbPoll asks path every second until it answers with data, giving up at

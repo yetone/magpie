@@ -3,6 +3,13 @@
 // built-in's plugin does.
 const ID = process.env.FAKE_ID || "fakeco"
 
+// fakeWho is who a team signs in as: team@fake, and a team named name/uid
+// is name@fake with that uid, as WorkBuddy's plugin keeps one
+function fakeWho(team) {
+  const [name, uid] = (team ?? "me").split("/")
+  return uid ? { accountId: name + "@fake", uid } : { accountId: name + "@fake" }
+}
+
 export const FakePlugin = async ({ client }) => ({
   config: async (cfg) => {
     cfg.provider = cfg.provider ?? {}
@@ -16,6 +23,10 @@ export const FakePlugin = async ({ client }) => ({
         "fake-gemini": { name: "Fake Gemini", provider: { npm: "@ai-sdk/google" }, reasoning: true, modalities: { input: ["text"], output: ["text"] }, limit: { context: 3000, output: 300 } },
       },
     }
+    // $FAKE_RESPONSES: one model more, on OpenAI's Responses (Grok's)
+    // $FAKE_FAST: fake-1 has a fast one, as a Cursor model has its -fast
+    if (process.env.FAKE_FAST) cfg.provider[ID].models["fake-1-fast"] = { name: "Fake One Fast", limit: { context: 1000, output: 100 } }
+    if (process.env.FAKE_RESPONSES) cfg.provider[ID].models["fake-resp"] = { name: "Fake Responses", provider: { npm: "@ai-sdk/openai" }, limit: { context: 4000, output: 400 } }
   },
   auth: {
     provider: ID,
@@ -34,7 +45,7 @@ export const FakePlugin = async ({ client }) => ({
           method: "code",
           callback: async (code) =>
             code === "good"
-              ? { type: "success", refresh: "r-" + (inputs.team ?? "none"), access: "stale", expires: 0, accountId: (inputs.team ?? "me") + "@fake" }
+              ? { type: "success", refresh: "r-" + (inputs.team ?? "none"), access: "stale", expires: 0, ...fakeWho(inputs.team) }
               : code === "expired"
                 ? { type: "failed", error: "the sign-in page expired" }
                 : { type: "failed" },
@@ -46,6 +57,8 @@ export const FakePlugin = async ({ client }) => ({
       baseURL: process.env.FAKE_BASE,
       async fetch(url, init) {
         let a = await getAuth()
+        // "r-revoked": the vendor turned the refresh away, said as Zed's says it
+        if (a.type === "oauth" && a.refresh === "r-revoked") throw Object.assign(new Error("FakeCo turned the sign-in away"), { signIn: "expired" })
         if (a.type === "oauth" && a.expires < Date.now()) {
           a = { ...a, access: "fresh-" + a.refresh, expires: Date.now() + 3600e3 }
           await client.auth.set({ path: { id: ID }, body: a })
@@ -113,7 +126,15 @@ export const FakePlugin = async ({ client }) => ({
       if (auth?.key === "few") return { "fake-1": p.models["fake-1"] }
       // $FAKE_MODELS: the vendor's list, whose answer names one more model
       if (process.env.FAKE_MODELS && auth) {
-        const r = await fetch(process.env.FAKE_MODELS).then((r) => r.text()).catch(() => "")
+        const r = await fetch(process.env.FAKE_MODELS).then((r) => r.text()).catch((e) => {
+          // $FAKE_MODELS_THROW: the hook throws, as Cursor's, Grok's and Devin's do
+          if (process.env.FAKE_MODELS_THROW === "1") throw e
+          return null
+        })
+        // "own": it hands back a table of its own, saying it fell back, as
+        // Command Code's Go and ZCode do
+        if (r === null && process.env.FAKE_MODELS_THROW === "own")
+          return { "fake-1": { ...p.models["fake-1"] }, [Symbol.for("magpie.fellBack")]: true }
         if (r) p.models["fake-" + r] = { ...p.models["fake-1"], id: "fake-" + r, name: r }
       }
       return p.models

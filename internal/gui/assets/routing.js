@@ -92,13 +92,29 @@
   const reqs = el("div", "list rt-reqs");
   // the days the history keeps on disk, to look back at one: see listed
   const dayBar = el("div", "rt-days");
+  const groupBar = el("div", "rt-group-by");
+  let bySession = false;
+  try { bySession = localStorage.getItem("magpie.routingBySession") === "1"; } catch {}
+  const groupButtons = [[false, "By request"], [true, "By session"]].map(([on, label]) => {
+    const b = el("button", "rt-day");
+    b.dataset.label = label;
+    b.onclick = () => {
+      bySession = on;
+      try { localStorage.setItem("magpie.routingBySession", on ? "1" : "0"); } catch {}
+      steady(renderHist);
+    };
+    groupBar.append(b);
+    return b;
+  });
   const actHead = el("div", "row-head"), actNote = el("span", "note");
   const acts = el("div", "list rt-acts");
   const actLabel = el("span", "label");
   actHead.append(actLabel, el("span", "grow"), actNote);
   const hist = el("div", "rt-cols");
   const colA = el("div", "rt-col"), colB = el("div", "rt-col");
-  colA.append(reqHead, dayBar, reqs);
+  const filters = el("div", "rt-filters");
+  filters.append(dayBar, groupBar);
+  colA.append(reqHead, filters, reqs);
   colB.append(actHead, acts);
   hist.append(colA, colB);
   more.append(hist);
@@ -415,8 +431,43 @@
     if (c === "compacting") return t("compacting");
     if ((m = /^effort ≥ (\w+)$/.exec(c))) return t("reasoning ≥ {level}", { level: m[1] });
     if ((m = /^agent (.+)$/.exec(c))) return m[1].split("|").map(agentName).join(" / ");
+    if ((m = /^time (all day|(\d\d:\d\d)–(\d\d:\d\d))(?: (.+))?$/.exec(c))) {
+      // the days as the gateway writes them: Mon–Fri, Sat,Sun, Mon,Wed–Fri
+      const days = [];
+      for (const part of (m[4] || "").split(",").filter(Boolean)) {
+        const [a, b] = part.split("–").map((d) => WEEK.indexOf(d.toLowerCase()));
+        for (let i = a; i >= 0 && i <= (b >= 0 ? b : a); i++) days.push(WEEK[i]);
+      }
+      return timeText({ from: m[2] || "00:00", to: m[3] || "00:00", days });
+    }
     return c;
   }
+  // a rule's hours (provider.TimeWindow): local time, past midnight when
+  // they end before they begin, on the days named or every day
+  const WEEK = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+  const DAY_NAMES = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
+  function daysText(days) {
+    const on = WEEK.map((d) => (days || []).includes(d)), out = [];
+    for (let i = 0; i < 7; i++) {
+      if (!on[i]) continue;
+      let j = i;
+      while (j + 1 < 7 && on[j + 1]) j++;
+      if (j - i >= 2) out.push(t("{from}–{to}", { from: t(DAY_NAMES[WEEK[i]]), to: t(DAY_NAMES[WEEK[j]]) }));
+      else for (let k = i; k <= j; k++) out.push(t(DAY_NAMES[WEEK[k]]));
+      i = j;
+    }
+    return out.length === 7 || !out.length ? "" : out.join(t(", "));
+  }
+  function timeText(w) {
+    const hours = w.from === w.to ? t("all day") : t("{from}–{to}", { from: w.from, to: w.to });
+    const days = daysText(w.days);
+    return days ? t("{hours} {days}", { hours, days }) : hours;
+  }
+  // "9:5" is no time; "9:05" is 09:05
+  const clockOf = (s) => {
+    const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(s || "");
+    return m && +m[1] < 24 && +m[2] < 60 ? m[1].padStart(2, "0") + ":" + m[2] : "";
+  };
 
   // how the reasoning a try was sent at came to be
   function effortNote(r, tr) {
@@ -449,6 +500,12 @@
   // (provider.WBRefusedHint, #182): the agent gets it in English, the page
   // says it apart from the vendor's words, in its own language
   const WB_REFUSED = "WorkBuddy refuses chats from Codex and Claude Code (their system prompt); use it from Hermes, OpenCode or Pi, or add another provider to this group";
+  // what it adds to a vendor's edge firewall's block page (provider.BlockedHint)
+  const BLOCKED = "the provider's network firewall blocked requests from this IP; wait a while, or switch to another network or proxy";
+  // what it says of ZCode's Start Plan turning a request away (#425,
+  // provider.ZCodeStartBlockedHint), in place of BLOCKED
+  const ZCODE_BLOCKED = "ZCode's Start Plan turns away requests that don't come from the ZCode app itself, and magpie doesn't pretend to be it; it can also be a network block of this IP. Use an account with a GLM Coding Plan, or add another provider to this group";
+  const HINTS = [WB_REFUSED, BLOCKED, ZCODE_BLOCKED];
 
   function trySaid(r, i) {
     const tr = r.tries[i], w = tried(r, tr), agent = agentName(r.agent);
@@ -722,6 +779,12 @@
     const sub = el("span", "", w.fallback ? w.name : w.kind === "provider" ? "" : w.plan || "");
     b.append(name, " ", sub, el("code", "mdl", w.fixed ? `${w.model}:${w.fixed}` : w.model));
     if (w.fixed) b.title = t("{level} reasoning, fixed on this model in the group", { level: w.fixed });
+    if (w.fast) {
+      // the group sends this member in its vendor's fast mode
+      const f = el("small", "fb", t("fast"));
+      f.title = t("Sent in its vendor's fast mode, as the group says");
+      b.append(f);
+    }
     if (w.fallback) b.append(el("small", "fb", t("fallback")));
     const st = el("em"), bar = el("div", "bar"), bi = el("i"), tg = el("span", "tag");
     bar.append(bi);
@@ -925,6 +988,9 @@
           : pinned ? t("How the request at {time} was routed", { time: clock(r.time) }) : t("How the last request was routed")),
         el("span", "grow"));
       if (!rp && r.done) {
+        const usage = el("button", "text", t("View usage"));
+        usage.onclick = () => window.openUsageRoute(logR);
+        logHead.append(usage);
         const again = el("button", "text", t("Replay"));
         again.onclick = () => replay([logR], pinned);
         logHead.append(again);
@@ -959,10 +1025,10 @@
       items.push([tryWhy(r, i), tr.done ? (tr.status < 400 ? "ok" : "bad") : "wait"]);
       // what the vendor said, word for word: the why above is magpie's reading of it
       if (tr.done && tr.status >= 400 && tr.error) {
-        const hinted = tr.error.endsWith(" — " + WB_REFUSED);
-        const said = hinted ? tr.error.slice(0, -(WB_REFUSED.length + 3)) : tr.error;
+        const hint = HINTS.find((h) => tr.error.endsWith(" — " + h));
+        const said = hint ? tr.error.slice(0, -(hint.length + 3)) : tr.error;
         items.push([t("It said: {error}", { error: said.length > 600 ? said.slice(0, 600) + "…" : said }), "aside said"]);
-        if (hinted) items.push([t(WB_REFUSED), "aside"]);
+        if (hint) items.push([t(hint), "aside"]);
       }
       // the reply said another model answered it
       if (tr.done && tr.status < 400 && tr.swapped) items.push([swapWhy(tr), "swap", tr]);
@@ -986,13 +1052,31 @@
   // the pointer, and the stage and its story change above it (it used to
   // go up to the stage, which read as the page jumping to its top)
   function pick(r) {
-    pinned = r.id === newest()?.id ? null : r;
+    pinned = !day && r.id === newest()?.id ? null : r;
     if (rp) { rp = null; rbar.hidden = true; }
     stopPlays();
     cur = r;
     sync(true); renderAll();
     say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r));
   }
+
+  window.openRoute = async (id, time) => {
+    let r = routes.get(id);
+    if (!r) {
+      const res = await fetch("/api/gateway/route?id=" + encodeURIComponent(id) + "&day=" + encodeURIComponent(time.slice(0, 10)));
+      if (res.status === 404) throw new Error(t("Routing history for this request is no longer available."));
+      if (!res.ok) throw new Error(await res.text());
+      r = await res.json();
+    }
+    day = routes.has(id) ? "" : r.time.slice(0, 10);
+    if (day) {
+      await loadDays(day);
+      if (!past.some((x) => x.id === id)) past.push(r);
+    }
+    offline("");
+    window.show("routing");
+    pick(r);
+  };
 
   // what a call was for when it isn't a turn of the conversation, as
   // Codex names it (x-openai-subagent): its own guardian review of an
@@ -1119,6 +1203,82 @@
   // is redrawn on every trace update, and made again whole each time it
   // was most of what a busy gateway cost the page (#308)
   const reqRows = new Map(); // id → { b, sig, r }
+  const sessionRows = new Map(); // agent + session → persistent heading
+  const closedSessions = new Set();
+  const groupSession = (r) => r.parentSession || r.session || "";
+  const sessionKey = (r) => groupSession(r) ? JSON.stringify([r.agent || "other", groupSession(r)]) : "";
+  let namesBusy = false;
+  async function refreshSessionNames() {
+    if (namesBusy || !shown()) return;
+    const rs = listed(), ids = [...new Set(rs.filter((r) => r.agent === "codex").map(groupSession).filter(Boolean))];
+    if (!ids.length) return;
+    namesBusy = true;
+    try {
+      const res = await fetch("/api/gateway/session-titles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) });
+      if (!res.ok) return;
+      const names = await res.json();
+      let changed = false;
+      for (const r of listed()) {
+        const id = groupSession(r);
+        if (r.agent !== "codex" || !ids.includes(id)) continue;
+        const name = typeof names[id] === "string" ? names[id] : "";
+        if ((r.sessionTitle || "") !== name) { r.sessionTitle = name; changed = true; }
+      }
+      if (changed) steady(renderHist);
+    } catch {} finally { namesBusy = false; }
+  }
+  setInterval(refreshSessionNames, 15000);
+  window.addEventListener("focus", refreshSessionNames);
+  const costNote = () => t("Estimated at effective model prices, including cache reads and writes; subscription billing may differ. Totals cover only the requests listed here.");
+  function routeCost(r) {
+    if (!r.priced) return "—";
+    return "≈" + fmtCost({ cost: r.cost || 0, unpriced: 0 }) + (r.unpriced ? "+" : "");
+  }
+  function groupedRows(rs, rowEls) {
+    const groups = new Map();
+    rs.forEach((r, i) => {
+      const key = sessionKey(r);
+      if (!groups.has(key)) groups.set(key, { key, r, rows: [], els: [] });
+      const g = groups.get(key);
+      g.rows.push(r); g.els.push(rowEls[i]);
+    });
+    const els = [];
+    for (const g of groups.values()) {
+      let x = sessionRows.get(g.key);
+      if (!x) {
+        const b = el(g.key ? "button" : "div", "rt-session"), name = el("span", "nm"), meta = el("span", "summary"), cost = el("span", "cost"), arrow = el("span", "arrow");
+        b.append(arrow, name, meta, cost);
+        x = { b, name, meta, cost, arrow };
+        if (g.key) b.onclick = () => {
+          if (closedSessions.has(g.key)) closedSessions.delete(g.key); else closedSessions.add(g.key);
+          steady(renderHist);
+        };
+        sessionRows.set(g.key, x);
+      }
+      const open = !closedSessions.has(g.key);
+      const total = g.rows.reduce((s, r) => {
+        s.tokens += r.tokens || 0;
+        if (r.priced) { s.cost += r.cost || 0; s.priced++; }
+        if (!r.priced || r.unpriced) s.unpriced++;
+        if (!r.done) s.running++;
+        return s;
+      }, { cost: 0, tokens: 0, priced: 0, unpriced: 0, running: 0 });
+      setText(x.arrow, g.key ? open ? "▾" : "▸" : "");
+      const name = g.rows.find((r) => r.sessionTitle)?.sessionTitle;
+      setText(x.name, g.key ? agentName(g.r.agent) + " · " + (name || groupSession(g.r)) : t("No session ID"));
+      x.name.title = g.key ? (name ? name + "\n" : "") + t("Session id") + ": " + groupSession(g.r) : t("These requests did not provide a session ID; they are not treated as one conversation.");
+      const bits = [t(g.rows.length === 1 ? "{n} request" : "{n} requests", { n: g.rows.length }), t("{n} tokens", { n: tokens(total.tokens) })];
+      if (total.running) bits.push(t("{n} in progress", { n: total.running }));
+      setText(x.meta, bits.join(" · "));
+      setText(x.cost, total.priced ? "≈" + fmtCost({ cost: total.cost, unpriced: 0 }) + (total.unpriced ? "+" : "") : "—");
+      x.cost.title = costNote();
+      if (g.key) x.b.setAttribute("aria-expanded", String(open));
+      els.push(x.b);
+      if (open) els.push(...g.els);
+    }
+    for (const key of sessionRows.keys()) if (!groups.has(key)) { sessionRows.delete(key); closedSessions.delete(key); }
+    return els;
+  }
   function renderHist() {
     const rs = listed();
     hist.hidden = !rs.length && !day && !days.length;
@@ -1128,6 +1288,12 @@
     setText(reqNote, day ? t(pastCut ? "the last {n} of {day}" : "{n} on {day}", { n: rs.length, day: dayName(day) })
       : t("the last {n} the gateway keeps", { n: rs.length }));
     renderDays();
+    groupButtons.forEach((b, i) => {
+      setText(b, t(b.dataset.label));
+      b.classList.toggle("on", bySession === !!i);
+      b.setAttribute("aria-pressed", String(bySession === !!i));
+    });
+    groupBar.hidden = !rs.length;
     if (!reqs.style.maxHeight) requestAnimationFrame(fitReqs); // first shown
     // none yet: what the list is for in its place, and no accounts column
     // to tally nothing
@@ -1143,11 +1309,13 @@
       if (!day && days.length) p.append(" " + t("Earlier ones are kept by day, in the bar above."));
       reqs.replaceChildren(p);
       reqRows.clear();
+      sessionRows.clear();
+      closedSessions.clear();
       renderActs(rs);
       return;
     }
     const lang = document.documentElement.lang, ids = new Set();
-    const els = rs.map((r) => {
+    const rowEls = rs.map((r) => {
       const [said, how, tr] = outcome(r);
       const sel = String(pinned ? pinned.id === r.id : cur?.id === r.id);
       const ag = agentOf(r.agent);
@@ -1159,7 +1327,7 @@
       // all the row says, and its titles
       const title = reqTitle(r, how, tr);
       const sig = JSON.stringify([lang, said, how, title, r.time, r.agent, agentName(r.agent), ag?.icon, r.model, r.provider, r.kind, r.effort,
-        tr?.effort, tr?.picked, tr?.fixed, tr?.swapped && tr.done && tr.status < 400 ? [tr.model, tr.served] : 0, tr?.routed && tr.done && tr.status < 400 ? tr.served : 0, meta]);
+        tr?.effort, tr?.picked, tr?.fixed, tr?.fast, tr?.swapped && tr.done && tr.status < 400 ? [tr.model, tr.served] : 0, tr?.routed && tr.done && tr.status < 400 ? tr.served : 0, meta, routeCost(r)]);
       ids.add(r.id);
       let x = reqRows.get(r.id);
       if (!x || x.sig !== sig) {
@@ -1172,6 +1340,7 @@
       return x.b;
     });
     for (const id of reqRows.keys()) if (!ids.has(id)) reqRows.delete(id);
+    const els = bySession && rs.some((r) => r.session) ? groupedRows(rs, rowEls) : rowEls;
     // the rows moved only where they changed; the list scrolls on its own,
     // and WebKit, a row taken out for a moment, would send it back to its
     // top from under the row just picked
@@ -1207,9 +1376,19 @@
       ef.title = effortNote(r, tr);
       to.append(ef);
     }
+    if (tr?.fast) {
+      // sent in its vendor's fast mode, as the group's member is
+      const ft = el("span", "ef", t("fast"));
+      ft.title = t("Sent in its vendor's fast mode, as the group says");
+      to.append(ft);
+    }
     if (tr?.swapped && tr.done && tr.status < 400) to.append(swapTag(tr, true)); // beside the model asked for
     else if (tr?.routed && tr.done && tr.status < 400) to.append(routedTag(tr));
-    b.append(when, asked, to, el("span", "meta", meta.join(" · ")));
+    const info = el("span", "meta");
+    info.append(el("span", "", meta.join(" · ")), el("span", "cost", routeCost(r)));
+    info.lastChild.title = r.priced ? costNote() : t("No known price or token counts for this request");
+    b.append(when, asked, to, info);
+
     b.title = title;
     return b;
   }
@@ -1764,7 +1943,7 @@
             : gw.window ? "Another magpie serves the gateway; its routing plays live in that magpie's window."
             // magpie serve: its routing isn't shown anywhere
             : "The gateway is served by a magpie without a window (magpie serve), so its routing can't be watched. Stop it and let this magpie serve the gateway to see routing live.";
-          offline(t(offMsg));
+          offline(pinned ? "" : t(offMsg));
           loaded = false;
           renderPanel();
           await new Promise((r) => setTimeout(r, 5000));
@@ -1790,7 +1969,7 @@
           for (let i = 0; i < 30 && !state.agents.length; i++) await new Promise((res) => setTimeout(res, 100));
           renderPanel();
           // the window opened from the tray panel's Routing tab on a request
-          const asked = wanted && routes.get(wanted), r = asked || newest();
+          const asked = wanted && routes.get(wanted), r = pinned || asked || newest();
           if (wanted) { wanted = 0; params.delete("req"); history.replaceState(null, "", params.size ? "?" + params : location.pathname); }
           if (asked && asked.id !== newest().id) pinned = asked;
           if (r) { cur = r; sync(true); say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r)); renderAll(); } else empty();
@@ -1825,6 +2004,7 @@
     renderPanel();
   }
   new MutationObserver(words).observe(document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+  document.addEventListener("magpie-costs-changed", () => steady(renderHist));
 
   // ---------- routing groups ----------
   // The groups agents can pick as one model (group/<id>): the user's, and
@@ -1867,6 +2047,7 @@
     if (r.agents?.length) bits.push(r.agents.map((id) => (state.clients || state.agents || []).find((a) => a.id === id)?.name || id).join(" / "));
     if (r.intent) bits.push(t("asks for “{intent}”", { intent: r.intent }));
     if (r.compact) bits.push(t("compacting"));
+    if (r.time) bits.push(timeText(r.time));
     return bits.join(" · ");
   }
   const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -1903,10 +2084,12 @@
   const memberIcon = (id) => { const s = subOf(id); return s ? stackIcon(groupIcons(s)) : icon(modelOf(id)?.icon || "generic"); };
   const memberName = (id) => { const s = subOf(id), m = modelOf(id); return s ? s.name : m ? m.name || m.id : id; };
   const memberNote = (id) => subOf(id) ? t("routing group") : [modelOf(id)?.providerName, fixedOf(id) && fixedWords(fixedOf(id))].filter(Boolean).join(" · ");
+  // a member the group sends in its vendor's fast mode (Group.Fast)
+  const fastIn = (g, id) => !!g?.fast?.includes(id) && !subOf(id);
   function memberLabel(g, id) {
     const i = g.memberInfo?.find((x) => x.id === id), m = modelOf(id), s = subOf(id), f = fixedOf(id);
     if (s) return `${t("routing group")} · ${s.name}`;
-    const at = f ? ` · ${fixedWords(f)}` : "";
+    const at = (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${t("fast")}` : "");
     if (m) return `${m.providerName} · ${m.name || m.id}${at}`;
     return i?.name ? `${i.name} · ${i.model}${at}` : id;
   }
@@ -1915,7 +2098,7 @@
   }
   function drawGroups() {
     const newBtn = el("button", "text", t("New group"));
-    newBtn.onclick = () => { gEdit = { id: "", draft: { name: "", members: [], routing: "", affinity: "", rules: [] } }; renderGroups(); };
+    newBtn.onclick = () => { gEdit = { id: "", draft: { name: "", members: [], fast: [], routing: "", affinity: "", rules: [] } }; renderGroups(); };
     gHead.replaceChildren(el("span", "label", t("Routing groups")), el("span", "grow"), el("span", "note", t("models agents pick as one")), newBtn);
     const rows = [];
     if (gEdit && !gEdit.id) rows.push(groupEditor(null));
@@ -1960,7 +2143,7 @@
     if (!g.ready) tags.append(el("span", "tag bad", t("no member ready")));
     const edit = el("button", "text", t("Edit"));
     edit.onclick = (e) => { e.stopPropagation(); open(); };
-    const open = () => { gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", classifier: g.classifier || "", effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])] })) } }; renderGroups(); };
+    const open = () => { gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], fast: [...(g.fast || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", classifier: g.classifier || "", effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } }; renderGroups(); };
     row.onclick = open;
     row.append(ics, main, tags, edit);
     return row;
@@ -1982,7 +2165,7 @@
       b.setAttribute("aria-checked", String(on));
       b.dataset.member = id;
       b.append(el("span", "dot"), memberIcon(id), el("span", "n", memberName(id)));
-      const note = memberNote(id);
+      const note = [memberNote(id), fastIn(g, id) && t("fast")].filter(Boolean).join(" · ");
       if (note) b.append(el("small", "", note));
       b.title = on ? t("Every request goes to {name}", { name: memberLabel(g, id) })
         : info && !info.ready ? t("No provider serves {id} now; it is skipped", { id })
@@ -1990,7 +2173,7 @@
       b.onclick = (e) => {
         e.stopPropagation(); // the card opens the editor; this picks
         if (on) return;
-        groupAction("save", { id: g.id, name: g.name, members: g.members, routing: "manual", pick: id, affinity: g.affinity || "", rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", context: g.context || 0, levels: g.levels || [], family: g.family || "" },
+        groupAction("save", { id: g.id, name: g.name, members: g.members, routing: "manual", pick: id, affinity: g.affinity || "", rules: g.rules || [], effort: g.effort || "", classifier: g.classifier || "", context: g.context || 0, levels: g.levels || [], family: g.family || "", fast: g.fast || [] },
           t("{name}: every request to {model}", { name: g.name, model: memberName(id) }));
       };
       box.append(b);
@@ -1999,12 +2182,16 @@
   }
   function groupEditor(g) {
     const d = gEdit.draft;
+    // whoever opened it, a draft has what the editor and Add read: a group
+    // made from a model (newGroupWith) had no fast, and Add threw on it
+    // and did nothing (悠悠哥 on Discord)
+    for (const k of ["members", "fast", "rules"]) if (!Array.isArray(d[k])) d[k] = [];
     const ed = el("div", "editor rt-gedit");
     const h = el("div", "ehead");
     h.append(el("b", "", g ? g.name : t("New group")));
     if (g?.auto) h.append(el("span", "note", t("found by magpie — saving a change makes it yours")));
     ed.append(h);
-    const keys = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { gEdit = null; renderGroups(); } else if (e.key === "Enter" && i === name) save(); }; return i; };
+    const keys = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { gEdit = null; renderGroups(); } else if (e.key === "Enter" && i === name) saveBtn.onclick(); }; return i; };
     const name = keys(input(d.name, t("e.g. Opus anywhere")));
     const idHint = el("div", "hint");
     // an existing group's id can change (an auto- one found by magpie too);
@@ -2070,15 +2257,28 @@
             if (d.members.includes(to)) { status(t("{name} at that reasoning is in the group already", { name: memberName(id) }), "err"); return; }
             d.members[i] = to;
             for (const r of d.rules) if (r.use === id) r.use = to;
+            d.fast = d.fast.map((x) => x === id ? to : x);
+            if (d.pick === id) d.pick = to;
             draw(); drawRules();
           }, fixed);
           row.append(fx);
+          // its vendor's fast mode, where the model has one: priority
+          // processing, Claude's fast mode (provider.CanFast)
+          if (m?.canFast) {
+            const on = d.fast.includes(id);
+            const fb = el("button", "rt-cond rt-fixed rt-fast" + (on ? " on" : ""), t(on ? "Fast" : "Standard speed"));
+            fb.type = "button";
+            fb.setAttribute("aria-pressed", String(on));
+            fb.title = on ? t("Sent in its vendor's fast mode whatever the agent asks: quicker, at a higher price") : t("Sent at its vendor's usual speed; click to send it in fast mode");
+            fb.onclick = () => { d.fast = on ? d.fast.filter((x) => x !== id) : [...d.fast, id]; draw(); };
+            row.append(fb);
+          }
         }
         if (s) row.title = s.members.map((x) => memberLabel(s, x)).join(s.routing === "order" ? " → " : " · ");
         if (!m && !s) { row.classList.add("off"); row.title = t("No provider serves {id} now; it is skipped", { id }); }
         if (i) { const up = el("button", "text", t("Up")); up.onclick = () => { d.members.splice(i - 1, 0, d.members.splice(i, 1)[0]); draw(); }; row.append(up); }
         const rm = el("button", "text", t("Remove"));
-        rm.onclick = () => { d.members.splice(i, 1); d.rules = d.rules.filter((r) => d.members.includes(r.use)); draw(); drawRules(); };
+        rm.onclick = () => { d.members.splice(i, 1); d.rules = d.rules.filter((r) => d.members.includes(r.use)); d.fast = d.fast.filter((x) => d.members.includes(x)); draw(); drawRules(); };
         row.append(rm);
         list.append(row);
       });
@@ -2170,7 +2370,47 @@
         const cp = el("button", "rt-cond" + (r.compact ? " on" : ""), t("compacting"));
         cp.title = t("The agent summarizes the conversation to go on in less room (Claude Code's /compact, Codex, OpenCode…): a cheaper, faster model can do it");
         cp.onclick = () => { r.compact = !r.compact; cp.classList.toggle("on", r.compact); warn(); };
-        when.append(tk, im, ef, ag, it, cp);
+        // hours of the day, on this computer's clock (a vendor's peak
+        // hours, say): typed as 09:00 and 18:00, past midnight when the
+        // second comes first; the days are picked like the agents
+        const tm = el("span", "rt-cond tm");
+        const tw = () => r.time || (r.time = { from: "", to: "", days: [] });
+        const tFrom = input(r.time?.from || "", "09:00"), tTo = input(r.time?.to || "", "18:00");
+        tm.title = t("The turn begins within these hours, on this computer's clock — a provider's peak-price hours sent to another, say");
+        tm.onclick = (e) => { if (e.target === tm || e.target.tagName === "SPAN") (tFrom.value ? tTo : tFrom).focus({ preventScroll: true }); };
+        const dayBtn = el("button", "rt-cond");
+        const drawTime = () => {
+          const w = r.time, from = clockOf(w?.from), to = clockOf(w?.to);
+          const typed = !!(w && (w.from || w.to));
+          tm.classList.toggle("on", !!(from && to));
+          // a time typed that isn't one, once its field is left
+          tm.classList.toggle("bad", [[tFrom, w?.from], [tTo, w?.to]].some(([b, v]) => v && !clockOf(v) && document.activeElement !== b));
+          dayBtn.hidden = !typed && !w?.days?.length;
+          dayBtn.textContent = daysText(w?.days) || t("every day");
+          dayBtn.classList.toggle("on", !!daysText(w?.days));
+        };
+        for (const [box, key] of [[tFrom, "from"], [tTo, "to"]]) {
+          box.className = "clock";
+          box.maxLength = 5;
+          box.inputMode = "numeric";
+          box.oninput = () => { tw()[key] = box.value.trim(); drawTime(); warn(); };
+          box.onblur = () => { const v = clockOf(box.value); if (v) { box.value = v; tw()[key] = v; } drawTime(); warn(); };
+          box.onkeydown = (e) => e.stopPropagation();
+        }
+        tm.append(el("span", "", t("from")), tFrom, el("span", "", t("to")), tTo);
+        const presets = [["", "every day", []], ["weekdays", "weekdays", WEEK.slice(0, 5)], ["weekends", "weekends", WEEK.slice(5)]];
+        dayBtn.onclick = (ev) => pickFrom("days", dayBtn, ev, [
+          ...presets.map(([v, label, ds]) => ({ value: "=" + v, label: t(label), note: ds.length ? daysText(ds) : t("not a condition") })),
+          ...WEEK.map((d) => ({ value: d, label: t(DAY_NAMES[d]), note: r.time?.days?.includes(d) ? "✓" : "" })),
+        ], (v) => {
+          const w = tw();
+          if (v.startsWith("=")) w.days = [...presets.find(([id]) => "=" + id === v)[2]];
+          else w.days = w.days.includes(v) ? w.days.filter((x) => x !== v) : WEEK.filter((x) => x === v || w.days.includes(x));
+          if (w.days.length === 7) w.days = [];
+          drawTime(); warn();
+        });
+        drawTime();
+        when.append(tk, im, ef, ag, it, cp, tm, dayBtn);
         // the member it sends to
         const use = el("div", "rt-use");
         const ub = el("button", "rt-cond on");
@@ -2185,6 +2425,8 @@
           if (r.tokens && m?.context && m.context < r.tokens) bits.push(t("it takes {n} tokens", { n: m.context.toLocaleString() }));
           // a summary longer than it takes goes by the next rule, or the group
           if (r.compact && m?.context && d.members.some((id) => (infoOf(id)?.context || 0) > m.context)) bits.push(t("longer conversations skip it: it takes {n} tokens", { n: m.context.toLocaleString() }));
+          const from = clockOf(r.time?.from), to = clockOf(r.time?.to);
+          if (from && to && to < from) bits.push(t("runs past midnight, into the next day"));
           hint.textContent = bits.join(" · ");
         };
         warn();
@@ -2199,19 +2441,24 @@
       });
       drawClassifier();
     };
-    rAdd.onclick = () => { d.rules.push({ use: d.members[d.members.length - 1], tokens: 0, images: false, effort: "", agents: [], intent: "", compact: false }); drawRules(); };
+    rAdd.onclick = () => { d.rules.push({ use: d.members[d.members.length - 1], tokens: 0, images: false, effort: "", agents: [], intent: "", compact: false, time: null }); drawRules(); };
     // the classifier, once a rule has an intent or the effort is picked
     // per turn: the model asked which intent a turn's message is and how
     // hard it is. Jev (a decision provider's model) answers both in one
     // call; any other model is asked each in words.
     const cls = el("div", "rt-classifier");
     const clabel = el("label", "");
+    // its cell in the editor's grid: hidden with the label, or the rows
+    // after it would each slip one cell (Levels' label at the right, its
+    // choices under the labels)
+    const cw = el("div");
+    cw.append(cls);
     const deciders = groups.deciders || [];
     const isJev = (id) => deciders.some((x) => x.id === id);
     const drawClassifier = () => {
       const auto = d.effort === "auto";
       const on = auto || d.rules.some((r) => r.intent?.trim());
-      cls.hidden = clabel.hidden = !on;
+      cls.hidden = cw.hidden = clabel.hidden = !on;
       if (!on) return;
       const intents = d.rules.some((r) => r.intent?.trim());
       clabel.textContent = t(auto && !intents ? "Decided by" : "Intent told by");
@@ -2259,8 +2506,6 @@
     }), eHint);
     drawEffort();
     ed.append(el("label", "", t("Effort")), ew);
-    const cw = el("div");
-    cw.append(cls);
     ed.append(clabel, cw);
     drawRules();
     // the levels agents are offered: those every model has, or ones the
@@ -2311,15 +2556,36 @@
     const save = () => {
       if (!d.members.length) { addBtn.focus({ preventScroll: true }); return status(t("A group needs a model in it"), "warn"); }
       d.rules.forEach((r) => { r.intent = (r.intent || "").trim(); });
-      const bare = d.rules.findIndex((r) => !r.tokens && !r.images && !r.effort && !r.agents.length && !r.intent && !r.compact);
+      // hours: both times, or none and no days; days alone are all day
+      const badTime = d.rules.findIndex((r) => {
+        const w = r.time;
+        if (!w || !w.from && !w.to && !w.days?.length) return r.time = null, false;
+        if (!w.from && !w.to) { w.from = w.to = "00:00"; return false; }
+        const from = clockOf(w.from), to = clockOf(w.to);
+        if (!from || !to) return true;
+        w.from = from; w.to = to;
+        return from === to && !w.days?.length;
+      });
+      if (badTime >= 0) {
+        const w = d.rules[badTime].time;
+        return status(clockOf(w.from) && clockOf(w.from) === clockOf(w.to)
+          ? t("Rule {n}: its hours are the whole day — pick days, or other hours", { n: badTime + 1 })
+          : t("Rule {n}: the hours are two times like 09:00 and 18:00", { n: badTime + 1 }), "warn");
+      }
+      const bare = d.rules.findIndex((r) => !r.tokens && !r.images && !r.effort && !r.agents.length && !r.intent && !r.compact && !r.time);
       if (bare >= 0) return status(t("Rule {n} needs a condition", { n: bare + 1 }), "warn");
       if (d.rules.some((r) => r.intent) && !d.classifier) return status(t("Choose the model that tells which intent a message is"), "warn");
       if (d.effort === "auto" && !d.classifier) return status(t("Choose the model that rates how hard a turn is"), "warn");
       if (own && !d.levels.length) return status(t("Pick a level to offer, or leave them to its models"), "warn");
       saveBtn.classList.add("busy");
-      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: d.members, routing: d.routing, pick: d.pick || "", affinity: d.affinity, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: g?.context || 0, levels: own ? d.levels : [], family: g?.family || "" }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }));
+      // refused, Add can be pressed again (busy, it takes no clicks)
+      groupAction("save", { id: idOf(), from: g?.id, name: d.name.trim() || idOf(), members: d.members, routing: d.routing, pick: d.pick || "", affinity: d.affinity, rules: d.rules, effort: d.effort, classifier: d.rules.some((r) => r.intent) || d.effort === "auto" ? d.classifier : "", context: g?.context || 0, levels: own ? d.levels : [], family: g?.family || "", fast: d.fast.filter((x) => d.members.includes(x)) }, t(g ? "{name} saved" : "{name} added", { name: d.name.trim() || idOf() }))
+        .then(() => saveBtn.classList.remove("busy"));
     };
-    saveBtn.onclick = save;
+    // what goes wrong is said where it is seen, never a click that does nothing
+    saveBtn.onclick = () => {
+      try { save(); } catch (e) { saveBtn.classList.remove("busy"); status(t("Couldn't save the group: {error}", { error: e.message }), "err"); }
+    };
     bar.append(cancel, saveBtn);
     ed.append(bar);
     if (!g) setTimeout(() => name.focus({ preventScroll: true }), 0); // WebKit would scroll the page to put it mid-view
@@ -2352,7 +2618,24 @@
   // loaded when the view is shown, and again when the window comes back
   new MutationObserver(() => { if (!$("#view-routing").hidden) loadGroups(); }).observe($("#view-routing"), { attributes: true, attributeFilter: ["hidden"] });
   window.addEventListener("focus", () => { if (shown()) loadGroups(); });
-  loadGroups();
+  // newGroupWith: a new group's editor, opened with the model in it — a
+  // model of a provider kept for routing groups that no group has, which
+  // agents can reach no other way. The picker and the provider's editor
+  // ask it (and the tray panel, by ?newgroup= on the window it opens).
+  window.newGroupWith = async (id, name, ev) => {
+    // app.js's show, the page's: this one's own show is the stage's caption
+    if (document.body.classList.contains("window") && $("#view-routing").hidden) window.show("routing");
+    if (!groups) await loadGroups();
+    if (!groups) return;
+    gEdit = { id: "", draft: { name: name || modelOf(id)?.name || id.split("/").pop(), members: [id], fast: [], routing: "", affinity: "", rules: [] } };
+    renderGroups();
+    const ed = gList.querySelector(".rt-gedit");
+    if (ed && window.scrollOnPurpose?.(ev)) ed.scrollIntoView({ block: "center", behavior: "smooth" });
+    ed?.querySelector("input")?.focus({ preventScroll: true });
+  };
+  const askedGroup = document.body.classList.contains("window") && params.get("newgroup");
+  if (askedGroup) loadGroups().then(() => window.newGroupWith(askedGroup, ""));
+  else loadGroups();
 
   // ---------- where the reader is, as requests come ----------
   // Every request redraws what is above the routing groups: the stage gains

@@ -11,7 +11,7 @@ import (
 // a model the agent names that magpie doesn't serve goes to the one the
 // agent is set to use for it; one magpie serves is sent as asked
 func TestStandIn(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setHome(t, t.TempDir())
 	f := &fake{t: t, ctype: "application/json", reply: `{"id":"c1","choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}`}
 	setup(t, provider.Chat, f)
 	var asked []string
@@ -38,7 +38,7 @@ func TestStandIn(t *testing.T) {
 // Codex's auto-review asks magpie, its provider, for "codex-auto-review":
 // the review goes to the model that stands in (Codex's, TestCodexStandIn).
 func TestCodexAutoReviewStandIn(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setHome(t, t.TempDir())
 	f := &fake{t: t, ctype: "application/json", reply: `{"id":"c1","choices":[{"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}]}`}
 	setup(t, provider.Chat, f)
 	StandIn = func(agent, model string) string {

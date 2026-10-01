@@ -4,8 +4,8 @@
 // on the Usage page's card, and "Use one…" on the menu bar panel's, an
 // "Auto-use" toggle, off until turned on, posts settings/codex-auto-reset
 // for that account and shows itself pressed; turned off again the same way.
-// A GLM team's resets, spent on its own site, and an account with no name
-// get none. No click moves the page; no left-border accent. English and
+// A GLM team's resets, spent on its own site, a plugin's, and an account
+// with no name get none, nor a button to use one. No click moves the page; no left-border accent. English and
 // Chinese, Chromium and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -21,11 +21,14 @@ const quotas = [
     resets: { count: 2, until: later } },
   { provider: "zhipu", name: "GLM Coding", icon: "zhipu-color", user: "team@example.com", plan: "Team",
     windows: [{ name: "5 hours", used: 30 }], resets: { count: 1, byWindow: true, fiveHour: 1 } },
+  // a plugin's, its resets told but not spent from magpie: never sent to Codex's
+  { provider: "codex-plugin", name: "Codex (plugin)", user: "Me@example.com", plan: "Plus",
+    windows: [{ name: "7 days", used: 100, resetsAt: later }], resets: { count: 3, until: later } },
 ];
 
 function serve(lang, posts) {
   let auto = [];
-  const settings = () => ({ theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd", trayUsages: ["codex"], trayUsageEvery: 3, codexAutoReset: auto });
+  const settings = () => ({ theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd", trayUsages: ["codex", "zhipu", "codex-plugin"], trayUsageEvery: 3, codexAutoReset: auto });
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
@@ -101,6 +104,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const sel = ".quota-resets .auto-reset";
       await page.locator(sel).waitFor();
       assert.equal(await page.locator(sel).count(), 1, "the GLM team's resets have no toggle");
+      assert.equal(await page.locator(".quota-resets").count(), 3, "every account's resets are told");
+      assert.equal(await page.locator(".quota-resets button").count(), 2, "only Codex's resets are used from here");
       assert.equal((await page.locator(sel).textContent()).trim(), w.auto);
       assert.equal(await page.locator(sel).getAttribute("aria-pressed"), "false", "off until turned on");
       assert(await page.locator(sel).getAttribute("title"));
@@ -119,6 +124,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await panel.locator(psel).waitFor();
       assert.equal(await panel.locator(psel).getAttribute("aria-pressed"), "false");
       assert.equal((await panel.locator(psel).textContent()).trim(), w.auto);
+      assert.equal(await panel.locator(".pq-resets").count(), 3);
+      assert.equal(await panel.locator(".pq-resets button").count(), 2, "only Codex's resets are used from the panel");
       await flip(panel, psel, panelPosts, true, w.on);
       // still beside "Use one…", on one line
       const [a, u] = await panel.evaluate(() => [...document.querySelectorAll(".pq-resets button")].map((b) => b.getBoundingClientRect().top));

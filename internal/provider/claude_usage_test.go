@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,14 +29,16 @@ func fakeClaudeUsage(t *testing.T, out *atomic.Value, fail *atomic.Bool) *atomic
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("magpie asked Anthropic itself: %s", r.URL)
 	}))
-	oldBase := claudeBase
+	oldBase, oldWait, oldUsed := claudeBase, claudeUsageWait, claudeUsedSince
 	claudeBase = srv.URL
+	claudeUsageWait = func() time.Duration { return usageTestWait }
+	claudeUsedSince = func(time.Time) bool { return true }
 	claudeAsked.Store(0)
 	claudeUsage.Lock()
 	claudeUsage.m = nil
 	claudeUsage.Unlock()
 	t.Cleanup(func() {
-		claudeCLIUsage, claudeBase = old, oldBase
+		claudeCLIUsage, claudeBase, claudeUsageWait, claudeUsedSince = old, oldBase, oldWait, oldUsed
 		claudeAsked.Store(oldAsked)
 		srv.Close()
 		claudeUsage.Lock()
@@ -56,11 +60,9 @@ func TestClaudeWindowsAsked(t *testing.T) {
 	runs := fakeClaudeUsage(t, &out, &fail)
 	ctx := context.Background()
 
-	// nobody asked: nothing is run
-	for range 3 {
-		if _, err := claudeWindows(ctx, "A@x", true); err != errClaudeNotAsked || runs.Load() != 0 {
-			t.Fatalf("unasked: %v %d", err, runs.Load())
-		}
+	// a saved account is never read, asked or not
+	if _, err := claudeWindows(ctx, "saved@x", false); err != errClaudeSaved || runs.Load() != 0 {
+		t.Fatalf("saved unasked: %v %d", err, runs.Load())
 	}
 	// a saved account is never read, asked or not
 	AskClaudeUsage()
@@ -84,19 +86,37 @@ func TestClaudeWindowsAsked(t *testing.T) {
 		t.Fatalf("too soon: %v %d", err, runs.Load())
 	}
 
-	// asked later: run again; a failed run isn't run again until asked
+	// its wait on, unasked: run again by itself, once
+	age := func(d time.Duration) {
+		claudeUsage.Lock()
+		e := claudeUsage.m["a@x"]
+		e.tried = e.tried.Add(-d)
+		claudeUsage.m["a@x"] = e
+		claudeUsage.Unlock()
+	}
+	claudeAsked.Store(0) // the ask above was answered by the run before it
+	age(usageTestWait - time.Minute)
+	if _, err = claudeWindows(ctx, "a@x", true); err != nil || runs.Load() != 1 {
+		t.Fatalf("ran before its wait: %v %d", err, runs.Load())
+	}
+	age(time.Minute)
+	out.Store("Current session: 55% used · resets Oct 1 at 3:30pm (UTC)\n")
+	for range 3 {
+		if ws, err = claudeWindows(ctx, "a@x", true); err != nil || len(ws) != 1 || ws[0].Used != 55 || runs.Load() != 2 {
+			t.Fatalf("every: %v %+v %d", err, ws, runs.Load())
+		}
+	}
+
+	// a failed run says why, and isn't run again until asked or its wait is up
 	claudeUsage.Lock()
-	e := claudeUsage.m["a@x"]
-	e.tried = e.tried.Add(-time.Hour)
-	claudeUsage.m["a@x"] = e
+	claudeUsage.m["b@x"] = claudeUsageEntry{tried: time.Now().Add(-claudeUsageWaitMax)}
 	claudeUsage.Unlock()
 	fail.Store(true)
-	AskClaudeUsage()
-	if _, err = claudeWindows(ctx, "a@x", true); err == nil || runs.Load() != 2 {
+	if _, err = claudeWindows(ctx, "b@x", true); err == nil || runs.Load() != 3 {
 		t.Fatalf("failed: %v %d", err, runs.Load())
 	}
-	if _, err = claudeWindows(ctx, "a@x", true); runs.Load() != 2 {
-		t.Fatalf("ran again unasked: %v %d", err, runs.Load())
+	if _, err = claudeWindows(ctx, "b@x", true); err == nil || err == errClaudeNotAsked || runs.Load() != 3 {
+		t.Fatalf("after a failure: %v %d", err, runs.Load())
 	}
 }
 
@@ -143,5 +163,93 @@ What's contributing to your limits usage?
 	}
 	if _, err := parseClaudeUsage("Error: not logged in", now); err == nil {
 		t.Fatal("nothing told, no error")
+	}
+}
+
+// usageTestWait is the wait between unasked runs of /usage in tests.
+const usageTestWait = 7 * time.Minute
+
+// An unasked run of /usage waits a whole number of minutes from 5 to 15,
+// drawn afresh each time, so it isn't run on a clock.
+func TestClaudeWaitRandom(t *testing.T) {
+	seen := map[time.Duration]bool{}
+	for range 2000 {
+		w := claudeUsageWait()
+		if w < claudeUsageWaitMin || w > claudeUsageWaitMax || w%time.Minute != 0 {
+			t.Fatalf("wait %v", w)
+		}
+		seen[w] = true
+	}
+	if len(seen) != 11 {
+		t.Fatalf("waits drawn: %v", seen)
+	}
+}
+
+// Unasked, /usage is run again only once Claude Code has been used since
+// it last was; asked, it is run whether it was or not.
+func TestClaudeUsageIdle(t *testing.T) {
+	var out atomic.Value
+	out.Store("Current session: 40% used · resets Oct 1 at 3:30pm (UTC)\n")
+	runs := fakeClaudeUsage(t, &out, nil)
+	var used atomic.Bool
+	claudeUsedSince = func(time.Time) bool { return used.Load() }
+	ctx := context.Background()
+
+	AskClaudeUsage()
+	if _, err := claudeWindows(ctx, "a@x", true); err != nil || runs.Load() != 1 {
+		t.Fatalf("asked: %v %d", err, runs.Load())
+	}
+	claudeAsked.Store(0)
+	claudeUsage.Lock()
+	e := claudeUsage.m["a@x"]
+	e.tried = e.tried.Add(-usageTestWait)
+	claudeUsage.m["a@x"] = e
+	claudeUsage.Unlock()
+
+	// its wait is up, but nobody used Claude Code
+	if ws, err := claudeWindows(ctx, "a@x", true); err != nil || len(ws) != 1 || runs.Load() != 1 {
+		t.Fatalf("idle: %v %d", err, runs.Load())
+	}
+	// asked, it runs all the same
+	AskClaudeUsage()
+	if _, err := claudeWindows(ctx, "a@x", true); err != nil || runs.Load() != 2 {
+		t.Fatalf("asked while idle: %v %d", err, runs.Load())
+	}
+	claudeAsked.Store(0)
+	claudeUsage.Lock()
+	e = claudeUsage.m["a@x"]
+	e.tried = e.tried.Add(-usageTestWait)
+	claudeUsage.m["a@x"] = e
+	claudeUsage.Unlock()
+	// used since: it runs by itself again
+	used.Store(true)
+	if _, err := claudeWindows(ctx, "a@x", true); err != nil || runs.Load() != 3 {
+		t.Fatalf("used: %v %d", err, runs.Load())
+	}
+}
+
+// Claude Code was used since a time when one of its sessions was written
+// to since then; its other files don't count.
+func TestClaudeUsedSince(t *testing.T) {
+	claudeHome(t)
+	project := filepath.Join(filepath.Dir(claudeCredentialsPath()), "projects", "-Users-x-proj")
+	if err := os.MkdirAll(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	session := filepath.Join(project, "s.jsonl")
+	os.WriteFile(session, []byte("{}\n"), 0o600)
+	os.WriteFile(filepath.Join(project, "notes.txt"), nil, 0o600)
+	now := time.Now()
+	old := now.Add(-time.Hour)
+	os.Chtimes(session, old, old)
+	if claudeUsedSince(now.Add(-time.Minute)) {
+		t.Fatal("used, with no session written to")
+	}
+	if !claudeUsedSince(now.Add(-2 * time.Hour)) {
+		t.Fatal("not used, with a session written to")
+	}
+	os.Chtimes(session, now, now)
+	if !claudeUsedSince(now.Add(-time.Minute)) {
+		t.Fatal("not used, with a session just written to")
 	}
 }

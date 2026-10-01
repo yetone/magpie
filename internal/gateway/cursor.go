@@ -202,7 +202,7 @@ func (s *Server) serveCursor(w http.ResponseWriter, r *http.Request, from provid
 	req.Model = model
 	ask := s.askCursor(model)
 	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
+		if canSearch() {
 			return s.searchReply(w, r, from, "Cursor", req, usage, ask)
 		}
 	}

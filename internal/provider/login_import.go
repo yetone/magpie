@@ -8,11 +8,12 @@ package provider
 // ({claudeAiOauth: {…}}); a bare refresh token a line is taken too. They
 // all sign in with the agents' own OAuth clients, the ones magpie uses.
 //
-// Each is checked the way a sign-in is finished: its refresh token traded
-// for new tokens and the account asked for. That rotates the token, so the
-// file it came from stops working: the account is magpie's from then on,
-// as a sign-in in magpie would make it. Tokens are never logged or sent
-// back.
+// A ChatGPT one is checked the way a sign-in is finished: its refresh token
+// traded for new tokens and the account asked for. That rotates the token,
+// so the file it came from stops working: the account is magpie's from then
+// on, as a sign-in in magpie would make it. A Claude one is kept as it
+// came, magpie asking Anthropic nothing; Claude Code refreshes it the first
+// time it runs on it. Tokens are never logged or sent back.
 
 import (
 	"context"
@@ -260,15 +261,16 @@ func importLogin(ctx context.Context, agent string, e loginImport, name string, 
 		if len(scopes) == 0 {
 			scopes = claudeImportScopes
 		}
-		c := claudeCredentials{raw: map[string]any{}, OAuth: claudeAuth{RefreshToken: e.refreshToken, Scopes: scopes}}
-		if err := claudeRefresh(ctx, &c); err != nil {
-			return refused("Claude", err)
+		// kept as it came, not tried: trying it would ask Anthropic, which
+		// magpie never does with a Claude sign-in. Claude Code refreshes it
+		// the first time it runs on the account, its access token taken
+		// for spent.
+		c := claudeCredentials{raw: map[string]any{}, OAuth: claudeAuth{AccessToken: e.accessToken, RefreshToken: e.refreshToken,
+			ExpiresAt: 1, Scopes: scopes}}
+		if e.email == "" {
+			return fail("the file doesn't say which Claude account this is; sign in to it from magpie instead")
 		}
-		acct := map[string]any{}
-		if e.email != "" {
-			acct["emailAddress"] = e.email
-		}
-		claudeProfileInto(ctx, &c, acct)
+		acct := map[string]any{"emailAddress": e.email}
 		l, err = claudeLogin(c, acct)
 	}
 	if err != nil {

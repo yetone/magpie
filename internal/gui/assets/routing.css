@@ -191,6 +191,16 @@
 .rt-req .to .routed, .pr-to .routed { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; line-height: 16px; color: var(--muted); white-space: nowrap; }
 .rt-steps li.swap::before { background: var(--amber); }
 .rt-req .meta { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.rt-req .meta .cost { display: inline-block; margin-left: 10px; color: var(--fg-2); }
+.rt-session { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; padding: 9px 8px; margin-top: 4px; font: inherit; font-size: 12px; text-align: left; color: var(--fg-2); background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; }
+button.rt-session { cursor: pointer; }
+.rt-session .arrow { flex: none; width: 10px; color: var(--muted); }
+.rt-session .nm { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.rt-session .summary { color: var(--muted); font-variant-numeric: tabular-nums; }
+.rt-session .cost { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
+.rt-filters { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rt-filters > .rt-days { flex: 1; min-width: 0; }
+.rt-group-by { flex: none; }
 /* one line wants room for the time, the model, where it went at what
    reasoning, and the numbers; in less, where it went and the numbers share
    a line under the model, and in less still each has a line of its own */
@@ -352,6 +362,11 @@
 .rt-cond.tk { cursor: text; }
 .rt-cond.in { cursor: text; }
 .rt-cond.in input, .editor .rt-cond.in input[type="text"] { width: 24ch; }
+/* a rule's hours: two times in the pill, typed; one that isn't a time is marked */
+.rt-cond.tm { cursor: text; }
+.rt-cond.tm input.clock, .editor .rt-cond.tm input.clock[type="text"] { width: 5.5ch; text-align: center; }
+.rt-cond.tm.bad { border-style: solid; border-color: var(--amber, var(--muted)); }
+.rt-cond[hidden] { display: none; }
 .rt-classifier { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .rt-classifier[hidden] { display: none; }
 .rt-classifier .w { color: var(--muted); font-size: 12px; }
@@ -395,8 +410,8 @@
 @media (max-width: 520px) { .rp-req .rp-at { display: none; } }
 
 /* the days the routing history keeps: live, then each day, newest first */
-.rt-days { display: flex; gap: 4px; overflow-x: auto; padding: 0 2px 6px; scrollbar-width: none; }
-.rt-days::-webkit-scrollbar { display: none; }
+.rt-days, .rt-group-by { display: flex; gap: 4px; overflow-x: auto; padding: 0 2px 6px; scrollbar-width: none; }
+.rt-days::-webkit-scrollbar, .rt-group-by::-webkit-scrollbar { display: none; }
 .rt-day { flex: none; display: inline-flex; align-items: baseline; gap: 5px; font-size: 12px; color: var(--muted); padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: none; white-space: nowrap; }
 .rt-day small { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .rt-day:hover { color: var(--fg); }

@@ -73,7 +73,7 @@ func readKiroFile(path string) (kiroCred, bool) {
 		return kiroCred{}, false
 	}
 	c := kiroCred{access: t.AccessToken, refresh: t.RefreshToken, region: t.Region, profile: t.ProfileArn,
-		clientID: t.ClientID, clientSecret: t.ClientSecret, idePath: path}
+		clientID: t.ClientID, clientSecret: t.ClientSecret, idePath: path, builderID: strings.EqualFold(t.Provider, "BuilderId")}
 	c.expires, _ = time.Parse(time.RFC3339Nano, t.ExpiresAt)
 	if c.region == "" {
 		c.region = "us-east-1"

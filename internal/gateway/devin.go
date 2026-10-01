@@ -44,7 +44,7 @@ func (s *Server) serveDevin(w http.ResponseWriter, r *http.Request, from provide
 	req.Model = model
 	ask := s.askDevin(home, model)
 	if req.WebSearch && !searching(r.Context()) {
-		if _, _, ok := searcher(); ok {
+		if canSearch() {
 			return s.searchReply(w, r, from, "Devin", req, usage, ask)
 		}
 	}

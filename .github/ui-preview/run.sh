@@ -32,6 +32,11 @@ export MAGPIE_ADDR=$gw MAGPIE_WEB_KEY=$(openssl rand -hex 20)
 echo "::add-mask::$MAGPIE_WEB_KEY"
 
 "$work/magpie" provider add deepseek "$DEEPSEEK_API_KEY" >/dev/null
+# Claude Desktop, as its config folder (no app: on Linux magpie finds it in
+# $XDG_CONFIG_HOME/Claude), put on magpie, so the Agents page shows its row
+# and settings; the CLI writes the folders where this OS keeps them
+mkdir -p "$XDG_CONFIG_HOME/Claude"
+"$work/magpie" claude-desktop provider magpie >/dev/null
 "$work/magpie" web --addr "$webaddr" --no-open >"$work/web.log" 2>&1 &
 web=$!
 url="http://$webaddr/?k=$MAGPIE_WEB_KEY"

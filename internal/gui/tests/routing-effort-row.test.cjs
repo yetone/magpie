@@ -115,8 +115,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           }
         }
         // the answered rows keep all their numbers
-        const meta = await page.locator(".rt-req").nth(1).locator(".meta").textContent();
+        const meta = await page.locator(".rt-req").nth(1).locator(".meta > span").first().textContent();
         assert.match(meta, lang === "zh" ? /秒 · 首字 4\.6 秒 · 142\.4k token$/ : /s · TTFT 4\.6 s · 142\.4k tokens$/);
+        assert.equal(await page.locator(".rt-req").nth(1).locator(".meta .cost").textContent(), "—");
         // no stripe down a row's side
         assert.equal(await page.locator(".rt-req").first().evaluate((e) => getComputedStyle(e).borderLeftColor === getComputedStyle(e).borderTopColor), true);
         assert.deepEqual(errors, []);

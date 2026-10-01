@@ -235,14 +235,16 @@ func devinModelsFlatten(families []DevinFamily) []catalog.Model {
 		if most == 0 {
 			most = catalog.OutputOf(f.UID)
 		}
-		out = append(out, catalog.Model{ID: f.UID, Name: f.Label, Provider: "devin", Context: window, Output: most})
+		// Devin's word on images, as its variants all say it (#417)
+		images := f.images()
+		out = append(out, catalog.Model{ID: f.UID, Name: f.Label, Provider: "devin", Context: window, Output: most, ImageInput: images})
 		// the family's fast run, one model for its fast variants as the
 		// family's id is for the rest; not an id of Devin's, the gateway
 		// asks for the variant at the effort (DevinVariant). One a family
 		// of that name already is (swe-1.6-fast) isn't made up.
 		for _, t := range f.tiers() {
 			if id := f.UID + "-" + t; !slices.ContainsFunc(families, func(g DevinFamily) bool { return g.named(id) }) {
-				out = append(out, catalog.Model{ID: id, Name: f.Label + " " + devinTierLabel(t), Provider: "devin", Context: window, Output: most})
+				out = append(out, catalog.Model{ID: id, Name: f.Label + " " + devinTierLabel(t), Provider: "devin", Context: window, Output: most, ImageInput: images})
 			}
 		}
 		for _, m := range f.Models {
@@ -313,6 +315,30 @@ func devinDeclared() map[string][2]int {
 	return out
 }
 
+// devinDeclaredImages is what Devin said of each model id's images, as
+// devinModelsFlatten gives it, for a list saved before Devin was asked.
+func devinDeclaredImages() map[string]*bool {
+	out := map[string]*bool{}
+	for _, f := range devinCached() {
+		if v := f.images(); v != nil {
+			for _, id := range append([]string{f.UID}, f.Aliases...) {
+				out[id] = v
+			}
+			for _, t := range f.tiers() {
+				if _, ok := out[f.UID+"-"+t]; !ok {
+					out[f.UID+"-"+t] = v
+				}
+			}
+		}
+		for _, m := range f.Models {
+			if m.ImageInput != nil {
+				out[m.ID] = m.ImageInput
+			}
+		}
+	}
+	return out
+}
+
 var devinEffort = regexp.MustCompile(`-(none|min|minimal|low|medium|high|xhigh|max|fast|priority)$`)
 
 // devinKnown is models.dev's window and reply cap for a model id, with the
@@ -338,8 +364,12 @@ func devinKnown(id string) (window, most int) {
 // has claude-opus-5-5's).
 func withDevinContexts(ms []catalog.Model) []catalog.Model {
 	declared := devinDeclared()
+	images := devinDeclaredImages()
 	out := slices.Clone(ms)
 	for i, m := range out {
+		if m.ImageInput == nil {
+			out[i].ImageInput = images[m.ID]
+		}
 		// Devin's own numbers, over what an older magpie took from models.dev
 		window, most := declared[m.ID][0], declared[m.ID][1]
 		if window > 0 {
@@ -520,7 +550,8 @@ func askDevinFamiliesAt(ctx context.Context, home string) ([]DevinFamily, error)
 	if len(families) == 0 {
 		return nil, errors.New("devin models list: no models")
 	}
-	return families, nil
+	// which take images, which the list doesn't say
+	return withDevinImages(families, devinImagesAt(ctx, home)), nil
 }
 
 // parseDevinModels reads `devin models list --format json`:

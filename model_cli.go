@@ -28,6 +28,10 @@ const modelUsage = `usage:
                                                  0.12,1.20,0.01,0.15; 0 is a model served for nothing, which is
                                                  a price, not the absence of one
   magpie model price <provider/model> --reset    take your price off this model
+  magpie model price <model> <in>,<out>,<cache read>,<cache write>
+                                                 what the model costs from any provider you have not priced it
+                                                 for, kept as '*/<model>': for usage whose provider is gone, or
+                                                 a model models.dev doesn't price, e.g. gemini-3-pro-preview
   magpie model prices                            the models you priced
   magpie model context <provider/model>          how long a request it takes, and what you said it takes
   magpie model context <provider/model> <n>      say how long, as 200000 or 1m; '<provider>/*' is every model
@@ -51,7 +55,7 @@ const modelUsage = `usage:
 
   Each is looked for in this order: this model, then <provider id>/*, then the provider's own
   list, then models.dev. --reset removes only the first, and says so when a <provider id>/* value
-  still applies.
+  still applies. A price comes from '*/<model>' after <provider id>/* and before any list price.
 
   Only what agents are shown changes with a name or levels: they still pick the model, and
   requests still reach it, as <provider/model>. The same model from another provider keeps
@@ -244,10 +248,23 @@ func modelPrice(args []string) error {
 	// prices` and still counted, so a reset that resolved the provider
 	// first could not take it away — and would take another provider's
 	// price away instead where the gone one's name has been given to one.
-	if isReset(rest) {
-		return resetModelPrice(args[0])
+	ref := args[0]
+	// a model named with no provider, or as */model, is that model from any
+	// provider: what prices a session's model whose provider is gone, or one
+	// that never went through magpie
+	every := false
+	if r := strings.TrimPrefix(strings.TrimSpace(ref), "magpie/"); r != "" && !strings.Contains(r, "/") {
+		ref, every = settings.AnyProvider+r, true
+	} else {
+		every = strings.HasPrefix(r, settings.AnyProvider)
 	}
-	p, model, err := modelRef(args[0])
+	if isReset(rest) {
+		return resetModelPrice(ref)
+	}
+	if every {
+		return anyModelPrice(ref, rest)
+	}
+	p, model, err := modelRef(ref)
 	if err != nil {
 		return err
 	}
@@ -266,6 +283,9 @@ func modelPrice(args []string) error {
 		case "provider":
 			fmt.Println(faint.Render("  · what you said every model of this provider costs · magpie model price " +
 				typedRef(p.ID+"/*") + " --reset takes that away"))
+		case "any":
+			fmt.Println(faint.Render("  · what you said this model costs from any provider · magpie model price " +
+				typedRef(provider.AnyPriceKey(model)) + " --reset takes that away"))
 		case "ignored":
 			fmt.Println(faint.Render("  · a price you gave is not usable and is ignored"))
 		default:
@@ -274,24 +294,64 @@ func modelPrice(args []string) error {
 		}
 		return nil
 	}
+	pr, err := parsePrice(rest)
+	if err != nil {
+		return err
+	}
+	if err := provider.SetModelPrice(id, &pr); err != nil {
+		return err
+	}
+	fmt.Println(green.Render("✓"), id, muted.Render("costs"), bold.Render(perMillion(pr)))
+	return nil
+}
+
+// parsePrice is the four parts of a price as typed, in USD per million
+// tokens.
+func parsePrice(rest []string) (catalog.Price, error) {
 	var nums []float64
 	for _, a := range rest {
 		for _, f := range strings.FieldsFunc(a, func(r rune) bool { return r == ',' || r == ' ' || r == '/' }) {
 			v, err := strconv.ParseFloat(f, 64)
 			if err != nil {
-				return fmt.Errorf("a price is numbers in USD per million tokens, like 0.12,1.20,0.01,0.15, not %q", f)
+				return catalog.Price{}, fmt.Errorf("a price is numbers in USD per million tokens, like 0.12,1.20,0.01,0.15, not %q", f)
 			}
 			nums = append(nums, v)
 		}
 	}
 	if len(nums) != 4 {
-		return fmt.Errorf("give all four parts, input,output,cache read,cache write — %d given", len(nums))
+		return catalog.Price{}, fmt.Errorf("give all four parts, input,output,cache read,cache write — %d given", len(nums))
 	}
-	pr := catalog.Price{Input: nums[0], Output: nums[1], CacheRead: nums[2], CacheWrite: nums[3]}
-	if err := provider.SetModelPrice(id, &pr); err != nil {
+	return catalog.Price{Input: nums[0], Output: nums[1], CacheRead: nums[2], CacheWrite: nums[3]}, nil
+}
+
+// anyModelPrice shows or sets what a model costs from any provider (*/model):
+// the price a session's model is counted at when no price of a provider's
+// own applies — its provider gone, the model no longer listed by it, or a
+// model models.dev doesn't price.
+func anyModelPrice(ref string, rest []string) error {
+	key := provider.AnyPriceKey(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(ref), "magpie/"), settings.AnyProvider))
+	if key == settings.AnyProvider || key == settings.AnyProvider+"*" {
+		return fmt.Errorf("name one model, such as %s", typedRef("*/claude-opus-4.6"))
+	}
+	if len(rest) == 0 {
+		if pr, ok := statedPrice(settings.Load().ModelPrices, key); ok {
+			fmt.Println(bold.Render(perMillion(pr)), muted.Render("· "+key))
+			fmt.Println(faint.Render("  · cache read " + money(pr.CacheRead) + ", cache write " + money(pr.CacheWrite)))
+			fmt.Println(faint.Render("  · what you said this model costs from any provider · --reset takes that away"))
+			return nil
+		}
+		fmt.Println(muted.Render(key), faint.Render("· no price of yours · magpie model price "+typedRef(key)+" <in>,<out>,<cache read>,<cache write>"))
+		return nil
+	}
+	pr, err := parsePrice(rest)
+	if err != nil {
 		return err
 	}
-	fmt.Println(green.Render("✓"), id, muted.Render("costs"), bold.Render(perMillion(pr)))
+	if err := provider.SetModelPrice(key, &pr); err != nil {
+		return err
+	}
+	fmt.Println(green.Render("✓"), key, muted.Render("costs"), bold.Render(perMillion(pr)),
+		faint.Render("from any provider you have not priced it for"))
 	return nil
 }
 
@@ -319,6 +379,14 @@ func resetModelPrice(ref string) error {
 	}
 	s := settings.Load()
 	wid, _, _ := strings.Cut(key, "/")
+	if strings.HasPrefix(key, settings.AnyProvider) {
+		if !dropped {
+			return fmt.Errorf("%s has no price of yours to reset — magpie model prices lists the ones you set", key)
+		}
+		fmt.Println(green.Render("✓"), key,
+			muted.Render("no longer has a price of yours; it is costed at what its provider lists, or its maker's on models.dev"))
+		return nil
+	}
 	if !dropped {
 		if _, wide := statedPrice(s.ModelPrices, wid+"/*"); wide {
 			return fmt.Errorf("%s has no price of its own; what it costs is what you set for every model of this provider, %s/*, which magpie model price %s --reset takes away",
@@ -371,6 +439,9 @@ func priceFrom(s settings.Settings, providerID, model string) string {
 	}
 	if _, ok := statedPrice(s.ModelPrices, providerID+"/*"); ok {
 		return "provider"
+	}
+	if _, ok := statedPrice(s.ModelPrices, provider.AnyPriceKey(model)); ok {
+		return "any"
 	}
 	if _, given := s.ModelPrices[providerID+"/"+model]; given {
 		return "ignored"

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -169,6 +170,7 @@ func TestSeveralKeysOnTakeOverFromEachOther(t *testing.T) {
 func TestSubscriptionAccountsTakeOver(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	restingUntil.Lock()
@@ -231,8 +233,12 @@ func TestSubscriptionAccountsTakeOver(t *testing.T) {
 // token and no email: the account is still named from ~/.claude.json, so it
 // is the saved me@example.com, not a "Claude Max" served beside it.
 func TestClaudeAccountsTakeOver(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	far := time.Now().Add(24 * time.Hour).UnixMilli()
@@ -253,9 +259,10 @@ func TestClaudeAccountsTakeOver(t *testing.T) {
 	// out of quota, the CLI says so in a result and waits on its next input
 	script := `#!/bin/sh
 if [ "$1" = auth ]; then echo '{"loggedIn":true,"authMethod":"oauth_token","apiProvider":"firstParty"}'; exit 0; fi
-echo "${CLAUDE_CODE_OAUTH_TOKEN:-own}" >> ` + log + `
+TOK=; [ -n "$CLAUDE_CONFIG_DIR" ] && TOK=$(sed -n 's/.*"accessToken": *"\([^"]*\)".*/\1/p' "$CLAUDE_CONFIG_DIR/.credentials.json")
+echo "${TOK:-own}" >> ` + log + `
 while read -r line; do
-  if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ] || [ "$CLAUDE_CODE_OAUTH_TOKEN" = tok-me ]; then
+  if [ -z "$TOK" ] || [ "$TOK" = tok-me ]; then
     echo '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","rateLimitType":"five_hour","resetsAt":1790700000}}'
     echo '{"type":"assistant","message":{"id":"x","model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"You'"'"'ve hit your limit · resets 3am"}]},"error":"rate_limit"}'
     echo '{"type":"result","subtype":"success","is_error":true,"result":"You'"'"'ve hit your limit · resets 3am"}'

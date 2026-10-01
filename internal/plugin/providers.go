@@ -80,6 +80,9 @@ type Provider struct {
 	AuthType  string  `json:"authType"`
 	AccountID string  `json:"accountId"`
 	Models    []Model `json:"models"`
+	// FellBack says the plugin's models hook couldn't fetch its vendor's
+	// list and gave the default one back.
+	FellBack bool `json:"fellBack,omitempty"`
 	// Accounts are the accounts signed in to it, the one kept under its
 	// own id first; SignedIn, AuthType and AccountID are that one's.
 	Accounts []Account `json:"accounts"`
@@ -95,7 +98,8 @@ type Account struct {
 	Hint string `json:"hint,omitempty"`
 	// Models are the ids of the provider's models this account has, when
 	// the provider has more than one account; none, it has them all.
-	Models []string `json:"models,omitempty"`
+	Models   []string `json:"models,omitempty"`
+	FellBack bool     `json:"fellBack,omitempty"`
 }
 
 var (
@@ -126,10 +130,11 @@ func forgetProviders() {
 // need be, and keeps the answer for Cached.
 func Providers(ctx context.Context) ([]Provider, error) {
 	var ps []Provider
-	if err := Call(ctx, "providers", nil, &ps); err != nil {
+	if err := Call(ctx, "providers", map[string]any{"proxies": listingProxies()}, &ps); err != nil {
 		return nil, err
 	}
 	provMu.Lock()
+	ps = keepListed(ps, provCache)
 	ps = keepUnloaded(ps, provCache)
 	provCache, provGood = ps, true
 	provMu.Unlock()
@@ -137,6 +142,70 @@ func Providers(ctx context.Context) ([]Provider, error) {
 		_ = writeWhole(providersPath(), b)
 	}
 	return ps, nil
+}
+
+// ProxyFor is the proxy choice (netproxy.With's) of the provider's
+// account at key, or of the provider for key "": set by the providers
+// magpie keeps, which know them.
+var ProxyFor func(provider, key string) string
+
+// listingProxies are the proxies each provider's model list is asked
+// through, by provider and account key ("" the provider's own): a
+// built-in's list is fetched through the account's proxy, so a plugin's
+// is too.
+func listingProxies() map[string]map[string]string {
+	out := map[string]map[string]string{}
+	if ProxyFor == nil {
+		return out
+	}
+	var m map[string]json.RawMessage
+	if b, err := steady.ReadFile(AuthPath()); err == nil {
+		_ = json.Unmarshal(b, &m)
+	}
+	for k := range m {
+		id := ProviderOf(k)
+		if out[id] == nil {
+			out[id] = map[string]string{"": forHost(ProxyFor(id, ""))}
+		}
+		out[id][k] = forHost(ProxyFor(id, k))
+	}
+	return out
+}
+
+// keepListed is ps with a list a plugin fell back to replaced by the one
+// it told last: a built-in whose fetch fails keeps the list it fetched
+// last too, so a vendor's hiccup never shrinks the models to the plugin's
+// short defaults.
+func keepListed(ps, last []Provider) []Provider {
+	if last == nil {
+		if b, err := steady.ReadFile(providersPath()); err == nil {
+			_ = json.Unmarshal(b, &last)
+		}
+	}
+	was := map[string]Provider{}
+	for _, p := range last {
+		was[p.Spec+"\x00"+p.ID] = p
+	}
+	for i, p := range ps {
+		l, ok := was[p.Spec+"\x00"+p.ID]
+		if !ok {
+			continue
+		}
+		if p.FellBack && !l.FellBack && len(l.Models) > 0 {
+			ps[i].Models, ps[i].FellBack = l.Models, false
+		}
+		for j, a := range p.Accounts {
+			if !a.FellBack {
+				continue
+			}
+			for _, b := range l.Accounts {
+				if b.Key == a.Key && !b.FellBack && len(b.Models) > 0 {
+					ps[i].Accounts[j].Models, ps[i].Accounts[j].FellBack = b.Models, false
+				}
+			}
+		}
+	}
+	return ps
 }
 
 // keepUnloaded is ps with the providers last known of an installed
@@ -186,6 +255,16 @@ var refreshing sync.WaitGroup
 func Settle() {
 	refreshing.Wait()
 	Restart()
+	// and no host goes on finishing its calls in a folder going away
+	hostMu.Lock()
+	hs := make([]*host, 0, len(retiring))
+	for h := range retiring {
+		hs = append(hs, h)
+	}
+	hostMu.Unlock()
+	for _, h := range hs {
+		h.stop()
+	}
 }
 
 // Cached is the plugins' providers as last asked, without starting the
@@ -483,7 +562,7 @@ func LoaderOptions(ctx context.Context, provider, account string) (Options, erro
 	if ok {
 		return o, nil
 	}
-	if err := Call(ctx, "load", map[string]any{"provider": provider, "account": account}, &o); err != nil {
+	if err := Call(ctx, "load", map[string]any{"provider": provider, "account": account, "proxy": proxyOf(ctx)}, &o); err != nil {
 		return Options{}, err
 	}
 	optMu.Lock()

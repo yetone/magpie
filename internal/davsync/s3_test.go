@@ -404,6 +404,87 @@ func TestConfigureS3Secret(t *testing.T) {
 	}
 }
 
+// Moving sync between a WebDAV folder and an S3 bucket keeps the server
+// moved from, its password too, and moving back finds it (ARNO on
+// Discord: trying S3 wiped the WebDAV address, user and password). A
+// sync.json from before, with no other server in it, reads as it did.
+func TestConfigureKeepsTheOtherKind(t *testing.T) {
+	newComputer(t).use(t)
+	old := `{"url":"https://dav.example.com/dav/","user":"me","password":"pw","passphrase":"correct horse","keys":true,"agents":true}`
+	os.MkdirAll(path(""), 0o755)
+	if err := os.WriteFile(path("sync.json"), []byte(old), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := Load(); !ok || c.URL != "https://dav.example.com/dav/" || c.Password != "pw" || c.Other != nil {
+		t.Fatalf("a setup from before: %v %+v", ok, c)
+	}
+	if v := Status(); v.Kind != "webdav" || !v.PasswordSet || v.Other != nil {
+		t.Fatalf("its view: %+v", v)
+	}
+
+	r2 := Config{URL: "s3://bkt/p", Endpoint: "https://acct.r2.cloudflarestorage.com", Region: "auto", PathStyle: true, User: "AKID", Password: "secret", Keys: true}
+	if err := Configure(r2); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := Load()
+	if !c.S3() || c.Password != "secret" || c.Passphrase != "correct horse" ||
+		c.Other == nil || *c.Other != (Server{URL: "https://dav.example.com/dav/", User: "me", Password: "pw"}) {
+		t.Fatalf("to S3: %+v %+v", c, c.Other)
+	}
+	v := Status()
+	if v.Kind != "s3" || v.Other == nil || v.Other.Kind != "webdav" || v.Other.URL != "https://dav.example.com/dav/" || v.Other.User != "me" || !v.Other.PasswordSet {
+		t.Fatalf("its view: %+v %+v", v, v.Other)
+	}
+	// a change to the bucket keeps it too
+	if err := Configure(Config{URL: "s3://bkt/q", Endpoint: r2.Endpoint, Region: "auto", PathStyle: true, User: "AKID"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := Load(); c.Password != "secret" || c.Other == nil || c.Other.Password != "pw" {
+		t.Fatalf("S3 changed: %+v", c)
+	}
+
+	// back to WebDAV, the password not typed again: the one kept, and the
+	// bucket kept in turn
+	back := Config{URL: "https://dav.example.com/dav/", User: "me"}
+	if kept, needed := SavedPassword(back); !kept || needed {
+		t.Fatalf("SavedPassword kept %v, needed %v", kept, needed)
+	}
+	if err := Configure(back); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load()
+	if c.S3() || c.Password != "pw" || c.Endpoint != "" || c.Other == nil ||
+		*c.Other != (Server{URL: "s3://bkt/q", User: "AKID", Password: "secret", Endpoint: r2.Endpoint, Region: "auto", PathStyle: true}) {
+		t.Fatalf("back to WebDAV: %+v %+v", c, c.Other)
+	}
+	// and to S3 again: its secret kept for that key at that endpoint alone
+	if err := Configure(Config{URL: "s3://bkt/q", Endpoint: r2.Endpoint, User: "AKID"}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := Load(); c.Password != "secret" || c.Other == nil || c.Other.Password != "pw" {
+		t.Fatalf("to S3 again: %+v", c)
+	}
+	Configure(back)
+	if err := Configure(Config{URL: "s3://bkt/q", Endpoint: "https://other.example.com", User: "AKID"}); err == nil || !strings.Contains(err.Error(), "type the secret") {
+		t.Fatalf("another endpoint: %v", err)
+	}
+	// the server given is never taken as the one kept
+	if err := Configure(Config{URL: "https://dav.example.com/dav/", User: "me", Other: &Server{URL: "s3://evil", User: "x", Password: "y"}}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := Load(); c.Other == nil || c.Other.URL != "s3://bkt/q" {
+		t.Fatalf("the kept one replaced: %+v", c.Other)
+	}
+
+	// off is off: nothing kept
+	if err := Off(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path("sync.json")); !os.IsNotExist(err) {
+		t.Fatalf("after off: %v", err)
+	}
+}
+
 // A real S3 server, when one is given: MAGPIE_S3_TEST=endpoint,bucket,key
 // id,secret[,region] (a MinIO: docker run -p 9000:9000 minio/minio server
 // /data, and a bucket made there). The same writes as TestS3Put, then a sync.

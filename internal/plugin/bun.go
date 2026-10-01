@@ -21,8 +21,9 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 )
 
-// BunVersion is the Bun magpie downloads to run plugins with, the first
-// time one is needed.
+// BunVersion is the Bun magpie downloads to run plugins with the first
+// time one is needed, and the oldest it runs them on: newer releases are
+// taken as they come (see CheckBun).
 const BunVersion = "1.3.14"
 
 // bunRelease is where Bun's releases are; a var for tests.
@@ -54,11 +55,6 @@ func bunTarget() (string, error) {
 	return t, nil
 }
 
-// bunDir is where the downloaded Bun is kept.
-func bunDir() string {
-	return filepath.Join(filepath.Dir(catalog.CachePath()), "bun", BunVersion)
-}
-
 func bunExe() string {
 	if runtime.GOOS == "windows" {
 		return "bun.exe"
@@ -67,19 +63,21 @@ func bunExe() string {
 }
 
 // Bun is the bun to run plugins with: $MAGPIE_BUN when set, else the one
-// magpie downloaded, downloading it now when there is none yet.
+// magpie downloaded and keeps up to date, downloading it now when there
+// is none yet.
 func Bun(ctx context.Context) (string, error) {
 	if b := os.Getenv("MAGPIE_BUN"); b != "" {
 		return b, nil
 	}
 	bunMu.Lock()
 	defer bunMu.Unlock()
-	exe := filepath.Join(bunDir(), bunExe())
+	v := inUseLocked()
+	exe := bunExeOf(v)
 	if _, err := os.Stat(exe); err == nil {
 		return exe, nil
 	}
-	if err := downloadBun(ctx, exe); err != nil {
-		return "", fmt.Errorf("downloading Bun %s to run plugins: %w", BunVersion, err)
+	if err := downloadBun(ctx, v, exe); err != nil {
+		return "", fmt.Errorf("downloading Bun %s to run plugins: %w", v, err)
 	}
 	return exe, nil
 }
@@ -89,16 +87,17 @@ func HasBun() bool {
 	if os.Getenv("MAGPIE_BUN") != "" {
 		return true
 	}
-	_, err := os.Stat(filepath.Join(bunDir(), bunExe()))
-	return err == nil
+	bunMu.Lock()
+	defer bunMu.Unlock()
+	return haveBun(inUseLocked())
 }
 
-func downloadBun(ctx context.Context, exe string) error {
+func downloadBun(ctx context.Context, version, exe string) error {
 	target, err := bunTarget()
 	if err != nil {
 		return err
 	}
-	base := bunRelease + "/bun-v" + BunVersion + "/"
+	base := bunRelease + "/bun-v" + version + "/"
 	sums, err := getURL(ctx, base+"SHASUMS256.txt", 1<<20)
 	if err != nil {
 		return err

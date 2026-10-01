@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -79,9 +80,11 @@ func TestGrokTokenReadsTheCLIsSignIn(t *testing.T) {
 }
 
 // Codex's freeform apply_patch is left out: Grok's backend turns away a
-// request with a tool type it doesn't know.
+// request with a tool type it doesn't know, a namespace among them. A
+// namespace's functions go as functions of their own, under their flat
+// names (#404); one with none to give goes whole.
 func TestGrokBodyLeavesOutCustomTools(t *testing.T) {
-	in := []byte(`{"model":"grok-4.7","tools":[{"type":"function","name":"shell"},{"type":"custom","name":"apply_patch","format":{"type":"grammar"}},{"type":"namespace","name":"multi_agent_v1","tools":[]},{"type":"web_search","external_web_access":false}],"tool_choice":{"type":"custom","name":"apply_patch"},"max_output_tokens":100}`)
+	in := []byte(`{"model":"grok-4.7","tools":[{"type":"function","name":"shell"},{"type":"custom","name":"apply_patch","format":{"type":"grammar"}},{"type":"namespace","name":"multi_agent_v1","tools":[]},{"type":"namespace","name":"collaboration","description":"agents","tools":[{"type":"function","name":"spawn_agent","parameters":{"type":"object"}},{"type":"custom","name":"freeform"}]},{"type":"namespace","name":"odd","tools":[{"type":"custom","name":"x"}]},{"type":"web_search","external_web_access":false}],"tool_choice":{"type":"custom","name":"apply_patch"},"max_output_tokens":100}`)
 	var got struct {
 		Tools  []map[string]any `json:"tools"`
 		Choice any              `json:"tool_choice"`
@@ -90,12 +93,49 @@ func TestGrokBodyLeavesOutCustomTools(t *testing.T) {
 	if err := json.Unmarshal(grokBody(in), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Tools) != 2 || got.Tools[0]["type"] != "function" || len(got.Tools[1]) != 1 || got.Tools[1]["type"] != "web_search" || got.Choice != nil || got.Max != 100 {
+	if len(got.Tools) != 3 || got.Tools[0]["type"] != "function" || got.Tools[0]["name"] != "shell" ||
+		got.Tools[1]["type"] != "function" || got.Tools[1]["name"] != "collaboration__spawn_agent" || got.Tools[1]["parameters"] == nil ||
+		len(got.Tools[2]) != 1 || got.Tools[2]["type"] != "web_search" || got.Choice != nil || got.Max != 100 {
 		t.Fatalf("%+v", got)
 	}
 	same := []byte(`{"tools":[{"type":"function","name":"x"}],"tool_choice":"auto"}`)
 	if string(grokBody(same)) != string(same) {
 		t.Fatal("a body Grok takes was changed")
+	}
+}
+
+// A call to a namespaced function handed back, and a tool_choice naming
+// one, go under the flat name Grok was offered it by; its output keeps its
+// call_id. Responses Lite's "functions" namespace is no namespace at all.
+func TestGrokBodyFlattensNamespacedCalls(t *testing.T) {
+	in := []byte(`{"tools":[{"type":"function","name":"exec_command"},{"type":"namespace","name":"codex_app","tools":[{"type":"function","name":"set_thread_title"}]},{"type":"namespace","name":"functions","tools":[{"type":"function","name":"view_image"}]}],"tool_choice":{"type":"function","name":"set_thread_title","namespace":"codex_app"},"input":[
+		{"type":"function_call","call_id":"c1","name":"spawn_agent","namespace":"collaboration","arguments":"{}"},
+		{"type":"function_call_output","call_id":"c1","output":"ok"},
+		{"type":"function_call","call_id":"c2","name":"exec_command","arguments":"{}"},
+		{"type":"function_call","call_id":"c3","name":"view_image","namespace":"functions","arguments":"{}"}]}`)
+	var got struct {
+		Tools  []map[string]any `json:"tools"`
+		Choice map[string]any   `json:"tool_choice"`
+		Input  []map[string]any `json:"input"`
+	}
+	if err := json.Unmarshal(grokBody(in), &got); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, tl := range got.Tools {
+		names = append(names, fmt.Sprint(tl["name"]))
+	}
+	if strings.Join(names, ",") != "exec_command,codex_app__set_thread_title,view_image" {
+		t.Fatalf("tools %v", names)
+	}
+	if got.Choice["name"] != "codex_app__set_thread_title" || got.Choice["namespace"] != nil {
+		t.Fatalf("tool_choice %v", got.Choice)
+	}
+	if c := got.Input[0]; c["name"] != "collaboration__spawn_agent" || c["namespace"] != nil || c["call_id"] != "c1" {
+		t.Fatalf("call %v", c)
+	}
+	if got.Input[1]["call_id"] != "c1" || got.Input[2]["name"] != "exec_command" || got.Input[3]["name"] != "view_image" || got.Input[3]["namespace"] != nil {
+		t.Fatalf("input %v", got.Input)
 	}
 }
 

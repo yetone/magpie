@@ -109,20 +109,28 @@ func SetModelPrice(id string, p *catalog.Price) error {
 		_, err := DropModelPrice(id)
 		return err
 	}
-	pr, model, err := splitRef(id)
-	if err != nil {
-		return err
+	var key string
+	if model, every := strings.CutPrefix(strings.TrimSpace(id), settings.AnyProvider); every {
+		// a model from any provider, or from none still there: no provider
+		// is asked whether it serves it, since what it prices is mostly
+		// usage whose provider is gone, or that never went through magpie
+		key = AnyPriceKey(model)
+	} else {
+		pr, model, err := splitRef(id)
+		if err != nil {
+			return err
+		}
+		// a price for a model the provider does not serve is a price that
+		// never applies and nothing later says so; the same refusal `magpie
+		// model name` makes for the same id.
+		if model != "*" && !pr.serves(model) {
+			return fmt.Errorf("%s has no model %s (magpie provider %s lists them, and magpie model price '*/%s' prices it from any provider)", pr.ID, model, pr.ID, model)
+		}
+		// the entry is written under the id the provider has now, the way a
+		// name is: a key under a display name is a price the provider is
+		// never asked for, and nothing later would say so.
+		key = pr.ID + "/" + model
 	}
-	// a price for a model the provider does not serve is a price that never
-	// applies and nothing later says so; the same refusal `magpie model
-	// name` makes for the same id.
-	if model != "*" && !pr.serves(model) {
-		return fmt.Errorf("%s has no model %s (magpie provider %s lists them)", pr.ID, model, pr.ID)
-	}
-	// the entry is written under the id the provider has now, the way a name
-	// is: a key under a display name is a price the provider is never asked
-	// for, and nothing later would say so.
-	key := pr.ID + "/" + model
 	s := settings.Load()
 	m := settings.ModelPrice{
 		Input: new(p.Input), Output: new(p.Output),
@@ -136,6 +144,12 @@ func SetModelPrice(id string, p *catalog.Price) error {
 	}
 	s.ModelPrices[key] = m
 	return settings.Save(s)
+}
+
+// AnyPriceKey is the key a price for a model from any provider is stored at:
+// its id lower-cased, the way a session's bare model is looked up.
+func AnyPriceKey(model string) string {
+	return settings.AnyProvider + strings.ToLower(strings.TrimSpace(model))
 }
 
 // PriceKey is the key a price for pid's model is stored at, and whether the
@@ -153,6 +167,9 @@ func SetModelPrice(id string, p *catalog.Price) error {
 // keeps a price set through a display name, and the same resolution
 // EffectivePrice reads it back under.
 func PriceKey(pid, model string) (string, bool) {
+	if pid+"/" == settings.AnyProvider {
+		return AnyPriceKey(model), false
+	}
 	key := pid + "/" + model
 	if _, under := settings.Load().ModelPrices[key]; under {
 		_, there := byIDOrWas(pid)

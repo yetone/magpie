@@ -379,6 +379,23 @@ type ompProviderEntry struct {
 	Models  []ompModel        `yaml:"models"`
 }
 
+// ompMaxSince is the first omp whose models.yml takes max as a thinking
+// effort (pi-ai 16.4.0); 16.3.5's schema stops at xhigh and turns the whole
+// file away over a max.
+const ompMaxSince = "16.4.0"
+
+// ompVersion is the version of the omp on PATH, "" when not known; a var so
+// tests can fake it.
+var ompVersion = func() string { return (&Agent{ID: "omp", Bin: "omp"}).InstalledVersion() }
+
+// ompTakesMax says whether omp at version v takes max in models.yml. One
+// whose version isn't known is taken for an older one: a max it refuses
+// costs every model magpie gives it, an xhigh in its place only the top
+// level of a model that has both.
+func ompTakesMax(v string) bool {
+	return v != "" && !Newer(ompMaxSince, v)
+}
+
 // ompProvider is magpie's entry in models.yml. The thinking efforts are the
 // levels omp offers for the model; on Chat it sends them as
 // reasoning_effort.
@@ -392,6 +409,7 @@ type ompProviderEntry struct {
 // nothing else, else on a budget: omp's anthropic-budget-effort would also
 // send output_config.effort, which Sonnet 4.5 and Haiku 4.5 refuse.
 func ompProvider() ompProviderEntry {
+	takesMax := ompTakesMax(ompVersion())
 	ms := []ompModel{}
 	for _, m := range magpieModels("omp") {
 		e := ompModel{ID: m.ID, Name: m.Name, Context: m.Context, MaxTokens: maxTokens(m)}
@@ -417,10 +435,14 @@ func ompProvider() ompProviderEntry {
 		}
 		var efforts []string
 		for _, x := range ompEfforts { // in omp's order
-			// a model's efforts stop at xhigh (omp 16.3.5 turns the whole
-			// file away over a max): a model whose top is max offers xhigh,
-			// which the gateway fits to max
-			if x == "xhigh" && slices.Contains(m.Efforts, "max") || x != "max" && slices.Contains(m.Efforts, x) {
+			// before omp 16.4.0 a model's efforts stop at xhigh (16.3.5
+			// turns the whole file away over a max): a model whose top is
+			// max offers xhigh, which the gateway fits to max when the
+			// model has no xhigh of its own
+			if x == "max" && !takesMax {
+				continue
+			}
+			if slices.Contains(m.Efforts, x) || x == "xhigh" && !takesMax && slices.Contains(m.Efforts, "max") {
 				efforts = append(efforts, x)
 			}
 		}

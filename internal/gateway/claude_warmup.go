@@ -26,14 +26,16 @@ func claudeProxy(ctx context.Context) string {
 // warmClaude sends a Claude account one "hi" through Claude Code, as the
 // bridge runs it (claudeCLIArgs): none of its tools, settings or MCP
 // servers, nothing kept on disk, at Haiku, the least an account's window
-// is started by. oauth is a saved account's sign-in, "" for the one
-// Claude Code is signed in to.
-func warmClaude(ctx context.Context, oauth string) error { return askClaude(ctx, oauth, "haiku") }
+// is started by. configDir is a saved account's config directory, "" for
+// the one Claude Code is signed in to.
+func warmClaude(ctx context.Context, configDir string) error {
+	return askClaude(ctx, configDir, "haiku")
+}
 
 // askClaude has Claude Code answer one "hi" at model, as warmClaude does;
 // it is how a Claude account's model test runs (provider.ProbeClaudeVia),
 // so the test asks Anthropic as Claude Code does, through Claude Code.
-func askClaude(ctx context.Context, oauth, model string) error {
+func askClaude(ctx context.Context, configDir, model string) error {
 	binary, err := claudeBinary()
 	if err != nil {
 		return err
@@ -47,17 +49,11 @@ func askClaude(ctx context.Context, oauth, model string) error {
 	cmd.Dir = tmp
 	cmd.Stdin = strings.NewReader("hi")
 	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
-	if oauth != "" {
-		cmd.Env = append(cmd.Env, "CLAUDE_CODE_OAUTH_TOKEN="+oauth)
-	}
+	cmd.Env = inClaudeDir(cmd.Env, configDir)
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	runErr := cmd.Run()
-	var res struct {
-		IsError bool   `json:"is_error"`
-		Result  string `json:"result"`
-	}
-	if json.Unmarshal(out.Bytes(), &res) == nil && res.IsError {
+	if res, ok := claudeResult(out.Bytes()); ok && res.IsError {
 		return errors.New("Claude Code: " + clip(res.Result))
 	}
 	if runErr != nil {
@@ -98,11 +94,7 @@ func claudeUsage(ctx context.Context) (string, error) {
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	runErr := cmd.Run()
-	var res struct {
-		IsError bool   `json:"is_error"`
-		Result  string `json:"result"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &res); err == nil {
+	if res, ok := claudeResult(out.Bytes()); ok {
 		if res.IsError {
 			return "", errors.New("Claude Code: " + clip(res.Result))
 		}
@@ -116,6 +108,35 @@ func claudeUsage(ctx context.Context) (string, error) {
 		return "", runErr
 	}
 	return "", errors.New("Claude Code: " + clip(msg))
+}
+
+// claudeRun is the result Claude Code prints for a -p run with
+// --output-format json.
+type claudeRun struct {
+	Type    string `json:"type"`
+	IsError bool   `json:"is_error"`
+	Result  string `json:"result"`
+}
+
+// claudeResult reads the result from what claude -p --output-format json
+// printed: one object, or, when the user turned on Claude Code's verbose
+// output (its own config, which --setting-sources leaves on), an array of
+// every message, the result last.
+func claudeResult(b []byte) (claudeRun, bool) {
+	var res claudeRun
+	if json.Unmarshal(b, &res) == nil {
+		return res, true
+	}
+	var all []claudeRun
+	if json.Unmarshal(b, &all) != nil {
+		return claudeRun{}, false
+	}
+	for i := len(all) - 1; i >= 0; i-- {
+		if all[i].Type == "result" {
+			return all[i], true
+		}
+	}
+	return claudeRun{}, false
 }
 
 func claudeUsageArgs() []string {
