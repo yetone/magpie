@@ -312,11 +312,7 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 		s.Window, s.Proxy, s.Dock, s.DockWindow = cur.Window, cur.Proxy, cur.Dock, cur.DockWindow
 		if !b.Keys {
 			s.LANKey, s.LANKeyID = cur.LANKey, cur.LANKeyID
-		} else if b.GatewayKeys != nil {
-			if err := access.Restore(*b.GatewayKeys); err != nil {
-				return r, err
-			}
-		} else {
+		} else if b.GatewayKeys == nil {
 			// An older backup may carry a marker without its named-key store.
 			s.LANKeyID = ""
 			keys, err := access.List()
@@ -330,6 +326,16 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 		}
 		if err := settings.Save(s); err != nil {
 			return r, err
+		}
+		if b.Keys && b.GatewayKeys != nil {
+			if err := access.Restore(*b.GatewayKeys); err != nil {
+				// Settings must be writable before replacing credentials. If the
+				// store refuses the write, restore their original association.
+				if rollback := settings.Save(cur); rollback != nil {
+					return r, errors.Join(err, fmt.Errorf("could not restore original settings after gateway-key restore failed: %w", rollback))
+				}
+				return r, err
+			}
 		}
 		if b.Keys && b.GatewayKeys == nil {
 			access.MigrateLegacyLANKeyBestEffort()

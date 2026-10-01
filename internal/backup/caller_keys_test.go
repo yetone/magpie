@@ -2,7 +2,9 @@ package backup
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -150,5 +152,61 @@ func TestGatewayKeysBackupWithoutSettingsFile(t *testing.T) {
 	}
 	if who, ok := access.Authenticate(secret); !ok || who.KeyName != "CLI client" {
 		t.Fatal("standalone CLI key was not restored", who, ok)
+	}
+}
+
+func TestGatewayKeyRestoreFailureKeepsSettingsAndKeys(t *testing.T) {
+	for _, failure := range []string{"invalid-settings", "readonly-settings", "readonly-store"} {
+		t.Run(failure, func(t *testing.T) {
+			home(t)
+			if err := access.ConfigureLAN(true, false); err != nil {
+				t.Fatal(err)
+			}
+			cur := settings.Load()
+			before, err := os.ReadFile(access.Path())
+			if err != nil {
+				t.Fatal(err)
+			}
+			incoming := cur
+			incoming.Theme, incoming.LANKeyID, incoming.LANKey = "dark", "restored", "sk-magpie-restored"
+			keys := []access.Key{{ID: incoming.LANKeyID, Name: "Restored", Secret: incoming.LANKey, LAN: true}}
+			if failure == "invalid-settings" {
+				incoming.Theme = "invalid-theme"
+			} else {
+				path := settings.Path()
+				if failure == "readonly-store" {
+					path = access.Path()
+				}
+				if err := os.Chmod(path, 0o400); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { os.Chmod(path, 0o600) })
+				f, err := os.OpenFile(path, os.O_WRONLY, 0)
+				if err == nil {
+					f.Close()
+					t.Skip("file remains writable")
+				}
+				if !errors.Is(err, os.ErrPermission) {
+					t.Fatal(err)
+				}
+			}
+			r, err := Restore(Bundle{Version: 1, Keys: true, Settings: &incoming, GatewayKeys: &keys}, Parts{Settings: true})
+			if err == nil || r.Settings {
+				t.Fatal("failed restore reported success", r, err)
+			}
+			if failure != "invalid-settings" && !errors.Is(err, os.ErrPermission) {
+				t.Fatal("restore lost permission error", err)
+			}
+			after, err := os.ReadFile(access.Path())
+			if err != nil || string(after) != string(before) || !reflect.DeepEqual(settings.Load(), cur) {
+				t.Fatal("failed restore left settings and keys inconsistent", err)
+			}
+			if _, ok := access.Authenticate(cur.LANKey); !ok {
+				t.Fatal("failed restore revoked the current key")
+			}
+			if _, ok := access.Authenticate(incoming.LANKey); ok {
+				t.Fatal("failed restore activated the incoming key")
+			}
+		})
 	}
 }
