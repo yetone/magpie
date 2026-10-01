@@ -198,6 +198,12 @@ func envFileValue(path, key string) string {
 		if uq, err := strconv.Unquote(v); err == nil {
 			v = uq
 		} else {
+			// an unquoted value ends at an inline comment, as dotenv reads it
+			if v == "" || (v[0] != '"' && v[0] != '\'') {
+				if i := strings.IndexByte(v, '#'); i >= 0 {
+					v = strings.TrimSpace(v[:i])
+				}
+			}
 			v = strings.Trim(v, `'`)
 		}
 		return v
