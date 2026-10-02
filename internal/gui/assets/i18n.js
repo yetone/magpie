@@ -1231,7 +1231,7 @@ const I18N = {
     // the Sessions page (sessions.js)
     "Filter sessions": "筛选会话",
     "No sessions yet": "还没有会话",
-    "Claude Code's, Codex's, Hermes, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.": "这台电脑上 Claude Code、Codex、Hermes、OpenCode、Pi 等的会话会按运行时所在的文件夹列在这里。",
+    "Claude Code's, Codex's, Hermes's, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.": "这台电脑上 Claude Code、Codex、Hermes、OpenCode、Pi 等的会话会按运行时所在的文件夹列在这里。",
     "magpie can list {agent}'s sessions and resume them, but not delete them: they aren't kept as files of their own.": "magpie 可以列出并继续 {agent} 的会话，但不能删除：它们没有各自独立的文件。",
     "magpie can list {agent}'s sessions, but cannot resume or delete them.": "magpie 可以列出 {agent} 的会话，但不能继续或删除。",
     "These {agent} sessions are read only; magpie can list them, but cannot resume or delete them.": "这些 {agent} 会话为只读；magpie 可以列出，但不能继续或删除。",

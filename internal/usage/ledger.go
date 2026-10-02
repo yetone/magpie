@@ -241,23 +241,18 @@ func logRecord(c sessions.Call) Record {
 // ambiguous direct call stays visible. One gateway entry consumes one file call.
 func gatewayMatches(recs []Record, logs []sessions.Call) map[int]bool {
 	gateway, local := &rowChunk{}, &rowChunk{}
-	var logIndexes []int
 	for i, r := range recs {
 		r.Agent = AgentOf(r.Agent)
 		gateway.add(Row{Record: r}, "", int64(i), false)
 	}
 	for i, c := range logs {
-		if c.Aggregate {
-			continue
-		}
 		r := logRecord(c)
 		r.Agent = c.Agent // the native log already names its agent
 		local.add(Row{Record: r}, c.Msg, int64(i), c.Error != "")
-		logIndexes = append(logIndexes, i)
 	}
 	matched := map[int]bool{}
 	for ref := range matchedBlocks([]*rowChunk{gateway}, []*rowChunk{local}, nil, time.Time{}, false) {
-		matched[logIndexes[ref.Index]] = true
+		matched[ref.Index] = true
 	}
 	return matched
 }
@@ -314,7 +309,7 @@ func ledgerWithShared(since time.Time, f Filter, recs []Record, logs []sessions.
 		add(r, priceOf(r), "")
 	}
 	for i, c := range logs {
-		if c.Aggregate || (!since.IsZero() && c.Time.Before(since)) || matched[i] {
+		if (!since.IsZero() && c.Time.Before(since)) || matched[i] {
 			continue
 		}
 		// Session identity does not establish a billing provider; price the

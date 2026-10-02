@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"math"
 	"net/url"
 	"os"
@@ -14,8 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/yetone/magpie/internal/provider"
 )
 
 // Hermes stores canonical, non-overlapping input/cache buckets. Reasoning is
@@ -193,6 +190,9 @@ func hermesFiles() []file {
 			})
 		}
 		rows.Close()
+		if rows.Err() != nil {
+			continue
+		}
 	}
 	return out
 }
@@ -405,8 +405,10 @@ func (h *hermesDB) eachMessage(q hermesQuery, sid string, fn func(hermesMessage)
 }
 
 // parseHermes uses a read transaction for a consistent snapshot while the
-// writer runs in WAL mode. Cache identity includes the WAL: usage and titles
-// can change without a DB-file mtime or message-count change.
+// writer runs in WAL mode. The connection opens in mode=ro, which does not
+// modify state.db itself; SQLite may create an empty state.db-wal and a
+// state.db-shm when the store was cleanly closed. Cache identity includes
+// the WAL: usage and titles can change without a DB-file mtime change.
 func parseHermes(f file) *state {
 	s := &state{Size: f.size, Mod: f.mod.UnixNano()}
 	if f.hermes == nil {
@@ -498,124 +500,4 @@ func hermesText(raw string) string {
 		return strings.Join(text, "\n")
 	}
 	return raw
-}
-
-// hermesCalls returns explicitly labelled usage aggregates. There is no safe
-// way to split the stored totals into made-up per-request token counts.
-func hermesCalls(since time.Time, session string) []Call {
-	var out []Call
-	for _, dir := range HermesDirs() {
-		path := filepath.Join(dir, "state.db")
-		db, err := provider.OpenReadOnly(path)
-		if err != nil {
-			continue
-		}
-		h := newHermesDB(db)
-		if h.sessions["id"] {
-			rows, err := db.Query("SELECT id FROM sessions")
-			var ids []string
-			if err == nil {
-				for rows.Next() {
-					var sid string
-					if rows.Scan(&sid) == nil {
-						ids = append(ids, sid)
-					}
-				}
-				rows.Close()
-			}
-			for _, sid := range ids {
-				id := hermesID(path, sid)
-				if session != "" && session != id {
-					continue
-				}
-				tx, err := db.BeginTx(context.Background(), nil)
-				if err != nil {
-					continue
-				}
-				s := &state{}
-				u, err := h.metadata(tx, sid, s)
-				var usage []hermesUsage
-				if err == nil {
-					usage, err = h.usages(tx, sid, u)
-				}
-				tx.Rollback()
-				if err != nil {
-					continue
-				}
-				for _, u := range usage {
-					at := hermesTime(u.last)
-					if at.IsZero() {
-						at = s.Last
-					}
-					if u.Tokens.zero() || (!since.IsZero() && at.Before(since)) {
-						continue
-					}
-					out = append(out, Call{
-						Agent:     "hermes",
-						Session:   id,
-						Time:      at,
-						Model:     u.model,
-						Tokens:    u.Tokens,
-						Reasoning: u.reasoning,
-						Upstream:  u.upstream,
-						Cwd:       s.Cwd,
-						File:      path + "#" + url.QueryEscape(sid),
-						Aggregate: true,
-						APICalls:  u.calls,
-					})
-				}
-			}
-		}
-		db.Close()
-	}
-	return out
-}
-
-func hermesContent(c Call, out *Content) error {
-	// The last separator belongs to the virtual session, even if a DB path
-	// itself contains '#'.
-	i := strings.LastIndex(c.File, "#")
-	if i < 0 {
-		return errNoPlace
-	}
-	path, escaped := c.File[:i], c.File[i+1:]
-	sid, err := url.QueryUnescape(escaped)
-	if err != nil {
-		return err
-	}
-	allowed := false
-	for _, dir := range HermesDirs() {
-		if filepath.Join(dir, "state.db") == canonicalHermesPath(path) {
-			allowed = true
-			break
-		}
-	}
-	if !allowed || c.Session != hermesID(path, sid) {
-		return errors.New("no such Hermes session")
-	}
-	db, err := provider.OpenReadOnly(path)
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-	h := newHermesDB(db)
-	return h.eachMessage(db, sid, func(m hermesMessage) {
-		kind := "text"
-		if m.role == "tool" {
-			kind = "tool_result"
-		}
-		out.add(m.role != "assistant", Part{
-			Role: m.role,
-			Kind: kind,
-			Text: hermesText(m.content),
-		})
-		for _, tool := range hermesTools(m.tools) {
-			out.add(false, Part{
-				Role: m.role,
-				Kind: "tool_use",
-				Name: tool.Function.Name,
-				Text: string(tool.Function.Arguments),
-			})
-		}
-	})
 }

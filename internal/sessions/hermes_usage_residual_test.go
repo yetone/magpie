@@ -58,18 +58,11 @@ func TestHermesUsageAddsMainResidualWhenOnlyAuxiliaryRowsExist(t *testing.T) {
 	if got := model(s, "actual-model").Tokens; got != (Tokens{100, 50, 25, 15}) {
 		t.Fatalf("auxiliary usage = %+v", got)
 	}
-
-	calls := Calls(time.Time{})
-	var main, auxiliary bool
-	for _, c := range calls {
-		if c.Session != hermesID(path, "aux-only") {
-			continue
+	// Hermes does not emit Calls; verify no leakage.
+	for _, c := range Calls(time.Time{}) {
+		if c.Agent == "hermes" {
+			t.Fatalf("unexpected Hermes call: %+v", c)
 		}
-		main = main || (c.Model == "fallback-model" && c.Upstream == "session-provider" && c.Tokens == (Tokens{90, 30, 40, 10}))
-		auxiliary = auxiliary || (c.Model == "actual-model" && c.Tokens == (Tokens{100, 50, 25, 15}))
-	}
-	if !main || !auxiliary {
-		t.Fatalf("main residual / auxiliary call missing: main=%v auxiliary=%v", main, auxiliary)
 	}
 }
 
@@ -112,12 +105,6 @@ func TestHermesUsageResidualDoesNotDuplicateCoveredOrOvercoveredMainRows(t *test
 			s := hermesSessionByID(t, hermesID(path, "covered"))
 			if got := model(s, "fallback-model").Tokens; !got.zero() {
 				t.Fatalf("unexpected duplicate main residual: %+v", got)
-			}
-			calls := Calls(time.Time{})
-			for _, c := range calls {
-				if c.Session == hermesID(path, "covered") && c.Model == "fallback-model" {
-					t.Fatalf("unexpected synthetic residual call: %+v", c)
-				}
 			}
 		})
 	}

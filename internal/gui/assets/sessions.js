@@ -159,7 +159,7 @@
     if (trashOn) { box.append(...trash()); return box; }
     if (!data.agents.length) {
       const e = el("div", "empty-state");
-      e.append(el("b", "", t("No sessions yet")), el("span", "", t("Claude Code's, Codex's, Hermes, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.")));
+      e.append(el("b", "", t("No sessions yet")), el("span", "", t("Claude Code's, Codex's, Hermes's, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.")));
       box.append(e);
       return box;
     }

@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
-	"time"
 )
 
 func TestHermesCompactionLogicalMessages(t *testing.T) {
@@ -60,16 +59,6 @@ func TestHermesCompactionLogicalMessages(t *testing.T) {
 	}
 	s := hermesSessionByID(t, hermesID(path, "compaction"))
 	assertHermesMessageStats(t, s.ID, 4, 2, 1)
-	for _, c := range Calls(time.Time{}) {
-		if c.Agent == "hermes" && c.Session == s.ID {
-			content, err := ContentOf(c)
-			if err != nil || len(content.Input) != 7 || len(content.Output) != 3 {
-				t.Fatalf("logical transcript content = %+v, error = %v", content, err)
-			}
-			return
-		}
-	}
-	t.Fatal("missing Hermes aggregate")
 }
 
 func TestHermesModelOnlyMessages(t *testing.T) {
@@ -100,10 +89,6 @@ func TestHermesModelOnlyMessages(t *testing.T) {
 	}
 	s := hermesSessionByID(t, hermesID(path, "model-only"))
 	assertHermesMessageStats(t, s.ID, 0, 1, 0)
-	content, err := ContentOf(Call{Agent: "hermes", Session: s.ID, File: path + "#model-only"})
-	if err != nil || len(content.Input) != 1 || len(content.Output) != 1 {
-		t.Fatalf("model-only content = %+v, error = %v", content, err)
-	}
 }
 
 func assertHermesMessageStats(t *testing.T, sid string, prompts, replies, tools int) {

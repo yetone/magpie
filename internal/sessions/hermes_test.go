@@ -97,6 +97,8 @@ func TestHermesListStatsCallsAndContent(t *testing.T) {
 	t.Setenv("HERMES_HOME", root)
 	path := hermesFixture(t, root, "", "same-id", true)
 	profilePath := hermesFixture(t, root, "work", "same-id", true)
+	_ = path
+	_ = profilePath
 
 	listed := List(0)
 	var hs []Session
@@ -143,34 +145,13 @@ func TestHermesListStatsCallsAndContent(t *testing.T) {
 		t.Errorf("Hermes stats total = %+v", total)
 	}
 
+	// hermesCalls is intentionally absent: Hermes usage is session-level
+	// and has no production consumer in callsFor or FindCall.
 	calls := Calls(time.Time{})
-	var hc []Call
 	for _, c := range calls {
 		if c.Agent == "hermes" {
-			hc = append(hc, c)
+			t.Errorf("Hermes should not appear in Calls: %+v", c)
 		}
-	}
-	if len(hc) != 2 {
-		t.Fatalf("want one aggregate per profile, got %+v", hc)
-	}
-	for _, c := range hc {
-		if !c.Aggregate || c.APICalls != 3 || c.Model != "actual-model" || c.Tokens != (Tokens{100, 50, 25, 15}) || c.Reasoning != 8 {
-			t.Errorf("aggregate call: %+v", c)
-		}
-		content, err := ContentOf(c)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(content.Input) != 2 || len(content.Output) != 3 || content.Input[0].Text != "Please inspect this" || content.Output[1].Kind != "tool_use" || content.Output[1].Name != "read_file" {
-			t.Errorf("content for %s: %+v", c.Session, content)
-		}
-	}
-	if hc[0].Session == hc[1].Session {
-		t.Errorf("Calls IDs collide: %+v", hc)
-	}
-	files := map[string]bool{hc[0].File: true, hc[1].File: true}
-	if len(files) != 2 || !files[canonicalHermesPath(path)+"#same-id"] || !files[canonicalHermesPath(profilePath)+"#same-id"] {
-		t.Errorf("call sources are not distinct: %+v", hc)
 	}
 }
 
@@ -275,6 +256,15 @@ func TestHermesOlderSchemaAndNullFields(t *testing.T) {
 func TestHermesStatsIncludesRecentUsageForOldTranscript(t *testing.T) {
 	setup(t)
 	inZone(t, 0)
+	// The background cache writer reads time.Local; drain it before inZone
+	// restores the zone. Cleanups run LIFO, so this runs before inZone's.
+	t.Cleanup(func() {
+		saving.Lock()
+		for saving.running {
+			saving.Wait()
+		}
+		saving.Unlock()
+	})
 	root := filepath.Join(t.TempDir(), "hermes")
 	t.Setenv("HERMES_HOME", root)
 	path := hermesFixture(t, root, "", "old-transcript", true)
