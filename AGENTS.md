@@ -56,7 +56,7 @@ plugin:
 2. Fix the plugin in the community repo,
    [magpie-community/plugins](https://github.com/magpie-community/plugins)
    (`packages/<name>`, provider id = the built-in's id; checked out locally
-   at `~/workspace/projects/magpie-commuity-plugins`). Publish a new version.
+   at `~/workspace/projects/magpie-community-plugins`). Publish a new version.
 3. Raise the mover's `min` to that version. `keepMovedCurrent` then updates
    every moved user's plugin.
 4. Make the same fix in the built-in only if it should also reach users who
