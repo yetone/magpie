@@ -34,8 +34,6 @@
 .row.sm-folder .sm-path { flex: 0 1 auto; min-width: 0; margin: 0; font-family: var(--code); font-size: 10.5px; color: var(--faint); }
 .row.sm-folder .grow { flex: 1; }
 .row.sm-folder .note { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.row.sm-folder .sm-folder-del { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
-.row.sm-folder .sm-folder-del:hover { color: var(--red); background: var(--red-soft); }
 .row.sm-sess { min-height: 44px; }
 .sm-item .sess-detail { padding-left: 34px; }
 .row.sess .sm-del:hover { color: var(--red); background: var(--red-soft); }
@@ -54,5 +52,4 @@
   .sm-agent-pick { max-width: 100%; }
   .sm-filter { width: 100%; min-width: 0; }
   .sm-trash-btn { grid-column: 2; justify-self: end; }
-  .row.sm-folder .sm-folder-del span { display: none; }
 }

@@ -367,6 +367,9 @@ func TestWithEffort(t *testing.T) {
 		{provider.Chat, `{"model":"m"}`, "high", []string{`{"model":"m"}`}},
 		{provider.Responses, `{"reasoning":{"effort":"medium","summary":"auto"}}`, "xhigh", []string{`"effort":"xhigh"`, `"summary":"auto"`}},
 		{provider.Responses, `{"reasoning":{"effort":"none"}}`, "high", []string{`"effort":"none"`}},
+		// Codex's Responses Lite (gpt-6.1-sol on a ChatGPT account): the
+		// backend turns the request away without context all_turns (#534)
+		{provider.Responses, `{"reasoning":{"effort":"high","summary":"auto","context":"all_turns"}}`, "medium", []string{`"effort":"medium"`, `"summary":"auto"`, `"context":"all_turns"`}},
 		{provider.Anthropic, `{"max_tokens":32000,"thinking":{"type":"adaptive"}}`, "low", []string{`"output_config":{"effort":"low"}`}},
 		{provider.Anthropic, `{"max_tokens":32000,"thinking":{"type":"enabled","budget_tokens":4096}}`, "high", []string{`"budget_tokens":24000`}},
 		{provider.Anthropic, `{"max_tokens":8000,"thinking":{"type":"enabled","budget_tokens":4096}}`, "xhigh", []string{`"budget_tokens":7999`}},

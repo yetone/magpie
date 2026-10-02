@@ -42,9 +42,8 @@ func TestLiveCodexSealedAgentGuidance(t *testing.T) {
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		isChild := false
 		if r.Method == http.MethodPost && r.URL.Path == CodexPath+"/responses" {
-			body, err := codexBody(r)
-			if err != nil {
-				http.Error(w, "could not decode request", 400)
+			body, ok := s.readRequestBody(w, r, provider.Responses, codexReader, 0)
+			if !ok {
 				return
 			}
 			isChild = bytes.Contains(body, []byte(`"model":"fake/m1"`))

@@ -204,3 +204,25 @@ func TestCodexBodyServiceTier(t *testing.T) {
 		t.Errorf("none became %v", v)
 	}
 }
+
+// Standalone notifications retain the metadata the native backend recognizes;
+// paired outputs and ID-bearing historical orphans keep their existing rules.
+func TestCodexStandaloneNotifications(t *testing.T) {
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	for _, kind := range []string{"function_call_output", "custom_tool_call_output"} {
+		for _, id := range []string{"", `,"call_id":""`} {
+			body := []byte(`{"model":"gpt-5.5","input":[{"type":"` + kind + `","id":"standalone","name":"send_message_to_thread","namespace":"codex_app","output":"native notice"` + id + `}]}`)
+			var before, after struct {
+				Input []map[string]any `json:"input"`
+			}
+			json.Unmarshal(body, &before)
+			json.Unmarshal(codexBody(body), &after)
+			b, _ := json.Marshal(before.Input)
+			a, _ := json.Marshal(after.Input)
+			if string(a) != string(b) {
+				t.Fatalf("standalone changed: %s -> %s", b, a)
+			}
+		}
+	}
+}

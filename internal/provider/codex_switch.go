@@ -34,6 +34,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -239,6 +240,21 @@ func setLoginReturn(agent string, r loginReturn) {
 	}
 }
 
+// codexWasUsedUp is whether the account Codex is signed in to was out of
+// its allowance at the last look.
+var codexWasUsedUp atomic.Bool
+
+// noteCodexUsedUp tells the agents' files when the account Codex is signed
+// in to runs out of its allowance, or has it back: the Codex app sends
+// nothing at all for an account that is out, a magpie model's turn
+// included, so the agent package then makes magpie Codex's provider, and
+// puts it back beside the sign-in after (#540). Only a change is told.
+func noteCodexUsedUp(now bool) {
+	if codexWasUsedUp.Swap(now) != now {
+		catalog.Touched()
+	}
+}
+
 // KeepOnAnAccountWithRoom runs SwitchWhenSpent for Codex and Claude Code a
 // minute after it starts and every loginSwitchEvery after that, until ctx
 // ends.
@@ -258,6 +274,9 @@ func KeepOnAnAccountWithRoom(ctx context.Context) {
 			}
 			cancel()
 		}
+		c, cancel := context.WithTimeout(ctx, time.Minute)
+		noteCodexUsedUp(CodexUsedUp(c))
+		cancel()
 		t.Reset(loginSwitchEvery)
 	}
 }

@@ -111,3 +111,39 @@ func TestPiResponsesRelayedToChatGPT(t *testing.T) {
 		t.Errorf("instructions: %q", ins)
 	}
 }
+
+// DeepSeek Harness on magpie's route switched to OpenAI Responses (its
+// llm-pi-ai plugin is pi-ai's openai-responses, so it asks as Pi does)
+// reaches a model served on Chat Completions alone, a DeepSeek one: the
+// gateway asks it in Chat, the effort as reasoning_effort, the image, tool
+// call and its output carried over, and dsh gets Responses events back.
+func TestDshResponsesReachChatVendor(t *testing.T) {
+	f := &fake{t: t, reply: sse(
+		`data: {"id":"c1","model":"m1","choices":[{"delta":{"role":"assistant","content":"a cat"}}]}`,
+		`data: {"id":"c1","choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":9,"completion_tokens":2}}`,
+		`data: [DONE]`)}
+	setup(t, provider.Chat, f)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(fmt.Sprintf(piResponses, "fake/m1")))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer magpie")
+	req.Header.Set("User-Agent", "deepseek-harness/0.2.0")
+	New().Handler().ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if rec.Code != 200 || !strings.Contains(body, "response.output_text.delta") || !strings.Contains(body, "a cat") || !strings.Contains(body, "response.completed") {
+		t.Fatalf("reply: %d %s", rec.Code, body)
+	}
+	var up map[string]any
+	if err := json.Unmarshal(f.got, &up); err != nil {
+		t.Fatalf("upstream body: %s", f.got)
+	}
+	if f.path != "/v1/chat/completions" || up["model"] != "m1" || up["reasoning_effort"] != "high" || up["stream"] != true {
+		t.Errorf("asked: %s %s", f.path, f.got)
+	}
+	s := string(f.got)
+	for _, want := range []string{`You are Pi.`, `data:image/png;base64,iVBORw0KGgo=`, `"tool_calls"`, `"call_1"`, `"tool_call_id"`, `"name":"read"`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("upstream lost %s: %s", want, s)
+		}
+	}
+}

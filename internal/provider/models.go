@@ -210,6 +210,28 @@ func FetchNewSoon(timeout time.Duration) {
 	}()
 }
 
+// FetchNewBehind is FetchNew in the background, started at once unless one
+// started so is still running: for the Providers page, which waited on it
+// (#541: ten seconds and more of placeholders, an account at a time and
+// behind start-up's own run). FetchingNew says when it is done.
+func FetchNewBehind(timeout time.Duration) {
+	if !fetchingNew.CompareAndSwap(false, true) {
+		return
+	}
+	newSoonAt.Store(time.Now().UnixNano())
+	go func() {
+		defer fetchingNew.Store(false)
+		FetchNew(timeout)
+	}()
+}
+
+// newRunning counts the FetchNew calls under way.
+var newRunning atomic.Int32
+
+// FetchingNew reports whether a FetchNew is under way (start-up's, or one
+// started behind a page): accounts' lists may be on their way still.
+func FetchingNew() bool { return newRunning.Load() > 0 }
+
 // FetchNew asks each signed-in account whose vendor list magpie hasn't
 // fetched yet for it, each for at most timeout. Start-up does this for the
 // accounts there then; an account signed in while magpie runs (in magpie or
@@ -217,6 +239,8 @@ func FetchNewSoon(timeout time.Duration) {
 // models than the vendor serves, until Refresh was clicked (#204). One that
 // fails is asked again after newFetchRetry, not each time.
 func FetchNew(timeout time.Duration) {
+	newRunning.Add(1)
+	defer newRunning.Add(-1)
 	newFetches.Lock()
 	defer newFetches.Unlock()
 	for _, p := range All() {
@@ -411,6 +435,7 @@ func (p Provider) fixV1(base, at string) string {
 func (p Provider) fetchPerKey(ctx context.Context, keys []KeyAccount) ([]catalog.Model, error) {
 	old, _, _ := catalog.Live(p.ID)
 	old = append(old, catalog.LiveDrawers(p.ID)...)
+	old = append(old, catalog.LiveVideomakers(p.ID)...)
 	var out []catalog.Model
 	at := map[string]int{}
 	add := func(m catalog.Model, id string) {

@@ -2,7 +2,7 @@
 // files — Claude Code's projects/*/<id>.jsonl (and Qoder's, the same kind),
 // Codex's rollout files, OpenCode's database (or its older JSON files) and
 // ZCode's, Pi's session files and omp's, DeepSeek Harness's, Cline's, Grok
-// Build's and WorkBuddy's — with the tokens each spent, what that cost at the
+// Build's, WorkBuddy's and Cursor CLI's chat stores — with the tokens each spent, what that cost at the
 // effective price, and the command that resumes it. It only ever reads the
 // agents' folders.
 //
@@ -70,7 +70,7 @@ type Model struct {
 // Session is one agent session.
 type Session struct {
 	ReadOnly bool      `json:"read_only,omitempty"`
-	Agent    string    `json:"agent"` // magpie agent id: claude, codex, opencode, pi, omp, zcode, dsh, cline, qoder, qoder-cn, grok, workbuddy
+	Agent    string    `json:"agent"` // magpie agent id: claude, codex, opencode, pi, omp, zcode, dsh, cline, qoder, qoder-cn, grok, workbuddy, cursor, hermes
 	ID       string    `json:"id"`
 	Cwd      string    `json:"cwd"`
 	Title    string    `json:"title"` // the first prompt, else the agent's own title
@@ -365,7 +365,7 @@ func allFiles() []file {
 	var out []file
 	for _, fs := range [][]file{callFiles(), openCodeFiles(), piFiles(),
 		zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
-		grokFiles(), workbuddyFiles(), ompFiles(), hermesFiles()} {
+		grokFiles(), workbuddyFiles(), ompFiles(), cursorFiles(), hermesFiles()} {
 		out = append(out, fs...)
 	}
 	return out
@@ -386,6 +386,7 @@ func Dirs() []string {
 		{GrokDir(), filepath.Join(GrokDir(), "sessions")},
 		{WorkBuddyDir(), filepath.Join(WorkBuddyDir(), "projects")},
 		{OmpDir(), filepath.Join(OmpDir(), "sessions")},
+		{CursorDir(), filepath.Join(CursorDir(), "chats")},
 	} {
 		if _, err := os.Stat(d.sessions); err == nil {
 			out = append(out, d.dir)
@@ -919,6 +920,8 @@ func parse(f file, old *state) *state {
 		return parseCline(f)
 	case "grok":
 		return parseGrok(f)
+	case "cursor":
+		return parseCursor(f)
 	}
 	headBytes := headOf(f.path)
 	var s *state
@@ -1199,6 +1202,12 @@ func ResumeCommand(agent, id, cwd string) string {
 		run = "grok --resume " + id
 	case "omp":
 		run = "omp --resume " + id
+	case "cursor":
+		// its chats are looked up by the folder it runs in
+		if cwd == "" {
+			return ""
+		}
+		run = "cursor-agent --resume " + id
 	default:
 		return ""
 	}

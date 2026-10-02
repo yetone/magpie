@@ -97,6 +97,23 @@ func TestQoderMover(t *testing.T) {
 	})
 }
 
+// A Qoder CN account keeps its site, and one that chats on its device
+// token keeps doing so.
+func TestQoderCNMover(t *testing.T) {
+	c1 := qoder.Credential{Site: QoderCNID, UID: "u1", Email: "a@q.cn", Token: "d1", RefreshToken: "dr1", DeviceToken: "d1", DeviceRefresh: "dr1", DeviceChat: true, ExpiresAt: 1_900_000_000_123, MachineID: "m1"}
+	c2 := qoder.Credential{Site: QoderCNID, UID: "u2", Token: "t2", RefreshToken: "r2", DeviceToken: "d2", ExpiresAt: 1_900_000_000_456, MachineID: "m2"}
+	roundTrip(t, QoderCNID, []savedLogin{
+		{Agent: QoderCNID, User: "a@q.cn", First: true, On: true, Auth: authOf(t, c1)},
+		{Agent: QoderCNID, User: "u2", Auth: authOf(t, c2)},
+	}, func(t *testing.T, a, b savedLogin) {
+		ca, _ := qoderSaved(a)
+		cb, _ := qoderSaved(b)
+		if !reflect.DeepEqual(ca, cb) {
+			t.Fatalf("qoder-cn %s: %+v, want %+v", a.User, cb, ca)
+		}
+	})
+}
+
 func TestFactoryMover(t *testing.T) {
 	c1 := factoryCreds{Access: "a1", Refresh: "r1", ExpiresAt: 1_900_000_000_000, Org: "org_1", Active: "fo1", Email: "a@f.com", UserID: "user_1", Region: "eu", Prem: "llm.example.com"}
 	c2 := factoryCreds{Access: "a2", Refresh: "r2", ExpiresAt: 1_900_000_000_001, UserID: "user_2"}

@@ -1,5 +1,15 @@
 package provider
 
+// PLUGIN-SERVED (see AGENTS.md): Factory ("factory") is a deprecated
+// built-in subscription served by its plugin,
+// @magpie-community/opencode-factory-auth, once moved onto it
+// (provider.Moved; the default for a new sign-in). A moved one's sign-ins,
+// models, requests and usage are all the plugin's, never this code's (only
+// the move, in migrate*.go, still reads its accounts). A fix here alone
+// doesn't reach those users; fix the plugin
+// (github.com/magpie-community/plugins, packages/factory) and raise the
+// mover's min in internal/provider/migrate_factory.go.
+
 // How much of a Factory plan an account has used, as droid's /status asks
 // it: GET /api/billing/limits. Standard usage runs in rolling 5-hour, weekly
 // and monthly windows, each a percent used and when it ends; Droid Core, the

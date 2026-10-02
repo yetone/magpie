@@ -148,7 +148,7 @@
     </figure>
 
     <h3>Several accounts or keys in one provider</h3>
-    <p>Open the provider’s row and tick every account or key to use. <span class="ui">Routing</span> says how requests spread over them: <span class="ui">Smart</span> (the default), <span class="ui">In order</span>, <span class="ui">In turn</span> or <span class="ui">Least used first</span>. <span class="ui">Fallback</span> lists models to use instead when the provider is out of quota, rate limited or down.</p>
+    <p>Open the provider’s row and tick every account or key to use. <span class="ui">Routing</span> says how requests spread over them: <span class="ui">Smart</span> (the default), <span class="ui">In order</span>, <span class="ui">In turn</span>, <span class="ui">Least used first</span> or <span class="ui">Weekly pace</span>. <span class="ui">Fallback</span> lists models to use instead when the provider is out of quota, rate limited or down.</p>
 
     <h3>One model over several providers</h3>
     <p>A group is several models, from one provider or many, that an agent picks as one: <code>group/&lt;id&gt;</code>, under <em>Routing groups</em> in the picker. A model two of your providers serve under the same name becomes a group on its own; <span class="ui">New group</span> in the <span class="ui">Routing</span> tab makes one of any models you like. The first model answers for what the group can do.</p>
@@ -159,6 +159,7 @@
       <tr><td>In order <code>order</code></td><td>The first model until it can’t answer, then the next.</td></tr>
       <tr><td>In turn <code>rotate</code></td><td>Each conversation’s next turn goes to the next member’s account or key, spreading the load.</td></tr>
       <tr><td>Least used <code>usage</code></td><td>The account or key with the most of its allowance left.</td></tr>
+      <tr><td>Weekly pace <code>pace</code></td><td>The account with the most of its week left per hour until it renews — the one with the most to lose at its reset — so less of each member’s week is lost at its reset; one at 90% or more waits until the others can’t answer. A key by the tokens sent it lately.</td></tr>
     </table></div>
     <div class="table-wrap"><table>
       <tr><th>Stays</th><th>How long a conversation stays with the account or key that answered it</th></tr>

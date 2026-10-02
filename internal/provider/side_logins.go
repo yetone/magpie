@@ -45,6 +45,9 @@ func sideLogins(agent, ownUser string, usable func(savedLogin) bool) []sideLogin
 				changed := false
 				if !strings.EqualFold(ls[i].User, ownUser) {
 					ls[i].User, ls[i].Seen = ownUser, time.Now().UTC().Truncate(time.Second)
+					if agent == "copilot" {
+						ls[i].Plan, ls[i].AccessSKU = "", ""
+					}
 					changed = true
 				}
 				// removed in magpie, it shows again once the agent signs in
@@ -258,6 +261,9 @@ func addSideLogin(l savedLogin, ownUser string, dup func(savedLogin)) error {
 			}
 			old := ls[i]
 			ls[i].Auth, ls[i].Home, ls[i].Plan, ls[i].Seen = l.Auth, l.Home, l.Plan, l.Seen
+			if l.Agent == "copilot" {
+				ls[i].AccessSKU = l.AccessSKU
+			}
 			if old.own() {
 				ls[i].On = true
 			} else if old.Home != l.Home {

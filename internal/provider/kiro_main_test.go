@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yetone/magpie/internal/agentenv"
 )
 
 // TestMain keeps the package's tests off the Kiro sign-ins of whoever runs
@@ -24,6 +26,11 @@ func TestMain(m *testing.M) {
 		"LOCALAPPDATA":    filepath.Join(home, "AppData", "Local"),
 	} {
 		os.Setenv(k, v)
+	}
+	// Accounts here read what an agent keeps on this machine: a variable left
+	// in the shell would point a test at the runner's real one (#522).
+	for _, k := range agentenv.Vars {
+		os.Unsetenv(k)
 	}
 	kiroCLIDB = func() string { return filepath.Join(dir, "kiro-cli", "data.sqlite3") }
 	kiroIDEDir = func() string { return filepath.Join(dir, "sso") }

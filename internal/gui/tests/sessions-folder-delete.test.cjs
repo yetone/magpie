@@ -1,13 +1,18 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Every session of a project folder deleted at once (#527: 有些codex会话多，
-// 有些特别老的项目，希望能直接删除整个项目文件夹下所有会话). Each folder's row
-// on the Sessions page has Delete all: it asks in magpie's own dialog (never
-// confirm()), naming the folder, how many and its path, then posts
-// sessions/delete with every id of the folder, as a pick of them would, so
-// they go to magpie's trash as one deleted alone does; a filter hiding some
-// of them doesn't keep them. Cancel posts nothing; a session still being
-// written to is left and said so; other folders stay. An agent magpie can't
-// delete from has none. Clicks leave the page where it is. In English and
+// Every session of project folders deleted at once (#527: 有些codex会话多，
+// 有些特别老的项目，希望能直接删除整个项目文件夹下所有会话; then mintonight: 在项目
+// 文件夹那一行的字首加一个复选框…多选同时删除多个项目…复用已选 x 项那一行右侧的
+// 删除按钮，这个数量 x 的计数逻辑还是按会话数量来). Each folder's row on the
+// Sessions page starts with a box, as each session's does: ticked, it picks
+// every session of the folder shown, folded or not, the bar counting
+// sessions, not folders; a filter picks the ones it shows. Several folders
+// are picked together, and the bar's Delete asks in magpie's own dialog
+// (never confirm()), naming the folder and its path when the pick is one
+// whole folder, and how many folders when it is several, then posts
+// sessions/delete with their ids, so they go to magpie's trash as one
+// deleted alone does. Cancel posts nothing; a session still being written
+// to is left and said so; other folders stay. An agent magpie can't delete
+// from has no boxes. Clicks leave the page where it is. In English and
 // Chinese, Chromium and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -79,15 +84,15 @@ function serve(lang, calls) {
 
 const words = {
   en: {
-    nav: "Sessions", del: "Delete", cancel: "Cancel", all: "Delete all", title: "Delete every session in this folder",
-    askApp: "Delete all 14 sessions in app?", askBlog: "Delete all 2 sessions in old-blog?", askOne: "Delete this session?",
-    moved: "2 sessions moved to magpie's trash", moved13: "13 sessions moved to magpie's trash",
+    nav: "Sessions", del: "Delete", cancel: "Cancel", label: "Select every session in old-blog", picked: (n) => `${n} selected`,
+    askApp: "Delete all 14 sessions in app?", askBlog: "Delete all 2 sessions in old-blog?", askTwo: "Delete all 3 sessions in 2 folders?", askSome: "Delete 2 sessions?",
+    moved3: "3 sessions moved to magpie's trash",
     active: "still running is still being written to; close it in Codex and try again in a minute",
   },
   zh: {
-    nav: "会话", del: "删除", cancel: "取消", all: "全部删除", title: "删除这个文件夹下的全部会话",
-    askApp: "删除 app 下的全部 14 个会话？", askBlog: "删除 old-blog 下的全部 2 个会话？", askOne: "删除这个会话？",
-    moved: "2 个会话已移到 magpie 的回收站", moved13: "13 个会话已移到 magpie 的回收站",
+    nav: "会话", del: "删除", cancel: "取消", label: "选中 old-blog 下的全部会话", picked: (n) => `已选 ${n} 个`,
+    askApp: "删除 app 下的全部 14 个会话？", askBlog: "删除 old-blog 下的全部 2 个会话？", askTwo: "删除 2 个文件夹下的全部 3 个会话？", askSome: "删除这 2 个会话？",
+    moved3: "3 个会话已移到 magpie 的回收站",
     active: "「still running」仍在写入；请在 Codex 中关闭它，一分钟后再试",
   },
 };
@@ -95,7 +100,7 @@ const words = {
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
     const w = words[lang];
-    test(`${engine} ${lang}: every session of a folder is deleted at once, after magpie's own dialog`, async (t) => {
+    test(`${engine} ${lang}: folders are picked with their box and deleted together, after magpie's own dialog`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       const page = await (await browser.newContext({ viewport: { width: 900, height: 560 }, reducedMotion: "reduce" })).newPage();
       t.after(async () => {
@@ -117,98 +122,126 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const row = (id) => view.locator(`.row.sm-sess[data-id="${id}"]`);
       await row("a-run").waitFor();
       const folder = (name) => view.locator(".row.sm-folder").filter({ has: page.locator(".fold .name", { hasText: new RegExp("^" + name + "$") }) });
+      const box = (name) => folder(name).locator("input.sm-folder-check");
       const said = (text) => page.waitForFunction((x) => document.querySelector("#status")?.textContent === x, text)
         .catch(async () => assert.equal(await page.locator("#status").textContent(), text));
       const top = (l) => l.evaluate((e) => e.getBoundingClientRect().top);
+      const count = async () => (await view.locator(".sm-bar .sm-count").textContent()).trim();
+      const nofolder = lang === "zh" ? "无文件夹" : "No folder";
       // the reader's wheel brings it into sight (a scroll by code is put back)
       const reach = async (l) => {
-        const box = await view.boundingBox();
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        const b0 = await view.boundingBox();
+        await page.mouse.move(b0.x + b0.width / 2, b0.y + b0.height / 2);
         for (let k = 0; k < 80; k++) {
           const b = await l.boundingBox();
-          if (b.y >= box.y + 40 && b.y + b.height <= box.y + box.height - 40) break;
-          await page.mouse.wheel(0, b.y < box.y + 40 ? -40 : 40);
+          if (b.y >= b0.y + 40 && b.y + b.height <= b0.y + b0.height - 40) break;
+          await page.mouse.wheel(0, b.y < b0.y + 40 ? -40 : 40);
           await page.waitForTimeout(20);
         }
         await page.waitForTimeout(300);
       };
-      const ask = page.locator("#modal .sm-ask");
-      // Delete all on a folder's row, the page held still and the folder
-      // left folded or open as it was
-      const askAll = async (name) => {
-        const r = folder(name);
-        const btn = r.locator(".sm-folder-del");
-        await reach(btn);
+      // a folder's box ticked: the page held still, the folder left folded
+      // or open as it was
+      const tick = async (name) => {
+        const r = folder(name), c = box(name);
+        await reach(c);
         const before = await top(r), open = await r.locator(".fold").getAttribute("aria-expanded");
-        await btn.click();
+        await c.click();
+        await page.waitForTimeout(50);
+        assert.equal(await top(folder(name)), before, "the box moved the page");
+        assert.equal(await folder(name).locator(".fold").getAttribute("aria-expanded"), open, "the box folded or unfolded the folder");
+      };
+      const ask = page.locator("#modal .sm-ask");
+      const askDel = async () => {
+        const d = view.locator(".sm-bar .sm-delete");
+        await reach(d);
+        await d.click();
         await ask.waitFor();
-        assert.equal(await top(r), before, "Delete all moved the page");
-        assert.equal(await r.locator(".fold").getAttribute("aria-expanded"), open, "Delete all folded or unfolded the folder");
       };
 
-      // every folder has it, named and inside its row
-      const btns = view.locator(".row.sm-folder .sm-folder-del");
-      assert.equal(await btns.count(), 3);
-      for (const b of await btns.all()) {
-        assert.equal((await b.textContent()).trim(), w.all);
-        assert.equal(await b.getAttribute("title"), w.title);
-        const inside = await b.evaluate((e) => { const q = e.getBoundingClientRect(), r = e.closest(".row").getBoundingClientRect(); return q.width > 0 && q.left >= r.left && q.right <= r.right; });
-        assert(inside, "the button is inside its row");
+      // every folder starts with its box, before its name, inside its row
+      const boxes = view.locator(".row.sm-folder input.sm-folder-check");
+      assert.equal(await boxes.count(), 3);
+      for (const b of await boxes.all()) {
+        const first = await b.evaluate((e) => e.parentElement.firstElementChild === e && e.getBoundingClientRect().right <= e.parentElement.querySelector(".fold").getBoundingClientRect().left);
+        assert(first, "the box comes first in the row");
       }
+      assert.equal(await box("old-blog").getAttribute("aria-label"), w.label);
+      assert.equal(await view.locator(".sm-folder-del").count(), 0, "no Delete all beside the box");
 
-      // filtered to one of app's sessions, Delete all still means the whole
-      // folder, and says so; Cancel posts nothing
-      await view.locator(".sm-filter").fill("login");
-      await view.locator(".row.sm-sess").first().waitFor();
-      assert.equal(await view.locator(".row.sm-sess").count(), 1);
-      await askAll("app");
-      assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.askApp);
-      assert.equal((await ask.locator(".sm-ask-path").textContent()).trim(), "/work/app");
-      assert.equal(await ask.locator(".sm-ask-list li").count(), 6, "five titles and the rest counted");
+      // a folded folder ticked picks its two, the bar counting sessions;
+      // its own Delete asks naming the folder; Cancel posts nothing
+      assert.equal(await folder("old-blog").locator(".fold").getAttribute("aria-expanded"), "false");
+      await tick("old-blog");
+      assert.equal(await count(), w.picked(2));
+      assert(await box("old-blog").isChecked());
+      await askDel();
+      assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.askBlog);
+      assert.equal((await ask.locator(".sm-ask-path").textContent()).trim(), "/work/old-blog");
+      assert.deepEqual(await ask.locator(".sm-ask-list li").allTextContents(), ["write the post", "b-2"]);
+      assert((await ask.locator(".lib-confirm").textContent()).includes("~/Library/Application Support/magpie/trash/sessions"), "they go to magpie's trash");
       await ask.getByRole("button", { name: w.cancel, exact: true }).click();
       await ask.waitFor({ state: "detached" });
       assert.deepEqual(calls, [], "Cancel deletes nothing");
+      assert.equal(await count(), w.picked(2), "the pick is kept");
+
+      // a second folder: three sessions in two folders; one of them left
+      // out and one of app's in, it is two picked sessions, not whole folders
+      await tick(nofolder);
+      assert.equal(await count(), w.picked(3));
+      const login = row("a-login").locator("input.sm-check");
+      await reach(login);
+      await login.check();
+      assert.equal(await count(), w.picked(4));
+      assert.equal(await box("app").evaluate((e) => e.indeterminate), true, "app's box is part-ticked");
+      await login.uncheck();
+      assert.equal(await box("app").evaluate((e) => e.indeterminate), false);
+      await reach(row("a-run"));
+      await row("a-run").locator("input.sm-check").check();
+      await tick("old-blog");
+      await askDel();
+      assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.askSome);
+      await ask.getByRole("button", { name: w.cancel, exact: true }).click();
+      await ask.waitFor({ state: "detached" });
+      await reach(row("a-run"));
+      await row("a-run").locator("input.sm-check").uncheck();
+      await tick("old-blog");
+      await page.waitForTimeout(400);
+      if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-sessions-folder-picked.png`) });
+      await askDel();
+      assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.askTwo);
+      await ask.getByRole("button", { name: w.del, exact: true }).click();
+      await ask.waitFor({ state: "detached" });
+      assert.equal(calls.length, 1);
+      assert.deepEqual(calls[0].body.ids.slice().sort(), ["b-1", "b-2", "n-1"]);
+      await folder("old-blog").waitFor({ state: "detached" });
+      await said(w.moved3);
+      assert.equal(await folder(nofolder).count(), 0);
+      assert.equal(await folder("app").count(), 1);
+      assert.equal(await view.locator(".sm-trash-btn em").textContent(), "3");
+
+      // under a filter the box picks the sessions it shows
+      await view.locator(".sm-filter").fill("older task 1");
+      await page.waitForFunction(() => document.querySelectorAll("#view-sessions .row.sm-sess").length === 3);
+      await tick("app");
+      assert.equal(await count(), w.picked(3));
+      await tick("app");
+      assert.equal(await count(), lang === "zh" ? "3 个会话" : "3 sessions");
       await view.locator(".sm-filter").fill("");
       await view.locator(".sm-filter").dispatchEvent("input");
       await row("a-run").waitFor();
 
-      // a folded folder: its two go, the others stay
-      assert.equal(await folder("old-blog").locator(".fold").getAttribute("aria-expanded"), "false");
-      const shot = async (name) => {
-        if (!process.env.ARTIFACT_DIR) return;
-        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
-        await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-sessions-folder-${name}.png`) });
-      };
-      await shot("list");
-      await askAll("old-blog");
-      await page.waitForTimeout(400);
-      await shot("ask");
-      assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.askBlog);
-      assert.deepEqual(await ask.locator(".sm-ask-list li").allTextContents(), ["write the post", "b-2"]);
-      assert((await ask.locator(".lib-confirm").textContent()).includes("~/Library/Application Support/magpie/trash/sessions"), "they go to magpie's trash");
-      await ask.getByRole("button", { name: w.del, exact: true }).click();
-      await ask.waitFor({ state: "detached" });
-      assert.deepEqual(calls, [{ path: "delete", body: { agent: "codex", ids: ["b-1", "b-2"] } }]);
-      await folder("old-blog").waitFor({ state: "detached" });
-      await said(w.moved);
-      assert.equal(await folder("app").count(), 1);
-      assert.equal(await view.locator(".sm-trash-btn em").textContent(), "2");
-
-      // app: every one posted; the one still running is left, and said so
-      await askAll("app");
+      // app whole: every one posted; the one still running is left, and said so
+      await tick("app");
+      assert.equal(await count(), w.picked(14));
+      await askDel();
+      assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.askApp);
       await ask.getByRole("button", { name: w.del, exact: true }).click();
       await ask.waitFor({ state: "detached" });
       assert.deepEqual(calls[1].body.ids, ["a-run", "a-login", ...Array.from({ length: 12 }, (_, i) => `a-${i}`)]);
       await said(w.active);
       await view.locator(".row.sm-sess").first().waitFor();
       assert.deepEqual(await view.locator(".row.sm-sess").evaluateAll((rs) => rs.map((r) => r.dataset.id)), ["a-run"]);
-
-      // a folder of one asks as a single delete does
-      await askAll(lang === "zh" ? "无文件夹" : "No folder");
-      assert.equal((await ask.locator(".ehead b").textContent()).trim(), w.askOne);
-      await ask.getByRole("button", { name: w.cancel, exact: true }).click();
-      await ask.waitFor({ state: "detached" });
-      assert.equal(calls.length, 2);
 
       // no left-border accent in the page or the dialog
       const border = await page.evaluate(() => [...document.querySelectorAll("#view-sessions, #view-sessions *")]
@@ -218,9 +251,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // an agent magpie can't delete from has none
       await view.locator(".sm-agents .opt", { hasText: "OpenCode" }).click();
       await view.locator('.row.sm-sess[data-id="o-1"]').waitFor();
-      assert.equal(await view.locator(".sm-folder-del").count(), 0);
+      assert.equal(await view.locator(".sm-folder-check").count(), 0);
 
-      const missing = await page.evaluate(() => ["Delete all", "Delete every session in this folder", "Delete all {n} sessions in {folder}?"].filter((k) => !I18N.zh[k]));
+      const missing = await page.evaluate(() => ["Select every session in {folder}", "Delete all {n} sessions in {k} folders?", "Delete all {n} sessions in {folder}?"].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");
       assert.deepEqual(errors, []);
     });

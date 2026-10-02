@@ -25,6 +25,14 @@ import (
 // against one US dollar; a var so a test can point it at a fake server.
 var rateURL = "https://open.er-api.com/v6/latest/USD"
 
+// SetRateURL points the rate at u until the returned func puts it back; for
+// other packages' tests.
+func SetRateURL(u string) (restore func()) {
+	old := rateURL
+	rateURL = u
+	return func() { rateURL = old }
+}
+
 // TTL is how long a fetched rate is used before another is asked for.
 const TTL = 12 * time.Hour
 
@@ -65,7 +73,12 @@ func CachePath() string { return filepath.Join(appdir.Cache(), "fxrate.json") }
 // of rateURL, kept in the cache for next time; else — offline, or the
 // endpoint's reply didn't parse — the last rate however old, or Fallback
 // when there has never been one.
-func Get(ctx context.Context) Rate {
+func Get(ctx context.Context) Rate { return getAt(ctx, CachePath()) }
+
+// getAt is Get with the cache file at path: Soon's fetch behind a page
+// keeps the one it was started with, and never writes a rate into a home
+// it wasn't read from (a test's next one)
+func getAt(ctx context.Context, path string) Rate {
 	mu.Lock()
 	if mem != nil && !mem.Stale() {
 		r := *mem
@@ -77,7 +90,7 @@ func Get(ctx context.Context) Rate {
 	mu.Unlock()
 
 	if !have {
-		if r, ok := readCache(); ok {
+		if r, ok := readCache(path); ok {
 			mu.Lock()
 			mem = &r
 			mu.Unlock()
@@ -88,8 +101,13 @@ func Get(ctx context.Context) Rate {
 	}
 
 	if !recent {
-		if r, err := fetchLive(ctx); err == nil {
-			writeCache(r)
+		r, err := fetchLive(ctx)
+		// a fetch begun for another home (a test's, gone) tells this one nothing
+		if CachePath() != path {
+			return Rate{CNYPerUSD: Fallback}
+		}
+		if err == nil {
+			writeCache(path, r)
 			mu.Lock()
 			mem, failed = &r, time.Time{}
 			mu.Unlock()
@@ -106,6 +124,44 @@ func Get(ctx context.Context) Rate {
 		return *mem
 	}
 	return Rate{CNYPerUSD: Fallback}
+}
+
+// refreshing is held while Soon's fetch behind it runs: one at a time.
+var refreshing sync.Mutex
+
+// Soon is Get without the wait, for a page that must not stand on the
+// network (#541): the rate known now — this process's, the cache file's,
+// else Fallback — and, when that is stale, Get behind it (one at a time),
+// for the next look to have.
+func Soon() Rate {
+	path := CachePath()
+	mu.Lock()
+	if mem == nil {
+		if r, ok := readCache(path); ok {
+			mem = &r
+		}
+	}
+	r := Rate{CNYPerUSD: Fallback}
+	if mem != nil {
+		r = *mem
+	}
+	mu.Unlock()
+	if r.Stale() && refreshing.TryLock() {
+		go func() {
+			defer refreshing.Unlock()
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			getAt(ctx, path)
+		}()
+	}
+	return r
+}
+
+// Settle waits for a fetch Soon started to end; for tests, whose home goes
+// once they do.
+func Settle() {
+	refreshing.Lock()
+	refreshing.Unlock()
 }
 
 // Reset forgets the in-memory rate, so the next Get rereads the cache file
@@ -151,8 +207,8 @@ func fetchLive(ctx context.Context) (Rate, error) {
 	return Rate{CNYPerUSD: cny, At: time.Now()}, nil
 }
 
-func readCache() (Rate, bool) {
-	b, err := os.ReadFile(CachePath())
+func readCache(path string) (Rate, bool) {
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return Rate{}, false
 	}
@@ -163,12 +219,11 @@ func readCache() (Rate, bool) {
 	return r, true
 }
 
-func writeCache(r Rate) {
+func writeCache(p string, r Rate) {
 	b, err := json.Marshal(r)
 	if err != nil {
 		return
 	}
-	p := CachePath()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return
 	}

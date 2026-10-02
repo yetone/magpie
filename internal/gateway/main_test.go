@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yetone/magpie/internal/agentenv"
 )
 
 func TestMain(m *testing.M) {
@@ -37,7 +39,7 @@ func isolatedTests(m *testing.M) (int, error) {
 			return 1, err
 		}
 	}
-	for _, name := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "GROK_HOME", "DSH_HOME"} {
+	for _, name := range agentenv.Vars {
 		if err := os.Unsetenv(name); err != nil {
 			return 1, err
 		}

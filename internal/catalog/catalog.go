@@ -55,6 +55,10 @@ type Model struct {
 	// a relay's flux): kept with the list for Settings → Images, never
 	// offered to agents as a model to talk to.
 	Draws bool `json:",omitempty"`
+	// Films is set on a model another magpie lists as one it makes videos
+	// with (a Remote magpie's Grok Imagine Video): kept with the list for
+	// its videos API, never offered as a model to talk to or draw with.
+	Films bool `json:",omitempty"`
 	// Free is set on a model a subscription serves at no cost to its
 	// allowance: WorkBuddy's "credits": "x0.00".
 	Free bool `json:",omitempty"`

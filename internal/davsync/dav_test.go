@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -129,5 +130,141 @@ func TestDAVForbiddenUntilMade(t *testing.T) {
 	}
 	if data, _, err := d.get(ctx, version{}); err != nil || string(data) != "x" {
 		t.Fatalf("after: %q %v", data, err)
+	}
+}
+
+// A relay or tunnel can cut a long write short: the server keeps half the
+// file and answers 2xx anyway, and every later read trips over the half as
+// "not a magpie backup". A write that kept less than was sent is read back,
+// tried again over the version the short one made, and told as itself in
+// the end. A HEAD that can't be done leaves the write unchecked: it landed.
+func TestDAVShortWrite(t *testing.T) {
+	data := []byte(strings.Repeat("x", 8192))
+	// cut is a small WebDAV with one file and, when etags, an ETag it
+	// changes on every write and If-Match it holds writes to — so a retry
+	// on the version read before the short one would be refused. The cut
+	// write keeps half: the writes-th one, or every one at -1. headfail
+	// answers the HEAD a check needs with 503.
+	cut := func(cut int, etags, headfail bool) (*dav, *int) {
+		var kept []byte
+		var etag, writes int
+		etagOf := func() string {
+			if !etags {
+				return ""
+			}
+			return strconv.Quote("v" + strconv.Itoa(etag))
+		}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if u, p, ok := r.BasicAuth(); !ok || u != "me" || p != "pw" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			switch r.Method {
+			case http.MethodPut:
+				if im := r.Header.Get("If-Match"); im != "" && im != etagOf() {
+					w.WriteHeader(http.StatusPreconditionFailed)
+					return
+				}
+				body, _ := io.ReadAll(r.Body)
+				writes++
+				if cut == -1 || cut == writes {
+					kept = body[:len(body)/2] // the tunnel drops the rest
+				} else {
+					kept = body
+				}
+				etag++
+				if e := etagOf(); e != "" {
+					w.Header().Set("ETag", e)
+				}
+				w.WriteHeader(http.StatusCreated)
+			case http.MethodGet:
+				if e := etagOf(); e != "" {
+					w.Header().Set("ETag", e)
+				}
+				w.Write(kept)
+			case http.MethodHead:
+				if headfail {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				w.Header().Set("Content-Length", strconv.Itoa(len(kept)))
+				if e := etagOf(); e != "" {
+					w.Header().Set("ETag", e)
+				}
+			default:
+				w.WriteHeader(http.StatusForbidden)
+			}
+		}))
+		t.Cleanup(srv.Close)
+		d, err := newDAV(Config{URL: srv.URL, User: "me", Password: "pw"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d, &writes
+	}
+	ctx := context.Background()
+	kept := func(d *dav) []byte {
+		got, _, err := d.get(ctx, version{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	// the write after a cut one is kept whole, so the sync goes through,
+	// and the server ends with the file in full
+	d, writes := cut(1, true, false)
+	if _, err := d.put(ctx, data, ""); err != nil {
+		t.Fatalf("the write after a short one: %v", err)
+	}
+	if *writes != 2 {
+		t.Fatalf("writes: %d, want 2: the short one was to be tried again", *writes)
+	}
+	if got := kept(d); len(got) != len(data) {
+		t.Fatalf("the server kept %d bytes, want the whole %d", len(got), len(data))
+	}
+
+	// the same over a version read before: the short write changed it, so
+	// the retry matches what the short write left, not that one
+	d, writes = cut(2, true, false)
+	if _, err := d.put(ctx, data, ""); err != nil {
+		t.Fatalf("the seed write: %v", err)
+	}
+	_, v, err := d.get(ctx, version{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.ETag == "" {
+		t.Fatal("no ETag to write over")
+	}
+	if _, err := d.put(ctx, data, v.ETag); err != nil {
+		t.Fatalf("over a version read: %v", err)
+	}
+	if *writes != 3 {
+		t.Fatalf("writes: %d, want 3: the short one was to be tried again", *writes)
+	}
+	if got := kept(d); len(got) != len(data) {
+		t.Fatalf("the server kept %d bytes, want the whole %d", len(got), len(data))
+	}
+
+	// a server that keeps cutting: three tries, then the error says what
+	// was kept
+	d, writes = cut(-1, true, false)
+	_, err = d.put(ctx, data, "")
+	if err == nil || !strings.Contains(err.Error(), "cut short") || !strings.Contains(err.Error(), "4096 of 8192") {
+		t.Fatalf("always short: %v, want a kept-of-sent count", err)
+	}
+	if *writes != 3 {
+		t.Fatalf("writes: %d, want 3 before giving up", *writes)
+	}
+
+	// a HEAD that can't be done (here 503) leaves the write unchecked:
+	// it landed, and it isn't failed over the check
+	d, writes = cut(0, true, true)
+	if _, err := d.put(ctx, data, ""); err != nil {
+		t.Fatalf("a write the HEAD couldn't be done for: %v", err)
+	}
+	if *writes != 1 {
+		t.Fatalf("writes: %d, want 1: the write landed", *writes)
 	}
 }

@@ -28,7 +28,7 @@ func TestNamespacedToolsOffered(t *testing.T) {
 	for _, tl := range r.Tools {
 		names = append(names, tl.Name)
 	}
-	if got := strings.Join(names, ","); got != "exec_command,collaboration__spawn_agent" {
+	if got := strings.Join(names, ","); got != "exec_command,collaboration__spawn_agent,collaboration__freeform" {
 		t.Fatalf("tools = %s", got)
 	}
 	if r.Tools[1].Description != "Spawns an agent." || !strings.Contains(string(r.Tools[1].Schema), "message") {

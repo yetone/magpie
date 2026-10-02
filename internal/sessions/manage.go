@@ -22,7 +22,7 @@ import (
 //
 // Only the agents whose sessions are files of their own can be deleted:
 // Claude Code's (and Qoder's and WorkBuddy's, kept the same way), Codex's,
-// Pi's and omp's. The agents' indexes are left as they are: Codex's
+// Pi's, omp's and Cursor CLI's (a chat's folder, its store and meta.json). The agents' indexes are left as they are: Codex's
 // session_index.jsonl (names by thread id) and its state database, and
 // Claude Code's history.jsonl (the prompts typed, for the up arrow), are
 // written by the agent while it runs, and a name or a prompt left for a
@@ -50,7 +50,7 @@ type AgentCount struct {
 // those kept as files of their own, in a layout magpie knows whole.
 func Deletable(agent string) bool {
 	switch agent {
-	case "claude", "qoder", "qoder-cn", "workbuddy", "codex", "pi", "omp":
+	case "claude", "qoder", "qoder-cn", "workbuddy", "codex", "pi", "omp", "cursor":
 		return true
 	}
 	return false
@@ -252,6 +252,21 @@ func sessionPaths(agent, id string, fs []file) []string {
 		if _, err := os.Lstat(p); err == nil {
 			out = append(out, p)
 		}
+	}
+	if agent == "cursor" {
+		// a chat is its folder, its subagents' chats theirs, and the
+		// transcripts Cursor wrote of it
+		cwd := ""
+		for _, f := range fs {
+			add(filepath.Dir(f.path))
+			if st := cache[f.path]; st != nil && f.main {
+				cwd = st.Cwd
+			}
+		}
+		for _, p := range cursorTranscripts(cwd, id) {
+			add(p)
+		}
+		return out
 	}
 	for _, f := range fs {
 		if f.main {

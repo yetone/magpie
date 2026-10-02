@@ -476,9 +476,27 @@ func (h *host) call(ctx context.Context, method string, params, out any) error {
 
 // Call starts the host if need be and asks it method.
 func Call(ctx context.Context, method string, params, out any) error {
-	h, err := get(ctx)
+	return callWithTimeout(ctx, method, params, out, 0)
+}
+
+// Background listings allow the host its own startup budget. The optional
+// timeout begins only after initialization and bounds just the requested RPC.
+func callWithTimeout(ctx context.Context, method string, params, out any, timeout time.Duration) error {
+	startup := ctx
+	if timeout > 0 {
+		startup = context.WithoutCancel(ctx)
+	}
+	h, err := get(startup)
 	if err != nil {
 		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
 	}
 	return h.call(ctx, method, params, out)
 }

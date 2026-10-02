@@ -18,6 +18,8 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/tidwall/jsonc"
+
+	"github.com/yetone/magpie/internal/agentenv"
 )
 
 // sandbox is a home with every agent magpie can give the library to, and
@@ -38,7 +40,13 @@ func sandbox(t *testing.T) string {
 	roots := piGlobalRoots
 	piGlobalRoots = func() []string { return nil }
 	t.Cleanup(func() { piGlobalRoots = roots })
-	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR", "OMO_CODING_AGENT_DIR", "SENPI_CODING_AGENT_DIR", "PI_CONFIG_DIR", "OMP_PROFILE", "PI_PROFILE", "COPILOT_HOME", "APPDATA", "LOCALAPPDATA", "DSH_HOME", "HERMES_HOME", "KIMI_CODE_HOME", "KIMI_SHARE_DIR", "GROK_HOME", "FACTORY_HOME_OVERRIDE", "CLINE_DIR", "CLINE_DATA_DIR", "CLINE_MCP_SETTINGS_PATH", "QODER_CONFIG_DIR", "QODERCN_CONFIG_DIR"} {
+	for _, k := range agentenv.Vars {
+		t.Setenv(k, "")
+	}
+	t.Setenv("APPDATA", "")
+	t.Setenv("LOCALAPPDATA", "")
+	// never the developer's own GitHub token, sent to a fake GitHub
+	for _, k := range GitHubTokenEnv {
 		t.Setenv(k, "")
 	}
 	for _, f := range []string{

@@ -1,5 +1,15 @@
 package provider
 
+// PLUGIN-SERVED (see AGENTS.md): Xiaomi MiMo ("mimo-app") is a deprecated
+// built-in subscription served by its plugin,
+// @magpie-community/opencode-mimo-auth, once moved onto it (provider.Moved;
+// the default for a new sign-in). A moved one's sign-ins, models, requests
+// and usage are all the plugin's, never this code's (only the move, in
+// migrate*.go, still reads its accounts). A fix here alone doesn't reach
+// those users; fix the plugin (github.com/magpie-community/plugins,
+// packages/mimo) and raise the mover's min in
+// internal/provider/migrate_mimo.go.
+
 // Xiaomi MiMo's sign-in, run by magpie. The app signs in to the Xiaomi
 // account in a window of its own; magpie asks account.xiaomi.com for a
 // long-poll sign-in for the MiMo server's service (sid mimosgp) instead,

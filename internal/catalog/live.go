@@ -70,11 +70,27 @@ func LiveDrawers(provider string) []Model {
 	return out
 }
 
-// Chat is ms without the models that draw.
+// LiveVideomakers are the models in the provider's fetched list that make
+// videos, in the list's order.
+func LiveVideomakers(provider string) []Model {
+	f, err := readLive(provider)
+	if err != nil {
+		return nil
+	}
+	var out []Model
+	for _, m := range f.Models {
+		if m.Films {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// Chat is ms without the models that draw or make videos.
 func Chat(ms []Model) []Model {
 	out := make([]Model, 0, len(ms))
 	for _, m := range ms {
-		if !m.Draws {
+		if !m.Draws && !m.Films {
 			out = append(out, m)
 		}
 	}
@@ -265,8 +281,9 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		}
 		// a model that draws is kept, marked, for Settings → Images; any
 		// other that isn't for text (embeddings, speech) is left out
-		drawer := DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research") || r.Kind == "image"
-		if !drawer && !textModel(mdModel{ID: id}) {
+		films := r.Kind == "video"
+		drawer := !films && (DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research") || r.Kind == "image")
+		if !drawer && !films && !textModel(mdModel{ID: id}) {
 			continue
 		}
 		name := r.DisplayName
@@ -284,7 +301,7 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		if len(apis) == 0 {
 			apis = targetAPIs(r.TypeTarget)
 		}
-		m := Model{ID: id, Name: name, ImageInput: input, APIs: apis, Draws: drawer}
+		m := Model{ID: id, Name: name, ImageInput: input, APIs: apis, Draws: drawer, Films: films}
 		if n, ok := r.ContextLength.(float64); ok && n > 0 {
 			m.Context = int(n)
 		}
@@ -350,7 +367,8 @@ type liveModel struct {
 	Output any      `json:"max_output_tokens"`
 	Levels any      `json:"supported_reasoning_levels"`
 	// another magpie's name for the model with its provider there after
-	// it, and "image" on one it draws with
+	// it, and "image" on one it draws with, "video" on one it makes videos
+	// with
 	Label string `json:"magpie_label"`
 	Kind  string `json:"kind"`
 	// the protocol family PipeLLM routes the model by: openai, anthropic

@@ -470,10 +470,16 @@ func firstOf(ss ...string) string {
 }
 
 // Do sends req, through the account's own transport when it has one (a
-// plugin's) and client otherwise.
+// plugin's), the client the account asks for this request when it asks
+// for one (ZCode's Start Plan: zcodeStartClient), and client otherwise.
 func (p Provider) Do(client *http.Client, req *http.Request) (*http.Response, error) {
 	if p.Account != nil && p.Account.transport != nil {
 		return p.Account.transport(req)
+	}
+	if p.Account != nil && p.Account.clientFor != nil {
+		if c := p.Account.clientFor(req); c != nil {
+			client = c
+		}
 	}
 	req.Header.Del(ConversationHeader)
 	return client.Do(req)

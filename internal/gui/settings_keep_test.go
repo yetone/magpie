@@ -81,6 +81,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		LAN:                 true,
 		LANKey:              "sk-lan",
 		LANKeyID:            "lan-key-id",
+		GitHubToken:         "ghp_kept",
 		RequestArchive:      true,
 		RequestArchiveMaxMB: 64,
 		QuotaLeft:           true,

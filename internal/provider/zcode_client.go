@@ -1,5 +1,14 @@
 package provider
 
+// PLUGIN-SERVED (see AGENTS.md): ZCode ("zcode") is a deprecated built-in
+// subscription served by its plugin, @magpie-community/opencode-zcode-auth,
+// once moved onto it (provider.Moved; the default for a new sign-in). A
+// moved one's sign-ins, models, requests and usage are all the plugin's,
+// never this code's (only the move, in migrate*.go, still reads its
+// accounts). A fix here alone doesn't reach those users; fix the plugin
+// (github.com/magpie-community/plugins, packages/zcode) and raise the
+// mover's min in internal/provider/migrate_zcode.go.
+
 // ZCode's Start Plan serves only what looks like ZCode's own request: one
 // without ZCode's system prompt is turned away with 405 "request has been
 // blocked due to unusual activity", code 3012 (#425), and one dressed as

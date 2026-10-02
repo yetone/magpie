@@ -134,7 +134,7 @@ func TestPackedRequestPageCallerAndRouteIdentity(t *testing.T) {
 		}
 	}
 	requestCache.Lock()
-	packed := len(requestCache.gateway.Archive) > 0
+	packed := len(readLogSnapshot().blocks[0].Archive) > 0
 	requestCache.Unlock()
 	if !packed {
 		t.Fatal("test must exercise a compressed gateway snapshot")

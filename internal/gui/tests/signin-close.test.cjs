@@ -3,10 +3,12 @@
 // 当我点击添加第二个账号，但最后没添加时，这个请在浏览器中完成登录的窗口状态不会释放，
 // 无论我点击底部的移除、取消、保存都没办法 — 希望在"重新打开"按钮旁边再添加一个"关闭"按钮).
 // In Qoder's editor, Add another account → Sign in anyway waits on the
-// browser with Qoder's long device link. Close sits beside Open again: it
-// tells magpie to drop the sign-in (signin/<id>/cancel), stops asking after
-// it, and the Add another row is back; the box's Cancel stays inside the
-// account list, the link never pushing it out of sight. The editor's own
+// browser with Qoder's long device link. The box's Cancel stays inside the
+// account list, the link never pushing it out of sight: it tells magpie to
+// drop the sign-in (signin/<id>/cancel), stops asking after it, and the Add
+// another row is back. It is the one button that does so: a Close beside
+// Open again did the same (mintonight, on #526: 取消和关闭功能不是重复了吗，
+// 只保留一个就行了). The editor's own
 // Cancel and Save put a waiting sign-in away too, so the editor opened again
 // is as it was.
 // No click moves the page. English and Chinese, Chromium and WebKit; no
@@ -57,8 +59,8 @@ function serve(lang, ctl) {
 }
 
 const W = {
-  en: { add: "Add another Qoder (international) account", anyway: "Sign in anyway", wait: "Finish signing in to Qoder (international) in your browser", again: "Open again", close: "Close", cancel: "Cancel" },
-  zh: { add: "添加另一个 Qoder 国际版 (qoder.com) 账号", anyway: "仍然登录", wait: "请在浏览器中完成 Qoder 国际版 (qoder.com) 登录", again: "重新打开", close: "关闭", cancel: "取消" },
+  en: { add: "Add another Qoder (international) account", anyway: "Sign in anyway", wait: "Finish signing in to Qoder (international) in your browser", again: "Open again", close: "Close", cancel: "Cancel", stop: "Stop waiting for this sign-in" },
+  zh: { add: "添加另一个 Qoder 国际版 (qoder.com) 账号", anyway: "仍然登录", wait: "请在浏览器中完成 Qoder 国际版 (qoder.com) 登录", again: "重新打开", close: "关闭", cancel: "取消", stop: "不再等待这次登录" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -113,13 +115,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         });
       });
       assert(fit.every((f) => f.inside), JSON.stringify(fit));
-      // Close beside Open again
+      // one button puts it away: Open again stands alone, no Close
       const acts = box.locator(".acts");
-      assert.deepEqual(await acts.locator("button").allTextContents(), [w.again, w.close]);
+      assert.deepEqual(await acts.locator("button").allTextContents(), [w.again]);
+      assert.equal(await box.getByRole("button", { name: w.close, exact: true }).count(), 0, "no Close beside Cancel");
+      const cancel = box.locator(":scope > button", { hasText: w.cancel });
+      assert.equal(await cancel.count(), 1);
+      assert.equal(await cancel.getAttribute("title"), w.stop);
       for (let i = 0; i < 40 && !ctl.polled.length; i++) await page.waitForTimeout(50);
       assert(ctl.polled.length, "the sign-in is followed");
       const before = await scrolls();
-      await acts.getByRole("button", { name: w.close, exact: true }).click();
+      await cancel.click();
       await page.locator(".editor .accts .acc.add", { hasText: w.add }).waitFor();
       assert.equal(await page.locator(".editor .accts .signing").count(), 0, "the box is gone");
       for (let i = 0; i < 40 && !ctl.canceled.length; i++) await page.waitForTimeout(25);
@@ -130,7 +136,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(2000);
       assert(ctl.polled.length <= polled + 1, `still polled: ${ctl.polled.length - polled}`);
 
-      // the box's own Cancel does the same
+      // and again, for a second sign-in
       const box2 = await begin();
       await box2.locator(":scope > button", { hasText: w.cancel }).click();
       await page.locator(".editor .accts .acc.add", { hasText: w.add }).waitFor();
@@ -157,7 +163,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(1000);
       assert.equal(await page.locator(".editor .accts .acc.add", { hasText: w.add }).count(), 1, "the editor stays open, with Add another");
 
-      const missing = await page.evaluate(() => ["Close", "Stop waiting for this sign-in"].filter((k) => !I18N.zh[k]));
+      const missing = await page.evaluate(() => ["Stop waiting for this sign-in"].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, []);
       assert.deepEqual(ctl.other.filter((o) => o.startsWith("POST") && !o.includes("/api/open")), [], "nothing else was changed");
       assert.deepEqual(errors, []);

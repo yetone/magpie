@@ -2369,7 +2369,7 @@
       const unknown = got.filter((s) => s.check.status === "unknown");
       let msg = n ? (n === 1 ? t("1 skill has an update") : t("{n} skills have updates", { n })) : t("Every skill is up to date");
       if (unknown.length) {
-        msg += " · " + t("{n} couldn't be checked: {error}", { n: unknown.length, error: unknown[0].check.error });
+        msg += " · " + t("{n} couldn't be checked: {error}", { n: unknown.length, error: checkError(unknown[0].check) });
         status(msg, "warn", 8000);
       } else status(msg, "ok");
     } catch (e) {
@@ -2377,6 +2377,19 @@
     }
     checking = false;
     render();
+  }
+
+  // why a skill couldn't be checked: GitHub's rate limit used up said in
+  // the page's words, with when it lifts and how a token raises it
+  function checkError(c) {
+    const l = c.limited;
+    if (!l) return t(c.error);
+    const d = l.until ? new Date(l.until) : null;
+    const time = d && !isNaN(d) ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    if (l.token) return time ? t("GitHub's rate limit for your GitHub token is used up until {time}", { time })
+      : t("GitHub's rate limit for your GitHub token is used up for now");
+    return time ? t("GitHub allows 60 requests an hour without a token, used up until {time}. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.", { time })
+      : t("GitHub allows 60 requests an hour without a token, used up for now. Add a GitHub token in Settings → Network and sharing to raise it to 5,000.");
   }
 
   // what a check found of a skill, for a tooltip: the last commit to it
@@ -2512,7 +2525,7 @@
       }
       nm.append(b);
     } else if (c?.status === "unknown") {
-      nm.append(tag(t("Not checked"), "lib-unchecked", c.error));
+      nm.append(tag(t("Not checked"), "lib-unchecked", checkError(c)));
     }
     who.append(nm);
     const sub = el("div", "sub", s.missing ? t("Its folder is gone from the library") : s.description || "");

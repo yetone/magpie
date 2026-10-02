@@ -343,7 +343,7 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 		keyID, keyName = provider.KeyID(p.Key), p.KeyName
 	}
 	usage.Append(usage.Record{Time: start, Agent: usage.AgentOf(RouterAgent), Provider: p.ID, Host: p.Where(), Model: model, Requested: model, Served: use.Model,
-		ProviderKeyID: keyID, ProviderKeyName: keyName,
+		ProviderKeyID: keyID, ProviderKeyName: keyName, ProviderAccount: accountOf(p),
 		Input: use.Usage.Input, Output: use.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: status})
 	return b, nil
 }
@@ -398,13 +398,8 @@ const maxSystemOneBody = 1 << 20
 // conversation is: the Routing view and the day's jsonl would otherwise
 // never see Jev, which answers no /v1/chat/completions.
 func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxSystemOneBody+1))
-	if err != nil {
-		writeError(w, provider.Chat, http.StatusBadRequest, err.Error())
-		return
-	}
-	if len(body) > maxSystemOneBody {
-		writeError(w, provider.Chat, http.StatusRequestEntityTooLarge, "request body too large")
+	body, ok := s.readRequestBody(w, r, provider.Chat, nil, maxSystemOneBody)
+	if !ok {
 		return
 	}
 	var q struct {
@@ -466,7 +461,7 @@ func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
 		keyID, keyName = provider.KeyID(p.Key), p.KeyName
 	}
 	appendUsage(r, usage.Record{RouteID: tr.ID, Time: start, Agent: agentOf(r), Provider: p.ID, Host: p.Where(), Model: model, Requested: asked, Served: use.Model,
-		ProviderKeyID: keyID, ProviderKeyName: keyName,
+		ProviderKeyID: keyID, ProviderKeyName: keyName, ProviderAccount: accountOf(p),
 		Input: use.Usage.Input, Output: use.Usage.Output, Millis: time.Since(start).Milliseconds(), Status: status})
 	end(status, errMsg, tokens)
 	if ctype == "" || status < 300 {
@@ -584,8 +579,7 @@ func withEffort(proto provider.Protocol, body []byte, effort string) []byte {
 	var v struct {
 		ReasoningEffort string `json:"reasoning_effort"`
 		Reasoning       *struct {
-			Effort  string `json:"effort"`
-			Summary string `json:"summary"`
+			Effort string `json:"effort"`
 		} `json:"reasoning"`
 		Thinking *struct {
 			Type string `json:"type"`
@@ -606,11 +600,12 @@ func withEffort(proto provider.Protocol, body []byte, effort string) []byte {
 		if v.Reasoning == nil || v.Reasoning.Effort == "" || v.Reasoning.Effort == "none" {
 			return body
 		}
-		r := map[string]any{"effort": effort}
-		if v.Reasoning.Summary != "" {
-			r["summary"] = v.Reasoning.Summary
-		}
-		return withFields(body, map[string]any{"reasoning": r})
+		// the effort alone: the rest of reasoning goes as the agent sent
+		// it — Codex's Responses Lite asks for context "all_turns", which
+		// the ChatGPT backend wants with its X-OpenAI-Internal-Codex-
+		// Responses-Lite header ("requires `reasoning.context` to be
+		// `all_turns`", #534)
+		return withBodyEffort(proto, body, effort)
 	case provider.Anthropic:
 		if v.Thinking == nil {
 			return body

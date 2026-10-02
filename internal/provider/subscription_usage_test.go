@@ -167,7 +167,7 @@ func TestCopilotQuotaWithoutEditorsSignIn(t *testing.T) {
 	if card == nil {
 		t.Fatal("no Copilot card: an account signed in from magpie alone was left out")
 	}
-	if card.User != "hubot" || card.Plan != "individual_pro" || len(card.Windows) != 1 {
+	if card.User != "hubot" || card.Plan != "Pro+" || len(card.Windows) != 1 {
 		t.Fatalf("Copilot card = %+v", *card)
 	}
 	if w := card.Windows[0]; w.Name != "Premium requests" || w.Display != "4 / 7000" {

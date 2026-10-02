@@ -274,13 +274,16 @@ func (d *dav) get(ctx context.Context, have version) (data []byte, v version, er
 }
 
 // put writes the backup, only over the version read (etag) when there was
-// one, making the folder if the server has none.
+// one, making the folder if the server has none. Relays and tunnels cut
+// long writes short, and the half that lands reads back as "not a magpie
+// backup" on every sync after, so what a write kept is read back and
+// compared; a short write is tried again and told as itself in the end.
 func (d *dav) put(ctx context.Context, data []byte, etag string) (version, error) {
 	h := map[string]string{"Content-Type": "application/octet-stream"}
 	if etag != "" {
 		h["If-Match"] = etag
 	}
-	for try := 0; ; try++ {
+	for try, writes := 0, 0; ; try++ {
 		res, err := d.send(ctx, http.MethodPut, d.url(folder, file), data, h)
 		if err != nil {
 			return version{}, err
@@ -288,6 +291,25 @@ func (d *dav) put(ctx context.Context, data []byte, etag string) (version, error
 		res.Body.Close()
 		switch {
 		case res.StatusCode >= 200 && res.StatusCode < 300:
+			writes++
+			he, cerr := d.check(ctx, len(data))
+			if cerr != nil {
+				if writes < 3 {
+					// the half file is a new version: the retry matches
+					// it — the ETag the PUT answered, else the one the
+					// check read; with neither, the old one goes, for it
+					// can't hold any more
+					if e := res.Header.Get("ETag"); e != "" {
+						h["If-Match"] = e
+					} else if he != "" {
+						h["If-Match"] = he
+					} else {
+						delete(h, "If-Match")
+					}
+					continue
+				}
+				return version{}, cerr
+			}
 			// an ETag said here is the version written; with none, the
 			// next sync reads the file in full, as before
 			return version{ETag: res.Header.Get("ETag")}, nil
@@ -306,6 +328,31 @@ func (d *dav) put(ctx context.Context, data []byte, etag string) (version, error
 		}
 		return version{}, fmt.Errorf("writing %s to the WebDAV server: HTTP %d", file, res.StatusCode)
 	}
+}
+
+// check says so when the server kept less than what was sent: relays and
+// tunnels cut long writes short, and the half that lands reads back as
+// "not a magpie backup" on every sync after. The size is enough — a short
+// file is the whole failure — so no download rides on a write. It gives
+// back the ETag it saw, for a retry to match the file as the short write
+// left it. A HEAD that can't be done — an error, or not a 200 — leaves the
+// write unchecked: it landed either way.
+func (d *dav) check(ctx context.Context, want int) (etag string, err error) {
+	res, err := d.send(ctx, http.MethodHead, d.url(folder, file), nil, nil)
+	if err != nil {
+		return "", nil
+	}
+	res.Body.Close()
+	// a server without a say on HEAD can't be checked; the read after it
+	// tells
+	if res.StatusCode != http.StatusOK {
+		return "", nil
+	}
+	etag = res.Header.Get("ETag")
+	if n := res.ContentLength; n >= 0 && int(n) < want {
+		return etag, fmt.Errorf("the WebDAV server kept %d of %d bytes of %s: the write was cut short — sync again, and if it keeps happening the network to the server is dropping long uploads", n, want, file)
+	}
+	return etag, nil
 }
 
 func (d *dav) mkcol(ctx context.Context) error {

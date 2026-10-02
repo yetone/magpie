@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yetone/magpie/internal/agentenv"
 )
 
 // TestMain gives the package a home of its own. A home an agent is found
@@ -24,15 +26,12 @@ func TestMain(m *testing.M) {
 	} {
 		os.Setenv(k, v)
 	}
-	for _, k := range []string{
-		"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "GROK_HOME", "DSH_HOME",
-		"PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR", "PI_CONFIG_DIR",
-		"OMP_PROFILE", "PI_PROFILE", "OPENCODE_DB", "CLINE_DIR", "CLINE_DATA_DIR",
-		"CLINE_SESSION_DATA_DIR", "WORKBUDDY_CONFIG_DIR",
-		"QODER_CONFIG_DIR", "QODERCN_CONFIG_DIR",
-	} {
+	for _, k := range agentenv.Vars {
 		os.Unsetenv(k)
 	}
+	// whether Codex's ChatGPT account is out of its allowance is asked of
+	// OpenAI; never from here
+	codexUsedUp = func() bool { return false }
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)

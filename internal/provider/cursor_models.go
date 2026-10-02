@@ -1,5 +1,14 @@
 package provider
 
+// PLUGIN-SERVED (see AGENTS.md): Cursor ("cursor") is a deprecated built-in
+// subscription served by its plugin, @magpie-community/opencode-cursor-auth,
+// once moved onto it (provider.Moved; the default for a new sign-in). A
+// moved one's sign-ins, models, requests and usage are all the plugin's,
+// never this code's (only the move, in migrate*.go, still reads its
+// accounts). A fix here alone doesn't reach those users; fix the plugin
+// (github.com/magpie-community/plugins, packages/cursor) and raise the
+// mover's min in internal/provider/migrate_side.go.
+
 // Cursor lists a model once for each effort and speed it serves it at
 // ("grok-4.7-low", "grok-4.7-low-fast", … "grok-4.7-xhigh-fast"), and a
 // Claude with thinking apart from one without. magpie offers one model a

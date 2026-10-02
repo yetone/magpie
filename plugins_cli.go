@@ -48,6 +48,8 @@ func pluginCmd(args []string) error {
 			return err
 		}
 		fmt.Println(green.Render("✓"), "added", e.Spec)
+		// a deprecated built-in it serves, not signed in to, is its now
+		provider.HandOver(ctx, false)
 		return listPlugins(ctx, false)
 	case "rm", "remove", "uninstall":
 		if len(rest) != 1 {
@@ -67,6 +69,7 @@ func pluginCmd(args []string) error {
 			return err
 		}
 		fmt.Println(green.Render("✓"), "plugins updated")
+		provider.HandOver(ctx, false)
 		return listPlugins(ctx, false)
 	case "on", "off":
 		if len(rest) != 1 {

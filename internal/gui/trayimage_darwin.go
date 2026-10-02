@@ -90,13 +90,15 @@ static void mpTinted(NSImage *im, NSRect r) {
 	CGContextEndTransparencyLayer(cg);
 }
 
-// mpMasked draws a coloured logo as a template image would be: one ink,
-// the bar's text colour. Its shape is what is opaque, less what is near
-// white when the rest isn't (Codex's white glyph on a blue tile is the tile
-// with the glyph cut out); a logo that is all one light colour keeps its
-// whole shape.
+// mpMasked draws a logo as a template image would be: one ink, the bar's
+// text colour. Its shape is what is opaque, less what is near white when
+// the rest isn't (Codex's white glyph on a blue tile is the tile with the
+// glyph cut out); a logo that is all one light colour keeps its whole
+// shape. Logos come with any margin round them in their files, so the
+// shape is cut to its own bounds and fitted to r, centred: each as large
+// as the next, a solid tile (fuller to the eye) a little smaller.
 static void mpMasked(NSImage *im, NSRect r) {
-	const int n = 64; // 14pt at more than any backing scale
+	const int n = 128; // 14pt at more than any backing scale, margin and all
 	size_t stride = n * 4;
 	unsigned char *px = calloc(n * stride, 1);
 	CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
@@ -106,9 +108,13 @@ static void mpMasked(NSImage *im, NSRect r) {
 		free(px);
 		return;
 	}
+	// its own shape, not stretched to a square
+	NSSize is = im.size;
+	CGFloat k = (is.width > 0 && is.height > 0) ? n / MAX(is.width, is.height) : 0;
+	NSRect at = k > 0 ? NSMakeRect((n - is.width * k) / 2, (n - is.height * k) / 2, is.width * k, is.height * k) : NSMakeRect(0, 0, n, n);
 	[NSGraphicsContext saveGraphicsState];
 	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithCGContext:bm flipped:NO]];
-	[im drawInRect:NSMakeRect(0, 0, n, n) fromRect:NSZeroRect operation:NSCompositingOperationCopy fraction:1];
+	[im drawInRect:at fromRect:NSZeroRect operation:NSCompositingOperationCopy fraction:1];
 	[NSGraphicsContext restoreGraphicsState];
 	// how much of it is light: the least of its channels, unpremultiplied
 	int solid = 0, light = 0;
@@ -119,6 +125,7 @@ static void mpMasked(NSImage *im, NSRect r) {
 		if (MIN(MIN(p[0], p[1]), p[2]) * 255 / p[3] > 200) light++;
 	}
 	BOOL cut = solid > 0 && light < solid * 0.85;
+	int x0 = n, y0 = n, x1 = -1, y1 = -1;
 	for (int i = 0; i < n * n; i++) {
 		unsigned char *p = px + i * 4;
 		CGFloat a = p[3] / 255.0;
@@ -129,14 +136,31 @@ static void mpMasked(NSImage *im, NSRect r) {
 		}
 		p[0] = p[1] = p[2] = 0;
 		p[3] = (unsigned char)round(a * 255);
+		if (p[3] > 64) {
+			int x = i % n, y = i / n;
+			x0 = MIN(x0, x), x1 = MAX(x1, x), y0 = MIN(y0, y), y1 = MAX(y1, y);
+		}
 	}
-	CGImageRef mask = CGBitmapContextCreateImage(bm);
+	CGImageRef whole = CGBitmapContextCreateImage(bm);
 	CGContextRelease(bm);
 	free(px);
+	if (whole == NULL) return;
+	if (x1 < x0) {
+		CGImageRelease(whole);
+		return;
+	}
+	// what the shape fills of its bounds, before the cut
+	CGRect box = CGRectMake(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
+	CGImageRef mask = CGImageCreateWithImageInRect(whole, box);
+	CGImageRelease(whole);
 	if (mask == NULL) return;
-	NSImage *glyph = [[NSImage alloc] initWithCGImage:mask size:r.size];
+	CGFloat side = r.size.width * (solid > box.size.width * box.size.height * 0.8 ? 0.9 : 1);
+	CGFloat f = side / MAX(box.size.width, box.size.height);
+	NSSize sz = NSMakeSize(box.size.width * f, box.size.height * f);
+	NSRect fit = NSMakeRect(NSMidX(r) - sz.width / 2, NSMidY(r) - sz.height / 2, sz.width, sz.height);
+	NSImage *glyph = [[NSImage alloc] initWithCGImage:mask size:sz];
 	CGImageRelease(mask);
-	mpTinted(glyph, r);
+	mpTinted(glyph, fit);
 	[glyph release];
 }
 
@@ -180,9 +204,7 @@ static void mpDraw(NSArray *cells, NSImage *bird, CGFloat h) {
 		first = NO;
 		NSRect logo = NSMakeRect(x, round((h - mpLogo) / 2), mpLogo, mpLogo);
 		NSImage *icon = c[@"icon"];
-		if (icon != nil && [c[@"mono"] boolValue]) {
-			mpTinted(icon, logo);
-		} else if (icon != nil) {
+		if (icon != nil) {
 			mpMasked(icon, logo);
 		} else {
 			// no logo: the name's first letter in a ring

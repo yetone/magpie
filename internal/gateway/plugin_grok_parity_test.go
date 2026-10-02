@@ -135,7 +135,7 @@ func TestGrokPluginGetsNamespacedTools(t *testing.T) {
 		tm := tl.(map[string]any)
 		names = append(names, tm["type"].(string)+":"+tm["name"].(string))
 	}
-	if got := strings.Join(names, ","); got != "function:exec_command,function:collaboration__spawn_agent" {
+	if got := strings.Join(names, ","); got != "function:exec_command,function:collaboration__spawn_agent,function:collaboration__freeform" {
 		t.Fatalf("Grok was offered %s", got)
 	}
 	if c := q["input"].([]any)[1].(map[string]any); c["name"] != "collaboration__spawn_agent" || c["namespace"] != nil {

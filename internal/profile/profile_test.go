@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/library"
 )
 
@@ -19,9 +20,11 @@ func sandbox(t *testing.T) string {
 	t.Setenv("USERPROFILE", h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("PATH", "")
-	for _, k := range []string{"CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR", "OMO_CODING_AGENT_DIR", "SENPI_CODING_AGENT_DIR", "COPILOT_HOME", "APPDATA", "LOCALAPPDATA", "DSH_HOME"} {
+	for _, k := range agentenv.Vars {
 		t.Setenv(k, "")
 	}
+	t.Setenv("APPDATA", "")
+	t.Setenv("LOCALAPPDATA", "")
 	for _, f := range []string{".claude/settings.json", ".codex/config.toml"} {
 		write(t, filepath.Join(h, f), "")
 	}

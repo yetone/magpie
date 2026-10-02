@@ -292,7 +292,7 @@ func codexIn(at place) *Agent {
 				return err
 			}
 			os.Remove(catalogPath)
-			forget(at.key("codex.model"), at.key("codex.effort"), at.key("codex.provider"), at.key("codex.catalog"))
+			forget(at.key("codex.model"), at.key("codex.effort"), at.key("codex.provider"), at.key("codex.catalog"), at.key("codex.out"))
 			return nil
 		}
 		if isMagpie(v) {
@@ -302,8 +302,12 @@ func codexIn(at place) *Agent {
 			}
 			// a ChatGPT account out of allowance keeps the Codex app from
 			// sending at all, a magpie model's request too; as a provider
-			// of Codex's own, magpie is past that
-			if !api() && codexChatGPT(dir) && !codexUsedUp() {
+			// of Codex's own, magpie is past that. Wired so for that
+			// alone, it is marked (codex.out), for Sync to put it back
+			// beside the sign-in once the allowance is back.
+			chatgpt := !api() && codexChatGPT(dir)
+			if chatgpt && !codexUsedUp() {
+				forget(at.key("codex.out"))
 				if err := dropProvider(); err != nil {
 					return err
 				}
@@ -326,6 +330,11 @@ func codexIn(at place) *Agent {
 					return err
 				}
 				return settle()
+			}
+			if chatgpt {
+				stash(map[string]string{at.key("codex.out"): "1"})
+			} else {
+				forget(at.key("codex.out"))
 			}
 			if err := putProvider(); err != nil {
 				return err
@@ -354,6 +363,7 @@ func codexIn(at place) *Agent {
 			}
 			return settle()
 		}
+		forget(at.key("codex.out"))
 		if err := giveTables(); err != nil {
 			return err
 		}
@@ -405,6 +415,21 @@ func codexIn(at place) *Agent {
 			// API key: its picker never had magpie's models (#322)
 			if m := get("model"); isMagpie(m) && viaBase() && get("model_provider") == "" && !codexChatGPT(dir) {
 				return set(m)
+			}
+			// the ChatGPT account used its allowance up after a magpie
+			// model was picked beside its sign-in: the Codex app then
+			// sends nothing, a magpie model's turn included, in a new
+			// thread or an old one (#540), so magpie becomes Codex's
+			// provider as set does for an account already out; and once
+			// the allowance is back (or Codex is on an account with
+			// room), Codex's own models join magpie's again
+			if m := get("model"); isMagpie(m) && !api() && codexChatGPT(dir) {
+				switch {
+				case viaBase() && !asProvider() && codexUsedUp():
+					return set(m)
+				case asProvider() && stashLoad()[at.key("codex.out")] == "1" && !codexUsedUp():
+					return set(m)
+				}
 			}
 			// a table taken away before (by an older magpie) comes back
 			// while magpie is wired, for the threads that name it

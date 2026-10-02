@@ -84,6 +84,7 @@ type Quota struct {
 // QuotaSpan is one window of an allowance: how much of it is used and
 // left, in percent, and when it starts again.
 type QuotaSpan struct {
+	Unlimited bool       `json:"unlimited,omitempty"`
 	Name      string     `json:"name"`
 	Used      float64    `json:"used"`
 	Remaining float64    `json:"remaining"`
@@ -103,7 +104,7 @@ func QuotaReport(ctx context.Context, now time.Time) []Quota {
 			r := Quota{Provider: q.Provider, Name: q.Name, Kind: g.kind, Plan: q.Plan, User: q.User, AsOf: q.AsOf,
 				Windows: []QuotaSpan{}, Balance: q.Balance, Error: q.Error, Until: q.Until, Renew: q.Renew, Resets: q.Resets}
 			for _, w := range q.Windows {
-				s := QuotaSpan{Name: w.Name, Used: w.Used, Remaining: max(0, 100-w.Used), ResetsAt: w.ResetsAt, Display: w.Display}
+				s := QuotaSpan{Unlimited: w.Unlimited, Name: w.Name, Used: w.Used, Remaining: max(0, 100-w.Used), ResetsAt: w.ResetsAt, Display: w.Display}
 				if s.ResetsAt == nil && w.ResetSecs > 0 {
 					t := now.Add(time.Duration(w.ResetSecs) * time.Second)
 					s.ResetsAt = &t

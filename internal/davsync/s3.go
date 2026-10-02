@@ -82,11 +82,26 @@ func newS3(c Config) (*s3, error) {
 // where names the object in messages: bucket/key at the endpoint's host.
 func (s *s3) where() string { return s.bucket + "/" + s.key + " at " + s.endpoint.Host }
 
-func (s *s3) objectURL() *url.URL {
+func (s *s3) objectURL() *url.URL { return s.urlOf(s.key) }
+
+// urlOf is the object key's address; bucketURL the bucket's, for a listing.
+func (s *s3) urlOf(key string) *url.URL {
 	u := *s.endpoint
-	p := u.Path + "/" + s.key
+	p := u.Path + "/" + key
 	if s.pathStyle {
-		p = u.Path + "/" + s.bucket + "/" + s.key
+		p = u.Path + "/" + s.bucket + "/" + key
+	} else {
+		u.Host = s.bucket + "." + u.Host
+	}
+	u.Path, u.RawPath = p, awsEscape(p, true)
+	return &u
+}
+
+func (s *s3) bucketURL() *url.URL {
+	u := *s.endpoint
+	p := u.Path + "/"
+	if s.pathStyle {
+		p = u.Path + "/" + s.bucket
 	} else {
 		u.Host = s.bucket + "." + u.Host
 	}
@@ -95,11 +110,15 @@ func (s *s3) objectURL() *url.URL {
 }
 
 func (s *s3) send(ctx context.Context, method string, body []byte, h map[string]string) (*http.Response, error) {
+	return s.sendTo(ctx, method, s.objectURL(), body, h)
+}
+
+func (s *s3) sendTo(ctx context.Context, method string, u *url.URL, body []byte, h map[string]string) (*http.Response, error) {
 	var r io.Reader
 	if body != nil {
 		r = bytes.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, s.objectURL().String(), r)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), r)
 	if err != nil {
 		return nil, err
 	}

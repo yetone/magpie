@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/library"
 	"github.com/yetone/magpie/internal/profile"
@@ -141,12 +142,14 @@ func (c computer) use(t *testing.T) {
 	t.Setenv("USERPROFILE", string(c))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(string(c), ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(string(c), ".cache"))
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(string(c), ".claude"))
-	t.Setenv("CODEX_HOME", filepath.Join(string(c), ".codex"))
 	t.Setenv("PATH", "")
-	for _, v := range []string{"DSH_HOME", "PI_CODING_AGENT_DIR", "OMO_CODING_AGENT_DIR", "SENPI_CODING_AGENT_DIR", "COPILOT_HOME", "CLINE_DIR", "GROK_HOME", "HERMES_HOME", "HANA_HOME", "APPDATA", "LOCALAPPDATA"} {
+	for _, v := range agentenv.Vars {
 		t.Setenv(v, "")
 	}
+	t.Setenv("APPDATA", "")
+	t.Setenv("LOCALAPPDATA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(string(c), ".claude"))
+	t.Setenv("CODEX_HOME", filepath.Join(string(c), ".codex"))
 }
 
 func ids() []string {

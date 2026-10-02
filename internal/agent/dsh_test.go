@@ -190,7 +190,7 @@ func TestDshModelLimits(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := yaml.Marshal(dshRouteConfig(magpieModels("dsh")))
+	b, _ := yaml.Marshal(dshRouteConfig(magpieModels("dsh"), ""))
 	s := string(b)
 	want := `    - id: v/see
       name: see · V

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/davsync"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -25,12 +26,14 @@ func webdavHome(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
-	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("PATH", "")
-	for _, v := range []string{"DSH_HOME", "PI_CODING_AGENT_DIR", "COPILOT_HOME", "CLINE_DIR", "GROK_HOME", "HERMES_HOME", "HANA_HOME", "APPDATA", "LOCALAPPDATA"} {
+	for _, v := range agentenv.Vars {
 		t.Setenv(v, "")
 	}
+	t.Setenv("APPDATA", "")
+	t.Setenv("LOCALAPPDATA", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", filepath.Join(home, ".claude"))
+	t.Setenv("CODEX_HOME", filepath.Join(home, ".codex"))
 	t.Setenv("MAGPIE_ADDR", "127.0.0.1:1")
 	piped(t)
 }

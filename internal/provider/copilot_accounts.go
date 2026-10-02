@@ -15,7 +15,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // copilotConfigDir is where the Copilot editors keep their sign-in.
@@ -152,19 +151,14 @@ func copilotUser(ctx context.Context, token string) (user, plan string, err erro
 	if _, err := get(GitHubUserURL, &gh); err != nil || gh.Login == "" {
 		return "", "", errors.New("GitHub didn't say whose account this is")
 	}
-	var cp struct {
-		Plan string `json:"copilot_plan"`
-	}
+	var cp copilotEntitlement
 	if code, err := get(CopilotUserURL, &cp); err != nil {
 		if code == 401 || code == 403 || code == 404 {
 			return gh.Login, "", errors.New(gh.Login + " has no Copilot subscription")
 		}
 		return gh.Login, "", errors.New("Copilot: " + err.Error())
 	}
-	plan = copilotPlans[strings.ToLower(cp.Plan)]
-	if plan == "" && cp.Plan != "" {
-		plan = strings.ToUpper(cp.Plan[:1]) + cp.Plan[1:]
-	}
+	plan = cp.label()
 	return gh.Login, plan, nil
 }
 

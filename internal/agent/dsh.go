@@ -487,7 +487,11 @@ func dshCheck(dir string) string {
 			return v, ok
 		}
 	}
-	if off := wiringOff("DeepSeek Harness", files[0], get, "baseURL", gatewayV1()); off != "" {
+	api, _ := get("api")
+	if route == nil {
+		api = "" // dsh's DeepSeek row taken over: Chat Completions
+	}
+	if off := wiringOff("DeepSeek Harness", files[0], get, "baseURL", dshBaseURL(dshAPI(api))); off != "" {
 		return off
 	}
 	// dsh counts a model its provider doesn't list as none at all and refuses
@@ -711,8 +715,14 @@ func dshPutRoute(items []dshItem, on bool, models []catalog.Model) ([]dshItem, e
 	config := yamlMapping(n, "config")
 	providers := yamlMapping(config, "providers")
 	if on {
+		// the wire protocol the user picked for the route in dsh's Models
+		// page stays, when it is one the gateway speaks
+		api := ""
+		if v := yamlKey(yamlKey(providers, dshRoute), "api"); v != nil && v.Kind == yaml.ScalarNode {
+			api = v.Value
+		}
 		var route yaml.Node
-		if err := route.Encode(dshRouteConfig(models)); err != nil {
+		if err := route.Encode(dshRouteConfig(models, api)); err != nil {
 			return nil, err
 		}
 		// what dsh's Models page added to it (a default level, headers)
@@ -745,7 +755,7 @@ func dshPutRoute(items []dshItem, on bool, models []catalog.Model) ([]dshItem, e
 }
 
 // dshPiRoute is magpie's route as llm-pi-ai takes a custom provider (the
-// shape dsh's Models page writes): the gateway's Chat Completions API, the
+// shape dsh's Models page writes): one of the gateway's APIs (dshAPI), the
 // key a credential named here, the catalog as its models.
 type dshPiRoute struct {
 	DisplayName string       `yaml:"displayName"`
@@ -765,6 +775,46 @@ type dshPiModel struct {
 	MaxTokens        int          `yaml:"maxTokens,omitempty"`
 	Input            []string     `yaml:"input,omitempty,flow"`
 	ReasoningEfforts *dshPiLevels `yaml:"reasoningEfforts,omitempty"`
+	Compat           *dshPiCompat `yaml:"compat,omitempty"`
+}
+
+// dshPiCompat is a model's compat switches. On Anthropic's Messages API
+// pi-ai asks a model for a thinking budget unless forceAdaptiveThinking is
+// set, and a Claude that thinks only adaptively turns a budget away.
+type dshPiCompat struct {
+	ForceAdaptiveThinking bool `yaml:"forceAdaptiveThinking,omitempty"`
+}
+
+// dshAPIs are the wire protocols of llm-pi-ai's (pi-ai's api names) a route
+// of magpie's may speak, the gateway serving each: openai-completions at
+// /v1/chat/completions, openai-responses at /v1/responses and
+// anthropic-messages at /v1/messages. dsh's Models page offers them as
+// OpenAI Chat Completions, OpenAI Responses and Anthropic Messages, set for
+// the route as a whole; the gateway takes every model on each.
+var dshAPIs = []string{"openai-completions", "openai-responses", "anthropic-messages"}
+
+// dshAPI is the wire protocol magpie's route speaks, given the one it has
+// now: that one when the gateway speaks it — a user who switched the route
+// to OpenAI Responses in dsh's Models page keeps it, where each round put
+// Chat Completions back (Discord, 01huadalang: 这些协议怎么改 responses，在
+// dsh 改了一会就会被 magpie 接管) — and Chat Completions otherwise, none or
+// one the gateway has no endpoint for.
+func dshAPI(cur string) string {
+	if contains(dshAPIs, cur) {
+		return cur
+	}
+	return dshAPIs[0]
+}
+
+// dshBaseURL is the gateway's address for a route on api. pi-ai hands the
+// base to the vendor's SDK as it is, and Anthropic's adds /v1/messages
+// itself, so Anthropic's Messages API is at the gateway's root; OpenAI's
+// SDK adds only /chat/completions or /responses, so those are at its /v1.
+func dshBaseURL(api string) string {
+	if api == "anthropic-messages" {
+		return gateway.URL()
+	}
+	return gatewayV1()
 }
 
 // dshPiLevels maps each of dsh's thinking levels a model takes to the
@@ -833,8 +883,14 @@ func dshLevels(ref string) []string {
 
 // dshRouteConfig is magpie's route for models, the catalog one round read:
 // what the round decides from and what it writes come from the same list.
-func dshRouteConfig(models []catalog.Model) dshPiRoute {
-	r := dshPiRoute{DisplayName: "Magpie", APIKeyEnv: dshKeyRef, API: "openai-completions", BaseURL: gatewayV1(), Models: []dshPiModel{}}
+// api is the wire protocol the route has now, kept when the gateway speaks
+// it (dshAPI). A model's reasoningEfforts go on every one of them: llm-pi-ai
+// makes them pi-ai's thinkingLevelMap, sent as reasoning_effort on Chat
+// Completions, reasoning.effort on Responses and, for a Claude thinking
+// adaptively, output_config.effort on Messages.
+func dshRouteConfig(models []catalog.Model, api string) dshPiRoute {
+	api = dshAPI(api)
+	r := dshPiRoute{DisplayName: "Magpie", APIKeyEnv: dshKeyRef, API: api, BaseURL: dshBaseURL(api), Models: []dshPiModel{}}
 	for _, m := range models {
 		e := dshPiModel{ID: m.ID, Name: m.Name, ContextWindow: m.Context}
 		if m.Output > 0 {
@@ -847,6 +903,9 @@ func dshRouteConfig(models []catalog.Model) dshPiRoute {
 			e.Input = []string{"text"}
 		}
 		_, e.ReasoningEfforts = dshModelLevels(m.Efforts)
+		if api == "anthropic-messages" && gateway.AdaptiveThinking(m.ID) {
+			e.Compat = &dshPiCompat{ForceAdaptiveThinking: true}
+		}
 		r.Models = append(r.Models, e)
 	}
 	return r

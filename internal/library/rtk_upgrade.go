@@ -80,6 +80,7 @@ func latestRTK() (string, error) {
 	}
 	req, _ = http.NewRequest("GET", rtkReleasesAPI, nil)
 	req.Header.Set("User-Agent", "magpie")
+	withGitHubToken(req)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := c.Do(req)
 	if err != nil {

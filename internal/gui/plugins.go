@@ -307,6 +307,12 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 			fail(rw, err)
 			return
 		}
+		// a deprecated built-in the plugin now serves is the plugin's, so
+		// it isn't listed twice; one with accounts moves in the background
+		// loop (provider.KeepRetiringMoved)
+		if op := r.PathValue("op"); op == "add" || op == "update" || op == "upgrade" {
+			provider.HandOver(ctx, false)
+		}
 		writeJSON(rw, pluginsState(ctx, w))
 	})
 	// signing in to a plugin's provider: the method's questions one at a

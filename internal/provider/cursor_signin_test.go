@@ -44,11 +44,16 @@ func TestCursorSignInJoinsAWrappedLink(t *testing.T) {
 	}
 	head, rest := cursorLink[:36], cursorLink[36:] // cut after "?"
 	mode := strings.Index(cursorLink, "&mode")
+	redirect := strings.Index(cursorLink, "&redirectTarget")
 	for _, c := range []struct{ name, script, want string }{
 		{"on one line", `echo "Waiting for browser authentication..."; echo "Open a browser and navigate to this link: ` + cursorLink + `"`, cursorLink},
 		{"wrapped after ?", `printf 'Open a browser and navigate to this link: %s\n%s\n' '` + head + `' '` + rest + `'`, cursorLink},
 		{"wrapped over three lines", `printf 'Open a browser and navigate to this link: %s\n  %s\n  %s\n' '` + head + `' '` + rest[:70] + `' '` + rest[70:] + `'`, cursorLink},
 		{"wrapped in the uuid", `printf '%s\n%s\n' '` + cursorLink[:125] + `' '` + cursorLink[125:] + `'`, cursorLink},
+		{"wrapped in the uuid across writes", `printf '%s\n' '` + cursorLink[:125] + `'; sleep 0.05; printf '%s\n' '` + cursorLink[125:] + `'`, cursorLink},
+		{"wrapped after the uuid across writes", `printf '%s\n' '` + cursorLink[:mode] + `'; sleep 0.05; printf '%s\n' '` + cursorLink[mode:] + `'`, cursorLink},
+		{"query across three writes", `printf '%s\n' '` + cursorLink[:mode] + `'; sleep 0.15; printf '%s\n' '` + cursorLink[mode:redirect] + `'; sleep 0.15; printf '%s\n' '` + cursorLink[redirect:] + `'`, cursorLink},
+		{"wrapped in the final value across writes", `printf '%s\n' '` + cursorLink[:len(cursorLink)-2] + `'; sleep 0.05; printf '%s\n' '` + cursorLink[len(cursorLink)-2:] + `'`, cursorLink},
 		{"wrapped after the uuid", `printf '%s\n%s\n' '` + cursorLink[:mode] + `' '` + cursorLink[mode:] + `'`, cursorLink},
 		{"the rest a moment later", `echo '` + head + `'; sleep 0.3; echo '` + rest + `'`, cursorLink},
 		{"whole, then a word", `printf "%s\nWaiting...\n" '` + cursorLink + `'`, cursorLink},

@@ -32,6 +32,7 @@ type modelJSON struct {
 	Given    bool     `json:"given,omitempty"`    // its levels aren't known: Efforts are those it can be given, Kept those it was
 	Images   bool     `json:"images"`             // agents are told it can see images
 	ImageSet bool     `json:"imageSet,omitempty"` // the user said so, rather than its vendor
+	Own      bool     `json:"ownImages,omitempty"` // its vendor's answer, which a staged Restore default shows
 	On       bool     `json:"on"`                 // exposed to agents
 	Context  int      `json:"context,omitempty"`
 	Max      int      `json:"max,omitempty"`  // the most its context may be set to, above Context
@@ -230,6 +231,9 @@ type providersJSON struct {
 	// the page says so over what is listed, which is then the signed-in
 	// accounts alone, never "add your first provider".
 	FileError string `json:"fileError,omitempty"`
+	// Fetching: accounts' lists are still being asked for
+	// (provider.FetchingNew); the page asks again until they are in
+	Fetching bool `json:"fetching,omitempty"`
 }
 
 // agentModel is the model an agent is on, as magpie's catalog names it.
@@ -377,9 +381,10 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		if m.ImageInput != nil {
 			images = *m.ImageInput
 		}
+		own := images
 		images, _ = provider.ApplyImage(p.ID, m.ID, images, m.ImageInput)
 		_, imageSet := provider.ImageOverride(p.ID, m.ID)
-		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: m.Context, Max: m.MaxContext, Free: m.Free, Images: images, ImageSet: imageSet}
+		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: m.Context, Max: m.MaxContext, Free: m.Free, Images: images, ImageSet: imageSet, Own: own}
 		if i := slices.IndexFunc(most, func(c catalog.Model) bool { return c.ID == m.ID }); j.Max == 0 && i >= 0 {
 			j.Max = most[i].MaxContext
 		}
@@ -432,8 +437,9 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 
 func providersState() providersJSON {
 	// an account signed in since start-up is listed with its vendor's
-	// models, not magpie's own list of them (#204)
-	provider.FetchNew(8 * time.Second)
+	// models, not magpie's own list of them (#204): asked behind the page,
+	// which is told so and asks again, never waited for (#541)
+	provider.FetchNewBehind(8 * time.Second)
 	agents := agent.Detected()
 	s := providersJSON{Providers: []providerJSON{}, Presets: []presetJSON{}, Excluded: []excludedJSON{}}
 	s.OnPlugins = provider.OnPlugins()
@@ -497,6 +503,7 @@ func providersState() providersJSON {
 	s.Gateway.Archive = archiveState()
 	s.CodexDaemon = provider.CodexDaemonStale()
 	s.Plugins = pluginSubs()
+	s.Fetching = provider.FetchingNew()
 	return s
 }
 
@@ -529,6 +536,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 	traceRoutes(mux)
 	groupRoutes(mux)
 	mux.HandleFunc("GET /api/providers", func(rw http.ResponseWriter, r *http.Request) {
+		// ?wait: an account just signed in opens in the editor with its
+		// vendor's list, worth the wait there (#204)
+		if r.URL.Query().Has("wait") {
+			provider.FetchNew(8 * time.Second)
+		}
 		writeJSON(rw, providersState())
 	})
 	// the order the Providers tab lists them in, which is the order they
@@ -632,6 +644,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// Images, for images: whether the model takes images. Nil
 			// gives the vendor's answer back.
 			Images *bool `json:"images"`
+			// ModelPrefs, for save: the names, levels and images the
+			// editor's Names & levels changed, by model id, made with the
+			// rest of the Save and not a click at a time
+			ModelPrefs map[string]provider.ModelPref `json:"modelPrefs"`
 			// Test, for test: models to send a request each, in place of
 			// one per endpoint
 			Test []string `json:"test"`
@@ -795,6 +811,12 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 						return
 					}
 					in.ID = to
+				}
+			}
+			if len(req.ModelPrefs) > 0 {
+				if err := provider.SetModelPrefs(in.ID, req.ModelPrefs); err != nil {
+					fail(rw, err)
+					return
 				}
 			}
 			provider.ForgetBalances()

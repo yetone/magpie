@@ -50,9 +50,9 @@ func TestCodexBodyReadsPastOldLimit(t *testing.T) {
 				// Hide the reader's length, as with a chunked request.
 				r := httptest.NewRequest("POST", CodexPath+"/responses", struct{ io.Reader }{bytes.NewReader(encodedBody(t, body, encoding))})
 				r.Header.Set("Content-Encoding", encoding)
-				got, err := codexBody(r)
-				if err != nil {
-					t.Fatal(err)
+				got, ok := New().readRequestBody(httptest.NewRecorder(), r, provider.Responses, codexReader, 0)
+				if !ok {
+					t.Fatal("body rejected")
 				}
 				if !bytes.Equal(got, body) {
 					t.Fatalf("read %d bytes, want all %d bytes including the tail", len(got), len(body))

@@ -38,6 +38,7 @@ import (
 	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // Every is how often the gateway's magpie syncs.
@@ -65,6 +66,9 @@ type Config struct {
 	// Library is whether the library goes too; nil, as in a setup made
 	// before it could, is yes
 	Library *bool `json:"library,omitempty"`
+	// Usage is whether this computer shares its usage with the others
+	// syncing to the server, and sees theirs (#542)
+	Usage bool `json:"usage,omitempty"`
 	// Other is the other kind's server, kept when sync moved from it (a
 	// WebDAV folder's while an S3 bucket is synced to, or the other way):
 	// moving back finds it as it was, its password too. Nothing syncs to it.
@@ -136,6 +140,7 @@ type state struct {
 	Server version           `json:"server,omitzero"`
 	Local  map[string]string `json:"local,omitempty"`
 	Remote map[string]string `json:"remote,omitempty"`
+	Usage  *usageState       `json:"usage,omitempty"`
 }
 
 func path(name string) string { return filepath.Join(settings.Dir(), name) }
@@ -295,6 +300,7 @@ func Off() error {
 	return locked(func() error {
 		os.Remove(path("sync-state.json"))
 		os.Remove(path(cacheName))
+		usage.DropAllShared() // the others' usage came by sync: it goes with it (#542)
 		if err := os.Remove(path("sync.json")); err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -304,21 +310,24 @@ func Off() error {
 
 // View is sync as the Settings page shows it: never the secrets.
 type View struct {
-	On            bool      `json:"on"`
-	URL           string    `json:"url,omitempty"`
-	User          string    `json:"user,omitempty"`
-	PasswordSet   bool      `json:"passwordSet,omitempty"`
-	PassphraseSet bool      `json:"passphraseSet,omitempty"`
-	Keys          bool      `json:"keys"`
-	Agents        bool      `json:"agents"`
-	Kind          string    `json:"kind,omitempty"` // "webdav" or "s3", when on
-	Endpoint      string    `json:"endpoint,omitempty"`
-	Region        string    `json:"region,omitempty"`
-	PathStyle     bool      `json:"pathStyle,omitempty"`
-	Library       bool      `json:"library"`
-	Last          time.Time `json:"last,omitzero"`
-	Error         string    `json:"error,omitempty"`
-	Notice        *Notice   `json:"notice,omitempty"`
+	On            bool   `json:"on"`
+	URL           string `json:"url,omitempty"`
+	User          string `json:"user,omitempty"`
+	PasswordSet   bool   `json:"passwordSet,omitempty"`
+	PassphraseSet bool   `json:"passphraseSet,omitempty"`
+	Keys          bool   `json:"keys"`
+	Agents        bool   `json:"agents"`
+	Kind          string `json:"kind,omitempty"` // "webdav" or "s3", when on
+	Endpoint      string `json:"endpoint,omitempty"`
+	Region        string `json:"region,omitempty"`
+	PathStyle     bool   `json:"pathStyle,omitempty"`
+	Library       bool   `json:"library"`
+	Usage         bool   `json:"usage,omitempty"`
+	// UsageError is why usage couldn't be shared the last time it was tried
+	UsageError string    `json:"usageError,omitempty"`
+	Last       time.Time `json:"last,omitzero"`
+	Error      string    `json:"error,omitempty"`
+	Notice     *Notice   `json:"notice,omitempty"`
 	// Other is the other kind's server, kept for moving back to: not
 	// synced to
 	Other *OtherView `json:"other,omitempty"`
@@ -347,7 +356,11 @@ func Status() View {
 		Kind: strings.ToLower(c.Kind()), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle}
 	if st.Key == stateKey(c) {
 		v.Last = st.Last
+		if c.Usage && st.Usage != nil {
+			v.UsageError = st.Usage.Error
+		}
 	}
+	v.Usage = c.Usage
 	if o := c.Other; o != nil {
 		v.Other = &OtherView{Kind: strings.ToLower(o.config().Kind()), URL: o.URL, User: o.User, PasswordSet: o.Password != "",
 			Endpoint: o.Endpoint, Region: o.Region, PathStyle: o.PathStyle}
@@ -420,8 +433,14 @@ func sum(b []byte) string {
 
 var mu sync.Mutex
 
-// Now syncs once; nothing when sync is off.
-func Now(ctx context.Context) error {
+// Now syncs once; nothing when sync is off. Usage is shared at most every
+// usageEvery.
+func Now(ctx context.Context) error { return syncNow(ctx, false) }
+
+// SyncNow is Now asked for: usage is shared whatever the time.
+func SyncNow(ctx context.Context) error { return syncNow(ctx, true) }
+
+func syncNow(ctx context.Context, force bool) error {
 	if _, ok := Load(); !ok { // off: no lock taken, so none made
 		return nil
 	}
@@ -451,6 +470,7 @@ func Now(ctx context.Context) error {
 		st.Error = err.Error()
 	} else {
 		st.Last = time.Now()
+		shareUsage(ctx, c, &st, force)
 	}
 	saveState(st)
 	return err

@@ -177,7 +177,11 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	if l.Agent == "copilot" {
 		for _, c := range copilotLogins(copilotConfigDir()) {
 			if strings.EqualFold(c.User, l.User) {
-				return copilotSubscriptionUsage(ctx, c.app.Token)
+				q := copilotSubscriptionUsage(ctx, c.app.Token)
+				if q.Error == "" {
+					refreshCopilotEntitlement(c.app, q.Plan, q.AccessSKU)
+				}
+				return q
 			}
 		}
 		return SubscriptionQuota{Provider: l.Agent, Plan: l.Plan, Windows: []QuotaWindow{}, Error: "not signed in"}
@@ -221,11 +225,11 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 // CodexUsedUp reports whether the ChatGPT account Codex is signed in to has
 // used up its allowance for now; false when that isn't known.
 func CodexUsedUp(ctx context.Context) bool {
+	// read as LoginUsage has it, fetched at most once a minute: the agent
+	// package asks on every catalog sync
+	u := LoginUsage(ctx, "codex")
 	for _, l := range Logins("codex") {
-		if !l.Active {
-			continue
-		}
-		if usedUp(loginQuota(ctx, l)) {
+		if q, ok := u[l.User]; l.Active && ok && q.Error == "" && usedUp(q) {
 			return true
 		}
 	}

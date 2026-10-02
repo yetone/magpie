@@ -379,6 +379,13 @@ func codexInput(input []any) []any {
 		if it["type"] == "item_reference" {
 			continue
 		}
+		// Codex delivers standalone notifications without a call ID. The
+		// native backend understands their name/namespace and item ID;
+		// they are not historical results whose calls have gone missing.
+		if (it["type"] == "function_call_output" || it["type"] == "custom_tool_call_output") && (it["call_id"] == nil || it["call_id"] == "") {
+			out = append(out, it)
+			continue
+		}
 		delete(it, "id")
 		switch t, _ := it["type"].(string); t {
 		case "function_call_output", "custom_tool_call_output", "local_shell_call_output":

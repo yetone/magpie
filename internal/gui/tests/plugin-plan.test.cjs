@@ -47,9 +47,34 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         accountPlan({ agent: "grok-plugin", builtin: "grok" }),
         accountPlan({ agent: "grok" }),
         accountPlan({ agent: "fakeco", builtin: "fakeco", plan: "Max" }),
+        accountPlan({ agent: "copilot", plan: "Education" }),
+        accountPlan({ agent: "copilot", plan: "Pro+" }),
+        accountPlan({ agent: "copilot" }),
       ]);
       assert.deepEqual(plans.slice(0, 4), ["Cursor Pro", "Cursor Pro", "SuperGrok", "SuperGrok"]);
       assert.equal(plans[4], "Max");
+      assert.deepEqual(plans.slice(5), ["GitHub Education", "GitHub Pro+", "GitHub"]);
+      assert.equal(await page.evaluate(() => quotaText({ unlimited: true, display: "Unlimited", used: 0 })), lang === "zh" ? "无限" : "Unlimited");
+      const metrics = await page.evaluate(() => {
+        const windows = [{ name: "Premium requests", used: 90, display: "270 / 300" }, { name: "Chat requests", unlimited: true, used: 0 }, { name: "Completions", unlimited: true, used: 0 }];
+        const q = { windows, name: "Copilot", user: "test" };
+        const row = accountQuota({ test: q }, "test"), panel = panelQuotaCard(q), usage = quotaWindows(q);
+        return { row: row.textContent, meters: row.querySelectorAll(".aq-track").length, rings: panel.querySelectorAll(".pq-ring").length, full: panel.querySelectorAll(".pq-ring.full").length, tracks: usage.querySelectorAll(".quota-track").length };
+      });
+      assert.match(metrics.row, /270 \/ 300/);
+      assert.equal(metrics.meters, 1);
+      assert.equal(metrics.rings, 1);
+      assert.equal(metrics.full, 1);
+      assert.equal(metrics.tracks, 1);
+      // windows past the row's two still read on one tooltip line, " · "
+      // between them, when no family joins them (#510 split them by line)
+      const tip = await page.evaluate(() => {
+        const windows = ["A", "B", "C", "D"].map((name, i) => ({ name, used: 10 * i, display: String(i) }));
+        const line = accountQuota({ test: { windows, name: "Copilot", user: "test" } }, "test");
+        return line.title;
+      });
+      assert.equal(tip.split("\n").length, 1);
+      assert.match(tip, /^C .* · D /);
       assert.deepEqual(errors, []);
     });
   }

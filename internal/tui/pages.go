@@ -714,6 +714,9 @@ func quotaLines(qs []provider.SubscriptionQuota, asked, left bool, width int, no
 // quotaCell is one window: its name, a meter, how much is used or left,
 // and when it starts again: on the clock, and how long until then.
 func quotaCell(w provider.QuotaWindow, left bool, now time.Time) string {
+	if w.Unlimited {
+		return sMuted.Render(w.Name) + " " + sText.Render("Unlimited")
+	}
 	used := int(math.Round(math.Max(0, math.Min(100, w.Used))))
 	n, word := used, "used"
 	if left {

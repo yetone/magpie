@@ -138,6 +138,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await p.locator("#panelUsage .pu-tot").waitFor();
       assert(await p.locator("#panelUsage").isVisible());
       assert.equal(await p.locator("#panelUsage > .usage-note").textContent(), lang === "zh" ? "统计网关调用与会话日志调用；本地拒绝的请求不计入汇总。" : "Gateway and session-log calls; local rejections excluded from totals.");
+      // read again on asking (#546), and as the panel is opened again
+      const refresh = p.locator("#panelUsage .pu-again");
+      assert.equal(await refresh.getAttribute("aria-label"), lang === "zh" ? "立即刷新" : "Refresh now");
+      let n = asked.length;
+      await refresh.click();
+      for (let i = 0; i < 60 && asked.length === n; i++) await new Promise((r) => setTimeout(r, 40));
+      assert.equal(asked.length, n + 1, "Refresh reads the usage again");
+      await new Promise((r) => setTimeout(r, 2100));
+      n = asked.length;
+      await p.evaluate(() => window.dispatchEvent(new Event("focus")));
+      for (let i = 0; i < 60 && asked.length === n; i++) await new Promise((r) => setTimeout(r, 40));
+      assert.equal(asked.length, n + 1, "the panel focused reads the usage again");
+      n = asked.length;
+      await p.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(asked.length, n, "not again at once");
       assert(!(await p.locator("#agents").isVisible()) && !(await p.locator("#panelRouting").isVisible()), "the others are other tabs");
       assert.equal(asked[0].get("period"), "today");
       assert.equal(asked[0].get("limit"), "1", "a page of one row is all it asks for");
@@ -154,6 +170,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // Labels in the 440px panel must be readable, not clipped by ellipsis.
       assert(await p.locator("#panelUsage .pu-tot .blk").first().locator(".sub").evaluate(e =>
         e.scrollWidth <= e.clientWidth + 1 && e.scrollHeight <= e.clientHeight + 1 && getComputedStyle(e).textOverflow !== "ellipsis"), "token input/output is fully visible");
+      // the total counts the cache, so the line under it names the cache too, or in + out doesn't add up to it
+      assert((await p.locator("#panelUsage .pu-tot .blk").first().locator(".sub").textContent()).includes(lang === "zh" ? "缓存" : "cached"), "the cache under the token total");
       // nothing runs out of the panel
       const over = await p.evaluate(() => [...document.querySelectorAll("#panelUsage *")].filter((e) => e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow === "visible" && e.children.length === 0 && e.tagName !== "text").length);
       assert.equal(over, 0, "an element wider than itself");
@@ -196,6 +214,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await p.locator("#panelUsage .pu-bar .segs .opt").nth(0).click();
       await settled(asked, (q) => q.get("period") === "today");
       await p.locator("#panelUsage:not(.pu-loading)").waitFor();
+      // half under the footer's edge, WebKit takes it as in view and clicks the footer: scroll it in whole, as a reader would
+      await p.locator("#panelUsage .pu-tot").hover();
+      await p.mouse.wheel(0, 400);
+      await p.waitForFunction(() => document.querySelector("#panelUsage .led-rank .rk").getBoundingClientRect().bottom <= document.querySelector("footer.foot").getBoundingClientRect().top);
       await p.locator("#panelUsage .led-rank .rk").first().click();
       await settled(asked, (q) => q.get("provider") === "anthropic");
       await p.locator("#panelUsage .sess-pick", { hasText: "Claude" }).waitFor();
@@ -204,6 +226,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await p.locator("#panelUsage rect.col").evaluateAll((r) => [...new Set(r.map((x) => x.dataset.k))].sort().join()), "claude-opus-5,claude-sonnet-5");
 
       // Open Usage takes the window to that provider's requests
+      await p.mouse.wheel(0, -400);
       await p.locator("#panelUsage .pu-bar .text").click();
       for (let i = 0; i < 50 && !opened.length; i++) await p.waitForTimeout(40);
       assert.equal(opened.at(-1), "?view=usage&tab=requests&provider=anthropic");

@@ -135,3 +135,32 @@ func TestTrayImageMonoLogos(t *testing.T) {
 		}
 	}
 }
+
+// Each logo is as large as the next in the menu bar (the user: tray 上的
+// provider icon 大小不一致), whatever margin its file has round it: its ink
+// spans 12-14pt of the 14pt box, a solid tile the lower end.
+func TestTrayImageLogoSizes(t *testing.T) {
+	bird, err := os.ReadFile("tray.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"codex-color", "claude-color", "gemini-color", "zcode", "alma", "kimi", "openai", "deepseek-color", "qwen-color", "minimax-color"} {
+		icon, mono := trayIconFile(name)
+		b, _, _ := trayImagePNG([]trayCell{{Icon: icon, Mono: mono, Rows: []string{"5%", "7%"}}}, bird, 22, 2, false, false)
+		img, err := png.Decode(bytes.NewReader(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		x0, y0, x1, y1 := 99, 99, -1, -1
+		for y := 0; y < 44; y++ {
+			for x := 46; x < 78; x++ {
+				if _, _, _, a := img.At(x, y).RGBA(); a > 0x4000 {
+					x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+				}
+			}
+		}
+		if side := max(x1-x0, y1-y0) + 1; side < 24 || side > 29 {
+			t.Errorf("%s spans %d px of a 28 px box", name, side)
+		}
+	}
+}

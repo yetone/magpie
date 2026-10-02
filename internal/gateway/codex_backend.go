@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -64,11 +65,11 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 	// newer: the backend serves a model only to a client that knows it
 	provider.SawCodexClient(r.Header)
 	rest := strings.TrimPrefix(r.URL.Path, CodexPath)
-	body, err := codexBody(r)
-	if err != nil {
-		writeError(w, provider.Responses, 400, err.Error())
+	body, ok := s.readRequestBody(w, r, provider.Responses, codexReader, 0)
+	if !ok {
 		return
 	}
+	var err error
 	switch {
 	case r.Method == http.MethodGet && rest == "/models":
 		s.codexModels(w, r)
@@ -149,19 +150,16 @@ func hasSealedAgentMessage(body []byte) bool {
 	return false
 }
 
-// codexBody reads a request's body as it was before Codex compressed it
-// (zstd, for the ChatGPT backend), so it can be read and passed on plain.
-func codexBody(r *http.Request) ([]byte, error) {
-	var rd io.Reader = r.Body
+func codexReader(r *http.Request) (io.ReadCloser, error) {
+	var rd io.ReadCloser = io.NopCloser(r.Body)
 	switch enc := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Encoding"))); enc {
 	case "", "identity":
 	case "zstd":
-		d, err := zstd.NewReader(r.Body)
+		d, err := zstd.NewReader(r.Body, zstd.WithDecoderMaxMemory(defaultBodyLimit))
 		if err != nil {
 			return nil, err
 		}
-		defer d.Close()
-		rd = d
+		rd = d.IOReadCloser()
 	case "gzip":
 		g, err := gzip.NewReader(r.Body)
 		if err != nil {
@@ -172,7 +170,7 @@ func codexBody(r *http.Request) ([]byte, error) {
 		return nil, fmt.Errorf("magpie can't read a %s body", enc)
 	}
 	r.Header.Del("Content-Encoding")
-	return io.ReadAll(rd)
+	return rd, nil
 }
 
 // codexAccounts is what a request for one of Codex's own models is served
@@ -590,9 +588,17 @@ func copyHeaders(dst, src http.Header) {
 	}
 }
 
+// codexModelsWait is how long the ChatGPT backend is given for its model
+// list. Codex gives the whole request 5 s (MODELS_REFRESH_TIMEOUT in its
+// models endpoint) and then keeps the list it was built with, magpie's
+// models nowhere in it; a backend slow to answer, or not reachable at all
+// on a network that drops chatgpt.com's packets rather than refusing
+// them, held magpie's answer past that (#539). A var so tests can say.
+var codexModelsWait = 3 * time.Second
+
 // codexModels is the ChatGPT backend's model list for this sign-in, with
-// magpie's models after it. Should the backend not answer, Codex's last
-// list of its own stands in.
+// magpie's models after it. Should the backend not answer, or not in
+// time, Codex's last list of its own stands in.
 func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	var own []any
 	etag := ""
@@ -600,7 +606,9 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	if r.URL.RawQuery != "" {
 		u += "?" + r.URL.RawQuery
 	}
-	if req, err := http.NewRequestWithContext(provider.ViaSignedIn(r.Context(), "codex"), http.MethodGet, u, nil); err == nil {
+	ctx, cancel := context.WithTimeout(provider.ViaSignedIn(r.Context(), "codex"), codexModelsWait)
+	defer cancel()
+	if req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil); err == nil {
 		copyHeaders(req.Header, r.Header)
 		req.Header.Del("Accept-Encoding")
 		if res, err := s.client.Do(req); err == nil {

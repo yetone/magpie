@@ -56,11 +56,12 @@ type Login struct {
 type savedLogin struct {
 	// Order is the user-arranged routing order within this agent. Zero keeps
 	// the original alphabetical order for accounts not arranged yet.
-	Order int       `json:"order,omitempty"`
-	Agent string    `json:"agent"`
-	User  string    `json:"user"`
-	Plan  string    `json:"plan,omitempty"`
-	Seen  time.Time `json:"seen"`
+	Order     int       `json:"order,omitempty"`
+	Agent     string    `json:"agent"`
+	User      string    `json:"user"`
+	Plan      string    `json:"plan,omitempty"`
+	AccessSKU string    `json:"accessSku,omitempty"`
+	Seen      time.Time `json:"seen"`
 	// On puts the account in use beside the one the agent is signed in to:
 	// requests go to it when that one is out of quota (see logins_on.go).
 	On bool `json:"on,omitempty"`

@@ -143,7 +143,7 @@ func TestMaxTokensWithinContextWindow(t *testing.T) {
 		pi, _ := json.Marshal(magpieProviderJSON("pi"))
 		cline, _ := json.Marshal(clineModels(""))
 		omp, _ := yaml.Marshal(ompProvider())
-		dshRoute, _ := yaml.Marshal(dshRouteConfig(magpieModels("dsh")))
+		dshRoute, _ := yaml.Marshal(dshRouteConfig(magpieModels("dsh"), ""))
 		droid, _ := json.Marshal(droidEntries())
 		qoder, _ := json.Marshal(qoderProvider("qoder", ""))
 		hanako, _ := json.Marshal(hanakoProvider())

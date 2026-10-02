@@ -51,12 +51,7 @@ var errClaudeCannotRun = errors.New("Claude Code can't be run from here")
 
 // An account error stays visible even when it also mentions a timeout or
 // rate limit. It is not a temporary failure to read the usage endpoint.
-var claudeUsageDenied = regexp.MustCompile(`(?i)\b(401|403)\b|not (logged|signed) in|signed out|sign-in (has )?expired|unauthorized|forbidden|authentication (failed|required)|invalid (access )?token|(session|usage) limit|using your overages`)
-
-func claudeUsageTemporary(err error) bool {
-	return !claudeUsageDenied.MatchString(err.Error()) &&
-		(err == errClaudeUsageUnavailable || err == errClaudeCannotRun || passing.MatchString(err.Error()))
-}
+var claudeUsageDenied = regexp.MustCompile(`(?i)\b(401|403)\b|not (logged|signed) in|signed out|sign-in (has )?expired|unauthorized|forbidden|authentication (failed|required)|invalid (access )?token|(session|usage) limit|hit your limit|using your overages`)
 
 // parseClaudeUsage reads /usage's windows; now dates a reset that names no
 // year.

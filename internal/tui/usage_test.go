@@ -100,3 +100,12 @@ func TestFmtCostShowsChosenCurrency(t *testing.T) {
 		t.Fatalf("unpriced: %q", got)
 	}
 }
+
+func TestUnlimitedQuotaCell(t *testing.T) {
+	for _, left := range []bool{false, true} {
+		got := quotaCell(provider.QuotaWindow{Name: "Chat", Unlimited: true}, left, time.Now())
+		if !strings.Contains(got, "Unlimited") || strings.Contains(got, "%") || strings.Contains(got, "░") {
+			t.Fatalf("unlimited: %q", got)
+		}
+	}
+}

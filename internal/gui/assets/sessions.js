@@ -18,6 +18,7 @@
   let trashOn = false;
   const picked = new Set();   // ids picked to delete, of the agent shown
   const opened = new Set();   // folders unfolded, by cwd
+  const folderBoxes = new Map(); // each folder's box as drawn, by cwd
   let openedFor = "";         // the agent the folders were first unfolded for
   let detail = "";            // the session opened to its details
   let loading = 0;
@@ -199,9 +200,20 @@
     del.type = "button";
     del.disabled = !picked.size;
     del.append(svg(TRASH, 13, 1.4), el("span", "", t("Delete")));
-    del.onclick = () => askDelete([...picked]);
+    del.onclick = () => askDelete([...picked], wholeFolder([...picked]));
     bar.append(all, n, el("span", "grow"), del);
     return bar;
+  }
+
+  // wholeFolder: the folder (a cwd, "" for none) when ids are every
+  // session of that one folder, so the dialog names it
+  function wholeFolder(ids) {
+    const all = data?.sessions || [];
+    const set = new Set(ids);
+    const cwds = new Set(all.filter((s) => set.has(s.id)).map((s) => s.cwd || ""));
+    if (cwds.size !== 1) return undefined;
+    const [cwd] = cwds;
+    return all.filter((s) => (s.cwd || "") === cwd).every((s) => set.has(s.id)) ? cwd : undefined;
   }
 
   function redrawList() {
@@ -223,6 +235,7 @@
       groups.get(k).push(s);
     }
     tree.replaceChildren();
+    folderBoxes.clear();
     if (!list.length) {
       tree.append(el("div", "empty-state", query ? t("No session matches.") : t("No sessions yet")));
       return;
@@ -232,6 +245,27 @@
       const open = !!q || opened.has(cwd);
       const g = el("div", "list sm-group");
       const r = el("div", "row sm-folder");
+      const writable = items.filter((s) => !s.read_only);
+      // the folder's box picks every session of it shown, folded or not,
+      // for the bar's Delete; the bar still counts sessions (#527)
+      if (current()?.deletable && writable.length) {
+        const c = el("input", "sm-check sm-folder-check");
+        c.type = "checkbox";
+        // a session's own box ticked or not shows here at once
+        c.sync = () => {
+          c.checked = writable.every((s) => picked.has(s.id));
+          c.indeterminate = !c.checked && writable.some((s) => picked.has(s.id));
+        };
+        c.sync();
+        folderBoxes.set(cwd, c);
+        c.setAttribute("aria-label", t("Select every session in {folder}", { folder: cwd ? baseName(cwd) : t("No folder") }));
+        c.onclick = (e) => e.stopPropagation();
+        c.onchange = () => {
+          for (const s of writable) c.checked ? picked.add(s.id) : picked.delete(s.id);
+          redrawList();
+        };
+        r.append(c);
+      }
       const fold = el("button", "fold");
       fold.type = "button";
       fold.setAttribute("aria-expanded", String(open));
@@ -241,20 +275,7 @@
         redrawList();
       };
       r.append(fold, el("span", "sub sm-path", cwd), el("span", "grow"), el("span", "note", t(items.length === 1 ? "{n} session" : "{n} sessions", { n: items.length })));
-      // every session of the folder, the ones a filter hides too, asked
-      // about and deleted as picked ones are (#527)
-      const deletable = data.sessions.filter((s) => (s.cwd || "") === cwd && !s.read_only);
-      if (current()?.deletable && deletable.length) {
-        const all = el("button", "text sm-folder-del");
-        all.type = "button";
-        all.title = t("Delete every session in this folder");
-        all.append(svg(TRASH, 13, 1.4), el("span", "", t("Delete all")));
-        all.onclick = (e) => {
-          e.stopPropagation();
-          askDelete(deletable.map((s) => s.id), cwd);
-        };
-        r.append(all);
-      }
+
       r.title = cwd;
       g.append(r);
       if (open) for (const s of items) g.append(item(s));
@@ -273,7 +294,7 @@
       c.checked = picked.has(s.id);
       c.setAttribute("aria-label", t("Select"));
       c.onclick = (e) => e.stopPropagation();
-      c.onchange = () => { c.checked ? picked.add(s.id) : picked.delete(s.id); const bar = page.querySelector(".sm-bar"); if (bar) bar.replaceWith(selectBar()); };
+      c.onchange = () => { c.checked ? picked.add(s.id) : picked.delete(s.id); const bar = page.querySelector(".sm-bar"); if (bar) bar.replaceWith(selectBar()); folderBoxes.get(s.cwd || "")?.sync(); };
       r.append(c);
     }
     const who = el("div", "who");
@@ -350,8 +371,12 @@
     const ed = el("div", "editor sm-ask");
     const h = el("div", "ehead");
     const whole = folder !== undefined && list.length > 1;
+    // picked folders each whole: how many folders, as well as sessions
+    const cwds = new Set(list.map((s) => s.cwd || ""));
+    const folders = !whole && cwds.size > 1 && (data?.sessions || []).every((s) => !cwds.has(s.cwd || "") || ids.includes(s.id)) ? cwds.size : 0;
     h.append(icon(a.icon), el("b", "", list.length === 1 ? t("Delete this session?")
       : whole ? t("Delete all {n} sessions in {folder}?", { n: list.length, folder: folder ? baseName(folder) : t("No folder") })
+      : folders ? t("Delete all {n} sessions in {k} folders?", { n: list.length, k: folders })
       : t("Delete {n} sessions?", { n: list.length })));
     ed.append(h);
     if (folder) ed.append(el("p", "sub sm-ask-path", folder));

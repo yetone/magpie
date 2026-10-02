@@ -197,6 +197,16 @@ level picked is posted for `subagent_effort` alone and lights the square.
 Claude Code's subagents (#468) get no square until it runs through magpie
 (nothing to pick), and one that says "same as model" once it does.
 
+`tier-effort.test.cjs` draws Claude Code's per-tier effort (#536) in Chromium
+and WebKit, English and Chinese: no tier's effort is a field of its own; the
+tiers' square lists each tier's model and then its effort (the bars, and "the
+effort Claude Code asks for" / 「跟随 Claude Code 请求的推理强度」 unset); an
+effort entry opens the effort slider without scrolling the page, Default its
+first stop, a level picked is posted for that tier's `<tier>_effort` alone and
+named in the square's title, and the session's effort stays. Its subagents'
+effort is a square that says what unset means for Claude Code, and a Claude
+Code not through magpie has no levels, no square and no effort entries.
+
 `gateway-fold.test.cjs` folds Connect on the Gateway page with the view
 scrolled: its fields hide, the head keeps the base URL and a copy button, the
 head stays where it was, and the fold is remembered across a reload.
@@ -834,16 +844,18 @@ with the row's key or `all`, the list empties, and the note says magpie
 never erases them by itself. No left-border accent, every string in Chinese.
 Chromium and WebKit, English and Chinese, API faked.
 
-`sessions-folder-delete.test.cjs` deletes every session of a project folder
-at once (#527): each folder's row has Delete all, which asks in magpie's own
-dialog (a browser `confirm()` fails the test) naming the folder, the count
-and its path; Cancel posts nothing; the confirm posts sessions/delete with
-every id of the folder, the ones a filter hides too, so they go to magpie's
-trash as single deletes do; a session still being written to is left and
-said so, other folders stay, a folder of one asks as a single delete, and an
-agent magpie can't delete from has none. No click moves the page, no
-left-border accent, every string in Chinese. Chromium and WebKit, English and
-Chinese, API faked.
+`sessions-folder-delete.test.cjs` deletes every session of project folders
+at once (#527): each folder's row starts with a box, as each session's does,
+that picks every session of the folder shown, folded or not; the bar counts
+sessions, not folders, a session's own box part-ticks its folder's, and a
+filter picks only what it shows. The bar's Delete asks in magpie's own
+dialog (a browser `confirm()` fails the test), naming the folder and its
+path for one whole folder and how many folders for several; Cancel posts
+nothing; the confirm posts sessions/delete with their ids, so they go to
+magpie's trash as single deletes do; a session still being written to is
+left and said so, other folders stay, and an agent magpie can't delete from
+has no boxes. No click moves the page, no left-border accent, every string
+in Chinese. Chromium and WebKit, English and Chinese, API faked.
 
 `sessions-toolbar.test.cjs` uses ten agents to check that fitting tabs stay
 visible at 1800px, while 900, 660 and 320px windows use a compact agent menu.
@@ -972,10 +984,11 @@ checks run in English and Chinese, in Chromium and WebKit.
 unfinished (#526). In Qoder's editor at the issue's window size, Add another
 → Sign in anyway waits with Qoder's long device link: the box and every
 button in it stay inside the account list (the link is cut short, Cancel in
-sight), and Close sits beside Open again. Close posts signin/<id>/cancel,
-stops the polling and brings Add another back without moving the page; the
-box's Cancel does the same, and so do the editor's Cancel and Save, so the
-editor opened again has no box. English and Chinese, Chromium and WebKit;
+sight), and Cancel is the one button that puts it away: Open again stands
+alone, with no Close beside it doing the same. Cancel posts
+signin/<id>/cancel, stops the polling and brings Add another back without
+moving the page, and so do the editor's Cancel and Save, so the editor
+opened again has no box. English and Chinese, Chromium and WebKit;
 the API is faked.
 
 `signin-paste-codex.test.cjs` checks a ChatGPT sign-in finished from its
@@ -1041,6 +1054,8 @@ The same test covers cached Claude snapshots on Usage, the tray's Allowances
 tab and the provider's account editor: historical percentages stay dated
 and visibly say when an expired window's current allowance is unknown;
 past reset times say they have passed. A fresh reading clears those markers.
+The tray's cached subscription date is as short as a balance card's, while
+expired-window warnings remain visible and the tooltip keeps the explanation.
 English and Chinese, Chromium and WebKit.
 `panel-effort.test.cjs` opens a row in the tray panel whose effort is not one
 of the levels offered (omp at auto, an agent with none set): the slider shows
@@ -1258,7 +1273,7 @@ Chinese, Chromium and WebKit, with `/api/plugins` faked.
 With Node.js and Playwright available:
 
 ```sh
-node --test internal/gui/tests/menu-scroll.test.cjs internal/gui/tests/click-scroll.test.cjs internal/gui/tests/panel-fold.test.cjs internal/gui/tests/rollup-short.test.cjs internal/gui/tests/panel-routing.test.cjs internal/gui/tests/gateway-fold.test.cjs internal/gui/tests/routing-kind.test.cjs internal/gui/tests/routing-log-icons.test.cjs internal/gui/tests/balance-fix.test.cjs internal/gui/tests/cli-update.test.cjs internal/gui/tests/login-import.test.cjs internal/gui/tests/agy-launch.test.cjs internal/gui/tests/currency.test.cjs internal/gui/tests/usage-ledger.test.cjs internal/gui/tests/update-check.test.cjs internal/gui/tests/omarchy.test.cjs internal/gui/tests/brand.test.cjs internal/gui/tests/library-loading.test.cjs internal/gui/tests/provider-typed.test.cjs internal/gui/tests/phone-web.test.cjs node --test internal/gui/tests/signin-callback.test.cjs internal/gui/tests/routing-steady.test.cjs internal/gui/tests/old-webkit.test.cjs internal/gui/tests/session-terminal.test.cjs internal/gui/tests/text-size.test.cjs internal/gui/tests/zcode-site.test.cjs internal/gui/tests/rail-tip.test.cjs internal/gui/tests/sync-update.test.cjs internal/gui/tests/plugin-signin.test.cjs internal/gui/tests/plugin-market.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/routing-wb-refused.test.cjs internal/gui/tests/routing-blocked.test.cjs internal/gui/tests/routing-zcode-blocked.test.cjs internal/gui/tests/routing-shape.test.cjs internal/gui/tests/market-have.test.cjs internal/gui/tests/sessions-today.test.cjs internal/gui/tests/routing-side-calls.test.cjs internal/gui/tests/import-all-skills.test.cjs internal/gui/tests/routing-flood.test.cjs internal/gui/tests/routing-busy.test.cjs internal/gui/tests/own-skill.test.cjs internal/gui/tests/routing-manual.test.cjs internal/gui/tests/tray-usages.test.cjs internal/gui/tests/provider-remove.test.cjs internal/gui/tests/signin-link.test.cjs internal/gui/tests/tray-inuse.test.cjs internal/gui/tests/codex-auto-reset.test.cjs internal/gui/tests/routing-auto-reset.test.cjs internal/gui/tests/claude-usage-asked.test.cjs internal/gui/tests/claude-risk.test.cjs internal/gui/tests/library-toggle-status.test.cjs internal/gui/tests/library-all.test.cjs internal/gui/tests/routing-reroute-title.test.cjs internal/gui/tests/plain-names.test.cjs internal/gui/tests/panel-effort.test.cjs internal/gui/tests/agent-models-all-hidden.test.cjs internal/gui/tests/omp-roles.test.cjs internal/gui/tests/claude-effort.test.cjs internal/gui/tests/remote-magpie.test.cjs internal/gui/tests/qoder-cn-tile.test.cjs internal/gui/tests/provider-levels-scroll.test.cjs internal/gui/tests/signin-paste-codex.test.cjs internal/gui/tests/signin-paste-key.test.cjs internal/gui/tests/usage-alert.test.cjs internal/gui/tests/quota-families.test.cjs internal/gui/tests/provider-search.test.cjs internal/gui/tests/webdav-settings-refresh.test.cjs internal/gui/tests/lan-docker.test.cjs internal/gui/tests/plugin-key-hint.test.cjs internal/gui/tests/update-hide.test.cjs internal/gui/tests/tray-logos.test.cjs internal/gui/tests/routing-proxy.test.cjs internal/gui/tests/sse-body.test.cjs internal/gui/tests/remote-group-served.test.cjs internal/gui/tests/plugin-move-overflow.test.cjs internal/gui/tests/plugin-movable-review.test.cjs internal/gui/tests/routing-time.test.cjs internal/gui/tests/unlisted-models.test.cjs internal/gui/tests/plugin-updates.test.cjs internal/gui/tests/request-archive.test.cjs internal/gui/tests/group-member-fast.test.cjs internal/gui/tests/providers-off-fold.test.cjs internal/gui/tests/account-return.test.cjs internal/gui/tests/usage-ledger-detail.test.cjs internal/gui/tests/usage-ledger-chart.test.cjs internal/gui/tests/usage-chart-axis.test.cjs internal/gui/tests/panel-usage.test.cjs internal/gui/tests/usage-refresh.test.cjs internal/gui/tests/usage-ledger-content.test.cjs internal/gui/tests/claude-direct.test.cjs internal/gui/tests/signin-again.test.cjs internal/gui/tests/sessions-calendar-fill.test.cjs internal/gui/tests/editor-short-window.test.cjs internal/gui/tests/group-from-model-add.test.cjs internal/gui/tests/sync-other-kind.test.cjs internal/gui/tests/web-page.test.cjs internal/gui/tests/balance-parts.test.cjs internal/gui/tests/search-api.test.cjs internal/gui/tests/provider-file-error.test.cjs internal/gui/tests/sessions-manage.test.cjs internal/gui/tests/number-units.test.cjs internal/gui/tests/sessions-bar-names.test.cjs internal/gui/tests/model-suffix-own.test.cjs internal/gui/tests/routing-effort-change.test.cjs internal/gui/tests/every-skill.test.cjs internal/gui/tests/header-centre.test.cjs internal/gui/tests/public-url.test.cjs internal/gui/tests/strip-scrollbar.test.cjs internal/gui/tests/remove-all-skills.test.cjs internal/gui/tests/request-archive-usage.test.cjs internal/gui/tests/agent-layout.test.cjs internal/gui/tests/group-found-off.test.cjs internal/gui/tests/provider-picks-stay.test.cjs internal/gui/tests/subagent-effort.test.cjs internal/gui/tests/header-zoom-fit.test.cjs internal/gui/tests/library-row-open-scroll.test.cjs internal/gui/tests/whats-new.test.cjs internal/gui/tests/by-agent.test.cjs internal/gui/tests/sessions-purge.test.cjs internal/gui/tests/sessions-folder-delete.test.cjs
+node --test internal/gui/tests/menu-scroll.test.cjs internal/gui/tests/click-scroll.test.cjs internal/gui/tests/panel-fold.test.cjs internal/gui/tests/rollup-short.test.cjs internal/gui/tests/panel-routing.test.cjs internal/gui/tests/gateway-fold.test.cjs internal/gui/tests/routing-kind.test.cjs internal/gui/tests/routing-log-icons.test.cjs internal/gui/tests/balance-fix.test.cjs internal/gui/tests/cli-update.test.cjs internal/gui/tests/login-import.test.cjs internal/gui/tests/agy-launch.test.cjs internal/gui/tests/currency.test.cjs internal/gui/tests/usage-ledger.test.cjs internal/gui/tests/update-check.test.cjs internal/gui/tests/omarchy.test.cjs internal/gui/tests/brand.test.cjs internal/gui/tests/library-loading.test.cjs internal/gui/tests/provider-typed.test.cjs internal/gui/tests/phone-web.test.cjs node --test internal/gui/tests/signin-callback.test.cjs internal/gui/tests/routing-steady.test.cjs internal/gui/tests/old-webkit.test.cjs internal/gui/tests/session-terminal.test.cjs internal/gui/tests/text-size.test.cjs internal/gui/tests/zcode-site.test.cjs internal/gui/tests/rail-tip.test.cjs internal/gui/tests/sync-update.test.cjs internal/gui/tests/plugin-signin.test.cjs internal/gui/tests/plugin-market.test.cjs internal/gui/tests/s3-sync.test.cjs internal/gui/tests/routing-wb-refused.test.cjs internal/gui/tests/routing-blocked.test.cjs internal/gui/tests/routing-zcode-blocked.test.cjs internal/gui/tests/routing-shape.test.cjs internal/gui/tests/market-have.test.cjs internal/gui/tests/sessions-today.test.cjs internal/gui/tests/routing-side-calls.test.cjs internal/gui/tests/import-all-skills.test.cjs internal/gui/tests/routing-flood.test.cjs internal/gui/tests/routing-busy.test.cjs internal/gui/tests/own-skill.test.cjs internal/gui/tests/routing-manual.test.cjs internal/gui/tests/tray-usages.test.cjs internal/gui/tests/provider-remove.test.cjs internal/gui/tests/signin-link.test.cjs internal/gui/tests/tray-inuse.test.cjs internal/gui/tests/codex-auto-reset.test.cjs internal/gui/tests/routing-auto-reset.test.cjs internal/gui/tests/claude-usage-asked.test.cjs internal/gui/tests/claude-risk.test.cjs internal/gui/tests/library-toggle-status.test.cjs internal/gui/tests/library-all.test.cjs internal/gui/tests/routing-reroute-title.test.cjs internal/gui/tests/plain-names.test.cjs internal/gui/tests/panel-effort.test.cjs internal/gui/tests/agent-models-all-hidden.test.cjs internal/gui/tests/omp-roles.test.cjs internal/gui/tests/claude-effort.test.cjs internal/gui/tests/remote-magpie.test.cjs internal/gui/tests/qoder-cn-tile.test.cjs internal/gui/tests/provider-levels-scroll.test.cjs internal/gui/tests/signin-paste-codex.test.cjs internal/gui/tests/signin-paste-key.test.cjs internal/gui/tests/usage-alert.test.cjs internal/gui/tests/quota-families.test.cjs internal/gui/tests/provider-search.test.cjs internal/gui/tests/webdav-settings-refresh.test.cjs internal/gui/tests/lan-docker.test.cjs internal/gui/tests/plugin-key-hint.test.cjs internal/gui/tests/update-hide.test.cjs internal/gui/tests/tray-logos.test.cjs internal/gui/tests/routing-proxy.test.cjs internal/gui/tests/sse-body.test.cjs internal/gui/tests/remote-group-served.test.cjs internal/gui/tests/plugin-move-overflow.test.cjs internal/gui/tests/plugin-movable-review.test.cjs internal/gui/tests/routing-time.test.cjs internal/gui/tests/unlisted-models.test.cjs internal/gui/tests/plugin-updates.test.cjs internal/gui/tests/request-archive.test.cjs internal/gui/tests/group-member-fast.test.cjs internal/gui/tests/providers-off-fold.test.cjs internal/gui/tests/account-return.test.cjs internal/gui/tests/usage-ledger-detail.test.cjs internal/gui/tests/usage-ledger-chart.test.cjs internal/gui/tests/usage-chart-axis.test.cjs internal/gui/tests/panel-usage.test.cjs internal/gui/tests/usage-refresh.test.cjs internal/gui/tests/usage-ledger-content.test.cjs internal/gui/tests/claude-direct.test.cjs internal/gui/tests/signin-again.test.cjs internal/gui/tests/sessions-calendar-fill.test.cjs internal/gui/tests/editor-short-window.test.cjs internal/gui/tests/group-from-model-add.test.cjs internal/gui/tests/sync-other-kind.test.cjs internal/gui/tests/web-page.test.cjs internal/gui/tests/balance-parts.test.cjs internal/gui/tests/search-api.test.cjs internal/gui/tests/provider-file-error.test.cjs internal/gui/tests/sessions-manage.test.cjs internal/gui/tests/number-units.test.cjs internal/gui/tests/sessions-bar-names.test.cjs internal/gui/tests/model-suffix-own.test.cjs internal/gui/tests/routing-effort-change.test.cjs internal/gui/tests/every-skill.test.cjs internal/gui/tests/header-centre.test.cjs internal/gui/tests/public-url.test.cjs internal/gui/tests/strip-scrollbar.test.cjs internal/gui/tests/remove-all-skills.test.cjs internal/gui/tests/request-archive-usage.test.cjs internal/gui/tests/agent-layout.test.cjs internal/gui/tests/group-found-off.test.cjs internal/gui/tests/provider-picks-stay.test.cjs internal/gui/tests/subagent-effort.test.cjs internal/gui/tests/tier-effort.test.cjs internal/gui/tests/header-zoom-fit.test.cjs internal/gui/tests/library-row-open-scroll.test.cjs internal/gui/tests/whats-new.test.cjs internal/gui/tests/by-agent.test.cjs internal/gui/tests/sessions-purge.test.cjs internal/gui/tests/sessions-folder-delete.test.cjs
 ```
 
 If Playwright is installed outside the repository, set `NODE_PATH` to the
@@ -1336,9 +1351,10 @@ node --test internal/gui/tests/seg-contrast.test.cjs
 ```
 
 `agent-grip.test.cjs` checks that hiding an agent can be found without a
-right-click (#479): a row in the Agents list under the pointer draws a grip
-in its left margin, beside its logo, and no row does with the pointer away;
-the logo stays the logo on hover (no second grip over it); dragging the grip
+right-click or hovering (#479, #537): every row in the Agents list draws a
+faint grip in its left margin, beside its logo, with the pointer away, and the
+row under the pointer draws it darker; the logo stays the logo on hover (no
+second grip over it); dragging the grip
 moves the row, and clicking it opens the row's menu, whose Hide puts the row in the fold
 at the foot of the list. Opened, the fold's Show button is there without the
 pointer on its row, and brings the row back; no click moves the page. It runs

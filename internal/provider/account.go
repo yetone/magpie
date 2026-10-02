@@ -98,6 +98,9 @@ type Account struct {
 	wasHost   string
 	moved     bool
 	transport func(req *http.Request) (*http.Response, error)
+	// clientFor is the client a request of the account's goes through in
+	// place of the one it was given, nil for that one (zcode_start.go).
+	clientFor func(req *http.Request) *http.Client
 }
 
 // APIs lists the APIs model is served on, as the provider's last model

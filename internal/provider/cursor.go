@@ -1,5 +1,14 @@
 package provider
 
+// PLUGIN-SERVED (see AGENTS.md): Cursor ("cursor") is a deprecated built-in
+// subscription served by its plugin, @magpie-community/opencode-cursor-auth,
+// once moved onto it (provider.Moved; the default for a new sign-in). A
+// moved one's sign-ins, models, requests and usage are all the plugin's,
+// never this code's (only the move, in migrate*.go, still reads its
+// accounts). A fix here alone doesn't reach those users; fix the plugin
+// (github.com/magpie-community/plugins, packages/cursor) and raise the
+// mover's min in internal/provider/migrate_side.go.
+
 // A Cursor subscription is served through the API cursor-agent talks to
 // (gateway/cursor.go), with the account it is signed in to; here is who that
 // account is, the models it offers, the sign-in, which is cursor-agent's own
@@ -237,8 +246,14 @@ func cursorLinkWhole(link string) bool {
 		return false
 	}
 	q := u.Query()
-	return q.Get("challenge") != "" && q.Get("uuid") != ""
+	// The CLI may wrap after the UUID, with the remaining login parameters
+	// arriving in another pipe write. Credentials alone do not finish its URL.
+	return q.Get("challenge") != "" && cursorLoginUUID.MatchString(q.Get("uuid")) &&
+		q.Get("mode") == "login" && q.Get("redirectTarget") == "cli" &&
+		(q.Get("supportsSelectedTeamLogin") == "true" || q.Get("supportsSelectedTeamLogin") == "false")
 }
+
+var cursorLoginUUID = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // cursorVersionFallback is the CLI version said when no install names one.
 const cursorVersionFallback = "2026.09.23-86fc751"

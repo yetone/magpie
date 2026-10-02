@@ -1,5 +1,14 @@
 package provider
 
+// PLUGIN-SERVED (see AGENTS.md): ZCode ("zcode") is a deprecated built-in
+// subscription served by its plugin, @magpie-community/opencode-zcode-auth,
+// once moved onto it (provider.Moved; the default for a new sign-in). A
+// moved one's sign-ins, models, requests and usage are all the plugin's,
+// never this code's (only the move, in migrate*.go, still reads its
+// accounts). A fix here alone doesn't reach those users; fix the plugin
+// (github.com/magpie-community/plugins, packages/zcode) and raise the
+// mover's min in internal/provider/migrate_zcode.go.
+
 // A team's GLM Coding Plan (团队套餐), bought by an organization on Z.ai or
 // BigModel (智谱) and handed out as seats to its members, is served where a
 // person's plan is (api.z.ai/api/anthropic, open.bigmodel.cn/api/anthropic)

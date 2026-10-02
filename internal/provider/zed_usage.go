@@ -1,5 +1,14 @@
 package provider
 
+// PLUGIN-SERVED (see AGENTS.md): Zed ("zed") is a deprecated built-in
+// subscription served by its plugin, @magpie-community/opencode-zed-auth,
+// once moved onto it (provider.Moved; the default for a new sign-in). A
+// moved one's sign-ins, models, requests and usage are all the plugin's,
+// never this code's (only the move, in migrate*.go, still reads its
+// accounts). A fix here alone doesn't reach those users; fix the plugin
+// (github.com/magpie-community/plugins, packages/zed) and raise the mover's
+// min in internal/provider/migrate_zed.go.
+
 // What a Zed account says of its plan. Zed tells its editor the plan and its
 // billing period, not how much of the model allowance is spent, so that is
 // all magpie can show: the plan's name, when the period ends, and a plan

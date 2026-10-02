@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yetone/magpie/internal/agentenv"
 )
 
 // TestMain gives the package a home of its own: a test that doesn't set one
@@ -20,6 +22,12 @@ func TestMain(m *testing.M) {
 		"LOCALAPPDATA":    filepath.Join(home, "AppData", "Local"),
 	} {
 		os.Setenv(k, v)
+	}
+	// The package's ledger reads what sessions finds, which asks each agent's
+	// own variable before its folder in the home: one left in the shell would
+	// point a test at the runner's real agent (#522).
+	for _, k := range agentenv.Vars {
+		os.Unsetenv(k)
 	}
 	code := m.Run()
 	os.RemoveAll(home)

@@ -70,3 +70,35 @@ func TestQuotasOverLAN(t *testing.T) {
 		t.Fatal("loopback got", c)
 	}
 }
+
+// A request from another machine turned away says whether a key came at
+// all, and names a long one by its last four characters alone (#545: Codex
+// got "disabled, removed or invalid" with no way to tell a dropped key from
+// a wrong one).
+func TestLANRefusalSaysWhichKey(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	h := lanGuard(New().Handler())
+	newCaller(t, "Codex box")
+	call := func(hdr ...string) (int, string) {
+		r := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(`{}`))
+		r.RemoteAddr = "10.0.0.7:5000"
+		for i := 0; i+1 < len(hdr); i += 2 {
+			r.Header.Set(hdr[i], hdr[i+1])
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code, w.Body.String()
+	}
+	if c, b := call(); c != http.StatusUnauthorized || !strings.Contains(b, "no API key was sent") {
+		t.Fatal("no key:", c, b)
+	}
+	wrong := "mgp-not-a-real-key-9z7q"
+	c, b := call("Authorization", "Bearer "+wrong)
+	if c != http.StatusUnauthorized || !strings.Contains(b, "ending in 9z7q") || strings.Contains(b, "not-a-real") {
+		t.Fatal("a wrong key:", c, b)
+	}
+	if c, b := call("x-api-key", "short"); c != http.StatusUnauthorized || strings.Contains(b, "hort") || !strings.Contains(b, "not an enabled") {
+		t.Fatal("a short wrong key:", c, b)
+	}
+}

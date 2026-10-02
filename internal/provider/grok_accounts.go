@@ -1,5 +1,14 @@
 package provider
 
+// PLUGIN-SERVED (see AGENTS.md): Grok ("grok") is a deprecated built-in
+// subscription served by its plugin, @magpie-community/opencode-grok-auth,
+// once moved onto it (provider.Moved; the default for a new sign-in). A
+// moved one's sign-ins, models, requests and usage are all the plugin's,
+// never this code's (only the move, in migrate*.go, still reads its
+// accounts). A fix here alone doesn't reach those users; fix the plugin
+// (github.com/magpie-community/plugins, packages/grok) and raise the mover's
+// min in internal/provider/migrate_side.go.
+
 // Several Grok subscriptions. The Grok CLI keeps one account, in its own
 // home (~/.grok), which magpie only ever reads. Each further account gets a
 // home of magpie's own, signed in there by the CLI's own `login`, so the

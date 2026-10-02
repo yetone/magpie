@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -32,13 +33,14 @@ type usageJSON struct {
 	usage.Summary
 	Agents     []usageGroup `json:"agents"`
 	Models     []usageGroup `json:"models"`
+	Accounts   []usageGroup `json:"accounts"`
 	CallerKeys []usageGroup `json:"callerKeys"`
 	Path       string       `json:"path"`
 }
 
 func usageState(p usage.Period) usageJSON {
 	s := usage.Summarize(p)
-	out := usageJSON{Summary: s, Agents: []usageGroup{}, Models: []usageGroup{}, Path: tilde(usage.Path())}
+	out := usageJSON{Summary: s, Agents: []usageGroup{}, Models: []usageGroup{}, Accounts: []usageGroup{}, Path: tilde(usage.Path())}
 	agents := map[string]*agent.Agent{}
 	for _, a := range agent.Clients() {
 		agents[a.ID] = a
@@ -66,6 +68,19 @@ func usageState(p usage.Period) usageJSON {
 			ug.Sub += " · " + g.Host
 		}
 		out.Models = append(out.Models, ug)
+	}
+	// each subscription account's share, by the account that answered
+	// (#557); Name "" is the calls whose record names none, the page
+	// saying "account not recorded"
+	for _, g := range s.Accounts {
+		ug := usageGroup{Group: g, Name: g.Account, Sub: g.Provider, Icon: "generic"}
+		if p, ok := providers[g.Provider]; ok {
+			ug.Sub = p.Name
+			if p.Icon != "" {
+				ug.Icon = p.Icon
+			}
+		}
+		out.Accounts = append(out.Accounts, ug)
 	}
 	out.CallerKeys = callerUsageGroups(s)
 	return out
@@ -101,7 +116,7 @@ func periodOf(s string) usage.Period {
 
 func ledgerFilter(q url.Values) usage.Filter {
 	id, _ := strconv.ParseInt(q.Get("route"), 10, 64)
-	return usage.Filter{RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q")}
+	return usage.Filter{RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Account: q.Get("account"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q"), Computer: q.Get("computer")}
 }
 
 // ledgerRow is a usage.Row with the names the page shows it by.
@@ -113,6 +128,8 @@ type ledgerRow struct {
 	ProviderName   string `json:"providerName"`
 	Access         string `json:"access,omitempty"` // known account/route type, independent of model maker
 	PricingModel   string `json:"pricing_model,omitempty"`
+	// ComputerName is the other computer a call was made on, shared through sync (#542)
+	ComputerName string `json:"computerName,omitempty"`
 }
 
 type ledgerJSON struct {
@@ -132,6 +149,12 @@ type ledgerJSON struct {
 	// Agents and Providers: those with calls in the period, for the filters
 	Agents    []ledgerAgent `json:"agents"`
 	Providers []ledgerAgent `json:"providers"`
+	// Accounts: the subscription accounts that answered calls in the
+	// period, for the Account filter (#557)
+	Accounts []ledgerAccount `json:"accounts"`
+	// Computers: this one ("this", no name) and the others whose usage
+	// sync brought (#542), for the filter; none while there are none
+	Computers []ledgerShare `json:"computers,omitempty"`
 }
 
 // ledgerShare is a usage.Share with the name and logo the page shows it by.
@@ -139,6 +162,13 @@ type ledgerShare struct {
 	usage.Share
 	Name string `json:"name"`
 	Icon string `json:"icon,omitempty"`
+}
+
+// ledgerAccount is a subscription account the Account filter offers: its
+// name, and the providers it answered for, by name.
+type ledgerAccount struct {
+	ID        string   `json:"id"`
+	Providers []string `json:"providers"`
 }
 
 type ledgerAgent struct {
@@ -185,7 +215,7 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 		}
 		return a
 	}
-	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: l.Total, Totals: l.Sum, Agents: []ledgerAgent{}, Providers: []ledgerAgent{}}
+	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: l.Total, Totals: l.Sum, Agents: []ledgerAgent{}, Providers: []ledgerAgent{}, Accounts: []ledgerAccount{}}
 	out.Bucket, out.Series = l.Bucket, l.Series
 	out.CallerKeys = callerUsageGroups(usage.Summary{CallerKeys: l.CallerKeys})
 	callerLabels := map[string]string{}
@@ -207,6 +237,12 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 			lr.ProviderName = r.Provider
 		}
 		lr.CallerKeyLabel = callerLabels[r.CallerKeyID]
+		if r.Computer != "" {
+			lr.ComputerName = l.Names[r.Computer]
+			if lr.ComputerName == "" {
+				lr.ComputerName = r.Computer
+			}
+		}
 		out.Rows = append(out.Rows, lr)
 	}
 	for _, id := range l.Agents {
@@ -214,6 +250,20 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 	}
 	for _, id := range l.Providers {
 		out.Providers = append(out.Providers, which(id))
+	}
+	// one choice per account, most used first, with the providers it
+	// answered for: the same email may be a Codex and a Claude account
+	at := map[string]int{}
+	for _, g := range l.Accounts {
+		name := which(g.Provider).Name
+		if i, ok := at[g.Account]; ok {
+			if a := &out.Accounts[i]; !slices.Contains(a.Providers, name) {
+				a.Providers = append(a.Providers, name)
+			}
+			continue
+		}
+		at[g.Account] = len(out.Accounts)
+		out.Accounts = append(out.Accounts, ledgerAccount{ID: g.Account, Providers: []string{name}})
 	}
 	// what each is of: the rows of the filter, or, for the dimension the
 	// filter has picked, of the rows without that pick
@@ -233,6 +283,13 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 			shares = append(shares, ls)
 		}
 		out.By[d] = shares
+	}
+	for _, s := range l.Computers {
+		ls := ledgerShare{Share: s, Name: l.Names[s.ID]}
+		if s.ID != usage.ThisComputer && ls.Name == "" {
+			ls.Name = s.ID
+		}
+		out.Computers = append(out.Computers, ls)
 	}
 	return out
 }

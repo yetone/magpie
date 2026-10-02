@@ -75,7 +75,7 @@ func TestOTelSettingsPreservesReadOnlyPermissions(t *testing.T) {
 
 func TestOTelSettingsAndOverrides(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
-	for _, k := range []string{"MAGPIE_OTEL_ENABLED", "MAGPIE_OTEL_ENDPOINT", "MAGPIE_OTEL_HEADERS", "MAGPIE_OTEL_METRICS"} {
+	for _, k := range []string{"MAGPIE_OTEL_ENABLED", "MAGPIE_OTEL_ENDPOINT", "MAGPIE_OTEL_HEADERS", "MAGPIE_OTEL_METRICS", "MAGPIE_OTEL_BODIES", "MAGPIE_OTEL_BODIES_WHOLE"} {
 		t.Setenv(k, "")
 	}
 	// Empty overrides are explicit; a malformed enabled value fails closed.
@@ -84,15 +84,19 @@ func TestOTelSettingsAndOverrides(t *testing.T) {
 	}
 	t.Setenv("MAGPIE_OTEL_ENABLED", "false")
 	t.Setenv("MAGPIE_OTEL_METRICS", "false")
+	t.Setenv("MAGPIE_OTEL_BODIES", "false")
+	t.Setenv("MAGPIE_OTEL_BODIES_WHOLE", "false")
 	t.Setenv("MAGPIE_OTEL_ENDPOINT", "http://localhost:4318")
 	if o, err := OTelExport(); err != nil || o.Enabled {
 		t.Fatalf("endpoint enabled export: %+v %v", o, err)
 	}
 	t.Setenv("MAGPIE_OTEL_ENABLED", "true")
 	t.Setenv("MAGPIE_OTEL_METRICS", "true")
+	t.Setenv("MAGPIE_OTEL_BODIES", "true")
+	t.Setenv("MAGPIE_OTEL_BODIES_WHOLE", "true")
 	t.Setenv("MAGPIE_OTEL_HEADERS", "Authorization=Basic%20YWJjZA==,X-Tag=a%2Cb%2Bc")
 	o, err := OTelExport()
-	if err != nil || !o.Enabled || !o.Metrics || o.Headers["Authorization"] != "Basic YWJjZA==" || o.Headers["X-Tag"] != "a,b+c" {
+	if err != nil || !o.Enabled || !o.Metrics || !o.Bodies || !o.BodiesWhole || o.Headers["Authorization"] != "Basic YWJjZA==" || o.Headers["X-Tag"] != "a,b+c" {
 		t.Fatalf("%+v %v", o, err)
 	}
 	if err := Save(Settings{OTel: OTel{Endpoint: "https://collector.test/", Headers: map[string]string{"Authorization": "Bearer test"}}}); err != nil {
@@ -101,7 +105,7 @@ func TestOTelSettingsAndOverrides(t *testing.T) {
 	if got := Load().OTel; got.Enabled || got.Endpoint != "https://collector.test" || !reflect.DeepEqual(got.Headers, map[string]string{"Authorization": "Bearer test"}) {
 		t.Fatalf("saved: %+v", got)
 	}
-	if Load().OTel.Metrics {
+	if Load().OTel.Metrics || Load().OTel.Bodies || Load().OTel.BodiesWhole {
 		t.Fatal("environment override persisted")
 	}
 }

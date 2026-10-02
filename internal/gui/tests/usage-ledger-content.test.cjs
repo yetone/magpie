@@ -59,7 +59,7 @@ function server(lang, asked, refreshed) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" }, fx: { rate: 7.2, at: new Date().toISOString() } });
     if (url.pathname === "/api/usage/requests") {
       refreshed.n++;
-      return json({ period: "30d", rows: ROWS, offset: 0, total: ROWS.length, calls: ROWS.length, errors: 0, input: 23, output: 13, cache_read: 0, cache_write: 0, reasoning: 0, cost: 0.02, unpriced: 0, bucket: "day", series: [], by: { provider: [], agent: [], model: [] }, agents: [], providers: [] });
+      return json({ period: "30d", rows: ROWS, offset: 0, total: ROWS.length, calls: ROWS.length, errors: 0, input: 23 + (refreshed.input || 0), output: 13, cache_read: 0, cache_write: 0, reasoning: 0, cost: 0.02, unpriced: 0, bucket: "day", series: [], by: { provider: [], agent: [], model: [] }, agents: [], providers: [] });
     }
     if (url.pathname === "/api/usage/requests/content") {
       const q = url.searchParams;
@@ -135,6 +135,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const tall = await long.locator(".cx-t").evaluate((e) => e.getBoundingClientRect().height);
         assert(tall > short * 2, `the whole is taller: ${short} → ${tall}`);
         assert.equal((await long.locator(".cx-more").textContent()).trim(), w.less);
+        refreshed.input = 1;
+        await reader.click(p, p.locator("#usageReload"));
+        await p.waitForTimeout(350);
+        await p.locator(".led-cx .cx-sec").first().waitFor();
+        const collapsed = await long.evaluate(e => e.classList.contains("clamp"));
+        t.diagnostic("After changed ledger refresh: long content collapsed=" + collapsed);
+        assert.equal(collapsed, false, "refresh must retain expanded request text");
+        assert.equal((await long.locator(".cx-more").textContent()).trim(), w.less);
+        await reader.click(p, long.locator(".cx-more"));
+        refreshed.input = 2;
+        await reader.click(p, p.locator("#usageReload"));
+        await p.waitForTimeout(350);
+        await p.locator(".led-cx .cx-sec").first().waitFor();
+        assert(await long.evaluate(e => e.classList.contains("clamp")), "refresh also retains the reader's collapse choice");
+        assert.equal((await long.locator(".cx-more").textContent()).trim(), w.more);
+
         assert.equal((await p.locator(".led-cx .cx-part .cx-t").last().textContent()).replace(/\s+/g, " ").trim(), "the end of a part " + w.cut);
         assert.equal((await p.locator(".led-cx .cx-none").textContent()).trim(), w.whole);
         assert.equal((await p.locator(".led-cx .cx-src").textContent()).trim(), w.src);

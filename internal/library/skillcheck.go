@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,6 +38,24 @@ type SkillCheck struct {
 	// folder's history when which that was isn't known
 	URL   string `json:"url,omitempty"`
 	Error string `json:"error,omitempty"`
+	// Limited is set when it couldn't be told because GitHub's rate limit
+	// was used up, for the page to say so in its own words
+	Limited *Limited `json:"limited,omitempty"`
+}
+
+// Limited is GitHub's rate limit used up: until when (RFC 3339, "" when
+// GitHub didn't say), and whether the requests carried a GitHub token.
+type Limited struct {
+	Until string `json:"until,omitempty"`
+	Token bool   `json:"token,omitempty"`
+}
+
+func (e errLimited) view() *Limited {
+	l := &Limited{Token: e.token}
+	if !e.until.IsZero() {
+		l.Until = e.until.UTC().Format(time.RFC3339)
+	}
+	return l
 }
 
 // The last check's findings stay for the page until a skill is updated,
@@ -76,18 +93,9 @@ type commit struct {
 	} `json:"commit"`
 }
 
-// errLimited is GitHub turning requests away for a while: the API allows
-// an address 60 an hour without a token.
-type errLimited struct{ until time.Time }
-
-func (e errLimited) Error() string {
-	if e.until.IsZero() {
-		return "GitHub is limiting requests from here; try again in a while"
-	}
-	return "GitHub is limiting requests from here until " + e.until.Local().Format("15:04")
-}
-
 // lastCommit is the last commit to touch a folder of a repository on a ref.
+// It asks with the ETag of the answer it had before, if any: GitHub's 304
+// for an unchanged one doesn't count against the rate limit.
 func lastCommit(src Source) (*commit, error) {
 	q := url.Values{"per_page": {"1"}}
 	if src.Path != "" {
@@ -96,9 +104,17 @@ func lastCommit(src Source) (*commit, error) {
 	if src.Ref != "" {
 		q.Set("sha", src.Ref)
 	}
-	req, _ := http.NewRequest("GET", githubAPI+"/repos/"+src.Repo+"/commits?"+q.Encode(), nil)
+	u := githubAPI + "/repos/" + src.Repo + "/commits?" + q.Encode()
+	req, _ := http.NewRequest("GET", u, nil)
 	req.Header.Set("User-Agent", "magpie")
 	req.Header.Set("Accept", "application/vnd.github+json")
+	token := withGitHubToken(req)
+	etags.Lock()
+	had, cached := etags.m[u]
+	etags.Unlock()
+	if cached {
+		req.Header.Set("If-None-Match", had.etag)
+	}
 	c := &http.Client{Timeout: 20 * time.Second}
 	resp, err := c.Do(req)
 	if err != nil {
@@ -106,14 +122,19 @@ func lastCommit(src Source) (*commit, error) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	switch {
-	case resp.StatusCode == 429,
-		resp.StatusCode == 403 && (resp.Header.Get("X-RateLimit-Remaining") == "0" || strings.Contains(strings.ToLower(string(body)), "rate limit")):
-		var e errLimited
-		if n, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil && n > 0 {
-			e.until = time.Unix(n, 0)
-		}
+	if e, ok := limitedBy(resp, body, token); ok {
 		return nil, e
+	}
+	switch {
+	case resp.StatusCode == 304 && cached:
+		body = had.body
+	case resp.StatusCode == 401 && token:
+		_, from := GitHubToken()
+		where := "the GitHub token in Settings → Network and sharing"
+		if from != "settings" {
+			where = from + " (no GitHub token is set in Settings → Network and sharing)"
+		}
+		return nil, fmt.Errorf("GitHub refused %s: it may have expired or been revoked", where)
 	case resp.StatusCode == 404, resp.StatusCode == 422:
 		if src.Ref != "" {
 			return nil, fmt.Errorf("GitHub has no %s at %s any more", src.Repo, src.Ref)
@@ -125,6 +146,11 @@ func lastCommit(src Source) (*commit, error) {
 	var list []commit
 	if err := json.Unmarshal(body, &list); err != nil {
 		return nil, fmt.Errorf("GitHub's answer wasn't understood: %w", err)
+	}
+	if et := resp.Header.Get("ETag"); resp.StatusCode == 200 && et != "" {
+		etags.Lock()
+		etags.m[u] = etagged{etag: et, body: body}
+		etags.Unlock()
 	}
 	if len(list) == 0 {
 		return nil, fmt.Errorf("%s has nothing at %s any more", src.Repo, src.Path)
@@ -265,7 +291,7 @@ func checkSkill(s *Skill, f *fetcher, asked map[string]*commit, limited *atomic.
 	last := asked[key]
 	if last == nil {
 		if e := limited.Load(); e != nil {
-			c.Error = e.Error()
+			c.Error, c.Limited = e.Error(), e.view()
 			return c, "", ""
 		}
 		var err error
@@ -274,6 +300,7 @@ func checkSkill(s *Skill, f *fetcher, asked map[string]*commit, limited *atomic.
 			var e errLimited
 			if errors.As(err, &e) {
 				limited.Store(&e)
+				c.Limited = e.view()
 			}
 			c.Error = err.Error()
 			return c, "", ""

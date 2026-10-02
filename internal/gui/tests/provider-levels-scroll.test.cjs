@@ -1,5 +1,6 @@
-// A saved reasoning level redraws the provider editor without moving its
-// scrollable model list back to the first model.
+// A reasoning level ticked leaves the provider editor's scrollable model
+// list where it is: it is staged for the editor's Save, with nothing sent
+// and nothing redrawn (provider-levels-save.test.cjs).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -55,15 +56,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const fifth = page.locator(".mname", { has: page.locator("code", { hasText: "model-5" }) });
     const old = await list.elementHandle();
     await fifth.getByRole("checkbox", { name: "low" }).uncheck();
-    await page.waitForFunction((e) => !e.isConnected, old);
-    assert.deepEqual(posts.at(-1), { id: "relay", model: "model-5", efforts: ["none", "medium", "high"] });
+    assert(await old.evaluate((e) => e.isConnected));
     assert.equal(await fifth.getByRole("checkbox", { name: "low" }).isChecked(), false);
     assert.equal(await list.evaluate((e) => e.scrollTop), before);
     const next = page.locator(".mname", { has: page.locator("code", { hasText: "model-6" }) });
-    const current = await list.elementHandle();
     await next.getByRole("checkbox", { name: "high" }).uncheck();
-    await page.waitForFunction((e) => !e.isConnected, current);
-    assert.deepEqual(posts.at(-1), { id: "relay", model: "model-6", efforts: ["none", "low", "medium"] });
+    assert.equal(await next.getByRole("checkbox", { name: "high" }).isChecked(), false);
+    assert.deepEqual(posts, []);
     assert.equal(await list.evaluate((e) => e.scrollTop), before);
     assert.deepEqual(errors, []);
   });

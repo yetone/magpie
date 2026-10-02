@@ -1,0 +1,56 @@
+// Package agentenv names the environment variables through which an agent
+// really installed on this machine reaches magpie: the one list a test
+// sandbox clears, so that a test meets only the agents it put there itself.
+//
+// A sandbox fakes magpie's own folders through HOME, USERPROFILE and the XDG
+// variables (appdir decides those), and an agent's folder through the
+// variable that agent's own CLI reads before it falls back to its folder in
+// the home: CLAUDE_CONFIG_DIR, CODEX_HOME, QODER_CONFIG_DIR and the rest.
+// Any one of them left over from the developer's shell points magpie at a
+// real agent, whose sessions and settings a test then reads — and, where
+// magpie writes what it wires, writes into (#522). Qoder's CLI sets both of
+// its variables for every child it starts, and magpie manages Qoder, so
+// writing magpie from inside Qoder was one way to meet this.
+//
+// Each package keeps its own sandbox, because a test in internal/sessions
+// cannot import internal/agent, which imports it, to ask which variables
+// there are; this is the list they all clear. A name here is one magpie
+// reads, and TestVarsAreRead says so, so a variable magpie stopped reading
+// does not linger — that is how GEMINI_CLI_HOME and OPENCODE_CONFIG came to
+// be cleared by a sandbox while OPENCODE_CONFIG_DIR, the one magpie reads,
+// was not. What is deliberately not here: APPDATA and LOCALAPPDATA, Windows'
+// folders rather than an agent's, which a sandbox sets to a folder of its
+// own instead of clearing; and CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, a
+// behaviour flag whose one test sets it on purpose to read what magpie then
+// does.
+package agentenv
+
+// Vars are the variables, by the agent they belong to. A sandbox clears all
+// of them, and sets back the ones its own fixtures need.
+var Vars = []string{
+	// Claude Code, Codex and Copilot CLI
+	"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME",
+	// Cline: its folder, its data, its sessions and its MCP settings file
+	"CLINE_DIR", "CLINE_DATA_DIR", "CLINE_SESSION_DATA_DIR", "CLINE_MCP_SETTINGS_PATH",
+	// Pi and its forks (OmO, Senpi), whose profile and config are apart
+	"PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR", "PI_CONFIG_DIR", "PI_PROFILE",
+	"OMO_CODING_AGENT_DIR", "SENPI_CODING_AGENT_DIR",
+	// omp
+	"OMP_PROFILE",
+	// Qoder's two builds, the global site's and China's
+	"QODER_CONFIG_DIR", "QODERCN_CONFIG_DIR",
+	// Grok: its home, and where its CLI is installed
+	"GROK_HOME", "GROK_BIN_DIR",
+	// Kimi Code and its shared folder
+	"KIMI_CODE_HOME", "KIMI_SHARE_DIR",
+	// MiMo Code, MiniMax Code, OpenHanako, Hermes, dsh, WorkBuddy
+	"MIMOCODE_HOME", "MINIMAX_DATA_DIR", "HANA_HOME", "HERMES_HOME", "DSH_HOME",
+	"WORKBUDDY_CONFIG_DIR",
+	// Cursor's CLI: its config folder (its chats) and its data folder
+	"CURSOR_CONFIG_DIR", "CURSOR_DATA_DIR",
+	// OpenCode and OpenChamber
+	"OPENCODE_CONFIG_DIR", "OPENCODE_DB", "OPENCHAMBER_DATA_DIR",
+	// Droid's home, Windsurf's API server, ZCode's credential seed: what
+	// makes an account or an installation visible that the test didn't make
+	"FACTORY_HOME_OVERRIDE", "WINDSURF_API_SERVER_URL", "ZCODE_CREDENTIAL_SECRET",
+}

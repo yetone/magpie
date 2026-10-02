@@ -55,6 +55,11 @@ type Settings struct {
 	// is the proxy (http://, https:// or socks5://; host:port means http).
 	Proxy string `json:"proxy,omitempty"`
 	OTel  OTel   `json:"otel,omitempty"`
+	// GitHubToken is a GitHub token the library's requests to GitHub's
+	// API carry, raising its rate limit from 60 requests an hour to 5,000.
+	// It is a secret: the Settings page is told only a masked one, and a
+	// backup or sync without keys leaves it out, as it does LANKey.
+	GitHubToken string `json:"githubToken,omitempty"`
 	// Redact keeps secrets in what agents send (API keys, private keys,
 	// tokens, passwords) from the vendors behind magpie: they go as
 	// placeholders, and come back as they were. RedactPersonal does the same

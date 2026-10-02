@@ -263,18 +263,22 @@
     // signed in to nothing yet, with a built-in's accounts to bring
     const c = !subs.some((x) => x.signedIn) && movableOf(pkg)[0];
     if (c) return moveButton(b, c, true);
-    if (out) {
+    // one of its subscriptions signed in (Qoder, beside Qoder CN; #556): the
+    // card says it is, rather than a Sign in that reads as signed out; the
+    // Installed row offers the others by name
+    const on = subs.find((x) => x.signedIn);
+    if (out && !on) {
       b.classList.add("go");
       b.textContent = t("Sign in");
       b.title = subs.length > 1 ? t("Sign in to {name}", { name: out.name }) : "";
       b.onclick = (ev) => { ev.stopPropagation(); pluginSignIn(out.id); };
       return b;
     }
-    if (subs.length) {
+    if (on) {
       b.classList.add("done");
       b.append(glyph(CHECK, 11, 2), el("span", "", t("Signed in")));
-      b.title = t("Open {name} in Providers", { name: subs[0].name });
-      b.onclick = (ev) => { ev.stopPropagation(); openProvider(subs[0].id); };
+      b.title = t("Open {name} in Providers", { name: on.name });
+      b.onclick = (ev) => { ev.stopPropagation(); openProvider(on.id); };
       return b;
     }
     b.classList.add("done");
@@ -612,6 +616,7 @@
         const builtin = !x.signedIn && cands.some((c) => c.id === x.pid);
         s.append(el("span", "dot"), el("span", "", x.signedIn ? t("{name}: signed in", { name: x.name }) : builtin ? t("{name}: on magpie's built-in", { name: x.name }) : t("{name}: not signed in", { name: x.name })));
         if (builtin) s.title = t("{name} runs on magpie's built-in, with your accounts; Move {name} here runs it on this plugin", { name: x.name });
+        else if (!x.signedIn && subs.some((y) => y.signedIn)) s.title = t("{name} is a subscription of its own; {other} works without it", { name: x.name, other: subs.find((y) => y.signedIn).name });
         sub.append(s);
       }
     } else sub.textContent = e.providers.length ? t("Signs in to {names}", { names: e.providers.join(t(", ")) }) : t("Signs in to nothing magpie can use");
@@ -642,8 +647,12 @@
       val.append(mv);
     }
     if (!e.off && !e.error && subs.some((x) => !x.signedIn)) {
-      const s = el("button", "text" + (here ? "" : " primary"), t("Sign in"));
-      s.onclick = () => pluginSignIn(subs.find((x) => !x.signedIn).id);
+      // signed in to one of its subscriptions already (Qoder, beside Qoder
+      // CN; #556): a blue Sign in read as the plugin signed out, so the
+      // button names the one it signs in to and stays quiet
+      const out = subs.find((x) => !x.signedIn), some = subs.some((x) => x.signedIn);
+      const s = el("button", "text" + (here || some ? "" : " primary"), some ? t("Sign in to {name}", { name: out.name }) : t("Sign in"));
+      s.onclick = () => pluginSignIn(out.id);
       val.append(s);
     }
     const back = () => { if (moved.length) status(t("{names} is back on the built-in", { names }), "ok"); };

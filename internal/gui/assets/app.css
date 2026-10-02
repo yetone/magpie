@@ -338,16 +338,17 @@ body.window .ag-handle { width: 28px; height: 28px; }
 .ag-handle:hover, .ag-handle.open { background: var(--pill); }
 .ag-handle:focus-visible { background: var(--pill); outline: 1.5px solid var(--fg-2); outline-offset: 0; }
 .agent-fold .ag-handle { cursor: default; }
-/* a row in the list carries a grip in its left margin (#479), drawn only
-   while the row is under the pointer, dragged, or its handle has the
-   keyboard or its menu open: always there, it was noise down every row. It
-   is the handle's own, so a drag or a click on it does what the logo does,
-   and it takes no room from the row */
+/* a row in the list carries a faint grip in its left margin (#479, #537),
+   always there, so that a row can be taken hold of, and hidden from its
+   menu, is seen without hovering or right-clicking; it darkens while the row
+   is under the pointer, dragged, or its handle has the keyboard or its menu
+   open. It is the handle's own, so a drag or a click on it does what the
+   logo does, and it takes no room from the row; the logo stays the logo. */
 #agents > .row .ag-handle { position: relative; }
-#agents > .row .ag-handle::before { content: ""; position: absolute; left: -6px; top: 50%; width: 5px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--muted) .9px, transparent 1.2px) 0 0 / 3.5px 3.75px; opacity: 0; transition: opacity .15s; }
+#agents > .row .ag-handle::before { content: ""; position: absolute; left: -6px; top: 50%; width: 5px; height: 11px; margin-top: -5.5px; background: radial-gradient(circle, var(--grip-dot) .9px, transparent 1.2px) 0 0 / 3.5px 3.75px; --grip-dot: var(--faint); }
 body.panel #agents > .row .ag-handle::before { left: -9px; }
-#agents > .row:is(:hover, .dragging) .ag-handle::before, #agents > .row .ag-handle.open::before { opacity: 1; }
-#agents > .row .ag-handle:focus-visible::before { opacity: 1; }
+#agents > .row:is(:hover, .dragging) .ag-handle::before, #agents > .row .ag-handle.open::before { --grip-dot: var(--muted); }
+#agents > .row .ag-handle:focus-visible::before { --grip-dot: var(--muted); }
 /* one hidden by hand reads as put away, with its way back beside its name */
 .agent-fold .row.put-away .ag-handle > .ic, .agent-fold .row.put-away .name { opacity: .6; }
 .agent-fold .row.put-away .who { display: flex; align-items: center; gap: 8px; }
@@ -614,6 +615,7 @@ body.window .field.solo { grid-column: auto; }
 /* the last label can be wider than its bar's column: let it spill left, not off the card */
 .chart .labels span:last-child { display: flex; justify-content: flex-end; }
 .row.stat .who { flex: 0 0 180px; }
+.row.stat .who .name.faint { color: var(--faint); font-weight: 400; }
 .row.stat .share { flex: 1 1 auto; height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; margin: 0 6px; }
 .row.stat .share i { display: block; height: 100%; border-radius: 2px; background: var(--accent); opacity: .7; }
 .row.stat .num { display: flex; flex-direction: column; align-items: flex-end; flex: none; min-width: 64px; font-variant-numeric: tabular-nums; }
@@ -2374,6 +2376,7 @@ body.panel .modal { padding: 16px 12px; }
 .pu-bar .segs .opt { height: 22px; padding: 0 9px; font-size: 11.5px; }
 .pu-bar .sess-pick { min-width: 0; max-width: 150px; }
 .pu-bar .text { flex: none; font-size: 12px; }
+.pu-bar .pu-again { width: 22px; height: 22px; flex: none; }
 .pu-tot { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-radius: 11px; background: var(--card); box-shadow: var(--card-edge); }
 .pu-tot .blk { min-width: 0; padding: 8px 10px 8px; }
 .pu-tot .blk + .blk { border-left: 1px solid var(--line-2); }

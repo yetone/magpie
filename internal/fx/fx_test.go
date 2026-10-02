@@ -64,7 +64,7 @@ func TestGetFallsBackToStaleCacheWhenOffline(t *testing.T) {
 	Reset()
 	// a cache file from well over TTL ago
 	old := Rate{CNYPerUSD: 6.9, At: time.Now().Add(-48 * time.Hour)}
-	writeCache(old)
+	writeCache(CachePath(), old)
 
 	badURL := rateURL
 	rateURL = "http://127.0.0.1:1/no-such-server"
@@ -148,7 +148,7 @@ func TestGetIgnoresAReplyWithNoCNYRate(t *testing.T) {
 func TestGetDoesNotRetryAFailedFetchAtOnce(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	Reset()
-	writeCache(Rate{CNYPerUSD: 6.9, At: time.Now().Add(-48 * time.Hour)})
+	writeCache(CachePath(), Rate{CNYPerUSD: 6.9, At: time.Now().Add(-48 * time.Hour)})
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++

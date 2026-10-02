@@ -211,9 +211,12 @@ func callerGuard(next http.Handler) http.Handler {
 }
 
 func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool) {
-	who, ok := access.Authenticate(callerKey(r))
+	key := callerKey(r)
+	who, ok := access.Authenticate(key)
 	if !ok && !local(r) {
-		writeError(w, provider.Chat, http.StatusUnauthorized, "API key is disabled, removed or invalid")
+		msg := refusedKey(key)
+		log.Printf("refused %s %s from %s: %s", r.Method, r.URL.Path, r.RemoteAddr, msg)
+		writeError(w, provider.Chat, http.StatusUnauthorized, msg)
 		return r, false
 	}
 	if ok {
@@ -233,6 +236,16 @@ func identifyCaller(w http.ResponseWriter, r *http.Request) (*http.Request, bool
 		r.URL = &u
 	}
 	return r, true
+}
+
+// accountOf is the subscription account p answers as, named as the Routing
+// trace names it (Account.User: an email, a login), never by a token; ""
+// for a key or a provider without an account (#557).
+func accountOf(p provider.Provider) string {
+	if p.Account == nil {
+		return ""
+	}
+	return p.Account.User
 }
 
 func appendUsage(r *http.Request, rec usage.Record) {
@@ -262,6 +275,21 @@ func callerKey(r *http.Request) string {
 		}
 	}
 	return r.URL.Query().Get("key")
+}
+
+// refusedKey says why a caller's key was turned away: none came, or the
+// one that came (its last four characters, and only of a long one) is no enabled
+// gateway key, so a client that drops its key is told apart from a wrong
+// key (#545).
+func refusedKey(key string) string {
+	if key == "" {
+		return "no API key was sent: send a magpie gateway key as Authorization: Bearer <key> (or x-api-key)"
+	}
+	which := "the API key sent"
+	if len(key) >= 12 { // a short one isn't named, so as not to give most of it away
+		which = "the API key ending in " + key[len(key)-4:]
+	}
+	return which + " is not an enabled magpie gateway key: it is disabled, removed or mistyped"
 }
 
 // local is a request from this computer.

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/agentenv"
 )
 
 var callT0 = time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
@@ -18,14 +20,14 @@ func setupCalls(t *testing.T) callDirs {
 	t.Helper()
 	dir := t.TempDir()
 	d := callDirs{filepath.Join(dir, "claude"), filepath.Join(dir, "codex"), filepath.Join(dir, "desktop")}
+	for _, k := range agentenv.Vars {
+		t.Setenv(k, "")
+	}
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
 	t.Setenv("CLAUDE_CONFIG_DIR", d.claude)
 	t.Setenv("CODEX_HOME", d.codex)
-	t.Setenv("DSH_HOME", "")
-	t.Setenv("HERMES_HOME", "")
-	t.Setenv("QODER_CONFIG_DIR", "")
-	t.Setenv("QODERCN_CONFIG_DIR", "")
+
 	t.Setenv("HOME", filepath.Join(dir, "home"))
 	t.Setenv("USERPROFILE", filepath.Join(dir, "home"))
 	callDesktopDirs = func() []string { return []string{d.desktop} }

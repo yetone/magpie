@@ -3,6 +3,7 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -62,21 +63,33 @@ func splitRef(ref string) (*Provider, string, error) {
 // their own are told (catalog.Touched), as for any other change of the
 // catalog.
 func SetModelName(ref, name string) error {
+	return touchedIf(setModelName(ref, name))
+}
+
+// touchedIf tells the agents of a change to the catalog that was made.
+func touchedIf(changed bool, err error) error {
+	if changed {
+		catalog.Touched()
+	}
+	return err
+}
+
+func setModelName(ref, name string) (bool, error) {
 	p, model, err := splitRef(ref)
 	if err != nil {
-		return err
+		return false, err
 	}
 	name = strings.Join(strings.Fields(name), " ")
 	if len([]rune(name)) > 80 {
-		return errors.New("a model's name is at most 80 characters")
+		return false, errors.New("a model's name is at most 80 characters")
 	}
 	if name != "" && !p.serves(model) {
-		return fmt.Errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
+		return false, fmt.Errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
 	}
 	s := settings.Load()
 	key := p.ID + "/" + model
 	if s.ModelNames[key] == name {
-		return nil
+		return false, nil
 	}
 	if name == "" {
 		delete(s.ModelNames, key)
@@ -87,10 +100,9 @@ func SetModelName(ref, name string) error {
 		s.ModelNames[key] = name
 	}
 	if err := settings.Save(s); err != nil {
-		return err
+		return false, err
 	}
-	catalog.Touched()
-	return nil
+	return true, nil
 }
 
 // SetModelPrice is what a provider's model costs the user, in USD per million
@@ -229,9 +241,13 @@ var Levels = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"
 // levels aren't known, any of Levels, which it is given; none takes them
 // away.
 func SetModelEfforts(ref string, efforts []string) error {
+	return touchedIf(setModelEfforts(ref, efforts))
+}
+
+func setModelEfforts(ref string, efforts []string) (bool, error) {
 	p, model, err := splitRef(ref)
 	if err != nil {
-		return err
+		return false, err
 	}
 	all := p.Known(model)
 	var keep []string
@@ -241,10 +257,10 @@ func SetModelEfforts(ref string, efforts []string) error {
 			continue
 		}
 		if len(all) == 0 && !slices.Contains(Levels, e) {
-			return fmt.Errorf("%q is not a reasoning level (they are %s)", e, strings.Join(Levels, ", "))
+			return false, fmt.Errorf("%q is not a reasoning level (they are %s)", e, strings.Join(Levels, ", "))
 		}
 		if len(all) > 0 && !slices.Contains(all, e) {
-			return fmt.Errorf("%s/%s has no reasoning level %q (it has %s)", p.ID, model, e, strings.Join(all, ", "))
+			return false, fmt.Errorf("%s/%s has no reasoning level %q (it has %s)", p.ID, model, e, strings.Join(all, ", "))
 		}
 		if !slices.Contains(keep, e) {
 			keep = append(keep, e)
@@ -257,7 +273,7 @@ func SetModelEfforts(ref string, efforts []string) error {
 	s := settings.Load()
 	key := p.ID + "/" + model
 	if slices.Equal(s.ModelEfforts[key], keep) {
-		return nil
+		return false, nil
 	}
 	if len(keep) == 0 {
 		delete(s.ModelEfforts, key)
@@ -268,10 +284,9 @@ func SetModelEfforts(ref string, efforts []string) error {
 		s.ModelEfforts[key] = keep
 	}
 	if err := settings.Save(s); err != nil {
-		return err
+		return false, err
 	}
-	catalog.Touched()
-	return nil
+	return true, nil
 }
 
 // ModelEfforts are the reasoning levels the user kept of the provider's
@@ -307,12 +322,16 @@ func effortsKept(all, kept []string) []string {
 // SetModelImage says whether a provider's model takes images, in place
 // of what its vendor's list says. nil gives that answer back.
 func SetModelImage(ref string, images *bool) error {
+	return touchedIf(setModelImage(ref, images))
+}
+
+func setModelImage(ref string, images *bool) (bool, error) {
 	p, model, err := splitRef(ref)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if images != nil && !p.serves(model) {
-		return fmt.Errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
+		return false, fmt.Errorf("%s has no model %s (magpie provider %s lists them)", p.ID, model, p.ID)
 	}
 	if images != nil {
 		if vendor, known := vendorSees(p, model); known && *images == vendor {
@@ -323,12 +342,12 @@ func SetModelImage(ref string, images *bool) error {
 	key := p.ID + "/" + model
 	if images == nil {
 		if _, ok := s.ModelImages[key]; !ok {
-			return nil
+			return false, nil
 		}
 		delete(s.ModelImages, key)
 	} else {
 		if cur, ok := s.ModelImages[key]; ok && cur == *images {
-			return nil
+			return false, nil
 		}
 		if s.ModelImages == nil {
 			s.ModelImages = map[string]bool{}
@@ -336,10 +355,58 @@ func SetModelImage(ref string, images *bool) error {
 		s.ModelImages[key] = *images
 	}
 	if err := settings.Save(s); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// ModelPref is what the provider editor's Names & levels changed of one
+// model, sent with its Save: each part left nil is as it was. Name "" gives
+// the model its own name back, Efforts [] all its levels, and OwnImages the
+// vendor's answer for whether it sees images.
+type ModelPref struct {
+	Name      *string   `json:"name,omitempty"`
+	Efforts   *[]string `json:"efforts,omitempty"`
+	Images    *bool     `json:"images,omitempty"`
+	OwnImages bool      `json:"ownImages,omitempty"`
+}
+
+// SetModelPrefs makes the changes to a provider's models, by model id, as
+// SetModelName, SetModelEfforts and SetModelImage do, and tells the agents
+// once, after them all, rather than once a change. It stops at the first
+// that fails, telling the agents of those made before it.
+func SetModelPrefs(pid string, prefs map[string]ModelPref) error {
+	changed := false
+	set := func(c bool, err error) error {
+		changed = changed || c
 		return err
 	}
-	catalog.Touched()
-	return nil
+	err := func() error {
+		for _, model := range slices.Sorted(maps.Keys(prefs)) {
+			m, ref := prefs[model], pid+"/"+model
+			if m.Name != nil {
+				if err := set(setModelName(ref, *m.Name)); err != nil {
+					return err
+				}
+			}
+			if m.Efforts != nil {
+				if err := set(setModelEfforts(ref, *m.Efforts)); err != nil {
+					return err
+				}
+			}
+			if m.Images != nil || m.OwnImages {
+				images := m.Images
+				if m.OwnImages {
+					images = nil
+				}
+				if err := set(setModelImage(ref, images)); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}()
+	return touchedIf(changed, err)
 }
 
 // ImageOverride is the user's answer for whether pid's model takes images.

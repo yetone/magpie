@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -24,6 +25,8 @@ func otelInt(key string, value int64) otelAttribute {
 
 // Only this allowlist leaves the machine: never record JSON, account/key
 // names, session titles, raw errors, prompts, completions or tool arguments.
+// The one exception is traces' input and output, sent only when the user
+// turned bodies on (#538).
 func otelAttributes(r Record) []otelAttribute {
 	op := r.Operation
 	if op == "" {
@@ -70,6 +73,12 @@ func (e *otelExporter) traces(records []Record) any {
 		}
 		if r.Effort != "" {
 			a = append(a, otelString("magpie.reasoning_effort", r.Effort))
+		}
+		if r.BodyIn != "" {
+			a = append(a, otelString("langfuse.observation.input", r.BodyIn))
+		}
+		if r.BodyOut != "" {
+			a = append(a, otelString("langfuse.observation.output", otelReplyText(r.BodyOut)))
 		}
 		status := 0
 		if r.Status >= 400 {
@@ -157,3 +166,63 @@ func otelMetrics(records []Record, start, end time.Time) any {
 	}
 	return otelEnvelope("Metrics", out)
 }
+
+// otelReplyText is a streamed reply's text, put together from its events
+// (Chat Completions' choices[].delta.content, Responses'
+// response.output_text.delta, Anthropic's content_block_delta), so the
+// trace shows what the model wrote rather than a few hundred SSE events; a
+// reply that isn't a stream, or one with no text in it (only tool calls),
+// goes as it came.
+func otelReplyText(body string) string {
+	if !strings.Contains(body, "data:") {
+		return body
+	}
+	body, cut := strings.CutSuffix(body, BodyCut)
+	var text strings.Builder
+	for _, line := range strings.Split(body, "\n") {
+		data, ok := strings.CutPrefix(strings.TrimSpace(line), "data:")
+		if !ok {
+			continue
+		}
+		var ev struct {
+			Type    string          `json:"type"`
+			Delta   json.RawMessage `json:"delta"`
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(data)), &ev) != nil {
+			continue
+		}
+		for _, c := range ev.Choices {
+			text.WriteString(c.Delta.Content)
+		}
+		switch ev.Type {
+		case "response.output_text.delta":
+			var d string
+			if json.Unmarshal(ev.Delta, &d) == nil {
+				text.WriteString(d)
+			}
+		case "content_block_delta":
+			var d struct {
+				Text string `json:"text"`
+			}
+			if json.Unmarshal(ev.Delta, &d) == nil {
+				text.WriteString(d.Text)
+			}
+		}
+	}
+	if text.Len() == 0 {
+		text.Reset()
+		text.WriteString(body)
+	}
+	if cut {
+		text.WriteString(BodyCut)
+	}
+	return text.String()
+}
+
+// BodyCut ends a body the gateway captured only the start of.
+const BodyCut = "\n… (cut here by magpie)"

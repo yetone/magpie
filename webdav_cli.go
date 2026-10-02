@@ -26,7 +26,7 @@ const webdavUsage = `usage:
                                           the same on every computer through a WebDAV folder (a folder named
                                           magpie is made in it), and sync at once; asks for the password
                                           (with a user) and the passphrase
-  magpie webdav set k=v…                  change it: address, user, keys, agents, library (yes|no);
+  magpie webdav set k=v…                  change it: address, user, keys, agents, library, usage (yes|no);
                                           password= and passphrase= ask for a new one
   magpie webdav now                       sync now (the gateway does every 3 minutes, while it runs)
   magpie webdav dismiss                   clear what the last sync said it replaced
@@ -40,6 +40,8 @@ const webdavUsage = `usage:
               again; user= alone for a server that asks for no sign-in. An app password where the server
               has them
   keys        no: providers go without their API keys, and each computer keeps its own
+  usage       yes: this computer's usage goes up too, a file a day, sealed, and the Usage page counts
+              the other computers' that share theirs, each named
   first sync  on a computer that had its own setup, each part that differs becomes the server's; what
               was here is kept in the sync folder beside magpie's files, and magpie webdav says so
   moving      magpie webdav on with S3 sync on moves sync to the folder; the bucket, endpoint, access key
@@ -61,7 +63,7 @@ const s3Usage = `usage:
                                           Cloudflare R2, Backblaze B2, MinIO, a NAS…), in <prefix>/magpie/,
                                           and sync at once; asks for the secret and the passphrase
   magpie s3 set k=v…                      change it: address, bucket, prefix, endpoint, region, access-key-id,
-                                          path-style, keys, agents, library (yes|no); secret= and passphrase=
+                                          path-style, keys, agents, library, usage (yes|no); secret= and passphrase=
                                           ask for a new one
   magpie s3 now                           sync now (the gateway does every 3 minutes, while it runs)
   magpie s3 dismiss                       clear what the last sync said it replaced
@@ -77,6 +79,8 @@ const s3Usage = `usage:
               only used with the endpoint and access key it was given for: change either and it is asked
               for again
   keys        no: providers go without their API keys, and each computer keeps its own
+  usage       yes: this computer's usage goes up too, a file a day, sealed, and the Usage page counts
+              the other computers' that share theirs, each named
   moving      magpie s3 on with WebDAV sync on moves sync to the bucket; the WebDAV address, user and
               password are kept, and magpie webdav on alone moves back to them
 
@@ -165,7 +169,7 @@ func syncSet(k syncKind, args []string, on bool) error {
 		if !on {
 			return fmt.Errorf("%s sync is on, not %s: magpie %s set changes it; %s", c.Kind(), k.name, other(k).cmd, k.turnOn())
 		}
-		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library}
+		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library, Usage: c.Usage}
 		if o := c.Other; o != nil { // its server, as it was kept when sync moved from it
 			next.URL, next.User, next.Endpoint, next.Region, next.PathStyle = o.URL, o.User, o.Endpoint, o.Region, o.PathStyle
 		}
@@ -214,7 +218,7 @@ func syncSet(k syncKind, args []string, on bool) error {
 			} else {
 				askPhrase = true
 			}
-		case key == "keys", key == "agents", key == "library", key == "path-style" && k.s3:
+		case key == "keys", key == "agents", key == "library", key == "usage", key == "path-style" && k.s3:
 			if v != "yes" && v != "no" {
 				return fmt.Errorf("%s=yes|no, not %q", key, v)
 			}
@@ -226,13 +230,15 @@ func syncSet(k syncKind, args []string, on bool) error {
 				c.Agents = yes
 			case "path-style":
 				c.PathStyle = yes
+			case "usage":
+				c.Usage = yes
 			default:
 				c.Library = &yes
 			}
 		case k.s3:
-			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, keys, agents, library)", key)
+			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, keys, agents, library, usage)", key)
 		default:
-			return fmt.Errorf("unknown field %q (address, user, password, passphrase, keys, agents, library)", key)
+			return fmt.Errorf("unknown field %q (address, user, password, passphrase, keys, agents, library, usage)", key)
 		}
 	}
 	if bucket != nil || prefix != nil {
@@ -317,7 +323,7 @@ func syncNow(k syncKind) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	if err := davsync.Now(ctx); err != nil {
+	if err := davsync.SyncNow(ctx); err != nil {
 		return fmt.Errorf("couldn't sync: %w", err)
 	}
 	return syncShow(k)
@@ -382,6 +388,9 @@ func syncShow(k syncKind) error {
 	if v.Library {
 		what = append(what, "library")
 	}
+	if v.Usage {
+		what = append(what, "usage")
+	}
 	fmt.Println("  syncs", strings.Join(what, ", "))
 	if o := v.Other; o != nil {
 		if o.Kind == "s3" {
@@ -398,6 +407,9 @@ func syncShow(k syncKind) error {
 		fmt.Println("  " + muted.Render("not synced yet"))
 	default:
 		fmt.Println(" ", green.Render("✓"), "synced", syncWhen(v.Last))
+	}
+	if v.UsageError != "" {
+		fmt.Println("  couldn't share usage:", v.UsageError)
 	}
 	if n := v.Notice; n != nil {
 		if len(n.Here) > 0 {

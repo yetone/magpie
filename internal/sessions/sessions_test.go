@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -40,6 +41,9 @@ func setup(t *testing.T) (claude, codex string) {
 	claude, codex = filepath.Join(dir, "claude"), filepath.Join(dir, "codex")
 	copyTree(t, "testdata/claude", claude)
 	copyTree(t, "testdata/codex", codex)
+	for _, env := range agentenv.Vars {
+		t.Setenv(env, "")
+	}
 	t.Setenv("CLAUDE_CONFIG_DIR", claude)
 	t.Setenv("CODEX_HOME", codex)
 	t.Setenv("HERMES_HOME", filepath.Join(dir, "hermes"))
@@ -47,16 +51,12 @@ func setup(t *testing.T) (claude, codex string) {
 	// OpenCode and Pi keep nothing here unless a test puts it there
 	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
 	t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(dir, "pi"))
-	t.Setenv("OPENCODE_DB", "")
-	t.Setenv("PI_CODING_AGENT_SESSION_DIR", "")
+	// Cursor's CLI keeps its chats under $XDG_CONFIG_HOME/cursor when set
+	t.Setenv("XDG_CONFIG_HOME", "")
 	// ZCode, dsh, Cline, Qoder, Grok Build, WorkBuddy and omp keep theirs in
 	// the home folder: never the real one's
 	t.Setenv("HOME", filepath.Join(dir, "home"))
 	t.Setenv("USERPROFILE", filepath.Join(dir, "home"))
-	for _, env := range []string{"DSH_HOME", "CLINE_DIR", "CLINE_DATA_DIR", "CLINE_SESSION_DATA_DIR", "QODER_CONFIG_DIR", "QODERCN_CONFIG_DIR",
-		"GROK_HOME", "WORKBUDDY_CONFIG_DIR"} {
-		t.Setenv(env, "")
-	}
 	PriceOf = func(_ settings.Settings, m string) (catalog.Price, bool) {
 		switch m {
 		case "claude-opus-5-5":

@@ -489,6 +489,8 @@ func (c candidate) allowanceKey() allowanceKey {
 type left struct {
 	used   float64
 	renews []time.Time
+	pace   float64   // weekly pace: share of its week left per hour until it renews
+	due    time.Time // when the window that pace went by renews; zero when not known
 }
 
 // learns: c is a subscription whose allowance isn't known yet, of an agent
@@ -519,7 +521,8 @@ func weigh(p provider.Provider, cs []candidate, model string, from provider.Prot
 		}
 		if a, ok := known[ag][c.p.Account.User]; ok {
 			u, r := a.For(c.model, now)
-			wg.lefts[c.allowanceKey()] = left{u, r} // one not known counts as unused
+			pc, due := a.Pace(c.model, now)
+			wg.lefts[c.allowanceKey()] = left{u, r, pc, due} // one not known counts as unused
 		}
 	}
 	lefts := wg.lefts
@@ -606,6 +609,99 @@ func weigh(p provider.Provider, cs []candidate, model string, from provider.Prot
 			ca, cb := cs[idx[a]], cs[idx[b]]
 			if sa, sb := shareOf(ca), shareOf(cb); sa != sb {
 				return sa < sb
+			}
+			return tokens[idx[a]] < tokens[idx[b]]
+		})
+		out := make([]candidate, len(cs))
+		for i, j := range idx {
+			out[i] = cs[j]
+		}
+		cs = out
+	case provider.Pace:
+		// a subscription by what it has left of its week per hour until
+		// that renews, the most first: it has the most to lose at the
+		// reset, where the most left alone (least used) sends a fresh
+		// account ahead of one with 80% left and an hour to go, and the
+		// soonest reset alone (smart) sends one with 3% left and an hour
+		// to go ahead of one with 90% and two. The tiers are Smart's: one
+		// at 90% or more of any window that counts the model — the five
+		// hours too, a rate cap it would be sent into before its
+		// allowance was read again — waits until the others can't answer,
+		// one all but used up until nothing else can; each tier by the
+		// share used. Among the rest, one not known that tells what it
+		// has left as it answers goes first while it isn't, as in Smart,
+		// else it would never be known; then the pace, those alike within
+		// a tenth by what magpie sent them lately, then in their order,
+		// keeping the vendor's prompt cache warm. An account not known
+		// counts as a whole week ahead of it; a key has no week.
+		paceOf := func(c candidate) float64 {
+			if l, ok := lefts[c.allowanceKey()]; ok {
+				return l.pace
+			}
+			if c.p.Account != nil {
+				return provider.FreshPace
+			}
+			return 0
+		}
+		tier := func(share float64) int {
+			switch {
+			case share >= usedShare:
+				return 2
+			case share >= lowShare:
+				return 1
+			}
+			return 0
+		}
+		// the bands of pace alike within a tenth, the highest first: drawn
+		// before sorting, from each band's highest down, so that sorting
+		// by them is consistent — "within a tenth of each other" alone is
+		// not, three paces a twelfth apart each going round in a circle.
+		// Drawn among those the pace orders alone — one running low
+		// would otherwise set a band's top and part two alike behind it
+		var byPace []int
+		for i, c := range cs {
+			if tier(shareOf(c)) == 0 && !learns(c, lefts) {
+				byPace = append(byPace, i)
+			}
+		}
+		sort.SliceStable(byPace, func(a, b int) bool { return paceOf(cs[byPace[a]]) > paceOf(cs[byPace[b]]) })
+		band, top := make([]int, len(cs)), 0.0
+		for k, i := range byPace {
+			if p := paceOf(cs[i]); k == 0 || p < 0.9*top {
+				top = p
+				if k > 0 {
+					band[i] = band[byPace[k-1]] + 1
+					continue
+				}
+			} else {
+				band[i] = band[byPace[k-1]]
+			}
+		}
+		routed.Lock()
+		tokens := make([]float64, len(cs))
+		wg.tokens = map[string]float64{}
+		for i, c := range cs {
+			tokens[i] = routed.used[c.restKey()].now(now)
+			wg.tokens[c.rest] = tokens[i]
+		}
+		routed.Unlock()
+		idx := make([]int, len(cs))
+		for i := range idx {
+			idx[i] = i
+		}
+		sort.SliceStable(idx, func(a, b int) bool {
+			ca, cb := cs[idx[a]], cs[idx[b]]
+			sa, sb := shareOf(ca), shareOf(cb)
+			if ta, tb := tier(sa), tier(sb); ta != tb {
+				return ta < tb
+			} else if ta > 0 {
+				if sa != sb {
+					return sa < sb
+				}
+			} else if la, lb := learns(ca, lefts), learns(cb, lefts); la != lb {
+				return la
+			} else if band[idx[a]] != band[idx[b]] {
+				return band[idx[a]] < band[idx[b]]
 			}
 			return tokens[idx[a]] < tokens[idx[b]]
 		})

@@ -1,8 +1,11 @@
 package gateway
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -35,6 +38,10 @@ import (
 // backend Grok Build talks to: <cli-chat-proxy.grok.com/v1>/videos/generations
 // starts one and answers with its request_id, and /videos/{request_id} is
 // answered 202 while it is made and 200 with the video's URL when it is.
+//
+// Another magpie's videos (a Remote magpie's, #545) are asked of it, at its
+// own videos API: its id for one goes, encoded, in the id given here, and
+// what it answers comes back with this magpie's id and name for the model.
 
 // grokVideoModels are the video models a Grok subscription makes videos with.
 var grokVideoModels = []catalog.Model{
@@ -48,8 +55,16 @@ var grokVideoAspects = []string{"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3
 // maxVideoBytes is the most of a video the gateway passes on.
 const maxVideoBytes = 512 << 20
 
-// Videomakers are the models a provider can make videos with.
+// Videomakers are the models a provider can make videos with: a Grok
+// subscription's, and those another magpie listed as its own.
 func Videomakers(p provider.Provider) []catalog.Model {
+	if p.IsRemoteMagpie() {
+		out := catalog.LiveVideomakers(p.ID)
+		for i := range out {
+			out[i].Provider = p.ID
+		}
+		return out
+	}
 	if !drawsGrok(p) {
 		return nil
 	}
@@ -147,7 +162,7 @@ func readFilming(r *http.Request) (filming, error) {
 			}
 		}
 	} else {
-		body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			return f, err
 		}
@@ -379,13 +394,69 @@ func videoMaker(id string) (p provider.Provider, vendorID string, started time.T
 		return p, "", started, fmt.Errorf("%q isn't the id of a video magpie is making", id)
 	}
 	found, ferr := provider.Find(pid)
-	if ferr != nil || !drawsGrok(*found) {
+	if ferr != nil || !drawsGrok(*found) && !found.IsRemoteMagpie() {
 		return p, "", started, fmt.Errorf("no provider %q makes videos here", pid)
 	}
 	if signer(*found) != by {
 		return p, "", started, fmt.Errorf("this video was started with another %s account than the one signed in now: sign back in to it to get the video", found.Name)
 	}
 	return *found, vendorID, started, nil
+}
+
+// remoteVideoID is the id of a video another magpie (p) is making, by its
+// id there: that has dots in it, so it goes in base64.
+func remoteVideoID(p provider.Provider, theirs string, t time.Time) string {
+	return videoID(p, base64.RawURLEncoding.EncodeToString([]byte(theirs)), t)
+}
+
+// theirVideoID is the other magpie's id of a video, from remoteVideoID's.
+func theirVideoID(vendorID string) string {
+	b, _ := base64.RawURLEncoding.DecodeString(vendorID)
+	return string(b)
+}
+
+// remoteVideoBody is f as another magpie's videos API takes it: OpenAI's,
+// the images as data URLs.
+func remoteVideoBody(model string, f filming) []byte {
+	req := map[string]any{"model": model, "prompt": f.Prompt}
+	if f.Seconds != "" {
+		req["seconds"] = f.Seconds
+	}
+	if f.Size != "" {
+		req["size"] = f.Size
+	}
+	if f.Start != nil {
+		req["input_reference"] = f.Start.dataURL()
+	}
+	var refs []string
+	for _, pic := range f.References {
+		refs = append(refs, pic.dataURL())
+	}
+	if len(refs) > 0 {
+		req["reference_images"] = refs
+	}
+	b, _ := json.Marshal(req)
+	return b
+}
+
+// asOurs is another magpie's video object with this magpie's id for it and
+// name for its model.
+func asOurs(b []byte, p provider.Provider, id string) (map[string]any, error) {
+	var obj map[string]any
+	if err := json.Unmarshal(b, &obj); err != nil || obj == nil {
+		return nil, fmt.Errorf("%s's answer isn't a video's: %v", p.Name, err)
+	}
+	obj["id"] = id
+	if m, _ := obj["model"].(string); m != "" {
+		obj["model"] = p.ID + "/" + m
+	}
+	return obj, nil
+}
+
+// remoteVideoURL is where another magpie answers for a video, with suffix
+// ("" or "/content").
+func remoteVideoURL(p provider.Provider, vendorID, suffix string) string {
+	return strings.TrimRight(p.Base(provider.Chat), "/") + "/videos/" + url.PathEscape(theirVideoID(vendorID)) + suffix
 }
 
 // videoStatus asks the vendor how a video is going.
@@ -403,6 +474,16 @@ func (s *Server) videoStatus(ctx context.Context, p provider.Provider, vendorID 
 
 // videosCreate starts a video and answers with its id.
 func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
+	inputBody, admitted := s.requestBody(w, r, provider.Chat)
+	if !admitted {
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewReader(inputBody))
+	defer func() {
+		if r.MultipartForm != nil {
+			r.MultipartForm.RemoveAll()
+		}
+	}()
 	start := time.Now()
 	f, err := readFilming(r)
 	if err != nil {
@@ -438,30 +519,36 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	call.Provider, call.To = p.ID, provider.Chat
+	remote := p.IsRemoteMagpie()
 	// any grok-imagine-video*, not only those listed: the vendor's newer ones work before magpie names them
-	if len(Videomakers(p)) == 0 || !strings.HasPrefix(model, "grok-imagine-video") {
+	if !remote && (len(Videomakers(p)) == 0 || !strings.HasPrefix(model, "grok-imagine-video")) {
 		fail(400, fmt.Sprintf("%s/%s can't make videos: magpie makes videos with a Grok subscription's grok-imagine-video", p.ID, model))
 		return
 	}
-	body, err := grokVideoBody(model, f)
-	if err != nil {
+	// another magpie is asked at its videos API, which says itself what
+	// it can't make
+	at, field := strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/generations", "request_id"
+	var body []byte
+	if remote {
+		at, field, body = strings.TrimRight(p.Base(provider.Chat), "/")+"/videos", "id", remoteVideoBody(model, f)
+	} else if body, err = grokVideoBody(model, f); err != nil {
 		fail(400, err.Error())
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), drawTimeout)
 	defer cancel()
-	b, code, err := s.send(ctx, p, strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/generations", "application/json", body, true)
+	b, code, err := s.send(ctx, p, at, "application/json", body, true)
 	call.Millis, call.Status = time.Since(start).Milliseconds(), code
-	var started struct {
-		ID string `json:"request_id"`
-	}
+	var started map[string]any
+	theirs := ""
 	if err == nil {
-		if json.Unmarshal(b, &started) != nil || started.ID == "" {
-			code, err = 502, fmt.Errorf("%s started no video: its answer had no request_id", p.Name)
+		json.Unmarshal(b, &started)
+		if theirs, _ = started[field].(string); theirs == "" {
+			code, err = 502, fmt.Errorf("%s started no video: its answer had no %s", p.Name, field)
 			call.Status = code
 		}
 	}
-	appendUsage(r, usage.Record{Operation: "generate_content", Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: model, Requested: call.Model,
+	appendUsage(r, usage.Record{Operation: "generate_content", Time: start, Agent: call.Agent, Via: call.Via, Provider: p.ID, Host: p.Where(), Model: model, Requested: call.Model, ProviderAccount: accountOf(p),
 		Millis: call.Millis, Status: call.Status, Session: sessionOf(r.Header)})
 	if err != nil {
 		call.Error = err.Error()
@@ -470,7 +557,12 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.record(call)
-	writeJSON(w, 200, videoObject(videoID(p, started.ID, start), p.ID+"/"+model, start, videoState{}, f))
+	if remote {
+		obj, _ := asOurs(b, p, remoteVideoID(p, theirs, start))
+		writeJSON(w, 200, obj)
+		return
+	}
+	writeJSON(w, 200, videoObject(videoID(p, theirs, start), p.ID+"/"+model, start, videoState{}, f))
 }
 
 // videosGet answers how a video is going.
@@ -483,6 +575,20 @@ func (s *Server) videosGet(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), drawTimeout)
 	defer cancel()
+	if p.IsRemoteMagpie() {
+		b, code, err := s.sendAs(ctx, p, http.MethodGet, remoteVideoURL(p, vendorID, ""), "", nil, true)
+		if err != nil {
+			writeError(w, provider.Chat, code, err.Error())
+			return
+		}
+		obj, err := asOurs(b, p, id)
+		if err != nil {
+			writeError(w, provider.Chat, 502, err.Error())
+			return
+		}
+		writeJSON(w, 200, obj)
+		return
+	}
 	st, code, err := s.videoStatus(ctx, p, vendorID)
 	if err != nil {
 		writeError(w, provider.Chat, code, err.Error())
@@ -505,6 +611,10 @@ func (s *Server) videosContent(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), drawTimeout)
 	defer cancel()
+	if p.IsRemoteMagpie() {
+		s.remoteVideoContent(ctx, w, p, vendorID)
+		return
+	}
 	st, code, err := s.videoStatus(ctx, p, vendorID)
 	if err != nil {
 		writeError(w, provider.Chat, code, err.Error())
@@ -539,6 +649,39 @@ func (s *Server) videosContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "video/mp4")
+	if res.ContentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(res.ContentLength, 10))
+	}
+	w.WriteHeader(200)
+	io.Copy(w, io.LimitReader(res.Body, maxVideoBytes))
+}
+
+// remoteVideoContent passes on the bytes of a video another magpie made, or
+// what it says of one it hasn't.
+func (s *Server) remoteVideoContent(ctx context.Context, w http.ResponseWriter, p provider.Provider, vendorID string) {
+	ctx = p.Via(ctx)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, remoteVideoURL(p, vendorID, "/content"), nil)
+	if err != nil {
+		writeError(w, provider.Chat, 502, err.Error())
+		return
+	}
+	passOnCaller(ctx, req)
+	if err := p.Sign(ctx, req, provider.Chat, nil); err != nil {
+		writeError(w, provider.Chat, 502, err.Error())
+		return
+	}
+	res, err := p.Do(s.client, req)
+	if err != nil {
+		writeError(w, provider.Chat, 502, fmt.Sprintf("the video couldn't be fetched: %v", err))
+		return
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		writeError(w, provider.Chat, res.StatusCode, p.Name+": "+vendorMessage(b))
+		return
+	}
+	w.Header().Set("Content-Type", cmp.Or(res.Header.Get("Content-Type"), "video/mp4"))
 	if res.ContentLength > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(res.ContentLength, 10))
 	}

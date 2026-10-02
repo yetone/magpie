@@ -5,8 +5,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -304,5 +306,71 @@ func TestOTelRetryAfterBound(t *testing.T) {
 				}
 			})
 		})
+	}
+}
+
+// a call's bodies go only to the OTLP export (#538), never to usage.jsonl
+func TestBodiesStayOutOfTheLog(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "config"))
+	Append(Record{Time: time.Now(), Model: "m1", Status: 200, BodyIn: "PRIVATE-PROMPT", BodyOut: "PRIVATE-REPLY"})
+	b, err := os.ReadFile(Path())
+	if err != nil || !strings.Contains(string(b), `"model":"m1"`) || strings.Contains(string(b), "PRIVATE-") {
+		t.Fatalf("usage.jsonl: %s %v", b, err)
+	}
+}
+
+func TestOTelReplyText(t *testing.T) {
+	for _, c := range []struct{ body, want string }{
+		{`{"choices":[{"message":{"content":"hi"}}]}`, `{"choices":[{"message":{"content":"hi"}}]}`},
+		{"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"he\"}}\n\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"llo\"}}\n\n", "hello"},
+		{"data: {\"type\":\"response.output_text.delta\",\"delta\":\"he\"}\n\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"llo\"}\n\n" + BodyCut, "hello" + BodyCut},
+		{"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"t\"}]}}]}\n\n", "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"t\"}]}}]}\n\n"},
+	} {
+		if got := otelReplyText(c.body); got != c.want {
+			t.Errorf("otelReplyText(%q) = %q, want %q", c.body, got, c.want)
+		}
+	}
+}
+
+// whole bodies (#538) are held by the queue within a byte budget, not by
+// record count alone: one past it is dropped as a full queue's is
+func TestOTelQueueBodiesBudget(t *testing.T) {
+	e := newOTelExporter()
+	defer e.cancel()
+	body := strings.Repeat("x", otelQueueBytes/2)
+	e.offer(otelItem{record: Record{BodyIn: body}})
+	e.offer(otelItem{record: Record{BodyIn: body}})
+	if got := e.bytes.Load(); got != int64(otelQueueBytes) {
+		t.Fatalf("held %d bytes, want %d", got, otelQueueBytes)
+	}
+	e.offer(otelItem{record: Record{BodyIn: "x"}})
+	if e.dropped.Load() != 1 {
+		t.Fatalf("dropped=%d, want 1", e.dropped.Load())
+	}
+}
+
+// Producers racing for the last bytes must reserve them atomically.
+func TestOTelQueueBodiesBudgetConcurrent(t *testing.T) {
+	body := strings.Repeat("x", 1<<10)
+	for range 100 {
+		e := newOTelExporter()
+		e.bytes.Store(otelQueueBytes - int64(len(body)))
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		for range 32 {
+			wg.Go(func() {
+				<-start
+				e.offer(otelItem{record: Record{BodyIn: body}})
+			})
+		}
+		close(start)
+		wg.Wait()
+		e.cancel()
+		if got := e.bytes.Load(); got != otelQueueBytes {
+			t.Fatalf("held %d bytes, want %d", got, otelQueueBytes)
+		}
+		if len(e.queue) != 1 || e.dropped.Load() != 31 {
+			t.Fatalf("queued=%d dropped=%d, want 1 and 31", len(e.queue), e.dropped.Load())
+		}
 	}
 }

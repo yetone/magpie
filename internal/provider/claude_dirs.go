@@ -232,3 +232,41 @@ func claudeStandInAccount() (Provider, bool) {
 	acct.token = func(context.Context) (string, error) { return claudeSavedDir(user) }
 	return claudeProvider(acct), true
 }
+
+// AgentsOwn says the account is the one the agent itself is signed in to,
+// run in the agent's own home with what it keeps there, not with a sign-in
+// magpie hands it. Which account that is moves with a switch (SwitchLogin):
+// a Claude Code started on it before goes on as whatever Claude Code is
+// signed in to by then, as it reads its keychain again every half minute.
+func (a *Account) AgentsOwn() bool { return a != nil && a.token == nil }
+
+// ClaudeCodeMovedOff says Claude Code itself is signed in to another
+// account than user now: what a Claude Code run in its own home says of
+// the account it is on is no longer user's. false when it can't be told.
+func ClaudeCodeMovedOff(user string) bool {
+	on := claudeCodeOn()
+	return on != "" && !sameClaudeUser(on, user)
+}
+
+// claudeCodeOn is the account Claude Code itself is signed in to now, as
+// magpie names it; "" when signed out or unknown.
+func claudeCodeOn() string {
+	l, ok := liveLogin("claude")
+	if !ok {
+		return ""
+	}
+	return l.User
+}
+
+// sameClaudeUser: a and b name one account, the one as magpie names a Team
+// or Enterprise seat ("me@x.com · Org") and the other as its email alone,
+// as `claude auth status` gives it.
+func sameClaudeUser(a, b string) bool {
+	a, b = strings.ToLower(strings.TrimSpace(a)), strings.ToLower(strings.TrimSpace(b))
+	if a == b {
+		return true
+	}
+	ea, _, _ := strings.Cut(a, " · ")
+	eb, _, _ := strings.Cut(b, " · ")
+	return (ea == b || eb == a) && ea != ""
+}

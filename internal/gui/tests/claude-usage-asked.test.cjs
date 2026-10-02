@@ -92,6 +92,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const reading = card.locator(surface === "panel" ? ".pq-asof" : ".aq-asof");
         await reading.waitFor();
         assert.match(await reading.innerText(), lang === "en" ? /As of .*expired.*unknown/ : /截至 .*已过期.*未知/);
+        if (surface === "panel") assert.doesNotMatch(await reading.innerText(), /couldn't be read just now|暂时无法获取最新额度/);
         assert.match(await card.innerText(), /100%/);
         assert.match(await card.innerText(), lang === "en" ? /Reset time passed/ : /重置时间已过/);
         assert.doesNotMatch(await card.innerText(), /in 1m|1 分钟后|1分钟后/);
@@ -112,6 +113,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
       });
     }
+    test(`${engine} ${lang}: the tray's cached subscription date is as short as a balance card's`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await browser.newPage({ viewport: { width: 440, height: 760 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(5000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      const asOf = new Date(Date.now() - 18e5).toISOString();
+      const quota = { provider: "claude", name: "Claude", user: "a@example.com", asOf,
+        windows: [{ name: "5 hours", used: 40, resetsAt: new Date(Date.now() + 36e5).toISOString() }] };
+      const balance = { provider: "deepseek", name: "DeepSeek", kind: "key", asOf, balance: "$10", windows: [] };
+      await page.route("**/*", serve([], { on: false }, [quota, balance], lang, true));
+      await page.goto("http://magpie.test/?mode=panel");
+      await page.locator('button[data-ptab="usage"]').click();
+      const card = page.locator(".pq-card:not(.bal)");
+      const reading = card.locator(".pq-asof");
+      await reading.waitFor();
+      assert.equal(await reading.innerText(), await page.locator(".pq-card.bal .pq-asof").innerText());
+      assert.match(await reading.innerText(), lang === "en" ? /^As of / : /^截至 /);
+      assert.doesNotMatch(await reading.innerText(), /couldn't be read just now|expired|unknown|暂时无法获取最新额度|已过期|未知/);
+      assert.match(await card.getAttribute("title"), lang === "en" ? /couldn't be read just now/ : /暂时无法获取最新额度/);
+      assert(await reading.evaluate((e) => e.scrollWidth <= e.clientWidth + 1), "the short date fits the card");
+      assert.deepEqual(errors, []);
+    });
   }
   test(`${engine}: Claude's usage is asked for only on opening Usage or Refresh`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));

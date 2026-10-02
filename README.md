@@ -143,6 +143,17 @@ deleted keys keep their historical identity. Older records appear as
 **key not recorded**, never inferred from today's configured key.
 These are upstream credentials, not keys clients use to call Magpie.
 
+It lists **accounts** too: each Codex, Claude or other subscription account's
+tokens and cost, by the account that actually answered — the one that took
+over after a failover, the one `X-Magpie-Account` pinned. The account is named
+as the Routing view names it (its email or login, never a token); the CSV
+adds `provider_account` (JSON `providerAccount`), `magpie usage --csv
+--account <name>` keeps one account's calls, and the app's Usage page has an
+Accounts list and an Account filter on Requests. An older record names the
+account its call went out as when its host says so (`chatgpt.com as
+dee@example.com`); otherwise it appears as **account not recorded**, never
+inferred from today's sign-in. OTLP export never carries the account.
+
 One magpie can serve several computers (an office one, a personal one):
 share it on the network (Settings → Share on local network), and on each
 other computer add it as a **Remote magpie** — in the app's Add sheet, or
@@ -430,7 +441,9 @@ magpie claude group/opus-anywhere       # use it
 `routing=` is `smart` (the default: of the subscriptions with quota to
 spare, the one whose allowance renews soonest first), `order` (the first
 model until it can't answer, then the next), `rotate` (each turn to the next
-member) or `usage` (least used first). `stays=` is how long a conversation
+member), `usage` (least used first) or `pace` (weekly pace: the account with
+the most of its week left per hour until it renews first, so less of a week
+is lost at its reset). `stays=` is how long a conversation
 stays with the key or account that answered it: `auto` (the default, while
 the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
 `models=` replaces the whole list, in order; a bare model id works when only
@@ -893,6 +906,11 @@ MAGPIE_OTEL_ENABLED=true MAGPIE_OTEL_ENDPOINT=http://localhost:4318 magpie serve
 - `MAGPIE_OTEL_HEADERS`: comma-separated `name=value` pairs, for example
   `Authorization=Bearer%20token`. Percent-encode spaces and commas in values.
 - `MAGPIE_OTEL_METRICS`: `true` or `false`, off by default.
+- `MAGPIE_OTEL_BODIES`: `true` or `false`, off by default; sends each call's
+  request and reply as the trace's Langfuse input and output.
+- `MAGPIE_OTEL_BODIES_WHOLE`: `true` or `false`, off by default; with bodies on,
+  keeps them entire rather than cut at 256 KB. A long reply is written to a
+  temporary file; a body too large for the collector is still refused.
 
 For Langfuse, use `https://<your-langfuse-host>/api/public/otel` as the base
 URL and `Authorization=Basic%20<base64(public-key:secret-key)>` as the header.
@@ -902,7 +920,15 @@ Traces include agent, provider, model, token counts (including cache and
 reasoning), HTTP status, timing, and route ID. Attempts with the same route ID
 share a trace ID. Metrics group duration and input/output token histograms by
 agent, provider, model, operation and error status. Prompt/reply text, tool
-arguments, sessions and provider account names/keys are never exported.
+arguments, sessions and provider account names/keys are never exported —
+unless **Include request and response bodies** is on, which sends each call's
+request and reply (secrets masked) as the trace's input and output, whole when
+**Include the whole bodies** is on too.
+Whole bodies increase transient memory and allocation costs during read-back,
+secret scrubbing and JSON encoding; a 32 MiB request and reply can roughly
+double total allocations compared with truncated export. The export limits
+queued bodies to 128 MiB, but this does not bound in-flight processing memory.
+Recent calls retain only the first 256 KiB of each body.
 
 Export runs in the background with a bounded queue (128 records) and batches
 of up to 32 records, flushed every five seconds. A full queue drops telemetry

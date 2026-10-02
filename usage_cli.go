@@ -37,19 +37,28 @@ func loadCostCurrency() {
 }
 
 // usageCmd: `magpie usage [today|7d|30d|all]` — tokens and cost per agent,
-// model and session; with --csv, every request of the period as CSV, one
-// row each, to set beside a vendor's bill
+// model, subscription account and session; with --csv, every request of the
+// period as CSV, one row each, to set beside a vendor's bill, and with
+// --account <name> too, only the calls that account answered (#557)
 func usageCmd(args []string) error {
 	return usageTo(os.Stdout, args)
 }
 
 func usageTo(out io.Writer, args []string) error {
+	const how = "usage: magpie usage [--csv [--account <name>]] [today|7d|30d|all]"
 	asCSV := false
 	if i := slices.Index(args, "--csv"); i > 0 {
 		asCSV, args = true, slices.Delete(slices.Clone(args), i, i+1)
 	}
+	var f stats.Filter
+	if i := slices.Index(args, "--account"); i > 0 {
+		if i+1 >= len(args) || !asCSV {
+			return fmt.Errorf("%s", how)
+		}
+		f.Account, args = args[i+1], slices.Delete(slices.Clone(args), i, i+2)
+	}
 	if len(args) > 2 {
-		return fmt.Errorf("usage: magpie usage [--csv] [today|7d|30d|all]")
+		return fmt.Errorf("%s", how)
 	}
 	period := stats.Month
 	if len(args) > 1 {
@@ -63,11 +72,11 @@ func usageTo(out io.Writer, args []string) error {
 		case "all":
 			period = stats.All
 		default:
-			return fmt.Errorf("usage: magpie usage [--csv] [today|7d|30d|all]")
+			return fmt.Errorf("%s", how)
 		}
 	}
 	if asCSV {
-		rows, _, _ := stats.Ledger(period, stats.Filter{})
+		rows, _, _ := stats.Ledger(period, f)
 		return stats.WriteCSV(out, rows)
 	}
 	loadCostCurrency()
@@ -123,6 +132,15 @@ func usageTo(out io.Writer, args []string) error {
 				name = "key not recorded"
 			}
 			return g.Provider + " / " + name
+		})
+	}
+	if len(s.Accounts) > 0 {
+		table("accounts", s.Accounts, func(g stats.Group) string {
+			who := g.Account
+			if who == "" {
+				who = "account not recorded"
+			}
+			return g.Provider + " / " + who
 		})
 	}
 	if len(s.CallerKeys) > 0 {

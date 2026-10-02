@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
@@ -26,13 +27,11 @@ func sessionsHome(t *testing.T) time.Time {
 	// OpenCode's and Pi's folders in the sandbox too (HOME isn't the home
 	// on Windows)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(h, ".local", "share"))
+	for _, k := range agentenv.Vars {
+		t.Setenv(k, "")
+	}
 	t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(h, ".pi", "agent"))
-	t.Setenv("OPENCODE_DB", "")
-	t.Setenv("PI_CODING_AGENT_SESSION_DIR", "")
-	t.Setenv("DSH_HOME", "")
-	t.Setenv("HERMES_HOME", "")
-	t.Setenv("QODER_CONFIG_DIR", "")
-	t.Setenv("QODERCN_CONFIG_DIR", "")
+
 	for from, env := range map[string]string{"claude": "CLAUDE_CONFIG_DIR", "codex": "CODEX_HOME"} {
 		dir := filepath.Join(h, "."+from)
 		if err := os.CopyFS(dir, os.DirFS(filepath.Join("internal", "sessions", "testdata", from))); err != nil {

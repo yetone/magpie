@@ -108,9 +108,9 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 				fail(rw, err)
 				return
 			}
-			err = busy(davsync.Now(ctx)) // how it went is in the status
+			err = busy(davsync.SyncNow(ctx)) // how it went is in the status
 		case "now":
-			err = busy(davsync.Now(ctx))
+			err = busy(davsync.SyncNow(ctx))
 		case "off":
 			err = davsync.Off()
 		case "dismiss":

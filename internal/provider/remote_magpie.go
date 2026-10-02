@@ -25,8 +25,16 @@ import (
 // there after it ("Claude Sonnet 5 · RelayA"), as its own agents see it:
 // two of its providers' models of one name are told apart here too.
 
+// Its video models come the same way (VideomakersHeader), marked "kind":
+// "video", and go on to its videos API (#545).
+
 // DrawersHeader asks a magpie's model list for its image models as well.
 const DrawersHeader = "X-Magpie-Drawers"
+
+// VideomakersHeader asks a magpie's model list for its video models as
+// well: a magpie that doesn't send it would take grok-imagine-video, whose
+// id says "imagine", for an image model.
+const VideomakersHeader = "X-Magpie-Videomakers"
 
 // RemoteMagpiePreset is the preset's id.
 const RemoteMagpiePreset = "remote-magpie"
@@ -64,7 +72,7 @@ func (p *Provider) remoteMagpieEndpoints() {
 }
 
 // listHeaders are the headers p's model list is asked with: a remote
-// magpie is asked for its image models too.
+// magpie is asked for its image and video models too.
 func (p Provider) listHeaders() map[string]string {
 	if !p.IsRemoteMagpie() {
 		return p.Headers
@@ -74,5 +82,6 @@ func (p Provider) listHeaders() map[string]string {
 		h = map[string]string{}
 	}
 	h[DrawersHeader] = "1"
+	h[VideomakersHeader] = "1"
 	return h
 }
