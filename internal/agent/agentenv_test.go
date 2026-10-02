@@ -20,14 +20,17 @@ var readsEnv = regexp.MustCompile(`(?:Getenv|LookupEnv|getenv)\("([A-Z][A-Z_0-9]
 // notAnAgent are the variables the same sources read that are not an agent's
 // folder, so no sandbox clears them through agentenv.Vars.
 var notAnAgent = map[string]string{
-	"APPDATA":         "Windows' own folder, which a sandbox sets to one of its own rather than clears",
-	"LOCALAPPDATA":    "the same",
-	"PATH":            "the process' own",
-	"TZ":              "the process' own",
-	"USER":            "the process' own",
-	"XDG_CONFIG_HOME": "magpie's own folder's, which appdir decides",
-	"XDG_DATA_HOME":   "the same",
-	"MAGPIE_ADDR":     "magpie's own",
+	"APPDATA":           "Windows' own folder, which a sandbox sets to one of its own rather than clears",
+	"LOCALAPPDATA":      "the same",
+	"PATH":              "the process' own",
+	"TZ":                "the process' own",
+	"USER":              "the process' own",
+	"XDG_CONFIG_HOME":   "magpie's own folder's, which appdir decides",
+	"XDG_DATA_HOME":     "the same",
+	"MAGPIE_ADDR":       "magpie's own",
+	"MAGPIE_DEBUG":      "magpie's own debug flag",
+	"MAGPIE_PUBLIC_URL": "magpie's own public URL",
+	"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "Claude Code's behaviour flag, not an agent's folder",
 }
 
 // TestFolderVarsAreListed says every variable the packages that find an
@@ -36,23 +39,21 @@ var notAnAgent = map[string]string{
 // meeting the agent a developer really has installed — which is how #522 came
 // about, four sandboxes clearing lists of their own that had each drifted.
 //
-// The four packages are this one, sessions, provider and library: every
-// agent's folder variable magpie reads is read in one of them, and the rest
-// of the repository reads only magpie's own variables, the process' and the
-// desktop's. Their sources are read as files rather than imported, since a
-// test in sessions or provider cannot import this package, which imports
-// them; what the walk looks at is what they say, not what they do.
+// 扫描本包、sessions、provider、library 和 gateway 这五个包的源文件。
+// 使用文件读取而非 import：sessions 和 provider 的包内测试不能反向
+// import 本包，因为本包已依赖它们。扫描检查的是源码中的读取写法。
 //
 // What this cannot see is a variable read through a name the sources build at
 // runtime, as omoDir reads OMO_CODING_AGENT_DIR and SENPI_CODING_AGENT_DIR
 // out of a slice. Both are in agentenv.Vars; a third taken the same way would
 // not be caught here.
+// 常量保存的变量名也无法识别，例如 const fooEnv = "FOO_HOME" 后的 os.Getenv(fooEnv)。
 func TestFolderVarsAreListed(t *testing.T) {
 	listed := make(map[string]bool, len(agentenv.Vars))
 	for _, v := range agentenv.Vars {
 		listed[v] = true
 	}
-	dirs := []string{".", filepath.Join("..", "sessions"), filepath.Join("..", "provider"), filepath.Join("..", "library")}
+	dirs := []string{".", filepath.Join("..", "sessions"), filepath.Join("..", "provider"), filepath.Join("..", "library"), filepath.Join("..", "gateway")}
 	found := map[string]string{}
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
