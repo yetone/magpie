@@ -32,6 +32,8 @@ func TestMain(m *testing.M) {
 	// whether Codex's ChatGPT account is out of its allowance is asked of
 	// OpenAI; never from here
 	codexUsedUp = func() bool { return false }
+	// Sandboxed config writes must never write into the real OS keychain.
+	zedCredential = func(string) error { return nil }
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)

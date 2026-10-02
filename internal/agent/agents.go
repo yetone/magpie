@@ -70,6 +70,7 @@ func All() []*Agent {
 		omo(home),
 		goose(home, cfg),
 		cursor(home),
+		zed(home, cfg),
 		copilot(home),
 		crush(home, cfg),
 		dsh(home),

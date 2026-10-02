@@ -81,6 +81,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | OmO (omo-ai) | `~/.omo/agent/settings.json` (+ `models.json`; `$OMO_CODING_AGENT_DIR`, `$SENPI_CODING_AGENT_DIR`) | model |
 | Goose        | `~/.config/goose/config.yaml`     | model           |
 | Cursor CLI   | `~/.cursor/cli-config.json`       | model           |
+| Zed          | `~/.config/zed/settings.json` (`$XDG_CONFIG_HOME` on Linux, `%APPDATA%\Zed` on Windows) | model (a `magpie` OpenAI-compatible provider; its catalog in Zed's picker) |
 | Copilot CLI  | `~/.copilot/settings.json`        | model           |
 | Crush        | `~/.config/crush/crush.json`      | large, small    |
 | DeepSeek Harness (dsh) | `~/.dsh/profiles/*/cordis.patch.yml` (`$DSH_HOME`; a custom provider, Magpie), or `~/.dsh/config.yaml` before dsh 0.1.5 | model, effort |
@@ -104,6 +105,13 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 
 Provider-scoped agents (OpenCode, MiMo Code, Pi, OmO, Goose, Crush, omp, Hermes Agent) take `provider/model`.
 Only agents that are installed or configured are shown.
+
+Configure Zed with `magpie zed <provider/model>`, or pick a model under Zed
+on the Agents page. magpie also configures Zed's local gateway credential in
+the system credential store (Keychain on macOS, Secret Service through
+`secret-tool` on Linux, Credential Manager on Windows). No manual API key
+entry is needed. Restart Zed if an already-open session still asks for a key.
+Resetting the model restores the previous default model.
 
 ## Providers and the gateway
 

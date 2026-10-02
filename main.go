@@ -98,7 +98,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie update [check]           install the newest release (check: only say if there is one)
   magpie update auto [on|off] [30m|1h|6h|24h]  whether the app looks for updates by itself, and how often (6h)
 
-agents: claude (cc), codex, gemini, opencode (oc), mimocode, pi, goose, cursor, copilot, crush
+agents: claude (cc), codex, gemini, opencode (oc), mimocode, pi, goose, cursor, zed, copilot, crush
 `
 
 var (
