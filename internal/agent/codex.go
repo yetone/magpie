@@ -245,10 +245,41 @@ func codexIn(at place) *Agent {
 		}
 		return nil
 	}
+	// CC Switch's unified-session history stores Codex's built-in OpenAI
+	// provider under the id "custom": name OpenAI, ChatGPT auth, websockets,
+	// the responses API, and no base URL. A relay uses that same id with a
+	// base URL or another name, and is left alone.
+	officialMirror := func() bool {
+		if get("model_provider") != "custom" {
+			return false
+		}
+		t, err := edit.GetTOMLTable(path, "model_providers.custom")
+		if err != nil || len(t) != 4 {
+			return false
+		}
+		return t["name"] == "OpenAI" && t["requires_openai_auth"] == "true" &&
+			t["supports_websockets"] == "true" && t["wire_api"] == "responses"
+	}
+	// dropOfficialMirror takes that mirror out, so Codex is on its built-in
+	// provider again. Left in place, model_provider "custom" hides the
+	// mirror from the picker (the group is named custom) and from failover
+	// below, which only moves the built-in provider onto the gateway.
+	dropOfficialMirror := func() error {
+		if !officialMirror() {
+			return nil
+		}
+		if err := edit.DelTOMLTop(path, "model_provider"); err != nil {
+			return err
+		}
+		return edit.DelTOMLTable(path, "model_providers.custom")
+	}
 	// Codex on one of its own models goes through magpie too while more of
 	// its ChatGPT accounts are on there, so one out of its allowance hands
 	// the turn to the next; with none, it goes straight to OpenAI again
 	failover := func() error {
+		if err := dropOfficialMirror(); err != nil {
+			return err
+		}
 		if isMagpie(get("model")) || asProvider() {
 			return nil
 		}
@@ -266,7 +297,8 @@ func codexIn(at place) *Agent {
 	}
 	modelOptions := func(withMagpie bool) []Option {
 		var own []Option
-		if p := get("model_provider"); p != "" && p != magpieID {
+		p := get("model_provider")
+		if p != "" && p != magpieID && !officialMirror() {
 			own = group(p, options(catalog.Codex(), ""))
 		} else {
 			own = group("OpenAI", options(ownCodex(), ""))
@@ -277,6 +309,11 @@ func codexIn(at place) *Agent {
 		return append(own, viaMagpieFor("codex", "")...)
 	}
 	set := func(v string) error {
+		// before stashing the provider a magpie model replaces: the mirror
+		// is the built-in provider, and must not be put back afterwards
+		if err := dropOfficialMirror(); err != nil {
+			return err
+		}
 		if v == "" {
 			if err := dropSubagent(); err != nil {
 				return err
