@@ -11,8 +11,9 @@ package provider
 // system message, Anthropic's Messages keeps them as blocks with the line
 // first, and Gemini's generateContent joins them into the one
 // systemInstruction part. Another agent's prompt follows, joined on with
-// one newline, as droid joins its own blocks. One that already opens with
-// the line goes on byte for byte, and so does droid's own.
+// one newline, as droid joins its own blocks. With no prompt of its own
+// the line stands alone: the "\n" is only between blocks. One that already
+// opens with the line goes on byte for byte, and so does droid's own.
 
 import (
 	"encoding/json"
@@ -50,7 +51,7 @@ func factoryDroidBody(path string, body []byte) []byte {
 			return body
 		}
 		if strings.TrimSpace(in) == "" {
-			in = factoryDroidPrompt
+			in = factoryDroidLine
 		} else {
 			in = factoryDroidPrompt + in
 		}
@@ -96,7 +97,7 @@ func factoryDroidChat(msgs *[]map[string]any) bool {
 				return false
 			}
 			if strings.TrimSpace(c) == "" {
-				ms[0]["content"] = factoryDroidPrompt
+				ms[0]["content"] = factoryDroidLine
 			} else {
 				ms[0]["content"] = factoryDroidPrompt + c
 			}
@@ -118,14 +119,19 @@ func factoryDroidChat(msgs *[]map[string]any) bool {
 				texts = append(texts, t)
 			}
 			if texts != nil {
-				ms[0]["content"] = factoryDroidPrompt + strings.Join(texts, "\n")
+				joined := strings.Join(texts, "\n")
+				if strings.TrimSpace(joined) == "" {
+					ms[0]["content"] = factoryDroidLine
+				} else {
+					ms[0]["content"] = factoryDroidPrompt + joined
+				}
 			} else {
 				ms[0]["content"] = append([]any{map[string]any{"type": "text", "text": factoryDroidLine}}, c...)
 			}
 			return true
 		}
 	}
-	*msgs = append([]map[string]any{{"role": "system", "content": factoryDroidPrompt}}, ms...)
+	*msgs = append([]map[string]any{{"role": "system", "content": factoryDroidLine}}, ms...)
 	return true
 }
 
@@ -182,21 +188,22 @@ func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 // factoryDroidGoogle opens a generateContent body's systemInstruction the
 // way droid does, and the way Responses and chat do: one part, its text the
 // prompt and then the agent's, joined. droid joins its own blocks with "\n"
-// into that one part; a body that already opens with the line is left as it
-// is. False when the field can't be read.
+// into that one part. With nothing of the agent's, the part is the line
+// alone. A body that already opens with the line is left as it is. False
+// when the field can't be read.
 func factoryDroidGoogle(m *map[string]json.RawMessage) bool {
 	raw, ok := (*m)["systemInstruction"]
 	if !ok || string(raw) == "null" {
-		return factoryDroidGoogleText(m, nil, factoryDroidPrompt)
+		return factoryDroidGoogleText(m, nil, factoryDroidLine)
 	}
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
 		if strings.HasPrefix(s, factoryDroidLine) {
 			return false
 		}
-		text := factoryDroidPrompt
+		text := factoryDroidLine
 		if strings.TrimSpace(s) != "" {
-			text += s
+			text = factoryDroidPrompt + s
 		}
 		return factoryDroidGoogleText(m, nil, text)
 	}
@@ -223,9 +230,9 @@ func factoryDroidGoogle(m *map[string]json.RawMessage) bool {
 		}
 		rest = append(rest, p)
 	}
-	text := factoryDroidPrompt
+	text := factoryDroidLine
 	if joined := strings.Join(texts, "\n"); strings.TrimSpace(joined) != "" {
-		text += joined
+		text = factoryDroidPrompt + joined
 	}
 	return factoryDroidGoogleText(m, content, text, rest...)
 }

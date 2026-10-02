@@ -16,9 +16,10 @@ import (
 // Build's and Claude Code's requests did in #242, where Droid's own through
 // magpie went through on the same models, endpoint and headers. droid
 // 0.231.0 opens every system prompt with its line. Responses, chat and
-// Gemini's generate join the agent's prompt on with one "\n". Anthropic's
-// Messages takes the line as the first system block. droid's own request
-// goes on byte for byte.
+// Gemini's generate join the agent's prompt on with one "\n". With no
+// prompt of its own, the line stands alone. Anthropic's Messages takes
+// the line as the first system block. droid's own request goes on byte
+// for byte.
 func TestFactoryOpensAsDroid(t *testing.T) {
 	signIn(t)
 	tok := factoryToken(map[string]any{"sub": "user_d", "org_id": "org_D"})
@@ -103,7 +104,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 	}
 	// no system prompt: droid's line alone, before the rest
 	b = read(send(chat, Chat, `{"model":"glm-5.3","messages":[{"role":"user","content":"hi"}]}`))
-	if len(b.Messages) != 2 || b.Messages[0].Role != "system" || b.Messages[0].Content != factoryDroidPrompt || b.Messages[1].Role != "user" {
+	if len(b.Messages) != 2 || b.Messages[0].Role != "system" || b.Messages[0].Content != factoryDroidLine || b.Messages[1].Role != "user" {
 		t.Errorf("no system on chat: %+v", b)
 	}
 	// Codex on GPT, Responses as it is: the instructions open with the line
@@ -112,7 +113,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		t.Errorf("codex on responses: %+v", b)
 	}
 	b = read(send(responses, Responses, `{"model":"grok-4.7","input":"hi"}`))
-	if b.Instructions == nil || *b.Instructions != factoryDroidPrompt {
+	if b.Instructions == nil || *b.Instructions != factoryDroidLine {
 		t.Errorf("no instructions on responses: %+v", b)
 	}
 
@@ -157,7 +158,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		} `json:"systemInstruction"`
 		Contents []any `json:"contents"`
 	}{}
-	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 1 || g.SystemInstruction.Parts[0]["text"] != factoryDroidPrompt || len(g.Contents) != 1 {
+	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 1 || g.SystemInstruction.Parts[0]["text"] != factoryDroidLine || len(g.Contents) != 1 {
 		t.Errorf("no system on generate: %s", sent)
 	}
 
