@@ -8469,7 +8469,7 @@ function renderUsage() {
   const stats = $("#stats");
   stats.replaceChildren();
   const empty = !u.calls;
-  $("#chart").hidden = empty;
+  renderUsageChart(u);
   for (const id of ["usageAgents", "usageModels"]) $("#" + id).hidden = empty;
   for (const h of $$("#view-usage .row-head")) h.hidden = empty;
   $("#usageKeysHead").hidden = $("#usageKeys").hidden = empty || !u.callerKeys?.length;
@@ -8499,28 +8499,6 @@ function renderUsage() {
   tile(fmtN(u.reasoning), t("reasoning"), t("inside output"));
   tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), u.errors ? t("{n} failed", { n: u.errors }) : "");
 
-  // the timeline: one bar per hour, day or week; output sits on top of input
-  const chart = $("#chart");
-  chart.replaceChildren();
-  const bars = el("div", "bars");
-  const peak = Math.max(1, ...u.series.map(tokensOf));
-  const labels = el("div", "labels");
-  const n = u.series.length;
-  const every = n <= 8 ? 1 : n <= 31 ? Math.ceil(n / 6) : Math.ceil(n / 5);
-  u.series.forEach((p, i) => {
-    const b = el("div", "bar");
-    const inp = el("i", "in"), out = el("i", "out");
-    inp.style.height = (100 * p.input / peak).toFixed(1) + "%";
-    out.style.height = (100 * p.output / peak).toFixed(1) + "%";
-    b.append(out, inp);
-    const when = u.bucket === "hour" ? `${p.label}:00` : u.bucket === "week" ? t("week of {label}", { label: p.label }) : p.label;
-    b.title = p.calls ? t(p.calls === 1 ? "{when} · {tokens} tokens · {n} call" : "{when} · {tokens} tokens · {n} calls", { when, tokens: fmtN(tokensOf(p)), n: p.calls }) + (fmtCost(p) ? " · ≈" + fmtCost(p) : "") : t("{when} · nothing", { when });
-    bars.append(b);
-    const last = i === n - 1 && (n - 1) % every >= every / 2;
-    labels.append(el("span", "", i % every === 0 || last ? p.label : ""));
-  });
-  chart.append(el("div", "peak", fmtN(peak)), bars, labels);
-
   const total = Math.max(1, tokensOf(u));
   const list = (id, groups) => {
     const box = $("#" + id);
@@ -8534,13 +8512,8 @@ function renderUsage() {
       if (g.sub) sub.push(g.sub);
       sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
       if (g.errors) sub.push(t("{n} failed", { n: g.errors }));
-      // how long the streamed replies took to begin, and how fast they
-      // wrote after (#196)
-      if (g.timed) {
-        const ms = Math.round(g.ttft_ms / g.timed);
-        sub.push(t("TTFT {ms}", { ms: ms < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(1) }) }));
-        if (g.decode_ms > 0) sub.push(t("{n} tok/s", { n: Math.round(g.decode_out / (g.decode_ms / 1000)) }));
-      }
+      // how long the streamed replies took to begin (#196)
+      if (g.timed) sub.push(t("TTFT {ms}", { ms: g.ttft_ms / g.timed < 1000 ? t("{n} ms", { n: Math.round(g.ttft_ms / g.timed) }) : t("{n} s", { n: (g.ttft_ms / g.timed / 1000).toFixed(1) }) }));
       who.append(el("div", "sub", sub.join(" · ")));
       r.append(who);
       const share = el("div", "share");
@@ -8550,7 +8523,9 @@ function renderUsage() {
       share.title = t("{n}% of tokens", { n: Math.round(100 * tokensOf(g) / total) });
       r.append(share);
       const num = el("div", "num");
-      num.append(el("b", "", fmtN(tokensOf(g))), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "")));
+      // how fast the streamed replies wrote, after their first token (#196)
+      const tps = g.decode_ms > 0 ? Math.round(g.decode_out / (g.decode_ms / 1000)) : 0;
+      num.append(el("b", "", fmtN(tokensOf(g)) + (tps ? " · " + t("{n} tok/s", { n: tps }) : "")), el("small", "", t("{a} in · {b} out", { a: fmtN(g.input), b: fmtN(g.output) }) + (g.cache_read ? " · " + t("{n} cached", { n: fmtN(g.cache_read) }) : "")));
       r.append(num);
       r.append(el("div", "cost", fmtCost(g) ? "≈" + fmtCost(g) : ""));
       box.append(r);
@@ -8560,6 +8535,45 @@ function renderUsage() {
   list("usageModels", u.models);
   list("usageKeys", u.callerKeys || []);
   $("#usageNote").textContent = t("Counted from the providers' own usage reports on every call through the gateway · {path}", { path: u.path });
+}
+
+// A rolling chart can have calls even when the selected period's totals
+// are empty (for example, yesterday's calls just after midnight).
+function renderUsageChart(u) {
+  const chart = $("#chart");
+  chart.hidden = !u.calls && !u.series.some((p) => p.calls);
+  chart.replaceChildren();
+  if (u.chartFrom && u.chartTo) {
+    const head = el("div", "usage-chart-head");
+    head.append(el("span", "", t(u.bucket === "10m" ? "Every 10 minutes · last 120 intervals (20 hours)" : "Hourly · last 60 hours")));
+    const clock = (v) => new Date(v).toLocaleString(locale === "zh" ? "zh-CN" : "en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+    head.append(el("span", "", clock(u.chartFrom) + " – " + clock(u.chartTo)));
+    chart.append(head);
+  }
+  const bars = el("div", "bars");
+  const peak = Math.max(1, ...u.series.map(tokensOf));
+  const labels = el("div", "labels");
+  const n = u.series.length;
+  chart.classList.toggle("rolling", !!u.chartFrom);
+  chart.style.setProperty("--chart-gap", u.chartFrom && n > 60 ? "1px" : "3px");
+  const every = n <= 8 ? 1 : n <= 31 ? Math.ceil(n / 6) : Math.ceil(n / 5);
+  u.series.forEach((p, i) => {
+    const b = el("div", "bar");
+    const inp = el("i", "in"), out = el("i", "out");
+    inp.style.height = (100 * p.input / peak).toFixed(1) + "%";
+    out.style.height = (100 * p.output / peak).toFixed(1) + "%";
+    b.append(out, inp);
+    const when = u.chartFrom ? new Date(p.time).toLocaleString(locale === "zh" ? "zh-CN" : "en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })
+      : u.bucket === "hour" ? `${p.label}:00` : u.bucket === "week" ? t("week of {label}", { label: p.label }) : p.label;
+    b.title = p.calls ? t(p.calls === 1 ? "{when} · {tokens} tokens · {n} call" : "{when} · {tokens} tokens · {n} calls", { when, tokens: fmtN(tokensOf(p)), n: p.calls }) + (fmtCost(p) ? " · ≈" + fmtCost(p) : "") : t("{when} · nothing", { when });
+    bars.append(b);
+    const last = i === n - 1 && (n - 1) % every >= every / 2;
+    // Use the browser's clock for rolling labels as for the range heading;
+    // a web client can be in a different time zone from the server.
+    const label = u.chartFrom ? new Date(p.time).toLocaleTimeString(locale === "zh" ? "zh-CN" : "en", { hour: "2-digit", minute: "2-digit", hour12: false }) : p.label;
+    labels.append(el("span", "", i % every === 0 || last ? label : ""));
+  });
+  chart.append(el("div", "peak", fmtN(peak)), bars, labels);
 }
 
 // ---------- requests ----------
@@ -10928,6 +10942,9 @@ function renderSettings() {
   const s = prefs;
   const keep = prefsKeep(s);
   prefsBase = keep;
+  $("#usageBucketSegs").replaceChildren(segs([["", t("Automatic")], ["hour", t("Hourly")], ["10m", t("Every 10 minutes")]],
+    s.usageBucket || "", (usageBucket) => savePrefs({ ...keep, usageBucket })));
+  $("#usageBucketSub").textContent = t("Automatic follows the selected period; hourly shows the last 60 hours, every 10 minutes the last 120 intervals (20 hours). Summary totals follow the selected period.");
   $("#themeSegs").replaceChildren(segs(THEMES.map(([id, name]) => [id, t(name)]), s.theme, (theme) => savePrefs({ ...keep, theme })));
   $("#langSegs").replaceChildren(segs(LOCALES.map(([id, name]) => [id, t(name)]), s.lang, (lang) => savePrefs({ ...keep, lang })));
   // a browser tab has its own zoom, and magpie leaves it to it
@@ -12006,7 +12023,7 @@ function prefsKeep(s) {
     claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "", workbuddyCheckin: !!s.workbuddyCheckin, noStats: !!s.noStats,
     noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360,
     trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, vision: s.vision || "", imageGen: s.imageGen || "", currency: s.currency || "usd",
-    westernUnits: !!s.westernUnits, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0 };
+    westernUnits: !!s.westernUnits, usageBucket: s.usageBucket || "", usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0 };
 }
 
 // savePrefs sends what the page was drawn with (prefsBase) and the choice

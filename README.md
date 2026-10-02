@@ -785,6 +785,13 @@ each; click a row to change the key or the exposed models, *Test* it, or
 click an agent icon to point that agent at one of its models. *Add
 provider* shows the presets as tiles: pick one, paste the key.
 
+*Settings → Preferences → Usage chart interval* chooses the overview's
+timeline: Automatic follows the selected period, Hourly shows 60 hourly
+bars, and Every 10 minutes shows 120 ten-minute bars (20 hours). The rolling
+charts include the current, partial interval and show their time range;
+bar widths fit the window. The overview's totals still follow its selected
+Today / 7 days / 30 days / All period.
+
 On macOS, *Settings → Preferences → Session terminal* chooses which installed
 app opens a session from the terminal button in *Usage → Sessions*. The list
 contains apps registered to open `.command` files, with the current system

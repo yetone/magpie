@@ -334,12 +334,16 @@ type Summary struct {
 	Period Period    `json:"period"`
 	Since  time.Time `json:"since"`
 	Totals
-	Bucket       string  `json:"bucket"` // hour | day | week
-	Series       []Point `json:"series"`
-	Agents       []Group `json:"agents"`
-	Models       []Group `json:"models"`
-	ProviderKeys []Group `json:"providerKeys"`
-	CallerKeys   []Group `json:"callerKeys"`
+	Bucket string  `json:"bucket"` // 10m | hour | day | week
+	Series []Point `json:"series"`
+	// ChartFrom and ChartTo bound a finer chart independently of the
+	// period's totals. ChartTo is the end of the current, partial bucket.
+	ChartFrom    *time.Time `json:"chartFrom,omitempty"`
+	ChartTo      *time.Time `json:"chartTo,omitempty"`
+	Agents       []Group    `json:"agents"`
+	Models       []Group    `json:"models"`
+	ProviderKeys []Group    `json:"providerKeys"`
+	CallerKeys   []Group    `json:"callerKeys"`
 	// Sessions are the calls that named their session, by session.
 	Sessions []Group `json:"sessions"`
 }
@@ -347,6 +351,54 @@ type Summary struct {
 // Summarize sums the log over a period, as of now.
 func Summarize(p Period) Summary {
 	return summarize(p, time.Now(), Load(time.Time{}))
+}
+
+// SummarizeChart keeps the selected period's totals and groups, with a
+// rolling chart of 60 hourly or 120 ten-minute buckets. Empty or unknown
+// intervals use the period's original timeline.
+func SummarizeChart(p Period, bucket string) Summary {
+	return summarizeChart(p, bucket, time.Now(), Load(time.Time{}))
+}
+
+func summarizeChart(p Period, bucket string, now time.Time, recs []Record) Summary {
+	s := summarize(p, now, recs)
+	var step time.Duration
+	var count int
+	switch bucket {
+	case "hour":
+		step = time.Hour
+		count = 60
+	case "10m":
+		step = 10 * time.Minute
+		count = 120
+	default:
+		return s
+	}
+	// Align to local clock boundaries, including zones with half-hour
+	// offsets; Duration.Truncate alone aligns to UTC instead.
+	current := now.Add(-time.Duration(now.Minute()%int(step/time.Minute))*time.Minute - time.Duration(now.Second())*time.Second - time.Duration(now.Nanosecond()))
+	from, to := current.Add(-time.Duration(count-1)*step), current.Add(step)
+	s.Bucket, s.ChartFrom, s.ChartTo = bucket, &from, &to
+	s.Series = make([]Point, count)
+	for i := range s.Series {
+		at := from.Add(time.Duration(i) * step)
+		s.Series[i] = Point{Label: at.Format("15:04"), Time: at}
+	}
+	priceOf := pricer()
+	renamed := provider.Renamed()
+	for _, r := range recs {
+		if r.IsRejected() || r.Time.Before(from) || r.Time.After(now) {
+			continue
+		}
+		i := int(r.Time.Sub(from) / step)
+		if i >= 0 && i < len(s.Series) {
+			if id, ok := renamed[r.Provider]; ok {
+				r.Provider = id
+			}
+			s.Series[i].add(r, priceOf(r))
+		}
+	}
+	return s
 }
 
 func summarize(p Period, now time.Time, recs []Record) Summary {

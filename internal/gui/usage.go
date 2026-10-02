@@ -17,6 +17,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -37,7 +38,7 @@ type usageJSON struct {
 }
 
 func usageState(p usage.Period) usageJSON {
-	s := usage.Summarize(p)
+	s := usage.SummarizeChart(p, settings.Load().UsageBucket)
 	out := usageJSON{Summary: s, Agents: []usageGroup{}, Models: []usageGroup{}, Path: tilde(usage.Path())}
 	agents := map[string]*agent.Agent{}
 	for _, a := range agent.Clients() {

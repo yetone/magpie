@@ -47,6 +47,13 @@ node --test --test-concurrency=1 internal/gui/tests/gateway-caller-keys.test.cjs
 
 ## Other Browser Regressions
 
+`usage-chart.test.cjs` checks the saved overview chart interval in English
+and Chinese: Automatic, hourly (60 hours) and every ten minutes (120 intervals, 20 hours),
+the range heading and clock labels, responsive bar widths, yesterday's
+chart calls with empty Today totals, and persistence across reloads and
+other settings changes. The API is faked. `BROWSER=chromium` runs Chromium
+alone; `PLAYWRIGHT_EXECUTABLE_PATH` can name an installed Chromium binary.
+
 `routing-sessions.test.cjs` checks the Routing request list in Chromium and
 WebKit, English and Chinese: the list defaults to By request and remembers
 the grouping choice across reloads; sessions are separated by agent and ID across

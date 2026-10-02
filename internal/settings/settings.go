@@ -42,6 +42,9 @@ type Settings struct {
 	// speaks Chinese, which otherwise says it in 万 and 亿 (8000 万
 	// rather than 80M). It means nothing in English.
 	WesternUnits bool `json:"westernUnits,omitempty"`
+	// UsageBucket is the Usage overview chart's time step: empty follows
+	// the selected period, "hour" or "10m" shows a finer timeline.
+	UsageBucket string `json:"usageBucket,omitempty"`
 	// Dock keeps magpie in the Mac's Dock as well as the menu bar, for a
 	// menu bar too full to show its icon.
 	Dock bool `json:"dock,omitempty"`
@@ -532,6 +535,9 @@ func Save(s Settings) error {
 	}
 	if !slices.Contains(Currencies, s.Currency) {
 		return fmt.Errorf("currency must be one of %v, not %q", Currencies, s.Currency)
+	}
+	if !slices.Contains([]string{"", "hour", "10m"}, s.UsageBucket) {
+		return fmt.Errorf("usage chart interval must be automatic, hour or 10m, not %q", s.UsageBucket)
 	}
 	if !slices.Contains(Warmups, s.CodexWarmup) {
 		return fmt.Errorf("codex warm-up must be off, week or all, not %q", s.CodexWarmup)

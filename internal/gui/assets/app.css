@@ -590,12 +590,14 @@ body.window .field.solo { grid-column: auto; }
 .kpi small { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chart { position: relative; margin-top: 8px; padding: 12px 14px 8px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; flex: none; }
 .chart .peak { font-size: 10.5px; color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; margin: 0 0 5px; }
-.chart .bars { display: flex; align-items: flex-end; gap: 3px; height: 72px; border-bottom: 1px solid var(--line-2); }
+.usage-chart-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .bars { display: flex; align-items: flex-end; gap: var(--chart-gap, 3px); height: 72px; border-bottom: 1px solid var(--line-2); }
 .chart .bar { flex: 1 1 0; min-width: 2px; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; border-radius: 3px 3px 0 0; overflow: hidden; }
 .chart .bar:hover { background: var(--pill); }
+.chart.rolling .bar { min-width: 0; }
 .chart .bar i { display: block; background: var(--accent); }
 .chart .bar i.in { opacity: .38; }
-.chart .labels { display: flex; gap: 3px; margin-top: 5px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .labels { display: flex; gap: var(--chart-gap, 3px); margin-top: 5px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .chart .labels span { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: visible; }
 /* the last label can be wider than its bar's column: let it spill left, not off the card */
 .chart .labels span:last-child { display: flex; justify-content: flex-end; }

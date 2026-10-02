@@ -12,8 +12,50 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
+
+func TestUsageChartSetting(t *testing.T) {
+	sandboxHome(t)
+	usage.Append(usage.Record{Time: time.Now().Add(-time.Minute), Input: 10, Output: 2, Status: 200})
+	mux := http.NewServeMux()
+	usageRoutes(mux, folderOnly{})
+	for _, bucket := range []string{"", "hour", "10m"} {
+		if err := settings.Save(settings.Settings{UsageBucket: bucket}); err != nil {
+			t.Fatal(err)
+		}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/usage?period=30d", nil))
+		var got usageJSON
+		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil || w.Code != 200 {
+			t.Fatalf("%d: %s", w.Code, w.Body)
+		}
+		if got.Calls != 1 || got.Input != 10 {
+			t.Fatalf("totals changed: %+v", got.Totals)
+		}
+		if bucket == "" {
+			if got.Bucket != "day" || len(got.Series) != 30 || got.ChartFrom != nil {
+				t.Fatalf("automatic: %+v", got)
+			}
+			continue
+		}
+		count := 60
+		if bucket == "10m" {
+			count = 120
+		}
+		if got.Bucket != bucket || len(got.Series) != count || got.ChartFrom == nil || got.ChartTo == nil {
+			t.Fatalf("%s: %+v", bucket, got)
+		}
+		calls := 0
+		for _, point := range got.Series {
+			calls += point.Calls
+		}
+		if calls != 1 {
+			t.Fatalf("chart dropped the call: %+v", got.Series)
+		}
+	}
+}
 
 // The Usage page's Requests: a page of the ledger at a time, newest first,
 // with the filters' rows counted on every page, and Export CSV writing all
