@@ -31,6 +31,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -1478,6 +1479,7 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	// so the client compacts again at each tool call. It is let go, and a
 	// run started anew is told the conversation as the client now has it.
 	if run != nil && !run.follows(req.Messages) {
+		log.Printf("%s run on %s let go: earlier messages changed while it waited for tool results", name, model)
 		run.abort()
 		run = nil
 	}
