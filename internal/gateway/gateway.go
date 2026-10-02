@@ -2588,6 +2588,9 @@ func pathOf(proto provider.Protocol) string {
 		return "/responses"
 	case provider.CodeAssist:
 		return "/v1internal:streamGenerateContent?alt=sse"
+	case provider.Gemini:
+		// Factory's generateContent. No other provider speaks Gemini upstream.
+		return "/generate"
 	}
 	return "/v1/messages"
 }
@@ -2644,6 +2647,8 @@ func build(proto provider.Protocol, r *Request, model, host string, rejectTemp b
 		return buildChat(r, model, host, rejectTemp)
 	case provider.Responses:
 		return buildResponses(r, model, host, rejectTemp)
+	case provider.Gemini:
+		return buildGemini(r, model)
 	}
 	out := buildAnthropic(r, model)
 	if r.Fast && host == "api.anthropic.com" && provider.ClaudeFast(model) {
@@ -2662,7 +2667,9 @@ func decoder(proto provider.Protocol) func(data string, emit func(Event)) error 
 	case provider.Responses:
 		d := &responsesDecoder{}
 		return d.decode
-	case provider.CodeAssist:
+	case provider.CodeAssist, provider.Gemini:
+		// Factory's generateContent is the same Gemini chunks, without
+		// Code Assist's {response} wrapper, which the decoder also reads.
 		d := &codeAssistDecoder{}
 		return d.decode
 	}

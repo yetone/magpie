@@ -17,9 +17,10 @@ import (
 // magpie went through on the same models, endpoint and headers. droid
 // 0.231.0 opens every system prompt with its line. Responses and chat
 // completions join it on with "\n". Anthropic's Messages takes it as the
-// first system block, which is where droid2api (github.com/1e0n/droid2api)
-// prepends its system_prompt. Another agent's request now opens so, its
-// own prompt after; droid's goes on byte for byte.
+// first system block, and Gemini's systemInstruction parts, which is where
+// droid2api (github.com/1e0n/droid2api) prepends its system_prompt. Another
+// agent's request now opens so, its own prompt after; droid's goes on byte
+// for byte.
 func TestFactoryOpensAsDroid(t *testing.T) {
 	signIn(t)
 	tok := factoryToken(map[string]any{"sub": "user_d", "org_id": "org_D"})
@@ -66,6 +67,10 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		return got[u.URL.Path]
 	}
 	chat, responses, messages := p.Chat+"/chat/completions", p.Responses+"/responses", p.Anthropic+"/v1/messages"
+	generate := p.Base(Gemini) + "/generate"
+	if !strings.HasSuffix(p.Base(Gemini), "/api/llm/g/v1") {
+		t.Fatalf("gemini base %s", p.Base(Gemini))
+	}
 	type msg struct {
 		Role    string `json:"role"`
 		Content any    `json:"content"`
@@ -136,6 +141,29 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		t.Errorf("no system on messages: system %s messages %+v", b.System, b.Messages)
 	}
 
+	// Gemini CLI on Factory's generate: the line, then its own part
+	sent := send(generate, Gemini, `{"model":"gemini-3.1-pro-preview","systemInstruction":{"parts":[{"text":"You are Gemini CLI."}]},"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
+	var g struct {
+		SystemInstruction struct {
+			Parts []map[string]any `json:"parts"`
+		} `json:"systemInstruction"`
+		Contents []any `json:"contents"`
+	}
+	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 2 || g.SystemInstruction.Parts[0]["text"] != factoryDroidLine ||
+		g.SystemInstruction.Parts[1]["text"] != "You are Gemini CLI." || len(g.Contents) != 1 {
+		t.Errorf("gemini cli on generate: %s", sent)
+	}
+	sent = send(generate, Gemini, `{"model":"gemini-3-flash-preview","contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
+	g = struct {
+		SystemInstruction struct {
+			Parts []map[string]any `json:"parts"`
+		} `json:"systemInstruction"`
+		Contents []any `json:"contents"`
+	}{}
+	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 1 || g.SystemInstruction.Parts[0]["text"] != factoryDroidLine || len(g.Contents) != 1 {
+		t.Errorf("no system on generate: %s", sent)
+	}
+
 	// droid's own requests go on byte for byte
 	for _, c := range []struct {
 		url   string
@@ -146,6 +174,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		{responses, Responses, `{"model":"gpt-5.5","input":[],"store":false,"instructions":"` + factoryDroidLine + `\nYou work in the user's terminal.","stream":true}`},
 		{messages, Anthropic, `{"model":"claude-opus-5-5","system":"` + factoryDroidLine + `\nYou are Claude Code.","messages":[{"role":"user","content":"hi"}]}`},
 		{messages, Anthropic, `{"model":"claude-opus-5-5","system":[{"type":"text","text":"` + factoryDroidLine + `"},{"type":"text","text":"Be brief."}],"messages":[{"role":"user","content":"hi"}]}`},
+		{generate, Gemini, `{"model":"gemini-3.1-pro-preview","systemInstruction":{"parts":[{"text":"` + factoryDroidLine + `"},{"text":"You are Gemini CLI."}]},"contents":[]}`},
 	} {
 		if sent := send(c.url, c.proto, c.body); !bytes.Equal(sent, []byte(c.body)) {
 			t.Errorf("changed:\n%s\nsent:\n%s", c.body, sent)
@@ -160,5 +189,11 @@ func TestFactoryGLMFlashImages(t *testing.T) {
 	}
 	if factoryVersion != "0.231.0" {
 		t.Errorf("factoryVersion %s", factoryVersion)
+	}
+	if m, ok := factoryModelOf("gemini-3.1-pro-preview"); !ok || m.api != Gemini || m.upstream != "google" || factoryCore("gemini-3.1-pro-preview") {
+		t.Errorf("gemini-3.1-pro-preview: %+v core %v", m, factoryCore("gemini-3.1-pro-preview"))
+	}
+	if !factoryCore("glm-5.3") {
+		t.Error("glm-5.3 is not Droid Core")
 	}
 }

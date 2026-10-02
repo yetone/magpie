@@ -31,7 +31,7 @@ const (
 	Chat      Protocol = "chat"      // OpenAI Chat Completions
 	Responses Protocol = "responses" // OpenAI Responses
 	Anthropic Protocol = "anthropic" // Anthropic Messages
-	Gemini    Protocol = "gemini"    // Google Gemini; only served to clients, never spoken upstream
+	Gemini    Protocol = "gemini"    // Google Gemini. Served to clients; spoken upstream only for Factory's generate route
 )
 
 // Protocols in the order magpie prefers them when it has to translate.
@@ -776,6 +776,12 @@ func (p Provider) Base(proto Protocol) string {
 		if p.Account != nil {
 			return p.Account.codeAssist
 		}
+	case Gemini:
+		// Factory's Gemini models are generateContent at /api/llm/g, not
+		// Code Assist. No other provider speaks Gemini upstream.
+		if p.ID == "factory" && p.Account != nil {
+			return factoryAPI + "/api/llm/g/v1"
+		}
 	}
 	return ""
 }
@@ -795,6 +801,11 @@ func (p Provider) Speaks() []Protocol {
 	// a plugin's Gemini models, beside what else it serves
 	if p.IsPlugin() && p.Account.codeAssist != "" {
 		out = append(out, CodeAssist)
+	}
+	// Factory's Gemini models, on generateContent. A model droid didn't
+	// list stays on the other three (factoryAPIs); this is not one of them.
+	if p.ID == "factory" && p.Account != nil {
+		out = append(out, Gemini)
 	}
 	return out
 }

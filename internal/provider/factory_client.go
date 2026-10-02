@@ -8,12 +8,13 @@ package provider
 // YOU_ARE_DROID_SYSTEM_PROMPT (droid 0.231.0: its system blocks are [that
 // line, the agent's prompt, reminders…]). Responses joins those blocks
 // with "\n" into instructions, chat completions joins them into the first
-// system message, and Anthropic's Messages keeps them as blocks with the
-// line first. droid2api (github.com/1e0n/droid2api) puts the same line
-// first on all three: instructions, the first system message, and the
-// first system block. Another agent's request opens so, its own prompt
-// after. One that already opens with the line goes on byte for byte, and
-// so does droid's own.
+// system message, Anthropic's Messages keeps them as blocks with the line
+// first, and Gemini's generateContent keeps them as systemInstruction
+// parts. droid2api (github.com/1e0n/droid2api) puts the same line
+// first on all four of its wires: instructions, the first system message,
+// the first system block, and Gemini's systemInstruction parts. Another
+// agent's request opens so, its own prompt after. One that already opens
+// with the line goes on byte for byte, and so does droid's own.
 
 import (
 	"encoding/json"
@@ -26,10 +27,11 @@ const factoryDroidLine = "You are Droid, an AI software engineering agent built 
 // factoryDroidBody is body, a request to Factory at path, as droid would
 // open it. /api/llm/o: Responses' instructions, or chat completions' first
 // system message. /api/llm/a: Anthropic's system blocks, the line first
-// (factoryDroidMessages). Anything else, a body that can't be read, or one
-// that already starts so is returned as it is.
+// (factoryDroidMessages). /api/llm/g: Gemini's systemInstruction parts,
+// the line first (factoryDroidGoogle). Anything else, a body that can't
+// be read, or one that already starts so is returned as it is.
 func factoryDroidBody(path string, body []byte) []byte {
-	if len(body) == 0 || (!strings.Contains(path, "/llm/o/") && !strings.Contains(path, "/llm/a/")) {
+	if len(body) == 0 || (!strings.Contains(path, "/llm/o/") && !strings.Contains(path, "/llm/a/") && !strings.Contains(path, "/llm/g/")) {
 		return body
 	}
 	var m map[string]json.RawMessage
@@ -65,6 +67,10 @@ func factoryDroidBody(path string, body []byte) []byte {
 		}
 	case strings.HasSuffix(path, "/messages"):
 		if !factoryDroidMessages(&m) {
+			return body
+		}
+	case strings.HasSuffix(path, "/generate"):
+		if !factoryDroidGoogle(&m) {
 			return body
 		}
 	default:
@@ -169,5 +175,56 @@ func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 		return false
 	}
 	(*m)["system"] = b
+	return true
+}
+
+// factoryDroidGoogle opens a generateContent body's systemInstruction with
+// droid's line, as droid sends {parts:[{text}]} and as droid2api prepends
+// its system_prompt there. The agent's own parts stay after it. False when
+// it opens so already, or the field can't be read.
+func factoryDroidGoogle(m *map[string]json.RawMessage) bool {
+	raw, ok := (*m)["systemInstruction"]
+	if !ok || string(raw) == "null" {
+		b, err := zcodeEncode(map[string]any{"parts": []any{map[string]any{"text": factoryDroidLine}}})
+		if err != nil {
+			return false
+		}
+		(*m)["systemInstruction"] = b
+		return true
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		if strings.HasPrefix(s, factoryDroidLine) {
+			return false
+		}
+		parts := []any{map[string]any{"text": factoryDroidLine}}
+		if strings.TrimSpace(s) != "" {
+			parts = append(parts, map[string]any{"text": s})
+		}
+		b, err := zcodeEncode(map[string]any{"parts": parts})
+		if err != nil {
+			return false
+		}
+		(*m)["systemInstruction"] = b
+		return true
+	}
+	var content map[string]any
+	if zcodeDecode(raw, &content) != nil {
+		return false
+	}
+	parts, _ := content["parts"].([]any)
+	if len(parts) > 0 {
+		if p, ok := parts[0].(map[string]any); ok {
+			if t, _ := p["text"].(string); strings.HasPrefix(t, factoryDroidLine) {
+				return false
+			}
+		}
+	}
+	content["parts"] = append([]any{map[string]any{"text": factoryDroidLine}}, parts...)
+	b, err := zcodeEncode(content)
+	if err != nil {
+		return false
+	}
+	(*m)["systemInstruction"] = b
 	return true
 }
