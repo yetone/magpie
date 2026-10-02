@@ -65,6 +65,13 @@ func TestZedAppPath(t *testing.T) {
 	if got, err := zedAppPath(context.Background()); err != nil || got != app {
 		t.Fatalf("home Applications: %q, %v", got, err)
 	}
+	preview := filepath.Join(home, "Applications", "Zed Preview.app")
+	if err := os.Rename(app, preview); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := zedAppPath(context.Background()); err != nil || got != preview {
+		t.Fatalf("Preview without a CLI: %q, %v", got, err)
+	}
 	custom := filepath.Join(t.TempDir(), "Custom Zed.app")
 	zedBin := filepath.Join(custom, "Contents", "MacOS", "zed")
 	writeFile(t, zedBin, "#!/bin/sh\n")

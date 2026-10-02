@@ -48,7 +48,10 @@ func saveZedCredential(url string) error {
 // Trust the installed Zed bundle, including a CLI symlink to a custom location.
 func zedAppPath(ctx context.Context) (string, error) {
 	home, _ := os.UserHomeDir()
-	paths := []string{filepath.Join(home, "Applications", "Zed.app"), "/Applications/Zed.app"}
+	paths := []string{
+		filepath.Join(home, "Applications", "Zed.app"), filepath.Join(home, "Applications", "Zed Preview.app"),
+		"/Applications/Zed.app", "/Applications/Zed Preview.app",
+	}
 	if bin, err := exec.LookPath("zed"); err == nil {
 		if bin, err = filepath.EvalSymlinks(bin); err == nil {
 			for dir := filepath.Dir(bin); dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
@@ -65,7 +68,7 @@ func zedAppPath(ctx context.Context) (string, error) {
 		}
 	}
 	// Spotlight finds bundles moved outside the usual Applications folders.
-	out, err := proc.CommandContext(ctx, "mdfind", "kMDItemCFBundleIdentifier == 'dev.zed.Zed'").Output()
+	out, err := proc.CommandContext(ctx, "mdfind", "kMDItemCFBundleIdentifier == 'dev.zed.Zed' || kMDItemCFBundleIdentifier == 'dev.zed.Zed-Preview'").Output()
 	if err == nil {
 		for _, path := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 			if info, err := os.Stat(path); err == nil && info.IsDir() && strings.HasSuffix(path, ".app") {

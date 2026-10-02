@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -186,6 +187,33 @@ func TestZedReselectAfterNativePicker(t *testing.T) {
 	}
 	if got := f.Get(); got != "openai/gpt-custom" {
 		t.Fatalf("reset model: %q", got)
+	}
+}
+
+func TestZedResetAfterNativePicker(t *testing.T) {
+	home := syncHome(t)
+	a := zedAt(filepath.Join(home, "zed"))
+	writeFile(t, a.Path, `{"agent":{"default_model":{"provider":"openai","model":"own"}},"language_models":{"openai_compatible":{"magpie":{"api_url":"https://my-proxy/v1","available_models":[]}}}}`)
+	f := a.Field("model")
+	if err := f.Set("magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	// Zed's picker changes the model without removing magpie's provider.
+	native := `{"provider":"zed.dev","model":"claude-sonnet","temperature":0.3}`
+	if err := edit.SetJSON(a.Path, edit.KV{Path: zedModel, Value: json.RawMessage(native)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := edit.GetJSON(a.Path, zedModel); got != native {
+		t.Fatalf("reset overwrote the native model: %s", got)
+	}
+	if got, _ := edit.GetJSON(a.Path, zedProvider+".api_url"); got != "https://my-proxy/v1" {
+		t.Fatalf("reset did not restore the user's provider: %q", got)
+	}
+	if was := stashLoad()["zed:"+a.Path+":model"]; was != "" {
+		t.Fatalf("reset left stale model stash: %s", was)
 	}
 }
 

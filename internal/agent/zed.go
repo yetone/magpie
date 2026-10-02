@@ -85,6 +85,10 @@ func zedAt(dir string) *Agent {
 				}
 				if get(zedProvider+".api_url") == gatewayV1() || usesMagpie(model()) {
 					for _, entry := range []struct{ name, field string }{{"provider", zedProvider}, {"model", zedModel}} {
+						if entry.name == "model" && !usesMagpie(model()) {
+							forget(key + entry.name)
+							continue
+						}
 						if was := unstash(key + entry.name); was != "" {
 							if err := edit.SetJSON(path, edit.KV{Path: entry.field, Value: json.RawMessage(was)}); err != nil {
 								return err

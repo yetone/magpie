@@ -46,12 +46,12 @@ func TestZedSecretService(t *testing.T) {
 			const prompt dbus.ObjectPath = "/prompt/7"
 			const url = "http://127.0.0.1:7654/v1"
 			calls := make(chan string, 16)
-			export := func(path dbus.ObjectPath, iface string, methods map[string]interface{}) {
+			export := func(path dbus.ObjectPath, iface string, methods map[string]any) {
 				if err := conn.ExportMethodTable(methods, path, iface); err != nil {
 					t.Fatal(err)
 				}
 			}
-			export(root, service, map[string]interface{}{
+			export(root, service, map[string]any{
 				"OpenSession": func(algorithm string, input dbus.Variant) (dbus.Variant, dbus.ObjectPath, *dbus.Error) {
 					if algorithm != "plain" || input.Value() != "" {
 						t.Errorf("session negotiation: %s %v", algorithm, input)
@@ -87,10 +87,10 @@ func TestZedSecretService(t *testing.T) {
 					return paths, "/", nil
 				},
 			})
-			export(session, "org.freedesktop.Secret.Session", map[string]interface{}{
+			export(session, "org.freedesktop.Secret.Session", map[string]any{
 				"Close": func() *dbus.Error { calls <- "close"; return nil },
 			})
-			export(collection, "org.freedesktop.Secret.Collection", map[string]interface{}{
+			export(collection, "org.freedesktop.Secret.Collection", map[string]any{
 				"CreateItem": func(properties map[string]dbus.Variant, secret struct {
 					Session     dbus.ObjectPath
 					Parameters  []byte
@@ -115,7 +115,7 @@ func TestZedSecretService(t *testing.T) {
 					return "/item/9", "/", nil
 				},
 			})
-			export(prompt, "org.freedesktop.Secret.Prompt", map[string]interface{}{
+			export(prompt, "org.freedesktop.Secret.Prompt", map[string]any{
 				"Prompt": func(window string) *dbus.Error {
 					calls <- "prompt"
 					if window != "" {
