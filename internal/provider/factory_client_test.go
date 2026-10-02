@@ -15,12 +15,10 @@ import (
 // #506: Codex on glm-5.3-flash through a Factory account got 403, as Grok
 // Build's and Claude Code's requests did in #242, where Droid's own through
 // magpie went through on the same models, endpoint and headers. droid
-// 0.231.0 opens every system prompt with its line. Responses and chat
-// completions join it on with "\n". Anthropic's Messages takes it as the
-// first system block, and Gemini's systemInstruction parts. droid2api
-// (github.com/1e0n/droid2api) prepends the system_prompt from its
-// config.json: that line, a blank line, then the agent's prompt. Another
-// agent's request now opens so; droid's goes on byte for byte.
+// 0.231.0 opens every system prompt with its line. Responses, chat and
+// Gemini's generate join the agent's prompt on with one "\n". Anthropic's
+// Messages takes the line as the first system block. droid's own request
+// goes on byte for byte.
 func TestFactoryOpensAsDroid(t *testing.T) {
 	signIn(t)
 	tok := factoryToken(map[string]any{"sub": "user_d", "org_id": "org_D"})
@@ -121,14 +119,14 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 	// Claude Code on Claude, a string system: two blocks, the line then its own
 	b = read(send(messages, Anthropic, `{"model":"claude-opus-5-5","system":"You are Claude Code.","messages":[{"role":"user","content":"hi"}]}`))
 	var blocks []map[string]any
-	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 2 || blocks[0]["text"] != factoryDroidPrompt || blocks[1]["text"] != "You are Claude Code." ||
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 2 || blocks[0]["text"] != factoryDroidLine || blocks[1]["text"] != "You are Claude Code." ||
 		len(b.Messages) != 1 || b.Messages[0].Content != "hi" {
 		t.Errorf("claude code on messages: system %s messages %+v", b.System, b.Messages)
 	}
 	// Claude Code's own blocks stay after the line, cache control included
 	b = read(send(messages, Anthropic, `{"model":"claude-sonnet-5","system":[{"type":"text","text":"You are Claude Code.","cache_control":{"type":"ephemeral"}},{"type":"text","text":"Be brief."}],"messages":[{"role":"user","content":"hi"}]}`))
 	blocks = nil
-	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 3 || blocks[0]["text"] != factoryDroidPrompt || blocks[1]["text"] != "You are Claude Code." || blocks[2]["text"] != "Be brief." {
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 3 || blocks[0]["text"] != factoryDroidLine || blocks[1]["text"] != "You are Claude Code." || blocks[2]["text"] != "Be brief." {
 		t.Errorf("claude code blocks: %s", b.System)
 	}
 	if cc, _ := blocks[1]["cache_control"].(map[string]any); cc["type"] != "ephemeral" {
@@ -137,7 +135,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 	// no system prompt: the line alone
 	b = read(send(messages, Anthropic, `{"model":"minimax-m2.7","messages":[{"role":"user","content":"hi"}]}`))
 	blocks = nil
-	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 1 || blocks[0]["text"] != factoryDroidPrompt || len(b.Messages) != 1 {
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 1 || blocks[0]["text"] != factoryDroidLine || len(b.Messages) != 1 {
 		t.Errorf("no system on messages: system %s messages %+v", b.System, b.Messages)
 	}
 

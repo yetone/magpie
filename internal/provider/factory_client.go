@@ -10,12 +10,9 @@ package provider
 // with "\n" into instructions, chat completions joins them into the first
 // system message, Anthropic's Messages keeps them as blocks with the line
 // first, and Gemini's generateContent joins them into the one
-// systemInstruction part. droid2api (github.com/1e0n/droid2api) puts its system_prompt
-// first on all four of its wires. That prompt, as config.json ships it, is
-// the line and a blank line. Responses, chat and Gemini's generate join it
-// into the one string droid sends; Anthropic keeps it as the first block.
-// Another agent's prompt follows. One that already opens with the line goes
-// on byte for byte, and so does droid's own.
+// systemInstruction part. Another agent's prompt follows, joined on with
+// one newline, as droid joins its own blocks. One that already opens with
+// the line goes on byte for byte, and so does droid's own.
 
 import (
 	"encoding/json"
@@ -25,9 +22,9 @@ import (
 // factoryDroidLine is the line every droid system prompt opens with.
 const factoryDroidLine = "You are Droid, an AI software engineering agent built by Factory."
 
-// factoryDroidPrompt is droid2api's system_prompt: the line, then a blank
-// line. Another agent's prompt is written straight after it.
-const factoryDroidPrompt = factoryDroidLine + "\n\n"
+// factoryDroidPrompt is the opening droid writes in front of another
+// agent's prompt: the line, then one newline.
+const factoryDroidPrompt = factoryDroidLine + "\n"
 
 // factoryDroidBody is body, a request to Factory at path, as droid would
 // open it. /api/llm/o: Responses' instructions, or chat completions' first
@@ -123,7 +120,7 @@ func factoryDroidChat(msgs *[]map[string]any) bool {
 			if texts != nil {
 				ms[0]["content"] = factoryDroidPrompt + strings.Join(texts, "\n")
 			} else {
-				ms[0]["content"] = append([]any{map[string]any{"type": "text", "text": factoryDroidPrompt}}, c...)
+				ms[0]["content"] = append([]any{map[string]any{"type": "text", "text": factoryDroidLine}}, c...)
 			}
 			return true
 		}
@@ -133,13 +130,13 @@ func factoryDroidChat(msgs *[]map[string]any) bool {
 }
 
 // factoryDroidMessages opens an Anthropic Messages body's system with
-// droid2api's system_prompt, then the agent's prompt. A string system
+// droid's line as the first block, then the agent's prompt. A string system
 // becomes those two blocks. False when it opens with the line already, or
 // the field can't be read.
 func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 	raw, ok := (*m)["system"]
 	if !ok || string(raw) == "null" {
-		b, err := zcodeEncode([]any{map[string]any{"type": "text", "text": factoryDroidPrompt}})
+		b, err := zcodeEncode([]any{map[string]any{"type": "text", "text": factoryDroidLine}})
 		if err != nil {
 			return false
 		}
@@ -151,7 +148,7 @@ func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 		if strings.HasPrefix(s, factoryDroidLine) {
 			return false
 		}
-		blocks := []any{map[string]any{"type": "text", "text": factoryDroidPrompt}}
+		blocks := []any{map[string]any{"type": "text", "text": factoryDroidLine}}
 		if strings.TrimSpace(s) != "" {
 			blocks = append(blocks, map[string]any{"type": "text", "text": s})
 		}
@@ -173,7 +170,7 @@ func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 			}
 		}
 	}
-	blocks = append([]any{map[string]any{"type": "text", "text": factoryDroidPrompt}}, blocks...)
+	blocks = append([]any{map[string]any{"type": "text", "text": factoryDroidLine}}, blocks...)
 	b, err := zcodeEncode(blocks)
 	if err != nil {
 		return false
