@@ -17,10 +17,10 @@ import (
 // magpie went through on the same models, endpoint and headers. droid
 // 0.231.0 opens every system prompt with its line. Responses and chat
 // completions join it on with "\n". Anthropic's Messages takes it as the
-// first system block, and Gemini's systemInstruction parts, which is where
-// droid2api (github.com/1e0n/droid2api) prepends its system_prompt. Another
-// agent's request now opens so, its own prompt after; droid's goes on byte
-// for byte.
+// first system block, and Gemini's systemInstruction parts. droid2api
+// (github.com/1e0n/droid2api) prepends the system_prompt from its
+// config.json: that line, a blank line, then the agent's prompt. Another
+// agent's request now opens so; droid's goes on byte for byte.
 func TestFactoryOpensAsDroid(t *testing.T) {
 	signIn(t)
 	tok := factoryToken(map[string]any{"sub": "user_d", "org_id": "org_D"})
@@ -94,41 +94,41 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 	// Codex on glm-5.3-flash, its Responses request made chat completions:
 	// its instructions as the first system message
 	b := read(send(chat, Chat, `{"model":"glm-5.3-flash","messages":[{"role":"system","content":"You are Codex, a coding agent."},{"role":"user","content":"hi <b> & co"}],"stream":true,"reasoning_effort":"high"}`))
-	if len(b.Messages) != 2 || b.Messages[0].Role != "system" || b.Messages[0].Content != factoryDroidLine+"\nYou are Codex, a coding agent." ||
+	if len(b.Messages) != 2 || b.Messages[0].Role != "system" || b.Messages[0].Content != factoryDroidPrompt+"You are Codex, a coding agent." ||
 		b.Messages[1].Content != "hi <b> & co" || b.Model != "glm-5.3-flash" || b.Effort != "high" || !b.Stream {
 		t.Errorf("codex on chat: %+v", b)
 	}
 	// Claude Code's system blocks, made chat completions as parts: joined
 	b = read(send(chat, Chat, `{"model":"kimi-k3","messages":[{"role":"system","content":[{"type":"text","text":"You are Claude Code."},{"type":"text","text":"Be brief."}]},{"role":"user","content":"hi"}]}`))
-	if len(b.Messages) != 2 || b.Messages[0].Content != factoryDroidLine+"\nYou are Claude Code.\nBe brief." {
+	if len(b.Messages) != 2 || b.Messages[0].Content != factoryDroidPrompt+"You are Claude Code.\nBe brief." {
 		t.Errorf("claude code on chat: %+v", b)
 	}
 	// no system prompt: droid's line alone, before the rest
 	b = read(send(chat, Chat, `{"model":"glm-5.3","messages":[{"role":"user","content":"hi"}]}`))
-	if len(b.Messages) != 2 || b.Messages[0].Role != "system" || b.Messages[0].Content != factoryDroidLine || b.Messages[1].Role != "user" {
+	if len(b.Messages) != 2 || b.Messages[0].Role != "system" || b.Messages[0].Content != factoryDroidPrompt || b.Messages[1].Role != "user" {
 		t.Errorf("no system on chat: %+v", b)
 	}
 	// Codex on GPT, Responses as it is: the instructions open with the line
 	b = read(send(responses, Responses, `{"model":"gpt-5.5","instructions":"You are Codex, a coding agent.","input":[{"role":"user","content":"hi"}],"stream":true}`))
-	if b.Instructions == nil || *b.Instructions != factoryDroidLine+"\nYou are Codex, a coding agent." || len(b.Input.([]any)) != 1 || !b.Stream {
+	if b.Instructions == nil || *b.Instructions != factoryDroidPrompt+"You are Codex, a coding agent." || len(b.Input.([]any)) != 1 || !b.Stream {
 		t.Errorf("codex on responses: %+v", b)
 	}
 	b = read(send(responses, Responses, `{"model":"grok-4.7","input":"hi"}`))
-	if b.Instructions == nil || *b.Instructions != factoryDroidLine {
+	if b.Instructions == nil || *b.Instructions != factoryDroidPrompt {
 		t.Errorf("no instructions on responses: %+v", b)
 	}
 
 	// Claude Code on Claude, a string system: two blocks, the line then its own
 	b = read(send(messages, Anthropic, `{"model":"claude-opus-5-5","system":"You are Claude Code.","messages":[{"role":"user","content":"hi"}]}`))
 	var blocks []map[string]any
-	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 2 || blocks[0]["text"] != factoryDroidLine || blocks[1]["text"] != "You are Claude Code." ||
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 2 || blocks[0]["text"] != factoryDroidPrompt || blocks[1]["text"] != "You are Claude Code." ||
 		len(b.Messages) != 1 || b.Messages[0].Content != "hi" {
 		t.Errorf("claude code on messages: system %s messages %+v", b.System, b.Messages)
 	}
 	// Claude Code's own blocks stay after the line, cache control included
 	b = read(send(messages, Anthropic, `{"model":"claude-sonnet-5","system":[{"type":"text","text":"You are Claude Code.","cache_control":{"type":"ephemeral"}},{"type":"text","text":"Be brief."}],"messages":[{"role":"user","content":"hi"}]}`))
 	blocks = nil
-	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 3 || blocks[0]["text"] != factoryDroidLine || blocks[1]["text"] != "You are Claude Code." || blocks[2]["text"] != "Be brief." {
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 3 || blocks[0]["text"] != factoryDroidPrompt || blocks[1]["text"] != "You are Claude Code." || blocks[2]["text"] != "Be brief." {
 		t.Errorf("claude code blocks: %s", b.System)
 	}
 	if cc, _ := blocks[1]["cache_control"].(map[string]any); cc["type"] != "ephemeral" {
@@ -137,7 +137,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 	// no system prompt: the line alone
 	b = read(send(messages, Anthropic, `{"model":"minimax-m2.7","messages":[{"role":"user","content":"hi"}]}`))
 	blocks = nil
-	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 1 || blocks[0]["text"] != factoryDroidLine || len(b.Messages) != 1 {
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 1 || blocks[0]["text"] != factoryDroidPrompt || len(b.Messages) != 1 {
 		t.Errorf("no system on messages: system %s messages %+v", b.System, b.Messages)
 	}
 
@@ -149,7 +149,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		} `json:"systemInstruction"`
 		Contents []any `json:"contents"`
 	}
-	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 2 || g.SystemInstruction.Parts[0]["text"] != factoryDroidLine ||
+	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 2 || g.SystemInstruction.Parts[0]["text"] != factoryDroidPrompt ||
 		g.SystemInstruction.Parts[1]["text"] != "You are Gemini CLI." || len(g.Contents) != 1 {
 		t.Errorf("gemini cli on generate: %s", sent)
 	}
@@ -160,7 +160,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		} `json:"systemInstruction"`
 		Contents []any `json:"contents"`
 	}{}
-	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 1 || g.SystemInstruction.Parts[0]["text"] != factoryDroidLine || len(g.Contents) != 1 {
+	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 1 || g.SystemInstruction.Parts[0]["text"] != factoryDroidPrompt || len(g.Contents) != 1 {
 		t.Errorf("no system on generate: %s", sent)
 	}
 

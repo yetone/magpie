@@ -10,9 +10,10 @@ package provider
 // with "\n" into instructions, chat completions joins them into the first
 // system message, Anthropic's Messages keeps them as blocks with the line
 // first, and Gemini's generateContent keeps them as systemInstruction
-// parts. droid2api (github.com/1e0n/droid2api) puts the same line
+// parts. droid2api (github.com/1e0n/droid2api) puts its system_prompt
 // first on all four of its wires: instructions, the first system message,
-// the first system block, and Gemini's systemInstruction parts. Another
+// the first system block, and Gemini's systemInstruction parts. That
+// prompt, as config.json ships it, is the line and a blank line. Another
 // agent's request opens so, its own prompt after. One that already opens
 // with the line goes on byte for byte, and so does droid's own.
 
@@ -23,6 +24,10 @@ import (
 
 // factoryDroidLine is the line every droid system prompt opens with.
 const factoryDroidLine = "You are Droid, an AI software engineering agent built by Factory."
+
+// factoryDroidPrompt is droid2api's system_prompt: the line, then a blank
+// line. Another agent's prompt is written straight after it.
+const factoryDroidPrompt = factoryDroidLine + "\n\n"
 
 // factoryDroidBody is body, a request to Factory at path, as droid would
 // open it. /api/llm/o: Responses' instructions, or chat completions' first
@@ -48,9 +53,9 @@ func factoryDroidBody(path string, body []byte) []byte {
 			return body
 		}
 		if strings.TrimSpace(in) == "" {
-			in = factoryDroidLine
+			in = factoryDroidPrompt
 		} else {
-			in = factoryDroidLine + "\n" + in
+			in = factoryDroidPrompt + in
 		}
 		m["instructions"], _ = zcodeEncode(in)
 	case strings.HasSuffix(path, "/chat/completions"):
@@ -94,15 +99,15 @@ func factoryDroidChat(msgs *[]map[string]any) bool {
 				return false
 			}
 			if strings.TrimSpace(c) == "" {
-				ms[0]["content"] = factoryDroidLine
+				ms[0]["content"] = factoryDroidPrompt
 			} else {
-				ms[0]["content"] = factoryDroidLine + "\n" + c
+				ms[0]["content"] = factoryDroidPrompt + c
 			}
 			return true
 		case []any:
 			// droid sends a string, its blocks joined with "\n": text
-			// parts alone are joined so
-			texts := []string{factoryDroidLine}
+			// parts alone are joined so, after the prompt
+			var texts []string
 			for i, p := range c {
 				p, _ := p.(map[string]any)
 				t, ok := p["text"].(string)
@@ -116,26 +121,25 @@ func factoryDroidChat(msgs *[]map[string]any) bool {
 				texts = append(texts, t)
 			}
 			if texts != nil {
-				ms[0]["content"] = strings.Join(texts, "\n")
+				ms[0]["content"] = factoryDroidPrompt + strings.Join(texts, "\n")
 			} else {
-				ms[0]["content"] = append([]any{map[string]any{"type": "text", "text": factoryDroidLine}}, c...)
+				ms[0]["content"] = append([]any{map[string]any{"type": "text", "text": factoryDroidPrompt}}, c...)
 			}
 			return true
 		}
 	}
-	*msgs = append([]map[string]any{{"role": "system", "content": factoryDroidLine}}, ms...)
+	*msgs = append([]map[string]any{{"role": "system", "content": factoryDroidPrompt}}, ms...)
 	return true
 }
 
 // factoryDroidMessages opens an Anthropic Messages body's system with
-// droid's line, as droid's own blocks do and as droid2api prepends its
-// system_prompt: the line, then the agent's prompt. A string system becomes
-// those two blocks. False when it opens so already, or the field can't be
-// read.
+// droid2api's system_prompt, then the agent's prompt. A string system
+// becomes those two blocks. False when it opens with the line already, or
+// the field can't be read.
 func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 	raw, ok := (*m)["system"]
 	if !ok || string(raw) == "null" {
-		b, err := zcodeEncode([]any{map[string]any{"type": "text", "text": factoryDroidLine}})
+		b, err := zcodeEncode([]any{map[string]any{"type": "text", "text": factoryDroidPrompt}})
 		if err != nil {
 			return false
 		}
@@ -147,7 +151,7 @@ func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 		if strings.HasPrefix(s, factoryDroidLine) {
 			return false
 		}
-		blocks := []any{map[string]any{"type": "text", "text": factoryDroidLine}}
+		blocks := []any{map[string]any{"type": "text", "text": factoryDroidPrompt}}
 		if strings.TrimSpace(s) != "" {
 			blocks = append(blocks, map[string]any{"type": "text", "text": s})
 		}
@@ -169,7 +173,7 @@ func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 			}
 		}
 	}
-	blocks = append([]any{map[string]any{"type": "text", "text": factoryDroidLine}}, blocks...)
+	blocks = append([]any{map[string]any{"type": "text", "text": factoryDroidPrompt}}, blocks...)
 	b, err := zcodeEncode(blocks)
 	if err != nil {
 		return false
@@ -179,13 +183,13 @@ func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 }
 
 // factoryDroidGoogle opens a generateContent body's systemInstruction with
-// droid's line, as droid sends {parts:[{text}]} and as droid2api prepends
-// its system_prompt there. The agent's own parts stay after it. False when
-// it opens so already, or the field can't be read.
+// droid2api's system_prompt, as droid2api prepends it onto parts. The
+// agent's own parts stay after it. False when it opens with the line
+// already, or the field can't be read.
 func factoryDroidGoogle(m *map[string]json.RawMessage) bool {
 	raw, ok := (*m)["systemInstruction"]
 	if !ok || string(raw) == "null" {
-		b, err := zcodeEncode(map[string]any{"parts": []any{map[string]any{"text": factoryDroidLine}}})
+		b, err := zcodeEncode(map[string]any{"parts": []any{map[string]any{"text": factoryDroidPrompt}}})
 		if err != nil {
 			return false
 		}
@@ -197,7 +201,7 @@ func factoryDroidGoogle(m *map[string]json.RawMessage) bool {
 		if strings.HasPrefix(s, factoryDroidLine) {
 			return false
 		}
-		parts := []any{map[string]any{"text": factoryDroidLine}}
+		parts := []any{map[string]any{"text": factoryDroidPrompt}}
 		if strings.TrimSpace(s) != "" {
 			parts = append(parts, map[string]any{"text": s})
 		}
@@ -220,7 +224,7 @@ func factoryDroidGoogle(m *map[string]json.RawMessage) bool {
 			}
 		}
 	}
-	content["parts"] = append([]any{map[string]any{"text": factoryDroidLine}}, parts...)
+	content["parts"] = append([]any{map[string]any{"text": factoryDroidPrompt}}, parts...)
 	b, err := zcodeEncode(content)
 	if err != nil {
 		return false
