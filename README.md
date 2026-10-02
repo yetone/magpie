@@ -108,8 +108,8 @@ Only agents that are installed or configured are shown.
 
 Configure Zed with `magpie zed <provider/model>`, or pick a model under Zed
 on the Agents page. magpie also configures Zed's local gateway credential in
-the system credential store (Keychain on macOS, Secret Service through
-`secret-tool` on Linux, Credential Manager on Windows). No manual API key
+the system credential store (Keychain on macOS, Secret Service over D-Bus
+on Linux, Credential Manager on Windows). No manual API key
 entry is needed. Restart Zed if an already-open session still asks for a key.
 Resetting the model restores the previous default model.
 
