@@ -485,17 +485,10 @@ func factoryMendOrg(ctx context.Context, user string, status int, body []byte) b
 }
 
 // factoryExplain is what the user can do about a 403 Factory still answers
-// once magpie has sent what droid sends. Factory takes a subscription's
-// model requests only from Droid: in #242 the same account's Claude, GPT and
-// GLM models answered droid through magpie every time, with magpie's
-// headers, and refused Grok Build's and Claude Code's every time, on the
-// same models and efforts, a request's body (droid's system prompt opens
-// with its own "You are Droid…") the only difference. Other agents'
-// requests on /api/llm/o now open so too (factoryDroidBody), which no real
-// account has tried; Claude's on /api/llm/a don't. So a 403 left says the
-// line may not be all Factory checks, to use the model from Droid, and that
-// an org's model policy or the plan is what is left when Droid is refused
-// too.
+// once the request opens as Droid's does (factoryDroidBody): the line first
+// on Responses, chat completions and Anthropic's Messages. A 403 left is
+// Factory telling the request apart some other way, or the organization's
+// model policy or the plan, which refuses Droid too.
 func factoryExplain(status int, body []byte) string {
 	if status != http.StatusForbidden {
 		return ""
@@ -503,7 +496,7 @@ func factoryExplain(status int, body []byte) string {
 	if factoryOrgRefused(status, body) {
 		return "the Factory account's organization changed; remove the account in magpie and sign in to it again"
 	}
-	return "Factory takes a Factory subscription's requests only from Droid itself. magpie opens other agents' requests to Factory's GPT, Grok and open models (GLM, Kimi…) as Droid's do, but Factory may still tell them apart, and Claude models (and MiniMax M2.7) are sent as the agent sent them, so Claude Code's and other agents' are refused there; use the model from Droid, and if Droid is refused it too, the organization's model policy or the plan doesn't allow this model"
+	return "Factory takes a Factory subscription's requests only from Droid itself. magpie already opens other agents' requests with Droid's line, and Factory may still tell them apart; use the model from Droid, and if Droid is refused it too, the organization's model policy or the plan doesn't allow this model"
 }
 
 // factoryFirstOrg is the first WorkOS org /api/cli/org says the account is
@@ -668,7 +661,8 @@ func factoryProvider(a factoryLogin) Provider {
 			// which Anthropic's SDK sends beside the bearer token
 			req.Header.Set("X-Api-Key", "placeholder")
 		}
-		// another agent's request opens as droid's does (factoryDroidBody)
+		// another agent's request opens as droid's does (factoryDroidBody),
+		// on /api/llm/o and on Anthropic's Messages
 		if nb := factoryDroidBody(req.URL.Path, body); !bytes.Equal(nb, body) {
 			req.Body = io.NopCloser(bytes.NewReader(nb))
 			req.ContentLength = int64(len(nb))

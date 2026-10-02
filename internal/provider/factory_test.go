@@ -702,11 +702,10 @@ func TestFactoryForbiddenWithoutOrg(t *testing.T) {
 		t.Errorf("prem request went to %s", got)
 	}
 
-	// a 403 still answered says what to do: Factory refuses every agent
-	// but Droid (#242: Claude Code on Opus 5.5, Grok Build on any model),
-	// which signing in again doesn't change; others pass as they are
+	// a 403 still answered says what to do: the request already opens as
+	// Droid (#242, #506), so signing in again changes nothing
 	msg := p.Explain("Factory: Forbidden", 403, []byte(forbidden))
-	if !strings.HasPrefix(msg, "Factory: Forbidden — ") || !strings.Contains(msg, "only from Droid") || !strings.Contains(msg, "Claude Code") ||
+	if !strings.HasPrefix(msg, "Factory: Forbidden — ") || !strings.Contains(msg, "only from Droid") || !strings.Contains(msg, "Droid's line") ||
 		strings.Contains(msg, "sign in to it again") {
 		t.Errorf("explained: %s", msg)
 	}

@@ -1,21 +1,19 @@
 package provider
 
 // Factory takes a subscription's model requests only from Droid (#242,
-// #506): the same account's GPT, Grok and GLM answered Droid through magpie
-// every time and refused Codex, Grok Build and Claude Code every time, on
-// the same models, efforts, endpoint and headers, the body the only
-// difference. Every request droid sends opens its system prompt with one
-// line, droid's YOU_ARE_DROID_SYSTEM_PROMPT (droid 0.231.0: its system
-// blocks are [that line, the agent's prompt, reminders…], sent as
-// Responses' instructions joined with "\n", and on chat completions as one
-// system message first, joined the same way; its smaller calls, the
-// latency ping among them, send the line alone). So another agent's request
-// to Factory's OpenAI-shaped API (/api/llm/o: GPT and Grok on Responses,
-// the open models on chat completions) opens with that line too, the
-// agent's own system prompt after it, as droid's own does. Anthropic's
-// Messages (/api/llm/a: Claude, MiniMax M2.7) is left as the agent sent
-// it, and so is a request that already opens with the line: droid's own
-// goes on byte for byte.
+// #506): the same account's models answered Droid through magpie and
+// refused Codex, Grok Build and Claude Code, on the same models, efforts,
+// endpoint and headers, the body the only difference. Every request droid
+// sends opens its system prompt with one line, droid's
+// YOU_ARE_DROID_SYSTEM_PROMPT (droid 0.231.0: its system blocks are [that
+// line, the agent's prompt, reminders…]). Responses joins those blocks
+// with "\n" into instructions, chat completions joins them into the first
+// system message, and Anthropic's Messages keeps them as blocks with the
+// line first. droid2api (github.com/1e0n/droid2api) puts the same line
+// first on all three: instructions, the first system message, and the
+// first system block. Another agent's request opens so, its own prompt
+// after. One that already opens with the line goes on byte for byte, and
+// so does droid's own.
 
 import (
 	"encoding/json"
@@ -25,12 +23,13 @@ import (
 // factoryDroidLine is the line every droid system prompt opens with.
 const factoryDroidLine = "You are Droid, an AI software engineering agent built by Factory."
 
-// factoryDroidBody is body, a request to Factory's /api/llm/o at path, as
-// droid would open it: Responses' instructions, or chat completions' first
-// system message, starting with droid's line. Anything else, a body that
-// can't be read, or one that already starts so is returned as it is.
+// factoryDroidBody is body, a request to Factory at path, as droid would
+// open it. /api/llm/o: Responses' instructions, or chat completions' first
+// system message. /api/llm/a: Anthropic's system blocks, the line first
+// (factoryDroidMessages). Anything else, a body that can't be read, or one
+// that already starts so is returned as it is.
 func factoryDroidBody(path string, body []byte) []byte {
-	if !strings.Contains(path, "/llm/o/") || len(body) == 0 {
+	if len(body) == 0 || (!strings.Contains(path, "/llm/o/") && !strings.Contains(path, "/llm/a/")) {
 		return body
 	}
 	var m map[string]json.RawMessage
@@ -62,6 +61,10 @@ func factoryDroidBody(path string, body []byte) []byte {
 		}
 		var err error
 		if m["messages"], err = zcodeEncode(msgs); err != nil {
+			return body
+		}
+	case strings.HasSuffix(path, "/messages"):
+		if !factoryDroidMessages(&m) {
 			return body
 		}
 	default:
@@ -115,5 +118,56 @@ func factoryDroidChat(msgs *[]map[string]any) bool {
 		}
 	}
 	*msgs = append([]map[string]any{{"role": "system", "content": factoryDroidLine}}, ms...)
+	return true
+}
+
+// factoryDroidMessages opens an Anthropic Messages body's system with
+// droid's line, as droid's own blocks do and as droid2api prepends its
+// system_prompt: the line, then the agent's prompt. A string system becomes
+// those two blocks. False when it opens so already, or the field can't be
+// read.
+func factoryDroidMessages(m *map[string]json.RawMessage) bool {
+	raw, ok := (*m)["system"]
+	if !ok || string(raw) == "null" {
+		b, err := zcodeEncode([]any{map[string]any{"type": "text", "text": factoryDroidLine}})
+		if err != nil {
+			return false
+		}
+		(*m)["system"] = b
+		return true
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		if strings.HasPrefix(s, factoryDroidLine) {
+			return false
+		}
+		blocks := []any{map[string]any{"type": "text", "text": factoryDroidLine}}
+		if strings.TrimSpace(s) != "" {
+			blocks = append(blocks, map[string]any{"type": "text", "text": s})
+		}
+		b, err := zcodeEncode(blocks)
+		if err != nil {
+			return false
+		}
+		(*m)["system"] = b
+		return true
+	}
+	var blocks []any
+	if zcodeDecode(raw, &blocks) != nil {
+		return false
+	}
+	if len(blocks) > 0 {
+		if b, ok := blocks[0].(map[string]any); ok {
+			if t, _ := b["text"].(string); b["type"] == "text" && strings.HasPrefix(t, factoryDroidLine) {
+				return false
+			}
+		}
+	}
+	blocks = append([]any{map[string]any{"type": "text", "text": factoryDroidLine}}, blocks...)
+	b, err := zcodeEncode(blocks)
+	if err != nil {
+		return false
+	}
+	(*m)["system"] = b
 	return true
 }

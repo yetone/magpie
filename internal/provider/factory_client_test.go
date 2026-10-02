@@ -15,11 +15,11 @@ import (
 // #506: Codex on glm-5.3-flash through a Factory account got 403, as Grok
 // Build's and Claude Code's requests did in #242, where Droid's own through
 // magpie went through on the same models, endpoint and headers. droid
-// 0.231.0 opens every system prompt with its line, sent as Responses'
-// instructions and chat completions' first system message, each joined
-// with "\n". Another agent's request to /api/llm/o now opens so, its own
-// prompt after; droid's goes on byte for byte, and so does anything on
-// Anthropic's Messages.
+// 0.231.0 opens every system prompt with its line. Responses and chat
+// completions join it on with "\n". Anthropic's Messages takes it as the
+// first system block, which is where droid2api (github.com/1e0n/droid2api)
+// prepends its system_prompt. Another agent's request now opens so, its
+// own prompt after; droid's goes on byte for byte.
 func TestFactoryOpensAsDroid(t *testing.T) {
 	signIn(t)
 	tok := factoryToken(map[string]any{"sub": "user_d", "org_id": "org_D"})
@@ -71,12 +71,13 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		Content any    `json:"content"`
 	}
 	read := func(b []byte) (out struct {
-		Model        string  `json:"model"`
-		Instructions *string `json:"instructions"`
-		Effort       string  `json:"reasoning_effort"`
-		Stream       bool    `json:"stream"`
-		Messages     []msg   `json:"messages"`
-		Input        any     `json:"input"`
+		Model        string          `json:"model"`
+		Instructions *string         `json:"instructions"`
+		Effort       string          `json:"reasoning_effort"`
+		Stream       bool            `json:"stream"`
+		Messages     []msg           `json:"messages"`
+		Input        any             `json:"input"`
+		System       json.RawMessage `json:"system"`
 	}) {
 		t.Helper()
 		if err := json.Unmarshal(b, &out); err != nil {
@@ -112,7 +113,30 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		t.Errorf("no instructions on responses: %+v", b)
 	}
 
-	// droid's own requests, and Anthropic's Messages, go on byte for byte
+	// Claude Code on Claude, a string system: two blocks, the line then its own
+	b = read(send(messages, Anthropic, `{"model":"claude-opus-5-5","system":"You are Claude Code.","messages":[{"role":"user","content":"hi"}]}`))
+	var blocks []map[string]any
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 2 || blocks[0]["text"] != factoryDroidLine || blocks[1]["text"] != "You are Claude Code." ||
+		len(b.Messages) != 1 || b.Messages[0].Content != "hi" {
+		t.Errorf("claude code on messages: system %s messages %+v", b.System, b.Messages)
+	}
+	// Claude Code's own blocks stay after the line, cache control included
+	b = read(send(messages, Anthropic, `{"model":"claude-sonnet-5","system":[{"type":"text","text":"You are Claude Code.","cache_control":{"type":"ephemeral"}},{"type":"text","text":"Be brief."}],"messages":[{"role":"user","content":"hi"}]}`))
+	blocks = nil
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 3 || blocks[0]["text"] != factoryDroidLine || blocks[1]["text"] != "You are Claude Code." || blocks[2]["text"] != "Be brief." {
+		t.Errorf("claude code blocks: %s", b.System)
+	}
+	if cc, _ := blocks[1]["cache_control"].(map[string]any); cc["type"] != "ephemeral" {
+		t.Errorf("cache control: %v", blocks)
+	}
+	// no system prompt: the line alone
+	b = read(send(messages, Anthropic, `{"model":"minimax-m2.7","messages":[{"role":"user","content":"hi"}]}`))
+	blocks = nil
+	if json.Unmarshal(b.System, &blocks) != nil || len(blocks) != 1 || blocks[0]["text"] != factoryDroidLine || len(b.Messages) != 1 {
+		t.Errorf("no system on messages: system %s messages %+v", b.System, b.Messages)
+	}
+
+	// droid's own requests go on byte for byte
 	for _, c := range []struct {
 		url   string
 		proto Protocol
@@ -120,8 +144,8 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 	}{
 		{chat, Chat, `{"model":"glm-5.3-flash","messages":[{"role":"system","content":"` + factoryDroidLine + `\nYou work in the user's terminal."},{"role":"user","content":"hi"}],"stream":true,"n":1.0}`},
 		{responses, Responses, `{"model":"gpt-5.5","input":[],"store":false,"instructions":"` + factoryDroidLine + `\nYou work in the user's terminal.","stream":true}`},
-		{messages, Anthropic, `{"model":"claude-opus-5-5","system":"You are Claude Code.","messages":[{"role":"user","content":"hi"}]}`},
-		{messages, Anthropic, `{"model":"minimax-m2.7","messages":[{"role":"user","content":"hi"}]}`},
+		{messages, Anthropic, `{"model":"claude-opus-5-5","system":"` + factoryDroidLine + `\nYou are Claude Code.","messages":[{"role":"user","content":"hi"}]}`},
+		{messages, Anthropic, `{"model":"claude-opus-5-5","system":[{"type":"text","text":"` + factoryDroidLine + `"},{"type":"text","text":"Be brief."}],"messages":[{"role":"user","content":"hi"}]}`},
 	} {
 		if sent := send(c.url, c.proto, c.body); !bytes.Equal(sent, []byte(c.body)) {
 			t.Errorf("changed:\n%s\nsent:\n%s", c.body, sent)
