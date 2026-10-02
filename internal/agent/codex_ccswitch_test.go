@@ -1,12 +1,15 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // CC Switch's Codex config, as it writes it: its "custom" table, one of
@@ -83,6 +86,81 @@ func TestCodexTakesCCSwitchTables(t *testing.T) {
 		if _, ok := stashLoad()[here(home).key("codex.tables")]; ok {
 			t.Errorf("auth %q: stash left", auth)
 		}
+	}
+}
+
+// CC Switch writes Codex's built-in OpenAI provider as its "custom" table:
+// name OpenAI, ChatGPT auth, websockets, responses, and no base URL. The
+// picker files those models under OpenAI, and with another account on,
+// Codex's own model goes through magpie. A relay on that id keeps its
+// base URL.
+func TestCodexCCSwitchBuiltInTableIsOpenAI(t *testing.T) {
+	const builtIn = "model = \"gpt-5.5\"\nmodel_provider = \"custom\"\n\n" +
+		"[model_providers.custom]\nname = \"OpenAI\"\nrequires_openai_auth = true\nsupports_websockets = true\nwire_api = \"responses\"\n"
+	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, builtIn)
+	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"), []byte(`{"models":[
+		{"slug":"gpt-5.5","display_name":"GPT-5.5","priority":1}]}`), 0o644)
+	cx := codex(home)
+	var group string
+	for _, o := range cx.Fields[0].Options(nil) {
+		if o.Value == "gpt-5.5" {
+			group = o.Group
+		}
+	}
+	if group != "OpenAI" {
+		t.Fatalf("built-in table: %q", group)
+	}
+	logins := func(on bool) {
+		b, _ := json.Marshal([]map[string]any{{"agent": "codex", "user": "spare@example.com", "on": on,
+			"seen": time.Now(), "auth": map[string]any{"tokens": map[string]any{"access_token": "y"}}}})
+		os.MkdirAll(filepath.Dir(provider.Path()), 0o755)
+		os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), b, 0o600)
+	}
+	logins(false)
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); strings.Contains(cfg, "model_provider") || strings.Contains(cfg, "model_providers") || strings.Contains(cfg, "openai_base_url") {
+		t.Fatalf("one account:\n%s", cfg)
+	}
+	os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte(builtIn), 0o644)
+	logins(true)
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); strings.Contains(cfg, "model_provider") || strings.Contains(cfg, "model_providers") ||
+		!strings.Contains(cfg, `openai_base_url = "http://127.0.0.1:`) || !strings.Contains(cfg, `model = "gpt-5.5"`) {
+		t.Fatalf("second account on:\n%s", cfg)
+	}
+}
+
+// A relay on CC Switch's "custom" id keeps its own base URL. Another
+// account being on does not move Codex onto magpie.
+func TestCodexCCSwitchRelayStaysPut(t *testing.T) {
+	const relay = "model = \"gpt-5.5\"\nmodel_provider = \"custom\"\n\n" +
+		"[model_providers.custom]\nname = \"custom\"\nbase_url = \"https://relay.example/v1\"\nwire_api = \"responses\"\nrequires_openai_auth = true\n"
+	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, relay)
+	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"), []byte(`{"models":[
+		{"slug":"gpt-5.5","display_name":"GPT-5.5","priority":1}]}`), 0o644)
+	cx := codex(home)
+	var group string
+	for _, o := range cx.Fields[0].Options(nil) {
+		if o.Value == "gpt-5.5" {
+			group = o.Group
+		}
+	}
+	if group != "custom" {
+		t.Fatalf("relay: %q", group)
+	}
+	b, _ := json.Marshal([]map[string]any{{"agent": "codex", "user": "spare@example.com", "on": true,
+		"seen": time.Now(), "auth": map[string]any{"tokens": map[string]any{"access_token": "y"}}}})
+	os.MkdirAll(filepath.Dir(provider.Path()), 0o755)
+	os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "logins.json"), b, 0o600)
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); !strings.Contains(cfg, `base_url = "https://relay.example/v1"`) || strings.Contains(cfg, "openai_base_url") || !strings.Contains(cfg, `model_provider = "custom"`) {
+		t.Fatalf("relay:\n%s", cfg)
 	}
 }
 
