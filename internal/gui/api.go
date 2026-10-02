@@ -355,7 +355,7 @@ func settingsState() settingsJSON {
 	searchState(&s)
 	s.ImageGenAuto, s.ImageGenModels = gateway.AutoDrawer(), []modelRef{}
 	for _, p := range provider.All() {
-		if !p.On() || p.Decides() {
+		if !p.On() || p.DecideOnly() {
 			continue
 		}
 		for _, m := range gateway.Drawers(p) {

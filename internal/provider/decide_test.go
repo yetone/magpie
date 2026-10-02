@@ -6,11 +6,106 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
 )
+
+func TestMixedDecisionProvider(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			w.Write([]byte(`{"data":[{"id":"typesafe/jev"},{"id":"deepseek-v4.1-flash"},{"id":"jevons"}]}`))
+			return
+		}
+		if r.URL.Path == "/v1/chat/completions" {
+			var q struct{ Model string }
+			json.NewDecoder(r.Body).Decode(&q)
+			if q.Model != "deepseek-v4.1-flash" {
+				http.Error(w, "wrong conversation model", 400)
+				return
+			}
+			w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer up.Close()
+	p := Provider{ID: "mixed", Name: "Mixed", Key: "k", Chat: up.URL + "/v1", Decide: up.URL + "/v1", Models: []string{"typesafe/jev", "deepseek-v4.1-flash", "jevons"}}
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(Provider{ID: "other", Name: "Other", Key: "k", Chat: up.URL + "/v1", Models: []string{"deepseek-v4-1-flash", "typesafe/jev"}}); err != nil {
+		t.Fatal(err)
+	}
+	if ms, err := p.Fetch(context.Background()); err != nil || len(ms) != 3 {
+		t.Fatalf("mixed fetch: %+v %v", ms, err)
+	}
+	var ids []string
+	for _, e := range providerEntries() {
+		if e.Provider.ID == p.ID {
+			ids = append(ids, e.ID)
+		}
+	}
+	if !slices.Equal(ids, []string{"mixed/deepseek-v4.1-flash", "mixed/jevons"}) {
+		t.Fatalf("conversation models: %v", ids)
+	}
+	if ds := Deciders(); len(ds) != 1 || ds[0].ID != "mixed/typesafe/jev" || IsDecider("mixed/deepseek-v4.1-flash") || !IsDecider("mixed/typesafe/jev") {
+		t.Fatalf("classifiers: %+v", ds)
+	}
+	if _, ms, ok := FindGroup("group/auto-deepseek-v4-1-flash"); !ok || len(ms) != 2 || ms[0].Provider.ID != p.ID {
+		t.Fatalf("automatic group: %+v %v", ms, ok)
+	}
+	if err := SaveGroup(Group{Name: "Bad", Members: []string{"mixed/typesafe/jev"}}); err == nil {
+		t.Fatal("Jev accepted as a conversation member")
+	}
+	if got, m, err := RouteDecider("mixed/typesafe/jev"); err != nil || got.ID != p.ID || m != "typesafe/jev" {
+		t.Fatalf("Jev route: %+v %s %v", got, m, err)
+	}
+	for _, id := range []string{"mixed/deepseek-v4.1-flash", "deepseek-v4.1-flash", "mixed/jevons"} {
+		if _, _, err := RouteDecider(id); err == nil {
+			t.Fatalf("conversation model %s accepted on System One", id)
+		}
+	}
+	if why := p.ModelTest(); why != "" {
+		t.Fatalf("conversation tests disabled: %s", why)
+	}
+	if r := p.Test(context.Background()); len(r) != 2 || !r[0].OK || r[0].Model != "deepseek-v4.1-flash" || !r[1].OK || r[1].Protocol != "decide" {
+		t.Fatalf("endpoint tests: %+v", r)
+	}
+	if ms, _, _ := catalog.Live(p.ID); len(ms) != 3 {
+		t.Fatalf("decision probe replaced conversation list: %+v", ms)
+	}
+	if r := p.TestModels(context.Background(), []string{"deepseek-v4.1-flash", "typesafe/jev"}); !r[0].OK || r[1].OK || r[1].Error == "" {
+		t.Fatalf("model tests: %+v", r)
+	}
+	for _, endpoint := range []Provider{{Chat: "chat"}, {Responses: "responses"}, {Anthropic: "anthropic"}} {
+		endpoint.Decide = "decide"
+		if endpoint.DecideOnly() || endpoint.DecidesModel("deepseek-v4.1-flash") || !endpoint.DecidesModel("typesafe/jev-preview") {
+			t.Fatalf("mixed endpoint: %+v", endpoint)
+		}
+	}
+	p.Models = nil
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	var many []catalog.Model
+	for i := 1; i <= manyModels; i++ {
+		many = append(many, catalog.Model{ID: strings.Repeat("m", i)})
+	}
+	many = append(many, catalog.Model{ID: "typesafe/jev"})
+	if err := catalog.SaveLive(p.ID, p.Chat, many); err != nil {
+		t.Fatal(err)
+	}
+	if ds := Deciders(); len(ds) != 1 || ds[0].ID != "mixed/typesafe/jev" {
+		t.Fatalf("classifier hidden by conversation model limit: %+v", ds)
+	}
+}
 
 // A decision provider (TypeSafe's Jev) is only ever a group's classifier:
 // its models aren't in the catalog nor a group's members, and a group's

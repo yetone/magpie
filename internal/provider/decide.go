@@ -2,12 +2,12 @@ package provider
 
 // A provider with a decision API (Provider.Decide) — TypeSafe's System One,
 // which Jev answers, or Jev as Vercel's AI Gateway or Cloudflare's Workers
-// AI serve it — serves no conversation. Given a message and typed
-// questions it answers with a choice and how likely each option was, so a
+// AI serve it — answers typed questions about a message with a choice and
+// how likely each option was, so a
 // routing group can ask it, as a user's turn begins, which of its rules'
 // intents the message is and how hard the turn is to think about (see
-// gateway/decide.go). Its models are never in the list agents pick from,
-// nor members of a group: they are only a group's classifier.
+// gateway/decide.go). A provider may also serve conversations; only its
+// decision models are excluded from agents' lists and group members.
 
 import (
 	"context"
@@ -31,6 +31,17 @@ const JevLatest = "jev-latest"
 
 // Decides reports whether the provider is a decision API.
 func (p Provider) Decides() bool { return p.Decide != "" }
+
+// DecideOnly reports whether the provider has no conversation endpoint.
+func (p Provider) DecideOnly() bool {
+	return p.Decides() && p.Chat == "" && p.Responses == "" && p.Anthropic == ""
+}
+
+// DecidesModel distinguishes Jev from the conversation models a gateway
+// also serves. A dedicated decision API may use any model name.
+func (p Provider) DecidesModel(model string) bool {
+	return p.Decides() && (p.DecideOnly() || jevID(model))
+}
 
 // The ways a decision API is asked, by where it is (DecideVia): TypeSafe's
 // own System One; Vercel's AI Gateway, at its TypeSafe API (System One's
@@ -78,7 +89,16 @@ func (p Provider) Jev() string {
 // list when fetched, else Jev's aliases (a gateway's one Jev).
 func (p Provider) decideModels() []catalog.Model {
 	if live, _, ok := catalog.Live(p.ID); ok && len(live) > 0 {
-		return live
+		if p.DecideOnly() {
+			return live
+		}
+		var out []catalog.Model
+		for _, m := range live {
+			if p.DecidesModel(m.ID) {
+				out = append(out, m)
+			}
+		}
+		return out
 	}
 	if p.DecideVia() != ViaSystemOne {
 		return []catalog.Model{{ID: p.Jev(), Name: "Jev"}}
@@ -208,8 +228,14 @@ func Deciders() []Entry {
 		if !p.Decides() || !p.On() {
 			continue
 		}
-		for _, m := range p.Exposed() {
-			out = append(out, Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: p})
+		ms := p.Exposed()
+		if !p.DecideOnly() && len(p.Models) == 0 {
+			ms = p.decideModels() // the conversation picker's limit does not hide Jev
+		}
+		for _, m := range ms {
+			if p.DecidesModel(m.ID) {
+				out = append(out, Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: p})
+			}
 		}
 	}
 	return out
@@ -218,8 +244,8 @@ func Deciders() []Entry {
 // IsDecider reports whether a classifier ("provider/model") is a decision
 // provider's model.
 func IsDecider(id string) bool {
-	p, _, ok := Resolve(id)
-	return ok && p.Decides()
+	p, model, ok := Resolve(id)
+	return ok && p.DecidesModel(model)
 }
 
 // RouteDecider is the decision provider a System One model names, and the
@@ -257,7 +283,7 @@ func RouteDecider(model string) (Provider, string, error) {
 	}
 	var listed []Provider
 	for _, p := range on {
-		for _, m := range p.Available() {
+		for _, m := range p.decideModels() {
 			if m.ID == model {
 				listed = append(listed, p)
 				break
@@ -343,7 +369,10 @@ func DecideRouteStatus(err error) int {
 // jev-latest (Vercel: typesafe-ai/jev, Cloudflare: typesafe/jev). Preview
 // and other unlisted names are none: the channel has no such model.
 func resolveDecideModel(p Provider, name string) (string, bool) {
-	for _, m := range p.Available() {
+	if !p.DecidesModel(name) {
+		return "", false
+	}
+	for _, m := range p.decideModels() {
 		if m.ID == name {
 			return name, true
 		}
@@ -421,6 +450,9 @@ func (p Provider) fetchDecide(ctx context.Context) ([]catalog.Model, error) {
 	}
 	if len(ms) == 0 {
 		return nil, fmt.Errorf("%s lists no models", p.Name)
+	}
+	if !p.DecideOnly() {
+		return ms, nil // do not replace a mixed provider's full model list
 	}
 	return ms, catalog.SaveLive(p.ID, p.Decide, ms)
 }

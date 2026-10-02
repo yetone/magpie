@@ -92,7 +92,7 @@ func videomaker() (string, bool) {
 // can.
 func AutoVideomaker() string {
 	for _, p := range provider.All() {
-		if !p.On() || p.Decides() {
+		if !p.On() || p.DecideOnly() {
 			continue
 		}
 		if ms := Videomakers(p); len(ms) > 0 {
@@ -110,7 +110,7 @@ func bareVideomaker(name string) (provider.Provider, string, bool) {
 		return provider.Provider{}, "", false
 	}
 	for _, p := range provider.All() {
-		if !p.On() || p.Decides() {
+		if !p.On() || p.DecideOnly() {
 			continue
 		}
 		for _, m := range Videomakers(p) {

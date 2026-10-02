@@ -64,8 +64,8 @@ type Provider struct {
 	Responses string `json:"responses,omitempty"`
 	Anthropic string `json:"anthropic,omitempty"`
 	// Decide is the base of a decision API (TypeSafe's System One, which
-	// Jev answers): a provider with it serves no conversation, only the
-	// routing groups' choices of model and effort (see decide.go).
+	// Jev answers), for routing groups' choices of model and effort. The
+	// provider may also serve conversations on the other endpoints.
 	Decide string `json:"decide,omitempty"`
 
 	// Fallback is where a request goes when this provider can't take it —

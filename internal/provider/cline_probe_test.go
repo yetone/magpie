@@ -137,7 +137,7 @@ func TestModelTest(t *testing.T) {
 			t.Errorf("%s: %q, want %q", c.p.ID, got, c.want)
 		}
 	}
-	r := Provider{ID: "jev", Decide: "https://decide.test/v1", Chat: "https://decide.test/v1"}.TestModels(context.Background(), []string{"m"})[0]
+	r := Provider{ID: "jev", Decide: "https://decide.test/v1", Chat: "https://decide.test/v1"}.TestModels(context.Background(), []string{"jev-latest"})[0]
 	if r.OK || r.Error == "" {
 		t.Errorf("a classifier's model was tested: %+v", r)
 	}

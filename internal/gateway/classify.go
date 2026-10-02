@@ -225,7 +225,7 @@ func classifyEffort(model string) string {
 // intents the message is and, when effort, how hard the turn is, each in a
 // call of its own, at once.
 func (s *Server) askClassifier(model string, intents []string, prev before, effort bool, text string) (verdict, error) {
-	if p, m, ok := provider.Resolve(model); ok && p.Decides() {
+	if p, m, ok := provider.Resolve(model); ok && p.DecidesModel(m) {
 		return s.askJev(p, m, intents, prev, effort, text)
 	}
 	var v verdict

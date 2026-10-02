@@ -552,7 +552,7 @@ func nativeEndpoints(e provider.Entry) []string {
 func drawerObjects() []map[string]any {
 	var out []map[string]any
 	for _, p := range provider.All() {
-		if !p.On() || p.Decides() {
+		if !p.On() || p.DecideOnly() {
 			continue
 		}
 		for _, m := range Drawers(p) {
@@ -574,7 +574,7 @@ func drawerObjects() []map[string]any {
 func videomakerObjects() []map[string]any {
 	var out []map[string]any
 	for _, p := range provider.All() {
-		if !p.On() || p.Decides() {
+		if !p.On() || p.DecideOnly() {
 			continue
 		}
 		for _, m := range Videomakers(p) {
@@ -1034,7 +1034,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		turnedAway()
 		return
 	}
-	if p.Decides() {
+	if p.DecidesModel(model) {
 		// Jev answers questions about a message, not the message
 		call.Status, call.Error = 400, "a decision model"
 		writeError(w, from, 400, fmt.Sprintf("%s only decides a routing group's model and effort; it holds no conversation", call.Model))

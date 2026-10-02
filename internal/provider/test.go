@@ -34,7 +34,7 @@ type Result struct {
 // sees, and reports what came back.
 func (p Provider) Test(ctx context.Context) []Result {
 	ctx = p.Via(ctx)
-	if p.Decides() {
+	if p.DecideOnly() {
 		return p.testDecide(ctx)
 	}
 	p.Fetch(ctx)
@@ -51,6 +51,9 @@ func (p Provider) Test(ctx context.Context) []Result {
 		}
 		url, body := tiny(q, proto, UpstreamName(p, model))
 		out = append(out, probe(ctx, q, proto, url, q.Prepare([]byte(body)), model, testWait))
+	}
+	if p.Decides() {
+		out = append(out, p.testDecide(ctx)...)
 	}
 	return out
 }
@@ -102,7 +105,7 @@ func clineProbe(body string) string {
 // sign-in), which the gateway translates every request for, so a probe
 // has no endpoint to go to.
 func (p Provider) ModelTest() string {
-	if p.Decides() {
+	if p.DecideOnly() {
 		return "decide"
 	}
 	if p.isClaudeAccount() {
@@ -188,7 +191,7 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 			protos = append(protos, pr)
 		}
 	}
-	if len(protos) == 0 || p.Decides() {
+	if len(protos) == 0 || p.DecidesModel(model) {
 		return Result{Model: model, Error: "this provider can't be sent a test request"}
 	}
 	// the endpoint the vendor's list says serves it, else Anthropic's for a
@@ -286,7 +289,7 @@ func (p Provider) testModel(q Provider, proto Protocol) string {
 	} {
 		for _, pool := range pools {
 			for _, m := range pool {
-				if want(m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
+				if !p.DecidesModel(m.ID) && want(m.ID) && (k.Key == "" || p.Serves(k, m.ID)) {
 					return m.ID
 				}
 			}
