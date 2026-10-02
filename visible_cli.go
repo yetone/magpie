@@ -10,7 +10,6 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
-	stats "github.com/yetone/magpie/internal/usage"
 )
 
 // Which models each agent is shown, from the terminal: magpie visible.
@@ -31,21 +30,6 @@ const visibleUsage = `usage:
        magpie group set gpt-plus-auto family=relay
        magpie visible zcode relay,ocgo`
 
-func agentIDs() []string {
-	var ids []string
-	for _, a := range agent.All() {
-		ids = append(ids, a.ID)
-	}
-	return ids
-}
-
-// agentID is the agent a typed name is, by its id or an alias.
-func agentOf(name string) string {
-	return stats.AgentOf(strings.ToLower(strings.TrimSpace(name)))
-}
-
-func knownAgent(id string) bool { return slices.Contains(agentIDs(), id) }
-
 // names is every name a visibility can hold: the families, and the
 // providers' and groups' ids.
 func visibleNames() []string {
@@ -64,8 +48,8 @@ func visibleCmd(args []string) error {
 		fmt.Println(visibleUsage)
 		return nil
 	}
-	s := settings.Load()
 	if len(args) == 0 {
+		s := settings.Load()
 		if len(s.Visible) == 0 {
 			fmt.Println(muted.Render("  every agent is shown every model · magpie visible <agent> <family>,… narrows one"))
 		}
@@ -79,14 +63,27 @@ func visibleCmd(args []string) error {
 		}
 		return nil
 	}
-	id := agentOf(args[0])
-	if !knownAgent(id) {
-		return fmt.Errorf("no agent %q (%s)", args[0], strings.Join(agentIDs(), ", "))
+	a, err := agent.Find(args[0])
+	if err != nil {
+		return err
 	}
+	id := a.ID
 	if len(args) == 1 {
 		return models([]string{id})
 	}
 	list := splitList(strings.Join(args[1:], ","))
+	if err := setVisible(id, list); err != nil {
+		return err
+	}
+	fmt.Println(green.Render("✓"), "saved")
+	return models([]string{id})
+}
+
+// setVisible saves which models an agent is shown under the same lowercase
+// key VisibleTo reads, and tells its files to follow.
+func setVisible(id string, list []string) error {
+	id = strings.ToLower(id)
+	s := settings.Load()
 	if len(list) == 1 && strings.EqualFold(list[0], "all") {
 		delete(s.Visible, id)
 	} else {
@@ -104,14 +101,19 @@ func visibleCmd(args []string) error {
 		}
 		s.Visible[id] = list
 	}
+	// Drop keys saved with the distro's case before writes were normalized.
+	for key := range s.Visible {
+		if key != id && strings.EqualFold(key, id) {
+			delete(s.Visible, key)
+		}
+	}
 	if err := settings.Save(s); err != nil {
 		return err
 	}
 	if catalog.Changed != nil {
 		catalog.Changed() // the agents' files follow
 	}
-	fmt.Println(green.Render("✓"), "saved")
-	return models([]string{id})
+	return nil
 }
 
 func orNone(xs []string) string {

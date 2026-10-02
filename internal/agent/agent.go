@@ -266,8 +266,11 @@ func Detected() []*Agent {
 
 // Find resolves a user-typed name (id, alias, or unique prefix).
 func Find(q string) (*Agent, error) {
+	return findIn(q, All())
+}
+
+func findIn(q string, all []*Agent) (*Agent, error) {
 	q = strings.ToLower(strings.TrimSpace(q))
-	all := All()
 	var prefix []*Agent
 	for _, a := range all {
 		if strings.EqualFold(a.ID, q) { // codex@wsl:Ubuntu
