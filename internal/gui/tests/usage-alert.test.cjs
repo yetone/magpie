@@ -84,8 +84,8 @@ const words = {
     share: "Share used", amount: "Amount", cny: "¥ CNY",
   },
   zh: {
-    usage: "用量提醒", balance: "余额提醒", off: "关闭", on: "开启",
-    usageSub: "5 小时、每周或每月窗口用到这个比例时发一条系统通知，每个周期只提醒一次",
+    usage: "额度提醒", balance: "余额提醒", off: "关闭", on: "开启",
+    usageSub: "5 小时、每周或每月额度用到这个比例时发一条系统通知，每个周期只提醒一次",
     balanceSub: "余额降到这个数（按它自己的货币或积分）时发一条系统通知，充值回升前只提醒一次",
     denied: "系统设置里关闭了 magpie 的通知",
     share: "已用比例", amount: "金额", cny: "¥ 人民币",

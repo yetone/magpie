@@ -265,6 +265,25 @@ body.window .top.inrow .actions { margin-left: 0; }
 /* and when even that doesn't fit, the tabs scroll sideways rather than push the page wider */
 .top.packed .seg { min-width: 0; flex: 0 1 auto; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .top.packed .seg::-webkit-scrollbar { display: none; }
+/* magpie web on a phone, or a browser as narrow (phoneWeb): the magpie and
+   the icons in a row, the tabs at their size in a row of their own under
+   them, sliding sideways when they don't fit (they were squeezed into the
+   room between, too small to read or tap) */
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+  body.web .top {
+    height: auto; min-height: 48px; flex-wrap: wrap; gap: 4px 8px;
+    padding: calc(6px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+  }
+  body.web .top .brand, body.web .top .actions { min-height: 40px; align-items: center; }
+  body.web .top #nav {
+    position: relative; left: auto; top: auto; transform: none;
+    order: 3; flex: 0 0 100%; min-width: 0; max-width: 100%;
+    overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none;
+  }
+  body.web .top #nav::-webkit-scrollbar { display: none; }
+  body.web .top #nav button { flex: none; height: 40px; padding: 0 14px; font-size: 14px; }
+  body.web .top .actions { gap: 4px; }
+}
 @keyframes update-in { from { opacity: 0; transform: translateY(-3px) scale(.94); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -2103,19 +2122,6 @@ body.panel .modal { padding: 16px 12px; }
    form controls are large enough to use without zooming the page. */
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
   body.web { height: 100%; font-size: 14px; }
-  body.web .top {
-    height: auto; min-height: 48px; flex-wrap: wrap; gap: 4px 8px;
-    padding: calc(6px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
-  }
-  body.web .top .brand { min-height: 40px; }
-  body.web .top #nav {
-    position: relative; left: auto; top: auto; transform: none;
-    order: 3; flex: 0 0 100%; min-width: 0; max-width: 100%;
-    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
-  }
-  body.web .top #nav::-webkit-scrollbar { display: none; }
-  body.web .top #nav button { flex: none; height: 40px; padding: 0 14px; font-size: 14px; }
-  body.web .top .actions { gap: 4px; }
   body.web .icon { width: 44px; height: 44px; }
   body.web .update { min-height: 36px; }
   body.web .view {

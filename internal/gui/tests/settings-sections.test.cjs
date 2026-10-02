@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // The Settings page in parts (#471: one long scroll of nine sections and
 // some 45 rows, the rarely used ones screens away): a tab list at the top —
-// General, Usage, Network and sharing, Models, Privacy, Observability, Sync
+// General, Allowances, Network and sharing, Models, Privacy, Observability, Sync
 // and backup, About — each tab showing its part's rows alone, so any section
 // is one click away once Settings is open. The part picked is kept in the
 // address (?view=settings&tab=…), so a reload lands on it, and remembered,
@@ -64,8 +64,8 @@ function server(lang, posts, { web = false, size = 100 } = {}) {
 
 const TABS = ["general", "usage", "network", "models", "privacy", "otel", "sync", "about"];
 const L = {
-  en: ["General", "Usage", "Network and sharing", "Models", "Privacy", "Observability", "Sync and backup", "About"],
-  zh: ["常规", "用量", "网络与共享", "模型", "隐私", "可观测性", "同步与备份", "关于"],
+  en: ["General", "Allowances", "Network and sharing", "Models", "Privacy", "Observability", "Sync and backup", "About"],
+  zh: ["常规", "额度", "网络与共享", "模型", "隐私", "可观测性", "同步与备份", "关于"],
 };
 const LABEL = { en: "Settings", zh: "设置" };
 // what each part shows: an element of its own rows, drawn by the page
@@ -157,9 +157,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert(Math.abs((await tabY(id)) - y0) <= 1, id + ": the tab stays where it was");
           assert.equal(posts.length, posted, id + ": a tab posts nothing");
         }
-        // the warm-ups are in Usage, still a tab each
+        // the warm-ups are in Allowances, still a tab each
         await page.locator("#setTab-usage").click();
-        assert(await page.locator("#warmTab-codex").isVisible(), "the warm-ups under Usage");
+        assert(await page.locator("#warmTab-codex").isVisible(), "the warm-ups under Allowances");
 
         // a part's control posts what it did
         await page.locator("#setTab-general").click();

@@ -8,6 +8,11 @@ document.body.classList.add(mode);
 // around it — it opens links itself, and what is the desktop's is left out
 const web = !!window.bootPrefs?.web;
 if (web) document.body.classList.add("web");
+// iOS zooms the page into a field it focuses whose text is under 16px, and
+// leaves it zoomed; at most 1 stops that, and Safari still lets a pinch zoom
+if (web && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))) {
+  document.querySelector('meta[name="viewport"]')?.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
+}
 // The Mac window draws its title bar inside the page (the traffic lights);
 // on Linux the page's header is the whole title bar (plainTitlebar), so it
 // has the name, the close button and a double-click to maximise.
@@ -12092,7 +12097,7 @@ function savePrefs(body) {
 // shows that with the reader's event: scrollOnPurpose(e). Called without one
 // (from a load, a timer, a helper that other clicks share) it is refused,
 // and whatever scroll follows is put back.
-let purposeUntil = 0, held = null, touchView = null, touchInertia = null;
+let purposeUntil = 0, held = null;
 const readerScrolls = (ms) => { purposeUntil = Math.max(purposeUntil, performance.now() + ms); held = null; };
 function scrollOnPurpose(e, ms = 1000) {
   if (!e?.isTrusted || performance.now() - e.timeStamp > 1000) {
@@ -12104,16 +12109,15 @@ function scrollOnPurpose(e, ms = 1000) {
 }
 const SCROLL_KEYS = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "]);
 addEventListener("wheel", () => readerScrolls(250), { capture: true, passive: true });
-addEventListener("touchstart", () => { touchView = touchInertia = null; }, { capture: true, passive: true });
-addEventListener("touchmove", (e) => {
-  readerScrolls(250);
-  touchView = e.target.closest?.(".view");
-}, { capture: true, passive: true });
-addEventListener("touchend", () => {
-  if (touchView && web && matchMedia("(pointer: coarse)").matches) touchInertia = { v: touchView, at: performance.now() };
-  touchView = null;
-}, { capture: true, passive: true });
-addEventListener("touchcancel", () => { touchView = touchInertia = null; }, { capture: true, passive: true });
+addEventListener("touchmove", () => readerScrolls(250), { capture: true, passive: true });
+// A flick goes on scrolling after the finger is lifted, with no touch event
+// to say so: each of its scrolls keeps the next one the reader's, till it
+// comes to rest. Put back, a phone's page jerked to and fro under the
+// finger's flick (jiakun_zhao on X: 滚动会抽搐).
+let flingUntil = 0;
+const flings = () => { flingUntil = performance.now() + 250; readerScrolls(250); };
+addEventListener("touchend", flings, { capture: true, passive: true });
+addEventListener("scroll", () => { if (performance.now() < flingUntil) flings(); }, { capture: true, passive: true });
 // a drag, not the tremble of a click
 let downAt = null;
 addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; }, { capture: true, passive: true });
@@ -12263,8 +12267,7 @@ function keepHeld() {
   requestAnimationFrame(keepHeld);
 }
 addEventListener("click", (e) => {
-  touchInertia = null;
-  purposeUntil = 0; // what came before the click (Space pressed on a button, a tremble) is no scroll
+  purposeUntil = flingUntil = 0; // what came before the click (Space pressed on a button, a tremble, the lift of a tap) is no scroll
   const v = e.target.closest?.(".view");
   if (!v || v.hidden) { held = null; return; }
   // a click before a frame has held the one before it (a tab list's keys
@@ -12284,14 +12287,7 @@ addEventListener("click", (e) => {
 for (const v of document.querySelectorAll(".view")) {
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
-    // Only a released touch's continuous momentum can extend its permission.
-    // Once its events stop arriving, code is subject to the same guard again.
-    const now = performance.now();
-    if (touchInertia?.v === v) {
-      if (now - touchInertia.at <= 150) { touchInertia.at = now; readerScrolls(150); }
-      else touchInertia = null;
-    }
-    if (now < purposeUntil) { fitRoom(v); readerLeaves(v); }
+    if (performance.now() < purposeUntil) { fitRoom(v); readerLeaves(v); }
     else if (held?.v === v) hold(held);
     else backToReader(v);
   }, { passive: true });
@@ -12299,7 +12295,7 @@ for (const v of document.querySelectorAll(".view")) {
 
 function show(v) {
   view = v;
-  if (mode === "window") { for (const b of $("#nav").querySelectorAll("button")) b.classList.toggle("on", b.dataset.view === v); slide($("#nav"), "nav"); }
+  if (mode === "window") { for (const b of $("#nav").querySelectorAll("button")) b.classList.toggle("on", b.dataset.view === v); slide($("#nav"), "nav"); navInSight(); }
   $("#prefs").classList.toggle("on", v === "settings");
   for (const id of ["agents", "providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"]) $("#view-" + id).hidden = v !== id;
   // back to where the reader was in it, and again once it has what it loads
@@ -12377,18 +12373,27 @@ function wag() {
 document.querySelector(".brand")?.addEventListener("mouseenter", wag);
 setTimeout(wag, 250);
 
+// magpie web on a phone, or a browser as narrow: the header is two rows,
+// the magpie and the icons over the tabs, which scroll sideways when they
+// don't fit, the one open kept in sight
+function phoneWeb() { return document.body.classList.contains("web") && matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").matches; }
+function navInSight() {
+  const nav = $("#nav"), on = nav?.querySelector("button.on");
+  if (!phoneWeb() || !on || nav.scrollWidth <= nav.clientWidth) return;
+  const l = on.offsetLeft - 16, r = on.offsetLeft + on.offsetWidth + 16 - nav.clientWidth;
+  if (nav.scrollLeft > l) nav.scrollLeft = l;
+  else if (nav.scrollLeft < r) nav.scrollLeft = r;
+}
+matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").addEventListener?.("change", () => { fitTop(); navInSight(); });
+
 // A narrow window has no room for the whole header: the name goes, leaving
 // the magpie, and Update becomes its arrow; narrower still, the tabs stop
 // centring and take the room between, and at the narrowest they draw in,
 // further still when they don't fit (the 560px window at 150%).
 function fitTop() {
   const top = $(".top"), nav = $("#nav"), brand = $(".brand"), actions = $(".actions");
-  // In a narrow browser the tabs have a row of their own; shrinking the
-  // desktop title bar would fight that layout and hide the name again.
-  if (web && matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").matches) {
-    top.classList.remove("tight", "cramped", "crowded");
-    return;
-  }
+  // a phone's browser: the tabs have a row of their own (app.css), at their size
+  if (phoneWeb()) { top.classList.remove("tight", "cramped", "inrow", "crowded", "packed"); return; }
   const fits = () => {
     const a = actions.getBoundingClientRect();
     // the buttons sit against the padding; under a page zoom (the text size)
