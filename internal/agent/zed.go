@@ -68,11 +68,11 @@ func zedAt(dir string) *Agent {
 						return fmt.Errorf("configure Zed gateway credential: %w", err)
 					}
 					if !usesMagpie(model()) {
-						previousProvider := get(zedProvider)
-						if get(zedProvider+".api_url") == gatewayV1() {
-							previousProvider = ""
+						previous := map[string]string{key + "model": get(zedModel)}
+						if get(zedProvider+".api_url") != gatewayV1() {
+							previous[key+"provider"] = get(zedProvider)
 						}
-						stash(map[string]string{key + "model": get(zedModel), key + "provider": previousProvider})
+						stash(previous)
 					}
 					return edit.SetJSON(path,
 						edit.KV{Path: zedProvider, Value: zedProviderJSON()},

@@ -190,6 +190,33 @@ func TestZedReselectAfterNativePicker(t *testing.T) {
 	}
 }
 
+func TestZedReselectPreservesProvider(t *testing.T) {
+	home := syncHome(t)
+	a := zedAt(filepath.Join(home, "zed"))
+	original := `{"api_url":"https://my-proxy/v1","available_models":[{"name":"custom","max_tokens":8192}],"headers":{"X-Custom":"keep"}}`
+	writeFile(t, a.Path, `{"agent":{"default_model":{"provider":"openai","model":"own"}},"language_models":{"openai_compatible":{"magpie":`+original+`}}}`)
+	f := a.Field("model")
+	if err := f.Set("magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	native := `{"provider":"zed.dev","model":"claude-sonnet","temperature":0.3}`
+	if err := edit.SetJSON(a.Path, edit.KV{Path: zedModel, Value: json.RawMessage(native)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Set("magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := edit.GetJSON(a.Path, zedProvider); got != original {
+		t.Fatalf("reselection lost the user's provider: %s", got)
+	}
+	if got, _ := edit.GetJSON(a.Path, zedModel); got != native {
+		t.Fatalf("reset did not restore the latest native model: %s", got)
+	}
+}
+
 func TestZedResetAfterNativePicker(t *testing.T) {
 	home := syncHome(t)
 	a := zedAt(filepath.Join(home, "zed"))
