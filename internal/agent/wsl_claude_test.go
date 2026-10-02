@@ -2,13 +2,17 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // claudeDistroHome is a distro's / in a temp dir with a user whose
@@ -311,4 +315,48 @@ func TestWSLClaudeStandIn(t *testing.T) {
 		t.Fatalf("not routed: %q", got)
 	}
 	noOwnClaude(t)
+}
+
+// The models magpie serves on the Claude account this machine's Claude
+// Code is signed in to fold into one row of its picker (#496), the same
+// models a second time. A distro's Claude Code has a sign-in of its own,
+// which magpie doesn't read, so its picker leaves them as they are: it
+// folded them all the same while the distro ran, only a stopped one's
+// options leaving them out.
+func TestWSLClaudeNotFolded(t *testing.T) {
+	root, _ := claudeDistroHome(t, `{"model": "claude-opus-5-5"}`)
+	home, _ := os.UserHomeDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	writeFile(t, catalog.CachePath(), `{"anthropic":{"models":{"claude-opus-5-5":{"id":"claude-opus-5-5","name":"Claude Opus 5.5","limit":{"context":1000000}}}}}`)
+	catalog.Reset()
+	// this machine's Claude Code signed in, as its files say, with an inert
+	// claude first on PATH: the machine's own is never asked
+	bin := t.TempDir()
+	writeFile(t, filepath.Join(bin, "claude"), "#!/bin/sh\nexit 1\n")
+	writeFile(t, filepath.Join(bin, "claude.cmd"), "@exit /b 1\r\n")
+	os.Chmod(filepath.Join(bin, "claude"), 0o755)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	writeFile(t, filepath.Join(home, ".claude", ".credentials.json"), fmt.Sprintf(
+		`{"claudeAiOauth":{"accessToken":"tok","refreshToken":"r","expiresAt":%d,"subscriptionType":"max"}}`, time.Now().Add(time.Hour).UnixMilli()))
+	writeFile(t, filepath.Join(home, ".claude.json"), `{"oauthAccount":{"emailAddress":"me@example.com"}}`)
+	provider.ForgetAccounts()
+	t.Cleanup(provider.ForgetAccounts)
+
+	folded := func(a *Agent) (n int) {
+		for _, o := range a.Field("model").Options(a.Values()) {
+			if o.Same {
+				n++
+			}
+		}
+		return n
+	}
+	if n := folded(claude(home)); n != 1 {
+		t.Fatalf("this machine's Claude Code: %d folded, want claude/claude-opus-5-5[1m]", n)
+	}
+	for _, running := range []bool{true, false} {
+		d := distro{Name: "Debian", Root: root, Home: "/home/me", Has: map[string]bool{"dir:.claude": true}, Mirrored: true, Running: running}
+		if n := folded(wslAgent(wslKindOf("claude"), d)); n != 0 {
+			t.Errorf("Claude Code in WSL Debian, running %v: %d folded", running, n)
+		}
+	}
 }

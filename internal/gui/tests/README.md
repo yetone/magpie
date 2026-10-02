@@ -1336,6 +1336,18 @@ window and the tray panel, light and dark, English and Chinese, Chromium and
 WebKit:
 node --test internal/gui/tests/favorite-star.test.cjs
 
+`claude-picker-fold.test.cjs` checks Claude Code's model picker (#496): the
+models magpie serves on the very account Claude Code is signed in to fold
+into one row after Claude Code's own, though the account comes after the
+providers the user added (Claude Code headed once); a click or Enter opens
+and closes it in place, the page not moving and the keys left to the
+filter (the arrows, Esc); the value set is a row of its own; a query shows
+every row it finds, so an id typed in full is picked with Enter; an alias
+and its dated id are one row, the dated one's while it is the value set or
+starred where the alias isn't. Chromium and WebKit, English and Chinese,
+the API faked:
+node --test internal/gui/tests/claude-picker-fold.test.cjs
+
 `list-sort.test.cjs` checks the installed lists' order, the reader's pick
 (#481): the Library's MCP servers and the installed plugins by name A→Z (the
 plugins no longer in the order they were installed) or Z→A, and the

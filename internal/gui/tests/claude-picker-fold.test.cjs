@@ -7,6 +7,12 @@
 // one, opened at a click without the page moving; an alias and its dated
 // id are one row, the alias's, or the dated one's while that is the value
 // set. In English and Chinese. No backend: the API is faked here.
+// The fold row ends Claude Code's own rows, though the account comes after
+// the providers the user added (where it was, Claude Code was headed twice);
+// a click on it leaves the keys to the filter (focus went to the page, and
+// Esc and the arrows did nothing); a query shows the rows it finds, so an id
+// typed in full is picked with Enter (which only opened the fold); and a
+// star on a dated id still shows (its row was gone, Favorites empty).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -17,16 +23,18 @@ const assets = path.resolve(__dirname, "../assets");
 const own = (value, note, alias) => ({ value, note, icon: "claude-color", group: "Claude Code", direct: "Anthropic", ...(alias ? { alias } : {}) });
 const via = (value, label, alias) => ({ value, label, note: "me@example.com · via magpie", icon: "claudecode-color", group: "Claude Code",
   ref: value.replace("[1m]", ""), same: true, ...(alias ? { alias } : {}) });
+// in the backend's order: Claude Code's own, the providers the user added,
+// then the signed-in accounts (provider.All)
 const options = [
   own("claude-opus-5-5", "Claude Opus 5.5"),
   own("claude-opus-4-5", "Claude Opus 4.5 (latest)"),
   own("claude-opus-4-5-20251101", "Claude Opus 4.5", "claude-opus-4-5"),
   own("claude-sonnet-4-5", "Claude Sonnet 4.5 (latest)"),
   own("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5", "claude-sonnet-4-5"),
+  { value: "deepseek/deepseek-v4", label: "DeepSeek V4", note: "DeepSeek · via magpie", icon: "deepseek-color", group: "DeepSeek", ref: "deepseek/deepseek-v4" },
   via("claude/claude-opus-5-5[1m]", "Claude Opus 5.5"),
   via("claude/claude-opus-4-5", "Claude Opus 4.5 (latest)"),
   via("claude/claude-opus-4-5-20251101", "Claude Opus 4.5", "claude/claude-opus-4-5"),
-  { value: "deepseek/deepseek-v4", label: "DeepSeek V4", note: "DeepSeek · via magpie", icon: "deepseek-color", group: "DeepSeek", ref: "deepseek/deepseek-v4" },
 ];
 const state = (value) => ({
   agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color", path: "/test/settings.json",
@@ -72,8 +80,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       if (errors.length) console.log(errors);
       await browser.close();
     });
-    const open = async (lang, value, sets = []) => {
-      const page = await (await browser.newContext({ viewport: { width: 980, height: 640 } })).newPage();
+    const open = async (lang, value, sets = [], favorites) => {
+      const context = await browser.newContext({ viewport: { width: 980, height: 640 } });
+      if (favorites) await context.addInitScript((f) => localStorage.setItem("magpie.modelFavorites", JSON.stringify(f)), favorites);
+      const page = await context.newPage();
       page.setDefaultTimeout(5000);
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", server(lang, value, sets));
@@ -107,6 +117,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(fold[0].v, w.two);
         assert.equal(fold[0].n, w.whose);
         assert(names.includes("DeepSeek V4"), "another provider's stay unfolded");
+        // after Claude Code's own rows, before the providers the user added:
+        // Claude Code is headed once
+        assert.deepEqual(await page.locator("#list li.group").allTextContents(), ["Claude Code", "DeepSeek"]);
+        assert.equal(await page.locator("#list li.fold + li.group").textContent(), "DeepSeek");
         const foldRow = page.locator("#list li.fold");
         assert.equal(await foldRow.getAttribute("aria-expanded"), "false");
 
@@ -145,6 +159,42 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const names = list.map((r) => r.v);
         assert.deepEqual(list.filter((r) => r.cur).map((r) => r.v), ["claude-opus-4-5-20251101"]);
         assert(!names.includes("claude-opus-4-5"), "its alias is the same row: " + names.join(", "));
+        await page.context().close();
+      });
+
+      await t.test(lang + ": a click on the fold leaves the keys to the filter", async () => {
+        const page = await open(lang, "claude-opus-5-5");
+        await page.locator("#list li.fold").click();
+        assert.equal(await page.evaluate(() => document.activeElement?.id), "q");
+        await page.keyboard.press("ArrowDown");
+        assert.equal(await page.locator("#list li.sel .v").textContent(), "Claude Opus 5.5", "the arrow went on from the fold");
+        await page.keyboard.press("Escape");
+        assert(await page.evaluate(() => document.querySelector("#pop").hidden), "Esc closes the picker");
+        await page.context().close();
+      });
+
+      await t.test(lang + ": a query shows the rows it finds, an id typed in full is Enter's", async () => {
+        const sets = [];
+        const page = await open(lang, "claude-opus-5-5", sets);
+        await page.locator("#q").fill("Claude Opus 5.5");
+        const list = await rows(page);
+        assert(!list.some((r) => r.fold), JSON.stringify(list));
+        assert(list.some((r) => r.v === "Claude Opus 5.5" && r.n === "me@example.com · via magpie"), JSON.stringify(list));
+        await page.locator("#q").fill("claude/claude-opus-5-5[1m]");
+        await page.keyboard.press("Enter");
+        await page.waitForFunction(() => document.querySelector("#pop").hidden);
+        assert.deepEqual(sets, [{ agent: "claude", field: "model", value: "claude/claude-opus-5-5[1m]" }]);
+        await page.context().close();
+      });
+
+      await t.test(lang + ": a star on a dated id still shows", async () => {
+        const page = await open(lang, "claude-opus-5-5", [], ["claude-opus-4-5-20251101", "claude/claude-opus-4-5-20251101"]);
+        // the dated one's row is the two's
+        const names = (await rows(page)).map((r) => r.v);
+        assert(names.includes("claude-opus-4-5-20251101") && !names.includes("claude-opus-4-5"), names.join(", "));
+        await page.locator('#pickerRail .rail-item[data-group="favorites"]').click();
+        await page.waitForFunction(() => document.querySelectorAll("#list li:not(.group)").length === 2);
+        assert.deepEqual((await rows(page)).map((r) => r.v), ["claude-opus-4-5-20251101", "Claude Opus 4.5"]);
         await page.context().close();
       });
     }

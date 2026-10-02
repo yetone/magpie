@@ -1900,31 +1900,36 @@ function ultracodeToggle(a, f) {
 
 // oneRowPerModel: an alias and its dated id (claude-opus-4-5 and
 // claude-opus-4-5-20251101, models.dev's two names of one model) are one
-// row, the alias's; the dated one's while it is the value set, so a pick
-// made before still shows as picked (#496).
+// row, the alias's; the dated one's while it is the value set, or starred
+// where the alias isn't, so a pick or a star made before still shows (#496).
 function oneRowPerModel(options, cur) {
-  const values = new Set(options.map((o) => o.value));
-  const dated = new Map(options.filter((o) => o.alias && values.has(o.alias)).map((o) => [o.alias, o.value]));
-  return options.filter((o) => (o.alias && values.has(o.alias) ? o.value === cur : !dated.has(o.value) || dated.get(o.value) !== cur));
+  const byValue = new Map(options.map((o) => [o.value, o]));
+  const gone = new Set();
+  for (const o of options) {
+    const alias = o.alias && byValue.get(o.alias);
+    if (alias) gone.add(o.value === cur || (alias.value !== cur && isFavorite(o) && !isFavorite(alias)) ? alias : o);
+  }
+  return options.filter((o) => !gone.has(o));
 }
 
 // foldSame: magpie's rows for the very account the agent is signed in to
 // itself (Claude Code's Claude subscription, added in magpie too) are the
 // agent's own models a second time; they fold into one row that a click
 // opens, for the few who want them (failover to more accounts, a fix that
-// only magpie's way has). The value set stays a row of its own (#496).
+// only magpie's way has). The value set stays a row of its own (#496). The
+// row comes after the agent's own rows of its group: the account is listed
+// after the providers the user added, and in its place the group was
+// headed twice. A query shows every row it finds, for Enter to pick.
 function foldSame(items) {
-  if (!pick.modelPicker || pick.groupFilter === "favorites") return items;
+  if (!pick.modelPicker || pick.groupFilter === "favorites" || $("#q").value.trim()) return items;
   const same = items.filter((o) => o.same && o.value !== pick.field.value);
   if (!same.length) return items;
   const first = same[0];
   const row = { fold: true, open: !!pick.unfold, n: same.length, group: first.group, icon: first.icon,
     account: (first.note || "").replace(/ · via magpie$/, "") };
-  const out = [];
-  for (const o of items) {
-    if (o === first) out.push(row);
-    if (!same.includes(o) || pick.unfold) out.push(o);
-  }
+  const out = items.filter((o) => !same.includes(o));
+  const own = out.findLastIndex((o) => o.group === first.group);
+  out.splice(own >= 0 ? own + 1 : items.indexOf(first), 0, row, ...(pick.unfold ? same : []));
   return out;
 }
 
@@ -2409,6 +2414,9 @@ function foldRow(o, idx, hasIcons) {
   li.append(chev);
   li.title = t(o.open ? "Fold them away again" : "The same models as {agent}'s own, through magpie: click to show them", { agent: pick.agent.name });
   li.onmousemove = () => { if (pick.cursor !== idx) { pick.cursor = idx; renderList(); } };
+  // the filter keeps the keys: the picker stays open, and the arrows,
+  // Enter and Esc go on working
+  li.onmousedown = (ev) => ev.preventDefault();
   li.onclick = (ev) => { ev.stopPropagation(); toggleFold(); };
   return li;
 }

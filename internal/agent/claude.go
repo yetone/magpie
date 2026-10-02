@@ -465,8 +465,10 @@ func claudeIn(at place) *Agent {
 			}
 			// magpie's Claude Code account is the one Claude Code asks on
 			// its own while that is Anthropic: the same models a second
-			// time, folded in the picker (#496)
-			return append(group(name, own), claudeViaMagpie(name == "Claude Code")...)
+			// time, folded in the picker (#496). Only this machine's: a
+			// distro's Claude Code has a sign-in of its own, which magpie
+			// doesn't read
+			return append(group(name, own), claudeViaMagpie(name == "Claude Code" && at.id == "")...)
 		},
 	}, {
 		// the effort Claude Code starts with, as its /effort saves it: under
