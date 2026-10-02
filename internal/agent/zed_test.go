@@ -164,19 +164,38 @@ func TestZedRestoresProviderAndModelLimits(t *testing.T) {
 	}
 }
 
-func TestZedFlatpakPath(t *testing.T) {
+func TestZedReselectAfterNativePicker(t *testing.T) {
+	home := syncHome(t)
+	a := zedAt(filepath.Join(home, "zed"))
+	f := a.Field("model")
+	if err := f.Set("magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	// Zed's picker changes only the model, leaving our provider installed.
+	if err := edit.SetJSON(a.Path, edit.KV{Path: zedModel, Value: map[string]string{"provider": "openai", "model": "gpt-custom"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Set("magpie/relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := edit.GetJSON(a.Path, zedProvider); ok {
+		t.Fatal("reset restored magpie's own provider")
+	}
+	if got := f.Get(); got != "openai/gpt-custom" {
+		t.Fatalf("reset model: %q", got)
+	}
+}
+
+func TestZedXDGPath(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux config path")
 	}
 	home := t.TempDir()
 	cfg := filepath.Join(home, "config")
-	t.Setenv("FLATPAK_XDG_CONFIG_HOME", "")
 	if a := zed(home, cfg); a.Path != filepath.Join(cfg, "zed", "settings.json") {
 		t.Fatalf("XDG: %s", a.Path)
-	}
-	flatpak := filepath.Join(home, "flatpak-config")
-	t.Setenv("FLATPAK_XDG_CONFIG_HOME", flatpak)
-	if a := zed(home, cfg); a.Path != filepath.Join(flatpak, "zed", "settings.json") {
-		t.Fatalf("Flatpak: %s", a.Path)
 	}
 }

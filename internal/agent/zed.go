@@ -28,10 +28,6 @@ func zed(home, cfg string) *Agent {
 			cfg = filepath.Join(home, "AppData", "Roaming")
 		}
 		return zedAt(filepath.Join(cfg, "Zed"))
-	default:
-		if flatpak := os.Getenv("FLATPAK_XDG_CONFIG_HOME"); flatpak != "" {
-			cfg = flatpak
-		}
 	}
 	return zedAt(filepath.Join(cfg, "zed"))
 }
@@ -72,7 +68,11 @@ func zedAt(dir string) *Agent {
 						return fmt.Errorf("configure Zed gateway credential: %w", err)
 					}
 					if !usesMagpie(model()) {
-						stash(map[string]string{key + "model": get(zedModel), key + "provider": get(zedProvider)})
+						previousProvider := get(zedProvider)
+						if get(zedProvider+".api_url") == gatewayV1() {
+							previousProvider = ""
+						}
+						stash(map[string]string{key + "model": get(zedModel), key + "provider": previousProvider})
 					}
 					return edit.SetJSON(path,
 						edit.KV{Path: zedProvider, Value: zedProviderJSON()},

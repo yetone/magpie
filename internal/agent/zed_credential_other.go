@@ -5,6 +5,9 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -23,8 +26,13 @@ func saveZedCredential(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		name = "security"
+		app, err := zedAppPath(ctx)
+		if err != nil {
+			return err
+		}
 		// GPUI uses an Internet Password whose server is the full API URL.
-		args = []string{"add-internet-password", "-U", "-s", url, "-a", "Bearer", "-w", gateway.TokenFor("zed")}
+		// Keep security trusted as well so it can update the key on later picks.
+		args = []string{"add-internet-password", "-U", "-T", app, "-T", "/usr/bin/security", "-s", url, "-a", "Bearer", "-w", gateway.TokenFor("zed")}
 	case "linux", "freebsd":
 		return saveZedSecret(ctx, url)
 	default:
@@ -35,6 +43,37 @@ func saveZedCredential(url string) error {
 		return fmt.Errorf("%s: %w: %s", name, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// Trust the installed Zed bundle, including a CLI symlink to a custom location.
+func zedAppPath(ctx context.Context) (string, error) {
+	home, _ := os.UserHomeDir()
+	paths := []string{filepath.Join(home, "Applications", "Zed.app"), "/Applications/Zed.app"}
+	if bin, err := exec.LookPath("zed"); err == nil {
+		if bin, err = filepath.EvalSymlinks(bin); err == nil {
+			for dir := filepath.Dir(bin); dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+				if strings.HasSuffix(dir, ".app") {
+					paths = append([]string{dir}, paths...)
+					break
+				}
+			}
+		}
+	}
+	for _, path := range paths {
+		if info, err := os.Stat(path); err == nil && info.IsDir() {
+			return path, nil
+		}
+	}
+	// Spotlight finds bundles moved outside the usual Applications folders.
+	out, err := proc.CommandContext(ctx, "mdfind", "kMDItemCFBundleIdentifier == 'dev.zed.Zed'").Output()
+	if err == nil {
+		for _, path := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			if info, err := os.Stat(path); err == nil && info.IsDir() && strings.HasSuffix(path, ".app") {
+				return path, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("cannot find Zed.app to authorize access to its gateway credential")
 }
 
 const secretService = "org.freedesktop.Secret.Service"

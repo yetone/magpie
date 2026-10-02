@@ -659,6 +659,7 @@ const I18N = {
     "{agent} is now signed in as {user}": "{agent} 已切换为 {user}",
     "Codex's background service is still signed in as {user}": "Codex 的后台服务仍登录着 {user}",
     "Restart it to use the new account. Running Codex sessions will be interrupted.": "重启它才会用上新账号。正在运行的 Codex 会话会被中断。",
+    "Restart Zed if it still asks for an API key: magpie has configured its gateway credential in the system credential store.": "如果 Zed 仍要求输入 API 密钥，请重启 Zed：magpie 已在系统凭据存储中配置了网关凭据。",
     "Later": "稍后",
     "Restart": "重启",
     "Codex's background service restarted": "Codex 的后台服务已重启",
