@@ -63,6 +63,9 @@ function server(lang, original = false, opened = []) {
     if (url.pathname === "/api/gateway/trace") return json({ mine: true, now: at, seq: 0, routes: [], totals: { requests: 0, rerouted: 0, errors: 0 } });
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [], routes: [] });
     if (url.pathname === "/api/library") return json({ dir: "/test/library", home: "/test", agents: [], instructions: { agents: [], sets: [] }, servers: [], skills: [], projects: [], foundServers: [], foundSkills: [] });
+    if (url.pathname === "/api/plugins") return json({ bun: true, plugins: [], movable: [] });
+    if (url.pathname === "/api/plugins/listings") return json({ listings: [] });
+    if (url.pathname === "/api/plugins/npm") return json({ npm: {} });
     if (url.pathname === "/api/plugins/market") return json({ listings: [], state: { bun: true, plugins: [] } });
     if (url.pathname === "/api/library/reveal") { opened.push(route.request().postDataJSON()); return json({}); }
     if (url.pathname.startsWith("/api/")) return json({});
