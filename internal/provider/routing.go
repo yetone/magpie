@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // The routings besides the default, smart, in order.
@@ -290,12 +292,37 @@ func StaleAllowance(agent, user string) {
 
 // allowanceOf keeps the windows that can stop an account.
 func allowanceOf(ws []QuotaWindow, now time.Time) Allowance {
+	// Antigravity keeps the vendor's ids in its windows (and on disk),
+	// while requests can name the collapsed model. Use the same families
+	// as the picker, without needing the live catalog to have been saved.
+	var raw []catalog.Model
+	for _, w := range ws {
+		if w.Family != "" && w.Model != "" && !w.Aside {
+			raw = append(raw, catalog.Model{ID: w.Model})
+		}
+	}
+	families := map[string]map[string]bool{}
+	for _, f := range antigravityFamilies(raw) {
+		if len(f.variants) > 1 {
+			ids := map[string]bool{f.id: true}
+			for _, v := range f.variants {
+				ids[v.ID] = true
+			}
+			for _, v := range f.variants {
+				families[v.ID] = ids
+			}
+		}
+	}
 	var a Allowance
 	for _, w := range ws {
 		if w.Aside {
 			continue
 		}
 		l := Limit{Used: w.Used, Span: w.Span, Model: w.Model, matches: w.matches}
+		if ids := families[w.Model]; ids != nil && w.Family != "" && w.matches == nil {
+			l.Model = ""
+			l.matches = func(model string) bool { return ids[model] }
+		}
 		switch {
 		case w.ResetsAt != nil:
 			l.Resets = *w.ResetsAt
