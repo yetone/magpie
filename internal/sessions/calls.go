@@ -18,10 +18,12 @@ import (
 
 // Call is one model call as an agent's own session file records it.
 type Call struct {
-	Time    time.Time `json:"t"`
-	Agent   string    `json:"agent"`   // claude (Claude Code's CLI), claude-desktop (Desktop's Code tab and Cowork), codex
-	Session string    `json:"session"` // the id the agent sends the gateway as its session header
-	Model   string    `json:"model"`   // the model the file names: for Claude, the one the vendor answered
+	Aggregate bool      `json:"aggregate,omitempty"`
+	APICalls  int       `json:"api_calls,omitempty"`
+	Time      time.Time `json:"t"`
+	Agent     string    `json:"agent"`   // claude (Claude Code's CLI), claude-desktop (Desktop's Code tab and Cowork), codex
+	Session   string    `json:"session"` // the id the agent sends the gateway as its session header
+	Model     string    `json:"model"`   // the model the file names: for Claude, the one the vendor answered
 	// Requested: the model Claude Code was running as (its identity note) when it made
 	// the call, as it was asked for: claude-opus-5[1m] for claude-opus-5 with the long context
 	Requested string `json:"requested,omitempty"`
@@ -163,6 +165,7 @@ func callsFor(since time.Time, session string) []Call {
 			}
 		}
 	}
+	out = append(out, hermesCalls(since, session)...)
 	sort.SliceStable(out, func(i, j int) bool {
 		if !out[i].Time.Equal(out[j].Time) {
 			return out[i].Time.After(out[j].Time)

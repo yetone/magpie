@@ -26,6 +26,7 @@ function fixture() {
   return {
     claude: [...app, sess("b-1", "/work/blog", "write the post", 120), sess("b-2", "/work/blog", "", 240)],
     opencode: [{ ...sess("o-1", "/work/app", "an opencode chat", 5), agent: "opencode", deletable: false, resume: "opencode -s o-1" }],
+    hermes: [{ ...sess("h-1", "/work/hermes", "Hermes chat", 8), agent: "hermes", deletable: false, read_only: true, resume: "" }],
     trash: [],
   };
 }
@@ -44,11 +45,12 @@ function serve(lang, calls) {
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
     if (url.pathname === "/api/sessions/manage") {
       const want = url.searchParams.get("agent");
-      const agent = want === "opencode" ? "opencode" : "claude";
+      const agent = ["opencode", "hermes"].includes(want) ? want : "claude";
       return json({
         agents: [
           { agent: "claude", count: store.claude.length, deletable: true, name: "Claude Code", icon: "claudecode-color" },
           { agent: "opencode", count: store.opencode.length, deletable: false, name: "OpenCode", icon: "opencode" },
+          { agent: "hermes", count: store.hermes.length, deletable: false, name: "Hermes", icon: "hermes" },
         ],
         agent, sessions: store[agent], terminal: true, trash: store.trash, trashDir: "~/Library/Application Support/magpie/trash/sessions",
       });
@@ -89,6 +91,8 @@ const words = {
     active: "still running is still being written to; close it in Claude Code and try again in a minute",
     restored: "fix the login form restored", picked: "2 selected", filter: "Filter sessions",
     cant: "magpie can list OpenCode's sessions and resume them, but not delete them: they aren't kept as files of their own.",
+    hermesNote: "These Hermes sessions are read only; magpie can list them, but cannot resume or delete them.",
+    codexNote: "Some Codex sessions are read only and cannot be deleted.",
     idLine: "Session ID",
   },
   zh: {
@@ -97,6 +101,8 @@ const words = {
     active: "「still running」仍在写入；请在 Claude Code 中关闭它，一分钟后再试",
     restored: "已恢复「fix the login form」", picked: "已选 2 个", filter: "筛选会话",
     cant: "magpie 可以列出并继续 OpenCode 的会话，但不能删除：它们没有各自独立的文件。",
+    hermesNote: "这些 Hermes 会话为只读；magpie 可以列出，但不能继续或删除。",
+    codexNote: "部分 Codex 会话为只读，无法删除。",
     idLine: "会话 ID",
   },
 };
@@ -236,6 +242,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await view.locator(".sm-note").textContent()).trim(), w.cant);
       assert.equal(await view.locator(".sm-del, .sm-check").count(), 0);
       assert(!(await view.locator(".sm-bar").isVisible()));
+      const mutationCount = calls.length;
+      await view.locator(".sm-agents .opt", { hasText: "Hermes" }).click();
+      const hermes = view.locator('.row.sm-sess[data-id="h-1"]');
+      await hermes.waitFor();
+      assert.equal((await view.locator(".sm-note").textContent()).trim(), w.hermesNote);
+      assert.equal(await hermes.locator(".sm-resume, .sess-resume, .sess-term, .sm-del, .sm-check").count(), 0);
+      assert.equal(await view.locator(".sm-folder-del").count(), 0);
+      assert(!(await view.locator(".sm-bar").isVisible()));
+      assert.equal(calls.length, mutationCount, "viewing Hermes sessions sends no mutation");
+      if (process.env.SCREENSHOT_DIR) {
+        await fs.mkdir(process.env.SCREENSHOT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.SCREENSHOT_DIR, `${engine}-${lang}-hermes.png`), fullPage: true });
+      }
 
       const missing = await page.evaluate(() => [
         "Sessions", "Filter sessions", "No sessions yet", "Select every session shown", "Select", "Delete", "Trash", "No folder", "deleted {when}",
@@ -243,8 +262,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "{title} is still being written to; close it in {agent} and try again in a minute",
         "{n} sessions are still being written to; close them in {agent} and try again in a minute",
         "Trash is empty", "Sessions deleted here wait in magpie's trash, to be restored.",
-        "Claude Code's, Codex's, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.",
+        "Claude Code's, Codex's, Hermes, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.",
         "magpie can list {agent}'s sessions and resume them, but not delete them: they aren't kept as files of their own.",
+        "These {agent} sessions are read only; magpie can list them, but cannot resume or delete them.",
+        "Some {agent} sessions are read only and cannot be deleted.",
         "Their files are moved to magpie's trash ({dir}), not erased: Trash puts them back. A session written to in the last minute is left alone, as {agent} may still be running it.",
         "Deleted sessions are kept in {dir} until you erase them here; magpie never erases them by itself.",
       ].filter((k) => !I18N.zh[k]));

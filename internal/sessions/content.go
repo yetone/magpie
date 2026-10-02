@@ -72,7 +72,9 @@ func ContentOf(c Call) (Content, error) {
 		return out, errNoPlace
 	}
 	var err error
-	if c.Agent == "codex" {
+	if c.Agent == "hermes" {
+		err = hermesContent(c, &out)
+	} else if c.Agent == "codex" {
 		err = codexContent(c, &out)
 	} else {
 		err = claudeContent(c, &out)
@@ -92,6 +94,9 @@ func FindCall(session string, from, to, at time.Time) (Call, bool) {
 	found := false
 	dist := func(t time.Time) time.Duration { return max(t.Sub(at), at.Sub(t)) }
 	for _, c := range callsFor(from.Add(-time.Minute), session) {
+		if c.Aggregate {
+			continue
+		}
 		if c.Session == session && !c.Time.Before(from) && !c.Time.After(to) && (!found || dist(c.Time) < dist(best.Time)) {
 			best, found = c, true
 		}

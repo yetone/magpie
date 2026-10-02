@@ -158,12 +158,22 @@
     if (trashOn) { box.append(...trash()); return box; }
     if (!data.agents.length) {
       const e = el("div", "empty-state");
-      e.append(el("b", "", t("No sessions yet")), el("span", "", t("Claude Code's, Codex's, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.")));
+      e.append(el("b", "", t("No sessions yet")), el("span", "", t("Claude Code's, Codex's, Hermes, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.")));
       box.append(e);
       return box;
     }
     const a = current();
-    if (a && !a.deletable) box.append(el("p", "usage-note sm-note", t("magpie can list {agent}'s sessions and resume them, but not delete them: they aren't kept as files of their own.", { agent: a.name })));
+    if (a && (data.sessions.some((s) => s.read_only) || !a.deletable)) {
+      const canResume = data.sessions.some((s) => s.resume);
+      const key = data.sessions.some((s) => s.read_only)
+        ? canResume
+          ? "Some {agent} sessions are read only and cannot be deleted."
+          : "These {agent} sessions are read only; magpie can list them, but cannot resume or delete them."
+        : canResume
+          ? "magpie can list {agent}'s sessions and resume them, but not delete them: they aren't kept as files of their own."
+          : "magpie can list {agent}'s sessions, but cannot resume or delete them.";
+      box.append(el("p", "usage-note sm-note", t(key, { agent: a.name })));
+    }
     box.append(selectBar(), el("div", "sm-tree"));
     queueMicrotask(redrawList);
     return box;
@@ -174,7 +184,7 @@
     const bar = el("div", "row-head sm-bar");
     const a = current();
     if (!a?.deletable) { bar.hidden = true; return bar; }
-    const list = shown();
+    const list = shown().filter((s) => !s.read_only);
     const all = el("input", "sm-check");
     all.type = "checkbox";
     all.checked = list.length > 0 && list.every((s) => picked.has(s.id));
@@ -233,14 +243,15 @@
       r.append(fold, el("span", "sub sm-path", cwd), el("span", "grow"), el("span", "note", t(items.length === 1 ? "{n} session" : "{n} sessions", { n: items.length })));
       // every session of the folder, the ones a filter hides too, asked
       // about and deleted as picked ones are (#527)
-      if (current()?.deletable) {
+      const deletable = data.sessions.filter((s) => (s.cwd || "") === cwd && !s.read_only);
+      if (current()?.deletable && deletable.length) {
         const all = el("button", "text sm-folder-del");
         all.type = "button";
         all.title = t("Delete every session in this folder");
         all.append(svg(TRASH, 13, 1.4), el("span", "", t("Delete all")));
         all.onclick = (e) => {
           e.stopPropagation();
-          askDelete(data.sessions.filter((s) => (s.cwd || "") === cwd).map((s) => s.id), cwd);
+          askDelete(deletable.map((s) => s.id), cwd);
         };
         r.append(all);
       }
@@ -256,7 +267,7 @@
     const wrap = el("div", "sess-item sm-item" + (detail === s.id ? " open" : ""));
     const r = el("div", "row sess sm-sess");
     r.dataset.id = s.id;
-    if (a?.deletable) {
+    if (a?.deletable && !s.read_only) {
       const c = el("input", "sm-check");
       c.type = "checkbox";
       c.checked = picked.has(s.id);
@@ -294,7 +305,7 @@
         r.append(term);
       }
     }
-    if (a?.deletable) {
+    if (a?.deletable && !s.read_only) {
       const del = el("button", "copy sm-del");
       del.type = "button";
       del.title = t("Delete");

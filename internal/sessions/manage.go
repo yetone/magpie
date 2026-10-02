@@ -65,6 +65,8 @@ var ErrActive = errors.New("the session was written to in the last minute; it ma
 
 // Agents are the agents with sessions on this computer, by how many.
 func Agents() []AgentCount {
+	dbReadMu.Lock()
+	defer dbReadMu.Unlock()
 	mu.Lock()
 	defer mu.Unlock()
 	defer closeDBs()
@@ -111,10 +113,10 @@ func ListAgent(agent string) []Managed {
 	out := []Managed{}
 	for _, fs := range groups {
 		s, _ := assemble(fs, price)
-		if s.Resume == "" {
+		if s.Resume == "" && !s.ReadOnly {
 			s.Resume = ResumeCommand(s.Agent, s.ID, s.Cwd)
 		}
-		m := Managed{Session: s, Files: len(fs), Deletable: Deletable(agent)}
+		m := Managed{Session: s, Files: len(fs), Deletable: Deletable(agent) && !s.ReadOnly}
 		for _, f := range fs {
 			m.Size += f.size
 			if st := cache[f.path]; st != nil && f.main {

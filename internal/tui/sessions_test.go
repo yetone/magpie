@@ -18,6 +18,7 @@ import (
 func sessionsHome(t *testing.T) {
 	t.Helper()
 	h := home(t)
+	t.Setenv("HERMES_HOME", filepath.Join(h, ".hermes"))
 	for from, env := range map[string]string{"claude": "CLAUDE_CONFIG_DIR", "codex": "CODEX_HOME"} {
 		dir := filepath.Join(h, "sessions", from)
 		if err := os.CopyFS(dir, os.DirFS(filepath.Join("..", "sessions", "testdata", from))); err != nil {

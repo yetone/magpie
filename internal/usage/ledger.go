@@ -230,7 +230,7 @@ func gatewayMatches(recs []Record, logs []sessions.Call) map[int]bool {
 	}
 	matched, used := map[int]bool{}, map[int]bool{}
 	for j, c := range logs {
-		if c.RequestID == "" {
+		if c.Aggregate || c.RequestID == "" {
 			continue
 		}
 		for _, i := range byID[c.RequestID] {
@@ -243,7 +243,7 @@ func gatewayMatches(recs []Record, logs []sessions.Call) map[int]bool {
 	candidates := map[int][]int{}
 	counts := map[int]int{}
 	for j, c := range logs {
-		if matched[j] || c.Session == "" {
+		if c.Aggregate || matched[j] || c.Session == "" {
 			continue
 		}
 		for _, i := range bySession[c.Session] {
@@ -325,7 +325,7 @@ func ledgerWith(since time.Time, f Filter, recs []Record, logs []sessions.Call) 
 		add(r, priceOf(r), "")
 	}
 	for i, c := range logs {
-		if (!since.IsZero() && c.Time.Before(since)) || matched[i] {
+		if c.Aggregate || (!since.IsZero() && c.Time.Before(since)) || matched[i] {
 			continue
 		}
 		// Session identity does not establish a billing provider; price the

@@ -42,6 +42,7 @@ func setup(t *testing.T) (claude, codex string) {
 	copyTree(t, "testdata/codex", codex)
 	t.Setenv("CLAUDE_CONFIG_DIR", claude)
 	t.Setenv("CODEX_HOME", codex)
+	t.Setenv("HERMES_HOME", filepath.Join(dir, "hermes"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
 	// OpenCode and Pi keep nothing here unless a test puts it there
 	t.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
