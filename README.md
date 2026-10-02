@@ -574,7 +574,7 @@ Each `/v1/models` entry includes `reasoning` and `supported_reasoning_levels`
 (`[{"effort":"low"}, ...]`). A routing group lists only the levels every
 member supports. `native_endpoints` (`["/v1/messages"]`) names the APIs a
 request for the model is passed straight through on; it is left out of a
-routing group, and of a model every request to is translated anyway.
+routing group, and of a model every request to which is translated anyway.
 
 Requests pass straight through when the vendor speaks the agent's API and
 are translated otherwise, streaming, tool calls and reasoning included. The
