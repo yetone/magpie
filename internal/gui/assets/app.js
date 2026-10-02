@@ -3769,7 +3769,7 @@ function renderActivity() {
     r.append(el("span", "m", c.model));
     r.append(el("span", "p", c.from === c.to ? c.from : `${c.from} → ${c.to}`));
     r.append(el("span", "grow"));
-    r.append(el("span", "st", c.error ? `${c.status} ${c.error}` : `${c.status} · ${c.ms} ms` + (c.ttft ? " · " + t("TTFT {ms}", { ms: `${c.ttft} ms` }) : "")));
+    r.append(el("span", "st", c.error ? `${c.status} ${c.error}` : `${c.status} · ${ledTook(c.ms)}` + (c.ttft ? " · " + t("TTFT {ms}", { ms: ledTook(c.ttft) }) : "")));
     r.title = open ? t("Hide request and response bodies") : t("Show request and response bodies");
     const toggle = () => {
       if (expandedCalls.has(id)) expandedCalls.delete(id); else expandedCalls.add(id);
@@ -5445,7 +5445,7 @@ function renderEndpoints(p, src) {
           s.className = "res " + (x.ok ? "ok" : "bad");
           s.replaceChildren();
           s.append(svg(x.ok ? CHECK : "M4.5 4.5l7 7M11.5 4.5l-7 7", 10, 2));
-          s.append(el("span", "", x.ok ? `${x.ms} ms` : x.status ? `${x.status} · ${x.error}` : x.error));
+          s.append(el("span", "", x.ok ? ledTook(x.ms) : x.status ? `${x.status} · ${x.error}` : x.error));
           s.title = x.ok ? t("model {model}", { model: x.model }) : x.error;
         }
       } catch (e) { for (const s of Object.values(slots)) { s.className = "res"; s.textContent = ""; } status(e.message, "err"); }
@@ -5474,7 +5474,7 @@ function renderModels(p) {
     if (!got || !(id in got)) return;
     const x = got[id];
     c.append(el("span", "tdot " + (!x ? "wait" : x.ok ? "ok" : "bad")));
-    c.title = !x ? t("Testing…") : x.ok ? t("Answered in {ms} ms", { ms: x.ms }) : (x.status ? x.status + " · " : "") + x.error;
+    c.title = !x ? t("Testing…") : x.ok ? t("Answered in {took}", { took: ledTook(x.ms) }) : (x.status ? x.status + " · " : "") + x.error;
   };
   // a chip's right-click (or the menu key) tests that model alone: Test models
   // asks every one, and a list of many takes a while (yonghe, Discord)
@@ -5691,7 +5691,7 @@ function renderModels(p) {
     try {
       const r = await api("provider/test", { ...asTyped(), id: p.id, test: [id] });
       const x = got[id] = r.results[0];
-      status(x.ok ? t("{model} answered in {ms} ms", { model: id, ms: x.ms }) : t("{model} didn't answer: {error}", { model: id, error: (x.status ? x.status + " · " : "") + x.error }), x.ok ? "ok" : "err");
+      status(x.ok ? t("{model} answered in {took}", { model: id, took: ledTook(x.ms) }) : t("{model} didn't answer: {error}", { model: id, error: (x.status ? x.status + " · " : "") + x.error }), x.ok ? "ok" : "err");
     } catch (e) { delete got[id]; status(e.message, "err"); }
     draw();
   };
