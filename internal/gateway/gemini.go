@@ -85,25 +85,24 @@ type gRequest struct {
 // buildGemini is a generateContent body for an upstream that speaks Gemini
 // itself (Factory's /api/llm/g). The contents are the ones Code Assist
 // sends inside its envelope. systemInstruction has no role: droid sends
-// {parts:[{text}]}. stream is the request's, which a translated call has
-// already set.
-func buildGemini(r *Request, model string) []byte {
+// {parts:[{text}]}. droid sends no stream field; Factory answers SSE either
+// way, and a client that asked for JSON is given it after the fact.
+func buildGemini(r *Request, model string) ([]byte, error) {
 	var wrap struct {
 		Request map[string]any `json:"request"`
 	}
-	if json.Unmarshal(buildCodeAssistSent(r, model, "gemini"), &wrap) != nil || wrap.Request == nil {
-		return []byte(`{}`)
+	if err := json.Unmarshal(buildCodeAssistSent(r, model, "gemini"), &wrap); err != nil {
+		return nil, err
+	}
+	if wrap.Request == nil {
+		return nil, fmt.Errorf("empty Gemini request")
 	}
 	if si, ok := wrap.Request["systemInstruction"].(map[string]any); ok {
 		delete(si, "role")
 	}
 	wrap.Request["model"] = model
-	wrap.Request["stream"] = r.Stream
-	b, err := json.Marshal(wrap.Request)
-	if err != nil {
-		return []byte(`{}`)
-	}
-	return b
+	delete(wrap.Request, "stream")
+	return json.Marshal(wrap.Request)
 }
 
 func parseGemini(body []byte) (*Request, error) {

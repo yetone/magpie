@@ -78,6 +78,9 @@ func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
 		return q.Responses + "/responses", fmt.Sprintf(`{"model":%q,"input":"hi","max_output_tokens":16}`, model)
 	case Anthropic:
 		return q.Anthropic + "/v1/messages", fmt.Sprintf(`{"model":%q,"max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
+	case Gemini:
+		// Factory's generate route. droid sends no stream field.
+		return q.Base(Gemini) + "/generate", fmt.Sprintf(`{"model":%q,"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, model)
 	}
 	return "", ""
 }
@@ -135,7 +138,7 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 	}
 	var protos []Protocol
 	for _, pr := range p.Speaks() {
-		if pr == Chat || pr == Responses || pr == Anthropic {
+		if pr == Chat || pr == Responses || pr == Anthropic || pr == Gemini {
 			protos = append(protos, pr)
 		}
 	}

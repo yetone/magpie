@@ -104,6 +104,25 @@ func (s *usageSniffer) parse(b []byte) {
 		}
 	}
 	switch s.proto {
+	case provider.Gemini:
+		// Factory's generateContent chunks, the same usageMetadata Code
+		// Assist wraps. Relaying one used to count nothing.
+		var v struct {
+			ModelVersion  string `json:"modelVersion"`
+			UsageMetadata *struct {
+				Prompt     int `json:"promptTokenCount"`
+				Candidates int `json:"candidatesTokenCount"`
+				Thoughts   int `json:"thoughtsTokenCount"`
+				Cached     int `json:"cachedContentTokenCount"`
+			} `json:"usageMetadata"`
+		}
+		if json.Unmarshal(b, &v) == nil {
+			s.saw(v.ModelVersion)
+			if u := v.UsageMetadata; u != nil {
+				s.u.add(Usage{Input: max(u.Prompt-u.Cached, 0), CacheRead: u.Cached,
+					Output: u.Candidates + u.Thoughts, Reasoning: u.Thoughts})
+			}
+		}
 	case provider.Chat:
 		var v struct {
 			Model string  `json:"model"`

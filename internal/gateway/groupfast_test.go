@@ -252,7 +252,11 @@ func TestWithFastWire(t *testing.T) {
 		{"api.anthropic.com", "claude-sonnet-5", false},
 		{"relay.example", "claude-opus-5-5", false},
 	} {
-		got := strings.Contains(string(build(provider.Anthropic, r, c.model, c.host, false)), `"speed":"fast"`)
+		b, err := build(provider.Anthropic, r, c.model, c.host, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := strings.Contains(string(b), `"speed":"fast"`)
 		if got != c.want {
 			t.Errorf("%s %s: speed %v, want %v", c.host, c.model, got, c.want)
 		}

@@ -195,7 +195,25 @@ func TestFactoryGeminiStreamsToChat(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "hello-from-factory") {
 		t.Fatalf("chat %d %s", code, body)
 	}
-	if f.path != "/api/llm/g/v1/generate" || !strings.Contains(string(f.got), "You are OpenCode.") {
+	if f.path != "/api/llm/g/v1/generate" || !strings.Contains(string(f.got), "You are OpenCode.") || strings.Contains(string(f.got), `"stream"`) {
 		t.Fatalf("upstream %s %s", f.path, f.got)
+	}
+
+	// generateContent asks for one JSON body. Factory answers SSE; the
+	// client gets the JSON, and the upstream body has no stream field.
+	code, body = post(t, "/v1beta/models/factory/gemini-3.1-pro-preview:generateContent", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
+	if code != 200 || strings.HasPrefix(body, "data:") || !strings.Contains(body, "hello-from-factory") {
+		t.Fatalf("json %d %s", code, body)
+	}
+	if strings.Contains(string(f.got), `"stream"`) {
+		t.Fatalf("stream sent upstream: %s", f.got)
+	}
+
+	code, body = post(t, "/v1beta/models/factory/gemini-3.1-pro-preview:streamGenerateContent", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
+	if code != 200 || !strings.Contains(body, "data:") || !strings.Contains(body, "hello-from-factory") {
+		t.Fatalf("sse %d %s", code, body)
+	}
+	if strings.Contains(string(f.got), `"stream"`) {
+		t.Fatalf("stream sent upstream: %s", f.got)
 	}
 }

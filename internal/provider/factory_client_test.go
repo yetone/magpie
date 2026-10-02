@@ -141,7 +141,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		t.Errorf("no system on messages: system %s messages %+v", b.System, b.Messages)
 	}
 
-	// Gemini CLI on Factory's generate: the line, then its own part
+	// Gemini CLI on Factory's generate: one part, the prompt then its own text
 	sent := send(generate, Gemini, `{"model":"gemini-3.1-pro-preview","systemInstruction":{"parts":[{"text":"You are Gemini CLI."}]},"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
 	var g struct {
 		SystemInstruction struct {
@@ -149,8 +149,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		} `json:"systemInstruction"`
 		Contents []any `json:"contents"`
 	}
-	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 2 || g.SystemInstruction.Parts[0]["text"] != factoryDroidPrompt ||
-		g.SystemInstruction.Parts[1]["text"] != "You are Gemini CLI." || len(g.Contents) != 1 {
+	if json.Unmarshal(sent, &g) != nil || len(g.SystemInstruction.Parts) != 1 || g.SystemInstruction.Parts[0]["text"] != factoryDroidPrompt+"You are Gemini CLI." || len(g.Contents) != 1 {
 		t.Errorf("gemini cli on generate: %s", sent)
 	}
 	sent = send(generate, Gemini, `{"model":"gemini-3-flash-preview","contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)
@@ -174,7 +173,7 @@ func TestFactoryOpensAsDroid(t *testing.T) {
 		{responses, Responses, `{"model":"gpt-5.5","input":[],"store":false,"instructions":"` + factoryDroidLine + `\nYou work in the user's terminal.","stream":true}`},
 		{messages, Anthropic, `{"model":"claude-opus-5-5","system":"` + factoryDroidLine + `\nYou are Claude Code.","messages":[{"role":"user","content":"hi"}]}`},
 		{messages, Anthropic, `{"model":"claude-opus-5-5","system":[{"type":"text","text":"` + factoryDroidLine + `"},{"type":"text","text":"Be brief."}],"messages":[{"role":"user","content":"hi"}]}`},
-		{generate, Gemini, `{"model":"gemini-3.1-pro-preview","systemInstruction":{"parts":[{"text":"` + factoryDroidLine + `"},{"text":"You are Gemini CLI."}]},"contents":[]}`},
+		{generate, Gemini, `{"model":"gemini-3.1-pro-preview","systemInstruction":{"parts":[{"text":"` + factoryDroidLine + `\nYou are Gemini CLI."}]},"contents":[]}`},
 	} {
 		if sent := send(c.url, c.proto, c.body); !bytes.Equal(sent, []byte(c.body)) {
 			t.Errorf("changed:\n%s\nsent:\n%s", c.body, sent)

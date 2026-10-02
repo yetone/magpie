@@ -1498,6 +1498,13 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	if p.OpenCodeFree(model) {
 		relay = false
 	}
+	// Factory's generate route always answers SSE, and droid sends no stream
+	// field. A client that asked for one JSON body is translated, which
+	// reads that SSE and writes the JSON. Relaying it would hand the client
+	// the data: lines under a 200.
+	if relay && from == provider.Gemini && !streamOf(body) {
+		relay = false
+	}
 	if relay {
 		call.To = from
 		if status, msg, done := s.passthrough(w, r, p, from, model, body, &call.Usage); done {
@@ -1737,6 +1744,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// max_tokens away as Bedrock's GPT models do
 			body = asCompletionTokens(body)
 		}
+	case provider.Gemini:
+		// the handler put stream in the body so serve can tell a
+		// streamGenerateContent from a generateContent. droid's generate
+		// body has no such field, and Factory ignores it.
+		body = withoutFields(body, "stream")
 	case provider.Anthropic:
 		if p.IsBedrock() {
 			// Claude Code's metadata.user_id, a JSON string these days, is
@@ -2110,7 +2122,10 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.GeminiCompat, req = want, &r
 		}
-		body := build(to, req, model, p.Host(), p.RejectsTemperature(model))
+		body, err := build(to, req, model, p.Host(), p.RejectsTemperature(model))
+		if err != nil {
+			return nil, to, err
+		}
 		if to == provider.Chat && (p.IsBedrock() || p.IsAzure()) {
 			body = asCompletionTokens(body)
 		}
@@ -2641,12 +2656,12 @@ func requiredAllowlist(proto provider.Protocol, body []byte) bool {
 	return false
 }
 
-func build(proto provider.Protocol, r *Request, model, host string, rejectTemp bool) []byte {
+func build(proto provider.Protocol, r *Request, model, host string, rejectTemp bool) ([]byte, error) {
 	switch proto {
 	case provider.Chat:
-		return buildChat(r, model, host, rejectTemp)
+		return buildChat(r, model, host, rejectTemp), nil
 	case provider.Responses:
-		return buildResponses(r, model, host, rejectTemp)
+		return buildResponses(r, model, host, rejectTemp), nil
 	case provider.Gemini:
 		return buildGemini(r, model)
 	}
@@ -2656,7 +2671,7 @@ func build(proto provider.Protocol, r *Request, model, host string, rejectTemp b
 		// goes with it: forwardOnce)
 		out = withFields(out, map[string]any{"speed": "fast"})
 	}
-	return out
+	return out, nil
 }
 
 func decoder(proto provider.Protocol) func(data string, emit func(Event)) error {

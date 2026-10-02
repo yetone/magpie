@@ -9,13 +9,13 @@ package provider
 // line, the agent's prompt, reminders…]). Responses joins those blocks
 // with "\n" into instructions, chat completions joins them into the first
 // system message, Anthropic's Messages keeps them as blocks with the line
-// first, and Gemini's generateContent keeps them as systemInstruction
-// parts. droid2api (github.com/1e0n/droid2api) puts its system_prompt
-// first on all four of its wires: instructions, the first system message,
-// the first system block, and Gemini's systemInstruction parts. That
-// prompt, as config.json ships it, is the line and a blank line. Another
-// agent's request opens so, its own prompt after. One that already opens
-// with the line goes on byte for byte, and so does droid's own.
+// first, and Gemini's generateContent joins them into the one
+// systemInstruction part. droid2api (github.com/1e0n/droid2api) puts its system_prompt
+// first on all four of its wires. That prompt, as config.json ships it, is
+// the line and a blank line. Responses, chat and Gemini's generate join it
+// into the one string droid sends; Anthropic keeps it as the first block.
+// Another agent's prompt follows. One that already opens with the line goes
+// on byte for byte, and so does droid's own.
 
 import (
 	"encoding/json"
@@ -182,35 +182,26 @@ func factoryDroidMessages(m *map[string]json.RawMessage) bool {
 	return true
 }
 
-// factoryDroidGoogle opens a generateContent body's systemInstruction with
-// droid2api's system_prompt, as droid2api prepends it onto parts. The
-// agent's own parts stay after it. False when it opens with the line
-// already, or the field can't be read.
+// factoryDroidGoogle opens a generateContent body's systemInstruction the
+// way droid does, and the way Responses and chat do: one part, its text the
+// prompt and then the agent's, joined. droid joins its own blocks with "\n"
+// into that one part; a body that already opens with the line is left as it
+// is. False when the field can't be read.
 func factoryDroidGoogle(m *map[string]json.RawMessage) bool {
 	raw, ok := (*m)["systemInstruction"]
 	if !ok || string(raw) == "null" {
-		b, err := zcodeEncode(map[string]any{"parts": []any{map[string]any{"text": factoryDroidPrompt}}})
-		if err != nil {
-			return false
-		}
-		(*m)["systemInstruction"] = b
-		return true
+		return factoryDroidGoogleText(m, nil, factoryDroidPrompt)
 	}
 	var s string
 	if json.Unmarshal(raw, &s) == nil {
 		if strings.HasPrefix(s, factoryDroidLine) {
 			return false
 		}
-		parts := []any{map[string]any{"text": factoryDroidPrompt}}
+		text := factoryDroidPrompt
 		if strings.TrimSpace(s) != "" {
-			parts = append(parts, map[string]any{"text": s})
+			text += s
 		}
-		b, err := zcodeEncode(map[string]any{"parts": parts})
-		if err != nil {
-			return false
-		}
-		(*m)["systemInstruction"] = b
-		return true
+		return factoryDroidGoogleText(m, nil, text)
 	}
 	var content map[string]any
 	if zcodeDecode(raw, &content) != nil {
@@ -224,7 +215,32 @@ func factoryDroidGoogle(m *map[string]json.RawMessage) bool {
 			}
 		}
 	}
-	content["parts"] = append([]any{map[string]any{"text": factoryDroidPrompt}}, parts...)
+	var texts []string
+	var rest []any
+	for _, p := range parts {
+		pm, ok := p.(map[string]any)
+		t, tok := pm["text"].(string)
+		if ok && tok && len(pm) == 1 {
+			texts = append(texts, t)
+			continue
+		}
+		rest = append(rest, p)
+	}
+	text := factoryDroidPrompt
+	if joined := strings.Join(texts, "\n"); strings.TrimSpace(joined) != "" {
+		text += joined
+	}
+	return factoryDroidGoogleText(m, content, text, rest...)
+}
+
+// factoryDroidGoogleText writes systemInstruction as one text part, then
+// rest. content's other fields are kept when it is the instruction object
+// already; nil starts a new one.
+func factoryDroidGoogleText(m *map[string]json.RawMessage, content map[string]any, text string, rest ...any) bool {
+	if content == nil {
+		content = map[string]any{}
+	}
+	content["parts"] = append([]any{map[string]any{"text": text}}, rest...)
 	b, err := zcodeEncode(content)
 	if err != nil {
 		return false

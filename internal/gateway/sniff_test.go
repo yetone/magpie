@@ -6,6 +6,16 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
+func TestSniffGeminiUsage(t *testing.T) {
+	s := newSniffer(provider.Gemini, "text/event-stream")
+	s.write([]byte("data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hi\"}]}}],\"usageMetadata\":{\"promptTokenCount\":100,\"candidatesTokenCount\":3,\"thoughtsTokenCount\":2,\"cachedContentTokenCount\":40},\"modelVersion\":\"gemini-3.1-pro-preview\"}\n\n"))
+	got := s.usage()
+	want := Usage{Input: 60, Output: 5, CacheRead: 40, Reasoning: 2, Served: "gemini-3.1-pro-preview"}
+	if got != want {
+		t.Fatalf("got %+v want %+v", got, want)
+	}
+}
+
 func TestSniffAnthropicStream(t *testing.T) {
 	s := newSniffer(provider.Anthropic, "text/event-stream")
 	s.write([]byte("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"usage\":{\"input_tokens\":12,\"cache_read_input_tokens\":300,\"cache_creation_input_tokens\":40,\"output_tokens\":1}}}\n\n"))

@@ -566,7 +566,7 @@ type factoryModel struct {
 }
 
 // factoryModels are the ones droid's /model picker offers, less auto (droid
-// picks it client side). Gemini's are the ones droid 0.232.0's CLI registry
+// picks it client side). Gemini's are the ones droid 0.231.0's CLI registry
 // still offers (provider google); 2.5 and Gemini 3 Pro Image are
 // availableInCLI false there, and stay out. They go to /api/llm/g.
 var factoryModels = []factoryModel{
