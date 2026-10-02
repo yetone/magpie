@@ -1333,6 +1333,12 @@ body.window .foot { padding-left: 18px; }
 .pop li.reset .ic { opacity: .75; }
 .pop li.custom .v { color: var(--fg); }
 .pop li.custom .n { color: var(--muted); }
+/* a group's folded options as one row (withFolds): a chevron where the
+   logos are, turned down while they show under it */
+.pop li.fold .tw { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex: none; color: var(--faint); }
+.pop li.fold .tw svg { transform: rotate(-90deg); transition: transform .2s var(--ease, ease); }
+.pop li.fold[aria-expanded="true"] .tw svg { transform: none; }
+.pop li.fold .v { color: var(--muted); }
 /* a model kept for routing groups, found by the filter: why it isn't
    offered, and what to do, below the choices */
 .pop li.kept, .pop.model-picker li.kept { height: auto; align-items: flex-start; padding: 8px; margin-top: 3px; border-top: 1px solid var(--line); border-radius: 0; white-space: normal; cursor: default; }

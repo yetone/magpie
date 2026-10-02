@@ -463,7 +463,16 @@ func claudeIn(at place) *Agent {
 			for i := range own {
 				own[i].Direct = direct
 			}
-			return append(group(name, own), claudeViaMagpie()...)
+			via := claudeViaMagpie()
+			// Claude Code asks Anthropic for its own models on the account
+			// it is signed in to; magpie's Claude subscription on that same
+			// account only adds a hop, wanted for magpie's usage or routing
+			// alone, so its models are folded, a click away (#496). A
+			// distro's Claude Code has a sign-in magpie doesn't read.
+			if direct == "Anthropic" && at.id == "" && claudeSignedInAlone() {
+				claudeFold(via, cur["model"])
+			}
+			return append(group(name, own), via...)
 		},
 	}, {
 		// the effort Claude Code starts with, as its /effort saves it: under
@@ -749,17 +758,37 @@ func claudeDropModelEffort(path, n string) error {
 // lists, and a compiled-in copy would just go stale. One the user's
 // settings.json names (cur: "model": "sonnet") comes first, said as the
 // model it stands for, so the row doesn't show a bare word; tier is the
-// model the user's env gives a tier, "" for none.
+// model the user's env gives a tier, "" for none. A model models.dev lists
+// under its alias and a dated snapshot both (claude-opus-4-5 and
+// claude-opus-4-5-20251101) is one row (#496): the alias's, or the
+// snapshot's while Claude Code is set to that.
 func claudeOwn(cur string, tier func(string) string) []Option {
 	ms := catalog.Provider("anthropic")
 	var own []Option
 	if o, ok := claudeAliasOption(cur, ms, tier); ok {
 		own = append(own, o)
 	}
+	listed := map[string]bool{}
 	for _, m := range ms {
-		if strings.HasPrefix(m.ID, "claude") {
-			own = append(own, Option{Value: m.ID, Note: m.Name, Icon: "claude-color"})
+		listed[m.ID] = true
+	}
+	// aliasOf is the alias a listed snapshot is listed under too, "" for none
+	aliasOf := func(id string) string {
+		if a := dated.ReplaceAllString(id, ""); a != id && listed[id] && listed[a] {
+			return a
 		}
+		return ""
+	}
+	for _, m := range ms {
+		switch {
+		case !strings.HasPrefix(m.ID, "claude"):
+			continue
+		case aliasOf(m.ID) != "" && m.ID != cur: // its alias's row stands for it
+			continue
+		case m.ID == aliasOf(cur): // the snapshot Claude Code is set to does
+			continue
+		}
+		own = append(own, Option{Value: m.ID, Note: m.Name, Icon: "claude-color"})
 	}
 	return own
 }
@@ -836,6 +865,39 @@ func claudeViaMagpie() []Option {
 		}
 	}
 	return opts
+}
+
+// claudeSignedInAlone reports whether magpie's Claude subscription serves
+// the account Claude Code is signed in to and no other: Claude Code is
+// signed in (signed out, a saved account is served in its place), and its
+// account isn't paused nor has another of magpie's Claude accounts on
+// beside it to take its requests.
+func claudeSignedInAlone() bool {
+	alone := false
+	for _, l := range provider.Logins("claude") {
+		switch {
+		case l.Active:
+			alone = !l.Paused
+		case l.On:
+			return false
+		}
+	}
+	return alone
+}
+
+// claudeFold folds the Claude subscription's models among opts (those
+// claudeViaMagpie gives), unless Claude Code is set to one of them: it goes
+// through magpie by choice then, and they stay in sight.
+func claudeFold(opts []Option, cur string) {
+	sub := func(o Option) bool { return strings.HasPrefix(o.Ref, "claude/") }
+	if slices.ContainsFunc(opts, func(o Option) bool {
+		return sub(o) && (o.Value == cur || o.Ref == strings.TrimSuffix(cur, "[1m]"))
+	}) {
+		return
+	}
+	for i := range opts {
+		opts[i].Folded = sub(opts[i])
+	}
 }
 
 // claude1M marks [1m] a magpie model whose window is 1M or more, as

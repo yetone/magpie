@@ -39,6 +39,12 @@ type Option struct {
 	// sign-in or key, with magpie not in the way ("Anthropic"): its config
 	// then names no magpie endpoint, which is right, not a failed setup
 	Direct string `json:"direct,omitempty"`
+	// Folded is set on a model through magpie on the very account the agent
+	// asks for its own models itself, offered beside them: the picker keeps
+	// these under one row at the end of their group, a click from sight
+	// (#496: Claude Code's models through magpie's Claude subscription,
+	// signed in to the account Claude Code is)
+	Folded bool `json:"folded,omitempty"`
 }
 
 // Field is one tunable setting of an agent. Set with an empty value puts
