@@ -59,13 +59,73 @@ var (
 	marketList []Listing
 	marketAt   time.Time
 	npmMu      sync.Mutex
-	npmCache   = map[string]npmEntry{}
+	npmCache   map[string]npmEntry // nil until read from npmCacheFile
 )
 
+// npmEntry is what npm said of a package, and when; kept on disk beside
+// the market's copy, so a magpie just started shows it before npm answers.
 type npmEntry struct {
-	info NPM
-	ok   bool
-	at   time.Time
+	Info NPM       `json:"info"`
+	At   time.Time `json:"at"`
+}
+
+// Where npm is asked, moved by tests; how many packages are asked at once;
+// how long one is waited for, and all of them.
+var (
+	npmRegistry  = "https://registry.npmjs.org"
+	npmDownloads = "https://api.npmjs.org"
+	npmAtOnce    = 6
+	npmEach      = 6 * time.Second
+	npmAll       = 8 * time.Second
+)
+
+func npmCacheFile() string { return filepath.Join(filepath.Dir(marketCache()), "plugin-npm.json") }
+
+// npmCached is npmCache, read from disk the first time; npmMu held.
+func npmCached() map[string]npmEntry {
+	if npmCache == nil {
+		npmCache = map[string]npmEntry{}
+		if b, err := os.ReadFile(npmCacheFile()); err == nil {
+			_ = json.Unmarshal(b, &npmCache)
+		}
+	}
+	return npmCache
+}
+
+// ReloadInfo forgets what npm said, as kept in memory: the next ask reads
+// it from disk again, as a magpie just started does.
+func ReloadInfo() {
+	npmMu.Lock()
+	npmCache = nil
+	npmMu.Unlock()
+}
+
+// saveNPM writes npmCache to disk; npmMu held.
+func saveNPM() {
+	b, err := json.Marshal(npmCache)
+	if err != nil {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(npmCacheFile()), 0o755)
+	tmp := npmCacheFile() + ".tmp"
+	if os.WriteFile(tmp, b, 0o644) == nil {
+		_ = os.Rename(tmp, npmCacheFile())
+	}
+}
+
+// InfoCached is what npm said last of each package it was asked of, however
+// long ago, without asking again; a package never asked isn't in it.
+func InfoCached(names []string) map[string]NPM {
+	npmMu.Lock()
+	defer npmMu.Unlock()
+	c := npmCached()
+	out := map[string]NPM{}
+	for _, n := range names {
+		if e, ok := c[n]; ok {
+			out[n] = e.Info
+		}
+	}
+	return out
 }
 
 func marketCache() string {
@@ -161,40 +221,72 @@ var errNotFound = errors.New("not found")
 // npmPath is a package's name as the registry's paths take it.
 func npmPath(name string) string { return strings.Replace(url.PathEscape(name), "%40", "@", 1) }
 
-// Info is what npm says of each package, asked at most hourly and all at
-// once; a package npm doesn't have has no Version.
+// Info is what npm says of each package, asked at most hourly: a few at a
+// time, and for no longer than npmAll in all (or ctx). A package npm didn't
+// answer for in time is what it said last, or missing when it never has;
+// its answer, when it comes, is kept for the next time. A package npm
+// doesn't have has no Version.
 func Info(ctx context.Context, names []string) map[string]NPM {
 	out := map[string]NPM{}
-	var wg sync.WaitGroup
 	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, npmAtOnce)
+	ctx, cancel := context.WithTimeout(ctx, npmAll)
+	defer cancel()
+	// asked apart from ctx: one that answers after the page stopped
+	// waiting is still kept
+	bg := context.WithoutCancel(ctx)
+	asked := map[string]bool{}
+	npmMu.Lock()
+	cache := npmCached()
 	for _, n := range names {
-		npmMu.Lock()
-		e, hit := npmCache[n]
-		npmMu.Unlock()
-		if hit && time.Since(e.at) < time.Hour {
-			out[n] = e.info
+		if asked[n] || !pkgName.MatchString(n) {
 			continue
+		}
+		asked[n] = true
+		e, hit := cache[n]
+		if hit {
+			out[n] = e.Info // what it said last, until it says otherwise
+			if time.Since(e.At) < time.Hour {
+				continue
+			}
 		}
 		wg.Add(1)
 		go func(n string) {
 			defer wg.Done()
-			info, ok := npmInfo(ctx, n)
-			mu.Lock()
-			out[n] = info
-			mu.Unlock()
-			if ok {
-				npmMu.Lock()
-				npmCache[n] = npmEntry{info, true, time.Now()}
-				npmMu.Unlock()
-			} else if hit {
-				mu.Lock()
-				out[n] = e.info // npm didn't answer: what it said last
-				mu.Unlock()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			c, cancel := context.WithTimeout(bg, npmEach)
+			info, ok := npmInfo(c, n)
+			cancel()
+			if !ok {
+				return // npm didn't answer: what it said last
 			}
+			npmMu.Lock()
+			npmCached()[n] = npmEntry{info, time.Now()}
+			saveNPM()
+			npmMu.Unlock()
+			mu.Lock()
+			if ctx.Err() == nil {
+				out[n] = info
+			}
+			mu.Unlock()
 		}(n)
 	}
-	wg.Wait()
-	return out
+	npmMu.Unlock()
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	res := make(map[string]NPM, len(out))
+	for k, v := range out {
+		res[k] = v
+	}
+	return res
 }
 
 type npmLatest struct {
@@ -245,15 +337,13 @@ func repoURL(v any) string {
 }
 
 func npmInfo(ctx context.Context, name string) (NPM, bool) {
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	defer cancel()
 	var info NPM
 	var wg sync.WaitGroup
 	var latestErr error
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		b, err := fetchJSON(ctx, "https://registry.npmjs.org/"+npmPath(name)+"/latest", 1<<20)
+		b, err := fetchJSON(ctx, npmRegistry+"/"+npmPath(name)+"/latest", 1<<20)
 		if err != nil {
 			latestErr = err
 			return
@@ -274,7 +364,7 @@ func npmInfo(ctx context.Context, name string) (NPM, bool) {
 	var weekly int
 	go func() {
 		defer wg.Done()
-		b, err := fetchJSON(ctx, "https://api.npmjs.org/downloads/point/last-week/"+npmPath(name), 64<<10)
+		b, err := fetchJSON(ctx, npmDownloads+"/downloads/point/last-week/"+npmPath(name), 64<<10)
 		if err != nil {
 			return
 		}

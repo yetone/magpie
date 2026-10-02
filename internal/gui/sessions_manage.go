@@ -13,7 +13,8 @@ import (
 
 // The Sessions page: every session of an agent, by folder, to pick up again
 // or delete. A delete moves the session's files into magpie's trash, and a
-// restore moves them back; nothing is ever removed for good here.
+// restore moves them back. Only the reader's Delete forever or Empty trash
+// erases what is in the trash; nothing is erased by itself.
 
 type manageAgentJSON struct {
 	sessions.AgentCount
@@ -136,6 +137,41 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 		}
 		forgetStats()
 		writeJSON(rw, map[string]string{"agent": t.Agent, "id": t.ID, "title": cmp.Or(t.Title, t.ID)})
+	})
+	// purge erases trashed sessions for good: the keys named, or every one
+	// the trash lists with all. Each key is checked by sessions.Purge, which
+	// removes only a session's folder in magpie's trash.
+	mux.HandleFunc("POST /api/sessions/purge", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Keys []string `json:"keys"`
+			All  bool     `json:"all"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if in.All {
+			in.Keys = nil
+			for _, t := range sessions.Trash() {
+				in.Keys = append(in.Keys, t.Key)
+			}
+		}
+		type refused struct {
+			Key   string `json:"key"`
+			Error string `json:"error"`
+		}
+		out := struct {
+			Purged  []string  `json:"purged"`
+			Refused []refused `json:"refused"`
+		}{Purged: []string{}, Refused: []refused{}}
+		for _, k := range in.Keys {
+			if err := sessions.Purge(k); err != nil {
+				out.Refused = append(out.Refused, refused{Key: k, Error: err.Error()})
+				continue
+			}
+			out.Purged = append(out.Purged, k)
+		}
+		writeJSON(rw, out)
 	})
 }
 

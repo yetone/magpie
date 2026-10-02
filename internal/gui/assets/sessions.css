@@ -22,7 +22,7 @@
 .sm-note { margin: 0 2px; }
 .sm-bar { gap: 8px; padding: 0 11px; }
 .sm-bar .grow { flex: 1; }
-.sm-bar .sm-delete { display: inline-flex; align-items: center; gap: 5px; }
+.sm-bar .sm-delete, .sm-bar .sm-empty { display: inline-flex; align-items: center; gap: 5px; }
 .sm-bar .sm-delete:disabled { opacity: .45; }
 .sm-count { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .sm-check { flex: none; margin: 0; width: 14px; height: 14px; accent-color: var(--accent); }

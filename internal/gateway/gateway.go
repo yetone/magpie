@@ -1609,7 +1609,8 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		}
 	}
 	if p.IsOpenCode() {
-		req.Header.Set("x-opencode-session", conversationID(in, body))
+		// as OpenCode itself sends it, which Zen's free tier asks for
+		provider.OpenCodeClient(req.Header, conversationID(in, body))
 	}
 	if p.Account != nil && p.Account.Agent == "codex" {
 		// what Codex says about the request goes on as codexUpstream

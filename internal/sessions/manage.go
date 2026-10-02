@@ -419,6 +419,28 @@ func trashFolder(key string) string {
 	return filepath.Join(TrashDir(), agent, name)
 }
 
+// Purge erases a trashed session for good: its folder in magpie's trash,
+// files and note. Only when the reader asks for it (#487); nothing is ever
+// erased by itself. A key that isn't a trashed session's, or whose folder
+// (or its agent's) is a link that could lead out of the trash, is refused.
+func Purge(key string) error {
+	dir := trashFolder(key)
+	if dir == "" {
+		return errors.New("no such deleted session")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, p := range []string{filepath.Dir(dir), dir} {
+		if fi, err := os.Lstat(p); err != nil || !fi.IsDir() {
+			return errors.New("no such deleted session")
+		}
+	}
+	if fi, err := os.Lstat(filepath.Join(dir, manifest)); err != nil || !fi.Mode().IsRegular() {
+		return errors.New("no such deleted session")
+	}
+	return os.RemoveAll(dir)
+}
+
 // Restore moves a trashed session's files back where they were. Nothing is
 // moved when any of those places is taken again.
 func Restore(key string) (Trashed, error) {

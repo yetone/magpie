@@ -302,7 +302,10 @@ var presets = []PresetDef{
 		Chat: "https://opencode.ai/zen/v1", Responses: "https://opencode.ai/zen/v1", Anthropic: "https://opencode.ai/zen",
 		Website: "https://opencode.ai/docs/zen", KeysURL: "https://opencode.ai/auth",
 		// its free models answer 403 "OpenCode's free tier can only be used
-		// from within OpenCode" to anything else
+		// from within OpenCode" to anything else: OpenCode's headers, which
+		// magpie sends (OpenCodeClient), are not enough without a streamed
+		// request offering tools named bash and read, as OpenCode's and Pi's
+		// do and most agents' don't
 		Drop: "-free"},
 	// Command Code's Provider API: its Claude models on /messages alone, the
 	// rest on chat and Responses, as its model list says (#93)

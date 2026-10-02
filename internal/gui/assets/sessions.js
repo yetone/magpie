@@ -1,7 +1,9 @@
 // Sessions: every session of an agent on this computer, by the folder it
 // ran in, to pick up again or to delete. A delete asks first, in magpie's
 // own dialog, and moves the session's files into magpie's trash; the Trash
-// lists them, each with a Restore. A session written to in the last minute
+// lists them, each with a Restore and a Delete forever, and can be emptied;
+// erasing for good asks in the same dialog, and is only ever done when the
+// reader asks for it. A session written to in the last minute
 // may still be running, and is left as it is. Everything comes from
 // /api/sessions/manage.
 (() => {
@@ -368,9 +370,67 @@
     cancel.focus({ preventScroll: true });
   }
 
+  // askPurge asks in magpie's dialog before trashed sessions are erased for
+  // good: the ones listed, or the whole trash (all)
+  function askPurge(list, all) {
+    if (!list.length) return;
+    const ed = el("div", "editor sm-ask sm-ask-purge");
+    const h = el("div", "ehead");
+    h.append(svg(TRASH, 15, 1.4), el("b", "", all ? t("Empty magpie's trash?") : t("Delete this session forever?")));
+    ed.append(h);
+    const names = el("ul", "sm-ask-list");
+    for (const x of list.slice(0, 5)) names.append(el("li", "", x.title || x.id));
+    if (list.length > 5) names.append(el("li", "more", t("+{n} more", { n: list.length - 5 })));
+    ed.append(names);
+    ed.append(el("p", "lib-confirm", all ? t("Every session in magpie's trash is erased for good: it can't be restored.") : t("Its files are erased for good: it can't be restored.")));
+    const bar = el("div", "bar");
+    const go = el("button", "text primary danger-fill", all ? t("Empty trash") : t("Delete forever"));
+    go.type = "button";
+    go.onclick = async (e) => {
+      e.stopPropagation();
+      go.disabled = true;
+      go.classList.add("busy");
+      let out;
+      try {
+        out = await api("sessions/purge", all ? { all: true } : { keys: list.map((x) => x.key) });
+      } catch (err) {
+        go.disabled = false;
+        go.classList.remove("busy");
+        status(err.message, "err");
+        return;
+      }
+      closeConfirmAsk();
+      if (out.refused.length) {
+        const first = out.refused[0], x = list.find((y) => y.key === first.key);
+        status((x?.title || x?.id || first.key) + ": " + first.error, "err");
+      } else {
+        status(t(out.purged.length === 1 ? "Erased for good" : "{n} sessions erased for good", { n: out.purged.length }), "ok");
+      }
+      await load();
+    };
+    const cancel = el("button", "text", t("Cancel"));
+    cancel.type = "button";
+    cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
+    bar.append(el("span", "grow"), cancel, go);
+    ed.append(bar);
+    confirmAsk = ed;
+    openModal(ed);
+    $("#modal").classList.add("lib");
+    cancel.focus({ preventScroll: true });
+  }
+
   function trash() {
     const out = [];
     const items = data.trash;
+    if (items.length) {
+      const bar = el("div", "row-head sm-bar sm-trash-bar");
+      const empty = el("button", "text danger sm-empty");
+      empty.type = "button";
+      empty.append(svg(TRASH, 13, 1.4), el("span", "", t("Empty trash")));
+      empty.onclick = () => askPurge(items, true);
+      bar.append(el("span", "note sm-count", t(items.length === 1 ? "{n} session" : "{n} sessions", { n: items.length })), el("span", "grow"), empty);
+      out.push(bar);
+    }
     if (!items.length) {
       const e = el("div", "empty-state");
       e.append(el("b", "", t("Trash is empty")), el("span", "", t("Sessions deleted here wait in magpie's trash, to be restored.")));
@@ -402,11 +462,18 @@
           await load();
         };
         r.append(b);
+        const del = el("button", "copy sm-del sm-purge");
+        del.type = "button";
+        del.title = t("Delete forever");
+        del.setAttribute("aria-label", t("Delete forever"));
+        del.append(svg(TRASH, 13, 1.4));
+        del.onclick = (e) => { e.stopPropagation(); askPurge([x], false); };
+        r.append(del);
         l.append(r);
       }
       out.push(l);
     }
-    out.push(el("p", "usage-note", t("Deleted sessions are kept in {dir}; magpie never erases them. Remove that folder yourself to free the space.", { dir: data.trashDir })));
+    out.push(el("p", "usage-note", t("Deleted sessions are kept in {dir} until you erase them here; magpie never erases them by itself.", { dir: data.trashDir })));
     return out;
   }
 })();

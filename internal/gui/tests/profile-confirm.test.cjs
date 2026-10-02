@@ -163,6 +163,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await detail.count(), 0, "closed with the list, the details stay closed");
           assert.equal(await home.getAttribute("aria-expanded"), "false");
         } else assert.deepEqual(calls, []);
+
+        // Apply closes the details, for good, and × works after it (#489:
+        // the details stayed, or came back with the list, and their × did
+        // nothing)
+        calls.length = 0; // in the panel, the list is open from above
+        await homeName.click();
+        await detail.waitFor();
+        await detail.locator(".pd-apply").click();
+        await page.waitForFunction(() => document.querySelector("#status").classList.contains("ok"));
+        assert.deepEqual(calls, ["use home"]);
+        await page.waitForTimeout(200);
+        assert.equal(await detail.count(), 0, "Apply closes the details");
+        assert.equal(await home.getAttribute("aria-expanded"), "false");
+        if (panel) {
+          assert.equal(await open.count(), 0, "Apply closes the panel's list");
+          await openList();
+          assert.equal(await detail.count(), 0, "after Apply the list opens on the chips");
+        }
+        await homeName.click();
+        await detail.waitFor();
+        await detail.locator(".pd-close").click();
+        await page.waitForTimeout(200);
+        assert.equal(await detail.count(), 0, "after Apply the details' × still closes them");
+        assert.equal(await home.getAttribute("aria-expanded"), "false");
         assert.deepEqual(errors, []);
       });
     }

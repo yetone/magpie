@@ -1,9 +1,10 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // ZCode's Start Plan turning a request away (#425: 405 "request has been
 // blocked due to unusual activity", code 3012): the Routing page gives
-// what the gateway made of it, and apart from that what it means (ZCode
-// takes only its own app's requests, or the network blocked the address,
-// and what to use instead), in the page's language.
+// what the gateway made of it, and apart from that what it means (it was
+// sent as the ZCode app sends it, so the network blocked the address or
+// ZCode checks something new, and what to use instead), in the page's
+// language.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -14,7 +15,7 @@ const assets = path.resolve(__dirname, "../assets");
 const now = new Date();
 const day = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map((n) => String(n).padStart(2, "0")).join("-");
 const at = (i) => new Date(now.getTime() - (i + 1) * 60e3).toISOString();
-const hint = "ZCode's Start Plan turns away requests that don't come from the ZCode app itself, and magpie doesn't pretend to be it; it can also be a network block of this IP. Use an account with a GLM Coding Plan, or add another provider to this group";
+const hint = "ZCode's Start Plan still turned this request away, though magpie sends it as the ZCode app does; it can be a network block of this IP, or ZCode checking for something new. Use an account with a GLM Coding Plan, or add another provider to this group";
 const vendor = "ZCode: 405 Method Not Allowed";
 const key = { id: "zcode", provider: "zcode", name: "ZCode", kind: "provider", model: "GLM-5.3-Flash" };
 // newest first: the block, then another 405 with nothing to add
@@ -56,7 +57,7 @@ function serve(lang) {
 
 const want = {
   en: { said: "It said: " + vendor, hint },
-  zh: { said: "原话：" + vendor, hint: "ZCode 体验套餐会拒绝不是来自 ZCode 客户端本身的请求，magpie 不会冒充它；也可能是网络拦截了这个 IP。请改用有 GLM Coding Plan 的账号，或在这个分组里加上其他供应商" },
+  zh: { said: "原话：" + vendor, hint: "ZCode 体验套餐仍拒绝了这个请求（magpie 已按 ZCode 客户端的方式发送）；可能是网络拦截了这个 IP，或 ZCode 又加了新的校验。请改用有 GLM Coding Plan 的账号，或在这个分组里加上其他供应商" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

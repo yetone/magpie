@@ -46,9 +46,11 @@ function serve(lang, posts) {
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" } });
     if (url.pathname === "/api/providers") return json(payload());
     if (url.pathname === "/api/groups") return json({ groups: [] });
-    if (url.pathname === "/api/plugins/market") {
-      return json({ listings: [{ package: pkg, name: "Zed", icon: "zed", providers: ["zed"], community: true, replaces: "zed", summary: { en: "Zed", zh: "Zed" }, npm: { version: "0.1.0" } }],
+    // the page asks for the market in parts (#488)
+    if (url.pathname === "/api/plugins/market" || url.pathname === "/api/plugins" || url.pathname === "/api/plugins/listings") {
+      const m = ({ listings: [{ package: pkg, name: "Zed", icon: "zed", providers: ["zed"], community: true, replaces: "zed", summary: { en: "Zed", zh: "Zed" }, npm: { version: "0.1.0" } }],
         state: { bun: true, bunVersion: "1.3.0", plugins: [], movable: move.state === "plugin" ? [] : [{ id: "zed", name: "Zed", package: pkg, accounts: 2 }] } });
+      return json(url.pathname === "/api/plugins" ? m.state : url.pathname === "/api/plugins/listings" ? { listings: m.listings } : m);
     }
     if (url.pathname === "/api/provider/move" || url.pathname === "/api/provider/moveback") {
       posts.push({ path: url.pathname, body: route.request().postDataJSON() });

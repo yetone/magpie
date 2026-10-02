@@ -2,15 +2,20 @@
 // signs in to through someone else's code. Discover lists the plugins
 // magpie suggests (the community repo's list, with what npm says of each
 // now) and finds the rest on npm; Installed is what was added, to sign in
-// with, update, switch off or remove. Everything comes from
-// /api/plugins/market; a sign-in happens in the Providers add sheet, as
-// every other subscription's does.
+// with, update, switch off or remove. Each part is drawn as it comes
+// (#488): what's installed from /api/plugins, the plugins suggested from
+// /api/plugins/listings, and what npm says of them (versions, downloads)
+// from /api/plugins/npm after; a sign-in happens in the Providers add
+// sheet, as every other subscription's does.
 (() => {
   const page = $("#view-plugins");
   if (!page) return;
 
-  let market = null;     // /api/plugins/market
-  let failed = "";       // why the market couldn't be loaded
+  let mine = null;       // /api/plugins: what's installed
+  let listings = null;   // /api/plugins/listings: the plugins suggested
+  const npm = {};        // /api/plugins/npm: package → what npm says of it
+  let failed = "";       // why what's installed couldn't be loaded
+  let failedList = "";   // ...and the plugins suggested
   let tab = "discover";
   try { tab = localStorage.getItem("magpie.pluginTab") || tab; } catch {}
   let query = "";
@@ -45,7 +50,9 @@
   const lang = () => (document.documentElement.lang || "").startsWith("zh") ? "zh" : "en";
   const summary = (l) => l.summary?.[lang()] || l.summary?.en || l.npm?.description || "";
   const count = (n) => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "k" : String(n || 0);
-  const entryOf = (pkg) => market?.state.plugins.find((e) => name(e.spec) === pkg);
+  const entryOf = (pkg) => mine?.plugins?.find((e) => name(e.spec) === pkg);
+  // npm has the versions of a package: not a folder's, nor a git one's
+  const onNPM = (spec) => !isPath(spec) && !isGit(spec);
   // the providers a plugin signs in to, as the add sheet knows them
   const subsOf = (pkg) => (providers?.plugins || []).filter((x) => name(x.spec) === pkg);
   const newer = (a, b) => {
@@ -63,18 +70,64 @@
     return box;
   }
 
-  async function load() {
-    const first = !market;
-    if (first) draw();
+  // npm's answers, put where the cards and rows read them: on the
+  // listing and the entry themselves, so a plugin's page opened before
+  // npm answered has them too
+  function merge() {
+    for (const l of listings || []) if (npm[l.package]) l.npm = npm[l.package];
+    for (const e of mine?.plugins || []) if (onNPM(e.spec) && npm[name(e.spec)]?.version) e.latest = npm[name(e.spec)].version;
+  }
+  // redrawn as a part comes: the search field keeps its focus
+  function redraw() {
+    const q = page.querySelector(".pm-find input");
+    const typing = q && document.activeElement === q;
+    draw();
+    if (typing) page.querySelector(".pm-find input")?.focus({ preventScroll: true });
+  }
+  async function loadMine() {
     try {
-      const [m] = await Promise.all([api("plugins/market"), providers ? null : loadProviders().catch(() => {})]);
-      market = m;
+      mine = await api("plugins");
       failed = "";
     } catch (e) {
       failed = e.message;
     }
-    draw();
-    window.renderPluginDot?.();
+    merge();
+  }
+  async function loadListings() {
+    try {
+      const r = await api("plugins/listings");
+      listings = r.listings || [];
+      failedList = "";
+    } catch (e) {
+      failedList = e.message;
+    }
+    merge();
+  }
+  // what npm says of the plugins suggested and those installed: drawn
+  // when it comes, never waited on
+  async function askNPM(only) {
+    const names = [...new Set([...(listings || []).map((l) => l.package), ...(mine?.plugins || []).filter((e) => onNPM(e.spec)).map((e) => name(e.spec))])]
+      .filter((n) => !only || !npm[n]);
+    if (!names.length) return;
+    try {
+      const r = await api("plugins/npm?names=" + encodeURIComponent(names.join(",")));
+      Object.assign(npm, r.npm || {});
+    } catch {}
+    merge();
+    // one npm said nothing of, now or ever: as one it doesn't have
+    for (const l of listings || []) if (!l.npm) l.npm = { weekly: 0 };
+    drawBody();
+  }
+
+  async function load() {
+    if (!mine && !listings) draw();
+    const parts = [
+      loadMine().then(() => { redraw(); window.renderPluginDot?.(); }),
+      loadListings().then(redraw),
+      providers ? null : loadProviders().then(drawBody, () => {}),
+    ];
+    await Promise.all(parts);
+    askNPM();
   }
   window.loadPlugins = load;
   // pluginQuery: Discover, looking for q (the add sheet found nothing by it)
@@ -90,14 +143,16 @@
 
   async function refresh() {
     try {
-      const [m, p] = await Promise.all([api("plugins/market"), api("providers")]);
-      market = m;
+      const [m, p] = await Promise.all([api("plugins"), api("providers")]);
+      mine = m;
       providers = p;
+      merge();
       // the Providers page owns the dialog as it draws: only drawn when shown
       if (view === "providers") renderProviders();
     } catch (e) { status(e.message, "err"); }
     draw();
     window.renderPluginDot?.();
+    askNPM(true);
   }
 
   async function act(pkg, op, body, done) {
@@ -116,7 +171,7 @@
     }
   }
   // the built-ins with accounts this plugin could run in their place
-  const movableOf = (pkg) => (market?.state.movable || []).filter((c) => c.package === pkg);
+  const movableOf = (pkg) => (mine?.movable || []).filter((c) => c.package === pkg);
   // move: a built-in's accounts onto its plugin, installing it if need be,
   // as its editor's Runs on does
   async function move(c) {
@@ -166,9 +221,17 @@
     if (op === "add" || op === "upgrade" || op === "move") {
       b.classList.add("busy");
       if (op === "move") b.classList.add("move");
-      b.append(el("span", "spin"), el("span", "", op === "move" ? t("Moving…") : op === "upgrade" ? t("Updating…") : market?.state.bun ? t("Installing…") : t("Getting Bun…")));
+      b.append(el("span", "spin"), el("span", "", op === "move" ? t("Moving…") : op === "upgrade" ? t("Updating…") : mine?.bun ? t("Installing…") : t("Getting Bun…")));
       b.disabled = true;
-      if (!market?.state.bun) b.title = t("Plugins run on Bun {v}, downloaded once", { v: market?.state.bunVersion || "" });
+      if (!mine?.bun) b.title = t("Plugins run on Bun {v}, downloaded once", { v: mine?.bunVersion || "" });
+      return b;
+    }
+    // not known yet whether it's installed, or whether npm has it: a
+    // button that waits, rather than one that says the wrong thing
+    if (!mine || (!e && listed && !listed.npm)) {
+      b.classList.add("busy");
+      b.append(el("span", "spin"));
+      b.disabled = true;
       return b;
     }
     if (!e) {
@@ -288,7 +351,7 @@
 
   function head() {
     const h = el("div", "lib-head pm-head");
-    const n = market?.state.plugins.length || 0;
+    const n = mine?.plugins?.length || 0;
     const tabs = segs([["discover", t("Discover")], ["installed", t("Installed") + (n ? " · " + n : "")]], tab, (id) => {
       tab = id;
       try { localStorage.setItem("magpie.pluginTab", id); } catch {}
@@ -352,17 +415,17 @@
     shown = key;
     body.replaceChildren();
     // the search field keeps its focus: only the body is redrawn while typing
-    if (failed && !market) {
-      body.append(el("p", "pm-empty", t("Couldn't load the plugins: {error}", { error: failed })));
+    if (tab === "installed") return drawInstalled();
+    if (failedList && !listings) {
+      body.append(el("p", "pm-empty", t("Couldn't load the plugins: {error}", { error: failedList })));
       return;
     }
-    if (tab === "installed") return drawInstalled();
-    if (!market) {
+    if (!listings) {
       body.append(intro(), skeleton(6));
       return;
     }
     const f = query.trim().toLowerCase();
-    const ls = market.listings.filter((l) => !f || [l.name, l.package, summary(l), (l.providers || []).join(" "), l.npm?.publisher || ""].join(" ").toLowerCase().includes(f));
+    const ls = listings.filter((l) => !f || [l.name, l.package, summary(l), (l.providers || []).join(" "), l.npm?.publisher || ""].join(" ").toLowerCase().includes(f));
     if (!f) {
       body.append(intro());
       // magpie's community's alone: others' plugins are found by a search
@@ -372,7 +435,7 @@
       return;
     }
     if (ls.length) body.append(section(t("Suggested"), "", ls));
-    const known = new Set(market.listings.map((l) => l.package));
+    const known = new Set(listings.map((l) => l.package));
     const box = el("section", "pm-sec");
     const h = el("div", "pm-sechead");
     h.append(el("h3", "", t("On npm")), el("span", "", t("OpenCode plugins anyone published — read what one does before you install it")));
@@ -427,7 +490,7 @@
     box.append(spec);
     // a folder is picked, not typed, where magpie can show the system's
     // picker (`magpie web` can't, and the market says so)
-    if (market?.state.picker) box.append(browse(spec, go));
+    if (mine?.picker) box.append(browse(spec, go));
     box.append(go);
     return box;
   }
@@ -459,8 +522,12 @@
   }
 
   function drawInstalled() {
-    if (!market) { body.append(skeleton(2)); return; }
-    const es = market.state.plugins;
+    if (failed && !mine) {
+      body.append(el("p", "pm-empty", t("Couldn't load the plugins: {error}", { error: failed })));
+      return;
+    }
+    if (!mine) { body.append(skeleton(2)); return; }
+    const es = mine.plugins || [];
     if (!es.length) {
       const none = el("div", "pm-none");
       none.append(logo("", true), el("b", "", t("No plugins yet")), el("p", "", t("Find a subscription in Discover and install it; it signs in from here.")));
@@ -483,7 +550,7 @@
     body.append(list);
     const foot = el("div", "pm-foot");
     const outdated = es.filter((e) => e.latest && e.version && newer(e.latest, e.version));
-    foot.append(el("span", "", market.state.bun ? t("Plugins run on Bun {v}", { v: market.state.bunVersion }) : ""), el("span", "grow"));
+    foot.append(el("span", "", mine.bun ? t("Plugins run on Bun {v}", { v: mine.bunVersion }) : ""), el("span", "grow"));
     if (outdated.length) {
       const up = el("button", "text", busy.has("*") ? t("Updating…") : t("Update all ({n})", { n: outdated.length }));
       up.disabled = busy.size > 0;
@@ -497,12 +564,12 @@
   // package's or the folder's
   function shownName(e) {
     const pkg = name(e.spec);
-    return market.listings.find((x) => x.package === pkg)?.name || (isGit(e.spec) && e.package) || label(e.spec);
+    return (listings || []).find((x) => x.package === pkg)?.name || (isGit(e.spec) && e.package) || label(e.spec);
   }
 
   function installedRow(e) {
     const pkg = name(e.spec);
-    const l = market.listings.find((x) => x.package === pkg);
+    const l = (listings || []).find((x) => x.package === pkg);
     const r = el("div", "row pm-row" + (e.off ? " off" : ""));
     const who = el("div", "who");
     const nm = el("div", "name");

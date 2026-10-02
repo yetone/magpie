@@ -43,8 +43,8 @@ function server(lang) {
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" } });
     if (url.pathname === "/api/library") return json(lib());
-    if (url.pathname === "/api/plugins") return json({ plugins: [] });
-    if (url.pathname === "/api/plugins/market") return json({ listings, state: { bun: true, bunVersion: "1.3.0", plugins, picker: false } });
+    // the page asks for the market in parts (#488)
+    if (url.pathname === "/api/plugins/market" || url.pathname === "/api/plugins" || url.pathname === "/api/plugins/listings") { const m = { listings, state: { bun: true, bunVersion: "1.3.0", plugins, picker: false } }; return json(url.pathname === "/api/plugins" ? m.state : url.pathname === "/api/plugins/listings" ? { listings: m.listings } : m); }
     if (url.pathname === "/api/plugins/search") return json({ hits: [] });
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true }, plugins: [] });
     if (url.pathname === "/api/groups") return json({ groups: [], pools: [] });

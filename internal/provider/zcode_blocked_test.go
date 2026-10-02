@@ -12,9 +12,9 @@ const zcodeBlockPage = `<!DOCTYPE html><html><head><title>405</title></head><bod
 <h1>Sorry, your request has been blocked due to unusual activity.</h1>
 <a href="https://errors.aliyun.com/error/405?code=blocked">errors.aliyun.com</a></body></html>`
 
-// The Start Plan's block is said for what it is (#425): ZCode turns away
-// requests that aren't its app's own, or the network blocked the address,
-// and what to use instead; not only the firewall. A Coding Plan account,
+// The Start Plan's block is said for what it is (#425): sent as ZCode's
+// app sends it, it is the network blocking the address or ZCode checking
+// something new, and what to use instead; not only the firewall. A Coding Plan account,
 // and any other provider, keep the generic hint.
 func TestZCodeStartBlockedSaid(t *testing.T) {
 	say := func(p Provider, status int, body string) string {

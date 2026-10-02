@@ -1059,10 +1059,12 @@ func TestOpenCodeGetsConversationSession(t *testing.T) {
 		}
 		return f.head.Get("x-opencode-session")
 	}
-	if got := send(http.Header{"Session_id": {"codex-ses"}}); got != "codex-ses" {
-		t.Errorf("agent's session: %q", got)
+	// in OpenCode's form (ses_…), one for each of the agent's sessions
+	codex := send(http.Header{"Session_id": {"codex-ses"}})
+	if !strings.HasPrefix(codex, "ses_") || send(http.Header{"Session_id": {"codex-ses"}}) != codex {
+		t.Errorf("agent's session: %q", codex)
 	}
-	if a, b := send(nil), send(nil); a == "" || a != b {
+	if a, b := send(nil), send(nil); !strings.HasPrefix(a, "ses_") || a != b || a == codex {
 		t.Errorf("derived session: %q %q", a, b)
 	}
 }

@@ -318,7 +318,7 @@ func zcodeProvider(who, plan string, k zcodeKey) Provider {
 				return errZCodeExpired
 			}
 			key = k.JWT
-			zcodeSourceHeaders(req)
+			zcodeStartRequest(req, body)
 		}
 		req.Header.Del("Authorization")
 		req.Header.Set("x-api-key", key)

@@ -246,7 +246,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "Claude Code's, Codex's, OpenCode's and Pi's sessions on this computer show up here, by the folder they ran in.",
         "magpie can list {agent}'s sessions and resume them, but not delete them: they aren't kept as files of their own.",
         "Their files are moved to magpie's trash ({dir}), not erased: Trash puts them back. A session written to in the last minute is left alone, as {agent} may still be running it.",
-        "Deleted sessions are kept in {dir}; magpie never erases them. Remove that folder yourself to free the space.",
+        "Deleted sessions are kept in {dir} until you erase them here; magpie never erases them by itself.",
       ].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");
       assert.deepEqual(errors, []);

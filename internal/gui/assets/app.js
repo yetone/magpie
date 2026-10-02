@@ -585,8 +585,9 @@ function toggleProfile(chip, p) {
 }
 
 // closeProfileDetail closes the details shown, if any: false if none were.
+// Details on the page close whether or not profileOpen still names them.
 function closeProfileDetail() {
-  if (!profileOpen) return false;
+  if (!profileOpen && !$("#profiles > .prof-detail")) return false;
   profileOpen = null;
   $("#profiles > .prof-detail")?.remove();
   $(".profiles").classList.remove("detailed");
@@ -2515,7 +2516,10 @@ async function profileAction(action, name, update) {
     state = data;
     renderAgents();
     if (action === "use") {
-      profileOpen = null;
+      // the details close, renderAgents having drawn them again (#489:
+      // profileOpen dropped first, closeProfileDetail found nothing open and
+      // left them there, their × doing nothing)
+      closeProfileDetail();
       closeProfiles(); // the agents, as they are now, in sight
       let msg = t(data.changed === 1 ? "{name} applied · {n} setting changed" : "{name} applied · {n} settings changed", { name, n: data.changed });
       const lib = data.library;
@@ -7566,6 +7570,7 @@ let quotasAt = 0; // when they came in
 // reading is due (every 5 to 15 minutes, at random, once Claude Code was used).
 async function loadUsage(asked) {
   renderUsageTab();
+  renderUsageEvery(); // the refresh's tooltip says what it reads on this tab
   if (asked) loadQuotas(true);
   if (usageTab === "sessions") return loadSessions();
   if (usageTab === "requests") return loadLedger();
@@ -7588,12 +7593,6 @@ function loadQuotas(asked) {
   quotasLoading = p;
   return p;
 }
-$("#quotaRefresh").onclick = async (e) => {
-  const b = e.currentTarget;
-  b.disabled = true;
-  b.classList.add("busy");
-  try { await loadQuotas(true); } finally { b.disabled = false; b.classList.remove("busy"); }
-};
 
 // the period picker, in the page's head, for the Overview and Requests
 function renderPeriod(loading) {
@@ -12476,7 +12475,10 @@ function renderUsageEvery() {
     }, "Refresh every", "sess-menu");
   };
   const r = $("#usageReload");
-  r.title = usageReadAt ? t("Refresh now") + " · " + t("Updated {time}", { time: new Date(usageReadAt).toLocaleTimeString(locale === "zh" ? "zh-CN" : undefined, { hour12: false }) }) : t("Refresh now");
+  // on the Overview it reads the allowances again too (#486: they had a
+  // Refresh of their own beside it)
+  const what = usageTab === "usage" ? t("Refresh now, the allowances too; a Claude account's is read by running Claude Code's own /usage") : t("Refresh now");
+  r.title = usageReadAt ? what + " · " + t("Updated {time}", { time: new Date(usageReadAt).toLocaleTimeString(locale === "zh" ? "zh-CN" : undefined, { hour12: false }) }) : what;
   r.setAttribute("aria-label", t("Refresh now"));
   r.onclick = async () => {
     r.classList.add("busy");
@@ -12494,11 +12496,18 @@ async function refreshUsage(now = false) {
     } else if (usageTab === "requests") {
       // the newest page takes the requests as they come; an older one stays put
       if (ledger && (now || !ledOffset)) await loadLedger(true);
-    } else if (usage) {
-      if (now || performance.now() - quotasAsked > 60e3) { quotasAsked = performance.now(); loadQuotas(); }
-      const p = period;
-      const u = await api("usage?period=" + p);
-      if (view === "usage" && usageTab === "usage" && p === period && JSON.stringify(u) !== JSON.stringify(usage)) { usage = u; renderUsage(); }
+    } else {
+      // the reader asking reads the allowances afresh, a Claude account's by
+      // running Claude Code's own /usage (the backend runs it at most once in 30s)
+      let q = null;
+      if (now) { quotasAsked = performance.now(); q = loadQuotas(true); }
+      else if (usage && performance.now() - quotasAsked > 60e3) { quotasAsked = performance.now(); loadQuotas(); }
+      if (usage) {
+        const p = period;
+        const u = await api("usage?period=" + p);
+        if (view === "usage" && usageTab === "usage" && p === period && JSON.stringify(u) !== JSON.stringify(usage)) { usage = u; renderUsage(); }
+      }
+      await q;
     }
     usageReadAt = Date.now();
     renderUsageEvery();

@@ -2,7 +2,8 @@
 // A Claude account's usage is read only when the reader asks (the user:
 // 不要伪造任何的 Claude 请求，能否通过 claude cli 获取): magpie runs Claude
 // Code's own /usage, and only when the Usage page is opened or Refresh is
-// pressed. Opening the page and Refresh load usage/quotas?asked=1; the
+// pressed. Opening the page and Refresh (the header's, which on the Overview
+// is the allowances' too, #486) load usage/quotas?asked=1; the
 // window coming back to the front and the timed reload load it without; an
 // asked load isn't swallowed by an unasked one already on its way, it goes
 // after it. Chromium and WebKit; no backend, the API is faked here.
@@ -50,7 +51,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     // opening the page asks
     await page.goto("http://magpie.test/?view=usage");
-    await page.locator("#quotaRefresh").waitFor();
+    await page.locator("#usageReload").waitFor();
     await settle(1);
     assert.equal(asked(), 1, `opening Usage asks once: ${JSON.stringify(asks)}`);
 
@@ -66,7 +67,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal(asked(), 1, `a timed reload must not ask: ${JSON.stringify(asks)}`);
 
     // Refresh asks
-    await page.locator("#quotaRefresh").click();
+    await page.locator("#usageReload").click();
     await settle(asks.length + 1);
     assert.equal(asked(), 2, `Refresh asks: ${JSON.stringify(asks)}`);
 
@@ -75,7 +76,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     n = asks.length;
     await page.evaluate(() => { loadQuotas(); });
     for (let i = 0; i < 100 && !hold.release; i++) await page.waitForTimeout(20);
-    await page.locator("#quotaRefresh").click();
+    await page.locator("#usageReload").click();
     hold.on = false;
     hold.release();
     await settle(n + 2);

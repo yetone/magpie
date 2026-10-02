@@ -16,13 +16,16 @@ package provider
 // key at all; to the Coding Plan otherwise, as before.
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -52,9 +55,10 @@ var zcodeStartModels = func() []catalog.Model {
 // due to unusual activity" (HTTP 405, code 3012 "method not allowed")
 // means (#425): zcode.z.ai looks at what a request carries and turns away
 // one that isn't the ZCode app's own, its system prompt and all, as
-// zcode2api found; it can still be Alibaba Cloud's firewall blocking the
-// address (BlockedHint). magpie sends the agent's request as it is.
-const ZCodeStartBlockedHint = "ZCode's Start Plan turns away requests that don't come from the ZCode app itself, and magpie doesn't pretend to be it; it can also be a network block of this IP. Use an account with a GLM Coding Plan, or add another provider to this group"
+// zcode2api found, so magpie sends it as the app does (zcode_client.go).
+// One turned away still is Alibaba Cloud's firewall blocking the address
+// (BlockedHint), or ZCode checking for something magpie doesn't send.
+const ZCodeStartBlockedHint = "ZCode's Start Plan still turned this request away, though magpie sends it as the ZCode app does; it can be a network block of this IP, or ZCode checking for something new. Use an account with a GLM Coding Plan, or add another provider to this group"
 
 // zcodeStartRefused matches that refusal: the block page, or its code.
 var zcodeStartRefused = regexp.MustCompile(`(?i)unusual activity|"code"\s*:\s*"?3012\b`)
@@ -142,22 +146,75 @@ func zcodeRebase(req *http.Request, from, to string) {
 }
 
 // zcodeSourceHeaders are the headers ZCode names itself with on a model
-// request.
+// request to the Start Plan (zcode_client.go), as zcode2api found them
+// (src/upstream/headers.js): the app, its agent and release, the
+// machine, the language and time zone, a new request and trace id, and
+// no query or session id.
 func zcodeSourceHeaders(req *http.Request) {
-	platform := runtime.GOOS
-	if platform == "windows" {
-		platform = "win32"
-	}
+	platform := zcodePlatform()
 	arch := runtime.GOARCH
 	if arch == "amd64" {
 		arch = "x64"
 	}
-	req.Header.Set("User-Agent", "ZCode/"+zcodeAppVersion)
+	category := map[string]string{"darwin": "macos", "win32": "windows"}[platform]
+	if category == "" {
+		category = "linux"
+	}
+	req.Header.Set("User-Agent", "ZCode/"+zcodeAppVersion+" ai-sdk/anthropic/3.0.81")
 	req.Header.Set("X-ZCode-App-Version", zcodeAppVersion)
 	req.Header.Set("X-Title", "Z Code@electron")
+	req.Header.Set("X-ZCode-Agent", "glm")
 	req.Header.Set("HTTP-Referer", zcodeAPI)
 	req.Header.Set("X-Platform", platform+"-"+arch)
+	req.Header.Set("X-Os-Category", category)
+	req.Header.Set("X-Release-Channel", "production")
+	req.Header.Set("X-Client-Language", zcodeLanguage())
+	if tz := zcodeTimezone(); tz != "" {
+		req.Header.Set("X-Client-Timezone", tz)
+	}
+	req.Header.Set("X-Request-Id", randomUUID())
+	req.Header.Set("X-ZCode-Session-Type", "main")
+	req.Header.Set("X-ZCode-Trace-Id", randomUUID())
 	zcodeDeviceHeader(req)
+}
+
+// zcodeLanguage is the user's language as ZCode gives it (zh-CN, en-US).
+func zcodeLanguage() string {
+	for _, k := range []string{"LC_ALL", "LC_MESSAGES", "LANG"} {
+		v, _, _ := strings.Cut(os.Getenv(k), ".")
+		if v != "" && v != "C" && v != "POSIX" {
+			return strings.ReplaceAll(v, "_", "-")
+		}
+	}
+	return "en-US"
+}
+
+// zcodeTimezone is the IANA name of the local time zone, "" when it can't
+// be told.
+func zcodeTimezone() string {
+	if tz := os.Getenv("TZ"); tz != "" && !strings.HasPrefix(tz, ":") {
+		return tz
+	}
+	if l, err := os.Readlink("/etc/localtime"); err == nil {
+		if _, name, ok := strings.Cut(l, "zoneinfo/"); ok {
+			return name
+		}
+	}
+	return ""
+}
+
+// zcodeStartRequest makes req, a request to the Start Plan, ZCode's own:
+// its headers, and a model request's body shaped as ZCode's
+// (zcodeStartBody).
+func zcodeStartRequest(req *http.Request, body []byte) {
+	zcodeSourceHeaders(req)
+	if len(body) == 0 || !strings.HasSuffix(req.URL.Path, "/v1/messages") {
+		return
+	}
+	nb := zcodeStartBody(body, time.Now())
+	req.Body = io.NopCloser(bytes.NewReader(nb))
+	req.ContentLength = int64(len(nb))
+	req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(nb)), nil }
 }
 
 // zcodeJWTExpired says whether ZCode's token has run out; ZCode then asks
