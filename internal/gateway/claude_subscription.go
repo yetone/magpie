@@ -761,12 +761,14 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 	// Code, not the client: its block is left out, and the message it ends
 	// goes on in the next one, so the client hears one reply.
 	own := map[int]bool{} // this message's blocks that are such calls
-	// With a schema the answer is Claude Code's StructuredOutput call, which
-	// ends the turn: its arguments are the reply's text, and the text the
-	// model writes beside it is left out, not being the JSON asked for.
-	answer := map[int]bool{} // this message's blocks that are that call
-	theirs := false          // this message calls a client's tool
-	inside := false          // a message goes on after Claude Code's own call
+	// With a schema the answer is what Claude Code's StructuredOutput call
+	// gave once Claude Code took it as fitting: its result's
+	// structured_output. A call that doesn't fit is told so and made again,
+	// and a reply in words is asked for the call, so every message but one
+	// calling a client's tool goes on into the next, as after Claude Code's
+	// own call, and the text the model writes is left out.
+	theirs := false // this message calls a client's tool
+	inside := false // a message goes on after Claude Code's own call
 	// what the messages before cost, as each message's usage counts only
 	// itself and the client keeps the last it is told
 	var before, this Usage
@@ -782,6 +784,10 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			Subtype string `json:"subtype"`
 			IsError bool   `json:"is_error"`
 			Result  string `json:"result"`
+			// the answer fitting the schema, with --json-schema, and what
+			// went wrong in a turn that ended without one
+			StructuredOutput json.RawMessage `json:"structured_output"`
+			Errors           []string        `json:"errors"`
 			// Anthropic's id for the request, on the messages it answered,
 			// and on a failure the HTTP status Claude Code got and its
 			// name for the kind of error (rate_limit, server_error…)
@@ -834,8 +840,25 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			// a turn that failed — out of quota, rate limited — ends with
 			// this and no message_stop, the CLI waiting on its next input:
 			// the reply ends here, or it would wait with it (#177)
-			if envelope.IsError {
-				r.emit(Event{Kind: KError, Text: envelope.Result, Status: envelope.APIErrorStatus, Code: errKind, RequestID: reqID})
+			waiting := r.schema && inside
+			inside = false
+			switch {
+			case envelope.IsError:
+				text := envelope.Result
+				if text == "" && waiting {
+					text = "Claude Code gave no answer fitting the schema (" + envelope.Subtype + ")"
+					if len(envelope.Errors) > 0 {
+						text += ": " + strings.Join(envelope.Errors, "; ")
+					}
+				}
+				r.emit(Event{Kind: KError, Text: text, Status: envelope.APIErrorStatus, Code: errKind, RequestID: reqID})
+				r.endSegment()
+			case waiting && len(envelope.StructuredOutput) > 0 && string(envelope.StructuredOutput) != "null":
+				r.emit(Event{Kind: KText, Text: string(envelope.StructuredOutput)})
+				r.emit(Event{Kind: KStop, Stop: "stop"})
+				r.endSegment()
+			case waiting:
+				r.emit(Event{Kind: KError, Text: "Claude Code ended the turn with no answer fitting the schema", RequestID: reqID})
 				r.endSegment()
 			}
 			continue
@@ -874,7 +897,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 		e := envelope.Event
 		switch e.Type {
 		case "message_start":
-			own, answer, theirs = map[int]bool{}, map[int]bool{}, false
+			own, theirs = map[int]bool{}, false
 			if inside {
 				inside = false
 				before, this = before.plus(this, false), Usage{}
@@ -890,7 +913,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			switch e.ContentBlock.Type {
 			case "tool_use":
 				if r.schema && e.ContentBlock.Name == "StructuredOutput" {
-					answer[e.Index] = true
+					own[e.Index] = true
 					continue
 				}
 				name, ok := strings.CutPrefix(e.ContentBlock.Name, "mcp__magpie__")
@@ -924,18 +947,14 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			case "signature_delta":
 				r.emit(Event{Kind: KSig, Text: e.Delta.Signature})
 			case "input_json_delta":
-				if answer[e.Index] {
-					if e.Delta.PartialJSON != "" {
-						r.emit(Event{Kind: KText, Text: e.Delta.PartialJSON})
-					}
-				} else if !own[e.Index] {
+				if !own[e.Index] {
 					r.emit(Event{Kind: KToolArgs, Text: e.Delta.PartialJSON})
 				}
 			}
 		case "message_delta":
 			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage), RequestID: reqID})
-			if e.Delta.StopReason == "tool_use" && len(answer) > 0 && !theirs {
-				r.emit(Event{Kind: KStop, Stop: "stop"})
+			if e.Delta.StopReason != "" && r.schema && !theirs {
+				inside = true // the answer is the result's
 			} else if e.Delta.StopReason == "tool_use" && len(own) > 0 && !theirs {
 				inside = true
 			} else if e.Delta.StopReason != "" {
