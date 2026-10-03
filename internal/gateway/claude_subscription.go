@@ -227,6 +227,17 @@ func sweepBridgeProjects(claudeDir, tempDir string) {
 	}
 }
 
+// claudeWorkDir is the folder every run works in. Claude Code tells its
+// model the working directory in its system prompt, after its own fixed
+// part and before the conversation: a folder of its own for each run made
+// every prompt new to Anthropic's cache from there on, a caller's system
+// prompt and its history written again each time, with only Claude Code's
+// own part (some 2.8k tokens) read.
+func claudeWorkDir() (string, error) {
+	dir := filepath.Join(os.TempDir(), "magpie-claude")
+	return dir, os.MkdirAll(dir, 0o700)
+}
+
 func evalSymlinks(path string) string {
 	if p, err := filepath.EvalSymlinks(path); err == nil {
 		return p
@@ -304,8 +315,13 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, con
 	if len(req.Schema) > 0 {
 		args = append(args, "--json-schema", string(req.Schema))
 	}
+	work, err := claudeWorkDir()
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	cmd := proc.CommandContext(context.Background(), binary, args...)
-	cmd.Dir = tmp
+	cmd.Dir = work
 	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
 	cmd.Env = inClaudeDir(cmd.Env, configDir)
 	stdin, err := cmd.StdinPipe()
@@ -708,7 +724,11 @@ func cleanClaudeEnv(env []string) []string {
 			out = append(out, e)
 		}
 	}
-	return append(out, "ENABLE_CLAUDEAI_MCP_SERVERS=0", "DISABLE_AUTO_COMPACT=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
+	// no auto memory: every run works in one folder (claudeWorkDir), so a
+	// memory one conversation's caller wrote there would be in the system
+	// prompt of all the account's others, and a change to it would undo
+	// the cache from there on
+	return append(out, "ENABLE_CLAUDEAI_MCP_SERVERS=0", "DISABLE_AUTO_COMPACT=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 }
 
 type lockedWriter struct{ run *subscriptionRun }

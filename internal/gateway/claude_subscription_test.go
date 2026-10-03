@@ -70,7 +70,7 @@ func TestCleanClaudeEnvRemovesGatewayOverrides(t *testing.T) {
 			t.Fatalf("kept %s in %q", forbidden, joined)
 		}
 	}
-	for _, want := range []string{"PATH=/bin", "KEEP=yes", "ENABLE_CLAUDEAI_MCP_SERVERS=0", "DISABLE_AUTO_COMPACT=1"} {
+	for _, want := range []string{"PATH=/bin", "KEEP=yes", "ENABLE_CLAUDEAI_MCP_SERVERS=0", "DISABLE_AUTO_COMPACT=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %s in %q", want, joined)
 		}
