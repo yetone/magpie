@@ -21,6 +21,7 @@
   let currentDim = "all";    // "all" | "model" | "provider" | "agent"
   let filters = { model: "", provider: "", agent: "" };
   let data = null;           // full AnalyticsData from GET /api/analytics
+  let shown = null;          // the period and filters data answers
   let loadSeq = 0;           // ignore stale async responses
   let pendingFetch = false;  // true while GET /api/analytics is in flight
   let dashboardScrollTop = 0;// saved scrollTop when entering drill page
@@ -154,11 +155,19 @@
       const res = await api("analytics?" + params.toString());
       if (seq !== loadSeq) return; // Stale request, ignore
       data = res;
+      shown = { period: currentPeriod, filters: { ...filters } };
       pendingFetch = false;
       render();
     } catch (e) {
       if (seq !== loadSeq) return;
       pendingFetch = false;
+      // the page still shows the last answer: put the query back to it, so
+      // the controls, and a drill from its charts, are of what is shown
+      if (shown) {
+        currentPeriod = shown.period;
+        filters = { ...shown.filters };
+        renderControls();
+      }
       status(e.message || String(e), "err");
     } finally {
       if (seq === loadSeq) {
@@ -293,10 +302,10 @@
     periodSeg.replaceChildren();
     for (const [id, label] of PERIOD_LIST) {
       const b = el("button", "opt" + (id === currentPeriod ? " on" : ""), t(label));
-      b.onclick = () => {
+      b.onclick = (e) => {
         if (id === currentPeriod) return;
         currentPeriod = id;
-        if (drillMode) exitDrill();
+        if (drillMode) exitDrill(e);
         fetchAnalytics();
       };
       periodSeg.append(b);
@@ -361,7 +370,7 @@
       btn.onclick = (e) => {
         const options = [{ value: "", label: t("All {name}", { name: dimNames[fdim] }) }];
         for (const item of availFilters[fdim] || []) {
-          options.push({ value: item, label: item });
+          options.push({ value: item, label: typeof maskAccounts === "function" ? maskAccounts(item) : item });
         }
         openFilterPicker(btn, fdim, options, curVal, e, (newVal) => {
           if (filters[fdim] === newVal) return;
@@ -1034,6 +1043,7 @@
       drillEntity = null;
       activeCall = null;
       activeCallIndex = null;
+      callsScrollTop = 0;
       renderDrillPage();
       fetchDrillCalls(drillChartId, null);
     };
@@ -1063,7 +1073,7 @@
       const track = el("div", "an-drill-mini-track");
       const seg = el("div", "an-drill-mini-seg");
       const raw = item[valKey] || 0;
-      const pct = maxVal > 0 ? Math.min(100, Math.max(2, (raw / maxVal) * 100)) : 0;
+      const pct = maxVal > 0 && raw > 0 ? Math.min(100, Math.max(2, (raw / maxVal) * 100)) : 0;
       seg.style.width = pct + "%";
       track.append(seg);
 
@@ -1074,6 +1084,7 @@
         drillEntity = { dim: currentDim, val: item.key };
         activeCall = null;
         activeCallIndex = null;
+        callsScrollTop = 0;
         renderDrillPage();
         fetchDrillCalls(drillChartId, drillEntity);
       };
@@ -1184,11 +1195,12 @@
 
     drillRightEl.append(list);
 
-    // Restore calls list scroll position if returning from detail
-    if (callsScrollTop > 0) {
+    // Restore the list's scroll only when coming back from its detail
+    if (returnEvent && callsScrollTop > 0) {
       const targetScroll = callsScrollTop;
       requestAnimationFrame(() => {
-        if (returnEvent && typeof scrollOnPurpose === "function") scrollOnPurpose(returnEvent, 1000);
+        if (!drillMode || activeCall || page.hidden) return;
+        if (typeof scrollOnPurpose === "function") scrollOnPurpose(returnEvent, 1000);
         page.scrollTop = targetScroll;
       });
     }

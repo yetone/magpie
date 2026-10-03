@@ -14903,15 +14903,23 @@ window.noteAccounts = noteAccounts;
       yield m;
     }
   }
+  // a label drawn outside the masked pages (the shared #pop), as they show it
+  window.maskAccounts = (s) => {
+    if (!masked || !s) return s;
+    let out = "", last = 0;
+    for (const m of hits(s, finder())) { out += s.slice(last, m.index) + dots(m[0]); last = m.index + m[0].length; }
+    return out + s.slice(last);
+  };
   // what a page redraws is masked before it's painted; masking isn't
   // itself watched, so it can't set itself off again
   const OBS = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["title", "aria-label"] };
   const SKIP = new Set(["SCRIPT", "STYLE", "OPTION", "TEXTAREA"]);
   let masked = false;
   try { masked = localStorage.getItem("magpie.maskEmails") === "1"; } catch {}
-  // the pages it hides on: Routing's and Usage's, each with its button; in
-  // the tray panel, the whole of it, as the window's setting says
-  const targets = mode === "panel" ? [["#view-agents", null]] : [["#view-routing", "#rtMask"], ["#view-usage", "#usageMask"], ["#view-analytics", null]];
+  // the pages it hides on: Routing's, Usage's and Analytics' drill page,
+  // each with its button; in the tray panel, the whole of it, as the
+  // window's setting says
+  const targets = mode === "panel" ? [["#view-agents", null]] : [["#view-routing", "#rtMask"], ["#view-usage", "#usageMask"], ["#view-analytics", "#anDrillMask"]];
   const pages = targets.map(([v, b]) => {
     const view = $(v), btn = b && $(b);
     if (!view) return () => {};

@@ -80,6 +80,20 @@ const mockAnalyticsData = {
           cost: 6.00,
         },
         {
+          key: "zero-err-model",
+          metric_val: 0.0,
+          insufficient: false,
+          unknown_cache: false,
+          has_unpriced: false,
+          share: 0.2,
+          calls: 20,
+          rate_limited: 0,
+          server_err: 0,
+          other_err: 0,
+          error_rate: 0.0,
+          cost: 1.00,
+        },
+        {
           key: "tiny-model",
           metric_val: 0.0,
           insufficient: true,
@@ -208,7 +222,7 @@ const mockAnalyticsData = {
   ],
   filters: {
     model: ["gpt-5.5", "claude-3-7-sonnet", "tiny-model"],
-    provider: ["openai", "anthropic"],
+    provider: ["openai", "anthropic", "pick.owner@corp.example"],
     agent: ["codex", "claude-code"],
   },
 };
@@ -220,7 +234,7 @@ const mockCallsData = {
       t: new Date(Date.parse("2026-09-30T10:14:22.318Z") - i * 60000).toISOString(),
       agent: i % 2 === 0 ? "codex" : "claude-code",
       provider: i % 2 === 0 ? "openai" : "anthropic",
-      host: i === 0 ? "extremely-long-custom-subdomain-host-name-for-enterprise-compliance.proxy.openai.internal.cloud" : (i % 2 === 0 ? "api.openai.com" : "api.anthropic.com"),
+      host: i === 0 ? "extremely-long-custom-subdomain-host-name-for-enterprise-compliance.proxy.openai.internal.cloud" : i === 5 ? "api.openai.com as host.owner@corp.example" : (i % 2 === 0 ? "api.openai.com" : "api.anthropic.com"),
       model: i % 2 === 0 ? "gpt-5.5" : "claude-3-7-sonnet",
       in: 4210 + i * 50,
       out: 850 + i * 10,
@@ -371,7 +385,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert(await page.locator("#anHead").isVisible(), "anHead must be rendered");
     assert(await page.locator("#anControls").isVisible(), "anControls must be rendered");
     assert(await page.locator("#anBack").isVisible(), "anBack must be rendered");
-    assert.equal(await page.locator("#analyticsMask").count(), 0, "analyticsMask button must be removed from analytics page");
 
     // 2. Mode switching: All -> By Model
     const modelDimBtn = page.locator("#anDim button").filter({ hasText: "By Model" });
@@ -439,6 +452,35 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     const scrollRestored = await page.evaluate(() => document.querySelector("#view-analytics").scrollTop);
     assert(Math.abs(scrollRestored - scrollBeforeDetail) < 5, `return to calls list must restore non-zero scroll position (expected ~${scrollBeforeDetail}, got ${scrollRestored})`);
 
+    // Verify mini chart: zero-err-model (error_rate: 0, calls: 20) renders seg width 0% while positive models have > 0%
+    const miniRows = page.locator(".an-drill-mini-row");
+    const zeroErrMiniRow = miniRows.filter({ hasText: "zero-err-model" });
+    assert.equal(await zeroErrMiniRow.count(), 1, "zero-err-model must appear in mini chart rows");
+    const zeroErrSegWidth = await zeroErrMiniRow.locator(".an-drill-mini-seg").evaluate((el) => el.style.width);
+    assert.equal(zeroErrSegWidth, "0%", "entity with metric 0 must have mini chart segment width 0%");
+    const positiveMiniRow = miniRows.filter({ hasText: "gpt-5.5" });
+    const posSegWidth = await positiveMiniRow.locator(".an-drill-mini-seg").evaluate((el) => el.style.width);
+    assert.notEqual(posSegWidth, "0%", "entity with positive metric must have mini chart segment width > 0%");
+
+    // Entity switch resets callsScrollTop: scroll calls list, open detail, switch to another left entity,
+    // verify view scrollTop is not restored to the old list position (stays at 0/top)
+    await page.evaluate(() => {
+      document.querySelector("#view-analytics").scrollTop = 220;
+    });
+    await page.waitForTimeout(50);
+    const listScrollBeforeDetail2 = await page.evaluate(() => document.querySelector("#view-analytics").scrollTop);
+    assert(listScrollBeforeDetail2 > 100, `list must be scrolled before detail, got ${listScrollBeforeDetail2}`);
+    // Open detail
+    await callItems.nth(3).click();
+    await page.locator(".an-call-detail-box").waitFor();
+    await page.waitForFunction(() => document.querySelector("#view-analytics").scrollTop === 0);
+    // Click another entity in left panel while in detail
+    await zeroErrMiniRow.click();
+    await page.locator(".an-calls-list").waitFor();
+    await page.waitForTimeout(100);
+    const scrollAfterEntitySwitch = await page.evaluate(() => document.querySelector("#view-analytics").scrollTop);
+    assert.equal(scrollAfterEntitySwitch, 0, "switching entity must reset callsScrollTop so list is at top (0), not restored to old position");
+
     // 5b. Verify HTTP 200 stream error badge and detail explanation
     const secondItem = callItems.nth(1);
     const badge2 = secondItem.locator(".an-st-badge");
@@ -475,35 +517,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert(tpsShortText.includes("100ms") || tpsShortText === "—", `TPS for short interval (<100ms) must show short interval note: ${tpsShortText}`);
     await page.locator(".an-drill-return-btn").click();
     await page.locator(".an-calls-list").waitFor();
-    // 6. Hide emails mask check: toggle via Routing #rtMask, verify effect propagates to Analytics drill detail
-    await page.goto("http://magpie.test/?view=routing");
-    await page.locator("#rtMask").waitFor();
-    await page.locator("#rtMask").click();
-
-    // Return to analytics drill detail
-    await page.goto("http://magpie.test/?view=analytics");
-    await page.locator("#anDim button").filter({ hasText: "By Model" }).click();
-    await page.locator(".an-bar-row").first().click();
+    // 6. The drill page's own Hide accounts, at the header's right end, masks
+    // an account after a call's host ("host as email") in the detail.
     await page.locator(".an-call-item").nth(5).click();
     await page.locator(".an-call-detail-box").waitFor();
-    await page.waitForTimeout(100);
+    const maskBtn = page.locator("#anDrillMask");
+    const headBox = await page.locator(".an-drill-page-head").boundingBox();
+    const maskBox = await maskBtn.boundingBox();
+    assert(Math.abs(headBox.x + headBox.width - (maskBox.x + maskBox.width)) < 2, "drill mask button must sit at the header row's right end");
+    await maskBtn.click();
+    await page.waitForFunction(() => document.querySelector("#anDrillMask").getAttribute("aria-pressed") === "true");
+    const hostRow = page.locator(".an-detail-row", { hasText: "api.openai.com as" });
+    await hostRow.locator(".pii").waitFor();
+    assert(!(await hostRow.innerText()).includes("corp.example"), "host row must not show the account email");
+    assert.equal(await hostRow.locator(".pii").evaluate((e) => e.dataset.raw), "host.owner@corp.example");
+    assert(!(await page.locator(".an-call-detail-box").innerText()).includes("test.org"), "session email must be masked too");
 
-    const pii = page.locator(".pii").first();
-    const maskedText = await pii.innerText();
-    const rawText = await pii.evaluate((e) => e.dataset.raw || "");
-    assert(rawText.includes("@"), "masked span should keep the original in data-raw");
-    assert(!maskedText.includes("test.org") && !maskedText.includes("sess_user"), `masked text must not leak raw email: ${maskedText}`);
-
-    // Restore unmasked state via Routing page
-    await page.goto("http://magpie.test/?view=routing");
-    await page.locator("#rtMask").waitFor();
-    await page.locator("#rtMask").click();
-
-    // Back to analytics drill page
-    await page.goto("http://magpie.test/?view=analytics");
-    await page.locator("#anDim button").filter({ hasText: "By Model" }).click();
-    await page.locator(".an-bar-row").first().click();
-    await page.locator("#anDrillPage:not([hidden])").waitFor();
+    // Same setting as Routing's: off again from the drill page
+    await maskBtn.click();
+    await page.waitForFunction(() => document.querySelector("#anDrillMask").getAttribute("aria-pressed") === "false");
+    assert((await hostRow.innerText()).includes("host.owner@corp.example"), "unmasking restores the host account");
 
     // 7. Return to main dashboard: preserves mode, filters, period and scroll
     const backToDashBtn = page.locator(".an-drill-back");
@@ -845,6 +878,94 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     // Verify mutually exclusive rule: By Provider clears Provider filter, retains other filters
     assert(requestedParams.some((q) => q.includes("provider=openai")), "first request must have included provider filter");
     assert(requestedParams.some((q) => !q.includes("provider=")), "switching to By Provider must clear provider filter");
+
+    // 4. Hide accounts on: filter picker with email shows masked label in #pop, but selection requests raw value
+    await page.evaluate(() => window.show("routing"));
+    await page.locator("#rtMask").waitFor();
+    await page.locator("#rtMask").click();
+    await page.evaluate(() => window.show("analytics"));
+    await page.locator("#view-analytics:not([hidden])").waitFor();
+
+    // Switch to By Model so Provider filter is visible in controls
+    await page.locator("#anDim button").filter({ hasText: "By Model" }).click();
+    await page.locator('.an-filter-wrap[data-filter-dim="provider"]').waitFor();
+
+    const filterWrapProv = page.locator('.an-filter-wrap[data-filter-dim="provider"]');
+    await filterWrapProv.locator(".an-filter-btn").click();
+    await page.locator("#pop:not([hidden])").waitFor();
+
+    const popListText = await page.locator("#pop #list").innerText();
+    assert(!popListText.includes("pick.owner@corp.example"), "filter picker options must not display raw email when accounts are hidden");
+    assert(popListText.includes("@"), "filter picker option should show masked email stand-in");
+
+    // Click the masked email option (contains @)
+    const emailOpt = page.locator("#pop #list li").filter({ hasText: "@" }).first();
+    await emailOpt.click();
+    await page.waitForTimeout(100);
+
+    const lastFilterReq = requestedParams[requestedParams.length - 1];
+    assert(lastFilterReq.includes("provider=pick.owner%40corp.example") || lastFilterReq.includes("provider=pick.owner@corp.example"),
+      `selecting masked option must still request raw value, got: ${lastFilterReq}`);
+
+    // Turn off mask
+    await page.evaluate(() => window.show("routing"));
+    await page.locator("#rtMask").waitFor();
+    await page.locator("#rtMask").click();
+    await page.evaluate(() => window.show("analytics"));
+    await page.locator("#view-analytics:not([hidden])").waitFor();
+
+    // 5. Dashboard request failure after successful load: roll back period and filters to shown query
+    let rejectAnalytics = false;
+    let shownPeriod = null;
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/api/analytics") {
+        if (rejectAnalytics) {
+          return route.fulfill({ status: 500, body: "analytics update failed" });
+        }
+        shownPeriod = url.searchParams.get("period");
+        return route.fulfill({ json: mockAnalyticsData });
+      }
+      return createServer()(route);
+    });
+    // one successful load through this route (a dimension switch need not
+    // fetch again), so the shown period is known
+    const loaded = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/analytics" && r.ok());
+    const onLabel = (await page.locator("#anPeriod button.opt.on").textContent()).trim();
+    await page.locator("#anPeriod button").filter({ hasText: onLabel === "30 days" ? "Today" : "30 days" }).click();
+    await loaded;
+    await page.waitForFunction(() => !document.querySelector("#view-analytics").classList.contains("loading"));
+    assert(shownPeriod && shownPeriod !== "7d", `shown period must be known and not 7d, got ${shownPeriod}`);
+    const shownLabel = (await page.locator("#anPeriod button.opt.on").textContent()).trim();
+
+    // Fail the next request when changing period to 7d
+    rejectAnalytics = true;
+    await page.locator("#anPeriod button").filter({ hasText: "7 days" }).click();
+    await page.waitForFunction(() => document.querySelector("#status").classList.contains("err"));
+
+    // Controls must have rolled back to the shown period
+    const activePeriodBtn = await page.locator("#anPeriod button.opt.on").textContent();
+    assert.equal(activePeriodBtn.trim(), shownLabel, "period segment must revert to previously shown period on fetch failure");
+
+    // Subsequent drilldown must request the shown period, not the failed 7d
+    let lastDrillCallsUrl = null;
+    await page.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/api/analytics/calls") {
+        lastDrillCallsUrl = url.toString();
+        return route.fulfill({ json: mockCallsData });
+      }
+      return createServer()(route);
+    });
+
+    // the dimension here is By Model: drill from a ranking row
+    await page.locator(".an-bar-row").first().click();
+    await page.locator("#anDrillPage:not([hidden])").waitFor();
+    assert(lastDrillCallsUrl, "drill calls request must be made");
+    assert.equal(new URL(lastDrillCallsUrl).searchParams.get("period"), shownPeriod, "drill calls must use the rolled-back shown period, not the failed 7d");
+
+    await page.locator(".an-drill-back").click();
+    await page.locator("#anBody:not([hidden])").waitFor();
   });
 
   test(engine + ": All mode KPI drilldown opens independent page, closes cleanly, and survives clicks", async (t) => {

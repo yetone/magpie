@@ -86,9 +86,10 @@ preserving mode/filter/period/scroll, 659px desktop width prioritizing two colum
 without horizontal overflow, equal bar-track widths and monotonic percentage fills,
 hover/focus filter clearing, detailed chart tooltips, TPS labels, visible request errors,
 HTTP-200 recorded stream failures shown as errors with blank TPS and reused clipboard
-fallbacks, zero-data `—` rendering, global email masking for text and accessible labels,
-and the
-Chinese/English switch including the Usage analytics entry.
+fallbacks, zero-data `—` rendering, global email masking for text and accessible labels
+(including the drill page's own Hide accounts at the header's right end, masking an
+account after a call's host), and the Chinese/English switch including the Usage
+analytics entry.
 It runs in both engines like the rest of the suite; set `CHROMIUM_PATH` to use a
 Chromium outside Playwright's cache.
 

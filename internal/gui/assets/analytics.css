@@ -453,8 +453,19 @@ button.an-kpi-tile.active {
   gap: 10px;
   min-height: 34px;
   margin: 4px 0 10px;
-  flex-wrap: wrap;
   flex: none;
+}
+.an-drill-head-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.an-drill-page-head > .rt-mask {
+  flex: none;
+  margin-left: auto;
 }
 .an-drill-back {
   display: inline-flex;

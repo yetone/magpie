@@ -236,7 +236,12 @@ func analyticsSince(p Period, now time.Time, recs []Record) (time.Time, string, 
 	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	switch p {
 	case Today:
-		return day, "hour", int(day.AddDate(0, 0, 1).Sub(day) / time.Hour)
+		// a day 24.5 hours long (a half-hour DST change) has a 25th bucket
+		// for its last half hour, as the Usage timeline draws it
+		n := 0
+		for end := day.AddDate(0, 0, 1); day.Add(time.Duration(n) * time.Hour).Before(end); n++ {
+		}
+		return day, "hour", n
 	case Week:
 		return day.AddDate(0, 0, -6), "day", 7
 	case Month:

@@ -407,6 +407,10 @@ func TestAnalyzeTrendCalendarBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	lordHowe, err := time.LoadLocation("Australia/Lord_Howe")
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, tc := range []struct {
 		name string
 		period Period
@@ -417,6 +421,8 @@ func TestAnalyzeTrendCalendarBoundaries(t *testing.T) {
 		{"spring week", Week, time.Date(2026, 3, 10, 12, 0, 0, 0, loc), time.Date(2026, 3, 9, 0, 15, 0, 0, loc), 9, 0},
 		{"spring all", All, time.Date(2026, 3, 9, 12, 0, 0, 0, loc), time.Date(2026, 3, 9, 0, 15, 0, 0, loc), 9, 0},
 		{"fall today", Today, time.Date(2026, 11, 1, 23, 45, 0, 0, loc), time.Date(2026, 11, 1, 23, 15, 0, 0, loc), 1, 23},
+		// a 24.5-hour day: its last half hour is a 25th bucket, not lost
+		{"half-hour fall today", Today, time.Date(2026, 4, 5, 23, 50, 0, 0, lordHowe), time.Date(2026, 4, 5, 23, 40, 0, 0, lordHowe), 5, 23},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			recs := []Record{{Time: tc.call, Model: "m", Provider: "p", Status: 429}}
@@ -679,6 +685,7 @@ func TestDefaultPriceLookupAndAnalyticsSettingsPricing(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(Path()), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// the last week, not Today: records minutes old cross midnight just after it
 	now := time.Now()
 	records := []Record{
 		{Time: now.Add(-10 * time.Minute), Provider: "prov-a", Model: "model-explicit", Input: 1_000_000, Status: 200},
@@ -692,7 +699,7 @@ func TestDefaultPriceLookupAndAnalyticsSettingsPricing(t *testing.T) {
 		Append(r)
 	}
 
-	data := Analyze(Today, AnalyticsFilter{})
+	data := Analyze(Week, AnalyticsFilter{})
 	expectedTotalCost := 10.0 + 0.0 + 7.0 + 3.0 + 5.0
 	if math.Abs(data.Summary.Cost-expectedTotalCost) > 1e-6 {
 		t.Fatalf("Analyze Summary.Cost = %v, want %v", data.Summary.Cost, expectedTotalCost)
@@ -718,7 +725,7 @@ func TestDefaultPriceLookupAndAnalyticsSettingsPricing(t *testing.T) {
 		}
 	}
 
-	recent, err := RecentCalls(Today, AnalyticsFilter{}, "3.1", 10)
+	recent, err := RecentCalls(Week, AnalyticsFilter{}, "3.1", 10)
 	if err != nil {
 		t.Fatalf("RecentCalls failed: %v", err)
 	}
