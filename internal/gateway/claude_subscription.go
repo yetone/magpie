@@ -740,7 +740,7 @@ func cleanClaudeEnv(env []string) []string {
 	blocked := map[string]bool{
 		"ANTHROPIC_BASE_URL": true, "ANTHROPIC_API_KEY": true, "ANTHROPIC_AUTH_TOKEN": true,
 		"CLAUDECODE": true, "CLAUDE_CODE_ENTRYPOINT": true, "CLAUDE_CODE_SSE_PORT": true,
-		"CLAUDE_CODE_OAUTH_TOKEN": true,
+		"CLAUDE_CODE_OAUTH_TOKEN": true, "CLAUDE_CODE_PROMPT_CACHE_TTL": true,
 	}
 	out := make([]string, 0, len(env)+3)
 	for _, e := range env {
@@ -753,7 +753,11 @@ func cleanClaudeEnv(env []string) []string {
 	// memory one conversation's caller wrote there would be in the system
 	// prompt of all the account's others, and a change to it would undo
 	// the cache from there on
-	return append(out, "ENABLE_CLAUDEAI_MCP_SERVERS=0", "DISABLE_AUTO_COMPACT=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
+	return append(out, "ENABLE_CLAUDEAI_MCP_SERVERS=0", "DISABLE_AUTO_COMPACT=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1",
+		// an hour's cache, as Claude Code writes it on a subscription within
+		// its limits, always: the mark on the caller's instructions
+		// (renderClaudePrompt) is an hour's, which may not follow a 5m one
+		"CLAUDE_CODE_PROMPT_CACHE_TTL=1h")
 }
 
 type lockedWriter struct{ run *subscriptionRun }
@@ -1087,6 +1091,15 @@ func renderClaudePrompt(req *Request) ([]map[string]any, error) {
 			fmt.Fprintf(&text, "\nYou must call the %s tool.", strings.TrimPrefix(req.ToolChoice, "name:"))
 		}
 		text.WriteString("\n</external_system_instructions>\n\n")
+		// The caller's instructions are a block of their own, marked for the
+		// cache: Claude Code marks only the end of the message, so with them
+		// in one block with the conversation a request whose messages differ
+		// (the next item of a batch, a new conversation under the same
+		// instructions) found nothing cached past Claude Code's own prompt.
+		// The mark's TTL is the one Claude Code uses (claudeCacheTTL, pinned
+		// in cleanClaudeEnv): Anthropic refuses a 1h mark after a 5m one.
+		blocks = append(blocks, map[string]any{"type": "text", "text": text.String(), "cache_control": map[string]string{"type": "ephemeral", "ttl": "1h"}})
+		text.Reset()
 	}
 	for _, m := range req.Messages {
 		label := "Human"
