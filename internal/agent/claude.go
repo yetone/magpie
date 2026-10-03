@@ -480,10 +480,14 @@ func claudeIn(at place) *Agent {
 		}
 		kvs := []edit.KV{
 			{Path: "env.ANTHROPIC_BASE_URL", Value: at.gw()},
-			{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: gateway.Token},
 			{Path: "env.ANTHROPIC_MODEL", Value: main},
 			{Path: "env.ANTHROPIC_SMALL_FAST_MODEL", Value: tiers["haiku"]},
 			{Path: "model", Value: main},
+		}
+		if !provider.ClaudeHasAccount() {
+			kvs = append(kvs, edit.KV{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: gateway.Token})
+		} else {
+			_ = edit.DelJSON(path, "env.ANTHROPIC_AUTH_TOKEN")
 		}
 		same := true
 		for _, t := range claudeTiers {
@@ -830,6 +834,10 @@ func claudeIn(at place) *Agent {
 			}
 			if u, _ := edit.GetJSON(managed, "env.ANTHROPIC_BASE_URL"); u != "" && u != at.gw() {
 				return "Claude Code's managed settings (" + at.native(managed) + ") set ANTHROPIC_BASE_URL to " + u + ", which wins over magpie's"
+			}
+			if provider.ClaudeHasAccount() {
+				return wiringOff("Claude Code", path, func(k string) (string, bool) { return edit.GetJSON(path, "env."+k) },
+					"ANTHROPIC_BASE_URL", at.gw())
 			}
 			return wiringOff("Claude Code", path, func(k string) (string, bool) { return edit.GetJSON(path, "env."+k) },
 				"ANTHROPIC_BASE_URL", at.gw(), "ANTHROPIC_AUTH_TOKEN", gateway.Token)

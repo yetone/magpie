@@ -96,7 +96,7 @@ echo "Login successful."
 	return exe
 }
 
-// noAnthropic fails the test if anything is asked of claudeBase.
+// noAnthropic fails the test if anything is asked of ClaudeBase.
 func noAnthropic(t *testing.T) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -104,9 +104,9 @@ func noAnthropic(t *testing.T) {
 		w.WriteHeader(500)
 	}))
 	t.Cleanup(srv.Close)
-	old := claudeBase
-	claudeBase = srv.URL
-	t.Cleanup(func() { claudeBase = old })
+	old := ClaudeBase
+	ClaudeBase = srv.URL
+	t.Cleanup(func() { ClaudeBase = old })
 }
 
 // A browser that can't come back to this machine: the page Claude Code

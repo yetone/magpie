@@ -29,8 +29,8 @@ func fakeClaudeUsage(t *testing.T, out *atomic.Value, fail *atomic.Bool) *atomic
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("magpie asked Anthropic itself: %s", r.URL)
 	}))
-	oldBase, oldWait, oldUsed := claudeBase, claudeUsageWait, claudeUsedSince
-	claudeBase = srv.URL
+	oldBase, oldWait, oldUsed := ClaudeBase, claudeUsageWait, claudeUsedSince
+	ClaudeBase = srv.URL
 	claudeUsageWait = func() time.Duration { return usageTestWait }
 	claudeUsedSince = func(time.Time) bool { return true }
 	claudeAsked.Store(0)
@@ -38,7 +38,7 @@ func fakeClaudeUsage(t *testing.T, out *atomic.Value, fail *atomic.Bool) *atomic
 	claudeUsage.m = nil
 	claudeUsage.Unlock()
 	t.Cleanup(func() {
-		claudeCLIUsage, claudeBase, claudeUsageWait, claudeUsedSince = old, oldBase, oldWait, oldUsed
+		claudeCLIUsage, ClaudeBase, claudeUsageWait, claudeUsedSince = old, oldBase, oldWait, oldUsed
 		claudeAsked.Store(oldAsked)
 		srv.Close()
 		claudeUsage.Lock()

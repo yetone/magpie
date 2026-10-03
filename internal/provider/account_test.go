@@ -69,7 +69,7 @@ func signIn(t *testing.T) string {
 // logins and forgets anything a previous test cached.
 func isolate(t *testing.T) {
 	t.Helper()
-	oldKeychain, oldBase, oldExe := claudeKeychain, claudeBase, claudeExecutable
+	oldKeychain, oldBase, oldExe := claudeKeychain, ClaudeBase, claudeExecutable
 	oldCursor, oldDevin := cursorKeychain, DevinExecutable
 	claudeKeychain, cursorKeychain = false, false
 	claudeExecutable = func() string { return "" }
@@ -79,7 +79,7 @@ func isolate(t *testing.T) {
 	forgetClaudeStatus()
 	forgetDevinStatus()
 	t.Cleanup(func() {
-		claudeKeychain, claudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
+		claudeKeychain, ClaudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
 		cursorKeychain, DevinExecutable = oldCursor, oldDevin
 		forgetClaudeCredential()
 		forgetClaudeStatus()
@@ -244,7 +244,7 @@ func TestClaudeAccountIsProvider(t *testing.T) {
 		w.WriteHeader(500)
 	}))
 	defer anthropic.Close()
-	claudeBase = anthropic.URL
+	ClaudeBase = anthropic.URL
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	if err := os.WriteFile(catalog.CachePath(), []byte(`{"anthropic": {"models": {
 	  "claude-sonnet-5": {"id":"claude-sonnet-5","name":"Claude Sonnet 5","modalities":{"input":["text"],"output":["text"]}},
@@ -258,7 +258,7 @@ func TestClaudeAccountIsProvider(t *testing.T) {
 	if !ok || p.Account == nil || p.Account.User != "Claude Max" || p.Account.Plan != "max" || !p.Ready() {
 		t.Fatalf("claude: %+v %v", p, ok)
 	}
-	if p.Anthropic != claudeBase || p.Chat != "" || p.Responses != "" || p.Host() == "" {
+	if p.Anthropic != ClaudeBase || p.Chat != "" || p.Responses != "" || p.Host() == "" {
 		t.Fatalf("endpoints: %+v", p)
 	}
 

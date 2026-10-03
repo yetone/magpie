@@ -121,9 +121,9 @@ func TestImportClaudeLogins(t *testing.T) {
 		w.WriteHeader(500)
 	}))
 	defer fake.Close()
-	oldBase := claudeBase
-	t.Cleanup(func() { claudeBase = oldBase })
-	claudeBase = fake.URL
+	oldBase := ClaudeBase
+	t.Cleanup(func() { ClaudeBase = oldBase })
+	ClaudeBase = fake.URL
 
 	cpa := `{"type":"claude","access_token":"sk-ant-oat01-old","refresh_token":"sk-ant-ort01-cpa","email":"max@example.com","expired":"2026-01-01T00:00:00Z"}`
 	creds := `{"claudeAiOauth":{"accessToken":"a","refreshToken":"sk-ant-ort01-gone","expiresAt":1}}`

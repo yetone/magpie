@@ -25,6 +25,7 @@ import (
 
 	"github.com/tidwall/gjson"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
@@ -633,6 +634,26 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 			m["magpie_label"] = labels[i]
 			data = append(data, m)
 		}
+		if isClaudeOAuth(r) {
+			seen := make(map[string]bool)
+			for _, m := range data {
+				if id, ok := m["id"].(string); ok {
+					seen[id] = true
+				}
+			}
+			for _, m := range catalog.Provider("anthropic") {
+				if !seen[m.ID] {
+					seen[m.ID] = true
+					data = append(data, map[string]any{
+						"id":           m.ID,
+						"object":       "model",
+						"type":         "model",
+						"display_name": m.Name,
+						"owned_by":     "anthropic",
+					})
+				}
+			}
+		}
 	}
 	if r.Header.Get(provider.DrawersHeader) != "" {
 		data = append(data, drawerObjects()...)
@@ -733,6 +754,10 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	// Count the same masked prompt that generation sends to the vendor.
 	w, body, unmask := redacted(w, body)
 	defer unmask()
+	if isClaudeOAuth(r) && isNativeAnthropicModel(model) {
+		s.claudeUpstream(w, r, r.URL.Path, body)
+		return
+	}
 	if m := claudeTierStandIn(agentOf(r), model); m != "" {
 		model = m // counted on the model the request will go to
 	}
@@ -859,6 +884,13 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		}
 		if from == provider.Chat {
 			body = thinkingEffort(body)
+		}
+		if from == provider.Anthropic && isClaudeOAuth(r) {
+			model := modelOf(body)
+			if isNativeAnthropicModel(model) {
+				s.claudeUpstream(w, r, r.URL.Path, body)
+				return
+			}
 		}
 		s.serve(w, r, from, body)
 	}
