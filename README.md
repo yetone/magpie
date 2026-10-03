@@ -718,6 +718,15 @@ Windows uses the WebView2 runtime that ships with the OS.
 
 ### Termux (Android)
 
+The one-line installer detects Termux and installs the Android terminal
+build into `$PREFIX/bin` (`MAGPIE_BIN_DIR` overrides it). It requires an
+Android asset in the download site's latest release; if that asset has
+not been published yet, it asks you to build from source instead:
+
+```sh
+curl -fsSL https://usemagpie.ai/install.sh | sh
+```
+
 Build inside Termux; the Linux release binaries target a different libc.
 The Makefile selects the terminal build on Android, including the gateway,
 TUI and browser UI:

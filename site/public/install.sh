@@ -6,6 +6,7 @@
 # Linux: puts magpie in ~/.local/bin — the desktop app when GTK 3 and
 # WebKitGTK 4.1 are installed (with a menu entry), the terminal build
 # otherwise or with MAGPIE_CLI=1.
+# Termux: installs the Android terminal build into $PREFIX/bin.
 # Every download is checked against the release's SHA-256.
 set -eu
 
@@ -23,9 +24,17 @@ esac
 case "$(uname -s)" in
   Darwin) os=darwin; file="magpie-darwin-$arch.zip" ;;
   Linux)
-    os=linux; file="magpie-cli-linux-$arch"
-    if [ -z "${MAGPIE_CLI:-}" ] && { ldconfig -p 2>/dev/null | grep -q 'libwebkit2gtk-4\.1\.so\.0'; }; then
-      file="magpie-linux-$arch"
+    termux="${TERMUX_VERSION:-}"
+    case "${PREFIX:-}" in */com.termux/files/usr) termux=1 ;; esac
+    if [ -n "$termux" ]; then
+      [ -n "${PREFIX:-}" ] || die "Termux requires PREFIX to locate its bin directory"
+      os=android; file="magpie-cli-android-$arch"
+      bin="${MAGPIE_BIN_DIR:-$PREFIX/bin}"
+    else
+      os=linux; file="magpie-cli-linux-$arch"
+      if [ -z "${MAGPIE_CLI:-}" ] && { ldconfig -p 2>/dev/null | grep -q 'libwebkit2gtk-4\.1\.so\.0'; }; then
+        file="magpie-linux-$arch"
+      fi
     fi ;;
   *) die "unsupported system: $(uname -s); see $site" ;;
 esac
@@ -39,6 +48,9 @@ entry=$(printf '%s' "$feed" | sed -n "s/.*\"$file\":{\([^}]*\)}.*/\1/p")
 url=$(printf '%s' "$entry" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p')
 sum=$(printf '%s' "$entry" | sed -n 's/.*"sha256":"\([^"]*\)".*/\1/p')
 version=$(printf '%s' "$feed" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+if [ "$os" = android ] && { [ -z "$url" ] || [ -z "$sum" ]; }; then
+  die "the newest release has no $file; build in Termux with go build -tags nogui (see $site/docs/start)"
+fi
 [ -n "$url" ] && [ -n "$sum" ] || die "the newest release has no $file"
 
 say "downloading magpie $version ($file)"
@@ -77,6 +89,8 @@ EOF
     command -v update-desktop-database >/dev/null && update-desktop-database "$share/applications" 2>/dev/null || true
     command -v xdg-mime >/dev/null && xdg-mime default magpie.desktop x-scheme-handler/magpie 2>/dev/null || true
     say "installed the magpie desktop app (menu entry: magpie)"
+  elif [ "$os" = android ]; then
+    say "installed the Termux build; use magpie web for the browser UI or magpie tui for the terminal UI"
   else
     say "installed the terminal build; for the desktop app, install WebKitGTK 4.1 (libwebkit2gtk-4.1-0) and run this again"
   fi
@@ -88,6 +102,7 @@ case ":$PATH:" in
 esac
 case "$file" in
   *.zip) say "open it: open -a magpie" ;;
+  magpie-cli-android-*) say "run it: magpie web" ;;
   magpie-linux-*) say "open it from your app menu, or run: magpie app" ;;
   *) say "run it: magpie" ;;
 esac
