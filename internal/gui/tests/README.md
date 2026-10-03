@@ -75,6 +75,39 @@ and is selected at first. It selects Ghostty, changes the theme, then returns
 to the system default, reloading to verify both saved choices.
 The API is faked and no terminal app is launched.
 
+`analytics.test.cjs` covers Issue #213's Analytics view with the real assets and
+mock API: navigation from Usage and direct `?view=analytics` URLs, the four
+display modes and mutually exclusive filters, first-row header controls alignment,
+stale response cancellation, independent drilldown page view (left compact chart
+with entity ranking/highlight, right 50-call list), right-pane full transition into
+7-group call details (single column, one KV per row, wrapping long values) and return
+preserving list selection/scroll, return to dashboard
+preserving mode/filter/period/scroll, 659px desktop width prioritizing two columns
+without horizontal overflow, equal bar-track widths and monotonic percentage fills,
+hover/focus filter clearing, detailed chart tooltips, TPS labels, visible request errors,
+HTTP-200 recorded stream failures shown as errors with blank TPS and reused clipboard
+fallbacks, zero-data `—` rendering, global email masking for text and accessible labels,
+and the
+Chinese/English switch including the Usage analytics entry.
+It runs in both engines like the rest of the suite; set `CHROMIUM_PATH` to use a
+Chromium outside Playwright's cache.
+
+Manual layout smoke: call-row model/provider text uses the remaining line width
+and wraps instead of truncating at a fixed width; detail groups stack vertically.
+Check both a wide window and the 659px desktop view for overflow and return state.
+Selected filters reserve no extra padding for the hidden clear button; on hover or
+focus it replaces the dropdown arrow in place without widening the control.
+
+Analytics uses the ledger's effective-price resolver: explicit overrides, provider
+catalog prices, and maker fallback; a known zero price remains distinct from unknown.
+TPS retains the existing `output / ((ms - ttft_ms) / 1000)` contract, but Analytics
+gates eligible decode samples to delivery intervals of at least 100ms (`millis - ttft_ms >= 100`).
+Millisecond-scale delivery intervals (< 100ms) produce extreme TPS artifacts for buffered
+responses; these records do not establish upstream generation speed and are excluded from
+analytics TPS summaries, rankings, and the TPS recent-calls drilldown chart (while raw records,
+costs, tokens, errors, and other charts retain them). Excluded short-interval sample counts are
+tracked and shown in tooltips/subtitles, and individual call details display an explanatory note.
+
 `menu-scroll.test.cjs` loads the real HTML, CSS and JavaScript with isolated API
 fixtures. It checks session folder/model filters and the main model picker in
 Chromium and WebKit, including wheel, scrollbar track/thumb, keyboard selection

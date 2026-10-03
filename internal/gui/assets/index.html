@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="plugins.css">
 <link rel="stylesheet" href="sessions.css">
 <link rel="stylesheet" href="omarchy.css">
+<link rel="stylesheet" href="analytics.css">
 </head>
 <body>
 <header class="top" style="--wails-draggable:drag">
@@ -123,6 +124,7 @@
       <button class="sess-pick" id="usageEvery" type="button"></button>
     </span>
     <span class="usage-cost" id="usageCost"></span>
+    <button id="openAnalytics" class="text" data-tt="Quality & Analytics" aria-label="Analytics"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg><span data-t>Analytics</span></button>
   </div>
   <div class="usage-pane" id="usagePane">
     <div class="row-head quota-head" id="quotaHead" hidden>
@@ -209,6 +211,26 @@
 </main>
 
 <main class="view" id="view-sessions" hidden></main>
+<main class="view" id="view-analytics" hidden>
+  <div class="an-head" id="anHead">
+    <button type="button" class="an-back" id="anBack" aria-label="Back to Usage" data-tt="Back to Usage">
+      <svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2L4 7l6 5"/></svg>
+    </button>
+    <div class="segs" id="anPeriod"></div>
+    <div class="an-controls" id="anControls">
+      <div class="segs" id="anDim"></div>
+      <div class="an-filters" id="anFilters"></div>
+    </div>
+  </div>
+  <div class="an-body" id="anBody"></div>
+  <div class="an-drill-page" id="anDrillPage" hidden>
+    <div class="an-drill-page-head" id="anDrillHead"></div>
+    <div class="an-drill-page-layout">
+      <div class="an-drill-left" id="anDrillLeft"></div>
+      <div class="an-drill-right" id="anDrillRight"></div>
+    </div>
+  </div>
+</main>
 
 <main class="view" id="view-library" hidden></main>
 
@@ -412,5 +434,6 @@
 <script src="library.js"></script>
 <script src="plugins.js"></script>
 <script src="sessions.js"></script>
+<script src="analytics.js"></script>
 </body>
 </html>
