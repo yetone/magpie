@@ -825,7 +825,7 @@ const I18N = {
     "Where the vendor tells what is left on the key, asked with it like a chat request; {key} in it or in a header is each key's own, for a vendor that takes the key in the URL (…?key={key}); shown on the Usage page": "供应商查询该 Key 余额的接口，按对话请求的方式带上 Key 请求；地址或请求头里的 {key} 会换成每个 Key 自己的值，适合要把 Key 拼在 URL 里的接口（…?key={key}）；结果显示在用量页",
     "Balance field": "余额字段",
     "Balance query template": "余额查询模板",
-    "Choose a platform…": "请选择平台…",
+    "None": "无",
     "Fill in the Base URL to complete the balance query address.": "填写 Base URL 后将自动补齐余额查询地址。",
     "Your custom balance address or field was kept; check it for the selected platform.": "已保留你的自定义余额查询地址或公式，请确认它适用于所选平台。",
     "Choose the panel yourself; the token's format does not identify it.": "请手动选择面板类型，令牌格式不能确定平台。",

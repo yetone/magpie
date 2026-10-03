@@ -164,6 +164,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await newForm(page);
     const base = page.locator(".editor input[type=url]").first(), token = page.locator(".editor input[type=password]").nth(1);
     const picker = page.locator(".bal-template"), url = page.locator(".bal-url"), field = page.locator(".bal-path");
+    assert.equal(await picker.getAttribute("data-value"), "", "no template is the default before interaction");
+    assert.equal(await picker.textContent(), lang === "zh" ? "无" : "None");
     await token.fill("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln");
     assert.equal(await picker.getAttribute("data-value"), "");
     assert.equal(await url.inputValue(), "", "a JWT does not select a platform");
@@ -200,7 +202,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.evaluate(() => { draft.anthropic = "http://fallback.example:8080/prefix"; renderProviders(); });
     await chooseTemplate(page, "sub2api");
     assert.equal(await url.inputValue(), "http://fallback.example:8080/api/v1/user/profile");
-    const missing = await page.evaluate(() => ["Balance query template", "Choose a platform…", "Fill in the Base URL to complete the balance query address.", "Your custom balance address or field was kept; check it for the selected platform.", "Choose the panel yourself; the token's format does not identify it."].filter((k) => !I18N.zh[k]));
+    const missing = await page.evaluate(() => ["Balance query template", "None", "Fill in the Base URL to complete the balance query address.", "Your custom balance address or field was kept; check it for the selected platform.", "Choose the panel yourself; the token's format does not identify it."].filter((k) => !I18N.zh[k]));
     assert.deepEqual(missing, []);
   });
 

@@ -8077,7 +8077,7 @@ function standardBalanceURL(raw) {
 function balanceFix(p) {
   const box = el("div", "bal-fix");
   const state = draft.balanceTemplateState ||= { kind: balanceTemplateOf(draft.balanceURL), active: false };
-  const choices = [["", "Choose a platform…"], ["newapi", "New API"], ["sub2api", "Sub2API"], ["custom", "Custom"]]
+  const choices = [["", "None"], ["newapi", "New API"], ["sub2api", "Sub2API"], ["custom", "Custom"]]
     .map(([v, name]) => ({ v, name, note: "" }));
   const picker = el("button", "sess-pick bal-template");
   picker.type = "button";
@@ -8087,7 +8087,7 @@ function balanceFix(p) {
   picker.append(el("span"), svg(CHEV, 11, 1.6));
   const showChoice = () => {
     picker.dataset.value = state.kind;
-    picker.firstChild.textContent = t(choices.find((o) => o.v === state.kind)?.name || "Choose a platform…");
+    picker.firstChild.textContent = t(choices.find((o) => o.v === state.kind)?.name || "None");
   };
   showChoice();
   box.picker = el("div", "bal-template-row");
