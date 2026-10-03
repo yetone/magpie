@@ -1320,6 +1320,9 @@ func googleProvider(g googleAccount, plan string) Provider {
 	}
 	acct.models = g.fallbackModels
 	acct.fetch = func(ctx context.Context) ([]catalog.Model, error) {
+		if g.app.agent == "antigravity" {
+			return antigravityPoolModels(ctx)
+		}
 		ms, err := g.models(ctx)
 		if err != nil {
 			return nil, err
