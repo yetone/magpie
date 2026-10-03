@@ -374,6 +374,14 @@ with the quota as its field, the New-Api-User header is asked for until it
 is typed, Check balance asks as the form has it and says the fix plainly,
 and the Usage page's card does too.
 
+`balance-templates.test.cjs` checks manually chosen New API/Sub2API templates,
+empty account-ID headers, custom-value preservation, late Base URLs and draft
+redraws in Chromium and WebKit, English and Chinese. It also checks the rounded
+platform popup, keyboard selection, focus return, dismissal and narrow-window fit.
+The Docker workflow in
+`build/validation/README.md` also exercises the compiled app's real save and
+balance APIs against local fixture vendors and exports a Windows desktop EXE.
+
 `cli-update.test.cjs` draws the agents' CLI versions on the Agents page
 (#202) from a faked API: the version after each name, "Update to x.y.z" only
 where magpie knows how the CLI was installed, the rows' height kept, an

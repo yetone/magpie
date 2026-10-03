@@ -1,0 +1,11 @@
+.git
+.github
+dist
+memory
+node_modules
+site
+magpie
+magpie.exe
+magpie.app
+magpie-dev*
+rsrc_windows_*.syso

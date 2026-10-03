@@ -4941,6 +4941,7 @@ function headerEditor(hints = []) {
     }
     box.append(adds);
   };
+  box.refresh = render;
   render();
   return box;
 }
@@ -5376,6 +5377,7 @@ function drawEditor(p, presetID) {
           draft[from] = p?.[from] || "";
         }
         showApi(v);
+        balFix?.refresh();
       };
       b.dataset.api = v;
       seg.append(b);
@@ -5545,7 +5547,7 @@ function drawEditor(p, presetID) {
   // a vendor that tells the whole account's balance only to a token of its
   // own (AiHubMix's system access token), where a key knows just its own
   // — or a custom provider's, whose Balance URL may not be named yet: a
-  // token pasted there says at once which URL it wants (balanceFix)
+  // the panel's query template is chosen beside the token (balanceFix)
   let balFix = null;
   if (p?.balanceToken?.takes || custom) {
     const saved = !!p?.balanceToken?.set;
@@ -5567,10 +5569,11 @@ function drawEditor(p, presetID) {
     const [label, wrap] = field(t("Account balance"), pair, tokHelp);
     if (custom) {
       balFix = balanceFix(p);
-      wrap.append(balFix);
+      wrap.append(balFix.picker, balFix.note, balFix);
+      queueMicrotask(() => ed.querySelector(".headers")?.refresh());
       // whatever is typed — the token, the Balance URL, a header — may
       // make it or unmake it
-      ed.addEventListener("input", () => balFix.refresh());
+      ed.addEventListener("input", (e) => balFix.refresh(e));
     }
     ed.append(label, wrap);
   }
@@ -8053,49 +8056,129 @@ function balanceError(err) {
   return "";
 }
 
-// balanceFix: under a custom provider's balance token, what its Balance URL
-// wants in place of what is there, with the one click that sets it:
-// new-api's /api/usage/token is asked with the key alone and never with the
-// token (balance.go doesn't send it there), and a token without a URL is
-// asked nowhere; new-api's /api/user/self takes the token, with the user's
-// id in New-Api-User, which is said too while no such header is set. A URL
-// of any other kind (a sub2api panel's) is left alone: a token's shape
-// can't tell the two apart, new-api's own sign-ins being JWTs too.
+// Templates are chosen by the user: both panels can issue JWTs. Only the
+// draft remembers the choice and the values we put there; edited values
+// belong to the user, and no template choice is written to providers.json.
+const BALANCE_TEMPLATES = {
+  newapi: { path: "/api/user/self", field: "$data.quota / 500000" },
+  sub2api: { path: "/api/v1/user/profile", field: "$data.balance" },
+};
+function balanceURLInfo(raw) {
+  try { const u = new URL((raw || "").trim()); return /^https?:$/.test(u.protocol) ? { origin: u.origin, path: u.pathname.replace(/\/+$/, ""), plain: !u.search && !u.hash && !u.username && !u.password } : null; } catch { return null; }
+}
+function balanceTemplateOf(raw) {
+  const u = balanceURLInfo(raw);
+  return Object.entries(BALANCE_TEMPLATES).find(([, v]) => u?.plain && u.path === v.path)?.[0] || ((raw || "").trim() ? "custom" : "");
+}
+function standardBalanceURL(raw) {
+  const u = balanceURLInfo(raw);
+  return !!u?.plain && ["/api/usage/token", ...Object.values(BALANCE_TEMPLATES).map((v) => v.path)].includes(u.path);
+}
 function balanceFix(p) {
   const box = el("div", "bal-fix");
-  const origin = (u) => { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.origin : ""; } catch { return ""; } };
-  box.refresh = () => {
+  const state = draft.balanceTemplateState ||= { kind: balanceTemplateOf(draft.balanceURL), active: false };
+  const choices = [["", "Choose a platform…"], ["newapi", "New API"], ["sub2api", "Sub2API"], ["custom", "Custom"]]
+    .map(([v, name]) => ({ v, name, note: "" }));
+  const picker = el("button", "sess-pick bal-template");
+  picker.type = "button";
+  picker.setAttribute("aria-label", t("Balance query template"));
+  picker.setAttribute("aria-haspopup", "menu");
+  picker.setAttribute("aria-expanded", "false");
+  picker.append(el("span"), svg(CHEV, 11, 1.6));
+  const showChoice = () => {
+    picker.dataset.value = state.kind;
+    picker.firstChild.textContent = t(choices.find((o) => o.v === state.kind)?.name || "Choose a platform…");
+  };
+  showChoice();
+  box.picker = el("div", "bal-template-row");
+  box.picker.append(el("span", "", t("Balance query template")), picker);
+  box.note = el("div", "bal-template-note");
+  const baseOrigin = () => {
+    for (const raw of [draft[apiField[draft.api]], draft.chat, draft.responses, draft.anthropic]) {
+      const origin = balanceURLInfo(raw)?.origin; if (origin) return origin;
+    }
+    return "";
+  };
+  const sync = () => {
+    const ed = box.closest(".editor");
+    for (const [sel, value] of [[".bal-url", draft.balanceURL], [".bal-path", draft.balancePath]]) {
+      const ctl = ed?.querySelector(sel); if (ctl && ctl.value !== (value || "")) ctl.value = value || "";
+    }
+    return ed;
+  };
+  const header = () => (draft.headers || []).find((r) => (r[0] || "").trim().toLowerCase() === "new-api-user");
+  const suggestHeader = () => {
+    if (header()) return;
+    const row = draft.headers.find((r) => !r[0].trim() && !r[1].trim()) || ["", "", false];
+    if (!draft.headers.includes(row)) draft.headers.push(row);
+    row[0] = "New-Api-User";
+    state.header = row;
+    box.closest(".editor")?.querySelector(".headers")?.refresh();
+  };
+  const apply = (kind) => {
+    state.kind = kind; showChoice();
+    const template = BALANCE_TEMPLATES[kind];
+    state.active = !!template;
+    if (!template) { box.refresh(); return; }
+    const oldURL = (draft.balanceURL || "").trim(), oldPath = (draft.balancePath || "").trim();
+    state.site = (standardBalanceURL(oldURL) && balanceURLInfo(oldURL).origin) || baseOrigin();
+    state.base = baseOrigin();
+    const replaceURL = !oldURL || (!state.manualURL && (oldURL === state.url || standardBalanceURL(oldURL)));
+    const standardFields = ["$data.quota/500000", "$data.balance", "$data.total_available/500000"];
+    const replacePath = !oldPath || (!state.manualPath && (oldPath === state.field || standardFields.includes(oldPath.replace(/\s/g, ""))));
+    state.kept = !replaceURL || !replacePath;
+    state.pendingURL = replaceURL && !state.site;
+    if (replaceURL) state.manualURL = false;
+    if (replacePath) state.manualPath = false;
+    if (replaceURL && state.site) draft.balanceURL = state.url = state.site + template.path;
+    if (replacePath) draft.balancePath = state.field = template.field;
+    if (kind === "newapi") suggestHeader();
+    else if (state.header && !state.header[1].trim() && state.header[0].trim().toLowerCase() === "new-api-user") {
+      const i = draft.headers.indexOf(state.header);
+      if (i >= 0) { draft.headers.splice(i, 1); box.closest(".editor")?.querySelector(".headers")?.refresh(); }
+      state.header = null;
+    }
+    const ed = sync(), more = ed?.querySelector("details.more");
+    if (more) more.open = true;
+    box.refresh();
+  };
+  picker.onclick = (e) => {
+    e.stopPropagation();
+    if (picker.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(picker, choices, state.kind, (kind) => { apply(kind); picker.focus({ preventScroll: true }); }, "Balance query template", "bal-template-menu");
+  };
+  // Restoring a saved account endpoint recreates its unfilled header hint,
+  // without replacing any saved endpoint or field.
+  let restoredHeader = false;
+  box.refresh = (event) => {
+    if (event?.target?.matches(".bal-url")) { state.manualURL = true; state.pendingURL = false; }
+    if (event?.target?.matches(".bal-path")) state.manualPath = true;
+    const template = BALANCE_TEMPLATES[state.kind], base = baseOrigin();
+    if (state.active && template && base && base !== state.base) {
+      state.base = base; state.site = base;
+      if (!state.manualURL && (state.pendingURL || draft.balanceURL === state.url)) {
+        draft.balanceURL = state.url = base + template.path; state.pendingURL = false; sync();
+      }
+    }
+    box.note.textContent = state.active && state.pendingURL ? t("Fill in the Base URL to complete the balance query address.") : state.active && state.kept ? t("Your custom balance address or field was kept; check it for the selected platform.") : t("Choose the panel yourself; the token's format does not identify it.");
     box.replaceChildren();
     box.className = "bal-fix";
     const tok = !!draft.balanceToken || (!!p?.balanceToken?.set && !draft.clearBalanceToken);
     if (!tok) return;
     const u = (draft.balanceURL || "").trim();
-    let path = "";
-    try { path = new URL(u).pathname.replace(/\/+$/, ""); } catch {}
+    const path = balanceURLInfo(u)?.path || "";
+    if (path === "/api/user/self" && !restoredHeader) { restoredHeader = true; suggestHeader(); }
     let why = "";
     if (path === "/api/usage/token") why = t("…/api/usage/token takes the API key, not this token: a new-api relay tells the account's balance to the token at /api/user/self.");
-    else if (!u) why = t("The token needs a Balance URL: a new-api relay tells the account's balance to it at /api/user/self.");
+    else if (!u && !state.kind) why = t("The token needs a Balance URL: a new-api relay tells the account's balance to it at /api/user/self.");
     if (why) {
       box.classList.add("warn");
       box.append(el("span", "", why));
-      const site = origin(u) || origin(draft.chat || draft.anthropic || draft.responses || "");
+      const site = balanceURLInfo(u)?.origin || baseOrigin();
       if (!site) return;
       const to = site + "/api/user/self";
       const use = el("button", "text action", t("Use {url}", { url: to }));
-      use.onclick = () => {
-        draft.balanceURL = to;
-        // /api/usage/token's fields aren't in /api/user/self's reply; the
-        // account's quota is, $1 to 500000 of it
-        if (!(draft.balancePath || "").trim() || /total_(available|granted|used)|unlimited_quota/.test(draft.balancePath)) draft.balancePath = "$data.quota / 500000";
-        const ed = box.closest(".editor");
-        const set = (sel, v) => { const i = ed?.querySelector(sel); if (i) i.value = v; };
-        set(".bal-url", draft.balanceURL);
-        set(".bal-path", draft.balancePath);
-        // what changed, in view below
-        const more = ed?.querySelector("details.more");
-        if (more) more.open = true;
-        box.refresh();
-      };
+      use.onclick = () => apply("newapi");
       box.append(use);
       return;
     }
