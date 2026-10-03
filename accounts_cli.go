@@ -371,6 +371,8 @@ func openInBrowser(url string) {
 		cmd = proc.Command("open", url)
 	case "windows":
 		cmd = proc.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "android":
+		cmd = proc.Command("termux-open-url", url)
 	default:
 		cmd = proc.Command("xdg-open", url)
 	}

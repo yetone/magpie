@@ -25,17 +25,19 @@ import (
 // BunVersion is the Bun magpie downloads to run plugins with the first
 // time one is needed, and the oldest it runs them on: newer releases are
 // taken as they come (see CheckBun). Update bunSums below when it changes.
-const BunVersion = "1.3.14"
+const BunVersion = "1.4.2"
 
 // bunSums are the SHA-256s of BunVersion's builds, from Bun's own
 // SHASUMS256.txt. They let the default Bun be downloaded through a mirror
 // when Bun's GitHub release page can't be reached.
 var bunSums = map[string]string{
-	"bun-darwin-aarch64.zip":       "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620",
-	"bun-darwin-x64.zip":           "4183df3374623e5bab315c547cfa0974533cd457d86b73b639f7a87974cd6633",
-	"bun-linux-aarch64.zip":        "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
-	"bun-linux-x64-baseline.zip":   "a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7",
-	"bun-windows-x64-baseline.zip": "538f9c846355d9e847b2671bc00c47da4229a0befb24df3282b739770f3b475f",
+	"bun-darwin-aarch64.zip":             "90987a3a16d7db556d886ac3d551e7b6d3edf0a1cf43acaed622e8676be1d12f",
+	"bun-darwin-x64.zip":                 "80520d7e17526308c9185d261679ac6d27798d3803a0e9f7ff9121ab8affb012",
+	"bun-linux-aarch64.zip":              "54328bbc2d9c8e0c9f892c544d66c57a83b84139e34909e5ee81758f1ac8fda7",
+	"bun-linux-x64-baseline.zip":         "c678040f14fe0440eb839d37cbd0ce4c051a32da72806ac97de6a6aab6bf728f",
+	"bun-windows-x64-baseline.zip":       "78c221c2376f79731ccf4e4af0b3bb46d81fefa3296c5abee09ad8a1b21e68c6",
+	"bun-linux-aarch64-android.zip":      "a1c7e2983f1bb65146beb256a4d72449f23042412bc2cf278aa6397ba27e0274",
+	"bun-linux-x64-android-baseline.zip": "fe36d8d4795e0eadc22fb6696d44d168491c2e5b9b7cbb12b8c96b0c0c40a4f9",
 }
 
 func bunChecksum(version, target string) string {
@@ -60,6 +62,12 @@ func bunTarget() (string, error) {
 	}
 	switch runtime.GOOS {
 	case "darwin", "linux":
+	case "android":
+		t := "bun-linux-" + arch + "-android"
+		if arch == "x64" {
+			t += "-baseline"
+		}
+		return t, nil
 	case "windows":
 		if arch != "x64" {
 			return "", fmt.Errorf("Bun has no build for windows/%s", runtime.GOARCH)

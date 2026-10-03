@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/yetone/magpie/internal/autostart"
 )
@@ -22,7 +23,11 @@ func autostartCmd(args []string) error {
 		}
 	}
 	if autostart.Enabled() {
-		fmt.Println(green.Render("✓"), "magpie opens at login, in the tray")
+		if runtime.GOOS == "android" {
+			fmt.Println(green.Render("✓"), "magpie starts the gateway at boot (requires Termux:Boot)")
+		} else {
+			fmt.Println(green.Render("✓"), "magpie opens at login, in the tray")
+		}
 	} else {
 		fmt.Println("magpie doesn't open at login")
 	}

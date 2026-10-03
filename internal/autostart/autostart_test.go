@@ -32,7 +32,11 @@ func TestSet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"/opt/my apps/magpie.AppImage", Arg} {
+	arg := Arg
+	if runtime.GOOS == "android" {
+		arg = "serve"
+	}
+	for _, want := range []string{"/opt/my apps/magpie.AppImage", arg} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("%s lacks %q:\n%s", path, want, b)
 		}

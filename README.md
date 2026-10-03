@@ -716,6 +716,37 @@ Linux needs `libgtk-3-dev` and `libwebkit2gtk-4.1-dev` for the app build
 (the Makefile adds the `gtk3` tag; with plain `go build`, pass `-tags gtk3`);
 Windows uses the WebView2 runtime that ships with the OS.
 
+### Termux (Android)
+
+Build inside Termux; the Linux release binaries target a different libc.
+The Makefile selects the terminal build on Android, including the gateway,
+TUI and browser UI:
+
+```sh
+pkg install golang make git
+git clone https://github.com/XYenon/magpie.git
+cd magpie
+make build
+install -m 755 magpie "$PREFIX/bin/magpie"
+magpie web               # opens the UI in Android's browser
+```
+
+For a direct Go build or install, pass `-tags nogui`. Use `magpie tui` for
+the terminal interface, or `magpie serve` for the gateway alone. Web UI and
+OAuth links open with `termux-open-url`.
+
+`magpie autostart on` writes a gateway startup script to
+`~/.termux/boot/magpie`. Install Termux:Boot from the same source as Termux
+and open it once to enable boot scripts. `magpie autostart off` removes the
+script. Android may stop background processes; disable battery optimisation
+for Termux and use `termux-wake-lock` when continuous service is needed.
+
+Plugins automatically download and verify the official Android Bun build
+(Bun 1.4.2 or newer, arm64 or amd64), just as on desktop platforms.
+`MAGPIE_BUN` remains available to use your own Bun instead. Update magpie
+source builds by pulling and rebuilding; the upstream release channel does
+not currently provide Android magpie binaries.
+
 ### Docker
 
 `docker build` makes a server image: the terminal-only binary on

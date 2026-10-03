@@ -96,6 +96,8 @@ func TestBunDefaultSums(t *testing.T) {
 		"bun-linux-aarch64",
 		"bun-linux-x64-baseline",
 		"bun-windows-x64-baseline",
+		"bun-linux-aarch64-android",
+		"bun-linux-x64-android-baseline",
 	} {
 		got := bunChecksum(BunVersion, target)
 		if len(got) != 64 {
@@ -107,6 +109,28 @@ func TestBunDefaultSums(t *testing.T) {
 	}
 	if got := bunChecksum("9.9.9", "bun-linux-x64-baseline"); got != "" {
 		t.Fatalf("a newer Bun used the built-in checksum: %q", got)
+	}
+}
+
+func TestBunTarget(t *testing.T) {
+	want := map[string]string{
+		"darwin/arm64":  "bun-darwin-aarch64",
+		"darwin/amd64":  "bun-darwin-x64",
+		"linux/arm64":   "bun-linux-aarch64",
+		"linux/amd64":   "bun-linux-x64-baseline",
+		"windows/amd64": "bun-windows-x64-baseline",
+		"android/arm64": "bun-linux-aarch64-android",
+		"android/amd64": "bun-linux-x64-android-baseline",
+	}[runtime.GOOS+"/"+runtime.GOARCH]
+	got, err := bunTarget()
+	if want == "" {
+		if err == nil {
+			t.Fatalf("unsupported platform selected %q", got)
+		}
+		return
+	}
+	if err != nil || got != want {
+		t.Fatalf("bunTarget = %q, %v; want %q", got, err, want)
 	}
 }
 

@@ -15,6 +15,11 @@ endif
 ifeq ($(shell uname -s),Linux)
   TAGS += gtk3
 endif
+# Termux uses Android's libc and has no desktop webview. Keep the web UI
+# and terminal commands, without linking GTK or Wails.
+ifeq ($(shell go env GOOS),android)
+  TAGS = nogui
+endif
 
 .PHONY: build cli install test app icons release release-cli release-windows release-linux clean dev dev-once
 
@@ -28,7 +33,7 @@ install:
 	go install -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" .
 
 test:
-	go vet ./... && go test ./...
+	go vet -tags "$(TAGS)" ./... && go test -tags "$(TAGS)" ./...
 
 # macOS bundle: menu bar app with no Dock icon (LSUIElement).
 app: build
