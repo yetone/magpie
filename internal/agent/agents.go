@@ -855,10 +855,21 @@ func copilot(home string) *Agent {
 
 func crush(home, cfg string) *Agent {
 	path := filepath.Join(cfg, "crush", "crush.json")
+	// Crush saves the models its own picker chooses to its data file, and
+	// reads that after crush.json, so a pick there wins over one in path.
+	// The picks are read as Crush merges the two files and written where
+	// Crush writes them; magpie's provider stays in path, beside the
+	// library's MCP servers.
+	data := filepath.Join(home, ".local", "share", "crush", "crush.json")
+	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+		data = filepath.Join(dir, "crush", "crush.json")
+	}
 	if runtime.GOOS == "windows" {
 		if app := os.Getenv("LOCALAPPDATA"); app != "" {
 			path = filepath.Join(app, "crush", "crush.json")
 		}
+		// %LOCALAPPDATA%\crush is Crush's data folder there
+		data = path
 	}
 	return crushAt(here(home), path)
 }
@@ -874,6 +885,19 @@ func crushAt(at place, path string) *Agent {
 	provider := func() any { return magpieProviderJSONAt("crush", "crush", at.gw()) }
 	get := func(k string) (string, bool) { return edit.GetJSON(path, k) }
 	set := func(kvs ...edit.KV) error { return edit.SetJSON(path, kvs...) }
+	pick := func(k string) (string, bool) {
+		if v, ok := edit.GetJSON(data, k); ok {
+			return v, true
+		}
+		return get(k)
+	}
+	setPick := func(kvs ...edit.KV) error { return edit.SetJSON(data, kvs...) }
+	delPick := func(k string) error {
+		if err := edit.DelJSON(data, k); err != nil {
+			return err
+		}
+		return edit.DelJSON(path, k)
+	}
 	opts := func(key string) func(map[string]string) []Option {
 		return func(cur map[string]string) []Option {
 			var extra []string
@@ -893,14 +917,14 @@ func crushAt(at place, path string) *Agent {
 		}
 	}
 	setter := func(pKey, mKey string) func(string) error {
-		pair := pairSet(set, pKey, mKey)
+		pair := pairSet(setPick, pKey, mKey)
 		return func(v string) error {
 			if v == "" {
-				if err := edit.DelJSON(path, strings.TrimSuffix(pKey, ".provider")); err != nil {
+				if err := delPick(strings.TrimSuffix(pKey, ".provider")); err != nil {
 					return err
 				}
-				large := pairGet(get, "models.large.provider", "models.large.model")()
-				small := pairGet(get, "models.small.provider", "models.small.model")()
+				large := pairGet(pick, "models.large.provider", "models.large.model")()
+				small := pairGet(pick, "models.small.provider", "models.small.model")()
 				if usesMagpie(large, small) {
 					return nil
 				}
@@ -918,8 +942,8 @@ func crushAt(at place, path string) *Agent {
 		ID: "crush", Name: "Crush", Icon: "crush", Bin: "crush", Dir: filepath.Dir(path), Path: path,
 		UA: []string{"crush"},
 		Check: func() string {
-			large, _ := get("models.large.provider")
-			small, _ := get("models.small.provider")
+			large, _ := pick("models.large.provider")
+			small, _ := pick("models.small.provider")
 			if large != magpieID && small != magpieID {
 				return ""
 			}
@@ -930,21 +954,21 @@ func crushAt(at place, path string) *Agent {
 			return syncJSON(path, "providers."+magpieID, provider)
 		},
 		Fields: []Field{
-			{Key: "model", Label: "large", Get: pairGet(get, "models.large.provider", "models.large.model"), Set: setter("models.large.provider", "models.large.model"), Options: opts("model")},
-			{Key: "small", Label: "small", Get: pairGet(get, "models.small.provider", "models.small.model"), Set: setter("models.small.provider", "models.small.model"), Options: opts("small")},
+			{Key: "model", Label: "large", Get: pairGet(pick, "models.large.provider", "models.large.model"), Set: setter("models.large.provider", "models.large.model"), Options: opts("model")},
+			{Key: "small", Label: "small", Get: pairGet(pick, "models.small.provider", "models.small.model"), Set: setter("models.small.provider", "models.small.model"), Options: opts("small")},
 			{
 				// the large model's reasoning_effort, which Crush's schema
 				// takes as low, medium or high (for OpenAI-style models)
 				Key: "effort", Label: "effort",
-				Get: func() string { v, _ := get("models.large.reasoning_effort"); return v },
+				Get: func() string { v, _ := pick("models.large.reasoning_effort"); return v },
 				Set: func(v string) error {
 					if v == "" {
-						return edit.DelJSON(path, "models.large.reasoning_effort")
+						return delPick("models.large.reasoning_effort")
 					}
-					if m, _ := get("models.large.model"); m == "" {
+					if m, _ := pick("models.large.model"); m == "" {
 						return fmt.Errorf("pick Crush's large model first; the effort is kept with it")
 					}
-					return set(edit.KV{Path: "models.large.reasoning_effort", Value: v})
+					return setPick(edit.KV{Path: "models.large.reasoning_effort", Value: v})
 				},
 				Options: func(map[string]string) []Option { return static("low", "medium", "high") },
 			},
