@@ -74,14 +74,31 @@ jobs:
         run: go test -v -count=1 ./internal/usage -run '^(TestWindows|TestLogChange|TestLogFileInfoPreservesIdentity$|TestUsageSameSizeAndMtimeRewrite$|TestLogGrowingRewriteThenAppend$|TestUsagePageCacheAfterUncachedQuery$)'
 
   cli:
-    name: cli (nogui)
+    name: cli (${{ matrix.goos }}/${{ matrix.goarch }}, nogui)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: android
+            goarch: arm64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Build the terminal-only magpie
+      - name: Build the terminal-only release
         env:
           CGO_ENABLED: '0'
-        run: go build -tags nogui -o /dev/null .
+        run: make release-cli TARGETS="${{ matrix.goos }}/${{ matrix.goarch }}"
+      - uses: actions/setup-node@v4
+        if: matrix.goos == 'linux'
+        with:
+          node-version: 22
+      - name: Test the site and installer
+        if: matrix.goos == 'linux'
+        run: |
+          sh -n site/public/install.sh
+          node --test site/*.test.mjs
