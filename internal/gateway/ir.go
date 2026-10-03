@@ -125,6 +125,9 @@ type Request struct {
 	// Anthropic upstream: a relay that serves only Claude Code turns a
 	// request without it away (#359).
 	Metadata json.RawMessage
+	// Schema is the JSON schema an Anthropic client asked the answer to fit
+	// (output_config.format, of type json_schema).
+	Schema json.RawMessage
 	// GeminiCompat is the upstream being Gemini's OpenAI-compatible API
 	// (AI Studio's, or a proxy in front of it on this machine or the LAN),
 	// which gives the model's thoughts only when asked in thinking_config.

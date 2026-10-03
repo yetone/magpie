@@ -73,6 +73,10 @@ type aRequest struct {
 	} `json:"thinking,omitempty"`
 	OutputConfig *struct {
 		Effort string `json:"effort,omitempty"`
+		Format *struct {
+			Type   string          `json:"type"`
+			Schema json.RawMessage `json:"schema"`
+		} `json:"format,omitempty"`
 	} `json:"output_config,omitempty"`
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 	Speed    string          `json:"speed,omitempty"` // "fast": Claude's fast mode
@@ -87,6 +91,9 @@ func parseAnthropic(body []byte) (*Request, error) {
 		Temp: a.Temperature, TopP: a.TopP, Stop: a.StopSequences, Stream: a.Stream, Fast: a.Speed == "fast"}
 	if len(a.Metadata) > 0 && string(a.Metadata) != "null" {
 		r.Metadata = a.Metadata
+	}
+	if oc := a.OutputConfig; oc != nil && oc.Format != nil && oc.Format.Type == "json_schema" && len(oc.Format.Schema) > 0 {
+		r.Schema = oc.Format.Schema
 	}
 	for _, m := range a.Messages {
 		msg := Message{Role: m.Role}
@@ -385,6 +392,14 @@ func buildAnthropic(r *Request, model string) []byte {
 		out["temperature"] = *r.Temp
 	} else if r.TopP != nil {
 		out["top_p"] = *r.TopP
+	}
+	if len(r.Schema) > 0 {
+		oc, _ := out["output_config"].(map[string]any)
+		if oc == nil {
+			oc = map[string]any{}
+		}
+		oc["format"] = map[string]any{"type": "json_schema", "schema": r.Schema}
+		out["output_config"] = oc
 	}
 	out["max_tokens"] = maxTokens
 	if len(r.Stop) > 0 {
