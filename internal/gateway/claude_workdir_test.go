@@ -11,13 +11,25 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// Every run works in the same folder: Claude Code puts its working
-// directory in the system prompt, ahead of the conversation, so a folder of
-// each run's own left nothing past Claude Code's own part of the prompt to
-// be read from the cache.
-func TestClaudeRunsShareAWorkDir(t *testing.T) {
+// claudeWorkDirs runs two Claude subscription requests through a script
+// standing in for Claude Code, with the user's cache folder in a temporary
+// home, and gives the folders the two runs worked in and the folder they
+// should share.
+func claudeWorkDirs(t *testing.T, prepare func(work string)) (dirs []string, work string) {
+	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("a shell script stands in for Claude Code")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	work = filepath.Join(cache, "magpie", "claude-work")
+	if prepare != nil {
+		prepare(work)
 	}
 	dir := t.TempDir()
 	script := `#!/bin/sh
@@ -44,8 +56,36 @@ done
 		}
 	}
 	b, _ := os.ReadFile(filepath.Join(dir, "dirs"))
-	dirs := strings.Fields(string(b))
-	if len(dirs) != 2 || dirs[0] != dirs[1] {
-		t.Fatalf("working directories: %q", dirs)
+	return strings.Fields(string(b)), evalSymlinks(work)
+}
+
+// Every run works in the same folder: Claude Code puts its working
+// directory in the system prompt, ahead of the conversation, so a folder of
+// each run's own left nothing past Claude Code's own part of the prompt to
+// be read from the cache. The folder is the user's own, in their cache
+// folder, made for them alone.
+func TestClaudeRunsShareAWorkDir(t *testing.T) {
+	dirs, work := claudeWorkDirs(t, nil)
+	if len(dirs) != 2 || dirs[0] != work || dirs[1] != work {
+		t.Fatalf("working directories: %q, want %s", dirs, work)
+	}
+	fi, err := os.Stat(work)
+	if err != nil || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("work folder: %v %v", fi.Mode(), err)
+	}
+}
+
+// A work folder others can write to is not worked in, as anything put
+// there (a CLAUDE.md) would be read by every run: each run works in a
+// folder of its own instead.
+func TestClaudeWorkDirOthersCanWriteIsAvoided(t *testing.T) {
+	dirs, work := claudeWorkDirs(t, func(work string) {
+		if err := os.MkdirAll(work, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		os.Chmod(work, 0o777)
+	})
+	if len(dirs) != 2 || dirs[0] == work || dirs[1] == work || dirs[0] == dirs[1] {
+		t.Fatalf("working directories: %q, shared %s", dirs, work)
 	}
 }

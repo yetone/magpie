@@ -233,9 +233,32 @@ func sweepBridgeProjects(claudeDir, tempDir string) {
 // every prompt new to Anthropic's cache from there on, a caller's system
 // prompt and its history written again each time, with only Claude Code's
 // own part (some 2.8k tokens) read.
+//
+// It is the user's own (in their cache folder, not a temp folder every user
+// shares, as /tmp is on Linux), and used only when it is a folder they own
+// that no one else can write to: one someone else made, or could put a
+// CLAUDE.md in, would be read by every run.
 func claudeWorkDir() (string, error) {
-	dir := filepath.Join(os.TempDir(), "magpie-claude")
-	return dir, os.MkdirAll(dir, 0o700)
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, "magpie", "claude-work")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	fi, err := os.Lstat(dir)
+	switch {
+	case err != nil:
+		return "", err
+	case !fi.IsDir():
+		return "", fmt.Errorf("%s is not a folder", dir)
+	case fi.Mode().Perm()&0o022 != 0:
+		return "", fmt.Errorf("%s can be written by others (%v)", dir, fi.Mode().Perm())
+	case !ownedByMe(fi):
+		return "", fmt.Errorf("%s belongs to another user", dir)
+	}
+	return dir, nil
 }
 
 func evalSymlinks(path string) string {
@@ -317,8 +340,10 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, con
 	}
 	work, err := claudeWorkDir()
 	if err != nil {
-		cleanup()
-		return nil, nil, err
+		// a run of its own folder answers all the same, its prompt only
+		// read from the cache as far as Claude Code's own part
+		log.Printf("claude: working in a folder of the run's own: %v", err)
+		work = tmp
 	}
 	cmd := proc.CommandContext(context.Background(), binary, args...)
 	cmd.Dir = work
