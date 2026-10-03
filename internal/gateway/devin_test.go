@@ -213,6 +213,38 @@ func TestBuildDevin(t *testing.T) {
 	}
 }
 
+func TestBuildDevinKeepsImagesAToolReturned(t *testing.T) {
+	r := &Request{Messages: []Message{
+		{Role: "user", Parts: []Part{{Kind: Text, Text: "look at it"}}},
+		{Role: "assistant", Parts: []Part{
+			{Kind: ToolCall, ID: "c1", Name: "read", Args: json.RawMessage(`{"p":"a.png"}`)},
+			{Kind: ToolCall, ID: "c2", Name: "read", Args: json.RawMessage(`{"p":"b.png"}`)},
+		}},
+		{Role: "user", Parts: []Part{
+			// Read gives a picture back with no text beside it
+			{Kind: ToolResult, CallID: "c1", Images: []Part{
+				{Kind: Image, MediaType: "image/png", Data: "AAAA"},
+				{Kind: Image, URL: "https://example.com/x.png"}, // Devin takes no URL
+			}},
+			{Kind: ToolResult, CallID: "c2", Text: "B", Images: []Part{{Kind: Image, MediaType: "image/jpeg", Data: "BBBB"}}},
+		}},
+	}}
+	d := decodeDevinRequest(t, buildDevin(r, "swe-2", "k"))
+	var got []string
+	for _, m := range d.msgs {
+		got = append(got, devinSummary(m))
+	}
+	want := []string{
+		"1:look at it",
+		"2: call c1/read {\"p\":\"a.png\"} call c2/read {\"p\":\"b.png\"}",
+		"4:(no output) for c1 image image/png",
+		"4:B for c2 image image/jpeg",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 func devinUpstream(t *testing.T, reply []byte) func() {
 	t.Helper()
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

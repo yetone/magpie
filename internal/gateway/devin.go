@@ -295,6 +295,17 @@ type devinMsg struct {
 	thinking []Part // with Devin's own signatures
 }
 
+// inlineImages is the images that carry their bytes: Devin takes no URL.
+func inlineImages(ims []Part) []Part {
+	var out []Part
+	for _, im := range ims {
+		if im.Data != "" {
+			out = append(out, im)
+		}
+	}
+	return out
+}
+
 // buildDevin is the GetChatMessage request for r, to the model uid.
 func buildDevin(r *Request, uid, key string) []byte {
 	var msgs []devinMsg
@@ -359,7 +370,7 @@ func buildDevin(r *Request, uid, key string) []byte {
 					if p.IsError {
 						out = "Error: " + out
 					}
-					msgs = append(msgs, devinMsg{role: devinTool, callID: c.ID, text: out})
+					msgs = append(msgs, devinMsg{role: devinTool, callID: c.ID, text: out, images: inlineImages(p.Images)})
 					pending = append(pending[:i:i], pending[i+1:]...)
 					break
 				}
