@@ -239,6 +239,16 @@ func getTOMLTopLines(path, key string) (string, bool) {
 // there is none. Every key is located in the file as it was read, so the
 // edit is one write that either happens entirely or not at all.
 func SetTOMLTop(path string, kvs ...KV) error {
+	return setTOMLTop(path, false, kvs...)
+}
+
+// SetTOMLTopPreserving is SetTOMLTop with an existing key's spacing and trailing
+// comment kept. New keys use the same spelling as SetTOMLTop.
+func SetTOMLTopPreserving(path string, kvs ...KV) error {
+	return setTOMLTop(path, true, kvs...)
+}
+
+func setTOMLTop(path string, preserve bool, kvs ...KV) error {
 	raw, err := Read(path)
 	if err != nil {
 		return err
@@ -264,6 +274,9 @@ func SetTOMLTop(path string, kvs ...KV) error {
 		found := false
 		for _, k := range doc.root.keys {
 			if k.name == kv.Path {
+				if preserve {
+					line = k.prefix + strconv.Quote(toString(kv.Value)) + k.suffix
+				}
 				replace[k.from] = span{k.to, line}
 				found = true
 				break

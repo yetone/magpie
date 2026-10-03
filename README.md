@@ -85,6 +85,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | Copilot CLI  | `~/.copilot/settings.json`        | model           |
 | Crush        | `~/.config/crush/crush.json`      | large, small    |
 | DeepSeek Harness (dsh) | `~/.dsh/profiles/*/cordis.patch.yml` (`$DSH_HOME`; a custom provider, Magpie), or `~/.dsh/config.yaml` before dsh 0.1.5 | model, effort |
+| Reasonix Studio (2.x) | `~/.reasonix/config.toml` + `.env` (`%APPDATA%/reasonix` on Windows; `$REASONIX_HOME`) | model, effort (a dedicated `magpie` provider, shared by Studio and the native 2.x CLI) |
 | Command Code | `~/.commandcode/settings.json` (+ `providers.json`) | model |
 | fx           | `~/.fx/settings.json`             | model (a keyless `magpie` provider) |
 | omp (oh-my-pi) | `~/.omp/agent/config.yml` (+ `models.yml`) | model |
@@ -107,6 +108,22 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 
 Provider-scoped agents (OpenCode, MiMo Code, Pi, OmO, Goose, Crush, omp, Hermes Agent) take `provider/model`.
 Only agents that are installed or configured are shown.
+
+Reasonix Studio is detected from its desktop installation or a native `reasonix`
+2.x CLI; the npm 1.x CLI and a shared config alone do not count. Tested with
+[Studio 2.24.0](https://github.com/esengine/DeepSeek-Reasonix/releases/tag/studio-v2.24.0).
+Pick its model in the app, or use `magpie reasonix magpie/deepseek/deepseek-chat`
+(`magpie reasonix magpie/group/code` for a routing group). `magpie reasonix effort high`
+sets an advertised reasoning level; `magpie reasonix default` restores the previous
+global selection and removes Magpie's provider and private `.env` key. Restart
+Studio for new sessions; project/session overrides still take precedence. Other
+providers and credentials are preserved. A non-managed provider named `magpie`
+is a conflict, reported without overwriting it. Studio and the 1.x CLI share these
+files; updating only Studio does not isolate their settings.
+
+The released-client stream/tool contract test can be run with
+`MAGPIE_TEST_REASONIX_CLI=/path/to/reasonix go test ./internal/agent -run '^TestReasonixStudioCLIIntegration$' -count=1`.
+It uses isolated settings and a local test upstream, with no vendor credentials.
 
 ## Providers and the gateway
 
