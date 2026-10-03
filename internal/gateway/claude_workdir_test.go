@@ -12,22 +12,22 @@ import (
 )
 
 // claudeWorkDirs runs two Claude subscription requests through a script
-// standing in for Claude Code, with the user's cache folder in a temporary
-// home, and gives the folders the two runs worked in and the folder they
-// should share.
+// standing in for Claude Code, with a temp folder of the test's own and a
+// home kept in git, and gives the folders the two runs worked in and the
+// folder they should share.
 func claudeWorkDirs(t *testing.T, prepare func(work string)) (dirs []string, work string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("a shell script stands in for Claude Code")
 	}
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	cache, err := os.UserCacheDir()
-	if err != nil {
+	if err := os.Mkdir(filepath.Join(home, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	work = filepath.Join(cache, "magpie", "claude-work")
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	t.Setenv("TMPDIR", t.TempDir())
+	work = filepath.Join(os.TempDir(), claudeWorkName())
 	if prepare != nil {
 		prepare(work)
 	}
@@ -62,12 +62,16 @@ done
 // Every run works in the same folder: Claude Code puts its working
 // directory in the system prompt, ahead of the conversation, so a folder of
 // each run's own left nothing past Claude Code's own part of the prompt to
-// be read from the cache. The folder is the user's own, in their cache
-// folder, made for them alone.
+// be read from the cache. The folder is the user's own, made for them
+// alone, in the temp folder: not under a home kept in git, whose status
+// Claude Code would put in the prompt.
 func TestClaudeRunsShareAWorkDir(t *testing.T) {
 	dirs, work := claudeWorkDirs(t, nil)
 	if len(dirs) != 2 || dirs[0] != work || dirs[1] != work {
 		t.Fatalf("working directories: %q, want %s", dirs, work)
+	}
+	if home := evalSymlinks(os.Getenv("HOME")); strings.HasPrefix(work, home+string(filepath.Separator)) || !strings.HasPrefix(work, evalSymlinks(os.TempDir())+string(filepath.Separator)) {
+		t.Fatalf("work folder %s: in the home %s, or not in the temp folder", work, home)
 	}
 	fi, err := os.Stat(work)
 	if err != nil || fi.Mode().Perm() != 0o700 {

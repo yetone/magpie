@@ -234,16 +234,16 @@ func sweepBridgeProjects(claudeDir, tempDir string) {
 // prompt and its history written again each time, with only Claude Code's
 // own part (some 2.8k tokens) read.
 //
-// It is the user's own (in their cache folder, not a temp folder every user
-// shares, as /tmp is on Linux), and used only when it is a folder they own
-// that no one else can write to: one someone else made, or could put a
-// CLAUDE.md in, would be read by every run.
+// It is in the temp folder, which is in no git repository: Claude Code puts
+// the status and recent commits of the repository its folder is in into
+// the prompt, so a folder under a home kept in git (dotfiles) would send
+// them with every request, and break the cache whenever they change. The
+// folder is the user's own (claudeWorkName: their uid in its name where
+// the temp folder is shared, as /tmp is on Linux), and used only when it
+// is a folder they own that no one else can write to: one someone else
+// made, or could put a CLAUDE.md in, would be read by every run.
 func claudeWorkDir() (string, error) {
-	base, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(base, "magpie", "claude-work")
+	dir := filepath.Join(os.TempDir(), claudeWorkName())
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
