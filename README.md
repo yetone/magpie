@@ -90,6 +90,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | omp (oh-my-pi) | `~/.omp/agent/config.yml` (+ `models.yml`) | model |
 | Devin        | `~/.config/devin/config.json` (`%APPDATA%\devin\config.json` on Windows) | model |
 | Hermes Agent | `~/.hermes/config.yaml` (`$HERMES_HOME`) | model |
+| Mister Morph | `~/.morph/config.yaml` (`$MISTER_MORPH_CONFIG`) | model, effort (`llm` on the gateway as `openai_response_compatible`, the Responses API; what it had comes back when you switch away) |
 | Kimi Code    | `~/.kimi/config.toml` (`$KIMI_SHARE_DIR`) | model (a `magpie` provider; magpie's models in Kimi's /model) |
 | Muse Code    | `~/.config/muse/settings.json` (`$XDG_CONFIG_HOME`) | model (endpoint_transport to the gateway, auth none; magpie's models in Muse's list) |
 | Empryo       | `~/.empryo/config.json` | defaultModel (a `magpie` provider at the gateway in `providers`) |

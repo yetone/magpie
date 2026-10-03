@@ -287,6 +287,9 @@ var wslKinds = []wslKind{
 		asleep:  wslOwnAsleep("crush", "model", "small")},
 	{id: "hermes", name: "Hermes Agent", dir: ".hermes", bin: "hermes", in: hermesIn,
 		restart: "reads its settings at start-up — restart open Hermes sessions to use this."},
+	// no bin: morph is other tools' name too
+	{id: "morph", name: "Mister Morph", dir: ".morph", in: morphIn,
+		restart: "uses this for new tasks in its Console — restart open morph chats to use it there."},
 	// no bin: grok is also other tools' name, as on this machine
 	{id: "grok", name: "Grok Build", dir: ".grok", in: grokIn,
 		restart: "reads its settings at start-up — restart open grok sessions to use this."},

@@ -823,7 +823,7 @@ const NATIVE_ONLY = {
 };
 // agents that pick no model once started: the one they start on stays in
 // the row
-const NO_PICKER = new Set(["gemini", "hermes", "agy", "muse"]);
+const NO_PICKER = new Set(["gemini", "hermes", "morph", "agy", "muse"]);
 // agents whose own model menu is the list picked here: no one model to
 // start on, but which of magpie's it offers (Claude Desktop reads
 // /v1/models as it starts, and the user switches among them in it)
