@@ -75,13 +75,13 @@ func searchesItself(p provider.Provider, proto provider.Protocol) bool {
 	return slices.Contains(searchHosts[proto], provider.HostOf(p.Base(proto)))
 }
 
-// searchHosts are the APIs that search by themselves: OpenAI's, xAI's and
-// DeepSeek's web_search tool (DeepSeek's on its Responses API only: its
-// Chat API has no search tool, and whether its Anthropic one searches isn't
-// known), Anthropic's web_search_20250305, OpenRouter's web plugin,
-// Gemini's googleSearch.
+// searchHosts are the APIs that search by themselves: OpenAI's, xAI's,
+// DeepSeek's, Zhipu's and Z.ai's web_search tool (DeepSeek's and Zhipu's on
+// their Responses API only: their Chat API has no such tool, and whether
+// DeepSeek's Anthropic one searches isn't known), Anthropic's
+// web_search_20250305, OpenRouter's web plugin, Gemini's googleSearch.
 var searchHosts = map[provider.Protocol][]string{
-	provider.Responses: {"api.openai.com", "api.x.ai", "api.deepseek.com"},
+	provider.Responses: {"api.openai.com", "api.x.ai", "api.deepseek.com", "open.bigmodel.cn", "api.z.ai"},
 	provider.Anthropic: {"api.anthropic.com"},
 	provider.Chat:      {"openrouter.ai"},
 	provider.Gemini:    {"generativelanguage.googleapis.com"},
