@@ -238,6 +238,20 @@ func (a *Account) Lists(model string) bool {
 	if !ok {
 		return true
 	}
+	if a.Agent == "antigravity" {
+		// Clients pick the family, while each account lists raw effort
+		// variants. A secondary account may be the only one listing it.
+		if variants, family := AntigravityVariants(model); family {
+			return slices.ContainsFunc(live, func(m catalog.Model) bool {
+				for _, id := range variants {
+					if m.ID == id {
+						return true
+					}
+				}
+				return false
+			})
+		}
+	}
 	return slices.ContainsFunc(live, func(m catalog.Model) bool { return m.ID == model })
 }
 
@@ -251,6 +265,9 @@ func (a *Account) Levels(model string) (levels []string, ok bool) {
 	live, _, found := catalog.Live(accountModels(a.Agent, a.User))
 	if !found {
 		return nil, false
+	}
+	if a.Agent == "antigravity" {
+		live = collapseAntigravityModels(live)
 	}
 	for _, m := range live {
 		if m.ID == model && len(m.Efforts) > 0 {
