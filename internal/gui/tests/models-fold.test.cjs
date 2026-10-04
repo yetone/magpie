@@ -75,8 +75,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await editor.locator(".models > .mchips .mchip").first().waitFor();
         await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
       };
-      const close = async () => {
+      const close = async (discard = false) => {
         await page.keyboard.press("Escape");
+        if (discard) await page.locator("dialog.action-confirm[open] button").last().click();
         await page.locator("#modal").waitFor({ state: "hidden" });
       };
       const fold = editor.locator(".mchips-fold");
@@ -118,7 +119,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await editor.locator(".models > .mchips .mchip", { hasText: "a-rather-long-model-name-2" }).first().click();
       await settle();
       assert.equal((await box()).shown, out.all, "a pick folded the list");
-      await close();
+      await close(true);
 
       // the next editor opens let out too, and folds back
       await open("Other Relay");

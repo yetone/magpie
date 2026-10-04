@@ -86,7 +86,7 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       const dirtyText = lang === "zh" ? /放弃未保存/ : /Discard unsaved/;
       const saveName = lang === "zh" ? "保存" : "Save";
       const cancelName = lang === "zh" ? "取消" : "Cancel";
-      const row = page.locator("#providers .row.provider");
+      const row = page.locator('#providers .row.provider[data-id="relay"]');
       await row.click();
       const modal = page.locator("#modal");
       await page.getByRole("dialog").waitFor();
