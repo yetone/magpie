@@ -356,6 +356,17 @@ func codexInput(input []any) []any {
 		it, _ := item.(map[string]any)
 		id, _ := it["call_id"].(string)
 		switch it["type"] {
+		case "function_call", "function_call_output", "local_shell_call", "local_shell_call_output", "custom_tool_call", "custom_tool_call_output":
+			// Foreign providers can join two IDs into one longer than
+			// Codex's 64-character limit. Keep calls and results paired
+			// across requests without truncating distinct IDs alike.
+			if len(id) > 64 {
+				sum := sha256.Sum256([]byte(id))
+				id = hex.EncodeToString(sum[:])
+				it["call_id"] = id
+			}
+		}
+		switch it["type"] {
 		case "function_call":
 			calls[strings.TrimSpace(id)] = "function_call_output"
 		case "local_shell_call":
