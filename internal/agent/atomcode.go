@@ -180,7 +180,7 @@ func atomcode(home string) *Agent {
 				// where AtomCode still has them
 				saved := stashLoad()
 				p, m := saved[key+":default_provider"], saved[key+":default_model"]
-				if p != "" && !usesMagpie(p) {
+				if p != "" && !usesMagpie(p) && own(p) {
 					if err := edit.SetTOMLTop(path, edit.KV{Path: "default_provider", Value: p}); err != nil {
 						return err
 					}

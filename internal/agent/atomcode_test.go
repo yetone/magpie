@@ -124,13 +124,18 @@ context_window = 512000
 			t.Fatalf("want %s kept or written in:\n%s", want, cfg)
 		}
 	}
+	if err := edit.DelTOMLTable(path, `models."AtomGit-qwen3.8-27b"`); err != nil {
+		t.Fatal(err)
+	}
 	if err := a.Apply("model", ""); err != nil {
 		t.Fatal(err)
 	}
 	cfg, _ = os.ReadFile(path)
-	if !strings.Contains(string(cfg), `default_model = "AtomGit-glm5.3-flash"`) ||
-		!strings.Contains(string(cfg), `default_provider = "AtomGit-qwen3.8-27b"`) {
+	if !strings.Contains(string(cfg), `default_model = "AtomGit-glm5.3-flash"`) {
 		t.Fatalf("the user's own defaults did not come back:\n%s", cfg)
+	}
+	if v, _ := edit.GetTOMLTop(path, "default_provider"); v != "" {
+		t.Fatalf("deleted provider table was restored as default_provider: %q\n%s", v, cfg)
 	}
 	if ts, _ := edit.TOMLTables(path); strings.Contains(strings.Join(ts, "\n"), atomcodeAccount) {
 		t.Fatalf("magpie's tables stayed:\n%s", cfg)
