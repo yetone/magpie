@@ -58,9 +58,6 @@ const I18N = {
     "This routing group will no longer be available to agents.": "此路由组将不再供 Agent 使用。",
     "It will be removed from the library and the agents it was given to.": "这将从资源库及使用它的 Agent 中移除它。",
     "Main navigation": "主导航",
-    "Dismiss notification": "关闭提示",
-    "Invalid value": "请输入有效的值",
-    "Rule {n}": "规则 {n}",
     "Gateway keys": "网关密钥",
     "Gateway key": "网关密钥",
     "Limit": "限额",
@@ -6836,9 +6833,6 @@ const I18N = {
     "This routing group will no longer be available to agents.": "このルーティンググループはエージェントから利用できなくなります。",
     "It will be removed from the library and the agents it was given to.": "ライブラリと使用中のエージェントから削除されます。",
     "Main navigation": "メインナビゲーション",
-    "Dismiss notification": "通知を閉じる",
-    "Invalid value": "有効な値を入力してください",
-    "Rule {n}": "ルール {n}",
   },
   de: {
     "Give skills as": "Skills geben als",
@@ -10247,9 +10241,6 @@ const I18N = {
     "This routing group will no longer be available to agents.": "Diese Weiterleitungsgruppe steht Agenten nicht mehr zur Verfügung.",
     "It will be removed from the library and the agents it was given to.": "Es wird aus der Bibliothek und den Agenten entfernt, denen es zugewiesen wurde.",
     "Main navigation": "Hauptnavigation",
-    "Dismiss notification": "Benachrichtigung schließen",
-    "Invalid value": "Geben Sie einen gültigen Wert ein",
-    "Rule {n}": "Regel {n}",
   },
 };
 

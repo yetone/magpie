@@ -17,8 +17,8 @@
   --line-2: #ececf0;
   --fg: #1c1c21;
   --fg-2: #4b4b53;
-  --muted: #686872;
-  --faint: #70707a;
+  --muted: #85858d;
+  --faint: #b9b9c2;
   --accent: #4f46e5;
   --accent-soft: #eeedfd;
   --accent-fg: #ffffff;
@@ -26,8 +26,6 @@
   --green: #189a58;
   --green-soft: #e4f6ec;
   --red: #d64545;
-  --red-fg: #ffffff;
-  --red-fill: #c73535;
   --red-soft: #fbe9e9;
   --amber: #b45309;
   --amber-soft: #fbf0df;
@@ -57,8 +55,8 @@
     --line-2: #2c2c32;
     --fg: #ededf1;
     --fg-2: #b9b9c1;
-    --muted: #a1a1ab;
-    --faint: #a1a1ab;
+    --muted: #8b8b94;
+    --faint: #56565f;
     --ctl-fg: #a1a1aa;
     --accent: #a5b4fc;
     --accent-soft: #2b2c47;
@@ -67,8 +65,6 @@
     --green: #6fd99b;
     --green-soft: #1e3a2b;
     --red: #f28b82;
-    --red-fg: #14142a;
-    --red-fill: var(--red);
     --red-soft: #45272a;
     --amber: #f2b544;
     --amber-soft: #3f3220;
@@ -84,9 +80,9 @@
 :root[data-theme="dark"] {
   --bg: #1a1a1e; --card: #232327; --card-2: #1f1f23; --pill: #2d2d33; --pill-hover: #36363d;
   --seg-track: rgba(255, 255, 255, .035); --seg-thumb: rgba(255, 255, 255, .15); --seg-edge: inset 0 .5px 0 rgba(255, 255, 255, .08), 0 1px 2px rgba(0, 0, 0, .3);
-  --line: #333339; --line-2: #2c2c32; --fg: #ededf1; --fg-2: #b9b9c1; --muted: #a1a1ab; --faint: #a1a1ab; --ctl-fg: #a1a1aa;
+  --line: #333339; --line-2: #2c2c32; --fg: #ededf1; --fg-2: #b9b9c1; --muted: #8b8b94; --faint: #56565f; --ctl-fg: #a1a1aa;
   --accent: #a5b4fc; --accent-soft: #2b2c47; --accent-fg: #14142a; --sel: #33345a;
-  --green: #6fd99b; --green-soft: #1e3a2b; --red: #f28b82; --red-fg: #14142a; --red-fill: var(--red); --red-soft: #45272a; --amber: #f2b544; --amber-soft: #3f3220;
+  --green: #6fd99b; --green-soft: #1e3a2b; --red: #f28b82; --red-soft: #45272a; --amber: #f2b544; --amber-soft: #3f3220;
   --drift: #ff9592; --drift-soft: #3b1219;
   --pop-bg: rgba(38, 38, 43, .96);
   --shadow: 0 16px 44px rgba(0, 0, 0, .55), 0 2px 8px rgba(0, 0, 0, .3), 0 0 0 .5px rgba(255, 255, 255, .1);
@@ -111,8 +107,8 @@ body {
   flex-direction: column;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
-  user-select: text;
-  -webkit-user-select: text;
+  user-select: none;
+  -webkit-user-select: none;
   cursor: default;
 }
 /* The tray panel sits on a frosted NSVisualEffectView, so its own paint is thin. */
@@ -130,17 +126,7 @@ body.panel.tinted { background: transparent; }
   :root:not([data-theme="dark"]) body.panel { --bg: #f2f2f5; --card: #ffffff; --card-2: #f8f8fa; --line: rgba(0, 0, 0, .07); --line-2: rgba(0, 0, 0, .06); --pill: #ffffff; --pill-hover: #f4f4f7; --skel: #eeeef2; --skel-hi: #e2e2e8; --pill-line: rgba(0, 0, 0, .12); --pill-shadow: 0 1px 1px rgba(0, 0, 0, .06); --faint: #9a9aa3; --card-edge: 0 0 0 1px rgba(0, 0, 0, .05), 0 1px 2px rgba(0, 0, 0, .04); }
 }
 :root[data-theme="light"] body.panel { --bg: #f2f2f5; --card: #ffffff; --card-2: #f8f8fa; --line: rgba(0, 0, 0, .07); --line-2: rgba(0, 0, 0, .06); --pill: #ffffff; --pill-hover: #f4f4f7; --skel: #eeeef2; --skel-hi: #e2e2e8; --pill-line: rgba(0, 0, 0, .12); --pill-shadow: 0 1px 1px rgba(0, 0, 0, .06); --faint: #9a9aa3; --card-edge: 0 0 0 1px rgba(0, 0, 0, .05), 0 1px 2px rgba(0, 0, 0, .04); }
-:root:not([data-theme="dark"]) body.panel { --faint: #70707a; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body.panel { --faint: #a1a1ab; } }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: default; appearance: none; -webkit-appearance: none; text-align: center; }
-button { user-select: none; -webkit-user-select: none; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.setting-field { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.setting-actions { display: inline-flex; gap: 6px; }
-.setting-error { flex: 1 1 100%; color: var(--red); white-space: normal; }
-.setting-error:empty { display: none; }
-.status-dismiss { flex: none; min-width: 24px; min-height: 24px; }
-input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--accent) !important; outline-offset: 2px; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 input { font: inherit; color: var(--fg); }
 .grow { flex: 1; }
@@ -2428,7 +2414,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .set-page > .list:not(:last-child) { margin-bottom: 8px; }
 .row.pref { min-height: 50px; padding: 8px 12px 8px 14px; gap: 14px; }
 .row.pref .who { flex: 1 1 auto; }
-.row.pref .sub { margin-top: 2px; color: var(--fg-2); white-space: normal; overflow-wrap: anywhere; }
+.row.pref .sub { margin-top: 2px; color: var(--fg-2); }
 /* Keep export consent readable, and give collector URLs their own line. */
 #otelList .otel-section { padding: 10px 14px 6px; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--pill); }
 #otelList .otel-section:not(:first-child) { border-top: 1px solid var(--line-2); }
@@ -2438,8 +2424,6 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 #otelList .otel-stacked > .who { flex-basis: 100%; }
 #otelList .otel-stacked > .val { width: 100%; max-width: none; margin-left: 0; }
 #otelList input.words { width: 100%; }
-#otelList .setting-field { width: 100%; }
-#otelList .setting-field input.words { flex: 1 1 100%; }
 #otelList .otel-stacked .segs { margin-left: 0; max-width: 100%; flex-wrap: wrap; }
 #otelList .otel-env { padding: 12px 14px; border-top: 1px solid var(--line-2); font-size: 11.5px; color: var(--muted); }
 
@@ -2560,7 +2544,11 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
 }
 
 /* Confirmation uses the top layer so an open editor remains intact underneath. */
-.action-confirm { position: fixed; inset: 0; margin: auto; max-height: calc(100dvh - 32px); overflow-y: auto; width: min(420px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--fg); box-shadow: 0 24px 60px rgba(0, 0, 0, .32); font: inherit; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.action-confirm { --confirm-fill: #c73535; --confirm-fg: #ffffff; position: fixed; inset: 0; margin: auto; max-height: calc(100dvh - 32px); overflow-y: auto; width: min(420px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); color: var(--fg); box-shadow: 0 24px 60px rgba(0, 0, 0, .32); font: inherit; }
+.action-confirm .text.danger-fill { background: var(--confirm-fill); color: var(--confirm-fg); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .action-confirm { --confirm-fill: var(--red); --confirm-fg: #14142a; } }
+:root[data-theme="dark"] .action-confirm { --confirm-fill: var(--red); --confirm-fg: #14142a; }
 .action-confirm::backdrop { background: rgba(0, 0, 0, .32); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 .action-confirm h2 { margin: 0 0 12px; font-size: 16px; overflow-wrap: anywhere; }
 .action-confirm p { margin: 0 0 20px; color: var(--fg-2); line-height: 1.6; white-space: pre-line; overflow-wrap: anywhere; }
@@ -2631,11 +2619,6 @@ body.panel .modal { padding: 16px 12px; }
    Tabs scroll on their own row, content keeps the available height, and
    form controls are large enough to use without zooming the page. */
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
-  body.web .warm-tabs { flex-wrap: wrap; gap: 4px; margin-left: 0; }
-  body.web .warm-tabs button { min-width: 44px; height: 44px; font-size: 14px; letter-spacing: normal; padding: 0 10px; }
-  body.web input, body.web textarea, body.web select { font-size: 16px !important; }
-  body.web .setting-field { width: 100%; }
-  body.web .status-dismiss { min-width: 44px; min-height: 44px; }
   body.web { height: 100%; font-size: 14px; }
   body.web .icon { width: 44px; height: 44px; }
   body.web .update { min-height: 36px; }

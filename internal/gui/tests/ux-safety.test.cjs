@@ -1,4 +1,4 @@
-// UI safety and Web conventions, using isolated APIs and the real frontend.
+// Editor safety and accessible confirmations, using isolated APIs and the real frontend.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -12,7 +12,7 @@ function fixture(lang, posts) {
     proxy: "", proxyNow: "none", proxySource: "none", redactWords: [], visionModels: [], imageGenModels: [],
     workbuddyCheckins: [], lanURLs: [], otel: {}, fx: { rate: 7.2, at: new Date().toISOString(), stale: false } };
   const relay = { id: "relay", name: "Relay", icon: "generic", host: "relay.test", chat: "https://relay.test/v1",
-    responses: "", anthropic: "", models: [], agents: [], fallback: [], headers: {},
+    responses: "", anthropic: "", models: [], agents: [], fallback: [], headers: { "X-Fixture": "kept" },
     key: { set: true, masked: "sk-…1234" }, keyList: [], ready: true };
   const providers = { providers: [relay], presets: [], excluded: [], gateway: { running: true, window: true } };
   return async (route) => {
@@ -73,7 +73,7 @@ async function answer(page, action, accept, text, escape = false) {
 
 for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"]) {
   for (const lang of ["en", "zh"]) {
-    test(`${engine} ${lang}: drafts, dialogs, history, explicit saves and deletion`, async (t) => {
+    test(`${engine} ${lang}: drafts, accessible dialogs and immediate deletion`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
       const page = await browser.newPage({ viewport: { width: 1100, height: 800 }, reducedMotion: "reduce" });
@@ -124,6 +124,28 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       await modal.locator('input[type="url"]').first().fill("https://discarded.test/v1");
       await answer(page, () => modal.getByRole("button", { name: cancelName, exact: true }).click(), true, dirtyText);
       await modal.waitFor({ state: "hidden" });
+      // Draft-only removals apply without a confirmation; canceling the draft restores them.
+      await row.click();
+      await modal.locator(".headers .pair .danger").click();
+      assert.equal(await modal.locator(".headers .pair").count(), 0);
+      assert.equal(await page.getByRole("alertdialog").count(), 0);
+      await answer(page, () => modal.getByRole("button", { name: cancelName, exact: true }).click(), true, dirtyText);
+      await modal.waitFor({ state: "hidden" });
+      await row.click();
+      assert.equal(await modal.locator(".headers .pair").count(), 1);
+      await modal.locator('input[type="url"]').first().fill("https://leave.test/v1");
+      assert.equal(await page.evaluate(() => {
+        const leaving = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(leaving);
+        return leaving.defaultPrevented;
+      }), true, "a dirty editor guards browser leave");
+      const leave = () => page.evaluate(() => { show("agents"); });
+      await answer(page, leave, false, dirtyText);
+      assert.equal(await modal.locator('input[type="url"]').first().inputValue(), "https://leave.test/v1");
+      await answer(page, leave, true, dirtyText);
+      await modal.waitFor({ state: "hidden" });
+      await page.waitForFunction(() => !document.querySelector("#view-agents").hidden);
+      await page.locator('#nav button[data-view="providers"]').click();
       // Removal never mutates anything when declined.
       await row.click();
       const remove = modal.getByRole("button", { name: lang === "zh" ? "移除" : "Remove", exact: true }).first();
@@ -133,70 +155,7 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       await answer(page, () => remove.click(), true, /Relay/);
       await modal.waitFor({ state: "hidden" });
       assert.equal(posts.filter((p) => p.path === "/api/provider/delete").length, 1);
-      // Normal Web navigation supports back and forward.
-      await page.locator('#nav button[data-view="agents"]').click();
-      await page.locator('#nav button[data-view="gateway"]').click();
-      await page.goBack();
-      await page.waitForFunction(() => !document.querySelector("#view-agents").hidden);
-      await page.goForward();
-      await page.waitForFunction(() => !document.querySelector("#view-gateway").hidden);
-      assert.equal(await page.locator('#nav button[data-view="gateway"]').getAttribute("aria-current"), "page");
-      // Text settings don't save on blur, and leaving requires confirmation.
-      await page.locator("#prefs").click();
-      await page.locator("#setTab-privacy").click();
-      const words = page.locator('input[data-setting="redactWords"]');
-      await words.fill("private-host");
-      await words.press("Tab");
-      assert.equal(posts.filter((p) => p.path === "/api/settings").length, 0);
-      await answer(page, () => page.locator('#nav button[data-view="agents"]').click(), false, dirtyText);
-      assert.equal(await words.inputValue(), "private-host");
-      const response = page.waitForResponse((r) => r.url().endsWith("/api/settings") && r.request().method() === "POST");
-      await words.locator("..").getByRole("button", { name: saveName, exact: true }).click();
-      await response;
-      await page.waitForFunction(() => document.querySelector('input[data-setting="redactWords"]').value === "private-host");
-      assert.deepEqual(posts.find((p) => p.path === "/api/settings").body.redactWords, ["private-host"]);
-      // Browser back can be declined without losing the current form or URL.
-      await words.fill("another-host");
-      assert.equal(await page.evaluate(() => {
-        const leaving = new Event("beforeunload", { cancelable: true });
-        window.dispatchEvent(leaving);
-        return leaving.defaultPrevented;
-      }), true, "unsaved settings guard browser leave");
-      await answer(page, () => page.goBack(), false, dirtyText);
-      await page.waitForFunction(() => location.search.includes("view=settings"));
-      assert.equal(await words.inputValue(), "another-host");
-      await answer(page, () => page.locator('#nav button[data-view="agents"]').click(), true, dirtyText);
-      await page.waitForFunction(() => !document.querySelector("#view-agents").hidden);
-      // Sync credentials use the same discard rule, including Close.
-      await page.locator("#prefs").click();
-      await page.locator("#setTab-sync").click();
-      await page.locator("#syncList .row.pref").first().locator("button").click();
-      const sync = page.locator("#syncList .sync-form");
-      const address = sync.locator('input[type="text"]').first();
-      await address.fill("https://dav.changed.test/dav/");
-      await answer(page, () => sync.getByRole("button", { name: cancelName, exact: true }).click(), false, dirtyText);
-      assert.equal(await address.inputValue(), "https://dav.changed.test/dav/");
-      await answer(page, () => sync.getByRole("button", { name: cancelName, exact: true }).click(), true, dirtyText);
-      await sync.waitFor({ state: "detached" });
-      assert.equal(posts.filter((p) => p.path.startsWith("/api/davsync/")).length, 0);
-      await page.locator('#nav button[data-view="agents"]').click();
-      // Focus-initiated scroll is not forced back to its earlier position.
-      const scrolled = await page.evaluate(() => {
-        const view = document.querySelector("#view-agents");
-        const spacer = document.createElement("div"); spacer.style.cssText = "height:2000px;flex:none";
-        const input = document.createElement("input");
-        view.append(spacer, input); input.focus(); input.scrollIntoView({ block: "nearest" });
-        return view.scrollTop;
-      });
-      assert.ok(scrolled > 0);
-      assert.ok(await page.locator("#view-agents").evaluate((v) => v.scrollTop) > 0);
-      await page.clock.install();
-      await page.evaluate(() => status("Fixture failure", "err"));
-      await page.clock.runFor(9000);
-      assert.equal(await page.locator("#status").textContent(), "Fixture failure");
-      assert.equal(await page.locator("#status").getAttribute("role"), "alert");
-      await page.locator("#statusDismiss").click();
-      assert.equal(await page.locator("#status").textContent(), "");
+      assert.equal(await page.locator('#nav button[data-view="providers"]').getAttribute("aria-current"), "page");
       assert.deepEqual(errors, []);
     });
   }

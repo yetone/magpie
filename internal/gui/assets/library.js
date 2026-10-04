@@ -1519,7 +1519,7 @@
         const line = el("div", "lib-pair");
         const k = field2(r[0], keyHint, (v) => { r[0] = v; emit(); });
         const v = field2(r[1], valHint, (x) => { r[1] = x; emit(); });
-        const x = button("", "lib-x", async () => { if (!await confirmRemoval(r[0] || t("Headers"))) return; rows.splice(i, 1); emit(); draw(); });
+        const x = button("", "lib-x", () => { rows.splice(i, 1); emit(); draw(); });
         x.append(svg("M4.5 4.5l7 7M11.5 4.5l-7 7", 11, 1.6));
         x.title = t("Remove");
         line.append(k, v, x);

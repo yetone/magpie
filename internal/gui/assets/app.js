@@ -186,25 +186,18 @@ function icon(name) {
   return e;
 }
 
-function status(msg, kind = "", ms = kind === "err" || kind === "warn" ? 0 : 3500, retry = null) {
+function status(msg, kind = "", ms = kind === "err" ? 8000 : 3500) {
   const s = $("#status");
-  if (kind === "err") ms = 0;
-  // Errors stay until dismissed or replaced; routine refreshes cannot erase them.
-  if (s.classList.contains("err") && kind !== "err" && kind !== "ok" && msg) return;
   s.textContent = msg;
   s.title = msg;
   s.className = "status " + kind;
   s.setAttribute("role", kind === "err" ? "alert" : "status");
-  $("#statusDismiss").hidden = !msg;
-  const retryButton = $("#statusRetry");
-  retryButton.hidden = !retry;
-  retryButton.onclick = retry ? () => { status(""); retry(); } : null;
+  // with a dialog open the footer is under its scrim: the pill floats over both
   const m = $("#modal");
   s.classList.toggle("lift", !!msg && !m.hidden && !m.classList.contains("out"));
   clearTimeout(status.t);
-  if (msg && ms > 0) status.t = setTimeout(() => status(""), ms);
+  if (msg) status.t = setTimeout(() => { s.textContent = ""; s.className = "status"; }, ms);
 }
-$("#statusDismiss").onclick = () => status("");
 
 // ---------- agents view ----------
 
@@ -2906,7 +2899,7 @@ async function load() {
     if (view === "usage") await loadUsage();
     // so is an open sync form (WebDAV, export, import): its passwords are
     // never sent back, so a rebuild would empty it
-    if (view === "settings" && !syncOpen && !settingsDirty()) await loadSettings();
+    if (view === "settings" && !syncOpen) await loadSettings();
   } catch (e) {
     status(e.message, "err");
   }
@@ -6330,8 +6323,7 @@ function input(value, placeholder, type = "text") {
   i.onkeydown = (e) => {
     e.stopPropagation();
     if (e.key === "Escape") {
-      if (i.closest(".sync-form")) cancelSync();
-      else if (editing !== null || importing || importingApps) cancelEdit();
+      if (editing !== null || importing || importingApps) cancelEdit();
     }
   };
   return i;
@@ -6405,7 +6397,7 @@ async function cancelEdit(keep) {
   return true;
 }
 window.addEventListener("beforeunload", (e) => {
-  if (providerDirty() || settingsDirty() || window.routingDirty?.() || (editing === null && modalFormDirty())) {
+  if (providerDirty() || window.routingDirty?.() || ((view === "library" || importing || importingApps) && modalFormDirty())) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -6709,7 +6701,7 @@ function headerEditor(hints = []) {
       side.append(j);
       const del = el("button", "text danger", "×");
       del.title = t("Remove header");
-      del.onclick = async () => { if (!await confirmRemoval(row[0] || t("Headers"))) return; draft.headers.splice(i, 1); render(); };
+      del.onclick = () => { draft.headers.splice(i, 1); render(); };
       side.append(del);
 
       if (row[2]) {
@@ -7526,7 +7518,7 @@ function drawEditor(p, presetID) {
     if (saved && !draft.clearBalanceToken) {
       const side = el("div", "side");
       const drop = el("button", "text", t("Remove"));
-      drop.onclick = async () => { if (!await confirmRemoval(t("Account balance"))) return; draft.clearBalanceToken = true; draft.balanceToken = ""; tok.value = ""; tok.placeholder = t("optional · the account's system access token"); drop.remove(); balFix?.refresh(); };
+      drop.onclick = () => { draft.clearBalanceToken = true; draft.balanceToken = ""; tok.value = ""; tok.placeholder = t("optional · the account's system access token"); drop.remove(); balFix?.refresh(); };
       side.append(drop);
       pair.append(side);
     }
@@ -9135,7 +9127,6 @@ function renderModels(p) {
     const forget = el("button", "text action", t("Forget"));
     forget.title = t("Drop the list fetched from the vendor; the models.dev one is used until Refresh");
     forget.onclick = async () => {
-      if (!await confirmRemoval(p.name, "Drop the list fetched from the vendor; the models.dev one is used until Refresh")) return;
       forget.classList.add("busy");
       try { await api("provider/unfetch", { id: p.id }); await loadProviders(); } // the picks stay in the draft, as on a Refresh
       catch (e) { status(e.message, "err"); forget.classList.remove("busy"); }
@@ -9301,7 +9292,7 @@ function renderFallback(p) {
         row.append(up);
       }
       const rm = el("button", "text", t("Remove"));
-      rm.onclick = async () => { if (!await confirmRemoval(draft.fallback[i])) return; draft.fallback.splice(i, 1); draw(); };
+      rm.onclick = () => { draft.fallback.splice(i, 1); draw(); };
       row.append(rm);
       list.append(row);
     });
@@ -11744,8 +11735,6 @@ function editorError(msg, kind = "err") {
   }
   box.className = "editor-error " + kind;
   box.textContent = msg;
-  readerScrolls(400);
-  box.scrollIntoView({ block: "nearest" });
   return true;
 }
 
@@ -16338,7 +16327,6 @@ function renderBarIcon() {
 }
 
 async function loadSettings() {
-  if (settingsDirty()) return;
   const since = prefsWrites;
   if (window.bootPrefs?.omarchy && !barIcon) api("omarchy/widget").then((b) => { barIcon = b; renderBarIcon(); }).catch(() => {});
   const s = await api("settings");
@@ -16363,14 +16351,8 @@ async function loadSettings() {
 let prefsWrites = 0, prefsBusy = 0;
 async function writingPrefs(p) {
   prefsWrites++;
-  if (!prefsBusy) { status(""); status(t("Saving…")); }
   prefsBusy++;
-  try {
-    const result = await p;
-    if (prefsBusy === 1 && result !== false) status(t("Saved"), "ok", 1500);
-    return result;
-  } catch (e) { status(e.message, "err"); throw e; }
-  finally { prefsBusy--; prefsWrites++; }
+  try { return await p; } finally { prefsBusy--; prefsWrites++; }
 }
 const prefsSettled = (since) => !prefsBusy && since === prefsWrites;
 
@@ -16827,15 +16809,6 @@ function renderSessionTerminal(s, keep) {
 // renderSync: the Settings page's sync and backup — WebDAV keeping the
 // setup the same on every computer, and a sealed file to carry by hand.
 // One of the three opens a form below its row at a time.
-const settingsFormBases = new WeakMap();
-function syncFormDirty() {
-  const form = $("#view-settings .sync-form");
-  return !!syncOpen && !!form?.querySelector("input") && settingsFormBases.has(form) && formValues(form) !== settingsFormBases.get(form);
-}
-async function cancelSync() {
-  if (syncFormDirty() && !(await confirmDiscard())) return false;
-  syncOpen = ""; renderSync(); return true;
-}
 let syncOpen = ""; // "dav" | "export" | "import"
 let syncView = null;
 async function renderSync(v) {
@@ -16859,10 +16832,7 @@ async function renderSync(v) {
     return s;
   };
   const btn = (label, fn, cls = "text") => { const b = el("button", cls, label); b.onclick = fn; return b; };
-  const toggle = (id) => async () => {
-    if (syncFormDirty() && !(await confirmDiscard())) return;
-    syncOpen = syncOpen === id ? "" : id; renderSync();
-  };
+  const toggle = (id) => () => { syncOpen = syncOpen === id ? "" : id; renderSync(); };
   const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", usage: "usage" }[p])).join(t(", "));
 
   // WebDAV or S3
@@ -16929,8 +16899,6 @@ async function renderSync(v) {
   if (syncOpen === "export") box.append(exportForm());
   row(t("Import"), t("Bring in a file exported from magpie"), btn(t(syncOpen === "import" ? "Close" : "Import…"), toggle("import")));
   if (syncOpen === "import") box.append(importForm());
-  const form = box.querySelector(".sync-form");
-  if (form) settingsFormBases.set(form, formValues(form));
 }
 
 // askRestore asks before the server's setup replaces this computer's
@@ -17071,11 +17039,8 @@ function davForm(v) {
   const off = v.on ? el("button", "text danger", t("Turn off")) : el("span");
   const cancel = el("button", "text", t("Cancel"));
   const say = syncBar(ed, "", off, el("span", "grow"), cancel, save);
-  cancel.onclick = cancelSync;
-  off.onclick = async () => {
-    if (syncFormDirty() && !(await confirmDiscard())) return;
-    syncOpen = ""; renderSync(await api("davsync/off", {}).catch(() => null) || undefined);
-  };
+  cancel.onclick = () => { syncOpen = ""; renderSync(); };
+  off.onclick = async () => { syncOpen = ""; renderSync(await api("davsync/off", {}).catch(() => null) || undefined); };
   save.onclick = async () => {
     const b = bucket.value.trim(), p = prefix.value.trim().replace(/^\/+|\/+$/g, "");
     if (kind === "s3" && !b) return say(t("Name the bucket"));
@@ -17111,7 +17076,7 @@ function exportForm() {
   const go = el("button", "text primary", t("Export"));
   const cancel = el("button", "text", t("Cancel"));
   const say = syncBar(ed, "", el("span", "grow"), cancel, go);
-  cancel.onclick = cancelSync;
+  cancel.onclick = () => { syncOpen = ""; renderSync(); };
   go.onclick = async () => {
     if (!p1.value) return say(t("Pick a passphrase: the file is sealed with it"));
     if (p1.value !== p2.value) return say(t("The two passphrases differ"));
@@ -17158,7 +17123,7 @@ function importForm() {
   const go = el("button", "text primary", t("Import"));
   const cancel = el("button", "text", t("Cancel"));
   const say = syncBar(ed, "", el("span", "grow"), cancel, go);
-  cancel.onclick = cancelSync;
+  cancel.onclick = () => { syncOpen = ""; renderSync(); };
   go.onclick = async () => {
     if (!data) return say(t("Choose a file first"));
     go.classList.add("busy");
@@ -17308,71 +17273,6 @@ const UPDATE_EVERY = [30, 60, 360, 1440];
 
 // renderProxy: magpie's own requests to vendors, and its update checks, follow the system proxy on
 // their own; this row says which one, and lets it be turned off or set.
-// Text settings are explicitly saved; toggles still apply immediately.
-const settingsEdits = new Map();
-function settingsDirty() {
-  return [...settingsEdits.values()].some((edit) => edit.value !== edit.saved)
-    || syncFormDirty()
-    || !!githubTokenDraft || !!searchDraft.key || !!searchDraft.url
-    || !!ruleDraft.kind || !!ruleDraft.match;
-}
-async function discardSettings() {
-  if (settingsDirty() && !(await confirmDiscard())) return false;
-  settingsEdits.clear();
-  syncOpen = "";
-  githubTokenDraft = "";
-  searchDraft = { vendor: "tavily", key: "", url: "", err: "" };
-  ruleDraft = { kind: "", by: "prefix", match: "", err: "" };
-  return true;
-}
-function settingField(id, input, save) {
-  const edit = settingsEdits.get(id) || { saved: input.value, value: input.value };
-  if (edit.value === edit.saved) edit.saved = edit.value = input.value;
-  settingsEdits.set(id, edit);
-  input.value = edit.value;
-  input.dataset.setting = id;
-  const box = el("div", "setting-field");
-  const actions = el("span", "setting-actions");
-  const commit = el("button", "text primary", t("Save"));
-  const cancel = el("button", "text", t("Cancel"));
-  const error = el("span", "setting-error");
-  error.setAttribute("role", "alert");
-  const update = () => {
-    edit.value = input.value;
-    actions.hidden = edit.value === edit.saved;
-    error.textContent = "";
-    input.setCustomValidity("");
-  };
-  const apply = async () => {
-    if (input.value === edit.saved || !input.reportValidity()) return;
-    const saved = edit.saved;
-    edit.saved = edit.value = input.value;
-    commit.disabled = cancel.disabled = true;
-    try {
-      if (await save() === false) { edit.saved = saved; renderSettings(); return; }
-      actions.hidden = true;
-    } catch (e) { edit.saved = saved; actions.hidden = false; error.textContent = e.message; }
-    finally { commit.disabled = cancel.disabled = false; }
-  };
-  commit.onclick = apply;
-  cancel.onclick = async () => {
-    if (input.value !== edit.saved && !(await confirmDiscard())) return;
-    input.value = edit.saved; update(); input.focus({ preventScroll: true });
-  };
-  input.oninput = update;
-  input.onchange = null;
-  input.onblur = null;
-  input.onkeydown = (e) => {
-    e.stopPropagation();
-    if (e.key === "Enter") { e.preventDefault(); apply(); }
-    else if (e.key === "Escape") { e.preventDefault(); cancel.click(); }
-  };
-  actions.append(cancel, commit);
-  box.append(input, actions, error);
-  update();
-  return box;
-}
-
 let proxyCustom = false; // Custom picked, nothing typed yet
 function renderProxy(s, keep) {
   const cur = !s.proxy ? "auto" : s.proxy === "direct" ? "off" : "custom";
@@ -17387,12 +17287,7 @@ function renderProxy(s, keep) {
   }[s.proxySource] || "";
   const box = $("#proxySegs");
   box.replaceChildren();
-  const pick = async (id) => {
-    const edit = settingsEdits.get("proxy");
-    if (id !== "custom" && edit?.value !== edit?.saved) {
-      if (!(await confirmDiscard())) { renderProxy(s, keep); return; }
-      settingsEdits.delete("proxy");
-    }
+  const pick = (id) => {
     proxyCustom = id === "custom";
     if (id === "auto") savePrefs({ ...keep, proxy: "" });
     else if (id === "off") savePrefs({ ...keep, proxy: "direct" });
@@ -17403,13 +17298,13 @@ function renderProxy(s, keep) {
     i.className = "proxy";
     const save = () => {
       const v = i.value.trim();
-      if (!v) { i.setCustomValidity(t("A base URL is needed")); i.reportValidity(); return false; }
-      i.setCustomValidity("");
-      if (v === s.proxy) return;
-      return savePrefs({ ...keep, proxy: v });
+      if (!v || v === s.proxy) return;
+      proxyCustom = false;
+      savePrefs({ ...keep, proxy: v });
     };
-    i.setAttribute("aria-label", t("Proxy"));
-    box.append(settingField("proxy", i, save));
+    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { proxyCustom = false; renderProxy(s, keep); } };
+    i.onblur = save;
+    box.append(i);
     if (proxyCustom) queueMicrotask(() => i.focus());
   }
   box.append(segs([["auto", t("Auto")], ["off", t("Off")], ["custom", t("Custom")]], mode, pick));
@@ -17437,7 +17332,7 @@ function renderGitHubToken(s) {
   if (s.githubTokenFrom === "settings") {
     sub.textContent = sub.title = why;
     const x = el("button", "text", t("Remove"));
-    x.onclick = async () => { if (await confirmRemoval(t("GitHub token"))) set(""); };
+    x.onclick = () => set("");
     val.append(el("code", "", s.githubTokenMask || ""), x);
     return;
   }
@@ -17474,7 +17369,9 @@ function renderWarmAt(box, sub, at, onReset, via, save) {
     const i = input(at, "06:00", "time");
     i.className = "at";
     i.setAttribute("aria-label", t("Time of day"));
-    box.append(settingField("warmAt-" + box.id, i, () => save(i.value)));
+    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); };
+    i.onchange = () => { if (i.value && i.value !== at) save(i.value); };
+    box.append(i);
   }
   box.append(segs([["off", t("Off")], ["on", t("On")]], at ? "on" : "off", (v) => save(v === "on" ? at || "06:00" : "")));
 }
@@ -17503,13 +17400,13 @@ function renderAlerts(s, keep) {
       i.className = "at num";
       i.inputMode = "decimal";
       i.setAttribute("aria-label", label);
-      const commit = () => {
+      i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") i.blur(); };
+      i.onchange = () => {
         const n = Number(i.value);
-        if (!ok(n)) { i.setCustomValidity(t("Invalid value")); i.reportValidity(); return false; }
-        i.setCustomValidity("");
-        if (n !== value) return save(n);
+        if (!ok(n)) { i.value = String(value); return; }
+        if (n !== value) save(n);
       };
-      box.append(settingField("alert-" + box.id, i, commit));
+      box.append(i);
       if (unit) box.append(el("span", "unit", unit));
     }
     return box;
@@ -17737,7 +17634,7 @@ function renderSearch(s, keep) {
   if (d.err) head.querySelector(".sub").classList.add("err");
   (s.searchAPIs || []).forEach((a, n) => {
     const x = el("button", "text", t("Remove"));
-    x.onclick = async () => { if (await confirmRemoval(a.vendor)) set({ vendor: a.vendor, remove: true }); };
+    x.onclick = () => set({ vendor: a.vendor, remove: true });
     const what = [a.key || (a.ready ? "" : t("needs its key")), a.url].filter(Boolean).join(" · ");
     const tools = [x];
     if (a.key) {
@@ -17894,10 +17791,11 @@ function renderRedact(s, keep) {
   const save = () => {
     const v = i.value.split(/[,，\n]/).map((w) => w.trim()).filter(Boolean);
     if (v.join(", ") === words) return;
-    return savePrefs({ ...keep, redactWords: v });
+    savePrefs({ ...keep, redactWords: v });
   };
-  i.setAttribute("aria-label", t("Masked words"));
-  row(t("Masked words"), t("Your own words to keep from vendors, separated by commas"), settingField("redactWords", i, save));
+  i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { i.value = words; i.blur(); } };
+  i.onblur = save;
+  row(t("Masked words"), t("Your own words to keep from vendors, separated by commas"), i);
   renderRedactRules(s, row);
   row(t("Count me as a user"), t("Once a day, a random id for this computer with magpie's version and system — nothing you use magpie for"),
     onOff(!s.noStats, (on) => savePrefs({ ...keep, noStats: !on })));
@@ -17921,7 +17819,7 @@ function renderOTel(s, keep) {
   };
   const save = (change) => {
     config = { ...config, ...change };
-    return savePrefs({ ...keep, otel: { ...config } });
+    savePrefs({ ...keep, otel: { ...config } });
   };
   section("Collector connection");
   row("otelExportRow", "OTLP export", "Send traces to your collector. Choose what to include below; account credentials stay local",
@@ -17929,13 +17827,15 @@ function renderOTel(s, keep) {
   const endpoint = input(config.endpoint || "", "http://localhost:4318", "url");
   endpoint.className = "words";
   endpoint.setAttribute("aria-label", t("OTLP endpoint"));
-  row("otelEndpointRow", "OTLP endpoint", "Base URL of your collector, or Langfuse's /api/public/otel endpoint",
-    settingField("otelEndpoint", endpoint, () => save({ endpoint: endpoint.value.trim().replace(/\/+$/, "") })));
+  endpoint.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") endpoint.blur(); };
+  endpoint.onchange = () => save({ endpoint: endpoint.value.trim().replace(/\/+$/, "") });
+  row("otelEndpointRow", "OTLP endpoint", "Base URL of your collector, or Langfuse's /api/public/otel endpoint", endpoint);
   const headers = input(Object.entries(config.headers || {}).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join(","), "Authorization=Bearer%20token", "password");
   headers.className = "words";
   headers.setAttribute("aria-label", t("OTLP headers"));
   headers.autocomplete = "off";
-  const saveHeaders = () => {
+  headers.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") headers.blur(); };
+  headers.onchange = () => {
     const values = {};
     try {
       for (const part of headers.value.split(",").filter((p) => p.trim())) {
@@ -17943,10 +17843,10 @@ function renderOTel(s, keep) {
         if (i < 1) throw new Error(t("Use comma-separated name=value headers"));
         values[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
       }
-      return save({ headers: values });
-    } catch (e) { throw e; }
+      save({ headers: values });
+    } catch (e) { toast(e.message, true); }
   };
-  row("otelHeadersRow", "OTLP headers", "Comma-separated name=value pairs; percent-encode spaces and commas in values", settingField("otelHeaders", headers, saveHeaders));
+  row("otelHeadersRow", "OTLP headers", "Comma-separated name=value pairs; percent-encode spaces and commas in values", headers);
   section("Export scope");
   row("otelMetricsRow", "Export metrics", "Also send duration and token histograms. Leave off for a traces-only service such as Langfuse",
     segs([["off", t("Off")], ["on", t("On")]], config.metrics ? "on" : "off", (v) => save({ metrics: v === "on" })));
@@ -18012,7 +17912,7 @@ function renderRedactRules(s, row) {
   // and the rules under it, each by the name its placeholders have
   rules.forEach((r, n) => {
     const x = el("button", "text", t("Remove"));
-    x.onclick = async () => { if (await confirmRemoval(rules[n].kind || rules[n].match)) set(rules.filter((_, i) => i !== n)); };
+    x.onclick = () => set(rules.filter((_, i) => i !== n));
     row(r.kind, r.prefix ? t("Starts with {p}", { p: r.prefix }) : t("Matches {re}", { re: r.regex }), x);
   });
 }
@@ -18356,8 +18256,6 @@ function prefsKeep(s) {
 let prefsBase = {}, prefsQueue = Promise.resolve(), prefsQueued = 0;
 function savePrefs(body) {
   const change = Object.fromEntries(Object.entries(body).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(prefsBase[k])));
-  status("");
-  status(t("Saving…"));
   prefsQueued++;
   // a save waiting its turn counts as under way
   prefsQueue = writingPrefs(prefsQueue.catch(() => {}).then(async () => {
@@ -18375,7 +18273,6 @@ function savePrefs(body) {
     renderSettings();
     if (spoke) { renderAgents(); providers = null; usage = null; }
     if (!failed) status(t("Saved"), "ok", 1500);
-    return !failed;
   }));
   return prefsQueue;
 }
@@ -18458,9 +18355,6 @@ addEventListener("keydown", (e) => {
 }, true);
 addEventListener("keyup", (e) => {
   if (e.isTrusted && e.key === " " && !e.target.closest?.("input, textarea, select, [contenteditable]")) keyboardFocus(e);
-}, true);
-addEventListener("focusin", (e) => {
-  if (e.target.closest?.(".view, #modal")) readerScrolls(400);
 }, true);
 const readerAt = new WeakMap();
 // Where the reader is is a number, the view's scrollTop, unless the view
@@ -18630,21 +18524,20 @@ for (const v of document.querySelectorAll(".view")) {
     if (v.hidden) return;
     if (performance.now() < purposeUntil) { fitRoom(v); readerLeaves(v); }
     else if (held?.v === v) hold(held);
-    else readerLeaves(v); // respect focus, validation and deliberate programmatic navigation
+    else backToReader(v);
   }, { passive: true });
 }
 
-async function show(v, navigation = "push") {
+async function show(v) {
   // a page gateway mode leaves out (a link to it, an address kept) opens Providers
   if (gatewayMode && GATEWAY_HIDES.includes(v)) v = "providers";
   if (v !== view) {
     if (editing !== null || importing || importingApps) {
       if (!await cancelEdit(true)) return false;
     } else if (!$("#modal").hidden && !$("#modal").classList.contains("out")) {
-      if (modalFormDirty() && !(await confirmDiscard())) return false;
+      if (view === "library" && modalFormDirty() && !(await confirmDiscard())) return false;
       if (view === "library") window.closeLibraryModal?.(); else closeModal();
     }
-    if (view === "settings" && !await discardSettings()) return false;
     if (view === "routing" && window.routingDirty?.()) {
       if (!(await confirmDiscard())) return false;
       window.discardRouting?.();
@@ -18675,57 +18568,29 @@ async function show(v, navigation = "push") {
   closeAgentModels();
   if (v !== "providers" && editing !== null) cancelEdit(true);
   if (v === "gateway") loadGatewayKeys();
-  const failed = (e) => status(e.message, "err", 0, () => show(v, "replace"));
-  if (v === "providers" || v === "gateway" || v === "routing") loadProviders().then(back, failed);
-  if (v === "usage") loadUsage(true).then(back, failed);
-  if (v === "settings") loadSettings().then(back, failed);
-  if (v === "library") window.loadLibrary?.()?.then(back).catch(failed);
-  if (v === "plugins") window.loadPlugins?.()?.then(back).catch(failed);
-  if (v === "sessions") window.loadSessionsPage?.()?.then(back).catch(failed);
+  if (v === "providers" || v === "gateway" || v === "routing") loadProviders().then(back, (e) => status(e.message, "err"));
+  if (v === "usage") loadUsage(true).then(back, (e) => status(e.message, "err"));
+  if (v === "settings") loadSettings().then(back, (e) => status(e.message, "err"));
+  if (v === "library") window.loadLibrary?.()?.then(back);
+  if (v === "plugins") window.loadPlugins?.()?.then(back);
+  if (v === "sessions") window.loadSessionsPage?.()?.then(back);
   syncTitle();
-  syncURL(navigation);
+  syncURL();
   return true;
 }
 
-// Keep browser history for page navigation; edits within a page replace its URL.
-let historyIndex = history.state?.magpieIndex || 0;
-let restoringHistory = false, handlingHistory = false;
-function syncURL(navigation = "replace") {
+// The tab, and the provider open in it, are kept in the address so a
+// reload comes back to them.
+function syncURL() {
   if (mode !== "window") return;
   const q = new URLSearchParams(location.search);
   if (view === "agents") q.delete("view"); else q.set("view", view);
   if (view === "providers" && typeof editing === "string") q.set("edit", editing); else q.delete("edit");
   if (view === "settings") q.set("tab", setShown); else q.delete("tab");
-  const s = location.pathname + (q.size ? "?" + q : "");
-  const current = location.pathname + location.search;
-  if (restoringHistory || handlingHistory || navigation === "none") return;
-  if (navigation === "push" && s !== current) history.pushState({ magpieIndex: ++historyIndex }, "", s);
-  else history.replaceState({ ...history.state, magpieIndex: historyIndex }, "", s);
+  const s = q.size ? "?" + q : location.pathname;
+  if (s !== location.search) history.replaceState(null, "", s);
 }
-window.addEventListener("popstate", async (e) => {
-  if (restoringHistory) { restoringHistory = false; return; }
-  const previous = historyIndex, next = e.state?.magpieIndex || 0;
-  const q = new URLSearchParams(location.search);
-  const target = q.get("view") || "agents";
-  const pages = ["agents", "providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"];
-  if (!pages.includes(target)) return;
-  handlingHistory = true;
-  const editChanged = target === "providers" && editing !== null && editing !== q.get("edit");
-  const allowed = (!editChanged || await cancelEdit(true)) && await show(target, "none");
-  handlingHistory = false;
-  if (!allowed) {
-    restoringHistory = true;
-    history.go(previous - next);
-    return;
-  }
-  historyIndex = next;
-  if (target === "settings" && SET_TABS.includes(q.get("tab"))) setSetTab(q.get("tab"), true);
-  if (target === "providers" && q.get("edit") && editing !== q.get("edit")) {
-    editing = q.get("edit"); draft = null; if (providers) renderProviders();
-  }
-  syncURL();
-});
-if (mode === "window") for (const b of $("#nav").querySelectorAll("button")) b.onclick = () => show(b.dataset.view);
+if (mode === "window") for (const b of $("#nav").querySelectorAll("button")) b.onclick = () => { show(b.dataset.view); b.blur(); };
 // setGatewayMode shows or leaves out gateway mode's pages' tabs; the page
 // open, one of them, gives way to Providers
 function setGatewayMode(on) {
@@ -18744,7 +18609,7 @@ function openSettings() {
   closeAgentMenu();
   show("settings");
 }
-$("#prefs").onclick = openSettings;
+$("#prefs").onclick = () => { openSettings(); $("#prefs").blur(); };
 
 // The header's refresh reads again what the page shown draws (#844): on
 // Agents it looks for the agents on this computer again (one just installed
@@ -19256,7 +19121,7 @@ if (mode === "window" && params.get("view") === "usage") {
   for (const k of ["tab", "provider", "agent", "computer", "card", "purpose"]) u.searchParams.delete(k);
   history.replaceState(null, "", u);
 }
-if (mode === "window" && ["providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"].includes(params.get("view"))) show(params.get("view"), "replace");
+if (mode === "window" && ["providers", "gateway", "routing", "usage", "sessions", "library", "plugins", "settings"].includes(params.get("view"))) show(params.get("view"));
 else if (mode === "window" && !gatewayMode) slide($("#nav"), "nav");
 // in gateway mode the first page is Providers, Agents' tab gone
 if (gatewayMode) setGatewayMode(true);

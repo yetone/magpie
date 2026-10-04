@@ -73,7 +73,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.ok(nav.y >= actions.y + actions.height - 1, "tabs already have their own row before app.js runs");
       assert.equal(await page.locator("#open").isVisible(), false, "the window button never flashes");
       assert.equal(await page.locator("#winclose").isVisible(), false, "the close button never flashes");
-      assert.doesNotMatch(await page.locator('meta[name="viewport"]').getAttribute("content"), /maximum-scale/, "pinch zoom remains available");
+      assert.match(await page.locator('meta[name="viewport"]').getAttribute("content"), /maximum-scale=1/, "the existing iOS viewport policy applies before app.js runs");
       release();
       await loaded;
       const readyNav = await box(page, "#nav");
@@ -99,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.ok(on.x >= nav.x - 1 && on.x + on.width <= nav.x + nav.width + 1, "Plugins, open, is in sight");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390, "nothing runs off the side");
     assert.equal(await page.locator(".top").getAttribute("class"), "top", "none of the narrow window's squeezing");
-    assert.doesNotMatch(await page.locator('meta[name="viewport"]').getAttribute("content"), /maximum-scale/, "iOS can still zoom the page");
+    assert.match(await page.locator('meta[name="viewport"]').getAttribute("content"), /maximum-scale=1/, "iOS doesn't zoom into a field");
     assert.deepEqual(page.errors, []);
     await page.context().close();
 

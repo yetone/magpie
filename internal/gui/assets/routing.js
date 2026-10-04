@@ -3184,7 +3184,7 @@
         if (i) { const up = el("button", "text", t("Up")); up.onclick = () => moveMember(i, i - 1); row.append(up); }
         if (i < named() - 1) { const down = el("button", "text", t("Down")); down.onclick = () => moveMember(i, i + 1); row.append(down); }
         const rm = el("button", "text", t("Remove"));
-        rm.onclick = async () => { if (!await confirmRemoval(d.members[i])) return; d.members.splice(i, 1); rematch(); draw(); drawRules(); };
+        rm.onclick = () => { d.members.splice(i, 1); rematch(); draw(); drawRules(); };
         row.append(rm);
         list.append(row);
       });
@@ -3245,7 +3245,7 @@
         c.append(el("code", "", p), el("small", "", patternWords(n)));
         if (!n) row.classList.add("none");
         const rm = el("button", "text", t("Remove"));
-        rm.onclick = async () => { if (!await confirmRemoval(p)) return; d.match = d.match.filter((x) => x !== p); rematch(); drawPats(); draw(); drawRules(); };
+        rm.onclick = () => { d.match = d.match.filter((x) => x !== p); rematch(); drawPats(); draw(); drawRules(); };
         row.append(c, el("span", "grow"), rm);
         return row;
       }));
@@ -3461,7 +3461,7 @@
         const ctl = el("span", "ctl");
         if (i) { const up = el("button", "text", t("Up")); up.onclick = () => { d.rules.splice(i - 1, 0, d.rules.splice(i, 1)[0]); drawRules(); }; ctl.append(up); }
         const rm = el("button", "text", t("Remove"));
-        rm.onclick = async () => { if (!await confirmRemoval(t("Rule {n}", { n: i + 1 }))) return; d.rules.splice(i, 1); drawRules(); };
+        rm.onclick = () => { d.rules.splice(i, 1); drawRules(); };
         ctl.append(rm);
         row.append(el("span", "i", String(i + 1)), when, use, ctl);
         rlist.append(row);
