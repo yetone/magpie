@@ -12,7 +12,7 @@ function fixture(lang, posts) {
     proxy: "", proxyNow: "none", proxySource: "none", redactWords: [], visionModels: [], imageGenModels: [],
     workbuddyCheckins: [], lanURLs: [], otel: {}, fx: { rate: 7.2, at: new Date().toISOString(), stale: false } };
   const relay = { id: "relay", name: "Relay", icon: "generic", host: "relay.test", chat: "https://relay.test/v1",
-    responses: "", anthropic: "", models: [], agents: [], fallback: [], headers: { "X-Fixture": "kept" },
+    responses: "", anthropic: "", models: [{ id: "fixture-model", name: "Fixture model", on: true }], agents: [], fallback: [], headers: { "X-Fixture": "kept" },
     key: { set: true, masked: "sk-…1234" }, keyList: [], ready: true };
   const providers = { providers: [relay], presets: [], excluded: [], gateway: { running: true, window: true } };
   return async (route) => {
@@ -101,6 +101,11 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       assert.equal(await page.evaluate(() => !!document.activeElement.closest("#modal")), true);
       await modal.getByRole("button", { name: cancelName, exact: true }).click();
       await modal.waitFor({ state: "hidden" }); // untouched form needs no confirmation
+      await row.click();
+      await modal.getByRole("button", { name: lang === "zh" ? "名称与推理档位" : "Names & levels", exact: true }).click();
+      await modal.getByRole("button", { name: cancelName, exact: true }).click();
+      await modal.waitFor({ state: "hidden" }); // opening model settings alone is not an edit
+      assert.equal(await page.getByRole("alertdialog").count(), 0);
       await row.click();
       const url = modal.locator('input[type="url"]').first();
       const initial = await url.inputValue();

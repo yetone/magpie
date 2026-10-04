@@ -125,6 +125,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await editor.locator(".mchips .mchip.auto").count(), 0);
       assert.equal(await scrolled(), before, "the page moved");
       await page.keyboard.press("Escape");
+      await page.locator("dialog.action-confirm[open] button").last().click();
       await page.locator("#modal").waitFor({ state: "hidden" });
 
       // an agent's model picker

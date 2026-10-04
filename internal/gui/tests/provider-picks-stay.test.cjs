@@ -100,6 +100,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await button(label).click();
         await until(() => posts.slice(n).some((p) => p.path === "/api/provider/" + action) && gate.waiting > 0);
         await page.keyboard.press("Escape");
+        await page.locator("dialog.action-confirm[open] button").last().click();
         await page.locator("#modal").waitFor({ state: "hidden" });
         await open("GPT Relay");
         release();

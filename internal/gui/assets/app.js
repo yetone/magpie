@@ -6274,7 +6274,7 @@ function field(label, control, hint) {
   if (label && inputs.length) {
     for (const input of inputs) {
       if (!input.id) input.id = "field-" + ++fieldIDs;
-      if (!input.hasAttribute("aria-label") && !input.hasAttribute("aria-labelledby")) input.setAttribute("aria-label", label);
+      if (!input.closest("label") && !input.hasAttribute("aria-label") && !input.hasAttribute("aria-labelledby")) input.setAttribute("aria-label", label);
     }
     l.htmlFor = inputs[0].id;
   }
@@ -6332,7 +6332,7 @@ function input(value, placeholder, type = "text") {
 // editor put away (Cancel, Escape, a click outside) takes it with it (#526)
 let providerDraftRef = null, providerDraftBase = "";
 function providerDraftValue() {
-  return JSON.stringify({ ...draft, headers: headersOf(draft?.headers) });
+  return JSON.stringify({ ...draft, headers: headersOf(draft?.headers), modelPrefs: modelPrefsOfDraft() });
 }
 function providerDirty() {
   return !!draft && draft === providerDraftRef && providerDraftValue() !== providerDraftBase;
@@ -18532,7 +18532,7 @@ async function show(v) {
   // a page gateway mode leaves out (a link to it, an address kept) opens Providers
   if (gatewayMode && GATEWAY_HIDES.includes(v)) v = "providers";
   if (v !== view) {
-    if (editing !== null || importing || importingApps) {
+    if (view === "providers" && (editing !== null || importing || importingApps)) {
       if (!await cancelEdit(true)) return false;
     } else if (!$("#modal").hidden && !$("#modal").classList.contains("out")) {
       if (view === "library" && modalFormDirty() && !(await confirmDiscard())) return false;

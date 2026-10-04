@@ -105,6 +105,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const before = calls.filter((c) => c === "market/servers").length;
         await view.locator(".lib-row", { hasText: "playwright" }).click();
         await page.getByRole("button", { name: words[lang].remove, exact: true }).click();
+        await page.locator("dialog.action-confirm[open] button").last().click();
         await card("mcp", "playwright").locator(".mk-add").waitFor({ timeout: 2000 });
         assert.equal(await card("mcp", "playwright").locator(".mk-have").count(), 0);
         assert.equal(await card("mcp", "playwright").evaluate((e) => e.classList.contains("have")), false);

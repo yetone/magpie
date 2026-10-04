@@ -97,6 +97,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#status").filter({ hasText: w.first }).waitFor();
       assert.equal(await ed.locator("input").first().inputValue(), "Sol 2", "the edit is kept");
       await ed.locator("button", { hasText: new RegExp("^" + w.cancel + "$") }).click();
+      await page.locator("dialog.action-confirm[open] button").last().click();
       await closed();
 
       assert.deepEqual(posts, [], "folding saves nothing");

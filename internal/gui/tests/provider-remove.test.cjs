@@ -86,6 +86,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(150);
         const top = await del.evaluate((e) => e.getBoundingClientRect().top);
         await del.click();
+        assert.deepEqual(deletes, [], "Remove waits for confirmation");
+        await page.locator("dialog.action-confirm[open] button").last().click();
         return { page, errors, deletes, top, del };
       };
       const rows = (page) => page.locator(".row.provider").allTextContents();

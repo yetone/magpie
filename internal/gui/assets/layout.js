@@ -8,7 +8,8 @@
   if (web) document.body.classList.add("web");
   // Preserve the existing iOS viewport policy before app.js runs.
   if (web && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))) {
-    document.querySelector('meta[name="viewport"]')?.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
+    var viewport = document.querySelector('meta[name="viewport"]');
+    if (viewport) viewport.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
   }
   if (!web && /^Mac/.test(navigator.platform)) document.body.classList.add("mac");
   if (!web && /^Linux/.test(navigator.platform)) document.body.classList.add("linux");

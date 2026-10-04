@@ -50,7 +50,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const zh = lang === "zh";
       const L = { names: zh ? "名称与推理档位" : "Names & levels", images: zh ? "支持图片输入" : "Accepts images", low: zh ? "低" : "low", high: zh ? "高" : "high", unsaved: zh ? "未保存" : "unsaved", save: zh ? "保存" : "Save", cancel: zh ? "取消" : "Cancel", reset: zh ? "恢复默认" : "Restore default" };
       const open = async () => {
-        await page.locator(".row.provider").click();
+        await page.locator('.row.provider[data-id="relay"]').click();
         // it stays open from one opening of the editor to the next
         if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: L.names, exact: true }).click();
       };
@@ -75,6 +75,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await row("model-3").getByRole("checkbox", { name: zh ? "中" : "medium", exact: true }).isChecked(), true, "Restore default ticks every level");
       // Cancel drops them; opened again, the editor is as saved
       await page.getByRole("button", { name: L.cancel, exact: true }).click();
+      await page.locator("dialog.action-confirm[open] button").last().click();
+      await page.locator("#modal").waitFor({ state: "hidden" });
       await open();
       assert.equal(await row("model-1").getByRole("checkbox", { name: L.low, exact: true }).isChecked(), true);
       assert.equal(await row("model-1").getByText(L.unsaved, { exact: true }).isVisible(), false);

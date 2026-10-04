@@ -97,6 +97,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await button(w.free).click();
       assert.deepEqual(await picked(), [...free]);
       await button(w.cancel).click();
+      await page.locator("dialog.action-confirm[open] button").last().click();
       await editor.waitFor({ state: "detached" });
       await open();
       assert.deepEqual(await picked(), [], "Free only undone by Cancel");
@@ -105,6 +106,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // Free only, then Escape: the same
       await button(w.free).click();
       await page.keyboard.press("Escape");
+      await page.locator("dialog.action-confirm[open] button").last().click();
       await editor.waitFor({ state: "detached" });
       await open();
       assert.deepEqual(await picked(), [], "Free only undone by Escape");

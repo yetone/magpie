@@ -222,6 +222,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await cp.locator(".pm-chip.up").waitFor({ state: "detached" });
         assert.deepEqual(asked.find(([k]) => k === "upgrade")[1], { spec: "opencode-copilot-auth" });
         await rows.filter({ hasText: "opencode-broken" }).locator("button", { hasText: w.remove }).click();
+        assert.deepEqual(asked.filter(([k]) => k === "remove"), [], "Remove waits for confirmation");
+        await page.locator("dialog.action-confirm[open] button").last().click();
         await page.waitForFunction(() => document.querySelectorAll("#view-plugins .pm-row").length === 1);
         assert.equal(await view.evaluate((e) => e.scrollTop), top, "a click doesn't move the page");
 

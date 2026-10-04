@@ -52,7 +52,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const zh = lang === "zh";
       const L = { names: zh ? "名称与推理档位" : "Names & levels", same: zh ? "等同于" : "Same as", unsaved: zh ? "未保存" : "unsaved", save: zh ? "保存" : "Save", cancel: zh ? "取消" : "Cancel", reset: zh ? "恢复默认" : "Restore default" };
       const open = async () => {
-        await page.locator(".row.provider").click();
+        await page.locator('.row.provider[data-id="relay"]').click();
         if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: L.names, exact: true }).click();
       };
       const row = (id) => page.locator(".mname", { has: page.locator("code", { hasText: id }) });
@@ -75,6 +75,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (const id of ["deepseek-v4-1-flash-260910", "ep-2026-sol"]) assert(await row(id).getByText(L.unsaved, { exact: true }).isVisible(), id + " says it is unsaved");
       // Cancel drops them
       await page.getByRole("button", { name: L.cancel, exact: true }).click();
+      await page.locator("dialog.action-confirm[open] button").last().click();
+      await page.locator("#modal").waitFor({ state: "hidden" });
       await open();
       assert.equal(await box("deepseek-v4-1-flash-260910").inputValue(), "");
       assert.equal(await box("ep-2026-sol").inputValue(), "sol");

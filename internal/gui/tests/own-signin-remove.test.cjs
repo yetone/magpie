@@ -71,6 +71,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const own = page.locator(".accts .acc", { hasText: "Kiro account" }).getByRole("button", { name: remove[lang], exact: true });
       assert.equal(await own.getAttribute("title"), title[lang]);
       await own.click();
+      assert.deepEqual(posts, [], "Remove waits for confirmation");
+      await page.locator("dialog.action-confirm[open] button").last().click();
       for (let i = 0; i < 50 && !posts.length; i++) await page.waitForTimeout(50);
       assert.deepEqual(posts, [{ path: "/api/login/forget", body: { agent: "kiro", user: "Kiro account" } }]);
       assert.deepEqual(errors, []);
@@ -82,6 +84,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const own = page.locator(".accts .acc", { hasText: "Kiro account" }).getByRole("button", { name: remove[lang], exact: true });
       assert.equal(await own.getAttribute("title"), title[lang]);
       await own.click();
+      assert.deepEqual(posts, [], "Remove waits for confirmation");
+      await page.locator("dialog.action-confirm[open] button").last().click();
       for (let i = 0; i < 50 && !posts.length; i++) await page.waitForTimeout(50);
       assert.deepEqual(posts, [{ path: "/api/login/forget", body: { agent: "kiro", user: "Kiro account" } }]);
       assert.deepEqual(errors, []);
