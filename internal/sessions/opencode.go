@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // OpenCode keeps a session as rows, not a file of lines: since 1.2 in its
@@ -44,7 +46,7 @@ import (
 // OpenCodeDir is OpenCode's data folder: $XDG_DATA_HOME/opencode, else
 // ~/.local/share/opencode — on Windows too, where OpenCode keeps it there.
 func OpenCodeDir() string {
-	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
+	if d := appdir.Getenv("XDG_DATA_HOME"); d != "" {
 		return filepath.Join(d, "opencode")
 	}
 	home, _ := os.UserHomeDir()
@@ -54,7 +56,7 @@ func OpenCodeDir() string {
 // openCodeDB is OpenCode's database: $OPENCODE_DB (a path in the data
 // folder unless absolute), else opencode.db there.
 func openCodeDB() string {
-	if p := os.Getenv("OPENCODE_DB"); p != "" && p != ":memory:" {
+	if p := appdir.Getenv("OPENCODE_DB"); p != "" && p != ":memory:" {
 		if filepath.IsAbs(p) {
 			return p
 		}

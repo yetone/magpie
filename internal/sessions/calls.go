@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Call is one model call as an agent's own session file records it.
@@ -219,13 +221,13 @@ func desktopDataDirs() []string {
 		d := filepath.Join(home, "Library", "Application Support")
 		return []string{filepath.Join(d, "Claude"), filepath.Join(d, "Claude-3p")}
 	case "windows":
-		d := os.Getenv("LOCALAPPDATA")
+		d := appdir.Getenv("LOCALAPPDATA")
 		if d == "" {
 			d = filepath.Join(home, "AppData", "Local")
 		}
 		return []string{windowsClaudeDir(d, false), windowsClaudeDir(d, true)}
 	}
-	d := os.Getenv("XDG_CONFIG_HOME")
+	d := appdir.Getenv("XDG_CONFIG_HOME")
 	if d == "" || !filepath.IsAbs(d) {
 		d = filepath.Join(home, ".config")
 	}

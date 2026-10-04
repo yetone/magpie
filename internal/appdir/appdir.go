@@ -130,7 +130,7 @@ func Config() string {
 	if p := Portable(); p != "" {
 		return p
 	}
-	if x := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(x) {
+	if x := os.Getenv("XDG_CONFIG_HOME"); rooted(x) {
 		return filepath.Join(x, "magpie")
 	}
 	return filepath.Join(mustHome(), ".config", "magpie")
@@ -142,7 +142,7 @@ func Cache() string {
 	if p := Portable(); p != "" {
 		return filepath.Join(p, "cache")
 	}
-	if x := os.Getenv("XDG_CACHE_HOME"); filepath.IsAbs(x) {
+	if x := os.Getenv("XDG_CACHE_HOME"); rooted(x) {
 		return filepath.Join(x, "magpie")
 	}
 	return filepath.Join(mustHome(), ".cache", "magpie")

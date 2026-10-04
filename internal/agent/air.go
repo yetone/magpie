@@ -40,6 +40,8 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // airAgent is the name magpie's agent has in acp.json, and so in Air's
@@ -52,7 +54,7 @@ func airDir(home, cfg string) string {
 	case "darwin":
 		return filepath.Join(home, "Library", "Application Support", "JetBrains", "Air")
 	case "windows":
-		d := os.Getenv("APPDATA")
+		d := appdir.Getenv("APPDATA")
 		if d == "" {
 			d = filepath.Join(home, "AppData", "Roaming")
 		}

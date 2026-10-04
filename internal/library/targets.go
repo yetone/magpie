@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/agent"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Target is where one agent keeps each of the three: an empty path is
@@ -41,7 +43,7 @@ type Target struct {
 func home() string { h, _ := os.UserHomeDir(); return h }
 
 func claudeDir() string {
-	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+	if d := appdir.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
 		return d
 	}
 	return filepath.Join(home(), ".claude")
@@ -50,14 +52,14 @@ func claudeDir() string {
 // claudeJSON is where Claude Code keeps its user-wide MCP servers: beside
 // its folder, or in it when CLAUDE_CONFIG_DIR moves it.
 func claudeJSON() string {
-	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+	if d := appdir.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
 		return filepath.Join(d, ".claude.json")
 	}
 	return filepath.Join(home(), ".claude.json")
 }
 
 func codexDir() string {
-	if d := os.Getenv("CODEX_HOME"); d != "" {
+	if d := appdir.Getenv("CODEX_HOME"); d != "" {
 		return d
 	}
 	return filepath.Join(home(), ".codex")
@@ -159,7 +161,7 @@ func targetOf(a *agent.Agent) *Target {
 		t.MCP = &mcpFile{Path: filepath.Join(d, "mcp.json"), Format: fmtCursor}
 		t.Skills = filepath.Join(d, "skills")
 	case "copilot":
-		d := os.Getenv("COPILOT_HOME")
+		d := appdir.Getenv("COPILOT_HOME")
 		if d == "" {
 			d = filepath.Join(h, ".copilot")
 		}
@@ -171,7 +173,7 @@ func targetOf(a *agent.Agent) *Target {
 		// Windows too since Crush 0.14; the crush.json magpie edits there is
 		// %LOCALAPPDATA%\crush's, where Crush keeps its own picks and reads
 		// skills but no CRUSH.md
-		cfg := os.Getenv("XDG_CONFIG_HOME")
+		cfg := appdir.Getenv("XDG_CONFIG_HOME")
 		if cfg == "" {
 			cfg = filepath.Join(h, ".config")
 		}
@@ -246,7 +248,7 @@ func targetOf(a *agent.Agent) *Target {
 		// Cline's CLI reads its MCP servers from settings/
 		// cline_mcp_settings.json beside providers.json, or
 		// $CLINE_MCP_SETTINGS_PATH (@cline/shared's storage)
-		p := os.Getenv("CLINE_MCP_SETTINGS_PATH")
+		p := appdir.Getenv("CLINE_MCP_SETTINGS_PATH")
 		if p == "" {
 			p = filepath.Join(filepath.Dir(a.Path), "cline_mcp_settings.json")
 		}

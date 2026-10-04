@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"net/url"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Cursor's CLI (cursor-agent) keeps a chat in a folder of its own under its
@@ -44,10 +46,10 @@ import (
 // CursorDir is Cursor's CLI config folder: $CURSOR_CONFIG_DIR, else cursor
 // in $XDG_CONFIG_HOME, else ~/.cursor.
 func CursorDir() string {
-	if d := strings.TrimSpace(os.Getenv("CURSOR_CONFIG_DIR")); d != "" {
+	if d := strings.TrimSpace(appdir.Getenv("CURSOR_CONFIG_DIR")); d != "" {
 		return d
 	}
-	if d := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); d != "" {
+	if d := strings.TrimSpace(appdir.Getenv("XDG_CONFIG_HOME")); d != "" {
 		return filepath.Join(d, "cursor")
 	}
 	home, _ := os.UserHomeDir()
@@ -57,7 +59,7 @@ func CursorDir() string {
 // cursorDataDir is where Cursor keeps its projects' files, the chats'
 // transcripts among them: $CURSOR_DATA_DIR, else ~/.cursor.
 func cursorDataDir() string {
-	if d := strings.TrimSpace(os.Getenv("CURSOR_DATA_DIR")); d != "" {
+	if d := strings.TrimSpace(appdir.Getenv("CURSOR_DATA_DIR")); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()

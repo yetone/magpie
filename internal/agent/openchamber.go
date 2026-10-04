@@ -31,11 +31,13 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // openChamberDir is where OpenChamber keeps its settings.
 func openChamberDir(home string) string {
-	if d := os.Getenv("OPENCHAMBER_DATA_DIR"); d != "" {
+	if d := appdir.Getenv("OPENCHAMBER_DATA_DIR"); d != "" {
 		if abs, err := filepath.Abs(d); err == nil {
 			return abs
 		}

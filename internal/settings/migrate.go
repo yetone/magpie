@@ -4,6 +4,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Migrate carries the files of an install that predates the name over:
@@ -17,7 +19,7 @@ func Migrate() {
 		return
 	}
 	copyTree(filepath.Join(filepath.Dir(Dir()), "dial"), Dir())
-	cache := os.Getenv("XDG_CACHE_HOME")
+	cache := appdir.Getenv("XDG_CACHE_HOME")
 	if cache == "" {
 		home, _ := os.UserHomeDir()
 		cache = filepath.Join(home, ".cache")

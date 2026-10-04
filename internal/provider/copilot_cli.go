@@ -24,6 +24,8 @@ import (
 	"github.com/tidwall/jsonc"
 
 	"github.com/yetone/magpie/internal/proc"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // copilotCLIHeaders are what the CLI sends with its token.
@@ -45,7 +47,7 @@ type copilotCLIUser struct {
 
 // copilotCLIHome is where the CLI keeps its settings.
 func copilotCLIHome() string {
-	if h := os.Getenv("COPILOT_HOME"); h != "" {
+	if h := appdir.Getenv("COPILOT_HOME"); h != "" {
 		return h
 	}
 	home, _ := os.UserHomeDir()

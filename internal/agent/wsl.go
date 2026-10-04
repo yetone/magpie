@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
@@ -57,7 +58,7 @@ func (p place) getenv(k string) string {
 	if p.spell != nil {
 		return ""
 	}
-	return os.Getenv(k)
+	return appdir.Getenv(k)
 }
 
 // exists is whether there is a file or folder at path, as an agent looks

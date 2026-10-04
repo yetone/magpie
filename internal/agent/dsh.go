@@ -42,6 +42,8 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 const dshMark = "# magpie"
@@ -1185,7 +1187,7 @@ func dshWriteError(err error) string {
 
 // dshHome is where dsh keeps its profiles: $DSH_HOME, or ~/.dsh.
 func dshHome() string {
-	if dir := os.Getenv("DSH_HOME"); dir != "" {
+	if dir := appdir.Getenv("DSH_HOME"); dir != "" {
 		return dir
 	}
 	home, err := os.UserHomeDir()

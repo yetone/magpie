@@ -38,13 +38,15 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // GrokExecutable finds the Grok Build CLI; a var so tests can fake it.
 var GrokExecutable = func() string {
 	home, _ := os.UserHomeDir()
 	path := append(filepath.SplitList(os.Getenv("PATH")), registryPath()...)
-	for _, c := range grokCandidates(runtime.GOOS, home, GrokHome(), os.Getenv("GROK_BIN_DIR"), path) {
+	for _, c := range grokCandidates(runtime.GOOS, home, GrokHome(), appdir.Getenv("GROK_BIN_DIR"), path) {
 		if isFile(c.path) && (c.own || isGrokBuild(c.path)) {
 			return c.path
 		}
@@ -120,7 +122,7 @@ func isGrokBuild(path string) bool {
 
 // GrokHome is where the CLI keeps its sign-in and settings.
 func GrokHome() string {
-	if h := os.Getenv("GROK_HOME"); h != "" {
+	if h := appdir.Getenv("GROK_HOME"); h != "" {
 		return h
 	}
 	home, _ := os.UserHomeDir()

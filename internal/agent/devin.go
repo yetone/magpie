@@ -14,17 +14,18 @@ package agent
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"runtime"
 
 	"github.com/yetone/magpie/internal/provider"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 func devin(home, cfg string) *Agent {
 	dir := filepath.Join(cfg, "devin")
 	if runtime.GOOS == "windows" {
-		if app := os.Getenv("APPDATA"); app != "" {
+		if app := appdir.Getenv("APPDATA"); app != "" {
 			dir = filepath.Join(app, "devin")
 		}
 	}

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Hermes stores canonical, non-overlapping input/cache buckets. Reasoning is
@@ -20,7 +22,7 @@ import (
 // multiple billing routes; sessions supplies only unattributed main-loop usage.
 // These tables contain aggregates, not individual API request usage.
 func HermesDir() string {
-	if home := os.Getenv("HERMES_HOME"); home != "" {
+	if home := appdir.Getenv("HERMES_HOME"); home != "" {
 		return filepath.Clean(home)
 	}
 	home, _ := os.UserHomeDir()

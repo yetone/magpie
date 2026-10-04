@@ -34,6 +34,8 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/proc"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Account is the signed-in agent behind a provider.
@@ -359,7 +361,7 @@ type claudeCredentialLocation struct {
 // claudeCredentialsPath is Claude Code's credentials file, where it keeps
 // its sign-in off the Mac's keychain.
 func claudeCredentialsPath() string {
-	dir := os.Getenv("CLAUDE_CONFIG_DIR")
+	dir := appdir.Getenv("CLAUDE_CONFIG_DIR")
 	if dir == "" {
 		home, _ := os.UserHomeDir()
 		dir = filepath.Join(home, ".claude")
@@ -659,7 +661,7 @@ func refreshFailed(status int, agent, msg string) error {
 func Accounts() []Provider {
 	rememberLogins(false)
 	home, _ := os.UserHomeDir()
-	cfg := os.Getenv("XDG_CONFIG_HOME")
+	cfg := appdir.Getenv("XDG_CONFIG_HOME")
 	if cfg == "" {
 		cfg = filepath.Join(home, ".config")
 	}

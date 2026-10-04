@@ -22,16 +22,17 @@ package agent
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"slices"
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 func workbuddy(home string) *Agent {
-	dir := os.Getenv("WORKBUDDY_CONFIG_DIR")
+	dir := appdir.Getenv("WORKBUDDY_CONFIG_DIR")
 	if dir == "" {
 		dir = filepath.Join(home, ".workbuddy")
 	}

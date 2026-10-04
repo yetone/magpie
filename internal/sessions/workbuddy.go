@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // WorkBuddy (Tencent's desktop agent) keeps its sessions much as Claude
@@ -27,7 +29,7 @@ import (
 
 // WorkBuddyDir is WorkBuddy's folder: $WORKBUDDY_CONFIG_DIR, else ~/.workbuddy.
 func WorkBuddyDir() string {
-	if d := strings.TrimSpace(os.Getenv("WORKBUDDY_CONFIG_DIR")); d != "" {
+	if d := strings.TrimSpace(appdir.Getenv("WORKBUDDY_CONFIG_DIR")); d != "" {
 		return expandHome(d)
 	}
 	home, _ := os.UserHomeDir()

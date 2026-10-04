@@ -19,6 +19,8 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // The gateway knows each agent's requests by what this package says of it.
@@ -58,7 +60,7 @@ func Clients() []*Agent {
 // All returns every agent magpie knows about, detected or not.
 func All() []*Agent {
 	home, _ := os.UserHomeDir()
-	cfg := os.Getenv("XDG_CONFIG_HOME")
+	cfg := appdir.Getenv("XDG_CONFIG_HOME")
 	if cfg == "" {
 		cfg = filepath.Join(home, ".config")
 	}
@@ -696,7 +698,7 @@ func mimocodeIn(at place) *Agent {
 // of the other; OpenCode 1 reads both, the variable's last, so what magpie
 // writes there wins in either.
 func openCodeDir(cfg string) string {
-	if d := strings.TrimSpace(os.Getenv("OPENCODE_CONFIG_DIR")); d != "" {
+	if d := strings.TrimSpace(appdir.Getenv("OPENCODE_CONFIG_DIR")); d != "" {
 		if abs, err := filepath.Abs(d); err == nil {
 			return abs
 		}
@@ -709,7 +711,7 @@ func openCodeDir(cfg string) string {
 // to its own config folder.
 func mimocode(home, cfg string) *Agent {
 	dir := filepath.Join(cfg, "mimocode")
-	if h := os.Getenv("MIMOCODE_HOME"); filepath.IsAbs(h) {
+	if h := appdir.Getenv("MIMOCODE_HOME"); filepath.IsAbs(h) {
 		dir = filepath.Join(h, "config")
 	}
 	return openCodeLike(here(home), "mimocode", "MiMo Code", "mimocode", "mimo",
@@ -734,7 +736,7 @@ func piIn(at place) *Agent {
 // it is not taken; nor this machine's variable for a WSL distro's Pi.
 func piDir(at place) string {
 	if at.spell == nil {
-		if d := homeDir(at.home, os.Getenv("PI_CODING_AGENT_DIR")); d != "" {
+		if d := homeDir(at.home, appdir.Getenv("PI_CODING_AGENT_DIR")); d != "" {
 			return d
 		}
 	}
@@ -855,7 +857,7 @@ func piLike(at place, id, name, dir string) *Agent {
 func goose(home, cfg string) *Agent {
 	path := filepath.Join(cfg, "goose", "config.yaml")
 	if runtime.GOOS == "windows" {
-		if app := os.Getenv("APPDATA"); app != "" {
+		if app := appdir.Getenv("APPDATA"); app != "" {
 			path = filepath.Join(app, "Block", "goose", "config", "config.yaml")
 		}
 	}
@@ -1006,11 +1008,11 @@ func crush(home, cfg string) *Agent {
 	// Crush writes them; magpie's provider stays in path, beside the
 	// library's MCP servers.
 	data := filepath.Join(home, ".local", "share", "crush", "crush.json")
-	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+	if dir := appdir.Getenv("XDG_DATA_HOME"); dir != "" {
 		data = filepath.Join(dir, "crush", "crush.json")
 	}
 	if runtime.GOOS == "windows" {
-		if app := os.Getenv("LOCALAPPDATA"); app != "" {
+		if app := appdir.Getenv("LOCALAPPDATA"); app != "" {
 			path = filepath.Join(app, "crush", "crush.json")
 		}
 		// %LOCALAPPDATA%\crush is Crush's data folder there

@@ -27,7 +27,10 @@ import (
 // and the app wasn't started with, so that magpie writes an agent's config
 // into the folder the agent reads, not its default one in the home (atie on
 // Discord: Pi's models.json went to ~/.pi/agent with PI_CODING_AGENT_DIR set
-// in the shell). One already in magpie's environment is kept. Those are read
+// in the shell). One already in magpie's environment is kept. One holding a
+// relative path is lent to the programs magpie starts all the same, but
+// magpie itself reads them through appdir.LookupEnv, which passes such a
+// value over, as it does the ones magpie started with. Those are read
 // as magpie starts (the library is synced into the agents at once), so the
 // answer is waited for, but no more than shellWait: a slow profile mustn't
 // hold the window up, and what it says later is still taken.

@@ -57,6 +57,8 @@ import (
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/wslrun"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 type subscriptionBridge struct {
@@ -235,7 +237,7 @@ type bridgeTool struct {
 }
 
 func claudeConfigDir() string {
-	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+	if d := appdir.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()

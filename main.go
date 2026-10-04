@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -121,14 +122,26 @@ var (
 func main() {
 	// before anything reads or writes a file: no home, or a relative one,
 	// would put the agents' configs and magpie's keys under the working
-	// folder
-	dropped, err := appdir.CheckEnv()
+	// folder. What needs no file still answers (magpie version in a
+	// container or a script without HOME): run makes magpie's folders first.
+	ignored, err := appdir.CheckEnv()
 	if err != nil {
+		if len(os.Args) > 1 {
+			switch os.Args[1] {
+			case "-v", "--version", "version":
+				fmt.Println("magpie", version)
+				return
+			case "-h", "--help", "help":
+				fmt.Print(usage)
+				return
+			}
+		}
 		fmt.Fprintln(os.Stderr, "magpie:", err)
 		os.Exit(1)
 	}
-	for _, v := range dropped {
-		fmt.Fprintf(os.Stderr, "magpie: ignoring %s: not an absolute path\n", v)
+	slices.Sort(ignored)
+	for _, v := range ignored {
+		fmt.Fprintf(os.Stderr, "magpie: ignoring %s: not an absolute path (the programs magpie starts still get it)\n", v)
 	}
 	if provider.TookOpenedURL(os.Args[1:]) {
 		// Claude Code, signing in for magpie, handed over the page to open

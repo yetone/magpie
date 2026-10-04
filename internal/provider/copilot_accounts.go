@@ -15,11 +15,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // copilotConfigDir is where the Copilot editors keep their sign-in.
 func copilotConfigDir() string {
-	if cfg := os.Getenv("XDG_CONFIG_HOME"); cfg != "" {
+	if cfg := appdir.Getenv("XDG_CONFIG_HOME"); cfg != "" {
 		return cfg
 	}
 	home, _ := os.UserHomeDir()

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/proc"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // StaleCLI is the path of a `magpie` command that is a copied file behind
@@ -54,7 +56,7 @@ func CopiedCLI() string {
 	if runtime.GOOS != "darwin" {
 		return ""
 	}
-	bin := os.Getenv("MAGPIE_BIN_DIR")
+	bin := appdir.Getenv("MAGPIE_BIN_DIR")
 	if bin == "" {
 		home := os.Getenv("HOME")
 		if home == "" {

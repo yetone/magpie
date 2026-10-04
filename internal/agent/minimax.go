@@ -16,7 +16,6 @@ package agent
 // stays.
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -24,6 +23,8 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"gopkg.in/yaml.v3"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // mcodeProvider is magpie's provider id in MiniMax Code, and mcodeEntry its
@@ -39,7 +40,7 @@ const mcodeUA = "minimax-code"
 
 // MiniMaxDir is the folder MiniMax Code keeps its config.yaml in.
 func MiniMaxDir(home string) string {
-	if d := strings.TrimSpace(os.Getenv("MINIMAX_DATA_DIR")); d != "" {
+	if d := strings.TrimSpace(appdir.Getenv("MINIMAX_DATA_DIR")); d != "" {
 		return d
 	}
 	return filepath.Join(home, ".minimax")

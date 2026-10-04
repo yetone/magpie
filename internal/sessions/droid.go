@@ -10,6 +10,8 @@ import (
 
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/jsonc"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Factory's Droid keeps a session under its sessions folder
@@ -31,7 +33,7 @@ import (
 // FactoryDir is Droid's folder: $FACTORY_HOME_OVERRIDE/.factory, else
 // ~/.factory.
 func FactoryDir() string {
-	home := strings.TrimSpace(os.Getenv("FACTORY_HOME_OVERRIDE"))
+	home := strings.TrimSpace(appdir.Getenv("FACTORY_HOME_OVERRIDE"))
 	if home == "" {
 		home, _ = os.UserHomeDir()
 	} else {

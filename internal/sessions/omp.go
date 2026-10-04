@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // omp (oh-my-pi, a fork of Pi) keeps its sessions as Pi does, a file per
@@ -32,7 +34,7 @@ func ompSessionRoots() []string {
 	roots := []string{filepath.Join(OmpDir(), "sessions")}
 	profiles, _ := filepath.Glob(filepath.Join(filepath.Dir(OmpDir()), "profiles", "*", "agent", "sessions"))
 	roots = append(roots, profiles...)
-	if d := os.Getenv("XDG_DATA_HOME"); d != "" && runtime.GOOS != "windows" {
+	if d := appdir.Getenv("XDG_DATA_HOME"); d != "" && runtime.GOOS != "windows" {
 		roots = append(roots, filepath.Join(d, "omp", "sessions"))
 	}
 	return roots

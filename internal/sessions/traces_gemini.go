@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Gemini moved from rewritten JSON snapshots to append-only JSONL metadata,
@@ -14,7 +16,7 @@ import (
 // schema. Message/tool timestamps are event boundaries, not measured latency.
 func geminiTraceFiles() []file {
 	home, _ := os.UserHomeDir()
-	if custom := os.Getenv("GEMINI_CLI_HOME"); custom != "" {
+	if custom := appdir.Getenv("GEMINI_CLI_HOME"); custom != "" {
 		home = custom
 	}
 	root := filepath.Join(home, ".gemini", "tmp")

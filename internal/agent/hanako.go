@@ -39,6 +39,8 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // hanakoProbe gives up quickly, as OpenHanako's own liveness probe does:
@@ -49,7 +51,7 @@ var hanakoProbe = &http.Client{Timeout: 1500 * time.Millisecond}
 var hanakoClient = &http.Client{Timeout: 15 * time.Second}
 
 func hanakoHome(home string) string {
-	dir := os.Getenv("HANA_HOME")
+	dir := appdir.Getenv("HANA_HOME")
 	if dir == "" {
 		return filepath.Join(home, ".hanako")
 	}

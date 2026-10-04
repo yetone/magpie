@@ -771,7 +771,7 @@ func Providers() []string {
 
 // CodexHome is where Codex CLI keeps its state: $CODEX_HOME, else ~/.codex.
 func CodexHome() string {
-	if dir := os.Getenv("CODEX_HOME"); dir != "" {
+	if dir := appdir.Getenv("CODEX_HOME"); dir != "" {
 		return dir
 	}
 	home, _ := os.UserHomeDir()

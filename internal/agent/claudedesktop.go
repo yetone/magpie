@@ -37,6 +37,8 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // desktopProfileID is magpie's profile in Desktop's configLibrary: a
@@ -118,7 +120,7 @@ func claudeDesktop(home string) *Agent {
 	// %APPDATA%\Claude is where Desktop keeps its MCP servers on Windows
 	also := ""
 	if runtime.GOOS == "windows" {
-		if d := os.Getenv("APPDATA"); d != "" {
+		if d := appdir.Getenv("APPDATA"); d != "" {
 			also = filepath.Join(d, "Claude")
 		}
 	}

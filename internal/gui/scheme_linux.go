@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/proc"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // registerScheme makes magpie:// links open this executable: a desktop
@@ -16,7 +18,7 @@ func registerScheme() error {
 	if err != nil {
 		return err
 	}
-	data := os.Getenv("XDG_DATA_HOME")
+	data := appdir.Getenv("XDG_DATA_HOME")
 	if data == "" {
 		home, _ := os.UserHomeDir()
 		data = filepath.Join(home, ".local", "share")

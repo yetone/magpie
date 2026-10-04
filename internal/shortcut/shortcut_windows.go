@@ -10,6 +10,8 @@ import (
 	"github.com/go-ole/go-ole/oleutil"
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // appPath is where Win+R and `start magpie` look magpie.exe up: the user's
@@ -48,7 +50,7 @@ func programs() (string, error) {
 	if p, err := windows.KnownFolderPath(windows.FOLDERID_Programs, windows.KF_FLAG_CREATE); err == nil && p != "" {
 		return p, nil
 	}
-	a := os.Getenv("APPDATA")
+	a := appdir.Getenv("APPDATA")
 	if a == "" {
 		return "", errors.New("no Start menu folder")
 	}

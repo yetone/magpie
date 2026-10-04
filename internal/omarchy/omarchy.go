@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/proc"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Detect reports whether magpie runs on Omarchy. MAGPIE_OMARCHY=1 says it
@@ -39,7 +41,7 @@ func Detect() bool {
 	if runtime.GOOS != "linux" || ThemeDir() == "" {
 		return false
 	}
-	if os.Getenv("OMARCHY_PATH") != "" {
+	if appdir.Getenv("OMARCHY_PATH") != "" {
 		return true
 	}
 	home, _ := os.UserHomeDir()
@@ -57,7 +59,7 @@ func ThemeDir() string {
 		return d
 	}
 	home, _ := os.UserHomeDir()
-	state := os.Getenv("XDG_STATE_HOME")
+	state := appdir.Getenv("XDG_STATE_HOME")
 	if state == "" {
 		state = filepath.Join(home, ".local", "state")
 	}
@@ -351,7 +353,7 @@ func themeFiles(dir string) []string {
 
 func deskFiles() []string {
 	home, _ := os.UserHomeDir()
-	cfg := os.Getenv("XDG_CONFIG_HOME")
+	cfg := appdir.Getenv("XDG_CONFIG_HOME")
 	if cfg == "" {
 		cfg = filepath.Join(home, ".config")
 	}

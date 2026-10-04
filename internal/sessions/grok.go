@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Grok Build keeps a session in a folder of its own under its sessions
@@ -29,7 +31,7 @@ import (
 
 // GrokDir is Grok Build's folder: $GROK_HOME, else ~/.grok.
 func GrokDir() string {
-	if d := strings.TrimSpace(os.Getenv("GROK_HOME")); d != "" {
+	if d := strings.TrimSpace(appdir.Getenv("GROK_HOME")); d != "" {
 		return expandHome(d)
 	}
 	home, _ := os.UserHomeDir()

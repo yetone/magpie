@@ -15,6 +15,8 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/edit"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Pi 0.99 (2026-09-29) has MCP of its own, a built-in extension, builtin:mcp
@@ -84,7 +86,7 @@ var piGlobalRoots = func() []string {
 		}
 	}
 	if runtime.GOOS == "windows" {
-		if d := os.Getenv("APPDATA"); d != "" {
+		if d := appdir.Getenv("APPDATA"); d != "" {
 			out = append(out, filepath.Join(d, "npm", "node_modules"))
 		}
 		return out

@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/tidwall/jsonc"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Pi writes a file per session, <time>_<session id>.jsonl, in a folder per
@@ -31,7 +33,7 @@ import (
 
 // PiDir is Pi's agent folder: $PI_CODING_AGENT_DIR, else ~/.pi/agent.
 func PiDir() string {
-	if d := os.Getenv("PI_CODING_AGENT_DIR"); d != "" {
+	if d := appdir.Getenv("PI_CODING_AGENT_DIR"); d != "" {
 		return expandHome(d)
 	}
 	home, _ := os.UserHomeDir()
@@ -41,7 +43,7 @@ func PiDir() string {
 // piSessionDir is the one folder the user told Pi to keep its sessions in,
 // $PI_CODING_AGENT_SESSION_DIR or the sessionDir setting, "" for none.
 func piSessionDir() string {
-	if d := os.Getenv("PI_CODING_AGENT_SESSION_DIR"); d != "" {
+	if d := appdir.Getenv("PI_CODING_AGENT_SESSION_DIR"); d != "" {
 		return expandHome(d)
 	}
 	b, err := os.ReadFile(filepath.Join(PiDir(), "settings.json"))

@@ -3,6 +3,8 @@ package sessions
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Qoder's CLI (qodercli, and qoderclicn for the China site: one build)
@@ -21,7 +23,7 @@ func QoderDir(id string) string {
 	if id == "qoder-cn" {
 		env, dir = "QODERCN_CONFIG_DIR", ".qoder-cn"
 	}
-	if d := os.Getenv(env); d != "" {
+	if d := appdir.Getenv(env); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()

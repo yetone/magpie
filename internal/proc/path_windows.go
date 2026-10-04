@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"golang.org/x/sys/windows/registry"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // UserPath has nothing to do on Windows: an app started from the Start menu
@@ -18,11 +20,11 @@ func UserPath() {}
 func UserBinDirs() []string {
 	home, _ := os.UserHomeDir()
 	known := []string{
-		filepath.Join(os.Getenv("APPDATA"), "npm"),
+		filepath.Join(appdir.Getenv("APPDATA"), "npm"),
 		filepath.Join(home, ".local", "bin"),
 		filepath.Join(home, ".bun", "bin"),
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "Volta", "bin"),
-		filepath.Join(os.Getenv("LOCALAPPDATA"), "pnpm"),
+		filepath.Join(appdir.Getenv("LOCALAPPDATA"), "Volta", "bin"),
+		filepath.Join(appdir.Getenv("LOCALAPPDATA"), "pnpm"),
 	}
 	var have []string
 	for _, d := range known {

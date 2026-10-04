@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/yetone/magpie/internal/appdir"
 )
 
 // DeepSeek Harness (dsh) keeps a session in a folder of its own, under
@@ -34,7 +36,7 @@ import (
 
 // DshDir is dsh's folder: $DSH_HOME, else ~/.dsh.
 func DshDir() string {
-	if d := os.Getenv("DSH_HOME"); d != "" {
+	if d := appdir.Getenv("DSH_HOME"); d != "" {
 		return expandHome(d)
 	}
 	home, _ := os.UserHomeDir()
