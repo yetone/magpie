@@ -224,6 +224,57 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium"]
     assert.deepEqual(errors, []);
   });
 
+  test(`${engine}: a pick's skeleton is ended by the timer's read of the same figures`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const errors = [], log = [], gate = gates();
+    const context = await browser.newContext({ viewport: { width: 1180, height: 700 }, reducedMotion: "reduce" });
+    const p = await context.newPage();
+    p.setDefaultTimeout(5000);
+    p.on("pageerror", (e) => errors.push(e.message));
+    await p.clock.install({ time: now });
+    // The opening read and the timer's answer with the same figures, so the
+    // timer's read is equal to what the page already has and draws nothing of
+    // its own; the pick's read, let go last, answers with different ones.
+    let read = 0;
+    const base = windowServer("en", log, gate, { holdUsage: false, costFor: () => 0 });
+    await p.route("**/*", async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname === "/api/usage") {
+        const period = url.searchParams.get("period"), mine = ++read;
+        log.push({ key: "usage", period, mine });
+        const g = gate.hold("usage");
+        await g.p;
+        const cost = mine === 2 ? 9.99 : 1.11; // only the pick's read differs
+        return route.fulfill({ json: { period, calls: 1, errors: 0, input: 100, output: 10, cache_read: 0, cache_write: 0, reasoning: 0, unpriced: 0, cost, bucket: "day", series: [{ label: "Mon", input: 100, output: 10, calls: 1, cost }], agents: [{ name: "Codex", calls: 1, cost }], models: [{ name: "gpt-6-sol", calls: 1, cost }], path: "~/.config/magpie/usage.jsonl" } });
+      }
+      return base(route);
+    });
+    const loading = () => p.locator("#view-usage").evaluate((el) => el.classList.contains("loading"));
+    await p.goto("http://magpie.test/");
+    await p.locator('[data-view="usage"]').first().click(); // Overview
+    await gate.waitFor("usage", 1);
+    gate.release("usage", "all"); // the opening read
+    await p.locator("#stats .kpi").first().waitFor();
+    assert.equal(await loading(), false, "the drawn page is not left loading");
+    // the reader picks the period already shown: the skeleton goes up, its read held
+    await p.locator("#period .opt").nth(0).click(); // today
+    await gate.waitFor("usage", 2);
+    assert.equal(await loading(), true, "a pick does not show the skeleton");
+    // the timer reads the same period; its figures are the ones already on hand
+    await p.clock.fastForward(6e3);
+    await gate.waitFor("usage", 3);
+    gate.release("usage", -1); // the timer's read, the newest
+    await p.locator("#view-usage:not(.loading)").waitFor();
+    const shown = await p.locator("#view-usage").textContent();
+    assert(shown.includes("1.11"), "the figures on hand did not end the skeleton: " + shown.slice(0, 200));
+    gate.release("usage", "all"); // the pick's read, late
+    await p.waitForTimeout(300);
+    const after = await p.locator("#view-usage").textContent();
+    assert(after.includes("1.11") && !after.includes("9.99"), "the late pick's figures were drawn: " + after.slice(0, 200));
+    assert.deepEqual(errors, []);
+  });
+
   // ---- The tray panel (mode=panel) ----------------------------------------
   test(`${engine}: the panel's Usage tab keeps one request in flight`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));

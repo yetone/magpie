@@ -3920,15 +3920,21 @@ async function loadProviders() {
 // Accounts' lists still on their way from their vendors (#541: the page no
 // longer waits for them): asked again every few seconds until they are in,
 // and drawn again only when something changed — never under an open editor.
+// A read that failed, or a reload that did, is asked again rather than ending
+// the asking: this timer is what brings the lists in.
 function providersWhileFetching() {
   clearTimeout(providersWhileFetching.timer);
   if (!providers?.fetching) return;
   providersWhileFetching.timer = setTimeout(async () => {
     if (!["providers", "gateway", "routing"].includes(view) || editing !== null || adding || document.hidden) return;
     let next;
-    try { next = await api("providers"); } catch { return; }
+    try { next = await api("providers"); } catch { providersWhileFetching(); return; }
     const json = (p) => JSON.stringify({ ...p, fetching: false, gateway: { ...p.gateway, calls: 0 } });
-    if (json(next) !== json(providers)) await loadProviders().catch(() => {});
+    if (json(next) !== json(providers)) {
+      // a reload that failed says nothing about the lists being in: it is
+      // asked again too, as loadProviders would have
+      try { await loadProviders(); } catch { providersWhileFetching(); }
+    }
     else { providers.fetching = next.fetching; providersWhileFetching(); }
   }, 2500);
 }
@@ -10191,6 +10197,9 @@ let quotaHist = []; // each account's windows over time, for the curves (#651)
 // asked: the reader opened the page, so a Claude account's usage is read
 // at once, by running Claude Code's own /usage, rather than when its last
 // reading is due (every 5 to 15 minutes, at random, once Claude Code was used).
+// The Overview's reads share one count: only the newest draws, and only for the
+// period and tab the page is on, whether a pick or the timer asked for it.
+let usageRead = 0;
 async function loadUsage(asked) {
   renderUsageTab();
   renderUsageEvery(); // the refresh's tooltip says what it reads on this tab
@@ -10199,7 +10208,10 @@ async function loadUsage(asked) {
   if (usageTab === "requests") return loadLedger();
   renderUsageLoading();
   if (!asked) loadQuotas();
-  usage = await api("usage?period=" + period);
+  const p = period, read = ++usageRead;
+  const next = await api("usage?period=" + p);
+  if (read !== usageRead || view !== "usage" || usageTab !== "usage" || period !== p) return;
+  usage = next;
   renderUsage();
 }
 
@@ -16173,9 +16185,14 @@ function refreshUsage(now = false) {
         if (want) { quotasAsked = performance.now(); q = loadQuotas(true); }
         else if (usage && performance.now() - quotasAsked > 60e3) { quotasAsked = performance.now(); loadQuotas(); }
         if (usage) {
-          const p = period;
+          const p = period, read = ++usageRead;
           const u = await api("usage?period=" + p);
-          if (view === "usage" && usageTab === "usage" && p === period && JSON.stringify(u) !== JSON.stringify(usage)) { usage = u; renderUsage(); }
+          if (read === usageRead && view === "usage" && usageTab === "usage" && p === period) {
+            if (JSON.stringify(u) !== JSON.stringify(usage)) { usage = u; renderUsage(); }
+            // this read claimed the newest one: a pick it superseded had put the
+            // skeleton up, and the figures on hand are what ends it
+            else if ($("#view-usage").classList.contains("loading")) renderUsage();
+          }
         }
         await q;
       }

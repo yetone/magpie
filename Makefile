@@ -21,7 +21,7 @@ ifeq ($(shell go env GOOS),android)
   TAGS = nogui
 endif
 
-.PHONY: build cli install test app icons release release-cli release-windows release-linux clean dev dev-once
+.PHONY: build cli install test test-ui app icons release release-cli release-windows release-linux clean dev dev-once
 
 build:
 	go build -tags "$(TAGS)" -trimpath -ldflags="$(LDFLAGS)" -o magpie .
@@ -34,6 +34,16 @@ install:
 
 test:
 	go vet -tags "$(TAGS)" ./... && go test -tags "$(TAGS)" ./...
+
+# The browser regressions under internal/gui/tests: the real pages in
+# Playwright's Chromium and WebKit; see internal/gui/tests/README.md.
+UI_TESTS = $(wildcard internal/gui/tests/*.test.cjs)
+# Files are independent and run in parallel; 1 diagnoses a flaky one.
+UI_TEST_CONCURRENCY ?= 2
+
+test-ui:
+	@test -n "$(UI_TESTS)" || { echo "no GUI tests found under internal/gui/tests" >&2; exit 1; }
+	node --test --test-concurrency=$(UI_TEST_CONCURRENCY) $(UI_TESTS)
 
 # macOS bundle: menu bar app with no Dock icon (LSUIElement).
 app: build
