@@ -54,12 +54,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/wslrun"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 type subscriptionBridge struct {

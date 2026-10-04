@@ -23,10 +23,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // atomcodeAccount is the account table magpie writes, and atomcodeModels the

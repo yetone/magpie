@@ -11,9 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yetone/magpie/internal/proc"
-
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // The bar widget: magpie's icon in Omarchy's own bar, where Omarchy's

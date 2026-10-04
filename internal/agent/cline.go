@@ -45,10 +45,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // clineSlot is the provider magpie takes in Cline.

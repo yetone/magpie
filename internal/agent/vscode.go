@@ -22,10 +22,9 @@ import (
 	"strings"
 
 	"github.com/tidwall/gjson"
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // vscodeDefault is chat.defaultModel, a key with a dot in it, escaped for

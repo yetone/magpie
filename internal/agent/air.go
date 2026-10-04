@@ -38,10 +38,9 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // airAgent is the name magpie's agent has in acp.json, and so in Air's

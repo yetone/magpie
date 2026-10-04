@@ -35,10 +35,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // desktopProfileID is magpie's profile in Desktop's configLibrary: a

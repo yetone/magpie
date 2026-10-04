@@ -25,10 +25,9 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 func workbuddy(home string) *Agent {

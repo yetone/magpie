@@ -30,11 +30,10 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Tokens is a count of tokens. Input excludes what was read from cache.

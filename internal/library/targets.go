@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/agent"
-
 	"github.com/yetone/magpie/internal/appdir"
 )
 

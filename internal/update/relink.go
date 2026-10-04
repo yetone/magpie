@@ -8,9 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yetone/magpie/internal/proc"
-
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // StaleCLI is the path of a `magpie` command that is a copied file behind

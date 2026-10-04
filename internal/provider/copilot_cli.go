@@ -23,9 +23,8 @@ import (
 
 	"github.com/tidwall/jsonc"
 
-	"github.com/yetone/magpie/internal/proc"
-
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/proc"
 )
 
 // copilotCLIHeaders are what the CLI sends with its token.

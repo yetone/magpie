@@ -13,14 +13,13 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // The gateway knows each agent's requests by what this package says of it.

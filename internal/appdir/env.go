@@ -20,8 +20,10 @@ func homeVar() string {
 }
 
 // rooted says whether p names the same place whatever the working folder
-// is: absolute, or on Windows rooted on the current drive (\Users\x, or
-// /c/x as Git Bash spells it).
+// is: absolute, or on Windows rooted on the current drive, as \Users\x or
+// /x is. A Git Bash path such as /c/x is one too, though Go takes it as
+// \c\x on the current drive, not C:\x: it kept that meaning before, and it
+// still doesn't depend on the working folder.
 func rooted(p string) bool {
 	if filepath.IsAbs(p) {
 		return true

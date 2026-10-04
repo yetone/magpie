@@ -21,12 +21,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/steady"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // Login is a remembered subscription account, without its secrets.

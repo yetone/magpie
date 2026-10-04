@@ -18,11 +18,10 @@ import (
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/proc"
 	"gopkg.in/yaml.v3"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // RTK (rtk-ai.app) is a CLI that the shell commands an agent runs go

@@ -40,10 +40,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // t3Instance is the key of magpie's provider instance in T3 Code's

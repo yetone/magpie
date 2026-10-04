@@ -20,10 +20,9 @@ import (
 	"strings"
 
 	"github.com/tidwall/jsonc"
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/plugin"
 	_ "modernc.org/sqlite"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // AppSource is one app magpie can import from, with what it holds.

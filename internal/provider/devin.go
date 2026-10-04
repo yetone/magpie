@@ -31,9 +31,8 @@ import (
 
 	toml "github.com/pelletier/go-toml/v2"
 
-	"github.com/yetone/magpie/internal/catalog"
-
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // DevinExecutable finds the devin CLI; a var so tests can fake it.

@@ -20,11 +20,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"gopkg.in/yaml.v3"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // mcodeProvider is magpie's provider id in MiniMax Code, and mcodeEntry its

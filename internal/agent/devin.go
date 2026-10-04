@@ -17,9 +17,8 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/yetone/magpie/internal/provider"
-
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 func devin(home, cfg string) *Agent {

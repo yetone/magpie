@@ -32,10 +32,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/proc"
-
-	"github.com/yetone/magpie/internal/appdir"
 )
 
 // CursorExecutable finds the cursor-agent CLI; a var so tests can fake it.
