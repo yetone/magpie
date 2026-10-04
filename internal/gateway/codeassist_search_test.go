@@ -7,6 +7,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // Gemini on a Google sign-in searches by itself, googleSearch, for a
@@ -98,7 +99,7 @@ func TestCodeAssistImageModelAsksForImages(t *testing.T) {
 func TestSmallModelOfGemini(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	p := provider.Provider{ID: "g", Name: "G", Chat: "https://example.invalid/v1", Key: "k",
 		Models: []string{"gemini-pro-agent", "gemini-3.1-pro-low", "gemini-3-flash", "gemini-3.1-flash-lite"}}
 	if err := provider.Save(p); err != nil {

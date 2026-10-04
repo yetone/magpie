@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // claudeWorkDirs runs two Claude subscription requests through a script
@@ -24,7 +25,7 @@ func claudeWorkDirs(t *testing.T, prepare func(work string)) (dirs []string, wor
 	if err := os.Mkdir(filepath.Join(home, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	t.Setenv("TMPDIR", t.TempDir())
 	work = filepath.Join(os.TempDir(), claudeWorkName())

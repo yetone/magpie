@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // resumeHarness runs Claude subscription requests through a script
@@ -32,7 +33,7 @@ func newResumeHarness(t *testing.T) *resumeHarness {
 		t.Skip("a shell script stands in for Claude Code")
 	}
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	t.Setenv("TMPDIR", t.TempDir())
 	config := filepath.Join(home, ".claude")

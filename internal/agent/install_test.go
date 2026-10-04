@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // The install commands are the vendors' own (#727): the installer their
@@ -155,7 +157,7 @@ func TestInstallWithoutNodeStopsWhenTheDownloadFails(t *testing.T) {
 	}))
 	defer bad.Close()
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	t.Setenv("NVM_DIR", filepath.Join(home, ".nvm"))
 	c := strings.Replace(npmInstall("@earendil-works/pi-coding-agent", "linux", false).Command,
 		"https://raw.githubusercontent.com/nvm-sh/nvm/"+nvmVersion+"/install.sh", bad.URL+"/install.sh", 1)
