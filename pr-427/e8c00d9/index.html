@@ -1,0 +1,15 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#427 界面预览 · e8c00d9</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#427 界面预览</h1><p class="m">commit e8c00d9 · <a href="https://github.com/yetone/magpie/pull/427">回到 PR</a> · 该 diff 在 magpie 的 Agent 注册表里新增了 Reasonix Studio（id=reasonix）：检测到 Studio 2.x 桌面安装或原生 2.x CLI 时，Agent 列表与菜单栏面板会多出一行（官方图标），可经 magpie 网关选择模型、设置 reasoning effort，并往 Studio 的 config.toml/.env 写入 magpie 供应商。其余改动（edit 包的 TOML 写入工具、检测/回滚逻辑、测试与 README）不出现在界面上。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-agents-list.png" alt="Agent 页的列表"><figcaption>Agent 列表中的 Reasonix Studio 入口 · Agent 页的列表</figcaption></figure>
+<figure><img src="02-agents-all.png" alt="展开后的 Agent 列表"><figcaption>Agent 列表中的 Reasonix Studio 入口 · 展开后的 Agent 列表</figcaption></figure>
+<figure><img src="03-panel-agents.png" alt="菜单栏快速面板的 Agent 标签"><figcaption>菜单栏面板的 Agent 列表 · 菜单栏快速面板的 Agent 标签</figcaption></figure>
+<figure><img src="04-panel-agents-all.png" alt="菜单栏面板展开后的 Agent 列表"><figcaption>菜单栏面板的 Agent 列表 · 菜单栏面板展开后的 Agent 列表</figcaption></figure>
+</main></html>

@@ -1,0 +1,14 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#319 界面预览 · 63d3281</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#319 界面预览</h1><p class="m">commit 63d3281 · <a href="https://github.com/yetone/magpie/pull/319">回到 PR</a> · 在添加 Qoder 订阅的登录流程中新增企业接入地址步骤：Qoder 卡片显示 Pro · Enterprise，点击后先出现风险提示，确认后提示填写可选的企业接入域名（留空为官方），并对输入做校验；登录凭据会保存该域名，之后各请求改走对应端点。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="02-qoder-risk-prompt.png" alt="登录前的风险提示"><figcaption>Qoder 企业 VPC 接入地址提示 · 登录前的风险提示</figcaption></figure>
+<figure><img src="03-qoder-endpoint-prompt.png" alt="企业接入地址输入步骤"><figcaption>Qoder 企业 VPC 接入地址提示 · 企业接入地址输入步骤</figcaption></figure>
+<figure><img src="04-qoder-endpoint-invalid.png" alt="提交无效地址后的界面"><figcaption>Qoder 企业 VPC 接入地址提示 · 提交无效地址后的界面</figcaption></figure>
+</main></html>

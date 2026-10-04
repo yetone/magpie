@@ -1,0 +1,19 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#284 界面预览 · 96247a7</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#284 界面预览</h1><p class="m">commit 96247a7 · <a href="https://github.com/yetone/magpie/pull/284">回到 PR</a> · 这个 PR 在路由组编辑器里新增了一行「输入类型」（自动 / 文本（必选）/ 图片）并带说明文字，在路由组行和选择器里的子组旁边显示输入摘要；路由规则里的「包含图片」补了提示与 aria-pressed，保存时一并带上 family、context 与 input。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-group-editor-input-auto.png" alt="新建组编辑器里的「输入类型」一行和它下面的说明"><figcaption>新建组并声明输入类型 · 新建组编辑器里的「输入类型」一行和它下面的说明</figcaption></figure>
+<figure><img src="02-group-editor-input-image.png" alt="点「图片」之后的输入类型与说明文字"><figcaption>新建组并声明输入类型 · 点「图片」之后的输入类型与说明文字</figcaption></figure>
+<figure><img src="04-group-editor-input-image.png" alt="点「图片」之后的输入类型与说明文字"><figcaption>新建组并声明输入类型 · 点「图片」之后的输入类型与说明文字</figcaption></figure>
+<figure><img src="06-group-member-picker.png" alt="模型选择器里可选的模型"><figcaption>新建组并声明输入类型 · 模型选择器里可选的模型</figcaption></figure>
+<figure><img src="07-group-editor-after-member.png" alt="选中成员后的组编辑器"><figcaption>新建组并声明输入类型 · 选中成员后的组编辑器</figcaption></figure>
+<figure><img src="08-group-editor-input-image.png" alt="点「图片」之后的输入类型与说明文字"><figcaption>新建组并声明输入类型 · 点「图片」之后的输入类型与说明文字</figcaption></figure>
+<figure><img src="10-group-editor-reopened.png" alt="重新打开后编辑器里的输入类型"><figcaption>新建组并声明输入类型 · 重新打开后编辑器里的输入类型</figcaption></figure>
+<figure><img src="11-picker-subgroup-input-note.png" alt="模型选择器里，已有的组作为子组出现时旁边跟着的输入说明"><figcaption>选择器里子组旁的输入说明 · 模型选择器里，已有的组作为子组出现时旁边跟着的输入说明</figcaption></figure>
+</main></html>

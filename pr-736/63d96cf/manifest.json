@@ -1,0 +1,49 @@
+{
+  "summary": "PR 把 AtomCode 注册成新的 Agent：Agents 页多出一行 AtomCode（带 atomcode 图标），模型选择器给出 magpie 目录里的模型并把选择写进 ~/.atomcode/config.toml；资源库为它提供 ATOMCODE.md、mcp.json 与 skills/；用量页按 agent 名识别它的请求。网关本身没有改动。",
+  "scenes": [
+    {
+      "title": "Agents 里的 AtomCode",
+      "shots": [
+        {
+          "file": "01-agents-unrolled.png",
+          "caption": "展开后的 Agent 列表与底部安装入口",
+          "width": 2560
+        },
+        {
+          "file": "02-agents-list.png",
+          "caption": "Agent 列表本身",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "资源库为 AtomCode 接的指令与 MCP",
+      "shots": [
+        {
+          "file": "03-library-instructions.png",
+          "caption": "资源库的「指令」标签",
+          "width": 2560
+        },
+        {
+          "file": "04-library-mcp.png",
+          "caption": "资源库的「MCP 服务器」标签",
+          "width": 2560
+        },
+        {
+          "file": "05-library-skills.png",
+          "caption": "资源库的「技能」标签",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里 AtomCode 未安装也未接入，也没有经它发出的请求：所以 Agents 里见不到 AtomCode 那一行、它展开后的模型选择器，资源库的列表里也见不到 AtomCode 条目，用量页更不会出现名为 AtomCode 的 agent——下面只展示这些条目会出现的位置。",
+  "interactive": true,
+  "pages": 2
+}

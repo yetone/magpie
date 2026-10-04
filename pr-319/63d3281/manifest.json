@@ -1,0 +1,36 @@
+{
+  "summary": "在添加 Qoder 订阅的登录流程中新增企业接入地址步骤：Qoder 卡片显示 Pro · Enterprise，点击后先出现风险提示，确认后提示填写可选的企业接入域名（留空为官方），并对输入做校验；登录凭据会保存该域名，之后各请求改走对应端点。",
+  "scenes": [
+    {
+      "title": "Qoder 企业 VPC 接入地址提示",
+      "shots": [
+        {
+          "file": "02-qoder-risk-prompt.png",
+          "caption": "登录前的风险提示",
+          "width": 2560
+        },
+        {
+          "file": "03-qoder-endpoint-prompt.png",
+          "caption": "企业接入地址输入步骤",
+          "width": 2560
+        },
+        {
+          "file": "04-qoder-endpoint-invalid.png",
+          "caption": "提交无效地址后的界面",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "Qoder 企业 VPC 接入地址提示 · shot button[title*=\"Qoder subscription\"]: nothing visible matches button[title*=\"Qoder subscription\"] (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒没有 Qoder 企业账号，也未配置可用的 VPC 域名，因此无法展示成功后端点如何用于模型发现、用量和推理；只能展示登录前的地址输入提示，以及用无效地址触发的错误界面。",
+  "interactive": true,
+  "pages": 1
+}

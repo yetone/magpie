@@ -1,0 +1,49 @@
+{
+  "summary": "界面侧只动了 app.js 两处：供应商列表的后台轮询在读取或重载失败后会继续安排下一次重试（不再停下），用量概览的每次读取带一个序号，只有最新一次的答案会绘制，且定时刷新读到同样数字时会结束抢先选周期留下的骨架。其余改动是插件宿主流队列、网关回归测试与 make test-ui。",
+  "scenes": [
+    {
+      "title": "用量概览：切换周期与立即刷新",
+      "shots": [
+        {
+          "file": "01-usage-overview-today.png",
+          "caption": "用量·概览：今天这个周期的数字",
+          "width": 2560
+        },
+        {
+          "file": "02-usage-period-7d.png",
+          "caption": "切到「7 天」后的用量概览",
+          "width": 2560
+        },
+        {
+          "file": "03-usage-period-30d.png",
+          "caption": "连续切换周期后概览上的数字",
+          "width": 2560
+        },
+        {
+          "file": "04-usage-after-reload.png",
+          "caption": "点「立即刷新」之后的用量概览",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "供应商页：后台列表轮询所在的位置",
+      "shots": [
+        {
+          "file": "05-providers-list.png",
+          "caption": "供应商页：列表在后台每隔几秒重新读取一次",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里供应商列表早已取回（fetching 为假）、读取也不会失败，用量读取同样又快又成功，所以「失败后继续重试」和「过期周期的答案不覆盖新选择」这两处行为在画面上看不到；只能展示它们所在的供应商页与用量概览页。",
+  "interactive": true,
+  "pages": 2
+}

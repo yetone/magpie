@@ -1,0 +1,71 @@
+{
+  "summary": "这个 PR 在路由组编辑器里新增了一行「输入类型」（自动 / 文本（必选）/ 图片）并带说明文字，在路由组行和选择器里的子组旁边显示输入摘要；路由规则里的「包含图片」补了提示与 aria-pressed，保存时一并带上 family、context 与 input。",
+  "scenes": [
+    {
+      "title": "新建组并声明输入类型",
+      "shots": [
+        {
+          "file": "01-group-editor-input-auto.png",
+          "caption": "新建组编辑器里的「输入类型」一行和它下面的说明",
+          "width": 2560
+        },
+        {
+          "file": "02-group-editor-input-image.png",
+          "caption": "点「图片」之后的输入类型与说明文字",
+          "width": 2560
+        },
+        {
+          "file": "04-group-editor-input-image.png",
+          "caption": "点「图片」之后的输入类型与说明文字",
+          "width": 2560
+        },
+        {
+          "file": "06-group-member-picker.png",
+          "caption": "模型选择器里可选的模型",
+          "width": 2560
+        },
+        {
+          "file": "07-group-editor-after-member.png",
+          "caption": "选中成员后的组编辑器",
+          "width": 2560
+        },
+        {
+          "file": "08-group-editor-input-image.png",
+          "caption": "点「图片」之后的输入类型与说明文字",
+          "width": 2560
+        },
+        {
+          "file": "10-group-editor-reopened.png",
+          "caption": "重新打开后编辑器里的输入类型",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "选择器里子组旁的输入说明",
+      "shots": [
+        {
+          "file": "11-picker-subgroup-input-note.png",
+          "caption": "模型选择器里，已有的组作为子组出现时旁边跟着的输入说明",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "新建组并声明输入类型 · click #view-routing .rt-gedit button.primary: nothing visible matches #view-routing .rt-gedit button.primary with \"保存\" (0 in the page)",
+    "新建组并声明输入类型 · shot .rt-group: nothing visible matches .rt-group (0 in the page)",
+    "新建组并声明输入类型 · shot .rt-group: nothing visible matches .rt-group (0 in the page)",
+    "新建组并声明输入类型 · click button: nothing visible matches button with \"V4.1 Flash\" (0 in the page)",
+    "新建组并声明输入类型 · shot .rt-group: nothing visible matches .rt-group (0 in the page)",
+    "新建组并声明输入类型 · click .rt-group button: nothing visible matches .rt-group button with \"编辑\" (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里只有 DeepSeek 一个供应商、没有识别/理解图片的模型，也没有已存在的路由组，所以声明图片后在网关上真正发生的事——图片只发给能收图的成员、嵌套组里文本边界的拦截、没有可用成员时的 400 报错、以及自动模式下按成员推断出「输入：文本 + 图片」——都看不到；这里只能看到编辑器里的三种状态和保存后组行上的输入摘要。",
+  "interactive": true,
+  "pages": 1
+}

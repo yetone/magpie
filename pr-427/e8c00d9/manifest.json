@@ -1,0 +1,44 @@
+{
+  "summary": "该 diff 在 magpie 的 Agent 注册表里新增了 Reasonix Studio（id=reasonix）：检测到 Studio 2.x 桌面安装或原生 2.x CLI 时，Agent 列表与菜单栏面板会多出一行（官方图标），可经 magpie 网关选择模型、设置 reasoning effort，并往 Studio 的 config.toml/.env 写入 magpie 供应商。其余改动（edit 包的 TOML 写入工具、检测/回滚逻辑、测试与 README）不出现在界面上。",
+  "scenes": [
+    {
+      "title": "Agent 列表中的 Reasonix Studio 入口",
+      "shots": [
+        {
+          "file": "01-agents-list.png",
+          "caption": "Agent 页的列表",
+          "width": 2560
+        },
+        {
+          "file": "02-agents-all.png",
+          "caption": "展开后的 Agent 列表",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "菜单栏面板的 Agent 列表",
+      "shots": [
+        {
+          "file": "03-panel-agents.png",
+          "caption": "菜单栏快速面板的 Agent 标签",
+          "width": 2560
+        },
+        {
+          "file": "04-panel-agents-all.png",
+          "caption": "菜单栏面板展开后的 Agent 列表",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述里的 `magpie reasonix <model>`、`magpie reasonix effort`、`magpie reasonix default` 是命令行入口，不是界面；界面部分只有 Agent 列表/菜单栏面板里的这一行及其模型、effort 选择器，diff 没有新增设置页、开关或按钮。",
+  "unseen": "沙盒没有安装 Reasonix Studio 2.x 桌面版，也没有原生 2.x CLI，检测结果为 false，所以列表里不会出现新增的 Reasonix Studio 行——它的 reasonix-color 图标、模型选择器（原生模型 + magpie/deepseek/… 与路由组选项）和 effort 选择器都看不到，只能展示它会出现的位置。",
+  "interactive": true,
+  "pages": 2
+}

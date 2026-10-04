@@ -1,0 +1,52 @@
+{
+  "summary": "PR 将原来的“隐藏邮箱”改为跨主窗口和快捷面板的共享隐私模式：用量、路由和设置页都有同一开关，快捷面板头部也有图标按钮；开启后邮箱、tooltip 和输入框值被遮罩，关闭后恢复。",
+  "scenes": [
+    {
+      "title": "主窗口：用量请求、路由和设置同步",
+      "shots": [
+        {
+          "file": "01-usage-requests-privacy-off.png",
+          "caption": "隐私模式关闭时，请求行中的邮箱显示",
+          "width": 2560
+        },
+        {
+          "file": "02-usage-requests-privacy-on.png",
+          "caption": "同一请求行在隐私模式开启后",
+          "width": 2560
+        },
+        {
+          "file": "03-routing-privacy-on.png",
+          "caption": "路由页的隐私模式按钮与用量页同步开启",
+          "width": 1120
+        },
+        {
+          "file": "04-settings-privacy-on.png",
+          "caption": "设置里新增的隐私模式行显示为开启",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "快捷面板：同步开关与恢复",
+      "shots": [
+        {
+          "file": "05-panel-usage-privacy-on.png",
+          "caption": "额度页在隐私模式已从主窗口同步开启时显示的邮箱",
+          "width": 2560
+        },
+        {
+          "file": "06-panel-usage-privacy-off.png",
+          "caption": "额度页在隐私模式关闭后恢复原样",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "interactive": true,
+  "pages": 4
+}

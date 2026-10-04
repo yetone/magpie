@@ -1,0 +1,44 @@
+{
+  "summary": "用量页顶部新增「分析」入口（#openAnalytics），点开进入新的 #view-analytics 质量与分析看板：顶部是周期（今天/7 天/30 天/全部）与「全部 / 按模型 / 按供应商 / 按客户端」展示模式加筛选栏，下面按可靠性、响应速度、成本与缓存三个主题排布六张图表（错误率、异常趋势、TTFT P95、解码速度、成本、缓存率），并可展开调用明细与详情；本页复用全局「账号打码」。",
+  "scenes": [
+    {
+      "title": "用量页入口与分析看板首屏",
+      "shots": [
+        {
+          "file": "01-usage-analytics-entry.png",
+          "caption": "用量页顶部操作栏里新增的「分析」入口",
+          "width": 2560
+        },
+        {
+          "file": "02-analytics-dashboard.png",
+          "caption": "看板首屏：周期、展示模式与三个主题区块",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "切换分组维度与周期",
+      "shots": [
+        {
+          "file": "03-analytics-by-model.png",
+          "caption": "「按模型」模式下的六张图与筛选栏",
+          "width": 2560
+        },
+        {
+          "file": "04-analytics-period-all.png",
+          "caption": "周期为「全部」时看板重新聚合后的样子",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述说点击排行行或 KPI 进入独立下钻页（左侧紧凑排行、右侧按该图指标排序的前 50 条调用），但 diff 里的 docs/specs/dashboard.md 与 interaction.md 写的是在被点击图表下方原地展开明细，两处口径不一致。",
+  "unseen": "沙盒只有 DeepSeek 一个供应商、少量成功调用、没有订阅账号：错误率与异常趋势没有失败样本，TTFT / 解码速度 / 缓存率排行的 ≥10 有效样本门槛无从体现，多供应商与多客户端分组、以及下钻页的调用列表与单条详情都无法呈现（可见的 diff 片段里也没有这些行、按钮的选择器）；账本里没有邮箱，账号打码的可见效果同样看不到。",
+  "interactive": true,
+  "pages": 1
+}
