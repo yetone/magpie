@@ -166,25 +166,51 @@ func shellEnv() (string, map[string]string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// interactive too, since many put PATH in .zshrc/.bashrc; the marker
-	// tells the answer apart from whatever the profile prints, and a NUL
-	// (which no variable can hold) parts the values: PATH first, then each
-	// of agentenv.Vars in order
-	const mark = "__magpie_path__"
-	format, args := mark+"%s", ` "$PATH"`
+	// interactive too, since many put PATH in .zshrc/.bashrc
+	cmd := CommandContext(ctx, sh, "-ilc", shellProbe(sh))
+	cmd.Stdin = nil
+	out, _ := cmd.Output()
+	return parseShellEnv(string(out), shellMark)
+}
+
+// shellMark tells shellEnv's answer apart from whatever the profile prints.
+const shellMark = "__magpie_path__"
+
+// shellProbe is the command the login shell sh runs to print its PATH and
+// agentenv.Vars, between two marks. A NUL (which no variable can hold)
+// parts the values: PATH first, then each of agentenv.Vars in order.
+//
+// A POSIX shell (zsh, bash, fish too) expands "$PATH" itself. nushell
+// doesn't: a double-quoted string is literal there, so it printed "$PATH",
+// "$CLAUDE_CONFIG_DIR", ... and magpie set each variable to its own name
+// (#738: then Claude sign-in failed with "mkdir $CLAUDE_CONFIG_DIR:
+// read-only file system", and the account lapsed minutes later, Claude
+// Code's sign-in looked for under that folder). nushell has no POSIX
+// quoting to ask with, and its PATH is a list, so it is asked to run
+// /bin/sh with the same printf: nushell hands it the environment as a
+// child sees it, PATH joined back into one string, and sh expands the
+// references. The outer command is in nushell's single quotes, where a
+// backslash is a backslash, and the printf format in sh's double quotes,
+// where \0 reaches printf as it is.
+func shellProbe(sh string) string {
+	format, args := shellMark+"%s", ` "$PATH"`
 	for _, v := range agentenv.Vars {
 		format += `\0%s`
 		args += ` "$` + v + `"`
 	}
-	cmd := CommandContext(ctx, sh, "-ilc", "printf '"+format+mark+"'"+args)
-	cmd.Stdin = nil
-	out, _ := cmd.Output()
-	return parseShellEnv(string(out), mark)
+	if filepath.Base(sh) == "nu" {
+		return `^/bin/sh -c 'printf "` + format + shellMark + `"` + args + `'`
+	}
+	return "printf '" + format + shellMark + "'" + args
 }
 
 // parseShellEnv reads shellEnv's answer out of what the shell printed. The
 // variables are nil when their count isn't agentenv.Vars' (a printf that
-// doesn't know \0); PATH alone is still taken then.
+// doesn't know \0); PATH alone is still taken then. A value that is the
+// variable's own reference ("$CODEX_HOME") is a shell that printed the
+// text instead of expanding it (nushell before shellProbe knew it; a shell
+// with other quoting still), not a folder: it counts as unset, as does a
+// PATH of "$PATH".
 func parseShellEnv(s, mark string) (string, map[string]string) {
 	i := strings.Index(s, mark)
 	if i < 0 {
@@ -196,6 +222,9 @@ func parseShellEnv(s, mark string) (string, map[string]string) {
 		return "", nil
 	}
 	f := strings.Split(s[:j], "\x00")
+	if f[0] == "$PATH" {
+		f[0] = ""
+	}
 	if len(f) != len(agentenv.Vars)+1 {
 		if len(f) == 1 {
 			return f[0], nil
@@ -204,6 +233,9 @@ func parseShellEnv(s, mark string) (string, map[string]string) {
 	}
 	vars := make(map[string]string, len(agentenv.Vars))
 	for k, v := range agentenv.Vars {
+		if f[k+1] == "$"+v {
+			f[k+1] = ""
+		}
 		vars[v] = f[k+1]
 	}
 	return f[0], vars
