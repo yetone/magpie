@@ -79,8 +79,9 @@ type aRequest struct {
 			Schema json.RawMessage `json:"schema"`
 		} `json:"format,omitempty"`
 	} `json:"output_config,omitempty"`
-	Metadata json.RawMessage `json:"metadata,omitempty"`
-	Speed    string          `json:"speed,omitempty"` // "fast": Claude's fast mode
+	Metadata   json.RawMessage `json:"metadata,omitempty"`
+	Speed      string          `json:"speed,omitempty"` // "fast": Claude's fast mode
+	Safeguards json.RawMessage `json:"safeguards,omitempty"`
 }
 
 func parseAnthropic(body []byte) (*Request, error) {
@@ -90,6 +91,10 @@ func parseAnthropic(body []byte) (*Request, error) {
 	}
 	r := &Request{Model: a.Model, System: stringOrText(a.System), MaxTokens: a.MaxTokens,
 		Temp: a.Temperature, TopP: a.TopP, Stop: a.StopSequences, Stream: a.Stream, Fast: a.Speed == "fast"}
+	r.Safeguards = a.Safeguards
+	if string(r.Safeguards) == "null" {
+		r.Safeguards = nil
+	}
 	if len(a.Metadata) > 0 && string(a.Metadata) != "null" {
 		r.Metadata = a.Metadata
 	}
@@ -775,8 +780,12 @@ func (e *anthropicEncoder) finish() {
 	}
 	e.close()
 	res := e.col.finish()
+	delta := map[string]any{"stop_reason": stopToAnthropic(res.Stop), "stop_sequence": nil}
+	if len(res.SafeguardResults) > 0 {
+		delta["safeguard_results"] = res.SafeguardResults
+	}
 	e.w.event("message_delta", map[string]any{"type": "message_delta",
-		"delta": map[string]any{"stop_reason": stopToAnthropic(res.Stop), "stop_sequence": nil},
+		"delta": delta,
 		"usage": res.Usage.anthropic()})
 	e.w.event("message_stop", map[string]any{"type": "message_stop"})
 }
@@ -807,8 +816,12 @@ func renderAnthropic(res Result, model string) []byte {
 	if res.Model != "" {
 		model = res.Model
 	}
-	b, _ := json.Marshal(map[string]any{"id": id, "type": "message", "role": "assistant", "model": model,
-		"content": content, "stop_reason": stopToAnthropic(res.Stop), "stop_sequence": nil, "usage": res.Usage.anthropic()})
+	reply := map[string]any{"id": id, "type": "message", "role": "assistant", "model": model,
+		"content": content, "stop_reason": stopToAnthropic(res.Stop), "stop_sequence": nil, "usage": res.Usage.anthropic()}
+	if len(res.SafeguardResults) > 0 {
+		reply["safeguard_results"] = res.SafeguardResults
+	}
+	b, _ := json.Marshal(reply)
 	return b
 }
 

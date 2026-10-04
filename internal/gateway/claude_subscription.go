@@ -30,6 +30,7 @@ package gateway
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -125,12 +126,19 @@ type subscriptionRun struct {
 	// the tools its agent was told of, as it started and since
 	tools map[string]bool
 
-	mu      sync.Mutex
-	segment chan Event
-	pending map[string]chan mcpToolResult
-	closed  bool
-	stderr  strings.Builder
-	timer   *time.Timer
+	mu       sync.Mutex
+	segment  chan Event
+	pending  map[string]chan mcpToolResult
+	closed   bool
+	resuming bool // a tool-result request owns this run until its segment ends
+	stderr   strings.Builder
+
+	// Only one settings update is in flight; it must be acknowledged before
+	// a tool result or a new user turn can trigger the next model request.
+	settingsMu    sync.Mutex
+	safeguards    json.RawMessage
+	safeguardBeta string
+	timer         *time.Timer
 
 	// Claude Code's input, kept open for the next turn; owner is the account
 	// it runs as, and idleKey and idleAt say it is waiting for one. convKey
@@ -365,7 +373,7 @@ func (c claudeCLI) command(ctx context.Context, args ...string) *exec.Cmd {
 // claudeEnvVars are the variables magpie sets for a Claude Code run, which
 // one in WSL is handed (wslrun's Env).
 var claudeEnvVars = []string{"ENABLE_CLAUDEAI_MCP_SERVERS", "DISABLE_AUTO_COMPACT", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
-	"DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING", "DISABLE_AUTOUPDATER"}
+	"DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING", "DISABLE_AUTOUPDATER", "ANTHROPIC_BETAS"}
 
 // env is env for a run in config directory configDir ("" for the account
 // Claude Code is signed in to): for one in WSL, what of it goes in.
@@ -470,7 +478,11 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, con
 	}
 	cmd := binary.command(context.Background(), args...)
 	cmd.Dir = work
-	cmd.Env = binary.env(netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ())), configDir)
+	env := netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
+	if len(req.Safeguards) > 0 {
+		env = append(env, "ANTHROPIC_BETAS="+req.SafeguardBeta)
+	}
+	cmd.Env = binary.env(env, configDir)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cleanup()
@@ -488,6 +500,7 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, con
 	}
 
 	run := &subscriptionRun{bridge: b, token: token, model: model, cmd: cmd, tmp: tmp, schema: len(req.Schema) > 0, pending: map[string]chan mcpToolResult{}, stdin: stdin, owner: owner, effort: req.Effort, sessions: sessions}
+	run.safeguardBeta = req.SafeguardBeta
 	if user, _ := ownerAccount(owner); user != "" {
 		run.loginVersion = provider.ClaudeLoginVersion(user)
 	}
@@ -508,6 +521,18 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, con
 	}()
 	go run.readOutput(stdout)
 
+	if len(req.Safeguards) > 0 {
+		// Initialize the SDK before applying settings. Send the potentially
+		// large context over stdin rather than an environment entry.
+		if err := run.cliControl(map[string]any{"subtype": "initialize"}); err != nil {
+			run.abort()
+			return nil, nil, err
+		}
+	}
+	if err := run.setSafeguards(req); err != nil {
+		run.abort()
+		return nil, nil, err
+	}
 	var prompt []map[string]any
 	if from != nil {
 		// the session is the run's now: its file goes when the run does,
@@ -527,6 +552,89 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, con
 		return nil, nil, err
 	}
 	return run, segment, nil
+}
+
+// safeguardBody passes only the safety field through EXTRA_BODY: overriding the
+// CLI's own betas there would remove headers its genuine request needs.
+func safeguardBody(raw json.RawMessage) string {
+	body := map[string]any{}
+	if len(raw) > 0 {
+		body["safeguards"] = raw
+	}
+	b, _ := json.Marshal(body)
+	return string(b)
+}
+
+// setSafeguards updates the caller's context, not the VPS's permission state.
+// A CLI unable to acknowledge the update is discarded by the caller; its old
+// context must never be used for another turn. The client's approval still
+// decides whether the tool runs, including a server verdict that is unavailable.
+func (r *subscriptionRun) setSafeguards(req *Request) error {
+	r.settingsMu.Lock()
+	defer r.settingsMu.Unlock()
+	if bytes.Equal(r.safeguards, req.Safeguards) && (len(req.Safeguards) == 0 || r.safeguardBeta == req.SafeguardBeta) {
+		return nil
+	}
+	if len(req.Safeguards) > 0 && r.safeguardBeta != req.SafeguardBeta {
+		return errors.New("safety beta changed; restart Claude Code")
+	}
+	err := r.cliControl(map[string]any{"subtype": "apply_flag_settings", "settings": map[string]any{
+		"env": map[string]string{"CLAUDE_CODE_EXTRA_BODY": safeguardBody(req.Safeguards)}}})
+	if err == nil {
+		r.safeguards = bytes.Clone(req.Safeguards)
+	}
+	return err
+}
+
+// cliControl shares the SDK reply dispatcher with rewind, so unrelated or
+// late control responses cannot acknowledge a safety-context update.
+func (r *subscriptionRun) cliControl(request map[string]any) error {
+	id := randomToken()
+	ch := make(chan controlReply, 1)
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return errors.New("Claude Code ended")
+	}
+	if r.controls == nil {
+		r.controls = map[string]chan controlReply{}
+	}
+	r.controls[id] = ch
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.controls, id)
+		r.mu.Unlock()
+	}()
+	line, _ := json.Marshal(map[string]any{"type": "control_request", "request_id": id, "request": request})
+	if _, err := r.stdin.Write(append(line, '\n')); err != nil {
+		return err
+	}
+	t := time.NewTimer(10 * time.Second)
+	defer t.Stop()
+	select {
+	case reply, ok := <-ch:
+		if !ok {
+			return errors.New("Claude Code ended")
+		}
+		if reply.Subtype != "success" {
+			return fmt.Errorf("Claude settings: %s", reply.Error)
+		}
+		return nil
+	case <-t.C:
+		return errors.New("Claude Code did not acknowledge safety context")
+	}
+}
+
+// claimResume holds a tool-result handoff across its context update and reply.
+func (r *subscriptionRun) claimResume() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.closed || r.resuming || r.segment != nil {
+		return false
+	}
+	r.resuming = true
+	return true
 }
 
 // resume hands a conversation's next turn to the run that had its last
@@ -553,6 +661,10 @@ func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRu
 	run.mu.Unlock()
 	if rewinding != nil {
 		<-rewinding
+	}
+	if err := run.setSafeguards(req); err != nil {
+		run.abort()
+		return nil, nil
 	}
 	// the message's id is the turn's, to rewind to if the client gives up
 	// on it
@@ -1226,6 +1338,7 @@ func cleanClaudeEnv(env []string) []string {
 		"ANTHROPIC_BASE_URL": true, "ANTHROPIC_API_KEY": true, "ANTHROPIC_AUTH_TOKEN": true,
 		"CLAUDECODE": true, "CLAUDE_CODE_ENTRYPOINT": true, "CLAUDE_CODE_SSE_PORT": true,
 		"CLAUDE_CODE_OAUTH_TOKEN": true, "CLAUDE_CODE_PROMPT_CACHE_TTL": true,
+		"CLAUDE_CODE_EXTRA_BODY": true, "ANTHROPIC_BETAS": true,
 	}
 	out := make([]string, 0, len(env)+3)
 	for _, e := range env {
@@ -1292,6 +1405,9 @@ func (r *subscriptionRun) endSegment() {
 	r.mu.Lock()
 	ch := r.segment
 	r.segment = nil
+	if ch != nil {
+		r.resuming = false
+	}
 	r.mu.Unlock()
 	if ch != nil {
 		close(ch)
@@ -1460,12 +1576,13 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 					Text string `json:"text"`
 				} `json:"content_block"`
 				Delta struct {
-					Type        string `json:"type"`
-					Text        string `json:"text"`
-					Thinking    string `json:"thinking"`
-					Signature   string `json:"signature"`
-					PartialJSON string `json:"partial_json"`
-					StopReason  string `json:"stop_reason"`
+					Type             string          `json:"type"`
+					Text             string          `json:"text"`
+					Thinking         string          `json:"thinking"`
+					Signature        string          `json:"signature"`
+					PartialJSON      string          `json:"partial_json"`
+					StopReason       string          `json:"stop_reason"`
+					SafeguardResults json.RawMessage `json:"safeguard_results"`
 				} `json:"delta"`
 				Usage cliUsage `json:"usage"`
 			} `json:"event"`
@@ -1474,11 +1591,12 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			return
 		}
 		var whole struct {
-			ID         string   `json:"id"`
-			Model      string   `json:"model"`
-			StopReason string   `json:"stop_reason"`
-			Usage      cliUsage `json:"usage"`
-			Content    []struct {
+			ID               string          `json:"id"`
+			Model            string          `json:"model"`
+			StopReason       string          `json:"stop_reason"`
+			Usage            cliUsage        `json:"usage"`
+			SafeguardResults json.RawMessage `json:"safeguard_results"`
+			Content          []struct {
 				Type      string          `json:"type"`
 				Text      string          `json:"text"`
 				Thinking  string          `json:"thinking"`
@@ -1598,7 +1716,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 					}
 				}
 			}
-			r.emit(Event{Kind: KUsage, Usage: usage(whole.Usage), RequestID: reqID})
+			r.emit(Event{Kind: KUsage, Usage: usage(whole.Usage), RequestID: reqID, SafeguardResults: whole.SafeguardResults})
 			if quiet != nil {
 				quiet.Stop()
 			}
@@ -1657,7 +1775,7 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 				}
 			}
 		case "message_delta":
-			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage), RequestID: reqID})
+			r.emit(Event{Kind: KUsage, Usage: usage(e.Usage), RequestID: reqID, SafeguardResults: e.Delta.SafeguardResults})
 			if e.Delta.StopReason != "" {
 				stopped = true
 			}
@@ -2299,6 +2417,7 @@ func (r *subscriptionRun) finish() {
 		return
 	}
 	r.closed = true
+	r.resuming = false
 	if r.timer != nil {
 		r.timer.Stop()
 	}
@@ -2445,6 +2564,15 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
 	req.Model = model
+	if len(req.Safeguards) > 0 {
+		req.SafeguardBeta = "dangerous-tool-use-2026-09-03"
+		for _, beta := range strings.Split(r.Header.Get("anthropic-beta"), ",") {
+			if beta = strings.TrimSpace(beta); strings.HasPrefix(beta, "dangerous-tool-use-") {
+				req.SafeguardBeta = beta
+				break
+			}
+		}
+	}
 	// its model searches the web with magpie's tool, which magpie answers
 	var search Tool
 	if req.WebSearch && !searching(r.Context()) {
@@ -2455,6 +2583,10 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	}
 
 	run, results, how := s.subscription.match(req)
+	if run != nil && !run.claimResume() {
+		msg := "the agent's turn is already being resumed"
+		return writeError(w, from, http.StatusConflict, msg), msg
+	}
 	// the client rewrote the conversation since the run's last reply, as Pi
 	// does compacting it mid-turn: the run's agent holds the one from before,
 	// would answer from it, and tell the client a context as large as ever,
@@ -2476,7 +2608,14 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	}
 	var events <-chan Event
 	if run != nil {
-		if events, err = run.continueWith(results, more); err != nil {
+		if name == "Claude Code" {
+			err = run.setSafeguards(req)
+		}
+		if err == nil {
+			events, err = run.continueWith(results, more)
+		}
+		if err != nil {
+			run.abort()
 			// it ended while it waited: a new one is told the whole
 			// conversation
 			run, how = nil, runExpired

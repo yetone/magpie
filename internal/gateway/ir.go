@@ -127,6 +127,9 @@ type Request struct {
 	// Anthropic upstream: a relay that serves only Claude Code turns a
 	// request without it away (#359).
 	Metadata json.RawMessage
+	// Safeguards are the caller's safety context, opaque to the gateway.
+	Safeguards    json.RawMessage
+	SafeguardBeta string
 	// Schema is the JSON schema an Anthropic client asked the answer to fit
 	// (output_config.format, of type json_schema).
 	Schema json.RawMessage
@@ -180,10 +183,11 @@ type Event struct {
 	// Code: for KError, the source error or safety-filter code (rate_limit,
 	// server_error, bio_policy, content_filter…); RequestID: the vendor's id for the
 	// request the event is of, when it is known by then
-	Code      string
-	RequestID string
-	Usage     Usage
-	Hits      []Hit
+	Code             string
+	RequestID        string
+	Usage            Usage
+	Hits             []Hit
+	SafeguardResults json.RawMessage
 }
 
 // Usage counts tokens.
@@ -244,11 +248,12 @@ func (u *Usage) add(v Usage) {
 
 // Result is a whole reply, for non-streaming clients.
 type Result struct {
-	ID    string
-	Model string
-	Parts []Part
-	Stop  string
-	Usage Usage
+	ID               string
+	Model            string
+	Parts            []Part
+	Stop             string
+	Usage            Usage
+	SafeguardResults json.RawMessage
 }
 
 // collector assembles a Result from events. Encoders use the same logic to
@@ -281,6 +286,9 @@ func (c *collector) closeTool() {
 }
 
 func (c *collector) add(ev Event) {
+	if len(ev.SafeguardResults) > 0 {
+		c.res.SafeguardResults = ev.SafeguardResults
+	}
 	switch ev.Kind {
 	case KStart:
 		c.res.ID, c.res.Model = ev.MsgID, ev.Model
