@@ -137,6 +137,8 @@ function keepIcons(...roots) {
     keptIcons.get(e.dataset.icon).push(e);
   }
 }
+const pngIcons = new Set(["crush", "zcode", "alma", "hanako", "cindy", "typesafe", "atomcode"]);
+
 function icon(name) {
   const kept = keptIcons?.get(name || "")?.shift();
   if (kept) { kept.removeAttribute("title"); return kept; }
@@ -158,9 +160,9 @@ function icon(name) {
     return e;
   }
   if (name) {
-    if (name.endsWith("-color") || name === "crush" || name === "zcode" || name === "alma" || name === "hanako" || name === "cindy" || name === "typesafe" || name === "atomcode") {
+    if (name.endsWith("-color") || pngIcons.has(name)) {
       const img = el("img");
-      img.src = `icons/${name}.${name === "crush" || name === "zcode" || name === "alma" || name === "hanako" || name === "cindy" || name === "typesafe" || name === "atomcode" ? "png" : "svg"}`;
+      img.src = `icons/${name}.${pngIcons.has(name) ? "png" : "svg"}`;
       img.alt = "";
       img.draggable = false;
       e.append(img);

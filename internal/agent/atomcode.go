@@ -163,24 +163,42 @@ func atomcode(home string) *Agent {
 				}
 				// magpie was in use: the defaults the user had come back
 				// where AtomCode still has them
-				if p := unstash(key + ":default_provider"); p != "" && !usesMagpie(p) {
-					edit.SetTOMLTop(path, edit.KV{Path: "default_provider", Value: p})
+				saved := stashLoad()
+				p, m := saved[key+":default_provider"], saved[key+":default_model"]
+				if p != "" && !usesMagpie(p) {
+					if err := edit.SetTOMLTop(path, edit.KV{Path: "default_provider", Value: p}); err != nil {
+						return err
+					}
 				} else {
-					edit.DelTOMLTop(path, "default_provider")
+					if err := edit.DelTOMLTop(path, "default_provider"); err != nil {
+						return err
+					}
 				}
 				if v == "" {
-					if m := unstash(key + ":default_model"); m != "" && !usesMagpie(m) && own(m) {
-						edit.SetTOMLTop(path, edit.KV{Path: "default_model", Value: m})
+					if m != "" && !usesMagpie(m) && own(m) {
+						if err := edit.SetTOMLTop(path, edit.KV{Path: "default_model", Value: m}); err != nil {
+							return err
+						}
 					} else {
-						edit.DelTOMLTop(path, "default_model")
+						if err := edit.DelTOMLTop(path, "default_model"); err != nil {
+							return err
+						}
 					}
-					return dropMagpie()
+					if err := dropMagpie(); err != nil {
+						return err
+					}
+					forget(key + ":default_provider", key + ":default_model")
+					return nil
 				}
 				// a model of the user's own picked: it is the current one
 				if err := edit.SetTOMLTop(path, edit.KV{Path: "default_model", Value: v}); err != nil {
 					return err
 				}
-				return dropMagpie()
+				if err := dropMagpie(); err != nil {
+					return err
+				}
+				forget(key + ":default_provider", key + ":default_model")
+				return nil
 			},
 			Options: func(c map[string]string) []Option {
 				return append(atomcodeOwnModels(path, c["model"]), viaMagpie("atomcode", magpieID+"/")...)
@@ -218,7 +236,7 @@ func atomcode(home string) *Agent {
 						}
 					}
 				}
-				return static("low", "medium", "high")
+				return nil
 			},
 		}},
 	}, path)
