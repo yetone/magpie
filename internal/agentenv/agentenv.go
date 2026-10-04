@@ -63,9 +63,13 @@ var Vars = []string{
 	"FACTORY_HOME_OVERRIDE", "WINDSURF_API_SERVER_URL", "ZCODE_CREDENTIAL_SECRET",
 }
 
-// NotPaths are the Vars that name no folder or file: a profile's name, a
-// server's address, a secret.
+// NotPaths are the Vars that name no folder or file under the working
+// folder: a profile's name, a server's address, a secret, or a name its
+// agent puts under a folder of its own (PI_CONFIG_DIR under the home,
+// OPENCODE_DB in OpenCode's data folder), which a relative value is meant
+// for.
 var NotPaths = map[string]bool{
 	"PI_PROFILE": true, "OMP_PROFILE": true,
 	"WINDSURF_API_SERVER_URL": true, "ZCODE_CREDENTIAL_SECRET": true,
+	"PI_CONFIG_DIR": true, "OPENCODE_DB": true,
 }
