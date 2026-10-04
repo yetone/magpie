@@ -337,7 +337,8 @@ func writeYAML(path string, root *yaml.Node) error {
 	if _, err := parseYAMLDocument(buf.Bytes()); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
-	return WriteAtomic(path, buf.Bytes())
+	orig, _ := Read(path)
+	return WriteAtomic(path, keepCRLF(buf.Bytes(), orig))
 }
 
 func lookupYAML(n *yaml.Node, parts []string) *yaml.Node {
