@@ -320,6 +320,15 @@ var presets = []PresetDef{
 		Website: "https://openrouter.ai", KeysURL: "https://openrouter.ai/keys",
 		// app attribution, for OpenRouter's rankings and analytics
 		HeaderHints: []string{"HTTP-Referer", "X-OpenRouter-Title"}},
+	// TokenDance's multi-provider gateway. Its public model list says which
+	// of Chat Completions, Responses and Anthropic Messages each model takes
+	// in supported_protocols (catalog/live.go).
+	{ID: "tokendance", Name: "TokenDance", Icon: "tokendance", Kind: KindRelay,
+		Chat: "https://tokendance.space/gateway/v1", Responses: "https://tokendance.space/gateway/v1", Anthropic: "https://tokendance.space/gateway",
+		Note:    "词元跳动 · multi-provider gateway",
+		Website: "https://tokendance.space", KeysURL: "https://tokendance.space/keys",
+		// optional per-request application attribution
+		HeaderHints: []string{"X-App-URL"}},
 	{ID: "opencode-go", Name: "OpenCode Go", Icon: "opencode", Kind: KindRelay, Catalog: "opencode-go",
 		Chat: "https://opencode.ai/zen/go/v1", Responses: "https://opencode.ai/zen/go/v1", Anthropic: "https://opencode.ai/zen/go",
 		Note:    "open coding models, $10/month",

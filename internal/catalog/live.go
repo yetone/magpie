@@ -302,6 +302,15 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		}
 		input := imageInput(r.Modalities.Input)
 		apis := EndpointAPIs(r.Endpoints)
+		protocols := ProtocolAPIs(r.Protocols)
+		if len(protocols) > 0 {
+			apis = protocols
+		} else if len(r.Protocols) > 0 && !drawer && !films {
+			// The vendor explicitly listed protocols, but none is a text API
+			// magpie speaks upstream (an embeddings- or Google-only model).
+			// Do not offer it as a chat model and then try an unrelated API.
+			continue
+		}
 		if native := EndpointAPIs(r.Native); len(native) > 0 {
 			apis = native
 		}
@@ -362,6 +371,11 @@ type liveModel struct {
 	// Code's Claude models on /messages alone, its open ones on
 	// /chat/completions and /responses
 	Endpoints []string `json:"supported_endpoints"`
+	// Protocols are the protocol-qualified capabilities a model is served
+	// on, as TokenDance's public list names them: openai:chat-completions,
+	// openai:responses and anthropic:messages. Protocols unknown to magpie
+	// (Google generateContent, embeddings and media APIs) are left out.
+	Protocols []string `json:"supported_protocols"`
 	// the context window, where the list tells it (OpenRouter, Command
 	// Code); any, as a vendor's odd value mustn't lose the whole list
 	ContextLength any `json:"context_length"`
@@ -413,6 +427,28 @@ func EndpointAPIs(endpoints []string) []string {
 		case "/responses":
 			api = "responses"
 		case "/messages":
+			api = "anthropic"
+		}
+		if api != "" && !slices.Contains(out, api) {
+			out = append(out, api)
+		}
+	}
+	return out
+}
+
+// ProtocolAPIs names the APIs in a model list's supported_protocols using
+// the same names EndpointAPIs returns. nil means the list named none magpie
+// can speak, so a provider without this field keeps its existing behavior.
+func ProtocolAPIs(protocols []string) []string {
+	var out []string
+	for _, p := range protocols {
+		var api string
+		switch strings.ToLower(strings.TrimSpace(p)) {
+		case "openai:chat-completions":
+			api = "chat"
+		case "openai:responses":
+			api = "responses"
+		case "anthropic:messages":
 			api = "anthropic"
 		}
 		if api != "" && !slices.Contains(out, api) {
