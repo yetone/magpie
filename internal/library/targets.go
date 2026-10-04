@@ -260,6 +260,14 @@ func targetOf(a *agent.Agent) *Target {
 		// on for each agent and tool, and fx's mcp.json, which one entry it
 		// refuses makes it read none of, isn't one magpie could try.
 		t.Skills = filepath.Join(a.Dir, "skills")
+	case "atomcode":
+		// AtomCode reads ~/.atomcode/ATOMCODE.md before every conversation
+		// (its ATOMCODE.md, beside AGENTS.md and CLAUDE.md), its MCP servers
+		// from mcp.json in its folder (`atomcode mcp add --global`, the same
+		// mcpServers as omp's) and its skills from skills/ there
+		t.Instructions = filepath.Join(a.Dir, "ATOMCODE.md")
+		t.MCP = &mcpFile{Path: filepath.Join(a.Dir, "mcp.json"), Format: fmtOmp}
+		t.Skills = filepath.Join(a.Dir, "skills")
 	case "claude-desktop":
 		// Claude Desktop reads only commands from its file: a remote server
 		// is added in its own Connectors settings. In its 3p mode (magpie's

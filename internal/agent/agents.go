@@ -99,6 +99,7 @@ func All() []*Agent {
 		pencil(home),
 		t3code(home),
 		hanako(home),
+		atomcode(home),
 		alma(),
 		cindy(),
 	}, wslAgents()...)

@@ -133,8 +133,9 @@ func TestCrushModelsCarryMaxTokens(t *testing.T) {
 // 384000 against 128000 of context) is cut to the window for every agent
 // magpie hands an output limit; one whose window isn't known keeps its
 // output. ZCode and WorkBuddy cap it at zcodeMaxOutput besides, Crush falls
-// back to 16384 without a known output, and OpenCode is handed no limit
-// without a window.
+// back to 16384 without a known output, OpenCode is handed no limit without
+// a window, and AtomCode, told a 128000 window when the model's isn't known,
+// is cut to that.
 func TestMaxTokensWithinContextWindow(t *testing.T) {
 	home := syncHome(t)
 	check := func(limit string, want int) {
@@ -151,6 +152,11 @@ func TestMaxTokensWithinContextWindow(t *testing.T) {
 		opencode, _ := json.Marshal(magpieProviderJSON("opencode"))
 		zc, _ := json.Marshal(zcodeProviderJSON(filepath.Join(home, "none.json")))
 		crush, _ := json.Marshal(magpieProviderJSON("crush"))
+		atomcode := filepath.Join(t.TempDir(), "config.toml")
+		if err := edit.SetTOMLTables(atomcode, nil, atomcodeTables()); err != nil {
+			t.Fatal(err)
+		}
+		atomcodeCfg, _ := os.ReadFile(atomcode)
 		rules, wb := filepath.Join(t.TempDir(), "provider_config.json"), filepath.Join(t.TempDir(), "models.json")
 		if err := zcodeRules(rules, true); err != nil {
 			t.Fatal(err)
@@ -161,6 +167,10 @@ func TestMaxTokensWithinContextWindow(t *testing.T) {
 		zcRules, _ := os.ReadFile(rules)
 		wbModels, _ := os.ReadFile(wb)
 		n, capped := strconv.Itoa(want), strconv.Itoa(min(want, zcodeMaxOutput))
+		told := n
+		if !strings.Contains(limit, "context") {
+			told = strconv.Itoa(min(want, atomcodeContext))
+		}
 		wants := map[string][2]string{
 			"pi":          {string(pi), `"maxTokens":` + n},
 			"cline":       {string(cline), `"maxTokens":` + n},
@@ -173,6 +183,7 @@ func TestMaxTokensWithinContextWindow(t *testing.T) {
 			"crush":       {string(crush), `"default_max_tokens":` + n},
 			"zcode rules": {string(zcRules), `"max":` + capped},
 			"workbuddy":   {string(wbModels), `"maxOutputTokens": ` + capped},
+			"atomcode":    {string(atomcodeCfg), "max_tokens = " + told},
 		}
 		if strings.Contains(limit, "context") {
 			wants["opencode"] = [2]string{string(opencode), `"output":` + n}
