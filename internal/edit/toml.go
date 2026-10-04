@@ -535,7 +535,8 @@ func tomlParseError(p *unstable.Parser, err error) error {
 // also checks duplicate keys and conflicting definitions; it never rewrites
 // the document, so comments and formatting survive validation unchanged.
 func writeTOML(path string, lines []string) error {
-	data := []byte(joinLines(lines))
+	orig, _ := Read(path)
+	data := []byte(joinLinesLike(lines, string(orig)))
 	if err := validateTOML(data); err != nil {
 		return fmt.Errorf("%s: edited TOML is invalid: %w", path, err)
 	}

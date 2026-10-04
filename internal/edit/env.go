@@ -55,7 +55,7 @@ func SetEnvFile(path string, kvs ...KV) error {
 			return "", false
 		})
 	}
-	return WriteAtomic(path, []byte(joinLines(lines)))
+	return WriteAtomic(path, []byte(joinLinesLike(lines, string(raw))))
 }
 
 // DelEnvFile removes keys from a dotenv file.

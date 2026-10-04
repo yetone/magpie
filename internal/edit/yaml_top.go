@@ -217,7 +217,8 @@ func sameYAMLValue(a, b *yaml.Node) bool {
 }
 
 func writeYAMLTop(path string, lines []string) error {
-	raw := []byte(joinLines(lines))
+	orig, _ := Read(path)
+	raw := []byte(joinLinesLike(lines, string(orig)))
 	if _, _, err := parseYAMLTop(raw); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
