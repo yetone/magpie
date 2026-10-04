@@ -74,6 +74,7 @@ func All() []*Agent {
 		openChamber(home, cfg),
 		mimocode(home, cfg),
 		pi(home),
+		aside(home),
 		omo(home),
 		goose(home, cfg),
 		cursor(home),

@@ -127,11 +127,13 @@ func (p Provider) ModelTest() string {
 // AsksDecideModels reports whether each of p's decision models can be
 // sent a System One question of its own (TestModels): where the API is
 // System One's, TypeSafe's or a gateway's that serves it as it is
-// (Vercel's TypeSafe API, OpenRouter's), not Vercel's evaluation models
-// nor Workers AI, which wrap it their own way.
+// (Vercel's TypeSafe API, OpenRouter's), or Workers AI's, which DecideAsk
+// wraps it for (ARNO on Discord: cloudflare-jev's models couldn't be
+// tested from their right-click); not Vercel's evaluation models, which
+// name the model in headers of their own.
 func (p Provider) AsksDecideModels() bool {
 	v := p.DecideVia()
-	return p.Decides() && (v == ViaSystemOne || v == ViaVercel)
+	return p.Decides() && (v == ViaSystemOne || v == ViaVercel || v == ViaCloudflare)
 }
 
 func tinyBody(q Provider, proto Protocol, model string) (url, body string) {

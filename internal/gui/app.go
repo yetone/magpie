@@ -438,6 +438,9 @@ func Run(version string, showMain bool, link string) error {
 	// the quick panel by the icon, or the main window if the user would
 	// rather (Settings → Tray icon)
 	h.tray.OnClick(func() {
+		if cmdClick() {
+			return // Command-drag moves the icon; the system handles it
+		}
 		if runtime.GOOS == "darwin" {
 			go h.flap()
 		}

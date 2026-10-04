@@ -131,10 +131,10 @@ func TestModelTest(t *testing.T) {
 		{Provider{ID: "copilot", Chat: "https://api.githubcopilot.com", Account: &Account{Agent: "copilot"}}, ""},
 		{Provider{ID: "kiro", Key: "k", Account: &Account{Agent: "kiro"}}, "own-api"},
 		{Provider{ID: "cursor", Account: &Account{Agent: "cursor"}}, "own-api"},
-		// System One's models are each asked a question of their own;
-		// Workers AI's envelope isn't System One's
+		// System One's models are each asked a question of their own, and
+		// Workers AI's in its envelope
 		{Provider{ID: "jev", Decide: "https://decide.test/v1"}, ""},
-		{Provider{ID: "cf", Decide: "https://api.cloudflare.com/client/v4/accounts/a/ai/run"}, "decide"},
+		{Provider{ID: "cf", Decide: "https://api.cloudflare.com/client/v4/accounts/a/ai/run"}, ""},
 	} {
 		if got := c.p.ModelTest(); got != c.want {
 			t.Errorf("%s: %q, want %q", c.p.ID, got, c.want)

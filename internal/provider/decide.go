@@ -598,6 +598,8 @@ func (p Provider) AskSystemOne(ctx context.Context, model string) error {
 	body, _ := json.Marshal(map[string]any{"model": model,
 		"state":     map[string]any{"text": "ping"},
 		"questions": map[string]any{"ok": map[string]any{"type": "noul", "instructions": "Is this a test?"}}})
+	via := p.DecideVia()
+	body = DecideAsk(via, model, body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(string(body)))
 	if err != nil {
 		return err
@@ -615,6 +617,7 @@ func (p Provider) AskSystemOne(ctx context.Context, model string) error {
 	if res.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s: %s", p.Name, APIError(b, res.Status))
 	}
+	b = DecideAnswer(via, b)
 	var out struct {
 		Answers map[string]json.RawMessage `json:"answers"`
 	}

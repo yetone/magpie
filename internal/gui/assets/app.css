@@ -2850,3 +2850,25 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
   .row.agent.conn > .field.ag-start, .row.agent.conn > .who + .field.ag-start { order: 1; flex: 1 1 100%; width: auto; margin: 9px 0 0 34px; }
   .row.agent.conn > .ag-exp { order: 2; }
 }
+
+/* Checkboxes are drawn as the app's own, not the system's (ARNO on
+   Discord: the Sessions page's white boxes stood out in dark mode); a
+   page's own margins stay. */
+input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 14px; height: 14px; flex: none;
+  display: inline-grid; place-content: center; vertical-align: middle;
+  border: 1px solid var(--faint); border-radius: 4px;
+  background: var(--card); color: var(--accent-fg);
+}
+input[type="checkbox"]:hover:not(:disabled) { border-color: var(--muted); }
+input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate { background: var(--accent); border-color: var(--accent); }
+input[type="checkbox"]::before {
+  content: ""; width: 10px; height: 10px; background: currentColor; transform: scale(0);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2l2 2L8 3' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5.2l2 2L8 3' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+input[type="checkbox"]:checked::before { transform: scale(1); }
+input[type="checkbox"]:indeterminate::before { transform: scale(1); -webkit-mask: none; mask: none; width: 8px; height: 1.6px; border-radius: 1px; }
+input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type="checkbox"]:disabled { opacity: .45; }

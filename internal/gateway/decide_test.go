@@ -729,7 +729,7 @@ func TestJevConfidence(t *testing.T) {
 		{map[string]any{"a": 0.5, "b": 0.5}, 0},
 		{map[string]any{"a": 1.0}, 1},
 	} {
-		if got := confidence(c.ps); got < c.want-0.001 || got > c.want+0.001 {
+		if got := provider.Confidence(c.ps); got < c.want-0.001 || got > c.want+0.001 {
 			t.Errorf("%v: %v, want %v", c.ps, got, c.want)
 		}
 	}
