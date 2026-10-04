@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -56,15 +57,12 @@ func TestAtomcodeWiring(t *testing.T) {
 	if d := a.Drift(); d != nil {
 		t.Fatalf("drift right after a set: %+v\n%s", d, cfg)
 	}
-	// the effort is kept with the model table
-	if err := a.Apply("effort", "high"); err != nil {
+	// an AtomCode-owned effort is kept with the model table
+	if err := edit.SetTOMLKey(path, atomcodeTable("magpie/fake/m1"), "reasoning_effort", "high"); err != nil {
 		t.Fatal(err)
 	}
 	if v := a.Field("effort").Get(); v != "high" {
 		t.Fatalf("effort reads %q", v)
-	}
-	if tbl, _ := edit.GetTOMLTable(path, atomcodeTable("magpie/fake/m1")); tbl["reasoning_effort"] != "high" {
-		t.Fatalf("reasoning_effort: %v", tbl)
 	}
 	if err := a.Apply("effort", ""); err != nil {
 		t.Fatal(err)
@@ -154,6 +152,18 @@ func TestAtomcodeSync(t *testing.T) {
 	if err := a.Apply("model", "magpie/fake/m1"); err != nil {
 		t.Fatal(err)
 	}
+	if err := edit.SetTOMLKey(path, atomcodeTable("magpie/fake/m1"), "reasoning_effort", "high"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	config := strings.ReplaceAll(string(b), `[provider_accounts."magpie"]`, `[provider_accounts.magpie]`)
+	config = strings.ReplaceAll(config, `[models."magpie/fake/m1"]`, `[models.'magpie/fake/m1']`)
+	if err := os.WriteFile(path, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if d := a.Drift(); d != nil {
+		t.Fatalf("valid unquoted account/single-quoted model reported drift: %+v", d)
+	}
 	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m1", "m2", "m3"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -166,5 +176,78 @@ func TestAtomcodeSync(t *testing.T) {
 	}
 	if v, _ := edit.GetTOMLTop(path, "default_model"); v != "magpie/fake/m1" {
 		t.Fatalf("Sync moved the default: %q", v)
+	}
+	if !strings.Contains(string(cfg), `reasoning_effort = "high"`) {
+		t.Fatalf("Sync dropped the selected effort:\n%s", cfg)
+	}
+	if strings.Count(string(cfg), "[provider_accounts.magpie]") != 0 || strings.Count(string(cfg), `[provider_accounts."magpie"]`) != 1 {
+		t.Fatalf("Sync did not canonicalize the exact magpie account:\n%s", cfg)
+	}
+	config = strings.ReplaceAll(string(cfg), `[provider_accounts."magpie"]`, `[provider_accounts.magpie]`)
+	config = strings.ReplaceAll(config, `[models."magpie/fake/m1"]`, `[models.'magpie/fake/m1']`)
+	if err := os.WriteFile(path, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Apply("model", ""); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ = os.ReadFile(path)
+	if strings.Contains(string(cfg), "[provider_accounts.magpie]") || strings.Contains(string(cfg), gateway.TokenFor("atomcode")) {
+		t.Fatalf("clearing left the unquoted magpie account or key behind:\n%s", cfg)
+	}
+}
+
+func TestAtomcodeLegacyProvidersArePickableAndRestored(t *testing.T) {
+	home := t.TempDir()
+	path := filepath.Join(home, ".atomcode", "config.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`default_provider = "legacy"
+default_model = "legacy"
+
+[providers.legacy]
+type = "openai"
+model = "legacy-model"
+base_url = "https://example.com/v1"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	atomcodeSaveFake(t)
+	a := atomcode(home)
+	if !slices.ContainsFunc(a.Field("model").Options(a.Values()), func(o Option) bool { return o.Value == "legacy" }) {
+		t.Fatal("legacy provider missing from model picker")
+	}
+	if err := a.Apply("model", "magpie/fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Apply("model", ""); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetTOMLTop(path, "default_model"); v != "legacy" {
+		t.Fatalf("legacy default_model not restored: %q", v)
+	}
+	if err := a.Apply("model", "magpie/fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Apply("model", "legacy"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetTOMLTop(path, "default_provider"); v != "legacy" {
+		t.Fatalf("legacy provider was not selected: %q", v)
+	}
+	if v, _ := edit.GetTOMLTop(path, "default_model"); v != "" {
+		t.Fatalf("legacy selection left a default_model override: %q", v)
+	}
+}
+
+func TestAtomcodeEffortLevelsMatchAgentSupport(t *testing.T) {
+	got := atomcodeSupportedEfforts([]string{"none", "minimal", "low", "medium", "high", "xhigh", "ultra", "max"})
+	want := []string{"low", "medium", "high", "xhigh", "max"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("supported effort levels = %v, want %v", got, want)
+	}
+	if got := atomcodeSupportedEfforts(nil); len(got) != 0 {
+		t.Fatalf("non-reasoning model has effort options: %v", got)
 	}
 }

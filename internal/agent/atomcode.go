@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -28,11 +29,13 @@ import (
 )
 
 // atomcodeAccount is the account table magpie writes, and atomcodeModels the
-// header prefix of every model table it writes. Both are quoted, so a prefix
-// names magpie's alone ("provider_accounts.magpie" would also cover a user's
-// "magpie-2").
+// header prefix of every model table it writes.
 var atomcodeAccount = `provider_accounts."` + magpieID + `"`
 var atomcodeModels = `models."` + magpieID + "/"
+var atomcodeTablePrefixes = []string{atomcodeModels, "models.'" + magpieID + "/", "models." + magpieID + "/"}
+var atomcodeAccountNames = []string{atomcodeAccount, "provider_accounts." + magpieID, "provider_accounts.'" + magpieID + "'"}
+
+var atomcodeEffortLevels = []string{"low", "medium", "high", "xhigh", "max"}
 
 // atomcodeContext is what AtomCode is told of a model whose context magpie
 // doesn't know: it has to be told one, and compacts as it nears it.
@@ -70,7 +73,10 @@ func atomcode(home string) *Agent {
 			return false
 		}
 		for _, t := range ts {
-			if name, ok := atomcodeModelName(t); ok && name == k {
+			if name, ok := kimiModelKey(t); ok && name == k {
+				return true
+			}
+			if name, ok := atomcodeProviderName(t); ok && name == k {
 				return true
 			}
 		}
@@ -86,11 +92,20 @@ func atomcode(home string) *Agent {
 			edit.KV{Path: "default_provider", Value: v},
 			edit.KV{Path: "default_model", Value: v})
 	}
+	setOwn := func(v string) error {
+		if atomcodeHasLegacyProvider(path, v) {
+			if err := edit.DelTOMLTop(path, "default_model"); err != nil {
+				return err
+			}
+			return edit.SetTOMLTop(path, edit.KV{Path: "default_provider", Value: v})
+		}
+		return edit.SetTOMLTop(path, edit.KV{Path: "default_model", Value: v})
+	}
 	writeMagpie := func() error {
-		return edit.SetTOMLTables(path, []string{atomcodeAccount, atomcodeModels}, atomcodeTables())
+		return edit.SetTOMLTablesMatching(path, atomcodeAccountNames, atomcodeTablePrefixes, atomcodeTables(path))
 	}
 	dropMagpie := func() error {
-		return edit.SetTOMLTables(path, []string{atomcodeAccount, atomcodeModels}, nil)
+		return edit.SetTOMLTablesMatching(path, atomcodeAccountNames, atomcodeTablePrefixes, nil)
 	}
 	return atomic(&Agent{
 		ID: "atomcode", Name: "AtomCode", Icon: "atomcode",
@@ -102,7 +117,7 @@ func atomcode(home string) *Agent {
 				return err
 			}
 			for _, t := range ts {
-				if strings.HasPrefix(t, atomcodeAccount) || strings.HasPrefix(t, atomcodeModels) {
+				if atomcodeAccountTable(t) || atomcodeMagpieModelTable(t) {
 					return writeMagpie()
 				}
 			}
@@ -119,14 +134,14 @@ func atomcode(home string) *Agent {
 			if !usesMagpie(k) {
 				return ""
 			}
-			t, err := edit.GetTOMLTable(path, atomcodeTable(k))
+			t, _, err := atomcodeModelValues(path, k)
 			if err != nil {
 				return err.Error()
 			}
 			if t == nil {
 				return "AtomCode's [models." + strconv.Quote(k) + "] (config.toml) is gone, so it no longer reaches magpie"
 			}
-			a, err := edit.GetTOMLTable(path, atomcodeAccount)
+			a, err := atomcodeAccountValues(path)
 			if err != nil {
 				return err.Error()
 			}
@@ -159,7 +174,7 @@ func atomcode(home string) *Agent {
 					if v == "" {
 						return edit.DelTOMLTop(path, "default_provider", "default_model")
 					}
-					return edit.SetTOMLTop(path, edit.KV{Path: "default_model", Value: v})
+					return setOwn(v)
 				}
 				// magpie was in use: the defaults the user had come back
 				// where AtomCode still has them
@@ -187,17 +202,17 @@ func atomcode(home string) *Agent {
 					if err := dropMagpie(); err != nil {
 						return err
 					}
-					forget(key + ":default_provider", key + ":default_model")
+					forget(key+":default_provider", key+":default_model")
 					return nil
 				}
 				// a model of the user's own picked: it is the current one
-				if err := edit.SetTOMLTop(path, edit.KV{Path: "default_model", Value: v}); err != nil {
+				if err := setOwn(v); err != nil {
 					return err
 				}
 				if err := dropMagpie(); err != nil {
 					return err
 				}
-				forget(key + ":default_provider", key + ":default_model")
+				forget(key+":default_provider", key+":default_model")
 				return nil
 			},
 			Options: func(c map[string]string) []Option {
@@ -212,7 +227,7 @@ func atomcode(home string) *Agent {
 				if !usesMagpie(k) {
 					return ""
 				}
-				t, err := edit.GetTOMLTable(path, atomcodeTable(k))
+				t, _, err := atomcodeModelValues(path, k)
 				if err != nil || t == nil {
 					return ""
 				}
@@ -223,16 +238,34 @@ func atomcode(home string) *Agent {
 				if !usesMagpie(k) {
 					return fmt.Errorf("pick AtomCode's model first; the effort is kept with its model")
 				}
-				if v == "" {
-					return edit.DelTOMLKey(path, atomcodeTable(k), "reasoning_effort")
+				_, table, err := atomcodeModelValues(path, k)
+				if err != nil {
+					return err
 				}
-				return edit.SetTOMLKey(path, atomcodeTable(k), "reasoning_effort", v)
+				if table == "" {
+					table = atomcodeTable(k)
+				}
+				if v == "" {
+					return edit.DelTOMLKey(path, table, "reasoning_effort")
+				}
+				ref := strings.TrimPrefix(k, magpieID+"/")
+				var offered []string
+				for _, m := range magpieModels("atomcode") {
+					if m.ID == ref {
+						offered = atomcodeSupportedEfforts(m.Efforts)
+						break
+					}
+				}
+				if !slices.Contains(offered, v) {
+					return fmt.Errorf("AtomCode does not support effort %q for this model", v)
+				}
+				return edit.SetTOMLKey(path, table, "reasoning_effort", v)
 			},
 			Options: func(c map[string]string) []Option {
 				if ref, ok := strings.CutPrefix(c["model"], magpieID+"/"); ok {
 					for _, m := range magpieModels("atomcode") {
-						if m.ID == ref && len(m.Efforts) > 0 {
-							return static(m.Efforts...)
+						if m.ID == ref {
+							return static(atomcodeSupportedEfforts(m.Efforts)...)
 						}
 					}
 				}
@@ -248,7 +281,8 @@ func atomcode(home string) *Agent {
 // limit, whether it sees images, and the reasoning levels its picker offers.
 // No reasoning_effort is picked for the user — the vendor's default stands
 // until they choose one.
-func atomcodeTables() []edit.Table {
+func atomcodeTables(path string) []edit.Table {
+	efforts := atomcodeExistingEfforts(path)
 	out := []edit.Table{{Name: atomcodeAccount, KVs: []edit.KV{
 		{Path: "provider", Value: "openai"},
 		{Path: "base_url", Value: gatewayV1()},
@@ -274,45 +308,36 @@ func atomcodeTables() []edit.Table {
 		}
 		if m.Images {
 			kvs = append(kvs, edit.KV{Path: "supports_vision", Value: true})
+		} else {
+			kvs = append(kvs, edit.KV{Path: "supports_vision", Value: false})
 		}
-		if len(m.Efforts) > 0 {
+		supported := atomcodeSupportedEfforts(m.Efforts)
+		if len(supported) > 0 {
 			var levels []string
-			for _, e := range m.Efforts {
+			for _, e := range supported {
 				levels = append(levels, strconv.Quote(e))
 			}
 			kvs = append(kvs, edit.KV{Path: "reasoning_effort_levels", Value: edit.Raw("[" + strings.Join(levels, ", ") + "]")})
+		}
+		if effort := efforts[atomcodeKey(m.ID)]; effort != "" {
+			kvs = append(kvs, edit.KV{Path: "reasoning_effort", Value: effort})
 		}
 		out = append(out, edit.Table{Name: atomcodeTable(atomcodeKey(m.ID)), KVs: kvs})
 	}
 	return out
 }
 
-// atomcodeModelName decodes one model table's key, bare or quoted,
-// rejecting nested tables.
-func atomcodeModelName(table string) (string, bool) {
-	k, ok := strings.CutPrefix(table, "models.")
-	if !ok {
-		return "", false
-	}
-	if u, err := strconv.Unquote(k); err == nil {
-		return u, true
-	}
-	if len(k) >= 2 && k[0] == '\'' && k[len(k)-1] == '\'' {
-		k = k[1 : len(k)-1]
-		return k, !strings.Contains(k, "'")
-	}
-	return k, k != "" && !strings.ContainsAny(k, ".\"'")
-}
-
 // atomcodeOwnModels are the models of the user's own in AtomCode's config,
-// and the current one: its CodingPlan sign-in's and any account they added,
-// each shown under its model table's key.
+// and the current one: both new model tables and legacy providers.* entries.
 func atomcodeOwnModels(path, cur string) []Option {
 	tables, _ := edit.TOMLTables(path)
 	seen := map[string]bool{}
 	var out []Option
 	for _, t := range tables {
-		k, ok := atomcodeModelName(t)
+		k, ok := kimiModelKey(t)
+		if !ok {
+			k, ok = atomcodeProviderName(t)
+		}
 		if !ok || seen[k] || usesMagpie(k) {
 			continue
 		}
@@ -322,10 +347,98 @@ func atomcodeOwnModels(path, cur string) []Option {
 	}
 	if cur != "" && !seen[cur] && !usesMagpie(cur) {
 		var icon string
-		if m, err := edit.GetTOMLTable(path, atomcodeTable(cur)); err == nil {
+		if m, _, err := atomcodeModelValues(path, cur); err == nil {
 			icon = modelIcon("", m["model"])
 		}
 		out = append([]Option{{Value: cur, Icon: icon}}, out...)
 	}
 	return group("AtomCode", out)
+}
+
+func atomcodeProviderName(table string) (string, bool) {
+	k, ok := strings.CutPrefix(table, "providers.")
+	if !ok {
+		return "", false
+	}
+	return kimiModelKey("models." + k)
+}
+
+func atomcodeHasLegacyProvider(path, key string) bool {
+	tables, _ := edit.TOMLTables(path)
+	for _, table := range tables {
+		if name, ok := atomcodeProviderName(table); ok && name == key {
+			return true
+		}
+	}
+	return false
+}
+
+func atomcodeAccountTable(table string) bool {
+	for _, name := range atomcodeAccountNames {
+		if table == name {
+			return true
+		}
+	}
+	return false
+}
+
+func atomcodeMagpieModelTable(table string) bool {
+	k, ok := kimiModelKey(table)
+	return ok && strings.HasPrefix(k, magpieID+"/")
+}
+
+func atomcodeAccountValues(path string) (map[string]string, error) {
+	for _, name := range atomcodeAccountNames {
+		v, err := edit.GetTOMLTable(path, name)
+		if err != nil {
+			return nil, err
+		}
+		if v != nil {
+			return v, nil
+		}
+	}
+	return nil, nil
+}
+
+func atomcodeModelValues(path, key string) (map[string]string, string, error) {
+	tables, err := edit.TOMLTables(path)
+	if err != nil {
+		return nil, "", err
+	}
+	for _, table := range tables {
+		if decoded, ok := kimiModelKey(table); ok && decoded == key {
+			values, err := edit.GetTOMLTable(path, table)
+			return values, table, err
+		}
+	}
+	return nil, "", nil
+}
+
+func atomcodeExistingEfforts(path string) map[string]string {
+	out := map[string]string{}
+	tables, _ := edit.TOMLTables(path)
+	for _, table := range tables {
+		key, ok := kimiModelKey(table)
+		if !ok || !strings.HasPrefix(key, magpieID+"/") {
+			continue
+		}
+		values, _ := edit.GetTOMLTable(path, table)
+		if values["reasoning_effort"] != "" {
+			out[key] = values["reasoning_effort"]
+		}
+	}
+	return out
+}
+
+func atomcodeSupportedEfforts(efforts []string) []string {
+	var out []string
+	for _, level := range atomcodeEffortLevels {
+		for _, effort := range efforts {
+			if effort == level {
+				out = append(out, level)
+				break
+			}
+		}
+	}
+	return out
 }

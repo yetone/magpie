@@ -143,6 +143,7 @@
       <tr><td>Claude Code</td><td><code>~/.claude/settings.json</code>: <code>ANTHROPIC_BASE_URL</code>, <code>ANTHROPIC_AUTH_TOKEN</code> and the model variables in its <code>env</code> block</td></tr>
       <tr><td>Codex</td><td><code>~/.codex/config.toml</code>: a <code>[model_providers.magpie]</code> table and the model, with the list in <code>magpie-models.json</code>. Your ChatGPT sign-in is left alone</td></tr>
       <tr><td>OpenCode, MiMo Code, Pi, Crush</td><td>A <code>magpie</code> provider entry, and <code>magpie/provider/model</code></td></tr>
+      <tr><td>AtomCode</td><td><code>~/.atomcode/config.toml</code>: a <code>magpie</code> provider account and one model entry per catalog model</td></tr>
       <tr><td>Gemini CLI</td><td><code>GOOGLE_GEMINI_BASE_URL</code> pointed at the gateway, API-key auth, and the model</td></tr>
     </table></div>
     <p><b>A running session keeps the model it started with.</b> Agents read their config when they start, so the change applies to the next session. Codex builds its model list at start-up too: restart the Codex app and open <code>codex</code> sessions after a switch.</p>

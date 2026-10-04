@@ -153,7 +153,7 @@ func TestMaxTokensWithinContextWindow(t *testing.T) {
 		zc, _ := json.Marshal(zcodeProviderJSON(filepath.Join(home, "none.json")))
 		crush, _ := json.Marshal(magpieProviderJSON("crush"))
 		atomcode := filepath.Join(t.TempDir(), "config.toml")
-		if err := edit.SetTOMLTables(atomcode, nil, atomcodeTables()); err != nil {
+		if err := edit.SetTOMLTables(atomcode, nil, atomcodeTables(atomcode)); err != nil {
 			t.Fatal(err)
 		}
 		atomcodeCfg, _ := os.ReadFile(atomcode)
