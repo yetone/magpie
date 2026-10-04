@@ -2172,13 +2172,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			body, searchFn = searchAsFunction(body)
 		}
 		body = forVendor(p, body)
-		if strings.HasSuffix(p.Host(), "openai.com") {
-			// a call another vendor answered earlier in the conversation
-			// goes to OpenAI's API, a magpie model's or a routing group's,
-			// with an id OpenAI takes (a ChatGPT account's request keeps
-			// no ids: provider.codexInput)
-			body = callItemIDs(body)
-		}
+		// Relays enforce OpenAI's item ID prefixes too, including during
+		// compaction. call_id stays unchanged so tool outputs remain paired.
+		body = callItemIDs(body)
 		// xAI's API turns away a tool_choice with no tools beside it ("A
 		// tool_choice was set on the request but no tools were specified"),
 		// and Copilot's /responses, in front of it for Grok, with a bare
