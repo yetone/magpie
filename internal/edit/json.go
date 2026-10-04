@@ -39,13 +39,26 @@ func SetJSON(path string, kvs ...KV) error {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		raw = []byte("{}\n")
 	}
+	orig := raw
 	for _, kv := range kvs {
 		raw, err = setJSONBytes(raw, kv.Path, kv.Value)
 		if err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 	}
-	return WriteAtomic(path, raw)
+	return WriteAtomic(path, keepCRLF(raw, orig))
+}
+
+// keepCRLF is out, an edit of orig, with \r\n at every line break when orig
+// used \r\n for all of them: the lines an edit adds are built with \n, and a
+// file that mixed endings is left as it was.
+func keepCRLF(out, orig []byte) []byte {
+	n := bytes.Count(orig, []byte("\n"))
+	if n == 0 || bytes.Count(orig, []byte("\r\n")) != n {
+		return out
+	}
+	out = bytes.ReplaceAll(out, []byte("\r\n"), []byte("\n"))
+	return bytes.ReplaceAll(out, []byte("\n"), []byte("\r\n"))
 }
 
 func setJSONBytes(raw []byte, keyPath string, value any) ([]byte, error) {
