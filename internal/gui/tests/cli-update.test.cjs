@@ -31,10 +31,10 @@ const CLIS = {
   "agent-1": { version: "2.0.0", latest: "2.0.0", via: "brew", command: "brew upgrade agent-1" },
 };
 
-function server(lang, posts) {
+function server(lang, posts, web = true) {
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:${web}};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return route.fulfill({ json: { ...state, settings: { lang, theme: "light" } } });
     if (url.pathname === "/api/agents/cli" && req.method() === "GET") return route.fulfill({ json: { agents: CLIS, pending: false } });
@@ -66,11 +66,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       if (errors.length) console.log(errors);
       await browser.close();
     });
-    const open = async (lang, posts) => {
+    const open = async (lang, posts, web = true) => {
       const page = await (await browser.newContext({ viewport: { width: 980, height: 520 } })).newPage();
       page.setDefaultTimeout(5000);
       page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", server(lang, posts));
+      await page.route("**/*", server(lang, posts, web));
       await page.goto("http://magpie.test/");
       await page.locator(`${row("codex")} .ag-ver`).waitFor();
       return page;
@@ -111,10 +111,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const posts = [];
       const page = await open("en", posts);
       const view = page.locator("#view-agents");
-      // the reader scrolls down a little, so a scroll would show
-      await page.mouse.move(400, 300);
-      for (let i = 0; i < 6; i++) { await page.mouse.wheel(0, 40); await page.waitForTimeout(20); }
-      await page.waitForTimeout(300);
+      // the reader scrolls down until a pill is in view, clear of the
+      // footer, so a scroll would show
+      const wheelTo = async (id) => {
+        const pill = page.locator(`${row(id)} .ag-up`);
+        await page.mouse.move(400, 300);
+        for (let i = 0; i < 30 && await pill.evaluate((b) => b.getBoundingClientRect().bottom > 460); i++) {
+          await page.mouse.wheel(0, 40);
+          await page.waitForTimeout(60);
+        }
+        await page.waitForTimeout(300);
+      };
+      await wheelTo("codex");
       const top = await view.evaluate((v) => v.scrollTop);
       assert(top > 0, "the list must be scrolled");
       const was = await page.locator(`${row("codex")} .ag-up`).evaluate((b) => b.getBoundingClientRect().top);
@@ -134,6 +142,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(Math.abs(now - was) <= 3, `the row moved ${now - was}px`);
 
       // one that fails says why, and can be tried again
+      await wheelTo("gemini");
       await page.locator(`${row("gemini")} .ag-up`).click();
       await page.waitForTimeout(1000);
       assert.match(await page.locator("#status").textContent(), /EACCES/);
@@ -147,37 +156,37 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(await page.locator(`${row("codex")} .ag-up`).getAttribute("title"), /通过 codex update 更新/);
     });
 
-    await t.test("a tight row cuts the pill and the version before the name", async () => {
-      const page = await open("zh", []);
-      const look = () => page.evaluate((r) => {
-        const q = (s) => document.querySelector(r + " " + s);
-        const shown = (e) => !!e && e.getBoundingClientRect().width > 0 && getComputedStyle(e).display !== "none";
-        const name = q(".name"), up = q(".ag-up"), words = q(".ag-up > span");
-        return { cut: name.scrollWidth > name.clientWidth + 1, up: shown(up), words: shown(words), ver: shown(q(".ag-ver")), label: up?.getAttribute("aria-label") };
-      }, row("codex"));
-      // wide: everything
-      assert.deepEqual(await look(), { cut: false, up: true, words: true, ver: true, label: "更新到 0.159.0" });
-      // the window at its first width, or a little less: the arrow alone
-      // (the name was "C." here)
-      await page.setViewportSize({ width: 620, height: 520 });
-      await page.waitForTimeout(100);
-      const tight = await look();
-      assert.equal(tight.cut, false, "the name was cut before the pill");
-      assert.equal(tight.up, true);
-      assert.equal(tight.words, false, "the pill kept its words in a tight row");
-      assert.equal(tight.label, "更新到 0.159.0");
-      // tighter still: the version goes too, the name last (just above
-      // 600px, the narrowest the row gets beside its fields)
-      await page.setViewportSize({ width: 604, height: 520 });
-      await page.waitForTimeout(100);
-      const tighter = await look();
-      assert.equal(tighter.cut, false, "the name was cut before the version");
-      assert.equal(tighter.ver, false);
-      // at 600px or less the fields go under the name (#440), so the name's
-      // line has room again for everything
-      await page.setViewportSize({ width: 540, height: 520 });
-      await page.waitForTimeout(100);
-      assert.deepEqual(await look(), { cut: false, up: true, words: true, ver: true, label: "更新到 0.159.0" });
+    const lookAt = (page) => page.evaluate((r) => {
+      const q = (s) => document.querySelector(r + " " + s);
+      const shown = (e) => !!e && e.getBoundingClientRect().width > 0 && getComputedStyle(e).display !== "none";
+      const name = q(".name"), up = q(".ag-up"), words = q(".ag-up > span");
+      return { cut: name.scrollWidth > name.clientWidth + 1, up: shown(up), words: shown(words), ver: shown(q(".ag-ver")), label: up?.getAttribute("aria-label") };
+    }, row("codex"));
+
+    // the update pill gives way before the name: where the name's line is
+    // under 250px the pill keeps only its arrow (under 150px the version
+    // goes too). Since the 「接入」 rows (d0d098c6) a connected agent's fields
+    // fold away under the row, and magpie web 760px wide or less (#391) puts
+    // them under the name, so the line is no longer tight at 620px, the
+    // window's first width, as it was beside the fields; it is on a phone.
+    await t.test("a tight row cuts the pill before the name", async () => {
+      const all = { cut: false, up: true, words: true, ver: true, label: "更新到 0.159.0" };
+      const arrow = { ...all, words: false };
+      const at = async (page, width) => {
+        await page.setViewportSize({ width, height: 520 });
+        await page.waitForTimeout(100);
+        return lookAt(page);
+      };
+      // the app's window, wide and at its narrowest (560px): everything
+      const win = await open("zh", [], false);
+      assert.deepEqual(await lookAt(win), all);
+      assert.deepEqual(await at(win, 620), all, "620px window");
+      assert.deepEqual(await at(win, 560), all, "560px window");
+      // magpie web: everything down to about 500px, then the arrow alone,
+      // the name never cut, on to the narrowest phones
+      const web = await open("zh", []);
+      for (const width of [620, 540]) assert.deepEqual(await at(web, width), all, width + "px");
+      for (const width of [480, 430, 400, 375, 340, 320]) assert.deepEqual(await at(web, width), arrow, "the pill kept its words, or the name was cut, at " + width + "px");
     });
 
     assert.deepEqual(errors, []);

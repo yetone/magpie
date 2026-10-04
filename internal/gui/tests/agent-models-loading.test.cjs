@@ -24,7 +24,7 @@ async function serve(route) {
   if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
   if (url.pathname === "/api/state") return json({
     agents: [{
-      id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color",
+      id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color", wired: true,
       fields: [{ key: "model", label: "model", value: "magpie/openai/gpt-5.5", options: [{ value: "magpie/openai/gpt-5.5", label: "GPT-5.5", ref: "openai/gpt-5.5" }] }],
       models: { shown: 3, listed: 3 },
     }],
@@ -52,7 +52,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.route("**/*", serve);
     t.after(() => browser.close());
     await page.goto("http://magpie.test/");
-    const entry = page.locator('.row.agent[data-id="codex"] .ag-models');
+    // the list opens from Pick in the connected row, opened
+    await page.locator('.row.agent[data-id="codex"] .ag-link').click();
+    const entry = page.locator('.row.agent[data-id="codex"] .ag-exp .ag-chips .ag-quiet');
     await entry.waitFor();
     const boxes = () => page.locator(".am-pop:not(.leaving)").count();
 

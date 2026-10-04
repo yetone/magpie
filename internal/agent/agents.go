@@ -15,6 +15,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -27,6 +28,8 @@ func init() {
 		}
 		return out
 	}
+	// the Sessions page reads the sessions of the agents in WSL distros
+	sessions.WSLHomes = wslHomes
 }
 
 // others are clients that reach the gateway without being agents magpie
@@ -71,6 +74,8 @@ func All() []*Agent {
 		goose(home, cfg),
 		cursor(home),
 		zed(home, cfg),
+		vscode(home, cfg),
+		air(home, cfg),
 		copilot(home),
 		crush(home, cfg),
 		dsh(home),
@@ -79,6 +84,7 @@ func All() []*Agent {
 		omp(home),
 		devin(home, cfg),
 		hermes(home),
+		morph(home),
 		kimi(home),
 		muse(cfg),
 		empryo(home),
@@ -173,6 +179,14 @@ func static(vals ...string) []Option {
 // ownOptions lists provider/model pairs an agent reaches on its own: the
 // providers in its auth file, plus whatever the current value already uses.
 func ownOptions(authFile string, cur string, extra ...string) []Option {
+	return ownOptionsFrom(nil, authFile, cur, extra...)
+}
+
+// ownOptionsFrom is ownOptions for an agent with a model registry of its
+// own (Pi, omp: nativemodels.go): a provider's models are the registry's
+// when it has them, else models.dev's, and for openai-codex, which
+// models.dev doesn't list, Codex CLI's (#709).
+func ownOptionsFrom(native func(p string) []catalog.Model, authFile string, cur string, extra ...string) []Option {
 	set := map[string]bool{}
 	for _, p := range extra {
 		set[p] = true
@@ -197,9 +211,22 @@ func ownOptions(authFile string, cur string, extra ...string) []Option {
 	for _, p := range providers {
 		name := catalog.ProviderName(p)
 		if name == "" {
+			name = nativeProviderNames[p]
+		}
+		if name == "" {
 			name = p
 		}
-		opts := group(name, options(catalog.Provider(p), p+"/"))
+		var ms []catalog.Model
+		if native != nil {
+			ms = native(p)
+		}
+		if len(ms) == 0 {
+			ms = catalog.Provider(p)
+		}
+		if len(ms) == 0 {
+			ms = codexServed(p)
+		}
+		opts := group(name, options(ms, p+"/"))
 		if ic := providerIcon(p); ic != "" {
 			for i := range opts {
 				opts[i].GroupIcon = ic
@@ -242,6 +269,9 @@ func magpieProviderJSONAt(shape, catalog, gw string) any {
 			// it; an output of 0 is OpenCode's own default
 			if m.Context > 0 {
 				e["limit"] = map[string]any{"context": m.Context, "output": maxTokens(m)}
+			}
+			if openCodeReasons(m) {
+				e["reasoning"] = true
 			}
 			e["variants"] = openCodeVariants(m.Efforts)
 			ms[m.ID] = e
@@ -312,7 +342,7 @@ func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
 	if m.Images {
 		e["input"] = []string{"text", "image"}
 	}
-	if levels := piThinkingLevels(m.Efforts, e["api"] == "anthropic-messages"); levels != nil {
+	if levels := piThinkingLevels(m.Efforts, e["api"] == "anthropic-messages" && gateway.ThinksOnlyWhenAsked(m.ID)); levels != nil {
 		e["thinkingLevelMap"] = levels
 	}
 	// without it Pi takes every model for a 128K one, and compacts
@@ -337,13 +367,69 @@ func piModelJSON(m catalog.Model, gw string, native bool) map[string]any {
 // config/plugin/provider.ts), so a model whose levels are none/high/max, or
 // go past high to xhigh and max, or that has none, was offered levels it
 // doesn't have and not the ones it has. A model without levels gets an
-// empty set, which OpenCode 2 takes as none rather than guessing.
-func openCodeVariants(efforts []string) map[string]any {
-	out := map[string]any{}
-	for _, e := range efforts {
-		out[e] = map[string]any{"reasoningEffort": e}
+// empty set, which OpenCode 2 takes as none rather than guessing. They are
+// written weakest first: OpenCode and OpenChamber list a model's variants in
+// the object's key order, and a map had them alphabetical — default, high,
+// low, max, medium, ultra, xhigh (#713).
+func openCodeVariants(efforts []string) orderedJSON {
+	out := orderedJSON{}
+	for _, e := range gateway.ByStrength(efforts) {
+		if !slices.ContainsFunc(out, func(p jsonPair) bool { return p.k == e }) {
+			out = append(out, jsonPair{e, map[string]any{"reasoningEffort": e}})
+		}
 	}
 	return out
+}
+
+// openCodeReasons is whether a model of magpie's is marked reasoning in
+// opencode.json, which OpenCode 1 shows as 支持推理 in its model tooltip
+// and takes for a model that thinks (#725: OpenCode Zen's
+// mimo-v2.6-flash-free, which thinks with no levels to pick, said 不支持推理
+// through magpie where it says it reasons under OpenCode's own Zen). OpenCode
+// 1 also adds low, medium and high of its own to the variants of a reasoning
+// model (ProviderTransform.variants; checked with 1.18.34), so one with levels
+// is marked only when it has those three, else it would be offered levels it
+// doesn't have; one with none gets them as it does under OpenCode's own
+// provider, and the gateway asks a model with a thinking switch alone no more
+// than high (fitFor). OpenCode 2 doesn't read the flag.
+func openCodeReasons(m catalog.Model) bool {
+	if len(m.Efforts) == 0 {
+		return m.Reasoning
+	}
+	for _, e := range []string{"low", "medium", "high"} {
+		if !slices.Contains(m.Efforts, e) {
+			return false
+		}
+	}
+	return true
+}
+
+// orderedJSON is a JSON object that keeps its keys in the order given,
+// where a map's would come out sorted.
+type orderedJSON []jsonPair
+
+type jsonPair struct {
+	k string
+	v any
+}
+
+func (o orderedJSON) MarshalJSON() ([]byte, error) {
+	b := []byte{'{'}
+	for i, p := range o {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		k, err := json.Marshal(p.k)
+		if err != nil {
+			return nil, err
+		}
+		v, err := json.Marshal(p.v)
+		if err != nil {
+			return nil, err
+		}
+		b = append(append(append(b, k...), ':'), v...)
+	}
+	return append(b, '}'), nil
 }
 
 // piThinkingLevels is the thinkingLevelMap for a model's efforts: every one
@@ -355,11 +441,14 @@ func openCodeVariants(efforts []string) map[string]any {
 // turned away (#243). Pi's off is the model's none when it takes one. A
 // model without none has off hidden — Pi's off asks a Responses model for
 // effort none and leaves a Chat model on the vendor's default thinking —
-// except on Anthropic's Messages API, where Pi's off sends thinking
-// disabled, which Claude takes whatever its levels; there off is left out,
-// for Pi to offer as before. A model whose levels magpie doesn't know gets
-// no map: Pi's own defaults, as before.
-func piThinkingLevels(efforts []string, anthropic bool) map[string]any {
+// except a Claude on Anthropic's Messages API (claudeOff), where Pi's off
+// sends thinking disabled, which Claude takes whatever its levels; there
+// off is left out, for Pi to offer as before. Another vendor's model there
+// keeps off hidden: without none it always thinks, and ZCode's
+// GLM-5.3-Flash turned Pi's off away ("该模型始终支持思考，不可关闭", #699),
+// as a level left out is one Pi offers. A model whose levels magpie doesn't
+// know gets no map: Pi's own defaults, as before.
+func piThinkingLevels(efforts []string, claudeOff bool) map[string]any {
 	if len(efforts) == 0 {
 		return nil
 	}
@@ -375,7 +464,7 @@ func piThinkingLevels(efforts []string, anthropic bool) map[string]any {
 			levels[l] = nil
 		}
 	}
-	if levels["off"] == nil && anthropic {
+	if levels["off"] == nil && claudeOff {
 		delete(levels, "off")
 	}
 	return levels
@@ -444,7 +533,7 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 			if _, ok := edit.GetJSON(path, "provider."+magpieID); !ok && onMagpie() {
 				return edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: provider()})
 			}
-			return syncJSON(path, "provider."+magpieID, provider)
+			return syncJSONInOrder(path, "provider."+magpieID, provider)
 		},
 		Fields: []Field{
 			{Key: "model", Label: "model", Get: jsonGet(path, "model"), Set: set("model"), Options: opts("model")},
@@ -657,7 +746,7 @@ func piLike(at place, id, name, dir string) *Agent {
 					return piScopeWith(path, v)
 				},
 				Options: func(cur map[string]string) []Option {
-					return append(ownOptions(auth, cur["model"]), viaMagpie(id, magpieID+"/")...)
+					return append(ownOptionsFrom(piRegistry(id), auth, cur["model"]), viaMagpie(id, magpieID+"/")...)
 				},
 			},
 			{

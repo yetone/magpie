@@ -621,8 +621,8 @@ func Fetch(ctx context.Context, r FetchRequest) (*http.Response, error) {
 	id, c := h.begin(true)
 	params := struct {
 		FetchRequest
-		Body string `json:"body,omitempty"`
-	}{r, base64.StdEncoding.EncodeToString(r.Body)}
+		Body []byte `json:"body,omitempty"`
+	}{r, r.Body}
 	if err := h.send(map[string]any{"id": id, "method": "fetch", "params": params}); err != nil {
 		h.forget(id)
 		return nil, err

@@ -122,6 +122,80 @@ func (p Provider) live() ([]catalog.Model, time.Time, bool) {
 
 // Fetch asks the vendor which models it serves and remembers the answer.
 func (p Provider) Fetch(ctx context.Context) ([]catalog.Model, error) {
+	ms, _, err := p.Refetch(ctx)
+	return ms, err
+}
+
+// Refetch is Fetch, and says which of the user's picks it dropped: those
+// the list fetched before had and the one fetched now doesn't. The new
+// list replaces the old one, and a pick made from the old list goes with
+// it — kept, it stayed among the models agents see, as if typed in by
+// hand, though the vendor serves it no more (akic404 on Discord: a remote
+// magpie offering far fewer models, and one of its providers renamed,
+// still listed every old "ws-ba5my…/qwen3.6-max" here after a Refresh).
+// A pick the old list didn't have was typed in by hand, and stays; a
+// fetch that fails, or that answers no model at all, changes nothing.
+func (p Provider) Refetch(ctx context.Context) ([]catalog.Model, []string, error) {
+	if p.Account != nil || p.DecideOnly() {
+		ms, err := p.fetch(ctx)
+		return ms, nil, err
+	}
+	before := liveIDs(p.ID)
+	ms, err := p.fetch(ctx)
+	if err != nil || len(before) == 0 {
+		return ms, nil, err
+	}
+	now := liveIDs(p.ID)
+	if len(now) == 0 {
+		return ms, nil, nil
+	}
+	dropped, derr := dropGonePicks(p.ID, before, now)
+	if derr != nil {
+		log.Println(p.ID + ": " + derr.Error())
+	}
+	return ms, dropped, nil
+}
+
+// liveIDs are the ids of every model in the provider's fetched list.
+func liveIDs(id string) map[string]bool {
+	ms, _, _ := catalog.Live(id)
+	ms = append(ms, catalog.LiveDrawers(id)...)
+	ms = append(ms, catalog.LiveVideomakers(id)...)
+	out := make(map[string]bool, len(ms))
+	for _, m := range ms {
+		out[m.ID] = true
+	}
+	return out
+}
+
+// dropGonePicks takes out of the saved provider's picks those before had
+// and now doesn't, and answers them.
+func dropGonePicks(id string, before, now map[string]bool) ([]string, error) {
+	f, err := read()
+	if err != nil {
+		return nil, err
+	}
+	i := slices.IndexFunc(f.Providers, func(q Provider) bool { return q.ID == id })
+	if i < 0 {
+		return nil, nil
+	}
+	var kept, dropped []string
+	for _, m := range f.Providers[i].Models {
+		if before[m] && !now[m] {
+			dropped = append(dropped, m)
+		} else {
+			kept = append(kept, m)
+		}
+	}
+	if len(dropped) == 0 {
+		return nil, nil
+	}
+	f.Providers[i].Models = kept
+	return dropped, store(f)
+}
+
+// fetch is Fetch without the picks looked after.
+func (p Provider) fetch(ctx context.Context) ([]catalog.Model, error) {
 	ctx = p.Via(ctx)
 	if p.DecideOnly() {
 		return p.fetchDecide(ctx)

@@ -21,7 +21,9 @@ import (
 // v3 persists Codex cumulative counters explicitly; v2 shards can contain
 // inflated deltas after a reload, so rebuild their derived rows from source.
 // v4: a Codex call's input no longer holds what it wrote to the cache (#589).
-const callCacheVersion = "calls-v4"
+// v5: an OpenCode call keeps the effort its prompt asked for (#680).
+// v6: Codex response records and compact disk-only parser state.
+const callCacheVersion = "calls-v6"
 const maxKeptCalls = 131072
 const maxKeptFiles = 64
 
@@ -40,6 +42,7 @@ func resetCalls() {
 	callsMu.Lock()
 	defer callsMu.Unlock()
 	callCache, callOrder = map[string]*callFile{}, nil
+	callContinuations, callContinuationOrder = map[string]callContinuation{}, nil
 	callCounts = map[string]int{}
 	callRoot = ""
 	callGeneration++
@@ -75,6 +78,7 @@ func pruneCalls(files []file) {
 			delete(callCounts, path)
 		}
 	}
+	trimCallRevisions(time.Now())
 	callsMu.Unlock()
 	if moved {
 		// an older version's shards are never read again
@@ -104,6 +108,7 @@ func pruneCalls(files []file) {
 }
 
 func keepCalls(path string, st *callFile) {
+	defer trimCallRevisions(time.Now())
 	callCounts[path] = len(st.Calls)
 	delete(callCache, path)
 	order := callOrder[:0]
@@ -140,7 +145,7 @@ func readCalls(f file) *callFile {
 	old, generation := callCache[f.path], callGeneration
 	callsMu.Unlock()
 	if old == nil {
-		old = loadCalls(f)
+		old = restoreCallContinuation(loadCalls(f))
 	}
 	if old != nil && old.Size == f.size && old.Mod == f.mod.UnixNano() {
 		callsMu.Lock()
@@ -149,6 +154,13 @@ func readCalls(f file) *callFile {
 		}
 		callsMu.Unlock()
 		return old
+	}
+	if f.cold || wslCold(f.path) {
+		// in a stopped WSL distro: opening it would start it
+		if old != nil {
+			return old
+		}
+		return &callFile{Path: f.path, Agent: f.agent}
 	}
 	if f.agent == "opencode" {
 		// rows, not lines: a session that changed is read again whole
@@ -204,9 +216,33 @@ type callPatch struct {
 	Began time.Time
 }
 type callFrame struct {
-	State   callFile
+	State   callDiskState
 	Strings []string
 	Patches []callPatch
+}
+
+// Disk state contains only scalar continuation metadata. Even a nil runtime
+// index makes gob emit its recursive type descriptors in every append frame.
+// Keep those types entirely outside the wire schema.
+type callDiskState struct {
+	ContentHash        string
+	Size, Mod, Off     int64
+	Head               string
+	HeadSize           int
+	Path, Agent        string
+	At, End, AsstEnd   int64
+	Session, Requested string
+	LastUser, LastAsst time.Time
+}
+
+func diskCallState(s *callFile) callDiskState {
+	return callDiskState{s.ContentHash, s.Size, s.Mod, s.Off, s.Head, s.HeadSize,
+		s.Path, s.Agent, s.At, s.End, s.AsstEnd, s.Session, s.Requested, s.LastUser, s.LastAsst}
+}
+func (s callDiskState) restore() *callFile {
+	return &callFile{ContentHash: s.ContentHash, Size: s.Size, Mod: s.Mod, Off: s.Off,
+		Head: s.Head, HeadSize: s.HeadSize, Path: s.Path, Agent: s.Agent, At: s.At, End: s.End,
+		AsstEnd: s.AsstEnd, Session: s.Session, Requested: s.Requested, LastUser: s.LastUser, LastAsst: s.LastAsst}
 }
 
 func callText(c *Call) [12]*string {
@@ -270,7 +306,7 @@ func loadCalls(f file) *callFile {
 				}
 			}
 		}
-		st = &frame.State
+		st = frame.State.restore()
 	}
 	if st == nil {
 		return nil
@@ -280,11 +316,7 @@ func loadCalls(f file) *callFile {
 }
 
 func writeCalls(st *callFile, start int, appendOnly bool) {
-	frame := callFrame{State: *st, Strings: []string{""}}
-	frame.State.Calls = nil
-	frame.State.Msgs = nil
-	frame.State.Began = nil
-	frame.State.Strs = nil
+	frame := callFrame{State: diskCallState(st), Strings: []string{""}}
 	dict := map[string]uint32{"": 0}
 	add := func(i int) {
 		p := callPatch{Index: i, Call: st.Calls[i], Began: st.Began[st.Calls[i].Msg]}

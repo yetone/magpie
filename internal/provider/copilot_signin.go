@@ -44,7 +44,13 @@ func gitHubForm(ctx context.Context, u string, form url.Values, v any) error {
 	return json.Unmarshal(b, v)
 }
 
+// startCopilotSignIn signs in on github.com, or on the enterprise's
+// <name>.ghe.com the sign-in names (#723).
 func startCopilotSignIn(s *signInFlow) error {
+	host, err := CopilotHost(s.site)
+	if err != nil {
+		return err
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	var dc struct {
 		DeviceCode string `json:"device_code"`
@@ -53,7 +59,7 @@ func startCopilotSignIn(s *signInFlow) error {
 		ExpiresIn  int    `json:"expires_in"`
 		Interval   int    `json:"interval"`
 	}
-	if err := gitHubForm(ctx, gitHubDeviceURL, url.Values{"client_id": {copilotClientID}, "scope": {"read:user"}}, &dc); err != nil {
+	if err := gitHubForm(ctx, copilotDeviceURL(host), url.Values{"client_id": {copilotClientID}, "scope": {"read:user"}}, &dc); err != nil {
 		cancel()
 		return err
 	}
@@ -63,7 +69,7 @@ func startCopilotSignIn(s *signInFlow) error {
 	}
 	s.st.URL, s.st.Code = dc.URI, dc.UserCode
 	if s.st.URL == "" {
-		s.st.URL = "https://github.com/login/device"
+		s.st.URL = copilotDevicePage(host)
 	}
 	s.stop = cancel
 	interval := time.Duration(max(dc.Interval, 1)) * time.Second
@@ -80,7 +86,7 @@ func startCopilotSignIn(s *signInFlow) error {
 				Error string `json:"error"`
 				Desc  string `json:"error_description"`
 			}
-			err := gitHubForm(ctx, gitHubTokenURL, url.Values{"client_id": {copilotClientID}, "device_code": {dc.DeviceCode},
+			err := gitHubForm(ctx, copilotOAuthURL(host), url.Values{"client_id": {copilotClientID}, "device_code": {dc.DeviceCode},
 				"grant_type": {"urn:ietf:params:oauth:grant-type:device_code"}}, &tok)
 			switch {
 			case ctx.Err() != nil:
@@ -102,18 +108,18 @@ func startCopilotSignIn(s *signInFlow) error {
 				fail("GitHub: " + strings.TrimSpace(tok.Error+" "+tok.Desc))
 				return
 			}
-			user, plan, err := copilotUser(ctx, tok.Token)
+			user, plan, err := copilotUser(ctx, tok.Token, host)
 			if err != nil {
 				fail(err.Error())
 				return
 			}
-			if err := addCopilotLogin(user, plan, tok.Token); err != nil {
+			if err := addCopilotLogin(user, plan, tok.Token, host); err != nil {
 				fail(err.Error())
 				return
 			}
 			// the one Copilot's editors are signed in to, if it is this
 			using := false
-			if own, ok := copilotLogin(copilotConfigDir()); ok && strings.EqualFold(own.User, user) {
+			if own, ok := copilotLogin(copilotConfigDir()); ok && strings.EqualFold(own.User, user) && own.Host == host {
 				using = true
 			}
 			s.finish(SignInState{State: "done", User: user, Plan: plan, Using: using})

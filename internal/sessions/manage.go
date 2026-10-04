@@ -116,9 +116,11 @@ func ListAgent(agent string) []Managed {
 	for _, fs := range groups {
 		s, _ := assemble(fs, price)
 		if s.Resume == "" && !s.ReadOnly {
-			s.Resume = ResumeCommand(s.Agent, s.ID, s.Cwd)
+			s.Resume = resumeCommand(s.WSL, s.Agent, s.ID, s.Cwd)
 		}
-		m := Managed{Session: s, Files: len(fs), Deletable: Deletable(agent) && !s.ReadOnly}
+		// a WSL distro's are listed and resumed, not deleted: magpie moves
+		// no files out of a distro
+		m := Managed{Session: s, Files: len(fs), Deletable: Deletable(agent) && !s.ReadOnly && s.WSL == ""}
 		for _, f := range fs {
 			m.Size += f.size
 			if st := cache[f.path]; st != nil && f.main {
@@ -205,6 +207,9 @@ func Delete(agent, id string) (Trashed, error) {
 	}
 	if len(fs) == 0 {
 		return Trashed{}, errors.New("no such session")
+	}
+	if s.WSL != "" {
+		return Trashed{}, fmt.Errorf("magpie doesn't delete sessions in WSL %s: delete it there", s.WSL)
 	}
 	paths := sessionPaths(agent, id, fs)
 	now := time.Now()

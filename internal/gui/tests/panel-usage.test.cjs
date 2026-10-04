@@ -266,11 +266,70 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await settled(asked, (q) => !q.has("day"));
       await p.locator("#panelUsage:not(.pu-loading)").waitFor();
       assert.equal(await p.locator('#panelUsage .led-day[aria-pressed="true"]').count(), 0);
+      // Hold the first response so the second click happens before it arrives.
+      let release, held, blocked;
+      const delay = () => {
+        held = new Promise((resolve) => { release = resolve; });
+        blocked = false;
+      };
+      const hold = async (route) => {
+        const q = new URL(route.request().url()).searchParams;
+        if (!blocked && q.has("day")) {
+          blocked = true;
+          asked.push(q);
+          await held;
+          await route.fulfill({ json: page(q) });
+          return;
+        }
+        await route.fallback();
+      };
+      const reply = (day) => p.waitForResponse((r) => {
+        const url = new URL(r.url());
+        return url.pathname === "/api/usage/requests" && (url.searchParams.get("day") || "") === day;
+      }).then((r) => r.finished());
+      await p.route("**/api/usage/requests?*", hold);
+      delay();
+      const beforeClicks = asked.length, clickedDay = await days.nth(4).getAttribute("data-day");
+      const requested = p.waitForRequest((r) => new URL(r.url()).searchParams.get("day") === clickedDay);
+      const selectedReply = reply(clickedDay), clearedReply = reply("");
+      await days.nth(4).dispatchEvent("click");
+      await requested;
+      await days.nth(4).dispatchEvent("click");
+      release();
+      await Promise.all([selectedReply, clearedReply]);
+      await p.evaluate(() => new Promise(requestAnimationFrame));
+      await settled(asked, (q) => asked.length > beforeClicks && !q.has("day"));
+      await p.locator("#panelUsage:not(.pu-loading)").waitFor();
+      assert.equal(await p.locator('#panelUsage .led-day[aria-pressed="true"]').count(), 0, "two quick clicks clear selection");
+
+      // A delayed redraw must not take focus back after the user moves it.
+      delay();
+      const movedRequest = p.waitForRequest((r) => new URL(r.url()).searchParams.get("day") === clickedDay);
+      const movedReply = reply(clickedDay);
+      await days.nth(4).focus();
+      await p.keyboard.press("Enter");
+      await movedRequest;
+      const away = p.locator('#ptabs [data-ptab="stats"]');
+      await away.focus();
+      release();
+      await movedReply;
+      await p.locator('#panelUsage .led-day[aria-pressed="true"]').waitFor();
+      assert(await away.evaluate((e) => e === document.activeElement), "the redraw does not steal focus");
+      const resetReply = reply("");
+      await days.nth(4).dispatchEvent("click");
+      await resetReply;
+      await p.waitForFunction(() => !document.querySelector('#panelUsage .led-day[aria-pressed="true"]'));
+      await p.unroute("**/api/usage/requests?*", hold);
+      const keyboardDay = await days.nth(1).getAttribute("data-day");
       await days.nth(1).focus();
       await p.keyboard.press("Enter");
       await settled(asked, (q) => q.get("day") === emptyDay);
       await p.locator("#panelUsage:not(.pu-loading)").waitFor();
 
+      await p.waitForFunction((day) => document.activeElement?.matches('#panelUsage .led-day[aria-pressed="true"]') && document.activeElement.dataset.day === day, keyboardDay);
+      await p.keyboard.press("Space");
+      await settled(asked, (q) => !q.has("day"));
+      await p.waitForFunction((day) => document.activeElement?.matches('#panelUsage .led-day[aria-pressed="false"]') && document.activeElement.dataset.day === day, keyboardDay);
       // a click on a provider switches to it: its requests, its models in the chart
       await p.locator("#panelUsage .pu-bar .segs .opt").nth(0).click();
       await settled(asked, (q) => q.get("period") === "today");

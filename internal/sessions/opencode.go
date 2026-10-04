@@ -84,6 +84,10 @@ type ocMessage struct {
 	ModelID string `json:"modelID"`
 	// the provider the reply came from: magpie's gateway is "magpie"
 	ProviderID string `json:"providerID,omitempty"`
+	// a reply's variant: the reasoning effort picked in OpenCode's model
+	// menu for its prompt (high, max, low …; "default" or none when none
+	// was). OpenCode 2 keeps it in model.variant (#680)
+	Variant string `json:"variant,omitempty"`
 	// what ended the reply, when something did: {name, data {message}}, or
 	// in OpenCode 2 {type, message}
 	Error json.RawMessage `json:"error,omitempty"`
@@ -316,7 +320,7 @@ func (s ocV2DB) messages(sid string) [][]byte {
 	}
 	defer rows.Close()
 	var out [][]byte
-	last, lastProvider := "", ""
+	last, lastProvider, lastVariant := "", "", ""
 	for rows.Next() {
 		var id, typ string
 		var b []byte
@@ -328,20 +332,21 @@ func (s ocV2DB) messages(sid string) [][]byte {
 			Model *struct {
 				ID         string `json:"id"`
 				ProviderID string `json:"providerID"`
+				Variant    string `json:"variant"`
 			} `json:"model"`
 		}
 		if json.Unmarshal(b, &m) != nil || json.Unmarshal(b, &v) != nil {
 			continue
 		}
-		m.ID, m.Role, m.ModelID, m.ProviderID = id, "assistant", last, lastProvider
+		m.ID, m.Role, m.ModelID, m.ProviderID, m.Variant = id, "assistant", last, lastProvider, lastVariant
 		if v.Model != nil && v.Model.ID != "" {
-			m.ModelID, m.ProviderID = v.Model.ID, v.Model.ProviderID
+			m.ModelID, m.ProviderID, m.Variant = v.Model.ID, v.Model.ProviderID, v.Model.Variant
 		}
 		switch typ {
 		case "user":
-			m.Role, m.ModelID, m.ProviderID, m.Tokens = "user", "", "", nil
+			m.Role, m.ModelID, m.ProviderID, m.Variant, m.Tokens = "user", "", "", "", nil
 		case "assistant":
-			last, lastProvider = m.ModelID, m.ProviderID
+			last, lastProvider, lastVariant = m.ModelID, m.ProviderID, m.Variant
 		}
 		if o, err := json.Marshal(m); err == nil {
 			out = append(out, o)

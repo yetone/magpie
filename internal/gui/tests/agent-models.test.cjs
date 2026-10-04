@@ -1,7 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // An agent's model list (@ChongkaiX on X: pick which models show in Codex's
-// /model): the line under its name counts them and opens the list, where a
-// click on a row takes a model out or puts it back, at once.
+// /model): its connected row, opened, counts them by provider and those
+// hidden, and Pick opens the list, where a click on a row takes a model out
+// or puts it back, at once.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -19,10 +20,18 @@ const models = () => [
 function fixture(lang) {
   const list = models();
   const posts = [];
-  const count = () => ({ shown: list.filter((m) => !m.hidden).length, listed: list.length });
+  const count = () => {
+    const by = [];
+    for (const m of list.filter((m) => !m.hidden)) {
+      let g = by.find((x) => x.name === m.group);
+      if (!g) by.push(g = { name: m.group, icon: m.icon, n: 0 });
+      g.n++;
+    }
+    return { shown: list.filter((m) => !m.hidden).length, listed: list.length, by };
+  };
   const state = () => ({
     agents: [{
-      id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color",
+      id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color", wired: true,
       fields: [{ key: "model", label: "model", value: "magpie/openai/gpt-5.5", options: [{ value: "magpie/openai/gpt-5.5", label: "GPT-5.5", ref: "openai/gpt-5.5" }] }],
       models: count(),
     }],
@@ -55,8 +64,8 @@ function fixture(lang) {
 }
 
 const W = {
-  en: { entry: "Showing 8 / 31 models", after: "Showing 7 / 31 models", all: "All 31 models", title: "Codex's model list", current: "Current", shown: "Shown", hideAll: "Hide all", one: "Showing 1 / 31 models", showAll: "Show all" },
-  zh: { entry: "显示 8 / 31 个模型", after: "显示 7 / 31 个模型", all: "全部 31 个模型", title: "Codex 的模型列表", current: "在用", shown: "已显示", hideAll: "全部隐藏", one: "显示 1 / 31 个模型", showAll: "全部显示" },
+  en: { entry: "23 hidden", after: "24 hidden", all: "", title: "Codex's model list", current: "Current", shown: "Shown", hideAll: "Hide all", one: "30 hidden", showAll: "Show all" },
+  zh: { entry: "已隐藏 23 个", after: "已隐藏 24 个", all: "", title: "Codex 的模型列表", current: "在用", shown: "已显示", hideAll: "全部隐藏", one: "已隐藏 30 个", showAll: "全部显示" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -78,13 +87,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await browser.close();
       });
       await page.goto("http://magpie.test/");
-      const entry = page.locator('.row.agent[data-id="codex"] .ag-models');
+      const row = page.locator('.row.agent[data-id="codex"]');
+      await row.locator(".ag-link").click();
+      const entry = row.locator(".ag-exp .ag-chips .ag-quiet");
+      const hidden = async () => (await row.locator(".ag-exp .ag-chips .ag-hint").allInnerTexts()).join("").trim();
+      const chips = async () => (await row.locator(".ag-chip").allInnerTexts()).map((s) => s.replace(/\s+/g, " "));
       await entry.waitFor();
-      assert.equal((await entry.innerText()).trim(), w.entry);
-      // under the name, not beside it
-      const name = await page.locator('.row.agent[data-id="codex"] .who .name').boundingBox();
-      const eb = await entry.boundingBox();
-      assert(eb.y >= name.y + name.height - 2, "the line is under the name");
+      // the row has slid open (its slide is agent-expand-steady's)
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      assert.equal(await hidden(), w.entry);
+      assert.deepEqual(await chips(), ["Routing groups 1", "OpenAI 6", "OpenRouter 1"].map((c) => lang === "zh" ? c.replace("Routing groups", "路由组") : c));
+      // the line under the name counts them too
+      assert.match(await row.locator(".who .ag-st-t").innerText(), /^(Connected|已接入) · (8 models|.* 里有 8 个模型)/);
 
       const scroll = () => page.evaluate(() => [scrollY, document.scrollingElement.scrollTop, $("#view-agents").scrollTop]);
       const was = await scroll();
@@ -117,8 +131,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // a click takes one out at once, the count under the name with it
       const mini = pop.locator(".am-mr", { hasText: "O4-MINI" });
       await mini.click();
-      await page.waitForFunction(() => document.querySelector(".ag-models")?.innerText.includes("7"));
-      assert.equal((await entry.innerText()).trim(), w.after);
+      await page.waitForFunction(() => document.querySelector(".ag-chips .ag-hint")?.innerText.includes("24"));
+      assert.equal(await hidden(), w.after);
+      assert.equal((await chips())[1], "OpenAI 5");
       await page.waitForTimeout(150);
       assert.equal(fx.posts.length, 1);
       assert(fx.posts[0].includes("openai/o4-mini") && fx.posts[0].includes("openrouter/m5"), "the whole list goes");
@@ -154,7 +169,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(150);
       assert.equal(fx.posts.at(-1).length, 30);
       assert(!fx.posts.at(-1).includes("openai/gpt-5.5"));
-      assert.equal((await entry.innerText()).trim(), w.one);
+      assert.equal(await hidden(), w.one);
       assert(await hideAll.isDisabled());
       assert.equal(await pop.locator(".am-g").nth(1).locator(".c").innerText(), "1 / 6");
 
@@ -162,7 +177,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await showAll.click();
       await page.waitForTimeout(150);
       assert.deepEqual(fx.posts.at(-1), []);
-      assert.equal((await entry.innerText()).trim(), w.all);
+      assert.equal(await hidden(), w.all);
       assert(await showAll.isDisabled());
       assert(!(await hideAll.isDisabled()));
 

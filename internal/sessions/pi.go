@@ -65,9 +65,13 @@ func expandHome(p string) string {
 	return p
 }
 
-func piFiles() []file {
-	paths, _ := filepath.Glob(filepath.Join(PiDir(), "sessions", "*", "*.jsonl"))
-	if d := piSessionDir(); d != "" {
+func piFiles() []file { return piFilesIn(PiDir(), piSessionDir()) }
+
+// piFilesIn are the sessions in a Pi folder, and in the folder it was told
+// to keep them in ("" for none).
+func piFilesIn(dir, sessionDir string) []file {
+	paths, _ := filepath.Glob(filepath.Join(dir, "sessions", "*", "*.jsonl"))
+	if d := sessionDir; d != "" {
 		more, _ := filepath.Glob(filepath.Join(d, "*.jsonl"))
 		paths = append(paths, more...)
 	}

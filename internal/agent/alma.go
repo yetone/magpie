@@ -7,8 +7,9 @@ package agent
 //	GET  /api/providers              [{"id","name","type","baseURL","enabled","models":["<id>",…],"availableModels":[{"id","name",…}]},…]
 //	POST /api/providers              {"name","type","apiKey","baseURL","enabled"} → the provider
 //	PUT  /api/providers/:id          the fields to change
-//	PUT  /api/providers/:id/models   {"models":["<id>",…],"availableModels":[{"id","name"}]}: models, kept as
-//	                                 given, are the ones Alma offers; its capabilities it works out itself
+//	PUT  /api/providers/:id/models   {"models":["<id>",…],"availableModels":[{"id","name","capabilityOverrides"}]}:
+//	                                 models, kept as given, are the ones Alma offers; a model's
+//	                                 capabilityOverrides, when sent, take the place of the ones it had
 //	GET  /api/settings, PUT it back  the whole settings; chat.defaultModel is "<providerId>:<model>"
 //
 // magpie is one provider there, named magpie, of type openai at the
@@ -30,6 +31,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
 )
 
@@ -228,18 +230,98 @@ func almaMagpie(ps []almaProvider) *almaProvider {
 }
 
 // almaModels is magpie's catalog as Alma is shown it: the ids Alma offers,
-// and each one's name.
+// and each one's name and what magpie knows it can do (almaCaps).
 func almaModels() (ids []string, known []map[string]any) {
 	ids, known = []string{}, []map[string]any{}
 	for _, m := range magpieModels("alma") {
 		ids = append(ids, m.ID)
-		known = append(known, map[string]any{"id": m.ID, "name": m.Name})
+		k := map[string]any{"id": m.ID, "name": m.Name}
+		if caps := almaCaps(m); len(caps) > 0 {
+			k["capabilityOverrides"] = caps
+		}
+		known = append(known, k)
 	}
 	return ids, known
 }
 
+// almaLevels are the reasoning levels Alma knows, in its order: its own
+// read of a provider's /models keeps these and drops the rest.
+var almaLevels = []string{"low", "medium", "high", "xhigh", "max"}
+
+// almaCaps is what Alma is told of m, as the model's capabilityOverrides.
+// Alma works a model's capabilities out from models.dev by its id, and
+// magpie's ids (codex/gpt-5.5) aren't models.dev's, so such a model came
+// out with no reasoning and Alma offered no thinking for it (#730). A model
+// that reasons says so, with those of its levels Alma knows, and its
+// window, output limit and images when magpie knows them.
+func almaCaps(m catalog.Model) map[string]any {
+	caps := map[string]any{}
+	if m.Reasoning || len(m.Efforts) > 0 {
+		caps["reasoning"] = true
+		var levels []string
+		for _, l := range almaLevels {
+			if slices.Contains(m.Efforts, l) {
+				levels = append(levels, l)
+			}
+		}
+		if len(levels) > 0 {
+			caps["reasoningLevels"] = levels
+		}
+	}
+	if m.Images {
+		caps["vision"] = true
+	}
+	if m.Context > 0 {
+		caps["contextWindow"] = m.Context
+	}
+	if n := maxTokens(m); n > 0 {
+		caps["maxOutputTokens"] = n
+	}
+	return caps
+}
+
+// almaWithOverrides is known with each model's overrides laid over the ones
+// it has in Alma: the overrides sent take the place of a model's, so one
+// the user set there that magpie says nothing of (functionCalling,
+// pricing) is sent back as it was.
+func almaWithOverrides(p *almaProvider, known []map[string]any) []map[string]any {
+	had := map[string]map[string]any{}
+	for _, k := range p.Known {
+		id, _ := k["id"].(string)
+		if o, ok := k["capabilityOverrides"].(map[string]any); ok && id != "" {
+			had[id] = o
+		}
+	}
+	out := make([]map[string]any, len(known))
+	for i, k := range known {
+		id, _ := k["id"].(string)
+		o := had[id]
+		mine, ok := k["capabilityOverrides"].(map[string]any)
+		if len(o) == 0 || !ok {
+			// nothing of magpie's to say: no overrides sent, and Alma
+			// keeps the model's own
+			out[i] = k
+			continue
+		}
+		merged := map[string]any{}
+		for key, v := range o {
+			merged[key] = v
+		}
+		for key, v := range mine {
+			merged[key] = v
+		}
+		kk := map[string]any{}
+		for key, v := range k {
+			kk[key] = v
+		}
+		kk["capabilityOverrides"] = merged
+		out[i] = kk
+	}
+	return out
+}
+
 // almaSameModels reports whether Alma already offers these models, in this
-// order, each under its name.
+// order, each under its name and with what magpie says of it.
 func almaSameModels(p *almaProvider, ids []string, known []map[string]any) bool {
 	if !slices.Equal(p.Models, ids) || len(p.Known) != len(known) {
 		return false
@@ -248,8 +330,24 @@ func almaSameModels(p *almaProvider, ids []string, known []map[string]any) bool 
 		if p.Known[i]["id"] != k["id"] || p.Known[i]["name"] != k["name"] {
 			return false
 		}
+		mine, _ := k["capabilityOverrides"].(map[string]any)
+		had, _ := p.Known[i]["capabilityOverrides"].(map[string]any)
+		for key, v := range mine {
+			if !sameJSONValue(had[key], v) {
+				return false
+			}
+		}
 	}
 	return true
+}
+
+// sameJSONValue reports whether a and b read the same as JSON: a value
+// read back from Alma (float64, []any) against one magpie made (int,
+// []string).
+func sameJSONValue(a, b any) bool {
+	x, err1 := json.Marshal(a)
+	y, err2 := json.Marshal(b)
+	return err1 == nil && err2 == nil && bytes.Equal(x, y)
 }
 
 // almaSyncModels puts magpie's catalog into its provider in Alma, if it
@@ -259,7 +357,7 @@ func almaSyncModels(p *almaProvider) error {
 	if almaSameModels(p, ids, known) {
 		return nil
 	}
-	return almaDo("PUT", "/api/providers/"+p.ID+"/models", map[string]any{"models": ids, "availableModels": known}, nil)
+	return almaDo("PUT", "/api/providers/"+p.ID+"/models", map[string]any{"models": ids, "availableModels": almaWithOverrides(p, known)}, nil)
 }
 
 // almaWire makes sure Alma has magpie's provider, pointed at the gateway,

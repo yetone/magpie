@@ -5,7 +5,8 @@
 // effort, or the subagent model's own default), it opens the effort slider
 // with Default as its first stop, and a level picked is posted and lights
 // the square. Claude Code's subagents (#468) have no square
-// while there is no model to pick. In English and Chinese. No backend: the API is faked here.
+// while there is no model to pick. Connected, the squares are in the row
+// opened from its link. In English and Chinese. No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -13,11 +14,11 @@ const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
-const models = [{ value: "gpt-5.5", label: "GPT-5.5" }, { value: "gpt-5.4-mini", label: "GPT-5.4 mini" }];
+const models = [{ value: "gpt-5.5", label: "GPT-5.5", ref: "openai/gpt-5.5" }, { value: "gpt-5.4-mini", label: "GPT-5.4 mini", ref: "openai/gpt-5.4-mini" }];
 const levels = ["low", "medium", "high", "xhigh"].map((value) => ({ value }));
 const fresh = () => ({
   agents: [{
-    id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color",
+    id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color", wired: true,
     fields: [
       { key: "model", label: "model", value: "gpt-5.5", options: models },
       { key: "effort", label: "effort", value: "high", options: levels },
@@ -27,8 +28,8 @@ const fresh = () => ({
   },
   // Claude Code's subagents (#468): a model of magpie's, offered once it runs
   // through magpie; before, there is nothing to pick and no square
-  ...[["cc-own", "opus", []], ["cc-magpie", "magpie/deepseek/pro", [{ value: "magpie/deepseek/flash", label: "DeepSeek Flash" }]]].map(([id, model, options]) => ({
-    id, name: "Claude Code", path: "/test/settings.json", icon: "claudecode-color",
+  ...[["cc-own", "opus", []], ["cc-magpie", "magpie/deepseek/pro", [{ value: "magpie/deepseek/flash", label: "DeepSeek Flash", ref: "deepseek/flash" }]]].map(([id, model, options]) => ({
+    id, name: "Claude Code", path: "/test/settings.json", icon: "claudecode-color", wired: options.length > 0,
     fields: [{ key: "model", label: "model", value: model, options: [{ value: model }] }, { key: "subagent", label: "subagents", value: "", options }],
   }))],
   profiles: [],
@@ -93,16 +94,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
       await page.goto("http://magpie.test/");
       await page.locator(codex).waitFor();
-
-      // a square beside the subagents' one; model and effort alone are pickers
-      const square = page.locator(`${codex} .extras-cell .field.extra[data-key="subagent_effort"]`);
-      assert.equal(await square.count(), 1);
-      assert.equal(await page.locator(`${codex} .extras-cell .field.extra[data-key="subagent"]`).count(), 1);
-      assert.deepEqual(await page.locator(`${codex} .field:not(.extra)`).evaluateAll((es) => es.map((e) => e.dataset.key)), ["model", "effort"]);
-      assert.equal(await square.getAttribute("aria-label"), w.unset);
-      assert.equal(await square.evaluate((e) => e.classList.contains("set")), false);
+      const expand = async (sel) => {
+        await page.locator(`${sel} .ag-link`).click();
+        await page.locator(`${sel} .ag-exp`).waitFor();
+      };
+      await expand('.row.agent[data-id="cc-magpie"]');
       assert.equal(await page.locator('.row.agent[data-id="cc-own"] .field.extra[data-key="subagent"]').count(), 0, "a subagents square with nothing to pick");
       assert.equal(await page.locator('.row.agent[data-id="cc-magpie"] .field.extra[data-key="subagent"]').getAttribute("aria-label"), w.follows);
+      await expand(codex);
+
+      // a square beside the subagents' one; model (in the row, connected) and
+      // effort alone are pickers
+      const square = page.locator(`${codex} .ag-exp .extras-cell .field.extra[data-key="subagent_effort"]`);
+      assert.equal(await square.count(), 1);
+      assert.equal(await page.locator(`${codex} .extras-cell .field.extra[data-key="subagent"]`).count(), 1);
+      assert.equal(await page.locator(`${codex} > .field.ag-start[data-key="model"]`).count(), 1);
+      assert.deepEqual(await page.locator(`${codex} .ag-exp .field:not(.extra)`).evaluateAll((es) => es.map((e) => e.dataset.key)), ["effort"]);
+      assert.equal(await square.getAttribute("aria-label"), w.unset);
+      assert.equal(await square.evaluate((e) => e.classList.contains("set")), false);
 
       // the effort slider, Default its first stop and the square's value on it
       const y = await page.evaluate(() => scrollY);

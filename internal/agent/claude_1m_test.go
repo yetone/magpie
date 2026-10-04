@@ -39,7 +39,7 @@ func TestClaude1MMarked(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	names := []string{"model", "env.ANTHROPIC_MODEL", "env.ANTHROPIC_SMALL_FAST_MODEL", "env.CLAUDE_CODE_SUBAGENT_MODEL"}
+	names := []string{"model", "env.ANTHROPIC_SMALL_FAST_MODEL"}
 	for _, tier := range claudeTiers {
 		names = append(names, "env."+tierEnv(tier))
 	}
@@ -54,7 +54,7 @@ func TestClaude1MMarked(t *testing.T) {
 	}
 	// a tier set on its own is marked too; a 200K one is not
 	set("model", "v/small")
-	if got := get("env.ANTHROPIC_MODEL"); got != "v/small" {
+	if got := get("model"); got != "v/small" {
 		t.Fatalf("a 200K model got marked: %q", got)
 	}
 	set("haiku", "v/big")

@@ -34,7 +34,7 @@ func TestClaudeTiers(t *testing.T) {
 	if err := a.Field("model").Set("deepseek/pro"); err != nil {
 		t.Fatal(err)
 	}
-	if env("ANTHROPIC_DEFAULT_HAIKU_MODEL") != "deepseek/pro" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/pro" || a.Field("haiku").Get() != "" {
+	if env("ANTHROPIC_DEFAULT_HAIKU_MODEL") != "deepseek/pro" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "" || a.Field("haiku").Get() != "" {
 		t.Fatalf("tiers should follow the model: %v", a.Values())
 	}
 	if err := a.Field("haiku").Set("deepseek/flash"); err != nil {
@@ -59,7 +59,7 @@ func TestClaudeTiers(t *testing.T) {
 	if err := a.Field("haiku").Set(""); err != nil {
 		t.Fatal(err)
 	}
-	if env("ANTHROPIC_DEFAULT_HAIKU_MODEL") != "deepseek/pro" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/pro" {
+	if env("ANTHROPIC_DEFAULT_HAIKU_MODEL") != "deepseek/pro" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "" {
 		t.Fatalf("haiku back to the model: %v", a.Values())
 	}
 	// back to Claude Code as installed
@@ -106,7 +106,7 @@ func TestClaudeSubagentModel(t *testing.T) {
 	if err := a.Field("model").Set("deepseek/pro"); err != nil {
 		t.Fatal(err)
 	}
-	if sub.Get() != "" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/pro" {
+	if sub.Get() != "" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "" {
 		t.Fatalf("subagents should follow the model: %v", a.Values())
 	}
 	if err := sub.Set("deepseek/flash"); err != nil {
@@ -121,13 +121,13 @@ func TestClaudeSubagentModel(t *testing.T) {
 	if err := a.Field("model").Set("deepseek/lite"); err != nil {
 		t.Fatal(err)
 	}
-	if env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/flash" || env("ANTHROPIC_MODEL") != "deepseek/lite" {
+	if m, _ := edit.GetJSON(path, "model"); env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/flash" || m != "deepseek/lite" {
 		t.Fatalf("own subagent model lost: %v", a.Values())
 	}
 	if err := sub.Set(""); err != nil {
 		t.Fatal(err)
 	}
-	if sub.Get() != "" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "deepseek/lite" {
+	if sub.Get() != "" || env("CLAUDE_CODE_SUBAGENT_MODEL") != "" {
 		t.Fatalf("back to the model: %v", a.Values())
 	}
 	if err := a.Field("model").Set(""); err != nil {

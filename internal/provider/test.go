@@ -21,6 +21,7 @@ import (
 
 // Result is what a probe of one endpoint came back with.
 type Result struct {
+	Account  string   `json:"account,omitempty"`
 	Protocol Protocol `json:"protocol"`
 	OK       bool     `json:"ok"`
 	Status   int      `json:"status,omitempty"`

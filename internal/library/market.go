@@ -63,8 +63,12 @@ type MarketServer struct {
 	OptIn  bool    `json:"optIn,omitempty"`
 	Inputs []Input `json:"inputs"`
 	// Have is the library's server that is this one
-	Have   string `json:"have,omitempty"`
+	Have string `json:"have,omitempty"`
+	// Match is one found at the address searched for: its repository, page,
+	// endpoint or package is it
+	Match  bool `json:"match,omitempty"`
 	server Server
+	addrs  []string // where it is, normalised (normAddr): matched by an address
 }
 
 func gh(owner string) string { return "https://github.com/" + owner + ".png?size=96" }
@@ -214,6 +218,7 @@ func init() {
 		if m.Inputs == nil {
 			m.Inputs = []Input{}
 		}
+		m.addrs = addrsOf(m.Homepage, m.server.URL, packageOf(&m.server))
 	}
 }
 
@@ -228,19 +233,31 @@ var seenServers = struct {
 }{m: map[string]MarketServer{}}
 
 // MarketServers is what the market shows for a search: the featured servers
-// that match it, then the registry's.
+// that match it, then the registry's. A search that is an address — a
+// repository, a page, an endpoint, a package — finds the ones at it.
 func MarketServers(q string) ([]MarketServer, error) {
 	q = strings.ToLower(strings.TrimSpace(q))
+	addr := address(q)
 	var out []MarketServer
 	for _, m := range featured {
-		if q == "" || strings.Contains(strings.ToLower(m.Title+" "+m.ID+" "+m.Publisher+" "+m.Description), q) {
+		switch {
+		case addr != "":
+			if addrScore(addr, m.addrs) > 0 {
+				m.Match = true
+				out = append(out, m)
+			}
+		case q == "" || strings.Contains(strings.ToLower(m.Title+" "+m.ID+" "+m.Publisher+" "+m.Description+" "+packageOf(&m.server)), q):
 			out = append(out, m)
 		}
 	}
 	var err error
 	if q != "" {
 		var found []MarketServer
-		found, err = searchRegistry(q)
+		if addr != "" {
+			found, err = searchRegistryAt(addr)
+		} else {
+			found, err = searchRegistry(q)
+		}
 		for _, f := range found {
 			if !slices.ContainsFunc(out, func(m MarketServer) bool { return serverKey(&m.server) == serverKey(&f.server) }) {
 				out = append(out, f)
@@ -332,7 +349,16 @@ type registryVar struct {
 
 var placeholderRe = regexp.MustCompile(`\{[^{}]*\}`)
 
-func searchRegistry(q string) ([]MarketServer, error) {
+// listed is an active server the registry lists, as the market
+// offers it.
+type listed struct {
+	m MarketServer
+	r registryServer
+}
+
+// fetchRegistry is what the registry lists for a search, which it matches
+// against servers' names; the same server once.
+func fetchRegistry(q string) ([]listed, error) {
 	u := registryURL + "?" + url.Values{"search": {q}, "limit": {"100"}, "version": {"latest"}}.Encode()
 	var body struct {
 		Servers []struct {
@@ -345,11 +371,7 @@ func searchRegistry(q string) ([]MarketServer, error) {
 	if err := getJSON(u, &body); err != nil {
 		return nil, fmt.Errorf("couldn't search the MCP Registry: %w", err)
 	}
-	type scored struct {
-		m     MarketServer
-		score int
-	}
-	var list []scored
+	var list []listed
 	seen := map[string]bool{}
 	for _, e := range body.Servers {
 		if st := e.Meta["io.modelcontextprotocol.registry/official"].Status; st != "" && st != "active" {
@@ -360,8 +382,68 @@ func searchRegistry(q string) ([]MarketServer, error) {
 			continue
 		}
 		seen[serverKey(&m.server)] = true
-		list = append(list, scored{m, rank(&e.Server, m, q)})
+		list = append(list, listed{m, e.Server})
 	}
+	return list, nil
+}
+
+type scored struct {
+	m     MarketServer
+	score int
+}
+
+func searchRegistry(q string) ([]MarketServer, error) {
+	found, err := fetchRegistry(q)
+	if err != nil {
+		return nil, err
+	}
+	var list []scored
+	for _, e := range found {
+		list = append(list, scored{e.m, rank(&e.r, e.m, q)})
+	}
+	return offer(list), nil
+}
+
+// searchRegistryAt finds the registry's servers at an address. The registry
+// searches names only, so it's asked for the names the address suggests (a
+// repository's, its owner's), and what it lists is kept when its repository,
+// page, endpoint or package is the address. When none is, what it lists for
+// the first name is offered, as a search for that name would.
+func searchRegistryAt(addr string) ([]MarketServer, error) {
+	var matched, byName []scored
+	seen := map[string]bool{}
+	for i, term := range addrTerms(addr) {
+		found, err := fetchRegistry(term)
+		if err != nil {
+			if i == 0 {
+				return nil, err
+			}
+			break
+		}
+		for _, e := range found {
+			if i == 0 {
+				byName = append(byName, scored{e.m, rank(&e.r, e.m, term)})
+			}
+			k := serverKey(&e.m.server)
+			if seen[k] {
+				continue
+			}
+			if sc := addrScore(addr, e.m.addrs); sc > 0 {
+				seen[k] = true
+				e.m.Match = true
+				matched = append(matched, scored{e.m, sc*1000 + rank(&e.r, e.m, term)})
+			}
+		}
+	}
+	if len(matched) > 0 {
+		return offer(matched), nil
+	}
+	return offer(byName), nil
+}
+
+// offer is the best of a search's servers, best first, kept for one to be
+// installed by its id.
+func offer(list []scored) []MarketServer {
 	sort.SliceStable(list, func(i, j int) bool { return list[i].score > list[j].score })
 	out := []MarketServer{}
 	seenServers.Lock()
@@ -376,7 +458,7 @@ func searchRegistry(q string) ([]MarketServer, error) {
 		seenServers.m[s.m.ID] = s.m
 		out = append(out, s.m)
 	}
-	return out, nil
+	return out
 }
 
 // rank puts first what's called what was searched for, then what says it
@@ -412,6 +494,13 @@ func rank(r *registryServer, m MarketServer, q string) int {
 // when it has one, else the package it's published as.
 func fromRegistry(r *registryServer) (MarketServer, bool) {
 	m := MarketServer{ID: r.Name, Name: shortName(r.Name), Title: r.Title, Description: r.Description, Homepage: r.WebsiteURL, Inputs: []Input{}}
+	m.addrs = addrsOf(r.Name, r.WebsiteURL, r.Repository.URL)
+	for _, rm := range r.Remotes {
+		m.addrs = append(m.addrs, addrsOf(rm.URL)...)
+	}
+	for _, p := range r.Packages {
+		m.addrs = append(m.addrs, addrsOf(p.Identifier)...)
+	}
 	if m.Title == "" {
 		m.Title = m.Name
 	}

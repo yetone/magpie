@@ -3,7 +3,8 @@
 // tiers each take a model of their own from magpie (WilianWeng). Desktop has
 // no model field here for them to follow: the tiers' square says what an
 // unset one runs on instead, and its picker's reset entry is "Not set", not
-// "Same as model". In English and Chinese. No backend: the API is faked here.
+// "Same as model". Connected to magpie, the square is in the row opened from
+// its link. In English and Chinese. No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -11,11 +12,11 @@ const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
-const models = [{ value: "magpie/v/glm", label: "GLM" }, { value: "magpie/v/flash", label: "Flash" }];
+const models = [{ value: "magpie/v/glm", label: "GLM", ref: "v/glm" }, { value: "magpie/v/flash", label: "Flash", ref: "v/flash" }];
 const tiers = ["opus", "sonnet", "haiku", "fable"];
 const fresh = () => ({
   agents: [{
-    id: "claude-desktop", name: "Claude Desktop", path: "/test/claude_desktop_config.json", icon: "claude-color",
+    id: "claude-desktop", name: "Claude Desktop", path: "/test/claude_desktop_config.json", icon: "claude-color", wired: true,
     fields: [
       { key: "provider", label: "provider", value: "magpie", options: [{ value: "magpie", label: "magpie" }] },
       ...tiers.map((tier) => ({ key: tier, label: tier, value: tier === "haiku" ? "magpie/v/flash" : "", options: models })),
@@ -70,8 +71,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       t.after(() => browser.close());
       await page.goto("http://magpie.test/");
       await page.locator(cd).waitFor();
+      await page.locator(`${cd} .ag-link`).click();
 
-      const square = page.locator(`${cd} .field.extra[data-key="tiers"]`);
+      const square = page.locator(`${cd} .ag-exp .field.extra[data-key="tiers"]`);
       assert.equal(await square.count(), 1, "no tiers square");
       assert.ok((await square.getAttribute("aria-label")).startsWith(w.summary), await square.getAttribute("aria-label"));
       const y = await page.evaluate(() => scrollY);

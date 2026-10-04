@@ -163,13 +163,15 @@
     if (st.pick && THEMES[st.pick]) return builtin(st.pick);
     const live = st.live && fromMagpie(st.live);
     if (live) return live;
-    return builtin(GUESS[matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"]);
+    return builtin(GUESS[scheme()]);
   }
+  const light = matchMedia("(prefers-color-scheme: light)");
+  function scheme() { return light.matches ? "light" : "dark"; }
 
   // magpie on this computer: "live" (it answered), "ask" (the browser will
   // ask the reader first), "denied" (the reader said no), "absent" (no magpie
   // answered), "" (not asked yet)
-  let status = "", timer = 0, reached = false;
+  let status = "", timer = 0, reached = false, missed = 0, asks = 0;
   async function allowed() {
     for (const name of ["loopback-network", "local-network-access"]) {
       try { return (await navigator.permissions.query({ name })).state; } catch {}
@@ -178,6 +180,7 @@
   }
   async function ask(byReader) {
     clearTimeout(timer);
+    const n = ++asks; // a later ask (both permissions turning) polls in its place
     if (!byReader && !reached) {
       const s = await allowed();
       if (s !== "granted") { status = s === "denied" ? "denied" : "ask"; render(); return; }
@@ -185,7 +188,7 @@
     try {
       const ctl = new AbortController();
       // the reader may be answering the browser's question meanwhile
-      const t = setTimeout(() => ctl.abort(), byReader ? 120000 : 3000);
+      const t = setTimeout(() => ctl.abort(), byReader ? 120000 : 5000);
       const r = await fetch(GATEWAY, { cache: "no-store", signal: ctl.signal });
       clearTimeout(t);
       if (!r.ok) throw new Error(r.status);
@@ -193,6 +196,7 @@
       const p = fromMagpie(th);
       if (!p) throw new Error("theme");
       status = "live";
+      missed = 0;
       reached = true; // the browser let it through: asked again freely
       const keep = { name: th.name, mode: th.mode, stamp: th.stamp, vars: th.vars };
       const changed = !st.live || st.live.stamp !== th.stamp;
@@ -200,20 +204,47 @@
       save();
       if (!st.pick && (changed || !cur || cur.name !== p.name)) paint(p); else render();
     } catch {
-      status = byReader && (await allowed()) === "denied" ? "denied" : "absent";
-      render();
+      // once reached, one slow answer (Omarchy setting a theme reloads
+      // Hyprland meanwhile) isn't magpie gone: asked again as often
+      if (byReader || !reached || ++missed > 1) {
+        status = byReader && (await allowed()) === "denied" ? "denied" : "absent";
+        render();
+      }
     }
     // followed while the page shows: a theme picked in Omarchy's menu comes
     // through within seconds
-    if (!st.pick && document.visibilityState === "visible" && status !== "ask" && status !== "denied") {
-      timer = setTimeout(() => ask(false), status === "live" ? 3000 : 30000);
+    if (n === asks && !st.pick && document.visibilityState === "visible" && status !== "ask" && status !== "denied") {
+      timer = setTimeout(() => ask(false), status === "live" || reached ? 3000 : 30000);
     }
   }
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && cur && !st.pick && status !== "ask" && status !== "denied") ask(false);
   });
 
+  // until magpie answers, Omarchy's default for light or dark follows the
+  // desktop as it turns (a theme set in Omarchy's menu turns it), and a page
+  // the browser lets through later (its prompt, its site settings) starts
+  // following then, both without a reload
+  let watching = false;
+  function watch() {
+    if (watching) return;
+    watching = true;
+    light.addEventListener("change", () => {
+      if (!cur || st.pick || status === "live") return;
+      const live = st.live && st.live.mode === scheme() && fromMagpie(st.live);
+      paint(live || builtin(GUESS[scheme()]));
+    });
+    for (const name of ["loopback-network", "local-network-access"]) {
+      navigator.permissions?.query({ name }).then((p) => p.addEventListener("change", () => {
+        if (!cur || st.pick || status === "live") return;
+        if (p.state === "granted") ask(false);
+        else if (p.state === "denied") { clearTimeout(timer); status = "denied"; render(); }
+      }), () => {});
+    }
+  }
+
   function start() {
+    watch();
     paint(choose());
     if (!st.pick) ask(false);
   }
@@ -252,7 +283,11 @@
       const on = st.pick === n ? " on" : "";
       return `<button class="om-row${on}" type="button" role="menuitemradio" aria-checked="${!!on}" data-pick="${n}"><span class="om-sw" style="background:#${bg};color:#${fg}"><i style="background:#${accent}"></i><i style="background:#${fg}"></i></span>${n}${mode === "light" ? ' <span class="om-dim">light</span>' : ""}</button>`;
     }).join("");
-    bar.innerHTML = `<button class="om-chip${status === "live" && following ? " live" : ""}" type="button" aria-haspopup="menu" aria-expanded="${open}"><span class="om-logo" aria-hidden="true"></span><span class="om-name">${esc(cur.name || "omarchy")}</span></button>`
+    // not let through yet: the chip says what one click does
+    const cta = status === "ask" && following && !open
+      ? `<button class="om-cta" type="button" data-ask title="${esc(T("Your browser will ask to let this page reach magpie on this computer", "浏览器会询问是否允许本页访问本机的 magpie", "このページがこのコンピュータの magpie に接続してよいか、ブラウザが尋ねます"))}">${esc(T("Follow my Omarchy theme", "跟随 Omarchy 主题", "Omarchy のテーマに合わせる"))}</button>`
+      : "";
+    bar.innerHTML = cta + `<button class="om-chip${status === "live" && following ? " live" : ""}" type="button" aria-haspopup="menu" aria-expanded="${open}"><span class="om-logo" aria-hidden="true"></span><span class="om-name">${esc(cur.name || "omarchy")}</span></button>`
       + (open ? `<div class="om-menu" role="menu">
         <div class="om-h">Omarchy</div>
         <button class="om-row${following ? " on" : ""}" type="button" role="menuitemradio" aria-checked="${following}" data-pick=""><span class="om-sw om-follow"></span>${esc(T("Follow this computer", "跟随这台电脑", "このコンピュータに合わせる"))}</button>

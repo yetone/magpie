@@ -4,8 +4,9 @@
 // card, and the editor showed it unticked as if left out). With no pick the
 // models agents are served are drawn as served (dashed, .auto), their title
 // says why, and the hint says how to show agents none, from the moment the
-// editor opens. A served one clicked is left out, the rest picked in its
-// place. In English and Chinese, Chromium and WebKit.
+// editor opens. A served one clicked is picked alone (#681: it used to be
+// left out, the rest picked in its place). In English and Chinese, Chromium
+// and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -77,14 +78,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await chip("glm-5.2").evaluate((c) => getComputedStyle(c).borderTopStyle), "dashed");
       await editor.getByText(w.hint).waitFor();
 
-      // a served one clicked is left out, as a picked one is: the rest is
-      // picked in its place
+      // a served one clicked is picked, alone (#681)
       await chip("glm-5.2").click();
-      assert.deepEqual(await cls("glm-5.2"), [false, false]);
-      assert.deepEqual(await cls("glm-5.3-free"), [true, false]);
+      assert.deepEqual(await cls("glm-5.2"), [true, false]);
+      assert.deepEqual(await cls("glm-5.3-free"), [false, false]);
       assert.equal(await editor.getByText(w.hint).count(), 0);
-      // and one not served then picked joins it
-      await chip("glm-5.2").click();
+      // and another clicked joins it
+      await chip("glm-5.3-free").click();
       assert.deepEqual(await cls("glm-5.2"), [true, false]);
       assert.deepEqual(await cls("glm-5.3-free"), [true, false]);
       assert.deepEqual(errors, []);

@@ -41,7 +41,7 @@ func TestSearcherChosen(t *testing.T) {
 		t.Cleanup(func() { searchHosts[proto] = hosts })
 	}
 	for _, p := range []provider.Provider{
-		{ID: "ant", Name: "Anthropic", Key: "k", Anthropic: ant},
+		{ID: "ant", Name: "Anthropic", Key: "k", Searches: true, Anthropic: ant},
 		{ID: "oai", Name: "OpenAI", Key: "k", Responses: oai + "/v1"},
 		{ID: "relay", Name: "Relay", Key: "k", Searches: true, Anthropic: lists("claude-haiku-4-5")},
 		{ID: "plain", Name: "Plain", Key: "k", Chat: lists("m1") + "/v1"},
@@ -81,12 +81,27 @@ func TestSearcherChosen(t *testing.T) {
 	for _, c := range Searchers() {
 		ids = append(ids, c.Provider.ID)
 	}
-	// the relay said to search is never offered (#359), nor one that can't
-	if len(ids) != 2 || ids[0] != "ant" || ids[1] != "oai" {
+	// a host that searches stays ahead of OpenAI even with its box ticked;
+	// a relay said to search comes last, for naming alone (#359)
+	if len(ids) != 3 || ids[0] != "ant" || ids[1] != "oai" || ids[2] != "relay" {
 		t.Errorf("searchers = %v", ids)
+	}
+	for _, c := range Searchers() {
+		if (c.Provider.ID == "relay") != c.ManualOnly {
+			t.Errorf("%s manual-only = %v", c.Provider.ID, c.ManualOnly)
+		}
 	}
 	if rs := RelaysSaidToSearch(); len(rs) != 1 || rs[0].ID != "relay" {
 		t.Errorf("relays = %v", rs)
+	}
+	if err := provider.SetModelName("ant/claude-haiku-4-5", "Named Haiku"); err != nil {
+		t.Fatal(err)
+	}
+	if got := AutoSearcher(); got != "Anthropic · Named Haiku" {
+		t.Errorf("auto = %q", got)
+	}
+	if err := provider.SetModelName("ant/claude-haiku-4-5", ""); err != nil {
+		t.Fatal(err)
 	}
 
 	// a provider, with its small model
@@ -98,14 +113,28 @@ func TestSearcherChosen(t *testing.T) {
 	// a provider and a model of it
 	choose("oai/gpt-5.5")
 	want("oai", "gpt-5.5", "")
+	if err := provider.SetModelName("oai/gpt-5.5", "GPT Five Five"); err != nil {
+		t.Fatal(err)
+	}
+	if got := Searcher(); got != "OpenAI · GPT Five Five" {
+		t.Errorf("Searcher() = %q", got)
+	}
+	if err := provider.SetModelName("oai/gpt-5.5", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := Searcher(); got != "OpenAI · gpt-5.5" {
+		t.Errorf("Searcher() = %q", got)
+	}
 	// a model it no longer lists: its small model
 	choose("oai/gpt-4")
 	want("oai", "gpt-5-mini", "")
 
-	// one that can't search, a relay said to, one gone: magpie's pick
-	choose("plain")
-	want("ant", "claude-haiku-4-5", SearcherCant)
+	// a relay said to search, named with a model of it
 	choose("relay/claude-haiku-4-5")
+	want("relay", "claude-haiku-4-5", "")
+
+	// one that can't search, one gone: magpie's pick
+	choose("plain")
 	want("ant", "claude-haiku-4-5", SearcherCant)
 	choose("nobody/x")
 	want("ant", "claude-haiku-4-5", SearcherGone)
@@ -120,6 +149,13 @@ func TestSearcherChosen(t *testing.T) {
 		t.Fatal(err)
 	}
 	want("oai", "gpt-5-mini", "")
+	if err := provider.SetOff("ant", true); err != nil {
+		t.Fatal(err)
+	}
+	want("oai", "gpt-5-mini", "")
+	if err := provider.SetOff("ant", false); err != nil {
+		t.Fatal(err)
+	}
 
 	// automatic again
 	choose("")

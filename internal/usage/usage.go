@@ -77,7 +77,9 @@ type Record struct {
 	Error     string `json:"err,omitempty"`
 	ErrType   string `json:"err_type,omitempty"`
 	RequestID string `json:"rid,omitempty"`
-	Endpoint  string `json:"ep,omitempty"`
+	// ResponseID is the response object ID actually sent to the client.
+	ResponseID string `json:"response_id,omitempty"`
+	Endpoint   string `json:"ep,omitempty"`
 	// Session is the conversation the call was part of, as its agent names
 	// it (X-Magpie-Session, or the session header Claude Code, Codex or
 	// OpenCode sends): several sessions on one model told apart

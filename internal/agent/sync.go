@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"reflect"
 	"strings"
 	"sync"
@@ -67,6 +69,44 @@ func syncJSON(path, key string, value func() any) error {
 		return nil
 	}
 	return edit.SetJSON(path, edit.KV{Path: key, Value: v})
+}
+
+// syncJSONInOrder is syncJSON for a block whose keys' order the agent reads
+// (OpenCode lists a model's variants in theirs): one that says the same in
+// another order is rewritten too, as an older magpie wrote the variants
+// alphabetically (#713).
+func syncJSONInOrder(path, key string, value func() any) error {
+	cur, ok := edit.GetJSON(path, key)
+	if !ok {
+		return nil
+	}
+	v := value()
+	if sameJSON(cur, v) && sameOrder(cur, v) {
+		return nil
+	}
+	return edit.SetJSON(path, edit.KV{Path: key, Value: v})
+}
+
+// sameOrder reports whether raw JSON and what v marshals to read alike token
+// by token, keys in the same order; whitespace and escapes aside.
+func sameOrder(raw string, v any) bool {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return false
+	}
+	x, y := json.NewDecoder(strings.NewReader(raw)), json.NewDecoder(bytes.NewReader(b))
+	x.UseNumber()
+	y.UseNumber()
+	for {
+		a, errA := x.Token()
+		c, errC := y.Token()
+		if errA != nil || errC != nil {
+			return errA == io.EOF && errC == io.EOF
+		}
+		if a != c {
+			return false
+		}
+	}
 }
 
 // sameJSON reports whether raw JSON says what v marshals to.

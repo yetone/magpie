@@ -183,6 +183,9 @@ type wbAccount struct {
 	// via, for an account on the plugin, sends a request as the plugin
 	// does, signed with its sign-in, which magpie never renews itself
 	via func(*http.Request) (*http.Response, error)
+	// card is the provider id its Usage card has, when not the site's:
+	// the plugin's signed in under its own id, "workbuddy-plugin"
+	card string
 }
 
 // ---- WorkBuddy's own account --------------------------------------------------

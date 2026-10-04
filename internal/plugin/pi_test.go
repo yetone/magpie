@@ -171,13 +171,29 @@ func TestPiPackage(t *testing.T) {
 		t.Fatalf("fp-plain = %+v", m)
 	}
 
-	// the login asks its team, shows its page, and waits for the code
+	// the login asks how on pi's terminal UI (a list, then a field), its
+	// region and its team, shows its page, and waits for the code
 	signIn := func(code string) (Saved, error) {
 		p, err := NextPrompt(ctx, "fakepi", 0, map[string]string{})
-		if err != nil || p == nil || p.Message != "Team?" || p.Placeholder != "blue" {
+		if err != nil || p == nil || p.Type != "select" || p.Message != "FakePi Login" || len(p.Options) != 2 || p.Options[1].Label != "Your organization" || p.Options[1].Value != "org" || p.Options[1].Hint != "its start URL" {
 			t.Fatalf("first prompt = %+v, %v", p, err)
 		}
-		in := map[string]string{p.Key: "blue"}
+		in := map[string]string{p.Key: "org"}
+		p, err = NextPrompt(ctx, "fakepi", 0, in)
+		if err != nil || p == nil || p.Type != "text" || p.Message != "Start URL (https://…)" {
+			t.Fatalf("the field = %+v, %v", p, err)
+		}
+		in[p.Key] = "https://acme.invalid/start"
+		p, err = NextPrompt(ctx, "fakepi", 0, in)
+		if err != nil || p == nil || p.Type != "select" || len(p.Options) != 2 || p.Options[0].Label != "China" || p.Options[0].Value != "cn" {
+			t.Fatalf("the region = %+v, %v", p, err)
+		}
+		in[p.Key] = p.Options[0].Value
+		p, err = NextPrompt(ctx, "fakepi", 0, in)
+		if err != nil || p == nil || p.Message != "Team?" || p.Placeholder != "blue" {
+			t.Fatalf("second prompt = %+v, %v", p, err)
+		}
+		in[p.Key] = "blue"
 		if p, err := NextPrompt(ctx, "fakepi", 0, in); err != nil || p != nil {
 			t.Fatalf("asked after the team: %+v, %v", p, err)
 		}
@@ -193,11 +209,32 @@ func TestPiPackage(t *testing.T) {
 	if got, err := signIn("good"); err != nil || got != (Saved{"fakepi", "fakepi"}) {
 		t.Fatalf("Finish = %+v, %v", got, err)
 	}
+	if b, err := os.ReadFile(filepath.Join(filepath.Dir(AuthPath()), "pi", "stolen")); err == nil {
+		t.Fatalf("a program the login started read magpie's messages: %s", b)
+	}
 	var saved map[string]map[string]any
 	b, _ := os.ReadFile(AuthPath())
 	json.Unmarshal(b, &saved)
-	if a := saved["fakepi"]; a["type"] != "oauth" || a["refresh"] != "r-blue" || a["access"] != "a-blue" || a["team"] != "blue" {
+	if a := saved["fakepi"]; a["type"] != "oauth" || a["refresh"] != "r-blue" || a["access"] != "a-blue" || a["team"] != "blue" || a["region"] != "cn" || a["org"] != "https://acme.invalid/start" {
 		t.Fatalf("saved %v", saved)
+	}
+	// pi's auth.json has the sign-in as pi keeps it, and the package, told
+	// the session started, reads it back and adds a model
+	late := false
+	for i := 0; i < 100 && !late; i++ {
+		ps, _ := Providers(ctx)
+		for _, p := range ps {
+			for _, m := range p.Models {
+				late = late || p.ID == "fakepi" && m.ID == "fp-blue"
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	var piAuth map[string]map[string]any
+	b, _ = os.ReadFile(filepath.Join(filepath.Dir(AuthPath()), "pi", "auth.json"))
+	json.Unmarshal(b, &piAuth)
+	if a := piAuth["fakepi"]; a["type"] != "oauth" || a["refresh"] != "r-blue" || !late {
+		t.Fatalf("pi's auth.json %v; the model added on session_start listed: %v", piAuth, late)
 	}
 	if got, err := APIKey(ctx, "fakepi-key", 0, nil, "k-123", NewAccount); err != nil || got.Account != "fakepi-key" {
 		t.Fatalf("APIKey = %+v, %v", got, err)
@@ -280,6 +317,11 @@ func TestPiPackage(t *testing.T) {
 	r = piAsk(t, ctx, "fakepi", "fp-think", map[string]any{"max_tokens": 100, "stream": true, "messages": []map[string]any{{"role": "user", "content": "fail429"}}})
 	if e, _ := r.body["error"].(map[string]any); r.status != 429 || r.header["retry-after"] != "7" || e["type"] != "rate_limit_error" || !strings.Contains(e["message"].(string), "slow down") {
 		t.Fatalf("a 429: %d %v %v", r.status, r.header, r.body)
+	}
+	// a refusal the package didn't read, with nothing said, is told
+	r = piAsk(t, ctx, "fakepi", "fp-plain", map[string]any{"max_tokens": 100, "stream": true, "messages": []map[string]any{{"role": "user", "content": "quota"}}})
+	if e, _ := r.body["error"].(map[string]any); r.status != 429 || e["message"] != "exceed quota limit (1005)" {
+		t.Fatalf("a refusal sent as JSON: %d %v", r.status, r.body)
 	}
 	if r := piAsk(t, ctx, "fakepi", "nope", map[string]any{"max_tokens": 100, "messages": []map[string]any{{"role": "user", "content": "hi"}}}); r.status != 404 {
 		t.Fatalf("an unknown model: %d %v", r.status, r.body)

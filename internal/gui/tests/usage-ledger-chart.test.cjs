@@ -304,10 +304,72 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await lastAsked(asked, (q) => !q.has("day"));
       await p.waitForFunction(() => document.querySelectorAll("#ledWrap tr.led-row").length === 6);
       assert.equal(await p.locator('#ledChart .led-day[aria-pressed="true"]').count(), 0, "clicking the selected day clears it");
+      // Hold the first response so the second click happens before it arrives.
+      let release, held, blocked;
+      const delay = () => {
+        held = new Promise((resolve) => { release = resolve; });
+        blocked = false;
+      };
+      const hold = async (route) => {
+        const q = new URL(route.request().url()).searchParams;
+        if (!blocked && q.has("day")) {
+          blocked = true;
+          asked.push(q);
+          await held;
+          await route.fulfill({ json: page(q, "daily") });
+          return;
+        }
+        await route.fallback();
+      };
+      const reply = (day) => p.waitForResponse((r) => {
+        const url = new URL(r.url());
+        return url.pathname === "/api/usage/requests" && (url.searchParams.get("day") || "") === day;
+      }).then((r) => r.finished());
+      await p.route("**/api/usage/requests?*", hold);
+      delay();
+      const beforeClicks = asked.length, clickedDay = await days.nth(4).getAttribute("data-day");
+      const requested = p.waitForRequest((r) => new URL(r.url()).searchParams.get("day") === clickedDay);
+      const selectedReply = reply(clickedDay), clearedReply = reply("");
+      await days.nth(4).dispatchEvent("click");
+      await requested;
+      await days.nth(4).dispatchEvent("click");
+      release();
+      await Promise.all([selectedReply, clearedReply]);
+      await p.evaluate(() => new Promise(requestAnimationFrame));
+      await lastAsked(asked, (q) => asked.length > beforeClicks && !q.has("day"));
+      assert.equal(await p.locator("#ledWrap tr.led-row").count(), 6, "the late response does not replace the cleared details");
+      assert.equal(await p.locator('#ledChart .led-day[aria-pressed="true"]').count(), 0, "two quick clicks clear selection");
+
+      // A delayed redraw must not take focus back after the user moves it.
+      delay();
+      const movedRequest = p.waitForRequest((r) => new URL(r.url()).searchParams.get("day") === clickedDay);
+      const movedReply = reply(clickedDay);
+      await days.nth(4).focus();
+      await p.keyboard.press("Enter");
+      await movedRequest;
+      const away = p.locator('#ledQ');
+      await away.focus();
+      release();
+      await movedReply;
+      await p.locator('#ledChart .led-day[aria-pressed="true"]').waitFor();
+      assert(await away.evaluate((e) => e === document.activeElement), "the redraw does not steal focus");
+      const resetReply = reply("");
+      await days.nth(4).dispatchEvent("click");
+      await resetReply;
+      await p.waitForFunction(() => !document.querySelector('#ledChart .led-day[aria-pressed="true"]'));
+      await p.unroute("**/api/usage/requests?*", hold);
+      const keyboardDay = await days.nth(1).getAttribute("data-day");
       await days.nth(1).focus();
       await p.keyboard.press("Space");
       await lastAsked(asked, (q) => q.has("day"));
       await p.waitForFunction(() => document.querySelectorAll("#ledWrap tr.led-row").length === 0);
+      await p.waitForFunction((day) => document.activeElement?.matches('#ledChart .led-day[aria-pressed="true"]') && document.activeElement.dataset.day === day, keyboardDay);
+      await p.keyboard.press("Enter");
+      await lastAsked(asked, (q) => !q.has("day"));
+      await p.waitForFunction((day) => document.activeElement?.matches('#ledChart .led-day[aria-pressed="false"]') && document.activeElement.dataset.day === day, keyboardDay);
+      await p.keyboard.press("Space");
+      await lastAsked(asked, (q) => q.has("day"));
+      await p.waitForFunction((day) => document.activeElement?.matches('#ledChart .led-day[aria-pressed="true"]') && document.activeElement.dataset.day === day, keyboardDay);
       assert(await p.locator("#ledDash").isVisible(), "the empty day keeps the chart");
       assert.equal(await names(p).then((x) => x.length), 0, "the empty day clears the ranking");
       await days.nth(2).click();

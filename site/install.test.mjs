@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 const installer = fileURLToPath(new URL("./public/install.sh", import.meta.url));
 
-function install(t, { termux = true, arch = "aarch64", override = false, prefixOnly = false, missing = false, corrupt = false, desktop = false } = {}) {
+function install(t, { termux = true, arch = "aarch64", override = false, prefixOnly = false, missing = false, corrupt = false, desktop = false, github = false, args = [], env: extra = {}, tamper = "" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "magpie-install-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const tools = join(dir, "tools");
@@ -26,7 +26,7 @@ function install(t, { termux = true, arch = "aarch64", override = false, prefixO
   // A Linux asset is present even when Android's is missing: never use it.
   for (const name of [file, `magpie-cli-linux-${cpu}`]) {
     if (missing && name === file) continue;
-    assets[name] = { url: `https://download.invalid/${name}`, sha256: corrupt ? "0".repeat(64) : createHash("sha256").update(payload).digest("hex") };
+    assets[name] = { url: github ? `https://github.com/yetone/magpie-releases/releases/download/vtest/${name}` : `https://download.invalid/${name}`, sha256: corrupt ? "0".repeat(64) : createHash("sha256").update(payload).digest("hex") };
   }
   const requests = join(dir, "requests");
   writeFileSync(join(tools, "uname"), `#!/bin/sh\ncase "$1" in -m) echo '${arch}';; -s) echo Linux;; esac\n`, { mode: 0o755 });
@@ -36,8 +36,10 @@ const fs = require("node:fs");
 const args = process.argv.slice(2);
 const url = args.at(-1);
 fs.appendFileSync(process.env.INSTALL_REQUESTS, url + String.fromCharCode(10));
+fs.appendFileSync(process.env.INSTALL_ARGS, JSON.stringify(args) + String.fromCharCode(10));
+const tamper = process.env.INSTALL_TAMPER;
 if (url.endsWith("/api/latest")) process.stdout.write(process.env.INSTALL_FEED);
-else fs.writeFileSync(args[args.indexOf("-o") + 1], process.env.INSTALL_PAYLOAD);
+else fs.writeFileSync(args[args.indexOf("-o") + 1], tamper && url.startsWith(tamper) ? "changed by the mirror" : process.env.INSTALL_PAYLOAD);
 `, { mode: 0o755 });
   const env = {
     ...process.env,
@@ -52,9 +54,16 @@ else fs.writeFileSync(args[args.indexOf("-o") + 1], process.env.INSTALL_PAYLOAD)
     INSTALL_REQUESTS: requests,
     INSTALL_FEED: JSON.stringify({ version: "test", assets }),
     INSTALL_PAYLOAD: payload,
+    INSTALL_ARGS: join(dir, "args"),
+    INSTALL_TAMPER: tamper,
+    MAGPIE_PROXY: "",
+    MAGPIE_MIRROR: "",
+    ...extra,
   };
-  const result = spawnSync("sh", [installer], { env, encoding: "utf8" });
-  return { ...result, bin, file, payload, share: env.XDG_DATA_HOME, requests: readFileSync(requests, "utf8") };
+  const result = spawnSync("sh", [installer, ...args], { env, encoding: "utf8" });
+  const read = (p) => (existsSync(p) ? readFileSync(p, "utf8") : "");
+  const calls = read(env.INSTALL_ARGS).trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  return { ...result, bin, file, payload, share: env.XDG_DATA_HOME, requests: read(requests), calls };
 }
 
 test("Termux downloads Android arm64 into PREFIX/bin even with WebKit installed", (t) => {
@@ -103,4 +112,54 @@ test("ordinary Linux still selects its CLI or desktop build", (t) => {
     assert.match(r.requests, desktop ? /magpie-linux-arm64/ : /magpie-cli-linux-arm64/);
     assert.equal(existsSync(join(r.share, "applications/magpie.desktop")), desktop);
   }
+});
+
+// akic404 on Discord: installing without a way round the firewall. A proxy
+// and a GitHub mirror can be given; neither is used unless given.
+test("no proxy and no mirror unless given", (t) => {
+  const r = install(t, { termux: false, github: true });
+  assert.equal(r.status, 0, r.stderr);
+  for (const a of r.calls) assert.ok(!a.includes("--proxy"), JSON.stringify(a));
+  assert.match(r.requests, /^https:\/\/github\.com\/yetone\/magpie-releases\//m);
+});
+
+test("--proxy takes every download through it, as does MAGPIE_PROXY", (t) => {
+  for (const [opts, want] of [
+    [{ args: ["--proxy", "socks5h://127.0.0.1:1080"] }, "socks5h://127.0.0.1:1080"],
+    [{ args: ["--proxy=http://127.0.0.1:7890"] }, "http://127.0.0.1:7890"],
+    [{ env: { MAGPIE_PROXY: "http://10.0.0.1:3128" } }, "http://10.0.0.1:3128"],
+  ]) {
+    const r = install(t, { termux: false, desktop: true, github: true, ...opts });
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.calls.length, 3); // the feed, the file, the icon
+    for (const a of r.calls) assert.equal(a[a.indexOf("--proxy") + 1], want, JSON.stringify(a));
+  }
+  const bad = install(t, { termux: false, args: ["--proxy", "ftp://x"] });
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /--proxy is an address/);
+  assert.equal(bad.calls.length, 0);
+});
+
+test("--mirror fetches the file through the mirror, the feed and its checksum from the site", (t) => {
+  const r = install(t, { termux: false, github: true, args: ["--mirror", "https://gh.mirror.example"] });
+  assert.equal(r.status, 0, r.stderr);
+  const [feed, file] = r.requests.trim().split("\n");
+  assert.equal(feed, "https://usemagpie.ai/api/latest");
+  assert.equal(file, "https://gh.mirror.example/https://github.com/yetone/magpie-releases/releases/download/vtest/magpie-cli-linux-arm64");
+  assert.equal(readFileSync(join(r.bin, "magpie"), "utf8"), r.payload);
+  assert.match(r.stdout, /through https:\/\/gh\.mirror\.example\//);
+
+  const env = install(t, { termux: false, github: true, env: { MAGPIE_MIRROR: "https://gh.mirror.example/" } });
+  assert.equal(env.status, 0, env.stderr);
+  assert.match(env.requests, /^https:\/\/gh\.mirror\.example\/https:\/\/github\.com\//m);
+});
+
+test("a file the mirror changed is refused and the installed magpie kept", (t) => {
+  const r = install(t, { termux: false, github: true, args: ["--mirror", "https://gh.mirror.example/"], tamper: "https://gh.mirror.example/" });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /from https:\/\/gh\.mirror\.example\/ does not match its checksum from https:\/\/usemagpie\.ai; not installed/);
+  assert.equal(readFileSync(join(r.bin, "magpie"), "utf8"), "old installation");
+  const bad = install(t, { termux: false, args: ["--mirror", "gh.mirror.example"] });
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /--mirror is an http\(s\) address/);
 });

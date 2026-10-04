@@ -24,7 +24,7 @@ import (
 // — the subscriptions magpie remembers, how much of each one's allowance is
 // used, and switching the agent between them.
 func accountsCmd(args []string) error {
-	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
+	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
 	agentID := func(s string) (string, error) {
 		switch strings.ToLower(s) {
 		case "claude", "cc":
@@ -73,6 +73,27 @@ func accountsCmd(args []string) error {
 		return checkinWorkBuddy(len(args) > 2 && args[2] == "--json")
 	}
 	if len(args) > 1 && args[1] == "add" {
+		// a Copilot account by GitHub's device code, on github.com or an
+		// enterprise's <name>.ghe.com (#723)
+		if len(args) >= 3 && strings.EqualFold(args[2], "copilot") {
+			var host string
+			switch {
+			case len(args) == 5 && args[3] == "--host":
+				host = args[4]
+			case len(args) == 4 && strings.HasPrefix(args[3], "--host="):
+				host = strings.TrimPrefix(args[3], "--host=")
+			case len(args) != 3:
+				return fmt.Errorf("usage: magpie accounts add copilot [--host <name>.ghe.com]")
+			}
+			h, err := provider.CopilotHost(host)
+			if err != nil {
+				return err
+			}
+			if h != "" {
+				return addAccount("copilot:" + h)
+			}
+			return addAccount("copilot")
+		}
 		if len(args) != 3 {
 			return fmt.Errorf("%s", usage)
 		}
@@ -232,8 +253,10 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 				r.Plan = q.Plan
 			}
 			r.Error, r.Resets, r.AsOf = q.Error, q.Resets, q.AsOf
-			for _, w := range q.Windows {
-				s := quotaSpan{Name: w.Name, Used: w.Used, Remaining: max(0, 100-w.Used), ResetsAt: w.ResetsAt, Display: w.Display}
+			// a pool's own windows stand in for the models' drawing on it,
+			// as the usage page shows them
+			for _, w := range provider.PooledWindows(q.Windows) {
+				s := quotaSpan{Name: w.Name, Used: w.Used, Remaining: max(0, 100-w.Used), ResetsAt: w.ResetsAt, Display: w.Display, Pool: w.Pool}
 				if s.ResetsAt == nil && w.ResetSecs > 0 {
 					t := now.Add(time.Duration(w.ResetSecs) * time.Second)
 					s.ResetsAt = &t
@@ -355,6 +378,8 @@ func addAccount(agentID string) error {
 			fmt.Println(green.Render("✓"), st.User, "is already listed — its sign-in was renewed")
 		} else if st.Using {
 			fmt.Println(green.Render("✓"), agentID, "is signed in as", st.User)
+		} else if strings.HasPrefix(agentID, "copilot") {
+			fmt.Println(green.Render("✓"), "added", st.User, muted.Render("· with the other Copilot accounts in magpie's window"))
 		} else {
 			fmt.Println(green.Render("✓"), "added", st.User, muted.Render("· use it: magpie accounts switch "+agentID+" "+st.User))
 		}
@@ -426,12 +451,13 @@ func refreshAccounts(asJSON bool) error {
 }
 
 // checkinWorkBuddy: `magpie accounts checkin` — WorkBuddy's daily check-in
-// (签到) for each WorkBuddy (China) account not in yet today, now, and how
-// each stands. The setting does it on its own once a day.
+// (签到) for each WorkBuddy (China) account not in yet today, and Trae CN's
+// (每日签到) for each Trae CN account, now, and how each stands. The
+// settings do it on their own once a day.
 func checkinWorkBuddy(asJSON bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	rs := provider.CheckInWorkBuddy(ctx)
+	rs := append(provider.CheckInWorkBuddy(ctx), provider.CheckInTrae(ctx)...)
 	if rs == nil {
 		rs = []provider.WorkBuddyCheckin{}
 	}
@@ -446,6 +472,9 @@ func checkinWorkBuddy(asJSON bool) error {
 		}
 		if asJSON {
 			continue
+		}
+		if r.By == "trae" {
+			r.User = "Trae CN " + r.User
 		}
 		switch r.Outcome {
 		case provider.CheckinClaimed, provider.CheckinDone:
@@ -469,10 +498,10 @@ func checkinWorkBuddy(asJSON bool) error {
 		}
 	}
 	if !asJSON && len(rs) == 0 {
-		fmt.Println(muted.Render("no WorkBuddy (China) account is signed in"))
+		fmt.Println(muted.Render("no WorkBuddy (China) or Trae CN account is signed in"))
 	}
 	if failed > 0 {
-		return fmt.Errorf("%d of %d WorkBuddy accounts couldn't check in", failed, len(rs))
+		return fmt.Errorf("%d of %d accounts couldn't check in", failed, len(rs))
 	}
 	return nil
 }

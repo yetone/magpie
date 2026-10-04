@@ -256,6 +256,8 @@ magpie claude group/opus-anywhere    <span class="c"># use it</span></pre>
     <p>A running session keeps what it started with. Start a new one; for Codex, restart the Codex app too.</p>
     <h3>Does editing the agent’s config by hand break anything?</h3>
     <p>No. magpie reads the files each time and touches only the keys it sets, so your other settings and comments stay. Providers brought over with <span class="ui">Import…</span> are copies: later changes in the agent’s settings aren’t copied again.</p>
+    <h3>Installing or updating behind a firewall, or without access to GitHub?</h3>
+    <p>Give the installer and <code>magpie update</code> a proxy: <code>curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890</code>, or <code>magpie update --proxy socks5://127.0.0.1:1080</code> (http, https, socks5 and socks5h; <code>HTTPS_PROXY</code> and <code>ALL_PROXY</code> are honoured too). <code>--mirror &lt;prefix&gt;</code> fetches the release file from a GitHub download mirror you choose, as <code>&lt;prefix&gt;https://github.com/…</code>; <code>magpie update mirror &lt;prefix&gt;</code> keeps it for every update, the app’s too, and <code>magpie update mirror off</code> removes it. No mirror is used unless you give one, and the file’s SHA-256 still comes from usemagpie.ai, never from the mirror: a file the mirror changed is refused. The app’s own updates go through <span class="ui">Settings</span> → <span class="ui">Proxy</span>.</p>
 
     <p style="margin-top:48px">Stuck, or have a setup worth sharing? Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>. Vendors who want to hand their users a ready-made provider: see <a href="/docs/import">Add to magpie</a>.</p>
   </article>

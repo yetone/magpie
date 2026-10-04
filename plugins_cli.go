@@ -14,7 +14,7 @@ import (
 )
 
 const pluginUsage = `usage: magpie plugin [list] [--json]
-       magpie plugin add <npm | git | path>        install an OpenCode provider plugin (opencode-gemini-auth, github:owner/repo, ./my-plugin.js)
+       magpie plugin add <npm | git | path>        install an OpenCode provider plugin or a pi package (opencode-gemini-auth, pi-antigravity, github:owner/repo, ./my-plugin.js)
        magpie plugin rm <name>                     remove one
        magpie plugin update                        install the newest version of each
        magpie plugin on|off <name>                 turn one on or off
@@ -23,8 +23,9 @@ const pluginUsage = `usage: magpie plugin [list] [--json]
        magpie plugin move|migrate <subscription>   run a built-in subscription's accounts on its community plugin
        magpie plugin move-back|unmigrate <subscription>   go back to the built-in, with its accounts`
 
-// pluginCmd: `magpie plugin …` — OpenCode's provider plugins, which sign in
-// to a subscription and carry its requests (internal/plugin).
+// pluginCmd: `magpie plugin …` — OpenCode's provider plugins and pi's
+// packages, which sign in to a subscription and carry its requests
+// (internal/plugin).
 func pluginCmd(args []string) error {
 	sub := "list"
 	if len(args) > 1 {

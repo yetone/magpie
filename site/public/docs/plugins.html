@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Writing plugins · magpie docs</title>
-<meta name="description" content="How to write a magpie plugin: the OpenCode plugin hooks magpie calls, how it turns them into a provider with accounts, models, requests and usage, and how to test, publish and list one.">
+<meta name="description" content="How to write a magpie plugin: the OpenCode plugin hooks magpie calls, the pi packages it runs, how it turns them into a provider with accounts, models, requests and usage, and how to test, publish and list one.">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -32,7 +32,7 @@
 <link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/plugins">
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:title" content="Writing plugins">
-<meta property="og:description" content="Turn any service into a magpie provider with an OpenCode plugin.">
+<meta property="og:description" content="Turn any service into a magpie provider with an OpenCode plugin or a pi package.">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/plugins">
 <meta name="twitter:card" content="summary_large_image">
@@ -79,6 +79,7 @@
     <a href="#ids">Provider ids</a>
     <a href="#test">Testing</a>
     <a href="#publish">Publishing and listing</a>
+    <a href="#pi">pi packages</a>
     <a href="#protocol">The host protocol</a>
     <a href="#faq">FAQ</a>
   </aside>
@@ -86,7 +87,7 @@
   <article>
     <p class="eyebrow" id="overview">Docs · Plugins</p>
     <h1>Writing a plugin</h1>
-    <p class="lede">A plugin signs in to a service and makes its requests. magpie turns it into a provider that every agent can use, with several accounts, failover, usage and the rest. magpie runs <a href="https://opencode.ai/docs/plugins/">OpenCode’s provider plugins</a>, so a plugin written for OpenCode works here unchanged. This page covers what a plugin author needs: the hooks magpie calls, what it does with their answers, and how to test, publish and list a plugin.</p>
+    <p class="lede">A plugin signs in to a service and makes its requests. magpie turns it into a provider that every agent can use, with several accounts, failover, usage and the rest. magpie runs <a href="https://opencode.ai/docs/plugins/">OpenCode’s provider plugins</a>, so a plugin written for OpenCode works here unchanged, and it runs <a href="https://github.com/earendil-works/pi">pi</a>’s packages that register a provider too (see <a href="#pi">pi packages</a>). This page covers what a plugin author needs: the hooks magpie calls, what it does with their answers, and how to test, publish and list a plugin.</p>
 
     <div class="callout"><b>In one paragraph.</b> A plugin is an npm package, a git repository or a folder. Its module exports an async function in OpenCode’s v1 plugin shape. magpie loads every plugin into one <a href="https://bun.sh">Bun</a> process, the <em>plugin host</em>. The function returns hooks:
       <ul>
@@ -568,7 +569,7 @@ m plugin logout acme</pre>
     <h2 id="publish"><a class="anchor" href="#publish">Publishing and listing</a></h2>
     <ul>
       <li><b>npm.</b> Publish the package as usual. Users add it by name (<code>magpie plugin add opencode-acme-auth</code>), by a version (<code>…@0.2.0</code>), from git, or from a folder.</li>
-      <li><b>Search.</b> The search on <span class="ui">Plugins</span> asks npm for <code>&lt;query&gt; opencode</code>. It shows a package whose name or keywords hold <code>opencode</code> and one of <code>auth</code>, <code>plugin</code> or <code>provider</code>. Keywords like <code>["opencode", "opencode-plugin", "&lt;vendor&gt;"]</code> do it.</li>
+      <li><b>Search.</b> The search on <span class="ui">Plugins</span> asks npm for <code>&lt;query&gt; opencode</code>. It shows a package whose name or keywords hold <code>opencode</code> and one of <code>auth</code>, <code>plugin</code> or <code>provider</code>. Keywords like <code>["opencode", "opencode-plugin", "&lt;vendor&gt;"]</code> do it. It also asks for <code>keywords:pi-package &lt;query&gt;</code> and shows a pi package whose name or keywords mention <code>auth</code> or <code>provider</code>.</li>
       <li><b>README.</b> A plugin’s page in magpie shows its npm README. Say what it signs in to, how, where the sign-in is kept, and which models it has.</li>
       <li><b>The list.</b> <span class="ui">Plugins</span> suggests the plugins in <a href="https://github.com/magpie-community/plugins/blob/main/registry.json"><code>registry.json</code></a> of the community repository. magpie fetches it at most every six hours and builds in a copy for when it can’t. To be listed, open a pull request adding an entry:
         <div class="code">
@@ -584,6 +585,17 @@ m plugin logout acme</pre>
           <li>Pushing a version bump to <code>main</code> publishes it.</li>
           <li>These packages update by themselves in every magpie.</li>
         </ul></li>
+    </ul>
+
+    <h2 id="pi"><a class="anchor" href="#pi">pi packages</a></h2>
+    <p>magpie also runs <a href="https://github.com/earendil-works/pi">pi</a>’s packages. A pi extension that registers a provider with <code>pi.registerProvider</code> works in magpie as it does in pi, with nothing to change, and is added like any plugin (<code>magpie plugin add pi-antigravity</code>).</p>
+    <ul>
+      <li><b>What makes a package pi’s.</b> Its <code>package.json</code> has a <code>pi</code> manifest (<code>"pi": { "extensions": [...] }</code>), the <code>pi-package</code> keyword, or <code>@earendil-works/pi-coding-agent</code> (or the older <code>@mariozechner/pi-coding-agent</code>) among its <code>dependencies</code> or <code>peerDependencies</code>. A single file counts when it imports pi.</li>
+      <li><b>Loading.</b> magpie installs pi beside the package and loads it with pi’s own loader, in the same plugin host. The providers it registers become magpie providers, with the models pi lists for them (an account’s own list when pi can fetch one). Its commands, tools, renderers and event handlers are left alone.</li>
+      <li><b>Signing in.</b> An OAuth login runs as pi runs it: its questions (<code>onPrompt</code>) are asked in magpie’s sign-in, its page (<code>onAuth</code>) opens in the browser, and <code>refreshToken</code> renews it. The dialogs a package shows with <code>ctx.ui</code> (<code>select</code>, <code>confirm</code>, <code>input</code>, <code>editor</code>) and the terminal components it gives <code>ctx.ui.custom</code> are asked as magpie’s questions too. A provider that takes an API key gets a key field. Each sign-in is an account, so a pi provider can have several.</li>
+      <li><b>pi’s files.</b> pi’s settings, its <code>auth.json</code> (each provider’s first account, as pi keeps it) and the files a package writes are in <code>pi/</code> under magpie’s config directory, not the user’s <code>~/.pi</code>, unless <code>PI_CODING_AGENT_DIR</code> is set. magpie keeps the accounts in <code>plugin-auth.json</code>, like any plugin’s.</li>
+      <li><b>Requests.</b> A pi provider’s models take Anthropic Messages: the gateway translates what the agent sends, magpie streams it through pi, and the answer keeps its thinking, signatures and tool calls. A vendor error is passed on with its status, so failover works as with any plugin.</li>
+      <li><b>Ids.</b> A pi provider’s id follows the same rule as any plugin’s; see <a href="#ids">Provider ids</a>.</li>
     </ul>
 
     <h2 id="protocol"><a class="anchor" href="#protocol">The host protocol</a></h2>
@@ -604,6 +616,8 @@ m plugin logout acme</pre>
     <h2 id="faq"><a class="anchor" href="#faq">FAQ</a></h2>
     <h3>Does my OpenCode plugin work in magpie unchanged?</h3>
     <p>Yes, as long as it signs in and makes requests through <code>auth</code>, <code>config</code>, <code>provider</code> and <code>chat.headers</code>. What magpie adds (<code>auth.usage</code>, <code>auth.refresh</code>, <code>magpie.icon</code>, <code>maxConcurrency</code>, <code>free</code>, <code>rate</code>, <code>X-Magpie-Sign-In</code>) is ignored by OpenCode, so one package serves both.</p>
+    <h3>Does my pi package work in magpie?</h3>
+    <p>Yes, if it signs in and serves models through <code>pi.registerProvider</code>. magpie uses only the providers it registers; see <a href="#pi">pi packages</a>. Give it the <code>pi-package</code> keyword so the search finds it.</p>
     <h3>Why is my provider called <code>…-plugin</code>?</h3>
     <p>Its id is one magpie already has. See <a href="#ids">Provider ids</a>.</p>
     <h3>Some of my helper functions run as plugins.</h3>

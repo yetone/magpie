@@ -7,7 +7,8 @@
 // a model Claude Code asks Anthropic for itself says so: the row's tooltip
 // says it isn't through magpie and why the file names no magpie endpoint,
 // and picking one says "straight to Anthropic". A magpie model says neither.
-// No click moves the page. In English and Chinese, Chromium and WebKit.
+// The model is picked beside the connected row's switch. No click
+// moves the page. In English and Chinese, Chromium and WebKit.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -21,14 +22,15 @@ const options = [
   { value: "claude-opus-5-5", note: "Claude Opus 5.5", icon: "claude-color", group: "Claude Code", direct: "Anthropic" },
   { value: "magpie/deepseek/pro", label: "DeepSeek Pro", icon: "deepseek-color", group: "DeepSeek", ref: "deepseek/pro" },
 ];
-// the other agents, so Claude Code sits down a list that scrolls
+// the other agents, so Claude Code sits down a list that scrolls; on a
+// magpie model, so connected and in view (#726)
 const filler = [{ key: "model", label: "model", value: "magpie/deepseek/pro", options: [options[3]] }];
 const fresh = () => ({
   agents: [
-    ...Array.from({ length: 5 }, (_, i) => ({ id: "agent-" + i, name: "Agent " + i, path: "/test/" + i, fields: filler })),
-    { id: "claude", name: "Claude Code", icon: "claudecode-color", path: "~/.claude/settings.json",
+    ...Array.from({ length: 5 }, (_, i) => ({ id: "agent-" + i, name: "Agent " + i, path: "/test/" + i, wired: true, fields: filler })),
+    { id: "claude", name: "Claude Code", icon: "claudecode-color", path: "~/.claude/settings.json", wired: true,
       fields: [{ key: "model", label: "model", value: "sonnet", options }] },
-    ...Array.from({ length: 8 }, (_, i) => ({ id: "more-" + i, name: "More " + i, path: "/test/m" + i, fields: filler })),
+    ...Array.from({ length: 8 }, (_, i) => ({ id: "more-" + i, name: "More " + i, path: "/test/m" + i, wired: true, fields: filler })),
   ],
   profiles: [],
 });
@@ -85,7 +87,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const sets = [];
       await page.route("**/*", server(lang, sets));
       await page.goto("http://magpie.test/");
-      const field = page.locator(`${row} .field[data-key="model"]`);
+      // beside the switch, one click away
+      const field = page.locator(`${row} > .field.ag-start[data-key="model"]`);
       await field.waitFor();
 
       // the alias, as the model it stands for, with Claude's logo
@@ -97,7 +100,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the page scrolled, a pick moves nothing and says where it goes
       const view = page.locator("#view-agents");
       await page.mouse.move(400, 300);
-      for (let i = 0; i < 2; i++) { await page.mouse.wheel(0, 30); await page.waitForTimeout(20); }
+      // down to the row's picker, so the click has no need to scroll
+      for (let i = 0; i < 8; i++) { await page.mouse.wheel(0, 30); await page.waitForTimeout(20); }
       await page.waitForTimeout(300);
       const top = await view.evaluate((v) => v.scrollTop);
       assert(top > 0, "the list must be scrolled");

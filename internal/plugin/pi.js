@@ -18,6 +18,7 @@
 // that reads it into pi's context, streams it with pi, and answers with
 // Anthropic's events.
 
+import { AsyncLocalStorage } from "node:async_hooks"
 import fs from "node:fs"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -256,6 +257,7 @@ function statusOf(res, msg) {
   const m = /\b(4\d\d|5\d\d)\b/.exec(msg)
   if (m) return Number(m[1])
   if (/not configured|no api key|unauthori[sz]ed|sign in|log ?in again|invalid_grant/i.test(msg)) return 401
+  if (/quota|rate.?limit|too many requests|usage limit/i.test(msg)) return 429
   return 502
 }
 
@@ -280,9 +282,55 @@ function kept(res) {
   return out
 }
 
+// emptyOf is whether a message says nothing at all.
+function emptyOf(m) {
+  return !(m?.content ?? []).some((c) => (c.type === "text" && c.text) || (c.type === "thinking" && (c.thinking || c.thinkingSignature)) || c.type === "toolCall")
+}
+
+// said is what a request's own fetches were last answered with, when that
+// wasn't a stream: a package that reads only streams (pi-zcode) passes a
+// vendor's refusal sent as JSON over in silence, and its answer is empty.
+const said = new AsyncLocalStorage()
+let watching = false
+function watchFetch() {
+  if (watching) return
+  watching = true
+  const was = globalThis.fetch
+  globalThis.fetch = Object.assign(function fetch(input, init) {
+    const s = said.getStore()
+    const p = was(input, init)
+    if (!s) return p
+    return p.then((res) => {
+      if (/json|text\/plain/i.test(res.headers.get("content-type") ?? "") && Number(res.headers.get("content-length") ?? 0) <= 65536 && res.body)
+        s.body = res
+          .clone()
+          .text()
+          .catch(() => "")
+      return res
+    })
+  }, was)
+}
+
+// whyOf is what a vendor's JSON body said went wrong, its code after it.
+async function whyOf(s) {
+  if (!s?.body) return ""
+  const text = await Promise.race([s.body, new Promise((ok) => setTimeout(() => ok(""), 1000))])
+  let v
+  try {
+    v = JSON.parse(text)
+  } catch {
+    return ""
+  }
+  const e = v?.error ?? v
+  const msg = typeof e === "string" ? e : e?.message ?? e?.msg ?? v?.msg ?? v?.message ?? v?.detail
+  if (typeof msg !== "string" || !msg) return ""
+  const code = (typeof e === "object" ? e?.code : undefined) ?? v?.code
+  return code === undefined || code === null || code === "" ? msg : `${msg} (${code})`
+}
+
 // answer turns pi's events into Anthropic's: an error before anything was
 // said as an HTTP failure, else a stream (or, unstreamed, one message).
-async function answer(events, { model, stream, res }) {
+async function answer(events, { model, stream, res, said }) {
   const it = events[Symbol.asyncIterator]()
   const first = []
   // wait for the first thing said, so a failure can still be a status
@@ -298,6 +346,13 @@ async function answer(events, { model, stream, res }) {
       return failure(st, st === 400 && !/prompt is too long/i.test(msg) && /context|too long|too many tokens/i.test(msg) ? "prompt is too long: " + msg : msg, kept(res()))
     }
     if (t !== "start") break
+  }
+  // nothing said, while the vendor said why in a body the package didn't
+  // read (pi-zcode's {"code":1005,"msg":"exceed quota limit"})
+  const last = first.at(-1)
+  if (last?.type === "done" && emptyOf(last.message)) {
+    const why = await whyOf(said)
+    if (why) return failure(statusOf(res(), why), why, kept(res()))
   }
   const id = "msg_pi_" + Math.random().toString(36).slice(2, 14)
   async function* all() {
@@ -430,6 +485,10 @@ export async function load(h, list) {
   const home = path.join(h.directory, "pi")
   // pi keeps its settings and caches here, not in the user's ~/.pi
   process.env.PI_CODING_AGENT_DIR ??= home
+  // pi makes it on start; packages write their files into it (pi-antigravity
+  // its accounts) and fail with ENOENT when it isn't there
+  fs.mkdirSync(process.env.PI_CODING_AGENT_DIR, { recursive: true })
+  watchFetch()
   const none = path.join(home, "none") // no project's or user's extensions come along
   const dirs = [...list.map((p) => (fs.statSync(p.target, { throwIfNoEntry: false })?.isDirectory() ? p.target : path.dirname(p.target))), path.join(h.directory, "plugins")]
   let pi, ai
@@ -464,6 +523,7 @@ export async function load(h, list) {
           all[key] = fromPi(next, all[key])
         })
         h.send({ event: "auth", provider: key.split("#")[0], account: key })
+        mirror()
         return next
       })
       chains.set(key, run)
@@ -475,33 +535,298 @@ export async function load(h, list) {
         if (!(key in all)) return false
         delete all[key]
       })
+      mirror()
     },
   }
   const mr = await pi.ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false, refreshOnCreate: false })
 
+  // pi's auth.json, kept as pi keeps it: each provider's sign-in (its first
+  // account's). Packages read it back themselves rather than be given it
+  // (readStoredCredential: pi-zcode its plans, pi-cursor its token), and
+  // are told of it as pi tells them, with session_start: each as the host
+  // starts, and a provider again once newly signed in (pi-zcode registers
+  // its plans' models then).
+  const runners = new Map() // provider id → its package's runner
+  const mirrored = new Map()
+  const authFile = path.join(process.env.PI_CODING_AGENT_DIR, "auth.json")
+  let started = false
+  function mirror() {
+    const all = h.readAuth()
+    const fresh = new Set()
+    let file
+    for (const [id, runner] of runners) {
+      const c = toPi(all[id])
+      const now = c ? JSON.stringify(c) : ""
+      // a session starts for each package as pi starts, signed in or not
+      // (pi-provider-kiro keeps the UI its sign-in asks on from it)
+      if (!started && runner) fresh.add(runner)
+      if (mirrored.get(id) === now) continue
+      if (c && !mirrored.get(id) && runner) fresh.add(runner)
+      mirrored.set(id, now)
+      file ??= readJSON(authFile) ?? {}
+      if (c) file[id] = c
+      else delete file[id]
+    }
+    if (file) {
+      try {
+        const tmp = `${authFile}.${process.pid}.tmp`
+        fs.writeFileSync(tmp, JSON.stringify(file, null, 2), { mode: 0o600 })
+        fs.renameSync(tmp, authFile)
+      } catch (e) {
+        h.send({ event: "log", level: "error", message: `pi: auth.json: ${e?.message ?? e}` })
+      }
+    }
+    const reason = started ? "new" : "startup"
+    for (const runner of fresh) {
+      const before = JSON.stringify([...runners.keys()].map((id) => (mr.getModels(id) ?? []).map((m) => m.id)))
+      runner
+        .emit({ type: "session_start", reason })
+        .catch(() => {})
+        .then(() => {
+          // magpie asks the models again when they changed
+          if (JSON.stringify([...runners.keys()].map((id) => (mr.getModels(id) ?? []).map((m) => m.id))) !== before) h.send({ event: "auth" })
+        })
+    }
+  }
+  const hp = { ...h, mirror }
+
   const out = []
   for (const p of list) {
     try {
-      const r = await pi.discoverAndLoadExtensions([p.target], none, none, pi.createEventBus())
-      const ids = []
-      for (const x of r.runtime?.pendingProviderRegistrations ?? []) {
-        mr.registerProvider(x.name, x.config)
-        ids.push(x.name)
-      }
-      for (const x of r.runtime?.pendingNativeProviderRegistrations ?? []) {
-        mr.registerNativeProvider(x.provider)
-        ids.push(x.provider.id)
-      }
+      const r = await pi.discoverAndLoadExtensions(await entriesOf(pi, p.target, none), none, none, pi.createEventBus())
+      const ids = [
+        ...(r.runtime?.pendingProviderRegistrations ?? []).map((x) => x.name),
+        ...(r.runtime?.pendingNativeProviderRegistrations ?? []).map((x) => x.provider.id),
+      ]
       if (r.errors?.length && !r.extensions?.length) throw new Error(r.errors.map((e) => e.error).join("; "))
       for (const e of r.errors ?? []) h.send({ event: "log", level: "error", message: `${p.spec}: ${e.error}` })
       if (!ids.length && !r.extensions?.length) throw new Error("has no pi extension")
-      const hooks = [...new Set(ids)].map((id) => ({ spec: p.spec, target: p.target, hooks: hooksOf(h, mr, ai, id) }))
+      const runner = bind(pi, r, mr, none, h, p.spec)
+      for (const id of ids) runners.set(id, runner)
+      const hooks = [...new Set(ids)].map((id) => ({ spec: p.spec, target: p.target, hooks: hooksOf(hp, mr, ai, id) }))
       out.push({ spec: p.spec, hooks })
     } catch (e) {
       out.push({ spec: p.spec, error: String(e?.stack ?? e) })
     }
   }
+  mirror()
+  started = true
   return out
+}
+
+// bind gives a package's extensions to the runtime as pi's session gives
+// them: the providers they registered while loading are registered, one
+// they register later (pi-zcode its plans, once signed in) at once, and
+// their events (session_start) are given pi's context, with no session
+// and no tools of its own, and a UI only for a sign-in's questions.
+// Without pi's runner the providers are registered as they were loaded,
+// and nothing later reaches them.
+function bind(pi, r, mr, cwd, h, spec) {
+  const flush = () => {
+    for (const x of r.runtime?.pendingProviderRegistrations ?? []) mr.registerProvider(x.name, x.config)
+    for (const x of r.runtime?.pendingNativeProviderRegistrations ?? []) mr.registerNativeProvider(x.provider)
+    return null
+  }
+  if (!pi.ExtensionRunner || !pi.ModelRegistry || !pi.SessionManager?.inMemory || !r.runtime) return flush()
+  const nothing = () => {}
+  let runner
+  try {
+    runner = new pi.ExtensionRunner(r.extensions ?? [], r.runtime, cwd, pi.SessionManager.inMemory(cwd), new pi.ModelRegistry(mr))
+    runner.bindCore(
+      {
+        sendMessage: nothing,
+        sendUserMessage: nothing,
+        appendEntry: nothing,
+        setSessionName: nothing,
+        getSessionName: () => undefined,
+        setLabel: nothing,
+        getActiveTools: () => [],
+        getAllTools: () => [],
+        getSettings: () => ({}),
+        setActiveTools: nothing,
+        refreshTools: nothing,
+        getCommands: () => [],
+        setModel: async () => false,
+        getThinkingLevel: () => "off",
+        setThinkingLevel: nothing,
+      },
+      {
+        getModel: () => undefined,
+        getScopedModels: () => [],
+        isIdle: () => true,
+        isProjectTrusted: () => false,
+        getSignal: () => undefined,
+        abort: nothing,
+        hasPendingMessages: () => false,
+        shutdown: nothing,
+        getContextUsage: () => undefined,
+        compact: nothing,
+        getSystemPrompt: () => "",
+        executeTool: async () => {
+          throw new Error("magpie runs no tools of pi's")
+        },
+        getCallableTools: () => [],
+      },
+      {
+        registerProvider: (name, config) => mr.registerProvider(name, config),
+        registerNativeProvider: (provider) => mr.registerNativeProvider(provider),
+        unregisterProvider: (name) => mr.unregisterProvider(name),
+        registerVirtualModel: (d) => mr.registerVirtualModel?.(d),
+        unregisterVirtualModel: (provider, id) => mr.unregisterVirtualModel?.(provider, id),
+      },
+    )
+  } catch (e) {
+    h.send({ event: "log", level: "error", message: `${spec}: pi's runner: ${e?.message ?? e}` })
+    return flush()
+  }
+  runner.onError((e) => h.send({ event: "log", level: "error", message: `${spec}: ${e.event}: ${e.error}` }))
+  try {
+    runner.setUIContext?.(uiOf(runner.getUIContext()), "rpc")
+  } catch (e) {
+    h.send({ event: "log", level: "error", message: `${spec}: pi's UI: ${e?.message ?? e}` })
+  }
+  return runner
+}
+
+// entriesOf is what pi loads of a package: the files its manifest names, a
+// directory among them read as pi's package manager reads one, for its
+// files (pi-xai-oauth's "./extensions") — pi's loader, given the package,
+// would import the directory itself and fail.
+async function entriesOf(pi, target, none) {
+  if (!fs.statSync(target, { throwIfNoEntry: false })?.isDirectory() || !pi.DefaultPackageManager || !pi.SettingsManager?.inMemory) return [target]
+  try {
+    const pm = new pi.DefaultPackageManager({ cwd: none, agentDir: none, settingsManager: pi.SettingsManager.inMemory() })
+    const r = await pm.resolveExtensionSources([target], { temporary: true })
+    const files = (r?.extensions ?? []).filter((e) => e.enabled).map((e) => e.path)
+    if (files.length) return files
+  } catch {}
+  return [target]
+}
+
+// ---- a package's own UI ----------------------------------------------------------
+
+// asking is the sign-in a package's UI is shown in: pi's dialogs and its
+// components (ctx.ui) are asked as the sign-in's questions, as magpie asks
+// them, and outside one they answer as pi's do with no UI.
+const asking = new AsyncLocalStorage()
+
+// plain stands for pi's theme and keybindings: a colour or a style gives
+// back the text it is given, and no key is bound.
+const plain = new Proxy({}, { get: (_, k) => (k === "then" ? undefined : (...a) => [...a].reverse().find((x) => typeof x === "string") ?? "") })
+
+function uiOf(base) {
+  const ask = (q) => asking.getStore().prompt(q)
+  return {
+    ...base,
+    get theme() {
+      return plain
+    },
+    async select(title, options) {
+      if (!asking.getStore() || !options?.length) return undefined
+      return ask({ type: "select", message: title, options: options.map((o) => ({ id: o, label: o })) })
+    },
+    async confirm(title, message) {
+      if (!asking.getStore()) return false
+      const yes = await ask({ type: "select", message: [title, message].filter(Boolean).join("\n"), options: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }] })
+      return yes === "yes"
+    },
+    async input(title, placeholder) {
+      if (!asking.getStore()) return undefined
+      return ask({ type: "text", message: title, placeholder: placeholder ?? "" })
+    },
+    async editor(title, prefill) {
+      if (!asking.getStore()) return undefined
+      return ask({ type: "text", message: title, placeholder: prefill ?? "" })
+    },
+    notify(message) {
+      asking.getStore()?.notify({ type: "info", message: String(message) })
+    },
+    async custom(factory) {
+      const i = asking.getStore()
+      return i ? shown(i, factory) : undefined
+    },
+  }
+}
+
+// shown runs a component of pi's terminal UI (ctx.ui.custom: Kiro's choice
+// of sign-in) with no terminal: the list it shows is asked as a choice and
+// the field as text, each answer given to it as its keys would, until it
+// is done; one with nothing to answer (a sign-in's waiting screen) is
+// waited on.
+async function shown(i, factory) {
+  let result
+  let over = false
+  let finish
+  const done = new Promise((ok) => (finish = ok))
+  const tui = new Proxy({ terminal: { columns: 100, rows: 40 } }, { get: (t, k) => (k in t ? t[k] : k === "then" ? undefined : () => {}) })
+  const c = await factory(tui, plain, plain, (v) => {
+    if (over) return
+    over = true
+    result = v
+    finish()
+  })
+  try {
+    while (!over) {
+      // what it does on an answer (its next screen) comes first
+      await new Promise((ok) => setTimeout(ok, 0))
+      if (over) break
+      const ctl = controlOf(c)
+      if (!ctl) {
+        await done
+        break
+      }
+      if (ctl.list) {
+        const items = ctl.list.filteredItems ?? ctl.list.items
+        const v = await i.prompt({ type: "select", message: ctl.message, options: items.map((x) => ({ id: String(x.value), label: x.label ?? String(x.value), description: x.description ?? "" })) })
+        const item = items.find((x) => String(x.value) === String(v))
+        if (item) ctl.list.onSelect?.(item)
+        else ctl.list.onCancel?.()
+      } else {
+        const v = String((await i.prompt({ type: "text", message: ctl.message, placeholder: "" })) ?? "")
+        ctl.input.setValue?.(v)
+        ctl.input.onSubmit?.(v)
+      }
+    }
+  } finally {
+    c?.dispose?.()
+  }
+  return result
+}
+
+const strip = (l) => String(l).replace(/\x1b\[[0-9;]*m/g, "").trim()
+
+// controlOf is the first list or field a component shows, with the text
+// shown above it, rules left out, as its question. A component may keep
+// its parts to itself (Kiro's gives only render and handleInput), and each
+// package loads its own copy of pi-tui, so its classes can't be told
+// apart; but drawing walks the parts in order, each container going
+// through its children, so the arrays walked while it draws are what it
+// shows.
+function controlOf(root) {
+  const seen = []
+  const walk = Array.prototype[Symbol.iterator]
+  Array.prototype[Symbol.iterator] = function () {
+    for (let i = 0; i < this.length; i++) {
+      const x = this[i]
+      if (x && typeof x === "object" && typeof x.render === "function" && !seen.includes(x)) seen.push(x)
+    }
+    return walk.call(this)
+  }
+  try {
+    root?.render?.(100)
+  } catch {
+  } finally {
+    Array.prototype[Symbol.iterator] = walk
+  }
+  const at = seen.findIndex((c) => (Array.isArray(c.items) && typeof c.onSelect === "function") || typeof c.onSubmit === "function")
+  if (at < 0) return undefined
+  const c = seen[at]
+  const above = seen
+    .slice(0, at)
+    .filter((t) => typeof t.text === "string")
+    .map((t) => strip(t.text))
+    .filter((l) => l && !/^[\s─━│┃┌┐└┘├┤┬┴┼╭╮╯╰═║-]*$/.test(l))
+  return { [typeof c.onSelect === "function" ? "list" : "input"]: c, message: above.join("\n") }
 }
 
 // ---- one provider's hooks --------------------------------------------------------
@@ -544,7 +869,7 @@ function startLogin(oauth) {
     },
   }
   run.promise = Promise.resolve()
-    .then(() => oauth.login(interaction))
+    .then(() => asking.run(interaction, () => oauth.login(interaction)))
     .then(
       (c) => (run.result = { ...c, type: "success" }),
       (e) => (run.result = { type: "failed", error: String(e?.message ?? e) }),
@@ -565,7 +890,9 @@ function promptOf(run) {
     key,
     message: q.message ?? "",
     placeholder: q.placeholder ?? "",
-    options: select ? q.options.map((o) => (typeof o === "string" ? { label: o, value: o, hint: "" } : { label: o.label ?? String(o.value), value: String(o.value ?? o.label), hint: o.hint ?? o.description ?? "" })) : undefined,
+    // pi's options are { id, label, description } and the login is answered
+    // with the id (pi-zcode's "bigmodel"), never with what the reader saw
+    options: select ? q.options.map((o) => (typeof o === "string" ? { label: o, value: o, hint: "" } : { label: o.label ?? String(o.id ?? o.value), value: String(o.id ?? o.value ?? o.label), hint: o.hint ?? o.description ?? "" })) : undefined,
   }
 }
 
@@ -681,6 +1008,7 @@ function hooksOf(h, mr, ai, id) {
       return failure(400, String(e?.message ?? e))
     }
     let res
+    const seen = {}
     const max = Number(body.max_tokens) > 0 ? Number(body.max_tokens) : undefined
     const opts = {
       signal: init?.signal,
@@ -692,12 +1020,12 @@ function hooksOf(h, mr, ai, id) {
     }
     let events
     try {
-      events = mr.streamSimple(model, context, opts)
+      events = said.run(seen, () => mr.streamSimple(model, context, opts))
     } catch (e) {
       const msg = String(e?.message ?? e)
       return failure(statusOf(undefined, msg), msg)
     }
-    return answer(events, { model: body.model, stream: body.stream !== false, res: () => res })
+    return answer(events, { model: body.model, stream: body.stream !== false, res: () => res, said: seen })
   }
 
   return {
@@ -705,6 +1033,7 @@ function hooksOf(h, mr, ai, id) {
     provider: {
       id,
       async models(_given, { auth: stored }) {
+        h.mirror()
         if (stored && prov()?.refreshModels) {
           const r = await mr.refresh({ providers: [id], allowNetwork: true })
           const e = r?.errors?.get?.(id)

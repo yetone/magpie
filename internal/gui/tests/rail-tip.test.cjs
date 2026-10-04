@@ -3,8 +3,9 @@
 // the icon below: the browser's own tooltip came up under the pointer, and
 // Devin's name sat on ZCode's Z as if it were ZCode's (Elan on X). Hovering
 // from one icon to the next moves the name with it; leaving, a click, Esc
-// and closing the picker take it away. Keyboard focus shows it too. In
-// Chromium and WebKit, English and Chinese, light and dark.
+// and closing the picker take it away. Keyboard focus shows it too. The
+// picker is the one in a connected agent's opened row. In Chromium and
+// WebKit, English and Chinese, light and dark.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -13,9 +14,9 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 const vendors = [["Grok (SuperGrok)", "xai"], ["Devin", "devin"], ["ZCode", "zcode"], ["Kimi", "kimi"]];
-const options = vendors.flatMap(([g, ic]) => [1, 2, 3].map((n) => ({ value: `${ic}/m${n}`, label: `${g} ${n}`, group: g, icon: ic })));
+const options = vendors.flatMap(([g, ic]) => [1, 2, 3].map((n) => ({ value: `${ic}/m${n}`, ref: `${ic}/m${n}`, label: `${g} ${n}`, group: g, icon: ic })));
 const state = (lang, theme) => ({
-  agents: [{ id: "claude", name: "Claude Code", path: "/test/settings.json", fields: [{ key: "model", label: "model", value: "xai/m1", options }] }],
+  agents: [{ id: "claude", name: "Claude Code", path: "/test/settings.json", wired: true, fields: [{ key: "model", label: "model", value: "xai/m1", options }] }],
   profiles: [], settings: { lang, theme },
 });
 
@@ -60,6 +61,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("http://magpie.test/**", serve(lang, theme));
         await page.goto("http://magpie.test/");
         await page.locator('#nav [data-view="agents"]').click();
+        // connected, its model picked in its opened row
+        await page.locator("#agents .ag-link").first().click();
         await page.locator('#agents [data-key="model"]').first().click();
         await page.locator("#pickerRail .rail-item").first().waitFor();
         const item = (n) => page.locator(`#pickerRail .rail-item[aria-label="${n}"]`);

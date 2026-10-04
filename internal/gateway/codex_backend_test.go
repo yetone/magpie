@@ -62,7 +62,7 @@ func TestCodexOwnModelPassesThrough(t *testing.T) {
 	if code != 200 || !strings.Contains(body, `"input_tokens":9`) {
 		t.Fatalf("%d %s", code, body)
 	}
-	if u := usage.Load(time.Time{}); len(u) != 1 || u[0].Input != 9 || u[0].Output != 2 || u[0].Provider != "openai" {
+	if u := usage.Load(time.Time{}); len(u) != 1 || u[0].Input != 9 || u[0].Output != 2 || u[0].Provider != "openai" || u[0].ResponseID != "r1" {
 		t.Errorf("usage %+v", u)
 	}
 	if path != "/backend-api/codex/responses" || head.Get("Authorization") != "Bearer chatgpt-token" || head.Get("chatgpt-account-id") != "acct-1" {

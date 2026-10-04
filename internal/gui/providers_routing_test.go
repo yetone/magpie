@@ -58,3 +58,48 @@ func TestProviderSaveRouting(t *testing.T) {
 	post("save", `{`+form+`,"from":"relay","routing":"","affinity":""}`)
 	is("", "")
 }
+
+// Sink (01huadalang: one rate limited with quota left goes to the back)
+// is picked in the editor and made with its Save, or set on its own from
+// the Routing page, and a Save that doesn't carry it keeps it.
+func TestProviderSaveSink(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	mux := http.NewServeMux()
+	providerRoutes(mux, nil)
+	post := func(action, body string) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/provider/"+action, strings.NewReader(body)))
+		if w.Code != 200 {
+			t.Fatalf("%s: %d %s", action, w.Code, w.Body)
+		}
+	}
+	is := func(want bool) {
+		t.Helper()
+		p, err := provider.Find("relay")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Sink != want {
+			t.Fatalf("sink %v, want %v", p.Sink, want)
+		}
+		if got := providerInfo(*p, nil).Sink; got != want {
+			t.Fatalf("listed sink %v, want %v", got, want)
+		}
+	}
+	const form = `"id":"relay","name":"Relay","chat":"http://127.0.0.1:1/v1","models":["sol"]`
+	post("save", `{`+form+`,"key":"k","new":true}`)
+	is(false)
+	post("save", `{`+form+`,"from":"relay","routing":"order","sink":true}`)
+	is(true)
+	post("save", `{`+form+`,"from":"relay"}`)
+	is(true)
+	post("sink", `{"id":"relay","sink":false}`)
+	is(false)
+	post("sink", `{"id":"relay","sink":true}`)
+	post("save", `{`+form+`,"from":"relay"}`)
+	is(true)
+}

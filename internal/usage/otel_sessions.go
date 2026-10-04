@@ -35,6 +35,20 @@ func OTelSession(agent, session string) bool {
 	return err == nil && e.sessionObserved(agent, session, config)
 }
 
+// OTelSessionFresh resolves a cached miss once before the gateway exports its
+// first attempt. Requests without a native ID retain observed-agent readiness.
+func OTelSessionFresh(agent, session string) bool {
+	if OTelSession(agent, session) {
+		return true
+	}
+	e := otel.Load()
+	if e == nil || session == "" {
+		return false
+	}
+	config, err := settings.OTelExport()
+	return err == nil && config.Enabled && config.Sessions && e.identities.VisibleFresh(agent, session)
+}
+
 func (e *otelExporter) sessionObserved(agent, session string, config settings.OTel) bool {
 	if !config.Enabled || !config.Sessions {
 		return false

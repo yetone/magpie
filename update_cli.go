@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/settings"
@@ -50,14 +51,89 @@ func updateAutoCmd(args []string) error {
 	return nil
 }
 
-// updateCmd is `magpie update [check]`: the app replaces its bundle, the
-// terminal build its binary.
+// updateMirrorCmd is `magpie update mirror [<prefix>|off]`: the GitHub
+// download mirror every update goes through, the app's own among them
+// (settings.UpdateMirror). With nothing, it says which.
+func updateMirrorCmd(args []string) error {
+	s := settings.Load()
+	if len(args) > 1 {
+		return fmt.Errorf("magpie update mirror takes one prefix, or off")
+	}
+	if len(args) == 1 {
+		switch m := strings.TrimSpace(args[0]); m {
+		case "off", "none", "":
+			s.UpdateMirror = ""
+		default:
+			if err := update.CheckMirror(m); err != nil {
+				return err
+			}
+			s.UpdateMirror = m
+		}
+		if err := settings.Save(s); err != nil {
+			return err
+		}
+	}
+	if s.UpdateMirror == "" {
+		fmt.Println("updates are downloaded from GitHub", muted.Render("· magpie update mirror <prefix> has them come through a mirror; the checksum is still usemagpie.ai's"))
+		return nil
+	}
+	fmt.Println("updates are downloaded through", bold.Render(s.UpdateMirror), muted.Render("· each is checked against usemagpie.ai's checksum · magpie update mirror off goes back to GitHub"))
+	return nil
+}
+
+// updateFlags takes --proxy and --mirror (each as --flag value or
+// --flag=value) out of args.
+func updateFlags(args []string) (rest []string, proxy, mirror string, err error) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		name, val, eq := strings.Cut(a, "=")
+		if name != "--proxy" && name != "--mirror" {
+			rest = append(rest, a)
+			continue
+		}
+		if !eq {
+			if i+1 >= len(args) {
+				return nil, "", "", fmt.Errorf("%s needs a value", name)
+			}
+			i++
+			val = args[i]
+		}
+		if name == "--proxy" {
+			if err := update.CheckProxy(val); err != nil {
+				return nil, "", "", err
+			}
+			proxy = val
+			continue
+		}
+		if val != "off" {
+			if err := update.CheckMirror(val); err != nil {
+				return nil, "", "", err
+			}
+		}
+		mirror = val
+	}
+	return rest, proxy, mirror, nil
+}
+
+// updateCmd is `magpie update [check] [--proxy <url>] [--mirror <prefix>]`:
+// the app replaces its bundle, the terminal build its binary.
 func updateCmd(args []string) error {
+	args, proxy, mirror, err := updateFlags(args)
+	if err != nil {
+		return err
+	}
 	if len(args) > 1 && args[1] == "auto" {
 		return updateAutoCmd(args[2:])
 	}
+	if len(args) > 1 && args[1] == "mirror" {
+		return updateMirrorCmd(args[2:])
+	}
+	if len(args) > 2 || len(args) == 2 && args[1] != "check" {
+		return fmt.Errorf("usage: magpie update [check] [--proxy <url>] [--mirror <prefix>]")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	ctx = update.WithMirror(update.WithProxy(ctx, proxy), mirror)
 	rel, err := update.Latest(ctx)
 	if err != nil {
 		return err
@@ -81,7 +157,7 @@ func updateCmd(args []string) error {
 		if update.Stuck(app) != "" {
 			return fmt.Errorf("%s can't be replaced where it is; move magpie to Applications, or download the new version from %s", tilde(app), update.Site)
 		}
-		fmt.Println(muted.Render("  downloading " + update.AppAsset() + " …"))
+		fmt.Println(muted.Render("  downloading " + update.AppAsset() + via(ctx) + " …"))
 		staged, err := update.Stage(ctx, rel, app)
 		if err != nil {
 			return err
@@ -106,10 +182,18 @@ func updateCmd(args []string) error {
 	if exe, err := update.Executable(); err == nil && update.Homebrew(exe) {
 		return fmt.Errorf("this magpie was installed with Homebrew; update it with: brew upgrade magpie")
 	}
-	fmt.Println(muted.Render("  downloading " + update.BinaryAsset() + " …"))
+	fmt.Println(muted.Render("  downloading " + update.BinaryAsset() + via(ctx) + " …"))
 	if err := update.ReplaceBinary(ctx, rel); err != nil {
 		return err
 	}
 	fmt.Println(green.Render("✓"), "updated to", rel.Version)
 	return nil
+}
+
+// via says the mirror a download goes through, if any.
+func via(ctx context.Context) string {
+	if m := update.Mirror(ctx); m != "" {
+		return " through " + m
+	}
+	return ""
 }

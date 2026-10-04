@@ -513,7 +513,7 @@ func ompOwnOptions(modelsFile, cur string) []Option {
 	}
 	at := map[string]int{}
 	var out []Option
-	for _, o := range append(opts, ownOptions("", cur)...) {
+	for _, o := range append(opts, ownOptionsFrom(ompRegistry, "", cur)...) {
 		i, dup := at[o.Value]
 		if !dup {
 			at[o.Value] = len(out)

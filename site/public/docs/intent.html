@@ -215,7 +215,7 @@ The number of its kind (0 for none):</pre>
       <tr><td>… (said before, for the same message).</td><td>The answer came from the 10-minute cache, so no call was made.</td></tr>
       <tr><td>… was to tell which … but couldn’t — <em>reason</em> — so no rule with an intent matches it.</td><td>It failed. The reason is the error, the timeout, what it answered, or that it is resting after a failure.</td></tr>
       <tr><td>Turn N begins and rule R matches — asks for “B” — so M goes first …</td><td>The rule that won, and the model put first.</td></tr>
-      <tr><td>Rule R matches, but M has nothing ready now, so the group’s order stands.</td><td>The rule’s model has no key or account available right now.</td></tr>
+      <tr><td>Rule R matches, but M has no account or key that can take this request, so the group’s order stands.</td><td>No account or key for the rule’s model can take this request.</td></tr>
       <tr><td>Rule R (…) sent turn N to M as it began; the turn stays there.</td><td>A tool round within the turn, held on its decision.</td></tr>
       <tr><td>This turn began before magpie saw it, so the rules wait for the next one.</td><td>See <em>Waits</em> above.</td></tr>
     </table></div>
@@ -274,7 +274,7 @@ The number of its kind (0 for none):</pre>
     <ul>
       <li>a rule above it matched first;</li>
       <li>another condition on the rule didn’t hold (tokens, images, reasoning or agent);</li>
-      <li>the rule’s model had nothing ready (“has nothing ready now”);</li>
+      <li>no account or key for the rule’s model could take this request;</li>
       <li>it was a tool round in a turn that began elsewhere;</li>
       <li>magpie didn’t see the turn begin (“the rules wait”).</li>
     </ul>

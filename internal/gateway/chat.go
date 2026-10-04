@@ -22,6 +22,9 @@ type cToolCall struct {
 		Name      string `json:"name,omitempty"`
 		Arguments string `json:"arguments,omitempty"`
 	} `json:"function"`
+	// Gemini's OpenAI-compatible API gives a call's thought signature
+	// here, and wants it back (gemini_signature.go)
+	ExtraContent json.RawMessage `json:"extra_content,omitempty"`
 }
 
 type cRequest struct {
@@ -91,7 +94,8 @@ func parseChat(body []byte) (*Request, error) {
 			}
 			msg.Parts = append(msg.Parts, chatParts(m.Content)...)
 			for _, tc := range m.ToolCalls {
-				msg.Parts = append(msg.Parts, Part{Kind: ToolCall, ID: tc.ID, Name: tc.Function.Name, Args: parseArgs(tc.Function.Arguments)})
+				msg.Parts = append(msg.Parts, Part{Kind: ToolCall, ID: tc.ID, Name: tc.Function.Name, Args: parseArgs(tc.Function.Arguments),
+					Signature: googleSignature(tc.ExtraContent)})
 			}
 			r.Messages = append(r.Messages, msg)
 		case "tool":
@@ -184,6 +188,9 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 	// served (#388), as Command Code's plugin does for a Go key, as the
 	// built-in replayed it to /alpha/generate
 	replay := strings.Contains(host, "deepseek") || strings.Contains(strings.ToLower(model), "deepseek") || host == provider.CommandCodePlanID
+	// Gemini wants each step's thought signature back on its first call
+	// (#687), and one it can't check for a step it didn't sign
+	gemini := geminiCompat(host, model)
 	// A tool message holds text only, so the images tools returned go to
 	// the model in a user message after the tool messages, as the start of
 	// the user's own message when one comes next: some models' chat
@@ -217,6 +224,12 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 			am := map[string]any{"role": "assistant"}
 			var calls []map[string]any
 			var think string
+			signed := false
+			for _, p := range m.Parts {
+				if p.Kind == ToolCall && p.Signature != "" {
+					signed = true
+				}
+			}
 			for _, p := range m.Parts {
 				switch p.Kind {
 				case ToolCall:
@@ -225,8 +238,18 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 						id = "call_" + newID()
 					}
 					names[id] = p.Name
-					calls = append(calls, map[string]any{"id": id, "type": "function",
-						"function": map[string]any{"name": p.Name, "arguments": argsString(p)}})
+					call := map[string]any{"id": id, "type": "function",
+						"function": map[string]any{"name": p.Name, "arguments": argsString(p)}}
+					if gemini {
+						// a later call of a signed step goes without: Gemini
+						// signs the first
+						if sig := p.Signature; sig != "" {
+							call["extra_content"] = googleExtra(sig)
+						} else if !signed {
+							call["extra_content"] = googleExtra(skipSignature)
+						}
+					}
+					calls = append(calls, call)
 				case Thinking:
 					think += p.Text
 				}
@@ -806,7 +829,9 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 			// next one.
 			if idx != d.tool || (tc.ID != "" && tc.ID != d.toolID) {
 				d.tool, d.toolID = idx, tc.ID
-				emit(Event{Kind: KToolStart, ID: tc.ID, Name: tc.Function.Name})
+				// a call Gemini signed goes to the client with an id
+				// carrying the signature, which comes back with it
+				emit(Event{Kind: KToolStart, ID: signedID(tc.ID, googleSignature(tc.ExtraContent)), Name: tc.Function.Name})
 			}
 			if tc.Function.Arguments != "" {
 				emit(Event{Kind: KToolArgs, Text: tc.Function.Arguments})

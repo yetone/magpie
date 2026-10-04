@@ -425,7 +425,7 @@ func (m model) updateGroup(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			in.SetValue(fmt.Sprint(g.Context))
 		}
 		m.openAsk(ask{crumbs: []string{"routing", g.Name, "context"}, input: in, empty: true,
-			hint: "how long a request agents are told the group takes, rather than its shortest model's",
+			hint: "how long a request agents are told the group takes, rather than its largest model's",
 			onEnter: func(v string) tea.Cmd {
 				return saveGroup(g.ID, func(g *provider.Group) error {
 					if v == "" {

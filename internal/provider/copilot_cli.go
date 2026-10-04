@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -70,17 +71,26 @@ func copilotCLILogin() (copilotApp, bool) {
 	if cfg.Last != nil {
 		users = append([]copilotCLIUser{*cfg.Last}, users...)
 	}
-	for _, u := range users {
-		if u.Login == "" || (u.Host != "" && u.Host != "https://github.com") {
-			continue // GitHub Enterprise has an API of its own
-		}
-		key := "https://github.com:" + u.Login
-		tok := cfg.Tokens[key]
-		if tok == "" {
-			tok = copilotCLISecret(key)
-		}
-		if tok != "" {
-			return copilotApp{User: u.Login, Token: tok, cli: true}, true
+	// a github.com account first, as before; then one an enterprise's
+	// `copilot login --host <name>.ghe.com` signed in (#723). A GitHub
+	// Enterprise Server's own host is left out: its API isn't GHE.com's.
+	for _, ghe := range []bool{false, true} {
+		for _, u := range users {
+			host, ok := copilotHostOf(u.Host)
+			if u.Login == "" || !ok || (host != "") != ghe {
+				continue
+			}
+			key := "https://github.com:" + u.Login
+			if ghe {
+				key = strings.TrimSuffix(u.Host, "/") + ":" + u.Login
+			}
+			tok := cfg.Tokens[key]
+			if tok == "" {
+				tok = copilotCLISecret(key)
+			}
+			if tok != "" {
+				return copilotApp{User: u.Login, Token: tok, Host: host, cli: true}, true
+			}
 		}
 	}
 	return copilotApp{}, false
@@ -123,13 +133,14 @@ var copilotCLISecret = func(account string) string {
 
 // copilotDirect is the session a CLI token makes: the token itself, at the
 // API its account is served from.
-func copilotDirect(ctx context.Context, github string) (copilotSession, error) {
+func copilotDirect(ctx context.Context, app copilotApp) (copilotSession, error) {
+	github := app.Token
 	copilotMu.Lock()
 	defer copilotMu.Unlock()
 	if s, ok := copilotSessions[github]; ok && time.Until(time.Unix(s.ExpiresAt, 0)) > 2*time.Minute {
 		return s, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, CopilotUserURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, copilotUserURL(app.Host), nil)
 	if err != nil {
 		return copilotSession{}, err
 	}

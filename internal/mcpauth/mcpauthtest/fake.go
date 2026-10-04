@@ -35,7 +35,10 @@ type Fake struct {
 	// method, with the session they named
 	Calls []string
 	// Seen are the headers of the last MCP request that got through
-	Seen      http.Header
+	Seen http.Header
+	// SeenQuery is the query of the last MCP request that got through, as
+	// it came (Exa's ?login is a bare key)
+	SeenQuery string
 	ExpiresIn int // what a token is said to last, in seconds
 	// NoMetadata leaves out the resource metadata: the server of the 2025-03
 	// spec, whose authorization server is its own origin
@@ -191,6 +194,7 @@ func (f *Fake) mcp(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	f.Calls = append(f.Calls, r.Method+" "+msg.Method+" "+r.Header.Get("Mcp-Session-Id"))
 	f.Seen = r.Header.Clone()
+	f.SeenQuery = r.URL.RawQuery
 	f.mu.Unlock()
 	switch r.Method {
 	case http.MethodDelete:

@@ -105,8 +105,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await days1.getAttribute("class"), "rt-cond on");
       assert.equal(await rows.first().locator(".rt-rwarn").textContent(), w.night);
 
-      // a second rule: its hours typed, nothing moved by a click
-      await ed.locator("button", { hasText: w.add }).click();
+      // a second rule: its hours typed, nothing moved by a click. The
+      // reader wheels Add a rule into view first: the editor runs past the
+      // fold since the hints under Routing (a click's scroll is put back)
+      const wheelTo = async (x) => {
+        const d = await x.evaluate((e) => { const v = document.querySelector("#view-routing");
+          return Math.round(e.getBoundingClientRect().top - v.getBoundingClientRect().top - v.clientHeight / 2); });
+        await page.mouse.move(550, 400);
+        await page.mouse.wheel(0, d);
+        await page.waitForTimeout(400);
+      };
+      const addBtn = ed.locator("button", { hasText: w.add });
+      await wheelTo(addBtn);
+      await addBtn.click();
       const row2 = rows.nth(1);
       const tm2 = row2.locator(".rt-cond.tm");
       await tm2.waitFor();

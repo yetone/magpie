@@ -20,6 +20,7 @@ import (
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 )
 
 // An agent installed in a WSL distro reads its config there, not in
@@ -286,6 +287,9 @@ var wslKinds = []wslKind{
 		asleep:  wslOwnAsleep("crush", "model", "small")},
 	{id: "hermes", name: "Hermes Agent", dir: ".hermes", bin: "hermes", in: hermesIn,
 		restart: "reads its settings at start-up — restart open Hermes sessions to use this."},
+	// no bin: morph is other tools' name too
+	{id: "morph", name: "Mister Morph", dir: ".morph", in: morphIn,
+		restart: "uses this for new tasks in its Console — restart open morph chats to use it there."},
 	// no bin: grok is also other tools' name, as on this machine
 	{id: "grok", name: "Grok Build", dir: ".grok", in: grokIn,
 		restart: "reads its settings at start-up — restart open grok sessions to use this."},
@@ -525,6 +529,23 @@ func wslAgentsOf(ds []distro) []*Agent {
 				out = append(out, a)
 			}
 		}
+	}
+	return out
+}
+
+// wslHomes are the distros agents were found in, each user's home as magpie
+// opens it, for internal/sessions to read their sessions in; none off
+// Windows. A stopped distro's is its home as last probed.
+func wslHomes() []sessions.WSLHome {
+	if !wslOn {
+		return nil
+	}
+	var out []sessions.WSLHome
+	for _, d := range wslDistros() {
+		if d.Root == "" || d.Home == "" {
+			continue
+		}
+		out = append(out, sessions.WSLHome{Distro: d.Name, Home: d.local(d.Home), Running: d.Running})
 	}
 	return out
 }

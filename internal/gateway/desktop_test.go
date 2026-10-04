@@ -83,13 +83,13 @@ func TestClaudeDesktopAliases(t *testing.T) {
 	rec := httptest.NewRecorder()
 	New().Handler().ServeHTTP(rec, req)
 	var list struct {
-		Data []struct{ ID, DisplayName, Description string } `json:"data"`
+		Data []desktopRow `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
 	alias := aliasFor("fake/m1")
-	var row *struct{ ID, DisplayName, Description string }
+	var row *desktopRow
 	for i := range list.Data {
 		if list.Data[i].ID == alias {
 			row = &list.Data[i]
@@ -98,7 +98,7 @@ func TestClaudeDesktopAliases(t *testing.T) {
 			t.Errorf("Desktop would drop %q", list.Data[i].ID)
 		}
 	}
-	if row == nil || row.Description != "fake/m1 in magpie" {
+	if row == nil || row.DisplayName != "m1" || row.Description != "" {
 		t.Fatalf("Claude Desktop by its User-Agent: %s", rec.Body)
 	}
 	for _, asked := range []string{alias, alias + "[1m]"} {
@@ -136,4 +136,10 @@ func TestClaudeDesktopKnown(t *testing.T) {
 			t.Errorf("%q %q: %s", c.key, c.ua, got)
 		}
 	}
+}
+
+type desktopRow struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
 }

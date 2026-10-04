@@ -147,7 +147,7 @@ func TestWSLClaudePick(t *testing.T) {
 			gw = "http://172.20.0.1:" + gateway.Port()
 		}
 		env := func(k string) string { v, _ := edit.GetJSON(path, "env."+k); return v }
-		if env("ANTHROPIC_BASE_URL") != gw || env("ANTHROPIC_AUTH_TOKEN") != gateway.Token || env("ANTHROPIC_MODEL") != "relay/glm-4.6" ||
+		if env("ANTHROPIC_BASE_URL") != gw || env("ANTHROPIC_AUTH_TOKEN") != gateway.Token || env("ANTHROPIC_MODEL") != "" ||
 			env("ANTHROPIC_DEFAULT_HAIKU_MODEL") != "relay/glm-4.6" || env(claudeEffortEnv) != "max" {
 			t.Fatalf("mirrored %v:\n%s", mirrored, readFile(path))
 		}

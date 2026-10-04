@@ -146,3 +146,54 @@ func TestCheckAlertsKeepsMarks(t *testing.T) {
 		t.Fatalf("told again after the file was read back: %+v", got)
 	}
 }
+
+// the windows Antigravity really reports (TestAntigravityQuotaPools): every
+// model's own beside the pools' 5-hour and weekly ones. A pool's weekly
+// window is what should be told of, once per pool and named with it — not
+// once for every model drawing on it, and not the 5-hour asides.
+func TestDueAlertsPoolWindows(t *testing.T) {
+	now := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	reset := now.Add(48 * time.Hour)
+	five, week := 5*time.Hour, 7*24*time.Hour
+	qs := []SubscriptionQuota{{
+		Provider: "antigravity",
+		Name:     "Antigravity",
+		User:     "u@x.com",
+		Windows: []QuotaWindow{
+			// the models' own, as fetchAvailableModels reports them, each
+			// drawing on its pool
+			{Name: "Gemini 3 Flash", Model: "gemini-3-flash", Family: "Gemini", Pool: "Gemini", Used: 85, ResetsAt: &reset},
+			{Name: "Gemini 3.1 Pro (High)", Model: "gemini-3.1-pro-high", Family: "Gemini", Pool: "Gemini", Used: 85, ResetsAt: &reset},
+			{Name: "Claude Opus 4.6 (Thinking)", Model: "claude-opus-4-6-thinking", Family: "Claude", Pool: "Claude & GPT", Used: 90},
+			{Name: "GPT-OSS 120B (Medium)", Model: "gpt-oss-120b-medium", Family: "GPT-OSS", Pool: "Claude & GPT", Used: 90},
+			// the pools' own, as retrieveUserQuotaSummary reports them:
+			// aside, naming no model
+			{Name: "7 days", Pool: "Gemini", Span: week, Aside: true, Used: 85, ResetsAt: &reset},
+			{Name: "5 hours", Pool: "Gemini", Span: five, Aside: true, Used: 95, ResetsAt: &reset},
+			{Name: "7 days", Pool: "Claude & GPT", Span: week, Aside: true, Used: 90, ResetsAt: &reset},
+			{Name: "5 hours", Pool: "Claude & GPT", Span: five, Aside: true, Used: 90, ResetsAt: &reset},
+		},
+	}}
+	marks := map[string]alertMark{}
+	got := dueAlerts(qs, marks, 80, 0, now)
+	if len(got) != 2 {
+		t.Fatalf("got %d alerts, want one per pool: %+v", len(got), got)
+	}
+	if got[0].Window != "Gemini · 7 days" || got[1].Window != "Claude & GPT · 7 days" {
+		t.Errorf("named %q, %q", got[0].Window, got[1].Window)
+	}
+	if len(marks) != 2 {
+		t.Errorf("the pools' marks ran together: %v", marks)
+	}
+	// told once: the same readings again say nothing
+	if again := dueAlerts(qs, marks, 80, 0, now); len(again) != 0 {
+		t.Errorf("told again: %+v", again)
+	}
+	// a mark an earlier build wrote of a window with no pool still holds
+	legacy := map[string]alertMark{"codex|c@x.com|w|5 hours|": {At: now, Until: &reset}}
+	codex := []SubscriptionQuota{{Provider: "codex", User: "c@x.com",
+		Windows: []QuotaWindow{{Name: "5 hours", Used: 90, ResetsAt: &reset}}}}
+	if told := dueAlerts(codex, legacy, 80, 0, now); len(told) != 0 {
+		t.Errorf("the old mark no longer holds: %+v", told)
+	}
+}

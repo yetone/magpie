@@ -136,11 +136,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(400);
       };
       await wheelTo(row);
-      assert.equal(await row.locator(".hint").textContent(), w.hint);
+      // the routing's own hint is the first; a group-in-group note follows it
+      assert.equal(await row.locator(".hint").first().textContent(), w.hint);
       await row.locator(".segs .opt", { hasText: w.smart }).click();
-      assert.notEqual(await row.locator(".hint").textContent(), w.hint);
+      assert.notEqual(await row.locator(".hint").first().textContent(), w.hint);
       await row.locator(".segs .opt", { hasText: w.manual }).click();
-      assert.equal(await row.locator(".hint").textContent(), w.hint);
+      assert.equal(await row.locator(".hint").first().textContent(), w.hint);
       assert.ok((await ed.innerText()).includes(w.rulesWait));
       const b = ed.locator("button.primary", { hasText: w.save });
       await wheelTo(b);

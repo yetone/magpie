@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>插件开发 · magpie 文档</title>
-<meta name="description" content="如何编写 magpie 插件：magpie 调用哪些 OpenCode 插件钩子，如何把它们变成带账号、模型、请求和用量的供应商，以及怎么测试、发布和上架。">
+<meta name="description" content="如何编写 magpie 插件：magpie 调用哪些 OpenCode 插件钩子、运行哪些 pi 扩展包，如何把它们变成带账号、模型、请求和用量的供应商，以及怎么测试、发布和上架。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -32,7 +32,7 @@
 <link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/plugins">
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:title" content="插件开发">
-<meta property="og:description" content="用一个 OpenCode 插件，把任何服务变成 magpie 的供应商。">
+<meta property="og:description" content="用一个 OpenCode 插件或 pi 扩展包，把任何服务变成 magpie 的供应商。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/zh/plugins">
 <meta name="twitter:card" content="summary_large_image">
@@ -79,6 +79,7 @@
     <a href="#ids">供应商 id</a>
     <a href="#test">测试</a>
     <a href="#publish">发布与上架</a>
+    <a href="#pi">pi 扩展包</a>
     <a href="#protocol">宿主协议</a>
     <a href="#faq">答疑</a>
   </aside>
@@ -86,7 +87,7 @@
   <article>
     <p class="eyebrow" id="overview">文档 · 插件</p>
     <h1>编写插件</h1>
-    <p class="lede">插件负责登录某个服务、替它发请求。magpie 把插件变成一个供应商，所有 agent 都能用，多账号、故障切换、用量这些也都有。magpie 运行的是 <a href="https://opencode.ai/docs/plugins/">OpenCode 的供应商插件</a>，为 OpenCode 写的插件不用改就能在这里用。本页讲插件作者需要知道的：magpie 调用哪些钩子、拿到返回值后做什么，以及怎么测试、发布和上架插件。</p>
+    <p class="lede">插件负责登录某个服务、替它发请求。magpie 把插件变成一个供应商，所有 agent 都能用，多账号、故障切换、用量这些也都有。magpie 运行的是 <a href="https://opencode.ai/docs/plugins/">OpenCode 的供应商插件</a>，为 OpenCode 写的插件不用改就能在这里用；注册了供应商的 <a href="https://github.com/earendil-works/pi">pi</a> 扩展包也能直接用（见 <a href="#pi">pi 扩展包</a>）。本页讲插件作者需要知道的：magpie 调用哪些钩子、拿到返回值后做什么，以及怎么测试、发布和上架插件。</p>
 
     <div class="callout"><b>一段话说清楚。</b>插件是一个 npm 包、一个 git 仓库或一个文件夹。它的模块导出一个 async 函数，形式是 OpenCode v1 插件。magpie 把所有插件加载进同一个 <a href="https://bun.sh">Bun</a> 进程，也就是<em>插件宿主</em>。函数返回一组钩子：
       <ul>
@@ -568,7 +569,7 @@ m plugin logout acme</pre>
     <h2 id="publish"><a class="anchor" href="#publish">发布与上架</a></h2>
     <ul>
       <li><b>npm。</b>照常发布。用户可以按名字添加（<code>magpie plugin add opencode-acme-auth</code>），按版本（<code>…@0.2.0</code>），从 git，或从文件夹。</li>
-      <li><b>搜索。</b><span class="ui">插件</span>里的搜索会向 npm 查询 <code>&lt;关键词&gt; opencode</code>，显示名字或 keywords 里同时含有 <code>opencode</code> 和 <code>auth</code>、<code>plugin</code>、<code>provider</code> 之一的包。keywords 写成 <code>["opencode", "opencode-plugin", "&lt;厂商&gt;"]</code> 就可以。</li>
+      <li><b>搜索。</b><span class="ui">插件</span>里的搜索会向 npm 查询 <code>&lt;关键词&gt; opencode</code>，显示名字或 keywords 里同时含有 <code>opencode</code> 和 <code>auth</code>、<code>plugin</code>、<code>provider</code> 之一的包。keywords 写成 <code>["opencode", "opencode-plugin", "&lt;厂商&gt;"]</code> 就可以。它还会查询 <code>keywords:pi-package &lt;关键词&gt;</code>，显示名字或 keywords 里提到 <code>auth</code> 或 <code>provider</code> 的 pi 扩展包。</li>
       <li><b>README。</b>插件在 magpie 里的详情页显示它在 npm 上的 README。写清楚它登录什么、怎么登录、登录信息存在哪里、有哪些模型。</li>
       <li><b>推荐列表。</b><span class="ui">插件</span>页推荐的是社区仓库 <a href="https://github.com/magpie-community/plugins/blob/main/registry.json"><code>registry.json</code></a> 里的插件。magpie 最多每六小时拉取一次，并内置一份副本，拉不到时使用。想被收录，就提一个 PR 加上一项：
         <div class="code">
@@ -584,6 +585,17 @@ m plugin logout acme</pre>
           <li>把版本号的改动推到 <code>main</code> 就会发布。</li>
           <li>这些包在每个 magpie 里都会自动更新。</li>
         </ul></li>
+    </ul>
+
+    <h2 id="pi"><a class="anchor" href="#pi">pi 扩展包</a></h2>
+    <p>magpie 也运行 <a href="https://github.com/earendil-works/pi">pi</a> 的扩展包。用 <code>pi.registerProvider</code> 注册了供应商的 pi 扩展，在 magpie 里和在 pi 里一样工作，不用改任何东西，添加方式和其他插件相同（<code>magpie plugin add pi-antigravity</code>）。</p>
+    <ul>
+      <li><b>怎样算 pi 的包。</b><code>package.json</code> 里有 <code>pi</code> 清单（<code>"pi": { "extensions": [...] }</code>）、有 <code>pi-package</code> 关键词，或者 <code>dependencies</code>、<code>peerDependencies</code> 里有 <code>@earendil-works/pi-coding-agent</code>（或旧的 <code>@mariozechner/pi-coding-agent</code>）。单个文件导入了 pi 也算。</li>
+      <li><b>加载。</b>magpie 在包旁边装好 pi，用 pi 自己的加载器在同一个插件宿主里加载它。它注册的供应商成为 magpie 的供应商，模型就是 pi 为它们列出的那些（pi 能拉取账号自己的列表时用那份）。它的命令、工具、渲染器和事件处理器都不会用到。</li>
+      <li><b>登录。</b>OAuth 登录按 pi 的方式进行：它的提问（<code>onPrompt</code>）在 magpie 的登录流程里问，它的页面（<code>onAuth</code>）在浏览器里打开，<code>refreshToken</code> 负责续期。扩展包用 <code>ctx.ui</code> 弹出的对话框（<code>select</code>、<code>confirm</code>、<code>input</code>、<code>editor</code>）和交给 <code>ctx.ui.custom</code> 的终端组件，也都变成 magpie 的提问。要 API key 的供应商会有一个填 key 的输入框。每次登录就是一个账号，所以 pi 的供应商也能有多个账号。</li>
+      <li><b>pi 的文件。</b>pi 的设置、它的 <code>auth.json</code>（按 pi 的方式保存每个供应商的第一个账号）以及扩展包自己写的文件，都放在 magpie 配置目录下的 <code>pi/</code> 里，不会动用户的 <code>~/.pi</code>，除非设置了 <code>PI_CODING_AGENT_DIR</code>。账号本身和其他插件一样存在 <code>plugin-auth.json</code> 里。</li>
+      <li><b>请求。</b>pi 供应商的模型接收 Anthropic Messages：网关把 agent 发来的请求翻译过去，magpie 通过 pi 流式发送，回复里的思考、签名和工具调用都会保留。厂商的错误会带着状态码传回，所以故障切换和其他插件一样有效。</li>
+      <li><b>id。</b>pi 供应商的 id 和其他插件规则相同，见<a href="#ids">供应商 id</a>。</li>
     </ul>
 
     <h2 id="protocol"><a class="anchor" href="#protocol">宿主协议</a></h2>
@@ -604,6 +616,8 @@ m plugin logout acme</pre>
     <h2 id="faq"><a class="anchor" href="#faq">答疑</a></h2>
     <h3>我的 OpenCode 插件不改就能在 magpie 里用吗？</h3>
     <p>可以，只要它通过 <code>auth</code>、<code>config</code>、<code>provider</code> 和 <code>chat.headers</code> 来登录和发请求。magpie 增加的部分（<code>auth.usage</code>、<code>auth.refresh</code>、<code>magpie.icon</code>、<code>maxConcurrency</code>、<code>free</code>、<code>rate</code>、<code>X-Magpie-Sign-In</code>）OpenCode 都会忽略，所以一个包能同时服务两边。</p>
+    <h3>我的 pi 扩展包能在 magpie 里用吗？</h3>
+    <p>能，只要它通过 <code>pi.registerProvider</code> 登录并提供模型。magpie 只使用它注册的供应商，见 <a href="#pi">pi 扩展包</a>。给它加上 <code>pi-package</code> 关键词，搜索就能找到它。</p>
     <h3>为什么我的供应商叫 <code>…-plugin</code>？</h3>
     <p>它的 id 在 magpie 里已经有了。见<a href="#ids">供应商 id</a>。</p>
     <h3>我的一些辅助函数被当成插件运行了。</h3>

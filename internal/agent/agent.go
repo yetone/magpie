@@ -55,6 +55,9 @@ type Option struct {
 
 	// own: served on the agent's own sign-in (viaMagpie), for Same
 	own bool
+	// sub: served on a subscription signed in in magpie, not a key; a
+	// Claude account only for Claude Code, which alone may use it safely
+	sub bool
 }
 
 // Field is one tunable setting of an agent. Set with an empty value puts
@@ -100,6 +103,19 @@ type Agent struct {
 	// kept: the endpoint, provider and model the user had. Disconnect runs
 	// it before the fields' defaults.
 	Unwire func() error
+	// Join, for an agent that can have magpie's models in its own list
+	// while it stays on the model it was on (Codex signed in with ChatGPT),
+	// connects it so, its model left as its own last pick; false where it
+	// can't, and Connect then picks one of magpie's.
+	Join func() (bool, error)
+	// Joined reports an agent Join connected: magpie is in its config
+	// though no field is on one of magpie's models.
+	Joined func() bool
+	// Follow, for an agent whose own picker moves its main model where
+	// magpie keeps other settings following it (Claude Code's /model and
+	// its tiers), brings those along to the model picked there. Run as the
+	// Agents page is drawn.
+	Follow func() error
 	// RenameRefs, for an agent whose config names magpie's models beyond
 	// its fields (omp's other roles and fallback chains), moves those names
 	// off provider from onto to, the rest of each kept; it answers whether
@@ -380,6 +396,9 @@ func atomic(a *Agent, paths ...string) *Agent {
 	}
 	if sync := a.Sync; sync != nil {
 		a.Sync = func() error { return edit.Atomically(sync, paths...) }
+	}
+	if follow := a.Follow; follow != nil {
+		a.Follow = func() error { return edit.Atomically(follow, paths...) }
 	}
 	if unwire := a.Unwire; unwire != nil {
 		a.Unwire = func() error { return edit.Atomically(unwire, paths...) }

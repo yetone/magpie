@@ -121,6 +121,10 @@ func TestRefusalFailsOverToTheNextMember(t *testing.T) {
 		}
 	}
 
+	if recs[0].ResponseID != "" || recs[1].ResponseID != "resp_m2" {
+		t.Fatalf("only the delivered reply has a client response ID: %+v", recs)
+	}
+
 	for _, rec := range recs {
 		if rec.RouteID != r.ID || rec.RouteID == 0 {
 			t.Fatalf("usage route %d, want %d", rec.RouteID, r.ID)

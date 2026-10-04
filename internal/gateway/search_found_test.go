@@ -218,6 +218,62 @@ func TestSearcherAskedWhereItSearches(t *testing.T) {
 	}
 }
 
+// A relay said to search is for Settings to name: when Automatic's searcher
+// finds nothing, the fallback goes on to another provider magpie picks by
+// itself, never to the relay and its quota (#359).
+func TestSearchFallbackSkipsARelaySaidToSearch(t *testing.T) {
+	searchSandbox(t)
+	newSearchServer := func(answer string, sources []map[string]any) (*httptest.Server, func() []string) {
+		var mu sync.Mutex
+		var asked []string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/models") {
+				io.WriteString(w, `{"data":[{"id":"m1"}]}`)
+				return
+			}
+			mu.Lock()
+			asked = append(asked, r.URL.Path)
+			mu.Unlock()
+			content := []map[string]any{{"type": "text", "text": answer}}
+			if len(sources) > 0 {
+				content = append(content, map[string]any{"type": "web_search_tool_result", "tool_use_id": "s", "content": sources})
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"id": "m", "type": "message", "role": "assistant", "model": "m1", "content": content, "stop_reason": "end_turn"})
+		}))
+		t.Cleanup(srv.Close)
+		return srv, func() []string {
+			mu.Lock()
+			defer mu.Unlock()
+			return slices.Clone(asked)
+		}
+	}
+	blind, blindAsked := newSearchServer("I found nothing.", nil)
+	good, goodAsked := newSearchServer("Go 1.27.1 is out.", []map[string]any{{"title": "Go", "url": "https://go.dev/"}})
+	relay, relayAsked := newSearchServer("Go 1.27.1 is out.", []map[string]any{{"title": "Go", "url": "https://go.dev/"}})
+	searchesOn(t, provider.Anthropic, blind.URL)
+	searchesOn(t, provider.Anthropic, good.URL)
+	save(t,
+		provider.Provider{ID: "blind", Name: "Blind", Key: "k", Anthropic: blind.URL + "/anthropic", Models: []string{"m1"}},
+		provider.Provider{ID: "good", Name: "Good", Key: "k", Anthropic: good.URL + "/anthropic", Models: []string{"m1"}},
+		provider.Provider{ID: "relay", Name: "Relay", Key: "k", Searches: true, Anthropic: relay.URL + "/anthropic", Models: []string{"m1"}})
+
+	if said, _, err := New().modelSearch(context.Background(), "latest go"); err != nil || !strings.Contains(said, "Go 1.27.1") {
+		t.Fatalf("search = %q %v", said, err)
+	}
+	if got := blindAsked(); !slices.Contains(got, "/anthropic/v1/messages") {
+		t.Fatalf("the automatic searcher was asked on %q", got)
+	}
+	if got := goodAsked(); !slices.Contains(got, "/anthropic/v1/messages") {
+		t.Fatalf("the fallback searcher was asked on %q", got)
+	}
+	for _, path := range relayAsked() {
+		if strings.Contains(path, "/messages") {
+			t.Fatalf("the relay was asked on %q", path)
+		}
+	}
+}
+
 // DeepSeek's Anthropic API searches by itself: its web_search_tool_result
 // is read into pages, with their titles, addresses and ages, and the
 // client gets them without DeepSeek's encrypted_content, which is sealed

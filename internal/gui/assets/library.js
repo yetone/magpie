@@ -236,7 +236,10 @@
       let tip = has ? t("{agent} has it — click to take it away", { agent: a.name }) : t("Give it to {agent}", { agent: a.name });
       if (via) { c.classList.add("via"); tip = t("{agent} reads it through {other} — click to give it its own", { agent: a.name, other: via }); }
       if (problem) { c.classList.add("warn"); tip = a.name + ": " + problem; }
-      if (blocked) { c.classList.add("blocked"); c.disabled = true; tip = blocked; }
+      // not disabled: a disabled button tells nothing on a click, and
+      // WebKit shows it no tooltip either — 蓝猫 clicked Claude Desktop's
+      // grey chip for a remote server and nothing said why
+      if (blocked) { c.classList.add("blocked"); c.setAttribute("aria-disabled", "true"); tip = blocked; }
       c.title = a.aside && !problem && !blocked ? tip + "\n" + a.aside : tip;
       c.setAttribute("aria-pressed", has ? "true" : "false");
       // What's lit is read off the chips clicked, not the list they were
@@ -246,6 +249,7 @@
       c.onclick = (e) => {
         e.stopPropagation();
         const me = e.currentTarget;
+        if (cannot(me)) { status(me.title, "warn", 8000); return; }
         const lit = litOf(me.parentElement);
         const kept = keptOf(me.parentElement, all, on);
         onChange([...kept, ...(lit.includes(a.id) ? lit.filter((x) => x !== a.id) : [...lit, a.id])], me);
@@ -255,6 +259,10 @@
     if (opts.all) allChip(box, all, on, onChange);
     return box;
   }
+
+  // cannot says a chip's agent can't be given the item, or has it whatever
+  // is ticked: a click says why rather than switching it
+  const cannot = (c) => c.getAttribute("aria-disabled") === "true";
 
   // The agents a row's chips have lit by a click: not one lit because it
   // has the item whatever is ticked.
@@ -273,7 +281,7 @@
   // remote server), and when they all have it, takes it from every one.
   // An agent not shown keeps what it has, as with a chip.
   function allChip(box, all, on, onChange) {
-    const can = [...box.children].filter((c) => !c.disabled).map((c) => c.dataset.agent);
+    const can = [...box.children].filter((c) => !cannot(c)).map((c) => c.dataset.agent);
     if (can.length < 2) return;
     const c = el("button", "lib-ag all", t("All"));
     c.dataset.all = "1";
@@ -291,7 +299,7 @@
   function paintAll(box) {
     const c = box.querySelector(":scope > .lib-ag.all");
     if (!c) return;
-    const can = [...box.children].filter((x) => x.dataset.agent && !x.disabled);
+    const can = [...box.children].filter((x) => x.dataset.agent && !cannot(x));
     const n = can.length, full = can.every((x) => x.getAttribute("aria-pressed") === "true");
     c.classList.toggle("on", full);
     c.setAttribute("aria-pressed", full ? "true" : "false");
@@ -356,7 +364,7 @@
   // to, and which of them couldn't be given it, and why.
   function reportAll(v, me) {
     const what = (me.list === "servers" ? "mcp:" : "skill:") + me.name;
-    const shown = [...me.box.children].filter((x) => x.dataset.agent && !x.disabled).map((x) => x.dataset.agent);
+    const shown = [...me.box.children].filter((x) => x.dataset.agent && !cannot(x)).map((x) => x.dataset.agent);
     const n = shown.filter((id) => me.want.includes(id)).length;
     const bad = (v.result?.problems || []).filter((p) => p.what === what && shown.includes(p.agent));
     if (!bad.length) {
@@ -396,7 +404,7 @@
       const n = now[i];
       c.className = n.className;
       c.title = n.title;
-      c.disabled = n.disabled;
+      if (cannot(n)) c.setAttribute("aria-disabled", "true"); else c.removeAttribute("aria-disabled");
       c.setAttribute("aria-pressed", n.getAttribute("aria-pressed"));
       c.onclick = n.onclick;
     });
@@ -1182,6 +1190,10 @@
       const after = el("div", "after-list");
       after.append(button(t("＋ Add server"), "", () => editServer(null)));
       body.append(after);
+      // each server is checked once a session, and again only once it
+      // changed; once the rows are on the page, for them to show it
+      const unchecked = lib.servers.filter((s) => health.get(s.name)?.key !== healthKey(s));
+      queueMicrotask(() => checkHealth(unchecked));
     }
     // an agent's own servers (Codex's node_repl, added each time it starts)
     // aren't listed: magpie leaves them as they are
@@ -1206,7 +1218,9 @@
     const nm = el("div", "name mono", s.name);
     if (s.signIn?.dead) nm.append(tag(t("Sign-in ran out"), "warn", t("Open it to sign in again")));
     else if (s.signIn?.signedIn) nm.append(tag(t("Signed in"), "lib-signed", t("The agents given it use magpie's sign-in")));
-    who.append(nm);
+    // its status beside the name, not in it: the name is still the name
+    who.classList.add("lib-srvwho");
+    who.append(nm, healthEl(s.name));
     const sub = el("div", "sub mono", serverLine(s));
     sub.title = serverLine(s);
     who.append(sub);
@@ -1217,15 +1231,92 @@
     return row;
   }
 
+  // Whether a server works, as magpie found by connecting to it: started
+  // (or reached) and asked for its tools. Its row shows it as a dot and a
+  // few words, the whole reason in its tooltip; a click checks it again.
+  const health = new Map(); // name → { key: the server as checked, h: what was found, null while checking }
+  const healthKey = (s) => JSON.stringify([s.transport, s.command, s.args, s.env, s.url, s.headers, s.signIn]);
+  function healthEl(name) {
+    const b = el("button", "lib-health");
+    b.type = "button";
+    b.dataset.server = name;
+    b.onclick = (e) => {
+      e.stopPropagation(); // the row opens the editor
+      const s = lib.servers.find((x) => x.name === name);
+      if (s && health.get(name)?.h) checkHealth([s], true);
+    };
+    paintHealth(b);
+    return b;
+  }
+  async function checkHealth(list, fresh) {
+    if (!list.length) return;
+    const keys = new Map(list.map((s) => [s.name, healthKey(s)]));
+    for (const [name, key] of keys) { health.set(name, { key, h: null }); paintHealth(name); }
+    let got = {}, failed = null;
+    try { got = (await api("library/mcp/check", { names: [...keys.keys()], fresh: !!fresh })).servers || {}; } catch (e) { failed = e.message; }
+    for (const [name, key] of keys) {
+      // a server changed while it was checked has been asked for again
+      if (health.get(name)?.key !== key) continue;
+      const h = got[name] || (failed ? { state: "error", why: "request", detail: failed } : null);
+      if (h) health.set(name, { key, h }); else health.delete(name);
+      paintHealth(name);
+    }
+  }
+  function healthWords(h, s) {
+    if (h.state === "ok") return [h.tools === 1 ? t("1 tool") : t("{n} tools", { n: h.tools }), t("It started and listed its tools")];
+    if (h.state === "auth") {
+      const why = h.oauth
+        ? (s?.transport === "http" ? t("The server asks for a sign-in — open it to sign in once in magpie") : t("The server asks for a sign-in"))
+        : t("The server refused magpie (HTTP {code}) — a key in its headers may be missing or wrong", { code: h.code || 401 });
+      return [t("needs sign-in"), h.detail ? why + "\n" + h.detail : why];
+    }
+    const more = (x) => (h.detail ? x + "\n" + h.detail : x);
+    switch (h.why) {
+      case "notfound": return [t("can't start: {cmd} not found", { cmd: h.detail }), t("Can't start it: there is no {cmd} on the PATH magpie has", { cmd: h.detail })];
+      case "start": return [t("can't start"), more(t("Can't start it"))];
+      case "exited": return [h.code ? t("exited ({code})", { code: h.code }) : t("exited"), more(h.code ? t("It exited with code {code} before listing its tools", { code: h.code }) : t("It exited before listing its tools"))];
+      case "timeout": return [t("no answer"), more(t("No answer in 15 seconds"))];
+      case "http": return ["HTTP " + h.code, t("The server answered {status}", { status: h.detail })];
+      case "refused": return [t("connection refused"), more(t("Nothing is listening at that address"))];
+      case "unreachable": return [t("can't reach"), more(t("Can't reach the server"))];
+      case "protocol": return [t("bad reply"), more(t("It answered, but not as an MCP server does"))];
+      default: return [t("couldn't check"), more(t("magpie couldn't check it"))];
+    }
+  }
+  // paintHealth fills a row's status in place, by the button or the
+  // server's name, so a check ending moves nothing on the page
+  function paintHealth(x) {
+    const boxes = typeof x === "string" ? page.querySelectorAll(`.lib-health[data-server="${CSS.escape(x)}"]`) : [x];
+    for (const b of boxes) {
+      const e = health.get(b.dataset.server);
+      b.hidden = !e;
+      if (!e) continue;
+      if (!e.h) {
+        b.className = "lib-health checking";
+        b.replaceChildren(el("span", "", t("checking…")));
+        b.title = t("Connecting to it to list its tools");
+        continue;
+      }
+      const [text, tip] = healthWords(e.h, lib.servers.find((s) => s.name === b.dataset.server));
+      b.className = "lib-health " + (e.h.state === "ok" ? "ok" : e.h.state === "auth" ? "auth" : "err");
+      b.replaceChildren(el("span", "", text));
+      b.title = tip + "\n" + t("Click to check again");
+    }
+  }
+
   // magpie's sign-in to a remote server (#615): signed in once here, and
   // every agent given the server reaches it through magpie, with it
   let mcpSigning = null; // { name, id, state, error } while one is under way
-  function signInBox(s) {
+  // name is the server as saved ("" for one being added); ready saves what
+  // the editor shows when it isn't that (a URL changed to the one that
+  // signs in, as Exa's ?login) and gives the name it's saved as, for the
+  // sign-in to be to the server the form shows
+  function signInBox(name, ready) {
     const box = el("div", "lib-signin");
     const draw = () => {
       box.replaceChildren();
-      const cur = lib.servers.find((x) => x.name === s.name)?.signIn || {};
-      const sg = mcpSigning?.name === s.name ? mcpSigning : null;
+      const cur = lib.servers.find((x) => x.name === name)?.signIn || {};
+      const sg = mcpSigning?.name === name ? mcpSigning : null;
       const line = el("div", "lib-signin-line");
       if (sg && (sg.state === "starting" || sg.state === "waiting")) {
         line.append(el("span", "note", sg.state === "starting" ? t("Opening the sign-in…") : t("Finish signing in in your browser…")),
@@ -1244,16 +1335,26 @@
       if (sg?.state === "failed") box.append(el("div", "lib-signin-err", sg.error));
     };
     async function start() {
-      mcpSigning = { name: s.name, state: "starting" };
+      const was = name;
+      mcpSigning = { name, state: "starting" };
       draw();
       try {
-        const st = await api("library/mcp-signin", { name: s.name });
+        if (ready) {
+          const saved = await ready();
+          // canceled while it was saved
+          if (mcpSigning?.name !== was || mcpSigning.id) return;
+          name = saved;
+          mcpSigning = { name, state: "starting" };
+        }
+        const st = await api("library/mcp-signin", { name });
         if (web && st.url) api("open", { url: st.url }).catch(() => {});
-        mcpSigning = { ...st, name: s.name };
+        mcpSigning = { ...st, name };
         draw();
         follow(st.id);
       } catch (e) {
-        mcpSigning = { name: s.name, state: "failed", error: e.message };
+        if (!mcpSigning) return; // canceled
+        // magpie's words in the reader's language, where it has them
+        mcpSigning = { name, state: "failed", error: t(e.message) };
         draw();
       }
     }
@@ -1268,17 +1369,17 @@
         if (st.state === "done") {
           mcpSigning = null;
           await api("library").then(take, () => {});
-          status(t("Signed in to {name} — the agents given it use magpie's sign-in", { name: s.name }), "ok");
+          status(t("Signed in to {name} — the agents given it use magpie's sign-in", { name }), "ok");
           render();
-        } else mcpSigning = st.state === "canceled" ? null : { ...st, name: s.name };
+        } else mcpSigning = st.state === "canceled" ? null : { ...st, name };
         draw();
         return;
       }
     }
     async function signOut() {
       try {
-        take(await api("library/mcp-signout", { name: s.name }));
-        status(t("Signed out of {name} — the agents are given the server's own address again", { name: s.name }), "ok");
+        take(await api("library/mcp-signout", { name }));
+        status(t("Signed out of {name} — the agents are given the server's own address again", { name }), "ok");
         render();
         draw();
       } catch (e) { status(e.message, "err", 6000); }
@@ -1433,9 +1534,9 @@
         url.classList.add("mono");
         g.append(...field("URL", url));
         g.append(...field(t("Headers"), pairs(d.headers, "Authorization", "Bearer …", (v) => { d.headers = v; })));
-        // the server as saved: one being added or turned into another is
-        // signed in to once it is saved
-        if (s?.transport === "http" && d.transport === "http") g.append(...field(t("Sign-in"), signInBox(s), t("For a server that asks you to sign in (OAuth): magpie signs in once, and every agent given it uses that sign-in")));
+        // Sign in saves the form first when it isn't what's saved, so a URL
+        // just changed (or a server just added) is the one signed in to
+        if (d.transport === "http") g.append(...field(t("Sign-in"), signInBox(s ? s.name : "", ready), t("For a server that asks you to sign in (OAuth): magpie signs in once, and every agent given it uses that sign-in")));
       }
       slot.append(g);
       // its own icon while it runs as it did; another way of running is another server
@@ -1449,18 +1550,38 @@
       if (await change("servers/remove", { name: s.name }, t("{name} is out of the library and the agents it was given to", { name: s.name }))) closeLibModal();
     }));
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal));
-    const save = async () => {
-      err.textContent = "";
+    // send saves the form; s is then the server as saved, for a save after
+    // a sign-in's to be of it
+    const send = async () => {
       const body = { old: s ? s.name : "", server: { name: d.name, transport: d.transport, agents: d.agents } };
       if (d.transport === "stdio") Object.assign(body.server, { command: d.command, args: d.args, env: d.env });
       else Object.assign(body.server, { url: d.url, headers: d.headers });
+      take(await api("library/servers/save", body));
+      const was = s;
+      s = lib.servers.find((x) => x.name === d.name) || s;
+      return was;
+    };
+    const save = async () => {
+      err.textContent = "";
       try {
-        take(await api("library/servers/save", body));
-        report(lib.result, s ? t("{name} saved", { name: d.name }) : "");
+        const was = await send();
+        report(lib.result, was ? t("{name} saved", { name: d.name }) : "");
         closeLibModal();
         render();
       } catch (e) { err.textContent = e.message; }
     };
+    // before a sign-in: the form saved, the dialog left open, when it
+    // isn't the server as saved
+    const sorted = (h) => JSON.stringify(Object.entries(h || {}).sort());
+    async function ready() {
+      if (s && d.name === s.name && d.transport === s.transport && d.url === (s.url || "") && sorted(d.headers) === sorted(s.headers)) return s.name;
+      err.textContent = "";
+      const was = await send();
+      report(lib.result, was ? t("{name} saved", { name: d.name }) : "");
+      ok.textContent = t("Save");
+      render();
+      return s.name;
+    }
     const ok = button(s ? t("Save") : t("Add"), "primary", save);
     bar.append(ok);
     ed.append(bar);
@@ -2769,7 +2890,7 @@
   // What the market offers: popular and featured ones until the reader
   // searches. Kept across renders; asked for the first time a tab shows it.
   const market = {
-    mcp: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0 },
+    mcp: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0, custom: null },
     skills: { q: "", items: null, error: "", loading: false, seq: 0, timer: 0 },
   };
   const asked = new Set(); // skills whose description has been asked for
@@ -2784,9 +2905,13 @@
       if (seq !== m.seq) return;
       m.items = r.items || [];
       m.error = r.error || "";
+      // a search that is an address nothing listed is at: the server
+      // there, to add by hand
+      m.custom = r.custom || null;
     } catch (e) {
       if (seq !== m.seq) return;
       m.items = m.items || [];
+      m.custom = null;
       m.error = e.message;
     }
     m.loading = false;
@@ -2877,11 +3002,25 @@
       return;
     }
     if (m.error) grid.append(el("div", "mk-msg err", m.error));
-    if (!m.items.length && !m.error) {
+    if (kind === "mcp" && q && m.custom) grid.append(customAt(q, m.custom, m.items.length));
+    else if (!m.items.length && !m.error) {
       grid.append(el("div", "mk-msg", q ? t("Nothing matches “{q}”.", { q }) : t("Nothing to show.")));
       return;
     }
     for (const x of m.items) grid.append(kind === "mcp" ? serverCard(x) : skillCard(x));
+  }
+
+  // An address searched for that nothing listed is at: say so, over the
+  // servers found by its name if any, and offer to add it by hand — the
+  // form filled in with what the address says (an endpoint, a package).
+  function customAt(q, c, found) {
+    const box = el("div", "mk-msg mk-custom");
+    box.append(el("span", "", found ? t("None of these is at {q} — they're found by its name.", { q }) : t("Nothing listed is at {q}.", { q })));
+    box.append(button(t("＋ Add it yourself…"), "action", () => editServer(null, {
+      name: c.name || "", transport: c.transport || "stdio", command: c.command || "", args: c.args || [], env: {},
+      url: c.url || "", headers: {}, agents: mcpAgents().map((a) => a.id),
+    })));
+    return box;
   }
 
   // A real picture: the project's own logo or its owner's, through magpie so

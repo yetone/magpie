@@ -591,7 +591,10 @@ func download(ctx context.Context, a Asset, path string) error {
 }
 
 func fetch(ctx context.Context, a Asset, path string) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", a.URL, nil)
+	// through a mirror when one is given (mirror.go): the hash checked
+	// below is still the feed's
+	u := mirrored(mirrorOf(ctx), a.URL)
+	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
 	if err != nil {
 		return err
 	}
@@ -601,6 +604,9 @@ func fetch(ctx context.Context, a Asset, path string) error {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
+		if u != a.URL {
+			return fmt.Errorf("download %s through the mirror %s: %s", filepath.Base(path), strings.TrimSuffix(u, a.URL), res.Status)
+		}
 		return fmt.Errorf("download %s: %s", filepath.Base(path), res.Status)
 	}
 	f, err := os.Create(path)
@@ -623,6 +629,9 @@ func fetch(ctx context.Context, a Asset, path string) error {
 	}
 	if err == nil && !strings.EqualFold(hex.EncodeToString(h.Sum(nil)), a.SHA256) {
 		err = fmt.Errorf("%s does not match its checksum", filepath.Base(path))
+		if u != a.URL {
+			err = fmt.Errorf("%s from the mirror %s does not match its checksum from %s; not installed", filepath.Base(path), strings.TrimSuffix(u, a.URL), Site)
+		}
 	}
 	if err != nil {
 		os.Remove(path)

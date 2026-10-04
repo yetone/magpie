@@ -17,6 +17,7 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -96,13 +97,86 @@ func lockAuth() func() {
 
 func listPath() string { return filepath.Join(settings.Dir(), "plugins.json") }
 
-// Load reads plugins.json.
-func Load() List {
-	var l List
-	if b, err := steady.ReadFile(listPath()); err == nil {
-		_ = json.Unmarshal(b, &l)
+// pluginsList is plugins.json as last read, with the bytes it was parsed
+// from. The file is read every time: an edit that keeps the file's size and
+// time (a swap of two accounts of one length, a replaced file whose time is
+// put back) would be missed by a stamp, and only the parse is reused.
+var pluginsList struct {
+	sync.Mutex
+	path string
+	raw  []byte
+	list List
+}
+
+// list is plugins.json, read now. What it gives is shared and must not be
+// changed; Load gives the mutable copy.
+func list() List {
+	path := listPath()
+	b, err := steady.ReadFile(path)
+	if err != nil {
+		// Do not cache read failures; a later call will read the file again.
+		return List{}
 	}
+	pluginsList.Lock()
+	defer pluginsList.Unlock()
+	if pluginsList.path == path && bytes.Equal(pluginsList.raw, b) {
+		return pluginsList.list
+	}
+	var l List
+	// Preserve partially decoded values on type errors, as Load has always done.
+	_ = json.Unmarshal(b, &l)
+	pluginsList.path, pluginsList.raw, pluginsList.list = path, b, l
 	return l
+}
+
+// Load reads plugins.json. What it gives is the caller's to change at every
+// level: the mutators (Add, Remove, SetOff, SetConfig) each get their own
+// copy, so nothing they change reaches what list keeps.
+func Load() List {
+	l := list()
+	return List{Plugins: clonePlugins(l.Plugins), Config: cloneMap(l.Config)}
+}
+
+// clonePlugins copies the entries, their options with them.
+func clonePlugins(es []Entry) []Entry {
+	if es == nil {
+		return nil
+	}
+	out := make([]Entry, len(es))
+	for i, e := range es {
+		out[i] = e
+		out[i].Options = cloneMap(e.Options)
+	}
+	return out
+}
+
+// cloneMap copies a JSON object and everything under it.
+func cloneMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = cloneJSON(v)
+	}
+	return out
+}
+
+// cloneJSON copies a JSON value: Unmarshal into any gives only objects,
+// arrays, strings, numbers, bools and nil, so this reaches every part of one.
+func cloneJSON(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		return cloneMap(x)
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = cloneJSON(e)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 // writeWhole writes b to p by a rename, so a magpie or the host reading

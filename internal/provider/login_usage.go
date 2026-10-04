@@ -22,10 +22,22 @@ type loginUsageEntry struct {
 	q  SubscriptionQuota
 }
 
+// loginUsageFor, when set, stands in for LoginUsage's readings (tests),
+// as UsageClaudeVia does for Claude's own.
+var loginUsageFor func(ctx context.Context, agent string) map[string]SubscriptionQuota
+
+// LoginUsageVia has tests stand in for LoginUsage's readings.
+func LoginUsageVia(f func(ctx context.Context, agent string) map[string]SubscriptionQuota) {
+	loginUsageFor = f
+}
+
 // LoginUsage is the allowance used by each of an agent's accounts, by
 // user. What was fetched less than a minute ago comes from the cache; the
 // rest is asked for at once, as long as ctx allows.
 func LoginUsage(ctx context.Context, agent string) map[string]SubscriptionQuota {
+	if loginUsageFor != nil {
+		return loginUsageFor(ctx, agent)
+	}
 	out := map[string]SubscriptionQuota{}
 	if agent == "grok" {
 		if _, ok := pluginOfAgent(agent); !ok {
@@ -177,7 +189,7 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	if l.Agent == "copilot" {
 		for _, c := range copilotLogins(copilotConfigDir()) {
 			if strings.EqualFold(c.User, l.User) {
-				q := copilotSubscriptionUsage(ctx, c.app.Token)
+				q := copilotSubscriptionUsage(ctx, c.app.Token, c.app.Host)
 				if q.Error == "" {
 					refreshCopilotEntitlement(c.app, q.Plan, q.AccessSKU)
 				}

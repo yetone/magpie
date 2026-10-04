@@ -179,6 +179,113 @@ func TestOTelSessionDedupOnlyUnkeyedLoopback(t *testing.T) {
 	}
 }
 
+func TestOTelSessionDiscoveredDuringFirstRequest(t *testing.T) {
+	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+	t.Setenv("PI_CODING_AGENT_SESSION_DIR", "")
+	t.Setenv("CODEX_HOME", t.TempDir())
+	t.Setenv("MAGPIE_OTEL_ENABLED", "true")
+	t.Setenv("MAGPIE_OTEL_ENDPOINT", "http://127.0.0.1:1")
+	t.Setenv("MAGPIE_OTEL_HEADERS", "")
+	t.Setenv("MAGPIE_OTEL_SESSIONS", "true")
+	stop := usage.StartOTel()
+	t.Cleanup(stop)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	req.Header.Set("User-Agent", "pi/1.0")
+	req.Header.Set("X-Session-Id", "late-session")
+	_, pending := beginOTelRequest(req, "", nil)
+	_, exported := beginOTelRequest(req, "", nil)
+	if pending == nil || exported == nil || !pending.sessionCandidate {
+		t.Fatal("unseen session must retain gateway fallback")
+	}
+	if exported.skip() {
+		t.Fatal("unseen session suppressed")
+	}
+	dir := filepath.Join(os.Getenv("PI_CODING_AGENT_DIR"), "sessions", "work")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "2026-10-03T00-00-00_late-session.jsonl"), []byte("{\"type\":\"session\",\"id\":\"late-session\"}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if usage.OTelSession("pi", "late-session") {
+		t.Fatal("test must exercise a fresh cached miss")
+	}
+	if !pending.skip() {
+		t.Fatal("newly discovered transcript duplicated gateway trace")
+	}
+	if exported.skip() {
+		t.Fatal("discovery after an exported attempt must retain its root")
+	}
+	remote := &otelRequest{agent: "pi", session: "late-session"}
+	if remote.skip() {
+		t.Fatal("remote/keyed request must retain gateway tracing")
+	}
+}
+
+func TestOTelFastRequestTranscriptDiscovery(t *testing.T) {
+	for _, transcript := range []bool{true, false} {
+		t.Run(fmt.Sprint(transcript), func(t *testing.T) {
+			f := &fake{ctype: "application/json", reply: `{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}`}
+			setup(t, provider.Chat, f)
+			t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
+			t.Setenv("PI_CODING_AGENT_SESSION_DIR", "")
+			t.Setenv("CODEX_HOME", t.TempDir())
+			dir := filepath.Join(os.Getenv("PI_CODING_AGENT_DIR"), "sessions", "work")
+			if err := os.MkdirAll(dir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			f.refuse = func([]byte) (int, string) {
+				if transcript {
+					if err := os.WriteFile(filepath.Join(dir, "2026-10-04T00-00-00_fast-session.jsonl"), []byte("{\"type\":\"session\",\"id\":\"fast-session\"}\n"), 0600); err != nil {
+						t.Error(err)
+					}
+				}
+				if usage.OTelSession("pi", "fast-session") {
+					t.Error("request must still have a cached discovery miss")
+				}
+				return 0, ""
+			}
+			received := make(chan []byte, 8)
+			collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				b, _ := io.ReadAll(r.Body)
+				received <- b
+				io.WriteString(w, `{}`)
+			}))
+			defer collector.Close()
+			t.Setenv("MAGPIE_OTEL_ENABLED", "true")
+			t.Setenv("MAGPIE_OTEL_ENDPOINT", collector.URL)
+			t.Setenv("MAGPIE_OTEL_HEADERS", "")
+			t.Setenv("MAGPIE_OTEL_SESSIONS", "true")
+			t.Setenv("MAGPIE_OTEL_METRICS", "false")
+			stop := usage.StartOTel()
+			t.Cleanup(stop)
+			req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"m1","messages":[{"role":"user","content":"hello"}]}`))
+			req.RemoteAddr = "127.0.0.1:1234"
+			req.Header.Set("User-Agent", "pi/1.0")
+			req.Header.Set("X-Session-Id", "fast-session")
+			req.Header.Set("traceparent", "00-11111111111111111111111111111111-2222222222222222-01")
+			w := httptest.NewRecorder()
+			New().Handler().ServeHTTP(w, req)
+			if w.Code != 200 || f.calls != 1 {
+				t.Fatalf("request: status=%d calls=%d", w.Code, f.calls)
+			}
+			stop()
+			count := 0
+			for len(received) > 0 {
+				count += strings.Count(string(<-received), `"traceId":"11111111111111111111111111111111"`)
+			}
+			want := 2
+			if transcript {
+				want = 0
+			}
+			if count != want {
+				t.Fatalf("gateway spans=%d want=%d", count, want)
+			}
+		})
+	}
+}
+
 func TestOTelExportsGatewayUsageWithoutContent(t *testing.T) {
 	f := &fake{ctype: "application/json", reply: `{"id":"c1","model":"m1","choices":[{"message":{"role":"assistant","content":"PRIVATE-REPLY"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5}}`}
 	setup(t, provider.Chat, f)

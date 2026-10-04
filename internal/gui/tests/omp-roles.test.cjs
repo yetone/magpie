@@ -3,7 +3,8 @@
 // (#325), so each is a square after the pickers, not a picker of its own:
 // unset it says it follows the model, its picker opens on "Same as model",
 // and set it names the model it is on. OpenCode's small model, which
-// doesn't follow the model, stays a picker. In English and Chinese.
+// doesn't follow the model, stays a picker. Both read in the connected
+// agent's opened row. In English and Chinese.
 // No backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -20,10 +21,10 @@ const field = (key, label, value) => ({ key, label, value, options });
 const fresh = () => ({
   agents: [
     {
-      id: "omp", name: "omp", path: "/test/config.yml", icon: "omp",
+      id: "omp", name: "omp", path: "/test/config.yml", icon: "omp", wired: true,
       fields: [field("model", "model", "magpie/deepseek/pro"), field("subagent", "subagents", ""), field("small", "smol", ""), field("slow", "slow", "magpie/deepseek/flash")],
     },
-    { id: "opencode", name: "OpenCode", path: "/test/opencode.json", fields: [field("model", "model", "magpie/deepseek/pro"), field("small", "small", "")] },
+    { id: "opencode", name: "OpenCode", path: "/test/opencode.json", wired: true, fields: [field("model", "model", "magpie/deepseek/pro"), field("small", "small", "")] },
   ],
   profiles: [],
 });
@@ -81,6 +82,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
       await page.goto("http://magpie.test/");
       await page.locator(omp).waitFor();
+      await page.locator(`${omp} .ag-link`).click();
 
       // the three roles are squares in the row's squares cell; the model alone is a picker
       const square = (key) => page.locator(`${omp} .extras-cell .field.extra[data-key="${key}"]`);
@@ -105,6 +107,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       // OpenCode's small model doesn't follow the model: a picker, not a square
       const oc = '.row.agent[data-id="opencode"]';
+      await page.locator(`${oc} .ag-link`).click();
+      await page.locator(`${oc} .ag-exp`).waitFor();
       assert.equal(await page.locator(`${oc} .field.extra`).count(), 0);
       assert.equal(await page.locator(`${oc} .field[data-key="small"]`).count(), 1);
       assert.deepEqual(errors, []);

@@ -49,8 +49,10 @@ func readClaudeDir(dir string) (claudeCredentials, bool) {
 		out, err := proc.Command("security", "find-generic-password", "-s", claudeDirService(dir), "-a", claudeKeychainAccount(), "-w").Output()
 		if err == nil {
 			b, _ := keychainText(bytes.TrimSpace(out))
-			if c, ok := parseClaudeCredentials(b); ok {
-				return c, true
+			if c, ok := parseClaudeCredentials(b); c.raw != nil {
+				// the item there is the sign-in, emptied or not: Claude
+				// Code reads no file beside it
+				return c, ok
 			}
 		}
 	}
@@ -79,7 +81,8 @@ func forgetClaudeDir(user string) {
 
 // claudeSavedDir is the config directory to run Claude Code in for the
 // saved account user: its sign-in is put there from logins.json when there
-// is none yet, and what Claude Code has made of it since is read back.
+// is none yet, and what Claude Code has made of it since is read back. An
+// account that can't be used (claudeSignedOut) gets none.
 func claudeSavedDir(user string) (string, error) {
 	savedTokenMu.Lock()
 	defer savedTokenMu.Unlock()
@@ -96,16 +99,22 @@ func claudeSavedDir(user string) (string, error) {
 		return "", fmt.Errorf("no saved claude account %q", user)
 	}
 	dir := claudeAccountDir(user)
-	if c, ok := readClaudeDir(dir); ok {
-		if changed, err := takeClaudeDir(&ls[i], c); err != nil || !changed {
-			return dir, err
+	has, changed, err := syncClaudeDir(&ls[i])
+	if err != nil {
+		return "", err
+	}
+	if changed {
+		if err := writeLogins(ls); err != nil {
+			return "", err
 		}
-		return dir, writeLogins(ls)
 	}
-	c, ok := parseClaudeCredentials(ls[i].Auth)
-	if !ok {
-		return "", errors.New("the saved Claude sign-in of " + user + " is unreadable")
+	if why := claudeSignedOut(ls[i]); why != "" {
+		return "", errors.New(why)
 	}
+	if has {
+		return dir, nil
+	}
+	c, _ := parseClaudeCredentials(ls[i].Auth)
 	b, err := c.marshal()
 	if err != nil {
 		return "", err
@@ -128,6 +137,23 @@ func claudeSavedDir(user string) (string, error) {
 	return dir, nil
 }
 
+// syncClaudeDir brings the saved Claude login l up to what Claude Code
+// keeps in the account's config directory: the sign-in it refreshed to
+// there, or, when it emptied that sign-in, Anthropic's refusal of the one
+// l has. has says the directory holds a sign-in to run on; changed, that l
+// changed.
+func syncClaudeDir(l *savedLogin) (has, changed bool, err error) {
+	c, ok := readClaudeDir(claudeAccountDir(l.User))
+	switch {
+	case ok:
+		changed, err = takeClaudeDir(l, c)
+		return true, changed, err
+	case c.cleared():
+		return false, refuseClaudeLogin(l, claudeLoginVersion(*l)), nil
+	}
+	return false, false, nil
+}
+
 // takeClaudeDir puts the sign-in Claude Code keeps in an account's config
 // directory into its saved login, and says whether that changed it.
 func takeClaudeDir(l *savedLogin, c claudeCredentials) (bool, error) {
@@ -144,7 +170,7 @@ func takeClaudeDir(l *savedLogin, c claudeCredentials) (bool, error) {
 		l.Plan = c.OAuth.SubscriptionType
 	}
 	l.Renewed = time.Now().UTC().Truncate(time.Second)
-	l.Lapsed = ""
+	l.Lapsed, l.Refused = "", ""
 	return true, nil
 }
 
@@ -154,20 +180,20 @@ func takeClaudeDir(l *savedLogin, c claudeCredentials) (bool, error) {
 // magpie keeps the other accounts' sign-ins itself, each its own, so a
 // logout signs none of them out of magpie: the stand-in runs Claude Code
 // in a config directory of its own, as the others on do. Never the one
-// Claude Code was signed in to, whose sign-in its /logout revoked
+// Claude Code was signed in to, whose sign-in went with it
 // (claudeLoggedOut, or still Held before rememberLogins next looks: it is
-// asked only while Claude Code is signed out); of the others, one with a
-// saved sign-in, on before off, then the one seen last; one whose saved
-// sign-in is gone only when no other has one; "" when there is none.
+// asked only while Claude Code is signed out); of the others, one that can
+// be used, on before off, then the one seen last; one that can't — its
+// sign-in gone, or refused — only when no other can; "" when there is none.
 func claudeStandIn(ls []savedLogin) string {
 	user, best := "", -1
 	var seen time.Time
 	for _, l := range ls {
-		if l.Agent != "claude" || l.Held || l.Lapsed == claudeLogoutLapse {
+		if l.Agent != "claude" || l.Held || l.Lapsed != "" && l.Refused == "" {
 			continue
 		}
 		rank := 0
-		if _, ok := parseClaudeCredentials(l.Auth); ok {
+		if claudeSignedOut(l) == "" {
 			rank = 2
 			if l.On {
 				rank++
@@ -181,15 +207,26 @@ func claudeStandIn(ls []savedLogin) string {
 }
 
 // claudeLogoutLapse is why the account Claude Code was signed in to can't
-// be used once Claude Code logged out.
-const claudeLogoutLapse = "Claude Code's /logout signed it out (it revokes the sign-in it holds); sign in again"
+// be used once Claude Code let go of it: logged out, which revokes the
+// sign-in it held, or emptied that sign-in once Anthropic refused it.
+const claudeLogoutLapse = "Claude Code is no longer signed in; sign in again in magpie"
 
-// claudeLoggedOut marks the account Claude Code held, now that it is
-// signed out, as lapsed: /logout revokes the refresh token Claude Code
-// holds (POST <token URL>/revoke, Claude Code 2.1.x's performLogout), and
-// magpie's copy of that account is the same sign-in, so it is gone too.
-// The accounts magpie keeps in config directories of their own are
-// sign-ins of their own and stay. It says whether ls changed.
+// legacyClaudeLogoutLapse is claudeLogoutLapse as magpie wrote it before,
+// which took every such lapse for a /logout.
+const legacyClaudeLogoutLapse = "Claude Code's /logout signed it out (it revokes the sign-in it holds); sign in again"
+
+// claudeGoneLapse is why a saved Claude account with no sign-in kept can't
+// be used.
+const claudeGoneLapse = "its sign-in is gone; sign in again"
+
+// claudeLoggedOut marks the account Claude Code held, now that it holds no
+// sign-in, as lapsed: magpie's copy of that account is the same sign-in,
+// gone too — revoked by a /logout (POST <token URL>/revoke, Claude Code
+// 2.1.x's performLogout), or refused by Anthropic, as the sign-in Claude
+// Code emptied was. Which it was can't be told from here. Signed in to it
+// again, Claude Code holds it once more (rememberLogins). The accounts
+// magpie keeps in config directories of their own are sign-ins of their own
+// and stay. It says whether ls changed.
 func claudeLoggedOut(ls []savedLogin) bool {
 	changed := false
 	for i := range ls {
@@ -197,20 +234,28 @@ func claudeLoggedOut(ls []savedLogin) bool {
 			continue
 		}
 		ls[i].Held, changed = false, true
-		if _, ok := parseClaudeCredentials(ls[i].Auth); ok && ls[i].Lapsed == "" {
-			ls[i].Lapsed = claudeLogoutLapse
+		if claudeSignedOut(ls[i]) == "" {
+			ls[i].Lapsed, ls[i].Refused = claudeLogoutLapse, ""
 		}
 	}
 	return changed
 }
 
-// claudeSignedOut is why a saved Claude account can't be used: its saved
-// sign-in is gone, and it has to be signed in again; "" when it has one.
+// claudeSignedOut is why a saved Claude account can't be used, "" when it
+// can: its saved sign-in is gone, Claude Code let go of it
+// (claudeLoggedOut), or Anthropic refused the credential it has now
+// (claude_auth.go) — a refusal of an earlier one says nothing of it.
 func claudeSignedOut(l savedLogin) string {
+	if l.Lapsed != "" && (l.Refused == "" || l.Refused == claudeLoginVersion(l)) {
+		if l.Lapsed == legacyClaudeLogoutLapse {
+			return claudeLogoutLapse
+		}
+		return l.Lapsed
+	}
 	if _, ok := parseClaudeCredentials(l.Auth); ok {
 		return ""
 	}
-	return "its sign-in is gone; sign in again"
+	return claudeGoneLapse
 }
 
 // claudeStandInAccount is the Claude Code provider while Claude Code is

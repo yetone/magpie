@@ -200,7 +200,9 @@ type Usage struct {
 	// headers (Claude Code's own for a subscription); ErrType: what a
 	// failed request's error body called the error
 	RequestID string `json:"request_id,omitempty"`
-	ErrType   string `json:"err_type,omitempty"`
+	// ResponseID is the final client response ID, independent of request headers.
+	ResponseID string `json:"response_id,omitempty"`
+	ErrType    string `json:"err_type,omitempty"`
 }
 
 // prompt is every token the prompt came to, as OpenAI's and Gemini's
@@ -231,6 +233,9 @@ func (u *Usage) add(v Usage) {
 	}
 	if v.RequestID != "" {
 		u.RequestID = v.RequestID
+	}
+	if v.ResponseID != "" {
+		u.ResponseID = v.ResponseID
 	}
 	if v.ErrType != "" {
 		u.ErrType = v.ErrType
@@ -487,6 +492,20 @@ func effortOf(s string) string {
 
 // effortRank orders the reasoning levels agents and vendors name.
 var effortRank = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"}
+
+// ByStrength is efforts weakest first, in effortRank's order; a level it
+// doesn't know keeps its place among the others of its kind, after them.
+func ByStrength(efforts []string) []string {
+	rank := func(e string) int {
+		if i := slices.Index(effortRank, e); i >= 0 {
+			return i
+		}
+		return len(effortRank)
+	}
+	out := slices.Clone(efforts)
+	slices.SortStableFunc(out, func(a, b string) int { return rank(a) - rank(b) })
+	return out
+}
 
 // fitEffort is the level of the model's own nearest the one asked for — a
 // tie goes up — or the one asked for when the model's aren't known. Codex

@@ -96,6 +96,13 @@ type SubscriptionQuota struct {
 	// Daily is a WorkBuddy account's credits used day by day, as magpie
 	// counted them from its readings (credits_daily.go).
 	Daily *DailyCredits `json:"daily,omitempty"`
+	// Checkins is set on a WorkBuddy (China) or Trae CN account whose
+	// daily check-in is pressed for, CheckinBy whose ("" WorkBuddy's,
+	// "trae" Trae CN's), and Checkin is how its last one went, nil before
+	// the first; never cached, added as the page asks (WithCheckins).
+	Checkins  bool              `json:"checkins,omitempty"`
+	CheckinBy string            `json:"checkinBy,omitempty"`
+	Checkin   *WorkBuddyCheckin `json:"checkin,omitempty"`
 }
 
 var subscriptionUsageCache struct {
@@ -515,10 +522,7 @@ var claudeAsked atomic.Int64
 // (claudeUsageWait); the next SubscriptionUsage waits for it.
 func AskClaudeUsage() {
 	claudeAsked.Store(time.Now().UnixNano())
-	c := &subscriptionUsageCache
-	c.Lock()
-	c.at, c.asked = time.Time{}, true
-	c.Unlock()
+	AskUsage()
 	l := &loginUsageCache
 	l.Lock()
 	for k := range l.m {
@@ -527,6 +531,17 @@ func AskClaudeUsage() {
 		}
 	}
 	l.Unlock()
+}
+
+// AskUsage has the next SubscriptionUsage wait for a new reading rather
+// than hand back the last one, as AskClaudeUsage does, without having
+// Claude Code's /usage run: magpie quota wait reads again each time it
+// wakes, and only a wait for Claude needs Claude read.
+func AskUsage() {
+	c := &subscriptionUsageCache
+	c.Lock()
+	c.at, c.asked = time.Time{}, true
+	c.Unlock()
 }
 
 // claudeWindows is the allowance of the Claude account user. Only the
@@ -761,7 +776,7 @@ func (w codexWindow) window() QuotaWindow {
 	return out
 }
 
-func copilotSubscriptionUsage(ctx context.Context, githubToken string) SubscriptionQuota {
+func copilotSubscriptionUsage(ctx context.Context, githubToken, host string) SubscriptionQuota {
 	q := SubscriptionQuota{Provider: "copilot", Name: "Copilot", Icon: "githubcopilot", Windows: []QuotaWindow{}}
 	var data struct {
 		copilotEntitlement
@@ -769,7 +784,7 @@ func copilotSubscriptionUsage(ctx context.Context, githubToken string) Subscript
 		Reset     string                      `json:"quota_reset_date_utc"`
 		ResetDay  string                      `json:"quota_reset_date"`
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, CopilotUserURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, copilotUserURL(host), nil)
 	if err == nil {
 		req.Header.Set("Authorization", "token "+githubToken)
 		req.Header.Set("Accept", "application/json")

@@ -90,8 +90,8 @@ func TestLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := strings.Join(CSVHeader, ",") + "\n" +
-		rows[1].Time.Format(time.RFC3339) + ",codex,relay/sol,relay,relay.example,sol,sol-2026-01-01,false,,10,1,0,0,0,0.000028,100,,200,false,,,,,,,,,,,,false,,,false,,\n" +
-		rows[2].Time.Format(time.RFC3339) + ",codex,fast,relay,relay.example,sol,luna,true,high,2000,500,1000,4000,0,0.012500,3200,400,200,false,s1,,,,,123,,,,,,false,,,false,,\n"
+		rows[1].Time.Format(time.RFC3339) + ",codex,relay/sol,relay,relay.example,sol,sol-2026-01-01,false,,10,1,0,0,0,0.000028,100,,200,false,,,,,,,,,,,,false,,,false,,,\n" +
+		rows[2].Time.Format(time.RFC3339) + ",codex,fast,relay,relay.example,sol,luna,true,high,2000,500,1000,4000,0,0.012500,3200,400,200,false,s1,,,,,123,,,,,,false,,,false,,,\n"
 	if b.String() != want {
 		t.Fatalf("csv:\n%s\nwant:\n%s", b.String(), want)
 	}
@@ -260,7 +260,7 @@ func TestLedgerWithSessionLogCalls(t *testing.T) {
 	if err := WriteCSV(&b, rows[2:4]); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{",req_log,,,,log,false,,,false,,\n", ",true,s2,,,,,,req_lim,,You've hit your limit,rate_limit,log,false,,,false,,\n"} {
+	for _, want := range []string{",req_log,,,,log,false,,,false,,,\n", ",true,s2,,,,,,req_lim,,You've hit your limit,rate_limit,log,false,,,false,,,\n"} {
 		if !strings.Contains(b.String(), want) {
 			t.Fatalf("csv lacks %q:\n%s", want, b.String())
 		}

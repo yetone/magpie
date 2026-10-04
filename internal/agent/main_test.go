@@ -34,6 +34,9 @@ func TestMain(m *testing.M) {
 	codexUsedUp = func() bool { return false }
 	// Sandboxed config writes must never write into the real OS keychain.
 	zedCredential = func(string) error { return nil }
+	// Pi's and omp's model registries are read from their installs; never
+	// this machine's
+	nodeModulesOf = func(string, []string) []string { return nil }
 	code := m.Run()
 	os.RemoveAll(home)
 	os.Exit(code)

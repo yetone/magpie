@@ -130,7 +130,7 @@ func relayStatus(w http.ResponseWriter, from provider.Protocol, name string, req
 			return fail(Event{Text: name + " ended without an answer"})
 		}
 		sw := newSSEWriter(w)
-		enc := encoder(from, sw, req)
+		enc := encoder(from, sw, req, usage)
 		var failed string
 		see := func(ev Event) bool {
 			if ev.Kind == KStart || ev.Kind == KUsage {
@@ -166,7 +166,7 @@ func relayStatus(w http.ResponseWriter, from provider.Protocol, name string, req
 	usage.add(res.Usage)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
-	w.Write(render(from, res, req))
+	w.Write(renderUsage(from, res, req, usage))
 	return 200, ""
 }
 

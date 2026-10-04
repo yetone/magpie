@@ -376,7 +376,9 @@ func Intents(rules []Rule, q RuleRequest) []string {
 // them (and any rule before it, which may take such a request first, sends
 // to one that does too); and a longer context, when a rule sends every
 // request past a length the other members can all take to one with more
-// room. Without rules the group can do what all its members can.
+// room. Without rules the group can do what all its members can — but for
+// its context, which groupEntries already takes from its largest member
+// (#712), so a rule of length never lifts it there.
 func ruledEntry(e *Entry, g Group, ms []Member, entries []Entry) {
 	// of is what a member takes: a group in the group takes what every
 	// one of its models does

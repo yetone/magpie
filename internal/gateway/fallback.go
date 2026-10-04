@@ -315,6 +315,9 @@ func (s *Server) planGroup(g provider.Group, ms []provider.Member, from provider
 	var asides []candidate
 	var wAsides []Weighed
 	out := planLevel(g, ms, 0, from, &pl, &asides, &wAsides)
+	if sinks(g.Sink, g.Routing) {
+		out, pl.order = sinkPlanned(out, pl.order)
+	}
 	out, pl.order = append(out, asides...), append(pl.order, wAsides...)
 	if len(out) == 0 {
 		return nil, pl
@@ -412,6 +415,7 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 			}
 			w := weighed(c, u.m.Provider, wg, false, from)
 			w.Routing, w.Via = g.Routing, u.m.Groups()
+			w.Sunk = nil // weighed as the group's, whose own Sink tells
 			w.Turn = i == 0 && g.Routing == provider.Rotate && len(weighedHeads) > 1
 			pl.order = append(pl.order, w)
 			out = append(out, c)
@@ -596,6 +600,15 @@ func retryable(status int, body []byte) bool {
 	return false
 }
 
+// lateRests says whether a reply that broke off after it began, with this
+// error, was the vendor failing (#733): unreachable, overloaded, out of
+// quota. A conversation grown too long for the model, or a request the
+// vendor turned away as it reads, would fail the same at the next asked:
+// nobody rests for it.
+func lateRests(msg string) bool {
+	return !tooLong(http.StatusBadRequest, msg) && !refusedWords.MatchString(msg)
+}
+
 // unsaidMargin is how far past a model's window a request's estimate
 // must go to be taken as too long for it: estimate counts a token as four
 // bytes, which most text runs under (Devin counted 173,954 tokens of one
@@ -686,6 +699,24 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 		return wait, again < rateRetries && failure(status, body) == failRate && !creditWords.Match(body)
 	}
 	return 0, false
+}
+
+// withRoom is, of the candidates left, those another member than c's may
+// answer a request of about tokens that c's model found too long: not an
+// account of c's model at c's provider, which holds it no better, nor one
+// whose window it is known to be past.
+func withRoom(left []candidate, c candidate, tokens int) []candidate {
+	var out []candidate
+	for _, x := range left {
+		if x.p.ID == c.p.ID && x.model == c.model {
+			continue
+		}
+		if w := windowOf(x.p, x.model); w > 0 && tokens >= w {
+			continue
+		}
+		out = append(out, x)
+	}
+	return out
 }
 
 // matesFirst puts first, of the candidates left, the other keys or

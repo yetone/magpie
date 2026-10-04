@@ -36,6 +36,8 @@ func providerIcon(catalogID string) string {
 	switch catalogID {
 	case "github-copilot":
 		return "githubcopilot"
+	case "openai-codex": // Pi's and omp's ChatGPT sign-in
+		return providerIcon("openai")
 	}
 	return ""
 }

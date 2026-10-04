@@ -138,6 +138,29 @@ func (m model) updateProviders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			onEnter: func(v string) tea.Cmd {
 				return saveProvider(p.ID, func(p *provider.Provider) { p.Key = v; provider.ForgetBalances() }, p.Name+" key "+provider.Mask(v))
 			}})
+	case "w":
+		pr := provider.Preset(p.Preset)
+		if pr == nil || pr.Endpoint == "" {
+			m.flash, m.flashOK = p.Name+" is asked at its vendor's address · magpie provider set "+p.ID+" url=… changes a custom one's", false
+			return m, nil
+		}
+		now := p.Chat
+		if now == "" {
+			now = p.Responses
+		}
+		if p.IsRemoteMagpie() {
+			now = p.Anthropic // the address as typed, without /v1
+		}
+		id, name := p.ID, p.Name
+		m.openAsk(endpointAsk(*pr, []string{"providers", name, "address"}, now, func(v string) tea.Cmd {
+			return saveProvider(id, func(p *provider.Provider) {
+				p.Chat, p.Responses = v, v
+				if p.IsRemoteMagpie() {
+					p.Anthropic = "" // put again from the address typed
+				}
+				provider.ForgetBalances()
+			}, name+" address "+v)
+		}))
 	case "f":
 		in := newInput("a tag, e.g. relay")
 		in.SetValue(p.Family)
@@ -164,6 +187,10 @@ func (m model) updateProviders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "t":
 		m.flash, m.flashOK = "testing "+p.Name+"…", true
 		return m, testCmd(p)
+	case "m":
+		// the vendor's list asked again, as the app editor's Refresh does
+		m.flash, m.flashOK = "asking "+p.Name+" for its models…", true
+		return m, refetchCmd(p.ID)
 	case "d":
 		if m.confirm != "provider/"+p.ID {
 			m.confirm = "provider/" + p.ID
@@ -209,6 +236,53 @@ func saveProvider(id string, change func(*provider.Provider), done string) tea.C
 		}
 		return flashMsg{text: done, ok: true}
 	}
+}
+
+// refetchCmd asks the provider's vendor for its model list again and says
+// how many it has and how many agents are offered, or why there is none:
+// the app editor's Refresh, which the TUI had no way to do (akic404 on
+// Discord: a provider added here had 0 models and nothing to fetch them).
+func refetchCmd(id string) tea.Cmd {
+	return func() tea.Msg {
+		p, err := provider.Find(id)
+		if err != nil {
+			return flashMsg{text: err.Error()}
+		}
+		if p.IsPlugin() {
+			return flashMsg{text: p.Name + "'s models are what its plugin lists"}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		ms, dropped, err := p.Refetch(ctx)
+		if err != nil {
+			return flashMsg{text: p.Name + ": " + fetchNote(err)}
+		}
+		text := p.Name + ": " + modelsNote(id, len(ms))
+		if len(dropped) > 0 {
+			text += " · gone from its list, so no longer picked: " + strings.Join(dropped, ", ")
+		}
+		return flashMsg{text: text, ok: len(ms) > 0}
+	}
+}
+
+// modelsNote says how many models the vendor's list had and how many of
+// them agents are offered.
+func modelsNote(id string, fetched int) string {
+	text := fmt.Sprintf("%d models from its list", fetched)
+	if p, err := provider.Find(id); err == nil {
+		text += fmt.Sprintf(" · %d for agents (↵ picks)", len(p.Exposed()))
+	}
+	return text
+}
+
+// fetchNote is why a model list wasn't had, short enough for the status
+// line: the first URL's answer.
+func fetchNote(err error) string {
+	e, _, _ := strings.Cut(err.Error(), "; ")
+	if r := []rune(e); len(r) > 140 {
+		e = string(r[:140]) + "…"
+	}
+	return "no model list · " + strings.TrimPrefix(e, "no model list: ") + " · m asks again"
 }
 
 func testCmd(p provider.Provider) tea.Cmd {
@@ -286,7 +360,7 @@ func (m *model) openProviderModels(id string) {
 		crumbs: []string{"providers", p.Name, "models"},
 		input:  newInput("filter models"),
 		items:  modelOptions(id),
-		empty:  "no models known yet · t tests it, which asks the vendor for them",
+		empty:  "no models known yet · m on the providers list asks the vendor for them",
 		toggle: func(model string) ([]agent.Option, string, bool) {
 			p, err := provider.Find(id)
 			if err != nil {
@@ -341,37 +415,87 @@ func (m *model) openPresets() {
 				if err != nil {
 					return flashMsg{text: err.Error()}
 				}
-				in := newInput("the API key")
-				in.EchoMode = textinput.EchoPassword
-				in.EchoCharacter = '•'
-				hint := "the key is kept in magpie's providers file"
-				if p.KeysURL != "" {
-					hint = "keys: " + p.KeysURL
-				}
-				return askMsg{ask{crumbs: []string{"providers", "add", p.Name}, input: in, hint: hint, empty: true,
-					onEnter: func(key string) tea.Cmd {
+				// a vendor reached at the user's own address (a remote
+				// magpie, Azure OpenAI) has none of the preset's: it is
+				// asked for first, as the app's editor asks it
+				if pr := provider.Preset(id); pr != nil && pr.Endpoint != "" {
+					return askMsg{endpointAsk(*pr, []string{"providers", "add", p.Name, "address"}, "", func(addr string) tea.Cmd {
 						return func() tea.Msg {
-							p.Key = key
-							id, err := provider.Add(p)
-							if err != nil {
-								return flashMsg{text: err.Error()}
-							}
-							ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-							defer cancel()
-							text := "added " + p.Name
-							if saved, err := provider.Find(id); err == nil {
-								if ms, err := saved.Fetch(ctx); err == nil {
-									text += fmt.Sprintf(" · %d models", len(ms))
-								}
-							}
-							return flashMsg{text: text, ok: true}
+							p.Chat, p.Responses = addr, addr
+							return askMsg{addKeyAsk(p)}
 						}
-					}}}
+					})}
+				}
+				return askMsg{addKeyAsk(p)}
 			}
 		},
 	}
 	m.pk.refilter()
 	m.mode = modePick
+}
+
+// addKeyAsk asks for the key of p, a preset's provider, and adds it.
+func addKeyAsk(p provider.Provider) ask {
+	in := newInput("the API key")
+	in.EchoMode = textinput.EchoPassword
+	in.EchoCharacter = '•'
+	hint := "the key is kept in magpie's providers file"
+	if p.KeysURL != "" {
+		hint = "keys: " + p.KeysURL
+	}
+	return ask{crumbs: []string{"providers", "add", p.Name}, input: in, hint: hint, empty: true,
+		onEnter: func(key string) tea.Cmd {
+			return func() tea.Msg {
+				p.Key = key
+				id, err := provider.Add(p)
+				if err != nil {
+					return flashMsg{text: err.Error()}
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer cancel()
+				saved, err := provider.Find(id)
+				if err != nil {
+					return flashMsg{text: err.Error()}
+				}
+				// the vendor's list, and what came of asking it: a list
+				// that failed said so, not an "added" over 0 models
+				// (akic404 on Discord)
+				text := "added " + saved.Name
+				ms, err := saved.Fetch(ctx)
+				if err != nil && saved.Decides() {
+					// a System One API: its list isn't what it is for
+					return flashMsg{text: text, ok: true}
+				}
+				if err != nil {
+					return flashMsg{text: text + " · " + fetchNote(err)}
+				}
+				return flashMsg{text: text + " · " + modelsNote(id, len(ms)), ok: len(ms) > 0}
+			}
+		}}
+}
+
+// endpointAsk asks for the address of a vendor reached at the user's own
+// (pr.Endpoint is its example): a remote magpie's, as the other
+// computer's magpie shows it in Settings, under Share on local network.
+// Nothing typed is said to be needed, as the app's editor says it.
+func endpointAsk(pr provider.PresetDef, crumbs []string, now string, then func(string) tea.Cmd) ask {
+	in := newInput(pr.Endpoint)
+	in.SetValue(now)
+	hint := pr.EndpointHint
+	if hint == "" {
+		hint = "the address it is reached at, e.g. " + pr.Endpoint
+	}
+	return ask{crumbs: crumbs, input: in, hint: hint, empty: true,
+		onEnter: func(v string) tea.Cmd {
+			if v == "" {
+				need := pr.EndpointNeeded
+				if need == "" {
+					need = "Your resource's endpoint is needed"
+				}
+				return func() tea.Msg { return flashMsg{text: need} }
+			}
+			return then(v)
+		}}
 }
 
 func (m model) viewProviders() string {
@@ -455,7 +579,123 @@ func quotasCmd() tea.Msg {
 	provider.AskClaudeUsage() // the page opened, or r pressed
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 	defer cancel()
-	return quotaMsg(provider.Quotas(ctx))
+	// a WorkBuddy (China) account's line says how its daily check-in went,
+	// as its card in the app does
+	return quotaMsg(provider.WithCheckins(provider.Quotas(ctx)))
+}
+
+// checkinMsg is what came of c, WorkBuddy's daily check-in pressed now.
+type checkinMsg struct {
+	text string
+	ok   bool
+}
+
+// The check-in; vars so tests can stand in for WorkBuddy and Trae CN.
+var (
+	checkinHere  = provider.CheckInWorkBuddy
+	hasWorkBuddy = provider.HasWorkBuddy
+	checkinTrae  = provider.CheckInTrae
+	hasTrae      = provider.HasTrae
+)
+
+// checkinCmd presses WorkBuddy's daily check-in (签到) now for every
+// WorkBuddy (China) account signed in here not in yet today, all at once,
+// as the app's Usage card's "Check in now" and magpie accounts checkin do:
+// the built-in's or the plugin's (akic404 on Discord: the TUI had no way
+// to); and Trae CN's (每日签到) for each Trae CN account (#694). It says
+// how each account stands: the credits and streak, in
+// already today, or why not. A shared magpie's accounts are checked in
+// on that magpie, from its own app, TUI or CLI.
+func checkinCmd() tea.Msg {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	var parts []string
+	failed := 0
+	if hasWorkBuddy() {
+		for _, r := range checkinHere(ctx) {
+			if r.Outcome == provider.CheckinFailed {
+				failed++
+			}
+			parts = append(parts, checkinWords(r))
+		}
+	}
+	if hasTrae() {
+		for _, r := range checkinTrae(ctx) {
+			if r.Outcome == provider.CheckinFailed {
+				failed++
+			}
+			parts = append(parts, checkinWords(r))
+		}
+	}
+	if len(parts) == 0 {
+		return checkinMsg{text: "no WorkBuddy (China) or Trae CN account is signed in · only they have the daily check-in"}
+	}
+	return checkinMsg{text: strings.Join(parts, "; "), ok: failed == 0}
+}
+
+// checkinWords is how an account's check-in stands, in a few words.
+func checkinWords(r provider.WorkBuddyCheckin) string {
+	who := r.User
+	switch {
+	case r.By == "trae" && who == "":
+		who = "Trae CN"
+	case r.By == "trae":
+		who = "Trae CN " + who
+	case who == "":
+		who = "WorkBuddy"
+	}
+	switch r.Outcome {
+	case provider.CheckinClaimed, provider.CheckinDone:
+		s := who + " checked in today"
+		if r.Credit > 0 {
+			s += fmt.Sprintf(" +%g", r.Credit)
+		}
+		if r.Streak > 0 {
+			s += fmt.Sprintf(" · a %d-day streak", r.Streak)
+		}
+		if r.Outcome == provider.CheckinDone || !r.Asked {
+			s += " · already"
+		}
+		return s
+	case provider.CheckinIneligible:
+		return who + " isn't eligible for the check-in"
+	case provider.CheckinInactive:
+		return who + ": no check-in event now"
+	}
+	msg := r.Msg
+	if msg == "" {
+		msg = "no answer"
+	}
+	return who + " couldn't check in: " + msg
+}
+
+// checkinCell is a WorkBuddy (China) or Trae CN account's check-in on its
+// line: today's
+// done, with the credits, or not yet; empty for an account without one.
+func checkinCell(q provider.SubscriptionQuota, now time.Time) string {
+	if !q.Checkins {
+		return ""
+	}
+	r := q.Checkin
+	if r == nil || r.Day != provider.CheckinDay(now) {
+		return sMuted.Render("签到 not yet today · c")
+	}
+	switch r.Outcome {
+	case provider.CheckinClaimed, provider.CheckinDone:
+		s := sOK.Render("签到 ✓")
+		if r.Credit > 0 {
+			s += sText.Render(fmt.Sprintf(" +%g", r.Credit))
+		}
+		if r.Streak > 0 {
+			s += sFaint.Render(fmt.Sprintf(" · %d-day streak", r.Streak))
+		}
+		return s
+	case provider.CheckinIneligible:
+		return sMuted.Render("签到 not eligible")
+	case provider.CheckinInactive:
+		return sMuted.Render("签到 no event now")
+	}
+	return sBad.Render("签到 failed") + sMuted.Render(" · c tries again")
 }
 
 func (m model) updateUsage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -464,6 +704,10 @@ func (m model) updateUsage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "u":
 		m.qleft = !m.qleft
 		return m, nil
+	case "c":
+		// WorkBuddy's daily check-in, as the app's "Check in now"
+		m.flash, m.flashOK = "checking in…", true
+		return m, checkinCmd
 	case "l", "right":
 		m.period = periods[(i+1)%len(periods)]
 	case "h", "left":
@@ -669,15 +913,20 @@ func quotaLines(qs []provider.SubscriptionQuota, asked, left bool, width int, no
 			t = sName.Render(trunc(p, tw))
 		}
 		line := padRight(t, tw)
+		// a WorkBuddy (China) account's check-in, after whatever else
+		ci := checkinCell(q, now)
+		if ci != "" {
+			ci = "   " + ci
+		}
 		switch {
 		case q.Balance != "":
-			out = append(out, line+"  "+sText.Render(q.Balance)+sMuted.Render(" left"))
+			out = append(out, line+"  "+sText.Render(q.Balance)+sMuted.Render(" left")+ci)
 			continue
 		case q.Error != "":
-			out = append(out, line+"  "+sMuted.Render(trunc(q.Error, max(20, width-tw-2))))
+			out = append(out, line+"  "+sMuted.Render(trunc(q.Error, max(20, width-tw-2-lipgloss.Width(ci))))+ci)
 			continue
 		case len(q.Windows) == 0:
-			out = append(out, line+"  "+sMuted.Render("no usage reported"))
+			out = append(out, line+"  "+sMuted.Render("no usage reported")+ci)
 			continue
 		}
 		// the windows follow the name, those that don't fit on lines below
@@ -685,6 +934,9 @@ func quotaLines(qs []provider.SubscriptionQuota, asked, left bool, width int, no
 		var cells []string
 		for _, w := range provider.PooledWindows(q.Windows) {
 			cells = append(cells, quotaCell(w, left, now))
+		}
+		if ci != "" {
+			cells = append(cells, ci[3:])
 		}
 		if r := q.Resets; r != nil {
 			c := sText.Render("↺ " + r.Words())

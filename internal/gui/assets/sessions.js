@@ -175,6 +175,9 @@
           : "magpie can list {agent}'s sessions, but cannot resume or delete them.";
       box.append(el("p", "usage-note sm-note", t(key, { agent: a.name })));
     }
+    if (a?.deletable && data.sessions.some((s) => s.wsl)) {
+      box.append(el("p", "usage-note sm-note", t("Sessions in WSL can be resumed, but not deleted from magpie: delete them in WSL.")));
+    }
     box.append(selectBar(), el("div", "sm-tree"));
     queueMicrotask(redrawList);
     return box;
@@ -185,7 +188,7 @@
     const bar = el("div", "row-head sm-bar");
     const a = current();
     if (!a?.deletable) { bar.hidden = true; return bar; }
-    const list = shown().filter((s) => !s.read_only);
+    const list = shown().filter((s) => !s.read_only && !s.wsl);
     const all = el("input", "sm-check");
     all.type = "checkbox";
     all.checked = list.length > 0 && list.every((s) => picked.has(s.id));
@@ -245,7 +248,7 @@
       const open = !!q || opened.has(cwd);
       const g = el("div", "list sm-group");
       const r = el("div", "row sm-folder");
-      const writable = items.filter((s) => !s.read_only);
+      const writable = items.filter((s) => !s.read_only && !s.wsl);
       // the folder's box picks every session of it shown, folded or not,
       // for the bar's Delete; the bar still counts sessions (#527)
       if (current()?.deletable && writable.length) {
@@ -288,7 +291,7 @@
     const wrap = el("div", "sess-item sm-item" + (detail === s.id ? " open" : ""));
     const r = el("div", "row sess sm-sess");
     r.dataset.id = s.id;
-    if (a?.deletable && !s.read_only) {
+    if (a?.deletable && !s.read_only && !s.wsl) {
       const c = el("input", "sm-check");
       c.type = "checkbox";
       c.checked = picked.has(s.id);
@@ -299,7 +302,9 @@
     }
     const who = el("div", "who");
     who.append(el("div", "name", s.title || t("(no prompt)")));
-    who.append(el("div", "sub", [ago(s.last), s.messages ? t(s.messages === 1 ? "{n} message" : "{n} messages", { n: s.messages }) : "", fmtBytes(s.size), s.id.slice(0, 8)].filter(Boolean).join(" · ")));
+    const sub = el("div", "sub", [ago(s.last), s.messages ? t(s.messages === 1 ? "{n} message" : "{n} messages", { n: s.messages }) : "", fmtBytes(s.size), s.id.slice(0, 8)].filter(Boolean).join(" · "));
+    if (s.wsl) sub.prepend(wslBadge(s), " ");
+    who.append(sub);
     r.append(who);
     if (s.resume) {
       const res = el("button", "sess-resume", t("Resume"));
@@ -326,7 +331,7 @@
         r.append(term);
       }
     }
-    if (a?.deletable && !s.read_only) {
+    if (a?.deletable && !s.read_only && !s.wsl) {
       const del = el("button", "copy sm-del");
       del.type = "button";
       del.title = t("Delete");
@@ -354,6 +359,7 @@
       d.append(l);
     };
     line(t("Time"), stamp(s.start || s.last) + " – " + stamp(s.last));
+    if (s.wsl) line("WSL", s.wsl);
     if (s.cwd) line(t("Folder"), s.cwd);
     line(t("Session ID"), s.id, copyBtn(s.id, t("Session id")));
     if (s.resume) line(t("Resume"), el("code", "", s.resume), copyBtn(s.resume, t("Resume command")));

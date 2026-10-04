@@ -333,6 +333,22 @@ func answered(key string, c candidate, turn, cacheRead int) {
 	saveSticks()
 }
 
+// unanswered forgets that c answered a conversation, when its reply to it
+// broke off (#733): the agent's retry goes by routing again, not back to
+// the one that just failed it.
+func unanswered(key string, c candidate) {
+	sticks.Lock()
+	st, ok := stickOf(key)
+	ok = ok && st.who == c.who() && st.model == c.model
+	if ok {
+		delete(sticks.m, key)
+	}
+	sticks.Unlock()
+	if ok {
+		saveSticks()
+	}
+}
+
 // foreignReasoning is how a vendor refuses reasoning another account (or
 // organization, or vendor) sealed: OpenAI's "The encrypted content for
 // item rs_… could not be verified", invalid_encrypted_content; xAI's

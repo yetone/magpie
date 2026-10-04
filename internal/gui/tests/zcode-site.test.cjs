@@ -70,10 +70,10 @@ for (const engine of engines) for (const lang of ["en", "zh"]) {
       const w = resetsWords({ byWindow: true, fiveHour: 2, weekly: 1, count: 3 });
       return [w.querySelector(".resets-n").textContent, w.title];
     });
-    assert.equal(words[0], lang === "zh" ? "↺ 2 次 5 小时重置 · 1 次每周重置" : "↺ 2 five-hour resets · 1 weekly reset");
+    assert.equal(words[0], lang === "zh" ? "↺ 2 张 5 小时重置卡 · 1 张每周重置卡" : "↺ 2 five-hour resets · 1 weekly reset");
     assert.ok(words[1].length > 0);
     const one = await page.evaluate(() => resetsWords({ byWindow: true, fiveHour: 1, count: 1 }).querySelector(".resets-n").textContent);
-    assert.equal(one, lang === "zh" ? "↺ 1 次 5 小时重置" : "↺ 1 five-hour reset");
+    assert.equal(one, lang === "zh" ? "↺ 1 张 5 小时重置卡" : "↺ 1 five-hour reset");
     assert.deepEqual(errors, []);
   });
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/tidwall/gjson"
 )
 
 // Codex writes a rollout file per session (a session picked up again later
@@ -16,13 +18,20 @@ import (
 type cxLine struct {
 	Type    string `json:"type"`
 	Payload struct {
-		Type    string `json:"type"`
-		ID      string `json:"id"`
-		Cwd     string `json:"cwd"`
-		Model   string `json:"model"`
-		Role    string `json:"role"`
-		Message string `json:"message"`
-		Content []struct {
+		cxCompaction
+		cxHistorySnapshot
+		Type        string   `json:"type"`
+		SessionID   string   `json:"session_id"`
+		TurnID      string   `json:"turn_id"`
+		ResponseID  string   `json:"response_id"`
+		Usage       *cxUsage `json:"usage"`
+		ThreadUsage *cxUsage `json:"thread_token_usage"`
+		ID          string   `json:"id"`
+		Cwd         string   `json:"cwd"`
+		Model       string   `json:"model"`
+		Role        string   `json:"role"`
+		Message     string   `json:"message"`
+		Content     []struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
@@ -38,10 +47,12 @@ type cxLine struct {
 }
 
 type cxUsage struct {
-	Input      int `json:"input_tokens"`
-	Cached     int `json:"cached_input_tokens"`
-	CacheWrite int `json:"cache_write_input_tokens"`
-	Output     int `json:"output_tokens"`
+	Input      int   `json:"input_tokens"`
+	Cached     int   `json:"cached_input_tokens"`
+	CacheWrite int   `json:"cache_write_input_tokens"`
+	Output     int   `json:"output_tokens"`
+	Reasoning  int   `json:"reasoning_output_tokens"`
+	Known      uint8 `json:"known,omitempty"`
 }
 
 // raw is the usage in Codex's own terms, input with the cache in it.
@@ -62,16 +73,18 @@ func spent(t Tokens) Tokens {
 }
 
 var (
-	cxMeta     = []byte(`"type":"session_meta"`)
-	cxTurn     = []byte(`"type":"turn_context"`)
-	cxCount    = []byte(`"type":"token_count"`)
-	cxSettings = []byte(`"type":"thread_settings_applied"`)
-	cxUserMsg  = []byte(`"type":"user_message"`)
-	cxUserRole = []byte(`"role":"user"`)
-	cxRole     = []byte(`"role":"`)
-	cxType     = []byte(`"type":"`)
-	cxPayload  = []byte(`"payload":{"type":"`)
-	cxText     = []byte(`,"text":"`)
+	cxMeta      = []byte(`"type":"session_meta"`)
+	cxTurn      = []byte(`"type":"turn_context"`)
+	cxRecord    = []byte(`"type":"token_usage_record"`)
+	cxCompacted = []byte(`"type":"compacted"`)
+	cxCount     = []byte(`"type":"token_count"`)
+	cxSettings  = []byte(`"type":"thread_settings_applied"`)
+	cxUserMsg   = []byte(`"type":"user_message"`)
+	cxUserRole  = []byte(`"role":"user"`)
+	cxRole      = []byte(`"role":"`)
+	cxType      = []byte(`"type":"`)
+	cxPayload   = []byte(`"payload":{"type":"`)
+	cxText      = []byte(`,"text":"`)
 )
 
 func codexLine(s *state, b []byte, main bool) {
@@ -82,8 +95,8 @@ func codexLine(s *state, b []byte, main bool) {
 
 // codexHead notes the time of a line, from its start, and says whether the
 // rest of it is worth reading: from its type and its payload's, which a
-// rollout writes first, so the megabytes of a compaction or a tool's output
-// are never searched. A line whose start is laid out otherwise is read.
+// rollout writes first, so irrelevant tool output is never searched.
+// Compactions carry usage metadata. A line laid out otherwise is read.
 func codexHead(s *state, b []byte, main bool) bool {
 	at := tsAt(b[:min(len(b), 256)], false)
 	if at.IsZero() {
@@ -92,12 +105,21 @@ func codexHead(s *state, b []byte, main bool) bool {
 	s.saw(at, main)
 	h := b[:min(len(b), 1024)]
 	top := typeAfter(h, cxType)
+	if s.Codex != nil && top == "response_item" {
+		payload := typeAfter(h, cxPayload)
+		if payload == "message" && bytes.Contains(h, cxUserRole) {
+			s.Codex.Pending = 0
+		}
+	}
+	if s.Codex != nil && top == "event_msg" && typeAfter(h, cxPayload) == "user_message" {
+		s.Codex.Pending = 0
+	}
 	switch top {
 	case "":
 		return true
 	case "session_meta":
 		return s.ID == ""
-	case "turn_context":
+	case "turn_context", "token_usage_record", "compacted":
 		return true
 	case "event_msg", "response_item":
 	default:
@@ -108,7 +130,7 @@ func codexHead(s *state, b []byte, main bool) bool {
 	case payload == "":
 		return true
 	case top == "event_msg":
-		return payload == "token_count" || payload == "thread_settings_applied" || payload == "user_message" && s.Title == ""
+		return payload == "token_count" || payload == "task_started" || payload == "thread_settings_applied" || payload == "user_message" && s.Title == ""
 	case cxCalls[payload]:
 		// a tool call, named in its head
 		name := typeAfter(h, cxName)
@@ -146,18 +168,33 @@ func typeAfter(b, key []byte) string {
 	return string(rest[:j])
 }
 
+// Read compaction identity/usage without decoding its potentially multi-MB
+// replacement history. The parser needs none of that conversation content.
+func cxCompactionIn(b []byte) cxCompaction {
+	fields := gjson.GetManyBytes(b, "payload.compaction_response_id", "payload.latest_token_usage_record")
+	p := cxCompaction{ResponseID: fields[0].String()}
+	if fields[1].Exists() {
+		_ = json.Unmarshal([]byte(fields[1].Raw), &p.Record)
+	}
+	return p
+}
+
 // codexBody reads a line codexHead let through.
 func codexBody(s *state, b []byte, main bool) {
 	at := tsAt(b[:min(len(b), 256)], false)
 	if at.IsZero() {
 		at = tsAt(b, false)
 	}
+	if typeAfter(b[:min(len(b), 1024)], cxType) == "compacted" {
+		codexApply(s, codexState(s).compacted(at, s.Model, cxCompactionIn(b)))
+		return
+	}
 	// the two kinds of line most read, each told from its head
 	if cxFastCount(s, at, b) || cxFastPrompt(s, at, b, main) {
 		return
 	}
 	want := s.ID == "" && bytes.Contains(b, cxMeta) ||
-		bytes.Contains(b, cxTurn) || bytes.Contains(b, cxCount) || bytes.Contains(b, cxSettings) ||
+		bytes.Contains(b, cxTurn) || bytes.Contains(b, cxCount) || bytes.Contains(b, cxRecord) || bytes.Contains(b, cxCompacted) || bytes.Contains(b, cxStarted) || bytes.Contains(b, cxSettings) ||
 		s.Title == "" && bytes.Contains(b, cxUserMsg) || (main || s.Title == "") && bytes.Contains(b, cxUserRole)
 	if !want {
 		return
@@ -168,7 +205,19 @@ func codexBody(s *state, b []byte, main bool) {
 	}
 	p := &l.Payload
 	switch {
+	case l.Type == "compacted":
+		codexApply(s, codexState(s).compacted(at, s.Model, p.cxCompaction))
+	case l.Type == "token_usage_record":
+		if p.Usage != nil {
+			codexApply(s, codexState(s).record(codexContribution{ResponseID: p.ResponseID, Session: p.SessionID, Turn: p.TurnID, Model: s.Model, At: at, Usage: *p.Usage, Total: p.ThreadUsage}))
+		}
 	case l.Type == "session_meta":
+		session := p.SessionID
+		if session == "" {
+			session = p.ID
+		}
+		codexState(s).context(session, "", "")
+		codexState(s).beginSnapshot(at, p.ID, p.cxHistorySnapshot)
 		if s.ID == "" {
 			s.ID = p.ID
 		}
@@ -176,15 +225,20 @@ func codexBody(s *state, b []byte, main bool) {
 			s.Cwd = p.Cwd
 		}
 	case l.Type == "turn_context":
+		codexState(s).context("", p.TurnID, p.Model)
 		if p.Model != "" {
 			s.Model = p.Model
 		}
 		if s.Cwd == "" {
 			s.Cwd = p.Cwd
 		}
+	case l.Type == "event_msg" && p.Type == "task_started":
+		codexState(s).context("", p.TurnID, "")
+		codexState(s).Pending = 0
 	case l.Type == "event_msg" && p.Type == "thread_settings_applied":
 		if p.Settings.Model != "" {
 			s.Model = p.Settings.Model
+			codexState(s).context("", "", p.Settings.Model)
 		}
 	case l.Type == "event_msg" && p.Type == "user_message":
 		if s.Title == "" {
@@ -271,29 +325,9 @@ func strEnd(b []byte) int {
 	return len(b)
 }
 
-// cxCounted counts a token_count event's usage: what its total adds to the
-// one before, or its last turn's when the total started over.
+// cxCounted uses the same interval reconciliation as the per-call reader.
 func cxCounted(s *state, at time.Time, tot, last *cxUsage) {
-	if tot == nil {
-		return
-	}
-	total := tot.raw()
-	var d Tokens
-	switch prev := s.Total; {
-	case prev != nil && total.Input >= prev.Input && total.Output >= prev.Output && total.CacheRead >= prev.CacheRead:
-		// the same total told again adds nothing
-		d = total
-		d.sub(*prev)
-		d.CacheWrite = max(0, d.CacheWrite)
-	case last != nil:
-		// the first count in the file (whose total may run on from an
-		// earlier file), or a total that started over
-		d = last.raw()
-	default:
-		d = total
-	}
-	s.Total = &total
-	s.use(dateOf(at), s.Model, spent(d))
+	codexApply(s, codexState(s).count(at, s.Model, tot, last))
 }
 
 var (

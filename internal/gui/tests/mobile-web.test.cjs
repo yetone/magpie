@@ -1,8 +1,9 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Phone navigation and content stay usable in both languages (#391). The
 // desktop screenshots match BASE_REF within a small rendering tolerance
-// (origin/main by default); only API
-// boundaries are faked, never the page's layout or scrolling helpers.
+// (origin/main by default), but for the Agents page while BASE_REF hasn't its
+// 「接入」 rows yet; only API boundaries are faked, never the page's layout or
+// scrolling helpers.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -22,26 +23,32 @@ const usage = { ...groups[0], path: "/test/usage.jsonl", bucket: "day", agents: 
   series: Array.from({ length: 30 }, (_, i) => ({ ...groups[0], label: "09-" + String(i + 1).padStart(2, "0") })) };
 // Populated rows are essential: an empty Agents list cannot expose clipped
 // model/effort controls or make the desktop comparison cover those rows.
-const modelOptions = [{ value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", icon: "claude-color" },
-  { value: "gpt-6.1-sol", label: "GPT-6.1-Sol", icon: "openai" }];
+// Connected, so each opens on its pickers.
+const modelOptions = [{ value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", icon: "claude-color", ref: "claude/claude-sonnet-4.5" },
+  { value: "gpt-6.1-sol", label: "GPT-6.1-Sol", icon: "openai", ref: "openai/gpt-6.1-sol" }];
 const modelField = (key, label, value = "") => ({ key, label, value, options: modelOptions });
 const agentRows = [
-  { id: "claude", name: "Claude Code", path: "/test/claude.json", icon: "claudecode-color", fields: [
+  { id: "claude", name: "Claude Code", path: "/test/claude.json", icon: "claudecode-color", wired: true, fields: [
     modelField("model", "model", "claude-sonnet-4.5"),
     { key: "effort", label: "thinking", value: "high", options: [{ value: "high", label: "High" }] },
   ] },
-  { id: "codex", name: "Codex", path: "/test/codex.toml", icon: "codex-color", fields: [
+  { id: "codex", name: "Codex", path: "/test/codex.toml", icon: "codex-color", wired: true, fields: [
     modelField("model", "model", "gpt-6.1-sol"),
     { key: "effort", label: "effort", value: "high", options: [{ value: "high", label: "High" }] },
     modelField("subagent", "subagents"),
     { key: "signin", label: "sign-in", value: "magpie", options: [{ value: "magpie", label: "magpie" }, { value: "chatgpt", label: "ChatGPT" }] },
   ] },
-  { id: "omp", name: "omp", path: "/test/omp.json", icon: "omp", fields: [
+  { id: "omp", name: "omp", path: "/test/omp.json", icon: "omp", wired: true, fields: [
     modelField("model", "model", "gpt-6.1-sol"), modelField("subagent", "subagents"),
     modelField("small", "smol"), modelField("slow", "slow"),
   ] },
 ];
 const views = ["agents", "providers", "gateway", "routing", "usage", "library", "plugins", "settings"];
+
+function baselineFile(file) {
+  if (!baseline.has(file)) baseline.set(file, execFileSync("git", ["show", `${base}:internal/gui/assets/${file}`], { cwd: assets, maxBuffer: 4 * 1024 * 1024 }));
+  return baseline.get(file);
+}
 
 function server(lang, original = false, opened = []) {
   return async route => {
@@ -73,10 +80,8 @@ function server(lang, original = false, opened = []) {
     const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];
     try {
       let body;
-      if (original) {
-        if (!baseline.has(file)) baseline.set(file, execFileSync("git", ["show", `${base}:internal/gui/assets/${file}`], { cwd: assets, maxBuffer: 4 * 1024 * 1024 }));
-        body = baseline.get(file);
-      } else body = await fs.readFile(path.join(assets, file));
+      if (original) body = baselineFile(file);
+      else body = await fs.readFile(path.join(assets, file));
       await route.fulfill({ body, contentType });
     } catch { await route.fulfill({ status: 404 }); }
   };
@@ -131,6 +136,9 @@ async function agentsFit(page) {
   for (const agent of agentRows) {
     const row = page.locator(`.row.agent[data-id="${agent.id}"]`);
     await row.waitFor();
+    // opened, its pickers in the row
+    await row.locator(".ag-link").click();
+    await row.locator(".ag-exp").waitFor();
     const bad = await row.evaluate(row => {
       const box = row.getBoundingClientRect(), bad = [];
       for (const field of row.querySelectorAll(".field")) {
@@ -252,6 +260,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const original = await open(browser, lang, width, { touch: false, original: true });
           try {
             for (const view of views) {
+              if (view === "agents" && !baselineFile("app.js").includes("function connectPanel")) continue;
               await go(current, view); await go(original, view);
               await current.mouse.move(0, 0); await original.mouse.move(0, 0);
               // Removing hover can repaint the tab's shadow in a later frame.

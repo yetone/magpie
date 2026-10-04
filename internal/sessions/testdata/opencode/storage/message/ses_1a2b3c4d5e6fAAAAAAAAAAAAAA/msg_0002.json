@@ -25,5 +25,6 @@
     "created": 1790416806000,
     "completed": 1790416830000
   },
+  "variant": "high",
   "finish": "tool-calls"
 }

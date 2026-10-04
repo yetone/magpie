@@ -174,7 +174,7 @@ func lastAllowances(agent string) map[string]Allowance {
 	for _, l := range logins {
 		q, ok := c.reading(loginProvider(l) + "/" + strings.ToLower(l.User))
 		if ok && len(q.Windows) > 0 {
-			out[l.User] = allowanceOf(q.Windows, now)
+			out[l.User] = allowanceOf(q.Windows, now).restartedBy(resetRunsOut(agent, l.User, q.Windows, q.Resets))
 		}
 	}
 	return out

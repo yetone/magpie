@@ -108,12 +108,17 @@ type Settings struct {
 	// of their rate-limit resets by themselves once their weekly window is
 	// used up and no other account can take the request: at most one a
 	// week each (see provider.AutoUseCodexReset); and one about to run out
-	// unused shortly before it does (provider.SpendExpiringCodexResets).
+	// unused half an hour before it does, or at once when the account is
+	// held up past then (provider.SpendExpiringCodexResets).
 	CodexAutoReset []string `json:"codexAutoReset,omitempty"`
 	// WorkBuddyCheckin presses WorkBuddy's daily check-in (签到) for each
 	// signed-in WorkBuddy (China) account once a Beijing day, claiming the
 	// credits it gives while its event runs.
 	WorkBuddyCheckin bool `json:"workbuddyCheckin,omitempty"`
+	// TraeCheckin presses Trae CN's daily check-in (每日签到) for each
+	// signed-in Trae CN account (its plugin's) once a Beijing day, claiming
+	// the credits it gives.
+	TraeCheckin bool `json:"traeCheckin,omitempty"`
 	// NoStats stops the one event a day that counts magpie's users (see
 	// internal/stats).
 	NoStats bool `json:"noStats,omitempty"`
@@ -129,6 +134,13 @@ type Settings struct {
 	// one of UpdateEveries, 0 for every six hours.
 	NoAutoUpdate bool `json:"noAutoUpdate,omitempty"`
 	UpdateEvery  int  `json:"updateEvery,omitempty"`
+	// UpdateMirror is a GitHub download mirror an update's file is fetched
+	// through, its prefix put before the release's github.com URL
+	// (https://mirror.example/https://github.com/…): "" for none, which is
+	// the default — magpie names no mirror of its own. The file is still
+	// checked against the SHA-256 the update feed at usemagpie.ai gives,
+	// never one from the mirror. magpie update mirror sets it.
+	UpdateMirror string `json:"updateMirror,omitempty"`
 	// Vision is the model that describes an image to a model that can't see
 	// it: a model's id (provider/model, group/<id>), "off" to turn such an
 	// image away, or empty for one magpie picks (see gateway.seer).
@@ -194,6 +206,12 @@ type Settings struct {
 	// V2's are sealed by OpenAI's server. Codex's features.multi_agent_v2
 	// still wins, and a thread keeps the version it started with.
 	CodexAgentsV1 bool `json:"codexAgentsV1,omitempty"`
+	// CodexTitles is where the requests Codex makes for a thread's title
+	// (thread_title, thread_title_reconsideration: a hidden turn of their
+	// own, on Codex's own model through its ChatGPT sign-in) go (#705): ""
+	// as Codex sends them, "off" answered by magpie with no title and sent
+	// nowhere, or a model's id (provider/model, group/<id>) that writes it.
+	CodexTitles string `json:"codexTitles,omitempty"`
 	// ChinaMirror is the Plugins page's 「国内镜像」 switch: the plugin list,
 	// npm (the plugins' packages and what npm says of them) and Bun's
 	// downloads are asked of mirrors in China first, and of their official
@@ -607,6 +625,11 @@ func Save(s Settings) error {
 	if !slices.Contains(UpdateEveries, s.UpdateEvery) {
 		return fmt.Errorf("magpie checks for updates every %v minutes, not %d", UpdateEveries, s.UpdateEvery)
 	}
+	if m := s.UpdateMirror; m != "" {
+		if u, err := url.Parse(m); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return fmt.Errorf("an update mirror is an http(s) address put before the github.com URL, like https://mirror.example/, not %q", m)
+		}
+	}
 	if s.UsageAlert < 0 || s.UsageAlert > 100 {
 		return fmt.Errorf("a usage alert is at a percentage from 1 to 100, or 0 for off, not %d", s.UsageAlert)
 	}
@@ -627,6 +650,10 @@ func Save(s Settings) error {
 	s.Vision = strings.TrimSpace(s.Vision)
 	if s.Vision != "" && s.Vision != "off" && !strings.Contains(s.Vision, "/") {
 		return fmt.Errorf("the vision model must be a model's id such as openai/gpt-5-mini, or off, not %q", s.Vision)
+	}
+	s.CodexTitles = strings.TrimSpace(s.CodexTitles)
+	if s.CodexTitles != "" && s.CodexTitles != "off" && !strings.Contains(s.CodexTitles, "/") {
+		return fmt.Errorf("the model for Codex's titles must be a model's id such as openai/gpt-5-mini, or off, not %q", s.CodexTitles)
 	}
 	s.Searcher = strings.TrimSpace(s.Searcher)
 	s.ImageGen = strings.TrimSpace(s.ImageGen)

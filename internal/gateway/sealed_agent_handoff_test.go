@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -59,12 +60,18 @@ func TestCodexSealedAgentHandoffDoesNotAffectOtherMessages(t *testing.T) {
 			f := &fake{t: t, reply: sse(`data: {"type":"response.completed","response":{"id":"r1","status":"completed","output":[]}}`)}
 			setup(t, provider.Responses, f)
 			body := `{"model":"fake/m1","stream":true,"input":` + tc.input + `}`
-			code, response := post(t, CodexPath+"/responses", body)
+			s := New()
+			code, response := postTo(t, s, CodexPath+"/responses", body)
 			if code != 200 || f.calls != 1 || strings.Contains(response, "sealed subagent task") {
 				t.Fatalf("normal request: status=%d upstream=%d response=%s", code, f.calls, response)
 			}
 			if tc.name == "plain agent task" && !strings.Contains(string(f.got), "reply PONG") {
 				t.Fatal("plain task was not delivered")
+			}
+			for _, route := range s.Trace(context.Background(), 0, 0).Routes {
+				if route.SealedTask || route.LeadAccount != "" {
+					t.Fatalf("ordinary request marked as sealed: %+v", route)
+				}
 			}
 		})
 	}
@@ -132,4 +139,23 @@ func TestCodexSealedAgentHandoffGoesToGroupsChatGPTAccount(t *testing.T) {
 	if grok.n != 0 || strings.Join(tried, ",") != "acct-2" || !strings.Contains(string(got), "gAAAAATest_ciphertext==") {
 		t.Fatalf("sealed task went to grok %d, accounts %v, forwarded sealed=%v", grok.n, tried, strings.Contains(string(got), "gAAAAATest_ciphertext=="))
 	}
+	for _, route := range s.Trace(context.Background(), 0, 0).Routes {
+		if route.Session != "worker-1" {
+			continue
+		}
+		if !route.SealedTask || route.LeadAccount == "" || route.LeadAccount != route.Order[0].ID {
+			t.Fatalf("sealed task's routing reason missing: %+v", route)
+		}
+		for _, account := range route.Order {
+			if account.Agent != "codex" {
+				t.Fatalf("unreadable account in sealed task's order: %+v", account)
+			}
+		}
+		b, err := json.Marshal(route)
+		if err != nil || strings.Contains(string(b), "gAAAAA") {
+			t.Fatalf("sealed task leaked into trace: %s, %v", b, err)
+		}
+		return
+	}
+	t.Fatal("sealed subagent trace missing")
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/yetone/magpie/internal/agentenv"
 )
 
 // UserPath gives the desktop app the PATH a terminal of the user's has. One
@@ -18,18 +20,49 @@ import (
 // or codex installed with a custom npm prefix (~/.npm-global/bin), nvm, bun,
 // volta or asdf wasn't found: the agent wasn't seen and its subscription
 // couldn't be used. The folders those tools use are added at once, when they
-// exist; the login shell's own PATH is asked for in the background and
-// added after, since a slow profile mustn't hold the window up.
+// exist; the login shell's own PATH is asked for after.
+//
+// The same call brings the agents' own variables (agentenv.Vars:
+// PI_CODING_AGENT_DIR, CODEX_HOME, CLAUDE_CONFIG_DIR, ...) the profile sets
+// and the app wasn't started with, so that magpie writes an agent's config
+// into the folder the agent reads, not its default one in the home (atie on
+// Discord: Pi's models.json went to ~/.pi/agent with PI_CODING_AGENT_DIR set
+// in the shell). One already in magpie's environment is kept. Those are read
+// as magpie starts (the library is synced into the agents at once), so the
+// answer is waited for, but no more than shellWait: a slow profile mustn't
+// hold the window up, and what it says later is still taken.
 func UserPath() {
 	addPath(userDirs(false))
+	done := make(chan struct{})
 	go func() {
-		if p := shellPath(); p != "" {
+		defer close(done)
+		p, vars := shellEnv()
+		setUnset(vars)
+		if p != "" {
 			addPath(filepath.SplitList(p))
 			login.Lock()
 			login.dirs, login.at = filepath.SplitList(p), time.Now()
 			login.Unlock()
 		}
 	}()
+	select {
+	case <-done:
+	case <-time.After(shellWait):
+	}
+}
+
+// shellWait is how long UserPath waits for the login shell before going on
+// without it.
+const shellWait = 2 * time.Second
+
+// setUnset sets each variable magpie's environment doesn't have, to a value
+// that isn't empty.
+func setUnset(vars map[string]string) {
+	for k, v := range vars {
+		if _, set := os.LookupEnv(k); !set && v != "" {
+			os.Setenv(k, v)
+		}
+	}
 }
 
 var login struct {
@@ -48,7 +81,7 @@ func LoginPath() []string {
 	if login.dirs != nil && time.Since(login.at) < time.Minute {
 		return login.dirs
 	}
-	p := shellPath()
+	p, _ := shellEnv()
 	if p == "" {
 		return nil
 	}
@@ -120,9 +153,10 @@ func npmPrefix(home string) string {
 	return ""
 }
 
-// shellPath asks the user's login shell for its PATH; "" when it can't say
+// shellEnv asks the user's login shell for its PATH and the values it has
+// for agentenv.Vars ("" for one it hasn't); "" and nil when it can't say
 // within a few seconds.
-func shellPath() string {
+func shellEnv() (string, map[string]string) {
 	sh := os.Getenv("SHELL")
 	if sh == "" || !filepath.IsAbs(sh) {
 		sh = "/bin/zsh"
@@ -133,22 +167,46 @@ func shellPath() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// interactive too, since many put PATH in .zshrc/.bashrc; the marker
-	// tells PATH apart from whatever the profile prints
+	// tells the answer apart from whatever the profile prints, and a NUL
+	// (which no variable can hold) parts the values: PATH first, then each
+	// of agentenv.Vars in order
 	const mark = "__magpie_path__"
-	cmd := CommandContext(ctx, sh, "-ilc", "printf '"+mark+"%s"+mark+"' \"$PATH\"")
+	format, args := mark+"%s", ` "$PATH"`
+	for _, v := range agentenv.Vars {
+		format += `\0%s`
+		args += ` "$` + v + `"`
+	}
+	cmd := CommandContext(ctx, sh, "-ilc", "printf '"+format+mark+"'"+args)
 	cmd.Stdin = nil
 	out, _ := cmd.Output()
-	s := string(out)
+	return parseShellEnv(string(out), mark)
+}
+
+// parseShellEnv reads shellEnv's answer out of what the shell printed. The
+// variables are nil when their count isn't agentenv.Vars' (a printf that
+// doesn't know \0); PATH alone is still taken then.
+func parseShellEnv(s, mark string) (string, map[string]string) {
 	i := strings.Index(s, mark)
 	if i < 0 {
-		return ""
+		return "", nil
 	}
 	s = s[i+len(mark):]
 	j := strings.Index(s, mark)
 	if j < 0 {
-		return ""
+		return "", nil
 	}
-	return s[:j]
+	f := strings.Split(s[:j], "\x00")
+	if len(f) != len(agentenv.Vars)+1 {
+		if len(f) == 1 {
+			return f[0], nil
+		}
+		return "", nil
+	}
+	vars := make(map[string]string, len(agentenv.Vars))
+	for k, v := range agentenv.Vars {
+		vars[v] = f[k+1]
+	}
+	return f[0], vars
 }
 
 // addPath adds the folders PATH lacks, after the ones it has.

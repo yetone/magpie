@@ -62,9 +62,11 @@ html.omarchy .rt-wires .pkt { fill: var(--om-accent); filter: none; }
 html.omarchy input:focus, html.omarchy select:focus { border-color: var(--om-accent); outline: none; }
 
 /* the chip in the corner: a Waybar module */
-.om-bar { position: fixed; right: 16px; bottom: 16px; z-index: 50; font: 13px/1.4 var(--om-font, monospace), monospace; }
+.om-bar { position: fixed; right: 16px; bottom: 16px; z-index: 50; display: flex; gap: 6px; font: 13px/1.4 var(--om-font, monospace), monospace; }
 .om-chip { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 11px; background: var(--bg); color: var(--ink2); border: 1px solid var(--line); cursor: pointer; font: inherit; }
 .om-chip:hover, .om-chip[aria-expanded="true"] { color: var(--ink); border-color: var(--om-accent); }
+.om-cta { height: 30px; padding: 0 11px; background: var(--om-accent); color: var(--btn-ink); border: 1px solid var(--om-accent); cursor: pointer; font: inherit; }
+.om-cta:hover { background: var(--bg); color: var(--om-accent); }
 .om-chip.om-off { width: 30px; padding: 0; justify-content: center; opacity: .6; }
 .om-chip.om-off:hover { opacity: 1; }
 .om-logo { font-family: omarchy; font-size: 15px; line-height: 1; color: var(--om-accent, currentColor); }

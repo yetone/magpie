@@ -15,8 +15,23 @@ import (
 type otelRequestKey struct{}
 
 type otelRequest struct {
-	root    usage.OTelSpan
-	routeID int64
+	root                                  usage.OTelSpan
+	routeID                               int64
+	agent, session                        string
+	sessionCandidate, decided, suppressed bool
+}
+
+// Decide once, before exporting any attempt, so a transcript discovered
+// during the request cannot leave an exported attempt without its root.
+func (t *otelRequest) skip() bool {
+	if t == nil {
+		return true
+	}
+	if !t.decided {
+		t.suppressed = t.sessionCandidate && usage.OTelSessionFresh(t.agent, t.session)
+		t.decided = true
+	}
+	return t.suppressed
 }
 
 func otelID(size int) string {
@@ -68,19 +83,21 @@ func beginOTelRequest(r *http.Request, kind string, body []byte) (*http.Request,
 	if !usage.OTelEnabled() {
 		return r, nil
 	}
-	if kind == "" && local(r) && access.Caller(r.Context()).KeyID == "" && callerOf(r).via == "" && usage.OTelSession(agentOf(r), otelSessionOf(r.Header)) && otelCallKind(agentOf(r), kind, body) == "" {
+	agent, session := agentOf(r), otelSessionOf(r.Header)
+	candidate := kind == "" && local(r) && access.Caller(r.Context()).KeyID == "" && callerOf(r).via == "" && otelCallKind(agent, kind, body) == ""
+	if candidate && usage.OTelSession(agent, session) {
 		return r, nil
 	}
 	traceID, parentID := otelParent(r.Header.Get("traceparent"))
 	if traceID == "" {
 		traceID = otelID(16)
 	}
-	t := &otelRequest{root: usage.OTelSpan{TraceID: traceID, SpanID: otelID(8), ParentID: parentID, Root: true}}
+	t := &otelRequest{root: usage.OTelSpan{TraceID: traceID, SpanID: otelID(8), ParentID: parentID, Root: true}, agent: agent, session: session, sessionCandidate: candidate}
 	return r.WithContext(context.WithValue(r.Context(), otelRequestKey{}, t)), t
 }
 
 func (t *otelRequest) end(call Call, millis int64) {
-	if t == nil {
+	if t.skip() {
 		return
 	}
 	t.root.End = time.Now()
@@ -90,7 +107,7 @@ func (t *otelRequest) end(call Call, millis int64) {
 // Called for every routing attempt, including unbilled failures and retries.
 // Its timing is the attempt's, not the whole request's ledger duration.
 func (t *otelRequest) attempt(call Call, attempt Try, providerID, effort string, held *holdWriter, capture *captureResponseWriter) {
-	if t == nil {
+	if t.skip() {
 		return
 	}
 	span := &usage.OTelSpan{TraceID: t.root.TraceID, SpanID: otelID(8), ParentID: t.root.SpanID, End: time.Now()}

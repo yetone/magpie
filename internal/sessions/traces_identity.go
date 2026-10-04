@@ -61,6 +61,19 @@ func (x *TraceSessionIndex) Visible(agent, id string) bool {
 	return snapshot != nil && snapshot.sessions[TraceSession{agent, id}]
 }
 
+// VisibleFresh bypasses the discovery TTL for the one check before exporting
+// a request's first attempt. Join an in-progress scan rather than trusting a
+// cached miss; normal request-start checks remain nonblocking and cached.
+func (x *TraceSessionIndex) VisibleFresh(agent, id string) bool {
+	if (agent != "codex" && agent != "pi") || id == "" {
+		return false
+	}
+	x.refresh.Lock()
+	snapshot := x.update(traceRecentFiles(traceLineFiles()))
+	x.refresh.Unlock()
+	return snapshot.sessions[TraceSession{agent, id}]
+}
+
 func (x *TraceSessionIndex) poll(files []file) []TraceSession {
 	x.refresh.Lock()
 	snapshot := x.update(files)

@@ -589,6 +589,24 @@ func TestAnthropicPassthroughDashScopeThinkingRestricted(t *testing.T) {
 	}
 }
 
+// #699: ZCode's GLM-5.3-Flash refuses thinking turned off in Chinese
+// ("该模型始终支持思考，不可关闭"), which Pi's off sent and the agent got as
+// a 400: asked again with thinking left to the model, once
+func TestAnthropicPassthroughAlwaysThinksInChinese(t *testing.T) {
+	f := &fake{t: t, ctype: "application/json", reply: `{"id":"msg","type":"message","content":[]}`}
+	f.refuse = func(b []byte) (int, string) {
+		if bytes.Contains(b, []byte(`"disabled"`)) {
+			return 400, `{"type":"error","error":{"type":"invalid_request_error","message":"该模型始终支持思考，不可关闭"}}`
+		}
+		return 0, ""
+	}
+	setup(t, provider.Anthropic, f)
+	code, body := post(t, "/v1/messages", `{"model":"m1","max_tokens":5,"messages":[{"role":"user","content":"title?"}],"thinking":{"type":"disabled"}}`)
+	if code != 200 || f.calls != 2 || bytes.Contains(f.got, []byte("thinking")) || !bytes.Contains(f.got, []byte(`"title?"`)) {
+		t.Fatalf("%d %s after %d calls, last sent %s", code, body, f.calls, f.got)
+	}
+}
+
 func TestOpenRouterMandatoryReasoningRetries(t *testing.T) {
 	const refusal = `{"error":{"message":"OpenRouter: Reasoning is mandatory for this endpoint and cannot be disabled.","type":"invalid_request_error"},"type":"error"}`
 	for _, tc := range []struct {

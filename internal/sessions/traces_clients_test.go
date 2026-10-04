@@ -83,6 +83,7 @@ func TestOmpTraceMainAndAuxiliaryModels(t *testing.T) {
 		`{"type":"model_usage","id":"aux","parentId":"a","timestamp":"2026-10-02T12:00:05Z","model":"small","provider":"p","purpose":"title","usage":{"input":10,"output":2}}`,
 		`{"type":"message","id":"result","parentId":"a","timestamp":"2026-10-02T12:00:06Z","message":{"role":"toolResult","toolCallId":"tool","content":"result"}}`,
 		`{"type":"message","id":"final","parentId":"result","timestamp":"2026-10-02T12:00:08Z","message":{"role":"assistant","model":"model","usage":{"input":120,"output":3},"content":[],"stopReason":"stop"}}`)
+	spans = append(spans, c.finishPi(time.Now().Add(piTimingGrace))...)
 	roots, models, tools := spanKinds(spans)
 	if len(roots) != 2 || len(models) != 3 || len(tools) != 1 || models[1].Tokens.Input != 10 || models[1].Parent != roots[0].ID {
 		t.Fatalf("omp %+v", spans)

@@ -270,3 +270,24 @@ func TestLedgerKeepsLocalAccountsSeparateFromGatewayProviders(t *testing.T) {
 		t.Fatalf("local identity was lost or guessed: %+v", rows)
 	}
 }
+
+// An OpenCode reply names only the model it was sent to, and the effort
+// picked for its prompt (#680): the row's requested model and effort, not a
+// served model the file never saw.
+func TestOpenCodeSessionCallIsWhatItAskedFor(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+	logs := []sessions.Call{{Time: time.Now(), Agent: "opencode", Model: "space-bunny-free", Upstream: "opencode", Effort: "high",
+		Tokens: sessions.Tokens{Input: 10, Output: 2}}}
+	rows, _, _, _ := ledgerWith(time.Time{}, Filter{}, nil, logs)
+	if len(rows) != 1 {
+		t.Fatalf("rows %+v", rows)
+	}
+	if r := rows[0]; r.Requested != "space-bunny-free" || r.Model != "space-bunny-free" || r.Served != "" || r.Effort != "high" {
+		t.Fatalf("an OpenCode call: requested %q model %q served %q effort %q", r.Requested, r.Model, r.Served, r.Effort)
+	}
+}

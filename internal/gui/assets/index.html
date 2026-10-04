@@ -255,6 +255,10 @@
         <div class="who"><div class="name" data-t>Codex subagents on any model</div><div class="sub" data-t>Codex’s OpenAI models hand subagents their tasks as text (multi-agent V1), so a GPT lead can spawn them on magpie’s other models. New threads only; Codex’s own multi_agent_v2 setting still wins</div></div>
         <div id="codexAgentsV1Segs"></div>
       </div>
+      <div class="row pref" id="codexTitlesRow">
+        <div class="who"><div class="name" data-t>Codex thread titles</div><div class="sub" id="codexTitlesSub"></div></div>
+        <div class="val" id="codexTitlesPick"></div>
+      </div>
       <div class="row pref">
         <div class="who"><div class="name" data-t>Open at login</div><div class="sub" data-t>Start magpie in the tray when you log in, so agents find the gateway from the start</div></div>
         <div id="loginSegs"></div>
@@ -312,6 +316,7 @@
       <button type="button" role="tab" id="warmTab-codex" data-warm="codex" aria-controls="codexWarmList">Codex</button>
       <button type="button" role="tab" id="warmTab-claude" data-warm="claude" aria-controls="claudeWarmList">Claude Code</button>
       <button type="button" role="tab" id="warmTab-wb" data-warm="wb" aria-controls="wbList" hidden>WorkBuddy</button>
+      <button type="button" role="tab" id="warmTab-trae" data-warm="trae" aria-controls="traeList" hidden>Trae CN</button>
     </div></div>
     <div class="warm-panes">
     <div class="list prefs" id="codexWarmList" role="tabpanel" aria-labelledby="warmTab-codex">
@@ -338,6 +343,12 @@
       <div class="row pref" id="wbCheckinRow">
         <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="wbCheckinSub"></div></div>
         <div id="wbCheckinSegs"></div>
+      </div>
+    </div>
+    <div class="list prefs" id="traeList" role="tabpanel" aria-labelledby="warmTab-trae">
+      <div class="row pref" id="traeCheckinRow">
+        <div class="who"><div class="name" data-t>Daily check-in</div><div class="sub" id="traeCheckinSub"></div></div>
+        <div id="traeCheckinSegs"></div>
       </div>
     </div>
     </div>

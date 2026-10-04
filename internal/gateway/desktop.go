@@ -122,9 +122,16 @@ func claudeModel(e provider.Entry) string {
 // gets its effort picker when the model has reasoning levels, else as it is
 // when it already reads as a Claude model's, else its alias (unprefixed
 // serves each again).
+//
+// A routing group is never listed as the Claude model its first member
+// is: Desktop names an id it finds in its own model catalog by the
+// catalog's name, so two groups led by claude-opus-5-5 read "Opus 5.5"
+// there like the model itself, and the group's id would change each time
+// its members are reordered. Its mythos-magpie-<n> keeps the picker and
+// the group's own name.
 func claudeLooking(e provider.Entry) string {
 	if len(e.Efforts) > 0 {
-		if m := claudeModel(e); m != "" {
+		if m := claudeModel(e); m != "" && e.Group == "" {
 			return "magpie-" + aliasNumber(e.ID) + desktopClaudeInfix + m
 		}
 		return desktopEffortAlias + aliasNumber(e.ID)
@@ -139,14 +146,15 @@ func claudeLooking(e provider.Entry) string {
 // Claude Code (claudeLooking).
 func DesktopID(e provider.Entry) string { return claudeLooking(e) }
 
-// desktopModels is /v1/models as Claude Desktop is shown it: every model by
-// an id it keeps (claudeLooking), named so the picker tells them apart —
-// it shows the name, not the id, and folds rows of one name into one entry.
+// desktopModels is /v1/models as Claude Desktop is shown it: every model
+// picked for it (provider.CatalogFor, the Agents page's model list) by an id
+// it keeps (claudeLooking), named by its own name alone (蓝猫: "DeepSeek
+// V4.1 Flash", not with its provider's beside it). Desktop shows the name,
+// not the id, and its description after it, so none is given; it folds rows
+// of one name into one entry, so two models of one name keep their
+// provider's after it (desktopNames).
 func desktopModels(entries []provider.Entry) []map[string]any {
-	names := map[string]int{}
-	for _, e := range entries {
-		names[desktopName(e)]++
-	}
+	names := desktopNames(entries)
 	// the tier each model stands in for: the user's pick (a model picked
 	// for two is tagged with the first, desktopTierTurn sends the other),
 	// else a Claude model's own
@@ -158,16 +166,10 @@ func desktopModels(entries []provider.Entry) []map[string]any {
 		}
 	}
 	data := make([]map[string]any, 0, len(entries))
-	for _, e := range entries {
+	for i, e := range entries {
 		m := modelObject(e)
-		name := desktopName(e)
-		if names[name] > 1 && name != e.ID {
-			name += " (" + e.ID + ")"
-		}
-		m["display_name"] = name
-		if m["id"] = claudeLooking(e); m["id"] != e.ID {
-			m["description"] = e.ID + " in magpie"
-		}
+		m["display_name"] = names[i]
+		m["id"] = claudeLooking(e)
 		if t := tierOf[e.ID]; t != "" {
 			m["anthropic_family_tier"], m["is_family_default"] = t, true
 		} else if t := claudeTier(e.ID); t != "" && picked[t] == "" {
@@ -270,6 +272,41 @@ func desktopName(e provider.Entry) string {
 		return e.Name
 	}
 	return e.ID
+}
+
+// desktopNames are the names Claude Desktop is shown entries by, in order:
+// each its own name, but for two or more of one name (case aside), which
+// get their provider's id after it — "DeepSeek V4.1 Flash (opencode-go)" —
+// or, where that still leaves two alike (two accounts of one provider), the
+// whole catalog id.
+func desktopNames(entries []provider.Entry) []string {
+	count := func(names []string) map[string]int {
+		n := map[string]int{}
+		for _, s := range names {
+			n[strings.ToLower(s)]++
+		}
+		return n
+	}
+	out := make([]string, len(entries))
+	for i, e := range entries {
+		out[i] = desktopName(e)
+	}
+	same := count(out)
+	by := make([]string, len(entries))
+	for i, e := range entries {
+		by[i] = out[i]
+		if same[strings.ToLower(out[i])] > 1 && out[i] != e.ID {
+			whose, _, _ := strings.Cut(e.ID, "/")
+			by[i] += " (" + whose + ")"
+		}
+	}
+	still := count(by)
+	for i, e := range entries {
+		if by[i] != out[i] && still[strings.ToLower(by[i])] > 1 {
+			by[i] = out[i] + " (" + e.ID + ")"
+		}
+	}
+	return by
 }
 
 // aliased is the catalog id an alias Claude Desktop was given stands for:

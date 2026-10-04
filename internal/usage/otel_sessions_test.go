@@ -129,6 +129,7 @@ func TestOTelSessionWatcherExportsNewInteractionWithoutGatewayDuplicates(t *test
 	for _, o := range []map[string]any{
 		{"type": "message", "id": "new-user", "timestamp": now, "message": map[string]any{"role": "user", "content": "PRIVATE-NEW"}},
 		{"type": "message", "id": "assistant", "parentId": "new-user", "timestamp": now.Add(time.Millisecond), "message": map[string]any{"role": "assistant", "timestamp": now.UnixMilli(), "model": "model", "provider": "magpie", "stopReason": "stop", "content": "PRIVATE-REPLY", "usage": map[string]int{"input": 10, "output": 5}}},
+		{"type": "custom", "parentId": "assistant", "customType": "timing-final", "timestamp": now.Add(2 * time.Millisecond), "data": map[string]any{"totalMs": 2, "endAt": now.Add(2 * time.Millisecond).UnixMilli()}},
 	} {
 		b, _ := json.Marshal(o)
 		f.Write(append(b, '\n'))
@@ -159,6 +160,29 @@ func TestOTelSessionWatcherExportsNewInteractionWithoutGatewayDuplicates(t *test
 		}
 		if strings.Count(text, `"key":"gen_ai.usage.input_tokens"`) != 1 {
 			t.Fatalf("duplicate model usage: %s", text)
+		}
+		var wire struct {
+			ResourceSpans []struct {
+				ScopeSpans []struct {
+					Spans []struct {
+						SpanID string `json:"spanId"`
+					}
+				}
+			}
+		}
+		if err := json.Unmarshal(b, &wire); err != nil {
+			t.Fatal(err)
+		}
+		ids := map[string]bool{}
+		for _, resource := range wire.ResourceSpans {
+			for _, scope := range resource.ScopeSpans {
+				for _, span := range scope.Spans {
+					if ids[span.SpanID] {
+						t.Fatalf("duplicate span %s: %s", span.SpanID, text)
+					}
+					ids[span.SpanID] = true
+				}
+			}
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("session watcher did not export")

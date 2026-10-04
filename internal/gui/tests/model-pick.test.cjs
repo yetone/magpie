@@ -3,7 +3,8 @@
 // still out (it answers with the whole state, which took seconds: Claude
 // Code's model took 5–10s to show, in the window and the tray panel alike).
 // The answer then draws what the config says; a refused pick puts the old
-// model back and says why. The page never moves. In English and Chinese.
+// model back and says why. The page never moves. In the window the picker
+// is in the connected agent's opened row. In English and Chinese.
 // No backend: the API is faked here, its /api/set held for SLOW ms.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -13,9 +14,9 @@ const { chromium, webkit } = require("playwright");
 
 const assets = path.resolve(__dirname, "../assets");
 const SLOW = 2500;
-const models = ["claude-sonnet-5-5", "claude-opus-5-5", "magpie/deepseek/pro", "magpie/kimi/k3"].map((m) => ({ value: m, label: "Label " + m }));
+const models = ["claude-sonnet-5-5", "claude-opus-5-5", "magpie/deepseek/pro", "magpie/kimi/k3"].map((m) => ({ value: m, ref: m.replace(/^magpie\//, ""), label: "Label " + m }));
 const agent = (id, name) => ({
-  id, name, path: "/test/" + id,
+  id, name, path: "/test/" + id, wired: true, // on magpie models (#726: a connected one is in view)
   fields: [{ key: "model", label: "model", value: "claude-sonnet-5-5", options: models }],
 });
 const fresh = () => ({
@@ -72,6 +73,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(row).waitFor();
       return page;
     };
+    // the window: scrolled down to the connected agent's picker, in its row,
+    // as a reader would (the page puts back any scroll that isn't
+    // the reader's), by at least `least` turns of the wheel
+    const toPicker = async (page, field, least = 0) => {
+      const view = page.locator("#view-agents");
+      await page.mouse.move(400, 300);
+      const shown = async () => { const f = await field.boundingBox(), v = await view.boundingBox(); return f.y + f.height + 8 <= v.y + v.height; };
+      for (let i = 0; i < least || !(await shown()); i++) { await page.mouse.wheel(0, 30); await page.waitForTimeout(i < least ? 20 : 80); }
+      await page.waitForTimeout(300);
+    };
     // the picker's row for a model, clicked
     const pickModel = async (page, value) => {
       const li = page.locator("#list li").filter({ hasText: "Label " + value });
@@ -84,10 +95,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const sets = [];
         const page = await open("http://magpie.test/", lang, sets);
         const view = page.locator("#view-agents");
-        const field = page.locator(`${row} .field[data-key="model"]`);
-        await page.mouse.move(400, 300);
-        for (let i = 0; i < 2; i++) { await page.mouse.wheel(0, 30); await page.waitForTimeout(20); }
-        await page.waitForTimeout(300);
+        const field = page.locator(`${row} > .field.ag-start[data-key="model"]`);
+        await toPicker(page, field, 2);
         const top = await view.evaluate((v) => v.scrollTop);
         assert(top > 0, "the list must be scrolled");
         await field.click();
@@ -126,7 +135,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await t.test("a refused pick puts the old model back", async () => {
       const sets = [];
       const page = await open("http://magpie.test/", "en", sets, { refuse: true });
-      const field = page.locator(`${row} .field[data-key="model"]`);
+      const field = page.locator(`${row} > .field.ag-start[data-key="model"]`);
+      await toPicker(page, field);
       await field.click();
       await page.locator("#pop:not([hidden]) #list li").first().waitFor();
       await pickModel(page, "claude-opus-5-5");

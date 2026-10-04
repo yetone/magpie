@@ -5,8 +5,9 @@
 // a click posts ultracode on, lights it and says the restart; the effort
 // slider's change says it too. On Opus 4.5 the slider has its three levels
 // and no ultracode; on Haiku 4.5 there is neither an effort nor ultracode.
-// The window scrolled down stays where it is through the clicks. English
-// and Chinese, Chromium and WebKit, the window and the tray panel.
+// In the window they are in a connected row, opened from its link; the
+// window scrolled down stays where it is through the clicks. English and
+// Chinese, Chromium and WebKit, the window and the tray panel.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -16,9 +17,9 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 const five = ["low", "medium", "high", "xhigh", "max"];
 const claude = (id, model, efforts, ultracode) => ({
-  id, name: "Claude Code " + id, icon: "claudecode-color", path: "/test/" + id,
+  id, name: "Claude Code " + id, icon: "claudecode-color", path: "/test/" + id, wired: true,
   fields: [
-    { key: "model", label: "model", value: model, options: [{ value: model, icon: "claude-color" }] },
+    { key: "model", label: "model", value: model, options: [{ value: model, icon: "claude-color", ref: "claude/" + model }] },
     { key: "effort", label: "effort", value: "", options: efforts.map((value) => ({ value })) },
     { key: "ultracode", label: "ultracode", value: ultracode, options: efforts.includes("xhigh") ? [{ value: "on", note: "Claude plans a workflow for each substantive task" }] : [] },
   ],
@@ -82,12 +83,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test("the window", async () => {
         const sets = [];
         const page = await open("", sets);
-        // the rows as the model has them
-        assert.equal(await page.locator(`${row("o55")} .field[data-key="ultracode"]`).count(), 1);
+        // the rows as the model has them, each opened in turn
+        const expand = async (id) => {
+          await page.locator(`${row(id)} .ag-link`).click();
+          await page.locator(`${row(id)} .ag-exp`).waitFor();
+        };
+        await expand("o45");
         assert.equal(await page.locator(`${row("o45")} .field[data-key="ultracode"]`).count(), 0, "ultracode on a model without xhigh");
+        assert.equal(await page.locator(`${row("o45")} .field[data-key="effort"]`).count(), 1);
+        await expand("h45");
         assert.equal(await page.locator(`${row("h45")} .field[data-key="effort"]`).count(), 0, "an effort for Haiku 4.5");
         assert.equal(await page.locator(`${row("h45")} .field[data-key="ultracode"]`).count(), 0);
-        assert.equal(await page.locator(`${row("o45")} .field[data-key="effort"]`).count(), 1);
+        await expand("o55");
+        assert.equal(await page.locator(`${row("o55")} .field[data-key="ultracode"]`).count(), 1);
 
         const sq = page.locator(`${row("o55")} .field[data-key="ultracode"]`);
         assert.equal(await sq.getAttribute("aria-pressed"), "false");

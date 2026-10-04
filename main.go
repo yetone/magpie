@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -74,12 +75,13 @@ const usage = `magpie — one place to pick every agent's model
   magpie group <id> | set <id> k=v… | rm <id>   show, change or remove one (magpie group help for more)
   magpie accounts [agent] [--json]  every subscription magpie knows, with each one's allowance used and when it resets
   magpie accounts add <agent>     sign in to one more Claude, ChatGPT or Google (Gemini CLI, Antigravity) subscription
+  magpie accounts add copilot [--host <name>.ghe.com]   one more Copilot account, on github.com or an enterprise's GHE.com
   magpie accounts switch <agent> <email>   sign the agent in to another of them
   magpie accounts refresh         renew the saved ChatGPT sign-ins now (the gateway does it daily)
   magpie accounts checkin         WorkBuddy's daily check-in (签到) for each WorkBuddy account, now (Settings can do it daily)
   magpie accounts project <gemini|antigravity> <email> <project>   the Google Cloud project a Google account's requests go to
   magpie plugin [add <package>|rm|update|on|off|login <provider>|logout <provider>]
-                                  OpenCode provider plugins: subscriptions signed in to, and served, through a plugin
+                                  OpenCode provider plugins and pi packages: subscriptions signed in to, and served, through a plugin
   magpie plugin move|migrate <subscription>   run a built-in subscription's accounts on its community plugin
   magpie plugin move-back|unmigrate <subscription>   go back to the built-in, with its accounts
 
@@ -94,9 +96,15 @@ const usage = `magpie — one place to pick every agent's model
   magpie sessions --days N|today|all [--model <m>] [--folder <f>] [--json]
                                   what every session spent, day by day, with the top models and folders (7 days)
   magpie quota [<provider>] [--json]  what is left of every subscription, plan and key balance
+  magpie quota wait <provider|account> [--timeout <d>] [--quiet]
+                                  block until that subscription (any of its accounts) or account has allowance again
   magpie sync                     refresh the model catalog and vendor model lists
   magpie agents                   list every supported agent
-  magpie update [check]           install the newest release (check: only say if there is one)
+  magpie update [check] [--proxy <url>] [--mirror <prefix>]
+                                  install the newest release (check: only say if there is one); --proxy: an
+                                  http(s):// or socks5:// proxy for it; --mirror: a GitHub download mirror put
+                                  before the github.com URL (none unless given; still checked against usemagpie.ai's SHA-256)
+  magpie update mirror [<prefix>|off]  the mirror every update, the app's own too, is downloaded through
   magpie update auto [on|off] [30m|1h|6h|24h]  whether the app looks for updates by itself, and how often (6h)
 
 agents: claude (cc), codex, gemini, opencode (oc), mimocode, pi, goose, cursor, zed, copilot, crush
@@ -122,8 +130,16 @@ func main() {
 	proc.EndProbes() // a CLI still being asked something isn't left to init
 	sessions.Saved() // the session index kept, for the next run
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "magpie:", err)
-		os.Exit(1)
+		// a command with exit codes of its own (quota wait) says which
+		code := 1
+		var e exitError
+		if errors.As(err, &e) {
+			code = e.code
+		}
+		if msg := err.Error(); msg != "" {
+			fmt.Fprintln(os.Stderr, "magpie:", msg)
+		}
+		os.Exit(code)
 	}
 }
 
@@ -139,6 +155,12 @@ var tuiRun = tui.Run
 func run(args []string) error {
 	if len(args) > 0 && args[0] == "healthcheck" {
 		return healthcheck() // every few seconds in a container: nothing else
+	}
+	if len(args) == 2 && args[0] == agent.DryRunArg {
+		// an agent disconnected on a copy of its files under a temporary
+		// home, for the Agents page to show what disconnecting changes
+		// (agent.DisconnectPreview)
+		return agent.DryRun(args[1])
 	}
 	makeDirs()
 	settings.Migrate()

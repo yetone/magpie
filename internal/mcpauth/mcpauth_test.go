@@ -110,8 +110,13 @@ func TestSignInPage(t *testing.T) {
 func TestNothingToSignIn(t *testing.T) {
 	home(t)
 	f := mcpauthtest.New(t)
-	if _, err := mcpauth.Start(t.Context(), "open", f.Server.URL+"/.well-known/oauth-protected-resource/mcp"); err == nil {
+	_, err := mcpauth.Start(t.Context(), "open", f.Server.URL+"/.well-known/oauth-protected-resource/mcp")
+	if err == nil {
 		t.Fatal("signed in to a server that asks for none")
+	}
+	// said to work as it is, not as a failure to find the sign-in
+	if !errors.Is(err, mcpauth.ErrNoSignIn) || !strings.Contains(err.Error(), "already works without signing in") {
+		t.Fatalf("error %v", err)
 	}
 }
 

@@ -129,6 +129,7 @@ func (s *usageSniffer) parse(b []byte) {
 		// Factory's generateContent chunks, the same usageMetadata Code
 		// Assist wraps. Relaying one used to count nothing.
 		var v struct {
+			ResponseID    string `json:"responseId"`
 			ModelVersion  string `json:"modelVersion"`
 			UsageMetadata *struct {
 				Prompt     int `json:"promptTokenCount"`
@@ -139,6 +140,7 @@ func (s *usageSniffer) parse(b []byte) {
 		}
 		if json.Unmarshal(b, &v) == nil {
 			s.saw(v.ModelVersion)
+			s.u.add(Usage{ResponseID: v.ResponseID})
 			if u := v.UsageMetadata; u != nil {
 				s.u.add(Usage{Input: max(u.Prompt-u.Cached, 0), CacheRead: u.Cached,
 					Output: u.Candidates + u.Thoughts, Reasoning: u.Thoughts})
@@ -146,25 +148,38 @@ func (s *usageSniffer) parse(b []byte) {
 		}
 	case provider.Chat:
 		var v struct {
+			ID    string  `json:"id"`
+			Error any     `json:"error"`
 			Model string  `json:"model"`
 			Usage *cUsage `json:"usage"`
 		}
 		if json.Unmarshal(b, &v) == nil {
 			s.saw(v.Model)
+			if v.Error == nil {
+				s.u.add(Usage{ResponseID: v.ID})
+			}
 			if v.Usage != nil {
 				s.u.add(v.Usage.usage())
 			}
 		}
 	case provider.Responses:
 		var v struct {
+			ID       string  `json:"id"`
+			Type     string  `json:"type"`
 			Model    string  `json:"model"`
 			Usage    *rUsage `json:"usage"`
 			Response struct {
+				ID    string  `json:"id"`
 				Model string  `json:"model"`
 				Usage *rUsage `json:"usage"`
 			} `json:"response"`
 		}
 		if json.Unmarshal(b, &v) == nil {
+			if !s.sse {
+				s.u.add(Usage{ResponseID: v.ID})
+			} else if strings.HasPrefix(v.Type, "response.") {
+				s.u.add(Usage{ResponseID: v.Response.ID})
+			}
 			s.saw(v.Response.Model)
 			s.saw(v.Model)
 			if v.Response.Usage != nil {
@@ -175,14 +190,22 @@ func (s *usageSniffer) parse(b []byte) {
 		}
 	default:
 		var v struct {
+			ID      string  `json:"id"`
+			Type    string  `json:"type"`
 			Model   string  `json:"model"`
 			Usage   *aUsage `json:"usage"`
 			Message struct {
+				ID    string  `json:"id"`
 				Model string  `json:"model"`
 				Usage *aUsage `json:"usage"`
 			} `json:"message"`
 		}
 		if json.Unmarshal(b, &v) == nil {
+			if !s.sse {
+				s.u.add(Usage{ResponseID: v.ID})
+			} else if v.Type == "message_start" {
+				s.u.add(Usage{ResponseID: v.Message.ID})
+			}
 			s.saw(v.Message.Model)
 			s.saw(v.Model)
 			if v.Message.Usage != nil {

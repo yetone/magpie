@@ -138,6 +138,29 @@ func TestCurrent(t *testing.T) {
 	if th2.Stamp == th.Stamp || th2.Mode != "light" || th2.Vars["--bg"] != "#fafafa" {
 		t.Fatalf("not read again: %+v", th2)
 	}
+	// a theme set asks neither omarchy-font-current nor hyprctl (Hyprland
+	// reloads meanwhile and hyprctl stalls): the font stays as it was asked
+	if th2.Vars["--font"] != th.Vars["--font"] || th.Vars["--font"] == "" {
+		t.Fatalf("font %q then %q", th.Vars["--font"], th2.Vars["--font"])
+	}
+	t.Setenv("MAGPIE_OMARCHY_FONT", "JetBrains Mono")
+	os.WriteFile(filepath.Join(dir, "colors.toml"), []byte(tokyoColors), 0o644)
+	mu.Lock()
+	asked = asked.Add(-2e9)
+	mu.Unlock()
+	if th3, _ := Current(); th3.Vars["--bg"] != "#1a1b26" || th3.Vars["--font"] != th.Vars["--font"] {
+		t.Fatalf("the theme set asked for the font again: %q", th3.Vars["--font"])
+	}
+	// omarchy-font-set (fontconfig's file) does
+	cfg := os.Getenv("XDG_CONFIG_HOME")
+	os.MkdirAll(filepath.Join(cfg, "fontconfig"), 0o755)
+	os.WriteFile(filepath.Join(cfg, "fontconfig", "fonts.conf"), []byte("<fontconfig/>"), 0o644)
+	mu.Lock()
+	asked = asked.Add(-2e9)
+	mu.Unlock()
+	if th4, _ := Current(); th4.Vars["--font"] == th.Vars["--font"] {
+		t.Fatalf("a new font not asked: %q", th4.Vars["--font"])
+	}
 	t.Setenv("MAGPIE_OMARCHY", "0")
 	if Detect() {
 		t.Error("MAGPIE_OMARCHY=0 detected")

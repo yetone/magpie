@@ -37,8 +37,7 @@ func TestClaudeDesktopTiers(t *testing.T) {
 		New().Handler().ServeHTTP(rec, req)
 		var list struct {
 			Data []struct {
-				ID          string `json:"id"`
-				Description string `json:"description"`
+				ID string `json:"id"`
 				row
 			} `json:"data"`
 		}
@@ -47,11 +46,7 @@ func TestClaudeDesktopTiers(t *testing.T) {
 		}
 		out := map[string]row{}
 		for _, d := range list.Data {
-			id := strings.TrimSuffix(d.Description, " in magpie")
-			if d.Description == "" {
-				id = d.ID
-			}
-			out[id] = d.row
+			out[DesktopCatalogID(d.ID)] = d.row
 		}
 		return out
 	}

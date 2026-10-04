@@ -12,7 +12,9 @@ import (
 // magpie model picked there went to the ChatGPT backend, which refused it
 // ("… is not supported when using Codex with a ChatGPT account"). The base
 // URL is magpie's now in that state too, so the built-in provider's request
-// reaches magpie; back on Codex's own model, it goes.
+// reaches magpie; back on Codex's own model, it goes — but on magpie API,
+// where Codex's own model goes through magpie on its ChatGPT account and
+// magpie stays wired (#701).
 func TestCodexProviderAlsoSetsBaseURL(t *testing.T) {
 	for _, tc := range []struct {
 		name, auth string
@@ -25,6 +27,7 @@ func TestCodexProviderAlsoSetsBaseURL(t *testing.T) {
 			home, read := codexHome(t, tc.auth, "model = \"gpt-5.5\"\n")
 			cx := codex(home)
 			if tc.api {
+				os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"), []byte(`{"models":[{"slug":"gpt-5.4","display_name":"5.4","priority":1}]}`), 0o644)
 				if err := cx.Field("login").Set("api"); err != nil {
 					t.Fatal(err)
 				}
@@ -42,6 +45,13 @@ func TestCodexProviderAlsoSetsBaseURL(t *testing.T) {
 			}
 			if err := cx.Fields[0].Set("gpt-5.4"); err != nil {
 				t.Fatal(err)
+			}
+			if tc.api {
+				if cfg = read(); !strings.Contains(cfg, `openai_base_url = "`+codexGatewayURL()+`"`) ||
+					!strings.Contains(cfg, `model_provider = "magpie"`) || !strings.Contains(cfg, `model = "codex/gpt-5.4"`) {
+					t.Fatalf("own model on magpie API:\n%s", cfg)
+				}
+				return
 			}
 			if cfg = read(); strings.Contains(cfg, "openai_base_url") || strings.Contains(cfg, "model_provider =") ||
 				!strings.Contains(cfg, `model = "gpt-5.4"`) {

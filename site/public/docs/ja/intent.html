@@ -215,7 +215,7 @@ The number of its kind (0 for none):</pre>
       <tr><td>… (said before, for the same message).</td><td>答えは 10 分間のキャッシュから取ったもので、呼び出しはしていません。</td></tr>
       <tr><td>… was to tell which … but couldn’t — <em>reason</em> — so no rule with an intent matches it.</td><td>失敗しました。理由はエラー、タイムアウト、返ってきた答え、または失敗後の休止中であることです。</td></tr>
       <tr><td>Turn N begins and rule R matches — asks for “B” — so M goes first …</td><td>採用されたルールと、先頭になったモデルです。</td></tr>
-      <tr><td>Rule R matches, but M has nothing ready now, so the group’s order stands.</td><td>ルールのモデルに、いま使えるキーやアカウントがありません。</td></tr>
+      <tr><td>Rule R matches, but M has no account or key that can take this request, so the group’s order stands.</td><td>ルールのモデルには、このリクエストを処理できるアカウントやキーがありません。</td></tr>
       <tr><td>Rule R (…) sent turn N to M as it began; the turn stays there.</td><td>ターン内のツールのやり取りで、ターン開始時の判断に従っています。</td></tr>
       <tr><td>This turn began before magpie saw it, so the rules wait for the next one.</td><td>上の<em>待機</em>を参照してください。</td></tr>
     </table></div>
@@ -274,7 +274,7 @@ The number of its kind (0 for none):</pre>
     <ul>
       <li>それより上のルールが先に一致した。</li>
       <li>ルールのほかの条件（トークン数・画像・推理・エージェント）が満たされなかった。</li>
-      <li>ルールのモデルに使えるものがなかった（“has nothing ready now”）。</li>
+      <li>ルールのモデルに、このリクエストを処理できるアカウントやキーがなかった。</li>
       <li>別のモデルで始まったターン内のツールのやり取りだった。</li>
       <li>magpie がターンの始まりを見ていなかった（“the rules wait”）。</li>
     </ul>

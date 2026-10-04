@@ -4,7 +4,8 @@
 // whose chip is greyed out (an SSE server for an agent without SSE), not one
 // hidden on the Agents page, which keeps what it has — in a single write;
 // an agent that couldn't be given it is named in the toast with how many
-// have it; a second click takes it from all. The click moves nothing. In English and Chinese. No
+// have it; a second click takes it from all. A greyed-out chip's click says
+// why it is grey and changes nothing. The click moves nothing. In English and Chinese. No
 // backend: the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -70,11 +71,19 @@ const words = {
     all: "All", on: "files is on for all 4 agents", off: "files is off for every agent",
     partial: "events is on for 1 of 2 agents — ZCode: config.json: permission denied",
     skill: "pdf is on for all 4 agents",
+    why: {
+      "claude-desktop": "Claude Desktop runs only a command from its settings — add a remote server in its Connectors instead",
+      codex: "Codex can't reach a server over SSE — only a command or streamable HTTP",
+    },
   },
   zh: {
     all: "全部", on: "已为全部 4 个 Agent 启用 files", off: "已从所有 Agent 中移除 files",
     partial: "events 已在 2 个 Agent 中的 1 个启用 — ZCode：config.json: permission denied",
     skill: "已为全部 4 个 Agent 启用 pdf",
+    why: {
+      "claude-desktop": "Claude Desktop 的配置文件只支持命令启动的服务器 — 远程服务器请在它的「连接器」里添加",
+      codex: "Codex 不支持 SSE 服务器 — 只支持命令或 Streamable HTTP",
+    },
   },
 };
 
@@ -182,7 +191,37 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await toast(page, words[lang].partial);
         assert.deepEqual([...posts[0].agents].sort(), ["claude", "zcode"]);
         assert.equal(await r.locator('.lib-ag[data-agent="zcode"]').evaluate((c) => c.classList.contains("warn")), true);
-        assert.equal(await r.locator('.lib-ag[data-agent="codex"]').evaluate((c) => c.disabled && c.getAttribute("aria-pressed") === "false"), true);
+        assert.equal(await r.locator('.lib-ag[data-agent="codex"]').evaluate((c) => c.getAttribute("aria-disabled") === "true" && c.getAttribute("aria-pressed") === "false"), true);
+        await page.close();
+      });
+
+      // 蓝猫 on Discord: Claude Desktop's chip for a remote server was grey,
+      // and clicking it did nothing — no tooltip on a disabled button in
+      // WebKit, nothing on a click. Now the click says why, and gives
+      // nothing to the agent.
+      await t.test(lang + ": a greyed-out chip's click says why, and changes nothing", async () => {
+        const posts = [], fixture = base();
+        fixture.agents.push(agent("claude-desktop", "Claude Desktop", "claude-color", { noRemote: true }));
+        fixture.servers.push({ name: "docs", transport: "http", url: "https://example.com/mcp", agents: [] });
+        const page = await open(lang, "mcp", posts, null, { fixture });
+        for (const [name, id] of [["docs", "claude-desktop"], ["events", "codex"]]) {
+          const c = row(page, name).locator(`.lib-ag[data-agent="${id}"]`);
+          assert.equal(await c.getAttribute("aria-disabled"), "true");
+          assert.equal(await c.evaluate((c) => c.disabled), false);
+          // a person's click reaches it; Playwright's own waits for
+          // aria-disabled to go, so it is forced
+          const top = await page.evaluate(() => document.querySelector("#view-library").scrollTop);
+          await c.click({ force: true });
+          assert.equal(await page.evaluate(() => document.querySelector("#view-library").scrollTop), top);
+          await toast(page, words[lang].why[id]);
+          assert.equal(await c.getAttribute("aria-pressed"), "false");
+        }
+        assert.deepEqual(posts, []);
+        // All passes over it: the HTTP server goes to the rest
+        await click(page, row(page, "docs").locator(".lib-ag.all"));
+        await page.waitForFunction(() => document.querySelector("#status").textContent !== "");
+        assert.equal(posts.length, 1);
+        assert.ok(!posts[0].agents.includes("claude-desktop"), JSON.stringify(posts[0].agents));
         await page.close();
       });
 

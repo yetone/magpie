@@ -264,7 +264,55 @@ func Describe() (proxy, source string) {
 	return "", "none"
 }
 
-func fromEnv(u *url.URL) (*url.URL, error) { return http.ProxyFromEnvironment(&http.Request{URL: u}) }
+// fromEnv is the proxy the environment names for u: HTTPS_PROXY or
+// HTTP_PROXY as Go reads them, else ALL_PROXY (curl's, which Go doesn't
+// read: a shell with only ALL_PROXY=socks5://… set has curl go through it,
+// and magpie, its updates among its requests, too). NO_PROXY is kept for
+// it as well.
+func fromEnv(u *url.URL) (*url.URL, error) {
+	if p, err := http.ProxyFromEnvironment(&http.Request{URL: u}); p != nil || err != nil {
+		return p, err
+	}
+	all := envOf("ALL_PROXY", "all_proxy")
+	if all == "" || noProxy(u.Hostname(), envOf("NO_PROXY", "no_proxy")) {
+		return nil, nil
+	}
+	return Parse(all)
+}
+
+func envOf(keys ...string) string {
+	for _, k := range keys {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// noProxy matches host against NO_PROXY as curl does: "*" for every host,
+// else entries apart by commas, each the host or a domain it is under
+// (example.com and .example.com both take api.example.com); a port on an
+// entry is ignored. Loopback is never proxied anyway.
+func noProxy(host, list string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if host == "" || loopback(host) {
+		return true
+	}
+	for _, e := range strings.Split(list, ",") {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "*" {
+			return true
+		}
+		if h, _, err := net.SplitHostPort(e); err == nil {
+			e = h
+		}
+		e = strings.TrimPrefix(strings.TrimPrefix(e, "*"), ".")
+		if e != "" && (host == e || strings.HasSuffix(host, "."+e)) {
+			return true
+		}
+	}
+	return false
+}
 
 // Proxy is the system's proxy: one address, and the hosts that skip it.
 type Proxy struct {

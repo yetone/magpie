@@ -24,7 +24,7 @@ func init() {
 func qoderMover(id string) *mover {
 	return &mover{
 		pkg:    "@magpie-community/opencode-qoder-auth",
-		min:    "0.2.4", // Qoder CN as "qoder-cn", its device-token chat as the built-in's; each model's credit rate; the sign-in renewed ahead of time through auth.refresh; token usage read
+		min:    "0.2.5", // Qoder CN as "qoder-cn", its device-token chat as the built-in's; each model's credit rate; the sign-in renewed ahead of time through auth.refresh; token usage read; each model's context the largest window Qoder offers it (#722)
 		agents: []string{id},
 		out: func() ([]Moving, error) {
 			// no refresh of the built-in's runs while the pairs are read

@@ -95,11 +95,27 @@ func (f *fakeAlma) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 4 && parts[3] == "models" && r.Method == "PUT":
 		p := f.provider(parts[2])
 		// as Alma: models kept as given, availableModels without what
-		// capabilities were sent
+		// capabilities were sent; a model's capabilityOverrides those sent,
+		// none if null, and the ones it had if none were
 		p["models"] = body["models"]
 		if av, ok := body["availableModels"].([]any); ok {
+			had := map[any]map[string]any{}
+			old, _ := p["availableModels"].([]any)
+			for _, m := range old {
+				if o, ok := m.(map[string]any); ok {
+					had[o["id"]] = o
+				}
+			}
 			for _, m := range av {
-				delete(m.(map[string]any), "capabilities")
+				o := m.(map[string]any)
+				delete(o, "capabilities")
+				if c, sent := o["capabilityOverrides"]; !sent {
+					if prev, ok := had[o["id"]]["capabilityOverrides"]; ok {
+						o["capabilityOverrides"] = prev
+					}
+				} else if c == nil {
+					delete(o, "capabilityOverrides")
+				}
 			}
 			p["availableModels"] = av
 		}

@@ -374,6 +374,11 @@ func setYAML(m *yaml.Node, parts []string, v *yaml.Node) {
 			}
 		}
 		if cur == nil {
+			// the {} a key taken out left (Hermes's providers: {} after
+			// a disconnect) is filled in block style, not on one line
+			if len(m.Content) == 0 {
+				m.Style &^= yaml.FlowStyle
+			}
 			cur = &yaml.Node{Kind: yaml.MappingNode}
 			if last {
 				cur = v

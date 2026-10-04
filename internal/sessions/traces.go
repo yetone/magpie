@@ -32,7 +32,13 @@ type traceTurn struct {
 	start, last          time.Time
 	input, output, model string
 	failed, completed    bool
+	finishAfter          time.Time
 }
+
+// Allow a timing extension to append its final event across reader polls.
+// Plain Pi still finishes on the next regular (two-second) poll.
+const piTimingGrace = time.Second
+
 type traceCursor struct {
 	info                     os.FileInfo
 	offset                   int64
@@ -175,6 +181,11 @@ func (r *TraceReader) Poll(bodies bool) []TraceSpan {
 			r.files[f.path] = c
 		}
 		if c.size == f.size && c.mod.Equal(f.mod) {
+			for _, s := range c.finishPi(time.Now()) {
+				if !s.End.Before(r.Since) {
+					result = append(result, s)
+				}
+			}
 			if f.mod.Before(time.Now().Add(-2 * time.Second)) {
 				if f.agent == "gemini" {
 					snap := r.snapshot(f.path)
@@ -233,6 +244,13 @@ func (r *TraceReader) Poll(bodies bool) []TraceSpan {
 		h.Close()
 		budget -= read
 		if c.offset == f.size {
+			// Prefer timing-final, allowing a bounded wait across polls when
+			// the extension has not appended it yet.
+			for _, s := range c.finishPi(time.Now()) {
+				if !s.End.Before(r.Since) {
+					result = append(result, s)
+				}
+			}
 			c.size, c.mod = f.size, f.mod
 		}
 	}
@@ -547,6 +565,9 @@ func (c *traceCursor) pi(line []byte, bodies bool) []TraceSpan {
 		}
 		if t := c.turns[id]; t != nil {
 			end := time.UnixMilli(o.Data.EndAt).UTC()
+			if o.Data.EndAt <= 0 || end.Before(t.last) || o.Data.TotalMS < 0 {
+				return nil
+			}
 			if o.Data.TotalMS > 0 {
 				t.start = end.Add(-time.Duration(o.Data.TotalMS) * time.Millisecond)
 			}
@@ -589,6 +610,9 @@ func (c *traceCursor) pi(line []byte, bodies bool) []TraceSpan {
 						delete(c.tools, key)
 					}
 				}
+			}
+			if previous.completed {
+				interrupted = append(interrupted, c.root(previous, previous.last, previous.failed))
 			}
 			delete(c.turns, c.current)
 		}
@@ -675,10 +699,24 @@ func (c *traceCursor) pi(line []byte, bodies bool) []TraceSpan {
 	spans := []TraceSpan{s}
 	if toolCalls == 0 && m.StopReason != "toolUse" {
 		t.completed = true
+		t.finishAfter = time.Now().Add(piTimingGrace)
 		if bodies {
 			t.output = string(m.Content)
 		}
-		spans = append(spans, c.root(t, o.Timestamp, s.Error))
+	}
+	return spans
+}
+
+func (c *traceCursor) finishPi(now time.Time) []TraceSpan {
+	if c.agent != "pi" && c.agent != "omp" {
+		return nil
+	}
+	var spans []TraceSpan
+	for id, t := range c.turns {
+		if t.completed && !now.Before(t.finishAfter) {
+			spans = append(spans, c.root(t, t.last, t.failed))
+			delete(c.turns, id)
+		}
 	}
 	return spans
 }

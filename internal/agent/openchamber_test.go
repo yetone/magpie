@@ -152,3 +152,30 @@ func TestOpenChamberSettingsOnly(t *testing.T) {
 		t.Fatal("preferences.json changed")
 	}
 }
+
+// OpenCode on magpie/… with a model its copy of magpie's list doesn't have
+// (a list from before the provider had it) is still on magpie, and
+// disconnecting takes it off: it read as not connected, and Disconnect left
+// it on magpie's provider.
+func TestOpenCodeOnAModelNotInItsList(t *testing.T) {
+	home, _ := codexHome(t, "", "")
+	oc := opencode(home, filepath.Join(home, ".config"))
+	if err := oc.Apply("model", "magpie/fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := edit.SetJSON(oc.Path, edit.KV{Path: "model", Value: "magpie/fake/newer"}); err != nil {
+		t.Fatal(err)
+	}
+	if !oc.Wired() {
+		t.Fatal("not connected")
+	}
+	if err := oc.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetJSON(oc.Path, "model"); strings.HasPrefix(v, "magpie/") {
+		t.Fatalf("still on magpie: %s", readFile(oc.Path))
+	}
+	if _, ok := edit.GetJSON(oc.Path, "provider.magpie"); ok {
+		t.Fatalf("magpie's provider left: %s", readFile(oc.Path))
+	}
+}

@@ -8,7 +8,8 @@
 // bars in the list and the effort icon full; one between two offered lights
 // them as far as its stop. auto, none and the default light no bar, where
 // minimal lights one, and none counts for no level: Hermes at low, second
-// of five, lights one of three. In English and Chinese. No backend: the API
+// of five, lights one of three; the window's icon is read in a connected
+// agent's opened row. In English and Chinese. No backend: the API
 // is faked here. ARTIFACT_DIR gets the slider and the panel's list.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -19,8 +20,8 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 const levels = ["minimal", "low", "medium", "high", "xhigh", "max"].map((value) => ({ value }));
 const agent = (id, name, effort, options = levels) => ({
-  id, name, path: "/test/" + id,
-  fields: [{ key: "model", label: "model", value: "anthropic/claude-opus-5-5:max", options: [] },
+  id, name, path: "/test/" + id, wired: true,
+  fields: [{ key: "model", label: "model", value: "anthropic/claude-opus-5-5:max", options: [{ value: "anthropic/claude-opus-5-5:max", ref: "anthropic/claude-opus-5-5:max" }] },
     { key: "effort", label: "thinking", value: effort, options }],
 });
 const some = (...vs) => vs.map((value) => ({ value }));
@@ -64,8 +65,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
     // the page, a row opened in the panel with its slider and a click on the
     // slider's first or last stop
-    const load = async (lang, sets, url) => {
-      const page = await (await browser.newContext({ viewport: { width: 440, height: 560 } })).newPage();
+    const load = async (lang, sets, url, viewport = { width: 440, height: 560 }) => {
+      const page = await (await browser.newContext({ viewport })).newPage();
       page.setDefaultTimeout(5000);
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", server(lang, sets));
@@ -129,10 +130,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await t.test("as bars", async () => {
       const lit = (page, id) => page.locator(`${row(id)} .field[data-key="effort"] .effort-ic rect[opacity="1"]`).count();
       const ids = ["omp-listed", "pi-minimal", "codex", "kimi", "grok", "hermes"];
-      const page = await load("en", [], "http://magpie.test/");
+      const page = await load("en", [], "http://magpie.test/", { width: 980, height: 900 });
       await page.locator(row("hermes")).waitFor();
       const icons = [];
-      for (const id of ids) icons.push(await lit(page, id));
+      for (const id of ids) {
+        // Hermes picks no model once started: its pickers stay in the row
+        const more = page.locator(`${row(id)} .ag-link`);
+        // the one open slides shut before this one opens
+        if (await more.count()) { await more.click(); await page.locator(`${row(id)} .ag-exp`).waitFor(); }
+        icons.push(await lit(page, id));
+      }
       const panel = await load("en", [], "http://magpie.test/?mode=panel");
       await panel.locator(row("hermes")).waitFor();
       const bars = [];

@@ -33,6 +33,10 @@ type fakeGoogle struct {
 	flags     string // listExperiments' reply
 	models    string // fetchAvailableModels' reply
 	summary   string // retrieveUserQuotaSummary's reply
+	// fetchAvailableModels' status and reply for the body asked, in place
+	// of models
+	modelsFor func(body map[string]any) (int, string)
+	fetches   []map[string]any
 	exps      []map[string]any
 	heads     map[string]http.Header
 }
@@ -66,6 +70,11 @@ func (f *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, f.quota)
 	case strings.HasSuffix(r.URL.Path, ":retrieveUserQuotaSummary") && f.summary != "":
 		io.WriteString(w, f.summary)
+	case strings.HasSuffix(r.URL.Path, ":fetchAvailableModels") && f.modelsFor != nil:
+		f.fetches = append(f.fetches, body)
+		code, reply := f.modelsFor(body)
+		w.WriteHeader(code)
+		io.WriteString(w, reply)
 	case strings.HasSuffix(r.URL.Path, ":fetchAvailableModels") && f.models != "":
 		io.WriteString(w, f.models)
 	case strings.HasSuffix(r.URL.Path, ":listExperiments") && f.flags != "":

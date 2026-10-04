@@ -399,6 +399,33 @@ body.window .row.agent .who .ag-cli { flex: 0 1 auto; overflow: hidden; }
 .ag-up.busy { pointer-events: none; color: var(--muted); }
 .ag-up.busy svg { animation: spin .8s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ag-up.busy svg { animation: none; } }
+/* Update all (#727): a line above the list once two or more agents' CLIs
+   are behind, its pill like a row's */
+.ag-updates { flex: none; display: flex; align-items: center; gap: 10px; margin: 0 2px 10px; min-height: 22px; font-size: 12.5px; color: var(--fg-2); }
+.ag-updates-say { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-updates.failed .ag-updates-say { color: var(--red); }
+/* the agents not on this machine (#727), under the list: a heading that
+   opens their install commands, each to copy */
+.ag-install { flex: none; margin-top: 12px; }
+.ag-install-head { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--muted); padding: 4px 2px; cursor: pointer; transition: color .2s; }
+.ag-install-head:hover { color: var(--fg); }
+.ag-install-head span { display: inline-flex; }
+.ag-install-head .chev { transition: transform .3s cubic-bezier(.22, 1, .36, 1); }
+.ag-install-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.ag-install-head:focus-visible { outline: 1.5px solid var(--fg-2); outline-offset: 1px; border-radius: 4px; }
+.ag-install-note { margin: 4px 2px 8px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.ag-install-row { display: flex; align-items: flex-start; gap: 12px; padding: 9px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; }
+.ag-install-who { display: flex; align-items: center; gap: 8px; flex: 0 0 150px; min-width: 0; padding-top: 2px; }
+.ag-install-who .ic { width: 18px; height: 18px; flex: none; }
+.ag-install-who b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-install-cmds { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.ag-install-cmd { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ag-install-via { flex: 0 0 72px; font-size: 11.5px; color: var(--muted); }
+.ag-install-cmd code { flex: 1 1 auto; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 11.5px; padding: 2px 6px; border-radius: 5px; background: var(--pill); color: var(--fg-2); }
+@media (max-width: 600px) {
+  .ag-install-row { flex-direction: column; gap: 6px; }
+  .ag-install-who { flex: none; }
+}
 /* the panel's name column has no room for it: there it is a badge on the
    agent's logo, the name and the columns left as every other row's */
 body.panel .row.drifted { position: relative; }
@@ -496,6 +523,7 @@ body.window .field.solo { grid-column: auto; }
   body.window .row.agent > .who { grid-column: 2; grid-row: 1; width: 100%; }
   body.window .row.agent > .fields { grid-column: 2; grid-row: 2; width: 100%; min-width: 0; margin-left: 0; }
   body.window #agents.extras .row.agent > .fields { grid-template-columns: minmax(0, 1fr) 124px var(--extras-w); }
+  body.window .row.agent > .ag-conn { grid-column: 2; grid-row: 1; justify-self: end; margin-left: 0; }
 }
 .field:hover, .field.open { background: var(--pill-hover); }
 .field.open { box-shadow: inset 0 0 0 1px var(--accent); }
@@ -597,6 +625,19 @@ body.window .field.solo { grid-column: auto; }
 .quota-resets .text { margin-left: auto; flex: none; font-size: 11px; padding: 2px 7px; }
 .subscription-card.several .quota-resets:not([hidden]) + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
 .reset-ask .reset-idle { color: var(--amber); }
+/* a WorkBuddy account's daily check-in on its Usage card (#694) */
+.wb-checkin { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wb-checkin .ci-say { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.wb-checkin .ci-say > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-checkin .ci-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+.wb-checkin .ci-dot.ok { background: var(--green); }
+.wb-checkin .ci-dot.bad { background: var(--red); }
+.wb-checkin .ci-dot.wait { background: var(--amber); }
+.wb-checkin[data-state="ok"] .ci-say { color: var(--fg-2); }
+.wb-checkin .text { flex: none; font-size: 11px; padding: 2px 7px; }
+.wb-checkin .ci-auto { margin-left: auto; }
+.subscription-card.several .wb-checkin { margin-bottom: 6px; }
+.wb-checkin .ci-auto.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
 .quota-balance { display: flex; align-items: baseline; gap: 6px; font-size: 10.5px; color: var(--muted); }
 .quota-windows + .quota-balance { margin-top: 9px; }
 /* "Every model" at the end of the account's line, above its families */
@@ -708,8 +749,8 @@ body.window .field.solo { grid-column: auto; }
 .led-chart .axis { fill: var(--muted); font-size: 10.5px; }
 .led-chart .hot { fill: var(--pill); }
 .led-chart rect.col { transition: opacity .12s; }
-.led-chart .led-day { cursor: pointer; }
-.led-chart .led-day:focus-visible { outline: none; stroke: var(--accent); stroke-width: 1; }
+.led-chart .led-day { cursor: pointer; outline: none; }
+.led-chart .led-day:focus-visible { stroke: var(--accent); stroke-width: 1; }
 .led-chart .tip { position: absolute; top: 2px; z-index: 2; min-width: 172px; max-width: 260px; padding: 8px 10px 7px; background: var(--pop-bg); border-radius: 9px; box-shadow: var(--shadow); font-size: 11.5px; pointer-events: none; }
 .led-chart .tip[hidden] { display: none; }
 .led-chart .tip b { display: block; margin-bottom: 4px; font-weight: 600; }
@@ -1105,7 +1146,7 @@ body.panel { --row-spring: cubic-bezier(.25, .3, .1, 1); }
 .ag-open .field { display: flex; justify-content: flex-start; width: 100%; height: 30px; gap: 8px; padding: 0 10px; border-radius: 8px; background: var(--card); font-size: 12.5px; box-shadow: inset 0 0 0 1px var(--pill-line); }
 body.panel .ag-open .field:hover { background: var(--card); box-shadow: inset 0 0 0 1px var(--pill-line), var(--pill-shadow); }
 body.panel .ag-open .field.open { box-shadow: inset 0 0 0 1px var(--accent); }
-.ag-open .field .k { order: 0; width: 44px; font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-open .field .k { order: 0; width: 44px; text-align: left; font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ag-open .field .v { order: 1; flex: 1 1 auto; font-weight: 400; text-align: left; }
 .ag-open .field > .ic, .ag-open .field > .ic-stack { order: 2; flex: none; }
 .row.agent .ag-open .field .ic { width: 14px; height: 14px; }
@@ -1199,11 +1240,28 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .resets-until { color: var(--faint); }
 .pq-use { margin-left: auto; flex: none; height: 20px; padding: 0 9px; border-radius: 999px; background: color-mix(in srgb, var(--fg) 7%, transparent); color: var(--fg-2); font-size: 11px; white-space: nowrap; transition: background .12s, color .12s; }
 .pq-use:hover { background: color-mix(in srgb, var(--fg) 12%, transparent); color: var(--fg); }
-/* spending a reset by itself, beside the button that spends one now */
-.pq-use.pq-auto { margin-left: auto; }
-.pq-auto + .pq-use { margin-left: 0; }
-.pq-use.pq-auto.on, .quota-resets .auto-reset.on { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
-.quota-resets .auto-reset + .text { margin-left: 0; }
+/* a Codex account spending its resets by itself (#719): a standing say of
+   the account's, held or not, its two times in words beside a switch */
+.quota-autoreset, .pq-autoreset { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.quota-autoreset { margin-top: 8px; font-size: 10.5px; }
+.quota-resets + .quota-autoreset { margin-top: 6px; }
+.subscription-card.several .quota-autoreset + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+.pq-autoreset { grid-column: 1 / -1; margin-top: 5px; padding-top: 7px; border-top: 1px solid var(--line-2); font-size: 11px; }
+.pq-resets + .pq-autoreset { margin-top: 5px; padding-top: 0; border-top: 0; }
+.ar-say { flex: 1; min-width: 0; line-height: 1.35; }
+.ar-say b { font-weight: 500; color: var(--fg-2); }
+.lib-switch.auto-reset { width: 28px; height: 16px; padding: 0; border: 0; cursor: pointer; }
+.lib-switch.auto-reset i { width: 12px; height: 12px; }
+.lib-switch.auto-reset.on i { transform: translateX(12px); }
+.lib-switch.auto-reset:disabled { opacity: .6; cursor: default; }
+.resets-kept { color: var(--faint); }
+.resets-kept.on { color: var(--accent); }
+/* in brief: the resets held and the say, beside the account's name */
+.subscription-account .acct-auto { flex: none; margin-left: auto; font-size: 10.5px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.subscription-account .acct-auto.on { color: var(--accent); }
+.subscription-account .acct-auto-n { color: var(--muted); }
+.subscription-account .acct-auto + .plan { margin-left: 0; }
+.subscription-account .acct-auto + .quota-every { margin-left: 4px; }
 .pq-bals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .pq-card.bal { grid-template-columns: minmax(0, 1fr); }
 .pq-bn { display: flex; align-items: center; gap: 6px; }
@@ -1371,7 +1429,7 @@ body.window .foot { padding-left: 18px; }
 .pop li .ic { width: 16px; height: 16px; }
 .pop li .option-words { display: flex; align-items: center; min-width: 0; flex: 1 1 auto; gap: 9px; }
 .pop li .v { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
-.pop li .badge.free, .pop li .badge.ctx, .pop li .badge.rate { flex: none; margin-left: -4px; padding: 0 4px; font-size: 9px; line-height: 14px; align-self: center; }
+.pop li .badge.free, .pop li .badge.ctx, .pop li .badge.rate, .pop li .badge.path { flex: none; margin-left: -4px; padding: 0 4px; font-size: 9px; line-height: 14px; align-self: center; }
 .pop li .n { flex: 1 1 0; min-width: 0; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
 .pop li .favorite { display: none; align-items: center; justify-content: center; color: var(--faint); width: 24px; height: 24px; border-radius: 6px; flex: none; }
 .pop li:hover .favorite, .pop li .favorite.on { display: inline-flex; }
@@ -1607,7 +1665,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .badge.off { background: var(--pill); color: var(--muted); }
 .badge.free { background: var(--green-soft); color: var(--green); }
 /* a model's context, when it is a large one: grey, as it is a fact, not a warning */
+/* which way a model goes (#726): through magpie, or straight to its vendor */
+.badge.path { letter-spacing: .02em; text-transform: none; white-space: nowrap; }
+.badge.path.via { background: var(--accent-soft); color: var(--accent); }
+.badge.path.direct { background: var(--pill); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); }
 .badge.ctx { background: var(--pill); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); letter-spacing: .02em; }
+.badge.wsl { background: var(--pill); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); letter-spacing: .02em; text-transform: none; }
 /* a model's credit rate (0.5×): grey, a fact to pick by; a discount's price before it struck through */
 .badge.rate { background: var(--pill); color: var(--muted); letter-spacing: .02em; text-transform: none; font-variant-numeric: tabular-nums; display: inline-flex; gap: 3px; }
 .badge.rate s { font-weight: 500; opacity: .75; }
@@ -1615,6 +1678,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .badge.mapi-tag { background: var(--accent-soft); color: var(--accent); letter-spacing: .02em; text-transform: none; }
 .mchip .badge { margin: 0 -3px 0 1px; padding: 0 4px; font-size: 9px; line-height: 14px; }
 .row.model .name .badge { margin-left: 6px; padding: 0 4px; font: 600 9px/14px var(--font); }
+.row.model .minfo { display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: 8px; cursor: help; }
+.row.model .minfo .badge { display: inline-flex; align-items: center; padding: 0 5px; font: 600 9.5px/16px var(--font); letter-spacing: .02em; text-transform: none; background: var(--pill); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); vertical-align: 0; }
+.row.model .minfo .mi-ctx { font-variant-numeric: tabular-nums; }
+.row.model .minfo .mi-img { padding: 0 4px; }
+.row.model .minfo .mi-img svg { display: block; }
 .provider .pswitch { margin-left: 8px; }
 .editor .off-note { grid-column: 1 / -1; }
 .uses { display: flex; align-items: center; gap: 4px; margin-left: auto; flex: none; }
@@ -1837,6 +1905,11 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .sheet .kind { display: flex; align-items: baseline; gap: 8px; padding: 22px 8px 6px; font-size: 12px; }
 .sheet .kind b { font-size: 13px; font-weight: 600; color: var(--fg); }
 .sheet .kind span { color: var(--faint); }
+/* a removed account: its name, then Add it back and Sign out… side by
+   side, across the row (#694) */
+.sheet .tile.removed { grid-column: 1 / -1; }
+.sheet .tile.removed:hover { background: none; }
+.sheet .tile.removed .acts { flex: none; display: flex; gap: 6px; }
 .sheet .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1px 12px; }
 .sheet .none { padding: 14px 2px; color: var(--muted); font-size: 12px; }
 #gwModels .none { padding: 16px; color: var(--muted); font-size: 12px; text-align: center; }
@@ -2059,8 +2132,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .mchip.on { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); font-weight: 500; }
 .mchip.on::before { content: "✓"; font-size: 10px; }
 .mchip.own.on::before { content: "＋"; }
-/* served with none picked: the vendor's list stands in for the picks */
-.mchip.auto { color: var(--accent); border-style: dashed; border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+/* served with none picked: the vendor's list stands in for the picks. Drawn
+   apart from a pick (no tick, no accent): a click picks it alone (#681) */
+.mchip.auto { border-style: dashed; border-color: var(--muted); }
 /* an image model in the editor: listed, not picked */
 .mchip.ro, .mchip.ro:hover { cursor: default; color: var(--muted); border-color: var(--line); }
 .mchip.ro:active { transform: none; }
@@ -2610,3 +2684,129 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-reset:hover:not(:disabled) { color: var(--accent); }
 .am-reset:disabled { color: var(--faint); cursor: default; }
 .am-dot { color: var(--faint); }
+
+/* ---- an agent's switch onto magpie ---------------------------------------- */
+/* the rows drawn again under the line said beneath each name had WebKit's
+   scroll anchoring move the list a few px before the page was held back
+   (claude-direct.test.cjs); the page holds the reader itself */
+#view-agents { overflow-anchor: none; }
+body.window .row.agent > .ag-conn { margin-left: 12px; align-self: center; cursor: pointer; }
+.ag-conn-row { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.ag-conn-row .ag-conn-said { flex: 1; min-width: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-conn-row .lib-switch { cursor: pointer; }
+
+/* 「接入」 in the window: a row says whether the agent goes through magpie —
+   a line under its name, a link that opens it, its switch */
+.ag-lead { margin: 0 2px 12px; font-size: 12.5px; color: var(--fg-2); }
+.ag-lead b { font-weight: 600; color: var(--fg); }
+.ag-lead.welcome { margin: 0 0 12px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.ag-lead .ag-lead-h { display: block; font-size: 14px; margin-bottom: 4px; }
+.ag-lead p { margin: 0; line-height: 1.55; color: var(--muted); }
+.ag-lead .text.primary { margin-top: 12px; }
+/* the first line keeps its place opened: a line of its own height, the
+   row not centring what it holds; no gap between its lines, which the
+   opened part couldn't fold away: it starts where the shut row ended */
+body.window .row.agent.conn { flex-wrap: wrap; min-height: 56px; align-content: flex-start; row-gap: 0; }
+body.window .row.agent.conn > .who { min-height: 42px; align-content: center; }
+body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line above it is in the 56px */
+.ag-st { flex: 0 0 100%; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 18px; color: var(--muted); }
+.ag-st .ag-st-t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-st .ag-st-t b { font-weight: 600; color: var(--fg-2); }
+.ag-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--faint); }
+.ag-st.on .ag-dot { background: var(--green); }
+.ag-st.wait .ag-dot, .ag-warn .ag-dot { background: var(--amber); }
+.ag-st.wait .ag-st-t { color: var(--amber); }
+.ag-st.bad .ag-dot { background: var(--red); }
+.ag-st.bad .ag-st-t { color: var(--red); }
+.ag-st .ag-fix { flex: none; }
+.ag-link, .ag-quiet { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: var(--fg-2); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; transition: background-color .15s, color .15s; }
+.ag-link:hover, .ag-quiet:hover, .ag-link.open { background: var(--pill); color: var(--fg); }
+.ag-link .chev, .ag-quiet .chev { display: inline-flex; color: var(--faint); transition: transform .2s ease; }
+.ag-quiet.open .chev { transform: rotate(90deg); }
+.ag-quiet.red { color: var(--red); }
+.ag-quiet.red:hover { background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red); }
+.ag-quiet.accent { color: var(--accent); }
+.ag-link:focus-visible, .ag-quiet:focus-visible, .ag-add:focus-visible { outline: 1.5px solid var(--accent); outline-offset: 1px; }
+.row.agent.conn > .ag-link { margin-left: auto; }
+.row.agent.conn > .fields + .ag-link { margin-left: 0; }
+.row.agent.conn > .ag-conn { margin-left: 4px; align-self: center; cursor: pointer; }
+.row.agent.conn > .ag-link + .ag-conn { margin-left: 4px; }
+.row.agent.conn > .who + .ag-conn, .row.agent.conn > .who + .ag-add, .row.agent.conn > .who + .ag-cant { margin-left: auto; }
+.row.agent.conn > .ag-conn:disabled { opacity: .4; cursor: default; }
+/* the model it starts on, beside the switch: one width down the list, so
+   the pickers and the switches line up */
+.row.agent.conn > .field.ag-start { flex: none; width: 196px; margin-left: 8px; align-self: center; justify-content: flex-start; }
+.row.agent.conn > .who + .field.ag-start { margin-left: auto; }
+.row.agent.conn > .field.ag-start .v { flex: 1; text-align: left; }
+.row.agent.conn > .field.ag-start .chev { margin-left: auto; }
+.row.agent.conn > .field.ag-start + .ag-conn { margin-left: 10px; }
+.row.agent.conn > .field.launch { flex: none; margin-left: 8px; align-self: center; }
+.row.agent.conn > .who + .field.launch { margin-left: auto; }
+.row.agent.conn > .field.launch + .field.ag-start { margin-left: 0; }
+.ag-add { flex: none; height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--pill); color: var(--fg); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; }
+.ag-add:hover { background: var(--pill-hover); }
+.ag-cant { flex: none; font-size: 12px; color: var(--faint); }
+.row.agent.conn.unplugged .ag-handle .ic { opacity: .7; }
+/* opened: the settings as named lines on the row's quieter ground */
+.ag-exp { flex: 0 0 calc(100% + 26px); margin: 7px -12px -7px -14px; padding: 4px 16px 14px 50px; border-top: 1px solid var(--line-2); background: var(--card-2); cursor: default; }
+.ag-kv { display: flex; align-items: flex-start; gap: 16px; padding: 11px 0; border-top: 1px solid var(--line-2); }
+.ag-kv:first-child { border-top: 0; }
+.ag-k { width: 112px; flex: none; padding-top: 3px; font-size: 12px; color: var(--muted); }
+.ag-v { flex: 1; min-width: 0; font-size: 12.5px; color: var(--fg-2); display: grid; gap: 4px; }
+.ag-vl { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; min-height: 24px; }
+.ag-vl > .fields { margin-left: 0; }
+.ag-code, .ag-diff code, .ag-path { font-family: var(--code); font-size: 11.5px; }
+.ag-code { padding: 1px 5px; border-radius: 4px; background: var(--pill); color: var(--fg); }
+.ag-warn { gap: 8px; font-size: 12px; }
+.ag-hint { font-size: 12px; color: var(--muted); }
+.ag-tier { width: 70px; flex: none; font-size: 12px; color: var(--fg-2); }
+.ag-vl .field.ag-pick { width: 220px; justify-content: flex-start; }
+.ag-vl .field.ag-eff { flex: none; }
+.ag-vl .field.ag-pick .v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.ag-exp .extras-cell { justify-content: flex-start; }
+.ag-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--card); box-shadow: inset 0 0 0 1px var(--line); font-size: 12px; color: var(--fg-2); }
+.ag-chip .ic { width: 13px !important; height: 13px !important; }
+.ag-chip .n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ag-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; padding-top: 12px; border-top: 1px solid var(--line-2); font-size: 12px; color: var(--muted); }
+.ag-files { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ag-path { color: var(--fg-2); }
+.ag-diff-box { margin-top: 10px; max-height: 320px; overflow: auto; }
+.ag-diff-more { display: block; margin: 2px 0 6px 28px; padding: 2px 0; border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--accent); cursor: pointer; }
+/* a file's lines as disconnecting changes them */
+.ag-diff { display: grid; gap: 10px; }
+.ag-diff-file { border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden; }
+.ag-diff-path { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--line-2); font-family: var(--code); font-size: 11.5px; color: var(--fg); }
+.ag-diff-path:last-child { border-bottom: 0; }
+.ag-diff-line { display: flex; align-items: baseline; gap: 8px; padding: 2px 10px; font-size: 11.5px; line-height: 1.6; }
+.ag-diff-line:first-of-type { padding-top: 6px; }
+.ag-diff-line:last-child { padding-bottom: 6px; }
+.ag-diff-line .op { width: 10px; flex: none; text-align: center; font-family: var(--code); }
+.ag-diff-line code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--fg-2); }
+.ag-diff-line.del .op, .ag-diff-line.del code { color: var(--red); }
+.ag-diff-line .ind { text-decoration: none; }
+.ag-diff-line.del code .t { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--red) 45%, transparent); }
+.ag-diff-line.back .op { color: var(--green); }
+.ag-tag { flex: none; padding: 0 6px; border-radius: 4px; background: var(--pill); font-family: inherit; font-size: 10.5px; line-height: 16px; color: var(--muted); }
+.ag-tag.del { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+.disconnect-ask .ag-diff-wrap { max-height: min(46vh, 380px); overflow: auto; margin: 2px 0 10px; }
+.ag-diff-loading { padding: 14px 0; font-size: 12px; color: var(--muted); }
+.disconnect-ask .ag-note { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.ag-bar-note { font-size: 12px; color: var(--muted); }
+@media (max-width: 600px) {
+  body.window .row.agent.conn { display: flex; }
+  /* the name beside its logo; the link and the switch wrap under it when short of room */
+  body.window .row.agent.conn > .who { width: auto; flex: 1 1 160px; min-width: 0; }
+  .ag-exp { padding-left: 16px; min-width: 0; }
+  .ag-kv { flex-direction: column; gap: 4px; min-width: 0; }
+  /* the pickers take the line, the effort and the squares wrap under them */
+  .ag-vl { width: 100%; min-width: 0; }
+  #agents .ag-vl > .fields { display: flex; flex-wrap: wrap; width: 100%; min-width: 0; }
+  .ag-vl > .fields > .field.main, .ag-vl > .fields > .field.solo { flex: 1 1 100%; min-width: 0; }
+  .ag-vl > .fields > .field.side { flex: 1 0 124px; }
+  .ag-vl > .fields > .extras-cell { flex-wrap: wrap; max-width: 100%; }
+  .ag-vl .field.ag-pick { flex: 1 1 160px; width: auto; min-width: 0; }
+  /* short of room, the model it starts on takes a line of its own under
+     the name, the link and the switch staying beside it */
+  .row.agent.conn > .field.ag-start, .row.agent.conn > .who + .field.ag-start { order: 1; flex: 1 1 100%; width: auto; margin: 9px 0 0 34px; }
+  .row.agent.conn > .ag-exp { order: 2; }
+}

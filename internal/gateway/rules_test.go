@@ -330,7 +330,7 @@ func TestRuleImages(t *testing.T) {
 		t.Fatalf("a %d b %d", a.n(), b.n())
 	}
 	for _, e := range provider.Catalog() {
-		if e.ID == "group/r" && (!e.Images || e.Context != 64000) {
+		if e.ID == "group/r" && (!e.Images || e.Context != 1000000) {
 			t.Fatalf("catalog: %+v", e)
 		}
 	}

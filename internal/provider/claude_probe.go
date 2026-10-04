@@ -28,7 +28,7 @@ const claudeWait = time.Minute
 
 // testClaude is a Claude account's test of model, run by Claude Code.
 func (p Provider) testClaude(ctx context.Context, model string) Result {
-	r := Result{Protocol: Anthropic, Model: model}
+	r := Result{Protocol: Anthropic, Model: model, Account: p.Account.User}
 	if model == "" {
 		r.Error = "no model to try: expose one, or refresh the model list"
 		return r
@@ -45,9 +45,11 @@ func (p Provider) testClaude(ctx context.Context, model string) Result {
 		return r
 	}
 	start := time.Now()
+	version := ClaudeLoginVersion(p.Account.User)
 	err = claudeCLIProbe(ctx, dir, model)
 	r.Millis = time.Since(start).Milliseconds()
 	if err != nil {
+		NoteClaudeSignInFailure(p.Account.User, version, err.Error())
 		r.Error = err.Error()
 		return r
 	}

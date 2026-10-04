@@ -114,6 +114,14 @@ func periodOf(s string) usage.Period {
 	return usage.Month
 }
 
+// csvStamp names the selected day, or the period when no day is selected.
+func csvStamp(p usage.Period, day string) string {
+	if _, err := time.Parse(time.DateOnly, day); err == nil {
+		return "magpie-requests-day-" + day
+	}
+	return "magpie-requests-" + string(p) + "-" + time.Now().Format(time.DateOnly)
+}
+
 func ledgerFilter(q url.Values) usage.Filter {
 	id, _ := strconv.ParseInt(q.Get("route"), 10, 64)
 	return usage.Filter{Day: q.Get("day"), RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Account: q.Get("account"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q"), Computer: q.Get("computer")}
@@ -381,7 +389,7 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 		p := periodOf(q.Get("period"))
 		rows, _, _ := usage.Ledger(p, ledgerFilter(q))
 		rw.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		rw.Header().Set("Content-Disposition", `attachment; filename="magpie-requests-`+string(p)+"-"+time.Now().Format("2006-01-02")+`.csv"`)
+		rw.Header().Set("Content-Disposition", `attachment; filename="`+csvStamp(p, q.Get("day"))+`.csv"`)
 		usage.WriteCSV(rw, rows)
 	})
 	// the rows the ledger shows, all its pages, as a CSV in Downloads
@@ -395,7 +403,7 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 			return
 		}
 		dir := downloads()
-		stamp := "magpie-requests-" + string(p) + "-" + time.Now().Format("2006-01-02")
+		stamp := csvStamp(p, q.Get("day"))
 		name := filepath.Join(dir, stamp+".csv")
 		for i := 2; ; i++ { // never over an earlier one
 			if _, err := os.Stat(name); err != nil {
@@ -422,7 +430,31 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 		defer cancel()
-		writeJSON(rw, provider.Quotas(ctx))
+		// a WorkBuddy (China) account's card says how its daily check-in
+		// went (#694)
+		writeJSON(rw, provider.WithCheckins(provider.Quotas(ctx)))
+	})
+	// WorkBuddy's daily check-in pressed now, from the Usage card, for
+	// each account not in yet today, as `magpie accounts checkin` does; the
+	// card is read again after
+	mux.HandleFunc("POST /api/usage/workbuddy-checkin", func(rw http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+		defer cancel()
+		rs := provider.CheckInWorkBuddy(ctx)
+		if rs == nil {
+			rs = []provider.WorkBuddyCheckin{}
+		}
+		writeJSON(rw, rs)
+	})
+	// and Trae CN's, for each Trae CN account (#694)
+	mux.HandleFunc("POST /api/usage/trae-checkin", func(rw http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+		defer cancel()
+		rs := provider.CheckInTrae(ctx)
+		if rs == nil {
+			rs = []provider.WorkBuddyCheckin{}
+		}
+		writeJSON(rw, rs)
 	})
 	// what was left of each window over time, for the quota cards' curves
 	// (#651); ?days= back

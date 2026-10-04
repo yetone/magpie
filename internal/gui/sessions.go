@@ -63,6 +63,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 			if a := agents[s.Agent]; a != nil {
 				j.Name, j.Icon = a.Name, a.Icon
 			}
+			j.Name = wslName(j.Name, s)
 			j.Path = tilde(j.Path)
 			out.Sessions = append(out.Sessions, j)
 		}
@@ -121,6 +122,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 				j.Name, j.Icon = a.Name, a.Icon
 			}
 		}
+		j.Name = wslName(j.Name, s)
 		since := s.Start
 		if since.IsZero() {
 			since = s.Last
@@ -152,6 +154,15 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})
+}
+
+// wslName is an agent's name for a session it ran in a WSL distro, as the
+// agent there is named (Claude Code · WSL Ubuntu); its own name otherwise.
+func wslName(name string, s sessions.Session) string {
+	if s.WSL == "" {
+		return name
+	}
+	return name + " · WSL " + s.WSL
 }
 
 // statsFor is sessions.StatsFor for a range, kept: the page asks for the

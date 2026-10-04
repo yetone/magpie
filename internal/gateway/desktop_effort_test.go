@@ -44,9 +44,11 @@ func desktopSmallFast(id string) bool {
 // a model with reasoning levels is listed to Claude Desktop by an id it
 // offers its effort picker for (ARNO: 接入claude desktop后无法设置思考强度):
 // a Claude model by magpie-<n>.anthropic.<model>, any other by
-// mythos-magpie-<n>; one without levels as before. Each is kept by Desktop,
-// served again by magpie, with or without [1m], and none but a Claude model
-// becomes Desktop's small_fast pick.
+// mythos-magpie-<n>, and so a routing group whatever model leads it (else
+// Desktop names it from its catalog, "Opus 5.5", not by the group's name);
+// one without levels as before. Each is kept by Desktop, served again by
+// magpie, with or without [1m], and none but a Claude model becomes
+// Desktop's small_fast pick.
 func TestClaudeDesktopEffortIDs(t *testing.T) {
 	levels := []string{"low", "medium", "high"}
 	for _, c := range []struct {
@@ -59,6 +61,7 @@ func TestClaudeDesktopEffortIDs(t *testing.T) {
 		{provider.Entry{ID: "or/anthropic/claude-opus-4-8", Model: "anthropic/claude-opus-4-8", Efforts: levels}, `^magpie-\d{10}\.anthropic\.claude-opus-4-8$`, true},
 		{provider.Entry{ID: "x/Claude-Sonnet-4-6-20260101", Model: "Claude-Sonnet-4-6-20260101", Efforts: levels}, `^magpie-\d{10}\.anthropic\.claude-sonnet-4-6$`, true},
 		{provider.Entry{ID: "x/claude-haiku-4-5", Model: "claude-haiku-4-5", Efforts: levels}, `^magpie-\d{10}\.anthropic\.claude-haiku-4-5$`, false},
+		{provider.Entry{ID: "group/coding", Model: "claude-opus-5-5", Group: "coding", Efforts: levels}, `^mythos-magpie-\d{10}$`, true},
 		{provider.Entry{ID: "zai/glm-4.5-air", Model: "glm-4.5-air"}, `^anthropic/magpie-\d{10}$`, false},
 		{provider.Entry{ID: "x/claude-opus-4-8", Model: "claude-opus-4-8"}, `^x/claude-opus-4-8$`, false},
 	} {
@@ -96,8 +99,7 @@ func TestClaudeDesktopEffortIDs(t *testing.T) {
 	New().Handler().ServeHTTP(rec, req)
 	var list struct {
 		Data []struct {
-			ID          string `json:"id"`
-			Description string `json:"description"`
+			ID string `json:"id"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
@@ -105,7 +107,7 @@ func TestClaudeDesktopEffortIDs(t *testing.T) {
 	}
 	got := map[string]string{}
 	for _, m := range list.Data {
-		got[strings.TrimSuffix(m.Description, " in magpie")] = m.ID
+		got[DesktopCatalogID(m.ID)] = m.ID
 	}
 	for id, want := range map[string]string{
 		"fake/m1":              desktopEffortAlias + aliasNumber("fake/m1"),

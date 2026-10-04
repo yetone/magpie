@@ -82,6 +82,8 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | Goose        | `~/.config/goose/config.yaml`     | model           |
 | Cursor CLI   | `~/.cursor/cli-config.json`       | model           |
 | Zed          | `~/.config/zed/settings.json` (`$XDG_CONFIG_HOME` on Linux, `%APPDATA%\Zed` on Windows) | model (a `magpie` OpenAI-compatible provider; its catalog in Zed's picker) |
+| VS Code (Chat) | `~/Library/Application Support/Code/User/settings.json` + `chatLanguageModels.json` (`~/.config/Code/User` on Linux, `%APPDATA%\Code\User` on Windows) | model (`chat.defaultModel`; a `magpie` Custom Endpoint group, its catalog in Chat's model picker; VS Code 1.122+, no Copilot sign-in or key needed) |
+| JetBrains Air | `acp.json` in `~/Library/Application Support/JetBrains/Air` (`~/.config/JetBrains/Air` on Linux, `%APPDATA%\JetBrains\Air` on Windows) + `magpie-opencode.json` beside it | model (a `Magpie` ACP agent: OpenCode's `opencode acp` on magpie's provider alone, its models and routing groups in Air's model menu; needs OpenCode installed) |
 | Copilot CLI  | `~/.copilot/settings.json`        | model           |
 | Crush        | `~/.config/crush/crush.json`      | large, small    |
 | DeepSeek Harness (dsh) | `~/.dsh/profiles/*/cordis.patch.yml` (`$DSH_HOME`; a custom provider, Magpie), or `~/.dsh/config.yaml` before dsh 0.1.5 | model, effort |
@@ -90,6 +92,7 @@ and there is a terminal version (`magpie tui`) and a plain CLI.
 | omp (oh-my-pi) | `~/.omp/agent/config.yml` (+ `models.yml`) | model |
 | Devin        | `~/.config/devin/config.json` (`%APPDATA%\devin\config.json` on Windows) | model |
 | Hermes Agent | `~/.hermes/config.yaml` (`$HERMES_HOME`) | model |
+| Mister Morph | `~/.morph/config.yaml` (`$MISTER_MORPH_CONFIG`) | model, effort (`llm` on the gateway as `openai_response_compatible`, the Responses API; what it had comes back when you switch away) |
 | Kimi Code    | `~/.kimi/config.toml` (`$KIMI_SHARE_DIR`) | model (a `magpie` provider; magpie's models in Kimi's /model) |
 | Muse Code    | `~/.config/muse/settings.json` (`$XDG_CONFIG_HOME`) | model (endpoint_transport to the gateway, auth none; magpie's models in Muse's list) |
 | Empryo       | `~/.empryo/config.json` | defaultModel (a `magpie` provider at the gateway in `providers`) |
@@ -123,6 +126,7 @@ magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… model
 magpie providers                        # host, key, exposed models, who uses what
 magpie provider deepseek                # one provider in detail
 magpie provider models deepseek         # re-fetch the vendor's list (add ids to choose which to expose)
+magpie provider refresh deepseek        # re-fetch it, and drop picks it no longer has (the TUI: m)
 magpie provider test deepseek           # one tiny request per API, with latency
 magpie provider key deepseek sk-…       # replace the key
 magpie provider rm deepseek
@@ -160,7 +164,9 @@ inferred from today's sign-in. OTLP export never carries the account.
 
 One magpie can serve several computers (an office one, a personal one):
 share it on the network (Settings → Share on local network), and on each
-other computer add it as a **Remote magpie** — in the app's Add sheet, or
+other computer add it as a **Remote magpie** — in the app's Add sheet, on the
+TUI's Providers page (`a`, then its address and key; `w` changes the address,
+`m` fetches its list again), or
 `magpie provider add remote-magpie sk-magpie-… url=http://192.168.1.20:3425 id=office`.
 Each computer's own magpie still wires its agents, while the providers,
 routing groups (`office/group/…`) and usage are the shared one's. A request
@@ -168,8 +174,15 @@ goes on in the API the agent spoke — Anthropic Messages, Responses, Chat
 Completions, token counting — and a model the shared magpie's provider serves
 on another API only is turned into that API once, never on both computers.
 Its list is the models the shared magpie's agents are shown, each named with
-its provider there (`Claude Sonnet 5 · Relay A · office`), and its image
+its provider there (`Claude Sonnet 5 · Relay A · office`) — the ids stay ids
+(`office/relay-a/claude-sonnet-5`), only these labels carry the names — and its image
 models are listed under Settings → Images and draw through it.
+
+WorkBuddy (China)'s daily check-in (签到) is pressed from the app's Usage card
+(*Check in now*), `magpie accounts checkin`, or `c` on the TUI's Usage page,
+which checks in every account signed in on this computer at once; its
+WorkBuddy lines say how today's went. A shared magpie's accounts are checked
+in on that magpie, from its own app, TUI or CLI.
 
 The gateway issues **gateway keys** for clients, separate from a provider's
 upstream API keys. Turn on **Settings → Share on local network**, then open
@@ -253,14 +266,17 @@ at `/v2/models`.
 ### Plugins
 
 A subscription magpie doesn't sign in to itself can come from an
-[OpenCode](https://opencode.ai) provider plugin: the npm packages OpenCode
-users install to sign in to a plan (their `auth` hook) work in magpie as they
-do there. magpie runs them on [Bun](https://bun.sh), downloaded the first
+[OpenCode](https://opencode.ai) provider plugin or a
+[pi](https://github.com/earendil-works/pi) package: the npm packages OpenCode
+users install to sign in to a plan (their `auth` hook), and the pi packages
+that register a provider (`pi.registerProvider`), work in magpie as they do
+there. magpie runs them on [Bun](https://bun.sh), downloaded the first
 time a plugin needs it, and the plugin signs in, lists the models and makes
 each request; magpie serves them to agents like any provider's.
 
 ```sh
 magpie plugin add opencode-gemini-auth   # an npm package, or a path to a plugin of your own
+magpie plugin add pi-antigravity         # a pi package, the same way
 magpie plugin                           # the plugins, what each signs in to, and whether you are
 magpie plugin login google-plugin       # its sign-in: the method, its questions, the browser or a key
 magpie plugin logout google-plugin
@@ -271,9 +287,22 @@ A provider id magpie already has (google, openai, anthropic) is
 `<id>-plugin`. In the app, Settings → Plugins adds and removes them, and
 the providers they sign in to are in Add provider → From plugins.
 
+A package is pi's when its `package.json` has a `pi` manifest, the
+`pi-package` keyword, or depends on `@earendil-works/pi-coding-agent`.
+magpie installs pi beside it and loads it with pi's own loader; the
+providers it registers are what magpie uses, and its commands, tools and
+renderers are left alone. Its sign-in runs as in pi: an OAuth login's
+questions and pages, and the dialogs and pickers it shows (`ctx.ui`, its
+terminal components too), are asked in magpie's sign-in; an API key works
+as well. pi's own files (its `auth.json` and what a package keeps) are in
+`pi/` under magpie's config directory, not your `~/.pi`, unless
+`PI_CODING_AGENT_DIR` says otherwise. Requests reach the package as pi
+sends them, and its replies keep their thinking and tool calls.
+
 #### For plugin authors
 
-A plugin is an OpenCode plugin; magpie reads a few more fields, which
+A plugin is an OpenCode plugin or a pi package; nothing magpie-specific is
+needed. For an OpenCode plugin magpie reads a few more fields, which
 OpenCode ignores:
 
 - **The provider's icon**: `icon` on the `auth` hook, or `"magpie": {
@@ -620,6 +649,23 @@ subscription account, plan and key that answered a request through the
 gateway in the last 30 days, and `last: true` on the latest. It is kept
 in `served.json` beside `providers.json`, so a restart keeps it.
 
+`magpie quota wait <provider|account>` blocks until that subscription (any
+of its accounts magpie has on) or that one account has allowance again — no
+window that stops it used up — then exits 0, so a long task stopped by its
+limit can go on unattended:
+
+```sh
+until codex exec "…"; do magpie quota wait codex || break; done
+```
+
+It reads the vendors itself, whether or not the gateway runs, and again
+shortly after the soonest reset it knows (every 1 to 10 minutes; an
+allowance it can't read is asked again less often each time), saying on
+stderr what it waits for and until when. Name an account by its email or
+login, or as `<provider>/<account>` when two subscriptions share it.
+`--timeout 6h` exits 1 if it passes first, `--quiet` says nothing; an
+unknown name exits 2 and Ctrl+C 130.
+
 The *Gateway* tab in the app has this as copy buttons and ready-made
 snippets (shell, curl, Python, Node) for each API, the list of model ids,
 and the recent calls; `MAGPIE_DEBUG=1` logs every call to the terminal.
@@ -687,6 +733,21 @@ otherwise):
 ```sh
 curl -fsSL https://usemagpie.ai/install.sh | sh
 ```
+
+Behind a firewall, or without access to GitHub, both the installer and
+`magpie update` take `--proxy <url>` (http, https, socks5, socks5h; or
+`MAGPIE_PROXY`, and `HTTPS_PROXY` / `ALL_PROXY` as usual) and
+`--mirror <prefix>`, a GitHub download mirror of your choosing put before
+the release's github.com URL (or `MAGPIE_MIRROR`; `magpie update mirror
+<prefix>|off` keeps one for every update, the app's too):
+
+```sh
+curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890
+magpie update --mirror https://mirror.example/
+```
+
+No mirror is used unless you give one, and the SHA-256 every download is
+checked against still comes from usemagpie.ai, never from the mirror.
 
 Mac releases are signed and notarised; the Windows and Linux builds are not
 signed yet (Windows SmartScreen may ask before the first run). Every build
@@ -776,6 +837,51 @@ the container as healthy (Compose: `depends_on: condition: service_healthy`)
 with no curl in the image. Bind-mounting a folder at `/config` in place of a
 named volume works too; it has to be writable by uid 65532.
 
+#### NAS with agents on other machines
+
+Magpie can run on a headless NAS as a shared gateway even when the agents that
+use it (Claude Code, Codex, OpenCode, and so on) run on other computers. The
+container does not discover agent installations on the NAS host or on remote
+machines: configure those agents to use the NAS address and an enabled gateway
+key. See [Connecting anything else](#connecting-anything-else) for the
+protocol-specific base URLs. Keep `3425` behind a firewall or VPN and do not
+expose it publicly without gateway-key authentication.
+
+For a bind-mounted configuration directory, the directory must be writable by
+the non-root container user (uid 65532):
+
+```sh
+sudo chown -R 65532:65532 /volume1/docker/magpie/config
+```
+
+An example Docker Compose project is:
+
+```yaml
+services:
+  magpie:
+    image: ghcr.io/yetone/magpie:latest
+    restart: unless-stopped
+    ports:
+      # Keep both ports on loopback until LAN sharing and a gateway key exist.
+      - "127.0.0.1:3425:3425"
+      - "127.0.0.1:3430:3430"
+    environment:
+      MAGPIE_ADDR: 0.0.0.0:3425
+      MAGPIE_PUBLIC_URL: http://<nas-address>:3425
+      MAGPIE_WEB_KEY: <random-key>
+    volumes:
+      - ./config:/config
+    command: [web, --addr, 0.0.0.0:3430, --no-open]
+```
+
+Open `http://127.0.0.1:3430/?k=<random-key>` through an SSH tunnel to
+configure providers. Turn on *Share on local network*, then create a gateway
+key for each remote agent host. After that, change the gateway mapping to
+`3425:3425` (or bind it only to the NAS interface or VPN address) and recreate
+the container so remote agents can reach it. For Internet access, prefer a
+VPN such as Tailscale or WireGuard; if a reverse proxy is used, it must
+authenticate clients itself when it forwards to Magpie over loopback.
+
 ### Developing
 
 ```sh
@@ -825,6 +931,9 @@ magpie profiles
 magpie rm work
 
 magpie sync                     # refresh the models.dev catalog and every live model list
+
+magpie quota                    # what is left of every subscription, plan and key balance
+magpie quota wait codex         # block until a Codex account has allowance again
 ```
 
 In the app, click any value to open a filtered list; type to search or to

@@ -37,6 +37,32 @@ const toErr = (...xs) => process.stderr.write(xs.map((x) => (typeof x === "strin
 console.log = console.info = console.debug = console.warn = toErr
 process.stdout.write = (chunk, enc, cb) => process.stderr.write(chunk, enc, cb)
 
+// Nor may a program a plugin starts have them: one given the host's stdin
+// reads magpie's messages away (pi-devin-plus runs `devin auth login` with
+// stdio "inherit", which took the next requests as its answer and gave up,
+// "Login canceled"), and its stdout is the host's answers. It reads
+// nothing instead and writes to stderr. node:child_process starts every
+// program through Bun.spawn and Bun.spawnSync, so these see all of them.
+const own = (v, fd) => v === "inherit" || v === fd || v === (fd ? process.stdout : process.stdin)
+const guard = (o) => {
+  if (!o || typeof o !== "object") return o
+  o = { ...o }
+  if (Array.isArray(o.stdio)) {
+    o.stdio = [...o.stdio]
+    if (own(o.stdio[0], 0)) o.stdio[0] = "ignore"
+    if (own(o.stdio[1], 1)) o.stdio[1] = 2
+  }
+  if (own(o.stdin, 0)) o.stdin = "ignore"
+  if (own(o.stdout, 1)) o.stdout = 2
+  return o
+}
+for (const name of ["spawn", "spawnSync"]) {
+  const run = Bun[name]
+  Bun[name] = function (a, b) {
+    return Array.isArray(a) ? run.call(this, a, guard(b)) : run.call(this, guard(a))
+  }
+}
+
 let authPath = ""
 let modelsDevPath = ""
 let piPath = "" // pi.js, which loads pi's extensions

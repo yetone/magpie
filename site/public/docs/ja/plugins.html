@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>プラグインの作り方 · magpie ドキュメント</title>
-<meta name="description" content="magpie プラグインの書き方：magpie が呼び出す OpenCode プラグインのフック、それをアカウント・モデル・リクエスト・使用量を備えたプロバイダにする仕組み、そしてテスト・公開・掲載の方法。">
+<meta name="description" content="magpie プラグインの書き方：magpie が呼び出す OpenCode プラグインのフック、magpie が動かす pi パッケージ、それをアカウント・モデル・リクエスト・使用量を備えたプロバイダにする仕組み、そしてテスト・公開・掲載の方法。">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fafafa">
 <script>
@@ -32,7 +32,7 @@
 <link rel="alternate" hreflang="ja" href="https://usemagpie.ai/docs/ja/plugins">
 <link rel="stylesheet" href="/docs.css">
 <meta property="og:title" content="プラグインの作り方">
-<meta property="og:description" content="OpenCode プラグインひとつで、どんなサービスも magpie のプロバイダにできます。">
+<meta property="og:description" content="OpenCode プラグインか pi パッケージひとつで、どんなサービスも magpie のプロバイダにできます。">
 <meta property="og:image" content="https://usemagpie.ai/img/og.png">
 <meta property="og:url" content="https://usemagpie.ai/docs/ja/plugins">
 <meta name="twitter:card" content="summary_large_image">
@@ -79,6 +79,7 @@
     <a href="#ids">プロバイダ id</a>
     <a href="#test">テスト</a>
     <a href="#publish">公開と掲載</a>
+    <a href="#pi">pi パッケージ</a>
     <a href="#protocol">ホストプロトコル</a>
     <a href="#faq">よくある質問</a>
   </aside>
@@ -86,7 +87,7 @@
   <article>
     <p class="eyebrow" id="overview">ドキュメント · プラグイン</p>
     <h1>プラグインを書く</h1>
-    <p class="lede">プラグインはサービスにサインインし、そのサービスへのリクエストを送ります。magpie はそれを、すべてのエージェントが使えるプロバイダに変えます。複数アカウント、フェイルオーバー、使用量表示なども備わります。magpie は <a href="https://opencode.ai/docs/plugins/">OpenCode のプロバイダプラグイン</a>を動かすので、OpenCode 向けに書いたプラグインはそのままここで動きます。このページでは、プラグイン作者に必要なこと、つまり magpie が呼び出すフック、その戻り値を magpie がどう扱うか、そしてプラグインのテスト・公開・掲載の方法を説明します。</p>
+    <p class="lede">プラグインはサービスにサインインし、そのサービスへのリクエストを送ります。magpie はそれを、すべてのエージェントが使えるプロバイダに変えます。複数アカウント、フェイルオーバー、使用量表示なども備わります。magpie は <a href="https://opencode.ai/docs/plugins/">OpenCode のプロバイダプラグイン</a>を動かすので、OpenCode 向けに書いたプラグインはそのままここで動きます。プロバイダを登録する <a href="https://github.com/earendil-works/pi">pi</a> のパッケージも動きます（<a href="#pi">pi パッケージ</a>を参照）。このページでは、プラグイン作者に必要なこと、つまり magpie が呼び出すフック、その戻り値を magpie がどう扱うか、そしてプラグインのテスト・公開・掲載の方法を説明します。</p>
 
     <div class="callout"><b>ひとことで言うと。</b>プラグインは npm パッケージ、git リポジトリ、またはフォルダです。そのモジュールは OpenCode v1 プラグイン形式の async 関数をエクスポートします。magpie はすべてのプラグインをひとつの <a href="https://bun.sh">Bun</a> プロセス、つまり<em>プラグインホスト</em>に読み込みます。関数はフックを返します：
       <ul>
@@ -568,7 +569,7 @@ m plugin logout acme</pre>
     <h2 id="publish"><a class="anchor" href="#publish">公開と掲載</a></h2>
     <ul>
       <li><b>npm。</b>パッケージを通常どおり公開します。ユーザーは名前（<code>magpie plugin add opencode-acme-auth</code>）、バージョン（<code>…@0.2.0</code>）、git、フォルダから追加できます。</li>
-      <li><b>検索。</b><span class="ui">プラグイン</span> の検索は npm に <code>&lt;query&gt; opencode</code> を問い合わせます。名前かキーワードに <code>opencode</code> と、<code>auth</code>、<code>plugin</code>、<code>provider</code> のいずれかを含むパッケージが表示されます。<code>["opencode", "opencode-plugin", "&lt;vendor&gt;"]</code> のようなキーワードで条件を満たせます。</li>
+      <li><b>検索。</b><span class="ui">プラグイン</span> の検索は npm に <code>&lt;query&gt; opencode</code> を問い合わせます。名前かキーワードに <code>opencode</code> と、<code>auth</code>、<code>plugin</code>、<code>provider</code> のいずれかを含むパッケージが表示されます。<code>["opencode", "opencode-plugin", "&lt;vendor&gt;"]</code> のようなキーワードで条件を満たせます。あわせて <code>keywords:pi-package &lt;query&gt;</code> も問い合わせ、名前かキーワードに <code>auth</code> か <code>provider</code> を含む pi パッケージを表示します。</li>
       <li><b>README。</b>magpie のプラグインページには npm の README が表示されます。何にサインインするのか、どうやって、サインイン情報をどこに保存するのか、どのモデルがあるのかを書いてください。</li>
       <li><b>一覧。</b><span class="ui">プラグイン</span> は、コミュニティリポジトリの <a href="https://github.com/magpie-community/plugins/blob/main/registry.json"><code>registry.json</code></a> にあるプラグインをおすすめします。magpie は最大で 6 時間ごとにこれを取得し、取得できないときのためのコピーを内蔵しています。掲載してほしい場合は、項目を追加するプルリクエストを送ってください：
         <div class="code">
@@ -584,6 +585,17 @@ m plugin logout acme</pre>
           <li>バージョンを上げて <code>main</code> にプッシュすると公開されます。</li>
           <li>これらのパッケージは、どの magpie でも自動で更新されます。</li>
         </ul></li>
+    </ul>
+
+    <h2 id="pi"><a class="anchor" href="#pi">pi パッケージ</a></h2>
+    <p>magpie は <a href="https://github.com/earendil-works/pi">pi</a> のパッケージも動かします。<code>pi.registerProvider</code> でプロバイダを登録する pi 拡張は、何も変えずに pi と同じように magpie で動き、ほかのプラグインと同じ方法で追加できます（<code>magpie plugin add pi-antigravity</code>）。</p>
+    <ul>
+      <li><b>pi のパッケージとみなす条件。</b><code>package.json</code> に <code>pi</code> マニフェスト（<code>"pi": { "extensions": [...] }</code>）があるか、<code>pi-package</code> キーワードがあるか、<code>dependencies</code> か <code>peerDependencies</code> に <code>@earendil-works/pi-coding-agent</code>（または旧名の <code>@mariozechner/pi-coding-agent</code>）があること。単体のファイルは pi を import していれば該当します。</li>
+      <li><b>読み込み。</b>magpie はパッケージの隣に pi をインストールし、pi 自身のローダーで同じプラグインホストに読み込みます。登録されたプロバイダは magpie のプロバイダになり、モデルは pi がそれぞれに挙げるもの（pi がアカウントごとの一覧を取得できるときはその一覧）です。コマンド、ツール、レンダラー、イベントハンドラは使いません。</li>
+      <li><b>サインイン。</b>OAuth のログインは pi と同じように進みます。質問（<code>onPrompt</code>）は magpie のサインインの中で聞かれ、ページ（<code>onAuth</code>）はブラウザで開き、<code>refreshToken</code> で更新されます。パッケージが <code>ctx.ui</code> で出すダイアログ（<code>select</code>、<code>confirm</code>、<code>input</code>、<code>editor</code>）や <code>ctx.ui.custom</code> に渡すターミナルコンポーネントも、magpie の質問として表示されます。API キーを受け付けるプロバイダにはキーの入力欄が出ます。サインインごとにアカウントになるので、pi のプロバイダも複数アカウントを持てます。</li>
+      <li><b>pi のファイル。</b>pi の設定、<code>auth.json</code>（pi と同じ形で各プロバイダの最初のアカウント）、パッケージが書くファイルは、magpie の設定ディレクトリの <code>pi/</code> に置かれ、<code>PI_CODING_AGENT_DIR</code> を設定しない限りユーザーの <code>~/.pi</code> には触れません。アカウント自体はほかのプラグインと同じく <code>plugin-auth.json</code> に保存されます。</li>
+      <li><b>リクエスト。</b>pi のプロバイダのモデルは Anthropic Messages を受け取ります。ゲートウェイがエージェントのリクエストを変換し、magpie が pi を通してストリーミングし、応答の思考・署名・ツール呼び出しはそのまま保たれます。ベンダーのエラーはステータス付きで返るので、フェイルオーバーもほかのプラグインと同じく働きます。</li>
+      <li><b>id。</b>pi のプロバイダの id もほかのプラグインと同じ規則です。<a href="#ids">プロバイダ id</a> を参照してください。</li>
     </ul>
 
     <h2 id="protocol"><a class="anchor" href="#protocol">ホストプロトコル</a></h2>
@@ -604,6 +616,8 @@ m plugin logout acme</pre>
     <h2 id="faq"><a class="anchor" href="#faq">よくある質問</a></h2>
     <h3>OpenCode のプラグインは magpie でそのまま動きますか？</h3>
     <p>はい。<code>auth</code>、<code>config</code>、<code>provider</code>、<code>chat.headers</code> を通してサインインとリクエストを行っていれば動きます。magpie が追加するもの（<code>auth.usage</code>、<code>auth.refresh</code>、<code>magpie.icon</code>、<code>maxConcurrency</code>、<code>free</code>、<code>rate</code>、<code>X-Magpie-Sign-In</code>）は OpenCode が無視するので、ひとつのパッケージで両方に対応できます。</p>
+    <h3>pi のパッケージは magpie で動きますか？</h3>
+    <p>はい。<code>pi.registerProvider</code> でサインインとモデルを提供していれば動きます。magpie が使うのは登録されたプロバイダだけです。<a href="#pi">pi パッケージ</a>を参照してください。<code>pi-package</code> キーワードを付ければ検索で見つかります。</p>
     <h3>プロバイダの名前が <code>…-plugin</code> になるのはなぜですか？</h3>
     <p>その id が magpie ですでに使われているからです。<a href="#ids">プロバイダ id</a>を参照してください。</p>
     <h3>ヘルパー関数の一部がプラグインとして実行されます。</h3>

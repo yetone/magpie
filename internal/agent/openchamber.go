@@ -210,7 +210,7 @@ func openChamber(home, cfg string) *Agent {
 			if _, ok := edit.GetJSON(ocPath, "provider."+magpieID); !ok && usesMagpie(s.model(), s.small()) {
 				return edit.SetJSON(ocPath, edit.KV{Path: "provider." + magpieID, Value: provider()})
 			}
-			return syncJSON(ocPath, "provider."+magpieID, provider)
+			return syncJSONInOrder(ocPath, "provider."+magpieID, provider)
 		},
 		Fields: []Field{
 			{Key: "model", Label: "model", Get: s.model, Options: opts("model"), Set: func(v string) error {

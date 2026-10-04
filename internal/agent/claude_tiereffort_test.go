@@ -65,7 +65,7 @@ func TestClaudeTierEffort(t *testing.T) {
 	if a.Field("haiku").Get() != "v/flash" || a.Field("haiku_effort").Get() != "low" || a.Field("sonnet_effort").Get() != "" {
 		t.Fatalf("read back: %v", a.Values())
 	}
-	if env("ANTHROPIC_MODEL") != "v/glm" || a.Field("effort").Get() != "high" || env("ANTHROPIC_DEFAULT_OPUS_MODEL") != "v/glm" {
+	if v, _ := edit.GetJSON(path, "model"); v != "v/glm" || env("ANTHROPIC_MODEL") != "" || a.Field("effort").Get() != "high" || env("ANTHROPIC_DEFAULT_OPUS_MODEL") != "v/glm" {
 		t.Fatalf("the main model's effort changed: %v", a.Values())
 	}
 	// a tier following the main model, at another effort
@@ -109,7 +109,7 @@ func TestClaudeTierEffort(t *testing.T) {
 	// their own, kept through a new main model
 	set("opus", "")
 	set("opus_effort", "")
-	if env("CLAUDE_CODE_SUBAGENT_MODEL") != "v/flash" {
+	if env("CLAUDE_CODE_SUBAGENT_MODEL") != "" {
 		t.Fatalf("subagents follow: %v", a.Values())
 	}
 	set("subagent_effort", "low")
@@ -126,7 +126,7 @@ func TestClaudeTierEffort(t *testing.T) {
 	}
 	set("subagent", "")
 	set("subagent_effort", "")
-	if env("CLAUDE_CODE_SUBAGENT_MODEL") != "v/glm" || a.Field("subagent_effort").Get() != "" {
+	if env("CLAUDE_CODE_SUBAGENT_MODEL") != "" || a.Field("subagent_effort").Get() != "" {
 		t.Fatalf("subagents back: %v", a.Values())
 	}
 	// back to Claude Code as installed: nothing of magpie's left

@@ -101,7 +101,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await rows.first().locator(".rt-rwarn").textContent(), w.skip);
 
       // a second rule, compacting alone: toggled with nothing moved
-      await ed.locator("button", { hasText: w.add }).click();
+      // (wheeled down to, as the reader would: the editor runs past the
+      // window and the page keeps still for any other scroll)
+      const add = ed.locator("button", { hasText: w.add });
+      await page.mouse.move(550, 600);
+      for (let i = 0; i < 10 && (await add.boundingBox()).y > 1400 - 160; i++) {
+        await page.mouse.wheel(0, 300);
+        await page.waitForTimeout(150);
+      }
+      const ab = await add.boundingBox();
+      await page.mouse.click(ab.x + ab.width / 2, ab.y + ab.height / 2);
       const second = rows.nth(1).locator("button.rt-cond", { hasText: w.cond });
       await second.waitFor();
       const at = () => page.evaluate(() => [...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => [e.id || e.className, e.scrollTop]).join(";") + "|" + Math.round(document.querySelector(".rt-gedit").getBoundingClientRect().top));
@@ -121,8 +130,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // other scroll, and the mouse where it is: the browsers' scroll
       // into view before a click can leave it under the footer)
       await page.mouse.move(550, 600);
-      await page.mouse.wheel(0, 600);
-      await page.waitForTimeout(300);
+      for (let i = 0; i < 10 && (await saveBtn.boundingBox()).y > 1400 - 160; i++) {
+        await page.mouse.wheel(0, 300);
+        await page.waitForTimeout(150);
+      }
       const sb = await saveBtn.boundingBox();
       await page.mouse.click(sb.x + sb.width / 2, sb.y + sb.height / 2);
       await page.waitForFunction(() => !document.querySelector(".rt-gedit"));

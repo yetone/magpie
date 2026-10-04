@@ -392,6 +392,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go provider.KeepResetsFromRunningOut(ctx)
 	// and checks the WorkBuddy accounts in for the day's credits
 	go provider.KeepWorkBuddyCheckedIn(ctx)
+	// and the Trae CN accounts (#694)
+	go provider.KeepTraeCheckedIn(ctx)
 	// and moves the built-in subscriptions being retired onto their plugins
 	go provider.KeepRetiringMoved(ctx)
 	// and keeps the community's plugins up to date, noting others' updates, and the Bun they run on
@@ -978,6 +980,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// which what is done with it goes by
 	who, agent := callerOf(r), agentOf(r)
 	metadata := requestSessionMetadata(r.Header, body)
+	var clientResponseID string // only a reply released to the client owns this ID
 	call := Call{Time: start, From: from, Model: unprefixed(modelOf(body)), Agent: who.agent, Via: who.via, Kind: requestCallKind(r.Header, metadata),
 		RequestBody: requestBody, RequestTruncated: requestTruncated, otelIn: otelIn, wire: archiving(r, capture, start, body)}
 	defer discardArchive(capture)
@@ -1213,12 +1216,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// (#63): its reasoning, sealed by the account that wrote it, is refused
 	// by another.
 	cands, pl, aff, stuck := affine(scope, mode, rotate, r.Header, from, body, cands, pl)
+	leadAccount := ""
 	if sealedTask && !aff.Kept {
 		parent := metadata.Parent
 		if parent == "" {
 			parent = r.Header.Get("x-codex-parent-thread-id")
 		}
-		cands, pl = leadFirst(leadScope, parent, cands, pl)
+		cands, pl, leadAccount = leadFirst(leadScope, parent, cands, pl)
 	}
 	if hit != nil && hit.Use != "" && !(hit.Held && aff.Kept) {
 		// the rule's member first, over whoever answered last, as a turn
@@ -1302,7 +1306,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	if len(cands) == 1 {
 		shown = nil // nobody else to stay away from
 	}
-	tr := s.trace.begin(Route{Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Provider: p.ID, Group: group, Rule: hit, Nested: nested, Affinity: shown, Order: pl.order, Left: pl.left})
+	tr := s.trace.begin(Route{Pinned: pin, Time: start, Agent: call.Agent, Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, call.Kind), Kind: call.Kind, For: call.For, Model: call.Model, Effort: requestEffort(from, body), Provider: p.ID, Group: group, Rule: hit, Nested: nested, SealedTask: sealedTask, LeadAccount: leadAccount, Affinity: shown, Order: pl.order, Left: pl.left})
 	if telemetry != nil {
 		telemetry.routeID = tr.ID
 	}
@@ -1461,6 +1465,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			stop()
 		}
 		hw.settle()
+		if hw.passing {
+			clientResponseID = call.Usage.ResponseID
+		}
 		outgrew := false // a failure that didn't say so was the request's length
 		if !hw.passing && !hw.refused && hw.code() >= 400 {
 			if req, err := parse(from, attemptBody); err == nil {
@@ -1598,6 +1605,29 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				break
 			}
 		}
+		if !last && !hw.passing && !hw.refused && overflowed(hw.code(), hw.errBody()) {
+			// too long for this member's model, and as long on every
+			// account of it, but another member — another model, or this
+			// one at another vendor — may hold it (#700: the overflow went
+			// to Kimi Code, which took 0.85 of the request for the model's
+			// window, where the next member would have answered). Only
+			// those not known to be too small are left to ask; none, and
+			// the agent is told, to compact. Nobody rests.
+			tokens := 0
+			if req, err := parse(from, attemptBody); err == nil {
+				tokens = estimate(req)
+			}
+			if left := withRoom(cands[i+1:], c, tokens); len(left) > 0 {
+				if other == nil {
+					other = &Try{Status: call.Status, Error: call.Error}
+				}
+				try.Fail = failOverflow
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+				skipped = append(skipped, c.label()+": "+call.Error)
+				cands = append(cands[:i+1:i+1], left...)
+				continue
+			}
+		}
 		if !last && hw.failed() && shapeRefused(hw.code(), hw.errBody()) {
 			// a request this vendor's API can't read (xAI's 422 over an
 			// input item it doesn't know, #350) another's may: the next is
@@ -1622,11 +1652,24 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			skipped = append(skipped, c.label()+": "+call.Error)
 			continue
 		}
+		if !last && hw.failed() && failureOf(c, hw.code(), hw.errBody()) == failAuth {
+			// the account's sign-in is gone, refused by Anthropic: no rest
+			// brings it back, so none is told; it is passed over until it
+			// is signed in again (provider/claude_auth.go), and the next
+			// one is asked
+			if other == nil {
+				other = &Try{Status: call.Status, Error: call.Error}
+			}
+			try.Fail = failAuth
+			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+			skipped = append(skipped, c.label()+": "+call.Error)
+			continue
+		}
 		if wait, ok := passing(hw.code(), hw.header, hw.errBody(), again); ok && !last && hw.failed() && spentAfter(cands[i+1:]) {
 			// the others left are out of their allowance (Discord, waroy: a
 			// Codex account run out, Grok busy a moment): this one is the
 			// last that may answer, and is tried again as the last is
-			try.Fail, try.Again = failure(hw.code(), hw.errBody()), wait.Milliseconds()
+			try.Fail, try.Again = failureOf(c, hw.code(), hw.errBody()), wait.Milliseconds()
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			skipped = append(skipped, c.label()+": "+call.Error)
 			again++
@@ -1651,7 +1694,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if wait, ok := passing(hw.code(), hw.header, hw.errBody(), again); ok && hw.failed() {
 			// nobody else is left: the same one again, after a moment
-			try.Fail, try.Again = failure(hw.code(), hw.errBody()), wait.Milliseconds()
+			try.Fail, try.Again = failureOf(c, hw.code(), hw.errBody()), wait.Milliseconds()
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			skipped = append(skipped, c.label()+": "+call.Error)
 			again++
@@ -1700,8 +1743,25 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			writeError(w, from, call.Status, hw.failMsg)
 		} else {
 			hw.release()
+			if hw.passing {
+				clientResponseID = call.Usage.ResponseID
+			}
 		}
-		if call.Status < 400 {
+		if call.Status < 400 && call.Error != "" && r.Context().Err() == nil {
+			// the reply had begun, its 200 sent, and broke off (#733:
+			// Cursor's "Unable to reach the model provider" after some of
+			// the text): not an answer. What the agent got stays as it is,
+			// but the conversation isn't kept here for the agent's retry,
+			// and a vendor that failed (not a reply too long, nor one its
+			// filter refused) rests, so the retry goes to another member. A
+			// reply the agent stopped itself is booked as before
+			try.Fail = failureOf(c, call.Status, []byte(call.Error))
+			unanswered(stuck, c)
+			if lateRests(call.Error) {
+				rest := s.restAfter(c, call.Status, hw.header, []byte(call.Error))
+				try.Fail, try.Rest = rest.Why, &rest
+			}
+		} else if call.Status < 400 {
 			servedCandidate(c, call.Usage.Input+call.Usage.Output+call.Usage.CacheRead+call.Usage.CacheWrite)
 			// a compaction a rule sent to a model of its own leaves the
 			// conversation, and the turn's size, where they were
@@ -1717,7 +1777,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		} else if hw.refused {
 			try.Fail = failRefused
 		} else {
-			try.Fail = failure(call.Status, []byte(call.Error))
+			try.Fail = failureOf(c, call.Status, []byte(call.Error))
 			if try.Fail == failVerify && !held {
 				// the last one left rests too, for the app to show and the
 				// next requests to be held
@@ -1732,6 +1792,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		call.Fallback = strings.Join(skipped, "; ")
 	}
 	call.Millis = time.Since(start).Milliseconds()
+	call.Usage.ResponseID = clientResponseID
 	finishCapture()
 	s.trace.update(tr, func(t *Route) {
 		t.Done, t.Status, t.Error, t.Millis = true, call.Status, call.Error, call.Millis
@@ -1752,7 +1813,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 			CacheWrite: call.Usage.CacheWrite, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: call.Millis, Status: call.Status,
 			TTFT: call.TTFT, FirstText: call.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
-			RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To), Archive: call.archiveName()}
+			RequestID: call.Usage.RequestID, ResponseID: call.Usage.ResponseID, Endpoint: endpointOf(r, from, call.To), Archive: call.archiveName()}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 		withBodies(&rec, &call)
 		appendUsage(r, rec)
@@ -2104,6 +2165,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 	case provider.Chat:
 		body = developerAsSystem(body)
+		// Gemini's thought signatures, which came to the client in its
+		// calls' ids, go back where Gemini wants them; another upstream
+		// gets the calls' own ids (#687)
+		body = chatCallSignatures(body, geminiCompat(p.Host(), model))
 		if p.Preset == "mistral" || p.Host() == "api.mistral.ai" {
 			// an earlier turn's reasoning_content, which Mistral turns
 			// away, as the thinking part it takes (#494)
@@ -2283,6 +2348,10 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if proto == provider.Chat && !sse && strings.Contains(res.Header.Get("Content-Type"), "json") {
 		whole = &chatWhole{}
 	}
+	var sigs *sigTidy
+	if proto == provider.Chat && geminiCompat(p.Host(), model) {
+		sigs = &sigTidy{sse: sse}
+	}
 	var search *searchTidy
 	if searchFn && sse {
 		search = &searchTidy{}
@@ -2310,6 +2379,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			if spaces != nil {
 				out = spaces.write(out)
 			}
+			if sigs != nil {
+				out = sigs.write(out)
+			}
 			if _, werr := w.Write(out); werr != nil {
 				return res.StatusCode, "", true
 			}
@@ -2322,25 +2394,36 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			break
 		}
 	}
+	// what's held at the end goes through the filters after the one
+	// that held it
+	sign := func(out []byte) []byte {
+		if sigs != nil {
+			return sigs.write(out)
+		}
+		return out
+	}
 	if tidy != nil {
-		w.Write(tidy.flush())
+		w.Write(sign(tidy.flush()))
 	}
 	if whole != nil {
 		out := whole.flush()
 		if spaces != nil {
 			out = spaces.write(out)
 		}
-		w.Write(out)
+		w.Write(sign(out))
 	}
 	if search != nil {
 		out := search.flush()
 		if spaces != nil {
 			out = spaces.write(out)
 		}
-		w.Write(out)
+		w.Write(sign(out))
 	}
 	if spaces != nil {
-		w.Write(spaces.flush())
+		w.Write(sign(spaces.flush()))
+	}
+	if sigs != nil {
+		w.Write(sigs.flush())
 	}
 	if sse {
 		sniff.drain()
@@ -2888,11 +2971,13 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 				break
 			}
 		}
-		if !searching(r.Context()) && canSearch() && !searchesItself(p, to) {
+		if !searching(r.Context()) && canSearchFor(p) && !searchesItself(p, to) {
 			ask := s.askTranslated(p, to, model, r.Header, w.Header())
 			if zen != nil {
 				ask = zenRound(zen.z, ask)
 			}
+			// a Kimi Code plan's own searches stay on it
+			r = r.WithContext(searchingOn(r.Context(), p))
 			return s.searchReply(w, r, from, p.Name, request, u, ask)
 		}
 	}
@@ -2931,7 +3016,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	empty := emptyFails(actual)
 	if stream {
 		sw := newSSEWriter(w)
-		enc := encoder(from, sw, request)
+		enc := encoder(from, sw, request, u)
 		var failed string
 		said, stop := false, ""
 		var kept []Event // the reply's end, while nothing is said in it
@@ -3010,7 +3095,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 	res2 := col.finish()
 	u.add(res2.Usage)
 	u.add(Usage{Served: res2.Model})
-	out := render(from, res2, request)
+	out := renderUsage(from, res2, request, u)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
 	w.Write(out)
@@ -3087,6 +3172,8 @@ func parse(proto provider.Protocol, body []byte) (*Request, error) {
 	if err != nil {
 		return nil, err
 	}
+	// a call's id may carry Gemini's thought signature (gemini_signature.go)
+	unsignCalls(req)
 	if req.ToolChoice == "required" && len(req.Tools) == 0 && !req.WebSearch && requiredAllowlist(proto, body) {
 		return nil, fmt.Errorf("required tool choice has no callable tools after filtering")
 	}
@@ -3193,7 +3280,15 @@ func relayEvents(events <-chan Event, sw *sseWriter, enc streamEncoder, see func
 	}
 }
 
-func encoder(proto provider.Protocol, w *sseWriter, r *Request) streamEncoder {
+func encoder(proto provider.Protocol, w *sseWriter, r *Request, usage ...*Usage) streamEncoder {
+	enc := makeEncoder(proto, w, r)
+	if len(usage) > 0 && usage[0] != nil {
+		return &usageEncoder{streamEncoder: enc, usage: usage[0]}
+	}
+	return enc
+}
+
+func makeEncoder(proto provider.Protocol, w *sseWriter, r *Request) streamEncoder {
 	model := r.Model
 	switch proto {
 	case provider.Chat:

@@ -56,8 +56,8 @@ function serve(lang) {
 const want = {
   en: { again: "answered 429: its week is used up and nobody else could take the request, so one of me@example.com's Codex resets was used by itself and the request is asked again, before any of the reply reaches Codex.",
     first: "Its week was used up, so one of me@example.com's Codex resets was used by itself first." },
-  zh: { again: "返回 429：本周额度已用完，且没有其他账号能接这个请求，于是自动使用了 me@example.com 的一次 Codex 重置并重新发送请求，此时 Codex 尚未收到任何回复。",
-    first: "本周额度已用完，所以先自动使用了 me@example.com 的一次 Codex 重置。" },
+  zh: { again: "返回 429：本周额度已用完，且没有其他账号能接这个请求，于是自动使用了 me@example.com 的一张 Codex 重置卡并重新发送请求，此时 Codex 尚未收到任何回复。",
+    first: "本周额度已用完，所以先自动使用了 me@example.com 的一张 Codex 重置卡。" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

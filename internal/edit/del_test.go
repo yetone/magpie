@@ -1,6 +1,9 @@
 package edit
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestDelJSONMiddleKeepsLayout(t *testing.T) {
 	in := "{\n  \"env\": {\n    \"A\": \"1\",\n    \"B\": \"2\",\n    \"C\": \"3\"\n  },\n  \"model\": \"m\"\n}\n"
@@ -71,6 +74,14 @@ func TestEnvFile(t *testing.T) {
 	}
 	if got := read(t, p); got != "# comment\nexport BAZ=\"q x\"\n" {
 		t.Fatalf("got %q", got)
+	}
+	// the keys all it held: the file goes, not a blank line left
+	only := tmpFile(t, "only.env", "GEMINI_API_KEY=magpie\nGOOGLE_GEMINI_BASE_URL=http://127.0.0.1:3425\n")
+	if err := DelEnvFile(only, "GEMINI_API_KEY", "GOOGLE_GEMINI_BASE_URL"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(only); !os.IsNotExist(err) {
+		t.Fatalf("left %q", read(t, only))
 	}
 	np := tmpFile(t, "new.env", "")
 	if err := SetEnvFile(np, KV{"A", "1"}); err != nil {

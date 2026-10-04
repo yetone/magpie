@@ -103,6 +103,10 @@ type Group struct {
 	Members  []string `json:"members"`            // "provider/model[:effort]" or "group/<id>", in order (see MemberEffort)
 	Routing  string   `json:"routing,omitempty"`  // as Provider.Routing, over all the members' keys and accounts; or Manual
 	Affinity string   `json:"affinity,omitempty"` // as Provider.Affinity
+	// Sink is Provider.Sink over the group's members' accounts and keys
+	// together: one rate limited with quota left goes behind every other
+	// member's. Not for "rotate" or Manual.
+	Sink bool `json:"sink,omitempty"`
 	// Off are the members switched off: kept where they are in the
 	// order, with their rules, but sent nothing until switched on again,
 	// so trying a group without one doesn't mean taking it out.
@@ -126,7 +130,7 @@ type Group struct {
 	// reasoning, where the agent asked for some (see EffortAuto).
 	Effort string `json:"effort,omitempty"`
 	// Context is how long a request the user says the group takes, in
-	// tokens: agents are told it rather than its shortest member's.
+	// tokens: agents are told it rather than its largest member's.
 	Context int `json:"context,omitempty"`
 	// Levels are the reasoning levels agents are offered for the group,
 	// lowest first, when the user names them (#295): rather than those
@@ -553,7 +557,13 @@ func groupEntries(entries []Entry) []Entry {
 				e.Output = output
 			}
 			e.Images = e.Images && images
-			if ctx > 0 && (e.Context == 0 || ctx < e.Context) {
+			// the window agents are told is the largest a member has:
+			// a conversation too long for one member goes on to a member
+			// with room for it (#700, withRoom in the gateway), so the
+			// agent compacts only when none has. The shortest member's,
+			// as it was, had Pi compact a group of 1M DeepSeeks at 200k
+			// for the one free model among them that holds 200k (#712)
+			if ctx > e.Context {
 				e.Context = ctx
 			}
 			if i == 0 {

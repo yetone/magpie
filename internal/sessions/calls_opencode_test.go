@@ -38,9 +38,13 @@ func checkOCCalls(t *testing.T, cs map[string]Call) {
 		!a.Time.Equal(at("2026-09-26T10:00:30Z")) {
 		t.Fatalf("astra: %+v", a)
 	}
+	// the effort picked in OpenCode's model menu, its reply's variant (#680)
+	if a.Effort != "high" {
+		t.Fatalf("astra's effort %q, want high", a.Effort)
+	}
 	o, ok := cs["msg_0004"]
 	if !ok || o.Model != "claude-opus-5-5" || o.Upstream != "anthropic" || o.Session != ocMain ||
-		o.Tokens != (Tokens{40, 60, 700, 300}) || o.Millis != 30000 {
+		o.Tokens != (Tokens{40, 60, 700, 300}) || o.Millis != 30000 || o.Effort != "" {
 		t.Fatalf("the subagent's opus: %+v", o)
 	}
 	if len(cs) != 2 {
@@ -81,11 +85,12 @@ func TestOpenCodeCallsDB(t *testing.T) {
 
 	// a failed reply is a failed call; one only stopped is none
 	ocInsert(t, db, ocChild, "msg_0005", 1790416990000, 1790417000000,
-		`{"id":"msg_0005","role":"assistant","modelID":"claude-opus-5-5","providerID":"anthropic","tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"error":{"name":"APIError","data":{"message":"Overloaded","statusCode":529}},"time":{"created":1790416990000,"completed":1790417000000}}`)
+		`{"id":"msg_0005","role":"assistant","modelID":"claude-opus-5-5","providerID":"anthropic","variant":"default","tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"error":{"name":"APIError","data":{"message":"Overloaded","statusCode":529}},"time":{"created":1790416990000,"completed":1790417000000}}`)
 	ocInsert(t, db, ocChild, "msg_0006", 1790417010000, 1790417020000,
 		`{"id":"msg_0006","role":"assistant","modelID":"claude-opus-5-5","providerID":"anthropic","tokens":{"input":0,"output":0,"reasoning":0,"cache":{"read":0,"write":0}},"error":{"name":"MessageAbortedError","data":{"message":"aborted"}},"time":{"created":1790417010000}}`)
 	cs := ocCalls(t)
-	if e := cs["msg_0005"]; e.Error != "APIError" || e.ErrorText != "Overloaded" || e.Session != ocMain {
+	// "default" is no effort picked
+	if e := cs["msg_0005"]; e.Error != "APIError" || e.ErrorText != "Overloaded" || e.Session != ocMain || e.Effort != "" {
 		t.Fatalf("a failed reply: %+v", e)
 	}
 	if _, ok := cs["msg_0006"]; ok {
@@ -105,7 +110,7 @@ func TestOpenCodeCallsV2(t *testing.T) {
 	}
 	// and one after OpenCode's own reply is OpenCode's
 	if _, err := db.Exec(`INSERT INTO session_message VALUES ('msg_0007', ?, 'assistant', 10, 1790417020000, 1790417030000, ?), ('msg_0008', ?, 'compaction', 11, 1790417040000, 1790417050000, ?)`,
-		ocMain, `{"model":{"id":"big-pickle","providerID":"opencode"},"content":[],"cost":0,"tokens":{"input":7,"output":3,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1790417020000,"completed":1790417030000}}`,
+		ocMain, `{"model":{"id":"big-pickle","providerID":"opencode","variant":"xhigh"},"content":[],"cost":0,"tokens":{"input":7,"output":3,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1790417020000,"completed":1790417030000}}`,
 		ocMain, `{"status":"completed","reason":"auto","cost":0,"tokens":{"input":11,"output":2,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1790417040000}}`); err != nil {
 		t.Fatal(err)
 	}
@@ -113,10 +118,11 @@ func TestOpenCodeCallsV2(t *testing.T) {
 	if _, ok := cs["msg_0005"]; ok {
 		t.Fatalf("a compaction through magpie counted: %+v", cs["msg_0005"])
 	}
-	if c := cs["msg_0007"]; c.Model != "big-pickle" || c.Upstream != "opencode" || c.Tokens != (Tokens{7, 3, 0, 0}) {
+	if c := cs["msg_0007"]; c.Model != "big-pickle" || c.Upstream != "opencode" || c.Tokens != (Tokens{7, 3, 0, 0}) || c.Effort != "xhigh" {
 		t.Fatalf("an OpenCode Zen reply: %+v", c)
 	}
-	if c := cs["msg_0008"]; c.Model != "big-pickle" || c.Upstream != "opencode" || c.Tokens != (Tokens{11, 2, 0, 0}) {
+	// a compaction is made with the model and effort last replied with
+	if c := cs["msg_0008"]; c.Model != "big-pickle" || c.Upstream != "opencode" || c.Tokens != (Tokens{11, 2, 0, 0}) || c.Effort != "xhigh" {
 		t.Fatalf("its compaction: %+v", c)
 	}
 }

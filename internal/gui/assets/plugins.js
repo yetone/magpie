@@ -560,7 +560,7 @@
     const box = el("div", "pm-intro");
     const text = el("div", "pm-introtext");
     text.append(el("h2", "", t("Subscriptions, as plugins")));
-    text.append(el("p", "", t("Plugins sign in to coding plans and make their requests; the models then work in every agent, like any provider's. They're OpenCode's provider plugins, run on Bun.")));
+    text.append(el("p", "", t("Plugins sign in to coding plans and make their requests; the models then work in every agent, like any provider's. They're OpenCode's provider plugins or pi's packages, run on Bun.")));
     const trust = el("p", "pm-trust");
     trust.append(glyph(SHIELD, 12, 1.5), el("span", "", t("A plugin is someone else's code with your sign-in: install the ones you trust.")));
     text.append(trust);

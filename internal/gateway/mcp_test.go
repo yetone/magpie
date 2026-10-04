@@ -162,3 +162,49 @@ func TestMCPProxyNotForWebPages(t *testing.T) {
 		}
 	}
 }
+
+// A server signed in to at an address with a query (Exa's
+// mcp.exa.ai/mcp?login, where its sign-in is) is reached at that address,
+// the query as it was, and the headers the Library gives it (a key) go
+// with magpie's token; only the gateway's own key stays here.
+func TestMCPProxyKeepsQueryAndHeaders(t *testing.T) {
+	fresh(t)
+	f := mcpauthtest.New(t)
+	mcpauthtest.SignIn(t, "exa", f.URL+"?login")
+	gw := httptest.NewServer(New().Handler())
+	defer gw.Close()
+	call := func(body string, hdr ...string) {
+		t.Helper()
+		req, _ := http.NewRequest("POST", gw.URL+"/mcp/exa", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		for i := 0; i+1 < len(hdr); i += 2 {
+			req.Header.Set(hdr[i], hdr[i+1])
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("%s: %d %s", body, resp.StatusCode, b)
+		}
+	}
+	call(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`, "X-Api-Key", "exa-key", "X-Exa-Source", "magpie")
+	if f.SeenQuery != "login" {
+		t.Fatalf("the server got the query %q, not login", f.SeenQuery)
+	}
+	if f.Seen.Get("X-Api-Key") != "exa-key" || f.Seen.Get("X-Exa-Source") != "magpie" {
+		t.Fatalf("headers not passed on: %v", f.Seen)
+	}
+	token, _ := mcpauth.Token(t.Context(), "exa")
+	if f.Seen.Get("Authorization") != "Bearer "+token {
+		t.Fatalf("Authorization %q", f.Seen.Get("Authorization"))
+	}
+
+	// the gateway's own key isn't the server's
+	call(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, "X-Api-Key", Token)
+	if f.Seen.Get("X-Api-Key") != "" {
+		t.Fatalf("the server got the gateway's key %q", f.Seen.Get("X-Api-Key"))
+	}
+}

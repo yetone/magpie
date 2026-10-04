@@ -139,7 +139,7 @@ func TestCopilotQuotaWithoutEditorsSignIn(t *testing.T) {
 	if _, ok := copilotLogin(filepath.Join(home, ".config")); ok {
 		t.Fatal("the editors' own sign-in is still readable")
 	}
-	if err := addCopilotLogin("hubot", "Pro+", "ghu_hubot"); err != nil {
+	if err := addCopilotLogin("hubot", "Pro+", "ghu_hubot", ""); err != nil {
 		t.Fatal(err)
 	}
 	if ls := copilotLoginList(); len(ls) != 1 || ls[0].User != "hubot" {

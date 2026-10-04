@@ -68,7 +68,7 @@ func gemini(home string) *Agent {
 		if m := unstash("gemini.model"); m != "" {
 			return edit.SetJSON(path, edit.KV{Path: "model.name", Value: m})
 		}
-		return edit.DelJSON(path, "model.name")
+		return delModelName(path)
 	}
 	setModel := func(v string) error {
 		if v == "" {
@@ -77,9 +77,11 @@ func gemini(home string) *Agent {
 				if err := edit.DelEnvFile(envPath, "GOOGLE_GEMINI_BASE_URL", "GEMINI_API_KEY"); err != nil {
 					return err
 				}
-				return edit.DelJSON(path, "security.auth.selectedType", "model.name")
+				if err := edit.DelJSON(path, "security.auth.selectedType"); err != nil {
+					return err
+				}
 			}
-			return edit.DelJSON(path, "model.name")
+			return delModelName(path)
 		}
 		if isMagpie(v) {
 			if !routed() {
@@ -244,4 +246,17 @@ func gemini(home string) *Agent {
 			},
 		},
 	}
+}
+
+// delModelName takes model.name out of Gemini CLI's settings.json, and the
+// model it was in once nothing else is there: the "model": {} it would
+// leave was never the user's.
+func delModelName(path string) error {
+	if err := edit.DelJSON(path, "model.name"); err != nil {
+		return err
+	}
+	if v, _ := edit.GetJSON(path, "model"); strings.TrimSpace(strings.Trim(strings.TrimSpace(v), "{}")) == "" && strings.HasPrefix(strings.TrimSpace(v), "{") {
+		return edit.DelJSON(path, "model")
+	}
+	return nil
 }

@@ -31,6 +31,7 @@ const pageText = 1500
 // foundPage is one page a search API found.
 type foundPage struct {
 	Title, URL, Text string
+	Age              string // how old the search said it is, "" when it didn't
 }
 
 // canSearch is whether magpie can answer its web_search tool: a provider
@@ -46,16 +47,28 @@ func canSearch() bool {
 // that can't, "" when none can.
 func Searcher() string {
 	if p, m, ok := searcher(); ok {
-		return p.Name + " · " + m
+		return searcherName(p, m)
 	}
 	return ""
+}
+
+// searcherName is a searcher by its provider and model; a Kimi Code plan,
+// which searches with no model, by its name.
+func searcherName(p provider.Provider, model string) string {
+	if model == "" {
+		return p.Name
+	}
+	if e, ok := provider.ServedEntryOf(p.ID + "/" + model); ok && e.Name != "" {
+		model = e.Name
+	}
+	return p.Name + " · " + model
 }
 
 // AutoSearcher names the provider and model magpie picks to search with
 // when Settings names none, "" when none can.
 func AutoSearcher() string {
 	if p, m, ok := autoSearcher(); ok {
-		return p.Name + " · " + m
+		return searcherName(p, m)
 	}
 	return ""
 }
@@ -82,19 +95,26 @@ func (s *Server) apiSearch(ctx context.Context, query string) (string, []Hit, er
 			errs = append(errs, fmt.Errorf("%s found nothing", a.Name()))
 			continue
 		}
-		var b strings.Builder
-		var hits []Hit
-		for i, p := range pages {
-			fmt.Fprintf(&b, "%d. %s — %s\n", i+1, p.Title, p.URL)
-			if p.Text != "" {
-				b.WriteString(p.Text + "\n")
-			}
-			b.WriteString("\n")
-			hits = append(hits, Hit{Title: p.Title, URL: p.URL})
-		}
-		return strings.TrimSpace(b.String()), hits, nil
+		said, hits := pagesSaid(pages)
+		return said, hits, nil
 	}
 	return "", nil, errors.Join(errs...)
+}
+
+// pagesSaid is what the pages a search found say, as its model is given
+// it, and the pages as the client hears of them.
+func pagesSaid(pages []foundPage) (string, []Hit) {
+	var b strings.Builder
+	var hits []Hit
+	for i, p := range pages {
+		fmt.Fprintf(&b, "%d. %s — %s\n", i+1, p.Title, p.URL)
+		if p.Text != "" {
+			b.WriteString(p.Text + "\n")
+		}
+		b.WriteString("\n")
+		hits = append(hits, Hit{Title: p.Title, URL: p.URL, PageAge: p.Age})
+	}
+	return strings.TrimSpace(b.String()), hits
 }
 
 // askSearchAPI asks one search API for the query.

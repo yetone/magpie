@@ -34,6 +34,7 @@ const providerUsage = `usage:
   magpie provider icon <id> <file|name>   give a custom provider a picture (PNG, JPEG, SVG…) or a built-in icon
   magpie provider fallback <id> <provider/model>…   where requests go when it's out of quota or down (none clears)
   magpie provider models <id> [ids…]      fetch the vendor's model list, or choose which models to expose
+  magpie provider refresh <id>            fetch the vendor's model list again (as the app's Refresh)
   magpie provider account-models <id> [account|key [ids…|all]]
                                           the models one account or key alone serves; all: every model the provider has
   magpie provider listed <id> yes|no      no: its models serve only through routing groups, not in the list
@@ -125,7 +126,9 @@ func providers() error {
 	}
 	for _, x := range provider.Excluded() {
 		name := x.Agent
-		if a, err := agent.Find(x.Agent); err == nil {
+		if x.Name != "" {
+			name = x.Name
+		} else if a, err := agent.Find(x.Agent); err == nil {
 			name = a.Name
 		}
 		fmt.Println()
@@ -450,13 +453,16 @@ func providerCmd(args []string) error {
 			fmt.Println(green.Render("✓"), p.Name, muted.Render("is switched on"))
 		}
 		return nil
-	case "models":
+	case "models", "refresh", "fetch":
 		if len(rest) < 1 {
-			return fmt.Errorf("magpie provider models <id> [model ids to expose…]")
+			return fmt.Errorf("magpie provider %s <id> [model ids to expose…]", verb)
 		}
 		p, err := provider.Find(rest[0])
 		if err != nil {
 			return err
+		}
+		if len(rest) > 1 && verb != "models" {
+			return fmt.Errorf("magpie provider %s <id> fetches its list · magpie provider models <id> <ids…> picks from it", verb)
 		}
 		if len(rest) > 1 {
 			p.Models = rest[1:]
@@ -470,11 +476,17 @@ func providerCmd(args []string) error {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		ms, err := p.Fetch(ctx)
+		ms, dropped, err := p.Refetch(ctx)
 		if err != nil {
 			return err
 		}
 		fmt.Println(green.Render("✓"), len(ms), "models from", fetchedFrom(*p))
+		if len(dropped) > 0 {
+			fmt.Println(amber.Render("!"), "gone from its list, so no longer picked:", strings.Join(dropped, ", "))
+		}
+		if q, err := provider.Find(p.ID); err == nil {
+			p = q // without the picks just dropped
+		}
 		return showProvider(*p)
 	}
 	// `magpie provider <id>`

@@ -66,6 +66,12 @@ var ErrNotSignedIn = errors.New("magpie isn't signed in to this server")
 // ErrExpired is a sign-in the server no longer takes: it has to be done again.
 var ErrExpired = errors.New("magpie's sign-in to this server has run out: sign in again in the Library")
 
+// ErrNoSignIn is a server that answered an agent's first request without
+// asking for a sign-in: it works as it is. One that takes a key as a header
+// takes it in Headers; one that signs in only at another address (Exa's
+// mcp.exa.ai/mcp?login) is signed in to there. The GUI has it in Chinese.
+var ErrNoSignIn = errors.New("this server already works without signing in, so there is nothing to sign in to: the agents given it can use it as it is. A key it takes goes in Headers; a server that signs in at another address (as Exa's ?login) needs that URL")
+
 // Record is magpie's sign-in to one server.
 type Record struct {
 	URL      string `json:"url"`                // the server's, as the library has it
@@ -497,7 +503,7 @@ func discover(ctx context.Context, serverURL string) (meta, error) {
 	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 	resp.Body.Close()
 	if resp.StatusCode/100 == 2 {
-		return meta{}, errors.New("this server answers without a sign-in: there is nothing to sign in to")
+		return meta{}, ErrNoSignIn
 	}
 	metadataURL, scope := challenge(resp.Header)
 

@@ -86,6 +86,35 @@ func usedUp(q SubscriptionQuota) bool {
 	return usedPast(q, 100)
 }
 
+// UsedUp is usedUp for the CLI's magpie quota wait, so what it waits out
+// is what stops an account here.
+func UsedUp(q SubscriptionQuota) bool { return usedUp(q) }
+
+// BackAt is when a used-up account has room again: when the last of the
+// windows that stop it (usedUp's) starts again, a window's seconds to go
+// counted from now. Zero when one of them doesn't say.
+func BackAt(q SubscriptionQuota, now time.Time) time.Time {
+	var back time.Time
+	for _, w := range q.Windows {
+		if w.Aside || w.Model != "" || w.Used < 100 {
+			continue
+		}
+		at := time.Time{}
+		switch {
+		case w.ResetsAt != nil:
+			at = *w.ResetsAt
+		case w.ResetSecs > 0:
+			at = now.Add(time.Duration(w.ResetSecs) * time.Second)
+		default:
+			return time.Time{}
+		}
+		if at.After(back) {
+			back = at
+		}
+	}
+	return back
+}
+
 func usedPast(q SubscriptionQuota, share float64) bool {
 	for _, w := range q.Windows {
 		if !w.Aside && w.Model == "" && w.Used >= share {

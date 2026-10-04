@@ -21,7 +21,7 @@ func TestSniffAnthropicStream(t *testing.T) {
 	s.write([]byte("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"m\",\"usage\":{\"input_tokens\":12,\"cache_read_input_tokens\":300,\"cache_creation_input_tokens\":40,\"output_tokens\":1}}}\n\n"))
 	s.write([]byte("event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"hi\"}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":57}}\n\n"))
 	got := s.usage()
-	want := Usage{Input: 12, Output: 57, CacheRead: 300, CacheWrite: 40}
+	want := Usage{Input: 12, Output: 57, CacheRead: 300, CacheWrite: 40, ResponseID: "m"}
 	if got != want {
 		t.Fatalf("got %+v want %+v", got, want)
 	}
@@ -44,7 +44,7 @@ func TestSniffResponsesJSON(t *testing.T) {
 	s.write([]byte(`{"id":"r","output":[],`))
 	s.write([]byte(`"usage":{"input_tokens":50,"output_tokens":9,"input_tokens_details":{"cached_tokens":10}}}`))
 	got := s.usage()
-	want := Usage{Input: 40, Output: 9, CacheRead: 10}
+	want := Usage{Input: 40, Output: 9, CacheRead: 10, ResponseID: "r"}
 	if got != want {
 		t.Fatalf("got %+v want %+v", got, want)
 	}

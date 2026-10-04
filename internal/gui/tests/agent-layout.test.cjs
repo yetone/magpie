@@ -1,5 +1,7 @@
 // An agent's name must stay readable when the main window is narrow or
-// enlarged, without making the model and effort controls run past the row.
+// enlarged, without making its 「接入」 switch, the link that opens it and
+// the model it starts on run past the row; the switches and the model
+// pickers line up down the list.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -11,16 +13,16 @@ const assets = path.resolve(__dirname, "../assets");
 const state = {
   agents: [
     {
-      id: "claude", name: "Claude Code", path: "/test/claude.json", icon: "claudecode-color",
+      id: "claude", name: "Claude Code", path: "/test/claude.json", icon: "claudecode-color", wired: true,
       fields: [
-        { key: "model", label: "model", value: "claude-sonnet-4.5", options: [{ value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", icon: "claude-color" }] },
+        { key: "model", label: "model", value: "claude-sonnet-4.5", options: [{ value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", icon: "claude-color", ref: "claude/claude-sonnet-4.5" }] },
         { key: "effort", label: "effort", value: "high", options: [{ value: "high", label: "High" }] },
       ],
     },
     {
-      id: "codex", name: "Codex", path: "/test/codex.toml", icon: "codex-color",
+      id: "codex", name: "Codex", path: "/test/codex.toml", icon: "codex-color", wired: true,
       fields: [
-        { key: "model", label: "model", value: "gpt-6.1-sol", options: [{ value: "gpt-6.1-sol", label: "GPT-6.1-Sol", icon: "openai" }] },
+        { key: "model", label: "model", value: "gpt-6.1-sol", options: [{ value: "gpt-6.1-sol", label: "GPT-6.1-Sol", icon: "openai", ref: "openai/gpt-6.1-sol" }] },
         { key: "effort", label: "effort", value: "high", options: [{ value: "high", label: "Highest" }] },
       ],
     },
@@ -64,32 +66,34 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/");
       await page.waitForLoadState("networkidle");
 
-      const row = page.locator('.row.agent[data-id="claude"]');
-      const who = row.locator(".who");
-      const name = row.locator(".name");
-      const fields = row.locator(".fields");
-      await fields.waitFor();
-      for (const width of [520, 560, 600]) {
+      await page.locator('.row.agent[data-id="claude"] .ag-conn').waitFor();
+      const boxes = () => page.locator(".row.agent").evaluateAll((els) => els.map((el) => {
+        const box = (e) => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width }; };
+        return { row: box(el), who: box(el.querySelector(".who")), controls: [...el.querySelectorAll(":scope > .ag-link, :scope > .ag-conn")].map(box), start: box(el.querySelector(":scope > .ag-start")) };
+      }));
+      for (const width of [520, 560, 600, 660, 601, 960]) {
         await page.setViewportSize({ width, height: 700 });
-        const [rb, wb, nb, fb] = await Promise.all([row.boundingBox(), who.boundingBox(), name.boundingBox(), fields.boundingBox()]);
-        assert(wb.width >= 150, `agent identity column is too narrow at ${width}px: ${JSON.stringify({ rb, wb, nb, fb })}`);
-        assert(fb.y >= wb.y + wb.height - 1, `controls should wrap below the agent name at ${width}px: ${JSON.stringify({ wb, fb })}`);
-        assert(Math.abs(fb.x - wb.x) < 1, `wrapped controls should align with the name at ${width}px: ${JSON.stringify({ wb, fb })}`);
-        assert(fb.x + fb.width <= rb.x + rb.width - 8, `controls must stay inside the row at ${width}px: ${JSON.stringify({ rb, fb })}`);
+        const rows = await boxes();
+        for (const { row, who, controls } of rows) {
+          assert(who.width >= 150, `agent identity column is too narrow at ${width}px: ${JSON.stringify({ row, who })}`);
+          assert.equal(controls.length, 2, "the link and the switch");
+          for (const c of controls) {
+            assert(c.right <= row.right - 8, `controls must stay inside the row at ${width}px: ${JSON.stringify({ row, c })}`);
+            // beside the name, or on a line below it in a narrow window
+            const ok = width > 600 ? c.x >= who.right && c.y < who.bottom : c.x >= who.right || c.y >= who.bottom - 1;
+            assert(ok, `controls stay clear of the name at ${width}px: ${JSON.stringify({ who, c })}`);
+          }
+        }
+        // the model it starts on, one click away: inside the row, the same
+        // width down the list, beside the switch or on a line under the name
+        for (const { row, who, start } of rows) {
+          assert(start.width >= 120 && start.right <= row.right - 8, `the model picker fits at ${width}px: ${JSON.stringify({ row, start })}`);
+          assert(width > 600 ? start.x >= who.right : start.y >= who.bottom - 1, `the model picker stays clear of the name at ${width}px: ${JSON.stringify({ who, start })}`);
+        }
+        assert(Math.abs(rows[0].start.right - rows[1].start.right) < 1 && Math.abs(rows[0].start.width - rows[1].start.width) < 1, `the model pickers line up at ${width}px`);
+        const rights = rows.map((r) => r.controls[1].right);
+        assert(Math.abs(rights[0] - rights[1]) < 1, `the switches line up at ${width}px: ${JSON.stringify(rights)}`);
         if (width === 520) narrowShot = await page.screenshot();
-      }
-
-      // The default 660px window and widths above the breakpoint keep
-      // the controls beside the names and their right edges aligned.
-      for (const width of [660, 601, 960]) {
-        await page.setViewportSize({ width, height: 700 });
-        const boxes = await page.locator(".row.agent").evaluateAll((els) => els.map((el) => {
-          const whoBox = el.querySelector(".who").getBoundingClientRect();
-          const fieldsBox = el.querySelector(".fields").getBoundingClientRect();
-          return { who: { x: whoBox.x, y: whoBox.y, right: whoBox.right, bottom: whoBox.bottom }, fields: { x: fieldsBox.x, y: fieldsBox.y, right: fieldsBox.right } };
-        }));
-        assert(boxes.every(({ who, fields }) => fields.y < who.bottom && fields.x > who.right), `controls should stay beside names at ${width}px: ${JSON.stringify(boxes)}`);
-        assert(Math.abs(boxes[0].fields.right - boxes[1].fields.right) < 1, `control columns should remain aligned at ${width}px: ${JSON.stringify(boxes)}`);
         if (width === 660) defaultShot = await page.screenshot();
       }
     });

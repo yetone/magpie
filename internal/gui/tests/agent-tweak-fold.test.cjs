@@ -3,7 +3,9 @@
 // "Show 17 more" (开启 ultracode 后为啥其他 agent 就不见了啊？): how an agent's
 // own model is run — ultracode, an effort, a tier's effort — doesn't make it
 // set up, so with nothing else set every agent stays in view. A model picked
-// on one still folds the ones nothing is set on.
+// on one still folds the ones nothing is set on. Since #726 a connected
+// agent is set up for being connected, so Claude Code connected folds the
+// rest from the start, and turning ultracode on in its row moves nothing.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -13,12 +15,12 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 
 const opt = (v) => ({ value: v, label: v });
-function agents({ ultracode = "", effort = "", tierEffort = "", subEffort = "", model = "" } = {}) {
+function agents({ ultracode = "", effort = "", tierEffort = "", subEffort = "", model = "", wired = true } = {}) {
   return [
     {
-      id: "claude", name: "Claude Code", path: "/test/claude.json", icon: "claudecode-color",
+      id: "claude", name: "Claude Code", path: "/test/claude.json", icon: "claudecode-color", wired,
       fields: [
-        { key: "model", label: "model", value: model, options: [opt("claude-sonnet-4.5")] },
+        { key: "model", label: "model", value: model, options: [{ ...opt("claude-sonnet-4.5"), ref: "claude/claude-sonnet-4.5" }] },
         { key: "effort", label: "effort", value: effort, options: [opt("high"), opt("xhigh")] },
         { key: "ultracode", label: "ultracode", value: ultracode, options: [opt("on")] },
         { key: "opus_effort", label: "opus effort", value: tierEffort, options: [opt("high")] },
@@ -88,25 +90,25 @@ async function open(t, engine, first) {
 }
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  test(`${engine}: turning ultracode on keeps every agent in view`, async (t) => {
+  test(`${engine}: turning ultracode on moves no agent`, async (t) => {
     const { page, errors } = await open(t, engine, {});
-    assert.deepEqual((await arranged(page)).folded, [], "a fresh magpie shows them all");
+    const before = await arranged(page);
+    assert.deepEqual(before.shown, ["claude"], "Claude Code, connected, is in view");
+    assert.deepEqual(before.folded, ["codex", "gemini", "opencode"]);
+    // in its connected row, opened
+    await page.locator('.row.agent[data-id="claude"] .ag-link').click();
     const toggle = page.locator('.row.agent[data-id="claude"] [data-key="ultracode"]');
     await toggle.click();
     await page.waitForFunction(() => document.querySelector('.row.agent[data-id="claude"] [data-key="ultracode"]')?.getAttribute("aria-pressed") === "true");
-    const r = await arranged(page);
-    assert.deepEqual(r.folded, [], "ultracode on folds nothing away");
-    assert.deepEqual(r.shown, IDS);
-    assert.deepEqual(r.drawn, IDS, "every agent's row is drawn in view");
-    assert.equal(r.more, false, "no Show more");
+    assert.deepEqual(await arranged(page), before, "ultracode on moves nothing");
     assert.deepEqual(errors, []);
   });
 
   for (const [what, first] of [
-    ["an effort", { effort: "high" }],
-    ["a tier's effort", { tierEffort: "high" }],
-    ["a subagent effort", { subEffort: "high" }],
-    ["ultracode and an effort", { ultracode: "on", effort: "xhigh" }],
+    ["an effort", { effort: "high", wired: false }],
+    ["a tier's effort", { tierEffort: "high", wired: false }],
+    ["a subagent effort", { subEffort: "high", wired: false }],
+    ["ultracode and an effort", { ultracode: "on", effort: "xhigh", wired: false }],
   ]) {
     test(`${engine}: ${what} set alone keeps every agent in view`, async (t) => {
       const { page, errors } = await open(t, engine, first);

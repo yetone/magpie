@@ -68,10 +68,7 @@ func copilotAutoResolve(ctx context.Context, app copilotApp, fresh bool) (copilo
 	if err != nil {
 		return copilotAutoSession{}, err
 	}
-	base := s.Endpoints.API
-	if base == "" {
-		base = copilotBase
-	}
+	base := s.apiBase(app.Host)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/models/session", strings.NewReader(`{"auto_mode":{"model_hints":["auto"]}}`))
 	if err != nil {
 		return copilotAutoSession{}, err

@@ -97,7 +97,7 @@ func TestAnsweredRequestKeepsItsIDAndEndpoint(t *testing.T) {
 	if got.Session != "magpie-override" || got.NativeSession != "client-session" {
 		t.Fatalf("session headers lost: %+v", got)
 	}
-	if got.RequestID != "chatcmpl-77" || got.Endpoint != "/v1/chat/completions" || got.Error != "" || got.ErrType != "" {
+	if got.ResponseID == "" || got.ResponseID != clientResponseID(t, provider.Chat, rec.Body.String(), false) || got.RequestID != "chatcmpl-77" || got.Endpoint != "/v1/chat/completions" || got.Error != "" || got.ErrType != "" {
 		t.Errorf("%+v", got)
 	}
 }

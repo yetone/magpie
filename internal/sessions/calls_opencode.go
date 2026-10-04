@@ -218,6 +218,11 @@ func ocCall(st *callFile, m ocMessage, dir string) (Call, bool) {
 	if m.Path != nil && m.Path.Cwd != "" {
 		c.Cwd = st.str(m.Path.Cwd)
 	}
+	// the effort picked for the prompt in OpenCode's model menu, which each
+	// of its replies carries; "default" is none picked (#680)
+	if m.Variant != "" && m.Variant != "default" {
+		c.Effort = st.str(m.Variant)
+	}
 	if !done.IsZero() && !created.IsZero() && done.After(created) {
 		c.Millis = done.Sub(created).Milliseconds()
 	}

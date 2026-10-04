@@ -156,6 +156,26 @@ func TestAccountsAreProviders(t *testing.T) {
 	if _, ok := find(All(), "codex"); ok {
 		t.Fatal("quieting brought codex back")
 	}
+	// hidden from the Add sheet too (#116): kept through a save, listed
+	// there again by untuck, still removed and quiet
+	if err := TuckAccount("codex", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(Provider{ID: "codex", Models: []string{"gpt-5.5"}}); err != nil {
+		t.Fatal(err)
+	}
+	if x := Excluded(); len(x) != 1 || !x[0].Quiet || !x[0].Tucked {
+		t.Fatalf("tucked: %+v", x)
+	}
+	if err := TuckAccount("codex", false); err != nil {
+		t.Fatal(err)
+	}
+	if x := Excluded(); len(x) != 1 || !x[0].Quiet || x[0].Tucked {
+		t.Fatalf("untucked: %+v", x)
+	}
+	if err := TuckAccount("codex", true); err != nil {
+		t.Fatal(err)
+	}
 	if err := ShowAccount("codex"); err != nil {
 		t.Fatal(err)
 	}

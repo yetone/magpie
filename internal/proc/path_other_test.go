@@ -4,6 +4,7 @@ package proc
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,5 +38,47 @@ func TestUserPath(t *testing.T) {
 	}
 	if n := strings.Count(os.Getenv("PATH"), "/usr/bin:"); n != 1 {
 		t.Fatalf("a folder PATH had was added again: %q", os.Getenv("PATH"))
+	}
+}
+
+// A desktop app started from the Finder doesn't have the variables a shell
+// profile exports either; the agents' folders among them come from the login
+// shell by the time UserPath returns (atie on Discord: PI_CODING_AGENT_DIR in
+// the shell, Pi's models.json still written to ~/.pi/agent). One magpie was
+// started with is kept, and one the profile leaves empty isn't set.
+func TestUserPathTakesAgentVars(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	pi := filepath.Join(home, "pi agent") // a space survives
+	sh := filepath.Join(home, "sh")
+	os.WriteFile(sh, []byte("#!/bin/sh\necho 'a profile that talks'\n"+
+		"export PI_CODING_AGENT_DIR='"+pi+"'\nexport CODEX_HOME=/from/profile/codex\nexport GROK_HOME=\n"+
+		"eval \"$2\"\necho bye\n"), 0o755)
+	t.Setenv("SHELL", sh)
+	t.Setenv("PATH", "/usr/bin:/bin")
+	for _, v := range []string{"PI_CODING_AGENT_DIR", "GROK_HOME", "CLAUDE_CONFIG_DIR"} {
+		t.Setenv(v, "")
+		os.Unsetenv(v)
+	}
+	t.Setenv("CODEX_HOME", "/started/with")
+	// the Mac checks a new script on its first run, which can take longer
+	// than UserPath waits; a login shell is no new script
+	exec.Command(sh, "-c", ":").Run()
+
+	UserPath()
+	if got := os.Getenv("PI_CODING_AGENT_DIR"); got != pi {
+		t.Fatalf("PI_CODING_AGENT_DIR = %q, want the profile's %q", got, pi)
+	}
+	if got := os.Getenv("CODEX_HOME"); got != "/started/with" {
+		t.Fatalf("CODEX_HOME = %q: the one magpie was started with was replaced", got)
+	}
+	for _, v := range []string{"GROK_HOME", "CLAUDE_CONFIG_DIR"} {
+		if _, set := os.LookupEnv(v); set {
+			t.Fatalf("%s was set though the shell has no value for it", v)
+		}
+	}
+	if !strings.Contains(os.Getenv("PATH"), "/usr/bin") {
+		t.Fatalf("PATH lost: %q", os.Getenv("PATH"))
 	}
 }

@@ -68,8 +68,10 @@ func dueAlerts(qs []SubscriptionQuota, marks map[string]alertMark, pct int, bal 
 			}
 			continue
 		}
-		for _, w := range q.Windows {
-			if w.Aside {
+		// the pools' own windows stand in for the models' drawing on them,
+		// so a pool is told of once, not once per model
+		for _, w := range PooledWindows(q.Windows) {
+			if w.Aside && !(w.Pool != "" && w.Span == 7*24*time.Hour) {
 				continue // using it up doesn't stop the account
 			}
 			key := alertPrefix(q) + "w|" + w.Name + "|" + w.Model

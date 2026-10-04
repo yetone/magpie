@@ -71,7 +71,7 @@ func TestProviderAndCallerIdentitiesRemainIndependent(t *testing.T) {
 			t.Fatal("missing or reordered identity columns", cells[0])
 		}
 	}
-	if !slices.Equal(cells[0][len(cells[0])-2:], columns[3:]) {
+	if !slices.Equal(cells[0][indexes[3]:indexes[4]+1], columns[3:]) {
 		t.Fatal("provider columns must precede caller columns", cells[0])
 	}
 	for i, row := range rows {

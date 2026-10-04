@@ -148,7 +148,7 @@ func TestCopilotUsageResets(t *testing.T) {
 	old := CopilotUserURL
 	CopilotUserURL = srv.URL
 	defer func() { CopilotUserURL = old }()
-	q := copilotSubscriptionUsage(t.Context(), "tok")
+	q := copilotSubscriptionUsage(t.Context(), "tok", "")
 	if q.Error != "" || len(q.Windows) != 2 || q.Windows[1].ResetsAt == nil || q.Windows[1].ResetsAt.Month() != time.October {
 		t.Fatalf("%+v", q)
 	}

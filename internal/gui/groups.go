@@ -88,6 +88,7 @@ type poolJSON struct {
 	Who      []string `json:"who"`
 	Routing  string   `json:"routing"`
 	Affinity string   `json:"affinity"`
+	Sink     bool     `json:"sink,omitempty"` // provider.Provider.Sink
 	// Protocol: the one its keys are made for, when the provider's keys are
 	// made for more than one — each protocol's keys are a pool of their own
 	Protocol provider.Protocol `json:"protocol,omitempty"`
@@ -215,13 +216,13 @@ func groupsState() groupsJSON {
 			continue
 		}
 		if kind, who := onOf(p); kind == "account" && len(who) > 1 {
-			out.Pools = append(out.Pools, poolJSON{Provider: p.ID, Name: p.Name, Icon: p.Icon, Kind: kind, Who: who, Routing: p.Routing, Affinity: p.Affinity})
+			out.Pools = append(out.Pools, poolJSON{Provider: p.ID, Name: p.Name, Icon: p.Icon, Kind: kind, Who: who, Routing: p.Routing, Affinity: p.Affinity, Sink: p.Sink})
 			continue
 		}
 		pools := keyPools(p)
 		for _, kp := range pools {
 			if len(kp.Who) > 1 {
-				kp.Provider, kp.Name, kp.Icon, kp.Kind, kp.Routing, kp.Affinity = p.ID, p.Name, p.Icon, "key", p.Routing, p.Affinity
+				kp.Provider, kp.Name, kp.Icon, kp.Kind, kp.Routing, kp.Affinity, kp.Sink = p.ID, p.Name, p.Icon, "key", p.Routing, p.Affinity, p.Sink
 				if len(pools) == 1 {
 					kp.Protocol = ""
 				}

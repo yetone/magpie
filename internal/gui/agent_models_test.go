@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -69,7 +70,7 @@ func TestAgentModelsAPI(t *testing.T) {
 		got.Count == nil || got.Count.Shown != got.Count.Listed-1 {
 		t.Fatalf("%+v %+v", got.Models, got.Count)
 	}
-	if c := modelCount("codex"); *c != *got.Count {
+	if c := modelCount("codex"); !reflect.DeepEqual(c, got.Count) {
 		t.Fatalf("count %+v, answered %+v", c, got.Count)
 	}
 	got = call("POST", `{"hidden":[]}`)

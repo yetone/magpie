@@ -20,8 +20,11 @@ const base = () => ({
   servers: [
     { name: "fs", transport: "stdio", command: "npx", args: ["fs-mcp"], agents: ["codex"] },
     { name: "neon", transport: "http", url: "https://mcp.neon.tech/mcp", agents: ["codex", "claude"], signIn: { signedIn: false } },
+    { name: "exa", transport: "http", url: "https://mcp.exa.ai/mcp", agents: ["codex"], signIn: { signedIn: false } },
   ],
 });
+// mcpauth.ErrNoSignIn, as the API says it
+const noSignIn = "this server already works without signing in, so there is nothing to sign in to: the agents given it can use it as it is. A key it takes goes in Headers; a server that signs in at another address (as Exa's ?login) needs that URL";
 
 function server(lang, calls) {
   const lib = base();
@@ -34,14 +37,29 @@ function server(lang, calls) {
     if (url.pathname === "/api/plugins") return route.fulfill({ json: { plugins: [] } });
     if (url.pathname === "/api/library") return route.fulfill({ json: lib });
     if (url.pathname === "/api/library/mcp-signin") {
-      calls.push("start " + req.postDataJSON().name);
+      const name = req.postDataJSON().name;
+      calls.push("start " + name);
+      // the backend signs in to the saved URL: Exa's plain one asks for none
+      const s = lib.servers.find((x) => x.name === name);
+      if (s.url === "https://mcp.exa.ai/mcp") return route.fulfill({ status: 400, json: { error: noSignIn } });
+      polls = 0;
       // no url: the test's browser opens no window
-      return route.fulfill({ json: { id: "s1", server: "neon", state: "waiting" } });
+      return route.fulfill({ json: { id: "s-" + name, server: name, state: "waiting" } });
     }
-    if (url.pathname === "/api/library/mcp-signin/s1") {
-      if (++polls < 2) return route.fulfill({ json: { id: "s1", server: "neon", state: "waiting" } });
-      lib.servers[1].signIn = { signedIn: true, at: Date.now() };
-      return route.fulfill({ json: { id: "s1", server: "neon", state: "done" } });
+    if (url.pathname.startsWith("/api/library/mcp-signin/s-")) {
+      const name = url.pathname.slice("/api/library/mcp-signin/s-".length);
+      if (++polls < 2) return route.fulfill({ json: { id: "s-" + name, server: name, state: "waiting" } });
+      lib.servers.find((x) => x.name === name).signIn = { signedIn: true, at: Date.now() };
+      return route.fulfill({ json: { id: "s-" + name, server: name, state: "done" } });
+    }
+    if (url.pathname === "/api/library/servers/save") {
+      const { old, server: s } = req.postDataJSON();
+      calls.push("save " + s.name + " " + s.url + " " + JSON.stringify(s.headers || {}));
+      const i = lib.servers.findIndex((x) => x.name === old);
+      // a sign-in is to a URL: another one isn't signed in to
+      const signIn = lib.servers[i].url === s.url ? lib.servers[i].signIn : { signedIn: false };
+      lib.servers[i] = { ...lib.servers[i], ...s, signIn };
+      return route.fulfill({ json: { ...lib, result: { changed: ["codex"] } } });
     }
     if (url.pathname === "/api/library/mcp-signout") {
       calls.push("out " + req.postDataJSON().name);
@@ -59,8 +77,8 @@ function server(lang, calls) {
 }
 
 const words = {
-  en: { signIn: "Sign in", signOut: "Sign out", signed: "Signed in", label: "Sign-in", done: "Signed in to neon — the agents given it use magpie's sign-in", out: "Signed out of neon — the agents are given the server's own address again" },
-  zh: { signIn: "登录", signOut: "退出登录", signed: "已登录", label: "登录", done: "已登录 neon——分配到它的 agent 都用 magpie 的登录", out: "已退出 neon——agent 重新使用服务器自己的地址" },
+  en: { signIn: "Sign in", signOut: "Sign out", signed: "Signed in", label: "Sign-in", done: "Signed in to neon — the agents given it use magpie's sign-in", out: "Signed out of neon — the agents are given the server's own address again", exaDone: "Signed in to exa — the agents given it use magpie's sign-in", noSignIn: "already works without signing in" },
+  zh: { signIn: "登录", signOut: "退出登录", signed: "已登录", label: "登录", done: "已登录 neon——分配到它的 agent 都用 magpie 的登录", out: "已退出 neon——agent 重新使用服务器自己的地址", exaDone: "已登录 exa——分配到它的 agent 都用 magpie 的登录", noSignIn: "不登录就已经能用" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -114,6 +132,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.keyboard.press("Escape");
         await page.locator("#modal .lib-editor").waitFor({ state: "detached" });
         assert.equal(await row("neon").locator(".lib-tag").count(), 0, "signed out: no tag");
+
+        // lc on Discord: Exa signs in at ?login, and Sign in before Save
+        // signed in to the saved URL, which asks for none. Unchanged, it's
+        // said to work as it is (in the reader's language), nothing saved
+        await row("exa").click();
+        const exa = page.locator("#modal .lib-signin");
+        await exa.getByRole("button", { name: w.signIn, exact: true }).click();
+        await exa.locator(".lib-signin-err", { hasText: w.noSignIn }).waitFor();
+        assert.deepEqual(calls.slice(2), ["start exa"]);
+        // the URL changed to ?login: Sign in saves it, the dialog stays,
+        // and the sign-in is to it
+        const urlField = page.locator("#modal .lib-editor input.mono").first();
+        await urlField.fill("https://mcp.exa.ai/mcp?login");
+        await exa.getByRole("button", { name: w.signIn, exact: true }).click();
+        await page.waitForFunction((want) => document.querySelector("#status").textContent === want, w.exaDone);
+        assert.deepEqual(calls.slice(3), ["save exa https://mcp.exa.ai/mcp?login {}", "start exa"]);
+        await exa.locator(".lib-tag", { hasText: w.signed }).waitFor();
+        assert.equal(await page.locator("#modal .lib-editor").count(), 1, "the dialog stays open");
+        // signed in, Save is of the server as saved now; nothing changed,
+        // nothing is saved again before a sign-in
+        await page.locator("#modal .bar button.primary").click();
+        await page.locator("#modal .lib-editor").waitFor({ state: "detached" });
+        assert.deepEqual(calls.slice(5), ["save exa https://mcp.exa.ai/mcp?login {}"]);
+        await row("exa").locator(".lib-tag", { hasText: w.signed }).waitFor();
         assert.equal(await scrolled(), before, "no click moved the page");
         await ctx.close();
       });

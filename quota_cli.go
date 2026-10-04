@@ -18,6 +18,7 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
        magpie quota reset [<codex account>] [--yes]
        magpie quota auto-reset [<codex account>] [on|off]
        magpie quota alert [<percent>|off] [--balance <amount>|off]
+       magpie quota wait <provider|account> [--timeout <duration>] [--quiet]
   what is left of every subscription, plan and key magpie has: each window's use and
   when it starts again, and each key's balance, asked of the vendors now (or less than
   a minute ago). --json is for scripts and agents, each entry with lastServedAt, when it
@@ -29,12 +30,24 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
   named). It can't be undone, so it asks first; --yes doesn't. quota auto-reset on lets
   the account spend one by itself when its weekly window is used up and no other
   account can take a request, one a week at most (the five hours running out never
-  does); off stops it, and alone it says which accounts do. It is off until turned on.
+  does), and spend the one about to expire about half an hour before it does, if
+  the account's windows have been used, so what they have left can be used until
+  then and it isn't lost; at once when the account is held up until after then.
+  It is the account's standing setting, held resets or not; off stops it, and alone
+  it says which accounts have it on. It is off until turned on.
   quota alert 80 has the magpie app notify when any window of a subscription or plan
   reaches 80% used, once each time the window runs (not windows set aside, such as
   on-demand spending); --balance 5 when a balance falls to 5 or under, in its own
   currency or credits, once until topped up past it. off turns either off, and alone
-  it says what is set. Both are off until set.`
+  it says what is set. Both are off until set.
+  quota wait codex returns once any Codex account magpie has on has allowance again
+  (a window that stops it no longer used up), and an account's email or login, or
+  <provider>/<account>, waits for that one alone: it reads the vendors itself, gateway
+  running or not, again shortly after the soonest reset (every 1 to 10 minutes), and
+  says on stderr what it waits for. For a script to go on with work it stopped:
+  until codex exec …; do magpie quota wait codex || break; done. Exit 0 once there
+  is allowance, 1 when --timeout (30m, 6h) passes first, 2 for a name it doesn't
+  know, 130 on Ctrl+C.`
 
 // quotaCmd: magpie quota [<provider>…] [--json]
 func quotaCmd(args []string) error {
@@ -46,6 +59,9 @@ func quotaCmd(args []string) error {
 	}
 	if len(args) > 1 && args[1] == "alert" {
 		return quotaAlertCmd(args[2:])
+	}
+	if len(args) > 1 && args[1] == "wait" {
+		return quotaWaitCmd(args[2:])
 	}
 	asJSON := false
 	var only []string
@@ -212,7 +228,7 @@ func quotaAutoResetCmd(args []string) error {
 			return nil
 		}
 		for _, u := range on {
-			fmt.Println(green.Render("●"), u, muted.Render("uses a reset by itself once its week is used up"))
+			fmt.Println(green.Render("●"), u, muted.Render("uses a reset by itself when its week runs out, or before one expires"))
 		}
 		return nil
 	}
@@ -229,7 +245,7 @@ func quotaAutoResetCmd(args []string) error {
 	}
 	if !set {
 		if provider.CodexAutoReset(user) {
-			fmt.Println(user, "uses a reset by itself once its week is used up")
+			fmt.Println(user, "uses a reset by itself when its week runs out, or before one expires")
 		} else {
 			fmt.Println(user, "uses its resets only when told to")
 		}
@@ -239,7 +255,7 @@ func quotaAutoResetCmd(args []string) error {
 		return err
 	}
 	if on {
-		fmt.Println(green.Render("✓"), user+":", "uses a reset by itself once its week is used up and no other account can answer, one a week at most")
+		fmt.Println(green.Render("✓"), user+":", "uses a reset by itself once its week is used up and no other account can answer, one a week at most, and the one about to expire half an hour before it does, or at once when held up past then")
 	} else {
 		fmt.Println(green.Render("✓"), user+":", "no longer uses a reset by itself")
 	}

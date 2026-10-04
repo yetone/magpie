@@ -56,7 +56,8 @@ func viaMagpie(agent, prefix string) []Option {
 			note = a.User + " · via magpie"
 		}
 		out = append(out, Option{Value: prefix + e.ID, Label: e.Name, Note: note,
-			Icon: e.Provider.Icon, Group: e.Provider.Name, Ref: e.ID, Free: e.Free, Rate: e.Rate, RateWas: e.RateWas, Context: e.Context, own: own[e.Provider.ID]})
+			Icon: e.Provider.Icon, Group: e.Provider.Name, Ref: e.ID, Free: e.Free, Rate: e.Rate, RateWas: e.RateWas, Context: e.Context, own: own[e.Provider.ID],
+			sub: e.Provider.Account != nil && (e.Provider.Account.Agent != "claude" || agent == "claude")})
 	}
 	return append(groups, out...)
 }
@@ -75,6 +76,9 @@ func viaMagpieFor(agentID, prefix string) []Option {
 
 // isMagpie reports whether a model value is a catalog reference.
 func isMagpie(v string) bool {
+	if pid, _, ok := strings.Cut(v, "/"); ok && dryProviders[pid] {
+		return true
+	}
 	_, _, ok := provider.Resolve(v)
 	return ok && strings.Contains(v, "/")
 }
@@ -95,7 +99,7 @@ func magpieModels(agent string) []catalog.Model {
 	// a model magpie describes images to takes them (provider.Described)
 	seen := provider.Described != nil && provider.Described()
 	for i, e := range shown {
-		m := catalog.Model{ID: e.ID, Name: labels[i], Provider: firstOf(e.Provider.Catalogs()), Efforts: e.Efforts, Images: e.Images || seen, ImageInput: e.ImageInput, Context: e.Context, Output: e.Output, AgentsV2: e.AgentsV2}
+		m := catalog.Model{ID: e.ID, Name: labels[i], Provider: firstOf(e.Provider.Catalogs()), Efforts: e.Efforts, Images: e.Images || seen, ImageInput: e.ImageInput, Context: e.Context, Output: e.Output, AgentsV2: e.AgentsV2, Reasoning: e.Reasoning}
 		if seen && !e.Images {
 			yes := true
 			m.ImageInput = &yes

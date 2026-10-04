@@ -3,6 +3,8 @@ package agent
 import (
 	"reflect"
 	"testing"
+
+	"github.com/yetone/magpie/internal/catalog"
 )
 
 // Every one of Pi's levels is in the map, the model's own mapped and the
@@ -33,6 +35,42 @@ func TestPiThinkingLevels(t *testing.T) {
 	} {
 		if got := piThinkingLevels(c.efforts, c.anthropic); !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%v (anthropic %v): got %v, want %v", c.efforts, c.anthropic, got, c.want)
+		}
+	}
+}
+
+// #699: ZCode's GLM-5.3-Flash, on Anthropic's Messages API, always thinks
+// (its levels low, high and max, no none) and turns thinking disabled away
+// ("该模型始终支持思考，不可关闭"); its entry left off out, which Pi offers,
+// so off is null for it. A Claude there still has off left for Pi to offer,
+// and a vendor's model that takes none maps off to it.
+func TestPiOffOnMessagesAPI(t *testing.T) {
+	for _, c := range []struct {
+		id      string
+		efforts []string
+		off     any // the map's off; "left out" when it has none
+		offered []string
+	}{
+		{"zcode/GLM-5.3-Flash", []string{"low", "high", "max"}, nil, []string{"low", "high", "max"}},
+		{"zcode/GLM-5.2", []string{"none", "high", "max"}, "none", []string{"off", "high", "max"}},
+		{"anth/claude-sonnet-5", []string{"low", "medium", "high", "xhigh", "max"}, "left out", []string{"off", "low", "medium", "high", "xhigh", "max"}},
+		{"relay/opus-5.5", []string{"low", "high", "max"}, "left out", []string{"off", "low", "high", "max"}},
+	} {
+		m := catalog.Model{ID: c.id, Name: c.id, Efforts: c.efforts, APIs: []string{"anthropic"}}
+		e := piModelJSON(m, "http://127.0.0.1:1", true)
+		if e["api"] != "anthropic-messages" {
+			t.Fatalf("%s on %v", c.id, e["api"])
+		}
+		levels := e["thinkingLevelMap"].(map[string]any)
+		off, set := levels["off"]
+		if !set {
+			off = "left out"
+		}
+		if off != c.off {
+			t.Errorf("%s: off is %v, want %v", c.id, off, c.off)
+		}
+		if got := piSupported(e); !reflect.DeepEqual(got, c.offered) {
+			t.Errorf("%s: Pi offers %v, want %v", c.id, got, c.offered)
 		}
 	}
 }
