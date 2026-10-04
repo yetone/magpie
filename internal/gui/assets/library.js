@@ -971,7 +971,8 @@
       render();
     }
   }
-  function discard() {
+  async function discard(force = false) {
+    if (force !== true && dirty() && !(await confirmDiscard())) return;
     for (const k of Object.keys(texts)) delete texts[k];
     for (const k of Object.keys(extras)) delete extras[k];
     render();
@@ -1518,7 +1519,7 @@
         const line = el("div", "lib-pair");
         const k = field2(r[0], keyHint, (v) => { r[0] = v; emit(); });
         const v = field2(r[1], valHint, (x) => { r[1] = x; emit(); });
-        const x = button("", "lib-x", () => { rows.splice(i, 1); emit(); draw(); });
+        const x = button("", "lib-x", async () => { if (!await confirmRemoval(r[0] || t("Headers"))) return; rows.splice(i, 1); emit(); draw(); });
         x.append(svg("M4.5 4.5l7 7M11.5 4.5l-7 7", 11, 1.6));
         x.title = t("Remove");
         line.append(k, v, x);
@@ -1594,7 +1595,8 @@
 
     const bar = el("div", "bar");
     if (s) bar.append(button(t("Remove from the library"), "danger", async () => {
-      if (await change("servers/remove", { name: s.name }, t("{name} is out of the library and the agents it was given to", { name: s.name }))) closeLibModal();
+      if (!await confirmRemoval(s.name, "It will be removed from the library and the agents it was given to.")) return;
+      if (await change("servers/remove", { name: s.name }, t("{name} is out of the library and the agents it was given to", { name: s.name }))) closeLibModal(true);
     }));
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal));
     // send saves the form; s is then the server as saved, for a save after
@@ -1613,7 +1615,7 @@
       try {
         const was = await send();
         report(lib.result, was ? t("{name} saved", { name: d.name }) : "");
-        closeLibModal();
+        closeLibModal(true);
         render();
       } catch (e) { err.textContent = e.message; }
     };
@@ -1650,7 +1652,8 @@
         status(t("Filled in from what you pasted"), "ok");
       } else pasteMany(found, d.agents);
     });
-    modal = { save };
+    const original = JSON.stringify(d);
+    modal = { save, dirty: () => JSON.stringify(d) !== original };
     openLib(ed);
     if (!s) requestAnimationFrame(() => name.focus());
   }
@@ -1698,7 +1701,7 @@
       }
       take(last);
       report(lib.result, t("Added {n} servers", { n: pick.size }));
-      closeLibModal();
+      closeLibModal(true);
       render();
     });
     go.disabled = !pick.size;
@@ -2709,7 +2712,7 @@
     const bar = el("div", "bar");
     const go = button(t("Remove"), "primary danger-fill", async () => {
       const body = keep.checked ? { dir: p.dir, keep: true } : { dir: p.dir };
-      if (await change("projects/remove", body, t(keep.checked ? "{name} removed, its skills and servers kept" : "{name} removed", { name: p.name }))) { openProjects.delete(p.dir); closeLibModal(); }
+      if (await change("projects/remove", body, t(keep.checked ? "{name} removed, its skills and servers kept" : "{name} removed", { name: p.name }))) { openProjects.delete(p.dir); closeLibModal(true); }
     });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
@@ -2840,7 +2843,7 @@
     ed.append(head);
     ed.append(el("p", "lib-confirm", t("Every skill is taken out of {agents}. They stay in the library, to turn on again.", { agents: ids.map(nameOf).join(", ") })));
     const bar = el("div", "bar");
-    const go = button(t("Turn all off"), "primary danger-fill", async () => { go.disabled = true; if (await everySkill(ids, false)) closeLibModal(); else go.disabled = false; });
+    const go = button(t("Turn all off"), "primary danger-fill", async () => { go.disabled = true; if (await everySkill(ids, false)) closeLibModal(true); else go.disabled = false; });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
     modal = { save: () => go.click() };
@@ -2971,7 +2974,7 @@
     if (linked) where.push(t("{n} linked from folders of your own are only unlinked: those folders stay where they are.", { n: linked }));
     ed.append(el("p", "lib-confirm", where.join(" ")));
     const bar = el("div", "bar");
-    const go = button(t("Remove all {n}", { n }), "primary danger-fill", async () => { go.disabled = true; if (await removeEverySkill(names)) closeLibModal(); else go.disabled = false; });
+    const go = button(t("Remove all {n}", { n }), "primary danger-fill", async () => { go.disabled = true; if (await removeEverySkill(names)) closeLibModal(true); else go.disabled = false; });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
     modal = { save: () => go.click() };
@@ -3235,7 +3238,7 @@
       ? t("It is taken out of every agent it was given to. The folder it was linked from stays where it is.")
       : t("It is taken out of every agent it was given to, and its folder is moved to magpie's backups.")));
     const bar = el("div", "bar");
-    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove", { name: s.name }, t("{name} removed", { name: s.name }))) closeLibModal(); });
+    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove", { name: s.name }, t("{name} removed", { name: s.name }))) closeLibModal(true); });
     bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
     ed.append(bar);
     modal = { save: () => go.click() };
@@ -3553,7 +3556,7 @@
         if (miss) { err.textContent = t("{what} is needed", { what: t(miss.label) }); ed.querySelector(`[data-key="${CSS.escape(miss.key)}"]`)?.focus(); return; }
         go.disabled = true;
         go.textContent = t("Adding…");
-        if (await addServer(x, values, agents)) closeLibModal();
+        if (await addServer(x, values, agents)) closeLibModal(true);
         else { go.disabled = false; go.textContent = t("Add to the library"); }
       });
       bar.append(go);
@@ -3637,7 +3640,7 @@
       const go = button(t("Add to the library"), "primary", async () => {
         go.disabled = true;
         go.textContent = t("Adding…");
-        if (await addSkill(x, agents)) closeLibModal();
+        if (await addSkill(x, agents)) closeLibModal(true);
         else { go.disabled = false; go.textContent = t("Add to the library"); }
       });
       bar.append(go);
@@ -3651,14 +3654,22 @@
   // ---------- the dialog ----------
 
   function openLib(content) { openModal(content); $("#modal").classList.add("lib"); }
-  function closeLibModal() { modal = null; closeModal().then(() => { if (!modal) $("#modal").classList.remove("lib"); }); }
+  async function closeLibModal(saved = false) {
+    if (saved !== true && (modal?.dirty?.() ?? modalFormDirty()) && !(await confirmDiscard())) return false;
+    modal = null;
+    closeModal().then(() => { if (!modal) $("#modal").classList.remove("lib"); });
+    return true;
+  }
+  window.closeLibraryModal = () => { if (modal) closeLibModal(true); else closeModal(); };
+  window.libraryDirty = () => !!lib && dirty();
+  window.discardLibrary = () => discard(true);
   // The dialog is the providers page's; while the library has it, its
   // backdrop and Escape close it here.
   $("#modal").addEventListener("click", (e) => {
     if (modal && e.target === e.currentTarget) { e.stopImmediatePropagation(); closeLibModal(); }
   }, true);
   document.addEventListener("keydown", (e) => {
-    if (modal && e.key === "Escape") { e.stopImmediatePropagation(); closeLibModal(); }
+    if (!confirmationPending && modal && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeLibModal(); }
   }, true);
   // leaving the page with the shared text not saved asks first
   window.addEventListener("beforeunload", (e) => { if (lib && dirty()) e.preventDefault(); });

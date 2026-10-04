@@ -112,6 +112,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // what the terminal leaves behind: on, with agents and the library
       // taken out. The focus of a window back on the page re-reads it.
       await first.locator(".val button", { hasText: zh ? "关闭" : "Close" }).click();
+      await page.getByRole("alertdialog").locator("button").last().click();
       await form.waitFor({ state: "detached" });
       sync.value = { on: true, kind: "webdav", url: "https://dav.example.com/dav/", user: "me", passwordSet: true, passphraseSet: true,
         keys: true, agents: false, library: false };

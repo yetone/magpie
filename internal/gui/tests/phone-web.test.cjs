@@ -53,6 +53,37 @@ const box = (page, s) => page.locator(s).first().boundingBox();
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   const phone = { ...devices["iPhone 13"] };
   if (engine === "chromium") delete phone.defaultBrowserType;
+  test(`${engine}: phone layout is ready while app.js is still downloading`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const context = await browser.newContext({ ...phone, reducedMotion: "reduce" });
+    const page = await context.newPage();
+    let release;
+    const pending = new Promise((resolve) => { release = resolve; });
+    t.after(() => release());
+    const handle = serve(true);
+    await page.route("**/*", async (route) => {
+      if (new URL(route.request().url()).pathname === "/app.js") await pending;
+      await handle(route);
+    });
+    const loaded = page.goto("http://magpie.test/");
+    try {
+      await page.waitForSelector("#nav", { state: "visible" });
+      const [nav, actions] = [await box(page, "#nav"), await box(page, ".top .actions")];
+      assert.ok(nav.y >= actions.y + actions.height - 1, "tabs already have their own row before app.js runs");
+      assert.equal(await page.locator("#open").isVisible(), false, "the window button never flashes");
+      assert.equal(await page.locator("#winclose").isVisible(), false, "the close button never flashes");
+      assert.doesNotMatch(await page.locator('meta[name="viewport"]').getAttribute("content"), /maximum-scale/, "pinch zoom remains available");
+      release();
+      await loaded;
+      const readyNav = await box(page, "#nav");
+      assert.ok(Math.abs(readyNav.y - nav.y) <= 1, "the navigation stays in its initial row after startup");
+    } finally {
+      release();
+      await loaded;
+    }
+  });
+
   test(`${engine}: magpie web on a phone`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
@@ -68,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.ok(on.x >= nav.x - 1 && on.x + on.width <= nav.x + nav.width + 1, "Plugins, open, is in sight");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390, "nothing runs off the side");
     assert.equal(await page.locator(".top").getAttribute("class"), "top", "none of the narrow window's squeezing");
-    assert.match(await page.locator('meta[name="viewport"]').getAttribute("content"), /maximum-scale=1/, "iOS doesn't zoom into a field");
+    assert.doesNotMatch(await page.locator('meta[name="viewport"]').getAttribute("content"), /maximum-scale/, "iOS can still zoom the page");
     assert.deepEqual(page.errors, []);
     await page.context().close();
 

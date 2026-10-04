@@ -848,7 +848,14 @@
     const rm = el("button", "text quiet", b === "remove" ? t(moved.length ? "Moving back…" : "Removing…") : t("Remove"));
     rm.title = moved.length ? t("{names} goes back to the built-in first, then the plugin is removed", { names }) : t("Removes the plugin and what it installed; its sign-ins are kept until you sign out");
     rm.disabled = busy.size > 0;
-    rm.onclick = () => { if (moved.length) { asking = { pkg, op: "remove" }; draw(); } else remove(); };
+    rm.onclick = async () => {
+      if (moved.length) {
+        asking = { pkg, op: "remove" };
+        draw();
+        return;
+      }
+      if (await confirmRemoval(l?.name || pkg, rm.title)) remove();
+    };
     val.append(onoff, rm);
     r.append(val);
     r.onclick = (ev) => { if (!ev.target.closest("button, .pm-opts")) detail(l || (isGit(e.spec) ? { package: e.spec, name: e.package || e.spec, npm: { version: e.version, repository: gitWeb(e.spec) } } : { package: pkg, name: label(e.spec), npm: { version: e.latest } })); };

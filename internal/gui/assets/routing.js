@@ -2495,7 +2495,19 @@
     try { groups = await api("groups"); } catch { return; }
     if (!gEdit && !gsec.contains(document.activeElement)) renderGroups(); // not under someone's hands
   }
+  const groupDirty = () => !!gEdit && gEdit.was !== undefined &&
+    (JSON.stringify(gEdit.draft) !== gEdit.was || !!gsec.querySelector(".rt-patadd input")?.value.trim());
+  async function cancelGroup() {
+    if (groupDirty() && !(await confirmDiscard())) return false;
+    gEdit = null;
+    renderGroups();
+    return true;
+  }
+  window.routingDirty = groupDirty;
+  window.discardRouting = () => { gEdit = null; renderGroups(); };
   async function groupAction(action, body, ok) {
+    if (action === "delete" && !await confirmRemoval(groups?.groups.find((g) => g.id === body.id)?.name || body.id,
+      "This routing group will no longer be available to agents.")) return;
     try {
       groups = await api("groups/" + action, body);
       gEdit = null;
@@ -2610,7 +2622,10 @@
       if (all.length > 1) {
         const pick = el("button", "text rt-gselect", t("Select"));
         pick.title = t("Pick several groups to remove together");
-        pick.onclick = () => { gEdit = null; gSel = new Set(); renderGroups(); };
+        pick.onclick = async () => {
+          if (groupDirty() && !(await confirmDiscard())) return;
+          gEdit = null; gSel = new Set(); renderGroups();
+        };
         head.push(pick);
       }
       head.push(newBtn);
@@ -2753,6 +2768,7 @@
     gNames.replaceChildren(txt, suffixSegs(() => renderGroups()));
   }
   async function setFound(on, s) {
+    if (groupDirty() && !(await confirmDiscard())) return;
     s.classList.toggle("on", on);
     s.setAttribute("aria-checked", String(on));
     try {
@@ -2960,7 +2976,7 @@
     h.append(el("b", "", g ? g.name : t("New group")));
     if (g?.auto) h.append(el("span", "note", t("found by magpie — saving a change makes it yours")));
     ed.append(h);
-    const keys = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { gEdit = null; renderGroups(); } else if (e.key === "Enter" && i === name) saveBtn.onclick(); }; return i; };
+    const keys = (i) => { i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Escape") { cancelGroup(); } else if (e.key === "Enter" && i === name) saveBtn.onclick(); }; return i; };
     const name = keys(input(d.name, t("e.g. Opus anywhere")));
     const idHint = el("div", "hint");
     // an existing group's id can change (an auto- one found by magpie too);
@@ -2970,7 +2986,6 @@
     // from the row (ARNO on Discord) — only while nothing in it has
     // changed, so a stray click never throws an edit away; Cancel does that
     if (g) {
-      if (gEdit.was === undefined) gEdit.was = JSON.stringify(d);
       h.classList.add("fold");
       h.setAttribute("role", "button");
       h.tabIndex = 0;
@@ -3169,7 +3184,7 @@
         if (i) { const up = el("button", "text", t("Up")); up.onclick = () => moveMember(i, i - 1); row.append(up); }
         if (i < named() - 1) { const down = el("button", "text", t("Down")); down.onclick = () => moveMember(i, i + 1); row.append(down); }
         const rm = el("button", "text", t("Remove"));
-        rm.onclick = () => { d.members.splice(i, 1); rematch(); draw(); drawRules(); };
+        rm.onclick = async () => { if (!await confirmRemoval(d.members[i])) return; d.members.splice(i, 1); rematch(); draw(); drawRules(); };
         row.append(rm);
         list.append(row);
       });
@@ -3230,7 +3245,7 @@
         c.append(el("code", "", p), el("small", "", patternWords(n)));
         if (!n) row.classList.add("none");
         const rm = el("button", "text", t("Remove"));
-        rm.onclick = () => { d.match = d.match.filter((x) => x !== p); rematch(); drawPats(); draw(); drawRules(); };
+        rm.onclick = async () => { if (!await confirmRemoval(p)) return; d.match = d.match.filter((x) => x !== p); rematch(); drawPats(); draw(); drawRules(); };
         row.append(c, el("span", "grow"), rm);
         return row;
       }));
@@ -3248,7 +3263,7 @@
       return "";
     };
     pAdd.onclick = () => { addPattern(); };
-    pin.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") addPattern(); else if (e.key === "Escape") { gEdit = null; renderGroups(); } };
+    pin.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") addPattern(); else if (e.key === "Escape") cancelGroup(); };
     const padd = el("div", "rt-patadd");
     padd.append(pin, pAdd);
     pbox.append(plist, padd);
@@ -3446,7 +3461,7 @@
         const ctl = el("span", "ctl");
         if (i) { const up = el("button", "text", t("Up")); up.onclick = () => { d.rules.splice(i - 1, 0, d.rules.splice(i, 1)[0]); drawRules(); }; ctl.append(up); }
         const rm = el("button", "text", t("Remove"));
-        rm.onclick = () => { d.rules.splice(i, 1); drawRules(); };
+        rm.onclick = async () => { if (!await confirmRemoval(t("Rule {n}", { n: i + 1 }))) return; d.rules.splice(i, 1); drawRules(); };
         ctl.append(rm);
         row.append(el("span", "i", String(i + 1)), when, use, ctl);
         rlist.append(row);
@@ -3563,7 +3578,7 @@
     }
     bar.append(el("span", "grow"));
     const cancel = el("button", "text", t("Cancel"));
-    cancel.onclick = () => { gEdit = null; renderGroups(); };
+    cancel.onclick = cancelGroup;
     const saveBtn = el("button", "text primary", t(g ? "Save" : "Add"));
     const save = () => {
       if (addPattern() === null) return pin.focus({ preventScroll: true }); // typed, not added: it is meant
@@ -3602,6 +3617,7 @@
     bar.append(cancel, saveBtn);
     ed.append(bar);
     if (!g) setTimeout(() => name.focus({ preventScroll: true }), 0); // WebKit would scroll the page to put it mid-view
+    if (gEdit.was == null) gEdit.was = JSON.stringify(d);
     return ed;
   }
   // the providers that route over several accounts or keys of their own

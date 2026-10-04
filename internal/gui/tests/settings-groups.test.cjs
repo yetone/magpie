@@ -196,6 +196,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await field.inputValue(), "06:00", "the time field comes with the daily warm-up on");
         await field.fill("07:30");
         await field.dispatchEvent("change");
+        assert.equal(posts.at(-1).codexWarmAt, "06:00", "typing does not save the time");
+        await field.locator("..").getByRole("button", { name: lang === "zh" ? "保存" : "Save", exact: true }).click();
         await last("codexWarmAt", "07:30");
 
         const posted = posts.length;
@@ -246,7 +248,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual((await shown(page)).on, ["wb"]);
         assert.equal(await page.locator("#warmTab-wb").getAttribute("tabindex"), "0");
         assert.equal(await page.locator("#warmTab-codex").getAttribute("tabindex"), "-1");
-        await still("the keyboard");
+        assert(await page.locator("#warmTab-wb").isVisible(), "keyboard focus may scroll its tab into view");
 
         // WorkBuddy's tab remembered across a reload
         await reload();

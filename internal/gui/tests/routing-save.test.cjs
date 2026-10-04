@@ -113,6 +113,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.evaluate(() => document.scrollingElement.scrollTop), y, "a click never scrolls the page");
         // Cancel drops them; opened again, the editor is as saved
         await page.getByRole("button", { name: L.cancel, exact: true }).click();
+        await page.getByRole("alertdialog").locator("button").last().click();
         await open();
         assert.match(await opt(L.routing, zh ? "智能" : "Smart").getAttribute("class"), /\bon\b/);
         assert.match(await opt(L.stays, zh ? "自动" : "Auto").getAttribute("class"), /\bon\b/);

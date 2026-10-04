@@ -313,7 +313,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-editor .lib-picks { grid-column: 1 / -1; max-height: 320px; }
 .lib-editor .lib-keep { grid-column: 1 / -1; margin: 0 -6px; }
 .lib-confirm { grid-column: 1 / -1; margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--fg-2); }
-.text.danger-fill { background: var(--red); color: #fff; }
+.text.danger-fill { background: var(--red-fill); color: var(--red-fg); }
 /* one agent's skills or servers on or off at once (#475) */
 .lib-byagent-sheet .lib-byagent-list { grid-column: 1 / -1; max-height: min(52vh, 420px); overflow: auto; }
 .lib-byagent-row { gap: 10px; }
