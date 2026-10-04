@@ -349,7 +349,7 @@ const de = {
   "det.edits": "Präzise Konfigurationsänderungen",
   "det.edits.p": "Kommentare, Reihenfolge und Einrückung in <code>settings.json</code>, <code>config.toml</code> oder <code>config.yaml</code> bleiben erhalten. Geschrieben wird atomar.",
   "det.tiny": "Klein, nativ, offen",
-  "det.tiny.p": "Unter 15 MB, auf der WebView des Systems. Kein Electron, keine Runtime. MIT-Lizenz, <a href=\"https://github.com/yetone/magpie\">auf GitHub</a>.",
+  "det.tiny.p": "Auf dem Mac ein Download von etwa 15 MB, auf der WebView des Systems. Kein Electron, keine Runtime. MIT-Lizenz, <a href=\"https://github.com/yetone/magpie\">auf GitHub</a>.",
   "det.env": "Keine Schlüssel aus Ihrer Shell",
   "det.env.p": "magpie liest nie API-Schlüssel aus Umgebungsvariablen. Es nutzt genau das, was Sie hinzufügen.",
   "det.client": "Offen für jeden Client",
