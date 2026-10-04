@@ -205,7 +205,8 @@ button.rt-session { cursor: pointer; }
 .rt-session .nm { flex: 1 1 160px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .rt-session .summary { color: var(--muted); font-variant-numeric: tabular-nums; }
 .rt-session .cost { flex: none; margin-left: auto; font-variant-numeric: tabular-nums; }
-.rt-filters { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rt-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.rt-purpose { max-width: 100%; }
 .rt-filters > .rt-days { flex: 1; min-width: 0; }
 .rt-group-by { flex: none; }
 /* one line wants room for the time, the model, where it went at what

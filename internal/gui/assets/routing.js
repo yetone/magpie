@@ -113,7 +113,11 @@
   const hist = el("div", "rt-cols");
   const colA = el("div", "rt-col"), colB = el("div", "rt-col");
   const filters = el("div", "rt-filters");
-  filters.append(dayBar, groupBar);
+  const purposePick = el("button", "sess-pick rt-purpose");
+  purposePick.type = "button";
+  purposePick.id = "rtPurpose";
+  let purpose = "";
+  filters.append(dayBar, groupBar, purposePick);
   colA.append(reqHead, filters, reqs);
   colB.append(actHead, acts);
   hist.append(colA, colB);
@@ -1184,6 +1188,7 @@
       await loadDays(day);
       if (!past.some((x) => x.id === id)) past.push(r);
     }
+    if (purpose && purposeOf(r.kind) !== purpose) purpose = "";
     offline("");
     window.show("routing");
     pick(r);
@@ -1206,8 +1211,19 @@
     web_search: "Web search",
     vision: "Image description",
   };
-  const kindName = (k) => KIND[k] ? t(KIND[k]) : k;
+  const kindName = (k) => Object.hasOwn(KIND, k) ? t(KIND[k]) : k;
   window.kindName = kindName; // the Usage page's Requests say it too (#714)
+  // One filter for aliases with the same meaning; unknown names remain literal.
+  // Match usage.PurposeOf without changing the kind kept on any request.
+  const purposeOf = (kind) => !kind ? "unmarked" : "kind:" + (Object.keys(KIND).find((k) => KIND[k] === KIND[kind]) || kind);
+  const purposeOptions = (ids, selected) => [...new Set([...ids, ...(selected ? [selected] : [])])].sort().map((id) => {
+    const kind = id.slice(5);
+    return { v: id, name: id === "unmarked" ? t("Unmarked") : kindName(kind), note: id === "unmarked"
+      ? t("No purpose was recorded; this may be a conversation turn or an older record.")
+      : Object.hasOwn(KIND, kind) ? "" : t("Unrecognized request purpose") };
+  });
+  window.purposeOf = purposeOf;
+  window.purposeOptions = purposeOptions;
   function kindTag(r) {
     const k = el("span", "kind", kindName(r.kind));
     k.title = kindWhy(r);
@@ -1276,7 +1292,8 @@
   // the requests the gateway keeps, newest first: pick one to see how it was routed
   // listed: the requests the list shows, newest first — the gateway's last
   // few, or a day the history keeps
-  const listed = () => (day ? past : [...routes.values()]).slice().sort((a, b) => b.id - a.id);
+  const allListed = () => (day ? past : [...routes.values()]).slice().sort((a, b) => b.id - a.id);
+  const listed = () => allListed().filter((r) => !purpose || purposeOf(r.kind) === purpose);
   const dayName = (d) => {
     const x = new Date(d + "T12:00:00"), n = new Date(), y = new Date(n.getTime() - 864e5);
     return x.toDateString() === n.toDateString() ? t("today") : x.toDateString() === y.toDateString() ? t("yesterday")
@@ -1407,7 +1424,13 @@
   }
   function renderHist() {
     const rs = listed();
-    hist.hidden = !rs.length && !day && !days.length;
+    const all = allListed();
+    hist.hidden = !all.length && !day && !days.length && !purpose;
+    sessPick(purposePick, "All purposes", purpose, purposeOptions(all.map((r) => purposeOf(r.kind)), purpose), "Purpose", (v) => {
+      purpose = v;
+      steady(renderHist);
+    });
+    purposePick.title = t("Filter the request list by purpose");
     setText(reqLabel, t("Requests"));
     setText(replayAll, t("Replay them all"));
     replayAll.hidden = !(rs.filter((r) => r.done).length > 1 && !rp);
@@ -1430,7 +1453,7 @@
     hist.classList.toggle("solo", none);
     if (none) {
       const p = el("div", "empty-state");
-      p.append(el("b", "", day ? t("Nothing on {day}", { day: dayName(day) }) : t("No requests since magpie started")),
+      p.append(el("b", "", purpose ? t("No requests match these filters.") : day ? t("Nothing on {day}", { day: dayName(day) }) : t("No requests since magpie started")),
         t("Each request an agent sends through magpie shows up here: who answered it, why, and each try."));
       if (!day && days.length) p.append(" " + t("Earlier ones are kept by day, in the bar above."));
       reqs.replaceChildren(p);

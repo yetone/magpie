@@ -124,7 +124,7 @@ func csvStamp(p usage.Period, day string) string {
 
 func ledgerFilter(q url.Values) usage.Filter {
 	id, _ := strconv.ParseInt(q.Get("route"), 10, 64)
-	return usage.Filter{Day: q.Get("day"), RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Account: q.Get("account"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q"), Computer: q.Get("computer")}
+	return usage.Filter{Day: q.Get("day"), RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Purpose: q.Get("purpose"), Account: q.Get("account"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q"), Computer: q.Get("computer")}
 }
 
 // ledgerRow is a usage.Row with the names the page shows it by.
@@ -156,9 +156,10 @@ type ledgerJSON struct {
 	ChartBy map[string][]ledgerShare `json:"chartBy,omitempty"`
 	Day     string                   `json:"day,omitempty"`
 	usage.Totals
-	// Agents and Providers: those with calls in the period, for the filters
+	// Agents, Providers and Purposes: those with calls in the period, for the filters
 	Agents    []ledgerAgent `json:"agents"`
 	Providers []ledgerAgent `json:"providers"`
+	Purposes  []string      `json:"purposes"`
 	// Accounts: the subscription accounts that answered calls in the
 	// period, for the Account filter (#557)
 	Accounts []ledgerAccount `json:"accounts"`
@@ -227,6 +228,7 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 	}
 	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: l.Total, Totals: l.Sum, Agents: []ledgerAgent{}, Providers: []ledgerAgent{}, Accounts: []ledgerAccount{}}
 	out.Bucket, out.Series = l.Bucket, l.Series
+	out.Purposes = l.Purposes
 	out.Day = f.Day
 	out.CallerKeys = callerUsageGroups(usage.Summary{CallerKeys: l.CallerKeys})
 	callerLabels := map[string]string{}

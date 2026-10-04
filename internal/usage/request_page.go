@@ -32,6 +32,7 @@ type RequestPage struct {
 	Sum               Totals
 	Total             int
 	Agents, Providers []string
+	Purposes          []string // all purposes in the period, independent of the selected filter
 	CallerKeys        []Group
 	// Accounts are the subscription accounts that answered calls in the
 	// period, by provider and account, for the Account filter (#557)
@@ -728,8 +729,9 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 			}
 		}
 	}
-	out := RequestPage{Rows: []Row{}, Agents: []string{}, Providers: []string{}, By: map[string][]Share{}}
+	out := RequestPage{Rows: []Row{}, Agents: []string{}, Providers: []string{}, Purposes: []string{}, By: map[string][]Share{}}
 	agents, providers := map[string]bool{}, map[string]bool{}
+	purposes := map[string]bool{}
 	callers := map[string]*Group{}
 	accounts := map[string]*Group{}
 	computers := map[string]*Share{}
@@ -757,6 +759,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 	var first time.Time
 	visit(func(ref rowRef, r Row) {
 		agents[r.Agent] = true
+		purposes[PurposeOf(r.Kind)] = true
 		if r.Provider != "" {
 			providers[r.Provider] = true
 		}
@@ -857,6 +860,10 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 		out.Providers = append(out.Providers, a)
 	}
 	slices.Sort(out.Providers)
+	for purpose := range purposes {
+		out.Purposes = append(out.Purposes, purpose)
+	}
+	slices.Sort(out.Purposes)
 	out.CallerKeys = callerGroups(callers)
 	out.Accounts = callerGroups(accounts)
 	for _, d := range Dimensions {
@@ -924,12 +931,18 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 }
 func pageFromLedger(p Period, f Filter, offset, limit int, all Ledgered) RequestPage {
 	l := all.Filtered(f)
-	out := RequestPage{Sum: l.Sum, Total: len(l.Rows), Agents: l.Agents, Providers: l.Providers, By: map[string][]Share{}}
+	out := RequestPage{Sum: l.Sum, Total: len(l.Rows), Agents: l.Agents, Providers: l.Providers, Purposes: []string{}, By: map[string][]Share{}}
 	callers, accounts := map[string]*Group{}, map[string]*Group{}
+	purposes := map[string]bool{}
 	for i := len(all.Rows) - 1; i >= 0; i-- {
+		purposes[PurposeOf(all.Rows[i].Kind)] = true
 		addCallerRow(callers, all.Rows[i])
 		addAccountRow(accounts, all.Rows[i])
 	}
+	for purpose := range purposes {
+		out.Purposes = append(out.Purposes, purpose)
+	}
+	slices.Sort(out.Purposes)
 	out.CallerKeys = callerGroups(callers)
 	out.Accounts = callerGroups(accounts)
 	offset = min(offset, len(l.Rows))

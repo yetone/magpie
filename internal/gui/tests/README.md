@@ -55,6 +55,14 @@ node --test --test-concurrency=1 internal/gui/tests/gateway-caller-keys.test.cjs
 
 ## Other Browser Regressions
 
+`purpose-filter.test.cjs` checks Usage and Routing purpose filters (#742) in
+English and Chinese on Chromium and WebKit. It covers title aliases, literal
+unknown names, unmarked records, pagination and totals, combined failure
+filters and CSV export, route navigation, session grouping, historical days
+and the narrow layout. It uses isolated API fixtures. Run with
+`node --test internal/gui/tests/purpose-filter.test.cjs` and the Playwright
+environment described below.
+
 `routing-sealed-task.test.cjs` checks that routing explains why an encrypted
 subagent task excludes non-ChatGPT providers and why the parent account goes
 first (#619). It also checks plain tasks, old traces, direct model requests,
