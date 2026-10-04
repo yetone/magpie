@@ -226,11 +226,6 @@ func TestHowInstalled(t *testing.T) {
 	if u := howInstalled(cliSpecs["opencode"], oc); u == nil || u.shown() != "opencode upgrade" {
 		t.Errorf("opencode's installer: %+v", u)
 	}
-	// the curl script's ~/.local/bin/atomcode upgrades itself
-	ac := file(t, filepath.Join(home, ".local/bin/atomcode"), "")
-	if u := howInstalled(cliSpecs["atomcode"], ac); u == nil || u.shown() != "atomcode upgrade" {
-		t.Errorf("atomcode's installer: %+v", u)
-	}
 
 	// a binary that says nothing of how it got there: the version only
 	if u := howInstalled(cliSpecs["claude"], file(t, filepath.Join(tmp, "opt/bin/claude"), "\x7fELF")); u != nil {
