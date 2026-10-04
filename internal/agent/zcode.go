@@ -2,6 +2,8 @@ package agent
 
 import (
 	"encoding/json"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -70,11 +72,11 @@ func zcode(home string) *Agent {
 			// a ZCode that keeps its providers as rules, with magpie's taken
 			// out there, had it removed in ZCode: it isn't put back
 			if _, err := os.Stat(rules); err != nil || zcodeRuled(rules) {
-				if err := zcodeRules(rules, true); err != nil {
+				if err := zcodeRules(rules, true, true); err != nil {
 					return err
 				}
 			}
-			return edit.SetJSON(path, edit.KV{Path: key, Value: zcodeProviderJSON(path)})
+			return edit.SetJSON(path, edit.KV{Path: key, Value: zcodeProviderJSON(path, true)})
 		},
 		Fields: []Field{{
 			Key: "provider", Label: "provider",
@@ -85,13 +87,13 @@ func zcode(home string) *Agent {
 				return ""
 			},
 			Set: func(v string) error {
-				if err := zcodeRules(rules, v != ""); err != nil {
+				if err := zcodeRules(rules, v != "", false); err != nil {
 					return err
 				}
 				if v == "" {
 					return edit.DelJSON(path, key)
 				}
-				return edit.SetJSON(path, edit.KV{Path: key, Value: zcodeProviderJSON(path)})
+				return edit.SetJSON(path, edit.KV{Path: key, Value: zcodeProviderJSON(path, false)})
 			},
 			Options: func(map[string]string) []Option {
 				return []Option{{Value: magpieID, Label: "magpie", Icon: "magpie", Note: "every magpie model in ZCode's picker"}}
@@ -101,8 +103,9 @@ func zcode(home string) *Agent {
 }
 
 // zcodeProviderJSON is magpie's provider in config.json at path; one
-// turned off in ZCode stays off.
-func zcodeProviderJSON(path string) any {
+// turned off in ZCode stays off. A sync (keep) leaves an address on another
+// machine as it found it (zcodeAddress).
+func zcodeProviderJSON(path string, keep bool) any {
 	ms := map[string]any{}
 	for _, m := range magpieModels("zcode") {
 		window := m.Context
@@ -129,8 +132,44 @@ func zcodeProviderJSON(path string) any {
 	if v, ok := edit.GetJSON(path, "provider."+magpieID+".enabled"); ok && v == "false" {
 		on = false
 	}
+	base, token := gateway.URL(), gateway.Token
+	if keep {
+		was, _ := edit.GetJSON(path, "provider."+magpieID+".options.baseURL")
+		wasKey, _ := edit.GetJSON(path, "provider."+magpieID+".options.apiKey")
+		base, token = zcodeAddress(was, wasKey)
+	}
 	return map[string]any{"name": "magpie", "kind": "anthropic", "enabled": on, "source": "custom",
-		"options": map[string]any{"apiKey": gateway.Token, "baseURL": gateway.URL()}, "models": ms}
+		"options": map[string]any{"apiKey": token, "baseURL": base}, "models": ms}
+}
+
+// zcodeAddress is the address and key magpie's provider is synced with:
+// the gateway's, unless the user pointed the provider at a magpie on another
+// machine (a NAS's), which a sync, there to bring the models up to date,
+// keeps with its key. An address on this machine's loopback is magpie's own
+// and follows the gateway.
+func zcodeAddress(was, wasKey string) (string, string) {
+	if !onAnotherMachine(was) {
+		return gateway.URL(), gateway.Token
+	}
+	if wasKey == "" {
+		wasKey = gateway.Token
+	}
+	return was, wasKey
+}
+
+// onAnotherMachine says base is an http(s) address whose host isn't this
+// machine's loopback.
+func onAnotherMachine(base string) bool {
+	u, err := url.Parse(base)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return false
+	}
+	h := u.Hostname()
+	if h == "localhost" {
+		return false
+	}
+	ip := net.ParseIP(h)
+	return ip == nil || !ip.IsLoopback() && !ip.IsUnspecified()
 }
 
 // zcodeMaxOutput caps a model's output limit: some vendors report their
@@ -192,8 +231,9 @@ func zcodeRuled(path string) bool {
 
 // zcodeRules puts magpie's provider and its models' rules into ZCode's
 // provider_config.json (on) or takes them out, leaving every other rule and
-// key as ZCode wrote it.
-func zcodeRules(path string, on bool) error {
+// key as ZCode wrote it. A sync (keep) leaves an address on another machine
+// as it found it (zcodeAddress).
+func zcodeRules(path string, on, keep bool) error {
 	b, err := edit.Read(path)
 	if err != nil {
 		return err
@@ -272,11 +312,20 @@ func zcodeRules(path string, on bool) error {
 		if ids == nil {
 			ids = []string{}
 		}
+		base, token := gateway.URL(), gateway.Token
+		if keep {
+			c, _ := old["config"].(map[string]any)
+			access, _ := c["access"].(map[string]any)
+			api, _ := c["api"].(map[string]any)
+			was, _ := api["baseUrl"].(string)
+			wasKey, _ := access["apiKey"].(string)
+			base, token = zcodeAddress(was, wasKey)
+		}
 		rule := map[string]any{"providerId": magpieID, "providerName": "magpie", "enabled": true,
 			"config": map[string]any{
 				"group":            "standard-personal",
-				"access":           map[string]any{"type": "api-key", "apiKey": gateway.Token},
-				"api":              map[string]any{"type": "anthropic-messages", "baseUrl": gateway.URL()},
+				"access":           map[string]any{"type": "api-key", "apiKey": token},
+				"api":              map[string]any{"type": "anthropic-messages", "baseUrl": base},
 				"personalModelIds": ids, "modelOrder": ids,
 			}}
 		// turned off in ZCode, it stays off

@@ -313,21 +313,21 @@ func TestFetchDecideOpenAIJevIDs(t *testing.T) {
 		t.Fatalf("test %+v", r)
 	}
 
-	names, err := listedDecide([]byte(`{"models":[{"name":"jev-latest"},{"name":"other-model"}],"data":[{"id":"gemini-3"}]}`))
+	names, err := listedDecide([]byte(`{"models":[{"name":"jev-latest"},{"name":"other-model"}],"data":[{"id":"gemini-3"}]}`), false)
 	if err != nil || len(names) != 2 || names[0].ID != "jev-latest" || names[1].ID != "other-model" {
 		t.Fatalf("names %+v %v", names, err)
 	}
-	byID, err := listedDecide([]byte(`{"models":[{"id":"jev-preview"},{"id":"gemini-3"}]}`))
+	byID, err := listedDecide([]byte(`{"models":[{"id":"jev-preview"},{"id":"gemini-3"}]}`), false)
 	if err != nil || len(byID) != 1 || byID[0].ID != "jev-preview" {
 		t.Fatalf("id %+v %v", byID, err)
 	}
-	if ms, err := listedDecide([]byte(`{"data":[{"id":"gemini-3.8-flash"}]}`)); err != nil || len(ms) != 0 {
+	if ms, err := listedDecide([]byte(`{"data":[{"id":"gemini-3.8-flash"}]}`), false); err != nil || len(ms) != 0 {
 		t.Fatalf("unrelated %+v %v", ms, err)
 	}
-	if _, err := listedDecide([]byte(`<html>`)); err == nil || err.Error() != "not a model list" {
+	if _, err := listedDecide([]byte(`<html>`), false); err == nil || err.Error() != "not a model list" {
 		t.Fatal(err)
 	}
-	if ms, err := listedDecide([]byte(`{"data":[{"id":"jevons"},{"id":"foo/jevx"}]}`)); err != nil || len(ms) != 0 {
+	if ms, err := listedDecide([]byte(`{"data":[{"id":"jevons"},{"id":"foo/jevx"}]}`), false); err != nil || len(ms) != 0 {
 		t.Fatalf("jevons %+v %v", ms, err)
 	}
 }
@@ -531,5 +531,53 @@ func TestTinyStreamsStreamOnly(t *testing.T) {
 			t.Errorf("%s: %s", proto, b)
 		}
 		p.Account = nil
+	}
+}
+
+// Workers AI's own decision models, Clef and Clef Flash, are offered
+// beside Jev, routed to by name, and each asked at its own run.
+func TestCloudflareClef(t *testing.T) {
+	h := t.TempDir()
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
+	p, err := FromPreset("cloudflare-jev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.Key, p.Decide = "k", "https://api.cloudflare.com/client/v4/accounts/acc7/ai/run"
+	var ids []string
+	for _, m := range p.Available() {
+		ids = append(ids, m.ID)
+	}
+	if strings.Join(ids, " ") != "typesafe/jev @cf/cloudflare/clef @cf/cloudflare/clef-flash" || p.Jev() != "typesafe/jev" {
+		t.Fatalf("offered %v, default %s", ids, p.Jev())
+	}
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"cloudflare-jev/@cf/cloudflare/clef-flash", "@cf/cloudflare/clef"} {
+		got, model, err := RouteDecider(name)
+		if err != nil || got.ID != "cloudflare-jev" || !strings.HasSuffix(name, model) {
+			t.Fatalf("%s: %s %s %v", name, got.ID, model, err)
+		}
+	}
+	if !IsDecider("cloudflare-jev/@cf/cloudflare/clef") {
+		t.Fatal("Clef is not a classifier")
+	}
+	for model, want := range map[string]string{
+		"typesafe/jev":              "https://api.cloudflare.com/client/v4/accounts/acc7/ai/run",
+		"@cf/cloudflare/clef":       "https://api.cloudflare.com/client/v4/accounts/acc7/ai/run/@cf/cloudflare/clef",
+		"@cf/cloudflare/clef-flash": "https://api.cloudflare.com/client/v4/accounts/acc7/ai/run/@cf/cloudflare/clef-flash",
+	} {
+		if u, err := p.DecideModelURL(context.Background(), model); err != nil || u != want {
+			t.Errorf("%s at %s %v", model, u, err)
+		}
+	}
+	// another System One provider's model named so is no Clef
+	o := Provider{ID: "o", Name: "O", Key: "k", Decide: "https://api.typesafe.ai/v1", Chat: "https://api.typesafe.ai/v1"}
+	if o.DecidesModel("@cf/cloudflare/clef") {
+		t.Fatal("a Clef id outside Workers AI decides")
 	}
 }

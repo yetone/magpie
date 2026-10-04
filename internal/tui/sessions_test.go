@@ -55,7 +55,7 @@ func TestSessionsPage(t *testing.T) {
 		t.Fatalf("page %d, range %d", m.page, m.srange)
 	}
 	v := m.View()
-	for _, want := range []string{"5 sessions", " all ", "all models", "all folders", "11.9K tokens", "cache read 25.2K (69% hit)", "active 7m on 2 days",
+	for _, want := range []string{"5 sessions", " all ", "all models", "all folders", "11.9K tokens", "cache read 25.2K (67% hit)", "active 7m on 2 days",
 		"█", "Sep 20", "tokens · a day", "models", "gpt-6-astra", "claude-opus-5-5", "folders", "/work/app", "/work/it's", "M model", "f folder"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("missing %q in\n%s", want, v)

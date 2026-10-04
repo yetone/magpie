@@ -135,9 +135,12 @@ func (a *Agent) Drift() *Drift {
 		}
 	}
 	rec := appliedOf(a.ID)
+	// still joined, a model off magpie is one picked in the agent, beside
+	// magpie's in its list (dsh's /model), not a change from outside
+	joined := a.Joined != nil && a.Joined()
 	for _, f := range a.Fields {
 		want, ok := rec.Fields[f.Key]
-		if !ok || vals[f.Key] == want || !magpieValue(a, f, want, vals) || magpieValue(a, f, vals[f.Key], vals) {
+		if !ok || joined || vals[f.Key] == want || !magpieValue(a, f, want, vals) || magpieValue(a, f, vals[f.Key], vals) || sameGroup(want, vals[f.Key]) {
 			continue
 		}
 		return &Drift{Kind: "replaced", Field: f.Key, Now: vals[f.Key], Want: want,
@@ -225,6 +228,40 @@ func magpieValue(a *Agent, f Field, v string, vals map[string]string) bool {
 	return false
 }
 
+// groupNamed is the routing group ("group/<id>") a model value reaches at
+// the gateway: a group's own id, or a model's id without a provider in it
+// that the gateway takes as a group's (provider.GroupFor: gpt-6.1-sol is
+// group/auto-gpt-6-1-sol); "" for any other.
+func groupNamed(v string) string {
+	v = strings.TrimPrefix(strings.TrimSpace(v), magpieID+"/")
+	if strings.HasPrefix(v, provider.GroupPrefix) {
+		return v
+	}
+	g, _ := provider.GroupFor(v)
+	return g
+}
+
+// sameGroup: two values of a field reach the same routing group, one by
+// the group's id and the other by its model's name (#750: Codex's config
+// read gpt-6.1-sol where magpie had set group/auto-gpt-6-1-sol). Asked for
+// either, the gateway serves the group, so the one is not the other
+// replaced.
+func sameGroup(a, b string) bool {
+	g := groupNamed(a)
+	return g != "" && g == groupNamed(b)
+}
+
+// setAsGroup: magpie set the agent's field to a routing group, and v names
+// that group by its model's name (sameGroup) — magpie's model still, for an
+// agent whose config sends v to magpie's gateway.
+func setAsGroup(id, key, v string) bool {
+	if v == "" || isMagpie(v) {
+		return false
+	}
+	want, ok := appliedOf(id).Fields[key]
+	return ok && sameGroup(want, v)
+}
+
 func orDefault(v string) string {
 	if v == "" {
 		return "the agent's default"
@@ -286,7 +323,7 @@ func (a *Agent) Wired() bool {
 	}
 	vals := a.Values()
 	for _, f := range a.Fields {
-		if v := vals[f.Key]; v == magpieID || magpieValue(a, f, v, vals) {
+		if v := vals[f.Key]; v == magpieID || magpieValue(a, f, v, vals) || a.Routed != nil && setAsGroup(a.ID, f.Key, v) && a.Routed() {
 			return true
 		}
 	}
@@ -509,7 +546,8 @@ func (a *Agent) Disconnect() error {
 	for _, f := range a.Fields {
 		vals := a.Values()
 		v := vals[f.Key]
-		set := v != "" && rec.Fields[f.Key] == v && before[f.Key] == v
+		// set by magpie: as it set it, or its group by the model's name
+		set := v != "" && (rec.Fields[f.Key] == v || sameGroup(rec.Fields[f.Key], v)) && before[f.Key] == v
 		if v == "" || !set && v != magpieID && !magpieValue(a, f, v, vals) {
 			continue
 		}

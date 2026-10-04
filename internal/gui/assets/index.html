@@ -150,6 +150,7 @@
     <div class="sess-tools">
       <button class="sess-pick" id="ledComputer" type="button" hidden></button>
       <button class="sess-pick" id="ledAgent" type="button" hidden></button>
+      <button class="sess-pick" id="ledPurpose" type="button" hidden></button>
       <button class="sess-pick" id="ledProvider" type="button" hidden></button>
       <button class="sess-pick" id="ledAccount" type="button" hidden></button>
       <button class="sess-pick" id="ledKey" type="button" hidden></button>
@@ -201,6 +202,7 @@
     <div class="row-head" id="sessListHead" hidden>
       <span class="label" data-t>Latest sessions</span>
       <span class="grow"></span>
+      <button class="text sess-all" id="sessAll" type="button" data-t>All sessions</button>
       <input class="sess-filter" id="sessQ" type="search" spellcheck="false" autocomplete="off" placeholder="Search sessions" data-tp>
     </div>
     <div class="list sess-list" id="sessList"></div>
@@ -255,6 +257,10 @@
         <div class="who"><div class="name" data-t>Codex subagents on any model</div><div class="sub" data-t>Codex’s OpenAI models hand subagents their tasks as text (multi-agent V1), so a GPT lead can spawn them on magpie’s other models. New threads only; Codex’s own multi_agent_v2 setting still wins</div></div>
         <div id="codexAgentsV1Segs"></div>
       </div>
+      <div class="row pref">
+        <div class="who"><div class="name" data-t>Long conversations</div><div class="sub" data-t>Codex and Claude Code compact a conversation at 272K tokens on a model with a larger window, as they do on OpenAI’s and Anthropic’s own; the model’s full window lets it grow further, with every turn slower and costlier</div></div>
+        <div id="fullContextSegs"></div>
+      </div>
       <div class="row pref" id="codexTitlesRow">
         <div class="who"><div class="name" data-t>Codex thread titles</div><div class="sub" id="codexTitlesSub"></div></div>
         <div class="val" id="codexTitlesPick"></div>
@@ -290,6 +296,10 @@
       <div class="row pref" id="trayLogosRow" hidden>
         <div class="who"><div class="name" data-t>Menu bar logos</div><div class="sub" data-t>Each subscription's logo before its numbers; off, the numbers alone with a thin line between subscriptions</div></div>
         <div id="trayLogosSegs"></div>
+      </div>
+      <div class="row pref" id="trayBirdRow" hidden>
+        <div class="who"><div class="name" data-t>Menu bar magpie icon</div><div class="sub" data-t>magpie's icon before the allowances; off, the allowances alone, and a click on one still opens the panel</div></div>
+        <div id="trayBirdSegs"></div>
       </div>
       <div class="row pref">
         <div class="who"><div class="name" data-t>Allowance display</div><div class="sub" data-t>How much of each window is used, or how much is left, on the Usage page, the panel and the menu bar</div></div>

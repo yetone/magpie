@@ -55,6 +55,14 @@ node --test --test-concurrency=1 internal/gui/tests/gateway-caller-keys.test.cjs
 
 ## Other Browser Regressions
 
+`purpose-filter.test.cjs` checks Usage and Routing purpose filters (#742) in
+English and Chinese on Chromium and WebKit. It covers title aliases, literal
+unknown names, unmarked records, pagination and totals, combined failure
+filters and CSV export, route navigation, session grouping, historical days
+and the narrow layout. It uses isolated API fixtures. Run with
+`node --test internal/gui/tests/purpose-filter.test.cjs` and the Playwright
+environment described below.
+
 `routing-sealed-task.test.cjs` checks that routing explains why an encrypted
 subagent task excludes non-ChatGPT providers and why the parent account goes
 first (#619). It also checks plain tasks, old traces, direct model requests,
@@ -71,6 +79,8 @@ the grouping choice across reloads; sessions are separated by agent and ID acros
 model changes, known and partial costs are summed, zero partial estimates
 retain their amount and +, single-request headings use the singular, zero prices stay known,
 title helpers merge only into their explicit parent (even arriving first),
+unnamed Codex memory-only groups explain their background purpose while keeping
+separate IDs, costs and folds; named and mixed chat groups keep their titles,
 late chat names and renames update while preserving folds and ID tooltips,
 missing IDs and old unpriced requests remain visible, folded sessions stay
 folded through live updates, costs follow the currency choice, and the original
@@ -472,6 +482,12 @@ Off posts `trayNoLogos: true`, a save of another setting keeps it, On posts it
 back; the row has no left-border stripe, no click moves the page, and there is
 no row with no card picked nor off a Mac; in English and Chinese.
 
+`tray-bird.test.cjs` turns the menu bar's magpie icon off and on in Settings:
+on a Mac with a card in the menu bar the Menu bar magpie icon row, under the
+logos row, shows On by default; Off posts `trayNoBird: true`, a save of
+another setting keeps it, On posts it back; no click moves the page, and there
+is no row with no card picked nor off a Mac; in English and Chinese.
+
 `tray-cell-click.test.cjs` checks menu-bar quota navigation in the panel
 and main window: selecting Allowances/Overview, scrolling to and highlighting
 the matching account or balance, and keeping a click pending while quotas
@@ -726,14 +742,14 @@ nothing runs past the card or scrolls the page sideways; Chromium and WebKit,
 English and Chinese.
 
 `number-units.test.cjs` checks Settings' Number units (John on Discord): in
-Chinese the Requests tab says a large count in 万 and 亿 ("15.4 亿", an axis's
-"8000 万") by default; picking K / M / B saves westernUnits, moves nothing on
-the settings page, and the totals and chart axis then say "1.54B" and "80M"
-while the page stays Chinese, after a reload and in the tray panel too, each
-label still ending before the plot. Every other count follows (#476): the
-Overview's tiles and chart peak, the Requests summary line, the Sessions tab's
-figures, and the panel's Routing "today", which turns back to 万/亿 when the
-setting does. In English the row is hidden and counts are
+Chinese the Requests tab says a large count in K / M / B ("1.54B", an axis's
+"80M") by default, as English does (#740); picking 万 / 亿 saves chineseUnits,
+moves nothing on the settings page, and the totals and chart axis then say
+"15.4 亿" and "8000 万" while the page stays Chinese, after a reload and in the
+tray panel too, each label still ending before the plot. Every other count
+follows (#476): the Overview's tiles and chart peak, the Requests summary
+line, the Sessions tab's figures, and the panel's Routing "today", which turns
+back to K/M/B when the setting does. In English the row is hidden and counts are
 K / M / B anyway; Chromium and WebKit.
 
 `panel-usage.test.cjs` opens the tray panel's Usage tab: the totals, a small
@@ -947,6 +963,16 @@ picked to sessions/delete, a session still being written to is said so, the
 Trash lists what went and Restore posts its key; an agent whose sessions
 magpie can't delete (OpenCode) shows no delete. No left-border accent, every
 string in Chinese. Chromium and WebKit, English and Chinese, API faked.
+
+`sessions-usage-open.test.cjs` keeps one list of sessions (#752): each
+Sessions page row shows the tokens, cost and models Usage → Sessions showed,
+its details what each model spent and where magpie routed it, and its filter
+finds a model. Usage's latest sessions keep their numbers but no Resume; a
+row there opens the session on the Sessions page (its agent, its folder
+unfolded, the row opened and brought into sight by that click, with no
+scroll refused), another agent's switches the page to it, and All sessions
+opens the page. At 420px a row still fits with its title readable. English
+and Chinese, WebKit (Chromium too where it launches), API faked.
 
 `sessions-purge.test.cjs` erases sessions in magpie's trash for good (#487):
 a trashed row's Delete forever and the Trash's Empty trash each ask in
@@ -1630,4 +1656,14 @@ compare the same completed API state rather than a loading-order difference.
 
 ```sh
 node --test internal/gui/tests/mobile-web.test.cjs internal/gui/tests/old-webkit.test.cjs
+```
+
+## Automatic Codex title grouping
+
+`routing-sessions.test.cjs` checks automatic grouping after a Codex title write,
+conflict revocation, costs and folds, plus name refresh on large history days.
+It uses isolated API fixtures in English and Chinese on Chromium and WebKit.
+
+```sh
+node --test internal/gui/tests/routing-sessions.test.cjs
 ```

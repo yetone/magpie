@@ -70,8 +70,12 @@ static CGFloat mpLead(NSDictionary *c, BOOL first) {
 	return (first ? 0 : mpCellGap) + mpLogo + mpLogoGap;
 }
 
-static CGFloat mpWidth(NSArray *cells, CGFloat h) {
-	CGFloat w = h + mpBirdGap;
+// mpIn is the room before the first cell: the bird's and the gap after
+// it, or none when the bird is left out (settings.TrayNoBird).
+static CGFloat mpIn(NSImage *bird, CGFloat h) { return bird != nil ? h + mpBirdGap : 0; }
+
+static CGFloat mpWidth(NSArray *cells, CGFloat h, CGFloat in) {
+	CGFloat w = in;
 	BOOL first = YES;
 	for (NSDictionary *c in cells) {
 		w += mpLead(c, first) + mpColumn(c);
@@ -187,7 +191,7 @@ static void mpRows(NSDictionary *c, CGFloat x, CGFloat h, NSColor *ink) {
 // mpDraw draws the bird, then each cell, top down (a flipped context).
 static void mpDraw(NSArray *cells, NSImage *bird, CGFloat h) {
 	if (bird != nil) mpTinted(bird, NSMakeRect(0, 0, h, h));
-	CGFloat x = h + mpBirdGap;
+	CGFloat x = mpIn(bird, h);
 	NSColor *ink = [NSColor labelColor];
 	BOOL first = YES;
 	for (NSDictionary *c in cells) {
@@ -228,7 +232,7 @@ static void mpDraw(NSArray *cells, NSImage *bird, CGFloat h) {
 // mpImage is the bird and the cells as one image, drawn afresh each time it
 // is shown so its colours follow the menu bar's, and sharp at any scale.
 static NSImage *mpImage(NSArray *cells, NSImage *bird, CGFloat h) {
-	NSImage *im = [NSImage imageWithSize:NSMakeSize(mpWidth(cells, h), h) flipped:YES drawingHandler:^BOOL(NSRect r) {
+	NSImage *im = [NSImage imageWithSize:NSMakeSize(mpWidth(cells, h, mpIn(bird, h)), h) flipped:YES drawingHandler:^BOOL(NSRect r) {
 		mpDraw(cells, bird, h);
 		return YES;
 	}];
@@ -238,8 +242,8 @@ static NSImage *mpImage(NSArray *cells, NSImage *bird, CGFloat h) {
 
 // mpStarts writes each cell's start in image points, following mpDraw's layout.
 // Plain cells start at their separator; others start at their logo.
-static void mpStarts(NSArray *cells, CGFloat h, CGFloat *out) {
-	CGFloat pos = h + mpBirdGap;
+static void mpStarts(NSArray *cells, CGFloat in, CGFloat *out) {
+	CGFloat pos = in;
 	BOOL first = YES;
 	int i = 0;
 	for (NSDictionary *c in cells) {
@@ -259,11 +263,11 @@ static void mpStarts(NSArray *cells, CGFloat h, CGFloat *out) {
 
 // mpCellAt returns the cell at x, including its trailing gap.
 // The bird and points outside the image return -1.
-static int mpCellAt(NSArray *cells, CGFloat h, CGFloat x, CGFloat w) {
-	if (cells.count == 0 || x < h + mpBirdGap || x >= w) return -1;
+static int mpCellAt(NSArray *cells, CGFloat in, CGFloat x, CGFloat w) {
+	if (cells.count == 0 || x < in || x >= w) return -1;
 	int n = (int)cells.count;
 	CGFloat starts[n];
-	mpStarts(cells, h, starts);
+	mpStarts(cells, in, starts);
 	for (int i = 0; i < n; i++) {
 		if (x < (i + 1 < n ? starts[i + 1] : w)) return i;
 	}
@@ -299,9 +303,9 @@ static CGFloat mpHitW = 0;
 
 // Used by the single status-item monitor and native tests. Modified clicks
 // retain the button's normal action; an unmodified quota click uses its ID.
-static BOOL mpClickCell(NSArray *cells, CGFloat h, CGFloat x, CGFloat w, NSEventModifierFlags flags) {
+static BOOL mpClickCell(NSArray *cells, CGFloat in, CGFloat x, CGFloat w, NSEventModifierFlags flags) {
 	if (flags & (NSEventModifierFlagCommand | NSEventModifierFlagControl | NSEventModifierFlagOption | NSEventModifierFlagShift)) return NO;
-	int i = mpCellAt(cells, h, x, w);
+	int i = mpCellAt(cells, in, x, w);
 	if (i < 0) return NO;
 	mpCellClicked((char *)[cells[i][@"id"] UTF8String]);
 	return YES;
@@ -318,6 +322,7 @@ static void mpApply(void) {
 }
 
 static NSImage *mpBirdImage(const void *bird, int len) {
+	if (bird == NULL || len <= 0) return nil; // the cells alone
 	NSImage *im = [[NSImage alloc] initWithData:[NSData dataWithBytes:bird length:len]];
 	return im;
 }
@@ -355,10 +360,11 @@ static int mpFrame(const void *bird, int len) {
 		NSImage *bi = mpBirdImage(bird, len);
 		dispatch_sync(dispatch_get_main_queue(), ^{
 			if (mpShown == nil) return;
+			ok = 1;
+			if (mpBird == nil) return; // shown without the bird: no flap
 			[mpBird release];
 			mpBird = [bi retain];
 			mpApply();
-			ok = 1;
 		});
 		[bi release];
 	}
@@ -397,7 +403,7 @@ static void mpOwnClicks(void) {
 				// Route quota clicks before the generic action, within this
 				// one monitor; local monitor ordering is not guaranteed.
 				CGFloat x = p.x - (b.bounds.size.width - mpHitW) / 2;
-				if (mpClickCell(mpShown, [[NSStatusBar systemStatusBar] thickness], x, mpHitW, e.modifierFlags)) return nil;
+				if (mpClickCell(mpShown, mpIn(mpBird, [[NSStatusBar systemStatusBar] thickness]), x, mpHitW, e.modifierFlags)) return nil;
 				[NSApp sendAction:b.action to:b.target from:b];
 				return nil;
 			}];
@@ -411,8 +417,8 @@ static void *mpPNG(mpTrayCell *cells, int n, const void *bird, int len, CGFloat 
 	__block void *out = NULL;
 	@autoreleasepool {
 		NSArray *cs = mpCells(cells, n);
-		NSImage *bi = len > 0 ? [mpBirdImage(bird, len) autorelease] : nil;
-		CGFloat w = mpWidth(cs, h);
+		NSImage *bi = [mpBirdImage(bird, len) autorelease];
+		CGFloat w = mpWidth(cs, h, mpIn(bi, h));
 		NSBitmapImageRep *rep = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:(NSInteger)ceil(w * scale) pixelsHigh:(NSInteger)ceil(h * scale)
 			bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO colorSpaceName:NSDeviceRGBColorSpace bytesPerRow:0 bitsPerPixel:0] autorelease];
 		rep.size = NSMakeSize(w, h);
@@ -448,7 +454,7 @@ static void *mpPNG(mpTrayCell *cells, int n, const void *bird, int len, CGFloat 
 static int mpCellAtCells(mpTrayCell *cells, int n, CGFloat h, CGFloat x) {
 	@autoreleasepool {
 		NSArray *cs = mpCells(cells, n);
-		return mpCellAt(cs, h, x, mpWidth(cs, h));
+		return mpCellAt(cs, h + mpBirdGap, x, mpWidth(cs, h, h + mpBirdGap));
 	}
 }
 
@@ -457,7 +463,7 @@ static CGFloat mpCellStartAt(mpTrayCell *cells, int n, CGFloat h, int i) {
 		NSArray *cs = mpCells(cells, n);
 		if (i < 0 || i >= n) return -1;
 		CGFloat starts[n];
-		mpStarts(cs, h, starts);
+		mpStarts(cs, h + mpBirdGap, starts);
 		return starts[i];
 	}
 }
@@ -466,7 +472,7 @@ static CGFloat mpCellStartAt(mpTrayCell *cells, int n, CGFloat h, int i) {
 static int mpClickCellsAt(mpTrayCell *cells, int n, CGFloat h, CGFloat x, unsigned long flags) {
 	@autoreleasepool {
 		NSArray *cs = mpCells(cells, n);
-		return mpClickCell(cs, h, x, mpWidth(cs, h), flags);
+		return mpClickCell(cs, h + mpBirdGap, x, mpWidth(cs, h, h + mpBirdGap), flags);
 	}
 }
 
@@ -522,8 +528,9 @@ func cBytes(b []byte) (unsafe.Pointer, C.int) {
 	return C.CBytes(b), C.int(len(b))
 }
 
-// trayImageShow puts the cells up beside the bird; false when the item
-// can't be found, and the text is to be shown instead.
+// trayImageShow puts the cells up beside the bird, or alone when bird is
+// nil; false when the item can't be found, and the text is to be shown
+// instead.
 func trayImageShow(cells []trayCell, bird []byte) bool {
 	ok := false
 	b, n := cBytes(bird)

@@ -394,8 +394,17 @@ func rtkCmd(args []string) error {
 				fmt.Println(muted.Render("  magpie library rtk path adds " + v.PathDir + " to your user PATH"))
 			}
 		}
-		if g := v.Gain; g != nil {
+		switch g := v.Gain; {
+		case g != nil:
 			fmt.Printf("  %d tokens saved over %d commands (%.0f%% on average)\n", g.Saved, g.Commands, g.Pct)
+		case v.GainErr != "":
+			fmt.Println(amber.Render("  what rtk saved isn't known:"), muted.Render(v.GainErr))
+		}
+		switch v.CodexSandbox {
+		case "elevated":
+			fmt.Println(muted.Render("  Codex runs its commands in its Windows sandbox as its own account, so what RTK saves there isn't counted"))
+		case "unelevated":
+			fmt.Println(muted.Render("  Codex runs its commands in its Windows sandbox, which can't write RTK's history, so what RTK saves there isn't counted"))
 		}
 	}
 	for _, a := range v.Agents {

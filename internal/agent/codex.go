@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -78,8 +79,14 @@ func codexIn(at place) *Agent {
 	// joined: connected by Join, on a model of Codex's own (its last pick)
 	// with magpie's beside it, by the base URL
 	joined := func() bool { return viaBase() && stashLoad()[at.key("codex.joined")] == "1" }
-	// magpie is in Codex's config: on one of magpie's models, or joined
-	wired := func() bool { return isMagpie(get("model")) || joined() }
+	// magpie is in Codex's config: on one of magpie's models, or joined;
+	// or, routed, on the model of the group magpie set it to as Codex
+	// spells it (gpt-6.1-sol for group/auto-gpt-6-1-sol, #750), which the
+	// gateway takes as that group
+	wired := func() bool {
+		m := get("model")
+		return isMagpie(m) || joined() || routed() && setAsGroup(cmp.Or(at.id, "codex"), "model", m)
+	}
 	models := func() []catalog.Model {
 		switch {
 		case asProvider():
@@ -574,6 +581,7 @@ func codexIn(at place) *Agent {
 			return true, settle()
 		},
 		Joined: joined,
+		Routed: routed,
 		Sync: func() error {
 			if err := failover(); err != nil {
 				return err

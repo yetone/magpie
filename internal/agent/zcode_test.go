@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -258,6 +259,110 @@ func TestZCodeDefaultLevel(t *testing.T) {
 	} {
 		if got := zcodeDefaultLevel(c.in); got != c.want {
 			t.Errorf("%v: %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// A provider the user pointed at a magpie on another machine (a NAS) keeps
+// that address and key through a sync, in both of ZCode's files; one on
+// loopback follows the gateway, and connecting it in magpie points it here.
+func TestZCodeKeepsRemoteAddress(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro"}}); err != nil {
+		t.Fatal(err)
+	}
+	a := zcode(home)
+	if err := a.Fields[0].Set(magpieID); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, ".zcode", "v2", "config.json")
+	rules := filepath.Join(home, ".zcode", "v2", "provider_config.json")
+	addr := func() (string, string, string, string) {
+		t.Helper()
+		var c struct {
+			Provider map[string]struct {
+				Options map[string]string `json:"options"`
+			} `json:"provider"`
+		}
+		b, _ := os.ReadFile(path)
+		json.Unmarshal(b, &c)
+		var r struct {
+			Config struct {
+				ProviderConfigRules struct {
+					ProviderRules []struct {
+						ProviderID string `json:"providerId"`
+						Config     struct {
+							Access map[string]string `json:"access"`
+							API    map[string]string `json:"api"`
+						} `json:"config"`
+					} `json:"providerRules"`
+				} `json:"providerConfigRules"`
+			} `json:"config"`
+		}
+		b, _ = os.ReadFile(rules)
+		json.Unmarshal(b, &r)
+		var base, key string
+		for _, p := range r.Config.ProviderConfigRules.ProviderRules {
+			if p.ProviderID == magpieID {
+				base, key = p.Config.API["baseUrl"], p.Config.Access["apiKey"]
+			}
+		}
+		o := c.Provider[magpieID].Options
+		return o["baseURL"], o["apiKey"], base, key
+	}
+
+	// as the user would in ZCode: both files, from what they hold now
+	point := func(base, key string) {
+		t.Helper()
+		was, wasKey, _, _ := addr()
+		b, _ := os.ReadFile(path)
+		s := strings.ReplaceAll(string(b), was, base)
+		os.WriteFile(path, []byte(strings.ReplaceAll(s, `"apiKey": "`+wasKey+`"`, `"apiKey": "`+key+`"`)), 0o644)
+		b, _ = os.ReadFile(rules)
+		s = strings.ReplaceAll(string(b), was, base)
+		os.WriteFile(rules, []byte(strings.ReplaceAll(s, `"apiKey":"`+wasKey+`"`, `"apiKey":"`+key+`"`)), 0o600)
+		if b, k, rb, rk := addr(); b != base || k != key || rb != base || rk != key {
+			t.Fatalf("pointing at %s: config %s %s, rules %s %s", base, b, k, rb, rk)
+		}
+	}
+	point("http://192.168.1.20:3425", "nas-key")
+	if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if b, k, rb, rk := addr(); b != "http://192.168.1.20:3425" || k != "nas-key" || rb != b || rk != k {
+		t.Fatalf("a sync moved the NAS address: config %s %s, rules %s %s", b, k, rb, rk)
+	}
+	if b, _ := os.ReadFile(rules); !strings.Contains(string(b), "flash") {
+		t.Fatalf("the sync didn't bring the new model: %s", b)
+	}
+
+	point("http://localhost:4000", "old")
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if b, k, rb, rk := addr(); b != gateway.URL() || k != gateway.Token || rb != b || rk != k {
+		t.Fatalf("a loopback address didn't follow the gateway: config %s %s, rules %s %s", b, k, rb, rk)
+	}
+
+	point("https://nas.example:8443", "nas-key")
+	if err := a.Fields[0].Set(magpieID); err != nil {
+		t.Fatal(err)
+	}
+	if b, k, rb, rk := addr(); b != gateway.URL() || k != gateway.Token || rb != b || rk != k {
+		t.Fatalf("connecting in magpie kept the NAS address: config %s %s, rules %s %s", b, k, rb, rk)
+	}
+
+	for base, want := range map[string]bool{"http://192.168.1.20:3425": true, "https://nas.lan": true, "http://127.0.0.1:3425": false,
+		"http://localhost:3425": false, "http://[::1]:3425": false, "http://0.0.0.0:3425": false, "": false, "nas:3425": false} {
+		if onAnotherMachine(base) != want {
+			t.Errorf("onAnotherMachine(%q) = %v, want %v", base, !want, want)
 		}
 	}
 }

@@ -64,8 +64,8 @@ function fixture(lang) {
 }
 
 const W = {
-  en: { entry: "23 hidden", after: "24 hidden", all: "", title: "Codex's model list", current: "Current", shown: "Shown", hideAll: "Hide all", one: "30 hidden", showAll: "Show all" },
-  zh: { entry: "已隐藏 23 个", after: "已隐藏 24 个", all: "", title: "Codex 的模型列表", current: "在用", shown: "已显示", hideAll: "全部隐藏", one: "已隐藏 30 个", showAll: "全部显示" },
+  en: { entry: "23 hidden", after: "24 hidden", all: "", title: "Codex's model list", current: "Current", shown: "Shown", hideAll: "Hide all", one: "30 hidden", showAll: "Show all", allTab: "All providers", routes: "Routing groups" },
+  zh: { entry: "已隐藏 23 个", after: "已隐藏 24 个", all: "", title: "Codex 的模型列表", current: "在用", shown: "已显示", hideAll: "全部隐藏", one: "已隐藏 30 个", showAll: "全部显示", allTab: "全部供应商", routes: "路由组" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -181,12 +181,34 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(await showAll.isDisabled());
       assert(!(await hideAll.isDisabled()));
 
+      // the providers down the left: one picked shows its models alone,
+      // a long one open; a search looks in all of them; All brings back the lot
+      const rail = pop.locator(".am-rail .am-ri");
+      assert.deepEqual((await rail.allInnerTexts()).map((s) => s.replace(/\s+/g, " ").trim()),
+        [`${w.allTab} 31/31`, `${w.routes} 1/1`, "OpenAI 6/6", "OpenRouter 24/24"]);
+      assert.equal(await rail.first().getAttribute("aria-pressed"), "true");
+      await rail.nth(3).click();
+      assert.deepEqual(await pop.locator(".am-fold .gn").allInnerTexts(), ["OpenRouter"]);
+      assert.equal(await pop.locator(".am-mr").count(), 24, "the picked one is open");
+      assert.equal(await rail.nth(3).getAttribute("aria-pressed"), "true");
+      await pop.locator(".am-mr", { hasText: "Router model 7" }).click();
+      await page.waitForTimeout(150);
+      assert.equal(await rail.nth(3).locator(".c").innerText(), "23/24", "the rail counts what's shown");
+      await q.fill("O4-MINI");
+      assert.deepEqual(await pop.locator(".am-fold .gn").allInnerTexts(), ["OpenAI"], "a search looks past the picked one");
+      await q.fill("");
+      await rail.first().click();
+      assert.equal(await pop.locator(".am-fold .gn").count(), 3);
+      const lb = await pop.locator(".am-list").boundingBox(), rb = await pop.locator(".am-rail").boundingBox();
+      assert(rb.x + rb.width <= lb.x + 1 && Math.abs(rb.y - lb.y) < 2, "the rail is left of the list");
+
       // Esc closes it; so does a click elsewhere
       await page.keyboard.press("Escape");
       await pop.waitFor({ state: "detached" });
       await entry.click();
       await pop.waitFor();
-      await page.mouse.click(900, 650);
+      const ob = await pop.boundingBox();
+      await page.mouse.click(ob.x + ob.width + 8 < 1000 ? ob.x + ob.width + 8 : ob.x - 8, 690);
       await pop.waitFor({ state: "detached" });
       assert.deepEqual(errors, []);
     });

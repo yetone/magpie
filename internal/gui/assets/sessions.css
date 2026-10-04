@@ -45,6 +45,9 @@
 @media (max-width: 560px) {
   .sm-filter { width: 130px; flex-basis: 130px; }
   .row.sm-folder .sm-path { display: none; }
+  /* the cost stays; the title keeps the room the tokens took (#752) */
+  .row.sm-sess .num { display: none; }
+  .row.sm-sess .cost { min-width: 0; }
 }
 @media (max-width: 420px) {
   .sm-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; }

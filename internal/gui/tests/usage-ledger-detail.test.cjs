@@ -23,7 +23,7 @@ const ROWS = [
   // the gateway's: a failure the vendor explained
   { t: new Date(now - 60e3).toISOString(), agent: "codex", agentName: "Codex", icon: "codex-color", provider: "relay", providerName: "Relay", host: "team", req: "sol", model: "gpt-6-sol", in: 0, out: 0, ms: 610, status: 429, err: "Relay: slow down, please", err_type: "rate_limit_error", rid: "req_011abc", ep: "/v1/responses", session: "019a2b", cost: 0, priced: false },
   // the gateway's: answered, with the id and the protocol it was turned into
-  { t: new Date(now - 120e3).toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color", provider: "relay", providerName: "Relay", host: "team", req: "sonnet", model: "sonnet", served: "sonnet", in: 300, out: 40, ms: 2380, ttft_ms: 700, status: 200, kind: "collab_spawn", rid: "chatcmpl-77", ep: "/v1/messages → /v1/chat/completions", cost: 0.01, priced: true },
+  { t: new Date(now - 120e3).toISOString(), agent: "claude", agentName: "Claude Code", icon: "claudecode-color", provider: "relay", providerName: "Relay", host: "team", req: "sonnet", model: "sonnet", served: "sonnet", in: 300, out: 40, ms: 2380, ttft_ms: 700, sent_ms: 40, status: 200, kind: "collab_spawn", rid: "chatcmpl-77", ep: "/v1/messages → /v1/chat/completions", cost: 0.01, priced: true },
   // a session file's: nothing went wrong
   { t: new Date(now - 180e3).toISOString(), agent: "claude-desktop", agentName: "Claude Desktop", icon: "claude-color", provider: "claude", providerName: "Claude", req: "claude-opus-5[1m]", model: "claude-opus-5", served: "claude-opus-5", effort: "xhigh", ms: 4200, in: 1000, out: 200, cache_read: 4000, cache_write: 500, status: 0, rid: "req_log", session: "s2", session_account: "claude@example.com", source: "log", cost: 0.02, priced: true },
   // a session file's: the error that ended the call
@@ -63,13 +63,13 @@ function server(lang, refreshed) {
 const L = {
   en: {
     statuses: ["429 · rate_limit_error", "200", "Succeeded", "rate_limit"], badge: "Local session",
-    labels: { fail: ["Status", "Error type", "Upstream said", "Request ID", "Endpoint", "Session ID"], ok: ["Request ID", "Endpoint", "Called for", "First token"], log: ["Request ID", "Session ID", "Data source"], logFail: ["Status", "Error type", "Error", "Request ID", "Session ID", "Data source"] },
+    labels: { fail: ["Status", "Error type", "Upstream said", "Request ID", "Endpoint", "Session ID"], ok: ["Request ID", "Endpoint", "Called for", "First token", "In magpie", "Vendor's first token"], log: ["Request ID", "Session ID", "Data source"], logFail: ["Status", "Error type", "Error", "Request ID", "Session ID", "Data source"] },
     subagent: "Subagent",
     noStatus: "Read from the agent's session file. The account is shown only when local metadata identifies it; no service provider is inferred.",
   },
   zh: {
     statuses: ["429 · rate_limit_error", "200", "成功", "rate_limit"], badge: "本地会话",
-    labels: { fail: ["状态", "错误类型", "上游返回", "请求 ID", "终结点", "会话 ID"], ok: ["请求 ID", "终结点", "用途", "首响"], log: ["请求 ID", "会话 ID", "数据来源"], logFail: ["状态", "错误类型", "错误", "请求 ID", "会话 ID", "数据来源"] },
+    labels: { fail: ["状态", "错误类型", "上游返回", "请求 ID", "终结点", "会话 ID"], ok: ["请求 ID", "终结点", "用途", "首响", "magpie 内耗时", "厂商首字等待"], log: ["请求 ID", "会话 ID", "数据来源"], logFail: ["状态", "错误类型", "错误", "请求 ID", "会话 ID", "数据来源"] },
     subagent: "子代理",
     noStatus: "读自 Agent 的会话文件；仅在本地元数据能够明确识别时显示账号，不推断供应商。",
   },
@@ -152,6 +152,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await reader.click(p, rows.nth(1));
         assert.deepEqual(await labels(), w.labels.ok);
         assert.deepEqual((await values()).slice(0, 3), ["chatcmpl-77", "/v1/messages → /v1/chat/completions", w.subagent]);
+        // the first token split: magpie's own 40 ms, the vendor's 660 ms
+        assert.deepEqual((await values()).slice(4, 6).map((v) => v.match(/^\d+/)?.[0]), ["40", "660"]);
         await reader.click(p, rows.nth(2));
         assert.deepEqual(await p.locator(".led tbody tr.led-detail").count(), 2);
         assert(!(await p.locator(".led-detail").nth(1).locator("dd.bad").count()), "a session file's success has nothing in red");

@@ -13,7 +13,7 @@ import (
 func init() {
 	movers["factory"] = &mover{
 		pkg:    "@magpie-community/opencode-factory-auth",
-		min:    "0.1.14", // Claude Code 2.1.288's runtime context as a system message of text blocks (#658); a tool whose input_schema has anyOf/oneOf/allOf at its root (Codex's automation_update) wrapped for Claude models (#646); a failure's status and its sign-in mark as the built-in's; Claude 5's system-role metadata as Factory takes it; Claude Code's standalone model-switch system updates; tool results quoting Claude Code's fixed phrases, and Claude Code's directory updates carrying a model; the sign-in renewed ahead of time through auth.refresh; Claude Code with a global CLAUDE.md or a SessionStart hook, and Claude Desktop's model line (#634)
+		min:    "0.1.16", // requests saying droid 0.233.0 (JL: every model 403); Claude Code 2.1.288's runtime context as a system message of text blocks (#658); a tool whose input_schema has anyOf/oneOf/allOf at its root (Codex's automation_update) wrapped for Claude models (#646); a failure's status and its sign-in mark as the built-in's; Claude 5's system-role metadata as Factory takes it; Claude Code's standalone model-switch system updates; tool results quoting Claude Code's fixed phrases, and Claude Code's directory updates carrying a model; the sign-in renewed ahead of time through auth.refresh; Claude Code with a global CLAUDE.md or a SessionStart hook, and Claude Desktop's model line (#634)
 		agents: []string{"factory"},
 		out: func() ([]Moving, error) {
 			ls := factoryLogins()

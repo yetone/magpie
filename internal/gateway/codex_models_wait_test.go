@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,5 +56,29 @@ func TestCodexModelListBackendSlow(t *testing.T) {
 	}
 	if rec.Code != 200 || !has["fake/m1"] || !has["gpt-5.5"] {
 		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// One /models request from Codex builds magpie's providers once (#746,
+// sperwe: seven builds, each reading every agent's sign-in, some 200
+// keychain reads, took 5.3–5.6 s, past the 5 s Codex waits, and Codex kept
+// its own list): the catalog, the codex provider's picks and windows and
+// the list's tag all read the one build.
+func TestCodexModelListBuildsProvidersOnce(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"models":[{"slug":"gpt-5.5","priority":1}]}`))
+	})
+	h := New().Handler()
+	n := provider.AllBuilt.Load()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", CodexPath+"/models?client_version=0.159.2", nil)
+	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"fake/m1"`) || !strings.Contains(rec.Body.String(), `"gpt-5.5"`) {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if got := provider.AllBuilt.Load() - n; got != 1 {
+		t.Fatalf("the providers were built %d times for one list, want 1", got)
 	}
 }

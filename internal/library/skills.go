@@ -1013,8 +1013,34 @@ func EverySkillAgents(agents []string, on bool) (*Result, error) {
 	if len(agents) == 0 {
 		return nil, fmt.Errorf("no agents to give the skills to")
 	}
+	return skillsAgents(nil, agents, on)
+}
+
+// SomeSkillsAgents does as EverySkillAgents for the skills named alone: a
+// repository's skills, from its group's chips (#787).
+func SomeSkillsAgents(names, agents []string, on bool) (*Result, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("no skills to give the agents")
+	}
+	if len(agents) == 0 {
+		return nil, fmt.Errorf("no agents to give the skills to")
+	}
+	return skillsAgents(names, agents, on)
+}
+
+// skillsAgents gives the skills named, or every one when none are, to the
+// agents, or takes them from them.
+func skillsAgents(names, agents []string, on bool) (*Result, error) {
 	return change(func(l *Library) error {
+		for _, name := range names {
+			if l.skill(name) == nil {
+				return fmt.Errorf("no skill called %s", name)
+			}
+		}
 		for _, s := range l.Skills {
+			if names != nil && !slices.Contains(names, s.Name) {
+				continue
+			}
 			kept := slices.DeleteFunc(slices.Clone(s.Agents), func(a string) bool { return slices.Contains(agents, a) })
 			if on {
 				kept = append(kept, agents...)

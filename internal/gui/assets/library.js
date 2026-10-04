@@ -591,6 +591,9 @@
     ], tab, (id) => {
       tab = id;
       try { localStorage.setItem("magpie.libTab", id); } catch {}
+      // RTK's count read afresh each time its tab is opened: an agent run
+      // since adds to it (#741); the page keeps the last one until then
+      if (id === "rtk" && rtk) loadRTK();
       if (!lib) return page.querySelector(":scope > .lib-skel")?.replaceWith(skeleton(id));
       render(); syncLists();
     });
@@ -705,6 +708,10 @@
         ttl.append(ub);
       }
       card.append(ttl);
+      // an upgrade under way says what it runs; one that failed says why,
+      // with the tool's exit code and what it said, until the next try (#741)
+      if (rtkUpgrading && rtk.upgrade) card.append(el("p", "lib-rtk-gain", t("Running {cmd} — this can take a few minutes.", { cmd: rtk.upgrade })));
+      else if (rtkUpgradeErr) card.append(el("p", "lib-rtk-note lib-rtk-err", t("The upgrade failed: {why}", { why: rtkUpgradeErr })));
       if (rtk.note) card.append(el("p", "lib-rtk-note", rtk.note));
       // found where magpie looks, but not on the PATH the agents get: their
       // hooks run rtk by name, so it does nothing for them (#601)
@@ -725,10 +732,22 @@
         acts.append(button(t("Check again"), rtk.pathDir ? "" : "action", () => { rtk = null; render(); }));
         card.append(acts);
       }
+      // RTK's own count (rtk gain): every agent and terminal, all time —
+      // said on the page, so an empty one isn't read as magpie counting
+      // only some (#741); one rtk couldn't give says why
       const g = rtk.gain;
-      card.append(el("p", "lib-rtk-gain", g
+      const gain = el("p", "lib-rtk-gain", g
         ? t("{saved} tokens saved over {n} commands — {pct}% on average", { saved: tokens(g.saved), n: g.commands.toLocaleString(), pct: Math.round(g.pct) })
-        : t("Nothing saved yet: the agents' commands go through RTK once it's switched on and the agent is restarted.")));
+        : rtk.gainErr
+          ? t("magpie couldn't read what RTK saved: {why}", { why: rtk.gainErr })
+          : t("Nothing saved yet: the agents' commands go through RTK once it's switched on and the agent is restarted."));
+      gain.append(" ", el("span", "lib-rtk-scope", t("RTK's own count (rtk gain): every command run through RTK on this computer, from any agent or terminal.")));
+      card.append(gain);
+      // Codex's Windows sandbox: rtk runs there as another account, or one
+      // that can't write RTK's history, so what it saves isn't in that count
+      if (rtk.codexSandbox) card.append(el("p", "lib-rtk-note lib-rtk-sandbox", rtk.codexSandbox === "elevated"
+        ? t("Codex runs its commands in its Windows sandbox, as its own sandbox account: RTK keeps what it saves there in that account's history, not yours, so it isn't counted here.")
+        : t("Codex runs its commands in its Windows sandbox, which can't write RTK's history: what RTK saves there isn't recorded, so it isn't counted here.")));
       if (rtk.days?.length) card.append(rtkChart(rtk.days));
     } else {
       card.append(ttl);
@@ -857,18 +876,25 @@
     return false;
   }
   let rtkUpgrading = false;
+  let rtkUpgradeErr = ""; // why the last upgrade failed, shown on the card
   async function upgradeRTK() {
     rtkUpgrading = true;
+    rtkUpgradeErr = "";
     render();
+    let failed = false;
     try {
       rtk = await api("library/rtk/upgrade", {});
       if (rtk.note) status(rtk.note, "", 10000);
       else status(t("RTK is now {v}", { v: rtk.version }), "ok", 6000);
     } catch (e) {
-      status(e.message, "err", 10000);
+      failed = true;
+      rtkUpgradeErr = e.message;
+      status(t("RTK's upgrade failed — the RTK card says why"), "err", 10000);
     }
     rtkUpgrading = false;
     render();
+    // the version it left, whatever the installer said
+    if (failed) loadRTK();
   }
   let rtkPathing = false;
   async function pathRTK() {
@@ -1966,16 +1992,7 @@
       u.title = stale.length === 1 ? t("Fetch {name} from GitHub again", { name: stale[0].name }) : t("Fetch the {n} skills GitHub changed again", { n: stale.length });
       tags.append(u);
     }
-    // which agents have its skills, all of them or some
-    const have = el("div", "lib-have");
-    for (const a of all) {
-      const k = g.skills.filter((s) => s.agents.includes(a.id)).length;
-      if (!k) continue;
-      const i = agentIcon(a.icon);
-      i.title = k === n ? t("{agent} has all of them", { agent: a.name }) : t("{agent} has {n} of them", { agent: a.name, n: k });
-      if (k < n) i.classList.add("some");
-      have.append(i);
-    }
+    const have = groupChips(g, all);
     const acts = el("div", "lib-rowacts");
     if (g.repo) {
       const o = button("", "lib-icon", () => browse("https://github.com/" + g.repo));
@@ -1996,6 +2013,46 @@
     card.append(head);
     if (!folded) card.append(w.el);
     return card;
+  }
+
+  // A group's chips: which agents have its skills, all of them or some,
+  // and a click gives an agent every one of them or takes them all (#787,
+  // mintonight: a repository's skills were on or off one row at a time).
+  // A chip is lit when its agent has them all; one with some is half lit,
+  // and a click gives it the rest. All gives them to every agent shown.
+  function groupChips(g, all) {
+    const n = g.skills.length, names = g.skills.map((s) => s.name);
+    const count = (id) => g.skills.filter((s) => s.agents?.includes(id)).length;
+    const full = all.filter((a) => count(a.id) === n).map((a) => a.id);
+    const box = agentChips(all, full, async (next) => {
+      const on = next.filter((id) => !full.includes(id)), off = full.filter((id) => !next.includes(id));
+      box.classList.add("busy");
+      try {
+        let v = null;
+        if (on.length) v = await api("library/skills/agents-some", { names, agents: on, on: true });
+        if (off.length) v = await api("library/skills/agents-some", { names, agents: off, on: false });
+        if (!v) return;
+        take(v);
+        const who = (ids) => ids.map(nameOf).join(", ");
+        report(v.result, on.length
+          ? t("{repo}'s skills are on for {agents}", { repo: g.repo || t("On this computer"), agents: who(on) })
+          : t("{repo}'s skills are off for {agents}", { repo: g.repo || t("On this computer"), agents: who(off) }));
+      } catch (e) {
+        status(e.message, "err", 6000);
+      }
+      render();
+    }, { all: true });
+    box.classList.add("lib-groupchips");
+    for (const c of box.querySelectorAll(".lib-ag[data-agent]")) {
+      const a = all.find((x) => x.id === c.dataset.agent), k = count(a.id);
+      if (k && k < n) c.classList.add("some");
+      c.title = k === n ? t("{agent} has all of them — click to take them away", { agent: a.name })
+        : k ? t("{agent} has {n} of them — click to give it the rest", { agent: a.name, n: k })
+        : t("Give {agent} all of them", { agent: a.name });
+    }
+    const every = box.querySelector(".lib-ag.all");
+    if (every) every.title = every.classList.contains("on") ? t("Every agent has all of them — click to take them from every one") : t("Give all of them to every agent");
+    return box;
   }
 
   // ---------- a long list, drawn near the view first ----------

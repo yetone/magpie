@@ -44,8 +44,21 @@ const usage = () => ({
   ] },
 });
 
-function serve(lang, posts) {
+// me's five hours and week are under its cap, but its Opus week, which
+// counts Opus alone, is past it: the account is held for Opus only (#760)
+const opusUsage = () => ({
+  "me@example.com": { provider: "codex", windows: [
+    { name: "5-hour", used: 40, resetsAt: inHours(1), capped: true },
+    { name: "Weekly", used: 50, resetsAt: inHours(100), capped: true },
+    { name: "Opus week", used: 90, resetsAt: inHours(3), capped: true, capsSome: true },
+  ] },
+  "Spare@Example.com": usage()["Spare@Example.com"],
+});
+
+function serve(lang, posts, use = usage, alone = false) {
   const ps = fresh();
+  // the spare off: Codex signed in to me has nowhere to be moved to
+  if (alone) ps.codex.account.logins[1].on = false;
   const providers = { providers: [ps.codex], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
@@ -57,7 +70,7 @@ function serve(lang, posts) {
     if (url.pathname === "/api/providers") return json(providers);
     if (url.pathname === "/api/groups") return json({ groups: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
-    if (url.pathname === "/api/login/usage") return json(url.searchParams.get("agent") === "codex" ? usage() : {});
+    if (url.pathname === "/api/login/usage") return json(url.searchParams.get("agent") === "codex" ? use() : {});
     if (url.pathname === "/api/provider/accountcap" && route.request().method() === "POST") {
       const body = route.request().postDataJSON();
       posts.push(body);
@@ -76,14 +89,14 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { none: "No cap", cap: (n) => `Cap ${n}%`, held: "At its cap · back in 3h", other: "Other…", menu: "Usage cap" },
-  zh: { none: "不设上限", cap: (n) => `上限 ${n}%`, held: "已达上限 · 3 小时后恢复", other: "其他…", menu: "用量上限" },
+  en: { direct: "At its cap · Codex still uses it", directWhy: /refused with a usage-cap error until it renews.*\nCodex is signed in to this account and asks its vendor itself, not through magpie/s, opus: "Opus week at its cap · back in 3h", opusWhy: /^Opus week is at 90%, past this account's 70% cap, so magpie sends the requests it counts to the other accounts until it renews; other models still use this account/, none: "No cap", cap: (n) => `Cap ${n}%`, held: "At its cap · back in 3h", other: "Other…", menu: "Usage cap" },
+  zh: { direct: "已达上限 · Codex 仍在使用", directWhy: /经过 magpie 的请求会返回.*\nCodex 登录的是这个账号，它自己直接向厂商发请求/s, opus: "Opus week已达上限 · 3 小时后恢复", opusWhy: /^Opus week已用 90%，超过该账号 70% 的上限.*其他模型仍会使用这个账号/, none: "不设上限", cap: (n) => `上限 ${n}%`, held: "已达上限 · 3 小时后恢复", other: "其他…", menu: "用量上限" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
     const w = words[lang];
-    const open = async (t, name) => {
+    const open = async (t, name, use, alone) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(async () => {
         if (process.env.ARTIFACT_DIR) {
@@ -97,7 +110,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
       const posts = [];
-      await page.route("**/*", serve(lang, posts));
+      await page.route("**/*", serve(lang, posts, use, alone));
       await page.goto("http://magpie.test/?view=providers");
       await page.locator(".row.provider", { hasText: "Codex" }).first().click();
       await page.locator(".editor .accts .acc .aq-w").first().waitFor();
@@ -180,6 +193,49 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "{who} is used to {n}% of each window at most", "{who} has no usage cap",
         "held at its {cap}% usage cap",
         "{who} is left out: a usage window is at {n}, past the {cap}% cap set on the account, so it counts as used up until that window renews.",
+      ].filter((k) => !I18N.zh[k]));
+      assert.deepEqual(missing, [], "every string has its Chinese");
+      assert.deepEqual(errors, []);
+    });
+
+    // 𝕏 on Discord: a Claude account capped at 90% ran its five hours to
+    // 100%, while its row said it was at its cap. Claude Code or Codex
+    // signed in to it asks the vendor itself; with no other account on to
+    // move it to, the cap stops only what goes through magpie, and the row
+    // says so, as the pill does before the cap is reached
+    test(`${engine} ${lang}: the only account on, at its cap, says the agent signed in to it still uses it`, async (t) => {
+      const { page, errors } = await open(t, "alone", usage, true);
+      const note = row(page, "me@example.com").locator(".acap-held");
+      assert.equal(await note.textContent(), w.direct);
+      assert.match(await note.getAttribute("title"), w.directWhy);
+      assert.match(await pill(page, "me@example.com").getAttribute("title"), w.directWhy.source.includes("Codex is") ? /\n\nCodex is signed in to this account/ : /\n\nCodex 登录的是这个账号/);
+      assert.notEqual(await note.evaluate((e) => getComputedStyle(e).color), await row(page, "me@example.com").locator(".n").evaluate((e) => getComputedStyle(e).color), "a warning, not plain text");
+      // the spare, off, has no pill note of its own
+      assert.equal(await row(page, "Spare@Example.com").locator(".acap-held").count(), 0);
+      const missing = await page.evaluate(() => [
+        "At its cap · {agent} still uses it",
+        "A usage window is at {n}%, past this account's {cap}% cap: requests through magpie are refused with a usage-cap error until it renews",
+        "{agent} is signed in to this account and asks its vendor itself, not through magpie, so with no other account on to move it to, {agent} goes on using it past the cap. Add another account, or pick {agent}'s models via magpie, for the cap to hold it",
+      ].filter((k) => !I18N.zh[k]));
+      assert.deepEqual(missing, [], "every string has its Chinese");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: with another account on, the pill and the note don't say the agent goes past the cap`, async (t) => {
+      const { page } = await open(t, "codex");
+      assert.equal(await row(page, "me@example.com").locator(".acap-direct").count(), 0);
+      assert.doesNotMatch(await pill(page, "me@example.com").getAttribute("title"), /Codex is signed in|Codex 登录的是/);
+    });
+
+    test(`${engine} ${lang}: a window of one model past the cap holds the account for that model, and says so`, async (t) => {
+      const { page, errors } = await open(t, "opus", opusUsage);
+      const note = row(page, "me@example.com").locator(".acap-held");
+      assert.equal(await note.textContent(), w.opus);
+      assert.match(await note.getAttribute("title"), w.opusWhy);
+      const missing = await page.evaluate(() => [
+        "{names} at its cap", "{names} at its cap · back {in}",
+        "{names} is at {n}%, past this account's {cap}% cap, so magpie sends the requests it counts to the other accounts until it renews; other models still use this account",
+        "With no other account on, those requests are refused with a usage-cap error until then",
       ].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");
       assert.deepEqual(errors, []);

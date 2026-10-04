@@ -111,6 +111,11 @@ type Agent struct {
 	// Joined reports an agent Join connected: magpie is in its config
 	// though no field is on one of magpie's models.
 	Joined func() bool
+	// Routed reports that the agent's config sends whatever model it
+	// names to magpie's gateway (Codex's openai_base_url or magpie as its
+	// provider), so a model's name the gateway takes as a routing group
+	// is that group's (#750).
+	Routed func() bool
 	// Follow, for an agent whose own picker moves its main model where
 	// magpie keeps other settings following it (Claude Code's /model and
 	// its tiers), brings those along to the model picked there. Run as the

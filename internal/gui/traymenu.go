@@ -19,6 +19,17 @@ var trayZh = map[string]string{
 	"Restart Now to Update (%d in flight)": "立即重启以更新（%d 个进行中）",
 }
 
+// trayJa is the tray menu in Japanese.
+var trayJa = map[string]string{
+	"Open magpie":                          "magpie を開く",
+	"Version %s":                           "バージョン %s",
+	"Restart to Update":                    "再起動してアップデート",
+	"Restart to Update to %s":              "再起動して %s にアップデート",
+	"Quit magpie":                          "magpie を終了",
+	"Restart Now to Update":                "今すぐ再起動してアップデート",
+	"Restart Now to Update (%d in flight)": "今すぐ再起動してアップデート（%d 件処理中）",
+}
+
 // trayDe is the tray menu in German.
 var trayDe = map[string]string{
 	"Open magpie":                          "magpie öffnen",
@@ -31,36 +42,38 @@ var trayDe = map[string]string{
 }
 
 // trayWords are the tray menu's translations by language.
-var trayWords = map[string]map[string]string{"zh": trayZh, "de": trayDe}
+var trayWords = map[string]map[string]string{"zh": trayZh, "ja": trayJa, "de": trayDe}
 
 // onLang relabels the tray menu when the Settings page changes the
 // language; set by the process that has the tray.
 var onLang func()
 
 // trayLang is the language the tray menu is in, as the page picks its own:
-// the setting, or with "system" (or none) the system's, Chinese for any zh
-// and German for any de.
+// the setting, or with "system" (or none) the system's, Chinese for any zh,
+// Japanese for any ja, German for any de.
 func trayLang(pref string, system func() string) string {
 	switch pref {
-	case "en", "zh", "de":
+	case "en", "zh", "ja", "de":
 		return pref
 	}
 	switch sys := strings.ToLower(system()); {
 	case strings.HasPrefix(sys, "zh"):
 		return "zh"
+	case strings.HasPrefix(sys, "ja"):
+		return "ja"
 	case strings.HasPrefix(sys, "de"):
 		return "de"
 	}
 	return "en"
 }
 
-// notesLang is the language release notes come in for lang: they are
-// written in English and Chinese alone.
+// notesLang is the language release notes are asked in for lang: there are
+// no German ones, so German asks for the English.
 func notesLang(lang string) string {
-	if lang == "zh" {
-		return "zh"
+	if lang == "de" {
+		return "en"
 	}
-	return "en"
+	return lang
 }
 
 // trayText is a menu line in the language, English where it has none.

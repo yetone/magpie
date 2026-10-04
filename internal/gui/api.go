@@ -365,6 +365,8 @@ type searchChoiceJSON struct {
 	// Service is a Kimi Code plan, which searches by its search service:
 	// named by itself, with no model
 	Service bool `json:"service,omitempty"`
+	// Own is a Google sign-in, which searches for its own models first
+	Own bool `json:"own,omitempty"`
 }
 
 type searchVendorJSON struct {
@@ -395,7 +397,7 @@ func searchState(s *settingsJSON) {
 	s.SearchChoices = []searchChoiceJSON{}
 	for _, c := range gateway.Searchers() {
 		p := c.Provider
-		j := searchChoiceJSON{ID: p.ID, Name: p.Name, Icon: p.Icon, Small: c.Small, SmallName: names[p.ID+"/"+c.Small], Models: []modelRef{}, Service: c.Service}
+		j := searchChoiceJSON{ID: p.ID, Name: p.Name, Icon: p.Icon, Small: c.Small, SmallName: names[p.ID+"/"+c.Small], Models: []modelRef{}, Service: c.Service, Own: c.Own}
 		for _, m := range c.Models {
 			id := p.ID + "/" + m.ID
 			j.Models = append(j.Models, modelRef{ID: id, Name: cmp.Or(names[id], m.Name, m.ID), Provider: p.ID, PName: p.Name, Icon: p.Icon})
@@ -830,6 +832,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// how agents' lists name models, set on its own for the agents to be told
 		in.PlainNames, in.PlainOwnNames = cur.PlainNames, cur.PlainOwnNames
 		in.CodexAgentsV1 = cur.CodexAgentsV1
+		in.FullContext = cur.FullContext // set on its own (full-context below)
 		in.CodexTitles = cur.CodexTitles // set on its own (codex-titles below)
 		in.ChinaMirror = cur.ChinaMirror // the Plugins page's, set on its own
 		// which Codex accounts spend a reset by themselves, set on the Usage card
@@ -872,9 +875,9 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			onDock(in)
 		}
 		// the cards the menu bar shows, any of them (TrayUsage is only the first),
-		// how often, and with their logos or not
+		// how often, with their logos or not, and beside the bird or not
 		if (!slices.Equal(settings.Load().TrayUsages, cur.TrayUsages) || in.TrayUsageEvery != cur.TrayUsageEvery ||
-			in.TrayNoLogos != cur.TrayNoLogos) && onTrayUsage != nil {
+			in.TrayNoLogos != cur.TrayNoLogos || in.TrayNoBird != cur.TrayNoBird) && onTrayUsage != nil {
 			onTrayUsage()
 		}
 		// an alert turned on or moved is looked at now, the Mac asked for its
@@ -964,6 +967,21 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		if err := provider.SetCodexAgentsV1(in.On); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// whether Codex and Claude Code are told a model's whole context window
+	// or the working one (settings.FullContext): their lists are written
+	// again
+	mux.HandleFunc("POST /api/settings/full-context", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ On bool }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := provider.SetFullContext(in.On); err != nil {
 			fail(rw, err)
 			return
 		}
@@ -1186,6 +1204,22 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		writeJSON(rw, settingsState())
+	})
+	// a search API's saved key, for its row's Show button (OnurBen on
+	// Discord); like a provider's, it never leaves this machine
+	mux.HandleFunc("POST /api/settings/search-key", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Vendor string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		for _, a := range provider.StoredSearchAPIs() {
+			if a.Vendor == in.Vendor {
+				writeJSON(rw, map[string]string{"key": a.Key})
+				return
+			}
+		}
+		fail(rw, fmt.Errorf("no search API %q", in.Vendor))
 	})
 	// the config folder only: the page names no path, so it can't open others
 	mux.HandleFunc("POST /api/settings/reveal", func(rw http.ResponseWriter, r *http.Request) {

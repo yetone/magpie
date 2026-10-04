@@ -119,7 +119,7 @@ func npmInstall(pkg, goos string, node bool) InstallCmd {
 	case node:
 		return InstallCmd{Via: "npm", Command: plain}
 	case goos == "windows":
-		return InstallCmd{Via: "npm", Node: "winget", Command: "winget install -e --id OpenJS.NodeJS.LTS; " +
+		return InstallCmd{Via: "npm", Node: "winget", Command: "winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements; " +
 			"$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); " +
 			"npm.cmd install -g " + pkg}
 	}
@@ -128,8 +128,8 @@ func npmInstall(pkg, goos string, node bool) InstallCmd {
 		how = "nvm-mac"
 	}
 	return InstallCmd{Via: "npm", Node: how, Command: `export NVM_DIR="$HOME/.nvm" && mkdir -p "$NVM_DIR" && ` +
-		"curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/" + nvmVersion + "/install.sh | bash && " +
-		`. "$NVM_DIR/nvm.sh" && nvm install --lts && ` + plain}
+		"t=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/" + nvmVersion + `/install.sh -o "$t" && ` +
+		`bash "$t" && . "$NVM_DIR/nvm.sh" && nvm install --lts && ` + plain}
 }
 
 // nodeHere says whether this machine has Node.js's npm: on PATH, in one

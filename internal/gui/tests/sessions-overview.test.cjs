@@ -98,7 +98,7 @@ function serve(lang, seen, ctl = {}) {
 
 const want = {
   en: { median: "median 120K · p90 880K", share: /\d+% in alpha/, busiest: /^Busiest at \S+ 09:00$/, detail: "Time", idLine: "Session ID", none: "Active time isn't kept by model." },
-  zh: { median: "中位 12 万 · p90 88 万", share: /alpha 占 \d+%/, busiest: /^最忙：\S+ 09:00$/, detail: "时间", idLine: "会话 ID", none: "活跃时长不按模型统计。" },
+  zh: { median: "中位 120K · p90 880K", share: /alpha 占 \d+%/, busiest: /^最忙：\S+ 09:00$/, detail: "时间", idLine: "会话 ID", none: "活跃时长不按模型统计。" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -193,7 +193,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       await t.test("tool use: the top tools, by kind and by week", async () => {
         const tools = page.locator("#sessTools");
-        assert.equal(await tools.locator(".tz").innerText(), lang === "en" ? "1.0K calls · 40 sessions" : "1000 次调用 · 40 个会话");
+        assert.equal(await tools.locator(".tz").innerText(), lang === "en" ? "1.0K calls · 40 sessions" : "1.0K 次调用 · 40 个会话");
         const rows = tools.locator(".sess-bar.tool");
         assert.equal(await rows.count(), 5);
         assert.deepEqual(await rows.first().locator("span").evaluateAll((es) => es.map((e) => e.textContent)).then((x) => x.filter(Boolean)),

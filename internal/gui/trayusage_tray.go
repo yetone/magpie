@@ -81,7 +81,11 @@ func (h *host) watchTrayUsage() {
 			// Reapply even unchanged cells: a system menu-bar rebuild can
 			// replace the composed image with Wails' bird icon.
 			if len(cells) > 0 {
-				if trayImageShow(cells, trayIcon) {
+				bird := trayIcon
+				if s.TrayNoBird {
+					bird = nil // the cards alone
+				}
+				if trayImageShow(cells, bird) {
 					drawn = true
 				} else {
 					h.tray.SetLabel(label)

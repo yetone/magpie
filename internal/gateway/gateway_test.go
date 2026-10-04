@@ -312,6 +312,51 @@ func TestAnthropicClientFallsBackPastOpenCodeFormats(t *testing.T) {
 	}
 }
 
+// Copilot's /v1/messages turns away a model it serves on chat completions
+// alone (GPT-4o, GPT-4.1) in plain text, "no model endpoints available
+// given user constraints": Claude Code's request goes on to chat
+// completions, where it is answered, not back to the user as a refusal of
+// their plan (#754).
+func TestAnthropicClientFallsBackPastCopilotNoEndpoints(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	calls := map[string]int{}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		calls[r.URL.Path]++
+		switch r.URL.Path {
+		case "/v1/messages":
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, "no model endpoints available given user constraints\n")
+		case "/v1/chat/completions":
+			w.Header().Set("Content-Type", "text/event-stream")
+			io.WriteString(w, sse(
+				`data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"role":"assistant","content":"chat ok"}}]}`,
+				`data: {"id":"c1","choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`,
+				`data: [DONE]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(up.Close)
+	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"gpt-4o"},
+		Chat: up.URL + "/v1", Anthropic: up.URL}); err != nil {
+		t.Fatal(err)
+	}
+	handler := New().Handler()
+	for i, want := range []int{1, 2} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"gpt-4o","max_tokens":5,"messages":[{"role":"user","content":"."}]}`)))
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "chat ok") {
+			t.Fatalf("call %d: status %d: %s", i, rec.Code, rec.Body.String())
+		}
+		if calls["/v1/messages"] != 1 || calls["/v1/chat/completions"] != want {
+			t.Fatalf("call %d: %v", i, calls)
+		}
+	}
+}
+
 func TestWrongEndpoint(t *testing.T) {
 	for _, tc := range []struct {
 		status int
@@ -324,6 +369,8 @@ func TestWrongEndpoint(t *testing.T) {
 		{400, `{"error":{"message":"model not accessible","code":"unsupported_api_for_model"}}`, true},
 		{400, `{"type":"error","error":{"type":"ModelError","message":"Model grok-4.7 is not supported for format anthropic"}}`, true},
 		{400, `{"type":"error","error":{"type":"invalid_request_error","message":"Model does not support this protocol."}}`, true},
+		{400, "no model endpoints available given user constraints\n", true}, // Copilot's /v1/messages (#754)
+		{400, `{"error":{"message":"The requested model is not supported.","code":"model_not_supported"}}`, false},
 		{429, `rate limit`, false},
 		{500, `use v1/responses`, false},
 		{200, `use v1/responses`, false},

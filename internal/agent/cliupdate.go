@@ -87,6 +87,11 @@ var cliSpecs = map[string]cliSpec{
 	"crush":   {npm: []string{"@charmland/crush"}, brew: []string{"crush"}},
 	"cline":   {npm: []string{"cline"}},
 	"goose":   {brew: []string{"block-goose-cli"}},
+	// AtomCode's installer chooses /usr/local/bin or ~/.local/bin by
+	// writability (`.local\bin\atomcode.exe` on Windows); `atomcode upgrade`
+	// exists, but its installed-binary update path is not exercised here, so
+	// only its npm package and brew cask are recognized
+	"atomcode": {npm: []string{"@atomgit.com/atomcode"}, brew: []string{"atomcode"}},
 	// omo update, however it was installed: OmO's own updater, which moves
 	// the engine it pins (senpi) with it
 	"omo": {npm: []string{"omo-ai"},

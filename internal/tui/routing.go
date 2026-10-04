@@ -566,6 +566,9 @@ func (m model) viewGroups() string {
 			notes = append(notes, "found")
 		}
 		members := strings.Join(g.Members, " → ")
+		if len(g.Match) > 0 {
+			notes = append(notes, fmt.Sprintf("%d pattern%s", len(g.Match), plural(len(g.Match))))
+		}
 		line += "  " + sText.Render(strings.Join(notes, " · "))
 		if room := m.w - lipgloss.Width(line) - 4; room > 10 {
 			line += "  " + sMuted.Render(trunc(members, room))
@@ -603,7 +606,22 @@ func (m model) viewGroup() string {
 		if g.IsFast(id) {
 			name += sMuted.Render(" · fast")
 		}
+		if slices.Contains(g.Matched, id) {
+			name += sMuted.Render(" · by pattern")
+		}
 		b.WriteString(pad + marker + sFaint.Render(fmt.Sprintf("%d  ", i+1)) + name + "\n")
+	}
+	// patterns find models in the catalog each time (#766): how many now,
+	// and one that finds none said so rather than left an empty list
+	if hits := provider.PatternHits(g); len(hits) > 0 {
+		b.WriteString("\n" + pad + "  " + sFaint.Render("patterns · every model they match now, after those named") + "\n")
+		for _, h := range hits {
+			n := sMuted.Render(fmt.Sprintf(" · %d model%s", h.Models, plural(h.Models)))
+			if h.Models == 0 {
+				n = sBad.Render(" · matches nothing now")
+			}
+			b.WriteString(pad + "     " + sText.Render(h.Pattern) + n + "\n")
+		}
 	}
 	b.WriteString("\n" + pad + "  " + sFaint.Render("rules · as a turn begins, the first that matches sends it to its model first") + "\n")
 	if len(g.Rules) == 0 {

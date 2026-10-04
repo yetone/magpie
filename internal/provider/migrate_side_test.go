@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/update"
 )
 
 // moveAndBack does what Move and MoveBack do with a mover's accounts, but
@@ -228,6 +230,11 @@ func TestMoveCommandCode(t *testing.T) {
 	}
 	if l := cmdLogins(); len(l) != 3 {
 		t.Fatalf("cmd logins %+v", l)
+	}
+	// 0.1.7 and before said every model took no pictures (the list says
+	// nothing of them), which magpie takes over models.dev's answer
+	if update.Newer("0.1.8", movers[CommandCodePlanID].min) {
+		t.Fatalf("the move installs commandcode-auth %q, which marks every model text-only", movers[CommandCodePlanID].min)
 	}
 }
 

@@ -85,7 +85,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		// still on Codex's own model, through its sign-in, when it says
 		// nothing of them
 		if rest == "/responses" {
-			if to := codexTitlesTo(r.Header, body); to != "" {
+			if to := codexTitlesTo(r.Header, body, false); to != "" {
 				s.codexTitle(w, r, body, to)
 				return
 			}
@@ -310,6 +310,8 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 	var uu Usage
 	metadata := requestSessionMetadata(r.Header, body)
 	kind := requestCallKind(r.Header, metadata)
+	var titleReply capturedBody // bounded; ordinary streams incur no copy
+	captureTitle := false
 	end := func(status int, msg string, tokens, out int) {}
 	if rest == "/responses" {
 		who := "Codex's own sign-in"
@@ -318,15 +320,26 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 		}
 		model := modelOf(body)
 		seat := Weighed{ID: "codex", Provider: "openai", Name: "OpenAI", Icon: "openai", Who: who, Kind: "account", Agent: "codex", Model: model}
-		tr = s.trace.begin(Route{Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Provider: "openai",
+		link := s.titlePrompts.observe(r, body, metadata, kind, start)
+		captureTitle = link != nil && isTitleKind(kind)
+		tr = s.trace.begin(Route{TitleLink: link, Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Provider: "openai",
 			Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Start: start}}})
 		end = func(status int, msg string, tokens, out int) {
 			ms := time.Since(start).Milliseconds()
 			ttft, text := first.ms()
+			replyDigest := ""
+			if captureTitle && status < 400 && msg == "" && !titleReply.truncated {
+				replyDigest = titleReplyDigest(titleReply.buf.Bytes(), nil)
+			}
 			s.trace.update(tr, func(t *Route) {
 				t.Tries[0].Done, t.Tries[0].Status, t.Tries[0].Millis, t.Tries[0].Error = true, status, ms, msg
 				t.Tries[0].TTFT, t.Tries[0].FirstText = ttft, text
 				t.Done, t.Status, t.Error, t.Millis, t.Tokens = true, status, msg, ms, tokens
+				if t.TitleLink != nil && isTitleKind(kind) && status < 400 && msg == "" && !titleReply.truncated {
+					link := *t.TitleLink
+					link.Reply = replyDigest
+					t.TitleLink = &link
+				}
 				t.Output, t.TTFT, t.FirstText = out, ttft, text
 				t.Usage = routeUsage("openai", model, uu)
 				t.Tries[0].Served, t.Tries[0].Swapped = served, swapped(model, served)
@@ -437,6 +450,9 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 	for {
 		n, err := res.Body.Read(buf)
 		if n > 0 {
+			if captureTitle {
+				titleReply.add(buf[:n])
+			}
 			if sniff != nil {
 				sniff.write(buf[:n])
 				first.see(buf[:n])
@@ -712,6 +728,11 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// what follows reads the providers seven times over (the catalog, the
+	// codex provider's picks and windows, the list's tag): held, they are
+	// built once, where each build read every agent's sign-in, keychain
+	// items among them, and together held the answer past Codex's 5 s (#746)
+	defer provider.Hold()()
 	cached := own == nil
 	if cached {
 		for _, e := range codexcat.CacheEntries() {

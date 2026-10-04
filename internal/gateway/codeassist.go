@@ -1,10 +1,12 @@
 package gateway
 
 import (
+	"cmp"
 	"encoding/json"
 	"regexp"
 	"strings"
 
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -220,6 +222,10 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 		}
 		fc["mode"] = mode
 		req["toolConfig"] = map[string]any{"functionCallingConfig": fc}
+	} else if r.WebSearch {
+		// Google's own search, which Code Assist runs on Gemini as long as
+		// no function is declared beside it (codeAssistSearches)
+		req["tools"] = []map[string]any{{"googleSearch": map[string]any{}}}
 	}
 
 	gen := map[string]any{}
@@ -241,6 +247,10 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 		if b, ok := tc["thinkingBudget"].(int); ok && claude && gen["maxOutputTokens"] == nil {
 			gen["maxOutputTokens"] = b + 32000
 		}
+	}
+	if catalog.DrawsID(sent) {
+		// an image model draws only when asked for images too
+		gen["responseModalities"] = []string{"TEXT", "IMAGE"}
 	}
 	if len(gen) > 0 {
 		req["generationConfig"] = gen
@@ -495,7 +505,10 @@ type codeAssistDecoder struct {
 	started bool
 	tools   bool
 	stopped bool
-	usage   *Usage
+	// searched is a googleSearch's grounding told already: it is given
+	// again with each chunk after it
+	searched bool
+	usage    *Usage
 	// held is text that may be the start of a call the model wrote out as
 	// text (see textCall), kept back until it is one or isn't
 	held string
@@ -561,6 +574,21 @@ func (d *codeAssistDecoder) decode(data string, emit func(Event)) error {
 				emit(Event{Kind: KImage, Name: p.InlineData.MimeType, Text: p.InlineData.Data})
 			case p.Text != "":
 				d.text(p.Text, emit)
+			}
+		}
+		if g := cand.GroundingMetadata; g != nil && !d.searched {
+			// what googleSearch found: the pages, by their site's name and
+			// an address of Google's that leads to them
+			var hits []Hit
+			for _, c := range g.GroundingChunks {
+				if c.Web != nil && c.Web.URI != "" {
+					hits = append(hits, Hit{Title: cmp.Or(c.Web.Title, c.Web.URI), URL: c.Web.URI})
+				}
+			}
+			if len(hits) > 0 || len(g.WebSearchQueries) > 0 {
+				d.flush(emit)
+				d.searched = true
+				emit(Event{Kind: KSearch, Text: strings.Join(g.WebSearchQueries, "; "), Hits: hits})
 			}
 		}
 		if cand.FinishReason != "" && !d.stopped {
@@ -811,7 +839,16 @@ type geminiChunk struct {
 		Content struct {
 			Parts []gPart `json:"parts"`
 		} `json:"content"`
-		FinishReason string `json:"finishReason"`
+		FinishReason      string `json:"finishReason"`
+		GroundingMetadata *struct {
+			WebSearchQueries []string `json:"webSearchQueries"`
+			GroundingChunks  []struct {
+				Web *struct {
+					Title string `json:"title"`
+					URI   string `json:"uri"`
+				} `json:"web"`
+			} `json:"groundingChunks"`
+		} `json:"groundingMetadata"`
 	} `json:"candidates"`
 	UsageMetadata *struct {
 		Prompt     int `json:"promptTokenCount"`

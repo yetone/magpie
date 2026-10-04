@@ -15,9 +15,10 @@ func isTitleKind(kind string) bool {
 // client_metadata in the Responses body. Read only identity fields; never keep
 // prompts or the rest of the metadata in the trace.
 type sessionMetadata struct {
-	Source string `json:"thread_source"`
-	Parent string `json:"parent_thread_id"`
-	Forked string `json:"forked_from_thread_id"`
+	Source       string `json:"thread_source"`
+	Parent       string `json:"parent_thread_id"`
+	Forked       string `json:"forked_from_thread_id"`
+	Installation string `json:"installation_id"`
 }
 
 func requestSessionMetadata(h http.Header, body []byte) sessionMetadata {
@@ -42,6 +43,7 @@ func requestSessionMetadata(h http.Header, body []byte) sessionMetadata {
 				_ = json.Unmarshal(envelope.Metadata["x-codex-parent-thread-id"], &m.Parent)
 			}
 			_ = json.Unmarshal(envelope.Metadata["forked_from_thread_id"], &m.Forked)
+			_ = json.Unmarshal(envelope.Metadata["installation_id"], &m.Installation)
 			if m.Source != "" || m.Parent != "" || m.Forked != "" {
 				return m
 			}

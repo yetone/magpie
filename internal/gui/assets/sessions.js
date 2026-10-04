@@ -4,8 +4,9 @@
 // lists them, each with a Restore and a Delete forever, and can be emptied;
 // erasing for good asks in the same dialog, and is only ever done when the
 // reader asks for it. A session written to in the last minute
-// may still be running, and is left as it is. Everything comes from
-// /api/sessions/manage.
+// may still be running, and is left as it is. Each row shows what the
+// session spent, as the Usage page's list does, and that list's rows open
+// here (#752). Everything comes from /api/sessions/manage.
 (() => {
   const page = $("#view-sessions");
   if (!page) return;
@@ -23,6 +24,7 @@
   let detail = "";            // the session opened to its details
   let loading = 0;
   let fitObserver = null;
+  let focus = null;           // { agent, id, until }: a session to bring into sight once drawn
 
   const TRASH = "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4";
   const TERM = "M3 4.5 6 7.5 3 10.5M7.5 11.5h5.5";
@@ -34,7 +36,8 @@
     try {
       const d = await api("sessions/manage?agent=" + encodeURIComponent(name ?? agent));
       if (n !== loading) return;
-      data = { ...d, agents: d?.agents || [], sessions: d?.sessions || [], trash: d?.trash || [], agent: d?.agent || "" };
+      // models may be null for a session that spent nothing
+      data = { ...d, agents: d?.agents || [], sessions: (d?.sessions || []).map((s) => ({ ...s, models: s.models || [] })), trash: d?.trash || [], agent: d?.agent || "" };
       failed = "";
       if (agent !== d.agent) { agent = d.agent; picked.clear(); }
     } catch (e) {
@@ -45,11 +48,46 @@
   }
   window.loadSessionsPage = load;
 
+  // openSessionOnPage: the Sessions page, from the Usage page's list (#752):
+  // on the session's agent, its folder unfolded and the session opened to
+  // its details, brought into sight once it is drawn; with no id, the page
+  // on that agent (or as it was). The reader's click is what moves the view.
+  window.openSessionOnPage = (s, e) => {
+    if (s.agent && s.agent !== agent) {
+      agent = s.agent;
+      try { localStorage.setItem("magpie.sessionsAgent", agent); } catch {}
+      picked.clear();
+      if (data) data = { ...data, agent, sessions: null };
+    }
+    trashOn = false;
+    if (s.id) {
+      query = "";
+      detail = s.id;
+      openedFor = agent;
+      opened.clear();
+      opened.add(s.cwd || "");
+      focus = scrollOnPurpose(e) ? { agent, id: s.id, until: performance.now() + 5000 } : null;
+    }
+    show("sessions");
+  };
+
+  // bring the session asked for into sight, once its row is drawn
+  function toFocus() {
+    if (!focus || focus.agent !== data?.agent || !data.sessions) return;
+    if (performance.now() > focus.until) { focus = null; return; }
+    const r = page.querySelector(`.row.sm-sess[data-id="${CSS.escape(focus.id)}"]`);
+    focus = null;
+    if (!r) return;
+    readerScrolls(1000);
+    r.closest(".sm-item").scrollIntoView({ block: "nearest", behavior: "instant" });
+    readerLeaves(page);
+  }
+
   const current = () => data?.agents.find((a) => a.agent === data.agent);
   const shown = () => {
     const q = query.trim().toLowerCase();
     const list = data?.sessions || [];
-    return q ? list.filter((s) => [s.title, s.cwd, s.id].some((x) => (x || "").toLowerCase().includes(q))) : list;
+    return q ? list.filter((s) => [s.title, s.cwd, s.id, ...(s.models || []).map((m) => m.model)].some((x) => (x || "").toLowerCase().includes(q))) : list;
   };
 
   function draw() {
@@ -284,6 +322,7 @@
       if (open) for (const s of items) g.append(item(s));
       tree.append(g);
     }
+    toFocus();
   }
 
   function item(s) {
@@ -302,10 +341,12 @@
     }
     const who = el("div", "who");
     who.append(el("div", "name", s.title || t("(no prompt)")));
-    const sub = el("div", "sub", [ago(s.last), s.messages ? t(s.messages === 1 ? "{n} message" : "{n} messages", { n: s.messages }) : "", fmtBytes(s.size), s.id.slice(0, 8)].filter(Boolean).join(" · "));
+    const sub = el("div", "sub", [ago(s.last), sessModelsText(s), s.messages ? t(s.messages === 1 ? "{n} message" : "{n} messages", { n: s.messages }) : "", fmtBytes(s.size), s.id.slice(0, 8)].filter(Boolean).join(" · "));
+    if (s.via?.length) sub.title = s.via.map(viaText).join("\n");
     if (s.wsl) sub.prepend(wslBadge(s), " ");
     who.append(sub);
-    r.append(who);
+    // what it spent, as the Usage page's list shows it
+    r.append(who, ...sessSpent(s));
     if (s.resume) {
       const res = el("button", "sess-resume", t("Resume"));
       res.type = "button";
@@ -363,6 +404,7 @@
     if (s.cwd) line(t("Folder"), s.cwd);
     line(t("Session ID"), s.id, copyBtn(s.id, t("Session id")));
     if (s.resume) line(t("Resume"), el("code", "", s.resume), copyBtn(s.resume, t("Resume command")));
+    sessUsageDetail(d, s, line);
     if (s.path) line(t("File"), s.path + (s.files > 1 ? " " + t("+{n} more", { n: s.files - 1 }) : ""));
     return d;
   }

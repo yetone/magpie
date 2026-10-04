@@ -1190,7 +1190,7 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 		if pool == "" {
 			continue
 		}
-		n := 0
+		n, fiveHour := 0, false
 		for _, b := range gr.Buckets {
 			if b.Disabled {
 				continue
@@ -1220,9 +1220,10 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 			}
 			out = append(out, w)
 			n++
+			fiveHour = fiveHour || w.Span == modelSpan
 		}
-		if n == 0 {
-			continue
+		if n == 0 || !fiveHour {
+			continue // without the group's 5 hours its models' own stand (#745)
 		}
 		// a model is in the group its name or description names its
 		// family in ("Models within this group: Claude Opus, Claude
@@ -1237,12 +1238,29 @@ func (g googleAccount) pools(ctx context.Context, ws []QuotaWindow) []QuotaWindo
 	return out
 }
 
+// modelSpan is the window fetchAvailableModels gives a model of
+// Antigravity's, its 5 hours, which its window leaves without a Span.
+const modelSpan = 5 * time.Hour
+
 // PooledWindows are ws as a page of text shows them: a pool's own windows,
 // named with their pool ("Gemini · 7 days"), in place of the per-model
-// windows drawing on it; ws as it is when it has no pool.
+// windows drawing on it; ws as it is when it has no pool. A model's window
+// goes only for a pool window of its span: one whose pool has only its
+// 7 days stays, the 5 hours it reads being the only ones to be had (#745).
 func PooledWindows(ws []QuotaWindow) []QuotaWindow {
 	if !slices.ContainsFunc(ws, func(w QuotaWindow) bool { return w.Pool != "" && w.Model == "" }) {
 		return ws
+	}
+	span := func(w QuotaWindow) time.Duration {
+		if w.Span == 0 && w.Model != "" {
+			return modelSpan
+		}
+		return w.Span
+	}
+	pooled := func(m QuotaWindow) bool {
+		return slices.ContainsFunc(ws, func(w QuotaWindow) bool {
+			return w.Pool == m.Pool && w.Model == "" && w.Span == span(m)
+		})
 	}
 	var out []QuotaWindow
 	for _, w := range ws {
@@ -1251,6 +1269,8 @@ func PooledWindows(ws []QuotaWindow) []QuotaWindow {
 			out = append(out, w)
 		case w.Model == "":
 			w.Name = w.Pool + " · " + w.Name
+			out = append(out, w)
+		case !pooled(w):
 			out = append(out, w)
 		}
 	}

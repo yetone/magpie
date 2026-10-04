@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -731,5 +732,44 @@ func TestJevConfidence(t *testing.T) {
 		if got := confidence(c.ps); got < c.want-0.001 || got > c.want+0.001 {
 			t.Errorf("%v: %v, want %v", c.ps, got, c.want)
 		}
+	}
+}
+
+// A Clef on Workers AI (ARNO on Discord) is asked at its own run, with
+// the System One request as it is and the model named as Clef names
+// itself, and answers in Cloudflare's envelope.
+func TestClefOnCloudflare(t *testing.T) {
+	j := &jevUp{choice: "crashes", sure: 0.9, score: 1}
+	var models []string
+	var mu sync.Mutex
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/client/v4/accounts/acc7/ai/run/@cf/cloudflare/clef-flash" || r.Header.Get("Authorization") != "Bearer kj" {
+			http.Error(w, `{"success":false,"errors":[{"message":"No route for that URI"}]}`, 400)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		var q map[string]any
+		json.Unmarshal(b, &q)
+		if _, ok := q["input"]; ok || q["questions"] == nil {
+			http.Error(w, `{"success":false,"errors":[{"message":"bad input"}]}`, 400)
+			return
+		}
+		mu.Lock()
+		models = append(models, fmt.Sprint(q["model"]))
+		mu.Unlock()
+		rec := httptest.NewRecorder()
+		j.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/systemone", bytes.NewReader(b)))
+		w.Write([]byte(`{"success":true,"errors":[],"messages":[],"result":` + rec.Body.String() + `}`))
+	}))
+	defer up.Close()
+	s := jevAt(t, up.URL+"/client/v4/accounts/acc7/ai/run", "jv/@cf/cloudflare/clef-flash", provider.Rule{Use: "b/big", Intent: "crashes"})
+	out, r := postOK(t, s, "s1", chat("why does this crash?", nil, 0, `,"reasoning_effort":"low"`))
+	if c := r.Rule.Classified; !strings.Contains(out, "from kb") || c.Intent != "crashes" || c.Sure != 0.9 {
+		t.Fatalf("%s %+v %+v", out, r.Rule, c)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(models) == 0 || slices.ContainsFunc(models, func(m string) bool { return m != "clef-flash" }) {
+		t.Fatalf("Clef asked as %v", models)
 	}
 }

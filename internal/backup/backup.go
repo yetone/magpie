@@ -80,6 +80,9 @@ type Bundle struct {
 	// Order is the order the user put the providers in (#499), by id;
 	// none from a magpie before it went, or when they were never arranged.
 	Order []string `json:"order,omitempty"`
+	// GroupOrder is the order the user put the routing groups in (#779),
+	// by id; none from a magpie before it, or when never arranged.
+	GroupOrder []string `json:"groupOrder,omitempty"`
 	// SettingsKeys lets sync carry settings credentials without changing the
 	// other parts' Keys policy; absent from older backups and whole collects.
 	SettingsKeys bool `json:"settingsKeys,omitempty"`
@@ -120,6 +123,9 @@ func Collect(keys bool, app string) (Bundle, error) {
 		return b, err
 	}
 	if b.Order, err = provider.StoredOrder(); err != nil {
+		return b, err
+	}
+	if b.GroupOrder, err = provider.StoredGroupOrder(); err != nil {
 		return b, err
 	}
 	if keys {
@@ -335,6 +341,9 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 			return r, err
 		}
 		if err := provider.MirrorOrder(b.Order); err != nil {
+			return r, err
+		}
+		if err := provider.MirrorGroupOrder(b.GroupOrder); err != nil {
 			return r, err
 		}
 		if b.Searches != nil {

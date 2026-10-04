@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
@@ -30,7 +31,56 @@ type routeJSON struct {
 	Unpriced     int     `json:"unpriced"`
 }
 
+// Name polling reuses the history evidence already loaded by this view. Never
+// reread a day's routing log every 15 seconds just to notice a title write.
+var titleHistory struct {
+	sync.Mutex
+	days map[string][]gateway.Route
+}
+
+func rememberTitleHistory(day string, rows []gateway.Route) {
+	if day == "" {
+		return
+	}
+	evidence := make([]gateway.Route, 0, len(rows))
+	for _, r := range rows {
+		if r.Agent != "codex" || (r.TitleLink == nil && r.ParentSession == "") {
+			continue
+		}
+		failed := ""
+		if r.Error != "" {
+			failed = "failed"
+		}
+		evidence = append(evidence, gateway.Route{ID: r.ID, Agent: r.Agent, Session: r.Session,
+			ParentSession: r.ParentSession, Kind: r.Kind, Time: r.Time, Millis: r.Millis,
+			Done: r.Done, Status: r.Status, Error: failed, TitleLink: r.TitleLink})
+	}
+	titleHistory.Lock()
+	defer titleHistory.Unlock()
+	if titleHistory.days == nil {
+		titleHistory.days = map[string][]gateway.Route{}
+	}
+	if _, exists := titleHistory.days[day]; !exists && len(titleHistory.days) >= 4 {
+		for key := range titleHistory.days {
+			delete(titleHistory.days, key)
+			break
+		}
+	}
+	titleHistory.days[day] = evidence
+}
+
+func recalledTitleHistory(day string) []gateway.Route {
+	titleHistory.Lock()
+	defer titleHistory.Unlock()
+	return titleHistory.days[day] // immutable after publication
+}
+
 func pricedRoutes(routes []gateway.Route) []routeJSON {
+	gw := served.Load()
+	if gw == nil {
+		gw = &gateway.Server{}
+	}
+	routes = gw.ResolveTitleParents(routes)
 	out := make([]routeJSON, 0, len(routes))
 	priceOf := usage.NewPricer()
 	ids := make([]string, 0, len(routes))
@@ -133,14 +183,52 @@ func traceRoutes(mux *http.ServeMux) {
 	// trace sequence. Read only the IDs the page currently lists.
 	mux.HandleFunc("POST /api/gateway/session-titles", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
-			IDs []string `json:"ids"`
+			IDs      []string `json:"ids"`
+			Groups   bool     `json:"groups"`
+			RouteIDs []int64  `json:"routeIds"`
+			Day      string   `json:"day"`
 		}
 		r.Body = http.MaxBytesReader(rw, r.Body, 256<<10)
-		if json.NewDecoder(r.Body).Decode(&in) != nil || len(in.IDs) > 2000 {
+		if json.NewDecoder(r.Body).Decode(&in) != nil || len(in.IDs) > 2000 || len(in.RouteIDs) > 2000 {
 			http.Error(rw, "invalid session IDs", http.StatusBadRequest)
 			return
 		}
-		writeJSON(rw, sessions.CodexTitles(in.IDs))
+		if !in.Groups {
+			writeJSON(rw, sessions.CodexTitles(in.IDs))
+			return
+		}
+		var rows []gateway.Route
+		gw := served.Load()
+		if in.Day != "" {
+			if _, err := time.Parse("2006-01-02", in.Day); err != nil {
+				http.Error(rw, "invalid route day", http.StatusBadRequest)
+				return
+			}
+			rows = recalledTitleHistory(in.Day)
+		} else if gw != nil {
+			rows = gw.Trace(r.Context(), 0, 0).Routes
+		}
+		if gw == nil {
+			gw = &gateway.Server{}
+		}
+		rows = gw.ResolveTitleParents(rows)
+		wanted := make(map[int64]bool, len(in.RouteIDs))
+		for _, id := range in.RouteIDs {
+			wanted[id] = true
+		}
+		parents := map[int64]string{}
+		matched := map[int64]bool{}
+		for _, row := range rows {
+			if !wanted[row.ID] || row.Agent != "codex" {
+				continue
+			}
+			parents[row.ID], matched[row.ID] = row.ParentSession, row.ParentMatched
+			if row.ParentSession != "" {
+				in.IDs = append(in.IDs, row.ParentSession)
+			}
+		}
+		writeJSON(rw, map[string]any{"names": sessions.CodexTitles(in.IDs), "parents": parents, "matched": matched,
+			"resetInferred": in.Day != "" && rows == nil})
 	})
 	mux.HandleFunc("GET /api/gateway/route", func(rw http.ResponseWriter, r *http.Request) {
 		id, err := strconv.ParseInt(r.URL.Query().Get("id"), 10, 64)
@@ -185,7 +273,9 @@ func traceRoutes(mux *http.ServeMux) {
 	// the routes of a day gone by, from the history the gateway keeps on
 	// disk — read whichever magpie serves the gateway
 	mux.HandleFunc("GET /api/gateway/history", func(rw http.ResponseWriter, r *http.Request) {
-		days, routes, cut := gateway.History(r.URL.Query().Get("day"))
+		day := r.URL.Query().Get("day")
+		days, routes, cut := gateway.History(day)
+		rememberTitleHistory(day, routes)
 		writeJSON(rw, map[string]any{"days": days, "routes": pricedRoutes(routes), "cut": cut})
 	})
 	// an account's rest lifted by hand: verified with its vendor, say

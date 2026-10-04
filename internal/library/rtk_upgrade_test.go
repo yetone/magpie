@@ -121,3 +121,46 @@ func TestRTKNewer(t *testing.T) {
 		}
 	}
 }
+
+// #741: a failed upgrade said only its command line, cut short on the page
+// ("winget upgrade --id rtk-ai.rtk --exact --silent ..."). It now says the
+// tool, its exit code (winget's HRESULT in hex, with what it means) and the
+// last lines it printed that say something — not the spinner frames and
+// progress bars winget writes to a pipe.
+func TestRTKUpgradeFailureSaid(t *testing.T) {
+	winget := []string{"winget", "upgrade", "--id", "rtk-ai.rtk", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}
+	out := "   - \r   \\ \r   | \r   / \rFound RTK [rtk-ai.rtk] Version 0.51.0\r\n" +
+		"This application is licensed to you by its owner.\r\nMicrosoft is not responsible for, nor does it grant any licenses to, third-party packages.\r\n" +
+		"Downloading https://github.com/rtk-ai/rtk/releases/download/v0.51.0/rtk-x86_64-pc-windows-msvc.zip\r\n" +
+		"  ██████████████▒▒▒▒▒▒▒▒▒▒▒▒  1.20 MB / 3.40 MB\r  ██████████████████████████  3.40 MB / 3.40 MB\r\n" +
+		"Successfully verified installer hash\r\nExtracting archive...\r\n\x1b[31mThe file cannot be accessed by the system.\x1b[0m\r\n   - \r"
+	// ExitCode is the HRESULT's uint32 on 64-bit Windows; negative as an int32
+	for _, code := range []int{0x8A150101, -1978334975} {
+		msg := installFailed(winget, out, code, nil).Error()
+		want := "winget failed (exit code 0x8A150101): RTK is in use — close the agents running it and try again — Successfully verified installer hash Extracting archive... The file cannot be accessed by the system."
+		if msg != want {
+			t.Fatalf("code %d:\n got %q\nwant %q", code, msg, want)
+		}
+	}
+	if msg := installFailed(winget, "", 0x8A15002B, nil).Error(); msg != "winget failed (exit code 0x8A15002B): winget has no newer RTK than this one yet" {
+		t.Fatalf("not applicable: %q", msg)
+	}
+	if msg := installFailed([]string{"sh", "-c", "curl … | sh"}, "curl: (6) Could not resolve host: raw.githubusercontent.com\n", 6, nil).Error(); msg != "RTK's install script failed (exit code 6) — curl: (6) Could not resolve host: raw.githubusercontent.com" {
+		t.Fatalf("script: %q", msg)
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	// a real process: its exit code and output; one that can't start, and
+	// one that runs too long, say so
+	_, err := runInstaller([]string{"sh", "-c", "printf '50%%\\r100%%\\r\\nno space left on device\\n'; exit 3"}, time.Minute)
+	if err == nil || err.Error() != "RTK's install script failed (exit code 3) — no space left on device" {
+		t.Fatalf("exit 3: %v", err)
+	}
+	if _, err := runInstaller([]string{"/nonexistent/winget"}, time.Minute); err == nil || !strings.HasPrefix(err.Error(), "/nonexistent/winget couldn't run: ") {
+		t.Fatalf("missing: %v", err)
+	}
+	if _, err := runInstaller([]string{"sleep", "5"}, 100*time.Millisecond); err == nil || err.Error() != "sleep didn't finish in 100ms" {
+		t.Fatalf("timeout: %v", err)
+	}
+}

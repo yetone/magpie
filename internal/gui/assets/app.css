@@ -583,8 +583,12 @@ body.window .field.solo { grid-column: auto; }
 .quota-labels .quota-n { max-width: 100%; padding: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; color: var(--fg-2); font-size: inherit; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .quota-labels .quota-n:hover { color: var(--fg); }
 .quota-labels .quota-n > span { white-space: nowrap; }
-/* stacked, a count too long for the window's width breaks at its · */
-.quota-windows.stacked .quota-n { flex-basis: 100%; white-space: normal; }
+/* stacked, a count too long for the window's width breaks at its ·; its
+   parts are laid out as flex items, as WebKit leaves the space between two
+   nowrap spans out when it checks a line fits and then cuts the line with
+   the ellipsis ("剩余 100…" for 100 / 100 积分 · 剩余 100%) */
+.quota-windows.stacked .quota-n { flex-basis: 100%; display: flex; flex-wrap: wrap; column-gap: 4px; white-space: normal; }
+.quota-windows.stacked .quota-n > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .quota-reset { display: flex; flex-wrap: wrap; column-gap: 4px; margin-top: 4px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .quota-reset > span { white-space: nowrap; }
 .quota-track { height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; }
@@ -1054,6 +1058,12 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .row.sess .num small { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
 .row.sess .cost { flex: none; min-width: 58px; text-align: right; color: var(--green); font-variant-numeric: tabular-nums; font-size: 12px; }
 .row.sess .cost.none { color: var(--faint); }
+.row.sess .num.none b { color: var(--faint); font-weight: 400; }
+/* a row of the Usage page's list opens on the Sessions page (#752) */
+.row.sess.sess-link { cursor: pointer; }
+.row.sess .sess-go { flex: none; display: inline-flex; color: var(--faint); }
+.row.sess.sess-link:hover .sess-go, .row.sess.sess-link:focus-visible .sess-go { color: var(--fg-2); }
+.sess-all { flex: none; white-space: nowrap; }
 .sess-resume { flex: none; height: 24px; padding: 0 10px; border-radius: 7px; border: 0; background: var(--pill); color: var(--fg); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
 .sess-resume:hover { background: var(--pill-hover); }
 .sess-resume.done { background: var(--green-soft); color: var(--green); }
@@ -1771,6 +1781,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .acap:hover, .acc .acap.open { color: var(--fg); background: var(--pill-hover); }
 .acc .acap-in { width: 64px; }
 .acc .acap-held { color: var(--fg); }
+/* held for magpie's requests, not the agent signed in to it: a warning */
+.acc .acap-held.acap-direct { color: var(--amber); }
 .accts .acc.with-am { flex-wrap: wrap; row-gap: 3px; }
 .acc .acct-models { flex-basis: 100%; display: grid; gap: 7px; padding: 6px 0 2px 25px; cursor: auto; }
 .acc .acct-models .acm-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1950,7 +1962,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .icon-pick { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .editor .icon-pick .icon-now { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; display: grid; place-items: center; }
 .editor .icon-pick .icon-now .ic { width: 20px; height: 20px; }
-.editor .icon-pick .icon-grid { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, 34px); gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; }
+.editor .icon-pick > input { flex-basis: 100%; }
+.editor .icon-pick .icon-grid { flex-basis: 100%; display: grid; grid-template-columns: repeat(auto-fill, 34px); gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; max-height: 196px; overflow-y: auto; }
 .editor .icon-pick .icon-grid button { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 7px; }
 .editor .icon-pick .icon-grid button:hover { background: var(--card-2); }
 .editor .icon-pick .icon-grid button.on { box-shadow: inset 0 0 0 1.5px var(--fg); }
@@ -2238,6 +2251,8 @@ input.words { width: 240px; max-width: 100%; }
 input.words.rule-kind { flex: none; width: 110px; }
 input.words.rule-match { flex: 1 1 auto; width: auto; min-width: 0; }
 input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; min-width: 0; }
+/* a search API's key, shown: selectable, and broken anywhere rather than widening the row */
+.search-api .sub.revealed { font-family: var(--code); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 .prefs .val.rule-add .segs { margin-left: 0; }
 .row.pref .sub.err { color: var(--red); white-space: normal; }
 .warm-at { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
@@ -2653,6 +2668,18 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-seg button { height: 24px; padding: 0 9px; border: 0; border-radius: 6px; background: none; color: var(--ctl-fg); font: inherit; font-size: 12px; cursor: pointer; transition: background-color .15s, color .15s; }
 .am-seg button.on { background: var(--seg-thumb); color: var(--fg); box-shadow: var(--seg-edge); }
 .am-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 2px; }
+/* the providers down the left (蓝猫 on Discord), the models of the one
+   picked beside them, each scrolling on its own */
+.am-body { flex: 1 1 auto; min-height: 0; display: flex; gap: 6px; }
+.am-body .am-list { min-width: 0; }
+.am-rail { flex: none; width: 176px; overflow-y: auto; overscroll-behavior: contain; padding: 4px 6px 2px 2px; border-right: 1px solid var(--line-2); }
+.am-ri { display: flex; align-items: center; gap: 8px; width: 100%; height: 30px; padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--fg-2); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; transition: background-color .12s; }
+.am-ri:hover { background: var(--pill); }
+.am-ri.on { background: var(--accent-soft); color: var(--fg); }
+.am-ri > .ic, .am-ri > svg { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.am-ri .rn { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-ri .c { flex: none; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.am-ri:focus-visible { outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
 .am-gh { display: flex; align-items: center; margin: 6px 2px 0; }
 .am-fold { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .am-fold > .ic, .am-fold > svg { width: 14px; height: 14px; flex: none; }

@@ -354,7 +354,7 @@ func (s *Server) systemOne(ctx context.Context, p provider.Provider, model strin
 // they are; a transport error is named with p.
 func (s *Server) postDecide(ctx context.Context, p provider.Provider, model string, body []byte) (int, []byte, string, error) {
 	ctx = p.Via(ctx)
-	u, err := p.DecideURL(ctx)
+	u, err := p.DecideModelURL(ctx, model)
 	if err != nil {
 		return 0, nil, "", err
 	}
@@ -488,7 +488,8 @@ func decideSeat(p provider.Provider, model string) Weighed {
 // decideAsk is a System One request (body) as via takes it: Vercel's
 // TypeSafe API takes it as it is; its evaluation models name the model in
 // a header and ask a noul as a boolean; Workers AI takes the state and
-// questions as the input of a run of the model.
+// questions as the input of a run of the model, and a Clef there takes
+// the request as it is, its model named as Clef names itself.
 func decideAsk(via, model string, body []byte) []byte {
 	var q map[string]any
 	if via == provider.ViaSystemOne || via == provider.ViaVercel || json.Unmarshal(body, &q) != nil {
@@ -506,6 +507,11 @@ func decideAsk(via, model string, body []byte) []byte {
 		b, _ := json.Marshal(q)
 		return b
 	case provider.ViaCloudflare:
+		if provider.CloudflareClef(model) {
+			q["model"] = strings.TrimPrefix(model, "@cf/cloudflare/")
+			b, _ := json.Marshal(q)
+			return b
+		}
 		b, _ := json.Marshal(map[string]any{"model": model, "input": q})
 		return b
 	}

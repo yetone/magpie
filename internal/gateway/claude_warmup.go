@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/netproxy"
-	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -46,11 +45,10 @@ func askClaude(ctx context.Context, configDir, model string) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	cmd := proc.CommandContext(ctx, binary, claudeWarmArgs(model)...)
+	cmd := binary.command(ctx, claudeWarmArgs(model)...)
 	cmd.Dir = tmp
 	cmd.Stdin = strings.NewReader("hi")
-	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ()))
-	cmd.Env = inClaudeDir(cmd.Env, configDir)
+	cmd.Env = binary.env(netproxy.EnvWith(claudeProxy(ctx), cleanClaudeEnv(os.Environ())), configDir)
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	runErr := cmd.Run()
@@ -88,7 +86,7 @@ func claudeUsage(ctx context.Context) (string, error) {
 		return "", err
 	}
 	defer os.RemoveAll(tmp)
-	cmd := proc.CommandContext(ctx, binary, claudeUsageArgs()...)
+	cmd := binary.command(ctx, claudeUsageArgs()...)
 	cmd.Dir = tmp
 	cmd.Stdin = strings.NewReader("")
 	// CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC makes /usage skip its request
@@ -101,7 +99,7 @@ func claudeUsage(ctx context.Context) (string, error) {
 		})
 	}
 	env = append(env, "DISABLE_TELEMETRY=1", "DISABLE_ERROR_REPORTING=1", "DISABLE_AUTOUPDATER=1")
-	cmd.Env = netproxy.EnvWith(claudeProxy(ctx), env)
+	cmd.Env = binary.env(netproxy.EnvWith(claudeProxy(ctx), env), "")
 	var out, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &stderr
 	runErr := cmd.Run()

@@ -42,9 +42,10 @@ type searchOnKey struct{}
 type searchCallKey struct{}
 
 // canSearchFor is whether a model of p that can't search is given magpie's
-// search: one of p's own (a Kimi Code plan), or canSearch.
+// search: one of p's own (a Kimi Code plan, a Google sign-in), or
+// canSearch.
 func canSearchFor(p provider.Provider) bool {
-	return provider.KimiCodeSearch(p) != "" || canSearch()
+	return provider.KimiCodeSearch(p) != "" || googleAccount(p) && searcherModel(p) != "" || canSearch()
 }
 
 // searchingOn is ctx for the searches made for a model of p.
@@ -52,11 +53,24 @@ func searchingOn(ctx context.Context, p provider.Provider) context.Context {
 	return context.WithValue(ctx, searchOnKey{}, p)
 }
 
-// ownSearcher is the provider serving the conversation when it searches by
-// a search service of its own plan.
+// ownSearcher is the provider serving the conversation when it searches
+// for itself: by a search service of its own plan (Kimi Code), or, a
+// Google sign-in, by its own Gemini's googleSearch — which a request with
+// function tools can't have (codeAssistSearches), so the search goes out
+// on its own, and not to another subscription's allowance (#757).
 func ownSearcher(ctx context.Context) (provider.Provider, bool) {
 	p, ok := ctx.Value(searchOnKey{}).(provider.Provider)
-	return p, ok && provider.KimiCodeSearch(p) != ""
+	return p, ok && (provider.KimiCodeSearch(p) != "" || googleAccount(p) && searcherModel(p) != "")
+}
+
+// ownSearch searches with the conversation's own provider (ownSearcher).
+func (s *Server) ownSearch(ctx context.Context, p provider.Provider, query string) (string, []Hit, error) {
+	if provider.KimiCodeSearch(p) != "" {
+		return s.kimiSearch(ctx, p, query)
+	}
+	ctx, cancel := context.WithTimeout(context.WithValue(ctx, searchingKey{}, true), searchTimeout)
+	defer cancel()
+	return s.searchWith(ctx, p, searcherModel(p), query)
 }
 
 // searchBy searches with one searcher: a Kimi Code plan by its search

@@ -112,6 +112,33 @@ func dshAt(at place) *Agent {
 			return strings.Join(notes, " ")
 		},
 		Check: func() string { return dshCheck(dir, gw()) },
+		// a model of DeepSeek's own picked in dsh (saved in its settings)
+		// leaves magpie's route in its list: dsh is still connected, its
+		// /model has magpie's models beside DeepSeek's (Fate on Discord:
+		// DSH went back to Not connected)
+		Joined: func() bool {
+			files := dshProfiles(dir)
+			if len(files) == 0 {
+				return false
+			}
+			_, items, err := dshRead(files[0])
+			return err == nil && dshWired(items)
+		},
+		// connected so, Disconnect takes the route out, the start magpie
+		// wrote and its key; the model picked in dsh stays its own
+		Unwire: func() error {
+			if usesMagpie(dshGet(dir)) {
+				return nil // the model set back does it all
+			}
+			dshWrites.Lock()
+			defer dshWrites.Unlock()
+			for _, f := range dshProfiles(dir) {
+				if err := dshSetFile(f, "", true, nil, gw()); err != nil {
+					return err
+				}
+			}
+			return dshEnv(dir, false)
+		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
 			Get: func() string { return dshGet(dir) },

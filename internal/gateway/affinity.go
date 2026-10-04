@@ -335,11 +335,14 @@ func answered(key string, c candidate, turn, cacheRead int) {
 
 // unanswered forgets that c answered a conversation, when its reply to it
 // broke off (#733): the agent's retry goes by routing again, not back to
-// the one that just failed it.
+// the one that just failed it. The account alone is enough: affine's
+// widest match keeps a conversation on an account whose answerer's model
+// has since left the group, so a stick that only matched by its model
+// would leave the next request kept on the account that just broke off.
 func unanswered(key string, c candidate) {
 	sticks.Lock()
 	st, ok := stickOf(key)
-	ok = ok && st.who == c.who() && st.model == c.model
+	ok = ok && st.who == c.who()
 	if ok {
 		delete(sticks.m, key)
 	}

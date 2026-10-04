@@ -1,5 +1,10 @@
 package provider
 
+import (
+	"cmp"
+	"slices"
+)
+
 // A preset is a vendor magpie already knows: adding one only asks for the key.
 
 // Kind groups presets in the picker.
@@ -70,6 +75,16 @@ type Region struct {
 	// on another page than the preset's, is where its Get-a-key link goes.
 	Lists   bool   `json:"lists,omitempty"`
 	KeysURL string `json:"keysUrl,omitempty"`
+	// Website, when the region's docs are another page than the preset's,
+	// is where the editor's link goes.
+	Website string `json:"website,omitempty"`
+	// Catalog, for a region whose models another models.dev entry names
+	// than the preset's (Tencent Cloud's pay as you go, beside its plan's
+	// none), is that entry's id.
+	Catalog string `json:"catalog,omitempty"`
+	// Models are a plan's, for a region that is one beside pay as you go
+	// (PresetDef.Models, for the region alone).
+	Models []string `json:"models,omitempty"`
 	// Decide is the region's decision API, for a preset that routes groups
 	Decide string `json:"decide,omitempty"`
 }
@@ -192,31 +207,38 @@ var presets = []PresetDef{
 		NoList: true,
 		Models: []string{"qianfan-code-latest", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813",
 			"deepseek-v4-flash", "deepseek-v4-flash-0731", "deepseek-v3.2", "glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5"}},
-	// Tencent Cloud's Token Plan (TokenHub): a general and a Hy plan on one
-	// sk-tp- key, served at their own endpoints under /plan, chat completions
-	// and Anthropic messages only (its Codex page asks for wire_api "chat").
-	// models.dev lists just its Hy models, so the plan's are given here.
-	{ID: "tencent-token-plan", Name: "Tencent Cloud Token Plan", Short: "Tencent Cloud", Icon: "tencentcloud-color", Kind: KindVendor,
-		Chat: "https://api.lkeap.cloud.tencent.com/plan/v3", Anthropic: "https://api.lkeap.cloud.tencent.com/plan/anthropic",
-		Note:    "TokenHub · subscription",
-		Website: "https://cloud.tencent.com/document/product/1823/130060", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
-		Models: []string{"tc-code-latest", "glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3", "kimi-k2.7-code",
-			"deepseek-v4-pro-202606", "deepseek-v4-flash-202605", "minimax-m3", "minimax-m2.7", "hy4-preview", "hy3"}},
+	// Tencent Cloud (Jorben on Discord: one Tencent Cloud, its plan and
+	// pay as you go picked inside it, as Xiaomi MiMo's are), once three
+	// presets, whose ids still name it, each at its region (presetAliases):
+	//
+	// Its Token Plan (TokenHub's subscription): a general and a Hy plan on
+	// one sk-tp- key, served at their own endpoints under /plan, chat
+	// completions and Anthropic messages only (its Codex page asks for
+	// wire_api "chat"). models.dev lists just its Hy models, so the plan's
+	// are given here, and none of its catalogs names them.
+	//
 	// TokenHub pay as you go: an API key of TokenHub's own (not the plan's
 	// sk-tp-), at tokenhub.tencentmaas.com in Guangzhou and
 	// tokenhub-intl.tencentmaas.com in Singapore. Each serves chat
 	// completions and Responses under /v1 (Responses converted from chat
 	// on its side for the models that speak chat alone) and Anthropic
 	// messages at /v1/messages, with its list at /v1/models. It serves Hy
-	// and other makers' models (DeepSeek, GLM, Kimi, MiniMax, Qwen …).
-	{ID: "tencent-tokenhub", Name: "Tencent Cloud TokenHub", Icon: "tencentcloud-color", Kind: KindVendor, Catalog: "tencent-tokenhub", Hosts: true,
-		Chat: "https://tokenhub-intl.tencentmaas.com/v1", Responses: "https://tokenhub-intl.tencentmaas.com/v1", Anthropic: "https://tokenhub-intl.tencentmaas.com",
-		Note:    "Pay as you go",
-		Website: "https://www.tencentcloud.com/document/product/1300/78939", KeysURL: "https://console.tencentcloud.com/tokenhub/apikey"},
-	{ID: "tencent-tokenhub-cn", Name: "Tencent Cloud TokenHub (China)", Icon: "tencentcloud-color", Kind: KindVendor, Catalog: "tencent-tokenhub", Hosts: true,
-		Chat: "https://tokenhub.tencentmaas.com/v1", Responses: "https://tokenhub.tencentmaas.com/v1", Anthropic: "https://tokenhub.tencentmaas.com",
-		Note:    "Pay as you go",
-		Website: "https://cloud.tencent.com/document/product/1823/130078", KeysURL: "https://console.cloud.tencent.com/tokenhub/apikey"},
+	// and other makers' models (DeepSeek, GLM, Kimi, MiniMax, Qwen …):
+	// Hosts, and models.dev's tencent-tokenhub for their names and prices.
+	{ID: "tencent-cloud", Name: "Tencent Cloud", Icon: "tencentcloud-color", Kind: KindVendor, Hosts: true,
+		Chat: "https://api.lkeap.cloud.tencent.com/plan/v3", Anthropic: "https://api.lkeap.cloud.tencent.com/plan/anthropic",
+		Note:    "Token Plan · pay as you go",
+		Website: "https://cloud.tencent.com/document/product/1823/130060", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
+		Regions: []Region{
+			{ID: "plan", Name: "Plan · China", Chat: "https://api.lkeap.cloud.tencent.com/plan/v3", Anthropic: "https://api.lkeap.cloud.tencent.com/plan/anthropic",
+				Website: "https://cloud.tencent.com/document/product/1823/130060", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
+				Models: []string{"tc-code-latest", "glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3", "kimi-k2.7-code",
+					"deepseek-v4-pro-202606", "deepseek-v4-flash-202605", "minimax-m3", "minimax-m2.7", "hy4-preview", "hy3"}},
+			{ID: "cn", Name: "Pay as you go · China", Chat: "https://tokenhub.tencentmaas.com/v1", Responses: "https://tokenhub.tencentmaas.com/v1", Anthropic: "https://tokenhub.tencentmaas.com",
+				Website: "https://cloud.tencent.com/document/product/1823/130078", KeysURL: "https://console.cloud.tencent.com/tokenhub/apikey", Catalog: "tencent-tokenhub"},
+			{ID: "intl", Name: "Pay as you go · Global", Chat: "https://tokenhub-intl.tencentmaas.com/v1", Responses: "https://tokenhub-intl.tencentmaas.com/v1", Anthropic: "https://tokenhub-intl.tencentmaas.com",
+				Website: "https://www.tencentcloud.com/document/product/1300/78939", KeysURL: "https://console.tencentcloud.com/tokenhub/apikey", Catalog: "tencent-tokenhub"},
+		}},
 	// Huawei Cloud MaaS's Token Plan: personal accounts in 西南-贵阳一, its
 	// quota spent only at the plan's own endpoints under /plan (v2 for chat
 	// completions, anthropic for messages; its Claude Code, OpenClaw, Cherry
@@ -425,7 +447,9 @@ var presets = []PresetDef{
 		Decide:  "https://ai-gateway.vercel.sh/typesafe",
 		Note:    "routes groups · picks model and effort",
 		Website: "https://vercel.com/ai-gateway/models/jev", KeysURL: "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai-gateway%2Fapi-keys"},
-	{ID: "cloudflare-jev", Name: "Jev · Cloudflare Workers AI", Icon: "cloudflare-color", Kind: KindRelay,
+	// Workers AI also serves Cloudflare's own decision models, Clef and
+	// Clef Flash, on the same key
+	{ID: "cloudflare-jev", Name: "Cloudflare Workers AI · Jev, Clef", Icon: "cloudflare-color", Kind: KindRelay,
 		Decide:  "https://api.cloudflare.com/client/v4",
 		Note:    "routes groups · picks model and effort",
 		Website: "https://developers.cloudflare.com/ai/models/typesafe/jev/", KeysURL: "https://dash.cloudflare.com/profile/api-tokens"},
@@ -490,11 +514,22 @@ func Presets() []PresetDef {
 	return out
 }
 
-// Preset finds a preset by id. The id the qianfan preset carried its first
-// day (qianfan-token-plan, v0.1.394) names it still.
+// presetAliases are ids presets carried before, each the preset since and
+// the region it is (none: the preset's default): qianfan's first day's
+// (qianfan-token-plan, v0.1.394), and Tencent Cloud's three presets, its
+// Token Plan and TokenHub's China and global pay as you go, made one.
+var presetAliases = map[string]struct{ preset, region string }{
+	"qianfan-token-plan":  {"baidu-qianfan", ""},
+	"tencent-token-plan":  {"tencent-cloud", "plan"},
+	"tencent-tokenhub-cn": {"tencent-cloud", "cn"},
+	"tencent-tokenhub":    {"tencent-cloud", "intl"},
+}
+
+// Preset finds a preset by id, or by an id it carried before
+// (presetAliases).
 func Preset(id string) *PresetDef {
-	if id == "qianfan-token-plan" {
-		id = "baidu-qianfan"
+	if a, ok := presetAliases[id]; ok {
+		id = a.preset
 	}
 	for i := range presets {
 		if presets[i].ID == id {
@@ -504,24 +539,42 @@ func Preset(id string) *PresetDef {
 	return nil
 }
 
-// FromPreset builds a provider from a preset; the caller adds the key.
+// FromPreset builds a provider from a preset; the caller adds the key. An
+// id the preset carried before builds it at the region that id was.
 func FromPreset(id string) (Provider, error) {
 	pr := Preset(id)
 	if pr == nil {
 		return Provider{}, errorf("no preset %q — magpie presets lists them", id)
 	}
-	return Provider{
+	p := Provider{
 		ID: pr.ID, Name: pr.Name, Icon: pr.Icon, Preset: pr.ID,
 		Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic, Decide: pr.Decide,
 		Catalog: pr.Catalog, Website: pr.Website, KeysURL: pr.KeysURL,
-	}, nil
+	}
+	if a, ok := presetAliases[id]; ok && a.region != "" {
+		for _, r := range pr.Regions {
+			if r.ID == a.region {
+				p.atRegionOf(pr, r)
+			}
+		}
+	}
+	return p, nil
+}
+
+// atRegionOf puts the provider at a region of its preset pr: its
+// endpoints, and its key page, docs and catalog where it has its own.
+func (p *Provider) atRegionOf(pr *PresetDef, r Region) {
+	p.Chat, p.Responses, p.Anthropic, p.Decide = r.Chat, r.Responses, r.Anthropic, cmp.Or(r.Decide, pr.Decide)
+	p.KeysURL = cmp.Or(r.KeysURL, p.KeysURL)
+	p.Website = cmp.Or(r.Website, p.Website)
+	p.Catalog = cmp.Or(r.Catalog, pr.Catalog)
 }
 
 // IconForCatalog names the logo of the vendor behind a models.dev
 // provider id, or "" when no preset covers it.
 func IconForCatalog(catalogID string) string {
 	for _, p := range presets {
-		if p.Catalog == catalogID {
+		if p.Catalog == catalogID || slices.ContainsFunc(p.Regions, func(r Region) bool { return r.Catalog == catalogID }) {
 			return p.Icon
 		}
 	}

@@ -52,6 +52,8 @@ var Vars = []string{
 	"MISTER_MORPH_CONFIG",
 	// T3 Code's base folder (its settings in userdata/)
 	"T3CODE_HOME",
+	// AtomCode's config folder
+	"ATOMCODE_HOME",
 	// Cursor's CLI: its config folder (its chats) and its data folder
 	"CURSOR_CONFIG_DIR", "CURSOR_DATA_DIR",
 	// OpenCode and OpenChamber

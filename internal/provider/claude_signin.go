@@ -16,13 +16,16 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/wslrun"
 )
 
 // claudeCLISignIn is a `claude auth login` magpie is running.
@@ -69,13 +72,75 @@ func claudeSignInEnv(env []string, dir string) []string {
 	return append(out, "CLAUDE_CONFIG_DIR="+dir)
 }
 
+// claudeCLI is the Claude Code a sign-in runs: this machine's, or, on
+// Windows without one, the one installed in a running WSL distro, which
+// signs in to the config directory magpie gives it all the same (wslrun).
+type claudeCLI struct {
+	path string
+	wsl  *wslrun.Tool
+}
+
+func findClaudeCLI() (claudeCLI, bool) {
+	if p := claudeExecutable(); p != "" {
+		return claudeCLI{path: p}, true
+	}
+	if t, ok := wslrun.Find("claude"); ok {
+		return claudeCLI{wsl: &t}, true
+	}
+	return claudeCLI{}, false
+}
+
+// ClaudeInWSL is the WSL distro the gateway runs Claude Code in, when there
+// is none on Windows itself and one was found there; "" otherwise. It never
+// waits on WSL: until a look has been made, one starts and "" comes back.
+func ClaudeInWSL() string {
+	if !wslrun.On || claudeExecutable() != "" {
+		return ""
+	}
+	if t, ok := wslrun.Known("claude"); ok {
+		return t.Distro
+	}
+	if lookingInWSL.CompareAndSwap(false, true) {
+		go func() {
+			defer lookingInWSL.Store(false)
+			wslrun.Find("claude")
+		}()
+	}
+	return ""
+}
+
+var lookingInWSL atomic.Bool
+
+func (c claudeCLI) command(ctx context.Context, args ...string) *exec.Cmd {
+	if c.wsl != nil {
+		return c.wsl.Command(ctx, args...)
+	}
+	return proc.CommandContext(ctx, c.path, args...)
+}
+
+func (c claudeCLI) probe(ctx context.Context, args ...string) *exec.Cmd {
+	if c.wsl != nil {
+		return c.wsl.Probe(ctx, args...)
+	}
+	return proc.ProbeContext(ctx, c.path, args...)
+}
+
+// env is env for a sign-in's Claude Code: for one in WSL, what of it goes
+// in, its config directory and browser told by their paths there.
+func (c claudeCLI) env(env []string) []string {
+	if c.wsl == nil {
+		return env
+	}
+	return c.wsl.Env(env, "CLAUDE_CONFIG_DIR/p", "BROWSER/p", openedURLEnv+"/p")
+}
+
 // startClaudeSignIn runs `claude auth login` and gives the window the page
 // to open: the one Claude Code would have opened, which comes back to it on
 // this machine, or, when it opened none, the one it prints, whose page
 // shows a code to paste.
 func startClaudeSignIn(s *signInFlow) error {
-	path := claudeExecutable()
-	if path == "" {
+	cli, ok := findClaudeCLI()
+	if !ok {
 		return errors.New("install Claude Code first: magpie signs in to Claude through it")
 	}
 	if err := os.MkdirAll(claudeDirsRoot(), 0o700); err != nil {
@@ -92,9 +157,9 @@ func startClaudeSignIn(s *signInFlow) error {
 	opened := filepath.Join(dir, ".opened-url")
 	env := append(claudeSignInEnv(os.Environ(), dir), "BROWSER="+claudeURLOpener(), openedURLEnv+"="+opened)
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := proc.CommandContext(ctx, path, "auth", "login", "--claudeai")
+	cmd := cli.command(ctx, "auth", "login", "--claudeai")
 	cmd.Dir = dir
-	cmd.Env = netproxy.Env(env)
+	cmd.Env = cli.env(netproxy.Env(env))
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()
@@ -144,7 +209,7 @@ func startClaudeSignIn(s *signInFlow) error {
 			msg = tail[n-1]
 		}
 		if err == nil {
-			l, lerr := claudeSignedIn(path, dir)
+			l, lerr := claudeSignedIn(cli, dir)
 			if lerr == nil {
 				var using bool
 				if using, lerr = addLogin(l); lerr == nil {
@@ -221,16 +286,16 @@ func isLoopback(host string) bool {
 // claudeSignedIn is the account `claude auth login` signed in to in config
 // directory dir, as magpie keeps it: the sign-in Claude Code kept, and who
 // it says that is.
-func claudeSignedIn(path, dir string) (savedLogin, error) {
+func claudeSignedIn(cli claudeCLI, dir string) (savedLogin, error) {
 	c, ok := readClaudeDir(dir)
 	if !ok {
 		return savedLogin{}, errors.New("Claude Code signed in, but kept no sign-in magpie can read")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := proc.ProbeContext(ctx, path, "auth", "status", "--json")
+	cmd := cli.probe(ctx, "auth", "status", "--json")
 	cmd.Dir = dir
-	cmd.Env = claudeSignInEnv(os.Environ(), dir)
+	cmd.Env = cli.env(claudeSignInEnv(os.Environ(), dir))
 	b, _ := cmd.Output()
 	var status struct {
 		Email            string `json:"email"`

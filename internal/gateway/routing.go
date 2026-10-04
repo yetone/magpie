@@ -161,6 +161,10 @@ const (
 	// failOverflow: the conversation is too long for the member's model
 	// (#700) — another member, with room for it, is asked, and nobody rests
 	failOverflow = "overflow"
+	// failSlow: the member hadn't begun its reply when its group's
+	// FirstToken ran out, nothing of it sent — the next is asked, and
+	// nobody rests, as a long prompt is slow anywhere
+	failSlow = "slow"
 )
 
 // proxyDown is the error Go gives when the proxy itself can't be reached,

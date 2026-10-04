@@ -74,3 +74,34 @@ func TestPiOffOnMessagesAPI(t *testing.T) {
 		}
 	}
 }
+
+// #781: Pi weighs warming a model's cache by its cost and promptCache, and
+// warms nothing without them. A Claude on Anthropic's Messages API keeps a
+// cache 5 minutes or an hour, a GPT on the Responses API 5 minutes; one
+// relayed through a subscription's own client (no api) or of an unknown
+// vendor declares none, and a model without a known price no cost.
+func TestPiCostAndPromptCache(t *testing.T) {
+	price := &catalog.Price{Input: 3, Output: 15, CacheRead: 0.3, CacheWrite: 3.75}
+	for _, c := range []struct {
+		m     catalog.Model
+		cost  any
+		cache any
+	}{
+		{catalog.Model{ID: "anthropic/claude-sonnet-5", APIs: []string{"anthropic"}, Price: price},
+			map[string]any{"input": 3.0, "output": 15.0, "cacheRead": 0.3, "cacheWrite": 3.75},
+			map[string]any{"short": 300, "long": 3600}},
+		{catalog.Model{ID: "openai/gpt-6-sol", APIs: []string{"responses"}},
+			nil, map[string]any{"short": 300}},
+		{catalog.Model{ID: "claude/claude-opus-5-5", Price: price},
+			map[string]any{"input": 3.0, "output": 15.0, "cacheRead": 0.3, "cacheWrite": 3.75}, nil},
+		{catalog.Model{ID: "deepseek/deepseek-flash", APIs: []string{"anthropic"}}, nil, nil},
+	} {
+		e := piModelJSON(c.m, "http://127.0.0.1:1", true)
+		if !reflect.DeepEqual(e["cost"], c.cost) {
+			t.Errorf("%s: cost %v, want %v", c.m.ID, e["cost"], c.cost)
+		}
+		if !reflect.DeepEqual(e["promptCache"], c.cache) {
+			t.Errorf("%s: promptCache %v, want %v", c.m.ID, e["promptCache"], c.cache)
+		}
+	}
+}

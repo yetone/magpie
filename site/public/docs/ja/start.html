@@ -99,8 +99,8 @@
     <p><span class="ui">Providers</span> タブを開き、<span class="ui">＋ Add provider</span> を押します。タイルを選ぶか、ベンダー名を入力して探します。</p>
 
     <figure class="figure">
-      <img class="for-light" src="/img/add-light.png" width="2080" height="1250" loading="lazy" alt="プロバイダの追加シート：サブスクリプション、ベンダー、中継サービス、このマシン上のもの、カスタム URL">
-      <img class="for-dark" src="/img/add-dark.png" width="2080" height="1250" loading="lazy" alt="プロバイダの追加シート：サブスクリプション、ベンダー、中継サービス、このマシン上のもの、カスタム URL">
+      <img class="for-light" src="/img/add-ja-light.png" width="2016" height="1604" loading="lazy" alt="プロバイダの追加シート：サブスクリプション、ベンダー、中継サービス、このマシン上のもの、カスタム URL">
+      <img class="for-dark" src="/img/add-ja-dark.png" width="2016" height="1604" loading="lazy" alt="プロバイダの追加シート：サブスクリプション、ベンダー、中継サービス、このマシン上のもの、カスタム URL">
       <figcaption>プロバイダの追加：サブスクリプションにサインインする、ベンダーを選ぶ、または互換性のある任意の URL を指定する。</figcaption>
     </figure>
 
@@ -128,8 +128,8 @@
     <p><span class="ui">Agents</span> タブには、このマシンにインストールまたは設定されているエージェントごとに行があります。magpie が対応しているのは Claude Code、Codex、Gemini CLI、OpenCode、MiMo Code、Pi、Goose、Cursor、Copilot CLI、Crush、DeepSeek Harness、Command Code、omp、OmO、Devin、Hermes Agent、MiniMax Code、Grok Build、ZCode、OpenHanako、Alma です。</p>
 
     <figure class="figure">
-      <img class="for-light" src="/img/agents-light.png" width="2080" height="1058" loading="lazy" alt="Agents タブ：エージェントごとに使用中のモデルを示す行と、下部に保存済みのプロファイル">
-      <img class="for-dark" src="/img/agents-dark.png" width="2080" height="1058" loading="lazy" alt="Agents タブ：エージェントごとに使用中のモデルを示す行と、下部に保存済みのプロファイル">
+      <img class="for-light" src="/img/agents-ja-light.png" width="2080" height="1344" loading="lazy" alt="エージェントタブ：エージェントごとに使用中のモデルを示す行と、下部に保存済みのプロファイル">
+      <img class="for-dark" src="/img/agents-ja-dark.png" width="2080" height="1344" loading="lazy" alt="エージェントタブ：エージェントごとに使用中のモデルを示す行と、下部に保存済みのプロファイル">
       <figcaption>エージェントごとに 1 行。どのプロバイダのモデルでも選べ、プロファイルですべてを一度に切り替えられます。</figcaption>
     </figure>
     <ul>
@@ -143,6 +143,7 @@
       <tr><td>Claude Code</td><td><code>~/.claude/settings.json</code>：<code>env</code> ブロック内の <code>ANTHROPIC_BASE_URL</code>、<code>ANTHROPIC_AUTH_TOKEN</code> とモデル関連の変数</td></tr>
       <tr><td>Codex</td><td><code>~/.codex/config.toml</code>：<code>[model_providers.magpie]</code> テーブルとモデル、一覧は <code>magpie-models.json</code>。ChatGPT のサインインには手を加えません</td></tr>
       <tr><td>OpenCode、MiMo Code、Pi、Crush</td><td><code>magpie</code> プロバイダのエントリと <code>magpie/provider/model</code></td></tr>
+      <tr><td>AtomCode</td><td><code>~/.atomcode/config.toml</code>：<code>magpie</code> プロバイダアカウントと、カタログ内の各モデルのエントリ</td></tr>
       <tr><td>Gemini CLI</td><td>ゲートウェイを指す <code>GOOGLE_GEMINI_BASE_URL</code>、API キー認証、そしてモデル</td></tr>
     </table></div>
     <p><b>実行中のセッションは、開始時のモデルを使い続けます。</b> エージェントは起動時に設定を読むので、変更は次のセッションから反映されます。Codex は起動時にモデル一覧も作るため、切り替えたら Codex アプリと開いている <code>codex</code> セッションを再起動してください。</p>
@@ -152,8 +153,8 @@
     <p>プロバイダごとにアカウントが 1 つなら、ここは読み飛ばして構いません。ChatGPT アカウントが 2 つある、あるいは同じモデルをサブスクリプションとキーの両方で使えるなど、複数あるときに意味を持ちます。</p>
 
     <figure class="figure">
-      <img class="for-light" src="/img/routing-light.png" width="2080" height="1914" loading="lazy" alt="Routing タブ：4 つのエージェントが 3 つのルーティンググループを通して同時に送信し、レート制限中のプロバイダは外れている">
-      <img class="for-dark" src="/img/routing-dark.png" width="2080" height="1996" loading="lazy" alt="Routing タブ：4 つのエージェントが 3 つのルーティンググループを通して同時に送信し、レート制限中のプロバイダは外れている">
+      <img class="for-light" src="/img/routing-ja-light.png" width="2080" height="1610" loading="lazy" alt="ルーティングタブ：4 つのエージェントが 3 つのルーティンググループを通して同時に送信し、レート制限中のプロバイダは外れている">
+      <img class="for-dark" src="/img/routing-ja-dark.png" width="2080" height="1610" loading="lazy" alt="ルーティングタブ：4 つのエージェントが 3 つのルーティンググループを通して同時に送信し、レート制限中のプロバイダは外れている">
       <figcaption>ルーティンググループ：複数のモデルやアカウントを 1 つの名前にまとめ、スマートまたは順番どおりにフォールバックします。</figcaption>
     </figure>
 
@@ -186,7 +187,7 @@
       <li>サブエージェントはそれ自体が独立した会話なので、親のエージェントはそのままに、ルールでサブエージェントだけを別の送り先に送れます。</li>
       <li>インテントは、ユーザーが求めていることを数語で表したものです（「テストを書く・直す」「ちょっとした質問」など）。ターンの開始時に、グループの分類モデル（magpie にある任意のモデル。小さく高速で推論なしのものが最適です）に、一致しうるインテントのうちユーザーのメッセージがどれに当たるかを一度だけ尋ねます。送られるのはそのメッセージだけで、会話全体ではありません。分類モデルが失敗した、遅すぎた（8 秒）、または判断できなかった場合は、どのインテントも一致せず、そのターンは他のルールに従います。インテントのないルールでいずれにせよ決まる場合は問い合わせず、同じメッセージについて二度尋ねることもありません。その呼び出しは使用量に magpie 自身の呼び出しとして表示されます。何を尋ねるのか、回答がどう使われるのか、失敗したらどうなるのかの詳細は<a href="/docs/ja/intent">インテントルーティング</a>を参照してください。</li>
       <li><span class="ui">compacting</span> は、エージェントが会話を圧縮するとき（Claude Code の <code>/compact</code> と自動圧縮、Codex、OpenCode、Pi、Gemini CLI、Qwen Code、Kimi Code）に一致します。これにより、会話は元のモデルのまま、要約だけをより安く速いモデルに書かせられます。圧縮は単独で判断されます。圧縮が起きたターンとそのキャッシュは元の送り先に留まります。会話がルールのモデルが受け付けられる長さを超えている場合は、次に一致するルール、またはグループの順序で決まります。</li>
-      <li>Routing タブには、各ターンをどのルールがどこへ送ったか、分類モデルが何と答えたかが表示されます。</li>
+      <li>ルーティングタブには、各ターンをどのルールがどこへ送ったか、分類モデルが何と答えたかが表示されます。</li>
     </ul>
     <h3 id="nested">グループの中のグループ</h3>
     <p>グループのモデルには別のグループも含められます。<span class="ui">Add a model</span> の <em>Routing groups</em> の下から選ぶか、ターミナルで <code>models+=group/&lt;id&gt;</code> を使います。中に入ったグループは順序の中でその位置を占め、自分のモデルの間では自分のルーティングとルールに従って振り分けます。たとえば Coder を <code>deepseek-v4-pro</code>、次に <em>Fast</em> とし、Fast は安いモデルを独自の順序で並べる、といった構成ができます。Coder のルールでターンを <code>group/fast</code> に送れば、どのモデルを先にするかは Fast 自身のルールが決めます。</p>
@@ -197,8 +198,8 @@
       <li>2 回現れるモデル（単独と、中のグループ内）は、最初の位置で一度だけ問い合わせます。</li>
     </ul>
     <figure class="figure">
-      <img class="for-light" src="/img/nested-routing-light.png" width="2080" height="1330" loading="lazy" alt="グループの中にグループがある Routing タブ：Coder には deepseek-v4-pro とグループ Fast があり、Fast の下に deepseek-v4-flash と kimi-k2.5 が並ぶ。応答したのは Kimi">
-      <img class="for-dark" src="/img/nested-routing-dark.png" width="2080" height="1330" loading="lazy" alt="グループの中にグループがある Routing タブ：Coder には deepseek-v4-pro とグループ Fast があり、Fast の下に deepseek-v4-flash と kimi-k2.5 が並ぶ。応答したのは Kimi">
+      <img class="for-light" src="/img/nested-routing-ja-light.png" width="2080" height="1404" loading="lazy" alt="グループの中にグループがある ルーティングタブ：Coder には deepseek-v4-pro とグループ Fast があり、Fast の下に deepseek-v4-flash と kimi-k2.5 が並ぶ。応答したのは Kimi">
+      <img class="for-dark" src="/img/nested-routing-ja-dark.png" width="2080" height="1404" loading="lazy" alt="グループの中にグループがある ルーティングタブ：Coder には deepseek-v4-pro とグループ Fast があり、Fast の下に deepseek-v4-flash と kimi-k2.5 が並ぶ。応答したのは Kimi">
       <figcaption>Coder のルールがちょっとした質問をグループ Fast に送り、Fast 自身のルールがそこで Kimi を先頭にしました。トレースには、各グループのルールと分類モデルが何を決めたかが表示されます。</figcaption>
     </figure>
     <p><span class="ui">Routing</span> タブには、ゲートウェイの判断がリアルタイムで表示されます。各リクエストに誰が応答したか、そしてその理由です。同じグループをターミナルから扱うと次のとおりです：</p>
@@ -221,8 +222,8 @@ magpie claude group/opus-anywhere    <span class="c"># これを使う</span></p
     <p><b>使用量。</b> <span class="ui">Usage</span> タブでは、ゲートウェイを通ったすべての呼び出しについて、エージェントとモデルごとのトークン、キャッシュヒット、コストを <span class="ui">Today</span>、<span class="ui">7 days</span>、<span class="ui">30 days</span>、<span class="ui">All</span> の期間で集計します。上部にはサブスクリプションの利用枠の使用量と、そのリセット時刻が表示されます。エージェントが自分のベンダーへ直接行う呼び出しは magpie を通らないため、集計されません。</p>
 
     <figure class="figure">
-      <img class="for-light" src="/img/usage-light.png" width="2080" height="842" loading="lazy" alt="Usage タブ：残高、トークンとコストの合計、30 日間のグラフ">
-      <img class="for-dark" src="/img/usage-dark.png" width="2080" height="842" loading="lazy" alt="Usage タブ：残高、トークンとコストの合計、30 日間のグラフ">
+      <img class="for-light" src="/img/usage-ja-light.png" width="2080" height="1004" loading="lazy" alt="使用量タブ：残高、トークンとコストの合計、30 日間のグラフ">
+      <img class="for-dark" src="/img/usage-ja-dark.png" width="2080" height="1004" loading="lazy" alt="使用量タブ：残高、トークンとコストの合計、30 日間のグラフ">
       <figcaption>ゲートウェイを通ったすべての呼び出しの残高、トークン、キャッシュヒット、コスト。</figcaption>
     </figure>
     <p><b>プロファイル。</b> <span class="ui">Agents</span> タブの下部にある <span class="ui">＋ Save current</span> で、全エージェントの設定を名前を付けて保存できます。チップをクリックすれば、すべてを一度に元に戻せます。</p>

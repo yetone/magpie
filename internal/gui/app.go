@@ -269,6 +269,7 @@ const panelStart = 520
 // link is a magpie:// link the app was started with, to confirm and import.
 func Run(version string, showMain bool, link string) error {
 	Version = version
+	webkitDefaults()
 	// `make dev` runs the backend on its own, so a Go change restarts only
 	// that, behind windows that stay up.
 	if devRole() == "backend" {
@@ -329,6 +330,17 @@ func Run(version string, showMain bool, link string) error {
 		// Wails exits on some webview errors; say why before it does.
 		ErrorHandler: func(err error) { log.Println("magpie:", err) },
 	})
+	// Wails' default Learn More replaces the current window with wails.io.
+	// Keep the native menus, but open magpie's help in the system browser.
+	// macOS only: it is the one that shows a menu bar unasked; on Linux a
+	// set menu becomes a menu bar in every window, the panel's too.
+	if runtime.GOOS == "darwin" {
+		appMenu := application.DefaultApplicationMenu()
+		help := appMenu.FindByRole(application.HelpMenu).GetSubmenu()
+		help.Clear()
+		help.Add("Learn More").OnClick(func(*application.Context) { h.OpenURL("https://usemagpie.ai") })
+		h.app.Menu.Set(appMenu)
+	}
 	if Started != nil {
 		h.app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) { Started() })
 	}

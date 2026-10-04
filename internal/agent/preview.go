@@ -468,6 +468,9 @@ func mask(l string) string {
 		return l
 	}
 	m := keyRe.FindStringIndex(l)
+	if m == nil { // a table header or compact array, not a key/value line
+		return l
+	}
 	val := strings.TrimSpace(l[m[1]:])
 	bare := strings.Trim(val, `"', `)
 	if bare == "" || bare == "magpie" || strings.HasPrefix(bare, "{") || strings.HasPrefix(bare, "$") {

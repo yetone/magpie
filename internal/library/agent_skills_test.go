@@ -121,3 +121,28 @@ func TestImportSharedSkillForKimi(t *testing.T) {
 	}
 	ok(t)(Sync())
 }
+
+// Droid and Grok Build read a user-wide AGENTS.md in their folders
+// (~/.factory, $GROK_HOME else ~/.grok): the library's instructions reach
+// them there, after what the user wrote, which stays.
+func TestDroidGrokInstructions(t *testing.T) {
+	h := sandbox(t)
+	write(t, filepath.Join(h, ".factory/settings.json"), "")
+	g := filepath.Join(h, "grok-home")
+	t.Setenv("GROK_HOME", g)
+	write(t, filepath.Join(g, "config.toml"), "")
+	files := map[string]string{"droid": filepath.Join(h, ".factory/AGENTS.md"), "grok": filepath.Join(g, "AGENTS.md")}
+	for id, f := range files {
+		if tg := targetByID(id); tg == nil || tg.Instructions != f {
+			t.Fatalf("%s: %+v", id, tg)
+		}
+		write(t, f, "# Mine\n")
+	}
+	shared := "Use tabs."
+	ok(t)(SaveInstructions(InstructionsChange{Shared: &shared, Agents: []string{"droid", "grok"}}))
+	for id, f := range files {
+		if s := read(t, f); s != "# Mine\n\n"+blockBegin+"\nUse tabs.\n"+blockEnd+"\n" {
+			t.Errorf("%s's AGENTS.md:\n%s", id, s)
+		}
+	}
+}

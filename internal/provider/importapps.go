@@ -8,6 +8,7 @@ package provider
 // Nothing is added until the user picks.
 
 import (
+	"cmp"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -289,11 +290,19 @@ func imported(name, key string, e endpoints, models []string) (Provider, string)
 		// an Azure OpenAI resource, from any app: the preset's, its
 		// endpoints on the resource's v1 API
 		p = asAzure(p)
-	} else if pr, exact := presetAt(e); pr != nil {
+	} else if pr, r, exact := presetAt(e); pr != nil {
 		p.ID, p.Icon, p.Catalog = pr.ID, pr.Icon, pr.Catalog
+		if r != nil {
+			p.Catalog = cmp.Or(r.Catalog, pr.Catalog)
+		}
 		if exact {
 			p.Preset, p.Website, p.KeysURL = pr.ID, pr.Website, pr.KeysURL
 			p.Chat, p.Responses, p.Anthropic = pr.Chat, pr.Responses, pr.Anthropic
+			if r != nil {
+				// at one of its regions: that region's endpoints and pages
+				p.atRegionOf(pr, *r)
+				p.Decide = ""
+			}
 			if n := strings.ToLower(name); n == "" || n == "default" {
 				p.Name = pr.Name
 			}
@@ -319,33 +328,57 @@ func gatewayURL(u *url.URL) bool {
 	return (h == "127.0.0.1" || h == "localhost") && u.Port() == "3425"
 }
 
-// presetAt finds the preset serving an entry's host, and whether the entry
-// uses exactly that preset's endpoints.
-func presetAt(e endpoints) (*PresetDef, bool) {
+// presetAt finds the preset serving an entry's host, the region of it the
+// entry is at when it isn't the preset's own endpoints (Tencent Cloud's
+// TokenHub), and whether the entry uses exactly those endpoints.
+func presetAt(e endpoints) (*PresetDef, *Region, bool) {
 	given := map[string]string{"chat": e.chat, "responses": e.responses, "anthropic": e.anthropic}
-	for i := range presets {
-		pr := &presets[i]
-		if pr.Kind == KindLocal {
-			continue
-		}
-		own := map[string]string{"chat": pr.Chat, "responses": pr.Responses, "anthropic": pr.Anthropic}
-		hit, exact := false, true
+	// at endpoints own: whether the entry is at their host, and at them all
+	at := func(chat, responses, anthropic string) (hit, exact bool) {
+		own := map[string]string{"chat": chat, "responses": responses, "anthropic": anthropic}
+		exact = true
 		for k, u := range given {
 			if u == "" {
 				continue
 			}
-			if own[k] != "" && hostOf(own[k]) == hostOf(u) || hostOf(pr.Chat) == hostOf(u) || hostOf(pr.Anthropic) == hostOf(u) {
+			if own[k] != "" && hostOf(own[k]) == hostOf(u) || hostOf(chat) == hostOf(u) || hostOf(anthropic) == hostOf(u) {
 				hit = true
 			}
 			if !strings.EqualFold(own[k], u) {
 				exact = false
 			}
 		}
+		return hit, exact
+	}
+	for i := range presets {
+		pr := &presets[i]
+		if pr.Kind == KindLocal {
+			continue
+		}
+		hit, exact := at(pr.Chat, pr.Responses, pr.Anthropic)
+		if hit && exact {
+			return pr, nil, true
+		}
+		var near *Region
+		for j := range pr.Regions {
+			r := &pr.Regions[j]
+			if r.Chat == "" && r.Responses == "" && r.Anthropic == "" {
+				continue
+			}
+			if hit, exact := at(r.Chat, r.Responses, r.Anthropic); exact && hit {
+				return pr, r, true
+			} else if hit && near == nil {
+				near = r
+			}
+		}
 		if hit {
-			return pr, exact
+			return pr, nil, false
+		}
+		if near != nil {
+			return pr, near, false
 		}
 	}
-	return nil, false
+	return nil, nil, false
 }
 
 // ---- CC Switch -------------------------------------------------------------

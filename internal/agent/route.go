@@ -6,6 +6,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Every agent's model picker has two halves: the models the agent reaches
@@ -98,8 +99,13 @@ func magpieModels(agent string) []catalog.Model {
 	labels := provider.Labels(shown)
 	// a model magpie describes images to takes them (provider.Described)
 	seen := provider.Described != nil && provider.Described()
+	st, find := settings.Load(), provider.GroupFinder()
 	for i, e := range shown {
 		m := catalog.Model{ID: e.ID, Name: labels[i], Provider: firstOf(e.Provider.Catalogs()), Efforts: e.Efforts, Images: e.Images || seen, ImageInput: e.ImageInput, Context: e.Context, Output: e.Output, AgentsV2: e.AgentsV2, Reasoning: e.Reasoning}
+		// what a call costs the user (Pi's cost, #781)
+		if pr, ok := entryPrice(st, find, e); ok {
+			m.Price = &pr
+		}
 		if seen && !e.Images {
 			yes := true
 			m.ImageInput = &yes
@@ -114,6 +120,28 @@ func magpieModels(agent string) []catalog.Model {
 		out = append(out, m)
 	}
 	return out
+}
+
+// entryPrice is what a call to e costs the user, as the usage pages count
+// it: a group's when every member costs the same, none in a fast mode,
+// since which of them answers isn't known beforehand.
+func entryPrice(st settings.Settings, find func(string) (provider.Group, []provider.Member, bool), e provider.Entry) (catalog.Price, bool) {
+	if e.Group == "" {
+		return provider.EffectivePriceIn(st, e.Provider.ID, e.Model)
+	}
+	_, ms, ok := find(e.ID)
+	if !ok || len(ms) == 0 {
+		return catalog.Price{}, false
+	}
+	var first catalog.Price
+	for i, m := range ms {
+		pr, ok := provider.EffectivePriceIn(st, m.Provider.ID, m.Model)
+		if !ok || m.Fast || i > 0 && pr != first {
+			return catalog.Price{}, false
+		}
+		first = pr
+	}
+	return first, true
 }
 
 // maxTokens is the output limit an agent is handed for m, kept within the

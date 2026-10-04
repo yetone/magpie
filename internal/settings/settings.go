@@ -43,10 +43,13 @@ type Settings struct {
 	// rate (see internal/fx). A vendor's own balance, already in its own
 	// currency (a Chinese relay's ¥), is never touched by this.
 	Currency string `json:"currency,omitempty"`
-	// WesternUnits shortens a large count in K, M and B even when magpie
-	// speaks Chinese, which otherwise says it in 万 and 亿 (8000 万
-	// rather than 80M). It means nothing in English.
-	WesternUnits bool `json:"westernUnits,omitempty"`
+	// ChineseUnits shortens a large count in 万 and 亿 when magpie speaks
+	// Chinese (8000 万 rather than 80M); otherwise it is in K, M and B, as
+	// prices per million tokens and context windows (200K, 1M) are, in
+	// Chinese too (#740). It means nothing in English. It replaces
+	// westernUnits, which asked for K/M/B: what that chose is now the
+	// default, so an old file's is left unread.
+	ChineseUnits bool `json:"chineseUnits,omitempty"`
 	// Dock keeps magpie in the Mac's Dock as well as the menu bar, for a
 	// menu bar too full to show its icon.
 	Dock bool `json:"dock,omitempty"`
@@ -172,6 +175,10 @@ type Settings struct {
 	// is its windows stacked alone, a thin line between one card and the
 	// next.
 	TrayNoLogos bool `json:"trayNoLogos,omitempty"`
+	// TrayNoBird leaves magpie's bird out of the Mac menu bar while the
+	// cards are there, the cards alone (KevinXC on Discord); a click on one
+	// still opens the panel, and with no cards the bird is shown.
+	TrayNoBird bool `json:"trayNoBird,omitempty"`
 	// Lightweight lets the webview of a window closed — the tray panel or
 	// the main window — go once it has stayed closed a while, and makes it
 	// again when it is opened (#580): less memory, a moment's wait. This
@@ -212,6 +219,14 @@ type Settings struct {
 	// as Codex sends them, "off" answered by magpie with no title and sent
 	// nowhere, or a model's id (provider/model, group/<id>) that writes it.
 	CodexTitles string `json:"codexTitles,omitempty"`
+	// FullContext has Codex and Claude Code told a model's whole context
+	// window. Off, a window above WorkingWindow is told as WorkingWindow,
+	// so they compact a long conversation there instead of sending ever
+	// more of it on every turn (X: Chen, a 1M DeepSeek model through
+	// Codex and Claude Code took 70–90s to its first token at 550K):
+	// what OpenAI does with its own models, 272K though they can take
+	// more, and Anthropic with its, 200K unless a [1m] one is picked.
+	FullContext bool `json:"fullContext,omitempty"`
 	// ChinaMirror is the Plugins page's 「国内镜像」 switch: the plugin list,
 	// npm (the plugins' packages and what npm says of them) and Bun's
 	// downloads are asked of mirrors in China first, and of their official
@@ -413,7 +428,7 @@ func Arrange[T any](s Settings, items []T, id func(T) string) (shown, hidden []T
 // Themes and Langs are the accepted values, in the order the UI offers them.
 var (
 	Themes     = []string{"system", "light", "dark"}
-	Langs      = []string{"system", "en", "zh", "de"}
+	Langs      = []string{"system", "en", "zh", "ja", "de"}
 	Trays      = []string{"panel", "window"}
 	Currencies = []string{"usd", "cny"}
 	// Warmups are CodexWarmup's and ClaudeWarmup's values, off as "".
@@ -495,6 +510,20 @@ func CarryPerModel(in, cur *Settings) {
 	}
 }
 
+// WorkingWindow is the context window Codex and Claude Code are told for a
+// model with a larger one, unless FullContext: Codex's own for OpenAI's
+// models that can take more.
+const WorkingWindow = 272000
+
+// Working is the context window an agent is told for a model with one of
+// n tokens (see FullContext).
+func (s Settings) Working(n int) int {
+	if !s.FullContext && n > WorkingWindow {
+		return WorkingWindow
+	}
+	return n
+}
+
 // KeepOwn puts back cur's settings that are this computer's own, which a
 // sync or a restored backup never brings from another: the window's size,
 // the proxy, the Dock, and what the menu bar or tray shows beside magpie's
@@ -502,7 +531,7 @@ func CarryPerModel(in, cur *Settings) {
 // Windows box that shows it).
 func (s *Settings) KeepOwn(cur Settings) {
 	s.Window, s.Proxy, s.Dock, s.DockWindow, s.Lightweight = cur.Window, cur.Proxy, cur.Dock, cur.DockWindow, cur.Lightweight
-	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos
+	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird
 }
 
 // RenamePerModel moves what the user said of a provider's models to the id

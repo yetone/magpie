@@ -442,6 +442,66 @@ func TestCopilotSignAndModels(t *testing.T) {
 	}
 }
 
+// Copilot lists GPT-4.1, GPT-4o and the models before them with no
+// supported_endpoints, and serves them on chat completions alone: asked on
+// /v1/messages, Copilot answers "no model endpoints available given user
+// constraints", which read as the plan's refusal (#754: an Education
+// account's copilot/gpt-4o from Claude Code). They are asked on Chat, a
+// model the list names for no picker (gpt-4o) too.
+func TestCopilotModelsWithoutEndpointsOnChat(t *testing.T) {
+	signIn(t)
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/models" {
+			w.Write([]byte(`{"data":[
+			  {"id":"claude-haiku-4.5","name":"Claude Haiku 4.5","model_picker_enabled":true,"model_picker_category":"lightweight","policy":{"state":"enabled"},"supported_endpoints":["/chat/completions","/v1/messages"],"capabilities":{"type":"chat"}},
+			  {"id":"gpt-4.1","name":"GPT-4.1","model_picker_enabled":false,"model_picker_category":"versatile","policy":{"state":"enabled"},"capabilities":{"type":"chat"}},
+			  {"id":"gpt-4o","name":"GPT-4o","model_picker_enabled":false,"capabilities":{"type":"chat"}},
+			  {"id":"text-embedding-3-small","name":"Emb","model_picker_enabled":false,"capabilities":{"type":"embeddings"}}]}`))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	defer api.Close()
+	tokens := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"token": "sess", "expires_at": time.Now().Add(time.Hour).Unix(), "endpoints": map[string]string{"api": api.URL}})
+	}))
+	defer tokens.Close()
+	old := CopilotTokenURL
+	CopilotTokenURL = tokens.URL
+	defer func() { CopilotTokenURL = old }()
+	copilotSessions = map[string]copilotSession{}
+	copilotSeenMu.Lock()
+	copilotSeen = map[string][]string{}
+	copilotSeenMu.Unlock()
+
+	p, _ := find(All(), "copilot")
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = find(All(), "copilot")
+	for model, want := range map[string]string{
+		"claude-haiku-4.5": "chat anthropic",
+		"gpt-4.1":          "chat", // listed
+		"gpt-4o":           "chat", // not listed, and asked for by hand
+	} {
+		var got []string
+		for _, a := range p.APIs(model) {
+			got = append(got, string(a))
+		}
+		if strings.Join(got, " ") != want {
+			t.Errorf("APIs(%s) = %v, want %s", model, got, want)
+		}
+	}
+	// what Copilot's /v1/messages said is kept, and said not to be the plan
+	msg := p.Explain("Copilot: 400 Bad Request: no model endpoints available given user constraints", 400, []byte("no model endpoints available given user constraints\n"))
+	if !strings.Contains(msg, "no model endpoints available given user constraints") || !strings.Contains(msg, "Anthropic's Messages API") {
+		t.Errorf("explained: %s", msg)
+	}
+	if got := p.Explain("Copilot: 400", 400, []byte(`{"error":{"code":"model_not_supported"}}`)); got != "Copilot: 400" {
+		t.Errorf("a refusal of the model was explained as the API's: %s", got)
+	}
+}
+
 // Logging out of Claude Code can leave its credentials behind; what the CLI
 // says wins, so a signed-out account is not a provider.
 func TestClaudeSignedOut(t *testing.T) {
@@ -489,8 +549,12 @@ func TestCopilotAPIs(t *testing.T) {
 	if strings.Join(got, " ") != "responses anthropic chat" {
 		t.Errorf("copilotAPIs = %v", got)
 	}
-	if copilotAPIs(nil) != nil {
-		t.Error("no endpoints should be not known")
+	// a model listed with no supported_endpoints (GPT-4.1, GPT-4o) is
+	// served on chat completions alone (#754)
+	for _, none := range [][]string{nil, {}} {
+		if got := copilotAPIs(none); strings.Join(got, " ") != "chat" {
+			t.Errorf("copilotAPIs(%#v) = %v, want chat", none, got)
+		}
 	}
 }
 

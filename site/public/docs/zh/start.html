@@ -143,6 +143,7 @@
       <tr><td>Claude Code</td><td><code>~/.claude/settings.json</code>：<code>env</code> 里的 <code>ANTHROPIC_BASE_URL</code>、<code>ANTHROPIC_AUTH_TOKEN</code> 和模型变量</td></tr>
       <tr><td>Codex</td><td><code>~/.codex/config.toml</code>：一个 <code>[model_providers.magpie]</code> 表和模型，模型列表写在 <code>magpie-models.json</code>。你的 ChatGPT 登录不受影响</td></tr>
       <tr><td>OpenCode、MiMo Code、Pi、Crush</td><td>一个 <code>magpie</code> 供应商条目，以及 <code>magpie/provider/model</code></td></tr>
+      <tr><td>AtomCode</td><td><code>~/.atomcode/config.toml</code>：一个 <code>magpie</code> 供应商账号，以及目录中每个模型各自的条目</td></tr>
       <tr><td>Gemini CLI</td><td><code>GOOGLE_GEMINI_BASE_URL</code> 指向网关、API 密钥认证，以及模型</td></tr>
     </table></div>
     <p><b>已在运行的会话保持它启动时的模型。</b>Agent 启动时读取配置，所以改动从下一个会话生效。Codex 也在启动时生成模型列表：切换后请重启 Codex 应用和已打开的 <code>codex</code> 会话。</p>

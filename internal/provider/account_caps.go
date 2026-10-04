@@ -172,13 +172,16 @@ func capReached(q SubscriptionQuota, cap int, now time.Time) bool {
 
 // WithCapped is m with Capped set on each window an account's usage cap
 // counts, for the GUI to mark the cap and say an account is held at it as
-// routing does; the windows are copied, the cache's left as they are.
+// routing does — a window one model's own counts for that model, so it is
+// marked as the rest are; the windows are copied, the cache's left as they
+// are.
 func WithCapped(m map[string]SubscriptionQuota) map[string]SubscriptionQuota {
 	out := make(map[string]SubscriptionQuota, len(m))
 	for u, q := range m {
 		ws := make([]QuotaWindow, len(q.Windows))
 		for i, w := range q.Windows {
-			w.Capped = !w.Aside && w.Model == "" && !w.Unlimited
+			w.Capped = !w.Aside && !w.Unlimited
+			w.CapsSome = w.Capped && (w.Model != "" || w.matches != nil)
 			ws[i] = w
 		}
 		if q.Windows != nil {

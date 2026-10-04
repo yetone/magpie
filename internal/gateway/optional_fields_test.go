@@ -148,7 +148,7 @@ func TestOptionalFieldMixedValidation(t *testing.T) {
 }
 
 func TestRefusedOptionalNamesOnlyUnsupportedFields(t *testing.T) {
-	request := []byte(`{"store":false,"metadata":{"session":"synthetic"},"service_tier":"default","thinking":{"type":"enabled"}}`)
+	request := []byte(`{"store":false,"metadata":{"session":"synthetic"},"service_tier":"default","prompt_cache_retention":"24h","thinking":{"type":"enabled"}}`)
 	for _, tt := range []struct {
 		name, reply string
 		status      int
@@ -174,6 +174,7 @@ func TestRefusedOptionalNamesOnlyUnsupportedFields(t *testing.T) {
 		{"multiple-extras", `{"detail":[{"type":"extra_forbidden","loc":["body","thinking"],"msg":"Extra inputs are not permitted"},{"type":"extra_forbidden","loc":["body","store"],"msg":"Extra inputs are not permitted"}]}`, 422, []string{"store", "thinking"}},
 		{"root-location", `{"detail":[{"type":"extra_forbidden","loc":["store"],"msg":"Extra inputs are not permitted"}]}`, 422, []string{"store"}},
 		{"unsupported-code", `{"error":{"message":"Not accepted here","code":"unsupported_parameter","param":"store"}}`, 400, []string{"store"}},
+		{"codex-unquoted-unsupported-parameter", `{"code":null,"message":"Codex: Unsupported parameter: prompt_cache_retention","param":null,"type":"invalid_request_error"}`, 400, []string{"prompt_cache_retention"}},
 		{"plain-error", `Unknown name "store": Cannot find field.`, 400, []string{"store"}},
 		{"status-prefix", `[400] Unknown name "store": Cannot find field.`, 400, []string{"store"}},
 		{"text-status-prefix", `[HTTP 400] Unknown name "store": Cannot find field.`, 400, []string{"store"}},

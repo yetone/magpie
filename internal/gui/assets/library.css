@@ -386,6 +386,8 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-rtk-gain { margin: 6px 12px 10px; font-size: 12px; line-height: 1.5; color: var(--muted); }
 .lib-card > .lib-acts { padding: 0 12px 12px; }
 .lib-rtk-note { margin: 6px 12px 0; font-size: 12px; line-height: 1.5; color: var(--amber); }
+.lib-rtk-scope { opacity: .8; }
+.lib-rtk-err { color: var(--red); user-select: text; overflow-wrap: anywhere; }
 .lib-rtk-chart { margin: 0 12px 12px; padding: 10px 12px 8px; }
 .lib-rtk-chart .bars { height: 88px; }
 .lib-rtk-foot { display: flex; align-items: center; gap: 12px; margin-top: 8px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -434,7 +436,11 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-grouphead .sub { font-size: 11px; }
 .lib-grouphead > .lib-logo, .lib-grouphead > .lib-glyph { align-self: center; margin-top: 0; }
 .lib-grouphead .lib-updall { height: 24px; padding: 0 9px; font-size: 12px; }
-.lib-have .ic.some { opacity: .4; }
+/* a group's chip whose agent has some of its skills: half lit */
+.lib-row > .lib-agents .lib-ag.some { border-style: dashed; border-color: var(--line); }
+.lib-ag.some .ic { filter: none; opacity: .55; }
+.lib-ag.some .ic.baked > img:not(.grey) { display: block; }
+.lib-ag.some .ic.baked > img.grey { display: none; }
 /* the skills' heading has the most on it: in a narrow window it goes on
    to a second line rather than past the page's side */
 #view-library .row-head.lib-skillshead { flex-wrap: wrap; row-gap: 6px; }

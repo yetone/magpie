@@ -139,6 +139,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		UpdateSkip:          "0.1.500",
 		UpdateMirror:        "https://mirror.example/",
 		Window:              []int{900, 700},
+		FullContext:         true,
 	}
 	if err := settings.Save(was); err != nil {
 		t.Fatal(err)

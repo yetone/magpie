@@ -66,7 +66,7 @@ const (
 	// factoryClientID is droid's WorkOS client, production.
 	factoryClientID = "client_01HNM792M5G5G1A2THWPXKFMXB"
 	// factoryVersion is the droid release magpie's requests say they are.
-	factoryVersion = "0.231.0"
+	factoryVersion = "0.233.0"
 	// factoryRefreshLead is how long before an access token lapses it is
 	// renewed; droid renews a minute ahead, magpie a little more.
 	factoryRefreshLead = 2 * time.Minute

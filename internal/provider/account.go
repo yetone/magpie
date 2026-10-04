@@ -1052,6 +1052,7 @@ func copilotProvider(app copilotApp, plan string) Provider {
 		return copilotRefused(ctx, app, model, status, body)
 	}
 	acct.unusable = func(model string) bool { return copilotRefuses(app.Token, model) }
+	acct.explain = copilotExplain
 	acct.fetch = func(ctx context.Context) ([]catalog.Model, error) {
 		ms, err := copilotModels(ctx, app)
 		if err != nil {
@@ -1064,6 +1065,18 @@ func copilotProvider(app copilotApp, plan string) Provider {
 	// model list says; see Provider.APIs)
 	base := copilotBaseOf(app.Host)
 	return Provider{ID: "copilot", Name: "Copilot", Icon: "githubcopilot", Chat: base, Responses: base, Anthropic: base, Website: "https://github.com/features/copilot", Account: acct}
+}
+
+// copilotNoEndpoint is Copilot's /v1/messages turning away a model it
+// serves on other APIs alone; it reads as if the plan were refused (#754).
+const copilotNoEndpoint = "no model endpoints available given user constraints"
+
+// copilotExplain says what Copilot's own words leave out.
+func copilotExplain(status int, body []byte) string {
+	if status == http.StatusBadRequest && bytes.Contains(body, []byte(copilotNoEndpoint)) {
+		return "Copilot doesn't serve this model on Anthropic's Messages API; it isn't about your plan"
+	}
+	return ""
 }
 
 // bodyModel is the model a request asks for.
@@ -1151,8 +1164,18 @@ func copilotToken(ctx context.Context, app copilotApp) (copilotSession, error) {
 }
 
 // copilotAPIs names the APIs of Copilot's supported_endpoints; the
-// websocket one is left out, as is anything magpie doesn't speak.
-func copilotAPIs(endpoints []string) []string { return catalog.EndpointAPIs(endpoints) }
+// websocket one is left out, as is anything magpie doesn't speak. A chat
+// model the list gives no supported_endpoints (GPT-4.1, GPT-4o and the other
+// models before them, what a Student plan is served) is served on chat
+// completions alone: Copilot's /v1/messages answers it "no model endpoints
+// available given user constraints" and its /responses "not supported via
+// Responses API" (#754).
+func copilotAPIs(endpoints []string) []string {
+	if len(endpoints) == 0 {
+		return []string{string(Chat)}
+	}
+	return catalog.EndpointAPIs(endpoints)
+}
 
 // internal is a Copilot model id nobody picks by hand.
 var copilotInternal = regexp.MustCompile(`^(copilot-search|exec-agent|trajectory)|-(secondary|tertiary|4th|free-auto)$`)
@@ -1264,7 +1287,7 @@ func copilotModels(ctx context.Context, app copilotApp) ([]catalog.Model, error)
 	waiting := map[string]bool{}
 	copilotSeenMu.Lock()
 	for _, m := range v.Data {
-		if m.Capabilities.Type == "chat" && len(m.Endpoints) > 0 {
+		if m.Capabilities.Type == "chat" {
 			copilotSeen[m.ID] = copilotAPIs(m.Endpoints)
 		}
 	}

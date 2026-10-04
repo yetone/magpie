@@ -74,16 +74,27 @@ func (q *tokenhub) last() tokenhubCall {
 // preset and the global one alike: each client's API reaches TokenHub's own
 // path for it, never translated away, with the key as a Bearer on the
 // OpenAI APIs and as x-api-key on Anthropic's, which TokenHub's docs ask.
+// TokenHub is now Tencent Cloud's pay as you go (one preset, its regions):
+// a provider added under either old preset, saved under its id with that
+// preset as an older magpie stored it, routes as before, and one added as
+// Tencent Cloud at either region alike.
 func TestTencentTokenHubRoutes(t *testing.T) {
-	for _, id := range []string{"tencent-tokenhub-cn", "tencent-tokenhub"} {
-		t.Run(id, func(t *testing.T) {
+	for _, c := range []struct{ id, preset string }{
+		{"tencent-tokenhub-cn", "tencent-tokenhub-cn"}, {"tencent-tokenhub", "tencent-tokenhub"},
+		{"tencent-cloud", "tencent-tokenhub-cn"}, {"tencent-cloud", "tencent-tokenhub"},
+	} {
+		id := c.id
+		t.Run(id+"@"+c.preset, func(t *testing.T) {
 			fresh(t)
 			up := &tokenhub{}
 			srv := httptest.NewServer(up)
 			t.Cleanup(srv.Close)
-			p, err := provider.FromPreset(id)
+			p, err := provider.FromPreset(c.preset)
 			if err != nil {
 				t.Fatal(err)
+			}
+			if id != "tencent-cloud" {
+				p.ID, p.Preset = id, c.preset
 			}
 			// the preset's paths kept, its host swapped for the fake's
 			host := strings.TrimSuffix(p.Chat, "/v1")

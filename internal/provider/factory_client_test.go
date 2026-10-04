@@ -185,7 +185,7 @@ func TestFactoryGLMFlashImages(t *testing.T) {
 	if m, ok := factoryModelOf("glm-5.3-flash"); !ok || !m.images {
 		t.Errorf("glm-5.3-flash: %+v", m)
 	}
-	if factoryVersion != "0.231.0" {
+	if factoryVersion != "0.233.0" {
 		t.Errorf("factoryVersion %s", factoryVersion)
 	}
 	if m, ok := factoryModelOf("gemini-3.1-pro-preview"); !ok || m.api != Gemini || m.upstream != "google" || factoryCore("gemini-3.1-pro-preview") {

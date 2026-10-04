@@ -429,6 +429,32 @@ func (p Provider) atRegion(r Region) bool {
 	return false
 }
 
+// regionOf is the region of pr the provider sits at, or nil: the one most
+// of its endpoints are as written first, else the one most share their
+// paths with (a mirror, a test). TokenHub's China and global hosts serve
+// the same paths, and a GLM Coding Plan its pay as you go's messages
+// endpoint: the host and the other endpoints tell them apart.
+func (p Provider) regionOf(pr *PresetDef) *Region {
+	var best *Region
+	top := 0
+	for i, r := range pr.Regions {
+		n := 0
+		for _, e := range [][2]string{{p.Chat, r.Chat}, {p.Responses, r.Responses}, {p.Anthropic, r.Anthropic}} {
+			switch {
+			case e[0] == "" || e[1] == "":
+			case strings.EqualFold(e[0], e[1]):
+				n += 4
+			case basePath(e[0]) == basePath(e[1]):
+				n++
+			}
+		}
+		if n > top {
+			best, top = &pr.Regions[i], n
+		}
+	}
+	return best
+}
+
 // basePath is a base URL's path, without scheme or host.
 func basePath(raw string) string {
 	if i := strings.Index(raw, "://"); i >= 0 {
@@ -443,10 +469,18 @@ func basePath(raw string) string {
 // planModels keeps a plan's own models of a vendor's list (PresetDef.Only),
 // or gives the plan's when the list has none; a plan with models but no
 // Only gives them only when there is no list. Any other provider's list is
-// as it came.
+// as it came. A region with models of its own (Tencent Cloud's Token Plan,
+// beside TokenHub's pay as you go) is a plan with those.
 func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 	pr := Preset(p.Preset)
-	if pr == nil || pr.Only == "" && (len(pr.Models) == 0 || len(ms) > 0) {
+	if pr == nil {
+		return ms
+	}
+	models := pr.Models
+	if r := p.regionOf(pr); r != nil && len(r.Models) > 0 {
+		models = r.Models
+	}
+	if pr.Only == "" && (len(models) == 0 || len(ms) > 0) {
 		return ms
 	}
 	var out, free []catalog.Model
@@ -461,7 +495,7 @@ func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 		}
 	}
 	if len(out) == 0 {
-		for _, id := range pr.Models {
+		for _, id := range models {
 			out = append(out, catalog.Model{ID: id, Name: id})
 		}
 	}
@@ -594,6 +628,23 @@ func sharedImageInput(a, b *bool) *bool {
 		return nil
 	}
 	return a
+}
+
+// anyImageInput is a group's answer from two of its members': it takes
+// images when one of them does (the gateway sends a request with an image
+// to the members that see, #756), is text-only when both are, and is
+// unknown otherwise.
+func anyImageInput(a, b *bool) *bool {
+	if a != nil && *a {
+		return a
+	}
+	if b != nil && *b {
+		return b
+	}
+	if a != nil && b != nil {
+		return a
+	}
+	return nil
 }
 
 // Serves reports whether key k can be asked for model: false only when the
@@ -924,7 +975,7 @@ type Entry struct {
 	Provider   Provider `json:"-"`                // a group's: its first member's
 	Group      string   `json:"group,omitempty"`  // set on a routing group (group.go)
 	Icons      []string `json:"-"`                // a group's: its providers' icons, one per provider
-	Images     bool     `json:"images,omitempty"` // takes images as input (a group's: every member does)
+	Images     bool     `json:"images,omitempty"` // takes images as input (a group's: a member does)
 	ImageInput *bool    `json:"-"`                // explicit answer, nil when unknown
 	// Context is the tokens a prompt may hold, when known (a group's: the
 	// least of its members')
@@ -1012,15 +1063,7 @@ func buildEntries() []Entry {
 // window and the reply limit a request on it is routed and metered against,
 // with what the user set taken over the vendor's list and models.dev.
 func entryFor(p Provider, m catalog.Model, s settings.Settings) Entry {
-	// a vendor models.dev doesn't list (a custom provider, a proxy)
-	// serves models it knows from others
-	ctx := m.Context
-	if ctx == 0 {
-		ctx = catalog.ContextOf(m.ID)
-	}
-	if n := p.ContextOf(m.ID); n > 0 {
-		ctx = n
-	}
+	ctx := p.WindowOf(m)
 	output := m.Output
 	if output == 0 {
 		output = catalog.OutputOf(m.ID)
@@ -1135,9 +1178,9 @@ func resolveIn(entries []Entry, id string) (Provider, string, bool) {
 		}
 	}
 	if pid, model, ok := strings.Cut(id, "/"); ok {
-		// the providers a request holds: an agent's value of a model not
-		// listed lands here, and All is read anew each time
-		if p, err := findIn(heldOf("all", All), pid); err == nil && p.On() {
+		// the providers a request holds (All): an agent's value of a
+		// model not listed lands here
+		if p, err := findIn(All(), pid); err == nil && p.On() {
 			return *p, model, true
 		}
 	}
@@ -1189,6 +1232,29 @@ func IDs() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// ListedWindow is the window a provider's model takes before the user says
+// one: its vendor's list's, else the one models.dev gives a model of its id.
+// A vendor models.dev doesn't list (a custom provider, a proxy, a plugin
+// whose list says none, as Cline's) serves models it knows from others, under
+// the vendor's prefix too: cline-free/mimo-v2.6-flash is mimo-v2.6-flash.
+func ListedWindow(m catalog.Model) int {
+	if m.Context > 0 {
+		return m.Context
+	}
+	return catalog.ContextOf(m.ID)
+}
+
+// WindowOf is the window one of the provider's models takes, as agents are
+// told it and requests are routed on it: the one the user set (ContextOf)
+// over ListedWindow. The catalog's entries and the Providers page's model
+// lists both read it, so the page shows the window agents are told.
+func (p Provider) WindowOf(m catalog.Model) int {
+	if n := p.ContextOf(m.ID); n > 0 {
+		return n
+	}
+	return ListedWindow(m)
 }
 
 // ContextOf is the context the user set for the provider's model: its own,

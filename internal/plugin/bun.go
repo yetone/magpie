@@ -221,12 +221,14 @@ func getURLFrom(ctx context.Context, url string, limit int64, mirror bool) ([]by
 }
 
 // bunCommand runs bun with args in dir, the environment's proxy settings
-// passed on, and npm's registry in China with the 「国内镜像」 switch on
-// (its packages are npm's own, checked against the integrity npm gave).
+// passed on, the roots the system trusts added to Bun's (caEnv), and npm's
+// registry in China with the 「国内镜像」 switch on (its packages are npm's
+// own, checked against the integrity npm gave).
 var bunCommand = func(ctx context.Context, bun, dir string, args ...string) *exec.Cmd {
 	cmd := command(ctx, bun, args...)
 	cmd.Dir = dir
 	cmd.Env = append(env(), "BUN_INSTALL_CACHE_DIR="+filepath.Join(filepath.Dir(catalog.CachePath()), "bun", "install-cache"))
+	cmd.Env = append(cmd.Env, caEnv(cmd.Env)...)
 	cmd.Env = append(cmd.Env, registryEnv(cmd.Env)...)
 	return cmd
 }

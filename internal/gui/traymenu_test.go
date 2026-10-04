@@ -26,6 +26,9 @@ func TestTrayMenuLabels(t *testing.T) {
 		{"system", enSys, "en"},
 		{"", func() string { return "zh_CN.UTF-8" }, "zh"},
 		{"system", func() string { return "" }, "en"},
+		{"ja", enSys, "ja"},
+		{"system", func() string { return "ja-JP" }, "ja"},
+		{"", func() string { return "ja_JP.UTF-8" }, "ja"},
 		{"de", enSys, "de"},
 		{"system", func() string { return "de-DE" }, "de"},
 		{"", func() string { return "de_AT.UTF-8" }, "de"},
@@ -46,6 +49,9 @@ func TestTrayMenuLabels(t *testing.T) {
 	zh := trayMenuLabels("zh", "0.1.500", "")
 	if zh != (trayLabels{"打开 magpie", "版本 0.1.500", "重启以更新", "退出 magpie"}) {
 		t.Errorf("zh: %+v", zh)
+	}
+	if ja := trayMenuLabels("ja", "0.1.500", ""); ja != (trayLabels{"magpie を開く", "バージョン 0.1.500", "再起動してアップデート", "magpie を終了"}) {
+		t.Errorf("ja: %+v", ja)
 	}
 	if l := trayMenuLabels("zh", "0.1.500", "0.1.501"); l.restart != "重启以更新到 0.1.501" {
 		t.Errorf("zh restart: %q", l.restart)

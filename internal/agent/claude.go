@@ -16,6 +16,7 @@ import (
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Claude Code reads its endpoint from the `env` block of settings.json.
@@ -136,6 +137,13 @@ var claudeAliases = []string{"default", "best", "opus", "sonnet", "haiku", "fabl
 // is 1M whatever it says.
 const claudeContextEnv = "CLAUDE_CODE_MAX_CONTEXT_TOKENS"
 
+// claudeCompactEnv is where Claude Code compacts a conversation, the smaller
+// of it and the model's window, a [1m] one's too. magpie sets it to
+// settings.WorkingWindow, so a 1M model isn't run to 1M with every turn
+// sending all of it (X: Chen, turns of ~550K tokens waiting 70–90s for a
+// first token); settings.FullContext leaves it out.
+const claudeCompactEnv = "CLAUDE_CODE_AUTO_COMPACT_WINDOW"
+
 // claudeCapsEnv tells Claude Code what a model it doesn't know can do, as
 // "<model>=effort,xhigh_effort;<model>=…" (a trailing * a prefix, [1m]
 // taken off the model first, the model lowercased, the pattern not). Run on
@@ -218,6 +226,54 @@ func claudeCapabilities(first []string, desktop bool) string {
 	return b.String()
 }
 
+// follow is the model tier takes while it follows the main model main:
+// main, but for haiku, on a Claude model, the Haiku its provider serves.
+// Claude Code runs its own small asks on the haiku tier — a session's
+// title, Explore subagents, WebFetch's reading — on Haiku, which on a Claude
+// subscription costs a fraction of Opus's limits (X, AncientTwo: the limits
+// went much faster through magpie than in Claude Code itself).
+func follow(tier, main string) string {
+	if tier == "haiku" {
+		if l := claudeLight(main); l != "" {
+			return l
+		}
+	}
+	return main
+}
+
+// claudeLight is the newest Haiku served where the Claude model main is —
+// the same provider, the same routing group naming (group/auto-claude-…), the
+// same vendor on a router (openrouter/anthropic/claude-…) — "" when main is
+// no Claude model, is a Haiku already, or there is none. Of one model's
+// names it takes the one without a date.
+func claudeLight(main string) string {
+	ref := strings.TrimSuffix(main, "[1m]")
+	i := strings.Index(ref, "/claude-")
+	if j := strings.Index(ref, "-claude-"); i < 0 || j >= 0 && j < i {
+		i = j
+	}
+	if i < 0 || strings.Contains(ref[i:], "haiku") {
+		return ""
+	}
+	prefix := ref[:i+1] + "claude-haiku-"
+	undated := func(id string) string {
+		if k := strings.LastIndex(id, "-"); k >= 0 && len(id)-k == 9 && strings.Trim(id[k+1:], "0123456789") == "" {
+			return id[:k]
+		}
+		return id
+	}
+	best := ""
+	for _, m := range magpieModels("claude") {
+		if !strings.HasPrefix(m.ID, prefix) {
+			continue
+		}
+		if u, b := undated(m.ID), undated(best); best == "" || u > b || u == b && len(m.ID) < len(best) {
+			best = m.ID
+		}
+	}
+	return best
+}
+
 func tierEnv(tier string) string { return "ANTHROPIC_DEFAULT_" + strings.ToUpper(tier) + "_MODEL" }
 
 // A tier (and the subagents' model) may run at an effort of its own (#536):
@@ -289,6 +345,20 @@ func claudeIn(at place) *Agent {
 	// it go with it when magpie next looks (Follow).
 	mainKey := at.key("claude.main")
 	wroteMain := func() string { return cmp.Or(stashLoad()[mainKey], env("ANTHROPIC_MODEL")) }
+	// a tier the user gave a model of their own, though it is the one it
+	// would follow: it stays when the main model changes
+	ownKey := func(t string) string { return at.key("claude.tier_own." + t) }
+	// follows says a tier on model m (its effort apart) follows the main
+	// model: on none, on the main model magpie last wrote, or on the model
+	// it takes after that one (follow)
+	follows := func(t, m string) bool {
+		if stashLoad()[ownKey(t)] != "" {
+			return false
+		}
+		was := strings.TrimSuffix(wroteMain(), "[1m]")
+		m = strings.TrimSuffix(m, "[1m]")
+		return m == "" || m == was || m == follow(t, was)
+	}
 
 	// the value shown: the catalog ref while routed, else Claude's own model.
 	get := func() string {
@@ -326,6 +396,37 @@ func claudeIn(at place) *Agent {
 			return edit.DelJSON(path, "env."+claudeCapsEnv)
 		}
 		return nil
+	}
+	// the auto-compact window magpie last wrote, kept apart from the
+	// user's own in the same way
+	compactKey := at.key("claude.compact_window")
+	compactOurs := func() bool {
+		cur := env(claudeCompactEnv)
+		return cur != "" && cur == stashLoad()[compactKey]
+	}
+	dropCompact := func() error {
+		defer forget(compactKey)
+		if compactOurs() {
+			return edit.DelJSON(path, "env."+claudeCompactEnv)
+		}
+		return nil
+	}
+	// writeCompact has Claude Code compact at the working window
+	// (settings.WorkingWindow) on magpie, unless settings.FullContext
+	writeCompact := func() error {
+		if env(claudeCompactEnv) != "" && !compactOurs() {
+			forget(compactKey)
+			return nil
+		}
+		if settings.Load().FullContext {
+			return dropCompact()
+		}
+		w := strconv.Itoa(settings.WorkingWindow)
+		stash(map[string]string{compactKey: w})
+		if env(claudeCompactEnv) == w {
+			return nil
+		}
+		return edit.SetJSON(path, edit.KV{Path: "env." + claudeCompactEnv, Value: w})
 	}
 	// Claude Code's /model lists what modelPicker says (2.1.287): while it
 	// runs on magpie, that is every one of magpie's models, so the user
@@ -403,12 +504,12 @@ func claudeIn(at place) *Agent {
 	// the main model and each tier's, one that has none or follows it on
 	// the main one, at its effort
 	curTiers := func() (string, map[string]string) {
-		main, was := mainModel(), wroteMain()
+		main := mainModel()
 		tiers := map[string]string{}
 		for _, t := range claudeTiers {
 			tiers[t] = env(tierEnv(t))
-			if m, e := tierAt(tiers[t]); m == "" || m == was {
-				tiers[t] = tierWith(main, e)
+			if m, e := tierAt(tiers[t]); follows(t, m) {
+				tiers[t] = tierWith(follow(t, main), e)
 			}
 		}
 		return main, tiers
@@ -419,6 +520,9 @@ func claudeIn(at place) *Agent {
 	// Unwire to go back to
 	unroute := func() (string, error) {
 		if err := dropWindow(); err != nil {
+			return "", err
+		}
+		if err := dropCompact(); err != nil {
 			return "", err
 		}
 		if err := dropCaps(); err != nil {
@@ -464,6 +568,9 @@ func claudeIn(at place) *Agent {
 			if err := dropWindow(); err != nil {
 				return err
 			}
+			if err := dropCompact(); err != nil {
+				return err
+			}
 			if err := dropCaps(); err != nil {
 				return err
 			}
@@ -484,13 +591,16 @@ func claudeIn(at place) *Agent {
 			// ones given a model of their own keep it
 			tiers := map[string]string{}
 			for _, t := range claudeTiers {
-				tiers[t] = v
+				tiers[t] = follow(t, v)
+				if !routed() {
+					forget(ownKey(t))
+				}
 				if w := env(tierEnv(t)); routed() && w != "" {
 					// at an effort of its own, it keeps that on the new model
-					if m, e := tierAt(w); m != wroteMain() && isMagpie(m) {
+					if m, e := tierAt(w); !follows(t, m) && isMagpie(m) {
 						tiers[t] = w
 					} else if e != "" {
-						tiers[t] = tierWith(v, e)
+						tiers[t] = tierWith(follow(t, v), e)
 					}
 				}
 			}
@@ -571,6 +681,9 @@ func claudeIn(at place) *Agent {
 		for _, t := range claudeTiers {
 			m, _ := tierAt(tiers[t])
 			models = append(models, m)
+		}
+		if err := writeCompact(); err != nil {
+			return err
 		}
 		if err := writePicker(); err != nil {
 			return err
@@ -736,7 +849,14 @@ func claudeIn(at place) *Agent {
 				main, tiers := curTiers()
 				// its effort, if it has one, goes with it to the new model
 				_, e := tierAt(tiers[tier])
-				tiers[tier] = tierWith(cmp.Or(v, main), e)
+				// the main model picked where the tier would follow another
+				// is the user's own; any other model is by itself
+				if v != "" && strings.TrimSuffix(v, "[1m]") == strings.TrimSuffix(main, "[1m]") && follow(tier, main) != main {
+					stash(map[string]string{ownKey(tier): "1"})
+				} else {
+					forget(ownKey(tier))
+				}
+				tiers[tier] = tierWith(cmp.Or(v, follow(tier, main)), e)
 				return writeTiers(main, tiers)
 			},
 			Options: func(map[string]string) []Option {
@@ -831,7 +951,7 @@ func claudeIn(at place) *Agent {
 		}
 		put := func(model, effort string) error {
 			main, tiers := curTiers()
-			tiers[tier] = tierWith(cmp.Or(model, main), effort)
+			tiers[tier] = tierWith(cmp.Or(model, follow(tier, main)), effort)
 			return writeTiers(main, tiers)
 		}
 		fields = append(fields, effortField(tier+"_effort", tier+" effort", tier, at, put))
@@ -879,6 +999,9 @@ func claudeIn(at place) *Agent {
 			for _, t := range claudeTiers {
 				models = append(models, env(tierEnv(t)))
 			}
+			if err := writeCompact(); err != nil {
+				return err
+			}
 			if err := writePicker(); err != nil {
 				return err
 			}
@@ -894,7 +1017,12 @@ func claudeIn(at place) *Agent {
 			if !routed() || !isMagpie(bare) {
 				return nil
 			}
-			if _, has := edit.GetJSON(path, "env.ANTHROPIC_MODEL"); !has && main == stashLoad()[mainKey] {
+			// a haiku tier an older magpie left on the main model, where it
+			// now follows on that model's Haiku, moves too
+			m, _ := tierAt(env(tierEnv("haiku")))
+			light := follow("haiku", bare)
+			stays := light == bare || strings.TrimSuffix(m, "[1m]") == light || !follows("haiku", m)
+			if _, has := edit.GetJSON(path, "env.ANTHROPIC_MODEL"); !has && main == stashLoad()[mainKey] && stays {
 				return nil
 			}
 			return set(bare)

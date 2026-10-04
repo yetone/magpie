@@ -26,8 +26,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/yetone/magpie/internal/proc"
 )
 
 // cursorBase is Cursor's API; a var so tests can point it elsewhere.
@@ -41,8 +39,7 @@ var cursorKeychain = runtime.GOOS == "darwin"
 // Keychain on a Mac, in its auth.json elsewhere.
 func cursorToken() (string, error) {
 	if cursorKeychain {
-		out, err := proc.Command("security", "find-generic-password", "-s", "cursor-access-token", "-a", "cursor-user", "-w").Output()
-		if tok := strings.TrimSpace(string(out)); err == nil && tok != "" {
+		if tok := cursorKeychainToken(false); tok != "" {
 			return tok, nil
 		}
 	}

@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"cmp"
 	"errors"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 )
 
@@ -57,7 +59,8 @@ func ParseImport(link string) (Provider, error) {
 		}
 		if r := get("region"); r != "" {
 			found := false
-			for _, reg := range Preset(p.Preset).Regions {
+			pr := Preset(p.Preset)
+			for _, reg := range pr.Regions {
 				if reg.ID == r {
 					p.Chat, p.Responses, p.Anthropic, found = reg.Chat, reg.Responses, reg.Anthropic, true
 					// a region with a key page of its own (Qianfan's pay
@@ -65,6 +68,11 @@ func ParseImport(link string) (Provider, error) {
 					// provider is saved
 					if reg.KeysURL != "" {
 						p.KeysURL = reg.KeysURL
+					}
+					// and its docs and prices (Tencent Cloud's TokenHub)
+					p.Website = cmp.Or(reg.Website, pr.Website)
+					if slices.ContainsFunc(pr.Regions, func(x Region) bool { return x.Catalog != "" }) {
+						p.Catalog = cmp.Or(reg.Catalog, pr.Catalog)
 					}
 				}
 			}

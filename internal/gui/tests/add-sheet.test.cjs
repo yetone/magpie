@@ -26,7 +26,7 @@ const presets = [
   preset("deepseek", "DeepSeek", "vendor", false),
   preset("moonshot", "Kimi", "vendor", false),
   preset("moonshot-cn", "Kimi (China)", "vendor", true, { chat: "https://api.moonshot.cn/v1" }),
-  preset("tencent-token-plan", "Tencent Cloud Token Plan", "vendor", false, { short: "Tencent Cloud" }),
+  preset("tencent-cloud", "Tencent Cloud", "vendor", false),
   preset("openrouter", "OpenRouter", "relay", true),
   preset("siliconflow", "SiliconFlow", "relay", false),
   preset("ollama", "Ollama", "local", false, { noKey: true }),
@@ -127,7 +127,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // short names, the long one in the title
         assert.equal(await row("Grok").count(), 1);
         assert.match(await row("Grok").getAttribute("title"), /SuperGrok/);
-        assert.match(await row("Tencent Cloud").getAttribute("title"), /Tencent Cloud Token Plan/);
+        assert.equal(await row("Tencent Cloud").count(), 1);
         // a vendor's global and China presets: one row
         assert.equal(await sheet.locator(".tile .n", { hasText: "China" }).count(), 0);
         // with nothing added to the row (B1): the regions and hosts are in its title

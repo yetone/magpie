@@ -30,7 +30,14 @@ function serve(lang, feed, fixture = initial) {
       return json({ mine: true, now: now.toISOString(), seq: routes.at(-1)?.seq || 1, totals: { requests: 6, rerouted: 0, errors: 0 }, routes });
     }
     if (url.pathname === "/api/gateway/history") return json({ cut: false, days: [{ day, requests: fixture.length }], routes: url.searchParams.get("day") ? fixture : [] });
-    if (url.pathname === "/api/gateway/session-titles") return json(feed.names || {});
+    if (url.pathname === "/api/gateway/route" && feed.route) return json(feed.route);
+    if (url.pathname === "/api/gateway/session-titles") {
+      const input = route.request().postDataJSON();
+      feed.titleRequests?.push(input);
+      if (input.ids.length > 2000 || input.routeIds.length > 2000) return route.fulfill({ status: 400, body: "too many IDs" });
+      return json(typeof feed.names === "function" ? feed.names(input) : feed.names || {});
+    }
+    if (url.pathname === "/api/clis") return json({ agents: [], providers: [] });
     if (url.pathname === "/api/groups") return json({ groups: [] });
     if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true, window: true } });
     if (url.pathname.startsWith("/api/")) return json({});
@@ -104,6 +111,73 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(200);
         await page.locator(".rt-cols").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-routing-sessions.png`) });
       }
+      assert.deepEqual(errors, []);
+    });
+  }
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: background memory groups explain their purpose and keep their own identity`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      const page = await browser.newPage({ viewport: { width: 1100, height: 800 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(5000);
+      const errors = [], feed = {};
+      const fixture = [
+        { ...req(1, "codex", "chat", 0.01), sessionTitle: "Chat title" },
+        { ...req(2, "codex", "chat", 0.02), kind: "memory_consolidation", sessionTitle: "Chat title" },
+        { ...req(3, "codex", "memory-a", 0.03), kind: "memory_consolidation" },
+        { ...req(4, "codex", "memory-a", 0.04), kind: "memgen" },
+        { ...req(5, "codex", "memory-b", 0.05), kind: "memory" },
+        { ...req(6, "codex", "named-memory", 0.06), kind: "memory_consolidation", sessionTitle: "Named memory" },
+        { ...req(7, "codex", "mixed", 0.07), kind: "memory_consolidation" },
+        req(8, "codex", "mixed", 0.08),
+        req(9, "codex", "unknown", 0.09),
+        { ...req(10, "codex", "", 0.1), kind: "memory_consolidation" },
+      ];
+      await page.route("**/*", serve(lang, feed, fixture));
+      page.on("pageerror", (e) => errors.push(e.message));
+      t.after(async () => { feed.next?.([]); await browser.close(); });
+      await page.goto("http://magpie.test/?view=routing");
+      await page.locator(".rt-group-by button").nth(1).click();
+      await page.locator(".rt-session").nth(6).waitFor();
+      const group = (id) => page.locator(`button.rt-session:has(.nm[title$="${id}"])`);
+      const memoryName = lang === "zh" ? "后台记忆整理" : "Background memory task";
+      assert.equal(await group("memory-a").locator(".nm").textContent(), `Codex · ${memoryName}`);
+      assert.equal(await group("memory-b").locator(".nm").textContent(), `Codex · ${memoryName}`);
+      assert.equal(await group("memory-a").locator(".cost").textContent(), "≈$0.070");
+      assert.match(await group("memory-a").locator(".summary").textContent(), lang === "zh" ? /2 个请求/ : /2 requests/);
+      assert.match(await group("memory-a").locator(".nm").getAttribute("title"), lang === "zh" ? /回答结束后.*继续/ : /continue after a chat finishes/);
+      assert.equal(await group("chat").locator(".nm").textContent(), "Codex · Chat title");
+      assert.equal(await group("named-memory").locator(".nm").textContent(), "Codex · Named memory");
+      assert.equal(await group("mixed").locator(".nm").textContent(), "Codex · mixed");
+      assert.equal(await group("unknown").locator(".nm").textContent(), "Codex · unknown");
+      assert.equal(await page.locator("div.rt-session .nm").textContent(), lang === "zh" ? "未提供会话标识" : "No session ID");
+      assert.equal(await page.locator(".rt-session").count(), 7, "separate memory IDs must not merge with each other or the chat");
+
+      const memory = group("memory-a"), handle = await memory.elementHandle();
+      await memory.click();
+      for (let i = 0; i < 50 && !feed.next; i++) await page.waitForTimeout(20);
+      assert(feed.next, "long poll started");
+      feed.next([{ ...req(11, "codex", "memory-a", 0.01), kind: "memory_consolidation" }]);
+      await page.waitForFunction(() => [...document.querySelectorAll("button.rt-session .cost")].some((e) => e.textContent === "≈$0.080"));
+      assert.equal(await memory.getAttribute("aria-expanded"), "false");
+      assert(await memory.evaluate((e, previous) => e === previous, handle), "labeling must preserve the heading through live updates");
+      assert.equal(await group("memory-b").getAttribute("aria-expanded"), "true");
+      await memory.click();
+      for (const width of [1100, 560]) {
+        await page.setViewportSize({ width, height: 800 });
+        await page.waitForTimeout(100);
+        const fit = await page.locator(".rt-reqs").evaluate((e) => ({ client: e.clientWidth, scroll: e.scrollWidth }));
+        assert(fit.scroll <= fit.client + 1, `request list overflows at ${width}: ${JSON.stringify(fit)}`);
+      }
+      if (process.env.ARTIFACT_DIR) {
+        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+        await page.setViewportSize({ width: 1100, height: 1000 });
+        await page.locator(".rt-reqs").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-background-memory.png`) });
+      }
+      await page.locator(".rt-group-by button").first().click();
+      assert.equal(await page.locator(".rt-req").count(), 11, "by-request view retains all requests");
       assert.deepEqual(errors, []);
     });
   }
@@ -212,5 +286,110 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await group("Codex · mixed").locator(".cost").textContent(), "≈¥0.000+");
       assert.equal(await page.locator(".rt-req").filter({ hasText: "model-a" }).locator(".cost").textContent(), "≈¥0.000+");
     });
+  }
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: applied titles regroup automatically and conflicts revoke the match without new traffic`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      const page = await browser.newPage({ viewport: { width: 1100, height: 1000 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(5000);
+      const feed = {}, errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      let data = {
+        before: [req(1, "codex", "main-test", 0.02), { ...req(2, "codex", "hidden-title-test", 0.01), kind: "thread_title" }, req(3, "codex", "unrelated-chat", 0.04)],
+        afterRefresh: { names: { "main-test": "完成标题关联测试" }, parents: { 1: "", 2: "main-test" }, matched: { 1: false, 2: true } },
+        conflictRefresh: { names: { "main-test": "完成标题关联测试" }, parents: { 1: "", 2: "" }, matched: { 1: false, 2: false } },
+      };
+      // Optional evidence comes from actual gateway HTTP requests and the Go
+      // GUI APIs, rather than fixture-supplied parentSession guesses.
+      if (process.env.TITLE_ASSOCIATION_FIXTURE) data = JSON.parse(await fs.readFile(process.env.TITLE_ASSOCIATION_FIXTURE, "utf8"));
+      const fixture = data.before, [main, title] = fixture;
+      await page.route("**/*", serve(lang, feed, fixture));
+      t.after(async () => { feed.next?.([]); await browser.close(); });
+      await page.goto("http://magpie.test/?view=routing");
+      await page.locator(".rt-req").nth(2).waitFor();
+      await page.locator(".rt-group-by button").nth(1).click();
+      const group = (id) => page.locator(`button.rt-session:has(.nm[title$="${id}"])`);
+      await group(title.session).waitFor();
+      assert.equal(await page.locator(".rt-session").count(), 3);
+      assert.equal(title.parentSession, undefined, "fixture must start without an explicit parent");
+      const shot = async (state) => {
+        if (!process.env.ARTIFACT_DIR) return;
+        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+        await page.locator(".rt-reqs").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-title-${state}.png`) });
+      };
+      await shot("before");
+      // No trace update is sent. Focus uses the same poll as the 15s refresh.
+      feed.names = data.afterRefresh;
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await page.waitForFunction(() => document.querySelectorAll(".rt-session").length === 2);
+      const parent = group(main.session);
+      assert.equal(await group(title.session).count(), 0);
+      assert.equal(await parent.locator(".nm").textContent(), "Codex · 完成标题关联测试");
+      if (main.priced && title.priced) {
+        const cost = await page.evaluate((amount) => "≈" + fmtCost({ cost: amount, unpriced: 0 }), main.cost + title.cost);
+        assert.equal(await parent.locator(".cost").textContent(), cost, "helper cost joins the original chat total");
+      }
+      assert.match(await parent.locator(".summary").textContent(), lang === "zh" ? /2 个请求/ : /2 requests/);
+      assert.equal(await page.locator(".rt-req .kind").filter({ hasText: lang === "zh" ? "标题" : "title" }).count(), 1);
+      await shot("after");
+      await parent.click();
+      assert.equal(await page.locator(".rt-req").count(), 1, "original request and title helper fold together");
+      const handle = await parent.elementHandle();
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await page.waitForTimeout(150);
+      assert.equal(await parent.getAttribute("aria-expanded"), "false");
+      assert(await parent.evaluate((e, previous) => e === previous, handle));
+      feed.names = data.conflictRefresh;
+      await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+      await group(title.session).waitFor();
+      assert.equal(await page.locator(".rt-session").count(), 3, "ambiguous helper becomes independent automatically");
+      assert.equal(await parent.getAttribute("aria-expanded"), "false", "unrelated heading state survives regrouping");
+      await parent.click();
+      assert.equal(await page.locator(".rt-req").count(), 3);
+      await page.locator(".rt-group-by button").first().click();
+      assert.equal(await page.locator(".rt-req").count(), 3, "by-request view keeps native request identities");
+      assert.deepEqual(errors, []);
+    });
+  }
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh"]) {
+    for (const mixed of [true, false]) {
+      test(`${engine} ${lang}: large ${mixed ? "mixed-agent" : "Codex"} history refresh includes an individually opened request`, async (t) => {
+        const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+        const page = await browser.newPage({ viewport: { width: 1100, height: 800 }, reducedMotion: "reduce" });
+        page.setDefaultTimeout(10000);
+        const errors = [], titleRequests = [];
+        const fixture = Array.from({ length: 2000 }, (_, i) => ({ ...req(i + 1, mixed && i < 800 ? "claude" : "codex", `chat-${i + 1}`, 0.01), time: now.toISOString() }));
+        const extra = { ...req(2001, "codex", "opened-chat", 0.01), time: now.toISOString() };
+        const feed = { titleRequests, route: extra, names: ({ ids }) => ({ names: Object.fromEntries(ids.map((id) => [id, `Applied ${id}`])) }) };
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.route("**/*", serve(lang, feed, fixture));
+        t.after(async () => { feed.next?.([]); await browser.close(); });
+        await page.goto("http://magpie.test/?view=routing");
+        await page.locator(".rt-req").nth(59).waitFor(); // live trace retains only 60 rows
+        await page.locator(".rt-group-by button").nth(1).click();
+        // openRoute loads the full day, then appends a row outside its 2,000-row page.
+        await page.evaluate(({ id, time }) => window.openRoute(id, time), extra);
+        await page.locator(".rt-req").nth(2000).waitFor();
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+        await page.waitForFunction(() => [...document.querySelectorAll(".rt-session .nm")].some((e) => e.textContent === "Codex · Applied opened-chat"));
+        const group = (id) => page.locator(`button.rt-session:has(.nm[title$="${id}"])`);
+        assert.equal(await group("chat-2000").locator(".nm").textContent(), "Codex · Applied chat-2000");
+        assert.equal(await group(mixed ? "chat-801" : "chat-1").locator(".nm").textContent(), `Codex · Applied chat-${mixed ? 801 : 1}`);
+        assert.equal(await group("opened-chat").locator(".cost").textContent(), "≈$0.010");
+        const batches = titleRequests.filter((input) => input.day === day);
+        assert(batches.length > 0, "history refresh never ran");
+        assert(batches.every((input) => input.ids.length <= 2000 && input.routeIds.length <= 2000), "API batch exceeded the ID limit");
+        assert(batches.some((input) => input.routeIds.includes(extra.id)), "individually opened row was omitted");
+        if (mixed) assert(batches.every((input) => input.routeIds.every((id) => id > 800)), "other agents were sent to the Codex title API");
+        else assert(batches.some((input) => input.routeIds.length === 2000) && batches.some((input) => input.routeIds.includes(2001)), "full Codex day was not split into batches");
+        assert.deepEqual(errors, []);
+      });
+    }
   }
 }

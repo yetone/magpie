@@ -88,7 +88,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     for (const [lang, name, off, on] of [
       ["en", "Menu bar logos", "Off", "On"],
-      ["zh", "菜单栏图标", "关闭", "开启"],
+      ["zh", "菜单栏订阅图标", "关闭", "开启"],
     ]) {
       await t.test(lang, async () => {
         const errors = [], posts = [];

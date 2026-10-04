@@ -6,7 +6,9 @@
 // own API (Kiro: modelTest "own-api") and a classifier ("decide") still open
 // the menu on a right-click, its Test this model off with the reason under it
 // and as its title, and Test models is off with the reason as its title;
-// nothing is posted and the page doesn't move. In English and Chinese.
+// nothing is posted and the page doesn't move. A System One provider's
+// model, one typed in by hand too, is tested (decideTest); Workers AI's
+// isn't. In English and Chinese.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -25,6 +27,16 @@ const providers = [
     ...base, id: "kiro", name: "Kiro", icon: "kiro-color", modelTest: "own-api",
     models: [{ id: "claude-sonnet-5", name: "", on: true }, { id: "claude-haiku-5", name: "", on: true }],
     account: { agent: "kiro", agentName: "Kiro", user: "k@example.com", plan: "PRO", logins: [{ user: "k@example.com", plan: "PRO", active: true, on: true }] },
+  },
+  // a System One provider (OpenRouter's) with a model typed in by hand
+  // (ARNO on Discord), and Workers AI, whose models can't each be asked
+  {
+    ...base, id: "or-decide", name: "Deciders", decide: "https://openrouter.ai/api/v1", decideTest: true, chosen: ["respan/span-01"],
+    models: [{ id: "liquid/d1", name: "", on: true }, { id: "respan/span-01", name: "", on: true }], key: { set: true, masked: "sk-…one" },
+  },
+  {
+    ...base, id: "cf-jev", name: "Workers", decide: "https://api.cloudflare.com/client/v4/accounts/a/ai/run", modelTest: "decide",
+    models: [{ id: "typesafe/jev", name: "", on: true }], key: { set: true, masked: "sk-…two" },
   },
 ];
 
@@ -121,8 +133,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await c.click({ button: "right" });
       const menu = page.locator(".pop.row-menu");
       await menu.waitFor();
-      const item = menu.locator(".rm-item");
-      assert.equal(await item.count(), 1);
+      // Test this model, off, and Copy model ID, which is on
+      const items = menu.locator(".rm-item");
+      assert.equal(await items.count(), 2);
+      assert(await items.nth(1).isEnabled(), "its id can still be copied");
+      const item = items.first();
       assert(await item.isDisabled(), "Test this model is off");
       assert.equal(await item.getAttribute("title"), w.own);
       assert.equal(await item.locator(".rm-why").textContent(), w.own, "the reason is said in the menu");
@@ -147,6 +162,40 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "A classifier's models aren't sent test requests: Test under Endpoints asks Jev's endpoint for them.",
       ].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: a System One model typed in by hand is tested from its chip`, async (t) => {
+      const tests = [];
+      const { page, errors } = await open(t, "Deciders", tests);
+      const c = chip(page, "respan/span-01");
+      await c.click({ button: "right" });
+      const menu = page.locator(".pop.row-menu");
+      await menu.waitFor();
+      const item = menu.getByRole("menuitem", { name: w.item });
+      assert(await item.isEnabled(), "the decision model can be tested");
+      await item.click();
+      for (let i = 0; i < 60 && !tests.length; i++) await page.waitForTimeout(50);
+      assert.deepEqual({ id: tests[0]?.id, test: tests[0]?.test }, { id: "or-decide", test: ["respan/span-01"] });
+      await c.locator(".tdot.ok").waitFor();
+      const all = page.locator(".editor .mfoot").getByRole("button", { name: w.all, exact: true });
+      assert(await all.isEnabled(), "Test models is offered");
+      await all.click();
+      for (let i = 0; i < 60 && tests.length < 2; i++) await page.waitForTimeout(50);
+      assert.deepEqual(tests[1]?.test, ["respan/span-01"], "Test models asks the picked decision model");
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: a Workers AI classifier's model still says why it can't be tested`, async (t) => {
+      const tests = [];
+      const { page, errors } = await open(t, "Workers", tests);
+      await chip(page, "typesafe/jev").click({ button: "right" });
+      const menu = page.locator(".pop.row-menu");
+      await menu.waitFor();
+      assert(await menu.locator(".rm-item").first().isDisabled(), "Test this model is off");
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(150);
+      assert.equal(tests.length, 0, "nothing was sent");
       assert.deepEqual(errors, []);
     });
   }

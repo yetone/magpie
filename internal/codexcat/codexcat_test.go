@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Codex's own models, routed through magpie, keep what Codex knows of them
@@ -69,7 +70,8 @@ func TestCodexCatalogImages(t *testing.T) {
 
 // A model magpie describes has Codex search its MCP tools rather than send
 // every one in each request (#258), with its prompt, context window, and
-// neither code mode nor Responses Lite.
+// neither code mode nor Responses Lite. A window above the working window
+// is told as that, the whole one as its max, unless settings.FullContext.
 func TestCodexCatalogToolSearch(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
@@ -83,8 +85,20 @@ func TestCodexCatalogToolSearch(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 	e := got.Models[0]
-	if e["supports_search_tool"] != true || e["base_instructions"] != Prompt || e["context_window"] != float64(996147) {
+	if e["supports_search_tool"] != true || e["base_instructions"] != Prompt || e["context_window"] != float64(settings.WorkingWindow) || e["max_context_window"] != float64(996147) {
 		t.Errorf("entry: %v", e)
+	}
+	if err := settings.Save(settings.Settings{FullContext: true}); err != nil {
+		t.Fatal(err)
+	}
+	var full struct {
+		Models []map[string]any `json:"models"`
+	}
+	json.Unmarshal(Catalog([]catalog.Model{
+		{ID: "group/auto-gemini-3-8-flash", Name: "auto", Context: 996147},
+	}), &full)
+	if e := full.Models[0]; e["context_window"] != float64(996147) || e["max_context_window"] != nil {
+		t.Errorf("full context: %v", e)
 	}
 	for _, off := range []string{"tool_mode", "use_responses_lite", "multi_agent_version", "model_messages"} {
 		if v, ok := e[off]; ok {

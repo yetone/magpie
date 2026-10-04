@@ -346,3 +346,69 @@ func TestRTKCodexOld(t *testing.T) {
 		}
 	}
 }
+
+// #741: the RTK page said "nothing saved yet" while rtk gain had records.
+// rtk's stdout and stderr were read as one, so anything rtk warned about on
+// stderr (an outdated hook, a console code page, a table it can't find) went
+// in front of the JSON and none of it was read; stdout is now read alone,
+// a line around the JSON object is passed over, and an rtk gain that fails
+// or prints nothing readable is said instead of "nothing saved".
+func TestRTKGainRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake rtk is a shell script")
+	}
+	h := sandbox(t)
+	bin := filepath.Join(h, "bin")
+	gain := func(body string) {
+		t.Helper()
+		write(t, filepath.Join(bin, "rtk"), "#!/bin/sh\ncase \"$1\" in\n--version) echo 'rtk 0.51.0'; exit 0 ;;\ngain) "+body+" ;;\nesac\nexit 2\n")
+		os.Chmod(filepath.Join(bin, "rtk"), 0o755)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+"/bin"+string(os.PathListSeparator)+"/usr/bin")
+	summary := `{"summary":{"total_commands":42,"total_input":9000,"total_output":1000,"total_saved":8000,"avg_savings_pct":88.9,"total_time_ms":10,"avg_time_ms":0},"daily":[{"date":"2026-10-03","commands":42,"input_tokens":9000,"output_tokens":1000,"saved_tokens":8000,"savings_pct":88.9,"total_time_ms":10,"avg_time_ms":0}]}`
+
+	gain(`echo '[rtk] warning: no decoder for console code page 936; non-UTF-8 output will be shown with replacement characters' >&2; echo '` + summary + `'; exit 0`)
+	if v := ReadRTK(); v.Gain == nil || v.Gain.Commands != 42 || v.Gain.Saved != 8000 || len(v.Days) != 1 || v.GainErr != "" {
+		t.Fatalf("stderr warning: gain %+v, days %+v, err %q", v.Gain, v.Days, v.GainErr)
+	}
+	gain(`echo '[rtk] notice: tee files moved'; echo '` + summary + `'; exit 0`)
+	if v := ReadRTK(); v.Gain == nil || v.Gain.Commands != 42 {
+		t.Fatalf("stdout notice: gain %+v, err %q", v.Gain, v.GainErr)
+	}
+	// no commands yet: nothing saved, and nothing wrong
+	gain(`echo '{"summary":{"total_commands":0,"total_input":0,"total_saved":0,"avg_savings_pct":0}}'; exit 0`)
+	if v := ReadRTK(); v.Gain != nil || v.GainErr != "" {
+		t.Fatalf("empty: gain %+v, err %q", v.Gain, v.GainErr)
+	}
+	gain(`echo 'Error: Failed to initialize tracking database' >&2; echo 'Caused by: database is locked' >&2; exit 1`)
+	if v := ReadRTK(); v.Gain != nil || v.GainErr != "rtk gain: Error: Failed to initialize tracking database Caused by: database is locked" {
+		t.Fatalf("failed: gain %+v, err %q", v.Gain, v.GainErr)
+	}
+	gain(`echo 'No tracking data yet.'; exit 0`)
+	if v := ReadRTK(); v.Gain != nil || v.GainErr != "rtk gain printed no summary magpie can read: No tracking data yet." {
+		t.Fatalf("not JSON: gain %+v, err %q", v.Gain, v.GainErr)
+	}
+}
+
+// What rtk saves in Codex's Windows sandbox isn't in rtk gain: elevated, its
+// commands run as Codex's sandbox account, with that account's AppData;
+// unelevated, they can't write the user's. Read from Codex's config.toml.
+func TestCodexSandbox(t *testing.T) {
+	h := sandbox(t)
+	t.Setenv("CODEX_HOME", filepath.Join(h, ".codex"))
+	for conf, want := range map[string]string{
+		"":                                      "",
+		"[windows]\nsandbox = \"elevated\"\n":   "elevated",
+		"[windows]\nsandbox = \"unelevated\"\n": "unelevated",
+		"[windows]\nsandbox = \"mxc\"\n":        "",
+		"[features]\nelevated_windows_sandbox = true\n":                              "elevated",
+		"[features]\nexperimental_windows_sandbox = true\n":                          "unelevated",
+		"sandbox_mode = \"danger-full-access\"\n[windows]\nsandbox = \"elevated\"\n": "",
+		"model = \"gpt-5\"\n": "",
+	} {
+		write(t, filepath.Join(h, ".codex", "config.toml"), conf)
+		if got := codexSandbox(); got != want {
+			t.Errorf("%q: %q, want %q", conf, got, want)
+		}
+	}
+}

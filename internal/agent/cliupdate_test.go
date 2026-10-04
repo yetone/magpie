@@ -135,6 +135,12 @@ func TestHowInstalled(t *testing.T) {
 	if u := howInstalled(cliSpecs["codex"], gem); u != nil {
 		t.Errorf("gemini's package taken for codex: %+v", u)
 	}
+	atomcodePkg := "@atomgit.com/atomcode"
+	file(t, filepath.Join(prefix, "lib/node_modules", atomcodePkg, "bin/atomcode.js"), "")
+	atomcodeBin := link(t, "../lib/node_modules/"+atomcodePkg+"/bin/atomcode.js", filepath.Join(prefix, "bin/atomcode"))
+	if u := howInstalled(cliSpecs["atomcode"], atomcodeBin); u == nil || u.via != "npm" || !reflect.DeepEqual(u.cmd, []string{npm, "install", "-g", "--prefix", prefix, atomcodePkg + "@latest"}) {
+		t.Errorf("AtomCode npm: %+v", u)
+	}
 	// npm with no npm of its own takes the one on PATH, or none
 	prefix2 := filepath.Join(tmp, "node2")
 	file(t, filepath.Join(prefix2, "lib/node_modules/@github/copilot/npm-loader.js"), "")
@@ -194,6 +200,11 @@ func TestHowInstalled(t *testing.T) {
 	cc := link(t, "../Caskroom/claude-code/2.1.0/claude", filepath.Join(brewDir, "bin/claude"))
 	if u := howInstalled(cliSpecs["claude"], cc); u == nil || !u.cask || !reflect.DeepEqual(u.cmd, []string{brew, "upgrade", "--cask", "claude-code"}) {
 		t.Errorf("brew cask: %+v", u)
+	}
+	file(t, filepath.Join(brewDir, "Caskroom/atomcode/5.2.1/atomcode"), "")
+	atomcode := link(t, "../Caskroom/atomcode/5.2.1/atomcode", filepath.Join(brewDir, "bin/atomcode"))
+	if u := howInstalled(cliSpecs["atomcode"], atomcode); u == nil || !u.cask || !reflect.DeepEqual(u.cmd, []string{brew, "upgrade", "--cask", "atomcode"}) {
+		t.Errorf("AtomCode brew cask: %+v", u)
 	}
 	file(t, filepath.Join(brewDir, "Cellar/something/1.0/bin/gemini"), "")
 	if u := howInstalled(cliSpecs["gemini"], link(t, "../Cellar/something/1.0/bin/gemini", filepath.Join(brewDir, "bin/gemini"))); u != nil {

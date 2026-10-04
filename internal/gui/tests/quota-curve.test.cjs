@@ -67,8 +67,8 @@ function serve(lang, theme, panel, data) {
 }
 
 const words = {
-  en: { head: "Left over time", two: "2 days", cycle: "Cycle", off: "Off", trend: (r) => "Trends: " + r, five: "5 hours", week: "Weekly" },
-  zh: { head: "剩余额度走势", two: "2 天", cycle: "本周期", off: "关闭", trend: (r) => "走势：" + r, five: "5 小时", week: "每周" },
+  en: { head: "Left over time", two: "2 days", cycle: "Cycle", off: "Off", trend: (r) => "Trends: " + r, five: "5 hours", week: "Weekly", dashes: /Dashed: an even pace/ },
+  zh: { head: "剩余额度走势", two: "2 天", cycle: "本周期", off: "关闭", trend: (r) => "走势：" + r, five: "5 小时", week: "每周", dashes: /虚线：匀速用量/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -112,6 +112,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // cycle, faint and without its upright even burn
         assert.equal(await curve.locator("path.qc-line").count(), 2);
         assert.equal(await curve.locator("line.qc-even").count(), 1);
+        assert.match(await curve.getAttribute("title"), w.dashes, "hovering the plot says what the dashes are");
         assert.equal(await curve.locator("path.qc-line.qc-short").getAttribute("data-name"), "5 hours");
         assert.equal(await curve.locator("line.qc-now").count(), 1);
         const five = await curve.locator('path.qc-line[data-name="5 hours"]').getAttribute("d");

@@ -83,7 +83,11 @@ func Entries(ms []catalog.Model, after int) []any {
 		Tools      []string `json:"experimental_supported_tools"`
 		Modalities []string `json:"input_modalities"`
 		Context    *int     `json:"context_window,omitempty"`
-		Tiers      []tier   `json:"service_tiers"`
+		// the model's whole window when Context is the working one
+		// (settings.Working): Codex's model_context_window may raise it
+		// that far, as it does OpenAI's own models'
+		MaxContext *int   `json:"max_context_window,omitempty"`
+		Tiers      []tier `json:"service_tiers"`
 		// Without the search, Codex puts every MCP tool's schema (a
 		// ChatGPT sign-in's apps' among them) in every request, 190K
 		// tokens before the first word (#258); with it, they are named in
@@ -108,6 +112,7 @@ func Entries(ms []catalog.Model, after int) []any {
 	}
 	own := CacheEntries()
 	v1 := V1()
+	work := settings.Load()
 	var entries []any
 	for i, m := range ms {
 		if raw, ok := own[strings.TrimPrefix(m.ID, "codex/")]; ok && strings.HasPrefix(m.ID, "codex/") {
@@ -146,7 +151,11 @@ func Entries(ms []catalog.Model, after int) []any {
 			e.Modalities = append(e.Modalities, "image")
 		}
 		if c := m.Context; c > 0 {
-			e.Context = &c
+			w := work.Working(c)
+			e.Context = &w
+			if w < c {
+				e.MaxContext = &c
+			}
 		}
 		e.Truncation.Mode, e.Truncation.Limit = "tokens", 10000
 		for _, ef := range m.Efforts {

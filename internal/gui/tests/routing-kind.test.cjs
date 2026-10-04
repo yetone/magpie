@@ -15,7 +15,7 @@ const now = new Date();
 const day = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map((n) => String(n).padStart(2, "0")).join("-");
 const at = (i) => new Date(now.getTime() - (i + 1) * 60e3).toISOString();
 const seat = { id: "codex", provider: "openai", name: "OpenAI", who: "Codex's own sign-in", kind: "account", agent: "codex", model: "gpt-6-luna" };
-const kinds = ["guardian", "thread_title", "memory_consolidation", "luna_reserve", "something_new", ""];
+const kinds = ["guardian", "thread_title", "thread_title_reconsideration", "memory_consolidation", "luna_reserve", "ambient_suggestions", "ambient_suggestion_safety", "something_new", ""];
 const routes = kinds.map((kind, i) => ({
   id: 100 - i, seq: 100 - i, time: at(i), agent: "codex", model: "gpt-6-luna", provider: "openai", ...(kind ? { kind } : {}),
   order: [seat], tries: [{ id: seat.id, model: "gpt-6-luna", start: at(i), done: true, status: 200, ms: 900 }],
@@ -39,7 +39,7 @@ function serve(lang) {
       return json({ cut: false, days: [{ day, requests: routes.length }], routes: d ? routes : [] });
     }
     if (url.pathname === "/api/groups") return json({ groups: [] });
-    if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true, window: true } });
+    if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true } });
     if (url.pathname.startsWith("/api/")) return json({});
     const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
     const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];
@@ -48,15 +48,15 @@ function serve(lang) {
 }
 
 const want = {
-  en: ["Approval check", "Title", "Memory", "Luna Reserve", "something_new"],
-  zh: ["审批判定", "标题", "记忆", "Luna 储备", "something_new"],
+  en: ["Approval check", "Title", "Title", "Memory", "Luna Reserve", "Suggestions", "Suggestions", "something_new"],
+  zh: ["审批判定", "标题", "标题", "记忆", "Luna 储备", "提示词建议", "提示词建议", "something_new"],
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh"]) {
     test(`${engine} ${lang}: a call Codex makes for itself is tagged by its model`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
-      const context = await browser.newContext({ viewport: { width: 1100, height: 760 }, reducedMotion: "reduce" });
+      const context = await browser.newContext({ viewport: { width: 1100, height: 860 }, reducedMotion: "reduce" });
       const page = await context.newPage();
       page.setDefaultTimeout(5000);
       const errors = [];
@@ -91,6 +91,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const story = page.locator(".rt-steps li.kind");
       assert.equal(await story.locator(".kind").textContent(), want[lang][0]);
       assert.match(await story.textContent(), lang === "zh" ? /不是对话中的一轮/ : /not as a turn of the conversation/);
+      // Codex's home-page suggestions say where Codex turns them off (#705)
+      await page.locator(".rt-req").nth(kinds.indexOf("ambient_suggestions")).click();
+      await page.waitForTimeout(300);
+      assert.match(await story.textContent(), lang === "zh" ? /设置 › 配置 › 提示词建议/ : /Settings › Configuration › Suggested prompts/);
       // a turn has no tag in its story
       await page.locator(".rt-req").nth(kinds.length - 1).click();
       await page.waitForTimeout(300);

@@ -129,7 +129,7 @@ func (t *trace) sessionLatest(ctx context.Context, session string, after int64, 
 		for i := len(t.routes) - 1; i >= 0; i-- {
 			if r := t.routes[i]; r.Session == session {
 				c := *r
-				c.Order = append([]Weighed(nil), r.Order...)
+				c.Order = append([]Weighed{}, r.Order...) // [] for none: the GUI reads it as a list
 				c.Left = append([]Weighed(nil), r.Left...)
 				c.Tries = append([]Try{}, r.Tries...)
 				seq, found = r.Seq, &c

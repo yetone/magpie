@@ -246,5 +246,10 @@ done
 		if !strings.Contains(" "+r+" ", " --effort low ") {
 			t.Errorf("run not at low effort: %s", r)
 		}
+		// thinking off as it asked: on, Claude Code thought thousands of
+		// output tokens before each 64-token verdict (0xAncientTwo)
+		if !strings.Contains(" "+r+" ", " --thinking disabled ") {
+			t.Errorf("run thinks: %s", r)
+		}
 	}
 }

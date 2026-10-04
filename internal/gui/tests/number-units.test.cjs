@@ -1,13 +1,13 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Number units (John on Discord): in Chinese a large count is said in 万 and
-// 亿 ("15.4 亿", an axis's "8000 万") unless Settings' Number units picks K /
-// M / B, which shortens it as English does ("1.54B", "80M") while the rest
-// stays Chinese — every count on the Usage page (#476: the Overview, the
+// Number units (John on Discord; #740 made K / M / B the default): a large
+// count is shortened in K / M / B ("1.54B", "80M") in Chinese too, unless
+// Settings' Number units picks 万 / 亿 ("15.4 亿", an axis's "8000 万"),
+// the rest staying Chinese either way — every count on the Usage page (#476: the Overview, the
 // Requests tab's totals, chart axis and summary line, the Sessions tab) and
 // in the tray panel (its Usage tab, Routing's "today"), the axes' labels
 // still ending before the plot starts. The row is
 // Chinese's alone: in English it is hidden and counts are K / M / B anyway.
-// Picking it saves westernUnits, never scrolls the settings page, and holds
+// Picking it saves chineseUnits, never scrolls the settings page, and holds
 // after a reload. Chromium and WebKit; no backend, the API is faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -113,6 +113,9 @@ async function rest(p, western, what) {
   const tiles = await p.locator("#stats .kpi").allInnerTexts();
   assert.equal(tiles[0].split("\n")[0], western ? "1.54B" : "15.4 亿", what + ": the Overview's tokens");
   for (const x of tiles) if (/\d/.test(x)) assert(has(x, western) || !/[万亿KMB]/.test(x), `${what}: Overview tile "${x}"`);
+  // the hit rate is of the whole prompt, what was written to the cache in
+  // it too: 2B read of 1B + 2B + 30M written, not of 1B + 2B (67%)
+  assert(tiles.some((x) => /(hit rate|命中率) 66%/.test(x)), `${what}: the Overview's hit rate in ${JSON.stringify(tiles)}`);
   assert.equal((await p.locator("#chart .peak").textContent()).trim(), western ? "1.46B" : "14.6 亿", what + ": the Overview chart's peak");
 
   await p.locator("#usageTab .opt").nth(1).click();
@@ -133,7 +136,7 @@ async function rest(p, western, what) {
 const settingsView = (p) => p.locator("#view-settings").evaluate((v) => v.scrollTop);
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  test(engine + ": Chinese counts in 万/亿 or, picked in Settings, K/M/B", async (t) => {
+  test(engine + ": counts in K/M/B or, picked in Settings in Chinese, 万/亿", async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
 
@@ -152,12 +155,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           await p.locator("#ledChart svg").waitFor();
         };
 
-        // by default Chinese says 万 and 亿, English K/M/B
+        // by default Chinese says K/M/B, as English does
         await p.goto("http://magpie.test/");
         await requests();
-        await check(p, ".led-trend", lang === "en", lang + " default");
-        assert.equal(await kpi(p, "#ledKpi"), lang === "en" ? "1.54B" : "15.4 亿");
-        await rest(p, lang === "en", lang + " default");
+        await check(p, ".led-trend", true, lang + " default");
+        assert.equal(await kpi(p, "#ledKpi"), "1.54B");
+        await rest(p, true, lang + " default");
 
         await p.locator("#prefs").click();
 
@@ -168,31 +171,31 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         } else {
           const segs = p.locator("#unitsSegs .opt");
           assert.equal(await p.locator("#unitsRow .name").textContent(), "数字单位");
-          assert.deepEqual((await segs.allTextContents()).map((x) => x.trim()), ["中文（万 / 亿）", "英文（K / M / B）"]);
-          assert.equal(await segs.nth(0).evaluate((b) => b.classList.contains("on")), true, "万/亿 starts picked");
+          assert.deepEqual((await segs.allTextContents()).map((x) => x.trim()), ["英文（K / M / B）", "中文（万 / 亿）"]);
+          assert.equal(await segs.nth(0).evaluate((b) => b.classList.contains("on")), true, "K/M/B starts picked");
           // scrolled down by a real wheel, a pick moves nothing
           await p.locator("#currencySegs").hover();
           for (let i = 0; i < 20 && !(await settingsView(p)); i++) { await p.mouse.wheel(0, 200); await p.waitForTimeout(20); }
           const before = await settingsView(p);
           assert(before > 0, "the settings list must be long enough to scroll");
           await segs.nth(1).click();
-          await p.locator("#unitsSegs .opt.on", { hasText: "K / M / B" }).waitFor();
+          await p.locator("#unitsSegs .opt.on", { hasText: "万 / 亿" }).waitFor();
           await p.waitForTimeout(300);
           assert.equal(await settingsView(p), before, "picking units must not scroll the settings page");
-          assert.equal(store.posts.at(-1).westernUnits, true, "saved as westernUnits");
+          assert.equal(store.posts.at(-1).chineseUnits, true, "saved as chineseUnits");
           assert.equal(store.posts.at(-1).currency, "usd", "the rest of the settings sent as they were");
 
-          // the Requests tab now says K/M/B, still in Chinese
+          // the Requests tab now says 万/亿
           await requests();
-          await check(p, ".led-trend", true, "zh western");
-          assert.equal(await kpi(p, "#ledKpi"), "1.54B");
+          await check(p, ".led-trend", false, "zh 万/亿");
+          assert.equal(await kpi(p, "#ledKpi"), "15.4 亿");
           assert.equal((await p.locator("#ledKpi .blk .k").nth(1).textContent()).trim(), "请求", "the page stays Chinese");
-          await rest(p, true, "zh western");
+          await rest(p, false, "zh 万/亿");
 
           // and after a reload, from the settings magpie keeps
           await p.reload();
           await requests();
-          await check(p, ".led-trend", true, "zh western, reloaded");
+          await check(p, ".led-trend", false, "zh 万/亿, reloaded");
         }
         assert.deepEqual(errors, []);
         await ctx.close();
@@ -206,20 +209,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await pp.goto("http://magpie.test/?mode=panel");
         await pp.locator('[data-ptab="stats"]').click();
         await pp.locator("#panelUsage .pu-card .led-chart svg").waitFor();
-        await check(pp, "#panelUsage .pu-card", true, lang + " panel");
-        assert.equal((await pp.locator("#panelUsage .pu-tot .blk .v").first().textContent()).trim(), "1.54B");
-        // Routing's "today" over its list, then in 万/亿 once Chinese's units are picked again
+        const wan = lang === "zh";
+        await check(pp, "#panelUsage .pu-card", !wan, lang + " panel");
+        assert.equal((await pp.locator("#panelUsage .pu-tot .blk .v").first().textContent()).trim(), wan ? "15.4 亿" : "1.54B");
+        // Routing's "today" over its list, then in K/M/B once the default is picked again
         await pp.locator('[data-ptab="routing"]').click();
         const today = () => pp.locator(".pr-today b").nth(1).textContent();
         await pp.waitForFunction(() => /\d/.test(document.querySelectorAll(".pr-today b")[1]?.textContent || ""));
-        assert.equal(await today(), "1.54B", lang + " panel: Routing's today");
-        if (lang === "zh") {
+        assert.equal(await today(), wan ? "15.4 亿" : "1.54B", lang + " panel: Routing's today");
+        if (wan) {
           // redrawn as the setting turns, not when a request next comes
-          const now = await pp.evaluate((s) => { applyPrefs({ ...s, westernUnits: false }); return document.querySelectorAll(".pr-today b")[1]?.textContent; }, store.cur);
-          assert.equal(now, "15.4 亿", "zh panel: Routing's today in 万/亿 again");
+          const now = await pp.evaluate((s) => { applyPrefs({ ...s, chineseUnits: false }); return document.querySelectorAll(".pr-today b")[1]?.textContent; }, store.cur);
+          assert.equal(now, "1.54B", "zh panel: Routing's today in K/M/B again");
           await pp.locator('[data-ptab="stats"]').click();
-          assert.equal((await pp.locator("#panelUsage .pu-tot .blk .v").first().textContent()).trim(), "15.4 亿");
-          await check(pp, "#panelUsage .pu-card", false, "zh panel, 万/亿");
+          assert.equal((await pp.locator("#panelUsage .pu-tot .blk .v").first().textContent()).trim(), "1.54B");
+          await check(pp, "#panelUsage .pu-card", true, "zh panel, K/M/B");
         }
         assert.deepEqual(errors, []);
         await pctx.close();

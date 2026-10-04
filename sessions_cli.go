@@ -377,9 +377,11 @@ func rollupCost(c float64, unpriced []string) string {
 	return cost(stats.Totals{Cost: c, Unpriced: len(unpriced)})
 }
 
-// hitRate is how much of the prompts came from the cache.
+// hitRate is how much of the prompts came from the cache: of all they
+// came to, what was read, written to the cache and neither (Input, which
+// leaves out both).
 func hitRate(t sessions.Tokens) string {
-	if p := t.Input + t.CacheRead; t.CacheRead > 0 && p > 0 {
+	if p := t.Input + t.CacheRead + t.CacheWrite; t.CacheRead > 0 && p > 0 {
 		return muted.Render(fmt.Sprintf(" (%d%% hit)", 100*t.CacheRead/p))
 	}
 	return ""

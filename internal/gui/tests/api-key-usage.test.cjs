@@ -125,7 +125,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator('nav [data-view="usage"]').click();
       await page.locator("#usageKeys .row").first().waitFor();
       assert.deepEqual(await page.locator("#usageKeys .name").allTextContents(), ["Server", "Laptop"]);
-      assert.deepEqual(await page.locator("#usageKeys .num b").allTextContents(), lang === "zh" ? ["2200", "1100"] : ["2.2K", "1.1K"]);
+      assert.deepEqual(await page.locator("#usageKeys .num b").allTextContents(), ["2.2K", "1.1K"]);
       assert.deepEqual(await page.locator("#usageKeys .cost").allTextContents(), ["≈$0.400", "≈$0.200"]);
       assert(!/Workspace|Personal/.test(await page.locator("#usageKeys").textContent()));
       await page.locator("#usageTab .opt").nth(1).click();

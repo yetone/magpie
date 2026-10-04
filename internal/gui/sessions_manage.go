@@ -6,9 +6,11 @@ import (
 	"errors"
 	"net/http"
 	"runtime"
+	"time"
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // The Sessions page: every session of an agent, by folder, to pick up again
@@ -20,6 +22,14 @@ type manageAgentJSON struct {
 	sessions.AgentCount
 	Name string `json:"name"`
 	Icon string `json:"icon"`
+}
+
+// managedJSON is a session as the Sessions page lists it: its files, and
+// what it spent (tokens, cost and models, which the Usage page's list shows
+// too, #752) with where magpie's gateway sent its calls
+type managedJSON struct {
+	sessions.Managed
+	Via []usage.Via `json:"via,omitempty"`
 }
 
 type trashedJSON struct {
@@ -58,13 +68,13 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/sessions/manage", func(rw http.ResponseWriter, r *http.Request) {
 		looks := agentLooks()
 		out := struct {
-			Agents   []manageAgentJSON  `json:"agents"`
-			Agent    string             `json:"agent"`
-			Sessions []sessions.Managed `json:"sessions"`
-			Terminal bool               `json:"terminal"`
-			Trash    []trashedJSON      `json:"trash"`
-			TrashDir string             `json:"trashDir"`
-		}{Agents: []manageAgentJSON{}, Sessions: []sessions.Managed{}, Terminal: runtime.GOOS == "darwin" && !isWeb(w),
+			Agents   []manageAgentJSON `json:"agents"`
+			Agent    string            `json:"agent"`
+			Sessions []managedJSON     `json:"sessions"`
+			Terminal bool              `json:"terminal"`
+			Trash    []trashedJSON     `json:"trash"`
+			TrashDir string            `json:"trashDir"`
+		}{Agents: []manageAgentJSON{}, Sessions: []managedJSON{}, Terminal: runtime.GOOS == "darwin" && !isWeb(w),
 			Trash: trashJSON(looks), TrashDir: tilde(sessions.TrashDir())}
 		want := r.URL.Query().Get("agent")
 		for _, a := range sessions.Agents() {
@@ -81,9 +91,17 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 			out.Agent = out.Agents[0].Agent
 		}
 		if out.Agent != "" {
-			out.Sessions = sessions.ListAgent(out.Agent)
-			for i := range out.Sessions {
-				out.Sessions[i].Path = tilde(out.Sessions[i].Path)
+			list := sessions.ListAgent(out.Agent)
+			since := time.Now()
+			for _, s := range list {
+				if !s.Start.IsZero() && s.Start.Before(since) {
+					since = s.Start
+				}
+			}
+			vias := usage.Vias(since.Add(-time.Minute))
+			for _, s := range list {
+				s.Path = tilde(s.Path)
+				out.Sessions = append(out.Sessions, managedJSON{Managed: s, Via: vias[s.Agent+"|"+s.ID]})
 			}
 		}
 		writeJSON(rw, out)

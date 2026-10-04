@@ -8,15 +8,18 @@
 package provider
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
@@ -235,6 +238,10 @@ type file struct {
 	// tab (#499), by id; one not in it follows those that are, in the
 	// order it was added (see SetOrder).
 	Order []string `json:"order,omitempty"`
+	// GroupOrder is the order the user put the routing groups in on the
+	// Routing page (#779), by id, found ones among them; one not in it
+	// follows those that are (see SetGroupOrder).
+	GroupOrder []string `json:"groupOrder,omitempty"`
 }
 
 // Path is the file the user's providers live in.
@@ -296,6 +303,12 @@ func store(f file) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
+	// a group as it was read has the models its patterns matched then
+	// among its members: they are found again each time, never written
+	f.Groups = slices.Clone(f.Groups)
+	for i := range f.Groups {
+		f.Groups[i] = f.Groups[i].stored()
+	}
 	b, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
@@ -311,8 +324,52 @@ func store(f file) error {
 
 // All lists the configured providers in the order they were added, then
 // the signed-in agents. An entry in the file with no URL is only the
-// model picks for one of those accounts.
+// model picks for one of those accounts. A request that holds the catalog
+// (Hold) builds it once: each build reads every agent's sign-in, a keychain
+// item or a CLI's among them, and Codex's /models asked for it seven times
+// over, past the 5 s Codex waits for the list (#746).
 func All() []Provider {
+	held := heldOf("all", allProviders)
+	out := make([]Provider, len(held))
+	for i, p := range held {
+		out[i] = p.clone() // callers change theirs, Keys[i] and Headers included
+	}
+	return out
+}
+
+// clone is p with its settings unshared: slices, maps and pointers copied.
+func (p Provider) clone() Provider {
+	p.Was = slices.Clone(p.Was)
+	p.Keys = slices.Clone(p.Keys)
+	p.Fallback = slices.Clone(p.Fallback)
+	p.Models = slices.Clone(p.Models)
+	p.Headers = maps.Clone(p.Headers)
+	p.AccountProxies = maps.Clone(p.AccountProxies)
+	p.AccountCaps = maps.Clone(p.AccountCaps)
+	p.Contexts = maps.Clone(p.Contexts)
+	if p.AccountModels != nil {
+		m := make(map[string][]string, len(p.AccountModels))
+		for k, v := range p.AccountModels {
+			m[k] = slices.Clone(v)
+		}
+		p.AccountModels = m
+	}
+	if p.MaxConcurrency != nil {
+		v := *p.MaxConcurrency
+		p.MaxConcurrency = &v
+	}
+	if p.ZhipuTeam != nil {
+		v := *p.ZhipuTeam
+		p.ZhipuTeam = &v
+	}
+	return p // Account, the sign-in's runtime, stays shared
+}
+
+// AllBuilt counts the times All built the list anew, for tests.
+var AllBuilt atomic.Int64
+
+func allProviders() []Provider {
+	AllBuilt.Add(1)
 	f := load()
 	stored := f.Providers
 	picks := map[string]Provider{}
@@ -749,11 +806,13 @@ func normalize(p Provider) Provider {
 	}
 	p.Models = cleanList(p.Models)
 	p.Fallback = cleanList(p.Fallback)
-	// a provider saved under the id the qianfan preset carried its first
-	// day (qianfan-token-plan, v0.1.394) is the preset since renamed:
-	// its own id stays, so whatever the agents wired to it keeps routing
-	if p.Preset == "qianfan-token-plan" {
-		p.Preset = "baidu-qianfan"
+	// a provider saved under an id a preset carried before (presetAliases:
+	// qianfan's first day's, Tencent Cloud's plan and TokenHub's two) is
+	// the preset since: its endpoints say the region, and its own id
+	// stays, so whatever the agents, groups and usage named it by keeps
+	// finding it
+	if a, ok := presetAliases[p.Preset]; ok {
+		p.Preset = a.preset
 	}
 	// OpenCode Zen serves its free models (-free) signed out, to the key
 	// OpenCode itself sends then: a Zen provider saved with no key of its
@@ -805,10 +864,16 @@ func normalize(p Provider) Provider {
 		}
 		// a region's own key page goes with its endpoints (Qianfan's pay
 		// as you go makes its keys on the IAM page, the plans at the
-		// plan console)
-		for _, r := range pr.Regions {
-			if r.KeysURL != "" && p.atRegion(r) {
-				p.KeysURL = r.KeysURL
+		// plan console), and its own docs and catalog (Tencent Cloud's
+		// TokenHub, models.dev's tencent-tokenhub, beside its plan's none)
+		if r := p.regionOf(pr); r != nil {
+			p.KeysURL = cmp.Or(r.KeysURL, p.KeysURL)
+			p.Website = cmp.Or(r.Website, p.Website)
+			// the catalog follows the region unless the user gave one
+			// of their own: the preset's or a region's is magpie's
+			if slices.ContainsFunc(pr.Regions, func(x Region) bool { return x.Catalog != "" }) &&
+				(p.Catalog == pr.Catalog || slices.ContainsFunc(pr.Regions, func(x Region) bool { return x.Catalog == p.Catalog })) {
+				p.Catalog = cmp.Or(r.Catalog, pr.Catalog)
 			}
 		}
 	}

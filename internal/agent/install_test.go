@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -60,9 +63,10 @@ func TestInstallsOnlyMissing(t *testing.T) {
 // line (#727, Sun1090): nvm and its LTS Node on a Mac or Linux, winget's
 // Node.js LTS on Windows; the vendors' own installers are as they were.
 func TestInstallCommandsWithoutNode(t *testing.T) {
-	nvm := `export NVM_DIR="$HOME/.nvm" && mkdir -p "$NVM_DIR" && curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/` + nvmVersion +
-		`/install.sh | bash && . "$NVM_DIR/nvm.sh" && nvm install --lts && npm install -g `
-	winget := "winget install -e --id OpenJS.NodeJS.LTS; $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); npm.cmd install -g "
+	nvm := `export NVM_DIR="$HOME/.nvm" && mkdir -p "$NVM_DIR" && ` +
+		`t=$(mktemp) && curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/` + nvmVersion +
+		`/install.sh -o "$t" && bash "$t" && . "$NVM_DIR/nvm.sh" && nvm install --lts && npm install -g `
+	winget := "winget install -e --id OpenJS.NodeJS.LTS --accept-source-agreements --accept-package-agreements; $env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User'); npm.cmd install -g "
 	for _, c := range []struct {
 		id, goos string
 		want     []InstallCmd
@@ -134,6 +138,39 @@ func TestInstallWithoutNodeParses(t *testing.T) {
 		}
 		if out, err := exec.Command(p, "-n", "-c", c).CombinedOutput(); err != nil {
 			t.Errorf("%s -n: %v %s", sh, err, out)
+		}
+	}
+}
+
+// A download that fails stops the line where it failed: piped into a
+// shell, the line's status was the shell's, so a 404 or a blocked host
+// went on to source nvm.sh and told the user that file was missing. The
+// command now downloads to a file, and its own failure ends the chain.
+func TestInstallWithoutNodeStopsWhenTheDownloadFails(t *testing.T) {
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("no curl to test the download with")
+	}
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer bad.Close()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("NVM_DIR", filepath.Join(home, ".nvm"))
+	c := strings.Replace(npmInstall("@earendil-works/pi-coding-agent", "linux", false).Command,
+		"https://raw.githubusercontent.com/nvm-sh/nvm/"+nvmVersion+"/install.sh", bad.URL+"/install.sh", 1)
+	for _, sh := range []string{"bash", "zsh", "sh"} {
+		p, err := exec.LookPath(sh)
+		if err != nil {
+			continue
+		}
+		out, err := exec.Command(p, "-c", c).CombinedOutput()
+		if err == nil {
+			t.Errorf("%s: the line went on past the failed download: %s", sh, out)
+			continue
+		}
+		if strings.Contains(string(out), "nvm.sh") {
+			t.Errorf("%s: the failed download is still told as a missing nvm.sh: %s", sh, out)
 		}
 	}
 }

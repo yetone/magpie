@@ -551,13 +551,12 @@ func ofMember(c candidate, m provider.Member) bool {
 	return c.model == m.Model && c.effort == m.Effort && (c.rest == id || strings.HasPrefix(c.rest, id+"#") || strings.HasPrefix(c.rest, id+"@"))
 }
 
-// membersImageInput is whether a group request may carry images: the
-// member a rule put first decides, or else every member must take them
-// (as the group's catalog entry says without rules).
-func membersImageInput(ms []provider.Member, ruled []provider.Member) *bool {
-	if len(ruled) > 0 {
-		ms = ruled
-	}
+// membersImageInput is whether a group request may carry images: when a
+// member takes them it may (as the group's catalog entry says), and a
+// request with an image goes to the members that see it, the others
+// given it described or left out (#756). A rule's member first changes
+// none of that: one that can't see is passed over for an image.
+func membersImageInput(ms []provider.Member) *bool {
 	var out *bool
 	cat := provider.Served() // an unlisted member counts as much as the others
 	for i, m := range ms {
@@ -572,22 +571,22 @@ func membersImageInput(ms []provider.Member, ruled []provider.Member) *bool {
 			out = in
 			continue
 		}
-		out = sharedImageInput(out, in)
+		out = anyImageInput(out, in)
 	}
 	return out
 }
 
-// sharedImageInput is provider's: an explicit text-only answer wins, and
-// an unknown one stays unknown.
-func sharedImageInput(a, b *bool) *bool {
-	if a != nil && !*a {
+// anyImageInput is provider's: one member that takes images is enough,
+// both text-only is text-only, and otherwise it is unknown.
+func anyImageInput(a, b *bool) *bool {
+	if a != nil && *a {
 		return a
 	}
-	if b != nil && !*b {
+	if b != nil && *b {
 		return b
 	}
-	if a == nil || b == nil {
-		return nil
+	if a != nil && b != nil {
+		return a
 	}
-	return a
+	return nil
 }

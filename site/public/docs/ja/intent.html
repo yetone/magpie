@@ -85,12 +85,12 @@
     <p class="lede">ユーザーが何を求めているかで、ターンを送るモデルを決めます。テストは強いモデルへ、ちょっとした質問は速くて安いモデルへ。それぞれの種類を数語で書いておけば、ターンの始まりに、あなたが選んだ小さなモデルがメッセージの種類を判定します。</p>
 
     <figure class="figure">
-      <img class="for-light" src="/img/intent-rules-light.png" width="2060" height="1590" alt="ルーティンググループの編集画面：ルールが 3 つあり、そのうち 2 つにインテント（asks for “a quick question”、asks for “writing or fixing tests”）が付き、Intent told by は Groq の llama-3.1-8b-instant">
-      <img class="for-dark" src="/img/intent-rules-dark.png" width="2060" height="1590" alt="ルーティンググループの編集画面：ルールが 3 つあり、そのうち 2 つにインテント（asks for “a quick question”、asks for “writing or fixing tests”）が付き、Intent told by は Groq の llama-3.1-8b-instant">
+      <img class="for-light" src="/img/intent-rules-ja-light.png" width="2012" height="2538" alt="ルーティンググループの編集画面：ルールが 3 つあり、そのうち 2 つにインテント（“a quick question” と “writing or fixing tests”）が付き、インテント判定は Groq の llama-3.1-8b-instant">
+      <img class="for-dark" src="/img/intent-rules-ja-dark.png" width="2012" height="2538" alt="ルーティンググループの編集画面：ルールが 3 つあり、そのうち 2 つにインテント（“a quick question” と “writing or fixing tests”）が付き、インテント判定は Groq の llama-3.1-8b-instant">
       <figcaption>Coder グループ：長いターンは Kimi へ、ちょっとした質問は DeepSeek Flash へ、テストは DeepSeek Pro へ。インテントは Groq の Llama 3.1 8B が判定します。</figcaption>
     </figure>
 
-    <p>インテントは<a href="/docs/ja/start#rules">ルーティンググループのルール</a>に付けられる条件の一つで、長さ・画像・推理・エージェントと並びます。このページでは、v0.1.99 時点で magpie がインテントをどう扱うかを正確に説明します。すべての判断を予測でき、Routing タブで確かめられるようにするためです。</p>
+    <p>インテントは<a href="/docs/ja/start#rules">ルーティンググループのルール</a>に付けられる条件の一つで、長さ・画像・推理・エージェントと並びます。このページでは、v0.1.99 時点で magpie がインテントをどう扱うかを正確に説明します。すべての判断を予測でき、ルーティングタブで確かめられるようにするためです。</p>
 
     <div class="callout"><b>ひとことで言うと。</b>magpie の判断はターンごとに 1 回です。あなたがメッセージを送ったときに決め、エージェントがツール呼び出しを重ねている間には決めません。インテント付きのルールが最初に一致する可能性があれば、magpie は自分のゲートウェイを通して、グループの<em>判定モデル</em>に短い質問を 1 つ送ります。質問には番号付きのインテント一覧と、あなたの最新メッセージのテキストが入っていて、判定モデルは番号で答えます。magpie はその番号を使ってルールを上から順に照合します。最初に一致したルールのモデルが先頭になり、グループのほかのモデルはフェイルオーバー用としてその後ろに残ります。以後、あなたが次に発言するまで、ターンはそのモデルに留まります。判定モデルが失敗したり、タイムアウトしたり、番号以外を答えたりした場合は、どのインテントも一致せず、そうしたルールがないものとしてルーティングされます。埋め込みもキーワードリストも学習もありません。あなたが選んだモデルがメッセージを読み、番号を選ぶだけです。</div>
 
@@ -144,8 +144,8 @@ magpie group rule rm coder 2</pre>
     <h3>アプリでの様子</h3>
     <p>インテント付きのルールが 2 つ（“a quick question or explanation, with no code to write or change” と “writing or fixing tests”）あるグループに、Claude Code から実際のリクエストを送った例です。内容は「Add unit tests for the LRU cache in cache.go, covering eviction and concurrent reads and writes」。<span class="ui">Routing</span> タブにリアルタイムで表示されます。</p>
     <figure class="figure">
-      <img class="for-light" src="/img/intent-routing-hit-light.png" width="2080" height="1116" loading="lazy" alt="Routing タブ：Claude Code から magpie を経て aihubmix/glm-5.3 が回答。トレースには、deepseek-flash が 964 ms で答えたとおりルール 2 が “writing or fixing tests” に一致したと書かれている">
-      <img class="for-dark" src="/img/intent-routing-hit-dark.png" width="2080" height="1116" loading="lazy" alt="Routing タブ：Claude Code から magpie を経て aihubmix/glm-5.3 が回答。トレースには、deepseek-flash が 964 ms で答えたとおりルール 2 が “writing or fixing tests” に一致したと書かれている">
+      <img class="for-light" src="/img/intent-routing-hit-ja-light.png" width="2080" height="1190" loading="lazy" alt="ルーティングタブ：Claude Code から magpie を経て aihubmix/glm-5.3 が回答。トレースには、deepseek-flash が 964 ms で答えたとおりルール 2 が “writing or fixing tests” に一致したと書かれている">
+      <img class="for-dark" src="/img/intent-routing-hit-ja-dark.png" width="2080" height="1190" loading="lazy" alt="ルーティングタブ：Claude Code から magpie を経て aihubmix/glm-5.3 が回答。トレースには、deepseek-flash が 964 ms で答えたとおりルール 2 が “writing or fixing tests” に一致したと書かれている">
       <figcaption>判定モデル（deepseek-flash）は 964 ms で “writing or fixing tests” と答え、ルール 2 がグループのいつもの先頭モデルより前に glm-5.3 を置きました。glm-5.3 は 5.6 秒で回答しています。</figcaption>
     </figure>
 
@@ -203,8 +203,8 @@ The number of its kind (0 for none):</pre>
     <h2 id="trace"><a class="anchor" href="#trace">トレースの読み方</a></h2>
     <p><span class="ui">Routing</span> タブには、各グループの最新のリクエストについて、どのモデルが答えたか、そして <span class="ui">How the last request was routed</span> の下にその理由が表示されます。</p>
     <figure class="figure">
-      <img class="for-light" src="/img/intent-trace-light.png" width="2064" height="898" loading="lazy" alt="リクエスト後の Routing タブ：Claude Code から magpie を経て DeepSeek の deepseek-v4-pro へ。トレースにはルール 3 が一致したことと判定モデルの答えが書かれている">
-      <img class="for-dark" src="/img/intent-trace-dark.png" width="2064" height="898" loading="lazy" alt="リクエスト後の Routing タブ：Claude Code から magpie を経て DeepSeek の deepseek-v4-pro へ。トレースにはルール 3 が一致したことと判定モデルの答えが書かれている">
+      <img class="for-light" src="/img/intent-trace-ja-light.png" width="2016" height="970" loading="lazy" alt="リクエスト後の ルーティングタブ：Claude Code から magpie を経て DeepSeek の deepseek-v4-pro へ。トレースにはルール 3 が一致したことと判定モデルの答えが書かれている">
+      <img class="for-dark" src="/img/intent-trace-ja-dark.png" width="2016" height="970" loading="lazy" alt="リクエスト後の ルーティングタブ：Claude Code から magpie を経て DeepSeek の deepseek-v4-pro へ。トレースにはルール 3 が一致したことと判定モデルの答えが書かれている">
       <figcaption>テストを求めるメッセージ：判定モデルが 323 ms で “writing or fixing tests” と答え、ルール 3 が deepseek-v4-pro を先頭にしました。</figcaption>
     </figure>
     <p>インテントに関してトレースに出る行は次のとおりです。</p>

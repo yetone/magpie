@@ -19,6 +19,8 @@ func effortHome(t *testing.T) string {
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	// Crush's data file, the sandbox's rather than the package's shared one
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
 	// where Windows keeps Goose's, Crush's and Devin's: the sandbox's, never the machine's
 	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))

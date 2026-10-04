@@ -100,13 +100,17 @@ func clineProbe(body string) string {
 }
 
 // ModelTest says why p's models can't each be sent a test request ("" when
-// they can): "decide" for a decision API, whose models only classify and
-// whose endpoint Test asks it for them; "own-api" for a sign-in reached
+// they can): "decide" for a decision API whose models can't each be sent
+// a System One question (AsksDecideModels), whose endpoint Test asks it
+// for them; "own-api" for a sign-in reached
 // through its agent's own API (Cursor, Devin, Kiro, Zed, Qoder, a Google
 // sign-in), which the gateway translates every request for, so a probe
 // has no endpoint to go to.
 func (p Provider) ModelTest() string {
 	if p.DecideOnly() {
+		if p.AsksDecideModels() {
+			return ""
+		}
 		return "decide"
 	}
 	if p.isClaudeAccount() {
@@ -118,6 +122,16 @@ func (p Provider) ModelTest() string {
 		}
 	}
 	return "own-api"
+}
+
+// AsksDecideModels reports whether each of p's decision models can be
+// sent a System One question of its own (TestModels): where the API is
+// System One's, TypeSafe's or a gateway's that serves it as it is
+// (Vercel's TypeSafe API, OpenRouter's), not Vercel's evaluation models
+// nor Workers AI, which wrap it their own way.
+func (p Provider) AsksDecideModels() bool {
+	v := p.DecideVia()
+	return p.Decides() && (v == ViaSystemOne || v == ViaVercel)
 }
 
 func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
@@ -186,6 +200,21 @@ func (p Provider) TestModels(ctx context.Context, models []string) []Result {
 }
 
 func (p Provider) testOne(ctx context.Context, model string) Result {
+	if p.DecidesModel(model) && p.AsksDecideModels() {
+		// a decision model is sent the smallest System One question, a
+		// yes-or-no (ARNO on Discord: a System One model typed in by hand
+		// couldn't be tested from its right-click)
+		t0 := time.Now()
+		r := Result{Protocol: "decide", Model: model}
+		err := p.AskSystemOne(ctx, model)
+		r.Millis = time.Since(t0).Milliseconds()
+		if err != nil {
+			r.Error = err.Error()
+			return r
+		}
+		r.OK, r.Status = true, http.StatusOK
+		return r
+	}
 	if p.isClaudeAccount() {
 		return p.testClaude(ctx, model)
 	}

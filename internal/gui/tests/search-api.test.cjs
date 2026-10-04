@@ -3,7 +3,8 @@
 // to when no provider can search, in their order, and a row to add one. A
 // SearXNG picked asks for its address; Add sends the API, its key and its
 // address; Remove takes one away; a key magpie refuses is said in the row,
-// what was typed kept. In English and Chinese, Chromium and WebKit, with the
+// what was typed kept. A saved key is shown in its row and hidden again, or
+// copied, as a provider's is (OnurBen on Discord). In English and Chinese, Chromium and WebKit, with the
 // API faked.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -20,8 +21,8 @@ const vendors = [
   { id: "searxng", name: "SearXNG", needURL: true },
 ];
 const words = {
-  en: { head: "Web search", name: "Search APIs", none: "No provider can search", add: "Add", remove: "Remove", refused: "Brave Search: 401 bad key" },
-  zh: { head: "联网搜索", name: "搜索 API", none: "没有能搜索的供应商", add: "添加", remove: "移除", refused: "Brave Search: 401 bad key" },
+  en: { head: "Web search", name: "Search APIs", none: "No provider can search", add: "Add", remove: "Remove", refused: "Brave Search: 401 bad key", show: "Show", hide: "Hide", copy: "Copy" },
+  zh: { head: "联网搜索", name: "搜索 API", none: "没有能搜索的供应商", add: "添加", remove: "移除", refused: "Brave Search: 401 bad key", show: "显示", hide: "隐藏", copy: "复制" },
 };
 
 function serve(lang, posted) {
@@ -42,6 +43,11 @@ function serve(lang, posted) {
       else apis = [...apis, { vendor: b.vendor, name: vendors.find((v) => v.id === b.vendor).name, url: b.url, key: b.key ? "••••" : "", ready: true }];
       return json(settings());
     }
+    if (url.pathname === "/api/settings/search-key") {
+      posted.push({ asked: JSON.parse(r.request().postData()).vendor });
+      return json({ key: "tvly-dev-0123456789abcd" });
+    }
+    if (url.pathname === "/api/copy") { posted.push({ copied: JSON.parse(r.request().postData()).text }); return json({}); }
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname === "/api/groups") return json({ models: [], groups: [], pools: [] });
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true, url: "http://127.0.0.1:3999" } });
@@ -107,6 +113,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await head.locator("button.search-vendor").innerText(), "Brave Search");
       assert.equal(await head.locator("input.search-key").inputValue(), "bad", "what was typed is kept");
       assert.deepEqual(await list.locator(".row.search-api .name").allInnerTexts(), ["1. Tavily", "2. SearXNG"]);
+
+      // the saved key: shown, hidden, copied; SearXNG's row has none to show
+      const tavily = list.locator(".row.search-api").first();
+      assert.equal(await list.locator(".row.search-api").nth(1).locator("button.search-eye").count(), 0);
+      assert.equal(await tavily.locator(".sub").innerText(), "tvly…abcd");
+      const sent = posted.length;
+      await click(tavily.locator("button.search-eye"));
+      await page.waitForFunction(() => document.querySelector("#searchList .row.search-api .sub.revealed"));
+      assert.equal(await tavily.locator(".sub").innerText(), "tvly-dev-0123456789abcd");
+      assert.equal(await tavily.locator("button.search-eye").innerText(), w.hide);
+      assert.equal(await tavily.locator(".sub").evaluate((e) => getComputedStyle(e).webkitUserSelect || getComputedStyle(e).userSelect), "text", "the key shown can be selected");
+      await click(tavily.locator("button.search-eye"));
+      assert.equal(await tavily.locator(".sub").innerText(), "tvly…abcd");
+      assert.equal(await tavily.locator("button.search-eye").innerText(), w.show);
+      await click(tavily.locator("button.search-copy", { hasText: w.copy }));
+      await page.waitForFunction(() => document.querySelector("#searchList .row.search-api .sub")?.innerText === "tvly…abcd");
+      await page.waitForFunction(() => document.querySelector("#status")?.textContent);
+      assert.deepEqual(posted.slice(sent), [{ asked: "tavily" }, { asked: "tavily" }, { copied: "tvly-dev-0123456789abcd" }]);
+      assert.equal(await tavily.locator(".sub").innerText(), "tvly…abcd", "copying shows nothing");
+      posted.splice(sent);
 
       // Remove
       await click(list.locator(".row.search-api").first().locator("button.text", { hasText: w.remove }));

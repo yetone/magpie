@@ -1094,6 +1094,47 @@ func TestEverySkillAgents(t *testing.T) {
 	}
 }
 
+// A repository's skills on for an agent at once, and off again, from its
+// group's chips; a skill not named, and an agent not named, keep theirs (#787).
+func TestSomeSkillsAgents(t *testing.T) {
+	h := sandbox(t)
+	src := filepath.Join(h, "src/skills")
+	for _, n := range []string{"pdf", "xlsx", "docx"} {
+		skill(t, filepath.Join(src, n), n, n)
+	}
+	ok(t)(InstallSkills(src, []string{"pdf", "xlsx"}, []string{"gemini"}))
+	ok(t)(InstallSkills(src, []string{"docx"}, []string{"claude"}))
+	has := func(d string) bool { _, err := os.Stat(filepath.Join(h, d, "SKILL.md")); return err == nil }
+	agents := func() map[string][]string {
+		v, _ := Read(nil)
+		m := map[string][]string{}
+		for _, s := range v.Skills {
+			m[s.Name] = s.Agents
+		}
+		return m
+	}
+	ok(t)(SomeSkillsAgents([]string{"pdf", "xlsx"}, []string{"claude"}, true))
+	if m := agents(); !slices.Equal(m["pdf"], []string{"claude", "gemini"}) || !slices.Equal(m["xlsx"], []string{"claude", "gemini"}) || !slices.Equal(m["docx"], []string{"claude"}) {
+		t.Errorf("on for claude: %v", m)
+	}
+	if !has(".claude/skills/pdf") || !has(".claude/skills/xlsx") {
+		t.Error("claude wasn't given pdf and xlsx")
+	}
+	ok(t)(SomeSkillsAgents([]string{"pdf", "xlsx"}, []string{"claude", "gemini"}, false))
+	if m := agents(); len(m["pdf"]) != 0 || len(m["xlsx"]) != 0 || !slices.Equal(m["docx"], []string{"claude"}) {
+		t.Errorf("off: %v", m)
+	}
+	if has(".claude/skills/pdf") || has(".gemini/skills/xlsx") || !has(".claude/skills/docx") {
+		t.Error("the agents' folders don't match")
+	}
+	if _, err := SomeSkillsAgents([]string{"nope"}, []string{"claude"}, true); err == nil {
+		t.Error("a skill not in the library was taken")
+	}
+	if _, err := SomeSkillsAgents(nil, []string{"claude"}, true); err == nil {
+		t.Error("no skills named was taken as every skill")
+	}
+}
+
 // Every server on for one agent at once, and off again; the others keep
 // theirs, and an agent isn't given a server it can't reach (#475).
 func TestEveryServerAgents(t *testing.T) {

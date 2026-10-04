@@ -62,6 +62,7 @@ func TestDiffLines(t *testing.T) {
 }
 
 func TestMask(t *testing.T) {
+	const compact = `[{"requestHeaders":{"Authorization":"Bearer magpie"}}]`
 	for in, want := range map[string]string{
 		`  "ANTHROPIC_AUTH_TOKEN": "magpie",`:          `  "ANTHROPIC_AUTH_TOKEN": "magpie",`,
 		`  "ANTHROPIC_API_KEY": "sk-ant-x",`:           `  "ANTHROPIC_API_KEY": ••••`,
@@ -69,6 +70,9 @@ func TestMask(t *testing.T) {
 		`env_key = "$KEY"`:                             `env_key = "$KEY"`,
 		`model = "x"`:                                  `model = "x"`,
 		`"CLAUDE_CODE_MAX_CONTEXT_TOKENS": "1000000",`: `"CLAUDE_CODE_MAX_CONTEXT_TOKENS": "1000000",`,
+		// A table header or compact array is not a key/value line.
+		`[auth]`: `[auth]`,
+		compact:  compact,
 	} {
 		if got := mask(in); got != want {
 			t.Errorf("mask(%q) = %q, want %q", in, got, want)

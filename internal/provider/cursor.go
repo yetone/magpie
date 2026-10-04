@@ -63,7 +63,13 @@ var cursorStatus = &cliIdentity{name: "cursor", exe: func() string { return Curs
 // cursorIdentity is who Cursor's CLI says is signed in; see cliIdentity.
 func cursorIdentity() (user, plan string, ok bool) { return cursorStatus.get() }
 
-func forgetCursorStatus() { cursorStatus.forget() }
+// forgetCursorStatus has who is signed in, and the token, read afresh.
+func forgetCursorStatus() {
+	cursorStatus.forget()
+	cursorTok.Lock()
+	cursorTok.at = time.Time{}
+	cursorTok.Unlock()
+}
 
 func askCursorIdentity() (user, plan string, ok bool) {
 	user, plan, ok, _ = askCursorStatus()
@@ -317,11 +323,43 @@ func cursorAuthFile() string {
 	return filepath.Join(dir, "cursor", "auth.json")
 }
 
+// cursorTok is the token cursor-agent keeps in the Keychain as last read,
+// and when: every look at whether Cursor is signed in ran `security`, a
+// plugin's accounts for each build of the providers (#746).
+var cursorTok struct {
+	sync.Mutex
+	tok string
+	at  time.Time
+}
+
+// cursorTokenTTL is how long a token read from the Keychain is taken as
+// it: a sign-in or out in magpie reads it afresh (forgetCursorStatus), one
+// made in cursor-agent is seen within it.
+const cursorTokenTTL = 10 * time.Second
+
+// cursorKeychainToken is cursor-agent's token in the Keychain, "" for none;
+// fresh reads it whatever was read last.
+func cursorKeychainToken(fresh bool) string {
+	cursorTok.Lock()
+	defer cursorTok.Unlock()
+	if !fresh && time.Since(cursorTok.at) < cursorTokenTTL {
+		return cursorTok.tok
+	}
+	out, err := proc.Command("security", "find-generic-password", "-s", "cursor-access-token", "-a", "cursor-user", "-w").Output()
+	cursorTok.tok, cursorTok.at = "", time.Now()
+	if err == nil {
+		cursorTok.tok = strings.TrimSpace(string(out))
+	}
+	return cursorTok.tok
+}
+
 // readCursorToken is the access token cursor-agent signed in with.
-func readCursorToken() string {
+func readCursorToken() string { return cursorTokenOf(false) }
+
+// cursorTokenOf is readCursorToken, fresh from the Keychain when asked.
+func cursorTokenOf(fresh bool) string {
 	if runtime.GOOS == "darwin" {
-		out, err := proc.Command("security", "find-generic-password", "-s", "cursor-access-token", "-a", "cursor-user", "-w").Output()
-		if t := strings.TrimSpace(string(out)); err == nil && t != "" {
+		if t := cursorKeychainToken(fresh); t != "" {
 			return t
 		}
 	}
@@ -366,13 +404,13 @@ func CursorToken() (string, error) {
 	}
 	if path := CursorExecutable(); path != "" {
 		cursorRefresh.Lock()
-		if t := readCursorToken(); t != tok && t != "" {
+		if t := cursorTokenOf(true); t != tok && t != "" {
 			tok = t // renewed while this waited
 		} else {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			_ = agentProbe(ctx, path, "status").Run()
 			cancel()
-			tok = readCursorToken()
+			tok = cursorTokenOf(true)
 		}
 		cursorRefresh.Unlock()
 	}

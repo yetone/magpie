@@ -71,7 +71,30 @@ func (p Provider) DecideOnly() bool {
 // DecidesModel distinguishes Jev from the conversation models a gateway
 // also serves. A dedicated decision API may use any model name.
 func (p Provider) DecidesModel(model string) bool {
-	return p.Decides() && (p.DecideOnly() || jevID(model))
+	return p.Decides() && (p.DecideOnly() || jevID(model) || p.DecideVia() == ViaCloudflare && CloudflareClef(model))
+}
+
+// Cloudflare's own decision models on Workers AI (ARNO on Discord): Clef
+// and Clef Flash answer System One's questions as Jev does, but each is
+// run at its own address (…/ai/run/@cf/cloudflare/clef) and takes the
+// request as it is, its model named "clef" or "clef-flash", where Jev is
+// a run of typesafe/jev with the questions as its input.
+const (
+	CloudflareJev       = "typesafe/jev"
+	CloudflareClefModel = "@cf/cloudflare/clef"
+	CloudflareClefFlash = "@cf/cloudflare/clef-flash"
+)
+
+// CloudflareClef reports whether model is one of Cloudflare's Clef models.
+func CloudflareClef(model string) bool {
+	return model == CloudflareClefModel || model == CloudflareClefFlash
+}
+
+// cloudflareDecideModels are the decision models Workers AI serves.
+var cloudflareDecideModels = []catalog.Model{
+	{ID: CloudflareJev, Name: "Jev"},
+	{ID: CloudflareClefModel, Name: "Clef"},
+	{ID: CloudflareClefFlash, Name: "Clef Flash"},
 }
 
 // The ways a decision API is asked, by where it is (DecideVia): TypeSafe's
@@ -111,7 +134,7 @@ func (p Provider) Jev() string {
 	case ViaVercel, ViaVercelEval:
 		return "typesafe-ai/jev"
 	case ViaCloudflare:
-		return "typesafe/jev"
+		return CloudflareJev
 	}
 	if own := p.ownDecideModels(); len(own) > 0 {
 		return own[0].ID
@@ -155,7 +178,10 @@ func (p Provider) decideModels() []catalog.Model {
 		}
 		return out
 	}
-	if p.DecideVia() != ViaSystemOne {
+	switch p.DecideVia() {
+	case ViaCloudflare:
+		return slices.Clone(cloudflareDecideModels)
+	case ViaVercel, ViaVercelEval:
 		return []catalog.Model{{ID: p.Jev(), Name: "Jev"}}
 	}
 	if own := p.ownDecideModels(); len(own) > 0 {
@@ -199,6 +225,16 @@ func (p Provider) DecideURL(ctx context.Context) (string, error) {
 		return api + "/accounts/" + acct + "/ai/run", nil
 	}
 	return p.Decide + "/systemone", nil
+}
+
+// DecideModelURL is where a question for model is posted: DecideURL, or,
+// for a Clef on Workers AI, its own run under it.
+func (p Provider) DecideModelURL(ctx context.Context, model string) (string, error) {
+	u, err := p.DecideURL(ctx)
+	if err == nil && p.DecideVia() == ViaCloudflare && CloudflareClef(model) {
+		u += "/" + model
+	}
+	return u, err
 }
 
 // cloudflareBase splits p's Workers AI base into Cloudflare's API
@@ -486,11 +522,18 @@ func (p Provider) fetchDecide(ctx context.Context) ([]catalog.Model, error) {
 		}
 		return p.decideModels(), nil
 	}
-	// Bailian lists its chat models only: its decision model is asked
-	if bailianDecides(p.Decide) {
+	// the list where the user said its models are, asked as given, query
+	// and all (ARNO on Discord: OpenRouter's decision models are at
+	// …/models?output_modalities=decisions; its /models lists chat models
+	// only, and only Jev's of those were kept): every model in it is one
+	list, all := p.Decide+"/models", false
+	if u := strings.TrimSpace(p.ModelsURL); u != "" && p.DecideOnly() {
+		list, all = u, true
+	} else if bailianDecides(p.Decide) {
+		// Bailian lists its chat models only: its decision model is asked
 		return p.decideAsked(ctx)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.Decide+"/models", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, list, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -512,7 +555,7 @@ func (p Provider) fetchDecide(ctx context.Context) ([]catalog.Model, error) {
 		}
 		return nil, fmt.Errorf("%s: %s", p.Name, APIError(b, res.Status))
 	}
-	ms, err := listedDecide(b)
+	ms, err := listedDecide(b, all)
 	if (err != nil || len(ms) == 0) && own {
 		return p.decideAsked(ctx)
 	}
@@ -548,7 +591,7 @@ func (p Provider) decideAsked(ctx context.Context) ([]catalog.Model, error) {
 // AskSystemOne sends model the smallest System One question at p's
 // decision API, and says why it wasn't answered.
 func (p Provider) AskSystemOne(ctx context.Context, model string) error {
-	u, err := p.DecideURL(ctx)
+	u, err := p.DecideModelURL(ctx, model)
 	if err != nil {
 		return err
 	}
@@ -585,8 +628,9 @@ func (p Provider) AskSystemOne(ctx context.Context, model string) error {
 // {"models":[{"name":…}]}. A gateway in front of Jev often answers
 // OpenAI's instead, {"data":[{"id":…}]}, and that list is every model
 // it serves, so an id counts only when it is Jev's: "jev…" or "…/jev…".
-// Names, when the list has any, are kept as they are.
-func listedDecide(b []byte) ([]catalog.Model, error) {
+// Names, when the list has any, are kept as they are. With all, every id
+// counts: a list the user pointed at is of decision models already.
+func listedDecide(b []byte, all bool) ([]catalog.Model, error) {
 	var out struct {
 		Models []struct {
 			Name string `json:"name"`
@@ -610,7 +654,7 @@ func listedDecide(b []byte) ([]catalog.Model, error) {
 	}
 	seen := map[string]bool{}
 	take := func(id string) {
-		if id == "" || seen[id] || !jevID(id) {
+		if id == "" || seen[id] || !all && !jevID(id) {
 			return
 		}
 		seen[id] = true

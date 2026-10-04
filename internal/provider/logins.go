@@ -148,6 +148,7 @@ func writeLogins(ls []savedLogin) error {
 	if err != nil {
 		return err
 	}
+	defer Changed() // an account added, switched or gone: All builds anew
 	return writePrivate(loginsPath(), append(b, '\n'))
 }
 
@@ -945,6 +946,7 @@ func ForgetAccounts() {
 
 // forgetAccountCaches makes the next look at the accounts read them afresh.
 func forgetAccountCaches() {
+	Changed() // the providers a request holds (All)
 	forgetClaudeCredential()
 	forgetClaudeStatus()
 	forgetCursorStatus()

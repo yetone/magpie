@@ -1,6 +1,9 @@
 package provider
 
-import "testing"
+import (
+	"maps"
+	"testing"
+)
 
 // Vendors spell the same model differently; a group magpie finds joins
 // them all.
@@ -32,29 +35,37 @@ func TestAutoGroupsSameModel(t *testing.T) {
 
 }
 
-// A group takes images only when every member does: any of them may be
-// the one that answers.
+// A group takes images when one of its members does: the gateway gives an
+// image to the members that see it (#756: an auto group of DeepSeek V4.1
+// Flash with one text-only member turned every image away).
 func TestGroupImages(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "")
-	e := func(p, m string, images bool) Entry {
-		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: Provider{ID: p}, Images: images}
+	no, yes := false, true
+	e := func(p, m string, images bool, in *bool) Entry {
+		return Entry{ID: p + "/" + m, Model: m, Name: m, Provider: Provider{ID: p}, Images: images, ImageInput: in}
 	}
 	gs := groupEntries([]Entry{
-		e("a", "kimi-k3", true), e("b", "kimi-k3", true),
-		e("a", "glm-5.3", true), e("b", "glm-5.3", false),
+		e("a", "kimi-k3", true, nil), e("b", "kimi-k3", true, nil),
+		e("a", "glm-5.3", true, nil), e("b", "glm-5.3", false, nil),
+		e("a", "deepseek-v4.1-flash", false, &no), e("b", "deepseek-v4.1-flash", true, &yes),
+		e("a", "glm-5.2", false, &no), e("b", "glm-5.2", false, &no),
 	})
 	got := map[string]bool{}
 	for _, g := range gs {
 		got[g.ID] = g.Images
 	}
-	if len(got) != 2 || !got[GroupPrefix+"auto-kimi-k3"] || got[GroupPrefix+"auto-glm-5-3"] {
+	want := map[string]bool{
+		GroupPrefix + "auto-kimi-k3": true, GroupPrefix + "auto-glm-5-3": true,
+		GroupPrefix + "auto-deepseek-v4-1-flash": true, GroupPrefix + "auto-glm-5-2": false,
+	}
+	if !maps.Equal(got, want) {
 		t.Errorf("%v", got)
 	}
 }
 
-func TestGroupImagesKeepUnknownMemberUnknown(t *testing.T) {
+func TestGroupImagesFromAMemberThatSees(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "")
@@ -64,8 +75,8 @@ func TestGroupImagesKeepUnknownMemberUnknown(t *testing.T) {
 		{ID: "b/m", Model: "m", Provider: Provider{ID: "b"}, Images: true},
 	}
 	groups := groupEntries(entries)
-	if len(groups) != 1 || !groups[0].Images || groups[0].ImageInput != nil {
-		t.Fatalf("group with inferred image support lost images: %+v", groups)
+	if len(groups) != 1 || !groups[0].Images || groups[0].ImageInput == nil || !*groups[0].ImageInput {
+		t.Fatalf("group with a member that sees lost images: %+v", groups)
 	}
 }
 

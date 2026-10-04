@@ -71,6 +71,39 @@ func TestCapReached(t *testing.T) {
 	}
 }
 
+// WithCapped marks every window a cap counts, as CapHeld holds them: a
+// window one model's own counts for that model, so it is marked like the
+// rest — the GUI had nothing to show for an account held at its Opus
+// window, though routing was holding it there (TestCapHeld).
+func TestWithCappedMarksPerModelWindows(t *testing.T) {
+	later := time.Now().Add(time.Hour)
+	windows := []QuotaWindow{
+		{Used: 30, ResetsAt: &later},
+		{Used: 90, ResetsAt: &later, Model: "opus"},
+		{Used: 90, ResetsAt: &later, Aside: true},
+		{Unlimited: true, Used: 90, ResetsAt: &later},
+	}
+	w := WithCapped(map[string]SubscriptionQuota{"me@example.com": {Windows: windows}})["me@example.com"].Windows
+	if !w[0].Capped {
+		t.Error("the window every model's is not marked")
+	}
+	if !w[1].Capped {
+		t.Error("the window one model's own is not marked")
+	}
+	if w[0].CapsSome || !w[1].CapsSome {
+		t.Error("the window one model's own is not told from the account's")
+	}
+	if w[2].Capped {
+		t.Error("on-demand spending is marked")
+	}
+	if w[3].Capped {
+		t.Error("an unlimited window is marked")
+	}
+	if (SubscriptionQuota{Windows: windows}).Windows[1].Capped {
+		t.Error("the windows given were marked, not copies")
+	}
+}
+
 func TestParseCap(t *testing.T) {
 	for in, want := range map[string]int{"70": 70, "70%": 70, " 5 % ": 5, "off": 0, "none": 0, "0": 0, "100": 0, "-": 0} {
 		if got, err := ParseCap(in); err != nil || got != want {

@@ -692,6 +692,21 @@ func SetCodexAgentsV1(on bool) error {
 	return nil
 }
 
+// SetFullContext turns settings.FullContext on or off: Codex and Claude
+// Code are told a model's whole window, or the working one, again.
+func SetFullContext(on bool) error {
+	s := settings.Load()
+	if s.FullContext == on {
+		return nil
+	}
+	s.FullContext = on
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
 // SetPlainNames has the agents' model lists name models by their names
 // alone (see Labels), or with their providers' again, and the agents told.
 func SetPlainNames(on bool) error {

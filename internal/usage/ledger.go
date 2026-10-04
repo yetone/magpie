@@ -50,6 +50,7 @@ type Filter struct {
 	Model     string // exact model selected in the ranking
 	Agent     string
 	Provider  string // a provider's id, as the ledger's rows have it
+	Purpose   string // PurposeOf's key; empty keeps every purpose
 	// Account narrows to the calls a subscription account answered, by its
 	// name as Record.Account gives it (#557)
 	Account string
@@ -93,6 +94,9 @@ func (f Filter) keeps(r Record) bool {
 		return false
 	}
 	if f.Provider != "" && r.Provider != f.Provider {
+		return false
+	}
+	if f.Purpose != "" && PurposeOf(r.Kind) != f.Purpose {
 		return false
 	}
 	if f.Account != "" && r.Account() != f.Account {
@@ -489,8 +493,8 @@ func (t *Totals) addRow(r Row) {
 	if r.TTFT > 0 && !r.Failed() {
 		t.Timed++
 		t.TTFT += r.TTFT
-		if r.Output > 0 && r.Millis > r.TTFT {
-			t.DecodeMs += r.Millis - r.TTFT
+		if w := DecodeWindow(r.Output, r.Millis, r.TTFT); w > 0 {
+			t.DecodeMs += w
 			t.DecodeOut += r.Output
 		}
 	}

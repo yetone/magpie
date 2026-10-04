@@ -62,6 +62,40 @@ func alertClockZh(at, now time.Time) string {
 	return fmt.Sprintf("%d月%d日 %s", at.Month(), at.Day(), at.Format("15:04"))
 }
 
+// alertWindowJa is a window's name in Japanese, as alertWindowZh.
+func alertWindowJa(name string) string {
+	if m := hoursName.FindStringSubmatch(name); m != nil {
+		return m[1] + " 時間"
+	}
+	if m := daysName.FindStringSubmatch(name); m != nil {
+		return m[1] + " 日"
+	}
+	switch name {
+	case "Weekly":
+		return "週間"
+	case "Monthly":
+		return "月間"
+	case "Daily":
+		return "日次"
+	}
+	return name
+}
+
+// alertClockJa is provider.ResetClock in Japanese.
+func alertClockJa(at, now time.Time) string {
+	at, now = at.Local(), now.Local()
+	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, time.Local) }
+	switch days := int(math.Round(day(at).Sub(day(now)).Hours() / 24)); {
+	case days <= 0:
+		return at.Format("15:04")
+	case days == 1:
+		return "明日 " + at.Format("15:04")
+	case days < 7:
+		return [...]string{"日曜", "月曜", "火曜", "水曜", "木曜", "金曜", "土曜"}[at.Weekday()] + " " + at.Format("15:04")
+	}
+	return fmt.Sprintf("%d月%d日 %s", at.Month(), at.Day(), at.Format("15:04"))
+}
+
 // alertWindowDe is a window's name in German; one it doesn't know stays as
 // the vendor named it.
 func alertWindowDe(name string) string {
@@ -104,8 +138,8 @@ func alertClockDe(at, now time.Time) string {
 }
 
 // alertText is a usage alert as a notification says it, in the language
-// (en, zh or de): the card, and what reached the line. left says a window
-// by how much of it is left, as the Usage page does when set to.
+// (en, zh, ja or de): the card, and what reached the line. left says a
+// window by how much of it is left, as the Usage page does when set to.
 func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now time.Time) (title, body string) {
 	title = a.Name
 	if a.User != "" {
@@ -116,6 +150,8 @@ func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now t
 		switch lang {
 		case "zh":
 			return title, fmt.Sprintf("余额已降至 %s（提醒线 %s）", a.Balance, line)
+		case "ja":
+			return title, fmt.Sprintf("残高が %s まで減りました（通知ライン %s）", a.Balance, line)
 		case "de":
 			return title, fmt.Sprintf("Guthaben auf %s gesunken (Warnschwelle %s)", a.Balance, line)
 		}
@@ -133,6 +169,16 @@ func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now t
 		}
 		if a.ResetsAt != nil {
 			body += "，" + alertClockZh(*a.ResetsAt, now) + " 重置"
+		}
+		return title, body
+	}
+	if lang == "ja" {
+		body = fmt.Sprintf("%s枠を %s 使用", alertWindowJa(a.Window), pct)
+		if left {
+			body = fmt.Sprintf("%s枠の残り %s", alertWindowJa(a.Window), pct)
+		}
+		if a.ResetsAt != nil {
+			body += "、" + alertClockJa(*a.ResetsAt, now) + " にリセット"
 		}
 		return title, body
 	}

@@ -18,8 +18,12 @@ func TestKnownTextOnlyModelRejectsImagesBeforeUpstream(t *testing.T) {
 	fresh(t)
 	noVision(t)
 	var sent int
+	var model string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sent++
+		var req struct{ Model string }
+		json.NewDecoder(r.Body).Decode(&req)
+		model = req.Model
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"id":"x","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`)
 	}))
@@ -57,8 +61,10 @@ func TestKnownTextOnlyModelRejectsImagesBeforeUpstream(t *testing.T) {
 	groupBody := strings.Replace(cases[0].body, "probe/text", "group/mixed", 1)
 	group := httptest.NewRecorder()
 	s.Handler().ServeHTTP(group, httptest.NewRequest("POST", cases[0].path, strings.NewReader(groupBody)))
-	if group.Code != 400 || sent != 0 {
-		t.Fatalf("mixed-capability group: %d %s; upstream sent %d", group.Code, group.Body.String(), sent)
+	// a group with a member that sees takes the image, and gives it to
+	// that member, though the text-only one comes first (#756)
+	if group.Code != 200 || sent != 1 || model != "vision" {
+		t.Fatalf("mixed-capability group: %d %s; upstream sent %d, to %q", group.Code, group.Body.String(), sent, model)
 	}
 	code, body := postAs(t, s, "", `{"model":"probe/text","messages":[{"role":"user","content":"the text image_url is not an image"}]}`)
 	if code != 200 {
@@ -72,8 +78,8 @@ func TestKnownTextOnlyModelRejectsImagesBeforeUpstream(t *testing.T) {
 			t.Errorf("%s image: %d %s", model, rec.Code, rec.Body.String())
 		}
 	}
-	if sent != 3 {
-		t.Fatalf("text, vision, and unknown requests sent %d times", sent)
+	if sent != 4 {
+		t.Fatalf("group, text, vision, and unknown requests sent %d times", sent)
 	}
 }
 
@@ -346,7 +352,7 @@ func TestGroupWithUnknownImageCapabilityReachesUpstream(t *testing.T) {
 	}
 	for _, e := range provider.Catalog() {
 		if e.ID == "group/auto-claude-sonnet-4-5" {
-			if !e.Images || e.ImageInput != nil {
+			if !e.Images || e.ImageInput == nil || !*e.ImageInput {
 				t.Fatalf("group image capability: %+v", e)
 			}
 			return

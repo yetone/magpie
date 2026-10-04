@@ -27,12 +27,16 @@ const choices = [
   { id: "relay", name: "MyRelay", icon: "generic", small: "claude-haiku-4-5", models: [
     { id: "relay/claude-haiku-4-5", name: "Claude Haiku 4.5", provider: "relay", providerName: "MyRelay" }] },
   { id: "kimi", name: "Kimi Code", icon: "kimi", small: "", models: [], service: true },
+  { id: "antigravity", name: "Antigravity", icon: "antigravity", small: "gemini-3-flash", own: true, models: [
+    { id: "antigravity/gemini-3-flash", name: "Gemini 3 Flash", provider: "antigravity", providerName: "Antigravity" }] },
 ];
 const words = {
   en: { name: "Searches for other models", auto: "Automatic", small: "GPT-5 Mini Named, its small model", unused: "isn't used: it is turned off", relays: "Relays said to search (MyRelay) are never picked automatically: they would spend the relay's quota on other models' searches; if one refuses magpie's own request, magpie falls back",
-    own: "A Kimi Code plan (Kimi Code) searches for its own models first, with its web search; for other models only when named here", web: "its web search" },
+    own: "A Kimi Code plan (Kimi Code) searches for its own models first, with its web search; for other models only when named here", web: "its web search",
+    google: "Antigravity search for their own models first, with Gemini's Google Search" },
   zh: { name: "代搜供应商", auto: "自动", small: "GPT-5 Mini Named（它的小模型）", unused: "没有用 OpenAI · GPT-5 Mini Named：它已关闭", relays: "标为能搜索的中转站（MyRelay）不会被自动选择：它们会为别的模型的搜索花掉中转站的额度；如果它拒绝 magpie 自己发出的请求，magpie 会退回其他选择",
-    own: "Kimi Code 套餐（Kimi Code）的模型先用套餐自带的联网搜索；别的模型只有在这里选了它才用", web: "它自带的联网搜索" },
+    own: "Kimi Code 套餐（Kimi Code）的模型先用套餐自带的联网搜索；别的模型只有在这里选了它才用", web: "它自带的联网搜索",
+    google: "Antigravity 的模型先用自己的 Gemini（Google 搜索）联网搜索" },
 };
 
 function serve(lang, posted, st) {
@@ -85,6 +89,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await row.locator("button.searcher-pick").innerText(), `${w.auto} · Claude · claude-haiku-4-5`);
       assert((await row.locator(".sub").innerText()).includes(w.relays), "the relays said to search are named");
       assert((await row.locator(".sub").innerText()).includes(w.own), "the Kimi Code plan is said to search for its own models");
+      assert((await row.locator(".sub").innerText()).includes(w.google), "a Google sign-in is said to search for its own models (#757)");
       // the Search APIs come after it
       assert.equal(await page.locator("#searchList .row").nth(1).evaluate((e) => e.classList.contains("search-add")), true);
 

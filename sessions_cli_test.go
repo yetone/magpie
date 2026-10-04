@@ -130,3 +130,12 @@ func TestSessionsCmd(t *testing.T) {
 		t.Error("--days week taken")
 	}
 }
+
+// The hit rate is of all the prompts came to: what was written to the
+// cache counts in it, as Input leaves it out — a prompt written again at
+// every turn showed near 100% otherwise.
+func TestHitRateCountsCacheWrites(t *testing.T) {
+	if got := hitRate(sessions.Tokens{Input: 10, CacheRead: 20, CacheWrite: 70}); !strings.Contains(got, "(20% hit)") {
+		t.Errorf("hitRate = %q, want 20%%", got)
+	}
+}

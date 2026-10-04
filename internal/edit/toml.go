@@ -597,6 +597,12 @@ type Table struct {
 // tables magpie owns as a whole (one per model of its catalog), which would
 // otherwise be rewritten once per table. With no tables it only removes.
 func SetTOMLTables(path string, prefixes []string, tables []Table) error {
+	return SetTOMLTablesMatching(path, nil, prefixes, tables)
+}
+
+// SetTOMLTablesMatching replaces tables whose names are exact matches or
+// begin with one of prefixes, then appends the given tables in one write.
+func SetTOMLTablesMatching(path string, names, prefixes []string, tables []Table) error {
 	raw, err := Read(path)
 	if err != nil {
 		return err
@@ -607,6 +613,11 @@ func SetTOMLTables(path string, prefixes []string, tables []Table) error {
 		return fmt.Errorf("%s: %w", path, err)
 	}
 	owned := func(name string) bool {
+		for _, n := range names {
+			if name == n {
+				return true
+			}
+		}
 		for _, p := range prefixes {
 			if strings.HasPrefix(name, p) {
 				return true

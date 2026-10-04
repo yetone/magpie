@@ -20,8 +20,8 @@ const groupUsage = `usage:
   magpie group add <name> models=<m1>[,m2…] [routing=…] [stays=…]
                                           make a group; agents pick it as group/<id>, the id made from the name;
                                           a name in use replaces that group
-  magpie group set <id> k=v…              change one: name, models (the whole list, in order),
-                                          models+=<m> (append), models-=<m> (drop), routing, stays,
+  magpie group set <id> k=v…              change one: name, models (the whole list, in order, patterns too),
+                                          models+=<m>[,m2…] (append), models-=<m>[,m2…] (drop), routing, stays,
                                           context (how long a request agents are told it takes: 272k; empty is
                                           its largest model's), levels (the reasoning levels agents are offered:
                                           levels=none,low,medium,high,xhigh,max; empty is those every model has —
@@ -59,6 +59,14 @@ const groupUsage = `usage:
            provider/model[:effort]:fast sends the member in its vendor's fast mode: priority processing on a
            ChatGPT account (Codex's Fast) or an OpenAI key, Cursor's -fast model, Claude's fast mode on an
            Anthropic key for Opus 4.8 and 5; a model without one is refused (codex/gpt-6.1-sol:high:fast)
+           a pattern puts in every model it matches, as magpie models lists them now and later: a glob, where
+           * is any run of characters, / too, over the provider/model id in any case (openrouter/*:free,
+           *-free, opencode-zen/*), or re:<regexp> matching the whole id (re:openrouter/.*:(free|beta)).
+           Quote it for the shell. The group keeps the pattern, not its models: one the vendor adds joins,
+           one it drops leaves. The models you name come first, in your order, then those the patterns
+           match, in the order magpie models lists them; one both named and matched keeps its named place.
+           A pattern never matches a group. models-=<pattern> drops the pattern; magpie group <id> shows
+           how many models each matches now, and says when one matches nothing
   routing  smart   (default) of the subscriptions with quota to spare, the one renewing soonest first
            order   the first model until it can't answer, then the next
            rotate  each conversation's next turn goes to the next member's account or key
@@ -84,6 +92,7 @@ const groupUsage = `usage:
        magpie group set opus-anywhere effort=auto classifier=typesafe/jev-latest
        magpie group add Fast models=codex/gpt-5.6-luna:low,deepseek/deepseek-v4-flash,glm/glm-5.3-flash:high
        magpie group set fast models+=gcloud/gemini-3.8-flash:medium
+       magpie group add my-free-pool models='openrouter/*:free,opencode-zen/*-free' routing=order
        magpie group pick opus-anywhere copilot/claude-opus-5.5
        magpie claude group/opus-anywhere`
 
@@ -289,9 +298,21 @@ func editDistance(a, b string) int {
 // applyGroupPairs sets a group's fields from k=v pairs. id is taken only
 // where allowID (a new group's).
 func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (string, error), allowID bool) error {
+	// patterns typed among the models (#766) are kept apart: SaveGroup
+	// finds their models each time the group is read
+	var patterns []string
 	members := func(v string) ([]string, error) {
 		var out []string
+		patterns = nil
 		for _, m := range splitList(v) {
+			if provider.IsPattern(m) {
+				ps, err := provider.CleanPatterns([]string{m})
+				if err != nil {
+					return nil, err
+				}
+				patterns = append(patterns, ps...)
+				continue
+			}
 			id, err := resolve(m)
 			if err != nil {
 				return nil, err
@@ -317,19 +338,40 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 		case "name":
 			g.Name = v
 		case "models", "members", "model":
+			// the whole list, patterns too: what the old ones matched goes
 			g.Members, err = members(v)
+			g.Match, g.Matched = patterns, nil
 			g.Fast = nil // the list as typed: :fast on those sent fast
 		case "models+", "members+", "model+":
 			var add []string
 			if add, err = members(v); err == nil {
 				for _, id := range add {
+					if slices.Contains(g.Matched, id) {
+						// a pattern's model named: it has the place it is named at
+						g.Matched = slices.DeleteFunc(g.Matched, func(x string) bool { return x == id })
+						g.Members = slices.DeleteFunc(g.Members, func(x string) bool { return x == id })
+					}
 					if !slices.Contains(g.Members, id) {
 						g.Members = append(g.Members, id)
+					}
+				}
+				for _, p := range patterns {
+					if !slices.Contains(g.Match, p) {
+						g.Match = append(g.Match, p)
 					}
 				}
 			}
 		case "models-", "members-", "model-":
 			for _, m := range splitList(v) {
+				if provider.IsPattern(m) {
+					m = strings.TrimPrefix(strings.TrimSpace(m), "magpie/")
+					i := slices.Index(g.Match, m)
+					if i < 0 {
+						return fmt.Errorf("%s is not one of the group's patterns (%s)", m, orNone(g.Match))
+					}
+					g.Match = slices.Delete(g.Match, i, i+1)
+					continue
+				}
 				m, _ = provider.MemberFast(strings.TrimPrefix(m, "magpie/"))
 				i := slices.IndexFunc(g.Members, func(x string) bool { return strings.EqualFold(x, m) })
 				if i < 0 { // a bare model id, as models= takes it
@@ -340,6 +382,16 @@ func applyGroupPairs(g *provider.Group, pairs []string, resolve func(string) (st
 				}
 				if i < 0 {
 					return fmt.Errorf("%s is not in the group (its models: %s)", m, strings.Join(g.Members, ", "))
+				}
+				if x := g.Members[i]; slices.Contains(g.Matched, x) {
+					// taken out, the pattern would find it again
+					var by []string
+					for _, p := range g.Match {
+						if provider.PatternMatches(p, x) {
+							by = append(by, p)
+						}
+					}
+					return fmt.Errorf("%s is in the group by its pattern %s: change the pattern (models-=%s, then models+= what you want), or switch the model off in the Routing view", x, strings.Join(by, ", "), by[0])
 				}
 				g.Members = slices.Delete(g.Members, i, i+1)
 			}
@@ -587,8 +639,8 @@ func addGroup(name string, pairs []string) (provider.Group, error) {
 	if strings.TrimSpace(g.Name) == "" {
 		g.Name = g.ID
 	}
-	if len(g.Members) == 0 {
-		return g, fmt.Errorf("a group needs a model in it: models=<provider/model>[,…] (magpie models lists them)")
+	if len(g.Members) == 0 && len(g.Match) == 0 {
+		return g, fmt.Errorf("a group needs a model in it: models=<provider/model>[,…] (magpie models lists them), or a pattern: models='openrouter/*:free'")
 	}
 	if err := provider.SaveGroup(g); err != nil {
 		return g, err
@@ -608,7 +660,7 @@ func setGroup(ref string, pairs []string) (provider.Group, error) {
 	if err := applyGroupPairs(&g, pairs, memberResolver(g.Members), true); err != nil {
 		return g, err
 	}
-	if len(g.Members) == 0 {
+	if len(g.Members) == 0 && len(g.Match) == 0 {
 		return g, fmt.Errorf("a group needs a model in it; magpie group rm %s removes it", from)
 	}
 	pruneRules(&g)
@@ -830,6 +882,13 @@ func groups() error {
 				ms = append(ms, shown)
 			}
 		}
+		for _, h := range provider.PatternHits(g) {
+			if h.Models == 0 {
+				ms = append(ms, amber.Render(h.Pattern+" (matches nothing)"))
+			} else {
+				ms = append(ms, muted.Render(fmt.Sprintf("%s (%d)", h.Pattern, h.Models)))
+			}
+		}
 		r.members = strings.Join(ms, sep)
 		if !ready {
 			r.how += " " + amber.Render("no member ready")
@@ -892,11 +951,31 @@ func showGroup(g provider.Group) error {
 			if g.IsFast(id) {
 				l += " · fast"
 			}
+			if slices.Contains(g.Matched, id) {
+				l += " · by pattern"
+			}
 			line += muted.Render("  " + l)
 		} else {
 			line = faint.Render(line) + amber.Render("  not served now, skipped")
 		}
 		kv(k, line)
+	}
+	if len(g.Members) == 0 {
+		kv("models", faint.Render("none now"))
+	}
+	for i, h := range provider.PatternHits(g) {
+		k := ""
+		if i == 0 {
+			k = "patterns"
+		}
+		switch h.Models {
+		case 0:
+			kv(k, h.Pattern+amber.Render("  matches nothing now"))
+		case 1:
+			kv(k, h.Pattern+muted.Render("  1 model"))
+		default:
+			kv(k, h.Pattern+muted.Render(fmt.Sprintf("  %d models", h.Models)))
+		}
 	}
 	for i, r := range g.Rules {
 		k := ""

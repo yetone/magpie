@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -111,5 +112,28 @@ func TestRetryAfterRests(t *testing.T) {
 	r := rs[0].Tries[0].Rest
 	if r.By != "retry-after" || time.Until(r.Until).Round(time.Minute) != 5*time.Minute {
 		t.Fatalf("rest %+v", r)
+	}
+}
+
+// A route weighed with no seats tells its order as [], not null: the
+// Routing page reads it as a list, and a null one left a refused request
+// that couldn't be opened (Discord, mythfish on v0.1.810).
+func TestTraceOrderIsAList(t *testing.T) {
+	s := New()
+	r := s.trace.begin(Route{Model: "workbuddy-ai/deepseek-v4.1-flash"})
+	s.trace.update(r, func(r *Route) {
+		r.Tries = append(r.Tries, Try{ID: "workbuddy-ai", Status: 400, Error: "WorkBuddy AI: Invalid request parameters"})
+		r.Status, r.Error, r.Done = 400, "WorkBuddy AI: Invalid request parameters", true
+	})
+	st := s.Trace(context.Background(), 0, 0)
+	b, err := json.Marshal(st.Routes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"order":[]`) || strings.Contains(string(b), `"order":null`) {
+		t.Fatalf("trace routes = %s, want order []", b)
+	}
+	if _, c := s.trace.sessionLatest(context.Background(), "", 0, 0); c == nil || c.Order == nil {
+		t.Fatalf("session's latest route = %+v, want a non-nil order", c)
 	}
 }

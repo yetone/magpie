@@ -98,7 +98,7 @@ func TestSummarizeKeepsMovedAccountTogether(t *testing.T) {
 	y, m, d := time.Now().Date()
 	now := time.Date(y, m, d, 12, 0, 0, 0, time.Local)
 	recs := []Record{
-		{Time: now.Add(-3 * time.Hour), Provider: "kiro", Host: "dee@example.com", Model: "m", Input: 100},      // the built-in
+		{Time: now.Add(-3 * time.Hour), Provider: "kiro", Host: "dee@example.com", Model: "m", Input: 100},        // the built-in
 		{Time: now.Add(-2 * time.Hour), Provider: "kiro", Host: "kiro as dee@example.com", Model: "m", Input: 10}, // its plugin
 		{Time: now.Add(-1 * time.Hour), Provider: "kiro", Host: "q.us-east-1.amazonaws.com as dee@example.com", Model: "m", Input: 1},
 		{Time: now.Add(-1 * time.Hour), Provider: "kiro", Host: "kiro as bo@example.com", Model: "m", Input: 7}, // another account
@@ -155,6 +155,50 @@ func TestSummarizeTimesFirstTokens(t *testing.T) {
 	b, _ := json.Marshal(Record{Time: at, Provider: "p", Model: "m", Millis: 5})
 	if strings.Contains(string(b), "ttft") || strings.Contains(string(b), "first_text") {
 		t.Fatalf("untimed record: %s", b)
+	}
+}
+
+// A reply that came in one burst at its end tells no speed (#731): the
+// reporter's Gemini turn, one write tool call of 8264 tokens whose first
+// content came 1 ms before the end, read 8,264,000 tok/s and lifted the
+// summed speed of three calls from 100 tok/s to 616. Its TTFT still
+// counts; ordinary replies are timed as before, ledger rows alike.
+func TestBurstTellsNoSpeed(t *testing.T) {
+	now := time.Date(2026, 10, 2, 15, 30, 0, 0, time.UTC)
+	at := now.Add(-time.Hour)
+	recs := []Record{
+		{Time: at, Provider: "antigravity", Model: "gemini-3.8-flash", Input: 4087, CacheRead: 97505, Output: 8264, Millis: 24360, TTFT: 24359, Status: 200},
+		{Time: at, Provider: "antigravity", Model: "gemini-3.8-flash", Output: 1200, Millis: 15000, TTFT: 3000, Status: 200}, // 100 tok/s
+		{Time: at, Provider: "antigravity", Model: "gemini-3.8-flash", Output: 400, Millis: 6000, TTFT: 2000, Status: 200},   // 100 tok/s
+	}
+	m := summarize(Today, now, recs).Models[0]
+	if m.Timed != 3 || m.MeanTTFT() != (24359+3000+2000)/3 || m.DecodeMs != 16000 || m.DecodeOut != 1600 || m.Speed() != 100 {
+		t.Fatalf("model: %+v, %v tok/s", m.Totals, m.Speed())
+	}
+	var rows Totals
+	for _, r := range recs {
+		rows.addRow(Row{Record: r})
+	}
+	if rows.Timed != 3 || rows.DecodeMs != 16000 || rows.DecodeOut != 1600 || rows.Speed() != 100 {
+		t.Fatalf("rows: %+v", rows)
+	}
+	for _, c := range []struct {
+		out      int
+		ms, ttft int64
+		want     int64
+	}{
+		{8264, 24360, 24359, 0}, // the report: 1 ms
+		{8264, 24360, 24360, 0}, // none at all
+		{3, 1050, 1000, 0},      // under 100 ms: too short to time
+		{8264, 1500, 1000, 0},   // 500 ms, 16,528 tok/s: a burst all the same
+		{100, 3000, 1000, 2000}, // 50 tok/s
+		{1000, 1100, 1000, 100}, // 10,000 tok/s over 100 ms, the bounds
+		{0, 3000, 1000, 0},      // wrote nothing
+		{100, 3000, 0, 0},       // not streamed
+	} {
+		if got := DecodeWindow(c.out, c.ms, c.ttft); got != c.want {
+			t.Errorf("DecodeWindow(%d, %d, %d) = %d, want %d", c.out, c.ms, c.ttft, got, c.want)
+		}
 	}
 }
 

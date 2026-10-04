@@ -128,27 +128,41 @@
   }
 
   // magpie's screenshots as magpie draws itself on Omarchy: its own windows
-  // shot in tokyo-night (dark) and catppuccin-latte (light), in place of the
-  // page's, as wide as before; shots not taken there keep the page's
+  // shot in each of Omarchy's themes (/img/omarchy/<theme>/), in place of the
+  // page's, as wide as before, and shot again as the theme turns; a theme of
+  // the reader's own takes Omarchy's default for its light or dark; shots not
+  // taken there keep the page's
   const SHOTS = {
     "add": [2016, 1600], "agents": [2080, 1078], "import": [1280, 1120], "panel": [880, 1000], "picker": [880, 1320],
-    "providers": [2080, 1004], "routing": [2080, 1666], "routing-zh": [2080, 1592], "usage": [2080, 1004],
-    "nested-routing": [2080, 1434], "nested-routing-zh": [2080, 1362], "intent-rules": [2012, 2150], "intent-rules-zh": [2012, 2088],
+    "providers": [2080, 1004], "routing": [2080, 1666], "routing-zh": [2080, 1592], "routing-ja": [2080, 1630], "agents-ja": [2080, 1344], "usage": [2080, 1004],
+    "nested-routing": [2080, 1434], "nested-routing-zh": [2080, 1362], "nested-routing-ja": [2080, 1470], "intent-rules": [2012, 2150], "intent-rules-zh": [2012, 2088], "intent-rules-ja": [2012, 2536],
     "intent-routing-hit": [2080, 1220], "intent-routing-hit-zh": [2080, 1112], "intent-trace": [2016, 964], "intent-trace-zh": [2016, 892],
   };
+  // shot in Chinese and in Japanese too (-zh, -ja)
   const ZH = new Set(["add", "agents", "import", "routing", "usage", "nested-routing", "intent-rules", "intent-routing-hit", "intent-trace"]);
-  let shot = false;
   function shots() {
-    if (shot) return;
+    if (!cur) return;
     if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", shots, { once: true }); return; }
-    shot = true;
-    for (const img of document.querySelectorAll('img[src^="/img/"]')) {
-      const m = img.getAttribute("src").match(/^\/img\/([a-z]+(?:-[a-z]+)*?)(-zh)?-(dark|light)\.png$/);
+    const set = THEMES[cur.name] ? cur.name : GUESS[cur.mode];
+    for (const img of document.querySelectorAll('img[src^="/img/"], img[data-om-src]')) {
+      const was = img.dataset.omSrc || img.getAttribute("src");
+      const m = was.match(/^\/img\/([a-z]+(?:-[a-z]+)*?)(-zh|-ja)?-(dark|light)\.png$/);
       if (!m || !SHOTS[m[1]] || (m[2] && !ZH.has(m[1]))) continue;
-      const [w, h] = SHOTS[m[1] + (m[2] || "")] || SHOTS[m[1]];
-      const width = +img.getAttribute("width");
-      if (width) img.setAttribute("height", Math.round((width * h) / w));
-      img.src = `/img/omarchy/${m[1]}${m[2] || ""}-${m[3]}.png`;
+      const src = `/img/omarchy/${set}/${m[1]}${m[2] || ""}.webp`;
+      if (!img.dataset.omSrc) {
+        img.dataset.omSrc = was;
+        const [w, h] = SHOTS[m[1] + (m[2] || "")] || SHOTS[m[1]];
+        const width = +img.getAttribute("width");
+        if (width) img.setAttribute("height", Math.round((width * h) / w));
+        img.src = src;
+      } else {
+        // the shot shown until the next one is in, not a blank
+        img.dataset.omWant = src;
+        if (img.getAttribute("src") === src) continue;
+        const next = new Image();
+        next.onload = () => { if (img.dataset.omWant === src) img.src = src; };
+        next.src = src;
+      }
     }
   }
   // the page's own light/dark switch follows the system; Omarchy's mode wins

@@ -98,15 +98,30 @@ func (g Group) Live() Group {
 
 // Group is a routing group.
 type Group struct {
-	ID       string   `json:"id"`
-	Name     string   `json:"name"`
-	Members  []string `json:"members"`            // "provider/model[:effort]" or "group/<id>", in order (see MemberEffort)
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Members []string `json:"members"` // "provider/model[:effort]" or "group/<id>", in order (see MemberEffort)
+	// Match are patterns its models are found by as well (#766): a glob
+	// over the "provider/model" id with * in it ("openrouter/*:free"), or
+	// a regular expression after "re:". Kept apart from Members, so the
+	// group follows the catalog: read, it has the models they match now
+	// after those it names (see withMatches).
+	Match []string `json:"match,omitempty"`
+	// Matched are the members the patterns match now, as Members has them
+	// after its own. Derived each time the group is read, never stored.
+	Matched  []string `json:"matched,omitempty"`
 	Routing  string   `json:"routing,omitempty"`  // as Provider.Routing, over all the members' keys and accounts; or Manual
 	Affinity string   `json:"affinity,omitempty"` // as Provider.Affinity
 	// Sink is Provider.Sink over the group's members' accounts and keys
 	// together: one rate limited with quota left goes behind every other
 	// member's. Not for "rotate" or Manual.
 	Sink bool `json:"sink,omitempty"`
+	// FirstToken is how many seconds a member's streamed reply may take to
+	// its first content — text, reasoning or a tool call — before the next
+	// member is asked instead, nothing of it having reached the agent; 0
+	// waits as long as it takes. The last one left is always waited for,
+	// and the slow one doesn't rest.
+	FirstToken int `json:"firstToken,omitempty"`
 	// Off are the members switched off: kept where they are in the
 	// order, with their rules, but sent nothing until switched on again,
 	// so trying a group without one doesn't mean taking it out.
@@ -195,7 +210,9 @@ func (m Member) Below(depth int) Member {
 const maxNest = 8
 
 // Groups lists the user's groups, then those magpie found, hidden ones
-// too (marked so).
+// too (marked so), in the order the user put them in (SetGroupOrder) where
+// they did: the Routing page, the gateway's model list, the CLI and the
+// TUI all list them so.
 func Groups() []Group {
 	return groupsIn(providerEntries())
 }
@@ -209,10 +226,10 @@ func groupsIn(entries []Entry) []Group {
 			hidden[g.ID] = true
 			continue
 		}
-		out = append(out, g)
+		out = append(out, withMatches(entries, g))
 	}
 	if f.NoAutoGroups {
-		return out
+		return orderedGroups(out, f.GroupOrder)
 	}
 	for _, g := range autoGroups(entries, settings.Load().ModelSameAs) {
 		if slices.ContainsFunc(out, func(o Group) bool { return o.ID == g.ID }) {
@@ -221,7 +238,7 @@ func groupsIn(entries []Entry) []Group {
 		g.Hidden = hidden[g.ID]
 		out = append(out, g)
 	}
-	return out
+	return orderedGroups(out, f.GroupOrder)
 }
 
 // AutoGroupsOn reports whether magpie finds groups on its own: a model
@@ -527,7 +544,7 @@ func groupEntries(entries []Entry) []Entry {
 		if len(ms) == 0 {
 			continue
 		}
-		e := Entry{ID: GroupPrefix + g.ID, Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Images: true, Reasoning: true}
+		e := Entry{ID: GroupPrefix + g.ID, Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Reasoning: true}
 		var fixed []string // the efforts members are fixed at
 		levelled := false  // a member that follows the agent's effort was met
 		// Codex's ultra (max, with Codex handing parts of the task to agents
@@ -556,7 +573,12 @@ func groupEntries(entries []Entry) []Entry {
 			if output > 0 && (e.Output == 0 || output < e.Output) {
 				e.Output = output
 			}
-			e.Images = e.Images && images
+			// it takes images when a member does: the gateway sends a
+			// request with an image to the members that see it, and the
+			// rest are given it described or without it (#756: an auto
+			// group of DeepSeek V4.1 Flash with a text-only member in it
+			// turned every image away, though its other members see)
+			e.Images = e.Images || images
 			// the window agents are told is the largest a member has:
 			// a conversation too long for one member goes on to a member
 			// with room for it (#700, withRoom in the gateway), so the
@@ -569,7 +591,7 @@ func groupEntries(entries []Entry) []Entry {
 			if i == 0 {
 				e.ImageInput = imageInput
 			} else {
-				e.ImageInput = sharedImageInput(e.ImageInput, imageInput)
+				e.ImageInput = anyImageInput(e.ImageInput, imageInput)
 			}
 			// a group in the group that names its own levels offers them for
 			// its models (the outermost that does)
@@ -664,15 +686,28 @@ func SaveGroup(g Group) error {
 	if g.Name == "" {
 		g.Name = g.ID
 	}
-	g.Members = cleanList(g.Members)
-	if len(g.Members) == 0 {
-		return errors.New("a group needs a model in it")
+	g.FirstToken = max(g.FirstToken, 0)
+	// the members it names and its patterns, without what the patterns
+	// matched when it was read: those are found again below, and stored
+	// never
+	members, match := ownMembers(g)
+	g.Members, g.Matched = cleanList(members), nil
+	var err error
+	if g.Match, err = CleanPatterns(match); err != nil {
+		return err
+	}
+	if len(g.Members) == 0 && len(g.Match) == 0 {
+		return errors.New("a group needs a model in it, or a pattern its models match")
 	}
 	f, err := read()
 	if err != nil {
 		return err
 	}
 	entries := providerEntries()
+	// checked with what its patterns match now, so that a rule, a pick, a
+	// fast or an off member may name one of those
+	named := len(g.Members)
+	g.Members = append(g.Members, matchesIn(entries, g)...)
 	if err := cleanFast(entries, &g); err != nil {
 		return err
 	}
@@ -682,7 +717,8 @@ func SaveGroup(g Group) error {
 		}
 		g.Members[i] = cleanMember(entries, m)
 	}
-	g.Members = cleanList(g.Members)
+	own := cleanList(g.Members[:named])
+	g.Members = append(slices.Clone(own), slices.DeleteFunc(cleanList(g.Members[named:]), func(m string) bool { return slices.Contains(own, m) })...)
 	var off []string
 	for _, m := range cleanList(g.Off) {
 		if m = cleanMember(entries, m); slices.Contains(g.Members, m) && !slices.Contains(off, m) {
@@ -690,7 +726,7 @@ func SaveGroup(g Group) error {
 		}
 	}
 	g.Off = off
-	if g.Routing != Manual && len(g.Off) == len(g.Members) {
+	if g.Routing != Manual && len(g.Members) > 0 && len(g.Off) == len(g.Members) {
 		return fmt.Errorf("every model in %s is switched off: switch one on, or it has nothing to send to", g.Name)
 	}
 	for i := range g.Rules {
@@ -716,7 +752,7 @@ func SaveGroup(g Group) error {
 	if !slices.Contains(g.Members, g.Pick) {
 		g.Pick = "" // taken out of the group: its first, when manual
 	}
-	if g.Routing == Manual && g.Pick == "" {
+	if g.Routing == Manual && g.Pick == "" && len(g.Members) > 0 {
 		g.Pick = g.Members[0]
 	}
 	rules, err := cleanRules(g.Rules, g.Members)
@@ -752,6 +788,7 @@ func SaveGroup(g Group) error {
 		}
 	}
 	g.Auto, g.Hidden = false, false
+	g.Members = own // what the patterns match is found again as it is read
 	for i := range f.Groups {
 		if f.Groups[i].ID == g.ID {
 			f.Groups[i] = g
@@ -955,6 +992,11 @@ func RenameGroup(from, to string) error {
 		f.Groups = append(f.Groups, Group{ID: from, Hidden: true})
 	}
 	f.Groups = append(f.Groups, g)
+	// renamed, it keeps its place in the order the user put the groups in
+	if i := slices.Index(f.GroupOrder, from); i >= 0 {
+		f.GroupOrder = slices.Clone(f.GroupOrder)
+		f.GroupOrder[i] = to
+	}
 	old, now := GroupPrefix+from, GroupPrefix+to
 	for i := range f.Groups {
 		for j, m := range f.Groups[i].Members {
