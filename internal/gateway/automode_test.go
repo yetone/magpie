@@ -1,16 +1,23 @@
 package gateway
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/wslrun"
 )
 
 // autoModeAsk is Claude Code's auto mode classifier's first stage as it
@@ -251,5 +258,271 @@ done
 		if !strings.Contains(" "+r+" ", " --thinking disabled ") {
 			t.Errorf("run thinks: %s", r)
 		}
+	}
+}
+
+// The subscription bridge keeps the API's verdict opaque, including a denial,
+// skipped/unavailable calls and future fields. Missing results stay missing.
+func TestClaudeBridgeSafeguardResults(t *testing.T) {
+	for _, verdict := range []string{
+		`[{"type":"dangerous_tool_use","status":{"type":"available","tool_uses":{"toolu_client":{"type":"evaluated","outcome":"flagged","explanation":"dangerous"}}},"future":{"x":1}}]`,
+		`[{"type":"dangerous_tool_use","status":{"type":"available","tool_uses":{"toolu_client":{"type":"evaluated","outcome":"not_flagged"}}}}]`,
+		`[{"type":"dangerous_tool_use","status":{"type":"available","tool_uses":{"toolu_client":{"type":"skipped"}}}}]`,
+		`[{"type":"dangerous_tool_use","status":{"type":"unavailable","reason":"error"}}]`,
+		`[{"type":"future_check","status":{"type":"unknown"}}]`,
+		`null`,
+	} {
+		for _, whole := range []bool{false, true} {
+			name := "stream "
+			if whole {
+				name = "whole "
+			}
+			t.Run(name+verdict, func(t *testing.T) {
+				ch := make(chan Event, 16)
+				run := &subscriptionRun{segment: ch}
+				delta := map[string]any{"stop_reason": "tool_use"}
+				if verdict != "null" {
+					delta["safeguard_results"] = json.RawMessage(verdict)
+				}
+				d, _ := json.Marshal(map[string]any{"type": "stream_event", "event": map[string]any{"type": "message_delta", "delta": delta}})
+				lines := []string{
+					`{"type":"stream_event","event":{"type":"message_start","message":{"id":"msg_client","model":"claude-sonnet-5"}}}`,
+					`{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_client","name":"mcp__magpie__Bash"}}}`,
+					string(d),
+					`{"type":"stream_event","event":{"type":"message_stop"}}`,
+				}
+				if whole {
+					message := map[string]any{"id": "msg_whole", "model": "claude-sonnet-5", "stop_reason": "tool_use",
+						"content": []any{map[string]any{"type": "tool_use", "id": "toolu_client", "name": "mcp__magpie__Bash", "input": map[string]any{}}}}
+					if verdict != "null" {
+						message["safeguard_results"] = json.RawMessage(verdict)
+					}
+					d, _ := json.Marshal(map[string]any{"type": "assistant", "message": message})
+					lines = append(append([]string{}, cutAttempt...), string(d))
+				}
+				run.readOutput(strings.NewReader(strings.Join(lines, "\n")))
+				rec := httptest.NewRecorder()
+				enc := encoder(provider.Anthropic, newSSEWriter(rec), &Request{Model: "claude-sonnet-5"})
+				var col collector
+				for e := range ch {
+					enc.event(e)
+					col.add(e)
+				}
+				enc.finish()
+				result := col.finish()
+				var response map[string]any
+				json.Unmarshal(renderAnthropic(result, "claude-sonnet-5"), &response)
+				for _, e := range events(rec.Body.String()) {
+					if e["type"] == "message_delta" {
+						delta := e["delta"].(map[string]any)
+						actual, _ := json.Marshal(delta["safeguard_results"])
+						var wantValue any
+						json.Unmarshal([]byte(verdict), &wantValue)
+						want, _ := json.Marshal(wantValue)
+						if string(actual) != string(want) {
+							t.Fatalf("stream verdict changed: %s != %s", actual, want)
+						}
+					}
+				}
+				actual, _ := json.Marshal(response["safeguard_results"])
+				var wantValue any
+				json.Unmarshal([]byte(verdict), &wantValue)
+				want, _ := json.Marshal(wantValue)
+				if string(actual) != string(want) {
+					t.Fatalf("non-stream verdict changed: %s != %s", actual, want)
+				}
+				if !strings.Contains(rec.Body.String(), `"id":"toolu_client"`) || !strings.Contains(string(renderAnthropic(result, "claude-sonnet-5")), `"id":"toolu_client"`) {
+					t.Fatal("tool ID changed")
+				}
+			})
+		}
+	}
+}
+
+// Exercise the actual subprocess/control wire: changed and removed contexts
+// reach an existing run; a rejected update restarts it with the new context.
+func TestClaudeBridgeSafeguardContextUpdates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a Python script stands in for Claude Code")
+	}
+	t.Setenv("TMPDIR", t.TempDir())
+	dir := t.TempDir()
+	script := `#!/usr/bin/env python3
+import json,os,sys
+body=json.loads(os.environ.get('CLAUDE_CODE_EXTRA_BODY','{}'))
+effort=sys.argv[sys.argv.index('--effort')+1] if '--effort' in sys.argv else ''
+effort_id=''
+turns=0
+def send(x): print(json.dumps(x),flush=True)
+for line in sys.stdin:
+ x=json.loads(line)
+ if x['type']=='control_request':
+  if x['request']['subtype']=='initialize':
+   send({'type':'control_response','response':{'request_id':x['request_id'],'subtype':'success'}})
+   continue
+  settings=x['request']['settings']
+  if 'effortLevel' in settings:
+   effort=settings['effortLevel']
+   effort_id=x['request_id']
+   continue
+  if effort_id:
+   send({'type':'control_response','response':{'request_id':effort_id,'subtype':'success'}})
+  fresh=json.loads(x['request']['settings']['env']['CLAUDE_CODE_EXTRA_BODY'])
+  rejected=turns>0 and 'reject' in json.dumps(fresh)
+  if not rejected:body=fresh
+  send({'type':'control_response','response':{'request_id':'unrelated','subtype':'success'}})
+  send({'type':'control_response','response':{'request_id':x['request_id'],'subtype':'error' if rejected else 'success','error':'probe rejected'}})
+  continue
+ turns+=1
+ send({'type':'stream_event','event':{'type':'message_start','message':{'id':'m','model':'claude-sonnet-5'}}})
+ text=str(os.getpid())+' '+effort+' '+json.dumps(body,sort_keys=True)
+ send({'type':'stream_event','event':{'type':'content_block_delta','index':0,'delta':{'type':'text_delta','text':text}}})
+ send({'type':'stream_event','event':{'type':'message_delta','delta':{'stop_reason':'end_turn'}}})
+ send({'type':'stream_event','event':{'type':'message_stop'}})
+`
+	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("CLAUDE_CODE_EXTRA_BODY", `{"model":"must-not-leak"}`)
+	s := New()
+	t.Cleanup(s.subscription.abortAll)
+	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
+	messages := []map[string]any{{"role": "assistant", "content": "seed"}, {"role": "user", "content": "hi"}}
+	var pid string
+	for i, context := range []string{"first", "second", "", "third", "reject"} {
+		b := map[string]any{"model": "claude-sonnet-5", "max_tokens": 64, "stream": false, "messages": messages}
+		effort := []string{"high", "low"}[i%2]
+		b["thinking"] = map[string]any{"type": "adaptive"}
+		b["output_config"] = map[string]any{"effort": effort}
+		if context != "" {
+			b["safeguards"] = []any{map[string]any{"type": "dangerous_tool_use", "classifier_context": map[string]any{"marker": context, "future": []int{1, 2}}}}
+		}
+		body, _ := json.Marshal(b)
+		req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(string(body)))
+		req.Header.Set("anthropic-beta", "claude-code-20250219,dangerous-tool-use-2026-09-03")
+		rec := httptest.NewRecorder()
+		var usage Usage
+		if code, msg := s.serveClaudeSubscription(rec, req, provider.Anthropic, p, "claude-sonnet-5", body, &usage); code != 200 {
+			t.Fatalf("%d %s", code, msg)
+		}
+		var a struct {
+			Content []struct {
+				Text string `json:"text"`
+			} `json:"content"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil || len(a.Content) != 1 {
+			t.Fatalf("bad reply %s", rec.Body)
+		}
+		text := a.Content[0].Text
+		parts := strings.SplitN(text, " ", 3)
+		if len(parts) != 3 {
+			t.Fatalf("no pid/context: %s", text)
+		}
+		if parts[1] != effort {
+			t.Fatalf("stale effort: %s, want %s", parts[1], effort)
+		}
+		if pid != "" && (parts[0] == pid) == (context == "reject") {
+			t.Fatalf("wrong reuse for %q: %s => %s", context, pid, parts[0])
+		}
+		pid = parts[0]
+		var extra map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(parts[2]), &extra); err != nil {
+			t.Fatal(err)
+		}
+		expected := safeguardBody(nil)
+		if v := b["safeguards"]; v != nil {
+			raw, _ := json.Marshal(v)
+			expected = safeguardBody(raw)
+		}
+		got, _ := json.Marshal(extra)
+		if string(got) != expected {
+			t.Fatalf("stale/modified context: %s != %s", got, expected)
+		}
+		messages = append(messages, map[string]any{"role": "assistant", "content": text}, map[string]any{"role": "user", "content": "next"})
+	}
+}
+
+// The beta must reach a Claude Code running in WSL as well as a native run.
+func TestClaudeBridgeSafeguardWSLEnv(t *testing.T) {
+	cli := claudeCLI{wsl: &wslrun.Tool{}}
+	env := cli.env([]string{"ANTHROPIC_BETAS=dangerous-tool-use-2026-09-03"}, "")
+	if !slices.Contains(env, "ANTHROPIC_BETAS=dangerous-tool-use-2026-09-03") ||
+		!slices.Contains(env, "WSLENV=ANTHROPIC_BETAS") {
+		t.Fatalf("safety beta not forwarded to WSL: %v", env)
+	}
+}
+
+// A context update and its tool-result handoff own the run together, through
+// the reply's end. Another caller cannot update it or abort its owner.
+func TestClaudeBridgeSafeguardConcurrentHandoff(t *testing.T) {
+	s := New()
+	b := s.subscription
+	input, stdin := io.Pipe()
+	stdout, output := io.Pipe()
+	run := &subscriptionRun{bridge: b, token: "tok", stdin: stdin, safeguardBeta: "dangerous-tool-use-2026-09-03",
+		pending: map[string]chan mcpToolResult{"a": make(chan mcpToolResult, 1), "b": make(chan mcpToolResult, 1)}}
+	b.runs[run.token], b.calls["a"], b.calls["b"] = run, run, run
+	t.Cleanup(func() { b.abortAll(); stdin.Close(); input.Close(); output.Close(); stdout.Close() })
+	go run.readOutput(stdout)
+	go func() {
+		scanner := bufio.NewScanner(input)
+		for scanner.Scan() {
+			var ctl struct {
+				RequestID string `json:"request_id"`
+			}
+			if json.Unmarshal(scanner.Bytes(), &ctl) == nil {
+				fmt.Fprintf(output, "{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":%q}}\n", ctl.RequestID)
+			}
+		}
+	}()
+	req := &Request{SafeguardBeta: run.safeguardBeta, Safeguards: json.RawMessage(`[{"context":"A"}]`),
+		Messages: []Message{{Role: "assistant"}, {Role: "user", Parts: []Part{{Kind: ToolResult, CallID: "a", Text: "A"}}}}}
+	found, results := b.findRun(req)
+	if found != run || !found.claimResume() {
+		t.Fatal("first claim failed")
+	}
+	if err := run.setSafeguards(req); err != nil {
+		t.Fatal(err)
+	}
+	run.endSegment() // a late end with no attached segment cannot release A
+	// B arrives after A's ACK and before its handoff, then again while A's
+	// reply is active, using another call that still maps to the same run.
+	blocked := func(id string) {
+		t.Helper()
+		body := []byte(`{"model":"claude-sonnet-5","max_tokens":64,"safeguards":[{"context":"B"}],"messages":[{"role":"assistant","content":"call"},{"role":"user","content":[{"type":"tool_result","tool_use_id":"` + id + `","content":"B"}]}]}`)
+		done := make(chan int, 1)
+		go func() {
+			rec := httptest.NewRecorder()
+			code, _ := s.serveSubscription(rec, httptest.NewRequest("POST", "/v1/messages", nil), provider.Anthropic, "Claude Code", req.Model, body, &Usage{},
+				func(context.Context, *Request) (*subscriptionRun, <-chan Event, error) {
+					return nil, nil, fmt.Errorf("must not start another run")
+				})
+			done <- code
+		}()
+		select {
+		case code := <-done:
+			if code != 409 || run.closed || string(run.safeguards) != string(req.Safeguards) {
+				t.Fatalf("second caller: status %d, closed %v, context %s", code, run.closed, run.safeguards)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("second caller did not reject the claimed run")
+		}
+	}
+	blocked("a")
+	waiter := run.pending["a"]
+	segment, err := run.continueWith(results, nil)
+	if err != nil || (<-waiter).Content[0]["text"] != "A" {
+		t.Fatalf("first handoff: %v", err)
+	}
+	blocked("b")
+	fmt.Fprintln(output, `{"type":"stream_event","event":{"type":"message_start","message":{"id":"m"}}}`)
+	fmt.Fprintln(output, `{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"tool_use"}}}`)
+	fmt.Fprintln(output, `{"type":"stream_event","event":{"type":"message_stop"}}`)
+	for range segment {
+	}
+	req.Messages[1].Parts[0].CallID = "b"
+	if next, _ := b.findRun(req); next != run || !next.claimResume() {
+		t.Fatal("claim not released at segment end")
 	}
 }

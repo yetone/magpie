@@ -1422,6 +1422,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				attemptBody, _ = textOnlyBody(from, body) // omit images in prior turns and tool results
 			}
 		}
+		// a group tells agents the longest reply a member of it gives
+		// (groupEntries); each member is asked for no more than its own
+		if isGroup {
+			if n := outputLimit(c.p, c.model); n > 0 {
+				attemptBody = withMaxOutput(from, attemptBody, n)
+			}
+		}
 		picked := false // the effort asked for in place of the agent's
 		// a member fixed at an effort (#189), else the model asked for at
 		// one (#536)

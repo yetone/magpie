@@ -570,7 +570,13 @@ func groupEntries(entries []Entry) []Entry {
 				}
 			}
 			e.Reasoning = e.Reasoning && thinks
-			if output > 0 && (e.Output == 0 || output < e.Output) {
+			// the reply agents are told is the longest a member gives: the
+			// gateway asks each member for no more than its own
+			// (withMaxOutput), so the members that write long replies aren't
+			// cut at the shortest one's (ARNO on Discord: a group's
+			// maxTokens was its smallest member's, and agents' replies were
+			// "truncated before completion")
+			if output > e.Output {
 				e.Output = output
 			}
 			// it takes images when a member does: the gateway sends a

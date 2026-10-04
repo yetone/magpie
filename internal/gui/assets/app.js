@@ -57,6 +57,7 @@ let importingApps = null; // the Import from other apps dialog: { sources, picks
 let flavor = params.get("flavor") || localStorage.getItem("magpie.flavor") || "openai"; // which API the snippets speak
 let lang = params.get("lang") || localStorage.getItem("magpie.lang") || "shell";        // which snippet
 let exampleModel = localStorage.getItem("magpie.model") || "";  // the model in the snippets
+let decideModel = localStorage.getItem("magpie.decideModel") || ""; // the System One snippets' decision model
 let connectFolded = false; // Connect folded away under its heading
 try { connectFolded = localStorage.getItem("magpie.gwConnectFolded") === "1"; } catch {}
 const expandedCalls = new Set(); // recent-call ids whose wire bodies are open
@@ -4411,7 +4412,7 @@ function accountPlan(a) {
 
 // ---------- gateway view ----------
 //
-// The gateway is one local endpoint speaking four APIs; this tab is the
+// The gateway is one local endpoint speaking five APIs; this tab is the
 // page that gets anything else connected to it: base URL, key, model ids,
 // and a snippet in whichever language the reader is holding.
 
@@ -4552,7 +4553,7 @@ function renderGateway() {
   if (older) {
     who.append(name, el("div", "sub old", t("Agents' requests go through magpie {v} and are sent as it sends them, without this version's fixes. Quit that magpie (a magpie serve, another copy) and this one takes the gateway over within 15 seconds.", { v: g.version })));
   } else who.append(name, el("div", "sub", g.running
-    ? [t(g.models === 1 ? "{n} model" : "{n} models", { n: g.models }), n ? t(n === 1 ? "{n} agent routed through it" : "{n} agents routed through it", { n }) : t("no agent routed through it yet"), t("four APIs, one URL")].join(" · ")
+    ? [t(g.models === 1 ? "{n} model" : "{n} models", { n: g.models }), n ? t(n === 1 ? "{n} agent routed through it" : "{n} agents routed through it", { n }) : t("no agent routed through it yet"), t("five APIs, one URL")].join(" · ")
     : t("start it with magpie serve, or open magpie at login")));
   const url = el("button", "url");
   url.append(el("code", "", g.url));
@@ -4647,6 +4648,45 @@ const ai = new GoogleGenAI({
 const r = await ai.models.generateContent({ model: "${m}", contents: "hi" });
 console.log(r.text);`,
   },
+  // magpie's own System One API (ARNO on Discord: gateway添加system one
+  // api 有想法吗): a decision model — Jev, Clef, Bailian's — answers typed
+  // questions about a state; no SDK speaks it, so no shell variables
+  systemone: {
+    name: "System One", base: (u) => u + "/v1", decide: true,
+    note: "TypeSafe's decision API: a Jev or Clef model answers typed questions (choice, noul, score) about a state, with how sure it is. Clef also reads images: add \"images\": [\"data:image/png;base64,…\"].",
+    curl: (b, m, k = "magpie") => ({ url: `${b}/systemone`, headers: [`Authorization: Bearer ${k}`],
+      body: `{"model": "${m}",\n "state": {"message": "My order never arrived, refund it"},\n "questions": {"team": {"type": "choice",\n   "instructions": "Which team should answer the message?",\n   "criteria": {"billing": "Payments and refunds", "shipping": "Deliveries", "other": "Anything else"}}}}` }),
+    python: (b, m, k = "magpie") => `import requests
+
+r = requests.post("${b}/systemone",
+    headers={"Authorization": "Bearer ${k}"},
+    json={
+        "model": "${m}",
+        "state": {"message": "My order never arrived, refund it"},
+        "questions": {"team": {
+            "type": "choice",
+            "instructions": "Which team should answer the message?",
+            "criteria": {"billing": "Payments and refunds", "shipping": "Deliveries", "other": "Anything else"},
+        }},
+    })
+a = r.json()["answers"]["team"]
+print(a["choice"], a["confidence"])`,
+    node: (b, m, k = "magpie") => `const r = await fetch("${b}/systemone", {
+  method: "POST",
+  headers: { Authorization: "Bearer ${k}", "Content-Type": "application/json" },
+  body: JSON.stringify({
+    model: "${m}",
+    state: { message: "My order never arrived, refund it" },
+    questions: { team: {
+      type: "choice",
+      instructions: "Which team should answer the message?",
+      criteria: { billing: "Payments and refunds", shipping: "Deliveries", other: "Anything else" },
+    } },
+  }),
+});
+const a = (await r.json()).answers.team;
+console.log(a.choice, a.confidence);`,
+  },
 };
 // Windows gets PowerShell: $env: in place of export, and the curl.exe that
 // ships with it (plain curl there is Invoke-WebRequest). The body goes in
@@ -4663,6 +4703,9 @@ function curlSnippet({ url, headers, body }) {
 function envSnippet(vars) {
   return vars.map(([k, v]) => (WIN ? `$env:${k}="${v}"` : `export ${k}=${v}`)).join("\n");
 }
+
+// a decision model on the list: one only System One asks, never an agent
+const decideEntry = (m) => !m.group && !!m.provider?.id && decidesModel(m.provider, m.id.slice(m.provider.id.length + 1));
 
 // every exposed model, as the ids agents use
 function gatewayModels() {
@@ -4746,10 +4789,20 @@ function renderConnect() {
   const g = providers.gateway;
   const box = $("#connect");
   box.replaceChildren();
-  const models = gatewayModels();
-  if (!models.some((m) => m.id === exampleModel)) exampleModel = models[0]?.id || "";
-  const model = exampleModel || "provider/model";
   const f = FLAVORS[flavor] || FLAVORS.openai;
+  // System One's snippets take a decision model, the others any other
+  const models = gatewayModels().filter((m) => decideEntry(m) === !!f.decide);
+  let model;
+  if (f.decide) {
+    if (!models.some((m) => m.id === decideModel)) decideModel = models[0]?.id || "";
+    model = decideModel || "provider/jev-latest";
+  } else {
+    if (!models.some((m) => m.id === exampleModel)) exampleModel = models[0]?.id || "";
+    model = exampleModel || "provider/model";
+  }
+  // no SDK speaks System One, so it has no shell variables to set
+  const langs = f.baseEnv ? LANGS : LANGS.filter(([id]) => id !== "shell");
+  const snipLang = langs.some(([id]) => id === lang) ? lang : "curl";
   const urls = [g.url, ...(g.lanURLs || [])];
   if (!urls.includes(connectURL)) connectURL = g.url;
   const remote = connectURL !== g.url;
@@ -4783,7 +4836,7 @@ function renderConnect() {
     (u) => { connectURL = u; renderConnect(); }));
   else b.append(el("code", "", base));
   b.append(copyBtn(base, "Base URL"));
-  box.append(...field("Base URL", b, t("What {env} takes.", { env: f.baseEnv })));
+  box.append(...field("Base URL", b, f.baseEnv ? t("What {env} takes.", { env: f.baseEnv }) : t("Requests go to POST {url}.", { url: base + "/systemone" })));
 
   const k = el("div", "val");
   const options = keys.map((k) => ({ v: k.id, name: k.name, literalName: true, note: k.masked }));
@@ -4795,30 +4848,34 @@ function renderConnect() {
   else k.append(el("code", "", t("Create a gateway key above to connect")));
   if (key) k.append(copyCallerKeyBtn(key));
   else if (!remote) k.append(copyBtn("magpie", t("Key")));
-  box.append(...field(t(keyLabel), k, t(g.lan && (remote || gatewayKeys?.length)
+  box.append(...field(t(keyLabel), k, !f.keyEnv ? t(g.lan && (remote || gatewayKeys?.length)
+    ? "Choose a gateway key to send as Authorization: Bearer; usage is tracked by key."
+    : "Sent as Authorization: Bearer. The gateway trusts everything on loopback, so any value works.") : t(g.lan && (remote || gatewayKeys?.length)
     ? "Choose a gateway key to use as {env}; usage is tracked by key."
     : "{env}=magpie. The gateway trusts everything on loopback, so any value works.", { env: f.keyEnv })));
 
   const m = el("div", "val");
   m.append(el("code", "", model), copyBtn(model, t("Model id")));
-  box.append(...field(t("Model"), m, t(models.length ? "provider/model, as listed below. Click a model there to put it in the snippets." : "No models yet. Add a provider, or sign in to Codex or Copilot.")));
+  box.append(...field(t("Model"), m, f.decide
+    ? t(models.length ? "A decision model (Jev, Clef), as listed below. Click one there to put it in the snippets." : "No decision models yet. Add a System One, Jev or Workers AI provider.")
+    : t(models.length ? "provider/model, as listed below. Click a model there to put it in the snippets." : "No models yet. Add a provider, or sign in to Codex or Copilot.")));
 
   const ex = el("div", "stack");
-  ex.append(segs(LANGS, lang, (id) => { lang = id; localStorage.setItem("magpie.lang", id); renderConnect(); }));
+  ex.append(segs(langs, snipLang, (id) => { lang = id; localStorage.setItem("magpie.lang", id); renderConnect(); }));
   const code = !secret ? t(key ? "Loading gateway key…" : "Create a gateway key above to connect")
-    : lang === "shell" ? envSnippet([[f.baseEnv, base], [f.keyEnv, secret]])
-    : lang === "curl" ? curlSnippet(f.curl(base, model, secret))
-    : f[lang](base, model, secret);
+    : snipLang === "shell" ? envSnippet([[f.baseEnv, base], [f.keyEnv, secret]])
+    : snipLang === "curl" ? curlSnippet(f.curl(base, model, secret))
+    : f[snipLang](base, model, secret);
   const pre = el("pre", "snip");
   const c = el("code");
-  c.append(highlight(code, lang));
+  c.append(highlight(code, snipLang));
   pre.append(c);
   // the button sits outside the scrolling box, so a long line doesn't carry it off
   const wrap = el("div", "snip-wrap");
   wrap.append(pre);
   if (secret) wrap.append(copyBtn(code, t("Snippet")));
   ex.append(wrap);
-  box.append(...field(t("Example"), ex, lang === "shell" ? t("Put these in the shell (or the tool's settings) and the tool talks to magpie instead of the vendor.") : ""));
+  box.append(...field(t("Example"), ex, snipLang === "shell" ? t("Put these in the shell (or the tool's settings) and the tool talks to magpie instead of the vendor.") : ""));
 }
 
 // A small highlighter for the four snippet dialects: strings, comments,
@@ -4917,14 +4974,22 @@ function renderGatewayModels() {
     return;
   }
   for (const m of models) {
-    const row = el("div", "row model" + (m.id === exampleModel ? " selected" : ""));
+    const row = el("div", "row model" + (m.id === (FLAVORS[flavor]?.decide ? decideModel : exampleModel) ? " selected" : ""));
     const who = el("div", "who");
     const name = el("div", "name", m.id);
     if (namedFree(m.id, m.name)) name.append(freeBadge(false));
     who.append(name, el("div", "sub", m.name && m.name !== m.id.split("/")[1] ? `${m.name} · ${m.provider.name}` : m.provider.name));
     row.append(m.group ? stackIcon(m.icons) : icon(m.provider.icon || "generic"), who, modelInfo(m), copyBtn(m.id, t("Model id")));
     row.title = t("Use this model in the snippets");
-    row.onclick = () => { exampleModel = m.id; localStorage.setItem("magpie.model", m.id); renderConnect(); renderGatewayModels(); };
+    // a decision model is put in System One's snippets, any other in the
+    // other APIs'; the API follows the model clicked
+    row.onclick = () => {
+      const so = decideEntry(m);
+      if (so) { decideModel = m.id; localStorage.setItem("magpie.decideModel", m.id); }
+      else { exampleModel = m.id; localStorage.setItem("magpie.model", m.id); }
+      if (so !== !!FLAVORS[flavor]?.decide) { flavor = so ? "systemone" : "openai"; localStorage.setItem("magpie.flavor", flavor); }
+      renderConnect(); renderGatewayModels();
+    };
     list.append(row);
   }
 }

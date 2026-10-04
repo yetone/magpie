@@ -477,3 +477,13 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-row.lib-subhead:hover { background: color-mix(in srgb, var(--card-2) 70%, var(--pill)); }
 /* no color-mix() before Safari 16.2 (#220): the sticky head stays opaque */
 @supports not (color: color-mix(in srgb, red 50%, blue)) { .lib-head { background: var(--bg); } }
+/* skills picked to turn on or off together (#791): a box on each row and
+   heading, and a bar that stays in view under the list while it's long */
+.lib-pickbox { margin: 0; flex: none; }
+.lib-vl > .row.lib-skill.picked { background: var(--accent-soft); }
+.lib-pickbar { position: sticky; bottom: 12px; z-index: 3; margin-top: 8px; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: var(--shadow); }
+.lib-pickall { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-2); white-space: nowrap; }
+.lib-pickn { font-size: 12px; font-weight: 500; color: var(--fg); white-space: nowrap; }
+.lib-pickn.none { font-weight: 400; color: var(--faint); white-space: normal; }
+.lib-pickbar .lib-updall { height: 24px; padding: 0 9px; font-size: 12px; flex: none; }
+.lib-subhead > .lib-agents { margin-left: auto; }
