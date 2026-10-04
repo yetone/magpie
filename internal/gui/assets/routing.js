@@ -59,9 +59,7 @@
       s.classList.add("rt-errs");
       s.title = t("Show the latest request that failed");
       s.addEventListener("click", () => {
-        // the same "bad" the rows and the story tell: a reply that broke
-        // off, not a 200 with a note of magpie's own (Codex's titles off)
-        const r = listed().find((x) => x.done && outcome(x)[1] === "bad");
+        const r = listed().find(failedRoute);
         if (r) pick(r);
       });
     }
@@ -131,7 +129,7 @@
   purposeClear.onclick = () => {
     closeProtoMenu();
     purpose = "";
-    steady(renderHist);
+    steady(followListed);
     purposePick.focus({ preventScroll: true });
   };
   filters.append(dayBar, groupBar);
@@ -648,6 +646,7 @@
 
   const routes = new Map(); // id → the latest of each route
   let seq = 0, mine = true, loaded = false, daysAt = 0;
+  let traceTotals = { requests: 0, rerouted: 0, errors: 0 };
   let offMsg = ""; // why the trace can't be watched here, when it can't
   // the request the window was opened on (?req=), from the tray panel
   let wanted = document.body.classList.contains("window") && Number(params.get("req")) || 0;
@@ -816,8 +815,9 @@
   // playing, and each agent's latest while it lingers, a few agents at most
   function staged() {
     if (pinned) return [pinned];
+    if (day && !rp) return [];
     const n = now(), last = new Map(), map = src();
-    const rs = [...map.values()].sort((a, b) => a.id - b.id);
+    const rs = [...map.values()].filter(matchesPurpose).sort((a, b) => a.id - b.id);
     for (const r of rs) last.set(r.agent, r);
     const out = rs.filter((r) => playing.has(r.id) || (last.get(r.agent) === r && (!r.done || at(r.time) + (r.ms || 0) > n - LINGER)));
     const c = cur && map.get(cur.id);
@@ -1113,7 +1113,7 @@
       }
       if (pinned && !rp) {
         const live = el("button", "text", t("Back to live"));
-        live.onclick = () => { if (day) lookAt(""); else { pinned = null; cur = newest(); sync(true); renderAll(); } };
+        live.onclick = () => { if (day) lookAt(""); else { pinned = null; followListed(); } };
         logHead.append(live);
       }
     }
@@ -1232,27 +1232,16 @@
   // for it, so a list of Luna calls under a Sol composer reads as it is.
   // A web search is magpie's own, run for a model that can't search on the
   // model it searches with (a DeepSeek chat showing GPT calls, #314)
-  const KIND = {
-    guardian: "Approval check", auto_review: "Approval check", guardian_review: "Approval check",
-    review: "Review", compact: "Compaction",
-    memory_consolidation: "Memory", memgen: "Memory", memory: "Memory",
-    thread_title: "Title", thread_title_reconsideration: "Title", title_generation: "Title", title: "Title",
-    collab_spawn: "Subagent", thread_spawn: "Subagent", agent_job: "Subagent",
-    luna_reserve: "Luna Reserve",
-    ambient_suggestions: "Suggestions", ambient_suggestion_safety: "Suggestions",
-    web_search: "Web search",
-    vision: "Image description",
-  };
-  const kindName = (k) => Object.hasOwn(KIND, k) ? t(KIND[k]) : k;
+  const knownKind = (k) => Object.hasOwn(REQUEST_KINDS, k) ? REQUEST_KINDS[k] : null;
+  const kindName = (k) => knownKind(k) ? t(knownKind(k).name) : k;
   window.kindName = kindName; // the Usage page's Requests say it too (#714)
-  // One filter for aliases with the same meaning; unknown names remain literal.
-  // Match usage.PurposeOf without changing the kind kept on any request.
-  const purposeOf = (kind) => !kind ? "unmarked" : "kind:" + (Object.keys(KIND).find((k) => KIND[k] === KIND[kind]) || kind);
+  // The catalog is generated from usage.PurposeKinds; unknown names stay literal.
+  const purposeOf = (kind) => !kind ? "unmarked" : knownKind(kind)?.purpose || "kind:" + kind;
   const purposeOptions = (ids, selected) => [...new Set([...ids, ...(selected ? [selected] : [])])].sort().map((id) => {
     const kind = id.slice(5);
     return { v: id, name: id === "unmarked" ? t("Unmarked") : kindName(kind), note: id === "unmarked"
       ? t("No purpose was recorded; this may be a conversation turn or an older record.")
-      : Object.hasOwn(KIND, kind) ? "" : t("Unrecognized request purpose") };
+      : knownKind(kind) ? "" : t("Unrecognized request purpose") };
   });
   window.purposeOf = purposeOf;
   window.purposeOptions = purposeOptions;
@@ -1283,10 +1272,10 @@
   window.routedWhy = routedWhy;
   function kindWhy(r) {
     const agent = agentName(r.agent);
-    if (KIND[r.kind] === "Subagent") return r.group
+    if (purposeOf(r.kind) === "kind:collab_spawn") return r.group
       ? t("{agent} requested a subagent; magpie selects its model within this routing group.", { agent })
       : t("{agent} requested a subagent on {model}.", { agent, model: r.model });
-    if (KIND[r.kind] === "Suggestions") return t("{agent} drafted the suggested prompts on its home page by itself, in the background, searching the project's files and connected apps, and checked them for safety. Not a turn of the conversation; Codex's Settings › Configuration › Suggested prompts turns it off.", { agent });
+    if (purposeOf(r.kind) === "kind:ambient_suggestions") return t("{agent} drafted the suggested prompts on its home page by itself, in the background, searching the project's files and connected apps, and checked them for safety. Not a turn of the conversation; Codex's Settings › Configuration › Suggested prompts turns it off.", { agent });
     if (r.kind === "luna_reserve") return t("{agent} sent this turn on Luna Reserve, which it turns to once the plan's own allowance is used up; it picks the model itself.", { agent });
     if (r.kind === "web_search") return r.for
       ? t("magpie ran this web search for {agent}'s {model}, which can't search the web by itself: {searcher} searched, and {model} goes on answering once it has what was found. Not a turn of the conversation.", { agent: agentName(r.for.agent), model: r.for.model, searcher: r.model })
@@ -1328,7 +1317,37 @@
   // listed: the requests the list shows, newest first — the gateway's last
   // few, or a day the history keeps
   const allListed = () => (day ? past : [...routes.values()]).slice().sort((a, b) => b.id - a.id);
-  const listed = () => allListed().filter((r) => !purpose || purposeOf(r.kind) === purpose);
+  const matchesPurpose = (r) => !purpose || purposeOf(r.kind) === purpose;
+  const listed = () => allListed().filter(matchesPurpose);
+  // Match the rows and story: a broken-off 200 fails, an informational note
+  // on an answered request (such as Codex titles being off) does not.
+  const failedRoute = (r) => r.done && outcome(r)[1] === "bad";
+  function renderStats(rs) {
+    const scoped = !!(day || purpose), done = rs.filter((r) => r.done);
+    const counts = scoped ? {
+      requests: done.length,
+      rerouted: done.reduce((n, r) => n + r.tries.filter((tr, i) => tr.rest && i < r.tries.length - 1).length, 0),
+      errors: done.filter(failedRoute).length,
+    } : traceTotals;
+    [counts.requests, counts.rerouted, counts.errors].forEach((n, i) => setText(statB[i], String(n)));
+    stats.title = t(scoped ? "Counts for the requests in this list" : "Counts since the gateway started");
+    const failed = rs.some(failedRoute), btn = statB[2].parentElement;
+    btn.setAttribute("aria-disabled", String(!failed));
+    btn.title = t(failed ? "Show the latest request that failed" : "No failed request in this list");
+  }
+  // Follow the newest matching request unless the reader picked one still in
+  // this list. Stop old flights before the scope changes, including replays.
+  function followListed() {
+    if (rp) endReplay(true);
+    stopPlays();
+    if (pinned && !listed().some((r) => r.id === pinned.id)) pinned = null;
+    cur = pinned || newest();
+    if (day) pinned = cur;
+    capQ = [];
+    if (cur) { sync(true); say(affWhy(cur, true) || ruleWhy(cur, true) || firstWhy(cur)); }
+    else empty();
+    renderAll();
+  }
   const dayName = (d) => {
     const x = new Date(d + "T12:00:00"), n = new Date(), y = new Date(n.getTime() - 864e5);
     return x.toDateString() === n.toDateString() ? t("today") : x.toDateString() === y.toDateString() ? t("yesterday")
@@ -1349,10 +1368,7 @@
     past = [];
     if (d) await loadDays(d);
     pinned = null;
-    const r = d ? listed()[0] : newest();
-    if (r && d) pick(r);
-    else if (r) { stopPlays(); cur = r; sync(true); say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r)); }
-    renderAll();
+    followListed();
   }
   function renderDays() {
     const b = (d, label, n) => {
@@ -1462,8 +1478,8 @@
       setText(x.arrow, g.key ? open ? "▾" : "▸" : "");
       // Background workers have their own IDs. Label groups made entirely
       // for one purpose without renaming a chat that also made helper calls.
-      const memory = g.r.agent === "codex" && g.rows.every((r) => ["memory_consolidation", "memgen", "memory"].includes(r.kind));
-      const suggestions = g.r.agent === "codex" && g.rows.every((r) => ["ambient_suggestions", "ambient_suggestion_safety"].includes(r.kind));
+      const memory = g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:memory_consolidation");
+      const suggestions = g.r.agent === "codex" && g.rows.every((r) => purposeOf(r.kind) === "kind:ambient_suggestions");
       const name = g.rows.find((r) => r.sessionTitle)?.sessionTitle || (memory ? t("Background memory task") : suggestions ? t("Background prompt suggestions") : "");
       setText(x.name, g.key ? agentName(g.r.agent) + " · " + (name || groupSession(g.r)) : t("No session ID"));
       const purpose = memory ? t("Codex is organizing memories from earlier chats in the background. This can continue after a chat finishes.") + "\n"
@@ -1484,6 +1500,7 @@
   }
   function renderHist() {
     const rs = listed();
+    renderStats(rs);
     const all = allListed();
     hist.hidden = !all.length && !day && !days.length && !purpose;
     const opts = purposeOptions(all.map((r) => purposeOf(r.kind)), purpose);
@@ -1496,7 +1513,7 @@
     const label = purpose ? t("Purpose: {name}", { name: selected?.name || purpose }) : t("Purpose filter");
     setText(purposeLabel, label);
     purposePick.setAttribute("aria-label", label);
-    purposePick.title = t("Filter the request list by purpose") + (purpose ? "\n" + label : "");
+    purposePick.title = t("Filter routing by purpose") + (purpose ? "\n" + label : "");
     purposePick.onclick = (e) => {
       e.stopPropagation();
       if (purposePick.classList.contains("open")) return closeProtoMenu();
@@ -1505,7 +1522,7 @@
         ...o, literalName: true, title: o.note || o.v, note: "",
       })), purpose, (v) => {
         purpose = v;
-        steady(renderHist);
+        steady(followListed);
         purposePick.focus({ preventScroll: true });
       }, "Purpose", "rt-purpose-menu", "right");
     };
@@ -1748,7 +1765,7 @@
     if (!shown()) return;
     render(); renderLog(); renderHist();
   }
-  const newest = () => [...routes.values()].reduce((a, b) => (!a || b.id > a.id ? b : a), null);
+  const newest = () => (day ? past : [...routes.values()]).filter(matchesPurpose).reduce((a, b) => (!a || b.id > a.id ? b : a), null);
 
   // ---------- playing a request ----------
 
@@ -2052,6 +2069,7 @@
     pinned = b || null;
     cur = b || newest();
     if (cur) { sync(true); renderAll(); }
+    else empty();
   }
   rSpeed.onclick = () => { if (rp) { rp.speed = rp.speed >= 8 ? 1 : rp.speed * 2; replayBar(rp, 1); } };
   rStop.onclick = () => endReplay(true);
@@ -2100,9 +2118,10 @@
   function resume() {
     stopPlays();
     if (!loaded) return;
-    if (!pinned && !rp) cur = newest() || cur;
+    if (!pinned && !rp) cur = newest();
     if (cur) sync(true);
-    const live = pinned ? [] : [...src().values()].filter((r) => !r.done).sort((a, b) => a.id - b.id).slice(-LIVE);
+    else empty();
+    const live = pinned || day ? [] : [...src().values()].filter((r) => !r.done && matchesPurpose(r)).sort((a, b) => a.id - b.id).slice(-LIVE);
     for (const r of live) play(r.id);
     renderAll();
   }
@@ -2167,7 +2186,7 @@
 
   function empty() {
     offline("");
-    what.replaceChildren(el("b", "", t("Waiting for a request")));
+    what.replaceChildren(el("b", "", t(purpose || day ? "No requests match these filters." : "Waiting for a request")));
     mode.textContent = t("Send one from any agent routed through magpie and it plays here as it happens: who routing put first and why, each try, and what each answered.");
     for (const a of agents.values()) a.wire.remove();
     agents.clear();
@@ -2182,7 +2201,7 @@
     subs.clear();
     chip.hidden = true;
     hubText();
-    list.replaceChildren(el("li", "idle", t("No request yet")));
+    list.replaceChildren(el("li", "idle", t(purpose || day ? "No requests match these filters." : "No request yet")));
     say(t("Every request an agent sends to magpie shows up here, routed for real."));
     log.hidden = true;
     renderHist(); // none live, but the days the history keeps are still there to look at
@@ -2198,9 +2217,7 @@
         skew = at(d.now) - Date.now();
         mine = d.mine;
         hubText();
-        statB[0].textContent = d.totals.requests;
-        statB[1].textContent = d.totals.rerouted;
-        statB[2].textContent = d.totals.errors;
+        traceTotals = d.totals || traceTotals;
         if (!mine) {
           const gw = providers?.gateway;
           offMsg = !gw?.running ? "The gateway isn't running, so nothing is routed."
@@ -2240,9 +2257,14 @@
         } else {
           if (cur && routes.has(cur.id) && !rp) cur = routes.get(cur.id);
           if (pinned && routes.has(pinned.id)) pinned = routes.get(pinned.id);
+          if (!pinned && !rp) {
+            cur = newest();
+            if (cur) sync();
+            else empty();
+          }
           // played only in sight: coming back into it plays those still
           // under way, not all that came meanwhile (#302)
-          const go = !pinned && !rp && shown() ? fresh : [];
+          const go = !pinned && !rp && !day && shown() ? fresh.filter((id) => matchesPurpose(routes.get(id))) : [];
           for (const id of go) playing.set(id, gen);
           if (go.length) sync(); // the stage once for them all (#308)
           for (const id of go) play(id, true);

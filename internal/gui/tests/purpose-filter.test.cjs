@@ -169,6 +169,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".rt-req .kind").count(), 0);
       assert.equal(await page.locator("#rtPurpose span").textContent(), lang === "zh" ? "用途：未标记" : "Purpose: Unmarked");
       await click(page, page.locator("#rtPurposeClear"));
+      await page.waitForFunction(() => document.querySelector("#rtPurposeClear").hidden && document.querySelectorAll(".rt-req").length === 8);
       assert.equal(await page.locator(".rt-req").count(), 8);
       assert.equal(await page.locator(".rt-group-by button").last().getAttribute("aria-pressed"), "true");
       assert.equal(await page.locator(".rt-days .rt-day").nth(1).getAttribute("aria-pressed"), "true");

@@ -65,6 +65,20 @@ isolated API fixtures. Run with
 `node --test internal/gui/tests/purpose-filter.test.cjs` and the Playwright
 environment described below.
 
+`routing-purpose-state.test.cjs` covers #771's follow-ups: selected-purpose
+counts (including broken-off 200s and failures without an HTTP status, while
+excluding informational notes on successful 200s), the failed-request link,
+the latest matching story through live updates and returning to the page,
+preserving a picked request, an empty historical selection, and both ways
+to clear the compact purpose control. Unfiltered
+live counters retain gateway lifetime totals; scoped counters describe the
+completed requests kept in the selected list. Run with
+`node --test internal/gui/tests/routing-purpose-state.test.cjs`.
+
+Request-kind aliases and English labels live in `internal/usage/purpose.go`.
+After changing them, run `go generate ./internal/usage` to update
+`assets/purposes.js`; `TestPurposeAssetMatchesUsage` rejects a stale asset.
+
 `routing-sealed-task.test.cjs` checks that routing explains why an encrypted
 subagent task excludes non-ChatGPT providers and why the parent account goes
 first (#619). It also checks plain tasks, old traces, direct model requests,

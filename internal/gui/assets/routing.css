@@ -104,8 +104,8 @@
 .rt-steps li.why::before { background: var(--fg); }
 .rt-steps li.aside { color: var(--muted); }
 .rt-steps li.said { font-family: var(--code); font-size: 11.5px; overflow-wrap: anywhere; white-space: pre-wrap; }
-.rt-stats > span.rt-errs { cursor: pointer; }
-.rt-stats > span.rt-errs:hover b { color: var(--red); }
+.rt-stats > span.rt-errs:not([aria-disabled="true"]) { cursor: pointer; }
+.rt-stats > span.rt-errs:not([aria-disabled="true"]):hover b { color: var(--red); }
 .rt-steps li.aside::before { background: none; border: 1px solid var(--muted); width: 4px; height: 4px; }
 .rt-steps li.ok::before { background: var(--green); }
 .rt-steps li.bad::before { background: var(--red); }
