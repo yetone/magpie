@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/agentenv"
 )
 
 // A desktop app with launchd's PATH finds a claude installed under a custom
@@ -80,5 +82,62 @@ func TestUserPathTakesAgentVars(t *testing.T) {
 	}
 	if !strings.Contains(os.Getenv("PATH"), "/usr/bin") {
 		t.Fatalf("PATH lost: %q", os.Getenv("PATH"))
+	}
+}
+
+// A login shell that doesn't expand "$CLAUDE_CONFIG_DIR" prints the
+// reference itself. That is no folder: the variable counts as unset,
+// rather than magpie setting CLAUDE_CONFIG_DIR to "$CLAUDE_CONFIG_DIR" and
+// then looking for Claude Code's sign-in under it (#738).
+func TestParseShellEnvUnexpanded(t *testing.T) {
+	s := shellMark + "$PATH"
+	for _, v := range agentenv.Vars {
+		s += "\x00$" + v
+	}
+	p, vars := parseShellEnv("hello from the profile\n"+s+shellMark, shellMark)
+	if p != "" {
+		t.Fatalf("PATH = %q, want none", p)
+	}
+	if len(vars) != len(agentenv.Vars) {
+		t.Fatalf("%d variables, want %d", len(vars), len(agentenv.Vars))
+	}
+	for v, got := range vars {
+		if got != "" {
+			t.Fatalf("%s = %q, want none", v, got)
+		}
+	}
+}
+
+// nushell is asked in its own way, and answers with its PATH and the
+// variables a child of it gets, as a POSIX shell does; where nushell isn't
+// installed, the command's shape is all that can be checked.
+func TestShellEnvNushell(t *testing.T) {
+	probe := shellProbe("/opt/homebrew/bin/nu")
+	if !strings.HasPrefix(probe, "^/bin/sh -c 'printf \""+shellMark+"%s") || !strings.HasSuffix(probe, `"$`+agentenv.Vars[len(agentenv.Vars)-1]+`"'`) {
+		t.Fatalf("nushell's probe: %q", probe)
+	}
+	if strings.Contains(probe, `'`+shellMark) || strings.Count(probe, "'") != 2 {
+		t.Fatalf("nushell's probe must hold sh's command in one pair of single quotes: %q", probe)
+	}
+	nu, err := exec.LookPath("nu")
+	if err != nil {
+		t.Skip("nushell isn't installed")
+	}
+	t.Setenv("CODEX_HOME", "/from/the/environment")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	os.Unsetenv("CLAUDE_CONFIG_DIR")
+	out, err := exec.Command(nu, "-ilc", shellProbe(nu)).Output()
+	if err != nil {
+		t.Fatalf("nu: %v", err)
+	}
+	p, vars := parseShellEnv(string(out), shellMark)
+	if p == "" || strings.Contains(p, "$PATH") {
+		t.Fatalf("PATH from nushell: %q", p)
+	}
+	if got := vars["CODEX_HOME"]; got != "/from/the/environment" {
+		t.Fatalf("CODEX_HOME = %q: nushell's environment didn't reach sh", got)
+	}
+	if got := vars["CLAUDE_CONFIG_DIR"]; got != "" {
+		t.Fatalf("CLAUDE_CONFIG_DIR = %q, want none", got)
 	}
 }
