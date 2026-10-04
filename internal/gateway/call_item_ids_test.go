@@ -65,6 +65,7 @@ func openaiIDs(got *[]string) http.HandlerFunc {
 		}
 		w.Header()["Content-Type"] = nil
 		io.WriteString(w, sse(`data: {"type":"response.output_text.delta","delta":"on it"}`,
+			`data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"on it"}]}}`,
 			`data: {"type":"response.completed","response":{"id":"r1","status":"completed","output":[]}}`))
 	}
 }
@@ -120,6 +121,67 @@ func TestMagpieModelOpenAICallIDs(t *testing.T) {
 			if !strings.Contains(last, want) {
 				t.Errorf("%s: upstream lacks %s: %s", model, want, last)
 			}
+		}
+	}
+}
+
+func TestResponsesRelayCallIDs(t *testing.T) {
+	fresh(t)
+	var got []string
+	relay := httptest.NewServer(openaiIDs(&got))
+	t.Cleanup(relay.Close)
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Models: []string{"m1"},
+		Responses: relay.URL + "/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	refusalGroup(t, "relay/m1")
+	s := New()
+	for _, model := range []string{"relay/m1", "group/g"} {
+		for _, tc := range []struct {
+			name    string
+			path    string
+			compact bool
+		}{
+			{"responses", "/v1/responses", false},
+			{"codex", CodexPath + "/responses", false},
+			{"compact", CodexPath + "/responses", true},
+		} {
+			t.Run(model+"/"+tc.name, func(t *testing.T) {
+				input := otherVendorsCalls
+				if tc.compact {
+					input = strings.TrimSuffix(input, "]") + `,{"type":"compaction_trigger"}]`
+				}
+				body := `{"model":"` + model + `","stream":true,"store":false,"tools":[{"type":"custom","name":"apply_patch"}],"input":` + input + `}`
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest("POST", tc.path, strings.NewReader(body))
+				req.Header.Set("Authorization", "Bearer chatgpt-token")
+				req.Header.Set("chatgpt-account-id", "acct-1")
+				before := len(got)
+				s.Handler().ServeHTTP(rec, req)
+				if rec.Code != 200 || len(got) != before+1 {
+					t.Fatalf("status %d, upstream calls %d: %s", rec.Code, len(got)-before, rec.Body)
+				}
+				last := got[len(got)-1]
+				for _, want := range sentAsOpenAI {
+					if !strings.Contains(last, want) {
+						t.Errorf("upstream lacks %s: %s", want, last)
+					}
+				}
+				if tc.compact {
+					var sent map[string]json.RawMessage
+					if err := json.Unmarshal([]byte(last), &sent); err != nil {
+						t.Fatal(err)
+					}
+					if sent["tools"] != nil || !strings.Contains(last, "CONTEXT CHECKPOINT COMPACTION") {
+						t.Errorf("not a compaction request: %s", last)
+					}
+					if !strings.Contains(rec.Body.String(), `"type":"compaction"`) || !strings.Contains(rec.Body.String(), magpieCompaction) {
+						t.Errorf("not a compaction response: %s", rec.Body)
+					}
+				} else if !strings.Contains(rec.Body.String(), "on it") {
+					t.Errorf("missing response text: %s", rec.Body)
+				}
+			})
 		}
 	}
 }
