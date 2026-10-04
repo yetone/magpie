@@ -57,6 +57,20 @@ func TestAtomcodeWiring(t *testing.T) {
 	if d := a.Drift(); d != nil {
 		t.Fatalf("drift right after a set: %+v\n%s", d, cfg)
 	}
+	// an effort picked in magpie is written to the model table, and one
+	// AtomCode does not know is turned away
+	if err := provider.SetModelEfforts("fake/m1", []string{"low", "medium", "high"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Apply("effort", "high"); err != nil {
+		t.Fatal(err)
+	}
+	if tbl, _ := edit.GetTOMLTable(path, atomcodeTable("magpie/fake/m1")); tbl["reasoning_effort"] != "high" {
+		t.Fatalf("reasoning_effort: %v", tbl)
+	}
+	if err := a.Apply("effort", "ultra"); err == nil {
+		t.Fatal("an effort AtomCode does not know was accepted")
+	}
 	// an AtomCode-owned effort is kept with the model table
 	if err := edit.SetTOMLKey(path, atomcodeTable("magpie/fake/m1"), "reasoning_effort", "high"); err != nil {
 		t.Fatal(err)
