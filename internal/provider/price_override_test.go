@@ -259,42 +259,6 @@ func TestEffectivePriceResolvesAnIDARenamedFrom(t *testing.T) {
 	}
 }
 
-// What a call costs is not what an agent picks a model by, and the model
-// lists magpie keeps in the agents' own files are not rewritten over a
-// number in a cost report. Unlike a name, a window or a reply limit, a
-// price is not told to anybody; the counter that hears a name below is one
-// that could have heard it.
-func TestSetModelPriceTellsNoAgent(t *testing.T) {
-	priceHome(t)
-	if err := Save(Provider{ID: "relay", Name: "relay", Key: "k", Chat: "https://relay.example/v1", Models: []string{"sol"}}); err != nil {
-		t.Fatal(err) // saving a provider does tell them, so it is done first
-	}
-	told := 0
-	catalog.Changed = func() { told++ }
-	t.Cleanup(func() { catalog.Changed = nil })
-
-	if err := SetModelPrice("relay/sol", &catalog.Price{Input: 1, Output: 2, CacheRead: 0.1, CacheWrite: 0.2}); err != nil {
-		t.Fatal(err)
-	}
-	if told != 0 {
-		t.Errorf("a price told the agents %d times; their files keep the model lists they had", told)
-	}
-	// taking it away is as quiet as setting it
-	if err := SetModelPrice("relay/sol", nil); err != nil {
-		t.Fatal(err)
-	}
-	if told != 0 {
-		t.Errorf("taking a price away told the agents %d times", told)
-	}
-	// a name is told, as every other thing agents see is
-	if err := SetModelName("relay/sol", "My Sol"); err != nil {
-		t.Fatal(err)
-	}
-	if told == 0 {
-		t.Error("a name did not tell the agents either, so nothing above shows a price stays quiet")
-	}
-}
-
 // A price for a model the provider does not serve never applies, and nothing
 // says so afterwards: the entry is simply there, and the model is counted at
 // the catalogue's price as if the user had never said anything. Refused at the

@@ -63,8 +63,8 @@ const modelUsage = `usage:
   requests still reach it, as <provider/model>. The same model from another provider keeps
   its own name, levels and limits.
   A price is one provider's tariff for one model, not the model's own: it changes what the
-  usage and session totals report, and nothing an agent can see, and it is saved without
-  rewriting the model lists in the agents' own files.
+  usage and session totals report, and refreshes Pi's model prices for cost estimates and
+  prompt-cache warming decisions.
 
   e.g. magpie model name claude/claude-opus-5-5 "Opus 5.5"
        magpie model efforts openai/gpt-6 low,medium,high

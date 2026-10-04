@@ -361,10 +361,11 @@ still in force; reset that one by name to take it away too.
 
 A price is **one provider's tariff for one model**, not the model's own: the
 same model through two providers is two prices, and each keeps its own.
-Nothing an agent can see changes. The model list, the agents' own settings
-and the pickers that choose a model for a background task — an image, a web
-search, a description — all still work from the catalogue; only the cost
-reports read the effective price.
+Pi and OmO receive that effective price as `cost` in their `models.json`,
+including cache reads and writes. Setting or resetting a price refreshes
+the saved metadata; open Pi's model picker to reload it. Pi uses these
+prices both to estimate a call's cost and to decide whether warming a
+supported prompt cache pays.
 
 Two things worth knowing. The ledger and the session totals re-price when they
 are read, so adding or changing a price restates earlier figures: they are

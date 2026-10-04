@@ -112,10 +112,8 @@ func setModelName(ref, name string) (bool, error) {
 // served at no cost. A price no vendor could charge is refused, naming the
 // part that is wrong.
 //
-// Unlike the other model preferences this does not tell the agents. What a
-// call costs is not what an agent picks a model by, and the model lists
-// magpie keeps in the agents' own files are not its to rewrite over a number
-// in a cost report.
+// Pi reads these prices to decide whether prompt-cache warming pays, so
+// successful changes refresh the model lists magpie keeps in agents' files.
 func SetModelPrice(id string, p *catalog.Price) error {
 	if p == nil {
 		_, err := DropModelPrice(id)
@@ -155,7 +153,11 @@ func SetModelPrice(id string, p *catalog.Price) error {
 		s.ModelPrices = map[string]settings.ModelPrice{}
 	}
 	s.ModelPrices[key] = m
-	return settings.Save(s)
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
 }
 
 // AnyPriceKey is the key a price for a model from any provider is stored at:
@@ -228,7 +230,11 @@ func DropModelPrice(key string) (bool, error) {
 		return false, nil
 	}
 	delete(s.ModelPrices, key)
-	return true, settings.Save(s)
+	if err := settings.Save(s); err != nil {
+		return false, err
+	}
+	catalog.Touched()
+	return true, nil
 }
 
 // Levels are the reasoning levels a model whose own aren't known can be
