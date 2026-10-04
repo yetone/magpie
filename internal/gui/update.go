@@ -157,7 +157,7 @@ func (u *updater) run() {
 	lang := u.lang
 	u.mu.Unlock()
 	if lang == "" {
-		lang = trayLang(settings.Load().Lang, systemLang)
+		lang = notesLang(trayLang(settings.Load().Lang, systemLang))
 	}
 	rel, err := update.LatestIn(ctx, lang)
 	u.mu.Lock()

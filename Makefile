@@ -1,4 +1,14 @@
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# The recipes (clean's rm -rf too) name paths relative to the working
+# folder: run from another one (make -f path/to/Makefile) they would act
+# there. make -C works.
+ROOT := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+ifneq ($(abspath $(CURDIR)),$(ROOT))
+  $(error run make in $(ROOT) (make -C $(ROOT)), not in $(CURDIR))
+endif
+
+# A tag may hold $, ( or `, which the shell lines below would run: the
+# version keeps only what a version is spelled with.
+VERSION ?= $(or $(shell git describe --tags --always --dirty 2>/dev/null | tr -cd 'A-Za-z0-9._+-'),dev)
 LDFLAGS  = -s -w -X main.version=$(VERSION)
 TAGS     = production
 TARGETS  = darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64 android/arm64

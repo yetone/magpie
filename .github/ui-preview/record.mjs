@@ -12,12 +12,22 @@
 import { chromium } from "playwright";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const env = (k, d) => process.env[k] ?? d;
-const OUT = path.resolve(env("OUT_DIR", "ui-preview-out"));
+const OUT = path.resolve(process.env.OUT_DIR || "ui-preview-out");
+// a leak empties OUT, so it must be a folder of its own: not the working
+// folder, the home, the root or one holding them
+for (const keep of [process.cwd(), os.homedir(), path.parse(OUT).root]) {
+  const rel = path.relative(OUT, keep);
+  if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
+    console.error(`record: OUT_DIR ${OUT} holds ${keep}; give it a folder of its own`);
+    process.exit(1);
+  }
+}
 const BASE = env("MAGPIE_URL");
 const LOCALE = env("UI_LOCALE", "zh-CN");
 const MODEL = env("PLAN_MODEL", "deepseek-flash");

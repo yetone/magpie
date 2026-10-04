@@ -19,18 +19,45 @@ var trayZh = map[string]string{
 	"Restart Now to Update (%d in flight)": "立即重启以更新（%d 个进行中）",
 }
 
+// trayDe is the tray menu in German.
+var trayDe = map[string]string{
+	"Open magpie":                          "magpie öffnen",
+	"Version %s":                           "Version %s",
+	"Restart to Update":                    "Zum Aktualisieren neu starten",
+	"Restart to Update to %s":              "Zum Aktualisieren auf %s neu starten",
+	"Quit magpie":                          "magpie beenden",
+	"Restart Now to Update":                "Jetzt neu starten und aktualisieren",
+	"Restart Now to Update (%d in flight)": "Jetzt neu starten und aktualisieren (%d laufend)",
+}
+
+// trayWords are the tray menu's translations by language.
+var trayWords = map[string]map[string]string{"zh": trayZh, "de": trayDe}
+
 // onLang relabels the tray menu when the Settings page changes the
 // language; set by the process that has the tray.
 var onLang func()
 
 // trayLang is the language the tray menu is in, as the page picks its own:
-// the setting, or with "system" (or none) the system's, Chinese for any zh.
+// the setting, or with "system" (or none) the system's, Chinese for any zh
+// and German for any de.
 func trayLang(pref string, system func() string) string {
 	switch pref {
-	case "en", "zh":
+	case "en", "zh", "de":
 		return pref
 	}
-	if strings.HasPrefix(strings.ToLower(system()), "zh") {
+	switch sys := strings.ToLower(system()); {
+	case strings.HasPrefix(sys, "zh"):
+		return "zh"
+	case strings.HasPrefix(sys, "de"):
+		return "de"
+	}
+	return "en"
+}
+
+// notesLang is the language release notes come in for lang: they are
+// written in English and Chinese alone.
+func notesLang(lang string) string {
+	if lang == "zh" {
 		return "zh"
 	}
 	return "en"
@@ -38,10 +65,8 @@ func trayLang(pref string, system func() string) string {
 
 // trayText is a menu line in the language, English where it has none.
 func trayText(lang, key string, args ...any) string {
-	if lang == "zh" {
-		if s, ok := trayZh[key]; ok {
-			key = s
-		}
+	if s, ok := trayWords[lang][key]; ok {
+		key = s
 	}
 	if len(args) == 0 {
 		return key

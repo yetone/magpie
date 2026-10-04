@@ -9540,7 +9540,7 @@ async function setQuotaLeft(on) {
 // "tomorrow 09:00", "Thu 14:30" later this week (Monday to Sunday), else
 // "Oct 12 08:05": a bare weekday in next week read as this week's (#181).
 function resetClock(at, now = new Date()) {
-  const lang = locale === "zh" ? "zh-CN" : undefined;
+  const lang = localeTag();
   const time = at.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", hour12: false });
   const day = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const days = Math.round((day(at) - day(now)) / 864e5);
@@ -10571,8 +10571,8 @@ function creditDays(sub) {
     d.setDate(d.getDate() - i);
     list.push({ day: key(d), date: d, used: by.get(key(d)) || 0, known: key(d) >= since });
   }
-  const num = (v) => (Math.round(v * 100) / 100).toLocaleString(locale === "zh" ? "zh-CN" : undefined);
-  const dayName = (d) => d.toLocaleDateString(locale === "zh" ? "zh-CN" : undefined, { month: "short", day: "numeric" });
+  const num = (v) => (Math.round(v * 100) / 100).toLocaleString(localeTag());
+  const dayName = (d) => d.toLocaleDateString(localeTag(), { month: "short", day: "numeric" });
   const sum = list.reduce((a, d) => a + d.used, 0);
   const head = el("div", "cd-head");
   const name = el("span", "", t("Credits used per day"));
@@ -10706,7 +10706,7 @@ function quotaPaths(points, x0, x1, w, h) {
   return d;
 }
 function quotaTimeText(at, now) {
-  const d = new Date(at), lang = locale === "zh" ? "zh-CN" : undefined;
+  const d = new Date(at), lang = localeTag();
   if (Math.abs(at - now) < 60e3) return t("Now");
   const sameDay = d.toDateString() === new Date(now).toDateString();
   const time = d.toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -10802,7 +10802,7 @@ function quotaSpark(q, w) {
 // either (the vendor doesn't say which), as short as a panel row needs.
 function planTerm(q) {
   if (!q.until) return "";
-  const date = new Date(q.until).toLocaleDateString(locale === "zh" ? "zh-CN" : undefined, { month: "short", day: "numeric" });
+  const date = new Date(q.until).toLocaleDateString(localeTag(), { month: "short", day: "numeric" });
   return t(q.renew === "auto" ? "Renews {date}" : q.renew === "off" ? "Expires {date}" : "Until {date}", { date });
 }
 function planSpan(q) {
@@ -12020,13 +12020,13 @@ function renderLedgerLoading() {
   }
 }
 
-const ledNum = (n) => (n || 0).toLocaleString(locale === "zh" ? "zh-CN" : "en");
+const ledNum = (n) => (n || 0).toLocaleString(localeTag("en"));
 const ledTook = (ms = 0) => ms < 1000 ? t("{n} ms", { n: ms }) : t("{n} s", { n: (ms / 1000).toFixed(ms < 10e3 ? 1 : 0) });
 function ledTime(when) {
   const d = new Date(when), now = new Date();
   const opts = { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
   if (d.toDateString() !== now.toDateString()) Object.assign(opts, { month: "short", day: "numeric" });
-  return d.toLocaleString(locale === "zh" ? "zh-CN" : "en", opts);
+  return d.toLocaleString(localeTag("en"), opts);
 }
 // the model the reply named: amber, as the Routing page's tag, when it is
 // another than the one sent; plain when it is that one under a dated name,
@@ -12240,7 +12240,7 @@ function ledCategories(l, split, metric) {
 
 // when a point is: the hour, the day or the week it stands for
 function ledWhen(p, bucket) {
-  const d = new Date(p.time), lang = locale === "zh" ? "zh-CN" : "en";
+  const d = new Date(p.time), lang = localeTag("en");
   if (bucket === "hour") return d.toLocaleString(lang, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
   const day = d.toLocaleDateString(lang, { year: "numeric", month: "2-digit", day: "2-digit" });
   return bucket === "week" ? t("week of {label}", { label: day }) : day;
@@ -12248,7 +12248,7 @@ function ledWhen(p, bucket) {
 function ledTick(p, bucket) {
   const d = new Date(p.time);
   if (bucket === "hour") return String(d.getHours()).padStart(2, "0") + ":00";
-  return d.toLocaleDateString(locale === "zh" ? "zh-CN" : "en", { month: "numeric", day: "numeric" });
+  return d.toLocaleDateString(localeTag("en"), { month: "numeric", day: "numeric" });
 }
 
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -12631,7 +12631,7 @@ function renderLedger() {
   $("#ledSum").textContent = sum.join(" · ");
   const routeFilter = $("#ledRoute");
   routeFilter.hidden = !ledRoute;
-  $("#ledRouteLabel").textContent = ledRouteInfo ? t("Request: {what}", { what: new Date(ledRouteInfo.time).toLocaleString(locale === "zh" ? "zh-CN" : "en") + " · " + ledRouteInfo.model }) : "";
+  $("#ledRouteLabel").textContent = ledRouteInfo ? t("Request: {what}", { what: new Date(ledRouteInfo.time).toLocaleString(localeTag("en")) + " · " + ledRouteInfo.model }) : "";
   $("#ledRouteClear").title = t("Clear filter");
   $("#ledRouteClear").setAttribute("aria-label", t("Clear filter"));
   $("#ledRouteClear").onclick = () => {
@@ -12679,7 +12679,7 @@ function renderLedger() {
       // the link opens the route, not the row's details as well
       when.onclick = (e) => { e.stopPropagation(); window.openRoute(r.route_id, r.t).catch((err) => status(err.message, "err")); };
     }
-    td(when, "when", new Date(r.t).toLocaleString(locale === "zh" ? "zh-CN" : "en"));
+    td(when, "when", new Date(r.t).toLocaleString(localeTag("en")));
     const who = el("span", "who");
     // an agent on another computer, whose magpie passed the request on
     const name = r.agentName || r.agent;
@@ -13163,14 +13163,14 @@ function sessCost(s) {
 }
 function ago(when) {
   const sec = (new Date(when) - Date.now()) / 1000;
-  const rtf = new Intl.RelativeTimeFormat(locale === "zh" ? "zh-CN" : "en", { numeric: "auto" });
+  const rtf = new Intl.RelativeTimeFormat(localeTag("en"), { numeric: "auto" });
   for (const [unit, n] of [["year", 31536000], ["month", 2592000], ["week", 604800], ["day", 86400], ["hour", 3600], ["minute", 60]]) {
     if (Math.abs(sec) >= n) return rtf.format(Math.round(sec / n), unit);
   }
   return t("just now");
 }
 function stamp(when) {
-  return new Date(when).toLocaleString(locale === "zh" ? "zh-CN" : undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(when).toLocaleString(localeTag(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 const baseName = (p) => (p || "").replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
 
@@ -13196,7 +13196,7 @@ function renderSessRange(loading) {
 // a "YYYY-MM-DD" as a local date, and back
 const sessDate = (d) => { const [y, m, day] = d.split("-").map(Number); return new Date(y, m - 1, day); };
 const sessISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const sessDay = (d) => d.toLocaleDateString(locale === "zh" ? "zh-CN" : "en", { month: "short", day: "numeric" });
+const sessDay = (d) => d.toLocaleDateString(localeTag("en"), { month: "short", day: "numeric" });
 // a length of time, as hours and minutes
 function fmtDur(sec) {
   const m = Math.round(sec / 60);
@@ -13466,7 +13466,7 @@ function sessLegend() {
 }
 // the short names of the days of the week, Monday first
 function sessWeekdays() {
-  const loc = locale === "zh" ? "zh-CN" : "en";
+  const loc = localeTag("en");
   return Array.from({ length: 7 }, (_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(loc, { weekday: "short" }));
 }
 function sessCardHead(title) {
@@ -13650,7 +13650,7 @@ function sessCalendar(days, value, tip, pad = 0) {
     l.style.gridArea = `${i + 2} / 1`;
     cal.append(l);
   }
-  const loc = locale === "zh" ? "zh-CN" : "en";
+  const loc = localeTag("en");
   let month = -1, labelAt = -9;
   // the days before the range, from the Monday it is laid out from: their
   // months named as the range's are, the days themselves left blank
@@ -14123,7 +14123,7 @@ $("#sessQ").onkeydown = (e) => { if (e.key === "Escape" && e.target.value) { e.s
 // the version, where magpie keeps its files, the gateway's address.
 
 const THEMES = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
-const LOCALES = [["system", "System"], ["en", "English"], ["zh", "中文"]];
+const LOCALES = [["system", "System"], ["en", "English"], ["zh", "中文"], ["de", "Deutsch"]];
 const TRAYS = [["panel", "Quick panel"], ["window", "Main window"]];
 const CURRENCIES = [["usd", "$ USD"], ["cny", "¥ CNY"]];
 // The text size is the windows' own zoom, as a browser's Ctrl/Cmd +: the
@@ -14645,8 +14645,8 @@ function refreshAfterSync() {
 
 function syncWhen(iso) {
   const d = new Date(iso);
-  const time = d.toLocaleTimeString(locale === "zh" ? "zh-CN" : undefined, { hour: "2-digit", minute: "2-digit" });
-  return new Date().toDateString() === d.toDateString() ? t("at {time}", { time }) : d.toLocaleDateString(locale === "zh" ? "zh-CN" : undefined) + " " + time;
+  const time = d.toLocaleTimeString(localeTag(), { hour: "2-digit", minute: "2-digit" });
+  return new Date().toDateString() === d.toDateString() ? t("at {time}", { time }) : d.toLocaleDateString(localeTag()) + " " + time;
 }
 
 function tick(label, on) {
@@ -16148,7 +16148,7 @@ function renderUsageEvery() {
   // on the Overview it reads the allowances again too (#486: they had a
   // Refresh of their own beside it)
   const what = usageTab === "usage" ? t("Refresh now, the allowances too; a Claude account's is read by running Claude Code's own /usage") : t("Refresh now");
-  r.title = usageReadAt ? what + " · " + t("Updated {time}", { time: new Date(usageReadAt).toLocaleTimeString(locale === "zh" ? "zh-CN" : undefined, { hour12: false }) }) : what;
+  r.title = usageReadAt ? what + " · " + t("Updated {time}", { time: new Date(usageReadAt).toLocaleTimeString(localeTag(), { hour12: false }) }) : what;
   r.setAttribute("aria-label", t("Refresh now"));
   r.onclick = async () => {
     r.classList.add("busy");

@@ -217,12 +217,13 @@ func fetchNotes(ctx context.Context, after, upto, lang string) ([]update.Note, e
 }
 
 // pageLang is the language a page asks in, its own (?lang=, zh or en), or
-// without one the app's, as the tray menu has it.
+// without one the app's, as the tray menu has it, in the languages release
+// notes come in.
 func pageLang(r *http.Request) string {
 	if l := askedLang(r); l != "" {
 		return l
 	}
-	return trayLang(settings.Load().Lang, systemLang)
+	return notesLang(trayLang(settings.Load().Lang, systemLang))
 }
 
 // askedLang is the language a page names (?lang=): zh for any Chinese, en

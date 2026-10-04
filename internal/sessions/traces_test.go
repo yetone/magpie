@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func traceLine(t *testing.T, c *traceCursor, at time.Time, typ string, payload any, bodies bool) []TraceSpan {
@@ -194,7 +196,7 @@ func TestPiCompletedRootWithoutTimingExportsOnce(t *testing.T) {
 }
 
 func TestPiTimingAcrossPollsAndFallback(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	t.Setenv("OPENCODE_DB", "")
@@ -262,7 +264,7 @@ func TestPiTimingAcrossPollsAndFallback(t *testing.T) {
 }
 
 func TestTraceReaderDoesNotReplayHistoryOrPartialLines(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	t.Setenv("OPENCODE_DB", "")
@@ -304,7 +306,7 @@ func TestTraceReaderDoesNotReplayHistoryOrPartialLines(t *testing.T) {
 }
 
 func TestTraceReaderNewEventsWithCoarseFileMtime(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	t.Setenv("OPENCODE_DB", "")

@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestBootScript(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	// Spaces, quotes and shell expansions must stay part of the file name.
 	exe := filepath.Join(home, "magpie ' $not_a_variable")
 	out := filepath.Join(home, "args")

@@ -13,6 +13,7 @@ import (
 
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestSessionTraceWirePrivacyAndTokenOwnership(t *testing.T) {
@@ -89,7 +90,7 @@ func TestSessionExporterDefersPendingRoot(t *testing.T) {
 }
 
 func TestOTelSessionWatcherExportsNewInteractionWithoutGatewayDuplicates(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	t.Setenv("OPENCODE_DB", "")

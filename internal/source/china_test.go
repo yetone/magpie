@@ -8,13 +8,16 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // the 「国内镜像」 switch is off in every test but those that turn it on,
-// whatever the settings of the HOME the tests run in say
+// whatever the settings of the HOME the tests run in say; and that HOME is
+// one of their own, never the user's
 func TestMain(m *testing.M) {
 	China = func() bool { return false }
-	os.Exit(m.Run())
+	os.Exit(testenv.Run(m))
 }
 
 func chinaOn(t *testing.T) {

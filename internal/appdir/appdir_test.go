@@ -108,8 +108,14 @@ func TestResolveAppImage(t *testing.T) {
 	img := touch(t, filepath.Join(r, "apps", "Magpie.AppImage"))
 	mkdir(t, filepath.Join(r, "apps", "data"))
 	t.Setenv("APPIMAGE", img)
+	t.Setenv("APPDIR", filepath.Join(r, "mount"))
 	if got, want := Resolve(exe), filepath.Join(r, "apps", "data"); got != want {
 		t.Errorf("AppImage: %q, want %q", got, want)
+	}
+	// inherited from another AppImage (a terminal): magpie isn't in its mount
+	other := touch(t, filepath.Join(r, "bin", "magpie"))
+	if got := Resolve(other); got != "" {
+		t.Errorf("inherited APPIMAGE: %q, want installed", got)
 	}
 }
 

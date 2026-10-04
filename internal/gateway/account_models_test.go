@@ -7,13 +7,14 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // A key set to serve some of its provider's models only is never a
 // candidate for another, whatever the routing; it is one for those, and a
 // key without a list of its own is one for every model, as before (#474).
 func TestKeyModelsNarrowCandidates(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, mode := range []string{"", provider.Ordered, provider.Rotate, provider.LeastUsed} {
 		p := provider.Provider{ID: "narrow", Name: "Narrow", Chat: "https://example.invalid/v1", Key: "first", Keys: []provider.KeyAccount{{Key: "second"}, {Key: "third"}}, Routing: mode}

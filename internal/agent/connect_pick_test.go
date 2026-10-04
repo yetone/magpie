@@ -8,6 +8,7 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // The 「接入」 switch keeps an agent on the model it was on, now through
@@ -72,7 +73,7 @@ func TestGeminiConnectRoundTrip(t *testing.T) {
 // first; on no model of its own, a subscription's before the first.
 func TestConnectPrefersTheSubscription(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	for _, c := range []struct {

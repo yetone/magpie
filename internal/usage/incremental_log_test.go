@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func historyLog(t testing.TB, n int) {
@@ -153,7 +155,7 @@ func TestCachedSummaryRemainsCallerOwned(t *testing.T) {
 
 func BenchmarkIncrementalUsage(b *testing.B) {
 	// benchmark homes are isolated just as pageHome isolates test homes
-	b.Setenv("HOME", b.TempDir())
+	testenv.SetHome(b, b.TempDir())
 	b.Setenv("XDG_CONFIG_HOME", b.TempDir())
 	b.Setenv("XDG_CACHE_HOME", b.TempDir())
 	historyLog(b, 100000)

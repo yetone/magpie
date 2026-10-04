@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // A data folder beside magpie takes every file of its own (#508): the
@@ -16,7 +17,7 @@ func TestPortableSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("HOME", filepath.Join(r, "home"))
+	testenv.SetHome(t, filepath.Join(r, "home"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(r, "home", ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(r, "home", ".cache"))
 	t.Setenv("APPIMAGE", "")

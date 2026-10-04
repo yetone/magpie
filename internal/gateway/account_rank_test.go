@@ -4,13 +4,14 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // The trace tells each key's place in its provider's own list, as dragged,
 // whatever order routing weighed them in, so the live routing view can
 // seat them in it (#217).
 func TestWeighedRankIsDraggedOrder(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, mode := range []string{"", provider.Ordered, provider.Rotate, provider.LeastUsed} {
 		p := provider.Provider{ID: "rank" + mode, Name: "Rank", Chat: "https://example.invalid/v1", Key: "first", Keys: []provider.KeyAccount{{Key: "second"}, {Key: "third"}}, Routing: mode}

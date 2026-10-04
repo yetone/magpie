@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // wbCard is a WorkBuddy card as the built-in and its plugin both make it:
@@ -30,7 +32,7 @@ func dailyOf(t *testing.T, qs []SubscriptionQuota, user string) *DailyCredits {
 // an error and a reading kept from before count nothing, and the days
 // come back with the card, oldest first (#568).
 func TestDailyCredits(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	day := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, time.Local) }
 	steps := []struct {

@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestArrangedKeysAreGatewayCandidates(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	for _, mode := range []string{"", provider.Ordered, provider.Rotate, provider.LeastUsed} {
 		p := provider.Provider{ID: "arrange-routing", Name: "Arrange", Chat: "https://example.invalid/v1", Key: "first", Keys: []provider.KeyAccount{{Key: "second"}, {Key: "third"}, {Key: "off", Off: true}}, Routing: mode}

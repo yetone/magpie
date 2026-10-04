@@ -26,9 +26,21 @@ func TestTrayMenuLabels(t *testing.T) {
 		{"system", enSys, "en"},
 		{"", func() string { return "zh_CN.UTF-8" }, "zh"},
 		{"system", func() string { return "" }, "en"},
+		{"de", enSys, "de"},
+		{"system", func() string { return "de-DE" }, "de"},
+		{"", func() string { return "de_AT.UTF-8" }, "de"},
 	} {
 		if got := trayLang(c.pref, c.sys); got != c.want {
 			t.Errorf("trayLang(%q, %s) = %s, want %s", c.pref, c.sys(), got, c.want)
+		}
+	}
+	de := trayMenuLabels("de", "0.1.500", "0.1.501")
+	if de != (trayLabels{"magpie öffnen", "Version 0.1.500", "Zum Aktualisieren auf 0.1.501 neu starten", "magpie beenden"}) {
+		t.Errorf("de: %+v", de)
+	}
+	for lang, want := range map[string]string{"de": "en", "en": "en", "zh": "zh"} {
+		if got := notesLang(lang); got != want {
+			t.Errorf("notesLang(%q) = %q, want %q", lang, got, want)
 		}
 	}
 	zh := trayMenuLabels("zh", "0.1.500", "")

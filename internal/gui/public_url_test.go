@@ -10,13 +10,14 @@ import (
 	"github.com/yetone/magpie/internal/fx"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // Settings shows the local address agents use; the Gateway page advertises
 // the public URL for its copy buttons and snippets.
 func TestPublicURLInConsole(t *testing.T) {
 	h := t.TempDir()
-	t.Setenv("HOME", h)
+	testenv.SetHome(t, h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(h, ".local", "share"))
@@ -72,7 +73,7 @@ func TestPublicURLInConsole(t *testing.T) {
 // beyond loopback with nothing shared.
 func TestGatewayOpenInConsole(t *testing.T) {
 	h := t.TempDir()
-	t.Setenv("HOME", h)
+	testenv.SetHome(t, h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(h, ".local", "share"))

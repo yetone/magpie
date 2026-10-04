@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/claudebridge"
 	"github.com/yetone/magpie/internal/davsync"
@@ -118,6 +119,17 @@ var (
 )
 
 func main() {
+	// before anything reads or writes a file: no home, or a relative one,
+	// would put the agents' configs and magpie's keys under the working
+	// folder
+	dropped, err := appdir.CheckEnv()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "magpie:", err)
+		os.Exit(1)
+	}
+	for _, v := range dropped {
+		fmt.Fprintf(os.Stderr, "magpie: ignoring %s: not an absolute path\n", v)
+	}
 	if provider.TookOpenedURL(os.Args[1:]) {
 		// Claude Code, signing in for magpie, handed over the page to open
 		return
@@ -126,7 +138,7 @@ func main() {
 	gateway.Version = version
 	netproxy.Install()
 	update.GUI = hasGUI
-	err := run(os.Args[1:])
+	err = run(os.Args[1:])
 	proc.EndProbes() // a CLI still being asked something isn't left to init
 	sessions.Saved() // the session index kept, for the next run
 	if err != nil {

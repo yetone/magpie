@@ -14,9 +14,10 @@
 //   /download/linux        the Linux app (x86-64); /download/linux-arm64
 //   /download/<file>       any file of the newest release, by name
 //   /docs, /docs/zh, /docs/ja  the getting-started guide: /docs/start, /docs/<lang>/start
-//   /zh/, /ja/             the home page in Chinese, Japanese (i18n.js); / sends
-//                          a browser that prefers one of them there, until a
-//                          language is picked on the page (the lang cookie)
+//   /zh/, /ja/, /de/       the home page in Chinese, Japanese, German (i18n.js);
+//                          / sends a browser that prefers one of them there,
+//                          until a language is picked on the page (the lang
+//                          cookie). /de/ has no docs: its links go to English.
 //
 // Everything else is the static site in public/.
 

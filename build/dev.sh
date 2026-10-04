@@ -16,7 +16,7 @@
 # make passes MAGPIE_ADDR, MAGPIE_DEV_UI, MAGPIE_DEV_BACKEND and
 # MAGPIE_DEV_CONTROL.
 set -u
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 shell='' backend='' watch='' fsw='' draining=''
 

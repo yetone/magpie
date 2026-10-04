@@ -5,6 +5,7 @@ import (
 	"math"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
@@ -61,9 +62,50 @@ func alertClockZh(at, now time.Time) string {
 	return fmt.Sprintf("%d月%d日 %s", at.Month(), at.Day(), at.Format("15:04"))
 }
 
+// alertWindowDe is a window's name in German; one it doesn't know stays as
+// the vendor named it.
+func alertWindowDe(name string) string {
+	if m := hoursName.FindStringSubmatch(name); m != nil {
+		if m[1] == "1" {
+			return "1 Stunde"
+		}
+		return m[1] + " Stunden"
+	}
+	if m := daysName.FindStringSubmatch(name); m != nil {
+		if m[1] == "1" {
+			return "1 Tag"
+		}
+		return m[1] + " Tage"
+	}
+	switch name {
+	case "Weekly":
+		return "Wöchentlich"
+	case "Monthly":
+		return "Monatlich"
+	case "Daily":
+		return "Täglich"
+	}
+	return name
+}
+
+// alertClockDe is provider.ResetClock in German.
+func alertClockDe(at, now time.Time) string {
+	at, now = at.Local(), now.Local()
+	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, time.Local) }
+	switch days := int(math.Round(day(at).Sub(day(now)).Hours() / 24)); {
+	case days <= 0:
+		return "um " + at.Format("15:04")
+	case days == 1:
+		return "morgen um " + at.Format("15:04")
+	case days < 7:
+		return [...]string{"So.", "Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa."}[at.Weekday()] + " um " + at.Format("15:04")
+	}
+	return at.Format("2.1. um 15:04")
+}
+
 // alertText is a usage alert as a notification says it, in the language
-// (en or zh): the card, and what reached the line. left says a window by
-// how much of it is left, as the Usage page does when set to.
+// (en, zh or de): the card, and what reached the line. left says a window
+// by how much of it is left, as the Usage page does when set to.
 func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now time.Time) (title, body string) {
 	title = a.Name
 	if a.User != "" {
@@ -71,8 +113,11 @@ func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now t
 	}
 	if a.Window == "" {
 		line := strconv.FormatFloat(bal, 'f', -1, 64)
-		if lang == "zh" {
+		switch lang {
+		case "zh":
 			return title, fmt.Sprintf("余额已降至 %s（提醒线 %s）", a.Balance, line)
+		case "de":
+			return title, fmt.Sprintf("Guthaben auf %s gesunken (Warnschwelle %s)", a.Balance, line)
 		}
 		return title, fmt.Sprintf("Balance down to %s (alert at %s)", a.Balance, line)
 	}
@@ -88,6 +133,17 @@ func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now t
 		}
 		if a.ResetsAt != nil {
 			body += "，" + alertClockZh(*a.ResetsAt, now) + " 重置"
+		}
+		return title, body
+	}
+	if lang == "de" {
+		pct = strings.Replace(pct, ".", ",", 1) // German decimal comma
+		body = fmt.Sprintf("%s: %s verbraucht", alertWindowDe(a.Window), pct)
+		if left {
+			body = fmt.Sprintf("%s: %s übrig", alertWindowDe(a.Window), pct)
+		}
+		if a.ResetsAt != nil {
+			body += ", Zurücksetzung " + alertClockDe(*a.ResetsAt, now)
 		}
 		return title, body
 	}

@@ -32,6 +32,8 @@ jobs:
             VERSION="$INPUT_VERSION"
             REF="v$INPUT_VERSION"
           fi
+          # a newline or quote would add outputs or break the JSON below
+          [[ "$VERSION" =~ ^[0-9][0-9A-Za-z.+-]*$ ]] || { echo "bad version: $VERSION" >&2; exit 1; }
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "ref=$REF" >> $GITHUB_OUTPUT
           echo "Triggering release for version: $VERSION (ref: $REF)"

@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestZedCredentialCommand(t *testing.T) {
@@ -57,7 +59,7 @@ func TestZedAppPath(t *testing.T) {
 	bin := t.TempDir()
 	t.Setenv("PATH", bin)
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	testenv.SetHome(t, home)
 	app := filepath.Join(home, "Applications", "Zed.app")
 	if err := os.MkdirAll(app, 0o755); err != nil {
 		t.Fatal(err)

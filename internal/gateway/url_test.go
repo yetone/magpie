@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestPublicURL(t *testing.T) {
@@ -132,7 +133,7 @@ func TestPublicURLWarningOnce(t *testing.T) {
 // keyNote does.
 func TestOpenToAnyone(t *testing.T) {
 	h := t.TempDir()
-	t.Setenv("HOME", h)
+	testenv.SetHome(t, h)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(h, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(h, ".cache"))
 	t.Setenv("XDG_DATA_HOME", filepath.Join(h, ".local"))

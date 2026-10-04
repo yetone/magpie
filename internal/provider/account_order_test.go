@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestAccountOrderValidation(t *testing.T) {
@@ -21,7 +23,7 @@ func TestAccountOrderValidation(t *testing.T) {
 }
 
 func TestAccountOrderKeysAllRoutingModes(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	testenv.SetHome(t, t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	for _, mode := range []string{"", Ordered, Rotate, LeastUsed} {

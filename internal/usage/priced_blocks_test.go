@@ -7,6 +7,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestRequestPageAppendDoesNotRepriceHistory(t *testing.T) {
@@ -79,7 +80,7 @@ func TestRequestPageInvalidatesLivePrice(t *testing.T) {
 }
 
 func BenchmarkRequestPageAfterAppend(b *testing.B) {
-	b.Setenv("HOME", b.TempDir())
+	testenv.SetHome(b, b.TempDir())
 	b.Setenv("XDG_CONFIG_HOME", b.TempDir())
 	b.Setenv("XDG_CACHE_HOME", b.TempDir())
 	historyLog(b, 100000)

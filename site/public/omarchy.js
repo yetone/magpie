@@ -20,7 +20,7 @@
 (() => {
   const root = document.documentElement;
   const lang = (root.lang || "en").slice(0, 2);
-  const T = (en, zh, ja) => ({ zh, ja })[lang] ?? en;
+  const T = (en, zh, ja, de) => ({ zh, ja, de })[lang] ?? en;
   const KEY = "omarchy";
   const GATEWAY = "http://127.0.0.1:3425/v1/magpie/omarchy";
   // Omarchy 4's themes (/usr/share/omarchy/themes/*/colors.toml): mode,
@@ -267,16 +267,16 @@
       document.addEventListener("keydown", (e) => { if (open && e.key === "Escape") { open = false; render(); bar.querySelector(".om-chip")?.focus(); } });
     }
     if (!cur) {
-      bar.innerHTML = `<button class="om-chip om-off" type="button" title="${esc(T("Omarchy look", "Omarchy 风格", "Omarchy スタイル"))}"><span class="om-logo" aria-hidden="true"></span></button>`;
+      bar.innerHTML = `<button class="om-chip om-off" type="button" title="${esc(T("Omarchy look", "Omarchy 风格", "Omarchy スタイル", "Omarchy-Look"))}"><span class="om-logo" aria-hidden="true"></span></button>`;
       return;
     }
     const following = !st.pick;
     const note = {
-      live: T(`Following ${cur.name} via magpie`, `正在跟随 ${cur.name}（来自 magpie）`, `magpie 経由で ${cur.name} に追従中`),
-      ask: T("Ask magpie on this computer for the theme", "向本机的 magpie 询问当前主题", "このコンピュータの magpie にテーマを尋ねる"),
-      denied: T("The browser blocks this page from reaching magpie", "浏览器禁止了本页访问本机的 magpie", "ブラウザがこのページから magpie への接続をブロックしています"),
-      absent: T("magpie isn't running on this computer", "本机没有运行 magpie", "このコンピュータで magpie が動いていません"),
-      "": T("Asking magpie…", "正在询问 magpie…", "magpie に問い合わせ中…"),
+      live: T(`Following ${cur.name} via magpie`, `正在跟随 ${cur.name}（来自 magpie）`, `magpie 経由で ${cur.name} に追従中`, `Folgt ${cur.name} über magpie`),
+      ask: T("Ask magpie on this computer for the theme", "向本机的 magpie 询问当前主题", "このコンピュータの magpie にテーマを尋ねる", "magpie auf diesem Rechner nach dem Theme fragen"),
+      denied: T("The browser blocks this page from reaching magpie", "浏览器禁止了本页访问本机的 magpie", "ブラウザがこのページから magpie への接続をブロックしています", "Der Browser verhindert, dass diese Seite magpie erreicht"),
+      absent: T("magpie isn't running on this computer", "本机没有运行 magpie", "このコンピュータで magpie が動いていません", "magpie läuft auf diesem Rechner nicht"),
+      "": T("Asking magpie…", "正在询问 magpie…", "magpie に問い合わせ中…", "Frage magpie …"),
     }[status];
     const rows = Object.keys(THEMES).map((n) => {
       const [mode, bg, fg, , , accent] = THEMES[n].split(" ");
@@ -285,16 +285,16 @@
     }).join("");
     // not let through yet: the chip says what one click does
     const cta = status === "ask" && following && !open
-      ? `<button class="om-cta" type="button" data-ask title="${esc(T("Your browser will ask to let this page reach magpie on this computer", "浏览器会询问是否允许本页访问本机的 magpie", "このページがこのコンピュータの magpie に接続してよいか、ブラウザが尋ねます"))}">${esc(T("Follow my Omarchy theme", "跟随 Omarchy 主题", "Omarchy のテーマに合わせる"))}</button>`
+      ? `<button class="om-cta" type="button" data-ask title="${esc(T("Your browser will ask to let this page reach magpie on this computer", "浏览器会询问是否允许本页访问本机的 magpie", "このページがこのコンピュータの magpie に接続してよいか、ブラウザが尋ねます", "Ihr Browser fragt, ob diese Seite magpie auf diesem Rechner erreichen darf"))}">${esc(T("Follow my Omarchy theme", "跟随 Omarchy 主题", "Omarchy のテーマに合わせる", "Meinem Omarchy-Theme folgen"))}</button>`
       : "";
     bar.innerHTML = cta + `<button class="om-chip${status === "live" && following ? " live" : ""}" type="button" aria-haspopup="menu" aria-expanded="${open}"><span class="om-logo" aria-hidden="true"></span><span class="om-name">${esc(cur.name || "omarchy")}</span></button>`
       + (open ? `<div class="om-menu" role="menu">
         <div class="om-h">Omarchy</div>
-        <button class="om-row${following ? " on" : ""}" type="button" role="menuitemradio" aria-checked="${following}" data-pick=""><span class="om-sw om-follow"></span>${esc(T("Follow this computer", "跟随这台电脑", "このコンピュータに合わせる"))}</button>
-        <div class="om-note">${status === "ask" ? `<button class="om-ask" type="button" data-ask>${esc(note)} →</button>` : esc(note)}${status === "absent" ? ` · <a href="/#download">${esc(T("Get magpie", "下载 magpie", "magpie を入手"))}</a>` : ""}</div>
-        <div class="om-h">${esc(T("Themes", "主题", "テーマ"))}</div>
+        <button class="om-row${following ? " on" : ""}" type="button" role="menuitemradio" aria-checked="${following}" data-pick=""><span class="om-sw om-follow"></span>${esc(T("Follow this computer", "跟随这台电脑", "このコンピュータに合わせる", "Diesem Rechner folgen"))}</button>
+        <div class="om-note">${status === "ask" ? `<button class="om-ask" type="button" data-ask>${esc(note)} →</button>` : esc(note)}${status === "absent" ? ` · <a href="/#download">${esc(T("Get magpie", "下载 magpie", "magpie を入手", "magpie holen"))}</a>` : ""}</div>
+        <div class="om-h">${esc(T("Themes", "主题", "テーマ", "Themes"))}</div>
         <div class="om-list">${rows}</div>
-        <button class="om-row om-quit" type="button" data-off>${esc(T("Turn off Omarchy look", "关闭 Omarchy 风格", "Omarchy スタイルをオフ"))}</button>
+        <button class="om-row om-quit" type="button" data-off>${esc(T("Turn off Omarchy look", "关闭 Omarchy 风格", "Omarchy スタイルをオフ", "Omarchy-Look ausschalten"))}</button>
       </div>` : "");
   }
   function onClick(e) {

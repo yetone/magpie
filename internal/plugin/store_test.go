@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // storeSandbox gives the test its own magpie folders, without the Bun the
@@ -20,7 +21,7 @@ import (
 func storeSandbox(t testing.TB) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("HOME", dir)
+	testenv.SetHome(t, dir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
 	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {

@@ -14,7 +14,9 @@ function install(t, { termux = true, arch = "aarch64", override = false, prefixO
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const tools = join(dir, "tools");
   const home = join(dir, "home");
-  const prefix = join(dir, "com.termux/files/usr");
+  // forward slashes on Windows too: install.sh knows Termux by
+  // */com.termux/files/usr, which a backslashed path never matches
+  const prefix = join(dir, "com.termux/files/usr").replaceAll("\\", "/");
   const bin = override ? join(dir, "custom bin") : termux ? join(prefix, "bin") : join(home, ".local/bin");
   mkdirSync(tools, { recursive: true });
   mkdirSync(bin, { recursive: true });
@@ -70,7 +72,8 @@ test("Termux downloads Android arm64 into PREFIX/bin even with WebKit installed"
   const r = install(t, { desktop: true });
   assert.equal(r.status, 0, r.stderr);
   assert.equal(readFileSync(join(r.bin, "magpie"), "utf8"), r.payload);
-  assert.ok(statSync(join(r.bin, "magpie")).mode & 0o111);
+  // NTFS keeps no execute bit, so Windows reports none
+  if (process.platform !== "win32") assert.ok(statSync(join(r.bin, "magpie")).mode & 0o111);
   assert.match(r.requests, /magpie-cli-android-arm64/);
   assert.doesNotMatch(r.requests, /magpie-linux-|icon-256/);
   assert.equal(existsSync(join(r.share, "applications/magpie.desktop")), false);

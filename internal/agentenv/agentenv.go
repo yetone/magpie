@@ -60,3 +60,10 @@ var Vars = []string{
 	// makes an account or an installation visible that the test didn't make
 	"FACTORY_HOME_OVERRIDE", "WINDSURF_API_SERVER_URL", "ZCODE_CREDENTIAL_SECRET",
 }
+
+// NotPaths are the Vars that name no folder or file: a profile's name, a
+// server's address, a secret.
+var NotPaths = map[string]bool{
+	"PI_PROFILE": true, "OMP_PROFILE": true,
+	"WINDSURF_API_SERVER_URL": true, "ZCODE_CREDENTIAL_SECRET": true,
+}

@@ -117,8 +117,12 @@ if [ "$os" = darwin ]; then
   apps=/Applications
   [ -w "$apps" ] || { apps="$HOME/Applications"; mkdir -p "$apps"; }
   ditto -x -k "$tmp/$file" "$tmp/x"
+  # the new app beside the old one first: a move failing (a full disk)
+  # leaves the old app in place
+  rm -rf "$apps/.magpie.app.new"
+  mv "$tmp/x/magpie.app" "$apps/.magpie.app.new"
   rm -rf "$apps/magpie.app"
-  mv "$tmp/x/magpie.app" "$apps/magpie.app"
+  mv "$apps/.magpie.app.new" "$apps/magpie.app"
   ln -sf "$apps/magpie.app/Contents/MacOS/magpie" "$bin/magpie"
   say "installed $apps/magpie.app"
 else

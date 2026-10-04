@@ -483,8 +483,11 @@ async function answer(events, { model, stream, res, said }) {
 // h is what host.js lends: readAuth, changeAuth, keyFor, send, directory.
 export async function load(h, list) {
   const home = path.join(h.directory, "pi")
-  // pi keeps its settings and caches here, not in the user's ~/.pi
-  process.env.PI_CODING_AGENT_DIR ??= home
+  // pi keeps its settings and caches here, not in the user's ~/.pi. This
+  // overrides any PI_CODING_AGENT_DIR from the user's shell: with that one,
+  // the auth.json written below would be the user's own pi sign-ins, and
+  // magpie would delete every sign-in it doesn't hold itself.
+  process.env.PI_CODING_AGENT_DIR = home
   // pi makes it on start; packages write their files into it (pi-antigravity
   // its accounts) and fail with ENOENT when it isn't there
   fs.mkdirSync(process.env.PI_CODING_AGENT_DIR, { recursive: true })

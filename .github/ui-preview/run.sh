@@ -8,9 +8,16 @@
 # env: DEEPSEEK_API_KEY, DIFF_FILE, PR_TITLE, PR_BODY_FILE; PLAYWRIGHT_BROWSERS_PATH
 # must already point at the installed Chromium, since HOME moves.
 set -euo pipefail
+# the home below isolates magpie on Linux only: Windows reads USERPROFILE
+# and APPDATA, macOS keeps sign-ins in the Keychain
+[ "$(uname -s)" = Linux ] || { echo "run.sh: Linux only" >&2; exit 1; }
 src=$(cd "$1" && pwd)
 mkdir -p "$2"
 out=$(cd "$2" && pwd)
+# record.mjs empties the out folder when a secret showed: never one that
+# holds the source, the home or everything
+case "$src/" in "${out%/}"/*) echo "run.sh: out folder $out holds the source" >&2; exit 1 ;; esac
+case "$HOME/" in "${out%/}"/*) echo "run.sh: out folder $out holds the home" >&2; exit 1 ;; esac
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
 trap 'kill "${web:-}" 2>/dev/null || true' EXIT

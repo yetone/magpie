@@ -7,7 +7,8 @@
 // language's own pages.
 //
 // A language is added here and in LANGS (its dictionary, "<html lang>", and
-// whether /docs/<lang>/ exists), in the page's language menu and hreflang
+// whether /docs/<lang>/ exists; without them its links to /docs/ stay on the
+// English guide), in the page's language menu and hreflang
 // links, and in the demo's T() calls.
 
 const zh = {
@@ -260,7 +261,133 @@ const ja = {
   "foot.feed": "更新フィード",
 };
 
+const de = {
+  "meta.desc": "Das Modell jedes Agenten an einem Ort wählen. Codex mit DeepSeek, Claude Code mit Kimi, Gemini CLI mit GLM – aus der Menüleiste, über einen einzigen lokalen Zugangspunkt.",
+  "meta.tagline": "Das Modell jedes Agenten. An einem Ort.",
+  "meta.ogalt": "magpie: das Modell jedes Agenten, an einem Ort",
+  "meta.url": "https://usemagpie.ai/de/",
+  "alt.picker": "Die Modellauswahl von Codex in magpie mit Modellen von DeepSeek, Kimi und GLM",
+  "alt.panel": "Das Menüleisten-Panel von magpie: jeder Agent mit dem Modell eines anderen Anbieters",
+  "alt.providers": "Der Reiter „Anbieter“ in magpie: DeepSeek, Kimi, GLM, Qwen, MiniMax, OpenRouter, Anthropic und Gemini, jeweils mit den Agenten, die sie nutzen",
+
+  "nav.how": "Funktionsweise",
+  "nav.routing": "Weiterleitung",
+  "nav.providers": "Anbieter",
+  "nav.docs": "Doku",
+  "nav.releases": "Releases",
+  "nav.language": "Sprache",
+  "nav.menu": "Menü",
+  "nav.download": "Download",
+
+  "hero.h1": "Das Modell jedes Agenten. <span>An einem Ort.</span>",
+  "hero.lede": "magpie gibt jedem Agenten jedes Modell. Fügen Sie einen Anbieter einmal hinzu – DeepSeek, Kimi, GLM, Qwen, OpenRouter, Ollama oder die Claude- und ChatGPT-Abos, die Sie ohnehin bezahlen – und wählen Sie ihn mit einem Klick in Codex, Claude Code, Gemini CLI oder jedem anderen Agenten.",
+  "dl.mac": "Für Mac herunterladen",
+  "hero.term": "Im Terminal installieren",
+  "hero.free": "Kostenlos",
+  "hero.oss": "Open Source",
+  "hero.other": "Windows &amp; Linux",
+
+  "sponsor.by": "Gesponsert von",
+  "sponsor.yylx": "Ein API-Zugangspunkt für Claude und GPT, abgestimmt auf Claude Code.",
+  "sponsor.become": "Sponsor werden",
+  "agents.agents": "Jeder Agent",
+  "agents.models": "Jedes Modell",
+
+  "how.eyebrow": "Funktionsweise",
+  "how.h2": "Ein Zugangspunkt spricht jede API.",
+  "how.sub": "Codex spricht nur OpenAI Responses, Claude Code nur Anthropic Messages. magpie betreibt auf Ihrem Rechner einen Zugangspunkt, der sie alle spricht und in beide Richtungen übersetzt – Streaming, Tool-Aufrufe und Reasoning inklusive. So kann jeder Agent das Modell jedes Anbieters nutzen.",
+  "how.agents": "Ihre Agenten",
+  "how.gateway": "magpie-Zugangspunkt",
+  "how.providers": "Beliebige Anbieter",
+  "how.claude": "Ihr Claude-Abo",
+  "how.chatgpt": "Ihr ChatGPT-Abo",
+
+  "bar.eyebrow": "Die Menüleiste",
+  "bar.h2": "Jeder Agent, sein eigenes Modell.",
+  "bar.sub": "Ein Blick zeigt, womit jeder Agent läuft. Klicken Sie auf einen Wert, um ihn zu ändern; magpie schreibt die Konfiguration dieses Agenten um – nur den Eintrag, den Sie geändert haben –, und die nächste Sitzung nutzt ihn.",
+  "bar.l1": "<b>Codex</b> bekommt DeepSeek in seine eigene <code>/model</code>-Liste, mit den passenden Reasoning-Stufen.",
+  "bar.l2": "<b>Claude Code</b> bekommt Kimi, GLM oder GPT hinter <code>opus</code>, <code>sonnet</code> und <code>haiku</code>.",
+  "bar.l3": "<b>Wählen Sie das native Modell</b>, und magpie stellt genau das wieder her, was vorher dort stand.",
+  "bar.l4": "<b>Profile</b> stellen alle Agenten auf einmal um – „Budget“, „Fokus“, was immer Sie speichern.",
+
+  "subs.eyebrow": "Abos, geteilt",
+  "subs.h2": "Die Abos, die Sie bezahlen, in jedem Agenten.",
+  "subs.sub": "In einem Agenten angemeldet? Diese Anmeldung wird zum Anbieter. Ihre Modelle erscheinen in der Modellauswahl jedes anderen Agenten – nichts wird kopiert, kein Schlüssel eingefügt, Tokens werden so erneuert, wie der Agent es selbst tut.",
+  "subs.claude": "Ihre Claude-Code-Anmeldung treibt OpenCode, Pi oder Goose an: <code>claude/claude-sonnet-5</code>.",
+  "subs.codex": "Ihre Codex-Anmeldung bringt GPT in Claude Code: <code>codex/gpt-5.5</code>.",
+  "subs.copilot": "Ihre Copilot-Lizenz bedient jeden Agenten: <code>copilot/claude-sonnet-4.5</code>.",
+
+  "rt.eyebrow": "Intelligente Weiterleitung",
+  "rt.h2": "Für jede Runde das richtige Modell. Nie auf dem Trockenen.",
+  "rt.sub": "Beschreiben Sie, wofür jedes Modell da ist – „eine kurze Frage“, „Tests schreiben oder reparieren“ –, und zu Beginn jeder Runde sagt ein kleines, schnelles Modell magpie, worum es geht: Die Runde geht an dieses Modell, und ihre Tool-Runden bleiben dort. <a href=\"/docs/intent\">So funktioniert’s</a>. Fügen Sie außerdem jeden Schlüssel und jedes Abo hinzu, das Sie haben – mehrere Claude-, ChatGPT-, Copilot- oder Grok-Konten, mehrere Schlüssel für einen Anbieter –, und schalten Sie alle ein. Für jede Anfrage wählt magpie das Konto, das antworten soll, und wenn eines nicht kann, antwortet das nächste, bevor Ihr Agent überhaupt einen Fehler sieht.",
+  "rt.intent": "Nach Intent",
+  "rt.smart": "Smart",
+  "rt.order": "Der Reihe nach",
+  "rt.turn": "Reihum",
+  "rt.least": "Geringste Nutzung zuerst",
+  "rt.mode.smart": "Smart, die Voreinstellung: Das Konto, das als Erstes zurückgesetzt wird, kommt zuerst, damit kein Kontingent verfällt; Konten, die nicht antworten können, werden übersprungen. (Hier steht jede Anfrage für eine Stunde.)",
+  "rt.agent": "Ihr Agent",
+  "rt.cap": "Claude Code schickt jede Anfrage an magpie; magpie entscheidet, welches Konto sie beantwortet.",
+  "rt.s1": "Anfragen",
+  "rt.s2": "umgeleitet",
+  "rt.s3": "Fehler bei Ihrem Agenten",
+  "rt.reset": "Achtet auf den Reset",
+  "rt.reset.p": "Das Konto, das als Erstes zurückgesetzt wird, kommt zuerst – was es noch übrig hat, verfiele sonst beim Reset. Es behält die Anfragen, solange es Kontingent übrig hat, damit sein Prompt-Cache warm bleibt.",
+  "rt.credit": "Guthaben aufgebraucht",
+  "rt.credit.p": "Ein Schlüssel ohne Guthaben pausiert eine halbe Stunde; die Anfragen gehen an einen, der noch zahlen kann.",
+  "rt.limits": "Rate-Limits &amp; Kontingente",
+  "rt.limits.p": "Ein Konto, das der Anbieter begrenzt hat, wird so lange übersprungen, wie der Anbieter es verlangt – nach seinen Retry-After- und Reset-Headern, ohne Raten und ohne Dauerfeuer.",
+  "rt.failover": "Failover",
+  "rt.failover.p": "Ein fehlerhaftes Konto setzt eine Minute aus, bei jedem weiteren Fehler länger; die Anfrage wird beim nächsten wiederholt, bevor auch nur ein Byte der Antwort Ihren Agenten erreicht.",
+
+  "prov.eyebrow": "Anbieter",
+  "prov.h2": "Schlüssel einfügen. Fertig eingerichtet.",
+  "prov.sub": "Zwanzig Presets – Anbieter, Relays und lokale Server. magpie fragt jeden Anbieter, welche Modelle er bereitstellt; ein Modell, das heute Morgen erschienen ist, steht also nach der nächsten Aktualisierung in jeder Modellauswahl. Schlüssel bleiben in magpie; Agenten sehen sie nie.",
+
+  "det.eyebrow": "Details",
+  "det.h2": "Klein, sorgfältig und unaufdringlich.",
+  "det.edits": "Präzise Konfigurationsänderungen",
+  "det.edits.p": "Kommentare, Reihenfolge und Einrückung in <code>settings.json</code>, <code>config.toml</code> oder <code>config.yaml</code> bleiben erhalten. Geschrieben wird atomar.",
+  "det.tiny": "Klein, nativ, offen",
+  "det.tiny.p": "Unter 15 MB, auf der WebView des Systems. Kein Electron, keine Runtime. MIT-Lizenz, <a href=\"https://github.com/yetone/magpie\">auf GitHub</a>.",
+  "det.env": "Keine Schlüssel aus Ihrer Shell",
+  "det.env.p": "magpie liest nie API-Schlüssel aus Umgebungsvariablen. Es nutzt genau das, was Sie hinzufügen.",
+  "det.client": "Offen für jeden Client",
+  "det.client.p": "Alles mit einer Base-URL-Einstellung kann den Zugangspunkt nutzen: <code>OPENAI_BASE_URL</code>, <code>ANTHROPIC_BASE_URL</code>, <code>GOOGLE_GEMINI_BASE_URL</code>.",
+  "det.usage": "Nutzung je Agent",
+  "det.usage.p": "Tokens, Cache-Treffer und Kosten für jeden Agenten und jedes Modell, die über den Zugangspunkt liefen.",
+  "det.update": "Aktualisiert sich selbst",
+  "det.update.p": "Neue Versionen werden still im Hintergrund geladen und beim Neustart installiert. Auf dem Mac signiert und notarisiert.",
+
+  "cli.eyebrow": "Terminal",
+  "cli.h2": "Auch als TUI und CLI.",
+  "cli.sub": "Dieselbe App, im Terminal. Das Installationsskript legt den Befehl <code>magpie</code> in <code>~/.local/bin</code> ab und die App dorthin, wo sie hingehört: nach <code>/Applications</code> auf dem Mac, ins App-Menü unter Linux.",
+  "copy": "Kopieren",
+  "cli.win": "Unter Windows nimmt <code>magpie.exe</code> dieselben Befehle an; <code>magpie-cli-windows-amd64.exe</code> aus dem <a href=\"https://github.com/yetone/magpie-releases/releases/latest\">neuesten Release</a> ist die reine Terminal-Version.",
+  "cli.c.add": "# Anbieter hinzufügen",
+  "cli.c.preset": "# ein Preset braucht nur den Schlüssel",
+  "cli.c.local": "# lokale Server brauchen keinen",
+  "cli.c.give": "# Agenten Modelle von Drittanbietern geben",
+  "cli.c.plan": "# Ihr Claude-Abo in OpenCode",
+  "cli.c.group": "# ein Modell über mehrere Anbieter",
+  "cli.c.ls": "# jeder Agent und sein Modell",
+  "cli.c.prof": "# Profile",
+  "cli.c.tui": "# die ganze App im Terminal",
+
+  "comm.h": "Werden Sie Teil der magpie-Community",
+  "comm.p": "Fragen stellen, Ihr Setup zeigen, uns sagen, was wir als Nächstes bauen sollen – auf Discord.",
+
+  "fin.h2": "Jeder Agent. Jedes Modell.",
+  "fin.sub": "Kostenlos, Open Source, nativ. Für macOS, Windows und Linux.",
+  "fin.gh": "Auf GitHub ansehen",
+  "plat.mac": "11 oder neuer",
+  "plat.win": "10 oder neuer",
+  "foot.start": "Erste Schritte",
+  "foot.feed": "Update-Feed",
+};
+
 export const LANGS = {
   zh: { dict: zh, html: "zh-CN", docs: true },
   ja: { dict: ja, html: "ja", docs: true },
+  de: { dict: de, html: "de", docs: false },
 };

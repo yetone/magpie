@@ -49,7 +49,7 @@
     const u = s.replace(/^git\+/, "").replace(/\.git$/, "");
     return /^https?:\/\//.test(u) ? u : "";
   };
-  const lang = () => (document.documentElement.lang || "").startsWith("zh") ? "zh" : "en";
+  const lang = () => (document.documentElement.lang || "en").slice(0, 2);
   const summary = (l) => l.summary?.[lang()] || l.summary?.en || l.npm?.description || "";
   const count = (n) => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "k" : String(n || 0);
   const entryOf = (pkg) => mine?.plugins?.find((e) => name(e.spec) === pkg);

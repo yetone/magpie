@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // Run the public command in a fresh process, with only a fake account,
@@ -68,7 +69,10 @@ func TestAccountsCachedReading(t *testing.T) {
 			cmd.Env = []string{"MAGPIE_TEST_ACCOUNTS_READING=" + mode, "HOME=" + home, "USERPROFILE=" + home,
 				"XDG_CONFIG_HOME=" + filepath.Dir(config), "XDG_CACHE_HOME=" + filepath.Join(home, ".cache"),
 				"CLAUDE_CONFIG_DIR=" + filepath.Join(home, ".claude"), "CODEX_HOME=" + filepath.Join(home, ".codex"), "PATH=" + home,
-				"SystemRoot=" + os.Getenv("SystemRoot"), "USER=magpie-test", "NO_COLOR=1"}
+				"SystemRoot=" + os.Getenv("SystemRoot"), "USER=magpie-test", "NO_COLOR=1",
+				// so that the binary keeps this home instead of a sandbox of its own
+				testenv.Marker + "=" + os.Getenv(testenv.Marker),
+				"TMP=" + os.Getenv("TMP"), "TEMP=" + os.Getenv("TEMP"), "TMPDIR=" + os.Getenv("TMPDIR")}
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("accounts: %v: %s", err, out)
