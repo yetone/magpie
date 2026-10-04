@@ -1600,8 +1600,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 /* the connect card: label column, then the value with a copy button */
 .connect { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px 14px; align-items: start; padding: 12px 14px 14px; }
 .connect > div { min-width: 0; }
-.connect label { font-size: 12px; color: var(--muted); text-align: right; padding-top: 4px; }
-.connect .hint { font-size: 11px; color: var(--faint); margin-top: 4px; line-height: 1.4; }
+.connect label { font-size: 12px; color: var(--fg-2); text-align: right; padding-top: 4px; }
+.connect .hint { font-size: 11px; color: var(--fg-2); margin-top: 4px; line-height: 1.4; }
 .connect .val { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 4px 0 9px; border-radius: 7px; background: var(--pill); box-shadow: inset 0 0 0 1px var(--line-2); max-width: 100%; }
 .connect .val code { font-size: 12px; color: var(--fg); user-select: text; -webkit-user-select: text; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .connect .val > .val { min-width: 0; height: auto; padding: 0; background: none; box-shadow: none; }
@@ -1629,6 +1629,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .row.model:hover { background: var(--card-2); }
 .row.model.selected { background: var(--sel); }
 .row.model .name { font: 12px var(--code); }
+.row.model .who { user-select: text; -webkit-user-select: text; cursor: text; }
+.row.model .sub { color: var(--fg-2); }
 .row.model .copy { opacity: 0; }
 .row.model:hover .copy, .row.model.selected .copy { opacity: 1; }
 .row.model .copy.done { opacity: 1; }
@@ -1991,8 +1993,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .icon-pick .icon-grid .ic { width: 18px; height: 18px; }
 .editor .ehead b { font-weight: 600; }
 .editor .ehead .note { font-size: 12px; color: var(--muted); }
-.editor label { font-size: 12px; color: var(--muted); text-align: right; padding-top: 5px; }
-.editor .hint { font-size: 11px; color: var(--faint); margin-top: 4px; }
+.editor label { font-size: 12px; color: var(--fg-2); text-align: right; padding-top: 5px; }
+.editor .hint { font-size: 11px; color: var(--fg-2); margin-top: 4px; }
 /* a provider's own proxy (#237): the address beside the options, its room
    kept while it is hidden so a pick never changes the dialog's height */
 .editor .proxy-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -2210,7 +2212,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .mname { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
 .mname .mwho { display: flex; align-items: center; gap: 8px; flex: 1 1 220px; min-width: 0; }
 .mname .mwho input { flex: 1; min-width: 0; max-width: 220px; height: 25px; }
-.mname .mwho code { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mname .mwho code { font-size: 11px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; user-select: text; -webkit-user-select: text; cursor: text; }
 .mname .mapi { flex: none; height: 24px; font-size: 11px; }
 .mname .msame { display: flex; align-items: center; gap: 6px; flex: 0 1 230px; min-width: 0; font-size: 11.5px; color: var(--muted); }
 .mname .msame span { flex: none; }
@@ -2242,7 +2244,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .set-page > .list:not(:last-child) { margin-bottom: 8px; }
 .row.pref { min-height: 50px; padding: 8px 12px 8px 14px; gap: 14px; }
 .row.pref .who { flex: 1 1 auto; }
-.row.pref .sub { margin-top: 2px; }
+.row.pref .sub { margin-top: 2px; color: var(--fg-2); }
 /* Keep export consent readable, and give collector URLs their own line. */
 #otelList .otel-section { padding: 10px 14px 6px; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--pill); }
 #otelList .otel-section:not(:first-child) { border-top: 1px solid var(--line-2); }
@@ -2360,6 +2362,7 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 .chips .chip { transition: background .16s var(--ease), color .16s var(--ease), transform .14s var(--ease); }
 .chips .chip:active { transform: scale(.96); }
 .status { transition: opacity .2s var(--ease); }
+.status.err, .status.warn { user-select: text; -webkit-user-select: text; cursor: text; }
 
 /* the theme crossfades instead of snapping */
 html.theming, html.theming *, html.theming *::before, html.theming *::after {

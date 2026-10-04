@@ -65,7 +65,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
     async function reset() {
       await page.goto("http://magpie.test/?view=routing");
-      await page.locator(".rt-day").nth(1).waitFor();
+      await page.locator(".rt-days .rt-day").nth(1).waitFor();
     }
     // the reader scrolls the view till sel is y under its top, or less
     async function scrollTo(sel, y = 300) {
@@ -85,16 +85,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     await t.test("Live and a day, picked in turn, stay under the pointer", async () => {
       await reset();
-      await page.locator(".rt-day").nth(1).click(); // the day's requests, the list full
+      await page.locator(".rt-days .rt-day").nth(1).click(); // the day's requests, the list full
       await settle(page);
       // down to the list's end: Live, with none, leaves the page shorter
       await scrollTo(".rt-days", 0);
       assert(await page.locator(view).evaluate((v) => v.scrollTop + v.clientHeight >= v.scrollHeight - 2), "the view must be at its end");
       for (const i of [0, 1, 0, 1]) {
-        const chip = page.locator(".rt-day").nth(i), was = await top(page, ".rt-days");
+        const chip = page.locator(".rt-days .rt-day").nth(i), was = await top(page, ".rt-days");
         await chip.click();
         await settle(page);
-        assert.equal(await page.locator(".rt-day").nth(i).getAttribute("aria-pressed"), "true");
+        assert.equal(await page.locator(".rt-days .rt-day").nth(i).getAttribute("aria-pressed"), "true");
         const is = await top(page, ".rt-days");
         assert(Math.abs(is - was) <= 1, `picking ${i ? "the day" : "Live"} moved the page ${Math.round(is - was)}px`);
       }
@@ -102,7 +102,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     await t.test("a request picked in the list, and Replay them all, stay under the pointer", async () => {
       await reset();
-      await page.locator(".rt-day").nth(1).click();
+      await page.locator(".rt-days .rt-day").nth(1).click();
       await settle(page);
       for (const i of [3, 7, 5]) {
         const row = () => page.locator(".rt-req").nth(i);
@@ -208,10 +208,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     await t.test("the room kept for a click goes as the reader scrolls back", async () => {
       await reset();
-      await page.locator(".rt-day").nth(1).click();
+      await page.locator(".rt-days .rt-day").nth(1).click();
       await settle(page);
       await scrollTo(".rt-days", 0);
-      await page.locator(".rt-day").nth(0).click(); // Live: none, the page shorter
+      await page.locator(".rt-days .rt-day").nth(0).click(); // Live: none, the page shorter
       await settle(page);
       assert(await page.locator(view).evaluate((v) => !!v.querySelector(":scope > .view-room")), "room must be kept");
       const box = await page.locator(view).boundingBox();
@@ -224,7 +224,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await t.test("the reader's wheel still scrolls after a click", async () => {
       await reset();
       await page.locator(view).evaluate((v) => { const s = document.createElement("div"); s.style.cssText = "flex:none;height:1600px"; v.append(s); });
-      await page.locator(".rt-day").nth(1).click();
+      await page.locator(".rt-days .rt-day").nth(1).click();
       const was = await page.locator(view).evaluate((v) => v.scrollTop);
       const box = await page.locator(view).boundingBox();
       await page.mouse.move(box.x + box.width / 2, box.y + 60);

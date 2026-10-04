@@ -5032,6 +5032,8 @@ function renderGatewayModels() {
     // a decision model is put in System One's snippets, any other in the
     // other APIs'; the API follows the model clicked
     row.onclick = () => {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && row.contains(selection.anchorNode)) return;
       const so = decideEntry(m);
       if (so) { decideModel = m.id; localStorage.setItem("magpie.decideModel", m.id); }
       else { exampleModel = m.id; localStorage.setItem("magpie.model", m.id); }
@@ -16249,6 +16251,20 @@ function scrollOnPurpose(e, ms = 1000) {
   return true;
 }
 const SCROLL_KEYS = new Set(["PageUp", "PageDown", "Home", "End", "ArrowUp", "ArrowDown", " "]);
+// Enter/Space can move focus to another field (opening a form, or validation).
+// Reveal that field only when the keyboard action moved it out of sight.
+function keyboardFocus(e) {
+  const before = document.activeElement;
+  // The click guard first puts back any native focus scroll; inspect its result.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const focused = document.activeElement;
+    if (focused === before) return;
+    const v = focused?.closest(".view");
+    if (!v || v.hidden) return;
+    const r = focused.getBoundingClientRect(), b = v.getBoundingClientRect();
+    if ((r.top < b.top || r.bottom > b.bottom) && scrollOnPurpose(e, 400)) focused.scrollIntoView({ block: "nearest" });
+  }));
+}
 addEventListener("wheel", () => readerScrolls(250), { capture: true, passive: true });
 addEventListener("touchmove", () => readerScrolls(250), { capture: true, passive: true });
 // A flick goes on scrolling after the finger is lifted, with no touch event
@@ -16268,6 +16284,10 @@ addEventListener("pointermove", (e) => {
 addEventListener("keydown", (e) => {
   const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
   if (e.key === "Tab" || (!typing && SCROLL_KEYS.has(e.key))) readerScrolls(400);
+  if (e.isTrusted && e.key === "Enter") keyboardFocus(e);
+}, true);
+addEventListener("keyup", (e) => {
+  if (e.isTrusted && e.key === " " && !e.target.closest?.("input, textarea, select, [contenteditable]")) keyboardFocus(e);
 }, true);
 const readerAt = new WeakMap();
 // Where the reader is is a number, the view's scrollTop, unless the view
