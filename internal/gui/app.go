@@ -131,9 +131,16 @@ func (h *host) Import(link string) {
 }
 
 // dock puts magpie in the Dock or takes it out as s says, with the window
-// shown or not: always, never, or while the window is.
+// shown or not, full screen or not.
 func (h *host) dock(s settings.Settings, shown bool) {
-	setDock(s.Dock || s.DockWindow && shown, shown)
+	full := application.InvokeSyncWithResult(func() bool { return h.main != nil && h.main.IsFullscreen() })
+	setDock(inDock(s, shown, full), shown)
+}
+
+// inDock: always, never, or while the window is shown, as s says, and while
+// it is full screen whatever s says (dockOnFullscreen).
+func inDock(s settings.Settings, shown, fullscreen bool) bool {
+	return s.Dock || s.DockWindow && shown || fullscreen
 }
 
 func (h *host) Quit()                        { h.app.Quit() }
@@ -345,6 +352,7 @@ func Run(version string, showMain bool, link string) error {
 	}
 
 	onDock = func(s settings.Settings) { h.dock(s, h.MainShown()) }
+	dockOnFullscreen()
 	// The Dock icon opens the window. Wails would show every hidden window
 	// on it, the panel too, so the hook answers first and stops it.
 	h.app.Event.RegisterApplicationEventHook(events.Mac.ApplicationShouldHandleReopen, func(e *application.ApplicationEvent) {

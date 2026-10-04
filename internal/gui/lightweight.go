@@ -90,10 +90,14 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 		}
 		h.hideMain()
 	})
+	// Out of full screen, magpie leaves the Dock again if it was there only
+	// for that (dockOnFullscreen).
 	w.OnWindowEvent(events.Mac.WindowDidExitFullScreen, func(*application.WindowEvent) {
 		if h.closing.Swap(false) {
 			h.hideMain()
+			return
 		}
+		h.dock(settings.Load(), true)
 	})
 	return w
 }

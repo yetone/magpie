@@ -108,6 +108,19 @@ static void setDock(int on, int front) {
 		if (front) [NSApp activateIgnoringOtherApps:YES];
 	});
 }
+
+// A full-screen window's title bar, buttons and all, comes down from the top
+// of the screen only with the menu bar, and an app out of the Dock has none.
+// It joins the Dock as the window starts going full screen: once the window
+// is full screen, joining brings neither back. Wails' window events reach Go
+// later than that, so this is the notification's own observer.
+static void dockOnFullscreen(void) {
+	dispatch_async(dispatch_get_main_queue(), ^{
+		[[NSNotificationCenter defaultCenter] addObserverForName:NSWindowWillEnterFullScreenNotification object:nil queue:nil usingBlock:^(NSNotification *n) {
+			[NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+		}];
+	});
+}
 */
 import "C"
 
@@ -157,6 +170,10 @@ func dockPolicy(on bool) application.ActivationPolicy {
 // setDock shows magpie in the Dock or takes it out, at once, bringing it to
 // the front after when front.
 func setDock(on, front bool) { C.setDock(C.int(boolInt(on)), C.int(boolInt(front))) }
+
+// dockOnFullscreen puts magpie in the Dock whenever a window goes full
+// screen; leaving it, the window puts magpie back as the settings say.
+func dockOnFullscreen() { C.dockOnFullscreen() }
 
 func boolInt(b bool) int {
 	if b {
