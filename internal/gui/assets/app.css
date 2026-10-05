@@ -2720,6 +2720,14 @@ body.panel .modal { padding: 16px 12px; }
 }
 
 /* Import from other apps: a checklist per app */
+.provider-discovery { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.provider-discovery .who { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.provider-discovery b { font-size: 12.5px; font-weight: 500; }
+.provider-discovery .who > span { font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; }
+.provider-discovery .actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 12px; margin-left: auto; }
+#view-providers .after-list { flex-wrap: wrap; }
+.provider-discovery.compact { padding: 0; margin: 0 0 0 auto; border: 0; background: none; }
+.provider-discovery.compact .who { display: none; }
 .editor.importapps { grid-template-columns: minmax(0, 1fr); }
 .editor.importapps .appnote { font-size: 12px; color: var(--muted); line-height: 1.5; }
 .editor.importapps .applist { display: flex; flex-direction: column; gap: 14px; max-height: min(56vh, 460px); overflow-y: auto; margin: 0 -4px; padding: 0 4px; }

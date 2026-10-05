@@ -81,6 +81,10 @@
 <main class="view" id="view-providers" hidden>
   <div id="fileError" hidden></div>
   <div id="movable" hidden></div>
+  <aside class="provider-discovery" id="providerDiscovery" hidden>
+    <div class="who" role="status" aria-live="polite"><b id="providerDiscoveryCount"></b><span id="providerDiscoverySources"></span></div>
+    <div class="actions"><button class="text primary" id="reviewProviderDiscovery">Review and import…</button><button class="text" id="dismissProviderDiscovery" data-t data-tt="Hide these configurations until they change">Ignore</button></div>
+  </aside>
   <div class="list" id="providers"></div>
   <div class="row-head off-head" id="offHead" hidden><button class="fold" id="foldOff" aria-expanded="false" aria-controls="offProviders"><span class="label" data-t>Turned off</span><span class="note" id="offCount"></span></button></div>
   <div class="list" id="offProviders" hidden></div>
