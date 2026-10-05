@@ -68,7 +68,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       await page.route("**/*", serve(lang, posts));
       await page.goto("http://magpie.test/?view=providers");
-      await page.locator(".row.provider").click();
+      const relay = page.locator('.row.provider[data-id="relay"]');
+      await relay.click();
       const rename = page.locator(".mfoot button", { hasText: w.names });
       await rename.waitFor();
       const open = page.locator(".mnames:not([hidden])");
@@ -103,7 +104,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".mnames:not([hidden])").evaluate((e) => getComputedStyle(e).borderLeftStyle), "none");
       await page.keyboard.press("Escape");
       await page.locator("#modal").waitFor({ state: "hidden" });
-      await page.locator(".row.provider").click();
+      await relay.click();
       await page.locator(".mfoot button", { hasText: w.names }).waitFor();
       assert.equal(await page.locator(".mnames:not([hidden])").count(), 0, "a fresh editor opens it folded");
       assert.equal(await page.locator("#modal select").count(), 0);

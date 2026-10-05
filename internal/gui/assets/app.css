@@ -1843,7 +1843,6 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .accts .keys-tools .grow { flex: 1; }
 .accts .keys-tools .keys-filter { flex: 1 1 220px; max-width: 320px; height: 26px; padding: 0 8px; font-size: 12px; }
 .accts .keys-tools .keys-count { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.accts .keys-tools .keys-remove[data-armed] { color: var(--red); background: var(--red-soft); }
 .accts .keys-tools + .acc { border-top: 0; }
 .accts > .keys-tools:first-child { border-top: 0; }
 .accts > .keys-none + .acc, .accts > .keys-rest + .acc { border-top: 1px solid var(--line-2); }

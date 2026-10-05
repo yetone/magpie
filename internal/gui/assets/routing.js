@@ -2559,9 +2559,11 @@
   // member takes no reasoning of its own (provider.SaveGroup refuses
   // "group/x:high"), so its row says where its reasoning is set and goes
   // there, rather than leaving the slot empty.
-  const openGroupEditor = (g) => {
+  const openGroupEditor = async (g) => {
+    if (groupDirty() && !(await confirmDiscard())) return false;
     gEdit = { id: g.id, draft: { name: g.name, members: [...g.members], match: [...(g.match || [])], matched: [...(g.matched || [])], fast: [...(g.fast || [])], off: [...(g.off || [])], routing: g.routing || "", pick: g.pick || "", affinity: g.affinity || "", sink: !!g.sink, firstToken: g.firstToken || 0, context: g.context || 0, classifier: g.classifier || "", effort: g.effort || "", levels: [...(g.levels || [])], rules: (g.rules || []).map((r) => ({ ...r, intent: r.intent || "", agents: [...(r.agents || [])], time: r.time ? { ...r.time, days: [...(r.time.days || [])] } : null })) } };
     renderGroups();
+    return true;
   };
   const groupIcons = (g) => [...new Map((g.memberInfo || []).filter((i) => i.icon).map((i) => [i.provider || i.icon, i.icon])).values()];
   const memberIcon = (id) => { const s = subOf(id); return s ? stackIcon(groupIcons(s)) : icon(modelOf(id)?.icon || "generic"); };
@@ -2615,6 +2617,7 @@
     const typing = document.activeElement === gQ, [a, b] = [gQ.selectionStart, gQ.selectionEnd];
     if (all.length > 1 || gQ.value) {
       gQ.placeholder = t("Filter groups and models");
+      gQ.setAttribute("aria-label", gQ.placeholder);
       head.push(gQ);
     }
     if (!gSel) {
@@ -3160,8 +3163,8 @@
           // the row: the desktop app's member row doesn't wrap
           hx.append(el("span", "", t("Follows {name}", { name: s.name })));
           hx.title = t("Its models reason as {name} says: set that up on {name}'s own card, not here", { name: s.name });
-          hx.onclick = (ev) => {
-            openGroupEditor(s);
+          hx.onclick = async (ev) => {
+            if (!(await openGroupEditor(s))) return;
             const ed = gList.querySelector(".rt-gedit");
             if (ed && window.scrollOnPurpose?.(ev)) ed.scrollIntoView({ block: "center", behavior: "smooth" });
           };

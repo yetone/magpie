@@ -2,8 +2,8 @@
 // Hundreds of keys on one provider (361 on Discord: 导入了几百个 key，账号列表
 // 铺满整屏): the Accounts list shows the first five and All 300 keys; opened,
 // a filter, a page of 50 rows and how many more, and removing many at once
-// (those turned off, those failing for good, those the filter matches) on a
-// second click. Moving a shown key sends every key's place. Several keys
+// (those turned off, those failing for good, those the filter matches) after
+// an in-app confirmation. Moving a shown key sends every key's place. Several keys
 // pasted into a provider's API key field are kept and counted. No click
 // scrolls, there is no <select>, nothing has a left border. In English and
 // Chinese.
@@ -68,8 +68,8 @@ function serve(lang, posts) {
 }
 
 const words = {
-  en: { all: "All 300 keys", fewer: "Show fewer", more: "250 more — type to narrow them down", failing: "Remove 3 failing", armed: "Remove 3 keys? Click again", off: "Remove 6 turned off", matching: /^Remove the \d+ matching$/, count: "3 keys", of: "1 of 300 keys" },
-  zh: { all: "全部 300 个密钥", fewer: "收起", more: "还有 250 个，输入关键词缩小范围", failing: "移除 3 个失效的", armed: "移除 3 个密钥？再点一次", off: "移除 6 个已停用的", matching: /^移除筛出的 \d+ 个$/, count: "3 个密钥", of: "300 个密钥中的 1 个" },
+  en: { all: "All 300 keys", fewer: "Show fewer", more: "250 more — type to narrow them down", failing: "Remove 3 failing", off: "Remove 6 turned off", matching: /^Remove the \d+ matching$/, count: "3 keys", of: "1 of 300 keys" },
+  zh: { all: "全部 300 个密钥", fewer: "收起", more: "还有 250 个，输入关键词缩小范围", failing: "移除 3 个失效的", off: "移除 6 个已停用的", matching: /^移除筛出的 \d+ 个$/, count: "3 个密钥", of: "300 个密钥中的 1 个" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -119,6 +119,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".keys-more").click();
       const filter = page.locator(".keys-tools .keys-filter");
       await filter.waitFor();
+      assert.equal(await filter.getAttribute("aria-label"), await filter.getAttribute("placeholder"));
       assert.equal(await scrolled(page), sc, "opening scrolled");
       assert.ok(await filter.evaluate((i) => document.activeElement === i), "the filter has the focus");
       assert.equal(await rows(page).count(), 50, "opened, a page of 50 rows");
@@ -141,7 +142,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(errors, []);
     });
 
-    test(`${engine} ${lang}: failing keys go at once, on a second click`, async (t) => {
+    test(`${engine} ${lang}: bulk key removal waits for confirmation across editor redraws`, async (t) => {
       const { page, errors, posts } = await open(t, "remove");
       await page.locator(".keys-more").click();
       await page.locator(".keys-tools").waitFor();
@@ -149,12 +150,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // nothing typed, nothing to remove by the filter
       assert.equal(await page.locator(".keys-tools .keys-remove").filter({ hasText: w.matching }).count(), 0);
       const sc = await scrolled(page);
-      // a handle, not a locator: the button's name changes as it arms
-      const failing = await page.getByRole("button", { name: w.failing }).elementHandle();
+      const failing = page.getByRole("button", { name: w.failing });
+      const ask = page.locator("dialog.action-confirm[open]");
       await failing.click();
-      assert.equal((await failing.textContent()).trim(), w.armed);
+      await ask.waitFor();
+      assert.match(await ask.locator("h2").textContent(), /sk-…0010, sk-…0020, sk-…0030/);
       assert.equal(posts.length, 0, "the first click only asks");
-      await page.locator(".keys-tools .keys-remove[data-armed]").click();
+      await page.evaluate(() => renderProviders());
+      assert.equal(await ask.evaluate((d) => d.inert), false, "redrawing leaves the confirmation interactive");
+      await ask.locator("button").first().click();
+      assert.equal(posts.length, 0, "Cancel removes nothing");
+      assert.match(await page.locator(".keys-count").textContent(), /300/);
+      await failing.click();
+      await ask.locator("button").last().click();
       const last = await posted(posts, 1);
       assert.equal(last.path, "/api/keys/remove-many");
       assert.deepEqual(last.body, { id: "relay", refs: [idOf(10), idOf(20), idOf(30)] });
@@ -164,7 +172,23 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // a typed filter offers removing what it matches
       await page.locator(".keys-filter").fill("sk-…004");
       await page.locator(".keys-filter").dispatchEvent("input");
-      await page.locator(".keys-tools .keys-remove").filter({ hasText: w.matching }).waitFor();
+      const matching = page.locator(".keys-tools .keys-remove").filter({ hasText: w.matching });
+      await matching.waitFor();
+      await matching.click();
+      await ask.waitFor();
+      await page.keyboard.press("Escape");
+      assert.equal(posts.length, 1, "Escape keeps matching keys");
+      await matching.click();
+      await ask.locator("button").last().click();
+      assert.deepEqual((await posted(posts, 2)).body, { id: "relay", refs: Array.from({ length: 10 }, (_, i) => idOf(40 + i)) });
+      await page.waitForFunction(() => /287/.test(document.querySelector(".keys-count")?.textContent || ""));
+      await page.locator(".keys-filter").fill("");
+      const off = page.locator(".keys-tools .keys-remove").first();
+      await off.click();
+      await ask.waitFor();
+      assert.equal(posts.length, 2, "turned-off keys also wait for confirmation");
+      await ask.locator("button").last().click();
+      assert.deepEqual((await posted(posts, 3)).body, { id: "relay", refs: [99, 149, 199, 249, 299].map(idOf) });
       assert.deepEqual(errors, []);
     });
 

@@ -4768,7 +4768,7 @@ function askSignOutLogin(a, l) {
     e.stopPropagation();
     go.disabled = true;
     go.classList.add("busy");
-    if (await accountAction("login/forget", { agent: a.agent, user: l.user }, t("{agent} signed out of {user}", { agent: a.agentName, user: l.user }))) closeConfirmAsk();
+    if (await accountAction("login/forget", { agent: a.agent, user: l.user }, t("{agent} signed out of {user}", { agent: a.agentName, user: l.user }), true)) closeConfirmAsk();
     else go.disabled = false;
   };
   const cancel = el("button", "text", t("Cancel"));
@@ -6335,7 +6335,10 @@ function providerDraftValue() {
   return JSON.stringify({ ...draft, headers: headersOf(draft?.headers), modelPrefs: modelPrefsOfDraft() });
 }
 function providerDirty() {
-  return !!draft && draft === providerDraftRef && providerDraftValue() !== providerDraftBase;
+  // Price boxes parse on change; a page closed while typing hasn't blurred one yet.
+  const active = document.activeElement;
+  return !!draft && draft === providerDraftRef && (providerDraftValue() !== providerDraftBase ||
+    (active?.matches(".editor .mprice input") && active.value !== active.defaultValue));
 }
 let confirmationPending = null;
 function confirmAction(title, message, action) {
@@ -8821,6 +8824,7 @@ function renderModels(p) {
       const typed = draft.priceTyped?.[id];
       const cell = (value, placeholder, k, label) => {
         const i = input(value, placeholder);
+        i.defaultValue = i.value;
         i.inputMode = "decimal";
         i.dataset.part = k;
         i.setAttribute("aria-label", label);
@@ -11360,6 +11364,7 @@ function keyFoldRows(p, fold) {
   const q = input(keysOpen[p.id].q, t("Filter {n} keys — name, key, off, resting…", { n: all.length }));
   q.className = "keys-filter";
   q.dataset.provider = p.id;
+  q.setAttribute("aria-label", q.placeholder);
   q.oninput = () => {
     keysOpen[p.id].q = q.value;
     const at = q.selectionStart;
@@ -11372,18 +11377,13 @@ function keyFoldRows(p, fold) {
   fewer.onclick = () => { delete keysOpen[p.id]; renderProviders(); };
   bar.append(q, count, el("span", "grow"));
   // removing many at once: those turned off, those failing for good, or
-  // those the filter matches; a second click does it
+  // those the filter matches; the confirmation names them before they go
   const removeMany = (label, keys) => {
     if (!keys.length || keys.length === all.length) return null;
     const b = el("button", "text keys-remove", label);
-    b.onclick = () => {
-      if (!b.dataset.armed) {
-        b.dataset.armed = "1";
-        b.classList.add("danger");
-        b.textContent = t("Remove {n} keys? Click again", { n: keys.length });
-        setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.classList.remove("danger"); b.textContent = label; } }, 4000);
-        return;
-      }
+    b.onclick = async () => {
+      if (!await confirmRemoval(keys.map((k) => k.name || k.masked || k.id).join(", "),
+        "This account or key will stop being used for requests. You will need to add it again to use it.")) return;
       b.classList.add("busy");
       accountAction("keys/remove-many", { id: p.id, refs: keys.map((k) => k.id) }, t("{n} keys removed", { n: keys.length }));
     };

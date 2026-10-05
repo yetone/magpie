@@ -88,6 +88,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the filter: by name, by a model's name or id, every word
       const q = page.locator(".rt-gsec .row-head input.rt-gfilter");
       assert.equal(await q.getAttribute("placeholder"), w.filter);
+      assert.equal(await q.getAttribute("aria-label"), w.filter);
       await q.click();
       await page.keyboard.type("three");
       assert.deepEqual(await listed(), ["fast"], "by a model's name");

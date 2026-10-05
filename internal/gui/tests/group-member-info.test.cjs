@@ -225,7 +225,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // a plain member beside it keeps its own picker, not that chip
       assert.equal(seen[0].follows, "", "the plain member carries no such chip");
 
-      // and clicking it opens that group's card, so going there is one click.
+      // A nested jump must not replace a dirty outer draft before the answer.
+      const name = page.locator(".rt-gedit input").first();
+      await name.fill("Outer changed");
+      const ask = page.locator("dialog.action-confirm[open]");
+      await page.mouse.move(550, 400);
+      await page.mouse.wheel(0, 400);
+      const follows = page.locator(".rt-gedit .rt-inner");
+      await follows.click();
+      await ask.waitFor();
+      await ask.locator("button").first().click();
+      assert.equal(await name.inputValue(), "Outer changed", "Cancel keeps the outer draft");
+      assert.equal(await follows.textContent(), w.follows, "Cancel stays in the outer editor");
+      await follows.click();
+      await ask.locator("button").last().click();
+      await page.waitForFunction(() => document.querySelector(".rt-gedit input")?.value === "Inner");
+      assert.equal(await page.locator(".rt-gedit .rt-inner").count(), 0, "Discard opens the inner editor");
+
+      // A clean editor still opens the nested group in one click.
+      await page.mouse.move(550, 400);
+      await page.mouse.wheel(0, 400);
+      await page.locator(".rt-group[data-id=g3]").click();
+      await page.locator(".rt-gedit .rt-inner").waitFor();
+      assert.equal(await name.inputValue(), "Outer", "the discarded name wasn't saved");
       // The last row sits under the footer in WebKit, as the test above found:
       // the wheel brings it up where a reader could click it
       await page.mouse.move(550, 400);
@@ -234,6 +256,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".rt-gedit").first().waitFor();
       const openNames = await page.locator(".rt-gedit input").evaluateAll((is) => is.map((i) => i.value));
       assert(openNames.includes("Inner"), `the inner group's editor is open: ${JSON.stringify(openNames)}`);
+      assert.equal(await ask.count(), 0, "the clean nested jump asks nothing");
 
       assert.deepEqual(errors, [], "no page error");
     });

@@ -66,12 +66,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const L = { names: zh ? "名称与推理档位" : "Names & levels", input: zh ? "输入" : "Input", output: zh ? "输出" : "Output", cacheRead: zh ? "缓存读取" : "Cache read",
         oneHour: zh ? "1 小时缓存写入" : "Cache write 1h", long: zh ? "长上下文价格" : "Long-context price", over: zh ? "超过的输入 token 数" : "Over input tokens",
         save: zh ? "保存" : "Save", badSize: zh ? "长上下文价格要写从多少输入 token 起算，比如 272K" : "A long-context price starts over a number of input tokens, like 272K" };
-      await page.locator(".row.provider").click();
+      await page.locator('.row.provider[data-id="relay"]').click();
       if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: L.names, exact: true }).click();
       const row = (id) => page.locator(".mname", { has: page.locator("code", { hasText: id }) });
       const base = (id) => row(id).locator(".mprice > .mpart input");
       const tier = (id) => row(id).locator(".mtier input");
-      const typeIn = async (box, v) => { await box.fill(v); await box.press("Enter"); };
+      // Blurring the previous price normalizes its siblings before fill selects their text.
+      const typeIn = async (box, v) => { await box.focus(); await box.fill(v); await box.press("Enter"); };
       const y = await page.evaluate(() => scrollY);
 
       // a list with a long-context price shows it in its quiet row, greyed
@@ -89,6 +90,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(!(await row("plain-1").locator(".mtier").isVisible()));
       assert(await row("plain-1").locator(".mtier-add").isVisible());
       assert.equal(await row("plain-1").locator("input[type=number]").count(), 0, "no number boxes");
+
+      // Closing the browser while typing has not fired change/blur yet.
+      // Both new price kinds must protect the raw input, and reverting it is clean.
+      const leaveAsked = () => page.evaluate(() => {
+        const event = new Event("beforeunload", { cancelable: true });
+        window.dispatchEvent(event);
+        return event.defaultPrevented;
+      });
+      assert.equal(await leaveAsked(), false, "unchanged prices ask nothing");
+      for (const [box, value] of [[base("claude-opus-5-5").last(), "7,5"], [tier("gpt-6-astra").first(), "350K"], [tier("gpt-6-astra").nth(1), "33"]]) {
+        await box.fill(value);
+        assert.equal(await leaveAsked(), true, "a focused price edit asks before leaving");
+        await box.fill("");
+        assert.equal(await leaveAsked(), false, "reverting the raw edit asks nothing");
+      }
+      assert.deepEqual(posts, [], "typing alone has saved nothing");
 
       // decimals, with a point and with a comma, each kept as typed
       await typeIn(row("gpt-6-astra").getByRole("textbox", { name: L.cacheRead, exact: true }), "0,25");
