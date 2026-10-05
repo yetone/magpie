@@ -694,25 +694,49 @@ func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRu
 }
 
 // nextTurn is the conversation a request goes on from, after its last
-// reply (turnKey), and the user's messages since; "" when it isn't a new
-// turn after a reply: a first one, or tool results.
+// reply (turnKey), and the messages since; "" when it isn't a new turn
+// after a reply: a first one, or tool results for a call made before it.
+// A reply that ends a turn calls no tool, so the calls after it, and their
+// results, are the client's own: an agent's framework that ran a tool
+// itself after the reply and put it in the conversation as a call and its
+// result (Pi Team Bright's team_sync). They go to the run as the rest of
+// what was said since, where a run started anew would be told the whole
+// conversation in one message, a prefix the cache has never seen.
 func nextTurn(req *Request, owner string) (string, []Message) {
-	j := len(req.Messages) - 1
-	for j >= 0 && req.Messages[j].Role != "assistant" {
-		j--
-	}
-	if j < 0 || j == len(req.Messages)-1 {
+	msgs := req.Messages
+	if len(msgs) == 0 || msgs[len(msgs)-1].Role == "assistant" {
 		return "", nil
 	}
-	since := req.Messages[j+1:]
+	j := len(msgs) - 1
+	for j >= 0 && (msgs[j].Role != "assistant" || callsTool(msgs[j])) {
+		j--
+	}
+	if j < 0 {
+		return "", nil
+	}
+	since := msgs[j+1:]
+	calls := map[string]bool{}
 	for _, m := range since {
 		for _, p := range m.Parts {
-			if p.Kind == ToolResult {
+			switch {
+			case p.Kind == ToolCall:
+				calls[p.ID] = true
+			case p.Kind == ToolResult && !calls[p.CallID]:
 				return "", nil
 			}
 		}
 	}
-	return turnKey(owner, req, req.Messages[:j+1]), since
+	return turnKey(owner, req, msgs[:j+1]), since
+}
+
+// callsTool says m calls a tool.
+func callsTool(m Message) bool {
+	for _, p := range m.Parts {
+		if p.Kind == ToolCall {
+			return true
+		}
+	}
+	return false
 }
 
 // setEffort tells the run's Claude Code to think at effort from its next
@@ -1919,14 +1943,25 @@ func withoutBillingHeader(system string) string {
 // cch=…;), which the block after follows with no newline between.
 var billingHeader = regexp.MustCompile(`^x-anthropic-billing-header:(\s*[A-Za-z_]+=[^;\s]*;)*\s*`)
 
-// renderClaudeTurn is the user's messages in a conversation Claude Code
-// already has, as it would be told them itself.
+// renderClaudeTurn is the messages since a reply in a conversation Claude
+// Code already has, as it would be told them itself. The user's alone go
+// as they are; with the client's own calls among them (nextTurn), each is
+// labeled with who said it, as a run started anew is told the conversation
+// (renderClaudePrompt).
 func renderClaudeTurn(msgs []Message) []map[string]any {
 	var blocks []map[string]any
 	var text strings.Builder
+	labeled := hasReply(msgs)
 	for i, m := range msgs {
 		if i > 0 {
 			text.WriteString("\n\n")
+		}
+		if labeled {
+			label := "Human"
+			if m.Role == "assistant" {
+				label = "Assistant"
+			}
+			text.WriteString(label + ": ")
 		}
 		blocks = renderParts(blocks, &text, m.Parts)
 	}
