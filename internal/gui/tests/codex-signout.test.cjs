@@ -124,6 +124,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await remove.count(), 1, "the one in use has Remove");
       assert.ok(await remove.getAttribute("title"));
       await remove.click();
+      const confirm = page.locator("dialog.action-confirm[open]");
+      await confirm.waitFor();
+      assert.deepEqual(posts, [], "Remove waits for confirmation");
+      await confirm.getByRole("button", { name: w.cancel, exact: true }).click();
+      assert.deepEqual(posts, [], "Cancel keeps the signed-in account");
+      assert.equal(await remove.count(), 1, "Cancel keeps the account's Remove button");
+      await remove.click();
+      await confirm.getByRole("button", { name: w.remove, exact: true }).click();
       await page.waitForFunction(() => document.querySelector("#status")?.textContent.includes("me@example.com"));
       assert.deepEqual(posts, [{ agent: "codex", user: "me@example.com" }]);
       const missing = await page.evaluate(() => ["Codex is signed in to another of its accounts, and magpie forgets this one; the account itself is untouched"]
