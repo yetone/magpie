@@ -154,7 +154,14 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       // Removal never mutates anything when declined.
       await row.click();
       const remove = modal.getByRole("button", { name: lang === "zh" ? "移除" : "Remove", exact: true }).first();
-      await answer(page, () => remove.click(), false, /Relay/);
+      await answer(page, async () => {
+        await remove.click();
+        const dialog = page.locator("dialog.action-confirm[open]");
+        await dialog.waitFor();
+        await page.evaluate(() => { renderProviders(); renderProviders(); });
+        assert.equal(await dialog.evaluate((element) => element.inert), false, "redrawing the editor keeps the confirmation interactive");
+        assert.equal(await page.locator("header").evaluate((element) => element.inert), true, "the background stays inert through redraws");
+      }, false, /Relay/);
       assert.equal(posts.filter((p) => p.path === "/api/provider/delete").length, 0);
       assert.equal(await modal.isVisible(), true);
       await answer(page, () => remove.click(), true, /Relay/);
@@ -162,6 +169,43 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       assert.equal(posts.filter((p) => p.path === "/api/provider/delete").length, 1);
       assert.equal(await page.locator('#nav button[data-view="providers"]').getAttribute("aria-current"), "page");
       assert.deepEqual(errors, []);
+    });
+    test(`${engine} ${lang}: modal redraw keeps menus interactive and restores only its background`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await browser.newPage({ viewport: { width: 1100, height: 800 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(5000);
+      await page.route("**/*", fixture(lang, []));
+      await page.goto("http://magpie.test/?view=providers");
+      await page.evaluate(() => {
+        const element = document.createElement("div");
+        element.id = "already-inert";
+        element.inert = true;
+        document.body.append(element);
+      });
+      await page.locator('#providers .row.provider[data-id="relay"]').click();
+      await page.getByRole("dialog").waitFor();
+      await page.evaluate(() => {
+        const element = document.createElement("div");
+        element.id = "later-inert";
+        element.inert = true;
+        document.body.append(element);
+        openProtoMenu(document.querySelector('#modal input[type="url"]'),
+          [{ v: "one", name: "One" }, { v: "two", name: "Two" }], "one",
+          (value) => { document.body.dataset.menuChoice = value; });
+        // The provider list intentionally closes menus; redraw just the editor here.
+        openModal(renderEditor(providers.providers.find((provider) => provider.id === "relay")));
+      });
+      const menu = page.getByRole("menu");
+      assert.equal(await menu.evaluate((element) => element.inert), false);
+      await menu.getByRole("menuitemradio", { name: "Two", exact: true }).click();
+      assert.equal(await page.locator("body").getAttribute("data-menu-choice"), "two");
+      await page.locator("#modal").getByRole("button", { name: lang === "zh" ? "取消" : "Cancel", exact: true }).click();
+      await page.locator("#modal").waitFor({ state: "hidden" });
+      assert.equal(await page.locator("header").evaluate((element) => element.inert), false);
+      for (const id of ["already-inert", "later-inert"]) {
+        assert.equal(await page.locator("#" + id).evaluate((element) => element.inert), true, `${id} keeps its own inert state`);
+      }
     });
   }
 }

@@ -6939,11 +6939,18 @@ function modalFormDirty() {
   return !$("#modal").hidden && !!modalFormBase && modalFormValues() !== modalFormBase;
 }
 function markModalSaved() { modalFormBase = modalFormValues(); }
+let modalBackgroundElements = [];
 function modalBackground(inert) {
-  const modal = $("#modal");
-  for (const element of document.body.children) {
-    if (element === modal || element.tagName === "SCRIPT") continue;
-    element.inert = inert;
+  if (inert) {
+    // A fresh editor may interrupt its closing animation; keep the original background.
+    if (modalBackgroundElements.length) return;
+    const modal = $("#modal");
+    modalBackgroundElements = [...document.body.children].filter((element) =>
+      element !== modal && element.tagName !== "SCRIPT" && !element.inert);
+    for (const element of modalBackgroundElements) element.inert = true;
+  } else {
+    for (const element of modalBackgroundElements) element.inert = false;
+    modalBackgroundElements = [];
   }
 }
 $("#modal").addEventListener("keydown", (e) => {
@@ -6983,7 +6990,7 @@ function openModal(content) {
   if (title) { title.id = "modalTitle"; d.setAttribute("aria-labelledby", title.id); d.removeAttribute("aria-label"); }
   else { d.removeAttribute("aria-labelledby"); d.setAttribute("aria-label", t("Settings")); }
   m.hidden = false;
-  modalBackground(true);
+  if (fresh) modalBackground(true);
   if (fresh) markModalSaved();
   const focus = focusID && content.querySelector("#" + CSS.escape(focusID))
     || focusLabel && [...content.querySelectorAll("[aria-label]")].find((element) => element.getAttribute("aria-label") === focusLabel)
