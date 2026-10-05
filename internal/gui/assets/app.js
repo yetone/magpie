@@ -15395,7 +15395,10 @@ function renderSessions() {
       seg.append(b);
     }
   }
-  for (const b of seg.querySelectorAll(":scope > .opt")) b.classList.toggle("on", b.dataset.agent === sessAgent);
+  for (const b of seg.querySelectorAll(":scope > .opt")) {
+    b.classList.toggle("on", b.dataset.agent === sessAgent);
+    b.setAttribute("aria-pressed", String(b.dataset.agent === sessAgent));
+  }
   // and the agent picked is brought into the strip, the page left where it is
   const picked = seg.querySelector(":scope > .on");
   if (picked && seg.scrollWidth > seg.clientWidth) {

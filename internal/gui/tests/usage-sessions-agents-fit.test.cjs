@@ -55,6 +55,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const strip = page.locator("#sessAgent");
       await page.waitForFunction((n) => document.querySelectorAll("#sessAgent .opt").length === n, names.length + 1);
       const settle = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+      const all = strip.locator('.opt[data-agent="all"]');
+      assert.equal(await all.getAttribute("aria-pressed"), "true", "All starts selected for assistive technology");
+      assert.equal(await strip.getByRole("button", { pressed: false }).count(), names.length);
       for (const width of [860, 560]) {
         await page.setViewportSize({ width, height: 700 });
         await settle();
@@ -73,6 +76,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.mouse.click(lb.x + lb.width / 2, lb.y + lb.height / 2);
       await page.waitForFunction(() => document.querySelector("#sessAgent .opt.on")?.textContent === "Zed");
       await settle();
+      assert.equal(await strip.getByRole("button", { pressed: true }).textContent(), "Zed", "the reused button exposes its new selection");
+      assert.equal(await all.getAttribute("aria-pressed"), "false", "the previous selection is cleared");
       const on = await strip.locator(".opt.on").boundingBox();
       const sb = await strip.boundingBox();
       const seen = Math.min(on.x + on.width, sb.x + sb.width) - Math.max(on.x, sb.x);
