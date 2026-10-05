@@ -18,7 +18,7 @@ function fixture(lang, posts) {
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify({ ...settings, web: true })};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify({ lang: settings.lang, theme: settings.theme, textSize: settings.textSize, web: true })};` });
     if (req.method() === "POST") posts.push({ path: url.pathname, body: req.postDataJSON() });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings });
     if (url.pathname === "/api/settings") {
