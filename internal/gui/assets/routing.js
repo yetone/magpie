@@ -3663,9 +3663,10 @@
   // ask it (and the tray panel, by ?newgroup= on the window it opens).
   window.newGroupWith = async (id, name, ev) => {
     // app.js's show, the page's: this one's own show is the stage's caption
-    if (document.body.classList.contains("window") && $("#view-routing").hidden) window.show("routing");
+    if (document.body.classList.contains("window") && $("#view-routing").hidden && !(await window.show("routing"))) return;
     if (!groups) await loadGroups();
     if (!groups) return;
+    if (groupDirty() && !(await confirmDiscard())) return;
     gEdit = { id: "", draft: { name: name || modelOf(id)?.name || id.split("/").pop(), members: [id], fast: [], routing: "", affinity: "", rules: [] } };
     renderGroups();
     const ed = gList.querySelector(".rt-gedit");
@@ -3675,7 +3676,8 @@
   // newGroup: an empty new group's editor. The groups sit below the
   // requests, out of sight on a first look, so the page's head has a New
   // group too (mintonight, #944), which brings the editor into view.
-  function newGroup(ev) {
+  async function newGroup(ev) {
+    if (groupDirty() && !(await confirmDiscard())) return;
     gSel = null;
     gEdit = { id: "", draft: { name: "", members: [], match: [], matched: [], fast: [], off: [], routing: "", affinity: "", rules: [] } };
     renderGroups();

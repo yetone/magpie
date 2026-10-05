@@ -34,6 +34,16 @@ three.
 - The page must work in Chromium (Windows' WebView2) and WebKit (macOS, and WebKitGTK on Linux). GUI tests run in both engines.
 - Tests never touch a live agent config. The package's `TestMain` runs under `testenv`'s home of its own. Playwright tests serve `assets/` with isolated `/api` fixtures.
 
+`openModal` makes the background inert when an editor opens fresh, leaving
+confirmations and menus interactive through redraws. `closeModal` releases
+that background as soon as the close animation starts, so clicks reach the
+page while the editor fades away. Opening an editor during that animation
+protects the background again. `ux-safety.test.cjs` checks these transitions.
+Routing's New group buttons share `newGroup`, which asks before replacing a
+dirty group draft; Cancel retains the draft and Discard opens the new editor.
+`newGroupWith` applies the same guard when creating a group from a model and
+waits for `show` to accept navigation before creating its draft.
+
 ## Verification
 
 ```sh

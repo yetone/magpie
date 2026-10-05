@@ -106,6 +106,38 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
       assert.equal(await ed.locator("input").first().inputValue(), "");
       assert.equal(await ed.evaluate((e) => e.contains(document.activeElement) && document.activeElement.tagName), "INPUT");
+      // Both New group entrances replace the same draft only after Discard.
+      const name = ed.locator("input").first();
+      const ask = page.locator("dialog.action-confirm[open]");
+      for (const entrance of [inList, head]) {
+        await name.fill("Unsaved group");
+        await page.mouse.move(500, 300);
+        for (let i = 0; i < 20; i++) {
+          const b = await entrance.boundingBox();
+          if (b.y >= 60 && b.y + b.height < vh - 60) break;
+          await page.mouse.wheel(0, b.y < 60 ? -400 : 400);
+          await page.waitForTimeout(100);
+        }
+        await entrance.click();
+        await ask.waitFor();
+        await ask.locator("button").first().click();
+        assert.equal(await name.inputValue(), "Unsaved group", "Cancel keeps the existing group draft");
+        await entrance.click();
+        await ask.locator("button").last().click();
+        await page.waitForFunction(() => document.querySelector(".rt-gedit input")?.value === "");
+        assert.equal(await ask.count(), 0, "Discard opens a clean new group");
+      }
+      // The model picker's entry must protect the same draft as both buttons.
+      await name.fill("Unsaved group");
+      const fromModel = () => page.evaluate(() => { window.newGroupWith("a/m", "Model A"); });
+      await fromModel();
+      await ask.waitFor();
+      await ask.locator("button").first().click();
+      assert.equal(await name.inputValue(), "Unsaved group", "Cancel keeps the draft when making a group from a model");
+      await fromModel();
+      await ask.locator("button").last().click();
+      await page.waitForFunction(() => document.querySelector(".rt-gedit input")?.value === "Model A");
+      assert.deepEqual(await ed.locator(".fbrow .n").allTextContents(), ["mA"], "Discard opens the group with its chosen model");
       assert.deepEqual(errors, []);
     });
   }

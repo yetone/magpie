@@ -7029,6 +7029,7 @@ function closeModal() {
   if (m.hidden) return Promise.resolve();
   if (m.classList.contains("out")) return modalDone || Promise.resolve();
   m.classList.add("out");
+  modalBackground(false);
   modalFormBase = "";
   for (const a of [...m.getAnimations(), ...d.getAnimations()]) a.commitStyles?.(), a.cancel();
   // where it would sit at rest, whatever an opening cut short left it at
@@ -7051,7 +7052,6 @@ function closeModal() {
     m.classList.remove("out");
     d.replaceChildren();
     modalFormBase = "";
-    modalBackground(false);
     if (modalReturnFocus?.isConnected && !modalReturnFocus.closest("[hidden]")) modalReturnFocus.focus({ preventScroll: true });
     else if (!$("#view-" + view).hidden) $("#view-" + view).focus({ preventScroll: true });
     modalReturnFocus = null;

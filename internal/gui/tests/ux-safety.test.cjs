@@ -147,6 +147,11 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       const leave = () => page.evaluate(() => { show("agents"); });
       await answer(page, leave, false, dirtyText);
       assert.equal(await modal.locator('input[type="url"]').first().inputValue(), "https://leave.test/v1");
+      const fromModel = () => page.evaluate(() => { window.newGroupWith("relay/fixture-model", "Fixture model"); });
+      await answer(page, fromModel, false, dirtyText);
+      assert.equal(await page.locator("#view-providers").evaluate((e) => e.hidden), false, "Cancel keeps the provider page when creating a group from its model");
+      assert.equal(await page.locator(".rt-gedit").count(), 0, "Cancel creates no routing draft behind the provider editor");
+      assert.equal(await modal.locator('input[type="url"]').first().inputValue(), "https://leave.test/v1");
       await answer(page, leave, true, dirtyText);
       await modal.waitFor({ state: "hidden" });
       await page.waitForFunction(() => !document.querySelector("#view-agents").hidden);
@@ -206,6 +211,55 @@ for (const engine of process.env.BROWSER ? [process.env.BROWSER] : ["chromium", 
       for (const id of ["already-inert", "later-inert"]) {
         assert.equal(await page.locator("#" + id).evaluate((element) => element.inert), true, `${id} keeps its own inert state`);
       }
+    });
+    test(`${engine} ${lang}: clicks reach the page during modal closing and a reopened editor protects it again`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+      await page.route("**/*", fixture(lang, []));
+      await page.goto("http://magpie.test/?view=providers");
+      await page.locator('#providers .row.provider[data-id="relay"]').click();
+      const nav = page.locator('#nav button[data-view="providers"]');
+      const point = await nav.boundingBox();
+      await page.evaluate(() => {
+        document.querySelector('#nav button[data-view="providers"]').addEventListener("click", () => {
+          document.body.dataset.closeClick = "received";
+          const modal = document.querySelector("#modal");
+          document.body.dataset.clickedWhileClosing = String(!modal.hidden && modal.classList.contains("out"));
+        }, { once: true, capture: true });
+        cancelEdit();
+        // Hold the real close animation at its start so the click cannot land after it finishes.
+        const modal = document.querySelector("#modal");
+        for (const a of [...modal.getAnimations(), ...modal.firstElementChild.getAnimations()]) a.pause();
+      });
+      await page.mouse.click(point.x + point.width / 2, point.y + point.height / 2);
+      assert.equal(await page.locator("body").getAttribute("data-close-click"), "received", "the closing editor does not swallow the page's click");
+      assert.equal(await page.locator("body").getAttribute("data-clicked-while-closing"), "true", "the click arrived before the close animation finished");
+      await page.evaluate(() => {
+        const modal = document.querySelector("#modal");
+        for (const a of [...modal.getAnimations(), ...modal.firstElementChild.getAnimations()]) a.finish();
+      });
+      await page.locator("#modal").waitFor({ state: "hidden" });
+      const row = page.locator('#providers .row.provider[data-id="relay"]');
+      await row.click();
+      const reopeningPoint = await row.boundingBox();
+      const closing = await page.evaluate(() => {
+        cancelEdit();
+        const modal = document.querySelector("#modal");
+        for (const a of [...modal.getAnimations(), ...modal.firstElementChild.getAnimations()]) a.pause();
+        return !modal.hidden && modal.classList.contains("out");
+      });
+      assert.equal(closing, true);
+      await page.mouse.click(reopeningPoint.x + reopeningPoint.width / 2, reopeningPoint.y + reopeningPoint.height / 2);
+      assert.equal(await page.locator("header").evaluate((e) => e.inert), true, "reopening during close protects the background again");
+      assert.equal(await page.locator("#modal").evaluate((m) => !m.hidden && !m.classList.contains("out")), true);
+      await page.evaluate(() => {
+        cancelEdit();
+        const modal = document.querySelector("#modal");
+        for (const a of [...modal.getAnimations(), ...modal.firstElementChild.getAnimations()]) a.finish();
+      });
+      await page.locator("#modal").waitFor({ state: "hidden" });
+      assert.equal(await page.locator("header").evaluate((e) => e.inert), false, "the reopened editor also releases its background");
     });
   }
 }
