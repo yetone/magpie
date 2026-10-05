@@ -115,6 +115,10 @@ jobs:
         if: runner.os == 'Windows'
         run: go test -v -count=1 ./internal/agent -run '^Test(Dsh|KeepDsh)'
 
+      - name: Windows VS Code detection
+        if: runner.os == 'Windows'
+        run: go test -v -count=1 ./internal/agent -run '^TestVSCodeDetected$'
+
   cli:
     name: cli (${{ matrix.goos }}/${{ matrix.goarch }}, nogui)
     strategy:

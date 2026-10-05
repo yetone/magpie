@@ -18,7 +18,9 @@ package agent
 // Chat's model picker, a model is kept in VS Code's storage, not here.
 
 import (
+	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -115,6 +117,16 @@ func vscodeAt(dir string) *Agent {
 		ID: "vscode", Name: "VS Code", Icon: "vscode", Aliases: []string{"vs-code", "copilot-chat", "vscode-chat"}, Spelled: prefixed,
 		Bin: "code", Dir: dir, Path: path,
 		UA: []string{vscodeUA},
+		detect: func() bool {
+			if Taken(dir) {
+				return false
+			}
+			if isDir(dir) {
+				return true
+			}
+			bin, err := exec.LookPath("code")
+			return err == nil && vscodeCodeBinary(bin)
+		},
 		Notice: func() string {
 			if joined() {
 				return "magpie's models are in VS Code's Chat model picker, under magpie, in each of its profiles (VS Code 1.122 or later). If they don't show, run Developer: Reload Window in VS Code."
@@ -207,6 +219,38 @@ func vscodeAt(dir string) *Agent {
 			},
 		}},
 	}, path, models, stashPath())
+}
+
+// Cursor can install its own launcher as code. Only a known product identity
+// rules it out: wrappers without readable metadata keep the PATH fallback.
+func vscodeCodeBinary(bin string) bool {
+	resolved, err := filepath.EvalSymlinks(bin)
+	if err != nil {
+		return true
+	}
+	dir := filepath.Dir(resolved)
+	if !strings.EqualFold(filepath.Base(dir), "bin") {
+		return true
+	}
+	// Launchers live in app/bin or in bin beside resources/app. Do not
+	// search arbitrary ancestors of an unknown wrapper.
+	for _, path := range []string{
+		filepath.Join(dir, "..", "product.json"),
+		filepath.Join(dir, "..", "resources", "app", "product.json"),
+	} {
+		var product struct {
+			ApplicationName string `json:"applicationName"`
+			NameShort       string `json:"nameShort"`
+		}
+		b, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(b, &product) != nil {
+			continue
+		}
+		if strings.EqualFold(product.ApplicationName, "cursor") || strings.EqualFold(product.NameShort, "Cursor") {
+			return false
+		}
+	}
+	return true
 }
 
 // vscodeProfiles are the settings.json and chatLanguageModels.json of the
