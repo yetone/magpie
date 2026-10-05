@@ -2810,7 +2810,7 @@
             status(e.message, "err", 6000);
           }
           busy = false;
-          if (list.isConnected) draw();
+          if (list.isConnected) { draw(); markModalSaved(); }
         }));
       }
       return row;
@@ -3179,7 +3179,13 @@
     // sync makes it again
     if (s.behind?.length) {
       const b = tag(t("Copy out of date"), "lib-new link lib-behind", t("The copy in {agents} differs from the library's skill. Click to copy it again.", { agents: s.behind.map(nameOf).join(", ") }));
+      b.setAttribute("role", "button");
+      b.tabIndex = 0;
       b.onclick = (e) => { e.stopPropagation(); change("all/sync", {}, t("Copies updated")); };
+      b.onkeydown = (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault(); e.stopPropagation(); b.click();
+      };
       nm.append(b);
     }
     who.append(nm);

@@ -3,7 +3,7 @@
 // are no longer listed one by one (lc on Discord: "路由组可否关闭自动发现，
 // 并且可编辑批量移除，已经移除的不要显示"). Select, by New group, puts a box
 // on each card; a click on a card picks it, the bar's box picks all or
-// none, and Remove asks for a second click before it posts groups/delete
+// none, and Remove asks in a dialog before it posts groups/delete
 // {ids}. The removed found groups are one line under the list, how many,
 // whose menu (the app's, not a native one) brings one back. No click moves
 // the page. In English and Chinese, Chromium and WebKit.
@@ -29,8 +29,8 @@ const all = [
 ];
 
 const words = {
-  en: { select: "Select", removed: "2 found groups removed", removed3: "3 found groups removed", picked: "2 selected", again: "Remove 2? Click again", done: "2 groups removed", back: "auto-gone is back" },
-  zh: { select: "选择", removed: "已移除 2 个自动创建的组", removed3: "已移除 3 个自动创建的组", picked: "已选 2 个", again: "移除 2 个？再点一次", done: "已移除 2 个组", back: "auto-gone" },
+  en: { select: "Select", removed: "2 found groups removed", removed3: "3 found groups removed", picked: "2 selected", cancel: "Cancel", done: "2 groups removed", back: "auto-gone is back" },
+  zh: { select: "选择", removed: "已移除 2 个自动创建的组", removed3: "已移除 3 个自动创建的组", picked: "已选 2 个", cancel: "取消", done: "已移除 2 个组", back: "auto-gone" },
 };
 
 function serve(lang, posts) {
@@ -113,9 +113,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".rt-groups .rt-editor, .rt-groups .rt-gedit").count(), 0, "a click on a card doesn't open its editor");
 
       await rm.click();
-      assert.equal((await rm.textContent()).trim(), w.again);
+      const confirm = page.getByRole("alertdialog");
+      await confirm.waitFor();
+      assert.match(await confirm.textContent(), /Model M/);
+      assert.match(await confirm.textContent(), /Mine/);
       assert.deepEqual(posts, [], "one click removes nothing");
+      await confirm.getByRole("button", { name: w.cancel, exact: true }).click();
+      assert.deepEqual(posts, [], "Cancel keeps every group");
+      assert.equal(await page.locator(".rt-gpick input:checked").count(), 2);
       await rm.click();
+      await confirm.locator("button").last().click();
       await bar.waitFor({ state: "detached" });
       assert.deepEqual(posts, [["delete", { ids: ["auto-m", "mine"] }]]);
       await card("Model M").waitFor({ state: "detached" });
@@ -137,7 +144,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       const missing = await page.evaluate(() => [
         "1 found group removed", "{n} found groups removed", "magpie doesn't make them again. Click to bring one back.",
-        "Pick several groups to remove together", "Select every group", "Pick the groups to remove", "Remove {n}? Click again", "{n} groups removed",
+        "Pick several groups to remove together", "Select every group", "Pick the groups to remove", "These routing groups will no longer be available to agents.", "{n} groups removed",
         "Select", "Done", "{n} selected", "Bring it back",
       ].filter((k) => !I18N.zh[k] || !I18N.ja[k] || !I18N.de[k]));
       assert.deepEqual(missing, [], "every string has its Chinese, Japanese and German");

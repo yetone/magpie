@@ -103,10 +103,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await row.locator(".opt.on").textContent(), w.smallest, "the editor opens at what was saved");
       await row.locator(".opt", { hasText: w.custom }).click();
       const box = row.locator("input");
+      assert.equal(await box.getAttribute("aria-label"), w.label);
       assert.equal(await box.inputValue(), "128k", "custom starts at the smallest");
       await box.fill("abc");
+      assert.equal(await box.getAttribute("aria-invalid"), "true");
       assert((await hint()).includes(w.bad), await hint());
       await box.fill("300k");
+      assert.equal(await box.getAttribute("aria-invalid"), "false");
+      assert.equal(await box.getAttribute("aria-describedby"), await row.locator(".hint").getAttribute("id"));
       assert((await hint()).includes(w.n300), await hint());
       assert.equal((await save()).context, 300000);
 

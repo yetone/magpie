@@ -2667,8 +2667,7 @@
     renderPools();
   }
   // selectBar: over the groups while picking: all or none, how many are
-  // picked, Remove them (a second click, as it can't be undone for the
-  // groups the user made), and Done
+  // picked, Remove them after confirmation, and Done
   function selectBar(shown) {
     const bar = el("div", "rt-gsel");
     const all = el("input");
@@ -2680,16 +2679,13 @@
     const done = el("button", "text", t("Done"));
     done.type = "button";
     done.onclick = () => { gSel = null; renderGroups(); };
-    let armed = 0;
     const sync = () => {
       const k = gSel.size;
       all.checked = k > 0 && k === shown.length;
       all.indeterminate = k > 0 && k < shown.length;
       n.textContent = k ? t("{n} selected", { n: k }) : t("Pick the groups to remove");
       rm.disabled = !k;
-      if (!k) armed = 0;
-      rm.textContent = armed ? t("Remove {n}? Click again", { n: k }) : t("Remove");
-      rm.classList.toggle("armed", !!armed);
+      rm.textContent = t("Remove");
       for (const r of gList.querySelectorAll(".rt-gpick")) {
         const on = gSel.has(r.dataset.id);
         r.classList.toggle("on", on);
@@ -2697,11 +2693,11 @@
       }
     };
     bar.sync = sync;
-    all.onchange = () => { gSel = new Set(all.checked ? shown.map((g) => g.id) : []); armed = 0; sync(); };
+    all.onchange = () => { gSel = new Set(all.checked ? shown.map((g) => g.id) : []); sync(); };
     rm.onclick = async () => {
       if (!gSel.size) return;
-      if (!armed || Date.now() - armed > 5000) { armed = Date.now(); sync(); return; }
       const ids = shown.map((g) => g.id).filter((id) => gSel.has(id));
+      if (!await confirmRemoval(shown.filter((g) => ids.includes(g.id)).map((g) => g.name).join(t(", ")), "These routing groups will no longer be available to agents.")) return;
       rm.disabled = true;
       try {
         groups = await api("groups/delete", { ids });
@@ -2710,7 +2706,6 @@
         status(ids.length === 1 ? t("{name} removed", { name: ids[0] }) : t("{n} groups removed", { n: ids.length }), "ok");
         load(); // the gateway's model list, the agents' pickers
       } catch (e) {
-        armed = 0;
         sync();
         status(e.message, "err");
       }
@@ -3301,12 +3296,16 @@
     const ctxHint = el("div", "hint"), ctxW = el("div", "ctx-wrap");
     const ctxIn = keys(input(d.context > 0 ? ctxShort(d.context).toLowerCase() : "", t("e.g. 200k")));
     ctxIn.classList.add("ctx-in");
+    ctxIn.setAttribute("aria-label", t("Context"));
+    ctxHint.id = "groupContextHint";
+    ctxIn.setAttribute("aria-describedby", ctxHint.id);
     const ctxs = () => d.members.map((id) => groups.models.find((x) => x.id === id)?.context || infoOf(id)?.context || 0).filter((n) => n > 0);
     const ctxMode = () => d.context === -1 ? "smallest" : d.context > 0 ? "custom" : "largest";
     let ctxErr = "";
     const drawCtx = () => {
       const ns = ctxs(), mode = ctxMode();
       ctxIn.hidden = mode !== "custom";
+      ctxIn.setAttribute("aria-invalid", String(!!ctxErr));
       const big = ns.length ? Math.max(...ns) : 0, small = ns.length ? Math.min(...ns) : 0;
       ctxHint.textContent = ctxErr || (mode === "custom"
         ? t("Agents are told the group takes {n} tokens; a longer conversation still goes on to a member with room for it.", { n: (d.context || 0).toLocaleString() })

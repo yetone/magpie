@@ -22,7 +22,7 @@ const state = { bun: true, bunVersion: "1.3.0", plugins: [
   { spec: BOTH, providers: ["Acme"], moved: [], isMiddleware: true, middleware: { hooks: ["onResponse"], calls: 0, avgMicros: 0, failures: 0 } },
 ] };
 
-function server(lang) {
+function server(lang, pluginState = state) {
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
@@ -32,7 +32,7 @@ function server(lang) {
     if (url.pathname === "/api/providers") return json({ providers: [], presets: [], excluded: [], gateway: { running: true, window: true }, plugins: [] });
     if (url.pathname === "/api/groups") return json({ groups: [], pools: [] });
     if (url.pathname === "/api/gateway/trace") return json({ routes: [] });
-    if (url.pathname === "/api/plugins/market" || url.pathname === "/api/plugins" || url.pathname === "/api/plugins/listings") return json(url.pathname === "/api/plugins" ? state : url.pathname === "/api/plugins/listings" ? { listings: [] } : { listings: [], state });
+    if (url.pathname === "/api/plugins/market" || url.pathname === "/api/plugins" || url.pathname === "/api/plugins/listings") return json(url.pathname === "/api/plugins" ? pluginState : url.pathname === "/api/plugins/listings" ? { listings: [] } : { listings: [], state: pluginState });
     if (url.pathname.startsWith("/api/")) return json({});
     const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
     const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];
@@ -149,8 +149,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.setDefaultTimeout(5000);
         const errors = [], posted = [];
         page.on("pageerror", (e) => errors.push(e.message));
-        await page.route("**/*", server(lang));
-        await page.route("**/api/plugins/options", (r) => { posted.push(r.request().postDataJSON()); return r.fulfill({ json: state }); });
+        const pluginState = structuredClone(state);
+        await page.route("**/*", server(lang, pluginState));
+        await page.route("**/api/plugins/options", (r) => {
+          const body = r.request().postDataJSON();
+          posted.push(body);
+          pluginState.plugins[0].options = body.options;
+          return r.fulfill({ json: pluginState });
+        });
         await page.goto("http://magpie.test/?view=plugins");
         const view = page.locator("#view-plugins");
         await view.locator(".lib-tabs .opt", { hasText: w.installed }).click();
@@ -163,6 +169,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await alias.locator("button", { hasText: w.options }).click();
         const ta = alias.locator(".pm-opts textarea");
         await ta.waitFor();
+        assert.equal(await ta.getAttribute("aria-label"), w.options);
         assert.equal(await page.evaluate(() => [document.scrollingElement.scrollTop, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)].join()), y, "the click scrolled nothing");
         assert.deepEqual(JSON.parse(await ta.inputValue()), { mapping: { fast: "deepseek-chat" } });
         assert.equal((await alias.locator(".pm-opts-bar > span").innerText()).trim(), w.note);
@@ -170,6 +177,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await ta.fill("{ mapping: ");
         await alias.locator(".pm-opts button", { hasText: w.save }).click();
         assert.match((await alias.locator(".pm-opts-err").innerText()).trim(), w.bad);
+        assert.equal(await ta.getAttribute("aria-invalid"), "true");
+        assert.equal(await alias.locator(".pm-opts-err").getAttribute("role"), "alert");
         await alias.locator(".pm-opts textarea").fill("[1]");
         await alias.locator(".pm-opts button", { hasText: w.save }).click();
         assert.equal((await alias.locator(".pm-opts-err").innerText()).trim(), w.obj);
@@ -178,6 +187,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await alias.locator(".pm-opts button", { hasText: w.save }).click();
         await alias.locator(".pm-opts").waitFor({ state: "detached" });
         assert.deepEqual(posted, [{ spec: ALIAS, options: { mapping: { fast: "glm-5" } } }]);
+        await alias.getByRole("button", { name: w.options, exact: true }).click();
+        const clear = alias.getByRole("button", { name: lang === "zh" ? "清空" : "Clear", exact: true });
+        await clear.click();
+        const confirm = page.getByRole("alertdialog");
+        await confirm.waitFor();
+        assert.match(await confirm.textContent(), lang === "zh" ? /不带选项运行/ : /run with no options/);
+        assert.equal(posted.length, 1, "Clear waits for confirmation");
+        await confirm.getByRole("button", { name: lang === "zh" ? "取消" : "Cancel", exact: true }).click();
+        assert.equal(posted.length, 1, "Cancel keeps the saved options");
+        assert.deepEqual(JSON.parse(await ta.inputValue()), { mapping: { fast: "glm-5" } });
+        await clear.click();
+        await confirm.locator("button").last().click();
+        await alias.locator(".pm-opts").waitFor({ state: "detached" });
+        assert.deepEqual(posted[1], { spec: ALIAS, options: null });
         const borders = await view.locator(".pm-row *").evaluateAll((els) => els.filter((e) => { const s = getComputedStyle(e); return parseFloat(s.borderLeftWidth) > 0 && s.borderLeftStyle !== "none" && parseFloat(s.borderRightWidth) === 0; }).length);
         assert.equal(borders, 0);
         assert.deepEqual(errors, []);

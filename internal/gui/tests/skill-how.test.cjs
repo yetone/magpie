@@ -140,7 +140,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await behind.textContent()).trim(), w.behind);
         assert.equal(await behind.getAttribute("title"), w.behindTip);
         assert.equal(await page.locator("#view-library .lib-skill", { hasText: "tdd" }).locator(".lib-behind").count(), 0);
-        await press(page, behind);
+        assert.equal(await behind.getAttribute("role"), "button");
+        await behind.focus();
+        await behind.press(lang === "en" ? "Enter" : "Space");
         await page.waitForTimeout(300);
         assert.deepEqual(posts[1], { path: "sync" });
         assert.equal(await page.locator("#view-library .lib-behind").count(), 0, "no copy is behind after the sync");
@@ -178,8 +180,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(300);
         await sheet.locator(".bar button.primary").click();
         await sheet.waitFor({ state: "detached" });
+        assert.equal(await page.getByRole("alertdialog").count(), 0, "saved skill choices close without a discard question");
         assert.equal((await bar.locator(".lib-howagent").textContent()).trim(), w.byAgentOne, "the button counts the agents with a way of their own");
         assert.equal(await scrolled(page), before, "the sheet scrolls nothing");
+
+        await press(page, bar.locator(".lib-howagent"));
+        await sheet.waitFor();
+        await press(page, sheet.locator('.lib-how-row[data-agent="codex"] .segs .opt').nth(2));
+        await page.waitForTimeout(300);
+        if (lang === "en") await page.keyboard.press("Escape");
+        else await page.evaluate(() => { show("agents"); });
+        await sheet.waitFor({ state: "detached" });
+        assert.equal(await page.getByRole("alertdialog").count(), 0, "Escape and page changes keep already saved choices");
 
         assert.equal(await page.locator("select").count(), 0, "no native select");
         assert.deepEqual(await leftBorders(page, "#lib-skillhow, #view-library .lib-skill"), []);

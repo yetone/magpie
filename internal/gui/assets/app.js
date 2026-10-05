@@ -11117,6 +11117,8 @@ function keyWeight(p, k, w, total) {
     i.min = "1";
     i.max = "1000";
     i.className = "key-weight-in";
+    i.setAttribute("aria-label", t("Key weight"));
+    i.title = b.title;
     let done = false;
     const save = (keep) => {
       if (done) return;
@@ -17210,6 +17212,7 @@ function renderTrayUsage(s, keep) {
   compactNum.className = "words compact-num";
   compactNum.hidden = !!s.fullContext;
   compactNum.title = t("Compact at");
+  compactNum.setAttribute("aria-label", t("Compact at"));
   compactNum.onchange = () => {
     const r = parseContexts(compactNum.value);
     const n = r.map?.["*"] || 0;

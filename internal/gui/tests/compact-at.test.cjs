@@ -77,7 +77,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
     test(`${engine} ${lang}: a provider's compaction threshold is set in its editor`, async (t) => {
       const { page, errors, posts } = await open(t, "providers");
-      await page.locator(".row.provider").click();
+      await page.locator('.row.provider[data-id="deepseek"]').click();
       assert(await page.getByText(w.field, { exact: true }).isVisible(), "the field is there");
       const box = page.locator("input.compacts");
       assert.equal(await box.inputValue(), "500k, deepseek-v4-flash=272k", "what is set is shown");
@@ -107,6 +107,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const row = page.locator("#fullContextSegs");
       const num = row.locator("input.compact-num");
       await num.waitFor();
+      assert.equal(await num.getAttribute("aria-label"), w.field);
       assert.equal(await row.locator("select").count(), 0, "no native select");
       assert(await row.getByText(w.at("272K"), { exact: true }).isVisible(), "272K by default");
       assert.equal(await num.inputValue(), "");

@@ -93,6 +93,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await chip("bbbbbbbbbb").click();
       const box = page.locator('.acc[data-account-id="bbbbbbbbbb"] .key-weight-in');
       await box.waitFor();
+      assert.equal(await box.getAttribute("aria-label"), lang === "zh" ? "密钥权重" : "Key weight");
       assert.equal(await scrolled(), sc, "a click scrolled");
       await box.fill("2");
       await box.press("Enter");
