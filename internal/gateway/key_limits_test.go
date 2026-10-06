@@ -263,7 +263,8 @@ func TestKeyBackOnceItsWindowIsNotFull(t *testing.T) {
 // A key resting out of its own window has it read again as it is
 // planned, so a limit raised brings it back where nothing weighs it by
 // its windows: an ordered group weighs each member's keys alone, and a
-// member with one key not at all. No card is read for it.
+// member with one key not at all. No card is read once its limit is
+// raised.
 func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 	fresh(t)
 	provider.ForgetBalances()
@@ -273,18 +274,24 @@ func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 	t.Cleanup(func() { keyAllowance = old })
 	week := time.Now().Add(72 * time.Hour).Truncate(time.Second).Format(time.RFC3339)
 	var mu sync.Mutex
-	limit, reads, raised := 800, 0, 0
+	limit, reads := 800, 0
+	// the raised limit is told only once the planning that asked for it
+	// has looked at the key, as a relay is slower to answer than planning
+	// is to finish
+	seen := make(chan struct{})
+	answer := sync.OnceFunc(func() { close(seen) })
 	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		l := limit
 		reads++
-		if l > 800 {
-			raised++
-		}
 		mu.Unlock()
+		if l != 800 {
+			<-seen
+		}
 		fmt.Fprintf(w, `{"isValid":true,"mode":"quota_limited","status":"active","rate_limits":[{"window":"7d","limit":%d,"used":800,"remaining":%d,"reset_at":%q}]}`, l, l-800, week)
 	}))
 	defer relay.Close()
+	defer answer() // a reading held is answered before the relay closes
 	for _, p := range []provider.Provider{
 		{ID: "ko", Name: "KO", Key: "sk-one", Models: []string{"gpt-6-astra"}, Responses: relay.URL + "/v1", BalanceURL: relay.URL + "/v1/usage"},
 		{ID: "kx", Name: "KX", Key: "sk-x", Models: []string{"gpt-6-astra"}, Responses: "http://127.0.0.1:1/v1"},
@@ -311,13 +318,15 @@ func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 		t.Fatalf("ko not planned: %d planned", len(out))
 		return "", nil
 	}
+	// its card first: its week used up, read just now, so planning asks
+	// for no reading that could still be out once its limit is raised
+	provider.KeyBalances(context.Background())
 	cs, _ := s.planGroup(g, ms, provider.Responses)
 	if len(cs) != 2 || cs[0].p.ID != "ko" {
 		t.Fatalf("planned %d, ko first: %v", len(cs), len(cs) > 0 && cs[0].p.ID == "ko")
 	}
 	a := cs[0]
 	t.Cleanup(func() { clearRest(a.restKey()) })
-	provider.KeyBalances(context.Background()) // its card: its week used up
 	quota := []byte(`{"error":{"message":"api key 7天限额已用完","type":"rate_limit_exceeded"}}`)
 	if r := s.restAfter(a, 429, http.Header{}, quota); r.Why != failQuota || r.By != "window" {
 		t.Fatalf("out of its week: rests by %s (%s)", r.By, r.Why)
@@ -327,15 +336,10 @@ func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 	mu.Lock()
 	limit = 1000
 	mu.Unlock()
-	// a reading out as the key refused is followed by another at once,
-	// which may have seen the limit raised and brought it back already
-	at, r := first()
-	mu.Lock()
-	seen := raised
-	mu.Unlock()
-	if (at != "kx" || r == nil) && (at != "ko" || r != nil || seen == 0) {
-		t.Fatalf("resting: %s first, its rest %v, the raised limit read %d times", at, r, seen)
+	if at, r := first(); at != "kx" || r == nil {
+		t.Fatalf("resting: %s first, its rest %v", at, r)
 	}
+	answer()
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		r, ok := restOf(a.restKey())
 		if !ok {
