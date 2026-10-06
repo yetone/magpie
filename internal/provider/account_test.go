@@ -84,6 +84,10 @@ func isolate(t *testing.T) {
 	loginUsageCache.Lock()
 	loginUsageCache.m, loginUsageCache.pending = nil, nil
 	loginUsageCache.Unlock()
+	// nor what Copilot refused an account, or its sessions and picks: they
+	// are kept by GitHub token, and every test signed in (signIn) has the
+	// same one
+	ForgetCopilotForTest()
 	t.Cleanup(func() {
 		claudeKeychain, claudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
 		cursorKeychain, DevinExecutable = oldCursor, oldDevin
