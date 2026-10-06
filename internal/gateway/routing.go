@@ -247,13 +247,18 @@ type Rest struct {
 	// Link: where the vendor said to verify the account, for failVerify
 	Link string `json:"link,omitempty"`
 
-	agent, user string    // the subscription account resting, when it is one
+	// the subscription account resting, when it is one; agent "" and its
+	// provider.KeyAllowanceID for a key out of its own windows
+	agent, user string
 	said        string    // the error it gave, for a failVerify held
 	hold        time.Time // until when a failVerify is answered without asking
 }
 
 // renewed lifts the rests of a subscription account whose windows were
-// just started again (a Codex reset spent): out of quota no longer.
+// just started again (a Codex reset spent): out of quota no longer. Told
+// agent "", it is a key (provider.KeyAllowanceID) whose windows a reading
+// found full no more — its limit raised, or its usage reset — and its
+// rest out of them is lifted; a key's other rests aren't noted by it.
 func renewed(agent, user string) {
 	restingUntil.Lock()
 	defer restingUntil.Unlock()
@@ -415,6 +420,11 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	r.Until = now.Add(d)
 	if a := c.p.Account; a != nil {
 		r.agent, r.user = a.UsageAgent(), a.User
+	} else if why == failQuota {
+		// a key out of its own windows is back as soon as they are read
+		// full no more, not only when they start again: its owner may
+		// raise its limit, or reset its usage
+		r.user = provider.KeyAllowanceID(c.p)
 	}
 	id := c.restKey()
 	// OpenRouter identifies a provider's shared pool separately from its

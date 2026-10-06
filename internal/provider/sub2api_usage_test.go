@@ -452,3 +452,82 @@ func TestKeyAllowancePerKeyAndForgotten(t *testing.T) {
 		t.Fatal("the key itself names its windows")
 	}
 }
+
+// A key out of a window is told renewed (OnRenewed, as agent "" and its
+// KeyAllowanceID) once a reading finds that window full no more — its
+// limit raised in the panel, or its usage reset — whether routing read it
+// or its card did; not on its first reading, while it stays full, as it
+// fills, or when a read fails.
+func TestKeyAllowanceRenewed(t *testing.T) {
+	keyLimitsHome(t)
+	week := time.Now().Add(72 * time.Hour).Truncate(time.Second)
+	var body atomic.Pointer[[]byte]
+	srv, _ := sub2apiServer(t, func() ([]byte, int) {
+		if b := *body.Load(); b != nil {
+			return b, 200
+		}
+		return []byte(`{"error":{"type":"api_error","message":"internal error"}}`), 502
+	})
+	p := sub2apiKey(srv)
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	renewedHooks.Lock()
+	hooks := renewedHooks.fs
+	renewedHooks.Unlock()
+	t.Cleanup(func() {
+		renewedHooks.Lock()
+		renewedHooks.fs = hooks
+		renewedHooks.Unlock()
+	})
+	var mu sync.Mutex
+	var told []string
+	OnRenewed(func(agent, user string) {
+		mu.Lock()
+		told = append(told, agent+"/"+user)
+		mu.Unlock()
+	})
+	id := KeyAllowanceID(p)
+	if id != keyAllowanceID(p) {
+		t.Fatalf("KeyAllowanceID = %q", id)
+	}
+	reply := func(b []byte) { body.Store(&b) }
+	// read is a reading as routing's, done here rather than behind it
+	read := func(b []byte) {
+		reply(b)
+		keyAllowances.Lock()
+		gen := keyAllowances.gen
+		keyAllowances.Unlock()
+		readKeyAllowance(p, id, gen)
+	}
+	tellsSo := func(what string, n int) {
+		t.Helper()
+		mu.Lock()
+		defer mu.Unlock()
+		if len(told) != n {
+			t.Fatalf("%s: told %v", what, told)
+		}
+		for _, s := range told {
+			if s != "/"+id {
+				t.Fatalf("%s: told %v", what, told)
+			}
+		}
+	}
+	full := weekUsed(t, "800", week)
+	reply(full)
+	waitAllowance(t, p, func(a Allowance) bool { u, _ := a.For("gpt-6-astra", time.Now()); return u == 100 })
+	tellsSo("its first reading, out of its week", 0)
+	read(full)
+	tellsSo("its week still used up", 0)
+	read(bytes.Replace(full, []byte(`"limit":800`), []byte(`"limit":1000`), 1))
+	tellsSo("its week's limit raised to $1,000", 1)
+	read(full)
+	tellsSo("its week used up again", 1)
+	read(nil)
+	tellsSo("a read that failed", 1)
+	// its usage reset in the panel, as its card reads it
+	reply(sub2apiUsage(t, false))
+	ForgetBalances()
+	KeyBalances(context.Background())
+	tellsSo("its usage reset, read on its card", 2)
+}

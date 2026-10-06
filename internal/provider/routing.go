@@ -447,7 +447,10 @@ func Allowances(agent string) map[string]Allowance {
 }
 
 // OnRenewed has f told when an account's usage windows were started again
-// (a Codex reset spent), so what sat out waiting for them can come back.
+// (a Codex reset spent), so what sat out waiting for them can come back;
+// and, as agent "" and the key's KeyAllowanceID, when a reading of a key's
+// own windows finds one it was full in full no more: its limit raised in
+// its panel, or its usage reset.
 func OnRenewed(f func(agent, user string)) {
 	renewedHooks.Lock()
 	renewedHooks.fs = append(renewedHooks.fs, f)
@@ -465,6 +468,11 @@ var renewedHooks struct {
 // holds it no more.
 func renewedNow(agent, user string) {
 	forgetAllowance(agent, user)
+	tellRenewed(agent, user)
+}
+
+// tellRenewed tells those OnRenewed asked.
+func tellRenewed(agent, user string) {
 	renewedHooks.Lock()
 	fs := renewedHooks.fs
 	renewedHooks.Unlock()

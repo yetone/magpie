@@ -5,7 +5,10 @@ package provider
 // tells what it has spent of each, and routing weighs and rests it by
 // them. They are read behind the request, never waited for, and read
 // again once a minute has passed; until the first reading is back, the
-// one last shown on the key's card stands in for it.
+// one last shown on the key's card stands in for it. A reading that finds
+// a window the key was out of no longer full — its limit raised in the
+// panel, or its usage reset — tells OnRenewed's hooks, as a Codex reset
+// spent does an account's, so what sat out for it comes back.
 
 import (
 	"context"
@@ -39,6 +42,15 @@ func readsKeyWindows(p Provider) bool {
 }
 
 func keyAllowanceID(p Provider) string { return p.ID + "#" + keyID(p.Key) }
+
+// KeyAllowanceID is what OnRenewed's hooks are told, as the user of agent
+// "", of a key whose own windows magpie reads; empty for any other.
+func KeyAllowanceID(p Provider) string {
+	if !readsKeyWindows(p) {
+		return ""
+	}
+	return keyAllowanceID(p)
+}
 
 // KeyAllowance is the provider's key in use's own usage windows as last
 // read, asked for again in the background when that was over a minute
@@ -85,15 +97,27 @@ func readKeyAllowance(p Provider, id string, gen int) {
 	now := time.Now()
 	c := &keyAllowances
 	c.Lock()
-	defer c.Unlock()
 	e := c.m[id]
 	if e == nil || c.gen != gen {
+		c.Unlock()
 		return // forgotten while it was read: read again
 	}
 	e.loading, e.at = false, now
-	if err == nil {
-		e.a = allowanceOf(ws, now)
+	renewed := err == nil && e.keep(allowanceOf(ws, now), SpentShareOf(p.Routing), now)
+	c.Unlock()
+	if renewed {
+		tellRenewed("", id)
 	}
+}
+
+// keep has the key go by a, read at now, and says whether a window it
+// was full in (at share, as routing counts it full) is full no more, or
+// till sooner: its limit raised, its usage reset, or the window started
+// again.
+func (e *keyAllowance) keep(a Allowance, share float64, now time.Time) (renewed bool) {
+	was := e.a.Full("", share, now)
+	e.a, e.at = a, now
+	return was.After(a.Full("", share, now))
 }
 
 // keyWindows asks the vendor for p's key's windows, as the key's card
@@ -132,7 +156,6 @@ func noteKeyAllowance(p Provider, ws []QuotaWindow, now time.Time) {
 	}
 	c := &keyAllowances
 	c.Lock()
-	defer c.Unlock()
 	if c.m == nil {
 		c.m = map[string]*keyAllowance{}
 	}
@@ -142,7 +165,11 @@ func noteKeyAllowance(p Provider, ws []QuotaWindow, now time.Time) {
 		e = &keyAllowance{}
 		c.m[id] = e
 	}
-	e.a, e.at = allowanceOf(ws, now), now
+	renewed := e.keep(allowanceOf(ws, now), SpentShareOf(p.Routing), now)
+	c.Unlock()
+	if renewed {
+		tellRenewed("", id)
+	}
 }
 
 // StaleKeyAllowance has the next KeyAllowance ask the vendor again for

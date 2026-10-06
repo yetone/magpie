@@ -627,9 +627,7 @@ func asideOf(cs []candidate, q provider.Provider, fallback bool, from provider.P
 // restLast moves those resting after a recent failure behind the rest.
 func restLast(out []candidate, pl planned) ([]candidate, planned) {
 	if len(out) == 1 {
-		if r, ok := restOf(out[0].restKey()); ok {
-			pl.order[0].Rest = &r // tried all the same: there is no other
-		} else if r, ok := restOf(out[0].restID()); ok {
+		if r, ok := restingOf(out[0]); ok {
 			pl.order[0].Rest = &r // tried all the same: there is no other
 		}
 		return out, pl
@@ -637,11 +635,7 @@ func restLast(out []candidate, pl planned) ([]candidate, planned) {
 	var ready, resting []candidate
 	var wReady, wResting []Weighed
 	for i, c := range out {
-		r, ok := restOf(c.restKey())
-		if !ok && c.restID() != c.restKey() {
-			r, ok = restOf(c.restID())
-		}
-		if ok {
+		if r, ok := restingOf(c); ok {
 			pl.order[i].Rest = &r
 			resting, wResting = append(resting, c), append(wResting, pl.order[i])
 		} else {
@@ -650,6 +644,22 @@ func restLast(out []candidate, pl planned) ([]candidate, planned) {
 	}
 	pl.order = append(wReady, wResting...)
 	return append(ready, resting...), pl
+}
+
+// restingOf is why c rests, by its own key or else its provider's, while
+// it does. A key resting out of its own windows has them read again as it
+// is planned, behind the request and once a minute at most: an ordered
+// group, or a provider with one key, weighs nothing by them, and a
+// reading that finds them full no more is what brings it back (renewed).
+func restingOf(c candidate) (Rest, bool) {
+	r, ok := restOf(c.restKey())
+	if !ok && c.restID() != c.restKey() {
+		r, ok = restOf(c.restID())
+	}
+	if ok && r.agent == "" && r.user != "" {
+		keyAllowance(c.p)
+	}
+	return r, ok
 }
 
 // spentAfter says whether every candidate in cs rests with its allowance

@@ -673,7 +673,8 @@ order or by what magpie sent it lately — except a sub2api key its owner gave
 a 5-hour, day or 7-day limit: with the provider's Balance URL set to the
 relay's `/v1/usage`, its card shows those windows and routing weighs it by
 them as it does a subscription, resting it till the window renews once the
-relay says `api key 7天限额已用完`. `stays=` is how long a conversation
+relay says `api key 7天限额已用完` — or till its windows are next read short
+of full, its limit raised or its usage reset. `stays=` is how long a conversation
 stays with the key or account that answered it: `auto` (the default, while
 the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
 `models=` replaces the whole list, in order; a bare model id works when only
