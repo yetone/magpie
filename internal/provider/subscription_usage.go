@@ -844,11 +844,12 @@ type codexUsage struct {
 		OverageReached *bool `json:"overage_limit_reached"`
 	} `json:"credits"`
 	RateLimit struct {
-		// false once its allowance is used up; held only with no credits
-		// to go on with (codexHeld)
-		Allowed   *bool        `json:"allowed"`
-		Primary   *codexWindow `json:"primary_window"`
-		Secondary *codexWindow `json:"secondary_window"`
+		// false, or limit_reached true, once its allowance is used up;
+		// held only with no credits to go on with (codexHeld)
+		Allowed      *bool        `json:"allowed"`
+		LimitReached *bool        `json:"limit_reached"`
+		Primary      *codexWindow `json:"primary_window"`
+		Secondary    *codexWindow `json:"secondary_window"`
 	} `json:"rate_limit"`
 	SpendControl *struct {
 		Reached bool `json:"reached"`
@@ -877,30 +878,41 @@ var codexReservePlans = []string{"team", "self_serve_business_prolite"}
 
 // codexHeld reports whether the Codex app (ChatGPT Desktop) holds its
 // composer for the account, sending nothing at all, whichever model the
-// turn is on, as the app itself decides it: the backend says the account
-// isn't allowed now, and it has no credits to go on with (has_credits or
-// unlimited), and isn't a workspace one still within its overage. A
-// window's percent never says it: a Pro account reads 100% on its week
-// and is not allowed, while its credits carry every turn on (the app's
-// composer stays open and the backend answers). Not said is not held.
+// turn is on: the backend says the account isn't allowed now (allowed
+// false or limit_reached true), and it is at a spend cap or past its
+// overage, or has no credits to go on with (has_credits or unlimited) and
+// isn't a workspace one still within its overage. A window's percent never
+// says it: a Pro account reads 100% on its week and is not allowed, while
+// its credits carry every turn on (the app's composer stays open and the
+// backend answers). Not said is not held.
 //
-// Where the app goes by what usage can't show (an experiment's gate, the
-// reserve it may send on, a reset redeemed in the app), this says held:
-// wrongly held costs the app its ChatGPT extras while magpie serves the
-// turn, wrongly not held leaves it sending nothing at all.
+// A spend cap or a reached overage holds it whatever its credits say, as
+// the app's readiness check reads it (26.930: `spend_control?.reached||
+// credits?.overage_limit_reached` is `limited` before `has_credits`), where
+// its composer gate alone (`hP`) lets credits through first: the backend
+// refuses an account at its cap, and magpie as Codex's provider can serve
+// the turn elsewhere. Where the app goes by what usage can't show (an
+// experiment's gate, the reserve it may send on, a reset redeemed in the
+// app), this says held too: wrongly held costs the app its ChatGPT extras
+// while magpie serves the turn, wrongly not held leaves it sending nothing
+// at all.
 func codexHeld(u codexUsage) bool {
-	if u.RateLimit.Allowed == nil || *u.RateLimit.Allowed {
+	r := u.RateLimit
+	if (r.Allowed == nil || *r.Allowed) && (r.LimitReached == nil || !*r.LimitReached) {
 		return false
 	}
 	c := u.Credits
+	spent := u.SpendControl != nil && u.SpendControl.Reached
+	if spent || c != nil && c.OverageReached != nil && *c.OverageReached {
+		return true
+	}
 	if c != nil && (c.Has || c.Unlimited) {
 		return false
 	}
-	spent := u.SpendControl != nil && u.SpendControl.Reached
 	why := u.ReachedType != nil && u.ReachedType.Type != nil && *u.ReachedType.Type != "rate_limit_reached"
 	plan := strings.ToLower(u.PlanType)
 	workspace := slices.Contains(codexWorkspacePlans, plan) && !slices.Contains(codexReservePlans, plan)
-	if workspace && c != nil && c.OverageReached != nil && !*c.OverageReached && !spent && !why {
+	if workspace && c != nil && c.OverageReached != nil && !why {
 		return false
 	}
 	return true

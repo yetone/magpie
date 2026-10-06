@@ -13,8 +13,9 @@ import (
 
 // The account Codex is signed in to is out (CodexUsedUp, which makes magpie
 // Codex's provider and the Codex app lose its ChatGPT sign-in) only when the
-// Codex app itself holds it: the backend says it isn't allowed and it has no
-// credits to go on with, a workspace one past its overage too. A window at
+// Codex app itself holds it: the backend says it isn't allowed, and it is at
+// a spend cap or past its overage, credits or not, or has no credits to go
+// on with, a workspace one past its overage too. A window at
 // 100% alone isn't: a Pro account with credits read 100% on its week and
 // "allowed": false, and the app kept sending, the backend answering 200,
 // while magpie had taken Codex out of ChatGPT ("Sign in to ChatGPT to start
@@ -56,7 +57,13 @@ func TestCodexUsedUpIsWhatTheAppHolds(t *testing.T) {
 		want bool
 	}{
 		{"Pro at 100% on its week, with credits", read("codex_usage_pro_credits.json"), false},
-		{"Team at its spend cap, with credits", read("codex_usage_team_spend_cap.json"), false},
+		{"Team at its spend cap, with credits", read("codex_usage_team_spend_cap.json"), true},
+		{"Pro at 100%, with credits, past its overage", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			credits(m)["overage_limit_reached"] = true
+		}), true},
+		{"Pro at 100%, with credits, at a spend cap", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			m["spend_control"].(map[string]any)["reached"] = true
+		}), true},
 		{"Pro at 100%, credits spent", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			credits(m)["has_credits"], credits(m)["balance"] = false, "0"
 		}), true},
@@ -69,10 +76,29 @@ func TestCodexUsedUpIsWhatTheAppHolds(t *testing.T) {
 		{"allowed not said", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			delete(m, "credits")
 			delete(m["rate_limit"].(map[string]any), "allowed")
+			delete(m["rate_limit"].(map[string]any), "limit_reached")
 		}), false},
 		{"allowed", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
 			delete(m, "credits")
 			m["rate_limit"].(map[string]any)["allowed"] = true
+			m["rate_limit"].(map[string]any)["limit_reached"] = false
+		}), false},
+		{"allowed, its limit reached, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			delete(m, "credits")
+			m["rate_limit"].(map[string]any)["allowed"] = true
+		}), true},
+		{"allowed, its limit reached, with credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			m["rate_limit"].(map[string]any)["allowed"] = true
+		}), false},
+		{"limit reached, allowed not said, no credits", with(read("codex_usage_pro_credits.json"), func(m map[string]any) {
+			delete(m, "credits")
+			delete(m["rate_limit"].(map[string]any), "allowed")
+		}), true},
+		// a workspace's included usage still served past its spend cap
+		{"Business at its spend cap, still allowed", within("business", func(m map[string]any) {
+			m["spend_control"].(map[string]any)["reached"] = true
+			m["rate_limit"].(map[string]any)["allowed"] = true
+			m["rate_limit"].(map[string]any)["limit_reached"] = false
 		}), false},
 		{"Business without credits, within its overage", within("business", as), false},
 		{"K12 without credits, within its overage", within("k12", as), false},
