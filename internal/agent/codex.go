@@ -298,6 +298,12 @@ func codexIn(at place) *Agent {
 	// api: the user wants magpie as Codex's provider even while Codex is
 	// signed in to ChatGPT
 	api := func() bool { return stashLoad()[at.key("codex.login")] == "api" }
+	// out reports whether the ChatGPT account Codex is signed in to has
+	// used its allowance up, for magpie to become Codex's provider while it
+	// is (#540): never with the sign-in kept on ChatGPT (chatgpt), where
+	// the user would rather the Codex app wait for the account than leave
+	// its ChatGPT state
+	out := func() bool { return stashLoad()[at.key("codex.login")] != "chatgpt" && codexUsedUp() }
 	dropBase := func() error {
 		forget(at.key("codex.failover"))
 		if !viaBase() {
@@ -564,7 +570,7 @@ func codexIn(at place) *Agent {
 			// alone, it is marked (codex.out), for Sync to put it back
 			// beside the sign-in once the allowance is back.
 			chatgpt := !api() && codexChatGPT(dir)
-			if chatgpt && !codexUsedUp() {
+			if chatgpt && !out() {
 				forget(at.key("codex.out"))
 				if err := dropProvider(); err != nil {
 					return err
@@ -680,7 +686,7 @@ func codexIn(at place) *Agent {
 		// was on, the one last picked in its /model (the owner: 让 Codex 记住
 		// 上次的选择), and magpie's models join its list
 		Join: func() (bool, error) {
-			if api() || !codexChatGPT(dir) || codexUsedUp() || isMagpie(get("model")) {
+			if api() || !codexChatGPT(dir) || out() || isMagpie(get("model")) {
 				return false, nil
 			}
 			if p := get("model_provider"); p != "" && p != "openai" && !isCCSwitchMirror(p) {
@@ -753,9 +759,9 @@ func codexIn(at place) *Agent {
 			// room), Codex's own models join magpie's again
 			if m := get("model"); isMagpie(m) && !api() && codexChatGPT(dir) {
 				switch {
-				case viaBase() && !asProvider() && codexUsedUp():
+				case viaBase() && !asProvider() && out():
 					return set(m)
-				case asProvider() && stashLoad()[at.key("codex.out")] == "1" && !codexUsedUp():
+				case asProvider() && stashLoad()[at.key("codex.out")] == "1" && !out():
 					return set(m)
 				}
 			}
@@ -963,19 +969,21 @@ func codexIn(at place) *Agent {
 			},
 			{
 				// how Codex takes magpie's models: beside its ChatGPT
-				// sign-in (openai_base_url), or with magpie as its provider,
+				// sign-in (openai_base_url), magpie its provider only while
+				// the account is used up (""); beside it always, the
+				// account used up or not (chatgpt); or with magpie as its provider,
 				// the Codex app in its API state. Kept in the stash, where
 				// set("") leaves it.
 				Key: "login", Label: "sign-in", Quiet: true,
 				Get: func() string { return stashLoad()[at.key("codex.login")] },
 				Set: func(v string) error {
-					if v != "" && v != "api" {
-						return fmt.Errorf("sign-in is api or empty (ChatGPT), not %q", v)
+					if v != "" && v != "api" && v != "chatgpt" {
+						return fmt.Errorf("sign-in is api, chatgpt or empty (ChatGPT), not %q", v)
 					}
 					stash(map[string]string{at.key("codex.login"): v})
 					m := get("model")
 					switch {
-					case v == "" && codexOwnOf(m) != "":
+					case v != "api" && codexOwnOf(m) != "":
 						// back beside the sign-in, Codex's own model goes to
 						// OpenAI itself again, not by a hop through magpie
 						return set(codexOwnOf(m))
@@ -990,7 +998,8 @@ func codexIn(at place) *Agent {
 				},
 				Options: func(map[string]string) []Option {
 					return []Option{
-						{Value: "", Label: "ChatGPT", Note: "magpie's models join Codex's own; Codex stays signed in to ChatGPT"},
+						{Value: "", Label: "ChatGPT", Note: "magpie's models join Codex's own; Codex stays signed in to ChatGPT, and while its account is used up magpie is Codex's provider, so the Codex app still sends"},
+						{Value: "chatgpt", Label: "Always ChatGPT", Note: "as ChatGPT, and kept so when its account is used up: magpie never becomes Codex's provider. The Codex app may then send nothing till the account has room; Codex CLI goes on through magpie"},
 						{Value: "api", Label: "magpie API", Note: "magpie is Codex's provider; the Codex app is in its API state, with magpie's models only"},
 					}
 				},

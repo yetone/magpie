@@ -57,3 +57,54 @@ func TestCodexRunsOutAfterPick(t *testing.T) {
 		t.Fatalf("api, allowance there, synced:\n%s", cfg)
 	}
 }
+
+// Kept on ChatGPT (Always ChatGPT), a ChatGPT account that runs out leaves
+// magpie beside the sign-in: Codex isn't moved to magpie as its provider,
+// by a pick or by Sync, and one moved before the user chose it is put back
+// beside it at once.
+func TestCodexKeptOnChatGPT(t *testing.T) {
+	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "")
+	cx := codex(home)
+	if err := cx.Fields[0].Set("fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	codexUsedUp = func() bool { return true }
+	t.Cleanup(func() { codexUsedUp = func() bool { return false } })
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); !strings.Contains(cfg, `model_provider = "magpie"`) {
+		t.Fatalf("ChatGPT, used up: magpie its provider:\n%s", cfg)
+	}
+
+	beside := func(when string) {
+		t.Helper()
+		if cfg := read(); strings.Contains(cfg, "model_provider =") || strings.Contains(cfg, "model_catalog_json") ||
+			!strings.Contains(cfg, "openai_base_url") || !strings.Contains(cfg, `model = "fake/m1"`) {
+			t.Fatalf("%s:\n%s", when, cfg)
+		}
+	}
+	if err := cx.Field("login").Set("chatgpt"); err != nil {
+		t.Fatal(err)
+	}
+	beside("kept on ChatGPT, used up")
+	if err := cx.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	beside("kept on ChatGPT, used up, synced")
+	if err := cx.Fields[0].Set("fake/m1"); err != nil {
+		t.Fatal(err)
+	}
+	beside("kept on ChatGPT, used up, picked")
+	if got := cx.Field("login").Get(); got != "chatgpt" {
+		t.Fatalf("login %q", got)
+	}
+
+	// back to ChatGPT, it is moved again while the account is out
+	if err := cx.Field("login").Set(""); err != nil {
+		t.Fatal(err)
+	}
+	if cfg := read(); !strings.Contains(cfg, `model_provider = "magpie"`) {
+		t.Fatalf("ChatGPT again, used up:\n%s", cfg)
+	}
+}

@@ -313,7 +313,7 @@ func TestCodexLoginAPI(t *testing.T) {
 	if login == nil {
 		t.Fatal("no login field")
 	}
-	if err := login.Set("chatgpt"); err == nil {
+	if err := login.Set("oauth"); err == nil {
 		t.Error("an unknown sign-in was taken")
 	}
 	if err := login.Set("api"); err != nil {
