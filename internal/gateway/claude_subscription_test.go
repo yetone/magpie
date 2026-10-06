@@ -80,6 +80,7 @@ func TestCleanClaudeEnvRemovesGatewayOverrides(t *testing.T) {
 
 // fakeClaude answers each line it is given with the process it runs in and
 // how many turns that process has had, as Claude Code's stream-json does.
+// A test calls it before New(), for runsEndWithTest.
 func fakeClaude(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -99,6 +100,45 @@ done
 `
 	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	runsEndWithTest(t, dir)
+}
+
+// runsEndWithTest fails the test, and ends the runs, when a Claude Code run
+// of the fake in dir is still going after the test's cleanups. A run kept
+// for the next turn waits idleLongest, so the test ends its server's runs
+// with t.Cleanup(s.subscription.abortAll), registered after this call, as
+// cleanups run last first.
+func runsEndWithTest(t *testing.T, dir string) {
+	t.Helper()
+	dir = filepath.Clean(dir) // as exec.LookPath's filepath.Join gives it
+	t.Cleanup(func() {
+		t.Helper()
+		var left []*subscriptionRun
+		bridges.Range(func(key, _ any) bool {
+			b := key.(*subscriptionBridge)
+			b.mu.Lock()
+			for _, run := range b.runs {
+				if run.cmd == nil || filepath.Dir(run.cmd.Path) != dir {
+					continue
+				}
+				// a run killed, or exited, may not have left b.runs yet
+				run.mu.Lock()
+				closed := run.closed
+				run.mu.Unlock()
+				if !closed {
+					left = append(left, run)
+				}
+			}
+			b.mu.Unlock()
+			return true
+		})
+		if len(left) > 0 {
+			t.Errorf("Claude Code runs the test started, still going after it: %d", len(left))
+		}
+		for _, run := range left {
+			run.abort()
+		}
+	})
 }
 
 // A conversation's next turn goes to the Claude Code that had its last,
@@ -107,6 +147,7 @@ done
 func TestClaudeRunKeptForTheNextTurn(t *testing.T) {
 	fakeClaude(t)
 	s := New()
+	t.Cleanup(s.subscription.abortAll)
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 	ask := func(msgs string) string {
 		t.Helper()
@@ -151,6 +192,7 @@ func TestClaudeRunKeptForTheNextTurn(t *testing.T) {
 func TestClaudeOneOffAskNotKept(t *testing.T) {
 	fakeClaude(t)
 	s := New()
+	t.Cleanup(s.subscription.abortAll)
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 	ask := func(msgs string) string {
 		t.Helper()
@@ -308,6 +350,7 @@ func TestClaudeLimits(t *testing.T) {
 func TestClaudeRunLetGoWhenTheConversationMovedOn(t *testing.T) {
 	fakeClaude(t)
 	s := New()
+	t.Cleanup(s.subscription.abortAll)
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 	ask := func(model, msgs string) string {
 		t.Helper()
@@ -528,7 +571,9 @@ done
 `
 	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	runsEndWithTest(t, dir)
 	s := New()
+	t.Cleanup(s.subscription.abortAll)
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 	ask := func(effort, msgs string) string {
 		t.Helper()
