@@ -952,7 +952,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// arranged is the Agents page's, and the window's size its own; both stay as they are
 		cur := settings.Load()
 		in.AgentOrder, in.AgentsHidden, in.AgentsShown = cur.AgentOrder, cur.AgentsHidden, cur.AgentsShown
-		in.Window = cur.Window // the window's own, as it was last resized
+		in.Window, in.WindowMaximised = cur.Window, cur.WindowMaximised // the window's own, as it was last resized
 		// and what other pages keep here: which models an agent is shown, and
 		// everything the user said of a model anywhere else in the app, set on
 		// its own. The per-model maps are carried whole rather than named one

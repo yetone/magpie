@@ -147,6 +147,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		UpdateSkip:          "0.1.500",
 		UpdateMirror:        "https://mirror.example/",
 		Window:              []int{900, 700},
+		WindowMaximised:     true,
 		FullContext:         true,
 		GatewayMode:         "off",
 	}

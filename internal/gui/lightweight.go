@@ -27,13 +27,16 @@ import (
 // makeMain makes the main window, hidden, on url, with its hooks.
 func (h *host) makeMain(url string) *application.WebviewWindow {
 	z := h.zoom()
-	// the window opens at the size it was last given
-	width, height := 660, 600
-	if s := settings.Load().Window; len(s) == 2 && s[0] >= 560 && s[1] >= 420 {
-		width, height = s[0], s[1]
-	}
-	// and no smaller than its page's least at the text size
+	// the window opens at the size it was last given, no smaller than its
+	// page's least at the text size (window_rule.go); maximised again, if it
+	// was: on Linux as it is made, elsewhere once it is first shown
+	// (placeMain)
 	minW, minH := windowMin(z, 0, 0)
+	width, height := openSize(settings.Load().Window, minW, minH)
+	state := application.WindowStateNormal
+	if runtime.GOOS == "linux" && settings.Load().WindowMaximised {
+		state = application.WindowStateMaximised
+	}
 	// Windows' title bar in the page's colour from the first frame; the
 	// page keeps it so as its theme changes (TintTitleBar)
 	winOpts, winBg := windowChrome(cmp.Or(os.Getenv("MAGPIE_THEME"), settings.Load().Theme))
@@ -41,40 +44,40 @@ func (h *host) makeMain(url string) *application.WebviewWindow {
 		Name:             "main",
 		Title:            "magpie",
 		URL:              url,
-		Width:            max(width, minW),
-		Height:           max(height, minH),
+		Width:            width,
+		Height:           height,
 		MinWidth:         minW,
 		MinHeight:        minH,
 		Zoom:             z,
 		Hidden:           true,
+		StartState:       state,
 		Mac:              mainMacWindow(),
 		Windows:          winOpts,
 		BackgroundColour: winBg,
 	})
-	// A resize is kept once it settles; a maximised or full-screen window
-	// is the screen's size, not one the user gave it.
+	// A resize is kept once it settles (settle): the size, or that the
+	// window is maximised. Nothing is kept of a window not placed and shown
+	// yet (placeMain: a text size can resize it, unmaximised as yet), one
+	// let go (0×0), or one full screen or minimised, which keeps what was
+	// kept before it went so; nor, on Linux, of one hidden by then, since
+	// X11 drops a hidden window's maximised state.
 	var resized *time.Timer
 	w.OnWindowEvent(events.Common.WindowDidResize, func(*application.WindowEvent) {
 		if resized != nil {
 			resized.Stop()
 		}
 		resized = time.AfterFunc(500*time.Millisecond, func() {
-			if w.IsMaximised() || w.IsFullscreen() || w.IsMinimised() {
+			if h.placed.Load() != w || w.IsFullscreen() || w.IsMinimised() || runtime.GOOS == "linux" && !w.IsVisible() {
 				return
 			}
 			wd, ht := w.Size()
-			if wd < 560 || ht < 420 {
+			if wd == 0 {
 				return
 			}
-			// macOS reports a window a pixel short of the size it was
-			// opened at; kept as it is, the window would shrink a pixel at
-			// every start
-			s := settings.Load()
-			if len(s.Window) == 2 && abs(s.Window[0]-wd) <= 2 && abs(s.Window[1]-ht) <= 2 {
-				return
+			sw, sh := fitScreen(w)
+			if s := settings.Load(); settle(&s, wd, ht, sw, sh, w.IsMaximised()) {
+				settings.Save(s)
 			}
-			s.Window = []int{wd, ht}
-			settings.Save(s)
 		})
 	})
 	// Closing the window keeps the tray alive; quitting is a menu action.
@@ -228,6 +231,7 @@ func (h *host) openMain(url string) {
 		h.madeAgain(w)
 		h.whenLoaded(w, func() {
 			if h.main == w {
+				h.placeMain(w)
 				w.Show()
 				w.Focus()
 			}
@@ -240,6 +244,77 @@ func (h *host) openMain(url string) {
 	if h.loading[h.main] {
 		return // made again, it is shown once its page has come
 	}
+	h.placeMain(h.main)
 	h.main.Show()
 	h.main.Focus()
+}
+
+// placeMain puts the main window, made and not shown yet, as it was last
+// left; on the main thread, before its first Show. On Windows, a size kept
+// on a larger screen is fitted to this one's work area and centred: Windows
+// doesn't, and the title bar would be out of reach. Then, if it was
+// maximised, it is maximised again; on Linux it was made so (StartState),
+// since GTK can't be asked about a window not shown yet.
+//
+// StartState can't do it elsewhere: on the Mac the window is centred after
+// it is zoomed, and so isn't zoomed when shown; on Windows it shows the
+// window before its page has come. Maximised while hidden, it zooms as it
+// appears on the Mac, and Show (SW_SHOW) keeps it so on Windows. Restored,
+// it goes back to the size it opened at. Wails' Maximise lets go of the
+// window's least size until its own UnMaximise, which a restore from the
+// Mac's title bar isn't; the least is put back at once. Before, too: the Mac
+// makes a window a point short, under its least when its size is the
+// least, and the resize to it then would stop the zoom.
+//
+// A Mac window larger than its screen is left to the Mac, which shows it
+// fitted to the screen, and zoomed: zoomed here as well, it would restore
+// to its own size, which the Mac fits to the screen again, so it couldn't
+// be restored at all.
+func (h *host) placeMain(w *application.WebviewWindow) {
+	if h.placed.Swap(w) == w || runtime.GOOS == "linux" {
+		return
+	}
+	if w.IsMaximised() {
+		return
+	}
+	wd, ht := w.Size()
+	sw, sh := h.mainRoom(w)
+	fw, fh, fitted := fitRoom(wd, ht, sw, sh)
+	if fitted && runtime.GOOS == "windows" {
+		w.SetSize(fw, fh)
+		w.Center()
+		fitted = false
+	}
+	if settings.Load().WindowMaximised && !fitted {
+		w.EnableSizeConstraints()
+		w.Maximise()
+		w.EnableSizeConstraints()
+	}
+}
+
+// mainRoom is the work area of the screen the main window is on, in the
+// units of its Size, 0s when unknown: DIPs on Windows, points on the Mac,
+// where GetScreen gives it in pixels (Wails' cScreenToScreen; the Screen
+// manager's copy is laid out only once the app has finished launching,
+// after the window may first be shown).
+func (h *host) mainRoom(w *application.WebviewWindow) (int, int) {
+	switch runtime.GOOS {
+	case "windows":
+		return screenRoom(w)
+	case "darwin":
+		if s, err := w.GetScreen(); err == nil && s != nil && s.ScaleFactor > 0 {
+			return int(float32(s.WorkArea.Width) / s.ScaleFactor), int(float32(s.WorkArea.Height) / s.ScaleFactor)
+		}
+	}
+	return 0, 0
+}
+
+// fitScreen is the work area the main window is fitted to, in the units of
+// its Size: Windows' (DIPs), 0s elsewhere — the Mac fits a window to its
+// screen itself, and GTK's window manager does.
+func fitScreen(w *application.WebviewWindow) (int, int) {
+	if runtime.GOOS != "windows" {
+		return 0, 0
+	}
+	return screenRoom(w)
 }

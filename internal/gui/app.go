@@ -94,6 +94,8 @@ type host struct {
 	// windows made again whose page hasn't come yet, shown by whenLoaded's
 	// fn; on the main thread
 	loading map[*application.WebviewWindow]bool
+	// the main window placed as it was last left (placeMain), and so shown
+	placed atomic.Pointer[application.WebviewWindow]
 }
 
 // whenReady runs fn once the main window can be shown safely.
@@ -536,13 +538,6 @@ func singleInstance(h *host) *application.SingleInstanceOptions {
 			}
 		},
 	}
-}
-
-func abs(n int) int {
-	if n < 0 {
-		return -n
-	}
-	return n
 }
 
 // flap plays trayFlap on the tray icon, a frame every 30ms as they were

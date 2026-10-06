@@ -25,6 +25,7 @@ three.
 3. The panel and the window load `index.html` from `Handler`. `boot.js` passes the saved language, theme and text size before the first paint.
 4. The page reads `GET /api/state` and writes through `POST` routes. Each write answers with the new state, built under `held`.
 5. Closing the window hides it. On the Mac a full-screen window first leaves full screen (`closeStep`).
+6. The window opens as it was last left. Its settled size and whether it was maximised are kept in `settings.Window` and `settings.WindowMaximised` (`settle`; per machine, see `KeepOwn`). A maximised window keeps the size it restores to. `makeMain` opens it at that size (`openSize`). On its first show, `placeMain` maximises it again on the Mac and Windows (on Windows once the page has come). On Linux, `makeMain` makes it maximised with `StartState`. On Windows a size larger than the screen's work area is fitted and centred (`fitRoom`), and the larger size stays kept. The window's position is not kept.
 
 ## Constraints and failure behavior
 
