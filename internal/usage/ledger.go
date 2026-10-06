@@ -154,7 +154,13 @@ type Ledgered struct {
 // comes with the calls the agents' session files record that the gateway did
 // not see.
 func LedgerOf(p Period, f Filter) Ledgered {
-	since := p.Since(Clock())
+	return LedgerOfAt(p, f, Clock())
+}
+
+// LedgerOfAt is LedgerOf with the period read at now, for an answer that
+// names that moment elsewhere too, as an exported CSV's name does.
+func LedgerOfAt(p Period, f Filter, now time.Time) Ledgered {
+	since := p.Since(now)
 	gatewaySince := since
 	if !since.IsZero() {
 		gatewaySince = since.Add(-24 * time.Hour)
@@ -660,7 +666,12 @@ const seriesKeep = 24
 // hour, day or week, for the chart over them. A row is of the point its
 // time falls in; the rows are in any order.
 func LedgerSeries(p Period, rows []Row) (bucket string, pts []SeriesPoint) {
-	now := Clock()
+	return ledgerSeriesAt(p, rows, Clock())
+}
+
+// ledgerSeriesAt is LedgerSeries with the period read at now, the moment the
+// rows were read at, so that the chart is of the rows' day.
+func ledgerSeriesAt(p Period, rows []Row, now time.Time) (bucket string, pts []SeriesPoint) {
 	var first time.Time
 	for _, r := range rows {
 		if r.IsRejected() {

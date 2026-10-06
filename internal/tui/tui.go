@@ -199,7 +199,7 @@ func (m *model) reload() {
 			m.gsel = clamp(m.gsel, len(g.Members)+len(g.Rules))
 		}
 	case pageUsage:
-		m.sum, m.direct = usage.Summarize(m.period), usage.Direct(m.period)
+		m.sum, m.direct = usage.Summaries(m.period)
 	case pageSessions:
 		m.reloadSessions()
 	case pageLibrary:

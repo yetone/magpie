@@ -80,10 +80,11 @@ func usageTo(out io.Writer, args []string) error {
 		return stats.WriteCSV(out, rows)
 	}
 	loadCostCurrency()
-	s := stats.Summarize(period)
-	// the calls the agents made on their own, read from their session files:
-	// the window's Requests tab counts them too (Kumo31 on Discord)
-	d := stats.Direct(period)
+	// s is the calls through magpie, d the calls the agents made on their
+	// own, read from their session files: the window's Requests tab counts
+	// them too (Kumo31 on Discord). Asked together, both are of one day when
+	// midnight falls while they are read.
+	s, d := stats.Summaries(period)
 	title := map[stats.Period]string{stats.Today: "today", stats.Week: "last 7 days", stats.Month: "last 30 days", stats.All: "all time"}[s.Period]
 	if s.Calls == 0 && d.Calls == 0 {
 		fmt.Fprintln(out, muted.Render("no calls "+title+" ·"), "route an agent through magpie and its usage shows up here")

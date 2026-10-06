@@ -214,9 +214,12 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	}
 	limit = min(limit, 500)
 	offset = max(0, offset)
+	// The time is read once, so that the rows, the chart and the day the page
+	// is kept for are of one day when midnight falls while it is worked out.
+	now := Clock()
 	// A replacement reader remains useful to callers supplying synthetic logs.
 	if LogCalls != nil {
-		return pageFromLedger(p, f, offset, limit, LedgerOf(p, Filter{}))
+		return pageFromLedgerAt(p, f, offset, limit, LedgerOfAt(p, Filter{}, now), now)
 	}
 	sources := sessions.CallSources()
 	slices.SortFunc(sources, func(a, b sessions.CallSource) int {
@@ -248,7 +251,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	h.Reset()
 	snapshot := logSnapshotFor(true)
 	version := snapshot.version
-	fmt.Fprint(h, meta, version, Clock().Format("2006-01-02 MST"))
+	fmt.Fprint(h, meta, version, now.Format("2006-01-02 MST"))
 	for _, s := range sources {
 		fmt.Fprintf(h, "%s:%d:%d;", s.Path, s.Size, s.Modified.UnixNano())
 	}
@@ -301,7 +304,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 		row.Agent = AgentOf(r.Agent)
 		return row
 	}
-	since := p.Since(Clock())
+	since := p.Since(now)
 	gatewaySince := since
 	if !since.IsZero() {
 		gatewaySince = since.Add(-24 * time.Hour)
@@ -444,7 +447,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	if someShared {
 		names = sharedNames()
 	}
-	page := buildRequestBlocks(p, f, offset, limit, gateways, chunks, others, names)
+	page := buildRequestBlocks(p, f, offset, limit, now, gateways, chunks, others, names)
 	shared.Lock()
 	defer shared.Unlock()
 	// A query for an older filesystem snapshot may finish after a newer one.
@@ -724,13 +727,15 @@ func sharesOf(m map[string]*Share) []Share {
 	return out
 }
 func buildRequestPage(p Period, f Filter, offset, limit int, gateway *rowChunk, chunks []*rowChunk) RequestPage {
-	return buildRequestBlocks(p, f, offset, limit, []*rowChunk{gateway}, chunks, nil, nil)
+	return buildRequestBlocks(p, f, offset, limit, Clock(), []*rowChunk{gateway}, chunks, nil, nil)
 }
 
 // Shared days are never matched to this computer's gateway or session calls.
-func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks, others []*rowChunk, names map[string]string) RequestPage {
+// now is the moment the page is asked at: its period and its chart's hours or
+// days are read from it.
+func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, gateways, chunks, others []*rowChunk, names map[string]string) RequestPage {
 	skip := visibleLocal(chunks)
-	since := p.Since(Clock())
+	since := p.Since(now)
 	matched := matchedBlocks(gateways, chunks, skip, since, true)
 	all := append(append(slices.Clone(gateways), chunks...), others...)
 	visit := func(fn func(rowRef, Row)) {
@@ -897,7 +902,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 	out.Computers, out.Names = computerShares(computers, names)
 	var base []Point
 	chartSince := since
-	chartSince, out.Bucket, base = timeline(p, Clock(), first)
+	chartSince, out.Bucket, base = timeline(p, now, first)
 	out.Series = make([]SeriesPoint, len(base))
 	for i := range base {
 		out.Series[i] = SeriesPoint{Point: base[i], By: map[string]map[string]Part{}}
@@ -945,6 +950,12 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 	return out
 }
 func pageFromLedger(p Period, f Filter, offset, limit int, all Ledgered) RequestPage {
+	return pageFromLedgerAt(p, f, offset, limit, all, Clock())
+}
+
+// pageFromLedgerAt is the page of a ledger read at now, its chart over the
+// period read at the same moment.
+func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now time.Time) RequestPage {
 	l := all.Filtered(f)
 	out := RequestPage{Sum: l.Sum, Total: len(l.Rows), Agents: l.Agents, Providers: l.Providers, Purposes: []string{}, By: map[string][]Share{}}
 	callers, accounts := map[string]*Group{}, map[string]*Group{}
@@ -969,7 +980,7 @@ func pageFromLedger(p Period, f Filter, offset, limit int, all Ledgered) Request
 		chartRows = all.Filtered(chartFilter).Rows
 		out.ChartBy = map[string][]Share{}
 	}
-	out.Bucket, out.Series = LedgerSeries(p, chartRows)
+	out.Bucket, out.Series = ledgerSeriesAt(p, chartRows, now)
 	for _, d := range Dimensions {
 		g := f
 		if d == "provider" {

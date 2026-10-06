@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -318,11 +319,62 @@ func TestLedgerNamesModelAtProvider(t *testing.T) {
 }
 
 func TestCSVStamp(t *testing.T) {
-	holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)
 	for _, day := range []string{"", "2026-02-30", "../../other", "2026-09-30\""} {
 		want := "magpie-requests-7d-2026-09-30"
-		if got := csvStamp(usage.Period("7d"), day); got != want {
+		if got := csvStamp(usage.Period("7d"), day, now); got != want {
 			t.Fatalf("%q: %s", day, got)
 		}
+	}
+}
+
+// midnightUsageClock sets usage.Clock to read a tenth of a second before
+// midnight the first time and a tenth of a second after it from then on, as
+// when midnight falls while an answer is worked out. It is set again for
+// each answer.
+func midnightUsageClock(t *testing.T, midnight time.Time) {
+	t.Helper()
+	var read atomic.Bool
+	old := usage.Clock
+	usage.Clock = func() time.Time {
+		if read.Swap(true) {
+			return midnight.Add(100 * time.Millisecond)
+		}
+		return midnight.Add(-100 * time.Millisecond)
+	}
+	t.Cleanup(func() { usage.Clock = old })
+}
+
+// A period's CSV asked for as midnight falls is named for the day of the
+// calls in it, downloaded or saved to Downloads: its rows and its name are
+// read at one moment, not the rows of one day under the next day's name.
+func TestUsageCSVAtMidnight(t *testing.T) {
+	home := sandboxHome(t)
+	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	midnight := time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local)
+	usage.Append(usage.Record{Time: midnight.Add(-time.Minute), Agent: "codex", Provider: "relay", Model: "m", Input: 10, Output: 1, Status: 200})
+	mux := http.NewServeMux()
+	usageRoutes(mux, folderOnly{})
+	want := "magpie-requests-today-2026-09-30.csv"
+
+	midnightUsageClock(t, midnight)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/usage/requests.csv?period=today", nil))
+	rows, err := csv.NewReader(w.Body).ReadAll()
+	if got := w.Header().Get("Content-Disposition"); w.Code != 200 || err != nil || len(rows) != 2 || got != `attachment; filename="`+want+`"` {
+		t.Errorf("download: %d, %s with %d rows (%v), want %s with 2", w.Code, got, len(rows), err, want)
+	}
+
+	midnightUsageClock(t, midnight)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/usage/requests/export?period=today", nil))
+	var out struct {
+		Path string
+		Rows int
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); w.Code != 200 || err != nil || out.Rows != 1 || out.Path != filepath.Join("~", "Downloads", want) {
+		t.Errorf("export: %d %s, want %s with 1 row", w.Code, w.Body, want)
 	}
 }

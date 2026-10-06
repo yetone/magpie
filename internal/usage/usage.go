@@ -492,7 +492,7 @@ type Summary struct {
 // Summarize caches the four periods over an indexed log snapshot. Callers
 // receive their own result slices, without retaining historical Records.
 func Summarize(p Period) Summary {
-	return indexedSummary(p)
+	return indexedSummary(p, Clock())
 }
 
 func summarize(p Period, now time.Time, recs []Record) Summary {

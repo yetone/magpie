@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/csv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +21,22 @@ func holdUsageClock(t *testing.T, at time.Time) time.Time {
 	stats.Clock = func() time.Time { return at }
 	t.Cleanup(func() { stats.Clock = old })
 	return at
+}
+
+// midnightUsageClock sets the usage clock to read a tenth of a second before
+// midnight the first time and a tenth of a second after it from then on, as
+// when midnight falls while magpie usage is worked out.
+func midnightUsageClock(t *testing.T, midnight time.Time) {
+	t.Helper()
+	var read atomic.Bool
+	old := stats.Clock
+	stats.Clock = func() time.Time {
+		if read.Swap(true) {
+			return midnight.Add(100 * time.Millisecond)
+		}
+		return midnight.Add(-100 * time.Millisecond)
+	}
+	t.Cleanup(func() { stats.Clock = old })
 }
 
 // magpie usage --csv writes the period's requests, newest first, one row
@@ -112,5 +129,28 @@ func TestUsageShowsCallsNotThroughMagpie(t *testing.T) {
 	b.Reset()
 	if err := usageTo(&b, []string{"usage", "all"}); err != nil || !strings.Contains(b.String(), "not through magpie") || !strings.Contains(b.String(), "gpt-6-luna") {
 		t.Fatal(b.String(), err)
+	}
+}
+
+// magpie usage asked as midnight falls shows the calls through magpie and
+// those not through it of one day, the day it was asked on. Asked apart,
+// the calls not through magpie were the next day's, none yet, and left out.
+func TestUsageAskedAtMidnight(t *testing.T) {
+	groupsHome(t)
+	midnight := time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local)
+	stats.Append(stats.Record{Time: midnight.Add(-time.Minute), Agent: "claude", Provider: "relay", Model: "m", Input: 5, Status: 200})
+	old := stats.LogCalls
+	stats.LogCalls = func(time.Time) []sessions.Call {
+		return []sessions.Call{{Time: midnight.Add(-2 * time.Minute), Agent: "codex", Session: "c1", Model: "gpt-6-luna", Tokens: sessions.Tokens{Input: 1200, Output: 300}}}
+	}
+	t.Cleanup(func() { stats.LogCalls = old })
+	midnightUsageClock(t, midnight)
+	var b strings.Builder
+	if err := usageTo(&b, []string{"usage", "today"}); err != nil {
+		t.Fatal(err)
+	}
+	gw, own, ok := strings.Cut(b.String(), "not through magpie")
+	if !ok || !strings.Contains(gw, "relay/m") || !strings.Contains(own, "gpt-6-luna") {
+		t.Fatal(b.String())
 	}
 }
