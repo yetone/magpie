@@ -168,3 +168,20 @@ func TestAccountRowsPoolsAntigravity(t *testing.T) {
 		t.Fatalf("windows %v", names)
 	}
 }
+
+// A ChatGPT account's credits are in its row beside its windows, as on the
+// usage page and in magpie quota.
+func TestAccountRowsTellCredits(t *testing.T) {
+	now := time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)
+	provider.LoginUsageVia(func(context.Context, string) map[string]provider.SubscriptionQuota {
+		return map[string]provider.SubscriptionQuota{"me@example.com": {
+			Provider: "codex", Name: "Codex", User: "me@example.com", Balance: "1.2K credits",
+			Windows: []provider.QuotaWindow{{Name: "5 hours", Used: 100}, {Name: "7 days", Used: 40}},
+		}}
+	})
+	t.Cleanup(func() { provider.LoginUsageVia(nil) })
+	rows := accountRows([]provider.Login{{Agent: "codex", User: "Me@example.com", Active: true, On: true}}, now)
+	if len(rows) != 1 || rows[0].Balance != "1.2K credits" || len(rows[0].Windows) != 2 {
+		t.Fatalf("%+v", rows)
+	}
+}

@@ -185,6 +185,9 @@ func accountsCmd(args []string) error {
 		for _, w := range r.Windows {
 			line += "  " + quotaCell(w)
 		}
+		if r.Balance != "" {
+			line += "  " + bold.Render(r.Balance) + muted.Render(" left")
+		}
 		if r.Resets != nil {
 			line += "  " + resetsCell(r.Resets, provider.AutoResets(r.Agent, r.User))
 		}
@@ -214,6 +217,9 @@ type accountRow struct {
 	ReadAt  *time.Time  `json:"readAt,omitempty"` // when what is shown was read, when known
 	// Resets are a Codex account's rate-limit resets, when it holds any.
 	Resets *provider.ResetCredits `json:"resets,omitempty"`
+	// Balance is what the account holds beside its windows, a ChatGPT
+	// account's credits, when the vendor tells it.
+	Balance string `json:"balance,omitempty"`
 }
 
 type quotaSpan = provider.QuotaSpan
@@ -253,7 +259,7 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 			if r.Plan == "" {
 				r.Plan = q.Plan
 			}
-			r.Error, r.Resets, r.AsOf, r.ReadAt = q.Error, q.Resets, q.AsOf, q.ReadAt
+			r.Error, r.Resets, r.AsOf, r.ReadAt, r.Balance = q.Error, q.Resets, q.AsOf, q.ReadAt, q.Balance
 			// a pool's own windows stand in for the models' drawing on it,
 			// as the usage page shows them
 			for _, w := range provider.PooledWindows(q.Windows) {
