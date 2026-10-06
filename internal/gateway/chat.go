@@ -825,6 +825,13 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 				ReasoningContent string          `json:"reasoning_content"`
 				Reasoning        string          `json:"reasoning"`
 				ToolCalls        []cToolCall     `json:"tool_calls"`
+				// Vertex AI's OpenAI-compatible API marks a chunk of
+				// Gemini's thoughts here, the thought its content
+				ExtraContent struct {
+					Google struct {
+						Thought bool `json:"thought"`
+					} `json:"google"`
+				} `json:"extra_content"`
 			} `json:"delta"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
@@ -869,6 +876,9 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 			content = text
 		} else {
 			json.Unmarshal(c.Delta.Content, &content)
+		}
+		if c.Delta.ExtraContent.Google.Thought {
+			t, content = t+content, ""
 		}
 		if t != "" {
 			emit(Event{Kind: KThink, Text: t})

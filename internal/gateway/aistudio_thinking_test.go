@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -352,5 +353,61 @@ func TestGeminiThinkingOffAtItsLowest(t *testing.T) {
 				t.Fatalf("reasoning off again went at %v (%d requests)", last["reasoning_effort"], len(bodies)-n-1)
 			}
 		})
+	}
+}
+
+// Asked for Gemini's thoughts, Vertex AI's OpenAI-compatible API gives each
+// of them in its own chunk, marked in the delta's extra_content rather than
+// with AI Studio's <thought> tags: these are its bytes, through a proxy on
+// this machine. The thoughts are a thinking block, the rest the answer.
+func TestGeminiThoughtsMarkedInExtraContent(t *testing.T) {
+	fresh(t)
+	sse, err := os.ReadFile("testdata/vertex_openai_thoughts.sse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write(sse)
+	}))
+	t.Cleanup(up.Close)
+	p := provider.Provider{ID: "vertex-proxy", Name: "Vertex proxy", Key: "k", Models: []string{"gemini-3.8-flash"}, Chat: up.URL}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"vertex-proxy/gemini-3.8-flash","max_tokens":32000,"stream":true,
+		"thinking":{"type":"adaptive"},"output_config":{"effort":"high"},"messages":[{"role":"user","content":"你好"}]}`))
+	New().Handler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var think, text string
+	var blocks []string
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		var ev struct {
+			Type         string `json:"type"`
+			ContentBlock struct {
+				Type string `json:"type"`
+			} `json:"content_block"`
+			Delta struct {
+				Thinking string `json:"thinking"`
+				Text     string `json:"text"`
+			} `json:"delta"`
+		}
+		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &ev) != nil {
+			continue
+		}
+		if ev.Type == "content_block_start" {
+			blocks = append(blocks, ev.ContentBlock.Type)
+		}
+		think += ev.Delta.Thinking
+		text += ev.Delta.Text
+	}
+	if !strings.HasPrefix(think, "**Acknowledging Greeting**") || text != "你好！很高兴与你交流。请问有什么我可以帮你的吗？" {
+		t.Fatalf("thinking %q, text %q", think, text)
+	}
+	if len(blocks) != 2 || blocks[0] != "thinking" || blocks[1] != "text" {
+		t.Fatalf("blocks %v, want thinking then text", blocks)
 	}
 }
