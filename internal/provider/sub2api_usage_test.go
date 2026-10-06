@@ -367,6 +367,21 @@ func TestKeyAllowanceStaleMidRead(t *testing.T) {
 	var once sync.Once
 	t.Cleanup(func() { once.Do(func() { close(release) }) })
 	p := sub2apiKey(srv)
+	renewedHooks.Lock()
+	hooks := renewedHooks.fs
+	renewedHooks.Unlock()
+	t.Cleanup(func() {
+		renewedHooks.Lock()
+		renewedHooks.fs = hooks
+		renewedHooks.Unlock()
+	})
+	renewed := make(chan struct{})
+	var told sync.Once
+	OnRenewed(func(agent, user string) {
+		if agent == "" && user == KeyAllowanceID(p) {
+			told.Do(func() { close(renewed) })
+		}
+	})
 	KeyAllowance(p)
 	for asked.Load() < 1 {
 		time.Sleep(5 * time.Millisecond)
@@ -376,6 +391,14 @@ func TestKeyAllowanceStaleMidRead(t *testing.T) {
 	waitAllowance(t, p, func(a Allowance) bool { u, _ := a.For("gpt-6-astra", time.Now()); return u > 0 && u < 100 })
 	if n := asked.Load(); n != 2 {
 		t.Fatalf("asked %d times", n)
+	}
+	// the reading after tells the week renewed only after it is kept, so
+	// waitAllowance can return first: waited for here, or a later test's
+	// hook is told it
+	select {
+	case <-renewed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the week renewed was never told")
 	}
 }
 
