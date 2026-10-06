@@ -91,7 +91,10 @@ type signInFlow struct {
 	// claimed is a callback being traded for the account: the browser's own
 	// or a pasted address, whichever came first
 	claimed bool
-	done    chan struct{}
+	// finished is an outcome being recorded: the first finish's, which for a
+	// sign-in done reads as done once the account is shown again
+	finished bool
+	done     chan struct{}
 }
 
 var signIns = struct {
@@ -520,7 +523,7 @@ func (p *pastedReply) Write(b []byte) (int, error) {
 func (s *signInFlow) claim() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.st.State != "waiting" || s.claimed {
+	if s.st.State != "waiting" || s.claimed || s.finished {
 		return false
 	}
 	s.claimed = true
@@ -550,21 +553,27 @@ func (s *signInFlow) status() SignInState {
 	return s.st
 }
 
-// finish records the outcome once and lets the callback server go.
+// finish records the outcome once and lets the callback server go. A
+// sign-in done reads as done only once its account is shown again, so the
+// window, seeing it done, finds the account listed.
 func (s *signInFlow) finish(out SignInState) bool {
 	s.mu.Lock()
-	if s.st.State != "waiting" && s.st.State != "installing" {
+	if s.finished {
 		s.mu.Unlock()
 		return false
+	}
+	s.finished = true
+	if out.State == "done" {
+		agent := s.st.Agent
+		s.mu.Unlock()
+		// signing in again brings back an account removed from magpie
+		_ = ShowAccount(agent)
+		s.mu.Lock()
 	}
 	out.ID, out.Agent, out.URL, out.Code = s.st.ID, s.st.Agent, s.st.URL, s.st.Code
 	s.st = out
 	stop, srv := s.stop, s.srv
 	s.mu.Unlock()
-	if out.State == "done" {
-		// signing in again brings back an account removed from magpie
-		_ = ShowAccount(out.Agent)
-	}
 	close(s.done)
 	if stop != nil {
 		stop()
