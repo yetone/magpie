@@ -133,10 +133,11 @@ func (c *lastQuotasT) load() {
 func (c *lastQuotasT) reading(key string) (SubscriptionQuota, bool) {
 	out, ok := c.reported(key)
 	if ok {
+		wasUp := usedUp(out)
 		out.Windows = elapsed(out.Windows, time.Now())
-		// held went with a window used up: once none is, the reading
-		// can't say the account is still held
-		if out.Held && !usedUp(out) {
+		// a hold that came with a window used up ends when that window
+		// starts again; one with no window used up stands till a fresh read
+		if out.Held && wasUp && !usedUp(out) {
 			out.Held = false
 		}
 	}

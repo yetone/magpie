@@ -140,40 +140,9 @@ func TestCodexUsedUpIsWhatTheAppHolds(t *testing.T) {
 // the window that held it has started again, as its usage does: else a
 // 503 after the reset kept Codex on magpie, out of ChatGPT, with room.
 func TestCodexHeldKeptOnlyTillTheReset(t *testing.T) {
-	signIn(t)
-	rememberLogins(true)
-	lastQuotas.Lock()
-	lastQuotas.m, lastQuotas.loaded = nil, false
-	lastQuotas.Unlock()
-	b, err := os.ReadFile("testdata/codex_usage_pro_credits.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var body map[string]any
-	if err := json.Unmarshal(b, &body); err != nil {
-		t.Fatal(err)
-	}
-	cr := body["credits"].(map[string]any)
-	cr["has_credits"], cr["balance"] = false, "0"
+	body := heldUsage(t)
 	body["rate_limit"].(map[string]any)["primary_window"].(map[string]any)["reset_at"] = time.Now().Add(time.Hour).Unix()
-	var down atomic.Bool
-	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if down.Load() {
-			http.Error(w, "upstream", http.StatusServiceUnavailable)
-			return
-		}
-		json.NewEncoder(w).Encode(body)
-	}))
-	defer fake.Close()
-	old := CodexBase
-	CodexBase = fake.URL + "/backend-api/codex"
-	t.Cleanup(func() { CodexBase = old })
-	read := func() bool {
-		loginUsageCache.Lock()
-		loginUsageCache.m = nil
-		loginUsageCache.Unlock()
-		return CodexUsedUp(context.Background())
-	}
+	read, down := servedUsage(t, body)
 	if !read() {
 		t.Fatal("CodexUsedUp = false on a held reading")
 	}
@@ -193,4 +162,69 @@ func TestCodexHeldKeptOnlyTillTheReset(t *testing.T) {
 	if read() {
 		t.Fatal("CodexUsedUp = true on the kept reading after its window started again")
 	}
+}
+
+// A hold with no window used up (the backend says not allowed, no credits,
+// every window under 100%) has no reset to end it: the kept reading stays
+// held through a failed read, till a fresh one says otherwise. Else a 503
+// put Codex back on an account its app sends nothing for.
+func TestCodexHeldWithNoWindowUpKeptTillAFreshRead(t *testing.T) {
+	body := heldUsage(t)
+	body["rate_limit"].(map[string]any)["primary_window"].(map[string]any)["used_percent"] = 40
+	read, down := servedUsage(t, body)
+	if !read() {
+		t.Fatal("CodexUsedUp = false on a held reading")
+	}
+	down.Store(true)
+	if !read() {
+		t.Fatal("CodexUsedUp = false on the kept held reading, no window used up")
+	}
+}
+
+// heldUsage is the real Pro reply with its credits spent: not allowed, no
+// credits, so held.
+func heldUsage(t *testing.T) map[string]any {
+	t.Helper()
+	b, err := os.ReadFile("testdata/codex_usage_pro_credits.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(b, &body); err != nil {
+		t.Fatal(err)
+	}
+	cr := body["credits"].(map[string]any)
+	cr["has_credits"], cr["balance"] = false, "0"
+	return body
+}
+
+// servedUsage signs in the account Codex is on and serves body as its
+// /wham/usage, or a 503 once down is set. read is CodexUsedUp on a fresh
+// read, which falls back on the kept reading when it fails.
+func servedUsage(t *testing.T, body map[string]any) (read func() bool, down *atomic.Bool) {
+	t.Helper()
+	signIn(t)
+	rememberLogins(true)
+	lastQuotas.Lock()
+	lastQuotas.m, lastQuotas.loaded = nil, false
+	lastQuotas.Unlock()
+	down = new(atomic.Bool)
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if down.Load() {
+			http.Error(w, "upstream", http.StatusServiceUnavailable)
+			return
+		}
+		json.NewEncoder(w).Encode(body)
+	}))
+	t.Cleanup(fake.Close)
+	old := CodexBase
+	CodexBase = fake.URL + "/backend-api/codex"
+	t.Cleanup(func() { CodexBase = old })
+	read = func() bool {
+		loginUsageCache.Lock()
+		loginUsageCache.m = nil
+		loginUsageCache.Unlock()
+		return CodexUsedUp(context.Background())
+	}
+	return read, down
 }
