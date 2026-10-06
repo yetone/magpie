@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -103,18 +102,20 @@ func TestArchiveOn(t *testing.T) {
 	b := &memBucket{objs: map[string][]byte{}}
 	archiveTo(t, b)
 	s := New()
-	before := time.Now().UTC()
 	rec := archivePost(t, s)
 	id := rec.Header().Get(ArchiveHeader)
 	if !regexp.MustCompile(`^\d{6}-[0-9a-f]{16}$`).MatchString(id) {
 		t.Fatalf("id %q", id)
 	}
-	name := before.Format("2006-01-02") + "/" + id
+	// the date is the one the call carries, in UTC, not the clock read
+	// again here, which a UTC midnight can fall between
 	c := s.Recent()[0]
+	date := c.Time.UTC().Format("2006-01-02")
+	name := date + "/" + id
 	if c.Archive != name || c.wire != nil {
 		t.Fatalf("call archive %q, want %q", c.Archive, name)
 	}
-	if p, ok := ArchiveName(before.Format("2006-01-02"), id); !ok || p != "archive/"+name+".json" {
+	if p, ok := ArchiveName(date, id); !ok || p != "archive/"+name+".json" {
 		t.Fatalf("ArchiveName %q %v", p, ok)
 	}
 	data, ok := b.objs["archive/"+name+".json"]
