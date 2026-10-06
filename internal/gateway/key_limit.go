@@ -14,6 +14,11 @@ import (
 	"github.com/yetone/magpie/internal/usage"
 )
 
+// limitClock is the time a gateway key's limit is checked at: the window
+// a request counts in and when its 429 says the key resets. A variable for
+// the tests.
+var limitClock = time.Now
+
 // keyLimited holds a gateway key's requests to its limit (#585, see
 // package budget for the rules): one that would go over is refused with a
 // 429 before any provider is asked, saying the key, the limit and when it
@@ -37,7 +42,7 @@ func keyLimited(next http.Handler) http.Handler {
 			r.Body = io.NopCloser(bytes.NewReader(b))
 			size, model = int64(len(b)), budget.ModelOf(b)
 		}
-		now := time.Now()
+		now := limitClock()
 		release, refused := budget.Reserve(who, size, model, now)
 		if refused != nil {
 			msg := refused.Error()
@@ -78,6 +83,6 @@ func (s *Server) keyLimit(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"limited": false, "key": who.KeyName})
 		return
 	}
-	st := budget.Of(access.Key{ID: who.KeyID, Name: who.KeyName, Limit: who.Limit}, time.Now())
+	st := budget.Of(access.Key{ID: who.KeyID, Name: who.KeyName, Limit: who.Limit}, limitClock())
 	writeJSON(w, 200, map[string]any{"limited": true, "key": who.KeyName, "limit": st})
 }
