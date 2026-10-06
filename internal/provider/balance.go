@@ -665,26 +665,36 @@ func (e *balanceExpr) at(path string) (any, error) {
 }
 
 // Balance asks the vendor what is left on the provider's key in use. ok is
-// false when there is no way to ask it.
+// false when there is no way to ask it. A key given limits and no quota of
+// its own has what its fullest window has left: what it can spend now.
 func Balance(ctx context.Context, p Provider) (amount string, ok bool, err error) {
-	amount, _, ok, err = balanceParts(ctx, p)
+	amount, _, ws, ok, err := balanceRead(ctx, p)
+	if err == nil && amount == "" && len(ws) > 0 {
+		left := ws[0].Limit - ws[0].Amount
+		for _, w := range ws[1:] {
+			left = min(left, w.Limit-w.Amount)
+		}
+		amount = money("$", max(0, left))
+	}
 	return amount, ok, err
 }
 
-// balanceParts is Balance, with the amounts of a balance field the user
-// wrote each apart (nil for a vendor magpie reads itself).
-func balanceParts(ctx context.Context, p Provider) (amount string, parts []BalancePart, ok bool, err error) {
+// balanceRead is what Balance reads, with the amounts of a balance field
+// the user wrote each apart (nil for a vendor magpie reads itself), and the
+// key's own usage windows when its reply tells them (a sub2api key's
+// limits, readSub2APIKeyLimits).
+func balanceRead(ctx context.Context, p Provider) (amount string, parts []BalancePart, ws []QuotaWindow, ok bool, err error) {
 	ctx = p.Via(ctx)
 	src, ok := balanceSourceOf(p)
 	if !ok || p.Account != nil || p.Key == "" {
-		return "", nil, false, nil
+		return "", nil, nil, false, nil
 	}
 	if src.token != "" && p.BalanceURL != "" && balanceURLPath(p.BalanceURL) == newAPIKeyUsage {
-		return "", nil, true, errKeyUsageWithToken(p.BalanceURL)
+		return "", nil, nil, true, errKeyUsageWithToken(p.BalanceURL)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, withBalanceKey(src.url, p.Key, true), nil)
 	if err != nil {
-		return "", nil, true, err
+		return "", nil, nil, true, err
 	}
 	if src.token != "" {
 		// a named endpoint still gets the provider's headers, which is
@@ -708,9 +718,9 @@ func balanceParts(ctx context.Context, p Provider) (amount string, parts []Balan
 	if err != nil {
 		if k := url.QueryEscape(p.Key); k != "" && strings.Contains(err.Error(), k) {
 			// the URL in the error has the key in it: not shown on a card
-			return "", nil, true, errors.New(strings.ReplaceAll(err.Error(), k, Mask(p.Key)))
+			return "", nil, nil, true, errors.New(strings.ReplaceAll(err.Error(), k, Mask(p.Key)))
 		}
-		return "", nil, true, err
+		return "", nil, nil, true, err
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -721,28 +731,43 @@ func balanceParts(ctx context.Context, p Provider) (amount string, parts []Balan
 		if res.StatusCode >= 300 {
 			msg = res.Status + ": " + msg
 		}
-		return "", nil, true, errors.New(msg)
+		return "", nil, nil, true, errors.New(msg)
 	}
 	if res.StatusCode >= 300 {
 		// what a JSON reply says, on one line; a page of HTML says nothing
 		msg := strings.Join(strings.Fields(string(b)), " ")
 		if !strings.HasPrefix(msg, "{") {
-			return "", nil, true, errors.New(res.Status)
+			return "", nil, nil, true, errors.New(res.Status)
 		}
 		if r := []rune(msg); len(r) > 200 {
 			msg = string(r[:200]) + "…"
 		}
-		return "", nil, true, fmt.Errorf("%s: %s", res.Status, msg)
+		return "", nil, nil, true, fmt.Errorf("%s: %s", res.Status, msg)
 	}
 	if p.BalanceURL != "" {
+		if sub2APIKeyLimits(p) {
+			ws, _ = readSub2APIKeyLimits(b)
+		}
 		// the field the user wrote: its amounts each apart, as well
 		if parts, err = readBalanceParts(b, balancePathOf(p)); err != nil {
-			return "", nil, true, err
+			if len(ws) > 0 && strings.TrimSpace(p.BalancePath) == "" {
+				// a key given limits and no quota of its own has no
+				// "remaining": its windows are what it has left
+				return "", nil, ws, true, nil
+			}
+			return "", nil, nil, true, err
 		}
-		return joinBalanceParts(parts), parts, true, nil
+		return joinBalanceParts(parts), parts, ws, true, nil
 	}
 	amount, err = src.read(b)
-	return amount, nil, true, err
+	return amount, nil, nil, true, err
+}
+
+// sub2APIKeyLimits says the provider's Balance URL is a sub2api panel's
+// query for a key, whose reply tells the key's own limits when it has
+// some.
+func sub2APIKeyLimits(p Provider) bool {
+	return p.BalanceURL != "" && balanceURLPath(p.BalanceURL) == sub2APIKeyUsage
 }
 
 // balanceKeyNames are what a Balance URL or a header's value names the
@@ -775,6 +800,8 @@ func ForgetBalances() {
 	keyBalanceCache.Lock()
 	keyBalanceCache.data = nil
 	keyBalanceCache.Unlock()
+	// nor is a key's allowance as last read, which may be another key's
+	forgetKeyAllowances()
 }
 
 // KeyBalances is the balance of every provider magpie can ask one of, the
@@ -859,14 +886,17 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 				out[i] = keepReading(ctx, q, keyTag("balance", j.p.Key))
 				return
 			}
-			amount, parts, _, err := balanceParts(ctx, j.p)
+			amount, parts, ws, _, err := balanceRead(ctx, j.p)
 			if err != nil {
 				q.Error = err.Error()
 			} else {
 				q.Balance = amount
 				q.BalanceParts = cardParts(parts)
+				q.Windows = append(q.Windows, ws...)
 				now := time.Now()
 				q.ReadAt = &now
+				// what routing goes by, read just now rather than in a minute
+				noteKeyAllowance(j.p, ws, now)
 			}
 			// the vendor failing a while shows the balance last read
 			out[i] = keepReading(ctx, q, keyTag("balance", j.p.Key))
