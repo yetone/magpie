@@ -1333,8 +1333,8 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .quota-autoreset, .pq-autoreset, .quota-credits, .pq-credits { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 /* the switch keeps by the first line, so one whose words rewrap when it
    turns stays under the pointer */
-.quota-credits, .pq-credits { align-items: flex-start; }
-.quota-credits .ar-say, .pq-credits .ar-say { line-height: 16px; }
+.quota-autoreset, .pq-autoreset, .quota-credits, .pq-credits { align-items: flex-start; }
+.quota-autoreset .ar-say, .pq-autoreset .ar-say, .quota-credits .ar-say, .pq-credits .ar-say { line-height: 16px; }
 .quota-autoreset, .quota-credits { margin-top: 8px; font-size: 10.5px; }
 .quota-resets + .quota-autoreset, .quota-autoreset + .quota-credits { margin-top: 6px; }
 .subscription-card.several .quota-autoreset + .subscription-account,
