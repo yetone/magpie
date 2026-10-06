@@ -58,6 +58,13 @@ func TestQuotaLines(t *testing.T) {
 	if !strings.HasSuffix(got[1], "↺ 2 resets until "+provider.ResetClock(expires, now)) || !strings.HasSuffix(got[2], "↺ 1 reset") {
 		t.Errorf("resets:\n%s", plain(got))
 	}
+	// a ChatGPT account's credits are told beside its windows, not in
+	// their place
+	credits := []provider.SubscriptionQuota{qs[0]}
+	credits[0].Balance = "1.2K credits"
+	if got := plain(quotaLines(credits, true, false, 200, now)); !strings.Contains(got, "64% used") || !strings.Contains(got, "99% used") || !strings.Contains(got, "1.2K credits left") {
+		t.Errorf("credits:\n%s", got)
+	}
 	if quotaLines(nil, false, false, 80, now) != nil {
 		t.Error("not asked yet: want nothing")
 	}

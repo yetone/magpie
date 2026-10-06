@@ -990,7 +990,7 @@ func quotaLines(qs []provider.SubscriptionQuota, asked, left bool, width int, no
 			ci = "   " + ci
 		}
 		switch {
-		case q.Balance != "":
+		case q.Balance != "" && len(q.Windows) == 0:
 			out = append(out, line+"  "+sText.Render(q.Balance)+sMuted.Render(" left")+ci)
 			continue
 		case q.Error != "":
@@ -1001,10 +1001,14 @@ func quotaLines(qs []provider.SubscriptionQuota, asked, left bool, width int, no
 			continue
 		}
 		// the windows follow the name, those that don't fit on lines below
-		// it, and a Codex account's resets after them
+		// it, then the credits a ChatGPT account holds beside them and a
+		// Codex account's resets
 		var cells []string
 		for _, w := range provider.PooledWindows(q.Windows) {
 			cells = append(cells, quotaCell(w, left, now))
+		}
+		if q.Balance != "" {
+			cells = append(cells, sText.Render(q.Balance)+sMuted.Render(" left"))
 		}
 		if ci != "" {
 			cells = append(cells, ci[3:])
