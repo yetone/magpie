@@ -144,6 +144,13 @@ func TestUsageReadKicksTheWarmUp(t *testing.T) {
 		_, ok := notStartedHooks.m["claude-test"]
 		return ok
 	}
+	// a warm-up the test starts is over when it ends: its hook left behind
+	// would be the next run's (-count)
+	t.Cleanup(func() {
+		if hooked() {
+			t.Error("a warm-up's hook outlived the test")
+		}
+	})
 	read := func(u map[string]SubscriptionQuota) {
 		for i := 0; i < 200 && !hooked(); i++ {
 			time.Sleep(10 * time.Millisecond)
@@ -182,9 +189,10 @@ func TestUsageReadKicksTheWarmUp(t *testing.T) {
 	which = ""
 	mu.Unlock()
 	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
+	done = make(chan struct{})
+	defer func() { cancel(); <-done }()
 	w.path = filepath.Join(t.TempDir(), "w2.json")
-	go keepWarm(ctx, "claude-test", w, prefs)
+	go func() { keepWarm(ctx, "claude-test", w, prefs); close(done) }()
 	read(usage)
 	select {
 	case u := <-sent:
