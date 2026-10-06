@@ -18,10 +18,7 @@ import (
 // gateway's record didn't, so their token counts never matched. However each
 // side splits the write out of the input, a call is the gateway's alone.
 func TestCodexCacheWriteMatchesGatewayCall(t *testing.T) {
-	end := time.Now().Truncate(time.Second).Add(-time.Minute)
-	if end.Before(Today.Since(time.Now())) {
-		end = Today.Since(time.Now()).Add(10 * time.Minute)
-	}
+	end := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)).Add(-time.Minute)
 	// the upstream's usage for the two calls: the second wrote 9000 to its cache
 	type call struct{ in, cached, write, out int }
 	calls := []call{{120000, 113000, 0, 300}, {130000, 113000, 9000, 400}}
@@ -95,7 +92,7 @@ func TestCodexCacheWriteNotInInput(t *testing.T) {
 	pageHome(t)
 	path := filepath.Join(sessions.CodexDir(), "sessions", "rollout-2026-09-30T00-00-00-w.jsonl")
 	os.MkdirAll(filepath.Dir(path), 0700)
-	at := time.Now().Add(-time.Minute).Format(time.RFC3339Nano)
+	at := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)).Add(-time.Minute).Format(time.RFC3339Nano)
 	u := `{"input_tokens":130000,"cached_input_tokens":113000,"cache_write_input_tokens":9000,"output_tokens":400}`
 	os.WriteFile(path, []byte(`{"type":"session_meta","payload":{"id":"w"}}`+"\n"+
 		`{"timestamp":"`+at+`","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":`+u+`,"last_token_usage":`+u+`}}}`+"\n"), 0600)

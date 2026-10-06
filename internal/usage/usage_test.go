@@ -233,11 +233,12 @@ func TestReasoningReplyTimedByItsAnswer(t *testing.T) {
 	}
 	var rows Totals
 	var lr []Row
+	held := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	for _, r := range recs {
 		rows.addRow(Row{Record: r})
-		// LedgerSeries buckets today by the clock, so the timeline's rows
-		// are made now
-		r.Time = time.Now()
+		// LedgerSeries buckets today by Clock, so the timeline's rows are
+		// made at the time it is held at
+		r.Time = held
 		lr = append(lr, Row{Record: r})
 	}
 	if rows.Timed != 6 || rows.DecodeMs != ms || rows.DecodeOut != out {

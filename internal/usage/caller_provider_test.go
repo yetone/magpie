@@ -97,7 +97,7 @@ func TestProviderAndCallerIdentitiesRemainIndependent(t *testing.T) {
 
 func TestPackedRequestPageCallerAndRouteIdentity(t *testing.T) {
 	pageHome(t)
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	for i := 0; i < 80; i++ {
 		caller := "desk"
 		if i%2 != 0 {
@@ -143,7 +143,7 @@ func TestPackedRequestPageCallerAndRouteIdentity(t *testing.T) {
 
 func TestCallerPageKeepsUnattributedSessionsSeparate(t *testing.T) {
 	pageHome(t)
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	recs := []Record{
 		{Time: now, Agent: "codex", Provider: "relay", Model: "m", CallerKeyID: "desk", CallerKeyName: "Desk", Input: 10, Status: 200},
 		{Time: now, Agent: "codex", Provider: "relay", Model: "m", CallerKeyID: "server", CallerKeyName: "Server", Input: 20, Status: 200},

@@ -134,6 +134,12 @@ func (p Period) Since(now time.Time) time.Time {
 // ledger adds to those the gateway logged. A variable for the tests.
 var LogCalls func(time.Time) []sessions.Call
 
+// Clock is the time the periods are read by: when today began, the hours
+// or days of the chart, the day a cached answer is for. A variable for the
+// tests, which hold it still so that midnight never falls between a call
+// they log and the period they ask for.
+var Clock = time.Now
+
 // Ledgered is a period's calls that a filter keeps, newest first, with their
 // sum, and the agents and providers that made any call in the period (their
 // ids, for a filter to offer).
@@ -148,7 +154,7 @@ type Ledgered struct {
 // comes with the calls the agents' session files record that the gateway did
 // not see.
 func LedgerOf(p Period, f Filter) Ledgered {
-	since := p.Since(time.Now())
+	since := p.Since(Clock())
 	gatewaySince := since
 	if !since.IsZero() {
 		gatewaySince = since.Add(-24 * time.Hour)
@@ -654,7 +660,7 @@ const seriesKeep = 24
 // hour, day or week, for the chart over them. A row is of the point its
 // time falls in; the rows are in any order.
 func LedgerSeries(p Period, rows []Row) (bucket string, pts []SeriesPoint) {
-	now := time.Now()
+	now := Clock()
 	var first time.Time
 	for _, r := range rows {
 		if r.IsRejected() {

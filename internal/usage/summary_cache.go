@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
@@ -30,7 +29,7 @@ func indexedSummary(p Period) Summary {
 	if p != Today && p != Week && p != Month {
 		p = All
 	}
-	now := time.Now()
+	now := Clock()
 	snapshot := logSnapshotFor(true)
 	_, offset := now.Zone()
 	meta := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d", statKey(settings.Path()), statKey(provider.Path()), statKey(catalog.CachePath()), statKey(catalog.LivePath("antigravity")), now.Format("2006-01-02"), now.Location(), offset)

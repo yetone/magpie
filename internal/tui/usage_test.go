@@ -124,7 +124,12 @@ func TestUnlimitedQuotaCell(t *testing.T) {
 // TUI).
 func TestUsagePageShowsCallsNotThroughMagpie(t *testing.T) {
 	home(t)
-	now := time.Now()
+	// the usage clock held at noon, so that the calls a minute or two
+	// before it are today's whenever the test runs
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)
+	oldClock := usage.Clock
+	usage.Clock = func() time.Time { return now }
+	t.Cleanup(func() { usage.Clock = oldClock })
 	usage.Append(usage.Record{Time: now.Add(-time.Minute), Agent: "claude", Provider: "relay", Model: "m", Input: 5, Status: 200})
 	old := usage.LogCalls
 	usage.LogCalls = func(time.Time) []sessions.Call {

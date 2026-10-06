@@ -21,7 +21,7 @@ func TestUsagePurposeRoutes(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	start := usage.Today.Since(time.Now()).Add(time.Second)
+	start := usage.Today.Since(holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))).Add(time.Second)
 	for i, kind := range []string{"thread_title", "thread_title_reconsideration", "review", "", "future_kind", "title_generation"} {
 		usage.Append(usage.Record{Time: start.Add(time.Duration(i) * time.Second), Agent: "codex", Provider: "relay", Model: "m", Kind: kind, Input: 10, Output: 2, Status: 200})
 	}

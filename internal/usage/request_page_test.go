@@ -66,7 +66,7 @@ func equalPage(t *testing.T, got, want RequestPage) {
 
 func TestCompactPageMatchesLedger(t *testing.T) {
 	pageHome(t)
-	now := time.Now().Truncate(time.Second)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	var recs []Record
 	var logs []sessions.Call
 	for i := 0; i < 180; i++ {
@@ -146,7 +146,7 @@ func TestCompactPageMatchesLedger(t *testing.T) {
 
 func TestRequestPageModelRankingKeepsAlternatives(t *testing.T) {
 	pageHome(t)
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	records := []Record{
 		{Time: now, Provider: "a", Agent: "codex", Model: "gpt-5", Input: 10},
 		{Time: now, Provider: "a", Agent: "codex", Model: "gpt-5-mini", Input: 20},
@@ -197,11 +197,12 @@ func TestRequestPageModelRankingKeepsAlternatives(t *testing.T) {
 func TestQueryPageSourceAndIdentityInvalidation(t *testing.T) {
 	pageHome(t)
 	sessionAuth(t, sessions.CodexDir(), "a", "u", "one@example.com")
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	path := filepath.Join(sessions.CodexDir(), "sessions", "rollout-2026-09-30T00-00-00-test.jsonl")
 	os.MkdirAll(filepath.Dir(path), 0700)
 	meta := `{"type":"session_meta","payload":{"id":"test","model_provider":"custom","creator_account_id":"a","creator_user_id":"u"}}` + "\n" + `{"type":"turn_context","payload":{"model":"m","effort":"high"}}` + "\n"
 	line := func(n int) string {
-		return fmt.Sprintf(`{"timestamp":%q,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":%d,"output_tokens":%d},"last_token_usage":{"input_tokens":10,"output_tokens":1}}}}`+"\n", time.Now().Format(time.RFC3339Nano), n*10, n)
+		return fmt.Sprintf(`{"timestamp":%q,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":%d,"output_tokens":%d},"last_token_usage":{"input_tokens":10,"output_tokens":1}}}}`+"\n", now.Format(time.RFC3339Nano), n*10, n)
 	}
 	os.WriteFile(path, []byte(meta+line(1)), 0600)
 	check := func(n int, account string, official bool) {
@@ -238,7 +239,7 @@ func TestQueryPageSourceAndIdentityInvalidation(t *testing.T) {
 	sessionAuth(t, sessions.CodexDir(), "other", "u", "wrong@example.com")
 	check(2, "", false)
 	os.MkdirAll(filepath.Dir(Path()), 0700)
-	r, _ := json.Marshal(Record{Time: time.Now(), Model: "m", Agent: "opencode", Input: 10, Output: 1})
+	r, _ := json.Marshal(Record{Time: now, Model: "m", Agent: "opencode", Input: 10, Output: 1})
 	os.WriteFile(Path(), r, 0600)
 	check(2, "", false) // partial gateway line
 	appendFile(Path(), "\n")
@@ -263,7 +264,7 @@ func TestQueryPageSourceAndIdentityInvalidation(t *testing.T) {
 // (inaction on Discord).
 func TestRequestPageRanksModelAtEachProvider(t *testing.T) {
 	pageHome(t)
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	records := []Record{
 		{Time: now, Provider: "zhipu", Agent: "claude", Model: "glm-5.3", Output: 1000, Millis: 2200, TTFT: 200},
 		{Time: now, Provider: "zhipu", Agent: "claude", Model: "glm-5.3", Output: 1000, Millis: 2200, TTFT: 200},

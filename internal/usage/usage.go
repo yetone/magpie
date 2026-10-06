@@ -146,7 +146,7 @@ var mu sync.Mutex
 // break a call.
 func Append(r Record) {
 	if r.Time.IsZero() {
-		r.Time = time.Now()
+		r.Time = Clock()
 	}
 	offerOTel(r)
 	b, err := json.Marshal(r)

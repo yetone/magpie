@@ -13,6 +13,7 @@ func TestLogGrowingRewriteThenAppend(t *testing.T) {
 	for _, writer := range []string{"this process", "another writer"} {
 		t.Run(writer, func(t *testing.T) {
 			pageHome(t)
+			now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 			historyLog(t, logBlockRows*2+10)
 			for _, period := range []Period{Today, Week, Month, All} {
 				Summarize(period)
@@ -30,7 +31,7 @@ func TestLogGrowingRewriteThenAppend(t *testing.T) {
 			}
 			// Change an early record and grow the same inode. Treating this as an
 			// append would reuse stale blocks and seek into the rewritten prefix.
-			edited := Record{Time: time.Now(), Agent: "codex", Provider: "relay", Model: "m", Session: "edited-prefix", Input: 73, Status: 200, RequestID: strings.Repeat("r", 2048)}
+			edited := Record{Time: now, Agent: "codex", Provider: "relay", Model: "m", Session: "edited-prefix", Input: 73, Status: 200, RequestID: strings.Repeat("r", 2048)}
 			first, err := json.Marshal(edited)
 			if err != nil {
 				t.Fatal(err)
@@ -42,7 +43,7 @@ func TestLogGrowingRewriteThenAppend(t *testing.T) {
 			if err := os.WriteFile(Path(), rewritten, 0600); err != nil {
 				t.Fatal(err)
 			}
-			added := Record{Time: time.Now(), Agent: "codex", Provider: "relay", Model: "m", Session: "appended-tail", Input: 19, Status: 200}
+			added := Record{Time: now, Agent: "codex", Provider: "relay", Model: "m", Session: "appended-tail", Input: 19, Status: 200}
 			if writer == "this process" {
 				Append(added)
 			} else {
@@ -64,7 +65,7 @@ func TestLogGrowingRewriteThenAppend(t *testing.T) {
 				t.Fatalf("fixture rows: %d", len(cold))
 			}
 			for _, period := range []Period{Today, Week, Month, All} {
-				got, want := Summarize(period), summarize(period, time.Now(), cold)
+				got, want := Summarize(period), summarize(period, now, cold)
 				if got.Totals != want.Totals {
 					t.Fatalf("%s summary stale: got %+v want %+v", period, got.Totals, want.Totals)
 				}

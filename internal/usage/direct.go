@@ -13,7 +13,7 @@ import (
 // their own (Kumo31 on Discord: Codex used outside magpie was on the
 // window's Usage tab but not in magpie usage).
 func Direct(p Period) Summary {
-	return direct(p, time.Now(), LedgerOf(p, Filter{}).Rows)
+	return direct(p, Clock(), LedgerOf(p, Filter{}).Rows)
 }
 
 func direct(p Period, now time.Time, rows []Row) Summary {

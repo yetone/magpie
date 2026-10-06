@@ -11,12 +11,22 @@ import (
 	stats "github.com/yetone/magpie/internal/usage"
 )
 
+// holdUsageClock stops the usage clock at at for the test and gives at back,
+// for the test to stamp its calls by: midnight then never falls between a
+// call and the period it is asked for in.
+func holdUsageClock(t *testing.T, at time.Time) time.Time {
+	t.Helper()
+	old := stats.Clock
+	stats.Clock = func() time.Time { return at }
+	t.Cleanup(func() { stats.Clock = old })
+	return at
+}
+
 // magpie usage --csv writes the period's requests, newest first, one row
 // each, with the model asked for, sent and served.
 func TestUsageCSV(t *testing.T) {
 	groupsHome(t)
-	y, m, d := time.Now().Date()
-	day := time.Date(y, m, d, 0, 0, 0, 0, time.Local) // today's, whenever this runs
+	day := stats.Today.Since(holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)))
 	stats.Append(stats.Record{Time: day.Add(time.Second), Agent: "codex", Provider: "a", Model: "m", Requested: "fast", Served: "m-mini", Input: 10, Output: 2, Millis: 700, Status: 200})
 	stats.Append(stats.Record{Time: day.Add(2 * time.Second), Agent: "claude", Provider: "b", Model: "gpt-5.5", Requested: "b/gpt-5.5", Millis: 30, Status: 502})
 	stats.Append(stats.Record{Time: day.AddDate(0, 0, -3), Agent: "pi", Provider: "a", Model: "m", Input: 1, Status: 200})
@@ -78,7 +88,7 @@ func TestUsageProviderKeys(t *testing.T) {
 // does (Kumo31 on Discord: Codex used outside magpie wasn't in it).
 func TestUsageShowsCallsNotThroughMagpie(t *testing.T) {
 	groupsHome(t)
-	now := time.Now()
+	now := holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	stats.Append(stats.Record{Time: now.Add(-time.Minute), Agent: "claude", Provider: "relay", Model: "m", Input: 5, Status: 200})
 	old := stats.LogCalls
 	stats.LogCalls = func(time.Time) []sessions.Call {

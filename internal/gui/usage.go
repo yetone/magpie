@@ -121,7 +121,7 @@ func csvStamp(p usage.Period, day string) string {
 	if _, err := time.Parse(time.DateOnly, day); err == nil {
 		return "magpie-requests-day-" + day
 	}
-	return "magpie-requests-" + string(p) + "-" + time.Now().Format(time.DateOnly)
+	return "magpie-requests-" + string(p) + "-" + usage.Clock().Format(time.DateOnly)
 }
 
 func ledgerFilter(q url.Values) usage.Filter {

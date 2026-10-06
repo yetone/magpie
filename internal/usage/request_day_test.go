@@ -9,7 +9,7 @@ import (
 
 func TestRequestPageDay(t *testing.T) {
 	pageHome(t)
-	start := Today.Since(time.Now()).AddDate(0, 0, -1)
+	start := Today.Since(holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))).AddDate(0, 0, -1)
 	end := start.AddDate(0, 0, 1)
 	day := start.Format(time.DateOnly)
 	gateway := &rowChunk{}

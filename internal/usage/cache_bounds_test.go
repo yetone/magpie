@@ -12,6 +12,7 @@ func TestUsageSameSizeAndMtimeRewrite(t *testing.T) {
 	for _, appendAfter := range []bool{false, true} {
 		t.Run(fmt.Sprint("append=", appendAfter), func(t *testing.T) {
 			pageHome(t)
+			now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 			historyLog(t, 1034)
 			Summarize(All)
 			QueryPage(All, Filter{}, 0, 100)
@@ -34,9 +35,9 @@ func TestUsageSameSizeAndMtimeRewrite(t *testing.T) {
 				t.Fatal(err)
 			}
 			if appendAfter {
-				Append(Record{Time: time.Now(), Agent: "codex", Provider: "relay", Model: "m", Input: 19})
+				Append(Record{Time: now, Agent: "codex", Provider: "relay", Model: "m", Input: 19})
 			}
-			got, want := Summarize(All), summarize(All, time.Now(), Load(time.Time{}))
+			got, want := Summarize(All), summarize(All, now, Load(time.Time{}))
 			if got.Totals != want.Totals {
 				t.Fatalf("same-stat summary stale: got %+v want %+v", got.Totals, want.Totals)
 			}
@@ -54,13 +55,14 @@ func cacheBudget(t *testing.T, n int64) {
 
 func TestUsageRawCacheBudget(t *testing.T) {
 	pageHome(t)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	cacheBudget(t, 128)
 	historyLog(t, 1034)
 	assertFresh := func() {
 		t.Helper()
 		cold := Load(time.Time{})
 		for _, p := range []Period{Today, Week, Month, All} {
-			got, want := Summarize(p), summarize(p, time.Now(), cold)
+			got, want := Summarize(p), summarize(p, now, cold)
 			if got.Totals != want.Totals {
 				t.Fatalf("uncached %s summary stale: %+v / %+v", p, got.Totals, want.Totals)
 			}
@@ -80,7 +82,7 @@ func TestUsageRawCacheBudget(t *testing.T) {
 		}
 	}
 	assertFresh()
-	Append(Record{Time: time.Now(), Agent: "codex", Provider: "relay", Model: "m", Input: 11})
+	Append(Record{Time: now, Agent: "codex", Provider: "relay", Model: "m", Input: 11})
 	assertFresh()
 	historyLog(t, 20) // rewrite/truncate after the oversized metadata-only index
 	assertFresh()
@@ -88,6 +90,7 @@ func TestUsageRawCacheBudget(t *testing.T) {
 
 func TestUsageRawAndPricedChunksShareBudget(t *testing.T) {
 	pageHome(t)
+	holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	historyLog(t, 1034)
 	snapshot := readLogSnapshot()
 	cacheBudget(t, snapshot.bytes+1)
@@ -127,6 +130,7 @@ func TestUsageLargeSummaryIsCompleteButNotCached(t *testing.T) {
 // page key. The preceding query must leave an initialized page map to write.
 func TestUsagePageCacheAfterUncachedQuery(t *testing.T) {
 	pageHome(t)
+	holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	historyLog(t, 1034)
 	normalBudget := requestCacheBytes
 	cacheBudget(t, 128)

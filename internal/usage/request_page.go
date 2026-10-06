@@ -248,7 +248,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	h.Reset()
 	snapshot := logSnapshotFor(true)
 	version := snapshot.version
-	fmt.Fprint(h, meta, version, time.Now().Format("2006-01-02 MST"))
+	fmt.Fprint(h, meta, version, Clock().Format("2006-01-02 MST"))
 	for _, s := range sources {
 		fmt.Fprintf(h, "%s:%d:%d;", s.Path, s.Size, s.Modified.UnixNano())
 	}
@@ -301,7 +301,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 		row.Agent = AgentOf(r.Agent)
 		return row
 	}
-	since := p.Since(time.Now())
+	since := p.Since(Clock())
 	gatewaySince := since
 	if !since.IsZero() {
 		gatewaySince = since.Add(-24 * time.Hour)
@@ -730,7 +730,7 @@ func buildRequestPage(p Period, f Filter, offset, limit int, gateway *rowChunk, 
 // Shared days are never matched to this computer's gateway or session calls.
 func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks, others []*rowChunk, names map[string]string) RequestPage {
 	skip := visibleLocal(chunks)
-	since := p.Since(time.Now())
+	since := p.Since(Clock())
 	matched := matchedBlocks(gateways, chunks, skip, since, true)
 	all := append(append(slices.Clone(gateways), chunks...), others...)
 	visit := func(fn func(rowRef, Row)) {
@@ -897,7 +897,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 	out.Computers, out.Names = computerShares(computers, names)
 	var base []Point
 	chartSince := since
-	chartSince, out.Bucket, base = timeline(p, time.Now(), first)
+	chartSince, out.Bucket, base = timeline(p, Clock(), first)
 	out.Series = make([]SeriesPoint, len(base))
 	for i := range base {
 		out.Series[i] = SeriesPoint{Point: base[i], By: map[string]map[string]Part{}}
