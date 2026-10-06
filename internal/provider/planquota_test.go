@@ -3,11 +3,13 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -347,5 +349,140 @@ func TestReadKimiCode(t *testing.T) {
 	}
 	if _, _, err := readKimiCode([]byte(`{"error":{"message":"bad key"}}`)); err == nil {
 		t.Fatal("nothing read")
+	}
+}
+
+// A GLM Coding Plan's key (Z.ai's or Zhipu's coding endpoint) is asked
+// for its windows as routing weighs and rests it by them, as a sub2api
+// key's limits are: never waited for, read behind the ask, at most once a
+// minute; after a restart the windows its plan card last showed stand in
+// for it until the next read, and a read again once stale. A
+// pay-as-you-go GLM key is asked nothing.
+func TestGLMCodingPlanKeyAllowance(t *testing.T) {
+	keyLimitsHome(t)
+	five := time.Now().Add(5 * time.Hour).Truncate(time.Second)
+	week := time.Now().Add(72 * time.Hour).Truncate(time.Second)
+	var mu sync.Mutex
+	var asked, auths = 0, []string{}
+	ask := func(key string) {
+		mu.Lock()
+		asked, auths = asked+1, append(auths, key)
+		mu.Unlock()
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Header.Get("X-Host") + r.URL.Path + " " + r.Header.Get("Authorization") {
+		case "api.z.ai/api/monitor/usage/quota/limit glm-full":
+			ask("glm-full")
+			fmt.Fprintf(w, `{"success":true,"data":{"level":"max","limits":[
+				{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":100,"nextResetTime":%d},
+				{"type":"TOKENS_LIMIT","unit":6,"number":1,"percentage":40,"nextResetTime":%d},
+				{"type":"TIME_LIMIT","unit":5,"number":1,"percentage":3,"nextResetTime":%d}]}}`,
+				five.UnixMilli(), week.UnixMilli(), week.UnixMilli())
+		case "api.z.ai/api/biz/subscription/list glm-full":
+			w.Write([]byte(`{"code":200,"success":true,"data":[]}`))
+		default:
+			t.Errorf("asked %s%s with %q", r.Header.Get("X-Host"), r.URL.Path, r.Header.Get("Authorization"))
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}))
+	defer srv.Close()
+	old := http.DefaultClient.Transport
+	http.DefaultClient.Transport = rewrite{srv}
+	t.Cleanup(func() { http.DefaultClient.Transport = old })
+
+	p := Provider{ID: "zp", Name: "Z.ai Plan", Chat: "https://api.z.ai/api/coding/paas/v4", Key: "glm-full"}
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if a, ok := KeyAllowance(p); ok || a != nil {
+		t.Fatalf("known before it was read: %+v", a)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("waited %v", d)
+	}
+	a := waitAllowance(t, p, func(Allowance) bool { return true })
+	now := time.Now()
+	if used, _ := a.For("glm-5.3", now); used != 100 {
+		t.Fatalf("used = %v of %+v", used, a)
+	}
+	if full := a.Full("glm-5.3", SpentShareOf(""), now); !full.Equal(five) {
+		t.Fatalf("full at %v, want the five hours' reset %v", full, five)
+	}
+	mu.Lock()
+	n := asked
+	mu.Unlock()
+	if n != 1 {
+		t.Fatalf("asked %d times", n)
+	}
+	// read within the minute: not asked again
+	KeyAllowance(p)
+	time.Sleep(20 * time.Millisecond)
+	mu.Lock()
+	n = asked
+	mu.Unlock()
+	if n != 1 {
+		t.Fatalf("asked %d times within the minute", n)
+	}
+
+	// stale: asked again, whatever the minute
+	StaleKeyAllowance(p)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		mu.Lock()
+		n = asked
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("not asked again once stale")
+		}
+		KeyAllowance(p)
+	}
+
+	// after a restart, the windows its plan card last showed (quotas.json)
+	// stand in for it until the next read
+	planQuotaCache.Lock()
+	planQuotaCache.data = nil
+	planQuotaCache.Unlock()
+	PlanQuotas(context.Background())
+	lastQuotas.Lock()
+	lastQuotas.m, lastQuotas.loaded = nil, false
+	lastQuotas.Unlock()
+	keyAllowances.Lock()
+	keyAllowances.m = nil
+	keyAllowances.Unlock()
+	a, ok := KeyAllowance(p)
+	if !ok {
+		t.Fatal("not seeded from its plan card")
+	}
+	if used, _ := a.For("glm-5.3", time.Now()); used != 100 {
+		t.Fatalf("seeded = %+v", a)
+	}
+	if r := a.Renewal("glm-5.3", time.Now()); len(r) != 2 || !r[0].Equal(week) {
+		t.Fatalf("renewal = %v, want the week %v first", r, week)
+	}
+
+	// a pay-as-you-go GLM key, and one whose endpoint is no plan's, are
+	// asked nothing: every ask was the plan key's own
+	for _, q := range []Provider{
+		{ID: "zp-api", Chat: "https://api.z.ai/api/paas/v4", Key: "glm-payg"},
+		{ID: "relay", Chat: "https://relay.example/v1", Key: "glm-full"},
+	} {
+		if a, ok := KeyAllowance(q); ok || a != nil {
+			t.Errorf("%s: %+v", q.ID, a)
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	mu.Lock()
+	tasks, keys := asked, append([]string{}, auths...)
+	mu.Unlock()
+	if tasks < 3 { // the first read, the stale one and the card's
+		t.Fatalf("asked %d times", tasks)
+	}
+	for _, k := range keys {
+		if k != "glm-full" {
+			t.Fatalf("asked for %s's windows", k)
+		}
 	}
 }

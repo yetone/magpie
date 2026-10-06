@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -341,5 +342,134 @@ func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 	}
 	if at, r := first(); at != "ko" || r != nil {
 		t.Fatalf("back: %s first, its rest %v", at, r)
+	}
+}
+
+// hostRewrite sends every request to srv, keeping its host in X-Host, as
+// if srv were the vendor's own host (the provider package's tests rewrite
+// the same way).
+type hostRewrite struct{ srv *httptest.Server }
+
+func (r hostRewrite) RoundTrip(req *http.Request) (*http.Response, error) {
+	u := *req.URL
+	u.Scheme, u.Host = "http", strings.TrimPrefix(r.srv.URL, "http://")
+	req = req.Clone(req.Context())
+	req.Header.Set("X-Host", req.URL.Host)
+	req.URL, req.Host = &u, ""
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+// A GLM Coding Plan's key (Z.ai's or Zhipu's coding endpoint, the preset
+// zai's Plan) refused 429 as out of quota rests until the window it
+// filled renews — its own windows, which the plan's monitor endpoint
+// tells, read behind the request — not a quarter of an hour at a time for
+// as long as the window has to run. With its windows as last read short
+// of full it rests quotaRest, a rate-worded 429 keeps the rate limit's
+// own backoff, a key whose endpoint is no plan's is unchanged, and only
+// the key that failed rests.
+func TestGLMCodingPlanKeyRestsByItsWindow(t *testing.T) {
+	fresh(t)
+	provider.ForgetBalances()
+	t.Cleanup(provider.ForgetBalances)
+	old := keyAllowance
+	keyAllowance = provider.KeyAllowance // the plan key's windows as read, here
+	t.Cleanup(func() { keyAllowance = old })
+
+	five := time.Now().Add(5 * time.Hour).Truncate(time.Second)
+	week := time.Now().Add(72 * time.Hour).Truncate(time.Second)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Header.Get("X-Host") + r.URL.Path + " " + r.Header.Get("Authorization") {
+		case "api.z.ai/api/monitor/usage/quota/limit glm-full":
+			fmt.Fprintf(w, `{"success":true,"data":{"level":"max","limits":[
+				{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":100,"nextResetTime":%d},
+				{"type":"TOKENS_LIMIT","unit":6,"number":1,"percentage":40,"nextResetTime":%d}]}}`,
+				five.UnixMilli(), week.UnixMilli())
+		case "api.z.ai/api/monitor/usage/quota/limit glm-fine":
+			fmt.Fprintf(w, `{"success":true,"data":{"level":"lite","limits":[
+				{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":1,"nextResetTime":%d}]}}`, five.UnixMilli())
+		default:
+			t.Errorf("asked %s%s with %q", r.Header.Get("X-Host"), r.URL.Path, r.Header.Get("Authorization"))
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}))
+	defer srv.Close()
+	oldTransport := http.DefaultClient.Transport
+	http.DefaultClient.Transport = hostRewrite{srv}
+	t.Cleanup(func() { http.DefaultClient.Transport = oldTransport })
+
+	if err := provider.Save(provider.Provider{ID: "zp", Name: "Z.ai Plan", Preset: "zai",
+		Chat: "https://api.z.ai/api/coding/paas/v4", Key: "glm-full",
+		Keys: []provider.KeyAccount{{Key: "glm-fine", Name: "fine"}}}); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := provider.Find("zp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := map[string]candidate{}
+	for _, c := range perKey(*saved, "glm-5.3", provider.Chat) {
+		keys[c.p.Key] = c
+	}
+	full, fine := keys["glm-full"], keys["glm-fine"]
+	_, hasFull := keys["glm-full"]
+	_, hasFine := keys["glm-fine"]
+	if !hasFull || !hasFine {
+		t.Fatalf("planned %d keys", len(keys))
+	}
+	read := func(c candidate) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+			if _, ok := keyAllowance(c.p); ok {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s's windows were never read", c.p.Key)
+			}
+		}
+	}
+	read(full)
+	read(fine)
+
+	s := &Server{}
+	near := func(r Rest, want time.Time) bool {
+		d := time.Until(r.Until)
+		return d > want.Sub(time.Now())-time.Minute && d <= want.Sub(time.Now())+time.Minute
+	}
+	quota := []byte(`{"error":{"code":"429","message":"当前套餐用量已达上限，请等待窗口重置后再试","type":"rate_limit_exceeded"}}`)
+	if got := failure(429, quota); got != failQuota {
+		t.Fatalf("the plan's refusal, as magpie words it: %s", got)
+	}
+	r := s.restAfter(full, 429, http.Header{}, quota)
+	if r.Why != failQuota || r.By != "window" || !near(r, five) {
+		t.Fatalf("out of its five hours: rests %v by %s (%s)", time.Until(r.Until), r.By, r.Why)
+	}
+	if r.Key != full.restKey() || r.user != provider.KeyAllowanceID(full.p) {
+		t.Fatalf("rests by %s as %q", r.Key, r.user)
+	}
+	if _, ok := restOf(fine.restKey()); ok {
+		t.Fatalf("%s rests too, only the key that failed should", fine.restKey())
+	}
+
+	// a rate-worded 429 with quota left keeps the rate limit's own backoff
+	rate := []byte(`{"error":{"code":"429","message":"Too many requests, please try again later"}}`)
+	if got := failure(429, rate); got != failRate {
+		t.Fatalf("a per-minute 429: %s", got)
+	}
+	if r := s.restAfter(fine, 429, http.Header{}, rate); r.Why != failRate || r.By != "cooldown" {
+		t.Fatalf("rate limited: rests by %s (%s)", r.By, r.Why)
+	}
+	// quota-worded with its windows short of full: quotaRest, never the window
+	if r := s.restAfter(fine, 429, http.Header{}, quota); r.Why != failQuota || r.By != "quota" {
+		t.Fatalf("short of full: rests by %s (%s)", r.By, r.Why)
+	}
+
+	// a key whose endpoint is no plan's is unchanged: no windows, the
+	// quota rest as before
+	plain := candidate{p: provider.Provider{ID: "dp", Key: "sk-dp", Chat: srv.URL + "/v1"}, model: "deepseek-v3.x", rest: "dp"}
+	if a, ok := keyAllowance(plain.p); ok || a != nil {
+		t.Fatalf("a key with no plan source: %+v", a)
+	}
+	if r := s.restAfter(plain, 429, http.Header{}, quota); r.Why != failQuota || r.By != "quota" {
+		t.Fatalf("no plan source: rests by %s (%s)", r.By, r.Why)
 	}
 }

@@ -60,6 +60,16 @@ func planQuotaSourceOf(p Provider) (planQuotaSource, bool) {
 	return planQuotaSource{}, false
 }
 
+// glmCodingPlanKey says p is a key magpie asks its vendor for the plan
+// it is on: a GLM Coding Plan's key (Zhipu's or Z.ai's coding endpoint,
+// where the Usage page's card asks), whose 5-hour and weekly windows the
+// vendor's monitor endpoint tells. Said without asking anything, so any
+// other key — a pay-as-you-go GLM one, a relay's — costs nothing here.
+func glmCodingPlanKey(p Provider) bool {
+	src, ok := planQuotaSourceOf(p)
+	return ok && src.sure && strings.HasSuffix(src.url, "/api/monitor/usage/quota/limit")
+}
+
 // readZhipuPlan reads
 //
 //	{"success":true,"data":{"level":"pro","limits":[
@@ -502,6 +512,12 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 			// 503 at times) shows what was last read, as a subscription's
 			// card does, rather than no card or "Usage unavailable"
 			tag := keyTag("plan", j.key)
+			if err == nil && len(ws) > 0 && !team {
+				// what routing goes by, read just now rather than in a minute
+				k := j.p
+				k.Key = j.key
+				noteKeyAllowance(k, ws, time.Now())
+			}
 			switch {
 			case err == nil && len(ws) == 0:
 				return // a key with no plan

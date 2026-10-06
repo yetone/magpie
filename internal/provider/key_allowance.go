@@ -2,8 +2,10 @@ package provider
 
 // A key's own usage windows, for routing, as Allowances is a subscription
 // account's: a sub2api key its owner gave a 5-hour, day or 7-day limit
-// tells what it has spent of each, and routing weighs and rests it by
-// them. They are read behind the request, never waited for, and read
+// tells what it has spent of each, and a GLM Coding Plan's key (Zhipu's
+// or Z.ai's) its 5-hour and weekly windows, which the plan's monitor
+// endpoint tells as the Usage page asks. Routing weighs and rests a key
+// by them. They are read behind the request, never waited for, and read
 // again once a minute has passed; until the first reading is back, the
 // one last shown on the key's card stands in for it. A reading that finds
 // a window the key was out of no longer full — its limit raised in the
@@ -35,10 +37,11 @@ type keyAllowance struct {
 const keyAllowanceAge = time.Minute
 
 // readsKeyWindows says p is a key whose own usage windows magpie reads:
-// one whose Balance URL is a sub2api panel's query for a key. Said
+// one whose Balance URL is a sub2api panel's query for a key, or a GLM
+// Coding Plan's key, which the plan's monitor endpoint tells. Said
 // without asking anything, so any other key costs nothing here.
 func readsKeyWindows(p Provider) bool {
-	return p.Account == nil && p.Key != "" && sub2APIKeyLimits(p)
+	return p.Account == nil && p.Key != "" && (sub2APIKeyLimits(p) || glmCodingPlanKey(p))
 }
 
 func keyAllowanceID(p Provider) string { return p.ID + "#" + keyID(p.Key) }
@@ -120,28 +123,40 @@ func (e *keyAllowance) keep(a Allowance, share float64, now time.Time) (renewed 
 	return was.After(a.Full("", share, now))
 }
 
-// keyWindows asks the vendor for p's key's windows, as the key's card
-// is asked (KeyBalances): the provider as saved, with the key, rather
-// than as a request has it, which leaves out the base URLs of the
-// protocols a key isn't made for.
+// keyWindows asks the vendor for p's key's windows, as the key's card is
+// asked (KeyBalances, PlanQuotas): the provider as saved, with the key,
+// rather than as a request has it, which leaves out the base URLs of the
+// protocols a key isn't made for. A GLM Coding Plan's key is asked where
+// its card asks (the plan's monitor endpoint), a sub2api key where its
+// Balance URL points.
 func keyWindows(ctx context.Context, p Provider) ([]QuotaWindow, error) {
 	q := p
 	if saved, err := Find(p.ID); err == nil {
 		q = *saved
 		q.Key = p.Key
 	}
+	if glmCodingPlanKey(q) {
+		src, _ := planQuotaSourceOf(q)
+		_, ws, err := planWindows(q.Via(ctx), src, q.Key)
+		return ws, err
+	}
 	_, _, ws, _, err := balanceRead(ctx, q)
 	return ws, err
 }
 
 // lastKeyAllowance is p's key's windows as its card last read them, kept
-// on disk (keepLast), each started again whose reset has passed.
+// on disk (keepLast) — a balance's for a sub2api key, a plan's for a GLM
+// Coding Plan's — each started again whose reset has passed.
 func lastKeyAllowance(p Provider) Allowance {
+	kind := "balance"
+	if glmCodingPlanKey(p) {
+		kind = "plan"
+	}
 	c := &lastQuotas
 	c.Lock()
 	defer c.Unlock()
 	c.load()
-	q, ok := c.reading(p.ID + "/" + strings.ToLower(keyTag("balance", p.Key)))
+	q, ok := c.reading(p.ID + "/" + strings.ToLower(keyTag(kind, p.Key)))
 	if !ok || len(q.Windows) == 0 {
 		return nil
 	}

@@ -686,12 +686,15 @@ model until it can't answer, then the next), `rotate` (each turn to the next
 member), `usage` (least used first) or `pace` (weekly pace: the account with
 the most of its week left per hour until it renews first, so less of a week
 is lost at its reset). A key has no allowance to weigh, so it goes by its
-order or by what magpie sent it lately — except a sub2api key its owner gave
-a 5-hour, day or 7-day limit: with the provider's Balance URL set to the
-relay's `/v1/usage`, its card shows those windows and routing weighs it by
-them as it does a subscription, resting it till the window renews once the
-relay says `api key 7天限额已用完` — or till its windows are next read short
-of full, its limit raised or its usage reset. `stays=` is how long a conversation
+order or by what magpie sent it lately — except a key whose own usage windows magpie
+reads: a sub2api key its owner gave a 5-hour, day or 7-day limit (with the
+provider's Balance URL set to the relay's `/v1/usage`, its card shows those
+windows) or a GLM Coding Plan's key (Zhipu's or Z.ai's coding endpoint,
+whose windows its Usage card already asks the plan for). Routing weighs
+such a key by its windows as it does a subscription, and rests it till the
+window it filled renews once the vendor says quota — for a GLM Coding Plan
+key, until its 5-hour or weekly window's own reset time — or till its
+windows are next read short of full, its limit raised or its usage reset. `stays=` is how long a conversation
 stays with the key or account that answered it: `auto` (the default, while
 the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
 `models=` replaces the whole list, in order; a bare model id works when only
