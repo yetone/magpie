@@ -162,7 +162,9 @@ the ones the agent asked for that request (Claude Code's, its 1M context's
 `context-1m-2025-08-07` for a `[1m]` model, fast mode's), each once. A beta
 the provider turns away (`Unexpected value(s) … for the anthropic-beta
 header`) is dropped from the retry and from then on, yours as well as the
-agent's; any other of yours is always sent.
+agent's; any other of yours is always sent. The beta of the agent's own
+sign-in (`oauth-2025-04-20`, which Claude Code signed in to claude.ai asks)
+never goes, as the sign-in never does; one you set yourself does.
 
 `magpie usage` also lists **upstream provider keys** to help check upstream bills.
 Each request records the fingerprint and saved name of the key that actually

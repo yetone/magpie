@@ -2682,7 +2682,7 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 				}
 			}
 		}
-		asked := in.Values("anthropic-beta")
+		asked := askedBetas(in)
 		if gjson.GetBytes(body, "speed").String() == "fast" && provider.HostOf(p.Base(to)) == "api.anthropic.com" {
 			asked = append(slices.Clone(asked), claudeFastBeta) // a group's member sent fast
 		}
