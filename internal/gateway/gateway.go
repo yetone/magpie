@@ -3302,6 +3302,12 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.GeminiCompat, req = want, &r
 		}
+		if req.GeminiCompat && req.ThinkOff {
+			if l := geminiOffLevel(p, model, s.fits(p.ID, offRefused(model), to)); l != req.OffLevel {
+				r := *req
+				r.OffLevel, req = l, &r
+			}
+		}
 		body, err := build(to, req, model, p.Host(), p.RejectsTemperature(model))
 		if err != nil {
 			return nil, to, err
@@ -3347,6 +3353,13 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
+		if req.GeminiCompat && res.StatusCode == http.StatusBadRequest && geminiMinimalRefused.Match(b) && s.fits(p.ID, offRefused(model), to) {
+			// minimal turned away by a Gemini that hasn't it, reasoning
+			// off or asked for at minimal: the fields were taken, and the
+			// model is asked again at its lowest, and so from then on
+			s.markUnfit(p.ID, offRefused(model), to)
+			continue
+		}
 		if req.GeminiCompat && refusesThinkingConfig(res.StatusCode, b) {
 			// Gemini's own fields turned away (a proxy that isn't in front
 			// of Google after all, or Google changing them): asked as
@@ -4233,6 +4246,18 @@ func offEffort(e string) bool { return e == "none" || e == "minimal" }
 func onEffort(p provider.Provider, model string) string {
 	levels := slices.DeleteFunc(slices.Clone(p.Efforts(model)), offEffort)
 	return fitEffort("low", levels)
+}
+
+// geminiOffLevel is the level Gemini's OpenAI-compatible API is asked to
+// think at for model with reasoning turned off: minimal, its least, where
+// its levels have it or aren't known; its lowest where they haven't, or
+// once it turned minimal away (fits false). Gemini 3 turns away a level it
+// doesn't have, gemini-3.8-flash minimal with a 400.
+func geminiOffLevel(p provider.Provider, model string, fits bool) string {
+	if !fits {
+		return onEffort(p, model)
+	}
+	return fitEffort("minimal", p.Efforts(model))
 }
 
 // offRefused is how unfit remembers a provider refusing reasoning turned

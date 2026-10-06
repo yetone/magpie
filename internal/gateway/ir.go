@@ -137,6 +137,11 @@ type Request struct {
 	// (AI Studio's, or a proxy in front of it on this machine or the LAN),
 	// which gives the model's thoughts only when asked in thinking_config.
 	GeminiCompat bool
+	// OffLevel is the level such an API is asked to think at when the
+	// client turned reasoning off: Gemini 3 can't stop thinking, and thinks
+	// least at minimal, or at its lowest level where it has no minimal
+	// (geminiOffLevel). "" is minimal.
+	OffLevel string
 	// Resume is set on a request built to go on with a reply the client
 	// already has part of (continuation.go): its last message is that
 	// part, an assistant message the model goes on from, not a turn

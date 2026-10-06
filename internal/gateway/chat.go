@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -411,8 +412,9 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 		if tc := aiStudioThinking(r, model); tc != nil {
 			out["extra_body"] = map[string]any{"google": map[string]any{"thinking_config": tc}}
 		} else if r.ThinkOff {
-			// Gemini 3 can't stop thinking; it thinks least at minimal
-			out["reasoning_effort"] = "minimal"
+			// Gemini 3 can't stop thinking; it thinks least at minimal,
+			// or at its lowest level where it has no minimal
+			out["reasoning_effort"] = cmp.Or(r.OffLevel, "minimal")
 		} else if r.Effort != "" {
 			out["reasoning_effort"] = r.Effort
 		}
@@ -633,6 +635,15 @@ func thinkingEffort(body []byte) []byte {
 // thinkingConfigField is Gemini's thinking_config as unfit remembers a
 // provider that refused it.
 const thinkingConfigField = "thinking_config"
+
+// geminiMinimalRefused is Gemini turning minimal away for a model that
+// doesn't have it, which names thinking but isn't thinking_config turned
+// away (refusesThinkingConfig): gemini-3.8-flash's 400 "Thinking level is
+// unsupported: THINKING_LEVEL_MINIMAL", for reasoning_effort minimal and
+// thinking_level minimal alike, at Vertex AI's OpenAI-compatible API; and
+// gemini-3.1-pro-preview's "thinking_level MINIMAL is not supported by this
+// model" at its generateContent.
+var geminiMinimalRefused = regexp.MustCompile(`(?i)thinking[ _]level.*minimal`)
 
 // refusesThinkingConfig recognizes an upstream turning a request away for
 // the thinking_config it was sent, by its error naming it.
