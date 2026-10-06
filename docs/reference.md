@@ -135,6 +135,7 @@ provider, and its models appear in every agent's picker:
 ```sh
 magpie presets                          # the vendors magpie knows, grouped: vendors, relays, local
 magpie provider add deepseek sk-…       # a preset needs only the key
+magpie provider add zenmux-api sk-…     # ZenMux: Chat, Responses and Anthropic
 magpie provider add ollama              # local servers need none
 magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… models=gpt-5.5,claude-sonnet-5
 magpie providers                        # host, key, exposed models, who uses what
@@ -153,6 +154,12 @@ Anthropic-compatible base), or both, plus `responses=` when the vendor has a
 separate Responses endpoint, `catalog=` to borrow a models.dev list, and
 `models=` to name the models to expose. Anything a preset does not know can
 be overridden the same way.
+
+The **ZenMux** relay preset supplies the three API bases from its
+[quickstart](https://zenmux.ai/docs/guide/quickstart) and uses the `zenmux`
+models.dev catalog. Its id is `zenmux-api` so existing accounts from
+`@zenmux/pi-zenmux-oauth` keep their provider ids and model picks. The preset
+uses an API key; OAuth sign-in remains in the plugin.
 
 `magpie provider set <id> header.<Name>=<value>` sends a header of your own
 on every request to a key+URL provider (an empty value removes it; signed-in

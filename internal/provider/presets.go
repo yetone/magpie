@@ -346,6 +346,11 @@ var presets = []PresetDef{
 		Website: "https://openrouter.ai", KeysURL: "https://openrouter.ai/keys",
 		// app attribution, for OpenRouter's rankings and analytics
 		HeaderHints: []string{"HTTP-Referer", "X-OpenRouter-Title"}},
+	// The API-key preset has its own id so adding it doesn't rename the
+	// existing zenmux OAuth provider from @zenmux/pi-zenmux-oauth.
+	{ID: "zenmux-api", Name: "ZenMux", Icon: "zenmux", Kind: KindRelay, Catalog: "zenmux",
+		Chat: "https://zenmux.ai/api/v1", Responses: "https://zenmux.ai/api/v1", Anthropic: "https://zenmux.ai/api/anthropic",
+		Website: "https://zenmux.ai", KeysURL: "https://zenmux.ai/platform/pay-as-you-go"},
 	{ID: "opencode-go", Name: "OpenCode Go", Icon: "opencode", Kind: KindRelay, Catalog: "opencode-go",
 		Chat: "https://opencode.ai/zen/go/v1", Responses: "https://opencode.ai/zen/go/v1", Anthropic: "https://opencode.ai/zen/go",
 		Note:    "open coding models, $10/month",
