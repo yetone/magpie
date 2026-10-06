@@ -25,6 +25,9 @@ func signInLink(t *testing.T, whole func(string) bool, script string) string {
 	s.mu.Unlock()
 	if stop != nil {
 		stop()
+		// the sign-in ends with the test: what it does as it ends (it
+		// forgets the accounts' caches) would be the next test's
+		<-s.done
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -91,6 +94,7 @@ func TestCLISignInSaysWhyNoLink(t *testing.T) {
 	s := &signInFlow{done: make(chan struct{})}
 	s.st = SignInState{State: "waiting"}
 	err := runCLISignIn(s, "grok login", nil, true, nil, func() (string, string, bool) { return "", "", false }, nil, "/bin/sh", "-c", "echo '"+said+"' >&2; exit 1")
+	<-s.done // the sign-in ends with the test, as signInLink's does
 	if err == nil || err.Error() != "grok login gave no link to open: "+said {
 		s.mu.Lock()
 		t.Fatalf("err %v, link %q", err, s.st.URL)
