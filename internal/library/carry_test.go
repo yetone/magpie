@@ -123,6 +123,35 @@ func TestCarry(t *testing.T) {
 	}
 }
 
+// A bundle carries a skill's files, not what a file manager wrote into the
+// folder the user opened — desktop.ini and Thumbs.db from Windows
+// Explorer, .DS_Store from Finder. Carried, they reach every agent on the
+// other computer, where the copy they came in is no longer the library's.
+func TestCarryLeavesExplorerMetadataOut(t *testing.T) {
+	h := sandbox(t)
+	skill(t, filepath.Join(h, "src/pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(filepath.Join(h, "src"), []string{"pdf"}, []string{"claude"}))
+	for _, name := range []string{".DS_Store", "desktop.ini", "Thumbs.db"} {
+		write(t, filepath.Join(realDir(skillDir("pdf")), name), "the file manager's\n")
+	}
+	b, err := Collect()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b.Skills) != 1 {
+		t.Fatalf("skills: %+v", b.Skills)
+	}
+	s := b.Skills[0]
+	for _, name := range []string{".DS_Store", "desktop.ini", "Thumbs.db"} {
+		if _, ok := s.Files[name]; ok {
+			t.Errorf("the bundle carries %s", name)
+		}
+	}
+	if _, ok := s.Files["SKILL.md"]; !ok || string(s.Files["scripts/run.sh"]) != "echo hi\n" {
+		t.Errorf("the skill itself: %v", keysOf(s.Files))
+	}
+}
+
 func TestCarryRefuses(t *testing.T) {
 	sandbox(t)
 	for _, b := range []*Bundle{

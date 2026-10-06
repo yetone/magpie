@@ -110,7 +110,9 @@ type editMemo struct {
 }
 
 // libraryHash is the hash of the library's folder of a skill, leaving
-// aside what Finder keeps in it: "" when it can't be read.
+// aside what isn't part of the skill (SkipInSkill): "" when it can't be
+// read. It reads as hashFiles with noFinder true, whose SkipInSkill now
+// leaves the file managers' files out either way.
 func libraryHash(name string) string {
 	dir := skillDir(name)
 	// a folder not wholly read has no time to remember its hash by
@@ -153,8 +155,15 @@ func (l *Library) editState(s *Skill, targets []*Target) (edited, known bool) {
 		if h == "" {
 			return false, false
 		}
-		// the fetched files may hold a .DS_Store of their own
-		if h != s.Hash && hashDir(lib) != s.Hash {
+		// what a file manager writes into a folder the user opened isn't
+		// part of the skill, so it is left out of the hash now
+		// (SkipInSkill). An earlier magpie put the file managers' files
+		// in the Hash it recorded, so one installed then matches only
+		// the old formula: without that fallback an untouched skill
+		// reads as changed here.
+		if h != s.Hash &&
+			legacyHashFiles(lib, true) != s.Hash &&
+			legacyHashFiles(lib, false) != s.Hash {
 			return true, true
 		}
 	}
