@@ -864,10 +864,14 @@ type codexUsage struct {
 }
 
 // codexWorkspacePlans are the plans of a ChatGPT workspace: every plan
-// /wham/usage names (codex-rs codex-backend-openapi-models PlanType) but
-// guest, free, go, plus, pro, prolite and promax, and Codex's own "hc".
+// /wham/usage names (codex-rs codex-backend-openapi-models PlanType, and
+// the Codex app's own plan_type switch for its usage banner, search
+// "case`enterprise_cbp_trial`:" in ChatGPT.app 26.930.61225 app-initial)
+// but guest, free, go, plus, pro, prolite and promax. A plan not listed
+// isn't a workspace, so it is held on no credits.
 var codexWorkspacePlans = []string{"free_workspace", "team", "self_serve_business_prolite", "self_serve_business_usage_based",
-	"business", "ent26", "enterprise_cbp_automation", "enterprise_cbp_usage_based", "enterprise", "hc",
+	"business", "ent26", "enterprise_cbp_automation", "enterprise_cbp_trial", "enterprise_cbp_usage_based",
+	"enterprise_cbp_view_only", "enterprise", "hc", "finserv", "law", "sci",
 	"education", "edu", "edu_plus", "edu_pro", "quorum", "k12"}
 
 // codexReservePlans are the workspace plans the Codex app's reserve

@@ -91,6 +91,11 @@ func TestCodexUsedUpIsWhatTheAppHolds(t *testing.T) {
 		}), true},
 		{"Business without credits, within its overage", within("business", as), false},
 		{"K12 without credits, within its overage", within("k12", as), false},
+		{"Law without credits, within its overage", within("law", as), false},
+		{"Sci without credits, within its overage", within("sci", as), false},
+		{"FinServ without credits, within its overage", within("finserv", as), false},
+		{"Enterprise trial without credits, within its overage", within("enterprise_cbp_trial", as), false},
+		{"Enterprise view-only without credits, within its overage", within("enterprise_cbp_view_only", as), false},
 		{"Pro without credits, its overage open", within("pro", as), true},
 		// the app's reserve experiment holds these on no credits, overage
 		// or not, and magpie can't see whether it is on
