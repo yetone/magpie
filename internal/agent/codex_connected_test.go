@@ -14,8 +14,8 @@ import (
 // (its /model, or a Codex app still running on its old pick): its own
 // models are in its list beside magpie's, as when it joined (#940: Codex
 // read as not connected then, its config still on magpie's gateway).
-// Disconnect leaves it on that model. Made magpie's provider (its
-// allowance used up), it is not beside the sign-in.
+// Disconnect leaves it on that model. Made magpie's provider (the Codex
+// app blocking its account), it is not beside the sign-in.
 func TestCodexOwnPickAfterMagpieModelStaysConnected(t *testing.T) {
 	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "model = \"gpt-5.5\"\n")
 	cx := codex(home)
@@ -60,11 +60,11 @@ func TestCodexOwnPickAfterMagpieModelStaysConnected(t *testing.T) {
 	}
 }
 
-// Connected while Codex can't join (its ChatGPT account used up, or a
-// provider of its own in config.toml), Codex stays on the model it was on
-// as magpie serves it on the ChatGPT account, not the first of magpie's
-// other models (#940: it went to Grok 4.7, "magpie doesn't serve the model
-// it was on").
+// Connected while Codex can't join (the Codex app blocking its ChatGPT
+// account, or a provider of its own in config.toml), Codex stays on the
+// model it was on as magpie serves it on the ChatGPT account, not the first
+// of magpie's other models (#940: it went to Grok 4.7, "magpie doesn't
+// serve the model it was on").
 func TestCodexConnectKeepsItsOwnModelThroughMagpie(t *testing.T) {
 	home, read := codexHome(t, `{"tokens":{"access_token":"x","id_token":"x.e30.x"}}`, "model = \"gpt-b\"\n")
 	os.WriteFile(filepath.Join(home, ".codex", "models_cache.json"), []byte(`{"models":[

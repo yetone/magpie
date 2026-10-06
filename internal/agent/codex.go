@@ -301,11 +301,11 @@ func codexIn(at place) *Agent {
 	// api: the user wants magpie as Codex's provider even while Codex is
 	// signed in to ChatGPT
 	api := func() bool { return stashLoad()[at.key("codex.login")] == "api" }
-	// out reports whether the ChatGPT account Codex is signed in to has
-	// used its allowance up, for magpie to become Codex's provider while it
-	// is (#540): never with the sign-in kept on ChatGPT (chatgpt), where
-	// the user would rather the Codex app wait for the account than leave
-	// its ChatGPT state
+	// out reports whether the Codex app holds the ChatGPT account Codex is
+	// signed in to (codexUsedUp), for magpie to become Codex's provider
+	// while it does (#540): never with the sign-in kept on ChatGPT
+	// (chatgpt), where the user would rather the Codex app wait for the
+	// account than leave its ChatGPT state
 	out := func() bool { return stashLoad()[at.key("codex.login")] != "chatgpt" && codexUsedUp() }
 	dropBase := func() error {
 		forget(at.key("codex.failover"))
@@ -974,8 +974,8 @@ func codexIn(at place) *Agent {
 			{
 				// how Codex takes magpie's models: beside its ChatGPT
 				// sign-in (openai_base_url), magpie its provider only while
-				// the account is used up (""); beside it always, the
-				// account used up or not (chatgpt); or with magpie as its provider,
+				// the Codex app holds the account (""); beside it always,
+				// held or not (chatgpt); or with magpie as its provider,
 				// the Codex app in its API state. Kept in the stash, where
 				// set("") leaves it.
 				Key: "login", Label: "sign-in", Quiet: true,
@@ -1002,8 +1002,8 @@ func codexIn(at place) *Agent {
 				},
 				Options: func(map[string]string) []Option {
 					return []Option{
-						{Value: "", Label: "ChatGPT", Note: "magpie's models join Codex's own; Codex stays signed in to ChatGPT, and while its account is used up magpie is Codex's provider, so the Codex app still sends"},
-						{Value: "chatgpt", Label: "Always ChatGPT", Note: "as ChatGPT, and kept so when its account is used up: magpie never becomes Codex's provider. The Codex app may then send nothing till the account has room; Codex CLI goes on through magpie"},
+						{Value: "", Label: "ChatGPT", Note: "magpie's models join Codex's own; Codex stays signed in to ChatGPT, and while the Codex app blocks its account (out of allowance, no credits left) magpie is Codex's provider, so the app still sends"},
+						{Value: "chatgpt", Label: "Always ChatGPT", Note: "as ChatGPT, and kept so while the Codex app blocks its account: magpie never becomes Codex's provider. The Codex app may then send nothing till the account has room; Codex CLI goes on through magpie"},
 						{Value: "api", Label: "magpie API", Note: "magpie is Codex's provider; the Codex app is in its API state, with magpie's models only"},
 					}
 				},
