@@ -9,9 +9,20 @@ import (
 	"time"
 )
 
+// historyNoon holds the history's clock at noon of a past day and returns
+// it: a test's routes, a second apart, then fall on that one day, and
+// saveRoute prunes by it rather than by the real day, which may have
+// turned since the test began.
+func historyNoon(t *testing.T) time.Time {
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)
+	historyClock = func() time.Time { return now }
+	t.Cleanup(func() { historyClock = time.Now })
+	return now
+}
+
 func TestHistoryKeepsSessionAndTokenTiers(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	now := time.Now()
+	now := historyNoon(t)
 	records := routeUsage("relay", "m", Usage{Input: 20, Output: 5, CacheRead: 100, CacheWrite: 40})
 	saveRoute(Route{ID: 1, Time: now, Session: "conversation", ParentSession: "parent-conversation", Kind: "thread_title", Usage: records, Done: true})
 	saveRoute(Route{ID: 2, Time: now, Tokens: 1000, Done: true}) // legacy route
@@ -29,7 +40,7 @@ func TestHistoryKeepsSessionAndTokenTiers(t *testing.T) {
 // still read, and a day too old or past the size kept dropped.
 func TestHistoryKeepsDaysAndDropsOld(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	now := time.Now()
+	now := historyNoon(t)
 	yday := now.AddDate(0, 0, -1)
 	saveRoute(Route{ID: 1, Time: yday, Model: "a", Done: true})
 	saveRoute(Route{ID: 2, Time: now, Model: "b", Done: true})

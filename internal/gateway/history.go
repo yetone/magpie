@@ -52,6 +52,10 @@ type counted struct {
 
 const dayForm = "2006-01-02"
 
+// historyClock is the time saveRoute prunes the days by: which day is today,
+// and which are over or too old. A variable for the tests.
+var historyClock = time.Now
+
 // saveRoute adds a done route to its day. Errors are swallowed: keeping
 // the history must never break a call.
 func saveRoute(r Route) {
@@ -72,9 +76,9 @@ func saveRoute(r Route) {
 	}
 	f.Write(append(b, '\n'))
 	f.Close()
-	if time.Since(history.pruned) > time.Hour {
-		history.pruned = time.Now()
-		pruneHistory(dir, time.Now())
+	if now := historyClock(); now.Sub(history.pruned) > time.Hour {
+		history.pruned = now
+		pruneHistory(dir, now)
 	}
 }
 

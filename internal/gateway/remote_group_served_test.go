@@ -132,7 +132,7 @@ func TestRemoteMagpieGroupLedgerRow(t *testing.T) {
 // routed; a real swap kept beside it is still one.
 func TestRemoteMagpieGroupHistory(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	now := time.Now()
+	now := historyNoon(t)
 	saveRoute(Route{ID: 1, Time: now, Model: "office/group/auto-deepseek-v4-1-flash", Done: true, Status: 200,
 		Tries:  []Try{{ID: "office", Model: "group/auto-deepseek-v4-1-flash", Done: true, Status: 200, Served: "deepseek/deepseek-v4.1-flash", Swapped: true}},
 		Served: "deepseek/deepseek-v4.1-flash", Swapped: true})
