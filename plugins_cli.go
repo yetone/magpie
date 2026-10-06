@@ -439,7 +439,10 @@ func pluginLogin(ctx context.Context, name, method string) error {
 			return err
 		}
 	}
-	fmt.Println(green.Render("✓"), "signed in to", pp.Name, muted.Render("· its models are "+provider.PluginID(saved.Provider)+"/<model>"))
+	// as the window's sign-in does: its lapsed mark goes and, removed from
+	// magpie, it comes back
+	id := provider.PluginSignedIn(saved)
+	fmt.Println(green.Render("✓"), "signed in to", pp.Name, muted.Render("· its models are "+id+"/<model>"))
 	return nil
 }
 

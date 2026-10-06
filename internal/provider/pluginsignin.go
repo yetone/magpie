@@ -169,9 +169,19 @@ func PluginAPIKey(ctx context.Context, id string, method int, inputs map[string]
 	if err != nil {
 		return "", err
 	}
+	return PluginSignedIn(saved), nil
+}
+
+// PluginSignedIn finishes a sign-in to a plugin's provider that magpie
+// doesn't follow, a key or the command line's own, once the plugin has
+// saved the account: as for one it follows (pluginDone), the account's
+// lapsed mark goes and, removed from magpie, it comes back. It gives the
+// provider's magpie id.
+func PluginSignedIn(saved plugin.Saved) string {
 	clearPluginLapse(saved)
-	_ = ShowAccount(PluginID(saved.Provider))
-	return PluginID(saved.Provider), nil
+	id := PluginID(saved.Provider)
+	_ = ShowAccount(id)
+	return id
 }
 
 // pluginUsing is whether the account signed in to is the one in use, the
