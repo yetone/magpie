@@ -23,6 +23,8 @@ func TestDirectCountsOnlySessionFileCalls(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	os.WriteFile(catalog.CachePath(), []byte(`{"openai":{"id":"openai","models":{"gpt-6":{"id":"gpt-6","cost":{"input":2,"output":10}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
 
 	t0 := time.Now()
 	now := time.Date(t0.Year(), t0.Month(), t0.Day(), 12, 0, 0, 0, t0.Location())

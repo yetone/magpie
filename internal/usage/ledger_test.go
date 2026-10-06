@@ -181,6 +181,8 @@ func TestLedgerWithSessionLogCalls(t *testing.T) {
 	// a models.dev catalog pricing Claude Sonnet 5: $3 in, $15 out, $0.3 a cached read, $3.75 a cache write, per million
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	os.WriteFile(catalog.CachePath(), []byte(`{"anthropic":{"id":"anthropic","models":{"claude-sonnet-5":{"id":"claude-sonnet-5","cost":{"input":3,"output":15,"cache_read":0.3,"cache_write":3.75}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
 
 	// noon today, so that what the test lists a few hours before it is still today,
 	// whenever the test runs
@@ -478,6 +480,8 @@ func TestLedgerUsesTheStatedPrice(t *testing.T) {
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	os.WriteFile(catalog.CachePath(), []byte(`{"openai":{"id":"openai","models":{"sol":{"id":"sol",`+
 		`"cost":{"input":2,"output":8,"cache_read":0.5,"cache_write":2.5}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
 	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "https://relay.example/v1"}); err != nil {
 		t.Fatal(err)
 	}
