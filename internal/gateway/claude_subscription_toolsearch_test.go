@@ -91,7 +91,21 @@ func TestToolSearchLoadKeepsTheRun(t *testing.T) {
 	if len(got.Content) == 0 || !strings.Contains(got.Content[0]["text"].(string), "WebFetch is loaded") {
 		t.Errorf("result = %v", got.Content)
 	}
-	if !run.offers([]Tool{{Name: "WebFetch"}}) {
+	// The run learns the new tool on the request that carries the result,
+	// after its own call has been answered: the MCP call's response reaches
+	// this test from the goroutine waiting on it, while the run's tools are
+	// written on the request's own (serveSubscription). So the answer
+	// arriving does not yet mean the run knows — wait for it, as the request
+	// does, rather than reading it the moment the call is answered.
+	knows := false
+	for deadline := time.Now().Add(2 * time.Second); ; {
+		knows = run.offers([]Tool{{Name: "WebFetch"}})
+		if knows || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if !knows {
 		t.Error("the run doesn't know it has WebFetch now")
 	}
 	run.finish()
