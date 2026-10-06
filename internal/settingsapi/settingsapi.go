@@ -471,12 +471,18 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 		return in, fmt.Errorf("contrast is %q, %q or \"\" (as the system), not %q", settings.ContrastMore, settings.ContrastNormal, c)
 	}
 	if v := strings.TrimSpace(in.Vision); v != "" && v != "off" && v != cur.Vision {
-		if _, _, ok := provider.Resolve(v); !ok {
+		// Resolve intentionally accepts arbitrary names under a known
+		// provider. A model describing images has to be one magpie serves,
+		// as the page's picker lists them.
+		if !slices.ContainsFunc(provider.Served(), func(e provider.Entry) bool { return e.ID == v }) {
 			return in, fmt.Errorf("no model %s to describe images", v)
 		}
 	}
 	if v := strings.TrimSpace(in.ImageGen); v != "" && v != "off" && v != cur.ImageGen {
-		if gateway.DrawerMissingOf(v) != "" {
+		// what draws is the picker's list, not the served catalog and not
+		// Resolve: a plan draws with models it doesn't chat with (a ChatGPT
+		// account's gpt-image-2), and a chat-only model draws nothing
+		if !slices.Contains(imageGenIds(cur.ImageGen), v) {
 			return in, fmt.Errorf("no model %s to generate images", v)
 		}
 	}
@@ -498,4 +504,39 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 		}
 	}
 	return in, nil
+}
+
+// imageGenIds are the ids the image generation picker lists, which a save of
+// that setting accepts: every model an on provider draws with
+// (gateway.Drawers), spelled "<provider>/<model>", plus the routing groups
+// with a member that draws. Some of them are not in the served catalog — a
+// plan draws with models it doesn't chat with, and a key's own list may name
+// image models it exposes for drawing alone.
+//
+// selected is the pick the page shows now: a model unticked in its provider's
+// editor stays listed only when it is the one picked (321sssrt on X).
+func imageGenIds(selected string) []string {
+	out := []string{}
+	for _, p := range provider.All() {
+		if !p.On() || p.DecideOnly() {
+			continue
+		}
+		for _, m := range gateway.Drawers(p) {
+			if p.DrawerHidden(m.ID) && gateway.ListedDrawer(selected) != p.ID+"/"+m.ID {
+				continue
+			}
+			out = append(out, p.ID+"/"+m.ID)
+		}
+	}
+	for _, e := range provider.Served() {
+		if e.Group != "" && gateway.GroupDraws(e.ID) {
+			out = append(out, e.ID)
+		}
+	}
+	for _, g := range provider.Groups() {
+		if ref := g.Ref(); !g.Hidden && !g.Disabled && gateway.GroupDraws(ref) && !slices.Contains(out, ref) {
+			out = append(out, ref)
+		}
+	}
+	return out
 }
