@@ -72,6 +72,10 @@ func TestCodexNoCreditsEveryAccount(t *testing.T) {
 	if strings.Contains(body, "usage cap reached") {
 		t.Errorf("told as a cap: %s", body)
 	}
+	// the request's record says the same as the client was told
+	if c := srv.Recent()[0]; c.Status != 429 || c.Error != "every account held: set not to spend its credits" {
+		t.Errorf("recorded %d %q", c.Status, c.Error)
+	}
 
 	// one held at its cap, the other for its credits: both told
 	if err := provider.SetAccountCap("codex", "me@example.com", 70); err != nil {
@@ -85,6 +89,9 @@ func TestCodexNoCreditsEveryAccount(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("no %q in %s", want, body)
 		}
+	}
+	if c := srv.Recent()[0]; c.Status != 429 || c.Error != "every account held: at its usage cap or set not to spend its credits" {
+		t.Errorf("recorded %d %q", c.Status, c.Error)
 	}
 }
 

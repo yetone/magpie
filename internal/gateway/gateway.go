@@ -1445,7 +1445,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if d := time.Until(back); d > 0 {
 			w.Header().Set("Retry-After", strconv.Itoa(int(d.Seconds())+1))
 		}
-		call.Status, call.Error = 429, "every account at its usage cap"
+		call.Status, call.Error = 429, cappedRecord(pl.left)
 		writeError(w, from, 429, msg)
 		turnedAway()
 		return

@@ -517,7 +517,7 @@ func capHeld(p, acct provider.Provider, model string, now time.Time) *capHold {
 func cappedError(model string, ws []Weighed, now time.Time) (string, time.Time) {
 	var held []string
 	var soonest time.Time
-	capped, noCredits := false, false
+	capped, noCredits := heldBy(ws)
 	for _, w := range ws {
 		if w.Capped == 0 {
 			continue
@@ -525,9 +525,6 @@ func cappedError(model string, ws []Weighed, now time.Time) (string, time.Time) 
 		s := fmt.Sprintf("%s (%s) is at %.0f%% of a usage window, past its %d%% cap", w.Name, w.Who, w.Used, w.Capped)
 		if w.NoCredits {
 			s = fmt.Sprintf("%s (%s) has used up a usage window and is set not to spend its credits", w.Name, w.Who)
-			noCredits = true
-		} else {
-			capped = true
 		}
 		if w.CapBack != nil {
 			s += ", until " + w.CapBack.Local().Format("Jan 2 15:04")
@@ -544,6 +541,29 @@ func cappedError(model string, ws []Weighed, now time.Time) (string, time.Time) 
 		return fmt.Sprintf("usage limit reached: every account that serves %q has used up its allowance and is set in magpie not to spend its credits — %s. magpie uses it again once that window renews; to go on now, let an account spend its credits (Usage → the account's Use credits, or magpie quota credits <account> on)", model, strings.Join(held, "; ")), soonest
 	}
 	return fmt.Sprintf("usage limit reached: every account that serves %q is held by magpie — %s. magpie uses it again once that window renews; to go on now, raise or lift a cap (Providers → the account's cap, or magpie provider account-cap) or let an account spend its credits (Usage → the account's Use credits, or magpie quota credits <account> on)", model, strings.Join(held, "; ")), soonest
+}
+
+// heldBy says what holds the accounts of ws held at a share: a usage cap
+// set on one, credits it is set not to spend, or both.
+func heldBy(ws []Weighed) (capped, noCredits bool) {
+	for _, w := range ws {
+		if w.Capped > 0 {
+			capped, noCredits = capped || !w.NoCredits, noCredits || w.NoCredits
+		}
+	}
+	return capped, noCredits
+}
+
+// cappedRecord is the call's record of the same refusal as cappedError,
+// told apart the same way.
+func cappedRecord(ws []Weighed) string {
+	switch capped, noCredits := heldBy(ws); {
+	case !noCredits:
+		return "every account at its usage cap"
+	case !capped:
+		return "every account held: set not to spend its credits"
+	}
+	return "every account held: at its usage cap or set not to spend its credits"
 }
 
 // creditsHeld are those of cs held only as they won't spend their
