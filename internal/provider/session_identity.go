@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"path/filepath"
+	"slices"
 
 	"github.com/yetone/magpie/internal/filememo"
 )
@@ -24,7 +25,10 @@ type SessionIdentity struct {
 func SessionIdentities(codexDir string) []SessionIdentity {
 	out := currentSessionIdentities(codexDir)
 	for _, l := range readLogins() {
-		if id, ok := savedSessionIdentity(l); ok {
+		// The account signed in now is saved too once rememberLogins has
+		// seen it. It is listed once, so the usage cache keyed on this list
+		// isn't thrown away when that copy is saved.
+		if id, ok := savedSessionIdentity(l); ok && !slices.Contains(out, id) {
 			out = append(out, id)
 		}
 	}
