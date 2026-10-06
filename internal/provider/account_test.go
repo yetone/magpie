@@ -88,6 +88,10 @@ func isolate(t *testing.T) {
 	// are kept by GitHub token, and every test signed in (signIn) has the
 	// same one
 	ForgetCopilotForTest()
+	// nor the plans' and keys' cards: PlanQuotas and KeyBalances keep them
+	// a minute, and CachedCards hands them on whatever their age
+	forgetPlanQuotas()
+	ForgetBalances()
 	t.Cleanup(func() {
 		claudeKeychain, claudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
 		cursorKeychain, DevinExecutable = oldCursor, oldDevin
