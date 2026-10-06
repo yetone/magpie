@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 )
 
@@ -196,6 +197,12 @@ func TestRequestPageModelRankingKeepsAlternatives(t *testing.T) {
 
 func TestQueryPageSourceAndIdentityInvalidation(t *testing.T) {
 	pageHome(t)
+	// QueryPage saves a copy of the account Codex is signed in to, at most
+	// once every 30s (rememberLogins), and this test expects only auth.json's
+	// identity. Look at the accounts before signing in, as an earlier test in
+	// a package run does, so no copy is saved while it runs.
+	provider.ForgetAccounts()
+	provider.Accounts()
 	sessionAuth(t, sessions.CodexDir(), "a", "u", "one@example.com")
 	path := filepath.Join(sessions.CodexDir(), "sessions", "rollout-2026-09-30T00-00-00-test.jsonl")
 	os.MkdirAll(filepath.Dir(path), 0700)
