@@ -141,6 +141,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		CodexAutoReview:     "fake/m1",
 		ChinaMirror:         true,
 		CodexAutoReset:      []string{"me@example.com"},
+		CodexNoCredits:      []string{"me@example.com"},
 		TextSize:            125,
 		UpdateSkip:          "0.1.500",
 		UpdateMirror:        "https://mirror.example/",

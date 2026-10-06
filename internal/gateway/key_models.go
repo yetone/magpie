@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/yetone/magpie/internal/access"
@@ -202,6 +203,10 @@ func allowedCandidates(who access.Identity, cs []candidate, pl planned, members 
 		}
 	}
 	pl.order = order
+	// nor is one held for its credits there for a reset to bring back
+	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool {
+		return !members[c.p.ID+"/"+c.model] && !modelAllowed(who, c.p, c.model) || !accountAllowed(who, c)
+	})
 	return out, pl, held && len(out) == 0
 }
 

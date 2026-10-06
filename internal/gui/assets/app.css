@@ -1330,18 +1330,23 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-use:hover { background: color-mix(in srgb, var(--fg) 12%, transparent); color: var(--fg); }
 /* a Codex account spending its resets by itself (#719): a standing say of
    the account's, held or not, its two times in words beside a switch */
-.quota-autoreset, .pq-autoreset { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-.quota-autoreset { margin-top: 8px; font-size: 10.5px; }
-.quota-resets + .quota-autoreset { margin-top: 6px; }
-.subscription-card.several .quota-autoreset + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
-.pq-autoreset { grid-column: 1 / -1; margin-top: 5px; padding-top: 7px; border-top: 1px solid var(--line-2); font-size: 11px; }
-.pq-resets + .pq-autoreset { margin-top: 5px; padding-top: 0; border-top: 0; }
+.quota-autoreset, .pq-autoreset, .quota-credits, .pq-credits { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+/* the switch keeps by the first line, so one whose words rewrap when it
+   turns stays under the pointer */
+.quota-credits, .pq-credits { align-items: flex-start; }
+.quota-credits .ar-say, .pq-credits .ar-say { line-height: 16px; }
+.quota-autoreset, .quota-credits { margin-top: 8px; font-size: 10.5px; }
+.quota-resets + .quota-autoreset, .quota-autoreset + .quota-credits { margin-top: 6px; }
+.subscription-card.several .quota-autoreset + .subscription-account,
+.subscription-card.several .quota-credits + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+.pq-autoreset, .pq-credits { grid-column: 1 / -1; margin-top: 5px; padding-top: 7px; border-top: 1px solid var(--line-2); font-size: 11px; }
+.pq-resets + .pq-autoreset, .pq-autoreset + .pq-credits { margin-top: 5px; padding-top: 0; border-top: 0; }
 .ar-say { flex: 1; min-width: 0; line-height: 1.35; }
 .ar-say b { font-weight: 500; color: var(--fg-2); }
-.lib-switch.auto-reset { width: 28px; height: 16px; padding: 0; border: 0; cursor: pointer; }
-.lib-switch.auto-reset i { width: 12px; height: 12px; }
-.lib-switch.auto-reset.on i { transform: translateX(12px); }
-.lib-switch.auto-reset:disabled { opacity: .6; cursor: default; }
+.lib-switch.auto-reset, .lib-switch.use-credits { width: 28px; height: 16px; padding: 0; border: 0; cursor: pointer; }
+.lib-switch.auto-reset i, .lib-switch.use-credits i { width: 12px; height: 12px; }
+.lib-switch.auto-reset.on i, .lib-switch.use-credits.on i { transform: translateX(12px); }
+.lib-switch.auto-reset:disabled, .lib-switch.use-credits:disabled { opacity: .6; cursor: default; }
 .resets-kept { color: var(--faint); }
 .resets-kept.on { color: var(--accent); }
 /* in brief: the resets held and the say, beside the account's name */

@@ -119,6 +119,12 @@ type Settings struct {
 	// unused half an hour before it does, or at once when the account is
 	// held up past then (provider.SpendExpiringCodexResets).
 	CodexAutoReset []string `json:"codexAutoReset,omitempty"`
+	// CodexNoCredits are the ChatGPT accounts (lower-case) that don't
+	// spend their credits: once a usage window is used up, routing holds
+	// the account as used up and goes on to the user's other accounts,
+	// groups and fallbacks, where by default the vendor answers on its
+	// credits (see provider.CodexCredits).
+	CodexNoCredits []string `json:"codexNoCredits,omitempty"`
 	// WorkBuddyCheckin presses WorkBuddy's daily check-in (签到) for each
 	// signed-in WorkBuddy (China) account once a Beijing day, claiming the
 	// credits it gives while its event runs.
@@ -889,6 +895,10 @@ func Save(s Settings) error {
 		s.CodexAutoReset[i] = strings.ToLower(u)
 	}
 	s.CodexAutoReset = ids(s.CodexAutoReset)
+	for i, u := range s.CodexNoCredits {
+		s.CodexNoCredits[i] = strings.ToLower(u)
+	}
+	s.CodexNoCredits = ids(s.CodexNoCredits)
 	s.TrayUsage = ""
 	if len(s.TrayUsages) > 0 {
 		s.TrayUsage = s.TrayUsages[0]

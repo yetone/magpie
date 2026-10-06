@@ -1422,6 +1422,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		cands, pl, accountHeld = allowedCandidates(who, cands, pl, members)
 	}
+	// a Codex reset spent before any try, on an account held as it won't
+	// spend its credits
+	var resetFirst *AutoReset
+	if len(cands) == 0 && len(pl.held) > 0 && strings.TrimSpace(r.Header.Get(AccountHeader)) == "" &&
+		!slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred && !w.Held && w.Capped == 0 }) {
+		// every account there is is held, and one held only as it won't
+		// spend its credits is out of its allowance at the vendor's own
+		// 100%: one that spends its resets by itself, its week used up,
+		// spends one and is tried, as one the vendor refused would be
+		if pick, out, ok := s.autoReset(r.Context(), nil, pl.held[0], pl.held); ok {
+			cands = []candidate{pick}
+			pl.order, pl.left = unhold(pl.order, pl.left, pick)
+			resetFirst = &AutoReset{Who: pick.p.Account.User, Text: out.Text(), Agent: pick.p.Account.Agent}
+		}
+	}
 	if len(cands) == 0 && slices.ContainsFunc(pl.left, func(w Weighed) bool { return w.Capped > 0 }) &&
 		!slices.ContainsFunc(pl.left, func(w Weighed) bool { return !w.Barred && !w.Held && w.Capped == 0 }) {
 		// every account there is is held at its usage cap: used up, as far
@@ -1577,8 +1592,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	plainFor := ""   // the account and model asked again without effort updates (#617)
 	// the key or subscription account the last try went to (#557)
 	providerKeyID, providerKeyName, providerAccount := "", "", ""
-	var other *Try     // the first failure that wasn't an allowance run out
-	autoReset := false // a Codex or Claude reset looked at, once a request
+	var other *Try                 // the first failure that wasn't an allowance run out
+	autoReset := resetFirst != nil // a Codex or Claude reset looked at, once a request
 	// what the tries' held streams sent the agent ahead of a reply (#751)
 	kept := &keptAlive{proto: from}
 	var sentMs int64 // ms from the request to its answering try going to the vendor
@@ -1828,6 +1843,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		try := Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Fixed: fixed, Fast: fast, Start: began, Done: true, Status: call.Status, Millis: time.Since(began).Milliseconds(), Error: call.Error, Queued: queued,
 			Served: call.Usage.Served, Upstream: call.Usage.Upstream, Auto: autoPicked()}
+		if resetFirst != nil {
+			// the reset spent for it before it was asked
+			try.Reset, resetFirst = resetFirst, nil
+		}
 		asName := provider.SentNameOnIn(wiresOf(r.Context()), c.p.ID, accountAgent(c.p), c.model, sent)
 		try.Swapped, try.Routed = swapped(asName, call.Usage.Served), usage.GroupRouted(asName, call.Usage.Served)
 		try.TTFT, try.FirstText = hw.first.ms()
@@ -2145,10 +2164,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// the user lets spend its resets by itself, its week used up,
 			// spends one and is asked again
 			autoReset = true
-			if pick, out, ok := s.autoReset(r.Context(), cands, c); ok {
+			if pick, out, ok := s.autoReset(r.Context(), cands, c, pl.held); ok {
 				try.Fail = failQuota
 				try.Reset = &AutoReset{Who: pick.p.Account.User, Text: out.Text(), Agent: pick.p.Account.Agent}
-				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+				s.trace.update(tr, func(t *Route) {
+					t.Tries[len(t.Tries)-1] = try
+					t.Order, t.Left = unhold(t.Order, t.Left, pick)
+				})
 				skipped = append(skipped, c.label()+": "+call.Error, pick.label()+": used one of its resets by itself ("+out.Text()+")")
 				cands = append(cands[:len(cands):len(cands)], pick)
 				continue

@@ -1008,7 +1008,11 @@ func quotaLines(qs []provider.SubscriptionQuota, asked, left bool, width int, no
 			cells = append(cells, quotaCell(w, left, now))
 		}
 		if q.Balance != "" {
-			cells = append(cells, sText.Render(q.Balance)+sMuted.Render(" left"))
+			c := sText.Render(q.Balance) + sMuted.Render(" left")
+			if q.Provider == "codex" && q.User != "" && !provider.CodexCredits(q.User) {
+				c += sFaint.Render(" · not spent") // held once a window is used up
+			}
+			cells = append(cells, c)
 		}
 		if ci != "" {
 			cells = append(cells, ci[3:])

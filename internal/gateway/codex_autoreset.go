@@ -8,6 +8,7 @@ package gateway
 import (
 	"context"
 	"log"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,8 +20,11 @@ var autoResetTimeout = 20 * time.Second
 
 // autoReset spends a reset of one of cands' Codex accounts, c — the last
 // one, just out of its allowance — first: only when every other one of
-// them sits out too. It says which account it was and what spending did.
-func (s *Server) autoReset(ctx context.Context, cands []candidate, c candidate) (candidate, provider.ResetOutcome, bool) {
+// them sits out too. held are accounts left out as they won't spend their
+// credits (planned.held): they sit out, and are out of their allowance as
+// c is, so one of them may spend one after cands'. It says which account it
+// was and what spending did.
+func (s *Server) autoReset(ctx context.Context, cands []candidate, c candidate, held []candidate) (candidate, provider.ResetOutcome, bool) {
 	for _, x := range cands {
 		if x.restKey() == c.restKey() {
 			continue
@@ -34,7 +38,7 @@ func (s *Server) autoReset(ctx context.Context, cands []candidate, c candidate) 
 		}
 	}
 	seen := map[string]bool{}
-	for _, x := range append([]candidate{c}, cands...) {
+	for _, x := range append(append([]candidate{c}, cands...), held...) {
 		a := x.p.Account
 		if a == nil || a.User == "" || seen[x.restKey()] || !provider.AutoResets(a.Agent, a.User) {
 			continue
@@ -42,6 +46,7 @@ func (s *Server) autoReset(ctx context.Context, cands []candidate, c candidate) 
 		seen[x.restKey()] = true
 		if out, ok := autoResetOf(ctx, a.Agent, a.User); ok {
 			s.Unrest(x.restKey())
+			x.capped = nil // its windows started again: held no more
 			return x, out, true
 		}
 	}
@@ -77,4 +82,17 @@ func autoResetOf(ctx context.Context, agent, user string) (provider.ResetOutcome
 		log.Printf("%s reset for %s not used: %s", agent, user, out.Text())
 	}
 	return out, err == nil && out.Code == "reset"
+}
+
+// unhold moves the account c of a plan's left, held as it won't spend its
+// credits, to its order: a reset started its windows again, and it is
+// tried.
+func unhold(order, left []Weighed, c candidate) ([]Weighed, []Weighed) {
+	i := slices.IndexFunc(left, func(w Weighed) bool { return w.ID == c.rest && w.NoCredits })
+	if i < 0 {
+		return order, left
+	}
+	w := left[i]
+	w.Unlisted, w.Capped, w.CapBack, w.NoCredits = false, 0, nil, false
+	return append(slices.Clip(order), w), slices.Delete(slices.Clone(left), i, i+1)
 }

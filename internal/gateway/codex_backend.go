@@ -152,6 +152,7 @@ func sealedReaders(cands []candidate, pl planned) ([]candidate, planned) {
 		}
 	}
 	cands, pl.order = kept, order
+	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !sealedReader(c.p) })
 	return cands, pl
 }
 
@@ -264,10 +265,13 @@ func codexAccounts(r *http.Request, model string) (string, bool) {
 	p, _, ok := provider.Resolve(id)
 	// one account named is found among them however many are on
 	pinned := h.Get(AccountHeader) != ""
-	// an account with a usage cap goes through routing, which holds it
-	// there, even alone: relayed as it came, nothing would
-	if ok && p.Account != nil && p.Account.Agent == "codex" && p.AccountCap(p.Account.User) > 0 {
-		return id, true
+	// an account with a usage cap, or set not to spend its credits, goes
+	// through routing, which holds it there, even alone: relayed as it
+	// came, nothing would
+	if ok && p.Account != nil && p.Account.Agent == "codex" {
+		if share, _ := provider.HoldShare(p, "codex", p.Account.User); share > 0 {
+			return id, true
+		}
 	}
 	// the key's holds are served, not relayed past: a key held to some
 	// models or accounts goes through routing, which holds it to them,

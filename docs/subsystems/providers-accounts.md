@@ -47,6 +47,7 @@ keys and accounts per request is in [Gateway routing and fallback](gateway-routi
 - A switched-off provider (`Off`, #163) stays saved. The gateway says it is off instead of saying the model is unknown.
 - A provider removed or switched off takes its models out of the catalog. [Agent wiring](agent-wiring.md)'s `Reseat` moves agents off them.
 - A gateway key held to some accounts (#905) is held to those of the providers its list names: a provider it names no account of, the key uses as it always did. The list keeps an account by its stable id — `logins.json`'s `id`, set once written and kept through renames; the agents that keep no logins (and plugins) are known by a hash of the account's name, so an account renamed there drops out of a key's list, holding it closer, never wider. Storing an id for every agent is a larger change, not this one's.
+- Whether a Codex account spends its credits (`CodexNoCredits` in settings, opt-out, by lower-cased email) is the gateway's routing only. It never changes which account Codex is signed in to: `NextLogin` moves off an account at its routing's spent share, 100% at most, credits or not.
 
 ## Verification
 

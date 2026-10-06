@@ -141,3 +141,20 @@ func TestUsagePageShowsCallsNotThroughMagpie(t *testing.T) {
 		t.Fatalf("the unknown provider's id is shown:\n%s", own)
 	}
 }
+
+// A Codex account set not to spend its credits says so beside them.
+func TestQuotaLinesCreditsNotSpent(t *testing.T) {
+	home(t)
+	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+	qs := []provider.SubscriptionQuota{{Provider: "codex", Name: "Codex", User: "me@example.com", Balance: "1.2K credits",
+		Windows: []provider.QuotaWindow{{Name: "5 hours", Used: 100}}}}
+	if got := strings.Join(quotaLines(qs, true, false, 200, now), "\n"); strings.Contains(got, "not spent") {
+		t.Errorf("spends them by default:\n%s", got)
+	}
+	if err := provider.SetCodexCredits("Me@example.com", false); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(quotaLines(qs, true, false, 200, now), "\n"); !strings.Contains(got, "1.2K credits left · not spent") {
+		t.Errorf("set not to:\n%s", got)
+	}
+}

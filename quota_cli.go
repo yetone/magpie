@@ -17,6 +17,7 @@ import (
 const quotaUsage = `usage: magpie quota [<provider>…] [--json]
        magpie quota reset [<codex account>] [--yes]
        magpie quota auto-reset [<codex account>] [on|off]
+       magpie quota credits [<codex account>] [on|off]
        magpie quota alert [<percent>|off] [--balance <amount>|off]
        magpie quota wait <provider|account> [--timeout <duration>] [--quiet]
        magpie quota history [<provider|account>…] [--days <n>] [--json]
@@ -36,6 +37,12 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
   then and it isn't lost; at once when the account is held up until after then.
   It is the account's standing setting, held resets or not; off stops it, and alone
   it says which accounts have it on. It is off until turned on.
+  quota credits off keeps a Codex account from spending its credits: once one of
+  its windows is used up, routing holds it as used up until that window renews and
+  the request goes to the other accounts, groups and fallbacks, or is refused with
+  why (with auto-reset on, its week used up and no one else left, it spends a reset
+  first). on, the default, lets the vendor answer on its credits then, so the task
+  goes on; alone it says which accounts don't spend theirs.
   quota alert 80 has the magpie app notify when any window of a subscription or plan
   reaches 80% used, once each time the window runs (not windows set aside, such as
   on-demand spending); --balance 5 when a balance falls to 5 or under, in its own
@@ -64,6 +71,9 @@ func quotaCmd(args []string) error {
 	}
 	if len(args) > 1 && args[1] == "auto-reset" {
 		return quotaAutoResetCmd(args[2:])
+	}
+	if len(args) > 1 && args[1] == "credits" {
+		return quotaCreditsCmd(args[2:])
 	}
 	if len(args) > 1 && args[1] == "alert" {
 		return quotaAlertCmd(args[2:])
@@ -122,7 +132,7 @@ func quotaCmd(args []string) error {
 			line += "  " + quotaCell(w)
 		}
 		if q.Balance != "" {
-			line += "  " + bold.Render(q.Balance) + muted.Render(" left")
+			line += "  " + balanceCell(q.Balance, q.Provider, q.User)
 		}
 		if q.Resets != nil {
 			line += "  " + resetsCell(q.Resets, provider.AutoResets(q.Provider, q.User))
@@ -135,6 +145,16 @@ func quotaCmd(args []string) error {
 	}
 	fmt.Println(faint.Render("  % is how much of a window is used · ↻ when it starts again · --json for scripts, or GET /v1/magpie/quotas on the gateway"))
 	return nil
+}
+
+// balanceCell is what an account holds in a line: "1.2K credits left",
+// and "· not spent" for a Codex account set not to spend its credits.
+func balanceCell(balance, id, user string) string {
+	cell := bold.Render(balance) + muted.Render(" left")
+	if id == "codex" && user != "" && !provider.CodexCredits(user) {
+		cell += muted.Render(" · not spent")
+	}
+	return cell
 }
 
 // resetsCell is a Codex account's rate-limit resets in a line: "↺ 2
@@ -243,16 +263,9 @@ func quotaAutoResetCmd(args []string) error {
 		}
 		return nil
 	}
-	if user == "" {
-		live, ok := provider.CodexSignedIn()
-		if !ok {
-			return fmt.Errorf("Codex isn't signed in: name the account")
-		}
-		user = live
-	} else if !slices.ContainsFunc(provider.Logins("codex"), func(l provider.Login) bool { return strings.EqualFold(l.User, user) }) {
-		if live, ok := provider.CodexSignedIn(); !ok || !strings.EqualFold(live, user) {
-			return fmt.Errorf("no Codex account %s", user)
-		}
+	user, err := codexAccountNamed(user)
+	if err != nil {
+		return err
 	}
 	if !set {
 		if provider.CodexAutoReset(user) {
@@ -271,6 +284,76 @@ func quotaAutoResetCmd(args []string) error {
 		fmt.Println(green.Render("✓"), user+":", "no longer uses a reset by itself")
 	}
 	return nil
+}
+
+// quotaCreditsCmd: magpie quota credits [<codex account>] [on|off] —
+// whether the account spends its credits once its allowance is used up.
+func quotaCreditsCmd(args []string) error {
+	user, set, on := "", false, false
+	for _, a := range args {
+		switch strings.ToLower(a) {
+		case "on", "off":
+			set, on = true, strings.EqualFold(a, "on")
+		case "help", "-h", "--help":
+			fmt.Println(quotaUsage)
+			return nil
+		default:
+			if user != "" {
+				return fmt.Errorf("one account at a time: %s or %s", user, a)
+			}
+			user = a
+		}
+	}
+	if !set && user == "" {
+		off := settings.Load().CodexNoCredits
+		if len(off) == 0 {
+			fmt.Println(muted.Render("every Codex account spends its credits once its allowance is used up ·"), "magpie quota credits <account> off")
+			return nil
+		}
+		for _, u := range off {
+			fmt.Println(muted.Render("○"), u, muted.Render("doesn't spend its credits: held once a window is used up"))
+		}
+		return nil
+	}
+	user, err := codexAccountNamed(user)
+	if err != nil {
+		return err
+	}
+	if !set {
+		if provider.CodexCredits(user) {
+			fmt.Println(user, "spends its credits once its allowance is used up")
+		} else {
+			fmt.Println(user, "doesn't spend its credits: once a window is used up it is held till it renews")
+		}
+		return nil
+	}
+	if err := provider.SetCodexCredits(user, on); err != nil {
+		return err
+	}
+	if on {
+		fmt.Println(green.Render("✓"), user+":", "spends its credits once its allowance is used up, so a task goes on")
+	} else {
+		fmt.Println(green.Render("✓"), user+":", "no longer spends its credits: once a window is used up, requests go to the other accounts till it renews")
+	}
+	return nil
+}
+
+// codexAccountNamed is the Codex account user names, the one Codex is
+// signed in to when "".
+func codexAccountNamed(user string) (string, error) {
+	if user == "" {
+		live, ok := provider.CodexSignedIn()
+		if !ok {
+			return "", fmt.Errorf("Codex isn't signed in: name the account")
+		}
+		return live, nil
+	}
+	if !slices.ContainsFunc(provider.Logins("codex"), func(l provider.Login) bool { return strings.EqualFold(l.User, user) }) {
+		if live, ok := provider.CodexSignedIn(); !ok || !strings.EqualFold(live, user) {
+			return "", fmt.Errorf("no Codex account %s", user)
+		}
+	}
+	return user, nil
 }
 
 // quotaAlertCmd: magpie quota alert [<percent>|off] [--balance <amount>|off]

@@ -836,6 +836,19 @@ login, or as `<provider>/<account>` when two subscriptions share it.
 `--timeout 6h` exits 1 if it passes first, `--quiet` says nothing; an
 unknown name exits 2 and Ctrl+C 130.
 
+A ChatGPT account that holds credits keeps answering once a usage window is
+used up: the vendor spends the credits, so a task goes on. That is the
+default. `magpie quota credits <account> off` (or *Use credits* on the
+account's Usage card) turns it off for that account: the gateway then holds
+it as used up till the window renews, and requests go to the other
+accounts, groups and fallbacks; with none left, the request gets a 429
+saying why, unless the account spends its resets by itself and its week is
+used up, when a reset is spent first. `magpie quota credits` lists the
+accounts set not to spend them, `magpie quota credits <account>` says one's.
+It changes the gateway's routing only, never the account Codex is signed in
+to. The credits an account holds show beside its windows in `magpie quota`,
+`magpie accounts`, the Usage page and the menu bar panel.
+
 The *Gateway* tab in the app has this as copy buttons and ready-made
 snippets (shell, curl, Python, Node) for each API, the list of model ids,
 and the recent calls; `MAGPIE_DEBUG=1` logs every call to the terminal.
@@ -1121,6 +1134,7 @@ magpie sync                     # refresh the models.dev catalog and every live 
 
 magpie quota                    # what is left of every subscription, plan and key balance
 magpie quota wait codex         # block until a Codex account has allowance again
+magpie quota credits me@example.com off   # hold a ChatGPT account at its limit, not spending credits
 ```
 
 In the app, click any value to open a filtered list; type to search or to

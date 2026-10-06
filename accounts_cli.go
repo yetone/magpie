@@ -186,7 +186,7 @@ func accountsCmd(args []string) error {
 			line += "  " + quotaCell(w)
 		}
 		if r.Balance != "" {
-			line += "  " + bold.Render(r.Balance) + muted.Render(" left")
+			line += "  " + balanceCell(r.Balance, r.Agent, r.User)
 		}
 		if r.Resets != nil {
 			line += "  " + resetsCell(r.Resets, provider.AutoResets(r.Agent, r.User))
