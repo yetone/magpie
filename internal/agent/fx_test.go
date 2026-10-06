@@ -78,3 +78,30 @@ func TestFx(t *testing.T) {
 		t.Fatalf("reset: %v", s)
 	}
 }
+
+// fx is also the JSON viewer's name: a command of that name on PATH is no
+// sign of the agent, its folder is.
+func TestFxDetected(t *testing.T) {
+	home := t.TempDir()
+	bin := t.TempDir()
+	t.Setenv("PATH", bin)
+	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if fx(home).Detected() {
+		t.Error("an fx command alone is taken for the agent")
+	}
+	if err := os.WriteFile(filepath.Join(home, ".fx"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if fx(home).Detected() {
+		t.Error("a file named .fx is taken for the agent's folder")
+	}
+	os.Remove(filepath.Join(home, ".fx"))
+	if err := os.MkdirAll(filepath.Join(home, ".fx"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !fx(home).Detected() {
+		t.Error("~/.fx is not taken for the agent")
+	}
+}

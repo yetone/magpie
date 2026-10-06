@@ -94,7 +94,11 @@ var ompProfileName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 // PI_PROFILE; "default" is none) is profiles/<name>/agent there; with none,
 // PI_CODING_AGENT_DIR — the variable Pi reads — moves it, else it is
 // agent there. omp takes that variable as given, without expanding "~".
-func ompDir(home string) string {
+//
+// shared says the folder is one omp has no claim to: PI_CODING_AGENT_DIR
+// moved it, and Pi reads that variable too, so Pi's own folder may be what
+// it names.
+func ompDir(home string) (dir string, shared bool) {
 	root := filepath.Join(home, ".omp")
 	if d := appdir.Getenv("PI_CONFIG_DIR"); d != "" {
 		root = filepath.Join(home, d)
@@ -104,16 +108,20 @@ func ompDir(home string) string {
 		p = os.Getenv("PI_PROFILE")
 	}
 	if p = strings.TrimSpace(p); p != "" && p != "default" && ompProfileName.MatchString(p) && !strings.HasSuffix(p, ".") {
-		return filepath.Join(root, "profiles", p, "agent")
+		return filepath.Join(root, "profiles", p, "agent"), false
 	}
 	if d := appdir.Getenv("PI_CODING_AGENT_DIR"); filepath.IsAbs(d) {
-		return filepath.Clean(d)
+		return filepath.Clean(d), true
 	}
-	return filepath.Join(root, "agent")
+	return filepath.Join(root, "agent"), false
 }
 
 func omp(home string) *Agent {
-	return ompAt(here(home), ompDir(home), func() ompProviderEntry { return ompProvider() })
+	dir, shared := ompDir(home)
+	a := ompAt(here(home), dir, func() ompProviderEntry { return ompProvider() })
+	// Pi's folder is no sign of omp: its config.yml or its command is
+	a.dirShared = shared
+	return a
 }
 
 // ompIn is omp in a WSL distro (see wsl.go): ~/.omp/agent, as the
