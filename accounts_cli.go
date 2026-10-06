@@ -169,6 +169,7 @@ func accountsCmd(args []string) error {
 	for _, r := range rows {
 		width = max(width, len(r.User))
 	}
+	now := time.Now() // one instant for every window's reset time
 	for _, r := range rows {
 		mark := "  "
 		switch {
@@ -183,7 +184,7 @@ func accountsCmd(args []string) error {
 		}
 		line := fmt.Sprintf("%s%-7s %-*s %s", mark, r.Agent, width, r.User, muted.Render(fmt.Sprintf("%-8s", plan)))
 		for _, w := range r.Windows {
-			line += "  " + quotaCell(w)
+			line += "  " + quotaCell(w, now)
 		}
 		if r.Balance != "" {
 			line += "  " + balanceCell(r.Balance, r.Agent, r.User)
@@ -276,18 +277,18 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 	return rows
 }
 
-// quotaCell is one window in a line: "5h 42% ↻2h13m".
-func quotaCell(w quotaSpan) string {
+// quotaCell is one window in a line as of now: "5h 42% ↻2h13m 14:13".
+func quotaCell(w quotaSpan, now time.Time) string {
 	name := strings.NewReplacer(" hours", "h", " hour", "h", " days", "d", " day", "d", " · ", " ").Replace(w.Name)
 	cell := fmt.Sprintf("%s %.0f%%", name, w.Used)
 	if w.Display != "" {
 		cell += " (" + w.Display + ")"
 	}
 	if w.ResetsAt != nil {
-		if !w.ResetsAt.After(time.Now()) {
+		if !w.ResetsAt.After(now) {
 			cell += muted.Render(" · reset time passed " + w.ResetsAt.Local().Format("Jan 2 15:04"))
 		} else {
-			cell += muted.Render(" ↻" + untilShort(time.Until(*w.ResetsAt)) + " " + provider.ResetClock(*w.ResetsAt, time.Now()))
+			cell += muted.Render(" ↻" + untilShort(w.ResetsAt.Sub(now)) + " " + provider.ResetClock(*w.ResetsAt, now))
 		}
 	}
 	return cell
