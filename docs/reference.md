@@ -668,7 +668,12 @@ spare, the one whose allowance renews soonest first), `order` (the first
 model until it can't answer, then the next), `rotate` (each turn to the next
 member), `usage` (least used first) or `pace` (weekly pace: the account with
 the most of its week left per hour until it renews first, so less of a week
-is lost at its reset). `stays=` is how long a conversation
+is lost at its reset). A key has no allowance to weigh, so it goes by its
+order or by what magpie sent it lately — except a sub2api key its owner gave
+a 5-hour, day or 7-day limit: with the provider's Balance URL set to the
+relay's `/v1/usage`, its card shows those windows and routing weighs it by
+them as it does a subscription, resting it till the window renews once the
+relay says `api key 7天限额已用完`. `stays=` is how long a conversation
 stays with the key or account that answered it: `auto` (the default, while
 the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
 `models=` replaces the whole list, in order; a bare model id works when only
