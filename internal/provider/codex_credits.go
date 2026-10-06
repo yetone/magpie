@@ -7,7 +7,10 @@ package provider
 // Turned off for an account, routing holds it as used up at 100% of a
 // window, as a usage cap holds it at its share (account_caps.go): never
 // tried till the window renews, so the user's other accounts, groups and
-// fallbacks take the request, and none spends the credits. An account with
+// fallbacks take the request rather than it spending the credits. The hold
+// goes by magpie's latest reading (Allowances, read again about every
+// minute), so a request in the minute after a window fills may still reach
+// the account. An account with
 // no credits is refused by the vendor at 100% either way; the switch only
 // spares it the request.
 //

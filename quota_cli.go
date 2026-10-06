@@ -38,11 +38,12 @@ const quotaUsage = `usage: magpie quota [<provider>…] [--json]
   It is the account's standing setting, held resets or not; off stops it, and alone
   it says which accounts have it on. It is off until turned on.
   quota credits off keeps a Codex account from spending its credits: once one of
-  its windows is used up, routing holds it as used up until that window renews and
-  the request goes to the other accounts, groups and fallbacks, or is refused with
-  why (with auto-reset on, its week used up and no one else left, it spends a reset
-  first). on, the default, lets the vendor answer on its credits then, so the task
-  goes on; alone it says which accounts don't spend theirs.
+  its windows is used up, by magpie's latest reading (refreshed about every
+  minute), routing holds it as used up until that window renews and the request
+  goes to the other accounts, groups and fallbacks, or is refused with why (with
+  auto-reset on, its week used up and no one else left, it spends a reset first).
+  on, the default, lets the vendor answer on its credits then, so the task goes
+  on; alone it says which accounts don't spend theirs.
   quota alert 80 has the magpie app notify when any window of a subscription or plan
   reaches 80% used, once each time the window runs (not windows set aside, such as
   on-demand spending); --balance 5 when a balance falls to 5 or under, in its own
@@ -311,7 +312,7 @@ func quotaCreditsCmd(args []string) error {
 			return nil
 		}
 		for _, u := range off {
-			fmt.Println(muted.Render("○"), u, muted.Render("doesn't spend its credits: held once a window is used up"))
+			fmt.Println(muted.Render("○"), u, muted.Render("doesn't spend its credits: held once magpie reads a window used up"))
 		}
 		return nil
 	}
@@ -323,7 +324,7 @@ func quotaCreditsCmd(args []string) error {
 		if provider.CodexCredits(user) {
 			fmt.Println(user, "spends its credits once its allowance is used up")
 		} else {
-			fmt.Println(user, "doesn't spend its credits: once a window is used up it is held till it renews")
+			fmt.Println(user, "doesn't spend its credits: once magpie reads a window used up it is held till it renews")
 		}
 		return nil
 	}
@@ -333,7 +334,7 @@ func quotaCreditsCmd(args []string) error {
 	if on {
 		fmt.Println(green.Render("✓"), user+":", "spends its credits once its allowance is used up, so a task goes on")
 	} else {
-		fmt.Println(green.Render("✓"), user+":", "no longer spends its credits: once a window is used up, requests go to the other accounts till it renews")
+		fmt.Println(green.Render("✓"), user+":", "no longer spends its credits: once magpie reads a window used up, requests go to the other accounts till it renews")
 	}
 	return nil
 }
