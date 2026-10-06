@@ -1,0 +1,53 @@
+{
+  "user_id": "user-1",
+  "account_id": "acct-1",
+  "email": "me@example.com",
+  "plan_type": "pro",
+  "rate_limit": {
+    "allowed": false,
+    "limit_reached": true,
+    "primary_window": {
+      "used_percent": 100,
+      "limit_window_seconds": 604800,
+      "reset_after_seconds": 384767,
+      "reset_at": 1791640059
+    },
+    "secondary_window": null
+  },
+  "code_review_rate_limit": null,
+  "additional_rate_limits": null,
+  "model_usage": {
+    "gpt-6-astra": {
+      "available": true,
+      "available_at": null,
+      "credits_would_enable": false
+    }
+  },
+  "credits": {
+    "has_credits": true,
+    "unlimited": false,
+    "overage_limit_reached": false,
+    "balance": "28263.2358130000",
+    "approx_local_messages": [
+      7066,
+      36742
+    ],
+    "approx_cloud_messages": [
+      1131,
+      7066
+    ]
+  },
+  "spend_control": {
+    "reached": false,
+    "individual_limit": null
+  },
+  "rate_limit_reached_type": {
+    "type": "rate_limit_reached",
+    "details": "default"
+  },
+  "promo": null,
+  "rate_limit_reset_credits": {
+    "available_count": 1,
+    "applicable_available_count": 1
+  }
+}

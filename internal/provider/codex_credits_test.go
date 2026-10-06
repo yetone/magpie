@@ -37,7 +37,7 @@ func TestCodexCreditsBalance(t *testing.T) {
 			old := CodexBase
 			CodexBase = fake.URL + "/backend-api/codex"
 			defer func() { CodexBase = old }()
-			plan, windows, _, credits, err := codexWindows(context.Background(), "tok", "acct-1")
+			plan, windows, _, credits, _, err := codexWindows(context.Background(), "tok", "acct-1")
 			if err != nil || plan != "plus" || len(windows) != 1 {
 				t.Fatalf("plan %q, windows %v, err %v", plan, windows, err)
 			}

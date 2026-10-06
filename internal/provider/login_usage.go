@@ -283,7 +283,7 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 			}
 		} else {
 			var plan string
-			if plan, q.Windows, q.Resets, q.Balance, err = codexWindows(ctx, tok, accountID); plan != "" {
+			if plan, q.Windows, q.Resets, q.Balance, q.Held, err = codexWindows(ctx, tok, accountID); plan != "" {
 				q.Plan = plan
 			}
 			q.Until = codexUntil(codexLoginAuth(l), time.Now())
@@ -295,14 +295,17 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	return q
 }
 
-// CodexUsedUp reports whether the ChatGPT account Codex is signed in to has
-// used up its allowance for now; false when that isn't known.
+// CodexUsedUp reports whether the ChatGPT account Codex is signed in to is
+// out for the Codex app, which then sends nothing for it (codexHeld): out
+// of its allowance with no credits to go on with. A window at 100% with
+// credits left isn't (the Codex app keeps sending, and the backend
+// answers). False when that isn't known.
 func CodexUsedUp(ctx context.Context) bool {
 	// read as LoginUsage has it, fetched at most once a minute: the agent
 	// package asks on every catalog sync
 	u := LoginUsage(ctx, "codex")
 	for _, l := range Logins("codex") {
-		if q, ok := u[l.User]; l.Active && ok && q.Error == "" && usedUp(q) {
+		if q, ok := u[l.User]; l.Active && ok && q.Error == "" && q.Held {
 			return true
 		}
 	}

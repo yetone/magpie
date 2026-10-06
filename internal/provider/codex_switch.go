@@ -289,15 +289,16 @@ func setLoginReturn(agent string, r loginReturn) {
 	}
 }
 
-// codexWasUsedUp is whether the account Codex is signed in to was out of
-// its allowance at the last look.
+// codexWasUsedUp is whether the account Codex is signed in to was out
+// (CodexUsedUp) at the last look.
 var codexWasUsedUp atomic.Bool
 
 // noteCodexUsedUp tells the agents' files when the account Codex is signed
-// in to runs out of its allowance, or has it back: the Codex app sends
-// nothing at all for an account that is out, a magpie model's turn
-// included, so the agent package then makes magpie Codex's provider, and
-// puts it back beside the sign-in after (#540). Only a change is told.
+// in to runs out (CodexUsedUp: of its allowance and its credits), or has
+// room again: the Codex app sends nothing at all for an account that is
+// out, a magpie model's turn included, so the agent package then makes
+// magpie Codex's provider, and puts it back beside the sign-in after
+// (#540). Only a change is told.
 func noteCodexUsedUp(now bool) {
 	if codexWasUsedUp.Swap(now) != now {
 		catalog.Touched()

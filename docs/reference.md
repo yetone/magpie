@@ -852,7 +852,13 @@ native model or disconnecting removes `model_provider` and the catalog. The
 still be opened. Codex won't load its config at all when `model_provider =
 "magpie"` has no table ("Model provider `magpie` not found"). If another
 tool leaves that state behind, magpie writes the table back the next time
-it syncs. Your ChatGPT sign-in is never touched.
+it syncs. Signed in to ChatGPT (the sign-in field's default), Codex keeps
+its own provider and sign-in, and magpie's models join its list through
+`openai_base_url`. magpie becomes Codex's provider then only while the
+Codex app holds the account (OpenAI no longer allows it and it has no
+credits left), since the app sends nothing for it, and steps back once the
+account has room again. A window at 100% with credits left doesn't count:
+Codex keeps sending on those. Your ChatGPT sign-in is never touched.
 Codex reads its model list at start-up, so restart it after a switch.
 
 **OpenCode, Pi, Crush** get a `magpie` provider entry and `magpie/provider/model`.

@@ -193,7 +193,7 @@ func SpendExpiringCodexResets(ctx context.Context) {
 			if err != nil {
 				return nil, nil, err
 			}
-			_, windows, resets, _, err := codexWindows(ViaLogin(ctx, "codex", who), tok, accountID)
+			_, windows, resets, _, _, err := codexWindows(ViaLogin(ctx, "codex", who), tok, accountID)
 			return windows, resets, err
 		}, func() (ResetOutcome, error) {
 			// one spend at a time, with the week's used-up one too
@@ -223,7 +223,7 @@ var stillExpiring = func(ctx context.Context, who string) bool {
 	if err != nil {
 		return false
 	}
-	_, windows, resets, _, err := codexWindows(ViaLogin(ctx, "codex", who), tok, accountID)
+	_, windows, resets, _, _, err := codexWindows(ViaLogin(ctx, "codex", who), tok, accountID)
 	return err == nil && spendExpiringNow(windows, resets, time.Now())
 }
 

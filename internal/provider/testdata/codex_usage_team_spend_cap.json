@@ -1,0 +1,76 @@
+{
+  "user_id": "user-1",
+  "account_id": "acct-1",
+  "email": "me@example.com",
+  "plan_type": "team",
+  "rate_limit": {
+    "allowed": false,
+    "limit_reached": true,
+    "primary_window": {
+      "used_percent": 100,
+      "limit_window_seconds": 18000,
+      "reset_after_seconds": 9452,
+      "reset_at": 1791264745
+    },
+    "secondary_window": {
+      "used_percent": 63,
+      "limit_window_seconds": 604800,
+      "reset_after_seconds": 360157,
+      "reset_at": 1791615450
+    }
+  },
+  "code_review_rate_limit": null,
+  "additional_rate_limits": null,
+  "model_usage": {
+    "gpt-6-astra": {
+      "available": false,
+      "available_at": "2026-10-06T05:32:26.047406Z",
+      "credits_would_enable": false
+    }
+  },
+  "credits": {
+    "has_credits": true,
+    "unlimited": false,
+    "overage_limit_reached": false,
+    "balance": null,
+    "approx_local_messages": null,
+    "approx_cloud_messages": null
+  },
+  "spend_control": {
+    "reached": true,
+    "individual_limit": {
+      "source": "account_user_spend_controls",
+      "unit": "credit",
+      "limit": "0",
+      "used": "0.0",
+      "remaining": "0.0",
+      "used_percent": 100,
+      "remaining_percent": 0,
+      "reset_after_seconds": 2235907,
+      "reset_at": 1793491201
+    }
+  },
+  "rate_limit_reached_type": {
+    "type": "workspace_owner_usage_limit_reached",
+    "details": null
+  },
+  "rate_limit_upsell": {
+    "banner_type": "workspace_owner_usage_limit_reached",
+    "title": "Usage limit reached",
+    "description": "You've reached your usage limit. Your limit will reset {time}, or you can increase your limits",
+    "ctas": [
+      {
+        "action": "increase_spend_cap",
+        "label": "Increase Usage Limit"
+      }
+    ],
+    "reset_at": 1793491201,
+    "referral": null,
+    "request_url": null
+  },
+  "promo": null,
+  "rate_limit_reset_credits": {
+    "available_count": 2,
+    "applicable_available_count": 2
+  }
+}

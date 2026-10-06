@@ -134,6 +134,11 @@ func (c *lastQuotasT) reading(key string) (SubscriptionQuota, bool) {
 	out, ok := c.reported(key)
 	if ok {
 		out.Windows = elapsed(out.Windows, time.Now())
+		// held went with a window used up: once none is, the reading
+		// can't say the account is still held
+		if out.Held && !usedUp(out) {
+			out.Held = false
+		}
 	}
 	return out, ok
 }
