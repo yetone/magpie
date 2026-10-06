@@ -67,6 +67,7 @@ named variable instances are offered without arbitrary axis controls.
 
 ### Shared UI rules
 
+- Routing's live stage has a separate **Current allowances** section (`renderCurrentQuotas` in [`assets/routing.js`](../../internal/gui/assets/routing.js), #1016). It reads the Usage page's `/api/usage/quotas` endpoint, at most once a minute while visible, and shows the cards of the providers on stage, each named by its account or key. A single key and an answering or resting request keep their windows visible. The meters, reset times, dated stale readings and Used / Left preference reuse Usage's helpers. A failed fetch retains the last cards with an unavailable notice; an empty successful response clears them. These are current provider readings, not what selected the request: a pinned request, a past day and replay hide them and stop polling. Routing order and recorded trace data are unchanged. `routing-current-quotas.test.cjs` covers this in four languages and both engines at narrow width.
 - Every user-visible string has zh, ja and de translations with the same placeholders. `gui-ja.test.cjs` and `gui-de.test.cjs` fail on a missing one.
 - A click never moves the page. Code scrolls a view only with the reader's event in hand (`scrollOnPurpose`); `click-scroll.test.cjs` guards this.
 - There are no native `<select>` elements and no colored left-border stripes. State is shown with a dot or a swatch.
