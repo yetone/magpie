@@ -88,10 +88,11 @@ jobs:
           build/race-shards.sh internal/gateway "$RUNNER_TEMP/gateway.race" "$(getconf _NPROCESSORS_ONLN)" -test.timeout=20m
           go test -race -tags "${{ steps.tags.outputs.tags }}" ./internal/redact/
 
-      # Account usage mixes cached results with concurrent fetches.
+      # Account usage mixes cached results with concurrent fetches, and a
+      # refresh one test starts can still be landing in the next (#1023).
       - name: Race account usage
         if: runner.os != 'Windows'
-        run: go test -race -tags "${{ steps.tags.outputs.tags }}" ./internal/provider/ -run '^Test(LoginUsage|SubscriptionUsageEachAccount)'
+        run: go test -race -tags "${{ steps.tags.outputs.tags }}" ./internal/provider/ -run '^Test(LoginUsage|SubscriptionUsage)'
 
       # Some tests fake a home through $HOME, which Windows doesn't read
       # (USERPROFILE), or assume Unix file modes. Compile the full suite
