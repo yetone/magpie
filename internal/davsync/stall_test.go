@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -82,94 +83,112 @@ func (s *slowDAV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"v1"`)
 		w.WriteHeader(http.StatusOK)
 		for i := 0; i < len(data); i += s.chunk {
+			if i > 0 { // the answer ends with its last chunk
+				time.Sleep(s.gap)
+			}
 			if s.stopAt > 0 && i >= s.stopAt {
 				s.stop(r)
 				return
 			}
 			w.Write(data[i:min(i+s.chunk, len(data))])
 			w.(http.Flusher).Flush()
-			time.Sleep(s.gap)
 		}
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
-// narrowLine serves h, and gives the client that reaches it, with the
-// line's buffers held small. The system hands a writer room in bursts: Linux wakes it once a third
-// of its send buffer has drained and opens the receiver's window by as much,
-// and with the MBs it tunes both up to on a fast loopback, a body moving at
-// 6.4 MB/s went 150–290 ms between two of magpie's writes, which a test's
-// watchdog of 300 ms didn't always outlast though the line never stopped (at
-// the real 60 s that is a line under ~25 KB/s). Small buffers keep the
-// bursts to a chunk or two; what sits in buffers after the body is handed
-// over is the server's tail.
-func narrowLine(t *testing.T, h http.Handler) (*httptest.Server, *http.Client) {
-	const buffer = 128 << 10
-	srv := httptest.NewUnstartedServer(h)
-	srv.Listener = narrowListener{srv.Listener, buffer}
-	srv.Start()
-	t.Cleanup(srv.Close)
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	dial := tr.DialContext
-	tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		c, err := dial(ctx, network, addr)
-		if err == nil {
-			err = c.(*net.TCPConn).SetWriteBuffer(buffer)
-		}
-		return c, err
+// pipeLine serves h on in-process pipes, and gives the client that reaches
+// it. A pipe holds no bytes of its own: what magpie has handed over is what
+// the server has read, so the server's gaps and tail are the line's. Run in
+// a synctest bubble, the clock moves only once everything waits, so the
+// watchdog keeps its real length, and a test process the system holds
+// still (a loaded machine, swapping) doesn't move it: on a TCP line with
+// the watchdog scaled down to 300 ms, a test held still that long woke to
+// the watchdog's timer before the write it would have seen.
+func pipeLine(t *testing.T, h http.Handler) *http.Client {
+	l := &pipeListener{conns: make(chan net.Conn), done: make(chan struct{})}
+	srv := &http.Server{Handler: h}
+	go srv.Serve(l)
+	tr := &http.Transport{DialContext: l.dial}
+	// a bubble ends with every goroutine in it: a request a failed test
+	// left is let run out on the bubble's clock
+	t.Cleanup(func() {
+		tr.CloseIdleConnections()
+		srv.Shutdown(context.Background())
+	})
+	return &http.Client{Transport: stallTransport{tr}}
+}
+
+type pipeListener struct {
+	conns chan net.Conn
+	done  chan struct{}
+	once  sync.Once
+}
+
+func (l *pipeListener) dial(ctx context.Context, _, _ string) (net.Conn, error) {
+	c, s := net.Pipe()
+	select {
+	case l.conns <- s:
+		return c, nil
+	case <-l.done:
+		return nil, net.ErrClosed
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
-	t.Cleanup(tr.CloseIdleConnections)
-	return srv, &http.Client{Transport: stallTransport{tr}}
 }
 
-type narrowListener struct {
-	net.Listener
-	buffer int
-}
-
-func (l narrowListener) Accept() (net.Conn, error) {
-	c, err := l.Listener.Accept()
-	if err == nil {
-		err = c.(*net.TCPConn).SetReadBuffer(l.buffer)
+func (l *pipeListener) Accept() (net.Conn, error) {
+	select {
+	case c := <-l.conns:
+		return c, nil
+	case <-l.done:
+		return nil, net.ErrClosed
 	}
-	return c, err
 }
 
-// A backup that takes far longer than the watchdog to go up and come back
-// down, but never stops moving, is written and read in full (#657: 43 MB
-// at 305 KB/s took 2.4 minutes, and a sync was given 2).
+func (l *pipeListener) Close() error   { l.once.Do(func() { close(l.done) }); return nil }
+func (l *pipeListener) Addr() net.Addr { return pipeAddr{} }
+
+type pipeAddr struct{}
+
+func (pipeAddr) Network() string { return "pipe" }
+func (pipeAddr) String() string  { return "pipe" }
+
+// A backup that takes longer than the watchdog to go up and come back down,
+// but never stops moving, is written and read in full (#657: 43 MB at
+// 305 KB/s took 2.4 minutes, and a sync was given 2). The watchdog is the
+// real one, on the bubble's clock.
 func TestSlowTransferIsNotCutShort(t *testing.T) {
-	shortStall(t, 300*time.Millisecond, 300*time.Millisecond)
-	// the PUT's last MBs cross the line twice the watchdog after magpie has
-	// handed them all over
-	s := &slowDAV{chunk: 256 << 10, gap: 40 * time.Millisecond, tail: 2 * stallAfter}
-	srv, client := narrowLine(t, s)
-	d, err := newDAV(Config{URL: srv.URL})
-	if err != nil {
-		t.Fatal(err)
-	}
-	d.client = client
-	// ~20 MB at 6.4 MB/s: 3 s each way
-	data := bytes.Repeat([]byte("magpie skill "), (20<<20)/13)
-	ctx := context.Background()
-	start := time.Now()
-	if _, err := d.put(ctx, data, ""); err != nil {
-		t.Fatalf("slow upload: %v", err)
-	}
-	up := time.Since(start)
-	start = time.Now()
-	got, _, err := d.get(ctx, version{})
-	if err != nil {
-		t.Fatalf("slow download: %v", err)
-	}
-	down := time.Since(start)
-	if !bytes.Equal(got, data) {
-		t.Fatalf("read back %d bytes of %d", len(got), len(data))
-	}
-	if up < 5*stallAfter || down < 5*stallAfter {
-		t.Fatalf("the transfers (%s up, %s down) weren't slow enough to test anything", up, down)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		// #657's line; the PUT's last bytes cross it twice the watchdog
+		// after magpie has handed them all over
+		s := &slowDAV{chunk: 305 << 10, gap: time.Second, tail: 2 * stallAfter}
+		d, err := newDAV(Config{URL: "http://dav.test"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		d.client = pipeLine(t, s)
+		data := bytes.Repeat([]byte("magpie skill "), (43<<20)/13)
+		ctx := context.Background()
+		start := time.Now()
+		if _, err := d.put(ctx, data, ""); err != nil {
+			t.Fatalf("slow upload: %v", err)
+		}
+		up := time.Since(start)
+		start = time.Now()
+		got, _, err := d.get(ctx, version{})
+		if err != nil {
+			t.Fatalf("slow download: %v", err)
+		}
+		down := time.Since(start)
+		if !bytes.Equal(got, data) {
+			t.Fatalf("read back %d bytes of %d", len(got), len(data))
+		}
+		if up < 2*time.Minute || down < 2*time.Minute {
+			t.Fatalf("the transfers (%s up, %s down) took no longer than a sync used to be given", up, down)
+		}
+	})
 }
 
 // A server that stops in the middle, either way, fails the sync soon after
