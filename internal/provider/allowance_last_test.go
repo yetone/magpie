@@ -25,9 +25,7 @@ func TestAllowancesBeforeFirstReading(t *testing.T) {
 		loginUsageCache.Lock()
 		loginUsageCache.m = nil
 		loginUsageCache.Unlock()
-		usedCache.Lock()
-		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
-		usedCache.Unlock()
+		forgetAllowances()
 		lastQuotas.Lock()
 		lastQuotas.m, lastQuotas.loaded = nil, false
 		lastQuotas.Unlock()
@@ -51,13 +49,15 @@ func TestAllowancesBeforeFirstReading(t *testing.T) {
 			"primary_window": map[string]any{"used_percent": used[r.Header.Get("chatgpt-account-id")], "limit_window_seconds": 18000}}})
 	}))
 	t.Cleanup(fake.Close)
-	t.Cleanup(func() { close(hold) })
 	old := CodexBase
 	CodexBase = fake.URL + "/backend-api/codex"
 	t.Cleanup(func() { CodexBase = old })
 	oldWait := firstWait
 	firstWait = 50 * time.Millisecond
 	t.Cleanup(func() { firstWait = oldWait })
+	// the reading held lands while CodexBase, which it reads, is still the
+	// fake's, and is forgotten with it
+	t.Cleanup(func() { close(hold); forgetAllowances() })
 
 	// read once, as before the restart: kept on disk
 	if u := LoginUsage(context.Background(), "codex"); len(u) != 2 {

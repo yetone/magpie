@@ -144,20 +144,12 @@ func TestLoginRoom(t *testing.T) {
 	// has no reading for. Marked fresh so Allowances answers from them rather
 	// than refetching over a test's fake home.
 	usedCache.Lock()
-	if usedCache.m == nil {
-		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
-	}
 	usedCache.m["codex"] = map[string]Allowance{
 		"me@example.com":    {{Used: 100, Span: 5 * time.Hour}},
 		"spare@example.com": {{Used: 10, Span: 5 * time.Hour}},
 	}
 	usedCache.at["codex"] = time.Now()
 	usedCache.Unlock()
-	t.Cleanup(func() {
-		usedCache.Lock()
-		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
-		usedCache.Unlock()
-	})
 
 	room := loginRoom("codex")
 	if known, spent := room("me@example.com"); !known || !spent {
