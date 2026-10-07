@@ -51,28 +51,41 @@ echo '{"type":"stream_event","event":{"type":"message_stop"}}'
 	}
 }
 
-// A write to a Claude Code that has exited says how it ended and what it
-// said on stderr, not the pipe Wait closed under the write ("write |1:
+// A write to a Claude Code that has exited says how it ended and the last
+// it said on stderr, not the pipe Wait closed under the write ("write |1:
 // file already closed", CI on main, where the run's first prompt failed
-// so and nothing told why).
+// so and nothing told why): the cause after any warnings before it. One
+// magpie ended says so, not how a kill ended it.
 func TestClaudeEndedBeforeItsInputSaysWhy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("a shell script stands in for Claude Code")
 	}
 	dir := t.TempDir()
-	testenv.Program(t, filepath.Join(dir, "claude"), "#!/bin/sh\nread -r line\necho 'Not logged in · Please run /login' >&2\nexit 3\n")
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	s := New()
 	t.Cleanup(s.subscription.abortAll)
 	req := &Request{Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "hi"}}}}}
-	run, events, err := s.subscription.start(context.Background(), req, "claude-sonnet-5", "", "", nil)
-	if err != nil {
-		t.Fatal(err)
+	write := func(script string, end func(*subscriptionRun)) error {
+		t.Helper()
+		testenv.Program(t, filepath.Join(dir, "claude"), script)
+		run, events, err := s.subscription.start(context.Background(), req, "claude-sonnet-5", "", "", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if end != nil {
+			end(run)
+		}
+		for range events { // until the run ends with its Claude Code
+		}
+		return run.setEffort("high")
 	}
-	for range events { // until the run ends with its Claude Code
+	warnings := strings.Repeat("echo '(node:1) Warning: something deprecated that node prints before anything else' >&2\n", 8)
+	err := write("#!/bin/sh\nread -r line\n"+warnings+"echo 'Not logged in · Please run /login' >&2\nexit 3\n", nil)
+	if err == nil || !strings.Contains(err.Error(), "exit status 3") || !strings.HasSuffix(err.Error(), "Not logged in · Please run /login") || !strings.Contains(err.Error(), "…") {
+		t.Errorf("a write after Claude Code exited: %v", err)
 	}
-	err = run.setEffort("high")
-	if err == nil || !strings.Contains(err.Error(), "exit status 3") || !strings.Contains(err.Error(), "Not logged in") {
-		t.Fatalf("a write after Claude Code exited: %v", err)
+	err = write("#!/bin/sh\nread -r line\nsleep 30\n", func(run *subscriptionRun) { run.abort() })
+	if err == nil || !strings.Contains(err.Error(), "ended by magpie") || strings.Contains(err.Error(), "signal") {
+		t.Errorf("a write after magpie ended Claude Code: %v", err)
 	}
 }

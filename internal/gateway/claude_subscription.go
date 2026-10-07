@@ -56,6 +56,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/netproxy"
@@ -126,9 +127,11 @@ type subscriptionRun struct {
 	outputs []*os.File
 	reading sync.WaitGroup
 	// exited is closed once Claude Code has exited and its output is read,
-	// exit then how it ended (Wait's error)
+	// exit then how it ended (Wait's error); killed says magpie ended it
+	// (abort) while it ran
 	exited chan struct{}
 	exit   error
+	killed bool
 	tmp    string
 	// schema says the client asked for an answer fitting a JSON schema,
 	// which Claude Code gives as its StructuredOutput call
@@ -2878,7 +2881,8 @@ func (r *subscriptionRun) launch() error {
 // tell writes line to Claude Code's input. Wait closes that input as
 // Claude Code exits, and a write after it failed "write |1: file already
 // closed", which said nothing of why: one Claude Code no longer reads says
-// how it ended and the last it wrote to stderr.
+// how it ended, or that magpie ended it, and the last it wrote to stderr —
+// the cause comes last, after any warnings before it.
 func (r *subscriptionRun) tell(line []byte) error {
 	_, err := r.stdin.Write(append(line, '\n'))
 	if err == nil {
@@ -2898,13 +2902,28 @@ func (r *subscriptionRun) tell(line []byte) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	why := "exited before it read its input"
-	if r.exit != nil {
+	if r.killed {
+		why = "was ended by magpie before it read its input"
+	} else if r.exit != nil {
 		why += " (" + r.exit.Error() + ")"
 	}
 	if said := strings.TrimSpace(r.stderr.String()); said != "" {
-		why += ": " + clipText(said, 300)
+		why += ": " + clipTail(said, 300)
 	}
 	return errors.New(why)
+}
+
+// clipTail is s's last n bytes at most, cut at a rune, "…" before them
+// where some went.
+func clipTail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	i := len(s) - n
+	for i < len(s) && !utf8.RuneStart(s[i]) {
+		i++
+	}
+	return "…" + s[i:]
 }
 
 // outputDrain is how long the run's output is read once Claude Code has
@@ -2932,6 +2951,13 @@ func (r *subscriptionRun) drain() {
 func (r *subscriptionRun) abort() {
 	r.mu.Lock()
 	t := r.tree
+	if t != nil && r.exited != nil {
+		select {
+		case <-r.exited:
+		default:
+			r.killed = true
+		}
+	}
 	r.mu.Unlock()
 	if t != nil {
 		t.Kill()
