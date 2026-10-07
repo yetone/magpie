@@ -128,6 +128,9 @@ func grokAlsoOn(p Provider) []Provider {
 var grokHomeUsage struct {
 	sync.Mutex
 	m map[string]loginUsageEntry // home
+	// dropped: when StaleAllowance dropped a home's reading, by home; a
+	// reading begun before was asked too soon and isn't kept
+	dropped map[string]time.Time
 }
 
 // grokLoginUsage is each Grok account's allowance, by user, as LoginUsage
@@ -150,15 +153,18 @@ func grokLoginUsage(ctx context.Context) map[string]SubscriptionQuota {
 		wg.Add(1)
 		go func(g grokLogin) {
 			defer wg.Done()
+			began := time.Now()
 			q := keepLast(grokUsageAt(ctx, g.Home), g.User)
 			if q.Error != "" && ok {
 				q = e.q // a hiccup keeps what was known
 			}
 			u.Lock()
-			if u.m == nil {
-				u.m = map[string]loginUsageEntry{}
+			if u.dropped[g.Home].Before(began) {
+				if u.m == nil {
+					u.m = map[string]loginUsageEntry{}
+				}
+				u.m[g.Home] = loginUsageEntry{at: time.Now(), q: q}
 			}
-			u.m[g.Home] = loginUsageEntry{at: time.Now(), q: q}
 			u.Unlock()
 			mu.Lock()
 			out[g.User] = q

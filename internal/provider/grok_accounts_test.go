@@ -2,10 +2,12 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -140,5 +142,65 @@ func TestGrokAccounts(t *testing.T) {
 	}
 	if _, err := os.Stat(again); !os.IsNotExist(err) || len(Logins("grok")) != 1 {
 		t.Fatalf("forgotten: %v %+v", err, Logins("grok"))
+	}
+}
+
+// A built-in Grok account that says it has run out while its allowance is
+// being read is read again from xAI once that reading is back: the reading
+// out was asked before, and isn't kept for the next to find.
+func TestGrokStaleMidRead(t *testing.T) {
+	home := signIn(t)
+	t.Setenv("GROK_HOME", filepath.Join(home, ".grok"))
+	grokSignedIn(t, GrokHome(), "me@x.ai")
+	grokHomeUsage.Lock()
+	oldCache, oldDropped := grokHomeUsage.m, grokHomeUsage.dropped
+	grokHomeUsage.m, grokHomeUsage.dropped = nil, nil
+	grokHomeUsage.Unlock()
+	hold := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(hold) }) }
+	var hits atomic.Int32
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		used := 100
+		if hits.Add(1) == 1 {
+			<-hold
+			used = 12
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"config":{"creditUsagePercent":%d,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY"}}}`, used)
+	}))
+	old := GrokBase
+	GrokBase = fake.URL
+	oldWait := firstWait
+	firstWait = time.Millisecond
+	t.Cleanup(func() {
+		release()
+		forgetAllowances()
+		fake.Close()
+		GrokBase, firstWait = old, oldWait
+		grokHomeUsage.Lock()
+		grokHomeUsage.m, grokHomeUsage.dropped = oldCache, oldDropped
+		grokHomeUsage.Unlock()
+	})
+
+	Allowances("grok")
+	for hits.Load() < 1 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	StaleAllowance("grok", "me@x.ai") // out, as the request found
+	release()
+	firstWait = 5 * time.Second
+	for deadline := time.Now().Add(5 * time.Second); hits.Load() < 2; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("not read again from xAI")
+		}
+	}
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		if used, _ := Allowances("grok")["me@x.ai"].For("grok-4", time.Now()); used == 100 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("allowance %+v, want 100%% from the second reading", Allowances("grok")["me@x.ai"])
+		}
 	}
 }

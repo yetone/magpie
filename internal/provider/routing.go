@@ -536,14 +536,19 @@ func StaleAllowance(agent, user string) {
 	delete(loginUsageCache.m, key)
 	delete(loginUsageCache.pending, key) // nor a reading asked for before
 	loginUsageCache.Unlock()
-	// the built-in keeps Grok's usage by home; a Grok moved to its plugin
-	// keeps it as "plugin:grok"'s, the line above
+	// the built-in keeps Grok's usage by home, a reading out for it not
+	// kept either; a Grok moved to its plugin keeps it as "plugin:grok"'s,
+	// the lines above
 	if agent == "grok" {
 		gs := grokLogins()
 		grokHomeUsage.Lock()
 		for _, g := range gs {
 			if strings.EqualFold(g.User, user) {
 				delete(grokHomeUsage.m, g.Home)
+				if grokHomeUsage.dropped == nil {
+					grokHomeUsage.dropped = map[string]time.Time{}
+				}
+				grokHomeUsage.dropped[g.Home] = time.Now()
 			}
 		}
 		grokHomeUsage.Unlock()
