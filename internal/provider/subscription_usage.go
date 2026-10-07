@@ -147,7 +147,9 @@ var subscriptionUsageCache struct {
 // OnSubscriptionUsage sets what is told when a refresh has landed, for what
 // shows a stale copy meanwhile (the menu bar's text) to read the new one; nil
 // tells nothing. It is held atomically: a refresh runs in the background and
-// may be under way while it is set (#1023).
+// may be under way while it is set (#1023). It is told before the refresh
+// counts as done, so whoever waits for the refresh waits for it too: it
+// must not block.
 func OnSubscriptionUsage(f func()) {
 	if f == nil {
 		onSubscriptionUsage.Store(nil)
