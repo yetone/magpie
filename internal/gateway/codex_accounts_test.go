@@ -21,14 +21,12 @@ import (
 // saved accounts spares (acct-2, …) on beside it in magpie.
 func codexSignedIn(t *testing.T, spares ...string) {
 	t.Helper()
+	fresh(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home) // Windows finds the home there
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	restingUntil.Lock()
-	restingUntil.m = map[string]time.Time{}
-	restingUntil.Unlock()
 	claims := func(m map[string]any) string {
 		b, _ := json.Marshal(m)
 		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
