@@ -261,10 +261,10 @@ func TestKeyBackOnceItsWindowIsNotFull(t *testing.T) {
 }
 
 // A key resting out of its own window has it read again as it is
-// planned, so a limit raised brings it back where nothing weighs it by
-// its windows: an ordered group weighs each member's keys alone, and a
-// member with one key not at all. No card is read once its limit is
-// raised.
+// planned, so a limit raised brings it back in an ordered group too: the
+// group weighs each member's keys alone, a member with one key included,
+// and reads each as it weighs it (weighRouted). No card is read once its
+// limit is raised.
 func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 	fresh(t)
 	provider.ForgetBalances()
