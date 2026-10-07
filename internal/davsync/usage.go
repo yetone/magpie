@@ -102,13 +102,12 @@ func shareUsage(ctx context.Context, c Config, st *state, force bool) {
 
 func shareWith(ctx context.Context, c Config, u *usageState, fs files) error {
 	id, name := usage.Computer()
-	now := usage.Clock()
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
-	first := today.AddDate(0, 0, 1-usage.SharedDays)
+	y, m, today := usage.Clock().In(time.Local).Date()
+	first := midnight(y, m, today+1-usage.SharedDays, time.Local)
 	from := first.Format(time.DateOnly)
 	since := first
 	if u.Whole {
-		since = today.AddDate(0, 0, -1)
+		since = midnight(y, m, today-1, time.Local)
 	}
 	if u.Sent == nil {
 		u.Sent = map[string]string{}
@@ -196,6 +195,19 @@ func shareWith(ctx context.Context, c Config, u *usageState, fs files) error {
 		}
 	}
 	return shareQuotas(ctx, c, u, fs, listed, id)
+}
+
+// midnight is when day d of m in y begins at loc. Where the clocks go
+// forward over 00:00 west of UTC (Santiago, Havana, the Azores), time.Date
+// puts the 00:00 they skip on the day before, so the day begins as they go
+// forward instead. Where they go back across 00:00, so that it comes twice,
+// this is the one time.Date gives, east of UTC the second.
+func midnight(y int, m time.Month, d int, loc *time.Location) time.Time {
+	t := time.Date(y, m, d, 0, 0, 0, 0, loc)
+	if t.Day() != time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Day() {
+		_, t = t.ZoneBounds()
+	}
+	return t
 }
 
 // shareQuotas merges the other computers' quota histories into this one's,

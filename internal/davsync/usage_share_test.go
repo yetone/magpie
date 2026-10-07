@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -372,5 +375,104 @@ func TestUsageSharedThroughS3(t *testing.T) {
 	f.mu.Unlock()
 	if still || lists < 4 {
 		t.Fatalf("a's old day still there: %v; %d listings", still, lists)
+	}
+}
+
+// Where the clocks go forward at 00:00, shareWith began the day before that
+// day at 23:00 west of UTC (Santiago, Havana, the Azores), and east of it
+// (Beirut) began that day at 01:00 and the day before at the 01:00 a day
+// back from it. On the day and the day after, the days before it went up
+// again holding only the calls from that hour on, and the other computers
+// took those in place of the whole days. Here each keeps both its calls, at
+// 00:30 and 23:30, and the day that leaves the window on the day leaves the
+// server then, not a day later. shareWith reads time.Local, so each zone
+// runs in a child process with TZ set.
+func TestUsageSharedDaysPastASkippedMidnight(t *testing.T) {
+	const zoneEnv = "MAGPIE_TEST_USAGE_ZONE"
+	skipped := map[string]time.Time{ // the day the clocks skip 00:00, its noon in UTC
+		"America/Santiago": time.Date(2026, 9, 6, 15, 0, 0, 0, time.UTC),
+		"America/Havana":   time.Date(2026, 3, 8, 16, 0, 0, 0, time.UTC),
+		"Atlantic/Azores":  time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC),
+		"Asia/Beirut":      time.Date(2026, 3, 29, 9, 0, 0, 0, time.UTC),
+	}
+	if zone := os.Getenv(zoneEnv); zone != "" {
+		day := skipped[zone].In(time.Local)
+		if day.Hour() != 12 {
+			t.Fatalf("TZ=%s didn't set the local zone: its day's noon is %s", zone, day)
+		}
+		y, m, d := day.Date()
+		at := func(n, hour, min int) time.Time { return time.Date(y, m, d+n, hour, min, 0, 0, time.Local) }
+		date := func(n int) string { return at(n, 12, 0).Format(time.DateOnly) }
+		newComputer(t).use(t)
+		_, cfg := usageShortServer(t, 0)
+		dav, err := newDAV(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		oldClock := usage.Clock
+		t.Cleanup(func() { usage.Clock = oldClock })
+		ctx := context.Background()
+		id, _ := usage.Computer()
+		st := &usageState{}
+		// share at noon n days from the day skipped
+		share := func(n int) {
+			t.Helper()
+			now := at(n, 12, 0)
+			usage.Clock = func() time.Time { return now }
+			if err := shareWith(ctx, cfg, st, dav); err != nil {
+				t.Fatalf("%s: sharing at %s: %v", zone, now, err)
+			}
+		}
+		// day n's file on the server, as shared on day on, has both its calls
+		whole := func(n, on int) {
+			t.Helper()
+			got, err := readDay(ctx, dav, id+"-"+date(n)+usageExt, cfg.Passphrase)
+			if err != nil {
+				t.Fatalf("%s: shared at noon on %s, %s: %v", zone, date(on), date(n), err)
+			}
+			if len(got.Calls) != 2 {
+				t.Errorf("%s: shared at noon on %s, %s holds %d of its 2 calls (00:30 and 23:30)", zone, date(on), date(n), len(got.Calls))
+			}
+		}
+		oldest := id + "-" + date(-usage.SharedDays) + usageExt
+		there := func() bool {
+			t.Helper()
+			l, err := dav.list(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, ok := l[oldest]
+			return ok
+		}
+
+		usage.Append(call(at(-usage.SharedDays, 23, 30), "deepseek-chat", 1))
+		usage.Append(call(at(-2, 0, 30), "deepseek-chat", 1))
+		usage.Append(call(at(-2, 23, 30), "deepseek-chat", 1))
+		usage.Append(call(at(-1, 0, 30), "deepseek-chat", 1))
+		share(-1)
+		if !there() {
+			t.Fatalf("%s: %s, the window's first day on %s, isn't on the server", zone, date(-usage.SharedDays), date(-1))
+		}
+		usage.Append(call(at(-1, 23, 30), "deepseek-chat", 1))
+		share(0)
+		whole(-2, 0)
+		whole(-1, 0)
+		if there() {
+			t.Errorf("%s: %s, past the window on %s, is still on the server", zone, date(-usage.SharedDays), date(0))
+		}
+		share(1)
+		whole(-2, 1)
+		whole(-1, 1)
+		return
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Go on Windows takes the local zone from the system, not TZ")
+	}
+	for zone := range skipped {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestUsageSharedDaysPastASkippedMidnight$")
+		cmd.Env = append(os.Environ(), "TZ="+zone, zoneEnv+"="+zone)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: %v\n%s", zone, err, out)
+		}
 	}
 }
