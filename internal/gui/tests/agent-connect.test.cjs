@@ -18,6 +18,7 @@ const options = [{ value: "gpt-5.4", label: "GPT-5.4" }, { value: "relay/m1", la
 const fresh = () => ({
   agents: [
     { id: "codex", name: "Codex", icon: "generic", path: "/fixture/codex", fields: [{ key: "model", label: "model", value: "gpt-5.4", options }] },
+    { id: "openclaw", name: "OpenClaw", icon: "openclaw-color", path: "/fixture/openclaw/openclaw.json", fields: [{ key: "model", label: "model", value: "gpt-5.4", options }] },
     { id: "cursor", name: "Cursor", icon: "generic", path: "/fixture/cursor", fields: [{ key: "model", label: "model", value: "auto", options: [{ value: "auto", label: "Auto" }] }] },
   ],
   profiles: [],
@@ -110,6 +111,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(posts, ["/api/agents/connect/codex", "/api/agents/disconnect/codex"]);
       assert.equal(await said(), w.off);
       assert.deepEqual(await tops(), top, "no click moved the page");
+      // OpenClaw uses the same one-click connection, also in a narrow window.
+      await page.setViewportSize({ width: 440, height: 520 });
+      const clawTop = await tops();
+      const claw = page.locator(`${row("openclaw")} .ag-conn`);
+      await claw.click();
+      await page.waitForFunction((r) => document.querySelector(r + " .ag-conn")?.getAttribute("aria-checked") === "true", row("openclaw"));
+      assert.equal(posts.at(-1), "/api/agents/connect/openclaw");
+      assert.equal(await page.locator(`${row("openclaw")} .ag-st`).textContent(), w.on.replaceAll("Codex", "OpenClaw"));
+      assert.equal(await page.locator(`${row("openclaw")} .ic[data-icon="openclaw-color"] img`).getAttribute("src"), "icons/openclaw-color.svg", "OpenClaw keeps its official brand colours instead of a text-colour mask");
+      assert.deepEqual(await tops(), clawTop, "OpenClaw's switch didn't scroll the page");
       assert.deepEqual(dialogs, [], "no native dialog");
       assert.deepEqual(errors, []);
     });

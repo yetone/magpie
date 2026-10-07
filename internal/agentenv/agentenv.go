@@ -64,6 +64,9 @@ var Vars = []string{
 	"ATOMCODE_HOME",
 	// Cursor's CLI: its config folder (its chats) and its data folder
 	"CURSOR_CONFIG_DIR", "CURSOR_DATA_DIR",
+	// OpenClaw's home, state folder, config file and read-only policy
+	"OPENCLAW_HOME", "OPENCLAW_STATE_DIR", "OPENCLAW_CONFIG_PATH",
+	"OPENCLAW_CONFIG_READONLY", "OPENCLAW_NIX_MODE",
 	// OpenCode and OpenChamber
 	"OPENCODE_CONFIG_DIR", "OPENCODE_DB", "OPENCHAMBER_DATA_DIR",
 	// Droid's home, Windsurf's API server, ZCode's credential seed: what
@@ -81,4 +84,5 @@ var NotPaths = map[string]bool{
 	"WINDSURF_API_SERVER_URL": true, "ZCODE_CREDENTIAL_SECRET": true,
 	"PI_CONFIG_DIR": true, "OPENCODE_DB": true,
 	"MAGPIE_ZED_BIN": true, "MAGPIE_ZED_PROCESS_NAMES": true,
+	"OPENCLAW_CONFIG_READONLY": true, "OPENCLAW_NIX_MODE": true,
 }

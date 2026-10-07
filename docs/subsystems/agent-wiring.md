@@ -34,6 +34,24 @@ something else shows up as drift.
 ## Constraints and failure behavior
 
 - magpie only removes what it wrote. Anything else in an agent's config stays as it was.
+- OpenClaw's adapter ([`openclaw.go`](../../internal/agent/openclaw.go)) writes
+  `models.providers.magpie` and the default primary model in
+  `agents.defaults.model`. Its model catalog includes context/output limits,
+  image input, reasoning and known prices; native Responses and Anthropic
+  models use their respective API adapters. A nonempty `agents.defaults.models`
+  menu gets magpie's entries beside its own; an explicit `modelPolicy.allow`
+  gets `magpie/*`. Sync updates only a provider carrying magpie's key and
+  removes obsolete, unedited menu entries. Disconnect restores the prior
+  primary (including string shorthand), provider and policy, preserving
+  fallback lists and later user edits. It does not override per-agent models
+  or session picks. JSON/JSONC keeps comments and layout; other JSON5 syntax
+  is normalized to JSON without changing numeric types or precision.
+  Malformed configs, `$include` configs and OpenClaw's read-only/Nix flags
+  fail without writing. Config location follows `OPENCLAW_CONFIG_PATH`, then
+  `OPENCLAW_STATE_DIR`, then `.openclaw` under `OPENCLAW_HOME` or the user's
+  home; absolute overrides use `appdir.Getenv` and join `agentenv.Vars` for
+  sandboxing. WSL uses the distro's default folder and gateway address, not
+  Windows' overrides.
 - Codex signed in to ChatGPT stays beside its sign-in (`openai_base_url`) unless the user picks magpie API. magpie becomes its provider only while the Codex app holds the active account, which it sends nothing for: `/wham/usage` says it isn't allowed, and it has no credits and isn't a workspace still within its overage (`codexHeld`, read by `provider.CodexUsedUp`). Where the app goes by what usage can't show (an experiment's gate, a reserve, a Team plan's overage under the reserve experiment), it counts as held: a wrong move costs ChatGPT extras, a missed one every turn. A saved reading kept through a failed read stops saying held once its used-up window has started again; a hold with no window used up stays till a fresh read. The app then loses its ChatGPT state (durable threads, remote control), so a window at 100% alone, which credits get past, doesn't move it (`codex.out` marks the move, and Sync undoes it once the account has room).
 - Moving a field from one of magpie's models to another (the agent's own picker) is not drift. Moving it off magpie is.
 - A field that follows another while empty (`Follows`: Claude Code's tiers and subagents on its main model) is read by `Drift` as on that field's model. The main model moved, in Claude Code's own `/model`, onto the model magpie had set a tier to is not drift (#1050).
@@ -50,6 +68,7 @@ something else shows up as drift.
 
 ```sh
 go test -tags nogui ./internal/agent -run 'TestConnect|TestDisconnect|Drift|TestKeptAddress|TestWSLAgentAddress|TestReachProbe|TestDryRunKnowsTheAskersProviders|TestReseat|TestPort|TestWSL'
+go test -tags nogui ./internal/agent -run TestOpenClaw
 go test -tags nogui ./internal/agent
 node --test internal/gui/tests/agent-connect.test.cjs internal/gui/tests/agent-disconnect-preview.test.cjs
 ```
