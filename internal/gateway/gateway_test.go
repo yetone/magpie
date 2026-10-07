@@ -706,7 +706,8 @@ func TestOpenRouterMandatoryReasoningRetries(t *testing.T) {
 }
 
 // Qoder asks "none" for its permission checks, which Command Code turns
-// away with the levels it takes: asked again at the lowest, once
+// away with the levels it takes: asked again at the lowest, and at the
+// lowest from then on
 func TestPassthroughEffortNoneRefused(t *testing.T) {
 	f := &fake{t: t, ctype: "application/json", reply: `{"id":"c1","choices":[]}`}
 	f.refuse = func(b []byte) (int, string) {
@@ -716,15 +717,51 @@ func TestPassthroughEffortNoneRefused(t *testing.T) {
 		return 0, ""
 	}
 	setup(t, provider.Chat, f)
-	code, body := post(t, "/v1/chat/completions", `{"model":"m1","messages":[{"role":"user","content":"ok?"}],"reasoning_effort":"none"}`)
-	if code != 200 || f.calls != 2 || !bytes.Contains(f.got, []byte(`"reasoning_effort":"low"`)) || !bytes.Contains(f.got, []byte(`"ok?"`)) {
-		t.Fatalf("%d %s after %d calls, last sent %s", code, body, f.calls, f.got)
+	srv := New()
+	for turn, calls := range []int{2, 1} {
+		f.calls = 0
+		code, body := postTo(t, srv, "/v1/chat/completions", `{"model":"m1","messages":[{"role":"user","content":"ok?"}],"reasoning_effort":"none"}`)
+		if code != 200 || f.calls != calls || !bytes.Contains(f.got, []byte(`"reasoning_effort":"low"`)) || !bytes.Contains(f.got, []byte(`"ok?"`)) {
+			t.Fatalf("turn %d: %d %s after %d calls, last sent %s", turn+1, code, body, f.calls, f.got)
+		}
 	}
 	// another 400 is the agent's to see
 	f.calls = 0
 	f.refuse = func([]byte) (int, string) { return 400, `{"error":{"message":"bad request"}}` }
 	if code, _ := post(t, "/v1/chat/completions", `{"model":"m1","messages":[],"reasoning_effort":"none"}`); code != 400 || f.calls != 1 {
 		t.Errorf("%d after %d calls", code, f.calls)
+	}
+}
+
+// minimal refused with none among the levels taken, as OpenAI does for
+// gpt-5.1: minimal goes at low from then on, and none still goes as sent
+func TestPassthroughMinimalRefusedNoneTaken(t *testing.T) {
+	for _, c := range []struct {
+		proto      provider.Protocol
+		path, body string
+	}{
+		{provider.Chat, "/v1/chat/completions", `{"model":"m1","messages":[{"role":"user","content":"ok?"}],"reasoning_effort":%q}`},
+		{provider.Responses, "/v1/responses", `{"model":"m1","input":"ok?","reasoning":{"effort":%q}}`},
+	} {
+		f := &fake{t: t, ctype: "application/json", reply: `{"id":"c1","choices":[]}`}
+		f.refuse = func(b []byte) (int, string) {
+			if bytes.Contains(b, []byte(`"minimal"`)) {
+				return 400, `{"error":{"message":"Unsupported value: 'minimal' is not supported with the 'gpt-5.1' model. Supported values are: 'none', 'low', 'medium', and 'high'.","type":"invalid_request_error","param":"reasoning.effort","code":"unsupported_value"}}`
+			}
+			return 0, ""
+		}
+		setup(t, c.proto, f)
+		srv := New()
+		for i, turn := range []struct {
+			effort, sent string
+			calls        int
+		}{{"minimal", "low", 2}, {"minimal", "low", 1}, {"none", "none", 1}} {
+			f.calls = 0
+			code, body := postTo(t, srv, c.path, fmt.Sprintf(c.body, turn.effort))
+			if code != 200 || f.calls != turn.calls || bodyEffort(c.proto, f.got) != turn.sent {
+				t.Fatalf("%s turn %d at %s: %d %s after %d calls, last sent %s", c.proto, i+1, turn.effort, code, body, f.calls, f.got)
+			}
+		}
 	}
 }
 

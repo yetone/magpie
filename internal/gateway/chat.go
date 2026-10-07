@@ -677,14 +677,31 @@ func thinkingEffort(body []byte) []byte {
 // provider that refused it.
 const thinkingConfigField = "thinking_config"
 
-// geminiMinimalRefused is Gemini turning minimal away for a model that
-// doesn't have it, which names thinking but isn't thinking_config turned
-// away (refusesThinkingConfig): gemini-3.8-flash's 400 "Thinking level is
-// unsupported: THINKING_LEVEL_MINIMAL", for reasoning_effort minimal and
-// thinking_level minimal alike, at Vertex AI's OpenAI-compatible API; and
-// gemini-3.1-pro-preview's "thinking_level MINIMAL is not supported by this
-// model" at its generateContent.
-var geminiMinimalRefused = regexp.MustCompile(`(?i)thinking[ _]level.*minimal`)
+// gemini3Levels are the levels Gemini 3 thinks at, of which a model may
+// take only some (gemini-3.8-flash has no minimal): those it is asked at
+// where its own aren't known.
+var gemini3Levels = []string{"minimal", "low", "medium", "high"}
+
+// geminiLevelRefused is Gemini turning away a thinking level the model
+// hasn't, which names thinking but isn't thinking_config turned away
+// (refusesThinkingConfig): gemini-3.8-flash's 400 "Thinking level MINIMAL
+// is not supported for this model. Please retry with other thinking level."
+// at AI Studio's OpenAI-compatible API, and "Thinking level is unsupported:
+// THINKING_LEVEL_MINIMAL" at Vertex AI's, for reasoning_effort minimal and
+// thinking_level minimal alike; and gemini-3.1-pro-preview's
+// "thinking_level MINIMAL is not supported by this model" at its
+// generateContent.
+var geminiLevelRefused = regexp.MustCompile(`(?i)thinking[ _]level\W+(?:(minimal|low|medium|high)\W+is not supported|is unsupported\W+thinking_level_(minimal|low|medium|high))`)
+
+// geminiRefusedLevel is the thinking level Gemini turned away in body
+// (geminiLevelRefused), or "".
+func geminiRefusedLevel(body []byte) string {
+	m := geminiLevelRefused.FindSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	return strings.ToLower(string(m[1]) + string(m[2]))
+}
 
 // refusesThinkingConfig recognizes an upstream turning a request away for
 // the thinking_config it was sent, by its error naming it.

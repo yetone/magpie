@@ -204,8 +204,8 @@ type Request struct {
 	GeminiCompat bool
 	// OffLevel is the level such an API is asked to think at when the
 	// client turned reasoning off: Gemini 3 can't stop thinking, and thinks
-	// least at minimal, or at its lowest level where it has no minimal
-	// (geminiOffLevel). "" is minimal.
+	// least at minimal, or at its lowest level where it has no minimal or
+	// turned minimal away (geminiLevels). "" is minimal.
 	OffLevel string
 	// Resume is set on a request built to go on with a reply the client
 	// already has part of (continuation.go): its last message is that

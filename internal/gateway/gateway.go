@@ -3153,10 +3153,16 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		}
 	}
 	// the effort as the agent sent it, fitted to the model's levels: Qoder's
-	// permission check asks "none", which Command Code turns away
+	// permission check asks "none", which Command Code turns away; and
+	// reasoning off at a level the model turned away before (below), at its
+	// lowest
 	asked := bodyEffort(proto, body)
-	if e := fitFor(p, model, asked); asked != "" && e != asked {
-		body = withBodyEffort(proto, body, e)
+	effort := fitFor(p, model, asked)
+	if offEffort(effort) && s.turnedAway(p, model, effort, proto) {
+		effort = onEffort(p, model)
+	}
+	if asked != "" && effort != asked {
+		body = withBodyEffort(proto, body, effort)
 	}
 	path := upstreamPath(p, proto, upstream)
 	if proto == provider.Anthropic && p.Account == nil && fromClaudeCode(r.Header) && r.URL.Query().Get("beta") == "true" {
@@ -3303,12 +3309,21 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	if e := bodyEffort(proto, body); res.StatusCode == http.StatusBadRequest && (e == "none" || e == "minimal" || proto == provider.Chat && hasReasoningDisabled(body)) {
 		// A model can refuse reasoning turned off. If it names its levels,
-		// try low; if OpenRouter requires reasoning, leave the level to it.
+		// or Gemini the level it hasn't, try its lowest, and from then on;
+		// if OpenRouter requires reasoning, leave the level to it.
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
-		if (e == "none" || e == "minimal") && effortLevelsNamed.Match(b) {
-			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(withBodyEffort(proto, body, "low")), r.Header); err != nil {
+		if gemini := geminiRefusedLevel(b) != ""; (e == "none" || e == "minimal") && (effortLevelsNamed.Match(b) || gemini) {
+			refused := offRefused(model)
+			if gemini || otherOffNamed[e].Match(b) {
+				// the level turned away, not reasoning off: AI Studio
+				// takes none from gemini-3.8-flash, not minimal, and
+				// OpenAI lists none where gpt-5.1 turns minimal away
+				refused = levelRefused(model, e)
+			}
+			s.markUnfit(p.ID, refused, proto)
+			if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(withBodyEffort(proto, body, onEffort(p, model))), r.Header); err != nil {
 				return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
 			}
 		} else if proto == provider.Chat && mandatoryReasoning.Match(b) {
@@ -3659,6 +3674,8 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 	// request with it, to go back to when it wasn't; tried once
 	var withImage *Request
 	imageTried := false
+	// Gemini's thinking levels turned away this time (geminiRefusedLevel)
+	var levelsRefused []string
 	for {
 		if mayDropImageTool(p) && !s.fits(p.ID, imageToolRefused, to) {
 			req, _ = withoutImageToolReq(req)
@@ -3700,10 +3717,20 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			r := *req
 			r.GeminiCompat, req = want, &r
 		}
-		if req.GeminiCompat && req.ThinkOff {
-			if l := geminiOffLevel(p, model, s.fits(p.ID, offRefused(model), to)); l != req.OffLevel {
+		if req.GeminiCompat {
+			// Gemini 3 turns away a thinking level the model hasn't
+			// (gemini-3.8-flash has no minimal): reasoning off goes at the
+			// least it has, and an effort at the nearest, of the levels
+			// not turned away before
+			levels := s.geminiLevels(p, model, to)
+			if req.ThinkOff {
+				if l := fitEffort("minimal", levels); l != req.OffLevel {
+					r := *req
+					r.OffLevel, req = l, &r
+				}
+			} else if e := fitEffort(req.Effort, levels); slices.Contains(gemini3Levels, req.Effort) && e != req.Effort {
 				r := *req
-				r.OffLevel, req = l, &r
+				r.Effort, req = e, &r
 			}
 		}
 		// the tier the client asked for goes to a provider the user added
@@ -3759,12 +3786,20 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		res.Body.Close()
 		res.Body = io.NopCloser(bytes.NewReader(b))
-		if req.GeminiCompat && res.StatusCode == http.StatusBadRequest && geminiMinimalRefused.Match(b) && s.fits(p.ID, offRefused(model), to) {
-			// minimal turned away by a Gemini that hasn't it, reasoning
-			// off or asked for at minimal: the fields were taken, and the
-			// model is asked again at its lowest, and so from then on
-			s.markUnfit(p.ID, offRefused(model), to)
-			continue
+		if req.GeminiCompat && res.StatusCode == http.StatusBadRequest {
+			if l := geminiRefusedLevel(b); l != "" {
+				// a thinking level the model hasn't, turned away: Gemini's
+				// fields were taken (not refusesThinkingConfig), and the
+				// model is asked again at the nearest level it has left,
+				// and so from then on. One turned away again, with no
+				// other left, goes back as it came.
+				if slices.Contains(levelsRefused, l) {
+					return res, to, nil
+				}
+				levelsRefused = append(levelsRefused, l)
+				s.markUnfit(p.ID, levelRefused(model, l), to)
+				continue
+			}
 		}
 		if req.endsWithAssistant() && refusesPrefill(res.StatusCode, b) {
 			// the model takes no prefill (#1447), remembered for it alone.
@@ -4803,21 +4838,36 @@ func onEffort(p provider.Provider, model string) string {
 	return fitEffort("low", levels)
 }
 
-// geminiOffLevel is the level Gemini's OpenAI-compatible API is asked to
-// think at for model with reasoning turned off: minimal, its least, where
-// its levels have it or aren't known; its lowest where they haven't, or
-// once it turned minimal away (fits false). Gemini 3 turns away a level it
-// doesn't have, gemini-3.8-flash minimal with a 400.
-func geminiOffLevel(p provider.Provider, model string, fits bool) string {
-	if !fits {
-		return onEffort(p, model)
+// geminiLevels are the thinking levels model is asked at on Gemini's
+// OpenAI-compatible API, less those it turned away before (turnedAway):
+// its own, or Gemini 3's where they aren't known or none of its own is
+// left.
+func (s *Server) geminiLevels(p provider.Provider, model string, to provider.Protocol) []string {
+	left := func(levels []string) []string {
+		return slices.DeleteFunc(slices.Clone(levels), func(l string) bool {
+			return s.turnedAway(p, model, l, to)
+		})
 	}
-	return fitEffort("minimal", p.Efforts(model))
+	if levels := left(p.Efforts(model)); len(levels) > 0 {
+		return levels
+	}
+	return left(gemini3Levels)
 }
 
 // offRefused is how unfit remembers a provider refusing reasoning turned
 // off for model.
 func offRefused(model string) string { return "reasoning off\x00" + model }
+
+// levelRefused is how unfit remembers Gemini turning away thinking level
+// for model.
+func levelRefused(model, level string) string { return "thinking level\x00" + model + "\x00" + level }
+
+// turnedAway says model turned level away before: Gemini that level
+// (levelRefused), or, for none and minimal, a provider refusing reasoning
+// off as a whole (offRefused).
+func (s *Server) turnedAway(p provider.Provider, model, level string, proto provider.Protocol) bool {
+	return !s.fits(p.ID, levelRefused(model, level), proto) || offEffort(level) && !s.fits(p.ID, offRefused(model), proto)
+}
 
 // forcedRefused is how unfit remembers a provider refusing a tool_choice
 // that forces a call (a named tool, or required) for model.
@@ -4854,6 +4904,15 @@ func unforced(req *Request) *Request {
 // takes, as one refusing "none" does: Command Code's `expected one of
 // "low"|"medium"|"high"|"xhigh"|"max"`.
 var effortLevelsNamed = regexp.MustCompile(`(?i)\blow\b\W+(?:medium|high)\b`)
+
+// otherOffNamed is, for one level of reasoning off, the other named in an
+// error: one refusing that level and listing the other among those taken
+// (OpenAI's "'minimal' is not supported with the 'gpt-5.1' model.
+// Supported values are: 'none', 'low', 'medium', and 'high'.").
+var otherOffNamed = map[string]*regexp.Regexp{
+	"none":    regexp.MustCompile(`(?i)\bminimal\b`),
+	"minimal": regexp.MustCompile(`(?i)\bnone\b`),
+}
 
 // bodyEffort is the reasoning effort a Chat or Responses request asks for,
 // or an Anthropic one in its output_config.
