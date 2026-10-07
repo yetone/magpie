@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -47,5 +48,31 @@ echo '{"type":"stream_event","event":{"type":"message_stop"}}'
 		if !strings.Contains(out, "the very end") || strings.Contains(out, "event: error") {
 			t.Fatalf("run %d: the reply's end: %q", i, out[max(0, len(out)-400):])
 		}
+	}
+}
+
+// A write to a Claude Code that has exited says how it ended and what it
+// said on stderr, not the pipe Wait closed under the write ("write |1:
+// file already closed", CI on main, where the run's first prompt failed
+// so and nothing told why).
+func TestClaudeEndedBeforeItsInputSaysWhy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for Claude Code")
+	}
+	dir := t.TempDir()
+	testenv.Program(t, filepath.Join(dir, "claude"), "#!/bin/sh\nread -r line\necho 'Not logged in · Please run /login' >&2\nexit 3\n")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	s := New()
+	t.Cleanup(s.subscription.abortAll)
+	req := &Request{Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "hi"}}}}}
+	run, events, err := s.subscription.start(context.Background(), req, "claude-sonnet-5", "", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range events { // until the run ends with its Claude Code
+	}
+	err = run.setEffort("high")
+	if err == nil || !strings.Contains(err.Error(), "exit status 3") || !strings.Contains(err.Error(), "Not logged in") {
+		t.Fatalf("a write after Claude Code exited: %v", err)
 	}
 }
