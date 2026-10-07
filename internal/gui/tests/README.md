@@ -183,6 +183,14 @@ asked for and names the pill, with the bar held where it was; three days need
 no such pill; a window narrowed then widened fits again. Chromium and WebKit,
 in English, Chinese, Japanese and German.
 
+`routing-yesterday.test.cjs` checks the same bar names yesterday by the
+calendar when the clocks have just changed: at 00:30 in New York on
+2026-03-09 and in Santiago on 2026-09-07 (whose 00:00–00:59 was skipped the
+day before), the day before is "yesterday" and the one before it its date,
+not the other way round, as 24 hours back made them; at 23:30 in New York on
+2026-11-01, a 25-hour day, the day before is "yesterday" too. Chromium and
+WebKit, in English, Chinese, Japanese and German.
+
 `agent-disconnect-preview.test.cjs` checks the disconnect confirmation's
 file previews fill the body instead of the editor's label column. omp and
 Codex previews, restored values, expanding hidden lines, scrolling, Cancel,

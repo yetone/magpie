@@ -1513,7 +1513,10 @@
     renderAll();
   }
   const dayName = (d) => {
-    const x = new Date(d + "T12:00:00"), n = new Date(), y = new Date(n.getTime() - 864e5);
+    // yesterday by the calendar, at noon: 24 hours ago is two days back
+    // from 00:00 to 00:59 the day after the clocks go forward, and still
+    // today from 23:00 on the day they go back
+    const x = new Date(d + "T12:00:00"), n = new Date(), y = new Date(n.getFullYear(), n.getMonth(), n.getDate() - 1, 12);
     return x.toDateString() === n.toDateString() ? t("today") : x.toDateString() === y.toDateString() ? t("yesterday")
       : x.toLocaleDateString([], { month: "short", day: "numeric", weekday: "short" });
   };
