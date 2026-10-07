@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,11 +12,12 @@ import (
 )
 
 // Claude Code signed in to claude.ai, sending that sign-in as its key, is
-// told a provider's 401 for magpie's credential as a 502, so it doesn't
-// renew a sign-in nobody refused, and a 403 the same where it says the
-// OAuth token was revoked: the provider's message as it was, Recent calls
-// keeping the provider's status. Any other 403 is as it was, and a request
-// with magpie's key still gets the 401.
+// told a provider's 401 for magpie's credential as a 502 in magpie's words,
+// so it doesn't renew a sign-in nobody refused, and a 403 the same where it
+// says the OAuth token was revoked; nothing it is told mentions x-api-key,
+// which it reads as "Not logged in". Recent calls keep the provider's
+// status. Any other 403 is as it was, and a request with magpie's key
+// still gets the 401 as the provider said it.
 func TestClaudeSignInNotToldItsSignInFailed(t *testing.T) {
 	f := &fake{t: t, ctype: "application/json", reply: `{"id":"msg","type":"message","role":"assistant","content":[],"usage":{"input_tokens":1,"output_tokens":1}}`}
 	setup(t, provider.Anthropic, f)
@@ -45,11 +47,11 @@ func TestClaudeSignInNotToldItsSignInFailed(t *testing.T) {
 		reply, said      string
 		want, recorded   int
 	}{
-		{"401", "/v1/messages", signIn, 401, badKey, "invalid x-api-key", 502, 401},
-		{"401 without v1", "/messages", signIn, 401, badKey, "invalid x-api-key", 502, 401},
-		{"revoked", "/v1/messages", signIn, 403, revoked, "OAuth token has been revoked", 502, 403},
+		{"401", "/v1/messages", signIn, 401, badKey, "Fake refused magpie's credential (HTTP 401): invalid API key", 502, 401},
+		{"401 without v1", "/messages", signIn, 401, badKey, "Fake refused magpie's credential (HTTP 401): invalid API key", 502, 401},
+		{"revoked", "/v1/messages", signIn, 403, revoked, "Fake refused magpie's credential (HTTP 403): OAuth token has been revoked", 502, 403},
 		{"another 403", "/v1/messages", signIn, 403, denied, "has been disabled", 403, 403},
-		{"401 counting", "/v1/messages/count_tokens", signIn, 401, badKey, "invalid x-api-key", 502, 0},
+		{"401 counting", "/v1/messages/count_tokens", signIn, 401, badKey, "refused magpie's credential (HTTP 401): invalid API key", 502, 0},
 		{"magpie's key", "/v1/messages", "Bearer " + Token, 401, badKey, "invalid x-api-key", 401, 401},
 		{"an API key", "/v1/messages", "Bearer sk-ant-api03-" + strings.Repeat("b", 24), 401, badKey, "invalid x-api-key", 401, 401},
 	} {
@@ -58,6 +60,15 @@ func TestClaudeSignInNotToldItsSignInFailed(t *testing.T) {
 		rec := send(c.path, c.auth)
 		if rec.Code != c.want || !strings.Contains(rec.Body.String(), c.said) {
 			t.Errorf("%s: %d %s, want %d saying %q", c.name, rec.Code, rec.Body.String(), c.want, c.said)
+		}
+		if c.want == 502 {
+			var e struct {
+				Type  string
+				Error struct{ Type, Message string }
+			}
+			if json.Unmarshal(rec.Body.Bytes(), &e) != nil || e.Type != "error" || e.Error.Type != "api_error" || strings.Contains(strings.ToLower(e.Error.Message), "x-api-key") {
+				t.Errorf("%s: told %s, want an api_error that doesn't mention x-api-key", c.name, rec.Body.String())
+			}
 		}
 		if c.recorded != 0 {
 			if got := s.Recent()[0].Status; got != c.recorded {
@@ -79,7 +90,8 @@ func TestClaudeSignInNotToldItsSignInFailed(t *testing.T) {
 }
 
 // A 403 written with nothing after it still goes, once the handler is
-// done; a status the handler flushes goes at once.
+// done, and a 401 as a 502; a status the handler flushes goes at once. A
+// stream's error that mentions x-api-key, after its 200, says "API key".
 func TestSignInWriterReleasesA403(t *testing.T) {
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
 	r.Header.Set("Authorization", "Bearer sk-ant-oat01-x")
@@ -87,6 +99,20 @@ func TestSignInWriterReleasesA403(t *testing.T) {
 	keepsSignIn(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(403) })(rec, r)
 	if rec.Code != 403 {
 		t.Fatalf("%d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	keepsSignIn(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(401) })(rec, r)
+	if rec.Code != 502 {
+		t.Fatalf("401 with no body: %d", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	keepsSignIn(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(200)
+		w.Write([]byte("event: ping\ndata: {\"type\":\"ping\"}\n\n"))
+		w.Write([]byte(`event: error` + "\n" + `data: {"type":"error","error":{"type":"api_error","message":"Fake: invalid X-Api-Key"}}` + "\n\n"))
+	})(rec, r)
+	if body := rec.Body.String(); rec.Code != 200 || strings.Contains(strings.ToLower(body), "x-api-key") || !strings.Contains(body, "Fake: invalid API key") || !strings.Contains(body, "ping") {
+		t.Errorf("stream: %d %q", rec.Code, body)
 	}
 	rec = httptest.NewRecorder()
 	keepsSignIn(func(w http.ResponseWriter, _ *http.Request) {
