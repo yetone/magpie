@@ -92,13 +92,41 @@ func isolate(t *testing.T) {
 	// a minute, and CachedCards hands them on whatever their age
 	forgetPlanQuotas()
 	ForgetBalances()
+	// nor the accounts' allowances routing read through LoginUsage
+	forgetAllowances()
 	t.Cleanup(func() {
+		// a reading this test left out lands in this test, not the next
+		forgetAllowances()
 		claudeKeychain, claudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
 		cursorKeychain, DevinExecutable = oldCursor, oldDevin
 		forgetClaudeCredential()
 		forgetClaudeStatus()
 		forgetDevinStatus()
 	})
+}
+
+// forgetAllowances forgets every agent's allowances as Allowances read
+// them, once the readings still out have landed. A reading begun before
+// would otherwise land in the maps left here, as read just now, and the
+// next test to ask for that agent's allowances would take it for its own.
+// A test that holds a reading lets it go before calling this.
+func forgetAllowances() {
+	c := &usedCache
+	c.Lock()
+	for len(c.loading) > 0 {
+		var out []chan struct{}
+		for _, done := range c.loading {
+			out = append(out, done)
+		}
+		c.Unlock()
+		for _, done := range out {
+			<-done
+		}
+		c.Lock()
+	}
+	c.m, c.at, c.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
+	c.renewed = nil
+	c.Unlock()
 }
 
 func TestAccountsAreProviders(t *testing.T) {

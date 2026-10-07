@@ -25,9 +25,7 @@ func TestAllowancesBeforeFirstReading(t *testing.T) {
 		loginUsageCache.Lock()
 		loginUsageCache.m = nil
 		loginUsageCache.Unlock()
-		usedCache.Lock()
-		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
-		usedCache.Unlock()
+		forgetAllowances()
 		lastQuotas.Lock()
 		lastQuotas.m, lastQuotas.loaded = nil, false
 		lastQuotas.Unlock()

@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -131,8 +133,47 @@ func TestAllowanceFor(t *testing.T) {
 // The first ask for an agent's allowances waits for them, so the first
 // requests after magpie starts are routed by them too.
 func TestAllowancesFirstWaits(t *testing.T) {
+	forgetAllowances()
+	t.Cleanup(forgetAllowances)
 	if m := Allowances("nobody"); m == nil {
 		t.Fatal("the first ask didn't wait")
+	}
+}
+
+// Tests start from no allowances read (forgetAllowances). A reading still
+// out then lands first and is forgotten with the rest: one that landed
+// after, in the maps left, would be read just now as far as the next ask
+// knows, and taken for that test's own.
+func TestForgetAllowancesLetsTheReadingOutLand(t *testing.T) {
+	signIn(t)
+	hold, landed := make(chan struct{}), make(chan struct{})
+	var asked atomic.Int32
+	LoginUsageVia(func(context.Context, string) map[string]SubscriptionQuota {
+		used := 12.0
+		if asked.Add(1) == 1 {
+			// what an earlier test's fake said, answered late
+			<-hold
+			defer close(landed)
+			used = 97
+		}
+		return map[string]SubscriptionQuota{"me@example.com": {Windows: []QuotaWindow{{Span: 5 * time.Hour, Used: used}}}}
+	})
+	t.Cleanup(func() { forgetAllowances(); LoginUsageVia(nil) })
+	oldWait := firstWait
+	firstWait = time.Millisecond
+	t.Cleanup(func() { firstWait = oldWait })
+
+	Allowances("codex") // the reading is out, held
+	time.AfterFunc(50*time.Millisecond, func() { close(hold) })
+	forgetAllowances()
+	select {
+	case <-landed:
+	default:
+		t.Fatal("forgotten while a reading was still out")
+	}
+	firstWait = 5 * time.Second
+	if got, _ := Allowances("codex")["me@example.com"].For("gpt-5.5", time.Now()); got != 12 || asked.Load() != 2 {
+		t.Fatalf("asked again: used %v, readings %d; want 12 from a reading of its own", got, asked.Load())
 	}
 }
 

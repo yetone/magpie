@@ -104,13 +104,7 @@ func TestResetRunsOutForRouting(t *testing.T) {
 			"other@example.com": {Windows: used, Resets: held},
 		}
 	})
-	reset := func() {
-		usedCache.Lock()
-		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
-		usedCache.Unlock()
-	}
-	reset()
-	t.Cleanup(func() { LoginUsageVia(nil); reset() })
+	t.Cleanup(func() { forgetAllowances(); LoginUsageVia(nil) })
 	oldWait := firstWait
 	firstWait = 5 * time.Second
 	t.Cleanup(func() { firstWait = oldWait })

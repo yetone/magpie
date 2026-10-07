@@ -100,7 +100,6 @@ func TestCodexCreditsSwitch(t *testing.T) {
 func TestRenewedAccountForgetsItsAllowance(t *testing.T) {
 	signIn(t)
 	usedCache.Lock()
-	usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
 	usedCache.m["codex"] = map[string]Allowance{
 		"me@example.com":    {{Used: 100, Span: 5 * time.Hour}},
 		"spare@example.com": {{Used: 10, Span: 5 * time.Hour}},
@@ -108,11 +107,6 @@ func TestRenewedAccountForgetsItsAllowance(t *testing.T) {
 	usedCache.at["codex"] = time.Now()
 	handed := usedCache.m["codex"]
 	usedCache.Unlock()
-	t.Cleanup(func() {
-		usedCache.Lock()
-		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
-		usedCache.Unlock()
-	})
 	renewedNow("codex", "Me@Example.com")
 	usedCache.Lock()
 	m, at := usedCache.m["codex"], usedCache.at["codex"]
