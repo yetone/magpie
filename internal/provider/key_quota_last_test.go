@@ -28,9 +28,7 @@ func TestKeyQuotasKeepLast(t *testing.T) {
 		t.Setenv(v, "")
 	}
 	restart := func() {
-		lastQuotas.Lock()
-		lastQuotas.m, lastQuotas.loaded = nil, false
-		lastQuotas.Unlock()
+		forgetLastReadings()
 		ForgetBalances()
 		forgetPlanQuotas()
 	}
@@ -87,9 +85,7 @@ func TestKeyQuotasKeepLast(t *testing.T) {
 	}
 
 	down.Store(true)
-	lastQuotas.Lock()
-	lastQuotas.m, lastQuotas.loaded = nil, false // read again from disk, as after a restart
-	lastQuotas.Unlock()
+	forgetLastReadings() // read again from disk, as after a restart
 	plans, bals = read()
 	if q := plans["commandcode"]; q.Error != "" || q.AsOf == nil || len(q.Windows) != 2 || q.Windows[1].Used != 30 || q.Name != "commandCode" {
 		t.Fatalf("plan while down: %+v", q)

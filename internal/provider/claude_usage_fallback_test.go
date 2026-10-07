@@ -26,16 +26,10 @@ func claudeUsageCards(t *testing.T, text string, snapshot *lastQuota) (*atomic.V
 	var out atomic.Value
 	out.Store(text)
 	fakeClaudeUsage(t, &out, nil)
-	lastQuotas.Lock()
-	lastQuotas.m, lastQuotas.loaded = nil, false
-	lastQuotas.Unlock()
 	loginUsageCache.Lock()
 	loginUsageCache.m = nil
 	loginUsageCache.Unlock()
 	t.Cleanup(func() {
-		lastQuotas.Lock()
-		lastQuotas.m, lastQuotas.loaded = nil, false
-		lastQuotas.Unlock()
 		loginUsageCache.Lock()
 		loginUsageCache.m = nil
 		loginUsageCache.Unlock()

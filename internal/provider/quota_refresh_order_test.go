@@ -37,9 +37,7 @@ func isolateRefreshes(t *testing.T) {
 		subscriptionUsageCache.Lock()
 		subscriptionUsageCache.data, subscriptionUsageCache.at, subscriptionUsageCache.asked = nil, time.Time{}, false
 		subscriptionUsageCache.Unlock()
-		lastQuotas.Lock()
-		lastQuotas.m, lastQuotas.loaded = nil, false
-		lastQuotas.Unlock()
+		forgetLastReadings()
 	}
 	reset()
 	t.Cleanup(reset)
@@ -198,9 +196,7 @@ func TestRefreshUsageKeepsNewerKeyReading(t *testing.T) {
 				}
 				// The late response must not corrupt quotas.json either: a
 				// subsequent 503, after restarting its cache, uses the new value.
-				lastQuotas.Lock()
-				lastQuotas.m, lastQuotas.loaded = nil, false
-				lastQuotas.Unlock()
+				forgetLastReadings()
 				expire()
 				assertCards(read(ctx), 90, 10, 40)
 			})
@@ -266,9 +262,7 @@ func TestRefreshUsageKeepsNewerSubscription(t *testing.T) {
 			if len(got) != 1 || got[0].Error != "" || len(got[0].Windows) != 1 || got[0].Windows[0].Used != 80 {
 				t.Fatalf("after late subscription response: %+v, want 80%%", got)
 			}
-			lastQuotas.Lock()
-			lastQuotas.m, lastQuotas.loaded = nil, false
-			lastQuotas.Unlock()
+			forgetLastReadings()
 			c.Lock()
 			c.at, c.asked = time.Time{}, true
 			c.Unlock()
