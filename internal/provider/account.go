@@ -125,7 +125,7 @@ func (p Provider) ListedAPIs(model string) []Protocol {
 		return p.pluginAPIs(model)
 	}
 	// asked for every model of every agent: read once while a request holds
-	ms := heldOf("live:"+p.ID, func() []catalog.Model { ms, _, _ := catalog.Live(p.ID); return ms })
+	ms, _, _ := p.live()
 	for _, m := range ms {
 		if m.ID == model && len(m.APIs) > 0 {
 			out := make([]Protocol, len(m.APIs))
