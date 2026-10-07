@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -37,8 +38,25 @@ esac
 		for deadline := time.Now().Add(10 * time.Second); provider.FetchingNew() && time.Now().Before(deadline); {
 			time.Sleep(20 * time.Millisecond)
 		}
-		provider.CursorExecutable = old
+		// ForgetAccounts has Cursor's CLI asked again, but until that ask
+		// answers, every look but the one waiting on it (and that one too
+		// after firstAsk) is served the last answer: this test's fake
+		// account. The FetchNew this test's last GET started isn't counted
+		// by FetchingNew until it runs, so it can slip past the wait above
+		// and be that waiting look, and a later test's provider.All()
+		// listed "cursor" (TestProviderListBeforeSave on macOS CI). So the
+		// accounts are forgotten with no CLI, which answers nobody at once,
+		// and the cleanup waits until that is what is served.
+		provider.CursorExecutable = func() string { return "" }
 		provider.ForgetAccounts()
+		cursor := func(p provider.Provider) bool { return p.ID == "cursor" }
+		for deadline := time.Now().Add(10 * time.Second); slices.ContainsFunc(provider.All(), cursor); time.Sleep(20 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Error("the fake Cursor account was still served after the test")
+				break
+			}
+		}
+		provider.CursorExecutable = old
 	})
 
 	mux := http.NewServeMux()
