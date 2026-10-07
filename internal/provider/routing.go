@@ -561,6 +561,7 @@ func StaleAllowance(agent, user string) {
 		for _, g := range gs {
 			if strings.EqualFold(g.User, user) {
 				delete(grokHomeUsage.m, g.Home)
+				delete(grokHomeUsage.pending, g.Home)
 			}
 		}
 		grokHomeUsage.Unlock()
