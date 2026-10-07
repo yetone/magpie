@@ -394,6 +394,16 @@ var refreshing sync.WaitGroup
 // host left running: for tests that watch the providers' list on disk.
 func Refreshed() { refreshing.Wait() }
 
+// Told waits for the hooks told of a change (OnChange) to end: for tests,
+// so that a change one test made is not told in the next.
+func Told() {
+	telling.Lock()
+	for telling.n > 0 {
+		telling.Wait()
+	}
+	telling.Unlock()
+}
+
 // Settle waits for Cached's refreshes to end, then stops the host: for
 // tests, whose folders the host runs in go when they end. Each ask is
 // bounded and the retries are few, so this waits a bounded time even for
@@ -411,6 +421,8 @@ func Settle() {
 	for _, h := range hs {
 		h.stop()
 	}
+	// nor is the restart, or a sign-in a host saved, told in the next test
+	Told()
 }
 
 // Cached is the plugins' providers as last asked, without starting the

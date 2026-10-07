@@ -37,7 +37,9 @@ func movedPlugin(t *testing.T, id string, auths map[string]map[string]any) {
 	write("plugin-auth.json", auths)
 	plugin.UseCached([]plugin.Provider{{ID: id, Spec: spec, Name: strings.ToUpper(id[:1]) + id[1:],
 		Methods: []plugin.Method{{Type: "oauth", Label: "Sign in"}}}})
-	t.Cleanup(func() { plugin.UseCached(nil) })
+	// and a change the test told the plugins' hooks (signing out with no
+	// host) is over before the next test, whose holds it would drop
+	t.Cleanup(func() { plugin.UseCached(nil); plugin.Told() })
 	if err := setMigration(id, func(m *Migration) { m.State, m.Package = MovePlugin, spec }); err != nil {
 		t.Fatal(err)
 	}
