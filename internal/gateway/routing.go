@@ -256,15 +256,18 @@ type Rest struct {
 }
 
 // renewed lifts the rests of a subscription account whose windows were
-// just started again (a Codex reset spent): out of quota no longer. Told
-// agent "", it is a key (provider.KeyAllowanceID) whose windows a reading
-// found full no more — its limit raised, or its usage reset — and its
-// rest out of them is lifted; a key's other rests aren't noted by it.
+// just started again (a Codex reset spent, or a reading finding a window
+// it was full in full no more): out of quota no longer. Only its rests out
+// of quota, or failed with a window full ("window"), are lifted; one for a
+// rate limit, its credit or a verification stays. Told agent "", it is a
+// key (provider.KeyAllowanceID) whose windows a reading found full no
+// more — its limit raised, or its usage reset — and its rest out of them
+// is lifted; a key's other rests aren't noted by it.
 func renewed(agent, user string) {
 	restingUntil.Lock()
 	defer restingUntil.Unlock()
 	for k, r := range restingUntil.note {
-		if r.agent == agent && strings.EqualFold(r.user, user) {
+		if r.agent == agent && strings.EqualFold(r.user, user) && (r.Why == failQuota || r.By == "window") {
 			delete(restingUntil.m, k)
 			delete(restingUntil.note, k)
 		}
