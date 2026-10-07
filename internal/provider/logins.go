@@ -169,6 +169,13 @@ func readLogins() []savedLogin {
 		// doesn't allow its subscription used outside its client), so one
 		// signed in before is left out, and gone from the file at its next write
 		out = slices.DeleteFunc(out, func(l savedLogin) bool { return l.Agent == "dimagent" })
+		// a Copilot account signed in at an enterprise before its name
+		// carried the host (#1220) is listed by the name it gets now
+		for i := range out {
+			if out[i].Agent == "copilot" {
+				out[i].User = copilotSavedName(out[i])
+			}
+		}
 		return nameAlike(dedupeLogins(out)), nil
 	})
 	lastLoginsMu.Lock()

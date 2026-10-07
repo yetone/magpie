@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/yetone/magpie/internal/appdir"
 )
@@ -26,6 +27,33 @@ func copilotConfigDir() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config")
+}
+
+// copilotName is the name a Copilot account is listed and addressed by
+// (switching, forgetting, its usage, routing): its GitHub login on
+// github.com, login@<name>.ghe.com on an enterprise's host (#1220). A
+// GitHub login holds no "@", so the host reads apart, and one login's
+// accounts on two enterprises, or on an enterprise and github.com, are as
+// many accounts, not one taking the place of the next.
+func copilotName(login, host string) string {
+	if host == "" {
+		return login
+	}
+	return login + "@" + host
+}
+
+// copilotSavedName is a saved account's name as it is listed now: one
+// signed in at an enterprise before its name carried the host (#1220)
+// gets the host, the rest keep theirs.
+func copilotSavedName(l savedLogin) string {
+	var app copilotApp
+	if l.own() || json.Unmarshal(l.Auth, &app) != nil || app.Host == "" {
+		return l.User
+	}
+	if h, err := CopilotHost(app.Host); err != nil || h != app.Host || strings.HasSuffix(strings.ToLower(l.User), "@"+h) {
+		return l.User
+	}
+	return copilotName(l.User, app.Host)
 }
 
 // copilotSaved is the sign-in of an account magpie keeps.
@@ -73,7 +101,7 @@ func copilotOwnUser(cfg string) string {
 	if !ok {
 		return ""
 	}
-	return firstNonEmpty(own.User, "GitHub")
+	return copilotName(firstNonEmpty(own.User, "GitHub"), own.Host)
 }
 
 func copilotSide() []sideLogin {
@@ -98,15 +126,15 @@ func forgetCopilotLogin(user string) error {
 	return forgetSideLogin("copilot", user, copilotSide(), nil)
 }
 
-// addCopilotLogin keeps an account magpie just signed in, on host ("" for
-// github.com).
-func addCopilotLogin(user, plan, token, host string) error {
+// addCopilotLogin keeps an account magpie just signed in as login, on
+// host ("" for github.com), under its name there (copilotName).
+func addCopilotLogin(login, plan, token, host string) error {
 	a := map[string]string{"oauth_token": token}
 	if host != "" {
 		a["host"] = host
 	}
 	auth, _ := json.Marshal(a)
-	return addSideLogin(savedLogin{Agent: "copilot", User: user, Plan: plan, Auth: auth}, copilotOwnUser(copilotConfigDir()), func(savedLogin) {})
+	return addSideLogin(savedLogin{Agent: "copilot", User: copilotName(login, host), Plan: plan, Auth: auth}, copilotOwnUser(copilotConfigDir()), func(savedLogin) {})
 }
 
 // copilotAccount is the Copilot account in use first.

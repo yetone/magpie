@@ -122,7 +122,7 @@ func startCopilotSignIn(s *signInFlow) error {
 			if own, ok := copilotLogin(copilotConfigDir()); ok && strings.EqualFold(own.User, user) && own.Host == host {
 				using = true
 			}
-			s.finish(SignInState{State: "done", User: user, Plan: plan, Using: using})
+			s.finish(SignInState{State: "done", User: copilotName(user, host), Plan: plan, Using: using})
 			return
 		}
 	}()
