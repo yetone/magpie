@@ -68,13 +68,19 @@ var runInstaller = func(ctx context.Context, c agentCLI) ([]byte, error) {
 	}
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = proc.CommandContext(ctx, "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", c.ps)
+		// the one-liner goes to PowerShell on stdin, as one typed into it
+		// does: on PowerShell's command line, Microsoft Defender took
+		// "irm <url> | iex" for a Trojan (Trojan:Win32/Commando.A!ml) and
+		// stopped it before it ran, which came back as "Access is denied"
+		cmd = proc.CommandContext(ctx, "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "-")
+		cmd.Stdin = strings.NewReader(c.ps + "\n")
 	} else {
 		cmd = proc.CommandContext(ctx, "bash", "-c", c.sh)
 	}
 	cmd.Dir, _ = os.UserHomeDir()
 	cmd.Env = netproxy.Env(nil)
-	// no stdin: an installer that would ask something takes its default
+	// nothing more on stdin: an installer that would ask something takes
+	// its default
 	return cmd.CombinedOutput()
 }
 
