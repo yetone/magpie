@@ -146,6 +146,9 @@ async function main() {
     unresolved.then = (...args) => { readyReactions++; return originalThen(...args) }
     initialize(unresolved)
     run('send({id: 99, result: null})')
+    const counts = emitter => Object.fromEntries(emitter.eventNames().map(event => [event, emitter.listenerCount(event)]))
+    const listeners = () => ({ stdin: counts(rl), stdout: counts(stdout) })
+    const sharedListeners = listeners()
     for (let iteration = 0; iteration < 1000; iteration++) {
       fetchOne()
       abortOne()
@@ -154,6 +157,7 @@ async function main() {
     }
     assert.equal(lines.length, 1, 'stdout stayed blocked at original line')
     assert.equal(stdout.listenerCount('drain'), 1, 'only shared drain listener remains')
+    assert.deepEqual(listeners(), sharedListeners, 'cancelled bootstrap waits leave no listener on stdin or stdout')
     const retainedWaiters = run('typeof readyWaiters === "undefined" ? -1 : readyWaiters.size')
     const retainedReadyReactions = readyReactions - (run('typeof setReady') === 'function' ? 1 : 0)
     console.log(JSON.stringify({ cancellations: 1000, idle: idle(), queued: queued(), readyReactions, retainedReadyReactions, retainedWaiters }))
