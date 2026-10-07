@@ -140,6 +140,8 @@ export const FakePlugin = async ({ client }) => ({
       // $FAKE_USAGE: the plan is what the vendor's page there says
       if (process.env.FAKE_USAGE) {
         const r = await fetch(process.env.FAKE_USAGE)
+        // a 401 there: the vendor refused the sign-in
+        if (r.status === 401) return { error: "the FakeCo sign-in has expired — sign in again" }
         return { plan: await r.text() }
       }
       if (a.type !== "oauth") return { error: "an API key has no plan" }

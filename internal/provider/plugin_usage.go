@@ -101,6 +101,7 @@ func pluginLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
+	began := pluginSignInAt()
 	u, err := plugin.AccountUsage(ctx, pp.ID, key)
 	if err != nil {
 		q.Error = err.Error()
@@ -108,17 +109,18 @@ func pluginLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	// the plugin says what the read means for the sign-in, as a built-in's
 	// usage read marked the account or left it; one that doesn't say has
-	// an error to sign in again mark it and a clean read clear it
+	// an error to sign in again mark it and a clean read clear it. What a
+	// request was answered while it read is newer, and stands.
 	switch {
 	case u.SignIn == "expired":
-		notePluginLapse(pp, key, http.StatusUnauthorized)
+		notePluginLapseSince(pp, key, http.StatusUnauthorized, began)
 	case u.SignIn == "renewed":
-		notePluginLapse(pp, key, http.StatusOK)
+		notePluginLapseSince(pp, key, http.StatusOK, began)
 	case u.SignIn == "kept":
 	case signInGone.MatchString(u.Error):
-		notePluginLapse(pp, key, http.StatusUnauthorized)
+		notePluginLapseSince(pp, key, http.StatusUnauthorized, began)
 	case u.Error == "":
-		notePluginLapse(pp, key, http.StatusOK)
+		notePluginLapseSince(pp, key, http.StatusOK, began)
 	}
 	keepPluginPlan(pp, key, u.Plan)
 	return quotaOfPlugin(q, u)
