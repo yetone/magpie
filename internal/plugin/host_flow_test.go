@@ -38,16 +38,17 @@ func TestHostJSCancellation(t *testing.T) {
 }
 
 // runHostJSCase runs one case of hostJSCancellationTest in node against the
-// embedded host.js. A case that hangs is stopped before this run's own
-// deadline, rather than at a fixed 10s a loaded machine can spend starting
-// node.
+// embedded host.js. A case that hangs is stopped after two minutes, or before
+// this run's own deadline if that comes first, rather than at a fixed 10s a
+// loaded machine can spend starting node. The cap keeps a real hang from
+// using up most of a 10m -timeout, and from hanging a -timeout 0 run.
 func runHostJSCase(t *testing.T, node, name string) ([]byte, error) {
-	ctx := context.Background()
+	limit := 2 * time.Minute
 	if d, ok := t.Deadline(); ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Until(d)*9/10)
-		defer cancel()
+		limit = min(limit, time.Until(d)*9/10)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
+	defer cancel()
 	// ready-wait forces a garbage collection (--expose-gc). A function V8 is
 	// optimizing on a worker thread is held until a worker is done with it,
 	// and with it the request it was made for, so V8 optimizes on the main
