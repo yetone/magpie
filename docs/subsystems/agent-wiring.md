@@ -53,8 +53,10 @@ something else shows up as drift.
   sandboxing. WSL uses the distro's default folder and gateway address, not
   Windows' overrides. When neither its config nor CLI is present, the Agents
   page still offers OpenClaw under **Install other agents**, using its vendor
-  installer for macOS/Linux or PowerShell on Windows ([`install.go`](../../internal/agent/install.go)).
-  Listing the installer does not create an OpenClaw config.
+  installer labeled `shell` for macOS/Linux or PowerShell on Windows, plus
+  `npm i -g openclaw` on each platform for users who already manage Node.js
+  ([`install.go`](../../internal/agent/install.go)). Listing these commands
+  neither runs an installer nor creates an OpenClaw config.
 - Codex signed in to ChatGPT stays beside its sign-in (`openai_base_url`) unless the user picks magpie API. magpie becomes its provider only while the Codex app holds the active account, which it sends nothing for: `/wham/usage` says it isn't allowed, and it has no credits and isn't a workspace still within its overage (`codexHeld`, read by `provider.CodexUsedUp`). Where the app goes by what usage can't show (an experiment's gate, a reserve, a Team plan's overage under the reserve experiment), it counts as held: a wrong move costs ChatGPT extras, a missed one every turn. A saved reading kept through a failed read stops saying held once its used-up window has started again; a hold with no window used up stays till a fresh read. The app then loses its ChatGPT state (durable threads, remote control), so a window at 100% alone, which credits get past, doesn't move it (`codex.out` marks the move, and Sync undoes it once the account has room).
 - Moving a field from one of magpie's models to another (the agent's own picker) is not drift. Moving it off magpie is.
 - A field that follows another while empty (`Follows`: Claude Code's tiers and subagents on its main model) is read by `Drift` as on that field's model. The main model moved, in Claude Code's own `/model`, onto the model magpie had set a tier to is not drift (#1050).

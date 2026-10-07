@@ -56,7 +56,7 @@ func TestOpenClawInstallOnFreshHome(t *testing.T) {
 				if x.ID != a.ID {
 					continue
 				}
-				if x.Name != a.Name || x.Icon != "openclaw-color" || len(x.Commands) != 1 || x.Missing {
+				if x.Name != a.Name || x.Icon != "openclaw-color" || len(x.Commands) != 2 || x.Missing {
 					t.Fatalf("OpenClaw install entry: %+v", x)
 				}
 				if _, err := os.Stat(a.Dir); !os.IsNotExist(err) {
