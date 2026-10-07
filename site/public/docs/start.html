@@ -171,7 +171,7 @@
       <tr><td>In order <code>order</code></td><td>The first model until it can’t answer, then the next.</td></tr>
       <tr><td>In turn <code>rotate</code></td><td>Each conversation’s next turn goes to the next member’s account or key, spreading the load.</td></tr>
       <tr><td>Least used <code>usage</code></td><td>The account or key with the most of its allowance left.</td></tr>
-      <tr><td>Weekly pace <code>pace</code></td><td>The account with the most of its week left per hour until it renews — the one with the most to lose at its reset — so less of each member’s week is lost at its reset; an account with five hours and no week (Claude Enterprise) by what its five hours have left per hour until they renew, so almost always first. One at 90% or more waits until the others can’t answer. A key by the tokens sent it lately.</td></tr>
+      <tr><td>Weekly pace <code>pace</code></td><td>Uses each member’s week up evenly until it renews — the most of its week left per hour first — so later five-hour windows still have several accounts. One with five hours and no week (Claude Enterprise) goes by its five hours, so almost always first. One at 90% or more waits until the others can’t answer. A key by the tokens sent it lately.</td></tr>
     </table></div>
     <div class="table-wrap"><table>
       <tr><th>Stays</th><th>How long a conversation stays with the account or key that answered it</th></tr>

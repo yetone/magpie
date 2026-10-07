@@ -122,7 +122,7 @@ A **routing group** is several models that an agent picks as one: `group/daily-c
 | `order` | Use the first model until it can't answer, then the next |
 | `rotate` | Move to the next member on each turn |
 | `usage` | Use the least-used member first |
-| `pace` | Use the account with the most of its week left per hour until its reset |
+| `pace` | Use each account's week up evenly until its reset |
 
 Conversations **stay with the account that answered them** while the vendor's prompt cache is still worth keeping. **Intent routing** goes further: a small model you choose reads each new turn, so tests can go to the strong model and quick questions to the fast, cheap one. Groups can contain other groups. The Routing tab shows each decision live.
 
