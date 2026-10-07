@@ -24,7 +24,7 @@ func TestHostJSCancellation(t *testing.T) {
 	if err != nil {
 		t.Skip("no node on PATH")
 	}
-	for _, name := range []string{"stopped-gate", "split-chunk", "terminal", "blocked-head", "blocked-head-cancel-error", "ready-wait", "ready-success", "ready-error", "local-error", "local-error-cancel", "normal-reply"} {
+	for _, name := range []string{"stopped-gate", "split-chunk", "terminal", "blocked-head", "blocked-head-cancel-error", "ready-wait", "ready-success", "ready-error", "local-error", "local-error-cancel", "normal-reply", "held-window"} {
 		t.Run(name, func(t *testing.T) {
 			out, err := runHostJSCase(t, node, name)
 			if err != nil {
@@ -266,6 +266,22 @@ async function main() {
     abortOne()
     await until(idle, 'host cancel ends error wait even after local signal aborted')
     assert.equal(queued(), 0, 'late error removed after host cancel')
+  } else if (name === 'held-window') {
+    // the reader credits nothing back, so the fetch spends its whole window
+    // and waits in gate.take; a cancel must wake that wait, or the fetch
+    // never finishes
+    context.reply.body = (async function* () { yield Buffer.alloc(1 << 20) })()
+    fetchOne()
+    const chunks = () => lines.filter(msg => msg.event === 'chunk')
+    const spent = () => chunks().reduce((n, msg) => n + Buffer.from(msg.data, 'base64').length + run('FRAME_OVERHEAD'), 0)
+    await until(() => spent() === 512 << 10, 'fetch spends its whole window')
+    const held = chunks().length
+    for (let iteration = 0; iteration < 5; iteration++) await tick()
+    assert.equal(chunks().length, held, 'no frame past the window')
+    assert.equal(idle(), false, 'fetch waits for credit')
+    abortOne()
+    await until(idle, 'cancel wakes a fetch waiting for credit')
+    assert.equal(lines.filter(msg => msg.id === 1 && ('result' in msg || 'error' in msg)).length, 0)
   } else if (name === 'normal-reply') {
     context.reply.body = (async function* () { yield Buffer.from('complete reply') })()
     fetchOne()
