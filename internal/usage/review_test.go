@@ -3,6 +3,7 @@ package usage
 import (
 	"bytes"
 	"encoding/csv"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -104,6 +105,116 @@ func TestCalendarBucketsAcrossDST(t *testing.T) {
 		start, bucket, pts = timeline(All, next, first)
 		if bucket != "week" || bucketIndex(bucket, start, next) != len(pts)-1 {
 			t.Fatal("weekly calendar bucket mismatch")
+		}
+	}
+}
+
+// Where the clocks go forward at midnight, that day begins at 01:00 and has
+// 23 hours. West of UTC (Santiago, Havana, the Azores) time.Date puts its
+// 00:00 at 23:00 the day before; east of UTC (Beirut, Cairo) it puts it at
+// 01:00, and AddDate from there kept 01:00 for the days around it. Each
+// period, and each hour or day of its chart, begins when that day or hour
+// does, and a call is counted and charted in the one it was made in.
+func TestCalendarSkippedMidnight(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	const hour, day = time.Hour, 24 * time.Hour
+	for _, c := range []struct {
+		zone  string
+		begin time.Time // when the day whose 00:00 the clocks skip begins
+	}{
+		{"America/Santiago", time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC)},
+		{"America/Havana", time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC)},
+		{"Atlantic/Azores", time.Date(2026, 3, 29, 1, 0, 0, 0, time.UTC)},
+		{"Asia/Beirut", time.Date(2026, 3, 28, 22, 0, 0, 0, time.UTC)},
+		{"Africa/Cairo", time.Date(2026, 4, 23, 22, 0, 0, 0, time.UTC)},
+	} {
+		loc, err := time.LoadLocation(c.zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		begin := c.begin.In(loc)
+		y, m, d := begin.Date()
+		days := func(from, n int) (labels []string) {
+			for i := range n {
+				labels = append(labels, time.Date(y, m, d+from+i, 12, 0, 0, 0, time.UTC).Format("Jan 2"))
+			}
+			return labels
+		}
+		weeks := func(from, n int) (labels []string) {
+			for i := range n {
+				labels = append(labels, days(from+7*i, 1)...)
+			}
+			return labels
+		}
+		hours := func(from int) (labels []string) {
+			for h := from; h < 24; h++ {
+				labels = append(labels, fmt.Sprintf("%02d", h))
+			}
+			return labels
+		}
+		// a long All goes by week, from the Monday of the day's week
+		monday := -time.Duration((int(begin.Weekday())+6)%7) * day
+		// now, since and last are from begin: when the period is asked
+		// for, when it begins, and a call in its chart's last point; on is
+		// the point of a call 12 hours into the day, -1 for a period without
+		// it
+		for _, k := range []struct {
+			what             string
+			p                Period
+			now, since, last time.Duration
+			labels           []string
+			on               int
+		}{
+			{"today", Today, 12 * hour, 0, 22*hour + 30*time.Minute, hours(1), 12},
+			{"the day before", Today, -12 * hour, -day, -30 * time.Minute, hours(0), -1},
+			{"7 days to the day", Week, 12 * hour, -6 * day, 12 * hour, days(-6, 7), 6},
+			{"7 days across the day", Week, 3*day + 12*hour, -3 * day, 3*day + 12*hour, days(-3, 7), 3},
+			{"7 days from the day", Week, 6*day + 12*hour, 0, 6*day + 12*hour, days(0, 7), 0},
+			{"30 days to the day", Month, 12 * hour, -29 * day, 12 * hour, days(-29, 30), 29},
+			{"30 days from the day", Month, 29*day + 12*hour, 0, 29*day + 12*hour, days(0, 30), 0},
+			{"all from the day", All, 6*day + 12*hour, 0, 6*day + 12*hour, days(0, 7), 0},
+			{"all by week from the day", All, 70*day + 12*hour, monday, 70*day + 12*hour, weeks(int(monday/day), 11), 0},
+		} {
+			now, since := begin.Add(k.now), begin.Add(k.since)
+			call := func(at time.Time) Record { return Record{Time: at, Provider: "p", Input: 1, Status: 200} }
+			// a call as the period begins (All's first, on the day), one
+			// in its last point, one 12 hours into the day and, but for All,
+			// which begins with the first call, one just before the
+			// period, which isn't counted
+			first := since
+			if k.p == All {
+				first = begin
+			}
+			recs := []Record{call(first.Add(30 * time.Minute)), call(begin.Add(k.last))}
+			want := make([]int, len(k.labels))
+			want[0]++
+			want[len(want)-1]++
+			if k.on >= 0 {
+				recs = append(recs, call(begin.Add(12*hour)))
+				want[k.on]++
+			}
+			counted := len(recs)
+			if k.p != All {
+				recs = append(recs, call(since.Add(-30*time.Minute)))
+				if got := k.p.Since(now); !got.Equal(since) {
+					t.Errorf("%s, %s (%s): the period begins at %s, want %s", c.zone, k.what, now, got, since)
+				}
+			}
+			s := summarize(k.p, now, recs)
+			var labels []string
+			var charted []int
+			for _, pt := range s.Series {
+				labels = append(labels, pt.Label)
+				charted = append(charted, pt.Calls)
+			}
+			if !s.Since.Equal(since) || !slices.Equal(labels, k.labels) {
+				t.Errorf("%s, %s (%s): the chart begins at %s with points %v, want %s with %v", c.zone, k.what, now, s.Since, labels, since, k.labels)
+			}
+			if s.Calls != counted || !slices.Equal(charted, want) {
+				t.Errorf("%s, %s (%s): %d calls counted, charted %v, want %d, charted %v", c.zone, k.what, now, s.Calls, charted, counted, want)
+			}
 		}
 	}
 }

@@ -159,16 +159,32 @@ func (f Filter) keeps(r Record) bool {
 
 // Since is when the period began, as of now; zero for all.
 func (p Period) Since(now time.Time) time.Time {
-	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	y, m, d := now.Date()
 	switch p {
 	case Today:
-		return day
+		return midnight(y, m, d, now.Location())
 	case Week:
-		return day.AddDate(0, 0, -6)
+		return midnight(y, m, d-6, now.Location())
 	case Month:
-		return day.AddDate(0, 0, -29)
+		return midnight(y, m, d-29, now.Location())
 	}
 	return time.Time{}
+}
+
+// midnight is when day d of m in y begins at loc. Where the clocks go
+// forward over 00:00 west of UTC (Santiago, Havana, the Azores), time.Date
+// puts the 00:00 they skip on the day before, so the day begins as they go
+// forward instead. Where they go back across 00:00, so that it comes twice,
+// this is the one time.Date gives, east of UTC the second. A period's days
+// each begin here, from their own date: AddDate from another day's start
+// keeps its clock, and east of UTC (Beirut) one that began at 01:00 would
+// start the days around it at 01:00 too.
+func midnight(y int, m time.Month, d int, loc *time.Location) time.Time {
+	t := time.Date(y, m, d, 0, 0, 0, 0, loc)
+	if t.Day() != time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Day() {
+		_, t = t.ZoneBounds()
+	}
+	return t
 }
 
 // LogCalls reads the calls the agents' own session files record, which the
@@ -484,20 +500,22 @@ func WriteCSV(w io.Writer, rows []Row) error {
 // and per week (from a Monday) of a longer time, which starts at first, the
 // time of the oldest call. since is when it starts.
 func timeline(p Period, now, first time.Time) (since time.Time, bucket string, pts []Point) {
-	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	loc := now.Location()
+	y, m, d := now.Date()
+	day := midnight(y, m, d, loc)
 	bucket, pts = "day", []Point{}
 	var n int
 	switch p {
 	case Today:
 		since, bucket = day, "hour"
 	case Week:
-		since, n = day.AddDate(0, 0, -6), 7
+		since, n = midnight(y, m, d-6, loc), 7
 	case Month:
-		since, n = day.AddDate(0, 0, -29), 30
+		since, n = midnight(y, m, d-29, loc), 30
 	default:
 		if !first.IsZero() {
-			f := first.In(now.Location())
-			since = time.Date(f.Year(), f.Month(), f.Day(), 0, 0, 0, 0, now.Location())
+			fy, fm, fd := first.In(loc).Date()
+			since = midnight(fy, fm, fd, loc)
 		} else {
 			since = day
 		}
@@ -505,24 +523,27 @@ func timeline(p Period, now, first time.Time) (since time.Time, bucket string, p
 			bucket = "week"
 			// start on the Monday of the first week
 			off := (int(since.Weekday()) + 6) % 7
-			since = since.AddDate(0, 0, -off)
+			sy, sm, sd := since.Date()
+			since = midnight(sy, sm, sd-off, loc)
 			n = calendarDays(since, day)/7 + 1
 		}
 	}
+	sy, sm, sd := since.Date()
 	switch bucket {
 	case "hour":
-		for h := 0; day.Add(time.Duration(h) * time.Hour).Before(day.AddDate(0, 0, 1)); h++ {
+		end := midnight(y, m, d+1, loc)
+		for h := 0; day.Add(time.Duration(h) * time.Hour).Before(end); h++ {
 			t := day.Add(time.Duration(h) * time.Hour)
 			pts = append(pts, Point{Label: t.Format("15"), Time: t})
 		}
 	case "day":
 		for i := 0; i < n; i++ {
-			t := since.AddDate(0, 0, i)
+			t := midnight(sy, sm, sd+i, loc)
 			pts = append(pts, Point{Label: t.Format("Jan 2"), Time: t})
 		}
 	case "week":
 		for i := 0; i < n; i++ {
-			t := since.AddDate(0, 0, 7*i)
+			t := midnight(sy, sm, sd+7*i, loc)
 			pts = append(pts, Point{Label: t.Format("Jan 2"), Time: t})
 		}
 	}
