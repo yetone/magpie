@@ -584,3 +584,57 @@ func TestKeychainText(t *testing.T) {
 		t.Fatal("hex that isn't JSON taken")
 	}
 }
+
+// The cached credential hands every caller the same raw maps, so marshal
+// must not write into them: Logins and the background Allowances read
+// marshal it at once, which -race reported as a race in
+// TestClaudeSwitchIsNoLogout and production would crash on as concurrent
+// map writes.
+func TestClaudeMarshalLeavesCachedMapsAlone(t *testing.T) {
+	file := []byte(`{
+  "claudeAiOauth": {
+    "accessToken": "sk-ant-oat01-a",
+    "refreshToken": "sk-ant-ort01-r",
+    "expiresAt": 1791331200000,
+    "scopes": ["user:inference", "user:profile"],
+    "subscriptionType": "max",
+    "rateLimitTier": "default_claude_max_20x"
+  },
+  "mcpOAuth": {"plugin:slack:slack|x": {"serverName": "Slack", "accessToken": "xoxp"}}
+}`)
+	c, ok := parseClaudeCredentials(file)
+	if !ok {
+		t.Fatal("unparsed")
+	}
+	before, _ := json.Marshal(c.raw)
+	c.OAuth.AccessToken = "sk-ant-oat01-b"
+
+	var wg sync.WaitGroup
+	outs := make([][]byte, 8)
+	for i := range outs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			outs[i], _ = c.marshal()
+		}()
+	}
+	wg.Wait()
+
+	if after, _ := json.Marshal(c.raw); string(after) != string(before) {
+		t.Fatalf("marshal changed the cached maps:\n%s\nwas\n%s", after, before)
+	}
+	for _, b := range outs {
+		var got map[string]any
+		if json.Unmarshal(b, &got) != nil {
+			t.Fatalf("not JSON: %s", b)
+		}
+		o, _ := got["claudeAiOauth"].(map[string]any)
+		if o["accessToken"] != "sk-ant-oat01-b" || o["rateLimitTier"] != "default_claude_max_20x" {
+			t.Fatalf("claudeAiOauth: %v", o)
+		}
+		// everything else in the file is written back as it was
+		if mcp, _ := json.Marshal(got["mcpOAuth"]); string(mcp) != `{"plugin:slack:slack|x":{"accessToken":"xoxp","serverName":"Slack"}}` {
+			t.Fatalf("mcpOAuth: %s", mcp)
+		}
+	}
+}
