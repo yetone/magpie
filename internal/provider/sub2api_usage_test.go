@@ -161,8 +161,10 @@ func sub2apiServer(t *testing.T, body func() ([]byte, int)) (*httptest.Server, *
 	return srv, &asked
 }
 
-func sub2apiKey(srv *httptest.Server) Provider {
-	return Provider{ID: "sub2api", Name: "Sub2API", Chat: srv.URL + "/v1", Responses: srv.URL + "/v1",
+// sub2apiKey is a key at srv, under an id of the test's own: a renewal a
+// reading behind another test tells, after it ended, is not this one's.
+func sub2apiKey(t *testing.T, srv *httptest.Server) Provider {
+	return Provider{ID: "sub2api-" + Slug(t.Name()), Name: "Sub2API", Chat: srv.URL + "/v1", Responses: srv.URL + "/v1",
 		Key: "sk-limited", BalanceURL: srv.URL + "/v1/usage"}
 }
 
@@ -175,14 +177,14 @@ func TestSub2APIKeyLimitsOnItsCard(t *testing.T) {
 	b := sub2apiUsage(t, true)
 	body.Store(&b)
 	srv, _ := sub2apiServer(t, func() ([]byte, int) { return *body.Load(), 200 })
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	if err := Save(p); err != nil {
 		t.Fatal(err)
 	}
 	card := func() SubscriptionQuota {
 		ForgetBalances()
 		for _, q := range KeyBalances(context.Background()) {
-			if q.Provider == "sub2api" {
+			if q.Provider == p.ID {
 				return q
 			}
 		}
@@ -247,7 +249,7 @@ func TestKeyAllowanceNeverWaits(t *testing.T) {
 		<-release
 		return weekUsed(t, "720", week), 200
 	})
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	if err := Save(p); err != nil {
 		t.Fatal(err)
 	}
@@ -294,7 +296,7 @@ func TestKeyAllowanceFailedReadKeepsLast(t *testing.T) {
 		}
 		return weekUsed(t, "720", week), 200
 	})
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	if err := Save(p); err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +337,7 @@ func TestKeyAllowanceForgottenMidRead(t *testing.T) {
 	})
 	var once sync.Once
 	t.Cleanup(func() { once.Do(func() { close(release) }) })
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	KeyAllowance(p)
 	for asked.Load() < 1 {
 		time.Sleep(5 * time.Millisecond)
@@ -366,7 +368,7 @@ func TestKeyAllowanceStaleMidRead(t *testing.T) {
 	})
 	var once sync.Once
 	t.Cleanup(func() { once.Do(func() { close(release) }) })
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	renewedHooks.Lock()
 	hooks := renewedHooks.fs
 	renewedHooks.Unlock()
@@ -415,7 +417,7 @@ func TestKeyAllowanceSeededFromItsCard(t *testing.T) {
 		}
 		return weekUsed(t, "720", week), 200
 	})
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	if err := Save(p); err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +467,7 @@ func TestKeyAllowanceOnlyForSub2APIKeys(t *testing.T) {
 func TestKeyAllowancePerKeyAndForgotten(t *testing.T) {
 	keyLimitsHome(t)
 	srv, asked := sub2apiServer(t, func() ([]byte, int) { return sub2apiUsage(t, true), 200 })
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	now := time.Now()
 	week := now.Add(72 * time.Hour)
 	noteKeyAllowance(p, []QuotaWindow{{Name: "7 days", Span: 7 * 24 * time.Hour, Used: 95, ResetsAt: &week}}, now)
@@ -522,7 +524,7 @@ func TestKeyAllowanceRenewed(t *testing.T) {
 		}
 		return []byte(`{"error":{"type":"api_error","message":"internal error"}}`), 502
 	})
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	if err := Save(p); err != nil {
 		t.Fatal(err)
 	}
@@ -534,17 +536,21 @@ func TestKeyAllowanceRenewed(t *testing.T) {
 		renewedHooks.fs = hooks
 		renewedHooks.Unlock()
 	})
-	var mu sync.Mutex
-	var told []string
-	OnRenewed(func(agent, user string) {
-		mu.Lock()
-		told = append(told, agent+"/"+user)
-		mu.Unlock()
-	})
 	id := KeyAllowanceID(p)
 	if id != keyAllowanceID(p) {
 		t.Fatalf("KeyAllowanceID = %q", id)
 	}
+	var mu sync.Mutex
+	var told []string
+	// only its own key's: another test's reading may still tell its own
+	OnRenewed(func(agent, user string) {
+		if user != id {
+			return
+		}
+		mu.Lock()
+		told = append(told, agent+"/"+user)
+		mu.Unlock()
+	})
 	reply := func(b []byte) { body.Store(&b) }
 	// read is a reading as routing's, done here rather than behind it
 	read := func(b []byte) {
