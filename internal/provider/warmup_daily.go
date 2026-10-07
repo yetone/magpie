@@ -42,9 +42,9 @@ func dayStart(at string, now time.Time) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	y, mo, d := now.Date()
-	t := time.Date(y, mo, d, h, m, 0, 0, now.Location())
+	t := clockOn(y, mo, d, h, m, now.Location())
 	if t.After(now) {
-		t = time.Date(y, mo, d-1, h, m, 0, 0, now.Location())
+		t = clockOn(y, mo, d-1, h, m, now.Location())
 	}
 	return t, true
 }
@@ -56,8 +56,23 @@ func nextDayStart(at string, now time.Time) (time.Time, bool) {
 		return t, false
 	}
 	y, mo, d := t.Date()
-	h, m, _ := t.Clock()
-	return time.Date(y, mo, d+1, h, m, 0, 0, now.Location()), true
+	h, m, _ := settings.Clock(at)
+	return clockOn(y, mo, d+1, h, m, now.Location()), true
+}
+
+// clockOn is h:m on day d of mo in y at loc. Where the clocks go forward
+// over 00:00 west of UTC (Santiago, Havana, the Azores), time.Date puts a
+// time they skip on the day before, so it is when they go forward instead.
+// Another time they skip is the one time.Date gives: the same day, or,
+// where they once went forward from 23:00 east of UTC (Dhaka in 2009),
+// the next.
+func clockOn(y int, mo time.Month, d, h, m int, loc *time.Location) time.Time {
+	t := time.Date(y, mo, d, h, m, 0, 0, loc)
+	ty, tmo, td := t.Date()
+	if time.Date(ty, tmo, td, 0, 0, 0, 0, time.UTC).Before(time.Date(y, mo, d, 0, 0, 0, 0, time.UTC)) {
+		_, t = t.ZoneBounds()
+	}
+	return t
 }
 
 // dailyDue says whether a 5-hour window, as cur (as of now) and last

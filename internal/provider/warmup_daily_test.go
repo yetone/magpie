@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // a zone with no daylight saving, as a day's start is the local clock's
@@ -104,6 +106,74 @@ func TestDayStartAcrossDaylightSaving(t *testing.T) {
 	now := next.Add(10 * time.Minute)
 	if day, due := dailyDue("06:00", "2026-03-07", QuotaWindow{Name: "5 hours", Span: fiveHours}, now); !due || day != "2026-03-08" {
 		t.Fatalf("due %v for %q", due, day)
+	}
+}
+
+// A day whose clocks go forward over the time set still has its start,
+// and the next day's comes at the time set. West of UTC (Santiago, Havana,
+// the Azores) they go forward at 00:00, and time.Date put 00:00 or 00:30
+// at 23:00 or 23:30 the day before, which had had its start: that day had
+// none, and the next day's came an hour early. Elsewhere time.Date puts it
+// an hour either side on the day itself, and the next day's came an hour
+// off with it.
+func TestDayStartClocksGoForward(t *testing.T) {
+	for _, c := range []struct {
+		zone, at string
+		day      string    // the day the clocks skip at
+		start    time.Time // when that day's start comes
+	}{
+		{"America/Santiago", "00:00", "2026-09-06", time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC)},
+		{"America/Santiago", "00:30", "2026-09-06", time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC)},
+		{"America/Havana", "00:00", "2026-03-08", time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC)},
+		{"America/Havana", "00:30", "2026-03-08", time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC)},
+		{"Atlantic/Azores", "00:00", "2026-03-29", time.Date(2026, 3, 29, 1, 0, 0, 0, time.UTC)},
+		{"Atlantic/Azores", "00:30", "2026-03-29", time.Date(2026, 3, 29, 1, 0, 0, 0, time.UTC)},
+		{"Asia/Beirut", "00:30", "2026-03-29", time.Date(2026, 3, 28, 22, 30, 0, 0, time.UTC)},    // 01:30
+		{"Africa/Cairo", "00:30", "2026-04-24", time.Date(2026, 4, 23, 22, 30, 0, 0, time.UTC)},   // 01:30
+		{"America/New_York", "02:30", "2026-03-08", time.Date(2026, 3, 8, 6, 30, 0, 0, time.UTC)}, // 01:30
+		{"Europe/Berlin", "02:30", "2026-03-29", time.Date(2026, 3, 29, 1, 30, 0, 0, time.UTC)},   // 03:30
+	} {
+		loc, err := time.LoadLocation(c.zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		day, _ := time.Parse(time.DateOnly, c.day)
+		before := day.AddDate(0, 0, -1).Format(time.DateOnly)
+		now := c.start.Add(5 * time.Minute).In(loc)
+		if got, due := dailyDue(c.at, before, QuotaWindow{Name: "5 hours", Span: fiveHours}, now); !due || got != c.day {
+			t.Errorf("%s %s: at %s due %v for %q, want due for %s", c.zone, c.at, now, due, got, c.day)
+		}
+		// from the evening before, the day's; from the day and from just
+		// before the next day's, the next day's at the time set
+		h, m, _ := settings.Clock(c.at)
+		y, mo, d := day.Date()
+		next := time.Date(y, mo, d+1, h, m, 0, 0, loc)
+		for _, w := range [][2]time.Time{
+			{c.start.Add(-4 * time.Hour), c.start},
+			{c.start.Add(12 * time.Hour), next},
+			{next.Add(-20 * time.Minute), next},
+		} {
+			from, want := w[0].In(loc), w[1]
+			if got, _ := nextDayStart(c.at, from); !got.Equal(want) {
+				t.Errorf("%s %s: the next start from %s is %s, want %s", c.zone, c.at, from, got, want.In(loc))
+			}
+		}
+	}
+	// where they went forward from 23:00 or 23:30 east of UTC, time.Date
+	// put 23:30 on the next day: the start stays that close, not months on
+	// (the zone's next change) or none
+	for _, c := range []struct{ zone, from string }{
+		{"Asia/Dhaka", "2009-06-19 20:00"},     // 23:00 → 00:00
+		{"Asia/Pyongyang", "2018-05-04 20:00"}, // 23:30 → 00:00, for good
+	} {
+		loc, err := time.LoadLocation(c.zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		from, _ := time.ParseInLocation("2006-01-02 15:04", c.from, loc)
+		if next, _ := nextDayStart("23:30", from); !next.After(from) || next.Sub(from) > 6*time.Hour {
+			t.Errorf("%s 23:30: the next start from %s is %s", c.zone, from, next)
+		}
 	}
 }
 
