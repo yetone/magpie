@@ -138,3 +138,45 @@ func valuesType(vals []gjson.Result) string {
 	}
 	return t
 }
+
+// kimiSamplingParams is body with the sampling parameters Kimi Code's
+// servers validate against a per-model whitelist brought in line: a client
+// that sends its own defaults (VS Code Copilot's chat, temperature 0.1 and
+// top_p 1) is refused 400 "invalid temperature: only 1 is allowed for this
+// model" before any token is read, and the whole request fails. The values
+// are those Kimi Code accepts: temperature 1 and top_p 0.95. A request
+// already carrying them, or going to another provider, is left as it was.
+func kimiSamplingParams(p provider.Provider, to provider.Protocol, body []byte) []byte {
+	if !isKimi(p, to) {
+		return body
+	}
+	fixed := []struct {
+		key string
+		val string
+	}{
+		{"temperature", "1"},
+		{"top_p", "0.95"},
+	}
+	changed := false
+	for _, f := range fixed {
+		v := gjson.GetBytes(body, f.key)
+		switch {
+		case !v.Exists():
+			// insert after the opening brace; the body's own fields follow
+			var out bytes.Buffer
+			out.Grow(len(body) + 24)
+			out.WriteByte('{')
+			out.WriteString(`"` + f.key + `":` + f.val + `,`)
+			out.Write(body[1:])
+			body = out.Bytes()
+			changed = true
+		case v.Raw != f.val:
+			body = bytes.Replace(body, []byte(`"`+f.key+`":`+v.Raw), []byte(`"`+f.key+`":`+f.val), 1)
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+	return body
+}
