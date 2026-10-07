@@ -725,6 +725,12 @@ func TestPassthroughEffortNoneRefused(t *testing.T) {
 			t.Fatalf("turn %d: %d %s after %d calls, last sent %s", turn+1, code, body, f.calls, f.got)
 		}
 	}
+	// the levels named mark reasoning off as a whole: minimal, never
+	// refused itself, goes at low too
+	f.calls = 0
+	if code, body := postTo(t, srv, "/v1/chat/completions", `{"model":"m1","messages":[{"role":"user","content":"ok?"}],"reasoning_effort":"minimal"}`); code != 200 || f.calls != 1 || !bytes.Contains(f.got, []byte(`"reasoning_effort":"low"`)) {
+		t.Fatalf("minimal: %d %s after %d calls, last sent %s", code, body, f.calls, f.got)
+	}
 	// another 400 is the agent's to see
 	f.calls = 0
 	f.refuse = func([]byte) (int, string) { return 400, `{"error":{"message":"bad request"}}` }
@@ -734,7 +740,9 @@ func TestPassthroughEffortNoneRefused(t *testing.T) {
 }
 
 // minimal refused with none among the levels taken, as OpenAI does for
-// gpt-5.1: minimal goes at low from then on, and none still goes as sent
+// gpt-5.1: minimal goes at low from then on, and none still goes as sent.
+// The error is OpenAI's wording as published for gpt-5.1, reconstructed,
+// not captured.
 func TestPassthroughMinimalRefusedNoneTaken(t *testing.T) {
 	for _, c := range []struct {
 		proto      provider.Protocol
@@ -761,6 +769,24 @@ func TestPassthroughMinimalRefusedNoneTaken(t *testing.T) {
 			if code != 200 || f.calls != turn.calls || bodyEffort(c.proto, f.got) != turn.sent {
 				t.Fatalf("%s turn %d at %s: %d %s after %d calls, last sent %s", c.proto, i+1, turn.effort, code, body, f.calls, f.got)
 			}
+		}
+	}
+}
+
+// the other level of reasoning off counts as taken only where an error
+// lists it quoted, in JSON's escaped quotes too, not as a word in a sentence
+func TestOtherOffNamed(t *testing.T) {
+	for _, c := range []struct {
+		effort, body string
+		want         bool
+	}{
+		{"minimal", `{"error":{"message":"Unsupported value: 'minimal' is not supported with the 'gpt-5.1' model. Supported values are: 'none', 'low', 'medium', and 'high'."}}`, true},
+		{"none", `{"error":{"message":"Invalid option: expected one of \"minimal\"|\"low\"|\"high\""}}`, true},
+		{"minimal", `{"error":{"message":"Invalid option: expected one of \"none\"|\"low\"|\"high\""}}`, true},
+		{"minimal", `{"error":{"message":"Invalid option: expected one of \"low\"|\"medium\"|\"high\". None of these is minimal."}}`, false},
+	} {
+		if got := otherOffNamed[c.effort].MatchString(c.body); got != c.want {
+			t.Errorf("otherOffNamed[%s] on %s = %v", c.effort, c.body, got)
 		}
 	}
 }

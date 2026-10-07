@@ -253,14 +253,18 @@ func TestGeminiThoughtsThroughLocalProxy(t *testing.T) {
 	}
 }
 
-// aiStudioRefusal is AI Studio's 400 for a thinking level the model hasn't,
-// in its words for minimal on gemini-3.8-flash.
+// aiStudioRefusal is AI Studio's 400 for a thinking level the model hasn't.
+// The status and message are the literal bytes of its 400 for minimal on
+// gemini-3.8-flash, captured 2026-10-06 at its OpenAI-compatible API; the
+// capture kept only those two, so the envelope around them is Vertex AI's
+// (vertexRefusal), and other levels are assumed to be refused in the same
+// words.
 func aiStudioRefusal(level string) string {
 	return `[{"error":{"code":400,"message":"Thinking level ` + strings.ToUpper(level) + ` is not supported for this model. Please retry with other thinking level.","status":"INVALID_ARGUMENT"}}]`
 }
 
 // vertexRefusal is Vertex AI's 400 for minimal on gemini-3.8-flash, at its
-// OpenAI-compatible API.
+// OpenAI-compatible API, as captured 2026-10-06.
 const vertexRefusal = `[{
   "error": {
     "code": 400,
@@ -279,7 +283,9 @@ func TestGeminiRefusedLevel(t *testing.T) {
 		{aiStudioRefusal("minimal"), "minimal"},
 		{aiStudioRefusal("medium"), "medium"},
 		{vertexRefusal, "minimal"},
-		{`{"error":{"code":400,"message":"thinking_level MINIMAL is not supported by this model","status":"INVALID_ARGUMENT"}}`, "minimal"},
+		// gemini-3.1-pro-preview's message for thinking_level minimal at
+		// Vertex AI, as captured 2026-10-06 up to its "Learn more" link
+		{`{"error":{"code":400,"message":"Unable to submit request because thinking_level MINIMAL is not supported by this model.","status":"INVALID_ARGUMENT"}}`, "minimal"},
 		{`{"error":{"message":"Invalid JSON payload received. Unknown name \"extra_body\": Cannot find field.","code":400}}`, ""},
 		// a level named, not turned away
 		{`{"error":{"code":400,"message":"thinking_level LOW cannot be set with thinking_budget","status":"INVALID_ARGUMENT"}}`, ""},

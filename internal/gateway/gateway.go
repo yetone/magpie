@@ -4908,10 +4908,12 @@ var effortLevelsNamed = regexp.MustCompile(`(?i)\blow\b\W+(?:medium|high)\b`)
 // otherOffNamed is, for one level of reasoning off, the other named in an
 // error: one refusing that level and listing the other among those taken
 // (OpenAI's "'minimal' is not supported with the 'gpt-5.1' model.
-// Supported values are: 'none', 'low', 'medium', and 'high'.").
+// Supported values are: 'none', 'low', 'medium', and 'high'."). The level is
+// matched quoted, as errors listing levels quote them (in JSON a double
+// quote comes escaped), so a "None" in a sentence isn't it.
 var otherOffNamed = map[string]*regexp.Regexp{
-	"none":    regexp.MustCompile(`(?i)\bminimal\b`),
-	"minimal": regexp.MustCompile(`(?i)\bnone\b`),
+	"none":    regexp.MustCompile(`(?i)['"]minimal\\?['"]`),
+	"minimal": regexp.MustCompile(`(?i)['"]none\\?['"]`),
 }
 
 // bodyEffort is the reasoning effort a Chat or Responses request asks for,
