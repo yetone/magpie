@@ -47,6 +47,7 @@ func TestPluginUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var first []QuotaWindow // a@fake's, as first read
 	for _, agent := range []string{"fakeco", "plugin:fakeco"} {
 		u := LoginUsage(ctx, agent)
 		if len(u) != 3 {
@@ -77,6 +78,9 @@ func TestPluginUsage(t *testing.T) {
 		if e := u["API key"].Error; e != "an API key has no plan" {
 			t.Fatalf("%s: the key's usage error = %q (%v)", agent, e, u)
 		}
+		if first == nil {
+			first = q.Windows
+		}
 	}
 
 	cards := 0
@@ -92,10 +96,20 @@ func TestPluginUsage(t *testing.T) {
 		t.Fatalf("%d usage cards for the plugin's accounts, want 3", cards)
 	}
 	// one account's card read again from its refresh button (#840): that
-	// account's alone is asked
+	// account's alone is asked. Read a moment later (the five hours' renewal
+	// is told to the millisecond), its windows renew when they did, as a
+	// vendor's do: TestPluginFailover's routing weighs accounts read at
+	// different times by when they renew.
+	time.Sleep(2 * time.Millisecond)
 	again := context.WithValue(context.Background(), cardRefreshKey{}, cardRefresh{"fakeco", "A@fake"})
-	if qs := fetchSubscriptionUsage(again); len(qs) != 1 || qs[0].User != "a@fake" || qs[0].Error != "" {
+	qs := fetchSubscriptionUsage(again)
+	if len(qs) != 1 || qs[0].User != "a@fake" || qs[0].Error != "" || len(qs[0].Windows) != len(first) {
 		t.Fatalf("a@fake read again: %+v", qs)
+	}
+	for i, w := range qs[0].Windows {
+		if a, b := w.ResetsAt, first[i].ResetsAt; (a == nil) != (b == nil) || a != nil && !a.Equal(*b) {
+			t.Errorf("a@fake's %s renews at %v read again, at %v first", w.Name, a, b)
+		}
 	}
 
 	// a model the plugin says the plan serves at no cost shows as free,
