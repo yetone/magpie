@@ -99,6 +99,10 @@ var usedCache struct {
 	// agent/user, kept through a reading that failed, for the next to be
 	// told renewed by (renewedFrom)
 	seen map[string]reading
+	// stale: made stale (StaleAllowance) while a reading was out, by
+	// agent; that reading was asked before an account said it was out,
+	// so what it tells is kept only until the next ask reads again
+	stale map[string]bool
 }
 
 // firstWait is how long a request waits for an agent's allowances the
@@ -439,6 +443,12 @@ func Allowances(agent string) map[string]Allowance {
 				}
 				c.seen[key] = reading{a, now}
 			}
+			if c.stale[agent] {
+				// kept, as weigh counts an account not known unused, but
+				// read again at the next ask
+				delete(c.stale, agent)
+				at = time.Time{}
+			}
 			c.m[agent], c.at[agent] = all, at
 			delete(c.loading, agent)
 			c.Unlock()
@@ -534,8 +544,9 @@ func forgetAllowance(agent, user string) {
 }
 
 // StaleAllowance makes the next Allowances ask the vendor again for user's
-// allowance rather than trust what it last said: the account just
-// answered that it has run out.
+// allowance rather than trust what it last said, or what a reading out
+// now, asked before, comes back with: the account just answered that it
+// has run out.
 func StaleAllowance(agent, user string) {
 	key := agent + "/" + strings.ToLower(user)
 	loginUsageCache.Lock()
@@ -557,6 +568,13 @@ func StaleAllowance(agent, user string) {
 	usedCache.Lock()
 	if usedCache.at != nil {
 		usedCache.at[agent] = time.Time{}
+	}
+	// a reading out now was asked before: read again once it is back
+	if usedCache.loading[agent] != nil {
+		if usedCache.stale == nil {
+			usedCache.stale = map[string]bool{}
+		}
+		usedCache.stale[agent] = true
 	}
 	usedCache.Unlock()
 }

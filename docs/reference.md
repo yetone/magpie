@@ -887,7 +887,8 @@ account, or on the account you picked, whatever it has left. It changes nothing 
 never waits for a reading, except the first one after magpie starts (3
 seconds at most). A reading over a minute old is read again in the
 background as a request is routed, and an account that fails for its
-quota is read again at once. Codex and most other subscriptions read every
+quota is read again at once; if a reading was already under way as it
+failed, the account is read again as soon as that reading is back. Codex and most other subscriptions read every
 account from the vendor this way. Claude is different: magpie never asks
 Anthropic itself. It reads only the account Claude Code is signed in to,
 by running Claude Code's `/usage`:

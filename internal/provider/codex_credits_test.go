@@ -101,6 +101,7 @@ func TestRenewedAccountForgetsItsAllowance(t *testing.T) {
 	signIn(t)
 	usedCache.Lock()
 	usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
+	usedCache.stale = nil
 	usedCache.m["codex"] = map[string]Allowance{
 		"me@example.com":    {{Used: 100, Span: 5 * time.Hour}},
 		"spare@example.com": {{Used: 10, Span: 5 * time.Hour}},
@@ -111,6 +112,7 @@ func TestRenewedAccountForgetsItsAllowance(t *testing.T) {
 	t.Cleanup(func() {
 		usedCache.Lock()
 		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
+		usedCache.stale = nil
 		usedCache.Unlock()
 	})
 	renewedNow("codex", "Me@Example.com")
