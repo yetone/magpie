@@ -110,8 +110,10 @@ func clipLine(s string) string {
 }
 
 // claudeResetTime reads "Oct 1 at 3:30pm (Asia/Shanghai)", "Oct 9, 2:59pm
-// (UTC)" (Claude Code 2.1.285 on) or "3pm (Asia/Shanghai)", in the zone named, else local time; a date with no
-// year is the next one from a day before now.
+// (UTC)" (Claude Code 2.1.285 on) or "3pm (Asia/Shanghai)", in the zone
+// named, else local time. A date with no year is in the first year it is
+// less than a day past, and a time alone is the next one from now; where the
+// clocks go back and read that time twice, the reading not yet past is taken.
 func claudeResetTime(s string, now time.Time) (time.Time, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -134,24 +136,63 @@ func claudeResetTime(s string, now time.Time) (time.Time, bool) {
 		if err != nil {
 			continue
 		}
-		if t.Year() == 0 {
-			t = t.AddDate(ref.Year(), 0, 0)
-			if t.Before(ref.Add(-24 * time.Hour)) {
-				t = t.AddDate(1, 0, 0)
+		if t.Year() != 0 {
+			return t, true
+		}
+		// Dec 31 read just after New Year is last year's
+		for y := ref.Year() - 1; y <= ref.Year()+1; y++ {
+			d := time.Date(y, t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, loc)
+			if r, ok := nextReading(d, ref, ref.Add(-24*time.Hour)); ok {
+				return r, true
 			}
 		}
-		return t, true
 	}
 	for _, layout := range []string{"3:04pm", "3pm"} {
-		t, err := time.ParseInLocation(layout, s, loc)
+		c, err := time.ParseInLocation(layout, s, loc)
 		if err != nil {
 			continue
 		}
-		t = time.Date(ref.Year(), ref.Month(), ref.Day(), t.Hour(), t.Minute(), 0, 0, loc)
-		if t.Before(ref) {
-			t = t.AddDate(0, 0, 1)
+		// a day whose clocks skip that time is passed over: Santiago's skip
+		// midnight, so "12:30am" before it is the day after tomorrow's
+		for d := 0; d <= 2; d++ {
+			t := time.Date(ref.Year(), ref.Month(), ref.Day()+d, c.Hour(), c.Minute(), 0, 0, loc)
+			if t.Hour() != c.Hour() || t.Minute() != c.Minute() {
+				continue
+			}
+			if r, ok := nextReading(t, ref, ref); ok {
+				return r, true
+			}
 		}
-		return t, true
+		return time.Time{}, false
+	}
+	return time.Time{}, false
+}
+
+// nextReading is the first instant whose clock reads as t's does that isn't
+// before ref, else the first that isn't before lim. As the clocks go back, an
+// hour is read twice, and time.Date may give either instant.
+func nextReading(t, ref, lim time.Time) (time.Time, bool) {
+	first, last := t, t
+	start, end := t.ZoneBounds()
+	_, off := t.Zone()
+	if !start.IsZero() {
+		_, prev := start.Add(-time.Second).Zone()
+		if e := t.Add(time.Duration(off-prev) * time.Second); prev > off && e.Before(start) {
+			first = e
+		}
+	}
+	if !end.IsZero() {
+		_, next := end.Zone()
+		if l := t.Add(time.Duration(off-next) * time.Second); next < off && !l.Before(end) {
+			last = l
+		}
+	}
+	for _, from := range []time.Time{ref, lim} {
+		for _, r := range []time.Time{first, last} {
+			if !r.Before(from) {
+				return r, true
+			}
+		}
 	}
 	return time.Time{}, false
 }

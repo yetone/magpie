@@ -178,6 +178,94 @@ What's contributing to your limits usage?
 	}
 }
 
+// Where the clocks go back and read a reset's time twice, the reading not yet
+// past is taken: west of UTC time.Date gives the first reading, east of it
+// the second. A time alone is the next day's when the clocks skip it, as
+// they skip 2:30am in New York and Berlin or 12:30am in Santiago. Claude
+// Code 2.1.290 prints a date on every line of /usage, with "at" or a comma
+// by platform; a time alone is the older form.
+func TestClaudeResetTimeAroundClockChanges(t *testing.T) {
+	zone := func(name string) *time.Location {
+		l, err := time.LoadLocation(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return l
+	}
+	ny, berlin, santiago := zone("America/New_York"), zone("Europe/Berlin"), zone("America/Santiago")
+	fixed := func(name string, hours float64) *time.Location {
+		return time.FixedZone(name, int(hours*3600))
+	}
+	edt, est, cest, cet := fixed("EDT", -4), fixed("EST", -5), fixed("CEST", 2), fixed("CET", 1)
+	aedt, aest, lhdt, lhst := fixed("AEDT", 11), fixed("AEST", 10), fixed("+11", 11), fixed("+1030", 10.5)
+	for _, c := range []struct {
+		now  time.Time
+		in   string
+		want time.Time
+	}{
+		// New York reads 2026-11-01 01:00-01:59 twice, EDT then EST
+		{time.Date(2026, 11, 1, 1, 20, 0, 0, est), "Nov 1, 1:30am (America/New_York)", time.Date(2026, 11, 1, 1, 30, 0, 0, est)},
+		{time.Date(2026, 11, 1, 1, 20, 0, 0, est), "Nov 1 at 1:30am (America/New_York)", time.Date(2026, 11, 1, 1, 30, 0, 0, est)},
+		{time.Date(2026, 11, 1, 1, 20, 0, 0, est), "1:30am (America/New_York)", time.Date(2026, 11, 1, 1, 30, 0, 0, est)},
+		{time.Date(2026, 11, 1, 1, 0, 0, 0, est), "1am (America/New_York)", time.Date(2026, 11, 1, 1, 0, 0, 0, est)},
+		{time.Date(2026, 11, 1, 1, 20, 0, 0, edt), "Nov 1, 1:30am (America/New_York)", time.Date(2026, 11, 1, 1, 30, 0, 0, edt)},
+		{time.Date(2026, 11, 1, 1, 20, 0, 0, edt), "1:30am (America/New_York)", time.Date(2026, 11, 1, 1, 30, 0, 0, edt)},
+		{time.Date(2026, 11, 1, 1, 50, 0, 0, est), "1:30am (America/New_York)", time.Date(2026, 11, 2, 1, 30, 0, 0, ny)},
+		{time.Date(2026, 11, 3, 1, 20, 0, 0, ny), "Nov 3, 1:30am (America/New_York)", time.Date(2026, 11, 3, 1, 30, 0, 0, ny)},
+		{time.Date(2026, 11, 3, 1, 20, 0, 0, ny), "1:30am (America/New_York)", time.Date(2026, 11, 3, 1, 30, 0, 0, ny)},
+		// a date less than a day past keeps that day's reading
+		{time.Date(2026, 11, 2, 1, 0, 0, 0, est), "Nov 1, 1:30am (America/New_York)", time.Date(2026, 11, 1, 1, 30, 0, 0, est)},
+		// Berlin reads 2026-10-25 02:00-02:59 twice, CEST then CET
+		{time.Date(2026, 10, 25, 2, 20, 0, 0, cest), "Oct 25, 2:30am (Europe/Berlin)", time.Date(2026, 10, 25, 2, 30, 0, 0, cest)},
+		{time.Date(2026, 10, 25, 2, 20, 0, 0, cest), "2:30am (Europe/Berlin)", time.Date(2026, 10, 25, 2, 30, 0, 0, cest)},
+		{time.Date(2026, 10, 24, 23, 0, 0, 0, cest), "2:30am (Europe/Berlin)", time.Date(2026, 10, 25, 2, 30, 0, 0, cest)},
+		{time.Date(2026, 10, 25, 2, 20, 0, 0, cet), "Oct 25, 2:30am (Europe/Berlin)", time.Date(2026, 10, 25, 2, 30, 0, 0, cet)},
+		{time.Date(2026, 10, 26, 2, 0, 0, 0, cet), "Oct 25, 2:15am (Europe/Berlin)", time.Date(2026, 10, 25, 2, 15, 0, 0, cet)},
+		{time.Date(2026, 4, 5, 2, 20, 0, 0, aedt), "Apr 5, 2:30am (Australia/Sydney)", time.Date(2026, 4, 5, 2, 30, 0, 0, aedt)},
+		{time.Date(2026, 4, 5, 2, 20, 0, 0, aest), "Apr 5, 2:30am (Australia/Sydney)", time.Date(2026, 4, 5, 2, 30, 0, 0, aest)},
+		{time.Date(2026, 4, 5, 1, 40, 0, 0, lhdt), "Apr 5, 1:45am (Australia/Lord_Howe)", time.Date(2026, 4, 5, 1, 45, 0, 0, lhdt)},
+		{time.Date(2026, 4, 5, 1, 40, 0, 0, lhst), "Apr 5, 1:45am (Australia/Lord_Howe)", time.Date(2026, 4, 5, 1, 45, 0, 0, lhst)},
+		// the clocks skipped 2:00-2:59 this morning
+		{time.Date(2026, 3, 8, 22, 0, 0, 0, ny), "2:30am (America/New_York)", time.Date(2026, 3, 9, 2, 30, 0, 0, ny)},
+		{time.Date(2026, 3, 29, 23, 0, 0, 0, berlin), "2:30am (Europe/Berlin)", time.Date(2026, 3, 30, 2, 30, 0, 0, berlin)},
+		// Santiago's clocks skip from 2026-09-06 00:00 to 01:00
+		{time.Date(2026, 9, 5, 23, 31, 0, 0, santiago), "12:30am (America/Santiago)", time.Date(2026, 9, 7, 0, 30, 0, 0, santiago)},
+		{time.Date(2026, 9, 5, 23, 31, 0, 0, santiago), "1:30am (America/Santiago)", time.Date(2026, 9, 6, 1, 30, 0, 0, santiago)},
+	} {
+		if r, ok := claudeResetTime(c.in, c.now); !ok || !r.Equal(c.want) {
+			t.Errorf("%q at %v: %v %v (in %v), want %v", c.in, c.now, r, ok, r.Sub(c.now), c.want)
+		}
+	}
+}
+
+// A date with no year is in the first year it is less than a day past.
+// Claude Code prints the year when it isn't this one, so a Dec 31 with none
+// is read past New Year only when /usage ran just before midnight.
+func TestClaudeResetTimeAtNewYear(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		now  time.Time
+		in   string
+		want time.Time
+	}{
+		{time.Date(2027, 1, 1, 0, 0, 5, 0, ny), "Dec 31, 11:59pm (America/New_York)", time.Date(2026, 12, 31, 23, 59, 0, 0, ny)},
+		{time.Date(2027, 1, 1, 0, 0, 5, 0, ny), "Dec 31 at 11:59pm (America/New_York)", time.Date(2026, 12, 31, 23, 59, 0, 0, ny)},
+		{time.Date(2027, 1, 1, 1, 0, 0, 0, ny), "Dec 31, 2026, 11pm (America/New_York)", time.Date(2026, 12, 31, 23, 0, 0, 0, ny)},
+		{time.Date(2027, 1, 1, 1, 0, 0, 0, ny), "Dec 30, 11pm (America/New_York)", time.Date(2027, 12, 30, 23, 0, 0, 0, ny)},
+		{time.Date(2027, 7, 1, 1, 0, 0, 0, ny), "Jun 30, 11pm (America/New_York)", time.Date(2027, 6, 30, 23, 0, 0, 0, ny)},
+		{time.Date(2026, 12, 31, 22, 0, 0, 0, ny), "Jan 1, 2027, 3pm (America/New_York)", time.Date(2027, 1, 1, 15, 0, 0, 0, ny)},
+		{time.Date(2026, 12, 31, 22, 0, 0, 0, ny), "Jan 1, 3pm (America/New_York)", time.Date(2027, 1, 1, 15, 0, 0, 0, ny)},
+		{time.Date(2026, 12, 31, 22, 0, 0, 0, ny), "Dec 31, 9pm (America/New_York)", time.Date(2026, 12, 31, 21, 0, 0, 0, ny)},
+	} {
+		if r, ok := claudeResetTime(c.in, c.now); !ok || !r.Equal(c.want) {
+			t.Errorf("%q at %v: %v %v (in %v), want %v", c.in, c.now, r, ok, r.Sub(c.now), c.want)
+		}
+	}
+}
+
 // usageTestWait is the wait between unasked runs of /usage in tests.
 const usageTestWait = 7 * time.Minute
 
