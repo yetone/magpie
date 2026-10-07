@@ -223,7 +223,10 @@ func TestHistoryKeepsADayCutShort(t *testing.T) {
 // magpie's still being written, stays.
 func TestHistoryDropsALeftGzTmp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	now := time.Now()
+	// noon: in the first hour of the day after one whose midnight the clocks
+	// skip west of UTC (Santiago, Havana, the Azores), AddDate(0, 0, -1) is
+	// two days back too, which gave the two files one name
+	now := historyNoon(t)
 	dir := HistoryDir()
 	os.MkdirAll(dir, 0o700)
 	left := filepath.Join(dir, now.AddDate(0, 0, -2).Format(dayForm)+".jsonl.gz.tmp")
@@ -234,12 +237,15 @@ func TestHistoryDropsALeftGzTmp(t *testing.T) {
 	if err := os.Chtimes(left, then, then); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chtimes(young, now.Add(-59*time.Minute), now.Add(-59*time.Minute)); err != nil { // not yet an hour old
+		t.Fatal(err)
+	}
 	pruneHistory(dir, now)
 	if _, err := os.Stat(left); !os.IsNotExist(err) {
 		t.Errorf("the .gz.tmp left over an hour ago is still there: %v", err)
 	}
 	if _, err := os.Stat(young); err != nil {
-		t.Errorf("a .gz.tmp written just now is gone: %v", err)
+		t.Errorf("a .gz.tmp written 59 minutes ago is gone: %v", err)
 	}
 }
 
