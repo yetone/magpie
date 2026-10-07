@@ -34,8 +34,9 @@ func cliFor(agent string) (agentCLI, bool) {
 	switch agent {
 	case "devin":
 		return agentCLI{Name: "Devin CLI", find: func() string { return DevinExecutable() },
-			sh: "curl -fsSL https://cli.devin.ai/install.sh | bash",
-			ps: "irm https://static.devin.ai/cli/setup.ps1 | iex"}, true
+			sh:     "curl -fsSL https://cli.devin.ai/install.sh | bash",
+			ps:     "irm https://static.devin.ai/cli/setup.ps1 | iex",
+			native: installDevinCLI}, true
 	case "cursor":
 		return agentCLI{Name: "Cursor CLI", find: func() string { return CursorExecutable() },
 			sh: "curl https://cursor.com/install -fsS | bash",
