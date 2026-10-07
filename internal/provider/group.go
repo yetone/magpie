@@ -247,7 +247,7 @@ func groupsIn(entries []Entry) []Group {
 			hidden[g.ID] = true
 			continue
 		}
-		out = append(out, withMatches(entries, g))
+		out = append(out, withMatches(entries, g.own()))
 	}
 	if f.NoAutoGroups {
 		return orderedGroups(out, f.GroupOrder)
@@ -260,6 +260,30 @@ func groupsIn(entries []Entry) []Group {
 		out = append(out, g)
 	}
 	return orderedGroups(out, f.GroupOrder)
+}
+
+// own is the group with lists of its own. f.Groups is the providers.json
+// every look-up shares while a request holds the catalog (heldOf), so a
+// caller changing its group in place — the TUI deleting a rule, SaveGroup
+// cleaning one — would change it for every reader in that while, and keep
+// the change there when the save failed.
+func (g Group) own() Group {
+	g.Members = slices.Clone(g.Members)
+	g.Match = slices.Clone(g.Match)
+	g.Matched = slices.Clone(g.Matched)
+	g.Off = slices.Clone(g.Off)
+	g.Levels = slices.Clone(g.Levels)
+	g.Fast = slices.Clone(g.Fast)
+	g.Rules = slices.Clone(g.Rules)
+	for i, r := range g.Rules {
+		g.Rules[i].Agents = slices.Clone(r.Agents)
+		if r.Time != nil {
+			w := *r.Time
+			w.Days = slices.Clone(w.Days)
+			g.Rules[i].Time = &w
+		}
+	}
+	return g
 }
 
 // AutoGroupsOn reports whether magpie finds groups on its own: a model
@@ -725,6 +749,7 @@ func levelsUnknown(x Entry) bool {
 // SaveGroup adds or replaces a group of the user's. Changing one magpie
 // found makes it the user's.
 func SaveGroup(g Group) error {
+	g = g.own() // cleaned below in place: the caller's lists stay as they were
 	g.ID = strings.ToLower(strings.TrimSpace(g.ID))
 	g.Name = strings.TrimSpace(g.Name)
 	if g.ID == "" {
