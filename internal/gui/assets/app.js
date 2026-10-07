@@ -4884,6 +4884,14 @@ function renderProviders() {
       const plan = accountPlan(p.account), bare = plan.startsWith(p.name + " ") ? plan.slice(p.name.length + 1) : "";
       key = el("span", "key acct", bare && plan.length > 15 ? bare : plan);
       key.title = t("{agent} is signed in; its models are here for every other agent", { agent: p.account.agentName });
+    } else if (p.vertex) {
+      // Vertex AI signs with the user's Google credentials, never a key;
+      // the pill says which: the service account it acts as, else the
+      // credentials file, else Application Default Credentials (ADC)
+      const v = p.vertex;
+      key = el("span", "key " + (p.ready ? "acct" : "none"), !p.ready ? t("needs a project") : v.impersonate || (v.credentials ? baseName(v.credentials) : t("Google ADC")));
+      key.title = !p.ready ? t("Open the row and give your Google Cloud project's id")
+        : (v.impersonate ? t("Signed as the service account {account}, with your Google credentials", { account: v.impersonate }) : t("Signed with your Google credentials")) + " · " + (v.credentials || t("Application Default Credentials"));
     } else {
       key = el("span", "key " + (p.key.set ? (keyPill(p) === p.key.masked ? "on" : "on acct") : p.ready ? "free" : "none"), p.key.set ? keyPill(p) : p.ready ? t("no key") : t("needs a key"));
       key.title = p.key.set ? t("API key {masked}", { masked: p.key.masked }) : p.ready ? t("Local servers need no key") : t("Open the row and paste an API key");
@@ -7238,6 +7246,9 @@ function asTyped() {
   const body = { typed: true, key: keys.length > 1 ? keys[0] : (draft.key || "").trim(), chat: (draft.chat || "").trim(), responses: (draft.responses || "").trim(), anthropic: (draft.anthropic || "").trim(), gemini: (draft.gemini || "").trim(), modelsURL: (draft.modelsURL || "").trim() };
   // a System One base is asked at POST …/systemone, not on the three APIs
   if (draft.api === "decide") body.decide = (draft.decide || "").trim();
+  // a Vertex AI provider is asked at the project typed, with the
+  // credentials typed, as a pasted key is
+  if (draft.vertex) body.vertex = vertexOfDraft();
   if (draft.headers) body.headers = headersOf(draft.headers);
   const proxy = draft.proxyMode === undefined ? null : proxyOfDraft();
   if (proxy !== null) body.proxy = proxy;
@@ -7796,8 +7807,25 @@ function slide(box, key) {
 }
 
 const PROTOS = [["chat", "OpenAI", "Chat Completions — most agents"], ["responses", "Responses", "OpenAI Responses — what Codex speaks"], ["anthropic", "Anthropic", "Anthropic Messages — what Claude Code speaks"], ["gemini", "Gemini", "Gemini generateContent — what the Gemini CLI speaks"], ["decide", "System One", "A decision API on System One (TypeSafe's Jev, a gateway's, or Bailian's decision model) — what a routing group asks as a turn begins"]];
+// Gemini generateContent at a Vertex AI provider's project, as its
+// endpoint is shown and tested
+const VERTEX_EP_HINT = "Gemini generateContent — what Vertex AI serves at your Google Cloud project";
 // apiLabel: the name an API (a protocol) goes by in the editor
 const apiLabel = (proto) => (PROTOS.find(([k]) => k === proto) || [])[1] || proto;
+// vertexBase is where a Vertex AI provider's requests go, the address its
+// project and location make (provider.vertexBase): "" until the project
+// typed is one an address can be made of
+function vertexBase(v) {
+  const project = (v?.project || "").trim().toLowerCase(), loc = (v?.location || "").trim().toLowerCase() || "global";
+  if (!/^[a-z0-9][a-z0-9.:-]*[a-z0-9]$/.test(project) || !/^[a-z]+(-[a-z0-9]+)*$/.test(loc)) return "";
+  const host = loc === "global" ? "aiplatform.googleapis.com" : loc === "us" || loc === "eu" ? `aiplatform.${loc}.rep.googleapis.com` : `${loc}-aiplatform.googleapis.com`;
+  return `https://${host}/v1/projects/${project}/locations/${loc}`;
+}
+// vertexOfDraft is the editor's Vertex AI fields as a Save sends them
+function vertexOfDraft() {
+  const v = draft.vertex || {};
+  return { project: (v.project || "").trim(), location: (v.location || "").trim(), credentials: (v.credentials || "").trim(), impersonate: (v.impersonate || "").trim() };
+}
 const decideOnly = (p) => !!p?.decide && !(p.chat || p.responses || p.anthropic || p.gemini);
 // a provider that lists its decision models apart (OpenRouter) says which
 // they are: its Jev Router (typesafe/jev-router) is a chat model
@@ -7849,6 +7877,7 @@ function duplicateProvider(p) {
   const d = draftOf(p);
   draft = { ...d, id: slug(name), name, chosen: [], extra: d.chosen, copyOf: p.id };
   if (p.zhipuTeam) draft.zhipuTeam = { org: p.zhipuTeam.org || "", project: p.zhipuTeam.project || "" };
+  if (p.vertex) draft.vertex = { project: p.vertex.project || "", location: p.vertex.location || "", credentials: p.vertex.credentials || "", impersonate: p.vertex.impersonate || "" };
   renderProviders();
 }
 
@@ -8207,8 +8236,32 @@ function drawEditor(p, presetID) {
   }
   const keyWrap = el("div", "pair");
   keyWrap.append(key, side);
+  // Google Vertex AI takes no key: it is asked at the user's own Google
+  // Cloud project with a token their Google credentials mint, so its
+  // project, location, credentials file and a service account to go as
+  // are asked in its place, the project first
+  const vertex = p ? !!p.vertex : !!pr?.vertex;
+  let vertexProject = null;
+  if (vertex) draft.vertex = draft.vertex || { project: p?.vertex?.project || "", location: p?.vertex?.location || "", credentials: p?.vertex?.credentials || "", impersonate: p?.vertex?.impersonate || "" };
+  const vertexFields = () => {
+    const box = (k, placeholder, cls) => {
+      const i = input(draft.vertex[k], placeholder);
+      i.classList.add(cls);
+      i.oninput = () => { draft.vertex[k] = i.value; refreshEndpoints(); };
+      i.onkeydown = key.onkeydown; // Enter adds it, as from the key's box
+      return i;
+    };
+    vertexProject = box("project", "my-project-123", "vertex-project");
+    return [
+      ...field(t("Project ID"), vertexProject, t("Your Google Cloud project, with the Agent Platform API (aiplatform.googleapis.com) enabled: requests are made, and billed, there")),
+      ...field(t("Location"), box("location", "global", "vertex-location"), t("global, us, eu or a region such as us-central1. Each location serves its own models; global serves them all.")),
+      ...field(t("Credentials file"), box("credentials", "~/.config/gcloud/application_default_credentials.json", "vertex-credentials"), t("Optional. Left empty, gcloud's Application Default Credentials are used (gcloud auth application-default login), or the file GOOGLE_APPLICATION_CREDENTIALS names. A service account's key file works too.")),
+      ...field(t("Service account"), box("impersonate", t("optional · a service account's email"), "vertex-impersonate"), t("Requests are then made as this service account, impersonated with the credentials above: their account needs roles/iam.serviceAccountTokenCreator on it.")),
+    ];
+  };
   if (p?.keyList?.length) ed.append(...field(t("Accounts"), renderKeyAccounts(p), p.routing ? t("Tick every key to use; Routing says how requests spread over them.") : t("Tick every key to use. Requests go to the first; when it runs out of quota or hits a rate limit, the next ticked key takes over.")));
   if (p?.keyList?.filter((k) => k.on).length > 1) ed.append(...renderRouting(p));
+  else if (vertex) ed.append(...vertexFields());
   else ed.append(...field(t("API key"), keyWrap, isNew ? t("Kept in ~/.config/magpie/providers.json, readable by you alone. Nothing is read from your shell.") : ""));
 
   // A user-defined provider can have its own picture; presets keep theirs.
@@ -8421,13 +8474,21 @@ function drawEditor(p, presetID) {
 
   if (!custom && !(decides && !p)) {
     const ebox = el("div");
+    const row = field(t("Endpoints"), ebox, "");
     refreshEndpoints = () => {
       const base = p || pr || {};
       const src = { chat: draft.chat || base.chat || "", responses: draft.responses || base.responses || "", anthropic: draft.anthropic || base.anthropic || "", decide: base.decide || "" };
+      // Vertex AI's is the address its project and location make, shown
+      // with its Test once a project is typed, saved one or not: with none
+      // there is nowhere to ask
+      if (vertex) {
+        src.gemini = vertexBase(draft.vertex);
+        for (const x of row) x.hidden = !src.gemini;
+      }
       ebox.replaceChildren(renderEndpoints(p, src));
     };
     refreshEndpoints();
-    ed.append(...field(t("Endpoints"), ebox, ""));
+    ed.append(...row);
   }
 
   if (custom) {
@@ -8506,13 +8567,13 @@ function drawEditor(p, presetID) {
   if (p && pr) {
     // another key of the vendor, or the same key for another workspace
     const more = el("button", "text", t("Add another {name}", { name: pr.name }));
-    more.title = t("One more {name} provider, with its own key, headers and models", { name: pr.name });
+    more.title = vertex ? t("One more {name} provider, with its own project, credentials, headers and models", { name: pr.name }) : t("One more {name} provider, with its own key, headers and models", { name: pr.name });
     more.onclick = () => { editing = { preset: pr.id }; draft = null; renderProviders(); };
     bar.append(more);
   }
   if (p) {
     const dup = el("button", "text", t("Duplicate"));
-    dup.title = t("A new provider with {name}'s URLs, key, headers, models and balance settings, to change before adding", { name: p.name });
+    dup.title = vertex ? t("A new provider with {name}'s project, credentials, headers and models, to change before adding", { name: p.name }) : t("A new provider with {name}'s URLs, key, headers, models and balance settings, to change before adding", { name: p.name });
     dup.onclick = () => duplicateProvider(p);
     bar.append(dup);
   }
@@ -8586,9 +8647,11 @@ function drawEditor(p, presetID) {
       else if (draft.clearAccessKey) body.clearAccessKey = true;
       if (body.accessKeyID && !body.secretAccessKey && !(access.secretSet && !draft.clearAccessKey)) { ed.querySelector(".volc-sk")?.focus({ preventScroll: true }); return editorError(t("Give the access key's Secret too"), "warn"); }
     }
+    if (vertex) body.vertex = vertexOfDraft();
     if (isNew && custom && !body.name) { name.focus(); return editorError(t("Give it a name"), "warn"); }
     if (isNew && custom && !body.chat && !body.anthropic && !body.responses && !body.decide) { url.focus(); return editorError(t("A base URL is needed"), "warn"); }
     if (endpoint && !body.chat && !body.responses) { endpoint.focus(); return editorError(t(pr.endpointNeeded || "Your resource's endpoint is needed"), "warn"); }
+    if (vertex && !body.vertex.project) { vertexProject?.focus({ preventScroll: true }); return editorError(t("Google Vertex AI needs the id of your Google Cloud project"), "warn"); }
     editorError("");
     saving(saveBtn, t(isNew ? "Adding…" : "Saving…"));
     providerAction("save", body, t(isNew ? "{name} added" : "{name} saved", { name: draft.name || draft.id }));
@@ -8596,7 +8659,7 @@ function drawEditor(p, presetID) {
   saveBtn.onclick = save;
   bar.append(cancel, saveBtn);
   ed.append(bar);
-  setTimeout(() => (isNew ? (custom || another ? name : endpoint || key) : null)?.focus(), 0);
+  setTimeout(() => (isNew ? (custom || another ? name : endpoint || vertexProject || key) : null)?.focus(), 0);
   return ed;
 }
 
@@ -9097,7 +9160,7 @@ function renderEndpoints(p, src) {
     if (!urls[proto]) continue;
     const e = el("div", "ep");
     const pl = el("span", "pl", label);
-    pl.title = t(hint);
+    pl.title = t(proto === "gemini" && draft?.vertex ? VERTEX_EP_HINT : hint);
     e.append(pl, el("code", "", urls[proto]), slots[proto] = el("span", "res"));
     eps.append(e);
   }
