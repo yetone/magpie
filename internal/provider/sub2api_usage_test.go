@@ -379,6 +379,89 @@ func TestKeyAllowanceStaleMidRead(t *testing.T) {
 	}
 }
 
+// A reading out as the key says it is out of its windows that itself
+// finds a window full no more (its limit raised in the panel) tells the
+// renewal, though another reading follows it at once: that one finds the
+// window as it was and tells nothing, so the key would rest until its
+// week resets.
+func TestKeyAllowanceStaleMidReadRenewed(t *testing.T) {
+	keyLimitsHome(t)
+	week := time.Now().Add(72 * time.Hour).Truncate(time.Second)
+	var body atomic.Pointer[[]byte]
+	release := make(chan struct{})
+	var hold atomic.Bool
+	srv, asked := sub2apiServer(t, func() ([]byte, int) {
+		if hold.CompareAndSwap(true, false) {
+			<-release
+		}
+		return *body.Load(), 200
+	})
+	var once sync.Once
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	p := sub2apiKey(srv)
+	// a provider of its own, so a renewal another sub2api test's reading
+	// is still to tell isn't this key's
+	p.ID = "sub2api-renewed"
+	renewedHooks.Lock()
+	hooks := renewedHooks.fs
+	renewedHooks.Unlock()
+	t.Cleanup(func() {
+		renewedHooks.Lock()
+		renewedHooks.fs = hooks
+		renewedHooks.Unlock()
+	})
+	renewed := make(chan struct{})
+	var told atomic.Int32
+	OnRenewed(func(agent, user string) {
+		if agent == "" && user == KeyAllowanceID(p) && told.Add(1) == 1 {
+			close(renewed)
+		}
+	})
+	reply := func(b []byte) { body.Store(&b) }
+	weekUse := func(a Allowance) float64 { u, _ := a.For("gpt-6-astra", time.Now()); return u }
+
+	reply(weekUsed(t, "800", week))
+	waitAllowance(t, p, func(a Allowance) bool { return weekUse(a) == 100 })
+
+	// its next reading is held until the key says it is out of its week,
+	// and finds half the week used
+	StaleKeyAllowance(p)
+	hold.Store(true)
+	reply(weekUsed(t, "400", week))
+	KeyAllowance(p)
+	for asked.Load() < 2 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	StaleKeyAllowance(p) // out of its week, as the request found
+	once.Do(func() { close(release) })
+	select {
+	case <-renewed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the week renewed was never told")
+	}
+	// the reading after it, begun before the tell, is done before the
+	// test is, and tells nothing
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		keyAllowances.Lock()
+		loading := keyAllowances.m[keyAllowanceID(p)].loading
+		keyAllowances.Unlock()
+		if !loading && asked.Load() == 3 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the reading after was never done: asked %d times", asked.Load())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if a, _ := KeyAllowance(p); weekUse(a) != 50 {
+		t.Fatalf("the week as read last = %+v", a)
+	}
+	if n := told.Load(); n != 1 {
+		t.Fatalf("told %d times", n)
+	}
+}
+
 // Until the key is first read (magpie just started), its windows are the
 // ones its card last showed, kept on disk; a window whose reset passed
 // since is empty again.
