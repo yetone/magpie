@@ -28,7 +28,11 @@ func TestHostJSCancellation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			cmd := exec.CommandContext(ctx, node, "-e", hostJSCancellationTest, name)
+			// ready-wait forces a garbage collection (--expose-gc). A function
+			// V8 is optimizing on a worker thread is held until a worker is
+			// done with it, and with it the request it was made for, so V8
+			// optimizes on the main thread (--no-concurrent-recompilation).
+			cmd := exec.CommandContext(ctx, node, "--expose-gc", "--no-concurrent-recompilation", "-e", hostJSCancellationTest, name)
 			cmd.Stdin = bytes.NewReader(hostJS)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -149,8 +153,18 @@ async function main() {
     const counts = emitter => Object.fromEntries(emitter.eventNames().map(event => [event, emitter.listenerCount(event)]))
     const listeners = () => ({ stdin: counts(rl), stdout: counts(stdout) })
     const sharedListeners = listeners()
+    // A cancelled wait lets its request, controller, signal and credit gate
+    // go. watch() reads them itself, so none stays in a variable of main,
+    // which main keeps while it waits.
+    const requests = []
+    const watch = () => {
+      const request = run('inflight.get(1)')
+      assert.ok(request, 'a fetch waiting for init is in flight')
+      requests.push([request, request.controller, request.controller.signal, request.gate].map(part => new WeakRef(part)))
+    }
     for (let iteration = 0; iteration < 1000; iteration++) {
       fetchOne()
+      watch()
       abortOne()
       await until(idle, 'cancelled bootstrap wait cleans registries')
       assert.equal(queued(), 0, 'cancelled bootstrap emits no late error')
@@ -160,10 +174,17 @@ async function main() {
     assert.deepEqual(listeners(), sharedListeners, 'cancelled bootstrap waits leave no listener on stdin or stdout')
     const retainedWaiters = run('typeof readyWaiters === "undefined" ? -1 : readyWaiters.size')
     const retainedReadyReactions = readyReactions - (run('typeof setReady') === 'function' ? 1 : 0)
-    console.log(JSON.stringify({ cancellations: 1000, idle: idle(), queued: queued(), readyReactions, retainedReadyReactions, retainedWaiters }))
+    // Waiters are counted before the collection: a FinalizationRegistry could
+    // tidy them up after it. A WeakRef keeps its target until the turn that
+    // made it ends.
+    await tick()
+    gc()
+    const retainedRequests = requests.filter(parts => parts.some(part => part.deref() !== undefined)).length
+    console.log(JSON.stringify({ cancellations: 1000, idle: idle(), queued: queued(), readyReactions, retainedReadyReactions, retainedWaiters, retainedRequests }))
     assert.equal(retainedWaiters, 0, 'cancelled bootstrap leaves no retained waiters')
     assert.equal(retainedReadyReactions, 0, 'cancelled requests leave no reactions on shared ready')
     assert.equal(readyReactions, 1, 'only shared initialization reaction remains')
+    assert.equal(retainedRequests, 0, 'cancelled requests are garbage collected')
   } else if (name === 'ready-success' || name === 'ready-error') {
     let settle
     initialize(new Promise((resolve, reject) => { settle = name === 'ready-success' ? resolve : reject }))
