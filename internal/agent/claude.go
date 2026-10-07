@@ -385,6 +385,13 @@ func claudeIn(at place) *Agent {
 		}
 		return at.gwKey()
 	}
+	// the key in env is one magpie wrote, at this gateway address or an
+	// older one: its own, or the empty one of the claude.ai sign-in kept
+	// (one the user's own endpoint had is never put back empty)
+	keyOurs := func() bool {
+		tok, has := edit.GetJSON(path, "env.ANTHROPIC_AUTH_TOKEN")
+		return ourKey(tok) || has && tok == "" && stashLoad()[loginKey] == "claudeai"
+	}
 	// a tier (or the subagents, "subagent") the user gave a model of their
 	// own, though it is the one it would follow: it stays when the main
 	// model changes
@@ -652,7 +659,7 @@ func claudeIn(at place) *Agent {
 			// magpie's, left at a gateway address since changed: its key,
 			// or, where Claude Code kept its claude.ai sign-in, an empty
 			// one beside magpie's model
-			if tok, has := edit.GetJSON(path, "env.ANTHROPIC_AUTH_TOKEN"); ourKey(tok) || has && tok == "" && isMagpie(strings.TrimSuffix(model(), "[1m]")) {
+			if keyOurs() {
 				for _, k := range claudeEnv {
 					keys = append(keys, "env."+k)
 				}
@@ -665,20 +672,22 @@ func claudeIn(at place) *Agent {
 		}
 		if isMagpie(v) {
 			if !routed() {
-				kept := map[string]string{
-					at.key("claude.model"):      model(),
-					at.key("claude.base_url"):   env("ANTHROPIC_BASE_URL"),
-					at.key("claude.auth_token"): env("ANTHROPIC_AUTH_TOKEN"),
-				}
-				// the user's own tiers and subagent model, for the
-				// endpoint they had: back with it when magpie steps out
-				// (#1050); an older gateway address's are magpie's
-				if !ourKey(env("ANTHROPIC_AUTH_TOKEN")) {
+				// the user's own model, endpoint, token, tiers and
+				// subagent model: back with it when magpie steps out
+				// (#1050). At an older gateway address they're all
+				// magpie's, and what was kept when magpie was wired in
+				// stays kept.
+				if !keyOurs() {
+					kept := map[string]string{
+						at.key("claude.model"):      model(),
+						at.key("claude.base_url"):   env("ANTHROPIC_BASE_URL"),
+						at.key("claude.auth_token"): env("ANTHROPIC_AUTH_TOKEN"),
+					}
 					for _, k := range claudeOwnEnv {
 						kept[at.key("claude.env."+k)] = env(k)
 					}
+					stash(kept)
 				}
-				stash(kept)
 			}
 			// tiers that followed the old model follow the new one; the
 			// ones given a model of their own keep it, the one the new

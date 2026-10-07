@@ -248,3 +248,46 @@ func TestWSLClaudeStoppedSignIn(t *testing.T) {
 		}
 	}
 }
+
+// Wired in, then the gateway moved without magpie following (it wasn't
+// running): a magpie model picked at the older address takes nothing of
+// magpie's there for the user's, with its key or its claude.ai sign-in.
+// Switched off, Claude Code gets its own endpoint and key back; on its own
+// model, no gateway address is left.
+func TestClaudeAtAnOlderGatewayAddress(t *testing.T) {
+	t.Setenv("MAGPIE_ADDR", "")
+	for _, login := range []string{"", "claudeai"} {
+		for _, off := range []string{"disconnect", "default"} {
+			home, path := claudeSettings(t, `{"theme":"dark","env":{"ANTHROPIC_BASE_URL":"https://relay.example","ANTHROPIC_AUTH_TOKEN":"sk-relay"}}`)
+			saveDeepseek(t)
+			setPort(t, 3591)
+			a := claude(home)
+			if err := a.Apply("model", "deepseek/pro"); err != nil {
+				t.Fatal(err)
+			}
+			if err := a.Apply("login", login); err != nil {
+				t.Fatal(err)
+			}
+			setPort(t, 3592)
+			if err := a.Apply("model", "deepseek/flash"); err != nil {
+				t.Fatal(err)
+			}
+			if u, _ := edit.GetJSON(path, "env.ANTHROPIC_BASE_URL"); u != "http://127.0.0.1:3592" {
+				t.Fatalf("%q %s: not at the new address:\n%s", login, off, readFile(path))
+			}
+			var err error
+			if off == "disconnect" {
+				err = a.Disconnect()
+			} else {
+				err = a.Field("model").Set("")
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := `{"ANTHROPIC_AUTH_TOKEN":"sk-relay","ANTHROPIC_BASE_URL":"https://relay.example"}`
+			if got := readFile(path); !strings.Contains(strings.Join(strings.Fields(got), ""), `"env":`+want) {
+				t.Fatalf("%q %s: want the relay back alone, got\n%s", login, off, got)
+			}
+		}
+	}
+}
