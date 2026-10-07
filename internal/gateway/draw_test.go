@@ -241,6 +241,7 @@ func TestViaFor(t *testing.T) {
 	}{
 		{google, "gemini-2.5-flash-image", viaGemini},
 		{google, "imagen-4.0-generate-001", viaImages},
+		{router, "openai/gpt-image-2", viaImages},
 		{router, "openai/gpt-5-image", viaChat},
 		{router, "google/gemini-2.5-flash-image", viaChat},
 		{openai, "gpt-image-1", viaImages},
@@ -250,6 +251,68 @@ func TestViaFor(t *testing.T) {
 		if got := viaFor(tc.p, tc.model); got != tc.want {
 			t.Errorf("%s at %s: %s, want %s", tc.model, tc.p.Chat, got, tc.want)
 		}
+	}
+}
+
+func TestOpenRouterImagesAPIDrawsImageModels(t *testing.T) {
+	fresh(t)
+	p := provider.Provider{ID: "openrouter", Name: "OpenRouter", Chat: "https://openrouter.ai/api/v1", Key: "key", Models: []string{"openai/gpt-image-2"}}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	var path, requestBody string
+	s := New()
+	s.client = &http.Client{Transport: countTransport(func(r *http.Request) (*http.Response, error) {
+		path = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		requestBody = string(b)
+		response := `{"data":[{"b64_json":"` + base64.StdEncoding.EncodeToString(pngBytes) + `","media_type":"image/png"}],"usage":{"prompt_tokens":3,"completion_tokens":7}}`
+		return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(response))}, nil
+	})}
+	ref := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngBytes)
+	code, answer, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"openrouter/openai/gpt-image-2","prompt":"a magpie","images":["`+ref+`"]}`)
+	if code != http.StatusOK || len(answer.Data) != 1 || answer.Usage.Input != 3 || answer.Usage.Output != 7 {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if path != "/api/v1/images" {
+		t.Fatalf("OpenRouter was asked at %q, want /api/v1/images", path)
+	}
+	var got struct {
+		Model           string `json:"model"`
+		Prompt          string `json:"prompt"`
+		InputReferences []struct {
+			Type     string `json:"type"`
+			ImageURL struct {
+				URL string `json:"url"`
+			} `json:"image_url"`
+		} `json:"input_references"`
+	}
+	if err := json.Unmarshal([]byte(requestBody), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Model != "openai/gpt-image-2" || got.Prompt != "a magpie" || len(got.InputReferences) != 1 || got.InputReferences[0].Type != "image_url" || got.InputReferences[0].ImageURL.URL != ref {
+		t.Fatalf("OpenRouter request: %s", requestBody)
+	}
+}
+
+func TestOpenRouterImagesAPIFailureIsReturnedWithoutChatRetry(t *testing.T) {
+	fresh(t)
+	if err := provider.Save(provider.Provider{ID: "openrouter", Name: "OpenRouter", Chat: "https://openrouter.ai/api/v1", Key: "key", Models: []string{"openai/gpt-image-2"}}); err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	s := New()
+	s.client = &http.Client{Transport: countTransport(func(r *http.Request) (*http.Response, error) {
+		paths = append(paths, r.URL.Path)
+		message := `{"error":{"message":"image model is unavailable on the images endpoint"}}`
+		return &http.Response{StatusCode: http.StatusNotFound, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(message))}, nil
+	})}
+	code, _, raw := postImages(t, s, "/v1/images/generations", "application/json", `{"model":"openrouter/openai/gpt-image-2","prompt":"a magpie"}`)
+	if code != http.StatusNotFound || !strings.Contains(raw, "images endpoint") {
+		t.Fatalf("%d %s", code, raw)
+	}
+	if len(paths) != 1 || paths[0] != "/api/v1/images" {
+		t.Fatalf("OpenRouter image request paths: %v", paths)
 	}
 }
 

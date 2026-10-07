@@ -907,9 +907,9 @@ func DrawsID(id string) bool {
 	return false
 }
 
-// ImagesAPI is whether a model draws on an images API (/images/generations)
-// rather than answering in chat with pictures: gpt-image, dall-e, imagen,
-// flux, seedream… — not gemini-*-image or gpt-5-image, which chat.
+// ImagesAPI is whether a model draws on an images API rather than answering
+// in chat with pictures: gpt-image, dall-e, imagen, flux, seedream… — not
+// gemini-*-image or gpt-5-image, which chat.
 func ImagesAPI(id string) bool {
 	id = strings.ToLower(id)
 	for _, w := range []string{"gpt-image", "chatgpt-image", "dall-e", "imagen", "imagine", "qwen-image", "wanx", "wan2", "seedream", "cogview", "flux", "stable-diffusion", "sdxl", "kolors", "hidream"} {

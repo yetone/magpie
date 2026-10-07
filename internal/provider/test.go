@@ -163,9 +163,10 @@ const (
 
 // drawsOnImages is whether model is asked on p's images API, as the
 // gateway draws with it there: chat would be turned away, or answered in
-// no shape a chat test knows. OpenRouter draws everything in chat.
+// no shape a chat test knows. OpenRouter's image-only models use its /images
+// endpoint; its chat image models still use chat completions.
 func (p Provider) drawsOnImages(model string) bool {
-	return p.Account == nil && p.Chat != "" && HostOf(p.Chat) != "openrouter.ai" && catalog.ImagesAPI(model)
+	return p.Account == nil && p.Chat != "" && catalog.ImagesAPI(model)
 }
 
 // tinyDrawing is the smallest images request for model: one picture of
@@ -177,7 +178,11 @@ func tinyDrawing(q Provider, model string) (url, body string) {
 		req["quality"] = "low"
 	}
 	b, _ := json.Marshal(req)
-	return strings.TrimRight(q.Chat, "/") + "/images/generations", string(b)
+	path := "/images/generations"
+	if HostOf(q.Chat) == "openrouter.ai" {
+		path = "/images"
+	}
+	return strings.TrimRight(q.Chat, "/") + path, string(b)
 }
 
 // TestModels sends each of models the smallest request, a few at a time,
@@ -270,7 +275,7 @@ func (p Provider) testOne(ctx context.Context, model string) Result {
 		// by is not one magpie sends them as
 		url, body := tinyDrawing(q, model)
 		r := probe(ctx, q, proto, url, []byte(body), model, drawWait)
-		if !r.OK && (r.Status == 404 || r.Status == 405) {
+		if !r.OK && (r.Status == 404 || r.Status == 405) && HostOf(q.Chat) != "openrouter.ai" {
 			url, body := tiny(q, proto, model)
 			if c := probe(ctx, q, proto, url, q.Prepare([]byte(body)), model, testWait); c.OK {
 				return c
