@@ -4,6 +4,14 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Relocate project": "迁移项目会话",
+    "Relocate Claude Code project": "迁移 Claude Code 项目会话",
+    "New absolute project path": "新的项目绝对路径",
+    "Preview relocation": "预览迁移",
+    "Confirm relocation": "确认迁移",
+    "Close Claude Code and its editor sessions first. This moves the entire project's sessions, not just filtered or selected rows. Existing target storage is never overwritten. Desktop-only sessions are not changed.": "请先关闭 Claude Code 及编辑器内的会话。此操作迁移整个项目的会话，不仅是筛选或勾选的部分。不覆盖目标已有的会话存储，也不修改桌面端独立存储的会话。",
+    "Relocation complete. Original files and recovery manifest: {dir}": "迁移完成。原始文件及恢复清单保存在：{dir}",
+    "Move {n} sessions ({size}) from {from} to {to}. Originals are retained outside Claude's project list. Historical message text is unchanged.": "将 {n} 个会话（{size}）从 {from} 迁移至 {to}。原始文件保留在 Claude 项目列表之外，历史消息正文不变。",
     "No installed fonts found": "未找到已安装字体",
     "Interface font": "界面字体",
     "Code font": "代码字体",

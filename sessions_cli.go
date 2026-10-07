@@ -21,7 +21,40 @@ const sessionsUsage = "usage: magpie sessions [--days N|today|all] [--model <mod
 // Codex; with --days, what they spent day by day, as the app's Sessions
 // view shows it.
 func sessionsCmd(args []string) error {
+	if len(args) > 1 && args[1] == "relocate-claude" {
+		return relocateClaudeTo(os.Stdout, args[2:])
+	}
 	return sessionsTo(os.Stdout, args[1:], time.Now())
+}
+
+func relocateClaudeTo(w io.Writer, args []string) error {
+	const usage = "usage: magpie sessions relocate-claude --from <absolute-path> --to <absolute-path> [--confirm <preview-token>]"
+	var in sessions.ClaudeRelocation
+	for i := 0; i < len(args); i += 2 {
+		if i+1 >= len(args) || args[i+1] == "" {
+			return fmt.Errorf("%s", usage)
+		}
+		switch args[i] {
+		case "--from":
+			in.From = args[i+1]
+		case "--to":
+			in.To = args[i+1]
+		case "--confirm":
+			in.Token = args[i+1]
+		default:
+			return fmt.Errorf("%s", usage)
+		}
+	}
+	if in.From == "" || in.To == "" {
+		return fmt.Errorf("%s", usage)
+	}
+	out, err := sessions.RelocateClaudeProject(in)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(out)
 }
 
 // sessionsOpts is what the command was asked.

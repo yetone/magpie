@@ -428,6 +428,14 @@
         redrawList();
       };
       r.append(fold, el("span", "sub sm-path", cwd), el("span", "grow"), el("span", "note", t(items.length === 1 ? "{n} session" : "{n} sessions", { n: items.length })));
+      const allInFolder = (data.sessions || []).filter((s) => s.cwd === cwd);
+      if (data.agent === "claude" && cwd && allInFolder.every((s) => !s.read_only)
+        && new Set(allInFolder.map((s) => s.wsl || "")).size === 1) {
+        const move = el("button", "text", t("Relocate project"));
+        move.type = "button";
+        move.onclick = (e) => { e.stopPropagation(); askRelocate(cwd, allInFolder[0].wsl || ""); };
+        r.append(move);
+      }
 
       r.title = cwd;
       g.append(r);
@@ -606,6 +614,69 @@
     if (got.tr?.cut) out.push(el("p", "cx-none", t("There was more than is shown here")));
     out.push(el("p", "cx-src", t("Read from the agent's session file; magpie keeps no copy")));
     box.replaceChildren(...out);
+  }
+
+  function askRelocate(from, wsl) {
+    const ed = el("div", "editor sm-ask");
+    const h = el("div", "ehead");
+    h.append(icon("claude"), el("b", "", t("Relocate Claude Code project")));
+    ed.append(h, el("p", "sub sm-ask-path", (wsl ? `WSL ${wsl}: ` : "") + from));
+    ed.append(el("p", "lib-confirm", t("Close Claude Code and its editor sessions first. This moves the entire project's sessions, not just filtered or selected rows. Existing target storage is never overwritten. Desktop-only sessions are not changed.")));
+    const label = el("label", "", t("New absolute project path"));
+    const input = el("input", "");
+    input.type = "text";
+    input.value = from;
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.style.width = "100%";
+    label.append(input);
+    ed.append(label);
+    const info = el("p", "lib-confirm");
+    info.setAttribute("aria-live", "polite");
+    ed.append(info);
+    const bar = el("div", "bar");
+    const cancel = el("button", "text", t("Cancel"));
+    const go = el("button", "text primary", t("Preview relocation"));
+    cancel.type = go.type = "button";
+    let preview = null;
+    input.oninput = () => { preview = null; info.textContent = ""; go.textContent = t("Preview relocation"); };
+    cancel.onclick = () => closeConfirmAsk();
+    go.onclick = async () => {
+      go.disabled = cancel.disabled = input.disabled = true;
+      go.classList.add("busy");
+      try {
+        const out = await api("sessions/relocate-claude", { from, to: input.value, wsl, token: preview?.token || "" });
+        if (out.backup) {
+          info.textContent = t("Relocation complete. Original files and recovery manifest: {dir}", { dir: out.backup });
+          go.hidden = true;
+          input.disabled = true;
+          cancel.textContent = t("Close");
+          picked.clear();
+          opened.add(out.to);
+          await load();
+        } else {
+          preview = out;
+          info.textContent = t("Move {n} sessions ({size}) from {from} to {to}. Originals are retained outside Claude's project list. Historical message text is unchanged.", {
+            n: out.sessions, size: fmtBytes(out.bytes), from: out.from, to: out.to,
+          });
+          go.textContent = t("Confirm relocation");
+        }
+      } catch (err) {
+        preview = null;
+        info.textContent = err.message;
+        go.textContent = t("Preview relocation");
+      } finally {
+        go.disabled = cancel.disabled = false;
+        input.disabled = go.hidden;
+        go.classList.remove("busy");
+      }
+    };
+    bar.append(el("span", "grow"), cancel, go);
+    ed.append(bar);
+    confirmAsk = ed;
+    openModal(ed);
+    $("#modal").classList.add("lib");
+    input.focus({ preventScroll: true });
   }
 
   // askDelete asks in magpie's dialog before the sessions go to its trash;

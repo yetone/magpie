@@ -2,6 +2,8 @@
 
 The full manual: every agent magpie wires, every provider option, the gateway, routing, plugins, the CLI, Docker, sync and the files magpie keeps. For the overview, see the [README](../README.md).
 
+Renamed a project folder? See [relocating Claude Code sessions](session-relocation.md).
+
 One place to pick every agent's model: Codex on DeepSeek, Claude Code
 on Kimi, Gemini CLI on GLM, from the menu bar. [usemagpie.ai](https://usemagpie.ai)
 
