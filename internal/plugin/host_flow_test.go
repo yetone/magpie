@@ -26,15 +26,7 @@ func TestHostJSCancellation(t *testing.T) {
 	}
 	for _, name := range []string{"stopped-gate", "split-chunk", "terminal", "blocked-head", "blocked-head-cancel-error", "ready-wait", "ready-success", "ready-error", "local-error", "local-error-cancel", "normal-reply"} {
 		t.Run(name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			// ready-wait forces a garbage collection (--expose-gc). A function
-			// V8 is optimizing on a worker thread is held until a worker is
-			// done with it, and with it the request it was made for, so V8
-			// optimizes on the main thread (--no-concurrent-recompilation).
-			cmd := exec.CommandContext(ctx, node, "--expose-gc", "--no-concurrent-recompilation", "-e", hostJSCancellationTest, name)
-			cmd.Stdin = bytes.NewReader(hostJS)
-			out, err := cmd.CombinedOutput()
+			out, err := runHostJSCase(t, node, name)
 			if err != nil {
 				t.Fatalf("JavaScript cancellation regression: %v\n%s", err, out)
 			}
@@ -43,6 +35,26 @@ func TestHostJSCancellation(t *testing.T) {
 			}
 		})
 	}
+}
+
+// runHostJSCase runs one case of hostJSCancellationTest in node against the
+// embedded host.js. A case that hangs is stopped before this run's own
+// deadline, rather than at a fixed 10s a loaded machine can spend starting
+// node.
+func runHostJSCase(t *testing.T, node, name string) ([]byte, error) {
+	ctx := context.Background()
+	if d, ok := t.Deadline(); ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Until(d)*9/10)
+		defer cancel()
+	}
+	// ready-wait forces a garbage collection (--expose-gc). A function V8 is
+	// optimizing on a worker thread is held until a worker is done with it,
+	// and with it the request it was made for, so V8 optimizes on the main
+	// thread (--no-concurrent-recompilation).
+	cmd := exec.CommandContext(ctx, node, "--expose-gc", "--no-concurrent-recompilation", "-e", hostJSCancellationTest, name)
+	cmd.Stdin = bytes.NewReader(hostJS)
+	return cmd.CombinedOutput()
 }
 
 const hostJSCancellationTest = `
@@ -616,11 +628,7 @@ func TestFlowAbortDuringSetupStaysHealthy(t *testing.T) {
 	if err != nil {
 		t.Skip("no node on PATH")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, node, "-e", hostJSCancellationTest, "mid-setup")
-	cmd.Stdin = bytes.NewReader(hostJS)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := runHostJSCase(t, node, "mid-setup"); err != nil {
 		t.Fatalf("mid-setup cancellation: %v\n%s", err, out)
 	}
 }
