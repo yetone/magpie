@@ -59,11 +59,23 @@ func Window(period string, now time.Time) (start, reset time.Time) {
 	switch period {
 	case "week":
 		back := (int(now.Weekday()) + 6) % 7 // days since Monday
-		start = time.Date(y, m, d-back, 0, 0, 0, 0, loc)
-		return start, time.Date(y, m, d-back+7, 0, 0, 0, 0, loc)
+		return midnight(y, m, d-back, loc), midnight(y, m, d-back+7, loc)
 	case "month":
-		return time.Date(y, m, 1, 0, 0, 0, 0, loc), time.Date(y, m+1, 1, 0, 0, 0, 0, loc)
+		return midnight(y, m, 1, loc), midnight(y, m+1, 1, loc)
 	default:
-		return time.Date(y, m, d, 0, 0, 0, 0, loc), time.Date(y, m, d+1, 0, 0, 0, 0, loc)
+		return midnight(y, m, d, loc), midnight(y, m, d+1, loc)
 	}
+}
+
+// midnight is when day d of m in y begins at loc. Where the clocks go
+// forward over 00:00 west of UTC (Santiago, Havana, the Azores), time.Date
+// puts the 00:00 they skip on the day before, so the day begins as they go
+// forward instead. Where they go back across 00:00, so that it comes twice,
+// this is the one time.Date gives, east of UTC the second.
+func midnight(y int, m time.Month, d int, loc *time.Location) time.Time {
+	t := time.Date(y, m, d, 0, 0, 0, 0, loc)
+	if t.Day() != time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Day() {
+		_, t = t.ZoneBounds()
+	}
+	return t
 }

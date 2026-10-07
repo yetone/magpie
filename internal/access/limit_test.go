@@ -30,6 +30,45 @@ func TestLimitWindow(t *testing.T) {
 	}
 }
 
+// Some zones' clocks go forward at midnight, so that day, and a week or month
+// that starts on it, begins at 01:00. West of UTC (Santiago, Havana, the
+// Azores) time.Date puts the 00:00 they skip at 23:00 on the day before,
+// which ended that window an hour early; east of UTC (Beirut) it puts it at
+// 01:00, where the day does begin. Samoa skipped 2011-12-30 whole, and
+// time.Date put its 00:00 at the 29th's, a day early.
+func TestLimitWindowSkippedMidnight(t *testing.T) {
+	for _, c := range []struct {
+		zone, period string
+		begin        time.Time // when a window begins, as the clocks go forward
+	}{
+		{"America/Santiago", "day", time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC)},
+		{"America/Havana", "day", time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC)},
+		{"Atlantic/Azores", "day", time.Date(2026, 3, 29, 1, 0, 0, 0, time.UTC)},
+		{"Asia/Beirut", "day", time.Date(2026, 3, 28, 22, 0, 0, 0, time.UTC)},
+		{"America/Sao_Paulo", "week", time.Date(1997, 10, 6, 3, 0, 0, 0, time.UTC)}, // a Monday
+		{"America/Asuncion", "month", time.Date(2023, 10, 1, 4, 0, 0, 0, time.UTC)},
+		{"Pacific/Apia", "day", time.Date(2011, 12, 30, 10, 0, 0, 0, time.UTC)}, // the 31st's 00:00 there
+	} {
+		loc, err := time.LoadLocation(c.zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// noon and 23:30 the day before are in the window that ends then
+		for _, back := range []time.Duration{12 * time.Hour, 30 * time.Minute} {
+			now := c.begin.Add(-back).In(loc)
+			if start, reset := Window(c.period, now); !reset.Equal(c.begin) {
+				t.Errorf("%s: the %s of %s is %s – %s, not ending at %s", c.zone, c.period, now, start, reset, c.begin.In(loc))
+			}
+		}
+		for _, on := range []time.Duration{0, 12 * time.Hour} {
+			now := c.begin.Add(on).In(loc)
+			if start, reset := Window(c.period, now); !start.Equal(c.begin) {
+				t.Errorf("%s: the %s of %s is %s – %s, not beginning at %s", c.zone, c.period, now, start, reset, c.begin.In(loc))
+			}
+		}
+	}
+}
+
 func TestLimitValid(t *testing.T) {
 	if l, err := (&Limit{Period: "day"}).Valid(); l != nil || err != nil {
 		t.Fatal("no cap is no limit", l, err)
