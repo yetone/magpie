@@ -309,3 +309,99 @@ func TestKeepAliveBeforeTheVendorsHeaders(t *testing.T) {
 		t.Fatalf("body: %q", rec.Body.String())
 	}
 }
+
+// quietWholeGap is how long quietWhole's vendor says nothing before it
+// answers: long enough for watch to have had many a look at it past
+// keepHeldAfter (40ms in quietFast).
+const quietWholeGap = 300 * time.Millisecond
+
+const (
+	wholeChatAnswer      = `{"id":"chatcmpl-1","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"the whole answer"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":2}}`
+	wholeResponsesAnswer = `{"id":"resp-1","object":"response","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"the whole answer"}]}]}`
+)
+
+// quietWhole serves a provider on endpoint that says nothing at all for
+// quietWholeGap and then answers whole, with no event stream in it.
+func quietWhole(t *testing.T, id string, endpoint provider.Protocol, body string) {
+	t.Helper()
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		time.Sleep(quietWholeGap)
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, body)
+	}))
+	t.Cleanup(up.Close)
+	p := provider.Provider{ID: id, Name: "Fixture", Key: "k", Models: []string{"gpt-test"}}
+	if endpoint == provider.Responses {
+		p.Responses = up.URL + "/v1"
+	} else {
+		p.Chat = up.URL + "/v1"
+	}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// askWhole posts body to the gateway and reads the whole of its answer: a
+// reply the vendor did not stream is not read as one.
+func askWhole(t *testing.T, path, body string) (int, string, string) {
+	t.Helper()
+	gw := httptest.NewServer(New().Handler())
+	t.Cleanup(gw.Close)
+	resp, err := http.Post(gw.URL+path, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, resp.Header.Get("Content-Type"), string(b)
+}
+
+// A vendor quiet for longer than keepHeldAfter, with nothing heard from it
+// at all, and then a whole, non-streamed application/json 200. watch keeps
+// the agent of a stream alive while the vendor has yet to answer, which
+// tells the agent the reply will be a stream, so the whole reply is held
+// for a stream that never was: it is told the vendor did not stream, as the
+// same vendor answering a request nothing went to ahead of it is, and not
+// as that stream's error with its answer inside it.
+func TestQuietThenWholeJSONSaysTheVendorDidNotStream(t *testing.T) {
+	fresh(t)
+	quietFast(t)
+	quietWhole(t, "fixture", provider.Chat, wholeChatAnswer)
+	code, _, got := askWhole(t, "/v1/chat/completions", `{"model":"fixture/gpt-test","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+	if !strings.Contains(got, "did not stream") {
+		t.Fatalf("%d %q", code, got)
+	}
+	if strings.Contains(got, "OK:") {
+		t.Fatalf("a 200 was told as the stream's error: %q", got)
+	}
+}
+
+// The same vendor, an agent that asked for no stream: no watch, no
+// keepalive, and the whole reply goes as it is.
+func TestQuietThenWholeJSONNoStream(t *testing.T) {
+	fresh(t)
+	quietFast(t)
+	quietWhole(t, "fixture", provider.Chat, wholeChatAnswer)
+	code, _, got := askWhole(t, "/v1/chat/completions", `{"model":"fixture/gpt-test","messages":[{"role":"user","content":"hi"}]}`)
+	if code != http.StatusOK || !strings.Contains(got, `"content":"the whole answer"`) || strings.Contains(got, `"error"`) {
+		t.Fatalf("%d %q", code, got)
+	}
+}
+
+// A provider with no Chat endpoint at all, quiet and then a whole JSON
+// 200: the agent that asked for a stream has already been given it, so the
+// provider not streaming one is told as that stream's error, with the
+// vendor's own reason and not a 200's.
+func TestQuietThenWholeJSONFromResponsesOnly(t *testing.T) {
+	fresh(t)
+	quietFast(t)
+	quietWhole(t, "fixture", provider.Responses, wholeResponsesAnswer)
+	_, _, got := askWhole(t, "/v1/chat/completions", `{"model":"fixture/gpt-test","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+	if !strings.Contains(got, "did not stream") || strings.Contains(got, "OK:") {
+		t.Fatalf("the stream's agent was told: %q", got)
+	}
+}

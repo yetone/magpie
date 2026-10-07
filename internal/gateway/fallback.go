@@ -1428,9 +1428,17 @@ func (h *holdWriter) release() {
 		return
 	}
 	if h.alive != nil && h.alive.sent && !h.stream {
-		// an error status, once the agent has a stream: told as its error
+		// the stream's 200 and comments went ahead of a reply that is not
+		// one. An error status is that error as it stands. A 2xx the vendor
+		// did not stream, said as the same words a vendor that answers a
+		// request nothing went to ahead of it is told in — not as the
+		// stream's error carrying its answer, which a 200 is not
 		h.passing = true
-		streamError(h.w, h.alive.proto, h.status, provider.APIError(h.held.Bytes(), http.StatusText(h.status)))
+		said := http.StatusText(h.status)
+		if h.status < 300 {
+			said = "did not stream"
+		}
+		streamError(h.w, h.alive.proto, h.status, provider.APIError(h.held.Bytes(), said))
 		return
 	}
 	h.pass()
