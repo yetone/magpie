@@ -60,8 +60,8 @@ func (m model) sessShown() []sessions.Session {
 func sessFilter(all []sessions.Session, days int, model, folder string, now time.Time) []sessions.Session {
 	var since time.Time
 	if days > 0 {
-		now = now.In(time.Local)
-		since = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local).AddDate(0, 0, 1-days)
+		y, m, d := now.In(time.Local).Date()
+		since = midnight(y, m, d+1-days, time.Local)
 	}
 	var out []sessions.Session
 	for _, s := range all {
@@ -74,6 +74,20 @@ func sessFilter(all []sessions.Session, days int, model, folder string, now time
 		out = append(out, s)
 	}
 	return out
+}
+
+// midnight is when day d of m in y begins at loc, where a range of days
+// starts. Where the clocks go forward over 00:00 west of UTC (Santiago,
+// Havana, the Azores), time.Date puts the 00:00 they skip on the day before,
+// so the day begins as they go forward instead. Where they go back across
+// 00:00, so that it comes twice, this is the one time.Date gives, east of UTC
+// the second.
+func midnight(y int, m time.Month, d int, loc *time.Location) time.Time {
+	t := time.Date(y, m, d, 0, 0, 0, 0, loc)
+	if t.Day() != time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Day() {
+		_, t = t.ZoneBounds()
+	}
+	return t
 }
 
 func (m model) updateSessions(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -476,7 +490,9 @@ func sessChart(days []sessions.DayTotal, byCost bool, width, height int) []strin
 }
 
 func shortDate(d string) string {
-	t, err := time.ParseInLocation(time.DateOnly, d, time.Local)
+	// a date names a day, not an instant: read in the local zone, a day
+	// whose 00:00 the clocks skip would read as the day before
+	t, err := time.Parse(time.DateOnly, d)
 	if err != nil {
 		return d
 	}

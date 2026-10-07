@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -164,6 +165,73 @@ func TestSessFilter(t *testing.T) {
 	}{{1, "", "", "a"}, {7, "", "", "a,b"}, {0, "", "", "a,b,c"}, {0, "m2", "", "b,c"}, {0, "", "/x", "a,c"}, {0, "m2", "/x", "c"}} {
 		if got := ids(sessFilter(all, c.days, c.model, c.folder, now)); got != c.want {
 			t.Errorf("%d %q %q: %s, want %s", c.days, c.model, c.folder, got, c.want)
+		}
+	}
+}
+
+// Where the clocks go forward at midnight, that day begins at 01:00. West of
+// UTC (Santiago, Havana, the Azores) time.Date puts the 00:00 they skip at
+// 23:00 the day before, so a range of days beginning on that day listed the
+// sessions last active in the day before's last hour, one ending on it began
+// an hour early, and the stats chart named the day by the day before. East
+// of UTC (Beirut, Cairo) time.Date gives 01:00, the day's start, but a range
+// counted back from that 01:00 began an hour late.
+func TestSessionRangesPastASkippedMidnight(t *testing.T) {
+	const zoneEnv = "MAGPIE_TEST_SESSIONS_ZONE"
+	skipped := map[string]time.Time{ // the day the clocks skip 00:00, as it begins
+		"America/Santiago": time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC),
+		"America/Havana":   time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC),
+		"Atlantic/Azores":  time.Date(2026, 3, 29, 1, 0, 0, 0, time.UTC),
+		"Asia/Beirut":      time.Date(2026, 3, 28, 22, 0, 0, 0, time.UTC),
+		"Africa/Cairo":     time.Date(2026, 4, 23, 22, 0, 0, 0, time.UTC),
+	}
+	if zone := os.Getenv(zoneEnv); zone != "" {
+		// TestMain sets time.Local to UTC, and no test may change it while
+		// others run; this child process runs only this test, so it sets the
+		// zone before anything reads it
+		loc, err := time.LoadLocation(zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Local = loc
+		begin := skipped[zone].In(loc)
+		y, m, d := begin.Date()
+		check := func(days int, now, first time.Time) {
+			for _, c := range []struct {
+				last time.Time
+				in   bool
+			}{{first, true}, {first.Add(-30 * time.Minute), false}} {
+				in := len(sessFilter([]sessions.Session{{ID: "s", Last: c.last}}, days, "", "", now)) == 1
+				if in != c.in {
+					is := map[bool]string{false: "isn't", true: "is"}[in]
+					t.Errorf("%s: %d days at %s: a session last active at %s %s listed, the range beginning at %s", zone, days, now, c.last, is, first)
+				}
+			}
+		}
+		for _, days := range []int{1, 7, 30, 90} {
+			// beginning on that day, asked at noon on its last day
+			check(days, time.Date(y, m, d+days-1, 12, 0, 0, 0, loc), begin)
+			// ending on it, asked at noon there, from an ordinary day's 00:00
+			if days > 1 {
+				check(days, time.Date(y, m, d, 12, 0, 0, 0, loc), time.Date(y, m, d+1-days, 0, 0, 0, 0, loc))
+			}
+		}
+		total := func(t time.Time) sessions.DayTotal {
+			dt := sessions.DayTotal{Date: t.Format(time.DateOnly)}
+			dt.Input = 100
+			return dt
+		}
+		ls := sessChart([]sessions.DayTotal{total(begin), total(begin.AddDate(0, 0, 1))}, false, 80, 2)
+		if want := begin.Format("Jan 2"); len(ls) == 0 || ls[len(ls)-1] != want {
+			t.Errorf("%s: the chart from %s is labelled %q, not %q", zone, begin.Format(time.DateOnly), ls, want)
+		}
+		return
+	}
+	for zone := range skipped {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestSessionRangesPastASkippedMidnight$")
+		cmd.Env = append(os.Environ(), zoneEnv+"="+zone)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: %v\n%s", zone, err, out)
 		}
 	}
 }
