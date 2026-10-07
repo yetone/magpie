@@ -137,8 +137,10 @@ func buildCodeAssist(r *Request, model, agent string) []byte {
 // with that same id and would otherwise work it out a second time. There is
 // no model but that id in here: on Antigravity the two differ, and the one
 // the request goes out under is the one everything below is shaped from.
+// agent "vertex" is Vertex AI's request (buildVertex).
 func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 	ag := agent == "antigravity"
+	vx := agent == "vertex"
 	at := "" // the level the id says it thinks at
 	if ag {
 		if _, l, ok := antigravityBaseOf(sent); ok {
@@ -334,7 +336,11 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 	if len(r.Stop) > 0 {
 		gen["stopSequences"] = r.Stop
 	}
-	if tc := thinkingConfig(r, sent, claude, at); tc != nil {
+	tc := thinkingConfig(r, sent, claude, at)
+	if vx {
+		tc = vertexThinking(r, sent)
+	}
+	if tc != nil {
 		gen["thinkingConfig"] = tc
 		// Claude's answer has to have room past its thinking
 		if b, ok := tc["thinkingBudget"].(int); ok && claude && gen["maxOutputTokens"] == nil {

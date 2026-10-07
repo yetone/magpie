@@ -128,7 +128,8 @@ func clineProbe(body string) string {
 // through its agent's own API (Cursor, Devin, Kiro, Zed, Qoder, a Google
 // sign-in), which the gateway translates every request for, so a probe
 // has no endpoint to go to. A Google sign-in's are asked through the
-// gateway's translator (testsTranslated).
+// gateway's translator (testsTranslated). Vertex AI's generateContent is
+// asked as it is.
 func (p Provider) ModelTest() string {
 	if p.DecideOnly() {
 		if p.AsksDecideModels() {
@@ -136,7 +137,7 @@ func (p Provider) ModelTest() string {
 		}
 		return "decide"
 	}
-	if p.isClaudeAccount() || p.testsTranslated() {
+	if p.isClaudeAccount() || p.testsTranslated() || p.IsVertex() {
 		return ""
 	}
 	for _, pr := range p.Speaks() {
@@ -171,6 +172,9 @@ func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
 	case Anthropic:
 		return q.Anthropic + "/v1/messages", fmt.Sprintf(`{"model":%q,"max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
 	case Gemini:
+		if q.IsVertex() {
+			return vertexTest(q, model)
+		}
 		if q.FactoryGemini() {
 			// Factory's generate route. droid sends no stream field.
 			return q.Base(Gemini) + "/generate", fmt.Sprintf(`{"model":%q,"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, model)
@@ -386,7 +390,8 @@ func isClaude(id string) bool {
 // Azure OpenAI takes a key in api-key alone: a Bearer there is an Entra ID
 // token, and the key sent as one is turned away.
 func AuthHeaders(p Provider, proto Protocol) map[string]string {
-	if p.Key == "" {
+	// Vertex AI's is the Google token Sign sets, which a key would replace
+	if p.Key == "" || p.IsVertex() {
 		return map[string]string{}
 	}
 	if p.IsAzure() {

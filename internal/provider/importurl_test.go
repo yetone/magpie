@@ -3,6 +3,7 @@ package provider
 import (
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -93,6 +94,19 @@ func TestParseImportRejects(t *testing.T) {
 	} {
 		if p, err := ParseImport(link); err == nil {
 			t.Errorf("%s: accepted as %+v", link, p)
+		}
+	}
+}
+
+// Google Vertex AI is asked at the user's own Google Cloud project with
+// their own credentials, none of which a link has: one naming it is
+// refused, saying how it is added, rather than offered as a provider that
+// wants a key and can't be saved.
+func TestParseImportVertex(t *testing.T) {
+	for _, link := range []string{"magpie://import?preset=google-vertex", "magpie://import?preset=Google-Vertex&key=AQ.abc&name=Vertex"} {
+		_, err := ParseImport(link)
+		if err == nil || !strings.Contains(err.Error(), "magpie provider add google-vertex project=") {
+			t.Errorf("%s: %v", link, err)
 		}
 	}
 }

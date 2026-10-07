@@ -16,7 +16,8 @@ import (
 //
 // Parameters (every value URL-encoded):
 //
-//	preset     a preset id (magpie presets); the preset's endpoints are used
+//	preset     a preset id (magpie presets); the preset's endpoints are used.
+//	           Not google-vertex, asked at the user's own Google Cloud project
 //	region     with a preset that has regions, which one
 //	name       the provider's name; required without a preset
 //	id         its id; derived from the name when absent
@@ -56,6 +57,11 @@ func ParseImport(link string) (Provider, error) {
 	if id := get("preset"); id != "" {
 		if p, err = FromPreset(strings.ToLower(id)); err != nil {
 			return Provider{}, err
+		}
+		if p.IsVertex() {
+			// asked at the user's own Google Cloud project, with their
+			// own credentials: nothing a link could hand over
+			return Provider{}, errorf("%s is added with your own Google Cloud project, not from a link: magpie provider add %s project=<id>, or Add in the app", p.Name, VertexPreset)
 		}
 		if r := get("region"); r != "" {
 			found := false

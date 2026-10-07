@@ -542,6 +542,9 @@ func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 	if r := p.regionOf(pr); r != nil && r.Models != nil {
 		models = r.Models
 	}
+	if p.IsVertex() && p.Vertex != nil {
+		models = vertexModels(p.Vertex.Location) // each location serves its own
+	}
 	if pr.Only == "" && (len(models) == 0 || len(ms) > 0) {
 		return ms
 	}

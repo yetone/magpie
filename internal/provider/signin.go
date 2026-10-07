@@ -695,12 +695,21 @@ func (s *signInFlow) exchange(ctx context.Context, code string) (savedLogin, err
 }
 
 func postToken(ctx context.Context, tokenURL, ctype string, body []byte, out any) error {
+	return postTokenAs(ctx, tokenURL, ctype, "", body, out)
+}
+
+// postTokenAs is postToken asked with bearer, a token already had, when it
+// isn't "" (Google's IAM Credentials, which trades one for another).
+func postTokenAs(ctx context.Context, tokenURL, ctype, bearer string, body []byte, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", ctype)
 	req.Header.Set("Accept", "application/json")
+	if bearer != "" {
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
@@ -732,9 +741,19 @@ func postToken(ctx context.Context, tokenURL, ctype string, body []byte, out any
 		if msg == "" {
 			msg = http.StatusText(resp.StatusCode)
 		}
-		return fmt.Errorf("the sign-in was refused (%d): %s", resp.StatusCode, msg)
+		return &tokenRefused{resp.StatusCode, msg}
 	}
 	return json.Unmarshal(b, out)
+}
+
+// tokenRefused is a token endpoint's refusal, as postToken answers it.
+type tokenRefused struct {
+	status int
+	msg    string
+}
+
+func (e *tokenRefused) Error() string {
+	return fmt.Sprintf("the sign-in was refused (%d): %s", e.status, e.msg)
 }
 
 // claudeLogin is a Claude sign-in as magpie keeps it.
