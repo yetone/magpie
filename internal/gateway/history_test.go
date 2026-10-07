@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -81,6 +83,53 @@ func TestHistoryKeepsDaysAndDropsOld(t *testing.T) {
 	want := []string{now.AddDate(0, 0, -4).Format(dayForm), now.AddDate(0, 0, -3).Format(dayForm), yday.Format(dayForm), now.Format(dayForm)}
 	if strings.Join(left, ",") != strings.Join(want, ",") {
 		t.Fatalf("kept %v, want %v", left, want)
+	}
+}
+
+// Where the clocks go forward at 00:00 west of UTC, that day has no 00:00 to
+// 00:59. From 00:00 to 00:59 on the day historyDays-1 later, the history
+// still keeps historyDays days, that day the oldest, not the day before it
+// too. pruneHistory reads the local zone, which Go takes from TZ once, so
+// each zone runs in a test process of its own.
+func TestHistoryKeepsDaysPastASkippedMidnight(t *testing.T) {
+	const zoneEnv = "MAGPIE_TEST_HISTORY_ZONE"
+	skipped := map[string]time.Time{ // the day the clocks skip 00:00, its noon in UTC
+		"America/Santiago": time.Date(2026, 9, 6, 15, 0, 0, 0, time.UTC),
+		"America/Havana":   time.Date(2026, 3, 8, 16, 0, 0, 0, time.UTC),
+		"Atlantic/Azores":  time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC),
+	}
+	if zone := os.Getenv(zoneEnv); zone != "" {
+		day := skipped[zone].In(time.Local)
+		if day.Hour() != 12 {
+			t.Fatalf("TZ=%s didn't set the local zone: the noon of its skipped midnight is %s", zone, day)
+		}
+		dir := t.TempDir()
+		y, m, d := day.Date()
+		for i := -2; i < historyDays; i++ {
+			name := time.Date(y, m, d+i, 12, 0, 0, 0, time.Local).Format(dayForm) + ".jsonl.gz"
+			if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, minute := range []int{0, 30, 59} {
+			now := time.Date(y, m, d+historyDays-1, 0, minute, 0, 0, time.Local)
+			pruneHistory(dir, now)
+			days := historyFiles(dir)
+			if len(days) != historyDays || days[0].day != day.Format(dayForm) {
+				t.Errorf("at %s kept %d days from %s, want %d from %s", now, len(days), days[0].day, historyDays, day.Format(dayForm))
+			}
+		}
+		return
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Go on Windows takes the local zone from the system, not TZ")
+	}
+	for zone := range skipped {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestHistoryKeepsDaysPastASkippedMidnight$")
+		cmd.Env = append(os.Environ(), "TZ="+zone, zoneEnv+"="+zone)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: %v\n%s", zone, err, out)
+		}
 	}
 }
 

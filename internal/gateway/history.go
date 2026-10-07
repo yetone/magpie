@@ -104,7 +104,10 @@ func pruneHistory(dir string, now time.Time) {
 			gzipFile(d.path)
 		}
 	}
-	oldest := now.Local().AddDate(0, 0, -historyDays+1).Format(dayForm)
+	// the oldest day kept is named from its noon: where the clocks go forward
+	// at 00:00 west of UTC, AddDate from 00:30 lands on the day before it
+	y, m, d := now.Local().Date()
+	oldest := time.Date(y, m, d-historyDays+1, 12, 0, 0, 0, time.Local).Format(dayForm)
 	days := historyFiles(dir)
 	var total int64
 	for _, d := range days {
