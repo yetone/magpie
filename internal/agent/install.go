@@ -51,7 +51,8 @@ type Install struct {
 // Codex's (github.com/openai/codex's README) and OpenCode's
 // (opencode.ai/docs), the ones whose own updaters cliSpecs knows by where
 // they put the binary — and the Homebrew cask and formula the READMEs name
-// (Codex's, Gemini CLI's).
+// (Codex's, Gemini CLI's). OpenClaw's installer (docs.openclaw.ai/install)
+// also sets up the Node.js version its CLI needs.
 var vendorInstall = map[string]func(goos string) []InstallCmd{
 	"claude": func(goos string) []InstallCmd {
 		if goos == "windows" {
@@ -64,6 +65,12 @@ var vendorInstall = map[string]func(goos string) []InstallCmd{
 			return nil
 		}
 		return []InstallCmd{{Via: "script", Command: "curl -fsSL https://opencode.ai/install | bash"}}
+	},
+	"openclaw": func(goos string) []InstallCmd {
+		if goos == "windows" {
+			return []InstallCmd{{Via: "powershell", Command: "iwr -useb https://openclaw.ai/install.ps1 | iex"}}
+		}
+		return []InstallCmd{{Via: "script", Command: "curl -fsSL https://openclaw.ai/install.sh | bash"}}
 	},
 	"codex": func(goos string) []InstallCmd {
 		switch goos {

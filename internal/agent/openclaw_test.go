@@ -45,6 +45,30 @@ func openclawHome(t *testing.T, config string) (*Agent, func() []byte) {
 	}
 }
 
+// The install list must offer OpenClaw on a fresh home, without creating
+// its config or pretending it is installed.
+func TestOpenClawInstallOnFreshHome(t *testing.T) {
+	a, _ := openclawHome(t, "")
+	t.Setenv("PATH", t.TempDir())
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		t.Run(goos, func(t *testing.T) {
+			for _, x := range installsOf(All(), goos, false) {
+				if x.ID != a.ID {
+					continue
+				}
+				if x.Name != a.Name || x.Icon != "openclaw-color" || len(x.Commands) != 1 || x.Missing {
+					t.Fatalf("OpenClaw install entry: %+v", x)
+				}
+				if _, err := os.Stat(a.Dir); !os.IsNotExist(err) {
+					t.Fatalf("listing created OpenClaw's config directory: %v", err)
+				}
+				return
+			}
+			t.Fatal("OpenClaw is missing from the install list on a fresh home")
+		})
+	}
+}
+
 func TestOpenClawRegistered(t *testing.T) {
 	a, _ := openclawHome(t, "")
 	t.Setenv("PATH", t.TempDir())
