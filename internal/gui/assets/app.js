@@ -18270,19 +18270,43 @@ const UPDATE_EVERY = [30, 60, 360, 1440];
 // renderProxy: magpie's own requests to vendors, and its update checks, follow the system proxy on
 // their own; this row says which one, and lets it be turned off or set.
 let proxyCustom = false; // Custom picked, nothing typed yet
+// Keep SOCKS credentials in their own fields; URL userinfo is the existing
+// saved format, with reserved characters escaped before it reaches Go/Bun.
+function proxyFields(value) {
+  try {
+    const u = new URL(value);
+    if (/^socks5h?:$/.test(u.protocol)) {
+      const encodedUsername = u.username, encodedPassword = u.password;
+      // A saved proxy can contain non-UTF-8 credential bytes. Keep their
+      // escapes, still masked, and preserve those bytes until edited.
+      const decode = (v) => { try { return decodeURIComponent(v); } catch { return v; } };
+      u.username = ""; u.password = "";
+      return { address: u.href, username: decode(encodedUsername), password: decode(encodedPassword), encodedUsername, encodedPassword, socks: true };
+    }
+  } catch {}
+  return { address: value, username: "", password: "", socks: /^socks5h?:\/\//i.test(value) };
+}
+function proxyDisplay(value) {
+  // Also mask an older backend's proxyNow, and environment/system proxies.
+  return (value || "").replace(/^(\w+:\/\/)?[^/?#]*@/, "$1");
+}
 function renderProxy(s, keep) {
   const cur = !s.proxy ? "auto" : s.proxy === "direct" ? "off" : "custom";
   const mode = proxyCustom ? "custom" : cur;
   const sub = $("#proxySub");
   sub.textContent = {
-    settings: t("Requests to vendors and update checks go through {proxy}", { proxy: s.proxyNow }),
-    system: t("Following the system proxy, {proxy}", { proxy: s.proxyNow }),
-    environment: t("Following HTTPS_PROXY, {proxy}", { proxy: s.proxyNow }),
+    settings: t("Requests to vendors and update checks go through {proxy}", { proxy: proxyDisplay(s.proxyNow) }),
+    system: t("Following the system proxy, {proxy}", { proxy: proxyDisplay(s.proxyNow) }),
+    environment: t("Following HTTPS_PROXY, {proxy}", { proxy: proxyDisplay(s.proxyNow) }),
     off: t("Off: requests to vendors and update checks go direct"),
     none: t("No system proxy found; requests to vendors and update checks go direct"),
   }[s.proxySource] || "";
   const box = $("#proxySegs");
   box.replaceChildren();
+  const row = el("div", "proxy-controls");
+  box.append(row);
+  let picking = false;
+  let saveOnLeave = null;
   const pick = (id) => {
     proxyCustom = id === "custom";
     if (id === "auto") savePrefs({ ...keep, proxy: "" });
@@ -18290,20 +18314,70 @@ function renderProxy(s, keep) {
     else renderProxy(s, keep);
   };
   if (mode === "custom") {
-    const i = input(cur === "custom" ? s.proxy : "", "http://127.0.0.1:7890");
+    let fields = proxyFields(cur === "custom" ? s.proxy : "");
+    const i = input(fields.address, "http://127.0.0.1:7890");
     i.className = "proxy";
+    i.setAttribute("aria-label", t("Proxy address"));
+    const auth = el("div", "proxy-auth");
+    const username = input(fields.username, t("Username (optional)"));
+    const password = input(fields.password, t("Password (optional)"), "password");
+    for (const field of [username, password]) {
+      field.className = "proxy-credential";
+      field.setAttribute("aria-label", field.placeholder);
+    }
+    const updateAuth = () => {
+      const parsed = proxyFields(i.value.trim());
+      auth.hidden = !parsed.socks;
+      if (parsed.username || parsed.password) {
+        fields = parsed;
+        i.value = parsed.address;
+        username.value = parsed.username; password.value = parsed.password;
+      }
+    };
+    i.oninput = updateAuth;
+    updateAuth();
+    let saving = false;
     const save = () => {
-      const v = i.value.trim();
-      if (!v || v === s.proxy) return;
+      let v = i.value.trim();
+      if (!v || saving) return;
+      if (!auth.hidden) {
+        try {
+          const u = new URL(v);
+          u.username = username.value === fields.username && fields.encodedUsername !== undefined ? fields.encodedUsername : encodeURIComponent(username.value);
+          u.password = password.value === fields.password && fields.encodedPassword !== undefined ? fields.encodedPassword : encodeURIComponent(password.value);
+          v = u.href;
+        } catch {} // the settings API explains an invalid address
+      }
+      if (v === s.proxy) return;
+      saving = true;
       proxyCustom = false;
       savePrefs({ ...keep, proxy: v });
     };
-    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { proxyCustom = false; renderProxy(s, keep); } };
-    i.onblur = save;
-    box.append(i);
+    // Moving between fields must not redraw the row with a partial login.
+    // A mode click makes its own save and must not also save the old draft.
+    saveOnLeave = (e) => {
+      if (box.contains(e.relatedTarget)) return;
+      queueMicrotask(() => { if (i.isConnected && !picking) save(); });
+    };
+    for (const field of [i, username, password]) {
+      field.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") save(); else if (e.key === "Escape") { proxyCustom = false; renderProxy(s, keep); } };
+      field.onfocus = () => { picking = false; };
+      field.onblur = saveOnLeave;
+    }
+    const apply = el("button", "text", t("Save"));
+    apply.onclick = save;
+    apply.onblur = saveOnLeave;
+    auth.append(username, password, apply);
+    row.append(i);
+    box.append(auth);
     if (proxyCustom) queueMicrotask(() => i.focus());
   }
-  box.append(segs([["auto", t("Auto")], ["off", t("Off")], ["custom", t("Custom")]], mode, pick));
+  const modes = segs([["auto", t("Auto")], ["off", t("Off")], ["custom", t("Custom")]], mode, pick);
+  // WebKit doesn't focus clicked buttons, so relatedTarget alone can't tell
+  // a mode click from leaving the proxy editor.
+  modes.onpointerdown = () => { picking = true; };
+  for (const button of modes.querySelectorAll("button")) button.onblur = saveOnLeave;
+  row.append(modes);
 }
 
 // renderGitHubToken: the GitHub token the library's requests to GitHub's

@@ -1,5 +1,11 @@
 # Dropdown browser regression
 
+`settings-proxy-auth.test.cjs` checks optional SOCKS5/SOCKS5h usernames and
+passwords in Settings, using the real page with isolated API fixtures. It
+covers saving and reloading, escaped and non-UTF-8 credentials, masked
+addresses/status, clearing authentication, Tab and Escape, mode switches,
+HTTP compatibility, and narrow windows in English and Chinese on Chromium
+and WebKit.
 ## Installed desktop fonts
 
 `fonts.test.cjs` exercises the interface/code font controls with installed

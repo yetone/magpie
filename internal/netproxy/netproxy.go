@@ -254,6 +254,7 @@ func Parse(s string) (*url.URL, error) {
 
 // Describe says, for the settings page, what a request to u would use.
 func Describe() (proxy, source string) {
+	defer func() { proxy = proxyAddress(proxy) }()
 	switch s := strings.TrimSpace(settings.Load().Proxy); s {
 	case "direct":
 		return "", "off"
@@ -269,6 +270,24 @@ func Describe() (proxy, source string) {
 		return sys.URL, "system"
 	}
 	return "", "none"
+}
+
+// proxyAddress keeps credentials out of the settings status. A malformed
+// address is omitted because its userinfo cannot be safely separated.
+func proxyAddress(raw string) string {
+	u, err := Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if u.User == nil {
+		return raw
+	}
+	u.User = nil
+	address := u.String()
+	if !strings.Contains(raw, "://") {
+		address = strings.TrimPrefix(address, "http://")
+	}
+	return address
 }
 
 // fromEnv is the proxy the environment names for u: HTTPS_PROXY or

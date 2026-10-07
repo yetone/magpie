@@ -2553,10 +2553,14 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .session-terminal-select { max-width: min(230px, 45%); height: 29px; color: var(--fg); }
 .session-terminal-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .row.pref .segs { flex: none; margin-left: auto; }
-.proxy-segs { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
-.proxy-segs input.proxy, input.words { width: 180px; min-width: 0; height: 27px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); font-size: 12.5px; outline: none; transition: border-color .12s, box-shadow .12s; }
-.proxy-segs input.proxy:focus, input.words:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
-.proxy-segs input.proxy::placeholder, input.words::placeholder { color: var(--faint); }
+.proxy-segs { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-left: auto; min-width: 0; max-width: 100%; }
+.proxy-controls, .proxy-auth { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-width: 0; max-width: 100%; }
+.proxy-auth[hidden] { display: none; }
+.proxy-segs input.proxy, .proxy-segs input.proxy-credential, input.words { width: 180px; max-width: 100%; min-width: 0; height: 27px; padding: 0 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--card); font-size: 12.5px; outline: none; transition: border-color .12s, box-shadow .12s; }
+.proxy-segs input.proxy-credential { width: 140px; }
+.proxy-auth .text { flex: none; }
+.proxy-segs input:focus, input.words:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.proxy-segs input::placeholder, input.words::placeholder { color: var(--faint); }
 input.words { width: 240px; max-width: 100%; }
 /* Settings → Long conversations: 272K or the size typed, beside it (#876) */
 .compact-at { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
@@ -2775,7 +2779,8 @@ body.panel .modal { padding: 16px 12px; }
   body.web .row.pref > .who { flex-basis: 100%; }
   body.web .row.pref .sub { white-space: normal; }
   body.web .row.pref .segs { margin-left: 0; max-width: 100%; flex-wrap: wrap; }
-  body.web .proxy-segs { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; }
+  body.web .proxy-segs { margin-left: 0; align-items: flex-start; }
+  body.web .proxy-controls, body.web .proxy-auth { justify-content: flex-start; }
   body.web .usage-head { height: auto; min-height: 44px; flex-wrap: wrap; gap: 8px; }
   body.web .usage-head > .segs { max-width: 100%; flex-wrap: wrap; }
   body.web .usage-head > .grow, body.web .sess-tools > .grow { display: none; }
