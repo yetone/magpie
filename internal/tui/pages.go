@@ -131,6 +131,11 @@ func (m model) updateProviders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.flash, m.flashOK = p.Name+" is a signed-in account: its key is the agent's sign-in", false
 			return m, nil
 		}
+		if p.IsVertex() {
+			// its token is minted from the user's Google credentials
+			m.flash, m.flashOK = p.Name+" takes no key · magpie provider set "+p.ID+" credentials=… impersonate=… changes its Google credentials", false
+			return m, nil
+		}
 		in := newInput("the API key")
 		in.EchoMode = textinput.EchoPassword
 		in.EchoCharacter = '•'
@@ -140,6 +145,10 @@ func (m model) updateProviders(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return saveProvider(p.ID, func(p *provider.Provider) { p.Key = v; provider.ForgetBalances() }, p.Name+" key "+provider.Mask(v))
 			}})
 	case "w":
+		if p.IsVertex() {
+			m.flash, m.flashOK = p.Name+" is asked at your Google Cloud project · magpie provider set "+p.ID+" project=… location=… changes it", false
+			return m, nil
+		}
 		pr := provider.Preset(p.Preset)
 		if pr == nil || pr.Endpoint == "" {
 			m.flash, m.flashOK = p.Name+" is asked at its vendor's address · magpie provider set "+p.ID+" url=… changes a custom one's", false
@@ -400,7 +409,8 @@ func (m *model) openProviderModels(id string) {
 	m.mode = modePick
 }
 
-// openPresets picks a vendor magpie knows, then asks for its key.
+// openPresets picks a vendor magpie knows, then asks for its key, or for
+// Google Vertex AI the project it takes in place of one.
 func (m *model) openPresets() {
 	var items []agent.Option
 	var shown []string
@@ -430,6 +440,9 @@ func (m *model) openPresets() {
 				p, err := provider.FromPreset(id)
 				if err != nil {
 					return flashMsg{text: err.Error()}
+				}
+				if p.IsVertex() {
+					return askMsg{vertexProjectAsk(p)}
 				}
 				// a vendor reached at the user's own address (a remote
 				// magpie, Azure OpenAI) has none of the preset's: it is
@@ -507,33 +520,54 @@ func addKeyAsk(p provider.Provider) ask {
 	}
 	return ask{crumbs: []string{"providers", "add", p.Name}, input: in, hint: hint, empty: true,
 		onEnter: func(key string) tea.Cmd {
-			return func() tea.Msg {
-				p.Key = key
-				id, err := provider.Add(p)
-				if err != nil {
-					return flashMsg{text: err.Error()}
-				}
-				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-				defer cancel()
-				saved, err := provider.Find(id)
-				if err != nil {
-					return flashMsg{text: err.Error()}
-				}
-				// the vendor's list, and what came of asking it: a list
-				// that failed said so, not an "added" over 0 models
-				// (akic404 on Discord)
-				text := "added " + saved.Name
-				ms, err := saved.Fetch(ctx)
-				if err != nil && saved.DecideOnly() {
-					// a System One API: its list isn't what it is for
-					return flashMsg{text: text, ok: true}
-				}
-				if err != nil {
-					return flashMsg{text: text + " · " + fetchNote(err)}
-				}
-				return flashMsg{text: text + " · " + modelsNote(id, len(ms)), ok: len(ms) > 0}
-			}
+			p.Key = key
+			return addCmd(p)
 		}}
+}
+
+// vertexProjectAsk asks for the Google Cloud project of p, a Google Vertex
+// AI provider, and adds it there. It takes no key: its requests are signed
+// with the user's Google credentials, whose file and service account are
+// set from the CLI, as its location is. Nothing typed is said to be needed,
+// as Save says it.
+func vertexProjectAsk(p provider.Provider) ask {
+	return ask{crumbs: []string{"providers", "add", p.Name, "project"}, input: newInput("your Google Cloud project's id"), empty: true,
+		hint: "no key: signed with gcloud's Application Default Credentials (gcloud auth application-default login)\n" +
+			"magpie provider set " + provider.FreeID(p.ID) + " location=… credentials=… impersonate=… changes the rest",
+		onEnter: func(project string) tea.Cmd {
+			p.Vertex = &provider.Vertex{Project: project}
+			return addCmd(p)
+		}}
+}
+
+// addCmd adds p, a preset's provider, and says what came of asking its
+// vendor for its models.
+func addCmd(p provider.Provider) tea.Cmd {
+	return func() tea.Msg {
+		id, err := provider.Add(p)
+		if err != nil {
+			return flashMsg{text: err.Error()}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		saved, err := provider.Find(id)
+		if err != nil {
+			return flashMsg{text: err.Error()}
+		}
+		// the vendor's list, and what came of asking it: a list that
+		// failed said so, not an "added" over 0 models (akic404 on
+		// Discord)
+		text := "added " + saved.Name
+		ms, err := saved.Fetch(ctx)
+		if err != nil && saved.DecideOnly() {
+			// a System One API: its list isn't what it is for
+			return flashMsg{text: text, ok: true}
+		}
+		if err != nil {
+			return flashMsg{text: text + " · " + fetchNote(err)}
+		}
+		return flashMsg{text: text + " · " + modelsNote(id, len(ms)), ok: len(ms) > 0}
+	}
 }
 
 // endpointAsk asks for the address of a vendor reached at the user's own
@@ -586,6 +620,15 @@ func (m model) viewProviders() string {
 			r.key = "○ switched off"
 		case p.Account != nil:
 			r.key = "● " + p.Account.User
+		case p.IsVertex() && !p.Ready():
+			r.key = "○ needs a project"
+		case p.IsVertex():
+			// no key: a token minted from the user's Google credentials,
+			// as magpie providers says it
+			r.key = "● Google credentials"
+			if p.Vertex != nil && p.Vertex.Impersonate != "" {
+				r.key += " as " + p.Vertex.Impersonate
+			}
 		case p.Key != "":
 			r.key = "● " + provider.Mask(p.Key)
 		case p.Ready():
