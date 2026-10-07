@@ -91,9 +91,9 @@ var usedCache struct {
 	m       map[string]map[string]Allowance // agent → user → allowance
 	at      map[string]time.Time
 	loading map[string]chan struct{} // closed when the fetch in flight is done
-	// renewed: when an account's windows were last started again (a
-	// Codex reset spent), by agent/user: a reading begun before says
-	// nothing of them
+	// renewed: when an account's windows were last started again, or its
+	// allowance last dropped as stale (renewedNow, StaleAllowance), by
+	// agent/user: a reading begun before says nothing of them
 	renewed map[string]time.Time
 }
 
@@ -529,11 +529,12 @@ func StaleAllowance(agent, user string) {
 		}
 		grokHomeUsage.Unlock()
 	}
-	usedCache.Lock()
-	if usedCache.at != nil {
-		usedCache.at[agent] = time.Time{}
-	}
-	usedCache.Unlock()
+	// the allowance as last read is forgotten too, not only asked for again:
+	// what the vendor said of the account before it refused it says nothing
+	// of what it has left now. A reading asked before the refusal and still
+	// out is dropped by this as well, rather than trusted for the minute
+	// after it comes back (forgetAllowance's renewed mark).
+	forgetAllowance(agent, user)
 }
 
 // restartedBy marks every window as started again by a reset spent
