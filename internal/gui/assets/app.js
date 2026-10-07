@@ -18518,6 +18518,10 @@ function renderCodexDescriptions(s) {
   $("#codexDescriptionsPick").replaceChildren(b);
 }
 
+// renderCodexTitles: where Codex's requests for a thread's title go (#705)
+// — as Codex sends them, to its own model through its ChatGPT sign-in; off,
+// answered by magpie with no title; or to a model of magpie's — set on its
+// own, as Codex's subagents are.
 function renderCodexTitles(s) {
   const models = s.titleModels || [];
   const named = (id) => {

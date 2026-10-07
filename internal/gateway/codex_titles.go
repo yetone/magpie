@@ -44,11 +44,19 @@ func codexTitlesTo(h http.Header, body []byte, ours bool) string {
 // description goes. "" leaves the request as Codex sent it; a model's id
 // writes it. A description is not a title: Codex asks for {"description"}
 // alone, which the title wrapper cannot answer.
-func codexDescriptionsTo(h http.Header, body []byte) string {
+func codexDescriptionsTo(h http.Header, body []byte, ours bool) string {
 	if !isDescriptionKind(requestCallKind(h, requestSessionMetadata(h, body))) {
 		return ""
 	}
-	return settings.Load().CodexDescriptions
+	if to := settings.Load().CodexDescriptions; to != "" {
+		return to
+	}
+	// Codex on a magpie model gets no schema upstream (#743), so an empty
+	// setting still wraps the model it asked for, as titles do.
+	if m := modelOf(body); m != "" && (ours || strings.Contains(m, "/")) {
+		return m
+	}
+	return ""
 }
 
 // titleCheckKey holds, in a request's context, what serve asks of the

@@ -1265,7 +1265,8 @@ expose it publicly without gateway-key authentication.
 Such a page is in **gateway mode**: it shows Providers, Gateway, Routing,
 Usage, Plugins and Settings, with no Agents, Sessions or Library tab, and
 Settings leaves out what is written into this machine's agents (provider in
-model names, Codex subagents, long conversations, Codex thread titles) and
+model names, Codex subagents, long conversations, Codex thread titles,
+Codex thread descriptions) and
 the desktop's alerts and tray. `magpie web` is in it by itself when it finds
 no agents on its machine, as in the container, and with
 `magpie web --gateway`. *Settings › General › Gateway mode* picks Automatic,

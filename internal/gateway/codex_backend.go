@@ -91,7 +91,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 				s.codexTitle(w, r, body, to)
 				return
 			}
-			if to := codexDescriptionsTo(r.Header, body); to != "" {
+			if to := codexDescriptionsTo(r.Header, body, false); to != "" {
 				s.codexDescription(w, r, body, to)
 				return
 			}

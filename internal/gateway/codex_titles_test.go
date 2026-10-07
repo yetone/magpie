@@ -289,8 +289,10 @@ func TestTitleJSONFillsTheSchema(t *testing.T) {
 
 func codexDescriptionRequest(t *testing.T, s *Server) *httptest.ResponseRecorder {
 	t.Helper()
+	// ChatGPT.app's thread_description schema: description is required and has
+	// a minimum length, but no maximum.
 	body := `{"model":"gpt-6-luna","stream":true,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"Describe the thread"}]}],` +
-		`"text":{"format":{"type":"json_schema","strict":true,"schema":{"type":"object","properties":{"description":{"type":"string","maxLength":24}},"required":["description"],"additionalProperties":false}}}}`
+		`"text":{"format":{"type":"json_schema","strict":true,"schema":{"type":"object","properties":{"description":{"type":"string","minLength":1}},"required":["description"],"additionalProperties":false}}}}`
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer chatgpt-token")
@@ -330,7 +332,7 @@ func TestCodexDescriptionsSetting(t *testing.T) {
 
 	save("fake/m1")
 	rec = codexDescriptionRequest(t, s)
-	if text, _ := outputText(t, rec.Body.String()); rec.Code != 200 || text != `{"description":"Reviewed the routing cha"}` || f.calls != 1 || chatgptCalls != 1 {
+	if text, _ := outputText(t, rec.Body.String()); rec.Code != 200 || text != `{"description":"Reviewed the routing change and verified it"}` || f.calls != 1 || chatgptCalls != 1 {
 		t.Fatalf("routed: %d %q, magpie model %d, chatgpt %d", rec.Code, rec.Body.String(), f.calls, chatgptCalls)
 	}
 	var sent struct {
@@ -350,11 +352,55 @@ func TestCodexDescriptionsSetting(t *testing.T) {
 	}
 }
 
+func TestCodexDescriptionFallbackOnMagpie(t *testing.T) {
+	f := &fake{t: t, reply: sse(
+		`data: {"id":"c1","choices":[{"index":0,"delta":{"content":"Plain description"}}]}`,
+		`data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2}}`,
+		`data: [DONE]`)}
+	setup(t, provider.Chat, f)
+	s := New()
+	body := `{"model":"fake/m1","stream":true,"input":"Describe the thread",` +
+		`"text":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"description":{"type":"string","minLength":1}},"required":["description"]}}}}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(body))
+	req.Header.Set("x-codex-turn-metadata", `{"thread_source":"thread_description"}`)
+	s.Handler().ServeHTTP(rec, req)
+	if text, _ := outputText(t, rec.Body.String()); rec.Code != 200 || text != `{"description":"Plain description"}` || f.calls != 1 {
+		t.Fatalf("fallback: %d %q, calls %d", rec.Code, rec.Body.String(), f.calls)
+	}
+}
+
+func TestNoDescription(t *testing.T) {
+	f := &fake{t: t, reply: sse(
+		`data: {"id":"c1","choices":[{"index":0,"delta":{"content":"   "}}]}`,
+		`data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":1}}`,
+		`data: [DONE]`)}
+	setup(t, provider.Chat, f)
+	st := settings.Load()
+	st.CodexDescriptions = "fake/m1"
+	if err := settings.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	s := New()
+	rec := codexDescriptionRequest(t, s)
+	text, n := outputText(t, rec.Body.String())
+	if rec.Code != 200 || n != 0 || text != "" {
+		t.Fatalf("empty reply: %d %q, %d items", rec.Code, rec.Body.String(), n)
+	}
+	var last usage.Record
+	for _, u := range usage.Load(time.Time{}) {
+		last = u
+	}
+	if last.Kind != "thread_description" || !strings.HasPrefix(last.Error, "description: ") || !last.Failed() {
+		t.Fatalf("unusable reply was not flagged: %+v", last)
+	}
+}
+
 func TestDescriptionJSON(t *testing.T) {
-	body := `{"text":{"format":{"schema":{"properties":{"description":{"type":"string","maxLength":11}}}}}}`
+	body := `{"text":{"format":{"schema":{"properties":{"description":{"type":"string","minLength":1}}}}}}`
 	shape := descriptionShapeOf([]byte(body))
 	for in, want := range map[string]string{
-		"A short note":                               `{"description":"A short not"}`,
+		"A short note":                               `{"description":"A short note"}`,
 		`{"description":"From JSON"}`:                `{"description":"From JSON"}`,
 		"```json\n{\"description\":\"Fenced\"}\n```": `{"description":"Fenced"}`,
 		"": "",

@@ -1057,7 +1057,7 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 				s.codexTitle(w, r, body, to)
 				return
 			}
-			if to := codexDescriptionsTo(r.Header, body); to != "" {
+			if to := codexDescriptionsTo(r.Header, body, true); to != "" {
 				s.codexDescription(w, r, body, to)
 				return
 			}
