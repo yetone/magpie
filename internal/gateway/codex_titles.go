@@ -40,6 +40,17 @@ func codexTitlesTo(h http.Header, body []byte, ours bool) string {
 	return ""
 }
 
+// codexDescriptionsTo is where a request Codex makes for a thread's
+// description goes. "" leaves the request as Codex sent it; a model's id
+// writes it. A description is not a title: Codex asks for {"description"}
+// alone, which the title wrapper cannot answer.
+func codexDescriptionsTo(h http.Header, body []byte) string {
+	if !isDescriptionKind(requestCallKind(h, requestSessionMetadata(h, body))) {
+		return ""
+	}
+	return settings.Load().CodexDescriptions
+}
+
 // titleCheckKey holds, in a request's context, what serve asks of the
 // reply it relayed before it records the call: the reason it fails its
 // caller although the vendor answered, or "".
@@ -110,6 +121,107 @@ func (s *Server) codexTitle(w http.ResponseWriter, r *http.Request, body []byte,
 			"content": []any{map[string]any{"type": "output_text", "text": t, "annotations": []any{}}}})
 	}
 	writeTitleReply(w, id, out, res.Usage)
+}
+
+// codexDescription answers a thread_description request with the model
+// CodexDescriptions names. The model's text comes back as the
+// {"description": ...} its schema asks for; a reply without one fails as a
+// description, not as a title.
+func (s *Server) codexDescription(w http.ResponseWriter, r *http.Request, body []byte, to string) {
+	shape := descriptionShapeOf(body)
+	body, _ = codexInput(body, true)
+	rec := &recorder{header: http.Header{}, status: 200}
+	check := func(reply string) string {
+		if res, err := compactReply([]byte(reply)); err == nil && descriptionJSON(messageText(res), shape) == "" {
+			return noDescription(messageText(res))
+		}
+		return ""
+	}
+	ctx := context.WithValue(r.Context(), titleCheckKey{}, check)
+	ctx = magpieChose(ctx)
+	s.serve(rec, r.WithContext(ctx), provider.Responses, withModel(body, to))
+	if rec.status >= 400 {
+		for k, vs := range rec.header {
+			w.Header()[k] = vs
+		}
+		w.WriteHeader(rec.status)
+		w.Write(rec.body.Bytes())
+		return
+	}
+	res, err := compactReply(rec.body.Bytes())
+	if err != nil {
+		writeError(w, provider.Responses, 502, "description: "+err.Error())
+		return
+	}
+	id := res.ID
+	if id == "" {
+		id = fmt.Sprintf("resp_magpie_%d", time.Now().UnixNano())
+	}
+	var out []any
+	if d := descriptionJSON(messageText(res), shape); d != "" {
+		out = append(out, map[string]any{"type": "message", "id": "msg_" + strings.TrimPrefix(id, "resp_"), "role": "assistant", "status": "completed",
+			"content": []any{map[string]any{"type": "output_text", "text": d, "annotations": []any{}}}})
+	}
+	writeTitleReply(w, id, out, res.Usage)
+}
+
+func noDescription(said string) string {
+	said = strings.Join(strings.Fields(said), " ")
+	if said == "" {
+		return "description: the model answered with no text, so Codex got no description"
+	}
+	if r := []rune(said); len(r) > 80 {
+		said = string(r[:80]) + "…"
+	}
+	return "description: no description in the model's answer, so Codex got none: " + said
+}
+
+// descriptionShape is the {"description"} object a description request asks
+// for. Its max length is all magpie needs: the reply contains that one field.
+type descriptionShape struct {
+	MaxLength int
+}
+
+func descriptionShapeOf(body []byte) descriptionShape {
+	shape := titleShapeOf(body)
+	return descriptionShape{MaxLength: shape.Properties["description"].MaxLength}
+}
+
+// descriptionJSON is a model's answer as {"description": "..."}, cut to the
+// schema's length. "" when the answer gave none.
+func descriptionJSON(said string, shape descriptionShape) string {
+	t := strings.TrimSpace(said)
+	if rest, ok := strings.CutPrefix(t, "<think>"); ok {
+		if _, after, ok := strings.Cut(rest, "</think>"); ok {
+			t = strings.TrimSpace(after)
+		}
+	}
+	if strings.HasPrefix(t, "```") {
+		t = strings.TrimPrefix(t, "```")
+		if i := strings.IndexByte(t, '\n'); i >= 0 && !strings.Contains(t[:i], "{") {
+			t = t[i+1:]
+		}
+		t = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(t), "```"))
+	}
+	if strings.HasPrefix(t, "{") {
+		fields := map[string]any{}
+		if json.NewDecoder(bytes.NewReader([]byte(t))).Decode(&fields) == nil {
+			if v, ok := fields["description"].(string); ok {
+				t = v
+			}
+		}
+	}
+	t = strings.TrimSpace(strings.Trim(strings.TrimSpace(t), "\"`'"))
+	if t == "" || strings.HasPrefix(t, "{") {
+		return ""
+	}
+	if n := shape.MaxLength; n > 0 {
+		if r := []rune(t); len(r) > n {
+			t = strings.TrimSpace(string(r[:n]))
+		}
+	}
+	b, _ := json.Marshal(map[string]string{"description": t})
+	return string(b)
 }
 
 // messageText is the text of a reply's messages, its reasoning left out.

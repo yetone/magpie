@@ -286,3 +286,81 @@ func TestTitleJSONFillsTheSchema(t *testing.T) {
 		t.Errorf("no schema: %s", got)
 	}
 }
+
+func codexDescriptionRequest(t *testing.T, s *Server) *httptest.ResponseRecorder {
+	t.Helper()
+	body := `{"model":"gpt-6-luna","stream":true,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"Describe the thread"}]}],` +
+		`"text":{"format":{"type":"json_schema","strict":true,"schema":{"type":"object","properties":{"description":{"type":"string","maxLength":24}},"required":["description"],"additionalProperties":false}}}}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	req.Header.Set("session_id", "description-thread")
+	req.Header.Set("x-codex-turn-metadata", `{"thread_source":"thread_description"}`)
+	s.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+func TestCodexDescriptionsSetting(t *testing.T) {
+	f := &fake{t: t, reply: sse(
+		`data: {"id":"c1","choices":[{"index":0,"delta":{"content":"Reviewed the routing change and verified it"}}]}`,
+		`data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":8}}`,
+		`data: [DONE]`)}
+	setup(t, provider.Chat, f)
+	chatgptCalls := 0
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		chatgptCalls++
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(`data: {"type":"response.completed","response":{"id":"r1","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"{\"description\":\"From ChatGPT\"}"}]}],"usage":{"input_tokens":9,"output_tokens":2}}}`))
+	})
+	save := func(v string) {
+		t.Helper()
+		st := settings.Load()
+		st.CodexDescriptions = v
+		if err := settings.Save(st); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	s := New()
+	rec := codexDescriptionRequest(t, s)
+	if text, _ := outputText(t, rec.Body.String()); chatgptCalls != 1 || f.calls != 0 || text != `{"description":"From ChatGPT"}` {
+		t.Fatalf("default: chatgpt %d, magpie model %d, %q", chatgptCalls, f.calls, text)
+	}
+
+	save("fake/m1")
+	rec = codexDescriptionRequest(t, s)
+	if text, _ := outputText(t, rec.Body.String()); rec.Code != 200 || text != `{"description":"Reviewed the routing cha"}` || f.calls != 1 || chatgptCalls != 1 {
+		t.Fatalf("routed: %d %q, magpie model %d, chatgpt %d", rec.Code, rec.Body.String(), f.calls, chatgptCalls)
+	}
+	var sent struct {
+		Model string `json:"model"`
+	}
+	json.Unmarshal(f.got, &sent)
+	if sent.Model != "m1" {
+		t.Errorf("the magpie model was asked for %q", sent.Model)
+	}
+	var kinds []string
+	for _, u := range usage.Load(time.Time{}) {
+		kinds = append(kinds, u.Provider+":"+u.Kind)
+	}
+	want := "openai:thread_description fake:thread_description"
+	if got := strings.Join(kinds, " "); got != want {
+		t.Errorf("ledger %s\nwant   %s", got, want)
+	}
+}
+
+func TestDescriptionJSON(t *testing.T) {
+	body := `{"text":{"format":{"schema":{"properties":{"description":{"type":"string","maxLength":11}}}}}}`
+	shape := descriptionShapeOf([]byte(body))
+	for in, want := range map[string]string{
+		"A short note":                               `{"description":"A short not"}`,
+		`{"description":"From JSON"}`:                `{"description":"From JSON"}`,
+		"```json\n{\"description\":\"Fenced\"}\n```": `{"description":"Fenced"}`,
+		"": "",
+	} {
+		if got := descriptionJSON(in, shape); got != want {
+			t.Errorf("descriptionJSON(%q) = %s, want %s", in, got, want)
+		}
+	}
+}

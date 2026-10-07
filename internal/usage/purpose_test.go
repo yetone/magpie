@@ -12,6 +12,7 @@ func TestPurposeFilter(t *testing.T) {
 		kinds   []string
 	}{
 		{"kind:thread_title", []string{"thread_title", "thread_title_reconsideration", "title_generation", "title"}},
+		{"kind:thread_description", []string{"thread_description"}},
 		{"kind:guardian", []string{"guardian", "auto_review", "guardian_review"}},
 		{"kind:memory_consolidation", []string{"memory_consolidation", "memgen", "memory"}},
 		{"kind:collab_spawn", []string{"collab_spawn", "thread_spawn", "agent_job"}},

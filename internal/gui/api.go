@@ -1010,7 +1010,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.FullContext = cur.FullContext // set on its own (full-context below)
 		in.CompactAt = cur.CompactAt     // and so is the threshold
 
-		in.CodexTitles = cur.CodexTitles // set on its own (codex-titles below)
+		in.CodexTitles = cur.CodexTitles             // set on its own (codex-titles below)
+		in.CodexDescriptions = cur.CodexDescriptions // set on its own (codex-descriptions below)
 		// and so is the model Codex's auto-review runs on (codex-auto-review)
 		in.CodexAutoReview = cur.CodexAutoReview
 		in.ChinaMirror = cur.ChinaMirror // the Plugins page's, set on its own
@@ -1179,6 +1180,29 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			err = provider.SetCompactAt(*in.At)
 		}
 		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// where Codex's request for a thread's description goes: "" as Codex
+	// sends it, or a model's id. It is separate from the title setting.
+	mux.HandleFunc("POST /api/settings/codex-descriptions", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Model string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		v := strings.TrimSpace(in.Model)
+		if v != "" {
+			if _, _, ok := provider.Resolve(v); !ok {
+				fail(rw, fmt.Errorf("no model %s to write Codex's descriptions", v))
+				return
+			}
+		}
+		s := settings.Load()
+		s.CodexDescriptions = v
+		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return
 		}

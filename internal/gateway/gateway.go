@@ -1057,6 +1057,10 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 				s.codexTitle(w, r, body, to)
 				return
 			}
+			if to := codexDescriptionsTo(r.Header, body); to != "" {
+				s.codexDescription(w, r, body, to)
+				return
+			}
 		}
 		s.serveAgent(w, r, from, body)
 	}
