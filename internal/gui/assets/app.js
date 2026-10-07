@@ -939,11 +939,7 @@ function menuButton(a, cls = "ag-start") {
   b.dataset.key = "models";
   fillMenuButton(b, a);
   b.onclick = (ev) => openAgentModels(a, b, ev);
-  // drawn again while its list is open: the list stays, held to it
-  if (agentModels?.a.id === a.id) {
-    b.classList.add("open");
-    agentModels.anchor = b;
-  }
+  holdAgentModels(a, b);
   return b;
 }
 function fillMenuButton(b, a) {
@@ -1323,11 +1319,7 @@ function connectPanel(a, { fields, fieldBtn }) {
     c.append(svg(CHEV_R, 10, 1.6));
     pick.append(c);
     pick.onclick = (ev) => openAgentModels(a, pick, ev);
-    // drawn again while its list is open: the list stays, held to it
-    if (agentModels?.a.id === a.id) {
-      pick.classList.add("open");
-      agentModels.anchor = pick;
-    }
+    holdAgentModels(a, pick);
     chips.append(pick);
     kv(t("Model list"), chips);
   }
@@ -2184,13 +2176,7 @@ function modelsEntry(a) {
   b.type = "button";
   fillModelsEntry(b, a);
   b.onclick = (ev) => openAgentModels(a, b, ev);
-  // the rows drawn again while its list is open: the list stays, held to
-  // the new line
-  if (agentModels?.a.id === a.id) {
-    b.classList.add("open");
-    agentModels.anchor = b;
-    if (agentModels.count) { a.models = agentModels.count; fillModelsEntry(b, a); }
-  }
+  if (holdAgentModels(a, b) && agentModels.count) { a.models = agentModels.count; fillModelsEntry(b, a); }
   return b;
 }
 function fillModelsEntry(b, a) {
@@ -2239,6 +2225,19 @@ function closeAgentModels() {
   m.saving.then(async () => { state = await api("state"); renderAgents(); }).catch(() => {});
 }
 
+// holdAgentModels: a button that opens an agent's list, drawn again while
+// that list is open or still loading. The list stays, held to the new
+// button: one loading came up at the old one, gone from the page, so a
+// redraw while it loaded (a refresh, or the state re-read after a changed
+// list) dropped the click. Says whether the list is open.
+function holdAgentModels(a, b) {
+  if (agentModelsLoading?.id === a.id) agentModelsLoading.anchor = b;
+  if (agentModels?.a.id !== a.id) return false;
+  b.classList.add("open");
+  agentModels.anchor = b;
+  return true;
+}
+
 async function openAgentModels(a, anchor, ev) {
   ev.stopPropagation();
   const again = agentModels?.a.id === a.id || agentModelsLoading?.id === a.id;
@@ -2248,7 +2247,8 @@ async function openAgentModels(a, anchor, ev) {
   // a click elsewhere while it loads is one away from it, as it is once open
   const loading = agentModelsLoading = {
     id: a.id,
-    away: (e) => { if (!anchor.contains(e.target)) loading.drop(); },
+    anchor,
+    away: (e) => { if (!loading.anchor.contains(e.target)) loading.drop(); },
     drop() {
       if (agentModelsLoading === loading) agentModelsLoading = null;
       document.removeEventListener("mousedown", loading.away, true);
@@ -2265,6 +2265,8 @@ async function openAgentModels(a, anchor, ev) {
   }
   if (agentModelsLoading !== loading) return;
   loading.drop();
+  // the button as it is drawn now
+  anchor = loading.anchor;
   if (!anchor.isConnected) return;
   const box = el("div", "pop am-pop");
   box.setAttribute("role", "dialog");
@@ -18292,6 +18294,11 @@ function suffixed(name, by, own, mode = suffixMode()) {
   return name + " · " + by;
 }
 
+// the menu bar's menu waiting on the allowances: the pill drawn last opens
+// it, with what that drawing keeps. Opened at the pill a redraw took away
+// (another setting saved meanwhile), it came up in the window's corner and
+// saved the other setting back as it was.
+let trayUsageLoading = null;
 function renderTrayUsage(s, keep) {
   $("#quotaLeftSegs").replaceChildren(segs([[false, t("Used")], [true, t("Left")]], !!s.quotaLeft,
     (on) => { if (on !== quotaLeft) setQuotaLeft(on); }));
@@ -18349,10 +18356,10 @@ function renderTrayUsage(s, keep) {
   };
   paint();
   if (ids.length === 1 && !quotas) loadQuotas().then(paint);
-  pill.onclick = async (e) => {
-    e.stopPropagation();
-    if (pill.classList.contains("open")) return closeProtoMenu();
-    if (!quotas) { pill.classList.add("busy"); await loadQuotas(); pill.classList.remove("busy"); paint(); }
+  const open = () => {
+    pill.classList.remove("busy");
+    paint();
+    if (!pill.isConnected) return;
     const cards = (quotas || []).filter((q) => !q.error && (q.windows?.length || q.balance));
     const opts = [{ v: "", name: "Off", note: "" }];
     for (const q of cards) {
@@ -18368,6 +18375,18 @@ function renderTrayUsage(s, keep) {
     if (!cards.length) opts.push({ v: "\x00", name: "No subscriptions yet", note: "Sign in to one, or add a plan's key, and it shows on the Usage page" });
     openProtoMenu(pill, opts, ids, (trayUsages) => savePrefs({ ...keep, trayUsages }), "Shown beside the icon");
   };
+  pill.onclick = async (e) => {
+    e.stopPropagation();
+    if (pill.classList.contains("open")) return closeProtoMenu();
+    if (quotas) return open();
+    const loading = trayUsageLoading = { open };
+    pill.classList.add("busy");
+    await loadQuotas();
+    if (trayUsageLoading !== loading) return;
+    trayUsageLoading = null;
+    loading.open();
+  };
+  if (trayUsageLoading) { trayUsageLoading.open = open; pill.classList.add("busy"); }
   $("#trayUsagePick").replaceChildren(pill);
   // how often it is asked for again, and whether it reads as used or left —
   // the Usage page's choice too (#122)
