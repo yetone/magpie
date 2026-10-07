@@ -15,6 +15,7 @@ import (
 // an hour); a rate limit's Retry-After and a failure's backoff stay short,
 // and a Codex reset spent lifts the rest.
 func TestQuotaRestsUntilItsReset(t *testing.T) {
+	forgetRouting()
 	old := allowances
 	defer func() { allowances = old }()
 	now := time.Now()
