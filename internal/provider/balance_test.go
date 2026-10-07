@@ -25,6 +25,7 @@ func TestBalanceReaders(t *testing.T) {
 		{"commandcode", readCommandCode, `{"credits":{"monthlyCredits":12.3,"purchasedCredits":2,"freeCredits":0},"windowLimits":{"limited":true,"fiveHour":{"used":4.2,"cap":10},"weekly":{"used":9,"cap":50}}}`, "$14.30"},
 		{"commandcode credits only", readCommandCode, `{"credits":{"monthlyCredits":"70"},"windowLimits":null}`, "$70.00"},
 		{"siliconflow", readSiliconFlow("¥"), `{"code":20000,"data":{"balance":"0.88","totalBalance":"88.88"}}`, "¥88.88"},
+		{"siliconflow international", readSiliconFlow("$"), `{"code":20000,"data":{"balance":"0.88","chargeBalance":"88.00","totalBalance":"88.88"}}`, "$88.88"},
 		{"stepfun", readStepFun("¥"), `{"object":"account","type":"prepaid","balance":26.00,"total_cash_balance":0.00,"total_voucher_balance":26.00}`, "¥26.00"},
 		{"stepfun intl", readStepFun("$"), `{"object":"account","type":"prepaid","balance":0.00,"total_cash_balance":0.00,"total_voucher_balance":0.00}`, "$0.00"},
 	} {
@@ -84,6 +85,7 @@ func TestBalanceSourceByHost(t *testing.T) {
 		"https://api.moonshot.cn/v1":             "https://api.moonshot.cn/v1/users/me/balance",
 		"https://openrouter.ai/api/v1":           "https://openrouter.ai/api/v1/credits",
 		"https://api.siliconflow.cn/v1":          "https://api.siliconflow.cn/v1/user/info",
+		"https://api.siliconflow.com/v1":         "https://api.siliconflow.com/v1/user/info",
 		"https://api.commandcode.ai/provider/v1": "https://api.commandcode.ai/alpha/billing/credits",
 		"https://api.stepfun.com/step_plan/v1":   "https://api.stepfun.com/v1/accounts",
 		"https://api.stepfun.ai/v1":              "https://api.stepfun.ai/v1/accounts",

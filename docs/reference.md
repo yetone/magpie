@@ -154,6 +154,18 @@ separate Responses endpoint, `catalog=` to borrow a models.dev list, and
 `models=` to name the models to expose. Anything a preset does not know can
 be overridden the same way.
 
+SiliconFlow defaults to China (`api.siliconflow.cn`). For an international
+account, use `magpie provider add siliconflow sk-… region=intl`, or an import
+link with `preset=siliconflow&region=intl`. The editor's Region control chooses
+China or Global and uses that site's key page. The sites have independent
+accounts, so use a key from the selected site. Add another SiliconFlow provider
+to keep both accounts; each provider has its own endpoint and model list.
+The existing balance lookup uses the old `/user/info` API, which returns
+HTTP 410 for Global. This does not prevent model discovery or chat; check
+your balance in the selected site's console. See
+[Providers and accounts](subsystems/providers-accounts.md#constraints-and-failure-behavior)
+for the balance limitation.
+
 `magpie provider set <id> header.<Name>=<value>` sends a header of your own
 on every request to a key+URL provider (an empty value removes it; signed-in
 accounts ignore them). It replaces a header of the same name magpie would
@@ -1113,7 +1125,7 @@ you press *Add*. `magpie import <link>` does the same in a terminal.
 | Parameter   | Meaning                                                            |
 | ----------- | ------------------------------------------------------------------ |
 | `preset`    | a preset id (`magpie presets`); its endpoints are used             |
-| `region`    | with a preset that has regions, which one                          |
+| `region`    | with a preset that has regions, which one; SiliconFlow: `cn` (default) or `intl` |
 | `name`      | the provider's name; required without a preset                     |
 | `id`        | its id; derived from the name when absent                          |
 | `key`       | the API key; the user pastes one when absent                       |
