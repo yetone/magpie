@@ -236,7 +236,15 @@ async function main() {
     throw Error('unknown test case')
   }
 }
-main().catch(err => { console.error(err); process.exitCode = 1 })
+// A pending promise doesn't keep node running: a case awaiting one that never
+// settles would end with nothing left to run and exit 0 without finishing.
+let finished = false
+process.on('exit', code => {
+  if (finished || code !== 0) return
+  console.error('case ' + process.argv[1] + ' did not finish: it was still awaiting a promise that never settled')
+  process.exitCode = 1
+})
+main().then(() => { finished = true }, err => { console.error(err); process.exitCode = 1 })
 `
 
 // fakeSignedIn starts a real Bun host with the fake plugin signed in to, its
