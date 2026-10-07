@@ -369,6 +369,22 @@ func claudeIn(at place) *Agent {
 	// it go with it when magpie next looks (Follow).
 	mainKey := at.key("claude.main")
 	wroteMain := func() string { return cmp.Or(stashLoad()[mainKey], env("ANTHROPIC_MODEL")) }
+	// how Claude Code signs in to magpie (its sign-in field): with magpie's
+	// key, or ("claudeai") with its own claude.ai sign-in, which it keeps
+	// so: an empty ANTHROPIC_AUTH_TOKEN leaves it signed in, where a key
+	// signs it out of claude.ai, and the gateway never passes the sign-in
+	// on. Only where the gateway takes any key: from another machine,
+	// magpie shared, it takes its sharing key alone. Kept in the stash,
+	// where set("") and Unwire leave it for the next time it is routed.
+	loginKey := at.key("claude.login")
+	signInHere := func() bool { return at.gwKey() == gateway.Token }
+	keepSignIn := func() bool { return stashLoad()[loginKey] == "claudeai" && signInHere() }
+	wiredKey := func() string {
+		if keepSignIn() {
+			return ""
+		}
+		return at.gwKey()
+	}
 	// a tier (or the subagents, "subagent") the user gave a model of their
 	// own, though it is the one it would follow: it stays when the main
 	// model changes
@@ -633,8 +649,10 @@ func claudeIn(at place) *Agent {
 				return err
 			}
 			keys := []string{"model"}
-			if ourKey(env("ANTHROPIC_AUTH_TOKEN")) {
-				// magpie's, left at a gateway address since changed
+			// magpie's, left at a gateway address since changed: its key,
+			// or, where Claude Code kept its claude.ai sign-in, an empty
+			// one beside magpie's model
+			if tok, has := edit.GetJSON(path, "env.ANTHROPIC_AUTH_TOKEN"); ourKey(tok) || has && tok == "" && isMagpie(strings.TrimSuffix(model(), "[1m]")) {
 				for _, k := range claudeEnv {
 					keys = append(keys, "env."+k)
 				}
@@ -738,7 +756,7 @@ func claudeIn(at place) *Agent {
 		}
 		kvs := []edit.KV{
 			{Path: "env.ANTHROPIC_BASE_URL", Value: at.gw()},
-			{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: at.gwKey()},
+			{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: wiredKey()},
 			{Path: "env.ANTHROPIC_SMALL_FAST_MODEL", Value: tiers["haiku"]},
 			{Path: "model", Value: main},
 		}
@@ -1065,6 +1083,41 @@ func claudeIn(at place) *Agent {
 		fields = append(fields, effortField(tier+"_effort", tier+" effort", tier, at, put))
 	}
 	fields = append(fields, effortField("subagent_effort", "subagent effort", "its subagents", subagentAt, setSubagent))
+	// its sign-in while it runs through magpie: magpie's key, or its own
+	// claude.ai sign-in kept (loginKey), where the gateway takes any key
+	fields = append(fields, Field{
+		Key: "login", Label: "sign-in", Quiet: true,
+		Get: func() string {
+			if routed() && keepSignIn() {
+				return "claudeai"
+			}
+			return ""
+		},
+		Set: func(v string) error {
+			if v != "" && v != "claudeai" {
+				return fmt.Errorf("sign-in is claudeai or empty (magpie's key), not %q", v)
+			}
+			if !routed() {
+				if v == "" {
+					stash(map[string]string{loginKey: ""})
+					return nil
+				}
+				return fmt.Errorf("pick a model through magpie for Claude Code first; it can then keep its claude.ai sign-in")
+			}
+			// one kept before stays so, taking effect where it can again
+			if v != "" && !signInHere() && stashLoad()[loginKey] != v {
+				return fmt.Errorf("Claude Code reaches magpie from another machine (%s), where magpie, shared, takes only its sharing key, so it can't keep its claude.ai sign-in there", at.gw())
+			}
+			stash(map[string]string{loginKey: v})
+			return edit.SetJSON(path, edit.KV{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: wiredKey()})
+		},
+		Options: func(map[string]string) []Option {
+			if !routed() || !signInHere() {
+				return nil
+			}
+			return claudeSignIns()
+		},
+	})
 
 	var self *Agent
 	self = &Agent{
@@ -1150,8 +1203,28 @@ func claudeIn(at place) *Agent {
 			if u, _ := edit.GetJSON(managed, "env.ANTHROPIC_BASE_URL"); u != "" && u != at.gw() {
 				return "Claude Code's managed settings (" + at.native(managed) + ") set ANTHROPIC_BASE_URL to " + u + ", which wins over magpie's"
 			}
-			return wiringOff("Claude Code", path, func(k string) (string, bool) { return edit.GetJSON(path, "env."+k) },
-				"ANTHROPIC_BASE_URL", at.gw(), "ANTHROPIC_AUTH_TOKEN", at.gwKey())
+			getEnv := func(k string) (string, bool) { return edit.GetJSON(path, "env."+k) }
+			if off := wiringOff("Claude Code", path, getEnv, "ANTHROPIC_BASE_URL", at.gw()); off != "" {
+				return off
+			}
+			// the key it sends: none where it keeps its claude.ai sign-in,
+			// which a key there would take the place of; magpie's otherwise,
+			// one gone sending that sign-in instead, if it has one
+			tok, has := getEnv("ANTHROPIC_AUTH_TOKEN")
+			where := "Claude Code's ANTHROPIC_AUTH_TOKEN (" + filepath.Base(path) + ")"
+			switch {
+			case keepSignIn() && tok != "":
+				return where + " is set, so Claude Code sends magpie that key, not its claude.ai sign-in as magpie set it"
+			case keepSignIn():
+				return ""
+			case tok == "" && signInHere():
+				how := "is gone"
+				if has {
+					how = "is empty"
+				}
+				return where + " " + how + ", so Claude Code sends magpie its claude.ai sign-in, if it has one, not magpie's key — to keep it so, set its sign-in to claude.ai"
+			}
+			return wiringOff("Claude Code", path, getEnv, "ANTHROPIC_AUTH_TOKEN", at.gwKey())
 		},
 		// every prompt typed into Claude Code goes into history.jsonl
 		LastUsed: func() time.Time {
@@ -1169,6 +1242,17 @@ func claudeIn(at place) *Agent {
 		},
 	}
 	return self
+}
+
+// claudeSignIns are the ways Claude Code signs in to magpie, its sign-in
+// field's options: what its claude.ai sign-in gives it is off under a key
+// (ANTHROPIC_AUTH_TOKEN), and Remote Control and ultrareview are off on any
+// address but Anthropic's own (2.1.290).
+func claudeSignIns() []Option {
+	return []Option{
+		{Value: "", Label: "magpie's key", Note: "Claude Code sends magpie its key and is signed out of claude.ai while it runs through magpie: claude.ai's plan limits in /usage, its connectors, voice and /teleport are off"},
+		{Value: "claudeai", Label: "claude.ai", Note: "Claude Code keeps its claude.ai sign-in (/login), so those work; it sends that sign-in to magpie, which never passes it on. Remote Control and ultrareview stay off: Claude Code has them only on Anthropic's own address"},
+	}
 }
 
 // claudeRunning says whether a Claude Code may be open; a var so tests can
