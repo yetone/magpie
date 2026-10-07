@@ -352,3 +352,96 @@ func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 		t.Fatalf("back: %s first, its rest %v", at, r)
 	}
 }
+
+// A key made for another protocol than the request's is set aside after
+// the keys that suit it, and nothing weighs it by its windows: resting
+// out of its own window, it has its windows read again only as it is
+// planned, so a limit raised brings it back then rather than days later
+// as the window starts again.
+// Readings made after the limit is raised are held until planning has
+// looked, so the one planning began is the one that brings it back.
+func TestRestingKeySetAsideReadAgain(t *testing.T) {
+	fresh(t)
+	provider.ForgetBalances()
+	t.Cleanup(provider.ForgetBalances)
+	old := keyAllowance
+	keyAllowance = provider.KeyAllowance // the keys' windows as read, here
+	t.Cleanup(func() { keyAllowance = old })
+	week := time.Now().Add(72 * time.Hour).Truncate(time.Second).Format(time.RFC3339)
+	var mu sync.Mutex
+	limit, held := 800, 0
+	gate := make(chan struct{})
+	var opened sync.Once
+	open := func() { opened.Do(func() { close(gate) }) }
+	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		l := limit
+		if l > 800 {
+			held++
+		}
+		mu.Unlock()
+		if l > 800 {
+			<-gate
+		}
+		fmt.Fprintf(w, `{"isValid":true,"mode":"quota_limited","status":"active","rate_limits":[{"window":"7d","limit":%d,"used":800,"remaining":%d,"reset_at":%q}]}`, l, l-800, week)
+	}))
+	defer relay.Close()
+	defer open() // before the relay closes: it waits for what it holds
+	if err := provider.Save(provider.Provider{ID: "ks", Name: "KS", Key: "sk-gpt", Keys: []provider.KeyAccount{{Key: "sk-claude", Protocol: provider.Anthropic}},
+		Models: []string{"gpt-6-astra"}, Responses: relay.URL + "/v1", Anthropic: relay.URL, BalanceURL: relay.URL + "/v1/usage"}); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := provider.Find("ks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider.KeyBalances(context.Background()) // both keys' cards: their weeks used up
+	s := &Server{}
+	plan := func() ([]candidate, planned) { return s.plan(*saved, "gpt-6-astra", provider.Responses) }
+	out, pl := plan()
+	if len(out) != 2 || out[0].p.Key != "sk-gpt" || out[1].p.Key != "sk-claude" || !pl.order[1].Aside {
+		t.Fatalf("planned %d, the Anthropic key set aside last: %v", len(out), len(out) == 2 && out[1].p.Key == "sk-claude" && pl.order[1].Aside)
+	}
+	side := out[1]
+	t.Cleanup(func() { clearRest(side.restKey()) })
+	quota := []byte(`{"error":{"message":"api key 7天限额已用完","type":"rate_limit_exceeded"}}`)
+	if r := s.restAfter(side, 429, http.Header{}, quota); r.Why != failQuota || r.By != "window" {
+		t.Fatalf("out of its week: rests by %s (%s)", r.By, r.Why)
+	}
+
+	// given $1,000 a week, and no card read again
+	mu.Lock()
+	limit = 1000
+	mu.Unlock()
+	out, pl = plan()
+	if len(out) != 2 || out[1].p.Key != "sk-claude" || pl.order[1].Rest == nil {
+		t.Fatalf("resting: planned %d, the Anthropic key last and resting: %v", len(out), len(out) == 2 && out[1].p.Key == "sk-claude" && pl.order[1].Rest != nil)
+	}
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		mu.Lock()
+		n := held
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("planned resting: its windows not read again")
+		}
+	}
+	open()
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		r, ok := restOf(side.restKey())
+		if !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			mu.Lock()
+			n := held
+			mu.Unlock()
+			t.Fatalf("its limit raised: still rests by %s till %v, its windows read %d times since", r.By, r.Until.Format(time.RFC3339), n)
+		}
+	}
+	if out, pl = plan(); len(out) != 2 || out[1].p.Key != "sk-claude" || pl.order[1].Rest != nil {
+		t.Fatalf("back: planned %d, the Anthropic key last and not resting: %v", len(out), len(out) == 2 && out[1].p.Key == "sk-claude" && pl.order[1].Rest == nil)
+	}
+}
