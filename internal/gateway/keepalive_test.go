@@ -31,7 +31,7 @@ func keepFast(t *testing.T, gap, every, longest time.Duration) {
 func TestTranslatedStreamKeepsClientAlive(t *testing.T) {
 	keepFast(t, 10*time.Millisecond, keepaliveEvery, keepaliveLongest)
 	for _, c := range []struct {
-		name, path, body, done, ping string
+		name, path, body, done, ping string // done: the reply's last event
 		upChat                       bool
 		comments                     bool // the client counts a comment as life
 	}{
@@ -40,7 +40,7 @@ func TestTranslatedStreamKeepsClientAlive(t *testing.T) {
 		{"chat_to_anthropic", "/v1/messages", `{"model":"fake/m1","stream":true,"max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`,
 			`"type":"message_stop"`, `"type":"ping"`, true, false},
 		{"responses_to_chat", "/v1/chat/completions", `{"model":"fake/m1","stream":true,"messages":[{"role":"user","content":"hi"}]}`,
-			`"finish_reason":"stop"`, ": keepalive", false, true},
+			"data: [DONE]", ": keepalive", false, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fresh(t)
@@ -112,6 +112,12 @@ func TestTranslatedStreamKeepsClientAlive(t *testing.T) {
 			}()
 			idle := time.NewTimer(150 * time.Millisecond)
 			defer idle.Stop()
+			// the client's idle timeout, until it has the whole reply. What
+			// the gateway does after that before the stream closes (the
+			// usage ledger, affinity, served) is no wait a client's idle
+			// timeout counts: Codex hangs up on response.completed, and the
+			// clients that read on to the close wait minutes, not 150ms.
+			wait := idle.C
 			timedOut, completed, pings := false, false, 0
 			// openai-go v2 (Crush) reads every blank line as an event and
 			// fails on one with no data: "unexpected end of JSON input"
@@ -135,13 +141,13 @@ func TestTranslatedStreamKeepsClientAlive(t *testing.T) {
 						data = true
 					}
 					if strings.Contains(line, c.done) {
-						completed = true
+						completed, wait = true, nil
 					}
 					// what the client's idle timeout counts
 					if strings.HasPrefix(line, "data:") || (c.comments && strings.HasPrefix(line, ":")) {
 						idle.Reset(150 * time.Millisecond)
 					}
-				case <-idle.C:
+				case <-wait:
 					timedOut = true
 					break read
 				}
