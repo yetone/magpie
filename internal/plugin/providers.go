@@ -423,6 +423,10 @@ func Settle() {
 	}
 	// nor is the restart, or a sign-in a host saved, told in the next test
 	Told()
+	// and the plugins go with the folder: the next test's, in a folder of
+	// its own, are not taken for the plugins changed (checkList), nor
+	// answered with these
+	UseCached(nil)
 }
 
 // Cached is the plugins' providers as last asked, without starting the

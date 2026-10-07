@@ -53,3 +53,30 @@ func TestSettleWaitsForTheHooksItTold(t *testing.T) {
 		<-settled
 	})
 }
+
+// The next test's plugins are its own. After Settle, the plugins' list in
+// the next test's folder read as changed (checkList), the list the last
+// test's folder had being the one seen last: the change was told there,
+// in the background, and dropped what that test held.
+func TestSettleForgetsTheFoldersPlugins(t *testing.T) {
+	t.Setenv("MAGPIE_BUN", "") // no Bun, nor a host: nothing asks the plugins here
+	storeSandbox(t)
+	t.Cleanup(Settle)
+	spec := "opencode-fake-auth"
+	writeList(t, `{"plugins":[{"spec":"`+spec+`"}]}`)
+	UseCached([]Provider{{ID: "fakeco", Spec: spec, Name: "FakeCo"}})
+	Settle()
+
+	storeSandbox(t) // the next test's folder, the same plugin listed in it
+	writeList(t, `{"plugins": [{"spec": "`+spec+`"}]}`)
+	var told atomic.Int32
+	watchChanges(t, func() { told.Add(1) })
+	ps := Cached()
+	Told()
+	if n := told.Load(); n != 0 {
+		t.Errorf("the next test's plugins read as changed: %d changes told in it", n)
+	}
+	if len(ps) != 0 {
+		t.Errorf("the next test's plugins answered with the last test's providers: %+v", ps)
+	}
+}
