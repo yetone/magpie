@@ -691,6 +691,26 @@ screenshot of each size:
 node --test --test-concurrency=1 internal/gui/tests/settings-sections.test.cjs internal/gui/tests/settings-groups.test.cjs
 ```
 
+`segs-press-redraw.test.cjs` presses a Settings option, redraws the page
+(`renderSettings()`, as a save's answer does) while the button is held and
+lets go on the same spot: Lightweight mode → On is posted once and shown on.
+Dragged off to the other option, or to the same option of another control,
+nothing is posted, and a plain click is posted once, not twice. It then
+presses every option control on every Settings tab (49 in English, the
+warm-up, check-in, sync and local network ones included) the same way and
+checks that the control drawn in its place is clicked once on the same
+option. Without the fix no click comes at all. A tap through the redraw is
+posted once, not twice (Chromium only: Playwright can't hold a tap in
+WebKit). A list of rows, each with its control, drawn again with a row gone,
+come in or moved above the pressed one picks nothing, whether its rows have
+`data-*` or not, and picks the pressed option when drawn again the same.
+Chromium and WebKit, English, Chinese, Japanese and German, 900 and 440px
+wide:
+
+```sh
+node --test internal/gui/tests/segs-press-redraw.test.cjs
+```
+
 `update-check.test.cjs` checks the version row: the button stays, dimmed,
 through a check, a second click asks nothing, and the answer puts it back.
 A read still out cannot draw "checking" over that answer. A row drawn again

@@ -5405,12 +5405,57 @@ function segs(items, current, onPick) {
     box.append(b);
   }
   queueMicrotask(() => { // once it is in the page
-    const home = box.isConnected && box.parentElement.closest("[id]");
-    if (home) key = kind + "@" + home.id + ":" + [...home.querySelectorAll(".segs")].filter((x) => x.dataset.kind === kind).indexOf(box);
+    key = segsPlace(box) || key;
     slide(box, key);
   });
   return box;
 }
+// where a control is in the page: the nearest element with an id, and which
+// of the same options it is there; "" for one not in the page
+function segsPlace(box) {
+  const home = box.isConnected && box.parentElement.closest("[id]");
+  return home ? box.dataset.kind + "@" + home.id + ":" + [...home.querySelectorAll(".segs")].filter((x) => x.dataset.kind === box.dataset.kind).indexOf(box) : "";
+}
+// A press on an option still picks it when the control is drawn again
+// before the button is let go: a save's answer redraws Settings, and a
+// second option pressed while the first one's save came back was let go
+// on a new button. Down and up were on two buttons, so the browser sent the
+// click to neither and nothing was picked. Let go on the same option of the
+// same control, the new one is clicked; let go anywhere else (dragged off
+// to another option), nothing is, as for any button. A tap is left to the
+// browser, which clicks what is under the finger as it lifts.
+let segsPress = null;
+const optAt = (b) => [...b.parentElement.querySelectorAll(":scope > .opt")].indexOf(b);
+// the same control is at the same place, among as many of its kind, in rows
+// that are the same by their data-* (an agent's, a provider's): a list drawn
+// again with a row gone, come in or moved above it is another control there
+function segsWho(box) {
+  const place = segsPlace(box);
+  if (!place) return "";
+  const home = box.parentElement.closest("[id]"), rows = [];
+  for (let n = box.parentElement; n !== home; n = n.parentElement) rows.push(Object.entries(n.dataset).join());
+  return [place, [...home.querySelectorAll(".segs")].filter((x) => x.dataset.kind === box.dataset.kind).length, ...rows].join(" ");
+}
+addEventListener("pointerdown", (e) => {
+  const b = e.isPrimary && e.button === 0 && e.pointerType !== "touch" && e.target.closest?.(".segs > .opt");
+  segsPress = b ? { b, who: segsWho(b.parentElement), i: optAt(b) } : null;
+}, true);
+addEventListener("pointercancel", () => { segsPress = null; }, true);
+addEventListener("pointerup", (e) => {
+  const p = segsPress;
+  segsPress = null;
+  if (!p?.who || p.b.isConnected || !e.isPrimary) return;
+  const b = document.elementFromPoint(e.clientX, e.clientY)?.closest(".segs > .opt");
+  if (!b || segsWho(b.parentElement) !== p.who || optAt(b) !== p.i) return;
+  // after the browser's own click, should one come to it after all
+  let clicked = false;
+  const seen = (c) => { if (b.contains(c.target)) clicked = true; };
+  addEventListener("click", seen, true);
+  setTimeout(() => {
+    removeEventListener("click", seen, true);
+    if (!clicked && b.isConnected) b.click();
+  });
+}, true);
 
 // An installed list's order, the reader's pick, remembered for each list
 // (#481): its names A→Z or Z→A, and for a list that has one, a view of its
