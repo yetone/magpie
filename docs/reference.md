@@ -535,6 +535,95 @@ first day, `qianfan-token-plan`, is taken too. The plans serve no model list,
 so the preset carries their documented models; pay as you go serves its own
 at `/v2/models`.
 
+### Google Vertex AI
+
+Google Vertex AI (`google-vertex`), which Google's documentation now calls
+Gemini Enterprise Agent Platform, serves Google's Gemini models from your own
+Google Cloud project, which is billed for them. It takes no API key: each
+request is signed with a token minted from your Google credentials. First turn
+on the Agent Platform API (`aiplatform.googleapis.com`) in the project (billing
+has to be on there), then sign in with `gcloud auth application-default login`
+or have a service account's key file
+([Google's guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/gcp-auth)).
+[Where magpie looks for the credentials, and the kinds it reads](subsystems/providers-accounts.md#responsibilities-and-sources-of-truth).
+
+```sh
+magpie provider add google-vertex project=my-project
+magpie provider set google-vertex location=us-central1        # global (the default), us, eu or a region
+magpie provider set google-vertex credentials=~/keys/vertex.json
+magpie provider set google-vertex impersonate=vertex@my-project.iam.gserviceaccount.com
+magpie provider set google-vertex impersonate=                # empty clears it
+magpie provider test google-vertex
+```
+
+`project=` is the project's id. `location=` is `global` (the default, and what
+an empty value goes back to), `us`, `eu` or a region such as `us-central1`.
+`credentials=` names a credentials file to sign with in place of gcloud's
+sign-in, such as a service account's key; a relative path is made full from
+the folder the command runs in. `impersonate=` has requests made as that
+service account; the account signed in needs the Service Account Token Creator
+role on it. The app's editor asks the same in **Project ID**,
+**Location**, **Credentials file** and **Service account**; the TUI's `a` asks
+for the project alone, and the CLI sets the rest. A key is refused, and so is
+an address (`url=` and the like): the project and location make the only one
+its token is sent to. Adding, listing and showing it ask Google nothing; the
+credentials are read when a request is signed.
+
+Each location serves models of its own, and Vertex AI has no list to ask which,
+so magpie gives each location the models it answered with on 2026-10-06:
+
+| Location | Models |
+| --- | --- |
+| `global` | `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-pro-preview`, `gemini-3.1-pro-preview-customtools`, `gemini-3.1-flash-lite`, `gemini-3-flash-preview`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
+| `us`, `eu` | `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3.5-flash`, `gemini-3.5-flash-lite`, `gemini-3.1-flash-lite` |
+| A region | `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite` |
+
+A region that serves one more, as asia-northeast1 serves `gemini-3.5-flash`,
+has it typed in with the rest you want:
+
+```sh
+magpie provider models google-vertex gemini-2.5-pro gemini-2.5-flash gemini-2.5-flash-lite gemini-3.5-flash
+magpie provider models google-vertex all     # back to the location's list
+```
+
+`magpie provider set google-vertex location=…` keeps the models picked, so pick
+again after a move.
+
+Google's [Priority PayGo](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/priority-paygo)
+and [Flex PayGo](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/flex-paygo)
+are asked for with request headers. The editor's **Headers** offers both,
+`X-Vertex-AI-LLM-Request-Type` and `X-Vertex-AI-LLM-Shared-Request-Type`, to
+add; their values are the ones Google's pages give. From the CLI:
+`magpie provider set google-vertex header.<Name>=<value>`. [What was seen of
+Priority PayGo](subsystems/providers-accounts.md#constraints-and-failure-behavior).
+
+When a request fails:
+
+- `no Google credentials at <file>`: there is no credentials file there. When
+  it is the provider's own, correct `credentials=`, or clear it with
+  `credentials=` alone; otherwise run `gcloud auth application-default login`,
+  or set `credentials=`.
+- `GOOGLE_APPLICATION_CREDENTIALS names <file>, which isn't there`, or
+  `GOOGLE_APPLICATION_CREDENTIALS is "…", not a full path` (`CLOUDSDK_CONFIG`
+  too): the variable names no file magpie can read, and gcloud's own isn't
+  read in its place. Give the whole path (a `~/` at its start is the home),
+  unset it, or set `credentials=`.
+- `the Google credentials in <file>: the sign-in was refused`, with the advice
+  to sign in again: the sign-in expired or was revoked. Run the command the
+  advice names for that file: `gcloud auth application-default login` (with
+  `--impersonate-service-account=` when the file impersonates one) for
+  gcloud's Application Default Credentials, `gcloud auth login <account>`
+  for a file under gcloud's `legacy_credentials`. A file of your own is
+  written anew, or another one given with `credentials=`. The next request
+  reads the new file, with no restart.
+- A 403 `PERMISSION_DENIED` naming `aiplatform.endpoints.predict`: the account
+  that signs, or the service account it goes as, may not use Vertex AI in the
+  project. Give it Agent Platform User (`roles/aiplatform.user`) on the project
+  ([the role](https://docs.cloud.google.com/gemini-enterprise-agent-platform/machine-learning/general/access-control#aiplatform.user)).
+- `impersonating …: the sign-in was refused (403)`: the account signed in
+  needs Service Account Token Creator (`roles/iam.serviceAccountTokenCreator`)
+  on that service account.
+
 ### Plugins
 
 A subscription magpie doesn't sign in to itself can come from an
@@ -1348,7 +1437,7 @@ you press *Add*. `magpie import <link>` does the same in a terminal.
 
 | Parameter   | Meaning                                                            |
 | ----------- | ------------------------------------------------------------------ |
-| `preset`    | a preset id (`magpie presets`); its endpoints are used             |
+| `preset`    | a preset id (`magpie presets`); its endpoints are used. Not `google-vertex`, which is asked at your own Google Cloud project |
 | `region`    | with a preset that has regions, which one                          |
 | `name`      | the provider's name; required without a preset                     |
 | `id`        | its id; derived from the name when absent                          |
