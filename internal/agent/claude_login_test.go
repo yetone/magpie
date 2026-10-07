@@ -161,6 +161,36 @@ func TestClaudeSignInThroughDisconnect(t *testing.T) {
 	}
 }
 
+// An empty key at an endpoint the user set after magpie stepped out is
+// theirs, though Claude Code kept its claude.ai sign-in through magpie
+// before: its model default leaves it (yetone on #1218).
+func TestClaudeOwnEndpointWithAnEmptyKey(t *testing.T) {
+	t.Setenv("MAGPIE_ADDR", "")
+	home, path := claudeSettings(t, `{"theme":"dark","env":{"ANTHROPIC_BASE_URL":"https://relay.example","ANTHROPIC_AUTH_TOKEN":"sk-relay"}}`)
+	saveDeepseek(t)
+	env := func(k string) (string, bool) { return edit.GetJSON(path, "env."+k) }
+	a := claude(home)
+	if err := a.Apply("model", "deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Apply("login", "claudeai"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if err := edit.SetJSON(path, edit.KV{Path: "env.ANTHROPIC_BASE_URL", Value: "https://corp.example"}, edit.KV{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: ""}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Apply("model", ""); err != nil {
+		t.Fatal(err)
+	}
+	u, _ := env("ANTHROPIC_BASE_URL")
+	if tok, has := env("ANTHROPIC_AUTH_TOKEN"); u != "https://corp.example" || !has || tok != "" {
+		t.Fatalf("the user's endpoint and empty key went:\n%s", readFile(path))
+	}
+}
+
 // Moved to another port, Claude Code keeps its sign-in; left at an old
 // one, its model default takes out magpie's empty key with the address.
 func TestClaudeSignInAcrossPorts(t *testing.T) {

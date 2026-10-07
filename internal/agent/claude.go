@@ -385,12 +385,20 @@ func claudeIn(at place) *Agent {
 		}
 		return at.gwKey()
 	}
+	// the gateway address magpie last wrote as Claude Code's base URL
+	wroteAt := at.key("claude" + wiredAt)
 	// the key in env is one magpie wrote, at this gateway address or an
-	// older one: its own, or the empty one of the claude.ai sign-in kept
-	// (one the user's own endpoint had is never put back empty)
+	// older one: its own, or the empty one of the claude.ai sign-in kept,
+	// beside the address magpie wrote with it. An empty key at an endpoint
+	// of the user's own is theirs, though magpie once kept the sign-in.
 	keyOurs := func() bool {
 		tok, has := edit.GetJSON(path, "env.ANTHROPIC_AUTH_TOKEN")
-		return ourKey(tok) || has && tok == "" && stashLoad()[loginKey] == "claudeai"
+		if ourKey(tok) {
+			return true
+		}
+		st := stashLoad()
+		u := env("ANTHROPIC_BASE_URL")
+		return has && tok == "" && st[loginKey] == "claudeai" && u != "" && u == st[wroteAt]
 	}
 	// a tier (or the subagents, "subagent") the user gave a model of their
 	// own, though it is the one it would follow: it stays when the main
@@ -664,7 +672,7 @@ func claudeIn(at place) *Agent {
 					keys = append(keys, "env."+k)
 				}
 			}
-			forget(at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"), mainKey)
+			forget(at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"), mainKey, wroteAt)
 			for _, k := range claudeOwnEnv {
 				forget(at.key("claude.env." + k))
 			}
@@ -777,7 +785,7 @@ func claudeIn(at place) *Agent {
 		} else if err := edit.DelJSON(path, "env.CLAUDE_CODE_SUBAGENT_MODEL"); err != nil {
 			return err
 		}
-		stash(map[string]string{mainKey: main})
+		stash(map[string]string{mainKey: main, wroteAt: at.gw()})
 		// the new model's window replaces the old one's, when magpie knows
 		// it; one the user set is theirs
 		if env(claudeContextEnv) == "" || windowOurs() {
@@ -1117,7 +1125,7 @@ func claudeIn(at place) *Agent {
 			if v != "" && !signInHere() && stashLoad()[loginKey] != v {
 				return fmt.Errorf("Claude Code reaches magpie from another machine (%s), where magpie, shared, takes only its sharing key, so it can't keep its claude.ai sign-in there", at.gw())
 			}
-			stash(map[string]string{loginKey: v})
+			stash(map[string]string{loginKey: v, wroteAt: at.gw()})
 			return edit.SetJSON(path, edit.KV{Path: "env.ANTHROPIC_AUTH_TOKEN", Value: wiredKey()})
 		},
 		Options: func(map[string]string) []Option {
@@ -1142,7 +1150,7 @@ func claudeIn(at place) *Agent {
 			if err != nil {
 				return err
 			}
-			forget(at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"), mainKey)
+			forget(at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"), mainKey, wroteAt)
 			for _, k := range claudeOwnEnv {
 				forget(at.key("claude.env." + k))
 			}
