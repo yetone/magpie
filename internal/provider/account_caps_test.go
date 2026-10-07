@@ -135,7 +135,7 @@ func TestCapNeverSpendsACodexReset(t *testing.T) {
 	if weekUsedUp(ws, now) != nil {
 		t.Fatal("an auto-used reset would be spent on a week at 80%")
 	}
-	if usedUp(q) || !BackAt(q, now).IsZero() {
+	if usedUp(q, now) || !BackAt(q, now).IsZero() {
 		t.Fatal("80% read as used up")
 	}
 	if spendExpiringNow(ws, &ResetCredits{Count: 1, Until: &until}, now) {
