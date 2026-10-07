@@ -50,14 +50,12 @@ func TestAddedKeyLeavesRunningConversations(t *testing.T) {
 // Codex reasoning another ChatGPT account sealed is refused by this one;
 // the request is sent again without it rather than failing the agent.
 func TestForeignReasoningIsLeftOut(t *testing.T) {
+	fresh(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-	restingUntil.Lock()
-	restingUntil.m = map[string]time.Time{}
-	restingUntil.Unlock()
 	claims := func(m map[string]any) string {
 		b, _ := json.Marshal(m)
 		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
