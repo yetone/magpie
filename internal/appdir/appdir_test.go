@@ -182,6 +182,12 @@ func TestResolveSharedFolder(t *testing.T) {
 	mkdir(t, filepath.Join(data, "nodes"))
 	touch(t, filepath.Join(data, "install-id"))
 
+	// another app's data folder, nothing installed: not taken
+	if got := Resolve(exe); got != "" {
+		t.Errorf("no magpie files in data: %q, want installed", got)
+	}
+	touch(t, filepath.Join(data, "settings.json"))
+
 	// nothing installed: one who keeps magpie portable there
 	if got := Resolve(exe); got != data {
 		t.Errorf("nothing installed: %q, want %q", got, data)
@@ -216,6 +222,59 @@ func TestResolveSharedFolder(t *testing.T) {
 	}
 }
 
+// tangle778 on X: magpie.exe run from Downloads beside a data folder the
+// user's archiver empties wrote its providers there and lost them. A data
+// folder in Downloads holding none of magpie's files isn't its portable
+// data; one that does is, and .portable always makes it portable.
+func TestResolveDownloads(t *testing.T) {
+	t.Setenv("APPIMAGE", "")
+	r := root(t)
+	h := filepath.Join(r, "home")
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	dl := filepath.Join(h, "Downloads")
+	exe := touch(t, filepath.Join(dl, "magpie.exe"))
+	data := filepath.Join(dl, "data")
+	touch(t, filepath.Join(data, "report.json"))
+
+	if got := Resolve(exe); got != "" {
+		t.Errorf("user's data folder: %q, want installed", got)
+	}
+	if got := Passed(exe); got != "" {
+		t.Errorf("user's data folder: Passed %q, want none", got)
+	}
+	touch(t, filepath.Join(data, "providers.json"))
+	if got := Resolve(exe); got != data {
+		t.Errorf("portable run before: %q, want %q", got, data)
+	}
+	touch(t, filepath.Join(h, ".config", "magpie", "logins.json"))
+	if got := Resolve(exe); got != "" {
+		t.Errorf("installed has files: %q, want installed", got)
+	}
+	if got := Passed(exe); got != data {
+		t.Errorf("Passed %q, want %q", got, data)
+	}
+	touch(t, filepath.Join(dl, ".portable"))
+	if got := Resolve(exe); got != data {
+		t.Errorf(".portable: %q, want %q", got, data)
+	}
+}
+
+func TestSharedFolders(t *testing.T) {
+	h, _ := Home()
+	for _, d := range []string{h, filepath.Join(h, "Downloads"), filepath.Join(h, "Downloads") + string(filepath.Separator), filepath.Join(h, "Desktop"), filepath.Join(h, "Documents")} {
+		if !sharedFolder(d) {
+			t.Errorf("%s not shared", d)
+		}
+	}
+	for _, d := range []string{filepath.Join(h, "Downloads", "magpie"), filepath.Join(h, "tools")} {
+		if sharedFolder(d) {
+			t.Errorf("%s shared", d)
+		}
+	}
+}
+
 func TestSharedFolderIsApplications(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		if sharedFolder("/Applications") {
@@ -229,7 +288,7 @@ func TestSharedFolderIsApplications(t *testing.T) {
 			t.Errorf("%s not shared", d)
 		}
 	}
-	for _, d := range []string{"/Volumes/USB", filepath.Join(h, "Downloads"), "/Applications/Utilities"} {
+	for _, d := range []string{"/Volumes/USB", "/Applications/Utilities"} {
 		if sharedFolder(d) {
 			t.Errorf("%s shared", d)
 		}

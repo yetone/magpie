@@ -2082,3 +2082,18 @@ unimportable entries, unreadable sources, stable fingerprints despite ID
 collisions, changed configuration fingerprints, excluding unticked collision and
 disabled Alma entries while preserving the add-key case, and keeping credentials
 server-side.
+
+## Filters typed through an IME
+
+`filter-ime.test.cjs` covers #1055: a digit typed into the Routing page's
+group filter went in twice (1, 2 → 1122), because the filter's own input
+event drew its row again and took the field out of the page while an IME
+committed. It types into the routing group filter, a provider's keys filter
+and the plugins search, through an IME in Chromium (CDP's
+`Input.imeSetComposition`, then `Input.insertText`) and by key in WebKit,
+and checks one character a key, the focus, the caret, and that the field
+never leaves the page. The rows around each still follow it: the groups and
+keys it matches, the routing header in the other language after
+`setLocale`, the plugins listings arriving while the reader types. In
+English, Chinese, Japanese and German, at 1100px and 440px. `MAGPIE_FILTER_ASSETS` points it
+at another assets folder, to see it fail on the old code.

@@ -2651,8 +2651,8 @@
   // Discord: they could only be removed one at a time); null otherwise
   let gSel = null;
   // gQ: the groups filtered by name and by the models in them, as many
-  // as there may be (PAMI on Discord); kept across redraws, and focused
-  // again when one comes while typing
+  // as there may be (PAMI on Discord); kept across redraws, never taken
+  // out of the page while it is there
   const gQ = el("input", "sess-filter rt-gfilter");
   gQ.type = "search";
   gQ.spellcheck = false;
@@ -2677,7 +2677,6 @@
     newBtn.append(svg(PLUS, 11, 1.8), el("span", "", t("New group")));
     newBtn.onclick = () => newGroup();
     const head = [el("span", "label", t("Routing groups")), el("span", "grow"), el("span", "note", t("models agents pick as one"))];
-    const typing = document.activeElement === gQ, [a, b] = [gQ.selectionStart, gQ.selectionEnd];
     if (all.length > 1 || gQ.value) {
       gQ.placeholder = t("Filter groups and models");
       gQ.setAttribute("aria-label", gQ.placeholder);
@@ -2696,8 +2695,9 @@
       }
       head.push(newBtn);
     }
-    gHead.replaceChildren(...head);
-    if (typing && gQ.isConnected) { gQ.focus({ preventScroll: true }); try { gQ.setSelectionRange(a, b); } catch {} }
+    // the filter stays in the page as the rest of the row is drawn again,
+    // so the key being typed into it lands once (#1055)
+    replaceKeeping(gHead, head);
     drawFound();
     drawNames();
     const rows = [];

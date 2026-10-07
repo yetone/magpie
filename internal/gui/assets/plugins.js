@@ -101,13 +101,6 @@
     for (const l of listings || []) if (npm[l.package]) l.npm = npm[l.package];
     for (const e of mine?.plugins || []) if (onNPM(e.spec) && npm[name(e.spec)]?.version) e.latest = npm[name(e.spec)].version;
   }
-  // redrawn as a part comes: the search field keeps its focus
-  function redraw() {
-    const q = page.querySelector(".pm-find input");
-    const typing = q && document.activeElement === q;
-    draw();
-    if (typing) page.querySelector(".pm-find input")?.focus({ preventScroll: true });
-  }
   async function loadMine() {
     try {
       mine = await api("plugins");
@@ -162,8 +155,8 @@
   async function load() {
     if (!mine && !listings) draw();
     const parts = [
-      loadMine().then(() => { redraw(); window.renderPluginDot?.(); }),
-      loadListings().then(redraw),
+      loadMine().then(() => { draw(); window.renderPluginDot?.(); }),
+      loadListings().then(draw),
       loadTagged().then(drawBody),
       providers ? null : loadProviders().then(drawBody, () => {}),
     ];
@@ -471,8 +464,31 @@
     return box;
   }
 
+  // the head and its search field are made once and drawn again in
+  // place: the field is never taken out of the page, or a key an IME
+  // commits while it is out lands twice (#1055)
+  const headBox = el("div", "lib-head pm-head");
+  const find = el("label", "pm-find");
+  const q = el("input");
+  q.type = "search";
+  q.spellcheck = false;
+  q.autocomplete = "off";
+  q.oninput = () => {
+    query = q.value;
+    if (tab !== "discover") { tab = "discover"; draw(); }
+    clearTimeout(searchTimer);
+    const s = query.trim();
+    if (s.length < 2) hits = null;
+    else {
+      hits = { q: s, loading: true };
+      searchTimer = setTimeout(() => searchNPM(s), 350);
+    }
+    drawBody();
+  };
+  q.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === "Escape" && q.value) { q.value = ""; q.oninput(); } };
+  find.append(glyph(SEARCH, 13, 1.6), q);
+
   function head() {
-    const h = el("div", "lib-head pm-head");
     const n = mine?.plugins?.length || 0;
     const tabs = segs([["discover", t("Discover")], ["installed", t("Installed") + (n ? " · " + n : "")]], tab, (id) => {
       tab = id;
@@ -480,32 +496,12 @@
       drawBody();
     });
     tabs.classList.add("lib-tabs");
-    const find = el("label", "pm-find");
-    find.append(glyph(SEARCH, 13, 1.6));
-    const q = el("input");
-    q.type = "search";
     q.placeholder = t("Search plugins and npm…");
-    q.value = query;
-    q.spellcheck = false;
-    q.autocomplete = "off";
+    if (q.value !== query) q.value = query;
     q.setAttribute("aria-label", t("Search plugins"));
-    q.oninput = () => {
-      query = q.value;
-      if (tab !== "discover") { tab = "discover"; draw(); page.querySelector(".pm-find input")?.focus(); }
-      clearTimeout(searchTimer);
-      const s = query.trim();
-      if (s.length < 2) hits = null;
-      else {
-        hits = { q: s, loading: true };
-        searchTimer = setTimeout(() => searchNPM(s), 350);
-      }
-      drawBody();
-    };
-    q.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === "Escape" && q.value) { q.value = ""; q.oninput(); } };
-    find.append(q);
-    h.append(tabs, el("span", "grow"), mirrorSwitch(), find);
-    h.classList.toggle("stuck", page.scrollTop > 0);
-    return h;
+    replaceKeeping(headBox, [tabs, el("span", "grow"), mirrorSwitch(), find]);
+    headBox.classList.toggle("stuck", page.scrollTop > 0);
+    return headBox;
   }
 
   // 「国内镜像」: the list, npm's packages and answers, and Bun asked of
@@ -533,13 +529,13 @@
         const r = await api("plugins/mirror", { on: !on });
         mine.mirror = r.mirror;
         // the list again, now from the mirror, and npm's answers with it
-        if (r.mirror) loadListings().then(() => { redraw(); askNPM(); });
+        if (r.mirror) loadListings().then(() => { draw(); askNPM(); });
       } catch (e) {
         mine.mirror = on;
         status(t(e.message), "err");
       }
       mirrorSaving = false;
-      redraw();
+      draw();
     };
     return b;
   }
@@ -559,9 +555,8 @@
   let body = null;
   function draw() {
     const scroll = page.scrollTop;
-    page.replaceChildren(head());
     body = el("div", "lib-body pm-body");
-    page.append(body);
+    replaceKeeping(page, [head(), body]);
     drawBody();
     page.scrollTop = scroll;
   }
