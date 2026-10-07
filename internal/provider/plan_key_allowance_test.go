@@ -116,9 +116,7 @@ func TestPlanKeyAllowanceFromItsCard(t *testing.T) {
 	keyAllowances.Lock()
 	keyAllowances.m = nil
 	keyAllowances.Unlock()
-	lastQuotas.Lock()
-	lastQuotas.m, lastQuotas.loaded = nil, false
-	lastQuotas.Unlock()
+	forgetLastReadings()
 	a, ok = KeyAllowance(kimiKey)
 	if used, _ := a.For("", time.Now()); !ok || used != 49 {
 		t.Fatalf("from the card on disk: %v %+v", ok, a)

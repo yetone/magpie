@@ -110,9 +110,7 @@ func keyLimitsHome(t *testing.T) {
 		t.Setenv(v, "")
 	}
 	restart := func() {
-		lastQuotas.Lock()
-		lastQuotas.m, lastQuotas.loaded = nil, false
-		lastQuotas.Unlock()
+		forgetLastReadings()
 		ForgetBalances()
 		keyAllowances.Lock()
 		keyAllowances.m = nil
@@ -399,9 +397,7 @@ func TestKeyAllowanceSeededFromItsCard(t *testing.T) {
 	KeyBalances(context.Background())
 	down.Store(true)
 	// as after a restart: nothing in memory
-	lastQuotas.Lock()
-	lastQuotas.m, lastQuotas.loaded = nil, false
-	lastQuotas.Unlock()
+	forgetLastReadings()
 	keyAllowances.Lock()
 	keyAllowances.m = nil
 	keyAllowances.Unlock()

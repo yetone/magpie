@@ -92,17 +92,29 @@ func isolate(t *testing.T) {
 	// a minute, and CachedCards hands them on whatever their age
 	forgetPlanQuotas()
 	ForgetBalances()
-	// nor the accounts' allowances routing read through LoginUsage
+	// nor the accounts' allowances routing read through LoginUsage, nor
+	// what each said last, kept from another test's home: a reading out
+	// writes those too, so they go once it has landed
 	forgetAllowances()
+	forgetLastReadings()
 	t.Cleanup(func() {
 		// a reading this test left out lands in this test, not the next
 		forgetAllowances()
+		forgetLastReadings()
 		claudeKeychain, claudeBase, claudeExecutable = oldKeychain, oldBase, oldExe
 		cursorKeychain, DevinExecutable = oldCursor, oldDevin
 		forgetClaudeCredential()
 		forgetClaudeStatus()
 		forgetDevinStatus()
 	})
+}
+
+// forgetLastReadings has what each account said last read again from the
+// home's quotas.json, as after a restart.
+func forgetLastReadings() {
+	lastQuotas.Lock()
+	lastQuotas.m, lastQuotas.loaded = nil, false
+	lastQuotas.Unlock()
 }
 
 // forgetAllowances forgets every agent's allowances as Allowances read

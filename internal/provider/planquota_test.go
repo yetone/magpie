@@ -321,9 +321,7 @@ func TestPlanQuotas(t *testing.T) {
 	planQuotaCache.Lock()
 	planQuotaCache.data = nil
 	planQuotaCache.Unlock()
-	lastQuotas.Lock()
-	lastQuotas.m, lastQuotas.loaded = nil, false
-	lastQuotas.Unlock()
+	forgetLastReadings()
 	qs := PlanQuotas(context.Background())
 	if len(qs) != 4 {
 		t.Fatalf("restored plans: %+v", qs)

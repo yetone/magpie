@@ -5,12 +5,30 @@ import (
 	"time"
 )
 
+// What an account said last is kept in its home's quotas.json, and a test
+// signed in (isolate) starts from its own: not from an earlier test's
+// readings still in memory, which Allowances would route by until its
+// first reading is back.
+func TestIsolateForgetsTheLastReadings(t *testing.T) {
+	signIn(t)
+	rememberLogins(true)
+	later := time.Now().Add(time.Hour)
+	keepLast(SubscriptionQuota{Provider: "codex", User: "me@example.com", Windows: []QuotaWindow{
+		{Name: "5 hours", Used: 97, ResetsAt: &later, Span: 5 * time.Hour}}}, "me@example.com")
+	if _, ok := lastAllowances("codex")["me@example.com"]; !ok {
+		t.Fatal("not kept")
+	}
+	signIn(t) // the next test, in a home of its own
+	rememberLogins(true)
+	if a, ok := lastAllowances("codex")["me@example.com"]; ok {
+		t.Fatalf("an earlier test's reading stands in a fresh home: %+v", a)
+	}
+}
+
 func TestKeepLast(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	restart := func() {
-		lastQuotas.Lock()
-		lastQuotas.m, lastQuotas.loaded = nil, false
-		lastQuotas.Unlock()
+		forgetLastReadings()
 	}
 	restart()
 	defer restart()

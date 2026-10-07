@@ -54,15 +54,9 @@ func TestAntigravityQuotaRoutesBaseModel(t *testing.T) {
 	}
 
 	// A restart reconstructs the matcher from the saved vendor ids.
-	t.Cleanup(func() {
-		lastQuotas.Lock()
-		lastQuotas.loaded, lastQuotas.m = false, nil
-		lastQuotas.Unlock()
-	})
+	t.Cleanup(forgetLastReadings)
 	keepLast(q, q.User)
-	lastQuotas.Lock()
-	lastQuotas.loaded, lastQuotas.m = false, nil
-	lastQuotas.Unlock()
+	forgetLastReadings()
 	saved := lastAllowances("antigravity")[q.User]
 	if used, _ := saved.For("gemini-3.7-flash", now); used != 100 {
 		t.Errorf("saved quota: used %v, want 100", used)

@@ -26,9 +26,7 @@ func TestAllowancesBeforeFirstReading(t *testing.T) {
 		loginUsageCache.m = nil
 		loginUsageCache.Unlock()
 		forgetAllowances()
-		lastQuotas.Lock()
-		lastQuotas.m, lastQuotas.loaded = nil, false
-		lastQuotas.Unlock()
+		forgetLastReadings()
 	}
 	reset()
 	t.Cleanup(reset)

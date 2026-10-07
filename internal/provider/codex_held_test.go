@@ -205,9 +205,6 @@ func servedUsage(t *testing.T, body map[string]any) (read func() bool, down *ato
 	t.Helper()
 	signIn(t)
 	rememberLogins(true)
-	lastQuotas.Lock()
-	lastQuotas.m, lastQuotas.loaded = nil, false
-	lastQuotas.Unlock()
 	down = new(atomic.Bool)
 	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if down.Load() {
