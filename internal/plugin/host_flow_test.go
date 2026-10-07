@@ -176,11 +176,14 @@ async function main() {
     const retainedReadyReactions = readyReactions - (run('typeof setReady') === 'function' ? 1 : 0)
     // Waiters are counted before the collection: a FinalizationRegistry could
     // tidy them up after it. A WeakRef keeps its target until the turn that
-    // made it ends.
+    // made it ends, and what runs once a request is collected (a registry's
+    // callback) runs on a later turn.
     await tick()
     gc()
+    await tick()
     const retainedRequests = requests.filter(parts => parts.some(part => part.deref() !== undefined)).length
     console.log(JSON.stringify({ cancellations: 1000, idle: idle(), queued: queued(), readyReactions, retainedReadyReactions, retainedWaiters, retainedRequests }))
+    assert.equal(queued(), 0, 'collected requests emit no late error')
     assert.equal(retainedWaiters, 0, 'cancelled bootstrap leaves no retained waiters')
     assert.equal(retainedReadyReactions, 0, 'cancelled requests leave no reactions on shared ready')
     assert.equal(readyReactions, 1, 'only shared initialization reaction remains')
