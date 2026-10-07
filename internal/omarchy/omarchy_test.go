@@ -124,6 +124,11 @@ func TestCurrent(t *testing.T) {
 	if !Detect() {
 		t.Fatal("not detected")
 	}
+	// the theme an earlier run read (-count) is kept for the process's
+	// life, and would be answered for a second
+	mu.Lock()
+	cached = Theme{}
+	mu.Unlock()
 	th, ok := Current()
 	if !ok || th.Name != "tokyo-night" || th.Vars["--bg"] != "#1a1b26" || th.Stamp == "" {
 		t.Fatalf("%v %+v", ok, th)
