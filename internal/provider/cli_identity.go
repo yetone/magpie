@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
+	"testing"
 	"time"
 )
 
@@ -41,6 +43,16 @@ type keptIdentity struct {
 
 var identityFile sync.Mutex
 
+// keepIdentities is whether the answers are kept on disk. Off under test: an
+// ask behind a request answers after it, often once the test that made the
+// request has ended, and wrote cli-identity.json into that test's config
+// folder as it was removed ("unlinkat …/magpie: directory not empty",
+// TestStandaloneToolOutputResponsesRoutes in a whole run). The tests of
+// keeping turn it on.
+var keepIdentities atomic.Bool
+
+func init() { keepIdentities.Store(!testing.Testing()) }
+
 func identityPath() string { return filepath.Join(filepath.Dir(Path()), "cli-identity.json") }
 
 func readIdentities() map[string]keptIdentity {
@@ -52,6 +64,9 @@ func readIdentities() map[string]keptIdentity {
 }
 
 func (c *cliIdentity) keep() {
+	if !keepIdentities.Load() {
+		return
+	}
 	identityFile.Lock()
 	defer identityFile.Unlock()
 	m := readIdentities()

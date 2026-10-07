@@ -7,8 +7,17 @@ import (
 	"time"
 )
 
+// keepingIdentities has the CLIs' answers kept on disk for t, as they are
+// outside a test.
+func keepingIdentities(t *testing.T) {
+	t.Helper()
+	keepIdentities.Store(true)
+	t.Cleanup(func() { keepIdentities.Store(false) })
+}
+
 func TestCLIIdentityKeptAcrossStarts(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepingIdentities(t)
 	var asked atomic.Int32
 	answer := func() (string, string, bool, error) { asked.Add(1); return "me@example.com", "Pro", true, nil }
 	exe := func() string { return "/bin/sh" }
@@ -67,6 +76,7 @@ func TestCLIIdentityKeptAcrossStarts(t *testing.T) {
 
 func TestCLIIdentityKeptIgnoredWithoutTheCLI(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepingIdentities(t)
 	(&cliIdentity{name: "x", exe: func() string { return "/bin/sh" }, ask: func() (string, string, bool, error) { return "me@example.com", "", true, nil }}).get()
 	gone := &cliIdentity{name: "x", exe: func() string { return "" }, ask: func() (string, string, bool, error) { return "", "", false, nil }}
 	if u, _, ok := gone.get(); ok || u != "" {
@@ -78,6 +88,7 @@ func TestCLIIdentityKeptIgnoredWithoutTheCLI(t *testing.T) {
 // nobody is signed in until it answers, and then its answer is served
 func TestCLIIdentityFirstAskBounded(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepingIdentities(t)
 	old := firstAsk
 	firstAsk = 100 * time.Millisecond
 	t.Cleanup(func() { firstAsk = old })
@@ -116,6 +127,7 @@ func TestCLIIdentityFirstAskBounded(t *testing.T) {
 // rather than waiting for it again
 func TestCLIIdentitySignedOutKept(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepingIdentities(t)
 	(&cliIdentity{name: "x", exe: func() string { return "/bin/sh" }, ask: func() (string, string, bool, error) { return "", "", false, nil }}).get()
 	if _, found := readIdentities()["x"]; !found {
 		t.Fatal("a signed-out answer wasn't kept")

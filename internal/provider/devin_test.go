@@ -440,6 +440,7 @@ func TestAskDevinStatus(t *testing.T) {
 // that says nobody (or keeps no key) drops it, on disk too
 func TestDevinStatusKeepsTheAccount(t *testing.T) {
 	home := claudeHome(t)
+	keepingIdentities(t)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
 	exe := filepath.Join(home, "devin")
 	fakeDevin(t, exe)
