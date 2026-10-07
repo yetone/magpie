@@ -822,10 +822,14 @@
   let rtkRange = 0; // days; 0 all
   try { rtkRange = +(localStorage.getItem("magpie.rtkRange") ?? 0) || 0; } catch {}
   const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const dayOf = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  // a day is held at its noon: where the clocks skip 00:00 (Santiago,
+  // Havana, Beirut) the browser puts that day's 00:00 at 01:00, and days
+  // stepped on from a 00:00 would keep the 01:00, pass today's 00:00 and
+  // leave today without a bar
+  const dayOf = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d, 12); };
   function rtkChart(days) {
     const chart = el("div", "chart lib-rtk-chart");
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(12, 0, 0, 0);
     let first = dayOf(days[0].date);
     if (rtkRange) { first = new Date(today); first.setDate(first.getDate() - rtkRange + 1); }
     if (first > today) first = new Date(today);

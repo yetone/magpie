@@ -2061,6 +2061,16 @@ Chinese, Chromium and WebKit.
 node --test internal/gui/tests/library-rtk-nohook.test.cjs
 ```
 
+`library-rtk-skipped-midnight.test.cjs` checks Library › RTK's chart where
+the clocks skip 00:00 two weeks before today (Santiago, Havana, the Azores,
+Beirut, Cairo): 30 days are 30 bars and 90 days 90, the last today's; All,
+by week, ends with the week that begins today; and today's commands are in
+the total. English, Chromium and WebKit.
+
+```sh
+node --test internal/gui/tests/library-rtk-skipped-midnight.test.cjs
+```
+
 ## Local Provider Discovery
 
 `provider-discovery.test.cjs` checks the automatic Providers-page hint on
