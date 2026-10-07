@@ -236,7 +236,15 @@ async function main() {
     throw Error('unknown test case')
   }
 }
-main().catch(err => { console.error(err); process.exitCode = 1 })
+// node exits 0 once nothing is left to run, even while main() still awaits a
+// promise that never settles, so a case passes only by reaching its end
+let finished = false
+process.on('exit', code => {
+  if (finished || code !== 0) return
+  process.exitCode = 1
+  console.error(process.argv[1] + ' never finished: main() was still awaiting a promise that never settled when node ran out of work')
+})
+main().then(() => { finished = true }, err => { console.error(err); process.exitCode = 1 })
 `
 
 // fakeSignedIn starts a real Bun host with the fake plugin signed in to, its
