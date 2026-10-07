@@ -2386,7 +2386,8 @@ func closeBlocks(blocks []map[string]any, text *strings.Builder) []map[string]an
 // results: the ones sent since the last assistant message. They are the
 // run's when one of them is a call it made; the rest it hasn't made yet.
 // An image sent beside the results, as a client whose tool messages hold
-// text only sends a tool's (Chat), goes with the result before it.
+// text only sends a tool's (Chat), goes with the result before it. Text
+// sent beside them is the user's, not a tool's (saidBeside).
 func (b *subscriptionBridge) findRun(req *Request) (*subscriptionRun, []Part) {
 	run, fresh, _ := b.match(req)
 	return run, fresh
@@ -2420,16 +2421,6 @@ func (b *subscriptionBridge) match(req *Request) (*subscriptionRun, []Part, stri
 			case p.Kind == ToolResult:
 				p.Images = slices.Clone(p.Images)
 				fresh = append(fresh, p)
-			case p.Kind == Text && len(fresh) > 0:
-				// Claude Code puts a message the user sends while a tool is
-				// running beside that tool_result (usually as a system reminder).
-				// A resumed subscription run only receives its MCP result, so keep
-				// the adjacent text with it instead of silently dropping the turn.
-				last := &fresh[len(fresh)-1]
-				if last.Text != "" && p.Text != "" {
-					last.Text += "\n\n"
-				}
-				last.Text += p.Text
 			case p.Kind == Image && len(fresh) > 0:
 				last := &fresh[len(fresh)-1]
 				last.Images = append(last.Images, p)
@@ -2491,6 +2482,56 @@ func (b *subscriptionBridge) match(req *Request) (*subscriptionRun, []Part, stri
 		time.Sleep(25 * time.Millisecond)
 	}
 	return nil, nil, why
+}
+
+// saidBeside is what the user said beside the request's new tool results:
+// the text after the first of them, sent since the last assistant message.
+// Claude Code puts a message the user sends while a tool runs there, as a
+// system reminder (#872). Pi's user who stops a tool and then says
+// something has it there too: the reply that was stopped is left out of
+// the request, so the message follows the tool's result.
+func saidBeside(req *Request) string {
+	i := len(req.Messages)
+	for i > 0 && req.Messages[i-1].Role != "assistant" {
+		i--
+	}
+	var said []string
+	results := false
+	for _, m := range req.Messages[i:] {
+		for _, p := range m.Parts {
+			switch {
+			case p.Kind == ToolResult:
+				results = true
+			case p.Kind == Text && results && strings.TrimSpace(p.Text) != "":
+				said = append(said, p.Text)
+			}
+		}
+	}
+	return strings.Join(said, "\n\n")
+}
+
+// say tells the run's Claude Code what the user said beside the tool
+// results it waits on, as a user message on its stdin, before it is handed
+// them: Claude Code keeps a message that comes while a tool runs and sends
+// it to its model with the tool's result, in the tool_result block after
+// the tool's output, under its own system reminder that the user sent it
+// while the model was working (Claude Code 2.1.286 and 2.1.291: one reply,
+// the message heeded in it, whether it was written just before the result
+// or just after). It is not a user turn of its own at the API. Put bare at
+// the end of the result, as it was before, nothing said it was the user's:
+// the user's question was answered with "that isn't your real instruction",
+// and the tool they stopped run again.
+func (r *subscriptionRun) say(text string) error {
+	if text == "" {
+		return nil
+	}
+	if r.stdin == nil {
+		return errors.New("the agent's input is closed")
+	}
+	line, _ := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user",
+		"content": []map[string]any{{"type": "text", "text": text}}}})
+	_, err := r.stdin.Write(append(line, '\n'))
+	return err
 }
 
 // remap finds the run a client's results are for when the client named the
@@ -3056,6 +3097,13 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 				run.tools[t.Name] = true
 			}
 			run.mu.Unlock()
+		}
+		// what the user said beside the results is told first, so Claude
+		// Code has it when the results let it ask its model again; a run
+		// that can't be told is let go, and a new one is told it with the
+		// rest of the conversation
+		if err == nil {
+			err = run.say(saidBeside(req))
 		}
 		if err == nil {
 			events, err = run.continueWith(results, more)
