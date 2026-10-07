@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -174,6 +175,52 @@ func TestForgetAllowancesLetsTheReadingOutLand(t *testing.T) {
 	firstWait = 5 * time.Second
 	if got, _ := Allowances("codex")["me@example.com"].For("gpt-5.5", time.Now()); got != 12 || asked.Load() != 2 {
 		t.Fatalf("asked again: used %v, readings %d; want 12 from a reading of its own", got, asked.Load())
+	}
+}
+
+// An account that says it has run out while its agent's allowances are
+// being read has them read again once that reading is back, without being
+// asked: the reading was asked before, and would otherwise be trusted for
+// a minute.
+func TestAllowanceStaleMidRead(t *testing.T) {
+	signIn(t)
+	hold := make(chan struct{})
+	var asked atomic.Int32
+	LoginUsageVia(func(context.Context, string) map[string]SubscriptionQuota {
+		used := 100.0
+		if asked.Add(1) == 1 {
+			<-hold
+			used = 97
+		}
+		return map[string]SubscriptionQuota{"me@example.com": {Windows: []QuotaWindow{{Span: 5 * time.Hour, Used: used}}}}
+	})
+	var once sync.Once
+	release := func() { once.Do(func() { close(hold) }) }
+	t.Cleanup(func() { release(); forgetAllowances(); LoginUsageVia(nil) })
+	oldWait := firstWait
+	firstWait = time.Millisecond
+	t.Cleanup(func() { firstWait = oldWait })
+
+	Allowances("codex")
+	for asked.Load() < 1 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	StaleAllowance("codex", "me@example.com") // out, as the request found
+	release()
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+		usedCache.Lock()
+		_, known := usedCache.m["codex"]
+		out := usedCache.loading["codex"] != nil
+		usedCache.Unlock()
+		if known && !out {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("never read")
+		}
+	}
+	if got, _ := Allowances("codex")["me@example.com"].For("gpt-5.5", time.Now()); got != 100 || asked.Load() != 2 {
+		t.Fatalf("used %v, readings %d; want 100 from a second reading", got, asked.Load())
 	}
 }
 

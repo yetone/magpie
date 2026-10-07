@@ -137,7 +137,7 @@ func forgetAllowances() {
 		c.Lock()
 	}
 	c.m, c.at, c.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
-	c.renewed = nil
+	c.renewed, c.stale = nil, nil
 	c.Unlock()
 }
 
