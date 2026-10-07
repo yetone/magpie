@@ -92,16 +92,30 @@ func StatsFor(days int) Stats {
 // StatsAt is StatsFor as if it were now.
 func StatsAt(days int, now time.Time) Stats { return statsAt(days, now) }
 
+// midnight is when day d of m in y begins at loc, which a range's files are
+// read from. Where the clocks go forward over 00:00 west of UTC (Santiago,
+// Havana, the Azores), time.Date puts the 00:00 they skip on the day before,
+// so the day begins as they go forward instead. Where they go back across
+// 00:00, so that it comes twice, this is the one time.Date gives, east of
+// UTC the second.
+func midnight(y int, m time.Month, d int, loc *time.Location) time.Time {
+	t := time.Date(y, m, d, 0, 0, 0, 0, loc)
+	if t.Day() != time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Day() {
+		_, t = t.ZoneBounds()
+	}
+	return t
+}
+
 func statsAt(days int, now time.Time) Stats {
 	now = now.In(time.Local)
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	y, m, d := now.Date()
 	var since time.Time
 	from := ""
 	if days > 0 {
-		since = today.AddDate(0, 0, 1-days)
+		since = midnight(y, m, d+1-days, time.Local)
 		from = since.Format(time.DateOnly)
 	}
-	out := Stats{From: from, To: today.Format(time.DateOnly), Days: []Day{}, Sessions: []Summary{}}
+	out := Stats{From: from, To: now.Format(time.DateOnly), Days: []Day{}, Sessions: []Summary{}}
 
 	dbReadMu.Lock()
 	defer dbReadMu.Unlock()
@@ -284,7 +298,8 @@ func statsAt(days int, now time.Time) Stats {
 			groups[f.key] = append(groups[f.key], f)
 		}
 	}
-	first, _ := time.ParseInLocation(time.DateOnly, out.From, time.Local)
+	// dates as UTC days, as Overview reads them
+	first, _ := time.Parse(time.DateOnly, out.From)
 	for key, sh := range shares {
 		if len(sh.dates) == 0 {
 			continue
@@ -301,7 +316,7 @@ func statsAt(days int, now time.Time) Stats {
 			sum.ToolCalls += n
 		}
 		for date, pd := range sh.perDate {
-			if t, err := time.ParseInLocation(time.DateOnly, date, time.Local); err == nil {
+			if t, err := time.Parse(time.DateOnly, date); err == nil {
 				sum.perDay[int(math.Round(t.Sub(first).Hours()/24))] = pd
 			}
 		}
@@ -322,7 +337,7 @@ func statsAt(days int, now time.Time) Stats {
 			return sum.Models[i] < sum.Models[j]
 		})
 		for date := range sh.dates {
-			if t, err := time.ParseInLocation(time.DateOnly, date, time.Local); err == nil {
+			if t, err := time.Parse(time.DateOnly, date); err == nil {
 				// whole days, across a change of the clocks too
 				sum.Days = append(sum.Days, int(math.Round(t.Sub(first).Hours()/24)))
 			}
@@ -430,8 +445,10 @@ type Skill struct {
 // ("" for any), with the n that spent the most each way.
 func (st Stats) Overview(agent, model, cwd string, n int) Overview {
 	out := Overview{Days: []int{}, Top: map[string][]Summary{}}
-	first, err1 := time.ParseInLocation(time.DateOnly, st.From, time.Local)
-	last, err2 := time.ParseInLocation(time.DateOnly, st.To, time.Local)
+	// in UTC, so toolUse steps whole days from first: where the clocks skip
+	// a day's 00:00, a local date parses to 23:00 on the day before
+	first, err1 := time.Parse(time.DateOnly, st.From)
+	last, err2 := time.Parse(time.DateOnly, st.To)
 	if err1 == nil && err2 == nil && !last.Before(first) {
 		out.Days = make([]int, int(math.Round(last.Sub(first).Hours()/24))+1)
 	}

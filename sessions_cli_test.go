@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -181,6 +183,71 @@ func footOf(out string) string {
 		}
 	}
 	return ""
+}
+
+// magpie sessions --days 4 across a day whose 00:00 the clocks skip prints
+// each of the four days once, under its own name. West of UTC a local
+// date's parse put that day at 23:00 on the day before, which named it
+// after the day before; east of UTC the days were stepped from 01:00, and
+// the last was left out.
+func TestSessionsDaysPastASkippedMidnight(t *testing.T) {
+	const zoneEnv = "MAGPIE_TEST_SESSIONS_ZONE"
+	skipped := map[string]time.Time{ // the day the clocks skip 00:00, its noon in UTC
+		"America/Santiago": time.Date(2026, 9, 6, 15, 0, 0, 0, time.UTC),
+		"America/Havana":   time.Date(2026, 3, 8, 16, 0, 0, 0, time.UTC),
+		"Atlantic/Azores":  time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC),
+		"Asia/Beirut":      time.Date(2026, 3, 29, 9, 0, 0, 0, time.UTC),
+	}
+	if zone := os.Getenv(zoneEnv); zone != "" {
+		noon := skipped[zone].In(time.Local)
+		if noon.Hour() != 12 {
+			t.Fatalf("TZ=%s didn't set the local zone: the day's noon is %s", zone, noon)
+		}
+		loc := time.Local
+		sessionsHome(t)
+		// sessionsHome puts the dates in UTC. Only this test runs in this
+		// child, and no index write is under way after sessionsHome's Reset,
+		// so the zone TZ set goes back in place as it is.
+		time.Local = loc
+		y, m, d := noon.Date()
+		id := "77777777-1111-2222-3333-444444444444"
+		var lines string
+		for days := -1; days <= 2; days++ {
+			at := time.Date(y, m, d+days, 10, 0, 0, 0, time.Local).UTC().Format("2006-01-02T15:04:05.000Z")
+			lines += fmt.Sprintf(`{"parentUuid":null,"isSidechain":false,"message":{"model":"claude-opus-5-5","id":"msg_%d","type":"message","role":"assistant","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":10,"output_tokens":2}},"type":"assistant","timestamp":"%s","cwd":"/work/zone","sessionId":"%s"}`+"\n", days+1, at, id)
+		}
+		proj := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "projects", "-work-zone")
+		if err := os.MkdirAll(proj, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(proj, id+".jsonl"), []byte(lines), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		sessions.Reset()
+
+		out := runSessions(t, noon.AddDate(0, 0, 2), "--days", "4")
+		var wrong []string
+		for days := -1; days <= 2; days++ {
+			name := time.Date(y, m, d+days, 12, 0, 0, 0, time.UTC).Format("Mon Jan 2")
+			if n := strings.Count(out, name); n != 1 {
+				wrong = append(wrong, fmt.Sprintf("%s on %d lines", name, n))
+			}
+		}
+		if len(wrong) > 0 {
+			t.Errorf("--days 4 prints %s, not one each:\n%s", strings.Join(wrong, ", "), out)
+		}
+		return
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Go on Windows takes the local zone from the system, not TZ")
+	}
+	for zone := range skipped {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestSessionsDaysPastASkippedMidnight$")
+		cmd.Env = append(os.Environ(), "TZ="+zone, zoneEnv+"="+zone)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: %v\n%s", zone, err, out)
+		}
+	}
 }
 
 // The hit rate is of all the prompts came to: what was written to the

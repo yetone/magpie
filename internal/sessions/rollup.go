@@ -64,8 +64,9 @@ func (t Tokens) Spent() int { return t.Input + t.Output }
 func (s Stats) Sum(model, folder string) Rollup {
 	r := Rollup{From: s.From, To: s.To, Model: model, Folder: folder, Unpriced: []string{}, Days: []DayTotal{}, Models: []Share{}, Folders: []Share{}}
 	at := map[string]int{}
-	if first, err := time.ParseInLocation(time.DateOnly, s.From, time.Local); err == nil {
-		last, _ := time.ParseInLocation(time.DateOnly, s.To, time.Local)
+	// stepped in UTC, where no day's 00:00 is skipped
+	if first, err := time.Parse(time.DateOnly, s.From); err == nil {
+		last, _ := time.Parse(time.DateOnly, s.To)
 		for d := first; !d.After(last); d = d.AddDate(0, 0, 1) {
 			at[d.Format(time.DateOnly)] = len(r.Days)
 			r.Days = append(r.Days, DayTotal{Date: d.Format(time.DateOnly)})

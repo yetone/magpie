@@ -306,7 +306,7 @@ func sessionStats(w io.Writer, o sessionsOpts, st sessions.Stats, now time.Time)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, faint.Render("  "+pad("date", 14)+pad("tokens", 9)+pad("cost", 10)+pad("cache read", 12)+pad("active", 9)))
 	for _, d := range days {
-		day, _ := time.ParseInLocation(time.DateOnly, d.Date, time.Local)
+		day, _ := time.Parse(time.DateOnly, d.Date)
 		c := faint.Render(pad("—", 9))
 		if d.Cost > 0 {
 			c = pad(cost(stats.Totals{Cost: d.Cost}), 9)

@@ -2,8 +2,11 @@ package sessions
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -263,4 +266,99 @@ func sortedByLast(ss []Summary) bool {
 		}
 	}
 	return true
+}
+
+// Where the clocks go forward at 00:00, that day has no 00:00. West of UTC
+// (Santiago, Havana, the Azores) time.Date and a local date's parse put it
+// at 23:00 on the day before: on that day Today was the day before, a range
+// that began on it began a day early, and a range across it was stepped
+// from 23:00, the day before twice and its last day left out, which the
+// tool weeks were a day off by too. East of UTC (Beirut, Cairo) it is
+// 01:00, and a range of days that ended on it began at 01:00 too, leaving
+// out the files last written in its first hour. statsAt reads time.Local,
+// so each zone runs in a child process with TZ set.
+func TestStatsDaysPastASkippedMidnight(t *testing.T) {
+	const zoneEnv = "MAGPIE_TEST_STATS_ZONE"
+	skipped := map[string]time.Time{ // the day the clocks skip 00:00, its noon in UTC
+		"America/Santiago": time.Date(2026, 9, 6, 15, 0, 0, 0, time.UTC),
+		"America/Havana":   time.Date(2026, 3, 8, 16, 0, 0, 0, time.UTC),
+		"Atlantic/Azores":  time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC),
+		"Asia/Beirut":      time.Date(2026, 3, 29, 9, 0, 0, 0, time.UTC),
+		"Africa/Cairo":     time.Date(2026, 4, 24, 9, 0, 0, 0, time.UTC),
+	}
+	if zone := os.Getenv(zoneEnv); zone != "" {
+		noon := skipped[zone].In(time.Local)
+		if noon.Hour() != 12 {
+			t.Fatalf("TZ=%s didn't set the local zone: the day's noon is %s", zone, noon)
+		}
+		y, m, d := noon.Date()
+		// the date and a local time some days from the skipped day
+		date := func(days int) string { return time.Date(y, m, d+days, 12, 0, 0, 0, time.UTC).Format(time.DateOnly) }
+		at := func(days, hour, minute int) string {
+			return time.Date(y, m, d+days, hour, minute, 0, 0, time.Local).UTC().Format("2006-01-02T15:04:05.000Z")
+		}
+		claude, _ := setup(t)
+		dir := filepath.Join(claude, "projects", "-work-night")
+		os.MkdirAll(dir, 0o755)
+		// a reply at 10:00 on each day from three before to three after
+		var lines string
+		for days := -3; days <= 3; days++ {
+			lines += ccMsg("m"+itoa(days+3), at(days, 10, 0), 100, 10)
+		}
+		os.WriteFile(filepath.Join(dir, "33333333-2222-3333-4444-555555555555.jsonl"), []byte(lines), 0o644)
+		// and a session last written to at 00:30 six days before
+		early := filepath.Join(dir, "66666666-2222-3333-4444-555555555555.jsonl")
+		os.WriteFile(early, []byte(strings.ReplaceAll(ccMsg("e1", at(-6, 0, 30), 200, 20), "33333333-", "66666666-")), 0o644)
+		written := time.Date(y, m, d-6, 0, 30, 0, 0, time.Local)
+		os.Chtimes(early, written, written)
+
+		if s := statsAt(1, noon); s.From != date(0) || s.To != date(0) {
+			t.Errorf("today at %s is %s – %s, not %s", noon, s.From, s.To, date(0))
+		} else if got, _ := usageOn(s, date(0), "/work/night"); got.Input != 100 {
+			t.Errorf("today at %s spent %+v, not the reply at 10:00", noon, got)
+		}
+		later := noon.AddDate(0, 0, 6)
+		if s := statsAt(7, later); s.From != date(0) || s.To != date(6) {
+			t.Errorf("the 7 days to %s are %s – %s, not from %s", later, s.From, s.To, date(0))
+		}
+		if s := statsAt(7, noon); s.From != date(-6) {
+			t.Errorf("the 7 days to %s are %s – %s, not from %s", noon, s.From, s.To, date(-6))
+		} else if got, _ := usageOn(s, date(-6), "/work/night"); got.Input != 200 {
+			t.Errorf("the 7 days to %s leave out the session written to at 00:30 on %s: %+v", noon, date(-6), got)
+		}
+
+		// summed up, each of 7 days across it once, with its own reply
+		later = noon.AddDate(0, 0, 3)
+		r := statsAt(7, later).Sum("", "/work/night")
+		var got, want []string
+		for _, day := range r.Days {
+			got = append(got, day.Date+" "+itoa(day.Spent()))
+		}
+		for days := -3; days <= 3; days++ {
+			want = append(want, date(days)+" 110")
+		}
+		if strings.Join(got, ", ") != strings.Join(want, ", ") || r.Tokens.Input != 700 {
+			t.Errorf("the 7 days to %s sum up as %v, %d input tokens; want %v, 700", later, got, r.Tokens.Input, want)
+		}
+
+		// a tool called the day after counts in that day's week, from Monday
+		next := time.Date(y, m, d+1, 12, 0, 0, 0, time.UTC)
+		monday := date(1 - (int(next.Weekday())+6)%7)
+		st := Stats{From: date(0), To: date(1), Sessions: []Summary{{Key: "claude:x", ToolCalls: 1, tools: map[string]int{"Bash": 1},
+			perDay: map[int]*summaryDay{1: {tools: map[string]int{"Bash": 1}}}}}}
+		if w := st.Overview("", "", "", 5).Tools.Weeks; len(w) != 1 || w[0].Start != monday {
+			t.Errorf("a tool called on %s counts in the weeks %+v, not the one from %s", date(1), w, monday)
+		}
+		return
+	}
+	if runtime.GOOS == "windows" {
+		t.Skip("Go on Windows takes the local zone from the system, not TZ")
+	}
+	for zone := range skipped {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestStatsDaysPastASkippedMidnight$")
+		cmd.Env = append(os.Environ(), "TZ="+zone, zoneEnv+"="+zone)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Errorf("%s: %v\n%s", zone, err, out)
+		}
+	}
 }
