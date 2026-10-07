@@ -24,7 +24,7 @@ func TestHostJSCancellation(t *testing.T) {
 	if err != nil {
 		t.Skip("no node on PATH")
 	}
-	for _, name := range []string{"stopped-gate", "split-chunk", "terminal", "blocked-head", "blocked-head-cancel-error", "ready-wait", "ready-success", "ready-error", "local-error", "local-error-cancel", "normal-reply", "held-window"} {
+	for _, name := range []string{"stopped-gate", "split-chunk", "terminal", "blocked-head", "blocked-head-cancel-error", "ready-wait", "ready-wait-many", "ready-wait-ids", "ready-wait-two", "drain", "blocked-heads", "ready-success", "ready-error", "local-error", "local-error-cancel", "normal-reply", "held-window"} {
 		t.Run(name, func(t *testing.T) {
 			out, err := runHostJSCase(t, node, name)
 			if err != nil {
@@ -105,8 +105,19 @@ const until = async (check, label) => {
 }
 const idle = () => run('pending === 0 && inflight.size === 0')
 const queued = () => run('outq.length')
-const fetchOne = () => message({ id: 1, method: 'fetch', params: { window: 512 << 10, provider: 'test', model: 'test', url: 'http://localhost/' } })
-const abortOne = () => message({ method: 'abort', params: { id: 1 } })
+// soon is until in microtasks, which is all a cancelled bootstrap wait takes
+// to end, so ready-wait-many's rounds cost no turn each.
+const soon = async (check, label) => {
+  for (let step = 0; step < 100; step++) {
+    if (check()) return
+    await null
+  }
+  assert.ok(check(), label)
+}
+const fetchId = id => message({ id, method: 'fetch', params: { window: 512 << 10, provider: 'test', model: 'test', url: 'http://localhost/' } })
+const abortId = id => message({ method: 'abort', params: { id } })
+const fetchOne = () => fetchId(1)
+const abortOne = () => abortId(1)
 const initialize = promise => {
   context.initialization = promise
   run('typeof setReady === "function" ? setReady(initialization) : ready = initialization')
@@ -201,6 +212,121 @@ async function main() {
     assert.equal(retainedReadyReactions, 0, 'cancelled requests leave no reactions on shared ready')
     assert.equal(readyReactions, 1, 'only shared initialization reaction remains')
     assert.equal(retainedRequests, 0, 'cancelled requests are garbage collected')
+  } else if (name === 'ready-wait-many') {
+    // A count of waiting fetches that a cancel doesn't take back shows only
+    // once it passes whatever it is checked against, which can be above
+    // ready-wait's 1,000: a warning every 1,024 waits passes there. These
+    // rounds take microtasks rather than a turn each, so 4,096 of them cost
+    // about what ready-wait's 1,000 do.
+    blockOn = 'all'
+    initialize(new Promise(() => {}))
+    run('send({ id: 99, result: null })')
+    // idle and queued, compiled once rather than every round
+    const cleaned = run('() => pending === 0 && inflight.size === 0')
+    const waitingLines = run('() => outq.length')
+    for (let iteration = 0; iteration < 4096; iteration++) {
+      fetchOne()
+      abortOne()
+      await soon(cleaned, 'cancelled bootstrap wait cleans registries')
+      assert.equal(waitingLines(), 0, 'cancelled bootstrap waits emit nothing however many there are')
+    }
+    assert.equal(lines.length, 1, 'stdout stayed blocked at original line')
+  } else if (name === 'ready-wait-ids') {
+    // State kept per fetch id that a cancel leaves behind stays at one entry
+    // while the id repeats, as ready-wait's does. Here every round has an id
+    // of its own, 64 KiB long, so what 128 rounds leave behind holds 8 MiB
+    // that a full collection can't free.
+    blockOn = 'all'
+    initialize(new Promise(() => {}))
+    run('send({ id: 99, result: null })')
+    const idBytes = 64 << 10
+    const rounds = 128
+    const round = async id => {
+      fetchId(id)
+      abortId(id)
+      await until(idle, 'cancelled bootstrap wait cleans registries')
+      assert.equal(queued(), 0, 'cancelled bootstrap emits no late error')
+    }
+    for (let iteration = 0; iteration < 8; iteration++) await round('warm-up ' + iteration)
+    gc()
+    const before = process.memoryUsage().heapUsed
+    for (let iteration = 0; iteration < rounds; iteration++) await round(String(iteration).padStart(idBytes, '0'))
+    await tick()
+    gc()
+    const grown = process.memoryUsage().heapUsed - before
+    console.log(JSON.stringify({ rounds, idBytes, grown }))
+    assert.ok(grown < rounds * idBytes / 4, 'cancelled bootstrap waits keep nothing per fetch id')
+  } else if (name === 'ready-wait-two') {
+    // Fetches that go on waiting for init while another's wait is cancelled,
+    // made before it and after it, are still waiting, and are answered once
+    // init settles.
+    let settle
+    initialize(new Promise(resolve => { settle = resolve }))
+    const waiting = []
+    const cancelled = async () => {
+      abortId(1)
+      await until(() => !run('inflight.has(1)'), 'cancelled bootstrap wait ends')
+      assert.deepEqual(lines, [], 'cancelled bootstrap emits nothing, and the others wait on')
+      assert.deepEqual(waiting.filter(id => !run('inflight.has(' + id + ')')), [], "a cancel ends no other fetch's wait")
+    }
+    fetchId(1)
+    fetchId(2)
+    waiting.push(2)
+    await cancelled()
+    fetchId(1)
+    await cancelled()
+    fetchId(1)
+    fetchId(3)
+    waiting.push(3)
+    await cancelled()
+    settle()
+    await until(idle, 'fetches still waiting are answered once init settles')
+    for (const id of [1, ...waiting]) {
+      const answer = lines.filter(msg => msg.id === id).map(msg => msg.event || ('error' in msg ? 'error' : 'result'))
+      assert.deepEqual(answer, id === 1 ? [] : ['head', 'result'], 'fetch ' + id + "'s answer")
+    }
+  } else if (name === 'drain') {
+    // ready-wait's stdout never drains. Here it drains while still blocked,
+    // which leaves one wait as before, and then for good, which leaves none.
+    const counts = () => Object.fromEntries(stdout.eventNames().map(event => [event, stdout.listenerCount(event)]))
+    const unblocked = counts()
+    let blocked
+    for (let iteration = 0; iteration < 3; iteration++) {
+      blockOn = 'all'
+      run('send({ id: 99, result: null })')
+      run('send({ id: 98, result: null })')
+      assert.equal(queued(), 1, 'the second line waits for a drain')
+      blocked ??= counts()
+      assert.deepEqual(counts(), blocked, 'a blocked stdout has one wait')
+      stdout.emit('drain')
+      await until(() => queued() === 0, 'a drain writes the queued line')
+      assert.deepEqual(counts(), blocked, 'a drain while stdout stays blocked leaves one wait')
+      blockOn = ''
+      stdout.emit('drain')
+      await tick()
+      assert.deepEqual(counts(), unblocked, 'a drained stdout keeps no listener')
+      run('send({ id: 97, result: null })')
+      assert.equal(queued(), 0, 'a drained stdout writes at once')
+    }
+    assert.deepEqual(lines.map(msg => msg.id), [99, 98, 97, 99, 98, 97, 99, 98, 97])
+  } else if (name === 'blocked-heads') {
+    // Two fetches' heads wait behind a blocked stdout. Cancelling either one
+    // leaves the other's head queued, and it goes out once stdout drains.
+    for (const cancelled of [1, 2]) {
+      const kept = 3 - cancelled
+      lines.length = 0
+      blockOn = 'all'
+      run('send({ id: 99, result: null })')
+      fetchId(1)
+      fetchId(2)
+      await until(() => queued() === 2, 'both heads queued behind blocked stdout')
+      abortId(cancelled)
+      assert.deepEqual(Array.from(run('outq'), item => JSON.parse(item.line).id), [kept], "a cancelled fetch's head goes, and only that")
+      blockOn = ''
+      stdout.emit('drain')
+      await until(idle, 'the fetch left waiting finishes once stdout drains')
+      assert.deepEqual(lines.map(msg => [msg.id, msg.event || ('error' in msg ? 'error' : 'result')]), [[99, 'result'], [kept, 'head'], [kept, 'result']])
+    }
   } else if (name === 'ready-success' || name === 'ready-error') {
     let settle
     initialize(new Promise((resolve, reject) => { settle = name === 'ready-success' ? resolve : reject }))
