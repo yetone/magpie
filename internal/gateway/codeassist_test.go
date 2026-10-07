@@ -2,11 +2,14 @@ package gateway
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 func codeAssistRequest(t *testing.T) *Request {
@@ -192,6 +195,63 @@ func TestCodeAssistAntigravityLevels(t *testing.T) {
 		if env.Model != c.want || level != c.level {
 			t.Errorf("%s at %q on %s: %s at %q, want %s at %q", c.model, c.effort, c.agent, env.Model, level, c.want, c.level)
 		}
+	}
+}
+
+// Claude Code's auto mode classifier turns thinking off and is asked at the
+// least level the model has (fitAutoModeClassifier, #250): minimal, on a
+// Gemini 3 Flash models.dev gives minimal. Code Assist sends minimal only
+// to a variant at minimal, as the id doesn't say which Flash serves it and
+// 3.8 Flash has none, and sent the rest at high, the most: they go at low.
+// An image model asked low, which fits to minimal (3.1 Flash Image has
+// minimal and high), still goes at high.
+func TestCodeAssistReasoningOffAtLow(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{"google":{"models":{
+	  "gemini-3.5-flash":{"id":"gemini-3.5-flash","reasoning":true,"reasoning_options":[{"type":"effort","values":["minimal","low","medium","high"]}]},
+	  "gemini-3.1-flash-lite":{"id":"gemini-3.1-flash-lite","reasoning":true,"reasoning_options":[{"type":"effort","values":["minimal","low","medium","high"]}]},
+	  "gemini-3.1-flash-image":{"id":"gemini-3.1-flash-image","reasoning":true,"reasoning_options":[{"type":"effort","values":["minimal","high"]}]}}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	// the level the request goes at, its effort fitted as forwardTranslated
+	// fits it
+	level := func(p provider.Provider, model string, r *Request) string {
+		if r.Effort != "" {
+			r.Effort = fitFor(p, model, r.Effort)
+		}
+		var env struct {
+			Request struct {
+				GenerationConfig struct {
+					ThinkingConfig struct {
+						ThinkingLevel string `json:"thinkingLevel"`
+					} `json:"thinkingConfig"`
+				} `json:"generationConfig"`
+			} `json:"request"`
+		}
+		json.Unmarshal(codeAssistBody(p, r, model, nil), &env)
+		return env.Request.GenerationConfig.ThinkingConfig.ThinkingLevel
+	}
+	for _, c := range []struct{ agent, model string }{{"gemini", "gemini-3.5-flash"}, {"antigravity", "gemini-3.1-flash-lite"}} {
+		p := provider.Provider{ID: c.agent, Account: &provider.Account{Agent: c.agent, User: "u"}}
+		r, err := parseAnthropic([]byte(autoModeAsk(c.model)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		fitAutoModeClassifier(p, c.model, r)
+		if got := level(p, c.model, r); r.Effort != "minimal" || got != "low" {
+			t.Errorf("the classifier on %s's %s: %q at %q, want minimal at low", c.agent, c.model, r.Effort, got)
+		}
+	}
+	p := provider.Provider{ID: "antigravity", Account: &provider.Account{Agent: "antigravity", User: "u"}}
+	r, err := parseChat([]byte(`{"model":"gemini-3.1-flash-image","stream":true,"reasoning_effort":"low","messages":[{"role":"user","content":"draw a cat"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := level(p, "gemini-3.1-flash-image", r); got != "high" {
+		t.Errorf("gemini-3.1-flash-image asked low: at %q, want high", got)
 	}
 }
 

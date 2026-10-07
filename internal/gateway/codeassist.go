@@ -367,8 +367,14 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 // stop thinking once the request has tools, and give none of it back
 // (#636); Antigravity's own tiered ids, sent a level, don't.
 //
-// Gemini 3's levels: Flash takes minimal, low, medium and high, so medium
-// goes as medium; Pro takes low and high only, so medium goes up to high.
+// Gemini 3's levels: medium goes as medium to Flash, and up to high to
+// Pro, which took low and high only (3 Pro). Minimal goes only to a Flash
+// variant at minimal: 3.7 and 3.8 Flash have none (AI Studio answers 3.8's
+// with a 400), and the id here doesn't say which Flash serves it (Gemini
+// CLI's 3.5 Flash goes out as 3.8 Flash where that is rolled out).
+// Reasoning off otherwise (the auto mode classifier's least level) goes at
+// low, which every Gemini 3 text model takes; an image model may have no
+// low (3.1 Flash Image: minimal and high), and goes at high.
 func thinkingConfig(r *Request, model string, claude bool, at string) map[string]any {
 	m := strings.ToLower(model)
 	if strings.HasPrefix(m, "gpt-oss") || claude && !strings.Contains(m, "thinking") {
@@ -393,6 +399,8 @@ func thinkingConfig(r *Request, model string, claude bool, at string) map[string
 				level = "low"
 			case effort == "minimal" && at != "":
 				level = "minimal"
+			case offEffort(effort) && !catalog.DrawsID(m):
+				level = "low"
 			case effort == "medium" && strings.Contains(m, "flash"):
 				level = "medium"
 			}
