@@ -14,6 +14,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/testenv"
+	"golang.org/x/sys/unix"
 )
 
 // A desktop app with launchd's PATH finds a claude installed under a custom
@@ -165,7 +166,7 @@ func TestAskShellOwnSession(t *testing.T) {
 	if mine := strconv.Itoa(syscall.Getpgrp()); f[0] == mine {
 		t.Fatalf("the login shell ran in magpie's process group %s: a shell there takes the terminal from magpie", mine)
 	}
-	if sid, err := syscall.Getsid(0); err == nil && f[1] == strconv.Itoa(sid) && f[1] != "0" {
+	if sid, err := unix.Getsid(0); err == nil && f[1] == strconv.Itoa(sid) && f[1] != "0" {
 		t.Fatalf("the login shell ran in magpie's session %s: it can take magpie's terminal", f[1])
 	}
 	zsh, err := exec.LookPath("zsh")
