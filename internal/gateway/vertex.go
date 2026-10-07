@@ -106,13 +106,6 @@ func vertexEffort(req *Request, levels []string) *Request {
 	return &r
 }
 
-// vertexMinimalRefused is Vertex AI turning minimal away for a model that
-// doesn't have it, in either of the words it does: gemini-3.8-flash's
-// "Thinking level is unsupported: THINKING_LEVEL_MINIMAL", and
-// gemini-3.1-pro-preview's "thinking_level MINIMAL is not supported by this
-// model". Neither names the levels it takes, as effortLevelsNamed wants.
-var vertexMinimalRefused = regexp.MustCompile(`(?i)thinking[ _]level.*minimal`)
-
 // vertexSignatureRefused is Vertex AI turning a call's thought signature
 // away as one it didn't give: "Invalid thought signature.".
 var vertexSignatureRefused = regexp.MustCompile(`(?i)invalid thought signature`)

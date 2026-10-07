@@ -3812,7 +3812,7 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			req = req.inSystem()
 			continue
 		}
-		if offEffort(req.Effort) && res.StatusCode == http.StatusBadRequest && (effortLevelsNamed.Match(b) || p.IsVertex() && vertexMinimalRefused.Match(b)) {
+		if offEffort(req.Effort) && res.StatusCode == http.StatusBadRequest && (effortLevelsNamed.Match(b) || p.IsVertex() && geminiMinimalRefused.Match(b)) {
 			// reasoning turned off, which the model refuses naming the
 			// levels it takes (Command Code's `expected one of "low"|…`
 			// for Claude Code's auto mode classifier, #394), or Vertex AI
