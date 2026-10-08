@@ -557,9 +557,224 @@ func TestDshRouteKeepsTheAPIPickedInDsh(t *testing.T) {
 	}
 }
 
+// dsh's own save of a patch list can strip magpie's route while the start
+// still names one of magpie's models — its desktop app keeps a snapshot of
+// the list and writes it back as it saves. The start is the user's pick, so
+// this is not a route taken out: the check says nothing (the row would go
+// red for a loss that repairs itself), and the round writes the route back
+// beside the user's own, the start kept.
+func TestDshStrippedRouteIsWrittenBackQuietly(t *testing.T) {
+	home, dir, web := dshRouteHome(t)
+	dshKeyFixture(dir)
+	stripped := "# Your patch layer for this dsh profile.\n" +
+		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n" +
+		"      mine:\n        displayName: Mine\n        apiKeyEnv: MINE_API_KEY\n        api: openai-completions\n        baseURL: https://mine.example/v1\n        models:\n          - id: m1\n" +
+		"- id: agent-default-model # magpie\n  config:\n    provider: magpie\n    model: deepseek/flash\n"
+	os.WriteFile(web, []byte(stripped), 0o644)
+	read := func() string { b, _ := os.ReadFile(web); return string(b) }
+	a := dsh(home)
+	if got := a.Field("model").Get(); got != "magpie/deepseek/flash" {
+		t.Fatalf("model: %q", got)
+	}
+	if d := a.Check(); d != "" {
+		t.Fatalf("a route dsh stripped is said: %q", d)
+	}
+	dshWiredOnce()
+	s := read()
+	for _, want := range []string{"      mine:\n", "      magpie:\n", "apiKeyEnv: " + dshKeyRef, "baseURL: " + gatewayV1(), "- id: deepseek/flash", "provider: magpie\n    model: deepseek/flash"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q after the write-back:\n%s", want, s)
+		}
+	}
+	if d := a.Check(); d != "" {
+		t.Fatalf("after the write-back: %q", d)
+	}
+	// and the round after leaves it as it is
+	dshWiredOnce()
+	if again := read(); again != s {
+		t.Fatalf("written again:\n%s", again)
+	}
+}
+
+// A profile taken off magpie for real — the start no longer names one of
+// magpie's models — is left as it is, as before: the round writes no route
+// back into it.
+func TestDshStrippedRouteWithoutAMagpieStartIsLeftAlone(t *testing.T) {
+	_, _, web := dshRouteHome(t)
+	mine := "# Your patch layer for this dsh profile.\n" +
+		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n" +
+		"      mine:\n        displayName: Mine\n        apiKeyEnv: MINE_API_KEY\n        api: openai-completions\n        baseURL: https://mine.example/v1\n        models:\n          - id: m1\n" +
+		"- id: agent-default-model\n  config:\n    provider: deepseek-official\n    model: deepseek-v4-flash\n"
+	os.WriteFile(web, []byte(mine), 0o644)
+	dshWiredOnce()
+	if b, _ := os.ReadFile(web); string(b) != mine {
+		t.Fatalf("a profile taken off magpie was written into:\n%s", b)
+	}
+}
+
+// With no catalog there is no route to write back, so a stripped profile is
+// said as before rather than met with silence.
+func TestDshCheckSaysForAStrippedRouteWithNoCatalog(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("DSH_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	// no provider: no catalog to write the route from
+	dir := filepath.Join(home, ".dsh")
+	web := filepath.Join(dir, "profiles", "web", "cordis.patch.yml")
+	os.MkdirAll(filepath.Dir(web), 0o755)
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"+
+		"- id: agent-default-model # magpie\n  config:\n    provider: magpie\n    model: deepseek/flash\n"), 0o644)
+	a := dsh(home)
+	if d := a.Check(); d == "" {
+		t.Fatal("a route that cannot be written back is not met with silence")
+	}
+}
+
+// and a profile still on the old wiring — its llm-deepseek row is magpie's,
+// not yet moved — is dshMove's: the serving round must not write an
+// llm-pi-ai entry into it beside the row the move is about to take over.
+func TestDshServingRoundLeavesTheOldWiringToDshMove(t *testing.T) {
+	home, _, web := dshRouteHome(t)
+	_ = home
+	old := "# Your patch layer for this dsh profile.\n" +
+		"- id: llm-deepseek # magpie\n  config:\n    apiKeyEnv: MAGPIE_API_KEY\n    baseURL: \"" + gatewayV1() + "\"\n    thinking: enabled\n" +
+		"- id: agent-default-model # magpie\n  config:\n    provider: deepseek-official\n    model: \"deepseek/pro\"\n"
+	os.WriteFile(web, []byte(old), 0o644)
+
+	dshWiredOnce()
+
+	b, _ := os.ReadFile(web)
+	if string(b) != old {
+		t.Fatalf("a list on the old wiring was written into by the round:\n%s", b)
+	}
+}
+
 // dshKeyFixture puts the key where magpie puts it for dsh: .env, which the
 // product CLI loads, and dsh's own key store, which the desktop app reads.
 func dshKeyFixture(dir string) {
 	os.WriteFile(filepath.Join(dir, ".env"), []byte(dshKeyRef+"=magpie\n"), 0o600)
 	os.WriteFile(filepath.Join(dir, ".credentials.yaml"), []byte("version: 1\nrefs:\n  "+dshKeyRef+": magpie\n"), 0o600)
+}
+
+// the user's own provider, as a profile's llm-pi-ai entry holds one
+const dshMineRow = "- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n" +
+	"      mine:\n        displayName: Mine\n        apiKeyEnv: MINE_API_KEY\n        api: openai-completions\n        baseURL: https://mine.example/v1\n        models:\n          - id: m1\n"
+
+// yetone's review of #1029: a home layer whose start names one of magpie's
+// models and which has no llm-pi-ai of its own must gain none — the home
+// layer's config replaces every profile's whole entry (dshOver), so an entry
+// added there takes the user's own providers out of dsh's list (#804).
+func TestDshHomeLayerWithoutPiRowGainsNone(t *testing.T) {
+	_, dir, web := dshRouteHome(t)
+	dshKeyFixture(dir)
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"+dshMineRow), 0o644)
+	hp := filepath.Join(dir, "cordis.patch.yml")
+	before := "# shared by every profile\n" +
+		"- id: agent-default-model # magpie\n  config:\n    provider: magpie\n    model: deepseek/flash\n"
+	os.WriteFile(hp, []byte(before), 0o644)
+
+	dshWiredOnce()
+
+	after, _ := os.ReadFile(hp)
+	if string(after) != before {
+		t.Fatalf("the home layer gained an entry:\n%s", after)
+	}
+}
+
+// and a home layer that does hold one keeps what magpie writes there: the
+// route goes back beside the user's own, never a second entry.
+func TestDshHomeLayerWithPiRowGetsItsRouteBack(t *testing.T) {
+	_, dir, web := dshRouteHome(t)
+	dshKeyFixture(dir)
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"+dshMineRow), 0o644)
+	hp := filepath.Join(dir, "cordis.patch.yml")
+	os.WriteFile(hp, []byte("# shared by every profile\n"+
+		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n"+
+		"      mine:\n        displayName: Mine\n        apiKeyEnv: MINE_API_KEY\n        api: openai-completions\n        baseURL: https://mine.example/v1\n        models:\n          - id: m1\n"+
+		"- id: agent-default-model # magpie\n  config:\n    provider: magpie\n    model: deepseek/flash\n"), 0o644)
+
+	dshWiredOnce()
+
+	after, _ := os.ReadFile(hp)
+	s := string(after)
+	if strings.Count(s, "- id: llm-pi-ai") != 1 {
+		t.Fatalf("the home layer got a second entry:\n%s", s)
+	}
+	if !strings.Contains(s, "\n      magpie:\n") {
+		t.Fatalf("the home layer's route was not written back:\n%s", s)
+	}
+	if !strings.Contains(s, "\n      mine:\n") {
+		t.Fatalf("the user's own provider was lost:\n%s", s)
+	}
+}
+
+// yetone's review of #1029: with no catalog to write a route from, a profile
+// whose start is not magpie's and which has no route is still said — the
+// loop over the other profiles must not be skipped just because nothing can
+// be written back (the web profile here is wired, with magpie's route, so
+// the check reaches the loop).
+func TestDshCheckSaysWhenNoCatalogAndAProfileHasNoRoute(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("DSH_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	// no provider: no catalog to write the route from
+	dir := filepath.Join(home, ".dsh")
+	web := filepath.Join(dir, "profiles", "web", "cordis.patch.yml")
+	cli := filepath.Join(dir, "profiles", "cli", "cordis.patch.yml")
+	os.MkdirAll(filepath.Dir(web), 0o755)
+	os.MkdirAll(filepath.Dir(cli), 0o755)
+	dshKeyFixture(dir)
+	// web: magpie's route in it, and the start on magpie's
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"+
+		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n"+
+		"      magpie:\n        displayName: Magpie\n        apiKeyEnv: "+dshKeyRef+"\n        api: openai-completions\n        baseURL: http://127.0.0.1:3425/v1\n        models:\n          - id: deepseek/flash\n"+
+		"- id: agent-default-model # magpie\n  config:\n    provider: magpie\n    model: deepseek/flash\n"), 0o644)
+	// cli: no route, and a start of the user's own
+	os.WriteFile(cli, []byte("# Your patch layer for this dsh profile.\n"+
+		"- id: agent-default-model\n  config:\n    provider: deepseek-official\n    model: deepseek-v4-flash\n"), 0o644)
+
+	d := dsh(home).Check()
+	if !strings.Contains(d, "cli profile") || !strings.Contains(d, "none of magpie's models") {
+		t.Fatalf("a profile without magpie's route and without magpie's start is not said: %q", d)
+	}
+}
+
+// yetone's review of #1029, the branch left untested: with no catalog there is
+// nothing a round could write back, so a second profile whose start names one
+// of magpie's models is said too — `canWriteBack` must stay false here (set it
+// true and this test fails: the profile would be passed over in silence).
+func TestDshCheckSaysWhenNoCatalogAndAProfilesStartIsMagpies(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("DSH_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	// no provider: no catalog to write the route from
+	dir := filepath.Join(home, ".dsh")
+	web := filepath.Join(dir, "profiles", "web", "cordis.patch.yml")
+	cli := filepath.Join(dir, "profiles", "cli", "cordis.patch.yml")
+	os.MkdirAll(filepath.Dir(web), 0o755)
+	os.MkdirAll(filepath.Dir(cli), 0o755)
+	dshKeyFixture(dir)
+	// web: magpie's route in it, and the start on magpie's
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"+
+		"- id: llm-pi-ai\n  name: \"@deepseek-ai/dsh-llm-pi-ai\"\n  config:\n    providers:\n"+
+		"      magpie:\n        displayName: Magpie\n        apiKeyEnv: "+dshKeyRef+"\n        api: openai-completions\n        baseURL: http://127.0.0.1:3425/v1\n        models:\n          - id: deepseek/flash\n"+
+		"- id: agent-default-model # magpie\n  config:\n    provider: magpie\n    model: deepseek/flash\n"), 0o644)
+	// cli: no route of its own, and its start names one of magpie's — the shape
+	// dsh's own save leaves, which a round would write back were there a catalog
+	os.WriteFile(cli, []byte("# Your patch layer for this dsh profile.\n"+
+		"- id: agent-default-model # magpie\n  config:\n    provider: magpie\n    model: deepseek/flash\n"), 0o644)
+
+	d := dsh(home).Check()
+	if !strings.Contains(d, "cli profile") || !strings.Contains(d, "none of magpie's models") {
+		t.Fatalf("with no catalog, a stripped profile of magpie's own start is not said: %q", d)
+	}
 }

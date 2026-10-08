@@ -525,6 +525,15 @@ type Page struct {
 // from a folder on this computer or a git repository — the one its folder
 // carries.
 func Readme(ctx context.Context, name string) (Page, error) {
+	if IsGit(name) {
+		// one not installed yet (a repository tagged magpie-plugin): its
+		// README as GitHub has it
+		if _, err := os.Stat(Target(name)); err != nil {
+			if repo := githubRepo(name); repo != "" {
+				return githubReadme(ctx, repo)
+			}
+		}
+	}
 	if IsPath(name) || IsGit(name) {
 		return folderReadme(Target(name))
 	}

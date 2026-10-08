@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // inZone runs the test with the local time zone at a fixed offset.
 func inZone(t *testing.T, hours int) {
-	old := time.Local
-	time.Local = time.FixedZone("test", hours*3600)
-	t.Cleanup(func() { time.Local = old })
+	testenv.Zone(t, time.FixedZone("test", hours*3600))
 }
 
 // ccMsg is a line of a Claude Code reply at a time.

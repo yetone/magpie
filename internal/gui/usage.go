@@ -116,17 +116,27 @@ func periodOf(s string) usage.Period {
 	return usage.Month
 }
 
-// csvStamp names the selected day, or the period when no day is selected.
-func csvStamp(p usage.Period, day string) string {
+// csvStamp names the selected day, or, when no day is selected, the period
+// and the day of now, the moment its rows were read at.
+func csvStamp(p usage.Period, day string, now time.Time) string {
 	if _, err := time.Parse(time.DateOnly, day); err == nil {
 		return "magpie-requests-day-" + day
 	}
-	return "magpie-requests-" + string(p) + "-" + time.Now().Format(time.DateOnly)
+	return "magpie-requests-" + string(p) + "-" + now.Format(time.DateOnly)
 }
 
 func ledgerFilter(q url.Values) usage.Filter {
 	id, _ := strconv.ParseInt(q.Get("route"), 10, 64)
-	return usage.Filter{Day: q.Get("day"), RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Purpose: q.Get("purpose"), Account: q.Get("account"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q"), Computer: q.Get("computer")}
+	return usage.Filter{Day: q.Get("day"), RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Purpose: q.Get("purpose"), Account: q.Get("account"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q"), Computer: q.Get("computer"), Through: viaOf(q.Get("via"))}
+}
+
+// viaOf is the source a request's ?via= names, "" for both.
+func viaOf(s string) string {
+	switch s {
+	case usage.SourceGateway, usage.SourceSession:
+		return s
+	}
+	return ""
 }
 
 // ledgerRow is a usage.Row with the names the page shows it by.
@@ -159,6 +169,11 @@ type ledgerJSON struct {
 	ChartBy map[string][]ledgerShare `json:"chartBy,omitempty"`
 	Day     string                   `json:"day,omitempty"`
 	usage.Totals
+	// Through and Direct: the rows the gateway served, and the rows read
+	// from the agents' own session files, which it never saw. Totals is
+	// the two together, so the page can show all three (#the usage report).
+	Through usage.Totals `json:"through"`
+	Direct  usage.Totals `json:"direct"`
 	// Agents, Providers and Purposes: those with calls in the period, for the filters
 	Agents    []ledgerAgent `json:"agents"`
 	Providers []ledgerAgent `json:"providers"`
@@ -230,6 +245,7 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 		return a
 	}
 	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: l.Total, Totals: l.Sum, Agents: []ledgerAgent{}, Providers: []ledgerAgent{}, Accounts: []ledgerAccount{}}
+	out.Through, out.Direct = l.Through, l.Direct
 	out.Bucket, out.Series = l.Bucket, l.Series
 	out.Purposes = l.Purposes
 	out.Day = f.Day
@@ -397,23 +413,26 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/usage/requests.csv", func(rw http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		p := periodOf(q.Get("period"))
-		rows, _, _ := usage.Ledger(p, ledgerFilter(q))
+		// one moment for the rows and the day in the file's name
+		now := usage.Clock()
+		rows := usage.LedgerOfAt(p, ledgerFilter(q), now).Rows
 		rw.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		rw.Header().Set("Content-Disposition", `attachment; filename="`+csvStamp(p, q.Get("day"))+`.csv"`)
+		rw.Header().Set("Content-Disposition", `attachment; filename="`+csvStamp(p, q.Get("day"), now)+`.csv"`)
 		usage.WriteCSV(rw, rows)
 	})
 	// the rows the ledger shows, all its pages, as a CSV in Downloads
 	mux.HandleFunc("POST /api/usage/requests/export", func(rw http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		p := periodOf(q.Get("period"))
-		rows, _, _ := usage.Ledger(p, ledgerFilter(q))
+		now := usage.Clock()
+		rows := usage.LedgerOfAt(p, ledgerFilter(q), now).Rows
 		var b bytes.Buffer
 		if err := usage.WriteCSV(&b, rows); err != nil {
 			fail(rw, err)
 			return
 		}
 		dir := downloads()
-		stamp := csvStamp(p, q.Get("day"))
+		stamp := csvStamp(p, q.Get("day"), now)
 		name := filepath.Join(dir, stamp+".csv")
 		for i := 2; ; i++ { // never over an earlier one
 			if _, err := os.Stat(name); err != nil {

@@ -102,9 +102,7 @@ func TestInstallCommandsWithoutNode(t *testing.T) {
 // npm.cmd on Windows; a folder without it, or a folder named npm, isn't it.
 func TestNpmIn(t *testing.T) {
 	empty, nvm, win, odd := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
-	if err := os.WriteFile(filepath.Join(nvm, "npm"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(nvm, "npm"), "#!/bin/sh\n")
 	if err := os.WriteFile(filepath.Join(win, "npm.cmd"), nil, 0o644); err != nil {
 		t.Fatal(err)
 	}

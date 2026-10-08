@@ -14,7 +14,7 @@ import (
 func init() {
 	movers[MiMoID] = &mover{
 		pkg:    "@magpie-community/opencode-mimo-auth",
-		min:    "0.1.6", // a failure's status and its sign-in mark as the built-in's; the sign-in renewed ahead of time through auth.refresh
+		min:    "0.1.8", // a Token Plan bought at the open platform shows on the card, not Free
 		agents: []string{MiMoID},
 		out: func() ([]Moving, error) {
 			var out []Moving

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/redact"
@@ -28,10 +29,17 @@ func TestConcurrentRedactedCountTokens(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// a child that hangs prints its stacks before this run's own deadline
+		// does, rather than at a fixed 20s a loaded machine can spend on
+		// starting it
+		timeout := "0"
+		if d, ok := t.Deadline(); ok {
+			timeout = (time.Until(d) * 9 / 10).Round(time.Second).String()
+		}
 		for _, mode := range []string{"shared", "new_per_request"} {
 			t.Run(mode, func(t *testing.T) {
 				t.Parallel() // independent processes, each with a cold key cache
-				cmd := exec.Command(exe, "-test.run=^TestConcurrentRedactedCountTokens$", "-test.timeout=20s")
+				cmd := exec.Command(exe, "-test.run=^TestConcurrentRedactedCountTokens$", "-test.timeout="+timeout)
 				cmd.Env = append(os.Environ(), modeEnv+"="+mode)
 				if out, err := cmd.CombinedOutput(); err != nil {
 					t.Fatalf("concurrent first requests: %v\n%s", err, out)

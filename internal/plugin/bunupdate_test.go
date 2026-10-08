@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // bunReleases serves Bun's releases as GitHub does: each version's zip for
@@ -243,9 +245,7 @@ func TestHostFallsBackWhenTheNewBunDies(t *testing.T) {
 	if err := os.MkdirAll(bunDirOf("9.9.9"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(bunExeOf("9.9.9"), []byte("#!/bin/sh\nexit 3\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, bunExeOf("9.9.9"), "#!/bin/sh\nexit 3\n")
 	if err := writeBunState(bunState{Current: "9.9.9", Previous: BunVersion}); err != nil {
 		t.Fatal(err)
 	}

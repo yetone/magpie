@@ -61,7 +61,12 @@ function server(lang, posts) {
 }
 
 const scrolled = (page) => page.evaluate(() => [window.scrollX, window.scrollY, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop || e.scrollLeft).map((e) => `${e.className}:${e.scrollTop},${e.scrollLeft}`)].join(" "));
+// A click at the middle of loc, as a mouse gives it. The dialog grows in from
+// a third of its size: a box read while it does is where the button was, not
+// where it is when the click lands (Library's way, left of Links), so the
+// dialog is let settle first.
 const press = async (page, loc) => {
+  await page.waitForFunction(() => !document.querySelector("#modal").getAnimations({ subtree: true }).length);
   const b = await loc.boundingBox();
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
 };
@@ -175,6 +180,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await press(page, rows.nth(1).locator(".segs .opt").nth(0));
         await page.waitForTimeout(300);
         assert.deepEqual(posts[3], { path: "how", agent: "codex", how: "" });
+        // the answer draws the rows again, every option replaced: the next press waits for it
+        await rows.nth(1).locator(".sub", { hasText: w.getsCopies }).waitFor();
         assert.equal((await rows.nth(1).locator(".segs .opt.on").textContent()).trim(), w.libWay);
         await press(page, rows.nth(1).locator(".segs .opt").nth(1));
         await page.waitForTimeout(300);

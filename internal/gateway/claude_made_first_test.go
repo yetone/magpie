@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // claudeMadeFirst signs Claude Code in to a@example.com, with
@@ -51,7 +52,7 @@ func claudeMadeFirst(t *testing.T, bRefuses bool) {
 	if bRefuses {
 		refuses = "yes"
 	}
-	day := time.Now().UTC().AddDate(0, 0, 1).Format("Jan 2")
+	session := time.Now().UTC().Add(3 * time.Hour).Format("Jan 2 at 3:04pm")
 	reset := strconv.FormatInt(time.Now().Add(3*time.Hour).Unix(), 10)
 	script := `#!/bin/sh
 case "$1" in auth) exit 1;; esac
@@ -59,7 +60,7 @@ creds="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json"
 if [ "$2" = "/usage" ]; then
   used=10
   grep -q tok-b "$creds" && used=100
-  echo '{"type":"result","is_error":false,"result":"Current session: '$used'% used · resets ` + day + ` at 3:30pm (UTC)"}'
+  echo '{"type":"result","is_error":false,"result":"Current session: '$used'% used · resets ` + session + ` (UTC)"}'
   exit 0
 fi
 n=0
@@ -83,7 +84,7 @@ while read -r line; do
   echo '{"type":"result","subtype":"success","is_error":false,"result":""}'
 done
 `
-	os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755)
+	testenv.Program(t, filepath.Join(bin, "claude"), script)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	provider.ForgetAccounts()
 	t.Cleanup(provider.ForgetAccounts)

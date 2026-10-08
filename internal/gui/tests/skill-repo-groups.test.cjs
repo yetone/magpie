@@ -78,8 +78,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const v = page.locator("#view-library");
         await v.locator(".lib-grouphead").first().waitFor();
         const heads = await v.locator(".lib-grouphead").evaluateAll((hs) => hs.map((h) => [h.querySelector(".name").textContent, h.querySelector(".sub").textContent.replace(/\D+/g, "")]));
-        // the first spelling met names the group
-        assert.deepEqual(heads, [["gitlab.com/me/review", "1"], ["mattpocock/skills", "3"], [w.here, "1"]]);
+        // the first spelling met names the group; one only traced to a
+        // repository is with this computer's, below those from GitHub (#1031)
+        assert.deepEqual(heads, [["mattpocock/skills", "3"], ["gitlab.com/me/review", "1"], [w.here, "1"]]);
         const card = (name) => v.locator(".lib-group").filter({ has: page.locator(".lib-grouphead .name", { hasText: name }) });
         assert.equal(await card("mattpocock/skills").locator(".lib-grouphead .lib-icon").getAttribute("title"), w.gh);
         const gl = card("gitlab.com/me/review").locator(".lib-grouphead .lib-icon");

@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func claudeAuthFixture(t *testing.T, lapse string) (Provider, savedLogin) {
@@ -134,9 +136,7 @@ func TestClaudeClearedKeychainDoesNotFallBackToStaleFile(t *testing.T) {
 	writeFile(t, cleared, map[string]any{"claudeAiOauth": map[string]any{
 		"accessToken": "", "refreshToken": "", "expiresAt": 0, "subscriptionType": "max",
 	}})
-	if err := os.WriteFile(filepath.Join(bin, "security"), []byte("#!/bin/sh\ncat '"+cleared+"'\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(bin, "security"), "#!/bin/sh\ncat '"+cleared+"'\n")
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	claudeKeychain = true
 	if _, err := sideToken(t, p, side.User); err == nil {

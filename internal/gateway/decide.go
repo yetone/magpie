@@ -400,7 +400,7 @@ const maxSystemOneBody = 16 << 20
 // conversation is: the Routing view and the day's jsonl would otherwise
 // never see Jev, which answers no /v1/chat/completions.
 func (s *Server) serveSystemOne(w http.ResponseWriter, r *http.Request) {
-	body, ok := s.readRequestBody(w, r, provider.Chat, nil, maxSystemOneBody)
+	body, ok := s.readRequestBody(w, r, provider.Chat, maxSystemOneBody)
 	if !ok {
 		return
 	}

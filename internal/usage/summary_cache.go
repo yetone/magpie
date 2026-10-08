@@ -26,11 +26,10 @@ var summaries struct {
 	entries map[Period]summaryEntry
 }
 
-func indexedSummary(p Period) Summary {
+func indexedSummary(p Period, now time.Time) Summary {
 	if p != Today && p != Week && p != Month {
 		p = All
 	}
-	now := time.Now()
 	snapshot := logSnapshotFor(true)
 	_, offset := now.Zone()
 	meta := fmt.Sprintf("%s|%s|%s|%s|%s|%s|%d", statKey(settings.Path()), statKey(provider.Path()), statKey(catalog.CachePath()), statKey(catalog.LivePath("antigravity")), now.Format("2006-01-02"), now.Location(), offset)

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // An agent whose settings are left but whose CLI is gone (#843: dsh
@@ -55,9 +57,7 @@ func TestCLIMissing(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	if err := os.WriteFile(filepath.Join(local, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(local, name), "#!/bin/sh\n")
 	if dsh.CLIMissing() {
 		t.Fatal("dsh in ~/.local/bin taken for missing")
 	}

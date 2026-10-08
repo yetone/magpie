@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -124,7 +125,12 @@ func TestUnlimitedQuotaCell(t *testing.T) {
 // TUI).
 func TestUsagePageShowsCallsNotThroughMagpie(t *testing.T) {
 	home(t)
-	now := time.Now()
+	// the usage clock held at noon, so that the calls a minute or two
+	// before it are today's whenever the test runs
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)
+	oldClock := usage.Clock
+	usage.Clock = func() time.Time { return now }
+	t.Cleanup(func() { usage.Clock = oldClock })
 	usage.Append(usage.Record{Time: now.Add(-time.Minute), Agent: "claude", Provider: "relay", Model: "m", Input: 5, Status: 200})
 	old := usage.LogCalls
 	usage.LogCalls = func(time.Time) []sessions.Call {
@@ -140,6 +146,45 @@ func TestUsagePageShowsCallsNotThroughMagpie(t *testing.T) {
 	if strings.Contains(own, usage.UnknownProvider) {
 		t.Fatalf("the unknown provider's id is shown:\n%s", own)
 	}
+}
+
+// The Usage page asked for as midnight falls shows the calls through magpie
+// and those not through it of one day, the day it was asked on, when a
+// period is picked and when the page is read again.
+func TestUsagePageAtMidnight(t *testing.T) {
+	home(t)
+	midnight := time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local)
+	usage.Append(usage.Record{Time: midnight.Add(-time.Minute), Agent: "claude", Provider: "relay", Model: "m", Input: 5, Status: 200})
+	old := usage.LogCalls
+	usage.LogCalls = func(time.Time) []sessions.Call {
+		return []sessions.Call{{Time: midnight.Add(-2 * time.Minute), Agent: "codex", Session: "c1", Model: "gpt-6-luna", Tokens: sessions.Tokens{Input: 1200, Output: 300}}}
+	}
+	t.Cleanup(func() { usage.LogCalls = old })
+	// the usage clock reads a tenth of a second before midnight the first
+	// time and a tenth of a second after it from then on, as when midnight
+	// falls while the page is worked out
+	var read atomic.Bool
+	oldClock := usage.Clock
+	usage.Clock = func() time.Time {
+		if read.Swap(true) {
+			return midnight.Add(100 * time.Millisecond)
+		}
+		return midnight.Add(-100 * time.Millisecond)
+	}
+	t.Cleanup(func() { usage.Clock = oldClock })
+	both := func(how string, m model) {
+		t.Helper()
+		v := m.viewUsage()
+		gw, own, ok := strings.Cut(v, "not through magpie")
+		if !ok || !strings.Contains(gw, "relay/m") || !strings.Contains(own, "gpt-6-luna") {
+			t.Errorf("%s:\n%s", how, v)
+		}
+	}
+	m := press(t, model{w: 160, h: 60, page: pageUsage}, "t")
+	both("today picked", m)
+	read.Store(false)
+	m.reload()
+	both("read again", m)
 }
 
 // A Codex account set not to spend its credits says so beside them.

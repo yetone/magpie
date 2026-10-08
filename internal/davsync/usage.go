@@ -102,7 +102,7 @@ func shareUsage(ctx context.Context, c Config, st *state, force bool) {
 
 func shareWith(ctx context.Context, c Config, u *usageState, fs files) error {
 	id, name := usage.Computer()
-	now := time.Now()
+	now := usage.Clock()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 	first := today.AddDate(0, 0, 1-usage.SharedDays)
 	from := first.Format(time.DateOnly)

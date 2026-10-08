@@ -30,6 +30,7 @@ var notAnAgent = map[string]string{
 	"MAGPIE_ADDR":           "magpie's own",
 	"MAGPIE_DEBUG":          "magpie's own debug flag",
 	"MAGPIE_PUBLIC_URL":     "magpie's own public URL",
+	"MAGPIE_TRUST_PROXY":    "magpie's own: a proxy here signs its clients in (#1022)",
 	"MAGPIE_EFFORT_UPDATES": "magpie's own switch for effort updates (#617)",
 	"MAGPIE_SITE_ORIGIN":    "a site origin magpie's Omarchy theme answers, to try the site locally",
 	"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "Claude Code's behaviour flag, not an agent's folder",

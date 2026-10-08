@@ -17,6 +17,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 	"github.com/yetone/magpie/internal/wslrun"
 )
 
@@ -222,7 +223,7 @@ while read -r line; do
   echo '{"type":"result","subtype":"success","is_error":false,"result":""}'
 done
 `
-	os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755)
+	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	s := New()
@@ -380,9 +381,7 @@ for line in sys.stdin:
  send({'type':'stream_event','event':{'type':'message_delta','delta':{'stop_reason':'end_turn'}}})
  send({'type':'stream_event','event':{'type':'message_stop'}})
 `
-	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("CLAUDE_CODE_EXTRA_BODY", `{"model":"must-not-leak"}`)
 	s := New()

@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // fakeRTK is an rtk on PATH that acts as rtk 0.50's installer does for
@@ -35,10 +37,7 @@ func TestRTK(t *testing.T) {
 	}
 	h := sandbox(t)
 	bin := filepath.Join(h, "bin")
-	write(t, filepath.Join(bin, "rtk"), fakeRTK)
-	if err := os.Chmod(filepath.Join(bin, "rtk"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(bin, "rtk"), fakeRTK)
 	t.Setenv("PATH", bin)
 	state := func() map[string]bool {
 		m := map[string]bool{}
@@ -220,15 +219,10 @@ func TestRTKOpenCode2(t *testing.T) {
 	}
 	h := sandbox(t)
 	bin := filepath.Join(h, "bin")
-	write(t, filepath.Join(bin, "rtk"), fakeRTK)
+	testenv.Program(t, filepath.Join(bin, "rtk"), fakeRTK)
 	opencode := func(version string) {
 		t.Helper()
-		write(t, filepath.Join(bin, "opencode"), "#!/bin/sh\necho "+version+"\n")
-		for _, f := range []string{"rtk", "opencode"} {
-			if err := os.Chmod(filepath.Join(bin, f), 0o755); err != nil {
-				t.Fatal(err)
-			}
-		}
+		testenv.Program(t, filepath.Join(bin, "opencode"), "#!/bin/sh\necho "+version+"\n")
 	}
 	t.Setenv("PATH", bin)
 	plugin := filepath.Join(h, ".config", "opencode", "plugins", "rtk.ts")
@@ -304,10 +298,7 @@ func TestRTKCodexOld(t *testing.T) {
 	bin := filepath.Join(h, "bin")
 	rtk := func(version, init string) {
 		t.Helper()
-		write(t, filepath.Join(bin, "rtk"), "#!/bin/sh\ncase \"$1\" in\n--version) echo \"rtk "+version+"\"; exit 0 ;;\ngain) exit 1 ;;\nesac\n"+init+"\n")
-		if err := os.Chmod(filepath.Join(bin, "rtk"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testenv.Program(t, filepath.Join(bin, "rtk"), "#!/bin/sh\ncase \"$1\" in\n--version) echo \"rtk "+version+"\"; exit 0 ;;\ngain) exit 1 ;;\nesac\n"+init+"\n")
 	}
 	t.Setenv("PATH", bin)
 	write(t, filepath.Join(codex, "config.toml"), "")
@@ -361,8 +352,7 @@ func TestRTKGainRead(t *testing.T) {
 	bin := filepath.Join(h, "bin")
 	gain := func(body string) {
 		t.Helper()
-		write(t, filepath.Join(bin, "rtk"), "#!/bin/sh\ncase \"$1\" in\n--version) echo 'rtk 0.51.0'; exit 0 ;;\ngain) "+body+" ;;\nesac\nexit 2\n")
-		os.Chmod(filepath.Join(bin, "rtk"), 0o755)
+		testenv.Program(t, filepath.Join(bin, "rtk"), "#!/bin/sh\ncase \"$1\" in\n--version) echo 'rtk 0.51.0'; exit 0 ;;\ngain) "+body+" ;;\nesac\nexit 2\n")
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+"/bin"+string(os.PathListSeparator)+"/usr/bin")
 	summary := `{"summary":{"total_commands":42,"total_input":9000,"total_output":1000,"total_saved":8000,"avg_savings_pct":88.9,"total_time_ms":10,"avg_time_ms":0},"daily":[{"date":"2026-10-03","commands":42,"input_tokens":9000,"output_tokens":1000,"saved_tokens":8000,"savings_pct":88.9,"total_time_ms":10,"avg_time_ms":0}]}`
@@ -419,8 +409,7 @@ func TestCodexSandbox(t *testing.T) {
 func TestRTKNoHookListed(t *testing.T) {
 	h := sandbox(t)
 	bin := filepath.Join(h, "bin")
-	write(t, filepath.Join(bin, "dsh"), "#!/bin/sh\n")
-	os.Chmod(filepath.Join(bin, "dsh"), 0o755)
+	testenv.Program(t, filepath.Join(bin, "dsh"), "#!/bin/sh\n")
 	write(t, filepath.Join(bin, "dsh.exe"), "")
 	var dsh *RTKAgent
 	for _, a := range ReadRTK().Agents {

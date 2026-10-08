@@ -204,12 +204,17 @@ func (d distro) place(id string) place {
 // of it, and how it lives at a place. Adding one here is all it takes.
 type wslKind struct {
 	id, name string
-	dir, bin string             // under $HOME, and on its PATH: either says it is there
+	// dir, under $HOME, and bin, on its PATH: either says it is there; ""
+	// for one that says nothing (a folder other tools keep too)
+	dir, bin string
 	in       func(place) *Agent // the agent at a place, as on this machine
 	restart  string             // advice after a change, when mirrored; "" none
 	// version: the probe asks the distro's own bin its version (--version),
 	// for an agent whose config depends on it
 	version bool
+	// accept, when set, is whether what the probe found is the agent: a
+	// command another tool's release shares the name of, told by its version
+	accept func(d distro) bool
 	// asleep, when set, is a stopped distro's options for a field, which
 	// must read nothing of its files; nil keeps the live agent's
 	asleep func(key string) func(map[string]string) []Option
@@ -267,6 +272,14 @@ var wslKinds = []wslKind{
 				}
 			case "effort":
 				return nil
+			case "login":
+				// its sign-in, while the model last seen is magpie's
+				return func(cur map[string]string) []Option {
+					if !isMagpie(cur["model"]) {
+						return nil
+					}
+					return claudeSignIns()
+				}
 			}
 			// a tier: magpie's models while the model last seen is one
 			return func(cur map[string]string) []Option {
@@ -371,6 +384,86 @@ var wslKinds = []wslKind{
 		restart: "reads its settings as a session starts — open sessions keep the model they have; new ones use this."},
 	{id: "qoder-cn", name: "Qoder CN", dir: ".qoder-cn", bin: "qoderclicn", in: qoderCNIn,
 		restart: "reads its settings as a session starts — open sessions keep the model they have; new ones use this."},
+	// lgtm on Discord: magpie didn't find a CodeBuddy Code installed in WSL
+	{id: "codebuddy", name: "CodeBuddy Code", dir: ".codebuddy", bin: "codebuddy", in: codebuddyIn,
+		restart: "reads its model when a session starts — restart open codebuddy sessions, or run /clear in them, to use this."},
+	// Cline's CLI, and its VS Code extension in a Remote - WSL window, which
+	// keep the same ~/.cline
+	{id: "cline", name: "Cline", dir: ".cline", bin: "cline", in: clineIn,
+		restart: "reads its provider as a session starts — open sessions keep the model they have; new ones use this. Reload VS Code's window for its extension.",
+		asleep:  wslOwnAsleep("cline", "model")},
+	{id: "atomcode", name: "AtomCode", dir: ".atomcode", bin: "atomcode", in: atomcodeIn,
+		restart: "reads its settings at start-up — restart open atomcode sessions to use this.",
+		asleep: func(key string) func(map[string]string) []Option {
+			if key != "model" {
+				return nil
+			}
+			// the models of its config.toml are the distro's files
+			return func(cur map[string]string) []Option {
+				return append(atomcodeOwnModels("", cur["model"]), viaMagpie("atomcode", magpieID+"/")...)
+			}
+		}},
+	// no dir: Antigravity keeps its folders in ~/.gemini too, so only the
+	// command says Gemini CLI is there
+	{id: "gemini", name: "Gemini CLI", bin: "gemini", in: geminiIn,
+		restart: "reads its settings at start-up — restart open gemini sessions to see this.",
+		asleep: func(key string) func(map[string]string) []Option {
+			if key != "provider" {
+				return nil
+			}
+			// which key its .env has is the distro's file
+			return func(cur map[string]string) []Option {
+				out := []Option{
+					{Value: "google", Label: "Google", Icon: "gemini-color", Note: "Google account · OAuth sign-in"},
+					{Value: "api-key", Label: "API key", Icon: "gemini-color"},
+					{Value: "vertex", Label: "Vertex AI", Icon: "googlecloud-color", Note: "Vertex AI · $GOOGLE_CLOUD_PROJECT"},
+				}
+				if v := cur["provider"]; v == magpieID || v == "custom" {
+					out = append(out, Option{Value: v})
+				}
+				return out
+			}
+		}},
+	// Block's goose, by its folder alone: a goose command may be pressly's
+	// database migration tool
+	{id: "goose", name: "Goose", dir: ".config/goose", in: func(at place) *Agent { return gooseIn(at, filepath.Join(at.home, ".config")) },
+		restart: "loads its providers at start-up — restart open goose sessions to use magpie's models.",
+		asleep:  wslOwnAsleep("goose", "model")},
+	// Reasonix's native CLI (1.39 on), by its command and the version it
+	// gives: the historical npm client is reasonix too, and ~/.reasonix is
+	// both's
+	{id: "reasonix", name: "Reasonix", bin: "reasonix", in: reasonixIn, version: true,
+		accept: func(d distro) bool {
+			v := d.Versions["reasonix"]
+			return strings.HasPrefix(v, "2.") || strings.HasPrefix(v, "1.39.")
+		},
+		restart: "reads its settings at start-up — start a new reasonix process to use this.",
+		asleep: func(key string) func(map[string]string) []Option {
+			switch key {
+			case "model", "planner":
+				return func(cur map[string]string) []Option {
+					out := append(ownOptions("", cur[key]), viaMagpie("reasonix", magpieID+"/")...)
+					if key == "planner" {
+						out = append([]Option{{Value: "off", Label: "off", Note: "Disable the separate planner"}}, out...)
+					}
+					return out
+				}
+			case "effort":
+				// the levels of magpie's model, as its provider is written them
+				return func(cur map[string]string) []Option {
+					ref, ok := strings.CutPrefix(cur["model"], magpieID+"/")
+					if !ok {
+						return nil
+					}
+					levels := reasonixCatalogAt(magpieModels("reasonix"), ref, "", "").Overrides[ref].Efforts
+					if len(levels) == 0 {
+						return nil
+					}
+					return static(append([]string{"auto"}, levels...)...)
+				}
+			}
+			return nil
+		}},
 }
 
 // wslOwnAsleep is a stopped distro's options for an agent's model fields
@@ -389,7 +482,10 @@ func wslOwnAsleep(id string, keys ...string) func(string) func(map[string]string
 
 // found reports whether the probe found the agent in d.
 func (k wslKind) found(d distro) bool {
-	return d.Has["dir:"+k.dir] || k.bin != "" && d.Has["bin:"+k.bin]
+	if k.accept != nil && !k.accept(d) {
+		return false
+	}
+	return k.dir != "" && d.Has["dir:"+k.dir] || k.bin != "" && d.Has["bin:"+k.bin]
 }
 
 // memo is the key a field of the agent is kept under in distro.Values:
@@ -545,7 +641,7 @@ func asleep(live *Agent, k wslKind, d distro) *Agent {
 		}}
 	for _, lf := range live.Fields {
 		key := lf.Key
-		f := Field{Key: key, Label: lf.Label, Quiet: lf.Quiet, Options: lf.Options,
+		f := Field{Key: key, Label: lf.Label, Quiet: lf.Quiet, Follows: lf.Follows, Options: lf.Options,
 			Get: func() string { return wslLastSeen(d.Name, k.memo(key)) },
 			Set: func(v string) error {
 				// opening a stopped distro's files is aborted rather than
@@ -576,6 +672,11 @@ func asleep(live *Agent, k wslKind, d distro) *Agent {
 			if o := k.asleep(key); o != nil {
 				f.Options = o
 			}
+		}
+		// Claude Code's claude.ai sign-in is kept only where the gateway
+		// takes any key, which the distro's address says without its files
+		if k.id == "claude" && key == "login" && d.place(live.ID).gwKey() != gateway.Token {
+			f.Options = func(map[string]string) []Option { return nil }
 		}
 		a.Fields = append(a.Fields, f)
 	}
@@ -903,7 +1004,9 @@ var wslProbeScript = func() string {
 	s := `wslbin() { for d in "$HOME/.bun/bin" "$HOME/.local/bin" "$HOME/.npm-global/bin" "$HOME/.volta/bin" "$HOME/.local/share/pnpm" "$HOME"/.nvm/versions/node/*/bin "$HOME/.local/share/mise/shims" "$HOME/.asdf/shims"; do [ -x "$d/$1" ] && { echo "$d/$1"; return 0; }; done; return 1; }; `
 	s += `echo "home:$HOME"; `
 	for _, k := range wslKinds {
-		s += `[ -d "$HOME/` + k.dir + `" ] && echo dir:` + k.dir + `; `
+		if k.dir != "" {
+			s += `[ -d "$HOME/` + k.dir + `" ] && echo dir:` + k.dir + `; `
+		}
 		if k.bin != "" {
 			s += `p=$(command -v ` + k.bin + ` 2>/dev/null || wslbin ` + k.bin + `) && echo "bin:` + k.bin + ` $p"`
 			if k.version {

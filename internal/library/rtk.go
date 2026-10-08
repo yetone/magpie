@@ -507,6 +507,12 @@ type RTKView struct {
 	// doesn't know how this rtk was installed
 	Latest  string `json:"latest,omitempty"`
 	Upgrade string `json:"upgrade,omitempty"`
+	// Waiting is the package manager this rtk was installed with (winget,
+	// Homebrew) when Latest is out but it has nothing newer than this rtk
+	// yet, WaitingHas what it has: an upgrade through it would change
+	// nothing, so the page offers none (#1025)
+	Waiting    string `json:"waiting,omitempty"`
+	WaitingHas string `json:"waitingHas,omitempty"`
 	// Note is what an upgrade left to say: Homebrew's rtk behind rtk's
 	// own release
 	Note string `json:"note,omitempty"`
@@ -629,7 +635,7 @@ func ReadRTK() *RTKView {
 	if out, err := rtkRun(v.Path, "--version"); err == nil {
 		v.Version = strings.TrimSpace(strings.TrimPrefix(out, "rtk"))
 	}
-	if c := rtkUpgrader(v.Path); c != nil {
+	if c := upgraderOf(v.Path); c != nil {
 		v.Upgrade = shown(c)
 	}
 	v.Gain, v.Days, v.GainErr = rtkGain(v.Path)

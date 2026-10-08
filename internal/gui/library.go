@@ -166,13 +166,14 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 	// installing rtk when the page is asked to
 	mux.HandleFunc("GET /api/library/rtk", func(rw http.ResponseWriter, r *http.Request) {
 		v := library.ReadRTK()
-		// its latest release, when GitHub answers in time: the page is
-		// drawn without it otherwise, and has it next time
+		// its latest release, and whether winget or Homebrew has it yet,
+		// when they answer in time: the page is drawn without them
+		// otherwise, and has them next time
 		if v.Path != "" {
-			latest := make(chan string, 1)
-			go func() { latest <- library.RTKLatest() }()
+			checked := make(chan *library.RTKView, 1)
+			go func() { c := *v; c.CheckLatest(); checked <- &c }()
 			select {
-			case v.Latest = <-latest:
+			case v = <-checked:
 			case <-time.After(3 * time.Second):
 			}
 		}
@@ -365,8 +366,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.ServerAgents(in.Name, in.Agents)
 		case "servers/agents-all":
 			res, err = library.EveryServerAgents(in.Agents, in.On)
+		case "servers/agents-some":
+			res, err = library.SomeServersAgents(in.Names, in.Agents, in.On)
 		case "servers/remove":
 			res, err = library.RemoveServer(in.Name)
+		case "servers/remove-all":
+			res, err = library.RemoveServers(in.Names)
 		case "servers/import":
 			res, err = library.ImportServer(in.Name)
 		case "skills/install":
@@ -391,6 +396,10 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.GroupSkills(in.Old, in.Name, in.Names)
 		case "skills/ungroup":
 			res, err = library.UngroupSkills(in.Name, in.Names)
+		case "skills/add-new":
+			res, err = library.AddNewSkills(in.Names)
+		case "skills/ignore-new":
+			err = library.IgnoreNewSkills(in.Names)
 		case "skills/import":
 			res, err = library.ImportSkill(in.Name)
 		case "skills/import-all":

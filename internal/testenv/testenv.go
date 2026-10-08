@@ -21,7 +21,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/agentenv"
 )
@@ -66,6 +68,7 @@ func RunIn(m *testing.M, setup func(home string)) int {
 		if setup != nil {
 			setup(home)
 		}
+		defer RemovePrograms()
 		return m.Run()
 	}
 	home, err := Isolate()
@@ -74,6 +77,7 @@ func RunIn(m *testing.M, setup func(home string)) int {
 		return 1
 	}
 	defer remove(home)
+	defer RemovePrograms()
 	if setup != nil {
 		setup(home)
 	}
@@ -174,10 +178,10 @@ func inertTools(home string) error {
 	if err := os.Mkdir(bin, 0o755); err != nil {
 		return err
 	}
+	if err := StandIns(bin, tools); err != nil {
+		return err
+	}
 	for _, name := range tools {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
-			return err
-		}
 		// Windows finds a program by PATHEXT; a .bat comes before the
 		// user's claude.cmd further down PATH
 		if runtime.GOOS == "windows" {
@@ -188,6 +192,43 @@ func inertTools(home string) error {
 	}
 	return os.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
+
+// StandIns writes a failing program for each name in bin. On macOS each
+// is run once now, in the background, so that the check macOS makes of a
+// new program's first run (Program) is made while the tests start rather
+// than in the first test to reach it, and without holding them up.
+func StandIns(bin string, names []string) error {
+	for _, name := range names {
+		p := filepath.Join(bin, name)
+		if err := os.WriteFile(p, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+			return err
+		}
+		if runtime.GOOS == "darwin" {
+			warming.Add(1)
+			go func() {
+				defer warming.Done()
+				if proc, err := os.StartProcess(p, []string{p}, &os.ProcAttr{}); err == nil {
+					proc.Wait()
+					record(p)
+				}
+			}()
+		}
+	}
+	return nil
+}
+
+// Zone sets time.Local for the test, and puts it back after. It first
+// waits out the stand-ins' first runs: they os.Stat what ran, which reads
+// time.Local, so a test that swaps it while they are under way races them.
+func Zone(t testing.TB, loc *time.Location) {
+	warming.Wait()
+	old := time.Local
+	time.Local = loc
+	t.Cleanup(func() { time.Local = old })
+}
+
+// warming is the stand-ins' first runs under way.
+var warming sync.WaitGroup
 
 // within says whether path lies in dir.
 func within(path, dir string) bool {

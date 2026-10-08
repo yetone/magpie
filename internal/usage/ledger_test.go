@@ -181,11 +181,12 @@ func TestLedgerWithSessionLogCalls(t *testing.T) {
 	// a models.dev catalog pricing Claude Sonnet 5: $3 in, $15 out, $0.3 a cached read, $3.75 a cache write, per million
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	os.WriteFile(catalog.CachePath(), []byte(`{"anthropic":{"id":"anthropic","models":{"claude-sonnet-5":{"id":"claude-sonnet-5","cost":{"input":3,"output":15,"cache_read":0.3,"cache_write":3.75}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
 
-	// noon today, so that what the test lists a few hours before it is still today,
-	// whenever the test runs
-	t0 := time.Now()
-	now := time.Date(t0.Year(), t0.Month(), t0.Day(), 12, 0, 0, 0, t0.Location())
+	// noon of the day Clock is held at, so that what the test lists a few
+	// hours before it is that day's
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	// the gateway's: an answered request of session s1 that began at -10m and
 	// took 20 s, and a failure of another with what the vendor said
 	Append(Record{Time: now.Add(-10 * time.Minute), Agent: "claude", Provider: "claude", Model: "claude-sonnet-5", Input: 5, Output: 5,
@@ -272,7 +273,7 @@ func TestLedgerWithSessionLogCalls(t *testing.T) {
 // with its calls, failures, tokens and cost; a row of before the period is
 // in none.
 func TestLedgerSeries(t *testing.T) {
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	row := func(at time.Time, in, out, cr, cw int, cost float64, priced bool, status int, errText string) Row {
 		return Row{Record: Record{Time: at, Provider: "p", Input: in, Output: out, CacheRead: cr, CacheWrite: cw, Status: status, Error: errText}, Cost: cost, Priced: priced}
@@ -329,7 +330,7 @@ func TestLedgerSeries(t *testing.T) {
 // as the point's own sums do, for a chart of speed to tell the models
 // apart (#860): a failed call and one too fast to time count in neither.
 func TestLedgerSeriesSpeed(t *testing.T) {
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	at := time.Date(now.Year(), now.Month(), now.Day(), 0, 10, 0, 0, now.Location())
 	row := func(model string, out int, ms, ttft int64, status int) Row {
 		return Row{Record: Record{Time: at, Provider: "p", Model: model, Output: out, Millis: ms, TTFT: ttft, Status: status}}
@@ -361,7 +362,7 @@ func TestLedgerSeriesSpeed(t *testing.T) {
 // timeline for a chart to stack — the ones with the most tokens over the
 // period, the rest left to the point's own sums.
 func TestLedgerByProvider(t *testing.T) {
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	at := time.Date(now.Year(), now.Month(), now.Day(), 0, 10, 0, 0, now.Location())
 	rec := func(agent, prov, model string, in, cw int, mins int) Record {
 		return Record{Time: at.Add(time.Duration(mins) * time.Minute), Agent: agent, Provider: prov, Model: model, Input: in, CacheRead: cw, Output: 1, Status: 200}
@@ -478,6 +479,8 @@ func TestLedgerUsesTheStatedPrice(t *testing.T) {
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	os.WriteFile(catalog.CachePath(), []byte(`{"openai":{"id":"openai","models":{"sol":{"id":"sol",`+
 		`"cost":{"input":2,"output":8,"cache_read":0.5,"cache_write":2.5}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
 	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "https://relay.example/v1"}); err != nil {
 		t.Fatal(err)
 	}

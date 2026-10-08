@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // fakeWarmClaude is a claude that writes what it was run with to log and
@@ -27,9 +28,7 @@ func fakeWarmClaude(t *testing.T, out string, code int) string {
 		"echo \"traffic:$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\"; echo \"telemetry:$DISABLE_TELEMETRY\"; " +
 		"echo \"errors:$DISABLE_ERROR_REPORTING\"; echo \"updater:$DISABLE_AUTOUPDATER\"; } > " + log + "\n" +
 		"echo '" + out + "'\nexit " + string(rune('0'+code)) + "\n"
-	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:3425")
 	return log
@@ -108,9 +107,7 @@ func TestClaudeUsageRunsClaudeCode(t *testing.T) {
 	script := "#!/bin/sh\n" +
 		"{ printf 'args:'; for a in \"$@\"; do printf '[%s]' \"$a\"; done; echo; echo \"token:$CLAUDE_CODE_OAUTH_TOKEN\"; } > " + log + "\n" +
 		"cat " + out + "\n"
-	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "leaked")
 	got, err := claudeUsage(context.Background())

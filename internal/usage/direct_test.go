@@ -23,9 +23,10 @@ func TestDirectCountsOnlySessionFileCalls(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)
 	os.WriteFile(catalog.CachePath(), []byte(`{"openai":{"id":"openai","models":{"gpt-6":{"id":"gpt-6","cost":{"input":2,"output":10}}}}}`), 0o644)
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
 
-	t0 := time.Now()
-	now := time.Date(t0.Year(), t0.Month(), t0.Day(), 12, 0, 0, 0, t0.Location())
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	Append(Record{Time: now.Add(-10 * time.Minute), Agent: "claude", Provider: "relay", Model: "m", Input: 5, Output: 5, Status: 200, Session: "g1"})
 	// a client built on Codex, which the gateway logs under its own name
 	// while its Codex session file names Codex: the same call, not one of

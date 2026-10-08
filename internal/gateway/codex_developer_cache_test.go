@@ -72,6 +72,7 @@ func TestCodexLaterDeveloperMessageKeepsTheSystem(t *testing.T) {
 func TestCodexThreadKeepsItsClaudeRunAcrossAMemoryCall(t *testing.T) {
 	fakeClaude(t)
 	s := New()
+	t.Cleanup(s.subscription.abortAll)
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 	said := regexp.MustCompile(`pid \d+ turn \d+`)
 	ask := func(body string) string {

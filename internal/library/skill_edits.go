@@ -27,7 +27,7 @@ import (
 func (l *Library) takeEdits(targets []*Target, res *Result) {
 	for _, s := range l.Skills {
 		lib := realDir(skillDir(s.Name))
-		if hashDir(lib) == "" {
+		if l.libHash(s.Name) == "" {
 			continue
 		}
 		type edit struct {
@@ -50,7 +50,14 @@ func (l *Library) takeEdits(targets []*Target, res *Result) {
 				continue
 			}
 			at := changedAt(p)
-			if !at.After(made) || sameTree(p, lib) {
+			if !at.After(made) {
+				if l.untouched == nil {
+					l.untouched = map[string]bool{}
+				}
+				l.untouched[p] = true
+				continue
+			}
+			if sameTree(p, lib) {
 				continue
 			}
 			edits = append(edits, edit{t.Agent.ID, p, at})
@@ -71,7 +78,9 @@ func (l *Library) takeEdits(targets []*Target, res *Result) {
 				res.fail(e.agent, "skill:"+s.Name, err)
 				continue
 			}
-			if err := mirrorDir(e.path, lib); err != nil {
+			err := mirrorDir(e.path, lib)
+			delete(l.hashes, s.Name)
+			if err != nil {
 				res.fail(e.agent, "skill:"+s.Name, err)
 				continue
 			}

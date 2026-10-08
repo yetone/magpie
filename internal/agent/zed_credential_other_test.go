@@ -20,10 +20,7 @@ func TestZedCredentialCommand(t *testing.T) {
 	bin := t.TempDir()
 	app := filepath.Join(t.TempDir(), "Zed.app")
 	zedBin := filepath.Join(app, "Contents", "MacOS", "zed")
-	writeFile(t, zedBin, "#!/bin/sh\n")
-	if err := os.Chmod(zedBin, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, zedBin, "#!/bin/sh\n")
 	if err := os.Symlink(zedBin, filepath.Join(bin, "zed")); err != nil {
 		t.Fatal(err)
 	}
@@ -36,9 +33,7 @@ func TestZedCredentialCommand(t *testing.T) {
 	t.Setenv("ZED_TEST_ARGS", args)
 	name := "security"
 	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ZED_TEST_ARGS\"\n"
-	if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(bin, name), script)
 	url := "http://127.0.0.1:7654/v1"
 	if err := saveZedCredential(url); err != nil {
 		t.Fatal(err)
@@ -47,9 +42,7 @@ func TestZedCredentialCommand(t *testing.T) {
 	if got := readFile(args); got != want {
 		t.Fatalf("credential arguments: %q, want %q", got, want)
 	}
-	if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\necho locked >&2\nexit 1\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(bin, name), "#!/bin/sh\necho locked >&2\nexit 1\n")
 	if err := saveZedCredential(url); err == nil || !strings.Contains(err.Error(), "locked") {
 		t.Fatalf("credential store error: %v", err)
 	}
@@ -76,10 +69,7 @@ func TestZedAppPath(t *testing.T) {
 	}
 	custom := filepath.Join(t.TempDir(), "Custom Zed.app")
 	zedBin := filepath.Join(custom, "Contents", "MacOS", "zed")
-	writeFile(t, zedBin, "#!/bin/sh\n")
-	if err := os.Chmod(zedBin, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, zedBin, "#!/bin/sh\n")
 	if err := os.Symlink(zedBin, filepath.Join(bin, "zed")); err != nil {
 		t.Fatal(err)
 	}
@@ -92,10 +82,7 @@ func TestZedAppPath(t *testing.T) {
 	}
 	customEnv := filepath.Join(t.TempDir(), "ZedG.app")
 	customBin := filepath.Join(customEnv, "Contents", "MacOS", "zedg")
-	writeFile(t, customBin, "#!/bin/sh\n")
-	if err := os.Chmod(customBin, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, customBin, "#!/bin/sh\n")
 	customEnv, err = filepath.EvalSymlinks(customEnv)
 	if err != nil {
 		t.Fatal(err)

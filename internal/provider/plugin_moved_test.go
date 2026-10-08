@@ -12,6 +12,7 @@ import (
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // movedPlugin sets up a built-in moved onto its plugin, id's accounts as
@@ -230,7 +231,7 @@ func TestMovedSignInAsBuiltIn(t *testing.T) {
 	runInstaller = func(ctx context.Context, c agentCLI) ([]byte, error) {
 		<-release
 		os.MkdirAll(filepath.Dir(exe), 0o755)
-		return nil, os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755)
+		return nil, testenv.WriteProgram(exe, "#!/bin/sh\n")
 	}
 	t.Cleanup(func() { runInstaller = oldRun })
 

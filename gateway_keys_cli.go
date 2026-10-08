@@ -36,8 +36,26 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 		access.MigrateLegacyLANKeyBestEffort()
 		return gatewayKeyAccounts(out, args[1:])
 	}
+	// add <name> --key <value>: the key keeps a value its clients already
+	// send (love1sbug on X); "--key -" reads it from stdin, out of the
+	// shell's history
+	var own string
+	if action == "add" && len(args) == 4 && args[2] == "--key" {
+		own = args[3]
+		if own == "-" {
+			b, err := io.ReadAll(io.LimitReader(os.Stdin, 4096))
+			if err != nil {
+				return err
+			}
+			own = strings.TrimSpace(string(b))
+			if own == "" {
+				return fmt.Errorf("no key came on stdin")
+			}
+		}
+		args = args[:2]
+	}
 	if (action == "list" && len(args) != 1) || (action != "list" && len(args) != 2) {
-		return fmt.Errorf("usage: magpie gateway-key list | add <name> | rotate <id> | remove <id> | limit <id> [off | day|week|month [--tokens N] [--cost USD] [--cache-reads]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...]")
+		return fmt.Errorf("usage: magpie gateway-key list | add <name> [--key <value> | --key -] | rotate <id> | remove <id> | limit <id> [off | day|week|month [--tokens N] [--cost USD] [--cache-reads]] | models <id> [all | <provider>/<model>|<provider>/* ...] | accounts <id> [all | <provider>/<account>|<provider>/<key id> ...]")
 	}
 	switch action {
 	case "list", "add", "rotate", "remove":
@@ -83,7 +101,7 @@ func gatewayKeysTo(out io.Writer, args []string) error {
 	}
 	in := access.Change{Key: args[1]}
 	if action == "add" {
-		in = access.Change{Name: args[1]}
+		in = access.Change{Name: args[1], Secret: own}
 	}
 	secret, err := access.Update(action+"-key", in)
 	if err != nil {

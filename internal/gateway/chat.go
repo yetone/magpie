@@ -8,6 +8,7 @@ import (
 	"mime"
 	"net"
 	"path"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -411,8 +412,9 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 		if tc := aiStudioThinking(r, model); tc != nil {
 			out["extra_body"] = map[string]any{"google": map[string]any{"thinking_config": tc}}
 		} else if r.ThinkOff {
-			// Gemini 3 can't stop thinking; it thinks least at minimal
-			out["reasoning_effort"] = "minimal"
+			// Gemini 3 can't stop thinking; it thinks least at minimal,
+			// or at its lowest level where it has no minimal
+			out["reasoning_effort"] = cmp.Or(r.OffLevel, "minimal")
 		} else if r.Effort != "" {
 			out["reasoning_effort"] = r.Effort
 		}
@@ -634,6 +636,15 @@ func thinkingEffort(body []byte) []byte {
 // provider that refused it.
 const thinkingConfigField = "thinking_config"
 
+// geminiMinimalRefused is Gemini turning minimal away for a model that
+// doesn't have it, which names thinking but isn't thinking_config turned
+// away (refusesThinkingConfig): gemini-3.8-flash's 400 "Thinking level is
+// unsupported: THINKING_LEVEL_MINIMAL", for reasoning_effort minimal and
+// thinking_level minimal alike, at Vertex AI's OpenAI-compatible API; and
+// gemini-3.1-pro-preview's "thinking_level MINIMAL is not supported by this
+// model" at its generateContent.
+var geminiMinimalRefused = regexp.MustCompile(`(?i)thinking[ _]level.*minimal`)
+
 // refusesThinkingConfig recognizes an upstream turning a request away for
 // the thinking_config it was sent, by its error naming it.
 func refusesThinkingConfig(status int, body []byte) bool {
@@ -814,6 +825,13 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 				ReasoningContent string          `json:"reasoning_content"`
 				Reasoning        string          `json:"reasoning"`
 				ToolCalls        []cToolCall     `json:"tool_calls"`
+				// Vertex AI's OpenAI-compatible API marks a chunk of
+				// Gemini's thoughts here, the thought its content
+				ExtraContent struct {
+					Google struct {
+						Thought bool `json:"thought"`
+					} `json:"google"`
+				} `json:"extra_content"`
 			} `json:"delta"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
@@ -858,6 +876,9 @@ func (d *chatDecoder) decode(data string, emit func(Event)) error {
 			content = text
 		} else {
 			json.Unmarshal(c.Delta.Content, &content)
+		}
+		if c.Delta.ExtraContent.Google.Thought {
+			t, content = t+content, ""
 		}
 		if t != "" {
 			emit(Event{Kind: KThink, Text: t})

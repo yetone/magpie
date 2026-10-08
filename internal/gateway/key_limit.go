@@ -14,6 +14,11 @@ import (
 	"github.com/yetone/magpie/internal/usage"
 )
 
+// limitClock is the time a gateway key's limit is checked at: the window
+// a request counts in and when its 429 says the key resets. A variable for
+// the tests.
+var limitClock = time.Now
+
 // keyLimited holds a gateway key's requests to its limit (#585, see
 // package budget for the rules): one that would go over is refused with a
 // 429 before any provider is asked, saying the key, the limit and when it
@@ -27,17 +32,17 @@ func keyLimited(next http.Handler) http.Handler {
 			return
 		}
 		size, model := r.ContentLength, ""
-		if who.Limit.Cost > 0 || size < 0 {
-			b, err := io.ReadAll(r.Body)
-			r.Body.Close()
+		// a compressed body (#1223) is reserved at its decoded size and model
+		if enc := r.Header.Get("Content-Encoding"); who.Limit.Cost > 0 || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
+			b, status, err := readBoundedRequestBody(w, r, requestLimits{})
 			if err != nil {
-				writeError(w, protoOfPath(r.URL.Path), http.StatusBadRequest, err.Error())
+				writeError(w, protoOfPath(r.URL.Path), status, err.Error())
 				return
 			}
-			r.Body = io.NopCloser(bytes.NewReader(b))
+			r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(b)), int64(len(b))
 			size, model = int64(len(b)), budget.ModelOf(b)
 		}
-		now := time.Now()
+		now := limitClock()
 		release, refused := budget.Reserve(who, size, model, now)
 		if refused != nil {
 			msg := refused.Error()
@@ -78,6 +83,6 @@ func (s *Server) keyLimit(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"limited": false, "key": who.KeyName})
 		return
 	}
-	st := budget.Of(access.Key{ID: who.KeyID, Name: who.KeyName, Limit: who.Limit}, time.Now())
+	st := budget.Of(access.Key{ID: who.KeyID, Name: who.KeyName, Limit: who.Limit}, limitClock())
 	writeJSON(w, 200, map[string]any{"limited": true, "key": who.KeyName, "limit": st})
 }

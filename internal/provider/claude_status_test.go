@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // With magpie wired into Claude Code, `claude auth status` tells of magpie's
@@ -32,7 +34,7 @@ func TestClaudeAccountNamedAsItsLogin(t *testing.T) {
 	})
 	dir := t.TempDir()
 	exe, env := filepath.Join(dir, "claude"), filepath.Join(dir, "env")
-	os.WriteFile(exe, []byte("#!/bin/sh\necho \"token=$ANTHROPIC_AUTH_TOKEN\" > "+env+"\necho '{\"loggedIn\":true,\"authMethod\":\"oauth_token\",\"apiProvider\":\"firstParty\"}'\n"), 0o755)
+	testenv.Program(t, exe, "#!/bin/sh\necho \"token=$ANTHROPIC_AUTH_TOKEN\" > "+env+"\necho '{\"loggedIn\":true,\"authMethod\":\"oauth_token\",\"apiProvider\":\"firstParty\"}'\n")
 	claudeExecutable = func() string { return exe }
 	loginsMu.Lock()
 	loginsSeenAt = time.Time{}
@@ -61,7 +63,7 @@ func TestClaudeIdentityServedWhileAsked(t *testing.T) {
 	dir := t.TempDir()
 	exe, who := filepath.Join(dir, "claude"), filepath.Join(dir, "who")
 	os.WriteFile(who, []byte("a@example.com"), 0o600)
-	os.WriteFile(exe, []byte("#!/bin/sh\nsleep 1\nprintf '{\"loggedIn\":true,\"email\":\"%s\",\"subscriptionType\":\"max\"}' \"$(cat "+who+")\"\n"), 0o755)
+	testenv.Program(t, exe, "#!/bin/sh\nsleep 1\nprintf '{\"loggedIn\":true,\"email\":\"%s\",\"subscriptionType\":\"max\"}' \"$(cat "+who+")\"\n")
 	old := claudeExecutable
 	claudeExecutable = func() string { return exe }
 	t.Cleanup(func() { claudeExecutable = old; forgetClaudeStatus() })

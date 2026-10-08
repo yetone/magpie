@@ -46,20 +46,24 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
-	"github.com/yetone/magpie/internal/gateway"
 )
 
 // clineSlot is the provider magpie takes in Cline.
 const clineSlot = "openai-compatible"
 
-func cline(home string) *Agent {
-	dir := appdir.Getenv("CLINE_DIR")
+func cline(home string) *Agent { return clineIn(here(home)) }
+
+// clineIn is Cline at a place: this machine's home, or a WSL distro's (see
+// wsl.go), where CLINE_DIR and CLINE_DATA_DIR aren't read and its provider
+// names the gateway as the distro reaches it, with the key it takes from
+// there.
+func clineIn(at place) *Agent {
+	dir := at.getenv("CLINE_DIR")
 	if dir == "" {
-		dir = filepath.Join(home, ".cline")
+		dir = filepath.Join(at.home, ".cline")
 	}
-	data := appdir.Getenv("CLINE_DATA_DIR")
+	data := at.getenv("CLINE_DATA_DIR")
 	if data == "" {
 		data = filepath.Join(dir, "data")
 	}
@@ -71,13 +75,13 @@ func cline(home string) *Agent {
 	get := func(k string) string { v, _ := edit.GetJSON(path, k); return v }
 	inUse := func() string { return get("lastUsedProvider") }
 	onMagpie := func() bool {
-		return inUse() == clineSlot && get(slot+".settings.apiKey") == gateway.Token
+		return inUse() == clineSlot && ourKey(get(slot+".settings.apiKey"))
 	}
 	// stateOnMagpie: the extension's state is magpie's
 	stateOnMagpie := func() bool {
 		k, _ := edit.GetJSON(secrets, "openAiApiKey")
 		u, _ := edit.GetJSON(state, "openAiBaseUrl")
-		return k == gateway.Token && u == gatewayV1()
+		return ourKey(k) && u == at.v1()
 	}
 	// wireState points the extension's state, when there is one, at model
 	// on magpie's openai-compatible
@@ -97,11 +101,11 @@ func cline(home string) *Agent {
 		if err := edit.SetJSON(state,
 			edit.KV{Path: "actModeApiProvider", Value: "openai"}, edit.KV{Path: "planModeApiProvider", Value: "openai"},
 			edit.KV{Path: "actModeOpenAiModelId", Value: model}, edit.KV{Path: "planModeOpenAiModelId", Value: model},
-			edit.KV{Path: "openAiBaseUrl", Value: gatewayV1()},
+			edit.KV{Path: "openAiBaseUrl", Value: at.v1()},
 			edit.KV{Path: "openAiHeaders", Value: map[string]string{"User-Agent": "cline"}}); err != nil {
 			return err
 		}
-		return clineWrite(secrets, "{}", edit.KV{Path: "openAiApiKey", Value: gateway.Token})
+		return clineWrite(secrets, "{}", edit.KV{Path: "openAiApiKey", Value: at.gwKey()})
 	}
 	// restoreState puts back the extension's state from before magpie;
 	// magpie's keys go when nothing was stashed
@@ -165,15 +169,15 @@ func cline(home string) *Agent {
 			if !onMagpie() {
 				return nil
 			}
-			if err := syncJSON(path, slot+".settings.baseUrl", func() any { return gatewayV1() }); err != nil {
+			if err := syncJSON(path, slot+".settings.baseUrl", func() any { return at.v1() }); err != nil {
 				return err
 			}
-			if k, _ := edit.GetJSON(secrets, "openAiApiKey"); k == gateway.Token {
-				if err := syncJSON(state, "openAiBaseUrl", func() any { return gatewayV1() }); err != nil {
+			if k, _ := edit.GetJSON(secrets, "openAiApiKey"); ourKey(k) {
+				if err := syncJSON(state, "openAiBaseUrl", func() any { return at.v1() }); err != nil {
 					return err
 				}
 			}
-			return syncJSON(models, "providers."+clineSlot, func() any { return clineModels(get(slot + ".settings.model")) })
+			return syncJSON(models, "providers."+clineSlot, func() any { return clineModelsAt(get(slot+".settings.model"), at.v1()) })
 		},
 		Notice: func() string {
 			if runtime.GOOS == "windows" {
@@ -193,7 +197,7 @@ func cline(home string) *Agent {
 				return ""
 			}
 			return wiringOff("Cline", path, func(k string) (string, bool) { return edit.GetJSON(path, slot+".settings."+k) },
-				"baseUrl", gatewayV1())
+				"baseUrl", at.v1())
 		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
@@ -229,14 +233,14 @@ func cline(home string) *Agent {
 						})
 					}
 					if err := clineWrite(models, `{"version":1,"providers":{}}`,
-						edit.KV{Path: "providers." + clineSlot, Value: clineModels(ref)}); err != nil {
+						edit.KV{Path: "providers." + clineSlot, Value: clineModelsAt(ref, at.v1())}); err != nil {
 						return err
 					}
 					if err := wireState(ref); err != nil {
 						return err
 					}
 					return clineWrite(path, providersEmpty,
-						edit.KV{Path: slot, Value: clineProvider(ref, effort)},
+						edit.KV{Path: slot, Value: clineProvider(ref, effort, at)},
 						edit.KV{Path: "lastUsedProvider", Value: clineSlot})
 				}
 				if onMagpie() {
@@ -284,10 +288,10 @@ func cutMagpie(v string) (string, bool) {
 }
 
 // clineProvider is magpie's openai-compatible entry, asking model with
-// effort (none unset).
-func clineProvider(model, effort string) map[string]any {
+// effort (none unset), for the Cline at a place.
+func clineProvider(model, effort string, at place) map[string]any {
 	s := map[string]any{
-		"provider": clineSlot, "apiKey": gateway.Token, "model": model, "baseUrl": gatewayV1(),
+		"provider": clineSlot, "apiKey": at.gwKey(), "model": model, "baseUrl": at.v1(),
 		"headers": map[string]string{"User-Agent": "cline"},
 	}
 	if effort != "" {
@@ -366,7 +370,10 @@ func clineRestore(path, snapshot string) error {
 
 // clineModels is magpie's entry in models.json: every magpie model, model
 // the one the provider starts on.
-func clineModels(model string) map[string]any {
+func clineModels(model string) map[string]any { return clineModelsAt(model, gatewayV1()) }
+
+// clineModelsAt is clineModels for a Cline reaching the gateway's /v1 at v1.
+func clineModelsAt(model, v1 string) map[string]any {
 	ms := map[string]any{}
 	for _, m := range magpieModels("cline") {
 		caps := []string{"streaming", "tools"}
@@ -386,7 +393,7 @@ func clineModels(model string) map[string]any {
 		ms[m.ID] = e
 	}
 	return map[string]any{
-		"provider": map[string]any{"name": "magpie", "baseUrl": gatewayV1(), "defaultModelId": model},
+		"provider": map[string]any{"name": "magpie", "baseUrl": v1, "defaultModelId": model},
 		"models":   ms,
 	}
 }

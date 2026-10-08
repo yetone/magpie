@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // sessionsHome is a sandbox HOME with the sessions package's fixtures as
@@ -39,8 +41,9 @@ func sessionsHome(t *testing.T) time.Time {
 		}
 		t.Setenv(env, dir)
 	}
-	oldZone, oldPrice := time.Local, sessions.PriceOf
-	time.Local = time.UTC
+	// put back after the Reset below, whose index write reads the zone
+	testenv.Zone(t, time.UTC)
+	oldPrice := sessions.PriceOf
 	sessions.PriceOf = func(_ settings.Settings, m string) (catalog.Price, bool) {
 		switch m {
 		case "claude-opus-5-5":
@@ -54,7 +57,7 @@ func sessionsHome(t *testing.T) time.Time {
 		// the index is written behind the page: let that write finish before
 		// the zone it reads (a stat of the file it writes) goes back
 		sessions.Reset()
-		time.Local, sessions.PriceOf = oldZone, oldPrice
+		sessions.PriceOf = oldPrice
 	})
 	sessions.Reset()
 	return time.Date(2026, 9, 28, 12, 0, 0, 0, time.UTC)
@@ -129,6 +132,55 @@ func TestSessionsCmd(t *testing.T) {
 	if err := sessionsTo(&b, []string{"--days", "week"}, now); err == nil {
 		t.Error("--days week taken")
 	}
+}
+
+// The "%d more with --limit" foot is counted over every session, not over a
+// list cut at sessions.Limit: with the default --limit 20 the command read
+// only 200, so a history longer than that reported a remainder that was
+// wrong, and a model or folder filter picked among the rest could never be
+// resolved (yetone, #1019).
+func TestSessionsMoreCountsTheWholeSet(t *testing.T) {
+	now := sessionsHome(t)
+	claude := os.Getenv("CLAUDE_CONFIG_DIR")
+	proj := filepath.Join(claude, "projects", "-work-many")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// past sessions.Limit: the fixtures hold 2, so 210 more
+	const n = sessions.Limit + 10
+	for i := range n {
+		id := fmt.Sprintf("%08d-1111-2222-3333-444444444444", i)
+		line := fmt.Sprintf(`{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"hi %d"},"uuid":"u","timestamp":"2026-09-20T10:00:00.000Z","cwd":"/work/many","sessionId":"%s"}`+"\n"+
+			`{"parentUuid":"u","isSidechain":false,"message":{"model":"claude-opus-5-5","id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"done"}],"usage":{"input_tokens":10,"output_tokens":2}},"requestId":"req_1","type":"assistant","uuid":"a","timestamp":"2026-09-20T10:00:05.000Z","cwd":"/work/many","sessionId":"%s"}`+"\n", i, id, id)
+		if err := os.WriteFile(filepath.Join(proj, id+".jsonl"), []byte(line), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sessions.Reset()
+
+	// the default --limit 20 prints 20 rows and says how many are left of all
+	got := runSessions(t, now, "--limit", "20")
+	if !strings.Contains(got, "latest 20") {
+		t.Fatalf("the foot of the default:\n%s", got)
+	}
+	total := 2 + n // the fixtures' own two and these
+	if want := fmt.Sprintf("· %d more with --limit", total-20); !strings.Contains(got, want) {
+		t.Errorf("the foot says %q, want %q:\n%s", footOf(got), want, got)
+	}
+	// and --limit past 200 shows that many, which the old read could not
+	if got := runSessions(t, now, "--limit", "205"); !strings.Contains(got, "latest 205") {
+		t.Errorf("--limit 205:\n%s", got)
+	}
+}
+
+// footOf is the line the command's foot is on, for a failure message.
+func footOf(out string) string {
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "with --limit") || strings.Contains(l, "latest ") {
+			return strings.TrimSpace(l)
+		}
+	}
+	return ""
 }
 
 // The hit rate is of all the prompts came to: what was written to the

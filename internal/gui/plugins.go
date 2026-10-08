@@ -253,6 +253,11 @@ func pluginRoutes(mux *http.ServeMux, w Windows) {
 	mux.HandleFunc("GET /api/plugins/listings", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, map[string]any{"listings": pluginListings(r.Context())})
 	})
+	// repositories on GitHub tagged magpie-plugin: nobody's list, shown
+	// apart as not reviewed, installed from the repository
+	mux.HandleFunc("GET /api/plugins/github", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, map[string]any{"repos": plugin.TaggedRepos(r.Context()), "topic": plugin.Topic})
+	})
 	mux.HandleFunc("GET /api/plugins/npm", func(rw http.ResponseWriter, r *http.Request) {
 		names := []string{}
 		for _, n := range strings.Split(r.URL.Query().Get("names"), ",") {

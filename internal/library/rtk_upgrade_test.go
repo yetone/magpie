@@ -1,6 +1,7 @@
 package library
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // versionedRTK is an rtk whose version is in the file VERSION names, with
@@ -35,6 +38,27 @@ func latestServer(t *testing.T, tag string) {
 	rtkLatest.Lock()
 	rtkLatest.v, rtkLatest.next = "", time.Time{}
 	rtkLatest.Unlock()
+	forgetChannels()
+	t.Cleanup(forgetChannels)
+}
+
+// forgetChannels forgets what winget and Homebrew were found to have.
+func forgetChannels() {
+	rtkChannels.Lock()
+	clear(rtkChannels.m)
+	rtkChannels.Unlock()
+}
+
+// asJSON is the view as the page gets it.
+func asJSON(t *testing.T, v *RTKView) map[string]any {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	json.Unmarshal(b, &m)
+	return m
 }
 
 // Homebrew's rtk is upgraded with brew; the days it saved come with the
@@ -47,7 +71,7 @@ func TestRTKUpgradeBrew(t *testing.T) {
 	h := sandbox(t)
 	latestServer(t, "v0.50.0")
 	cellar := filepath.Join(h, "brew", "Cellar", "rtk", "0.28.2", "bin")
-	write(t, filepath.Join(cellar, "rtk"), strings.ReplaceAll(versionedRTK, "VERSION", filepath.Join(cellar, "VERSION")))
+	testenv.Program(t, filepath.Join(cellar, "rtk"), strings.ReplaceAll(versionedRTK, "VERSION", filepath.Join(cellar, "VERSION")))
 	write(t, filepath.Join(cellar, "VERSION"), "0.28.2")
 	bin := filepath.Join(h, "brew", "bin")
 	os.MkdirAll(bin, 0o755)
@@ -55,12 +79,10 @@ func TestRTKUpgradeBrew(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Homebrew so far has 0.49.0
-	write(t, filepath.Join(bin, "brew"), `#!/bin/sh
+	testenv.Program(t, filepath.Join(bin, "brew"), `#!/bin/sh
 [ "$*" = "upgrade rtk" ] || exit 2
 echo 0.49.0 > "`+filepath.Join(cellar, "VERSION")+`"
 `)
-	os.Chmod(filepath.Join(cellar, "rtk"), 0o755)
-	os.Chmod(filepath.Join(bin, "brew"), 0o755)
 	t.Setenv("PATH", bin)
 
 	v := ReadRTK()
@@ -80,6 +102,15 @@ echo 0.49.0 > "`+filepath.Join(cellar, "VERSION")+`"
 	if v.Version != "0.49.0" || !strings.Contains(v.Note, "Homebrew's RTK is 0.49.0") || !strings.Contains(v.Note, "0.50.0") {
 		t.Fatalf("after: %q, note %q", v.Version, v.Note)
 	}
+	// #1025: Homebrew has nothing newer, so the page offers no upgrade —
+	// then, and when it reads the card again
+	if m := asJSON(t, v); m["waiting"] != "Homebrew" || m["waitingHas"] != "0.49.0" {
+		t.Fatalf("after the upgrade: waiting %v, has %v", m["waiting"], m["waitingHas"])
+	}
+	v = ReadRTK()
+	if v.CheckLatest(); asJSON(t, v)["waiting"] != "Homebrew" {
+		t.Fatalf("read again: %+v", v)
+	}
 }
 
 // An rtk its own script put somewhere is upgraded with that script again,
@@ -91,15 +122,13 @@ func TestRTKUpgradeScript(t *testing.T) {
 	h := sandbox(t)
 	latestServer(t, "v0.50.0")
 	dir := filepath.Join(h, ".local", "bin")
-	write(t, filepath.Join(dir, "rtk"), strings.ReplaceAll(versionedRTK, "VERSION", filepath.Join(dir, "VERSION")))
+	testenv.Program(t, filepath.Join(dir, "rtk"), strings.ReplaceAll(versionedRTK, "VERSION", filepath.Join(dir, "VERSION")))
 	write(t, filepath.Join(dir, "VERSION"), "0.40.1")
-	os.Chmod(filepath.Join(dir, "rtk"), 0o755)
 	tools := filepath.Join(h, "tools")
 	// curl hands over an installer that puts 0.50.0 in RTK_INSTALL_DIR
-	write(t, filepath.Join(tools, "curl"), `#!/bin/sh
+	testenv.Program(t, filepath.Join(tools, "curl"), `#!/bin/sh
 echo 'echo 0.50.0 > "$RTK_INSTALL_DIR/VERSION"'
 `)
-	os.Chmod(filepath.Join(tools, "curl"), 0o755)
 	t.Setenv("PATH", tools+string(os.PathListSeparator)+"/bin"+string(os.PathListSeparator)+"/usr/bin")
 
 	v := ReadRTK()
@@ -162,5 +191,116 @@ func TestRTKUpgradeFailureSaid(t *testing.T) {
 	}
 	if _, err := runInstaller([]string{"sleep", "5"}, 100*time.Millisecond); err == nil || err.Error() != "sleep didn't finish in 100ms" {
 		t.Fatalf("timeout: %v", err)
+	}
+}
+
+// #1025 (Fermin214): RTK 0.51.0 was on GitHub while winget had 0.50.0, the
+// one installed. Upgrade ran winget upgrade, which said so, and the card
+// then offered "v0.51.0 is out" and Upgrade again. The card now says winget
+// hasn't got it yet and offers no upgrade, from an upgrade's answer or from
+// asking winget itself (winget show), until winget has it; a winget that
+// can't be asked leaves Upgrade offered. Homebrew's lag is in
+// TestRTKUpgradeBrew.
+func TestRTKWaitsForWinget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fakes are shell scripts")
+	}
+	h := sandbox(t)
+	latestServer(t, "v0.51.0")
+	links := filepath.Join(h, "AppData", "Local", "Microsoft", "WinGet", "Links")
+	testenv.Program(t, filepath.Join(links, "rtk"), strings.ReplaceAll(versionedRTK, "VERSION", filepath.Join(links, "VERSION")))
+	write(t, filepath.Join(links, "VERSION"), "0.50.0")
+	has, broken := filepath.Join(h, "winget-has"), filepath.Join(h, "winget-broken")
+	write(t, has, "0.50.0")
+	tools := filepath.Join(h, "tools")
+	// winget show, as Windows in Chinese prints it; winget upgrade installs
+	// what it has, when that is newer, and says when it isn't
+	testenv.Program(t, filepath.Join(tools, "winget"), `#!/bin/sh
+[ -e "`+broken+`" ] && { echo "Failed when searching source: winget"; exit 1; }
+v=$(/bin/cat "`+has+`")
+case "$1" in
+show) printf '已找到 RTK [rtk-ai.rtk]\r\n版本: %s\r\n发布者: rtk-ai\r\n描述: RTK 0.99.0 compatible\r\n' "$v" ;;
+upgrade)
+  if [ "$v" = "$(/bin/cat "`+filepath.Join(links, "VERSION")+`")" ]; then echo "No available upgrade found."; exit 0; fi
+  echo "$v" > "`+filepath.Join(links, "VERSION")+`"; echo "Successfully installed" ;;
+*) exit 2 ;;
+esac
+`)
+	t.Setenv("PATH", links+string(os.PathListSeparator)+tools)
+	up := upgraderOf
+	upgraderOf = func(string) []string {
+		return []string{"winget", "upgrade", "--id", "rtk-ai.rtk", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}
+	}
+	t.Cleanup(func() { upgraderOf = up })
+	card := func() map[string]any {
+		v := ReadRTK()
+		v.CheckLatest()
+		return asJSON(t, v)
+	}
+
+	// winget can't be asked: not known, so Upgrade stays offered
+	write(t, broken, "")
+	if m := card(); m["latest"] != "0.51.0" || m["waiting"] != nil {
+		t.Fatalf("winget unasked: %v", m)
+	}
+	os.Remove(broken)
+	forgetChannels()
+
+	// asked, winget has the one installed
+	if m := card(); m["waiting"] != "winget" || m["waitingHas"] != "0.50.0" {
+		t.Fatalf("winget asked: %v", m)
+	}
+
+	// the reporter's click: winget upgrade changes nothing, and says so; the
+	// card read again afterwards still waits, without asking winget again
+	forgetChannels()
+	v, err := UpgradeRTK()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := asJSON(t, v); v.Version != "0.50.0" || m["waiting"] != "winget" || !strings.Contains(v.Note, "winget's RTK is 0.50.0 so far") {
+		t.Fatalf("after the upgrade: %v", m)
+	}
+	write(t, broken, "")
+	if m := card(); m["waiting"] != "winget" {
+		t.Fatalf("read again: %v", m)
+	}
+	os.Remove(broken)
+
+	// winget has 0.51.0 now: once asked again, Upgrade is back, and works
+	write(t, has, "0.51.0")
+	if m := card(); m["waiting"] != "winget" {
+		t.Fatalf("before winget is asked again: %v", m)
+	}
+	rtkChannels.Lock()
+	for k, e := range rtkChannels.m {
+		e.next = time.Now().Add(-time.Second)
+		rtkChannels.m[k] = e
+	}
+	rtkChannels.Unlock()
+	if m := card(); m["waiting"] != nil || m["latest"] != "0.51.0" || m["version"] != "0.50.0" {
+		t.Fatalf("winget has it: %v", m)
+	}
+	if v, err := UpgradeRTK(); err != nil || v.Version != "0.51.0" || v.Waiting != "" || v.Note != "" {
+		t.Fatalf("upgraded: %+v, %v", v, err)
+	}
+}
+
+// winget show's version, in any language, and brew info's.
+func TestRTKChannelVersion(t *testing.T) {
+	for _, c := range []struct{ tool, out, want string }{
+		{"winget", "Found RTK [rtk-ai.rtk]\r\nVersion: 0.50.0\r\nPublisher: rtk-ai\r\n", "0.50.0"},
+		{"winget", "   - \r   \\ \rFound RTK [rtk-ai.rtk]\r\nVersion: 0.50.0\r\n", "0.50.0"},
+		{"winget", "Gefunden RTK [rtk-ai.rtk]\nVersion: 0.49.1\n", "0.49.1"},
+		{"winget", "已找到 RTK [rtk-ai.rtk]\n版本: 0.50.0\n描述: 1.2.3\n", "0.50.0"},
+		{"winget", "No package found matching input criteria.\r\n", ""},
+		{"brew", `{"formulae":[{"name":"rtk","versions":{"stable":"0.50.0","head":"HEAD"}}],"casks":[]}`, "0.50.0"},
+		{"brew", `{"formulae":[],"casks":[]}`, ""},
+		{"brew", `Error: No available formula`, ""},
+	} {
+		got, err := rtkChannelVersion(c.tool, c.out)
+		if got != c.want || (err == nil) != (c.want != "") {
+			t.Errorf("%s %q: %q, %v", c.tool, c.out, got, err)
+		}
 	}
 }

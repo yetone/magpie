@@ -13,6 +13,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // Devin's own ids models.dev doesn't know (swe-2, gpt-6-1-sol) take images,
@@ -58,7 +59,7 @@ func TestDevinImagesFromModelConfigs(t *testing.T) {
 	t.Setenv("WINDSURF_API_SERVER_URL", fake.URL)
 
 	exe := filepath.Join(home, "devin")
-	os.WriteFile(exe, []byte(`#!/bin/sh
+	testenv.Program(t, exe, `#!/bin/sh
 cat <<'X'
 {"families":[
  {"family_label":"SWE-2","family_uid":"swe-2","aliases":["swe"],"variants":[
@@ -67,7 +68,7 @@ cat <<'X'
   {"model_uid":"glm-5-2","label":"GLM-5.2 High"},{"model_uid":"glm-5-2-max","label":"GLM-5.2 Max"}]},
  {"family_label":"New","family_uid":"new-model","variants":[{"model_uid":"new-model-high","label":"New High"}]}]}
 X
-`), 0o755)
+`)
 	fakeDevin(t, exe)
 
 	families, err := askDevinFamiliesAt(context.Background(), "")

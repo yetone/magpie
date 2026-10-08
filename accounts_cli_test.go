@@ -121,14 +121,21 @@ func TestUntilShort(t *testing.T) {
 }
 
 func TestQuotaCell(t *testing.T) {
-	at := time.Now().Add(2*time.Hour + 13*time.Minute + 30*time.Second)
-	got := quotaCell(quotaSpan{Name: "5 hours", Used: 42, ResetsAt: &at})
-	if !strings.HasPrefix(got, "5h 42%") || !strings.Contains(got, "↻2h13m "+provider.ResetClock(at, time.Now())) {
+	// a fixed now, so the reset reads the same day whenever the test runs
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)
+	at := now.Add(2*time.Hour + 13*time.Minute + 30*time.Second)
+	got := quotaCell(quotaSpan{Name: "5 hours", Used: 42, ResetsAt: &at}, now)
+	if !strings.HasPrefix(got, "5h 42%") || !strings.Contains(got, "↻2h13m 14:13") {
 		t.Fatalf("%q", got)
+	}
+	// a reset on the next day reads "tomorrow" against the same now
+	next := now.Add(14*time.Hour + 13*time.Minute + 30*time.Second)
+	if got := quotaCell(quotaSpan{Name: "7 days", Used: 42, ResetsAt: &next}, now); !strings.Contains(got, "↻14h13m tomorrow 02:13") {
+		t.Fatalf("tomorrow: %q", got)
 	}
 	// a pool's own window comes in named with its pool (PooledWindows) and
 	// reads compactly, without the " · "
-	pooled := quotaCell(quotaSpan{Name: "Gemini · 7 days", Pool: "Gemini", Used: 80})
+	pooled := quotaCell(quotaSpan{Name: "Gemini · 7 days", Pool: "Gemini", Used: 80}, now)
 	if !strings.HasPrefix(pooled, "Gemini 7d 80%") {
 		t.Fatalf("pooled: %q", pooled)
 	}

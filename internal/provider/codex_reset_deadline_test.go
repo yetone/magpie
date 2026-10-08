@@ -107,6 +107,7 @@ func TestResetRunsOutForRouting(t *testing.T) {
 	reset := func() {
 		usedCache.Lock()
 		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
+		usedCache.stale = nil
 		usedCache.Unlock()
 	}
 	reset()

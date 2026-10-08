@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/yetone/magpie/internal/edit"
@@ -86,75 +87,92 @@ func TestCodexDisconnect(t *testing.T) {
 // Disconnect leaves Claude Code's settings.json as it was before magpie
 // was wired in: the relay's endpoint and token and the model the user had
 // come back, and every env key, tier and capability magpie wrote goes.
+// The tier and subagent models the user set for their relay come back with
+// it (#1050), whether magpie steps out by Disconnect or by Claude Code's
+// own model.
 func TestClaudeDisconnect(t *testing.T) {
 	for name, before := range map[string]string{
 		"own relay":   `{"theme":"dark","model":"opus","env":{"ANTHROPIC_BASE_URL":"https://relay.example","ANTHROPIC_AUTH_TOKEN":"sk-relay","DISABLE_TELEMETRY":"1"}}`,
+		"own tiers":   `{"model":"sonnet","env":{"ANTHROPIC_BASE_URL":"https://relay.example","ANTHROPIC_AUTH_TOKEN":"sk-relay","ANTHROPIC_DEFAULT_OPUS_MODEL":"relay-opus","ANTHROPIC_DEFAULT_SONNET_MODEL":"relay-sonnet","ANTHROPIC_DEFAULT_HAIKU_MODEL":"relay-haiku","ANTHROPIC_SMALL_FAST_MODEL":"relay-haiku","CLAUDE_CODE_SUBAGENT_MODEL":"relay-sonnet"}}`,
 		"nothing set": `{"theme":"dark"}`,
 	} {
-		t.Run(name, func(t *testing.T) {
-			home := t.TempDir()
-			t.Setenv("HOME", home)
-			t.Setenv("USERPROFILE", home)
-			t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-			t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
-			if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
-				t.Fatal(err)
-			}
-			path := filepath.Join(home, ".claude", "settings.json")
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(path, []byte(before), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			parse := func() map[string]any {
-				b, err := os.ReadFile(path)
-				if err != nil {
+		for _, out := range []string{"disconnect", "default"} {
+			t.Run(name+", "+out, func(t *testing.T) {
+				home := t.TempDir()
+				t.Setenv("HOME", home)
+				t.Setenv("USERPROFILE", home)
+				t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+				t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+				if err := provider.Save(provider.Provider{ID: "deepseek", Name: "DeepSeek", Chat: "https://api.deepseek.com/v1", Key: "k", Models: []string{"pro", "flash"}}); err != nil {
 					t.Fatal(err)
 				}
-				var m map[string]any
-				if err := json.Unmarshal(b, &m); err != nil {
+				path := filepath.Join(home, ".claude", "settings.json")
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 					t.Fatal(err)
 				}
-				// an object magpie emptied out is the same as none
-				for k, v := range m {
-					if o, ok := v.(map[string]any); ok && len(o) == 0 {
-						delete(m, k)
+				if err := os.WriteFile(path, []byte(before), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				parse := func() map[string]any {
+					b, err := os.ReadFile(path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var m map[string]any
+					if err := json.Unmarshal(b, &m); err != nil {
+						t.Fatal(err)
+					}
+					// an object magpie emptied out is the same as none
+					for k, v := range m {
+						if o, ok := v.(map[string]any); ok && len(o) == 0 {
+							delete(m, k)
+						}
+					}
+					return m
+				}
+				want := parse()
+				a := claude(home)
+				if a.Wired() {
+					t.Fatal("wired before magpie set anything")
+				}
+				if err := a.Apply("model", "deepseek/pro"); err != nil {
+					t.Fatal(err)
+				}
+				if err := a.Apply("haiku", "deepseek/flash"); err != nil {
+					t.Fatal(err)
+				}
+				if err := a.Apply("subagent", "deepseek/flash"); err != nil {
+					t.Fatal(err)
+				}
+				if !a.Wired() {
+					t.Fatal("not wired on a magpie model")
+				}
+				if out == "default" {
+					if err := a.Apply("model", ""); err != nil {
+						t.Fatal(err)
+					}
+					// Claude Code's own model, set by leaving none
+					delete(want, "model")
+				} else if err := a.Disconnect(); err != nil {
+					t.Fatal(err)
+				}
+				if got := parse(); !reflect.DeepEqual(got, want) {
+					b, _ := os.ReadFile(path)
+					t.Fatalf("after disconnect:\n%s\nwant %v", b, want)
+				}
+				if a.Wired() {
+					t.Fatal("still wired")
+				}
+				if _, ok := appliedLoad()["claude"]; ok && out == "disconnect" {
+					t.Error("magpie still remembers setting Claude Code")
+				}
+				for k := range stashLoad() {
+					if strings.HasPrefix(k, "claude.env.") {
+						t.Errorf("stash keeps %s", k)
 					}
 				}
-				return m
-			}
-			want := parse()
-			a := claude(home)
-			if a.Wired() {
-				t.Fatal("wired before magpie set anything")
-			}
-			if err := a.Apply("model", "deepseek/pro"); err != nil {
-				t.Fatal(err)
-			}
-			if err := a.Apply("haiku", "deepseek/flash"); err != nil {
-				t.Fatal(err)
-			}
-			if err := a.Apply("subagent", "deepseek/flash"); err != nil {
-				t.Fatal(err)
-			}
-			if !a.Wired() {
-				t.Fatal("not wired on a magpie model")
-			}
-			if err := a.Disconnect(); err != nil {
-				t.Fatal(err)
-			}
-			if got := parse(); !reflect.DeepEqual(got, want) {
-				b, _ := os.ReadFile(path)
-				t.Fatalf("after disconnect:\n%s\nwant %v", b, want)
-			}
-			if a.Wired() {
-				t.Fatal("still wired")
-			}
-			if _, ok := appliedLoad()["claude"]; ok {
-				t.Error("magpie still remembers setting Claude Code")
-			}
-		})
+			})
+		}
 	}
 }
 

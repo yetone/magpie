@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // Claude Code installed off magpie's PATH, in ~/.local/bin as its
@@ -24,7 +26,7 @@ func TestClaudeFoundInLocalBin(t *testing.T) {
 	bin := filepath.Join(h, ".local", "bin")
 	os.MkdirAll(bin, 0o755)
 	exe := filepath.Join(bin, name)
-	os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755)
+	testenv.Program(t, exe, "#!/bin/sh\n")
 	if got := claudeExecutable(); got != exe {
 		t.Fatalf("claude: %q, want %q", got, exe)
 	}

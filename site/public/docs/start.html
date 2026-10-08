@@ -227,6 +227,7 @@ magpie claude group/opus-anywhere    <span class="c"># use it</span></pre>
       <img class="for-dark" src="/img/usage-dark.png" width="2080" height="842" loading="lazy" alt="The Usage tab: remaining balances, token and cost totals, and a 30-day chart">
       <figcaption>Balances, tokens, cache hits and cost for every call through the gateway.</figcaption>
     </figure>
+    <p><b>Context.</b> Usage’s <span class="ui">Context</span> tab shows what each agent’s prompts hold, read as they pass through the gateway: its system prompt, tool definitions (an MCP server’s as one), instruction files and skills, the files its tools read, their other output and the conversation, as parts of the model’s context window. Each agent gets a score out of 100 — how much of its prompt the cache reads, how lean it starts, how fast it fills and how often it fails — and tags such as <i>Lean start</i> or <i>MCP-heavy</i> that say what the score was told by. Open a session to see its latest request’s window, cell by cell; the <span class="ui">Routing</span> page shows the same for any request you pick. Only names are kept, never your prompt’s text.</p>
     <p><b>Profiles.</b> At the bottom of the <span class="ui">Agents</span> tab, <span class="ui">＋ Save current</span> snapshots every agent’s settings under a name; click the chip to switch everything back in one move.</p>
 
     <h2 id="cli"><a class="anchor" href="#cli">From the terminal</a></h2>
@@ -261,6 +262,15 @@ magpie claude group/opus-anywhere    <span class="c"># use it</span></pre>
     <h3>Installing or updating behind a firewall, or without access to GitHub?</h3>
     <p>Give the installer and <code>magpie update</code> a proxy: <code>curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890</code>, or <code>magpie update --proxy socks5://127.0.0.1:1080</code> (http, https, socks5 and socks5h; <code>HTTPS_PROXY</code> and <code>ALL_PROXY</code> are honoured too). <code>--mirror &lt;prefix&gt;</code> fetches the release file from a GitHub download mirror you choose, as <code>&lt;prefix&gt;https://github.com/…</code>; <code>magpie update mirror &lt;prefix&gt;</code> keeps it for every update, the app’s too, and <code>magpie update mirror off</code> removes it. No mirror is used unless you give one, and the file’s SHA-256 still comes from usemagpie.ai, never from the mirror: a file the mirror changed is refused. The app’s own updates go through <span class="ui">Settings</span> → <span class="ui">Proxy</span>.</p>
 
+    <h3 id="proxy-loopback">The agent gets 502 or can’t connect, and nothing shows in magpie’s Routing tab?</h3>
+    <p>A proxy app (Surge, Clash, mihomo and the like, with system proxy, TUN or enhanced mode on) has taken the agent’s request to <code>http://127.0.0.1:3425</code> and sent it somewhere else, so it never reaches magpie. The bypass list (<code>skip-proxy</code>, “bypass”) isn’t always enough: some agents, Codex among them, send it through the proxy anyway. Add rules that send the local addresses direct, ahead of your other rules:</p>
+    <div class="code">
+      <span class="lang">Surge</span>
+      <button class="copy" data-copy="ex-loopback">Copy</button>
+      <pre id="ex-loopback">IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+IP-CIDR6,::1/128,DIRECT,no-resolve</pre>
+    </div>
+    <p>In a Clash or mihomo config the same lines go under <code>rules:</code>, each starting with <code>- </code>. Then send the agent a new request.</p>
     <p style="margin-top:48px">Stuck, or have a setup worth sharing? Ask on <a href="https://discord.gg/vGSnD3ZKQF">Discord</a>. Vendors who want to hand their users a ready-made provider: see <a href="/docs/import">Add to magpie</a>.</p>
   </article>
 </main>

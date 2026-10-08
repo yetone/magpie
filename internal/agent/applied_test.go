@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
-	"github.com/yetone/magpie/internal/usage"
 )
 
 // sameGroup compares two values of a field, one of them read back from the
@@ -94,6 +93,11 @@ func TestDriftBypassed(t *testing.T) {
 	cx := codex(home)
 	defer func(s time.Time) { started = s }(started)
 	started = time.Now().Add(-time.Hour)
+	// a request reaching the gateway, kept to this run: usage.Saw's record
+	// lasts the process, so the next run (-count=2) would start with it
+	var saw time.Time
+	defer func(f func(string) time.Time) { lastSeen = f }(lastSeen)
+	lastSeen = func(string) time.Time { return saw }
 	if err := cx.Apply("model", "fake/m1"); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +115,7 @@ func TestDriftBypassed(t *testing.T) {
 	if d := cx.Drift(); d == nil || d.Kind != "bypassed" || d.Want != "fake/m1" {
 		t.Fatalf("bypassed: %+v", d)
 	}
-	usage.Saw("codex")
+	saw = time.Now()
 	if d := cx.Drift(); d != nil {
 		t.Fatalf("a request arrived: %+v", d)
 	}

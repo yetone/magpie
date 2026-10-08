@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // #275: a restart to update from the open window (Windows, Linux) came
@@ -51,9 +53,7 @@ func TestRelaunchBinaryArgs(t *testing.T) {
 		out := filepath.Join(dir, "out")
 		exe := filepath.Join(dir, "magpie")
 		script := "#!/bin/sh\necho \"$* $MAGPIE_REPLACES\" > " + out + ".tmp && mv " + out + ".tmp " + out + "\n"
-		if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testenv.Program(t, exe, script)
 		if err := RelaunchBinary(exe, "", c.window, c.view); err != nil {
 			t.Fatal(err)
 		}

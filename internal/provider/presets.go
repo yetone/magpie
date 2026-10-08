@@ -258,7 +258,9 @@ var presets = []PresetDef{
 	// at /api/plan/v3 (chat completions and Responses, its Hermes page) and
 	// /api/plan, with a key of its own; pay-as-you-go is /api/v3, which
 	// both plans' pages warn bills apart. Their versioned paths are used as
-	// written: no /v1 goes on them.
+	// written: no /v1 goes on them. Coding's /models lists Ark's general
+	// catalog, not the plan's models; Agent's returns 404. Only pay-as-you-go's
+	// /models is asked.
 	{ID: "volcengine", Name: "Volcengine Ark", Icon: "volcengine-color", Kind: KindVendor,
 		Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Responses: "https://ark.cn-beijing.volces.com/api/coding/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/coding",
 		Note:    "火山方舟 · Coding / Agent Plan",
@@ -266,8 +268,9 @@ var presets = []PresetDef{
 		RegionLabel: "Plan", Regions: []Region{
 			{ID: "coding", Name: "Coding Plan", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Responses: "https://ark.cn-beijing.volces.com/api/coding/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/coding"},
 			{ID: "agent", Name: "Agent Plan", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Responses: "https://ark.cn-beijing.volces.com/api/plan/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/plan"},
-			{ID: "api", Name: "Pay as you go", Chat: "https://ark.cn-beijing.volces.com/api/v3", Responses: "https://ark.cn-beijing.volces.com/api/v3"},
+			{ID: "api", Name: "Pay as you go", Chat: "https://ark.cn-beijing.volces.com/api/v3", Responses: "https://ark.cn-beijing.volces.com/api/v3", Lists: true},
 		},
+		NoList: true,
 		// the plans' model names, lowercase as their quick-start pages list
 		// them; ark-code-latest is whichever the console has picked
 		Models: []string{"ark-code-latest", "doubao-seed-evolving", "doubao-seed-2.1-pro", "doubao-seed-2.1-lite", "doubao-seed-2.0-mini",

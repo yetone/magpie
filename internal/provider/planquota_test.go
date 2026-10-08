@@ -251,6 +251,13 @@ func TestPlanQuotas(t *testing.T) {
 			w.Write([]byte(`{"code":200,"success":true,"data":[{"productName":"GLM Coding Pro","status":"VALID","autoRenew":1,"nextRenewTime":"2026-10-18 10:00:00"}]}`))
 		case "open.bigmodel.cn/api/biz/subscription/list glm-b":
 			w.WriteHeader(http.StatusInternalServerError)
+		case "open.bigmodel.cn/api/biz/customer-package-reset/list glm-a":
+			if r.URL.Query().Get("targetType") != "PERSONAL" {
+				t.Errorf("resets asked as %s", r.URL)
+			}
+			w.Write([]byte(zhipuResetList))
+		case "open.bigmodel.cn/api/biz/customer-package-reset/list glm-b":
+			w.Write([]byte(`{"code":1000,"msg":"身份验证失败。","success":false}`))
 		case "api.minimaxi.com/v1/token_plan/remains Bearer sk-cp-k":
 			w.Write([]byte(`{"model_remains":[{"model_name":"general","current_interval_remaining_percent":75,"current_interval_status":1,
 				"current_weekly_remaining_percent":96,"current_weekly_status":1}],"base_resp":{"status_code":0,"status_msg":"success"}}`))
@@ -298,6 +305,13 @@ func TestPlanQuotas(t *testing.T) {
 	}
 	if q := got["glm/home"]; q.Plan != "lite" || q.Windows[0].Used != 90 || q.Until != nil || q.Error != "" {
 		t.Errorf("second key: %+v", q)
+	}
+	// its resets (#1191): a list read is counted, one refused shows none
+	if r := got["glm/work"].Resets; r == nil || r.Count != 2 || r.FiveHour != 1 || r.Weekly != 1 {
+		t.Errorf("first key's resets: %+v", r)
+	}
+	if r := got["glm/home"].Resets; r != nil {
+		t.Errorf("second key's resets: %+v", r)
 	}
 	if q := got["go/"]; q.Name != "OpenCode Go" || len(q.Windows) != 1 || q.Windows[0].Name != "5 hours" {
 		t.Errorf("go: %+v", q)

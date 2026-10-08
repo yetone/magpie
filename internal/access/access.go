@@ -30,6 +30,82 @@ func Managed(secret string) bool {
 	return strings.HasPrefix(secret, legacyLANPrefix)
 }
 
+// Named: secret has a named gateway key's form (sk-magpie-…), or is the
+// key's own value a user gave it (Change.Secret), so a request from this
+// computer with one is counted and limited as that key, as a sk-magpie-
+// key is.
+func Named(secret string) bool {
+	if Managed(secret) {
+		return true
+	}
+	if secret == "" {
+		return false
+	}
+	own := ownSecrets()
+	_, ok := own[secret]
+	return ok
+}
+
+// own caches the key store's own-value secrets by the file's size and
+// time, so a request from this computer doesn't read it each time.
+var own struct {
+	sync.Mutex
+	size    int64
+	mod     int64
+	secrets map[string]struct{}
+}
+
+func ownSecrets() map[string]struct{} {
+	fi, err := os.Stat(Path())
+	if err != nil {
+		return nil
+	}
+	own.Lock()
+	defer own.Unlock()
+	if own.secrets != nil && own.size == fi.Size() && own.mod == fi.ModTime().UnixNano() {
+		return own.secrets
+	}
+	mu.Lock()
+	keys, err := load()
+	mu.Unlock()
+	if err != nil {
+		return nil // unknown: tried again on the next request
+	}
+	m := map[string]struct{}{}
+	for _, k := range keys {
+		if k.Secret != "" && !Managed(k.Secret) {
+			m[k.Secret] = struct{}{}
+		}
+	}
+	own.size, own.mod, own.secrets = fi.Size(), fi.ModTime().UnixNano(), m
+	return m
+}
+
+// ownSecret checks a key value a user brings (one their clients already
+// send, from another gateway they move from, such as CLIProxyAPI's
+// api-keys, which are any string): what an HTTP header carries, and no
+// other key's.
+func ownSecret(secret string, keys []Key) (string, error) {
+	secret = strings.TrimSpace(secret)
+	if n := len(secret); n < 8 || n > 256 {
+		return "", errors.New("Use a key between 8 and 256 characters")
+	}
+	for i := 0; i < len(secret); i++ {
+		if c := secret[i]; c <= ' ' || c > '~' {
+			return "", errors.New("A key can have only letters, digits and ASCII symbols, no spaces")
+		}
+	}
+	if strings.HasPrefix(secret, legacyLANPrefix) {
+		return "", errors.New("A key of your own can't start with sk-magpie-: leave the key empty and magpie makes one")
+	}
+	for _, k := range keys {
+		if subtle.ConstantTimeCompare([]byte(secret), []byte(k.Secret)) == 1 {
+			return "", errors.New("Another gateway key already has this key")
+		}
+	}
+	return secret, nil
+}
+
 type Key struct {
 	ID     string `json:"id"`
 	Name   string `json:"name"`
@@ -97,6 +173,12 @@ func List() ([]Key, error) {
 			}
 			k.Masked = prefix + "…" + k.Secret[len(k.Secret)-6:]
 		}
+		if k.Secret != "" && !Managed(k.Secret) { // a key of the user's own: only its end
+			k.Masked = "…"
+			if len(k.Secret) >= 12 {
+				k.Masked += k.Secret[len(k.Secret)-4:]
+			}
+		}
 		k.Secret = ""
 	}
 	return keys, nil
@@ -162,6 +244,10 @@ type Change struct {
 	// Accounts is what "accounts-key" sets (#905); none lets the key use
 	// every account and key.
 	Accounts []string `json:"accounts,omitempty"`
+	// Secret is the value "add-key" gives the new key, one its clients
+	// already send (love1sbug on X: keys handed out from another gateway);
+	// "" for one magpie makes.
+	Secret string `json:"secret,omitempty"`
 }
 
 // Update writes the named key store atomically.
@@ -185,11 +271,17 @@ func Update(action string, in Change) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		token, err := random(24)
-		if err != nil {
-			return "", err
+		if in.Secret != "" {
+			if secret, err = ownSecret(in.Secret, keys); err != nil {
+				return "", err
+			}
+		} else {
+			token, err := random(24)
+			if err != nil {
+				return "", err
+			}
+			secret = Prefix + token
 		}
-		secret = Prefix + token
 		keys = append(keys, Key{ID: id, Name: name, Secret: secret})
 	} else {
 		i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == in.Key })

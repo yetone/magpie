@@ -34,6 +34,11 @@ type RequestPage struct {
 	Agents, Providers []string
 	Purposes          []string // all purposes in the period, independent of the selected filter
 	CallerKeys        []Group
+	// Through and Direct are the rows the gateway served and the rows read
+	// from the agents' own session files, which the gateway never saw. Sum
+	// is the two together; the page shows the three beside each other so a
+	// reader can tell what magpie carried from what it only read about.
+	Through, Direct Totals
 	// Accounts are the subscription accounts that answered calls in the
 	// period, by provider and account, for the Account filter (#557)
 	Accounts []Group
@@ -214,9 +219,12 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	}
 	limit = min(limit, 500)
 	offset = max(0, offset)
+	// The time is read once, so that the rows, the chart and the day the page
+	// is kept for are of one day when midnight falls while it is worked out.
+	now := Clock()
 	// A replacement reader remains useful to callers supplying synthetic logs.
 	if LogCalls != nil {
-		return pageFromLedger(p, f, offset, limit, LedgerOf(p, Filter{}))
+		return pageFromLedgerAt(p, f, offset, limit, LedgerOfAt(p, Filter{}, now), now)
 	}
 	sources := sessions.CallSources()
 	slices.SortFunc(sources, func(a, b sessions.CallSource) int {
@@ -248,7 +256,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	h.Reset()
 	snapshot := logSnapshotFor(true)
 	version := snapshot.version
-	fmt.Fprint(h, meta, version, time.Now().Format("2006-01-02 MST"))
+	fmt.Fprint(h, meta, version, now.Format("2006-01-02 MST"))
 	for _, s := range sources {
 		fmt.Fprintf(h, "%s:%d:%d;", s.Path, s.Size, s.Modified.UnixNano())
 	}
@@ -301,7 +309,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 		row.Agent = AgentOf(r.Agent)
 		return row
 	}
-	since := p.Since(time.Now())
+	since := p.Since(now)
 	gatewaySince := since
 	if !since.IsZero() {
 		gatewaySince = since.Add(-24 * time.Hour)
@@ -444,7 +452,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	if someShared {
 		names = sharedNames()
 	}
-	page := buildRequestBlocks(p, f, offset, limit, gateways, chunks, others, names)
+	page := buildRequestBlocks(p, f, offset, limit, now, gateways, chunks, others, names)
 	shared.Lock()
 	defer shared.Unlock()
 	// A query for an older filesystem snapshot may finish after a newer one.
@@ -724,13 +732,15 @@ func sharesOf(m map[string]*Share) []Share {
 	return out
 }
 func buildRequestPage(p Period, f Filter, offset, limit int, gateway *rowChunk, chunks []*rowChunk) RequestPage {
-	return buildRequestBlocks(p, f, offset, limit, []*rowChunk{gateway}, chunks, nil, nil)
+	return buildRequestBlocks(p, f, offset, limit, Clock(), []*rowChunk{gateway}, chunks, nil, nil)
 }
 
 // Shared days are never matched to this computer's gateway or session calls.
-func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks, others []*rowChunk, names map[string]string) RequestPage {
+// now is the moment the page is asked at: its period and its chart's hours or
+// days are read from it.
+func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, gateways, chunks, others []*rowChunk, names map[string]string) RequestPage {
 	skip := visibleLocal(chunks)
-	since := p.Since(time.Now())
+	since := p.Since(now)
 	matched := matchedBlocks(gateways, chunks, skip, since, true)
 	all := append(append(slices.Clone(gateways), chunks...), others...)
 	visit := func(fn func(rowRef, Row)) {
@@ -772,6 +782,9 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 	selected := newestHeap{}
 	chartFilter := f
 	chartFilter.Day = ""
+	// the two source cells' own numbers, counted without the source pick
+	viaFilter := f
+	viaFilter.Through = ""
 	var first time.Time
 	visit(func(ref rowRef, r Row) {
 		agents[r.Agent] = true
@@ -781,7 +794,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 		}
 		addCallerRow(callers, r)
 		addAccountRow(accounts, r)
-		keep := f.keeps(r.Record)
+		keep := f.keepsRow(r)
 		if keep {
 			out.Total++
 			if take > 0 && len(selected) < take {
@@ -794,10 +807,22 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 				out.Sum.addRow(r)
 			}
 		}
+		// The two sources are counted with the Via pick cleared, as the
+		// dimension groups above are: the cells are what the reader
+		// switches between, so each must go on saying its own number
+		// while another is picked, or one of them would read 0 and
+		// there would be no way back.
+		if !r.IsRejected() && viaFilter.keepsRow(r) {
+			if r.Source == "log" {
+				out.Direct.addRow(r)
+			} else {
+				out.Through.addRow(r)
+			}
+		}
 		if r.IsRejected() {
 			return
 		}
-		if keep || f.Day != "" && chartFilter.keeps(r.Record) {
+		if keep || f.Day != "" && chartFilter.keepsRow(r) {
 			for _, d := range Dimensions {
 				k := keys.key(r, d)
 				s := seriesGroups[d][k]
@@ -814,7 +839,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 		if g := f; names != nil {
 			g.Computer = ""
 			g.Day = ""
-			if g.keeps(r.Record) {
+			if g.keepsRow(r) {
 				k := r.key("computer")
 				if computers[k] == nil {
 					computers[k] = &Share{ID: k}
@@ -838,7 +863,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 			}
 			if f.Day != "" {
 				g.Day = ""
-				if g.keeps(r.Record) {
+				if g.keepsRow(r) {
 					k := keys.key(r, d)
 					if chartGroups[d][k] == nil {
 						chartGroups[d][k] = &Share{ID: k}
@@ -847,7 +872,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 				}
 				g.Day = f.Day
 			}
-			if !g.keeps(r.Record) {
+			if !g.keepsRow(r) {
 				continue
 			}
 			k := keys.key(r, d)
@@ -897,7 +922,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 	out.Computers, out.Names = computerShares(computers, names)
 	var base []Point
 	chartSince := since
-	chartSince, out.Bucket, base = timeline(p, time.Now(), first)
+	chartSince, out.Bucket, base = timeline(p, now, first)
 	out.Series = make([]SeriesPoint, len(base))
 	for i := range base {
 		out.Series[i] = SeriesPoint{Point: base[i], By: map[string]map[string]Part{}}
@@ -906,7 +931,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 		}
 	}
 	visit(func(_ rowRef, r Row) {
-		if !chartFilter.keeps(r.Record) || r.IsRejected() {
+		if !chartFilter.keepsRow(r) || r.IsRejected() {
 			return
 		}
 		t := r.Time.In(time.Local)
@@ -945,8 +970,31 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, gateways, chunks,
 	return out
 }
 func pageFromLedger(p Period, f Filter, offset, limit int, all Ledgered) RequestPage {
+	return pageFromLedgerAt(p, f, offset, limit, all, Clock())
+}
+
+// pageFromLedgerAt is the page of a ledger read at now, its chart over the
+// period read at the same moment.
+func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now time.Time) RequestPage {
 	l := all.Filtered(f)
 	out := RequestPage{Sum: l.Sum, Total: len(l.Rows), Agents: l.Agents, Providers: l.Providers, Purposes: []string{}, By: map[string][]Share{}}
+	// the same split the streaming path makes, so both pages of the ledger
+	// agree: "log" is a call read from an agent's own session file, which
+	// the gateway never saw; the rest went through it. Counted with the source
+	// pick cleared, as the streaming path does, so the three cells stay
+	// switchable whichever one is picked.
+	viaFilter := f
+	viaFilter.Through = ""
+	for _, r := range all.Rows {
+		if r.IsRejected() || !viaFilter.keepsRow(r) {
+			continue
+		}
+		if r.Source == "log" {
+			out.Direct.addRow(r)
+		} else {
+			out.Through.addRow(r)
+		}
+	}
 	callers, accounts := map[string]*Group{}, map[string]*Group{}
 	purposes := map[string]bool{}
 	for i := len(all.Rows) - 1; i >= 0; i-- {
@@ -969,7 +1017,7 @@ func pageFromLedger(p Period, f Filter, offset, limit int, all Ledgered) Request
 		chartRows = all.Filtered(chartFilter).Rows
 		out.ChartBy = map[string][]Share{}
 	}
-	out.Bucket, out.Series = LedgerSeries(p, chartRows)
+	out.Bucket, out.Series = ledgerSeriesAt(p, chartRows, now)
 	for _, d := range Dimensions {
 		g := f
 		if d == "provider" {

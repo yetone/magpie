@@ -51,7 +51,7 @@ func TestRejectedOnlyInRequestRows(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	catalog.Reset()
 	t.Cleanup(catalog.Reset)
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	recs := []Record{{Time: now, Agent: "codex", Provider: "relay", Model: "m", Status: 200, Input: 2}, {Time: now, Agent: "codex", Status: 404, Error: "unknown model", Rejected: true}, {Time: now, Agent: "codex", Status: 400}}
 	rows, sum, _ := ledger(time.Time{}, Filter{}, recs)
 	if len(rows) != 3 || sum.Calls != 1 || sum.Errors != 0 {

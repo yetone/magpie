@@ -43,9 +43,15 @@ type memberKey struct{}
 // and tells the request's memberWriter, if it has one.
 func noteMember(w http.ResponseWriter, r *http.Request, p provider.Provider, model string) {
 	id := p.ID + "/" + model
-	h := w.Header()
-	h.Set(providerHeader, p.ID)
-	h.Set(modelHeader, id)
+	if hw, ok := w.(*holdWriter); ok {
+		// watch's keepAlive may send them meanwhile
+		hw.note(providerHeader, p.ID)
+		hw.note(modelHeader, id)
+	} else {
+		h := w.Header()
+		h.Set(providerHeader, p.ID)
+		h.Set(modelHeader, id)
+	}
 	if mw, _ := r.Context().Value(memberKey{}).(*memberWriter); mw != nil {
 		mw.setMember(id)
 	}

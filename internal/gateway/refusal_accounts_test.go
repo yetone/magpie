@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -267,7 +268,7 @@ while read -r line; do
   fi
 done
 `
-	os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755)
+	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	provider.ForgetAccounts()
 	t.Cleanup(provider.ForgetAccounts)

@@ -5,8 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // WSL puts Windows' PATH on the distro's, so `command -v pi` there finds
@@ -55,8 +58,14 @@ func TestWSLProbeScriptSaysWhere(t *testing.T) {
 	if err != nil {
 		t.Skip("no sh")
 	}
+	// the probe is a distro's: a Windows shell of its own (Git Bash's)
+	// reports the folder it is given as a drive, and a program on a drive
+	// is not the distro's, which is not what this check is about
+	if runtime.GOOS == "windows" {
+		t.Skip("a Windows shell reports the temp folder as a drive")
+	}
 	home, bin := t.TempDir(), t.TempDir()
-	os.WriteFile(filepath.Join(bin, "pi"), []byte("#!/bin/sh\n"), 0o755)
+	testenv.Program(t, filepath.Join(bin, "pi"), "#!/bin/sh\n")
 	cmd := exec.Command(sh, "-c", wslProbeScript)
 	cmd.Env = []string{"HOME=" + home, "PATH=" + bin + ":/usr/bin:/bin"}
 	out, err := cmd.Output()

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // fakeClaudeCalling answers each line with a reply that calls one of the
@@ -48,7 +49,7 @@ while read -r line; do
   echo '{"type":"stream_event","event":{"type":"message_stop"}}'
 done
 `
-	os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755)
+	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return dir
 }

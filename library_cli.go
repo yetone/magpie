@@ -388,6 +388,8 @@ func rtkCmd(args []string) error {
 		switch {
 		case v.Note != "":
 			fmt.Println(amber.Render("  " + v.Note))
+		case v.Waiting != "":
+			fmt.Println(amber.Render("  RTK "+v.Latest+" is out · waiting for "+v.Waiting), muted.Render("— "+v.Waiting+" has "+v.WaitingHas+" so far, and usually has a release within a few days"))
 		case v.Latest != "" && v.Version != "" && library.RTKNewer(v.Latest, v.Version):
 			up := "update it the way it was installed"
 			if v.Upgrade != "" {

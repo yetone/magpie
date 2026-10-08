@@ -32,6 +32,8 @@ type ResetCredits struct {
 	ByWindow bool `json:"byWindow,omitempty"`
 	FiveHour int  `json:"fiveHour,omitempty"`
 	Weekly   int  `json:"weekly,omitempty"`
+	// Team: the resets are a GLM Coding team plan's, not the person's own
+	Team bool `json:"team,omitempty"`
 	// Each is every reset still to be used and when it runs out, the
 	// soonest first, one that never does last (#960: the card's tooltip
 	// lists them, where it only said the first). Empty when the vendor

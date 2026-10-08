@@ -13,6 +13,16 @@ import (
 // take Omarchy's look and its bar's place instead of the tray's.
 var onOmarchy = omarchy.Detect()
 
+// hyprland is whether magpie runs under Hyprland (omarchy.Hyprland), a
+// variable so a test can stand in for it.
+var hyprland = omarchy.Hyprland
+
+// onBarIcon is told whether magpie's icon is in Omarchy's bar once Settings'
+// Bar icon has changed it. The app then takes its tray item out of the bar's
+// tray (setTrayInBar), so the bar shows one magpie, not the widget and the
+// tray icon side by side (Alex on Discord: two icons with Bar icon on).
+var onBarIcon func(on bool)
+
 // omarchyTheme is the Omarchy theme the page draws with, when on Omarchy.
 func omarchyTheme() (omarchy.Theme, bool) {
 	if !onOmarchy {
@@ -24,7 +34,7 @@ func omarchyTheme() (omarchy.Theme, bool) {
 // barIcon is whether magpie can put its icon in Omarchy's bar (the desktop
 // app on Omarchy's Hyprland; not a browser's page), and whether it has.
 func barIcon(w Windows) map[string]bool {
-	ok := onOmarchy && !isWeb(w) && omarchy.Hyprland()
+	ok := onOmarchy && !isWeb(w) && hyprland()
 	return map[string]bool{"available": ok, "on": ok && omarchy.WidgetOn()}
 }
 
@@ -52,6 +62,11 @@ func omarchyRoutes(mux *http.ServeMux, w Windows) {
 			}
 		} else {
 			err = omarchy.RemoveWidget()
+		}
+		// what is in the bar now, though the omarchy command failed after
+		// the files went in or out
+		if onBarIcon != nil {
+			onBarIcon(barIcon(w)["on"])
 		}
 		if err != nil {
 			fail(rw, err)

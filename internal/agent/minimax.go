@@ -212,12 +212,21 @@ func writeMiniMaxEntryAt(path, gw string) error {
 			}
 		}
 		yamlSet(mn, "reasoning", len(levels) > 0)
+		// a default effort set by hand stays while the model has it
+		var was string
+		if d := yamlGet(yamlGet(mn, "thinking"), "defaultEffort"); d != nil && d.Kind == yaml.ScalarNode {
+			was = d.Value
+		}
 		yamlDel(mn, "thinking")
 		if len(levels) > 0 {
 			th := yamlMap(mn, "thinking")
 			yamlSet(th, "effortOptions", levels)
+			def := ""
 			if slices.Contains(levels, "high") {
-				yamlSet(th, "defaultEffort", "high")
+				def = "high"
+			}
+			if def = keptEffort(was, levels, def); def != "" {
+				yamlSet(th, "defaultEffort", def)
 			}
 		}
 		if caps := yamlGet(mn, "capabilities"); m.Images {

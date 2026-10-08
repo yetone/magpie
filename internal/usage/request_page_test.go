@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
 )
 
@@ -66,7 +67,7 @@ func equalPage(t *testing.T, got, want RequestPage) {
 
 func TestCompactPageMatchesLedger(t *testing.T) {
 	pageHome(t)
-	now := time.Now().Truncate(time.Second)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	var recs []Record
 	var logs []sessions.Call
 	for i := 0; i < 180; i++ {
@@ -134,7 +135,7 @@ func TestCompactPageMatchesLedger(t *testing.T) {
 		rows, sum, agents, providers := ledgerWith(since, Filter{}, rs, cs)
 		all := Ledgered{rows, sum, agents, providers}
 		day := now.AddDate(0, 0, -1).Format(time.DateOnly)
-		for _, f := range []Filter{{}, {Agent: "claude"}, {Provider: "a"}, {Failed: true}, {Query: "LOCAL"}, {Agent: "codex", Provider: UnknownProvider}, {Query: "no match"}, {Day: day}, {Day: day, Provider: "a"}, {Day: day, Model: "m", Failed: true}, {Day: "1900-01-01"}} {
+		for _, f := range []Filter{{}, {Agent: "claude"}, {Provider: "a"}, {Failed: true}, {Query: "LOCAL"}, {Agent: "codex", Provider: UnknownProvider}, {Query: "no match"}, {Day: day}, {Day: day, Provider: "a"}, {Day: day, Model: "m", Failed: true}, {Day: "1900-01-01"}, {Through: SourceGateway}, {Through: SourceSession}} {
 			for _, offset := range []int{0, 7, 500, int(^uint(0) >> 1)} {
 				t.Run(fmt.Sprintf("%s/%+v/%d", period, f, offset), func(t *testing.T) {
 					equalPage(t, buildRequestPage(period, f, offset, 7, gateway, []*rowChunk{local}), pageFromLedger(period, f, offset, 7, all))
@@ -146,7 +147,7 @@ func TestCompactPageMatchesLedger(t *testing.T) {
 
 func TestRequestPageModelRankingKeepsAlternatives(t *testing.T) {
 	pageHome(t)
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	records := []Record{
 		{Time: now, Provider: "a", Agent: "codex", Model: "gpt-5", Input: 10},
 		{Time: now, Provider: "a", Agent: "codex", Model: "gpt-5-mini", Input: 20},
@@ -196,12 +197,19 @@ func TestRequestPageModelRankingKeepsAlternatives(t *testing.T) {
 
 func TestQueryPageSourceAndIdentityInvalidation(t *testing.T) {
 	pageHome(t)
+	// QueryPage saves a copy of the account Codex is signed in to, at most
+	// once every 30s (rememberLogins), and this test expects only auth.json's
+	// identity. Look at the accounts before signing in, as an earlier test in
+	// a package run does, so no copy is saved while it runs.
+	provider.ForgetAccounts()
+	provider.Accounts()
 	sessionAuth(t, sessions.CodexDir(), "a", "u", "one@example.com")
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	path := filepath.Join(sessions.CodexDir(), "sessions", "rollout-2026-09-30T00-00-00-test.jsonl")
 	os.MkdirAll(filepath.Dir(path), 0700)
 	meta := `{"type":"session_meta","payload":{"id":"test","model_provider":"custom","creator_account_id":"a","creator_user_id":"u"}}` + "\n" + `{"type":"turn_context","payload":{"model":"m","effort":"high"}}` + "\n"
 	line := func(n int) string {
-		return fmt.Sprintf(`{"timestamp":%q,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":%d,"output_tokens":%d},"last_token_usage":{"input_tokens":10,"output_tokens":1}}}}`+"\n", time.Now().Format(time.RFC3339Nano), n*10, n)
+		return fmt.Sprintf(`{"timestamp":%q,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":%d,"output_tokens":%d},"last_token_usage":{"input_tokens":10,"output_tokens":1}}}}`+"\n", now.Format(time.RFC3339Nano), n*10, n)
 	}
 	os.WriteFile(path, []byte(meta+line(1)), 0600)
 	check := func(n int, account string, official bool) {
@@ -238,7 +246,7 @@ func TestQueryPageSourceAndIdentityInvalidation(t *testing.T) {
 	sessionAuth(t, sessions.CodexDir(), "other", "u", "wrong@example.com")
 	check(2, "", false)
 	os.MkdirAll(filepath.Dir(Path()), 0700)
-	r, _ := json.Marshal(Record{Time: time.Now(), Model: "m", Agent: "opencode", Input: 10, Output: 1})
+	r, _ := json.Marshal(Record{Time: now, Model: "m", Agent: "opencode", Input: 10, Output: 1})
 	os.WriteFile(Path(), r, 0600)
 	check(2, "", false) // partial gateway line
 	appendFile(Path(), "\n")
@@ -263,7 +271,7 @@ func TestQueryPageSourceAndIdentityInvalidation(t *testing.T) {
 // (inaction on Discord).
 func TestRequestPageRanksModelAtEachProvider(t *testing.T) {
 	pageHome(t)
-	now := time.Now()
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	records := []Record{
 		{Time: now, Provider: "zhipu", Agent: "claude", Model: "glm-5.3", Output: 1000, Millis: 2200, TTFT: 200},
 		{Time: now, Provider: "zhipu", Agent: "claude", Model: "glm-5.3", Output: 1000, Millis: 2200, TTFT: 200},

@@ -776,11 +776,21 @@ type MarketSkill struct {
 	Name     string `json:"name"`
 	Installs int    `json:"installs"`
 	Official bool   `json:"official,omitempty"`
+	// Featured is magpie's own, not one skills.sh lists
+	Featured bool   `json:"featured,omitempty"`
 	Icon     string `json:"icon"`
 	// Description is known once it has been fetched
 	Description string `json:"description,omitempty"`
 	Have        string `json:"have,omitempty"`
 }
+
+// featuredSkills are magpie's own skills, first in the market: in
+// magpie-community/plugins, beside its plugins (ttmouse on X: an official
+// skill for an agent to read what magpie quota tells).
+var featuredSkills = []MarketSkill{{
+	Source: "magpie-community/plugins", SkillID: "magpie-quota", Name: "magpie-quota", Official: true, Featured: true,
+	Description: "Check how much is left of the user's AI subscriptions, coding plans and API key balances through magpie: each usage window's percent used and when it resets, each key's balance, and wait until a subscription has allowance again.",
+}}
 
 type skillsShEntry struct {
 	Source   string `json:"source"`
@@ -867,8 +877,9 @@ func searchSkillsSh(q string) ([]skillsShEntry, error) {
 	return slices.DeleteFunc(body.Skills, func(e skillsShEntry) bool { return !repoRe.MatchString(e.Source) || e.SkillID == "" }), nil
 }
 
-// MarketSkills is what the market shows for a search: the most installed
-// skills that match it, then what skills.sh finds for it.
+// MarketSkills is what the market shows for a search: magpie's own skills
+// that match it, the most installed skills that do, then what skills.sh
+// finds for it.
 func MarketSkills(q string) ([]MarketSkill, error) {
 	q = strings.ToLower(strings.TrimSpace(q))
 	var list []skillsShEntry
@@ -899,6 +910,26 @@ func MarketSkills(q string) ([]MarketSkill, error) {
 	about := cachedAbout()
 	l, _ := loadLocked()
 	out := []MarketSkill{}
+	for _, f := range featuredSkills {
+		if q != "" && !strings.Contains(strings.ToLower(f.Name+" "+f.Source+" "+f.Description), q) {
+			continue
+		}
+		owner, _, _ := strings.Cut(f.Source, "/")
+		f.ID, f.Icon = f.Source+"/"+f.SkillID, gh(owner)
+		if l != nil {
+			f.Have = l.haveSkill(f.Source, f.SkillID, f.Name)
+		}
+		// once skills.sh lists it too, its count of installs is told, and
+		// it isn't shown twice
+		list = slices.DeleteFunc(list, func(e skillsShEntry) bool {
+			if e.Source == f.Source && e.SkillID == f.SkillID {
+				f.Installs = e.Installs
+				return true
+			}
+			return false
+		})
+		out = append(out, f)
+	}
 	for _, e := range list {
 		owner, _, _ := strings.Cut(e.Source, "/")
 		ms := MarketSkill{ID: e.Source + "/" + e.SkillID, Source: e.Source, SkillID: e.SkillID, Name: e.Name, Installs: e.Installs,
@@ -1019,9 +1050,6 @@ func InstallMarketSkill(source, id string, agents []string) (*Result, error) {
 	if i < 0 {
 		return nil, fmt.Errorf("%s has no skill %s any more", source, id)
 	}
-	if p.Candidates[i].Have {
-		return nil, fmt.Errorf("the library already has a skill called %s", p.Candidates[i].Name)
-	}
 	if agents == nil {
 		for _, t := range Targets() {
 			if t.Skills != "" {
@@ -1029,7 +1057,10 @@ func InstallMarketSkill(source, id string, agents []string) (*Result, error) {
 			}
 		}
 	}
-	return InstallSkills(source, []string{p.Candidates[i].Path}, agents)
+	// the market showed this one skill: the repository's others are
+	// offered as new by a check, beside it
+	path := p.Candidates[i].Path
+	return installChange(func(l *Library, in *installed) error { return installFrom(l, p, []string{path}, agents, false, in) })
 }
 
 // ---- icons ------------------------------------------------------------------

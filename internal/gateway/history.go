@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/steady"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -52,6 +53,10 @@ type counted struct {
 
 const dayForm = "2006-01-02"
 
+// historyClock is the time saveRoute prunes the days by: which day is today,
+// and which are over or too old. A variable for the tests.
+var historyClock = time.Now
+
 // saveRoute adds a done route to its day. Errors are swallowed: keeping
 // the history must never break a call.
 func saveRoute(r Route) {
@@ -72,15 +77,27 @@ func saveRoute(r Route) {
 	}
 	f.Write(append(b, '\n'))
 	f.Close()
-	if time.Since(history.pruned) > time.Hour {
-		history.pruned = time.Now()
-		pruneHistory(dir, time.Now())
+	if now := historyClock(); now.Sub(history.pruned) > time.Hour {
+		history.pruned = now
+		pruneHistory(dir, now)
 	}
 }
 
 // pruneHistory gzips the days that are over, and drops the days older than
 // historyDays, then the oldest until what is left fits historyBytes.
 func pruneHistory(dir string, now time.Time) {
+	// a .gz.tmp left by a magpie stopped before renaming it (gzipFile) goes
+	// once it is an hour old: a younger one may be another magpie's, still
+	// being written
+	es, _ := os.ReadDir(dir)
+	for _, e := range es {
+		if !strings.HasSuffix(e.Name(), ".jsonl.gz.tmp") {
+			continue
+		}
+		if fi, err := e.Info(); err == nil && now.Sub(fi.ModTime()) > time.Hour {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
 	today := now.Local().Format(dayForm)
 	for _, d := range historyFiles(dir) {
 		if d.day < today && !strings.HasSuffix(d.path, ".gz") {
@@ -103,18 +120,96 @@ func pruneHistory(dir string, now time.Time) {
 	}
 }
 
+// gzipFile gzips a day's file into its .gz. A day gzipped already keeps its
+// .gz, the file's routes going after its own as a gzip member of their own
+// (read back as one stream): a route that began before midnight and was done
+// after the first prune past it is written to its day's file again. A route
+// in the .gz already, from a file added and left behind (magpie stopped
+// before removing it), isn't added again. A .gz cut short, or ending in a
+// route cut short (an older magpie stopped, or the disk filled, as it or its
+// file was written), is written anew from its whole routes and the file's
+// when the file has a route to add: after the break the file's routes
+// couldn't be read, and after a route cut short the first of them would join
+// it. A last route whole but for its newline is kept. The .gz is read a route
+// at a time, never held whole unzipped; it is replaced whole, never seen half
+// written, and the file goes once its routes are in. A .gz that can't be read
+// from disk is left as it is, and the file with it, for a later prune.
 func gzipFile(path string) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
-	var buf bytes.Buffer
-	z := gzip.NewWriter(&buf)
-	z.Write(b)
-	if z.Close() != nil || os.WriteFile(path+".gz", buf.Bytes(), 0o600) != nil {
+	old, err := os.ReadFile(path + ".gz")
+	if err != nil && !os.IsNotExist(err) {
 		return
 	}
+	// the file's routes, each true once the .gz is seen to have it: a set
+	// built from the file, a few routes, not from the whole day
+	in := map[string]bool{}
+	whole := true // the .gz, if there is one, can have routes go after it
+	if len(old) > 0 {
+		for l := range bytes.Lines(b) {
+			in[string(bytes.TrimSpace(l))] = false
+		}
+		whole = gzRoutes(old, func(l []byte) {
+			if _, ok := in[string(l)]; ok {
+				in[string(l)] = true
+			}
+		})
+	}
+	buf := new(bytes.Buffer)
+	if whole {
+		buf = bytes.NewBuffer(old)
+	}
+	z := gzip.NewWriter(buf)
+	nl := []byte{'\n'}
+	add := func(l []byte) {
+		z.Write(l)
+		z.Write(nl)
+	}
+	if !whole {
+		gzRoutes(old, add) // written anew, its whole routes first
+	}
+	added := false
+	for l := range bytes.Lines(b) {
+		if l = bytes.TrimSpace(l); len(l) > 0 && !in[string(l)] {
+			add(l)
+			added = true
+		}
+	}
+	if added {
+		tmp := path + ".gz.tmp"
+		if z.Close() != nil || os.WriteFile(tmp, buf.Bytes(), 0o600) != nil || steady.Rename(tmp, path+".gz") != nil {
+			os.Remove(tmp)
+			return
+		}
+	}
 	os.Remove(path)
+}
+
+// gzRoutes calls f with each route of a day's .gz in turn, a last route
+// whole but for its newline among them and one cut short left out. It says
+// whether the .gz read to its end, its last route ending in a newline: what
+// a gzip member added after it needs to be read.
+func gzRoutes(gz []byte, f func([]byte)) bool {
+	z, err := gzip.NewReader(bytes.NewReader(gz))
+	if err != nil {
+		return false
+	}
+	r := bufio.NewReader(z)
+	for {
+		line, err := r.ReadBytes('\n')
+		l := bytes.TrimSpace(line)
+		if err != nil {
+			if len(l) > 0 && json.Valid(l) {
+				f(l)
+			}
+			return err == io.EOF && len(l) == 0
+		}
+		if len(l) > 0 {
+			f(l)
+		}
+	}
 }
 
 type dayFile struct {
@@ -180,7 +275,11 @@ func History(day string) (days []HistoryDay, routes []Route, cut bool) {
 			history.counts[d.path] = c
 		}
 		if n := c.n; n > 0 {
-			days = append([]HistoryDay{{d.day, n}}, days...)
+			if len(days) > 0 && days[0].Day == d.day {
+				days[0].Requests += n // a late route's file beside the day's .gz
+			} else {
+				days = append([]HistoryDay{{d.day, n}}, days...)
+			}
 		}
 	}
 	sort.SliceStable(routes, func(i, j int) bool { return routes[i].Time.Before(routes[j].Time) })

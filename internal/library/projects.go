@@ -161,14 +161,13 @@ var errForeign = errors.New("not magpie's")
 // copy made again whenever the library's differs from it.
 func (p *Project) place(e, name string) error {
 	abs := filepath.Join(p.Dir, filepath.FromSlash(e))
-	lib := skillDir(name)
 	if fi, err := os.Lstat(abs); err == nil {
 		if !ours(abs, name) {
 			return errForeign
 		}
 		link := linkEntry(fi)
 		// a copy stands for a link on Windows without the right to make one
-		if !p.Copy && link || !link && (p.Copy || runtime.GOOS == "windows") && hashDir(abs) == hashDir(realDir(lib)) {
+		if !p.Copy && link || !link && (p.Copy || runtime.GOOS == "windows") && fresh(abs, name) {
 			return nil
 		}
 	}

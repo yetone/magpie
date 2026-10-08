@@ -112,7 +112,12 @@ func TestUsageSharedBetweenComputers(t *testing.T) {
 		t.Helper()
 		return usage.QueryPage(usage.All, f, 0, 100)
 	}
-	now := time.Now()
+	// the usage clock held at noon, so that a's calls of today are of one
+	// day whenever the test runs
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)
+	oldClock := usage.Clock
+	usage.Clock = func() time.Time { return now }
+	t.Cleanup(func() { usage.Clock = oldClock })
 
 	// a: two calls today, one two days ago, and one another magpie passed
 	// on to it, which that one counts itself

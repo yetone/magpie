@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // TestRTKOffPath (#601): an rtk magpie finds where rtk's script puts it,
@@ -18,11 +20,9 @@ import (
 func TestRTKOffPath(t *testing.T) {
 	h := sandbox(t)
 	local := filepath.Join(h, ".local", "bin")
-	write(t, filepath.Join(local, "rtk"), fakeRTK)
-	os.Chmod(filepath.Join(local, "rtk"), 0o755)
+	testenv.Program(t, filepath.Join(local, "rtk"), fakeRTK)
 	tools := filepath.Join(h, "tools")
-	write(t, filepath.Join(tools, "curl"), "#!/bin/sh\n")
-	os.Chmod(filepath.Join(tools, "curl"), 0o755)
+	testenv.Program(t, filepath.Join(tools, "curl"), "#!/bin/sh\n")
 	t.Setenv("PATH", tools)
 
 	v := ReadRTK()

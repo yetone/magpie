@@ -38,6 +38,9 @@ type gPart struct {
 		ID       string          `json:"id,omitempty"`
 		Name     string          `json:"name"`
 		Response json.RawMessage `json:"response,omitempty"`
+		// Parts is what the function gave back beside its response: the
+		// image agy's view_file read, as inlineData (#1038)
+		Parts []gPart `json:"parts,omitempty"`
 	} `json:"functionResponse,omitempty"`
 }
 
@@ -255,7 +258,10 @@ func parseGemini(body []byte) (*Request, error) {
 					id = names[fr.Name]
 				}
 				text, isErr := functionResponseText(fr.Response)
-				msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: id, Name: fr.Name, Text: text, IsError: isErr})
+				images, files := functionResponseParts(fr.Parts, &text)
+				msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: id, Name: fr.Name, Text: text, Images: images, IsError: isErr})
+				// a file no tool result can hold follows it in the same turn
+				msg.Parts = append(msg.Parts, files...)
 			case p.InlineData != nil:
 				if strings.HasPrefix(p.InlineData.MimeType, "image/") {
 					msg.Parts = append(msg.Parts, Part{Kind: Image, MediaType: p.InlineData.MimeType, Data: p.InlineData.Data})
@@ -355,6 +361,40 @@ func geminiText(raw json.RawMessage) string {
 		}
 	}
 	return b.String()
+}
+
+// functionResponseParts reads a functionResponse's own parts (Gemini 3's
+// multimodal function responses): its images go with the result, as the
+// other APIs' tool results carry them, and any other file (a PDF, audio)
+// is given back as a part of the turn, since a tool result holds only
+// text and images. Left unread, the model never saw what the tool read and
+// made it up (#1038).
+func functionResponseParts(parts []gPart, text *string) (images, files []Part) {
+	for _, p := range parts {
+		var part Part
+		switch {
+		case p.InlineData != nil:
+			part = Part{MediaType: p.InlineData.MimeType, Data: p.InlineData.Data}
+		case p.FileData != nil:
+			part = Part{MediaType: p.FileData.MimeType, URL: p.FileData.FileURI}
+		case p.Text != "" && !p.Thought:
+			if strings.TrimSpace(*text) != "" {
+				*text += "\n\n"
+			}
+			*text += p.Text
+			continue
+		default:
+			continue
+		}
+		if strings.HasPrefix(part.MediaType, "image/") {
+			part.Kind = Image
+			images = append(images, part)
+		} else {
+			part.Kind = File
+			files = append(files, part)
+		}
+	}
+	return images, files
 }
 
 // functionResponseText is what a tool said, as the other APIs carry it:

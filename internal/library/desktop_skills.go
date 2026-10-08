@@ -75,20 +75,9 @@ func isFile(p string) bool {
 }
 
 // desktopCopy puts a copy of the library's skill at p, its mark keeping
-// the hash of what was copied.
+// the hash of what was copied (markCopy).
 func desktopCopy(p, name string) error {
-	if err := copyIn(p, name); err != nil {
-		return err
-	}
-	f, err := os.OpenFile(filepath.Join(p, marker), os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprintf(f, "hash %s\n", hashDir(p))
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	return err
+	return copyIn(p, name)
 }
 
 // desktopEdited is whether magpie's copy at p was changed since it was

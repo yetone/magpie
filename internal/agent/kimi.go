@@ -59,9 +59,11 @@ func kimiDir(at place) (dir string, legacy bool) {
 
 // kimiModelTables are magpie's model tables; the new Kimi Code is told of
 // tool calling too, which kimi-cli has no word for and refuses.
-func kimiModelTables(legacy bool) []edit.Table {
+func kimiModelTables(path string, legacy bool) []edit.Table {
 	var out []edit.Table
+	names, _ := edit.TOMLTables(path)
 	for _, m := range magpieModels("kimi") {
+		name := "models." + strconv.Quote(magpieID+"/"+m.ID)
 		ctx := m.Context
 		if ctx <= 0 {
 			ctx = kimiContext
@@ -85,9 +87,15 @@ func kimiModelTables(legacy bool) []edit.Table {
 			kvs = append(kvs, edit.KV{Path: "capabilities", Value: edit.Raw("[" + strings.Join(caps, ", ") + "]")})
 		}
 		if !legacy {
-			kvs = append(kvs, kimiEfforts(m.Efforts)...)
+			// a default effort set by hand stays while the model has it
+			var was string
+			if slices.Contains(names, name) {
+				t, _ := edit.GetTOMLTable(path, name)
+				was = t["default_effort"]
+			}
+			kvs = append(kvs, kimiEfforts(m.Efforts, was)...)
 		}
-		out = append(out, edit.Table{Name: "models." + strconv.Quote(magpieID+"/"+m.ID), KVs: kvs})
+		out = append(out, edit.Table{Name: name, KVs: kvs})
 	}
 	return out
 }
@@ -98,19 +106,25 @@ func kimiModelTables(legacy bool) []edit.Table {
 // on the middle one). Without them it offers thinking on or off only and
 // asks for no level at all. none is left out: Kimi Code's own off turns
 // thinking off. kimi-cli has neither key.
-func kimiEfforts(efforts []string) []edit.KV {
-	var levels []string
+func kimiEfforts(efforts []string, was string) []edit.KV {
+	var levels, quoted []string
 	for _, e := range efforts {
 		if e != "none" {
-			levels = append(levels, strconv.Quote(e))
+			levels = append(levels, e)
+			quoted = append(quoted, strconv.Quote(e))
 		}
 	}
 	if len(levels) == 0 {
 		return nil
 	}
-	kvs := []edit.KV{{Path: "support_efforts", Value: edit.Raw("[" + strings.Join(levels, ", ") + "]")}}
-	if slices.Contains(efforts, "high") {
-		kvs = append(kvs, edit.KV{Path: "default_effort", Value: "high"})
+	kvs := []edit.KV{{Path: "support_efforts", Value: edit.Raw("[" + strings.Join(quoted, ", ") + "]")}}
+	def := ""
+	if slices.Contains(levels, "high") {
+		def = "high"
+	}
+	// one set by hand (was) stays while the model has it
+	if def = keptEffort(was, levels, def); def != "" {
+		kvs = append(kvs, edit.KV{Path: "default_effort", Value: def})
 	}
 	return kvs
 }
@@ -133,7 +147,7 @@ func kimiIn(at place) *Agent {
 		); err != nil {
 			return err
 		}
-		return edit.SetTOMLTables(path, []string{kimiModelTable}, kimiModelTables(legacy))
+		return edit.SetTOMLTables(path, []string{kimiModelTable}, kimiModelTables(path, legacy))
 	}
 	dropMagpie := func() error {
 		if err := edit.SetTOMLTables(path, []string{kimiModelTable}, nil); err != nil {

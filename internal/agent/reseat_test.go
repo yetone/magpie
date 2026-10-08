@@ -94,7 +94,7 @@ func TestReseatOff(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]string{"model": "ds/gpt-5", "opus": "ds/claude-sonnet-4-5-20250929",
-		"haiku": "", "sonnet": "", "fable": ""} // haiku follows the main model; sonnet was ds/gpt-5 already
+		"haiku": "", "sonnet": "ds/gpt-5", "fable": ""} // haiku follows the main model; sonnet keeps the ds/gpt-5 picked for it, now the main model too (#1050)
 	for k, w := range want {
 		if got := c.Field(k).Get(); got != w {
 			t.Errorf("claude %s: %q, want %q", k, got, w)

@@ -43,12 +43,14 @@ function server(lang) {
 }
 
 // a grip's dots: whether it shows, and whether its last column of dots
-// (each 1.2px round about its tile's middle) is inside its box
-const grip = (h) => h.evaluate((h) => {
-  const s = getComputedStyle(h, "::before"), w = parseFloat(s.width), tile = parseFloat(s.backgroundSize);
+// (each 1.2px round about its tile's middle) is inside its box. Found in the
+// page at the read, as shown() does: a grip drawn again is a new element, and
+// the old one, out of the page, has no style to read.
+const grip = (page, sel) => page.evaluate((sel) => {
+  const s = getComputedStyle(document.querySelector(sel), "::before"), w = parseFloat(s.width), tile = parseFloat(s.backgroundSize);
   const cols = Math.ceil(w / tile);
   return { whole: (cols - 1) * tile + tile / 2 + 1.2 <= w + 0.01, cols, w, tile };
-});
+}, sel);
 const shown = (page, sel, v) => page.waitForFunction(([sel, v]) => getComputedStyle(document.querySelector(sel), "::before").opacity === v, [sel, v]);
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -69,9 +71,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const show = idle.locator(".ag-show");
       await show.waitFor();
       assert.equal((await show.textContent()).trim(), lang === "zh" ? "显示" : "Show");
-      const mid = async (l) => { const b = await l.boundingBox(); return b.y + b.height / 2; };
-      const pick = idle.locator("> .field.ag-start");
-      const [ms, mp] = [await mid(show), await mid(pick)];
+      // the fold's rows slide in (translateY and scale, .56s after a staggered
+      // delay): measure Show and the picker at rest, in one read. Read one at a
+      // time while the row still moves, the second read lands lower, by more
+      // the slower the machine.
+      await page.locator(".agent-fold").evaluate((f) => Promise.all(f.getAnimations({ subtree: true }).map((a) => a.finished)));
+      const [ms, mp] = await idle.evaluate((row) => [row.querySelector(".ag-show"), row.querySelector(":scope > .field.ag-start")]
+        .map((e) => { const b = e.getBoundingClientRect(); return b.y + b.height / 2; }));
       assert.ok(Math.abs(ms - mp) <= 1, `Show (${ms}) is level with the picker (${mp})`);
       // the shown one beside it has none
       assert.equal(await page.locator('.agent-fold .row.agent[data-id="grok"] .ag-show').count(), 0);
@@ -82,7 +88,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await shown(page, sel, "0");
       await page.locator('#agents > .row.agent[data-id="codex"]').hover();
       await shown(page, sel, "1");
-      const ag = await grip(page.locator(sel));
+      const ag = await grip(page, sel);
       assert.ok(ag.whole && ag.cols === 2, "the Agents grip's columns are whole: " + JSON.stringify(ag));
       assert.deepEqual(await tops(), top, "no click moved the page");
 
@@ -95,12 +101,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await shown(page, ".subscription-card .us-handle", "0");
       await card.hover();
       await shown(page, ".subscription-card .us-handle", "1");
-      const us = await grip(handle);
+      const us = await grip(page, ".subscription-card .us-handle");
       assert.ok(us.whole && us.cols === 2, "the Usage grip's columns are whole: " + JSON.stringify(us));
-      // between the card's edge and the logo
-      const [hb, ib, cb] = await Promise.all([handle.boundingBox(), handle.locator(".ic").boundingBox(), card.boundingBox()]);
-      const left = hb.x + await handle.evaluate((h) => parseFloat(getComputedStyle(h, "::before").left));
-      assert.ok(left > cb.x + 1 && left + us.w <= ib.x, `the grip (${left}–${left + us.w}) is between the card (${cb.x}) and the logo (${ib.x})`);
+      // between the card's edge and the logo. The cards are drawn again as the
+      // page's reads come in, so the boxes are read in one go, from one card:
+      // a box read from a card already replaced is null.
+      const { left, logo, edge } = await page.evaluate(() => {
+        const card = document.querySelector(".subscription-card"), h = card.querySelector(".us-handle");
+        return { left: h.getBoundingClientRect().x + parseFloat(getComputedStyle(h, "::before").left),
+          logo: h.querySelector(".ic").getBoundingClientRect().x, edge: card.getBoundingClientRect().x };
+      });
+      assert.ok(left > edge + 1 && left + us.w <= logo, `the grip (${left}–${left + us.w}) is between the card (${edge}) and the logo (${logo})`);
       assert.deepEqual(errors, []);
     });
   }

@@ -4,8 +4,9 @@
 // row says how much of its window is used and when it renews, with a bar,
 // and the story says why it went first by its allowance — beside an
 // account in a group, or among a provider's keys, all at 90% or more. A
-// key not known is told as before. In English, Chinese, Japanese and
-// German.
+// key not known is told as before. A lone key bought as a plan (#1016:
+// Kimi Code's, 49% of its 5 hours used) says what it has left too, at
+// 440px as well. In English, Chinese, Japanese and German.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -47,6 +48,12 @@ const scenes = {
       { id: "relay#a", provider: "relay", name: "Relay", who: "relay-a", kind: "key", model: "gpt-6-astra", routing: "usage", tokens: 100, ...week(95, 30) },
     ],
   },
+  // #1016: Kimi Code (China) with one key on, its 5 hours 49% used
+  lone: {
+    order: [
+      { id: "kimi-code-cn", provider: "kimi-code-cn", name: "Kimi Code (China)", kind: "provider", model: "kimi-for-coding", known: true, used: 49, renews: [ahead(26), ahead(2)] },
+    ],
+  },
   // keys whose windows aren't read: as before
   plain: {
     order: [
@@ -83,16 +90,20 @@ function serve(lang, scene) {
   };
 }
 
-async function open(t, engine, lang, scene) {
+async function open(t, engine, lang, scene, width = 1100) {
   const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
   t.after(() => browser.close());
-  const page = await browser.newPage({ viewport: { width: 1100, height: 900 }, reducedMotion: "reduce" });
+  const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
   page.setDefaultTimeout(5000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.route("**/*", serve(lang, scene));
   await page.goto("http://magpie.test/?view=routing");
-  await page.locator(".rt-req").first().click();
+  // the one request is opened already; below the fold at 440px, WebKit
+  // never finds it still enough to click
+  const req = page.locator(".rt-req").first();
+  await req.waitFor();
+  if (await req.getAttribute("aria-pressed") !== "true") await req.click();
   await page.locator(".rt-steps li.why").first().waitFor();
   // each row's state is filled on the next frame, after the story
   await page.waitForFunction(() => [...document.querySelectorAll("li")].filter((li) => li.querySelector(".who")).every((li) => li.querySelector("em")?.textContent.trim()));
@@ -138,6 +149,27 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await say("Smart: of the accounts with quota to spare, the one whose allowance renews soonest goes first — what it has left would be lost at the reset. The week decides; an account with five hours and no week goes by its five hours. One at 90% or more waits until the others can't answer; one resting after a failure goes last."));
       assert.deepEqual(errors, []);
     });
+    for (const width of [1100, 440]) {
+      test(`${engine} ${lang} ${width}px: one key on still says what it has left`, async (t) => {
+        const { page, errors, say, row, why } = await open(t, engine, lang, "lone", width);
+        assert.equal((await why()).trim(), await say("{name} has one key on — nothing to choose between.", { name: "Kimi Code (China)" }));
+        const used = (await say("{n} used · renews in {d}", { n: "49%" })).split("{d}")[0];
+        // its row in the story has a bar; it answered, so it says that
+        const key = row("Kimi Code (China)");
+        assert.equal(await key.locator(".bar i").evaluate((i) => i.style.width), "49%");
+        assert.equal(await key.evaluate((li) => li.classList.contains("nobar")), false);
+        // its own row under its name says what is used and when it renews
+        const act = page.locator(".rt-prov", { hasText: "Kimi Code (China)" }).locator("xpath=following-sibling::div[contains(@class, 'rt-act')][1]");
+        await act.locator(".st", { hasText: "49%" }).waitFor();
+        const st = (await act.locator(".st").textContent()).trim();
+        assert.ok(st.startsWith(used), `${st}\nwant ${used}…`);
+        assert.equal(await act.locator(".bar i").evaluate((i) => i.style.width), "49%");
+        const fits = await act.locator(".st").evaluate((e) => e.scrollWidth <= e.clientWidth + 1);
+        assert.ok(fits, `${st} is cut at this width`);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, "the page scrolls sideways");
+        assert.deepEqual(errors, []);
+      });
+    }
   }
   for (const lang of ["en", "zh"]) {
     test(`${engine} ${lang}: a key not read yet beside one read is told as weighed with it`, async (t) => {

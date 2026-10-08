@@ -227,6 +227,7 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
       <img class="for-dark" src="/img/usage-zh-dark.png" width="2080" height="842" loading="lazy" alt="用量页：剩余余额、token 与费用汇总，以及 30 天趋势图">
       <figcaption>经过网关的每次调用的余额、token、缓存命中和费用。</figcaption>
     </figure>
+    <p><b>上下文。</b><span class="ui">用量</span> 里的 <span class="ui">上下文</span> 标签页显示每个 Agent 的提示词里装了什么，在请求经过网关时读出：系统提示词、工具定义（一个 MCP 服务器的工具算作一项）、指令文件与 skills、工具读入的文件、工具的其他输出和对话，各占模型上下文窗口的多少。每个 Agent 有一个百分制得分——缓存读到了多少提示词、起步多轻、上下文涨得多快、失败多不多——以及「起步轻」「MCP 偏重」之类的标签，说明得分从何而来。打开一个会话，可以一格一格地看它最近一次请求的窗口；在 <span class="ui">路由</span> 页点选任意请求也能看到。magpie 只记名称，不保存提示词的文字。</p>
     <p><b>方案。</b>在 <span class="ui">Agent</span> 标签页底部点 <span class="ui">＋ 保存当前</span>，把所有 Agent 的设置存成一个方案；之后点这个方案就能一键全部切回。</p>
 
     <h2 id="cli"><a class="anchor" href="#cli">命令行</a></h2>
@@ -261,6 +262,15 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
     <h3>没有梯子，安装或更新连不上 GitHub 怎么办？</h3>
     <p>给安装脚本和 <code>magpie update</code> 加代理：<code>curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890</code>，或 <code>magpie update --proxy socks5://127.0.0.1:1080</code>（支持 http、https、socks5、socks5h；环境变量 <code>HTTPS_PROXY</code>、<code>ALL_PROXY</code> 同样生效）。<code>--mirror &lt;前缀&gt;</code> 从你指定的 GitHub 下载镜像取发布文件，即 <code>&lt;前缀&gt;https://github.com/…</code>；<code>magpie update mirror &lt;前缀&gt;</code> 让之后每次更新（包括应用自己的更新）都用它，<code>magpie update mirror off</code> 取消。不指定就不用任何镜像；文件的 SHA-256 始终来自 usemagpie.ai，而不是镜像，镜像改过的文件会被拒绝安装。应用自己的更新走 <span class="ui">设置</span> → <span class="ui">代理</span>。</p>
 
+    <h3 id="proxy-loopback">Agent 报 502 或连不上，magpie 的路由标签页里却什么都没有？</h3>
+    <p>代理软件（Surge、Clash、mihomo 等，开了系统代理、TUN 或增强模式）把 Agent 发往 <code>http://127.0.0.1:3425</code> 的请求接走、转去了别处，请求根本没到 magpie。只在跳过列表（<code>skip-proxy</code>、「绕过」）里写 127.0.0.1 不一定够：有些 Agent（比如 Codex）照样会走代理。在代理软件里加两条本地地址直连的规则，放在其他规则前面：</p>
+    <div class="code">
+      <span class="lang">Surge</span>
+      <button class="copy" data-copy="ex-loopback">复制</button>
+      <pre id="ex-loopback">IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+IP-CIDR6,::1/128,DIRECT,no-resolve</pre>
+    </div>
+    <p>Clash / mihomo 的配置里把这两行写在 <code>rules:</code> 下，每行前面加 <code>- </code>。改完让 Agent 重新发一次请求即可。</p>
     <p style="margin-top:48px">遇到问题，或者有值得分享的配置？来 <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> 聊。想给自己的用户一键添加供应商的厂商，请看 <a href="/docs/zh/import">Add to magpie</a>。</p>
   </article>
 </main>

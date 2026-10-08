@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestIsManagedDaemon(t *testing.T) {
@@ -180,9 +181,7 @@ func fakeCodex(t *testing.T, exit int) (out string) {
 		script += "echo 'Error: background server socket is stale or unreachable' >&2\nexit " + string(rune('0'+exit)) + "\n"
 	}
 	exe := filepath.Join(dir, "codex")
-	if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, exe, script)
 	old := codexExecutable
 	t.Cleanup(func() { codexExecutable = old })
 	codexExecutable = func() string { return exe }

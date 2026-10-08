@@ -273,11 +273,14 @@ func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 	t.Cleanup(func() { keyAllowance = old })
 	week := time.Now().Add(72 * time.Hour).Truncate(time.Second).Format(time.RFC3339)
 	var mu sync.Mutex
-	limit, reads := 800, 0
+	limit, reads, raised := 800, 0, 0
 	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		l := limit
 		reads++
+		if l > 800 {
+			raised++
+		}
 		mu.Unlock()
 		fmt.Fprintf(w, `{"isValid":true,"mode":"quota_limited","status":"active","rate_limits":[{"window":"7d","limit":%d,"used":800,"remaining":%d,"reset_at":%q}]}`, l, l-800, week)
 	}))
@@ -324,8 +327,14 @@ func TestRestingKeyReadAgainInAnOrderedGroup(t *testing.T) {
 	mu.Lock()
 	limit = 1000
 	mu.Unlock()
-	if at, r := first(); at != "kx" || r == nil {
-		t.Fatalf("resting: %s first, its rest %v", at, r)
+	// a reading out as the key refused is followed by another at once,
+	// which may have seen the limit raised and brought it back already
+	at, r := first()
+	mu.Lock()
+	seen := raised
+	mu.Unlock()
+	if (at != "kx" || r == nil) && (at != "ko" || r != nil || seen == 0) {
+		t.Fatalf("resting: %s first, its rest %v, the raised limit read %d times", at, r, seen)
 	}
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		r, ok := restOf(a.restKey())

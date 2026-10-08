@@ -207,9 +207,19 @@ func callFiles() []file {
 	return out
 }
 
-// callSources are callFiles and OpenCode's sessions (#680), whose calls are
-// rows of its database or its JSON files rather than lines.
-func callSources() []file { return append(callFiles(), openCodeCallFiles()...) }
+// callSources are callFiles and the agents whose calls are read whole
+// rather than line by line: OpenCode's (#680) and ZCode's, whose calls are
+// rows of their database or their JSON files; DeepSeek Harness's, whose
+// session file is packed in frames and so cannot be read on from the middle
+// of one; and WorkBuddy's, whose usage lines repeat a reply's id as it goes
+// on. Every agent here needs an entry in wholeCallReaders.
+func callSources() []file {
+	out := callFiles()
+	out = append(out, openCodeCallFiles()...)
+	out = append(out, zcodeCallFiles()...)
+	out = append(out, dshCallFiles()...)
+	return append(out, workbuddyCallFiles()...)
+}
 
 // desktopDataDirs are Claude Desktop's Claude and Claude-3p folders on this
 // computer, found as desktopDirs in internal/agent's claudedesktop.go does
@@ -339,9 +349,14 @@ func callHead(st *callFile, b []byte) bool {
 }
 
 // sessionOfPath is the session a Claude Code file belongs to by its name:
-// <id>.jsonl, or <id>/subagents/<agent>.jsonl.
+// <id>.jsonl, <id>/subagents/<agent>.jsonl, or a workflow's
+// <id>/subagents/workflows/<run>/<agent>.jsonl.
 func sessionOfPath(p string) string {
-	if d := filepath.Dir(p); filepath.Base(d) == "subagents" {
+	d := filepath.Dir(p)
+	if w := filepath.Dir(d); filepath.Base(w) == "workflows" && filepath.Base(filepath.Dir(w)) == "subagents" {
+		return filepath.Base(filepath.Dir(filepath.Dir(w)))
+	}
+	if filepath.Base(d) == "subagents" {
 		return filepath.Base(filepath.Dir(d))
 	}
 	return strings.TrimSuffix(filepath.Base(p), ".jsonl")

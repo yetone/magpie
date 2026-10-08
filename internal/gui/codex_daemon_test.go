@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // The Restart button runs `codex app-server daemon restart` with the codex
@@ -22,9 +24,7 @@ func TestCodexDaemonRestartRoute(t *testing.T) {
 	t.Setenv("CODEX_HOME", "/somewhere/else")
 	rec := filepath.Join(bin, "ran")
 	script := "#!/bin/sh\necho \"$@|$CODEX_HOME\" > '" + rec + "'\n[ \"$FAIL\" = 1 ] && { echo 'Error: no daemon' >&2; exit 1; }\nexit 0\n"
-	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(bin, "codex"), script)
 	mux := http.NewServeMux()
 	providerRoutes(mux, nil)
 	post := func(action string) *httptest.ResponseRecorder {

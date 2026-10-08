@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // Settings' Command line (PAMI on Discord): which magpie each shell runs,
@@ -27,9 +29,7 @@ func TestCLIOnPath(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, exe, "#!/bin/sh\n")
 	paths := map[string][]string{
 		"/bin/zsh":  {bin, "/usr/bin"},
 		"/bin/fish": {other, "/usr/bin"},
@@ -81,7 +81,7 @@ func TestCLIOnPath(t *testing.T) {
 
 	// another copy that runs first is replaced by the link, as install.sh's ln -sf
 	copied := filepath.Join(other, "magpie")
-	os.WriteFile(copied, []byte("#!/bin/sh\necho old\n"), 0o755)
+	testenv.Program(t, copied, "#!/bin/sh\necho old\n")
 	paths["/bin/zsh"] = []string{other, bin}
 	if v = ReadCLI(); v.Ours || v.Command != copied || v.Dir != other {
 		t.Fatalf("shadowed: %+v", v)
@@ -121,7 +121,7 @@ func TestCLIOnPath(t *testing.T) {
 	// a magpie.app elsewhere says its version without being run
 	app := filepath.Join(h, "Old", "magpie.app", "Contents")
 	os.MkdirAll(filepath.Join(app, "MacOS"), 0o755)
-	os.WriteFile(filepath.Join(app, "MacOS", "magpie"), []byte("#!/bin/sh\nexit 1\n"), 0o755)
+	testenv.Program(t, filepath.Join(app, "MacOS", "magpie"), "#!/bin/sh\nexit 1\n")
 	os.WriteFile(filepath.Join(app, "Info.plist"), []byte("<dict><key>CFBundleShortVersionString</key>\n<string>0.1.500</string></dict>"), 0o644)
 	if got := otherVersion(filepath.Join(app, "MacOS", "magpie")); got != "0.1.500" {
 		t.Fatalf("version = %q", got)

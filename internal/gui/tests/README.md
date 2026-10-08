@@ -217,6 +217,11 @@ sign-in with pasteCallback shows) in a narrow Chinese
 dark window: invalid input remains editable, retry reaches the callback route,
 and a pending or accepted submission cannot be submitted twice.
 
+`signin-paste-plugin.test.cjs` checks a plugin's browser sign-in that comes
+back to a port on magpie's machine: the plugin's words, the pasted-address
+field posted to the sign-in, and the plugin's API key way, in a 360px window.
+English and Chinese, Chromium and WebKit.
+
 `plugin-updates.test.cjs` checks the dot on Plugins while a plugin's update
 waits for the reader, gone once it's updated, and the "Auto-updated" chip on a
 plugin magpie updated by itself.
@@ -357,6 +362,16 @@ calls with their arguments as objects, how it stopped, usage) or as it came,
 the pick remembered. A 450-event stream draws 200 at a time from a button under
 the box that stays where it is, the page too; a body that isn't a stream is as
 before. English and Chinese, Chromium and WebKit.
+
+`json-tree.test.cjs` opens a JSON request and response in the Gateway page's
+recent calls: keys, strings, numbers and keywords each have their colour, the
+body's text is still the pretty-printed JSON, an object or array folds to
+`{…}` with its count and unfolds from its arrow or that summary with the page
+kept where it is, a fold outlives the list being drawn again, a value's copy
+button (shown on hovering its line) copies a string's text or an object's
+JSON, a click on a key copies its name, and a stream's events and its reply
+fold the same way. English, Chinese, Japanese and German, 1000px and 440px,
+Chromium and WebKit.
 
 `routing-kind.test.cjs` lists calls Codex makes for itself (a guardian review,
 a title, memories, a turn on Luna Reserve, a kind it does not know yet): each
@@ -580,6 +595,15 @@ cny (#212): the Usage page's total converts, the row's tooltip carries the
 rate, picking it with the settings list scrolled well down moves nothing,
 and the choice survives a reload — in English and Chinese.
 
+`context-window.test.cjs` opens Usage's Context tab: each agent's score, its
+grade and tags, its sessions counted one or many, the score bars toned by how
+much of them there is; a refresh with the same answer keeps the pane; a
+session opened draws its latest request's window in 400 cells without moving
+the page, a cell hovered names its part and what is largest in it, and the
+Tools tab of the contents lists only tools; nothing scrolls sideways — in
+Chromium and WebKit, in English, Chinese, Japanese and German, at 1100px and
+420px.
+
 `tray-usages.test.cjs` picks several of the Usage page's cards for the menu
 bar in Settings: the menu keeps open as Codex and Claude Code are ticked
 beside Copilot, posts nothing till it closes and then the three once, in the
@@ -674,6 +698,26 @@ screenshot of each size:
 
 ```sh
 node --test --test-concurrency=1 internal/gui/tests/settings-sections.test.cjs internal/gui/tests/settings-groups.test.cjs
+```
+
+`segs-press-redraw.test.cjs` presses a Settings option, redraws the page
+(`renderSettings()`, as a save's answer does) while the button is held and
+lets go on the same spot: Lightweight mode → On is posted once and shown on.
+Dragged off to the other option, or to the same option of another control,
+nothing is posted, and a plain click is posted once, not twice. It then
+presses every option control on every Settings tab (49 in English, the
+warm-up, check-in, sync and local network ones included) the same way and
+checks that the control drawn in its place is clicked once on the same
+option. Without the fix no click comes at all. A tap through the redraw is
+posted once, not twice (Chromium only: Playwright can't hold a tap in
+WebKit). A list of rows, each with its control, drawn again with a row gone,
+come in or moved above the pressed one picks nothing, whether its rows have
+`data-*` or not, and picks the pressed option when drawn again the same.
+Chromium and WebKit, English, Chinese, Japanese and German, 900 and 440px
+wide:
+
+```sh
+node --test internal/gui/tests/segs-press-redraw.test.cjs
 ```
 
 `update-check.test.cjs` checks the version row: the button stays, dimmed,
@@ -2067,3 +2111,18 @@ unimportable entries, unreadable sources, stable fingerprints despite ID
 collisions, changed configuration fingerprints, excluding unticked collision and
 disabled Alma entries while preserving the add-key case, and keeping credentials
 server-side.
+
+## Filters typed through an IME
+
+`filter-ime.test.cjs` covers #1055: a digit typed into the Routing page's
+group filter went in twice (1, 2 → 1122), because the filter's own input
+event drew its row again and took the field out of the page while an IME
+committed. It types into the routing group filter, a provider's keys filter
+and the plugins search, through an IME in Chromium (CDP's
+`Input.imeSetComposition`, then `Input.insertText`) and by key in WebKit,
+and checks one character a key, the focus, the caret, and that the field
+never leaves the page. The rows around each still follow it: the groups and
+keys it matches, the routing header in the other language after
+`setLocale`, the plugins listings arriving while the reader types. In
+English, Chinese, Japanese and German, at 1100px and 440px. `MAGPIE_FILTER_ASSETS` points it
+at another assets folder, to see it fail on the old code.

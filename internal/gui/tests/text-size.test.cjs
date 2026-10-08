@@ -227,6 +227,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(before > 0, "the settings page must scroll");
         await segs.nth(0).click();
         await page.locator("#textSizeSegs .opt.on", { hasText: "100%" }).waitFor();
+        // the webview zooms out only once Go has the post (textsize.go), by
+        // when the page has drawn the click: the Mac header back at 50px. A
+        // resize before that frame is clamped to a view 17px too tall, which
+        // shows once the page runs past the window's foot (bd33e575's font
+        // rows made Settings that long)
+        for (let i = 0; i < 50 && !posts.length; i++) await page.waitForTimeout(20);
+        await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
         // the webview's zoom out: the same window is half as many CSS pixels again
         await page.setViewportSize({ width: 1440, height: 900 });
         await page.waitForTimeout(600);

@@ -18,6 +18,7 @@ import (
 func TestClaudeRunKeptAfterTheClientsOwnToolCall(t *testing.T) {
 	fakeClaude(t)
 	s := New()
+	t.Cleanup(s.subscription.abortAll)
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
 	ask := func(msgs string) string {
 		t.Helper()
@@ -71,7 +72,7 @@ func TestClaudeRunKeptAfterTheClientsOwnToolCall(t *testing.T) {
 func TestClaudeTurnLabelsTheClientsOwnCall(t *testing.T) {
 	text := func(msgs []Message) string {
 		var b strings.Builder
-		for _, block := range renderClaudeTurn(msgs) {
+		for _, block := range renderClaudeTurn(msgs, nil) {
 			s, _ := block["text"].(string)
 			b.WriteString(s)
 		}

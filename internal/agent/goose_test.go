@@ -76,7 +76,7 @@ func TestGooseDetectSkipsGoGoose(t *testing.T) {
 		t.Fatal("a Go goose on PATH was taken for the agent")
 	}
 
-	os.WriteFile(filepath.Join(bin, "goose"), []byte("#!/bin/sh\necho 1.9.0\n"), 0o755)
+	testenv.Program(t, filepath.Join(bin, "goose"), "#!/bin/sh\necho 1.9.0\n")
 	if !a.Detected() {
 		t.Fatal("Block's goose on PATH not detected")
 	}

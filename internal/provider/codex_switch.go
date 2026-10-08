@@ -80,15 +80,15 @@ const backShare = 90
 // switchedAgents are the agents whose account magpie moves on.
 var switchedAgents = []string{"codex", "claude"}
 
-// usedUp reports whether an account's allowance is used up for now: a
+// usedUp reports whether an account's allowance is used up at now: a
 // window that stops the account, for every model, at 100%.
-func usedUp(q SubscriptionQuota) bool {
-	return usedPast(q, 100)
+func usedUp(q SubscriptionQuota, now time.Time) bool {
+	return usedPast(q, 100, now)
 }
 
 // UsedUp is usedUp for the CLI's magpie quota wait, so what it waits out
 // is what stops an account here.
-func UsedUp(q SubscriptionQuota) bool { return usedUp(q) }
+func UsedUp(q SubscriptionQuota, now time.Time) bool { return usedUp(q, now) }
 
 // BackAt is when a used-up account has room again: when the last of the
 // windows that stop it (usedUp's) starts again, a window's seconds to go
@@ -96,7 +96,7 @@ func UsedUp(q SubscriptionQuota) bool { return usedUp(q) }
 func BackAt(q SubscriptionQuota, now time.Time) time.Time {
 	var back time.Time
 	for _, w := range q.Windows {
-		if w.Aside || w.Model != "" || w.Used < 100 {
+		if w.Aside || w.Model != "" || w.Used < 100 || resetPassed(w, now) {
 			continue
 		}
 		var at time.Time
@@ -115,9 +115,21 @@ func BackAt(q SubscriptionQuota, now time.Time) time.Time {
 	return back
 }
 
-func usedPast(q SubscriptionQuota, share float64) bool {
+// resetPassed says whether w has started again by now: its reset time has
+// passed, whatever share it was read at. One that gives no reset time
+// can't say.
+func resetPassed(w QuotaWindow, now time.Time) bool {
+	return w.ResetsAt != nil && !now.Before(*w.ResetsAt)
+}
+
+// usedPast reports whether one of q's windows that stop the account for
+// every model is at share or past at now. A window whose reset has passed
+// has started again, whatever share it was read at: a reading kept from
+// before, or one the vendor gave late (Claude Code's /usage tells a reset
+// to the minute), says nothing of now.
+func usedPast(q SubscriptionQuota, share float64, now time.Time) bool {
 	for _, w := range q.Windows {
-		if !w.Aside && w.Model == "" && w.Used >= share {
+		if !w.Aside && w.Model == "" && w.Used >= share && !resetPassed(w, now) {
 			return true
 		}
 	}
@@ -174,25 +186,20 @@ func NextLogin(ctx context.Context, agent string) (from, to string, back, ok boo
 		return capReached(q, AccountCapOf(agent, user), now)
 	}
 	if first != nil && first.On && first.Lapsed == "" {
-		if q, known := u[first.User]; known && q.Error == "" && !usedPast(q, backShare) && !capped(first.User, q) {
+		if q, known := u[first.User]; known && q.Error == "" && !usedPast(q, backShare, now) && !capped(first.User, q) {
 			return from, first.User, true, true
 		}
 	}
-	q, known := u[from]
-	if q.Provider == "claude" && q.AsOf != nil {
-		// An expired cached window cannot say whether this account is spent
-		// now. Keep other windows and the stored historical reading intact.
-		q.Windows = slices.DeleteFunc(slices.Clone(q.Windows), func(w QuotaWindow) bool {
-			return w.ResetsAt != nil && !w.ResetsAt.After(now)
-		})
-	}
 	// kept on the first, it stays there however little that has left; and
-	// it moves on at the share its routing counts the account spent at
-	if keep || !known || q.Error != "" || !usedPast(q, share) && !capped(from, q) {
+	// it moves on at the share its routing counts the account spent at.
+	// A window whose reset has passed counts as started again (usedPast),
+	// on every account, however its reading came
+	q, known := u[from]
+	if keep || !known || q.Error != "" || !usedPast(q, share, now) && !capped(from, q) {
 		return "", "", false, false
 	}
 	for _, l := range spares {
-		if q, known := u[l.User]; known && q.Error == "" && !usedPast(q, share) && !capped(l.User, q) {
+		if q, known := u[l.User]; known && q.Error == "" && !usedPast(q, share, now) && !capped(l.User, q) {
 			return from, l.User, false, true
 		}
 	}

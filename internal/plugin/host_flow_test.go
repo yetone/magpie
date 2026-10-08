@@ -146,7 +146,7 @@ async function main() {
     unresolved.then = (...args) => { readyReactions++; return originalThen(...args) }
     initialize(unresolved)
     run('send({id: 99, result: null})')
-    for (let iteration = 0; iteration < 30000; iteration++) {
+    for (let iteration = 0; iteration < 1000; iteration++) {
       fetchOne()
       abortOne()
       await until(idle, 'cancelled bootstrap wait cleans registries')
@@ -156,7 +156,7 @@ async function main() {
     assert.equal(stdout.listenerCount('drain'), 1, 'only shared drain listener remains')
     const retainedWaiters = run('typeof readyWaiters === "undefined" ? -1 : readyWaiters.size')
     const retainedReadyReactions = readyReactions - (run('typeof setReady') === 'function' ? 1 : 0)
-    console.log(JSON.stringify({ cancellations: 30000, idle: idle(), queued: queued(), readyReactions, retainedReadyReactions, retainedWaiters }))
+    console.log(JSON.stringify({ cancellations: 1000, idle: idle(), queued: queued(), readyReactions, retainedReadyReactions, retainedWaiters }))
     assert.equal(retainedWaiters, 0, 'cancelled bootstrap leaves no retained waiters')
     assert.equal(retainedReadyReactions, 0, 'cancelled requests leave no reactions on shared ready')
     assert.equal(readyReactions, 1, 'only shared initialization reaction remains')

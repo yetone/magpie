@@ -5,7 +5,9 @@
 // the page beside an empty column; the models an account answered sit on a
 // line of their own, not wrapped in among its numbers; a provider's row
 // says its model once, under the provider's name, not the name again and the
-// model twice. One column, the accounts list is as long as it is.
+// model twice. One column, the accounts list is as long as it is. Side by
+// side only where each request still fits one line; narrower, one column of
+// one-line requests, not two with each request on three (#860).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -63,7 +65,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   for (const lang of ["en", "zh"]) {
     test(`${engine} ${lang}: requests and accounts side by side`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
-      const page = await browser.newPage({ viewport: { width: 940, height: 1400 } });
+      const page = await browser.newPage({ viewport: { width: 1440, height: 1400 } });
       page.setDefaultTimeout(5000);
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
@@ -84,7 +86,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(acts.left >= reqs.right, "side by side");
       assert(Math.abs(acts.bottom - reqs.bottom) <= 1, `the lists end on one line: ${reqs.bottom} / ${acts.bottom}`);
       assert(acts.scroll, "the rest of the accounts scroll");
-      for (const width of [940, 1100, 1440, 1920]) {
+      // a request on one line: its destination and numbers beside its model
+      const oneLine = () => page.locator(".rt-req").evaluateAll((rs) => rs.every((r) => {
+        const y = (s) => { const b = r.querySelector(s).getBoundingClientRect(); return b.width ? b.top : null; };
+        const a = y(".asked");
+        return [y(".to"), y(".meta")].every((v) => v === null || Math.abs(v - a) < 4);
+      }));
+      for (const width of [940, 1100]) {
+        await page.setViewportSize({ width, height: 1400 });
+        await page.waitForTimeout(200);
+        const requests = await box(".rt-reqs"), accounts = await box(".rt-acts");
+        assert(accounts.left < requests.right, `${width}px: one column`);
+        assert(await oneLine(), `${width}px: each request on one line`);
+      }
+      for (const width of [1440, 1920]) {
         await page.setViewportSize({ width, height: 1400 });
         await page.waitForTimeout(200);
         const requests = await box(".rt-col:first-child"), accounts = await box(".rt-col:last-child");
@@ -96,6 +111,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width}px: no horizontal overflow`);
         const clipped = await page.locator(".rt-act .mdls code").evaluateAll((es) => es.some((e) => e.getBoundingClientRect().right > e.closest(".rt-act").getBoundingClientRect().right + 1));
         assert.equal(clipped, false, `${width}px: models stay inside the narrower account column`);
+        assert(await oneLine(), `${width}px: side by side, each request still on one line`);
       }
 
       // the Codex account's three models on their own line, none in the tally

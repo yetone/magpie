@@ -12,7 +12,8 @@ describe and review a change to a subsystem is in the
 | A change does only what its goal needs. | Every change in behavior has a reason. Unrelated refactors, extra features and policy changes go in a PR of their own. |
 | A fix covers exactly the cases it means to. | Which cases change, and which neighboring ones stay the same. Different errors are not handled as one. |
 | A change holds on the whole path. | Follow it from the user's input to the end result, through the callers, the state it changes and the side effects. One correct function doesn't make the whole operation correct. For example, an agent's model picks are saved under one id and read under another (#926). An update button doesn't update the binary that actually runs (#930). |
-| A fix reaches every sibling of the bug. | Grep for the same pattern: every agent, subcommand, guard of the same shape and caller of a changed predicate gets the fix in the same change. On 2026-10-05 six fixes needed a second release because they covered only the case in the report (see [LESSONS.md](../LESSONS.md)). |
+| A fix reaches every sibling of the bug. | Grep for the same pattern: every agent, subcommand, guard of the same shape and caller of a changed predicate gets the fix in the same change. That includes the other branches of the same operation and the other messages that name the same endpoint or rule. On 2026-10-05 six fixes needed a second release because they covered only the case in the report. On 10-06 #933's Codex models followed an hour after its sign-in. On 10-07 cd8d64a9 (#1059) offered sub2api's balance URL in one hint, while the error shown after a failed balance read still names only new-api's. Pi's whole-file move of mcp.json had no backup until d40fee80 (#1097), though the merge branch beside it already had one. |
+| A change re-derives everything built on what it changes. | When a change alters a formula, a list, a layout breakpoint or the timing of an async step, find every caller, saved copy and test that assumed the old meaning, and run it. 12cba74a kept Zed's old clamp under a new max_tokens. 5d871723 (#860) moved the Requests page's columns to 1150px, and click-scroll was red on main for most of 10-07 (82a36a35). ee2588c2 added an immediate re-read, and the test's assertion about the state in between became a race on Linux CI (3e38bd76). |
 | Checks cover the edges the change touches. | For numbers, check the boundaries. For paths, check each platform (macOS, Linux, Windows). For concurrency, check races and stale state. Pick checks by risk. |
 
 ## Tests
@@ -22,6 +23,7 @@ describe and review a change to a subsystem is in the
 | A fix comes with a test that fails without it. | The reviewer puts the old code back and runs the test, and the test must fail. A PR description says what it failed with. |
 | Tests use real inputs. | Fixtures look like real requests, real serialized output and real files on disk. That includes missing fields, empty values and defaults. |
 | Tests check behavior, not implementation. | Assert what the user or caller needs. Formatting changes and internal refactors shouldn't break a test, unless exact bytes are the requirement. |
+| A test that fails on `main` is a bug to fix now. | "Fails the same on origin/main" is not a baseline, and neither is "fails under the full run, passes alone". Fix it at its cause, or open an issue naming the cause, in a commit of its own, before shipping on top of it. From 10-05 to 10-07 dozens of commits shipped past red tests. Some were real bugs: a data race (a45b3e09), test order (bfe8bcaf), and click-scroll red since 5d871723 while dcbae2ef, 76d82528 and b2345078 shipped past it. Run `go test -race -count=20 -run X` before calling a Go test a flake. |
 | Tests stay out of the real machine. | Run them under a temp HOME with Go's caches pinned (see the snippet in [provider-plugins.md](subsystems/provider-plugins.md)). Never touch a real agent's config or `~/.config/magpie`. An agent's variable goes in `agentenv.Vars`, so the sandbox clears it. |
 
 ## Acceptance criteria
@@ -51,9 +53,13 @@ listed as not run, never left out.
 4. **GUI tests in both engines.** A change to `internal/gui/assets` runs the
    Playwright tests it touches in Chromium and WebKit (`make test-ui`, or
    `BROWSER=webkit node --test …`). The suite must also pass in Chinese,
-   English, and `gui-ja`/`gui-de` (every string has its Japanese and German,
-   with the same placeholders). CI doesn't run this suite, so it is run
-   locally.
+   English, and `gui-zh-tw`/`gui-ja`/`gui-de` (every string has its
+   Traditional Chinese, Japanese and German, with the same placeholders).
+   CI doesn't run this suite, so it is run locally. Run the whole suite, not only the touched page's tests, when a
+   change adds an API the GUI calls, a selector or class other pages share,
+   a CSS feature older WebKit lacks (`:has()`), or a layout breakpoint. On
+   10-07, 479865bc, 134d388b, 61838f7c and 51626258 cleared four tests left
+   red by commits that had run only their own page's tests.
 5. **Real use where possible.** A change to a provider, subscription or
    agent is also checked against the real thing: a real account or key, the
    agent's real config format, the vendor's real reply. Do this in a sandbox
@@ -67,8 +73,13 @@ A PR is merged only after a maintainer has pulled it, merged it onto
 current `main` and run the checks above on the result. The merge names the
 commit that was reviewed: `gh pr merge --match-head-commit <reviewed sha>`.
 A push made during the review then stops the merge, rather than shipping
-code nobody ran. A Draft PR can't be merged until it is marked Ready for
-review.
+code nobody ran. A head pushed after the review is reviewed again, and the
+comment names the new head (#974 was merged without that). Write on the PR
+what was run, at which head, and then merge: a merge with no record of what
+was run can't be checked afterwards (#981, #1000, #1030, #1037). On 10-07
+#1045, #1046, #1047, #1049, #1057, #1060, #1061 and #948 are the model.
+Each names its reviewed head and what was run, posted before the merge. A
+Draft PR can't be merged until it is marked Ready for review.
 
 A release counts only when all of these hold:
 
@@ -116,10 +127,9 @@ applies:
   cursor and other product decisions are the maintainer's to change (#820,
   #921). A PR that changes one is left for the maintainer.
 - **GUI suites.** Compare pass counts with `main`. A test that fails on
-  `main` too is not a baseline: fix it, or open an issue naming its cause,
-  in a commit of its own. "Passes alone" is not a pass; run a Go test with
-  `-race -count=20` before calling it a flake (a45b3e09 found a data race
-  that was waved through for 19 hours).
+  `main` too is not a baseline (see [Tests](#tests)). A PR that says its
+  failures "fail the same on origin/main" gets that checked, and gets them
+  fixed or filed before the merge.
 - **Docs match the source.** A reference is checked against the code it
   links, and every link must resolve (#889).
 - **Keep the PR to its goal.** Unrelated tests and refactors go in a PR of

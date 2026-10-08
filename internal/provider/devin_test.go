@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/testenv"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -183,7 +184,7 @@ func TestDevinSignIn(t *testing.T) {
 
 	// a CLI that answers `auth status` once the exchange wrote its file
 	exe := filepath.Join(home, "devin")
-	os.WriteFile(exe, []byte("#!/bin/sh\ncat <<'X'\nLogged in (via Devin).\n\nUser:\n  Email:             dev@example.com\n\nAccount:\n  Tier:              Devin Pro\nX\n"), 0o755)
+	testenv.Program(t, exe, "#!/bin/sh\ncat <<'X'\nLogged in (via Devin).\n\nUser:\n  Email:             dev@example.com\n\nAccount:\n  Tier:              Devin Pro\nX\n")
 	oldExe := DevinExecutable
 	DevinExecutable = func() string { return exe }
 	t.Cleanup(func() { DevinExecutable = oldExe })
@@ -258,7 +259,7 @@ func TestDevinSeveralAccounts(t *testing.T) {
 
 	// a CLI that says whose key is in the credentials.toml of its data folder
 	exe := filepath.Join(home, "devin")
-	os.WriteFile(exe, []byte(`#!/bin/sh
+	testenv.Program(t, exe, `#!/bin/sh
 f="$XDG_DATA_HOME/devin/credentials.toml"
 [ -f "$f" ] || { echo "Not logged in"; exit 1; }
 if grep -q own "$f"; then who=dev@example.com; tier="Devin Pro"; else who=two@example.com; tier="Devin Max"; fi
@@ -270,7 +271,7 @@ User:
 Account:
   Tier:              %s
 ' "$who" "$tier"
-`), 0o755)
+`)
 	oldExe := DevinExecutable
 	DevinExecutable = func() string { return exe }
 	t.Cleanup(func() { DevinExecutable = oldExe })
@@ -427,9 +428,7 @@ func TestAskDevinStatus(t *testing.T) {
 		} else if err := os.Remove(creds); err != nil && !os.IsNotExist(err) {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(exe, []byte("#!/bin/sh\n"+c.script+"\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testenv.Program(t, exe, "#!/bin/sh\n"+c.script+"\n")
 		u, _, ok, err := askDevinStatus()
 		if u != c.user || ok != (c.user != "") || (err == nil) != c.sure {
 			t.Errorf("%s: %q %v %v", c.name, u, ok, err)
@@ -455,9 +454,7 @@ func TestDevinStatusKeepsTheAccount(t *testing.T) {
 	// signed in once, then asked again behind what is served
 	ask := func(script string) {
 		t.Helper()
-		if err := os.WriteFile(exe, []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testenv.Program(t, exe, "#!/bin/sh\n"+script+"\n")
 		devinStatus.Lock()
 		devinStatus.at = time.Now().Add(-2 * time.Minute)
 		done := devinStatus.refresh()

@@ -24,12 +24,32 @@ import (
 // Loopback clients may still use any token, including a stale named key.
 
 // listenAddr is where the gateway listens: every interface while it is
-// shared, on its port, else its address.
+// shared, on its port, else its address. A host MAGPIE_ADDR names itself
+// (127.0.0.1 behind Tailscale Serve, one interface's address) is kept
+// while shared too: sharing asks remote callers for a gateway key, and
+// never widens the listener past the address the user chose (#1112).
 func listenAddr() string {
-	if s := settings.Load(); s.LAN {
+	if s := settings.Load(); s.LAN && pinnedHost() == "" {
 		return "0.0.0.0:" + Port()
 	}
 	return Addr()
+}
+
+// pinnedHost is the host MAGPIE_ADDR names, "" when it isn't set or names
+// every interface (0.0.0.0, ::, or no host).
+func pinnedHost() string {
+	a := os.Getenv("MAGPIE_ADDR")
+	if a == "" {
+		return ""
+	}
+	h, _, err := net.SplitHostPort(a)
+	if err != nil || h == "" {
+		return ""
+	}
+	if ip := net.ParseIP(h); ip != nil && ip.IsUnspecified() {
+		return ""
+	}
+	return h
 }
 
 // Port is the gateway's port.
@@ -129,6 +149,14 @@ func LANURLs() []string {
 	if u := publicURL(); u != "" {
 		return []string{u}
 	}
+	// a gateway MAGPIE_ADDR keeps on one host is reached there alone; on
+	// loopback, only through a proxy, whose address MAGPIE_PUBLIC_URL says
+	if h := pinnedHost(); h != "" {
+		if ip := net.ParseIP(h); h == "localhost" || ip != nil && ip.IsLoopback() {
+			return nil
+		}
+		return []string{"http://" + net.JoinHostPort(h, Port())}
+	}
 	var out []string
 	ifs, _ := net.Interfaces()
 	for _, i := range ifs {
@@ -195,7 +223,19 @@ func lanGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		remote := !local(r)
 		shared := settings.Load().LAN
-		if remote && !shared && os.Getenv("MAGPIE_ADDR") == "" {
+		// a gateway MAGPIE_ADDR opens to the network lets anyone in, through
+		// a proxy too; listening on loopback, it is reached from elsewhere
+		// only through one, and that stays closed unless shared
+		closed := os.Getenv("MAGPIE_ADDR") == ""
+		if proxied(r) {
+			closed = !OpenToAnyone()
+		}
+		if remote && !shared && closed {
+			if proxied(r) {
+				log.Printf("refused %s %s through a proxy or tunnel: magpie isn't shared", r.Method, r.URL.Path)
+				http.Error(w, "this request came through a proxy or tunnel (it carries a forwarding header such as X-Forwarded-For or Cf-Connecting-IP), so magpie answers it as one from another machine: only while Settings → Share on local network is on, with an enabled gateway key (Gateway → Gateway keys) sent as Authorization: Bearer <key> or x-api-key", http.StatusForbidden)
+				return
+			}
 			http.Error(w, "magpie isn't shared on the local network", http.StatusForbidden)
 			return
 		}
@@ -330,10 +370,10 @@ func callerKeys(r *http.Request) []string {
 	return out
 }
 
-// managedKey: the request carries a named gateway key's form (sk-magpie-…)
-// in any of the places a key is read.
+// managedKey: the request carries a named gateway key's form (sk-magpie-…),
+// or a key's own value a user gave it, in any of the places a key is read.
 func managedKey(r *http.Request) bool {
-	return slices.ContainsFunc(callerKeys(r), access.Managed)
+	return slices.ContainsFunc(callerKeys(r), access.Named)
 }
 
 // refusedKey says why a caller's key was turned away: none came, or the
@@ -351,12 +391,37 @@ func refusedKey(key string) string {
 	return which + " is not an enabled magpie gateway key: it is disabled, removed or mistyped"
 }
 
-// local is a request from this computer.
+// local is a request from this computer: one that reached the gateway on
+// loopback and wasn't passed on by a proxy or tunnel running here.
 func local(r *http.Request) bool {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return false
 	}
 	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return ip != nil && ip.IsLoopback() && !proxied(r)
+}
+
+// forwardHeaders are what a proxy or tunnel adds to a request it passes
+// on: cloudflared (Cf-Connecting-IP, and X-Forwarded-For beside it),
+// ngrok, Tailscale serve and funnel, frp's and Caddy's and nginx's HTTP
+// proxies. An agent calling magpie sends none of them.
+var forwardHeaders = []string{"Forwarded", "X-Forwarded-For", "X-Real-IP", "Cf-Connecting-IP", "True-Client-IP", "Tailscale-User-Login"}
+
+// proxied: the request came to loopback through a proxy or tunnel on this
+// computer (#1022, znjhahaha: a Cloudflare Tunnel to 127.0.0.1:3425), so it
+// is someone else's, from wherever the proxy reaches, and is treated as
+// from another machine: answered only while magpie is shared, with an
+// enabled gateway key. MAGPIE_TRUST_PROXY=1 says a proxy here signs its
+// clients in itself, and keeps what it forwards local, as before.
+func proxied(r *http.Request) bool {
+	if trustProxy() {
+		return false
+	}
+	return slices.ContainsFunc(forwardHeaders, func(h string) bool { return r.Header.Get(h) != "" })
+}
+
+func trustProxy() bool {
+	v, _ := strconv.ParseBool(strings.TrimSpace(os.Getenv("MAGPIE_TRUST_PROXY")))
+	return v
 }

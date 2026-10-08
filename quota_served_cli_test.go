@@ -12,6 +12,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // magpie quota --json tells when each key last answered through the gateway
@@ -26,9 +27,7 @@ func TestQuotaJSONLastServedAt(t *testing.T) {
 	// no agent's CLI nor the keychain is asked: what answers is inert
 	bin := t.TempDir()
 	for _, name := range []string{"security", "secret-tool", "claude", "codex", "cursor-agent", "devin", "grok", "kiro-cli"} {
-		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testenv.Program(t, filepath.Join(bin, name), "#!/bin/sh\nexit 1\n")
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, `{"balance":"7"}`) }))

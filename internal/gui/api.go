@@ -994,6 +994,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.LAN, in.LANKey = cur.LAN, cur.LANKey
 		in.LANKeyID = cur.LANKeyID
 		in.Port = cur.Port                               // set on its own (port below), which moves the gateway
+		in.CORSOrigins = cur.CORSOrigins                 // set on its own (cors below)
 		in.GitHubToken = cur.GitHubToken                 // set on its own (github-token below), never sent to the page
 		in.RequestArchive = cur.RequestArchive           // the Gateway page's, set on its own
 		in.RequestArchiveMaxMB = cur.RequestArchiveMaxMB // in settings.json only
@@ -1462,6 +1463,27 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 				fail(rw, err)
 				return
 			}
+		}
+		writeJSON(rw, settingsState())
+	})
+	// the web pages that may call the gateway from a browser (#1051), as
+	// their origins; none takes them all away
+	mux.HandleFunc("POST /api/settings/cors", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ Origins []string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		origins, err := settings.CleanOrigins(in.Origins)
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		s.CORSOrigins = origins
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
 		}
 		writeJSON(rw, settingsState())
 	})

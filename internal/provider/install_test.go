@@ -6,10 +6,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // a sign-in that needs a CLI this machine lacks installs it, then goes on
@@ -35,7 +39,7 @@ func TestSignInInstallsMissingCLI(t *testing.T) {
 		ran = c.sh
 		<-release
 		os.MkdirAll(filepath.Dir(exe), 0o755)
-		os.WriteFile(exe, []byte("#!/bin/sh\nprintf 'Logged in (via Devin).\\n  Email: dev@example.com\\n  Tier: Devin Pro\\n'\n"), 0o755)
+		testenv.Program(t, exe, "#!/bin/sh\nprintf 'Logged in (via Devin).\\n  Email: dev@example.com\\n  Tier: Devin Pro\\n'\n")
 		// as Devin's does: `devin setup` gives up on its sign-in without a terminal
 		return []byte("Installed devin\nError: Login canceled\n"), errors.New("exit status 1")
 	}
@@ -91,6 +95,30 @@ func TestSignInInstallFails(t *testing.T) {
 	}
 }
 
+// on Windows the vendor's one-liner reaches PowerShell on stdin, never on
+// its command line: Microsoft Defender took "powershell … -Command irm
+// https://static.devin.ai/cli/setup.ps1 | iex" for a Trojan
+// (Trojan:Win32/Commando.A!ml) and stopped it before it ran, so Devin's
+// sign-in failed with "fork/exec …\powershell.exe: Access is denied"
+func TestWindowsInstallerNotOnCommandLine(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("PowerShell's command line is Windows'")
+	}
+	c := agentCLI{Name: "Probe CLI", ps: "Write-Output ([Environment]::CommandLine); exit 7"}
+	out, err := runInstaller(context.Background(), c)
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 7 {
+		t.Fatalf("the installer's exit: %v (output %q)", err, out)
+	}
+	line := lastLine(out)
+	if !strings.Contains(strings.ToLower(line), "powershell") {
+		t.Fatalf("the installer didn't print PowerShell's command line: %q", out)
+	}
+	if strings.Contains(line, "Write-Output") {
+		t.Fatalf("PowerShell's command line carries the installer: %s", line)
+	}
+}
+
 // canceled while installing: the sign-in never starts
 func TestSignInCanceledWhileInstalling(t *testing.T) {
 	claudeHome(t)
@@ -126,7 +154,7 @@ func TestDevinSignInUnseen(t *testing.T) {
 	home := claudeHome(t)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
 	exe := filepath.Join(home, "devin")
-	os.WriteFile(exe, []byte("#!/bin/sh\necho 'Not logged in.'\n"), 0o755)
+	testenv.Program(t, exe, "#!/bin/sh\necho 'Not logged in.'\n")
 	oldExe := DevinExecutable
 	DevinExecutable = func() string { return exe }
 	t.Cleanup(func() { DevinExecutable = oldExe })
@@ -157,4 +185,24 @@ func waitPast(t *testing.T, id, state string) SignInState {
 	}
 	t.Fatalf("still %s", state)
 	return SignInState{}
+}
+
+// magpie's Docker image has bash and busybox's wget but no curl, which every
+// vendor's one-liner downloads with: there the native installer is used
+func TestShellInstallerNeedsCurl(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the shell installer is for macOS and Linux")
+	}
+	bin := t.TempDir()
+	for _, p := range []string{"bash", "wget"} {
+		testenv.Program(t, filepath.Join(bin, p), "#!/bin/sh\n")
+	}
+	t.Setenv("PATH", bin)
+	if shellInstallerRuns() {
+		t.Fatal("the shell installer runs with bash and wget, without curl")
+	}
+	testenv.Program(t, filepath.Join(bin, "curl"), "#!/bin/sh\n")
+	if !shellInstallerRuns() {
+		t.Fatal("the shell installer doesn't run with bash and curl")
+	}
 }

@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -33,6 +35,7 @@ func TestAIStudioThinking(t *testing.T) {
 		{"2.5 budget", aiStudioHost, "gemini-2.5-flash", Request{GeminiCompat: true, Thinking: true, Effort: "medium"}, want{"", `{"include_thoughts":true,"thinking_budget":8192}`}},
 		{"no effort", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, Thinking: true}, want{"", `{"include_thoughts":true}`}},
 		{"off", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, ThinkOff: true}, want{"minimal", ""}},
+		{"off at its lowest", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, ThinkOff: true, OffLevel: "low"}, want{"low", ""}},
 		{"effort unasked to show", aiStudioHost, "gemini-3.8-flash", Request{GeminiCompat: true, Effort: "medium"}, want{"medium", ""}},
 		{"other host", "api.deepseek.com", "deepseek-chat", Request{Thinking: true, Effort: "high"}, want{"high", ""}},
 		{"other host off", "api.deepseek.com", "deepseek-chat", Request{ThinkOff: true}, want{"", ""}},
@@ -244,5 +247,167 @@ func TestGeminiThoughtsThroughLocalProxy(t *testing.T) {
 				t.Fatalf("the next turn was sent %v (%d requests)", bodies[len(bodies)-1], len(bodies))
 			}
 		})
+	}
+}
+
+// Gemini 3 can't stop thinking, and one without minimal turns it away:
+// gemini-3.8-flash, asked with reasoning off as AI Studio's is, answered
+// Vertex AI's OpenAI-compatible API with this 400. It names thinking, and
+// was taken for thinking_config turned away, so the provider wasn't asked
+// for Gemini's thoughts again, for any model, until magpie restarted.
+// Reasoning off goes at the model's lowest level instead: at once where its
+// levels are known, as models.dev's list for AI Studio gives them, and after
+// the refusal where they aren't; the thoughts are still asked for.
+func TestGeminiThinkingOffAtItsLowest(t *testing.T) {
+	const refusal = `[{
+  "error": {
+    "code": 400,
+    "message": "Thinking level is unsupported: THINKING_LEVEL_MINIMAL",
+    "status": "INVALID_ARGUMENT"
+  }
+}
+]
+`
+	thinkingConfig := func(b map[string]any) map[string]any {
+		extra, _ := b["extra_body"].(map[string]any)
+		google, _ := extra["google"].(map[string]any)
+		tc, _ := google["thinking_config"].(map[string]any)
+		return tc
+	}
+	for _, known := range []bool{false, true} {
+		name := "levels not known"
+		if known {
+			name = "levels known"
+		}
+		t.Run(name, func(t *testing.T) {
+			fresh(t)
+			var bodies []map[string]any
+			up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var b map[string]any
+				json.NewDecoder(r.Body).Decode(&b)
+				bodies = append(bodies, b)
+				tc := thinkingConfig(b)
+				if b["reasoning_effort"] == "minimal" || tc["thinking_level"] == "minimal" {
+					w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+					w.WriteHeader(400)
+					io.WriteString(w, refusal)
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				content := "你好！"
+				if tc["include_thoughts"] == true {
+					content = "<thought>The user says hi.</thought>你好！"
+				}
+				for _, c := range []string{
+					`{"id":"x","model":"gemini-3.8-flash","choices":[{"index":0,"delta":{"role":"assistant","content":` + strconv.Quote(content) + `}}]}`,
+					`{"id":"x","model":"gemini-3.8-flash","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3}}`,
+				} {
+					io.WriteString(w, "data: "+c+"\n\n")
+				}
+				io.WriteString(w, "data: [DONE]\n\n")
+			}))
+			t.Cleanup(up.Close)
+			p := provider.Provider{ID: "ai-studio", Name: "AI Studio", Key: "k", Models: []string{"gemini-3.8-flash"}, Chat: up.URL}
+			if err := provider.Save(p); err != nil {
+				t.Fatal(err)
+			}
+			if known {
+				if err := provider.SetModelEfforts("ai-studio/gemini-3.8-flash", []string{"low", "medium", "high"}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s := New()
+			ask := func(thinking string) string {
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"ai-studio/gemini-3.8-flash","max_tokens":32000,"stream":true,
+					`+thinking+`,"messages":[{"role":"user","content":"你好"}]}`))
+				s.Handler().ServeHTTP(rec, req)
+				if rec.Code != 200 || !strings.Contains(rec.Body.String(), "你好！") {
+					t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+				}
+				return rec.Body.String()
+			}
+			const off, think = `"thinking":{"type":"disabled"}`, `"thinking":{"type":"adaptive"},"output_config":{"effort":"high"}`
+			ask(off)
+			var sent []any
+			for _, b := range bodies {
+				if b["extra_body"] != nil {
+					t.Fatalf("reasoning off asked for the thoughts: %v", b)
+				}
+				sent = append(sent, b["reasoning_effort"])
+			}
+			if want := []any{"minimal", "low"}; known && !slices.Equal(sent, want[1:]) || !known && !slices.Equal(sent, want) {
+				t.Fatalf("reasoning off went at %v", sent)
+			}
+			n := len(bodies)
+			out := ask(think)
+			last := bodies[len(bodies)-1]
+			if tc := thinkingConfig(last); len(bodies) != n+1 || tc["include_thoughts"] != true || tc["thinking_level"] != "high" || last["reasoning_effort"] != nil {
+				t.Fatalf("the next turn, thinking, was sent %v (%d requests)", last, len(bodies)-n)
+			}
+			if !strings.Contains(out, `"thinking_delta"`) || !strings.Contains(out, "The user says hi.") {
+				t.Fatalf("no thoughts in the reply:\n%s", out)
+			}
+			ask(off)
+			if last := bodies[len(bodies)-1]; len(bodies) != n+2 || last["reasoning_effort"] != "low" {
+				t.Fatalf("reasoning off again went at %v (%d requests)", last["reasoning_effort"], len(bodies)-n-1)
+			}
+		})
+	}
+}
+
+// Asked for Gemini's thoughts, Vertex AI's OpenAI-compatible API gives each
+// of them in its own chunk, marked in the delta's extra_content rather than
+// with AI Studio's <thought> tags: these are its bytes, through a proxy on
+// this machine. The thoughts are a thinking block, the rest the answer.
+func TestGeminiThoughtsMarkedInExtraContent(t *testing.T) {
+	fresh(t)
+	sse, err := os.ReadFile("testdata/vertex_openai_thoughts.sse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write(sse)
+	}))
+	t.Cleanup(up.Close)
+	p := provider.Provider{ID: "vertex-proxy", Name: "Vertex proxy", Key: "k", Models: []string{"gemini-3.8-flash"}, Chat: up.URL}
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(`{"model":"vertex-proxy/gemini-3.8-flash","max_tokens":32000,"stream":true,
+		"thinking":{"type":"adaptive"},"output_config":{"effort":"high"},"messages":[{"role":"user","content":"你好"}]}`))
+	New().Handler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var think, text string
+	var blocks []string
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		var ev struct {
+			Type         string `json:"type"`
+			ContentBlock struct {
+				Type string `json:"type"`
+			} `json:"content_block"`
+			Delta struct {
+				Thinking string `json:"thinking"`
+				Text     string `json:"text"`
+			} `json:"delta"`
+		}
+		if json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &ev) != nil {
+			continue
+		}
+		if ev.Type == "content_block_start" {
+			blocks = append(blocks, ev.ContentBlock.Type)
+		}
+		think += ev.Delta.Thinking
+		text += ev.Delta.Text
+	}
+	if !strings.HasPrefix(think, "**Acknowledging Greeting**") || text != "你好！很高兴与你交流。请问有什么我可以帮你的吗？" {
+		t.Fatalf("thinking %q, text %q", think, text)
+	}
+	if len(blocks) != 2 || blocks[0] != "thinking" || blocks[1] != "text" {
+		t.Fatalf("blocks %v, want thinking then text", blocks)
 	}
 }

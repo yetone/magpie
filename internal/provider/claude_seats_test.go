@@ -54,14 +54,14 @@ func TestClaudeSeatKeepsItsOwnUsage(t *testing.T) {
 	cred := claudeSignIn(t, home, time.Now().Add(time.Hour))
 	claudeOnSeat(t, home, cred, "Acme", "org-acme", "team")
 	var out atomic.Value
-	out.Store("Current session: 5% used · resets " + soon(1) + " at 3:30pm (UTC)\n")
+	out.Store("Current session: 5% used · resets " + sessionReset() + "\n")
 	fakeClaudeUsage(t, &out, nil)
 	AskClaudeUsage()
 	if ws, err := claudeWindows(context.Background(), "me@x.com · Acme", true); err != nil || len(ws) == 0 || ws[0].Used != 5 {
 		t.Fatalf("seat: %v %+v", err, ws)
 	}
 	claudeOnSeat(t, home, cred, "me@x.com's Organization", "org-me", "max")
-	out.Store("Current session: 100% used · resets " + soon(1) + " at 3:30pm (UTC)\n")
+	out.Store("Current session: 100% used · resets " + sessionReset() + "\n")
 	claudeUsage.Lock()
 	for k, e := range claudeUsage.m {
 		e.tried = e.tried.Add(-claudeAskFloor)

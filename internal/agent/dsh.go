@@ -651,14 +651,33 @@ func dshCheck(dir, gw string) string {
 			return "DeepSeek Harness's home patch layer (" + routeFile + ") sets llm-pi-ai over every profile without magpie's route, so sessions list none of magpie's models; Apply again writes it there too"
 		}
 	}
-	// a profile of dsh's (its desktop app's) without magpie's route:
-	// sessions there list dsh's own models alone
+	// a profile of dsh's (its desktop app's) without magpie's route: where
+	// the start still names one of magpie's models the route was stripped by
+	// dsh's own save, and the serving round writes it back within a round of
+	// magpie serving — so that one is not said, unless there is no catalog
+	// for the round to write it from. A profile taken off magpie for real,
+	// its start with it, is said as before, and so is one still on the old
+	// wiring, which dshSync moves rather than this round writing beside.
+	canWriteBack := len(magpieModels("dsh")) > 0
 	for _, f := range files[1:] {
-		if _, items, err := dshRead(f); err == nil && !dshWired(dshOver(dir, items)) {
-			return "DeepSeek Harness's " + filepath.Base(filepath.Dir(f)) + " profile (" + f + ") has none of magpie's models, so sessions there list DeepSeek's own alone"
+		_, items, err := dshRead(f)
+		if err != nil || dshWired(dshOver(dir, items)) {
+			continue
 		}
+		if canWriteBack && !dshOldWiring(items) && dshStartsOnMagpie(dir, items) {
+			continue
+		}
+		return "DeepSeek Harness's " + filepath.Base(filepath.Dir(f)) + " profile (" + f + ") has none of magpie's models, so sessions there list DeepSeek's own alone"
 	}
 	route := dshRouteIn(dshOver(dir, items))
+	// the route gone entirely while the start still names one of magpie's
+	// models is dsh's own save stripping it: the round writes it back, so
+	// the check is quiet unless nothing can write it (no catalog below). A
+	// start of dsh's own or of the user's fell through usesMagpie already,
+	// and one on the old wiring is not this route's to speak for.
+	if route == nil && !dshOldWiring(items) && dshStartsOnMagpie(dir, items) {
+		return dshCheckStripped(dir, gw)
+	}
 	get := func(k string) (string, bool) {
 		if v := yamlKey(route, k); v != nil && v.Kind == yaml.ScalarNode {
 			return v.Value, true
@@ -719,6 +738,22 @@ func dshCheck(dir, gw string) string {
 	} else if !ok && dshCredsOurs(creds) {
 		// the desktop app doesn't read .env (#969)
 		return "DeepSeek Harness's own key store (" + creds + ") doesn't hold " + dshKeyRef + ": the desktop app reads the key from there, not from .env, and its sessions fail with no credential for provider route " + dshRoute + " until it is written (Apply again)"
+	}
+	return ""
+}
+
+// dshCheckStripped says what a route dsh's own save stripped still stands on:
+// quiet where a round of the serving loop can write it back, said only where
+// nothing can (no catalog to write it from — the key check still runs, since
+// a route written without its key would fail the turn all the same).
+func dshCheckStripped(dir, gw string) string {
+	if len(magpieModels("dsh")) == 0 {
+		return "DeepSeek Harness starts on one of magpie's models, but magpie's route is out of " + dshHomePatch(dir) + " and the profiles' and there is no model list to write it back from; pick a model of magpie's again once it has one"
+	}
+	env := filepath.Join(dir, ".env")
+	if off := wiringOff("DeepSeek Harness", env, func(k string) (string, bool) { return edit.GetEnvFile(env, k) },
+		dshKeyRef, keyAt(gw)); off != "" {
+		return off
 	}
 	return ""
 }
@@ -1302,16 +1337,26 @@ func dshSync(dir, gw string) error {
 	return dshMirrorHome(dir, models, gw, false)
 }
 
+// dshStartsOnMagpie reports whether the model a profile's sessions start on
+// is one of magpie's, read the way dsh starts sessions.
+func dshStartsOnMagpie(dir string, items []dshItem) bool {
+	return strings.HasPrefix(dshStart(dir, items), magpieID+"/")
+}
+
 // dshRouteAgain writes magpie's route again in one patch list where it is no
 // longer what magpie would write, and says whether it wrote; magpie's web
 // search entry in a profile goes to the gateway's address with it. It is the one
 // thing that may be done again at any time: the route is magpie's list of
 // its own models, while the model a session starts on is the user's pick
-// (see dshCheck). A patch list without magpie's route is left as it is —
-// one the user took out stays out — and so is one written between the read
-// and the write, which is the newer of the two: the next round reads it.
-// models is the catalog the round read: with none there is no route to write,
-// and writing an empty one would take a working list away.
+// (see dshCheck). A patch list without magpie's route is written back only
+// while the start still names one of magpie's models — dsh's own save keeps
+// a snapshot and can write the list back without the route, and stripping
+// the route under a start magpie still owes is not the user taking magpie
+// out; a start of dsh's own or of the user's says that they were. One
+// written between the read and the write is left as it is: it is the newer
+// of the two, and the next round reads it. models is the catalog the round
+// read: with none there is no route to write, and writing an empty one
+// would take a working list away.
 func dshRouteAgain(f string, models []catalog.Model, gw string) (bool, error) {
 	if len(models) == 0 {
 		return false, nil
@@ -1322,13 +1367,22 @@ func dshRouteAgain(f string, models []catalog.Model, gw string) (bool, error) {
 	}
 	head, items, err := dshParse(f, string(raw))
 	if err != nil || !dshWired(items) {
-		return false, nil
+		// no route of magpie's in the list: write it back only where the
+		// start still names one of magpie's models — the route was stripped
+		// under it, not taken out. dshPutRoute reads the entry dsh wrote in
+		// its own style, so the route is added beside the user's own. A list
+		// still on the old wiring is dshSync's to move (dshMove), not this
+		// round's to write beside.
+		if err != nil || dshOldWiring(items) || !dshStartsOnMagpie(dirOf(f), items) {
+			return false, nil
+		}
+		return dshWriteParsed(f, head, items, models, gw, raw)
 	}
 	before := dshJoin(items)
 	if items, err = dshPutRoute(items, true, models, gw); err != nil {
 		return false, nil
 	}
-	if filepath.Base(filepath.Dir(filepath.Dir(f))) == "profiles" {
+	if dshProfileList(f) {
 		items = dshSearchAgain(items, dshProfileHome(f), gw)
 	}
 	if dshJoin(items) == before {
@@ -1338,6 +1392,42 @@ func dshRouteAgain(f string, models []catalog.Model, gw string) (bool, error) {
 		return false, nil
 	}
 	return true, dshWrite(f, head, items)
+}
+
+// dshProfileList reports whether f is a profile's own patch list rather than
+// the home layer, which applies over every profile's.
+func dshProfileList(f string) bool {
+	return filepath.Base(filepath.Dir(filepath.Dir(f))) == "profiles"
+}
+
+// dirOf is the dsh home a patch list belongs to.
+func dirOf(f string) string {
+	if dshProfileList(f) {
+		return filepath.Dir(filepath.Dir(filepath.Dir(f)))
+	}
+	return filepath.Dir(f)
+}
+
+// dshWriteParsed adds the route to the list as it was read, and writes it
+// back when the file still holds what was read. The home layer is only
+// written into where it already holds an llm-pi-ai entry of its own: its
+// config replaces every profile's whole entry (dshOver), so one magpie added
+// there would take the user's own providers out of dsh's list (#804). A
+// profile's own list may be given the entry, as magpie's apply path does.
+func dshWriteParsed(f string, head []string, items []dshItem, models []catalog.Model, gw string, raw []byte) (bool, error) {
+	if !dshProfileList(f) && dshFindLast(items, dshPiRow) < 0 {
+		return false, nil
+	}
+	before := dshJoin(items)
+	if items, err := dshPutRoute(items, true, models, gw); err != nil {
+		return false, nil
+	} else if dshJoin(items) == before {
+		return false, nil
+	} else if now, err := edit.Read(f); err != nil || !bytes.Equal(now, raw) {
+		return false, nil
+	} else {
+		return true, dshWrite(f, head, items)
+	}
 }
 
 // dshWiredEvery is how often a magpie serving the gateway looks at dsh's

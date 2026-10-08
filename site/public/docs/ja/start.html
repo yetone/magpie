@@ -227,6 +227,7 @@ magpie claude group/opus-anywhere    <span class="c"># これを使う</span></p
       <img class="for-dark" src="/img/usage-ja-dark.png" width="2080" height="1004" loading="lazy" alt="使用量タブ：残高、トークンとコストの合計、30 日間のグラフ">
       <figcaption>ゲートウェイを通ったすべての呼び出しの残高、トークン、キャッシュヒット、コスト。</figcaption>
     </figure>
+    <p><b>コンテキスト。</b> Usage の <span class="ui">Context</span> タブでは、ゲートウェイを通るときに読み取った各エージェントのプロンプトの中身を表示します。システムプロンプト、ツール定義（MCP サーバーのツールはまとめて 1 つ）、指示ファイルと skills、ツールが読み込んだファイル、ツールのその他の出力、会話が、モデルのコンテキストウィンドウのどれだけを占めるかがわかります。各エージェントには 100 点満点のスコア（プロンプトのうちキャッシュから読まれた割合、スタートの軽さ、埋まる速さ、失敗の頻度）と、スコアの根拠を示す「軽いスタート」「MCP が重い」などのタグが付きます。セッションを開くと最新リクエストのウィンドウをマスごとに見られ、<span class="ui">Routing</span> ページでも選んだリクエストについて同じものが表示されます。保存するのは名前だけで、プロンプトの本文は保存しません。</p>
     <p><b>プロファイル。</b> <span class="ui">Agents</span> タブの下部にある <span class="ui">＋ Save current</span> で、全エージェントの設定を名前を付けて保存できます。チップをクリックすれば、すべてを一度に元に戻せます。</p>
 
     <h2 id="cli"><a class="anchor" href="#cli">ターミナルから</a></h2>
@@ -261,6 +262,15 @@ magpie claude group/opus-anywhere    <span class="c"># これを使う</span></p
     <h3>GitHub に届かない環境で、インストールや更新をするには？</h3>
     <p>インストーラと <code>magpie update</code> にプロキシを渡します：<code>curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890</code>、または <code>magpie update --proxy socks5://127.0.0.1:1080</code>（http・https・socks5・socks5h に対応。<code>HTTPS_PROXY</code> と <code>ALL_PROXY</code> も使われます）。<code>--mirror &lt;prefix&gt;</code> を付けると、指定した GitHub ダウンロードミラーから <code>&lt;prefix&gt;https://github.com/…</code> としてリリースファイルを取得します。<code>magpie update mirror &lt;prefix&gt;</code> でアプリ自身の更新を含め毎回使い、<code>magpie update mirror off</code> で解除します。指定しない限りミラーは使われず、ファイルの SHA-256 はミラーではなく常に usemagpie.ai から取得するので、ミラーが書き換えたファイルはインストールされません。アプリ自身の更新は <span class="ui">Settings</span> → <span class="ui">Proxy</span> を通ります。</p>
 
+    <h3 id="proxy-loopback">エージェントが 502 を返す、または接続できず、magpie の Routing タブに何も出ない？</h3>
+    <p>プロキシアプリ（Surge、Clash、mihomo など。システムプロキシ、TUN、拡張モードのいずれかが有効）が、エージェントから <code>http://127.0.0.1:3425</code> へのリクエストを横取りして別の場所へ送っているため、magpie に届いていません。除外リスト（<code>skip-proxy</code>、バイパス）に 127.0.0.1 を書くだけでは足りないことがあります。Codex など一部のエージェントは、それでもプロキシを通します。ローカルアドレスを直結にするルールを、他のルールより前に追加してください：</p>
+    <div class="code">
+      <span class="lang">Surge</span>
+      <button class="copy" data-copy="ex-loopback">コピー</button>
+      <pre id="ex-loopback">IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
+IP-CIDR6,::1/128,DIRECT,no-resolve</pre>
+    </div>
+    <p>Clash / mihomo の設定では、同じ行を <code>rules:</code> の下に、それぞれ先頭に <code>- </code> を付けて書きます。そのあと、エージェントからもう一度リクエストを送ってください。</p>
     <p style="margin-top:48px">困ったときや、共有したい構成があるときは <a href="https://discord.gg/vGSnD3ZKQF">Discord</a> でどうぞ。ユーザーにすぐ使えるプロバイダを配りたいベンダーの方は <a href="/docs/ja/import">magpie に追加</a> をご覧ください。</p>
   </article>
 </main>

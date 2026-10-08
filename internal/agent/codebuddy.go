@@ -23,16 +23,22 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 )
 
-func codebuddy(home string) *Agent {
-	dir := appdir.Getenv("CODEBUDDY_CONFIG_DIR")
+func codebuddy(home string) *Agent { return codebuddyIn(here(home)) }
+
+// codebuddyIn is CodeBuddy Code at a place: this machine's home, or a WSL
+// distro's (see wsl.go), where CODEBUDDY_CONFIG_DIR isn't read and its
+// models name the gateway as the distro reaches it, with the key it takes
+// from there.
+func codebuddyIn(at place) *Agent {
+	dir := at.getenv("CODEBUDDY_CONFIG_DIR")
 	if dir == "" {
-		dir = filepath.Join(home, ".codebuddy")
+		dir = filepath.Join(at.home, ".codebuddy")
 	}
 	path := filepath.Join(dir, "models.json")
+	write := func(on bool) error { return buddyWriteAt(path, "codebuddy", on, at) }
 	settings := filepath.Join(dir, "settings.json")
 	model := func() string { v, _ := edit.GetJSON(settings, "model"); return v }
 	// ours is whether id is one of magpie's models in models.json
@@ -48,7 +54,7 @@ func codebuddy(home string) *Agent {
 			if !workbuddyWired(path) {
 				return nil
 			}
-			return buddyWrite(path, "codebuddy", true)
+			return write(true)
 		},
 		Notice: func() string {
 			if Running(`(^|/)(codebuddy|cbc|codebuddy-code)( |$)`) {
@@ -67,13 +73,13 @@ func codebuddy(home string) *Agent {
 			},
 			Set: func(v string) error {
 				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
-					if err := buddyWrite(path, "codebuddy", true); err != nil {
+					if err := write(true); err != nil {
 						return err
 					}
 					return edit.SetJSON(settings, edit.KV{Path: "model", Value: ref})
 				}
 				// CodeBuddy's own: magpie's models come out of its list
-				if err := buddyWrite(path, "codebuddy", false); err != nil {
+				if err := write(false); err != nil {
 					return err
 				}
 				if v == "" {

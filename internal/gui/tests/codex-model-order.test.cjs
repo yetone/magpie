@@ -3,6 +3,8 @@
 // "Order" lists the models shown as Codex does, the account's own first,
 // and a drag or Alt+↑/↓ puts one elsewhere, saved at once; "Default order"
 // puts magpie's back. The hidden stay out, and nothing scrolls the page.
+// Every agent's list has the Order (#1052): Claude Code's, which had none,
+// orders and saves the same way, saying it is the order magpie hands it.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -19,13 +21,15 @@ const models = () => [
   { id: "codex-acc/gpt-5-codex", name: "gpt-5-codex", group: "ChatGPT", icon: "openai", own: true },
 ];
 
-function fixture(lang, orderable) {
-  const first = models();
-  let list = models();
+function fixture(lang, agent = { id: "codex", name: "Codex", icon: "codex-color" }) {
+  // only Codex has models of its own, which the server marks
+  const mine = () => models().map((m) => agent.id === "codex" ? m : { ...m, own: undefined });
+  const first = mine();
+  let list = mine();
   const posts = [];
   const state = () => ({
     agents: [{
-      id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color", wired: true,
+      id: agent.id, name: agent.name, path: "/test/config.toml", icon: agent.icon, wired: true,
       fields: [{ key: "model", label: "model", value: "gpt-5.5", options: [{ value: "gpt-5.5", label: "gpt-5.5", ref: "codex-acc/gpt-5.5" }] }],
       models: { shown: 4, listed: 5, by: [{ name: "Relay", icon: "anthropic", n: 2 }, { name: "ChatGPT", icon: "openai", n: 2 }] },
     }],
@@ -38,7 +42,7 @@ function fixture(lang, orderable) {
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state());
-    if (url.pathname === "/api/agent-models/codex") {
+    if (url.pathname === "/api/agent-models/" + agent.id) {
       if (req.method() === "POST") {
         const { order } = req.postDataJSON();
         posts.push(order);
@@ -46,7 +50,7 @@ function fixture(lang, orderable) {
         list = order.length ? [...first].sort((x, y) => at(x) - at(y)) : first;
         return json({ models: list, ordered: order.length > 0 });
       }
-      return json({ models: list, orderable, ordered: false });
+      return json({ models: list, ordered: false });
     }
     if (url.pathname === "/api/groups") return json({ groups: [] });
     if (url.pathname === "/api/providers") return json({ providers: [], gateway: { running: true, window: true } });
@@ -59,8 +63,8 @@ function fixture(lang, orderable) {
 }
 
 const W = {
-  en: { entry: "1 hidden", order: "Order", unorder: "Default order", note: "Drag to put them in the order Codex lists them; new models go last" },
-  zh: { entry: "已隐藏 1 个", order: "排序", unorder: "恢复默认顺序", note: "拖动排列 Codex 列表中的顺序；新模型排在最后" },
+  en: { entry: "1 hidden", order: "Order", unorder: "Default order", note: "Drag to put them in the order Codex lists them; new models go last", handed: "Drag to put them in the order magpie hands them to Claude Code; new models go last" },
+  zh: { entry: "已隐藏 1 个", order: "排序", unorder: "恢复默认顺序", note: "拖动排列 Codex 列表中的顺序；新模型排在最后", handed: "拖动排列 magpie 交给 Claude Code 的模型顺序；新模型排在最后" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -72,7 +76,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.setDefaultTimeout(5000);
       const errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
-      const fx = fixture(lang, true);
+      const fx = fixture(lang);
       await page.route("**/*", fx.serve);
       t.after(async () => {
         if (process.env.ARTIFACT_DIR) {
@@ -148,18 +152,59 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(errors, []);
     });
   }
-  test(`${engine}: a list that can't be ordered has no Order`, async (t) => {
-    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
-    const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
-    page.setDefaultTimeout(5000);
-    t.after(() => browser.close());
-    await page.route("**/*", fixture("en", false).serve);
-    await page.goto("http://magpie.test/");
-    const row = page.locator('.row.agent[data-id="codex"]');
-    await row.locator(".ag-link").click();
-    await row.locator(".ag-exp .ag-chips .ag-quiet").click();
-    const pop = page.locator(".am-pop:not(.leaving)");
-    await pop.waitFor();
-    assert.equal(await pop.locator(".am-seg button").count(), 2);
-  });
+  for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: Claude Code's list has an Order too (#1052)`, async (t) => {
+      const w = W[lang];
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      // narrow: the three views still fit beside the search
+      const page = await browser.newPage({ viewport: { width: 440, height: 700 } });
+      page.setDefaultTimeout(5000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      const fx = fixture(lang, { id: "claude", name: "Claude Code", icon: "claude-color" });
+      await page.route("**/*", fx.serve);
+      t.after(async () => {
+        if (process.env.ARTIFACT_DIR) {
+          await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+          await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-claude-order.png`) });
+        }
+        await browser.close();
+      });
+      await page.goto("http://magpie.test/");
+      const row = page.locator('.row.agent[data-id="claude"]');
+      await row.locator(".ag-link").click();
+      const entry = row.locator(".ag-exp .ag-chips .ag-quiet");
+      await entry.waitFor();
+      await page.waitForFunction(() => document.getAnimations().length === 0);
+      const scroll = () => page.evaluate(() => [scrollY, document.scrollingElement.scrollTop, $("#view-agents").scrollTop]);
+      const was = await scroll();
+      await entry.click();
+      const pop = page.locator(".am-pop:not(.leaving)");
+      await pop.waitFor();
+      assert.equal(await pop.locator(".am-seg button").count(), 3);
+      const seg = pop.locator(".am-seg button", { hasText: w.order });
+      // the three views whole, not squeezed to "…", and inside the box
+      for (const b of await pop.locator(".am-seg button").all()) {
+        assert(await b.evaluate((e) => e.scrollWidth <= e.clientWidth + 1), "a view's name is cut");
+      }
+      const box = await pop.boundingBox(), sb = await seg.boundingBox();
+      assert(sb.x + sb.width <= box.x + box.width + 1 && sb.x >= box.x - 1, "Order is outside the box");
+      await seg.click();
+      assert.deepEqual(await scroll(), was, "nothing scrolls");
+      const names = async () => (await pop.locator(".am-or .n").allInnerTexts()).map((s) => s.trim());
+      assert.deepEqual(await names(), ["claude-opus-5.5", "claude-sonnet-4-5", "gpt-5.5", "gpt-5-codex"], "the shown as handed, the hidden left out");
+      assert.equal(await pop.locator(".am-foot").innerText().then((s) => s.includes(w.handed)), true);
+      await pop.locator(".am-or").first().focus();
+      await page.keyboard.press("Alt+ArrowDown");
+      await page.waitForTimeout(150);
+      assert.deepEqual(fx.posts.at(-1), ["relay/claude-sonnet-4-5", "relay/claude-opus-5.5", "codex-acc/gpt-5.5", "codex-acc/gpt-5-codex"]);
+      assert.deepEqual(await names(), ["claude-sonnet-4-5", "claude-opus-5.5", "gpt-5.5", "gpt-5-codex"]);
+      const unorder = pop.locator(".am-foot .am-reset", { hasText: w.unorder });
+      await unorder.click();
+      await page.waitForTimeout(150);
+      assert.deepEqual(fx.posts.at(-1), []);
+      assert.deepEqual(await scroll(), was, "nothing scrolls");
+      assert.deepEqual(errors, []);
+    });
+  }
 }

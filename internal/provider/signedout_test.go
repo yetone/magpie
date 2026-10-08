@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // Saved accounts of an agent not signed in where magpie looks (a magpie
@@ -79,7 +81,7 @@ func TestSavedButSignedOutClaudeServed(t *testing.T) {
 	shellFakes(t)
 	claudeSignIn(t, home, time.Now().Add(time.Hour))
 	exe := filepath.Join(home, "claude")
-	os.WriteFile(exe, []byte("#!/bin/sh\necho '{\"loggedIn\": false}'\n"), 0o755)
+	testenv.Program(t, exe, "#!/bin/sh\necho '{\"loggedIn\": false}'\n")
 	claudeExecutable = func() string { return exe }
 	check("auth status signed out")
 }
@@ -125,12 +127,12 @@ func TestClaudeKeychainReadsItsAccount(t *testing.T) {
 	bin := filepath.Join(home, "bin")
 	os.MkdirAll(bin, 0o755)
 	// the leftover comes first unless the account is asked for
-	os.WriteFile(filepath.Join(bin, "security"), []byte(`#!/bin/sh
+	testenv.Program(t, filepath.Join(bin, "security"), `#!/bin/sh
 case "$*" in
 *"-a tester"*) echo '{"claudeAiOauth":{"accessToken":"live","subscriptionType":"max"}}' ;;
 *) echo '{}' ;;
 esac
-`), 0o755)
+`)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	claudeKeychain = true
 	forgetClaudeCredential()

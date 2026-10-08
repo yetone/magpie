@@ -10,16 +10,26 @@ package agent
 //	agents/<id>/config.yaml                that agent's settings; models.chat is {id, provider}
 //	server-info.json                       {port, token, …}, while it runs
 //
+// Since 1.0 OpenHanako seals the catalog under a key the desktop app keeps
+// in the system keychain: the file is then "HANA-SECRET-1.AES-256-GCM.…",
+// not JSON. magpie can't read it nor write it, and never writes over it. A
+// provider's definition is in its plugin file, out of the catalog, so that
+// is still magpie's to keep up to date; its key stays sealed, and adding or
+// removing magpie needs OpenHanako running, to do it through its API.
+//
 // magpie is one provider there, magpie, spoken to as chat completions at the
 // gateway's /v1 with the catalog as its models; choosing one of them makes it
 // the primary agent's chat model. While OpenHanako runs, both go through its
 // local API, which saves them and reloads its models at once:
 //
 //	PUT /api/config               {"providers":{"magpie":{…}|null}}
-//	PUT /api/agents/:id/config    {"models":{"chat":{"id","provider"}|null}}
+//	PUT /api/agents/:id/config    {"models":{"chat":{"id","provider"}}}
+//	GET /api/models               {"models":[{"id","provider",…}]}
 //
 // Otherwise magpie writes the files, which it reads when it starts. The
-// model the agent had is stashed and put back when magpie steps out.
+// model the agent had is stashed and put back when magpie steps out; since
+// 1.0 the API takes no agent without a model, so with none stashed, or one
+// it no longer has, the agent goes to the first of OpenHanako's own.
 
 import (
 	"bytes"
@@ -96,7 +106,7 @@ func hanako(home string) *Agent {
 		Spelled: prefixed,
 		Sync: func() error {
 			cur, ok := hanakoCurrent(dir)
-			if !ok || hanakoSame(cur, hanakoProvider()) {
+			if !ok || hanakoSame(cur, hanakoProvider(), hanakoSealed(path)) {
 				return nil
 			}
 			return hanakoSave(dir, hanakoProvider())
@@ -106,10 +116,14 @@ func hanako(home string) *Agent {
 				return ""
 			}
 			cur, _ := hanakoCurrent(dir)
-			return wiringOff("OpenHanako", path, func(k string) (string, bool) {
+			file, kvs := path, []string{"base_url", gatewayV1(), "api_key", gateway.TokenFor("hanako")}
+			if hanakoSealed(path) { // its key is sealed: unknown, not gone; the address is in the plugin
+				file, kvs = filepath.Join(hanakoPlugin(dir), "providers", magpieID+".json"), kvs[:2]
+			}
+			return wiringOff("OpenHanako", file, func(k string) (string, bool) {
 				v, ok := cur[k].(string)
 				return v, ok
-			}, "base_url", gatewayV1(), "api_key", gateway.TokenFor("hanako"))
+			}, kvs...)
 		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
@@ -123,10 +137,16 @@ func hanako(home string) *Agent {
 			Set: func(v string) error {
 				agent := hanakoAgent(dir)
 				if v == "" {
+					// nothing changes rather than half of it
+					if _, there := hanakoCurrent(dir); there && hanakoSealed(path) && hanakoLive(dir) == nil {
+						return errSealed("take magpie out of")
+					}
 					if onMagpie() {
-						if err := hanakoChat(dir, agent, unstash(key())); err != nil {
+						// the stash goes only once the model is back
+						if err := hanakoBack(dir, agent, stashLoad()[key()]); err != nil {
 							return err
 						}
+						forget(key())
 					}
 					return hanakoRemove(dir)
 				}
@@ -245,12 +265,27 @@ func hanakoCurrent(dir string) (map[string]any, bool) {
 	return cur, found
 }
 
+// hanakoSealed reports whether OpenHanako has sealed its catalog under its
+// keychain's key, so that only it can read or write it.
+func hanakoSealed(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	b = bytes.TrimPrefix(bytes.TrimSpace(b), []byte("\ufeff"))
+	return bytes.HasPrefix(bytes.TrimSpace(b), []byte("HANA-SECRET-"))
+}
+
 // hanakoSame reports whether the provider says all that want does; keys
-// the user added (headers, say) don't count.
-func hanakoSame(cur map[string]any, want hanakoProviderEntry) bool {
+// the user added (headers, say) don't count, nor, in a sealed catalog, its
+// key, which magpie can't read.
+func hanakoSame(cur map[string]any, want hanakoProviderEntry, sealed bool) bool {
 	b, _ := json.Marshal(want)
 	var w map[string]any
 	json.Unmarshal(b, &w)
+	if sealed {
+		delete(w, "api_key")
+	}
 	for k, v := range w {
 		c := cur[k]
 		if l, _ := v.([]any); k == "models" && len(l) == 0 {
@@ -274,6 +309,9 @@ func hanakoSave(dir string, p hanakoProviderEntry) error {
 		return s.put("/api/config", map[string]any{"providers": map[string]any{magpieID: p}})
 	}
 	path := filepath.Join(dir, "provider-catalog.json")
+	if hanakoSealed(path) {
+		return hanakoSavePlugin(dir, p)
+	}
 	raw, err := edit.Read(path)
 	if err != nil {
 		return err
@@ -309,6 +347,9 @@ func hanakoRemove(dir string) error {
 		return s.put("/api/config", map[string]any{"providers": map[string]any{magpieID: nil}})
 	}
 	path := filepath.Join(dir, "provider-catalog.json")
+	if hanakoSealed(path) {
+		return errSealed("take magpie out of")
+	}
 	if err := edit.DelJSON(path, "providers."+magpieID); err != nil {
 		return err
 	}
@@ -319,6 +360,28 @@ func hanakoRemove(dir string) error {
 		}
 	}
 	return os.RemoveAll(hanakoPlugin(dir))
+}
+
+// errSealed says why magpie can't do what it was asked to with OpenHanako
+// closed, and what will.
+func errSealed(what string) error {
+	return fmt.Errorf("OpenHanako keeps its providers encrypted, so magpie can only %s it while it runs: open OpenHanako and try again", what)
+}
+
+// hanakoSavePlugin keeps magpie's definition up to date in its plugin file,
+// beside a sealed catalog: all but the key, which is the catalog's. With no
+// plugin file magpie isn't there to keep up to date, and only OpenHanako
+// can add it, its key going into the sealed catalog.
+func hanakoSavePlugin(dir string, p hanakoProviderEntry) error {
+	file := filepath.Join(hanakoPlugin(dir), "providers", magpieID+".json")
+	if _, err := os.Stat(file); err != nil {
+		return errSealed("add magpie to")
+	}
+	return edit.SetJSON(file,
+		edit.KV{Path: "displayName", Value: p.DisplayName},
+		edit.KV{Path: "defaultBaseUrl", Value: p.BaseURL},
+		edit.KV{Path: "defaultApi", Value: p.API},
+		edit.KV{Path: "models", Value: p.Models})
 }
 
 func hanakoExists(path string) bool { _, err := os.Stat(path); return err == nil }
@@ -353,6 +416,76 @@ func hanakoChat(dir, agent, v string) error {
 		return edit.DelYAML(path, "models.chat")
 	}
 	return edit.SetYAML(path, edit.KV{Path: "models.chat", Value: chat})
+}
+
+// hanakoBack puts an agent's chat model back off magpie's: prev, the one
+// it had, if there is one. Running, OpenHanako takes only a model it has, as
+// provider/id: no model at all or an id alone is a 400 ("models.chat requires
+// provider/id"). So prev is looked up in its models (an id alone, from
+// before its migration #5, by its id), and when magpie has none for this
+// agent (it was put on magpie in OpenHanako, or under another agent) or its
+// provider has gone, the agent goes to the first model of OpenHanako's own.
+func hanakoBack(dir, agent, prev string) error {
+	s := hanakoLive(dir)
+	if s == nil || agent == "" {
+		return hanakoChat(dir, agent, prev)
+	}
+	models, err := s.models()
+	if err != nil {
+		return err
+	}
+	pick := ""
+	p, id, ref := strings.Cut(prev, "/")
+	for _, m := range models {
+		if m.Provider == "" || m.Provider == magpieID || m.ID == "" {
+			continue
+		}
+		if (ref && m.Provider == p && m.ID == id) || (!ref && prev != "" && m.ID == prev) {
+			pick = m.Provider + "/" + m.ID
+			break
+		}
+		if pick == "" && prev == "" {
+			pick = m.Provider + "/" + m.ID
+		}
+	}
+	if pick == "" && prev != "" {
+		return hanakoBack(dir, agent, "")
+	}
+	if pick == "" {
+		return errors.New("OpenHanako has no model of its own to go back to — add a provider in OpenHanako's settings, then turn magpie off again")
+	}
+	return hanakoChat(dir, agent, pick)
+}
+
+type hanakoAvail struct {
+	ID       string `json:"id"`
+	Provider string `json:"provider"`
+}
+
+// models lists the models OpenHanako can chat with, as its model picker
+// does: GET /api/models.
+func (s *hanakoServer) models() ([]hanakoAvail, error) {
+	req, err := http.NewRequest("GET", s.url("/api/models"), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+s.Token)
+	resp, err := hanakoClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("OpenHanako: %w", err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Models []hanakoAvail `json:"models"`
+		Error  string        `json:"error"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(&out); err != nil || resp.StatusCode/100 != 2 {
+		if out.Error == "" && err != nil {
+			out.Error = err.Error()
+		}
+		return nil, fmt.Errorf("OpenHanako: %s /api/models: %s", resp.Status, out.Error)
+	}
+	return out.Models, nil
 }
 
 // hanakoServer is a running OpenHanako's API, as server-info.json gives it.

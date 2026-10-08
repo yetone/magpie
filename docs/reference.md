@@ -79,7 +79,7 @@ line; agents connected to magpie lose it when it quits.
 
 | Agent        | File                              | Fields          |
 | ------------ | --------------------------------- | --------------- |
-| Claude Code  | `~/.claude/settings.json`         | provider, model, opus/sonnet/haiku/fable (through magpie) |
+| Claude Code  | `~/.claude/settings.json`         | provider, model, opus/sonnet/haiku/fable, sign-in (through magpie) |
 | Claude Desktop | `Claude/` + `Claude-3p/configLibrary/` in `~/Library/Application Support` (`%LOCALAPPDATA%` on Windows, `~/.config` on Linux) | provider (its third-party gateway mode: Code and Cowork on magpie, no Anthropic sign-in; restart Desktop) |
 | Codex        | `~/.codex/config.toml`            | provider, model, effort |
 | Gemini CLI   | `~/.gemini/settings.json`, `~/.gemini/.env` | auth, model |
@@ -162,7 +162,9 @@ the ones the agent asked for that request (Claude Code's, its 1M context's
 `context-1m-2025-08-07` for a `[1m]` model, fast mode's), each once. A beta
 the provider turns away (`Unexpected value(s) … for the anthropic-beta
 header`) is dropped from the retry and from then on, yours as well as the
-agent's; any other of yours is always sent.
+agent's; any other of yours is always sent. The beta of the agent's own
+sign-in (`oauth-2025-04-20`, which Claude Code signed in to claude.ai asks)
+never goes, as the sign-in never does; one you set yourself does.
 
 `magpie usage` also lists **upstream provider keys** to help check upstream bills.
 Each request records the fingerprint and saved name of the key that actually
@@ -249,6 +251,11 @@ The gateway issues **gateway keys** for clients, separate from a provider's
 upstream API keys. Turn on **Settings → Share on local network**, then open
 **Gateway → Gateway keys → Add gateway key**. This block appears only while
 sharing is on. Create a named key for each client and copy it from its row.
+To move from another gateway without touching its clients, enter the key they
+already send in **Your own key (optional)** (8–256 characters, no spaces, not
+starting with `sk-magpie-`, unlike any other key); left empty, magpie makes
+one. The list shows only its last four characters, and it is counted,
+limited and restricted as any other key, from this computer too.
 Rename, disable, rotate or remove keys independently; rotation and removal
 ask for confirmation. Rotation keeps the name, enabled state and usage
 history; other keys are unchanged. While sharing is on, **Gateway → Connect**
@@ -261,6 +268,7 @@ For a headless gateway, use the CLI before exposing the port:
 
 ```sh
 magpie gateway-key add "Remote laptop" # prints the new credential once
+magpie gateway-key add Family --key -  # keeps a key clients already send, read from stdin
 magpie gateway-key list                # ids, names, enabled state and masked keys
 magpie gateway-key rotate <id>         # prints the replacement; identity stays the same
 magpie gateway-key remove <id>         # revokes remote access
@@ -335,6 +343,27 @@ permissive: any token works, including a stale or disabled gateway key.
 Only a valid, enabled key is attributed to its named identity.
 Without sharing, an explicitly exposed `MAGPIE_ADDR` keeps its original open
 access, including old `sk-magpie-…` tokens, without key authentication.
+Sharing listens on every interface, unless `MAGPIE_ADDR` names a host of its
+own: `MAGPIE_ADDR=127.0.0.1:3425` behind Tailscale Serve, or one interface's
+address, stays where it is while shared, and what reaches it from elsewhere
+still needs an enabled gateway key (#1112).
+
+A request that reaches loopback through a proxy or tunnel on this computer
+(Cloudflare Tunnel's `cloudflared`, ngrok, Tailscale serve or funnel, frp's
+HTTP proxy, Caddy, nginx) is someone else's, and is answered as one from
+another machine (#1022): it carries a forwarding header (`Forwarded`,
+`X-Forwarded-For`, `X-Real-IP`, `Cf-Connecting-IP`, `True-Client-IP`,
+`Tailscale-User-Login`), which no agent sends. Without sharing it is refused;
+with sharing it needs an enabled gateway key, as from the network. This
+covers every route: the model APIs, quotas, MCP sign-ins. To serve magpie
+through a Cloudflare Tunnel, turn on **Settings → Share on local network**,
+add a gateway key for each client, point the tunnel's service at
+`http://127.0.0.1:3425`, and give clients the tunnel's address with that key.
+A tunnel that forwards bare TCP (frp's `tcp`, `ssh -R`, socat) adds no header
+and can't be told from an agent here: point it at this computer's LAN
+address with sharing on, not at loopback. A proxy here that signs its
+clients in itself can be trusted with `MAGPIE_TRUST_PROXY=1`, which keeps
+what it forwards local, as before.
 
 **Usage → Overview → Gateway keys** groups calls by the client's key, never
 the provider's credential. **Usage → Requests** offers the same filter;
@@ -691,7 +720,10 @@ a 5-hour, day or 7-day limit: with the provider's Balance URL set to the
 relay's `/v1/usage`, its card shows those windows and routing weighs it by
 them as it does a subscription, resting it till the window renews once the
 relay says `api key 7天限额已用完` — or till its windows are next read short
-of full, its limit raised or its usage reset. `stays=` is how long a conversation
+of full, its limit raised or its usage reset. A key bought as a plan — Kimi Code, GLM Coding Plan
+or Z.ai, MiniMax Coding Plan, OpenCode Go, Command Code — is weighed by its
+plan's windows the same way. With one key or account, the Routing page still
+shows what it has left. `stays=` is how long a conversation
 stays with the key or account that answered it: `auto` (the default, while
 the vendor's cache of it is worth keeping), `session`, `turn` or `off`.
 `models=` replaces the whole list, in order; a bare model id works when only
@@ -746,6 +778,143 @@ including fixed headers for custom providers in
 `[profiles.*]` or `model_catalog_json`. Review the entries before importing;
 subsequent changes to agent settings are not automatically copied to magpie.
 Entries that point back to magpie or only name an `env_key` are skipped.
+
+### How magpie picks an account
+
+When a subscription has several accounts on (Claude Code's or Codex's
+saved accounts, say), or a routing group has several members, the gateway
+orders them for each request in these steps. The Routing page shows the
+result for every request: who went first, and why.
+
+1. **Who can answer.** The account the agent is signed in to, unless it
+   is paused, and the other accounts that are ticked. An account set not
+   to serve the model, or held at its usage cap, is never tried. An account whose plan doesn't list the model (a Free one behind a
+   Plus) is tried only when no other lists it. A Claude account that has to
+   be signed in again stays in the list, but is passed over when its turn
+   comes, without resting.
+2. **The routing.** What is left is put in order by the routing the
+   subscription or group uses (below).
+3. **Rate limited ones last**, only with *Sink* on: an account a 429 rate
+   limited while it still had quota goes behind every one not rate limited
+   since.
+4. **The provider's fallback models** come after its own accounts.
+5. **Resting ones last.** An account resting after a failure goes to the
+   back, behind every fallback. It is never dropped: when it is the only
+   one, it is tried anyway.
+6. **The conversation's account first.** Once an account has answered a
+   conversation, it is moved to the front for the conversation's next
+   requests, as *Stays* says. In auto mode that is within a turn, and
+   across turns while at least 1,024 tokens of the last request were read
+   from the vendor's cache and it answered in the last 5 minutes. This
+   never brings back an account that is resting, nor one that has used 98%
+   of a window (100% In order).
+
+So routing decides who goes first only for a conversation nobody has
+answered yet. An account that has used 90% goes behind the others for new
+conversations, but a conversation already on it stays there until 98%.
+
+**The routings.** Smart, Least used first and Weekly pace go by the share
+used of the fullest window that counts the model, the 5-hour window
+included. Smart and Weekly pace put an account behind the others once a
+window is at 90% or more, and behind those once one is at 98% or more,
+each of these groups ordered by the share used.
+
+- **Smart** (the default): of the accounts under 90%, the one whose
+  allowance renews soonest goes first, because what it has left is lost at
+  the reset. The biggest window decides: the week, then the 5 hours only
+  when the weeks renew in the same hour. Reset times are compared to the
+  hour, by the clock: 13:55 and 14:05 are different hours, 14:05 and
+  14:55 the same. An account
+  with no week (Claude Enterprise) goes by its 5 hours. A Claude account
+  magpie knows nothing of yet goes first once, to learn what it has left
+  from the answer; any other unknown account goes after those known.
+- **In order**: the accounts in their order. The first takes every request
+  until it is used up (100%) or fails.
+- **In turn**: each turn of a conversation goes to the next account. A new
+  conversation goes to the account the fewest other conversations of the
+  last 30 minutes are on.
+- **Least used first**: the lowest share used first; then the account
+  magpie sent the fewest tokens lately (half of them stop counting after an
+  hour). An account not known counts as unused.
+- **Weekly pace**: the account with the highest pace first. Pace is the
+  share of the week left divided by the hours until the week renews (at
+  least 1): 60% left with 20 hours to go is 3 per hour. With two weekly
+  windows that count the model (Opus's own and the general one), the lower
+  pace counts. An account with no week goes by its 5 hours. Accounts whose
+  pace is within a tenth of the highest in their band count as alike, and
+  among them the one magpie sent the fewest tokens lately goes first. A
+  Claude account not known goes first once, as in Smart; another unknown
+  account counts as a fresh week.
+
+**Make first** sets the accounts' order. How much that order counts
+depends on the routing:
+
+| Routing | What the order decides |
+| --- | --- |
+| In order | Everything: the first takes every request it can. |
+| In turn | Where the rotation goes next. |
+| Smart | Only between accounts whose windows all renew in the same hours, or whose shares used are equal. |
+| Least used first | Only between accounts with the same share used and the same tokens sent lately. |
+| Weekly pace | Only between accounts in the same pace band that magpie sent the same tokens lately, in practice none since magpie started. |
+
+For Claude Code and Codex, *Make first* also signs the agent in to that
+account, because the account the agent is signed in to is first. With
+*Keep … signed in to* on, *Make first* changes only the gateway's order,
+and the agent stays signed in where it is kept.
+
+**When an account runs out.** A 429 that says the allowance is used up
+rests the account until it is back, and the same request goes to the next
+candidate at once, as long as none of the reply has been sent. How long it
+rests comes from the first of these that is known: the reset time in the
+refusal (Claude Code's `usage limit reached|<time>`, ChatGPT's
+`resets_at`), the reset of a window magpie last read as used up (98%, 100%
+In order), the vendor's `Retry-After` or rate-limit reset header (an hour
+at most), else 15 minutes. It is never longer than 8 days. The account's
+windows are read again right away, and once a reading finds the window it
+filled started again (for Claude, a new `/usage`; for any subscription,
+its reset gone by), it is back at once, not at the time the refusal
+named. A five hours started again while its week is still used up doesn't
+bring it back. A 429 that is a short rate limit rests
+the account for as long as the vendor asks (an hour at most), or a
+minute, doubled each time it comes back right after its rest, up to 30
+minutes. Out of credit rests half an hour. Any other failure rests a minute, longer each time it fails
+again, up to 10 minutes; a subscription that fails with a window used up
+rests until that window renews.
+
+**Through the gateway, or on its own.** Everything above is the gateway's,
+for requests sent through magpie. Claude Code or Codex used on its own
+talks to the vendor with the account it is signed in to, and routing
+never sees it. For that, magpie looks at the account the agent is signed
+in to a minute after it starts and every 5 minutes after: once it has used
+98% of a window (100% In order), or reached its usage cap, magpie signs
+the agent in to the next ticked account, in their order, whose allowance
+is known and under that share. A saved Claude account magpie knows
+nothing of yet (see below) is not moved to. Once the account it moved the
+agent off has every window under 90% again, it signs the agent back in to
+it. *Keep … signed in to* turns this off: the agent stays on the first
+account, or on the account you picked, whatever it has left. It changes nothing in the gateway's routing.
+
+**How often an allowance is read.** Routing uses what was read last and
+never waits for a reading, except the first one after magpie starts (3
+seconds at most). A reading over a minute old is read again in the
+background as a request is routed, and an account that fails for its
+quota is read again at once; if a reading was already under way as it
+failed, the account is read again as soon as that reading is back. Codex and most other subscriptions read every
+account from the vendor this way. Claude is different: magpie never asks
+Anthropic itself. It reads only the account Claude Code is signed in to,
+by running Claude Code's `/usage`:
+
+- once after magpie starts;
+- when you open or refresh the Usage page (in the app or the TUI), or run
+  `magpie quota` or `magpie accounts`, at most every 30 seconds;
+- otherwise again after 5 to 15 minutes (drawn at random each time), and
+  only if Claude Code was used since.
+
+A saved Claude account that isn't signed in is never read. What it has
+left is known only from what Claude Code says as that account answers a
+request through the gateway, and its Usage card says so until then. So
+the windows routing goes by for such an account can be hours old; a window
+whose reset has passed counts as empty again.
 
 ### Signed-in agents as providers
 
@@ -809,9 +978,10 @@ Settings → Share on local network and use an enabled gateway key
 its own — a reverse proxy's `https://magpie.example.com` — is the address
 `magpie web` prints for its own page too, so the proxy must forward `/v1`
 and `/v1beta` to the gateway's port and the rest to the page's. When the
-proxy and magpie run on the same machine, requests forwarded over loopback
-are treated as local and need no key, so the proxy must authenticate those
-clients itself.
+proxy and magpie run on the same machine, a request it forwards over
+loopback carries a forwarding header and needs a gateway key as one from
+the network does (see [Providers and the gateway](#providers-and-the-gateway)); a proxy that
+authenticates its clients itself can be trusted with `MAGPIE_TRUST_PROXY=1`.
 
 It exposes:
 
@@ -919,6 +1089,16 @@ and the recent calls; `MAGPIE_DEBUG=1` logs every call to the terminal.
 **Claude Code** gets `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` and the
 model variables in the `env` block of `settings.json`; picking a native
 model (`opus`, `sonnet`…) removes them and restores whatever was there.
+A key in `ANTHROPIC_AUTH_TOKEN` signs Claude Code out of claude.ai while it
+runs through magpie: claude.ai's plan limits in `/usage`, its connectors,
+voice and `/teleport` are off. Set its sign-in to claude.ai to keep that
+login: magpie writes the token empty, Claude Code sends magpie its claude.ai
+sign-in, and magpie never passes it on (nor its `oauth-2025-04-20` beta). A
+provider that refuses magpie's own key is then reported to Claude Code as
+a 502, not as its sign-in refused, so Claude Code doesn't log out. Remote
+Control and ultrareview stay off: Claude Code has them only on Anthropic's
+own address. The choice is offered where the gateway takes any key, so not
+from a WSL distro under NAT while magpie is shared on the network.
 
 **Codex** gets a `[model_providers.magpie]` table, `model_catalog_json`
 pointing at `~/.codex/magpie-models.json` (written from the catalog, so the
@@ -1150,8 +1330,8 @@ configure providers. Turn on *Share on local network*, then create a gateway
 key for each remote agent host. After that, change the gateway mapping to
 `3425:3425` (or bind it only to the NAS interface or VPN address) and recreate
 the container so remote agents can reach it. For Internet access, prefer a
-VPN such as Tailscale or WireGuard; if a reverse proxy is used, it must
-authenticate clients itself when it forwards to Magpie over loopback.
+VPN such as Tailscale or WireGuard; a reverse proxy or tunnel forwarding to
+Magpie over loopback needs a gateway key from its clients, as the network does.
 
 ### Developing
 
@@ -1380,7 +1560,9 @@ client session ID takes precedence over a Magpie routing override; unknown
 sessions retain gateway traces, including WSL mirrored and Docker Desktop
 clients whose sessions are not visible locally. Requests without a session ID
 fall back to recent observations for that agent.
-Claude Code/Cowork readers also follow `<session>/subagents/*.jsonl`. Child
+Claude Code/Cowork readers also follow `<session>/subagents/*.jsonl` and a
+workflow's (ultracode) `<session>/subagents/workflows/<run>/agent-*.jsonl`
+(not its `journal.jsonl`). Child
 interactions share their parent session and use separate trace/span IDs, even
 when a user UUID is copied. Child final responses are combined across content
 blocks and exported when the transcript is unchanged for two seconds; no
@@ -1409,7 +1591,7 @@ Supported clients and formats:
 | Codex | JSONL rollouts (`token_usage_record`, `item_completed`, `response_item`) | Recorded operations and paired native tools; inferred model/native-tool intervals |
 | Pi | Version-3 JSONL; optional `timing-final` | Recorded model times; inferred tool intervals |
 | Oh My Pi | Pi-compatible JSONL, including `model_usage` | Pi timing; auxiliary calls have inferred zero duration |
-| Claude Code / Cowork | `projects/*/*.jsonl` and `<session>/subagents/*.jsonl`, repeated assistant blocks and paired tool results | Inferred model/tool starts; recorded transcript boundaries |
+| Claude Code / Cowork | `projects/*/*.jsonl`, `<session>/subagents/*.jsonl` and `<session>/subagents/workflows/*/agent-*.jsonl`, repeated assistant blocks and paired tool results | Inferred model/tool starts; recorded transcript boundaries |
 | OpenCode | SQLite V1/V2 (`message`/`part` or `session_message`); legacy JSON storage | Recorded model and tool timestamps |
 | Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json[l]`, including patches and rewinds | Inferred intervals from message/tool event boundaries |
 
@@ -1528,7 +1710,9 @@ MAGPIE_GITHUB_MIRROR=https://gh.example magpie serve
 - `~/.config/magpie/stash.json` — values magpie replaced, restored on switch-back
 - `~/.config/magpie/plugins.json`, `plugins/` — the plugins added, and their packages
 - `~/.config/magpie/plugin-auth.json` — the plugins' sign-ins (0600)
-- `~/.cache/magpie/bun/` — the Bun plugins run on
+- `~/.cache/magpie/bun/<version>/magpie-bun` — the Bun plugins run on, named
+  so that a proxy app's PROCESS-NAME rule can match it (`magpie-bun.exe` on
+  Windows)
 - `~/.cache/magpie/models.json` — models.dev catalog (OpenCode's cache at
   `~/.cache/opencode/models.json` is used when present)
 - `~/.cache/magpie/models/<provider>.json` — model lists fetched from vendors

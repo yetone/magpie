@@ -328,9 +328,9 @@ func (c *asideConnection) connectLocked() error {
 		return fmt.Errorf("%s", detail)
 	}
 	if status == "connected" {
-		return syncJSON(c.models, "providers.magpie", c.block)
+		return syncJSON(c.models, "providers.magpie", c.kept())
 	}
-	return edit.SetJSON(c.models, edit.KV{Path: "providers.magpie", Value: c.block()})
+	return edit.SetJSON(c.models, edit.KV{Path: "providers.magpie", Value: c.kept()()})
 }
 
 func (c *asideConnection) sync() error {
@@ -340,7 +340,13 @@ func (c *asideConnection) sync() error {
 	if status != "connected" {
 		return nil
 	}
-	return syncJSON(c.models, "providers.magpie", c.block)
+	return syncJSON(c.models, "providers.magpie", c.kept())
+}
+
+// kept is the block with what else Aside's providers.magpie holds kept
+// (theirsKept).
+func (c *asideConnection) kept() func() any {
+	return theirsKept(c.models, "providers.magpie", c.block, "models")
 }
 
 func (c *asideConnection) state() NativeState {

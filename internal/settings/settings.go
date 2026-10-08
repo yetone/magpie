@@ -85,6 +85,12 @@ type Settings struct {
 	// named caller keys. LANKey is retained for older Magpie versions.
 	LAN    bool   `json:"lan,omitempty"`
 	LANKey string `json:"lanKey,omitempty"`
+	// CORSOrigins are the web pages (scheme://host[:port]) whose scripts
+	// may call the gateway from a browser (#1051): a preflight from one is
+	// answered, and its calls carry the CORS headers that let it read the
+	// reply, each with an enabled gateway key. None by default: a page
+	// gets no CORS headers, as before.
+	CORSOrigins []string `json:"corsOrigins,omitempty"`
 	// Port is the gateway's port on this computer, 0 for DefaultPort.
 	// MAGPIE_ADDR, where it is set, comes first (GatewayAddr).
 	Port int `json:"port,omitempty"`
@@ -567,7 +573,7 @@ func Arrange[T any](s Settings, items []T, id func(T) string) (shown, hidden []T
 // Themes and Langs are the accepted values, in the order the UI offers them.
 var (
 	Themes     = []string{"system", "light", "dark"}
-	Langs      = []string{"system", "en", "zh", "ja", "de"}
+	Langs      = []string{"system", "en", "zh", "zh-TW", "ja", "de"}
 	Trays      = []string{"panel", "window"}
 	Currencies = []string{"usd", "cny"}
 	// Warmups are CodexWarmup's and ClaudeWarmup's values, off as "".

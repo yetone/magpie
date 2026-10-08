@@ -224,6 +224,10 @@ func TestWhatsNewQuietAfterRestartToUpdate(t *testing.T) {
 func TestWhatsNewTodayRoute(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)
+	// one day for the post and the check, so a run across midnight agrees
+	oldToday := today
+	t.Cleanup(func() { today = oldToday })
+	today = func() string { return "2026-09-30" }
 	mux := http.NewServeMux()
 	whatsNewRoutes(mux)
 	post := func(body string) int {

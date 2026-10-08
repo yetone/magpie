@@ -76,11 +76,13 @@ func TestRequestArchiveToS3(t *testing.T) {
 
 	// on
 	settings.Save(settings.Settings{RequestArchive: true})
-	date := time.Now().UTC().Format("2006-01-02")
 	id := post()
 	if id == "" {
 		t.Fatal("no archive id")
 	}
+	// the date is the one the call carries, in UTC, not the clock read
+	// again here, which a UTC midnight can fall between
+	date := s.Recent()[0].Time.UTC().Format("2006-01-02")
 	key := "team x+y/magpie/archive/" + date + "/" + id + ".json"
 	deadline := time.Now().Add(5 * time.Second)
 	for archived() == 0 && time.Now().Before(deadline) {

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // A CLI is asked its version once per binary: one that fails to run (macOS
@@ -22,9 +24,7 @@ func TestVersionRunsOnce(t *testing.T) {
 	runs := filepath.Join(dir, "runs")
 	bin := filepath.Join(dir, "codex")
 	write := func(body string) {
-		if err := os.WriteFile(bin, []byte("#!/bin/sh\necho x >> '"+runs+"'\n"+body), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testenv.Program(t, bin, "#!/bin/sh\necho x >> '"+runs+"'\n"+body)
 	}
 	count := func() int {
 		b, _ := os.ReadFile(runs)
@@ -51,7 +51,7 @@ func TestVersionRunsOnce(t *testing.T) {
 
 	// a timeout is asked again
 	other := filepath.Join(dir, "slow")
-	os.WriteFile(other, []byte("#!/bin/sh\n"), 0o755)
+	testenv.Program(t, other, "#!/bin/sh\n")
 	old := runVersion
 	t.Cleanup(func() { runVersion = old })
 	asked := 0

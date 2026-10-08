@@ -414,11 +414,35 @@ func pluginLogin(ctx context.Context, name, method string) error {
 		}
 		wait, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		defer cancel()
+		if a.Method != "code" && provider.PluginPastesCallback(pp.ID, a.URL) {
+			// a browser on another computer (magpie on a server or in
+			// Docker) ends on a page that won't load: its address finishes it
+			fmt.Println("If the page the browser ends on won't load (magpie on a server or in Docker), paste its whole address here and press Enter:")
+			go func() {
+				for wait.Err() == nil {
+					line, err := stdin.ReadString('\n')
+					if strings.TrimSpace(line) != "" && wait.Err() == nil {
+						if next, err := provider.PastePluginCallback(wait, a.URL, line); err != nil {
+							fmt.Println(err)
+						} else if next != "" {
+							fmt.Println("Go on signing in at:")
+							fmt.Println(faint.Render(next))
+						}
+					}
+					if err != nil {
+						return
+					}
+				}
+			}()
+		}
 		if saved, err = plugin.Finish(wait, a.Session, code); err != nil {
 			return err
 		}
 	}
-	fmt.Println(green.Render("✓"), "signed in to", pp.Name, muted.Render("· its models are "+provider.PluginID(saved.Provider)+"/<model>"))
+	// as the window's sign-in does: its lapsed mark goes and, removed from
+	// magpie, it comes back
+	id := provider.PluginSignedIn(saved)
+	fmt.Println(green.Render("✓"), "signed in to", pp.Name, muted.Render("· its models are "+id+"/<model>"))
 	return nil
 }
 

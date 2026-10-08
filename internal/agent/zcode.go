@@ -106,6 +106,7 @@ func zcode(home string) *Agent {
 // turned off in ZCode stays off. A sync (keep) leaves an address on another
 // machine as it found it (zcodeAddress).
 func zcodeProviderJSON(path string, keep bool) any {
+	was := zcodeVariants(path)
 	ms := map[string]any{}
 	for _, m := range magpieModels("zcode") {
 		window := m.Context
@@ -124,7 +125,7 @@ func zcodeProviderJSON(path string, keep bool) any {
 		e := map[string]any{"name": m.Name, "limit": limit,
 			"modalities": map[string]any{"input": in, "output": []string{"text"}}}
 		if levels := zcodeLevels(m.Efforts); levels != nil {
-			e["reasoning"] = map[string]any{"enabled": true, "variants": levels, "defaultVariant": zcodeDefaultLevel(levels)}
+			e["reasoning"] = map[string]any{"enabled": true, "variants": levels, "defaultVariant": keptEffort(was[m.ID], levels, zcodeDefaultLevel(levels))}
 		}
 		ms[m.ID] = e
 	}
@@ -138,6 +139,29 @@ func zcodeProviderJSON(path string, keep bool) any {
 	}
 	return map[string]any{"name": "magpie", "kind": "anthropic", "enabled": on, "source": "custom",
 		"options": map[string]any{"apiKey": token, "baseURL": base}, "models": ms}
+}
+
+// zcodeVariants is the default variant each of magpie's models has in
+// config.json at path, which one set by hand keeps (keptEffort).
+func zcodeVariants(path string) map[string]string {
+	var c struct {
+		Provider map[string]struct {
+			Models map[string]struct {
+				Reasoning struct {
+					DefaultVariant string `json:"defaultVariant"`
+				} `json:"reasoning"`
+			} `json:"models"`
+		} `json:"provider"`
+	}
+	b, _ := edit.Read(path)
+	if json.Unmarshal(b, &c) != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for id, m := range c.Provider[magpieID].Models {
+		out[id] = m.Reasoning.DefaultVariant
+	}
+	return out
 }
 
 // zcodeAddress is the address and key magpie's provider is synced with:

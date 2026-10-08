@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -268,5 +269,43 @@ func TestQuietStreamsKeptAliveEveryProtocol(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A vendor slow to answer at all gets its stream's agent kept alive from
+// watch's goroutine while the try, once the vendor answers, copies the
+// vendor's headers in: keepAlive reads only magpie's notes until the try
+// has its status, so the two never touch one map (a race, and in a build
+// without -race "concurrent map iteration and map write").
+func TestKeepAliveBeforeTheVendorsHeaders(t *testing.T) {
+	quietFast(t)
+	rec := httptest.NewRecorder()
+	h := newHoldWriter(rec, true)
+	h.streams, h.alive = true, &keptAlive{proto: provider.Responses}
+	r := httptest.NewRequest("POST", "/v1/responses", nil)
+	noteMember(h, r, provider.Provider{ID: "q"}, "m")
+	end := h.watch()
+	// the vendor's headers come in as passthrough copies them, the first
+	// comment going out meanwhile
+	deadline := time.Now().Add(5 * time.Second)
+	for i := 0; ; i++ {
+		h.Header().Set("X-Vendor", strconv.Itoa(i))
+		h.mu.Lock()
+		sent := h.alive.sent
+		h.mu.Unlock()
+		if sent && i > 100 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(100 * time.Microsecond)
+	}
+	end()
+	if !h.alive.sent {
+		t.Fatal("no comment went out")
+	}
+	if got := rec.Header().Get(providerHeader); got != "q" {
+		t.Fatalf("the stream's headers before its reply lack magpie's notes: %q", got)
+	}
+	if !strings.Contains(rec.Body.String(), ": keepalive") {
+		t.Fatalf("body: %q", rec.Body.String())
 	}
 }

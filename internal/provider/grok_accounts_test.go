@@ -2,10 +2,12 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -140,5 +142,72 @@ func TestGrokAccounts(t *testing.T) {
 	}
 	if _, err := os.Stat(again); !os.IsNotExist(err) || len(Logins("grok")) != 1 {
 		t.Fatalf("forgotten: %v %+v", err, Logins("grok"))
+	}
+}
+
+// A Grok account refused while its allowance is being read is read again
+// on the next ask: the reading out at the refusal goes to its caller but
+// isn't kept, so it isn't served for a minute as the account's share.
+func TestGrokUsageStaleMidRead(t *testing.T) {
+	home := signIn(t)
+	t.Setenv("GROK_HOME", filepath.Join(home, ".grok"))
+	grokSignedIn(t, GrokHome(), "me@x.ai")
+	grokHomeUsage.Lock()
+	oldCache := grokHomeUsage.m
+	grokHomeUsage.m = nil
+	grokHomeUsage.Unlock()
+	t.Cleanup(func() {
+		grokHomeUsage.Lock()
+		grokHomeUsage.m = oldCache
+		grokHomeUsage.Unlock()
+	})
+
+	release := make(chan struct{})
+	var once sync.Once
+	var hits atomic.Int32
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		used := 40
+		if hits.Add(1) == 1 { // out as the request is refused
+			<-release
+			used = 90
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"config":{"creditUsagePercent":%d,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY"}}}`, used)
+	}))
+	var wg sync.WaitGroup
+	// the reading this test starts is waited for before the server closes
+	t.Cleanup(func() {
+		once.Do(func() { close(release) })
+		wg.Wait()
+		fake.Close()
+	})
+	old := GrokBase
+	GrokBase = fake.URL
+	t.Cleanup(func() { GrokBase = old })
+
+	used := func(u map[string]SubscriptionQuota) float64 {
+		q := u["me@x.ai"]
+		if q.Error != "" || len(q.Windows) != 1 {
+			t.Fatalf("usage %+v", q)
+		}
+		return q.Windows[0].Used
+	}
+	var first map[string]SubscriptionQuota
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		first = LoginUsage(context.Background(), "grok")
+	}()
+	for hits.Load() < 1 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	StaleAllowance("grok", "me@x.ai")
+	once.Do(func() { close(release) })
+	wg.Wait()
+	if u := used(first); u != 90 {
+		t.Fatalf("the reading out at the refusal gave its caller %v%%", u)
+	}
+	if u := used(LoginUsage(context.Background(), "grok")); u != 40 || hits.Load() != 2 {
+		t.Fatalf("next reading %v%%, %d requests: the one from before the refusal was kept", u, hits.Load())
 	}
 }

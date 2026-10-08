@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestFx(t *testing.T) {
@@ -85,9 +86,7 @@ func TestFxDetected(t *testing.T) {
 	home := t.TempDir()
 	bin := t.TempDir()
 	t.Setenv("PATH", bin)
-	if err := os.WriteFile(filepath.Join(bin, "fx"), []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(bin, "fx"), "#!/bin/sh\n")
 	if fx(home).Detected() {
 		t.Error("an fx command alone is taken for the agent")
 	}

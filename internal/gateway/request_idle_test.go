@@ -23,7 +23,7 @@ func TestRequestBodyProgressRenewsIdleDeadline(t *testing.T) {
 			s := New()
 			s.requestLimits.readTimeout = 200 * time.Millisecond
 			gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				body, ok := s.readRequestBody(w, r, provider.Responses, codexReader, 0)
+				body, ok := s.readRequestBody(w, r, provider.Responses, 0)
 				if !ok {
 					return
 				}

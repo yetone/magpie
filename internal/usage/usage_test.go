@@ -233,8 +233,12 @@ func TestReasoningReplyTimedByItsAnswer(t *testing.T) {
 	}
 	var rows Totals
 	var lr []Row
+	held := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	for _, r := range recs {
 		rows.addRow(Row{Record: r})
+		// LedgerSeries buckets today by Clock, so the timeline's rows are
+		// made at the time it is held at
+		r.Time = held
 		lr = append(lr, Row{Record: r})
 	}
 	if rows.Timed != 6 || rows.DecodeMs != ms || rows.DecodeOut != out {
@@ -290,5 +294,20 @@ func TestFormatCost(t *testing.T) {
 		if got := FormatCost(c.amount, c.currency, c.rate); got != c.want {
 			t.Errorf("FormatCost(%v, %q, %v) = %q, want %q", c.amount, c.currency, c.rate, got, c.want)
 		}
+	}
+}
+
+// A request Saw note is LastSeen's answer at once, before any record of it
+// is written.
+func TestSawIsLastSeen(t *testing.T) {
+	const agent = "saw-is-last-seen"
+	t.Cleanup(func() { seen.Delete(agent) }) // the record lasts the process
+	if at := LastSeen(agent); !at.IsZero() {
+		t.Fatalf("before any request: %v", at)
+	}
+	before := time.Now()
+	Saw(agent)
+	if at := LastSeen(agent); at.Before(before) || time.Since(at) > time.Minute {
+		t.Fatalf("after a request: %v", at)
 	}
 }

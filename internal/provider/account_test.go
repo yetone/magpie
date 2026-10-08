@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // fakeJWT is a token whose payload is the given claims; nobody checks the
@@ -516,7 +517,7 @@ func TestClaudeSignedOut(t *testing.T) {
 	status := `{"loggedIn": true, "email": "me@example.com", "subscriptionType": "max"}`
 	exe := filepath.Join(home, "claude")
 	fake := func() {
-		os.WriteFile(exe, []byte("#!/bin/sh\ncat <<'X'\n"+status+"\nX\n"), 0o755)
+		testenv.Program(t, exe, "#!/bin/sh\ncat <<'X'\n"+status+"\nX\n")
 		forgetClaudeStatus()
 	}
 	claudeExecutable = func() string { return exe }

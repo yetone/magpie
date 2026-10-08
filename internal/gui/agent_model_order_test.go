@@ -15,8 +15,8 @@ import (
 
 // Codex's model list goes in the order dragged on the Agents page (#855):
 // the list says it can be ordered, an order comes back in it and stays in
-// the settings, the hidden kept as they were; none puts magpie's back, and
-// another agent's list can't be ordered.
+// the settings, the hidden kept as they were; none puts magpie's back.
+// Another agent's list takes an order of its own (#1052).
 func TestAgentModelOrderAPI(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -34,9 +34,8 @@ func TestAgentModelOrderAPI(t *testing.T) {
 	mux := http.NewServeMux()
 	agentModelsAPI(mux)
 	type reply struct {
-		Models    []agentModelJSON
-		Orderable bool
-		Ordered   bool
+		Models  []agentModelJSON
+		Ordered bool
 	}
 	call := func(method, agent, body string) (int, reply) {
 		t.Helper()
@@ -55,8 +54,8 @@ func TestAgentModelOrderAPI(t *testing.T) {
 		return out
 	}
 	_, got := call("GET", "codex", "")
-	if !got.Orderable || got.Ordered {
-		t.Fatalf("codex: orderable %v ordered %v", got.Orderable, got.Ordered)
+	if got.Ordered {
+		t.Fatalf("codex: ordered %v", got.Ordered)
 	}
 	if want := []string{"relay/m1", "relay/m2", "relay/m3"}; !slices.Equal(ids(got.Models), want) {
 		t.Fatalf("%v, want %v", ids(got.Models), want)
@@ -96,14 +95,18 @@ func TestAgentModelOrderAPI(t *testing.T) {
 	if len(provider.ModelOrder("codex")) != 0 {
 		t.Errorf("still saved %v", provider.ModelOrder("codex"))
 	}
-	// only Codex's
-	if _, got = call("GET", "opencode", ""); got.Orderable {
-		t.Error("opencode's list says it can be ordered")
+	// every agent's list takes an order of its own (#1052), and Codex's
+	// stays as it was
+	if code, got = call("POST", "opencode", `{"order":["relay/m3"]}`); code != 200 || !got.Ordered {
+		t.Fatalf("opencode: %d %+v", code, got)
 	}
-	if code, _ = call("POST", "opencode", `{"order":["relay/m3"]}`); code == 200 {
-		t.Error("opencode's list took an order")
+	if want := []string{"relay/m3", "relay/m1", "relay/m2", "relay/m4"}; !slices.Equal(ids(got.Models), want) {
+		t.Errorf("opencode ordered %v, want %v", ids(got.Models), want)
 	}
-	if len(provider.ModelOrder("opencode")) != 0 {
-		t.Errorf("opencode's order saved: %v", provider.ModelOrder("opencode"))
+	if _, got = call("GET", "opencode", ""); !got.Ordered || ids(got.Models)[0] != "relay/m3" {
+		t.Errorf("opencode read back %+v", got)
+	}
+	if len(provider.ModelOrder("codex")) != 0 {
+		t.Errorf("opencode's order went to codex: %v", provider.ModelOrder("codex"))
 	}
 }

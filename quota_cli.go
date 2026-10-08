@@ -127,10 +127,11 @@ func quotaCmd(args []string) error {
 	for _, q := range qs {
 		width = max(width, len([]rune(quotaTitle(q))))
 	}
+	now := time.Now() // one instant for every window's reset time
 	for _, q := range qs {
 		line := fmt.Sprintf("%-*s  %s", width, quotaTitle(q), muted.Render(fmt.Sprintf("%-12s", q.Kind)))
 		for _, w := range q.Windows {
-			line += "  " + quotaCell(w)
+			line += "  " + quotaCell(w, now)
 		}
 		if q.Balance != "" {
 			line += "  " + balanceCell(q.Balance, q.Provider, q.User)

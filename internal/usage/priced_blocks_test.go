@@ -24,6 +24,7 @@ func appendAndQueryAllocs(t *testing.T, n int) float64 {
 }
 
 func TestRequestPageAppendDoesNotRepriceHistory(t *testing.T) {
+	holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	// A query costs a fixed number of allocations that depends on the
 	// machine (on Windows, provider sign-in lookups read the environment and
 	// registry), so the budget is what 7990 more records of history add:

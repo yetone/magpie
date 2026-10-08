@@ -302,3 +302,51 @@ func TestLANRotationKeepsOlderMagpieWorking(t *testing.T) {
 		t.Fatal("old key resurrected")
 	}
 }
+
+// A key can be given a value of the user's own, one their clients already
+// send (love1sbug on X), checked as a header can carry it and unlike any
+// other key's.
+func TestOwnKeyValue(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	const own = "cpa-family-key-0042"
+	if Named(own) {
+		t.Fatal("named before it is a key")
+	}
+	got, err := Update("add-key", Change{Name: "Family", Secret: "  " + own + "\n"})
+	if err != nil || got != own {
+		t.Fatal(got, err)
+	}
+	keys, err := List()
+	if err != nil || len(keys) != 1 || keys[0].Masked != "…0042" || keys[0].Secret != "" {
+		t.Fatal(keys, err)
+	}
+	if who, ok := Authenticate(own); !ok || who.KeyName != "Family" {
+		t.Fatal(who, ok)
+	}
+	if !Named(own) || Named(own+"x") || Named("") || !Named(Prefix+"abc") {
+		t.Fatal("Named")
+	}
+	for _, bad := range []string{"short", own, "has a space in it", "tab\there-and-more", "非ascii-key-value", "sk-magpie-key-mine-1234", strings.Repeat("k", 257)} {
+		if _, err := Update("add-key", Change{Name: "Other", Secret: bad}); err == nil {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+	if keys, _ := List(); len(keys) != 1 {
+		t.Fatal("a refused key was kept", keys)
+	}
+	// rotating it gives it one magpie makes; the old value no longer works
+	rotated, err := Update("rotate-key", Change{Key: keys[0].ID})
+	if err != nil || !strings.HasPrefix(rotated, Prefix) {
+		t.Fatal(rotated, err)
+	}
+	if _, ok := Authenticate(own); ok || Named(own) {
+		t.Fatal("the old value still works")
+	}
+	short, err := Update("add-key", Change{Name: "Short", Secret: "abcd1234"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keys, _ := List(); keys[1].Masked != "…" {
+		t.Fatal("a short key shows its end", keys[1].Masked, short)
+	}
+}

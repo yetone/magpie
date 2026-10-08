@@ -786,7 +786,7 @@ func (m model) updateUsage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	default:
 		return m, nil
 	}
-	m.sum, m.direct = usage.Summarize(m.period), usage.Direct(m.period)
+	m.sum, m.direct = usage.Summaries(m.period)
 	return m, nil
 }
 

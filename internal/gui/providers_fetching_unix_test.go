@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // The Providers page answers at once while an account's vendor is slow to
@@ -23,12 +24,12 @@ func TestProvidersAnswerWhileListsComeIn(t *testing.T) {
 	h := sandboxHome(t)
 	t.Setenv("PATH", "/usr/bin"+string(os.PathListSeparator)+"/bin")
 	exe := filepath.Join(h, "cursor-agent")
-	os.WriteFile(exe, []byte(`#!/bin/sh
+	testenv.Program(t, exe, `#!/bin/sh
 case "$1" in
 about) echo '{"userEmail":"me@example.com","subscriptionTier":"Pro"}' ;;
 models) sleep 4; echo 'slow-1 - Slow One' ;;
 esac
-`), 0o755)
+`)
 	old := provider.CursorExecutable
 	provider.CursorExecutable = func() string { return exe }
 	provider.ForgetAccounts()

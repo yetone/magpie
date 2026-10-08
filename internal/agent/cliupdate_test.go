@@ -10,6 +10,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestNewerVersions(t *testing.T) {
@@ -51,9 +53,7 @@ func TestInstalledVersion(t *testing.T) {
 	}
 	p := filepath.Join(bin, "pi")
 	for _, c := range []struct{ out, want string }{{"0.98.2", "0.98.2"}, {"pi 0.99.0\n", "0.99.0"}} {
-		if err := os.WriteFile(p, []byte("#!/bin/sh\necho '"+c.out+"'\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testenv.Program(t, p, "#!/bin/sh\necho '"+c.out+"'\n")
 		if v := a.InstalledVersion(); v != c.want {
 			t.Errorf("%q: %q", c.out, v)
 		}
@@ -87,7 +87,9 @@ func file(t *testing.T, path, body string) string {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+	if strings.HasPrefix(body, "#!") {
+		testenv.Program(t, path, body)
+	} else if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return path

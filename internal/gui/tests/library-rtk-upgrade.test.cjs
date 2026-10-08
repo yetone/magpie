@@ -114,3 +114,91 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
   });
 }
+
+// #1025 (Fermin214): RTK 0.51.0 was out on GitHub while winget had 0.50.0,
+// the one installed. Upgrade ran winget upgrade, which said so, and the card
+// went back to "v0.51.0 is out" with Upgrade. Now the card says the release
+// is out and waits for winget, with no Upgrade button — from the upgrade's
+// answer and when the card is read again — and offers Upgrade again once
+// winget has it. In every language, at 440px.
+const waitWords = {
+  en: { out: "v0.51.0 is out", waiting: "v0.51.0 is out · waiting for winget", button: "Upgrade" },
+  zh: { out: "v0.51.0 可升级", waiting: "v0.51.0 已发布 · 等待 winget", button: "升级" },
+  ja: { out: "v0.51.0 公開済み", waiting: "v0.51.0 公開済み · winget 待ち", button: "アップグレード" },
+  de: { out: "v0.51.0 ist da", waiting: "v0.51.0 ist da · wartet auf winget", button: "Aktualisieren" },
+};
+const NOTE = "winget's RTK is 0.50.0 so far; RTK 0.51.0 is out, and winget usually has it within a few days";
+
+function waitServer(lang, state) {
+  const base = server(lang, state);
+  return async (route) => {
+    const url = new URL(route.request().url());
+    const view = () => ({ ...rtkView("0.50.0"), ...(state.wingetHas ? {} : { waiting: "winget", waitingHas: "0.50.0" }) });
+    if (url.pathname === "/api/library/rtk") { state.reads++; return route.fulfill({ json: state.checked ? view() : rtkView("0.50.0") }); }
+    if (url.pathname === "/api/library/rtk/upgrade") { state.checked = true; return route.fulfill({ json: { ...view(), note: NOTE } }); }
+    return base(route);
+  };
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": RTK waits for winget to have its release", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    const errors = [];
+    t.after(async () => {
+      if (errors.length) console.log(errors);
+      await browser.close();
+    });
+    for (const lang of ["en", "zh", "ja", "de"]) {
+      await t.test(lang, async () => {
+        const w = waitWords[lang];
+        const state = { reads: 0, checked: false, wingetHas: false };
+        const ctx = await browser.newContext({ viewport: { width: 440, height: 800 } });
+        await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "rtk"); } catch {} });
+        const page = await ctx.newPage();
+        page.setDefaultTimeout(5000);
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.route("**/*", waitServer(lang, state));
+        const open = async () => {
+          await page.goto("http://magpie.test/");
+          await page.locator('button[data-view="library"]').click();
+          await page.locator("#view-library .lib-cardhead .lib-tag").waitFor();
+        };
+        const head = page.locator("#view-library .lib-cardhead").first();
+        const fits = async () => {
+          const box = await head.evaluate((h) => ({ sw: h.scrollWidth, cw: h.clientWidth, doc: document.documentElement.scrollWidth, vw: innerWidth }));
+          assert(box.sw <= box.cw + 1, `card head overflows: ${JSON.stringify(box)}`);
+          assert(box.doc <= box.vw, `page scrolls sideways: ${JSON.stringify(box)}`);
+        };
+
+        // before any check: out, with Upgrade
+        await open();
+        assert.equal(await head.locator(".lib-tag").textContent(), w.out);
+        assert.equal(await head.locator("button").textContent(), w.button);
+
+        // the upgrade finds winget has nothing newer: waiting, no button
+        await head.locator("button").click();
+        await page.waitForFunction((want) => document.querySelector("#view-library .lib-cardhead .lib-tag")?.textContent === want, w.waiting);
+        assert.equal(await head.locator("button").count(), 0);
+        await page.locator("#view-library .lib-rtk-note", { hasText: NOTE }).waitFor();
+        await fits();
+
+        // the card read again (a new page) still waits
+        const reads = state.reads;
+        await open();
+        assert(state.reads > reads);
+        assert.equal(await head.locator(".lib-tag").textContent(), w.waiting);
+        assert.equal(await head.locator("button").count(), 0);
+        await fits();
+
+        // winget has 0.51.0 now: Upgrade is back
+        state.wingetHas = true;
+        await open();
+        assert.equal(await head.locator(".lib-tag").textContent(), w.out);
+        assert.equal(await head.locator("button").textContent(), w.button);
+        await fits();
+        await ctx.close();
+      });
+    }
+    assert.deepEqual(errors, []);
+  });
+}

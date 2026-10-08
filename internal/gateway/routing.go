@@ -85,8 +85,9 @@ const (
 	creditRest  = 30 * time.Minute // out of credit: until someone tops it up
 	quotaRest   = 15 * time.Minute // out of quota, with no word of when it resets
 	longestWait = time.Hour        // the most a vendor's own "try again at" is trusted
-	// longestQuota is the most an account out of quota sits out, when it
-	// says when it's back: a week's window, and a day over
+	// longestQuota is the most an account out of quota, or failing with a
+	// window full, sits out, when it says when it's back: a week's window,
+	// and a day over
 	longestQuota = 8 * 24 * time.Hour
 	longestRetry = 10 * time.Minute // failing again and again
 	// longestRateRest is the most a rate limit that keeps coming back as
@@ -255,15 +256,18 @@ type Rest struct {
 }
 
 // renewed lifts the rests of a subscription account whose windows were
-// just started again (a Codex reset spent): out of quota no longer. Told
-// agent "", it is a key (provider.KeyAllowanceID) whose windows a reading
-// found full no more — its limit raised, or its usage reset — and its
-// rest out of them is lifted; a key's other rests aren't noted by it.
+// just started again (a Codex reset spent, or a reading finding a window
+// it was full in full no more): out of quota no longer. Only its rests out
+// of quota, or failed with a window full ("window"), are lifted; one for a
+// rate limit, its credit or a verification stays. Told agent "", it is a
+// key (provider.KeyAllowanceID) whose windows a reading found full no
+// more — its limit raised, or its usage reset — and its rest out of them
+// is lifted; a key's other rests aren't noted by it.
 func renewed(agent, user string) {
 	restingUntil.Lock()
 	defer restingUntil.Unlock()
 	for k, r := range restingUntil.note {
-		if r.agent == agent && strings.EqualFold(r.user, user) {
+		if r.agent == agent && strings.EqualFold(r.user, user) && (r.Why == failQuota || r.By == "window") {
 			delete(restingUntil.m, k)
 			delete(restingUntil.note, k)
 		}
@@ -405,9 +409,12 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		d, r.By, r.Failures = min(fallbackCooldown<<min(n-1, 10), longestRetry), "backoff", n
 		// a subscription that failed with a window full is out of it,
 		// whatever it said; a key isn't: a relay out of accounts for
-		// everyone (sub2api's 503) says nothing of the key's own windows
+		// everyone (sub2api's 503) says nothing of the key's own windows.
+		// Held to the longest an account out of quota sits out: the window
+		// is the vendor's reading, and one read a year off (a /usage date
+		// with no year) would bench the account until someone noticed
 		if t := c.full(now); !t.IsZero() && c.p.Account != nil {
-			d, r.By = t.Sub(now), "window"
+			d, r.By = min(t.Sub(now), longestQuota), "window"
 		}
 	}
 	// an account is kept by the agent its usage is asked of: a plugin's
@@ -656,10 +663,12 @@ func weigh(p provider.Provider, cs []candidate, model string, from provider.Prot
 // weighRouted is weigh by the routing alone.
 func weighRouted(p provider.Provider, cs []candidate, model string, from provider.Protocol) ([]candidate, weighing) {
 	var wg weighing
-	if len(cs) < 2 {
+	if len(cs) == 0 {
 		return cs, wg
 	}
-	// each account's own agent's: a group weighs accounts of several
+	// each account's own agent's: a group weighs accounts of several. One
+	// alone is weighed against nobody, but what it has left is still
+	// told: the Routing page shows it (#1016)
 	known := map[string]map[string]provider.Allowance{}
 	now := time.Now()
 	wg.lefts = map[allowanceKey]left{}
@@ -685,6 +694,9 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			wg.lefts[c.allowanceKey()] = left{used: u, renews: r, soon: a.Renewal(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
 				restarts: rs, dueRestart: !rs.IsZero() && due.Equal(rs)} // one not known counts as unused
 		}
+	}
+	if len(cs) < 2 {
+		return cs, wg
 	}
 	lefts := wg.lefts
 	shareOf := func(c candidate) float64 { return lefts[c.allowanceKey()].used }

@@ -10,6 +10,55 @@ function fakeWho(team) {
   return uid ? { accountId: name + "@fake", uid } : { accountId: name + "@fake" }
 }
 
+// h2 POSTs path on an HTTP/2 session to origin, a test server's
+// certificate taken, and answers with what it said; one that fails is a
+// 502 saying why.
+async function h2(origin, path) {
+  const http2 = (await import("node:http2")).default
+  return new Promise((resolve) => {
+    const s = http2.connect(origin, { rejectUnauthorized: false })
+    const fail = (e) => (s.destroy(), resolve(new Response("h2: " + (e?.message || e?.code || e), { status: 502 })))
+    s.on("error", fail)
+    const req = s.request({ ":method": "POST", ":path": path })
+    req.on("error", fail)
+    let status = 0
+    const body = []
+    req.on("response", (h) => (status = h[":status"]))
+    req.on("data", (c) => body.push(c))
+    req.on("end", () => (s.close(), resolve(new Response(Buffer.concat(body), { status }))))
+    req.end()
+  })
+}
+
+// loopbackSignIn is a browser sign-in finished at a port on this machine:
+// /callback with this sign-in's state and the code "good" signs in, a
+// wrong code fails it, and /next sends the browser on to another page
+// that comes back here, as Kiro's AWS sign-in does.
+async function loopbackSignIn(inputs) {
+  const http = (await import("node:http")).default
+  const state = Math.random().toString(36).slice(2)
+  let settle
+  const done = new Promise((r) => (settle = r))
+  const server = http.createServer((req, res) => {
+    const u = new URL(req.url ?? "/", "http://127.0.0.1")
+    const back = `http://127.0.0.1:${server.address().port}/callback`
+    if (u.pathname === "/next") return res.writeHead(302, { Location: "https://aws.invalid/authorize?redirect_uri=" + encodeURIComponent(back) }).end()
+    if (u.pathname !== "/callback") return res.writeHead(404).end()
+    if (u.searchParams.get("state") !== state) return res.writeHead(200).end("not this sign-in")
+    const code = u.searchParams.get("code")
+    settle(code === "good" ? { type: "success", refresh: "r-" + (inputs.team ?? "none"), access: "stale", expires: 0, ...fakeWho(inputs.team) } : { type: "failed", error: "FakeCo refused the code" })
+    res.writeHead(200).end("done")
+  })
+  await new Promise((r) => server.listen(0, "127.0.0.1", r))
+  const back = `http://127.0.0.1:${server.address().port}/callback`
+  return {
+    url: "https://fake.invalid/auth?" + new URLSearchParams({ redirect_uri: back, state }),
+    instructions: "Sign in in the browser",
+    method: "auto",
+    callback: () => done.finally(() => setTimeout(() => server.close(), 1000)),
+  }
+}
+
 export const FakePlugin = async ({ client }) => ({
   config: async (cfg) => {
     cfg.provider = cfg.provider ?? {}
@@ -48,7 +97,9 @@ export const FakePlugin = async ({ client }) => ({
           { type: "select", key: "where", message: "Where?", options: [{ label: "Home", value: "home" }, { label: "Work", value: "work" }] },
           { type: "text", key: "team", message: "Team?", when: { key: "where", op: "eq", value: "work" }, validate: (v) => (v ? undefined : "Required") },
         ],
-        authorize: async (inputs) => ({
+        // $FAKE_LOOPBACK: the page comes back to a port here, as Devin's
+        // and Kiro's plugins sign in
+        authorize: async (inputs) => process.env.FAKE_LOOPBACK ? loopbackSignIn(inputs) : ({
           url: "https://fake.invalid/auth?where=" + inputs.where,
           instructions: "Paste the code",
           method: "code",
@@ -76,6 +127,9 @@ export const FakePlugin = async ({ client }) => ({
         h.set("authorization", "Bearer " + (a.type === "oauth" ? a.access : a.key))
         h.set("x-models", Object.keys(provider.models).sort().join(","))
         h.set("x-body-type", typeof init.body)
+        // $FAKE_H2: the request goes on node:http2 to that origin, as
+        // Cursor's plugin runs its chats
+        if (process.env.FAKE_H2) return h2(process.env.FAKE_H2, new URL(url).pathname)
         return fetch(url, { ...init, headers: h })
       },
     }),
@@ -86,6 +140,8 @@ export const FakePlugin = async ({ client }) => ({
       // $FAKE_USAGE: the plan is what the vendor's page there says
       if (process.env.FAKE_USAGE) {
         const r = await fetch(process.env.FAKE_USAGE)
+        // a 401 there: the vendor refused the sign-in
+        if (r.status === 401) return { error: "the FakeCo sign-in has expired — sign in again" }
         return { plan: await r.text() }
       }
       if (a.type !== "oauth") return { error: "an API key has no plan" }

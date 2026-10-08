@@ -15,6 +15,7 @@ import (
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,9 +60,7 @@ func noKeychain(t *testing.T) {
 		return
 	}
 	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "security"), []byte("#!/bin/sh\nexit 44\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(bin, "security"), "#!/bin/sh\nexit 44\n")
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 

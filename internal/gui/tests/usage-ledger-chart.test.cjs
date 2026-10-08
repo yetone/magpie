@@ -85,6 +85,11 @@ function page(q, variant) {
     ...(daily ? { rows: series.filter((p) => p.calls).map((p) => ({ ...ROWS[0], t: p.time })), total: 6 } : {}),
     bucket: daily ? "day" : "hour", series: none ? [] : series, by: none ? { provider: [], agent: [], model: [] } : many ? { ...BY, provider: many } : BY,
     agents: Object.entries(AGENTS).map(([id, a]) => ({ id, ...a })), providers: (many || WHO).map((w) => ({ id: w.id, name: w.name, icon: w.icon })),
+    // the two sources and their total, as the Requests tab's three cells count
+    // them: the calls the gateway served, the ones read from an agent's own
+    // session file, and both together
+    through: { calls: 8, errors: 1, input: TOTALS.input * .4, output: TOTALS.output * .4, cache_write: TOTALS.cache_write * .4, cache_read: TOTALS.cache_read * .4, cost: TOTALS.cost * .4 },
+    direct: { calls: 12, errors: 2, input: TOTALS.input * .6, output: TOTALS.output * .6, cache_write: TOTALS.cache_write * .6, cache_read: TOTALS.cache_read * .6, cost: TOTALS.cost * .6 },
   };
 }
 
@@ -400,6 +405,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(svg.width > 300 && svg.x + svg.width <= chart.x + chart.width + 1, "the chart fits at 560");
       assert(rank.y >= chart.y + chart.height - 1, "the ranking goes under the chart when there is no room beside it");
       assert.equal(await p.locator("#ledKpi").evaluate((k) => getComputedStyle(k).gridTemplateColumns.split(" ").length), 2, "two totals to a row");
+      // the lines between the columns of one bar belong to the totals' cards:
+      // a card starting a row has no left line, and the rows under the first
+      // are divided — the two sources the Requests tab draws keep none of it
+      assert.equal(await p.locator("#ledKpi .blk").nth(2).evaluate((b) => getComputedStyle(b).borderLeftWidth), "0px", "a totals card starting a row carries no left line");
+      assert.notEqual(await p.locator("#ledKpi .blk").nth(2).evaluate((b) => getComputedStyle(b).borderTopWidth), "0px", "and the rows are divided");
+      await p.locator("#usageTab .opt").nth(1).click();
+      await p.locator("#ledVia .blk").first().waitFor();
+      assert.equal(await p.locator("#ledVia .blk").nth(1).evaluate((b) => getComputedStyle(b).borderLeftWidth), "0px", "a source cell carries no line between cells of one bar");
       // the chart follows the window
       await p.setViewportSize({ width: 1100, height: 760 });
       await p.waitForTimeout(300);

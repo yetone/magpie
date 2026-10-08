@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,12 +17,23 @@ import (
 	"github.com/yetone/magpie/internal/usage"
 )
 
+// holdUsageClock stops usage.Clock at at for the test and gives at back, for
+// the test to stamp its calls by: midnight then never falls between a call
+// and the period it is asked for in.
+func holdUsageClock(t *testing.T, at time.Time) time.Time {
+	t.Helper()
+	old := usage.Clock
+	usage.Clock = func() time.Time { return at }
+	t.Cleanup(func() { usage.Clock = old })
+	return at
+}
+
 func TestUsageLedgerDayRoutes(t *testing.T) {
 	home := sandboxHome(t)
 	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	start := usage.Today.Since(time.Now()).AddDate(0, 0, -1)
+	start := usage.Today.Since(holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))).AddDate(0, 0, -1)
 	for i, at := range []time.Time{start.Add(-time.Second), start, start.Add(12 * time.Hour), start.AddDate(0, 0, 1)} {
 		usage.Append(usage.Record{Time: at, Agent: "codex", Provider: "relay", Model: "m", Input: 10 + i, Output: 1, Status: 200})
 	}
@@ -86,8 +98,8 @@ func TestUsageLedgerRoutes(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	y, m, d := time.Now().Date()
-	at := time.Date(y, m, d, 0, 0, 1, 0, time.Local) // today, whenever the test runs
+	now := holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	at := usage.Today.Since(now).Add(time.Second)
 	for i, r := range []usage.Record{
 		{RouteID: 123, Agent: "codex", Provider: "relay", Model: "gpt-6-sol", Requested: "sol", Served: "gpt-6-luna", Input: 10, Output: 1, Status: 200},
 		{Agent: "claude", Provider: "anthropic", Model: "claude-sonnet-5", Requested: "sonnet", Input: 20, Output: 2, Status: 200},
@@ -184,7 +196,7 @@ func TestUsageLedgerRoutes(t *testing.T) {
 	}
 	p1, n := export()
 	p2, _ := export()
-	day := time.Now().Format("2006-01-02")
+	day := now.Format("2006-01-02")
 	if n != 2 || p1 != filepath.Join("~", "Downloads", "magpie-requests-today-"+day+".csv") || p2 != filepath.Join("~", "Downloads", "magpie-requests-today-"+day+"-2.csv") {
 		t.Fatalf("export: %s %s %d", p1, p2, n)
 	}
@@ -269,11 +281,12 @@ func TestUsageRequestContent(t *testing.T) {
 // filters set. Calls without recorded routing are shown as local sessions.
 func TestLedgerSingleSnapshotAndLocalSession(t *testing.T) {
 	sandboxHome(t)
+	now := holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	before := usage.LogCalls
 	reads := 0
 	usage.LogCalls = func(time.Time) []sessions.Call {
 		reads++
-		return []sessions.Call{{Time: time.Now(), Agent: "claude", Session: "s", Model: "claude-sonnet-5", Tokens: sessions.Tokens{Input: 10, Output: 2}}}
+		return []sessions.Call{{Time: now, Agent: "claude", Session: "s", Model: "claude-sonnet-5", Tokens: sessions.Tokens{Input: 10, Output: 2}}}
 	}
 	t.Cleanup(func() { usage.LogCalls = before })
 	l := ledgerPage(usage.Today, usage.Filter{Provider: usage.UnknownProvider, Agent: "claude"}, 0, 1)
@@ -292,9 +305,10 @@ func TestLedgerSingleSnapshotAndLocalSession(t *testing.T) {
 // one model's speed at each provider reads apart (inaction on Discord).
 func TestLedgerNamesModelAtProvider(t *testing.T) {
 	sandboxHome(t)
+	now := holdUsageClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
 	before := usage.LogCalls
 	usage.LogCalls = func(time.Time) []sessions.Call {
-		return []sessions.Call{{Time: time.Now(), Agent: "claude", Session: "s", Model: "claude-sonnet-5", Tokens: sessions.Tokens{Input: 10, Output: 2}}}
+		return []sessions.Call{{Time: now, Agent: "claude", Session: "s", Model: "claude-sonnet-5", Tokens: sessions.Tokens{Input: 10, Output: 2}}}
 	}
 	t.Cleanup(func() { usage.LogCalls = before })
 	l := ledgerPage(usage.Today, usage.Filter{}, 0, 1)
@@ -305,10 +319,62 @@ func TestLedgerNamesModelAtProvider(t *testing.T) {
 }
 
 func TestCSVStamp(t *testing.T) {
+	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)
 	for _, day := range []string{"", "2026-02-30", "../../other", "2026-09-30\""} {
-		want := "magpie-requests-7d-" + time.Now().Format(time.DateOnly)
-		if got := csvStamp(usage.Period("7d"), day); got != want {
+		want := "magpie-requests-7d-2026-09-30"
+		if got := csvStamp(usage.Period("7d"), day, now); got != want {
 			t.Fatalf("%q: %s", day, got)
 		}
+	}
+}
+
+// midnightUsageClock sets usage.Clock to read a tenth of a second before
+// midnight the first time and a tenth of a second after it from then on, as
+// when midnight falls while an answer is worked out. It is set again for
+// each answer.
+func midnightUsageClock(t *testing.T, midnight time.Time) {
+	t.Helper()
+	var read atomic.Bool
+	old := usage.Clock
+	usage.Clock = func() time.Time {
+		if read.Swap(true) {
+			return midnight.Add(100 * time.Millisecond)
+		}
+		return midnight.Add(-100 * time.Millisecond)
+	}
+	t.Cleanup(func() { usage.Clock = old })
+}
+
+// A period's CSV asked for as midnight falls is named for the day of the
+// calls in it, downloaded or saved to Downloads: its rows and its name are
+// read at one moment, not the rows of one day under the next day's name.
+func TestUsageCSVAtMidnight(t *testing.T) {
+	home := sandboxHome(t)
+	if err := os.MkdirAll(filepath.Join(home, "Downloads"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	midnight := time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local)
+	usage.Append(usage.Record{Time: midnight.Add(-time.Minute), Agent: "codex", Provider: "relay", Model: "m", Input: 10, Output: 1, Status: 200})
+	mux := http.NewServeMux()
+	usageRoutes(mux, folderOnly{})
+	want := "magpie-requests-today-2026-09-30.csv"
+
+	midnightUsageClock(t, midnight)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/usage/requests.csv?period=today", nil))
+	rows, err := csv.NewReader(w.Body).ReadAll()
+	if got := w.Header().Get("Content-Disposition"); w.Code != 200 || err != nil || len(rows) != 2 || got != `attachment; filename="`+want+`"` {
+		t.Errorf("download: %d, %s with %d rows (%v), want %s with 2", w.Code, got, len(rows), err, want)
+	}
+
+	midnightUsageClock(t, midnight)
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/usage/requests/export?period=today", nil))
+	var out struct {
+		Path string
+		Rows int
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); w.Code != 200 || err != nil || out.Rows != 1 || out.Path != filepath.Join("~", "Downloads", want) {
+		t.Errorf("export: %d %s, want %s with 1 row", w.Code, w.Body, want)
 	}
 }

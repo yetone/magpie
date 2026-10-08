@@ -92,9 +92,14 @@ func (s *Server) retrieve(path, operation string) http.HandlerFunc {
 		// masked once, as the settings say: a document a reranker gives
 		// back has its secrets again
 		all, _ := json.Marshal(req)
-		w, all, done := redacted(w, all)
-		defer done()
-		json.Unmarshal(all, &req)
+		// unless every try is on this machine or the local network, set
+		// to go unmasked (provider.SkipsRedaction)
+		if slices.ContainsFunc(tries, func(c candidate) bool { return !c.p.SkipsRedaction() }) {
+			var done func()
+			w, all, done = redacted(w, all)
+			defer done()
+			json.Unmarshal(all, &req)
+		}
 		for i, c := range tries {
 			last := i == len(tries)-1
 			call.Provider = c.p.ID

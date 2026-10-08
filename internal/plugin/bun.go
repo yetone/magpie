@@ -100,7 +100,7 @@ func Bun(ctx context.Context) (string, error) {
 	defer bunMu.Unlock()
 	v := inUseLocked()
 	exe := bunExeOf(v)
-	if _, err := os.Stat(exe); err == nil {
+	if haveBun(v) {
 		return exe, nil
 	}
 	if err := downloadBun(ctx, v, exe); err != nil {

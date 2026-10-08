@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/testenv"
 	"github.com/yetone/magpie/internal/update"
 )
 
@@ -100,7 +101,7 @@ func TestMoveDevin(t *testing.T) {
 	os.MkdirAll(filepath.Join(data, "devin"), 0o700)
 	os.WriteFile(DevinCredentialsPath(), devinCredentials("key-own", "", "", ""), 0o600)
 	exe := filepath.Join(home, "devin")
-	os.WriteFile(exe, []byte("#!/bin/sh\n"+devinSigned+"\n"), 0o755)
+	testenv.Program(t, exe, "#!/bin/sh\n"+devinSigned+"\n")
 	fakeDevin(t, exe)
 	// the CLI's account is read by running it, which a loaded machine may
 	// take longer than a look's first wait for

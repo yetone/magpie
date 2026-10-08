@@ -146,6 +146,22 @@ func swapImageBlocks(proto provider.Protocol, raw json.RawMessage, last, tool bo
 			}
 			continue
 		}
+		// Gemini's function response holds a tool's images in its own parts
+		if proto == provider.Gemini && len(block["functionResponse"]) > 0 {
+			var fr map[string]json.RawMessage
+			if json.Unmarshal(block["functionResponse"], &fr) == nil && len(fr["parts"]) > 0 {
+				content, nested, err := swapImageBlocks(proto, fr["parts"], last, true, swap)
+				if err != nil {
+					return raw, false, err
+				}
+				if nested {
+					fr["parts"] = content
+					block["functionResponse"], _ = json.Marshal(fr)
+					blocks[i], _ = json.Marshal(block)
+					swapped = true
+				}
+			}
+		}
 		if proto == provider.Anthropic && kind == "tool_result" {
 			content, nested, err := swapImageBlocks(proto, block["content"], last, true, swap)
 			if err != nil {

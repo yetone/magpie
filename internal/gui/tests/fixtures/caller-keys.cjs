@@ -105,10 +105,12 @@ function fixture(lang, theme, events, options = {}) {
       let secret = "";
       if (action === "add-key") {
         if (!body.name.trim()) return route.fulfill({ status: 400, json: { error: "Use a name between 1 and 120 characters" } });
+        // a value of the user's own, checked as access.ownSecret does
+        if (body.secret !== undefined && body.secret.trim().length < 8) return route.fulfill({ status: 400, json: { error: "Use a key between 8 and 256 characters" } });
         const id = "new-key-" + (++serial);
-        secret = "fixture-created-" + serial;
+        secret = body.secret?.trim() || "fixture-created-" + serial;
         secrets.set(id, secret);
-        keys.push({ id, name: body.name, masked: "sk-magpie-key-…created" });
+        keys.push({ id, name: body.name, masked: body.secret ? "…" + secret.slice(-4) : "sk-magpie-key-…created" });
       }
       if (action === "rename-key") k.name = body.name;
       if (action === "rotate-key") {

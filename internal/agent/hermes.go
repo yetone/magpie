@@ -7,7 +7,12 @@ package agent
 // with the catalog as its models) and points model.provider at it; a model
 // through magpie is "magpie/<provider>/<model>" here and model.default holds
 // "<provider>/<model>". The provider and model the user had are stashed and
-// put back when magpie steps out.
+// put back when magpie steps out. A model of the user's own picked after
+// that, in Hermes or on the Agents page, leaves magpie's provider in
+// providers: Hermes stays connected, its session model picker still offers
+// magpie's models beside its own (lijiho96940561 on X: Hermes went to Not
+// connected and magpie's models left its picker), and only Disconnect
+// takes the provider out.
 
 import (
 	"path/filepath"
@@ -31,7 +36,11 @@ func hermesIn(at place) *Agent {
 	key := "hermes:" + path + ":"
 	getKey := func(k string) string { v, _ := edit.GetYAML(path, k); return v }
 	onMagpie := func() bool { return getKey("model.provider") == magpieID }
-	// restore puts back the provider and model the user had before magpie
+	// joined: magpie's provider is in providers, though the model is one of
+	// Hermes's own
+	joined := func() bool { _, ok := edit.GetYAML(path, "providers."+magpieID+".base_url"); return ok }
+	// restore puts back the provider and model the user had before magpie,
+	// magpie's provider left beside them
 	restore := func() error {
 		var del []string
 		var kvs []edit.KV
@@ -42,8 +51,10 @@ func hermesIn(at place) *Agent {
 				del = append(del, k)
 			}
 		}
-		if err := edit.DelYAML(path, append(del, "providers."+magpieID)...); err != nil {
-			return err
+		if len(del) > 0 {
+			if err := edit.DelYAML(path, del...); err != nil {
+				return err
+			}
 		}
 		if len(kvs) == 0 {
 			return nil
@@ -62,6 +73,15 @@ func hermesIn(at place) *Agent {
 				return "Hermes reads its settings at start-up — restart open Hermes sessions to use this."
 			}
 			return ""
+		},
+		Joined: joined,
+		// Disconnect takes magpie's provider out; the model, when it is
+		// magpie's, goes back by the field
+		Unwire: func() error {
+			if !joined() {
+				return nil
+			}
+			return edit.DelYAML(path, "providers."+magpieID)
 		},
 		Check: func() string {
 			if !onMagpie() {

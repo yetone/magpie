@@ -86,6 +86,10 @@ func TestZCodeStartSentAsTheApp(t *testing.T) {
 	t.Setenv("LC_MESSAGES", "")
 	t.Setenv("TZ", "Asia/Shanghai")
 	t.Setenv("SHELL", "/bin/zsh")
+	// the day the context prefix gives, the same whenever the test runs
+	oldClock := zcodeClock
+	t.Cleanup(func() { zcodeClock = oldClock })
+	zcodeClock = func() time.Time { return time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local) }
 	jwt := zcodeTestJWT(time.Now().Add(24 * time.Hour))
 	u := newZCodeStartUpstream(t, jwt)
 	u.balance = zcodeActiveStart(time.Now(), "active")
@@ -187,8 +191,7 @@ func TestZCodeStartSentAsTheApp(t *testing.T) {
 	}
 	var prefix []block
 	json.Unmarshal(got.Messages[0].Content, &prefix)
-	want := "<system-reminder>As you answer the user's questions, you can use the following context:\n# currentDate\nToday's date is " +
-		time.Now().Format("2006-01-02") + ".\n\n      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.</system-reminder>"
+	want := "<system-reminder>As you answer the user's questions, you can use the following context:\n# currentDate\nToday's date is 2026-09-30.\n\n      IMPORTANT: this context may or may not be relevant to your tasks. You should not respond to this context unless it is highly relevant to your task.</system-reminder>"
 	if got.Messages[0].Role != "user" || len(prefix) != 1 || prefix[0].Type != "text" || prefix[0].Text != want || prefix[0].Cache != nil {
 		t.Fatalf("the context prefix: %s", got.Messages[0].Content)
 	}

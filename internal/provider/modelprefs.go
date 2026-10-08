@@ -543,7 +543,13 @@ func setModelSame(ref, same string) (bool, error) {
 
 // ImageOverride is the user's answer for whether pid's model takes images.
 func ImageOverride(pid, model string) (bool, bool) {
-	v, ok := settings.Load().ModelImages[pid+"/"+model]
+	return ImageOverrideIn(settings.Load(), pid, model)
+}
+
+// ImageOverrideIn is ImageOverride from settings s already read: a list of
+// many models reads them once, not for each (lml on Discord, Windows).
+func ImageOverrideIn(s settings.Settings, pid, model string) (bool, bool) {
+	v, ok := s.ModelImages[pid+"/"+model]
 	return v, ok
 }
 

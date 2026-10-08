@@ -6,11 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/agentenv"
+	"github.com/yetone/magpie/internal/testenv"
+	"golang.org/x/sys/unix"
 )
 
 // A desktop app with launchd's PATH finds a claude installed under a custom
@@ -22,9 +26,9 @@ func TestUserPath(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	npm := filepath.Join(home, ".npm-global", "bin")
 	os.MkdirAll(npm, 0o755)
-	os.WriteFile(filepath.Join(npm, "claude"), []byte("#!/bin/sh\n"), 0o755)
+	testenv.Program(t, filepath.Join(npm, "claude"), "#!/bin/sh\n")
 	sh := filepath.Join(home, "sh")
-	os.WriteFile(sh, []byte("#!/bin/sh\necho 'welcome back!'\nPATH=/from/profile:$PATH\neval \"$2\"\necho bye\n"), 0o755)
+	testenv.Program(t, sh, "#!/bin/sh\necho 'welcome back!'\nPATH=/from/profile:$PATH\neval \"$2\"\necho bye\n")
 	t.Setenv("SHELL", sh)
 	t.Setenv("PATH", "/usr/bin:/bin")
 
@@ -54,9 +58,9 @@ func TestUserPathTakesAgentVars(t *testing.T) {
 	t.Setenv("USERPROFILE", home)
 	pi := filepath.Join(home, "pi agent") // a space survives
 	sh := filepath.Join(home, "sh")
-	os.WriteFile(sh, []byte("#!/bin/sh\necho 'a profile that talks'\n"+
+	testenv.Program(t, sh, "#!/bin/sh\necho 'a profile that talks'\n"+
 		"export PI_CODING_AGENT_DIR='"+pi+"'\nexport CODEX_HOME=/from/profile/codex\nexport GROK_HOME=\n"+
-		"eval \"$2\"\necho bye\n"), 0o755)
+		"eval \"$2\"\necho bye\n")
 	t.Setenv("SHELL", sh)
 	t.Setenv("PATH", "/usr/bin:/bin")
 	for _, v := range []string{"PI_CODING_AGENT_DIR", "GROK_HOME", "CLAUDE_CONFIG_DIR"} {
@@ -139,5 +143,37 @@ func TestShellEnvNushell(t *testing.T) {
 	}
 	if got := vars["CLAUDE_CONFIG_DIR"]; got != "" {
 		t.Fatalf("CLAUDE_CONFIG_DIR = %q, want none", got)
+	}
+}
+
+// The login shell is asked outside magpie's process group and session (DD
+// on Discord: magpie web → zsh: suspended (tty input)). An interactive zsh
+// in magpie's session puts itself in the terminal's foreground, which left
+// magpie's group in the background there: Ctrl-C no longer reached it, and
+// anything in the group that touched the terminal had the kernel stop all
+// of it. The fake shell answers with its own process group and session; a
+// real zsh, where there is one, still gives its PATH when asked that way.
+func TestAskShellOwnSession(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	sh := filepath.Join(home, "sh")
+	testenv.Program(t, sh, "#!/bin/sh\nprintf '"+shellMark+"%s %s"+shellMark+"' \"$(ps -o pgid= -p $$ | tr -d ' ')\" \"$(ps -o sess= -p $$ | tr -d ' ')\"\n")
+	out, _ := askShell(sh)
+	f := strings.Fields(out)
+	if len(f) != 2 {
+		t.Fatalf("the fake shell's answer: %q", out)
+	}
+	if mine := strconv.Itoa(syscall.Getpgrp()); f[0] == mine {
+		t.Fatalf("the login shell ran in magpie's process group %s: a shell there takes the terminal from magpie", mine)
+	}
+	if sid, err := unix.Getsid(0); err == nil && f[1] == strconv.Itoa(sid) && f[1] != "0" {
+		t.Fatalf("the login shell ran in magpie's session %s: it can take magpie's terminal", f[1])
+	}
+	zsh, err := exec.LookPath("zsh")
+	if err != nil {
+		t.Skip("zsh isn't installed")
+	}
+	if p := ShellPath(zsh); len(p) == 0 {
+		t.Fatalf("zsh asked in a session of its own gave no PATH")
 	}
 }

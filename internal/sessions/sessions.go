@@ -121,8 +121,18 @@ type Session struct {
 // so a swapped one prices against the same copy as the default does.
 var PriceOf = priceOf
 
-// Limit is how many sessions, the latest by last activity, List reads.
+// Limit is how many sessions, the latest by last activity, List reads when
+// the caller asks for no particular number. traceRecentFiles sizes the
+// window gateway attribution is judged over by it too, so it is not raised
+// to make a listing longer: a caller that wants more asks for more.
 const Limit = 200
+
+// All is what a listing that means every session asks List for: the count a
+// page or a command shows beside the list is taken from every session, so
+// the list has to be as long as the count, and this is long past any history
+// a computer has. Limit stays what it is because traceRecentFiles sizes
+// gateway attribution by it.
+const All = 5000
 
 // state is what one file's parse has come to, enough to read on from Off.
 type state struct {
@@ -374,7 +384,9 @@ func stat(f *file) bool {
 
 // ccFiles are the session files of an agent that keeps them as Claude Code
 // does, under its folder's projects/: a session's own <id>.jsonl in its
-// project's folder, and its subagents' in <id>/subagents/.
+// project's folder, its subagents' in <id>/subagents/, and the agents of
+// its workflows (ultracode) in <id>/subagents/workflows/<run>/agent-*.jsonl
+// — beside each run's journal.jsonl, which isn't a transcript.
 func ccFiles(agent, dir string) []file {
 	projects := filepath.Join(dir, "projects")
 	var out []file
@@ -391,13 +403,29 @@ func ccFiles(agent, dir string) []file {
 					out = append(out, f)
 				}
 			} else if e.IsDir() || e.Type()&os.ModeSymlink != 0 {
-				for _, sub := range readDirectory(filepath.Join(path, "subagents")) {
+				subs := filepath.Join(path, "subagents")
+				for _, sub := range readDirectory(subs) {
 					if sub.IsDir() || !strings.HasSuffix(sub.Name(), ".jsonl") {
 						continue
 					}
-					f := file{agent: agent, key: agent + ":" + e.Name(), path: filepath.Join(path, "subagents", sub.Name())}
+					f := file{agent: agent, key: agent + ":" + e.Name(), path: filepath.Join(subs, sub.Name())}
 					if stat(&f) {
 						out = append(out, f)
+					}
+				}
+				for _, run := range readDirectory(filepath.Join(subs, "workflows")) {
+					if !run.IsDir() {
+						continue
+					}
+					dir := filepath.Join(subs, "workflows", run.Name())
+					for _, sub := range readDirectory(dir) {
+						if sub.IsDir() || !strings.HasPrefix(sub.Name(), "agent-") || !strings.HasSuffix(sub.Name(), ".jsonl") {
+							continue
+						}
+						f := file{agent: agent, key: agent + ":" + e.Name(), path: filepath.Join(dir, sub.Name())}
+						if stat(&f) {
+							out = append(out, f)
+						}
 					}
 				}
 			}

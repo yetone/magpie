@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -34,6 +35,32 @@ func TestSessionIdentitiesReadOnly(t *testing.T) {
 	b, _ := json.Marshal(ids)
 	if strings.Contains(string(b), "secret-") {
 		t.Fatal("credentials leaked into identity metadata")
+	}
+}
+
+// Saving the account Codex is signed in to leaves the identities as they
+// were, and a saved account that differs from it is still listed.
+func TestSessionIdentitiesListTheSavedCurrentAccountOnce(t *testing.T) {
+	home := signIn(t)
+	codexDir := filepath.Join(home, ".codex")
+	before := SessionIdentities(codexDir)
+	rememberLogins(true) // saves the Codex account signed in now
+	if ls := readLogins(); len(ls) != 1 {
+		t.Fatalf("the signed-in account wasn't saved: %d saved logins", len(ls))
+	}
+	after := SessionIdentities(codexDir)
+	if len(before) != 1 || !slices.Equal(after, before) {
+		t.Fatalf("saving the signed-in account changed its identities: before %+v, after %+v", before, after)
+	}
+	// another member of the same workspace is another identity, still listed
+	mate, _ := json.Marshal(map[string]any{"auth_mode": "chatgpt", "tokens": map[string]any{
+		"id_token":   fakeJWT(map[string]any{"email": "mate@example.com", "https://api.openai.com/auth": map[string]any{"chatgpt_account_id": "acct-1"}}),
+		"account_id": "acct-1"}})
+	if err := writeLogins(append(readLogins(), savedLogin{Agent: "codex", User: "mate@example.com", Auth: mate})); err != nil {
+		t.Fatal(err)
+	}
+	if ids := SessionIdentities(codexDir); len(ids) != 2 || ids[1].User != "mate@example.com" {
+		t.Fatalf("another member of the workspace was left out: %+v", ids)
 	}
 }
 

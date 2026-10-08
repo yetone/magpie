@@ -88,6 +88,10 @@ func (s *signInFlow) pluginBegin(id string, method int, inputs map[string]string
 	s.stop = stop
 	if a.Method == "code" {
 		s.st.PasteCode, s.plugin = true, a.Session
+	} else if PluginPastesCallback(id, a.URL) {
+		// a browser that can't reach the plugin's port here ends on a page
+		// that won't load: its address finishes it
+		s.st.PasteCallback, s.pluginPorts = true, loopbackPorts(a.URL)
 	}
 	s.mu.Unlock()
 	if a.Method == "code" {
@@ -165,9 +169,19 @@ func PluginAPIKey(ctx context.Context, id string, method int, inputs map[string]
 	if err != nil {
 		return "", err
 	}
+	return PluginSignedIn(saved), nil
+}
+
+// PluginSignedIn finishes a sign-in to a plugin's provider that magpie
+// doesn't follow, a key or the command line's own, once the plugin has
+// saved the account: as for one it follows (pluginDone), the account's
+// lapsed mark goes and, removed from magpie, it comes back. It gives the
+// provider's magpie id.
+func PluginSignedIn(saved plugin.Saved) string {
 	clearPluginLapse(saved)
-	_ = ShowAccount(PluginID(saved.Provider))
-	return PluginID(saved.Provider), nil
+	id := PluginID(saved.Provider)
+	_ = ShowAccount(id)
+	return id
 }
 
 // pluginUsing is whether the account signed in to is the one in use, the

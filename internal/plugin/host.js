@@ -27,9 +27,11 @@
 
 import { AsyncLocalStorage } from "node:async_hooks"
 import fs from "node:fs"
+import http2 from "node:http2"
 import net from "node:net"
 import path from "node:path"
 import readline from "node:readline"
+import { Duplex } from "node:stream"
 import tls from "node:tls"
 import { pathToFileURL } from "node:url"
 
@@ -421,6 +423,96 @@ globalThis.fetch = Object.assign(function fetch(input, init) {
     },
   )
 }, bunFetch)
+
+// An HTTP/2 session a plugin opens itself goes through the proxy its
+// fetches take, as a built-in's requests on Go's transport did. Cursor's
+// plugin runs agent.v1.AgentService/Run on node:http2, which Bun connects
+// directly, *_PROXY or not: where Cursor is reached only through magpie's
+// proxy (the system's, or one set in magpie), its sign-in, models and
+// usage came through and every chat went out without it (#1035).
+const h2connect = http2.connect
+http2.connect = function connect(authority, options, listener) {
+  if (typeof options === "function") [listener, options] = [options, undefined]
+  let u
+  try {
+    u = typeof authority === "string" ? new URL(authority) : authority instanceof URL ? authority : new URL(`${authority.protocol ?? "https:"}//${authority.host ?? authority.hostname}`)
+  } catch {
+    return h2connect.call(this, authority, options, listener)
+  }
+  const p = options?.createConnection ? "" : proxyFor(u.href)
+  if (!p) return h2connect.call(this, authority, options, listener)
+  const host = u.hostname.replace(/^\[|\]$/g, "")
+  const port = Number(u.port || (u.protocol === "http:" ? 80 : 443))
+  const raw = tunnel(p, host, port)
+  const createConnection = () =>
+    u.protocol === "http:" ? raw : tls.connect({ ...options, socket: raw, servername: options?.servername || (net.isIP(host) ? undefined : host), ALPNProtocols: ["h2"] })
+  const session = h2connect.call(this, authority, { ...options, createConnection }, listener)
+  // the tunnel's failure is the session's: Bun's TLS over a stream leaves
+  // the stream's errors unheard (one unheard ends the host), and says a
+  // tunnel that never came as "h2 is not supported"
+  raw.on("error", (e) => session.destroy(e))
+  return session
+}
+
+// tunnel is a connection to host:port through the HTTP proxy p (a SOCKS
+// one is handed to the host as an HTTP bridge to it, netproxy.ForBun): its
+// CONNECT is asked first, and what is written waits for the tunnel. A proxy
+// that turns it away fails it in Go's words ("proxyconnect …").
+function tunnel(p, host, port) {
+  const pu = new URL(p)
+  const ph = pu.hostname.replace(/^\[|\]$/g, "")
+  const pp = Number(pu.port || (pu.protocol === "https:" ? 443 : 80))
+  const target = `${host.includes(":") ? `[${host}]` : host}:${port}`
+  let ready = false
+  const queued = []
+  const sock = pu.protocol === "https:" ? tls.connect({ host: ph, port: pp, servername: net.isIP(ph) ? undefined : ph }) : net.connect({ host: ph, port: pp })
+  const conn = new Duplex({
+    read() {},
+    write(chunk, enc, cb) {
+      if (ready) sock.write(chunk, cb)
+      else queued.push([chunk, cb])
+    },
+    final(cb) {
+      sock.end()
+      cb()
+    },
+    destroy(err, cb) {
+      sock.destroy()
+      cb(err)
+    },
+  })
+  sock.once(pu.protocol === "https:" ? "secureConnect" : "connect", () => {
+    let req = `CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n`
+    if (pu.username) {
+      const cred = `${decodeURIComponent(pu.username)}:${decodeURIComponent(pu.password)}`
+      req += `Proxy-Authorization: Basic ${Buffer.from(cred).toString("base64")}\r\n`
+    }
+    sock.write(req + "\r\n")
+  })
+  let got = Buffer.alloc(0)
+  const head = (chunk) => {
+    got = Buffer.concat([got, chunk])
+    const end = got.indexOf("\r\n\r\n")
+    if (end < 0) {
+      if (got.length > 8192) conn.destroy(new Error(`proxyconnect tcp: ${ph}:${pp} answered CONNECT with no HTTP`))
+      return
+    }
+    sock.off("data", head)
+    const status = got.subarray(0, got.indexOf("\r\n")).toString("latin1").replace(/^HTTP\/\d(\.\d)?\s+/, "")
+    if (!/^2\d\d/.test(status)) {
+      const body = got.subarray(end + 4, end + 304).toString("utf8").trim()
+      return conn.destroy(new Error(`proxyconnect tcp: ${body ? `${status}: ${body}` : status}`))
+    }
+    ready = true
+    if (got.length > end + 4) conn.push(got.subarray(end + 4))
+    sock.on("data", (d) => conn.push(d))
+    for (const [c, cb] of queued.splice(0)) sock.write(c, cb)
+  }
+  sock.on("data", head)
+  sock.on("end", () => conn.push(null))
+  sock.on("error", (e) => conn.destroy(ready ? e : new Error(`proxyconnect tcp: dial tcp ${ph}:${pp}: ${e?.message || e?.code || e}`)))
+  return conn
+}
 
 // ---- auth.json ---------------------------------------------------------------
 

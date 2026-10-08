@@ -117,9 +117,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             const at = await top();
             await loc.click();
             await p.waitForTimeout(200);
-            // magpie web's page settles a row's first opening up to a pixel
-            // off, on main before #447 as well
-            assert(Math.abs((await top()) - at) <= (web ? 1 : 0), `a click moved the page: ${at} to ${await top()}`);
+            assert.equal(await top(), at, "a click moved the page");
           };
           const wait = async (n) => { for (let i = 0; i < 60 && seen.length < n; i++) await p.waitForTimeout(50); };
 

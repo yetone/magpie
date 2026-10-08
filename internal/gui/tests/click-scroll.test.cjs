@@ -66,7 +66,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
       await browser.close();
     });
-    async function reset() {
+    // wide: the accounts sit beside the requests (a Routing area of 1150px
+    // or more, 5d871723), so the view ends with the date bar still in sight
+    // and Live, with none, leaves the page shorter; narrower, the accounts
+    // go below and the bar scrolls away first
+    async function reset(width = 1100) {
+      await page.setViewportSize({ width, height: 640 });
       await page.goto("http://magpie.test/?view=routing");
       await dayButtons.nth(1).waitFor();
     }
@@ -98,7 +103,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
 
     await t.test("Live and a day, picked in turn, stay under the pointer", async () => {
-      await reset();
+      await reset(1440);
       await dayButtons.nth(1).click(); // the day's requests, the list full
       await settle(page);
       // down to the list's end: Live, with none, leaves the page shorter
@@ -221,7 +226,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
 
     await t.test("the room kept for a click goes as the reader scrolls back", async () => {
-      await reset();
+      await reset(1440);
       await dayButtons.nth(1).click();
       await settle(page);
       await scrollTo(".rt-days", 0);

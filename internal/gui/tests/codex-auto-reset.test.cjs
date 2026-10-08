@@ -198,7 +198,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
       assert(fits, "the say fits the panel's card");
       // the account holding none, shown: its say too
-      await panel.locator(".pq-more").click();
+      // its group's Show more, not the tab's Arrange (490d2ea3), which is a .pq-more too
+      await panel.locator(".pq-group .pq-more").click();
       const ptwo = '.pq-autoreset[data-user="two@example.com"]';
       await panel.locator(ptwo).waitFor();
       await flip(panel, ptwo + " .auto-reset", panelPosts, "two@example.com", true);

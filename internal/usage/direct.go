@@ -13,7 +13,17 @@ import (
 // their own (Kumo31 on Discord: Codex used outside magpie was on the
 // window's Usage tab but not in magpie usage).
 func Direct(p Period) Summary {
-	return direct(p, time.Now(), LedgerOf(p, Filter{}).Rows)
+	now := Clock()
+	return direct(p, now, LedgerOfAt(p, Filter{}, now).Rows)
+}
+
+// Summaries is Summarize(p) and Direct(p) asked at one moment, for a page
+// that shows the two together: asked one after the other, midnight could
+// fall between them and set one day's calls through magpie beside the next
+// day's calls not through it.
+func Summaries(p Period) (Summary, Summary) {
+	now := Clock()
+	return indexedSummary(p, now), direct(p, now, LedgerOfAt(p, Filter{}, now).Rows)
 }
 
 func direct(p Period, now time.Time, rows []Row) Summary {

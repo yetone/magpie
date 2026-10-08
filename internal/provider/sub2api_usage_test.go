@@ -348,6 +348,37 @@ func TestKeyAllowanceForgottenMidRead(t *testing.T) {
 	}
 }
 
+// A key that says it is out of its windows while a reading of them is
+// out has them read again once that reading is back, without being asked:
+// the reading was asked before, and the rest it would lift is planned on
+// the one after (an ordered group's member read as it is planned).
+func TestKeyAllowanceStaleMidRead(t *testing.T) {
+	keyLimitsHome(t)
+	week := time.Now().Add(72 * time.Hour).Truncate(time.Second)
+	release := make(chan struct{})
+	var first atomic.Bool
+	srv, asked := sub2apiServer(t, func() ([]byte, int) {
+		if first.CompareAndSwap(false, true) {
+			<-release
+			return weekUsed(t, "800", week), 200
+		}
+		return weekUsed(t, "400", week), 200
+	})
+	var once sync.Once
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	p := sub2apiKey(srv)
+	KeyAllowance(p)
+	for asked.Load() < 1 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	StaleKeyAllowance(p) // out of its week, as the request found
+	once.Do(func() { close(release) })
+	waitAllowance(t, p, func(a Allowance) bool { u, _ := a.For("gpt-6-astra", time.Now()); return u > 0 && u < 100 })
+	if n := asked.Load(); n != 2 {
+		t.Fatalf("asked %d times", n)
+	}
+}
+
 // Until the key is first read (magpie just started), its windows are the
 // ones its card last showed, kept on disk; a window whose reset passed
 // since is empty again.

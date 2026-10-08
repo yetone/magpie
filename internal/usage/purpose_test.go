@@ -41,7 +41,8 @@ func TestPurposeFilter(t *testing.T) {
 
 func TestPurposeRequestPages(t *testing.T) {
 	pageHome(t)
-	start := Today.Since(time.Now()).Add(time.Second)
+	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))
+	start := Today.Since(now).Add(time.Second)
 	kinds := []string{"thread_title", "review", "thread_title_reconsideration", "future_kind", "", "title_generation", "unmarked"}
 	for i, kind := range kinds {
 		Append(Record{Time: start.Add(time.Duration(i) * time.Second), Agent: "codex", Provider: "openai", Model: "m",

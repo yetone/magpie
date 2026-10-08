@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // TestDevinSignedInOnlyInMagpie is 蓝猫's Devin on Discord: the CLI kept a
@@ -33,7 +35,7 @@ func TestDevinSignedInOnlyInMagpie(t *testing.T) {
 	// an old account's, one Devin refused, or the account signed in (by
 	// magpie, or by `devin auth login` after)
 	exe := filepath.Join(home, "devin")
-	os.WriteFile(exe, []byte(`#!/bin/sh
+	testenv.Program(t, exe, `#!/bin/sh
 f="$XDG_DATA_HOME/devin/credentials.toml"
 [ -f "$f" ] || { echo "Not logged in"; exit 1; }
 if grep -q refused "$f"; then
@@ -47,7 +49,7 @@ if [ "$1" = models ]; then
 fi
 if grep -q old "$f"; then who=old@example.com; else who=dev@example.com; fi
 printf 'Logged in (via Devin).\n\nUser:\n  Email:             %s\n\nAccount:\n  Tier:              Devin Pro\n' "$who"
-`), 0o755)
+`)
 	fakeDevin(t, exe)
 	devinFamiliesCached(nil)
 	t.Cleanup(func() { devinFamiliesCached(nil) })

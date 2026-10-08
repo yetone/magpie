@@ -1,0 +1,14 @@
+{
+  "name": "@magpie-community/middleware-word-guard",
+  "version": "0.1.1",
+  "description": "New API's sensitive-word filter (敏感词过滤) as magpie gateway middleware: turn away or mask words and patterns in what agents send, and in replies",
+  "type": "module",
+  "files": ["word-guard.middleware.js", "README.md"],
+  "keywords": ["magpie", "magpie-middleware", "new-api", "sensitive-words", "guardrails", "llm-gateway"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/magpie-community/plugins.git", "directory": "packages/word-guard" },
+  "magpie": {
+    "middleware": "./word-guard.middleware.js",
+    "options": { "words": ["project-codename"], "patterns": [], "action": "reject", "check": "last" }
+  }
+}

@@ -66,6 +66,9 @@ const providerUsage = `usage:
        magpie provider set my-relay search=yes
                                    (the relay answers Claude Code's WebSearch and Codex's web_search itself:
                                     those go to it as sent, not through magpie's own search)
+       magpie provider set ollama unmasked=yes
+                                   (a model on this computer or the local network: Settings' redaction leaves its
+                                    requests as written; not for a local relay that passes them on to a vendor)
        magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… balance=https://relay.example.com/api/usage/token balance.path='$data.total_available / 500000'
        magpie provider set my-relay balance.path='(1 - credits.monthlyCredits / 70) %'
        magpie provider set my-relay balance=https://relay.example.com/api/user/self balance.path='$data.quota / 500000' balance.token=<access token> header.New-Api-User=<user id>
@@ -613,6 +616,13 @@ func showProvider(p provider.Provider) error {
 	if p.Searches {
 		kv("search", "by itself"+muted.Render("  a client's web search goes to it as sent"))
 	}
+	if p.Unredacted {
+		why := "  local: Settings' redaction leaves its requests as written"
+		if !p.SkipsRedaction() {
+			why = "  but masked: not every address of it is on this computer or the local network"
+		}
+		kv("unmasked", "yes"+muted.Render(why))
+	}
 	switch {
 	case p.Account != nil:
 		who := p.Account.User
@@ -748,6 +758,15 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 				return fmt.Errorf("search=yes|no, not %q", v)
 			}
 			p.Searches = v == "yes"
+		case "unmasked":
+			// yes: a model on this computer or the local network gets the
+			// requests as written, unmasked by Settings' redaction (lc on
+			// Discord); only while every address of it is local
+			// (provider.SkipsRedaction)
+			if v != "yes" && v != "no" {
+				return fmt.Errorf("unmasked=yes|no, not %q", v)
+			}
+			p.Unredacted = v == "yes"
 		case "context":
 			if err := setContext(p, "*", v); err != nil {
 				return err

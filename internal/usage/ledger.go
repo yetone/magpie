@@ -59,6 +59,47 @@ type Filter struct {
 	// Computer narrows to the calls of one computer (#542): ThisComputer,
 	// OtherComputers, or another's id; "" is every computer's
 	Computer string
+	// Through narrows to one of the two sources a row can be of
+	// (SourceGateway, SourceSession); "" keeps both. It is what the requests
+	// page's source cells filter by, and, as with the other dimensions, the
+	// cells themselves are counted with it cleared so all three stay
+	// switchable. Not Record.Via, which is the computer that forwarded the
+	// call (#542).
+	Through string
+}
+
+// SourceGateway and SourceSession are the two sources a request row is of,
+// which Row.Source spells "log" and "": the calls magpie's own gateway
+// served, and the ones read from the agents' own session files, which it
+// never saw. They are the requests page's source cells, and the values its
+// via= takes.
+const (
+	SourceGateway = "through"
+	SourceSession = "direct"
+)
+
+// SourceOf is the source a row is of, as the page's cells name them: the
+// calls magpie's gateway served and the ones read from the agents' session
+// files. A call the gateway turned away itself is neither — the page says
+// under its totals that local rejections are not counted — so it is "" and
+// picking either cell leaves it out, as the cells' own counts already do.
+func SourceOf(r Row) string {
+	if r.IsRejected() {
+		return ""
+	}
+	if r.Source == "log" {
+		return SourceSession
+	}
+	return SourceGateway
+}
+
+// keepsRow is keeps with the one dimension a Record does not carry: which of
+// the two sources the row is of (Row.Source, not the record's).
+func (f Filter) keepsRow(r Row) bool {
+	if f.Through != "" && SourceOf(r) != f.Through {
+		return false
+	}
+	return f.keeps(r.Record)
 }
 
 // OtherComputers is the Filter.Computer of every other computer's calls.
@@ -134,6 +175,12 @@ func (p Period) Since(now time.Time) time.Time {
 // ledger adds to those the gateway logged. A variable for the tests.
 var LogCalls func(time.Time) []sessions.Call
 
+// Clock is the time the periods are read by: when today began, the hours
+// or days of the chart, the day a cached answer is for. A variable for the
+// tests, which hold it still so that midnight never falls between a call
+// they log and the period they ask for.
+var Clock = time.Now
+
 // Ledgered is a period's calls that a filter keeps, newest first, with their
 // sum, and the agents and providers that made any call in the period (their
 // ids, for a filter to offer).
@@ -148,7 +195,13 @@ type Ledgered struct {
 // comes with the calls the agents' session files record that the gateway did
 // not see.
 func LedgerOf(p Period, f Filter) Ledgered {
-	since := p.Since(time.Now())
+	return LedgerOfAt(p, f, Clock())
+}
+
+// LedgerOfAt is LedgerOf with the period read at now, for an answer that
+// names that moment elsewhere too, as an exported CSV's name does.
+func LedgerOfAt(p Period, f Filter, now time.Time) Ledgered {
+	since := p.Since(now)
 	gatewaySince := since
 	if !since.IsZero() {
 		gatewaySince = since.Add(-24 * time.Hour)
@@ -168,7 +221,7 @@ func (l Ledgered) Filtered(f Filter) Ledgered {
 	}
 	out := Ledgered{Rows: []Row{}, Agents: l.Agents, Providers: l.Providers}
 	for _, r := range l.Rows {
-		if f.keeps(r.Record) {
+		if f.keepsRow(r) {
 			out.Rows = append(out.Rows, r)
 			if !r.IsRejected() {
 				out.Sum.addRow(r)
@@ -654,7 +707,12 @@ const seriesKeep = 24
 // hour, day or week, for the chart over them. A row is of the point its
 // time falls in; the rows are in any order.
 func LedgerSeries(p Period, rows []Row) (bucket string, pts []SeriesPoint) {
-	now := time.Now()
+	return ledgerSeriesAt(p, rows, Clock())
+}
+
+// ledgerSeriesAt is LedgerSeries with the period read at now, the moment the
+// rows were read at, so that the chart is of the rows' day.
+func ledgerSeriesAt(p Period, rows []Row, now time.Time) (bucket string, pts []SeriesPoint) {
 	var first time.Time
 	for _, r := range rows {
 		if r.IsRejected() {

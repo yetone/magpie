@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -106,6 +107,10 @@ type model struct {
 	// entry for it says: Ultra hands work to Codex's agents in V2
 	// alone, and a magpie-served lead writes their tasks as text.
 	MultiAgent string `json:"multi_agent_version,omitempty"`
+	// the effort Codex's Ultra sends the model, as Codex's own entry
+	// for the same model says it (see agentsEffort); without it Codex
+	// sends max (#1108)
+	AgentsEffort string `json:"multi_agent_reasoning_effort,omitempty"`
 	// the model Codex's auto-review runs on, settings.CodexAutoReview
 	// (see AutoReview)
 	AutoReview string `json:"auto_review_model_override,omitempty"`
@@ -173,6 +178,7 @@ func Entries(ms []catalog.Model, after int) []any {
 		for _, ef := range m.Efforts {
 			e.Efforts = append(e.Efforts, level{Effort: ef})
 		}
+		e.AgentsEffort = agentsEffort(own, m)
 		if len(m.Efforts) > 0 {
 			d := DefaultEffort(m.Efforts)
 			e.DefaultEffort = &d
@@ -180,6 +186,32 @@ func Entries(ms []catalog.Model, after int) []any {
 		entries = append(entries, &e)
 	}
 	return entries
+}
+
+// datedSuffix is a snapshot's date after a model's id (-2026-09-14,
+// -20260914).
+var datedSuffix = regexp.MustCompile(`-(\d{4}-\d{2}-\d{2}|\d{8})$`)
+
+// agentsEffort is the multi_agent_reasoning_effort of Codex's own entry for
+// the model a third-party one serves (s2a/gpt-6-astra, openai/gpt-6-astra on
+// a relay, a dated snapshot): Codex's Ultra sends that effort, and max when
+// an entry has none, so the same model under magpie's id would otherwise
+// run at max where OpenAI's runs at xhigh (#1108). Only a model offering
+// Ultra and the effort itself gets it; "" otherwise.
+func agentsEffort(own map[string]map[string]any, m catalog.Model) string {
+	if !slices.Contains(m.Efforts, "ultra") {
+		return ""
+	}
+	slug := strings.ToLower(m.ID)
+	if i := strings.LastIndex(slug, "/"); i >= 0 {
+		slug = slug[i+1:]
+	}
+	slug = datedSuffix.ReplaceAllString(slug, "")
+	ef, _ := own[slug]["multi_agent_reasoning_effort"].(string)
+	if ef == "" || !slices.Contains(m.Efforts, ef) {
+		return ""
+	}
+	return ef
 }
 
 // Order ranks entries — Codex's own, as the backend gives them, and

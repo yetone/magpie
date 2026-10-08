@@ -546,3 +546,32 @@ func bare(c Call) Call {
 	c.File, c.From, c.To, c.Msg = "", 0, 0, ""
 	return c
 }
+
+// The agents of a Claude Code workflow (ultracode) write their transcripts
+// a folder deeper, in <session>/subagents/workflows/<run>/, beside the run's
+// journal.jsonl; their calls are the session's (ksinverse on X: Claude's
+// usage read low with ultracode on, Codex's right).
+func TestCallsWorkflowAgents(t *testing.T) {
+	d := setupCalls(t)
+	proj := filepath.Join(d.claude, "projects", "-work-app")
+	writeLines(t, filepath.Join(proj, "sess1.jsonl"), claudeMsg("m1", "claude-opus-5-5", 1, 2, 3, 4, 1))
+	run := filepath.Join(proj, "sess1", "subagents", "workflows", "wf_a1b2c3")
+	writeLines(t, filepath.Join(run, "agent-w1.jsonl"),
+		swap(claudeMsg("w1", "claude-sonnet-5-5", 5, 6, 7, 8, 2), `"isSidechain":false`, `"isSidechain":true`))
+	// the run's journal isn't a transcript, even with a line that reads as one
+	writeLines(t, filepath.Join(run, "journal.jsonl"), claudeMsg("j1", "claude-sonnet-5-5", 100, 100, 0, 0, 3))
+
+	cs := Calls(time.Time{})
+	want := []Call{
+		{Time: callT0.Add(2 * time.Second), Agent: "claude", Session: "sess1", Model: "claude-sonnet-5-5", Tokens: Tokens{5, 6, 7, 8, 0}, RequestID: "req_w1", Cwd: "/work/app"},
+		{Time: callT0.Add(1 * time.Second), Agent: "claude", Session: "sess1", Model: "claude-opus-5-5", Tokens: Tokens{1, 2, 3, 4, 0}, RequestID: "req_m1", Cwd: "/work/app"},
+	}
+	if len(cs) != len(want) {
+		t.Fatalf("want %d calls, got %d: %+v", len(want), len(cs), cs)
+	}
+	for i := range want {
+		if bare(cs[i]) != want[i] {
+			t.Errorf("call %d:\n got %+v\nwant %+v", i, bare(cs[i]), want[i])
+		}
+	}
+}

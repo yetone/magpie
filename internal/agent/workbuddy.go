@@ -21,6 +21,7 @@ package agent
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"path/filepath"
 	"slices"
@@ -91,11 +92,15 @@ func workbuddyRead(path string) (workbuddyDoc, error) {
 
 // workbuddyEntry is what magpie reads of an entry.
 type workbuddyEntry struct {
-	ID       string `json:"id"`
-	Vendor   string `json:"vendor"`
-	Disabled *bool  `json:"disabled"`
-	URL      string `json:"url"`
-	APIKey   string `json:"apiKey"`
+	ID        string `json:"id"`
+	Vendor    string `json:"vendor"`
+	Disabled  *bool  `json:"disabled"`
+	URL       string `json:"url"`
+	APIKey    string `json:"apiKey"`
+	Reasoning *struct {
+		DefaultEffort string `json:"defaultEffort"`
+		Effort        string `json:"effort"` // the older key WorkBuddy still reads
+	} `json:"reasoning"`
 }
 
 func workbuddyMine(raw json.RawMessage) (workbuddyEntry, bool) {
@@ -120,7 +125,15 @@ func workbuddyWrite(path string, on bool) error { return buddyWrite(path, "workb
 // WorkBuddy, or CodeBuddy Code (codebuddy.go), whose models go under the
 // agent's own key. A new file is a bare list for WorkBuddy, as it writes
 // one, and {"models":[…]} for CodeBuddy Code, as its docs give it.
-func buddyWrite(path, agent string, on bool) error {
+func buddyWrite(path, agent string, on bool) error { return buddyWriteAt(path, agent, on, place{}) }
+
+// buddyWriteAt is buddyWrite for the agent at a place. One in a WSL distro
+// (where.base set) is written the gateway as the distro reaches it, with the
+// key it takes from there, at every write: its address is the distro's
+// view of Windows, which moves, so it is never kept as a magpie of the
+// user's on another machine.
+func buddyWriteAt(path, agent string, on bool, where place) error {
+	away := where.base != nil
 	d, err := workbuddyRead(path)
 	if err != nil {
 		return err
@@ -128,22 +141,44 @@ func buddyWrite(path, agent string, on bool) error {
 	if d.rest == nil && d.models == nil && agent != "workbuddy" {
 		d.rest = map[string]json.RawMessage{}
 	}
+	// the keys magpie's models are asked with: the gateway's, or that of a
+	// magpie on another machine the user pointed them at
+	keys := map[string]bool{gateway.TokenFor(agent): true}
+	if away {
+		keys[agentKeyAt(agent, where.gw())] = true
+	}
+	for _, raw := range d.models {
+		if e, ok := workbuddyMine(raw); ok && e.APIKey != "" {
+			keys[e.APIKey] = true
+		}
+	}
 	var kept []json.RawMessage
 	var ours []string
 	off := map[string]bool{}
+	effort := map[string]string{} // the default effort each model was given in WorkBuddy, "" for its Auto
 	var remote, remoteKey string
 	at := -1 // where magpie's were, which they keep
 	for _, raw := range d.models {
-		if e, ok := workbuddyMine(raw); ok {
+		e, ok := workbuddyMine(raw)
+		// WorkBuddy's model settings save an edited entry under the vendor
+		// of the provider it matches, "Custom" for magpie's: still magpie's
+		// model by its key, which a sync must not add a second time
+		if !ok && e.ID != "" && keys[e.APIKey] {
+			ok = true
+		}
+		if ok {
 			if at < 0 {
 				at = len(kept)
 			}
-			if remote == "" && onAnotherMachine(e.URL) {
+			if !away && remote == "" && onAnotherMachine(e.URL) {
 				remote, remoteKey = e.URL, e.APIKey
 			}
 			ours = append(ours, e.ID)
 			if e.Disabled != nil && *e.Disabled {
 				off[e.ID] = true
+			}
+			if r := e.Reasoning; r != nil {
+				effort[e.ID] = cmp.Or(r.DefaultEffort, r.Effort)
 			}
 			continue
 		}
@@ -159,6 +194,20 @@ func buddyWrite(path, agent string, on bool) error {
 			e := buddyModel(agent, m.ID, m.Name, m.Context, maxTokens(m), m.Images, m.Efforts)
 			if off[m.ID] {
 				e["disabled"] = true
+			}
+			// the default effort set in WorkBuddy's model settings (or by
+			// hand) stays while the model still has it, Auto included
+			if r, ok := e["reasoning"].(map[string]any); ok {
+				if was, set := effort[m.ID]; set {
+					if was == "" {
+						delete(r, "defaultEffort")
+					} else {
+						r["defaultEffort"] = keptEffort(was, r["supportedEfforts"].([]string), r["defaultEffort"].(string))
+					}
+				}
+			}
+			if away {
+				e["url"], e["apiKey"] = where.v1()+"/chat/completions", agentKeyAt(agent, where.gw())
 			}
 			if remote != "" {
 				e["url"] = remote
@@ -236,4 +285,15 @@ func buddyModel(agent, id, name string, context, output int, images bool, effort
 			"canDisableThinking": slices.Contains(efforts, "none"), "defaultEffort": zcodeDefaultLevel(levels)}
 	}
 	return e
+}
+
+// keptEffort is the default effort a sync leaves on one of magpie's models:
+// the one the user set (in the agent's own settings, or by hand) while the
+// model still offers it, else magpie's def. magpie's default never
+// overrides the user's own.
+func keptEffort(was string, levels []string, def string) string {
+	if was != "" && slices.Contains(levels, was) {
+		return was
+	}
+	return def
 }

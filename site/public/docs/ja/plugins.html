@@ -581,6 +581,7 @@ m plugin logout acme</pre>
   <span class="s">"summary"</span>: { <span class="s">"en"</span>: <span class="s">"Your Acme Coding Plan."</span>, <span class="s">"zh"</span>: <span class="s">"使用你的 Acme Coding Plan。"</span> } }</pre>
         </div>
         ミドルウェアのエントリには <code>"kind": "middleware"</code> を書き、<code>providers</code> は書きません。<span class="ui">ゲートウェイミドルウェア</span> の下に表示されます。<code>MAGPIE_PLUGIN_MARKET=&lt;url&gt;</code> は magpie に別の一覧を参照させます（自分の一覧の確認に便利です）。<code>off</code> にすると内蔵のコピーだけを使います。</li>
+      <li><b>GitHub のトピック。</b>GitHub で <code>magpie-plugin</code> トピックを付けたリポジトリは、<span class="ui">プラグイン → 発見 → 非公式 · GitHub</span> に、スターの多い順に、誰もレビューしていないものとして表示されます。<code>package.json</code> はリポジトリのルートに置いてください。<code>repository</code> がそのリポジトリを指す形で npm に公開されていれば npm からインストールされ、そうでなければリポジトリの現在のコードがインストールされます。そのため読み込むファイルはコミットしておく必要があり、<code>dist</code> を公開時にしかビルドしないリポジトリは表示されません。フォーク、アーカイブ済みのリポジトリ、magpie-community 自身のものも表示されません。magpie が GitHub に問い合わせるのは最大で 10 分に 1 回なので、トピックを付けたリポジトリは数分で表示されます。</li>
       <li><b>コミュニティのパッケージ。</b><a href="https://github.com/magpie-community/plugins">magpie-community/plugins</a> に貢献するには：
         <ul>
           <li><code>packages/&lt;name&gt;</code> に置き、名前はプロバイダなら <code>@magpie-community/opencode-&lt;name&gt;-auth</code>、ミドルウェアなら <code>@magpie-community/middleware-&lt;name&gt;</code> とします。本当に必要でない限り、ランタイムの依存は持たせないでください。</li>

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // claudeRefuses has the fake Claude Code fail as Claude Code does on a
@@ -42,9 +43,7 @@ while read -r line; do
 done
 `
 	binary := strings.Split(os.Getenv("PATH"), string(os.PathListSeparator))[0]
-	if err := os.WriteFile(filepath.Join(binary, "claude"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, filepath.Join(binary, "claude"), script)
 }
 
 func askClaudeModel(s *Server, text string) *httptest.ResponseRecorder {

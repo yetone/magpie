@@ -429,6 +429,19 @@ func planWindows(ctx context.Context, src planQuotaSource, key string) (plan str
 	return src.read(b)
 }
 
+// planKeyWindows asks the vendor for the plan key is on and its windows:
+// a Zhipu or Z.ai key with no plan of its own is a team's, whose windows
+// are asked with type=2 (zcode_team.go), and team says so.
+func planKeyWindows(ctx context.Context, p Provider, src planQuotaSource, key string) (plan string, ws []QuotaWindow, team bool, err error) {
+	plan, ws, err = planWindows(ctx, src, key)
+	if zhipu := strings.HasSuffix(src.url, "/api/monitor/usage/quota/limit"); zhipu && (err != nil || len(ws) == 0) {
+		if tplan, tws, terr := zhipuKeyTeamWindows(ctx, src.url, key, p.ZhipuTeam); terr == nil && len(tws) > 0 {
+			return tplan, tws, true, nil
+		}
+	}
+	return plan, ws, false, err
+}
+
 var planQuotaCache struct {
 	sync.Mutex
 	at   time.Time
@@ -489,15 +502,7 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 		go func() {
 			defer wg.Done()
 			q := SubscriptionQuota{Provider: j.p.ID, Name: j.p.Name, Icon: j.p.Icon, User: j.user, Windows: []QuotaWindow{}}
-			plan, ws, err := planWindows(j.p.Via(ctx), j.src, j.key)
-			team := false
-			if zhipu := strings.HasSuffix(j.src.url, "/api/monitor/usage/quota/limit"); zhipu && (err != nil || len(ws) == 0) {
-				// no plan of the key's own: a team's key, whose windows are
-				// asked with type=2 (zcode_team.go)
-				if tplan, tws, terr := zhipuKeyTeamWindows(j.p.Via(ctx), j.src.url, j.key, j.p.ZhipuTeam); terr == nil && len(tws) > 0 {
-					plan, ws, err, team = tplan, tws, nil, true
-				}
-			}
+			plan, ws, team, err := planKeyWindows(j.p.Via(ctx), j.p, j.src, j.key)
 			// a vendor failing a while (Command Code answers billing/credits
 			// 503 at times) shows what was last read, as a subscription's
 			// card does, rather than no card or "Usage unavailable"
@@ -516,8 +521,17 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 				q.Error = err.Error()
 			default:
 				q.Plan, q.Windows = plan, ws
+				// what routing goes by, read just now (KeyAllowance)
+				k := j.p
+				k.Key = j.key
+				noteKeyAllowance(k, ws, time.Now())
 				if strings.HasSuffix(j.src.url, "/api/monitor/usage/quota/limit") && !team { // Zhipu, Z.ai
-					q.Until, q.Renew = zhipuTerm(ctx, zcodeRoot(j.src.url), j.key)
+					// the plan's term and its resets (#1191), asked together
+					root := zcodeRoot(j.src.url)
+					resets := make(chan *ResetCredits, 1)
+					go func() { resets <- zhipuPersonalResets(ctx, root, j.key) }()
+					q.Until, q.Renew = zhipuTerm(ctx, root, j.key)
+					q.Resets = <-resets
 				}
 			}
 			q = keepReading(ctx, q, tag)

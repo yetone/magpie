@@ -782,6 +782,8 @@ body.window .field.solo { grid-column: auto; }
    were of — by provider, agent or model — which is also the chart's legend */
 .led-dash { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .led-dash[hidden] { display: none; }
+/* the totals and the two sources: one block of cells, a line between them, as
+   the totals above have it */
 .led-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 .led-strip .blk { min-width: 0; padding: 11px 15px 10px; }
 .led-strip .blk + .blk { border-left: 1px solid var(--line-2); }
@@ -807,8 +809,12 @@ body.window .field.solo { grid-column: auto; }
 .led-chart .axis { fill: var(--muted); font-size: 10.5px; }
 .led-chart .hot { fill: var(--pill); }
 .led-chart rect.col { transition: opacity .12s; }
-/* a speed chart's column is all the replies', each one told apart a mark on it */
-.led-chart rect.col.all { fill-opacity: .55; }
+/* a speed chart's column is the point's own speed: a track the marks sit on,
+   at full strength so it reads as the track and not as a fainter series */
+.led-chart rect.col.all { fill-opacity: 1; }
+/* a mark faster than its point's own leaves the column: the leader line ties
+   it back, so it reads as this column's and not as a stray dash */
+.led-chart line.stem { stroke-dasharray: 2 2; transition: opacity .12s; }
 .led-chart .led-day { cursor: pointer; outline: none; }
 .led-chart .led-day:focus-visible { stroke: var(--accent); stroke-width: 1; }
 .led-chart .tip { position: absolute; top: 2px; z-index: 2; min-width: 172px; max-width: 260px; padding: 8px 10px 7px; background: var(--pop-bg); border-radius: 9px; box-shadow: var(--shadow); font-size: 11.5px; pointer-events: none; }
@@ -864,6 +870,21 @@ body.window .field.solo { grid-column: auto; }
 /* over the requests: their sum, and at its right the request archive's switch */
 .led-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 2px 7px; min-width: 0; }
 .led-head .led-sum { margin: 0; min-width: 0; }
+/* the two sources the request page counts and their total, in the same block
+   of cells as the totals above them, each one clickable to filter by it */
+.led-vias { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 9px; }
+.led-vias[hidden] { display: none; }
+.led-vias .blk { cursor: pointer; text-align: left; border: 0; font: inherit; color: inherit; background: none; }
+.led-vias .blk:hover { background: var(--pill-hover); }
+.led-vias .blk:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* the one being filtered by: its own colour under the count, no blue text */
+.led-vias .blk.on { box-shadow: inset 0 -2px 0 var(--accent); }
+/* the count's unit sits after the number, small, as its label is under it */
+.led-vias .v em { margin-left: 3px; font-size: 12.5px; font-weight: 600; font-style: normal; color: var(--muted); }
+@media (max-width: 620px) {
+  .led-vias { grid-template-columns: minmax(0, 1fr); }
+  .led-vias .blk + .blk { border-left: 0; border-top: 1px solid var(--line-2); }
+}
 .led-arch { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
 .led-arch-sw { display: inline-flex; align-items: center; gap: 7px; padding: 2px 0; background: none; border: 0; font: inherit; font-size: 11.5px; color: var(--muted); cursor: pointer; }
 .led-arch-sw:hover, .led-arch-sw.on { color: var(--fg); }
@@ -912,6 +933,13 @@ body.window .field.solo { grid-column: auto; }
 .led.tight .led-dl .lc-opt { display: block; }
 .led.tight .model, .led.tight .where { max-width: 160px; }
 .led.tight th, .led.tight td { padding-left: 6px; padding-right: 6px; }
+.led.tighter .price-reference { display: none; }
+/* the account's name is cut at 110px, but its column keeps room for the
+   source badges under it, which don't wrap: capped at 110px the cell cut
+   off the second English one ("Subscription") */
+.led.tighter .model, .led.tighter .where-name { max-width: 110px; }
+.led.tighter th, .led.tighter td { padding-left: 4px; padding-right: 4px; }
+.led.tighter th { white-space: normal; }
 .led-tight { font-size: 11.5px; color: var(--muted); }
 .led-tight[hidden] { display: none; }
 .led .where { color: var(--fg-2); }
@@ -1006,6 +1034,9 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .sess-chart-head .segs .opt { height: 20px; padding: 0 9px; font-size: 11px; }
 .chart .sess-chart-head .peak { margin: 0; align-self: flex-end; }
 .sess-list { margin-top: 8px; }
+/* the list is drawn in pages: the button that appends the next one, under
+   the rows it follows, as a card's "+N more" is */
+.sess-page-more { align-self: flex-start; margin: 6px 0 2px; font-size: 12px; }
 /* the overview: six figures, the calendar, and four cards two by two */
 .sess-pane { container-type: inline-size; }
 .stats.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
@@ -1774,6 +1805,33 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .call-body .copy { width: 20px; height: 20px; }
 .call-body pre { margin: 0; padding: 9px 10px 11px; min-height: 54px; max-height: 280px; overflow: auto; border-top: 1px solid var(--line-2); background: var(--code-bg, var(--card-2)); }
 .call-body code { display: block; font: var(--code-style, normal) var(--code-weight, 400) 10.5px/1.5 var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); color: var(--fg-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; tab-size: 2; }
+/* a JSON body's tree: the fold arrow sits in the indent before its line,
+   taking no width, so the text is the JSON as printed; a line's copy
+   button shows on its hover, after the value */
+.call-body code.jt { padding-left: 11px; }
+.jt button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+/* no absolute positioning inside: Chromium's innerText would break the
+   line around a box taken out of the flow */
+.jt-fold { display: inline-block; width: 0; height: 1em; overflow: visible; white-space: nowrap; vertical-align: -.15em; }
+.jt-fold svg { display: inline-block; margin-left: -12px; color: var(--faint); transition: transform .12s; }
+.jt-fold.open svg { transform: rotate(90deg); }
+.jt-fold:hover svg { color: var(--fg); }
+/* :focus-visible in a rule of its own: in a list, Safari before 15.4 drops the whole rule */
+.jt-fold:focus-visible svg { color: var(--fg); }
+.jt-key { color: var(--tk-f); cursor: copy; }
+.jt-key:hover { text-decoration: underline dotted; text-underline-offset: 2px; }
+.jt-copy { display: inline-block; width: 0; height: 1em; overflow: visible; white-space: nowrap; vertical-align: -.2em; opacity: 0; }
+.jt-copy svg { display: inline-block; margin-left: 5px; padding: 1px; width: 13px; height: 13px; border-radius: 3px; color: var(--muted); background: var(--code-bg, var(--card-2)); }
+.jt-copy:hover svg { color: var(--fg); background: var(--pill-hover); }
+.jt-copy.done svg { color: var(--green); }
+/* faded, not hidden, so the pointer on its way across the gap to it still
+   finds it there */
+.jt-head:hover > .jt-copy, .jt-copy.done { opacity: 1; }
+.jt-copy:focus-visible { opacity: 1; }
+.jt-kids[hidden], .jt-sum[hidden] { display: none; }
+.jt-sum { color: var(--muted); border-radius: 3px; }
+.jt-sum:hover { background: var(--pill-hover); color: var(--fg); }
+.jt-sum::after { content: " " attr(data-n) " "; font-size: .9em; color: var(--faint); }
 .call-body code.empty { color: var(--faint); font-family: var(--ui-font, var(--font)); }
 :where(html[data-fonts]) .call-body code.empty { font-style: var(--ui-style, inherit); font-weight: var(--ui-weight, inherit); font-stretch: var(--ui-stretch, 100%); }
 @media (max-width: 760px) { .call-details { grid-template-columns: 1fr; } }
@@ -1806,7 +1864,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .provider .name .badge { margin-left: 6px; }
 /* a row whose name holds a vendor's outage badge (#971): the name gives
    way to it, the badge is never the part cut */
-.provider .name:has(> .badge.upstream) { display: flex; align-items: center; }
+.provider .name.with-upstream { display: flex; align-items: center; }
 .provider .name > .nm { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .badge { font-size: 9.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; background: var(--amber-soft); color: var(--amber); vertical-align: 1px; }
 .provider.selected { background: var(--card-2); }
@@ -3179,7 +3237,7 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
   .ag-vl > .fields > .field.main, .ag-vl > .fields > .field.solo { flex: 1 1 100%; min-width: 0; }
   .ag-vl > .fields > .field.side { flex: 1 0 124px; }
   .ag-vl > .fields > .extras-cell { flex-wrap: wrap; max-width: 100%; }
-  .ag-vl .field.ag-pick { flex: 1 1 160px; width: auto; min-width: 0; }
+  .ag-vl .field.ag-pick { flex: 0 0 220px; width: 220px; min-width: 0; }
   /* short of room, the model it starts on takes a line of its own under
      the name, the link and the switch staying beside it */
   .row.agent.conn > .field.ag-start, .row.agent.conn > .who + .field.ag-start { order: 1; flex: 1 1 100%; width: auto; margin: 9px 0 0 34px; }

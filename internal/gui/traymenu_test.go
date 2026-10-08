@@ -32,6 +32,15 @@ func TestTrayMenuLabels(t *testing.T) {
 		{"de", enSys, "de"},
 		{"system", func() string { return "de-DE" }, "de"},
 		{"", func() string { return "de_AT.UTF-8" }, "de"},
+		{"zh-TW", enSys, "zh-TW"},
+		{"system", func() string { return "zh-Hant-TW" }, "zh-TW"},
+		{"system", func() string { return "zh-TW" }, "zh-TW"},
+		{"system", func() string { return "zh-HK" }, "zh-TW"},
+		{"system", func() string { return "zh-Hant" }, "zh-TW"},
+		{"", func() string { return "zh_TW.UTF-8" }, "zh-TW"},
+		{"", func() string { return "zh_HK" }, "zh-TW"},
+		{"system", func() string { return "zh-Hans-HK" }, "zh"},
+		{"system", func() string { return "zh-SG" }, "zh"},
 	} {
 		if got := trayLang(c.pref, c.sys); got != c.want {
 			t.Errorf("trayLang(%q, %s) = %s, want %s", c.pref, c.sys(), got, c.want)
@@ -41,7 +50,7 @@ func TestTrayMenuLabels(t *testing.T) {
 	if de != (trayLabels{"magpie öffnen", "Version 0.1.500", "Zum Aktualisieren auf 0.1.501 neu starten", "magpie beenden"}) {
 		t.Errorf("de: %+v", de)
 	}
-	for lang, want := range map[string]string{"de": "en", "en": "en", "zh": "zh"} {
+	for lang, want := range map[string]string{"de": "en", "en": "en", "zh": "zh", "zh-TW": "zh"} {
 		if got := notesLang(lang); got != want {
 			t.Errorf("notesLang(%q) = %q, want %q", lang, got, want)
 		}
@@ -49,6 +58,9 @@ func TestTrayMenuLabels(t *testing.T) {
 	zh := trayMenuLabels("zh", "0.1.500", "")
 	if zh != (trayLabels{"打开 magpie", "版本 0.1.500", "重启以更新", "退出 magpie"}) {
 		t.Errorf("zh: %+v", zh)
+	}
+	if tw := trayMenuLabels("zh-TW", "0.1.500", "0.1.501"); tw != (trayLabels{"開啟 magpie", "版本 0.1.500", "重新啟動以更新到 0.1.501", "結束 magpie"}) {
+		t.Errorf("zh-TW: %+v", tw)
 	}
 	if ja := trayMenuLabels("ja", "0.1.500", ""); ja != (trayLabels{"magpie を開く", "バージョン 0.1.500", "再起動してアップデート", "magpie を終了"}) {
 		t.Errorf("ja: %+v", ja)

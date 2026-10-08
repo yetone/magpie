@@ -14,7 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/yetone/magpie/internal/edit"
-	"github.com/yetone/magpie/internal/gateway"
 )
 
 // Goose (Block's goose, its CLI and desktop app alike) reaches magpie as a
@@ -69,8 +68,9 @@ var gooseKeys = map[string]string{
 // (migrate_provider_config, config/migrations.rs), and a provider whose key
 // is in the environment. A key in goose's keyring can't be seen from here;
 // such a provider still counts once goose has used it, as each provider it
-// is set up with gets an entry.
-func gooseConfigured(cfg string) []string {
+// is set up with gets an entry. getenv is the environment goose runs in:
+// none of a WSL distro's is read.
+func gooseConfigured(cfg string, getenv func(string) string) []string {
 	set := map[string]bool{}
 	if b, err := os.ReadFile(cfg); err == nil {
 		var c map[string]any
@@ -95,7 +95,7 @@ func gooseConfigured(cfg string) []string {
 		}
 	}
 	for p, k := range gooseKeys {
-		if os.Getenv(k) != "" {
+		if getenv(k) != "" {
 			set[p] = true
 		}
 	}
@@ -114,9 +114,9 @@ func gooseProviderPath(cfg string) string {
 	return filepath.Join(filepath.Dir(cfg), "custom_providers", gooseProviderID+".json")
 }
 
-// gooseProviderJSON is magpie as a Goose custom provider, its models the
-// catalog as Goose is shown it.
-func gooseProviderJSON() map[string]any {
+// gooseProviderJSON is magpie as a custom provider of the Goose at a
+// place, its models the catalog as Goose is shown it.
+func gooseProviderJSON(at place) map[string]any {
 	models := []map[string]any{}
 	for _, m := range magpieModels("goose") {
 		e := map[string]any{"name": m.ID, "reasoning": gooseThinks.MatchString(m.ID)}
@@ -131,8 +131,8 @@ func gooseProviderJSON() map[string]any {
 		"display_name":             "magpie",
 		"description":              "Every model magpie has, through its local gateway",
 		"api_key_env":              "",
-		"base_url":                 gatewayV1(),
-		"headers":                  map[string]any{"Authorization": "Bearer " + gateway.Token},
+		"base_url":                 at.v1(),
+		"headers":                  map[string]any{"Authorization": "Bearer " + at.gwKey()},
 		"requires_auth":            false,
 		"skip_canonical_filtering": true,
 		"models":                   models,
@@ -145,8 +145,8 @@ func gooseProviderJSON() map[string]any {
 }
 
 // writeGooseProvider writes magpie's custom provider file for Goose.
-func writeGooseProvider(path string) error {
-	b, err := json.MarshalIndent(gooseProviderJSON(), "", "  ")
+func writeGooseProvider(path string, at place) error {
+	b, err := json.MarshalIndent(gooseProviderJSON(at), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -158,15 +158,15 @@ func writeGooseProvider(path string) error {
 
 // syncGooseProvider rewrites magpie's custom provider file for Goose with
 // the catalog as it is now, where magpie wrote one and it differs.
-func syncGooseProvider(path string) error {
+func syncGooseProvider(path string, at place) error {
 	raw, err := edit.Read(path)
 	if err != nil || raw == nil {
 		return nil
 	}
-	if sameJSON(string(raw), gooseProviderJSON()) {
+	if sameJSON(string(raw), gooseProviderJSON(at)) {
 		return nil
 	}
-	return writeGooseProvider(path)
+	return writeGooseProvider(path, at)
 }
 
 // removeGooseProvider takes magpie's custom provider file away once Goose's

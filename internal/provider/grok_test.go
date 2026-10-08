@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestParseGrokModels(t *testing.T) {
@@ -230,9 +232,7 @@ func TestGrokExecutableFinds(t *testing.T) {
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		testenv.Program(t, p, "#!/bin/sh\n")
 		return p
 	}
 	npm := filepath.Join(home, "npm")
@@ -264,6 +264,34 @@ func TestGrokExecutableFinds(t *testing.T) {
 // object branches' properties are merged, $refs to $defs read, a field all
 // of them require stays required, the non-object branches go. One that is
 // an object already is left as it is.
+// TestObjectRootKeepsOwnRequired: the root's and allOf's own required
+// fields stay required beside anyOf's and oneOf's branches, which only add
+// the fields they all require.
+func TestObjectRootKeepsOwnRequired(t *testing.T) {
+	var ps map[string]any
+	if err := json.Unmarshal([]byte(`{
+		"type": "object",
+		"properties": {"id": {"type": "string"}},
+		"required": ["id"],
+		"allOf": [{"properties": {"kind": {"type": "string"}}, "required": ["kind"]}],
+		"anyOf": [
+			{"type": "object", "properties": {"a": {"type": "string"}, "n": {"type": "integer"}}, "required": ["a", "n"]},
+			{"type": "object", "properties": {"b": {"type": "string"}}, "required": ["b", "n", "id"]}
+		]
+	}`), &ps); err != nil {
+		t.Fatal(err)
+	}
+	if !ObjectRoot(ps) {
+		t.Fatal("not changed")
+	}
+	if got := fmt.Sprint(ps["required"]); got != "[id kind n]" {
+		t.Fatalf("required = %s", got)
+	}
+	if props := ps["properties"].(map[string]any); len(props) != 5 {
+		t.Fatalf("properties = %v", props)
+	}
+}
+
 func TestGrokBodyObjectRoot(t *testing.T) {
 	in := []byte(`{"tools":[
 		{"type":"function","name":"mcp__codex_app__automation_update","parameters":{"anyOf":[

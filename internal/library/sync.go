@@ -1,6 +1,7 @@
 package library
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -23,9 +24,16 @@ type Result struct {
 	// Unimported are, for skills brought in together, the ones that
 	// couldn't be (What is skill:<name>)
 	Unimported []Problem `json:"unimported,omitempty"`
-	// Unremoved are, for skills taken out together, the ones that couldn't
-	// be (What is skill:<name>)
+	// Unremoved are, for skills or servers taken out together, the ones
+	// that couldn't be (What is skill:<name> or mcp:<name>)
 	Unremoved []Problem `json:"unremoved,omitempty"`
+	// Installed, Had and Skipped are, for skills installed together, the
+	// ones added, the ones the library had already from the same source,
+	// and the ones left out with why: another skill by that name, the
+	// user's, is never written over (What is skill:<name>)
+	Installed []string  `json:"installed,omitempty"`
+	Had       []string  `json:"had,omitempty"`
+	Skipped   []Problem `json:"skipped,omitempty"`
 }
 
 // Problem is one thing that couldn't be given to an agent.
@@ -219,11 +227,14 @@ type SkillView struct {
 
 // View is the Library page.
 type View struct {
-	Agents       []AgentView       `json:"agents"`
-	Servers      []ServerView      `json:"servers"`
-	FoundServers []Found           `json:"foundServers"`
-	Skills       []SkillView       `json:"skills"`
-	FoundSkills  []FoundSkill      `json:"foundSkills"`
+	Agents       []AgentView  `json:"agents"`
+	Servers      []ServerView `json:"servers"`
+	FoundServers []Found      `json:"foundServers"`
+	Skills       []SkillView  `json:"skills"`
+	FoundSkills  []FoundSkill `json:"foundSkills"`
+	// NewSkills are skills a check found its skills' repositories to have
+	// added beside them, to add or set aside
+	NewSkills    []NewSkill        `json:"newSkills"`
 	Projects     []ProjectView     `json:"projects"`
 	Instructions *InstructionsView `json:"instructions"`
 	Dir          string            `json:"dir"`
@@ -344,6 +355,7 @@ func Read(problems []Problem) (*View, error) {
 		v.FoundServers[i].Icon = serverIcon(l, v.FoundServers[i].Server)
 	}
 	v.FoundSkills = foundSkills(l)
+	v.NewSkills = newSkills(l)
 	v.Projects = projectViews(l, problems)
 	v.SkillGroups = l.skillGroups()
 	return v, nil
@@ -405,7 +417,30 @@ func EveryServerAgents(agents []string, on bool) (*Result, error) {
 	if len(agents) == 0 {
 		return nil, fmt.Errorf("no agents to give the servers to")
 	}
+	return serversAgents(nil, agents, on)
+}
+
+// SomeServersAgents does as EveryServerAgents for the servers named alone:
+// the ones picked on the page (#1027).
+func SomeServersAgents(names, agents []string, on bool) (*Result, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("no servers to give the agents")
+	}
+	if len(agents) == 0 {
+		return nil, fmt.Errorf("no agents to give the servers to")
+	}
+	return serversAgents(names, agents, on)
+}
+
+// serversAgents gives the servers named, or every one when none are, to
+// the agents, or takes them from them.
+func serversAgents(names, agents []string, on bool) (*Result, error) {
 	return change(func(l *Library) error {
+		for _, name := range names {
+			if l.server(name) == nil {
+				return fmt.Errorf("no server called %s", name)
+			}
+		}
 		mcp := map[string]*mcpFile{}
 		if on {
 			for _, t := range Targets() {
@@ -415,6 +450,9 @@ func EveryServerAgents(agents []string, on bool) (*Result, error) {
 			}
 		}
 		for _, s := range l.MCP {
+			if names != nil && !slices.Contains(names, s.Name) {
+				continue
+			}
 			kept := slices.DeleteFunc(slices.Clone(s.Agents), func(a string) bool { return slices.Contains(agents, a) })
 			for _, a := range agents {
 				if on && mcp[a] != nil && mcp[a].supports(s) == nil {
@@ -432,27 +470,67 @@ func EveryServerAgents(agents []string, on bool) (*Result, error) {
 // RemoveServer takes a server out of the library and out of every agent
 // magpie gave it to.
 func RemoveServer(name string) (*Result, error) {
-	res, err := change(func(l *Library) error {
-		i := slices.IndexFunc(l.MCP, func(x *Server) bool { return x.Name == name })
-		if i < 0 {
-			return fmt.Errorf("no server called %s", name)
-		}
-		k := serverKey(l.MCP[i])
-		l.MCP = slices.Delete(l.MCP, i, i+1)
-		for _, p := range l.Projects {
-			delete(p.Servers, name)
-		}
-		// its icon goes with it, unless another server runs the same thing
-		if !slices.ContainsFunc(l.MCP, func(x *Server) bool { return serverKey(x) == k }) {
-			delete(l.Icons, k)
-		}
-		return nil
-	})
+	res, err := change(func(l *Library) error { return removeServer(l, name) })
 	if err == nil {
 		// its sign-in goes with it
 		_ = mcpauth.Forget(name)
 	}
 	return res, err
+}
+
+// RemoveServers takes the servers named out of the library and every agent
+// in one write (#1027), each as RemoveServer does: only the entries magpie
+// wrote (Applied) leave the agents' files, a server of the agent's own by
+// another name stays, and each one's sign-in goes with it. One that can't
+// be taken out stays, and is said in Unremoved.
+func RemoveServers(names []string) (*Result, error) {
+	if len(names) == 0 {
+		return nil, fmt.Errorf("no servers to remove")
+	}
+	names = slices.Compact(slices.Sorted(slices.Values(names)))
+	var failed []Problem
+	var gone []string
+	res, err := change(func(l *Library) error {
+		failed, gone = nil, nil
+		for _, name := range names {
+			if err := removeServer(l, name); err != nil {
+				failed = append(failed, Problem{What: "mcp:" + name, Error: err.Error()})
+			} else {
+				gone = append(gone, name)
+			}
+		}
+		if len(failed) == len(names) {
+			return errors.New(failed[0].Error)
+		}
+		return nil
+	})
+	if err == nil {
+		for _, name := range gone {
+			_ = mcpauth.Forget(name)
+		}
+	}
+	if res != nil {
+		res.Unremoved = failed
+	}
+	return res, err
+}
+
+// removeServer takes a server out of l and its projects; its icon goes
+// with it, unless another server runs the same thing.
+func removeServer(l *Library, name string) error {
+	i := slices.IndexFunc(l.MCP, func(x *Server) bool { return x.Name == name })
+	if i < 0 {
+		return fmt.Errorf("no server called %s", name)
+	}
+	k := serverKey(l.MCP[i])
+	l.MCP = slices.Delete(l.MCP, i, i+1)
+	for _, p := range l.Projects {
+		delete(p.Servers, name)
+	}
+	if !slices.ContainsFunc(l.MCP, func(x *Server) bool { return serverKey(x) == k }) {
+		delete(l.Icons, k)
+	}
+	return nil
 }
 
 // ImportServer takes a server the agents have into the library: the agents

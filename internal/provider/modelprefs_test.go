@@ -16,6 +16,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/settings"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // prefsHome is a sandbox home where two providers serve the same model,
@@ -32,7 +33,7 @@ func prefsHome(t *testing.T) {
 	// a `security` that finds nothing: no Keychain of the user's is read
 	if runtime.GOOS != "windows" {
 		bin := t.TempDir()
-		os.WriteFile(filepath.Join(bin, "security"), []byte("#!/bin/sh\nexit 44\n"), 0o755)
+		testenv.Program(t, filepath.Join(bin, "security"), "#!/bin/sh\nexit 44\n")
 		t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	}
 	os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755)

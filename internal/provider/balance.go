@@ -31,6 +31,9 @@ type balanceSource struct {
 	// token, when set, is sent as the whole Authorization header in place
 	// of the key's: the balance is the account's, not a key's
 	token string
+	// failed, when set, words a refusal the vendor is known to give in
+	// place of the status and body as they came (nil when it isn't one)
+	failed func(status int, body []byte) error
 }
 
 // balanceSourceOf is the provider's own endpoint when it named one, else
@@ -41,34 +44,34 @@ func balanceSourceOf(p Provider) (balanceSource, bool) {
 		// a token saved beside it (a new-api relay's access token, its
 		// /api/user/self telling the account's quota) is asked with
 		// instead of the key
-		return balanceSource{p.BalanceURL, func(b []byte) (string, error) { return readBalancePath(b, path) }, p.BalanceToken}, true
+		return balanceSource{p.BalanceURL, func(b []byte) (string, error) { return readBalancePath(b, path) }, p.BalanceToken, nil}, true
 	}
 	hosts := []string{hostOf(p.Chat), hostOf(p.Responses), hostOf(p.Anthropic)}
 	for _, h := range hosts {
 		switch h {
 		case "api.deepseek.com":
-			return balanceSource{"https://api.deepseek.com/user/balance", readDeepSeek, ""}, true
+			return balanceSource{"https://api.deepseek.com/user/balance", readDeepSeek, "", nil}, true
 		case "api.moonshot.cn":
-			return balanceSource{"https://api.moonshot.cn/v1/users/me/balance", readMoonshot("¥"), ""}, true
+			return balanceSource{"https://api.moonshot.cn/v1/users/me/balance", readMoonshot("¥"), "", nil}, true
 		case "api.moonshot.ai":
-			return balanceSource{"https://api.moonshot.ai/v1/users/me/balance", readMoonshot("$"), ""}, true
+			return balanceSource{"https://api.moonshot.ai/v1/users/me/balance", readMoonshot("$"), "", nil}, true
 		case "openrouter.ai":
-			return balanceSource{"https://openrouter.ai/api/v1/credits", readOpenRouter, ""}, true
+			return balanceSource{"https://openrouter.ai/api/v1/credits", readOpenRouter, "", nil}, true
 		case "api.siliconflow.cn":
-			return balanceSource{"https://api.siliconflow.cn/v1/user/info", readSiliconFlow("¥"), ""}, true
+			return balanceSource{"https://api.siliconflow.cn/v1/user/info", readSiliconFlow("¥"), "", siliconFlowGone("https://cloud.siliconflow.cn (余额充值 → 代金券)")}, true
 		case "api.siliconflow.com":
-			return balanceSource{"https://api.siliconflow.com/v1/user/info", readSiliconFlow("$"), ""}, true
+			return balanceSource{"https://api.siliconflow.com/v1/user/info", readSiliconFlow("$"), "", siliconFlowGone("https://cloud.siliconflow.com")}, true
 		case "api.stepfun.com":
-			return balanceSource{"https://api.stepfun.com/v1/accounts", readStepFun("¥"), ""}, true
+			return balanceSource{"https://api.stepfun.com/v1/accounts", readStepFun("¥"), "", nil}, true
 		case "api.stepfun.ai":
-			return balanceSource{"https://api.stepfun.ai/v1/accounts", readStepFun("$"), ""}, true
+			return balanceSource{"https://api.stepfun.ai/v1/accounts", readStepFun("$"), "", nil}, true
 		case "api.commandcode.ai":
-			return balanceSource{"https://api.commandcode.ai/alpha/billing/credits", readCommandCode, ""}, true
+			return balanceSource{"https://api.commandcode.ai/alpha/billing/credits", readCommandCode, "", nil}, true
 		case "aihubmix.com":
 			if p.BalanceToken != "" {
-				return balanceSource{"https://aihubmix.com/api/user/self", readAiHubMixAccount, p.BalanceToken}, true
+				return balanceSource{"https://aihubmix.com/api/user/self", readAiHubMixAccount, p.BalanceToken, nil}, true
 			}
-			return balanceSource{"https://aihubmix.com/dashboard/billing/remain", readAiHubMix, ""}, true
+			return balanceSource{"https://aihubmix.com/dashboard/billing/remain", readAiHubMix, "", nil}, true
 		}
 	}
 	return balanceSource{}, false
@@ -293,6 +296,25 @@ func readSiliconFlow(sign string) func([]byte) (string, error) {
 			return "", errors.New("no balance in the reply")
 		}
 		return money(sign, v), nil
+	}
+}
+
+// siliconFlowGone words SiliconFlow's answer to /v1/user/info since it
+// retired the query on 2026-08-14 (410, {"code":20092,"message":"This
+// endpoint is deprecated and is no longer available.","data":null}, #1094):
+// it has no API for the balance in its place yet, and the balance given
+// before 2025-12 is a voucher now, so both are read on the console. A key
+// refused for itself (401 30014) is still said as it came.
+func siliconFlowGone(console string) func(int, []byte) error {
+	return func(status int, b []byte) error {
+		var r struct {
+			Code int `json:"code"`
+		}
+		_ = json.Unmarshal(b, &r)
+		if status != http.StatusGone && r.Code != 20092 {
+			return nil
+		}
+		return fmt.Errorf("SiliconFlow retired its balance query (/v1/user/info) and has no API for it in its place yet; the balance and vouchers are on %s", console)
 	}
 }
 
@@ -732,6 +754,11 @@ func balanceRead(ctx context.Context, p Provider) (amount string, parts []Balanc
 			msg = res.Status + ": " + msg
 		}
 		return "", nil, nil, true, errors.New(msg)
+	}
+	if res.StatusCode >= 300 && src.failed != nil {
+		if err := src.failed(res.StatusCode, b); err != nil {
+			return "", nil, nil, true, err
+		}
 	}
 	if res.StatusCode >= 300 {
 		// what a JSON reply says, on one line; a page of HTML says nothing

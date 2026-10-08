@@ -1,8 +1,9 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // A group of the user's made of the skills picked (#791, mintonight: 能不能
 // 在选择后自己创建分组呢): Select, pick some, Group… asks a name, and the
-// group made is a card of its own above the ones by source, its skills out
-// of theirs. It is renamed in place, and Ungroup lets it go. English and
+// group made is a card of its own, its skills out of theirs: with a skill
+// of this computer's in it, it is below those from GitHub, above On this
+// computer (#1031). It is renamed in place, and Ungroup lets it go. English and
 // Chinese; the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -105,9 +106,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#status").filter({ hasText: w.made }).waitFor();
         assert.deepEqual(posts.shift(), { group: { name: "Office", names: ["pdf", "review"] } });
 
-        // its card comes first, open, with its two; theirs are without them
-        await page.waitForFunction(() => document.querySelector("#view-library .lib-group")?.dataset.group === "my:Office");
-        assert.deepEqual(await cards(), ["Office", "acme/skills", w.local]);
+        // its card is open, with its two, below GitHub's and above this
+        // computer's (pdf is local); theirs are without them
+        await page.waitForFunction(() => !!document.querySelector('#view-library .lib-group[data-group="my:Office"]'));
+        assert.deepEqual(await cards(), ["acme/skills", "Office", w.local]);
         const office = v.locator('.lib-group[data-group="my:Office"]');
         assert.equal(await office.locator(".lib-grouphead .sub").textContent(), w.two);
         assert.deepEqual((await office.locator(".lib-skill .name").allTextContents()).sort(), ["pdf", "review"]);

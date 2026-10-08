@@ -21,7 +21,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/edit"
-	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -78,8 +77,19 @@ type reasonixState struct {
 	AddedAccess    bool    `json:"added_access"`
 }
 
-func reasonix(home string) *Agent {
-	dir := reasonixHome(runtime.GOOS, home, os.Getenv)
+func reasonix(home string) *Agent { return reasonixIn(here(home)) }
+
+// reasonixIn is Reasonix at a place: this machine's home, or a WSL
+// distro's (see wsl.go), where its CLI keeps Linux's ~/.reasonix
+// (REASONIX_HOME isn't read) and its provider names the gateway as the
+// distro reaches it, with the key it takes from there.
+func reasonixIn(at place) *Agent {
+	goos, getenv := runtime.GOOS, os.Getenv
+	if at.spell != nil {
+		goos, getenv = "linux", func(string) string { return "" }
+	}
+	dir := reasonixHome(goos, at.home, getenv)
+	gwKey := func() string { return agentKeyAt("reasonix", at.gw()) }
 	if absolute, err := filepath.Abs(dir); err == nil {
 		dir = absolute
 	}
@@ -203,7 +213,7 @@ func reasonix(home string) *Agent {
 				return err
 			}
 		}
-		if v, exists := edit.GetEnvFile(env, reasonixKey); exists && v == gateway.TokenFor("reasonix") {
+		if v, exists := edit.GetEnvFile(env, reasonixKey); exists && v == gwKey() {
 			if err := edit.DelEnvFile(env, reasonixKey); err != nil {
 				return err
 			}
@@ -240,7 +250,7 @@ func reasonix(home string) *Agent {
 			currentState = &reasonixState{Version: 1, Default: cfg.DefaultModel, NewConfig: os.IsNotExist(cErr), NewEnv: os.IsNotExist(eErr)}
 			currentState.AddedAccess = cfg.Desktop.Access != nil && !slices.Contains(cfg.Desktop.Access, magpieID)
 		}
-		p := reasonixCatalog(models, selected, cfg.magpie().Effort)
+		p := reasonixCatalogAt(models, selected, cfg.magpie().Effort, at.v1())
 		if err := writeProvider(p); err != nil {
 			return err
 		}
@@ -251,8 +261,8 @@ func reasonix(home string) *Agent {
 			}
 			currentState.AddedAccess = true
 		}
-		if token, _ := edit.GetEnvFile(env, reasonixKey); token != gateway.TokenFor("reasonix") {
-			if err := edit.SetEnvFile(env, edit.KV{Path: reasonixKey, Value: gateway.TokenFor("reasonix")}); err != nil {
+		if token, _ := edit.GetEnvFile(env, reasonixKey); token != gwKey() {
+			if err := edit.SetEnvFile(env, edit.KV{Path: reasonixKey, Value: gwKey()}); err != nil {
 				return err
 			}
 		}
@@ -289,7 +299,7 @@ func reasonix(home string) *Agent {
 	a := &Agent{
 		ID: "reasonix", Name: "Reasonix Studio", Icon: "reasonix-color", Aliases: []string{"reasonix-studio"},
 		Bin: "reasonix", Dir: dir, Path: path, UA: []string{"reasonix"},
-		detect: func() bool { return reasonixDetected(home) },
+		detect: func() bool { return reasonixDetected(at.home) },
 		Notice: func() string {
 			return "Reasonix Studio 2.x and the native 1.39.x/2.x CLI read global settings at startup. Start a new process to load changes. Project/session models can override Executor and Plan."
 		},
@@ -318,10 +328,10 @@ func reasonix(home string) *Agent {
 			if err := checkOwner(cfg, state); err != nil {
 				return err.Error()
 			}
-			if p.Kind != "openai" || p.BaseURL != gatewayV1() {
+			if p.Kind != "openai" || p.BaseURL != at.v1() {
 				return "Reasonix's magpie base_url or kind changed"
 			}
-			if token, _ := edit.GetEnvFile(env, reasonixKey); token != gateway.TokenFor("reasonix") {
+			if token, _ := edit.GetEnvFile(env, reasonixKey); token != gwKey() {
 				return "Reasonix's gateway credential changed"
 			}
 			if !slices.Contains(p.Models, ref) || cfg.Agent.Planner != nil && usesMagpie(*cfg.Agent.Planner) && !slices.Contains(p.Models, strings.TrimPrefix(*cfg.Agent.Planner, magpieID+"/")) {
@@ -351,7 +361,7 @@ func reasonix(home string) *Agent {
 			if len(models) == 0 {
 				return fmt.Errorf("magpie has no visible Reasonix models")
 			}
-			next := reasonixCatalog(models, current.Default, current.Effort)
+			next := reasonixCatalogAt(models, current.Default, current.Effort, at.v1())
 			if reflect.DeepEqual(current, next) {
 				return nil
 			}
@@ -618,7 +628,13 @@ func (cfg reasonixConfig) hasModel(ref string) bool {
 }
 
 func reasonixCatalog(models []catalog.Model, selected, effort string) reasonixProvider {
-	p := reasonixProvider{Name: magpieID, Kind: "openai", BaseURL: gatewayV1(), APIKeyEnv: reasonixKey,
+	return reasonixCatalogAt(models, selected, effort, gatewayV1())
+}
+
+// reasonixCatalogAt is reasonixCatalog for a Reasonix reaching the
+// gateway's /v1 at v1.
+func reasonixCatalogAt(models []catalog.Model, selected, effort, v1 string) reasonixProvider {
+	p := reasonixProvider{Name: magpieID, Kind: "openai", BaseURL: v1, APIKeyEnv: reasonixKey,
 		Default: selected, Protocol: "openai", NoProxy: true, Overrides: map[string]reasonixModel{}}
 	for _, m := range models {
 		p.Models = append(p.Models, m.ID)

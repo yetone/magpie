@@ -107,8 +107,8 @@ function serve(lang, asked, opened, fitted = [], resize) {
 }
 
 const want = {
-  en: { tab: "Usage", quota: "Allowances", periods: ["Today", "7 days", "30 days"], blocks: ["Tokens", "Requests", "Cost", "Cache hit rate"], all: "All providers", open: "Open Usage", metrics: ["Tokens", "Cost", "Requests"] },
-  zh: { tab: "用量", quota: "额度", periods: ["今天", "7 天", "30 天"], blocks: ["Token", "请求", "费用", "缓存命中率"], all: "全部供应商", open: "打开用量", metrics: ["Token", "费用", "请求"] },
+  en: { tab: "Usage", quota: "Allowances", periods: ["Today", "7 days", "30 days", "All"], blocks: ["Tokens", "Requests", "Cost", "Cache hit rate"], all: "All providers", open: "Open Usage", metrics: ["Tokens", "Cost", "Requests"] },
+  zh: { tab: "用量", quota: "额度", periods: ["今天", "7 天", "30 天", "全部"], blocks: ["Token", "请求", "费用", "缓存命中率"], all: "全部供应商", open: "打开用量", metrics: ["Token", "费用", "请求"] },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -213,6 +213,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await scroll(),before,"a click moved the panel");
       await p.locator("#panelUsage .pu-card .segs .opt").nth(0).click();
       assert.equal(await scroll(),before,"a click moved the panel");
+
+      // All, as the window's Usage has it (#860): asked for, and the
+      // four periods stay on one line at 440px
+      await p.locator("#panelUsage .pu-bar .segs .opt").nth(3).click();
+      await settled(asked, (q) => q.get("period") === "all");
+      await p.locator("#panelUsage .pu-bar .segs .opt.on", { hasText: w.periods[3] }).waitFor();
+      await p.locator("#panelUsage:not(.pu-loading)").waitFor();
+      const segs = await p.locator("#panelUsage .pu-bar .segs").evaluate((e) => {
+        const bar = e.parentElement.getBoundingClientRect(), tops = [...e.children].map((c) => Math.round(c.getBoundingClientRect().top));
+        return { one: tops.every((y) => y === tops[0]), fits: e.getBoundingClientRect().right <= bar.right + 0.5 };
+      });
+      assert.deepEqual(segs, { one: true, fits: true }, "the four periods on one line, inside the bar");
+      assert.equal(await scroll(), before, "a click moved the panel");
 
       // the period: seven days is by the day
       await p.locator("#panelUsage .pu-bar .segs .opt").nth(1).click();

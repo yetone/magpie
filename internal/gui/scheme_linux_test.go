@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 func TestRegisterScheme(t *testing.T) {
@@ -35,9 +37,7 @@ func TestRegisterScheme(t *testing.T) {
 			t.Setenv("PATH", bin)
 			for _, name := range []string{"update-desktop-database", "xdg-mime"} {
 				script := "#!/bin/sh\nprintf '%s\\n' '" + name + "' \"$@\" >> \"$MAGPIE_SCHEME_TEST_CALLS\"\n"
-				if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
-					t.Fatal(err)
-				}
+				testenv.Program(t, filepath.Join(bin, name), script)
 			}
 			dir := filepath.Join(data, "applications")
 			path := filepath.Join(dir, "magpie.desktop")

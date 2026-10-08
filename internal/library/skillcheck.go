@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -107,6 +108,42 @@ func lastCommit(src Source) (*commit, error) {
 		q.Set("sha", src.Ref)
 	}
 	u := githubAPI + "/repos/" + src.Repo + "/commits?" + q.Encode()
+	body, code, token, err := apiGet(u)
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case code == 401 && token:
+		_, from := GitHubToken()
+		where := "the GitHub token in Settings → Network and sharing"
+		if from != "settings" {
+			where = from + " (no GitHub token is set in Settings → Network and sharing)"
+		}
+		return nil, fmt.Errorf("GitHub refused %s: it may have expired or been revoked", where)
+	case code == 404, code == 422:
+		if src.Ref != "" {
+			return nil, fmt.Errorf("GitHub has no %s at %s any more", src.Repo, src.Ref)
+		}
+		return nil, fmt.Errorf("GitHub has no repository %s any more", src.Repo)
+	case code != 200:
+		return nil, fmt.Errorf("GitHub answered %d %s", code, http.StatusText(code))
+	}
+	var list []commit
+	if err := json.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("GitHub's answer wasn't understood: %w", err)
+	}
+	if len(list) == 0 {
+		return nil, fmt.Errorf("%s has nothing at %s any more", src.Repo, src.Path)
+	}
+	return &list[0], nil
+}
+
+// apiGet asks GitHub's API for u, with the ETag of the answer it had
+// before, if any: GitHub's 304 for an unchanged one doesn't count against
+// the rate limit, and is answered as the 200 it had. It says whether the
+// request carried a GitHub token, and a rate limit used up is an
+// errLimited.
+func apiGet(u string) ([]byte, int, bool, error) {
 	req, _ := http.NewRequest("GET", u, nil)
 	req.Header.Set("User-Agent", "magpie")
 	req.Header.Set("Accept", "application/vnd.github+json")
@@ -120,44 +157,22 @@ func lastCommit(src Source) (*commit, error) {
 	c := &http.Client{Timeout: 20 * time.Second}
 	resp, err := source.Do(c, req)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't reach GitHub: %w", err)
+		return nil, 0, token, fmt.Errorf("couldn't reach GitHub: %w", err)
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if e, ok := limitedBy(resp, body, token); ok {
-		return nil, e
+		return nil, resp.StatusCode, token, e
 	}
-	switch {
-	case resp.StatusCode == 304 && cached:
-		body = had.body
-	case resp.StatusCode == 401 && token:
-		_, from := GitHubToken()
-		where := "the GitHub token in Settings → Network and sharing"
-		if from != "settings" {
-			where = from + " (no GitHub token is set in Settings → Network and sharing)"
-		}
-		return nil, fmt.Errorf("GitHub refused %s: it may have expired or been revoked", where)
-	case resp.StatusCode == 404, resp.StatusCode == 422:
-		if src.Ref != "" {
-			return nil, fmt.Errorf("GitHub has no %s at %s any more", src.Repo, src.Ref)
-		}
-		return nil, fmt.Errorf("GitHub has no repository %s any more", src.Repo)
-	case resp.StatusCode != 200:
-		return nil, fmt.Errorf("GitHub answered %s", resp.Status)
-	}
-	var list []commit
-	if err := json.Unmarshal(body, &list); err != nil {
-		return nil, fmt.Errorf("GitHub's answer wasn't understood: %w", err)
+	if resp.StatusCode == 304 && cached {
+		return had.body, 200, token, nil
 	}
 	if et := resp.Header.Get("ETag"); resp.StatusCode == 200 && et != "" {
 		etags.Lock()
 		etags.m[u] = etagged{etag: et, body: body}
 		etags.Unlock()
 	}
-	if len(list) == 0 {
-		return nil, fmt.Errorf("%s has nothing at %s any more", src.Repo, src.Path)
-	}
-	return &list[0], nil
+	return body, resp.StatusCode, token, nil
 }
 
 // hashDir is a hash of a skill's files, their names and what's in them,
@@ -244,6 +259,7 @@ func CheckSkills() ([]SkillCheck, error) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			asked := map[string]*commit{} // a repository's skills in one folder are asked about once
+			refs := []string{}
 			for _, s := range skills {
 				c, sha, hash := checkSkill(s, f, asked, &limited)
 				omu.Lock()
@@ -252,6 +268,17 @@ func CheckSkills() ([]SkillCheck, error) {
 					known[s.Name] = [2]string{sha, hash}
 				}
 				omu.Unlock()
+				if !slices.Contains(refs, s.Source.Ref) {
+					refs = append(refs, s.Source.Ref)
+				}
+			}
+			// and what the repository has added beside them since
+			for _, ref := range refs {
+				if found, ok := findNew(l, skills[0].Source.Repo, ref, f, &limited); ok {
+					newFound.Lock()
+					newFound.m[repoKey(skills[0].Source.Repo, ref)] = found
+					newFound.Unlock()
+				}
 			}
 		}()
 	}

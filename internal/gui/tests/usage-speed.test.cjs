@@ -45,7 +45,11 @@ function ledger(period) {
     by: { model: [FAST, SLOW] }, bucket: "hour",
     series: [
       { label: "", time: hour(1), calls: 14, input: 1, output: 1890, ...{ timed: 14, ttft_ms: 8400, decode_ms: 25200, decode_out: 1890 }, by: { model: { "glm-fast": part({ ...FAST, calls: 14, output: 1890, timed: 14, ttft_ms: 8400, decode_ms: 25200, decode_out: 1890 }) } } },
-      { label: "", time: hour(0), calls: 15, input: 1, output: 1910, ...{ timed: 14, ttft_ms: 8400, decode_ms: 25400, decode_out: 1910 }, by: { model: { "glm-fast": part({ ...FAST, calls: 14, output: 1890, timed: 13, ttft_ms: 7800, decode_ms: 23400, decode_out: 1755 }), "kimi-slow": part(SLOW) } } },
+      // hour(0): the hour's own is 1910 tokens in 27.4 s (69.7 tok/s) while
+      // glm-fast answered 1755 in 23.4 s (75.0), so its mark leaves the column
+      // and gets a leader line; kimi-slow (10) stays under it. hour(1) is the
+      // hour's own equal to the one model that answered in it, so no line
+      { label: "", time: hour(0), calls: 15, input: 1, output: 1910, ...{ timed: 14, ttft_ms: 8400, decode_ms: 27400, decode_out: 1910 }, by: { model: { "glm-fast": part({ ...FAST, calls: 14, output: 1890, timed: 13, ttft_ms: 7800, decode_ms: 23400, decode_out: 1755 }), "kimi-slow": part(SLOW) } } },
     ],
     agents: [{ id: "claude", name: "Claude Code", icon: "claudecode-color" }],
   };
@@ -144,6 +148,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await p.locator("#ledRank .rk").nth(1).locator(".rk-val").textContent()).trim(), w.slow);
         assert.equal(await p.locator("#ledChart rect.col.mark").count(), 3, "a mark for each model at each hour it answered");
         assert.equal(await p.locator("#ledChart rect.col.all").count(), 2, "and the hour's own");
+        // a model faster than the hour's own leaves its mark above the column:
+        // a dotted leader line ties the two, so the mark reads as this hour's
+        // rather than as a stray dash (huoranxuanyuan, #860). The hour(0)
+        // fixture is the one where that happens: 1755 tokens in 23.4 s is
+        // 75.0 tok/s for glm-fast against the hour's own 1910 in 27.4 s,
+        // 69.7, while kimi-slow answers 10
+        const stems = p.locator("#ledChart line.stem");
+        assert.equal(await stems.count(), 1, "a leader line for the mark that leaves its column");
+        const stem = await stems.first().evaluate((l) => ({ x1: l.x1.baseVal.value, x2: l.x2.baseVal.value, y1: l.y1.baseVal.value, y2: l.y2.baseVal.value }));
+        const mark = await p.locator("#ledChart rect.col.mark").nth(1).evaluate((r) => ({ x: r.x.baseVal.value, y: r.y.baseVal.value, w: r.width.baseVal.value, h: r.height.baseVal.value }));
+        const col = await p.locator("#ledChart rect.col.all").nth(1).evaluate((r) => ({ y: r.y.baseVal.value, color: r.dataset.color, style: r.style.fill }));
+        assert(Math.abs(stem.x1 - (mark.x + mark.w / 2)) < 0.51 && Math.abs(stem.x2 - stem.x1) < 0.01, "the line runs down the mark's middle");
+        assert(Math.abs(stem.y1 - col.y) < 0.01, "and starts at its column's top");
+        assert(Math.abs(stem.y2 - (mark.y + mark.h)) < 0.01, "and ends at the mark's foot");
+        assert(stem.y1 > stem.y2, "downward: the mark is above its column");
+        assert.equal(await stems.first().evaluate((l) => getComputedStyle(l).strokeDasharray), "2px, 2px", "dotted");
+        // the column is the track the marks sit on, not the stacked charts'
+        // "Other" grey, and the colour goes through style, where var()
+        // substitutes — not through the attribute, where it does not
+        assert.equal(col.color, "var(--pill)", "the track's colour, named");
+        assert.notEqual(col.style, "", "set through style");
+        const fill = await p.locator("#ledChart rect.col.all").nth(1).evaluate((r) => getComputedStyle(r).fill);
+        assert(fill.startsWith("rgb"), "the style resolves to a colour, not the var() text: " + fill);
+        assert.equal(fill, await p.locator("#ledChart rect.col.all").nth(0).evaluate((r) => getComputedStyle(r).fill), "both hours' tracks read the same");
 
         // a wide window: the Agents and Settings rows don't stretch across it
         await p.setViewportSize({ width: 1670, height: 1060 });

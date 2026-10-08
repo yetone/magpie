@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // probeScript is a CLI that is a script starting another program and
@@ -20,7 +22,7 @@ import (
 func probeScript(t *testing.T) (sh, pidFile string) {
 	dir := t.TempDir()
 	sh, pidFile = filepath.Join(dir, "cli"), filepath.Join(dir, "child.pid")
-	os.WriteFile(sh, []byte("#!/bin/sh\nsleep 30 &\necho $! > "+pidFile+"\nwait\n"), 0o755)
+	testenv.Program(t, sh, "#!/bin/sh\nsleep 30 &\necho $! > "+pidFile+"\nwait\n")
 	old := waitDelay
 	waitDelay = 200 * time.Millisecond
 	t.Cleanup(func() { waitDelay = old })

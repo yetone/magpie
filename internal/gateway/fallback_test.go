@@ -16,6 +16,7 @@ import (
 
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // twoProviders: "plan" (the one agents pick) falls back to "spare".
@@ -275,7 +276,7 @@ while read -r line; do
   fi
 done
 `
-	os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755)
+	testenv.Program(t, filepath.Join(dir, "claude"), script)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	provider.ForgetAccounts()
 	t.Cleanup(provider.ForgetAccounts)

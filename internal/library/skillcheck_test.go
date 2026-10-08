@@ -34,6 +34,10 @@ func TestCheckSkills(t *testing.T) {
 			w.Write(tarball(t, files))
 			return
 		}
+		if strings.Contains(r.URL.Path, "/git/trees/") {
+			w.WriteHeader(404) // what the repositories added since is TestCheckSkillsFindsNewOnes's
+			return
+		}
 		repo := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/repos/"), "/commits")
 		asked["api "+repo]++
 		if r.URL.Query().Get("per_page") != "1" {

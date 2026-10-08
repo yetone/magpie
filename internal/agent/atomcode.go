@@ -23,7 +23,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/gateway"
 )
@@ -50,9 +49,14 @@ func atomcodeKey(ref string) string { return magpieID + "/" + ref }
 // (atomcodeOwnModels), not built ones.
 func atomcodeTable(key string) string { return "models." + strconv.Quote(key) }
 
-func atomcode(home string) *Agent {
-	dir := filepath.Join(home, ".atomcode")
-	if h := appdir.Getenv("ATOMCODE_HOME"); filepath.IsAbs(h) {
+func atomcode(home string) *Agent { return atomcodeIn(here(home)) }
+
+// atomcodeIn is AtomCode at a place: this machine's home, or a WSL distro's
+// (see wsl.go), where ATOMCODE_HOME isn't read and its account names the
+// gateway as the distro reaches it, with the key it takes from there.
+func atomcodeIn(at place) *Agent {
+	dir := filepath.Join(at.home, ".atomcode")
+	if h := at.getenv("ATOMCODE_HOME"); filepath.IsAbs(h) {
 		dir = filepath.Clean(h)
 	}
 	path := filepath.Join(dir, "config.toml")
@@ -102,7 +106,7 @@ func atomcode(home string) *Agent {
 		return edit.SetTOMLTop(path, edit.KV{Path: "default_model", Value: v})
 	}
 	writeMagpie := func() error {
-		return edit.SetTOMLTablesMatching(path, atomcodeAccountNames, atomcodeTablePrefixes, atomcodeTables(path))
+		return edit.SetTOMLTablesMatching(path, atomcodeAccountNames, atomcodeTablePrefixes, atomcodeTablesAt(path, at.v1(), agentKeyAt("atomcode", at.gw())))
 	}
 	dropMagpie := func() error {
 		return edit.SetTOMLTablesMatching(path, atomcodeAccountNames, atomcodeTablePrefixes, nil)
@@ -149,7 +153,7 @@ func atomcode(home string) *Agent {
 				return "AtomCode's [" + atomcodeAccount + "] (config.toml) is gone, so it no longer reaches magpie"
 			}
 			return wiringOff("AtomCode", path, func(f string) (string, bool) { v, ok := a[f]; return v, ok },
-				"base_url", gatewayV1(), "api_key", gateway.TokenFor("atomcode"))
+				"base_url", at.v1(), "api_key", agentKeyAt("atomcode", at.gw()))
 		},
 		Fields: []Field{{
 			Key: "model", Label: "model",
@@ -289,12 +293,18 @@ func atomcode(home string) *Agent {
 // No reasoning_effort is picked for the user — the vendor's default stands
 // until they choose one.
 func atomcodeTables(path string) []edit.Table {
+	return atomcodeTablesAt(path, gatewayV1(), gateway.TokenFor("atomcode"))
+}
+
+// atomcodeTablesAt is atomcodeTables for an AtomCode reaching the
+// gateway's /v1 at v1 with key.
+func atomcodeTablesAt(path, v1, key string) []edit.Table {
 	efforts := atomcodeExistingEfforts(path)
 	out := []edit.Table{{Name: atomcodeAccount, KVs: []edit.KV{
 		// openai-compatible is the documented preset for a custom endpoint
 		{Path: "provider", Value: "openai-compatible"},
-		{Path: "base_url", Value: gatewayV1()},
-		{Path: "api_key", Value: gateway.TokenFor("atomcode")},
+		{Path: "base_url", Value: v1},
+		{Path: "api_key", Value: key},
 	}}}
 	for _, m := range magpieModels("atomcode") {
 		ctx := m.Context

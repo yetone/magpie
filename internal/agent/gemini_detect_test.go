@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // TestGeminiNotAntigravity: a ~/.gemini holding only what Antigravity keeps
@@ -42,7 +44,7 @@ func TestGeminiNotAntigravity(t *testing.T) {
 		return
 	}
 	bin := t.TempDir()
-	os.WriteFile(filepath.Join(bin, "gemini"), []byte("#!/bin/sh\n"), 0o755)
+	testenv.Program(t, filepath.Join(bin, "gemini"), "#!/bin/sh\n")
 	t.Setenv("PATH", bin)
 	if !gemini(home).Detected() {
 		t.Fatal("gemini on PATH not detected")

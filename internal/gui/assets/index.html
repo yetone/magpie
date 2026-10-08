@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="library.css">
 <link rel="stylesheet" href="plugins.css">
 <link rel="stylesheet" href="sessions.css">
+<link rel="stylesheet" href="context.css">
 <link rel="stylesheet" href="omarchy.css">
 </head>
 <body>
@@ -186,11 +187,13 @@
       </section>
     </div>
     <div class="led-head"><p class="led-sum" id="ledSum"></p><span class="grow"></span><span class="led-arch" id="ledArchive"></span></div>
+    <div class="led-strip led-vias" id="ledVia" hidden></div>
     <div class="led-wrap" id="ledWrap"></div>
             <div class="led-hscroll" id="ledHScroll" hidden><div></div></div>
     <div class="led-pager" id="ledPager" hidden></div>
     <p class="usage-note" id="ledNote"></p>
   </div>
+  <div class="usage-pane ctx-pane" id="contextPane" hidden></div>
   <div class="usage-pane sess-pane" id="sessionsPane" hidden>
     <div class="sess-tools">
       <div class="segs" id="sessAgent"></div>
@@ -437,6 +440,8 @@
     <div class="list prefs" id="portList"></div>
     <div class="row-head"><span class="label" data-t>Local network</span></div>
     <div class="list prefs" id="lanList"></div>
+    <div class="row-head"><span class="label" data-t>Web pages</span></div>
+    <div class="list prefs" id="corsList"></div>
   </section>
   <section class="set-page" id="setPage-models" role="tabpanel" aria-labelledby="setTab-models">
     <div class="row-head"><span class="label" data-t>Images</span></div>
@@ -498,5 +503,6 @@
 <script src="library.js"></script>
 <script src="plugins.js"></script>
 <script src="sessions.js"></script>
+<script src="context.js"></script>
 </body>
 </html>

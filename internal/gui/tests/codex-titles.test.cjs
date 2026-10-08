@@ -94,6 +94,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await row.locator(".name").textContent()).trim(), want[lang].name);
       assert.equal((await pick.textContent()).trim(), want[lang].own, "Codex's own by default");
       assert.match(await row.locator(".sub").textContent(), want[lang].subOwn);
+      // the chip's icon is the chip's size, not the row's 18–22px (duanckham on X)
+      assert.deepEqual(await pick.locator(".ic").evaluate((e) => [e.offsetWidth, e.offsetHeight]), [14, 14]);
 
       // scrolled by a wheel till the row is mid-view, so a click that
       // moved the page would show

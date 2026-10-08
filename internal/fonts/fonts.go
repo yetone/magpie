@@ -75,7 +75,7 @@ func group(faces []Face) []Family {
 	out := make([]Family, 0, len(byName))
 	for name, styles := range byName {
 		slices.SortFunc(styles, func(a, b Face) int {
-			return cmp.Or(cmp.Compare(a.Weight, b.Weight), cmp.Compare(a.Style, b.Style), cmp.Compare(a.Stretch, b.Stretch), strings.Compare(a.Name, b.Name))
+			return cmp.Or(cmp.Compare(a.Weight, b.Weight), cmp.Compare(styleRank(a.Style), styleRank(b.Style)), cmp.Compare(a.Stretch, b.Stretch), strings.Compare(a.Name, b.Name))
 		})
 		out = append(out, Family{Name: name, Styles: styles})
 	}
@@ -83,6 +83,18 @@ func group(faces []Face) []Family {
 		return cmp.Or(strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)), strings.Compare(a.Name, b.Name))
 	})
 	return out
+}
+
+// At the same weight, upright faces precede slanted ones in the style menu.
+func styleRank(style string) int {
+	switch style {
+	case "normal":
+		return 0
+	case "italic":
+		return 1
+	default: // group has already validated the remaining style as oblique.
+		return 2
+	}
 }
 
 // OpenType and DirectWrite share these width classes.

@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/plugin"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // magpie in Docker (xugui on Discord: "docker版登不上grok和command code"):
@@ -62,6 +64,12 @@ func TestGrokInstallsWithoutShell(t *testing.T) {
 	if !ok {
 		t.Fatal("grok is installed already")
 	}
+	// The download lands in a file macOS has already let run, which the
+	// installer writes over in place and renames. A newly written one waits
+	// for the system's first-run check before its first exec, and while a
+	// go test ./... starts other new programs that wait outlasts the
+	// install's own 30s for `grok --version`. That check isn't under test.
+	testenv.Program(t, filepath.Join(home, ".grok", "downloads", fmt.Sprintf("grok-%s.tmp.%d", platform, os.Getpid())), "#!/bin/sh\n")
 	if err := installCLI(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
@@ -260,7 +268,7 @@ export const P = async () => ({
 	runInstaller = func(ctx context.Context, c agentCLI) ([]byte, error) {
 		ran = c.Name
 		os.MkdirAll(filepath.Dir(exe), 0o755)
-		return nil, os.WriteFile(exe, []byte("#!/bin/sh\n"), 0o755)
+		return nil, testenv.WriteProgram(exe, "#!/bin/sh\n")
 	}
 	t.Cleanup(func() { runInstaller = oldRun })
 

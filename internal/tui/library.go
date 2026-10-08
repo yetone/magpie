@@ -206,13 +206,20 @@ func libCmd(do func() (*library.Result, error), done string) tea.Cmd {
 
 // libSaid is a change's result in a line.
 func libSaid(res *library.Result, done string) (string, bool) {
+	// an install of skills the library had already added none
+	if len(res.Installed) == 0 && len(res.Had) > 0 {
+		done = strings.Join(res.Had, ", ") + " in the library already"
+	}
+	for _, p := range res.Skipped {
+		done += " · " + strings.TrimPrefix(p.What, "skill:") + " skipped: " + p.Error
+	}
 	if len(res.Changed) > 0 {
 		done += " · written into " + strings.Join(res.Changed, ", ")
 	}
 	for _, p := range res.Problems {
 		done += " · " + p.Agent + ": " + p.Error
 	}
-	return done, len(res.Problems) == 0
+	return done, len(res.Problems) == 0 && len(res.Skipped) == 0
 }
 
 // libOptions are the agents that can get a row's kind, those that get it

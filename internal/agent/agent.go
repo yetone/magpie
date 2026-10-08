@@ -83,7 +83,8 @@ type Field struct {
 	// another field until set (Claude Code's per-tier models).
 	Quiet bool
 	// Follows is the key of the field a Quiet one takes after while empty
-	// ("model" for Claude Code's tiers), for a profile's details to say so.
+	// ("model" for Claude Code's tiers and subagents): a profile's details
+	// say so, and Drift reads the field as on that one's model (#1050).
 	Follows string
 }
 

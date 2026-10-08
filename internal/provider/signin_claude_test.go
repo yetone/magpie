@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // fakeClaudeAccount is who a fake `claude auth login` signs in to.
@@ -61,6 +63,9 @@ exec 3<&0
 ( while read -r line; do echo "$line" >> "$CLAUDE_CONFIG_DIR/.pasted"; done ) <&3 >/dev/null 2>&1 &
 reader=$!
 while :; do
+  # a test that ended without signing in removed this folder: end, rather
+  # than poll for ever (one did for days after its run)
+  [ -d "${0%%/*}" ] || exit 3
   [ -f '%s' ] && break
   grep -qx 'the-code#st' "$CLAUDE_CONFIG_DIR/.pasted" 2>/dev/null && break
   sleep 0.05
@@ -76,15 +81,13 @@ EOF
 echo '{"loggedIn":true,"email":"%[8]s","subscriptionType":"%[7]s"}' > "$CLAUDE_CONFIG_DIR/status.json"
 echo "Login successful."
 `, own, opened, printed, goFile, a.refresh, time.Now().Add(time.Hour).UnixMilli(), a.plan, a.email, a.orgUUID, a.org, a.name)
-	if err := os.WriteFile(exe, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testenv.Program(t, exe, script)
 	browser := filepath.Join(dir, "browser")
 	body := "#!/bin/sh\nexit 1\n"
 	if opens {
 		body = "#!/bin/sh\nprintf %s \"$1\" > \"$" + openedURLEnv + "\"\n"
 	}
-	os.WriteFile(browser, []byte(body), 0o755)
+	testenv.Program(t, browser, body)
 	oldExe, oldOpener := claudeExecutable, claudeURLOpener
 	claudeExecutable = func() string { return exe }
 	claudeURLOpener = func() string { return browser }

@@ -1,8 +1,6 @@
 package provider
 
 import (
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -13,16 +11,15 @@ import (
 const cursorLink = "https://cursor.com/loginDeepControl?challenge=Zm9vYmFyYmF6cXV4Zm9vYmFyYmF6cXV4Zm9vYmFyYmF&uuid=0b9d5f3e-6f1c-4c2a-9a55-3d1f0e6b7a21&mode=login&redirectTarget=cli&supportsSelectedTeamLogin=true"
 
 // signInLink runs a fake login command printing script and says the link
-// the sign-in hands to the window.
+// the sign-in hands to the window. It is /bin/sh -c, not a script written
+// for the test: macOS checks a new executable before its first run, which
+// takes ~0.3s alone and seconds while a `go test ./...` starts its other
+// new test binaries, all of it counted against linkWait.
 func signInLink(t *testing.T, whole func(string) bool, script string) string {
 	t.Helper()
-	exe := filepath.Join(t.TempDir(), "login")
-	if err := os.WriteFile(exe, []byte("#!/bin/sh\n"+script+"\nexec sleep 5\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	s := &signInFlow{done: make(chan struct{})}
 	s.st = SignInState{State: "waiting"}
-	err := runCLISignIn(s, "login", nil, true, nil, func() (string, string, bool) { return "", "", false }, whole, exe)
+	err := runCLISignIn(s, "login", nil, true, nil, func() (string, string, bool) { return "", "", false }, whole, "/bin/sh", "-c", script+"\nexec sleep 5")
 	s.mu.Lock()
 	stop, u := s.stop, s.st.URL
 	s.mu.Unlock()
@@ -91,13 +88,9 @@ func TestCLISignInSaysWhyNoLink(t *testing.T) {
 		t.Skip("fake CLI is a shell script")
 	}
 	said := "Error: error sending request for url (https://auth.x.ai/oauth2/device/code): client error (Connect): tunnel error: failed to create underlying connection: tcp connect error: Connection refused (os error 61)"
-	exe := filepath.Join(t.TempDir(), "login")
-	if err := os.WriteFile(exe, []byte("#!/bin/sh\necho '"+said+"' >&2\nexit 1\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	s := &signInFlow{done: make(chan struct{})}
 	s.st = SignInState{State: "waiting"}
-	err := runCLISignIn(s, "grok login", nil, true, nil, func() (string, string, bool) { return "", "", false }, nil, exe)
+	err := runCLISignIn(s, "grok login", nil, true, nil, func() (string, string, bool) { return "", "", false }, nil, "/bin/sh", "-c", "echo '"+said+"' >&2; exit 1")
 	if err == nil || err.Error() != "grok login gave no link to open: "+said {
 		s.mu.Lock()
 		t.Fatalf("err %v, link %q", err, s.st.URL)

@@ -13,6 +13,8 @@
 
   let mine = null;       // /api/plugins: what's installed
   let listings = null;   // /api/plugins/listings: the plugins suggested
+  let tagged = null;     // /api/plugins/github: repositories their authors tagged magpie-plugin, as listings
+  let topic = "magpie-plugin";
   const npm = {};        // /api/plugins/npm: package → what npm says of it
   let failed = "";       // why what's installed couldn't be loaded
   let failedList = "";   // ...and the plugins suggested
@@ -30,6 +32,7 @@
 
   const SEARCH = "M7 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M10 10l3 3";
   const DOWN = "M8 3v7.5 M4.8 7.6 8 10.8l3.2-3.2 M3.5 13h9";
+  const STAR = "M8 2.2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.4l-3.6 1.9.7-4L2.2 6.5l4-.6z";
   const SHIELD = "M8 2.3 13 4v3.8c0 3-2.1 5.1-5 5.9-2.9-.8-5-2.9-5-5.9V4z M5.8 8l1.6 1.6 2.9-3";
   const OUTL = "M9.5 3.5h3v3 M12.5 3.5 7.5 8.5 M11 9.5v3H3.5V5h3";
   const PLUG = "M6 2v3 M10 2v3 M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0z M8 11v3";
@@ -55,7 +58,14 @@
   const lang = () => (document.documentElement.lang || "en").slice(0, 2);
   const summary = (l) => l.summary?.[lang()] || l.summary?.en || l.npm?.description || "";
   const count = (n) => n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + "k" : String(n || 0);
-  const entryOf = (pkg) => mine?.plugins?.find((e) => name(e.spec) === pkg);
+  // a repository tagged magpie-plugin is installed by whichever spec
+  // names it (github:owner/repo, its page's URL), or as the package its
+  // package.json names
+  const ghRepo = (spec) => { const m = /^(?:github:|https?:\/\/(?:www\.)?github\.com\/)([^/#\s]+\/[^/#\s]+?)(?:\.git)?(?:[/#].*)?$/i.exec(spec) || (isGit(spec) && /^([^:/#]+\/[^:/#]+)(?:#.*)?$/.exec(spec)); return m ? m[1].toLowerCase() : ""; };
+  const entryOf = (pkg) => {
+    const g = (tagged || []).find((x) => x.package === pkg)?.github;
+    return mine?.plugins?.find((e) => name(e.spec) === pkg || (g && (ghRepo(e.spec) === g.repo.toLowerCase() || (g.package && isGit(e.spec) && e.package === g.package))));
+  };
   // npm has the versions of a package: not a folder's, nor a git one's
   const onNPM = (spec) => !isPath(spec) && !isGit(spec);
   // the providers a plugin signs in to, as the add sheet knows them
@@ -91,13 +101,6 @@
     for (const l of listings || []) if (npm[l.package]) l.npm = npm[l.package];
     for (const e of mine?.plugins || []) if (onNPM(e.spec) && npm[name(e.spec)]?.version) e.latest = npm[name(e.spec)].version;
   }
-  // redrawn as a part comes: the search field keeps its focus
-  function redraw() {
-    const q = page.querySelector(".pm-find input");
-    const typing = q && document.activeElement === q;
-    draw();
-    if (typing) page.querySelector(".pm-find input")?.focus({ preventScroll: true });
-  }
   async function loadMine() {
     try {
       mine = await api("plugins");
@@ -106,6 +109,22 @@
       failed = e.message;
     }
     merge();
+  }
+  // a repository tagged magpie-plugin as the market's cards read a
+  // listing: its owner as the publisher, its version, and installed by its
+  // spec (its npm name when its author published it there from the
+  // repository, else github:owner/repo)
+  const ghListing = (r) => ({
+    package: r.spec, name: r.repo.split("/")[1], kind: r.kind, github: r,
+    summary: r.description ? { en: r.description } : undefined,
+    npm: { version: r.version || "", publisher: r.owner, repository: r.url, license: r.license, weekly: 0 },
+  });
+  async function loadTagged() {
+    try {
+      const r = await api("plugins/github");
+      tagged = (r.repos || []).map(ghListing);
+      if (r.topic) topic = r.topic;
+    } catch { tagged = tagged || []; }
   }
   async function loadListings() {
     try {
@@ -136,8 +155,9 @@
   async function load() {
     if (!mine && !listings) draw();
     const parts = [
-      loadMine().then(() => { redraw(); window.renderPluginDot?.(); }),
-      loadListings().then(redraw),
+      loadMine().then(() => { draw(); window.renderPluginDot?.(); }),
+      loadListings().then(draw),
+      loadTagged().then(drawBody),
       providers ? null : loadProviders().then(drawBody, () => {}),
     ];
     await Promise.all(parts);
@@ -302,7 +322,7 @@
       return b;
     }
     if (!e) {
-      if (listed && !listed.npm?.version) {
+      if (listed && !listed.github && !listed.npm?.version) {
         b.textContent = t("Coming soon");
         b.disabled = true;
         b.title = t("Not on npm yet");
@@ -370,10 +390,12 @@
       by.append(v);
     } else by.append(el("span", "", l.npm?.publisher || l.package));
     who.append(by);
+    if (l.github) c.classList.add("gh");
     top.append(logo(l.icon, false, l.kind === "middleware"), who, actionFor(l.package, l.name, l));
     const sum = el("p", "pm-sum", summary(l));
     const meta = el("div", "pm-meta");
     meta.append(kindChip(l.kind === "middleware"));
+    if (l.github) meta.append(unofficial(), stars(l.github.stars));
     if (l.npm?.weekly) {
       const d = el("span", "pm-dl");
       d.append(glyph(DOWN, 11, 1.5), el("span", "", t("{n}/week", { n: count(l.npm.weekly) })));
@@ -408,6 +430,19 @@
     return c;
   }
 
+  // a repository's author put it here, nobody reviewed it: said on its card
+  function unofficial() {
+    const u = el("span", "pm-chip warn", t("Unofficial"));
+    u.title = t("Tagged {topic} on GitHub by its author. Nobody at magpie has read it: read its code before you install it", { topic });
+    return u;
+  }
+  function stars(n) {
+    const d = el("span", "pm-dl");
+    d.append(glyph(STAR, 11, 1.4), el("span", "", count(n)));
+    d.title = t("{n} stars on GitHub", { n: (n || 0).toLocaleString() });
+    return d;
+  }
+
   function skeleton(n) {
     const g = el("div", "pm-grid");
     for (let i = 0; i < n; i++) {
@@ -429,8 +464,31 @@
     return box;
   }
 
+  // the head and its search field are made once and drawn again in
+  // place: the field is never taken out of the page, or a key an IME
+  // commits while it is out lands twice (#1055)
+  const headBox = el("div", "lib-head pm-head");
+  const find = el("label", "pm-find");
+  const q = el("input");
+  q.type = "search";
+  q.spellcheck = false;
+  q.autocomplete = "off";
+  q.oninput = () => {
+    query = q.value;
+    if (tab !== "discover") { tab = "discover"; draw(); }
+    clearTimeout(searchTimer);
+    const s = query.trim();
+    if (s.length < 2) hits = null;
+    else {
+      hits = { q: s, loading: true };
+      searchTimer = setTimeout(() => searchNPM(s), 350);
+    }
+    drawBody();
+  };
+  q.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === "Escape" && q.value) { q.value = ""; q.oninput(); } };
+  find.append(glyph(SEARCH, 13, 1.6), q);
+
   function head() {
-    const h = el("div", "lib-head pm-head");
     const n = mine?.plugins?.length || 0;
     const tabs = segs([["discover", t("Discover")], ["installed", t("Installed") + (n ? " · " + n : "")]], tab, (id) => {
       tab = id;
@@ -438,32 +496,12 @@
       drawBody();
     });
     tabs.classList.add("lib-tabs");
-    const find = el("label", "pm-find");
-    find.append(glyph(SEARCH, 13, 1.6));
-    const q = el("input");
-    q.type = "search";
     q.placeholder = t("Search plugins and npm…");
-    q.value = query;
-    q.spellcheck = false;
-    q.autocomplete = "off";
+    if (q.value !== query) q.value = query;
     q.setAttribute("aria-label", t("Search plugins"));
-    q.oninput = () => {
-      query = q.value;
-      if (tab !== "discover") { tab = "discover"; draw(); page.querySelector(".pm-find input")?.focus(); }
-      clearTimeout(searchTimer);
-      const s = query.trim();
-      if (s.length < 2) hits = null;
-      else {
-        hits = { q: s, loading: true };
-        searchTimer = setTimeout(() => searchNPM(s), 350);
-      }
-      drawBody();
-    };
-    q.onkeydown = (ev) => { ev.stopPropagation(); if (ev.key === "Escape" && q.value) { q.value = ""; q.oninput(); } };
-    find.append(q);
-    h.append(tabs, el("span", "grow"), mirrorSwitch(), find);
-    h.classList.toggle("stuck", page.scrollTop > 0);
-    return h;
+    replaceKeeping(headBox, [tabs, el("span", "grow"), mirrorSwitch(), find]);
+    headBox.classList.toggle("stuck", page.scrollTop > 0);
+    return headBox;
   }
 
   // 「国内镜像」: the list, npm's packages and answers, and Bun asked of
@@ -491,13 +529,13 @@
         const r = await api("plugins/mirror", { on: !on });
         mine.mirror = r.mirror;
         // the list again, now from the mirror, and npm's answers with it
-        if (r.mirror) loadListings().then(() => { redraw(); askNPM(); });
+        if (r.mirror) loadListings().then(() => { draw(); askNPM(); });
       } catch (e) {
         mine.mirror = on;
         status(t(e.message), "err");
       }
       mirrorSaving = false;
-      redraw();
+      draw();
     };
     return b;
   }
@@ -517,9 +555,8 @@
   let body = null;
   function draw() {
     const scroll = page.scrollTop;
-    page.replaceChildren(head());
     body = el("div", "lib-body pm-body");
-    page.append(body);
+    replaceKeeping(page, [head(), body]);
     drawBody();
     page.scrollTop = scroll;
   }
@@ -541,7 +578,11 @@
       return;
     }
     const f = query.trim().toLowerCase();
-    const ls = listings.filter((l) => !f || [l.name, l.package, summary(l), (l.providers || []).join(" "), l.npm?.publisher || ""].join(" ").toLowerCase().includes(f));
+    const match = (l) => !f || [l.name, l.package, summary(l), (l.providers || []).join(" "), l.npm?.publisher || ""].join(" ").toLowerCase().includes(f);
+    const ls = listings.filter(match);
+    // a tagged repository the market already lists is the market's card
+    const listed = new Set(listings.map((l) => l.package));
+    const gh = (tagged || []).filter((l) => !(l.github.package && listed.has(l.github.package)) && match(l));
     if (!f) {
       body.append(intro());
       // magpie's community's alone: others' plugins are found by a search
@@ -549,11 +590,13 @@
       const mws = ls.filter((l) => l.community && l.kind === "middleware");
       if (ours.length) body.append(section(t("Subscriptions"), t("written for magpie, checked against its own sign-ins"), ours));
       if (mws.length) body.append(section(t("Gateway middleware"), t("runs in magpie's gateway on what every agent sends and gets back, whichever provider serves it"), mws));
+      if (gh.length) body.append(section(t("Unofficial, on GitHub"), t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic }), gh));
       body.append(manual());
       return;
     }
     if (ls.length) body.append(section(t("Suggested"), "", ls));
-    const known = new Set(listings.map((l) => l.package));
+    if (gh.length) body.append(section(t("Unofficial, on GitHub"), t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic }), gh));
+    const known = new Set([...listings.map((l) => l.package), ...(tagged || []).map((l) => l.github.package).filter(Boolean)]);
     const box = el("section", "pm-sec");
     const h = el("div", "pm-sechead");
     h.append(el("h3", "", t("On npm")), el("span", "", t("OpenCode plugins and pi packages anyone published — read what one does before you install it")));
@@ -969,6 +1012,7 @@
     const fact = (k, v) => { if (!v) return; const f = el("div", "pm-fact"); f.append(el("span", "k", k), typeof v === "string" ? el("span", "v", v) : v); facts.append(f); };
     fact(t("Version"), l.npm?.version && "v" + l.npm.version);
     fact(t("Downloads"), l.npm?.weekly ? t("{n}/week", { n: count(l.npm.weekly) }) : "");
+    if (l.github) fact(t("Stars"), count(l.github.stars));
     fact(t("License"), l.npm?.license);
     const upd = el("span", "v", "…");
     fact(t("Updated"), upd);
@@ -985,9 +1029,18 @@
     };
     // npm is where a package's page is; a folder on this computer has none
     if (!local) link("npm", "https://www.npmjs.com/package/" + l.package);
-    link(t("Source"), l.npm?.repository);
+    link(l.github ? "GitHub" : t("Source"), l.npm?.repository);
     if (l.npm?.homepage && l.npm.homepage !== l.npm.repository && !l.npm.homepage.startsWith(l.npm.repository + "#")) link(t("Homepage"), l.npm.homepage);
     main.append(links);
+    if (l.github) {
+      const w = el("p", "pm-note warn");
+      // from npm when its author published it there from the repository
+      const from = isGit(l.package)
+        ? "Unofficial: {owner} tagged it {topic} on GitHub, and nobody at magpie has reviewed it. It is installed from the repository as it stands, and runs with your sign-in or your requests."
+        : "Unofficial: {owner} tagged it {topic} on GitHub, and nobody at magpie has reviewed it. It is installed from npm, as its author published it from the repository, and runs with your sign-in or your requests.";
+      w.append(glyph(SHIELD, 12, 1.5), el("span", "", t(from, { owner: l.github.owner, topic })));
+      main.append(w);
+    }
     if (l.replaces) main.append(el("p", "pm-note", t("magpie also signs in to this itself, for now; the plugin keeps it working if the built-in one is retired.")));
     const readme = el("div", "pm-readme");
     readme.append(el("div", "pm-rskel"), el("div", "pm-rskel short"), el("div", "pm-rskel"));
@@ -1005,11 +1058,12 @@
     function stop() { clearInterval(tick); }
     try {
       const p = await api("plugins/page?name=" + encodeURIComponent(l.package));
-      upd.textContent = p.updated && !p.updated.startsWith("0001") ? new Date(p.updated).toLocaleDateString(document.documentElement.lang || undefined, { year: "numeric", month: "short", day: "numeric" }) : "—";
+      const at = l.github && !entryOf(l.package) ? l.github.pushed : p.updated;
+      upd.textContent = at && !at.startsWith("0001") ? new Date(at).toLocaleDateString(document.documentElement.lang || undefined, { year: "numeric", month: "short", day: "numeric" }) : "—";
       readme.replaceChildren(markdown(p.readme || t("No README")));
     } catch (e) {
       upd.textContent = "—";
-      readme.replaceChildren(el("p", "pm-note", t(local ? "Couldn't read the folder's README: {error}" : "npm didn't answer: {error}", { error: e.message })));
+      readme.replaceChildren(el("p", "pm-note", t(l.github && isGit(l.package) && !entryOf(l.package) ? "GitHub didn't answer: {error}" : local ? "Couldn't read the folder's README: {error}" : "npm didn't answer: {error}", { error: e.message })));
     }
   }
 

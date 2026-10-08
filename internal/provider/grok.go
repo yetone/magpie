@@ -400,6 +400,9 @@ func ObjectRoot(ps map[string]any) bool {
 		}
 		delete(ps, k)
 	}
+	// a field every branch requires stays required, beside the root's and
+	// allOf's own, which no branch can drop
+	var common []any
 	for i, b := range branches {
 		bp, _ := b["properties"].(map[string]any)
 		for k, v := range bp {
@@ -409,21 +412,33 @@ func ObjectRoot(ps map[string]any) bool {
 		}
 		br, _ := b["required"].([]any)
 		if i == 0 {
-			required = append(required, br...)
+			common = append(common, br...)
 			continue
 		}
 		in := map[any]bool{}
 		for _, r := range br {
 			in[r] = true
 		}
-		kept := required[:0]
-		for _, r := range required {
+		kept := common[:0]
+		for _, r := range common {
 			if in[r] {
 				kept = append(kept, r)
 			}
 		}
-		required = kept
+		common = kept
 	}
+	seen := map[string]bool{}
+	var merged []any
+	for _, r := range append(required, common...) {
+		if name, ok := r.(string); ok {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+		}
+		merged = append(merged, r)
+	}
+	required = merged
 	ps["type"] = "object"
 	ps["properties"] = props
 	if len(required) > 0 {

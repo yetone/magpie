@@ -483,7 +483,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-ag.some .ic.baked > img.grey { display: none; }
 /* the skills' heading has the most on it: in a narrow window it goes on
    to a second line rather than past the page's side */
-#view-library .row-head.lib-skillshead { flex-wrap: wrap; row-gap: 6px; }
+#view-library .row-head.lib-skillshead, #view-library .row-head.lib-serverhead { flex-wrap: wrap; row-gap: 6px; }
 #view-library .row-head.lib-skillshead .lib-skillq { flex: 1 1 90px; max-width: 190px; }
 #view-library .row-head .lib-skillq { width: 190px; height: 24px; margin: 0; flex: 0 1 auto; min-width: 90px; }
 .lib-skillq::-webkit-search-cancel-button { -webkit-appearance: none; }
@@ -521,7 +521,8 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
    heading, and a bar that stays in view under the list while it's long */
 .lib-pickbox { margin: 0; flex: none; }
 .lib-vl > .row.lib-skill.picked { background: var(--accent-soft); }
-.lib-pickbar { position: sticky; bottom: 12px; z-index: 3; margin-top: 8px; min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: var(--shadow); }
+.lib-list > .row.lib-server.picked { background: var(--accent-soft); }
+.lib-pickbar { position: sticky; bottom: 12px; z-index: 3; margin-top: 8px; min-height: 44px; flex-wrap: wrap; row-gap: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); box-shadow: var(--shadow); }
 .lib-pickall { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-2); white-space: nowrap; }
 .lib-pickn { font-size: 12px; font-weight: 500; color: var(--fg); white-space: nowrap; }
 .lib-pickn.none { font-weight: 400; color: var(--faint); white-space: normal; }

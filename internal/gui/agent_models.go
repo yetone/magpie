@@ -3,7 +3,6 @@ package gui
 import (
 	"cmp"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -177,11 +176,6 @@ func agentModelList(a *agent.Agent) []agentModelJSON {
 	return out
 }
 
-// orderable reports whether the agent's model list is put in the order the
-// user drags it into: Codex's, whose /model lists the models by the
-// priority magpie gives them (#855).
-func orderable(id string) bool { return id == "codex" }
-
 func agentModelsAPI(mux *http.ServeMux) {
 	// a model the agent picks sent in its vendor's fast mode, or not (#954):
 	// for is the option's fastFor, the agent whose requests it goes on
@@ -206,13 +200,15 @@ func agentModelsAPI(mux *http.ServeMux) {
 			fail(rw, err)
 			return
 		}
-		writeJSON(rw, map[string]any{"models": agentModelList(a), "orderable": orderable(a.ListsFor()), "ordered": len(provider.ModelOrder(a.ListsFor())) > 0})
+		writeJSON(rw, map[string]any{"models": agentModelList(a), "ordered": len(provider.ModelOrder(a.ListsFor())) > 0})
 	})
 	// hidden is every entry to take out of the agent's lists; the others
 	// are shown, and one the agent is set to is kept in whatever is asked
 	//
 	// order, instead, is the order the agent's list puts them in (#855):
-	// the ones named first, as named; none puts back magpie's own
+	// the ones named first, as named; none puts back magpie's own. Every
+	// agent's (#1052): its list, the gateway's /models and the files magpie
+	// writes for it all come from provider.CatalogFor, which keeps it
 	mux.HandleFunc("POST /api/agent-models/{id}", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
 			Hidden []string
@@ -228,10 +224,6 @@ func agentModelsAPI(mux *http.ServeMux) {
 			return
 		}
 		if in.Order != nil {
-			if !orderable(a.ListsFor()) {
-				fail(rw, errors.New(a.Name+"'s model list can't be put in an order"))
-				return
-			}
 			if err := provider.SetModelOrder(a.ListsFor(), *in.Order); err != nil {
 				fail(rw, err)
 				return

@@ -34,6 +34,29 @@ var wslMore = []struct {
 	{"muse", ".config/muse/settings.json", "/v1"},
 	{"qoder", ".qoder/settings.json", "/v1"},
 	{"qoder-cn", ".qoder-cn/settings.json", "/v1"},
+	// lgtm on Discord: a CodeBuddy Code in WSL wasn't found, nor were the
+	// other CLIs magpie set up only on this machine
+	{"codebuddy", ".codebuddy/models.json", "/v1/chat/completions"},
+	{"cline", ".cline/data/settings/providers.json", "/v1"},
+	{"atomcode", ".atomcode/config.toml", "/v1"},
+	{"goose", ".config/goose/custom_providers/magpie.json", "/v1"},
+	{"reasonix", ".reasonix/config.toml", "/v1"},
+}
+
+// wslFinds is what a probe of a distro with the agent of kind k prints,
+// and the distro it makes: its folder, or for one found by its command
+// alone, the command and the version it gives.
+func wslFinds(k wslKind) (probe string, has map[string]bool, versions map[string]string) {
+	if k.dir != "" {
+		return "dir:" + k.dir + "\n", map[string]bool{"dir:" + k.dir: true}, nil
+	}
+	probe = "bin:" + k.bin + " /home/me/.local/bin/" + k.bin + "\n"
+	has = map[string]bool{"bin:" + k.bin: true}
+	if k.version {
+		probe += "ver:" + k.id + " " + k.bin + " v2.1.0\n"
+		versions = map[string]string{k.id: "2.1.0"}
+	}
+	return probe, has, versions
 }
 
 // moveHostDirs points the variables that move these agents' folders on
@@ -43,7 +66,8 @@ func moveHostDirs(t *testing.T) string {
 	t.Helper()
 	moved := t.TempDir()
 	for _, v := range []string{"OPENCODE_CONFIG_DIR", "MIMOCODE_HOME", "KIMI_CODE_HOME", "KIMI_SHARE_DIR", "PI_CODING_AGENT_DIR",
-		"HERMES_HOME", "GROK_HOME", "FACTORY_HOME_OVERRIDE", "MINIMAX_DATA_DIR", "QODER_CONFIG_DIR", "QODERCN_CONFIG_DIR", "DSH_HOME", "MISTER_MORPH_CONFIG"} {
+		"HERMES_HOME", "GROK_HOME", "FACTORY_HOME_OVERRIDE", "MINIMAX_DATA_DIR", "QODER_CONFIG_DIR", "QODERCN_CONFIG_DIR", "DSH_HOME", "MISTER_MORPH_CONFIG",
+		"CODEBUDDY_CONFIG_DIR", "CLINE_DIR", "CLINE_DATA_DIR", "ATOMCODE_HOME", "REASONIX_HOME", "APPDATA"} {
 		t.Setenv(v, filepath.Join(moved, v))
 	}
 	return moved
@@ -55,25 +79,27 @@ func moveHostDirs(t *testing.T) string {
 func TestWSLProbeFindsMoreAgents(t *testing.T) {
 	for _, c := range wslMore {
 		k := wslKindOf(c.id)
-		if !strings.Contains(wslProbeScript, `[ -d "$HOME/`+k.dir+`" ] && echo dir:`+k.dir+`; `) {
+		if k.dir != "" && !strings.Contains(wslProbeScript, `[ -d "$HOME/`+k.dir+`" ] && echo dir:`+k.dir+`; `) {
 			t.Errorf("%s: probe lacks its folder %s", c.id, k.dir)
 		}
-		if !strings.HasPrefix(c.file, k.dir+"/") {
+		if k.dir != "" && !strings.HasPrefix(c.file, k.dir+"/") {
 			t.Errorf("%s: its file %s isn't under %s", c.id, c.file, k.dir)
 		}
 		if k.bin != "" && !strings.Contains(wslProbeScript, `command -v `+k.bin+` `) {
 			t.Errorf("%s: probe lacks its command %s", c.id, k.bin)
 		}
-		if d := parseProbe("U", "home:/home/me\ndir:"+k.dir+"\n"); d == nil || !k.found(*d) {
-			t.Errorf("%s: not found by its folder", c.id)
+		if p, _, _ := wslFinds(k); k.dir != "" || k.version {
+			if d := parseProbe("U", "home:/home/me\n"+p); d == nil || !k.found(*d) {
+				t.Errorf("%s: not found by %q", c.id, p)
+			}
 		}
-		if k.bin != "" {
+		if k.bin != "" && !k.version {
 			if d := parseProbe("U", "home:/home/me\nbin:"+k.bin+" /usr/bin/"+k.bin+"\n"); d == nil || !k.found(*d) {
 				t.Errorf("%s: not found by its command", c.id)
 			}
 		}
 	}
-	for _, bin := range []string{"fx", "grok"} {
+	for _, bin := range []string{"fx", "grok", "goose"} {
 		if strings.Contains(wslProbeScript, `command -v `+bin+` `) {
 			t.Errorf("probe takes any %s command for the agent", bin)
 		}
@@ -92,7 +118,8 @@ func TestWSLMoreAgentsDiscovered(t *testing.T) {
 	probe := "home:/home/me\nroute:default via 172.20.0.1 dev eth0\n"
 	var want []string
 	for _, c := range wslMore {
-		probe += "dir:" + wslKindOf(c.id).dir + "\n"
+		p, _, _ := wslFinds(wslKindOf(c.id))
+		probe += p
 		want = append(want, c.id+"@wsl:Ubuntu")
 	}
 	_, opened := fakeWSL(t, "Ubuntu\r\n", "Ubuntu\r\n", map[string]string{"Ubuntu": probe}, map[string]string{"Ubuntu": root})
@@ -128,8 +155,11 @@ func TestWSLMoreAgentsPick(t *testing.T) {
 			root := t.TempDir()
 			dhome := filepath.Join(root, "home", "me")
 			k := wslKindOf(c.id)
-			os.MkdirAll(filepath.Join(dhome, filepath.FromSlash(k.dir)), 0o755)
-			d := distro{Name: "Ubuntu", Root: root, Home: "/home/me", Has: map[string]bool{"dir:" + k.dir: true},
+			if k.dir != "" {
+				os.MkdirAll(filepath.Join(dhome, filepath.FromSlash(k.dir)), 0o755)
+			}
+			_, has, versions := wslFinds(k)
+			d := distro{Name: "Ubuntu", Root: root, Home: "/home/me", Has: has, Versions: versions,
 				Gateway: "172.20.0.1", Mirrored: mirrored, Running: true}
 			a := wslAgent(k, d)
 			if err := a.Field("model").Set("magpie/relay/glm-4.6"); err != nil {
@@ -150,8 +180,10 @@ func TestWSLMoreAgentsPick(t *testing.T) {
 			if v := a.Field("model").Get(); !usesMagpie(v) {
 				t.Fatalf("%s: model %q", c.id, v)
 			}
-			if msg := a.Check(); msg != "" {
-				t.Fatalf("%s mirrored %v: %s", c.id, mirrored, msg)
+			if a.Check != nil {
+				if msg := a.Check(); msg != "" {
+					t.Fatalf("%s mirrored %v: %s", c.id, mirrored, msg)
+				}
 			}
 			if a.Sync != nil {
 				if err := a.Sync(); err != nil || !strings.Contains(readFile(path), gw+c.suffix) {
@@ -164,7 +196,11 @@ func TestWSLMoreAgentsPick(t *testing.T) {
 			if mirrored && !strings.HasPrefix(a.Notice(), k.name+" in WSL Ubuntu ") {
 				t.Errorf("%s: %s", c.id, a.Notice())
 			}
-			for _, dir := range []string{filepath.Join(home, filepath.FromSlash(k.dir)), moved} {
+			own := k.dir
+			if own == "" {
+				own, _, _ = strings.Cut(c.file, "/")
+			}
+			for _, dir := range []string{filepath.Join(home, filepath.FromSlash(own)), moved} {
 				if es, _ := os.ReadDir(dir); len(es) > 0 {
 					t.Fatalf("%s: this machine's %s was touched", c.id, dir)
 				}
@@ -181,8 +217,9 @@ func TestWSLMoreAgentsStopped(t *testing.T) {
 		syncHome(t)
 		root := t.TempDir()
 		k := wslKindOf(c.id)
+		_, has, versions := wslFinds(k)
 		b, _ := json.Marshal(map[string]*distro{
-			"Stopped": {Name: "Stopped", Home: "/home/me", Root: root, Has: map[string]bool{"dir:" + k.dir: true},
+			"Stopped": {Name: "Stopped", Home: "/home/me", Root: root, Has: has, Versions: versions, Probe: wslProbeVersion,
 				Values: map[string]string{k.memo("model"): "own/last-seen"}},
 		})
 		os.MkdirAll(filepath.Dir(wslStatePath()), 0o755)
@@ -317,5 +354,132 @@ func TestWSLDshProfiles(t *testing.T) {
 		if es, _ := os.ReadDir(dir); len(es) > 0 {
 			t.Fatalf("this machine's %s was touched", dir)
 		}
+	}
+}
+
+// Gemini CLI in a distro is found by its command alone (Antigravity keeps
+// ~/.gemini too), and a magpie model points the distro's ~/.gemini/.env at
+// the gateway as the distro reaches it, with the key it takes from there;
+// a model of its own puts back what that replaced.
+func TestWSLGemini(t *testing.T) {
+	home := syncHome(t)
+	k := wslKindOf("gemini")
+	if strings.Contains(wslProbeScript, `"$HOME/" ]`) {
+		t.Fatal("the probe asks after $HOME itself")
+	}
+	if d := parseProbe("U", "home:/home/me\ndir:.gemini\n"); d != nil && k.found(*d) {
+		t.Fatal("found by a ~/.gemini Antigravity keeps too")
+	}
+	if d := parseProbe("U", "home:/home/me\nbin:gemini /home/me/.npm-global/bin/gemini\n"); d == nil || !k.found(*d) {
+		t.Fatal("not found by its command")
+	}
+	root := t.TempDir()
+	dhome := filepath.Join(root, "home", "me")
+	env := filepath.Join(dhome, ".gemini", ".env")
+	os.MkdirAll(filepath.Dir(env), 0o755)
+	os.WriteFile(env, []byte("GEMINI_API_KEY=mine\n"), 0o600)
+	d := distro{Name: "Ubuntu", Root: root, Home: "/home/me", Has: map[string]bool{"bin:gemini": true},
+		Gateway: "172.20.0.1", Running: true}
+	a := wslAgent(k, d)
+	if !a.Detected() {
+		t.Fatal("not detected")
+	}
+	if err := a.Field("model").Set("relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	gw := "http://172.20.0.1:" + gateway.Port()
+	if v, _ := edit.GetEnvFile(env, "GOOGLE_GEMINI_BASE_URL"); v != gw {
+		t.Fatalf(".env:\n%s", readFile(env))
+	}
+	if v, _ := edit.GetJSON(filepath.Join(dhome, ".gemini", "settings.json"), "model.name"); v != "relay/glm-4.6" {
+		t.Fatalf("model %q", v)
+	}
+	if msg := a.Check(); msg != "" {
+		t.Fatal(msg)
+	}
+	if v := a.Field("provider").Get(); v != magpieID {
+		t.Fatalf("auth %q", v)
+	}
+	if err := a.Field("model").Set("gemini-2.5-pro"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetEnvFile(env, "GEMINI_API_KEY"); v != "mine" {
+		t.Fatalf("the key of its own isn't back:\n%s", readFile(env))
+	}
+	if _, set := edit.GetEnvFile(env, "GOOGLE_GEMINI_BASE_URL"); set {
+		t.Fatalf(".env:\n%s", readFile(env))
+	}
+	if es, _ := os.ReadDir(filepath.Join(home, ".gemini")); len(es) > 0 {
+		t.Fatal("this machine's ~/.gemini was touched")
+	}
+}
+
+// A distro's address under NAT changes when WSL restarts: the next sync
+// names the gateway at the new one, and the old is gone from the file.
+func TestWSLMoreAgentsFollowTheAddress(t *testing.T) {
+	for _, c := range wslMore {
+		syncHome(t)
+		moveHostDirs(t)
+		root := t.TempDir()
+		k := wslKindOf(c.id)
+		if k.dir != "" {
+			os.MkdirAll(filepath.Join(root, "home", "me", filepath.FromSlash(k.dir)), 0o755)
+		}
+		_, has, versions := wslFinds(k)
+		d := distro{Name: "Ubuntu", Root: root, Home: "/home/me", Has: has, Versions: versions, Gateway: "172.20.0.1", Running: true}
+		if err := wslAgent(k, d).Field("model").Set("magpie/relay/glm-4.6"); err != nil {
+			t.Fatalf("%s: %v", c.id, err)
+		}
+		d.Gateway = "172.29.0.1"
+		a := wslAgent(k, d)
+		if a.Sync == nil {
+			continue
+		}
+		if err := a.Sync(); err != nil {
+			t.Fatalf("%s: %v", c.id, err)
+		}
+		body := readFile(filepath.Join(root, "home", "me", filepath.FromSlash(c.file)))
+		if !strings.Contains(body, "http://172.29.0.1:"+gateway.Port()+c.suffix) || strings.Contains(body, "172.20.0.1") {
+			t.Errorf("%s: %s after the address moved:\n%s", c.id, c.file, body)
+		}
+	}
+}
+
+// Gemini CLI in a distro whose address moved is on magpie still, and
+// picking its model again names the new address without taking the old
+// one for the user's own: a model of its own then puts back their key.
+func TestWSLGeminiAddressMoved(t *testing.T) {
+	syncHome(t)
+	k := wslKindOf("gemini")
+	root := t.TempDir()
+	env := filepath.Join(root, "home", "me", ".gemini", ".env")
+	writeFile(t, env, "GEMINI_API_KEY=mine\n")
+	d := distro{Name: "Ubuntu", Root: root, Home: "/home/me", Has: map[string]bool{"bin:gemini": true},
+		Gateway: "172.20.0.1", Running: true}
+	if err := wslAgent(k, d).Field("model").Set("relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	d.Gateway = "172.29.0.1"
+	a := wslAgent(k, d)
+	if v := a.Field("provider").Get(); v != magpieID {
+		t.Fatalf("auth %q", v)
+	}
+	if a.Check() == "" {
+		t.Fatal("the old address passes")
+	}
+	if err := a.Field("model").Set("relay/glm-4.6"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetEnvFile(env, "GOOGLE_GEMINI_BASE_URL"); v != "http://172.29.0.1:"+gateway.Port() {
+		t.Fatalf(".env:\n%s", readFile(env))
+	}
+	if msg := a.Check(); msg != "" {
+		t.Fatal(msg)
+	}
+	if err := a.Field("model").Set("gemini-2.5-pro"); err != nil {
+		t.Fatal(err)
+	}
+	if body := readFile(env); body != "GEMINI_API_KEY=mine\n" {
+		t.Fatalf(".env:\n%s", body)
 	}
 }

@@ -3,11 +3,9 @@
 package gui
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -19,15 +17,7 @@ import (
 // A separate process runs AppKit on its main thread. It uses an isolated
 // config and a minimal page, without starting magpie's backend or status item.
 func TestTrayCellClickReleasedPanel(t *testing.T) {
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, exe)
-	cmd.Env = append(os.Environ(), "MAGPIE_TEST_TRAY_PANEL=1", "XDG_CONFIG_HOME="+t.TempDir())
-	out, err := cmd.CombinedOutput()
+	out, err := runAppKit(t, 20*time.Second, []string{"MAGPIE_TEST_TRAY_PANEL=1"})
 	if err != nil || !strings.Contains(string(out), "tray quota: recreated and focused twice") {
 		t.Fatalf("released panel: %v\n%s", err, out)
 	}

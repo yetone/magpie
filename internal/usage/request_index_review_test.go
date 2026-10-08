@@ -60,7 +60,7 @@ func TestQueryPageIOOutsideCacheLock(t *testing.T) {
 	path := filepath.Join(sessions.ClaudeDir(), "projects", "p", "yesterday.jsonl")
 	os.MkdirAll(filepath.Dir(path), 0700)
 	os.WriteFile(path, []byte("{}\n"), 0600)
-	at := time.Now().Add(-48 * time.Hour)
+	at := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local)).Add(-48 * time.Hour)
 	os.Chtimes(path, at, at)
 	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	go func() {

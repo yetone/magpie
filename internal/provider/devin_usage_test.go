@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // TestDevinUsage: magpie's built-in Devin account showed no usage while the
@@ -24,9 +26,9 @@ func TestDevinUsage(t *testing.T) {
 	os.MkdirAll(filepath.Join(data, "devin"), 0o700)
 	os.WriteFile(filepath.Join(data, "devin", "credentials.toml"), devinCredentials("devin-session-token$good", "", "", ""), 0o600)
 	exe := filepath.Join(home, "devin")
-	os.WriteFile(exe, []byte(`#!/bin/sh
+	testenv.Program(t, exe, `#!/bin/sh
 printf 'Logged in (via Devin).\n\nUser:\n  Email:             dev@example.com\n\nAccount:\n  Tier:              Devin Pro\n'
-`), 0o755)
+`)
 	fakeDevin(t, exe)
 	forgetDevinStatus()
 	old := firstAsk

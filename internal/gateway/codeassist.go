@@ -3,6 +3,7 @@ package gateway
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -133,7 +134,7 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 		if m.Role == "assistant" {
 			role = "model"
 		}
-		var parts []map[string]any
+		var parts, after []map[string]any // after: tools' images held back
 		for _, p := range m.Parts {
 			switch p.Kind {
 			case Text:
@@ -171,17 +172,46 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 				}
 				parts = append(parts, map[string]any{"functionResponse": res})
 				// the images a tool returned follow its response, as Gemini
-				// CLI sends a file it read
+				// CLI sends a file it read. Antigravity hands a Claude model
+				// the turn back as Anthropic blocks, where an image between
+				// two responses splits them from their calls ("tool_use ids
+				// were found without tool_result blocks immediately after"):
+				// there the images wait until every response is in, each
+				// after a line saying whose it is.
+				var ims []map[string]any
 				for _, im := range p.Images {
 					if im.Data != "" {
-						parts = append(parts, map[string]any{"inlineData": map[string]any{"mimeType": im.MediaType, "data": im.Data}})
+						ims = append(ims, map[string]any{"inlineData": map[string]any{"mimeType": im.MediaType, "data": im.Data}})
 					} else if im.URL != "" {
-						parts = append(parts, map[string]any{"fileData": map[string]any{"mimeType": im.MediaType, "fileUri": im.URL}})
+						ims = append(ims, map[string]any{"fileData": map[string]any{"mimeType": im.MediaType, "fileUri": im.URL}})
 					}
+				}
+				if ag && claude && len(ims) > 0 {
+					label := fmt.Sprintf("Image returned by tool %s (call %s):", name, toolID(p.CallID))
+					if len(ims) > 1 {
+						label = fmt.Sprintf("%d images returned by tool %s (call %s):", len(ims), name, toolID(p.CallID))
+					}
+					after = append(after, map[string]any{"text": label})
+					after = append(after, ims...)
+				} else {
+					parts = append(parts, ims...)
 				}
 			}
 			// thinking isn't sent back: its signatures belong to whoever
 			// made them, and Google turns away ones it didn't
+		}
+		if len(after) > 0 {
+			// the responses lead the turn, as an Anthropic tool_result
+			// turn has to; what the user said and the tools' images follow
+			var lead, rest []map[string]any
+			for _, part := range parts {
+				if part["functionResponse"] != nil {
+					lead = append(lead, part)
+				} else {
+					rest = append(rest, part)
+				}
+			}
+			parts = append(append(lead, after...), rest...)
 		}
 		if len(parts) == 0 {
 			continue

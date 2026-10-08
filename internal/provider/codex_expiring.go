@@ -96,7 +96,7 @@ func (e *expiringResets) check(user string, now time.Time, look func() ([]QuotaW
 		return ResetOutcome{}, nil
 	}
 	q := SubscriptionQuota{Windows: windows}
-	at := expiringResetSpent(until, now, usedUp(q), BackAt(q, now))
+	at := expiringResetSpent(until, now, usedUp(q, now), BackAt(q, now))
 	if at.After(now) || !windowsUsed(windows) {
 		// not yet, or nothing to start again yet: the account may be used,
 		// or held up, before it runs out
@@ -234,7 +234,7 @@ func spendExpiringNow(windows []QuotaWindow, resets *ResetCredits, now time.Time
 		return false
 	}
 	q := SubscriptionQuota{Windows: windows}
-	at := expiringResetSpent(resets.Until.Round(0), now, usedUp(q), BackAt(q, now))
+	at := expiringResetSpent(resets.Until.Round(0), now, usedUp(q, now), BackAt(q, now))
 	return !at.IsZero() && !at.After(now)
 }
 

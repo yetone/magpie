@@ -3,6 +3,7 @@ package gateway
 import (
 	"net/http"
 
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 )
@@ -37,4 +38,33 @@ func redactedPrompt(w http.ResponseWriter, prompt string) (http.ResponseWriter, 
 func redactionOptions() redact.Options {
 	st := settings.Load()
 	return redact.Options{Secrets: st.Redact, Personal: st.RedactPersonal, Words: st.RedactWords, Rules: st.RedactRules}
+}
+
+// unredactedRoute says a request resolved to p, or to the group whose
+// models are ms, goes only where the user set requests to go unmasked
+// (provider.SkipsRedaction): p and each of its fallbacks, or every model of
+// the group (a member's own fallbacks are not the group's, see planGroup).
+// One that may go on to anyone else stays masked for all of them.
+func unredactedRoute(p provider.Provider, isGroup bool, ms []provider.Member) bool {
+	if isGroup {
+		if len(ms) == 0 {
+			return false
+		}
+		for _, m := range ms {
+			if !m.Provider.SkipsRedaction() {
+				return false
+			}
+		}
+		return true
+	}
+	if !p.SkipsRedaction() {
+		return false
+	}
+	for _, id := range p.Fallback {
+		// one that resolves to nothing isn't tried (plan)
+		if fp, _, ok := provider.Resolve(id); ok && !fp.SkipsRedaction() {
+			return false
+		}
+	}
+	return true
 }

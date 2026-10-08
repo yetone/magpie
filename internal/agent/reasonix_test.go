@@ -238,12 +238,13 @@ func main() {
 }
 
 // Separate a temporary executable's first launch from the version and timeout
-// assertions. Windows may delay that first launch beyond the probe budget.
+// assertions. Windows, and macOS's first-run check of a newly written
+// program, may delay that first launch beyond the probe budget: on a loaded
+// Mac the check alone outlasts any fixed wait, so the launch is waited for
+// as long as the test runs, and ended with it.
 func warmReasonixCLIFixture(t *testing.T, bin string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if out, err := proc.CommandContext(ctx, bin, "--warmup").CombinedOutput(); err != nil {
+	if out, err := proc.CommandContext(t.Context(), bin, "--warmup").CombinedOutput(); err != nil {
 		t.Fatalf("start native CLI fixture: %v %s", err, out)
 	}
 }

@@ -34,6 +34,22 @@ var bedrockRefuses = []string{
 	"redact-thinking-2026-02-12",
 }
 
+// askedBetas are the betas an agent asked in its anthropic-beta header,
+// but for its own sign-in's: Claude Code signed in to claude.ai asks
+// oauth-2025-04-20, which names a credential that never leaves magpie, so
+// a provider gets the request as magpie's key sends it.
+func askedBetas(in http.Header) []string {
+	var out []string
+	for _, v := range in.Values("anthropic-beta") {
+		for _, b := range strings.Split(v, ",") {
+			if b = strings.TrimSpace(b); b != "" && !strings.HasPrefix(b, "oauth-") {
+				out = append(out, b)
+			}
+		}
+	}
+	return out
+}
+
 // betaKey is a beta a provider refused, as remembered in unfit.
 func betaKey(beta string) string { return "anthropic-beta\x00" + beta }
 

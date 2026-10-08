@@ -14,12 +14,42 @@ func TestGroupInstalledStyles(t *testing.T) {
 	italic.Name, italic.Style = "Italic", "italic"
 	chinese := Face{Family: "思源黑体", Name: "Regular", Weight: 400, Style: "normal", Stretch: 100}
 	got := group([]Face{chinese, medium, italic, regular, medium, {Family: "invalid"}})
-	want := []Family{{Name: regular.Family, Styles: []Face{italic, regular, medium}}, {Name: chinese.Family, Styles: []Face{chinese}}}
+	want := []Family{{Name: regular.Family, Styles: []Face{regular, italic, medium}}, {Name: chinese.Family, Styles: []Face{chinese}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("installed families and styles = %#v, want %#v", got, want)
 	}
 	if got := group(nil); got == nil || len(got) != 0 {
 		t.Fatalf("an empty successful collection must be [], got %#v", got)
+	}
+}
+
+func TestGroupMenloStyleOrder(t *testing.T) {
+	faces := []Face{
+		{Family: "Menlo", Name: "Bold Italic", Weight: 700, Style: "italic", Stretch: 100},
+		{Family: "Menlo", Name: "Italic", Weight: 400, Style: "italic", Stretch: 100},
+		{Family: "Menlo", Name: "Bold", Weight: 700, Style: "normal", Stretch: 100},
+		{Family: "Menlo", Name: "Regular", Weight: 400, Style: "normal", Stretch: 100},
+	}
+	styles := group(faces)[0].Styles
+	want := []Face{faces[3], faces[1], faces[2], faces[0]}
+	if !reflect.DeepEqual(styles, want) {
+		t.Fatalf("Menlo style menu = %v, want Regular, Italic, Bold, Bold Italic", styles)
+	}
+}
+
+func TestGroupStyleOrderKeepsWeightWidthAndName(t *testing.T) {
+	faces := []Face{
+		{Family: "Ordering fixture", Name: "Oblique", Weight: 400, Style: "oblique", Stretch: 50},
+		{Family: "Ordering fixture", Name: "Italic", Weight: 400, Style: "italic", Stretch: 75},
+		{Family: "Ordering fixture", Name: "Regular", Weight: 400, Style: "normal", Stretch: 100},
+		{Family: "Ordering fixture", Name: "Book", Weight: 400, Style: "normal", Stretch: 100},
+		{Family: "Ordering fixture", Name: "Condensed", Weight: 400, Style: "normal", Stretch: 75},
+		{Family: "Ordering fixture", Name: "Light Oblique", Weight: 300, Style: "oblique", Stretch: 100},
+	}
+	styles := group(faces)[0].Styles
+	want := []Face{faces[5], faces[4], faces[3], faces[2], faces[1], faces[0]}
+	if !reflect.DeepEqual(styles, want) {
+		t.Fatalf("style menu = %v, want %v", styles, want)
 	}
 }
 

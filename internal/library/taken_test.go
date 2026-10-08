@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/testenv"
 )
 
 // A file where an agent keeps its folder (~/.dsh, another tool's) is not
@@ -20,8 +21,7 @@ func TestAgentHomeTakenByAFile(t *testing.T) {
 	write(t, filepath.Join(h, ".dsh"), "ls -la\n")
 	if runtime.GOOS != "windows" {
 		bin := filepath.Join(h, "bin")
-		write(t, filepath.Join(bin, "dsh"), "#!/bin/sh\n")
-		os.Chmod(filepath.Join(bin, "dsh"), 0o755)
+		testenv.Program(t, filepath.Join(bin, "dsh"), "#!/bin/sh\n")
 		t.Setenv("PATH", bin)
 	}
 	a, err := agent.Find("dsh")

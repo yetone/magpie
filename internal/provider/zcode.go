@@ -391,7 +391,10 @@ func zcodeQuota(ctx context.Context, l Login, k zcodeKey) SubscriptionQuota {
 		q.Plan = "GLM Coding " + strings.ToUpper(data.Level[:1]) + data.Level[1:]
 	}
 	q.Windows = data.windows()
+	resets := make(chan *ResetCredits, 1)
+	go func() { resets <- zhipuPersonalResets(ctx, zcodeRoot(k.Base), k.Key) }()
 	q.Until, q.Renew = zhipuTerm(ctx, zcodeRoot(k.Base), k.Key)
+	q.Resets = <-resets
 	return q
 }
 
