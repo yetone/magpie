@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/gui"
@@ -40,6 +43,11 @@ func webCmd(args []string) error {
 		_, port, _ := net.SplitHostPort(webAddr)
 		addr = "0.0.0.0:" + port
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	// Like the desktop app and TUI, web finishes on these signals itself.
+	// Leave probe cleanup to main after the servers have stopped.
+	ownSignals()
 	w, err := gui.StartWeb(addr, version)
 	if err != nil {
 		return err
@@ -65,5 +73,5 @@ func webCmd(args []string) error {
 	if open {
 		openInBrowser(w.Link)
 	}
-	return w.Wait()
+	return w.Wait(ctx)
 }
