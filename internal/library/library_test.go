@@ -132,18 +132,36 @@ func TestCrushInstructionsWhereCrushReadsThem(t *testing.T) {
 	}
 }
 
-// Alma takes skills, in ~/.config/alma/skills (#824), but has no
-// user-wide place for instructions or MCP servers, and the library says so
-// rather than recording it as given any.
+// Alma takes skills, in ~/.config/alma/skills (#824), and MCP servers, in
+// ~/.config/alma/mcp.json (#1292), but has no user-wide place for
+// instructions, and the library says so rather than recording it as given
+// any.
 func TestTakesRefusesAlma(t *testing.T) {
 	sandbox(t)
-	for _, kind := range []string{"instructions", "mcp"} {
-		if id, err := Takes("alma", kind); err == nil || !strings.Contains(err.Error(), "Alma has no user-wide place") {
+	if id, err := Takes("alma", "instructions"); err == nil || !strings.Contains(err.Error(), "Alma has no user-wide place") {
+		t.Errorf("instructions: %q %v", id, err)
+	}
+	for _, kind := range []string{"skills", "mcp"} {
+		if id, err := Takes("alma", kind); err != nil || id != "alma" {
 			t.Errorf("%s: %q %v", kind, id, err)
 		}
 	}
-	if id, err := Takes("alma", "skills"); err != nil || id != "alma" {
-		t.Errorf("skills: %q %v", id, err)
+}
+
+// Claude Desktop keeps its instructions in its own settings and OpenChamber
+// reads OpenCode's: the refusal says where they go instead, and lists the
+// agents here that take that kind (MOMO on Discord: "has no user-wide
+// place" said neither).
+func TestTakesSaysWhereInstead(t *testing.T) {
+	sandbox(t)
+	_, err := Takes("claude-desktop", "instructions")
+	if err == nil || !strings.Contains(err.Error(), "give them to claude") || !strings.Contains(err.Error(), "agents here that take instructions: ") || !strings.Contains(err.Error(), "gemini") {
+		t.Errorf("claude-desktop instructions: %v", err)
+	}
+	for _, kind := range []string{"instructions", "mcp", "skills"} {
+		if _, err := Takes("openchamber", kind); err == nil || !strings.Contains(err.Error(), "give them to opencode") {
+			t.Errorf("openchamber %s: %v", kind, err)
+		}
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -126,4 +127,39 @@ func TestProbeForgotten(t *testing.T) {
 		}
 	}
 	t.Fatal("a probe that answered is still listed")
+}
+
+// a process the group's kill missed — forked as the signal went out, as
+// one of a launcher calling itself was (#1278) — is ended too: the group is
+// signalled again while any of it lives. The first signal here misses all
+// of it, as the race misses one.
+func TestProbeKillEndsWhatTheSignalMissed(t *testing.T) {
+	sh, pidFile := probeScript(t)
+	old := signalGroup
+	var mu sync.Mutex
+	missed := false
+	signalGroup = func(pgid int) error {
+		mu.Lock()
+		first := !missed
+		missed = true
+		mu.Unlock()
+		if first {
+			return nil // sent, and reached nobody
+		}
+		return old(pgid)
+	}
+	t.Cleanup(func() { signalGroup = old })
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	done := runProbe(ProbeContext(ctx, sh))
+	pid := childPid(t, pidFile, done)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the probe went on after its context ended")
+	}
+	if !gone(pid) {
+		t.Fatalf("what the probe started (pid %d) outlived a kill that missed it once", pid)
+	}
 }

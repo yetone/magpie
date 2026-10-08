@@ -84,6 +84,7 @@ func All() []*Agent {
 		vscode(home, cfg),
 		vscodeInsidersAgent(home, cfg),
 		vscodium(home, cfg),
+		copilotJetBrains(home),
 		air(home, cfg),
 		copilot(home),
 		crush(home, cfg),

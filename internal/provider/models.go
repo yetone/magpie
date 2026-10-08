@@ -518,14 +518,14 @@ func basePath(raw string) string {
 // or gives the plan's when the list has none; a plan with models but no
 // Only gives them only when there is no list. Any other provider's list is
 // as it came. A region with models of its own (Tencent Cloud's Token Plan,
-// beside TokenHub's pay as you go) is a plan with those.
+// or one of Volcengine's plans) is a plan with those.
 func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 	pr := Preset(p.Preset)
 	if pr == nil {
 		return ms
 	}
 	models := pr.Models
-	if r := p.regionOf(pr); r != nil && len(r.Models) > 0 {
+	if r := p.regionOf(pr); r != nil && r.Models != nil {
 		models = r.Models
 	}
 	if pr.Only == "" && (len(models) == 0 || len(ms) > 0) {
@@ -567,6 +567,42 @@ func (p Provider) planModels(ms []catalog.Model) []catalog.Model {
 		if m.Output == 0 {
 			out[i].Output = catalog.OutputOf(id)
 		}
+	}
+	return out
+}
+
+// PlanEmbeddings are the embedding models explicitly included in the preset
+// region's plan. They are resolved by the embeddings API but kept out of
+// agents' chat-model lists.
+func (p Provider) PlanEmbeddings() []catalog.Model {
+	return p.planMedia(func(r *Region) []string { return r.Embeddings }, false, false)
+}
+
+// PlanDrawers are the image-generation models explicitly included in the
+// preset region's plan. They are separate from its chat models.
+func (p Provider) PlanDrawers() []catalog.Model {
+	return p.planMedia(func(r *Region) []string { return r.Drawers }, true, false)
+}
+
+// PlanVideos are the video-generation models explicitly included in the
+// preset region's plan.
+func (p Provider) PlanVideos() []catalog.Model {
+	return p.planMedia(func(r *Region) []string { return r.Videos }, false, true)
+}
+
+func (p Provider) planMedia(ids func(*Region) []string, draws, films bool) []catalog.Model {
+	pr := Preset(p.Preset)
+	if pr == nil {
+		return nil
+	}
+	r := p.regionOf(pr)
+	if r == nil {
+		return nil
+	}
+	models := ids(r)
+	out := make([]catalog.Model, 0, len(models))
+	for _, id := range models {
+		out = append(out, catalog.Model{ID: id, Name: id, Provider: p.ID, Draws: draws, Films: films})
 	}
 	return out
 }

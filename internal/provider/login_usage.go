@@ -48,34 +48,47 @@ func LoginUsageVia(f func(ctx context.Context, agent string) map[string]Subscrip
 // comes from the cache; the rest is asked for at once, as long as ctx
 // allows.
 func LoginUsage(ctx context.Context, agent string) map[string]SubscriptionQuota {
+	out, _ := loginUsageAt(ctx, agent)
+	return out
+}
+
+// loginUsageAt is LoginUsage and when the oldest of its readings was made:
+// one taken from the cache is up to a minute old already, and Allowances
+// counts its own minute from then, not from when it asked (#1295).
+func loginUsageAt(ctx context.Context, agent string) (map[string]SubscriptionQuota, time.Time) {
+	asked := time.Now()
 	if loginUsageFor != nil {
-		return loginUsageFor(ctx, agent)
+		return loginUsageFor(ctx, agent), asked
 	}
 	out := map[string]SubscriptionQuota{}
 	if agent == "grok" {
 		if _, ok := pluginOfAgent(agent); !ok {
-			return grokLoginUsage(ctx)
+			return grokLoginUsage(ctx), asked
 		}
 	}
 	logins, ok := usageLogins(agent)
 	if !ok {
-		return out
+		return out, asked
 	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+	oldest := asked
 	for _, l := range logins {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			q := loginReading(ctx, l).q
+			e := loginReading(ctx, l)
 			mu.Lock()
-			out[l.User] = q
+			out[l.User] = e.q
+			if e.q.Error == "" && e.at.Before(oldest) {
+				oldest = e.at
+			}
 			mu.Unlock()
 		}()
 	}
 	wg.Wait()
 	usageRead(agent, out) // a window not started: the warm-up looks now
-	return out
+	return out, oldest
 }
 
 // loginReading is l's allowance as LoginUsage and the Usage page both show

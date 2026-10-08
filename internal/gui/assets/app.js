@@ -1236,6 +1236,40 @@ async function addProviderFromAgents() {
   $("#addProvider")?.click();
 }
 
+// desktopLongestLine: Claude Desktop lists a model of 1M or more twice, the
+// plain one and a "1M context window" one of its own; switched on, magpie
+// lists it by its 1M id alone, one entry each (#1272). Desktop reads the
+// list as it starts.
+function desktopLongestLine() {
+  const on = !!state.settings?.desktopLongest;
+  const l = el("label", "ag-vl ag-longest");
+  const b = el("button", "lib-switch use-credits" + (on ? " on" : ""));
+  b.type = "button";
+  b.setAttribute("role", "switch");
+  b.setAttribute("aria-checked", String(on));
+  b.append(el("i"));
+  const say = el("span", "ag-longest-say", t("Only each model's largest window"));
+  b.setAttribute("aria-label", say.textContent);
+  const hint = el("span", "ag-hint", t("A model of 1M or more is listed once, as its 1M entry. Quit and reopen Claude Desktop after a change."));
+  l.append(b, say, hint);
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (b.disabled) return;
+    b.disabled = true;
+    try {
+      prefs = await writingPrefs(api("settings/desktop-longest", { on: !on }));
+      state.settings = prefs;
+      status(t("Saved — quit and reopen Claude Desktop to see it"), "ok");
+      renderAgents();
+    } catch (err) {
+      b.disabled = false;
+      status(t(err.message), "err");
+    }
+  };
+  return l;
+}
+
 // connectPanel: a connected agent's row, opened
 function connectPanel(a, { fields, fieldBtn }) {
   const box = el("div", "ag-exp");
@@ -1352,6 +1386,7 @@ function connectPanel(a, { fields, fieldBtn }) {
       w.append(el("span", "ag-dot"), el("span", "", t("The Codex app's model menu shows only the first {max}: the last {n} models can't be picked there (the Codex CLI's /model lists them all). In Pick, turn off the ones you don't use, or drag the ones you use to the front under Order.", { max: CODEX_APP_MENU, n: a.models.shown - CODEX_APP_MENU })));
       v.append(w);
     }
+    if (a.id === "claude-desktop") v.append(desktopLongestLine());
   }
   // what a new session starts on: optional, the agent's own last pick
   // unset; Codex's is the very value its /model picks, so one choice
@@ -11278,13 +11313,13 @@ function capMark(track, w, cap) {
 function accountCapPill(p, user, cap, direct) {
   const pill = el("button", "acap" + (cap ? " set" : ""), cap ? t("Cap {n}%", { n: cap }) : t("No cap"));
   pill.type = "button";
-  pill.title = (cap ? t("Used to {n}% of each usage window at most; past it, magpie counts this account as used up until the window renews. Click to change", { n: cap })
+  pill.title = (cap ? t("Stops at {n}% of each usage window: once magpie reads a window at {n}% or past it, it counts this account as used up and sends it nothing more until the window renews. A turn already under way can still take it past {n}%, so the cap doesn't promise the rest is left. Click to change", { n: cap })
     : t("Used to 100% of its usage windows. Click to cap it at a share of each, so magpie goes on to the other accounts past it"))
     + (direct ? "\n\n" + directNote(direct) : "");
   pill.setAttribute("aria-haspopup", "menu");
   pill.setAttribute("aria-expanded", "false");
   const set = (v) => accountAction("provider/accountcap", { id: p.id, account: user, cap: v },
-    v ? t("{who} is used to {n}% of each window at most", { who: user, n: v }) : t("{who} has no usage cap", { who: user }));
+    v ? t("{who} stops at {n}% of each window", { who: user, n: v }) : t("{who} has no usage cap", { who: user }));
   const other = () => {
     // a share of the user's own, typed where the pill was
     const i = input(cap ? String(cap) : "", "1–99", "text");
@@ -18879,12 +18914,19 @@ function renderImages(s, keep) {
     : t("When the model in use can't see images, this one describes them to it, once for each image")));
   const b = el("button", "rt-cond on");
   const icOf = (id) => models.find((x) => x.id === id)?.icon;
+  // the model picked here that magpie can't find any more is said, with
+  // what describes in its place, not shown as if it were in use
+  const gone = v && v === s.visionMissing;
   if (v === "off") b.append(el("span", "", t("Off")));
+  else if (gone) b.append(icon("generic"), el("span", "", v + " · " + t("missing")));
   else if (v) b.append(icon(icOf(v) || "generic"), el("span", "", named(v)));
   else {
     if (s.visionAuto) b.append(icon(icOf(s.visionAuto) || "generic"));
     b.append(el("span", "", s.visionAuto ? t("Automatic") + " · " + named(s.visionAuto) : t("Automatic") + " · " + t("no model that sees")));
   }
+  if (gone) who.append(el("div", "sub err vision-missing", s.visionAuto
+    ? t("{model}, picked here, isn't set up any more: its provider was removed or turned off, or no longer has it. {auto}, the automatic choice, describes images in its place. Pick another model here.", { model: v, auto: named(s.visionAuto) })
+    : t("{model}, picked here, isn't set up any more: its provider was removed or turned off, or no longer has it. No other model sees, so images are turned away. Pick another model here.", { model: v })));
   // a routing group (no provider of its own) goes with the others, as in
   // an agent's picker, not in a group of its own with its own rail button
   const opt = (x) => ({ value: x.id, label: x.name || x.id, note: x.providerName, icon: x.icon, group: x.provider ? x.providerName : ROUTING_GROUPS, ref: x.id });
@@ -18910,14 +18952,20 @@ function renderImageGen(s, keep, box) {
   };
   const icOf = (id) => models.find((x) => x.id === id)?.icon;
   const v = s.imageGen || "";
+  // a picked model magpie can't find any more is said, as Image recognition's
+  const gone = v && v === s.imageGenMissing;
   const r = el("div", "row pref");
   const who = el("div", "who");
   const sub = el("div", "sub",
     v === "off" ? t("Agents given Magpie Image can't generate images or videos: the tool says it is off")
     : t("The model Magpie Image draws with. Give an agent the tool from Library → MCP servers → Discover → Magpie Image; images are saved in its project"));
   who.append(el("div", "name", t("Image generation")), sub);
+  if (gone) who.append(el("div", "sub err image-gen-missing", s.imageGenAuto
+    ? t("{model}, picked here, isn't set up any more: its provider was removed or turned off, or no longer has it. {auto}, the automatic choice, draws in its place. Pick another model here.", { model: v, auto: named(s.imageGenAuto) })
+    : t("{model}, picked here, isn't set up any more: its provider was removed or turned off, or no longer has it. No other model draws, so a request that names no model is turned away. Pick another model here.", { model: v })));
   const b = el("button", "rt-cond on");
   if (v === "off") b.append(el("span", "", t("Off")));
+  else if (gone) b.append(icon("generic"), el("span", "", v + " · " + t("missing")));
   else if (v) b.append(icon(icOf(v) || "generic"), el("span", "", named(v)));
   else {
     if (s.imageGenAuto) b.append(icon(icOf(s.imageGenAuto) || "generic"));
@@ -19795,8 +19843,39 @@ function keyboardFocus(e) {
     if ((r.top < b.top || r.bottom > b.bottom) && scrollOnPurpose(e, 400)) focused.scrollIntoView({ block: "nearest" });
   }));
 }
-addEventListener("wheel", () => readerScrolls(250), { capture: true, passive: true });
-addEventListener("touchmove", () => readerScrolls(250), { capture: true, passive: true });
+// A wheel or a touch can scroll the view before the page is told of it: the
+// browser scrolls off the main thread, and a busy page gets the scroll event
+// first and the wheel after (WebKit, a loaded Mac). That scroll was put back
+// as no one's, and the reader lost a wheel step. What was put back is kept
+// for a moment, and a wheel or touch that came in before it was put back, the
+// same way, gives it back to the reader.
+let putBack = []; // { v, by: px put back, at }, the last second's
+function puttingBack(v, from) {
+  const by = from - v.scrollTop, at = performance.now();
+  putBack = putBack.filter((p) => at - p.at < 1000);
+  if (Math.abs(by) >= 1) putBack.push({ v, by, at });
+}
+// Given back is what was put back after the reader's input was made (its
+// timeStamp is when it was made, not when the page was told) and went the
+// way it goes: not a scroll by code from before it.
+function givesBack(e, dir) {
+  if (!e.isTrusted || !dir) return;
+  const now = performance.now(), mine = (p) => p.at >= e.timeStamp - 50 && now - p.at < 1000 && Math.sign(p.by) === dir && !p.v.hidden;
+  const back = putBack.filter(mine);
+  putBack = putBack.filter((p) => !mine(p));
+  for (const p of back) p.v.scrollTop += p.by;
+}
+let touchY = null;
+addEventListener("wheel", (e) => { readerScrolls(250); givesBack(e, Math.sign(e.deltaY)); }, { capture: true, passive: true });
+addEventListener("touchstart", (e) => { touchY = e.touches[0]?.clientY ?? null; }, { capture: true, passive: true });
+addEventListener("touchmove", (e) => {
+  readerScrolls(250);
+  const y = e.touches[0]?.clientY;
+  if (y == null) return;
+  // a finger going up scrolls the view down
+  if (touchY != null) givesBack(e, Math.sign(touchY - y));
+  touchY = y;
+}, { capture: true, passive: true });
 // A flick goes on scrolling after the finger is lifted, with no touch event
 // to say so: each of its scrolls keeps the next one the reader's, till it
 // comes to rest. Put back, a phone's page jerked to and fro under the
@@ -19988,9 +20067,11 @@ for (const v of document.querySelectorAll(".view")) {
   v.tabIndex = -1;
   v.addEventListener("scroll", () => {
     if (v.hidden) return;
-    if (performance.now() < purposeUntil) { fitRoom(v); readerLeaves(v); }
-    else if (held?.v === v) hold(held);
+    if (performance.now() < purposeUntil) { fitRoom(v); readerLeaves(v); return; }
+    const from = v.scrollTop;
+    if (held?.v === v) hold(held);
     else backToReader(v);
+    puttingBack(v, from);
   }, { passive: true });
 }
 

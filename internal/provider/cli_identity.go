@@ -17,7 +17,11 @@ import (
 // the CLIs (#123), and asks them again behind it. An ask that couldn't tell
 // (the CLI failed, ran out of time or printed something else) leaves what
 // was served as it was: taken for nobody signed in, it dropped the account
-// from the Providers page and from routing until the next ask (#154).
+// from the Providers page and from routing until the next ask (#154). One
+// that keeps failing, or taking slowAsk or longer, is asked less often, the
+// wait doubling up to slowestAsk: a cursor-agent that calls itself ran out
+// of time every minute, after hundreds of processes, and answered nobody
+// signed in all the same, as no token is kept (#1278).
 type cliIdentity struct {
 	sync.Mutex
 	name       string
@@ -28,6 +32,7 @@ type cliIdentity struct {
 	done       chan struct{} // closed when the ask under way has answered
 	gen        int           // bumped by forget: an ask from before is dropped
 	waited     bool          // a look waited for the first answer already
+	retry      time.Duration // after asks that failed or were slow, the wait before the next
 	read       bool          // the one kept on disk was looked for
 	user, plan string
 	ok         bool
@@ -95,7 +100,7 @@ func (c *cliIdentity) get() (user, plan string, ok bool) {
 			}
 			c.Lock()
 		}
-	} else if time.Since(c.at) > time.Minute {
+	} else if time.Since(c.at) > max(time.Minute, c.retry) {
 		c.refresh()
 	}
 	return c.user, c.plan, c.ok
@@ -103,6 +108,13 @@ func (c *cliIdentity) get() (user, plan string, ok bool) {
 
 // firstAsk is how long a look waits for a CLI never answered before.
 var firstAsk = 3 * time.Second
+
+// slowAsk is how long an ask takes for the CLI to be asked less often.
+var slowAsk = 5 * time.Second
+
+// slowestAsk is the longest wait before asking again a CLI that keeps
+// failing or taking long to answer.
+const slowestAsk = 30 * time.Minute
 
 // refresh asks the CLI behind what is served, once at a time; the channel is
 // closed when it has answered. Called with c locked.
@@ -113,7 +125,9 @@ func (c *cliIdentity) refresh() chan struct{} {
 	c.refreshing, c.done = true, make(chan struct{})
 	gen, done := c.gen, c.done
 	go func() {
+		start := time.Now()
 		u, p, ok, err := c.ask()
+		slow := time.Since(start) >= slowAsk
 		c.Lock()
 		defer c.Unlock()
 		defer close(done)
@@ -121,8 +135,15 @@ func (c *cliIdentity) refresh() chan struct{} {
 			return
 		}
 		c.at, c.refreshing = time.Now(), false
+		// asked again in a minute, then two, four… up to slowestAsk while
+		// it fails or is slow
+		if err != nil || slow {
+			c.retry = min(max(2*c.retry, time.Minute), slowestAsk)
+		} else {
+			c.retry = 0
+		}
 		if err != nil {
-			return // asked again in a minute; what was served stays
+			return // what was served stays
 		}
 		c.user, c.plan, c.ok = u, p, ok
 		c.keep()
@@ -137,5 +158,6 @@ func (c *cliIdentity) forget() {
 	c.at, c.read = time.Time{}, true
 	c.gen++
 	c.refreshing, c.waited = false, false
+	c.retry = 0
 	c.Unlock()
 }

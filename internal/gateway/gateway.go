@@ -522,6 +522,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /_magpie/claude-mcp/{token}", s.subscription.mcpCall)
 	mux.HandleFunc("/mcp/{name}", s.mcpProxy)
 	mux.HandleFunc(CodexPath+"/", s.codexBackend)
+	mux.HandleFunc("GET "+CodexCatalogPath, s.codexCatalog)
 	mux.HandleFunc("GET /v1beta/models", s.geminiModels)
 	mux.HandleFunc("POST /v1beta/models/{call...}", s.gemini)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -1398,19 +1399,20 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// a model its list says nothing of is text-only to a describer, as
 	// agents are told: while one describes images they are told every
 	// model takes them, and send the images on to be described
+	unknownSight := false
 	if imageInput == nil && !isGroup && hasImage(from, body) && blindTo(p.ID, model, nil) {
 		if _, ok := seeing(); ok {
 			no := false
-			imageInput = &no
+			imageInput, unknownSight = &no, true
 		}
 	}
 	if imageInput != nil && !*imageInput {
 		var currentImage bool
 		if see, ok := seeing(); ok && hasImage(from, body) {
-			seen, err := s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header)), from, body, see)
+			seen, err := s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header), unknownSight), from, body, see)
 			if err != nil {
 				call.Status, call.Error = 502, "image not described"
-				writeError(w, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v", call.Model, see, err))
+				writeError(w, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v%s", call.Model, see, err, missingSeerNote()))
 				turnedAway()
 				return
 			}
@@ -1428,7 +1430,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if currentImage {
 			call.Status, call.Error = 400, "model does not support image input"
-			writeError(w, from, 400, fmt.Sprintf("model %q does not support image input", call.Model))
+			writeError(w, from, 400, fmt.Sprintf("model %q does not support image input%s", call.Model, missingSeerNote()))
 			turnedAway()
 			return
 		}
@@ -1584,10 +1586,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// Described only when such a member is tried: a rule that sends the
 	// images to a model that sees asks for no description.
 	var seenGroup func() ([]byte, error)
+	// groupUnknown is whether the member the images are first described
+	// for is counted text-only for knowing nothing of it (CallFor.Unknown)
+	groupUnknown := false
 	if isGroup && hasImage(from, body) {
 		if see, ok := seeing(); ok {
 			seenGroup = sync.OnceValues(func() ([]byte, error) {
-				return s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header)), from, body, see)
+				return s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header), groupUnknown), from, body, see)
 			})
 		}
 	}
@@ -1615,7 +1620,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 			if len(cands) == 0 {
 				call.Status, call.Error = 400, "model does not support image input"
-				writeError(w, from, 400, fmt.Sprintf("model %q does not support image input", call.Model))
+				writeError(w, from, 400, fmt.Sprintf("model %q does not support image input%s", call.Model, missingSeerNote()))
 				turnedAway()
 				return
 			}
@@ -1717,6 +1722,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if isGroup {
 			in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}})
 			if seenGroup != nil && blindTo(c.p.ID, c.model, in) {
+				groupUnknown = in == nil
 				b, err := seenGroup()
 				if err != nil {
 					// only an image of the latest turn fails to be described
@@ -1727,7 +1733,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					}
 					see, _ := seeing()
 					call.Status = 502
-					failTo(w, kept, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v", c.p.ID+"/"+c.model, see, err))
+					failTo(w, kept, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v%s", c.p.ID+"/"+c.model, see, err, missingSeerNote()))
 					break
 				}
 				attemptBody = b
@@ -2784,7 +2790,10 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	}
 	// Cline's whole replies come in {success, data}; a web page or
 	// nothing at all, served 200, is the 502 it stands for (#1012)
-	return notAnAPIReply(clineUnwrapped(p, res), ""), nil
+	res = notAnAPIReply(clineUnwrapped(p, res), "")
+	// what a Codex account's reply says it has used, for its cap (#1295)
+	heardCodexLimits(p, res)
+	return res, nil
 }
 
 // fromClaudeCode is a request Claude Code sent, by the User-Agent it gives

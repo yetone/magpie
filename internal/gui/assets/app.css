@@ -3198,6 +3198,9 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 .ag-vl.ag-menu-cap { flex-wrap: nowrap; align-items: flex-start; line-height: 1.6; }
 .ag-menu-cap > .ag-dot { margin-top: calc(0.8em - 3px); }
 .ag-menu-cap > span:last-child { flex: 1; min-width: 0; }
+/* Claude Desktop's "largest window only" switch (#1272): its words beside it, the hint after them */
+.ag-longest { cursor: pointer; }
+.ag-longest-say { color: var(--fg-2); }
 /* which copy is left on the old list: a sentence that wraps as one, under the warning's words */
 .ag-vl.ag-stale-copy { display: block; padding-left: 14px; font-size: 12px; line-height: 1.6; color: var(--fg-2); }
 .ag-hint { font-size: 12px; color: var(--muted); }

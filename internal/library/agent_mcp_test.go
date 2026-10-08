@@ -2,6 +2,7 @@ package library
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,6 +29,8 @@ func TestAgentMCPFiles(t *testing.T) {
 		// what magpie writes for each server, as the agent's add does
 		fs, web, sse entry
 		noSSE        bool
+		// pre makes the agent there, beyond its MCP file
+		pre func(t *testing.T, h string)
 	}{
 		{
 			id: "omp", file: ".omp/agent/mcp.json",
@@ -128,6 +131,23 @@ func TestAgentMCPFiles(t *testing.T) {
 			sse:  entry{"type": "sse", "url": "https://example.com/sse"},
 		},
 		{
+			// as Alma's own add writes them, the server it adds itself kept
+			// (#1292); Alma is there once it has its data folder
+			id: "alma", file: ".config/alma/mcp.json",
+			user: `{"mcpServers": {"mine": {"command": "uvx", "args": ["mine"], "env": {"ELECTRON_RUN_AS_NODE": "1"}}}}`,
+			fs:   entry{"command": "npx", "args": []any{"-y", "@mcp/fs"}, "env": entry{"K": "V"}},
+			web:  entry{"url": "https://example.com/mcp", "headers": entry{"Authorization": "Bearer x"}},
+			sse:  entry{"url": "https://example.com/sse", "transport": "sse"},
+			pre: func(t *testing.T, h string) {
+				t.Setenv("APPDATA", filepath.Join(h, "AppData", "Roaming"))
+				cfg, err := os.UserConfigDir()
+				if err != nil {
+					t.Fatal(err)
+				}
+				os.MkdirAll(filepath.Join(cfg, "alma"), 0o755)
+			},
+		},
+		{
 			id: "grok", file: ".grok/config.toml", toml: true,
 			user:  "# mine\n[models]\ndefault = \"grok-4\"\n\n[mcp_servers.mine]\ncommand = \"uvx\"\nargs = [\"mine\"]\nenabled = true\n\n[mcp_servers.mine.env]\nA = \"b\"\n",
 			fs:    entry{"command": "npx", "args": []any{"-y", "@mcp/fs"}, "env": entry{"K": "V"}},
@@ -139,6 +159,9 @@ func TestAgentMCPFiles(t *testing.T) {
 			h := sandbox(t)
 			for k, v := range c.env {
 				t.Setenv(k, filepath.Join(h, v))
+			}
+			if c.pre != nil {
+				c.pre(t, h)
 			}
 			p := filepath.Join(h, c.file)
 			write(t, p, c.user)

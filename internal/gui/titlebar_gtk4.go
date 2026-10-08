@@ -50,3 +50,7 @@ func nameWindow(w *application.WebviewWindow, title string) {
 		}
 	})
 }
+
+// ownFrame: GTK 4 asks the compositor for no frame on an undecorated window
+// itself (gdk_toplevel_set_decorated), so KWin draws none (#1283).
+func ownFrame(*application.WebviewWindow) {}

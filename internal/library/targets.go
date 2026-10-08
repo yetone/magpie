@@ -225,10 +225,13 @@ func targetOf(a *agent.Agent) *Target {
 	case "alma":
 		// Alma reads personal skills from ~/.config/alma/skills, on every
 		// system (its home, not its data folder), and Claude Code's, Codex's
-		// and ~/.agents/skills besides (its skills service, #824); it has
-		// no user-wide instructions file or MCP file of the kind magpie
-		// writes, its prompts being its settings' own
+		// and ~/.agents/skills besides (its skills service, #824). Its MCP
+		// servers are ~/.config/alma/mcp.json's mcpServers, read as Alma
+		// starts and when its MCP settings refresh (0.4.164's
+		// out/main/index.js, #1292). It has no user-wide instructions file,
+		// its prompts being its settings' own
 		t.Skills = filepath.Join(h, ".config", "alma", "skills")
+		t.MCP = &mcpFile{Path: filepath.Join(h, ".config", "alma", "mcp.json"), Format: fmtAlma}
 		t.SkillsAlso = []string{"claude", "codex"}
 	case "cindy":
 		// Cindy keeps its user-wide skills in ~/.agents/skills
@@ -519,7 +522,40 @@ func Takes(q, kind string) (string, error) {
 		}
 	}
 	if !has {
-		return "", fmt.Errorf("%s has no user-wide place for %s that magpie knows of", a.Name, what)
+		return "", fmt.Errorf("%s%s", noPlace(a, kind, what), takenBy(kind, what))
 	}
 	return a.ID, nil
+}
+
+// noPlace says why an agent can't be given kind, and where it gets it
+// instead when another agent's files are what it reads (MOMO on Discord).
+func noPlace(a *agent.Agent, kind, what string) string {
+	switch {
+	case a.ID == "openchamber":
+		// OpenChamber's server reads the global AGENTS.md, skills folder
+		// and opencode.json from OpenCode's config folder
+		// (packages/web/server/lib/opencode/shared.js), and the OpenCode it
+		// runs reads them there too
+		return fmt.Sprintf("OpenChamber has no place of its own for %s: it runs OpenCode on OpenCode's config, so it has what OpenCode is given · give them to opencode", what)
+	case a.ID == "claude-desktop" && kind == "instructions":
+		// Desktop's chat takes its instructions in its own settings, kept
+		// with the Claude account, not in a file; its Code tab is Claude
+		// Code, which reads Claude Code's CLAUDE.md
+		return "Claude Desktop keeps its instructions in its own settings, with your Claude account, not in a file magpie can write; its Code tab runs Claude Code, which reads Claude Code's · give them to claude"
+	}
+	return fmt.Sprintf("%s has no user-wide place for %s that magpie knows of", a.Name, what)
+}
+
+// takenBy lists the agents here that kind can be given to.
+func takenBy(kind, what string) string {
+	var ids []string
+	for _, t := range Targets() {
+		if kind == "instructions" && t.Instructions != "" || kind == "mcp" && t.MCP != nil || kind == "skills" && t.Skills != "" {
+			ids = append(ids, t.Agent.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return ""
+	}
+	return "\n  agents here that take " + what + ": " + strings.Join(ids, ", ")
 }

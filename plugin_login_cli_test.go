@@ -5,17 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
-	"github.com/yetone/magpie/internal/testenv"
 )
 
 // magpie accounts add, signing in to a plugin's provider removed from
@@ -128,16 +125,14 @@ func fakeCoHome(t *testing.T) context.Context {
 	return ctx
 }
 
-// noBrowser has the sign-in pages magpie opens go nowhere: an open (macOS)
-// and an xdg-open (Linux) that do nothing come first on PATH.
+// noBrowser has the sign-in pages magpie opens go nowhere. It swaps the
+// opener rather than putting a do-nothing open first on PATH: a script
+// written now is a program macOS checks on its first run, which took 25 to
+// 55 seconds while other test binaries ran, and ate the minute the plugin
+// calls have (#1284).
 func noBrowser(t *testing.T) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("rundll32 opens the browser on Windows")
-	}
-	dir := t.TempDir()
-	for _, name := range []string{"open", "xdg-open"} {
-		testenv.Program(t, filepath.Join(dir, name), "#!/bin/sh\nexit 0\n")
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	old := openInBrowser
+	openInBrowser = func(string) {}
+	t.Cleanup(func() { openInBrowser = old })
 }

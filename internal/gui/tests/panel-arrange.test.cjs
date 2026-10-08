@@ -143,7 +143,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => document.querySelector("#panelQuota .pq-arow")?.dataset.key === "deepseek");
       assert.deepEqual(posts.splice(0), [{ order: ["deepseek", "codex", "claude", "kimi"] }]);
 
-      // Done: the cards in the new order, DeepSeek left out
+      // Done: the cards in the new order, DeepSeek left out. The reader brings
+      // Done out from under the sticky tabs with the wheel: Playwright's own
+      // scroll into view is code's, and the page puts it back
+      await page.mouse.move(220, 150);
+      for (let i = 0; i < 20; i++) {
+        const [by, was] = await page.evaluate(() => {
+          const d = document.querySelector("#panelQuota .pq-done").getBoundingClientRect();
+          const top = document.querySelector("#ptabs").getBoundingClientRect().bottom, v = document.querySelector("#view-agents");
+          const foot = v.getBoundingClientRect().bottom;
+          return [d.top < top ? d.top - top - 8 : d.bottom > foot ? d.bottom - foot + 8 : 0, v.scrollTop];
+        });
+        if (!by) break;
+        await page.mouse.wheel(0, by);
+        await page.waitForFunction((was) => document.querySelector("#view-agents").scrollTop !== was, was, { timeout: 1000 }).catch(() => {});
+      }
       await page.locator("#panelQuota .pq-done").click();
       await page.waitForFunction(() => !document.querySelector("#panelQuota .pq-arow"));
       assert.deepEqual(await cards(), ["codex|x@y.z", "claude|a@b.c", "kimi"]);

@@ -122,10 +122,11 @@ jobs:
         run: go test -v -count=1 -timeout 2m ./internal/update -run '^(TestInstallBinary|TestMoveAside)'
 
       # These tests use temporary paths, without the Unix HOME assumptions
-      # of the full suite. Run the native link-kind and sharing-error checks.
+      # of the full suite. Run the native link-kind and sharing-error checks,
+      # and the Codex copy checks that read NTFS ChangeTime (#1299).
       - name: Windows session moves
         if: runner.os == 'Windows'
-        run: go test -v -count=1 ./internal/sessions -run '^Test(WindowsSession|Move|CopyAll)'
+        run: go test -v -count=1 ./internal/sessions -run '^Test(WindowsSession|Move|CopyAll|CodexArchived|CodexSameTick|CodexPlainTwin)'
 
       # dsh's layered config is read and edited in temporary homes. Run
       # these checks on Windows too, including Desktop's home patch layer.

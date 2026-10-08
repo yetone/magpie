@@ -18,7 +18,7 @@ import (
 func init() {
 	movers["devin"] = &mover{
 		pkg:    "@magpie-community/opencode-devin-auth",
-		min:    "0.1.11", // a tool whose parameters have a root anyOf, oneOf or allOf goes as a plain object (#1196), a branch that is a union itself folded too (#1271); a turn's parallel calls split over two assistant messages keep their results (#1275)
+		min:    "0.1.12", // a tool whose parameters have a root anyOf, oneOf or allOf goes as a plain object (#1196), a branch that is a union itself folded too (#1271); a turn's parallel calls split over two assistant messages keep their results (#1275); a temperature or top_p of 0 goes as 1e-6, which Devin takes (plugins #50)
 		agents: []string{"devin"},
 		// a variant picked before the families were one model (swe-2-high)
 		// goes to Devin as it is, through the plugin too, which keeps the

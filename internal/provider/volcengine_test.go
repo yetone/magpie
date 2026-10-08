@@ -28,13 +28,50 @@ func TestVolcengineArkPlans(t *testing.T) {
 		pr.Regions[2].Chat != "https://ark.cn-beijing.volces.com/api/v3" || pr.Regions[2].Anthropic != "" {
 		t.Fatalf("plans: %+v", pr.Regions)
 	}
-	for _, id := range pr.Models {
-		if id != strings.ToLower(id) {
-			t.Fatalf("model ids are lowercase, as the quick-start page has them: %q", id)
+	coding, agent, payg := pr.Regions[0], pr.Regions[1], pr.Regions[2]
+	if pr.Models != nil || coding.Models == nil || agent.Models == nil || payg.Models != nil {
+		t.Fatalf("model sources aren't defined per plan: coding %v, agent %v, pay as you go %v", coding.Models, agent.Models, payg.Models)
+	}
+	if len(coding.Embeddings) == 0 || len(agent.Embeddings) == 0 || len(payg.Embeddings) != 0 {
+		t.Fatalf("embedding models by plan: coding %v, agent %v, pay as you go %v", coding.Embeddings, agent.Embeddings, payg.Embeddings)
+	}
+	if len(coding.Drawers) != 0 || len(coding.Videos) != 0 || len(agent.Drawers) == 0 || len(agent.Videos) == 0 || len(payg.Drawers) != 0 || len(payg.Videos) != 0 {
+		t.Fatalf("media models aren't confined to Agent Plan: coding %+v, agent %+v, pay as you go %+v", coding, agent, payg)
+	}
+	for _, models := range [][]string{coding.Models, coding.Embeddings, agent.Models, agent.Embeddings, agent.Drawers, agent.Videos} {
+		for _, id := range models {
+			if id != strings.ToLower(id) {
+				t.Fatalf("model ids are lowercase, as the quick-start page has them: %q", id)
+			}
 		}
 	}
-	if got := p.planModels(nil); len(got) != len(pr.Models) || got[0].ID != "ark-code-latest" {
-		t.Fatalf("plan's: %+v", got)
+	if got := modelIDs(p.planModels(nil)); !slices.Equal(got, coding.Models) {
+		t.Fatalf("Coding Plan models: %v, want preset region's %v", got, coding.Models)
+	}
+	if got := modelIDs(p.PlanEmbeddings()); !slices.Equal(got, coding.Embeddings) {
+		t.Fatalf("Coding Plan embeddings: %v, want preset region's %v", got, coding.Embeddings)
+	}
+	for _, id := range coding.Embeddings {
+		if slices.Contains(modelIDs(p.Available()), id) || slices.Contains(modelIDs(p.Exposed()), id) {
+			t.Fatalf("embedding model %q exposed as a chat model", id)
+		}
+	}
+	p.atRegionOf(pr, agent)
+	if got := modelIDs(p.planModels(nil)); !slices.Equal(got, agent.Models) {
+		t.Fatalf("Agent Plan models: %v, want preset region's %v", got, agent.Models)
+	}
+	if got := modelIDs(p.PlanEmbeddings()); !slices.Equal(got, agent.Embeddings) {
+		t.Fatalf("Agent Plan embeddings: %v, want preset region's %v", got, agent.Embeddings)
+	}
+	if got := modelIDs(p.PlanDrawers()); !slices.Equal(got, agent.Drawers) {
+		t.Fatalf("Agent Plan drawers: %v, want preset region's %v", got, agent.Drawers)
+	}
+	if got := modelIDs(p.PlanVideos()); !slices.Equal(got, agent.Videos) {
+		t.Fatalf("Agent Plan videos: %v, want preset region's %v", got, agent.Videos)
+	}
+	p.atRegionOf(pr, pr.Regions[2])
+	if got := p.planModels(nil); len(got) != 0 {
+		t.Fatalf("pay as you go preset models: %+v", got)
 	}
 	// an entry imported from another app at an Ark endpoint is known as Ark
 	im, _ := imported("Ark", "k", endpoints{chat: "https://ark.cn-beijing.volces.com/api/plan/v3"}, nil)
@@ -84,7 +121,7 @@ func TestVolcengineModelLists(t *testing.T) {
 				if err := catalog.SaveLive(p.ID, p.Chat, listed); err != nil {
 					t.Fatal(err)
 				}
-				want := pr.Models
+				want := r.Models
 				if r.ID == "api" {
 					want = []string{"doubao-seed-2-0-pro-260215"}
 				}

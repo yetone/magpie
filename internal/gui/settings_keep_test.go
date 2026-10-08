@@ -153,6 +153,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		Window:              []int{900, 700},
 		WindowMaximised:     true,
 		FullContext:         true,
+		DesktopLongest:      true,
 		GatewayMode:         "off",
 	}
 	if err := settings.Save(was); err != nil {

@@ -312,6 +312,13 @@ type Settings struct {
 	// what OpenAI does with its own models, 272K though they can take
 	// more, and Anthropic with its, 200K unless a [1m] one is picked.
 	FullContext bool `json:"fullContext,omitempty"`
+	// DesktopLongest has Claude Desktop list a model of 1M tokens or more
+	// once, as its 1M entry (its id with Claude Code's "[1m]"), instead of
+	// twice (#1272): Desktop adds a "1M context window" entry beside any
+	// gateway model whose max_input_tokens is 1M or more and whose id has no
+	// "[1m]", and adds none to one whose id has it. Off, as before, it shows
+	// both, the plain one compacting at Claude Code's 200K.
+	DesktopLongest bool `json:"desktopLongest,omitempty"`
 	// CompactAt is the window told for a longer one when FullContext is
 	// off, in tokens: 0 is WorkingWindow (#876: 272K was the only one).
 	// A provider's or a model's own (ModelCompacts) comes before it.

@@ -482,6 +482,7 @@ func Run(version string, showMain bool, link string) error {
 		h.app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 			plainTitlebar(h.main) // Linux: the page's header is the title bar
 			nameWindow(h.panel, panelTitle)
+			ownFrame(h.panel) // KDE: no title bar of KWin's on it (#1283)
 			markReady()
 		})
 	}
