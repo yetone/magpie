@@ -222,6 +222,13 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 		}
 		contents = append(contents, map[string]any{"role": role, "parts": parts})
 	}
+	if len(contents) > 0 && contents[0]["role"] == "model" {
+		// Gemini turns away a history that opens with the model's turn
+		// (what an agent's compaction can leave): "function call turn comes
+		// immediately after a user turn". Gemini CLI's hardenHistory puts
+		// this user turn before it, and so does this.
+		contents = append([]map[string]any{{"role": "user", "parts": []map[string]any{{"text": "[Continuing from previous AI thoughts...]"}}}}, contents...)
+	}
 	req := map[string]any{"contents": contents}
 	if r.System != "" {
 		req["systemInstruction"] = map[string]any{"role": "user", "parts": []map[string]any{{"text": r.System}}}

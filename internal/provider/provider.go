@@ -184,10 +184,11 @@ type Provider struct {
 	// "direct" none, anything else the proxy's address (http://, https://,
 	// socks5://; host:port means http). Signed-in accounts keep it too.
 	Proxy string `json:"proxy,omitempty"`
-	// AccountProxies is, for a subscription holding several accounts
-	// (Codex's, Claude Code's…), the proxy of each account that has one
-	// of its own, by its name in lower case, as Proxy takes one; an
-	// account not in it follows Proxy (see ProxyChoice).
+	// AccountProxies is, for a provider holding several accounts or keys
+	// (Codex's accounts, a relay's keys…), the proxy of each one that has
+	// one of its own, as Proxy takes one: an account by its name in lower
+	// case, a key by its KeyID. One not in it follows Proxy (see
+	// ProxyChoice).
 	AccountProxies map[string]string `json:"accountProxies,omitempty"`
 	// AccountModels is, for a provider holding several accounts or keys,
 	// the models each one the user narrowed serves, and no others (#474):
@@ -556,7 +557,7 @@ func Save(p Provider) error {
 		}
 		p = Provider{ID: p.ID, Key: key, Models: p.Models, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, PinUpstream: p.PinUpstream, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
 	} else {
-		p.AccountProxies = nil // a provider of a key has no accounts to proxy apart
+		p.AccountProxies = keyProxies(p) // a provider of keys proxies each key apart
 		if subscriptionID(p.ID) && !stored(p.ID) {
 			// taken, it would hide that subscription once signed in
 			return fmt.Errorf("%q is the id of the %s subscription; pick another name", p.ID, p.ID)

@@ -2605,6 +2605,12 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 /* a usage alert's share or amount: a short number field, its unit beside it */
 .warm-at input.at.num { width: 64px; text-align: right; }
 .warm-at .unit { color: var(--muted); font-size: 12.5px; margin-left: -4px; }
+/* a daily warm-up's times (#1260): each with its ×, then +, wrapping under one another on a narrow window rather than past it */
+.warm-at.times { flex: 0 0 auto; max-width: 65%; align-items: flex-start; }
+.warm-at.times > :not(.warm-times) { flex: none; }
+.warm-at .warm-times { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 8px; min-width: 0; }
+.warm-at .warm-time { display: inline-flex; align-items: center; gap: 2px; }
+.warm-at .warm-rm, .warm-at .warm-add { min-width: 24px; height: 27px; padding: 0 6px; font-size: 14px; line-height: 1; }
 .row.pref .sub .warn { color: var(--amber); }
 .row.pref .sub.wraps { white-space: normal; }
 /* the field's clock and picker in the page's own palette */
@@ -2795,6 +2801,7 @@ body.panel .modal { padding: 16px 12px; }
   body.web .row.pref > .who { flex-basis: 100%; }
   body.web .row.pref .sub { white-space: normal; }
   body.web .row.pref .segs { margin-left: 0; max-width: 100%; flex-wrap: wrap; }
+  body.web .row.pref .warm-at.times { max-width: 100%; }
   body.web .proxy-segs { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; }
   body.web .usage-head { height: auto; min-height: 44px; flex-wrap: wrap; gap: 8px; }
   body.web .usage-head > .segs { max-width: 100%; flex-wrap: wrap; }

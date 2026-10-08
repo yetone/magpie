@@ -106,18 +106,21 @@ type codexWarmer struct {
 	// it has left is read again rather than taken from before.
 	warmed func(user string)
 	// ownAt, when set, is the accounts that have a time of day of their
-	// own, by name in lower case, "" for none: theirs in place of the one
+	// own, by name in lower case, "" for none: theirs in place of the ones
 	// warmNow is given (#957).
 	ownAt func() map[string]string
 }
 
-// atOf is the time of day user's 5-hour window starts at: its own, else
-// at.
-func (c codexWarmer) atOf(own map[string]string, user, at string) string {
+// atOf is the times of day user's 5-hour window starts at: its own, else
+// ats.
+func (c codexWarmer) atOf(own map[string]string, user string, ats []string) []string {
 	if a, ok := own[strings.ToLower(user)]; ok {
-		return a
+		if a == "" {
+			return nil
+		}
+		return []string{a}
 	}
-	return at
+	return ats
 }
 
 // owned is c's accounts' own times of day, none when it has no ownAt.
@@ -130,10 +133,10 @@ func (c codexWarmer) owned() map[string]string {
 
 // warmNow reads each account's windows, the weekly ones or with which
 // "all" the 5-hour ones too, sends a request to each account one of them
-// has started over on — or whose 5-hour window isn't running at the time
-// of day at ("06:00", "" none), or the account's own (ownAt) — and keeps
-// what it saw.
-func (c codexWarmer) warmNow(ctx context.Context, which, dayAt string) []CodexWarm {
+// has started over on — or whose 5-hour window isn't running at one of
+// the times of day dayAts ("06:00", none for none), or the account's own
+// (ownAt) — and keeps what it saw.
+func (c codexWarmer) warmNow(ctx context.Context, which string, dayAts []string) []CodexWarm {
 	st := readWarmState(c.path)
 	now := c.now()
 	own := c.owned()
@@ -151,7 +154,7 @@ func (c codexWarmer) warmNow(ctx context.Context, which, dayAt string) []CodexWa
 			continue // nothing known: what was seen stands
 		}
 		key := strings.ToLower(user)
-		at := c.atOf(own, user, dayAt)
+		at := c.atOf(own, user, dayAts)
 		prev, next := st[key], map[string]warmWindow{}
 		var due []string
 		onReset, days := map[string]bool{}, map[string]string{}
@@ -162,7 +165,7 @@ func (c codexWarmer) warmNow(ctx context.Context, which, dayAt string) []CodexWa
 			// ones with "all" and for the day's start
 			short := w.Span < 24*time.Hour
 			onItsReset := which == "all" || which != "" && !short
-			if w.Span <= 0 || w.Aside || w.Model != "" || !onItsReset && !(short && at != "") {
+			if w.Span <= 0 || w.Aside || w.Model != "" || !onItsReset && !(short && len(at) > 0) {
 				continue
 			}
 			cur := asOf(w, now)
@@ -487,14 +490,14 @@ func codexWarmAtOf() map[string]string {
 }
 
 // CodexWarmAtOf is user's own time of day to start its 5-hour window at,
-// "off" for none; false when it follows settings' CodexWarmAt.
+// "off" for none; false when it follows settings' CodexWarmAts.
 func CodexWarmAtOf(user string) (string, bool) {
 	at, ok := settings.Load().CodexWarmAtOf[strings.ToLower(strings.TrimSpace(user))]
 	return at, ok
 }
 
 // SetCodexWarmAt gives user a time of day of its own ("06:00"), none
-// ("off"), or, "", has it follow settings' CodexWarmAt again.
+// ("off"), or, "", has it follow settings' CodexWarmAts again.
 func SetCodexWarmAt(user, at string) error {
 	user = strings.ToLower(strings.TrimSpace(user))
 	if user == "" {
@@ -519,18 +522,18 @@ func SetCodexWarmAt(user, at string) error {
 func KeepCodexWindowsWarm(ctx context.Context) {
 	w := codexWarmer{path: codexWarmPath(), now: time.Now, usage: codexWarmUsage, send: warmCodexLogin,
 		warmed: func(user string) { StaleAllowance("codex", user) }, ownAt: codexWarmAtOf}
-	keepWarm(ctx, "codex", w, func() (string, string) { s := settings.Load(); return s.CodexWarmup, s.CodexWarmAt })
+	keepWarm(ctx, "codex", w, func() (string, []string) { s := settings.Load(); return s.CodexWarmup, s.CodexWarmAts })
 }
 
 // keepWarm runs w while prefs (the settings: which windows on their
-// reset, and the time of day to start the 5-hour one at) say to: two
+// reset, and the times of day to start the 5-hour one at) say to: two
 // minutes after it starts and every codexWarmEvery after that, and as soon
-// as the time of day comes, until ctx ends. The time is the wall clock's,
+// as one of the times of day comes, until ctx ends. The time is the wall clock's,
 // looked at every minute: a machine that slept through it notices on
 // waking. A usage read that finds an account's window not started — one
 // never used, which routing leaves for last — has it run at once too, for
 // each account at most every warmKickEvery.
-func keepWarm(ctx context.Context, name string, w codexWarmer, prefs func() (which, at string)) {
+func keepWarm(ctx context.Context, name string, w codexWarmer, prefs func() (which string, ats []string)) {
 	t := time.NewTimer(2 * time.Minute)
 	defer t.Stop()
 	kick := make(chan string, 16)
@@ -581,11 +584,11 @@ func keepWarm(ctx context.Context, name string, w codexWarmer, prefs func() (whi
 }
 
 // warmLook says whether keepWarm looks at the windows now: a warm-up is
-// on — on reset (which), or at a time of day, the one for all (at) or an
+// on — on reset (which), or at a time of day, the ones for all (at) or an
 // account's own — and a read kicked it (kicked), it hasn't looked yet, it
 // last looked codexWarmEvery ago, or one of those times came since.
-func warmLook(which, at string, own map[string]string, kicked bool, last, now time.Time) bool {
-	ats := []string{at}
+func warmLook(which string, at []string, own map[string]string, kicked bool, last, now time.Time) bool {
+	ats := slices.Clone(at)
 	for _, a := range own {
 		ats = append(ats, a)
 	}
@@ -593,7 +596,7 @@ func warmLook(which, at string, own map[string]string, kicked bool, last, now ti
 		return false
 	}
 	return kicked || last.IsZero() || now.Sub(last) >= codexWarmEvery ||
-		slices.ContainsFunc(ats, func(a string) bool { return dayStartPassed(a, last, now) })
+		dayStartPassed(ats, last, now)
 }
 
 // notStartedHooks is, by agent, what a usage read finding an account's

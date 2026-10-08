@@ -5,8 +5,10 @@
 // opening on what each has; Save posts accountProxies with each account
 // that doesn't follow Codex's, and Custom with no address is refused
 // before anything is posted. A pick moves nothing and the page stays where
-// it is. A subscription with one account has no such lines. In English
-// and Chinese.
+// it is. A subscription with one account has no such lines. A provider's
+// keys have the same lines, a key by its fingerprint (Beyfish_Wang on X:
+// 不同 key 走不同的代理), and one with one key none. In English and
+// Chinese.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -34,9 +36,22 @@ const claude = {
   account: { agent: "claude", agentName: "Claude Code", user: "solo@example.com", plan: "MAX", logins: [{ user: "solo@example.com", plan: "MAX", active: true, on: true }] },
   proxy: "",
 };
+const relay = {
+  id: "relay", name: "Relay", icon: "generic", chat: "https://relay.example.com/v1", responses: "", anthropic: "", catalog: "",
+  models: [{ id: "big", name: "", on: true }], agents: [], fallback: [], headers: {},
+  key: { set: true, masked: "sk-…one" }, balanceToken: { takes: false, set: false }, proxy: "http://10.0.0.2:7890",
+  keyList: [{ id: "aaaaaaaaaa", name: "Team", masked: "sk-…one", on: true, active: true }, { id: "bbbbbbbbbb", name: "", masked: "sk-…two", on: true }, { id: "cccccccccc", name: "Spare", masked: "sk-…three", on: true }],
+  accountProxies: { aaaaaaaaaa: "socks5://10.0.0.5:1080", bbbbbbbbbb: "direct" },
+};
+const solo = {
+  id: "lone", name: "Lone", icon: "generic", chat: "https://lone.example.com/v1", responses: "", anthropic: "", catalog: "",
+  models: [{ id: "big", name: "", on: true }], agents: [], fallback: [], headers: {},
+  key: { set: true, masked: "sk-…solo" }, balanceToken: { takes: false, set: false }, proxy: "",
+  keyList: [{ id: "5050505050", name: "", masked: "sk-…solo", on: true, active: true }],
+};
 
 function serve(lang, posts) {
-  const providers = { providers: [codex, claude], presets: [], excluded: [], gateway: { running: true, window: true } };
+  const providers = { providers: [codex, claude, relay, solo], presets: [], excluded: [], gateway: { running: true, window: true } };
   const state = { agents: [], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
@@ -60,6 +75,10 @@ function serve(lang, posts) {
 const words = {
   en: { prov: "Provider's proxy", direct: "Direct", custom: "Custom", save: "Save", missing: "Proxy of Third@Example.com: type its address, like http://127.0.0.1:7890" },
   zh: { prov: "供应商代理", direct: "直连", custom: "自定义", save: "保存", missing: "Third@Example.com 的代理：请填写地址，例如 http://127.0.0.1:7890" },
+};
+const keyWords = {
+  en: { missing: "Proxy of Spare: type its address, like http://127.0.0.1:7890", hint: "Each key can go through a proxy of its own; Provider's proxy is the one above" },
+  zh: { missing: "Spare 的代理：请填写地址，例如 http://127.0.0.1:7890", hint: "每个 Key 可以走自己的代理；“供应商代理”即上面这一项" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -85,7 +104,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(wait).first().waitFor();
       return { page, errors, posts };
     };
-    const line = (page, user) => page.locator(`.editor .acct-proxy[data-user="${user}"]`);
+    const line = (page, user) => page.locator(`.editor .acct-proxy[data-${/^[a-f0-9]{10}$/.test(user) ? "key" : "user"}="${user}"]`);
     const mode = (page, user) => line(page, user).locator(".proxy-mode .opt.on").textContent();
     const addr = (page, user) => line(page, user).locator(".proxy-url");
     // what the page and the dialog's scrollers have scrolled
@@ -170,6 +189,53 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const saved = await save(page, posts);
       assert.equal(saved.body.id, "claude");
       assert.deepEqual(saved.body.accountProxies, {});
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: each key's proxy opens as it is and is saved`, async (t) => {
+      const { page, errors, posts } = await open(t, "Relay", ".editor .acct-proxy");
+      const kw = keyWords[lang];
+      // the keys as the Accounts list has them, named by their names, or
+      // masked when they have none
+      assert.deepEqual(await page.locator(".editor .acct-proxy").evaluateAll((ls) => ls.map((l) => [l.dataset.key, l.querySelector(".who").textContent])),
+        [["aaaaaaaaaa", "Team"], ["bbbbbbbbbb", "sk-…two"], ["cccccccccc", "Spare"]]);
+      assert.equal(await page.locator(".editor .acct-proxies .hint").textContent(), kw.hint);
+      assert.equal(await mode(page, "aaaaaaaaaa"), w.custom);
+      assert.equal(await addr(page, "aaaaaaaaaa").inputValue(), "socks5://10.0.0.5:1080");
+      assert.equal(await mode(page, "bbbbbbbbbb"), w.direct);
+      assert.equal(await mode(page, "cccccccccc"), w.prov, "a key with none follows the provider's");
+      assert.equal(await page.locator(".editor .proxy-pick .proxy-url").inputValue(), "http://10.0.0.2:7890", "the provider's own is kept above");
+
+      let saved = await save(page, posts);
+      assert.equal(saved.body.id, "relay");
+      assert.equal(saved.body.proxy, "http://10.0.0.2:7890");
+      assert.deepEqual(saved.body.accountProxies, { aaaaaaaaaa: "socks5://10.0.0.5:1080", bbbbbbbbbb: "direct" });
+
+      // Custom for Spare with nothing typed is refused by its name
+      await page.locator(".row.provider", { hasText: "Relay" }).first().click();
+      await line(page, "cccccccccc").waitFor();
+      await pick(page, "cccccccccc", w.custom);
+      const n = posts.length;
+      await page.locator(".editor .bar").getByRole("button", { name: w.save, exact: true }).click();
+      await page.locator(".editor .editor-error").waitFor();
+      assert.equal(await page.locator(".editor .editor-error").textContent(), kw.missing);
+      assert.equal(posts.length, n);
+      assert(await addr(page, "cccccccccc").evaluate((e) => e === document.activeElement), "its address is focused");
+
+      await addr(page, "cccccccccc").fill(" http://10.0.0.7:3128 ");
+      await pick(page, "bbbbbbbbbb", w.prov);
+      await pick(page, "aaaaaaaaaa", w.direct);
+      saved = await save(page, posts);
+      assert.deepEqual(saved.body.accountProxies, { aaaaaaaaaa: "direct", cccccccccc: "http://10.0.0.7:3128" });
+      assert.deepEqual(errors, []);
+    });
+
+    test(`${engine} ${lang}: a provider with one key has no per-key lines`, async (t) => {
+      const { page, errors, posts } = await open(t, "Lone");
+      assert.equal(await page.locator(".editor .acct-proxies").count(), 0);
+      const saved = await save(page, posts);
+      assert.equal(saved.body.id, "lone");
+      assert.equal(saved.body.accountProxies, undefined, "nothing said: the key's own are kept");
       assert.deepEqual(errors, []);
     });
   }

@@ -30,7 +30,7 @@ func TestWarmAtEachAccountsOwn(t *testing.T) {
 		f.sent = nil
 		w := f.warmer(path)
 		w.ownAt = func() map[string]string { return own }
-		w.warmNow(context.Background(), "", at)
+		w.warmNow(context.Background(), "", times(at))
 		return f.sent
 	}
 	// six: b, which follows the time for all; a waits for its nine, c for none
@@ -59,16 +59,16 @@ func TestWarmAtEachAccountsOwn(t *testing.T) {
 // with nothing else on, and never with nothing on at all.
 func TestWarmLookAtAnAccountsOwnTime(t *testing.T) {
 	last, now := at8(28, 8, 59), at8(28, 9, 0)
-	if !warmLook("", "", map[string]string{"a@x": "09:00"}, false, last, now) {
+	if !warmLook("", times(""), map[string]string{"a@x": "09:00"}, false, last, now) {
 		t.Error("an account's own nine not looked at")
 	}
-	if warmLook("", "", map[string]string{"a@x": "10:00"}, false, last, now) {
+	if warmLook("", times(""), map[string]string{"a@x": "10:00"}, false, last, now) {
 		t.Error("looked at before its time")
 	}
-	if warmLook("", "", map[string]string{"a@x": ""}, true, time.Time{}, now) {
+	if warmLook("", times(""), map[string]string{"a@x": ""}, true, time.Time{}, now) {
 		t.Error("looked at with nothing on")
 	}
-	if !warmLook("", "06:00", nil, false, time.Time{}, now) || !warmLook("week", "", nil, false, now.Add(-codexWarmEvery), now) {
+	if !warmLook("", times("06:00"), nil, false, time.Time{}, now) || !warmLook("week", times(""), nil, false, now.Add(-codexWarmEvery), now) {
 		t.Error("the time for all, or the warm-up on reset, not looked at")
 	}
 }

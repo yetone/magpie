@@ -117,8 +117,17 @@ type Settings struct {
 	// so the windows line up with the day (06:00 gives three by 21:00, where
 	// the first use at 9 gives two by the end of it); "" off. It works
 	// with CodexWarmup or without it. ClaudeWarmAt is the Claude accounts'.
+	// Each is CodexWarmAts' (ClaudeWarmAts') first, all a magpie before
+	// them read: a file with it and no list has that one time, and it is
+	// kept written for an older magpie to go on starting the day's first.
 	CodexWarmAt  string `json:"codexWarmAt,omitempty"`
 	ClaudeWarmAt string `json:"claudeWarmAt,omitempty"`
+	// CodexWarmAts are the times of day CodexWarmAt's start is made at,
+	// each once a day, earliest first: 09:00, 15:05 and 19:10 start a
+	// window at each, where it isn't running (#1260); none when empty.
+	// ClaudeWarmAts is the Claude accounts'.
+	CodexWarmAts  []string `json:"codexWarmAts,omitempty"`
+	ClaudeWarmAts []string `json:"claudeWarmAts,omitempty"`
 	// CodexWarmAtOf is a ChatGPT account's own time of day for that, by
 	// its name in lower case, "off" for none: two accounts started hours
 	// apart take over from one another, where at one time they run out
@@ -867,8 +876,8 @@ func Save(s Settings) error {
 	if !slices.Contains(Warmups, s.ClaudeWarmup) {
 		return fmt.Errorf("claude warm-up must be off, week or all, not %q", s.ClaudeWarmup)
 	}
-	for _, at := range []string{s.CodexWarmAt, s.ClaudeWarmAt} {
-		if _, _, ok := Clock(at); at != "" && !ok {
+	for _, at := range slices.Concat(s.CodexWarmAts, s.ClaudeWarmAts) {
+		if _, _, ok := Clock(at); !ok {
 			return fmt.Errorf("a warm-up's time of day must look like 06:00, not %q", at)
 		}
 	}
@@ -1033,11 +1042,21 @@ func (s Settings) normal() Settings {
 	if s.TrayUsages == nil && s.TrayUsage != "" {
 		s.TrayUsages = []string{s.TrayUsage}
 	}
-	// a time of day as 06:00 whichever way it came (6:00, 06:00:00)
-	for _, at := range []*string{&s.CodexWarmAt, &s.ClaudeWarmAt} {
-		*at = strings.TrimSpace(*at)
-		if h, m, ok := Clock(*at); ok {
-			*at = fmt.Sprintf("%02d:%02d", h, m)
+	// the times of day: the one a magpie before the lists kept, when the
+	// list isn't there (an empty one sent on purpose stays empty), each as
+	// 06:00 whichever way it came (6:00, 06:00:00), earliest first, once;
+	// and the first kept as the one for that older magpie
+	for _, w := range []struct {
+		at  *string
+		ats *[]string
+	}{{&s.CodexWarmAt, &s.CodexWarmAts}, {&s.ClaudeWarmAt, &s.ClaudeWarmAts}} {
+		if *w.ats == nil && strings.TrimSpace(*w.at) != "" {
+			*w.ats = []string{*w.at}
+		}
+		*w.ats = clocks(*w.ats)
+		*w.at = ""
+		if len(*w.ats) > 0 {
+			*w.at = (*w.ats)[0]
 		}
 	}
 	// an account's own, by its name in lower case; one with none follows
@@ -1070,6 +1089,27 @@ func Clock(at string) (hour, min int, ok bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// clocks is ats as 06:00 (one Clock can't read kept as it came, for Save
+// to name), earliest first, with no empties or repeats; nil when none,
+// and an empty list stays one.
+func clocks(ats []string) []string {
+	if ats == nil {
+		return nil
+	}
+	out := []string{}
+	for _, at := range ats {
+		at = strings.TrimSpace(at)
+		if h, m, ok := Clock(at); ok {
+			at = fmt.Sprintf("%02d:%02d", h, m)
+		}
+		if at != "" && !slices.Contains(out, at) {
+			out = append(out, at)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // ids trims, drops empties and repeats, and keeps the first of each.
