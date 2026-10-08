@@ -29,6 +29,24 @@ three.
 
 ## Constraints and failure behavior
 
+### Browser-mode shutdown
+
+`magpie web` owns SIGINT and SIGTERM, like the desktop app and TUI, rather
+than letting the global probe-cleanup handler terminate the process.
+[`webCmd`](../../web_cli.go) passes their cancellation context to
+[`Web.Wait`](../../internal/gui/web.go), which closes the page server and
+calls `stopServing` to drain the gateway this process owns before returning
+to main's probe and session cleanup. The gateway's existing drain deadline
+applies (normally two seconds); another process's gateway is not stopped.
+These signals exit successfully instead of making a container's planned
+stop look like a crash. SIGHUP retains the global termination behavior.
+
+The page's Quit and restart-to-update also close and drain the servers.
+Only a page-requested update reexecutes the binary with its existing run
+key; a cancelled context suppresses that restart. `TestWebShutdown` runs
+the real command entry point in isolated child processes and checks
+SIGTERM, SIGINT, SIGHUP and the page's Quit endpoint.
+
 ### Desktop fonts
 
 Settings → General offers independent interface and code fonts, each with
