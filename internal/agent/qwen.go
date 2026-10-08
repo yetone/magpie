@@ -310,6 +310,9 @@ func qwenIn(at place) *Agent {
 
 	return atomic(&Agent{
 		ID: "qwen", Name: "Qwen Code", Icon: "qwen-color", Aliases: []string{"qwen-code", "qwen-cli"}, Spelled: prefixed,
+		// qwen's requests carry QwenCode/<version> (packages/core/src/core/
+		// openaiContentGenerator/provider/default.ts buildHeaders)
+		UA:  []string{"qwencode"},
 		Bin: "qwen", Dir: dir, Path: path,
 		Sync: func() error {
 			for _, c := range qwenCustoms(path) {
