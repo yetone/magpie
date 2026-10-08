@@ -1479,6 +1479,9 @@ For S3:
   needs to list the bucket.
 - A server without conditional writes is supported. There magpie checks the
   object's ETag just before each write.
+- Shared usage is reconciled only after a complete S3 listing. A missing or
+  repeated continuation token, or a listing still truncated after 100 pages,
+  reports a sync error and keeps previously downloaded usage days in place.
 
 ## OTLP export
 
