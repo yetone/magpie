@@ -175,12 +175,39 @@
     return box;
   }
 
+  // A card's narrow layouts go by its own width, as container queries
+  // would, set here as classes (max520: 520px wide or less). Not by
+  // container queries: WebKit pulled a view scrolled to its end back up by
+  // a card's height each time the card was drawn again (#1249). A card
+  // drawn again starts with the width the last one in its place had, so it
+  // doesn't lay out wide for a moment and pull the page up as it narrows
+  const cardWidth = {};
+  const sizeCard = (card, w) => {
+    card.classList.toggle("max520", w <= 520);
+    card.classList.toggle("max420", w <= 420);
+  };
+  const cardSizes = new ResizeObserver((all) => {
+    for (const e of all) {
+      if (!e.target.isConnected) { cardSizes.unobserve(e.target); continue; }
+      const card = e.target, w = e.contentRect.width;
+      cardWidth[card.dataset.place] = w;
+      // on the next frame: a class changed in the observer's own call
+      // changes the card's height, which WebKit reports as a
+      // ResizeObserver loop (see quotaFit)
+      requestAnimationFrame(() => sizeCard(card, w));
+    }
+  });
+
   // ctxCard draws a route's prompt. opts: series (the session's prompts,
   // [{id, tokens, time}]), onPoint (a point of it clicked), cache ({read,
-  // total}, when the route carries no usage), crumbs (the footer's path)
+  // total}, when the route carries no usage), crumbs (the footer's path),
+  // place (where it is drawn, for its width: see cardWidth)
   function ctxCard(r, opts = {}) {
     const p = r.prompt;
     const card = el("div", "ctx-card");
+    card.dataset.place = opts.place || "";
+    if (cardWidth[card.dataset.place] !== undefined) sizeCard(card, cardWidth[card.dataset.place]);
+    cardSizes.observe(card);
     if (!p) return card;
     const window = p.window || 0;
     const fill = window ? p.tokens / window : 0;
@@ -549,7 +576,7 @@
       const r = { id: s.latestId, time: s.last, done: true, agent: s.agent, model: s.model, prompt: s.latest };
       const cache = last && s.latest.counted && last.tokens ? { read: last.cache || 0, total: last.tokens } : null;
       box.append(ctxCard(r, {
-        still: true, cache,
+        still: true, cache, place: "session",
         series: s.points,
         crumbs: [agentLabel(s.agent), s.title || s.key.slice(0, 12), t("latest request")],
         onPoint: (pt) => window.openRoute(pt.id, pt.time).catch((e) => status(e.message, "err")),

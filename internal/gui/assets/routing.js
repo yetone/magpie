@@ -187,10 +187,10 @@
       steady(renderHist);
     }, "Metrics to show", "rt-metric-menu", "right", true);
   };
-  let purpose = "";
+  let purpose = [];
   purposeClear.onclick = () => {
     closeProtoMenu();
-    purpose = "";
+    purpose = [];
     steady(followListed);
     purposePick.focus({ preventScroll: true });
   };
@@ -199,6 +199,23 @@
   colB.append(actHead, acts);
   hist.append(colA, colB);
   more.append(hist);
+  // the narrow and wide layouts go by a box's own width, as container
+  // queries would, set here as a class (max560: 560px wide or less). Not
+  // by container queries: with query containers in it, WebKit pulled the
+  // scrolling view back from its end a frame after each scroll there, so
+  // the page couldn't be scrolled to its bottom (#1249). Set on the next
+  // frame: a class changed in the observer's own call changes the box's
+  // height, which WebKit reports as a ResizeObserver loop (see quotaFit)
+  const byWidth = (node, marks) => new ResizeObserver(([e]) => {
+    const w = e.contentRect.width;
+    requestAnimationFrame(() => {
+      for (const [cls, fits] of Object.entries(marks)) node.classList.toggle(cls, fits(w));
+    });
+  }).observe(node);
+  byWidth(box, { max560: (w) => w <= 560 });
+  byWidth(list, { max460: (w) => w <= 460, max560: (w) => w <= 560 });
+  byWidth(more, { max520: (w) => w <= 520, min1150: (w) => w >= 1150 });
+  for (const col of [colA, colB]) byWidth(col, { max440: (w) => w <= 440, max760: (w) => w <= 760 });
 
   const path = () => { const p = document.createElementNS(NS, "path"); wires.appendChild(p); return p; };
   const setText = (e, s) => { if (e.textContent !== s) e.textContent = s; };
@@ -1302,7 +1319,7 @@
     ctxShown = r.id;
     const sess = groupSession(r) || r.conv || "";
     ctxBox.replaceChildren(window.ctxCard(r, {
-      still, series, tab: ctxTab,
+      still, series, tab: ctxTab, place: "routing",
       onTab: (id) => { ctxTab = id; },
       crumbs: [agentName(r.agent), sess && (sess.length > 14 ? sess.slice(0, 12) + "…" : sess), "#" + r.id],
       onPoint: (pt) => {
@@ -1413,7 +1430,7 @@
       await loadDays(day);
       if (!past.some((x) => x.id === id)) past.push(r);
     }
-    if (purpose && purposeOf(r.kind) !== purpose) purpose = "";
+    if (!matchesPurpose(r)) purpose = [];
     offline("");
     window.show("routing");
     pick(r);
@@ -1518,13 +1535,13 @@
   // listed: the requests the list shows, newest first — the gateway's last
   // few, or a day the history keeps
   const allListed = () => (day ? past : [...routes.values()]).slice().sort((a, b) => b.id - a.id);
-  const matchesPurpose = (r) => !purpose || purposeOf(r.kind) === purpose;
+  const matchesPurpose = (r) => !purpose.length || purpose.includes(purposeOf(r.kind));
   const listed = () => allListed().filter(matchesPurpose);
   // Match the rows and story: a broken-off 200 fails, an informational note
   // on an answered request (such as Codex titles being off) does not.
   const failedRoute = (r) => r.done && outcome(r)[1] === "bad";
   function renderStats(rs) {
-    const scoped = !!(day || purpose), done = rs.filter((r) => r.done);
+    const scoped = !!(day || purpose.length), done = rs.filter((r) => r.done);
     const counts = scoped ? {
       requests: done.length,
       rerouted: done.reduce((n, r) => n + r.tries.filter((tr, i) => tr.rest && i < r.tries.length - 1).length, 0),
@@ -1727,31 +1744,31 @@
     const rs = listed();
     renderStats(rs);
     const all = allListed();
-    hist.hidden = !all.length && !day && !days.length && !purpose;
-    const opts = purposeOptions(all.map((r) => purposeOf(r.kind)), purpose);
-    const selected = opts.find((o) => o.v === purpose);
-    purposeTools.hidden = opts.length < 2 && !purpose;
-    purposeTools.classList.toggle("set", !!purpose);
-    purposeClear.hidden = !purpose;
+    hist.hidden = !all.length && !day && !days.length && !purpose.length;
+    const opts = purposeOptions([...all.map((r) => purposeOf(r.kind)), ...purpose]);
+    const selected = opts.filter((o) => purpose.includes(o.v));
+    purposeTools.hidden = opts.length < 2 && !purpose.length;
+    purposeTools.classList.toggle("set", !!purpose.length);
+    purposeClear.hidden = !purpose.length;
     purposeClear.title = t("Clear filter");
     purposeClear.setAttribute("aria-label", t("Clear filter"));
-    const label = purpose ? t("Purpose: {name}", { name: selected?.name || purpose }) : t("Purpose filter");
+    const label = purpose.length ? t("Purpose: {name}", { name: selected.map((o) => o.name).join(", ") }) : t("Purpose filter");
     setText(purposeLabel, label);
     purposePick.setAttribute("aria-label", label);
-    purposePick.title = t("Filter routing by purpose") + (purpose ? "\n" + label : "");
+    purposePick.title = t("Filter routing by purpose") + (purpose.length ? "\n" + label : "");
     setText(metricLabel, t("Metrics"));
     metricPick.title = t("Metrics to show");
     purposePick.onclick = (e) => {
       e.stopPropagation();
       if (purposePick.classList.contains("open")) return closeProtoMenu();
-      // A handful of purposes needs a small menu; explanations stay in tooltips.
+      // Tick several purposes without closing the menu; an empty list shows all.
       openProtoMenu(purposePick, [{ v: "", name: t("All purposes"), note: "" }, ...opts].map((o) => ({
         ...o, literalName: true, title: o.note || o.v, note: "",
-      })), purpose, (v) => {
-        purpose = v;
+      })), purpose, (keys) => {
+        purpose = keys;
         steady(followListed);
-        purposePick.focus({ preventScroll: true });
-      }, "Purpose", "rt-purpose-menu", "right");
+        if (!purpose.length) purposePick.focus({ preventScroll: true });
+      }, "Purpose", "rt-purpose-menu", "right", true);
     };
     setText(reqLabel, t("Requests"));
     setText(replayAll, t("Replay them all"));
@@ -1775,7 +1792,7 @@
     hist.classList.toggle("solo", none);
     if (none) {
       const p = el("div", "empty-state");
-      p.append(el("b", "", purpose ? t("No requests match these filters.") : day ? t("Nothing on {day}", { day: dayName(day) }) : t("No requests since magpie started")),
+      p.append(el("b", "", purpose.length ? t("No requests match these filters.") : day ? t("Nothing on {day}", { day: dayName(day) }) : t("No requests since magpie started")),
         t("Each request an agent sends through magpie shows up here: who answered it, why, and each try."));
       if (!day && days.length) p.append(" " + t("Earlier ones are kept by day, in the bar above."));
       reqs.replaceChildren(p);
@@ -2413,7 +2430,7 @@
 
   function empty() {
     offline("");
-    what.replaceChildren(el("b", "", t(purpose || day ? "No requests match these filters." : "Waiting for a request")));
+    what.replaceChildren(el("b", "", t(purpose.length || day ? "No requests match these filters." : "Waiting for a request")));
     mode.textContent = t("Send one from any agent routed through magpie and it plays here as it happens: who routing put first and why, each try, and what each answered.");
     for (const a of agents.values()) a.wire.remove();
     agents.clear();
@@ -2428,7 +2445,7 @@
     subs.clear();
     chip.hidden = true;
     hubText();
-    list.replaceChildren(el("li", "idle", t(purpose || day ? "No requests match these filters." : "No request yet")));
+    list.replaceChildren(el("li", "idle", t(purpose.length || day ? "No requests match these filters." : "No request yet")));
     say(t("Every request an agent sends to magpie shows up here, routed for real."));
     log.hidden = true;
     renderHist(); // none live, but the days the history keeps are still there to look at

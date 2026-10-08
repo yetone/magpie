@@ -1344,7 +1344,14 @@ function connectPanel(a, { fields, fieldBtn }) {
     pick.onclick = (ev) => openAgentModels(a, pick, ev);
     holdAgentModels(a, pick);
     chips.append(pick);
-    kv(t("Model list"), chips);
+    const v = kv(t("Model list"), chips);
+    // the Codex app's menu reaches only so many of them (#1262)
+    if (a.id === "codex" && a.models.shown > CODEX_APP_MENU) {
+      const w = line();
+      w.classList.add("ag-warn", "ag-menu-cap");
+      w.append(el("span", "ag-dot"), el("span", "", t("The Codex app's model menu shows only the first {max}: the last {n} models can't be picked there (the Codex CLI's /model lists them all). In Pick, turn off the ones you don't use, or drag the ones you use to the front under Order.", { max: CODEX_APP_MENU, n: a.models.shown - CODEX_APP_MENU })));
+      v.append(w);
+    }
   }
   // what a new session starts on: optional, the agent's own last pick
   // unset; Codex's is the very value its /model picks, so one choice
@@ -2190,6 +2197,12 @@ function dragCards(e, handle, card, list, cards, commit, idle = () => {}) {
 }
 
 // ---------- an agent's model list ----------
+
+// CODEX_APP_MENU is how many models the Codex app's model menu reaches: it
+// asks Codex's app-server for model/list with limit 100 and never for the
+// next page (ChatGPT.app 26.930), so a model past them can't be picked
+// there; the Codex CLI's /model asks for every one (#1262).
+const CODEX_APP_MENU = 100;
 
 // modelsEntry: the line under an agent's name counting the models its
 // lists show ("All 41 models", or "Showing 5 / 32 models"); it opens the
@@ -12048,8 +12061,12 @@ function openProtoMenu(anchor, opts, value, choose, head = "Protocol this key sp
   anchor.classList.add("open");
   if (anchor.hasAttribute("aria-expanded")) anchor.setAttribute("aria-expanded", "true");
   const outside = (e) => { if (!box.contains(e.target) && !anchor.contains(e.target)) closeProtoMenu(); };
-  // Scrolling the menu keeps it open; scrolling outside moves its anchor.
-  const scroll = (e) => { if (!box.contains(e.target)) closeProtoMenu(); };
+  // A live pick can shrink the list or wrap its heading and clamp the scroll.
+  // Only the reader's scroll dismisses it; the click guard holds its anchor.
+  const scroll = (e) => {
+    if (box.contains(e.target) || live && performance.now() >= purposeUntil) return;
+    closeProtoMenu();
+  };
   const keys = (e) => {
     const shown = filter ? items.filter((b) => !b.hidden) : items;
     const i = shown.indexOf(document.activeElement);

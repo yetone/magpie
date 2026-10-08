@@ -29,6 +29,24 @@ three.
 
 ## Constraints and failure behavior
 
+### Routing purpose filter
+
+The request heading's purpose menu in [`routing.js`](../../internal/gui/assets/routing.js)
+uses `openProtoMenu`'s live checkbox selection: each tick immediately shows
+requests matching any selected purpose, with the menu kept open. An empty
+selection, All purposes or Clear filter restores every purpose without
+changing the day or request/session view. A live menu stays open when its
+redraw clamps the list's scroll; the reader scrolling outside still dismisses it.
+Choosing All purposes closes the menu and returns keyboard focus to the
+purpose button without scrolling; unticking the last checkbox keeps the
+menu open and focused on that checkbox.
+Counts, the current story and replay
+follow the same filtered list. Selected purposes remain available when a day
+has no matching requests. Opening a request from another page clears the
+filter only when that request is excluded. Usage's purpose picker remains a
+single choice sent to the ledger API. See `purpose-filter.test.cjs` and
+`routing-purpose-state.test.cjs`.
+
 ### Desktop fonts
 
 Settings → General offers independent interface and code fonts, each with

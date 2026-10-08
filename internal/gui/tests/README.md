@@ -101,7 +101,12 @@ English and Chinese on Chromium and WebKit. It covers title aliases, literal
 unknown names, unmarked records, pagination and totals, combined failure
 filters and CSV export, route navigation, session grouping, historical days
 and the narrow layout. Routing also covers keyboard dismissal and clearing
-the purpose while keeping the selected day and session grouping. It uses
+the purpose while keeping the selected day and session grouping. Checkbox
+selection also covers combining purposes, immediate updates without closing
+or scrolling, keyboard toggling, restoring all purposes and returning focus
+to the purpose button when All purposes closes the menu, and retaining the
+union through history, session grouping and matching route navigation, in
+English, Simplified/Traditional Chinese, Japanese and German at narrow widths. It uses
 isolated API fixtures. Run with
 `node --test internal/gui/tests/purpose-filter.test.cjs` and the Playwright
 environment described below.
@@ -1995,6 +2000,18 @@ aligned list bottoms, account model labels, and no horizontal overflow at
 
 ```sh
 node --test internal/gui/tests/routing-columns.test.cjs
+```
+
+`routing-scroll-end.test.cjs` wheels the Routing page to its end while the
+trace redraws it, at 440x620, 600x700, 900x500, 1200x600 and 1400x700, and
+checks that it stays there (#1249: in WebKit, container queries pulled it
+back). It also checks the stage, request and column layouts that those
+widths select. `context-scroll-end.test.cjs` does the same on Usage's
+Context tab, with a session open, across its timed reads. Both run in
+English and Chinese, on Chromium and WebKit.
+
+```sh
+node --test internal/gui/tests/routing-scroll-end.test.cjs internal/gui/tests/context-scroll-end.test.cjs
 ```
 
 ## Automatic Codex title grouping
