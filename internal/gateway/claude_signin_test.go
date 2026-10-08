@@ -15,9 +15,9 @@ import (
 // told a provider's 401 for magpie's credential as a 502 in magpie's words,
 // so it doesn't renew a sign-in nobody refused, and a 403 the same where it
 // says the OAuth token was revoked; nothing it is told mentions x-api-key,
-// which it reads as "Not logged in". Recent calls keep the provider's
-// status. Any other 403 is as it was, and a request with magpie's key
-// still gets the 401 as the provider said it.
+// which it reads as "Not logged in" at any status. Recent calls keep the
+// provider's status. Any other error keeps its status, and a request with
+// magpie's key still gets the 401 as the provider said it.
 func TestClaudeSignInNotToldItsSignInFailed(t *testing.T) {
 	f := &fake{t: t, ctype: "application/json", reply: `{"id":"msg","type":"message","role":"assistant","content":[],"usage":{"input_tokens":1,"output_tokens":1}}`}
 	setup(t, provider.Anthropic, f)
@@ -40,6 +40,10 @@ func TestClaudeSignInNotToldItsSignInFailed(t *testing.T) {
 		badKey  = `{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}`
 		revoked = `{"type":"error","error":{"type":"permission_error","message":"OAuth token has been revoked. Please obtain a new token."}}`
 		denied  = `{"type":"error","error":{"type":"permission_error","message":"This organization has been disabled."}}`
+		// as yetone's run of Claude Code 2.1.293 had them (#1218)
+		keyDenied = `{"type":"error","error":{"type":"permission_error","message":"invalid x-api-key"}}`
+		noKey     = `{"type":"error","error":{"type":"invalid_request_error","message":"x-api-key header is required"}}`
+		limited   = `{"type":"error","error":{"type":"rate_limit_error","message":"rate limited for this x-api-key"}}`
 	)
 	for _, c := range []struct {
 		name, path, auth string
@@ -51,6 +55,9 @@ func TestClaudeSignInNotToldItsSignInFailed(t *testing.T) {
 		{"401 without v1", "/messages", signIn, 401, badKey, "Fake refused magpie's credential (HTTP 401): invalid API key", 502, 401},
 		{"revoked", "/v1/messages", signIn, 403, revoked, "Fake refused magpie's credential (HTTP 403): OAuth token has been revoked", 502, 403},
 		{"another 403", "/v1/messages", signIn, 403, denied, "has been disabled", 403, 403},
+		{"403 naming the key", "/v1/messages", signIn, 403, keyDenied, "invalid API key", 403, 403},
+		{"400 naming the key", "/v1/messages", signIn, 400, noKey, "API key header is required", 400, 400},
+		{"429 naming the key", "/v1/messages", signIn, 429, limited, "rate limited for this API key", 429, 429},
 		{"401 counting", "/v1/messages/count_tokens", signIn, 401, badKey, "refused magpie's credential (HTTP 401): invalid API key", 502, 0},
 		{"magpie's key", "/v1/messages", "Bearer " + Token, 401, badKey, "invalid x-api-key", 401, 401},
 		{"an API key", "/v1/messages", "Bearer sk-ant-api03-" + strings.Repeat("b", 24), 401, badKey, "invalid x-api-key", 401, 401},
@@ -60,6 +67,9 @@ func TestClaudeSignInNotToldItsSignInFailed(t *testing.T) {
 		rec := send(c.path, c.auth)
 		if rec.Code != c.want || !strings.Contains(rec.Body.String(), c.said) {
 			t.Errorf("%s: %d %s, want %d saying %q", c.name, rec.Code, rec.Body.String(), c.want, c.said)
+		}
+		if c.auth == signIn && strings.Contains(strings.ToLower(rec.Body.String()), "x-api-key") {
+			t.Errorf("%s: told %s, which Claude Code reads as its sign-in refused", c.name, rec.Body.String())
 		}
 		if c.want == 502 {
 			var e struct {

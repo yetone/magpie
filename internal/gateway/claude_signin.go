@@ -21,7 +21,8 @@ import (
 // credential, or one of magpie's own Claude accounts lapsed — so it is
 // told as the 502 it is, in magpie's words: "<provider> refused magpie's
 // credential (HTTP 401): …", the provider's reason after it with x-api-key
-// said as "API key". The usage log and Recent calls keep the provider's
+// said as "API key". Any other error keeps its status, x-api-key said as
+// "API key" in it too. The usage log and Recent calls keep the provider's
 // status and message.
 
 // claudeSignIn is a request whose key is a Claude sign-in: an Anthropic
@@ -46,12 +47,13 @@ func keepsSignIn(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// signInWriter is keepsSignIn's: a 401 or 403 is held until its body,
-// which says whose refusal it was — magpie writes an error whole, in one
-// write, and a stream's event the same.
+// signInWriter is keepsSignIn's: an error's status is held until its
+// body, which says whose refusal it was and is said without x-api-key —
+// magpie writes an error whole, in one write, and a stream's event the
+// same.
 type signInWriter struct {
 	http.ResponseWriter
-	held  int  // a 401 or 403, waiting for its body
+	held  int  // an error's status, waiting for its body
 	wrote bool // the status went
 	told  bool // the error went in magpie's words: the rest of it is dropped
 }
@@ -60,7 +62,7 @@ func (w *signInWriter) WriteHeader(code int) {
 	if w.wrote || w.held != 0 {
 		return
 	}
-	if code == http.StatusUnauthorized || code == http.StatusForbidden {
+	if code >= http.StatusBadRequest {
 		w.held = code
 		return
 	}
@@ -79,7 +81,12 @@ func (w *signInWriter) Write(b []byte) (int, error) {
 		}
 		code := w.held
 		w.held = 0
-		if code == http.StatusForbidden && !bytes.Contains(b, []byte("OAuth token has been revoked")) {
+		if code != http.StatusUnauthorized && (code != http.StatusForbidden || !bytes.Contains(b, []byte("OAuth token has been revoked"))) {
+			// any other error, at its status
+			if xAPIKey.Match(b) {
+				b = xAPIKey.ReplaceAll(b, []byte("API key"))
+				w.Header().Del("Content-Length")
+			}
 			w.ResponseWriter.WriteHeader(code)
 			break
 		}
@@ -141,7 +148,7 @@ func (w *signInWriter) Flush() {
 func (w *signInWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // release sends a status held with no body after all: a 401 as the 502
-// it is.
+// it is, any other as it was.
 func (w *signInWriter) release() {
 	if w.held != 0 {
 		code := w.held
