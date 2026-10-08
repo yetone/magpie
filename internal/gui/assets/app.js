@@ -86,6 +86,7 @@ async function api(path, body, heads) {
   }
   if (!res.ok) {
     const err = new Error(data?.error || `${res.status} ${res.statusText}`);
+    if (data?.code === "lan_key_required") err.code = data.code;
     if (data?.code === "runtime_unavailable") {
       err.code = data.code;
       if (data.offline === "stage" || data.offline === "disconnect") err.offline = data.offline;
@@ -17462,6 +17463,7 @@ async function loadSettings() {
   const s = await api("settings");
   if (!prefsSettled(since) && prefs) return; // the save draws the page when it's in
   prefs = s;
+  lanKeyError = false;
   // the WebDAV setup can have been changed from outside the window (magpie
   // webdav at the terminal): the page's copy of it is dropped, so the page
   // is drawn from a fresh read. Coming back to the window is safe with a
@@ -19303,7 +19305,7 @@ function renderCORS(s) {
 
 // renderLAN: the gateway shared on the local network, for agents on other
 // machines. Gateway keys and connection examples live together in Gateway.
-let lanSelectedURL = "", lanProtocol = "openai";
+let lanSelectedURL = "", lanProtocol = "openai", lanKeyError = false;
 function renderLAN(s) {
   const box = $("#lanList");
   box.replaceChildren();
@@ -19319,10 +19321,28 @@ function renderLAN(s) {
     box.append(r);
     return r;
   };
-  const set = (body) => writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; renderSettings(); })
-    .catch((e) => { status(t(e.message), "err"); renderSettings(); });
-  row(t("Share on local network"), t("Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
+  const set = (body) => {
+    if (lanKeyError) {
+      lanKeyError = false;
+      share.querySelector(".sub").replaceWith(el("div", "sub", t("Agents on other computers on this network can use magpie’s models with a gateway key from Gateway")));
+    }
+    return writingPrefs(api("settings/lan", body)).then((ns) => { prefs = ns; lanKeyError = false; renderSettings(); })
+      .catch((e) => {
+        lanKeyError = e.code === "lan_key_required";
+        if (!lanKeyError) status(t(e.message), "err");
+        renderSettings();
+      });
+  };
+  const keys = el("button", "text", t("Gateway keys"));
+  keys.onclick = () => show("gateway");
+  const share = row(t("Share on local network"), t(lanKeyError ? "Create or enable a gateway key before sharing"
+    : "Agents on other computers on this network can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
+  if (s.lan) share.querySelector(".val").append(keys);
+  if (lanKeyError) {
+    share.querySelector(".sub").classList.add("err");
+    share.querySelector(".sub").setAttribute("role", "alert");
+  }
   if (!s.lan) return;
   let urls = s.lanURLs || [], sub = "";
   // in a container magpie finds only the container's own addresses; the

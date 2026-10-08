@@ -29,6 +29,38 @@ three.
 
 ## Constraints and failure behavior
 
+### Gateway keys and local-network sharing
+
+Gateway → Gateway keys stays hidden while sharing is off. While sharing
+is on, the same entry is linked from Settings → Network.
+`POST /api/settings/lan` calls
+[`access.ConfigureLAN`](../../internal/access/access.go): sharing changes
+remote access and preserves existing gateway keys. Enabling with a completely
+empty key store creates its first default key with a fresh credential and ID.
+If any records exist, enabling requires an enabled key with a nonempty
+credential; otherwise the request fails with guidance beside the sharing
+control with the stable API code `lan_key_required` and leaves the sharing
+setting unchanged. A new attempt or a fresh settings read clears the old
+guidance. The switch never rotates or re-enables a key.
+The older `newKey` request field no longer rotates a credential; explicit
+rotation remains in Gateway's key management.
+
+`MigrateLegacyLANKey` still imports an older Settings credential, keeping its
+identity and old clients' access. A completed migration or revoked mirror
+does not resurrect a retained credential: if an empty store gets a new default
+key, its legacy mirror is replaced with the new credential. Removed and
+disabled credentials stay revoked. `LANSecret` only returns an enabled
+legacy/default LAN credential for an agent beyond loopback. Without one it
+returns an empty string: it neither borrows another client's key nor creates
+an extra key. Non-loopback agents then need an explicitly configured valid
+gateway key; local agent credentials cannot authenticate remote requests.
+
+Sharing still requires remote and forwarded callers to authenticate with
+an enabled gateway key. An explicit `MAGPIE_ADDR` host is retained by
+[`gateway.listenAddr`](../../internal/gateway/lan.go), including loopback
+behind a proxy. `TestSharingUsesExistingGatewayKey` checks direct and
+forwarded requests with valid, invalid and absent credentials.
+
 ### Desktop fonts
 
 Settings → General offers independent interface and code fonts, each with

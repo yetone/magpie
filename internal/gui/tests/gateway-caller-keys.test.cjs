@@ -83,13 +83,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator("#lanList").getByRole("button", { name: w.copy, exact: true }).count(), 0,
         "Settings does not duplicate key management");
       await page.locator("#nav").getByRole("button", { name: lang === "zh" ? "网关" : "Gateway", exact: true }).click();
-      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 5);
-      let lanRow = page.locator("#gatewayKeys .acc[data-key]", { has: page.locator(".rename", { hasText: /^Magpie$/ }) });
+      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 4);
+      let lanRow = page.locator("#gatewayKeys .acc[data-key]", { has: page.locator(".rename", { hasText: /^Laptop$/ }) });
       const lanID = await lanRow.getAttribute("data-key");
       const before = await lanRow.locator(".plan").textContent();
       await lanRow.getByRole("button", { name: w.copy, exact: true }).click();
       await page.waitForFunction(() => document.querySelector("#gatewayKeys .copy.done"));
-      assert(events.some((e) => e.action === "clipboard" && e.body.text === "fixture-lan-1"));
+      assert(events.some((e) => e.action === "clipboard" && e.body.text === "fixture-laptop"));
       const rotateLabel = lang === "zh" ? "轮换密钥" : "Rotate key";
       const cancelLabel = lang === "zh" ? "取消" : "Cancel";
       await lanRow.getByRole("button", { name: rotateLabel, exact: true }).click();
@@ -98,17 +98,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#modal").waitFor({ state: "hidden" });
       assert.equal(events.filter((e) => e.action === "rotate-key").length, 0);
       await confirmKeyAction(page, lanRow, rotateLabel);
-      await page.waitForFunction((masked) => document.querySelector('#gatewayKeys .acc[data-key^="lan-key"] .plan')?.textContent !== masked, before);
+      await page.waitForFunction((masked) => document.querySelector('#gatewayKeys .acc[data-key="laptop"] .plan')?.textContent !== masked, before);
       assert.equal(await lanRow.getAttribute("data-key"), lanID, "rotation keeps the key's identity");
       await lanRow.getByRole("button", { name: w.copy, exact: true }).click();
       await page.waitForFunction(() => document.querySelector("#gatewayKeys .copy.done"));
-      assert(events.some((e) => e.action === "clipboard" && e.body.text === "fixture-rotated-2"));
+      assert(events.some((e) => e.action === "clipboard" && e.body.text === "fixture-rotated-1"));
       await lanRow.getByRole("button", { name: w.remove, exact: true }).click();
       await page.keyboard.press("Escape");
       await page.locator("#modal").waitFor({ state: "hidden" });
       assert.equal(events.filter((e) => e.action === "remove-key").length, 0);
       await confirmKeyAction(page, lanRow, w.remove);
-      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 4);
+      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 3);
       await page.locator("#prefs").click();
       await page.locator("#setTab-network").click();
       await page.locator("#lanList .lan-address-row").waitFor();
@@ -117,14 +117,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await share.click();
       await page.locator("#lanList .lan-address-row").waitFor();
       await page.locator("#nav").getByRole("button", { name: lang === "zh" ? "网关" : "Gateway", exact: true }).click();
-      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 5);
-      lanRow = page.locator("#gatewayKeys .acc[data-key]", { has: page.locator(".rename", { hasText: /^Magpie$/ }) });
-      assert.notEqual(await lanRow.getAttribute("data-key"), lanID, "recreated LAN key appears without a page reload");
-      assert.equal(await page.locator(`#gatewayKeys .acc[data-key="${lanID}"]`).count(), 0);
+      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 3);
+      assert.equal(await page.locator(`#gatewayKeys .acc[data-key="${lanID}"]`).count(), 0,
+        "sharing does not restore a removed key");
+      assert.equal(await page.locator("#gatewayKeys .rename", { hasText: /^Magpie$/ }).count(), 0,
+        "sharing does not add a default key");
       tablet = page.locator("#gatewayKeys .acc[data-key]", { hasText: "Travel" });
       await tablet.waitFor();
       await confirmKeyAction(page, tablet, w.remove);
-      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 4);
+      await page.waitForFunction(() => document.querySelectorAll("#gatewayKeys .acc[data-key]").length === 2);
       await page.setViewportSize({ width: 560, height: 740 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
       assert.deepEqual(errors, []);

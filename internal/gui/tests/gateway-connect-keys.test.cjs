@@ -14,7 +14,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.setDefaultTimeout(6000);
       const events = [], errors = [];
       page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", fixture(locale, "dark", events));
+      await page.route("**/*", fixture(locale, "dark", events, { legacyLAN: true }));
       const w = locale === "zh" ? { on: "开启", off: "关闭", gateway: "网关", disable: "停用密钥", enable: "启用密钥", remove: "移除", rotate: "轮换密钥", create: "创建", name: "网关密钥名称" }
         : { on: "On", off: "Off", gateway: "Gateway", disable: "Disable key", enable: "Enable key", remove: "Remove", rotate: "Rotate key", create: "Create", name: "Gateway key name" };
       const snippet = page.locator("#connect .snip");
@@ -126,7 +126,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "custom key names are not translated as interface labels");
       await page.keyboard.press("Escape");
       await confirmKeyAction(page, row("server"), w.rotate);
-      await expectSecret("fixture-rotated-2");
+      await expectSecret("fixture-rotated-1");
       assert.equal(await row("server").locator(".rename").textContent(), "Local network");
       assert(!(await snippet.textContent()).includes("fixture-server"), "rotation refreshes the selected secret");
       const code = await snippet.textContent();
@@ -152,7 +152,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.setViewportSize({ width: 1000, height: 760 });
       await confirmKeyAction(page, row("server"), w.remove);
       await expectSecret("fixture-laptop");
-      assert(!(await snippet.textContent()).includes("fixture-rotated-2"), "removal clears the selected credential");
+      assert(!(await snippet.textContent()).includes("fixture-rotated-1"), "removal clears the selected credential");
       // A remote connection without enabled keys must not copy a broken command.
       for (const id of ["laptop", "work"]) {
         await confirmKeyAction(page, row(id), w.remove);
@@ -166,7 +166,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator("#addGatewayKey").click();
       await page.getByRole("textbox", { name: w.name, exact: true }).fill("Replacement");
       await page.getByRole("button", { name: w.create, exact: true }).click();
-      await expectSecret("fixture-created-2");
+      await expectSecret("fixture-created-1");
       assert.equal(await page.locator("#connectKey code").textContent(), "Replacement");
       await page.locator("#prefs").click();
       await page.locator("#setTab-network").click();
@@ -179,7 +179,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator("#connectKey").count(), 0);
       assert.equal(await page.locator("#connect").getByText(locale === "zh" ? "API 密钥" : "API key", { exact: true }).count(), 1);
       assert((await snippet.textContent()).includes("http://127.0.0.1:3999"));
-      assert(!(await snippet.textContent()).includes("fixture-created-2"), "sharing off clears the selected gateway credential");
+      assert(!(await snippet.textContent()).includes("fixture-created-1"), "sharing off clears the selected gateway credential");
       assert.deepEqual(errors, []);
     });
   }

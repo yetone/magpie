@@ -4,6 +4,8 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Create or enable a gateway key before sharing": "请先创建或启用一个网关密钥，再开启共享",
+    "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network": "在局域网共享前，请先在网关 → 网关密钥中创建一个已启用的密钥",
     // the context window (context.js)
     "1 request": "1 个请求",
     "1 session": "1 个会话",
@@ -7449,6 +7451,8 @@ const I18N = {
     "credits": "積分",
   },
   ja: {
+    "Create or enable a gateway key before sharing": "共有する前に、ゲートウェイキーを作成するか有効にしてください",
+    "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network": "ローカルネットワークで共有する前に、ゲートウェイ → ゲートウェイキーで有効なキーを作成してください",
     // the context window (context.js)
     "1 request": "1 件のリクエスト",
     "1 session": "1 件のセッション",
@@ -11165,6 +11169,8 @@ const I18N = {
     "Main navigation": "メインナビゲーション",
   },
   de: {
+    "Create or enable a gateway key before sharing": "Vor der Freigabe einen Zugangsschlüssel erstellen oder aktivieren",
+    "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network": "Erstelle vor der Freigabe im lokalen Netzwerk einen aktivierten Zugangsschlüssel unter Zugangspunkt → Zugangsschlüssel",
     // the context window (context.js)
     "1 request": "1 Anfrage",
     "1 session": "1 Sitzung",

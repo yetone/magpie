@@ -201,7 +201,7 @@ func TestMigratedLANKeyUsageAndRevocation(t *testing.T) {
 	if rec.CallerKeyID != keys[0].ID || rec.CallerKeyName != keys[0].Name || rec.Input != 30 || rec.Output != 5 {
 		t.Fatal("remote usage attribution", rec)
 	}
-	if err := access.ConfigureLAN(true, true); err != nil {
+	if _, err := access.Update("rotate-key", access.Change{Key: keys[0].ID}); err != nil {
 		t.Fatal(err)
 	}
 	if code := call(); code != http.StatusUnauthorized {

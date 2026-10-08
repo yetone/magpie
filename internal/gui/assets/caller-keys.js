@@ -175,7 +175,7 @@ function renderGatewayKeys() {
     list.append(row);
   }
   if (gatewayKeyDraft !== null) list.append(gatewayKeyForm());
-  else if (!gatewayKeys.length) list.append(el("div", "none", t("No gateway keys yet")));
+  else if (!gatewayKeys.length) list.append(el("div", "empty-state", t("No gateway keys yet")));
   box.append(list);
 }
 

@@ -184,11 +184,9 @@ func List() ([]Key, error) {
 	return keys, nil
 }
 
-// LANSecret is the key magpie shares the gateway on the local network with
-// (the default key ConfigureLAN made), for an agent of this computer's that
-// reaches it from beyond loopback — one in a WSL distro under NAT, whose
-// requests the gateway takes only with a named key; "" while the gateway
-// isn't shared, or that key is off.
+// LANSecret gives an agent beyond loopback the enabled LAN key while
+// sharing is on. Other caller keys belong to their clients, not magpie.
+// Reading it never changes credentials or their migration markers.
 func LANSecret() string {
 	mu.Lock()
 	defer mu.Unlock()
@@ -200,13 +198,12 @@ func LANSecret() string {
 	if err != nil {
 		return ""
 	}
-	if i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == s.LANKeyID || k.LAN }); i >= 0 {
-		if keys[i].Off {
-			return ""
-		}
+	if i := slices.IndexFunc(keys, func(k Key) bool { return (k.ID == s.LANKeyID || k.LAN) && !k.Off && k.Secret != "" }); i >= 0 {
 		return keys[i].Secret
 	}
-	if s.LANKeyID == "" && s.LANKey != "" && !strings.HasPrefix(s.LANKey, revokedLANPrefix) {
+	if s.LANKeyID == "" && s.LANKey != "" && !strings.HasPrefix(s.LANKey, revokedLANPrefix) && !slices.ContainsFunc(keys, func(k Key) bool {
+		return k.LAN || subtle.ConstantTimeCompare([]byte(k.Secret), []byte(s.LANKey)) == 1
+	}) {
 		return s.LANKey
 	}
 	return ""
@@ -442,9 +439,13 @@ func migrateLegacyLANKey() error {
 	return settings.Save(s)
 }
 
-// ConfigureLAN starts sharing with a named key. Rotation preserves the key's
-// identity, name and enabled state.
-func ConfigureLAN(on, rotate bool) error {
+// ErrLANKeyRequired means existing gateway keys are all disabled or empty.
+var ErrLANKeyRequired = errors.New("Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network")
+
+// ConfigureLAN changes remote access, creating the default key only when
+// the store is empty. The second argument is retained for older callers;
+// rotation belongs to Update("rotate-key"), not the sharing switch.
+func ConfigureLAN(on, _ bool) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if err := migrateLegacyLANKey(); err != nil {
@@ -456,28 +457,24 @@ func ConfigureLAN(on, rotate bool) error {
 		if err != nil {
 			return err
 		}
-		i := slices.IndexFunc(keys, func(k Key) bool { return k.ID == s.LANKeyID || k.LAN })
-		if i < 0 || rotate {
+		if len(keys) == 0 {
 			token, err := random(24)
 			if err != nil {
 				return err
 			}
-			if i < 0 {
-				id, err := random(12)
-				if err != nil {
-					return err
-				}
-				keys = append(keys, Key{ID: id, Name: "Magpie", LAN: true})
-				i = len(keys) - 1
+			id, err := random(12)
+			if err != nil {
+				return err
 			}
-			keys[i].Secret = Prefix + token
+			keys = append(keys, Key{ID: id, Name: "Magpie", LAN: true, Secret: Prefix + token})
 			if err := save(keys); err != nil {
 				return err
 			}
-			s.LANKeyID = keys[i].ID
-		}
-		if err := setLegacyMirror(&s, keys[i]); err != nil {
-			return err
+			if err := setLegacyMirror(&s, keys[0]); err != nil {
+				return err
+			}
+		} else if !slices.ContainsFunc(keys, func(k Key) bool { return !k.Off && k.Secret != "" }) {
+			return ErrLANKeyRequired
 		}
 	}
 	s.LAN = on

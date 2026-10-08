@@ -9,7 +9,7 @@ const sum = (rows) => ({
 });
 
 function fixture(lang, theme, events, options = {}) {
-  let keys = [
+  let keys = options.keys ? structuredClone(options.keys) : [
     { id: "laptop", name: "Laptop", masked: "sk-magpie-key-…111111" },
     { id: "server", name: "Server", masked: "sk-magpie-key-…222222" },
     { id: "work", name: "Work", masked: "sk-magpie-key-…333333" },
@@ -20,8 +20,12 @@ function fixture(lang, theme, events, options = {}) {
   }
   let serial = 0;
   let lan = !!options.lan;
-  let lanKeyID = "", rotations = 0, lanSecret = "";
+  let rotations = 0;
   const secrets = new Map([["laptop", "fixture-laptop"], ["server", "fixture-server"], ["work", "fixture-work"]]);
+  if (options.legacyLAN) {
+    keys.push({ id: "lan-key-legacy", name: "Magpie", masked: "sk-magpie-key-…legacy" });
+    secrets.set("lan-key-legacy", "fixture-legacy-lan");
+  }
   const lanURLs = ["http://192.168.1.10:3999", "http://10.0.0.10:3999"];
   const lanState = () => ({ lang, theme, lan,
     lanURLs: lan ? lanURLs : [], fx: { rate: 7.2, at: new Date().toISOString() } });
@@ -63,17 +67,14 @@ function fixture(lang, theme, events, options = {}) {
     if (url.pathname === "/api/settings/lan") {
       const body = req.postDataJSON();
       events.push({ action: "lan", body });
-      lan = body.on;
-      let key = keys.find((k) => k.id === lanKeyID);
-      if (lan && (!key || body.newKey)) {
-        if (!key) {
-          key = { id: "lan-key-" + (++serial), name: "Magpie" };
-          lanKeyID = key.id;
-          keys.push(key);
-        }
-        lanSecret = "fixture-lan-" + (++rotations);
-        key.masked = "sk-magpie-key-…" + lanSecret.slice(-6);
+      if (body.on && !keys.length) {
+        const id = "lan-key-" + (++serial);
+        secrets.set(id, "fixture-first-lan-" + serial);
+        keys.push({ id, name: "Magpie", masked: "sk-magpie-key-…first", lan: true });
       }
+      if (body.on && !keys.some((k) => !k.off)) return route.fulfill({ status: 400,
+        json: { code: "lan_key_required", error: options.lanKeyError || "Create an enabled gateway key in Gateway → Gateway keys before sharing on the local network" } });
+      lan = body.on;
       return json(lanState());
     }
     if (url.pathname === "/api/settings") {
@@ -116,7 +117,6 @@ function fixture(lang, theme, events, options = {}) {
       if (action === "rotate-key") {
         secret = "fixture-rotated-" + (++rotations);
         secrets.set(k.id, secret);
-        if (k.id === lanKeyID) lanSecret = secret;
         k.masked = "sk-magpie-key-…" + secret.slice(-6);
       }
       if (action === "remove-key") keys = keys.filter((v) => v !== k);
@@ -129,7 +129,7 @@ function fixture(lang, theme, events, options = {}) {
       }
       if (action === "models-key") k.models = body.models?.length ? body.models : undefined;
       if (action === "accounts-key") k.accounts = body.accounts?.length ? body.accounts : undefined;
-      if (action === "copy-key") secret = k.id === lanKeyID ? lanSecret : secrets.get(k.id);
+      if (action === "copy-key") secret = secrets.get(k.id);
       return json({ keys, secret });
     }
     if (url.pathname === "/api/copy") { events.push({ action: "clipboard", body: req.postDataJSON() }); return json({}); }

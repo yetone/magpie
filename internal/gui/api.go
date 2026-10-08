@@ -1734,6 +1734,9 @@ func fail(rw http.ResponseWriter, err error) {
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(http.StatusBadRequest)
 	out := map[string]string{"error": err.Error()}
+	if errors.Is(err, access.ErrLANKeyRequired) {
+		out["code"] = "lan_key_required"
+	}
 	var unavailable *agent.RuntimeUnavailableError
 	if errors.As(err, &unavailable) {
 		out["code"] = "runtime_unavailable"
