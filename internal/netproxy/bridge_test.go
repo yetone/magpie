@@ -181,7 +181,10 @@ func TestBunThroughBridge(t *testing.T) {
 	socks, n := fakeSOCKS(t, "me", "pw")
 	b, _ := Bridge(socks)
 	// loopback is never proxied by magpie, but the test's servers are on it:
-	// Bun is given the proxy outright
+	// Bun is given the proxy outright. It still honors NO_PROXY, so the
+	// developer's loopback bypass must not turn this into a direct fetch.
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
 	js := `for (const u of process.env.URLS.split(" ")) console.log(await (await fetch(u, { proxy: "` + b + `", tls: { rejectUnauthorized: false } })).text())`
 	cmd := exec.Command(bun, "-e", js)
 	cmd.Env = append(os.Environ(), "URLS="+plain.URL+" "+tls.URL)
