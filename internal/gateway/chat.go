@@ -254,7 +254,8 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 			seen = nil
 		}
 	}
-	for i, m := range r.Messages {
+	turns := joinSplitCalls(r.Messages)
+	for i, m := range turns {
 		if m.Role == "assistant" {
 			showSeen()
 			am := map[string]any{"role": "assistant"}
@@ -303,7 +304,7 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 			// to go on) — and its reasoning goes with it where the upstream
 			// reads reasoning_content back, so the going on picks the thought
 			// up where it was cut
-			if r.Resume && i == len(r.Messages)-1 {
+			if r.Resume && i == len(turns)-1 {
 				mode := chatPrefill(host, model)
 				switch mode {
 				case "prefix":
@@ -471,7 +472,9 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 //     id used twice, the way the Responses path's orphanedToolOutputs
 //     turns an output without a call into a user message;
 //   - a call left unanswered gets a synthetic error result, so the turn
-//     can go on (an interrupted turn leaves its call pending);
+//     can go on (an interrupted turn leaves its call pending); a turn's
+//     calls split over consecutive assistant messages were joined into
+//     one by joinSplitCalls before, so they are pending together (#1275);
 //   - an assistant message with nothing in it — no text, no calls, no
 //     reasoning, what a thinking-only turn becomes — is dropped inside a
 //     pending exchange, where it would sit between calls and their

@@ -232,8 +232,7 @@ func (h *host) openMain(url string) {
 		h.whenLoaded(w, func() {
 			if h.main == w {
 				h.placeMain(w)
-				w.Show()
-				w.Focus()
+				showHere(w)
 			}
 		})
 		return
@@ -245,8 +244,41 @@ func (h *host) openMain(url string) {
 		return // made again, it is shown once its page has come
 	}
 	h.placeMain(h.main)
-	h.main.Show()
-	h.main.Focus()
+	showHere(h.main)
+}
+
+// reopenMain answers a click on magpie's Dock icon (#1252). A window that is
+// open, on whichever Space, is left there, and magpie is activated as any
+// app is: the Mac takes the user to the window's Space. One closed or
+// minimised is shown as openMain shows it, on the Space the user is on.
+func (h *host) reopenMain() {
+	if h.main == nil || h.loading[h.main] || !windowOpen(h.main) {
+		h.openMain("")
+		return
+	}
+	h.closing.Store(false) // reopened while leaving full screen: it stays
+	if h.panel != nil {
+		h.panel.Hide()
+	}
+	activateApp()
+}
+
+// spaceSettle is how long a window just shown keeps moving to the active
+// Space: the Mac moves it once the order to the front is committed, after
+// Show has returned, and not at all if the flag is gone by then.
+const spaceSettle = 500 * time.Millisecond
+
+// showHere shows w and makes it key on the Space the user is on, wherever it
+// was last; on the main thread. It moves only while being shown: left on,
+// activating magpie in any way (the Dock, Command-Tab) would pull the open
+// window off its own Space onto the user's (#1252).
+func showHere(w *application.WebviewWindow) {
+	setMovesToActiveSpace(w, true)
+	w.Show()
+	w.Focus()
+	time.AfterFunc(spaceSettle, func() {
+		application.InvokeAsync(func() { setMovesToActiveSpace(w, false) })
+	})
 }
 
 // placeMain puts the main window, made and not shown yet, as it was last

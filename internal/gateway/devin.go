@@ -319,7 +319,7 @@ func buildDevin(r *Request, uid, key string) []byte {
 		}
 		pending = nil
 	}
-	for _, m := range r.Messages {
+	for _, m := range joinSplitCalls(r.Messages) {
 		if m.Role == "assistant" {
 			a := devinMsg{role: devinAssistant}
 			var texts []string

@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -113,5 +114,88 @@ func TestProtectionBreakOffDoesNotRest(t *testing.T) {
 	}
 	if !lateRests("Unable to reach the model provider") {
 		t.Error("a vendor failing mid-reply no longer rests")
+	}
+}
+
+// brokenOff is the ChatGPT backend's refusal as #1270 (bulai0408, Codex
+// 0.159.2 in Lody) met it on a long history: HTTP 200, the reply begun,
+// then an error event whose error is nested — the object Codex was shown,
+// {"message":"response protection is unavailable","type":"internal_error",
+// "param":null,"code":null}, when it came before the reply.
+var brokenOff = sse(
+	`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-6.1-sol"}}`,
+	`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"message","role":"assistant","content":[]}}`,
+	`data: {"type":"response.output_text.delta","output_index":0,"delta":"## Progress so far"}`,
+	`event: error`+"\n"+`data: {"type":"error","error":{"message":"response protection is unavailable","type":"internal_error","param":null,"code":null}}`)
+
+// brokenOffUp answers the structured history with brokenOff, and the
+// history as text with brokenOff too when textFails, else with a summary.
+func brokenOffUp(t *testing.T, textFails bool) *[]string {
+	t.Helper()
+	var mu sync.Mutex
+	tried := &[]string{}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		*tried = append(*tried, r.Header.Get("chatgpt-account-id"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "text/event-stream")
+		if textFails || !strings.Contains(string(b), "This is the conversation so far") {
+			io.WriteString(w, brokenOff)
+			return
+		}
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"resp_2","model":"gpt-6.1-sol"}}`,
+			`data: {"type":"response.output_item.done","item":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"the summary"}]}}`,
+			`data: {"type":"response.completed","response":{"id":"resp_2","usage":{"input_tokens":7,"output_tokens":2}}}`))
+	}))
+	t.Cleanup(up.Close)
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	t.Cleanup(func() { provider.CodexBase = was })
+	return tried
+}
+
+// #1270: the refusal came after the reply began, so the compaction got a
+// 200 and Codex "502 compaction: the model failed" — the error's nested
+// message unread and the history never asked as text. It is asked as text
+// as the 502 is, and Codex gets its compaction.
+func TestProtectionBrokenOffCompactionAsText(t *testing.T) {
+	codexSignedIn(t, "two@example.com")
+	tried := brokenOffUp(t, false)
+	code, body := codexPost(t, strings.Replace(protectedCompaction, "%q", `"codex/gpt-6.1-sol"`, 1))
+	if code != 200 || !strings.Contains(body, `"type":"compaction"`) || !strings.Contains(body, magpieCompaction) {
+		t.Fatalf("status %d: %s", code, body)
+	}
+	if len(*tried) != 2 {
+		t.Errorf("asked %d times (%v), not once as it came and once as text", len(*tried), *tried)
+	}
+	if r := restingNow(t); len(r) > 0 {
+		t.Errorf("resting: %v", r)
+	}
+}
+
+// Broken off as text too, the summary is magpie's own, and Codex goes on.
+func TestProtectionBrokenOffTwiceCompactsLocally(t *testing.T) {
+	codexSignedIn(t, "two@example.com")
+	brokenOffUp(t, true)
+	code, body := codexPost(t, strings.Replace(protectedCompaction, "%q", `"codex/gpt-6.1-sol"`, 1))
+	if code != 200 || !strings.Contains(body, `"type":"compaction"`) {
+		t.Fatalf("status %d: %s", code, body)
+	}
+	_, enc, _ := strings.Cut(body, magpieCompaction)
+	enc, _, _ = strings.Cut(enc, `"`)
+	sum, _ := base64.StdEncoding.DecodeString(enc)
+	if !strings.Contains(string(sum), "refactor the parser") || !strings.Contains(string(sum), "response protection is unavailable") {
+		t.Errorf("local summary: %s", sum)
+	}
+}
+
+// An error event's message nested in its error is the one read, not "the
+// model failed".
+func TestCompactReplyReadsNestedError(t *testing.T) {
+	_, err := compactReply([]byte(brokenOff))
+	if err == nil || err.Error() != "response protection is unavailable" {
+		t.Errorf("err = %v", err)
 	}
 }

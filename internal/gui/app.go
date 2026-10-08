@@ -361,10 +361,11 @@ func Run(version string, showMain bool, link string) error {
 
 	onDock = func(s settings.Settings) { h.dock(s, h.MainShown()) }
 	dockOnFullscreen()
-	// The Dock icon opens the window. Wails would show every hidden window
-	// on it, the panel too, so the hook answers first and stops it.
+	// The Dock icon opens the window, or goes to it where it is open. Wails
+	// would show every hidden window on it, the panel too, so the hook
+	// answers first and stops it.
 	h.app.Event.RegisterApplicationEventHook(events.Mac.ApplicationShouldHandleReopen, func(e *application.ApplicationEvent) {
-		h.ShowMain("")
+		application.InvokeSync(h.reopenMain)
 		e.Cancel()
 	})
 

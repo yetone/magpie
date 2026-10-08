@@ -476,7 +476,7 @@ func cursorMessages(r *Request, tools []bridgeTool) [][]byte {
 			add(map[string]any{"role": "tool", "content": results})
 		}
 	}
-	for _, m := range r.Messages {
+	for _, m := range joinSplitCalls(r.Messages) {
 		if m.Role == "assistant" {
 			answer(nil)
 			var content []any
