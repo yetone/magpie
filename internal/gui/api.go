@@ -377,6 +377,11 @@ type settingsJSON struct {
 	// LANURLs are a container's own addresses, not the host's: the page
 	// offers the one it was opened at instead, or says how to set it
 	LANContainer bool `json:"lanContainer,omitempty"`
+	// the optional loopback HTTPS gateway Claude for Microsoft 365 uses,
+	// and its named gateway key without the credential.
+	M365Status    gateway.M365Status `json:"m365Status"`
+	M365KeyName   string             `json:"m365KeyName,omitempty"`
+	M365KeyMasked string             `json:"m365KeyMasked,omitempty"`
 	// when the Codex warm-up last started an account's window
 	CodexWarmed *time.Time `json:"codexWarmed,omitempty"`
 	// and the Claude warm-up
@@ -509,6 +514,12 @@ func settingsState() settingsJSON {
 	s.Login = autostart.Enabled()
 	if s.LAN {
 		s.LANURLs, s.LANContainer = gateway.LANURLs(), gateway.ContainerAddrs()
+	}
+	s.M365Status = m365.Status()
+	if keys, err := access.List(); err == nil {
+		if i := slices.IndexFunc(keys, func(k access.Key) bool { return k.ID == s.M365KeyID }); i >= 0 {
+			s.M365KeyName, s.M365KeyMasked = keys[i].Name, keys[i].Masked
+		}
 	}
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
 	s.CodexUsers = codexUsers()
@@ -951,6 +962,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 	importRoutes(mux)
 	usageRoutes(mux, w)
 	callerKeyRoutes(mux)
+	m365Routes(mux)
 	sessionRoutes(mux, w)
 	sessionManageRoutes(mux, w)
 	backupRoutes(mux, w)
@@ -1008,6 +1020,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.LANKeyID = cur.LANKeyID
 		in.Port = cur.Port                               // set on its own (port below), which moves the gateway
 		in.CORSOrigins = cur.CORSOrigins                 // set on its own (cors below)
+		in.M365, in.M365KeyID = cur.M365, cur.M365KeyID  // set on its own (m365 below)
 		in.GitHubToken = cur.GitHubToken                 // set on its own (github-token below), never sent to the page
 		in.RequestArchive = cur.RequestArchive           // the Gateway page's, set on its own
 		in.RequestArchiveMaxMB = cur.RequestArchiveMaxMB // in settings.json only

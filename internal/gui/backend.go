@@ -11,12 +11,16 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 )
 
 // served is the gateway this process serves, nil while another magpie
 // has it.
 var served atomic.Pointer[gateway.Server]
+
+// m365 serves the same gateway over loopback HTTPS while its setting is on.
+var m365 = gateway.NewM365Server()
 
 // backendCtx ends the gateway this process serves (stopServing).
 var backendCtx, endBackend = context.WithCancel(context.Background())
@@ -122,6 +126,11 @@ func serveGatewayLocked() *gateway.Server {
 	ctx, stop := context.WithCancel(backendCtx)
 	done := make(chan struct{})
 	servedRun.stop, servedRun.done = stop, done
+	if settings.Load().M365 {
+		if err := m365.Start(ctx, gw.Handler()); err != nil {
+			log.Println("Microsoft 365 gateway:", err)
+		}
+	}
 	go func() {
 		defer serving.Done()
 		defer close(done)

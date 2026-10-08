@@ -91,6 +91,11 @@ type Settings struct {
 	// reply, each with an enabled gateway key. None by default: a page
 	// gets no CORS headers, as before.
 	CORSOrigins []string `json:"corsOrigins,omitempty"`
+	// M365 serves the Anthropic gateway to Claude for Microsoft 365 over a
+	// second, loopback-only HTTPS listener. M365KeyID is the named gateway
+	// key made for the add-in; the credential itself stays in caller-keys.json.
+	M365      bool   `json:"m365,omitempty"`
+	M365KeyID string `json:"m365KeyId,omitempty"`
 	// Port is the gateway's port on this computer, 0 for DefaultPort.
 	// MAGPIE_ADDR, where it is set, comes first (GatewayAddr).
 	Port int `json:"port,omitempty"`
@@ -735,6 +740,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird
 	s.GatewayMode = cur.GatewayMode
+	s.M365, s.M365KeyID = cur.M365, cur.M365KeyID
 	s.NoWSLAgents = cur.NoWSLAgents
 }
 
