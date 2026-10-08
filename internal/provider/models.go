@@ -755,20 +755,27 @@ func (p Provider) Exposed() []catalog.Model {
 		byID[m.ID] = m
 	}
 	pick := func(ids []string) []catalog.Model {
-		out := make([]catalog.Model, 0, len(ids))
+		var unlisted []catalog.Model
 		for _, id := range ids {
-			if m, ok := byID[id]; ok {
-				out = append(out, m)
-			} else {
+			if _, ok := byID[id]; !ok {
 				// with the levels the gateway fits an effort to (Known),
 				// not the none effortsOf takes a vendor's word for: the
 				// vendor's list doesn't have it, so it gave no word (#597)
 				m := catalog.Model{ID: id, Name: id, Provider: p.firstCatalog(), Efforts: p.knownElsewhere(id)}
-				if !p.IsAzure() {
-					m = catalog.Named([]catalog.Model{m})[0]
-				}
-				out = append(out, m)
+				unlisted = append(unlisted, m)
 			}
+		}
+		if !p.IsAzure() {
+			// Available has already named the listed models. Reserve their
+			// names and ids without refilling ones it left as ids.
+			unlisted = catalog.Named(unlisted, avail...)
+		}
+		for _, m := range unlisted {
+			byID[m.ID] = m
+		}
+		out := make([]catalog.Model, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, byID[id])
 		}
 		return out
 	}

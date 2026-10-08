@@ -657,17 +657,56 @@ func NameOf(id string) string {
 // knows it by (NameOf), so one model reads the same under every provider:
 // a GLM Coding Plan's glm-5-turbo, which Zhipu's catalog doesn't list, is
 // GLM-5-Turbo as ZCode's is. Its id, and where requests go, stay as they
-// are.
-func Named(ms []Model) []Model {
+// are. A supplemented name shared by different ids falls back to the id.
+// Already named models in reserved count toward collisions but stay as given.
+func Named(ms []Model, reserved ...Model) []Model {
 	out := slices.Clone(ms)
-	for i, m := range out {
+	fallback := make([]string, len(ms))
+	for i, m := range ms {
 		if m.Name == "" || m.Name == m.ID {
-			if n := NameOf(m.ID); n != "" {
-				out[i].Name = n
-			}
+			fallback[i] = NameOf(m.ID)
 		}
 	}
+	fillNames(out, fallback, reserved...)
 	return out
+}
+
+// fillNames applies catalog names without giving different ids the same
+// name. The ids are reserved too, so falling back to one cannot collide
+// with another model's supplemented name. The caller owns ms.
+func fillNames(ms []Model, fallback []string, reserved ...Model) {
+	owners := make(map[string]string)
+	collisions := make(map[string]bool)
+	claim := func(name, id string) {
+		if name == "" {
+			return
+		}
+		if owner, ok := owners[name]; ok && owner != id {
+			collisions[name] = true
+		}
+		owners[name] = id
+	}
+	for _, m := range reserved {
+		claim(m.ID, m.ID)
+		claim(m.Name, m.ID)
+	}
+	for i, m := range ms {
+		claim(m.ID, m.ID)
+		name := m.Name
+		if fallback[i] != "" {
+			name = fallback[i]
+		}
+		claim(name, m.ID)
+	}
+	for i, name := range fallback {
+		if name == "" {
+			continue
+		}
+		if collisions[name] {
+			name = ms[i].ID
+		}
+		ms[i].Name = name
+	}
 }
 
 // Knows reports whether models.dev lists a model of this id at all, under

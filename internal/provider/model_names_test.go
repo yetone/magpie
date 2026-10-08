@@ -3,6 +3,8 @@ package provider
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -85,5 +87,116 @@ func TestModelNamedAsElsewhere(t *testing.T) {
 	}
 	if ms := a.Exposed(); len(ms) != 1 || ms[0].Name != "gpt-x" {
 		t.Errorf("an Azure deployment was renamed: %+v", ms)
+	}
+}
+
+// Unlisted picks are named together, so each fallback sees its neighbors.
+func TestPickedNamesAvoidCollisions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{"vendor":{"models":{
+	  "flash":{"id":"flash","name":"Flash"},
+	  "fast":{"id":"fast","name":"Flash"},
+	  "other":{"id":"other","name":"Other"}
+	}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	for _, c := range []struct {
+		name, preset string
+		live         []catalog.Model
+		want         []string
+	}{
+		{"unlisted", "", nil, []string{"flash|flash", "fast|fast", "other|Other"}},
+		{"listed name", "", []catalog.Model{{ID: "flash", Name: "Flash"}}, []string{"flash|Flash", "fast|fast", "other|Other"}},
+		{"Azure", AzurePreset, nil, []string{"flash|flash", "fast|fast", "other|other"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := Provider{ID: "name-picks", Preset: c.preset, Models: []string{"flash", "fast", "other"}}
+			if err := catalog.SaveLive(p.ID, "", c.live); err != nil {
+				t.Fatal(err)
+			}
+			for _, reverse := range []bool{false, true} {
+				want := slices.Clone(c.want)
+				if reverse {
+					slices.Reverse(p.Models)
+					slices.Reverse(want)
+				}
+				var got []string
+				for _, m := range p.Exposed() {
+					got = append(got, m.ID+"|"+m.Name)
+				}
+				if strings.Join(got, "\n") != strings.Join(want, "\n") {
+					t.Errorf("got %v, want %v", got, want)
+				}
+			}
+		})
+	}
+}
+
+// Picking a subset must not refill names Available deliberately left as ids.
+// Unlisted picks still reserve all listed names and ids, even if not picked.
+func TestPickedNamesKeepListed(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	if err := os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(catalog.CachePath(), []byte(`{"vendor":{"models":{
+	  "flash":{"id":"flash","name":"Flash"},
+	  "fast":{"id":"fast","name":"Flash"},
+	  "alias":{"id":"alias","name":"listed-id"}
+	}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog.Reset()
+	t.Cleanup(catalog.Reset)
+	for _, c := range []struct {
+		name, providerID, catalog string
+		live                      []catalog.Model
+		picks, want               []string
+	}{
+		{"collision fallback", "picked-collision", "vendor", []catalog.Model{{ID: "flash", Name: "flash"}, {ID: "fast", Name: "fast", Context: 1000000}}, []string{"fast"}, []string{"fast|fast"}},
+		{"Antigravity", "antigravity", "", []catalog.Model{{ID: "fast", Context: 1000000}}, []string{"fast"}, []string{"fast|fast"}},
+		{"listed name", "picked-name", "", []catalog.Model{{ID: "flash", Name: "Flash"}}, []string{"flash", "fast"}, []string{"flash|Flash", "fast|fast"}},
+		{"unpicked name", "unpicked-name", "", []catalog.Model{{ID: "flash", Name: "Flash"}}, []string{"fast"}, []string{"fast|fast"}},
+		{"listed id", "picked-id", "", []catalog.Model{{ID: "listed-id", Name: "Listed custom"}}, []string{"listed-id", "alias"}, []string{"listed-id|Listed custom", "alias|alias"}},
+		{"unpicked id", "unpicked-id", "", []catalog.Model{{ID: "listed-id", Name: "Listed custom"}}, []string{"alias"}, []string{"alias|alias"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := Provider{ID: c.providerID, Catalog: c.catalog, Models: slices.Clone(c.picks)}
+			if err := catalog.SaveLive(p.ID, "", c.live); err != nil {
+				t.Fatal(err)
+			}
+			before := p.Available()
+			for _, reverse := range []bool{false, true} {
+				want := slices.Clone(c.want)
+				if reverse {
+					slices.Reverse(p.Models)
+					slices.Reverse(want)
+				}
+				var got []string
+				for _, m := range p.Exposed() {
+					got = append(got, m.ID+"|"+m.Name)
+					for _, listed := range before {
+						if listed.ID == m.ID && !reflect.DeepEqual(m, listed) {
+							t.Errorf("listed model changed: %+v; Available gave %+v", m, listed)
+						}
+					}
+				}
+				if !slices.Equal(got, want) {
+					t.Errorf("got %v, want %v", got, want)
+				}
+			}
+			if after := p.Available(); !reflect.DeepEqual(after, before) {
+				t.Errorf("available list changed: %+v; was %+v", after, before)
+			}
+		})
 	}
 }
