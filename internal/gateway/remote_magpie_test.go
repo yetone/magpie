@@ -99,6 +99,8 @@ func TestRemoteMagpieNativeAPI(t *testing.T) {
 		{"/v1/messages/count_tokens", `{"model":"office/fake/m1","messages":[{"role":"user","content":"hi"}]}`, "/v1/messages/count_tokens", "/v1/messages/count_tokens m1"},
 		// a group's request goes on in the client's API; the remote picks
 		{"/v1/responses", `{"model":"office/group/g","input":"hi","stream":true}`, "/v1/responses", "/v1/messages m1"},
+		{"/v1beta/models/office/fake/m1:generateContent", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, "/v1/messages", "/v1/messages m1"},
+		{"/v1beta/models/office/fake/m1:streamGenerateContent?alt=sse", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, "/v1/messages", "/v1/messages m1"},
 	}
 	for _, c := range calls {
 		mu.Lock()

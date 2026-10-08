@@ -471,7 +471,7 @@ func addKeyAsk(p provider.Provider) ask {
 				// (akic404 on Discord)
 				text := "added " + saved.Name
 				ms, err := saved.Fetch(ctx)
-				if err != nil && saved.Decides() {
+				if err != nil && saved.DecideOnly() {
 					// a System One API: its list isn't what it is for
 					return flashMsg{text: text, ok: true}
 				}

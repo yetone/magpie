@@ -838,6 +838,16 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get(provider.VideomakersHeader) != "" {
 		data = append(data, videomakerObjects()...)
 	}
+	if r.Header.Get(provider.DecidersHeader) != "" {
+		deciders := keyAllowed(r, provider.Deciders())
+		labels := provider.Labels(deciders)
+		for i, e := range deciders {
+			m := modelObject(e)
+			m["kind"], m["magpie_label"] = "decision", labels[i]
+			m["native_endpoints"] = []string{"/v1/systemone"}
+			data = append(data, m)
+		}
+	}
 	// ?format=text: the ids one a line, to paste into a client that takes
 	// its models typed by hand, one a line, and asks no list of its own
 	// (ZCode's custom provider), from a browser on another computer with

@@ -65,6 +65,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, saves));
         await page.goto("http://magpie.test/?view=providers");
+        // A remote's explicit list is authoritative, including an empty
+        // list after refresh: Jev Router still belongs to chat.
+        const classifications = await page.evaluate(() => {
+          const remote = {
+            preset: "remote-magpie", chat: "http://office/v1", decide: "http://office/v1",
+            deciders: ["judge/custom", "judge/@cf/cloudflare/clef"],
+          };
+          return [
+            decidesModel(remote, "judge/custom"),
+            decidesModel(remote, "judge/@cf/cloudflare/clef"),
+            decidesModel(remote, "relay/typesafe/jev-router"),
+            decidesModel({ ...remote, deciders: [] }, "relay/typesafe/jev-router"),
+          ];
+        });
+        assert.deepEqual(classifications, [true, true, false, false]);
         await page.locator("#addProvider").click();
         const sheet = page.locator("#addSheet");
         const tile = sheet.locator(".tile", { has: page.locator(".n", { hasText: /^Remote magpie$/ }) });

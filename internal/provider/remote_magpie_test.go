@@ -12,9 +12,21 @@ import (
 // Its whole list is offered, being already what its user exposed.
 func TestRemoteMagpie(t *testing.T) {
 	azureHome(t)
-	for _, in := range []string{"192.168.1.20:3425", "http://192.168.1.20:3425/", "http://192.168.1.20:3425/v1", "http://192.168.1.20:3425/v1/messages"} {
+	for _, in := range []string{
+		"192.168.1.20:3425",
+		"http://192.168.1.20:3425/",
+		"http://192.168.1.20:3425/v1",
+		"http://192.168.1.20:3425/v1/messages",
+		"http://192.168.1.20:3425/v1/systemone",
+		"http://192.168.1.20:3425/v1/embeddings",
+		"http://192.168.1.20:3425/v1/rerank",
+		"http://192.168.1.20:3425/v1/images/generations",
+		"http://192.168.1.20:3425/v1/images/edits",
+		"http://192.168.1.20:3425/v1/videos",
+		"http://192.168.1.20:3425/v1/messages/count_tokens",
+	} {
 		p := normalize(Provider{Preset: RemoteMagpiePreset, Chat: in})
-		if p.Chat != "http://192.168.1.20:3425/v1" || p.Responses != p.Chat || p.Anthropic != "http://192.168.1.20:3425" {
+		if p.Chat != "http://192.168.1.20:3425/v1" || p.Responses != p.Chat || p.Anthropic != "http://192.168.1.20:3425" || p.Decide != p.Chat {
 			t.Errorf("%q: %q %q %q", in, p.Chat, p.Responses, p.Anthropic)
 		}
 	}

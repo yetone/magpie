@@ -300,8 +300,18 @@ Completions, token counting — and a model the shared magpie's provider serves
 on another API only is turned into that API once, never on both computers.
 Its list is the models the shared magpie's agents are shown, each named with
 its provider there (`Claude Sonnet 5 · Relay A · office`) — the ids stay ids
-(`office/relay-a/claude-sonnet-5`), only these labels carry the names — and its image
-models are listed under Settings → Images and draw through it.
+(`office/relay-a/claude-sonnet-5`), only these labels carry the names.
+Its image and video models are discovered automatically and served through
+its image generation/edit and video creation/status/content APIs. System One
+is also configured automatically at its `/v1/systemone`: refresh the remote
+provider's model list to discover its decision models, including Jev, Clef
+and models with custom names. These appear as decision models rather than
+chat models. Embeddings and rerank requests use the remote's corresponding
+APIs, and its exposed retrieval models are kept when fetching its list.
+The remote must serve the requested API and model, and allow the supplied
+key to use them. Responses uses HTTP, including SSE, rather than WebSocket.
+An older remote without decision-model discovery still serves its existing
+APIs; update it and refresh the list to expose System One models here.
 Its quotas show too: the Usage page, the menu bar and `magpie quota` list the
 shared magpie's cards named with it (`Codex · office`, id `office/codex`), as
 that magpie last read them — only the computer holding the sign-ins asks the

@@ -66,9 +66,30 @@ served by a plugin are in [Provider and plugin ownership](provider-plugins.md).
 - An agent whose config can't carry an effort has one picked in magpie (`provider.AgentEffort`, settings' `agentEfforts`; Cursor Private Inference's row, #1003). It is asked for on that agent's requests to a model that reasons (`Provider.Thinks`), in place of the level the request sent, fitted to the model's levels and bounded by the group's. Order: a member's fixed effort, then a model's `:effort` suffix, then the turn's pick (a routing rule's), then the agent's pick, then the request's own. A model that doesn't reason is sent as asked; the default (none picked) leaves every request as it came. The pick beats the request's own because Cursor sends its own default as often as a real choice. Picking Default hands the choice back to Cursor.
 - Gemini's OpenAI-compatible API (AI Studio's, or a proxy in front of Gemini on this computer or the LAN: `geminiCompat`) is asked for the model's thoughts in `extra_body.google.thinking_config`. A 400 naming it (`refusesThinkingConfig`) marks the provider unfit for the field (`thinking_config`), and it is asked again with `reasoning_effort` alone. Gemini 3 can't stop thinking, so reasoning turned off goes at `minimal`, or at the model's lowest level where its levels are known and have no `minimal` (`geminiOffLevel`). Google's 400 for `minimal` (`geminiMinimalRefused`; gemini-3.8-flash's "Thinking level is unsupported: THINKING_LEVEL_MINIMAL") names thinking too, but isn't the field turned away: the model is marked as refusing reasoning off (`offRefused`) and asked again at its lowest level, and so from then on, still asked for its thoughts. Vertex AI's OpenAI-compatible API marks each streamed chunk of thoughts in the delta's `extra_content.google.thought`, and such a chunk is read as thinking.
 
+## Remote magpie APIs
+
+A remote provider serves the conversation, token-counting, System One,
+embeddings, rerank, image generation/edit and video creation/status/content
+APIs. Gemini clients enter through the local Gemini adapter and follow the
+same model routing as other conversation clients. Responses uses HTTP/SSE;
+its WebSocket route still answers 426. Discovery and older-peer behavior
+are described in [Providers and accounts](providers-accounts.md#remote-magpie).
+
+System One uses `RouteDecider` and `postDecide` in
+[`decide.go`](../../internal/gateway/decide.go), taking one provider prefix
+off at each hop and preserving the state, questions and vendor errors.
+[`embeddings.go`](../../internal/gateway/embeddings.go) relays retrieval
+bodies and options, [`draw.go`](../../internal/gateway/draw.go) sends images
+to the remote's images API, and [`video.go`](../../internal/gateway/video.go)
+wraps remote task ids for later polls and downloads. `passOnCaller` in
+[`remote_magpie.go`](../../internal/gateway/remote_magpie.go) supplies
+magpie's User-Agent and caller/session headers on all remote request paths,
+so the remote accepts their attribution. Vendors receive no caller headers.
+
 ## Verification
 
 ```sh
+go test -tags nogui ./internal/gateway -run 'TestRemoteMagpie'
 go test -tags nogui ./internal/gateway -run 'TestLoop|TestLongReplyThatDoesNotLoop|TestQuiet|TestSilentHeld|TestRotateSpreadsSessions|TestRouting|TestSmartRouting|TestFallback|TestNoFallbackForOtherErrors|TestLastFallbackErrorReachesTheAgent|TestRateLimitedSinksToTheBack|TestGroupRateLimitedSinks|TestAffinity|TestSeveralKeysOnTakeOverFromEachOther|TestModelNotInPlanRestsTheModelNotTheKey|TestSubscriptionAccountsTakeOver|TestGroup|TestTrace|TestImageTool|TestCodexNoCredits|TestWindowCapsHoldTheAccount|TestAccountCap|TestClaudeGoesOnMessagesWhereTheRelayHasThem|TestAutoRelaysOnTheClientsOwnAPI|TestSearchOfferedStaysOnTheClientsAPI|TestCodexSearchAnsweredOnResponses|TestAgentEffortOnCursorLocal|TestAzureCompactionWithoutMagpiesReasoning|TestCodexCompact|TestProtection|TestSearchedConversation|TestUnsearchedConversationUnchanged|TestNotAnAPIReply|TestAPIReplyUntouched|TestCodexBackendWebPage|TestSub2APIKeyLimitIsQuota|TestKeysWeighedByTheirWindows|TestGroupWeighsKeyWindows|TestKeyOutOfItsWindowRestsUntilReset|TestKeyPoolErrorDoesNotRestForWindow|TestKeyBackOnceItsWindowIsNotFull|TestRestingKeyReadAgainInAnOrderedGroup|TestClaudeAccountBackOnceItsWindowRenews|TestThinkingStreams|TestHeldThinkingKeepsTheAgentAlive|TestRefusalAfterThinkingFailsOver|TestGeminiEmptyRepliesAskedAgain|TestLocalUnredacted|TestCORS|TestForeignPagesRefused|TestGeminiThinkingOffAtItsLowest|TestGeminiThoughtsMarkedInExtraContent|TestClaudeSignInNotToldItsSignInFailed|TestSignInWriterReleasesA403|TestSignInBetaStaysWithMagpie|TestStructuredOutput|TestResponsesTextKeepsVerbosityBesideFormat|TestRefusedFormatToldInWords|RPM|TestQueued|TestCustomGeminiUpstream|TestWholeNums|TestGrokCalls|TestOnlyGrokCalls|TestGrokModel|TestGrokPluginCalls'
 go test -tags nogui ./internal/gateway -run 'TestCodexModelList|TestCodexModelsEtag'
 go test -tags nogui ./internal/provider -run 'TestGroup|TestCodexCreditsSwitch|TestRenewedAccountForgetsItsAllowance|TestDeclareSearch|TestNative|TestKeyAllowance|TestPlanKeyAllowance|TestClaudeAccountToldRenewed|TestPluginAccountToldRenewed|TestSkipsRedaction|TestSetRPM'

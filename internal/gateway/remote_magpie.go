@@ -107,6 +107,9 @@ func boundedSession(v string) string {
 // account by it rather than by its first message (#672). Only a remote
 // magpie is sent them; a vendor never is.
 func passOnCaller(ctx context.Context, req *http.Request) {
+	// The remote accepts caller labels only from magpie's User-Agent,
+	// including retrieval, media and decision requests.
+	req.Header.Set("User-Agent", "magpie/"+Version)
 	c, ok := ctx.Value(callerCtx{}).(caller)
 	if !ok {
 		return

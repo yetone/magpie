@@ -35,6 +35,30 @@ keys and accounts per request is in [Gateway routing and fallback](gateway-routi
 | Partners | Services that pay to be listed first in the add sheet, under a heading of their own ("Partners · magpie's sponsors"). The list is `site/partners.js`, served at `usemagpie.ai/api/partners`: a change reaches users with a deploy, not a release. `Partners` never waits: it returns what was fetched last and fetches again behind the call every 6 hours (10 minutes after a failure), keeping the list in `partners.json` in the cache folder. Each entry is checked again on every read (`validPartners`): its own id, never a built-in preset's, a name, an endpoint, https only, at most 12; what only magpie's presets may set (a decision API, no key, a user endpoint) is cleared. Its logo is fetched through `FetchIcon` and kept as an uploaded icon. A partner is a preset to the rest of magpie (`Preset`, `FromPreset`, the editor), and one no longer listed still is to the providers added from it (`Seen`), without the sponsored mark. The window lists a partner in the languages it names (`langs`) only and shows its tagline in the page's language (`notes`, else `en`). `MAGPIE_PARTNERS` points it elsewhere, `off` lists none; tests list none unless they name a list. How often each listed partner was shown, opened (its row, its key page) and added is counted per UTC day (`CountPartner`, capped at 20 of each and 5 adds, kept in `partner-counts.json` in the cache folder) and sent with the next day's stats event as `magpie partner` events (`internal/stats`); nothing is counted with the stats or their usage part off. A listed partner the add sheet (or the TUI's, or `magpie providers presets`) hasn't shown yet is new (`NoticePartners` keeps those shown, as `noticed` in `partners.json`, whatever the stats); the window's add button carries a small dot for it, with its name in the title, until the sheet shows it. | [`partners.go`](../../internal/provider/partners.go), [`partner_events.go`](../../internal/provider/partner_events.go), [`site/partners.js`](../../site/partners.js) |
 | Protocol detection | Works out which of Chat, Responses, Anthropic Messages and Gemini generateContent a base URL speaks when a provider is added. Each is asked at the URL as it takes it (`DetectBase`); Gemini's at the `…/v1beta` beside a typed `…/v1` or bare host, a Gemini model from the list picked for it, with the key in `x-goog-api-key` (#1346). Detection, endpoint tests and model tests share `probe`, which adds `anthropic-version` only for Anthropic Messages; OpenAI probes omit that default so a relay that refuses it can answer. User-supplied headers still apply through `Sign`. | [`detect.go`](../../internal/provider/detect.go), [`test.go`](../../internal/provider/test.go) |
 
+## Remote magpie
+
+A `remote-magpie` provider derives Chat, Responses, Messages and System One
+bases from one address (`remoteMagpieEndpoints` in
+[`remote_magpie.go`](../../internal/provider/remote_magpie.go)). Its model
+list requests images, videos and decisions with `X-Magpie-Drawers`,
+`X-Magpie-Videomakers` and `X-Magpie-Deciders`. The gateway includes these
+only when asked, with `kind` of `image`, `video` or `decision`. Decision
+entries pass through `keyAllowed`, including model and account restrictions.
+[`catalog/live.go`](../../internal/catalog/live.go) keeps each kind and all
+models the remote already exposed, including retrieval models.
+
+`DecidesModel` uses the remote's explicit decision marker, so Clef and custom
+names work and a chat model named Jev Router stays a chat model. `Deciders`
+and the provider editor offer these decisions even when the user's local
+conversation picks omit them. The editor's `providerInfo` in
+[`providers.go`](../../internal/gui/providers.go) sends `deciders: []` when
+the remote has none, suppressing the UI's legacy name-based guessing.
+Refresh replaces the list: removed decisions stop routing, and an empty
+remote list never gains a fabricated Jev alias.
+An older peer without the decision-list extension continues serving its
+other APIs but must be updated before its decisions can be discovered.
+See [`decide.go`](../../internal/provider/decide.go).
+
 ## Runtime path
 
 1. **Add.** The Providers page adds a key provider through `Add` or `Save`, or an account through `StartSignIn`. An agent signed in on its own is found by `Accounts` with no step from the user.
@@ -70,6 +94,7 @@ go test -tags nogui ./internal/provider -run 'TestAccount|TestCodex|TestGroup|Te
 go test -tags nogui ./internal/provider -run 'TestCapHeld|TestCapReached|TestWindowCapHeld|TestSetWindowCap'
 go test -tags nogui . -run TestAccountCapCmd
 node --test internal/gui/tests/account-cap.test.cjs internal/gui/tests/window-cap.test.cjs
+go test -tags nogui ./internal/provider -run 'TestRemoteMagpie'
 go test -tags nogui ./internal/provider -run 'TestVolc|TestQianfan|TestBedrock|TestAddCopy|TestBackupBalanceToken'
 go test -tags nogui ./internal/gui -run TestProviderSaveKeepsVolcengineSecret
 go test -tags nogui ./internal/backup ./internal/davsync -run 'TestRoundTrip|TestNoKeys|BalanceToken'
