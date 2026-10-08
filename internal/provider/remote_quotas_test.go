@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -215,5 +217,41 @@ func TestRemoteQuotaHistories(t *testing.T) {
 	hs := RemoteQuotaHistories(context.Background(), "7")
 	if len(hs) != 1 || hs[0].Provider != "office/codex" || hs[0].User != "a@x.com" {
 		t.Errorf("%+v", hs)
+	}
+}
+
+// A background usage read (CodexUsedUp, the routing loop's) lands on a
+// remote magpie's cards too: only the Usage page's reads fed the cards'
+// cache, so a remote saw nothing until someone opened the page or pressed
+// refresh (#1313, jorben's repro).
+func TestCachedCardsAfterBackgroundRead(t *testing.T) {
+	azureHome(t)
+	writeFile(t, filepath.Join(os.Getenv("HOME"), ".codex", "auth.json"), map[string]any{
+		"auth_mode": "chatgpt",
+		"tokens": map[string]any{
+			"id_token":      fakeJWT(map[string]any{"email": "solo@example.com", "https://api.openai.com/auth": map[string]any{"chatgpt_plan_type": "plus", "chatgpt_account_id": "acct-solo"}}),
+			"access_token":  fakeJWT(map[string]any{"exp": float64(time.Now().Add(time.Hour).Unix())}),
+			"refresh_token": "r-solo", "account_id": "acct-solo",
+		},
+	})
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"plan_type": "plus", "rate_limit": map[string]any{
+			"primary_window": map[string]any{"used_percent": 10, "limit_window_seconds": 18000}}})
+	}))
+	t.Cleanup(fake.Close)
+	old := CodexBase
+	CodexBase = fake.URL + "/backend-api/codex"
+	t.Cleanup(func() { CodexBase = old })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	// rememberLogins is memoized for 30s process-wide; another test may
+	// have just run it, and then this account is never saved and read.
+	loginsMu.Lock()
+	loginsSeenAt = time.Time{}
+	loginsMu.Unlock()
+	_ = CodexUsedUp(ctx)
+	if cs := CachedCards(time.Now()); len(cs) == 0 {
+		t.Error("CachedCards empty after a background read")
 	}
 }

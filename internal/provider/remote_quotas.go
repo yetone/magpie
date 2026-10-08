@@ -54,6 +54,30 @@ func CachedCards(now time.Time) []SubscriptionQuota {
 	c.Lock()
 	data := c.data
 	c.Unlock()
+	// The routing loop's background reads (LoginUsage) never went through
+	// the Usage page's cache, so a remote magpie saw no Codex card until
+	// someone opened the page or pressed refresh (#1313). Each account's
+	// last reading answers here too, where the page's cache has no card
+	// for it; nobody is asked either way.
+	l := &loginUsageCache
+	l.Lock()
+	var readings []SubscriptionQuota
+	for _, e := range l.m {
+		readings = append(readings, e.q)
+	}
+	l.Unlock()
+	if len(readings) > 0 {
+		have := map[string]bool{}
+		for _, q := range data {
+			have[q.Provider+"/"+strings.ToLower(q.User)] = true
+		}
+		for _, q := range readings {
+			if have[q.Provider+"/"+strings.ToLower(q.User)] {
+				continue
+			}
+			data = append(data, q)
+		}
+	}
 	subs := []SubscriptionQuota{}
 	if data != nil {
 		subs = withDailyCredits(visibleQuotas(data), now)
