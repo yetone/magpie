@@ -1835,10 +1835,26 @@ MAGPIE_GITHUB_MIRROR=https://gh.example magpie serve
 Once a day, a running magpie (the app, or `magpie serve`) sends one event to
 PostHog so we know how many people use it: a random id made up on your
 computer (`~/.config/magpie/install-id`), magpie's version, and your system
-and architecture. Nothing else goes: no accounts, keys, providers, models,
-prompts or usage. Turn it off in Settings → Privacy → Count me as a user, or
-with `DO_NOT_TRACK=1` or `MAGPIE_NO_STATS=1`. Builds from source never send
-it. The code is [internal/stats](../internal/stats/stats.go).
+and architecture.
+
+With it goes what magpie is used with, so we know which agents, providers
+and models to look after first, by magpie's own ids only:
+
+- the agents connected to magpie (`claude`, `codex`);
+- the providers that are on: a preset's id (`deepseek`), a subscription's
+  (`codex`, `copilot`), a community plugin's (`plugin:kiro`); a provider you
+  added yourself is only `custom`, another plugin only `plugin`;
+- the models the connected agents are set to, as the provider's id and the
+  vendor's model id (`deepseek/deepseek-v4`); one on a provider of your own
+  is only `custom`, a routing group only `group`;
+- how many of each, and how many routing groups you have.
+
+No names, base URLs, accounts, keys, prompts or usage go. Turn that part off
+in Settings → Privacy → Share the agents, providers and models I use; the
+day's event then has the id, version and system only. Turn it all off in
+Settings → Privacy → Count me as a user, or with `DO_NOT_TRACK=1` or
+`MAGPIE_NO_STATS=1`. Builds from source never send it. The code is
+[internal/stats](../internal/stats/stats.go).
 
 ## Community
 

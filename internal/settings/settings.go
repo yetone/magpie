@@ -175,6 +175,9 @@ type Settings struct {
 	// NoStats stops the one event a day that counts magpie's users (see
 	// internal/stats).
 	NoStats bool `json:"noStats,omitempty"`
+	// NoUsageStats keeps which agents, providers and models magpie is
+	// used with out of that event, which then counts the user only.
+	NoUsageStats bool `json:"noUsageStats,omitempty"`
 	// NoUpdatePill keeps the header's Update pill away when a newer magpie
 	// is out; UpdateSkip is the one version it was hidden for, and a newer
 	// one brings it back. Either way magpie still downloads the version and
