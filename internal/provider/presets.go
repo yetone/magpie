@@ -433,6 +433,11 @@ var presets = []PresetDef{
 			{ID: "global", Name: "Global", Chat: "https://global.yylx.io/v1", Anthropic: "https://global.yylx.io"},
 			{ID: "cn", Name: "China Mainland", Chat: "https://cn.yylx.io/v1", Anthropic: "https://cn.yylx.io"},
 		}},
+	// JD's internal OpenAI-compatible LLM gateway: only the key is the user's.
+	{ID: "dongcolor", Name: "DongColor", Icon: "dongcolor-color", Kind: KindRelay,
+		Chat:    "http://llm-gw.jd.local/v1",
+		Note:    "京东内网 LLM 网关",
+		Website: "http://llm-gw.jd.local"},
 
 	// another computer's magpie, shared on its network (remote_magpie.go):
 	// its providers, routing groups and usage stay there, each request
