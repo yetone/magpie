@@ -290,6 +290,7 @@ func TestPiMCPNative(t *testing.T) {
 	// and in Pi's extensions folder, unlisted
 	write(t, filepath.Join(d, "settings.json"), `{}`)
 	write(t, filepath.Join(d, "extensions/pi-mcp-adapter/package.json"), `{"name": "pi-mcp-adapter", "version": "3.1.0"}`)
+	write(t, filepath.Join(d, "extensions/pi-mcp-adapter/index.ts"), "export default function extension() {}\n")
 	if tg := targetByID("pi"); tg.MCP.Path != adapter {
 		t.Errorf("0.99 with the adapter in extensions: %s", tg.MCP.Path)
 	}
@@ -320,8 +321,9 @@ func TestPiNativeVersions(t *testing.T) {
 // mcp.json is copied aside first, byte for byte, and its servers survive.
 func TestPiMCPWholeMoveKeepsABackup(t *testing.T) {
 	h := sandbox(t)
+	piAtVersion(t, "1.0.0")
 	d := filepath.Join(h, ".pi/agent")
-	write(t, filepath.Join(d, "settings.json"), `{ "quietStartup": false, "packages": [] }`)
+	write(t, filepath.Join(d, "settings.json"), `{ "quietStartup": false, "packages": ["npm:pi-mcp-adapter"] }`)
 	write(t, filepath.Join(d, "npm/node_modules/pi-mcp-adapter/package.json"), `{"name": "pi-mcp-adapter", "version": "4.0.0"}`)
 	old, adapter := filepath.Join(d, "mcp.json"), filepath.Join(d, "mcp-adapter.json")
 	mine := `{ "mcpServers": { "demo": { "url": "https://mcp.exa.ai/mcp" } } }
