@@ -115,8 +115,11 @@ func TestQwen(t *testing.T) {
 		t.Fatalf("model: %v", m)
 	}
 	env := f["env"].(map[string]any)
-	if env["IDEALAB_API_KEY"] != "team-key" || env["MAGPIE_API_KEY"] != gateway.Token {
+	if env["IDEALAB_API_KEY"] != "team-key" || env["MAGPIE_QWEN_API_KEY"] != gateway.Token {
 		t.Fatalf("env: %v", env)
+	}
+	if auth := f["security"].(map[string]any)["auth"].(map[string]any)["selectedType"]; auth != "openai" {
+		t.Fatalf("selectedType: %v", auth)
 	}
 	if f["outputLanguage"] != "zh-CN" {
 		t.Fatalf("settings: %v", f)
@@ -127,7 +130,7 @@ func TestQwen(t *testing.T) {
 			t.Errorf("%s missing: %v", id, order)
 			continue
 		}
-		if e["name"] != "magpie/"+id || e["baseUrl"] != gatewayV1() || e["envKey"] != "MAGPIE_API_KEY" {
+		if e["name"] != "magpie/"+id || e["baseUrl"] != gatewayV1() || e["envKey"] != "MAGPIE_QWEN_API_KEY" {
 			t.Errorf("%s: %v", id, e)
 		}
 	}
@@ -201,7 +204,7 @@ func TestQwenOwnModel(t *testing.T) {
 		t.Fatalf("model: %v", m)
 	}
 	env := f["env"].(map[string]any)
-	if _, ok := env["MAGPIE_API_KEY"]; ok {
+	if _, ok := env["MAGPIE_QWEN_API_KEY"]; ok {
 		t.Fatalf("key left: %v", env)
 	}
 	// and a reset after that leaves the user's choice, not the stash
@@ -227,7 +230,7 @@ func TestQwenFresh(t *testing.T) {
 	}
 	if _, order, f := qwenFile(t, path); len(order) != 4 {
 		t.Fatalf("models: %v", order)
-	} else if env := f["env"].(map[string]any); env["MAGPIE_API_KEY"] != gateway.Token {
+	} else if env := f["env"].(map[string]any); env["MAGPIE_QWEN_API_KEY"] != gateway.Token {
 		t.Fatalf("env: %v", env)
 	}
 	if err := a.Apply("model", ""); err != nil {
@@ -236,16 +239,33 @@ func TestQwenFresh(t *testing.T) {
 	if got := strings.TrimSpace(readFile(path)); got != "{}" {
 		t.Fatalf("left: %s", got)
 	}
+	// a file Qwen Code never put a modelProviders in reads as no models
+	// of anyone at all, and magpie touches none of it
+	os.WriteFile(path, []byte("{\n  \"fastModel\": \"qwen3.8-flash\"\n}\n"), 0o644)
+	if got := a.Values()["model"]; got != "" {
+		t.Fatalf("model without modelProviders: %q", got)
+	}
+	if err := a.Apply("model", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(path); got != "{\n  \"fastModel\": \"qwen3.8-flash\"\n}\n" {
+		t.Fatalf("nothing of magpie's to take out:\n%s", got)
+	}
 }
 
 // A model the user picked without a matching entry keeps no baseUrl;
-// one of the user's under magpie's own env key name is stashed and put
-// back when magpie steps out.
+// one of the user's under magpie's own env key name, and their auth
+// type, are stashed and put back when magpie steps out.
 func TestQwenBareModelAndOwnEnvKey(t *testing.T) {
 	_, path := qwenHome(t)
 	bare := `{
   "env": {
-    "MAGPIE_API_KEY": "the-user's-own"
+    "MAGPIE_QWEN_API_KEY": "the-user's-own"
+  },
+  "security": {
+    "auth": {
+      "selectedType": "qwen-oauth"
+    }
   },
   "model": {
     "name": "qwen3.8-max"
@@ -260,7 +280,7 @@ func TestQwenBareModelAndOwnEnvKey(t *testing.T) {
 	if err := a.Apply("model", "magpie/deepseek/pro"); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, f := qwenFile(t, path); f["env"].(map[string]any)["MAGPIE_API_KEY"] != gateway.Token {
+	if _, _, f := qwenFile(t, path); f["env"].(map[string]any)["MAGPIE_QWEN_API_KEY"] != gateway.Token {
 		t.Fatalf("key not magpie's: %v", f["env"])
 	}
 	if err := a.Apply("model", ""); err != nil {
@@ -268,8 +288,11 @@ func TestQwenBareModelAndOwnEnvKey(t *testing.T) {
 	}
 	var f map[string]any
 	json.Unmarshal([]byte(readFile(path)), &f)
-	if f["env"].(map[string]any)["MAGPIE_API_KEY"] != "the-user's-own" {
+	if f["env"].(map[string]any)["MAGPIE_QWEN_API_KEY"] != "the-user's-own" {
 		t.Fatalf("key not restored: %v", f["env"])
+	}
+	if got := f["security"].(map[string]any)["auth"].(map[string]any)["selectedType"]; got != "qwen-oauth" {
+		t.Fatalf("auth not restored: %v", got)
 	}
 	m, ok := f["model"].(map[string]any)
 	if !ok || m["name"] != "qwen3.8-max" {
@@ -277,5 +300,48 @@ func TestQwenBareModelAndOwnEnvKey(t *testing.T) {
 	}
 	if _, ok = m["baseUrl"]; ok {
 		t.Fatalf("baseUrl it never had: %v", m)
+	}
+}
+
+// An auth type of "openai" the user set themselves is told from
+// magpie's, and stays when magpie steps out.
+func TestQwenAuthOpenAIOfTheUsersOwn(t *testing.T) {
+	_, path := qwenHome(t)
+	os.WriteFile(path, []byte(`{
+  "security": {
+    "auth": {
+      "selectedType": "openai"
+    }
+  },
+  "model": {
+    "name": "qwen3.8-max"
+  }
+}
+`), 0o644)
+	a := qwen(os.Getenv("HOME"))
+	if err := a.Apply("model", "magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Apply("model", ""); err != nil {
+		t.Fatal(err)
+	}
+	var f map[string]any
+	json.Unmarshal([]byte(readFile(path)), &f)
+	if got := f["security"].(map[string]any)["auth"].(map[string]any)["selectedType"]; got != "openai" {
+		t.Fatalf("the user's own openai came off: %v", f)
+	}
+}
+
+// $QWEN_HOME moves the config folder Qwen Code looks at.
+func TestQwenHomeOverride(t *testing.T) {
+	home, _ := qwenHome(t)
+	other := filepath.Join(home, "elsewhere")
+	t.Setenv("QWEN_HOME", other)
+	a := qwen(home)
+	if a.Dir != other || a.Path != filepath.Join(other, "settings.json") {
+		t.Fatalf("override: %s %s", a.Dir, a.Path)
 	}
 }

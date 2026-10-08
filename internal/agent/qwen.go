@@ -1,21 +1,26 @@
 package agent
 
 // Qwen Code (`qwen`, QwenLM/qwen-code, a Gemini CLI fork) keeps its
-// settings in ~/.qwen/settings.json. Models of the user's own are the
-// modelProviders.<protocol> arrays, each {id, name, baseUrl, envKey}: id
-// is the model asked for, name what its /model picker shows, and envKey
-// names a variable in the same file's env object (or ~/.qwen/.env) with
-// the key. The model sessions start on is settings.model {name, baseUrl},
-// baseUrl telling two entries of one id apart.
+// settings in ~/.qwen/settings.json ($QWEN_HOME when set). Models of the
+// user's own are the modelProviders.<protocol> arrays, each
+// {baseUrl, envKey, id, name}: id is the model asked for, name what its
+// /model picker shows, and envKey names a variable in the same file's env
+// object (or ~/.qwen/.env) with the key. The model sessions start on is
+// settings.model {name, baseUrl}, baseUrl telling two entries of one id
+// apart, and security.auth.selectedType "openai" skips the /auth prompt
+// on start.
 //
 // magpie appends one entry per catalog model to modelProviders.openai,
 // the wire id the gateway takes ("<provider>/<model>") and the name
-// "magpie/<provider>/<model>", every one on the same env key
-// env.MAGPIE_API_KEY, which is the gateway's key and how an entry of
-// magpie's is told from the user's own; and it points settings.model at a
-// pick. The user's entries stay as they were and in front, so their own
-// ids don't move, and the default they had is stashed and put back when
-// magpie steps out.
+// "magpie/<provider>/<model>", every one on the same env key of its own,
+// which is how an entry of magpie's is told from the user's own, and
+// points settings.model and security.auth.selectedType at a pick. The key
+// itself lives in the settings' env object — a shell-exported or
+// ~/.qwen/.env variable of the same name would win over it, which the
+// qwen-specific name makes unlikely. The user's entries stay as they were
+// and in front, so their own ids don't move, and the default, auth type
+// and any key of theirs they had are stashed and put back when magpie
+// steps out.
 
 import (
 	"encoding/json"
@@ -32,28 +37,42 @@ const (
 	qwenModels  = "modelProviders.openai"
 	qwenModel   = "model.name"
 	qwenModelAt = "model.baseUrl"
+	qwenAuth    = "security.auth.selectedType"
 	qwenEnv     = "env." + qwenEnvKey
 	// qwenEnvKey names the variable magpie's provider entries take their
-	// key from: it is set in the settings' env object while magpie is
-	// wired in, and names one of magpie's entries wherever it appears.
-	qwenEnvKey = "MAGPIE_API_KEY"
+	// key from: qwen-specific so a shell or ~/.qwen/.env value of the
+	// name is unlikely to shadow the settings' (their priority over it is
+	// why "MAGPIE_API_KEY" is not used), and set in the settings' env
+	// object while magpie is wired in, which names one of magpie's
+	// entries wherever it appears.
+	qwenEnvKey = "MAGPIE_QWEN_API_KEY"
 )
 
 // qwenEntry is one modelProviders.openai member magpie writes, fields
 // ordered as Qwen Code orders its own (alphabetically).
 type qwenEntry struct {
-	BaseURL string `json:"baseUrl"`
-	EnvKey  string `json:"envKey"`
-	ID      string `json:"id"`
-	Name    string `json:"name"`
+	BaseURL    string   `json:"baseUrl"`
+	EnvKey     string   `json:"envKey"`
+	Generation *qwenGen `json:"generationConfig,omitempty"`
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+}
+
+// qwenGen is the generationConfig a model's entry may carry.
+type qwenGen struct {
+	ContextWindowSize int `json:"contextWindowSize,omitempty"`
 }
 
 // qwenEntriesAt are magpie's entries for a qwen reaching the gateway at
-// v1, taken with the key key.
-func qwenEntriesAt(v1, key string) []qwenEntry {
+// v1.
+func qwenEntriesAt(v1 string) []qwenEntry {
 	var out []qwenEntry
 	for _, m := range magpieModels("qwen") {
-		out = append(out, qwenEntry{ID: m.ID, Name: magpieID + "/" + m.ID, BaseURL: v1, EnvKey: qwenEnvKey})
+		e := qwenEntry{ID: m.ID, Name: magpieID + "/" + m.ID, BaseURL: v1, EnvKey: qwenEnvKey}
+		if m.Context > 0 {
+			e.Generation = &qwenGen{ContextWindowSize: m.Context}
+		}
+		out = append(out, e)
 	}
 	return out
 }
@@ -74,7 +93,13 @@ func qwenCustoms(path string) []qwenCustom {
 		return nil
 	}
 	var out []qwenCustom
-	gjson.GetBytes(jsonc.ToJSONInPlace(raw), qwenModels).ForEach(func(_, v gjson.Result) bool {
+	all := gjson.GetBytes(jsonc.ToJSONInPlace(raw), qwenModels)
+	if !all.IsArray() {
+		// no modelProviders (or none of openai): none of magpie's and
+		// none of the user's, rather than an error ForEach gives for null
+		return nil
+	}
+	all.ForEach(func(_, v gjson.Result) bool {
 		c := qwenCustom{
 			raw:    json.RawMessage(v.Raw),
 			id:     v.Get("id").String(),
@@ -125,10 +150,18 @@ func qwen(home string) *Agent { return qwenIn(here(home)) }
 // with the key it takes from there.
 func qwenIn(at place) *Agent {
 	dir := filepath.Join(at.home, ".qwen")
+	if d := at.getenv("QWEN_HOME"); d != "" {
+		dir = d
+	}
 	path := filepath.Join(dir, "settings.json")
-	entries := func() []qwenEntry { return qwenEntriesAt(at.v1(), at.gwKey()) }
+	entries := func() []qwenEntry { return qwenEntriesAt(at.v1()) }
 	keyName := "qwen:" + path + ":" + qwenModel
 	keyBase := "qwen:" + path + ":" + qwenModelAt
+	keyAuth := "qwen:" + path + ":" + qwenAuth
+	// keyAuthSeen marks the user's own auth type already stashed (or
+	// known absent), so a later wire doesn't take magpie's own "openai"
+	// for it
+	keyAuthSeen := keyAuth + ".seen"
 	keyEnv := "qwen:" + path + ":" + qwenEnv
 
 	// get spells an entry of magpie's as the catalog does
@@ -166,6 +199,37 @@ func qwenIn(at place) *Agent {
 		return nil
 	}
 
+	// setAuth sets security.auth.selectedType to openai while magpie's
+	// models are the pick (skipping the /auth prompt), stashing the user's
+	// own; with=false puts it back, or takes the key out where it never
+	// was, pruning the empty security.auth and security it would leave.
+	setAuth := func(with bool) error {
+		if with {
+			// the user's own value is stashed once, whatever it is —
+			// "openai" of their own too, or it can't be told from
+			// magpie's on a later wire or Sync and comes off with it
+			if _, seen := stashLoad()[keyAuthSeen]; !seen {
+				kv := map[string]string{keyAuthSeen: "1"}
+				if v, ok := edit.GetJSON(path, qwenAuth); ok {
+					kv[keyAuth] = v
+				}
+				stash(kv)
+			}
+			return edit.SetJSON(path, edit.KV{Path: qwenAuth, Value: "openai"})
+		}
+		forget(keyAuthSeen)
+		if was := unstash(keyAuth); was != "" {
+			return edit.SetJSON(path, edit.KV{Path: qwenAuth, Value: was})
+		}
+		if err := edit.DelJSON(path, qwenAuth); err != nil {
+			return err
+		}
+		if err := qwenPrune(path, "security.auth"); err != nil {
+			return err
+		}
+		return qwenPrune(path, "security")
+	}
+
 	// setProviders writes modelProviders.openai with the user's own and,
 	// when with, magpie's after them; none left takes the array out. A
 	// with=false when none were magpie's changes nothing.
@@ -183,12 +247,19 @@ func qwenIn(at place) *Agent {
 			if err := setEnvKey(true); err != nil {
 				return err
 			}
+			if err := setAuth(true); err != nil {
+				return err
+			}
 			for _, e := range entries() {
 				ms = append(ms, e)
 			}
 		} else if !had {
-			// nothing of magpie's left: a key it left behind still goes
-			return setEnvKey(false)
+			// nothing of magpie's left: a key it left behind, and the
+			// auth type it set, still go
+			if err := setEnvKey(false); err != nil {
+				return err
+			}
+			return setAuth(false)
 		}
 		if len(ms) > 0 {
 			if err := edit.SetJSON(path, edit.KV{Path: qwenModels, Value: ms}); err != nil {
@@ -199,6 +270,9 @@ func qwenIn(at place) *Agent {
 		}
 		if !with {
 			if err := setEnvKey(false); err != nil {
+				return err
+			}
+			if err := setAuth(false); err != nil {
 				return err
 			}
 			return qwenPrune(path, "modelProviders")
@@ -272,6 +346,9 @@ func qwenIn(at place) *Agent {
 			}
 			if v, ok := edit.GetJSON(path, qwenEnv); !ok || v != at.gwKey() {
 				return "Qwen Code's " + qwenEnv + " (settings.json) no longer is magpie's key, so magpie's models have none"
+			}
+			if v, ok := edit.GetJSON(path, qwenAuth); !ok || v != "openai" {
+				return "Qwen Code's security.auth.selectedType (settings.json) no longer is openai, so it asks /auth instead of using magpie"
 			}
 			return wiringOff("Qwen Code", path, func(k string) (string, bool) {
 				g := gjson.GetBytes(c.raw, k)
