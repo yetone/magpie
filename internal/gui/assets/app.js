@@ -11313,7 +11313,7 @@ function capMark(track, w, cap) {
 function accountCapPill(p, user, cap, direct) {
   const pill = el("button", "acap" + (cap ? " set" : ""), cap ? t("Cap {n}%", { n: cap }) : t("No cap"));
   pill.type = "button";
-  pill.title = (cap ? t("Used to {n}% of each usage window at most; past it, magpie counts this account as used up until the window renews. Click to change", { n: cap })
+  pill.title = (cap ? t("Used to {n}% of each usage window at most, as last read (readings refresh about once a minute, so a window can run past it first); past it, magpie counts this account as used up until the window renews. Click to change", { n: cap })
     : t("Used to 100% of its usage windows. Click to cap it at a share of each, so magpie goes on to the other accounts past it"))
     + (direct ? "\n\n" + directNote(direct) : "");
   pill.setAttribute("aria-haspopup", "menu");
