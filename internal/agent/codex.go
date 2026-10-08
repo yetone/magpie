@@ -77,6 +77,110 @@ func codexStandIn(path string) string {
 
 func codex(home string) *Agent { return codexIn(here(home)) }
 
+// The two notices magpie's multi-agent V1 setting (#141) can carry: Codex's
+// own features.multi_agent_v2 is on in the config magpie routes and takes the
+// V1 over, or magpie couldn't read that config to tell. magpie writes nothing
+// here — the setting is the user's own to turn off.
+const (
+	codexV1ConflictNotice  = "Codex's own multi_agent_v2 is on in the config magpie routes, which takes over the multi-agent V1 magpie's models ask for; turn it off in Codex's config to run subagents on magpie's models."
+	codexV1ReadErrorNotice = "Codex's multi-agent V1 is on, but magpie couldn't read Codex's config to check its own multi_agent_v2."
+)
+
+// multiAgentV2OnIn reads one [features] table for Codex's own multi_agent_v2,
+// read-only: the bare multi_agent_v2 boolean, or enabled in the
+// [features.multi_agent_v2] table, spelled as a table, an inline object or a
+// dotted key. set reports whether magpie recognizes the key as on or off. A
+// table whose enabled is left out, or any other value (a string "true"), is
+// not recognized, so magpie reads it as nothing and warns on nothing — Codex
+// itself rejects such a config at load (multi_agent_v2 is a bool or a table
+// there), so this is magpie's read of an invalid file, not Codex's default.
+func multiAgentV2OnIn(features map[string]any) (on, set bool) {
+	switch v := features["multi_agent_v2"].(type) {
+	case bool:
+		return v, true
+	case map[string]any:
+		enabled, ok := v["enabled"].(bool)
+		return enabled, ok
+	}
+	return false, false
+}
+
+// codexMultiAgentV2On reports whether a Codex config explicitly turns its own
+// features.multi_agent_v2 on: the bare multi_agent_v2 = true key, or enabled =
+// true in the [features.multi_agent_v2] table (a table, an inline object or a
+// dotted key), read at the top level and, on the legacy in-file profile shape,
+// in the profile the config selects. Codex 0.133.0 applied that overlay itself
+// (core/config/mod.rs: Features::from_sources with base = [features] and
+// profile = [profiles.<name>.features], the profile applied on top), and
+// magpie's own Check already reads profiles.<profile> the same way; that legacy
+// shape is what this mirrors. From 0.134 Codex dropped in-file profiles: an
+// in-file `profile` key is an error and `--profile` selects a separate
+// {profile}.config.toml layer, so this is not a claim about which profile a
+// modern Codex is running under — only about the same in-file shape magpie's
+// Check reads. The whole file is decoded (edit.Read + toml.Unmarshal, as
+// codexEnableEfforts does). A config magpie can't read is an error, never taken
+// for off.
+func codexMultiAgentV2On(path string) (bool, error) {
+	raw, err := edit.Read(path)
+	if err != nil {
+		return false, err
+	}
+	if raw == nil { // no config file: no key, nothing Codex turns V2 on with
+		return false, nil
+	}
+	var doc map[string]any
+	if err := toml.Unmarshal(raw, &doc); err != nil {
+		return false, err
+	}
+	top, _ := doc["features"].(map[string]any)
+	on, _ := multiAgentV2OnIn(top)
+	// the legacy in-file profile's features override the top level's, as Codex
+	// 0.133.0 applied them (base then profile) and as magpie's Check reads
+	// profiles.<profile>: take the profile's value when it sets one, else keep
+	// the top level's. Only the profile the config names counts.
+	if profile, _ := doc["profile"].(string); profile != "" {
+		profiles, _ := doc["profiles"].(map[string]any)
+		p, _ := profiles[profile].(map[string]any)
+		pf, _ := p["features"].(map[string]any)
+		if pon, set := multiAgentV2OnIn(pf); set {
+			on = pon
+		}
+	}
+	return on, nil
+}
+
+// codexSubAgentsV1Warning is the notice for the config Codex is routed
+// through (path, routed): settings.CodexAgentsV1 is on and Codex's own
+// multi_agent_v2 is explicitly on there, so Codex's V2 wins over the V1
+// magpie's own models ask for and a subagent on one can't read its task.
+// "" when the setting is off, Codex isn't routed through magpie here, or its
+// own multi_agent_v2 is off; a config magpie can't read is told, not taken
+// for off.
+func codexSubAgentsV1Warning(path string, routed bool) string {
+	if !codexcat.V1() || !routed {
+		return ""
+	}
+	on, err := codexMultiAgentV2On(path)
+	if err != nil {
+		return codexV1ReadErrorNotice
+	}
+	if !on {
+		return ""
+	}
+	return codexV1ConflictNotice
+}
+
+// CodexSubAgentsV1Warning is codexSubAgentsV1Warning for the Codex config
+// here, as the Settings row asks it (the page can't reach the config itself).
+// "" when there is no Codex, or no conflict.
+func CodexSubAgentsV1Warning() string {
+	a, err := Find("codex")
+	if err != nil || a.Routed == nil {
+		return ""
+	}
+	return codexSubAgentsV1Warning(a.Path, a.Routed())
+}
+
 // codexIn is Codex as it lives at a place: this machine's home, or a WSL
 // distro's (see wsl.go).
 func codexIn(at place) *Agent {
@@ -867,10 +971,14 @@ func codexIn(at place) *Agent {
 		// the app-server behind the Codex app (and every codex TUI) builds
 		// its model list once, at start-up.
 		Notice: func() string {
-			if Running(`(^|/)codex( |$)`) {
-				return "Codex builds its model list at start-up — restart the Codex app (and open codex sessions) to see this."
+			var out []string
+			if s := codexSubAgentsV1Warning(path, routed()); s != "" {
+				out = append(out, s)
 			}
-			return ""
+			if Running(`(^|/)codex( |$)`) {
+				out = append(out, "Codex builds its model list at start-up — restart the Codex app (and open codex sessions) to see this.")
+			}
+			return strings.Join(out, "\n\n")
 		},
 		Fields: []Field{
 			{

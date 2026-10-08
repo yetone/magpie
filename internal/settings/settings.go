@@ -274,8 +274,12 @@ type Settings struct {
 	// account's own, their codex/ ids and the groups one is in — say
 	// multi_agent_version "v1" (#141): their subagents are then handed
 	// their tasks as text, which a magpie-served subagent can read, where
-	// V2's are sealed by OpenAI's server. Codex's features.multi_agent_v2
-	// still wins, and a thread keeps the version it started with.
+	// V2's are sealed by OpenAI's server, and it is V1 that a ChatGPT
+	// lead's subagent on a magpie-served model needs (a V2 task to a
+	// non-ChatGPT model fails). Codex's own features.multi_agent_v2 would
+	// still win: where it is on in the config magpie routes, magpie says so
+	// (internal/agent/codex.go, and the Settings row) and leaves it to the
+	// user to turn off. A thread keeps the version it started with.
 	CodexAgentsV1 bool `json:"codexAgentsV1,omitempty"`
 	// CodexTitles is where the requests Codex makes for a thread's title
 	// (thread_title, thread_title_reconsideration: a hidden turn of their

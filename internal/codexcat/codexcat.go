@@ -312,9 +312,13 @@ func CacheEntries() map[string]map[string]any {
 // subagent's task, so a GPT lead can't hand one to a magpie-served
 // subagent; in V1 the task goes as text (#141). With settings.CodexAgentsV1
 // the OpenAI entries magpie hands Codex say "v1"; nothing else in them
-// changes. Codex keeps what it was handed in models_cache.json, versions
-// and all, so what the backend itself said is kept aside (originals) and
-// put back when the cache is read again (CacheEntries).
+// changes. Codex's own features.multi_agent_v2 still wins over the entry, so
+// where it is on in the config magpie routes the setting can't reach Codex:
+// magpie says so (internal/agent/codex.go, and the Settings row) and leaves
+// the config alone — turning the key off there is the user's. Codex keeps
+// what it was handed in models_cache.json, versions and all, so what the
+// backend itself said is kept aside (originals) and put back when the cache
+// is read again (CacheEntries).
 
 // V1 reports whether the OpenAI models magpie hands Codex say "v1".
 func V1() bool { return settings.Load().CodexAgentsV1 }

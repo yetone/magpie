@@ -71,6 +71,28 @@ func TestDshAndCodexAdviceOnWindows(t *testing.T) {
 	}
 }
 
+// On Windows Running says yes to every pattern, so Codex's restart advice is
+// always one a shown notice carries. When Codex's own multi_agent_v2 is on in
+// the routed config, the V2 warning is joined with that advice, not put in its
+// place — otherwise a user who just switched models loses the "restart Codex"
+// they need (#1028 review point 2).
+func TestDshCodexV2WarningJoinsRestart(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("the Windows answer is only given there")
+	}
+	home, read := codexAgentsHome(t, "model = \"gpt-5.5\"\n\n[features]\nmulti_agent_v2 = true\n")
+	cx := codex(home)
+	route(t, cx, read)
+	setAgentsV1(t, true)
+	n := cx.Notice()
+	if !strings.Contains(n, "multi_agent_v2") || !strings.Contains(n, "turn it off") {
+		t.Fatalf("no V2 warning to join: %q", n)
+	}
+	if !strings.Contains(n, "restart") {
+		t.Fatalf("the restart advice was lost when the V2 warning showed: %q", n)
+	}
+}
+
 // Cline's desktop app and its CLI can't be told apart on Windows, where
 // Running says yes to both: its advice names both, not the desktop app's
 // alone, so one who uses the VS Code extension is still told to reload it.
