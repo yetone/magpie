@@ -1,0 +1,281 @@
+name: JD Release
+
+# Builds unsigned (ad-hoc on macOS) packages and publishes them to this
+# repo's GitHub Releases. No Developer ID, notarisation, Discord or
+# Homebrew — those stay with yetone/magpie-releases.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.1.0 — no v prefix)'
+        required: true
+        type: string
+      ref:
+        description: 'Git ref to build (branch, tag or SHA)'
+        required: false
+        default: 'jd'
+        type: string
+      publish:
+        description: 'Publish the GitHub Release (off: build only)'
+        type: boolean
+        default: true
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      ref: ${{ steps.v.outputs.ref }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - id: v
+        env:
+          INPUT_REF: ${{ inputs.ref }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="$GITHUB_REF_NAME"
+            VERSION="${TAG#v}"
+            REF="$TAG"
+          else
+            VERSION="${INPUT_VERSION#v}"
+            TAG="v$VERSION"
+            REF="${INPUT_REF:-jd}"
+          fi
+          [[ "$VERSION" =~ ^[0-9][0-9A-Za-z.+-]*$ ]] || { echo "bad version: $VERSION" >&2; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Building $TAG from $REF (unsigned)"
+
+  mac:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: macos-15-intel
+            arch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build magpie.app
+        run: make app VERSION="${{ needs.version.outputs.version }}"
+
+      - name: Ad-hoc sign magpie.app
+        run: |
+          codesign --force --sign - magpie.app
+          codesign --verify --verbose=2 magpie.app
+
+      - name: Build dmg
+        run: |
+          DMG=magpie-darwin-${{ matrix.arch }}.dmg
+          mkdir -p "$RUNNER_TEMP/dmg"
+          cp -R magpie.app "$RUNNER_TEMP/dmg/"
+          ln -s /Applications "$RUNNER_TEMP/dmg/Applications"
+          hdiutil create -volname magpie -srcfolder "$RUNNER_TEMP/dmg" -ov -format UDZO "$DMG"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+
+      - name: Zip magpie.app
+        run: ditto -c -k --keepParent magpie.app magpie-darwin-${{ matrix.arch }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-darwin-${{ matrix.arch }}
+          path: |
+            magpie-darwin-*.dmg
+            magpie-darwin-*.zip
+          if-no-files-found: error
+
+  cli:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build CLI and Windows apps
+        run: make release-cli release-windows VERSION="${{ needs.version.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-cli
+          path: |
+            dist/magpie-cli-*
+            dist/magpie-windows-*.exe
+          if-no-files-found: error
+
+  windows-check:
+    needs: [version, cli]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            arch: amd64
+          - os: windows-11-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build-cli
+          path: dist
+
+      - name: Launch magpie
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $exe = "dist\magpie-windows-${{ matrix.arch }}.exe"
+          $v = (& $exe --version | Out-String).Trim()
+          Write-Output $v
+          if ($v -notlike "magpie $env:VERSION*") { throw "unexpected version: $v" }
+          $log = "$env:RUNNER_TEMP\magpie"
+          $p = Start-Process -FilePath $exe -ArgumentList app -PassThru -RedirectStandardOutput "$log.out" -RedirectStandardError "$log.err"
+          function Fail($why) { Get-Content "$log.out", "$log.err" -ErrorAction SilentlyContinue; throw $why }
+          $ok = $false
+          foreach ($i in 1..30) {
+            Start-Sleep -Seconds 2
+            if ($p.HasExited) { Fail "magpie exited with $($p.ExitCode)" }
+            try { Invoke-WebRequest http://127.0.0.1:3425/v1/models -UseBasicParsing | Out-Null; $ok = $true; break } catch {}
+          }
+          if (-not $ok) { Fail "the gateway never answered" }
+          Start-Sleep -Seconds 5
+          if ($p.HasExited) { Fail "magpie exited with $($p.ExitCode)" }
+          Stop-Process -Id $p.Id
+          Write-Output "magpie ran and served the gateway"
+
+  linux:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            arch: amd64
+          - os: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install GTK and WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libwebkit2gtk-4.1-dev xvfb dbus-x11
+
+      - name: Build
+        run: make release-linux VERSION="${{ needs.version.outputs.version }}"
+
+      - name: Launch magpie
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          BIN=dist/magpie-linux-${{ matrix.arch }}
+          $BIN --version | grep -F "magpie $VERSION"
+          export HOME=$(mktemp -d)
+          xvfb-run -a dbus-launch --exit-with-session $BIN app > "$RUNNER_TEMP/magpie.log" 2>&1 &
+          for i in $(seq 30); do
+            sleep 2
+            curl -fs -o /dev/null http://127.0.0.1:3425/v1/models && break
+          done
+          sleep 5
+          curl -fs -o /dev/null http://127.0.0.1:3425/v1/models || { cat "$RUNNER_TEMP/magpie.log"; echo "::error::magpie did not come up"; exit 1; }
+          pkill -f "$BIN" || true
+          echo "magpie ran and served the gateway"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-${{ matrix.arch }}
+          path: dist/magpie-linux-*
+          if-no-files-found: error
+
+  publish:
+    needs: [version, mac, cli, windows-check, linux]
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          ls -la
+
+      - name: Changelog
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          PREV=$(git tag --sort=-v:refname | grep -A1 "^${TAG}$" | tail -1 || true)
+          if [ -z "$PREV" ] || [ "$PREV" = "$TAG" ]; then
+            PREV=$(git rev-list --max-parents=0 HEAD)
+          fi
+          COMMITS=$(git log "$PREV..HEAD" --pretty=format:"%s" --no-merges || true)
+          {
+            echo "### Changes"
+            echo
+            if [ -n "$COMMITS" ]; then
+              echo "$COMMITS" | sed 's/^/- /'
+            else
+              echo "- Unsigned JD build of magpie $VERSION"
+            fi
+            echo
+            echo "### Install"
+            echo
+            echo "This is an **unsigned** JD build (macOS is ad-hoc signed: right-click → Open the first time)."
+            echo
+            echo "- **macOS (Apple Silicon):** \`magpie-darwin-arm64.dmg\`"
+            echo "- **macOS (Intel):** \`magpie-darwin-amd64.dmg\`"
+            echo "- **Windows:** \`magpie-windows-amd64.exe\` (ARM: \`magpie-windows-arm64.exe\`)"
+            echo "- **Linux:** \`magpie-linux-amd64\` / \`magpie-linux-arm64\` (needs GTK 3 and WebKitGTK 4.1)"
+            echo "- **Terminal only:** \`magpie-cli-<os>-<arch>\`"
+          } > "$RUNNER_TEMP/changelog.md"
+          cat "$RUNNER_TEMP/changelog.md"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: magpie ${{ needs.version.outputs.tag }} (JD unsigned)
+          target_commitish: ${{ needs.version.outputs.ref }}
+          draft: false
+          body_path: ${{ runner.temp }}/changelog.md
+          files: dist/*
