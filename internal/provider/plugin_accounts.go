@@ -311,12 +311,51 @@ func keepPluginPlan(pp plugin.Provider, key, plan string) {
 // a request (401), as a built-in's refused sign-in is marked, and clears
 // the mark once one goes through.
 func notePluginLapse(pp plugin.Provider, key string, status int) {
+	notePluginLapseSince(pp, key, status, toldNow)
+}
+
+// What plugin accounts' sign-ins were told of (a request's answer, a usage
+// reading, a sign-in) is counted, under loginsMu: pluginSignInTold
+// counts it all, and pluginSignInSaid has the count each account was last
+// told of at. A count, not a time: Windows' clock moves in ticks of up to
+// 15.6ms, and a reading begun just after an answer would read as begun
+// with it.
+var (
+	pluginSignInTold uint64
+	pluginSignInSaid = map[string]uint64{}
+)
+
+// toldNow is the began of what is told now, not read from earlier.
+const toldNow = ^uint64(0)
+
+// pluginSignInAt is the count a usage reading beginning now goes by.
+func pluginSignInAt() uint64 {
+	loginsMu.Lock()
+	defer loginsMu.Unlock()
+	return pluginSignInTold
+}
+
+// notePluginLapseSince is notePluginLapse for what a usage reading begun
+// at began (pluginSignInAt) found, toldNow for what is told now: what was
+// told of the sign-in since began stands over it. A reading begun before
+// a request's 401 that ended clean took the mark off an account the
+// vendor had just refused.
+func notePluginLapseSince(pp plugin.Provider, key string, status int, began uint64) {
 	refused := status == http.StatusUnauthorized
 	if !refused && (status < 200 || status > 299) {
 		return
 	}
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
+	said := pluginAgent(pp) + "/" + key
+	if pluginSignInSaid[said] > began {
+		return
+	}
+	if began == toldNow {
+		pluginSignInTold++
+		began = pluginSignInTold
+	}
+	pluginSignInSaid[said] = began
 	ls := readLogins()
 	for i, l := range ls {
 		if l.Agent == pluginAgent(pp) && l.Home == key {

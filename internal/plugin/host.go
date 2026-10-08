@@ -988,11 +988,15 @@ func (h *host) writerLoop() {
 				return
 			}
 			_, err := h.in.Write(req.b)
+			if err != nil {
+				// End the host before the writer's caller hears of it, so a
+				// caller freed by the failure finds the host already dead.
+				h.fail(fmt.Errorf("writing to the plugin host: %w", err))
+			}
 			if req.done != nil {
 				req.done <- err
 			}
 			if err != nil {
-				h.fail(fmt.Errorf("writing to the plugin host: %w", err))
 				return
 			}
 		}

@@ -208,7 +208,9 @@ func findNew(l *Library, repo, ref string, f *fetcher, limited *atomic.Pointer[e
 	if err != nil {
 		return nil, false
 	}
-	var agents []string
+	// none when the repository's skills are on no agent: [], which the
+	// page reads as a list (#1217)
+	agents := []string{}
 	for _, s := range skills {
 		for _, a := range s.Agents {
 			if !slices.Contains(agents, a) {
@@ -301,10 +303,10 @@ func AddNewSkills(ids []string) (*Result, error) {
 		}
 		g.paths = append(g.paths, n.Path)
 	}
-	return change(func(l *Library) error {
+	return installChange(func(l *Library, in *installed) error {
 		for _, from := range order {
 			g := groups[from]
-			if err := installFrom(l, g.p, g.paths, g.agents, false); err != nil {
+			if err := installFrom(l, g.p, g.paths, g.agents, false, in); err != nil {
 				return err
 			}
 		}

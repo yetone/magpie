@@ -34,8 +34,11 @@ jobs:
 
       # The GUI links GTK 3 and WebKitGTK 4.1 through cgo on Linux (see the
       # Makefile), so vet and test need their headers and the gtk3 tag.
+      # A stuck apt mirror held main's run here for 2.5 hours (b0d456c3), and
+      # every later push queued behind it; it takes under a minute.
       - name: Install GTK and WebKitGTK
         if: runner.os == 'Linux'
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev

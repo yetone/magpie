@@ -915,6 +915,8 @@ func normalize(p Provider) Provider {
 	// Azure OpenAI's resource, however its endpoint was pasted, is asked
 	// on its v1 API, chat completions and Responses both (azure.go)
 	p.azureEndpoints()
+	// OpenCode Zen's or Go's other APIs, beside the one it was given (#1215)
+	p.openCodeEndpoints()
 	// a preset's provider keeps its headers too: the preset gives the
 	// endpoints and catalog, the headers say which workspace or app it is
 	p.Headers = cleanHeaders(p.Headers)

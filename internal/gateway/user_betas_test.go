@@ -118,3 +118,49 @@ func TestUserBetasAlone(t *testing.T) {
 		t.Fatalf("betas sent %q", got)
 	}
 }
+
+// Claude Code signed in to claude.ai asks oauth-2025-04-20 with its
+// sign-in, which magpie never passes on: a provider gets the other betas,
+// as Claude Code with magpie's key asks them, and an oauth beta the user
+// set on the provider (header.anthropic-beta) still goes.
+func TestSignInBetaStaysWithMagpie(t *testing.T) {
+	fresh(t)
+	up := &betaRelay{}
+	srv := httptest.NewServer(up)
+	t.Cleanup(srv.Close)
+	for _, p := range []provider.Provider{
+		{ID: "relay", Name: "Relay", Key: "k", Anthropic: srv.URL, Models: []string{"claude-opus-5-5"}},
+		{ID: "own", Name: "Own", Key: "k", Anthropic: srv.URL, Models: []string{"claude-opus-5-5"}, Headers: map[string]string{"anthropic-beta": "oauth-2025-04-20"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := New()
+	ask := func(model, betas string) []string {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/v1/messages?beta=true", strings.NewReader(
+			`{"model":"`+model+`","max_tokens":20,"messages":[{"role":"user","content":"ping"}]}`))
+		req.Header.Set("User-Agent", "claude-cli/2.1.290 (external, cli)")
+		req.Header.Set("Authorization", "Bearer sk-ant-oat01-"+strings.Repeat("a", 24)) // made up, of a sign-in's shape
+		req.Header.Set("anthropic-beta", betas)
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("status %d: %s", rec.Code, rec.Body)
+		}
+		return up.last()
+	}
+	for _, c := range []struct {
+		model, asked string
+		want         []string
+	}{
+		{"relay/claude-opus-5-5", "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14", []string{"claude-code-20250219,interleaved-thinking-2025-05-14"}},
+		{"relay/claude-opus-5-5", "oauth-2025-04-20", nil},
+		{"own/claude-opus-5-5", "claude-code-20250219,oauth-2025-04-20", []string{"claude-code-20250219,oauth-2025-04-20"}},
+	} {
+		if got := ask(c.model, c.asked); !slices.Equal(got, c.want) {
+			t.Errorf("%s asked %q: sent %q, want %q", c.model, c.asked, got, c.want)
+		}
+	}
+}

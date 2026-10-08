@@ -33,6 +33,25 @@ func TestParseProbe(t *testing.T) {
 		t.Fatalf("mirrored = %+v", tool)
 	}
 
+	// consomme networking (#1230), and virtioproxy, its name before WSL
+	// 2.9: 127.0.0.1 is relayed to Windows' own, and the default route is
+	// Windows' next hop (a TUN proxy's 198.18.0.2), not Windows. A mode
+	// wslinfo didn't name, or one that isn't these, keeps the route.
+	for out, host := range map[string]string{
+		"net:consomme\n":    "",
+		"net:Consomme\r\n":  "",
+		"net:virtioproxy\n": "",
+		"net:nat\n":         "198.18.0.2",
+		"net:bridged\n":     "198.18.0.2",
+		"net:\n":            "198.18.0.2",
+		"":                  "198.18.0.2",
+	} {
+		tool, _ = parseProbe("d", "bin:/usr/bin/claude\nlpath:/usr/bin\nroute:default via 198.18.0.2 dev eth0 proto kernel\n"+out)
+		if tool.Host != host {
+			t.Errorf("%q: Host = %q, want %q", out, tool.Host, host)
+		}
+	}
+
 	// no claude in the distro (the probe skips Windows' own under /mnt)
 	if _, ok := parseProbe("d", "mount:/mnt/c/\n"); ok {
 		t.Fatal("found nothing, yet ok")

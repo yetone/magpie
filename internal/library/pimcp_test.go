@@ -313,3 +313,33 @@ func TestPiNativeVersions(t *testing.T) {
 		}
 	}
 }
+
+// heliar-k on #1097: the adapter found, mcp.json was moved whole to
+// mcp-adapter.json with no backup, the servers the user added with
+// `pi mcp add` leaving the file Pi reads. Whatever moves it, the user's
+// mcp.json is copied aside first, byte for byte, and its servers survive.
+func TestPiMCPWholeMoveKeepsABackup(t *testing.T) {
+	h := sandbox(t)
+	d := filepath.Join(h, ".pi/agent")
+	write(t, filepath.Join(d, "settings.json"), `{ "quietStartup": false, "packages": [] }`)
+	write(t, filepath.Join(d, "npm/node_modules/pi-mcp-adapter/package.json"), `{"name": "pi-mcp-adapter", "version": "4.0.0"}`)
+	old, adapter := filepath.Join(d, "mcp.json"), filepath.Join(d, "mcp-adapter.json")
+	mine := `{ "mcpServers": { "demo": { "url": "https://mcp.exa.ai/mcp" } } }
+`
+	write(t, old, mine)
+	targetByID("pi")
+	bs, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "pi", "mcp.json"))
+	if len(bs) != 1 {
+		t.Fatalf("backups of mcp.json: %v", bs)
+	}
+	if got := read(t, bs[0]); got != mine {
+		t.Errorf("backup: %q, want the user's %q", got, mine)
+	}
+	if exists(old) {
+		if piServers(t, old)["demo"] == nil {
+			t.Errorf("mcp.json lost demo: %s", read(t, old))
+		}
+	} else if piServers(t, adapter)["demo"] == nil {
+		t.Errorf("demo neither in mcp.json nor in mcp-adapter.json: %s", read(t, adapter))
+	}
+}

@@ -127,7 +127,9 @@ func grokAlsoOn(p Provider) []Provider {
 
 var grokHomeUsage struct {
 	sync.Mutex
-	m map[string]loginUsageEntry // home
+	m       map[string]loginUsageEntry // home
+	pending map[string]uint64          // home: the reading out now
+	reads   uint64
 }
 
 // grokLoginUsage is each Grok account's allowance, by user, as LoginUsage
@@ -147,6 +149,14 @@ func grokLoginUsage(ctx context.Context) map[string]SubscriptionQuota {
 			mu.Unlock()
 			continue
 		}
+		u.Lock()
+		if u.pending == nil {
+			u.pending = map[string]uint64{}
+		}
+		u.reads++
+		read := u.reads
+		u.pending[g.Home] = read
+		u.Unlock()
 		wg.Add(1)
 		go func(g grokLogin) {
 			defer wg.Done()
@@ -155,10 +165,16 @@ func grokLoginUsage(ctx context.Context) map[string]SubscriptionQuota {
 				q = e.q // a hiccup keeps what was known
 			}
 			u.Lock()
-			if u.m == nil {
-				u.m = map[string]loginUsageEntry{}
+			// one dropped meanwhile (StaleAllowance) was asked for too soon,
+			// and one a later reading took over from is older: either goes
+			// to its caller but isn't kept, as in loginReading
+			if u.pending[g.Home] == read {
+				delete(u.pending, g.Home)
+				if u.m == nil {
+					u.m = map[string]loginUsageEntry{}
+				}
+				u.m[g.Home] = loginUsageEntry{at: time.Now(), q: q}
 			}
-			u.m[g.Home] = loginUsageEntry{at: time.Now(), q: q}
 			u.Unlock()
 			mu.Lock()
 			out[g.User] = q

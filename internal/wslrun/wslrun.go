@@ -32,7 +32,7 @@ type Tool struct {
 	Path   string // the command, inside the distro
 	PATH   string // the distro's PATH it was found on, which it may need (node)
 	Mount  string // where Windows' drives are mounted: "/mnt/"
-	Host   string // the Windows host's address inside the distro, "" when it is 127.0.0.1 (mirrored networking)
+	Host   string // the Windows host's address inside the distro, "" when it is 127.0.0.1 (HostLoopback)
 }
 
 // On is whether there is WSL to look in: on Windows, or in tests.
@@ -228,10 +228,27 @@ func parseProbe(distro, out string) (Tool, bool) {
 	if dir := t.Path[:strings.LastIndex(t.Path, "/")]; dir != "" && !onPath(t.PATH, dir) {
 		t.PATH = dir + ":" + t.PATH
 	}
-	if net_ == "mirrored" {
+	if HostLoopback(net_) {
 		t.Host = ""
 	}
 	return t, true
+}
+
+// HostLoopback reports whether 127.0.0.1 inside a WSL 2 distro reaches
+// Windows' own 127.0.0.1 in networking mode, as wslinfo --networking-mode
+// prints it: mirrored, and consomme (WSL 2.9's name for what was
+// virtioproxy), whose user-mode stack relays the distro's 127.0.0.1 to
+// Windows' while localhostForwarding is on, as it is unless .wslconfig
+// turns it off (microsoft/WSL's ConsommeTests::LoopbackGuestToHost). Its
+// default route there is Windows' own next hop (198.18.0.2 under a TUN
+// proxy, #1230), never Windows. Under nat, bridged or none, and for a mode
+// not known (""), 127.0.0.1 is the distro's own.
+func HostLoopback(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "mirrored", "consomme", "virtioproxy":
+		return true
+	}
+	return false
 }
 
 func onPath(path, dir string) bool {

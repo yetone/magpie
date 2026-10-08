@@ -132,12 +132,12 @@ func TestCopilotGHESignIn(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	st, err = WaitSignIn(ctx, st.ID)
-	if err != nil || st.State != "done" || st.User != "mona_acme" || st.Plan != "Enterprise" || st.Using {
+	if err != nil || st.State != "done" || st.User != "mona_acme@acme.ghe.com" || st.Plan != "Enterprise" || st.Using {
 		t.Fatalf("signed in: %+v %v", st, err)
 	}
 	var saved *savedLogin
 	for _, l := range readLogins() {
-		if l.Agent == "copilot" && l.User == "mona_acme" {
+		if l.Agent == "copilot" && l.User == "mona_acme@acme.ghe.com" {
 			saved = &l
 		}
 	}
@@ -148,7 +148,7 @@ func TestCopilotGHESignIn(t *testing.T) {
 
 	var app copilotApp
 	for _, c := range copilotLogins(copilotConfigDir()) {
-		if c.User == "mona_acme" {
+		if c.User == "mona_acme@acme.ghe.com" {
 			app = c.app
 		}
 	}
@@ -206,7 +206,7 @@ func TestCopilotCLIGHELogin(t *testing.T) {
 		"loggedInUsers":[{"host":"https://acme.ghe.com","login":"mona_acme"}],
 		"copilotTokens":{"https://acme.ghe.com:mona_acme":"gho_ent"}}`)
 	p, ok := find(All(), "copilot")
-	if !ok || p.Account.User != "mona_acme" {
+	if !ok || p.Account.User != "mona_acme@acme.ghe.com" {
 		t.Fatalf("copilot: %+v", p)
 	}
 	ms, err := p.Fetch(context.Background())

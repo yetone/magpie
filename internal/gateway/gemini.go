@@ -203,11 +203,15 @@ func parseGemini(body []byte) (*Request, error) {
 			}
 			r.Thinking = r.Effort != ""
 		}
-		// structured output has no seat in the other APIs; ask for it
+		// structured output, asked for in the upstream's own field
+		// (Format) and in words as well: a Gemini client doesn't know
+		// OpenAI's rule that a json_object's prompt say "JSON"
 		if strings.HasPrefix(gc.ResponseMimeType, "application/json") {
 			ask := "Respond with a single JSON value and nothing else"
+			r.Format = &Format{Type: "json_object"}
 			if s := firstJSON(gc.ResponseJSONSchema, gc.ResponseSchema); s != "" {
 				ask += ", matching this JSON schema:\n" + s
+				r.Format = &Format{Type: "json_schema", Name: formatName, Schema: json.RawMessage(s)}
 			}
 			if r.System != "" {
 				r.System += "\n\n"

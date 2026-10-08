@@ -207,9 +207,19 @@ func callFiles() []file {
 	return out
 }
 
-// callSources are callFiles and OpenCode's sessions (#680), whose calls are
-// rows of its database or its JSON files rather than lines.
-func callSources() []file { return append(callFiles(), openCodeCallFiles()...) }
+// callSources are callFiles and the agents whose calls are read whole
+// rather than line by line: OpenCode's (#680) and ZCode's, whose calls are
+// rows of their database or their JSON files; DeepSeek Harness's, whose
+// session file is packed in frames and so cannot be read on from the middle
+// of one; and WorkBuddy's, whose usage lines repeat a reply's id as it goes
+// on. Every agent here needs an entry in wholeCallReaders.
+func callSources() []file {
+	out := callFiles()
+	out = append(out, openCodeCallFiles()...)
+	out = append(out, zcodeCallFiles()...)
+	out = append(out, dshCallFiles()...)
+	return append(out, workbuddyCallFiles()...)
+}
 
 // desktopDataDirs are Claude Desktop's Claude and Claude-3p folders on this
 // computer, found as desktopDirs in internal/agent's claudedesktop.go does

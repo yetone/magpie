@@ -59,6 +59,47 @@ type Filter struct {
 	// Computer narrows to the calls of one computer (#542): ThisComputer,
 	// OtherComputers, or another's id; "" is every computer's
 	Computer string
+	// Through narrows to one of the two sources a row can be of
+	// (SourceGateway, SourceSession); "" keeps both. It is what the requests
+	// page's source cells filter by, and, as with the other dimensions, the
+	// cells themselves are counted with it cleared so all three stay
+	// switchable. Not Record.Via, which is the computer that forwarded the
+	// call (#542).
+	Through string
+}
+
+// SourceGateway and SourceSession are the two sources a request row is of,
+// which Row.Source spells "log" and "": the calls magpie's own gateway
+// served, and the ones read from the agents' own session files, which it
+// never saw. They are the requests page's source cells, and the values its
+// via= takes.
+const (
+	SourceGateway = "through"
+	SourceSession = "direct"
+)
+
+// SourceOf is the source a row is of, as the page's cells name them: the
+// calls magpie's gateway served and the ones read from the agents' session
+// files. A call the gateway turned away itself is neither — the page says
+// under its totals that local rejections are not counted — so it is "" and
+// picking either cell leaves it out, as the cells' own counts already do.
+func SourceOf(r Row) string {
+	if r.IsRejected() {
+		return ""
+	}
+	if r.Source == "log" {
+		return SourceSession
+	}
+	return SourceGateway
+}
+
+// keepsRow is keeps with the one dimension a Record does not carry: which of
+// the two sources the row is of (Row.Source, not the record's).
+func (f Filter) keepsRow(r Row) bool {
+	if f.Through != "" && SourceOf(r) != f.Through {
+		return false
+	}
+	return f.keeps(r.Record)
 }
 
 // OtherComputers is the Filter.Computer of every other computer's calls.
@@ -180,7 +221,7 @@ func (l Ledgered) Filtered(f Filter) Ledgered {
 	}
 	out := Ledgered{Rows: []Row{}, Agents: l.Agents, Providers: l.Providers}
 	for _, r := range l.Rows {
-		if f.keeps(r.Record) {
+		if f.keepsRow(r) {
 			out.Rows = append(out.Rows, r)
 			if !r.IsRejected() {
 				out.Sum.addRow(r)

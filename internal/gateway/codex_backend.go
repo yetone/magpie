@@ -3,7 +3,6 @@ package gateway
 import (
 	"bytes"
 	"cmp"
-	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -17,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/klauspost/compress/zstd"
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/codexcat"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
@@ -67,7 +66,7 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 	// newer: the backend serves a model only to a client that knows it
 	provider.SawCodexClient(r.Header)
 	rest := strings.TrimPrefix(r.URL.Path, CodexPath)
-	body, ok := s.readRequestBody(w, r, provider.Responses, codexReader, 0)
+	body, ok := s.readRequestBody(w, r, provider.Responses, 0)
 	if !ok {
 		return
 	}
@@ -136,33 +135,71 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 }
 
 // sealedTaskError is what a subagent is told whose task its lead sealed
-// when nothing model names can read it.
-func sealedTaskError(model string) string {
-	return fmt.Sprintf("An OpenAI lead sent a sealed subagent task that only a ChatGPT account can read, and %s has none. Use a Magpie-served model for the lead, or choose an OpenAI subagent (or a group with a Codex account in it).", model)
+// when nothing model names can read it. lead is the provider that
+// answered the lead, "" when magpie didn't (the lead was one of Codex's
+// own models) or no longer remembers it.
+func sealedTaskError(model, lead string) string {
+	if lead != "" {
+		return fmt.Sprintf("This subagent's task was sealed by the server that answered its lead (%s), and only that server can open it; %s can't. Give the subagent the lead's model, or a lead model that isn't served by the ChatGPT backend, so its subagents get a task they can read.", lead, model)
+	}
+	return fmt.Sprintf("This subagent's task was sealed by the ChatGPT backend that answered its lead, and only that backend can open it: a ChatGPT account, or the Responses API provider that answered the lead. %s is neither. Give the subagent the lead's model, or a lead model that isn't served by the ChatGPT backend, so its subagents get a task they can read.", model)
 }
 
 // sealedReader is who can read a subagent's task its lead sealed: a
 // ChatGPT account (#619). The ChatGPT backend seals spawn_agent's message
 // for a lead it answers as it came (passthrough, a Codex account a group
-// has as well), and only it opens it again.
-func sealedReader(p provider.Provider) bool {
-	return p.Account != nil && p.Account.Agent == "codex"
+// has as well), and only it opens it again. A provider that relays the
+// ChatGPT backend's Responses API (Sub2API, #1109) seals its lead's tasks
+// as well and opens them again: it reads the task when it answered the
+// lead (lead, the provider id), and the task is relayed to it as it came,
+// on Responses, never translated.
+func (s *Server) sealedReader(p provider.Provider, model, lead string) bool {
+	if p.Account != nil && p.Account.Agent == "codex" {
+		return true
+	}
+	return lead != "" && p.Account == nil && p.ID == lead && slices.Contains(s.usable(p, model), provider.Responses)
 }
 
 // sealedReaders keeps of cands those that can read a sealed subagent task,
 // pl's order with them.
-func sealedReaders(cands []candidate, pl planned) ([]candidate, planned) {
+func (s *Server) sealedReaders(cands []candidate, pl planned, lead string) ([]candidate, planned) {
 	var kept []candidate
 	var order []Weighed
 	for i, c := range cands {
-		if sealedReader(c.p) {
+		if s.sealedReader(c.p, c.model, lead) {
 			kept = append(kept, c)
 			order = append(order, pl.order[i])
 		}
 	}
 	cands, pl.order = kept, order
-	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !sealedReader(c.p) })
+	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !s.sealedReader(c.p, c.model, lead) })
 	return cands, pl
+}
+
+// leadProvider is the provider that answered a subagent's lead, the
+// thread parent names, in any scope magpie routed it in: "" when it
+// answered none of the lead's turns, or so long ago it no longer counts.
+func leadProvider(scope, parent string) string {
+	parent = strings.TrimSpace(parent)
+	if parent == "" {
+		return ""
+	}
+	sticks.Lock()
+	defer sticks.Unlock()
+	st, had := stickOf(scope + "|" + parent) // reads what's kept on disk too
+	if !had {
+		for k, v := range sticks.m {
+			if strings.HasSuffix(k, "|"+parent) && (!had || v.at.After(st.at)) {
+				st, had = v, true
+			}
+		}
+	}
+	if !had || time.Since(st.at) > stickKeep {
+		return ""
+	}
+	id, _, _ := strings.Cut(st.who, "@") // an account: provider@user
+	id, _, _ = strings.Cut(id, "#")      // a key: provider#key
+	return id
 }
 
 // leadFirst puts first the account that answered the lead, the thread
@@ -232,29 +269,6 @@ func hasSealedAgentMessage(body []byte) bool {
 		}
 	}
 	return false
-}
-
-func codexReader(r *http.Request) (io.ReadCloser, error) {
-	var rd io.ReadCloser = io.NopCloser(r.Body)
-	switch enc := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Encoding"))); enc {
-	case "", "identity":
-	case "zstd":
-		d, err := zstd.NewReader(r.Body, zstd.WithDecoderMaxMemory(defaultBodyLimit))
-		if err != nil {
-			return nil, err
-		}
-		rd = d.IOReadCloser()
-	case "gzip":
-		g, err := gzip.NewReader(r.Body)
-		if err != nil {
-			return nil, err
-		}
-		rd = g
-	default:
-		return nil, fmt.Errorf("magpie can't read a %s body", enc)
-	}
-	r.Header.Del("Content-Encoding")
-	return rd, nil
 }
 
 // compactSigninHeld is the calling key when its accounts (#905) hold a
@@ -391,8 +405,9 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 		seat := Weighed{ID: "codex", Provider: "openai", Name: "OpenAI", Icon: "openai", Who: who, Kind: "account", Agent: "codex", Model: model}
 		link := s.titlePrompts.observe(r, body, metadata, kind, start)
 		captureTitle = link != nil && isTitleKind(kind)
-		tr = s.trace.begin(Route{imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Provider: "openai",
+		tr = s.trace.begin(Route{imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: agentOf(r), Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Provider: "openai",
 			Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Effort: effort, Start: start}}})
+		promptRead := s.inspectPrompt(tr, provider.Responses, body)
 		end = func(status int, msg string, tokens, out int) {
 			ms := time.Since(start).Milliseconds()
 			ttft, text := first.ms()
@@ -400,6 +415,7 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 			if captureTitle && status < 400 && msg == "" && !titleReply.truncated {
 				replyDigest = titleReplyDigest(titleReply.buf.Bytes(), nil)
 			}
+			prompt := promptRead() // outside the trace's lock, which reading it takes
 			s.trace.update(tr, func(t *Route) {
 				t.Tries[0].Done, t.Tries[0].Status, t.Tries[0].Millis, t.Tries[0].Error = true, status, ms, msg
 				t.Tries[0].TTFT, t.Tries[0].FirstText = ttft, text
@@ -411,6 +427,9 @@ func (s *Server) codexUpstream(w http.ResponseWriter, r *http.Request, rest stri
 				}
 				t.Output, t.Reasoning, t.TTFT, t.FirstText = out, uu.Reasoning, ttft, text
 				t.Usage = routeUsage("openai", model, uu)
+				if prompt != nil {
+					t.Prompt = prompt.calibrated(promptCounted(t.Usage), catalog.ContextOf(model))
+				}
 				t.Tries[0].Served, t.Tries[0].Swapped = served, swapped(model, served)
 				t.Served, t.Swapped = t.Tries[0].Served, t.Tries[0].Swapped
 			})

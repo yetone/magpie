@@ -453,6 +453,9 @@ button.rt-session { cursor: pointer; }
 }
 .rt-gadd:hover, .rt-gadd.open { color: var(--fg); border-color: var(--muted); background: var(--card); }
 .rt-gadd svg { flex: none; }
+/* Add a rule, and beside it a rule by what the message asks for */
+.rt-gadds { display: flex; flex-wrap: wrap; gap: 6px; }
+.rt-gadds > [hidden] { display: none; }
 /* a group's rules: when, and the model it sends that turn to first */
 .rt-rules .fbl { gap: 6px; }
 .rt-rule { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
@@ -487,6 +490,9 @@ button.rt-session { cursor: pointer; }
 .rt-classifier[hidden] { display: none; }
 .rt-classifier .w { color: var(--muted); font-size: 12px; }
 .rt-classifier .hint { flex-basis: 100%; }
+/* the effort's classifier offering to pick the model too: a line of its
+   own, wrapping rather than running past a narrow window */
+.rt-classifier .rt-cls-more { margin-left: -7px; white-space: normal; text-align: left; color: var(--accent); }
 /* the levels a group names for agents (#295): one toggle each */
 .rt-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; }
 .rt-levels[hidden] { display: none; }

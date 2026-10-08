@@ -75,6 +75,12 @@ type Route struct {
 	Routed  bool   `json:"routed,omitempty"`
 	// Upstream: the provider an aggregator said answered behind it
 	Upstream string `json:"upstream,omitempty"`
+	// Prompt: what the prompt held, part by part, and the window it went
+	// into (prompt.go)
+	Prompt *Prompt `json:"prompt,omitempty"`
+	// Conv: the conversation a request without a session id is part of,
+	// as a digest of its first user turn (conversationID)
+	Conv string `json:"conv,omitempty"`
 }
 
 // RouteUsage is one billable attempt's pricing inputs, kept in routing history.

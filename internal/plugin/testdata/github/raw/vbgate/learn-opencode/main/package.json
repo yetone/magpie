@@ -1,0 +1,25 @@
+{
+  "name": "opencode-tutorial",
+  "version": "1.0.0",
+  "description": "OpenCode 中文实战课 - 零基础学会用 AI 干实际工作",
+  "type": "module",
+  "scripts": {
+    "dev": "bash scripts/stats.sh && vitepress dev docs",
+    "build": "bash scripts/stats.sh && vitepress build docs",
+    "preview": "vitepress preview docs"
+  },
+  "keywords": [
+    "opencode",
+    "ai",
+    "tutorial",
+    "vitepress"
+  ],
+  "license": "CC-BY-NC-SA-4.0",
+  "devDependencies": {
+    "vitepress": "^2.0.0-alpha.15",
+    "vue": "^3.5.0"
+  },
+  "dependencies": {
+    "medium-zoom": "^1.1.0"
+  }
+}

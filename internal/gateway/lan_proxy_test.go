@@ -140,3 +140,66 @@ func TestProxiedLoopbackRoutes(t *testing.T) {
 		t.Fatal("MCP through a tunnel without the key:", c)
 	}
 }
+
+// Sharing keeps a host MAGPIE_ADDR names (#1112): a gateway kept on
+// loopback behind Tailscale Serve asks what Serve forwards for a gateway
+// key once shared, and still listens on loopback alone; the addresses it
+// offers other machines are the one it listens on, or none on loopback.
+func TestSharedKeepsPinnedAddr(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_TRUST_PROXY", "")
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	t.Setenv("MAGPIE_ADDR", "127.0.0.1:4555")
+	reached := false
+	h := lanGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached = true }))
+	call := func(hdr ...string) int {
+		reached = false
+		r := httptest.NewRequest("GET", "/v1/models", nil)
+		r.RemoteAddr = "127.0.0.1:51234"
+		for i := 0; i+1 < len(hdr); i += 2 {
+			r.Header.Set(hdr[i], hdr[i+1])
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	serve := []string{"Tailscale-User-Login", "someone@example.com", "X-Forwarded-For", "100.64.0.7"}
+
+	_, secrets := newCaller(t, "Tailnet laptop") // shares magpie
+	if a := listenAddr(); a != "127.0.0.1:4555" {
+		t.Fatal("shared, MAGPIE_ADDR on loopback, listens on", a)
+	}
+	if u := LANURLs(); len(u) != 0 {
+		t.Fatal("shared on loopback offers", u)
+	}
+	for _, bad := range [][]string{nil, {"Authorization", "Bearer magpie"}, {"x-api-key", "sk-magpie-wrong"}} {
+		if c := call(append(append([]string{}, bad...), serve...)...); c != http.StatusUnauthorized || reached {
+			t.Fatalf("through Serve with %v: %d reached=%v", bad, c, reached)
+		}
+	}
+	if c := call(append([]string{"Authorization", "Bearer " + secrets[0]}, serve...)...); c != 200 || !reached {
+		t.Fatal("through Serve with the key:", c)
+	}
+	if c := call("Authorization", "Bearer anything"); c != 200 {
+		t.Fatal("an agent on loopback:", c)
+	}
+
+	t.Setenv("MAGPIE_ADDR", "100.64.0.1:4555")
+	if a := listenAddr(); a != "100.64.0.1:4555" {
+		t.Fatal("shared, MAGPIE_ADDR on one address, listens on", a)
+	}
+	if u := LANURLs(); len(u) != 1 || u[0] != "http://100.64.0.1:4555" {
+		t.Fatal("shared on one address offers", u)
+	}
+	// every interface, said or left to Settings, is every interface still
+	for _, a := range []string{"0.0.0.0:4555", "[::]:4555", ":4555"} {
+		t.Setenv("MAGPIE_ADDR", a)
+		if got := listenAddr(); got != "0.0.0.0:4555" {
+			t.Fatal("shared, MAGPIE_ADDR", a, "listens on", got)
+		}
+	}
+	t.Setenv("MAGPIE_ADDR", "")
+	if got := listenAddr(); got != "0.0.0.0:"+Port() {
+		t.Fatal("shared from Settings listens on", got)
+	}
+}

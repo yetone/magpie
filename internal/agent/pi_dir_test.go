@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/yetone/magpie/internal/edit"
@@ -137,11 +138,18 @@ func TestOmpDetectedWithPiDir(t *testing.T) {
 	if omp(home).Detected() {
 		t.Error("Pi's folder is taken for omp's")
 	}
-	testenv.Program(t, filepath.Join(bin, "omp"), "#!/bin/sh\n")
+	// a command a PATH lookup answers to: a #! script under the bare name
+	// is one only a Unix PATH answers to, where Windows answers to a name
+	// with a PATHEXT extension
+	ompCmd := "omp"
+	if runtime.GOOS == "windows" {
+		ompCmd = "omp.cmd"
+	}
+	testenv.Program(t, filepath.Join(bin, ompCmd), "#!/bin/sh\n")
 	if !omp(home).Detected() {
 		t.Error("omp's command is not")
 	}
-	os.Remove(filepath.Join(bin, "omp"))
+	os.Remove(filepath.Join(bin, ompCmd))
 	if err := os.WriteFile(filepath.Join(pi, "config.yml"), []byte("modelRoles: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

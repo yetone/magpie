@@ -191,6 +191,30 @@ func dshReadHead(path string) (dshHead, bool) {
 	return h, true
 }
 
+// dshResponse is what the vendor's own reply named: the model and provider
+// that answered, under a streamed reply's replay state.
+type dshResponse struct {
+	Model         string `json:"model"`
+	Provider      string `json:"provider"`
+	ResponseModel string `json:"responseModel"`
+}
+
+// dshReplay is a reply's replay state, where dsh keeps what the vendor's own
+// reply named: it is the only place a swapped model shows (the provider
+// answered with another).
+type dshReplay struct {
+	Response dshResponse `json:"response"`
+}
+
+// dshSource is the source of an assistant/message: the model and provider dsh
+// was told to use, and, under ReplayState, the replay state's record of the
+// response.
+type dshSource struct {
+	Model       string    `json:"model"`
+	Provider    string    `json:"provider"`
+	ReplayState dshReplay `json:"replayState"`
+}
+
 // dshEvent is an event line: packed rows of a streamed reply's chunks carry
 // neither type nor time of their own and are passed over.
 type dshEvent struct {
@@ -205,9 +229,7 @@ type dshEvent struct {
 		Title     string `json:"title"`
 		Inherited bool   `json:"inherited"`
 		Message   struct {
-			Source struct {
-				Model string `json:"model"`
-			} `json:"source"`
+			Source dshSource `json:"source"`
 		} `json:"message"`
 		Usage *struct {
 			Input      int `json:"inputTokens"`

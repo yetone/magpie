@@ -99,7 +99,7 @@ func parseAnthropic(body []byte) (*Request, error) {
 		r.Metadata = a.Metadata
 	}
 	if oc := a.OutputConfig; oc != nil && oc.Format != nil && oc.Format.Type == "json_schema" && len(oc.Format.Schema) > 0 {
-		r.Schema = oc.Format.Schema
+		r.Format = &Format{Type: "json_schema", Name: formatName, Schema: oc.Format.Schema}
 	}
 	for _, m := range a.Messages {
 		msg := Message{Role: m.Role}
@@ -341,6 +341,11 @@ func imageBlock(p Part) aBlock {
 
 // buildAnthropic renders a request for an Anthropic-style upstream.
 func buildAnthropic(r *Request, model string) []byte {
+	if r.Format != nil && r.Format.schema() == nil {
+		// output_config.format takes a schema only: any JSON object is
+		// asked for in words
+		r = r.inSystem()
+	}
 	type msg struct {
 		Role    string   `json:"role"`
 		Content []aBlock `json:"content"`
@@ -449,12 +454,12 @@ func buildAnthropic(r *Request, model string) []byte {
 	} else if r.TopP != nil {
 		out["top_p"] = *r.TopP
 	}
-	if len(r.Schema) > 0 {
+	if s := r.Format.schema(); len(s) > 0 {
 		oc, _ := out["output_config"].(map[string]any)
 		if oc == nil {
 			oc = map[string]any{}
 		}
-		oc["format"] = map[string]any{"type": "json_schema", "schema": r.Schema}
+		oc["format"] = map[string]any{"type": "json_schema", "schema": s}
 		out["output_config"] = oc
 	}
 	out["max_tokens"] = maxTokens

@@ -113,6 +113,15 @@ func (l *Library) save() error {
 		sort.Strings(a.MCP)
 		sort.Strings(a.Skills)
 	}
+	// a skill or server on no agent is on none, [] not null: a list sorted
+	// with slices.Sorted, or cloned, from an empty one is nil (#1217)
+	for _, s := range l.Skills {
+		s.Agents = orNone(s.Agents)
+	}
+	for _, s := range l.MCP {
+		s.Agents = orNone(s.Agents)
+	}
+	l.Instructions.Agents = orNone(l.Instructions.Agents)
 	b, err := json.MarshalIndent(l, "", "  ")
 	if err != nil {
 		return err

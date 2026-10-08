@@ -1,6 +1,8 @@
 {
   "version": 1,
   "plugins": [
+    { "package": "@magpie-community/opencode-zen-free-auth", "name": "OpenCode Zen Free", "icon": "opencode", "providers": ["opencode-zen-free"], "community": true,
+      "summary": { "en": "OpenCode Zen's free models with the public credential, automatic discovery and native streaming protocols.", "zh": "使用 public 凭证接入 OpenCode Zen 免费模型，自动发现模型并支持原生流式协议。" } },
     { "package": "@magpie-community/opencode-zcode-auth", "name": "ZCode", "icon": "zcode", "providers": ["zcode"], "community": true, "replaces": "zcode",
       "summary": { "en": "Z.ai and BigModel GLM Coding Plan, with team seats.", "zh": "Z.ai 与智谱 GLM Coding Plan，支持团队席位。" } },
     { "package": "@magpie-community/opencode-qoder-auth", "name": "Qoder", "icon": "qoder", "providers": ["qoder"], "community": true, "replaces": "qoder",

@@ -286,6 +286,13 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 			gen["maxOutputTokens"] = b + 32000
 		}
 	}
+	if r.Format != nil {
+		// the answer as JSON, of the client's schema when it gave one
+		gen["responseMimeType"] = "application/json"
+		if sc := r.Format.schema(); len(sc) > 0 {
+			gen["responseJsonSchema"] = sc
+		}
+	}
 	if catalog.DrawsID(sent) {
 		// an image model draws only when asked for images too
 		gen["responseModalities"] = []string{"TEXT", "IMAGE"}

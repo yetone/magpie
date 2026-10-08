@@ -227,6 +227,7 @@ magpie claude group/opus-anywhere    <span class="c"># use it</span></pre>
       <img class="for-dark" src="/img/usage-dark.png" width="2080" height="842" loading="lazy" alt="The Usage tab: remaining balances, token and cost totals, and a 30-day chart">
       <figcaption>Balances, tokens, cache hits and cost for every call through the gateway.</figcaption>
     </figure>
+    <p><b>Context.</b> Usage’s <span class="ui">Context</span> tab shows what each agent’s prompts hold, read as they pass through the gateway: its system prompt, tool definitions (an MCP server’s as one), instruction files and skills, the files its tools read, their other output and the conversation, as parts of the model’s context window. Each agent gets a score out of 100 — how much of its prompt the cache reads, how lean it starts, how fast it fills and how often it fails — and tags such as <i>Lean start</i> or <i>MCP-heavy</i> that say what the score was told by. Open a session to see its latest request’s window, cell by cell; the <span class="ui">Routing</span> page shows the same for any request you pick. Only names are kept, never your prompt’s text.</p>
     <p><b>Profiles.</b> At the bottom of the <span class="ui">Agents</span> tab, <span class="ui">＋ Save current</span> snapshots every agent’s settings under a name; click the chip to switch everything back in one move.</p>
 
     <h2 id="cli"><a class="anchor" href="#cli">From the terminal</a></h2>

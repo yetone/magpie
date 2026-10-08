@@ -127,7 +127,16 @@ func csvStamp(p usage.Period, day string, now time.Time) string {
 
 func ledgerFilter(q url.Values) usage.Filter {
 	id, _ := strconv.ParseInt(q.Get("route"), 10, 64)
-	return usage.Filter{Day: q.Get("day"), RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Purpose: q.Get("purpose"), Account: q.Get("account"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q"), Computer: q.Get("computer")}
+	return usage.Filter{Day: q.Get("day"), RouteID: id, Model: q.Get("model"), Agent: q.Get("agent"), Provider: q.Get("provider"), Purpose: q.Get("purpose"), Account: q.Get("account"), CallerKey: q.Get("callerKey"), Failed: q.Get("failed") == "1", Query: q.Get("q"), Computer: q.Get("computer"), Through: viaOf(q.Get("via"))}
+}
+
+// viaOf is the source a request's ?via= names, "" for both.
+func viaOf(s string) string {
+	switch s {
+	case usage.SourceGateway, usage.SourceSession:
+		return s
+	}
+	return ""
 }
 
 // ledgerRow is a usage.Row with the names the page shows it by.
@@ -160,6 +169,11 @@ type ledgerJSON struct {
 	ChartBy map[string][]ledgerShare `json:"chartBy,omitempty"`
 	Day     string                   `json:"day,omitempty"`
 	usage.Totals
+	// Through and Direct: the rows the gateway served, and the rows read
+	// from the agents' own session files, which it never saw. Totals is
+	// the two together, so the page can show all three (#the usage report).
+	Through usage.Totals `json:"through"`
+	Direct  usage.Totals `json:"direct"`
 	// Agents, Providers and Purposes: those with calls in the period, for the filters
 	Agents    []ledgerAgent `json:"agents"`
 	Providers []ledgerAgent `json:"providers"`
@@ -231,6 +245,7 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 		return a
 	}
 	out := ledgerJSON{Period: p, Rows: make([]ledgerRow, 0, len(page)), Offset: offset, Total: l.Total, Totals: l.Sum, Agents: []ledgerAgent{}, Providers: []ledgerAgent{}, Accounts: []ledgerAccount{}}
+	out.Through, out.Direct = l.Through, l.Direct
 	out.Bucket, out.Series = l.Bucket, l.Series
 	out.Purposes = l.Purposes
 	out.Day = f.Day

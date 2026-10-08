@@ -1,6 +1,6 @@
 module github.com/yetone/magpie
 
-go 1.26.3
+go 1.26.8
 
 require (
 	github.com/Calcium-Ion/moejs v0.1.0-alpha.4

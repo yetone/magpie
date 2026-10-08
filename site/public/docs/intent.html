@@ -99,8 +99,8 @@
     <p>You need a <a href="/docs/start#routing">routing group</a> with at least two models, and one more model to classify with. The classifier can be any model magpie has, in the group or not.</p>
     <ol class="steps">
       <li><b>Open the group</b>Go to <span class="ui">Routing</span>, find the group under <em>Routing groups</em> and click <span class="ui">Edit</span>.</li>
-      <li><b>Add a rule with an intent</b>Click <span class="ui">Add a rule</span>, choose the model under <span class="ui">send to</span>, click <span class="ui">asks for</span> and type what the message asks for, such as <em>writing or fixing tests</em>. Other conditions on the same rule must hold too.</li>
-      <li><b>Pick the classifier</b><span class="ui">Intent told by</span> appears once a rule has an intent. Choose a small, fast model without reasoning. A group can’t be saved with an intent and no classifier.</li>
+      <li><b>Add a rule with an intent</b>Click <span class="ui">Route by what it asks for</span> (or <span class="ui">Add a rule</span>), choose the model under <span class="ui">send to</span>, click <span class="ui">asks for</span> and type what the message asks for, such as <em>writing or fixing tests</em>. Other conditions on the same rule must hold too.</li>
+      <li><b>Pick the classifier</b><span class="ui">Intent told by</span> appears once a rule has an intent, set to Jev when you have a TypeSafe provider. Otherwise choose a small, fast model without reasoning. A group whose effort Jev already picks offers the same under its classifier: <span class="ui">It can pick the model too</span>. A group can’t be saved with an intent and no classifier.</li>
       <li><b>Save, and send a message</b>Changes apply from the next turn, with no restart. The <span class="ui">Routing</span> tab shows what the classifier said and where the turn went.</li>
     </ol>
     <p>The same from a terminal:</p>

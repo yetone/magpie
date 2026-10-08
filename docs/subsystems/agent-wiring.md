@@ -62,6 +62,7 @@ something else shows up as drift.
 - A field that follows another while empty (`Follows`: Claude Code's tiers and subagents on its main model) is read by `Drift` as on that field's model. The main model moved, in Claude Code's own `/model`, onto the model magpie had set a tier to is not drift (#1050).
 - A Claude Code tier or its subagents given a model of their own keep it when the main model moves onto that model and on again (`ownKey` in `claudeIn`), whether the main model is picked in magpie or in Claude Code's `/model`. Same as model, picked for them, has them follow again.
 - Claude Code's tier and subagent models the user had set for their own endpoint (`claudeOwnEnv`) are stashed with that endpoint and token when magpie is wired in, and come back with them when magpie steps out, by Disconnect or by Claude Code's own model (#1050).
+- Claude Code's sign-in (`login`) is magpie's key (`""`, the default) or claude.ai (`claudeai`). claude.ai writes `ANTHROPIC_AUTH_TOKEN` empty, which Claude Code reads as no key: it keeps its claude.ai login and sends that to magpie, which never passes it on (`claudeSignIn` in the gateway). Every later write keeps the token empty (`wiredKey`), and a key put there by hand is reported by Check, not taken for magpie's. It's offered only where the gateway takes any key (`gwKey() == gateway.Token`: loopback, a WSL distro mirrored), not from a distro under NAT while magpie is shared on the network, where only the sharing key gets in. The choice is stashed, so it survives Disconnect and a port move. An empty token counts as magpie's only beside the address magpie last wrote (`claude.wired_at` in the stash, which Rewire carries to the new port, `keyOurs`): an endpoint of the user's own with an empty token stays theirs when the model goes back to Claude Code's own.
 - A value an agent spells as its own provider's model is never taken for one of magpie's, even when magpie has a provider of the same name (`Spelled`, #835).
 - `unreachable` never sets anything: the config is right, and the page's pill only says what has to listen. The exception is an address a WSL distro reached Windows at before (`distro.Was`, kept in `wsl.json`) while it reaches Windows at another now: the pill offers that one, and `Reapply` moves the config there (`Agent.move`, Codex's `codexMoveGateway`). An address no distro was seen at is the user's own and is never moved. An unknown answer (no probe yet) and a gateway down on loopback too are not drift. Tests stub `reachProbe` in `TestMain`.
 - Listing never starts a stopped WSL distro. A stopped distro's agent shows what was last seen there (`asleep`, `wsl.json`); setting one of its fields writes its files, which starts the distro.
@@ -72,8 +73,8 @@ something else shows up as drift.
 ## Verification
 
 ```sh
-go test -tags nogui ./internal/agent -run 'TestConnect|TestDisconnect|Drift|TestKeptAddress|TestWSLAgentAddress|TestReachProbe|TestDryRunKnowsTheAskersProviders|TestReseat|TestPort|TestWSL'
+go test -tags nogui ./internal/agent -run 'TestConnect|TestDisconnect|Drift|TestKeptAddress|TestWSLAgentAddress|TestReachProbe|TestDryRunKnowsTheAskersProviders|TestReseat|TestPort|TestWSL|TestClaudeKeepsItsClaudeAISignIn|TestClaudeSignIn|TestClaudeOwnEndpointWithAnEmptyKey|TestClaudeAtAnOlderGatewayAddress'
 go test -tags nogui ./internal/agent -run TestOpenClaw
 go test -tags nogui ./internal/agent
-node --test internal/gui/tests/agent-connect.test.cjs internal/gui/tests/agent-disconnect-preview.test.cjs
+node --test internal/gui/tests/agent-connect.test.cjs internal/gui/tests/agent-disconnect-preview.test.cjs internal/gui/tests/claude-signin.test.cjs
 ```

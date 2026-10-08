@@ -267,8 +267,8 @@ var piKey = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // piMove moves what pi-mcp-adapter read from mcp.json into
 // mcp-adapter.json: the whole file when there is none yet, as the adapter's
-// own warning says; into one there, each server and setting it hasn't got
-// (the file backed up first). A server or setting the two have
+// own warning says; into one there, each server and setting it hasn't got.
+// Either way the files are backed up first. A server or setting the two have
 // differently stays in mcp.json for the user to merge, as does anything
 // the adapter never read; mcp.json goes once nothing is left in it.
 //
@@ -285,7 +285,11 @@ func piMove(from, to string, serversOnly bool) {
 		return
 	}
 	if !serversOnly && !exists(to) {
-		os.Rename(from, to)
+		// the user's mcp.json is copied aside before it is moved, as it is
+		// before a merge (#1097); one that can't be kept stays where it is
+		if newBackups().keep("pi", from) == nil {
+			os.Rename(from, to)
+		}
 		return
 	}
 	var have map[string]json.RawMessage

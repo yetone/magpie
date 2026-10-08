@@ -99,8 +99,8 @@
     <p>モデルが 2 つ以上ある<a href="/docs/ja/start#routing">ルーティンググループ</a>と、判定用のモデルがもう 1 つ必要です。判定モデルは magpie にあるモデルならどれでもよく、グループに入っているかどうかは問いません。</p>
     <ol class="steps">
       <li><b>グループを開く</b><span class="ui">Routing</span> を開き、<em>Routing groups</em> からグループを探して <span class="ui">Edit</span> をクリックします。</li>
-      <li><b>インテント付きのルールを追加する</b><span class="ui">Add a rule</span> をクリックし、<span class="ui">send to</span> でモデルを選び、<span class="ui">asks for</span> をクリックして、メッセージが求めていることを書きます（例：<em>writing or fixing tests</em>）。同じルールのほかの条件も満たされている必要があります。</li>
-      <li><b>判定モデルを選ぶ</b>ルールにインテントが付くと <span class="ui">Intent told by</span> が表示されます。推理なしの、小さく速いモデルを選んでください。インテントがあって判定モデルがないグループは保存できません。</li>
+      <li><b>インテント付きのルールを追加する</b><span class="ui">Route by what it asks for</span>（または <span class="ui">Add a rule</span>）をクリックし、<span class="ui">send to</span> でモデルを選び、<span class="ui">asks for</span> をクリックして、メッセージが求めていることを書きます（例：<em>writing or fixing tests</em>）。同じルールのほかの条件も満たされている必要があります。</li>
+      <li><b>判定モデルを選ぶ</b>ルールにインテントが付くと <span class="ui">Intent told by</span> が表示されます。TypeSafe プロバイダーがあれば Jev が選ばれ、なければ推理なしの、小さく速いモデルを選んでください。推論の強さをすでに Jev が選んでいるグループでは、判定モデルの下に同じ入口（<span class="ui">It can pick the model too</span>）があります。インテントがあって判定モデルがないグループは保存できません。</li>
       <li><b>保存して、メッセージを送る</b>変更は次のターンから反映され、再起動は不要です。<span class="ui">Routing</span> タブに、判定モデルの答えとターンの行き先が表示されます。</li>
     </ol>
     <p>ターミナルからも同じことができます。</p>

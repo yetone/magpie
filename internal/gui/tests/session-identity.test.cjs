@@ -64,8 +64,26 @@ for (const engine of ["chromium", "webkit"]) {
           assert.equal(await cells.nth(i).locator(".access").count(),0,"account login does not establish a supplier route");
           for (const inferred of ["OpenAI","Anthropic","custom","relay","官方登录","ChatGPT login"]) assert(!text.includes(inferred));
         }
-        for (const i of [3,5,8]) {
-          assert.equal(await cells.nth(i).textContent(),localName,"no account means only Local session, regardless of model/provider ID");
+        // A row whose file names both an account and a provider shows the
+        // account: local metadata identifies it, and the provider id is not
+        // read as the row's supplier (#557)
+        assert.equal(await cells.nth(7).locator(".where-name").textContent(),"reviewer@example.com");
+        assert((await cells.nth(7).textContent()).includes(localName));
+        for (const i of [3,5]) {
+          assert.equal(await cells.nth(i).textContent(),localName,"a file that names no provider says only Local session");
+        }
+        // A session file names the provider it was set up to call. That is
+        // the file's own record, not a route magpie saw, so the id is shown
+        // as the file carries it — never resolved to a provider's name,
+        // which would promote an unknown request to an official provider —
+        // and the row keeps saying it is a local session. An account, when
+        // local metadata identifies one, is shown instead (rows 0,1,2,7).
+        {
+          const cell = cells.nth(8);
+          assert.equal(await cell.locator(".where-name").textContent(),"my-custom-route","the recorded provider ID, as the file carries it");
+          assert((await cell.textContent()).includes(localName),"and it is still a local session");
+          assert.equal(await cell.locator(".local").count(),1);
+          assert((await cell.locator(".local").getAttribute("title")).includes(lang === "zh" ? "不是 magpie 看到的路由" : "not a route magpie saw"));
         }
         assert((await cells.nth(4).textContent()).includes("My Relay · relay.example"));
         assert.equal(await cells.nth(4).locator(".access").textContent(),"API");
@@ -103,6 +121,9 @@ for (const engine of ["chromium", "webkit"]) {
         assert((await review.locator(".price-reference").textContent()).includes("gpt-5.6-luna"));
         for (const width of [1200,440]) {
           await page.setViewportSize({width,height:900});
+          // the table is fitted to the new width on a frame after the resize
+          // (ledFit, which may cut names shorter): look once it has been
+          await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100)))));
           const layout = await cells.nth(7).evaluate(cell => {
             const badges = [...cell.querySelectorAll(".source-badges .src")].map(n => n.getBoundingClientRect());
             const bounds = cell.getBoundingClientRect();

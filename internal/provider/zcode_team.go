@@ -340,6 +340,27 @@ func zhipuTeamWindows(ctx context.Context, root, key, base, org, project string)
 // hours and of the week: those of customer-package-reset/list still
 // available. nil when it can't be told or there are none.
 func zhipuTeamResets(ctx context.Context, root, auth, base, org, project string) *ResetCredits {
+	r := zhipuResets(ctx, root+"/api/biz/customer-package-reset/list?targetType=TEAM", auth, zcodeTeamHeaders(base, org, project))
+	if r != nil {
+		r.Team = true
+	}
+	return r
+}
+
+// zhipuPersonalResets is how many resets a GLM Coding Plan of a person's
+// own holds, as bigmodel.cn's usage page lists them (#1191), asked with
+// the plan's key where its term is (zhipuTerm). Only read: a reset is
+// spent on the vendor's own page, never from magpie.
+func zhipuPersonalResets(ctx context.Context, root, key string) *ResetCredits {
+	return zhipuResets(ctx, root+"/api/biz/customer-package-reset/list?targetType=PERSONAL", key, nil)
+}
+
+// zhipuResets reads customer-package-reset/list: the resets of the five
+// hours and of the week, of which only those still available count (one
+// run out stays listed a week, available false). nil when the list
+// can't be read, so no count is shown rather than 0, and when it holds
+// none.
+func zhipuResets(ctx context.Context, u, auth string, hdr map[string]string) *ResetCredits {
 	type reset struct {
 		Available bool `json:"available"`
 		Expire    any  `json:"expireTime"`
@@ -348,7 +369,7 @@ func zhipuTeamResets(ctx context.Context, root, auth, base, org, project string)
 		FiveHour []reset `json:"fiveHourResets"`
 		Week     []reset `json:"weekResets"`
 	}
-	if err := zcodeCallH(ctx, http.MethodGet, root+"/api/biz/customer-package-reset/list?targetType=TEAM", auth, zcodeTeamHeaders(base, org, project), nil, &data); err != nil {
+	if err := zcodeCallH(ctx, http.MethodGet, u, auth, hdr, nil, &data); err != nil {
 		return nil
 	}
 	r := &ResetCredits{ByWindow: true}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/gateway"
+	"github.com/yetone/magpie/internal/wslrun"
 )
 
 // An agent pointed at magpie by an address other than this machine's
@@ -137,8 +138,9 @@ func (a *Agent) unreachable(on Field, now string) *Drift {
 
 // wslMovedFrom is the address a WSL distro reaches Windows at now, when
 // base is on one it reached Windows at before (its networking's address
-// changed since), and that distro's name; "" otherwise. A host no distro
-// was seen at is the user's own, and is never offered to be moved.
+// changed since, or it is in mirrored or consomme networking now, where
+// that is 127.0.0.1), and that distro's name; "" otherwise. A host no
+// distro was seen at is the user's own, and is never offered to be moved.
 func wslMovedFrom(base string) (to, name string) {
 	u, err := url.Parse(base)
 	if err != nil {
@@ -148,16 +150,24 @@ func wslMovedFrom(base string) (to, name string) {
 	wsl.Lock()
 	defer wsl.Unlock()
 	for n, d := range wsl.seen {
-		if d == nil || d.Gateway == "" || d.Gateway == h {
+		if d == nil {
+			continue
+		}
+		loopback := wslrun.HostLoopback(d.Net)
+		if !loopback && (d.Gateway == "" || d.Gateway == h) {
 			continue
 		}
 		for _, w := range d.Was {
-			if w == h {
-				if port == "" {
-					port = gateway.Port()
-				}
-				return "http://" + net.JoinHostPort(d.Gateway, port), n
+			if w != h {
+				continue
 			}
+			if loopback {
+				return gateway.URL(), n
+			}
+			if port == "" {
+				port = gateway.Port()
+			}
+			return "http://" + net.JoinHostPort(d.Gateway, port), n
 		}
 	}
 	return "", ""

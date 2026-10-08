@@ -115,7 +115,7 @@ func narrowLine(t *testing.T, h http.Handler) (*httptest.Server, *http.Client) {
 	tr.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		c, err := dial(ctx, network, addr)
 		if err == nil {
-			err = c.(*net.TCPConn).SetWriteBuffer(buffer)
+			err = narrow(c, buffer)
 		}
 		return c, err
 	}
@@ -131,16 +131,32 @@ type narrowListener struct {
 func (l narrowListener) Accept() (net.Conn, error) {
 	c, err := l.Listener.Accept()
 	if err == nil {
-		err = c.(*net.TCPConn).SetReadBuffer(l.buffer)
+		err = narrow(c, l.buffer)
 	}
 	return c, err
+}
+
+// narrow keeps both ways of a connection small: the PUT goes up through the
+// client's send buffer and the server's receive buffer, the GET comes down
+// through the other two, and on macOS a download through the tuned-up pair
+// burst as the upload had (run 37693090857: "took nothing for 300ms (GET)").
+func narrow(c net.Conn, buffer int) error {
+	tc := c.(*net.TCPConn)
+	if err := tc.SetReadBuffer(buffer); err != nil {
+		return err
+	}
+	return tc.SetWriteBuffer(buffer)
 }
 
 // A backup that takes far longer than the watchdog to go up and come back
 // down, but never stops moving, is written and read in full (#657: 43 MB
 // at 305 KB/s took 2.4 minutes, and a sync was given 2).
 func TestSlowTransferIsNotCutShort(t *testing.T) {
-	shortStall(t, 300*time.Millisecond, 300*time.Millisecond)
+	// a second, not the 300 ms the other stall tests use: a macOS runner
+	// can stop the whole test for a few hundred ms, and here the line never
+	// stops, so such a pause is all a shorter watchdog would catch (red
+	// on macOS in run 37693090857, near the end of the GET)
+	shortStall(t, time.Second, time.Second)
 	// the PUT's last MBs cross the line twice the watchdog after magpie has
 	// handed them all over
 	s := &slowDAV{chunk: 256 << 10, gap: 40 * time.Millisecond, tail: 2 * stallAfter}
@@ -150,8 +166,8 @@ func TestSlowTransferIsNotCutShort(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.client = client
-	// ~20 MB at 6.4 MB/s: 3 s each way
-	data := bytes.Repeat([]byte("magpie skill "), (20<<20)/13)
+	// ~24 MB at 6.4 MB/s: nearly 4 s each way
+	data := bytes.Repeat([]byte("magpie skill "), (24<<20)/13)
 	ctx := context.Background()
 	start := time.Now()
 	if _, err := d.put(ctx, data, ""); err != nil {
@@ -167,7 +183,7 @@ func TestSlowTransferIsNotCutShort(t *testing.T) {
 	if !bytes.Equal(got, data) {
 		t.Fatalf("read back %d bytes of %d", len(got), len(data))
 	}
-	if up < 5*stallAfter || down < 5*stallAfter {
+	if up < 3*stallAfter || down < 3*stallAfter {
 		t.Fatalf("the transfers (%s up, %s down) weren't slow enough to test anything", up, down)
 	}
 }
