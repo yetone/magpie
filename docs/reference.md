@@ -732,7 +732,6 @@ one provider serves it.
 The Routing page's Requests list defaults to the time-ordered By request view.
 Choose By session to group calls by the agent's session ID; the page remembers
 your choice across reloads.
-
 Codex title helpers with an explicit parent or fork source join their originating
 chat, retaining their title badge and contributing to its cost. Titles without
 ancestry and ordinary forked chats stay separate.

@@ -48,6 +48,8 @@
   stage.append(wires, srcs, hub, list, sky);
   const currentQuotas = el("section", "rt-quotas");
   currentQuotas.hidden = true;
+  const quotaSpace = el("div");
+  quotaSpace.append(currentQuotas);
   const foot = el("div", "rt-foot");
   const cap = el("p", "rt-cap");
   cap.setAttribute("aria-live", "polite");
@@ -88,7 +90,7 @@
   rTrack.append(rHead);
   rbar.append(rTop, rWhat, rTrack);
   rbar.hidden = true;
-  box.append(top, rbar, stage, currentQuotas, foot, log, off);
+  box.append(top, rbar, stage, quotaSpace, foot, log, off);
 
   // under the stage: every request the gateway keeps, and each account or
   // key as those requests found it
@@ -1244,41 +1246,40 @@
   // Current readings belong to the providers on the live stage, separately
   // from what a request weighed. Show all their cards, named by account/key
   // as on Usage, rather than matching a display name to a routing seat.
-  // Reading the same endpoint reuses its vendor caches; no request waits
-  // for it, and an unseen page or a historical request asks for nothing.
-  let currentCards = [], currentRead = 0, currentReading = false, currentError = false, currentKey = "";
-  function hideCurrentQuotas() {
+  // Usage and Routing share their cache and in-flight read, including the
+  // short retry while a vendor's fresh reading is on its way.
+  let currentRead = 0, currentKey = "";
+  function hideCurrentQuotas(reserve = false) {
+    // A historical request hides today's readings, but keeps the space
+    // above the clicked row. Scroll anchoring cannot compensate when
+    // collapsing it would require scrolling above the top of the page.
+    if (reserve && !currentQuotas.hidden) quotaSpace.style.minHeight = currentQuotas.getBoundingClientRect().height + "px";
+    else if (!reserve) quotaSpace.style.minHeight = "";
     for (const windows of currentQuotas.querySelectorAll(".quota-windows")) quotaFit.unobserve(windows);
     currentKey = "";
     currentQuotas.hidden = true;
   }
   function renderCurrentQuotas() {
     const live = shown() && mine && cur && !pinned && !day && !rp;
-    if (!live) return hideCurrentQuotas();
-    if (!currentReading && (!currentRead || Date.now() - currentRead >= 60000)) {
+    if (!live) return hideCurrentQuotas(shown() && mine && !!cur);
+    if (!quotasLoading && Date.now() - Math.max(currentRead, quotasAt) >= 60000) {
       currentRead = Date.now();
-      currentReading = true;
-      api("usage/quotas").then((cards) => {
-        currentError = !Array.isArray(cards);
-        if (!currentError) currentCards = cards;
-      }, () => { currentError = true; }).finally(() => {
-        currentReading = false;
-        steady(renderCurrentQuotas);
-      });
+      loadQuotas();
     }
     const providers = new Set([...rows.values()].map((row) => row.w.provider));
-    const cards = currentCards.filter((q) => providers.has(q.provider) && (q.windows?.length || q.error));
-    if (!cards.length && !currentError) return hideCurrentQuotas();
+    const cards = (quotas || []).filter((q) => providers.has(q.provider) && (q.windows?.length || q.error));
+    if (!cards.length) return hideCurrentQuotas();
+    quotaSpace.style.minHeight = "";
     currentQuotas.hidden = false;
     // The reset countdowns change by the minute. Keep the nodes between
     // changes, and release the shared meters' observer before replacing.
-    const key = JSON.stringify([cards, currentError, quotaLeft, document.documentElement.lang, Math.floor(Date.now() / 60000)]);
+    const key = JSON.stringify([cards, quotasError, quotaLeft, document.documentElement.lang, Math.floor(Date.now() / 60000)]);
     if (key === currentKey) return;
     currentKey = key;
     for (const windows of currentQuotas.querySelectorAll(".quota-windows")) quotaFit.unobserve(windows);
     const head = el("div", "rt-quota-head", t("Current allowances"));
     const contents = [head];
-    if (currentError) contents.push(el("div", "subscription-error", t("Usage unavailable")));
+    if (quotasError) contents.push(el("div", "subscription-error", t("Usage unavailable")));
     for (const q of cards) {
       const card = el("div", "rt-quota-card");
       const name = el("div", "subscription-head");
@@ -1292,6 +1293,7 @@
     }
     steady(() => currentQuotas.replaceChildren(...contents));
   }
+  document.addEventListener("magpie-quotas-changed", () => steady(renderCurrentQuotas));
 
   // ---------- the log: how one request was routed ----------
 

@@ -5169,6 +5169,7 @@ const I18N = {
     "no reset left on the account": "這個帳號已沒有重置卡",
     "that reset was already used": "這張重置卡已經用過了",
     "Allowances": "額度",
+    "Current allowances": "目前額度",
     "What is left on the account: the vendor tells only this, so Used / Left leaves it as it is": "帳戶餘額：供應商只提供此數，不受「已用 / 剩餘」切換影響",
     "What is left on the account besides its windows": "帳戶裡除週期額度外的其他餘額或積分",
     "Headers": "請求頭",
