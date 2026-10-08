@@ -119,7 +119,11 @@ func jevBody(model string, intents []string, work map[string]string, prev before
 			}
 		}
 		qs["intent"] = map[string]any{"type": "choice", "instructions": intentAsk(prev), "criteria": criteria}
-		qs["level"] = map[string]any{"type": "choice", "instructions": levelAsk(prev, work != nil), "criteria": levels}
+		// One kind is no scale, and a choice of one option is no question:
+		// Clef turns it away, failing the whole call
+		if len(intents) > 1 {
+			qs["level"] = map[string]any{"type": "choice", "instructions": levelAsk(prev, work != nil), "criteria": levels}
+		}
 
 	}
 	if effort {
@@ -302,7 +306,7 @@ func (s *Server) askJev(p provider.Provider, model string, intents []string, pre
 		model = p.Jev()
 	}
 	var l levelling
-	if len(intents) > 0 {
+	if len(intents) > 1 { // one kind is a topic: a message may be none of it
 		var err error
 		if l, err = s.jevLevelled(ctx, p, model, intents); err != nil {
 			return verdict{}, err
