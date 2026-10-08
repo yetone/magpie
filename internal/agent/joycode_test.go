@@ -88,6 +88,9 @@ func TestJoyCode(t *testing.T) {
 	if v, _ := edit.GetTOMLTop(cfg, "model"); v != "magpie/deepseek/pro" {
 		t.Fatalf("model: %q", v)
 	}
+	if v, _ := edit.GetTOMLTop(cfg, "model_provider"); v != "magpie" {
+		t.Fatalf("model_provider: %q", v)
+	}
 	if v, _ := edit.GetTOMLTop(cfg, "personality"); v != "pragmatic" {
 		t.Fatalf("toml kept: personality=%q", v)
 	}
@@ -110,12 +113,42 @@ func TestJoyCode(t *testing.T) {
 		t.Fatalf("sync: %#v", mine)
 	}
 
-	// stepping out puts the user's model back and drops magpie
-	if err := f.Set(""); err != nil {
+	// Pro's model-repair: model reset to JoyAI, provider kept — still wired
+	if err := edit.SetTOMLTop(cfg, edit.KV{Path: "model", Value: "JoyAI-Code-1.5"}); err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := edit.GetTOMLTop(cfg, "model"); v != "GPT-5.6 Sol" {
+	if f.Get() != "JoyAI-Code-1.5" || !a.Wired() || a.Joined == nil || !a.Joined() {
+		t.Fatalf("after repair: model=%q wired=%v joined=%v", f.Get(), a.Wired(), a.Joined != nil && a.Joined())
+	}
+	if _, ok := readProviders()["providers"].(map[string]any)["magpie"]; !ok {
+		t.Fatal("provider dropped by repair")
+	}
+	// model_provider=magpie is what stops Pro rewriting on the next open
+	if v, _ := edit.GetTOMLTop(cfg, "model_provider"); v != "magpie" {
+		t.Fatalf("model_provider after repair: %q", v)
+	}
+
+	// re-pick magpie after repair: back on a catalog model + model_provider
+	if err := f.Set("magpie/deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetTOMLTop(cfg, "model"); v != "magpie/deepseek/flash" {
+		t.Fatalf("re-pick model: %q", v)
+	}
+	if v, _ := edit.GetTOMLTop(cfg, "model_provider"); v != "magpie" {
+		t.Fatalf("model_provider after re-pick: %q", v)
+	}
+
+	// Disconnect drops magpie; model goes back to what was stashed at the
+	// last leave of a non-magpie session (JoyAI from the repair above)
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetTOMLTop(cfg, "model"); v != "JoyAI-Code-1.5" {
 		t.Fatalf("restore model: %q", v)
+	}
+	if v, ok := edit.GetTOMLTop(cfg, "model_provider"); ok {
+		t.Fatalf("model_provider left: %q", v)
 	}
 	m = readProviders()
 	ps, _ = m["providers"].(map[string]any)
@@ -124,6 +157,26 @@ func TestJoyCode(t *testing.T) {
 	}
 	if a.Wired() || a.Check() != "" {
 		t.Fatalf("off: wired=%v check=%q", a.Wired(), a.Check())
+	}
+}
+
+func TestJoyCodeDisconnectRestoresOwn(t *testing.T) {
+	home, _ := museHome(t)
+	dir := filepath.Join(home, ".joycode")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "config.toml"), []byte("model = \"GPT-5.6 Sol\"\n"), 0o600)
+	a := joycode(home)
+	if err := a.Field("model").Set("magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := edit.GetTOMLTop(filepath.Join(dir, "config.toml"), "model"); v != "GPT-5.6 Sol" {
+		t.Fatalf("restore: %q", v)
+	}
+	if _, ok := edit.GetJSON(filepath.Join(dir, "model-providers.json"), "providers.magpie"); ok {
+		t.Fatal("magpie provider left")
 	}
 }
 
@@ -152,10 +205,29 @@ func TestJoyCodeNewFiles(t *testing.T) {
 	if v, _ := edit.GetTOMLTop(cfg, "model"); v != "magpie/deepseek/flash" {
 		t.Fatalf("model: %q", v)
 	}
-	if err := f.Set(""); err != nil {
+	if v, _ := edit.GetTOMLTop(cfg, "model_provider"); v != "magpie" {
+		t.Fatalf("model_provider: %q", v)
+	}
+	if err := a.Disconnect(); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := edit.GetJSON(providers, "providers.magpie"); ok {
 		t.Fatal("magpie provider left")
+	}
+}
+
+func TestJoyCodeModelProviderSkipsRepair(t *testing.T) {
+	// JoyCode's Aee skips rewrite when model_provider is set and ≠ jdcloud.
+	home, _ := museHome(t)
+	dir := filepath.Join(home, ".joycode")
+	os.MkdirAll(dir, 0o755)
+	cfg := filepath.Join(dir, "config.toml")
+	a := joycode(home)
+	if err := a.Field("model").Set("magpie/deepseek/pro"); err != nil {
+		t.Fatal(err)
+	}
+	v, ok := edit.GetTOMLTop(cfg, "model_provider")
+	if !ok || v != "magpie" || v == "jdcloud" {
+		t.Fatalf("model_provider=%q ok=%v — Pro would reset the model on open", v, ok)
 	}
 }

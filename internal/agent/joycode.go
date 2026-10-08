@@ -8,8 +8,13 @@ package agent
 // Models from a provider are named "<provider id>/<model id>" in config.toml.
 //
 // magpie adds providers.magpie at the gateway and sets model to
-// magpie/<catalog id>. Other providers and the rest of config.toml stay as
-// they are. Disconnect puts the previous model back and drops providers.magpie.
+// magpie/<catalog id>, with model_provider = "magpie". JoyCode's pro-kernel
+// model-repair rewrites any model not in its official catalog to JoyAI on
+// every open — unless model_provider is set and is not "jdcloud". Setting it
+// to "magpie" skips that rewrite. Joined keeps the connection while the
+// session model is JoyCode's own (as Hermes does), so a repair can't show
+// 未接入 and wipe the provider. Disconnect restores the previous model and
+// drops providers.magpie.
 
 import (
 	"path/filepath"
@@ -26,12 +31,17 @@ func joycodeIn(at place) *Agent {
 	providers := filepath.Join(dir, "model-providers.json")
 	cfg := filepath.Join(dir, "config.toml")
 	keyModel := at.key("joycode.model")
+	keyProv := at.key("joycode.model_provider")
 	providerJSON := func() any { return joyProviderJSONAt(at) }
 	keptProvider := func() any {
 		return theirsKept(providers, "providers."+magpieID, providerJSON, "enabled_models")()
 	}
 	model := func() string {
 		v, _ := edit.GetTOMLTop(cfg, "model")
+		return v
+	}
+	modelProvider := func() string {
+		v, _ := edit.GetTOMLTop(cfg, "model_provider")
 		return v
 	}
 	ours := func() bool {
@@ -59,14 +69,28 @@ func joycodeIn(at place) *Agent {
 		}
 		return edit.SetJSON(providers, edit.KV{Path: "providers." + magpieID, Value: v})
 	}
-	putModel := func(v string) error {
-		if v == "" {
-			if !isFile(cfg) {
-				return nil
+	// setModel writes config.toml's model and model_provider. provider ""
+	// deletes the key (JoyCode then uses its official catalog).
+	setModel := func(modelVal, providerVal string, delProvider bool) error {
+		if modelVal == "" {
+			if isFile(cfg) {
+				if err := edit.DelTOMLTop(cfg, "model"); err != nil {
+					return err
+				}
 			}
-			return edit.DelTOMLTop(cfg, "model")
+		} else if err := edit.SetTOMLTop(cfg, edit.KV{Path: "model", Value: modelVal}); err != nil {
+			return err
 		}
-		return edit.SetTOMLTop(cfg, edit.KV{Path: "model", Value: v})
+		if delProvider {
+			if isFile(cfg) && modelProvider() != "" {
+				return edit.DelTOMLTop(cfg, "model_provider")
+			}
+			return nil
+		}
+		if providerVal == "" {
+			return nil
+		}
+		return edit.SetTOMLTop(cfg, edit.KV{Path: "model_provider", Value: providerVal})
 	}
 	return atomic(&Agent{
 		ID: "joycode", Name: "JoyCode", Icon: "joycode-color", Aliases: []string{"joy-code", "jd-code"}, Spelled: prefixed,
@@ -74,6 +98,21 @@ func joycodeIn(at place) *Agent {
 		Dir: dir, Path: cfg,
 		Sync: func() error {
 			return syncJSON(providers, "providers."+magpieID, keptProvider)
+		},
+		Joined: ours,
+		Unwire: func() error {
+			// clear magpie's model_provider even when the session model is
+			// already JoyCode's own (after Pro repaired it, or the user
+			// picked an own model while still joined)
+			if isFile(cfg) && modelProvider() == magpieID {
+				if err := edit.DelTOMLTop(cfg, "model_provider"); err != nil {
+					return err
+				}
+			}
+			if !ours() {
+				return nil
+			}
+			return dropMagpie()
 		},
 		Notice: func() string {
 			if Running(`(?i)JoyCode`) {
@@ -88,6 +127,9 @@ func joycodeIn(at place) *Agent {
 			if !ours() {
 				return "JoyCode's magpie provider (model-providers.json) is gone, so it no longer reaches magpie"
 			}
+			if p := modelProvider(); p != magpieID {
+				return "JoyCode's model_provider (config.toml) is " + orDefault(p) + ", so Pro may reset the model on open"
+			}
 			return wiringOff("JoyCode", providers, func(k string) (string, bool) {
 				return edit.GetJSON(providers, "providers."+magpieID+"."+k)
 			}, "base_url", at.gw(), "models_url", at.v1()+"/models")
@@ -98,25 +140,46 @@ func joycodeIn(at place) *Agent {
 			Set: func(v string) error {
 				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
 					if !on() {
-						forget(keyModel)
-						stash(map[string]string{keyModel: model()})
+						forget(keyModel, keyProv)
+						wasProv := modelProvider()
+						if wasProv == magpieID {
+							wasProv = ""
+						}
+						stash(map[string]string{
+							keyModel: model(),
+							keyProv:  wasProv,
+						})
 					}
 					if err := putProvider(); err != nil {
 						return err
 					}
-					return putModel(v)
+					return setModel(v, magpieID, false)
 				}
-				if on() || ours() {
-					if v == "" {
-						v = unstash(keyModel)
-					} else {
-						forget(keyModel)
+				if v == "" {
+					if on() {
+						wasModel, wasProv := unstash(keyModel), unstash(keyProv)
+						if err := setModel(wasModel, wasProv, wasProv == ""); err != nil {
+							return err
+						}
+						if ours() {
+							return dropMagpie()
+						}
+						return nil
 					}
-					if err := dropMagpie(); err != nil {
-						return err
-					}
+					return setModel("", "", true)
 				}
-				return putModel(v)
+				// own model: keep providers.magpie for Joined (Disconnect's
+				// Unwire drops it). Restore the stash as Hermes does, then
+				// write the pick so the picker still offers magpie's models.
+				if on() {
+					unstash(keyModel)
+					wasProv := unstash(keyProv)
+					return setModel(v, wasProv, wasProv == "")
+				}
+				if ours() && modelProvider() == magpieID {
+					return setModel(v, "", true)
+				}
+				return setModel(v, "", false)
 			},
 			Options: func(cur map[string]string) []Option {
 				var own []Option
