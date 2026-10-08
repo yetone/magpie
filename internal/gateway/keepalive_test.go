@@ -117,8 +117,11 @@ func TestTranslatedStreamKeepsClientAlive(t *testing.T) {
 			// usage ledger, affinity, served) is no wait a client's idle
 			// timeout counts: Codex hangs up on response.completed, and the
 			// clients that read on to the close wait minutes, not 150ms.
+			// Then the stream closes within closeAfterLast, or the test
+			// fails rather than hangs.
+			const closeAfterLast = 5 * time.Second
 			wait := idle.C
-			timedOut, completed, pings := false, false, 0
+			timedOut, completed, unclosed, pings := false, false, false, 0
 			// openai-go v2 (Crush) reads every blank line as an event and
 			// fails on one with no data: "unexpected end of JSON input"
 			data, empty := false, 0
@@ -140,19 +143,22 @@ func TestTranslatedStreamKeepsClientAlive(t *testing.T) {
 					} else if strings.HasPrefix(line, "data:") {
 						data = true
 					}
-					if strings.Contains(line, c.done) {
-						completed, wait = true, nil
+					if strings.Contains(line, c.done) && !completed {
+						completed, wait = true, time.After(closeAfterLast)
 					}
 					// what the client's idle timeout counts
 					if strings.HasPrefix(line, "data:") || (c.comments && strings.HasPrefix(line, ":")) {
 						idle.Reset(150 * time.Millisecond)
 					}
 				case <-wait:
-					timedOut = true
+					timedOut, unclosed = !completed, completed
 					break read
 				}
 			}
 			cancel()
+			if unclosed {
+				t.Fatalf("the stream didn't close within %v of its last event", closeAfterLast)
+			}
 			t.Logf("upstream_keepalives=%d downstream_keepalives=%d idle_timeout=%v completed=%v", upPings.Load(), pings, timedOut, completed)
 			if timedOut || !completed || pings < 3 {
 				t.Fatal("the client wasn't kept alive while the provider was")
