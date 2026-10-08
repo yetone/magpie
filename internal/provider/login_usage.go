@@ -88,8 +88,34 @@ func loginUsageAt(ctx context.Context, agent string) (map[string]SubscriptionQuo
 	}
 	wg.Wait()
 	usageRead(agent, out) // a window not started: the warm-up looks now
+	if len(out) > 0 {
+		// the batch's readings are points of each account's quota history
+		// too, as a Usage-page reading is: a magpie only ever serving
+		// other magpies has nobody on its Usage page, and its quota
+		// history stayed empty otherwise (#1313). One note for the whole
+		// batch, off the request path: the file is read, parsed and
+		// written once for all accounts, and no waiter on a reading is
+		// held by a slow disk. A cached reading notes nothing new, its
+		// ReadAt no newer than what is kept; a failed one is skipped.
+		qs := make([]SubscriptionQuota, 0, len(out))
+		for user, q := range out {
+			q.User = user // a login's reading itself carries no user
+			qs = append(qs, q)
+		}
+		noteHistory(qs, time.Now())
+	}
 	return out, oldest
 }
+
+// noteHistory notes a batch of accounts' readings in the quota history,
+// never holding the caller: the write runs in its own goroutine. Tests
+// run it synchronously.
+var noteHistory = func(qs []SubscriptionQuota, now time.Time) {
+	go noteHistoryWrite(qs, now)
+}
+
+// noteHistoryWrite is the history write itself; tests count or hold it.
+var noteHistoryWrite = noteQuotaHistory
 
 // loginReading is l's allowance as LoginUsage and the Usage page both show
 // it, one reading for the two: what was read less than a minute ago comes
@@ -131,7 +157,6 @@ func loginReading(ctx context.Context, l Login) loginUsageEntry {
 			// one dropped meanwhile (StaleAllowance) read too soon, and a
 			// Claude account the user asked to see meanwhile is read again
 			// (AskClaudeUsage), as SubscriptionUsage reads it: neither is kept
-			kept := false
 			if c.pending[key] == r {
 				delete(c.pending, key)
 				if l.Agent != "claude" || claudeAsked.Load() <= start.UnixNano() {
@@ -139,22 +164,9 @@ func loginReading(ctx context.Context, l Login) loginUsageEntry {
 						c.m = map[string]loginUsageEntry{}
 					}
 					c.m[key] = r.e
-					kept = true
 				}
 			}
 			c.Unlock()
-			if kept {
-				// a background reading is a point of the account's quota
-				// history too, as a Usage-page reading is: a magpie only
-				// ever serving other magpies has nobody on its Usage page,
-				// and its quota history stayed empty otherwise (#1313).
-				// The fresh reading goes, named for its account (a login's
-				// reading itself carries no user), not the card kept of
-				// it: a read that failed is skipped inside, not told again.
-				q := r.e.read
-				q.User = l.User
-				noteQuotaHistory([]SubscriptionQuota{q}, time.Now())
-			}
 			close(r.done)
 		}()
 	}
