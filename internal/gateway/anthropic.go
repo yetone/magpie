@@ -711,6 +711,32 @@ type anthropicEncoder struct {
 	col     collector
 }
 
+// toolUseID keeps an upstream call id within Anthropic's charset
+// ([a-zA-Z0-9_-]): Claude Code validates it and drops the whole block on
+// any other byte, which is how devin/swe-2's "Bash:0#a65b…" ids broke every
+// local tool call. The client echoes the sanitized id back as tool_use_id,
+// so both sides still match. An id reduced to nothing is replaced outright.
+func toolUseID(id string) string {
+	if id == "" {
+		return "toolu_" + newID()
+	}
+	if strings.IndexFunc(id, func(r rune) bool {
+		return !('a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || r == '_' || r == '-')
+	}) < 0 {
+		return id
+	}
+	b := strings.Map(func(r rune) rune {
+		if 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || '0' <= r && r <= '9' || r == '_' || r == '-' {
+			return r
+		}
+		return -1
+	}, id)
+	if b == "" {
+		return "toolu_" + newID()
+	}
+	return b
+}
+
 // anthropicID is a reply's id as Anthropic's API gives one, msg_…: an
 // OpenAI-shaped upstream's chatcmpl-… (a plugin's provider, a relay) reads
 // as a built-in's does.
@@ -792,10 +818,7 @@ func (e *anthropicEncoder) event(ev Event) {
 			e.delta(map[string]any{"type": "signature_delta", "signature": ev.Text})
 		}
 	case KToolStart:
-		id := ev.ID
-		if id == "" {
-			id = "toolu_" + newID()
-		}
+		id := toolUseID(ev.ID)
 		e.openBlock(ToolCall, map[string]any{"id": id, "name": ev.Name, "input": map[string]any{}})
 	case KToolArgs:
 		if e.open == ToolCall && ev.Text != "" {
@@ -860,10 +883,7 @@ func renderAnthropic(res Result, model string) []byte {
 		case Thinking:
 			content = append(content, map[string]any{"type": "thinking", "thinking": p.Text, "signature": p.Signature})
 		case ToolCall:
-			id := p.ID
-			if id == "" {
-				id = "toolu_" + newID()
-			}
+			id := toolUseID(p.ID)
 			content = append(content, map[string]any{"type": "tool_use", "id": id, "name": p.Name, "input": argsOf(p)})
 		case Search:
 			id := "srvtoolu_" + newID()
