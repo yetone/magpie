@@ -1617,6 +1617,8 @@ function cliTag(a) {
   v.title = !c.via ? t("{agent} {v} · magpie can't tell how it was installed — update it the way you installed it", { agent: a.name, v: c.version })
     : c.update ? t("{agent} {v} is installed · {latest} is out", { agent: a.name, v: c.version, latest: c.latest })
     : t("{agent} {v} · up to date", { agent: a.name, v: c.version });
+  // a CLI whose vendor ships an app of its own: this is not that app
+  if (c.note) v.title += " · " + t(c.note);
   box.append(v);
   if (c.update || cliBusy.has(a.id)) {
     const b = el("button", "ag-up");

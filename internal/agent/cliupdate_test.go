@@ -259,6 +259,29 @@ func TestHowInstalledWindowsShim(t *testing.T) {
 	}
 }
 
+// On Windows a native .exe can stand beside npm's shim in the prefix, and
+// PATHEXT finds the .exe first: that is what magpie sees, and a big binary
+// says nothing of how it got there. Its .cmd beside it names the package.
+func TestHowInstalledWindowsNpmExe(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows' npm layout")
+	}
+	dir := filepath.Join(t.TempDir(), "npm")
+	file(t, filepath.Join(dir, `node_modules\@openai\codex\bin\codex.js`), "")
+	npm := file(t, filepath.Join(dir, "npm.cmd"), "")
+	file(t, filepath.Join(dir, "codex.cmd"), "@ECHO off\r\n\"%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n")
+	exe := file(t, filepath.Join(dir, "codex.exe"), strings.Repeat("MZ", 40<<10))
+	u := howInstalled(cliSpecs["codex"], exe)
+	if u == nil || !reflect.DeepEqual(u.cmd, []string{npm, "install", "-g", "--prefix", dir, "@openai/codex@latest"}) {
+		t.Fatalf("npm's codex.exe: %+v", u)
+	}
+	// an .exe in the prefix with no .cmd beside it says nothing sure
+	other := file(t, filepath.Join(dir, "gemini.exe"), "MZ")
+	if u := howInstalled(cliSpecs["gemini"], other); u != nil {
+		t.Errorf("an .exe with no .cmd: %+v", u)
+	}
+}
+
 // The whole of it with a fake CLI, a fake registry and a fake update:
 // nothing real is installed or updated.
 func TestUpdateCLI(t *testing.T) {
@@ -322,4 +345,122 @@ func TestUpdateCLI(t *testing.T) {
 	if _, ok := (&Agent{ID: "codex", Bin: "codex", WSL: "Ubuntu"}).CLI(); ok {
 		t.Error("a WSL codex has a CLI here")
 	}
+}
+
+// The .exe Windows runs where it is a hard link to the file inside the
+// package: npm's update replaces that file, so the .exe would go on being
+// the old program and the update would look like it did nothing. magpie
+// links it onto what npm installed (#930); a copy, which is nobody's link,
+// is left alone.
+func TestUpdateCLIWindowsHardLink(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("a hard link standing where npm's .exe is, which is Windows' layout")
+	}
+	const older, newer = "codex-cli 0.146.0\n", "codex-cli 0.160.0\n"
+	tmp := t.TempDir()
+	prefix := newCodexPrefix(t, tmp, "npm", older)
+	vendor := codexVendor(prefix)
+	exe := filepath.Join(prefix, "codex.exe")
+	if err := os.Link(vendor, exe); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", prefix)
+	// the .exe is what --version runs, and its bytes are what it says
+	oldRun, oldUpd, oldReg := runVersion, runUpdate, npmRegistry
+	runVersion = func(bin string) string { b, _ := os.ReadFile(bin); return string(b) }
+	replacing := vendor // the file inside the package npm replaces
+	ran := 0
+	runUpdate = func(_ context.Context, u *updater) ([]byte, error) {
+		ran++
+		// npm puts a new file where the old one was, leaving the hard link
+		// the prefix has to the old one exactly where it is
+		if err := os.WriteFile(replacing+".new", []byte(newer), 0o755); err != nil {
+			return nil, err
+		}
+		return []byte("added 2 packages"), os.Rename(replacing+".new", replacing)
+	}
+	reg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/@openai/codex/latest" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte(`{"name":"@openai/codex","version":"0.160.0"}`))
+	}))
+	defer reg.Close()
+	npmRegistry = reg.URL + "/"
+	versions, latests = memo{}, memo{}
+	t.Cleanup(func() {
+		npmRegistry, runVersion, runUpdate = oldReg, oldRun, oldUpd
+		versions, latests = memo{}, memo{}
+	})
+
+	a := &Agent{ID: "codex", Name: "Codex", Bin: "codex"}
+	c, ok := a.CLI()
+	if !ok || c.Version != "0.146.0" || c.Latest != "0.160.0" || !c.Update || c.Via != "npm" {
+		t.Fatalf("before: %+v, %v", c, ok)
+	}
+	if c.Note == "" {
+		t.Error("the Codex CLI says nothing of the Codex app")
+	}
+	c, err := a.UpdateCLI()
+	if err != nil || c.Version != "0.160.0" || c.Update {
+		t.Fatalf("after: %+v, %v", c, err)
+	}
+	if b, _ := os.ReadFile(exe); string(b) != newer {
+		t.Errorf("the .exe on PATH runs %q, want %q", b, newer)
+	}
+	if same, err := sameFile(exe, vendor); err != nil || !same {
+		t.Errorf("the .exe on PATH is not the file npm installed (same file %v, %v)", same, err)
+	}
+	if _, err := os.Stat(exe + ".old"); err == nil {
+		t.Errorf("the old .exe was left behind at %s.old", exe)
+	}
+	if ran != 1 {
+		t.Errorf("the update ran %d times", ran)
+	}
+
+	// an .exe that is a copy, not a link to the package's file: not
+	// magpie's to move, and it says so rather than reporting success
+	copyPrefix := newCodexPrefix(t, tmp, "npm2", older)
+	replacing = codexVendor(copyPrefix)
+	copied := file(t, filepath.Join(copyPrefix, "codex.exe"), older)
+	t.Setenv("PATH", copyPrefix)
+	versions, latests = memo{}, memo{}
+	b := &Agent{ID: "codex", Name: "Codex", Bin: "codex"}
+	if _, err := b.UpdateCLI(); err == nil || !strings.Contains(err.Error(), "still 0.146.0") {
+		t.Errorf("a copy: %v", err)
+	}
+	if got, _ := os.ReadFile(copied); string(got) != older {
+		t.Errorf("a copy was rewritten: %q", got)
+	}
+}
+
+// newCodexPrefix is an npm prefix holding @openai/codex as npm installs it:
+// the .cmd and .ps1 that name it, its package, and npm.cmd beside them.
+func newCodexPrefix(t *testing.T, tmp, name, version string) string {
+	t.Helper()
+	prefix := filepath.Join(tmp, name)
+	file(t, codexVendor(prefix), version)
+	file(t, filepath.Join(prefix, "npm.cmd"), "")
+	file(t, filepath.Join(prefix, "codex.cmd"), "@ECHO off\r\n\"%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n")
+	return prefix
+}
+
+// codexVendor is the native binary inside @openai/codex's platform package,
+// which is what an .exe in the prefix is a hard link to.
+func codexVendor(prefix string) string {
+	return filepath.Join(prefix, `node_modules\@openai\codex\node_modules\@openai\codex-win32-x64\vendor\x86_64-pc-windows-msvc\bin\codex.exe`)
+}
+
+// sameFile says whether two paths are one file — a hard link to it.
+func sameFile(a, b string) (bool, error) {
+	x, err := os.Stat(a)
+	if err != nil {
+		return false, err
+	}
+	y, err := os.Stat(b)
+	if err != nil {
+		return false, err
+	}
+	return os.SameFile(x, y), nil
 }

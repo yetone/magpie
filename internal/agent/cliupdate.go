@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -43,6 +44,9 @@ type CLI struct {
 	Command string `json:"command,omitempty"`
 	// Update: Latest is after Version, and magpie knows how to get it
 	Update bool `json:"update,omitempty"`
+	// Note is a sentence to show after the version, for a CLI whose vendor
+	// ships a desktop app of its own that this does not update
+	Note string `json:"note,omitempty"`
 }
 
 // cliSpec is where an agent's CLI is published.
@@ -53,6 +57,10 @@ type cliSpec struct {
 	// links lead, with forward slashes) is the one its vendor's installer
 	// put there
 	self func(bin, real string) []string
+	// note is a sentence the Agents page shows after the version, for a
+	// CLI whose vendor ships a desktop app of its own that this does not
+	// update (an English string, an i18n key)
+	note string
 }
 
 var cliSpecs = map[string]cliSpec{
@@ -66,6 +74,8 @@ var cliSpecs = map[string]cliSpec{
 			return nil
 		}},
 	"codex": {npm: []string{"@openai/codex"}, brew: []string{"codex"},
+		// Codex's own app is not this CLI and updates itself (#930)
+		note: "the command-line program, not the Codex app (which updates itself)",
 		self: func(bin, real string) []string {
 			// its standalone installer's ~/.codex/packages/standalone/releases/…
 			if strings.Contains(real, "/.codex/packages/standalone/") {
@@ -108,6 +118,11 @@ type updater struct {
 	brew string   // the brew that has it
 	cmd  []string // the update
 	path string   // a folder to put first on PATH for it (its npm's node)
+	// pkgDir is the package's folder, set when the CLI magpie found is a
+	// native .exe standing beside npm's shim: npm's update replaces what
+	// is in there, which is what that .exe may be a hard link to, so it
+	// is re-linked after one (hardLink, relinkExe)
+	pkgDir string
 }
 
 // shown is the update as a person would type it.
@@ -169,14 +184,15 @@ func howInstalled(spec cliSpec, bin string) *updater {
 }
 
 // fromNodeModules is the updater of a CLI the package pkg installed in a
-// global node_modules: the binary leads there (npm's and bun's links), or
-// is a shim that names it (npm's .cmd on Windows, pnpm's scripts).
+// global node_modules: the binary leads there (npm's and bun's links), is
+// a shim that names it (npm's .cmd on Windows, pnpm's scripts), or is a
+// native .exe standing beside such a shim (Windows again).
 func fromNodeModules(pkg, bin, real string) *updater {
 	mark := "/node_modules/" + pkg + "/"
 	modules := ""
 	if i := strings.Index(real, mark); i >= 0 {
 		modules = real[:i] + "/node_modules"
-	} else if shimNames(bin, pkg) {
+	} else if shimNames(bin, pkg) || shimExeNames(bin, pkg) {
 		modules = filepath.ToSlash(filepath.Join(filepath.Dir(bin), "node_modules"))
 		if !isDir(filepath.Join(filepath.FromSlash(modules), filepath.FromSlash(pkg))) {
 			modules = "" // pnpm's shims name a store elsewhere
@@ -232,6 +248,11 @@ func fromNodeModules(pkg, bin, real string) *updater {
 		}
 	}
 	u.cmd = []string{npm, "install", "-g", "--prefix", prefix, pkg + "@latest"}
+	if filepath.Ext(bin) == ".exe" && shimExeNames(bin, pkg) {
+		// the .exe may be a hard link to something in the package, which
+		// this very update is about to replace
+		u.pkgDir = filepath.Join(m, filepath.FromSlash(pkg))
+	}
 	return u
 }
 
@@ -246,6 +267,83 @@ func shimNames(bin, pkg string) bool {
 		return false
 	}
 	return strings.Contains(strings.ReplaceAll(string(b), `\`, "/"), "node_modules/"+pkg+"/")
+}
+
+// shimExeNames says whether bin, a native .exe that names nothing, stands
+// beside a small shim that does name pkg. On Windows PATHEXT finds a
+// prefix's .exe before its .cmd, so a native .exe put in the prefix — a
+// hard link to the binary inside @openai/codex, which is how `codex` can
+// be run from a program at all, Node's spawn taking no .cmd or .ps1
+// without a shell — is the .exe magpie sees, and a 358 MB binary says
+// nothing of how it got there. npm's .cmd beside it names the package and
+// is small enough to read.
+func shimExeNames(bin, pkg string) bool {
+	if filepath.Ext(bin) != ".exe" {
+		return false
+	}
+	base := strings.TrimSuffix(bin, ".exe")
+	for _, ext := range []string{".cmd", ".ps1"} {
+		if shimNames(base+ext, pkg) {
+			return true
+		}
+	}
+	return false
+}
+
+// hardLink is the file inside the package that bin is a hard link to — the
+// one npm's update replaces — and "" when bin is not one of them (a copy,
+// or something else altogether).
+func (u *updater) hardLink(bin string) string {
+	if u.pkgDir == "" {
+		return ""
+	}
+	want, err := os.Stat(bin)
+	if err != nil {
+		return ""
+	}
+	found := ""
+	filepath.WalkDir(u.pkgDir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.EqualFold(d.Name(), filepath.Base(bin)) {
+			return nil
+		}
+		if st, err := os.Stat(p); err == nil && os.SameFile(want, st) {
+			found = p
+			return fs.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
+// relinkExe puts what npm just installed into the .exe the prefix runs: npm
+// has replaced the file that .exe was a hard link to, so where it was one
+// the .exe still is the old program, and updating would look like it did
+// nothing. The old file is renamed aside first — Windows renames a running
+// .exe where it refuses to delete one — and the new one linked where it
+// stood. A copy, not a link (npm left it alone), is left alone.
+func relinkExe(exe, src string) error {
+	want, err := os.Stat(exe)
+	if err != nil {
+		return nil // no .exe there any more: nothing to point at anything
+	}
+	got, err := os.Stat(src)
+	if err != nil || got.IsDir() {
+		return nil // not a file the package has now
+	}
+	if os.SameFile(want, got) {
+		return nil // the same file still: there was nothing to bring over
+	}
+	old := exe + ".old"
+	os.Remove(old) // one a rename before could not finish
+	if err := os.Rename(exe, old); err != nil {
+		return err
+	}
+	if err := os.Link(src, exe); err != nil {
+		os.Rename(old, exe) // put it back as it was
+		return err
+	}
+	os.Remove(old) // fails while the old one runs; it is named for a next time
+	return nil
 }
 
 func exe(name string) string {
@@ -507,6 +605,7 @@ func (a *Agent) CLI() (c CLI, ok bool) {
 	if bin == "" {
 		return CLI{}, false
 	}
+	c.Note = spec.note
 	c.Version = installedVersion(bin)
 	u := howInstalled(spec, bin)
 	if u == nil {
@@ -604,12 +703,19 @@ func (a *Agent) UpdateCLI() (CLI, error) {
 	}
 	defer updating.Delete(a.ID)
 	before := installedVersion(bin)
+	// what npm is about to replace underneath the .exe magpie found, where
+	// that .exe is a hard link to it
+	link := u.hardLink(bin)
 	ctx, cancel := context.WithTimeout(context.Background(), updateTimeout)
 	defer cancel()
 	out, err := runUpdate(ctx, u)
 	versions.forget(bin)
 	// brew upgrade updates Homebrew first, which may know a newer one
 	latests.forget("brew:" + u.pkg)
+	relink := error(nil)
+	if err == nil && link != "" {
+		relink = relinkExe(bin, link)
+	}
 	c, _ := a.CLI()
 	if err != nil {
 		msg := lastLines(string(out), 3)
@@ -617,6 +723,9 @@ func (a *Agent) UpdateCLI() (CLI, error) {
 			msg = strings.TrimSpace(msg + " " + err.Error())
 		}
 		return c, fmt.Errorf("%s: %s", u.shown(), msg)
+	}
+	if relink != nil {
+		return c, fmt.Errorf("%s was updated, but %s is a hard link npm left on the old file: %v", a.Name, bin, relink)
 	}
 	if c.Update && c.Version == before {
 		return c, fmt.Errorf("%s is still %s after %s; %s is out", a.Name, c.Version, u.shown(), c.Latest)

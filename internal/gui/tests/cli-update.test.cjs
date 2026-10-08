@@ -25,7 +25,10 @@ const state = {
   profiles: [], settings: { lang: "en", theme: "light" },
 };
 const CLIS = {
-  codex: { version: "0.155.1", latest: "0.159.0", via: "self", command: "codex update", update: true },
+  codex: {
+    version: "0.155.1", latest: "0.159.0", via: "self", command: "codex update", update: true,
+    note: "the command-line program, not the Codex app (which updates itself)",
+  },
   gemini: { version: "0.60.0", latest: "0.61.0", via: "npm", command: "npm install -g --prefix /x @google/gemini-cli@latest", update: true },
   "agent-0": { version: "1.2.3" }, // installed some way magpie can't tell
   "agent-1": { version: "2.0.0", latest: "2.0.0", via: "brew", command: "brew upgrade agent-1" },
@@ -81,6 +84,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(`${row("codex")} .ag-ver`).textContent(), "0.155.1");
       assert.equal(await page.locator(`${row("codex")} .ag-up`).textContent(), "Update to 0.159.0");
       assert.match(await page.locator(`${row("codex")} .ag-up`).getAttribute("title"), /codex update/);
+      // Codex's own app is not this CLI: the version says so where it is
+      assert.match(await page.locator(`${row("codex")} .ag-ver`).getAttribute("title"), /the command-line program, not the Codex app \(which updates itself\)$/);
+      assert.doesNotMatch(await page.locator(`${row("gemini")} .ag-ver`).getAttribute("title"), /command-line program/);
       // installed some way magpie can't tell: the version, and nothing to click
       assert.equal(await page.locator(`${row("agent-0")} .ag-ver`).textContent(), "1.2.3");
       assert.equal(await page.locator(`${row("agent-0")} .ag-up`).count(), 0);
@@ -154,6 +160,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const page = await open("zh", []);
       assert.equal(await page.locator(`${row("codex")} .ag-up`).textContent(), "更新到 0.159.0");
       assert.match(await page.locator(`${row("codex")} .ag-up`).getAttribute("title"), /通过 codex update 更新/);
+      assert.match(await page.locator(`${row("codex")} .ag-ver`).getAttribute("title"), /这是命令行版本，不是 Codex 桌面版/);
     });
 
     const lookAt = (page) => page.evaluate((r) => {
