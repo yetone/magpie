@@ -140,6 +140,10 @@ type distro struct {
 	// Versions is what the CLIs of wslKinds that ask (version) said their
 	// versions are at the last probe, by the kind's id
 	Versions map[string]string `json:"versions,omitempty"`
+	// OmpProfiles are the named omp profiles the probe found under
+	// ~/.omp/profiles there: each is an agent of its own (omp#<name>).
+	// Kept so a stopped distro lists them without being started.
+	OmpProfiles []string `json:"ompProfiles,omitempty"`
 	// Mirrored is whether the distro's 127.0.0.1 is Windows' (mirror): in
 	// mirrored networking, or in consomme
 	Mirrored bool `json:"-"`
@@ -211,6 +215,12 @@ func (d distro) base() string {
 
 func (d distro) place(id string) place {
 	kind, _, _ := strings.Cut(id, "@")
+	// a profile's row is omp#<name>@wsl:<distro>, whose kind is
+	// omp#<name>: the probe keeps the binary version under omp, so the
+	// lookup cuts the profile off
+	if k, _, ok := strings.Cut(kind, "#"); ok {
+		kind = k
+	}
 	return place{home: d.local(d.Home), id: id, spell: d.native, sys: d.local, base: d.base, cold: !d.Running, version: d.Versions[kind]}
 }
 
@@ -532,6 +542,9 @@ func wslFound(d distro) bool {
 // its row are the ones it is shown only when kept under that id too (#927).
 func (a *Agent) ListsFor() string {
 	id, _, _ := strings.Cut(a.ID, "@wsl:")
+	// a named omp profile (omp#work) shares omp's lists: it is another
+	// omp, not another agent with a catalog of its own
+	id, _, _ = strings.Cut(id, "#")
 	return id
 }
 
@@ -721,6 +734,18 @@ func wslAgentsOf(ds []distro) []*Agent {
 			if a := wslAgent(k, d); a.Detected() {
 				out = append(out, a)
 			}
+		}
+		// the named omp profiles the probe remembered: the row is made
+		// because the probe found it, not because a default omp row is
+		// there, and its detection is that memory
+		for _, name := range d.OmpProfiles {
+			k := wslKindOf("omp")
+			k.id, k.name = "omp#"+name, "omp · "+name
+			k.in = func(at place) *Agent {
+				return ompAt(at, filepath.Join(at.home, ".omp", "profiles", name, "agent"),
+					func() ompProviderEntry { return ompProviderAt(at.gw(), at.version) })
+			}
+			out = append(out, wslAgent(k, d))
 		}
 	}
 	return out
@@ -1044,6 +1069,9 @@ var wslProbeScript = func() string {
 	}
 	// a drive's source in /proc/mounts is C:\ (written C:\134), under any automount root
 	s += `awk '$1 ~ /^[A-Za-z]:/ {print "win:" $2}' /proc/mounts 2>/dev/null; `
+	// named omp profiles: the probe runs only in a distro that is running,
+	// so this never starts a stopped one to find them
+	s += `for d in "$HOME"/.omp/profiles/*; do [ -d "$d" ] && echo "profile:omp:$(basename "$d")"; done; `
 	return s + `ip route show default 2>/dev/null | head -n1 | sed 's/^/route:/'; ` +
 		`grep -m1 '^nameserver' /etc/resolv.conf 2>/dev/null | sed 's/^/ns:/'; ` +
 		`command -v wslinfo >/dev/null 2>&1 && echo "net:$(wslinfo --networking-mode 2>/dev/null)"; true`
@@ -1109,6 +1137,15 @@ func parseProbe(name, out string) *distro {
 			// one word; anything else (an old wslinfo's usage) says nothing
 			if m := strings.ToLower(strings.TrimSpace(v)); m != "" && !strings.ContainsAny(m, " \t") {
 				d.Net = m
+			}
+		case "profile":
+			// profile:omp:<name>: a named omp profile the distro has
+			kind, name, _ := strings.Cut(v, ":")
+			if kind != "omp" || !ompProfileOK(name) {
+				continue
+			}
+			if !slices.Contains(d.OmpProfiles, name) {
+				d.OmpProfiles = append(d.OmpProfiles, name)
 			}
 		}
 	}

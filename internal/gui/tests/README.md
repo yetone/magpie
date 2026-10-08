@@ -2047,6 +2047,16 @@ magpie is added (green once it is), its button stands where the other rows'
 model picker does, as wide and lined up with it at 960 and 700px, and a click
 opens the app's link. English and Chinese, Chromium and WebKit.
 
+`omp-profile-connect.test.cjs` checks an omp named profile's switch (#1187):
+clicking **omp · work** posts `/api/agents/connect/omp%23work`, not a path the
+browser cuts at `#`. A query string on the same page (`/api/usage?period=today`)
+stays a query. English, Chromium and WebKit. The API is faked. Without the `#`
+encoding in `api()` the posted path is `/api/agents/connect/omp`.
+
+```sh
+node --test internal/gui/tests/omp-profile-connect.test.cjs
+```
+
 `privacy-hides-accounts.test.cjs` checks that Privacy's Mask personal data
 hides the accounts on screen too (inaction on Discord): until Hide accounts is
 chosen on a computer it follows the setting, so Usage's email address is
