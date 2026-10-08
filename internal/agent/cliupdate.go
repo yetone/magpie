@@ -43,6 +43,9 @@ type CLI struct {
 	Command string `json:"command,omitempty"`
 	// Update: Latest is after Version, and magpie knows how to get it
 	Update bool `json:"update,omitempty"`
+	// App is the version of the agent's desktop app installed beside it
+	// (the Codex app, AppVersion); shown even with no CLI on PATH
+	App string `json:"app,omitempty"`
 }
 
 // cliSpec is where an agent's CLI is published.
@@ -501,11 +504,13 @@ func (a *Agent) cliBin() (string, cliSpec) {
 }
 
 // CLI is the agent's CLI: its version, the newest, and whether magpie can
-// update it. ok is false for an agent without a CLI magpie knows.
+// update it, with its desktop app's version. ok is false for an agent with
+// neither a CLI magpie knows nor its app.
 func (a *Agent) CLI() (c CLI, ok bool) {
+	c.App = a.AppVersion()
 	bin, spec := a.cliBin()
 	if bin == "" {
-		return CLI{}, false
+		return c, c.App != ""
 	}
 	c.Version = installedVersion(bin)
 	u := howInstalled(spec, bin)

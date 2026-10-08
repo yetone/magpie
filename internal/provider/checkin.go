@@ -2,9 +2,9 @@ package provider
 
 // A daily check-in, whichever vendor's: WorkBuddy's (workbuddy_checkin.go)
 // and Trae CN's (trae_checkin.go). Each account in use is checked in once
-// a Beijing day; what came of it is kept in the vendor's file by its key,
-// so a restart doesn't ask again (see workbuddy_checkin.go for when a
-// failure is tried again).
+// a Beijing day, except Qoder's campaigns, rechecked every 30 minutes.
+// What came of it is kept in the vendor's file by its key for reuse
+// (see workbuddy_checkin.go for when a failure is tried again).
 
 import (
 	"context"
@@ -31,6 +31,7 @@ type checkiner struct {
 	mu       *sync.Mutex
 	by       string // the vendor, WorkBuddyCheckin.By; "" for WorkBuddy
 	label    string // the vendor in the log
+	recheck  bool   // its campaigns can change before the Beijing day ends
 	accounts func() []checkinAcct
 }
 
@@ -63,7 +64,14 @@ func (c checkiner) checkinNow(ctx context.Context, soon bool) []WorkBuddyCheckin
 		}
 		asked[a.key] = true
 		prev, seen := st[a.key]
-		if seen && prev.settled(day, now, soon) {
+		settled := prev.settled(day, now, soon)
+		if c.recheck {
+			settled = settled && !soon && now.Sub(prev.At) < wbCheckinEvery
+			if prev.Checked() && !prev.ValidUntil.IsZero() {
+				settled = settled && now.Before(prev.ValidUntil)
+			}
+		}
+		if seen && settled {
 			prev.User, prev.By = a.User, c.by
 			out = append(out, prev)
 			continue

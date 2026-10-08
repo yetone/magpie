@@ -141,7 +141,7 @@ func (c claudeCLI) env(env []string) []string {
 func startClaudeSignIn(s *signInFlow) error {
 	cli, ok := findClaudeCLI()
 	if !ok {
-		return errors.New("install Claude Code first: magpie signs in to Claude through it")
+		return errors.New("install Claude Code first, the `claude` command line (the Claude desktop app is not it): magpie signs in to Claude through it")
 	}
 	if err := os.MkdirAll(claudeDirsRoot(), 0o700); err != nil {
 		return err

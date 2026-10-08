@@ -42,6 +42,9 @@ func SetJSONItem(path string, where map[string]string, value any) error {
 		return WriteAtomic(path, []byte("[\n\t"+string(v)+"\n]\n"))
 	}
 	stripped := jsonc.ToJSONInPlace(append([]byte(nil), raw...))
+	if !json.Valid(stripped) {
+		return fmt.Errorf("%s: invalid JSON/JSONC", path)
+	}
 	root, open, close := topArray(stripped)
 	if close < 0 {
 		return fmt.Errorf("%s: top level is not a JSON array", path)
@@ -85,6 +88,9 @@ func DelJSONItem(path string, where map[string]string) error {
 	changed := false
 	for {
 		stripped := jsonc.ToJSONInPlace(append([]byte(nil), raw...))
+		if !json.Valid(stripped) {
+			return fmt.Errorf("%s: invalid JSON/JSONC", path)
+		}
 		r, ok := findItem(stripped, where)
 		if !ok {
 			break

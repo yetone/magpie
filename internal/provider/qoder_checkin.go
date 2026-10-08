@@ -5,7 +5,9 @@ package provider
 // account's campaigns on their openapi host, the day's credits among them
 // (actionType CLAIM_BENEFIT), and claim one with a POST. While the setting
 // is on, whichever magpie runs the gateway claims each claimable one for
-// each account of @magpie-community/opencode-qoder-auth once a Beijing day.
+// each account of @magpie-community/opencode-qoder-auth. Campaigns are
+// checked every 30 minutes and on a Beijing day change: their daily
+// rollover need not be midnight. The server decides which can be claimed.
 // Both go through the plugin's fetch (0.2.7 and later), which sends them
 // as the account, on its device token. The built-in's accounts, not moved
 // onto the plugin, aren't checked in.
@@ -39,7 +41,7 @@ var qoderCampaignURLs = map[string]string{
 }
 
 // qoderCampaign is one of an account's campaigns. startAt and endAt bound
-// the day it is for.
+// its claim window, which can cross Beijing midnight.
 type qoderCampaign struct {
 	ID          string  `json:"campaignId"`
 	ActionType  string  `json:"actionType"`
@@ -81,11 +83,11 @@ func qoderCheckinKey(a qoderCheckinAcct) string {
 
 var qoderCheckinMu sync.Mutex
 
-func newQoderCheckiner(accounts func() []qoderCheckinAcct) checkiner {
-	return checkiner{path: qoderCheckinPath(), now: time.Now, mu: &qoderCheckinMu, by: "qoder", label: "qoder", accounts: func() []checkinAcct {
+func newQoderCheckiner(accounts func() []qoderCheckinAcct, now func() time.Time) checkiner {
+	return checkiner{path: qoderCheckinPath(), now: now, mu: &qoderCheckinMu, by: "qoder", label: "qoder", recheck: true, accounts: func() []checkinAcct {
 		var out []checkinAcct
 		for _, a := range accounts() {
-			out = append(out, checkinAcct{User: a.User, On: a.On, key: qoderCheckinKey(a), do: func(ctx context.Context) WorkBuddyCheckin { return qoderCheckin(ctx, a, time.Now()) }})
+			out = append(out, checkinAcct{User: a.User, On: a.On, key: qoderCheckinKey(a), do: func(ctx context.Context) WorkBuddyCheckin { return qoderCheckin(ctx, a, now()) }})
 		}
 		return out
 	}}
@@ -108,9 +110,15 @@ func qoderCheckin(ctx context.Context, a qoderCheckinAcct, now time.Time) WorkBu
 		}
 	}
 	var credit float64
+	var until time.Time
 	claimed, failed := 0, 0
 	var why string
 	for _, c := range daily {
+		if c.active(now) {
+			if end := qoderWhen(c.EndAt); until.IsZero() || end.Before(until) {
+				until = end
+			}
+		}
 		if c.ClaimStatus != "CLAIMABLE" || c.ID == "" {
 			continue
 		}
@@ -138,24 +146,29 @@ func qoderCheckin(ctx context.Context, a qoderCheckinAcct, now time.Time) WorkBu
 	case failed > 0:
 		return WorkBuddyCheckin{Outcome: CheckinFailed, Msg: why}
 	case claimed > 0:
-		return WorkBuddyCheckin{Outcome: CheckinClaimed, Credit: credit}
+		return WorkBuddyCheckin{Outcome: CheckinClaimed, Credit: credit, ValidUntil: until}
 	case len(daily) == 0:
 		return WorkBuddyCheckin{Outcome: CheckinInactive}
 	}
 	for _, c := range daily {
-		if c.ClaimStatus == "CLAIMED" && qoderWhen(c.StartAt) <= now.Unix() && now.Unix() < qoderWhen(c.EndAt) {
-			return WorkBuddyCheckin{Outcome: CheckinDone, Credit: c.Benefit.Amount}
+		if c.ClaimStatus == "CLAIMED" && c.active(now) {
+			return WorkBuddyCheckin{Outcome: CheckinDone, Credit: c.Benefit.Amount, ValidUntil: until}
 		}
 	}
 	return WorkBuddyCheckin{Outcome: CheckinFailed, Msg: "today's credits aren't offered yet"}
 }
 
-// qoderWhen is a time Qoder gives, in seconds or milliseconds, as seconds.
-func qoderWhen(v float64) int64 {
+// active includes the start and excludes the end, regardless of the Beijing day.
+func (c qoderCampaign) active(now time.Time) bool {
+	return !now.Before(qoderWhen(c.StartAt)) && now.Before(qoderWhen(c.EndAt))
+}
+
+// qoderWhen is a time Qoder gives, in seconds or milliseconds.
+func qoderWhen(v float64) time.Time {
 	if v > 1e12 {
-		return int64(v / 1000)
+		return time.UnixMilli(int64(v))
 	}
-	return int64(v)
+	return time.Unix(int64(v), 0)
 }
 
 // qoderCall asks u as a and reads its answer.
@@ -203,7 +216,7 @@ func qoderCall(ctx context.Context, a qoderCheckinAcct, method, u string, dst an
 // CheckInQoder checks each Qoder account in use in for today now, those
 // not in yet, and says how each stands.
 func CheckInQoder(ctx context.Context) []WorkBuddyCheckin {
-	return newQoderCheckiner(qoderCheckinAccounts).checkinNow(ctx, true)
+	return newQoderCheckiner(qoderCheckinAccounts, time.Now).checkinNow(ctx, true)
 }
 
 // QoderCheckins is each Qoder account's last check-in, as kept, by its
@@ -272,5 +285,5 @@ func qoderCheckinAccounts() []qoderCheckinAcct {
 // KeepQoderCheckedIn checks the Qoder accounts in each day while settings
 // say to, as KeepTraeCheckedIn does Trae CN's.
 func KeepQoderCheckedIn(ctx context.Context) {
-	keepCheckedIn(ctx, "qoder", newQoderCheckiner(qoderCheckinAccounts), func() bool { return settings.Load().QoderCheckin })
+	keepCheckedIn(ctx, "qoder", newQoderCheckiner(qoderCheckinAccounts, time.Now), func() bool { return settings.Load().QoderCheckin })
 }

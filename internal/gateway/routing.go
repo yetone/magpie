@@ -67,6 +67,9 @@ func servedCandidate(c candidate, tokens int) {
 	served(c.restKey(), c.restKey(), tokens)
 	provider.NoteServed(c.p, time.Now())
 	if id := c.restID(); id != c.restKey() {
+		routed.Lock()
+		delete(routed.failures, id)
+		routed.Unlock()
 		clearRest(id)
 	}
 }
@@ -358,6 +361,9 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// counts some models only, the account's others are still in theirs
 	// (Cursor's Auto with Other Models used up)
 	pooled := why == failQuota && c.pooled(now)
+	// a model the key's plan doesn't serve rests alone, counted by itself
+	// (#1235): the key's other models are still served
+	unserved := why == failOther && modelRefused(status, body)
 	r := Rest{Why: why, Status: status, By: "cooldown"}
 	if why == failProxy {
 		// the account is as good as it was; the proxy is the user's to start
@@ -402,9 +408,13 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		}
 		r.Link, _ = provider.Verification([]byte(r.said))
 	default:
+		counted := c.restKey()
+		if unserved {
+			counted = c.restID()
+		}
 		routed.Lock()
-		routed.failures[c.restKey()]++
-		n := routed.failures[c.restKey()]
+		routed.failures[counted]++
+		n := routed.failures[counted]
 		routed.Unlock()
 		d, r.By, r.Failures = min(fallbackCooldown<<min(n-1, 10), longestRetry), "backoff", n
 		// a subscription that failed with a window full is out of it,
@@ -413,7 +423,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		// Held to the longest an account out of quota sits out: the window
 		// is the vendor's reading, and one read a year off (a /usage date
 		// with no year) would bench the account until someone noticed
-		if t := c.full(now); !t.IsZero() && c.p.Account != nil {
+		if t := c.full(now); !t.IsZero() && c.p.Account != nil && !unserved {
 			d, r.By = min(t.Sub(now), longestQuota), "window"
 		}
 	}
@@ -439,7 +449,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	if why == failRate && c.isOpenRouterFree() && sharedPool {
 		id = c.restID()
 	}
-	if pooled {
+	if pooled || unserved {
 		id = c.restID()
 	}
 	r.Key = id

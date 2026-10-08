@@ -52,6 +52,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -526,8 +527,8 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, con
 		// tokens a check on the subscription (0xAncientTwo)
 		args = append(args, "--thinking", "disabled")
 	}
-	if len(req.Schema) > 0 {
-		args = append(args, "--json-schema", string(req.Schema))
+	if len(req.Format.schema()) > 0 {
+		args = append(args, "--json-schema", string(req.Format.schema()))
 	}
 	work, err := claudeWorkDir()
 	var sessions []string
@@ -582,7 +583,7 @@ func (b *subscriptionBridge) start(ctx context.Context, req *Request, model, con
 	}
 	cmd.Stdout, cmd.Stderr = stdoutW, stderrW
 
-	run := &subscriptionRun{bridge: b, token: token, model: model, cmd: cmd, tmp: tmp, schema: len(req.Schema) > 0, pending: map[string]chan mcpToolResult{}, stdin: stdin, owner: owner, effort: req.Effort, sessions: sessions}
+	run := &subscriptionRun{bridge: b, token: token, model: model, cmd: cmd, tmp: tmp, schema: len(req.Format.schema()) > 0, pending: map[string]chan mcpToolResult{}, stdin: stdin, owner: owner, effort: req.Effort, sessions: sessions}
 	run.safeguardBeta = req.SafeguardBeta
 	if user, _ := ownerAccount(owner); user != "" {
 		run.loginVersion = provider.ClaudeLoginVersion(user)
@@ -871,7 +872,7 @@ func newLooseTurn(owner string, req *Request, msgs []Message) *looseTurn {
 		}
 	}
 	h := sha256.New()
-	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%t\x00%s\x00%d\x00%d", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, req.System, req.WebSearch, req.Schema, len(msgs), start)
+	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%t\x00%s\x00%d\x00%d", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, req.System, req.WebSearch, req.Format.schema(), len(msgs), start)
 	hashMessages(h, msgs[:start], nil)
 	l := &looseTurn{key: hex.EncodeToString(h.Sum(nil))}
 	words := messageWords(msgs)
@@ -1529,7 +1530,7 @@ func (r *subscriptionRun) park() {
 func turnKey(owner string, req *Request, msgs []Message) string {
 	h := sha256.New()
 	tools, _ := json.Marshal(req.Tools)
-	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%s\x00%t\x00%s", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, req.System, tools, req.WebSearch, req.Schema)
+	fmt.Fprintf(h, "%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%s\x00%t\x00%s", owner, req.Model, req.Effort != "", req.ThinkOff, req.ToolChoice, req.System, tools, req.WebSearch, req.Format.schema())
 	hashMessages(h, msgs, nil)
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -2409,6 +2410,8 @@ const (
 	runExpired     = "process expired"
 	noRunWaiting   = "no run waiting"
 	accountChanged = "account changed"
+	// another request has the run's calls answered, or is answering them
+	answeredElsewhere = "answered by another request"
 )
 
 // match is findRun, and how the results found their run (byExactID,
@@ -2884,6 +2887,14 @@ func (r *subscriptionRun) launch() error {
 // how it ended, or that magpie ended it, and the last it wrote to stderr —
 // the cause comes last, after any warnings before it.
 func (r *subscriptionRun) tell(line []byte) error {
+	// one magpie ended is not written to: until Wait has reaped it, its
+	// input still takes a write, which no one will read
+	r.mu.Lock()
+	killed := r.killed
+	r.mu.Unlock()
+	if killed {
+		return r.whyEnded()
+	}
 	_, err := r.stdin.Write(append(line, '\n'))
 	if err == nil {
 		return nil
@@ -2899,6 +2910,12 @@ func (r *subscriptionRun) tell(line []byte) error {
 	case <-time.After(outputDrain + time.Second):
 		return err
 	}
+	return r.whyEnded()
+}
+
+// whyEnded says how the run's Claude Code ended, or that magpie ended it,
+// and the last it wrote to stderr.
+func (r *subscriptionRun) whyEnded() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	why := "exited before it read its input"
@@ -3050,6 +3067,41 @@ func (s *Server) serveClaudeSubscription(w http.ResponseWriter, r *http.Request,
 	return s.serveSubscription(w, r, from, "Claude Code", model, owner, body, usage, start)
 }
 
+// limitHeaders says on a reply what is kept of the allowance of the account
+// a run's owner names, as Anthropic says it to Claude Code: its
+// anthropic-ratelimit-unified-* headers, which a Claude Code signed in to
+// claude.ai reads into its status line's rate_limits (claude-hud's 5-hour
+// and weekly figures, #1257). Its run tells them in its rate_limit_event,
+// not as headers, so they are said again from what magpie keeps.
+func limitHeaders(w http.ResponseWriter, owner string) {
+	user, own := ownerAccount(owner)
+	if user == "" || own && provider.ClaudeCodeMovedOff(user) {
+		return
+	}
+	set := func(k, v string) {
+		if hw, ok := w.(*holdWriter); ok {
+			hw.note(k, v) // keepAlive may send the headers before the reply has them
+		} else {
+			w.Header().Set(k, v)
+		}
+	}
+	for _, l := range provider.KeptClaudeLimits(user) {
+		if win, ok := ratelimitWindows[l.Kind]; ok {
+			set("anthropic-ratelimit-unified-"+win+"-utilization", strconv.FormatFloat(l.Used, 'f', -1, 64))
+			set("anthropic-ratelimit-unified-"+win+"-reset", strconv.FormatInt(l.ResetsAt, 10))
+		}
+	}
+}
+
+// ratelimitWindows are the windows Claude Code reads from
+// anthropic-ratelimit-unified-<window>-*, by the kind it names them in its
+// rate_limit_event.
+var ratelimitWindows = map[string]string{
+	"five_hour":                  "5h",
+	"seven_day":                  "7d",
+	"seven_day_overage_included": "7d_oi",
+}
+
 // serveSubscription answers a request through an agent's own binary: a new
 // turn starts it, a request carrying tool results resumes the turn waiting
 // on them.
@@ -3060,6 +3112,11 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
 	req.Model = model
+	if req.Format != nil && req.Format.schema() == nil {
+		// --json-schema takes a schema only: any JSON object is asked for
+		// in words
+		req = req.inSystem()
+	}
 	if len(req.Safeguards) > 0 {
 		req.SafeguardBeta = "dangerous-tool-use-2026-09-03"
 		for _, beta := range strings.Split(r.Header.Get("anthropic-beta"), ",") {
@@ -3079,9 +3136,18 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	}
 
 	run, results, how := s.subscription.match(req)
+	// Another request has the run's calls answered, or is answering them,
+	// or the run ended. Claude Code's fork sub-agents each start from their
+	// lead's conversation as it stands, a result for each of its calls and
+	// their directive after, so the lead's next turn and every fork it
+	// started answer the same calls at once; a client may also send a turn
+	// again while the first is still answered. The run takes one set of
+	// results only, and is not waiting for this request's once it is past
+	// the turn they were for: this request is its own conversation from
+	// here and gets a run of its own, told it whole. A 409 isn't retried,
+	// and the fork died with it (ylorn on Discord).
 	if run != nil && !run.claimResume() {
-		msg := "the agent's turn is already being resumed"
-		return writeError(w, from, http.StatusConflict, msg), msg
+		run, how = nil, answeredElsewhere
 	}
 	// Tool-call IDs find the process that made them, independently of the
 	// account routing selected. Continuing a different owner's process would
@@ -3180,7 +3246,14 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 			run.abort()
 		}
 	}
-	return relay(w, r, from, name, req, events, usage, abort, func(said, stop string, ok bool) {
+	// the allowance as kept now, and again as the reply begins, its turn
+	// having told it by then
+	var begin func()
+	if name == "Claude Code" {
+		limitHeaders(w, owner)
+		begin = func() { limitHeaders(w, owner) }
+	}
+	return relay(w, r, from, name, req, events, usage, abort, begin, func(said, stop string, ok bool) {
 		if !gone() {
 			return // the client went first: letGo has the run
 		}
@@ -3192,7 +3265,7 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 // there is no answer to give, ended when one was given, before its last
 // event goes out.
 func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, events <-chan Event, usage *Usage,
-	abort func(), ended func(said, stop string, ok bool)) (int, string) {
+	abort, begin func(), ended func(said, stop string, ok bool)) (int, string) {
 	stream := req.Stream
 	if stream {
 		// an error before any of the answer — out of quota, rate limited —
@@ -3221,6 +3294,9 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 				}
 			}
 			return writeError(w, from, code, name+": "+msg), msg
+		}
+		if begin != nil {
+			begin()
 		}
 		sw := newSSEWriter(w)
 		enc := encoder(from, sw, req, usage)
@@ -3280,6 +3356,9 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		return writeError(w, from, code, name+": "+col.err), col.err
 	}
 	ended(said, stop, col.err == "" && r.Context().Err() == nil)
+	if begin != nil {
+		begin()
+	}
 	res := col.finish()
 	usage.add(res.Usage)
 	usage.add(Usage{Served: res.Model})

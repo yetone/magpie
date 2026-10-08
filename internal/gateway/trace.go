@@ -67,6 +67,8 @@ type Route struct {
 	// counts: streamed replies only (#196)
 	TTFT      int64 `json:"ttft,omitempty"`
 	FirstText int64 `json:"firstText,omitempty"`
+	// Flow: the ms its content took to come (Call.Flow)
+	Flow int64 `json:"flow,omitempty"`
 	// Served: the model the reply says answered, as the last try has it;
 	// Swapped: another than the one that try asked for; Routed: that try
 	// asked another magpie's routing group, and Served is its member
@@ -248,6 +250,8 @@ type Try struct {
 	// first text, when it streamed any (#196)
 	TTFT      int64 `json:"ttft,omitempty"`
 	FirstText int64 `json:"firstText,omitempty"`
+	// Flow: the ms its content took to come (Call.Flow)
+	Flow int64 `json:"flow,omitempty"`
 	// Served: the model its reply said answered, when it named one;
 	// Swapped: another model than Model, not just its dated name; Routed:
 	// Model is another magpie's routing group, and Served the member it

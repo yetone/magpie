@@ -152,7 +152,7 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 		s, _ = t.MCP.side(s)
 		old := entries[s.Name]
 		if old != nil {
-			if cur, ok := t.MCP.decode(s.Name, old); ok && cur.same(s) && t.MCP.has(s) && !t.MCP.behind(s, old) {
+			if cur, ok := t.MCP.current(s.Name, old, s); ok && cur.same(s) && t.MCP.has(s) && !t.MCP.behind(s, old) {
 				mine = append(mine, s.Name)
 				continue
 			}
@@ -184,7 +184,10 @@ type AgentView struct {
 	Note         string   `json:"note,omitempty"`
 	NoSSE        bool     `json:"noSSE,omitempty"`
 	NoRemote     bool     `json:"noRemote,omitempty"`
-	MCPVia       string   `json:"mcpVia,omitempty"`
+	// NoEnvRefs: it reads no ${NAME} from its MCP config, so a server
+	// whose headers or environment have one isn't given to it (envref.go)
+	NoEnvRefs bool   `json:"noEnvRefs,omitempty"`
+	MCPVia    string `json:"mcpVia,omitempty"`
 	// How is the way it is given its skills, link or copy, and HowOwn its
 	// own over the library's; MustCopy is one that can only take copies
 	// (in WSL)
@@ -274,6 +277,7 @@ func Read(problems []Problem) (*View, error) {
 			av.MCP = t.MCP.Path
 			av.NoSSE = t.MCP.supports(&Server{Transport: "sse"}) != nil
 			av.NoRemote = t.MCP.supports(&Server{Transport: "http"}) != nil
+			av.NoEnvRefs = t.MCP.refsOf() == envSyntax{}
 		}
 		v.Agents = append(v.Agents, av)
 	}

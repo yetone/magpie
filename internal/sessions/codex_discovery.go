@@ -2,13 +2,13 @@ package sessions
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -33,13 +33,24 @@ var codexCopyCache = struct {
 // Windows replaces this with a same-handle stat carrying ChangeTime.
 var codexDiscoveryStat = os.Stat
 var compareCodexCopies = readCodexCopies
+var codexDiscoveryNow = time.Now
+
+// A file system stamps change times from the clock tick, not the precise
+// clock: NTFS from Windows' system time (0.5 ms to 15.6 ms), Linux from the
+// coarse kernel clock. Two writes within one tick get the same change time,
+// so a comparison is cached only for files whose change time is older than
+// this when it starts. A later rewrite is then in a later tick and changes
+// the stamp; a file changed more recently is compared again.
+const codexStampSettle = time.Second
 
 type codexDiscoveryInfo struct {
 	os.FileInfo
-	ChangeTime string
+	ChangeTime time.Time
 }
 
-func codexChangeStamp(info os.FileInfo) string {
+// codexChangeTime is the file's change time, zero when the file system
+// doesn't expose one.
+func codexChangeTime(info os.FileInfo) time.Time {
 	if wrapped, ok := info.(codexDiscoveryInfo); ok {
 		return wrapped.ChangeTime
 	}
@@ -51,22 +62,29 @@ func codexChangeStamp(info os.FileInfo) string {
 		v = v.Elem()
 	}
 	if v.Kind() != reflect.Struct {
-		return ""
+		return time.Time{}
 	}
 	for _, name := range []string{"Ctimespec", "Ctim"} {
 		c := v.FieldByName(name)
 		if c.IsValid() && c.Kind() == reflect.Struct {
 			sec, nsec := c.FieldByName("Sec"), c.FieldByName("Nsec")
 			if sec.IsValid() && nsec.IsValid() && sec.CanInt() && nsec.CanInt() {
-				return fmt.Sprintf("%d:%d", sec.Int(), nsec.Int())
+				return time.Unix(sec.Int(), nsec.Int())
 			}
 		}
 	}
-	return ""
+	return time.Time{}
+}
+
+// settledCodexStamp reports whether a comparison of this file, started at
+// start, can be cached: it has a change time from before the current tick.
+func settledCodexStamp(info os.FileInfo, start time.Time) bool {
+	c := codexChangeTime(info)
+	return !c.IsZero() && c.Before(start.Add(-codexStampSettle))
 }
 
 func sameCodexSnapshot(a, b os.FileInfo) bool {
-	if a == nil || b == nil || a.Size() != b.Size() || !a.ModTime().Equal(b.ModTime()) || codexChangeStamp(a) != codexChangeStamp(b) {
+	if a == nil || b == nil || a.Size() != b.Size() || !a.ModTime().Equal(b.ModTime()) || !codexChangeTime(a).Equal(codexChangeTime(b)) {
 		return false
 	}
 	if wrapped, ok := a.(codexDiscoveryInfo); ok {
@@ -112,13 +130,14 @@ func distinctCodexFiles(files []file) []file {
 }
 
 func codexCopyRelation(first, second string) int {
+	start := codexDiscoveryNow()
 	a, errA := codexDiscoveryStat(first)
 	b, errB := codexDiscoveryStat(second)
 	if errA != nil || errB != nil {
 		return codexCopiesDiffer
 	}
 	key := codexCopyPair{first, second}
-	cacheable := codexChangeStamp(a) != "" && codexChangeStamp(b) != ""
+	cacheable := settledCodexStamp(a, start) && settledCodexStamp(b, start)
 	codexCopyCache.Lock()
 	saved, found := codexCopyCache.Pairs[key]
 	codexCopyCache.Unlock()

@@ -141,6 +141,12 @@ type Provider struct {
 	// it is turned away as having waited too long (#892). 0 waits as long
 	// as it takes.
 	QueueWait int `json:"queueWait,omitempty"`
+	// MaxRPM is how many requests a minute each of its keys or accounts
+	// sends the vendor, over a rolling 60 seconds (coeo91 on Discord:
+	// OpenRouter's free models take 20 a minute, which a limit at once
+	// can't keep to); one more waits for room (see RPMLimit). 0 is no
+	// limit.
+	MaxRPM int `json:"maxRPM,omitempty"`
 
 	// PriceRate is what the provider charges against the official price
 	// (ITea312, #819): a relay that bills 0.8× or 1.5× of it. It scales the
@@ -184,10 +190,11 @@ type Provider struct {
 	// "direct" none, anything else the proxy's address (http://, https://,
 	// socks5://; host:port means http). Signed-in accounts keep it too.
 	Proxy string `json:"proxy,omitempty"`
-	// AccountProxies is, for a subscription holding several accounts
-	// (Codex's, Claude Code's…), the proxy of each account that has one
-	// of its own, by its name in lower case, as Proxy takes one; an
-	// account not in it follows Proxy (see ProxyChoice).
+	// AccountProxies is, for a provider holding several accounts or keys
+	// (Codex's accounts, a relay's keys…), the proxy of each one that has
+	// one of its own, as Proxy takes one: an account by its name in lower
+	// case, a key by its KeyID. One not in it follows Proxy (see
+	// ProxyChoice).
 	AccountProxies map[string]string `json:"accountProxies,omitempty"`
 	// AccountModels is, for a provider holding several accounts or keys,
 	// the models each one the user narrowed serves, and no others (#474):
@@ -437,6 +444,7 @@ func allProviders() []Provider {
 		a.AccountCaps = pk.AccountCaps
 		a.MaxConcurrency, a.PinUpstream = pk.MaxConcurrency, pk.PinUpstream
 		a.AccountConcurrency, a.QueueLimit, a.QueueWait = pk.AccountConcurrency, pk.QueueLimit, pk.QueueWait
+		a.MaxRPM = pk.MaxRPM
 		if a.ID == "cursor" { // picked before its efforts were one model
 			a.Models = cursorPicks(a.Models)
 		}
@@ -554,9 +562,9 @@ func Save(p Provider) error {
 		if p.ID == "kiro" {
 			key = p.Key
 		}
-		p = Provider{ID: p.ID, Key: key, Models: p.Models, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, PinUpstream: p.PinUpstream, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
+		p = Provider{ID: p.ID, Key: key, Models: p.Models, Unlisted: p.Unlisted, Off: p.Off, Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Contexts: p.Contexts, Family: p.Family, Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, MaxConcurrency: p.MaxConcurrency, AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM, PinUpstream: p.PinUpstream, Hidden: hiddenAccount(p.ID), Quiet: quietAccount(p.ID), Tucked: tuckedAccount(p.ID)}
 	} else {
-		p.AccountProxies = nil // a provider of a key has no accounts to proxy apart
+		p.AccountProxies = keyProxies(p) // a provider of keys proxies each key apart
 		if subscriptionID(p.ID) && !stored(p.ID) {
 			// taken, it would hide that subscription once signed in
 			return fmt.Errorf("%q is the id of the %s subscription; pick another name", p.ID, p.ID)
@@ -905,6 +913,7 @@ func normalize(p Provider) Provider {
 	}
 	p.AccountConcurrency = normalAccountConcurrency(p.AccountConcurrency)
 	p.QueueLimit, p.QueueWait = min(max(p.QueueLimit, 0), MaxQueueLimit), min(max(p.QueueWait, 0), MaxQueueWait)
+	p.MaxRPM = min(max(p.MaxRPM, 0), MaxRPMLimit)
 	p.Catalog = strings.Join(p.Catalogs(), ", ")
 	// a Bedrock provider saved before the preset had its Responses API
 	// (#176) gets it where its chat completions are: the runtime serves both

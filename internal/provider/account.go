@@ -360,12 +360,15 @@ func parseClaudeCredentials(b []byte) (claudeCredentials, bool) {
 	return c, c.OAuth.AccessToken != ""
 }
 
+// marshal writes into copies: c.raw is shared with every copy of c, the
+// cached one included, which other goroutines marshal at the same time.
 func (c claudeCredentials) marshal() ([]byte, error) {
-	raw := c.raw
+	raw := maps.Clone(c.raw)
 	if raw == nil {
 		raw = map[string]any{}
 	}
 	oauth, _ := raw["claudeAiOauth"].(map[string]any)
+	oauth = maps.Clone(oauth)
 	if oauth == nil {
 		oauth = map[string]any{}
 	}
@@ -866,7 +869,7 @@ func codexAccount(home string) (Provider, bool) {
 		}
 		catalog.SaveLive(accountModels("codex", acct.User), CodexBase, ms)
 		codexFetchSaved(ctx)
-		ms = codexPoolLevels(ms)
+		ms = codexPoolModels(ms)
 		return ms, catalog.SaveLive("codex", CodexBase, ms)
 	}
 	return Provider{ID: "codex", Name: "Codex", Icon: "codex-color", Responses: CodexBase, Website: "https://chatgpt.com/codex", Account: acct}, true
@@ -1002,14 +1005,39 @@ type copilotApp struct {
 	// github.com (copilot_ghe.go)
 	Host string `json:"host,omitempty"`
 	cli  bool   // the standalone Copilot CLI's sign-in
+	src  string // the editors' file it was read from, "" for any other
 }
 
-// copilotLogin finds the GitHub token Copilot's editors and CLI keep.
+// copilotLogin finds the GitHub token Copilot's editors and CLI keep: an
+// editor's github.com sign-in first, then the Copilot CLI's, then an
+// editor's on an enterprise's GHE.com. An editor's token GitHub has
+// refused (copilotRefusedToken) gives way to the CLI's sign-in of the same
+// account, never to another account's (#1238).
 func copilotLogin(cfg string) (copilotApp, bool) {
-	var ghe *copilotApp // an editor's sign-in on an enterprise's <name>.ghe.com
+	gh, ghe := copilotEditorLogins(cfg)
+	if gh != nil && !copilotRefusedToken(gh.Token) {
+		return *gh, true
+	}
+	if gh != nil {
+		if cli, ok := copilotCLILogin(); ok && copilotSameAccount(cli, *gh) {
+			return cli, true
+		}
+		return *gh, true
+	}
+	if app, ok := copilotCLILogin(); ok || ghe == nil {
+		return app, ok
+	}
+	return *ghe, true
+}
+
+// copilotEditorLogins are the sign-ins Copilot's editors keep: the first on
+// github.com and the first on an enterprise's <name>.ghe.com, each with the
+// file it was read from.
+func copilotEditorLogins(cfg string) (gh, ghe *copilotApp) {
 	for _, name := range []string{"apps.json", "hosts.json"} {
 		var apps map[string]copilotApp
-		if !readJSON(filepath.Join(cfg, "github-copilot", name), &apps) {
+		src := filepath.Join(cfg, "github-copilot", name)
+		if !readJSON(src, &apps) {
 			continue
 		}
 		var keys []string
@@ -1020,30 +1048,105 @@ func copilotLogin(cfg string) (copilotApp, bool) {
 		for _, k := range keys {
 			if strings.HasPrefix(k, "github.com") && apps[k].Token != "" {
 				app := apps[k]
-				app.Host = ""
-				return app, true
+				app.Host, app.src = "", src
+				return &app, ghe
 			}
 			// "acme.ghe.com:Iv1…", as copilot.lua keeps one (#723)
 			host, _, _ := strings.Cut(k, ":")
 			if h, err := CopilotHost(host); ghe == nil && err == nil && h != "" && apps[k].Token != "" {
 				app := apps[k]
-				app.Host = h
+				app.Host, app.src = h, src
 				ghe = &app
 			}
 		}
 	}
-	if app, ok := copilotCLILogin(); ok || ghe == nil {
-		return app, ok
-	}
-	return *ghe, true
+	return nil, ghe
 }
 
-// session is what this sign-in's requests carry.
+// copilotSameAccount says two sign-ins are one GitHub account: the same
+// login on the same host. An editor's sign-in that names no user is no
+// one's to stand in for.
+func copilotSameAccount(a, b copilotApp) bool {
+	return a.User != "" && strings.EqualFold(a.User, b.User) && a.Host == b.Host
+}
+
+// copilotRefusals is when GitHub last turned away the trade of an editor's
+// GitHub token for a session token (401 Bad credentials, or 403), by
+// token: a stale sign-in left in apps.json, or a CLI token put there
+// (#1238). It is tried again after an hour, or at once when traded.
+var copilotRefusals = struct {
+	sync.Mutex
+	at     map[string]time.Time
+	status map[string]int
+}{at: map[string]time.Time{}, status: map[string]int{}}
+
+func copilotRefusedToken(token string) bool {
+	copilotRefusals.Lock()
+	defer copilotRefusals.Unlock()
+	at, ok := copilotRefusals.at[token]
+	return ok && time.Since(at) < time.Hour
+}
+
+// copilotStaleToken says GitHub answered the token's trade 401: the token
+// itself is no good. A 403 can be an account without Copilot as well, so
+// it isn't called stale.
+func copilotStaleToken(token string) bool {
+	copilotRefusals.Lock()
+	defer copilotRefusals.Unlock()
+	return copilotRefusals.status[token] == http.StatusUnauthorized
+}
+
+func copilotRefuse(token string, status int) {
+	copilotRefusals.Lock()
+	defer copilotRefusals.Unlock()
+	copilotRefusals.at[token] = time.Now()
+	copilotRefusals.status[token] = status
+}
+
+// copilotStandIn is the Copilot CLI's sign-in of the same account as a,
+// an editor's sign-in GitHub refused (#1238).
+func copilotStandIn(a copilotApp) (copilotApp, bool) {
+	if a.cli || a.src == "" {
+		return copilotApp{}, false
+	}
+	cli, ok := copilotCLILogin()
+	return cli, ok && copilotSameAccount(cli, a)
+}
+
+// session is what this sign-in's requests carry. An editor's token GitHub
+// refuses is replaced by the Copilot CLI's sign-in of the same account,
+// sent as the CLI sends it; with none, the error names the file the
+// refused token is in, since it is read before the CLI's (#1238).
 func (a copilotApp) session(ctx context.Context) (copilotSession, error) {
 	if a.cli {
 		return copilotDirect(ctx, a)
 	}
-	return copilotToken(ctx, a)
+	// refused before: not asked again at every request
+	if copilotRefusedToken(a.Token) {
+		if cli, ok := copilotStandIn(a); ok {
+			return copilotDirect(ctx, cli)
+		}
+	}
+	s, err := copilotToken(ctx, a)
+	if err == nil || a.src == "" || !copilotRefusedToken(a.Token) {
+		return s, err
+	}
+	cli, ok := copilotCLILogin()
+	if ok && copilotSameAccount(cli, a) {
+		return copilotDirect(ctx, cli)
+	}
+	if !copilotStaleToken(a.Token) {
+		return s, err
+	}
+	who := ""
+	if a.User != "" {
+		who = " for " + CopilotAccountName(a.User, a.Host)
+	}
+	msg := strings.TrimSuffix(err.Error(), "; sign in to Copilot again") + ": the GitHub token Copilot's editors keep in " + a.src + who + " was refused, and it is read before any other sign-in; sign in to Copilot again in your editor or in magpie, or move that file aside"
+	if ok {
+		msg += " (the Copilot CLI is signed in to " + CopilotAccountName(cli.User, cli.Host) + ", another account, so it isn't used in its place)"
+	}
+	return copilotSession{}, errors.New(msg)
 }
 
 // copilotProvider is Copilot as one GitHub account serves it.
@@ -1201,9 +1304,16 @@ func copilotToken(ctx context.Context, app copilotApp) (copilotSession, error) {
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	var s copilotSession
 	if res.StatusCode != 200 || json.Unmarshal(b, &s) != nil || s.Token == "" {
+		if res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden {
+			copilotRefuse(github, res.StatusCode)
+		}
 		return copilotSession{}, errors.New("Copilot is signed out (" + APIError(b, res.Status) + "); sign in to Copilot again")
 	}
 	copilotSessions[github] = s
+	copilotRefusals.Lock()
+	delete(copilotRefusals.at, github)
+	delete(copilotRefusals.status, github)
+	copilotRefusals.Unlock()
 	return s, nil
 }
 

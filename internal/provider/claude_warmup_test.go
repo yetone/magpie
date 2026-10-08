@@ -55,7 +55,7 @@ func TestReproIdleWindowNeverWarmedAgain(t *testing.T) {
 		},
 		expect: claudeWindowsExpected, warmed: func(user string) { warmed = append(warmed, user) }}
 	for i := 0; i < 3; i++ { // three failures: given up
-		w.warmNow(context.Background(), "all", "")
+		w.warmNow(context.Background(), "all", nil)
 		now = now.Add(5 * time.Minute)
 	}
 	if sent != 3 || len(warmed) != 0 {
@@ -64,7 +64,7 @@ func TestReproIdleWindowNeverWarmedAgain(t *testing.T) {
 	fail = false
 	before := sent
 	for i := 0; i < 10; i++ { // the account is still idle, and sending works now
-		w.warmNow(context.Background(), "all", "")
+		w.warmNow(context.Background(), "all", nil)
 		now = now.Add(5 * time.Minute)
 	}
 	// 15 minutes after giving up, then 30 after that: not every round
@@ -78,7 +78,7 @@ func TestReproIdleWindowNeverWarmedAgain(t *testing.T) {
 	idle = SubscriptionQuota{Windows: []QuotaWindow{win("5 hours", fiveHours, 1, now.Add(fiveHours)), win("7 days", week, 1, now.Add(week))}}
 	before = sent
 	for i := 0; i < 20; i++ {
-		w.warmNow(context.Background(), "all", "")
+		w.warmNow(context.Background(), "all", nil)
 		now = now.Add(5 * time.Minute)
 	}
 	if sent != before {
@@ -91,16 +91,16 @@ func TestReproIdleWindowNeverWarmedAgain(t *testing.T) {
 	w2.usage = func(context.Context) map[string]SubscriptionQuota {
 		return map[string]SubscriptionQuota{"b@x": {Windows: []QuotaWindow{}}}
 	}
-	if rs := w2.warmNow(context.Background(), "all", ""); sent == 0 || len(rs) != 1 || strings.Join(rs[0].Windows, ",") != "5 hours,7 days" {
+	if rs := w2.warmNow(context.Background(), "all", nil); sent == 0 || len(rs) != 1 || strings.Join(rs[0].Windows, ",") != "5 hours,7 days" {
 		t.Errorf("windows absent from the usage reply: %+v", rs)
 	}
 	// weekly only: the week; and none but those an account is known to have
 	w2.path = filepath.Join(t.TempDir(), "w3.json")
-	if rs := w2.warmNow(context.Background(), "week", ""); len(rs) != 1 || strings.Join(rs[0].Windows, ",") != "7 days" {
+	if rs := w2.warmNow(context.Background(), "week", nil); len(rs) != 1 || strings.Join(rs[0].Windows, ",") != "7 days" {
 		t.Errorf("weekly: %+v", rs)
 	}
 	w2.path, w2.expect = filepath.Join(t.TempDir(), "w4.json"), nil
-	if rs := w2.warmNow(context.Background(), "all", ""); len(rs) != 0 {
+	if rs := w2.warmNow(context.Background(), "all", nil); len(rs) != 0 {
 		t.Errorf("no windows expected: %+v", rs)
 	}
 }
@@ -117,7 +117,7 @@ func TestWarmRetryBacksOff(t *testing.T) {
 		},
 		send: func(context.Context, string) error { at = append(at, now.Sub(start).String()); return nil }}
 	for now.Sub(start) < 16*time.Hour {
-		w.warmNow(context.Background(), "week", "")
+		w.warmNow(context.Background(), "week", nil)
 		now = now.Add(5 * time.Minute)
 	}
 	if want := "0s,15m0s,45m0s,1h45m0s,3h45m0s,7h45m0s,11h45m0s,15h45m0s"; strings.Join(at, ",") != want {
@@ -131,7 +131,7 @@ func TestWarmRetryBacksOff(t *testing.T) {
 func TestUsageReadKicksTheWarmUp(t *testing.T) {
 	var mu sync.Mutex
 	which := "all"
-	prefs := func() (string, string) { mu.Lock(); defer mu.Unlock(); return which, "" }
+	prefs := func() (string, []string) { mu.Lock(); defer mu.Unlock(); return which, nil }
 	sent := make(chan string, 8)
 	usage := map[string]SubscriptionQuota{"a@x": {Windows: []QuotaWindow{}}}
 	w := codexWarmer{path: filepath.Join(t.TempDir(), "w.json"), now: time.Now,

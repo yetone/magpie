@@ -85,7 +85,7 @@ func (s *Server) searchBy(ctx context.Context, p provider.Provider, model, query
 // kimiSearch asks a Kimi Code plan's search service.
 func (s *Server) kimiSearch(ctx context.Context, p provider.Provider, query string) (string, []Hit, error) {
 	// the service gives itself 30 s, as kimi-cli asks
-	ctx, cancel := context.WithTimeout(ctx, searchTimeout/2)
+	ctx, cancel := context.WithTimeout(s.metered(ctx, p, ""), searchTimeout/2)
 	defer cancel()
 	body, _ := json.Marshal(map[string]any{"text_query": query, "limit": searchHits, "enable_page_crawling": false, "timeout_seconds": 30})
 	r, err := http.NewRequestWithContext(ctx, http.MethodPost, provider.KimiCodeSearch(p), bytes.NewReader(body))

@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/agentenv"
+	"github.com/yetone/magpie/internal/desktopdir"
 )
 
 var callT0 = time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
@@ -436,10 +438,23 @@ func TestDesktopDataDirs(t *testing.T) {
 	t.Setenv("HOME", "/home/u")
 	t.Setenv("USERPROFILE", "/home/u")
 	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("LOCALAPPDATA", filepath.Join(t.TempDir(), "Local"))
+	dir := t.TempDir()
+	t.Setenv("LOCALAPPDATA", filepath.Join(dir, "Local"))
+	t.Setenv("APPDATA", filepath.Join(dir, "Roaming"))
 	ds := desktopDataDirs()
-	if len(ds) != 2 || filepath.Base(ds[0]) != "Claude" || filepath.Base(ds[1]) != "Claude-3p" {
+	// on Windows Desktop's own data is %APPDATA%\Claude, beside
+	// %LOCALAPPDATA%'s Claude and Claude-3p
+	want := []string{"Claude", "Claude-3p"}
+	if runtime.GOOS == "windows" {
+		want = []string{filepath.Join("Roaming", "Claude"), filepath.Join("Local", "Claude"), filepath.Join("Local", "Claude-3p")}
+	}
+	if len(ds) != len(want) {
 		t.Fatalf("dirs: %v", ds)
+	}
+	for i, w := range want {
+		if !strings.HasSuffix(ds[i], string(filepath.Separator)+w) {
+			t.Fatalf("dirs: %v, want %v", ds, want)
+		}
 	}
 }
 
@@ -573,5 +588,37 @@ func TestCallsWorkflowAgents(t *testing.T) {
 		if bare(cs[i]) != want[i] {
 			t.Errorf("call %d:\n got %+v\nwant %+v", i, bare(cs[i]), want[i])
 		}
+	}
+}
+
+// Kilig on Discord: an MSIX Claude Desktop (Windows 10 LTSC) keeps Cowork's
+// sessions in its package's LocalCache\Roaming\Claude, nothing in
+// %APPDATA%\Claude; their calls are read from there.
+func TestCallsCoworkMSIX(t *testing.T) {
+	d := setupCalls(t)
+	old := desktopdir.OS
+	desktopdir.OS = "windows"
+	callDesktopDirs = desktopDataDirs
+	t.Cleanup(func() { desktopdir.OS = old })
+	home := filepath.Join(t.TempDir(), "home")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	local, roaming := filepath.Join(home, "AppData", "Local"), filepath.Join(home, "AppData", "Roaming")
+	t.Setenv("LOCALAPPDATA", local)
+	t.Setenv("APPDATA", roaming)
+	os.MkdirAll(roaming, 0o755)
+	data := filepath.Join(local, "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache", "Roaming", "Claude")
+	writeLines(t, filepath.Join(data, "Local State"), `{}`)
+
+	if ds := desktopDataDirs(); len(ds) != 3 || ds[0] != data {
+		t.Fatalf("dirs: %v", ds)
+	}
+	cw := filepath.Join(data, "local-agent-mode-sessions", "acct", "org", "local_abc", ".claude", "projects", "-sessions-x")
+	writeLines(t, filepath.Join(cw, "cw1.jsonl"), swap(claudeMsg("c1", "claude-sonnet-5-5", 5, 6, 7, 8, 3), `"entrypoint":"cli"`, `"entrypoint":"local-agent"`))
+	writeLines(t, filepath.Join(d.claude, "projects", "-p", "sess1.jsonl"), claudeMsg("m1", "claude-opus-5-5", 1, 2, 3, 4, 1))
+	Reset()
+	cs := Calls(time.Time{})
+	if len(cs) != 2 || cs[0].Agent != "claude-desktop" || cs[0].Tokens != (Tokens{5, 6, 7, 8, 0}) || cs[1].Agent != "claude" {
+		t.Fatalf("calls: %+v", cs)
 	}
 }

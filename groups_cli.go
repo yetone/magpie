@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -557,6 +558,10 @@ func groupCmd(args []string) error {
 			return err
 		}
 		fmt.Println(green.Render("✓"), "saved", bold.Render(g.Name))
+		if slices.ContainsFunc(rest[1:], func(kv string) bool { return strings.HasPrefix(strings.ToLower(kv), "name=") }) {
+			// a new name isn't a new id: say what agents still ask for
+			fmt.Println(muted.Render("  its id stays " + g.ID + ": agents ask for " + provider.GroupPrefix + g.ID + " (a client given the name may ask by the name too)"))
+		}
 		return showGroup(g)
 	case "rm", "remove", "delete":
 		if len(rest) < 1 {
@@ -903,7 +908,7 @@ func groups() error {
 			shown := typedMember(g, id)
 			switch {
 			case !served:
-				ms = append(ms, faint.Render(shown+" (not served)"))
+				ms = append(ms, faint.Render(shown+" ("+whyNotServed(model)+")"))
 			case picked:
 				ms = append(ms, green.Render("● "+shown))
 			case g.Routing == provider.Manual:
@@ -986,7 +991,8 @@ func showGroup(g provider.Group) error {
 			}
 			line += muted.Render("  " + l)
 		} else {
-			line = faint.Render(line) + amber.Render("  not served now, skipped")
+			model, _ := provider.MemberEffort(id)
+			line = faint.Render(line) + amber.Render("  "+whyNotServed(model)+" now, skipped")
 		}
 		kv(k, line)
 	}
@@ -1035,4 +1041,26 @@ func showGroup(g provider.Group) error {
 		kv("used by", green.Render(strings.Join(u, ", ")))
 	}
 	return nil
+}
+
+// whyNotServed is why a group's member isn't served: most often a model its
+// provider's list has but doesn't expose, which `magpie provider models
+// <id> +<model>` puts right (MOMO on Discord: opencode-go/deepseek-flash).
+func whyNotServed(member string) string {
+	pid, model, ok := strings.Cut(member, "/")
+	if !ok || strings.HasPrefix(member, provider.GroupPrefix) {
+		return "not served"
+	}
+	p, err := provider.Find(pid)
+	if err != nil {
+		return "not served: no provider " + pid
+	}
+	if !p.On() {
+		return "not served: " + p.Name + " is off"
+	}
+	if slices.ContainsFunc(p.Available(), func(m catalog.Model) bool { return m.ID == model }) &&
+		!slices.ContainsFunc(p.Exposed(), func(m catalog.Model) bool { return m.ID == model }) {
+		return "not served: not exposed · magpie provider models " + p.ID + " +" + model
+	}
+	return "not served"
 }

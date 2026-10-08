@@ -99,6 +99,9 @@ type WorkBuddyCheckin struct {
 	Credit  float64   `json:"credit,omitempty"`
 	Streak  int       `json:"streak,omitempty"`
 	Msg     string    `json:"msg,omitempty"`
+	// ValidUntil is a campaign's end, when a successful answer must be
+	// checked again, even if the Beijing day hasn't changed.
+	ValidUntil time.Time `json:"until,omitzero"`
 	// Offline is a failure that never reached WorkBuddy, and Tries how
 	// many before it the same day did the same.
 	Offline bool `json:"offline,omitempty"`

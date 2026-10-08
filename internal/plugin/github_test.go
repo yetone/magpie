@@ -52,6 +52,7 @@ func fakeGitHub(t *testing.T, up *atomic.Bool, asked *atomic.Int32) {
 		like("someone/word-guard", map[string]any{"description": "word guard", "stargazers_count": 3, "license": nil}),
 		like("alfaoz/opencode-see-image", nil),
 		like("someone/flaky-entry", map[string]any{"license": map[string]any{"key": "other", "spdx_id": "NOASSERTION"}}),
+		like("cyberElar/magpie-x-search", nil),
 		like("forker/opencode-claude-auth", map[string]any{"fork": true}),
 		like("old/opencode-old", map[string]any{"archived": true}),
 		like("magpie-community/plugins", nil))
@@ -122,7 +123,9 @@ func TestTaggedRepos(t *testing.T) {
 	}
 	// iPolloWork and learn-opencode (a workspace and a course) have no
 	// index.js to load, nor see-image its dist: installed from GitHub,
-	// none would load
+	// none would load. magpie-x-search (real, #1327) is on npm from its
+	// repository, but a command alone, an MCP server: npm's copy names no
+	// file to load, and it has no index.js
 	want := "rynfar/meridian griffinmartin/opencode-claude-auth slkiser/opencode-quota someone/word-guard someone/flaky-entry"
 	if strings.Join(repos, " ") != want {
 		t.Fatalf("repos %v\nwant %s", repos, want)

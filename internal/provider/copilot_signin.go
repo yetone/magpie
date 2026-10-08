@@ -113,6 +113,7 @@ func startCopilotSignIn(s *signInFlow) error {
 				fail(err.Error())
 				return
 			}
+			copilotProbeEditor(ctx, user, host)
 			if err := addCopilotLogin(user, plan, tok.Token, host); err != nil {
 				fail(err.Error())
 				return

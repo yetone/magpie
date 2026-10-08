@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/yetone/magpie/internal/desktopdir"
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -345,5 +346,50 @@ func TestClaudeDesktopTiers(t *testing.T) {
 	}
 	if err := f.Set(""); err != nil || f.Get() != "" {
 		t.Fatalf("unset: %v %q", err, f.Get())
+	}
+}
+
+// Kilig on Discord: Claude Desktop from its setup.exe on Windows 10 LTSC
+// runs as an MSIX package, its data in
+// %LOCALAPPDATA%\Packages\Claude_<publisher>\LocalCache\Roaming\Claude and
+// nothing in %APPDATA%\Claude. It is detected, and magpie's switch writes
+// the package's folders, which the packaged app reads, not the usual ones
+// it doesn't see.
+func TestClaudeDesktopMSIX(t *testing.T) {
+	home, _ := desktopSandbox(t)
+	old := desktopdir.OS
+	desktopdir.OS = "windows"
+	t.Cleanup(func() { desktopdir.OS = old })
+	local, roaming := filepath.Join(home, "AppData", "Local"), filepath.Join(home, "AppData", "Roaming")
+	os.MkdirAll(roaming, 0o755)
+	pkg := filepath.Join(local, "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache")
+	data := filepath.Join(pkg, "Roaming", "Claude")
+	for _, d := range []string{"claude-code-sessions", "local-agent-mode-sessions", "Local Storage", "IndexedDB", "logs"} {
+		os.MkdirAll(filepath.Join(data, d), 0o755)
+	}
+	os.WriteFile(filepath.Join(data, "Local State"), []byte(`{}`), 0o644)
+	os.MkdirAll(filepath.Join(pkg, "Local", "Claude", "logs"), 0o755)
+
+	a := claudeDesktop(home)
+	if !a.Detected() {
+		t.Fatal("an MSIX Claude Desktop isn't detected")
+	}
+	if want := filepath.Join(pkg, "Local", "Claude", "claude_desktop_config.json"); a.Path != want {
+		t.Errorf("path %s, want %s", a.Path, want)
+	}
+	if err := a.Field("provider").Set("magpie"); err != nil {
+		t.Fatal(err)
+	}
+	p := desktopPathsOf(filepath.Join(pkg, "Local", "Claude"), filepath.Join(pkg, "Local", "Claude-3p"))
+	if !desktopWired(p) || a.Field("provider").Get() != magpieID {
+		t.Fatalf("not wired in the package's folders: %v", desktopTree(t, p))
+	}
+	if m := desktopJSON(t, p.config3p); m["deploymentMode"] != "3p" {
+		t.Errorf("Claude-3p: %v", m)
+	}
+	for _, d := range []string{filepath.Join(roaming, "Claude"), filepath.Join(local, "Claude"), filepath.Join(local, "Claude-3p")} {
+		if _, err := os.Stat(d); err == nil {
+			t.Errorf("%s written, which the packaged Desktop doesn't read", d)
+		}
 	}
 }

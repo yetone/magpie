@@ -57,12 +57,14 @@ async function wheelTo(page, l) {
     await page.mouse.wheel(0, 120);
     await page.waitForTimeout(50);
   }
-  // a wheel scroll is eased: hovered while it still runs, the cell moves out
-  // from under the pointer and its tip closes again. Wait until it stops.
-  const view = page.locator("#view-usage");
-  for (let last = -1, i = 0; i < 40; i++) {
+  // a wheel scroll is eased, and a window's cells scale in one after
+  // another (ctx-cell): hovered while either runs, Chromium scrolls the
+  // view to the cell, the app puts that scroll back, the cell moves out
+  // from under the pointer and its tip closes again. Wait until the target
+  // stops moving.
+  for (let last = null, i = 0; i < 40; i++) {
     await page.waitForTimeout(100);
-    const now = await view.evaluate((v) => v.scrollTop);
+    const now = await l.evaluate((b) => { const r = b.getBoundingClientRect(); return r.x + "," + r.y; });
     if (now === last) break;
     last = now;
   }
@@ -179,4 +181,59 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
     }
   }
+}
+
+// context.js comes after app.js, which shows the page and reads the state
+// before it is there: the state answered first, the tab still loads at once
+// rather than at the refresh's first tick, five seconds on
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: the Context tab loads when context.js arrives after the state`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await (await browser.newContext({ viewport: { width: 1100, height: 900 } })).newPage();
+    const errors = [], asked = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    const base = serve("en", asked);
+    let answered;
+    const stateDone = new Promise((res) => { answered = res; });
+    await page.route("**/*", async (r) => {
+      const p = new URL(r.request().url()).pathname;
+      if (p === "/context.js") await stateDone.then(() => new Promise((res) => setTimeout(res, 150)));
+      await base(r);
+      if (p === "/api/state") answered();
+    });
+    await page.addInitScript(() => { try { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+    await page.goto("http://magpie.test/?view=usage");
+    await page.locator(".ctx-agent", { hasText: "Codex" }).waitFor({ timeout: 2500 });
+    assert.equal(asked[0], "7");
+    assert.doesNotMatch(await page.locator("#status").innerText(), /loadContext|not a function/);
+    assert.deepEqual(errors, []);
+  });
+}
+
+// the routing history can answer before the state, which names the agents:
+// the cards drawn first by the agents' ids take their names once the state
+// is in, though the next read brings the same history
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: the Context tab names its agents when the state answers after the history`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await (await browser.newContext({ viewport: { width: 1100, height: 900 } })).newPage();
+    page.setDefaultTimeout(5000);
+    const errors = [], asked = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    const base = serve("en", asked);
+    let drawn;
+    const historyDrawn = new Promise((res) => { drawn = res; });
+    await page.route("**/*", async (r) => {
+      if (new URL(r.request().url()).pathname === "/api/state") await historyDrawn;
+      await base(r);
+    });
+    await page.addInitScript(() => { try { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+    await page.goto("http://magpie.test/?view=usage");
+    await page.waitForFunction(() => document.querySelectorAll(".ctx-agent").length === 2);
+    drawn();
+    await page.waitForFunction(() => [...document.querySelectorAll(".ctx-agent .ctx-who b")].map((b) => b.textContent).join() === "Codex,Claude Code");
+    assert.deepEqual(errors, []);
+  });
 }

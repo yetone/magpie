@@ -287,7 +287,7 @@ func qoderUser(c *qoder.Credential) *qoder.User {
 }
 
 // qoderSave keeps c under its site's accounts.
-func qoderSave(c qoder.Credential) error {
+func qoderSave(c qoder.Credential) (err error) {
 	site := c.OnSite()
 	agent := site.ID
 	if c.UID == "" || c.Token == "" {
@@ -299,6 +299,13 @@ func qoderSave(c qoder.Credential) error {
 			return err
 		}
 	}
+	// its kept usage reading was read under the old sign-in (as
+	// addSideLogin drops it), once the locks are let go
+	defer func() {
+		if err == nil {
+			StaleAllowance(agent, qoderWho(c))
+		}
+	}()
 	qoderMu.Lock()
 	defer qoderMu.Unlock()
 	if c.MachineID == "" {

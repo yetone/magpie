@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/access"
 )
 
 // #969 (pan17): the DeepSeek Harness desktop app, wired through magpie, failed
@@ -66,6 +68,32 @@ func TestDshDesktopGetsTheKeyFromItsStore(t *testing.T) {
 	b, _ = os.ReadFile(creds)
 	if s := string(b); strings.Contains(s, dshKeyRef) || !strings.Contains(s, "DEEPSEEK_API_KEY: sk-mine") || !strings.Contains(s, "# mine") {
 		t.Fatalf("back to dsh's own:\n%s", s)
+	}
+}
+
+// #1332: a caller key this gateway issued, held in dsh's own store, takes dsh
+// through magpie all the same — the store wins over .env (#969) and the
+// gateway authenticates the key — so the check is quiet. A key the gateway
+// doesn't take still is drift.
+func TestDshStoreHoldingAGatewayCallerKey(t *testing.T) {
+	home, dir, web := dshRouteHome(t)
+	os.WriteFile(web, []byte("# Your patch layer for this dsh profile.\n"), 0o644)
+	a := dsh(home)
+	if err := a.Field("model").Set("magpie/deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	secret, err := access.Update("add-key", access.Change{Name: "dsh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	creds := filepath.Join(dir, ".credentials.yaml")
+	os.WriteFile(creds, []byte("version: 1\nrefs:\n  "+dshKeyRef+": "+secret+"\n"), 0o600)
+	if d := a.Check(); d != "" {
+		t.Fatalf("a key the gateway issued is drift: %s", d)
+	}
+	os.WriteFile(creds, []byte("version: 1\nrefs:\n  "+dshKeyRef+": sk-not-this-gateways\n"), 0o600)
+	if d := a.Check(); !strings.Contains(d, "holds another") {
+		t.Fatalf("a key the gateway doesn't take is not reported: %q", d)
 	}
 }
 

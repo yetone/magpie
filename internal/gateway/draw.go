@@ -52,13 +52,26 @@ func drawer() (string, bool) {
 		return "", false
 	case "":
 	default:
-		if _, _, ok := provider.Resolve(v); ok {
+		if pickedMissing(v) == "" {
 			return v, true
 		}
 	}
 	m := AutoDrawer()
 	return m, m != ""
 }
+
+// Drawer is the model a request that names none draws with (drawer), as
+// provider/model: "" when image generation is off or no provider draws.
+func Drawer() string {
+	m, _ := drawer()
+	return m
+}
+
+// DrawerMissing is the model Settings › Models › Image generation names
+// when magpie can't find it any more, so that AutoDrawer's draws in its
+// place, as VisionMissing is Image recognition's. "" when none is named,
+// it is off, or it resolves.
+func DrawerMissing() string { return pickedMissing(settings.Load().ImageGen) }
 
 func resolveDrawing(id string) (provider.Provider, string, bool) {
 	if strings.Contains(id, "/") {
@@ -147,8 +160,11 @@ func Drawers(p provider.Provider) []catalog.Model {
 	if p.Account != nil || (p.Base(provider.Chat) == "" && p.Base(provider.Responses) == "") {
 		return nil
 	}
-	var out []catalog.Model
-	have := map[string]bool{}
+	out := p.PlanDrawers()
+	have := make(map[string]bool, len(out))
+	for _, m := range out {
+		have[m.ID] = true
+	}
 	for _, c := range p.Catalogs() {
 		for _, m := range catalog.Drawers(c) {
 			if !have[m.ID] {
@@ -271,6 +287,10 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 		if d.Model == "" {
 			m, ok := drawer()
 			if !ok {
+				if v := DrawerMissing(); v != "" {
+					fail(400, fmt.Sprintf("no model to draw with: the Image generation model picked in magpie's Settings, %q, isn't set up any more: pick another in Settings → Models → Image generation, or name one", v))
+					return
+				}
 				fail(400, "no model to draw with: pick one in magpie's Settings → Images → Image generation, or name one")
 				return
 			}
@@ -673,7 +693,7 @@ func (s *Server) sendAs(ctx context.Context, p provider.Provider, method, url, c
 
 // sendWith is sendAs with headers of the vendor's own besides.
 func (s *Server) sendWith(ctx context.Context, p provider.Provider, method, url, contentType string, body []byte, sign bool, extra http.Header) ([]byte, int, error) {
-	ctx = p.Via(ctx)
+	ctx = s.metered(p.Via(ctx), p, "") // counted against its MaxRPM (rpm.go)
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, 500, err

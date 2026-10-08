@@ -90,7 +90,7 @@ func (f *fakeWarm) warmer(path string) codexWarmer {
 
 func (f *fakeWarm) run(t *testing.T, path, which string) []CodexWarm {
 	t.Helper()
-	return f.warmer(path).warmNow(context.Background(), which, "")
+	return f.warmer(path).warmNow(context.Background(), which, nil)
 }
 
 func TestCodexWarmOncePerReset(t *testing.T) {
@@ -254,7 +254,7 @@ func TestCodexWarmRequest(t *testing.T) {
 	loginUsageCache.m = nil
 	loginUsageCache.Unlock()
 	w := codexWarmer{path: codexWarmPath(), now: time.Now, usage: codexWarmUsage, send: warmCodexLogin}
-	rs := w.warmNow(context.Background(), "week", "")
+	rs := w.warmNow(context.Background(), "week", nil)
 	if len(rs) != 1 || rs[0].User != "me@example.com" || rs[0].Err != "" {
 		t.Fatalf("warm: %+v", rs)
 	}
@@ -275,7 +275,7 @@ func TestCodexWarmRequest(t *testing.T) {
 		t.Fatalf("headers: %v", hdr)
 	}
 	// a second look, the read cached: nothing more is sent
-	if rs := w.warmNow(context.Background(), "week", ""); len(rs) != 0 || len(got) != 1 {
+	if rs := w.warmNow(context.Background(), "week", nil); len(rs) != 0 || len(got) != 1 {
 		t.Fatalf("again: %+v", rs)
 	}
 	if CodexWarmed()["me@example.com"].IsZero() {

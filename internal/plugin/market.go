@@ -322,7 +322,10 @@ type npmLatest struct {
 	Homepage    string `json:"homepage"`
 	Repository  any    `json:"repository"`
 	Author      any    `json:"author"`
-	NPMUser     struct {
+	// Main and Exports are what importing it loads (pkgEntry)
+	Main    string          `json:"main"`
+	Exports json.RawMessage `json:"exports"`
+	NPMUser struct {
 		Name string `json:"name"`
 	} `json:"_npmUser"`
 }

@@ -156,6 +156,9 @@ type providerJSON struct {
 	// (0: no bound)
 	QueueLimit int `json:"queueLimit,omitempty"`
 	QueueWait  int `json:"queueWait,omitempty"`
+	// how many requests each key or account sends the vendor in any
+	// minute, 0 for no limit (coeo91 on Discord)
+	MaxRPM int `json:"maxRPM,omitempty"`
 	// what it charges against the official price, 0 for that (#819)
 	PriceRate float64     `json:"priceRate,omitempty"`
 	Models    []modelJSON `json:"models"`            // everything the vendor lists, exposed ones flagged
@@ -289,6 +292,9 @@ type presetJSON struct {
 	// ZhipuTeam: a key of it may be on a team's GLM Coding Plan, whose
 	// organization and project the editor offers to take
 	ZhipuTeam bool `json:"zhipuTeam,omitempty"`
+	// a partner's tagline by language, and the languages it is listed in
+	Notes map[string]string `json:"notes,omitempty"`
+	Langs []string          `json:"langs,omitempty"`
 }
 
 type gatewayJSON struct {
@@ -418,7 +424,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		Ready: p.Ready(), Chosen: p.Models, Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Unlisted: p.Unlisted, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
-		AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait,
+		AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
 	}
 	if out.Fallback == nil {
@@ -644,6 +650,10 @@ func providersState() providersJSON {
 		have[p.ID], have[p.Preset] = true, true
 		s.Providers = append(s.Providers, providerInfo(p, uses))
 	}
+	// partners first, as the add sheet lists them
+	for _, pa := range provider.Partners() {
+		s.Presets = append(s.Presets, presetJSON{PresetDef: pa.PresetDef, Added: have[pa.ID], Notes: pa.Notes, Langs: pa.Langs})
+	}
 	for _, pr := range provider.Presets() {
 		team := provider.TakesZhipuTeam(provider.Provider{Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic})
 		s.Presets = append(s.Presets, presetJSON{PresetDef: pr, Added: have[pr.ID], ZhipuTeam: team})
@@ -834,6 +844,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// null for no bound; a save that leaves them out keeps them
 			QueueLimit json.RawMessage `json:"queueLimit"`
 			QueueWait  json.RawMessage `json:"queueWait"`
+			// MaxRPM is how many requests each key or account sends the
+			// vendor in any minute: a number, 0 or null for no limit; a
+			// save that leaves it out keeps it
+			MaxRPM json.RawMessage `json:"maxRPM"`
 			// Limit, for accountconcurrency: the account's or key's own
 			// limit, 0 for none, null for the provider's (#892)
 			Limit *int `json:"limit"`
@@ -1021,6 +1035,16 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 			in.QueueLimit, in.QueueWait = ql, qw
+			rpm, keepRPM, err := queueOf(req.MaxRPM, "requests a minute")
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			if err := provider.CheckRPM(rpm); err != nil {
+				fail(rw, err)
+				return
+			}
+			in.MaxRPM = rpm
 			rate, keepRate, err := priceRateOf(req.PriceRate)
 			if err != nil {
 				fail(rw, err)
@@ -1082,6 +1106,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				}
 				if keepQW && old != nil {
 					in.QueueWait = old.QueueWait
+				}
+				if keepRPM && old != nil {
+					in.MaxRPM = old.MaxRPM
 				}
 				if keepRate && old != nil {
 					in.PriceRate = old.PriceRate

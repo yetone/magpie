@@ -223,20 +223,31 @@ func askTagged(ctx context.Context) ([]Tagged, error) {
 			// built only to publish), so it is installed from npm
 			b, err := fetchJSON(pc, npmRegistry+"/"+npmPath(pj.Name)+"/latest", 1<<20)
 			known := err == nil || errors.Is(err, errNotFound)
+			// npmNames is whether npm's copy names what it loads (main,
+			// exports); one that names nothing loads an index file
+			npmNames := false
 			if err == nil {
 				var l npmLatest
 				if json.Unmarshal(b, &l) == nil && l.Version != "" && strings.EqualFold(githubRepo(repoURL(l.Repository)), t.Repo) {
 					t.Spec, t.Version = pj.Name, l.Version
+					npmNames = l.Main != "" || len(l.Exports) > 0
 				}
 			}
 			// installed from the repository, the file it loads must be in
 			// it: one whose dist is built only to publish couldn't load
 			// (GitHub not answering is no answer, and keeps it; so is a
-			// name Bun would add .js or /index.js to)
-			if IsGit(t.Spec) {
+			// name Bun would add .js or /index.js to). Installed from npm,
+			// a copy that names no file loads index.js, which the
+			// repository has too when it is a plugin at all: a package
+			// that is only a command (bin), an MCP server, has none and
+			// would never load (#1327)
+			if IsGit(t.Spec) || !npmNames {
 				entry := pj.Magpie.Middleware
 				if t.Kind != "middleware" {
 					entry = pkgEntry(pj.Exports, pj.Main)
+					if !IsGit(t.Spec) {
+						entry = pkgEntry(nil, "")
+					}
 				}
 				if path.Ext(entry) != "" {
 					_, err := fetchJSON(pc, githubRaw+"/"+t.Repo+"/"+url.PathEscape(branch)+"/"+strings.TrimPrefix(path.Clean("/"+entry), "/"), 1)

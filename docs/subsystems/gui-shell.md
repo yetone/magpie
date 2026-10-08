@@ -24,10 +24,44 @@ three.
 2. `startBackend` brings up the gateway, or finds another magpie serving it.
 3. The panel and the window load `index.html` from `Handler`. `boot.js` passes the saved language, theme, text size and desktop font choices before the first paint.
 4. The page reads `GET /api/state` and writes through `POST` routes. Each write answers with the new state, built under `held`.
-5. Closing the window hides it. On the Mac a full-screen window first leaves full screen (`closeStep`).
+5. Closing the window hides it. On the Mac a full-screen window first leaves full screen (`closeStep`). The system's close on the panel (a title bar's X, Alt+F4, a window manager's close key) hides it as Escape does, so the tray icon opens it again; a panel lightweight mode let go, no longer `h.panel`, closes (`makePanel`, `TestPanelCloseHidesIt`).
 6. The window opens as it was last left. Its settled size and whether it was maximised are kept in `settings.Window` and `settings.WindowMaximised` (`settle`; per machine, see `KeepOwn`). A maximised window keeps the size it restores to. `makeMain` opens it at that size (`openSize`). On its first show, `placeMain` maximises it again on the Mac and Windows (on Windows once the page has come). On Linux, `makeMain` makes it maximised with `StartState`. On Windows a size larger than the screen's work area is fitted and centred (`fitRoom`), and the larger size stays kept. The window's position is not kept.
 
 ## Constraints and failure behavior
+
+### Routing purpose filter
+
+The request heading's purpose menu in [`routing.js`](../../internal/gui/assets/routing.js)
+uses `openProtoMenu`'s live checkbox selection: each tick immediately shows
+requests matching any selected purpose, with the menu kept open. An empty
+selection, All purposes or Clear filter restores every purpose without
+changing the day or request/session view. A live menu stays open when its
+redraw clamps the list's scroll; the reader scrolling outside still dismisses it.
+Choosing All purposes closes the menu and returns keyboard focus to the
+purpose button without scrolling; unticking the last checkbox keeps the
+menu open and focused on that checkbox.
+Counts, the current story and replay
+follow the same filtered list. Selected purposes remain available when a day
+has no matching requests. Opening a request from another page clears the
+filter only when that request is excluded. Usage's purpose picker remains a
+single choice sent to the ledger API. See `purpose-filter.test.cjs` and
+`routing-purpose-state.test.cjs`.
+
+### Routing key folds
+
+Three or more API keys of one provider standing next to each other for one
+model (same fixed effort, fallback and group-in-group heading) fold into one
+stage row, `li.rt-fold` in [`routing.js`](../../internal/gui/assets/routing.js)
+(`FOLD_AT`, `rebuild`). It shows the key count and the keys' state together:
+the key that is lit and what it is doing, how many are available and how
+many rest. Requests that land on a folded key fly to the fold (`shownRow`).
+Clicking it (or Enter / Space) shows each key in place, wired from the fold.
+Accounts and keys folds the same provider's keys into one `.rt-keys` row
+with their summed tally. Which folds are open is kept per reader in
+localStorage `magpie.routingKeysOpen` (`provider/model` on the stage,
+`provider/*` in the list). Display only: the gateway's order and choice of
+key don't change. Two keys stay two rows. See
+`routing-keys-fold.test.cjs`.
 
 ### Desktop fonts
 
@@ -74,6 +108,7 @@ axis controls.
 - There are no native `<select>` elements and no colored left-border stripes. State is shown with a dot or a swatch.
 - The Usage page's cards and the tray panel's Allowances tab share one order, `settings.UsageOrder` (`byUsageOrder`). The panel's *Arrange* (`panelArrange`) moves rows in it and hides subscriptions from that tab alone (`settings.PanelUsageHidden`); both save through `POST /api/usage/arrange`, which changes only the field it is sent, and the Settings save keeps both. Hiding is display only: a menu bar cell's card shows though hidden (`panelPeek`). See `TestUsageArrangePanelHidden` and `panel-arrange.test.cjs`.
 - The page must work in Chromium (Windows' WebView2) and WebKit (macOS, and WebKitGTK on Linux). GUI tests run in both engines.
+- On Linux the panel is frameless and the main window has a hidden title bar (`plainTitlebar`). GTK 3 asks KDE's Wayland session (KWin's decoration protocol) for a frame drawn by KWin on any window without client-side decorations, an undecorated one too, so `ownFrame` tells KWin the panel draws its own on each realize (#1283). GTK 4 builds ask for none themselves.
 - Tests never touch a live agent config. The package's `TestMain` runs under `testenv`'s home of its own. A macOS test that shows windows runs them in a process of its own through `runAppKit` ([`appkit_darwin_test.go`](../../internal/gui/appkit_darwin_test.go)). AppKit and WebKit take their home from the account, not from HOME, so `runAppKit` gives them a temporary one with `CFFIXED_USER_HOME`; appearance, contrast and languages still come from the account. The test fails when that process leaves a folder in the real `~/Library/WebKit` or `~/Library/Caches`. Playwright tests serve `assets/` with isolated `/api` fixtures.
 - `POST /api/settings/codex-auto-review` accepts an empty value (Codex's own choice) or an exact model/group ID in `provider.Served`, including unlisted providers. A known provider with an unknown or empty model name is rejected without changing the saved reviewer or catalog tag. Generic gateway request resolution remains permissive; it is not the validator for this setting. See `Handler` in [`api.go`](../../internal/gui/api.go) and `TestCodexAutoReviewSetting` in [`codex_auto_review_test.go`](../../internal/gui/codex_auto_review_test.go).
 

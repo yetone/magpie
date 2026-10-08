@@ -59,7 +59,7 @@ type packedRow struct {
 	Text                           [28]uint32
 	Tokens                         [6]int64
 	Millis, TTFT, FirstText, Order int64
-	Sent                           int64
+	Sent, Flow                     int64
 	RouteID                        int64
 	Cost                           float64
 	Status                         int32
@@ -101,7 +101,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 		c.Bytes += int64(len(s) + 48)
 		return id
 	}
-	p := packedRow{Time: r.Time, Tokens: [6]int64{int64(r.Input), int64(r.Output), int64(r.CacheRead), int64(r.CacheWrite), int64(r.Reasoning), int64(r.CacheWrite1h)}, Millis: r.Millis, TTFT: r.TTFT, FirstText: r.FirstText, Sent: r.Sent, Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status)}
+	p := packedRow{Time: r.Time, Tokens: [6]int64{int64(r.Input), int64(r.Output), int64(r.CacheRead), int64(r.CacheWrite), int64(r.Reasoning), int64(r.CacheWrite1h)}, Millis: r.Millis, TTFT: r.TTFT, FirstText: r.FirstText, Sent: r.Sent, Flow: r.Flow, Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status)}
 	for i, s := range rowText(&r) {
 		p.Text[i] = intern(*s)
 	}
@@ -133,12 +133,12 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 }
 func (c *rowChunk) row(i int) Row {
 	p := &c.Rows[i]
-	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: p.Millis, TTFT: p.TTFT, FirstText: p.FirstText, Sent: p.Sent, Status: int(p.Status), Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
+	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: p.Millis, TTFT: p.TTFT, FirstText: p.FirstText, Sent: p.Sent, Flow: p.Flow, Status: int(p.Status), Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
 	for i, s := range rowText(&r) {
 		*s = c.Strings[p.Text[i]]
 	}
-	if r.Swapped && SameSpelled(r.Model, r.Served) {
-		r.Swapped = false // kept before a name spelled otherwise was the same
+	if r.Swapped && (SameSpelled(r.Model, r.Served) || GeminiServing(r.Model, r.Served)) {
+		r.Swapped = false // kept before a name spelled otherwise, or Google's serving name, was the same
 	}
 	r.Computer = c.Computer
 	return r

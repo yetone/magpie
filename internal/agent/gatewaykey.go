@@ -40,3 +40,13 @@ func ourKey(k string) bool {
 	}
 	return k != "" && k == access.LANSecret()
 }
+
+// gatewayTakes says the gateway would authenticate a request carrying k: a
+// caller key of this magpie's own (one issued, or a value the user brought),
+// so an agent holding it in its store of its own still goes through magpie
+// (#1332). A key of another magpie's, which this gateway would refuse, is
+// not.
+func gatewayTakes(k string) bool {
+	_, ok := access.Authenticate(k)
+	return ok
+}

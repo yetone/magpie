@@ -31,8 +31,9 @@ type updater struct {
 	latest *update.Release
 	err    string
 	bundle string      // the .app to replace, "" when not in one or stuck
-	stuck  string      // why the .app can't be replaced where it is (update.Stuck)
+	stuck  string      // why the .app or binary can't be replaced where it is (update.Stuck, exeStuck)
 	exe    string      // off the Mac: the binary to replace, "" when not writable
+	exeDir string      // off the Mac: the binary's folder, named when it is stuck there
 	self   os.FileInfo // exe as this process started from it
 	retry  bool        // error: the download failed, and may be tried again
 	mirror string      // error: the mirror the failed download came through (#893)
@@ -71,7 +72,9 @@ type updateJSON struct {
 	Notes   string `json:"notes,omitempty"`
 	URL     string `json:"url,omitempty"`
 	Stuck   string `json:"stuck,omitempty"` // available: why it can't update itself
-	Retry   bool   `json:"retry,omitempty"` // error: a click downloads it again
+	// available, stuck "not-writable": the folder magpie may not write to
+	StuckDir string `json:"stuckDir,omitempty"`
+	Retry    bool   `json:"retry,omitempty"` // error: a click downloads it again
 	// error: the download failed through this mirror (Settings' UpdateMirror),
 	// and GitHub itself may do (#893)
 	Mirror string `json:"mirror,omitempty"`
@@ -104,12 +107,8 @@ func (u *updater) start() {
 			u.bundle = b
 		}
 	} else if runtime.GOOS != "darwin" {
-		if exe, err := update.Executable(); err == nil && (update.Writable(filepath.Dir(exe)) || update.CanElevate()) {
-			u.exe = exe
-			u.self, _ = os.Stat(exe)
-			update.RemoveOld(exe)      // what the last updates on Windows moved aside
-			update.RemoveStaleNew(exe) // what a magpie left running downloaded again
-			u.blocked = update.ReadBlocked(Version)
+		if exe, err := update.Executable(); err == nil {
+			u.placeExe(exe)
 		}
 	}
 	go func() {
@@ -125,6 +124,35 @@ func (u *updater) start() {
 		}
 	}()
 }
+
+// placeExe takes exe, off the Mac, as the binary an update replaces, or
+// says why it can't be (stuck).
+func (u *updater) placeExe(exe string) {
+	u.exeDir = filepath.Dir(exe)
+	if u.stuck = exeStuck(u.exeDir); u.stuck != "" {
+		return
+	}
+	u.exe = exe
+	u.self, _ = os.Stat(exe)
+	update.RemoveOld(exe)      // what the last updates on Windows moved aside
+	update.RemoveStaleNew(exe) // what a magpie left running downloaded again
+	u.blocked = update.ReadBlocked(Version)
+}
+
+// exeStuck says why the binary in dir can't be replaced off the Mac, or ""
+// when it can: "not-writable" when magpie may not write to dir and this
+// system can't ask for the administrator's password. On Windows a magpie.exe
+// kept at C:\ updated only by opening the release page, with nothing saying
+// why (#1277).
+func exeStuck(dir string) string {
+	if update.Writable(dir) || canElevate() {
+		return ""
+	}
+	return "not-writable"
+}
+
+// canElevate is update.CanElevate; tests stand in for it.
+var canElevate = update.CanElevate
 
 // check asks the feed and, when it can, stages the new version.
 func (u *updater) check() {
@@ -352,6 +380,9 @@ func (u *updater) jsonIn(lang string) updateJSON {
 	}
 	if u.state == "available" {
 		j.Stuck = u.stuck
+		if u.stuck == "not-writable" {
+			j.StuckDir = u.exeDir
+		}
 	}
 	if u.state == "downloading" {
 		j.Done, j.Total = u.done, u.total

@@ -10,12 +10,11 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/desktopdir"
 )
 
 // Call is one model call as an agent's own session file records it.
@@ -221,53 +220,11 @@ func callSources() []file {
 	return append(out, workbuddyCallFiles()...)
 }
 
-// desktopDataDirs are Claude Desktop's Claude and Claude-3p folders on this
-// computer, found as desktopDirs in internal/agent's claudedesktop.go does
-// (that package is not one to import from here).
-func desktopDataDirs() []string {
-	home, _ := os.UserHomeDir()
-	switch runtime.GOOS {
-	case "darwin":
-		d := filepath.Join(home, "Library", "Application Support")
-		return []string{filepath.Join(d, "Claude"), filepath.Join(d, "Claude-3p")}
-	case "windows":
-		d := appdir.Getenv("LOCALAPPDATA")
-		if d == "" {
-			d = filepath.Join(home, "AppData", "Local")
-		}
-		return []string{windowsClaudeDir(d, false), windowsClaudeDir(d, true)}
-	}
-	d := appdir.Getenv("XDG_CONFIG_HOME")
-	if d == "" || !filepath.IsAbs(d) {
-		d = filepath.Join(home, ".config")
-	}
-	return []string{filepath.Join(d, "Claude"), filepath.Join(d, "Claude-3p")}
-}
-
-// windowsClaudeDir is %LOCALAPPDATA%\Claude (or Claude-3p), else the first
-// folder there named Claude… (with -3p in it or not).
-func windowsClaudeDir(local string, threep bool) string {
-	name := "Claude"
-	if threep {
-		name = "Claude-3p"
-	}
-	exact := filepath.Join(local, name)
-	if _, err := os.Stat(exact); err == nil {
-		return exact
-	}
-	ents, _ := os.ReadDir(local)
-	var found []string
-	for _, e := range ents {
-		if n := e.Name(); e.IsDir() && strings.HasPrefix(n, "Claude") && strings.Contains(n, "-3p") == threep {
-			found = append(found, n)
-		}
-	}
-	if len(found) == 0 {
-		return exact
-	}
-	sort.Strings(found)
-	return filepath.Join(local, found[0])
-}
+// desktopDataDirs are Claude Desktop's folders on this computer that
+// hold sessions: its own (%APPDATA%\Claude on Windows, or the MSIX
+// package's), the Claude folder magpie writes and Claude-3p, as
+// desktopdir finds them.
+func desktopDataDirs() []string { return desktopdir.Here().All() }
 
 // headLen is how much of a file's start is kept to know it again.
 const headLen = 256

@@ -181,8 +181,8 @@ func TestCodexPromptsSameMtime(t *testing.T) {
 	}
 }
 
-// Codex's Fast mode reaches the ChatGPT backend as service_tier "priority";
-// any other tier is dropped as before.
+// Codex's Fast mode reaches the ChatGPT backend as service_tier "priority",
+// its Ultrafast as "ultrafast"; any other tier is dropped as before.
 func TestCodexBodyServiceTier(t *testing.T) {
 	t.Setenv("CODEX_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
@@ -194,6 +194,9 @@ func TestCodexBodyServiceTier(t *testing.T) {
 	}
 	if v, _ := tier(`{"model":"gpt-6-sol","service_tier":"priority","input":"hi"}`); v != "priority" {
 		t.Errorf("priority: %v", v)
+	}
+	if v, _ := tier(`{"model":"gpt-6-sol","service_tier":"ultrafast","input":"hi"}`); v != "ultrafast" {
+		t.Errorf("ultrafast: %v", v)
 	}
 	for _, s := range []string{`"flex"`, `"auto"`, `"default"`, `"fast"`, `null`} {
 		if v, ok := tier(`{"model":"gpt-6-sol","service_tier":` + s + `,"input":"hi"}`); ok {

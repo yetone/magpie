@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -371,6 +372,15 @@ func Add(ctx context.Context, spec string) (Entry, error) {
 			return Entry{}, err
 		}
 	}
+	if err := notPlugin(Target(spec)); err != nil {
+		// installed just now for this, and nothing loads it: taken out again
+		if !IsPath(spec) && !slices.Contains(slices.Collect(maps.Values(was)), Name(spec)) {
+			if bun, berr := Bun(ctx); berr == nil {
+				_ = bunCommand(ctx, bun, Dir(), "remove", "--ignore-scripts", Name(spec)).Run()
+			}
+		}
+		return Entry{}, err
+	}
 	if err := ensurePi(ctx, Target(spec)); err != nil {
 		return Entry{}, err
 	}
@@ -396,6 +406,52 @@ func Add(ctx context.Context, spec string) (Entry, error) {
 	}
 	Restart()
 	return e, nil
+}
+
+// indexFiles are the files a package that names none loads, as the host
+// looks for them (host.js's INDEX_FILES).
+var indexFiles = []string{"index.ts", "index.tsx", "index.js", "index.mjs", "index.cjs"}
+
+// notPlugin says why the plugin at target is nothing the host can load,
+// or nil: a package that names no file to import (main, exports), has no
+// index file, and is neither pi's nor a middleware — a command alone
+// (bin), an MCP server like magpie-x-search, is installed fine and then
+// never loads (#1327).
+func notPlugin(target string) error {
+	st, err := os.Stat(target)
+	if err != nil || !st.IsDir() || IsPi(target) {
+		return nil
+	}
+	if f, _ := Middleware(target); f != "" {
+		return nil
+	}
+	var pkg struct {
+		Name    string          `json:"name"`
+		Main    string          `json:"main"`
+		Exports json.RawMessage `json:"exports"`
+		Bin     json.RawMessage `json:"bin"`
+	}
+	b, err := os.ReadFile(filepath.Join(target, "package.json"))
+	if err != nil || json.Unmarshal(b, &pkg) != nil {
+		return nil
+	}
+	if strings.TrimSpace(pkg.Main) != "" || len(pkg.Exports) > 0 && string(pkg.Exports) != "null" {
+		return nil
+	}
+	for _, f := range indexFiles {
+		if _, err := os.Stat(filepath.Join(target, f)); err == nil {
+			return nil
+		}
+	}
+	name := pkg.Name
+	if name == "" {
+		name = filepath.Base(target)
+	}
+	why := fmt.Sprintf("%s isn't an OpenCode or magpie plugin: its package names no file to load (no main or exports in package.json, no index file)", name)
+	if len(pkg.Bin) > 0 && string(pkg.Bin) != "null" {
+		why += ", only a command (bin). If it is an MCP server, add it under Library → MCP servers instead"
+	}
+	return errors.New(why)
 }
 
 // Update installs the version of each npm plugin its spec says now

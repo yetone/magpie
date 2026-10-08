@@ -72,7 +72,7 @@ func TestCursorToolStepReadsItsUsageEvent(t *testing.T) {
 			}
 		}
 		mu.Unlock()
-		http.NewResponseController(w).EnableFullDuplex()
+		cursorDuplex(w)
 		w.Header().Set("Content-Type", "application/connect+proto")
 		if text {
 			w.Write(cursorUpdate(1, pb{}.str(1, "READY")))

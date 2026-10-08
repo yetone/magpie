@@ -411,6 +411,10 @@ body.window .row.agent .who .ag-cli { flex: 0 1 auto; overflow: hidden; }
   body.window .row.agent .ag-up > span { display: none; }
 }
 @container (max-width: 150px) { body.window .row.agent .ag-ver { display: none; } }
+/* the desktop app's version (#1334) gives way first: cut with an ellipsis,
+   and gone where the pill keeps only its arrow */
+.ag-app { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 250px) { body.window .row.agent .ag-app { display: none; } }
 .ag-cli { display: inline-flex; align-items: center; gap: 6px; flex: none; min-width: 0; }
 .ag-cli:empty { display: none; }
 .ag-missing { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
@@ -617,6 +621,9 @@ body.window .field.solo { grid-column: auto; }
 .quota-windows.stacked .quota-n > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .quota-reset { display: flex; flex-wrap: wrap; column-gap: 4px; margin-top: 4px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .quota-reset > span { white-space: nowrap; }
+/* a window's whole (WindowHolds): a line of its own under the reset */
+.quota-reset .quota-holds { flex-basis: 100%; display: flex; flex-wrap: wrap; column-gap: 4px; min-width: 0; }
+.quota-reset .quota-holds > span { white-space: nowrap; }
 .quota-track { height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; }
 .quota-track i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .subscription-error { font-size: 11px; color: var(--faint); }
@@ -879,11 +886,17 @@ body.window .field.solo { grid-column: auto; }
 .led-vias .blk:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* the one being filtered by: its own colour under the count, no blue text */
 .led-vias .blk.on { box-shadow: inset 0 -2px 0 var(--accent); }
+/* the end cells round as the strip does, inside its 1px border, so a hover,
+   the focus ring or the bar under the one filtered by doesn't square its corner */
+.led-vias .blk:first-child { border-radius: 11px 0 0 11px; }
+.led-vias .blk:last-child { border-radius: 0 11px 11px 0; }
 /* the count's unit sits after the number, small, as its label is under it */
 .led-vias .v em { margin-left: 3px; font-size: 12.5px; font-weight: 600; font-style: normal; color: var(--muted); }
 @media (max-width: 620px) {
   .led-vias { grid-template-columns: minmax(0, 1fr); }
   .led-vias .blk + .blk { border-left: 0; border-top: 1px solid var(--line-2); }
+  .led-vias .blk:first-child { border-radius: 11px 11px 0 0; }
+  .led-vias .blk:last-child { border-radius: 0 0 11px 11px; }
 }
 .led-arch { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
 .led-arch-sw { display: inline-flex; align-items: center; gap: 7px; padding: 2px 0; background: none; border: 0; font: inherit; font-size: 11.5px; color: var(--muted); cursor: pointer; }
@@ -2161,8 +2174,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .fbrow .grow { flex: 1; }
 .fallback .mchips:empty { display: none; }
 .after-list { display: flex; align-items: center; gap: 8px; padding: 8px 4px 0; flex: none; }
-/* the Providers page's add button stays at the view's foot over a long list */
-#view-providers .after-list { position: sticky; bottom: -8px; z-index: 2; margin: 0 -12px -8px; padding: 14px 16px 12px; background: linear-gradient(to bottom, transparent, var(--bg) 12px); transition: opacity .18s ease, visibility 0s; }
+/* the Providers page's add button stays at the view's foot over a long list;
+   its fade reaches 12px past each side from a ::before, the bar's own box
+   in the content box (a negative margin-end was sideways scroll in macOS
+   15's WebKit: see .lib-head, #1236) */
+#view-providers .after-list { position: sticky; bottom: -8px; z-index: 2; margin: 0 0 -8px; padding: 14px 4px 12px; transition: opacity .18s ease, visibility 0s; }
+#view-providers .after-list::before { content: ""; position: absolute; z-index: -1; inset: 0 -12px; pointer-events: none; background: linear-gradient(to bottom, transparent, var(--bg) 12px); }
 /* stepping aside it fades, then goes; back, it is there at once, so the
    focus can go to it as the sheet closes */
 #view-providers .after-list.away { opacity: 0; visibility: hidden; transition: opacity .18s ease, visibility 0s .18s; }
@@ -2605,6 +2622,12 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 /* a usage alert's share or amount: a short number field, its unit beside it */
 .warm-at input.at.num { width: 64px; text-align: right; }
 .warm-at .unit { color: var(--muted); font-size: 12.5px; margin-left: -4px; }
+/* a daily warm-up's times (#1260): each with its ×, then +, wrapping under one another on a narrow window rather than past it */
+.warm-at.times { flex: 0 0 auto; max-width: 65%; align-items: flex-start; }
+.warm-at.times > :not(.warm-times) { flex: none; }
+.warm-at .warm-times { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 8px; min-width: 0; }
+.warm-at .warm-time { display: inline-flex; align-items: center; gap: 2px; }
+.warm-at .warm-rm, .warm-at .warm-add { min-width: 24px; height: 27px; padding: 0 6px; font-size: 14px; line-height: 1; }
 .row.pref .sub .warn { color: var(--amber); }
 .row.pref .sub.wraps { white-space: normal; }
 /* the field's clock and picker in the page's own palette */
@@ -2795,6 +2818,7 @@ body.panel .modal { padding: 16px 12px; }
   body.web .row.pref > .who { flex-basis: 100%; }
   body.web .row.pref .sub { white-space: normal; }
   body.web .row.pref .segs { margin-left: 0; max-width: 100%; flex-wrap: wrap; }
+  body.web .row.pref .warm-at.times { max-width: 100%; }
   body.web .proxy-segs { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; }
   body.web .usage-head { height: auto; min-height: 44px; flex-wrap: wrap; gap: 8px; }
   body.web .usage-head > .segs { max-width: 100%; flex-wrap: wrap; }
@@ -3187,6 +3211,15 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 :where(html[data-fonts]) .ag-code, :where(html[data-fonts]) .ag-diff code, :where(html[data-fonts]) .ag-path { font-style: var(--code-style, inherit); font-weight: var(--code-weight, inherit); font-stretch: var(--code-stretch, 100%); }
 .ag-code { padding: 1px 5px; border-radius: 4px; background: var(--pill); color: var(--fg); }
 .ag-warn { gap: 8px; font-size: 12px; }
+/* a note of several lines: its dot stays by the first line, the words wrap beside it */
+.ag-vl.ag-menu-cap { flex-wrap: nowrap; align-items: flex-start; line-height: 1.6; }
+.ag-menu-cap > .ag-dot { margin-top: calc(0.8em - 3px); }
+.ag-menu-cap > span:last-child { flex: 1; min-width: 0; }
+/* Claude Desktop's "largest window only" switch (#1272): its words beside it, the hint after them */
+.ag-longest { cursor: pointer; }
+.ag-longest-say { color: var(--fg-2); }
+/* which copy is left on the old list: a sentence that wraps as one, under the warning's words */
+.ag-vl.ag-stale-copy { display: block; padding-left: 14px; font-size: 12px; line-height: 1.6; color: var(--fg-2); }
 .ag-hint { font-size: 12px; color: var(--muted); }
 .ag-tier { width: 70px; flex: none; font-size: 12px; color: var(--fg-2); }
 .ag-vl .field.ag-pick { width: 220px; justify-content: flex-start; }
@@ -3237,7 +3270,7 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
   .ag-vl > .fields > .field.main, .ag-vl > .fields > .field.solo { flex: 1 1 100%; min-width: 0; }
   .ag-vl > .fields > .field.side { flex: 1 0 124px; }
   .ag-vl > .fields > .extras-cell { flex-wrap: wrap; max-width: 100%; }
-  .ag-vl .field.ag-pick { flex: 1 1 160px; width: auto; min-width: 0; }
+  .ag-vl .field.ag-pick { flex: 0 0 220px; width: 220px; min-width: 0; }
   /* short of room, the model it starts on takes a line of its own under
      the name, the link and the switch staying beside it */
   .row.agent.conn > .field.ag-start, .row.agent.conn > .who + .field.ag-start { order: 1; flex: 1 1 100%; width: auto; margin: 9px 0 0 34px; }

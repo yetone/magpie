@@ -88,4 +88,14 @@ func TestClaudeEndedBeforeItsInputSaysWhy(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "ended by magpie") || strings.Contains(err.Error(), "signal") {
 		t.Errorf("a write after magpie ended Claude Code: %v", err)
 	}
+	// at once, before Claude Code has been reaped (red on ubuntu CI, where
+	// the write went into a pipe still open and nothing was said)
+	run, _, err := s.subscription.start(context.Background(), req, "claude-sonnet-5", "", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.abort()
+	if err := run.setEffort("high"); err == nil || !strings.Contains(err.Error(), "ended by magpie") {
+		t.Errorf("a write right after magpie ended Claude Code: %v", err)
+	}
 }

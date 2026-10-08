@@ -219,6 +219,26 @@ type rRequest struct {
 	} `json:"reasoning,omitempty"`
 }
 
+// textFormat splits a Responses client's text into the rest of it and
+// the format it asks the answer in (text.format), which is asked for again
+// in each upstream's own words. A format of plain text stays where it was.
+func textFormat(text json.RawMessage) (json.RawMessage, *Format) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(text, &fields) != nil {
+		return text, nil
+	}
+	f := openAIFormat(fields["format"])
+	if f == nil {
+		return text, nil
+	}
+	delete(fields, "format")
+	if len(fields) == 0 {
+		return nil, f
+	}
+	rest, _ := json.Marshal(fields)
+	return rest, f
+}
+
 // sentRaw is a raw field the client sent, unless it sent null.
 func sentRaw(v json.RawMessage) json.RawMessage {
 	if t := strings.TrimSpace(string(v)); t == "" || t == "null" {
@@ -235,8 +255,9 @@ func parseResponses(body []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: q.Model, System: q.Instructions, MaxTokens: q.MaxOutputTokens, Temp: q.Temperature,
-		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority", CacheKey: q.PromptCacheKey, Include: q.Include,
-		ClientMetadata: sentRaw(q.ClientMetadata), Text: sentRaw(q.Text)}
+		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority" || q.ServiceTier == "ultrafast", Ultrafast: q.ServiceTier == "ultrafast", CacheKey: q.PromptCacheKey, Include: q.Include,
+		ClientMetadata: sentRaw(q.ClientMetadata)}
+	r.Text, r.Format = textFormat(sentRaw(q.Text))
 	if q.Reasoning != nil {
 		r.Effort = effortOf(q.Reasoning.Effort)
 		r.Thinking = true
@@ -721,8 +742,13 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	if len(r.ClientMetadata) > 0 {
 		out["client_metadata"] = r.ClientMetadata
 	}
-	if len(r.Text) > 0 {
-		out["text"] = r.Text
+	if len(r.Text) > 0 || r.Format != nil {
+		text := map[string]any{}
+		json.Unmarshal(r.Text, &text)
+		if r.Format != nil {
+			text["format"] = r.Format.responses()
+		}
+		out["text"] = text
 	}
 	if r.CacheKey != "" {
 		out["prompt_cache_key"] = r.CacheKey
@@ -744,6 +770,10 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	// Fast goes to OpenAI's own backends; another's may not know the tier
 	if r.Fast && (host == "chatgpt.com" || host == "api.openai.com") {
 		out["service_tier"] = "priority"
+	}
+	// Ultrafast only the ChatGPT backend offers
+	if r.Ultrafast && host == "chatgpt.com" {
+		out["service_tier"] = "ultrafast"
 	}
 	if r.Effort != "" {
 		out["reasoning"] = map[string]any{"effort": r.Effort, "summary": "auto"}

@@ -253,8 +253,14 @@ func ownMark(agent string) string {
 // one it can be read as: the agent's own account remembered from before,
 // while the agent is signed out or keeps its tokens encrypted, takes the
 // new sign-in rather than letting it go — let go, it was listed nowhere
-// (#155).
-func addSideLogin(l savedLogin, ownUser string, dup func(savedLogin)) error {
+// (#155). The account's kept usage reading goes (StaleAllowance): it
+// was read under the old sign-in.
+func addSideLogin(l savedLogin, ownUser string, dup func(savedLogin)) (err error) {
+	defer func() { // after loginsMu is let go: Grok's is read by its accounts
+		if err == nil {
+			StaleAllowance(l.Agent, l.User)
+		}
+	}()
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
 	ls := readLogins()

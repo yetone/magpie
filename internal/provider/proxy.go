@@ -17,12 +17,16 @@ func (p Provider) Via(ctx context.Context) context.Context {
 
 // ProxyChoice is the proxy requests made on the provider's behalf go
 // through, as netproxy.With takes it: for one account of a subscription
-// that holds several, that account's own (AccountProxies), else the
-// provider's (Proxy); "" follows the global one. An account in use beside
-// the agent's own is made afresh by some agents (AlsoOn), without the
-// provider's settings: those are read from providers.json.
+// that holds several, or one key of a provider that holds several
+// (Beyfish_Wang on X: 不同 key 走不同的代理), its own (AccountProxies),
+// else the provider's (Proxy); "" follows the global one. An account in
+// use beside the agent's own is made afresh by some agents (AlsoOn),
+// without the provider's settings: those are read from providers.json.
 func (p Provider) ProxyChoice() string {
 	if p.Account == nil {
+		if v := p.AccountProxies[keyID(p.Key)]; p.Key != "" && v != "" {
+			return v
+		}
 		return p.Proxy
 	}
 	own, prov := p.AccountProxies, p.Proxy
@@ -109,6 +113,21 @@ func normalAccountProxies(m map[string]string) map[string]string {
 			out = map[string]string{}
 		}
 		out[u] = v
+	}
+	return out
+}
+
+// keyProxies is a provider of keys' AccountProxies as it is kept: those
+// of the keys it still holds, by their KeyID; nil for none.
+func keyProxies(p Provider) map[string]string {
+	var out map[string]string
+	for _, k := range p.KeyList() {
+		if v := p.AccountProxies[k.ID]; v != "" {
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[k.ID] = v
+		}
 	}
 	return out
 }

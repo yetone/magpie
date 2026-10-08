@@ -56,6 +56,9 @@ type Model struct {
 	// Fast is set on a model Codex may ask for priority processing (its
 	// Fast mode): one a ChatGPT account serves.
 	Fast bool `json:",omitempty"`
+	// Tiers, in one ChatGPT account's own model list, are the service
+	// tiers its plan offers on the model ("priority", "ultrafast").
+	Tiers []string `json:",omitempty"`
 	// AgentsV2 is set on a model Codex is told multi-agent V2 for, so its
 	// Ultra hands work to Codex's agents: one offering Ultra that no
 	// ChatGPT account answers for (provider.Entry's).
@@ -298,8 +301,13 @@ func (m mdModel) efforts() []string {
 
 // window is the tokens a prompt to m may hold: the input limit where
 // models.dev gives one (gpt-5's 272K of its 400K), else the whole context.
+// A row whose input limit sits above its window (Cloudflare AI Gateway's
+// gpt-5 at 272K over 128K) holds the window: the cap never exceeds it.
 func (m mdModel) window() int {
 	if m.Limit.Input > 0 {
+		if m.Limit.Context > 0 && m.Limit.Context < m.Limit.Input {
+			return m.Limit.Context
+		}
 		return m.Limit.Input
 	}
 	return m.Limit.Context

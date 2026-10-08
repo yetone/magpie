@@ -101,6 +101,11 @@ func TestURLOfWildcard(t *testing.T) {
 func TestAgentOf(t *testing.T) {
 	for _, c := range []struct{ auth, key, ua, want string }{
 		{"Bearer " + TokenFor("alma"), "", "ai-sdk/openai/2.0.52 ai-sdk/provider-utils/3.0.12 runtime/node.js/v22", "alma"},
+		// alma-server's (Alma 0.4's @ai-sdk/openai 4.0.15 under Node 22,
+		// whose navigator.userAgent the AI SDK appends): Alma's by the key
+		// magpie gives its provider, the AI SDK's without it (Lutra.x)
+		{"Bearer " + TokenFor("alma"), "", "ai-sdk/openai/4.0.15 ai-sdk/provider-utils/5.0.10 runtime/node.js/22", "alma"},
+		{"Bearer " + Token, "", "ai-sdk/openai/4.0.15 ai-sdk/provider-utils/5.0.10 runtime/node.js/22", "ai-sdk"},
 		{"", TokenFor("alma"), "ai-sdk/anthropic/2.0.1", "alma"},
 		{"Bearer " + TokenFor("qoder"), "", "Bun/1.4.2", "qoder"},
 		{"Bearer " + TokenFor("hanako"), "", "OpenAI/JS 6.0.0", "hanako"},

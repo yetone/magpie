@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"errors"
 	"os"
 	"sync/atomic"
 	"testing"
@@ -119,5 +120,77 @@ func TestCLIIdentitySignedOutKept(t *testing.T) {
 	(&cliIdentity{name: "x", exe: func() string { return "/bin/sh" }, ask: func() (string, string, bool, error) { return "", "", false, nil }}).get()
 	if _, found := readIdentities()["x"]; !found {
 		t.Fatal("a signed-out answer wasn't kept")
+	}
+}
+
+// a CLI that keeps failing to answer, or answers only after a long while,
+// is asked again after a minute, then two, four… not every minute: a
+// cursor-agent calling itself ran ten seconds and hundreds of processes
+// each time, and with no token kept answered nobody all the same (#1278).
+// A quick answer has it asked every minute again.
+func TestCLIIdentityFailingAskedLessOften(t *testing.T) {
+	old := slowAsk
+	slowAsk = 50 * time.Millisecond
+	t.Cleanup(func() { slowAsk = old })
+	for _, bad := range []struct {
+		name string
+		ask  func() (string, string, bool, error)
+	}{
+		{"fails", func() (string, string, bool, error) { return "", "", false, errors.New("signal: killed") }},
+		{"slow", func() (string, string, bool, error) { time.Sleep(60 * time.Millisecond); return "", "", false, nil }},
+	} {
+		t.Run(bad.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			var asked atomic.Int32
+			var good atomic.Bool
+			c := &cliIdentity{name: "x", exe: func() string { return "/bin/sh" }, ask: func() (string, string, bool, error) {
+				asked.Add(1)
+				if good.Load() {
+					return "me@example.com", "", true, nil
+				}
+				return bad.ask()
+			}}
+			// look as if the last ask was ago, and wait for any ask it starts
+			look := func(ago time.Duration) int32 {
+				c.Lock()
+				c.at = time.Now().Add(-ago)
+				c.Unlock()
+				c.get()
+				c.Lock()
+				done, busy := c.done, c.refreshing
+				c.Unlock()
+				if busy {
+					<-done
+				}
+				return asked.Load()
+			}
+			if c.get(); asked.Load() != 1 { // never answered: asked
+				t.Fatalf("first look asked %d times", asked.Load())
+			}
+			if n := look(61 * time.Second); n != 2 { // a minute after the first
+				t.Fatalf("a minute after the first: asked %d times", n)
+			}
+			if n := look(61 * time.Second); n != 2 {
+				t.Fatal("asked again a minute after the second")
+			}
+			if n := look(121 * time.Second); n != 3 {
+				t.Fatalf("two minutes after the second: asked %d times", n)
+			}
+			for i := 0; i < 10; i++ { // never longer than slowestAsk
+				if n := look(slowestAsk + time.Second); n != int32(4+i) {
+					t.Fatalf("after %v: asked %d times, want %d", slowestAsk, n, 4+i)
+				}
+			}
+			good.Store(true)
+			if n := look(slowestAsk + time.Second); n != 14 {
+				t.Fatalf("asked %d times", n)
+			}
+			if n := look(61 * time.Second); n != 15 {
+				t.Fatal("after a quick answer, not asked again a minute later")
+			}
+			if u, _, ok := c.get(); !ok || u != "me@example.com" {
+				t.Fatalf("served %q %v", u, ok)
+			}
+		})
 	}
 }

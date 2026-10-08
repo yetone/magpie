@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -231,7 +232,8 @@ func TestFirstTokenKinds(t *testing.T) {
 	for i := 0; i < len(stream); i += 7 {
 		f.see([]byte(stream[i:min(i+7, len(stream))]))
 	}
-	if first, text := f.ms(); first < 1000 || text < first || !f.off || f.pend != nil {
+	// read on past its first text, for when the rest came (flowMs)
+	if first, text := f.ms(); first < 1000 || text < first || f.off || f.pend != nil || f.flowFor(0) < 1 {
 		t.Errorf("split: %d %d %+v", first, text, f)
 	}
 	// a JSON reply is not read
@@ -257,5 +259,145 @@ func TestCodexBackendTimesFirstToken(t *testing.T) {
 	gap := pacedGap.Milliseconds()
 	if u := lastUsage(t); u.TTFT < gap || u.FirstText < 2*gap || u.Millis <= u.FirstText || u.Output != 20 {
 		t.Errorf("usage %+v", u)
+	}
+}
+
+// bursty is a vendor that writes each of its chunks a gap after the last,
+// every event of a chunk in one write: a chunk of many is a reply it held
+// back and let go at once.
+type bursty struct {
+	chunks [][]string
+	gap    time.Duration
+	header bool // no Content-Type, as the ChatGPT backend sends
+}
+
+func (b *bursty) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	io.ReadAll(r.Body)
+	if b.header {
+		w.Header()["Content-Type"] = nil
+	} else {
+		w.Header().Set("Content-Type", "text/event-stream")
+	}
+	f := w.(http.Flusher)
+	for i, c := range b.chunks {
+		if i > 0 {
+			time.Sleep(b.gap)
+		}
+		io.WriteString(w, strings.Join(c, "\n\n")+"\n\n")
+		f.Flush()
+	}
+}
+
+// burstChunks: a reply's first word at once, then its out tokens' worth
+// of words n events in each later chunk, then its end with the usage.
+func burstChunks(proto provider.Protocol, words, per, out int) [][]string {
+	ev := func(word string) string {
+		if proto == provider.Responses {
+			return "event: response.output_text.delta\ndata: " + `{"type":"response.output_text.delta","item_id":"msg_1","output_index":0,"content_index":0,"delta":"` + word + `"}`
+		}
+		return `data: {"id":"c1","model":"m1","choices":[{"index":0,"delta":{"content":"` + word + `"}}]}`
+	}
+	chunks := [][]string{{ev("hi")}}
+	for i := 1; i < words; i += per {
+		var c []string
+		for j := i; j < min(i+per, words); j++ {
+			c = append(c, ev(" word"))
+		}
+		chunks = append(chunks, c)
+	}
+	end := []string{`data: {"id":"c1","model":"m1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":` + strconv.Itoa(out) + `}}`, `data: [DONE]`}
+	if proto == provider.Responses {
+		end = []string{"event: response.completed\ndata: " + `{"type":"response.completed","response":{"id":"r1","status":"completed","output":[],"usage":{"input_tokens":5,"output_tokens":` + strconv.Itoa(out) + `}}}`}
+	}
+	last := &chunks[len(chunks)-1]
+	*last = append(*last, end...)
+	return chunks
+}
+
+// A reply whose first word came at once and the rest only after a wait,
+// all in one burst, wrote nothing over the wait, and tells no speed (John
+// on Discord: a Kimi Code reply to OpenCode read 1,367 tok/s): before,
+// its 5,000 tokens over the 600 ms from its first word to its end read
+// about 8,300 tok/s. The burst is 5,000 tokens so that the time magpie
+// takes to pass it on (138 ms on a busy macOS runner at 8db24fd6) reads
+// faster than any real stream (MaxDecodeSpeed), as a real burst does;
+// 1,000 read 7,246 tok/s. One that streamed steadily keeps its speed, over
+// nearly all of its time from its first word.
+func TestBurstTellsNoSpeed(t *testing.T) {
+	const gap = 600 * time.Millisecond
+	for _, c := range []struct {
+		name  string
+		proto provider.Protocol
+		path  string
+		body  string
+	}{
+		{"chat", provider.Chat, "/v1/chat/completions", `{"model":"fake/m1","stream":true,"messages":[{"role":"user","content":"hi"}]}`},
+		{"responses from chat", provider.Chat, "/v1/responses", `{"model":"fake/m1","stream":true,"input":"hi"}`},
+	} {
+		for _, steady := range []bool{false, true} {
+			name := c.name + " burst"
+			chunks, g := burstChunks(c.proto, 200, 199, 5000), gap
+			if steady {
+				name = c.name + " steady"
+				chunks, g = burstChunks(c.proto, 11, 1, 200), gap/10
+			}
+			t.Run(name, func(t *testing.T) {
+				fresh(t)
+				up := httptest.NewServer(&bursty{chunks: chunks, gap: g})
+				t.Cleanup(up.Close)
+				p := provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"m1"}, Chat: up.URL + "/v1"}
+				if err := provider.Save(p); err != nil {
+					t.Fatal(err)
+				}
+				s := New()
+				rec := httptest.NewRecorder()
+				s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", c.path, strings.NewReader(c.body)))
+				if rec.Code != 200 || !strings.Contains(rec.Body.String(), "word") {
+					t.Fatalf("%d %s", rec.Code, rec.Body)
+				}
+				u := lastUsage(t)
+				span := u.Millis - u.TTFT
+				// the upstream's wait starts when it sent the first word,
+				// which magpie reads a moment later: the span is the gap
+				// less that moment (599 ms of 600 on a busy macOS runner)
+				if u.TTFT <= 0 || span < gap.Milliseconds()*9/10 {
+					t.Fatalf("usage ttft %d, ms %d; want the end %v after the first word", u.TTFT, u.Millis, gap)
+				}
+				r := lastRoute(s)
+				if len(r.Tries) != 1 || r.Flow != u.Flow || r.Tries[0].Flow != u.Flow {
+					t.Errorf("flow: usage %d, route %d, tries %+v", u.Flow, r.Flow, r.Tries)
+				}
+				n, w := u.Decode()
+				if !steady {
+					if n != 0 || w != 0 {
+						t.Errorf("burst: %d tokens in %d ms (flow %d, %d ms from the first word) read %d tok/s; want no speed", n, w, u.Flow, span, int64(n)*1000/max(w, 1))
+					}
+					return
+				}
+				if n != 200 || w < span*7/10 || w > span {
+					t.Errorf("steady: %d tokens in %d ms (flow %d); want 200 over most of the %d ms from the first word", n, w, u.Flow, span)
+				}
+			})
+		}
+	}
+}
+
+// Codex's own models, relayed to the ChatGPT backend as they came, tell no
+// speed for a burst either.
+func TestCodexBackendBurstTellsNoSpeed(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	b := &bursty{chunks: burstChunks(provider.Responses, 200, 199, 5000), gap: 600 * time.Millisecond, header: true}
+	chatgpt(t, b.ServeHTTP)
+	if code, body := codexPost(t, `{"model":"gpt-5.5","stream":true,"input":"hi"}`); code != 200 {
+		t.Fatalf("%d %s", code, body)
+	}
+	u := lastUsage(t)
+	// the end after the wait, less the moment the first word took to
+	// reach magpie (599 ms of 600 on macOS CI at 58f45d05)
+	if u.Millis-u.TTFT < 540 || u.Output != 5000 {
+		t.Fatalf("usage %+v", u)
+	}
+	if n, w := u.Decode(); n != 0 || w != 0 {
+		t.Errorf("burst: %d tokens in %d ms (flow %d) read a speed; want none", n, w, u.Flow)
 	}
 }

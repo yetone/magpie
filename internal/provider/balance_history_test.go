@@ -109,3 +109,63 @@ func TestBalanceTrendRunsOut(t *testing.T) {
 		t.Fatalf("one point within the span shown: %+v", tr)
 	}
 }
+
+// TestBalanceHistoryTwoCurrencies (gakki on Discord): DeepSeek tells an
+// account's CNY and USD balances in an order that changes between reads.
+// The card says them in one order every time, the money left first, and
+// the trend is the USD alone, in dollars, not ¥-0.05 and $11.12 joined
+// into one line; the CNY keeps a line of its own. The card's old line,
+// kept before and alternating, goes.
+func TestBalanceHistoryTwoCurrencies(t *testing.T) {
+	testenv.SetHome(t, t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	cny := `{"currency":"CNY","total_balance":"-0.05","granted_balance":"0.00","topped_up_balance":"-0.05"}`
+	usd := func(v string) string {
+		return `{"currency":"USD","total_balance":"` + v + `","granted_balance":"0.00","topped_up_balance":"` + v + `"}`
+	}
+	t0 := time.Date(2026, 10, 8, 8, 0, 0, 0, time.UTC)
+	key := quotaHistKey("deepseek", "main")
+	// what an earlier magpie kept: whichever amount came first
+	writeBalanceHist(balanceHist{key: {{t0.Add(-30 * time.Minute), 11.2}, {t0.Add(-20 * time.Minute), -0.05}, {t0.Add(-10 * time.Minute), 11.15}}})
+	var last []SubscriptionQuota
+	for i, v := range []string{"11.12", "11.10", "11.08", "11.05"} {
+		body := `{"is_available":true,"balance_infos":[` + cny + `,` + usd(v) + `]}`
+		if i%2 == 1 {
+			body = `{"is_available":true,"balance_infos":[` + usd(v) + `,` + cny + `]}`
+		}
+		bal, err := readDeepSeek([]byte(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := "$" + v + " · ¥-0.05"; bal != want {
+			t.Fatalf("read %d: card says %q, want %q", i, bal, want)
+		}
+		last = []SubscriptionQuota{balCard("Main", bal)}
+		noteBalanceHistory(last, t0.Add(time.Duration(i)*10*time.Minute))
+	}
+	tr := last[0].BalanceTrend
+	if tr == nil || tr.Currency != "$" || len(tr.Points) != 4 {
+		t.Fatalf("trend = %+v, want the four USD readings in $", tr)
+	}
+	for _, p := range tr.Points {
+		if p.Amount < 11 {
+			t.Fatalf("a CNY amount in the USD line: %+v", tr.Points)
+		}
+	}
+	h := readBalanceHist()
+	if c := h[currencyHistKey(key, "¥")]; len(c) != 2 || c[0].Amount != -0.05 {
+		t.Fatalf("CNY line = %+v, want its own run of -0.05", c)
+	}
+	if old, ok := h[key]; ok {
+		t.Fatalf("the old alternating line is kept: %+v", old)
+	}
+	if n, ok := BalanceNumber(last[0].Balance); !ok || n != 11.05 {
+		t.Fatalf("an alert reads %v, want the USD's 11.05", n)
+	}
+	// anything else with " · " in it is one amount, as before
+	for _, s := range []string{"$3 · 2 keys", "$1 · $2", "¥12.30", "12 · 13"} {
+		if cs := balanceCurrencies(s); cs != nil {
+			t.Errorf("%q read as currencies %+v", s, cs)
+		}
+	}
+}

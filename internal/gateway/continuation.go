@@ -323,7 +323,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			res.Body.Close()
 			failed, failedStatus = p.Explain(p.Name+": "+provider.APIError(b, res.Status), res.StatusCode, b), res.StatusCode
 			if wrongEndpoint(res.StatusCode, b) {
-				failed += wrongAPINote(p, model, res)
+				failed += wrongAPINote(p, model, res, b)
 			}
 			if res.StatusCode == http.StatusTooManyRequests && accountAgent(p) == "antigravity" && antigravityTurnsAway(request.System) {
 				failed += " — " + antigravityTurnedAwayHint

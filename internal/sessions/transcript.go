@@ -55,17 +55,21 @@ func TranscriptOf(s Session) (Transcript, error) {
 	if !HasTranscript(s.Agent) || s.Path == "" {
 		return out, ErrNoTranscript
 	}
+	return out, readTranscript(s, out.add)
+}
+
+// readTranscript tells add each part of a session's conversation, in order,
+// as its agent's file has it.
+func readTranscript(s Session, add func(bool, Part) bool) error {
 	whole := Call{Agent: s.Agent, File: s.Path, To: math.MaxInt64}
-	var err error
 	switch s.Agent {
 	case "codex":
-		err = codexContent(whole, out.add)
+		return codexContent(whole, add)
 	case "pi", "omp":
-		err = piTranscript(s.Path, out.add)
+		return piTranscript(s.Path, add)
 	default:
-		err = claudeContent(whole, out.add)
+		return claudeContent(whole, add)
 	}
-	return out, err
 }
 
 // piEntry is a line of a Pi (or oh-my-pi) session: an entry of its tree.

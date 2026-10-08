@@ -733,7 +733,7 @@ func dshCheck(dir, gw string) string {
 		return off
 	}
 	creds := filepath.Join(dir, ".credentials.yaml")
-	if v, ok := edit.GetYAML(creds, "refs."+dshKeyRef); ok && v != keyAt(gw) {
+	if v, ok := edit.GetYAML(creds, "refs."+dshKeyRef); ok && v != keyAt(gw) && !gatewayTakes(v) {
 		return "DeepSeek Harness's own key store (" + creds + ") holds another " + dshKeyRef + ", which it uses over magpie's; remove it there (dsh's Models page, Magpie's key) to go through magpie"
 	} else if !ok && dshCredsOurs(creds) {
 		// the desktop app doesn't read .env (#969)
@@ -1484,12 +1484,15 @@ func dshWiredOnce() string {
 	if dir == "" {
 		return ""
 	}
+	files := dshProfiles(dir)
+	if len(files) == 0 {
+		// no dsh: the catalog isn't built for nothing every round, ~34 MB
+		// of garbage a minute in a magpie at rest
+		return ""
+	}
+	files = append(files, dshHomePatch(dir)) // left as it is without magpie's route
 	var trouble []string
 	models := magpieModels("dsh")
-	files := dshProfiles(dir)
-	if len(files) > 0 {
-		files = append(files, dshHomePatch(dir)) // left as it is without magpie's route
-	}
 	for _, f := range files {
 		written, err := dshRouteAgain(f, models, gateway.URL())
 		if err != nil {

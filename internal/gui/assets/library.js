@@ -1222,12 +1222,19 @@
   function sseBlocked(s) {
     return (a) => {
       if (remote(s) && a.noRemote) return t("{agent} runs only a command from its settings — add a remote server in its Connectors instead", { agent: a.name });
-      return s.transport === "sse" && a.noSSE ? t("{agent} can't reach a server over SSE — only a command or streamable HTTP", { agent: a.name }) : "";
+      if (s.transport === "sse" && a.noSSE) return t("{agent} can't reach a server over SSE — only a command or streamable HTTP", { agent: a.name });
+      // #1250: written there as it is, the agent would send the text
+      // itself; written with the value, the token would be in its file
+      return envRefs(s) && a.noEnvRefs ? t("{agent} can't read {ref} from its settings — given this server, the token would be written there as plain text", { agent: a.name, ref: "${NAME}" }) : "";
     };
   }
+  // envRefs says whether the server's headers (remote) or environment
+  // (command) reference a variable: ${NAME}, as the library writes one
+  const envRef = /\$\{[A-Za-z_][A-Za-z0-9_]*\}/;
+  const envRefs = (s) => Object.values((remote(s) ? s.headers : s.env) || {}).some((v) => envRef.test(v));
   // reaches(s) says whether an agent can be given the server
   const remote = (s) => s.transport === "http" || s.transport === "sse";
-  const reaches = (s) => (a) => !a || (!(remote(s) && a.noRemote) && !(s.transport === "sse" && a.noSSE));
+  const reaches = (s) => (a) => !a || (!(remote(s) && a.noRemote) && !(s.transport === "sse" && a.noSSE) && !(envRefs(s) && a.noEnvRefs));
 
   function renderServers(body) {
     body.append(intro(t("Add a server once and switch it on for the agents that should have it — magpie writes it into each one's config in the shape that agent reads.")));
@@ -1278,6 +1285,12 @@
     if (lib.servers.length || lib.projects.length) renderProjects(body, "mcp");
     const skip = shownAgents().filter((a) => !a.mcp);
     if (skip.length) body.append(el("p", "lib-aside", t("{agents} has no MCP servers magpie can write.", { agents: skip.map((a) => a.name).join(", ") })));
+    // WorkBuddy connects a server only once it is trusted there, again
+    // after its command or address changes (#1266)
+    const wb = shownAgents().find((a) => a.id === "workbuddy" && a.mcp);
+    if (wb && lib.servers.some((s) => s.agents?.includes(wb.id))) {
+      body.append(el("p", "lib-aside lib-wb-trust", t("{agent} connects a server only once you trust it: switch it on in {agent}'s MCP settings, and again after its command or address changes.", { agent: wb.name })));
+    }
     body.append(discover("mcp"));
   }
 
@@ -1350,6 +1363,9 @@
       case "refused": return [t("connection refused"), more(t("Nothing is listening at that address"))];
       case "unreachable": return [t("can't reach"), more(t("Can't reach the server"))];
       case "protocol": return [t("bad reply"), more(t("It answered, but not as an MCP server does"))];
+      // a ${NAME} magpie's own environment hasn't; an agent started from a
+      // shell that has it still gets it
+      case "novar": return [t("{names} not set", { names: h.detail }), t("magpie can't check it: {names} isn't set where magpie runs. An agent started where it is set still gets it", { names: h.detail })];
       default: return [t("couldn't check"), more(t("magpie couldn't check it"))];
     }
   }
@@ -1564,6 +1580,9 @@
     return i;
   }
 
+  // refHint: how a value is read from a variable (#1250)
+  const refHint = () => t("A value can name a variable, as {ref}: each agent is given it in its own way, so the token stays out of its settings", { ref: "${NAME}" });
+
   function editServer(s, prefill) {
     const all = mcpAgents();
     const d = prefill || (s ? structuredClone(s) : { name: "", transport: "stdio", command: "", args: [], env: {}, url: "", headers: {}, agents: all.map((a) => a.id) });
@@ -1598,12 +1617,12 @@
         const line = field2([d.command, ...(d.args || [])].filter((x, i) => i > 0 || x).map(quote).join(" "), "npx -y @modelcontextprotocol/server-github", (v) => { const w = words(v); d.command = w[0] || ""; d.args = w.slice(1); });
         line.classList.add("mono");
         g.append(...field(t("Command"), line, t("The command and its arguments, as you'd type them")));
-        g.append(...field(t("Environment"), pairs(d.env, "GITHUB_TOKEN", t("value"), (v) => { d.env = v; })));
+        g.append(...field(t("Environment"), pairs(d.env, "GITHUB_TOKEN", t("value"), (v) => { d.env = v; drawAgents(); }), refHint()));
       } else {
         const url = field2(d.url, "https://example.com/mcp", (v) => { d.url = v.trim(); });
         url.classList.add("mono");
         g.append(...field("URL", url));
-        g.append(...field(t("Headers"), pairs(d.headers, "Authorization", "Bearer …", (v) => { d.headers = v; })));
+        g.append(...field(t("Headers"), pairs(d.headers, "Authorization", "Bearer …", (v) => { d.headers = v; drawAgents(); }), refHint()));
         // Sign in saves the form first when it isn't what's saved, so a URL
         // just changed (or a server just added) is the one signed in to
         if (d.transport === "http") g.append(...field(t("Sign-in"), signInBox(s ? s.name : "", ready), t("For a server that asks you to sign in (OAuth): magpie signs in once, and every agent given it uses that sign-in")));
@@ -3477,8 +3496,31 @@
       : f.shared ? t("Keeps it where it is in the shared skills folder and links to it: you can give it to any agent")
       : f.link ? t("Keeps a link to where it is: {agents} go on having it, and you can give it to the others", { agents: [...f.agents, ...(f.copies || [])].map(nameOf).join(", ") })
       : t("Moves it into the library and links it back: {agents} go on having it, and you can give it to the others", { agents: [...f.agents, ...(f.copies || [])].map(nameOf).join(", ") });
-    row.append(b);
+    // gone from the agents without bringing it in first (#1303)
+    const rm = button("", "lib-icon danger", () => confirmRemoveFoundSkill(f));
+    rm.append(svg(GLYPH.trash, 13, 1.4));
+    rm.title = t("Remove");
+    row.append(b, rm);
     return row;
+  }
+
+  function confirmRemoveFoundSkill(f) {
+    const ed = el("div", "editor lib-editor");
+    const head = el("div", "ehead");
+    head.append(glyph(GLYPH.trash), el("b", "", t("Remove {name}?", { name: f.name })));
+    ed.append(head);
+    const agents = [...f.agents, ...(f.copies || [])].map(nameOf).filter(Boolean);
+    ed.append(el("p", "lib-confirm", !agents.length ? t("Its folder is moved to magpie's backups.")
+      : f.link ? t("It is taken out of {agents}. The folder it was linked from stays where it is.", { agents: agents.join(", ") })
+      : t("It is taken out of {agents}, and its folder is moved to magpie's backups.", { agents: agents.join(", ") })));
+    if (f.shared) ed.append(el("p", "lib-confirm", t("Its entry in {path} goes to the backups too, so no agent reads it from there.", { path: f.shared })));
+    if (f.others?.length) ed.append(el("p", "lib-confirm", t("{agents} has another skill by this name; that one stays.", { agents: f.others.map(nameOf).join(", ") })));
+    const bar = el("div", "bar");
+    const go = button(t("Remove"), "primary danger-fill", async () => { if (await change("skills/remove-found", { name: f.name }, t("{name} removed", { name: f.name }))) closeLibModal(true); });
+    bar.append(el("span", "grow"), button(t("Cancel"), "", closeLibModal), go);
+    ed.append(bar);
+    modal = { save: () => go.click() };
+    openLib(ed);
   }
 
   // ---------- the market ----------

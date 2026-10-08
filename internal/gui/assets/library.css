@@ -1,27 +1,37 @@
 /* Library: instructions, MCP servers and skills for every agent. */
 #view-library { gap: 0; }
 /* The tabs stay at the top while the page scrolls under them, on a frosted
-   strip as wide as the view; a hairline shows once something is beneath. */
+   strip as wide as the view; a hairline shows once something is beneath.
+   The strip's own box keeps to the view's content box and its ::before
+   reaches out over the view's padding (--bleed-l/-r): a box that ran past
+   the content's end edge, by a negative margin, was 16px of sideways
+   scroll in macOS 15's WebKit, which leaves a negative margin-end out of
+   a flex scroller's scrollable width (#1236). */
 .lib-head {
   position: sticky; top: 0; z-index: 5;
   display: flex; align-items: center; gap: 8px; flex: none;
-  margin: 0 -12px; padding: 6px 12px 4px;
+  margin: 0; padding: 6px 0 4px;
+  --bleed-l: 12px; --bleed-r: 12px;
+}
+.lib-head::before {
+  content: ""; position: absolute; z-index: -1; pointer-events: none;
+  top: 0; bottom: 0; left: calc(-1 * var(--bleed-l)); right: calc(-1 * var(--bleed-r));
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px);
   box-shadow: 0 1px 0 transparent; transition: box-shadow .18s var(--ease);
 }
 /* the window's view is padded 2px at the top: the strip reaches over it */
-body.window .lib-head { top: -2px; margin: -2px -16px 0; padding: 8px 16px 4px; }
+body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; --bleed-l: 16px; --bleed-r: 16px; }
 @media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
   body.web .lib-head {
     flex-wrap: wrap;
-    margin: -2px calc(-1 * var(--view-right)) 0 calc(-1 * var(--view-left));
-    padding: 8px var(--view-right) 4px var(--view-left);
+    margin: -2px 0 0; padding: 8px 0 4px;
+    --bleed-l: var(--view-left); --bleed-r: var(--view-right);
   }
   body.web .lib-tabs { max-width: 100%; flex-wrap: wrap; }
   body.web .lib-more { flex: none; }
 }
-.lib-head.stuck { box-shadow: 0 1px 0 var(--line-2); }
+.lib-head.stuck::before { box-shadow: 0 1px 0 var(--line-2); }
 .lib-tabs .opt { height: 24px; padding: 0 12px; font-size: 12.5px; }
 .lib-more { display: inline-flex; align-items: center; gap: 5px; }
 .lib-mini { display: inline-grid; place-items: center; color: var(--muted); }
@@ -516,7 +526,7 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-subhead .lib-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
 .lib-row.lib-subhead:hover { background: color-mix(in srgb, var(--card-2) 70%, var(--pill)); }
 /* no color-mix() before Safari 16.2 (#220): the sticky head stays opaque */
-@supports not (color: color-mix(in srgb, red 50%, blue)) { .lib-head { background: var(--bg); } }
+@supports not (color: color-mix(in srgb, red 50%, blue)) { .lib-head::before { background: var(--bg); } }
 /* skills picked to turn on or off together (#791): a box on each row and
    heading, and a bar that stays in view under the list while it's long */
 .lib-pickbox { margin: 0; flex: none; }

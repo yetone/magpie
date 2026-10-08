@@ -688,3 +688,48 @@ func older(a, b string) bool {
 	}
 	return false
 }
+
+// Codex's Ultrafast (service_tier "ultrafast", offered on a Pro plan's
+// models) reaches the ChatGPT backend when the pool of Codex's accounts
+// serves the turn, as it does on Codex's own sign-in, and Fast's
+// "priority" still does (yxinyu715 on X: two Pro accounts, Ultrafast
+// does nothing through magpie and works without it).
+func TestCodexPoolKeepsUltrafast(t *testing.T) {
+	codexSignedIn(t, "spare@example.com")
+	var tiers []any
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var m map[string]any
+		json.Unmarshal(b, &m)
+		tiers = append(tiers, m["service_tier"])
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"r1","model":"gpt-5.5"}}`,
+			`data: {"type":"response.output_text.delta","delta":"pong"}`,
+			`data: {"type":"response.completed","response":{"id":"r1","usage":{"input_tokens":7,"output_tokens":1}}}`))
+	}))
+	t.Cleanup(up.Close)
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	t.Cleanup(func() { provider.CodexBase = was })
+
+	s := New()
+	for _, tier := range []string{"ultrafast", "priority", "flex"} {
+		tiers = nil
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":"ping","service_tier":"`+tier+`"}`))
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		req.Header.Set("chatgpt-account-id", "acct-1")
+		req.Header.Set("User-Agent", "codex_cli_rs/0.160.1")
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != 200 || len(tiers) != 1 {
+			t.Fatalf("%s: status %d, %d requests: %s", tier, rec.Code, len(tiers), rec.Body.String())
+		}
+		want := any(tier)
+		if tier == "flex" {
+			want = nil
+		}
+		if tiers[0] != want {
+			t.Errorf("%s: backend asked for %v", tier, tiers[0])
+		}
+	}
+}

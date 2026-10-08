@@ -17,11 +17,21 @@ const at = (i) => new Date(now.getTime() - (i + 1) * 60e3).toISOString();
 const key = { id: "antigravity", provider: "antigravity", name: "Antigravity", kind: "provider", model: "gemini-3.8-flash" };
 // newest first: the report's burst, a 500 ms burst, then ordinary replies
 // (100 tok/s and 50 tok/s; a few rows, so the stage above holds still)
-const timing = [[8264, 24360, 24359], [8264, 1500, 1000], [1200, 15000, 3000], [100, 3000, 1000], [100, 3000, 1000], [100, 3000, 1000]];
-const routes = timing.map(([out, ms, ttft], i) => ({
+// and last, a reply whose first words came at 5.1 s and the rest held back
+// and sent at once (John on Discord: Kimi Code, 1,367 tok/s): its flow says
+// its content took 2 ms to come
+// Then John's rows after that fix (Kimi Code again: 2,237 and 2,012 tok/s),
+// a burst let go over 236 ms and 196 ms: 550 tokens, 22 of them reasoning,
+// in 16 s with the first content at 5.2 s, its text early (5.4 s) and
+// with the burst (15.764 s); 395 tokens in 19 s. And a steady 50 tok/s
+// answer after the same reasoning, which keeps its speed.
+// [out, ms, ttft, flow, reasoning, firstText]
+const timing = [[8264, 24360, 24359], [8264, 1500, 1000], [1200, 15000, 3000], [100, 3000, 1000], [100, 3000, 1000], [100, 3000, 1000], [2187, 6700, 5100, 2],
+  [550, 16000, 5200, 236, 22, 5400], [550, 16000, 5200, 236, 22, 15764], [395, 19000, 5200, 196], [552, 16000, 5200, 10600, 22, 5400]];
+const routes = timing.map(([out, ms, ttft, flow, reasoning, firstText], i) => ({
   id: 100 - i, seq: 100 - i, time: at(i), agent: "codex", model: "antigravity/gemini-3.8-flash", provider: "antigravity",
-  order: [key], tries: [{ id: key.id, model: key.model, start: at(i), done: true, status: 200, ms, ttft }],
-  done: true, status: 200, ms, ttft, tokens: out + 4087, out,
+  order: [key], tries: [{ id: key.id, model: key.model, start: at(i), done: true, status: 200, ms, ttft, flow, firstText }],
+  done: true, status: 200, ms, ttft, flow, firstText, reasoning, tokens: out + 4087, out,
 }));
 
 function serve(lang) {
@@ -97,6 +107,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // ordinary replies keep theirs
       assert.match(await story(2), want[lang].normal);
       assert.match(await story(3), want[lang].slow);
+      // a burst after its first words: no speed, not 1,367 tok/s
+      const held = await story(6);
+      assert.doesNotMatch(held, want[lang].speed);
+      assert.doesNotMatch(held, /1367|1,367/);
+      // a burst let go over 236 ms after its text, or with it, and over
+      // 196 ms: no speed, not 2,237 or 2,012 tok/s
+      for (const [i, n] of [[7, /2237|2,237/], [8, /2237|2,237/], [9, /2015|2,015|2012|2,012/]]) {
+        const s = await story(i);
+        assert.doesNotMatch(s, want[lang].speed, `row ${i}: ${s}`);
+        assert.doesNotMatch(s, n);
+      }
+      // a steady answer after the same reasoning keeps its 50 tok/s
+      assert.match(await story(10), want[lang].slow);
       assert.deepEqual(errors, []);
     });
   }

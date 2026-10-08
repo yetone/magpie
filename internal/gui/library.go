@@ -404,6 +404,8 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.ImportSkill(in.Name)
 		case "skills/import-all":
 			res, err = library.ImportSkills(in.Names)
+		case "skills/remove-found":
+			res, err = library.RemoveFoundSkill(in.Name)
 		case "skills/use-library":
 			res, err = library.UseLibrarySkill(in.Name, in.Agent)
 		case "skills/how":

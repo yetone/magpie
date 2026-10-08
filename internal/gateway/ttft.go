@@ -17,7 +17,8 @@ import (
 // that is all tool calls has no text to wait for.
 const firstMost = 8 << 20
 
-// firstToken times a stream's first content and first text from start.
+// firstToken times a stream's first content and first text from start,
+// and when the rest of its content came (flowMs).
 type firstToken struct {
 	start time.Time
 	first time.Duration // to the first content; 0 until it comes
@@ -26,6 +27,16 @@ type firstToken struct {
 	began bool
 	read  int
 	pend  []byte
+	// flow: how many bytes of content events had come by each time, one
+	// mark a millisecond, from the first content on
+	flow []flowMark
+	sum  int
+}
+
+// flowMark is how many bytes of content events had come by at.
+type flowMark struct {
+	at  time.Duration
+	sum int
 }
 
 // see reads what was written of the reply.
@@ -48,28 +59,98 @@ func (f *firstToken) see(b []byte) {
 		return
 	}
 	f.pend = append(f.pend, b...)
+	d := max(time.Since(f.start), time.Millisecond)
 	for !f.off {
 		end := eventEnd(f.pend)
 		if end < 0 {
 			break
 		}
-		content, text := firstKind(f.pend[:end])
+		ev := f.pend[:end]
 		f.pend = f.pend[end:]
+		if f.text > 0 {
+			// the first text is known: what is left to tell is when the
+			// rest came, which a quicker look tells
+			if flowContent(ev) {
+				f.mark(d, len(ev))
+			}
+			continue
+		}
+		content, text := firstKind(ev)
 		if !content && !text {
 			continue
 		}
-		d := max(time.Since(f.start), time.Millisecond)
 		if f.first == 0 {
 			f.first = d
 		}
+		f.mark(d, len(ev))
 		if text {
 			f.text = d
-			f.off, f.pend = true, nil // all there is to know
 		}
 	}
 	if len(f.pend) == 0 {
 		f.pend = nil
 	}
+}
+
+// flowMost is the most marks kept: a reply that took longer than this many
+// distinct milliseconds to come has its flow untold (flowMs).
+const flowMost = 1 << 16
+
+// mark counts n bytes of content as come by d.
+func (f *firstToken) mark(d time.Duration, n int) {
+	f.sum += n
+	if k := len(f.flow); k > 0 && f.flow[k-1].at == d {
+		f.flow[k-1].sum = f.sum
+		return
+	}
+	if len(f.flow) >= flowMost {
+		f.off, f.pend, f.flow = true, nil, nil
+		return
+	}
+	f.flow = append(f.flow, flowMark{d, f.sum})
+}
+
+// flowContent: a server-sent event of a reply that carries content, told by
+// a look rather than a parse: a delta of any protocol, or Gemini's parts.
+// The end of a reply (Responses' response.completed, which says the whole
+// reply again) carries none.
+func flowContent(ev []byte) bool {
+	return bytes.Contains(ev, []byte("delta")) || bytes.Contains(ev, []byte(`"parts"`))
+}
+
+// flowMs is how long the content of a reply took to come from its decode's
+// start from (its first content, or first text, as ms): the time its middle
+// 80% of content bytes took, scaled to the whole, so a reply that came
+// evenly gets its whole window, and one that came in a burst — the vendor
+// wrote it all at once after its first content (John on Discord: 1,367
+// tok/s from Kimi Code) — gets next to none, and tells no speed
+// (usage.DecodeOf). At least 1 when told; 0 when it can't be: no content
+// after from, or a stream read too far to keep (flowMost, firstMost).
+func (f *firstToken) flowMs(from int64) int64 {
+	if from <= 0 || len(f.flow) == 0 || f.read > firstMost {
+		return 0
+	}
+	base := 0
+	for _, m := range f.flow {
+		if m.at.Milliseconds() >= from {
+			break
+		}
+		base = m.sum
+	}
+	total := f.sum - base
+	if total <= 0 {
+		return 0
+	}
+	at := func(share int) time.Duration {
+		for _, m := range f.flow {
+			if (m.sum-base)*100 >= total*share && m.at.Milliseconds() >= from {
+				return m.at
+			}
+		}
+		return f.flow[len(f.flow)-1].at
+	}
+	span := at(90) - at(10)
+	return max(span.Milliseconds()*10/8, 1)
 }
 
 // ms are the two as milliseconds from start, 0 for none.
@@ -195,4 +276,14 @@ func filled(raw json.RawMessage) bool {
 		return false
 	}
 	return true
+}
+
+// flowFor is flowMs from where a reply's speed is counted from, as
+// usage.DecodeOf counts it: its first text when it reasoned, else its
+// first content.
+func (f *firstToken) flowFor(reasoning int) int64 {
+	if reasoning > 0 {
+		return f.flowMs(f.text.Milliseconds())
+	}
+	return f.flowMs(f.first.Milliseconds())
 }

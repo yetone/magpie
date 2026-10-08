@@ -416,6 +416,7 @@ func (s *s3) list(ctx context.Context) (map[string]string, error) {
 	prefix := s.usageKey("")
 	out := map[string]string{}
 	token := ""
+	seen := map[string]bool{}
 	for range 100 {
 		q := url.Values{"list-type": {"2"}, "prefix": {prefix}}
 		if token != "" {
@@ -450,12 +451,18 @@ func (s *s3) list(ctx context.Context) (map[string]string, error) {
 				out[name] = c.ETag
 			}
 		}
-		if !l.Truncated || l.Next == "" {
-			break
+		if !l.Truncated {
+			return out, nil
 		}
+		if l.Next == "" || seen[l.Next] {
+			return nil, fmt.Errorf("listing shared usage on S3: incomplete listing (missing or repeated continuation token)")
+		}
+		seen[l.Next] = true
 		token = l.Next
 	}
-	return out, nil
+	// shareWith removes cached days absent from the listing, so a partial
+	// result must never be presented as the complete set of remote files.
+	return nil, fmt.Errorf("listing shared usage on S3: incomplete listing after 100 pages")
 }
 
 func (s *s3) read(ctx context.Context, name string) ([]byte, error) {

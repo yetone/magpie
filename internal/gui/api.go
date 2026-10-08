@@ -22,6 +22,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -196,6 +197,9 @@ type agentJSON struct {
 	// started with (agent.Stale), for the line under its name
 	Source string `json:"source,omitempty"`
 	Stale  int    `json:"stale,omitempty"`
+	// StaleCopies: those copies, each with what it is and when it
+	// started, for the opened row to say which is left to reopen and how
+	StaleCopies []agent.StaleCopy `json:"staleCopies,omitempty"`
 	// Joined: connected with its own models still in its list (Codex
 	// signed in with ChatGPT, agent.Agent.Join)
 	Joined bool `json:"joined,omitempty"`
@@ -315,6 +319,9 @@ type settingsJSON struct {
 	AddrEnv string `json:"addrEnv,omitempty"`
 	// Dir is the data folder beside a portable magpie (#508)
 	Portable bool `json:"portable,omitempty"`
+	// WSL is whether there is WSL to look in for agents (Windows), for
+	// Settings' Detect agents in WSL (#1264)
+	WSL bool `json:"wsl,omitempty"`
 	// Mac apps that explicitly handle .command files, for resumed sessions.
 	TerminalApps    []terminalChoice `json:"terminalApps,omitempty"`
 	TerminalDefault string           `json:"terminalDefault,omitempty"`
@@ -334,12 +341,17 @@ type settingsJSON struct {
 	// that can be named
 	VisionAuto   string     `json:"visionAuto,omitempty"`
 	VisionModels []modelRef `json:"visionModels"`
+	// the Vision the user picked when magpie can't find it any more:
+	// VisionAuto describes in its place, and the row says so
+	VisionMissing string `json:"visionMissing,omitempty"`
 	// the models Codex's thread titles may be sent to (CodexTitles, #705)
 	TitleModels []modelRef `json:"titleModels"`
 	// the model magpie's generate_image tool draws with when ImageGen
 	// names none, and those that can be named
-	ImageGenAuto   string     `json:"imageGenAuto,omitempty"`
-	ImageGenModels []modelRef `json:"imageGenModels"`
+	ImageGenAuto string `json:"imageGenAuto,omitempty"`
+	// the ImageGen the user picked when magpie can't find it any more
+	ImageGenMissing string     `json:"imageGenMissing,omitempty"`
+	ImageGenModels  []modelRef `json:"imageGenModels"`
 	// the web search APIs a model's search goes to when no provider can
 	// search (#419), their keys masked; the ones that can be added; and
 	// the provider that searches first, if one does
@@ -468,6 +480,7 @@ func searchState(s *settingsJSON) {
 func settingsState() settingsJSON {
 	s := settingsJSON{Settings: settings.Load(), Version: Version, Dir: tilde(settings.Dir()), Portable: settings.Portable() != "", Gateway: gateway.URL()}
 	s.AddrEnv = os.Getenv("MAGPIE_ADDR")
+	s.WSL = runtime.GOOS == "windows"
 	s.Web = webPage.Load()
 	s.GatewayOn, s.GatewayWhy = gatewayMode(s.Web)
 	s.LANKey = "" // the retained credential belongs on disk, not in UI state
@@ -504,7 +517,7 @@ func settingsState() settingsJSON {
 	s.MiniMax, s.MiniMaxCheckins = provider.HasMiniMax(), provider.MiniMaxCheckins()
 	s.Qoder, s.QoderCheckins = provider.HasQoder(), provider.QoderCheckins()
 	s.CheckinPlugins = provider.PluginCheckins()
-	s.VisionAuto, s.VisionModels = gateway.AutoVision(), []modelRef{}
+	s.VisionAuto, s.VisionModels, s.VisionMissing = gateway.AutoVision(), []modelRef{}, gateway.VisionMissing()
 	for _, e := range provider.Served() {
 		if e.Images && (e.ImageInput == nil || *e.ImageInput) && (e.Group != "" || e.Provider.Ready()) {
 			m := modelRef{ID: e.ID, Name: e.Name, Provider: e.Provider.ID, PName: e.Provider.Name, Icon: e.Provider.Icon}
@@ -525,7 +538,7 @@ func settingsState() settingsJSON {
 		}
 	}
 	searchState(&s)
-	s.ImageGenAuto, s.ImageGenModels = gateway.AutoDrawer(), []modelRef{}
+	s.ImageGenAuto, s.ImageGenModels, s.ImageGenMissing = gateway.AutoDrawer(), []modelRef{}, gateway.DrawerMissing()
 	for _, p := range provider.All() {
 		if !p.On() || p.DecideOnly() {
 			continue
@@ -1009,6 +1022,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.CodexAgentsV1 = cur.CodexAgentsV1
 		in.FullContext = cur.FullContext // set on its own (full-context below)
 		in.CompactAt = cur.CompactAt     // and so is the threshold
+		// Claude Desktop's list, set in its row on the Agents page
+		in.DesktopLongest = cur.DesktopLongest
 
 		in.CodexTitles = cur.CodexTitles // set on its own (codex-titles below)
 		// and so is the model Codex's auto-review runs on (codex-auto-review)
@@ -1155,6 +1170,22 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			return
 		}
 		if err := provider.SetCodexAgentsV1(in.On); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
+	// whether Claude Desktop lists a model of 1M or more once, by its 1M id
+	// (settings.DesktopLongest, #1272): it reads the list as it starts
+	mux.HandleFunc("POST /api/settings/desktop-longest", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct{ On bool }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		s := settings.Load()
+		s.DesktopLongest = in.On
+		if err := settings.Save(s); err != nil {
 			fail(rw, err)
 			return
 		}
@@ -1690,7 +1721,8 @@ func state() stateJSON {
 		aj.Drift = a.Drift()
 		aj.Wired = a.Wired()
 		if aj.Wired {
-			aj.Stale = a.Stale()
+			aj.StaleCopies = a.StaleCopies()
+			aj.Stale = len(aj.StaleCopies)
 			aj.Joined = a.Joined != nil && a.Joined()
 		} else {
 			aj.Source = a.Source()

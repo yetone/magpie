@@ -30,6 +30,17 @@ const row = (i, model, out, ttft) => ({
 const ROWS = [row(0, "glm-fast", 135, 600), row(1, "kimi-slow", 20, 600), row(2, "glm-fast", 135, 600)];
 ROWS.push({ ...row(3, "glm-fast", 135, 0), ttft_ms: undefined, ms: 3000 });
 for (let i = 4; i < 30; i++) ROWS.push(row(i, "glm-fast", 135, 600));
+// one whose content came in a burst (flow_ms, John on Discord: a Kimi Code
+// reply read 1,367 tok/s): its tokens over the wait tell no speed
+ROWS[4].flow_ms = 2;
+// and John's after that fix (Kimi Code: 2,237 tok/s): 550 tokens, 22 of
+// them reasoning, in 16 s from a first content at 5.2 s, the rest let go
+// over 236 ms, its text early or with the burst; then a steady 50 tok/s
+// answer after the same reasoning
+const kimi = { out: 550, reasoning: 22, ms: 16000, ttft_ms: 5200, flow_ms: 236 };
+Object.assign(ROWS[5], kimi, { first_text_ms: 5400 });
+Object.assign(ROWS[6], kimi, { first_text_ms: 15764 });
+Object.assign(ROWS[7], kimi, { out: 552, first_text_ms: 5400, flow_ms: 10600 });
 
 const FAST = { id: "glm-fast", calls: 28, input: 1, output: 3780, cache_read: 0, cache_write: 0, cost: 0.3, timed: 27, ttft_ms: 27 * 600, decode_ms: 27 * 1800, decode_out: 27 * 135 };
 const SLOW = { id: "kimi-slow", calls: 1, input: 1, output: 20, cache_read: 0, cache_write: 0, cost: 0.01, timed: 1, ttft_ms: 600, decode_ms: 2000, decode_out: 20 };
@@ -119,6 +130,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal((await cell(0).textContent()).trim(), w.fast);
         assert.equal((await cell(1).textContent()).trim(), w.slow);
         assert.equal((await cell(3).textContent()).trim(), "—");
+        assert.equal((await cell(4).textContent()).trim(), "—");
+        assert.equal((await cell(5).textContent()).trim(), "—");
+        assert.equal((await cell(6).textContent()).trim(), "—");
+        assert.equal((await cell(7).textContent()).trim(), lang === "en" ? "50 tok/s" : "50 token/秒");
 
         // the table fits the window; what it leaves out is in the details
         const wrap = p.locator("#ledWrap");

@@ -432,7 +432,11 @@ func addAccount(agentID string) error {
 	return fmt.Errorf("sign-in canceled")
 }
 
-func openInBrowser(url string) {
+// openInBrowser opens url in the user's browser. It is a variable so the
+// tests can have it go nowhere without starting a program (noBrowser).
+var openInBrowser = openURLInBrowser
+
+func openURLInBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":

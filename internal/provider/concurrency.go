@@ -179,3 +179,43 @@ func normalAccountConcurrency(m map[string]int) map[string]int {
 	}
 	return out
 }
+
+// MaxRPMLimit bounds a limit on requests a minute.
+const MaxRPMLimit = 10000
+
+// RPMLimit is how many requests a minute each of p's keys or accounts may
+// send the vendor, 0 for no limit: the provider's MaxRPM. An account made
+// afresh beside the agent's own (AlsoOn) carries none of the provider's
+// settings: it is read from providers.json then.
+func (p Provider) RPMLimit() int {
+	n := p.MaxRPM
+	if n == 0 && p.Account != nil {
+		if s, ok := storedPicks(p.ID); ok {
+			n = s.MaxRPM
+		}
+	}
+	return min(max(n, 0), MaxRPMLimit)
+}
+
+// CheckRPM says what is wrong with a limit on requests a minute, nil when
+// nothing is.
+func CheckRPM(n int) error {
+	if n < 0 || n > MaxRPMLimit {
+		return fmt.Errorf("a limit on requests a minute is from 0 (none) to %d, not %d", MaxRPMLimit, n)
+	}
+	return nil
+}
+
+// SetRPM sets how many requests a minute each of the provider's keys or
+// accounts may send, 0 for no limit.
+func SetRPM(id string, n int) error {
+	if err := CheckRPM(n); err != nil {
+		return err
+	}
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	p.MaxRPM = n
+	return Save(*p)
+}

@@ -270,3 +270,26 @@ test("docs: an English docs page sends a browser that prefers Chinese or Japanes
   const res = await worker.fetch(new Request("https://usemagpie.ai/docs/zh/start", { headers: { Cookie: "lang=en" } }), env, ctx);
   assert.equal(res.status, 200);
 });
+
+// /api/partners is partners.js, cached ten minutes; every entry keeps the
+// rules the app checks (internal/provider/partners.go), so none is dropped
+// there unseen.
+test("partners", async () => {
+  const { PARTNERS } = await import("./partners.js");
+  const res = await ask("/api/partners");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Cache-Control"), "public, max-age=600");
+  assert.deepEqual(await res.json(), { partners: PARTNERS });
+  assert(PARTNERS.length <= 12);
+  const ids = new Set();
+  for (const p of PARTNERS) {
+    assert.match(p.id, /^[a-z0-9][a-z0-9-]{1,40}$/, p.id);
+    assert(!ids.has(p.id), p.id + " twice");
+    ids.add(p.id);
+    assert(p.name?.trim(), p.id + " has no name");
+    assert(p.chat || p.responses || p.anthropic || p.regions?.length, p.id + " has no endpoint");
+    const urls = [p.chat, p.responses, p.anthropic, p.website, p.keysUrl, p.iconUrl, ...(p.regions || []).flatMap((r) => [r.chat, r.responses, r.anthropic, r.keysUrl, r.website])];
+    for (const u of urls.filter(Boolean)) assert.equal(new URL(u).protocol, "https:", p.id + ": " + u);
+    for (const t of [p.from, p.until].filter(Boolean)) assert(!isNaN(Date.parse(t)), p.id + ": " + t);
+  }
+});

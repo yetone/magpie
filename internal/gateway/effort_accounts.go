@@ -161,3 +161,35 @@ func effortError(c candidate, e string, takes []string, vendor string) string {
 	}
 	return msg
 }
+
+// askedTier is the service tier a Responses request asks for.
+func askedTier(body []byte) string {
+	var q struct {
+		Tier string `json:"service_tier"`
+	}
+	json.Unmarshal(body, &q)
+	return q.Tier
+}
+
+// takesTier says whether c's account may be asked for service tier t on
+// its model: not when its own model list says which tiers the model has
+// and t isn't one.
+func takesTier(c candidate, t string) bool {
+	if c.p.Account == nil {
+		return true
+	}
+	tiers, ok := c.p.Account.Tiers(c.model)
+	return !ok || slices.Contains(tiers, t)
+}
+
+// tierMate is the first of left that is another account of c's member
+// whose list offers tier t on the model, or -1.
+func tierMate(left []candidate, c candidate, t string) int {
+	return slices.IndexFunc(left, func(x candidate) bool {
+		if x.p.Account == nil || x.p.ID != c.p.ID || x.model != c.model || x.effort != c.effort || x.who() == c.who() {
+			return false
+		}
+		tiers, ok := x.p.Account.Tiers(x.model)
+		return ok && slices.Contains(tiers, t)
+	})
+}

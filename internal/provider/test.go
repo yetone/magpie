@@ -379,7 +379,9 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 		return r
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("anthropic-version", "2023-06-01")
+	if proto == Anthropic {
+		req.Header.Set("anthropic-version", "2023-06-01")
+	}
 	if p.IsOpenCode() {
 		OpenCodeClient(req.Header, "")
 	}

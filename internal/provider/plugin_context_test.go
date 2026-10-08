@@ -85,3 +85,31 @@ func TestPluginModelWindow(t *testing.T) {
 		}
 	}
 }
+
+// A plugin model naming both a window and a prompt cap keeps the cap, but
+// a cap above the window is held to the window: opencode/hy3-free's row
+// (190K window, 192K input) was served past its window, and GPT-5's real
+// 272K prompt cap still wins over its 400K window (#1286).
+func TestPluginCatalogClampsInputAboveWindow(t *testing.T) {
+	pp := plugin.Provider{ID: "opencode", Models: []plugin.Model{
+		{ID: "hy3-free", Context: 190_000, Input: 192_000, Output: 64_000},
+		{ID: "gpt-5-codex", Context: 400_000, Input: 272_000, Output: 128_000},
+		{ID: "input-only", Input: 200_000, Output: 64_000},
+		{ID: "context-only", Context: 1_000_000, Output: 64_000},
+	}}
+	got := map[string]int{}
+	for _, m := range pluginCatalog(pp) {
+		got[m.ID] = m.Context
+	}
+	want := map[string]int{
+		"hy3-free":     190_000,
+		"gpt-5-codex":  272_000,
+		"input-only":   200_000,
+		"context-only": 1_000_000,
+	}
+	for id, n := range want {
+		if got[id] != n {
+			t.Errorf("%s: %d, want %d", id, got[id], n)
+		}
+	}
+}

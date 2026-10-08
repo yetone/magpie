@@ -49,7 +49,7 @@ func claudeReply(t *testing.T, run *subscriptionRun, lines []string, hold bool) 
 	req := &Request{Model: "claude-opus-5-5", Stream: true}
 	var usage Usage
 	relay(rec, httptest.NewRequest("POST", "/v1/messages", nil), provider.Anthropic, "Claude Code", req, segment, &usage,
-		func() {}, func(said, s string, k bool) { ended, ok = s, k })
+		func() {}, nil, func(said, s string, k bool) { ended, ok = s, k })
 	raw = rec.Body.String()
 	var tools []string
 	for _, l := range strings.Split(raw, "\n") {

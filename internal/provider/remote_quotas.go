@@ -21,7 +21,8 @@ import (
 // remote's ("office/codex"), so they never meet this computer's own.
 //
 // Only the magpie holding the sign-ins asks the vendors. It answers
-// RemoteCardsPath from what it has kept (CachedCards) and asks nobody;
+// RemoteCardsPath from what it has kept (CachedCards: its page's cards and
+// what was read behind the requests since, cards_kept.go) and asks nobody;
 // a card's refresh here asks it to read that card again
 // (RemoteRefreshPath), which is the one time a vendor is asked for us.
 
@@ -49,15 +50,16 @@ const errRemoteNoShare = "remote magpie doesn't share its quotas; update magpie 
 // each with its kind, for another magpie to show: no vendor is asked,
 // whatever their age, and another magpie's cards shown here aren't
 // passed on.
+//
+// The cards are the page's with what was read of the same accounts and
+// keys behind it since (cards_kept.go): a magpie serving only other
+// magpies has nobody on its page (#1313).
 func CachedCards(now time.Time) []SubscriptionQuota {
 	c := &subscriptionUsageCache
 	c.Lock()
 	data := c.data
 	c.Unlock()
-	subs := []SubscriptionQuota{}
-	if data != nil {
-		subs = withDailyCredits(visibleQuotas(data), now)
-	}
+	subs := withDailyCredits(visibleQuotas(withAccountReadings(data)), now)
 	p := &planQuotaCache
 	p.Lock()
 	plans := slices.Clone(p.data)
@@ -66,6 +68,17 @@ func CachedCards(now time.Time) []SubscriptionQuota {
 	b.Lock()
 	balances := slices.Clone(b.data)
 	b.Unlock()
+	ps := keyCardProviders()
+	if plans == nil || balances == nil {
+		keptPlans, keptBalances := keptKeyCards(ps)
+		if plans == nil {
+			plans = keptPlans
+		}
+		if balances == nil {
+			balances = keptBalances
+		}
+	}
+	plans, balances = withKeyReadings(plans, ps, "plan"), withKeyReadings(balances, ps, "balance")
 	out := []SubscriptionQuota{}
 	for _, g := range []struct {
 		kind string
@@ -107,6 +120,15 @@ func ForgetRemoteCardsForTest() {
 	c := &remoteCardCache
 	c.Lock()
 	c.m = nil
+	c.Unlock()
+}
+
+// ForgetKeptCardsForTest has the cards kept on disk (quotas.json) read
+// again from the home a test has set: they are read once per process.
+func ForgetKeptCardsForTest() {
+	c := &lastQuotas
+	c.Lock()
+	c.m, c.loaded = nil, false
 	c.Unlock()
 }
 

@@ -14,7 +14,7 @@
 i.dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 2.5px; background: var(--k); }
 i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent); }
 
-.ctx-card { position: relative; container-type: inline-size; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 14px; min-width: 0; font-variant-numeric: tabular-nums; }
+.ctx-card { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 14px; min-width: 0; font-variant-numeric: tabular-nums; }
 .ctx-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ctx-head .grow, .ctx-foot .grow, .ctx-contents-head .grow, .ctx-agent-head .grow, .ctx-agent-foot .grow, .ctx-tools .grow, .ctx-sess-head .grow { flex: 1; }
 .ctx-title { font-size: 13px; font-weight: 600; color: var(--fg); white-space: nowrap; }
@@ -46,7 +46,8 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 
 /* the window, a cell for each 1/400 of it */
 .ctx-waffle { display: grid; grid-template-columns: repeat(50, minmax(0, 1fr)); gap: 2px; }
-@container (max-width: 520px) { .ctx-waffle { grid-template-columns: repeat(25, minmax(0, 1fr)); } }
+/* a card 520px wide or less (context.js sets max520 by its width) */
+:where(.ctx-card.max520) .ctx-waffle { grid-template-columns: repeat(25, minmax(0, 1fr)); }
 .ctx-waffle > i { aspect-ratio: 1; border-radius: 2px; background: var(--k, var(--k-free)); transition: opacity .16s, transform .16s; animation: ctx-cell .32s var(--ease, ease) both; animation-delay: var(--d, 0ms); }
 .ctx-waffle > i.free { --k: var(--k-free); }
 @keyframes ctx-cell { from { opacity: 0; transform: scale(.4); } }
@@ -75,7 +76,8 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 .ctx-contents-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ctx-contents-head .segs { max-width: 100%; overflow-x: auto; scrollbar-width: none; flex: none; }
 .ctx-contents-head .segs .opt { height: 20px; padding: 0 9px; font-size: 11px; white-space: nowrap; flex: none; }
-@container (max-width: 520px) { .ctx-contents-head { flex-wrap: wrap; } .ctx-contents-head .segs { flex: 1 1 100%; } }
+:where(.ctx-card.max520) .ctx-contents-head { flex-wrap: wrap; }
+:where(.ctx-card.max520) .ctx-contents-head .segs { flex: 1 1 100%; }
 .ctx-rows { display: flex; flex-direction: column; }
 .ctx-row { display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 0 6px; margin: 0 -6px; border-radius: 6px; font-size: 12px; }
 .ctx-row:hover { background: var(--pill); }
@@ -87,7 +89,7 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 .ctx-mini { flex: none; width: 72px; height: 4px; border-radius: 2px; background: var(--k-free); overflow: hidden; }
 .ctx-mini i { display: block; height: 100%; border-radius: 2px; background: var(--k); }
 .ctx-v { flex: none; width: 48px; text-align: right; color: var(--fg-2); font-size: 11.5px; }
-@container (max-width: 420px) { .ctx-mini, .ctx-tag { display: none; } }
+:where(.ctx-card.max420) :is(.ctx-mini, .ctx-tag) { display: none; }
 .ctx-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
 .ctx-more { align-self: flex-start; margin-top: 2px; font-size: 11.5px; }
 
@@ -198,17 +200,8 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
   .ctx-waffle > i { transition: none; }
 }
 
-/* Safari 15: no container queries, so the card's narrow layout goes by the
-   window's width; no color-mix, so the free cells and the line's area are
+/* Safari 15: no color-mix, so the free cells and the line's area are
    tinted by opacity */
-@supports not (container-type: inline-size) {
-  @media (max-width: 560px) {
-    .ctx-waffle { grid-template-columns: repeat(25, minmax(0, 1fr)); }
-    .ctx-contents-head { flex-wrap: wrap; }
-    .ctx-contents-head .segs { flex: 1 1 100%; }
-  }
-  @media (max-width: 460px) { .ctx-mini, .ctx-tag { display: none; } }
-}
 @supports not (color: color-mix(in srgb, red 50%, blue)) {
   :root { --k-free: rgba(128, 128, 128, .12); }
   i.dot.free { box-shadow: inset 0 0 0 1px var(--line); }

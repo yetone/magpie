@@ -118,10 +118,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       quotaError("the Balance URL https://relay.example.com/api/usage/token takes the API key, not the access token: set it to https://relay.example.com/api/user/self (Balance field $data.quota / 500000) for the account's balance, or remove the token for the key's own"),
       quotaError("401 Unauthorized: add the header New-Api-User = your user ID (shown in the site's personal settings) to this provider's Headers; the relay said: 无权进行此操作，未提供 New-Api-User"),
       quotaError("401 Unauthorized: something else"),
+      // ZCode with nothing left to spend: the card gets either the
+      // built-in's words (zcodeStartQuota, zcode_start.go) or the
+      // plugin's NO_START, and the two are the same string — neither
+      // names a way out, so the card says the action itself (#1001)
+      quotaError("this account has no GLM Coding Plan, and ZCode's Start Plan has ended or was never started"),
+      quotaError("this account has no GLM Coding Plan, and ZCode's Start Plan has ended or was never started"),
+      // a sign-in error, which names the address and never reaches the
+      // card — it must not be mistaken for the card's
+      quotaError("this Z.ai account has no GLM Coding Plan, of its own or a team's, and ZCode's Start Plan has ended or was never started — subscribe at z.ai/subscribe, then add it again"),
+      // one that couldn't be read is a reading that failed, and says so
+      quotaError("this Z.ai account has no GLM Coding Plan, of its own or a team's, and ZCode's Start Plan could not be read: 502 Bad Gateway"),
     ]);
     assert.match(said[0], /set it to …\/api\/user\/self/);
     assert.match(said[1], /^Add the header New-Api-User = your user ID/);
     assert.equal(said[2], "Allowance unavailable");
+    // the card's own words for a ZCode account with nothing to spend, and
+    // the action on the card itself (there is none in the error to hover for)
+    for (const s of [said[3], said[4]]) {
+      assert.match(s, /^ZCode: no GLM Coding Plan, and no free Start Plan/);
+      assert.match(s, /subscribe to a GLM Coding Plan to use this account/);
+    }
+    assert.equal(said[5], "Allowance unavailable", "a Start Plan that couldn't be read is not a plan that ended");
+    assert.equal(said[6], "Allowance unavailable", "a sign-in error names the address itself and is not the card's")
     const missing = await page.evaluate(() => [
       "…/api/usage/token takes the API key, not this token: for the account's balance, new-api uses /api/user/self; sub2api uses /api/v1/user/profile.",
       "The token needs a Balance URL: a new-api relay uses /api/user/self; a sub2api panel uses /api/v1/user/profile to read the account's balance.",
@@ -129,6 +148,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       "A new-api relay also wants the header New-Api-User = your user ID (shown in the site's personal settings): add it under Headers.",
       "The Balance URL …/api/usage/token takes the API key, not the access token — set it to …/api/user/self in the provider's settings",
       "Add the header New-Api-User = your user ID (shown in the site's personal settings) to the provider's Headers",
+      "ZCode: no GLM Coding Plan, and no free Start Plan — subscribe to a GLM Coding Plan to use this account",
     ].filter((k) => !I18N.zh[k]));
     assert.deepEqual(missing, [], "every new string has its Chinese");
     assert.deepEqual(errors, []);

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yetone/magpie/internal/desktopdir"
 )
 
 // desktopAccount makes a skills-plugin for one of Claude Desktop's
@@ -228,5 +230,34 @@ func TestClaudeDesktopSkills(t *testing.T) {
 	}
 	if !strings.Contains(read(t, m), `{"skillId":"ponytail","name":"ponytail","syncManaged":true,"updatedAt":"2025-10-04T00:00:00.000Z","enabled":true}`) {
 		t.Errorf("the entry's keys moved:\n%s", read(t, m))
+	}
+}
+
+// Kilig on Discord: an MSIX Claude Desktop (Windows 10 LTSC) has its
+// claude_desktop_config.json and Cowork's skills in the package's
+// LocalCache\Roaming\Claude, and doesn't see a file written into
+// %APPDATA%\Claude: the library's MCP servers and skills go there.
+func TestClaudeDesktopMSIXLibrary(t *testing.T) {
+	h := sandbox(t)
+	old := desktopdir.OS
+	desktopdir.OS = "windows"
+	t.Cleanup(func() { desktopdir.OS = old })
+	local, roaming := filepath.Join(h, "AppData", "Local"), filepath.Join(h, "AppData", "Roaming")
+	t.Setenv("LOCALAPPDATA", local)
+	t.Setenv("APPDATA", roaming)
+	os.MkdirAll(roaming, 0o755)
+	data := filepath.Join(local, "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache", "Roaming", "Claude")
+	write(t, filepath.Join(data, "Local State"), `{}`)
+	root := desktopAccount(t, data, "org", "acct", `{"lastUpdated": "2026-10-01T00:00:00.000Z", "skills": []}`)
+
+	tg := targetByID("claude-desktop")
+	if tg == nil || tg.MCP == nil {
+		t.Fatalf("no Claude Desktop target: %+v", tg)
+	}
+	if want := filepath.Join(data, "claude_desktop_config.json"); tg.MCP.Path != want {
+		t.Errorf("MCP file %s, want %s", tg.MCP.Path, want)
+	}
+	if !slices.Equal(tg.Desktop, []string{root}) {
+		t.Errorf("skills-plugin roots %v, want %s", tg.Desktop, root)
 	}
 }
