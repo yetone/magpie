@@ -29,6 +29,7 @@ var wslMore = []struct {
 	{"droid", ".factory/settings.json", "/v1"},
 	{"fx", ".fx/settings.json", "/v1"},
 	{"commandcode", ".commandcode/providers.json", "/v1"},
+	{"joycode", ".joycode/model-providers.json", "/v1"},
 	{"minimax-code", ".minimax/config.yaml", ""},
 	{"dsh", ".dsh/config.yaml", "/v1"},
 	{"muse", ".config/muse/settings.json", "/v1"},

@@ -391,6 +391,8 @@ var wslKinds = []wslKind{
 		}},
 	{id: "empryo", name: "Empryo", dir: ".empryo", bin: "empryo", in: empryoIn,
 		restart: "reads its config at start-up — restart open empryo sessions to use this."},
+	{id: "joycode", name: "JoyCode", dir: ".joycode", in: joycodeIn,
+		restart: "reads its config at start-up — restart open JoyCode windows to use this."},
 	{id: "muse", name: "Muse Code", dir: ".config/muse", bin: "muse", in: museIn,
 		restart: "reads its settings at start-up — restart open muse sessions to use this."},
 	{id: "qoder", name: "Qoder", dir: ".qoder", bin: "qodercli", in: qoderIn,

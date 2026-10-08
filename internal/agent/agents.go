@@ -97,6 +97,7 @@ func All() []*Agent {
 		kimi(home),
 		muse(cfg),
 		empryo(home),
+		joycode(home),
 		miniMax(home),
 		droid(home),
 		cline(home),
