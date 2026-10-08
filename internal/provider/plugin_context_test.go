@@ -57,6 +57,35 @@ func pluginWindow(t *testing.T, id string) int {
 	return 0
 }
 
+// A plugin model that carries both OpenCode limit.context and limit.input
+// keeps the context window, not the input (which is context−output there).
+// The reporter's space-bunny-free bytes (#1286).
+func TestPluginCatalogKeepsContextWindow(t *testing.T) {
+	pp := plugin.Provider{ID: "opencode-zen-free", Models: []plugin.Model{
+		{ID: "space-bunny-free", Name: "Space Bunny Free", Context: 1_048_576, Input: 524_288, Output: 524_288},
+		{ID: "big-pickle", Name: "Big Pickle", Context: 200_000, Input: 160_000, Output: 32_000},
+		{ID: "hy3-free", Name: "HY3 Free", Context: 190_000, Input: 192_000, Output: 64_000},
+		{ID: "muse-spark-1.3-contributor-free", Name: "Muse Spark", Context: 1_048_576, Output: 131_072},
+		{ID: "input-only", Name: "Input only", Input: 128_000, Output: 16_384},
+	}}
+	got := map[string]int{}
+	for _, m := range pluginCatalog(pp) {
+		got[m.ID] = m.Context
+	}
+	want := map[string]int{
+		"space-bunny-free":                 1_048_576,
+		"big-pickle":                       200_000,
+		"hy3-free":                         190_000,
+		"muse-spark-1.3-contributor-free":  1_048_576,
+		"input-only":                       128_000,
+	}
+	for id, n := range want {
+		if got[id] != n {
+			t.Errorf("%s: %d, want %d", id, got[id], n)
+		}
+	}
+}
+
 // A plugin's model listed without a window (Cline's feed says none) takes
 // the one models.dev gives its model under the vendor's prefix, and the
 // window the user sets on the provider over both (ARNO on Discord, v0.1.815).

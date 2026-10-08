@@ -77,6 +77,8 @@ The host gets magpie's proxy only as `MAGPIE_*_PROXY` and applies it to each fet
 
 The GUI's plugin integration includes `subOf`, `pluginSubs`, and `startPluginSignIn`. A change to sign-in or provider presentation must follow these paths as well as the built-in paths it affects.
 
+`pluginCatalog` maps a plugin model's window from `context`, falling back to `input` only when `context` is missing. OpenCode's `limit.input` is the window minus output headroom, not models.dev's smaller prompt cap; preferring `input` halved 1M models such as `space-bunny-free` (#1286). models.dev still prefers its own `limit.input` in [`catalog.go`](../../internal/catalog/catalog.go).
+
 ## Verification
 
 [`migrate_notice_test.go`](../../internal/provider/migrate_notice_test.go) includes `TestMovedBuiltinsSayTheirPlugin`, which checks that moved built-ins tell contributors which plugin serves them. Migration tests live beside [`migrate.go`](../../internal/provider/migrate.go).

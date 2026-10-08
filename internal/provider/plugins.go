@@ -170,11 +170,15 @@ func pluginCatalog(pp plugin.Provider) []catalog.Model {
 		c := catalog.Model{
 			ID: m.ID, Name: m.Name, Provider: pp.ID, Released: m.Released,
 			APIs: []string{string(pluginProtocol(pp.ID, m))}, Images: m.Image,
-			Context: m.Input, Output: m.Output, Free: m.Free,
+			// Context is the window the plugin gave. OpenCode's limit.input
+			// is context−output (space reserved for the reply), not
+			// models.dev's smaller prompt cap, so Input only fills in when
+			// Context is missing (#1286).
+			Context: m.Context, Output: m.Output, Free: m.Free,
 			Rate: m.Rate, RateWas: m.RateWas,
 		}
 		if c.Context == 0 {
-			c.Context = m.Context
+			c.Context = m.Input
 		}
 		// Cursor's own ids no catalog knows: one not named a 1M model
 		// holds what the catalog knows its base to, as the built-in's did
