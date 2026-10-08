@@ -137,8 +137,8 @@ func (c *rowChunk) row(i int) Row {
 	for i, s := range rowText(&r) {
 		*s = c.Strings[p.Text[i]]
 	}
-	if r.Swapped && SameSpelled(r.Model, r.Served) {
-		r.Swapped = false // kept before a name spelled otherwise was the same
+	if r.Swapped && (SameSpelled(r.Model, r.Served) || GeminiServing(r.Model, r.Served)) {
+		r.Swapped = false // kept before a name spelled otherwise, or Google's serving name, was the same
 	}
 	r.Computer = c.Computer
 	return r
