@@ -797,6 +797,8 @@ var codexModelsWait = 3 * time.Second
 // time, Codex's last list of its own stands in.
 func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	var own []any
+	var authResponse *http.Response
+	var authBody []byte
 	etag := ""
 	u := provider.CodexBase + "/models"
 	if r.URL.RawQuery != "" {
@@ -819,11 +821,7 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 				// stamped below (see codexcat.V1)
 				codexcat.Remember(own)
 			} else if res.StatusCode == 401 || res.StatusCode == 403 {
-				// a sign-in to renew is Codex's to see
-				w.Header().Set("Content-Type", res.Header.Get("Content-Type"))
-				w.WriteHeader(res.StatusCode)
-				w.Write(b)
-				return
+				authResponse, authBody = res, b
 			}
 		}
 	}
@@ -832,7 +830,24 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 	// built once, where each build read every agent's sign-in, keychain
 	// items among them, and together held the answer past Codex's 5 s (#746)
 	defer provider.Hold()()
-	cached := own == nil
+	ms := provider.CodexListed()
+	if authResponse != nil {
+		if _, held := keyHolds(r); held {
+			shown, _ := provider.CatalogFor("codex")
+			allowed := map[string]bool{}
+			for _, entry := range keyAllowed(r, shown) {
+				allowed[entry.ID] = true
+			}
+			ms = slices.DeleteFunc(ms, func(model catalog.Model) bool { return !allowed[model.ID] })
+		}
+		if len(ms) == 0 {
+			w.Header().Set("Content-Type", authResponse.Header.Get("Content-Type"))
+			w.WriteHeader(authResponse.StatusCode)
+			w.Write(authBody)
+			return
+		}
+	}
+	cached := own == nil && authResponse == nil
 	if cached {
 		for _, e := range codexcat.CacheEntries() {
 			own = append(own, e)
@@ -891,7 +906,6 @@ func (s *Server) codexModels(w http.ResponseWriter, r *http.Request) {
 			codexcat.AutoReview(o)
 		}
 	}
-	ms := provider.CodexListed()
 	// the list is the backend's and magpie's, and so is its ETag
 	w.Header().Set("ETag", codexcat.WithTag(etag, provider.CodexListTag()))
 	all := append(own, codexcat.Entries(ms, len(own)+100)...)
