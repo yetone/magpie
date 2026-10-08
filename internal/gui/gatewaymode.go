@@ -12,8 +12,8 @@ import (
 
 // Gateway mode (Player on Discord): `magpie web` on a server that is only
 // the gateway for other machines' agents shows what such a gateway needs —
-// Providers, Gateway, Routing, Usage, Plugins and Settings — and leaves out
-// what is this machine's agents' (Agents, Sessions, Library, the settings
+// Providers, Gateway, Routing, Usage, Sessions, Plugins and Settings — and leaves out
+// what is this machine's agents' (Agents, Library, the settings
 // written into agents' files) and its desktop's (the tray, the Dock, open
 // at login, notifications). It is the browser page's alone: the app's
 // windows show everything whatever it says.

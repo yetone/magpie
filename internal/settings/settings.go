@@ -103,6 +103,9 @@ type Settings struct {
 	// RequestArchiveMaxMB is how much of each body the archive keeps, in
 	// MiB: 0 for 32, at most 1024 (#447)
 	RequestArchiveMaxMB int `json:"requestArchiveMaxMB,omitempty"`
+	// GatewayConversations is local, opt-in recording of session traffic.
+	// Only SetGatewayConversations changes it; other saves keep local consent.
+	GatewayConversations bool `json:"gatewayConversations,omitempty"`
 	// CodexWarmup starts a ChatGPT account's next window as soon as the
 	// last one resets, with one tiny request, so it counts from then (a
 	// Codex window starts at its first use): "" off, "week" the weekly
@@ -730,6 +733,7 @@ func (s Settings) Compact() int {
 // icon (yoooo on Discord: usage turned off on a Mac came back from a
 // Windows box that shows it).
 func (s *Settings) KeepOwn(cur Settings) {
+	s.GatewayConversations = cur.GatewayConversations
 	s.UIFont, s.CodeFont = cur.UIFont, cur.CodeFont
 	s.Window, s.Proxy, s.Port, s.Dock, s.DockWindow, s.Lightweight = cur.Window, cur.Proxy, cur.Port, cur.Dock, cur.DockWindow, cur.Lightweight
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
@@ -794,6 +798,11 @@ var fileMu sync.RWMutex
 func Load() Settings {
 	fileMu.RLock()
 	defer fileMu.RUnlock()
+	return load()
+}
+
+// load is called with fileMu held for reading or writing.
+func load() Settings {
 	var s Settings
 	// read again only once the file changed: a look at the agents asks for
 	// the settings for every model of every agent (hundreds of reads, a
@@ -859,10 +868,25 @@ func SavedAddr() string {
 	return fmt.Sprintf("127.0.0.1:%d", p)
 }
 
-// Save validates and writes the settings.
+// Save validates and writes the settings, preserving current recording consent.
 func Save(s Settings) error {
 	fileMu.Lock()
 	defer fileMu.Unlock()
+	return save(s, false)
+}
+
+// SetGatewayConversations changes local recording consent without overwriting
+// other settings from an earlier snapshot.
+func SetGatewayConversations(on bool) error {
+	fileMu.Lock()
+	defer fileMu.Unlock()
+	s := load()
+	s.GatewayConversations = on
+	return save(s, true)
+}
+
+// save is called under fileMu. Only the consent setter may replace recording.
+func save(s Settings, recording bool) error {
 	defer filememo.Forget() // read again, where a request holds it
 	s = s.normal()
 	if !slices.Contains(Themes, s.Theme) {
@@ -981,6 +1005,7 @@ func Save(s Settings) error {
 	}
 	// Load may have returned defaults or only part of an unreadable file.
 	// Do not replace it, including its permissions, with those values.
+	consent := false
 	if b, err := steady.ReadFile(Path()); err == nil {
 		b = bytes.TrimPrefix(b, []byte("\xef\xbb\xbf"))
 		if len(bytes.TrimSpace(b)) != 0 {
@@ -988,9 +1013,13 @@ func Save(s Settings) error {
 			if err := json.Unmarshal(b, &stored); err != nil {
 				return fmt.Errorf("could not read settings at %s; repair or move that file aside before saving: %w", Path(), err)
 			}
+			consent = stored.GatewayConversations
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("could not read settings at %s: %w", Path(), err)
+	}
+	if !recording {
+		s.GatewayConversations = consent
 	}
 	if err := os.MkdirAll(Dir(), 0o755); err != nil {
 		return err

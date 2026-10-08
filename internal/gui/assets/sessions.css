@@ -77,3 +77,8 @@
 .sm-provider-list li .name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sm-provider-list li .note { flex: none; font-size: 11px; color: var(--faint); }
 .sm-provider-list { max-height: min(300px, 45vh); overflow-y: auto; }
+.sm-recording { margin: 0 0 12px; gap: 8px; min-height: 28px; }
+.sm-recording:empty { display: none; }
+.sm-record-label { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+.sm-record-label input { flex: 0 0 auto; accent-color: var(--fg); }
+.sm-record-clear { flex: 0 0 28px; width: 28px; height: 28px; }

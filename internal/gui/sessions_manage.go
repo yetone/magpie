@@ -6,10 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"runtime"
+	"sort"
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -63,35 +65,87 @@ func trashJSON(looks map[string]*agent.Agent) []trashedJSON {
 }
 
 func sessionManageRoutes(mux *http.ServeMux, w Windows) {
+	mux.HandleFunc("POST /api/sessions/recording", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			On    bool `json:"on"`
+			Clear bool `json:"clear"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(rw, r.Body, 1024)).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if err := sessions.SetGatewayRecording(in.On, in.Clear); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]bool{"recording": settings.Load().GatewayConversations})
+	})
 	// manage is the agents with sessions, and every session of ?agent=
 	// (the one with the most when none is named), and the trash.
 	mux.HandleFunc("GET /api/sessions/manage", func(rw http.ResponseWriter, r *http.Request) {
 		looks := agentLooks()
 		out := struct {
-			Agents   []manageAgentJSON `json:"agents"`
-			Agent    string            `json:"agent"`
-			Sessions []managedJSON     `json:"sessions"`
-			Terminal bool              `json:"terminal"`
-			Trash    []trashedJSON     `json:"trash"`
-			TrashDir string            `json:"trashDir"`
+			Agents    []manageAgentJSON `json:"agents"`
+			Agent     string            `json:"agent"`
+			Sessions  []managedJSON     `json:"sessions"`
+			Terminal  bool              `json:"terminal"`
+			Trash     []trashedJSON     `json:"trash"`
+			TrashDir  string            `json:"trashDir"`
+			Recording bool              `json:"recording"`
 		}{Agents: []manageAgentJSON{}, Sessions: []managedJSON{}, Terminal: runtime.GOOS == "darwin" && !isWeb(w),
-			Trash: trashJSON(looks), TrashDir: tilde(sessions.TrashDir())}
+			Trash: trashJSON(looks), TrashDir: tilde(sessions.TrashDir()), Recording: settings.Load().GatewayConversations}
 		want := r.URL.Query().Get("agent")
+		counts := map[string]*manageAgentJSON{}
 		for _, a := range sessions.Agents() {
 			j := manageAgentJSON{AgentCount: a, Name: a.Agent, Icon: "generic"}
 			if l := looks[a.Agent]; l != nil {
 				j.Name, j.Icon = l.Name, l.Icon
 			}
-			out.Agents = append(out.Agents, j)
-			if a.Agent == want {
-				out.Agent = want
+			counts[a.Agent] = &j
+		}
+		gateway := usage.GatewaySessions(time.Time{}, nil)
+		nativeCounts := map[string]map[string]bool{}
+		for _, s := range sessions.List(sessions.All) {
+			if nativeCounts[s.Agent] == nil {
+				nativeCounts[s.Agent] = map[string]bool{}
 			}
+			nativeCounts[s.Agent][s.ID] = true
+		}
+		for _, s := range gateway {
+			if nativeCounts[s.Agent][s.ID] {
+				continue
+			}
+			j := counts[s.Agent]
+			if j == nil {
+				j = &manageAgentJSON{AgentCount: sessions.AgentCount{Agent: s.Agent}, Name: s.Agent, Icon: "generic"}
+				if l := looks[s.Agent]; l != nil {
+					j.Name, j.Icon = l.Name, l.Icon
+				}
+				counts[s.Agent] = j
+			}
+			j.Count++
+		}
+		for _, j := range counts {
+			out.Agents = append(out.Agents, *j)
+		}
+		sort.Slice(out.Agents, func(i, j int) bool {
+			if out.Agents[i].Count != out.Agents[j].Count {
+				return out.Agents[i].Count > out.Agents[j].Count
+			}
+			return out.Agents[i].Agent < out.Agents[j].Agent
+		})
+		if _, ok := counts[want]; ok {
+			out.Agent = want
 		}
 		if out.Agent == "" && len(out.Agents) > 0 {
 			out.Agent = out.Agents[0].Agent
 		}
 		if out.Agent != "" {
 			list := sessions.ListAgent(out.Agent)
+			native := map[string]bool{}
+			for _, s := range list {
+				native[s.ID] = true
+			}
 			since := time.Now()
 			for _, s := range list {
 				if !s.Start.IsZero() && s.Start.Before(since) {
@@ -103,6 +157,16 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 				s.Path = tilde(s.Path)
 				out.Sessions = append(out.Sessions, managedJSON{Managed: s, Via: vias[s.Agent+"|"+s.ID]})
 			}
+			for _, g := range gateway {
+				if g.Agent != out.Agent || native[g.ID] {
+					continue
+				}
+				s := gatewaySession(g)
+				out.Sessions = append(out.Sessions, managedJSON{Managed: sessions.Managed{Session: s}, Via: vias[s.Agent+"|"+s.ID]})
+			}
+			sort.SliceStable(out.Sessions, func(i, j int) bool {
+				return out.Sessions[i].Last.After(out.Sessions[j].Last)
+			})
 		}
 		writeJSON(rw, out)
 	})

@@ -13,8 +13,10 @@ import (
 
 // Transcript is what was said in a session, in the order it was said.
 type Transcript struct {
-	Parts []Part `json:"parts"`
-	Cut   bool   `json:"cut,omitempty"` // there was more than is kept here
+	Parts    []Part `json:"parts"`
+	Cut      bool   `json:"cut,omitempty"` // there was more than is kept here
+	Source   string `json:"source,omitempty"`
+	Captured int    `json:"captured,omitempty"`
 }
 
 // transcriptMax is the characters of all of a transcript's parts.

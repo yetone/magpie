@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Gateway mode (Player on Discord): magpie web on a server that is only
 // the gateway for other computers' agents. boot.js says so and the page
-// opens on Providers with no Agents, Sessions or Library tab, an address
+// opens on Providers with no Agents or Library tab, an address
 // kept for one of them opening Providers; Settings leaves out what is
 // written into this computer's agents' files (provider in model names,
 // Codex subagents, long conversations, Codex thread titles) and the
@@ -70,8 +70,8 @@ const L = {
   en: { mode: "Gateway mode", noAgents: "Now on: no agents on this computer", off: "Now off: agents found on this computer" },
   zh: { mode: "网关模式", noAgents: "当前开启：本机没有 Agent", off: "当前关闭：本机找到了 Agent" },
 };
-const HIDDEN = ["agents", "sessions", "library"];
-const KEPT = ["providers", "gateway", "routing", "usage", "plugins"];
+const HIDDEN = ["agents", "library"];
+const KEPT = ["providers", "gateway", "routing", "usage", "sessions", "plugins"];
 
 // the tabs shown, the page shown
 const tabs = (page) => page.evaluate(() => [...document.querySelectorAll("#nav button")].filter((b) => !b.hidden && b.offsetParent).map((b) => b.dataset.view));

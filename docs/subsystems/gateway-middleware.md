@@ -20,7 +20,7 @@ plugins.json is the source of truth for which middleware is installed and on, in
 
 ## Runtime path
 
-1. `serveAgent` calls `middleware.Begin` with the request's protocol, model, stream flag, path and agent. With no middleware it is `serve` as before, at no cost beyond the check.
+1. `serveAgent` establishes the [gateway session identity and optional recording](gateway-sessions.md), then calls `middleware.Begin` with the request's protocol, model, stream flag, path and agent. With no middleware it calls `serve` directly.
 2. `Run.Request` passes the agent's body, in its own API, to each `onRequest` in turn. An object returned is the body the next middleware and the gateway get; `undefined` keeps the bytes as they were. `ctx.reject(status, message)` stops the chain, and the agent gets that error in its API's shape (`writeError`).
 3. `Run.Wrap` wraps the response writer when some middleware has `onEvent` or `onResponse`. An SSE reply is split into events. Each event whose data is a JSON object goes to every `onEvent` that wants its name (`export const events`): an object replaces it, `null` drops it, and `undefined` writes the original bytes. `data: [DONE]` and other non-object data pass by. A whole JSON reply is buffered for `onResponse`, with `ctx.status` set. A reply with a `Content-Encoding` passes as-is.
 4. `Run.End` returns the runtimes to their pools.

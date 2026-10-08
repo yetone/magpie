@@ -109,7 +109,8 @@ type Record struct {
 	Stop string `json:"stop,omitempty"`
 	// Session is the conversation the call was part of, as its agent names
 	// it (X-Magpie-Session, or the session header Claude Code, Codex or
-	// OpenCode sends): several sessions on one model told apart
+	// OpenCode sends), or a gateway-generated identity for an unidentified
+	// conversation request: several sessions on one model told apart.
 	Session string `json:"session,omitempty"`
 	// NativeSession retains the client header when X-Magpie-Session overrides it.
 	NativeSession string `json:"native_session,omitempty"`

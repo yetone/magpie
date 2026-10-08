@@ -27,6 +27,7 @@
   let loading = 0;
   let fitObserver = null;
   let focus = null;           // { agent, id, until }: a session to bring into sight once drawn
+  let recordingBusy = false;
 
   const TRASH = "M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4";
   const TERM = "M3 4.5 6 7.5 3 10.5M7.5 11.5h5.5";
@@ -98,7 +99,7 @@
     fitObserver?.disconnect();
     if (page.querySelector(".sm-agent-pick.open")) closeProtoMenu();
     page.classList.toggle("loading", !data?.sessions && !failed);
-    page.replaceChildren(head(), body());
+    page.replaceChildren(head(), recordingControls(), body());
     const wrap = page.querySelector(".sm-switch");
     const tabs = wrap.querySelector(".sm-agents");
     const pick = wrap.querySelector(".sm-agent-pick");
@@ -132,6 +133,47 @@
     data = { ...data, agent: name, sessions: null };
     draw();
     load(name);
+  }
+
+  function recordingControls() {
+    const bar = el("div", "bar sm-recording");
+    if (typeof data?.recording !== "boolean") return bar;
+    const label = el("label", "sm-record-label");
+    const toggle = el("input");
+    toggle.type = "checkbox";
+    toggle.checked = data.recording;
+    toggle.disabled = recordingBusy;
+    toggle.setAttribute("role", "switch");
+    toggle.setAttribute("aria-label", t("Record gateway conversations"));
+    toggle.onchange = async () => {
+      const on = toggle.checked;
+      toggle.checked = data.recording;
+      if (on && !await confirmAction(t("Record gateway conversations"), t("Prompts, replies and tool results may contain private code and files. Store them on this server for up to 7 days (256 MiB total)? Recognized secrets are masked, but this is not a privacy guarantee."), t("Enable"))) return;
+      recordingBusy = true;
+      toggle.disabled = true;
+      try {
+        const result = await api("sessions/recording", { on });
+        data.recording = result.recording;
+      } catch (err) { status(err.message, "err"); }
+      finally { recordingBusy = false; draw(); }
+    };
+    label.append(toggle, el("span", "", t("Record gateway conversations")));
+    const clear = el("button", "copy sm-record-clear");
+    clear.type = "button";
+    clear.title = t("Stop recording and clear saved conversations");
+    clear.setAttribute("aria-label", clear.title);
+    clear.disabled = recordingBusy;
+    clear.append(svg(TRASH, 13, 1.4));
+    clear.onclick = async () => {
+      if (!await confirmAction(t("Stop recording and clear saved conversations"), t("Delete all locally recorded gateway conversation content? Usage totals and native session files are kept."), t("Delete"))) return;
+      recordingBusy = true;
+      clear.disabled = true;
+      try { await api("sessions/recording", { clear: true }); talks.clear(); await load(); }
+      catch (err) { status(err.message, "err"); }
+      finally { recordingBusy = false; draw(); }
+    };
+    bar.append(label, el("span", "grow"), clear);
+    return bar;
   }
 
   function head() {
@@ -527,6 +569,7 @@
     if (s.path) line(t("File"), s.path + (s.files > 1 ? " " + t("+{n} more", { n: s.files - 1 }) : ""));
     if (s.transcript) {
       const box = el("div", "sess-talk");
+      box.dataset.talk = s.agent + "/" + s.id;
       const b = el("button", "text sess-talk-btn");
       b.type = "button";
       const show = () => {
@@ -624,20 +667,29 @@
     const got = talks.get(k);
     if (!got) {
       box.replaceChildren(el("p", "cx-none", t("Reading…")));
-      talks.set(k, { busy: true });
+      const pending = { busy: true };
+      talks.set(k, pending);
+      const finish = (value) => {
+        // A refresh or clear invalidates older responses, even for the same ID.
+        if (talks.get(k) !== pending) return;
+        talks.set(k, value);
+        if (!talkOpen.has(k)) return;
+        for (const currentBox of page.querySelectorAll(".sess-talk")) {
+          if (currentBox.dataset.talk === k) drawTalk(currentBox, s);
+        }
+      };
       api("sessions/transcript?agent=" + encodeURIComponent(s.agent) + "&id=" + encodeURIComponent(s.id))
-        .then((tr) => talks.set(k, { tr }), (err) => talks.set(k, { err: err.message }))
-        .then(() => { if (box.isConnected && talkOpen.has(k)) drawTalk(box, s); });
+        .then((tr) => finish({ tr }), (err) => finish({ err: err.message }));
       return;
     }
-    if (got.busy) return;
+    if (got.busy) { box.replaceChildren(el("p", "cx-none", t("Reading…"))); return; }
     if (got.err) { box.replaceChildren(el("p", "cx-none", got.err)); talks.delete(k); return; }
     const parts = got.tr?.parts || [];
     const out = [];
-    if (!parts.length) out.push(el("p", "cx-none", t("Nothing was said here")));
+    if (!parts.length) out.push(el("p", "cx-none", t(got.tr?.source === "gateway" ? "No saved gateway content for this session" : "Nothing was said here")));
     for (const p of parts) out.push(ledSaid(p));
     if (got.tr?.cut) out.push(el("p", "cx-none", t("There was more than is shown here")));
-    out.push(el("p", "cx-src", t("Read from the agent's session file; magpie keeps no copy")));
+    out.push(el("p", "cx-src", t(got.tr?.source === "gateway" ? "Recorded gateway traffic only; earlier, expired or uncaptured content may be missing" : "Read from the agent's session file; magpie keeps no copy")));
     box.replaceChildren(...out);
   }
 

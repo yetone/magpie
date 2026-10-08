@@ -159,6 +159,9 @@ func TestCORSKeyThroughTheServer(t *testing.T) {
 		if w.Code != want || w.Header().Get("Access-Control-Allow-Origin") != "http://localhost:3000" {
 			t.Errorf("key %q: %d %v %s", key, w.Code, w.Header(), w.Body)
 		}
+		if key != "" && (w.Header().Get(SessionHeader) == "" || w.Header().Get("Access-Control-Expose-Headers") != SessionHeader) {
+			t.Error("browser client cannot reuse the gateway session identity")
+		}
 	}
 }
 

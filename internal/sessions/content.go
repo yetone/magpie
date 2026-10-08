@@ -71,7 +71,7 @@ func keep(p Part) (Part, bool) {
 	}
 	if n := utf8.RuneCountInString(p.Text); n > partMax {
 		r := []rune(p.Text)
-		p.Text, p.Cut = string(r[:partMax]), n-partMax
+		p.Text, p.Cut = string(r[:partMax]), p.Cut+n-partMax
 	}
 	return p, true
 }

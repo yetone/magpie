@@ -14,7 +14,7 @@ const web = !!window.bootPrefs?.web;
 // pages — Agents, Sessions, Library — and their settings; Settings ›
 // General turns it off, and they are back.
 let gatewayMode = web && !!window.bootPrefs?.gateway;
-const GATEWAY_HIDES = ["agents", "sessions", "library"];
+const GATEWAY_HIDES = ["agents", "library"];
 // The window is dragged by its header, and only where the header says so
 // (--wails-draggable), so the tabs and buttons in it stay plain clicks.
 // Outside the app — a browser on the gateway's page, or on `magpie web` —
@@ -16730,7 +16730,7 @@ function renderSessions() {
   // the rest were behind a "Show more" that isn't there (yetone, #1019).
   // Nothing left to draw, the note is just the list's length, in words a
   // reader uses: one session is a session, not "1 sessions".
-  const parts = [t("Totals count every session in the agents' own files")];
+  const parts = [t("Totals count native sessions and gateway requests with a session ID")];
   if (sessDrawn !== null) {
     parts.push(sessDrawn < sessTotal
       ? t("showing {drawn} of {n}", { drawn: sessDrawn, n: sessTotal })
@@ -18134,7 +18134,7 @@ function renderGatewayMode(s) {
     flag: t("Now on: magpie web was started with --gateway"),
     "no-agents": t("Now on: no agents on this computer"),
   }[s.gatewayWhy] || t("Now off: agents found on this computer");
-  $("#gatewayModeSub").textContent = [t("Only what a gateway for other computers needs: no Agents, Sessions or Library, nor this computer's agents' settings"), now].filter(Boolean).join(" · ");
+  $("#gatewayModeSub").textContent = [t("Only what a gateway for other computers needs: no Agents or Library, nor this computer's agents' settings"), now].filter(Boolean).join(" · ");
 }
 
 function renderSessionTerminal(s, keep) {

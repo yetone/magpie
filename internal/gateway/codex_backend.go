@@ -131,6 +131,12 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if r.Method == http.MethodPost && rest == "/responses" {
+		r = withGatewaySession(w, r)
+		var recorded func()
+		w, recorded = recordConversation(w, r, provider.Responses, body)
+		defer recorded()
+	}
 	s.codexUpstream(w, r, rest, body)
 }
 
