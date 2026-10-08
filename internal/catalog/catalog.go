@@ -285,13 +285,22 @@ type mdModel struct {
 	} `json:"limit"`
 }
 
-// efforts are the reasoning levels models.dev says the model takes.
+// efforts are the reasoning levels models.dev says the model takes. A
+// reasoning toggle adds the off level when the model also has effort levels;
+// a toggle by itself leaves the model level-less.
 func (m mdModel) efforts() []string {
 	var out []string
+	toggle := false
 	for _, r := range m.Reasoning {
-		if r.Type == "effort" {
+		switch r.Type {
+		case "toggle":
+			toggle = true
+		case "effort":
 			out = r.Values
 		}
+	}
+	if toggle && len(out) > 0 && !slices.Contains(out, "none") {
+		return append([]string{"none"}, out...)
 	}
 	return out
 }

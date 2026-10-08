@@ -57,6 +57,32 @@ func TestProviderReadsTemperatureCapability(t *testing.T) {
 	}
 }
 
+func TestToggleAddsOffLevelAlongsideEfforts(t *testing.T) {
+	writeCatalog(t, `{
+	  "deepseek": {"models": {
+	    "deepseek-flash": {"id":"deepseek-flash","reasoning_options":[{"type":"toggle"},{"type":"effort","values":["low","high","max"]}]},
+	    "effort-only": {"id":"effort-only","reasoning_options":[{"type":"effort","values":["low","high","max"]}]},
+	    "toggle-only": {"id":"toggle-only","reasoning_options":[{"type":"toggle"}]}
+	  }}
+	}`)
+
+	want := map[string]string{
+		"deepseek-flash": "none,low,high,max",
+		"effort-only":    "low,high,max",
+		"toggle-only":    "",
+	}
+	for id, levels := range want {
+		if got := strings.Join(EffortsOf(id), ","); got != levels {
+			t.Errorf("EffortsOf(%q) = %q, want %q", id, got, levels)
+		}
+	}
+	for _, model := range Provider("deepseek") {
+		if levels, ok := want[model.ID]; ok && strings.Join(model.Efforts, ",") != levels {
+			t.Errorf("Provider model %q efforts = %v, want %q", model.ID, model.Efforts, levels)
+		}
+	}
+}
+
 func TestDecorateCarriesTemperature(t *testing.T) {
 	no, yes := false, true
 	live := []Model{{ID: "new-model"}, {ID: "gpt-5.5"}}

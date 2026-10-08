@@ -64,7 +64,7 @@ func TestDshGroupHasItsMembersLevels(t *testing.T) {
 	for _, o := range a.Field("effort").Options(map[string]string{"model": "magpie/group/flash"}) {
 		offered = append(offered, o.Value)
 	}
-	if !reflect.DeepEqual(offered, []string{"low", "high", "max"}) {
+	if !reflect.DeepEqual(offered, []string{"off", "low", "high", "max"}) {
 		t.Fatalf("thinking offered for the group: %v", offered)
 	}
 }

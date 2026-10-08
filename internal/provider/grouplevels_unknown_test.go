@@ -44,7 +44,7 @@ func TestGroupLevelsWithUnknownMember(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	want := []string{"low", "high", "max"}
+	want := []string{"none", "low", "high", "max"}
 	entry := func(id string) Entry {
 		t.Helper()
 		e, ok := EntryOf(id)
