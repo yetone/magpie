@@ -189,6 +189,7 @@ func (s *Server) retrieveFrom(ctx context.Context, p provider.Provider, url stri
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if p.IsRemoteMagpie() {
+		req.Header.Set("User-Agent", "magpie/"+Version)
 		passOnCaller(ctx, req)
 	}
 	if err := p.Sign(ctx, req, provider.Chat, body); err != nil {

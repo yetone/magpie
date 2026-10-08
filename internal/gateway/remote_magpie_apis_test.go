@@ -162,6 +162,14 @@ func TestRemoteMagpieRetrieval(t *testing.T) {
 	if !slices.ContainsFunc(live, func(m catalog.Model) bool { return m.ID == "lib/embed-1" }) {
 		t.Fatalf("remote embedding model lost: %v", live)
 	}
+	// The shared list has no separate retrieval kind, so these stay in
+	// the local catalog just as they do in the remote's agent list.
+	entries := provider.Catalog()
+	for _, id := range []string{"office/lib/embed-1", "office/lib/rerank-1"} {
+		if !slices.ContainsFunc(entries, func(e provider.Entry) bool { return e.ID == id }) {
+			t.Errorf("remote retrieval entry missing from catalog: %s", id)
+		}
+	}
 	for _, tc := range []struct{ path, body, result, model string }{
 		{"/v1/embeddings", `{"model":"office/lib/embed-1","input":["hello","world"],"dimensions":2,"encoding_format":"float"}`, `"embedding":[0.1,-0.2]`, "embed-1"},
 		{"/v1/rerank", `{"model":"office/lib/rerank-1","query":"magpie","documents":["a crow","a magpie"],"top_n":2,"return_documents":true}`, `"relevance_score":0.9`, "rerank-1"},

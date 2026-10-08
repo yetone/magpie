@@ -481,7 +481,11 @@ func Deciders() []Entry {
 		}
 		for _, m := range ms {
 			if p.DecidesModel(m.ID) {
-				out = append(out, entryFor(p, m, s))
+				e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: p}
+				if p.IsRemoteMagpie() {
+					e = entryFor(p, m, s)
+				}
+				out = append(out, e)
 			}
 		}
 	}
@@ -626,9 +630,6 @@ func resolveDecideModel(p Provider, name string) (string, bool) {
 		if m.ID == name {
 			return name, true
 		}
-	}
-	if p.IsRemoteMagpie() {
-		return "", false
 	}
 	if name == p.Jev() {
 		return name, true

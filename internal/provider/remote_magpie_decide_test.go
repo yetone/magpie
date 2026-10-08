@@ -11,7 +11,65 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
+	"github.com/yetone/magpie/internal/settings"
 )
+
+func TestRemoteMagpieUnlistedDecisions(t *testing.T) {
+	azureHome(t)
+	p := normalize(Provider{ID: "office", Preset: RemoteMagpiePreset, Chat: "http://127.0.0.1:1/typesafe"})
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := catalog.SaveLive(p.ID, p.Chat, []catalog.Model{
+		{ID: "judge/custom", Decides: true},
+		{ID: "judge/jev-preview"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := resolveDecideModel(p, "judge/custom"); !ok || got != "judge/custom" {
+		t.Fatalf("listed decision: %q %v", got, ok)
+	}
+	for _, name := range []string{"judge/missing", "judge/jev-preview", "jev-latest", "jev-preview", "typesafe-ai/jev", "@cf/cloudflare/clef"} {
+		if got, ok := resolveDecideModel(p, name); ok || got != "" {
+			t.Errorf("unlisted decision %q resolved as %q", name, got)
+		}
+		if _, _, err := RouteDecider(p.ID + "/" + name); err == nil {
+			t.Errorf("unlisted decision %q routed", name)
+		}
+	}
+}
+
+// Entry formatting for other decision providers keeps its earlier behavior;
+// only a remote's entries inherit conversation model names and limits.
+func TestRemoteMagpieDecidersKeepOtherEntries(t *testing.T) {
+	azureHome(t)
+	for _, p := range []Provider{
+		{ID: "openrouter", Key: "k", Decide: "https://openrouter.ai/api/v1", Models: []string{OpenRouterJev}},
+		{ID: "cloudflare", Key: "k", Decide: "https://api.cloudflare.com/client/v4/accounts/test/ai", Models: []string{CloudflareJev}},
+		{ID: "vercel", Key: "k", Decide: "https://ai-gateway.vercel.sh/typesafe", Models: []string{"typesafe-ai/jev"}},
+	} {
+		if err := Save(p); err != nil {
+			t.Fatal(err)
+		}
+		s := settings.Load()
+		if s.ModelNames == nil {
+			s.ModelNames = map[string]string{}
+		}
+		s.ModelNames[p.ID+"/"+p.Models[0]] = "My judge"
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries := Deciders()
+	if len(entries) != 3 {
+		t.Fatalf("decision entries: %v", entries)
+	}
+	for _, e := range entries {
+		if e.Name == "My judge" || e.Context != 0 || len(e.Efforts) != 0 {
+			t.Errorf("non-remote entry gained conversation overrides: %+v", e)
+		}
+	}
+}
 
 func TestRemoteMagpieDecisionRefresh(t *testing.T) {
 	azureHome(t)

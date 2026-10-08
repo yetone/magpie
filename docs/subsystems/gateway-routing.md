@@ -83,8 +83,12 @@ bodies and options, [`draw.go`](../../internal/gateway/draw.go) sends images
 to the remote's images API, and [`video.go`](../../internal/gateway/video.go)
 wraps remote task ids for later polls and downloads. `passOnCaller` in
 [`remote_magpie.go`](../../internal/gateway/remote_magpie.go) supplies
-magpie's User-Agent and caller/session headers on all remote request paths,
-so the remote accepts their attribution. Vendors receive no caller headers.
+caller/session headers without replacing the outgoing User-Agent.
+Conversation forwarding preserves Claude Code and Codex client headers
+(including Codex's `originator`) so relays behind the remote can recognize
+them. Decision, retrieval and media requests set magpie's User-Agent at
+their own call sites, so the remote accepts their attribution. Vendors
+receive no caller labels.
 
 ## Verification
 

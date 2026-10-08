@@ -308,6 +308,8 @@ provider's model list to discover its decision models, including Jev, Clef
 and models with custom names. These appear as decision models rather than
 chat models. Embeddings and rerank requests use the remote's corresponding
 APIs, and its exposed retrieval models are kept when fetching its list.
+These remain in agent model lists as on the remote; being listed does not
+mean an embedding or rerank model can hold a conversation.
 The remote must serve the requested API and model, and allow the supplied
 key to use them. Responses uses HTTP, including SSE, rather than WebSocket.
 An older remote without decision-model discovery still serves its existing

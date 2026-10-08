@@ -45,12 +45,17 @@ list requests images, videos and decisions with `X-Magpie-Drawers`,
 only when asked, with `kind` of `image`, `video` or `decision`. Decision
 entries pass through `keyAllowed`, including model and account restrictions.
 [`catalog/live.go`](../../internal/catalog/live.go) keeps each kind and all
-models the remote already exposed, including retrieval models.
+models the remote already exposed, including retrieval models. The shared
+list has no separate retrieval kind: these entries remain in `Catalog` and
+agent model lists, just as on the remote. Keeping them makes retrieval
+routing possible; their presence does not mean they support conversations.
 
 `DecidesModel` uses the remote's explicit decision marker, so Clef and custom
 names work and a chat model named Jev Router stays a chat model. `Deciders`
 and the provider editor offer these decisions even when the user's local
-conversation picks omit them. The editor's `providerInfo` in
+conversation picks omit them. Only remote decision entries use `entryFor`
+to apply user model names and limits; other decision providers retain their
+previous entry formatting. The editor's `providerInfo` in
 [`providers.go`](../../internal/gui/providers.go) sends `deciders: []` when
 the remote has none, suppressing the UI's legacy name-based guessing.
 Refresh replaces the list: removed decisions stop routing, and an empty
@@ -58,6 +63,11 @@ remote list never gains a fabricated Jev alias.
 An older peer without the decision-list extension continues serving its
 other APIs but must be updated before its decisions can be discovered.
 See [`decide.go`](../../internal/provider/decide.go).
+
+The TUI reports model-list fetch errors for remote and other mixed providers
+(such as OpenRouter, serving conversation and decision models). Only a
+decision-only provider keeps the separate decision discovery behavior
+(`addKeyAsk` in [`pages.go`](../../internal/tui/pages.go)).
 
 ## Runtime path
 

@@ -742,6 +742,7 @@ func (s *Server) remoteVideoContent(ctx context.Context, w http.ResponseWriter, 
 		writeError(w, provider.Chat, 502, err.Error())
 		return
 	}
+	req.Header.Set("User-Agent", "magpie/"+Version)
 	passOnCaller(ctx, req)
 	if err := p.Sign(ctx, req, provider.Chat, nil); err != nil {
 		writeError(w, provider.Chat, 502, err.Error())

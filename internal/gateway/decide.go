@@ -367,6 +367,7 @@ func (s *Server) postDecide(ctx context.Context, p provider.Provider, model stri
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", RouterAgent)
 	if p.IsRemoteMagpie() {
+		req.Header.Set("User-Agent", "magpie/"+Version)
 		passOnCaller(ctx, req)
 	}
 	if via == provider.ViaVercelEval {

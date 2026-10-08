@@ -702,6 +702,7 @@ func (s *Server) sendWith(ctx context.Context, p provider.Provider, method, url,
 		req.Header.Set("Content-Type", contentType)
 	}
 	if p.IsRemoteMagpie() {
+		req.Header.Set("User-Agent", "magpie/"+Version)
 		passOnCaller(ctx, req)
 	}
 	if sign {
