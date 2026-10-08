@@ -15,6 +15,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -100,11 +101,16 @@ func TestOTelSessionDedupOnlyUnkeyedLoopback(t *testing.T) {
 	if !usage.OTelSessionAgent("pi") {
 		t.Fatal("local Pi reader unavailable")
 	}
+	if err := sessions.SetGatewayRecording(true, false); err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		name, addr, key         string
 		session, override, kind string
 		dedup                   bool
 	}{
+		{"generated recording identity", "127.0.0.1:1234", "", "", "request-recorded", "", true},
+		{"native with generated override", "127.0.0.1:1234", "", "session", "request-recorded", "", true},
 		{"loopback", "127.0.0.1:1234", "", "", "", "", true},
 		{"IPv6 loopback", "[::1]:1234", "", "", "", "", true},
 		{"LAN", "192.168.1.5:1234", "key", "", "", "", false},

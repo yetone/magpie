@@ -2,6 +2,7 @@ package usage
 
 import (
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -49,7 +50,7 @@ func direct(p Period, now time.Time, rows []Row) Summary {
 		if who := r.Account(); who != "" {
 			put(accounts, r.Provider+"@"+who, Group{ID: r.Provider + "@" + who, Provider: r.Provider, Account: who}, r)
 		}
-		if r.Session != "" {
+		if r.Session != "" && !strings.HasPrefix(r.Session, "request-") {
 			put(sessions, id+"|"+r.Session, Group{ID: r.Session, Agent: id}, r)
 		}
 	}

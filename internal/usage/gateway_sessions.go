@@ -1,7 +1,10 @@
 package usage
 
 import (
+	"slices"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -28,7 +31,7 @@ type GatewayDayUsage struct {
 
 // GatewaySession is a read-only projection of requests served by this
 // gateway. Its identity is the agent name and the session id supplied by the
-// client or assigned by the gateway. Older records without an id are left out.
+// client. Unidentified requests and generated recording identities are left out.
 type GatewaySession struct {
 	Agent  string            `json:"agent"`
 	ID     string            `json:"id"`
@@ -52,20 +55,126 @@ type GatewayModel struct {
 // history or agent files. NativeKeys contains identities already represented
 // by local session files and is used to suppress the duplicate projection.
 func GatewaySessions(since time.Time, nativeKeys map[string]bool) []GatewaySession {
-	ss, _ := gatewaySessionSnapshot(since, nativeKeys)
-	return ss
+	e := gatewayProjection(since)
+	out := make([]GatewaySession, 0, len(e.sessions))
+	for _, s := range e.sessions {
+		if !nativeKeys[s.Agent+"|"+s.ID] {
+			out = append(out, cloneGatewaySession(s))
+		}
+	}
+	return out
 }
 
 func GatewaySessionByID(agent, id string, nativeKeys map[string]bool) (GatewaySession, bool) {
-	for _, s := range GatewaySessions(time.Time{}, nativeKeys) {
-		if s.Agent == AgentOf(agent) && s.ID == id {
-			return s, true
+	if id == "" || strings.HasPrefix(id, "request-") {
+		return GatewaySession{}, false
+	}
+	agent = AgentOf(agent)
+	if nativeKeys[agent+"|"+id] {
+		return GatewaySession{}, false
+	}
+	entry := gatewayProjection(time.Time{})
+	i, ok := entry.byID[agent+"|"+id]
+	if !ok {
+		return GatewaySession{}, false
+	}
+	return cloneGatewaySession(entry.sessions[i]), true
+}
+
+type gatewayProjectionEntry struct {
+	version  uint64
+	meta     string
+	since    time.Time
+	sessions []GatewaySession
+	byID     map[string]int
+}
+
+var gatewayCache struct {
+	sync.Mutex
+	entries []gatewayProjectionEntry
+}
+
+// Retain a few window projections, not one copy for every native exclusion set.
+// The log snapshot version also detects rewrites and changes of config directory.
+func gatewayProjection(since time.Time) gatewayProjectionEntry {
+	snapshot := logSnapshotFor(true)
+	meta := usagePriceCacheKey(time.Now())
+	gatewayCache.Lock()
+	defer gatewayCache.Unlock()
+	for _, e := range gatewayCache.entries {
+		if e.version == snapshot.version && e.meta == meta && e.since.Equal(since) {
+			return e
 		}
 	}
-	return GatewaySession{}, false
+	if snapshot.uncached && len(snapshot.blocks) == 0 {
+		snapshot = readLogSnapshot()
+	}
+	ss, _ := buildGatewaySessions(snapshot, since, nil)
+	e := gatewayProjectionEntry{version: snapshot.version, meta: meta, since: since, sessions: ss, byID: make(map[string]int, len(ss))}
+	for i, s := range ss {
+		e.byID[s.Agent+"|"+s.ID] = i
+	}
+	// A failed or partial read must be retried, not published as current.
+	if snapshot.info != nil && snapshot.off == snapshot.info.Size() {
+		gatewayCache.entries = slices.DeleteFunc(gatewayCache.entries, func(old gatewayProjectionEntry) bool {
+			return old.version != e.version || old.meta != e.meta || old.since.Equal(since)
+		})
+		if len(gatewayCache.entries) >= 4 {
+			gatewayCache.entries = gatewayCache.entries[1:]
+		}
+		gatewayCache.entries = append(gatewayCache.entries, e)
+	}
+	return e
+}
+
+func cloneGatewaySession(s GatewaySession) GatewaySession {
+	s.Models, s.Daily = slices.Clone(s.Models), slices.Clone(s.Daily)
+	return s
 }
 
 func gatewaySessionSnapshot(since time.Time, nativeKeys map[string]bool) ([]GatewaySession, []GatewayDayUsage) {
+	out := GatewaySessions(since, nativeKeys)
+	return out, gatewayDays(out)
+}
+
+func gatewayDays(ss []GatewaySession) []GatewayDayUsage {
+	type key struct{ date, agent, model string }
+	groups := map[key]GatewayDayUsage{}
+	for _, s := range ss {
+		for _, d := range s.Daily {
+			k := key{d.Date, d.Agent, d.Model}
+			v, ok := groups[k]
+			if !ok {
+				v.Date, v.Agent, v.Model, v.Priced = d.Date, d.Agent, d.Model, true
+			}
+			v.Input += d.Input
+			v.Output += d.Output
+			v.CacheRead += d.CacheRead
+			v.CacheWrite += d.CacheWrite
+			v.CacheWrite1h += d.CacheWrite1h
+			v.Cost += d.Cost
+			v.Priced = v.Priced && d.Priced
+			groups[k] = v
+		}
+	}
+	out := make([]GatewayDayUsage, 0, len(groups))
+	for _, d := range groups {
+		out = append(out, d)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Date != b.Date {
+			return a.Date < b.Date
+		}
+		if a.Agent != b.Agent {
+			return a.Agent < b.Agent
+		}
+		return a.Model < b.Model
+	})
+	return out
+}
+
+func buildGatewaySessions(snapshot *logSnapshot, since time.Time, nativeKeys map[string]bool) ([]GatewaySession, []GatewayDayUsage) {
 	priceOf := pricer()
 	type key struct{ agent, id string }
 	groups := map[key]*GatewaySession{}
@@ -73,8 +182,8 @@ func gatewaySessionSnapshot(since time.Time, nativeKeys map[string]bool) ([]Gate
 	type dayKey struct{ date, agent, model string }
 	daily := map[dayKey]*GatewayDayUsage{}
 	perSession := map[key]map[dayKey]*GatewayDayUsage{}
-	Visit(since, func(r Record) {
-		if r.IsRejected() || r.Session == "" {
+	snapshot.visit(since, func(r Record) {
+		if r.IsRejected() || r.Session == "" || strings.HasPrefix(r.Session, "request-") {
 			return
 		}
 		a := AgentOf(r.Agent)

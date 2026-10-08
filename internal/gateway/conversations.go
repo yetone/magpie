@@ -21,18 +21,17 @@ const conversationBodyMax = 8 << 20
 
 type gatewaySessionKey struct{}
 
-// withGatewaySession assigns unidentified requests their own ledger identity.
+// withGatewaySession assigns unidentified recorded requests a content identity.
 // Keep it out of the input headers so routing still uses the client's context.
 func withGatewaySession(w http.ResponseWriter, r *http.Request) *http.Request {
 	id := sessionOf(r.Header)
-	if id == "" {
+	if id == "" && settings.Load().GatewayConversations {
 		id = "request-" + rand.Text()
-		ctx := context.WithValue(r.Context(), gatewaySessionKey{}, id)
-		who := callerOf(r)
-		who.session = id // A remote Magpie must keep the same ledger identity.
-		r = r.WithContext(context.WithValue(ctx, callerCtx{}, who))
+		r = r.WithContext(context.WithValue(r.Context(), gatewaySessionKey{}, id))
 	}
-	w.Header().Set(SessionHeader, id)
+	if id != "" {
+		w.Header().Set(SessionHeader, id)
+	}
 	return r
 }
 
@@ -77,6 +76,7 @@ func (w *conversationWriter) WriteHeader(status int) {
 // translation, so retries never become duplicate assistant replies.
 func recordConversation(w http.ResponseWriter, r *http.Request, proto provider.Protocol, body []byte) (http.ResponseWriter, func()) {
 	id := gatewaySessionOf(r)
+	generation := sessions.GatewayRecordingGeneration()
 	if !settings.Load().GatewayConversations || id == "" {
 		return w, func() {}
 	}
@@ -100,7 +100,7 @@ func recordConversation(w http.ResponseWriter, r *http.Request, proto provider.P
 			turn.Status = http.StatusOK
 		}
 		turn.Cut = turn.Cut || cut
-		if err := sessions.SaveGatewayTurn(turn); err != nil {
+		if err := sessions.SaveGatewayTurnGeneration(turn, generation); err != nil {
 			log.Printf("gateway conversation save failed: %v", err)
 		}
 	}

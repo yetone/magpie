@@ -152,6 +152,11 @@ func sessionManageRoutes(mux *http.ServeMux, w Windows) {
 					since = s.Start
 				}
 			}
+			for _, g := range gateway {
+				if g.Agent == out.Agent && !g.Start.IsZero() && g.Start.Before(since) {
+					since = g.Start
+				}
+			}
 			vias := usage.Vias(since.Add(-time.Minute))
 			for _, s := range list {
 				s.Path = tilde(s.Path)

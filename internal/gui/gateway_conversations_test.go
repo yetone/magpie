@@ -137,3 +137,42 @@ func TestGatewaySessionsNativeWinsBeforeLimits(t *testing.T) {
 		t.Fatalf("date window exposed a duplicate gateway projection: %+v", st.Sessions)
 	}
 }
+
+func TestGatewaySessionsIgnoreLargeGeneratedHistory(t *testing.T) {
+	sandboxHome(t)
+	sessions.Reset()
+	t.Cleanup(sessions.Reset)
+	if err := os.MkdirAll(filepath.Dir(usage.Path()), 0700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(usage.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc := json.NewEncoder(f)
+	for i := range 150000 {
+		if err := enc.Encode(usage.Record{Time: time.Now(), Agent: "claude", Session: fmt.Sprintf("request-%d", i), Model: "m", Input: 1, Status: 200}); err != nil {
+			f.Close()
+			t.Fatal(err)
+		}
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	sessionRoutes(mux, folderOnly{})
+	sessionManageRoutes(mux, folderOnly{})
+	for _, path := range []string{"/api/sessions/manage?agent=claude", "/api/sessions"} {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		var out struct {
+			Sessions []json.RawMessage `json:"sessions"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		if w.Code != 200 || len(out.Sessions) != 0 {
+			t.Fatalf("generated history leaked into %s: status=%d rows=%d", path, w.Code, len(out.Sessions))
+		}
+	}
+}

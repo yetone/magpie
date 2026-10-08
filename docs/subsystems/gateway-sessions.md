@@ -3,13 +3,19 @@
 The Sessions API combines file-backed native sessions with a read-only
 projection of gateway usage records. A gateway session identity is exactly
 `AgentOf(record.Agent) + record.Session`. Client conversation requests without a
-session header receive a unique `request-…` identity. The response returns
-`X-Magpie-Session`; clients can send that value on later requests to continue
-the same session. Listed browser origins can read this header through CORS.
-Without reuse, each unidentified request is a separate session: prompt text,
+session header receive a unique `request-…` identity when recording is enabled.
+The response returns `X-Magpie-Session`; clients can send that value on later
+requests to continue the same recorded session. Listed browser origins can
+read this header through CORS. When recording is disabled, unidentified
+requests receive no generated identity or response header. Generated
+`request-…` identities are excluded from usage and Sessions projections.
+Without reuse, each unidentified recorded request is a separate session: prompt text,
 caller keys and network addresses are never used to guess conversation ownership.
 Older ledger records without `Session` remain excluded. The projection is
-computed from the usage ledger and is not persisted.
+computed from the usage ledger and is not persisted. Window projections and
+routing summaries reuse versioned log snapshots; appends and rewrites invalidate
+them, and price/provider changes also invalidate priced projections. Single-session
+lookups use the cached identity index. Native exclusions are applied per caller.
 
 When the same identity is present in a native session, the native session wins
 and the gateway projection is omitted. Gateway projections have no path,
@@ -46,8 +52,10 @@ projection. Codex's direct `/backend-api/codex/responses` relay is captured too.
 Internal helper calls, token counting, embeddings, model listings, and compaction
 paths that do not pass through these entry points are not recorded.
 Generated identities live in request context, preserving the original headers
-used by routing and prompt-cache affinity. They reach the ledger and a remote
-Magpie's caller headers, but never upstream vendor headers. The existing protocol
+used by routing and prompt-cache affinity. Automatically assigned identities
+are neither written to the usage ledger nor forwarded to remote Magpie instances.
+Reused `request-…` headers are also excluded from the ledger and retain OTel
+agent-level deduplication when no native session header exists. The existing protocol
 readers handle Chat, Anthropic, Responses and Gemini; streaming replies use the
 existing decoders, with completed Responses items retaining custom tool calls.
 Only content actually sent through the gateway is available. Images are shown
@@ -56,25 +64,35 @@ items cannot be reconstructed. This is not a raw request archive or remote
 session synchronization, and existing S3 archives are not imported.
 
 [`SaveGatewayTurn`](../../internal/sessions/gateway.go) stores normalized,
-scrubbed exchanges in `gateway-conversations/<UTC date>/<identity hash>/` under
-the Magpie config directory, using private directories and temporary files
-renamed atomically. No headers are stored. Known secrets and secret-named JSON
+scrubbed exchanges in one append-only `turns.jsonl` per
+`gateway-conversations/<UTC date>/<identity hash>/` under
+the Magpie config directory, using 0700 directories and 0600 files. Each line is
+one bounded turn; legacy per-turn JSON files remain readable until they expire.
+An incomplete final append is omitted from reads (marked truncated) and removed
+before the next append; complete earlier lines remain available. No headers are
+stored. Known secrets and secret-named JSON
 fields are scrubbed, but arbitrary sensitive text is not guaranteed removable.
 Response capture uses an 8 MiB temporary spool; input is bounded to 8 MiB too.
 Normalized turns are bounded to 1 MiB on disk, individual parts to 64 KiB,
-and the store to 256 MiB and 4096 files by removing oldest files first.
+and each daily session file to 256 MiB. A full daily session file rejects further
+recording that day. Hourly background cleanup removes expired buckets and the
+oldest files above 256 MiB; this is a soft store limit between cleanup passes.
+Saving a turn does not rescan the whole store, and background traversal and
+sorting do not hold the save lock.
 Capture, parsing or persistence failure does not change the model response;
 filesystem failures are logged without conversation bodies.
 
 Content older than seven days is excluded from reads. The serving gateway
 cleans up expired UTC-day buckets at startup and hourly, including with recording
 off; the daily layout means physical cleanup can lag the read cutoff by one day.
-Writes enforce size limits and cleanup too. Disable-and-clear and writes share
-a lock and recheck consent, preventing an in-flight request from refilling a
-cleared store while recording remains off.
+Disable-and-clear and writes share a lock and recheck the consent generation,
+preventing an in-flight request from refilling a cleared store even if recording
+is enabled again before that request completes.
 
 `GET /api/sessions/transcript` still prefers a matching native session. Otherwise
-it reads a known gateway session's last 128 retained exchanges. A full exact
+it reads a known gateway session's last 128 retained exchanges. Generated
+recording identities do not create rows in Sessions, including for agents whose
+native files provide their own sessions. A full exact
 previous-history prefix is omitted from the next request, while repeated new
 messages are preserved. System/tool-definition context is separately collapsed
 when unchanged. Compacted, edited or incremental contexts may repeat material;

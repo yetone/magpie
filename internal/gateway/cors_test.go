@@ -10,6 +10,7 @@ import (
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -139,6 +140,9 @@ func TestCORSKeyThroughTheServer(t *testing.T) {
 	s := settings.Load()
 	s.CORSOrigins = []string{"http://localhost:3000"}
 	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := sessions.SetGatewayRecording(true, false); err != nil {
 		t.Fatal(err)
 	}
 	srv := lanGuard(New().Handler())

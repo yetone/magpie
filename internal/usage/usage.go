@@ -680,7 +680,7 @@ func summarizeFrom(p Period, now time.Time, first time.Time, historicalKeys map[
 			}
 			g.add(r, pr)
 		}
-		if r.Session != "" {
+		if r.Session != "" && !strings.HasPrefix(r.Session, "request-") {
 			g := sessions[id+"|"+r.Session]
 			if g == nil {
 				g = &Group{ID: r.Session, Agent: id}
@@ -747,9 +747,13 @@ type Via struct {
 // Vias is what the gateway sent each session's calls to since a time, by
 // agent id and the session's id ("codex|<id>"), the most calls first.
 func Vias(since time.Time) map[string][]Via {
+	return cachedVias(since)
+}
+
+func buildVias(snapshot *logSnapshot, since time.Time) map[string][]Via {
 	out := map[string][]Via{}
-	readLogSnapshot().visit(since, func(r Record) {
-		if r.IsRejected() || r.Session == "" || r.Model == "" {
+	snapshot.visit(since, func(r Record) {
+		if r.IsRejected() || r.Session == "" || strings.HasPrefix(r.Session, "request-") || r.Model == "" {
 			return
 		}
 		k := AgentOf(r.Agent) + "|" + r.Session

@@ -66,7 +66,11 @@ func otelSessionOf(h http.Header) string {
 	if id := nativeSessionOf(h); id != "" {
 		return id
 	}
-	return sessionOf(h)
+	id := sessionOf(h)
+	if strings.HasPrefix(id, "request-") {
+		return ""
+	}
+	return id
 }
 
 // Claude's tool-less small tasks (titles, suggestions, haiku helpers) may
