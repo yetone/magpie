@@ -4,6 +4,7 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Enable": "启用",
     "Record gateway conversations": "记录网关对话",
     "Prompts, replies and tool results may contain private code and files. Store them on this server for up to 7 days (256 MiB total)? Recognized secrets are masked, but this is not a privacy guarantee.": "提示词、回复和工具结果可能包含私有代码与文件。是否在此服务器保存最多 7 天（总计 256 MiB）？已识别的密钥会被遮蔽，但不能保证所有敏感信息都被移除。",
     "Stop recording and clear saved conversations": "停止记录并清空已保存的对话",
@@ -3795,6 +3796,7 @@ const I18N = {
     "magpie's key": "magpie 的金鑰",
     "Claude Code sends magpie its key and is signed out of claude.ai while it runs through magpie: claude.ai's plan limits in /usage, its connectors, voice and /teleport are off": "Claude Code 向 magpie 傳送 magpie 的金鑰，經 magpie 執行期間處於 claude.ai 未登入狀態：/usage 裡的方案限額、claude.ai 連接器、語音和 /teleport 都無法使用",
     "Claude Code keeps its claude.ai sign-in (/login), so those work; it sends that sign-in to magpie, which never passes it on. Remote Control and ultrareview stay off: Claude Code has them only on Anthropic's own address": "Claude Code 保留 claude.ai 登入（/login），上述功能可用；它把這份登入憑證傳給 magpie，magpie 不會轉交到任何地方。Remote Control 和 ultrareview 仍無法使用：Claude Code 只在 Anthropic 官方位址上提供它們",
+    "Enable": "啟用",
     "Record gateway conversations": "記錄閘道對話",
     "Prompts, replies and tool results may contain private code and files. Store them on this server for up to 7 days (256 MiB total)? Recognized secrets are masked, but this is not a privacy guarantee.": "提示詞、回覆和工具結果可能包含私人程式碼與檔案。是否在此伺服器儲存最多 7 天（總計 256 MiB）？已辨識的金鑰會被遮蔽，但無法保證所有敏感資訊都被移除。",
     "Stop recording and clear saved conversations": "停止記錄並清空已儲存的對話",
@@ -7563,6 +7565,7 @@ const I18N = {
     "credits": "積分",
   },
   ja: {
+    "Enable": "有効にする",
     "Record gateway conversations": "ゲートウェイの会話を記録",
     "Prompts, replies and tool results may contain private code and files. Store them on this server for up to 7 days (256 MiB total)? Recognized secrets are masked, but this is not a privacy guarantee.": "プロンプト、応答、ツールの結果には非公開のコードやファイルが含まれる場合があります。このサーバーに最大7日間（合計256 MiB）保存しますか？検出された秘密情報は隠されますが、すべての機密情報の除去は保証されません。",
     "Stop recording and clear saved conversations": "記録を停止して保存済みの会話を消去",
@@ -11336,6 +11339,7 @@ const I18N = {
     "Main navigation": "メインナビゲーション",
   },
   de: {
+    "Enable": "Aktivieren",
     "Record gateway conversations": "Gateway-Gespräche aufzeichnen",
     "Prompts, replies and tool results may contain private code and files. Store them on this server for up to 7 days (256 MiB total)? Recognized secrets are masked, but this is not a privacy guarantee.": "Prompts, Antworten und Werkzeugergebnisse können privaten Code und Dateien enthalten. Bis zu 7 Tage auf diesem Server speichern (insgesamt 256 MiB)? Erkannte Geheimnisse werden maskiert, aber vollständiger Datenschutz ist nicht garantiert.",
     "Stop recording and clear saved conversations": "Aufzeichnung stoppen und gespeicherte Gespräche löschen",
