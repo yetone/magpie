@@ -12,7 +12,7 @@ test("no language in i18n.js has a key twice", async () => {
   const twice = [];
   let lang, seen;
   body.split("\n").forEach((line, i) => {
-    const head = line.match(/^  (\w+): \{/);
+    const head = line.match(/^  "?([\w-]+)"?: \{/);
     if (head) return void ((lang = head[1]), (seen = new Map()));
     const key = line.match(/^    ("(?:[^"\\]|\\.)*")\s*:/);
     if (!key || !lang) return;

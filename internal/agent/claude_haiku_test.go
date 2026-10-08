@@ -145,3 +145,40 @@ func TestClaudeLight(t *testing.T) {
 		}
 	}
 }
+
+// Claude Haiku 5.5 (claude-haiku-5-5; anthropic/claude-haiku-5.5 on a
+// router, as Vercel's gateway lists it) is the newest Haiku where a provider
+// serves it beside Haiku 4.5, dated or not, so Claude Code's haiku tier
+// follows it. It is a Claude after Opus 5.5: Claude Code sends it every
+// level and reads its effort from modelSettings only.
+func TestClaudeLightHaiku55(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	for _, p := range []provider.Provider{
+		{ID: "anth", Name: "Claude", Chat: "https://api.anthropic.com/v1", Key: "k", Models: []string{"claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-4-5-20251001", "claude-haiku-5-5", "claude-haiku-4-5"}},
+		{ID: "or", Name: "Router", Chat: "https://or.test/v1", Key: "k", Models: []string{"anthropic/claude-haiku-5.5", "anthropic/claude-sonnet-5.5", "anthropic/claude-haiku-4.5"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for main, want := range map[string]string{
+		"anth/claude-opus-5-5":           "anth/claude-haiku-5-5",
+		"anth/claude-sonnet-5-5[1m]":     "anth/claude-haiku-5-5",
+		"anth/claude-haiku-5-5":          "",
+		"or/anthropic/claude-sonnet-5.5": "or/anthropic/claude-haiku-5.5",
+	} {
+		if got := claudeLight(main); got != want {
+			t.Errorf("claudeLight(%q) = %q, want %q", main, got, want)
+		}
+	}
+	if got := claudeEffortsFor("claude-haiku-5-5"); len(got) != len(claudeEfforts) {
+		t.Errorf("claudeEffortsFor(claude-haiku-5-5) = %v, want %v", got, claudeEfforts)
+	}
+	if claudeReadsTop("claude-haiku-5-5[1m]") {
+		t.Error("claude-haiku-5-5 should read only modelSettings' effort, as every Claude after Opus 5.5")
+	}
+}

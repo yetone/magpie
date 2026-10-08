@@ -221,6 +221,30 @@ func TestSkillsShPages(t *testing.T) {
 	}
 }
 
+// magpie's own skills come first, marked official, and only where a
+// search names them (ttmouse on X).
+func TestFeaturedSkills(t *testing.T) {
+	sandbox(t)
+	t.Setenv("LOCALAPPDATA", t.TempDir())
+	skillsSh(t)
+	popular.Lock()
+	popular.list = nil
+	popular.Unlock()
+	t.Cleanup(func() { popular.Lock(); popular.list = nil; popular.Unlock() })
+
+	list, _ := MarketSkills("")
+	if len(list) != 2 || list[0].ID != "magpie-community/plugins/magpie-quota" || !list[0].Official || !list[0].Featured ||
+		list[0].Description == "" || list[0].Icon != gh("magpie-community") || !offered(list[0].Icon) || list[1].ID != "o/r/pdf" {
+		t.Fatalf("market: %+v", list)
+	}
+	if list, _ := MarketSkills("quota"); len(list) == 0 || list[0].SkillID != "magpie-quota" {
+		t.Fatalf("quota: %+v", list)
+	}
+	if list, _ := MarketSkills("pdf"); slices.ContainsFunc(list, func(m MarketSkill) bool { return m.Featured }) {
+		t.Fatalf("pdf: %+v", list)
+	}
+}
+
 func TestInstallFromRegistry(t *testing.T) {
 	sandbox(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

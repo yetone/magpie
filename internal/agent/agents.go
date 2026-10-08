@@ -578,7 +578,7 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 			break
 		}
 	}
-	provider := func() any { return magpieProviderJSONAt("opencode", id, at.gw()) }
+	provider := theirsKept(path, "provider."+magpieID, func() any { return magpieProviderJSONAt("opencode", id, at.gw()) }, "models")
 	opts := func(key string) func(map[string]string) []Option {
 		return func(cur map[string]string) []Option {
 			return append(ownOptions(auth, cur[key]), viaMagpie(id, magpieID+"/")...)
@@ -654,7 +654,8 @@ func openCodeRefAt(at place, path, id, v string) (string, error) {
 	if own := ownGatewayProvider(path, ref, at.v1()); own != "" {
 		return own + "/" + ref, nil
 	}
-	return v, edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: magpieProviderJSONAt("opencode", id, at.gw())})
+	provider := theirsKept(path, "provider."+magpieID, func() any { return magpieProviderJSONAt("opencode", id, at.gw()) }, "models")
+	return v, edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: provider()})
 }
 
 // ownGatewayProvider is the provider in an OpenCode config, other than
@@ -797,8 +798,9 @@ func piLike(at place, id, name, dir string) *Agent {
 	pair := pairSet(set, "defaultProvider", "defaultModel")
 	// the model a new session starts on, as the model field shows it
 	startup := func() string { return piStartup(path, pairGet(get, "defaultProvider", "defaultModel")()) }
+	block := theirsKept(modelsPath, "providers."+magpieID, func() any { return magpieProviderJSONAt("pi", id, at.gw()) }, "models")
 	writeMagpie := func() error {
-		return edit.SetJSON(modelsPath, edit.KV{Path: "providers." + magpieID, Value: magpieProviderJSONAt("pi", id, at.gw())})
+		return edit.SetJSON(modelsPath, edit.KV{Path: "providers." + magpieID, Value: block()})
 	}
 	return &Agent{
 		ID: id, Name: name, Icon: id, Bin: id, Dir: dir, Path: path, Spelled: prefixed,
@@ -810,7 +812,7 @@ func piLike(at place, id, name, dir string) *Agent {
 				"baseUrl", at.v1(), "apiKey", at.gwKey())
 		},
 		Sync: func() error {
-			return syncJSON(modelsPath, "providers."+magpieID, func() any { return magpieProviderJSONAt("pi", id, at.gw()) })
+			return syncJSON(modelsPath, "providers."+magpieID, block)
 		},
 		Fields: []Field{
 			{
@@ -1078,7 +1080,7 @@ func crushIn(at place) *Agent {
 // crushAt is Crush with its config at path and its data file at data,
 // reaching the gateway as at does.
 func crushAt(at place, path, data string) *Agent {
-	provider := func() any { return magpieProviderJSONAt("crush", "crush", at.gw()) }
+	provider := theirsKept(path, "providers."+magpieID, func() any { return magpieProviderJSONAt("crush", "crush", at.gw()) }, "models")
 	get := func(k string) (string, bool) { return edit.GetJSON(path, k) }
 	set := func(kvs ...edit.KV) error { return edit.SetJSON(path, kvs...) }
 	pick := func(k string) (string, bool) {

@@ -526,7 +526,12 @@ func PlanQuotas(ctx context.Context) []SubscriptionQuota {
 				k.Key = j.key
 				noteKeyAllowance(k, ws, time.Now())
 				if strings.HasSuffix(j.src.url, "/api/monitor/usage/quota/limit") && !team { // Zhipu, Z.ai
-					q.Until, q.Renew = zhipuTerm(ctx, zcodeRoot(j.src.url), j.key)
+					// the plan's term and its resets (#1191), asked together
+					root := zcodeRoot(j.src.url)
+					resets := make(chan *ResetCredits, 1)
+					go func() { resets <- zhipuPersonalResets(ctx, root, j.key) }()
+					q.Until, q.Renew = zhipuTerm(ctx, root, j.key)
+					q.Resets = <-resets
 				}
 			}
 			q = keepReading(ctx, q, tag)

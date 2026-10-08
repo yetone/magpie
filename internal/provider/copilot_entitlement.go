@@ -44,7 +44,7 @@ func refreshCopilotEntitlement(app copilotApp, plan, sku string) {
 		current, valid := copilotSaved(*l)
 		if l.own() {
 			current, valid = own, ownOK
-			valid = valid && strings.EqualFold(firstNonEmpty(current.User, "GitHub"), app.User)
+			valid = valid && strings.EqualFold(CopilotAccountName(firstNonEmpty(current.User, "GitHub"), current.Host), app.User)
 		}
 		if !valid || current.Token != app.Token {
 			continue

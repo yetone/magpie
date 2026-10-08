@@ -6,6 +6,7 @@ package provider
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -247,6 +248,15 @@ func loginQuota(ctx context.Context, l Login) SubscriptionQuota {
 		for _, c := range copilotLogins(copilotConfigDir()) {
 			if strings.EqualFold(c.User, l.User) {
 				q := copilotSubscriptionUsage(ctx, c.app.Token, c.app.Host)
+				// an editor's stale token, the CLI signed in to the same
+				// account: read as the requests are sent (#1238)
+				if q.Error == http.StatusText(http.StatusUnauthorized) {
+					if cli, ok := copilotStandIn(c.app); ok {
+						copilotRefuse(c.app.Token, http.StatusUnauthorized)
+						c.app = cli
+						q = copilotSubscriptionUsage(ctx, cli.Token, cli.Host)
+					}
+				}
 				if q.Error == "" {
 					refreshCopilotEntitlement(c.app, q.Plan, q.AccessSKU)
 				}

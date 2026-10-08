@@ -121,6 +121,9 @@ for (const engine of ["chromium", "webkit"]) {
         assert((await review.locator(".price-reference").textContent()).includes("gpt-5.6-luna"));
         for (const width of [1200,440]) {
           await page.setViewportSize({width,height:900});
+          // the table is fitted to the new width on a frame after the resize
+          // (ledFit, which may cut names shorter): look once it has been
+          await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100)))));
           const layout = await cells.nth(7).evaluate(cell => {
             const badges = [...cell.querySelectorAll(".source-badges .src")].map(n => n.getBoundingClientRect());
             const bounds = cell.getBoundingClientRect();

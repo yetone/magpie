@@ -90,6 +90,13 @@ func TestZCodeAccounts(t *testing.T) {
 				return
 			}
 			ok([]any{map[string]any{"productName": "GLM Coding Pro", "status": "VALID"}})
+		case r.URL.Path == "/api/biz/customer-package-reset/list":
+			// the account's own resets, asked with its key (#1191)
+			if auth != "two.secret2" || r.URL.Query().Get("targetType") != "PERSONAL" {
+				w.WriteHeader(401)
+				return
+			}
+			w.Write([]byte(zhipuResetList))
 		case r.URL.Path == "/api/monitor/usage/quota/limit":
 			if auth != "two.secret2" && auth != "own.secret" {
 				w.WriteHeader(401)
@@ -160,6 +167,9 @@ func TestZCodeAccounts(t *testing.T) {
 	if q.Error != "" || q.Plan != "GLM Coding Pro" || len(q.Windows) != 2 || q.Windows[0].Name != "5 hours" || q.Windows[0].Used != 25 ||
 		q.Windows[1].Name != "Weekly" || q.Windows[1].Used != 10 || q.Windows[0].ResetsAt == nil {
 		t.Fatalf("usage: %+v", q)
+	}
+	if r := q.Resets; r == nil || r.Count != 2 || r.FiveHour != 1 || r.Weekly != 1 || r.Team {
+		t.Fatalf("resets: %+v", r)
 	}
 
 	if err := SwitchLogin("zcode", "two@example.com"); err != nil {

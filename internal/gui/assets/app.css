@@ -934,7 +934,10 @@ body.window .field.solo { grid-column: auto; }
 .led.tight .model, .led.tight .where { max-width: 160px; }
 .led.tight th, .led.tight td { padding-left: 6px; padding-right: 6px; }
 .led.tighter .price-reference { display: none; }
-.led.tighter .model, .led.tighter .where { max-width: 110px; }
+/* the account's name is cut at 110px, but its column keeps room for the
+   source badges under it, which don't wrap: capped at 110px the cell cut
+   off the second English one ("Subscription") */
+.led.tighter .model, .led.tighter .where-name { max-width: 110px; }
 .led.tighter th, .led.tighter td { padding-left: 4px; padding-right: 4px; }
 .led.tighter th { white-space: normal; }
 .led-tight { font-size: 11.5px; color: var(--muted); }
@@ -3184,6 +3187,8 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 :where(html[data-fonts]) .ag-code, :where(html[data-fonts]) .ag-diff code, :where(html[data-fonts]) .ag-path { font-style: var(--code-style, inherit); font-weight: var(--code-weight, inherit); font-stretch: var(--code-stretch, 100%); }
 .ag-code { padding: 1px 5px; border-radius: 4px; background: var(--pill); color: var(--fg); }
 .ag-warn { gap: 8px; font-size: 12px; }
+/* which copy is left on the old list: a sentence that wraps as one, under the warning's words */
+.ag-vl.ag-stale-copy { display: block; padding-left: 14px; font-size: 12px; line-height: 1.6; color: var(--fg-2); }
 .ag-hint { font-size: 12px; color: var(--muted); }
 .ag-tier { width: 70px; flex: none; font-size: 12px; color: var(--fg-2); }
 .ag-vl .field.ag-pick { width: 220px; justify-content: flex-start; }
@@ -3234,7 +3239,7 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
   .ag-vl > .fields > .field.main, .ag-vl > .fields > .field.solo { flex: 1 1 100%; min-width: 0; }
   .ag-vl > .fields > .field.side { flex: 1 0 124px; }
   .ag-vl > .fields > .extras-cell { flex-wrap: wrap; max-width: 100%; }
-  .ag-vl .field.ag-pick { flex: 1 1 160px; width: auto; min-width: 0; }
+  .ag-vl .field.ag-pick { flex: 0 0 220px; width: 220px; min-width: 0; }
   /* short of room, the model it starts on takes a line of its own under
      the name, the link and the switch staying beside it */
   .row.agent.conn > .field.ag-start, .row.agent.conn > .who + .field.ag-start { order: 1; flex: 1 1 100%; width: auto; margin: 9px 0 0 34px; }

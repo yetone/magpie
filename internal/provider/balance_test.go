@@ -2,11 +2,14 @@ package provider
 
 import (
 	"context"
+	"crypto/tls"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/agentenv"
 )
@@ -429,5 +432,54 @@ func TestKnownBalanceFieldLeftEmpty(t *testing.T) {
 	p = Provider{ID: "relay", Chat: srv.URL + "/v1", Key: "sk-one", BalanceURL: srv.URL + "/other"}
 	if _, _, err := Balance(context.Background(), p); err == nil || !strings.Contains(err.Error(), "no balance path") {
 		t.Errorf("unknown query: %v", err)
+	}
+}
+
+// SiliconFlow retired /v1/user/info (#1094): its 410, as the reporter's card
+// showed it, says the query is gone and where the balance and vouchers are
+// read now, not the raw reply; a key it refuses still says so as it came.
+func TestSiliconFlowRetiredBalanceQuery(t *testing.T) {
+	var status int
+	var body string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/user/info" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	addr := srv.Listener.Addr().String()
+	old := http.DefaultClient.Transport
+	http.DefaultClient.Transport = &http.Transport{
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, network, addr)
+		},
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	t.Cleanup(func() { http.DefaultClient.Transport = old })
+
+	for _, c := range []struct {
+		base, console string
+	}{
+		{"https://api.siliconflow.cn/v1", "https://cloud.siliconflow.cn"},
+		{"https://api.siliconflow.com/v1", "https://cloud.siliconflow.com"},
+	} {
+		p := Provider{ID: "siliconflow", Chat: c.base, Key: "sk-test"}
+		status, body = http.StatusGone, `{"code":20092,"message":"This endpoint is deprecated and is no longer available.","data":null}`
+		_, ok, err := Balance(context.Background(), p)
+		if !ok || err == nil || !strings.Contains(err.Error(), "retired") || !strings.Contains(err.Error(), c.console) || strings.Contains(err.Error(), "410 Gone") {
+			t.Errorf("%s 410: %v %v, want it retired and %s named", c.base, ok, err, c.console)
+		}
+		status, body = http.StatusUnauthorized, `{"code":30014,"data":null,"message":"Token is invalid."}`
+		if _, _, err := Balance(context.Background(), p); err == nil || !strings.Contains(err.Error(), "Token is invalid.") || strings.Contains(err.Error(), "retired") {
+			t.Errorf("%s 401: %v, want the refusal as it came", c.base, err)
+		}
+		status, body = http.StatusOK, `{"code":20000,"message":"OK","status":true,"data":{"id":"userid","balance":"0.88","chargeBalance":"88.00","totalBalance":"88.88"}}`
+		if got, _, err := Balance(context.Background(), p); err != nil || !strings.HasSuffix(got, "88.88") {
+			t.Errorf("%s 200: %q %v", c.base, got, err)
+		}
 	}
 }

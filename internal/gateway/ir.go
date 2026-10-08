@@ -117,9 +117,9 @@ type Request struct {
 	Include []string
 	// ClientMetadata and Text are a Responses client's client_metadata
 	// (Codex's installation and session ids, which a relay may check, #374)
-	// and text (its verbosity, and the schema an answer must fit), which go
-	// on as they were sent when the request is built again for a Responses
-	// upstream; no other API takes them.
+	// and text (its verbosity), which go on as they were sent when the
+	// request is built again for a Responses upstream; no other API takes
+	// them. text's format is read into Format.
 	ClientMetadata json.RawMessage
 	Text           json.RawMessage
 	// Metadata is an Anthropic client's metadata (Claude Code's user_id),
@@ -130,9 +130,10 @@ type Request struct {
 	// Safeguards are the caller's safety context, opaque to the gateway.
 	Safeguards    json.RawMessage
 	SafeguardBeta string
-	// Schema is the JSON schema an Anthropic client asked the answer to fit
-	// (output_config.format, of type json_schema).
-	Schema json.RawMessage
+	// Format is the shape the client asked the answer in (structured
+	// output: format.go), nil for plain text. Text, a Responses client's,
+	// holds it no more: it is asked for again in the upstream's own words.
+	Format *Format
 	// GeminiCompat is the upstream being Gemini's OpenAI-compatible API
 	// (AI Studio's, or a proxy in front of it on this machine or the LAN),
 	// which gives the model's thoughts only when asked in thinking_config.

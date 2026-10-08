@@ -18,7 +18,7 @@ import (
 func init() {
 	movers["devin"] = &mover{
 		pkg:    "@magpie-community/opencode-devin-auth",
-		min:    "0.1.8", // which models take images is what Devin tells its CLI (swe-2 does)
+		min:    "0.1.9", // a tool whose parameters have a root anyOf, oneOf or allOf goes as a plain object (#1196)
 		agents: []string{"devin"},
 		// a variant picked before the families were one model (swe-2-high)
 		// goes to Devin as it is, through the plugin too, which keeps the

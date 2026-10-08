@@ -61,6 +61,7 @@ type cRequest struct {
 	ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"`
 	ServiceTier         string          `json:"service_tier,omitempty"`
 	PromptCacheKey      string          `json:"prompt_cache_key,omitempty"`
+	ResponseFormat      json.RawMessage `json:"response_format,omitempty"`
 }
 
 func parseChat(body []byte) (*Request, error) {
@@ -70,7 +71,7 @@ func parseChat(body []byte) (*Request, error) {
 	}
 	r := &Request{Model: c.Model, MaxTokens: c.MaxCompletionTokens, Temp: c.Temperature, TopP: c.TopP,
 		Stream: c.Stream, Effort: effortOf(c.ReasoningEffort), Parallel: c.ParallelToolCalls, Fast: c.ServiceTier == "priority",
-		CacheKey: c.PromptCacheKey}
+		CacheKey: c.PromptCacheKey, Format: openAIFormat(c.ResponseFormat)}
 	if r.MaxTokens == 0 {
 		r.MaxTokens = c.MaxTokens
 	}
@@ -440,6 +441,9 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 		if r.Parallel != nil {
 			out["parallel_tool_calls"] = *r.Parallel
 		}
+	}
+	if r.Format != nil {
+		out["response_format"] = r.Format.chat()
 	}
 	if r.WebSearch && host == "openrouter.ai" {
 		// OpenRouter's own search, for any of its models

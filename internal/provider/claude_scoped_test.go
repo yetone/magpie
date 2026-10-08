@@ -10,7 +10,7 @@ import (
 // Claude Code's /usage tells a week's allowance per model (#139).
 func TestClaudeWindowsModelScoped(t *testing.T) {
 	now := time.Date(2026, 7, 20, 0, 0, 0, 0, time.UTC)
-	ws, err := parseClaudeUsage(`Current session: 2% used · resets Jul 20 at 10am (UTC)
+	ws, err := parseClaudeUsage(`Current session: 2% used · resets Jul 20 at 3am (UTC)
 Current week (all models): 88% used · resets Jul 24 at 8pm (UTC)
 Current week (Opus): 12% used · resets Jul 24 at 8pm (UTC)
 Current week (Fable): 64% used · resets Jul 24 at 8pm (UTC)`, now)

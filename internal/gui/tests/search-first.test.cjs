@@ -76,6 +76,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(saved[0].searchFirst, "api");
       assert.equal(saved[0].searcher, "ds", "the rest kept");
       assert.equal(saved[0].redact, true);
+      // the save's answer draws Settings again, every option replaced: what is read
+      // and measured below is the page drawn from it
+      await page.waitForFunction(() => prefsBusy === 0);
       await page.locator("#searchFirstRow .segs button.on", { hasText: w.apis }).waitFor();
       assert((await page.locator("#searchList .row.search-add .sub").innerText()).includes(w.before));
       assert.deepEqual(await page.evaluate(() => [scrollX, scrollY, document.scrollingElement.scrollTop]), before, "the click moved nothing");

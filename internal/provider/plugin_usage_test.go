@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -45,6 +47,7 @@ func TestPluginUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	var first []QuotaWindow // a@fake's, as first read
 	for _, agent := range []string{"fakeco", "plugin:fakeco"} {
 		u := LoginUsage(ctx, agent)
 		if len(u) != 3 {
@@ -75,6 +78,9 @@ func TestPluginUsage(t *testing.T) {
 		if e := u["API key"].Error; e != "an API key has no plan" {
 			t.Fatalf("%s: the key's usage error = %q (%v)", agent, e, u)
 		}
+		if first == nil {
+			first = q.Windows
+		}
 	}
 
 	cards := 0
@@ -90,10 +96,20 @@ func TestPluginUsage(t *testing.T) {
 		t.Fatalf("%d usage cards for the plugin's accounts, want 3", cards)
 	}
 	// one account's card read again from its refresh button (#840): that
-	// account's alone is asked
+	// account's alone is asked. Read a moment later (the five hours' renewal
+	// is told to the millisecond), its windows renew when they did, as a
+	// vendor's do: TestPluginFailover's routing weighs accounts read at
+	// different times by when they renew.
+	time.Sleep(2 * time.Millisecond)
 	again := context.WithValue(context.Background(), cardRefreshKey{}, cardRefresh{"fakeco", "A@fake"})
-	if qs := fetchSubscriptionUsage(again); len(qs) != 1 || qs[0].User != "a@fake" || qs[0].Error != "" {
+	qs := fetchSubscriptionUsage(again)
+	if len(qs) != 1 || qs[0].User != "a@fake" || qs[0].Error != "" || len(qs[0].Windows) != len(first) {
 		t.Fatalf("a@fake read again: %+v", qs)
+	}
+	for i, w := range qs[0].Windows {
+		if a, b := w.ResetsAt, first[i].ResetsAt; (a == nil) != (b == nil) || a != nil && !a.Equal(*b) {
+			t.Errorf("a@fake's %s renews at %v read again, at %v first", w.Name, a, b)
+		}
 	}
 
 	// a model the plugin says the plan serves at no cost shows as free,
@@ -203,6 +219,100 @@ func TestPluginUsageLapse(t *testing.T) {
 	}
 	if !passing.MatchString(pluginLoginQuota(ctx, Login{Agent: "plugin:fakeco", User: "off@fake"}).Error) {
 		t.Fatal("a failed fetch isn't taken for the network")
+	}
+}
+
+// A usage read begun before a request was answered doesn't overrule what
+// the answer told of the sign-in: one that ends clean leaves the mark of a
+// 401 that came meanwhile, and one that ends refused doesn't mark an
+// account a request went through on meanwhile. A read begun afterwards
+// marks or clears as before. TestPluginFailover's refused account lost
+// its mark to a reading of its allowance begun just before the 401.
+func TestPluginUsageReadOlderThanAnswer(t *testing.T) {
+	bun, err := exec.LookPath("bun")
+	if err != nil {
+		t.Skip("no bun on PATH")
+	}
+	claudeHome(t)
+	t.Setenv("MAGPIE_BUN", bun)
+	t.Cleanup(plugin.Settle)
+	asked, answer := make(chan struct{}), make(chan int)
+	vendor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case asked <- struct{}{}:
+		case <-r.Context().Done():
+			return
+		}
+		select {
+		case status := <-answer:
+			w.WriteHeader(status)
+			fmt.Fprint(w, "Fake Pro")
+		case <-r.Context().Done():
+		}
+	}))
+	defer vendor.Close()
+	t.Setenv("FAKE_USAGE", vendor.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	abs, _ := filepath.Abs("../plugin/testdata/fake/index.js")
+	if _, err := plugin.Add(ctx, abs); err != nil {
+		t.Fatal(err)
+	}
+	key, err := plugin.Import(ctx, "fakeco", map[string]any{"type": "oauth", "refresh": "r-ok", "access": "a", "expires": 9e15, "accountId": "ok@fake"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveLogins(t, savedLogin{Agent: "plugin:fakeco", User: "ok@fake", Home: key, On: true})
+	if _, err := plugin.Providers(ctx); err != nil {
+		t.Fatal(err)
+	}
+	pp := mustPlugin(t)
+	lapsed := func() bool {
+		for _, l := range pluginLogins(mustPlugin(t)) {
+			return l.Lapsed != ""
+		}
+		t.Fatal("no account")
+		return false
+	}
+	// read reads the account's usage, the vendor answering it status
+	// once meanwhile has run
+	read := func(status int, meanwhile func()) {
+		t.Helper()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			pluginLoginQuota(ctx, Login{Agent: "plugin:fakeco", User: "ok@fake"})
+		}()
+		select {
+		case <-asked:
+		case <-ctx.Done():
+			t.Fatal("the usage was never asked")
+		}
+		meanwhile()
+		answer <- status
+		<-done
+	}
+	// as the gateway notes a request's answer that says nothing of it
+	answered := func(status int) func() {
+		return func() { notePluginSaid(pp, key, "", status) }
+	}
+	nothing := func() {}
+
+	read(http.StatusOK, answered(http.StatusUnauthorized))
+	if !lapsed() {
+		t.Fatal("a usage read begun before the 401 took its mark off")
+	}
+	read(http.StatusOK, nothing)
+	if lapsed() {
+		t.Fatal("a clean usage read begun after the 401 left its mark")
+	}
+	read(http.StatusUnauthorized, answered(http.StatusOK))
+	if lapsed() {
+		t.Fatal("a refused usage read begun before a request went through marked the account")
+	}
+	read(http.StatusUnauthorized, nothing)
+	if !lapsed() {
+		t.Fatal("a refused usage read didn't mark the account")
 	}
 }
 

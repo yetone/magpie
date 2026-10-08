@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -133,6 +136,79 @@ func TestAllowanceFor(t *testing.T) {
 func TestAllowancesFirstWaits(t *testing.T) {
 	if m := Allowances("nobody"); m == nil {
 		t.Fatal("the first ask didn't wait")
+	}
+}
+
+// An account that says it is out while its allowance is being read has it
+// read again once that reading is back, not a minute later: the reading
+// was asked before the refusal, and what it tells is kept only until the
+// next ask, which reads again (as StaleKeyAllowance does a key's).
+func TestAllowancesStaleMidRead(t *testing.T) {
+	signIn(t)
+	week := time.Now().Add(72 * time.Hour)
+	release := make(chan struct{})
+	var once sync.Once
+	var readings atomic.Int32
+	LoginUsageVia(func(_ context.Context, agent string) map[string]SubscriptionQuota {
+		used := 100.0
+		if readings.Add(1) == 1 {
+			<-release
+			used = 97
+		}
+		return map[string]SubscriptionQuota{"me@example.com": {Windows: []QuotaWindow{{Span: 7 * 24 * time.Hour, Used: used, ResetsAt: &week}}}}
+	})
+	reset := func() {
+		usedCache.Lock()
+		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
+		usedCache.stale = nil
+		usedCache.Unlock()
+	}
+	reset()
+	t.Cleanup(func() {
+		once.Do(func() { close(release) })
+		// every reading this started lands before the stand-in goes
+		for {
+			usedCache.Lock()
+			done := usedCache.loading["codex"]
+			usedCache.Unlock()
+			if done == nil {
+				break
+			}
+			<-done
+		}
+		LoginUsageVia(nil)
+		reset()
+	})
+	// read over a minute ago, at 90%
+	usedCache.Lock()
+	usedCache.m["codex"] = map[string]Allowance{"me@example.com": {{Used: 90, Resets: week, Span: 7 * 24 * time.Hour}}}
+	usedCache.at["codex"] = time.Now().Add(-2 * time.Minute)
+	usedCache.Unlock()
+	share := func() float64 {
+		u, _ := Allowances("codex")["me@example.com"].For("gpt-5.5", time.Now())
+		return u
+	}
+	share() // reads again, behind the request
+	usedCache.Lock()
+	reading := usedCache.loading["codex"]
+	usedCache.Unlock()
+	for readings.Load() < 1 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	StaleAllowance("codex", "me@example.com") // refused: out, as the request found
+	once.Do(func() { close(release) })
+	<-reading
+	first := share()
+	got, deadline := first, time.Now().Add(2*time.Second)
+	for got != 100 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+		got = share()
+	}
+	if got != 100 {
+		t.Fatalf("first ask %v%%, 2s later %v%%, readings %d", first, got, readings.Load())
+	}
+	if n := readings.Load(); n != 2 {
+		t.Fatalf("readings %d", n)
 	}
 }
 

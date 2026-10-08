@@ -50,6 +50,8 @@ func (s *Server) serveDevin(w http.ResponseWriter, r *http.Request, from provide
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
+	// the vendor's own API is told the answer's format in words
+	req = req.inSystem()
 	req.Model = model
 	ask := s.askDevin(home, model)
 	if req.WebSearch && !searching(r.Context()) {
@@ -446,7 +448,11 @@ func buildDevin(r *Request, uid, key string) []byte {
 			desc = name
 		}
 		offered[name] = true
-		out = out.bytes(10, pb{}.str(1, name).str(2, desc).bytes(3, schema))
+		// Devin's Claude models answer 502 "There is an issue with this
+		// request" to a tool whose parameters have a root anyOf, oneOf or
+		// allOf (#1196: Codex desktop's automation_update), as Anthropic
+		// does behind Factory (#646)
+		out = out.bytes(10, pb{}.str(1, name).str(2, desc).bytes(3, objectSchema(schema)))
 	}
 	for _, t := range tools {
 		desc := t.Description

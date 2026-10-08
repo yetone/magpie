@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
@@ -169,5 +171,109 @@ func TestAirCheckAndSync(t *testing.T) {
 	}
 	if d := a.Drift(); d != nil {
 		t.Fatalf("drift after setting it again: %+v", d)
+	}
+}
+
+// Sync and a model pick keep the user's provider fields, while magpie's
+// endpoint, key and complete model list still follow the gateway.
+func TestAirProviderWritesKeepCustomFields(t *testing.T) {
+	for _, action := range []string{"sync", "pick"} {
+		t.Run(action, func(t *testing.T) {
+			home, dir := airHome(t, "/opt/bin/opencode")
+			a := air(home, filepath.Join(home, ".config"))
+			cfg := filepath.Join(dir, "magpie-opencode.json")
+			if err := a.Apply("model", "magpie/fake/m1"); err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, cfg, `{
+  // the user's configuration
+  "theme": "dark",
+  "model": "magpie/fake/m1",
+  "provider": {
+    "mine": {"name": "mine"},
+    "magpie": {
+      "name": "old",
+      "npm": "old",
+      "options": {
+        "baseURL": "http://127.0.0.1:1/v1",
+        "apiKey": "old-key",
+        "timeout": 12345,
+        "headers": {"z": "last", "a": "first"}
+      },
+      "compat": {"sendSessionAffinityHeaders": true, "supportsLongCacheRetention": false},
+      "marker": {"z": 9007199254740993, "a": null},
+      "models": {"fake/m1": {"obsolete": true}, "removed/m0": {}}
+    }
+  }
+}
+`)
+			kept := map[string]string{}
+			for _, field := range []string{"compat", "marker", "options.timeout", "options.headers"} {
+				kept[field], _ = edit.GetJSON(cfg, "provider.magpie."+field)
+			}
+			check := func() {
+				t.Helper()
+				for field, was := range kept {
+					if v, ok := edit.GetJSON(cfg, "provider.magpie."+field); !ok || !sameOrder(v, json.RawMessage(was)) {
+						t.Errorf("custom %s lost or changed: got %q, want %q", field, v, was)
+					}
+				}
+				if !strings.Contains(readFile(cfg), "// the user's configuration") {
+					t.Error("the user's comment was removed")
+				}
+				for k, want := range map[string]string{"theme": "dark", "provider.mine.name": "mine"} {
+					if got, _ := edit.GetJSON(cfg, k); got != want {
+						t.Errorf("%s = %q, want %q", k, got, want)
+					}
+				}
+				want := magpieProviderJSONFor("opencode", "air").(map[string]any)
+				for k, v := range want["options"].(map[string]any) {
+					if got, _ := edit.GetJSON(cfg, "provider.magpie.options."+k); got != v {
+						t.Errorf("options.%s = %q, want %v", k, got, v)
+					}
+				}
+				for _, k := range []string{"name", "npm", "models"} {
+					got, _ := edit.GetJSON(cfg, "provider.magpie."+k)
+					if k != "models" {
+						b, _ := json.Marshal(got)
+						got = string(b)
+					}
+					if !sameOrder(got, want[k]) {
+						t.Errorf("managed %s is stale: %s", k, got)
+					}
+				}
+			}
+			if action == "sync" {
+				if err := a.Sync(); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := a.Apply("model", "magpie/fake/m1"); err != nil {
+				t.Fatal(err)
+			}
+			check()
+			// The old catalog entry must go when the provider changes.
+			if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m2"}}); err != nil {
+				t.Fatal(err)
+			}
+			if err := a.Sync(); err != nil {
+				t.Fatal(err)
+			}
+			check()
+			before := readFile(cfg)
+			stamp := time.Unix(1000000000, 0)
+			if err := os.Chtimes(cfg, stamp, stamp); err != nil {
+				t.Fatal(err)
+			}
+			if err := a.Sync(); err != nil {
+				t.Fatal(err)
+			}
+			stat, err := os.Stat(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if readFile(cfg) != before || !stat.ModTime().Equal(stamp) {
+				t.Error("unchanged provider was rewritten")
+			}
+		})
 	}
 }

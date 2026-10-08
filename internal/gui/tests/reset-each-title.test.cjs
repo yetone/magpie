@@ -2,8 +2,9 @@
 // A card's resets, hovered, list each one left and when it runs out, a line
 // each, soonest first (#960, Magixyne: the tooltip only restated the first
 // one's date the card already shows). A Codex account's are numbered, one
-// that never runs out last; a GLM team's say which window each resets; a
-// plugin's, whose list isn't told, keep the one line. The Usage page's card
+// that never runs out last; a GLM team's say which window each resets,
+// and so do a GLM Coding Plan key's own (#1191), each named for whose plan
+// it is; a plugin's, whose list isn't told, keep the one line. The Usage page's card
 // and the menu bar panel's, at 900px and 440px. English, Chinese, Japanese
 // and German, Chromium and WebKit; no backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -21,14 +22,18 @@ const quotas = [
     resets: { count: 3, until: a, each: [{ until: a }, { until: c }, {}] } },
   { provider: "zhipu", name: "GLM Coding", icon: "zhipu-color", user: "team@example.com", plan: "Team",
     windows: [{ name: "5 hours", used: 30 }],
-    resets: { count: 3, byWindow: true, fiveHour: 2, weekly: 1, until: a,
+    resets: { count: 3, byWindow: true, team: true, fiveHour: 2, weekly: 1, until: a,
       each: [{ until: a, window: "fiveHour" }, { until: b, window: "weekly" }, { until: c, window: "fiveHour" }] } },
   { provider: "codex-plugin", name: "Codex (plugin)", user: "p@example.com", plan: "Plus",
     windows: [{ name: "7 days", used: 10, resetsAt: b }], resets: { count: 2, until: b } },
+  { provider: "glm", name: "GLM", icon: "zhipu-color", user: "work", plan: "pro",
+    windows: [{ name: "5 hours", used: 20 }],
+    resets: { count: 2, byWindow: true, fiveHour: 1, weekly: 1, until: b,
+      each: [{ until: b, window: "weekly" }, { until: c, window: "fiveHour" }] } },
 ];
 
 function serve(lang) {
-  const settings = { theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd", trayUsages: ["codex", "zhipu", "codex-plugin"], trayUsageEvery: 3 };
+  const settings = { theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd", trayUsages: ["codex", "zhipu", "codex-plugin", "glm"], trayUsageEvery: 3 };
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
@@ -51,21 +56,29 @@ const words = {
     nth: (n, w) => `Reset ${n} runs out ${w}`, never: (n) => `Reset ${n} never runs out`,
     five: (w) => `Five-hour reset runs out ${w}`, week: (w) => `Weekly reset runs out ${w}`,
     first: (w) => `The first runs out ${w}`,
+    team: "The team plan's resets, used on bigmodel.cn or z.ai",
+    own: "The plan's resets, used on bigmodel.cn or z.ai",
   },
   zh: {
     nth: (n, w) => `第 ${n} 张 ${w} 到期`, never: (n) => `第 ${n} 张永不过期`,
     five: (w) => `5 小时重置卡 ${w} 到期`, week: (w) => `每周重置卡 ${w} 到期`,
     first: (w) => `最早的一张 ${w} 到期`,
+    team: "团队套餐的重置卡，在 bigmodel.cn 或 z.ai 上使用",
+    own: "套餐的重置卡，在 bigmodel.cn 或 z.ai 上使用",
   },
   ja: {
     nth: (n, w) => `${n}つ目のリセットは${w}に期限切れ`, never: (n) => `${n}つ目のリセットは期限なし`,
     five: (w) => `5時間リセットは${w}に期限切れ`, week: (w) => `週次リセットは${w}に期限切れ`,
     first: (w) => `最初のものは${w}に期限切れ`,
+    team: "チームプランのリセット。bigmodel.cn または z.ai で使用します",
+    own: "プランのリセット。bigmodel.cn または z.ai で使用します",
   },
   de: {
     nth: (n, w) => `Reset ${n} läuft ${w} ab`, never: (n) => `Reset ${n} läuft nie ab`,
     five: (w) => `Fünf-Stunden-Reset läuft ${w} ab`, week: (w) => `Wochen-Reset läuft ${w} ab`,
     first: (w) => `Der erste läuft ${w} ab`,
+    team: "Die Resets des Team-Tarifs, einlösbar auf bigmodel.cn oder z.ai",
+    own: "Die Resets des Tarifs, einlösbar auf bigmodel.cn oder z.ai",
   },
 };
 
@@ -91,22 +104,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           codex: [w.nth(1, wa), w.nth(2, wc), w.never(3)],
           team: [w.five(wa), w.week(wb), w.five(wc)],
           plugin: w.first(wb),
+          own: [w.week(wb), w.five(wc)],
         };
       };
       const check = async (page, sel) => {
         await page.locator(sel).first().waitFor();
         const titles = await page.locator(sel + " .resets-words").evaluateAll((es) => es.map((e) => e.title));
-        assert.equal(titles.length, 3, "every card's resets are told");
+        assert.equal(titles.length, 4, "every card's resets are told");
         const ww = await want(page);
-        const [codex, team, plugin] = titles.map((s) => s.split("\n"));
+        const [codex, team, plugin, own] = titles.map((s) => s.split("\n"));
         assert.deepEqual(codex.slice(0, 3), ww.codex, "a Codex account's, numbered, soonest first, the one that never runs out last");
         assert.equal(codex.length, 4, "the Auto-use line follows them");
         assert.equal(team.length, 4, "the team plan's line, then each reset");
         assert.deepEqual(team.slice(1), ww.team, "a team's, each its window, soonest first");
         assert.deepEqual(plugin, [ww.plugin], "a plugin's, not listed, keeps the one line");
+        assert.equal(team[0], w.team, "a team's say they are the team plan's");
+        assert.deepEqual(own, [w.own, ...ww.own], "a GLM key's own say they are the plan's, then each, soonest first");
         // the card itself says what it did
         const shown = await page.locator(sel + " .resets-words .resets-n").allTextContents();
-        assert.equal(shown.length, 3);
+        assert.equal(shown.length, 4);
         // nothing cut off: the resets' words stay inside their card
         const fits = await page.locator(sel + " .resets-words").evaluateAll((es) => es.every((e) => {
           const card = e.closest(".pq-card, .subscription-card, .subscription-account") || document.body;

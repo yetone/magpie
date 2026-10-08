@@ -42,7 +42,7 @@ func TestLiveCodexSealedAgentGuidance(t *testing.T) {
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		isChild := false
 		if r.Method == http.MethodPost && r.URL.Path == CodexPath+"/responses" {
-			body, ok := s.readRequestBody(w, r, provider.Responses, codexReader, 0)
+			body, ok := s.readRequestBody(w, r, provider.Responses, 0)
 			if !ok {
 				return
 			}
@@ -62,7 +62,7 @@ func TestLiveCodexSealedAgentGuidance(t *testing.T) {
 		handler.ServeHTTP(rec, r)
 		mu.Lock()
 		childStatus = rec.Code
-		sawGuidance = sawGuidance || strings.Contains(rec.Body.String(), "Magpie-served model for the lead")
+		sawGuidance = sawGuidance || strings.Contains(rec.Body.String(), "sealed by the ChatGPT backend that answered its lead")
 		leaked = leaked || bytes.Contains(rec.Body.Bytes(), []byte("gAAAAA"))
 		mu.Unlock()
 		for key, values := range rec.Header() {
@@ -83,7 +83,7 @@ func TestLiveCodexSealedAgentGuidance(t *testing.T) {
 	mu.Lock()
 	gotCiphertext, gotGuidance, gotLeak, status := sawCiphertext, sawGuidance, leaked, childStatus
 	mu.Unlock()
-	cliGuidance := strings.Contains(string(output), "Magpie-served model for the lead")
+	cliGuidance := strings.Contains(string(output), "sealed by the ChatGPT backend that answered its lead")
 	if !gotCiphertext || !gotGuidance || gotLeak || status != 400 || upstreamCalls.Load() != 0 || !cliGuidance || err != nil {
 		t.Errorf("live guidance: sealed=%v status=%d errorShown=%v leaked=%v upstreamCalls=%d cliShowsGuidance=%v cliError=%v", gotCiphertext, status, gotGuidance, gotLeak, upstreamCalls.Load(), cliGuidance, err)
 	}

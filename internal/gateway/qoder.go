@@ -65,6 +65,8 @@ func (s *Server) serveQoder(w http.ResponseWriter, r *http.Request, from provide
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
+	// the vendor's own API is told the answer's format in words
+	req = req.inSystem()
 	req.Model = model
 	ask := s.askQoder(p.Account.Agent, model, p.Account.User)
 	ctx, cancel := context.WithCancel(r.Context())

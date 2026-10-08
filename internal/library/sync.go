@@ -27,6 +27,13 @@ type Result struct {
 	// Unremoved are, for skills or servers taken out together, the ones
 	// that couldn't be (What is skill:<name> or mcp:<name>)
 	Unremoved []Problem `json:"unremoved,omitempty"`
+	// Installed, Had and Skipped are, for skills installed together, the
+	// ones added, the ones the library had already from the same source,
+	// and the ones left out with why: another skill by that name, the
+	// user's, is never written over (What is skill:<name>)
+	Installed []string  `json:"installed,omitempty"`
+	Had       []string  `json:"had,omitempty"`
+	Skipped   []Problem `json:"skipped,omitempty"`
 }
 
 // Problem is one thing that couldn't be given to an agent.

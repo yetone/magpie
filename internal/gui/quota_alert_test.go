@@ -24,6 +24,9 @@ func TestAlertText(t *testing.T) {
 		{"zh", w, true, "Claude Code · a@b.c", "5 小时窗口剩余 17.7%，14:30 重置"},
 		{"en", b, false, "DeepSeek", "Balance down to ¥4.20 (alert at 5)"},
 		{"zh", b, false, "DeepSeek", "余额已降至 ¥4.20（提醒线 5）"},
+		{"zh-TW", w, false, "Claude Code · a@b.c", "5 小時時段已用 82.3%，14:30 重置"},
+		{"zh-TW", w, true, "Claude Code · a@b.c", "5 小時時段剩餘 17.7%，14:30 重置"},
+		{"zh-TW", b, false, "DeepSeek", "餘額已降至 ¥4.20（提醒線 5）"},
 		{"de", w, false, "Claude Code · a@b.c", "5 Stunden: 82,3% verbraucht, Zurücksetzung um 14:30"},
 		{"de", w, true, "Claude Code · a@b.c", "5 Stunden: 17,7% übrig, Zurücksetzung um 14:30"},
 		{"de", b, false, "DeepSeek", "Guthaben auf ¥4.20 gesunken (Warnschwelle 5)"},
@@ -37,6 +40,13 @@ func TestAlertText(t *testing.T) {
 	week := provider.QuotaAlert{Name: "Codex", Window: "7 days", Used: 80, ResetsAt: &tomorrow}
 	if _, body := alertText("zh", week, 0, false, now); body != "7 天窗口已用 80%，明天 14:30 重置" {
 		t.Errorf("zh tomorrow: %q", body)
+	}
+	weekly := provider.QuotaAlert{Name: "Codex", Window: "Weekly", Used: 80, ResetsAt: &tomorrow}
+	if _, body := alertText("zh-TW", weekly, 0, false, now); body != "每週時段已用 80%，明天 14:30 重置" {
+		t.Errorf("zh-TW tomorrow: %q", body)
+	}
+	if in3 := now.Add(72 * time.Hour); alertClockZhTW(in3, now) != "週日 09:00" || alertClockZh(in3, now) != "周日 09:00" {
+		t.Errorf("weekday: %q / %q", alertClockZhTW(in3, now), alertClockZh(in3, now))
 	}
 	if _, body := alertText("ja", week, 0, false, now); body != "7 日枠を 80% 使用、明日 14:30 にリセット" {
 		t.Errorf("ja tomorrow: %q", body)
@@ -67,6 +77,8 @@ func TestReminderText(t *testing.T) {
 		{"de", r, "7 Tage: noch 55% übrig, Zurücksetzung morgen um 14:30"},
 		{"en", c, "2 resets unused, expiring tomorrow 14:30"},
 		{"zh", c, "2 张重置卡尚未使用，将于 明天 14:30 过期"},
+		{"zh-TW", r, "7 天時段還剩 55%，明天 14:30 重置，記得用掉"},
+		{"zh-TW", c, "2 張重置卡尚未使用，將於 明天 14:30 過期"},
 		{"ja", c, "未使用のリセット 2 回分が 明日 14:30 に期限切れになります"},
 		{"de", c, "2 ungenutzte Resets verfallen morgen um 14:30"},
 	} {

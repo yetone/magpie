@@ -135,9 +135,13 @@ func (p Provider) Listed() (time.Time, bool) {
 
 // live is the list last fetched from the vendor. A plugin's provider has
 // none: its models are what the plugin lists now, and a built-in moved
-// onto it left its own last list under the same id.
+// onto it left its own last list under the same id. A preset with no list
+// ignores old fetched models too, unless a region or explicit URL lists them.
 func (p Provider) live() ([]catalog.Model, time.Time, bool) {
 	if p.IsPlugin() {
+		return nil, time.Time{}, false
+	}
+	if pr := Preset(p.Preset); p.Account == nil && pr != nil && pr.NoList && strings.TrimSpace(p.ModelsURL) == "" && !p.listRegion(pr) {
 		return nil, time.Time{}, false
 	}
 	type live struct {
@@ -694,7 +698,7 @@ func anyImageInput(a, b *bool) *bool {
 // Serves reports whether key k can be asked for model: false only when the
 // vendor's lists say another of the provider's keys sees it and k doesn't.
 func (p Provider) Serves(k KeyAccount, model string) bool {
-	live, _, ok := catalog.Live(p.ID)
+	live, _, ok := p.live()
 	if !ok {
 		return true
 	}

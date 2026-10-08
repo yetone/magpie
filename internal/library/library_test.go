@@ -758,8 +758,9 @@ func TestSkillsFromGitHub(t *testing.T) {
 	if !ours(filepath.Join(h, ".claude/skills/pdf"), "pdf") {
 		t.Error("claude's link went in the update")
 	}
-	if _, err := InstallSkills(in, []string{"skills/pdf"}, nil); err == nil {
-		t.Error("installed twice")
+	// installed again, it is had already: not copied a second time
+	if r := ok(t)(InstallSkills(in, []string{"skills/pdf"}, nil)); len(r.Installed) != 0 || !slices.Equal(r.Had, []string{"pdf"}) {
+		t.Errorf("installed twice: %v, had %v", r.Installed, r.Had)
 	}
 }
 

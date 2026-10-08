@@ -22,6 +22,7 @@ import (
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/wslrun"
 )
 
 // An agent installed in a WSL distro reads its config there, not in
@@ -31,10 +32,11 @@ import (
 // stopped), and edits the files through \\wsl.localhost\<distro>. Each is
 // an agent of its own, <id>@wsl:<distro> (codex@wsl:Ubuntu,
 // pi@wsl:Ubuntu, claude@wsl:Ubuntu). The gateway it is pointed at is
-// 127.0.0.1 when WSL shares Windows' network (mirrored networking, as the
-// distro's wslinfo says, or .wslconfig where there is no wslinfo); under
-// NAT it is Windows as WSL sees it, which reaches the gateway only while
-// that listens beyond loopback.
+// 127.0.0.1 when the distro's 127.0.0.1 reaches Windows' (mirrored or
+// consomme networking, as the distro's wslinfo says, wslrun.HostLoopback;
+// or mirrored in .wslconfig where there is no wslinfo); under NAT it is
+// Windows as WSL sees it, which reaches the gateway only while that
+// listens beyond loopback.
 
 // place is where an agent lives: its home as magpie opens it, how a path
 // there is spelt in the agent's own config, and the gateway as it reaches
@@ -124,20 +126,26 @@ type distro struct {
 	Root    string          `json:"root"`              // where magpie opens its / from, e.g. \\wsl.localhost\Ubuntu
 	Has     map[string]bool `json:"has"`               // "dir:.codex", "bin:pi": what the probe found
 	Probe   int             `json:"probe,omitempty"`   // the wslProbeVersion that found it
-	Gateway string          `json:"gateway,omitempty"` // the Windows host as the distro reaches it, when not mirrored
+	Gateway string          `json:"gateway,omitempty"` // the Windows host as the distro reaches it, when not at 127.0.0.1
 	// Was are the addresses it reached Windows at before, newest last: an
 	// agent's config still on one is offered the one now (#1013)
 	Was    []string          `json:"was,omitempty"`
 	Values map[string]string `json:"values,omitempty"` // its agents' fields as last read (wslKind.memo), shown while it is stopped
 	// Net is WSL's networking mode as the distro's wslinfo said at the
-	// last probe ("mirrored", "nat", "virtioproxy", "none"); "" when it
-	// couldn't say (a WSL without wslinfo), and .wslconfig is read instead
+	// last probe ("mirrored", "consomme", "nat", "bridged", "none", and
+	// "virtioproxy" before WSL 2.9); "" when it couldn't say (a WSL without
+	// wslinfo), and .wslconfig is read instead
 	Net string `json:"net,omitempty"`
 	// Versions is what the CLIs of wslKinds that ask (version) said their
 	// versions are at the last probe, by the kind's id
 	Versions map[string]string `json:"versions,omitempty"`
-	Mirrored bool              `json:"-"`
-	Running  bool              `json:"-"`
+	// Mirrored is whether the distro's 127.0.0.1 is Windows' (mirror): in
+	// mirrored networking, or in consomme
+	Mirrored bool `json:"-"`
+	// noRelay: consomme with localhostForwarding=false in .wslconfig, where
+	// the distro's 127.0.0.1 is its own after all
+	noRelay bool
+	Running bool `json:"-"`
 	// up asks whether it runs now (wslUp), for one wslDistros listed
 	up func() bool
 }
@@ -170,10 +178,15 @@ func (d distro) native(local string) string {
 	return rel
 }
 
-// mirror settles Mirrored: what wslinfo said at the probe, or cfg
-// (.wslconfig's say) when it couldn't.
-func (d *distro) mirror(cfg bool) {
-	d.Mirrored = d.Net == "mirrored" || d.Net == "" && cfg
+// mirror settles Mirrored from what wslinfo said at the probe, or, when it
+// couldn't, from cfg (.wslconfig) saying mirrored: a WSL without wslinfo
+// predates consomme, so .wslconfig's consomme isn't taken for one. Under
+// consomme, cfg's localhostForwarding=false (wsl2.localhostForwarding)
+// turns the relay of 127.0.0.1 off; it stays the address, with a notice,
+// as Windows' next hop (the default route) is never Windows there.
+func (d *distro) mirror(cfg string) {
+	d.Mirrored = wslrun.HostLoopback(d.Net) || d.Net == "" && wslMirrored(cfg)
+	d.noRelay = d.Net != "mirrored" && wslrun.HostLoopback(d.Net) && wslOff(cfg, "localhostForwarding")
 }
 
 // notMirrored is the notice of an agent in a distro not known to be in
@@ -272,6 +285,14 @@ var wslKinds = []wslKind{
 				}
 			case "effort":
 				return nil
+			case "login":
+				// its sign-in, while the model last seen is magpie's
+				return func(cur map[string]string) []Option {
+					if !isMagpie(cur["model"]) {
+						return nil
+					}
+					return claudeSignIns()
+				}
 			}
 			// a tier: magpie's models while the model last seen is one
 			return func(cur map[string]string) []Option {
@@ -544,6 +565,10 @@ func wslAgent(k wslKind, d distro) *Agent {
 		if !d.Mirrored {
 			return d.notMirrored(k.name)
 		}
+		if d.noRelay {
+			return "WSL " + d.Name + " is in " + d.Net + " networking with localhostForwarding=false in %UserProfile%\\.wslconfig, so 127.0.0.1 there, where its " + k.name +
+				" was pointed, isn't relayed to Windows, where magpie listens. Remove localhostForwarding=false under [wsl2] (it is on by default) and run wsl --shutdown."
+		}
 		if k.restart == "" {
 			return ""
 		}
@@ -665,6 +690,11 @@ func asleep(live *Agent, k wslKind, d distro) *Agent {
 				f.Options = o
 			}
 		}
+		// Claude Code's claude.ai sign-in is kept only where the gateway
+		// takes any key, which the distro's address says without its files
+		if k.id == "claude" && key == "login" && d.place(live.ID).gwKey() != gateway.Token {
+			f.Options = func(map[string]string) []Option { return nil }
+		}
 		a.Fields = append(a.Fields, f)
 	}
 	return a
@@ -775,7 +805,7 @@ func wslDistros() []distro {
 	}
 	wslRunningLocked()
 	installed := map[string]bool{}
-	mirrored := wslMirrored(wslConfig())
+	cfg := wslConfig()
 	var out []distro
 	for _, n := range wsl.names {
 		installed[n] = true
@@ -810,7 +840,7 @@ func wslDistros() []distro {
 		c := *d
 		c.Running = wsl.running[n]
 		c.up = func() bool { return wslUp(n) }
-		c.mirror(mirrored)
+		c.mirror(cfg)
 		out = append(out, c)
 	}
 	// an unregistered distro is forgotten
@@ -949,9 +979,9 @@ func wslClaudeStandIn(model string) string {
 		}
 	}
 	wsl.Unlock()
-	mirrored := wslMirrored(wslConfig())
+	cfg := wslConfig()
 	for _, d := range ds {
-		d.mirror(mirrored)
+		d.mirror(cfg)
 		path := filepath.Join(d.local(d.Home), ".claude", "settings.json")
 		if m := claudeStandInAt(path, model, d.base()); m != "" {
 			return m
@@ -1084,6 +1114,13 @@ func parseProbe(name, out string) *distro {
 	if d.Gateway == "" {
 		d.Gateway = ns
 	}
+	// the default route of a distro whose 127.0.0.1 is Windows' is
+	// Windows' own next hop (consomme: 198.18.0.2 under a TUN proxy,
+	// #1230), not Windows: an agent left on it is moved to 127.0.0.1
+	// (wslMovedFrom)
+	if wslrun.HostLoopback(d.Net) {
+		d.Gateway = ""
+	}
 	return d
 }
 
@@ -1155,7 +1192,22 @@ func decodeText(b []byte) string {
 // wslMirrored reports whether a .wslconfig puts WSL 2 in mirrored
 // networking: networkingMode=mirrored under [wsl2].
 func wslMirrored(cfg string) bool {
-	section, mirrored := "", false
+	v, _ := wslSetting(cfg, "networkingMode")
+	return strings.EqualFold(v, "mirrored")
+}
+
+// wslOff reports whether a .wslconfig turns key under [wsl2] off: false,
+// as WSL reads a boolean (false, or 0).
+func wslOff(cfg, key string) bool {
+	v, ok := wslSetting(cfg, key)
+	return ok && (strings.EqualFold(v, "false") || v == "0")
+}
+
+// wslSetting is key's value under [wsl2] in a .wslconfig, the last one
+// set, unquoted and without a trailing comment; ok is false when it isn't
+// set there.
+func wslSetting(cfg, key string) (val string, ok bool) {
+	section := ""
 	sc := bufio.NewScanner(strings.NewReader(strings.TrimPrefix(cfg, "\ufeff")))
 	for sc.Scan() {
 		l := strings.TrimSpace(sc.Text())
@@ -1169,14 +1221,14 @@ func wslMirrored(cfg string) bool {
 				continue
 			}
 		}
-		k, v, ok := strings.Cut(l, "=")
-		if !ok || section != "wsl2" || !strings.EqualFold(strings.TrimSpace(k), "networkingMode") {
+		k, v, found := strings.Cut(l, "=")
+		if !found || section != "wsl2" || !strings.EqualFold(strings.TrimSpace(k), key) {
 			continue
 		}
 		if i := strings.IndexAny(v, "#;"); i >= 0 {
 			v = v[:i]
 		}
-		mirrored = strings.EqualFold(strings.Trim(strings.TrimSpace(v), `"`), "mirrored")
+		val, ok = strings.Trim(strings.TrimSpace(v), `"`), true
 	}
-	return mirrored
+	return val, ok
 }

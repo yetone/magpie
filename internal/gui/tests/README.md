@@ -521,6 +521,15 @@ element, and a click on it still picks it. With another tab open, the list
 isn't touched, and coming back lists every request that came meanwhile. It
 runs in English and Chinese.
 
+`routing-weight-chip.test.cjs` checks the stage's header for a provider
+routed By weight (#841): the MODES table had no weight entry, so the chip
+and the mode paragraph under it fell back to Smart's. A trace over two
+weighted keys now has the chip read By weight and the mode paragraph say
+what the provider editor's routing option says (the words already spoken in
+each language), with the story telling whose share went first, while keys
+under Smart keep Smart's chip and the keys' own mode line. It runs in
+English, Chinese, Japanese and German on Chromium and WebKit.
+
 `balance-fix.test.cjs` opens a custom provider whose balance token sits
 beside new-api's `/api/usage/token` (and a new one with a token and no
 Balance URL): the editor says so, one click moves it to `/api/user/self`
@@ -594,6 +603,15 @@ magpie's cached exchange rate, once the Settings page's Currency row picks
 cny (#212): the Usage page's total converts, the row's tooltip carries the
 rate, picking it with the settings list scrolled well down moves nothing,
 and the choice survives a reload — in English and Chinese.
+
+`context-window.test.cjs` opens Usage's Context tab: each agent's score, its
+grade and tags, its sessions counted one or many, the score bars toned by how
+much of them there is; a refresh with the same answer keeps the pane; a
+session opened draws its latest request's window in 400 cells without moving
+the page, a cell hovered names its part and what is largest in it, and the
+Tools tab of the contents lists only tools; nothing scrolls sideways — in
+Chromium and WebKit, in English, Chinese, Japanese and German, at 1100px and
+420px.
 
 `tray-usages.test.cjs` picks several of the Usage page's cards for the menu
 bar in Settings: the menu keeps open as Codex and Claude Code are ticked
@@ -689,6 +707,26 @@ screenshot of each size:
 
 ```sh
 node --test --test-concurrency=1 internal/gui/tests/settings-sections.test.cjs internal/gui/tests/settings-groups.test.cjs
+```
+
+`segs-press-redraw.test.cjs` presses a Settings option, redraws the page
+(`renderSettings()`, as a save's answer does) while the button is held and
+lets go on the same spot: Lightweight mode → On is posted once and shown on.
+Dragged off to the other option, or to the same option of another control,
+nothing is posted, and a plain click is posted once, not twice. It then
+presses every option control on every Settings tab (49 in English, the
+warm-up, check-in, sync and local network ones included) the same way and
+checks that the control drawn in its place is clicked once on the same
+option. Without the fix no click comes at all. A tap through the redraw is
+posted once, not twice (Chromium only: Playwright can't hold a tap in
+WebKit). A list of rows, each with its control, drawn again with a row gone,
+come in or moved above the pressed one picks nothing, whether its rows have
+`data-*` or not, and picks the pressed option when drawn again the same.
+Chromium and WebKit, English, Chinese, Japanese and German, 900 and 440px
+wide:
+
+```sh
+node --test internal/gui/tests/segs-press-redraw.test.cjs
 ```
 
 `update-check.test.cjs` checks the version row: the button stays, dimmed,

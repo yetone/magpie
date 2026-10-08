@@ -180,6 +180,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await press(page, rows.nth(1).locator(".segs .opt").nth(0));
         await page.waitForTimeout(300);
         assert.deepEqual(posts[3], { path: "how", agent: "codex", how: "" });
+        // the answer draws the rows again, every option replaced: the next press waits for it
+        await rows.nth(1).locator(".sub", { hasText: w.getsCopies }).waitFor();
         assert.equal((await rows.nth(1).locator(".segs .opt.on").textContent()).trim(), w.libWay);
         await press(page, rows.nth(1).locator(".segs .opt").nth(1));
         await page.waitForTimeout(300);

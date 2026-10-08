@@ -71,8 +71,8 @@ func TestClaudeSchemaAnswer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(req.Schema), `"color"`) {
-		t.Fatalf("schema: %s", req.Schema)
+	if !strings.Contains(string(req.Format.schema()), `"color"`) {
+		t.Fatalf("schema: %s", req.Format.schema())
 	}
 	var built struct {
 		OutputConfig struct {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/provider"
 	"gopkg.in/yaml.v3"
 )
@@ -62,33 +63,60 @@ func TestHermes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// its own model: the user's provider comes back, magpie's entry goes
+	// its own model: the user's provider comes back, magpie's entry stays
+	// beside it, so Hermes's session picker still offers magpie's models
+	// and it is still connected (lijiho96940561 on X)
 	if err := f.Set("moonshotai/kimi-k3"); err != nil {
 		t.Fatal(err)
 	}
 	c, m, raw = read()
-	if m["default"] != "moonshotai/kimi-k3" || m["provider"] != "openrouter" || providers(c)["magpie"] != nil || providers(c)["mine"] == nil {
+	if m["default"] != "moonshotai/kimi-k3" || m["provider"] != "openrouter" || providers(c)["magpie"] == nil || providers(c)["mine"] == nil {
 		t.Fatalf("own:\n%s", raw)
 	}
+	a := hermes(home)
+	if !a.Wired() || a.Drift() != nil {
+		t.Fatalf("own model: wired %v, drift %+v", a.Wired(), a.Drift())
+	}
 
-	// reset from magpie: back to what the user had
-	f.Set("magpie/deepseek/flash")
-	if err := f.Set(""); err != nil {
+	// the default changed in Hermes itself (`hermes model`): still connected,
+	// not told as drift
+	if err := a.Apply("model", "magpie/deepseek/flash"); err != nil {
+		t.Fatal(err)
+	}
+	if err := edit.SetYAML(path, edit.KV{Path: "model.provider", Value: "anthropic"}, edit.KV{Path: "model.default", Value: "claude-opus-5"}); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Wired() || a.Drift() != nil {
+		t.Fatalf("changed in Hermes: wired %v, drift %+v", a.Wired(), a.Drift())
+	}
+
+	// Disconnect takes magpie's entry out
+	if err := a.Disconnect(); err != nil {
 		t.Fatal(err)
 	}
 	c, m, raw = read()
-	if m["default"] != "moonshotai/kimi-k3" || m["provider"] != "openrouter" || providers(c)["magpie"] != nil {
-		t.Fatalf("reset:\n%s", raw)
+	if m["default"] != "claude-opus-5" || m["provider"] != "anthropic" || providers(c)["magpie"] != nil || providers(c)["mine"] == nil || a.Wired() {
+		t.Fatalf("disconnect, own model:\n%s", raw)
+	}
+
+	// Disconnect from magpie's model: back to what the user had
+	f.Set("magpie/deepseek/flash")
+	if err := a.Disconnect(); err != nil {
+		t.Fatal(err)
+	}
+	c, m, raw = read()
+	if m["default"] != "claude-opus-5" || m["provider"] != "anthropic" || providers(c)["magpie"] != nil {
+		t.Fatalf("disconnect:\n%s", raw)
 	}
 
 	// a config with no provider of its own: none comes back
 	os.WriteFile(path, []byte("agent:\n  max_turns: 60\n"), 0o644)
 	f.Set("magpie/deepseek/pro")
-	if err := f.Set(""); err != nil {
+	if err := a.Disconnect(); err != nil {
 		t.Fatal(err)
 	}
 	c, m, raw = read()
 	if m["provider"] != nil || m["default"] != nil || providers(c)["magpie"] != nil || c["agent"] == nil {
-		t.Fatalf("reset, no provider:\n%s", raw)
+		t.Fatalf("disconnect, no provider:\n%s", raw)
 	}
 }

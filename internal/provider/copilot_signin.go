@@ -113,6 +113,7 @@ func startCopilotSignIn(s *signInFlow) error {
 				fail(err.Error())
 				return
 			}
+			copilotProbeEditor(ctx, user, host)
 			if err := addCopilotLogin(user, plan, tok.Token, host); err != nil {
 				fail(err.Error())
 				return
@@ -122,7 +123,8 @@ func startCopilotSignIn(s *signInFlow) error {
 			if own, ok := copilotLogin(copilotConfigDir()); ok && strings.EqualFold(own.User, user) && own.Host == host {
 				using = true
 			}
-			s.finish(SignInState{State: "done", User: user, Plan: plan, Using: using})
+			// named as the account list names it, so the window finds it
+			s.finish(SignInState{State: "done", User: CopilotAccountName(user, host), Plan: plan, Using: using})
 			return
 		}
 	}()
