@@ -27,7 +27,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         if (u.pathname === "/api/sessions/manage") return json({
           agents: [{ agent: "claude", name: "Claude Code", icon: "claudecode", count: 1, deletable: false }],
           agent: "claude", terminal: false, trash: [], recording,
-          sessions: [{ agent: "claude", id: "gateway-session", title: "gateway-session", start: new Date().toISOString(), last: new Date().toISOString(), models: [], read_only: true, transcript: true }],
+          sessions: [{ agent: "claude", id: "gateway-session", title: "Gateway conversation", start: new Date().toISOString(), last: new Date().toISOString(), input: 1200, output: 180, cache_read: 800, cache_write: 0, models: [], read_only: true, transcript: true }],
         });
         if (u.pathname === "/api/sessions/transcript") {
           const transcript = { source: "gateway", cut: !cleared, parts: cleared ? [] : [
@@ -62,6 +62,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await sw.isChecked(), false);
       await sw.click();
       await page.locator("dialog.action-confirm").waitFor();
+      if (process.env.ARTIFACT_DIR) {
+        await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+        await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-recording-consent.png`), fullPage: true });
+      }
       assert.equal(writes.length, 0, "no consent yet");
       await page.keyboard.press("Escape");
       assert.equal(writes.length, 0, "cancel must not record");
@@ -102,6 +106,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       assert.equal(await page.locator(".sess-talk .cx-part").count(), 0, "late transcript cannot restore cleared content");
       assert.deepEqual(writes, [{ on: true }, { clear: true }]);
+      if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-recording-cleared.png`), fullPage: true });
       assert.equal(await row.count(), 1, "usage session survives clear");
       assert.deepEqual(errors, []);
     });
