@@ -24,6 +24,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/yetone/magpie/internal/proc"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // A Tool is a command of a WSL distro's own.
@@ -58,10 +59,11 @@ var found struct {
 const findAge = time.Minute
 
 // Find is the command name of a running WSL distro's own, the default
-// distro first. ok is false off Windows, without WSL, or when no running
-// distro has it.
+// distro first. ok is false off Windows, without WSL, with Settings'
+// Detect agents in WSL off, or when no running distro has it.
 func Find(name string) (Tool, bool) {
-	if !On {
+	// Settings' Detect agents in WSL, off, looks in no distro (#1264)
+	if !On || settings.Load().NoWSLAgents {
 		return Tool{}, false
 	}
 	found.Lock()

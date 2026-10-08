@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -258,6 +259,23 @@ func TestAspectOf(t *testing.T) {
 		if got := aspectOf(size); got != want {
 			t.Errorf("aspectOf(%q) = %q, want %q", size, got, want)
 		}
+	}
+}
+
+func TestVolcengineAgentPlanDrawers(t *testing.T) {
+	p, err := provider.FromPreset("volcengine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr := provider.Preset("volcengine")
+	p.Chat, p.Responses, p.Anthropic = pr.Regions[1].Chat, pr.Regions[1].Responses, pr.Regions[1].Anthropic
+	ds, want := Drawers(p), p.PlanDrawers()
+	if len(ds) == 0 || !slices.EqualFunc(ds, want, func(a, b catalog.Model) bool { return a.ID == b.ID }) {
+		t.Fatalf("Agent Plan drawers: %+v, want preset plan's %+v", ds, want)
+	}
+	p.Chat, p.Responses, p.Anthropic = pr.Regions[0].Chat, pr.Regions[0].Responses, pr.Regions[0].Anthropic
+	if ds := Drawers(p); len(ds) != 0 {
+		t.Fatalf("Coding Plan drawers: %+v", ds)
 	}
 }
 

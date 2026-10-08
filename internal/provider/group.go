@@ -472,7 +472,8 @@ func FindGroup(id string) (Group, []Member, bool) {
 // "group/<id>": the group of that id, else the group of that model however
 // a vendor spells it ("grok-4.7" is the group grok-4-7 or auto-grok-4-7).
 // A request for the model is the group's then, as it would be for the
-// group's own id; ok is false when no group has it. An id with a provider
+// group's own id; failing those, the group whose name it is (groupNamed);
+// ok is false when no group has it. An id with a provider
 // in it ("a/m") names that provider's model, never a group.
 func GroupFor(id string) (string, bool) {
 	id = strings.TrimSuffix(strings.TrimSpace(id), "[1m]")
@@ -486,7 +487,41 @@ func GroupFor(id string) (string, bool) {
 			return GroupPrefix + g.ID, true
 		}
 	}
-	return "", false
+	return groupNamed(all, id)
+}
+
+// groupNamed is the group whose name, not its id, the request gave: a
+// client the user typed the group's name into (ZCode's own model field)
+// asks for it so, and a group renamed keeps its id (MOMO on Discord: "DS
+// Flash" was 404 once group set name= gave it that name). The name is
+// matched as the id is, by its slug; only one group may have it, and a
+// model a provider serves by that id is the provider's, not the group's.
+func groupNamed(all []Group, id string) (string, bool) {
+	k := Slug(sameModel(id))
+	if k == "" {
+		return "", false
+	}
+	var hit *Group
+	for i, g := range all {
+		if g.Hidden || strings.TrimSpace(g.Name) == "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(g.Name), id) || Slug(sameModel(g.Name)) == k {
+			if hit != nil {
+				return "", false // two groups go by it: neither is meant
+			}
+			hit = &all[i]
+		}
+	}
+	if hit == nil {
+		return "", false
+	}
+	for _, e := range providerEntries() {
+		if e.Model == id || e.ID == id {
+			return "", false
+		}
+	}
+	return GroupPrefix + hit.ID, true
 }
 
 // GroupFinder is FindGroup for looking up many: every provider's models

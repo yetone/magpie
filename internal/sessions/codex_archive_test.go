@@ -109,9 +109,14 @@ func TestCodexArchivedDiscoveryCacheAndAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if codexChangeStamp(info) == "" {
+	if codexChangeTime(info).IsZero() {
 		t.Skip("filesystem exposes no change-time stamp; safe fallback reads content")
 	}
+	// The copies were written a moment ago; a minute on, their stamps have
+	// settled and the comparison is cached.
+	now := codexDiscoveryNow
+	codexDiscoveryNow = func() time.Time { return time.Now().Add(time.Minute) }
+	t.Cleanup(func() { codexDiscoveryNow = now })
 	reads, compare := 0, compareCodexCopies
 	compareCodexCopies = func(a, b string) (int, error) {
 		reads++
@@ -155,6 +160,59 @@ func TestCodexArchivedSameSizeRewriteInvalidatesDiscovery(t *testing.T) {
 	}
 	if fs := codexFiles(); len(fs) != 2 {
 		t.Fatalf("same-size rewrite with restored mtime reused a stale relation: %+v", fs)
+	}
+}
+
+// #1299: NTFS stamps ChangeTime from Windows' clock tick (0.5 ms here, up
+// to 15.6 ms), so a rewrite in the tick of the comparison keeps the stamp
+// the cache saw. Here every write in the test lands in one 15.6 ms tick and
+// gets the same change time, and the rewrite must still be seen.
+func TestCodexSameTickRewriteIsNotCached(t *testing.T) {
+	d := setupCalls(t)
+	name := "rollout-2026-09-20T10-00-00-0190aaaa-1111-7222-8333-444455556666.jsonl"
+	live, archived := filepath.Join(d.codex, "sessions", name), filepath.Join(d.codex, "archived_sessions", name)
+	tick := time.Now().Truncate(time.Second)
+	stat, now := codexDiscoveryStat, codexDiscoveryNow
+	codexDiscoveryStat = func(path string) (os.FileInfo, error) {
+		info, err := os.Stat(path)
+		if err != nil {
+			return nil, err
+		}
+		return codexDiscoveryInfo{info, tick}, nil
+	}
+	codexDiscoveryNow = func() time.Time { return tick.Add(10 * time.Millisecond) }
+	t.Cleanup(func() { codexDiscoveryStat, codexDiscoveryNow = stat, now })
+	writeLines(t, live, `{"x":1}`)
+	writeLines(t, archived, `{"x":1}`)
+	info, err := os.Stat(archived)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(codexFiles()) != 1 {
+		t.Fatal("initial copies were not deduplicated")
+	}
+	writeLines(t, archived, `{"x":2}`)
+	if err := os.Chtimes(archived, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if fs := codexFiles(); len(fs) != 2 {
+		t.Fatalf("a rewrite in the tick of the comparison reused its stale relation: %+v", fs)
+	}
+	// Once the tick is long past, the same stamps are cached.
+	codexDiscoveryNow = func() time.Time { return tick.Add(time.Hour) }
+	reads, compare := 0, compareCodexCopies
+	compareCodexCopies = func(a, b string) (int, error) {
+		reads++
+		return compare(a, b)
+	}
+	t.Cleanup(func() { compareCodexCopies = compare })
+	for range 3 {
+		if len(codexFiles()) != 2 {
+			t.Fatal("settled divergent copies were deduplicated")
+		}
+	}
+	if reads != 1 {
+		t.Fatalf("settled copies were compared %d times, want 1", reads)
 	}
 }
 

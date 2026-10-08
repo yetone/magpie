@@ -1262,22 +1262,39 @@ func userMessage(text string) map[string]any {
 // so the compaction still completes and Codex goes on. So is one the
 // ChatGPT backend answers 502 "response protection is unavailable" (vs on
 // Discord): the same long history failed so on every account and model,
-// and as plain text was summarised. Any other failure
-// (401, 429, 500) goes back to Codex as it came.
+// and as plain text was summarised — and one it breaks off with that
+// refusal after the reply began, HTTP 200 and an error event (#1270). Any
+// other failure (401, 429, 500) goes back to Codex as it came.
 func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byte) {
-	rec := &recorder{header: http.Header{}, status: 200}
-	s.serve(rec, r, provider.Responses, body)
-	local := ""
-	if first := rec.status; first == http.StatusNotFound || itemNotFound(rec) || protectionRefused(first, rec.body.Bytes()) {
-		who, msg := compactFailure(body, rec)
-		log.Printf("codex compaction: %s answered %d (%s); asking again with the conversation as text", who, first, msg)
-		rec = &recorder{header: http.Header{}, status: 200}
-		s.serve(rec, r, provider.Responses, plainCompact(body))
+	ask := func(b []byte) (*recorder, compactResult, error) {
+		rec := &recorder{header: http.Header{}, status: 200}
+		s.serve(rec, r, provider.Responses, b)
 		if rec.status >= 400 {
-			_, again := compactFailure(body, rec)
+			return rec, compactResult{}, nil
+		}
+		res, err := compactReply(rec.body.Bytes())
+		return rec, res, err
+	}
+	rec, res, err := ask(body)
+	local := ""
+	if first := rec.status; first == http.StatusNotFound || itemNotFound(rec) || protectionRefused(first, rec.body.Bytes()) ||
+		err != nil && protectionWords.MatchString(err.Error()) {
+		who, msg := compactFailure(body, rec)
+		if err != nil {
+			msg = "broken off: " + err.Error()
+		}
+		log.Printf("codex compaction: %s answered %d (%s); asking again with the conversation as text", who, first, msg)
+		rec, res, err = ask(plainCompact(body))
+		if rec.status >= 400 || err != nil {
+			again := ""
+			if err != nil {
+				again = "broken off: " + err.Error()
+			} else {
+				_, again = compactFailure(body, rec)
+			}
 			log.Printf("codex compaction: %s answered %d again (%s); compacting locally", who, rec.status, again)
 			local = localSummary(body, fmt.Sprintf("%s answered %d to the summary request: %s", who, first, msg))
-			rec = &recorder{header: http.Header{}, status: 200}
+			rec, res, err = &recorder{header: http.Header{}, status: 200}, compactResult{}, nil
 		}
 	}
 	if rec.status >= 400 {
@@ -1288,16 +1305,14 @@ func (s *Server) codexCompact(w http.ResponseWriter, r *http.Request, body []byt
 		w.Write(rec.body.Bytes())
 		return
 	}
-	var res compactResult
+	if err != nil {
+		writeError(w, provider.Responses, 502, "compaction: "+err.Error())
+		return
+	}
 	var sum strings.Builder
 	if local != "" {
 		sum.WriteString(local)
 	} else {
-		var err error
-		if res, err = compactReply(rec.body.Bytes()); err != nil {
-			writeError(w, provider.Responses, 502, "compaction: "+err.Error())
-			return
-		}
 		for _, o := range res.Output {
 			if o.Type != "message" {
 				continue
@@ -1520,6 +1535,9 @@ func compactReply(b []byte) (compactResult, error) {
 			Item     compactOutput  `json:"item"`
 			Response *compactResult `json:"response"`
 			Message  string         `json:"message"` // an error event's
+			Error    *struct {
+				Message string `json:"message"`
+			} `json:"error"` // or nested in its error, as the ChatGPT backend's (#1270)
 		}
 		if json.Unmarshal([]byte(data), &ev) != nil {
 			return nil
@@ -1535,7 +1553,11 @@ func compactReply(b []byte) (compactResult, error) {
 				res.Output, res.Usage = ev.Response.Output, ev.Response.Usage
 			}
 		case "response.failed", "error":
-			failed = cmp.Or(ev.Message, "the model failed")
+			failed = ev.Message
+			if failed == "" && ev.Error != nil {
+				failed = ev.Error.Message
+			}
+			failed = cmp.Or(failed, "the model failed")
 			if ev.Response != nil && ev.Response.Error != nil && ev.Response.Error.Message != "" {
 				failed = ev.Response.Error.Message
 			}

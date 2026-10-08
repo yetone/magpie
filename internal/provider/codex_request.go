@@ -236,7 +236,7 @@ func codexInstructions(model string) string {
 // codexBody makes a Responses request the one Codex CLI would send: it
 // streams only, keeps nothing (so its items carry no ids), carries Codex's
 // instructions — the client's own riding first in the input — and rejects
-// the sampling knobs and any service tier but Fast's.
+// the sampling knobs and any service tier but Fast's and Ultrafast's.
 func codexBody(body []byte) []byte {
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
@@ -247,8 +247,9 @@ func codexBody(body []byte) []byte {
 	for _, k := range []string{"max_output_tokens", "max_completion_tokens", "temperature", "top_p", "previous_response_id", "user", "safety_identifier"} {
 		delete(m, k)
 	}
-	// Codex's Fast mode sends "priority"; any other tier stays out
-	if m["service_tier"] != "priority" {
+	// Codex's Fast mode sends "priority", its Ultrafast "ultrafast"; any
+	// other tier stays out
+	if t := m["service_tier"]; t != "priority" && t != "ultrafast" {
 		delete(m, "service_tier")
 	}
 	model, _ := m["model"].(string)

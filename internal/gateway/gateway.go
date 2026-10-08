@@ -522,6 +522,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /_magpie/claude-mcp/{token}", s.subscription.mcpCall)
 	mux.HandleFunc("/mcp/{name}", s.mcpProxy)
 	mux.HandleFunc(CodexPath+"/", s.codexBackend)
+	mux.HandleFunc("GET "+CodexCatalogPath, s.codexCatalog)
 	mux.HandleFunc("GET /v1beta/models", s.geminiModels)
 	mux.HandleFunc("POST /v1beta/models/{call...}", s.gemini)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -1057,6 +1058,17 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 				s.codexTitle(w, r, body, to)
 				return
 			}
+			// Codex compacts remotely, a compaction_trigger here, on a
+			// provider table named "OpenAI" (CC Switch's relay tables,
+			// which magpie points here, #1301): the summary is magpie's to
+			// make, as on CodexPath, and magpie's summaries go back as text
+			if bytes.Contains(body, []byte(`"compaction`)) {
+				var compact bool
+				if body, compact = codexInput(body, true); compact {
+					s.codexCompact(w, r, body)
+					return
+				}
+			}
 		}
 		s.serveAgent(w, r, from, body)
 	}
@@ -1398,19 +1410,20 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// a model its list says nothing of is text-only to a describer, as
 	// agents are told: while one describes images they are told every
 	// model takes them, and send the images on to be described
+	unknownSight := false
 	if imageInput == nil && !isGroup && hasImage(from, body) && blindTo(p.ID, model, nil) {
 		if _, ok := seeing(); ok {
 			no := false
-			imageInput = &no
+			imageInput, unknownSight = &no, true
 		}
 	}
 	if imageInput != nil && !*imageInput {
 		var currentImage bool
 		if see, ok := seeing(); ok && hasImage(from, body) {
-			seen, err := s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header)), from, body, see)
+			seen, err := s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header), unknownSight), from, body, see)
 			if err != nil {
 				call.Status, call.Error = 502, "image not described"
-				writeError(w, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v", call.Model, see, err))
+				writeError(w, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v%s", call.Model, see, err, missingSeerNote()))
 				turnedAway()
 				return
 			}
@@ -1428,7 +1441,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if currentImage {
 			call.Status, call.Error = 400, "model does not support image input"
-			writeError(w, from, 400, fmt.Sprintf("model %q does not support image input", call.Model))
+			writeError(w, from, 400, fmt.Sprintf("model %q does not support image input%s", call.Model, missingSeerNote()))
 			turnedAway()
 			return
 		}
@@ -1584,10 +1597,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// Described only when such a member is tried: a rule that sends the
 	// images to a model that sees asks for no description.
 	var seenGroup func() ([]byte, error)
+	// groupUnknown is whether the member the images are first described
+	// for is counted text-only for knowing nothing of it (CallFor.Unknown)
+	groupUnknown := false
 	if isGroup && hasImage(from, body) {
 		if see, ok := seeing(); ok {
 			seenGroup = sync.OnceValues(func() ([]byte, error) {
-				return s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header)), from, body, see)
+				return s.seenBody(withDescribeFor(r.Context(), call.Agent, call.Model, sessionOf(r.Header), groupUnknown), from, body, see)
 			})
 		}
 	}
@@ -1615,7 +1631,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			}
 			if len(cands) == 0 {
 				call.Status, call.Error = 400, "model does not support image input"
-				writeError(w, from, 400, fmt.Sprintf("model %q does not support image input", call.Model))
+				writeError(w, from, 400, fmt.Sprintf("model %q does not support image input%s", call.Model, missingSeerNote()))
 				turnedAway()
 				return
 			}
@@ -1717,6 +1733,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if isGroup {
 			in := membersImageInput([]provider.Member{{Provider: c.p, Model: c.model}})
 			if seenGroup != nil && blindTo(c.p.ID, c.model, in) {
+				groupUnknown = in == nil
 				b, err := seenGroup()
 				if err != nil {
 					// only an image of the latest turn fails to be described
@@ -1727,7 +1744,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					}
 					see, _ := seeing()
 					call.Status = 502
-					failTo(w, kept, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v", c.p.ID+"/"+c.model, see, err))
+					failTo(w, kept, from, 502, fmt.Sprintf("model %q can't see images, and %s couldn't describe the image for it: %v%s", c.p.ID+"/"+c.model, see, err, missingSeerNote()))
 					break
 				}
 				attemptBody = b
@@ -2784,7 +2801,10 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	}
 	// Cline's whole replies come in {success, data}; a web page or
 	// nothing at all, served 200, is the 502 it stands for (#1012)
-	return notAnAPIReply(clineUnwrapped(p, res), ""), nil
+	res = notAnAPIReply(clineUnwrapped(p, res), "")
+	// what a Codex account's reply says it has used, for its cap (#1295)
+	heardCodexLimits(p, res)
+	return res, nil
 }
 
 // fromClaudeCode is a request Claude Code sent, by the User-Agent it gives
@@ -2942,6 +2962,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if dropImage && !s.fits(p.ID, imageToolRefused, proto) {
 		body, _ = withoutImageTool(body)
 	}
+	// a tool with a union at its parameters' root, to an upstream that
+	// takes none (object_root.go, #1271)
+	if s.foldsRoots(p, model, proto) {
+		body, _ = objectRootsBody(proto, body)
+	}
 	// a Grok subscription is given Codex's namespaced functions flat
 	// (grokBody), and Zed's plugin likewise (ZedBody); a call to one goes
 	// back under its namespace (#404)
@@ -2967,6 +2992,18 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		var ms []string
 		if proto == provider.Chat {
 			ms = refusedInMessages(res.StatusCode, b, body)
+		}
+		if len(fs) == 0 && len(ms) == 0 && rootUnionRefusal.Match(b) {
+			// a tool's parameters refused for a union at their root
+			// (#1271): asked once more with them folded to an object
+			if nb, changed := objectRootsBody(proto, body); changed {
+				refused = append(refused, rootUnionRefused(model))
+				body = nb
+				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
+					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+				}
+				continue
+			}
 		}
 		if len(fs) == 0 && len(ms) == 0 && proto == provider.Responses && refusesInput(res.StatusCode, b) {
 			// and reasoning with nothing sealed in it, which a relay in
@@ -3350,6 +3387,10 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 		if mayDropImageTool(p) && !s.fits(p.ID, imageToolRefused, to) {
 			req, _ = withoutImageToolReq(req)
 		}
+		// Anthropic's Messages are folded as they're built (objectSchema)
+		if to != provider.Anthropic && s.foldsRoots(p, model, to) {
+			req, _ = objectRootsReq(req)
+		}
 		// only a provider that searches by itself is asked to
 		if want := web && searchesFor(p, to, model, req); want != req.WebSearch {
 			r := *req
@@ -3442,6 +3483,15 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			// before, with reasoning_effort, and not sent them again
 			s.markUnfit(p.ID, thinkingConfigField, to)
 			continue
+		}
+		if badRequest(res.StatusCode) && rootUnionRefusal.Match(b) && s.fits(p.ID, rootUnionRefused(model), to) {
+			if _, changed := objectRootsReq(req); changed {
+				// a tool's parameters refused for a union at their root
+				// (#1271): asked again with them folded to an object, and
+				// so from then on
+				s.markUnfit(p.ID, rootUnionRefused(model), to)
+				continue
+			}
 		}
 		if req.Format != nil && refusesFormat(res.StatusCode, b) {
 			// structured output turned away by the model or the relay in

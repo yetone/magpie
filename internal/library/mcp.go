@@ -138,6 +138,9 @@ const (
 	// fmtCommandCode is Command Code's mcp.json: transport stdio or http,
 	// and enabled
 	fmtCommandCode
+	// fmtAlma is Alma's ~/.config/alma/mcp.json: a url is streamable HTTP
+	// (SSE when that fails) unless transport says sse, a command stdio
+	fmtAlma
 )
 
 // mcpFile is the file an agent keeps its user-wide MCP servers in.
@@ -439,10 +442,12 @@ func (f *mcpFile) encode(s *Server) ordered {
 			add("args", list(s.Args))
 			optional("env", s.Env)
 		}
-	case fmtHermes:
+	case fmtHermes, fmtAlma:
 		// Hermes' own `hermes mcp add` writes url/headers or
 		// command/args/env; transport: sse is its only other transport
-		// (tools/mcp_tool.py)
+		// (tools/mcp_tool.py). Alma's own add writes the same keys, and
+		// it reads transport "sse" alone, else tries streamable HTTP
+		// first (0.4.164's out/main/index.js connectRemoteServer)
 		if s.Remote() {
 			add("url", s.URL)
 			optional("headers", s.Headers)
@@ -684,7 +689,7 @@ func (f *mcpFile) decode(name string, m map[string]any) (*Server, bool) {
 		case "streamable-http":
 			remote("http", str(m, "url"), m["headers"])
 		}
-	case fmtHermes, fmtKimi, fmtDevin:
+	case fmtHermes, fmtKimi, fmtDevin, fmtAlma:
 		// each takes a url over a command when an entry has both
 		if u := str(m, "url"); u != "" {
 			t := "http"
@@ -884,6 +889,7 @@ var owned = map[mcpFormat][]string{
 	fmtDsh:      {"serverName", "transport", "url", "headers", "command", "args", "env"},
 	// timeout, enabled, tools, sampling, auth… are the user's
 	fmtHermes: {"transport", "url", "headers", "command", "args", "env"},
+	fmtAlma:   {"transport", "url", "headers", "command", "args", "env"},
 	fmtOmp:    {"type", "url", "headers", "command", "args", "env"},
 	fmtKimi:   {"transport", "type", "url", "headers", "command", "args", "env"},
 	fmtDevin:  {"transport", "type", "url", "headers", "command", "args", "env"},

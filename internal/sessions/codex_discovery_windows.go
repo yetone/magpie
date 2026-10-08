@@ -1,8 +1,8 @@
 package sessions
 
 import (
-	"fmt"
 	"os"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -30,5 +30,6 @@ func statCodexDiscovery(path string) (os.FileInfo, error) {
 		(*byte)(unsafe.Pointer(&basic)), uint32(unsafe.Sizeof(basic))); err != nil || basic.Change == 0 {
 		return info, nil // no stamp means content comparisons are not cached
 	}
-	return codexDiscoveryInfo{info, fmt.Sprint(basic.Change)}, nil
+	change := windows.Filetime{LowDateTime: uint32(basic.Change), HighDateTime: uint32(basic.Change >> 32)}
+	return codexDiscoveryInfo{info, time.Unix(0, change.Nanoseconds())}, nil
 }

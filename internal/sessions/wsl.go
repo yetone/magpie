@@ -45,6 +45,14 @@ var WSLHomes func() []WSLHome
 // files, so a file is read only while this says it runs.
 var WSLRunning func(distro string) bool
 
+// WSLOff is whether Settings' Detect agents in WSL is off (#1264); set by
+// internal/agent. Off, no distro's sessions are listed, not even those
+// listed before.
+var WSLOff func() bool
+
+// wslLooking is whether the distros' sessions are listed.
+func wslLooking() bool { return WSLHomes != nil && (WSLOff == nil || !WSLOff()) }
+
 // wslUp is WSLRunning's answer; true when nothing set it (the listing
 // alone decides).
 func wslUp(distro string) bool { return WSLRunning == nil || WSLRunning(distro) }
@@ -116,7 +124,7 @@ func wslListPath() string { return filepath.Join(filepath.Dir(CachePath()), "ses
 // as last listed; a listing is started behind when the last is older than
 // wslRelist.
 func wslFiles(agents ...string) []file {
-	if WSLHomes == nil {
+	if !wslLooking() {
 		return nil
 	}
 	wslSess.Lock()
@@ -271,7 +279,7 @@ func under(path, dir string) bool {
 
 // wslDirs are the agents' folders in the distros sessions were found in.
 func wslDirs() []string {
-	if WSLHomes == nil {
+	if !wslLooking() {
 		return nil
 	}
 	wslSess.Lock()

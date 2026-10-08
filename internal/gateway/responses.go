@@ -255,7 +255,7 @@ func parseResponses(body []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: q.Model, System: q.Instructions, MaxTokens: q.MaxOutputTokens, Temp: q.Temperature,
-		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority", CacheKey: q.PromptCacheKey, Include: q.Include,
+		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority" || q.ServiceTier == "ultrafast", Ultrafast: q.ServiceTier == "ultrafast", CacheKey: q.PromptCacheKey, Include: q.Include,
 		ClientMetadata: sentRaw(q.ClientMetadata)}
 	r.Text, r.Format = textFormat(sentRaw(q.Text))
 	if q.Reasoning != nil {
@@ -770,6 +770,10 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	// Fast goes to OpenAI's own backends; another's may not know the tier
 	if r.Fast && (host == "chatgpt.com" || host == "api.openai.com") {
 		out["service_tier"] = "priority"
+	}
+	// Ultrafast only the ChatGPT backend offers
+	if r.Ultrafast && host == "chatgpt.com" {
+		out["service_tier"] = "ultrafast"
 	}
 	if r.Effort != "" {
 		out["reasoning"] = map[string]any{"effort": r.Effort, "summary": "auto"}

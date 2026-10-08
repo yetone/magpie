@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -329,5 +331,50 @@ func TestGrokBodyObjectRoot(t *testing.T) {
 	same := []byte(`{"tools":[{"type":"function","name":"x","parameters":{"type":"object","properties":{}}}]}`)
 	if string(grokBody(same)) != string(same) {
 		t.Fatal("an object root was changed")
+	}
+}
+
+// TestObjectRootNestedUnion: Codex desktop's automation_update, whose
+// parameters are zod's discriminated union on mode with the create and
+// update branches each a union on kind of their own (toJSONSchema with
+// reused: "ref", as ChatGPT.app 26.930 builds it; #1271). Folded to an
+// object root, the nested branches' fields are kept, so a model can still
+// create an automation, and a field the branches type apart (mode, kind)
+// takes any of their types, not the first branch's alone; only mode,
+// which every branch requires, stays required.
+func TestObjectRootNestedUnion(t *testing.T) {
+	b, err := os.ReadFile("testdata/codex_automation_update_schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ps map[string]any
+	if err := json.Unmarshal(b, &ps); err != nil {
+		t.Fatal(err)
+	}
+	if !ObjectRoot(ps) {
+		t.Fatal("not changed")
+	}
+	if ps["type"] != "object" || ps["anyOf"] != nil || ps["oneOf"] != nil {
+		t.Fatalf("root %v", ps)
+	}
+	props, _ := ps["properties"].(map[string]any)
+	for _, k := range []string{"mode", "id", "name", "prompt", "rrule", "status", "kind", "projectId", "model", "targetThreadId", "executionEnvironment"} {
+		if props[k] == nil {
+			t.Errorf("no %s among %v", k, slices.Sorted(maps.Keys(props)))
+		}
+	}
+	if got := fmt.Sprint(ps["required"]); got != "[mode]" {
+		t.Errorf("required = %s", got)
+	}
+	// every mode a branch takes can still be sent
+	mode, _ := json.Marshal(props["mode"])
+	for _, m := range []string{`"view"`, `"delete"`, `__schema11`} {
+		if !strings.Contains(string(mode), m) {
+			t.Errorf("mode %s leaves out %s", mode, m)
+		}
+	}
+	kind, _ := json.Marshal(props["kind"])
+	if !strings.Contains(string(kind), "__schema7") || !strings.Contains(string(kind), "__schema12") {
+		t.Errorf("kind %s", kind)
 	}
 }

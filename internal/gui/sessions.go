@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -158,6 +160,35 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, t)
 	})
+	// markdown is a session's whole conversation as a Markdown file (#1276),
+	// read from the agent's own file as transcript is: to the browser that
+	// asks (magpie web), which saves it itself, and, in the app, to
+	// Downloads.
+	mux.HandleFunc("GET /api/sessions/markdown", func(rw http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		stem, md, err := sessionMarkdown(q.Get("agent"), q.Get("id"))
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		rw.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+		rw.Header().Set("Content-Disposition", `attachment; filename="`+stem+`.md"`)
+		rw.Write(md)
+	})
+	mux.HandleFunc("POST /api/sessions/export", func(rw http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		stem, md, err := sessionMarkdown(q.Get("agent"), q.Get("id"))
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		path, err := saveDownload(downloads(), stem, ".md", bytes.NewReader(md))
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, map[string]any{"path": tilde(path)})
+	})
 	// terminal opens Terminal on a session's resume command, or, with In, on
 	// the command that carries it on in that other agent. The command is
 	// made here from the session as listed, never taken from the page.
@@ -191,6 +222,38 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})
+}
+
+// sessionMarkdown is a session's conversation as Markdown, and the name its
+// file is saved under: the session found as listed, never a path from the
+// page. It is made whole before any of it is sent, so a file that can't be
+// read is an error and not half a download.
+func sessionMarkdown(agentID, id string) (stem string, md []byte, err error) {
+	s, ok := sessions.Find(agentID, id)
+	if !ok {
+		return "", nil, errors.New("no such session")
+	}
+	name := s.Agent
+	for _, a := range agent.Clients() {
+		if a.ID == s.Agent {
+			name = a.Name
+		}
+	}
+	var b bytes.Buffer
+	if err := sessions.WriteMarkdown(&b, s, wslName(name, s)); err != nil {
+		return "", nil, err
+	}
+	short := []rune(s.ID)
+	if len(short) > 12 {
+		short = short[:12]
+	}
+	safe := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			return r
+		}
+		return '-'
+	}, s.Agent+"-"+string(short))
+	return "magpie-session-" + safe, b.Bytes(), nil
 }
 
 // wslName is an agent's name for a session it ran in a WSL distro, as the

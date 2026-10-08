@@ -24,12 +24,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -352,9 +354,18 @@ func objectRoot(fn map[string]any) bool {
 // oneOf, allOf, or anyOf at the top level", #646). allOf's branches are
 // all merged, properties and required alike. Of anyOf's and oneOf's object
 // branches the properties are merged, a field each of them requires stays
-// required, and the other branches go. It reports whether it changed
-// anything.
+// required, and the other branches go. A branch that is a union itself, as
+// zod writes a discriminated union inside another (Codex desktop's
+// automation_update, #1271), is folded the same way first, so its fields
+// are kept; a field the branches give different schemas takes any of them.
+// It reports whether it changed anything.
 func ObjectRoot(ps map[string]any) bool {
+	return objectRootIn(ps, ps, 0)
+}
+
+// objectRootIn is ObjectRoot on ps, a schema whose local $refs name root's
+// $defs; depth bounds how far unions inside unions are followed.
+func objectRootIn(root, ps map[string]any, depth int) bool {
 	_, any1 := ps["anyOf"]
 	_, one := ps["oneOf"]
 	_, all := ps["allOf"]
@@ -372,7 +383,7 @@ func ObjectRoot(ps map[string]any) bool {
 	list, _ := ps["allOf"].([]any)
 	for _, b := range list {
 		bm, _ := b.(map[string]any)
-		if bm = grokRef(ps, bm); bm == nil {
+		if bm = grokRef(root, bm); bm == nil {
 			continue
 		}
 		bp, _ := bm["properties"].(map[string]any)
@@ -390,8 +401,13 @@ func ObjectRoot(ps map[string]any) bool {
 		list, _ := ps[k].([]any)
 		for _, b := range list {
 			bm, _ := b.(map[string]any)
-			if bm = grokRef(ps, bm); bm == nil {
+			if bm = grokRef(root, bm); bm == nil {
 				continue
+			}
+			if nestedUnion(bm) && depth < 8 {
+				// folded on a copy: the branch may be a $def others name
+				bm = maps.Clone(bm)
+				objectRootIn(root, bm, depth+1)
 			}
 			if _, has := bm["properties"]; bm["type"] != "object" && !has {
 				continue
@@ -403,12 +419,19 @@ func ObjectRoot(ps map[string]any) bool {
 	// a field every branch requires stays required, beside the root's and
 	// allOf's own, which no branch can drop
 	var common []any
+	// the schemas the branches give a field the root doesn't define
+	from := map[string][]any{}
+	var order []string
 	for i, b := range branches {
 		bp, _ := b["properties"].(map[string]any)
-		for k, v := range bp {
-			if _, ok := props[k]; !ok {
-				props[k] = v
+		for _, k := range slices.Sorted(maps.Keys(bp)) {
+			if _, own := props[k]; own {
+				continue
 			}
+			if _, seen := from[k]; !seen {
+				order = append(order, k)
+			}
+			from[k] = appendDistinct(from[k], bp[k])
 		}
 		br, _ := b["required"].([]any)
 		if i == 0 {
@@ -426,6 +449,13 @@ func ObjectRoot(ps map[string]any) bool {
 			}
 		}
 		common = kept
+	}
+	for _, k := range order {
+		if vs := from[k]; len(vs) == 1 {
+			props[k] = vs[0]
+		} else {
+			props[k] = map[string]any{"anyOf": vs}
+		}
 	}
 	seen := map[string]bool{}
 	var merged []any
@@ -447,6 +477,27 @@ func ObjectRoot(ps map[string]any) bool {
 		delete(ps, "required")
 	}
 	return true
+}
+
+// nestedUnion reports whether a branch of a union is a union itself.
+func nestedUnion(b map[string]any) bool {
+	for _, k := range []string{"anyOf", "oneOf", "allOf"} {
+		if _, ok := b[k]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// appendDistinct adds v to vs unless one there is the same schema.
+func appendDistinct(vs []any, v any) []any {
+	vb, _ := json.Marshal(v)
+	for _, w := range vs {
+		if wb, _ := json.Marshal(w); bytes.Equal(vb, wb) {
+			return vs
+		}
+	}
+	return append(vs, v)
 }
 
 // grokRef is a branch of a schema, or what its local $ref names in the

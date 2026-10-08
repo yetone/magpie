@@ -319,7 +319,7 @@ func buildDevin(r *Request, uid, key string) []byte {
 		}
 		pending = nil
 	}
-	for _, m := range r.Messages {
+	for _, m := range joinSplitCalls(r.Messages) {
 		if m.Role == "assistant" {
 			a := devinMsg{role: devinAssistant}
 			var texts []string
@@ -427,13 +427,22 @@ func buildDevin(r *Request, uid, key string) []byte {
 	if max <= 0 {
 		max = 128000 // the server holds it to the model's own
 	}
+	// Devin answers "an internal error occurred" to a temperature or top_p
+	// of exactly 0, on every model, where 1e-6 goes through: a 0 is sent
+	// as that, as near greedy as Devin takes (plugins #50)
+	above0 := func(v float64) float64 {
+		if v == 0 {
+			return 1e-6
+		}
+		return v
+	}
 	topP := 0.95
 	if r.TopP != nil {
-		topP = *r.TopP
+		topP = above0(*r.TopP)
 	}
 	temp := 1.0
 	if r.Temp != nil {
-		temp = *r.Temp
+		temp = above0(*r.Temp)
 	}
 	out = out.bytes(8, pb{}.varint(1, 1).varint(2, uint64(max)).varint(3, 400).double(5, temp).varint(7, 40).double(8, topP))
 

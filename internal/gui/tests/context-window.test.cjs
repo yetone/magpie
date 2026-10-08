@@ -210,3 +210,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.deepEqual(errors, []);
   });
 }
+
+// the routing history can answer before the state, which names the agents:
+// the cards drawn first by the agents' ids take their names once the state
+// is in, though the next read brings the same history
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(`${engine}: the Context tab names its agents when the state answers after the history`, async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    const page = await (await browser.newContext({ viewport: { width: 1100, height: 900 } })).newPage();
+    page.setDefaultTimeout(5000);
+    const errors = [], asked = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    const base = serve("en", asked);
+    let drawn;
+    const historyDrawn = new Promise((res) => { drawn = res; });
+    await page.route("**/*", async (r) => {
+      if (new URL(r.request().url()).pathname === "/api/state") await historyDrawn;
+      await base(r);
+    });
+    await page.addInitScript(() => { try { localStorage.clear(); localStorage.setItem("magpie.usageTab", "context"); } catch {} });
+    await page.goto("http://magpie.test/?view=usage");
+    await page.waitForFunction(() => document.querySelectorAll(".ctx-agent").length === 2);
+    drawn();
+    await page.waitForFunction(() => [...document.querySelectorAll(".ctx-agent .ctx-who b")].map((b) => b.textContent).join() === "Codex,Claude Code");
+    assert.deepEqual(errors, []);
+  });
+}

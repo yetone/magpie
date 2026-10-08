@@ -1285,6 +1285,12 @@
     if (lib.servers.length || lib.projects.length) renderProjects(body, "mcp");
     const skip = shownAgents().filter((a) => !a.mcp);
     if (skip.length) body.append(el("p", "lib-aside", t("{agents} has no MCP servers magpie can write.", { agents: skip.map((a) => a.name).join(", ") })));
+    // WorkBuddy connects a server only once it is trusted there, again
+    // after its command or address changes (#1266)
+    const wb = shownAgents().find((a) => a.id === "workbuddy" && a.mcp);
+    if (wb && lib.servers.some((s) => s.agents?.includes(wb.id))) {
+      body.append(el("p", "lib-aside lib-wb-trust", t("{agent} connects a server only once you trust it: switch it on in {agent}'s MCP settings, and again after its command or address changes.", { agent: wb.name })));
+    }
     body.append(discover("mcp"));
   }
 

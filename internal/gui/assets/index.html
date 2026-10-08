@@ -321,6 +321,10 @@
         <div class="who"><div class="name" data-t>Keep awake while agents work</div><div class="sub" data-t>Keeps this computer from going to sleep by itself while agents work through magpie and for ten minutes after; the display may still turn off</div></div>
         <div id="keepAwakeSegs"></div>
       </div>
+      <div class="row pref" id="wslAgentsRow" hidden>
+        <div class="who"><div class="name" data-t>Detect agents in WSL</div><div class="sub" data-t>Looks in running WSL distros for agents to set up, their sessions and Claude Code; off, WSL is never asked anything and the agents found there are no longer shown</div></div>
+        <div id="wslAgentsSegs"></div>
+      </div>
       <div class="row pref" id="sessionTerminalRow" hidden>
         <div class="who"><div class="name" data-t>Session terminal</div><div class="sub" data-t>Used by the terminal button in Sessions; only apps registered for .command files appear</div></div>
         <button type="button" id="sessionTerminalSelect" class="sess-pick session-terminal-select" aria-label="Session terminal" aria-haspopup="menu" aria-expanded="false" data-ta></button>

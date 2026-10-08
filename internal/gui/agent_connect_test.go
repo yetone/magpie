@@ -71,6 +71,75 @@ func TestAgentConnectAPI(t *testing.T) {
 	}
 }
 
+// An omp profile's id is omp#<name>, and the Agents page asks for it with
+// the # encoded: left raw, a browser reads #work as the fragment and the
+// request reaches the default omp row, whose config.yml then changes
+// (#1187). Connecting and disconnecting the encoded id touches the
+// profile's files alone.
+func TestOmpProfileConnectURL(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	def := filepath.Join(home, ".omp", "agent", "config.yml")
+	os.MkdirAll(filepath.Dir(def), 0o755)
+	os.WriteFile(def, []byte("modelRoles:\n  default: own/model-a\n"), 0o600)
+	work := filepath.Join(home, ".omp", "profiles", "work", "agent")
+	os.MkdirAll(work, 0o755)
+	os.WriteFile(filepath.Join(work, "config.yml"), []byte("modelRoles:\n  default: own/model-b\n"), 0o600)
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m1"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := Handler(nil, nil)
+	call := func(path string) stateJSON {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader("{}")))
+		if rec.Code != 200 {
+			t.Fatalf("%s %d %s", path, rec.Code, rec.Body)
+		}
+		var s stateJSON
+		json.Unmarshal(rec.Body.Bytes(), &s)
+		return s
+	}
+	row := func(s stateJSON, id string) agentJSON {
+		for _, a := range s.Agents {
+			if a.ID == id {
+				return a
+			}
+		}
+		t.Fatalf("no %s", id)
+		return agentJSON{}
+	}
+	before, err := os.ReadFile(def)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := row(call("/api/agents/connect/omp%23work"), "omp#work")
+	if !a.Wired {
+		t.Fatal("omp#work isn't connected")
+	}
+	got, err := os.ReadFile(def)
+	if err != nil || string(got) != string(before) {
+		t.Fatalf("connecting the profile wrote the default omp config:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".omp", "agent", "models.yml")); !os.IsNotExist(err) {
+		t.Fatalf("connecting the profile wrote the default row's models.yml: %v", err)
+	}
+	profile, err := os.ReadFile(filepath.Join(work, "config.yml"))
+	if err != nil || !strings.Contains(string(profile), "magpie/relay/m1") {
+		t.Fatal("the profile's config wasn't connected")
+	}
+	s := call("/api/agents/disconnect/omp%23work")
+	if row(s, "omp#work").Wired || row(s, "omp").Wired {
+		t.Fatal("a row stayed connected")
+	}
+	if got, err = os.ReadFile(def); err != nil || string(got) != string(before) {
+		t.Fatalf("disconnecting the profile wrote the default omp config:\n%s", got)
+	}
+}
+
 // Claude Code's /model lists modelPicker's rows: connected, they are
 // magpie's models; switched off, they go, and a modelPicker the user wrote
 // is never touched.

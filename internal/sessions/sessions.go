@@ -1377,6 +1377,46 @@ func Find(agent, id string) (Session, bool) {
 	return Session{}, false
 }
 
+// Titles is the title of each session named by key (agent:id, as Get takes
+// it) that has its files on this computer: the name it was given, else the
+// agent's own title, else its first prompt. A key with no files, or a
+// session with no title, is left out. The Routing page names its sessions
+// with it (#1293).
+func Titles(keys []string) map[string]string {
+	out := map[string]string{}
+	if len(keys) == 0 {
+		return out
+	}
+	want := make(map[string]bool, len(keys))
+	for _, k := range keys {
+		want[k] = true
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	loadCache()
+	defer closeDBs()
+	files := allFiles()
+	groups := map[string][]file{}
+	var fs []file
+	for _, f := range files {
+		if want[f.key] {
+			groups[f.key] = append(groups[f.key], f)
+			fs = append(fs, f)
+		}
+	}
+	if len(fs) == 0 {
+		return out
+	}
+	refresh(fs, files)
+	price := pricer()
+	for k, g := range groups {
+		if s, ok := assemble(g, price); ok && s.Title != "" {
+			out[k] = s.Title
+		}
+	}
+	return out
+}
+
 // Get is the session whose files are grouped under key (a Summary's Key),
 // however long ago it was at work.
 func Get(key string) (Session, bool) {

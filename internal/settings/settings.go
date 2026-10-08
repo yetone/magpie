@@ -175,6 +175,9 @@ type Settings struct {
 	// NoStats stops the one event a day that counts magpie's users (see
 	// internal/stats).
 	NoStats bool `json:"noStats,omitempty"`
+	// NoUsageStats keeps which agents, providers and models magpie is
+	// used with out of that event, which then counts the user only.
+	NoUsageStats bool `json:"noUsageStats,omitempty"`
 	// NoUpdatePill keeps the header's Update pill away when a newer magpie
 	// is out; UpdateSkip is the one version it was hidden for, and a newer
 	// one brings it back. Either way magpie still downloads the version and
@@ -243,6 +246,10 @@ type Settings struct {
 	// agents work through the gateway and for a while after (xiao_wang24004
 	// on X; internal/awake). This computer's own (KeepOwn).
 	KeepAwake bool `json:"keepAwake,omitempty"`
+	// NoWSLAgents stops magpie looking in WSL on its own, on Windows
+	// (#1264): no distro is listed or probed for agents, their sessions or
+	// Claude Code, and the agents found there before aren't shown.
+	NoWSLAgents bool `json:"noWSLAgents,omitempty"`
 	// KeepAwakeDisplay keeps the display on too while KeepAwake holds the
 	// computer awake (#975, Hu9956: an agent recording the screen to check
 	// its work found it locked). This computer's own (KeepOwn).
@@ -308,6 +315,13 @@ type Settings struct {
 	// what OpenAI does with its own models, 272K though they can take
 	// more, and Anthropic with its, 200K unless a [1m] one is picked.
 	FullContext bool `json:"fullContext,omitempty"`
+	// DesktopLongest has Claude Desktop list a model of 1M tokens or more
+	// once, as its 1M entry (its id with Claude Code's "[1m]"), instead of
+	// twice (#1272): Desktop adds a "1M context window" entry beside any
+	// gateway model whose max_input_tokens is 1M or more and whose id has no
+	// "[1m]", and adds none to one whose id has it. Off, as before, it shows
+	// both, the plain one compacting at Claude Code's 200K.
+	DesktopLongest bool `json:"desktopLongest,omitempty"`
 	// CompactAt is the window told for a longer one when FullContext is
 	// off, in tokens: 0 is WorkingWindow (#876: 272K was the only one).
 	// A provider's or a model's own (ModelCompacts) comes before it.
@@ -712,7 +726,7 @@ func (s Settings) Compact() int {
 
 // KeepOwn puts back cur's settings that are this computer's own, which a
 // sync or a restored backup never brings from another: the window's size
-// and whether it was maximised, the proxy, the gateway's port, the Dock, gateway mode, and what the menu bar or tray shows beside magpie's
+// and whether it was maximised, the proxy, the gateway's port, the Dock, gateway mode, whether WSL is looked in, and what the menu bar or tray shows beside magpie's
 // icon (yoooo on Discord: usage turned off on a Mac came back from a
 // Windows box that shows it).
 func (s *Settings) KeepOwn(cur Settings) {
@@ -721,6 +735,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird
 	s.GatewayMode = cur.GatewayMode
+	s.NoWSLAgents = cur.NoWSLAgents
 }
 
 // RenamePerModel moves what the user said of a provider's models to the id

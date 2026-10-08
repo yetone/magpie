@@ -187,10 +187,18 @@ func traceRoutes(mux *http.ServeMux) {
 			Groups   bool     `json:"groups"`
 			RouteIDs []int64  `json:"routeIds"`
 			Day      string   `json:"day"`
+			// Sessions are other agents' sessions as agent:id, named
+			// from their own files (sessions.Titles) rather than Codex's
+			// index (#1293)
+			Sessions []string `json:"sessions"`
 		}
 		r.Body = http.MaxBytesReader(rw, r.Body, 256<<10)
-		if json.NewDecoder(r.Body).Decode(&in) != nil || len(in.IDs) > 2000 || len(in.RouteIDs) > 2000 {
+		if json.NewDecoder(r.Body).Decode(&in) != nil || len(in.IDs) > 2000 || len(in.RouteIDs) > 2000 || len(in.Sessions) > 2000 {
 			http.Error(rw, "invalid session IDs", http.StatusBadRequest)
+			return
+		}
+		if len(in.Sessions) > 0 && len(in.IDs) == 0 {
+			writeJSON(rw, map[string]any{"titles": sessions.Titles(in.Sessions)})
 			return
 		}
 		if !in.Groups {

@@ -542,11 +542,44 @@
         if (talkOpen.has(k)) talkOpen.delete(k); else talkOpen.add(k);
         show();
       };
-      line(t("Conversation"), b);
+      line(t("Conversation"), b, exportBtn(s));
       d.append(box);
       show();
     }
     return d;
+  }
+
+  // exportBtn saves a session's whole conversation as Markdown (#1276),
+  // read from the agent's own file by the server: in magpie web the browser
+  // downloads it, in the app it goes to Downloads and the status says where.
+  function exportBtn(s) {
+    const b = el("button", "text sess-export", t("Export Markdown"));
+    b.type = "button";
+    b.title = t("Save the whole conversation as a Markdown file");
+    const q = "agent=" + encodeURIComponent(s.agent) + "&id=" + encodeURIComponent(s.id);
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      if (web) {
+        const a = el("a");
+        a.href = "/api/sessions/markdown?" + q;
+        a.download = "";
+        a.click();
+        return;
+      }
+      if (b.disabled) return;
+      b.disabled = true;
+      b.classList.add("busy");
+      try {
+        const r = await api("sessions/export?" + q, {});
+        status(t("Saved to {path}", { path: r.path }), "ok");
+      } catch (err) {
+        status(err.message, "err");
+      } finally {
+        b.disabled = false;
+        b.classList.remove("busy");
+      }
+    };
+    return b;
   }
 
   // agentOf is an agent as the page names it: of those with sessions, else

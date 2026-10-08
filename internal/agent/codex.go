@@ -472,12 +472,18 @@ func codexIn(at place) *Agent {
 			own = say(group(p, options(catalog.Codex(), "")))
 		} else {
 			own = say(group("OpenAI", options(ownCodex(), "")))
-			// on magpie API, Codex's own models are reached through magpie,
-			// on its ChatGPT account there: picked so, set so (#701)
-			if api() {
+			// with magpie Codex's provider (magpie API, or a magpie model
+			// picked with no ChatGPT sign-in beside it), Codex's own models
+			// are reached through magpie on a ChatGPT account there: picked
+			// so, set so (#701). One magpie doesn't serve is picked off
+			// magpie, straight to OpenAI, and says so: it said via magpie,
+			// and picking it took Codex off magpie at once (#1269)
+			if api() || asProvider() {
 				for i, o := range own {
 					if id := codexOwnViaMagpie(o.Value); id != "" {
 						own[i].Label, own[i].Value, own[i].Ref = o.Value, id, id
+					} else if !api() {
+						own[i].Via, own[i].Direct = false, "OpenAI"
 					}
 				}
 			}

@@ -78,6 +78,35 @@ type Message struct {
 	Parts []Part
 }
 
+// joinSplitCalls joins an assistant message onto the assistant message
+// before it when that one made tool calls: Anthropic's Messages takes
+// consecutive assistant messages as one turn, and an agent can send a
+// turn's parallel tool_use blocks split over two of them, answered by one
+// user message (#1275). A builder that closes a turn's calls at the next
+// assistant message would otherwise answer the first calls as interrupted
+// and lose their real results. ms is left as it is.
+func joinSplitCalls(ms []Message) []Message {
+	out := make([]Message, 0, len(ms))
+	for _, m := range ms {
+		if n := len(out); n > 0 && m.Role == "assistant" && out[n-1].Role == "assistant" && hasCalls(out[n-1].Parts) {
+			out[n-1].Parts = append(out[n-1].Parts, m.Parts...)
+			continue
+		}
+		out = append(out, Message{Role: m.Role, Parts: append([]Part(nil), m.Parts...)})
+	}
+	return out
+}
+
+// hasCalls reports whether parts hold a tool call.
+func hasCalls(parts []Part) bool {
+	for _, p := range parts {
+		if p.Kind == ToolCall {
+			return true
+		}
+	}
+	return false
+}
+
 // Tool is a function the model may call.
 type Tool struct {
 	Name        string
@@ -107,6 +136,10 @@ type Request struct {
 	Parallel  *bool // parallel tool calls allowed
 	WebSearch bool  // the client offered its provider's own web search
 	Fast      bool  // the client asked for priority processing: service_tier priority (Codex's Fast mode)
+	// Ultrafast is Codex's Ultrafast (service_tier "ultrafast"), which a
+	// ChatGPT account on a plan with it offers on its models; Fast is set
+	// with it, so where there is no Ultrafast the request goes fast
+	Ultrafast bool
 	// CacheKey is the client's prompt_cache_key (Codex sends its thread's
 	// id), which OpenAI, and relays in front of it, route a conversation by
 	// to where its prompt is cached.

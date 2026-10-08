@@ -22,6 +22,7 @@ import (
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/sessions"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/wslrun"
 )
 
@@ -139,6 +140,10 @@ type distro struct {
 	// Versions is what the CLIs of wslKinds that ask (version) said their
 	// versions are at the last probe, by the kind's id
 	Versions map[string]string `json:"versions,omitempty"`
+	// OmpProfiles are the named omp profiles the probe found under
+	// ~/.omp/profiles there: each is an agent of its own (omp#<name>).
+	// Kept so a stopped distro lists them without being started.
+	OmpProfiles []string `json:"ompProfiles,omitempty"`
 	// Mirrored is whether the distro's 127.0.0.1 is Windows' (mirror): in
 	// mirrored networking, or in consomme
 	Mirrored bool `json:"-"`
@@ -210,6 +215,12 @@ func (d distro) base() string {
 
 func (d distro) place(id string) place {
 	kind, _, _ := strings.Cut(id, "@")
+	// a profile's row is omp#<name>@wsl:<distro>, whose kind is
+	// omp#<name>: the probe keeps the binary version under omp, so the
+	// lookup cuts the profile off
+	if k, _, ok := strings.Cut(kind, "#"); ok {
+		kind = k
+	}
 	return place{home: d.local(d.Home), id: id, spell: d.native, sys: d.local, base: d.base, cold: !d.Running, version: d.Versions[kind]}
 }
 
@@ -403,6 +414,10 @@ var wslKinds = []wslKind{
 		}},
 	{id: "empryo", name: "Empryo", dir: ".empryo", bin: "empryo", in: empryoIn,
 		restart: "reads its config at start-up — restart open empryo sessions to use this."},
+	// Ante ships macOS and Linux builds alone, and suggests WSL on Windows,
+	// so a Windows machine's Ante is usually this one
+	{id: "ante", name: "Ante", dir: ".ante", bin: "ante", in: anteIn,
+		restart: "reads its catalog at start-up — restart open ante sessions to use this."},
 	{id: "muse", name: "Muse Code", dir: ".config/muse", bin: "muse", in: museIn,
 		restart: "reads its settings at start-up — restart open muse sessions to use this."},
 	{id: "qoder", name: "Qoder", dir: ".qoder", bin: "qodercli", in: qoderIn,
@@ -539,6 +554,9 @@ func wslFound(d distro) bool {
 // its row are the ones it is shown only when kept under that id too (#927).
 func (a *Agent) ListsFor() string {
 	id, _, _ := strings.Cut(a.ID, "@wsl:")
+	// a named omp profile (omp#work) shares omp's lists: it is another
+	// omp, not another agent with a catalog of its own
+	id, _, _ = strings.Cut(id, "#")
 	return id
 }
 
@@ -714,7 +732,7 @@ func asleep(live *Agent, k wslKind, d distro) *Agent {
 
 // wslAgents are the agents in this machine's WSL distros; none off Windows.
 func wslAgents() []*Agent {
-	if !wslOn {
+	if !wslLooks() {
 		return nil
 	}
 	return wslAgentsOf(wslDistros())
@@ -729,6 +747,18 @@ func wslAgentsOf(ds []distro) []*Agent {
 				out = append(out, a)
 			}
 		}
+		// the named omp profiles the probe remembered: the row is made
+		// because the probe found it, not because a default omp row is
+		// there, and its detection is that memory
+		for _, name := range d.OmpProfiles {
+			k := wslKindOf("omp")
+			k.id, k.name = "omp#"+name, "omp · "+name
+			k.in = func(at place) *Agent {
+				return ompAt(at, filepath.Join(at.home, ".omp", "profiles", name, "agent"),
+					func() ompProviderEntry { return ompProviderAt(at.gw(), at.version) })
+			}
+			out = append(out, wslAgent(k, d))
+		}
 	}
 	return out
 }
@@ -737,7 +767,7 @@ func wslAgentsOf(ds []distro) []*Agent {
 // opens it, for internal/sessions to read their sessions in; none off
 // Windows. A stopped distro's is its home as last probed.
 func wslHomes() []sessions.WSLHome {
-	if !wslOn {
+	if !wslLooks() {
 		return nil
 	}
 	var out []sessions.WSLHome
@@ -780,6 +810,10 @@ const (
 
 // wslOn is whether there is WSL to look in: on Windows, or in tests.
 var wslOn = runtime.GOOS == "windows"
+
+// wslLooks is whether magpie looks in WSL on its own: there is WSL, and
+// Settings' Detect agents in WSL is on (#1264).
+func wslLooks() bool { return wslOn && !settings.Load().NoWSLAgents }
 
 // wslRun runs wsl.exe; a var for tests.
 var wslRun = func(timeout time.Duration, args ...string) ([]byte, error) {
@@ -935,7 +969,7 @@ func wslUp(distro string) bool {
 // WSLRunning is whether the WSL distro runs now (wslUp); false off
 // Windows. What another package does in a distro on its own, rather than
 // at the user's asking, asks it first.
-func WSLRunning(distro string) bool { return wslOn && wslUp(distro) }
+func WSLRunning(distro string) bool { return wslLooks() && wslUp(distro) }
 
 // wslSave writes wsl.json if anything in it changed.
 func wslSave() {
@@ -1047,6 +1081,9 @@ var wslProbeScript = func() string {
 	}
 	// a drive's source in /proc/mounts is C:\ (written C:\134), under any automount root
 	s += `awk '$1 ~ /^[A-Za-z]:/ {print "win:" $2}' /proc/mounts 2>/dev/null; `
+	// named omp profiles: the probe runs only in a distro that is running,
+	// so this never starts a stopped one to find them
+	s += `for d in "$HOME"/.omp/profiles/*; do [ -d "$d" ] && echo "profile:omp:$(basename "$d")"; done; `
 	return s + `ip route show default 2>/dev/null | head -n1 | sed 's/^/route:/'; ` +
 		`grep -m1 '^nameserver' /etc/resolv.conf 2>/dev/null | sed 's/^/ns:/'; ` +
 		`command -v wslinfo >/dev/null 2>&1 && echo "net:$(wslinfo --networking-mode 2>/dev/null)"; true`
@@ -1112,6 +1149,15 @@ func parseProbe(name, out string) *distro {
 			// one word; anything else (an old wslinfo's usage) says nothing
 			if m := strings.ToLower(strings.TrimSpace(v)); m != "" && !strings.ContainsAny(m, " \t") {
 				d.Net = m
+			}
+		case "profile":
+			// profile:omp:<name>: a named omp profile the distro has
+			kind, name, _ := strings.Cut(v, ":")
+			if kind != "omp" || !ompProfileOK(name) {
+				continue
+			}
+			if !slices.Contains(d.OmpProfiles, name) {
+				d.OmpProfiles = append(d.OmpProfiles, name)
 			}
 		}
 	}

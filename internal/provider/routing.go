@@ -416,15 +416,20 @@ func Allowances(agent string) map[string]Allowance {
 			share := renewalShare(agent) // read before the lock: it reads providers.json
 			began := time.Now()
 			all := map[string]Allowance{}
-			for user, q := range LoginUsage(ctx, agent) {
+			readings, readAt := loginUsageAt(ctx, agent)
+			for user, q := range readings {
 				if q.Error != "" || len(q.Windows) == 0 {
 					continue
 				}
 				all[user] = allowanceOf(q.Windows, time.Now()).restartedBy(resetRunsOut(agent, user, q.Windows, q.Resets))
 			}
 			c.Lock()
-			at := time.Now()
-			now := at
+			now := time.Now()
+			// as old as its oldest reading: one the Usage page made 50s
+			// ago, taken here, is read again in 10s, not kept a minute
+			// more — near its cap an account was sent on a reading two
+			// minutes old (#1295)
+			at := readAt
 			if c.seen == nil {
 				c.seen = map[string]reading{}
 			}

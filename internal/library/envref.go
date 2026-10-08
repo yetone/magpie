@@ -64,7 +64,11 @@ func (f *mcpFile) refsOf() envSyntax {
 		// the clouds' and the package registries' own credential variables
 		// as empty. Droid 0.231 expands ${NAME} in env and headers of
 		// ~/.factory/mcp.json and won't connect with one unset
-		// (docs.factory.com/cli/configuration/mcp).
+		// (docs.factory.com/cli/configuration/mcp). CodeBuddy Code, and
+		// WorkBuddy, whose servers its CodeBuddy engine runs, expand ${NAME}
+		// in command, args, cwd, env, url and headers of every scope's
+		// servers and warn of one unset (McpConfigEnvExpandService,
+		// @tencent-ai/codebuddy-code 2.162.0).
 		return envSyntax{refDollar, refDollar}
 	case fmtGrok:
 		// Grok Build expands ${NAME} and ${NAME:-default} in url, command,
@@ -162,7 +166,10 @@ func (f *mcpFile) refsOf() envSyntax {
 	// and env on (kimi_cli/cli/__init__.py, fastmcp mcp_config.py). Cline's
 	// settings are plain strings (@cline/core 0.0.90). ZCode expands only
 	// its plugins' servers, not mcp.servers (zcode.cjs createTransport).
-	// DeepSeek
+	// Alma
+	// 0.4.164 JSON.parses mcp.json and hands a command its env and a url
+	// its headers as written (out/main/index.js createStdioTransport,
+	// connectRemoteServer). DeepSeek
 	// Harness takes only a YAML !!js expression (dsh-mcp-client README),
 	// which magpie doesn't write. Devin's docs name ${env:NAME} for OAuth
 	// fields only (extensibility/mcp/configuration.mdx), so its headers

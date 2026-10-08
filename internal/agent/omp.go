@@ -89,6 +89,30 @@ func ompYAMLList(v string) bool { return strings.HasPrefix(v, "[") || strings.Ha
 // normalizeProfileName); it refuses any other.
 var ompProfileName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 
+// ompReserved is a Windows device name omp refuses on every platform
+// (pi-utils dirs.ts, normalizeProfileName): CON, PRN, AUX, NUL, COM0–COM9,
+// LPT0–LPT9, and the same with a dot and anything after (con.work).
+var ompReserved = regexp.MustCompile(`(?i)^(?:CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(?:\..*)?$`)
+
+// ompProfileOK says whether name is one omp takes as a profile (pi-utils
+// dirs.ts): "default" is none, a trailing dot is refused, and so is a
+// Windows reserved device name. What a profiles folder holds is checked
+// against this, and so is what a distro's probe finds, and the profile
+// OMP_PROFILE names for the default row.
+func ompProfileOK(name string) bool {
+	return name != "" && name != "default" && ompProfileName.MatchString(name) &&
+		!strings.HasSuffix(name, ".") && !ompReserved.MatchString(name)
+}
+
+// ompRoot is where omp keeps its agent folder and its profiles: ~/.omp, or
+// ~/$PI_CONFIG_DIR when that variable renames it.
+func ompRoot(home string) string {
+	if d := appdir.Getenv("PI_CONFIG_DIR"); d != "" {
+		return filepath.Join(home, d)
+	}
+	return filepath.Join(home, ".omp")
+}
+
 // ompDir is omp's agent folder, found as omp's pi-utils (dirs.ts) finds it:
 // under ~/.omp, or ~/$PI_CONFIG_DIR; a profile's (OMP_PROFILE, else
 // PI_PROFILE; "default" is none) is profiles/<name>/agent there; with none,
@@ -99,15 +123,12 @@ var ompProfileName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 // moved it, and Pi reads that variable too, so Pi's own folder may be what
 // it names.
 func ompDir(home string) (dir string, shared bool) {
-	root := filepath.Join(home, ".omp")
-	if d := appdir.Getenv("PI_CONFIG_DIR"); d != "" {
-		root = filepath.Join(home, d)
-	}
+	root := ompRoot(home)
 	p, set := os.LookupEnv("OMP_PROFILE")
 	if !set {
 		p = os.Getenv("PI_PROFILE")
 	}
-	if p = strings.TrimSpace(p); p != "" && p != "default" && ompProfileName.MatchString(p) && !strings.HasSuffix(p, ".") {
+	if p = strings.TrimSpace(p); ompProfileOK(p) {
 		return filepath.Join(root, "profiles", p, "agent"), false
 	}
 	if d := appdir.Getenv("PI_CODING_AGENT_DIR"); filepath.IsAbs(d) {
@@ -122,6 +143,45 @@ func omp(home string) *Agent {
 	// Pi's folder is no sign of omp: its config.yml or its command is
 	a.dirShared = shared
 	return a
+}
+
+// ompProfiles are the named omp profiles under ~/.omp/profiles (or
+// ~/$PI_CONFIG_DIR/profiles): each is an omp of its own, omp#<name>, with
+// its own config.yml and models.yml in profiles/<name>/agent. The one the
+// default row already picks (OMP_PROFILE) is left out, so it is not listed
+// twice, and the name rules are omp's own. A missing profiles folder is no
+// profiles, not an error; a profile whose agent folder has no config.yml
+// yet is still a row, and the first Set makes the file.
+func ompProfiles(home string) []*Agent {
+	root := ompRoot(home)
+	entries, err := os.ReadDir(filepath.Join(root, "profiles"))
+	if err != nil {
+		return nil
+	}
+	cur, _ := ompDir(home)
+	var names []string
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() || !ompProfileOK(name) {
+			continue
+		}
+		if filepath.Join(root, "profiles", name, "agent") == cur {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out []*Agent
+	for _, name := range names {
+		a := ompAt(here(home), filepath.Join(root, "profiles", name, "agent"), func() ompProviderEntry { return ompProvider() })
+		a.ID, a.Name = "omp#"+name, "omp · "+name
+		// the default row keeps omp's name, its command and its own lists
+		a.Aliases, a.UA, a.Bin = nil, nil, ""
+		profile := filepath.Join(root, "profiles", name)
+		a.detect = func() bool { return isDir(profile) }
+		out = append(out, a)
+	}
+	return out
 }
 
 // ompIn is omp in a WSL distro (see wsl.go): ~/.omp/agent, as the

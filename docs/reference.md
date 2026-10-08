@@ -95,6 +95,7 @@ line; agents connected to magpie lose it when it quits.
 | VS Code (Chat) | `~/Library/Application Support/Code/User/settings.json` + `chatLanguageModels.json` (`~/.config/Code/User` on Linux, `%APPDATA%\Code\User` on Windows) | model (`chat.defaultModel`; a `magpie` Custom Endpoint group, its catalog in Chat's model picker; VS Code 1.122+, no Copilot sign-in or key needed). Each profile's own pair under `User/profiles/<id>/` (listed in `globalStorage/storage.json`) gets the same, unless the profile uses the default's |
 | VS Code Insiders (Chat) | the same files under `Code - Insiders/User` in place of `Code/User` | as VS Code, a row of its own; its models send the token `magpie-vscode-insiders`, since its chat's User-Agent is VS Code's |
 | VSCodium (Chat) | the same files under `VSCodium/User` in place of `Code/User` | as VS Code, a row of its own; its models send the token `magpie-vscodium`, so Usage counts them as VSCodium; its Chat features must be turned on (`chat.disableAIFeatures=false`, and `defaultChatAgent` plus `trustedExtensionAuthAccess` for GitHub.copilot-chat in its product.json). With the Marketplace's GitHub Copilot Chat 0.48.1, which has no Custom Endpoint provider, the group is written for its OpenAI Compatible provider (`customoai`, the token sent as `x-api-key`), which lists models only while Copilot Chat is signed in to GitHub with a personal Copilot plan |
+| Copilot (JetBrains) | `byok.json` in `~/.config/github-copilot` (`$XDG_CONFIG_HOME/github-copilot` when set, `%USERPROFILE%\AppData\Local\github-copilot` on Windows), the Copilot language server's own file, which Xcode's and Eclipse's Copilot read too | provider (a `magpie` custom endpoint provider beside the user's: every magpie model at the gateway's `/v1/chat/completions`, sent with `magpie-copilot-jetbrains`; a model hidden in Manage Models stays hidden through a sync; off removes magpie's three keys alone). Found by the `github-copilot-intellij` plugin in a JetBrains IDE or Android Studio. Listed after the IDE restarts, and only while Copilot is signed in to GitHub on a plan with Bring Your Own Key (Free, Pro, Pro+; Business and Enterprise when the organisation allows it); the model is picked in Copilot Chat |
 | JetBrains Air | `acp.json` in `~/Library/Application Support/JetBrains/Air` (`~/.config/JetBrains/Air` on Linux, `%APPDATA%\JetBrains\Air` on Windows) + `magpie-opencode.json` beside it | model (a `Magpie` ACP agent: OpenCode's `opencode acp` on magpie's provider alone, its models and routing groups in Air's model menu; needs OpenCode installed) |
 | Copilot CLI  | `~/.copilot/settings.json`        | model           |
 | Crush        | `~/.config/crush/crush.json`      | large, small    |
@@ -110,6 +111,7 @@ line; agents connected to magpie lose it when it quits.
 | Qwen Code    | `~/.qwen/settings.json` (`$QWEN_HOME`) | model (magpie's models as `modelProviders.openai` entries on a `MAGPIE_QWEN_API_KEY` env var; settings.model; `security.auth.selectedType` openai while wired) |
 | Muse Code    | `~/.config/muse/settings.json` (`$XDG_CONFIG_HOME`) | model (endpoint_transport to the gateway, auth none; magpie's models in Muse's list) |
 | Empryo       | `~/.empryo/config.json` | defaultModel (a `magpie` provider at the gateway in `providers`) |
+| Ante         | `~/.ante/catalog.json` and `settings.json` (`$ANTE_HOME`) | provider, model (a `magpie` provider on OpenAiCompatible, with no auth of magpie's: the gateway lets this machine in with any token and Ante counts a provider with none as authenticated; magpie's models in Ante's model picker, and Ante started on magpie, which is what its settings' `provider` decides) |
 | MiniMax Code (mcode) | `~/.minimax/config.yaml` (`$MINIMAX_DATA_DIR`) | model (a `magpie` custom provider; magpie's models in its /model) |
 | Droid (Factory) | `~/.factory/settings.json` (`$FACTORY_HOME_OVERRIDE`) | model (magpie's models as BYOK `customModels`, in Droid's /model) |
 | Cline (CLI)  | `~/.cline/data/settings/providers.json` (`$CLINE_DIR`) | model, effort (magpie takes its openai-compatible provider) |
@@ -207,6 +209,8 @@ magpie provider add "My Relay" url=https://relay.example.com/v1 key=sk-… model
 magpie providers                        # host, key, exposed models, who uses what
 magpie provider deepseek                # one provider in detail
 magpie provider models deepseek         # re-fetch the vendor's list (add ids to choose which to expose)
+magpie provider models deepseek +deepseek-v4 -deepseek-chat   # expose one more, take one out; the rest stay
+magpie provider models deepseek a b c   # the whole list of models to expose, replacing it (all: the default)
 magpie provider refresh deepseek        # re-fetch it, and drop picks it no longer has (the TUI: m)
 magpie provider test deepseek           # one tiny request per API, with latency
 magpie provider key deepseek sk-…       # replace the key
@@ -374,8 +378,8 @@ openai/gpt-5 anthropic/*` (`all` takes the restriction off). A pattern is
 serves the call, so a bare model name is resolved first, or a routing group,
 `group/<id>` (`group/*` for every group). A key that names a group may use
 the group with every member in it, though not those members asked for by
-name. Such a key sees only its models in `/v1/models` and the Anthropic and
-Gemini lists, a routing group it doesn't name only when it may use every
+name. Such a key sees only its models in `/v1/models`, `/v1/codex/models`
+and the Anthropic and Gemini lists, a routing group it doesn't name only when it may use every
 member, and is refused any other model with a 403 in the API's error shape
 before a provider is asked; a fallback it may not use is skipped. A key with
 no models listed may use every model.
@@ -414,6 +418,35 @@ Sharing listens on every interface, unless `MAGPIE_ADDR` names a host of its
 own: `MAGPIE_ADDR=127.0.0.1:3425` behind Tailscale Serve, or one interface's
 address, stays where it is while shared, and what reaches it from elsewhere
 still needs an enabled gateway key (#1112).
+
+**Codex on another computer** (#1281) can name the shared magpie its model
+provider, with a gateway key, and read magpie's models in Codex's own
+catalog shape from `GET /v1/codex/models`. `/v1/models` is OpenAI's list,
+which Codex can't read, and `/backend-api/codex/models` is the ChatGPT
+backend's, for a Codex signed in to ChatGPT on the gateway's own computer;
+a gateway key gets a 401 there.
+
+```toml
+model_provider = "magpie"
+model = "provider/model"
+
+[model_providers.magpie]
+name = "magpie"
+base_url = "http://192.168.1.20:3425/v1"
+model_catalog_url = "http://192.168.1.20:3425/v1/codex/models"
+env_key = "MAGPIE_API_KEY"   # the gateway key
+wire_api = "responses"
+supports_websockets = false
+```
+
+The list is the models the shared magpie shows Codex (its Agents page
+picks), each as the `model_catalog_json` magpie writes for a Codex on its
+own computer describes it, and only the models the key may use. Codex 0.161
+reads it by default; 0.160 needs `[features] api_key_model_discovery = true`.
+Codex reads at most 1 MiB of a catalog, and every entry carries Codex's
+prompt, so past about 125 models the list keeps the first that fit and the
+answer's `X-Magpie-Left-Out` header says how many it left out: pick fewer
+for Codex, or hold the key to fewer.
 
 A request that reaches loopback through a proxy or tunnel on this computer
 (Cloudflare Tunnel's `cloudflared`, ngrok, Tailscale serve or funnel, frp's
@@ -802,8 +835,11 @@ your choice across reloads.
 Codex title helpers with an explicit parent or fork source join their originating
 chat, retaining their title badge and contributing to its cost. Titles without
 ancestry and ordinary forked chats stay separate.
-Codex chat names come from its local name index and follow renames. Unknown or
-remote-only names fall back to the ID; the full ID remains in the heading tooltip.
+Codex chat names come from its local name index and follow renames. Other
+agents' sessions (Claude Code and the rest the Sessions page reads) take the
+name the Sessions page shows for them, read from their own files on this
+computer. Unknown or remote-only names fall back to the ID; the full ID
+remains in the heading tooltip.
 Expand a session to see each request. Each request and session shows its estimated cost at the effective model
 prices, including cache reads and writes. Session totals cover the listed
 requests only (the live trace or the selected day's retained history), and a
@@ -957,8 +993,15 @@ never waits for a reading, except the first one after magpie starts (3
 seconds at most). A reading over a minute old is read again in the
 background as a request is routed, and an account that fails for its
 quota is read again at once; if a reading was already under way as it
-failed, the account is read again as soon as that reading is back. Codex and most other subscriptions read every
-account from the vendor this way. Claude is different: magpie never asks
+failed, the account is read again as soon as that reading is back. A
+reading the Usage page made counts as one, its age from when it was made.
+Codex and most other subscriptions read every
+account from the vendor this way. A Codex account is also known from each
+reply ChatGPT sends magpie for it, which says what the account has used:
+an account near its usage cap is held from the next turn on (#1295). A
+usage cap is still a stop on what magpie has read, not a guarantee: a turn
+already under way can take an account past it, so a 99% cap doesn't
+promise 1% is left. Claude is different: magpie never asks
 Anthropic itself. It reads only the account Claude Code is signed in to,
 by running Claude Code's `/usage`:
 
@@ -1051,6 +1094,7 @@ It exposes:
 | `/v1/messages/count_tokens` | Anthropic token counting |
 | `/v1beta/models/{model}:generateContent` | Google Gemini (also `:streamGenerateContent`, `:countTokens`) |
 | `/v1/models`, `/v1beta/models` | the catalog            |
+| `/v1/codex/models`       | the catalog as Codex's `model_catalog_url` reads it ([Codex on another computer](#providers-and-the-gateway)) |
 
 Each `/v1/models` entry includes `reasoning` and `supported_reasoning_levels`
 (`[{"effort":"low"}, ...]`). A routing group is marked `reasoning` when any
@@ -1792,10 +1836,26 @@ MAGPIE_GITHUB_MIRROR=https://gh.example magpie serve
 Once a day, a running magpie (the app, or `magpie serve`) sends one event to
 PostHog so we know how many people use it: a random id made up on your
 computer (`~/.config/magpie/install-id`), magpie's version, and your system
-and architecture. Nothing else goes: no accounts, keys, providers, models,
-prompts or usage. Turn it off in Settings → Privacy → Count me as a user, or
-with `DO_NOT_TRACK=1` or `MAGPIE_NO_STATS=1`. Builds from source never send
-it. The code is [internal/stats](../internal/stats/stats.go).
+and architecture.
+
+With it goes what magpie is used with, so we know which agents, providers
+and models to look after first, by magpie's own ids only:
+
+- the agents connected to magpie (`claude`, `codex`);
+- the providers that are on: a preset's id (`deepseek`), a subscription's
+  (`codex`, `copilot`), a community plugin's (`plugin:kiro`); a provider you
+  added yourself is only `custom`, another plugin only `plugin`;
+- the models the connected agents are set to, as the provider's id and the
+  vendor's model id (`deepseek/deepseek-v4`); one on a provider of your own
+  is only `custom`, a routing group only `group`;
+- how many of each, and how many routing groups you have.
+
+No names, base URLs, accounts, keys, prompts or usage go. Turn that part off
+in Settings → Privacy → Share the agents, providers and models I use; the
+day's event then has the id, version and system only. Turn it all off in
+Settings → Privacy → Count me as a user, or with `DO_NOT_TRACK=1` or
+`MAGPIE_NO_STATS=1`. Builds from source never send it. The code is
+[internal/stats](../internal/stats/stats.go).
 
 ## Community
 

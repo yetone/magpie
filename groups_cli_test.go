@@ -287,3 +287,19 @@ func TestGroupSetID(t *testing.T) {
 		t.Fatal("renamed onto another group")
 	}
 }
+
+// magpie group set <id> name=… says the id stays, and what agents ask for,
+// so a renamed group isn't taken for one with a new id (MOMO on Discord).
+func TestGroupRenameSaysTheIDStays(t *testing.T) {
+	groupsHome(t)
+	if err := provider.SaveGroup(provider.Group{ID: "fast", Name: "Fast", Members: []string{"a/m"}}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := stdoutOf(t, func() error { return groupCmd([]string{"group", "set", "fast", "name=DS Flash"}) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "its id stays fast") || !strings.Contains(out, "group/fast") {
+		t.Fatalf("rename said %q; want that the id stays fast", out)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
+	"github.com/yetone/magpie/internal/omarchy"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -119,6 +120,21 @@ func (h *host) makePanel() *application.WebviewWindow {
 	trayOwnClicks()
 	w.OnWindowEvent(events.Mac.WindowShow, func(*application.WindowEvent) { trayHighlight(true) })
 	w.OnWindowEvent(events.Mac.WindowHide, func(*application.WindowEvent) { trayHighlight(false) })
+	// The system's close hides the panel, as Escape does: a title bar's X
+	// (KWin's, #1283), Alt+F4 or the window manager's close key. Closed, it
+	// was gone while the tray still opened it, and the icon did nothing
+	// until magpie restarted. One lightweight mode let go (no longer
+	// h.panel by then) is closed.
+	w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if !application.InvokeSyncWithResult(func() bool { return h.panel == w }) {
+			return
+		}
+		e.Cancel()
+		w.Hide()
+		if omarchy.Hyprland() {
+			go omarchy.StopClicks()
+		}
+	})
 	return w
 }
 
@@ -132,6 +148,7 @@ func (h *host) madeAgain(w *application.WebviewWindow) {
 	}
 	if w.Name() == "panel" {
 		nameWindow(w, panelTitle)
+		ownFrame(w)
 	} else {
 		plainTitlebar(w)
 	}

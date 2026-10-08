@@ -41,7 +41,7 @@
 /* carrying a session on in another agent, and its conversation (#845) */
 .row.sm-sess .sess-carry { height: 24px; color: var(--fg); }
 .pop.proto-menu.sess-carry-menu { width: min(300px, calc(100vw - 16px)); background: var(--card); }
-.sess-talk-btn { height: 22px; padding: 0 8px; font-size: 11.5px; }
+.sess-talk-btn, .sess-export { height: 22px; padding: 0 8px; font-size: 11.5px; }
 .sess-talk { max-height: min(560px, 70vh); overflow-y: auto; margin-top: 4px; padding: 8px 10px 4px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--bg); }
 .sm-restore { display: inline-flex; align-items: center; gap: 5px; }
 .sm-ask-list { grid-column: 1 / -1; min-width: 0; margin: 0; padding: 0; list-style: none; font-size: 12.5px; color: var(--fg); line-height: 1.6; }

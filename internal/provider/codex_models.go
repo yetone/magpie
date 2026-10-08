@@ -370,7 +370,19 @@ func CodexListed() []catalog.Model {
 	return codexListed(shown, func(id string) []Member {
 		_, ms, _ := find(id)
 		return ms
-	})
+	}, false)
+}
+
+// CodexCatalog is shown as a Codex that names magpie its model_provider is
+// handed it from GET /v1/codex/models (#1281): every model, a ChatGPT
+// account's own among them, since that Codex reaches them through magpie's
+// /v1 by magpie's id, not through the ChatGPT backend's list.
+func CodexCatalog(shown []Entry) []catalog.Model {
+	find := GroupFinder()
+	return codexListed(shown, func(id string) []Member {
+		_, ms, _ := find(id)
+		return ms
+	}, true)
 }
 
 // CodexNativeHidden is the ChatGPT account's own model slugs the user took
@@ -513,8 +525,9 @@ func codexWindowsTag() []catalog.Model {
 
 // codexListed marks a group Fast when a ChatGPT account's GPT model is in
 // it, so Codex offers /fast there too; the tier goes out only to that
-// account (buildResponses).
-func codexListed(shown []Entry, members func(id string) []Member) []catalog.Model {
+// account (buildResponses). own keeps a ChatGPT account's own models in,
+// which a signed-in Codex has from the backend already.
+func codexListed(shown []Entry, members func(id string) []Member, own bool) []catalog.Model {
 	var ms []catalog.Model
 	// named among all shown: the account's own, which the backend lists,
 	// are in Codex's picker beside these
@@ -523,7 +536,7 @@ func codexListed(shown []Entry, members func(id string) []Member) []catalog.Mode
 	s := settings.Load()
 	find := func(id string) (Group, []Member, bool) { return Group{}, members(id), true }
 	for i, e := range shown {
-		if CodexOwn(e) {
+		if CodexOwn(e) && !own {
 			continue
 		}
 		m := catalog.Model{ID: e.ID, Name: labels[i], Efforts: e.Efforts, Images: e.Images || seen, Context: e.Context, AgentsV2: e.AgentsV2}

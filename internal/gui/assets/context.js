@@ -633,8 +633,10 @@
     if (read !== ctxRead) return;
     // the auto refresh redraws only what changed: the same answer keeps the
     // pane (and what the pointer is on), and a new one comes in without its
-    // entrance animations
-    const json = JSON.stringify(data);
+    // entrance animations. What it is drawn with counts too: the agents'
+    // names and icons come with the state, which can answer after a first
+    // history, drawn by the agents' ids until then
+    const json = JSON.stringify([data, (state.clients || state.agents || []).map((a) => [a.id, a.name, a.icon])]);
     if (ctxData && json === ctxJSON) return;
     const pane = $("#contextPane");
     if (pane) pane.classList.toggle("still", !!ctxData);

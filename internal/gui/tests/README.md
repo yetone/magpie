@@ -619,7 +619,8 @@ session opened draws its latest request's window in 400 cells without moving
 the page, a cell hovered names its part and what is largest in it, and the
 Tools tab of the contents lists only tools; nothing scrolls sideways — in
 Chromium and WebKit, in English, Chinese, Japanese and German, at 1100px and
-420px.
+420px. With the state answering after the history, the cards drawn by the
+agents' ids take their names once it is in, though the history is the same.
 
 `tray-usages.test.cjs` picks several of the Usage page's cards for the menu
 bar in Settings: the menu keeps open as Codex and Claude Code are ticked
@@ -2045,6 +2046,16 @@ of its own (Cindy) on the Agents page: a line under its name says whether
 magpie is added (green once it is), its button stands where the other rows'
 model picker does, as wide and lined up with it at 960 and 700px, and a click
 opens the app's link. English and Chinese, Chromium and WebKit.
+
+`omp-profile-connect.test.cjs` checks an omp named profile's switch (#1187):
+clicking **omp · work** posts `/api/agents/connect/omp%23work`, not a path the
+browser cuts at `#`. A query string on the same page (`/api/usage?period=today`)
+stays a query. English, Chromium and WebKit. The API is faked. Without the `#`
+encoding in `api()` the posted path is `/api/agents/connect/omp`.
+
+```sh
+node --test internal/gui/tests/omp-profile-connect.test.cjs
+```
 
 `privacy-hides-accounts.test.cjs` checks that Privacy's Mask personal data
 hides the accounts on screen too (inaction on Discord): until Hide accounts is
