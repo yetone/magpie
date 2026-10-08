@@ -95,6 +95,7 @@ func All() []*Agent {
 		hermes(home),
 		morph(home),
 		kimi(home),
+		qwen(home),
 		muse(cfg),
 		empryo(home),
 		miniMax(home),
