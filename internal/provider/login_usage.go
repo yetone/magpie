@@ -131,6 +131,7 @@ func loginReading(ctx context.Context, l Login) loginUsageEntry {
 			// one dropped meanwhile (StaleAllowance) read too soon, and a
 			// Claude account the user asked to see meanwhile is read again
 			// (AskClaudeUsage), as SubscriptionUsage reads it: neither is kept
+			kept := false
 			if c.pending[key] == r {
 				delete(c.pending, key)
 				if l.Agent != "claude" || claudeAsked.Load() <= start.UnixNano() {
@@ -138,9 +139,22 @@ func loginReading(ctx context.Context, l Login) loginUsageEntry {
 						c.m = map[string]loginUsageEntry{}
 					}
 					c.m[key] = r.e
+					kept = true
 				}
 			}
 			c.Unlock()
+			if kept {
+				// a background reading is a point of the account's quota
+				// history too, as a Usage-page reading is: a magpie only
+				// ever serving other magpies has nobody on its Usage page,
+				// and its quota history stayed empty otherwise (#1313).
+				// The fresh reading goes, named for its account (a login's
+				// reading itself carries no user), not the card kept of
+				// it: a read that failed is skipped inside, not told again.
+				q := r.e.read
+				q.User = l.User
+				noteQuotaHistory([]SubscriptionQuota{q}, time.Now())
+			}
 			close(r.done)
 		}()
 	}
