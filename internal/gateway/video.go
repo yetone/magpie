@@ -35,10 +35,10 @@ import (
 // for it again. It says who is making the video, video_<provider>.<the
 // vendor's id>.<when it started>, so the gateway keeps nothing.
 //
-// Only a Grok subscription makes videos so far, at the Imagine API of the
-// backend Grok Build talks to: <cli-chat-proxy.grok.com/v1>/videos/generations
-// starts one and answers with its request_id, and /videos/{request_id} is
-// answered 202 while it is made and 200 with the video's URL when it is.
+// A Grok subscription uses the Imagine API of the backend Grok Build talks
+// to: <cli-chat-proxy.grok.com/v1>/videos/generations starts one and answers
+// with its request_id. Volcengine Agent Plan uses Ark's asynchronous content
+// generation tasks under its /api/plan/v3 base.
 //
 // Another magpie's videos (a Remote magpie's, #545) are asked of it, at its
 // own videos API: its id for one goes, encoded, in the id given here, and
@@ -57,13 +57,17 @@ var grokVideoAspects = []string{"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3
 const maxVideoBytes = 512 << 20
 
 // Videomakers are the models a provider can make videos with: a Grok
-// subscription's, and those another magpie listed as its own.
+// subscription's, another magpie's, and a preset plan's models when magpie
+// implements that vendor's video API.
 func Videomakers(p provider.Provider) []catalog.Model {
 	if p.IsRemoteMagpie() {
 		out := catalog.LiveVideomakers(p.ID)
 		for i := range out {
 			out[i].Provider = p.ID
 		}
+		return out
+	}
+	if out := p.PlanVideos(); len(out) > 0 {
 		return out
 	}
 	if !drawsGrok(p) {
@@ -265,6 +269,31 @@ func pixelResolution(size string) string {
 	return "480p"
 }
 
+// volcengineVideoBody is f as Ark's content-generation API takes it: text
+// and images in content, with image roles distinguishing the first frame from
+// subject references, plus duration, ratio and resolution as separate fields.
+func volcengineVideoBody(model string, f filming) []byte {
+	content := []map[string]any{{"type": "text", "text": f.Prompt}}
+	if f.Start != nil {
+		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": f.Start.dataURL()}, "role": "first_frame"})
+	}
+	for _, pic := range f.References {
+		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": pic.dataURL()}, "role": "reference_image"})
+	}
+	req := map[string]any{"model": model, "content": content}
+	if f.Seconds != "" {
+		req["duration"], _ = strconv.Atoi(f.Seconds)
+	}
+	if ar := aspectAmong(f.Size, grokVideoAspects); ar != "" {
+		req["ratio"] = ar
+	}
+	if res := pixelResolution(f.Size); res != "" {
+		req["resolution"] = res
+	}
+	b, _ := json.Marshal(req)
+	return b
+}
+
 // grokVideoBody is f as Grok's video API takes it: the duration in whole
 // seconds, an aspect ratio and a resolution rather than a size, the first
 // frame as image and the subjects to draw from as reference_images. What
@@ -343,7 +372,11 @@ type videoState struct {
 		URL      string  `json:"url"`
 		Duration float64 `json:"duration"`
 	} `json:"video"`
-	Error struct {
+	Content struct {
+		VideoURL string `json:"video_url"`
+	} `json:"content"`
+	Duration float64 `json:"duration"`
+	Error    struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	} `json:"error"`
@@ -353,9 +386,11 @@ type videoState struct {
 func videoObject(id, model string, started time.Time, st videoState, f filming) map[string]any {
 	status, progress := "queued", 0
 	switch st.Status {
-	case "done":
+	case "done", "succeeded":
 		status, progress = "completed", 100
-	case "failed", "expired":
+	case "running":
+		status, progress = "in_progress", st.Progress
+	case "failed", "expired", "cancelled":
 		status, progress = "failed", st.Progress
 	default:
 		if st.Progress > 0 {
@@ -372,13 +407,18 @@ func videoObject(id, model string, started time.Time, st videoState, f filming) 
 	switch {
 	case st.Video.Duration > 0:
 		obj["seconds"] = strconv.FormatFloat(st.Video.Duration, 'f', -1, 64)
+	case st.Duration > 0:
+		obj["seconds"] = strconv.FormatFloat(st.Duration, 'f', -1, 64)
 	case f.Seconds != "":
 		obj["seconds"] = f.Seconds
 	}
 	if status == "failed" {
 		code, msg := st.Error.Code, st.Error.Message
-		if st.Status == "expired" {
+		switch st.Status {
+		case "expired":
 			code, msg = "expired", "the vendor no longer keeps this video"
+		case "cancelled":
+			code, msg = "cancelled", "the video was cancelled"
 		}
 		if msg == "" {
 			msg = "the video failed"
@@ -395,7 +435,7 @@ func videoMaker(id string) (p provider.Provider, vendorID string, started time.T
 		return p, "", started, fmt.Errorf("%q isn't the id of a video magpie is making", id)
 	}
 	found, ferr := provider.Find(pid)
-	if ferr != nil || !drawsGrok(*found) && !found.IsRemoteMagpie() {
+	if ferr != nil || !drawsGrok(*found) && !found.IsRemoteMagpie() && len(found.PlanVideos()) == 0 {
 		return p, "", started, fmt.Errorf("no provider %q makes videos here", pid)
 	}
 	if signer(*found) != by {
@@ -463,7 +503,11 @@ func remoteVideoURL(p provider.Provider, vendorID, suffix string) string {
 // videoStatus asks the vendor how a video is going.
 func (s *Server) videoStatus(ctx context.Context, p provider.Provider, vendorID string) (videoState, int, error) {
 	var st videoState
-	b, code, err := s.sendAs(ctx, p, http.MethodGet, strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/"+url.PathEscape(vendorID), "", nil, true)
+	at := strings.TrimRight(p.Base(provider.Responses), "/") + "/videos/" + url.PathEscape(vendorID)
+	if p.Preset == "volcengine" {
+		at = strings.TrimRight(p.Base(provider.Responses), "/") + "/contents/generations/tasks/" + url.PathEscape(vendorID)
+	}
+	b, code, err := s.sendAs(ctx, p, http.MethodGet, at, "", nil, true)
 	if err != nil {
 		return st, code, err
 	}
@@ -536,9 +580,10 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	call.Provider, call.To = p.ID, provider.Chat
 	remote := p.IsRemoteMagpie()
+	volcengine := p.Preset == "volcengine" && slices.ContainsFunc(p.PlanVideos(), func(m catalog.Model) bool { return m.ID == model })
 	// any grok-imagine-video*, not only those listed: the vendor's newer ones work before magpie names them
-	if !remote && (len(Videomakers(p)) == 0 || !strings.HasPrefix(model, "grok-imagine-video")) {
-		fail(400, fmt.Sprintf("%s/%s can't make videos: magpie makes videos with a Grok subscription's grok-imagine-video", p.ID, model))
+	if !remote && !volcengine && (len(Videomakers(p)) == 0 || !strings.HasPrefix(model, "grok-imagine-video")) {
+		fail(400, fmt.Sprintf("%s/%s can't make videos: magpie makes videos with a Grok subscription's grok-imagine-video or Volcengine Agent Plan's Seedance models", p.ID, model))
 		return
 	}
 	var unmask func()
@@ -548,11 +593,17 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 	// it can't make
 	at, field := strings.TrimRight(p.Base(provider.Responses), "/")+"/videos/generations", "request_id"
 	var body []byte
-	if remote {
+	switch {
+	case remote:
 		at, field, body = strings.TrimRight(p.Base(provider.Chat), "/")+"/videos", "id", remoteVideoBody(model, f)
-	} else if body, err = grokVideoBody(model, f); err != nil {
-		fail(400, err.Error())
-		return
+	case volcengine:
+		at, field, body = strings.TrimRight(p.Base(provider.Responses), "/")+"/contents/generations/tasks", "id", volcengineVideoBody(model, f)
+	default:
+		body, err = grokVideoBody(model, f)
+		if err != nil {
+			fail(400, err.Error())
+			return
+		}
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), drawTimeout)
 	defer cancel()
@@ -643,7 +694,7 @@ func (s *Server) videosContent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, provider.Chat, code, err.Error())
 		return
 	}
-	if st.Status != "done" {
+	if st.Status != "done" && st.Status != "succeeded" {
 		obj := videoObject(id, "", time.Time{}, st, filming{})
 		msg := fmt.Sprintf("the video isn't ready: it is %v", obj["status"])
 		if e, ok := obj["error"].(map[string]string); ok {
@@ -651,6 +702,9 @@ func (s *Server) videosContent(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, provider.Chat, 409, msg)
 		return
+	}
+	if st.Video.URL == "" {
+		st.Video.URL = st.Content.VideoURL
 	}
 	if st.Video.URL == "" {
 		writeError(w, provider.Chat, 502, p.Name+" made the video but gave no URL for it")

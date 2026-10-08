@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -104,6 +105,59 @@ func TestEmbeddingsGoToTheModelsProvider(t *testing.T) {
 	}
 	if len(recs) < 1 || recs[0].Operation != "embeddings" || recs[0].Provider != "lib" || recs[0].Model != "embed-1" || recs[0].Requested != "lib/embed-1" || recs[0].Input != 5 || recs[0].Status != 200 {
 		t.Fatalf("usage %+v", recs)
+	}
+}
+
+func TestVolcengineEmbeddingResponses(t *testing.T) {
+	type response struct {
+		Object string `json:"object"`
+		Model  string `json:"model"`
+		Data   []struct {
+			Object    string    `json:"object"`
+			Index     int       `json:"index"`
+			Embedding []float64 `json:"embedding"`
+		} `json:"data"`
+		Usage struct {
+			Prompt int `json:"prompt_tokens"`
+			Total  int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	for name, fixture := range map[string]string{"Coding Plan": volcengineCodingEmbeddingResponse, "Agent Plan": volcengineAgentEmbeddingResponse} {
+		var out response
+		if err := json.Unmarshal([]byte(fixture), &out); err != nil {
+			t.Fatal(err)
+		}
+		if out.Object != "list" || !strings.HasPrefix(out.Model, "doubao-embedding-vision") || len(out.Data) != 1 || out.Data[0].Object != "embedding" || len(out.Data[0].Embedding) != 2048 || out.Usage.Prompt != 23 || out.Usage.Total != 23 {
+			t.Fatalf("%s embedding response: %+v", name, out)
+		}
+	}
+}
+
+func TestPresetPlanEmbeddingResolvesOutsideChatModels(t *testing.T) {
+	fresh(t)
+	p, err := provider.FromPreset("volcengine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr := provider.Preset("volcengine")
+	p.ID = "ark-agent"
+	p.Chat, p.Responses, p.Anthropic = pr.Regions[1].Chat, pr.Regions[1].Responses, pr.Regions[1].Anthropic
+	p.Key = "key"
+	if err := provider.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	embed := p.PlanEmbeddings()
+	if len(embed) == 0 {
+		t.Fatal("Agent Plan has no preset embedding model")
+	}
+	for _, m := range p.Exposed() {
+		if m.ID == embed[0].ID {
+			t.Fatalf("embedding model exposed for chat: %+v", m)
+		}
+	}
+	got, model, ok := resolveRetrievalModel(embed[0].ID)
+	if !ok || got.ID != p.ID || model != embed[0].ID {
+		t.Fatalf("bare embedding resolved to %q/%q, %v", got.ID, model, ok)
 	}
 }
 

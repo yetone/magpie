@@ -82,9 +82,14 @@ type Region struct {
 	// than the preset's (Tencent Cloud's pay as you go, beside its plan's
 	// none), is that entry's id.
 	Catalog string `json:"catalog,omitempty"`
-	// Models are a plan's, for a region that is one beside pay as you go
-	// (PresetDef.Models, for the region alone).
-	Models []string `json:"models,omitempty"`
+	// Models are a plan's text models, for a region that is one beside
+	// another plan or pay as you go (PresetDef.Models, for the region alone).
+	// Embeddings, Drawers and Videos are its non-chat models, kept apart from
+	// agents' model pickers.
+	Models     []string `json:"models,omitempty"`
+	Embeddings []string `json:"embeddings,omitempty"`
+	Drawers    []string `json:"drawers,omitempty"`
+	Videos     []string `json:"videos,omitempty"`
 	// Decide is the region's decision API, for a preset that routes groups
 	Decide string `json:"decide,omitempty"`
 }
@@ -266,16 +271,21 @@ var presets = []PresetDef{
 		Note:    "火山方舟 · Coding / Agent Plan",
 		Website: "https://www.volcengine.com/docs/82379/1925114", KeysURL: "https://ark.volcengine.com/region:cn-beijing/apikey",
 		RegionLabel: "Plan", Regions: []Region{
-			{ID: "coding", Name: "Coding Plan", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Responses: "https://ark.cn-beijing.volces.com/api/coding/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/coding"},
-			{ID: "agent", Name: "Agent Plan", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Responses: "https://ark.cn-beijing.volces.com/api/plan/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/plan"},
+			{ID: "coding", Name: "Coding Plan", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", Responses: "https://ark.cn-beijing.volces.com/api/coding/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/coding",
+				Models: []string{"ark-code-latest", "doubao-seed-evolving", "doubao-seed-2.1-pro", "doubao-seed-2.1-lite", "doubao-seed-2.1-turbo",
+					"doubao-seed-2.0-mini", "minimax-m3", "glm-5.3", "glm-5.3-flash", "deepseek-v4.1-flash", "deepseek-v4-flash", "deepseek-v4-pro",
+					"kimi-k2.7-code", "kimi-k2.8-preview", "kimi-k3"},
+				Embeddings: []string{"doubao-embedding-vision"}},
+			{ID: "agent", Name: "Agent Plan", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Responses: "https://ark.cn-beijing.volces.com/api/plan/v3", Anthropic: "https://ark.cn-beijing.volces.com/api/plan",
+				Models: []string{"ark-code-latest", "doubao-seed-evolving", "doubao-seed-2.1-pro", "doubao-seed-2.1-lite", "doubao-seed-2.1-turbo",
+					"doubao-seed-2.0-mini", "minimax-m3", "glm-5.3", "glm-5.3-flash", "deepseek-v4.1-flash", "deepseek-v4-flash", "deepseek-v4-pro",
+					"kimi-k2.7-code", "kimi-k2.8-preview", "kimi-k3"},
+				Embeddings: []string{"doubao-embedding-vision"},
+				Drawers:    []string{"doubao-seedream-5-0-pro"},
+				Videos:     []string{"doubao-seedance-2.0", "doubao-seedance-2.0-fast", "doubao-seedance-2.0-mini", "doubao-seedance-2.5"}},
 			{ID: "api", Name: "Pay as you go", Chat: "https://ark.cn-beijing.volces.com/api/v3", Responses: "https://ark.cn-beijing.volces.com/api/v3", Lists: true},
 		},
-		NoList: true,
-		// the plans' model names, lowercase as their quick-start pages list
-		// them; ark-code-latest is whichever the console has picked
-		Models: []string{"ark-code-latest", "doubao-seed-evolving", "doubao-seed-2.1-pro", "doubao-seed-2.1-lite", "doubao-seed-2.0-mini",
-			"minimax-m3", "glm-5.3", "glm-5.3-flash", "deepseek-v4.1-flash", "deepseek-v4-flash", "deepseek-v4-pro",
-			"kimi-k2.7-code", "kimi-k2.8-preview", "kimi-k3"}},
+		NoList: true},
 	{ID: "qwen", Name: "Qwen", Icon: "qwen-color", Kind: KindVendor, Catalog: "alibaba",
 		Chat: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", Anthropic: "https://dashscope-intl.aliyuncs.com/apps/anthropic",
 		Note:    "DashScope · intl",

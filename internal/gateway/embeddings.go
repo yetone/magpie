@@ -46,7 +46,7 @@ func (s *Server) retrieve(path, operation string) http.HandlerFunc {
 		who := callerOf(r)
 		call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: asked}
 		usage.Saw(agentOf(r))
-		p, model, ok := provider.Resolve(asked)
+		p, model, ok := resolveRetrievalModel(asked)
 		if !ok {
 			msg := fmt.Sprintf("magpie knows no model %q", asked)
 			if off, isOff := provider.SwitchedOff(asked); isOff {
@@ -153,6 +153,29 @@ func (s *Server) retrieve(path, operation string) http.HandlerFunc {
 			return
 		}
 	}
+}
+
+// resolveRetrievalModel also finds a preset plan's embedding model by its
+// bare id. Such models stay out of agents' chat-model lists, so the general
+// resolver does not otherwise see them there.
+func resolveRetrievalModel(id string) (provider.Provider, string, bool) {
+	if p, model, ok := provider.Resolve(id); ok {
+		return p, model, true
+	}
+	if strings.Contains(id, "/") {
+		return provider.Provider{}, "", false
+	}
+	for _, p := range provider.All() {
+		if !p.On() || p.DecideOnly() {
+			continue
+		}
+		for _, m := range p.PlanEmbeddings() {
+			if m.ID == id {
+				return p, id, true
+			}
+		}
+	}
+	return provider.Provider{}, "", false
 }
 
 // retrieveFrom posts body to url as the provider signs its requests, and
