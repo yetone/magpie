@@ -2962,7 +2962,13 @@ async function load() {
     // an open provider editor is someone typing: coming back to the window
     // must not rebuild it under them
     if ((view === "providers" || view === "gateway") && !(editing || adding)) await loadProviders();
-    if (view === "usage") await loadUsage();
+    // Usage reads its rows on its own, but its Requests tab draws the
+    // request archive's switch from the providers' state (renderArchive:
+    // box.hidden = !providers?.gateway), so that state is loaded here too.
+    // Opened straight onto Usage, providers was never read and the switch
+    // stayed hidden on every tab; a failure is said, as the views above say
+    // theirs, and the page is drawn without the switch either way
+    if (view === "usage") await Promise.all([loadUsage(), (editing || adding) ? null : loadProviders()]);
     // so is an open sync form (WebDAV, export, import): its passwords are
     // never sent back, so a rebuild would empty it
     if (view === "settings" && !syncOpen) await loadSettings();
@@ -19885,7 +19891,10 @@ async function show(v) {
   if (v !== "providers" && editing !== null) cancelEdit(true);
   if (v === "gateway") loadGatewayKeys();
   if (v === "providers" || v === "gateway" || v === "routing") loadProviders().then(back, (e) => status(e.message, "err"));
-  if (v === "usage") loadUsage(true).then(back, (e) => status(e.message, "err"));
+  // the Usage tab draws the request archive's switch from the providers'
+  // state, which no other tab's load brings in: without it the switch is
+  // drawn from nothing and stays hidden
+  if (v === "usage") { loadUsage(true).then(back, (e) => status(e.message, "err")); loadProviders().then(back, (e) => status(e.message, "err")); }
   if (v === "settings") loadSettings().then(back, (e) => status(e.message, "err"));
   if (v === "library") window.loadLibrary?.()?.then(back);
   if (v === "plugins") window.loadPlugins?.()?.then(back);

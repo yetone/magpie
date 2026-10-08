@@ -190,5 +190,33 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(missing, [], "every string has its Chinese");
       assert.deepEqual(errors, []);
     });
+
+    // Opened straight onto Usage — the address the page keeps, a reload, a
+    // link from another machine — the requests' tab draws the switch from the
+    // providers' state, and show()/load() read it for no other tab's view.
+    // Before, providers was never read on this path and the switch stayed
+    // hidden on every tab of the page.
+    test(`${engine} ${lang}: the archive's switch is drawn when the page opens on Usage`, async (t) => {
+      const w = words[lang];
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      const page = await (await browser.newContext({ viewport: { width: 1000, height: 760 }, reducedMotion: "reduce" })).newPage();
+      t.after(() => browser.close());
+      page.setDefaultTimeout(5000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", serve(lang, []));
+      await page.goto("http://magpie.test/?view=usage");
+      await page.locator("#usageTab .opt").nth(1).click();
+      const sw = page.locator("#ledArchive .led-arch-sw");
+      await sw.waitFor();
+      assert.equal(await sw.getAttribute("role"), "switch");
+      assert.equal(await sw.innerText(), w.name);
+      assert.equal(await sw.getAttribute("aria-checked"), "false", "off unless turned on");
+      assert((await sw.getAttribute("title")).includes(w.setup));
+      // and it is the one the requests' list is under, not a stray box
+      const [swBox, sumBox] = await Promise.all([sw.boundingBox(), page.locator("#ledSum").boundingBox()]);
+      assert(Math.abs(swBox.y + swBox.height / 2 - (sumBox.y + sumBox.height / 2)) <= 3, "on the line of the requests' sum");
+      assert.deepEqual(errors, []);
+    });
   }
 }

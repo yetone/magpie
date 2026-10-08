@@ -42,6 +42,12 @@ async function serve(route) {
   if (url.pathname === "/api/usage/quotas" || url.pathname === "/api/usage/quotas/history" || url.pathname === "/api/agents/install") return json([]);
   if (url.pathname === "/api/whatsnew") return json({});
   if (url.pathname === "/api/upstream") return json({ vendors: [], providers: {} });
+  // the Usage page reads the providers' state for the request archive's
+  // switch, as it draws it on the requests' tab (request-archive.test.cjs)
+  if (url.pathname === "/api/providers") return json({
+    providers: [], presets: [], excluded: [], models: [],
+    gateway: { running: false, window: false, mine: true, groups: [], archive: { on: false } },
+  });
   assert(!url.pathname.startsWith("/api/"), "Unexpected API: " + url.pathname);
   const file = path.join(assets, url.pathname === "/" ? "index.html" : url.pathname);
   const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];
