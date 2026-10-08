@@ -63,7 +63,7 @@ func (s *Server) serveKiro(w http.ResponseWriter, r *http.Request, from provider
 	if events == nil {
 		return writeError(w, from, status, msg), msg
 	}
-	return relay(w, r, from, "Kiro", req, events, usage, cancel, func(string, string, bool) {})
+	return relay(w, r, from, "Kiro", req, events, usage, cancel, nil, func(string, string, bool) {})
 }
 
 // askKiro is a round for Kiro's API.

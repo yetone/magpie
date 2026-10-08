@@ -574,7 +574,7 @@ func (s *Server) searchReply(w http.ResponseWriter, r *http.Request, from provid
 		defer close(events)
 		s.searchRounds(ctx, &q, tool.Name, first, ask, events)
 	}()
-	return relay(w, r, from, name, req, events, usage, cancel, func(string, string, bool) {})
+	return relay(w, r, from, name, req, events, usage, cancel, nil, func(string, string, bool) {})
 }
 
 func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <-chan Event, ask round, out chan<- Event) {

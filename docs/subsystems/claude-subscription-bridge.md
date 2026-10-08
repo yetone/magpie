@@ -94,10 +94,31 @@ A run started anew still sends every image in the conversation. Replacing
 earlier images with a placeholder would change what the model sees, and
 magpie doesn't do it.
 
+## The account's allowance on the reply (#1257)
+
+Claude Code tells a run's account allowance in its stream-json
+`rate_limit_event`, not as HTTP headers. The bridge keeps it
+(`provider.NoteClaudeLimits`) and says it again on the reply as the
+`anthropic-ratelimit-unified-{5h,7d,7d_oi}-{utilization,reset}` headers
+Anthropic sends (`limitHeaders`, from `provider.KeptClaudeLimits`): a share
+from 0 to 1 and a Unix-seconds reset, for each kept window that says when
+it renews. They are set when the request comes in, from what is kept, and
+again as the reply begins (`relay`'s `begin`), once the turn's own
+`rate_limit_event` is in. A run on Claude Code's own home that has moved to
+another account says nothing (`ClaudeCodeMovedOff`), as its event isn't
+kept either.
+
+A Claude Code signed in to claude.ai (its sign-in field set to
+`claudeai`, `claudeSignIns` in `internal/agent/claude.go`) reads these into its status line's `rate_limits`, which
+claude-hud shows. One that signs in to magpie with magpie's key
+(`ANTHROPIC_AUTH_TOKEN`) ignores them: Claude Code 2.1.293 reads the
+headers only for a claude.ai subscriber. A reply another provider answered
+carries none.
+
 ## Verification
 
 ```sh
-go test -tags nogui ./internal/gateway/ -run 'ClaudeRewritten|ClaudeSessionTempFiles|ClaudeLetGo|ClaudeSessionFiles|ClaudeOldSessions' -count=1
+go test -tags nogui ./internal/gateway/ -run 'ClaudeRewritten|ClaudeSessionTempFiles|ClaudeLetGo|ClaudeSessionFiles|ClaudeOldSessions|ClaudeSubscriptionReplySaysTheAllowance|ClaudeAllowanceHeaders' -count=1
 ```
 
 `claude_rewritten_test.go` has a case for each relaxation and one for each

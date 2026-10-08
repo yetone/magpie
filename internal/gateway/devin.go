@@ -65,7 +65,7 @@ func (s *Server) serveDevin(w http.ResponseWriter, r *http.Request, from provide
 	if events == nil {
 		return writeError(w, from, status, msg), msg
 	}
-	return relay(w, r, from, "Devin", req, events, usage, cancel, func(string, string, bool) {})
+	return relay(w, r, from, "Devin", req, events, usage, cancel, nil, func(string, string, bool) {})
 }
 
 // askDevin is a round for Devin's API.

@@ -52,6 +52,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -3064,6 +3065,41 @@ func (s *Server) serveClaudeSubscription(w http.ResponseWriter, r *http.Request,
 	return s.serveSubscription(w, r, from, "Claude Code", model, owner, body, usage, start)
 }
 
+// limitHeaders says on a reply what is kept of the allowance of the account
+// a run's owner names, as Anthropic says it to Claude Code: its
+// anthropic-ratelimit-unified-* headers, which a Claude Code signed in to
+// claude.ai reads into its status line's rate_limits (claude-hud's 5-hour
+// and weekly figures, #1257). Its run tells them in its rate_limit_event,
+// not as headers, so they are said again from what magpie keeps.
+func limitHeaders(w http.ResponseWriter, owner string) {
+	user, own := ownerAccount(owner)
+	if user == "" || own && provider.ClaudeCodeMovedOff(user) {
+		return
+	}
+	set := func(k, v string) {
+		if hw, ok := w.(*holdWriter); ok {
+			hw.note(k, v) // keepAlive may send the headers before the reply has them
+		} else {
+			w.Header().Set(k, v)
+		}
+	}
+	for _, l := range provider.KeptClaudeLimits(user) {
+		if win, ok := ratelimitWindows[l.Kind]; ok {
+			set("anthropic-ratelimit-unified-"+win+"-utilization", strconv.FormatFloat(l.Used, 'f', -1, 64))
+			set("anthropic-ratelimit-unified-"+win+"-reset", strconv.FormatInt(l.ResetsAt, 10))
+		}
+	}
+}
+
+// ratelimitWindows are the windows Claude Code reads from
+// anthropic-ratelimit-unified-<window>-*, by the kind it names them in its
+// rate_limit_event.
+var ratelimitWindows = map[string]string{
+	"five_hour":                  "5h",
+	"seven_day":                  "7d",
+	"seven_day_overage_included": "7d_oi",
+}
+
 // serveSubscription answers a request through an agent's own binary: a new
 // turn starts it, a request carrying tool results resumes the turn waiting
 // on them.
@@ -3199,7 +3235,14 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 			run.abort()
 		}
 	}
-	return relay(w, r, from, name, req, events, usage, abort, func(said, stop string, ok bool) {
+	// the allowance as kept now, and again as the reply begins, its turn
+	// having told it by then
+	var begin func()
+	if name == "Claude Code" {
+		limitHeaders(w, owner)
+		begin = func() { limitHeaders(w, owner) }
+	}
+	return relay(w, r, from, name, req, events, usage, abort, begin, func(said, stop string, ok bool) {
 		if !gone() {
 			return // the client went first: letGo has the run
 		}
@@ -3211,7 +3254,7 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 // there is no answer to give, ended when one was given, before its last
 // event goes out.
 func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, events <-chan Event, usage *Usage,
-	abort func(), ended func(said, stop string, ok bool)) (int, string) {
+	abort, begin func(), ended func(said, stop string, ok bool)) (int, string) {
 	stream := req.Stream
 	if stream {
 		// an error before any of the answer — out of quota, rate limited —
@@ -3240,6 +3283,9 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 				}
 			}
 			return writeError(w, from, code, name+": "+msg), msg
+		}
+		if begin != nil {
+			begin()
 		}
 		sw := newSSEWriter(w)
 		enc := encoder(from, sw, req, usage)
@@ -3299,6 +3345,9 @@ func relay(w http.ResponseWriter, r *http.Request, from provider.Protocol, name 
 		return writeError(w, from, code, name+": "+col.err), col.err
 	}
 	ended(said, stop, col.err == "" && r.Context().Err() == nil)
+	if begin != nil {
+		begin()
+	}
 	res := col.finish()
 	usage.add(res.Usage)
 	usage.add(Usage{Served: res.Model})

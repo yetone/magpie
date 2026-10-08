@@ -225,7 +225,7 @@ func TestRelayKeepsClientAlive(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := &Request{Model: "m1", Stream: true}
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
-	code, failed := relay(rec, r, provider.Anthropic, "Bridge", req, events, &Usage{}, func() {}, func(string, string, bool) {})
+	code, failed := relay(rec, r, provider.Anthropic, "Bridge", req, events, &Usage{}, func() {}, nil, func(string, string, bool) {})
 	if code != 200 || failed != "" {
 		t.Fatalf("relay: %d %q", code, failed)
 	}
