@@ -336,7 +336,8 @@ func (d *dav) put(ctx context.Context, data []byte, etag string) (version, error
 // file is the whole failure — so no download rides on a write. It gives
 // back the ETag it saw, for a retry to match the file as the short write
 // left it. A HEAD that can't be done — an error, or not a 200 — leaves the
-// write unchecked: it landed either way.
+// write unchecked: it landed either way. A HEAD that says short is asked
+// again of PROPFIND, which costs a request only then.
 func (d *dav) check(ctx context.Context, u, name string, want int) (etag string, err error) {
 	res, err := d.send(ctx, http.MethodHead, u, nil, nil)
 	if err != nil {
@@ -349,10 +350,49 @@ func (d *dav) check(ctx context.Context, u, name string, want int) (etag string,
 		return "", nil
 	}
 	etag = res.Header.Get("ETag")
-	if n := res.ContentLength; n >= 0 && int(n) < want {
-		return etag, fmt.Errorf("the WebDAV server kept %d of %d bytes of %s: the write was cut short — sync again, and if it keeps happening the network to the server is dropping long uploads", n, want, name)
+	n := res.ContentLength
+	if n < 0 || int(n) >= want {
+		return etag, nil
 	}
-	return etag, nil
+	// a HEAD's Content-Length isn't always the file's: 坚果云 (Nutstore)
+	// answered a 6869-byte usage file's with 0 on every try (#1259). The
+	// length WebDAV keeps for a file is PROPFIND's getcontentlength, which
+	// every client of it reads, so a short HEAD is asked of that before it
+	// is believed; with no length there, the HEAD's stands
+	if m, ok := d.length(ctx, u); ok {
+		if m >= int64(want) {
+			return etag, nil
+		}
+		n = m
+	}
+	return etag, fmt.Errorf("the WebDAV server kept %d of %d bytes of %s: the write was cut short — sync again, and if it keeps happening the network to the server is dropping long uploads", n, want, name)
+}
+
+// length is the file at u's size as PROPFIND (Depth 0) says it; false when
+// it says none.
+func (d *dav) length(ctx context.Context, u string) (int64, bool) {
+	res, err := d.send(ctx, "PROPFIND", u, nil, map[string]string{"Depth": "0"})
+	if err != nil {
+		return 0, false
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusMultiStatus {
+		return 0, false
+	}
+	var ms struct {
+		Responses []struct {
+			Length string `xml:"propstat>prop>getcontentlength"`
+		} `xml:"response"`
+	}
+	if xml.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&ms) != nil {
+		return 0, false
+	}
+	for _, r := range ms.Responses {
+		if n, err := strconv.ParseInt(strings.TrimSpace(r.Length), 10, 64); err == nil && n >= 0 {
+			return n, true
+		}
+	}
+	return 0, false
 }
 
 func (d *dav) mkcol(ctx context.Context) error {

@@ -18013,7 +18013,6 @@ async function renderSync(v) {
       : v.last ? t("Synced {when} · {host}", { when: syncWhen(v.last), host }) : t("Not synced yet · {host}", { host });
     // the other kind's server, kept from before sync moved here
     if (v.other) status += " · " + t("{kind} settings kept", { kind: v.other.kind === "s3" ? "S3" : "WebDAV" });
-    if (!v.error && v.usageError) status += " · " + t("Couldn't share usage: {error}", { error: v.usageError });
     if (v.auto === 0) status += " · " + t("only when asked");
   }
   const sub = row(t(s3 ? "S3 sync" : v.on ? "WebDAV sync" : "WebDAV or S3 sync"), status, ...(v.on
@@ -18021,6 +18020,10 @@ async function renderSync(v) {
        btn(t(syncOpen === "dav" ? "Close" : "Edit"), toggle("dav"))]
     : [btn(t(syncOpen === "dav" ? "Close" : "Set up"), toggle("dav"))]));
   if (v.error) sub.classList.add("bad");
+  // usage that couldn't be shared is a line of its own, in red: beside
+  // "Synced" in the same grey it read as part of a sync that went fine
+  // (#1259)
+  if (v.on && !v.error && v.usageError) sub.after(el("div", "sub bad wraps sync-usage-err", t("Couldn't share usage: {error}", { error: v.usageError })));
   if (v.notice) {
     const n = v.notice, r = el("div", "row pref sync-note");
     const lines = [];

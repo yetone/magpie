@@ -867,6 +867,13 @@ func wbKeepSignIn(w *wbSite, c wbCreds, name string) (who string, again, using b
 		return "", false, false, err
 	}
 	using = hasOwn && own.UID == c.UID
+	// its kept usage reading was read under the old sign-in (as
+	// addSideLogin drops it), once loginsMu is let go
+	defer func() {
+		if err == nil {
+			StaleAllowance(w.id, who)
+		}
+	}()
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
 	ls := readLogins()

@@ -36,6 +36,7 @@ agents RTK, a CLI that cuts shell output down before the model reads it.
 - An edit never silently loses. When an agent's copy of a skill and the library both changed, the newest edit wins, and the losing one is kept with the backups.
 - A failure for one agent is a `Problem` in the result. It doesn't stop the others.
 - A server an agent can't reach is not written there, and `mcpFile.supports` says why. For example, Claude Desktop takes no remote server, and Codex, Goose, dsh, Grok and Command Code take no SSE.
+- A server's headers (remote) or environment (command) can name a variable as `${NAME}` (#1250). `library.json` keeps the placeholder, and `refsOf` gives each MCP format the agent's own syntax, with the agent's source cited beside it: `${NAME}` for most, `{env:NAME}` for OpenCode and MiMo, `${env:NAME}` for Cursor, and Codex's own keys (`bearer_token_env_var`, `env_http_headers`, `env_vars`). Goose gets `${NAME}` plus `env_keys`. An agent with no syntax (Claude Desktop, Antigravity, Kimi, Cline, ZCode, dsh, Devin, Pi with pi-mcp-extension) is never written the value: `refsProblem` makes `supports` refuse the server, a magpie entry already there is taken out, and `AgentView.NoEnvRefs` greys its chip with the reason. Codex and Goose's extra keys are magpie's only while the server names a variable there (`refKeys`), so the user's own `env_vars` or `env_keys` are kept. `CheckServers` expands the variable from magpie's own environment, and one that isn't set is `novar`, naming it.
 - Removing RTK never uses `rtk init --uninstall`. That command deletes Gemini's `GEMINI.md` whole and removes Claude Code, OpenCode and Cursor together.
 - CC Switch's own skills folder is only ever read.
 - Skills installed together (`InstallSkills`, `InstallMarketSkill`, `AddNewSkills`, through `installFrom` and `installChange`) install each on its own. One the library lists from the same source, or a folder in the library's own skills folder holding exactly that skill's files (left by an install that stopped before the library was saved), is had already and goes in `Result.Had`. Its files are never written, so the user's edits stay. Another skill by that name, listed or only in the folder, or a folder that can't be read, is left as it is and goes in `Result.Skipped` with why. The rest are installed and named in `Result.Installed`. Only when nothing was installed or had does the change fail, with the first reason.
@@ -43,9 +44,9 @@ agents RTK, a CLI that cuts shell output down before the model reads it.
 ## Verification
 
 ```sh
-go test -tags nogui ./internal/library -run 'TestCheckSkillsFindsNewOnes|TestNewBase|TestTargets|TestServer|TestImportServer|TestCheck|TestInstructions|TestInstructionSets|TestSkill|TestInstallSet|TestInstallLists|TestEverySkillAgents|TestEveryServerAgents|TestSomeServersAgents|TestRemoveServers|TestRTK'
+go test -tags nogui ./internal/library -run 'TestCheckSkillsFindsNewOnes|TestNewBase|TestTargets|TestServer|TestImportServer|TestCheck|TestInstructions|TestInstructionSets|TestSkill|TestInstallSet|TestInstallLists|TestEverySkillAgents|TestEveryServerAgents|TestSomeServersAgents|TestRemoveServers|TestRTK|TestEnvRefs'
 go test -tags nogui ./internal/library
-node --test internal/gui/tests/library-items.test.cjs internal/gui/tests/library-rtk-gain.test.cjs internal/gui/tests/library-rtk-nohook.test.cjs internal/gui/tests/library-servers-bulk.test.cjs internal/gui/tests/skill-new-in-repo.test.cjs
+node --test internal/gui/tests/library-items.test.cjs internal/gui/tests/library-rtk-gain.test.cjs internal/gui/tests/library-rtk-nohook.test.cjs internal/gui/tests/library-servers-bulk.test.cjs internal/gui/tests/library-env-refs.test.cjs internal/gui/tests/skill-new-in-repo.test.cjs
 ```
 
 The package's `TestMain` runs in a home of its own (`testenv`), never the

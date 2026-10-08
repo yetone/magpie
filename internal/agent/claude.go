@@ -278,13 +278,39 @@ func claudeCapabilities(first []string, desktop bool) string {
 // title, Explore subagents, WebFetch's reading — on Haiku, which on a Claude
 // subscription costs a fraction of Opus's limits (X, AncientTwo: the limits
 // went much faster through magpie than in Claude Code itself).
+//
+// For fable, on a Claude model that is no Fable, it is none: the fable tier
+// is left unset. Claude Code takes the model ANTHROPIC_DEFAULT_FABLE_MODEL
+// names for a Fable model (2.1.293: a model id equal to it is Fable), so the
+// main model written there made Claude Opus a Fable model to it, and on a
+// Claude Pro sign-in without Fable it asked for usage credits and fell back
+// to Haiku (Zhenzhen on Discord). Claude Code's own /model fable, asked of
+// the gateway, still runs on the main model (claudeStandInAt). Another
+// vendor's model, which Claude Code knows nothing of, the fable tier still
+// follows, as it does the others.
 func follow(tier, main string) string {
-	if tier == "haiku" {
+	switch tier {
+	case "haiku":
 		if l := claudeLight(main); l != "" {
 			return l
 		}
+	case "fable":
+		if n := claudeName(main); n != "" && !strings.HasPrefix(n, "claude-fable-") {
+			return ""
+		}
 	}
 	return main
+}
+
+// followAt is the model tier takes, fixed at effort, while it follows the
+// main model main: follow's, but at an effort of its own on the main model
+// where follow has none, the effort being the user's pick for the tier.
+func followAt(tier, main, effort string) string {
+	m := follow(tier, main)
+	if m == "" && effort != "" {
+		m = main
+	}
+	return tierWith(m, effort)
 }
 
 // claudeLight is the newest Haiku served where the Claude model main is —
@@ -672,7 +698,7 @@ func claudeIn(at place) *Agent {
 		for _, t := range claudeTiers {
 			tiers[t] = env(tierEnv(t))
 			if m, e := tierAt(tiers[t]); follows(t, m) {
-				tiers[t] = tierWith(follow(t, main), e)
+				tiers[t] = followAt(t, main, e)
 			}
 		}
 		return main, tiers
@@ -794,13 +820,15 @@ func claudeIn(at place) *Agent {
 				}
 				if w := env(tierEnv(t)); routed() && w != "" {
 					// at an effort of its own, it keeps that on the new model
-					if m, e := tierAt(w); !follows(t, m) && isMagpie(m) {
+					// one not magpie's on a tier that follows none (fable on a
+					// Claude model) is the user's own, left as written
+					if m, e := tierAt(w); !follows(t, m) && (isMagpie(m) || follow(t, v) == "") {
 						tiers[t] = w
 						if same(t, m) {
 							stash(map[string]string{ownKey(t): "1"})
 						}
 					} else if e != "" {
-						tiers[t] = tierWith(follow(t, v), e)
+						tiers[t] = followAt(t, v, e)
 					}
 				}
 			}
@@ -857,8 +885,20 @@ func claudeIn(at place) *Agent {
 			{Path: "env.ANTHROPIC_SMALL_FAST_MODEL", Value: tiers["haiku"]},
 			{Path: "model", Value: main},
 		}
+		// a tier on no model is left out, for Claude Code's own (fable on
+		// a Claude model, follow)
+		var none []string
 		for _, t := range claudeTiers {
+			if tiers[t] == "" {
+				none = append(none, "env."+tierEnv(t))
+				continue
+			}
 			kvs = append(kvs, edit.KV{Path: "env." + tierEnv(t), Value: tiers[t]})
+		}
+		if len(none) > 0 {
+			if err := edit.DelJSON(path, none...); err != nil {
+				return err
+			}
 		}
 		if sub != "" {
 			kvs = append(kvs, edit.KV{Path: "env.CLAUDE_CODE_SUBAGENT_MODEL", Value: mark(sub)})
@@ -1077,7 +1117,11 @@ func claudeIn(at place) *Agent {
 				} else {
 					forget(ownKey(tier))
 				}
-				tiers[tier] = tierWith(cmp.Or(v, follow(tier, main)), e)
+				if v != "" {
+					tiers[tier] = tierWith(v, e)
+				} else {
+					tiers[tier] = followAt(tier, main, e)
+				}
 				return writeTiers(main, tiers)
 			},
 			Options: func(map[string]string) []Option {
@@ -1174,7 +1218,11 @@ func claudeIn(at place) *Agent {
 		}
 		put := func(model, effort string) error {
 			main, tiers := curTiers()
-			tiers[tier] = tierWith(cmp.Or(model, follow(tier, main)), effort)
+			if model != "" {
+				tiers[tier] = tierWith(model, effort)
+			} else {
+				tiers[tier] = followAt(tier, main, effort)
+			}
 			return writeTiers(main, tiers)
 		}
 		fields = append(fields, effortField(tier+"_effort", tier+" effort", tier, at, put))
@@ -1290,6 +1338,10 @@ func claudeIn(at place) *Agent {
 			m, _ := tierAt(env(tierEnv("haiku")))
 			light := follow("haiku", bare)
 			stays := light == bare || strings.TrimSuffix(m, "[1m]") == light || !follows("haiku", m)
+			// so does a fable tier it left on a Claude model, where it now
+			// follows on none (follow), unless at an effort of its own
+			fm, fe := tierAt(env(tierEnv("fable")))
+			stays = stays && (follow("fable", bare) != "" || fm == "" || fe != "" || !follows("fable", fm))
 			if _, has := edit.GetJSON(path, "env.ANTHROPIC_MODEL"); !has && main == stashLoad()[mainKey] && stays {
 				return nil
 			}

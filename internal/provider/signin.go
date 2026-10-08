@@ -794,8 +794,15 @@ func codexLogin(idToken, accessToken, refreshToken, accountID string) (savedLogi
 
 // addLogin keeps a freshly signed-in account. The agent is signed in to it
 // too when it has no account yet, or had this one: the new tokens replace
-// the old, so one refresh token stays in one place.
+// the old, so one refresh token stays in one place. Its kept usage
+// reading goes (StaleAllowance): it was read under the old sign-in, and
+// for a minute it would answer for the new one, a refusal and all.
 func addLogin(l savedLogin) (using bool, err error) {
+	defer func() { // under the name it is kept by (codexName), once loginsMu is let go
+		if err == nil {
+			StaleAllowance(l.Agent, l.User)
+		}
+	}()
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
 	l.Seen = time.Now().UTC().Truncate(time.Second)

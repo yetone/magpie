@@ -23,6 +23,7 @@ import (
 // Command is exec.Command, with no window of its own on Windows.
 func Command(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
+	batch(cmd)
 	hide(cmd)
 	return cmd
 }
@@ -36,6 +37,7 @@ func CommandContext(ctx context.Context, name string, args ...string) *exec.Cmd 
 	// Output waited for it however long it took (#123) — its pipes are
 	// closed a moment after instead
 	cmd.WaitDelay = waitDelay
+	batch(cmd)
 	hide(cmd)
 	return cmd
 }
