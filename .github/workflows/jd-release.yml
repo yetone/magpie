@@ -3,16 +3,26 @@ name: JD Release
 # Builds unsigned (ad-hoc on macOS) packages and publishes them to this
 # repo's GitHub Releases. No Developer ID, notarisation, Discord or
 # Homebrew — those stay with yetone/magpie-releases.
+#
+# Version scheme: v{upstream}-jd.{n}
+#   upstream = yetone/magpie's latest v* tag (e.g. 0.1.1112)
+#   n        = this fork's Nth release based on that upstream
+#   example  : v0.1.1112-jd.1, v0.1.1112-jd.2, then v0.1.1113-jd.1 after upstream moves on
+# Only tags matching v*-jd.* trigger this workflow (plain upstream tags do not).
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*-jd.*'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g. 0.1.0 — no v prefix)'
-        required: true
+        description: 'Override version (e.g. 0.1.1112-jd.1). Leave empty to auto-bump from yetone/magpie latest + next -jd.N'
+        required: false
+        type: string
+      upstream_base:
+        description: 'Pin upstream base without v (e.g. 0.1.1110). Empty = yetone/magpie latest tag. Ignored when version is set.'
+        required: false
         type: string
       ref:
         description: 'Git ref to build (branch, tag or SHA)'
@@ -31,26 +41,74 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       ref: ${{ steps.v.outputs.ref }}
       tag: ${{ steps.v.outputs.tag }}
+      upstream: ${{ steps.v.outputs.upstream }}
     steps:
       - id: v
         env:
           INPUT_REF: ${{ inputs.ref }}
           INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BASE: ${{ inputs.upstream_base }}
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_REPO: yetone/magpie
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          set -euo pipefail
+          # v{semver}-jd.{n} — semver is upstream's tag without the leading v
+          ok_ver() { [[ "$1" =~ ^[0-9]+(\.[0-9A-Za-z]+)*-jd\.[0-9]+$ ]]; }
+
+          latest_upstream() {
+            # highest plain v* tag on yetone/magpie (no -jd suffix)
+            git ls-remote --tags --refs "https://github.com/${UPSTREAM_REPO}.git" 'v*' \
+              | awk '{print $2}' | sed 's|refs/tags/||' \
+              | grep -E '^v[0-9]' | grep -v -- '-jd' \
+              | sort -V | tail -1
+          }
+
+          next_jd_n() {
+            local base="$1" # without v, e.g. 0.1.1112
+            local max=0 n
+            while read -r t; do
+              n="${t##*-jd.}"
+              [[ "$n" =~ ^[0-9]+$ ]] || continue
+              if (( n > max )); then max=$n; fi
+            done < <(
+              git ls-remote --tags --refs "https://github.com/${GITHUB_REPOSITORY}.git" "v${base}-jd.*" \
+                | awk '{print $2}' | sed 's|refs/tags/||' || true
+            )
+            echo $((max + 1))
+          }
+
+          if [[ "$GITHUB_REF" == refs/tags/v*-jd.* ]]; then
             TAG="$GITHUB_REF_NAME"
             VERSION="${TAG#v}"
             REF="$TAG"
-          else
+            ok_ver "$VERSION" || { echo "tag must look like v0.1.1112-jd.1, got $TAG" >&2; exit 1; }
+            UPSTREAM="${VERSION%-jd.*}"
+          elif [ -n "${INPUT_VERSION:-}" ]; then
             VERSION="${INPUT_VERSION#v}"
             TAG="v$VERSION"
             REF="${INPUT_REF:-jd}"
+            ok_ver "$VERSION" || { echo "version must look like 0.1.1112-jd.1, got $VERSION" >&2; exit 1; }
+            UPSTREAM="${VERSION%-jd.*}"
+          else
+            if [ -n "${INPUT_BASE:-}" ]; then
+              UPSTREAM="${INPUT_BASE#v}"
+            else
+              UTAG=$(latest_upstream)
+              [ -n "$UTAG" ] || { echo "could not read latest tag from $UPSTREAM_REPO" >&2; exit 1; }
+              UPSTREAM="${UTAG#v}"
+            fi
+            [[ "$UPSTREAM" =~ ^[0-9]+(\.[0-9A-Za-z]+)*$ ]] || { echo "bad upstream base: $UPSTREAM" >&2; exit 1; }
+            N=$(next_jd_n "$UPSTREAM")
+            VERSION="${UPSTREAM}-jd.${N}"
+            TAG="v$VERSION"
+            REF="${INPUT_REF:-jd}"
           fi
-          [[ "$VERSION" =~ ^[0-9][0-9A-Za-z.+-]*$ ]] || { echo "bad version: $VERSION" >&2; exit 1; }
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "ref=$REF" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "Building $TAG from $REF (unsigned)"
+          echo "upstream=$UPSTREAM" >> "$GITHUB_OUTPUT"
+          echo "Building $TAG from $REF (unsigned; based on upstream v$UPSTREAM)"
 
   mac:
     needs: version
@@ -243,13 +301,17 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
           TAG: ${{ needs.version.outputs.tag }}
+          UPSTREAM: ${{ needs.version.outputs.upstream }}
         run: |
-          PREV=$(git tag --sort=-v:refname | grep -A1 "^${TAG}$" | tail -1 || true)
-          if [ -z "$PREV" ] || [ "$PREV" = "$TAG" ]; then
+          # previous JD tag by version sort, else repo root
+          PREV=$(git tag --list 'v*-jd.*' --sort=-v:refname | awk -v cur="$TAG" '$0 != cur { print; exit }')
+          if [ -z "$PREV" ]; then
             PREV=$(git rev-list --max-parents=0 HEAD)
           fi
           COMMITS=$(git log "$PREV..HEAD" --pretty=format:"%s" --no-merges || true)
           {
+            echo "JD build \`$TAG\` based on upstream [\`v$UPSTREAM\`](https://github.com/yetone/magpie/releases/tag/v$UPSTREAM)."
+            echo
             echo "### Changes"
             echo
             if [ -n "$COMMITS" ]; then
@@ -274,7 +336,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
-          name: magpie ${{ needs.version.outputs.tag }} (JD unsigned)
+          name: magpie ${{ needs.version.outputs.tag }} (based on v${{ needs.version.outputs.upstream }})
           target_commitish: ${{ needs.version.outputs.ref }}
           draft: false
           body_path: ${{ runner.temp }}/changelog.md
