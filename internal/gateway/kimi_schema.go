@@ -139,44 +139,47 @@ func valuesType(vals []gjson.Result) string {
 	return t
 }
 
-// kimiSamplingParams is body with the sampling parameters Kimi Code's
-// servers validate against a per-model whitelist brought in line: a client
-// that sends its own defaults (VS Code Copilot's chat, temperature 0.1 and
-// top_p 1) is refused 400 "invalid temperature: only 1 is allowed for this
-// model" before any token is read, and the whole request fails. The values
-// are those Kimi Code accepts: temperature 1 and top_p 0.95. A request
-// already carrying them, or going to another provider, is left as it was.
-func kimiSamplingParams(p provider.Provider, to provider.Protocol, body []byte) []byte {
-	if !isKimi(p, to) {
+// kimiCodeSampling is body without the sampling fields Kimi Code checks
+// against a per-model, per-mode whitelist: kimi-for-coding takes only
+// temperature 1 and top_p 0.95, a K2.5/K2.6 with thinking off takes only
+// 0.6, and a client that sends its own defaults — VS Code Copilot's chat
+// sends temperature 0.1 and top_p 1 — is refused 400 "invalid
+// temperature: only 1 is allowed for this model" before any token is
+// read, and the whole request fails. Left out, the server fills in the
+// value the current model and mode want, so no number is written here.
+// Moonshot's pay-as-you-go API, whose models take a range, keeps what the
+// user set, as does a model that isn't a K and a request that never named
+// the fields.
+func kimiCodeSampling(p provider.Provider, to provider.Protocol, body []byte) []byte {
+	if !isKimiCode(p, to) {
 		return body
 	}
-	fixed := []struct {
-		key string
-		val string
-	}{
-		{"temperature", "1"},
-		{"top_p", "0.95"},
-	}
-	changed := false
-	for _, f := range fixed {
-		v := gjson.GetBytes(body, f.key)
-		switch {
-		case !v.Exists():
-			// insert after the opening brace; the body's own fields follow
-			var out bytes.Buffer
-			out.Grow(len(body) + 24)
-			out.WriteByte('{')
-			out.WriteString(`"` + f.key + `":` + f.val + `,`)
-			out.Write(body[1:])
-			body = out.Bytes()
-			changed = true
-		case v.Raw != f.val:
-			body = bytes.Replace(body, []byte(`"`+f.key+`":`+v.Raw), []byte(`"`+f.key+`":`+f.val), 1)
-			changed = true
-		}
-	}
-	if !changed {
+	if !kimiKModel(gjson.GetBytes(body, "model").String()) {
 		return body
 	}
-	return body
+	return withoutFields(body, "temperature", "top_p")
+}
+
+// isKimiCode is whether p is a Kimi Code membership's own endpoint, not
+// Moonshot's pay-as-you-go API (api.moonshot.ai / api.moonshot.cn).
+func isKimiCode(p provider.Provider, to provider.Protocol) bool {
+	if strings.HasPrefix(p.Preset, "kimi-code") {
+		return true
+	}
+	base := p.Base(to)
+	switch provider.HostOf(base) {
+	case "api.kimi.com", "api.kimi.ai":
+		return strings.Contains(base, "/coding")
+	}
+	return false
+}
+
+// kimiKModel is whether model is one of Kimi's K models: kimi-for-coding,
+// kimi-k2.6, k3 and the like.
+func kimiKModel(model string) bool {
+	m := strings.ToLower(model)
+	if strings.HasPrefix(m, "kimi") {
+		return true
+	}
+	return len(m) > 1 && m[0] == 'k' && m[1] >= '0' && m[1] <= '9'
 }

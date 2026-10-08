@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -73,58 +74,98 @@ func TestKimiToolEnumTypes(t *testing.T) {
 	}
 }
 
-// The sampling parameters a chat client sends that Kimi Code's whitelist
-// refuses (Copilot's temperature 0.1, top_p 1) are sent as the ones it
-// accepts (1, 0.95); a request without them gets them; another provider is
-// sent the body as it was.
-func TestKimiSamplingParams(t *testing.T) {
+// A request to a Kimi Code K model goes without temperature and top_p:
+// the plan's whitelist refuses the ones clients send (Copilot's
+// temperature 0.1, top_p 1, 400 "invalid temperature: only 1 is allowed
+// for this model"), and left out the server fills in what the current
+// model and mode take. A request that never named them stays without
+// them; Moonshot's pay-as-you-go API, whose moonshot-v1 models take a
+// range, keeps the user's own temperature, and so does anyone else.
+func TestKimiCodeSampling(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	kimi, err := provider.FromPreset("kimi-code-cn")
 	if err != nil {
 		t.Fatal(err)
 	}
-	kimi.ID, kimi.Key, kimi.Models = "kimi", "k", []string{"m"}
+	kimi.ID, kimi.Key, kimi.Models = "kimi", "k", []string{"kimi-for-coding"}
+	moonshot, err := provider.FromPreset("moonshot-cn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	moonshot.ID, moonshot.Key, moonshot.Models = "moonshot", "k", []string{"moonshot-v1-8k"}
 	other := provider.Provider{ID: "other", Name: "Other", Key: "k", Chat: "https://other.test/v1", Models: []string{"m"}}
-	for _, p := range []provider.Provider{kimi, other} {
+	for _, p := range []provider.Provider{kimi, moonshot, other} {
 		if err := provider.Save(p); err != nil {
 			t.Fatal(err)
 		}
 	}
-	got := map[string]string{}
+	type sentBody struct{ host, path, body string }
+	var sent []sentBody
 	s := New()
 	s.client = &http.Client{Transport: countTransport(func(r *http.Request) (*http.Response, error) {
 		b, _ := io.ReadAll(r.Body)
-		got[r.URL.Host] = string(b)
+		sent = append(sent, sentBody{r.URL.Host, r.URL.Path, string(b)})
+		if r.URL.Path == "/v1/messages" {
+			return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}},
+				Body: io.NopCloser(strings.NewReader(`{"id":"msg_1","type":"message","role":"assistant","model":"m","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))}, nil
+		}
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}},
 			Body: io.NopCloser(strings.NewReader(`{"id":"c","object":"chat.completion","model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))}, nil
 	})}
-	bodies := map[string]string{
-		"refused":  `{"model":"kimi/m","messages":[{"role":"user","content":"hi"}],"temperature":0.1,"top_p":1}`,
-		"absent":   `{"model":"kimi/m","messages":[{"role":"user","content":"hi"}]}`,
-		"accepted": `{"model":"kimi/m","messages":[{"role":"user","content":"hi"}],"temperature":1,"top_p":0.95}`,
-		"other":    `{"model":"other/m","messages":[{"role":"user","content":"hi"}],"temperature":0.1,"top_p":1}`,
-	}
-	for name, body := range bodies {
+	post := func(t *testing.T, path, body string) sentBody {
+		t.Helper()
 		rec := httptest.NewRecorder()
-		s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body)))
+		s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(body)))
 		if rec.Code != 200 {
-			t.Fatalf("%s: %d %s", name, rec.Code, rec.Body)
+			t.Fatalf("%d %s", rec.Code, rec.Body)
 		}
+		return sent[len(sent)-1]
 	}
-	b := got["api.kimi.com"]
-	for _, want := range []string{`"temperature":1`, `"top_p":0.95`} {
-		if !strings.Contains(b, want) {
-			t.Errorf("Kimi was sent %s without %s", b, want)
+	// the request VS Code Copilot's chat sends, refused 400 by Kimi Code
+	t.Run("refused values are dropped", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"kimi/kimi-for-coding","messages":[{"role":"user","content":"hi"}],"temperature":0.1,"top_p":1,"max_tokens":5}`)
+		if gjson.Get(got.body, "temperature").Exists() || gjson.Get(got.body, "top_p").Exists() {
+			t.Errorf("Kimi Code was sent the sampling fields: %s", got.body)
 		}
-	}
-	if strings.Contains(b, `"temperature":0.1`) || strings.Contains(b, `"top_p":1`) {
-		t.Errorf("Kimi was sent the refused values: %s", b)
-	}
-	if !json.Valid([]byte(b)) {
-		t.Errorf("Kimi was sent invalid JSON: %s", b)
-	}
-	if b := got["other.test"]; !strings.Contains(b, `"temperature":0.1,"top_p":1`) {
-		t.Errorf("another provider was sent: %s", b)
-	}
+		if !json.Valid([]byte(got.body)) {
+			t.Errorf("Kimi Code was sent invalid JSON: %s", got.body)
+		}
+	})
+	t.Run("absent stays absent", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"kimi/kimi-for-coding","messages":[{"role":"user","content":"hi"}],"max_tokens":5}`)
+		if gjson.Get(got.body, "temperature").Exists() || gjson.Get(got.body, "top_p").Exists() {
+			t.Errorf("sampling fields were added: %s", got.body)
+		}
+	})
+	t.Run("accepted values are dropped too", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"kimi/kimi-for-coding","messages":[{"role":"user","content":"hi"}],"temperature":1,"top_p":0.95}`)
+		if gjson.Get(got.body, "temperature").Exists() || gjson.Get(got.body, "top_p").Exists() {
+			t.Errorf("Kimi Code was sent the sampling fields: %s", got.body)
+		}
+	})
+	t.Run("anthropic endpoint", func(t *testing.T) {
+		got := post(t, "/v1/messages", `{"model":"kimi/kimi-for-coding","messages":[{"role":"user","content":"hi"}],"temperature":0.1,"top_p":1,"max_tokens":5}`)
+		if got.host != "api.kimi.com" {
+			t.Fatalf("the request went to %s", got.host)
+		}
+		if gjson.Get(got.body, "temperature").Exists() || gjson.Get(got.body, "top_p").Exists() {
+			t.Errorf("Kimi Code was sent the sampling fields: %s", got.body)
+		}
+	})
+	t.Run("moonshot pay-as-you-go keeps the user's temperature", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"moonshot/moonshot-v1-8k","messages":[{"role":"user","content":"hi"}],"temperature":0.1,"top_p":1}`)
+		if got.host != "api.moonshot.cn" {
+			t.Fatalf("the request went to %s", got.host)
+		}
+		if v := gjson.Get(got.body, "temperature"); !v.Exists() || v.Raw != "0.1" {
+			t.Errorf("Moonshot's own temperature was not kept: %s", got.body)
+		}
+	})
+	t.Run("another provider is sent the body as it was", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"other/m","messages":[{"role":"user","content":"hi"}],"temperature":0.1,"top_p":1}`)
+		if !strings.Contains(got.body, `"temperature":0.1,"top_p":1`) {
+			t.Errorf("another provider was sent: %s", got.body)
+		}
+	})
 }
