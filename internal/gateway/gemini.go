@@ -78,12 +78,30 @@ type gRequest struct {
 		ResponseMimeType   string          `json:"responseMimeType,omitempty"`
 		ResponseSchema     json.RawMessage `json:"responseSchema,omitempty"`
 		ResponseJSONSchema json.RawMessage `json:"responseJsonSchema,omitempty"`
-		ThinkingConfig     *struct {
-			ThinkingBudget  *int   `json:"thinkingBudget,omitempty"`
-			ThinkingLevel   string `json:"thinkingLevel,omitempty"`
-			IncludeThoughts bool   `json:"includeThoughts,omitempty"`
-		} `json:"thinkingConfig,omitempty"`
+		ThinkingConfig     *gThinking      `json:"thinkingConfig,omitempty"`
 	} `json:"generationConfig,omitempty"`
+}
+
+// gThinking is a Gemini request's generationConfig.thinkingConfig.
+type gThinking struct {
+	ThinkingBudget  *int   `json:"thinkingBudget,omitempty"`
+	ThinkingLevel   string `json:"thinkingLevel,omitempty"`
+	IncludeThoughts bool   `json:"includeThoughts,omitempty"`
+}
+
+// effort is the reasoning the thinkingConfig asks for: its level, else its
+// budget as the level it is nearest, -1 (the model decides) as medium. ""
+// when it asks for none: a budget of 0, or includeThoughts alone.
+func (tc *gThinking) effort() string {
+	switch {
+	case tc.ThinkingLevel != "":
+		return effortOf(tc.ThinkingLevel)
+	case tc.ThinkingBudget != nil && *tc.ThinkingBudget < 0:
+		return "medium" // -1: let the model decide
+	case tc.ThinkingBudget != nil:
+		return effortOfBudget(*tc.ThinkingBudget)
+	}
+	return ""
 }
 
 // buildGemini is a generateContent body for an upstream that speaks Gemini
@@ -193,14 +211,7 @@ func parseGemini(body []byte) (*Request, error) {
 	if gc := g.GenerationConfig; gc != nil {
 		r.MaxTokens, r.Temp, r.TopP, r.Stop = gc.MaxOutputTokens, gc.Temperature, gc.TopP, gc.StopSequences
 		if tc := gc.ThinkingConfig; tc != nil {
-			switch {
-			case tc.ThinkingLevel != "":
-				r.Effort = effortOf(tc.ThinkingLevel)
-			case tc.ThinkingBudget != nil && *tc.ThinkingBudget < 0:
-				r.Effort = "medium" // -1: let the model decide
-			case tc.ThinkingBudget != nil:
-				r.Effort = effortOfBudget(*tc.ThinkingBudget)
-			}
+			r.Effort = tc.effort()
 			r.Thinking = r.Effort != ""
 		}
 		// structured output, asked for in the upstream's own field

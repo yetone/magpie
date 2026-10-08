@@ -380,11 +380,17 @@ func lapsedText(pp plugin.Provider, user string) string {
 
 // clearPluginLapse takes the mark off an account signed in again, and
 // brings back the agent's own account removed in magpie, as signing in to
-// the built-in's did (#320).
+// the built-in's did (#320). The account's kept usage reading goes too: it
+// was read under the old sign-in, and for a minute it would answer the
+// next reading with the old sign-in's "expired" without asking the plugin,
+// and so without marking or clearing anything.
 func clearPluginLapse(saved plugin.Saved) {
 	for _, pp := range plugin.Cached() {
 		if pp.ID == saved.Provider {
 			notePluginLapse(pp, saved.Account, http.StatusOK)
+			if user := pluginLabels(pp)[saved.Account]; user != "" {
+				StaleAllowance(pluginAgent(pp), user)
+			}
 		}
 	}
 	loginsMu.Lock()

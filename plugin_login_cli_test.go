@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -61,6 +65,38 @@ func TestPluginLoginTakesTheLapseOff(t *testing.T) {
 	login()
 	if ls := provider.Logins("fakeco"); len(ls) != 1 || ls[0].Lapsed != "" {
 		t.Fatalf("signed in again, but still lapsed: %+v", ls)
+	}
+}
+
+// An account signed in again is read afresh: the reading kept from the
+// sign-in the vendor refused doesn't answer for the new one, saying its
+// sign-in has expired for up to a minute after it was renewed.
+func TestPluginLoginReadsUsageAfresh(t *testing.T) {
+	var status atomic.Int32
+	status.Store(http.StatusUnauthorized)
+	vendor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(int(status.Load()))
+		fmt.Fprint(w, "Fake Pro")
+	}))
+	defer vendor.Close()
+	t.Setenv("FAKE_USAGE", vendor.URL)
+	ctx := fakeCoHome(t)
+	noBrowser(t)
+	login := func() {
+		t.Helper()
+		piped(t, "2", "2", "team", "good")
+		if out, err := said(t, func() error { return pluginCmd([]string{"plugin", "login", "fakeco"}) }); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+	}
+	login()
+	if q := provider.LoginUsage(ctx, "fakeco")["team@fake"]; q.Error == "" {
+		t.Fatalf("the vendor's 401 read clean: %+v", q)
+	}
+	status.Store(http.StatusOK)
+	login()
+	if q := provider.LoginUsage(ctx, "fakeco")["team@fake"]; q.Error != "" || q.Plan != "Fake Pro" {
+		t.Fatalf("signed in again, but the usage is the old sign-in's: %+v", q)
 	}
 }
 

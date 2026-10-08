@@ -1790,6 +1790,17 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if fast {
 			attemptBody = withFast(from, attemptBody)
 		}
+		// a member known not to think is sent no reasoning ask (#950): the
+		// group reasons for the members that do, and asking one that can't
+		// is what some vendors turn away with a 400. Every other field goes
+		// as the agent sent it, and which member goes first is unchanged.
+		// One the user fixed at an effort is left as it is: that is the
+		// user saying this model does think, over a catalog that may be
+		// wrong about it (the Trae plugin's own model, #950)
+		quiet := isGroup && c.effort == "" && quietTo(c.p.ID, c.model)
+		if quiet {
+			attemptBody, picked = withoutReasoningAsk(from, attemptBody), false
+		}
 		// the reasoning the model is asked for, whoever chose it
 		sent = sentEffort(from, attemptBody, c.p, c.model)
 		if !takesEffort(c, sent) {
@@ -1806,7 +1817,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		// an effort changed mid-thread goes as an update in the history,
 		// which keeps the prompt the upstream cached (#617)
 		updated := false
-		if from == provider.Responses && plainFor != c.who()+"|"+c.model && takesEffortUpdates(c.p, c.model) {
+		if from == provider.Responses && !quiet && plainFor != c.who()+"|"+c.model && takesEffortUpdates(c.p, c.model) {
 			if b, ok := withEffortUpdates(stuck, c.who(), c.model, sent, attemptBody); ok {
 				attemptBody, updated = b, true
 			}

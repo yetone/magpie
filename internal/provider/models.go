@@ -1083,8 +1083,8 @@ type Entry struct {
 	// unless the group names its own (Group.Levels).
 	Shared []string `json:"-"`
 	// Reasoning is set on a model that thinks, levels or not: one with a
-	// thinking switch alone has it and no Efforts (a group's: every
-	// member thinks).
+	// thinking switch alone has it and no Efforts (a group's: a member
+	// thinks).
 	Reasoning bool `json:"reasoning,omitempty"`
 	// AgentsV2 is set on a model offering Codex's Ultra that no ChatGPT
 	// account answers for (a group's: none of its members): Codex is told

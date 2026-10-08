@@ -834,6 +834,11 @@ func TestModelsListReasoning(t *testing.T) {
 		"a/sol": "low,medium,high,max", "b/sol": "medium,high", "group/auto-sol": "medium,high",
 		"a/mixed": "low,high", "b/mixed": "", "group/auto-mixed": "", "a/plain": "",
 	}
+	// a group reasons when any member does: b/mixed has no levels and a
+	// list that says nothing of reasoning, but a/mixed does, so the group
+	// is told to reason — Levelless, with no levels to pick from (#756's
+	// rule for images, applied to reasoning)
+	reasoning := map[string]bool{"group/auto-mixed": true}
 	for _, m := range response.Data {
 		expected, ok := want[m.ID]
 		if !ok {
@@ -844,7 +849,7 @@ func TestModelsListReasoning(t *testing.T) {
 		for _, level := range m.Levels {
 			levels = append(levels, level.Effort)
 		}
-		if m.Reasoning == nil || *m.Reasoning != (expected != "") || strings.Join(levels, ",") != expected {
+		if m.Reasoning == nil || *m.Reasoning != (expected != "" || reasoning[m.ID]) || strings.Join(levels, ",") != expected {
 			t.Errorf("%s: reasoning %v, levels %v; want %q", m.ID, m.Reasoning, levels, expected)
 		}
 	}

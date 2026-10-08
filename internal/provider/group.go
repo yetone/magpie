@@ -562,15 +562,18 @@ func membersIn(entries []Entry, all []Group, g Group) []Member {
 
 // groupEntries are the catalog's groups: each with a member ready, named
 // as the user named it, answering for its first member when an agent asks
-// what the model can do, and offering only the reasoning levels every
-// member has — but for those fixed at an effort of their own, which take
-// whatever the agent asks, and those whose levels nothing magpie reads
-// knows (levelsUnknown), which are sent it as asked, and those that think
-// with no levels to pick from, which are sent it as asked up to high
-// (the gateway's fitFor). With every member fixed, the group offers the
-// levels they are fixed at, so that an agent still asks it to reason.
-// A group that names its own levels (Group.Levels) offers those, and so
-// does a group in it for its models.
+// what the model can do, and reasoning when any member does — a member
+// that doesn't think doesn't take reasoning from the others, as a
+// text-only member doesn't take images (#756) — offering the reasoning
+// levels the members have in common, as before, but for those fixed at
+// an effort of their own, which take whatever the agent asks, and those
+// whose levels nothing magpie reads knows (levelsUnknown), which are
+// sent it as asked, and those that think with no levels to pick from,
+// which are sent it as asked up to high (the gateway's fitFor). With
+// every member fixed, the group offers the levels they are fixed at, so
+// that an agent still asks it to reason. A group that names its own
+// levels (Group.Levels) offers those, and so does a group in it for its
+// models.
 func groupEntries(entries []Entry) []Entry {
 	var out []Entry
 	all := groupsIn(entries)
@@ -582,7 +585,7 @@ func groupEntries(entries []Entry) []Entry {
 		if len(ms) == 0 {
 			continue
 		}
-		e := Entry{ID: GroupPrefix + g.ID, Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Named: !g.Auto, Reasoning: true}
+		e := Entry{ID: GroupPrefix + g.ID, Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Named: !g.Auto}
 		var fixed []string // the efforts members are fixed at
 		levelled := false  // a member that follows the agent's effort was met
 		// Codex's ultra (max, with Codex handing parts of the task to agents
@@ -608,7 +611,16 @@ func groupEntries(entries []Entry) []Entry {
 					unknown = levelsUnknown(x)
 				}
 			}
-			e.Reasoning = e.Reasoning && thinks
+			// it reasons when a member does: the gateway sends the
+			// effort to the members that take it, and a member known not
+			// to think is sent none of it, as a text-only member is sent
+			// no image (#756's rule for images, applied to reasoning).
+			// One that doesn't think is no reason to tell the agent the
+			// group can't. Which levels the group offers is left as it
+			// was: a member known to take none still leaves the group
+			// none (#597), and the group is then Levelless, a shape
+			// magpie serves
+			e.Reasoning = e.Reasoning || thinks
 			// the reply agents are told is the longest a member gives: the
 			// gateway asks each member for no more than its own
 			// (withMaxOutput), so the members that write long replies aren't
@@ -720,6 +732,20 @@ func levelsUnknown(x Entry) bool {
 		return false
 	}
 	return !catalog.Knows(x.Model)
+}
+
+// Quiet reports whether the model is known not to think: magpie has a
+// word on it — its vendor's or its maker's list, or its provider's own
+// account list — and that word says no reasoning. A model nothing speaks
+// for isn't quiet: the gateway sends it the effort the agent asked for,
+// as #597 leaves it. Nor is one that takes levels — a model that thinks,
+// or one the user gave levels of their own, which the gateway fits an
+// effort to. A group's member that is quiet is sent no reasoning ask,
+// which some vendors turn away with a 400 on a model that can't think,
+// but for one the user fixed at an effort (Group's member syntax, #189):
+// the gateway leaves that alone, the user's word over magpie's.
+func (e Entry) Quiet() bool {
+	return !e.Reasoning && len(e.Efforts) == 0 && !levelsUnknown(e)
 }
 
 // SaveGroup adds or replaces a group of the user's. Changing one magpie
