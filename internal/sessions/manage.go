@@ -122,7 +122,7 @@ func ListAgent(agent string) []Managed {
 	for _, fs := range groups {
 		s, _ := assemble(fs, price)
 		if s.Resume == "" && !s.ReadOnly {
-			s.Resume = resumeCommand(s.WSL, s.Agent, s.ID, s.Cwd)
+			s.Resume = resumeCommand(s.WSL, s.Agent, s.ID, s.Cwd, s.Path)
 		}
 		if s.Carry == nil {
 			s.Carry = carries(s)

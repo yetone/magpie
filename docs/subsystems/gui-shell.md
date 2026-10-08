@@ -29,6 +29,27 @@ three.
 
 ## Constraints and failure behavior
 
+### Stored agent sessions in WSL
+
+The Sessions page uses `sessions.ListAgent`; Usage → Sessions uses
+`sessions.List` and `StatsFor` through the handlers in
+[`sessions.go`](../../internal/gui/sessions.go) and
+[`sessions_manage.go`](../../internal/gui/sessions_manage.go).
+On Windows, [`internal/sessions/wsl.go`](../../internal/sessions/wsl.go)
+reads running distros through their WSL shared paths. A stopped distro keeps
+its cached listing and is not opened; running distros are relisted at most
+every 30 seconds.
+
+For omp, [`ompRootsIn`](../../internal/sessions/omp.go) includes both
+`~/.omp/agent/sessions` and
+`~/.omp/profiles/<name>/agent/sessions`. Subagents and advisor files count
+in their parent session. A profile session's Resume command selects its
+own profile with `omp --profile <name> --resume <id>`, including when
+resumed through `wsl.exe`. Delete and Restore preserve its original
+profile path and artifacts. Windows does not discover arbitrary stores
+selected by a distro's `PI_CODING_AGENT_DIR`, XDG variables or
+`--session-dir`.
+
 ### Desktop fonts
 
 Settings → General offers independent interface and code fonts, each with

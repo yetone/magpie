@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -85,6 +86,9 @@ func TestOmp(t *testing.T) {
 	Reset()
 	ss = List(0)
 	for id := range moves {
-		find(t, ss, "omp", id)
+		m := find(t, ss, "omp", id)
+		if id == ompNamed && !strings.Contains(m.Resume, "omp --profile work --resume "+id) {
+			t.Fatalf("profile resume %q", m.Resume)
+		}
 	}
 }

@@ -19,8 +19,8 @@ func wslSettle() {
 }
 
 // wslDistro is a distro's home in a temp dir with Claude Code's, Codex's
-// and Pi's sessions in it, and this computer's own folders empty; WSLHomes
-// says it runs while *running is true.
+// Pi's and omp's sessions in it, and this computer's own folders empty;
+// WSLHomes says it runs while *running is true.
 func wslDistro(t *testing.T) (home string, running *bool) {
 	setup(t)
 	dir := t.TempDir()
@@ -30,6 +30,7 @@ func wslDistro(t *testing.T) (home string, running *bool) {
 	copyTree(t, "testdata/claude", filepath.Join(home, ".claude"))
 	copyTree(t, "testdata/codex", filepath.Join(home, ".codex"))
 	copyTree(t, "testdata/pi", filepath.Join(home, ".pi", "agent"))
+	copyTree(t, "testdata/omp/agent", filepath.Join(home, ".omp", "agent"))
 	on := true
 	WSLHomes = func() []WSLHome { return []WSLHome{{Distro: "Ubuntu", Home: home, Running: on}} }
 	t.Cleanup(func() { wslSettle(); WSLHomes = nil; Reset() })
@@ -37,8 +38,8 @@ func wslDistro(t *testing.T) (home string, running *bool) {
 	return home, &on
 }
 
-// The sessions of Claude Code, Codex and Pi in a WSL distro are listed with
-// the distro, resumed there through wsl.exe; their calls count in usage.
+// The sessions of Claude Code, Codex, Pi and omp in a WSL distro are listed
+// with the distro, resumed there through wsl.exe; their calls count in usage.
 func TestWSLSessionsListed(t *testing.T) {
 	home, _ := wslDistro(t)
 	ss := List(0)
@@ -49,7 +50,7 @@ func TestWSLSessionsListed(t *testing.T) {
 		}
 		got[s.Agent] = s
 	}
-	for _, a := range []string{"claude", "codex", "pi"} {
+	for _, a := range []string{"claude", "codex", "pi", "omp"} {
 		if _, ok := got[a]; !ok {
 			t.Fatalf("no %s session from WSL in %+v", a, ss)
 		}
@@ -65,6 +66,17 @@ func TestWSLSessionsListed(t *testing.T) {
 	if r := got["codex"].Resume; !strings.HasPrefix(r, "wsl.exe -d 'Ubuntu' ") || !strings.Contains(r, "''codex resume ") {
 		t.Fatalf("codex resume %q", r)
 	}
+	omp := got["omp"]
+	if omp.ID != "019a0000-0000-7000-8000-00000000000a" || omp.Cwd != "/work/omp" || omp.Title != "Port the parser to omp" || omp.Tokens.zero() {
+		t.Fatalf("omp: %+v", omp)
+	}
+	wantOmp := `wsl.exe -d 'Ubuntu' --cd '/work/omp' -e sh -lc 'exec ${SHELL:-sh} -lic ''omp --resume 019a0000-0000-7000-8000-00000000000a'''`
+	if omp.Resume != wantOmp {
+		t.Fatalf("omp resume\n got %s\nwant %s", omp.Resume, wantOmp)
+	}
+	if len(omp.Models) != 4 {
+		t.Fatalf("the subagent and advisor weren't read: %+v", omp.Models)
+	}
 	var calls int
 	for _, c := range Calls(time.Time{}) {
 		if c.Agent == "claude" || c.Agent == "codex" {
@@ -77,6 +89,23 @@ func TestWSLSessionsListed(t *testing.T) {
 	dirs := strings.Join(Dirs(), "\n")
 	if !strings.Contains(dirs, filepath.Join(home, ".claude")) || !strings.Contains(dirs, filepath.Join(home, ".codex")) {
 		t.Fatalf("dirs %s", dirs)
+	}
+	if !strings.Contains(dirs, filepath.Join(home, ".omp", "agent")) {
+		t.Fatalf("omp's folder isn't listed: %s", dirs)
+	}
+	// the Usage page's sessions (/api/sessions/stats and overview) count it
+	st := StatsFor(0)
+	var inStats, inDays bool
+	for _, s := range st.Sessions {
+		inStats = inStats || (s.Key == "omp:"+omp.ID && !s.Tokens.zero())
+	}
+	for _, d := range st.Days {
+		for _, u := range d.Usage {
+			inDays = inDays || u.Agent == "omp"
+		}
+	}
+	if !inStats || !inDays {
+		t.Fatalf("the WSL omp session isn't in the usage stats: sessions %v, days %v", inStats, inDays)
 	}
 }
 
@@ -132,12 +161,124 @@ func TestWSLSessionDeleted(t *testing.T) {
 	}
 }
 
+// An omp session in a WSL distro is deleted and restored as this computer's
+// are: its file and the artifacts beside it leave the distro together, and
+// come back there.
+func TestWSLOmpSessionDeleted(t *testing.T) {
+	home, _ := wslDistro(t)
+	const id = "019a0000-0000-7000-8000-00000000000a"
+	old := time.Now().Add(-time.Hour)
+	filepath.WalkDir(home, func(p string, _ os.DirEntry, _ error) error { return os.Chtimes(p, old, old) })
+	List(0)
+	wslSettle()
+	m, ok := findManaged(ListAgent("omp"), id)
+	if !ok || m.WSL != "Ubuntu" || !m.Deletable || m.Files < 2 {
+		t.Fatalf("the WSL omp session listed as %+v, %v", m, ok)
+	}
+	artifacts := strings.TrimSuffix(m.Path, ".jsonl")
+	if fi, err := os.Stat(artifacts); err != nil || !fi.IsDir() {
+		t.Fatalf("artifacts %s: %v", artifacts, err)
+	}
+	tr, err := Delete("omp", id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{m.Path, artifacts} {
+		if _, err := os.Lstat(p); err == nil {
+			t.Fatalf("%s is still there", p)
+		}
+	}
+	if _, ok := findManaged(ListAgent("omp"), id); ok {
+		t.Fatal("still listed")
+	}
+	if _, err := Restore(tr.Key); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{m.Path, filepath.Join(artifacts, "__advisor.jsonl")} {
+		if _, err := os.Lstat(p); err != nil {
+			t.Fatalf("%s wasn't restored", p)
+		}
+	}
+	if m, ok := findManaged(ListAgent("omp"), id); !ok || m.WSL != "Ubuntu" || len(m.Models) != 4 {
+		t.Fatalf("restored session listed as %+v, %v", m, ok)
+	}
+}
+
+// A distro's named profiles are read as its default folder is: one
+// session's file and its artifacts move to a profile, and both stay
+// listed, only the profile's resumed through it.
+func TestWSLOmpProfiles(t *testing.T) {
+	for _, profile := range []string{"work", "client-a.v2"} {
+		t.Run(profile, func(t *testing.T) {
+			home, _ := wslDistro(t)
+			from := filepath.Join(home, ".omp", "agent", "sessions", "--work-omp--")
+			to := filepath.Join(home, ".omp", "profiles", profile, "agent", "sessions", "--work-omp--")
+			if err := os.MkdirAll(to, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			// the session's file and the folder beside it (its subagents
+			// and advisor), leaving the default folder's other sessions
+			for _, p := range []string{
+				filepath.Join(from, "2026-09-28T08-00-00-000Z_"+ompMain+".jsonl"),
+				filepath.Join(from, "2026-09-28T08-00-00-000Z_"+ompMain),
+			} {
+				if err := os.Rename(p, filepath.Join(to, filepath.Base(p))); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ss := List(0)
+			wslSettle()
+			m := find(t, ss, "omp", ompMain)
+			if m.WSL != "Ubuntu" || !strings.HasPrefix(m.Path, to) || len(m.Models) != 4 {
+				t.Fatalf("profile session: %+v", m)
+			}
+			want := "omp --profile " + profile + " --resume " + ompMain
+			if !strings.Contains(m.Resume, want) {
+				t.Fatalf("resume doesn't select %s: %s", profile, m.Resume)
+			}
+			// the default folder's own sessions are untouched by it
+			for _, id := range []string{ompFork, ompNamed} {
+				d := find(t, ss, "omp", id)
+				if strings.Contains(d.Resume, "--profile") {
+					t.Fatalf("%s resumed through a profile: %s", id, d.Resume)
+				}
+			}
+			st := StatsFor(0)
+			var usage Tokens
+			for _, s := range st.Sessions {
+				if s.Key == "omp:"+ompMain {
+					usage = s.Tokens
+				}
+			}
+			if usage != m.Tokens {
+				t.Fatalf("usage tokens %+v, want %+v", usage, m.Tokens)
+			}
+			old := time.Now().Add(-time.Hour)
+			filepath.WalkDir(to, func(p string, _ os.DirEntry, _ error) error { return os.Chtimes(p, old, old) })
+			tr, err := Delete("omp", ompMain)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(m.Path); !os.IsNotExist(err) {
+				t.Fatalf("profile session wasn't deleted: %v", err)
+			}
+			if _, err := Restore(tr.Key); err != nil {
+				t.Fatal(err)
+			}
+			back, ok := findManaged(ListAgent("omp"), ompMain)
+			if !ok || back.Path != m.Path || !strings.Contains(back.Resume, want) || len(back.Models) != 4 {
+				t.Fatalf("restored profile session: %+v, %v", back, ok)
+			}
+		})
+	}
+}
+
 // A stopped distro's sessions are listed as last read, and nothing in it is
 // opened: that would start it.
 func TestWSLStoppedDistroKept(t *testing.T) {
 	home, running := wslDistro(t)
-	if n := len(List(0)); n != 4 {
-		t.Fatalf("want the 4 sessions, got %d", n)
+	if n := len(List(0)); n != 7 {
+		t.Fatalf("want the 7 sessions, got %d", n)
 	}
 	wslSettle()
 	Saved()
@@ -150,8 +291,8 @@ func TestWSLStoppedDistroKept(t *testing.T) {
 	}
 	for i := 0; i < 2; i++ {
 		ss := List(0)
-		if len(ss) != 4 {
-			t.Fatalf("pass %d: want the 4 sessions as last read, got %+v", i, ss)
+		if len(ss) != 7 {
+			t.Fatalf("pass %d: want the 7 sessions as last read, got %+v", i, ss)
 		}
 		for _, s := range ss {
 			if s.WSL != "Ubuntu" || s.Tokens.zero() || s.Resume == "" {
@@ -172,8 +313,8 @@ func TestWSLStoppedSinceNotOpened(t *testing.T) {
 	up := true
 	WSLRunning = func(d string) bool { return d == "Ubuntu" && up }
 	t.Cleanup(func() { WSLRunning = nil })
-	if n := len(List(0)); n != 4 {
-		t.Fatalf("want the 4 sessions, got %d", n)
+	if n := len(List(0)); n != 7 {
+		t.Fatalf("want the 7 sessions, got %d", n)
 	}
 	wslSettle()
 	project := filepath.Join(home, ".claude", "projects", "-work-app")
@@ -209,7 +350,7 @@ func TestWSLStoppedSinceNotOpened(t *testing.T) {
 		wslSess.Unlock()
 		ss := List(0)
 		wslSettle()
-		if len(ss) != 4 {
+		if len(ss) != 7 {
 			t.Fatalf("pass %d: the stopped distro was listed again: %d sessions", i, len(ss))
 		}
 		for _, s := range ss {
@@ -226,8 +367,8 @@ func TestWSLStoppedSinceNotOpened(t *testing.T) {
 	List(0)
 	wslSettle()
 	ss := List(0)
-	if len(ss) != 5 {
-		t.Fatalf("running again: want 5 sessions, got %d", len(ss))
+	if len(ss) != 8 {
+		t.Fatalf("running again: want 8 sessions, got %d", len(ss))
 	}
 }
 

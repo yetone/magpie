@@ -15,9 +15,9 @@ import (
 // sessions in the distro's home, which magpie opens through
 // \\wsl.localhost\<distro> — the distros internal/agent's wsl.go already
 // finds and probes for the agents it sets up (WSLHomes, which that package
-// sets; this one can't import it). Claude Code's, Codex's and Pi's session
-// files there are read as this computer's are, each session marked with its
-// distro (Session.WSL) and resumed through wsl.exe (wslResume).
+// sets; this one can't import it). Claude Code's, Codex's, Pi's and omp's
+// session files there are read as this computer's are, each session marked
+// with its distro (Session.WSL) and resumed through wsl.exe (wslResume).
 //
 // Reading over \\wsl.localhost is slow, and looking at a stopped distro's
 // files starts it. So the distros' files are listed behind, at most every
@@ -56,6 +56,7 @@ var wslAgents = []struct{ agent, dir string }{
 	{"claude", ".claude"},
 	{"codex", ".codex"},
 	{"pi", filepath.Join(".pi", "agent")},
+	{"omp", filepath.Join(".omp", "agent")},
 }
 
 // wslScan lists the session files under a distro's home.
@@ -70,6 +71,8 @@ func wslScan(home string) []file {
 			out = append(out, codexFilesIn(dir)...)
 		case "pi":
 			out = append(out, piFilesIn(dir, "")...)
+		case "omp":
+			out = append(out, ompFilesIn(dir)...)
 		}
 	}
 	return out
