@@ -1035,6 +1035,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.CodexNoCredits = cur.CodexNoCredits
 		// and each Codex account's own daily warm-up (codex-warm-at below)
 		in.CodexWarmAtOf = cur.CodexWarmAtOf
+		in.ClaudePassthrough = cur.ClaudePassthrough
 		// and the text size, which the keyboard changes too (text-size below)
 		in.TextSize = cur.TextSize
 		// the version the Update pill was hidden for, set from the pill

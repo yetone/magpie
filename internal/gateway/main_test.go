@@ -8,6 +8,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/testenv"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // standInsEnv names the folder of a test binary's stand-in CLIs, for a
@@ -80,5 +81,12 @@ func isolatedTests(m *testing.M) (int, error) {
 	// key would, in the background (a plan key's windows, #1016), and a
 	// plugin host's first start fetched models.dev
 	testenv.Offline()
+	usage.Agents = func() []usage.Known {
+		return []usage.Known{
+			{ID: "claude", Names: []string{"claude", "cc", "claude-code"}, UA: []string{"claude-cli", "claude-code"}},
+			{ID: "codex", Names: []string{"codex"}, UA: []string{"codex"}},
+			{ID: "opencode", Names: []string{"opencode"}, UA: []string{"opencode"}},
+		}
+	}
 	return m.Run(), nil
 }
