@@ -74,14 +74,16 @@ func TestKimiToolEnumTypes(t *testing.T) {
 	}
 }
 
-// A request to a Kimi Code K model goes without temperature and top_p:
-// the plan's whitelist refuses the ones clients send (Copilot's
-// temperature 0.1, top_p 1, 400 "invalid temperature: only 1 is allowed
-// for this model"), and left out the server fills in what the current
-// model and mode take. A request that never named them stays without
-// them; Moonshot's pay-as-you-go API, whose moonshot-v1 models take a
-// range, keeps the user's own temperature, and so does anyone else.
-func TestKimiCodeSampling(t *testing.T) {
+// A request to a model whose server locks temperature and top_p — Kimi
+// Code's kimi-for-coding and k3*, kimi-k2.5 and later on either Kimi
+// platform — goes without them: the whitelist refuses the ones clients
+// send (Copilot's temperature 0.1, top_p 1, 400 "invalid temperature:
+// only 1 is allowed for this model"), and left out the server fills in
+// what the current model and mode take. A request that never named them
+// stays without them; a model that takes a range (moonshot-v1-8k,
+// kimi-k2-0905-preview) keeps the user's own temperature, and so does
+// anyone else.
+func TestKimiLockedSampling(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	kimi, err := provider.FromPreset("kimi-code-cn")
@@ -93,7 +95,8 @@ func TestKimiCodeSampling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	moonshot.ID, moonshot.Key, moonshot.Models = "moonshot", "k", []string{"moonshot-v1-8k"}
+	moonshot.ID, moonshot.Key = "moonshot", "k"
+	moonshot.Models = []string{"moonshot-v1-8k", "kimi-k2.6", "kimi-k2-0905-preview"}
 	other := provider.Provider{ID: "other", Name: "Other", Key: "k", Chat: "https://other.test/v1", Models: []string{"m"}}
 	for _, p := range []provider.Provider{kimi, moonshot, other} {
 		if err := provider.Save(p); err != nil {
@@ -153,6 +156,15 @@ func TestKimiCodeSampling(t *testing.T) {
 			t.Errorf("Kimi Code was sent the sampling fields: %s", got.body)
 		}
 	})
+	t.Run("moonshot pay-as-you-go kimi-k2.6 drops the fields", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"moonshot/kimi-k2.6","messages":[{"role":"user","content":"hi"}],"temperature":0.1,"top_p":1}`)
+		if got.host != "api.moonshot.cn" {
+			t.Fatalf("the request went to %s", got.host)
+		}
+		if gjson.Get(got.body, "temperature").Exists() || gjson.Get(got.body, "top_p").Exists() {
+			t.Errorf("kimi-k2.6 was sent the sampling fields: %s", got.body)
+		}
+	})
 	t.Run("moonshot pay-as-you-go keeps the user's temperature", func(t *testing.T) {
 		got := post(t, "/v1/chat/completions", `{"model":"moonshot/moonshot-v1-8k","messages":[{"role":"user","content":"hi"}],"temperature":0.1,"top_p":1}`)
 		if got.host != "api.moonshot.cn" {
@@ -160,6 +172,15 @@ func TestKimiCodeSampling(t *testing.T) {
 		}
 		if v := gjson.Get(got.body, "temperature"); !v.Exists() || v.Raw != "0.1" {
 			t.Errorf("Moonshot's own temperature was not kept: %s", got.body)
+		}
+	})
+	t.Run("moonshot kimi-k2-0905-preview keeps the user's temperature", func(t *testing.T) {
+		got := post(t, "/v1/chat/completions", `{"model":"moonshot/kimi-k2-0905-preview","messages":[{"role":"user","content":"hi"}],"temperature":0.1}`)
+		if got.host != "api.moonshot.cn" {
+			t.Fatalf("the request went to %s", got.host)
+		}
+		if v := gjson.Get(got.body, "temperature"); !v.Exists() || v.Raw != "0.1" {
+			t.Errorf("kimi-k2-0905-preview's temperature was not kept: %s", got.body)
 		}
 	})
 	t.Run("another provider is sent the body as it was", func(t *testing.T) {

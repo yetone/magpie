@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"strconv"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -139,47 +140,73 @@ func valuesType(vals []gjson.Result) string {
 	return t
 }
 
-// kimiCodeSampling is body without the sampling fields Kimi Code checks
-// against a per-model, per-mode whitelist: kimi-for-coding takes only
-// temperature 1 and top_p 0.95, a K2.5/K2.6 with thinking off takes only
-// 0.6, and a client that sends its own defaults — VS Code Copilot's chat
-// sends temperature 0.1 and top_p 1 — is refused 400 "invalid
-// temperature: only 1 is allowed for this model" before any token is
-// read, and the whole request fails. Left out, the server fills in the
-// value the current model and mode want, so no number is written here.
-// Moonshot's pay-as-you-go API, whose models take a range, keeps what the
-// user set, as does a model that isn't a K and a request that never named
-// the fields.
-func kimiCodeSampling(p provider.Provider, to provider.Protocol, body []byte) []byte {
-	if !isKimiCode(p, to) {
+// kimiLockedSampling is body without temperature and top_p when the model's
+// server locks them to one value: since kimi-k2.5 every kimi-kX.Y on both
+// Kimi platforms (Moonshot's API and a Kimi Code membership's), and Kimi
+// Code's own kimi-for-coding and k3*. A client that sends its own
+// defaults — VS Code Copilot's chat sends temperature 0.1 and top_p 1 — is
+// refused 400 "invalid temperature: only 1 is allowed for this model"
+// before any token is read (a K2.5/K2.6 with thinking off takes only 0.6),
+// and the whole request fails. Left out, the server fills in the value the
+// model and mode want, so no number is written here. Models that take a
+// range — moonshot-v1-*, kimi-k2-0905-preview, kimi-k2-thinking,
+// kimi-latest — keep what the user set, as does anyone not served by
+// Moonshot.
+func kimiLockedSampling(p provider.Provider, to provider.Protocol, body []byte) []byte {
+	if !isKimi(p, to) {
 		return body
 	}
-	if !kimiKModel(gjson.GetBytes(body, "model").String()) {
+	if !kimiLockedSamplingModel(gjson.GetBytes(body, "model").String()) {
 		return body
 	}
 	return withoutFields(body, "temperature", "top_p")
 }
 
-// isKimiCode is whether p is a Kimi Code membership's own endpoint, not
-// Moonshot's pay-as-you-go API (api.moonshot.ai / api.moonshot.cn).
-func isKimiCode(p provider.Provider, to provider.Protocol) bool {
-	if strings.HasPrefix(p.Preset, "kimi-code") {
+// kimiLockedSamplingModel is whether the model's server locks temperature
+// and top_p: kimi-for-coding* and k3* on Kimi Code, and kimi-k2.5 and
+// later (kimi-k2.6, kimi-k3, …) on either platform. A leading "vendor/" is
+// ignored.
+func kimiLockedSamplingModel(model string) bool {
+	m := strings.ToLower(model)
+	if i := strings.LastIndexByte(m, '/'); i >= 0 {
+		m = m[i+1:]
+	}
+	if strings.HasPrefix(m, "kimi-for-coding") {
 		return true
 	}
-	base := p.Base(to)
-	switch provider.HostOf(base) {
-	case "api.kimi.com", "api.kimi.ai":
-		return strings.Contains(base, "/coding")
+	v, ok := strings.CutPrefix(m, "kimi-k")
+	if !ok {
+		if v, ok = strings.CutPrefix(m, "k"); !ok {
+			return false
+		}
 	}
-	return false
+	major, rest := leadingInt(v)
+	if major < 0 {
+		return false
+	}
+	if major != 2 {
+		return major >= 3
+	}
+	if !strings.HasPrefix(rest, ".") {
+		return false // kimi-k2-thinking, kimi-k2-0905-preview
+	}
+	minor, _ := leadingInt(rest[1:])
+	return minor >= 5
 }
 
-// kimiKModel is whether model is one of Kimi's K models: kimi-for-coding,
-// kimi-k2.6, k3 and the like.
-func kimiKModel(model string) bool {
-	m := strings.ToLower(model)
-	if strings.HasPrefix(m, "kimi") {
-		return true
+// leadingInt reads the decimal integer s begins with, -1 when there is
+// none, and what follows it.
+func leadingInt(s string) (int, string) {
+	i := 0
+	for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+		i++
 	}
-	return len(m) > 1 && m[0] == 'k' && m[1] >= '0' && m[1] <= '9'
+	if i == 0 {
+		return -1, s
+	}
+	n, err := strconv.Atoi(s[:i])
+	if err != nil {
+		return -1, s
+	}
+	return n, s[i:]
 }
