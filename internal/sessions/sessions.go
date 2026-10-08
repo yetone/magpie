@@ -899,9 +899,9 @@ func List(limit int) []Session {
 		}
 		return keys[i] < keys[j]
 	})
-	if len(keys) > limit {
-		keys = keys[:limit]
-	}
+	// the keys are not truncated yet: assemble below drops an empty
+	// session, and a nonempty one must take its place rather than the
+	// page going short - an empty file is not a session (#1320)
 	// every changed file, not just the latest sessions': the first read
 	// indexes them all in one run the page can show, and the stats read
 	// after it has nothing left to do
@@ -912,6 +912,9 @@ func List(limit int) []Session {
 	for _, k := range keys {
 		if s, ok := assemble(groups[k], price); ok {
 			out = append(out, s)
+			if len(out) == limit {
+				break
+			}
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Last.After(out[j].Last) })
