@@ -57,12 +57,14 @@ async function wheelTo(page, l) {
     await page.mouse.wheel(0, 120);
     await page.waitForTimeout(50);
   }
-  // a wheel scroll is eased: hovered while it still runs, the cell moves out
-  // from under the pointer and its tip closes again. Wait until it stops.
-  const view = page.locator("#view-usage");
-  for (let last = -1, i = 0; i < 40; i++) {
+  // a wheel scroll is eased, and a window's cells scale in one after
+  // another (ctx-cell): hovered while either runs, Chromium scrolls the
+  // view to the cell, the app puts that scroll back, the cell moves out
+  // from under the pointer and its tip closes again. Wait until the target
+  // stops moving.
+  for (let last = null, i = 0; i < 40; i++) {
     await page.waitForTimeout(100);
-    const now = await view.evaluate((v) => v.scrollTop);
+    const now = await l.evaluate((b) => { const r = b.getBoundingClientRect(); return r.x + "," + r.y; });
     if (now === last) break;
     last = now;
   }
