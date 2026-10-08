@@ -2,16 +2,16 @@ name: Test
 
 on:
   push:
-    branches: [main]
+    branches: [jd]
   pull_request:
   workflow_dispatch:
 
-# On main a run finishes: a release waits for a green run, and one cancelled
+# On jd a run finishes: a release waits for a green run, and one cancelled
 # by every next push left none to wait for (LESSONS.md). A newer push still
 # replaces a run that hasn't started. A PR's run is cancelled by its next push.
 concurrency:
   group: test-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/jd' }}
 
 permissions:
   contents: read

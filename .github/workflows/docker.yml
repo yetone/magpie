@@ -2,7 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: [main]
+    branches: [jd]
     tags: ['v*']
   pull_request:
     paths: [Dockerfile, .dockerignore, .github/workflows/docker.yml]

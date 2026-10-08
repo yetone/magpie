@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Phone navigation and content stay usable in both languages (#391). The
 // desktop screenshots match BASE_REF within a small rendering tolerance
-// (origin/main by default), but for the Agents page while BASE_REF hasn't its
+// (origin/jd by default), but for the Agents page while BASE_REF hasn't its
 // 「接入」 rows yet; only API boundaries are faked, never the page's layout or
 // scrolling helpers.
 const assert = require("node:assert/strict");
@@ -13,7 +13,7 @@ const { chromium, webkit } = require("playwright");
 const { PNG } = require("playwright-core/lib/utilsBundle");
 
 const assets = path.resolve(__dirname, "../assets");
-const base = process.env.BASE_REF || "origin/main";
+const base = process.env.BASE_REF || "origin/jd";
 const baseline = new Map();
 const at = "2026-09-30T12:00:00.000Z";
 const groups = [{ name: "Claude Code", icon: "claudecode-color", calls: 123, errors: 2,
