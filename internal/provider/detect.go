@@ -282,11 +282,11 @@ func (p Provider) detectModels(ctx context.Context) []string {
 	if len(ids) > 0 {
 		return ids
 	}
-	ms, _, err := p.fetchOne(ctx)
+	l, err := p.fetchOne(ctx)
 	if err != nil {
 		return nil
 	}
-	for _, m := range ms {
+	for _, m := range l.models {
 		ids = append(ids, m.ID)
 	}
 	return ids

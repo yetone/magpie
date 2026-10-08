@@ -2,9 +2,14 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -102,6 +107,132 @@ func TestKiloModels(t *testing.T) {
 	o, _ := FromPreset("together")
 	if o.kiloFreeModel("qwen/qwen3.8-27b:free") {
 		t.Fatal("kiloFreeModel on another provider")
+	}
+}
+
+// A page of the gateway's list is not the list: the gateway's shape is
+// OpenRouter's, which pages with has_more and last_id, and a reply read as
+// the whole one drops every model of a later page from the user's picks
+// (#904). The fetch says so instead, and the picks are left alone.
+func TestKiloModelsRefuseAPageOfTheList(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	var paged atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/openrouter/models" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if paged.Load() {
+			w.Write([]byte(`{"data":[` +
+				`{"id":"kilo-auto/free","name":"Auto Free","context_length":256000,"supported_parameters":["tools"],"isFree":true}` +
+				`],"has_more":true,"first_id":"kilo-auto/free","last_id":"kilo-auto/free"}`))
+			return
+		}
+		w.Write([]byte(kiloList))
+	}))
+	defer srv.Close()
+	p, err := FromPreset("kilo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.ID, p.Chat, p.Key = "kilo-page", srv.URL+"/api/openrouter", "kilo_jwt"
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	q, _ := Find("kilo-page")
+	if _, err := q.Fetch(context.Background()); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	q, _ = Find("kilo-page")
+	q.Models = []string{"kilo-auto/free", "stealth/space-bunny-alpha"}
+	if err := Save(*q); err != nil {
+		t.Fatal(err)
+	}
+
+	// the second list leaves out a model the first one had, because it is
+	// a page: the fetch says so and takes nothing away
+	paged.Store(true)
+	if _, dropped, err := q.Refetch(context.Background()); err == nil {
+		t.Fatal("a page of the list was read as the whole list")
+	} else if len(dropped) != 0 {
+		t.Errorf("dropped %v, want none", dropped)
+	}
+	q, _ = Find("kilo-page")
+	if !slices.Equal(q.Models, []string{"kilo-auto/free", "stealth/space-bunny-alpha"}) {
+		t.Errorf("picks: %v, want the two that were picked", q.Models)
+	}
+}
+
+// The gateway's shape is OpenRouter's, which pages with has_more and
+// last_id, so a list that comes twenty at a time is followed to the end of
+// it and not refused: the models of the page after are the gateway's as
+// much as the first twenty's, and the picks made of any of them keep.
+func TestKiloModelsFollowThePagesOfTheList(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	var mu sync.Mutex
+	var after []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/openrouter/models" {
+			http.NotFound(w, r)
+			return
+		}
+		a := r.URL.Query().Get("after_id")
+		mu.Lock()
+		after = append(after, a)
+		mu.Unlock()
+		start := 0
+		if a != "" {
+			n, err := strconv.Atoi(strings.TrimPrefix(a, "vendor/model-"))
+			if err != nil {
+				http.Error(w, "no such id: "+a, http.StatusBadRequest)
+				return
+			}
+			start = n // after vendor/model-20 the list goes on with 21
+		}
+		var b strings.Builder
+		b.WriteString(`{"data":[`)
+		for i := start + 1; i <= min(start+20, 25); i++ {
+			if i > start+1 {
+				b.WriteByte(',')
+			}
+			fmt.Fprintf(&b, `{"id":"vendor/model-%d","name":"Model %d","context_length":1000000,"supported_parameters":["tools"]}`, i, i)
+		}
+		more := start+20 < 25
+		last := ""
+		if more {
+			last = fmt.Sprintf("vendor/model-%d", start+20)
+		}
+		fmt.Fprintf(&b, `],"has_more":%t,"first_id":"vendor/model-%d","last_id":%q}`, more, start+1, last)
+		w.Write([]byte(b.String()))
+	}))
+	defer srv.Close()
+	p, err := FromPreset("kilo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.ID, p.Chat, p.Key = "kilo-pages", srv.URL+"/api/openrouter", "kilo_jwt"
+	if err := Save(p); err != nil {
+		t.Fatal(err)
+	}
+	q, _ := Find("kilo-pages")
+	ms, err := q.Fetch(context.Background())
+	if err != nil {
+		t.Fatalf("fetch of a paged list: %v", err)
+	}
+	all := idsOf(ms)
+	if len(all) != 25 {
+		t.Fatalf("listed %d models, want all 25: %v", len(all), all)
+	}
+	if all[24] != "vendor/model-25" {
+		t.Errorf("last model %q, want the one on the second page", all[24])
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(after) != 2 || after[0] != "" || after[1] != "vendor/model-20" {
+		t.Errorf("asked %q, want the first page and then the one after vendor/model-20", after)
 	}
 }
 

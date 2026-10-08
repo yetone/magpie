@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +32,11 @@ type liveFile struct {
 	Fetched time.Time `json:"fetched"`
 	Base    string    `json:"base"`
 	Models  []Model   `json:"models"`
+	// Sides, for a provider whose protocols are served at bases of their
+	// own, is what each of those bases listed, before the lists were
+	// merged into Models. A base that can't be asked keeps its own part
+	// from the list saved before (#904).
+	Sides map[string][]Model `json:"sides,omitempty"`
 }
 
 func readLive(provider string) (liveFile, error) {
@@ -52,6 +59,19 @@ func Live(provider string) (models []Model, fetched time.Time, ok bool) {
 		return nil, time.Time{}, false
 	}
 	return ms, f.Fetched, true
+}
+
+// LiveSplit returns the provider's fetched list as every endpoint's own part
+// of it: sides[base] is what that endpoint listed, and all is the whole list
+// those parts were merged into. ok is false where there is no list at all;
+// sides is nil for a list saved without its parts, where every endpoint
+// answered alike.
+func LiveSplit(provider string) (sides map[string][]Model, all []Model, ok bool) {
+	f, err := readLive(provider)
+	if err != nil || len(f.Models) == 0 {
+		return nil, nil, false
+	}
+	return f.Sides, f.Models, true
 }
 
 // LiveDrawers are the models in the provider's fetched list that make
@@ -99,6 +119,14 @@ func Chat(ms []Model) []Model {
 
 // SaveLive stores a fetched list; an empty list forgets it.
 func SaveLive(provider, base string, models []Model) error {
+	return SaveLiveSides(provider, base, models, nil)
+}
+
+// SaveLiveSides is SaveLive, keeping what each endpoint answered with beside
+// the merged list (LiveSplit): a provider whose protocols sit at bases of
+// their own asks every base, and a base that can't be asked next time has to
+// know which of the models were its own to keep (#904).
+func SaveLiveSides(provider, base string, models []Model, sides map[string][]Model) error {
 	p := LivePath(provider)
 	if len(models) == 0 {
 		err := os.Remove(p)
@@ -113,7 +141,7 @@ func SaveLive(provider, base string, models []Model) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	b, _ := json.MarshalIndent(liveFile{Fetched: time.Now(), Base: base, Models: models}, "", "  ")
+	b, _ := json.MarshalIndent(liveFile{Fetched: time.Now(), Base: base, Models: models, Sides: sides}, "", "  ")
 	if err := os.WriteFile(p, b, 0o644); err != nil {
 		return err
 	}
@@ -233,12 +261,97 @@ func FetchURL(ctx context.Context, url, key string, anthropic bool, headers map[
 	return ms, err
 }
 
+// modelPages caps how many pages of one model list are followed before
+// the list is taken to be unreadable: a real catalog is one or two pages
+// at PageLimit, and a relay that pages for ever stops here rather than
+// being asked until it says so.
+const modelPages = 20
+
+// PageLimit is the page size asked of a list that pages, which Anthropic
+// accepts: a real catalog of its own fits in one or two pages of it.
+const PageLimit = 1000
+
+// fetchOne asks the model list at url to its end: the first page as the
+// URL stands, and every page after it with the id it ended at (Paged), so
+// a list that pages is the whole list and not the twenty of its first
+// page — a base whose only list is a paged one (Anthropic's own) has no
+// other answer to fall back on, and was left with none (#1006).
 func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[string]string) ([]Model, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	var out []Model
+	err := Paged(url, func(at string) (bool, string, error) {
+		ms, more, last, err := fetchPage(ctx, at, key, anthropic, headers)
+		if err != nil {
+			return false, "", err
+		}
+		out = append(out, ms...)
+		return more, last, nil
+	})
 	if err != nil {
 		return nil, err
+	}
+	return out, nil
+}
+
+// Paged asks a model list that pages for every page of itself: page asks
+// for one page, at the URL given, and says whether another page follows
+// and the id it starts after. The first page is asked at list as it
+// stands, so a list that does not page is asked exactly as it always was,
+// and each page after it at the same list with limit=PageLimit and
+// after_id set to the id the page before ended at. It stops when a page
+// says none follows.
+//
+// What does not stop it leaves the list unread, and an unread list is no
+// answer at all, as a page of it was (#904): a page that fails, a list
+// that pages without naming the id to carry on from, one that answers the
+// page just asked again under that same id, and one still paging after
+// modelPages pages. Half a list is not a list — it is missing every model
+// of the pages after, which the caller would take for models the vendor
+// dropped, and would then drop from the user's picks.
+//
+// A caller that has to ask the list itself, for the headers it takes or
+// the shape it reads, pages it here rather than with a rule of its own
+// (provider.kiloModels).
+func Paged(list string, page func(at string) (more bool, last string, err error)) error {
+	after := ""
+	for n := 0; ; n++ {
+		at := list
+		if after != "" {
+			u, err := url.Parse(list)
+			if err != nil {
+				return fmt.Errorf("%s: not a URL to page: %w", list, err)
+			}
+			q := u.Query()
+			q.Set("after_id", after)
+			q.Set("limit", strconv.Itoa(PageLimit))
+			u.RawQuery = q.Encode()
+			at = u.String()
+		}
+		more, last, err := page(at)
+		if err != nil {
+			return err
+		}
+		if !more {
+			return nil
+		}
+		if last == "" || last == after {
+			return fmt.Errorf("%s: only a page of the model list (has_more, last id %q), not the whole list", list, last)
+		}
+		if n+1 >= modelPages {
+			return fmt.Errorf("%s: still paging after %d pages of the model list (last id %q)", list, modelPages, last)
+		}
+		after = last
+	}
+}
+
+// fetchPage asks one page of the model list at url, and says whether
+// another page follows, and the id it starts after. The caller bounds the
+// time a whole list may take (fetchOne).
+func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map[string]string) ([]Model, bool, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, false, "", err
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "magpie")
@@ -256,27 +369,39 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, false, "", err
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 	if res.StatusCode != http.StatusOK {
 		if msg := errorMessage(b); msg != "" {
-			return nil, fmt.Errorf("%s: %s (%s)", url, res.Status, msg)
+			return nil, false, "", fmt.Errorf("%s: %s (%s)", url, res.Status, msg)
 		}
-		return nil, fmt.Errorf("%s: %s", url, res.Status)
+		return nil, false, "", fmt.Errorf("%s: %s", url, res.Status)
 	}
 	var v struct {
-		Data   []liveModel `json:"data"`
-		Models []liveModel `json:"models"`
+		Data    []liveModel `json:"data"`
+		Models  []liveModel `json:"models"`
+		HasMore bool        `json:"has_more"`
+		LastID  string      `json:"last_id"`
 	}
 	if err := json.Unmarshal(b, &v); err != nil {
-		return nil, fmt.Errorf("%s: not a model list", url)
+		return nil, false, "", fmt.Errorf("%s: not a model list", url)
 	}
 	rows := v.Data
 	if len(rows) == 0 {
 		rows = v.Models
 	}
+	// A list that says it has more is a page of the vendor's catalog, not
+	// the catalog: a model the user picked that lives on a later page is
+	// not in this reply, and a base that answers without a model is read
+	// as one that dropped it (#904). The pick would go for good, on a list
+	// that never said the model was gone. So the pages are followed to the
+	// end of the list (Paged), and only a list that cannot be read to its
+	// end says nothing about what this base serves today, which keeps what
+	// it listed last time. The shape is a convention, not a vendor's —
+	// Anthropic's and OpenAI's /v1/models both page with has_more and
+	// last_id.
 	var out []Model
 	for _, r := range rows {
 		id := r.ID
@@ -324,7 +449,7 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		}
 		out = append(out, m)
 	}
-	return out, nil
+	return out, v.HasMore, v.LastID, nil
 }
 
 // errorMessage is the message of a vendor's JSON error reply

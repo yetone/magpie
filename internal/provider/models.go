@@ -274,11 +274,11 @@ func (p Provider) fetch(ctx context.Context) ([]catalog.Model, error) {
 	if keys := p.KeysOn(); len(keys) > 1 {
 		return p.fetchPerKey(ctx, keys)
 	}
-	ms, base, err := p.fetchOne(ctx)
+	l, err := p.fetchOne(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return catalog.Chat(ms), catalog.SaveLive(p.ID, base, ms)
+	return catalog.Chat(l.models), catalog.SaveLiveSides(p.ID, l.base, l.models, l.sides)
 }
 
 // List asks the vendor which models it serves, as Fetch does, and keeps
@@ -301,11 +301,11 @@ func (p Provider) List(ctx context.Context) ([]catalog.Model, error) {
 		}
 		return catalog.Chat(ms), nil
 	}
-	ms, _, err := p.fetchOne(ctx)
+	l, err := p.fetchOne(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return catalog.Chat(ms), nil
+	return catalog.Chat(l.models), nil
 }
 
 // newFetches is when each account with no list from its vendor yet was
@@ -412,43 +412,282 @@ func FetchNew(timeout time.Duration) {
 	}
 }
 
-// fetchOne asks the first endpoint that answers, with p's key.
-func (p Provider) fetchOne(ctx context.Context) ([]catalog.Model, string, error) {
+// a fetched list: every endpoint's models merged, the base kept for
+// routing, what each endpoint listed of its own (sides), and which of them
+// answered at all, so that one which can't be asked keeps its own models
+// next time (#904).
+type fetched struct {
+	models   []catalog.Model
+	base     string
+	sides    map[string][]catalog.Model
+	answered map[string]bool
+}
+
+// fetchOne asks every endpoint the provider speaks with p's key, and merges
+// the lists (#904): a vendor serves its models on several protocols, and
+// each protocol's base lists its own (Kimi's Claude models at its Anthropic
+// base, its GPT models at its Chat base). Keeping only the first list that
+// answered left every other endpoint's models out of the catalog, and so out
+// of the agents' model lists and of a model's own protocol setting.
+func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 	if u := strings.TrimSpace(p.ModelsURL); u != "" {
 		// asked where the user said, and nowhere else: the base URLs
 		// list nothing, or the wrong thing
 		ms, err := catalog.FetchURL(ctx, u, p.Key, p.Chat == "" && p.Responses == "", p.listHeaders())
 		if err != nil {
-			return nil, u, err
+			return fetched{}, err
 		}
-		return catalog.WithDrawers(p.planModels(ms), catalog.PublicDrawers(ctx, u)), u, nil
+		return fetched{catalog.WithDrawers(p.planModels(ms), catalog.PublicDrawers(ctx, u)), u, nil, nil}, nil
 	}
 	if p.IsAzure() && (p.Chat != "" || p.Responses != "") {
 		// its deployments, asked with the key in api-key
-		return p.azureModels(ctx)
+		ms, base, err := p.azureModels(ctx)
+		if err != nil {
+			return fetched{}, err
+		}
+		return fetched{ms, base, nil, nil}, nil
 	}
 	var errs []string
+	var out []catalog.Model
+	byID := map[string]int{}
+	add := func(m catalog.Model) {
+		i, ok := byID[m.ID]
+		if !ok {
+			byID[m.ID], i = len(out), len(out)
+			out = append(out, m)
+			return
+		}
+		// a model of both protocols' lists is one model: its image
+		// capability is merged as the keys' lists are merged
+		out[i].ImageInput = sharedImageInput(out[i].ImageInput, m.ImageInput)
+		out[i].Images = out[i].Images && m.Images
+	}
+	var base string
+	var sides []side  // the bases that answered, in the order asked
+	var dead []string // the bases that could not be asked this time
+	asked := map[string]bool{}
+	answered := map[string]bool{} // of the bases that answered, not those kept from
 	for _, proto := range p.Speaks() {
-		base := p.Base(proto)
-		ms, at, err := catalog.FetchAt(ctx, base, p.Key, proto == Anthropic, p.listHeaders())
-		if err == nil {
-			if proto != Anthropic {
-				base = p.fixV1(base, at)
-			}
-			// the image models its list leaves out (AIHubMix's gpt-image-2)
-			return catalog.WithDrawers(p.planModels(ms), catalog.PublicDrawers(ctx, base)), base, nil
+		protoBase := p.Base(proto)
+		// OpenRouter's Anthropic base is not asked for the list, when the
+		// provider asks at another base: with the Anthropic version header
+		// OpenRouter's /models answers with its own catalog again, twenty
+		// newest first, every id namespaced under `anthropic/` — ids
+		// OpenRouter does not serve, so merged they are entries of the
+		// model picker that name no model, and a cluttered list to choose
+		// from (2026-10-06, #904). What the rule reads is the base being
+		// asked, not the provider's other bases: a Chat base of
+		// OpenRouter's says nothing of an Anthropic base that belongs to
+		// another vendor, whose models are merged as they are. One of
+		// OpenRouter's asked because it is the only base there is is asked
+		// after all, and refused with what it answers
+		// (openRouterNamespacedErr).
+		if proto == Anthropic && p.skipOpenRouterAnthropic(protoBase) {
+			continue
 		}
 		// Chat and Responses at one base say the same thing
-		if !slices.Contains(errs, err.Error()) {
-			errs = append(errs, err.Error())
+		if asked[protoBase] {
+			continue
+		}
+		asked[protoBase] = true
+		ms, u, err := catalog.FetchAt(ctx, protoBase, p.Key, proto == Anthropic, p.listHeaders())
+		if err == nil && proto == Anthropic && HostOf(protoBase) == openRouterHost {
+			// the pages of the list are followed to its end, and what
+			// comes back is still not a list of models to serve
+			err = openRouterNamespacedErr(protoBase)
+		}
+		if err != nil {
+			if !slices.Contains(errs, err.Error()) {
+				errs = append(errs, err.Error())
+			}
+			dead = append(dead, protoBase)
+			continue
+		}
+		sideBase := protoBase
+		if base == "" {
+			// the first protocol that answered keeps the base: the drawer
+			// list is fetched beside it, and it is saved with the models
+			base = protoBase
+			if proto != Anthropic {
+				base = p.fixV1(base, u)
+			}
+			// the base as it will be asked next time, /v1 and all, so
+			// this side is found again by the fetch after this one
+			sideBase = base
+		}
+		sides = append(sides, side{sideBase, ms})
+		answered[sideBase] = true
+		for _, m := range ms {
+			add(m)
 		}
 	}
-	if len(errs) == 0 {
-		return nil, "", errorf("%s has no endpoint to ask", p.Name)
+	if base == "" {
+		if len(errs) == 0 {
+			return fetched{}, errorf("%s has no endpoint to ask", p.Name)
+		}
+		// the endpoints are kept as they were: a vendor with no list (or one
+		// that wants what the key can't give) still serves the models typed in
+		return fetched{}, errorf("%s — type its model ids in by hand, or give the URL its list is at", strings.Join(errs, "; "))
 	}
-	// the endpoints are kept as they were: a vendor with no list (or one
-	// that wants what the key can't give) still serves the models typed in
-	return nil, "", errorf("%s — type its model ids in by hand, or give the URL its list is at", strings.Join(errs, "; "))
+	if len(dead) > 0 {
+		kept, saved := p.keepDeadSides(dead, sides)
+		for _, m := range kept {
+			add(m)
+		}
+		sides = append(sides, saved...)
+	}
+	// the image models its list leaves out (AIHubMix's gpt-image-2)
+	// the parts are kept only where several bases were asked: a single one
+	// that fails is the fetch that fails, and its list is kept as it is
+	var parts map[string][]catalog.Model
+	if len(asked) > 1 {
+		parts = sidesOf(sides)
+	}
+	return fetched{
+		catalog.WithDrawers(p.planModels(out), catalog.PublicDrawers(ctx, base)),
+		base,
+		parts,
+		answered,
+	}, nil
+}
+
+// side is what one of a provider's base URLs listed.
+type side struct {
+	base   string
+	models []catalog.Model
+}
+
+// openRouterHost is OpenRouter's, whose Anthropic base answers the
+// Anthropic version header with a namespaced re-listing of the catalog.
+const openRouterHost = "openrouter.ai"
+
+// openRouterNamespacedErr says why the list OpenRouter's Anthropic base
+// answers with is not one to serve. The header asks for Anthropic's own
+// catalog, and OpenRouter answers with its catalog namespaced under
+// `anthropic/` instead. Asked on 2026-10-06 that was a first page of the
+// twenty newest and, under the cursor that page ended at, a second page
+// with nothing after it; the two shared no id, and of all of them four
+// were in the catalog the same host serves without the header. Those
+// counts move with the catalog every day and are of no use to anyone: what
+// does not move is the shape. Following the pages to the end of the list
+// (catalog.Paged) lands deeper in the namespace rather than back at the
+// catalog it was namespaced from, so a list read whole is no better a
+// catalog than a page of it — the whole namespaced list, where the rule
+// used to keep the twenty — and a provider whose only base is that one is
+// left with the models it listed last time, as it is for any base it could
+// not ask (#904).
+//
+// The message says what to do instead; the caller's own suffix adds the
+// other way round, which is the same advice: a Chat base of OpenRouter's
+// lists that very catalog under the ids OpenRouter serves.
+func openRouterNamespacedErr(base string) error {
+	return fmt.Errorf("%s: with the Anthropic version header this base answers with OpenRouter's own "+
+		"catalog namespaced under `anthropic/`, which is not a list of models to serve; give this "+
+		"provider OpenRouter's Chat base (https://openrouter.ai/api/v1), which lists those models "+
+		"under the ids OpenRouter serves", base)
+}
+
+// skipOpenRouterAnthropic reports whether the Anthropic base at base is
+// one of OpenRouter's, whose reply is its own catalog namespaced and of no
+// use to the union, and the provider asks at a base of its own besides it
+// (fetchOne). The host of the base being asked is the whole of the input:
+// another vendor's Anthropic base is merged as it always was, and one of
+// OpenRouter's under a provider that asks nowhere else is asked after all —
+// there is then no other list to take, so it is asked rather than left
+// unanswered, and refused with what it answers (openRouterNamespacedErr).
+func (p Provider) skipOpenRouterAnthropic(base string) bool {
+	if HostOf(base) != openRouterHost {
+		return false
+	}
+	return strings.TrimSpace(p.Chat) != "" || strings.TrimSpace(p.Responses) != ""
+}
+
+// sidesOf is what each base listed, for the fetch to be saved with. A base
+// that answered with nothing keeps its empty part: it is a base that listed
+// nothing, which is what tells the next fetch not to look for its models
+// among the ones another base dropped.
+func sidesOf(sides []side) map[string][]catalog.Model {
+	if len(sides) == 0 {
+		return nil
+	}
+	out := make(map[string][]catalog.Model, len(sides))
+	for _, s := range sides {
+		out[s.base] = s.models
+		if s.models == nil {
+			out[s.base] = []catalog.Model{}
+		}
+	}
+	return out
+}
+
+// keepDeadSides is what a base that could not be asked this time keeps: the
+// models it listed last time, as fetchPerKey's keys keep theirs. A read that
+// failed says nothing about what the vendor serves today, and a model of a
+// failed endpoint read as gone is dropped from the user's picks for good,
+// with no way back (#904).
+//
+// What is kept is that base's own models alone: a model the bases that
+// answered have dropped is dropped here too, however many of them dropped
+// it, and however many endpoints are down. Keeping every model of the list
+// saved before would bring such a model back, which is the same fault the
+// other way round (#904, yetone's review).
+//
+// A base in none of the saved parts is one that has never answered, and
+// keeps nothing: the whole list saved before is not its own. Reading an
+// absent part as the whole list kept a model its vendor had already
+// dropped, and then saved that guess as what the base listed, so from then
+// on the model was a base's own and could never be dropped again (#904,
+// yetone's review of #1006).
+//
+// A list saved without its parts (before this kept them) says nothing about
+// which base listed what, so the models no answering base lists are kept
+// this once, and the next fetch with every base answering says which they
+// are.
+//
+// kept are the models this fetch's list is made of, saved the parts to
+// write beside it: not every base kept from is saved, only one whose part
+// was read out of the file rather than stood in for.
+func (p Provider) keepDeadSides(dead []string, answered []side) (kept []catalog.Model, saved []side) {
+	old, last, ok := catalog.LiveSplit(p.ID)
+	if !ok || len(last) == 0 {
+		return nil, nil
+	}
+	listed := map[string]bool{}
+	for _, s := range answered {
+		for _, m := range s.models {
+			listed[m.ID] = true
+		}
+	}
+	// a model another of the provider's keys alone sees is not this key's
+	// to keep (fetchPerKey's Keys)
+	mine := func(m catalog.Model) bool {
+		return p.Key == "" || len(m.Keys) == 0 || slices.Contains(m.Keys, keyID(p.Key))
+	}
+	var out []side
+	for _, base := range dead {
+		own, had := old[base]
+		if !had {
+			if old != nil {
+				// the parts are saved and this base is in none of them: it
+				// has never answered, so it has no models of its own
+				continue
+			}
+			// no parts at all: what no answering base lists is kept, this
+			// once, and not saved as this base's own
+			own = last
+		}
+		var part []catalog.Model
+		for _, m := range own {
+			if (had || !listed[m.ID]) && mine(m) {
+				part = append(part, m)
+			}
+		}
+		kept = append(kept, part...)
+		if had {
+			out = append(out, side{base, part})
+		}
+	}
+	return kept, out
 }
 
 // listRegion reports whether the provider sits at one of its preset's
@@ -614,19 +853,32 @@ func (p Provider) fixV1(base, at string) string {
 // fetchPerKey asks with each key in turn, at the endpoint it is made for: a
 // relay that hands out a key per group lists each group's models to its key
 // only. The lists are merged, each model marking the keys that see it. A
-// key that can't be asked now keeps the models it saw last time.
+// key that can't be asked now keeps the models it saw last time, and so does
+// a base of its own that can't be asked (#904).
 func (p Provider) fetchPerKey(ctx context.Context, keys []KeyAccount) ([]catalog.Model, error) {
 	old, _, _ := catalog.Live(p.ID)
 	old = append(old, catalog.LiveDrawers(p.ID)...)
 	old = append(old, catalog.LiveVideomakers(p.ID)...)
+	oldSides, _, _ := catalog.LiveSplit(p.ID)
 	var out []catalog.Model
+	var from [][]string // the bases that listed each model of out
+	asked := map[string]bool{}
+	// the bases each key was answered at, beside the models a key that
+	// could not be asked at all keeps and the keys that saw them last time
+	answeredBy := map[string]map[string]bool{}
+	type deadModel struct {
+		at   int
+		keys []string
+	}
+	var deadKept []deadModel
 	at := map[string]int{}
-	add := func(m catalog.Model, id string) {
+	add := func(m catalog.Model, id string) int {
 		i, ok := at[m.ID]
 		if !ok {
 			m.Keys = nil
 			at[m.ID], i = len(out), len(out)
 			out = append(out, m)
+			from = append(from, nil)
 		} else {
 			out[i].ImageInput = sharedImageInput(out[i].ImageInput, m.ImageInput)
 			out[i].Images = out[i].Images && m.Images
@@ -634,33 +886,108 @@ func (p Provider) fetchPerKey(ctx context.Context, keys []KeyAccount) ([]catalog
 		if !slices.Contains(out[i].Keys, id) {
 			out[i].Keys = append(out[i].Keys, id)
 		}
+		return i
 	}
 	var base string
 	var lastErr error
 	for _, k := range keys {
 		id := keyID(k.Key)
 		q := p.WithKey(k)
-		ms, b, err := q.fetchOne(ctx)
+		l, err := q.fetchOne(ctx)
 		if err != nil {
 			lastErr = err
 			for _, m := range old {
 				if slices.Contains(m.Keys, id) {
-					add(m, id)
+					deadKept = append(deadKept, deadModel{add(m, id), m.Keys})
 				}
 			}
 			continue
 		}
 		if base == "" {
-			base = b
+			base = l.base
 		}
-		for _, m := range ms {
+		for _, m := range l.models {
 			add(m, id)
+		}
+		// the bases this key's fetch asked, listed or not
+		for b := range l.sides {
+			asked[b] = true
+		}
+		if l.answered != nil {
+			answeredBy[id] = l.answered
+		}
+		// what each base listed of its own, marked on the merged models
+		// as its part, and kept out of them: a model this plan's own
+		// models (PresetDef.Only) leave out is left out here too
+		for b, ms := range l.sides {
+			for _, m := range ms {
+				if i, ok := at[m.ID]; ok && !slices.Contains(from[i], b) {
+					from[i] = append(from[i], b)
+				}
+			}
 		}
 	}
 	if len(out) == 0 {
 		return nil, lastErr
 	}
-	return catalog.Chat(out), catalog.SaveLive(p.ID, base, out)
+	// the parts saved beside the list say which bases listed a model kept
+	// for a key that could not be asked at all, so it is as its own base's
+	// as one kept for that base alone (#904). A base that was asked this
+	// round for one of the model's own keys, and answered it without
+	// listing the model, has said what it serves today and no longer owns
+	// it: sides may only say what the bases listed (yetone's review of
+	// #1006).
+	spokeFor := func(keys []string, b string) bool {
+		for _, j := range keys {
+			if answeredBy[j][b] {
+				return true
+			}
+		}
+		return false
+	}
+	for _, d := range deadKept {
+		for _, b := range basesOf(oldSides, out[d.at].ID) {
+			if spokeFor(d.keys, b) || slices.Contains(from[d.at], b) {
+				continue
+			}
+			from[d.at] = append(from[d.at], b)
+		}
+	}
+	// the parts, where the provider was asked at more than one of its
+	// bases: a base that can't be asked keeps its own models from the list
+	// saved before (#904). A base that listed nothing is a part of its own,
+	// empty, which is what says it has no models rather than that its part
+	// was lost.
+	var sides map[string][]catalog.Model
+	if len(asked) > 1 {
+		sides = make(map[string][]catalog.Model, len(asked))
+		for b := range asked {
+			sides[b] = []catalog.Model{}
+		}
+		for i, m := range out {
+			for _, b := range from[i] {
+				sides[b] = append(sides[b], m)
+			}
+		}
+	}
+	return catalog.Chat(out), catalog.SaveLiveSides(p.ID, base, out, sides)
+}
+
+// basesOf are the saved parts that listed a model: where a model a failed
+// key kept out of the list saved before came from, and so which base keeps
+// it the next time that base is the one that can't be asked (#904).
+func basesOf(sides map[string][]catalog.Model, id string) []string {
+	var out []string
+	for b, ms := range sides {
+		for _, m := range ms {
+			if m.ID == id {
+				out = append(out, b)
+				break
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // An explicit text-only answer wins. Without one, an unknown answer stays

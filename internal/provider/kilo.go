@@ -68,9 +68,38 @@ func (p Provider) kiloModels(ctx context.Context) ([]catalog.Model, string, erro
 	u := base + "/models"
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	var ms []catalog.Model
+	err := catalog.Paged(u, func(at string) (bool, string, error) {
+		page, more, last, err := p.kiloModelsPage(ctx, at)
+		if err != nil {
+			return false, "", err
+		}
+		ms = append(ms, page...)
+		return more, last, nil
+	})
 	if err != nil {
 		return nil, base, err
+	}
+	if len(ms) == 0 {
+		return nil, base, errors.New(u + ": no models listed")
+	}
+	return ms, base, nil
+}
+
+// kiloModelsPage asks the gateway's list at at, one page of it, and says
+// whether another page follows, and the id it starts after. The reply's
+// shape is OpenRouter's, which pages with has_more and last_id, so the
+// pages are followed to the end of the list (catalog.Paged) rather than
+// refused: a page read as the whole list drops every model of the pages
+// after from the user's picks (#904). As far as was measured on 2026-10-06
+// the gateway answers with the whole list either way — 400 models and no
+// has_more at api.kilo.ai/api/openrouter/models, 466 and links.next: null
+// at OpenRouter's own /api/v1/models — so this is the shape's rule kept in
+// one place, for the day either of them does answer with a page.
+func (p Provider) kiloModelsPage(ctx context.Context, at string) ([]catalog.Model, bool, string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, at, nil)
+	if err != nil {
+		return nil, false, "", err
 	}
 	req.Header.Set("Accept", "application/json")
 	KiloClient(req.Header, p.Key, "")
@@ -82,12 +111,12 @@ func (p Provider) kiloModels(ctx context.Context) ([]catalog.Model, string, erro
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, base, err
+		return nil, false, "", err
 	}
 	defer res.Body.Close()
 	b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
 	if res.StatusCode != http.StatusOK {
-		return nil, base, errorf("%s: HTTP %d", u, res.StatusCode)
+		return nil, false, "", errorf("%s: HTTP %d", at, res.StatusCode)
 	}
 	var list struct {
 		Data []struct {
@@ -105,9 +134,11 @@ func (p Provider) kiloModels(ctx context.Context) ([]catalog.Model, string, erro
 				Output []string `json:"output_modalities"`
 			} `json:"architecture"`
 		} `json:"data"`
+		HasMore bool   `json:"has_more"`
+		LastID  string `json:"last_id"`
 	}
 	if err := json.Unmarshal(b, &list); err != nil {
-		return nil, base, errorf("%s: not a model list", u)
+		return nil, false, "", errorf("%s: not a model list", at)
 	}
 	num := func(v any) int {
 		if n, ok := v.(float64); ok && n > 0 {
@@ -145,10 +176,7 @@ func (p Provider) kiloModels(ctx context.Context) ([]catalog.Model, string, erro
 		}
 		ms = append(ms, m)
 	}
-	if len(ms) == 0 {
-		return nil, base, errors.New(u + ": no models listed")
-	}
-	return ms, base, nil
+	return ms, list.HasMore, list.LastID, nil
 }
 
 // isKiloFree reports whether id is one of the gateway's free models by its

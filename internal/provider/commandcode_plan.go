@@ -354,12 +354,12 @@ func cmdProvider(who, plan string, a cmdAuth) Provider {
 		}
 		keyed := p
 		keyed.Account, keyed.Key = nil, a.APIKey
-		ms, base, err := keyed.fetchOne(keyed.Via(ctx))
+		l, err := keyed.fetchOne(keyed.Via(ctx))
 		if err != nil {
 			return nil, err
 		}
-		cmdMarkFree(ms)
-		return catalog.Chat(ms), catalog.SaveLive(p.ID, base, ms)
+		cmdMarkFree(l.models)
+		return catalog.Chat(l.models), catalog.SaveLiveSides(p.ID, l.base, l.models, l.sides)
 	}
 	acct.generate = func(ctx context.Context) (string, bool) {
 		return a.APIKey, cmdPlanNow(ctx, a, plan) == "Go"
