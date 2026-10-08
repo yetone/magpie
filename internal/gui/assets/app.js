@@ -12408,6 +12408,7 @@ const PERIODS = [["today", "Today"], ["7d", "7 days"], ["30d", "30 days"], ["all
 // never waits for them. They don't depend on the period either.
 let quotas = null;
 let quotasAt = 0; // when they came in
+let quotasError = false;
 let quotaHist = []; // each account's windows over time, for the curves (#651)
 // asked: the reader opened the page, so a Claude account's usage is read
 // at once, by running Claude Code's own /usage, rather than when its last
@@ -12446,9 +12447,10 @@ function loadQuotas(asked, again) {
   const p = Promise.resolve(quotasLoading).catch(() => {})
     .then(() => Promise.all([api("usage/quotas" + (asked ? "?asked=1" : ""), undefined, (h) => { reading = h.get("X-Magpie-Reading") === "1"; }), api("usage/quotas/history?days=35").catch(() => null)]))
     .then(([q, h]) => {
-      same = !!again && !!quotas && JSON.stringify(q || []) === JSON.stringify(quotas) && (!h || JSON.stringify(h) === JSON.stringify(quotaHist));
-      quotas = q || []; quotasAt = Date.now(); if (h) quotaHist = h;
-    }, () => { quotas = quotas || []; reading = false; })
+      if (!Array.isArray(q)) { quotasError = true; quotas = quotas || []; reading = false; return; }
+      same = !!again && !quotasError && !!quotas && JSON.stringify(q) === JSON.stringify(quotas) && (!h || JSON.stringify(h) === JSON.stringify(quotaHist));
+      quotas = q; quotasAt = Date.now(); quotasError = false; if (Array.isArray(h)) quotaHist = h;
+    }, () => { quotasError = true; quotas = quotas || []; reading = false; })
     .finally(() => {
       if (quotasLoading === p) quotasLoading = null;
       if (!same) renderQuotas();
@@ -12540,6 +12542,7 @@ function renderCosts() {
 const tokensOf = (t) => t.input + t.output;
 
 function renderQuotas() {
+  document.dispatchEvent(new Event("magpie-quotas-changed"));
   renderPanelQuota();
   const subscriptions = $("#subscriptionUsage");
   const restoreFlash = keepQuotaFlash(subscriptions);
@@ -14420,7 +14423,7 @@ function quotaRefresh(q) {
     b.classList.add("busy");
     try {
       const qs = await api("usage/quotas/refresh?provider=" + encodeURIComponent(q.provider) + (q.user ? "&user=" + encodeURIComponent(q.user) : ""), {});
-      if (Array.isArray(qs)) { quotas = qs; quotasAt = Date.now(); }
+      if (Array.isArray(qs)) { quotas = qs; quotasAt = Date.now(); quotasError = false; }
     } catch (err) {
       status(err.message, "err");
     } finally {

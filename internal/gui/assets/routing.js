@@ -6,7 +6,8 @@
 // once, each from its own place on the left. Every row, number and sentence comes from what the gateway
 // recorded while deciding (see internal/gateway/trace.go) — the order it
 // weighed the accounts in, what it weighed them by, what each answered,
-// how long a failed one rests. Nothing here is worked out again or made up.
+// how long a failed one rests. The separate Current allowances section
+// reads the Usage page's cards; it is never part of a historical request.
 (() => {
   const box = $("#rt");
   if (!box) return;
@@ -45,6 +46,10 @@
   sky.setAttribute("class", "rt-sky");
   sky.setAttribute("aria-hidden", "true");
   stage.append(wires, srcs, hub, list, sky);
+  const currentQuotas = el("section", "rt-quotas");
+  currentQuotas.hidden = true;
+  const quotaSpace = el("div");
+  quotaSpace.append(currentQuotas);
   const foot = el("div", "rt-foot");
   const cap = el("p", "rt-cap");
   cap.setAttribute("aria-live", "polite");
@@ -85,7 +90,7 @@
   rTrack.append(rHead);
   rbar.append(rTop, rWhat, rTrack);
   rbar.hidden = true;
-  box.append(top, rbar, stage, foot, log, off);
+  box.append(top, rbar, stage, quotaSpace, foot, log, off);
 
   // under the stage: every request the gateway keeps, and each account or
   // key as those requests found it
@@ -1182,6 +1187,7 @@
 
   // what a row says now: resting, answering, or what routing weighed it by
   function render() {
+    renderCurrentQuotas();
     if (!cur) return;
     hubText();
     const n = now(), rs = staged();
@@ -1240,6 +1246,58 @@
     }
     for (const [id, a] of agents) a.wire.classList.toggle("live", busy.has(id));
   }
+
+  // Current readings belong to the providers on the live stage, separately
+  // from what a request weighed. Show all their cards, named by account/key
+  // as on Usage, rather than matching a display name to a routing seat.
+  // Usage and Routing share their cache and in-flight read, including the
+  // short retry while a vendor's fresh reading is on its way.
+  let currentRead = 0, currentKey = "";
+  function hideCurrentQuotas(reserve = false) {
+    // A historical request hides today's readings, but keeps the space
+    // above the clicked row. Scroll anchoring cannot compensate when
+    // collapsing it would require scrolling above the top of the page.
+    if (reserve && !currentQuotas.hidden) quotaSpace.style.minHeight = currentQuotas.getBoundingClientRect().height + "px";
+    else if (!reserve) quotaSpace.style.minHeight = "";
+    for (const windows of currentQuotas.querySelectorAll(".quota-windows")) quotaFit.unobserve(windows);
+    currentKey = "";
+    currentQuotas.hidden = true;
+  }
+  function renderCurrentQuotas() {
+    const live = shown() && mine && cur && !pinned && !day && !rp;
+    if (!live) return hideCurrentQuotas(shown() && mine && !!cur);
+    if (!quotasLoading && Date.now() - Math.max(currentRead, quotasAt) >= 60000) {
+      currentRead = Date.now();
+      loadQuotas();
+    }
+    const providers = new Set([...rows.values()].map((row) => row.w.provider));
+    const cards = (quotas || []).filter((q) => providers.has(q.provider) && (q.windows?.length || q.error));
+    if (!cards.length) return hideCurrentQuotas();
+    quotaSpace.style.minHeight = "";
+    currentQuotas.hidden = false;
+    // The reset countdowns change by the minute. Keep the nodes between
+    // changes, and release the shared meters' observer before replacing.
+    const key = JSON.stringify([cards, quotasError, quotaLeft, document.documentElement.lang, Math.floor(Date.now() / 60000)]);
+    if (key === currentKey) return;
+    currentKey = key;
+    for (const windows of currentQuotas.querySelectorAll(".quota-windows")) quotaFit.unobserve(windows);
+    const head = el("div", "rt-quota-head", t("Current allowances"));
+    const contents = [head];
+    if (quotasError) contents.push(el("div", "subscription-error", t("Usage unavailable")));
+    for (const q of cards) {
+      const card = el("div", "rt-quota-card");
+      const name = el("div", "subscription-head");
+      name.append(icon(q.icon || "generic"), el("b", "", q.name || q.provider));
+      if (q.user) name.append(el("span", "rt-quota-user", q.user));
+      card.append(name, q.error ? el("div", "subscription-error", quotaError(q.error)) : quotaWindows(q));
+      if (q.error) card.title = q.error;
+      const read = readWhen(q);
+      if (read) card.append(read);
+      contents.push(card);
+    }
+    steady(() => currentQuotas.replaceChildren(...contents));
+  }
+  document.addEventListener("magpie-quotas-changed", () => steady(renderCurrentQuotas));
 
   // ---------- the log: how one request was routed ----------
 
@@ -2393,7 +2451,7 @@
   // Visibility events can arrive after the browser has suspended frames, so
   // finish hidden work here too. The first visible frame alone owns resume.
   function start() {
-    if (!shown()) { pause(); return; }
+    if (!shown()) { hideCurrentQuotas(); pause(); return; }
     if (!ticking) ticking = requestAnimationFrame(frame);
   }
   // in sight again: the view picked, the window shown, another tab left,
@@ -2409,10 +2467,12 @@
     off.hidden = !msg;
     for (const e of [top, stage, foot, log]) e.hidden = !!msg;
     more.hidden = !!msg;
+    if (msg) hideCurrentQuotas();
   }
 
   function empty() {
     offline("");
+    hideCurrentQuotas();
     what.replaceChildren(el("b", "", t(purpose || day ? "No requests match these filters." : "Waiting for a request")));
     mode.textContent = t("Send one from any agent routed through magpie and it plays here as it happens: who routing put first and why, each try, and what each answered.");
     for (const a of agents.values()) a.wire.remove();

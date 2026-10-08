@@ -743,6 +743,14 @@ requests only (the live trace or the selected day's retained history), and a
 `+` marks a partial estimate. Calls without a session ID are listed separately;
 old history without token tiers, or a model without a known price, shows `—`.
 
+Below its live routing diagram, **Current allowances** shows the Usage page's
+windows for the providers on stage, including a Kimi Code plan with only one
+key. Each account or key has its own card; answering or resting does not hide
+its allowance. The cards follow Settings' Used / Left choice and show reset
+times, refreshing once a minute while this view is visible. A failed read
+keeps the last figures with an unavailable notice. These are current readings:
+selecting an older request, a past day or replay hides them.
+
 Opening the Providers page automatically checks Alma, CC Switch, Claude Code
 and Codex for local provider configurations that can be imported. With no
 providers yet, a hint shows how many were found and which apps they came from;
