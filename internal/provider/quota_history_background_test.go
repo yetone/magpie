@@ -7,19 +7,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
-
-// noteHistoryNow runs the batch's history note in the test's own
-// goroutine, so what it wrote can be looked at right after.
-func noteHistoryNow(t *testing.T) {
-	t.Helper()
-	old := noteHistory
-	noteHistory = func(qs []SubscriptionQuota, now time.Time) { noteHistoryWrite(qs, now) }
-	t.Cleanup(func() { noteHistory = old })
-}
 
 // A background reading of an account is a point of the account's quota
 // history too, as a Usage-page reading is: a magpie only ever serving
@@ -28,7 +20,6 @@ func noteHistoryNow(t *testing.T) {
 // empty (#1313; yetone on #1317).
 func TestBackgroundLoginReadNotesQuotaHistory(t *testing.T) {
 	azureHome(t)
-	noteHistoryNow(t)
 	writeFile(t, filepath.Join(os.Getenv("HOME"), ".codex", "auth.json"), map[string]any{
 		"auth_mode": "chatgpt",
 		"tokens": map[string]any{
@@ -73,7 +64,6 @@ func TestBackgroundReadsNoteHistoryOnce(t *testing.T) {
 	rememberLogins(true)
 	codexSignIn(t, home, "work@example.com", "r-work")
 	rememberLogins(true)
-	noteHistoryNow(t)
 	var calls atomic.Int32
 	var batch atomic.Int32
 	oldWrite := noteHistoryWrite
@@ -112,8 +102,10 @@ func TestBackgroundReadsNoteHistoryOnce(t *testing.T) {
 	}
 }
 
-// A slow history write holds nobody: LoginUsage answers while the
-// batch's note is still being written (#1318 review).
+// A slow history write holds no routing waiter: the first LoginUsage
+// pays for the batch's note after its readings have all completed, so a
+// second caller on the same account answers while the note is still
+// being written (#1318 review).
 func TestHistoryWriteHoldsNoWaiter(t *testing.T) {
 	azureHome(t)
 	writeFile(t, filepath.Join(os.Getenv("HOME"), ".codex", "auth.json"), map[string]any{
@@ -139,22 +131,48 @@ func TestHistoryWriteHoldsNoWaiter(t *testing.T) {
 
 	release := make(chan struct{})
 	entered := make(chan struct{})
+	var writes atomic.Int32
 	oldWrite := noteHistoryWrite
 	noteHistoryWrite = func(qs []SubscriptionQuota, now time.Time) {
-		close(entered)
-		<-release // the slow disk, held until the test lets go
+		if writes.Add(1) == 1 {
+			close(entered)
+			<-release // the slow disk, held until the test lets go
+		}
 	}
-	t.Cleanup(func() { noteHistoryWrite = oldWrite; close(release) })
+	var releaseOnce sync.Once
+	t.Cleanup(func() {
+		noteHistoryWrite = oldWrite
+		releaseOnce.Do(func() { close(release) })
+	})
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		LoginUsage(context.Background(), "codex")
 	}()
-	<-entered // the note started and is stuck on the slow write
+	select {
+	case <-entered: // the note started and is stuck on the slow write
+	case <-time.After(10 * time.Second):
+		t.Fatal("history write never started")
+	}
+	select {
+	case <-done:
+		t.Fatal("LoginUsage returned before the held write finished")
+	case <-time.After(200 * time.Millisecond):
+	}
+	// The first caller is still paying for the write, but its readings
+	// completed and released their in-flight markers before the note
+	// began, so a second caller on the same account answers from them
+	// instead of waiting on the write.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if got := LoginUsage(ctx, "codex"); len(got) == 0 {
+		t.Fatal("second LoginUsage held by the history write")
+	}
+	releaseOnce.Do(func() { close(release) })
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		t.Fatal("LoginUsage held by the history write")
+		t.Fatal("LoginUsage did not return once the write was let go")
 	}
 }

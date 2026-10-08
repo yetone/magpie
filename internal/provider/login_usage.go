@@ -93,10 +93,16 @@ func loginUsageAt(ctx context.Context, agent string) (map[string]SubscriptionQuo
 		// too, as a Usage-page reading is: a magpie only ever serving
 		// other magpies has nobody on its Usage page, and its quota
 		// history stayed empty otherwise (#1313). One note for the whole
-		// batch, off the request path: the file is read, parsed and
-		// written once for all accounts, and no waiter on a reading is
-		// held by a slow disk. A cached reading notes nothing new, its
-		// ReadAt no newer than what is kept; a failed one is skipped.
+		// batch: the file is read, parsed and written once for all
+		// accounts. The note runs after every reading of the batch has
+		// completed and released its in-flight marker, so no waiter on a
+		// reading is held by a slow disk; the LoginUsage caller pays for
+		// the write, and Allowances already calls it from its own
+		// background goroutine. A detached goroutine is deliberately not
+		// used: it would outlive the caller and write after tests and
+		// commands have moved on (#1318 review). A cached reading notes
+		// nothing new, its ReadAt no newer than what is kept; a failed
+		// one is skipped.
 		qs := make([]SubscriptionQuota, 0, len(out))
 		for user, q := range out {
 			q.User = user // a login's reading itself carries no user
@@ -107,11 +113,12 @@ func loginUsageAt(ctx context.Context, agent string) (map[string]SubscriptionQuo
 	return out, oldest
 }
 
-// noteHistory notes a batch of accounts' readings in the quota history,
-// never holding the caller: the write runs in its own goroutine. Tests
-// run it synchronously.
+// noteHistory notes a batch of accounts' readings in the quota history.
+// The write is synchronous: it runs after the batch's readings have all
+// completed, so it holds no waiter on a reading. Tests substitute their
+// own note or write.
 var noteHistory = func(qs []SubscriptionQuota, now time.Time) {
-	go noteHistoryWrite(qs, now)
+	noteHistoryWrite(qs, now)
 }
 
 // noteHistoryWrite is the history write itself; tests count or hold it.
