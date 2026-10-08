@@ -61,24 +61,40 @@ func TestToggleAddsOffLevelAlongsideEfforts(t *testing.T) {
 	writeCatalog(t, `{
 	  "deepseek": {"models": {
 	    "deepseek-flash": {"id":"deepseek-flash","reasoning_options":[{"type":"toggle"},{"type":"effort","values":["low","high","max"]}]},
+	    "deepseek-v4-pro": {"id":"deepseek-v4-pro","reasoning_options":[{"type":"toggle"},{"type":"effort","values":["low","high","max"]}]},
+	    "deepseek-v4-flash": {"id":"deepseek-v4-flash","reasoning_options":[{"type":"toggle"},{"type":"effort","values":["low","high","max"]}]},
+	    "deepseek-v4-flash-vision-exp": {"id":"deepseek-v4-flash-vision-exp","reasoning_options":[{"type":"toggle"},{"type":"effort","values":["low","high","max"]}]},
 	    "effort-only": {"id":"effort-only","reasoning_options":[{"type":"effort","values":["low","high","max"]}]},
 	    "toggle-only": {"id":"toggle-only","reasoning_options":[{"type":"toggle"}]}
+	  }},
+	  "anthropic": {"models": {
+	    "claude-sonnet-5": {"id":"claude-sonnet-5","reasoning_options":[{"type":"toggle"},{"type":"effort","values":["low","medium","high","xhigh","max"]}]}
+	  }},
+	  "amazon-bedrock": {"models": {
+	    "us.anthropic.claude-sonnet-5": {"id":"us.anthropic.claude-sonnet-5","reasoning_options":[{"type":"toggle"},{"type":"effort","values":["low","medium","high","xhigh","max"]}]}
 	  }}
 	}`)
 
 	want := map[string]string{
-		"deepseek-flash": "none,low,high,max",
-		"effort-only":    "low,high,max",
-		"toggle-only":    "",
+		"deepseek-flash":               "none,low,high,max",
+		"deepseek-v4-pro":              "none,low,high,max",
+		"deepseek-v4-flash":            "none,low,high,max",
+		"deepseek-v4-flash-vision-exp": "none,low,high,max",
+		"effort-only":                  "low,high,max",
+		"toggle-only":                  "",
+		"claude-sonnet-5":              "low,medium,high,xhigh,max",
+		"us.anthropic.claude-sonnet-5": "low,medium,high,xhigh,max",
 	}
 	for id, levels := range want {
 		if got := strings.Join(EffortsOf(id), ","); got != levels {
 			t.Errorf("EffortsOf(%q) = %q, want %q", id, got, levels)
 		}
 	}
-	for _, model := range Provider("deepseek") {
-		if levels, ok := want[model.ID]; ok && strings.Join(model.Efforts, ",") != levels {
-			t.Errorf("Provider model %q efforts = %v, want %q", model.ID, model.Efforts, levels)
+	for _, providerID := range []string{"deepseek", "anthropic", "amazon-bedrock"} {
+		for _, model := range Provider(providerID) {
+			if levels, ok := want[model.ID]; ok && strings.Join(model.Efforts, ",") != levels {
+				t.Errorf("Provider %q model %q efforts = %v, want %q", providerID, model.ID, model.Efforts, levels)
+			}
 		}
 	}
 }
