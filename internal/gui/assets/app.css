@@ -630,8 +630,9 @@ body.window .field.solo { grid-column: auto; }
 .credit-days .cd-day.unknown { background: none; outline: 1px dashed var(--line); outline-offset: -1px; }
 .credit-days .cd-day i { display: block; width: 100%; border-radius: 2px; background: var(--accent); }
 .credit-days .cd-note { margin-top: 4px; font-size: 10px; color: var(--faint); }
-/* what was left over time (#651): a line a window, an even burn dashed, now
-   upright; the range (or Off) is picked once, in the allowances' head */
+/* what is left of each window over its own cycle (#651, the forecast's
+   redesign): a header saying what the forecast expects, the burn-down under
+   it, then the meter; the legend and the range live once, in the head */
 .quota-head .quota-trend { margin-right: 8px; }
 .quota-curve { margin-top: 10px; }
 .quota-curve .qc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 10.5px; color: var(--muted); }
@@ -644,6 +645,8 @@ body.window .field.solo { grid-column: auto; }
 @media (prefers-reduced-motion: reduce) { .quota-curve .qc-plot { transition: none; } }
 .balance-curve .qc-range { color: var(--muted); }
 .balance-curve .bc-pace { color: var(--faint); }
+.quota-head .quota-legend { display: flex; flex-wrap: wrap; gap: 3px 12px; align-items: center; margin-right: 10px; font-size: 10.5px; color: var(--muted); }
+.quota-head .quota-legend[hidden] { display: none; }
 .qc-grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .qc-line { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
 /* a window far shorter than the span drawn (a 5-hour one over a week) is a
@@ -653,11 +656,53 @@ body.window .field.solo { grid-column: auto; }
 .qc-now { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 1 2; vector-effect: non-scaling-stroke; }
 .quota-curve .qc-axis { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .quota-curve .qc-legend { display: flex; flex-wrap: wrap; gap: 3px 12px; margin-top: 5px; font-size: 10.5px; color: var(--muted); }
+/* the forecast's own marks: a soft fill under the line, a dotted projection,
+   the dot for now with the card's ring, the marker it runs out at */
+.qc-area { opacity: .1; stroke: none; }
+.qc-proj { fill: none; stroke-width: 1.2; stroke-dasharray: 1 2.6; stroke-linecap: round; opacity: .9; vector-effect: non-scaling-stroke; }
+.qc-dot, .qc-zero { fill: var(--card); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.qc-zero { stroke-width: 1.4; }
 /* a key never breaks inside: a long name ends in … rather than its % on a line of its own */
 .qc-key { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; white-space: nowrap; }
 .qc-key > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .qc-key i { flex: none; width: 7px; height: 7px; border-radius: 50%; }
+.qc-key i.qc-sw { width: 14px; height: 0; border-radius: 0; border-top: 1.6px solid var(--accent); }
+.qc-key i.qc-sw.dashed { border-top: 1.4px dashed var(--faint); }
+.qc-key i.qc-sw.dotted { border-top: 1.6px dotted var(--ctl-fg); }
 .qc-key b { color: var(--fg-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* one window's burn-down across the card, its axis marking the cycle's
+   start and reset, now, and where the projection runs out */
+.quota-plot { margin-top: 7px; }
+.quota-plot .qc-plot { display: block; width: 100%; height: 112px; overflow: hidden; cursor: zoom-in; transition: height .15s ease; }
+.quota-plot.big .qc-plot { height: 224px; cursor: zoom-out; }
+.quota-plot .qc-plot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+@media (prefers-reduced-motion: reduce) { .quota-plot .qc-plot { transition: none; } }
+.quota-plot .qc-axis { position: relative; display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 9.5px; color: var(--ctl-fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.quota-plot .qc-axis .axnow, .quota-plot .qc-axis .axzero, .quota-plot .qc-axis .axrest { position: absolute; top: 0; transform: translateX(-50%); }
+.quota-plot .qc-axis .axzero, .quota-plot .qc-axis .axrest { top: -14px; border-radius: 4px; padding: 0 4px; font-weight: 600; }
+.quota-plot .qc-axis .axzero { background: var(--amber-soft); color: var(--tk-n); }
+.quota-plot .qc-axis .axrest { background: var(--green-soft); color: var(--tk-s); }
+.quota-plot .qc-axis .axnow.right, .quota-plot .qc-axis .axzero.right, .quota-plot .qc-axis .axrest.right { transform: none; }
+/* a window's header above the plot: its name, the verdict, the delta */
+.quota-windows .quota.has-plot { display: flex; flex-direction: column; grid-row: auto; grid-column: 1 / -1; }
+.quota-windows.brief .quota.has-plot { display: grid; grid-row: span 3; grid-column: auto; grid-template-rows: subgrid; grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+.quota-windows.brief .qv-row, .quota-windows.brief .quota-plot { display: none; }
+.qv-row { display: flex; align-items: baseline; gap: 9px; margin-bottom: 6px; }
+.qv-badge { flex: none; font-size: 10px; font-weight: 600; color: var(--ctl-fg); background: var(--pill); border-radius: 5px; padding: 1px 6px; font-variant-numeric: tabular-nums; }
+.qv-text { min-width: 0; font-size: 13px; font-weight: 600; letter-spacing: .1px; }
+.qv-src { font-size: 10px; font-weight: 400; color: var(--ctl-fg); }
+.qv-delta { flex: none; margin-left: auto; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.qv-badge.k-safe { color: var(--tk-s); background: var(--green-soft); }
+.qv-badge.k-warn { color: var(--tk-n); background: var(--amber-soft); }
+.qv-badge.k-risk { color: var(--drift); background: var(--red-soft); }
+.qv-text.k-thin { color: var(--ctl-fg); font-size: 12px; font-weight: 500; }
+.qv-text.k-safe { color: var(--tk-s); }
+.qv-text.k-warn { color: var(--tk-n); }
+.qv-text.k-risk { color: var(--drift); }
+.qv-delta.k-thin { color: var(--ctl-fg); }
+.qv-delta.k-safe { color: var(--tk-s); }
+.qv-delta.k-warn { color: var(--tk-n); }
+.qv-delta.k-risk { color: var(--drift); }
 .quota-resets { display: flex; align-items: center; gap: 8px; margin-top: 9px; font-size: 10.5px; font-variant-numeric: tabular-nums; }
 .quota-resets .text { margin-left: auto; flex: none; font-size: 11px; padding: 2px 7px; }
 .subscription-card.several .quota-resets:not([hidden]) + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
@@ -1366,6 +1411,17 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-user { font-size: 12.5px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pq-sub { font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pq-sub.err { color: var(--muted); white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* the tray card's one compact verdict line a window, as the Usage page's */
+.pq-verdicts { display: flex; flex-direction: column; gap: 3px; margin-top: 7px; font-size: 10.5px; color: var(--muted); }
+.pq-verdict { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.pq-verdict > b { flex: none; font-weight: 600; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.pq-verdict .pq-src { font-style: normal; font-size: 9.5px; color: var(--muted); }
+/* the tray is narrow and German's line is long, so the text wraps onto a
+   second line rather than being cut off; the window label (b) stays whole */
+.pq-verdict > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.pq-verdict.k-safe > span { color: var(--tk-s); }
+.pq-verdict.k-warn > span { color: var(--tk-n); }
+.pq-verdict.k-risk > span { color: var(--drift); }
 .pq-rings { grid-row: 1 / 3; grid-column: 2; display: flex; gap: 12px; }
 .pq-ring { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
 .pq-dial { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--fg-2) calc(var(--p) * 1%), color-mix(in srgb, var(--fg) 9%, transparent) 0); }

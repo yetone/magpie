@@ -1743,11 +1743,42 @@ yet saved and an id typed in that the vendor doesn't list (added by hand)
 outlive both, and Save sends them. No click moves the page. English and
 Chinese, Chromium and WebKit, with `/api/plugins` faked.
 
-`quota-curve.test.cjs` checks the quota cards' curves (#651): a line a
-window under the meters, broken at a reset, a dashed even burn and a now
-line, the 2 days / Cycle control turning every card without moving the page,
-no curve without readings, the theme's chart colours in light and dark, and
-the tray card's thin current-cycle line, in Chinese and English.
+`quota-curve.test.cjs` checks the quota cards' burn-downs (#651, as the
+forecast redesign draws them): each window of an account's card carries its
+own plot — over its own current cycle, with the soft fill under the line, the
+0/50/100 grid, a dashed even burn, the upright now line and its dot — under a
+header and above its meter; the 2 days / Cycle control still turns every card
+at once without moving the page, the legend stands once in the allowances'
+head rather than on every card, no readings means no plot or header, a brief
+account keeps its bars alone (no header and no plot is built for it), and the
+theme's chart colours hold in light and dark, as does the tray card's thin
+current-cycle line, in Chinese and English. Nothing is drawn past a plot's
+viewBox: the geometry insets the box by the markers' room, and the point
+before the range's start (and the one after its end) goes along only as where
+its segment meets the edge. The plots and the count-fitting observer watch the
+one stable container rather than each rebuilt plot, which is checked by
+counting what app.js observed across three refreshes (none of it a plot or a
+window, and none of it detached); the fixtures serve a complete /api/usage body
+as the handler returns it, so the page no longer throws its pre-existing
+fmtCost error behind the assertions, and the error banner is asserted empty.
+
+`quota-forecast.test.cjs` checks what each window's forecast says (the
+backend's numbers, never display strings): "Lasts to reset" with the multiple
+it leaves, "Runs out in …" with the time left — one sentence whichever layer
+answered, the history marker beside it saying which — "Used up", and no
+verdict for an absent forecast or `none` state; the delta from an
+even burn at the header's right (ahead, behind, level); the dotted projection
+to the floor where it runs out and to the reset edge where it lasts, drawn
+only where a forecast came; the history marker; the one legend in the head;
+and the tray panel's compact verdict line a window, which a window with no
+readings gets no more than the card does. A run-out the backend gave no usable
+time for says only that it runs out, and a headroom past ten times the even
+burn reads as "10x+". Every plot's content is measured against its viewBox
+(the markers are not cut by the plot's edge), every string is checked in
+Chinese, English, Japanese and German, in light and dark. Unknown cycle
+timing with many readings, untouched cycles, young cycles and single
+readings retain observations without a verdict. Model/family toggles redraw
+at their attached width and refit counts while the wall's size stays fixed.
 
 `balance-curve.test.cjs` checks a key's balance over time on the Usage page:
 its readings as a line, the least-squares line since the last top-up dashed

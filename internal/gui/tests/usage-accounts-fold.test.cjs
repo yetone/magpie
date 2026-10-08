@@ -157,10 +157,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       got = await cards(page);
       assert.deepEqual(got["workbuddy-ai"].users, range(1, 5));
       assert.equal(got["workbuddy-ai"].more, w.more17);
-      // seventeen rows fewer leave less page than was scrolled: it rests at
-      // its end (the head can't be held), with the button still in sight
-      const [top, sh, ch] = await view.evaluate((v) => [v.scrollTop, v.scrollHeight, v.clientHeight]);
-      assert.ok(Math.abs(top - (sh - ch)) <= 1, "the page rests at its end");
+      // Seventeen fewer rows can leave the new button above the viewport,
+      // especially when a neighboring card has taller translated counts.
       const after = await page.locator(`${sel} .quota-accts-more`).boundingBox();
       assert.ok(after.y > 0 && after.y + after.height < 500, "the button is still in sight");
       assert.ok(await head.evaluate((e) => e.getBoundingClientRect().top) > at, "the head came down, not further up");

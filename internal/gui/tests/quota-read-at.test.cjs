@@ -3,8 +3,8 @@
 // says "Updated 40 minutes ago" from the reading's own time (readAt) — a
 // Claude account's is what Claude Code last told, which can be well before
 // the page asked — one standing in for a reading that failed says "As of",
-// marked stale, and a failed one says neither. Hovering a window's key under
-// the curve lists its latest readings, each with when it was read, ↻ where
+// marked stale, and a failed one says neither. Hovering a window's plot
+// lists its latest readings, each with when it was read, ↻ where
 // the window started again; the card gets no control of its own.
 // English and Chinese; no backend, the API is faked here.
 const assert = require("node:assert/strict");
@@ -71,7 +71,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const page = await (await browser.newContext({ viewport: { width: 900, height: 700 }, reducedMotion: "reduce" })).newPage();
       page.setDefaultTimeout(5000);
       page.on("pageerror", (e) => errors.push(e.message));
-      await page.route("**/*", serve(lang, fixtures(Date.now())));
+      const data = fixtures(Date.now());
+      await page.route("**/*", serve(lang, data));
       await page.goto("http://magpie.test/?view=usage");
 
       const claude = page.locator(".subscription-card", { hasText: "Claude Code" });
@@ -86,12 +87,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       assert.equal(await page.locator(".subscription-card", { hasText: "Kimi" }).locator(".quota-read").count(), 0, "a failed reading says no time");
 
-      // the latest readings, newest first, on the window's key
-      const key = claude.locator(".quota-curve .qc-key").first();
-      const title = (await key.getAttribute("title")).split("\n");
-      assert.equal(title[2], w.latest, title.join(" | "));
-      assert.deepEqual(title.slice(3).map((l) => l.replace(/ · .*/, "")), ["72%", "↻ 100%", "35%"]);
-      assert.equal(await claude.locator(".quota-curve button").count(), 0, "no control on the card");
+      // the latest readings, newest first, on the window's plot
+      const plot = claude.locator(".quota-plot").first();
+      await plot.hover();
+      const title = (await plot.getAttribute("title")).split("\n");
+      assert.equal(title[0], w.latest, title.join(" | "));
+      assert.deepEqual(title.slice(1).map((l) => l.replace(/ · .*/, "")), ["72%", "↻ 100%", "35%"]);
+      for (const reading of title.slice(1)) assert.match(reading, / · .+/, "each reading includes its own time");
+      const last = data.history[0].lines[0].points.at(-1);
+      const readTime = new Date(last.at).toLocaleTimeString(lang === "zh" ? "zh-CN" : "en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+      assert.ok(title[1].includes(readTime), "the latest reading's own time is reachable: " + title[1]);
+      const dot = await plot.locator("circle.qc-dot title").textContent();
+      assert.match(dot, /72%/);
+      assert.ok(dot.includes(lang === "zh" ? "读取于" : "read "), dot);
+      assert.equal(await plot.locator("button").count(), 0, "no control on the plot");
       assert.deepEqual(errors, []);
     });
   }

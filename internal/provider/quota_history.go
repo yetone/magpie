@@ -56,10 +56,12 @@ type QuotaPoint struct {
 	ResetsAt *time.Time `json:"resetsAt,omitempty"`
 }
 
-// QuotaLine is one window's points, oldest first.
+// QuotaLine is one window's points, oldest first, and what they say about
+// the cycle in progress.
 type QuotaLine struct {
-	Name   string       `json:"name"`
-	Points []QuotaPoint `json:"points"`
+	Name     string         `json:"name"`
+	Points   []QuotaPoint   `json:"points"`
+	Forecast *QuotaForecast `json:"forecast,omitempty"`
 }
 
 // QuotaHistory is one account's windows over time. User is lowercased.
@@ -334,6 +336,7 @@ func QuotaHistories(since time.Time, provider, user string) []QuotaHistory {
 		return []QuotaHistory{}
 	}
 	out := []QuotaHistory{}
+	now := time.Now()
 	for _, key := range slices.Sorted(maps.Keys(h)) {
 		p, u, _ := strings.Cut(key, "|")
 		if provider != "" && p != provider || user != "" && u != strings.ToLower(user) {
@@ -347,7 +350,14 @@ func QuotaHistories(since time.Time, provider, user string) []QuotaHistory {
 				i-- // the one before, so a line reaches the range's edge
 			}
 			if i < len(pts) {
-				a.Lines = append(a.Lines, QuotaLine{Name: name, Points: slices.Clone(pts[i:])})
+				line := QuotaLine{Name: name, Points: slices.Clone(pts[i:])}
+				// The forecast is over the whole series stored for the window,
+				// not the days the caller asked to see: a client's display
+				// window must not change the verdict.
+				if f, ok := quotaForecast(name, pts, now); ok {
+					line.Forecast = &f
+				}
+				a.Lines = append(a.Lines, line)
 			}
 		}
 		if len(a.Lines) > 0 {

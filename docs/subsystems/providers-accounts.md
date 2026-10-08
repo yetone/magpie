@@ -39,6 +39,50 @@ keys and accounts per request is in [Gateway routing and fallback](gateway-routi
 3. **Sign.** For each try, `Sign` gives the request its auth. A token about to expire is refreshed first, and the rotated tokens go back to their one holder: the agent's store, or `logins.json` for an account standing behind it.
 4. **Allowance.** Usage endpoints are rate limited, so `SubscriptionUsage` caches its results: a cached copy comes back at once and a stale one is refreshed in the background. When an account's windows start again, `OnRenewed` tells the gateway so a resting account can come back: a Codex reset spent (`renewedNow`), or a reading routing takes (`Allowances`, as the agent the account's usage is read under, `claude` or `plugin:<id>`) that finds the account full till sooner than the last did (`renewedFrom`, the rule a key's reading goes by): the whole account, or a pool of some models with the whole account's windows over it. A window used below `SpentShareOf` its routing, or whose reset passed, is full no more; one full with its reset not known is full for good. A Claude account is back as soon as a new `/usage` or the reset passing shows the window it was out of started again, not when the time Claude Code's refusal named comes; its five hours started again in a week used up tells nothing. A first reading, a failed one, one read alike, or one leaving the full window out tells nothing, and a reset spent is told once, by `renewedNow`. A key's reading that finds a window it was full in (at `SpentShareOf` its routing) full no more, or full till sooner, tells it too, as agent `""` and the key's `KeyAllowanceID`, so a key out of its limit is back once the limit is raised or its usage reset; a first reading, a failed one, or one that finds it fuller tells nothing. An account refused for its quota has its agent's allowances read again at the next ask (`StaleAllowance`). A reading already out then was asked before the refusal: what it read is kept, as not read, so the ask after it lands reads again, as `StaleKeyAllowance` does for a key. Built-in Grok's own per-account cache (`grokLoginUsage`) doesn't keep such a reading at all: it goes to its caller only, so that next ask reaches xAI.
 
+## Allowance history and forecasts
+
+[`quota_history.go`](../../internal/provider/quota_history.go) records each
+window's observed percent left, observation time, cycle start and reset.
+`QuotaHistories` serves those lines through `GET /api/usage/quotas/history`
+and `GET /v1/magpie/quotas/history`. Each line may also carry a derived
+`forecast`; changing the requested `days` trims the displayed points, not
+the full history used to forecast. Forecasts are never persisted or synced.
+
+[`quota_forecast.go`](../../internal/provider/quota_forecast.go) compares
+current consumption with an even burn. Windows of at least two days may
+also use at least three completed cycles with sufficient readings and
+coverage. The more conservative result wins: either layer can warn that the
+allowance runs out. Unknown cycles, insufficient readings and expired resets
+have no forecast; `state: "none"` means the cycle is too young or too little
+is consumed, `"spent"` means an observed depleted allowance, and `"ok"`
+means a projection is available. Below 8% of a cycle, a clear early run-out
+still gets a projection once 30 minutes have elapsed, at least 10% has been
+used and the even-burn ETA is at most half the time remaining to reset.
+Smaller or younger early burns wait for more of the cycle. The backend
+returns numbers and enums; labels belong to the UI's translations.
+
+A forecast's `asOf` is its last observation, which fixes its rate, ahead
+percentage, verdict, projected `leftAtReset` and `headroom`. Unobserved time
+never counts as zero consumption. `runsOutAt`, when present, is that
+projection's fixed crossing; `etaSeconds` counts down from the query's clock
+and floors at zero after the crossing. An expired projection does not claim
+an observed `"spent"` state. A reset that has passed ends the forecast,
+and readings from a new cycle cannot reuse the previous cycle's verdict.
+
+The Usage page and tray share the same verdict in
+[`app.js`](../../internal/gui/assets/app.js). An absent forecast or `"none"`
+state shows no verdict; actual readings and their times remain available.
+Each full account window has its own burn-down, even-burn line and projected
+crossing or reset remainder.
+The actual dot is at the reading's time, with a reading tooltip; the vertical
+line marks now. The shared legend explains the marks, and the range menu
+changes charts without changing the verdict. Brief accounts retain meters
+only. Clicking a plot or pressing Enter enlarges it without scrolling; the
+tray keeps a compact verdict and sparkline. Model/family switches redraw
+and fit the new windows after insertion, even when the card wall's size
+stays the same. Resizing redraws from the stable
+card container on the next animation frame, avoiding WebKit observer loops.
+
 ## Constraints and failure behavior
 
 - Each refresh token has exactly one holder. Vendors rotate tokens on refresh, so two copies of one token would sign each other out. `savedTokenMu` stops two requests refreshing one saved account at once.
@@ -61,7 +105,15 @@ keys and accounts per request is in [Gateway routing and fallback](gateway-routi
 ```sh
 go test -tags nogui ./internal/provider -run 'TestAccount|TestCodex|TestGroup|TestQuota|TestLogin|TestSignIn|TestSeveralKeys|TestKeyProtocol|TestSetKeyWeight|TestReadSub2APIKeyLimits|TestSub2APIKeyLimitsOnItsCard|TestKeyAllowance|TestPlanKeyAllowance|TestPayAsYouGoKeyAskedSeldom|TestClaudeAccountToldRenewed|TestPluginAccountToldRenewed'
 go test -tags nogui ./internal/provider -run 'TestVolcengine|TestQianfan|TestBedrock'
-go test -tags nogui ./internal/provider
+go test -tags nogui ./internal/provider -count=1
+```
+
+The forecast regressions include `TestQuotaHistoriesForecastIgnoresDisplayDays`,
+`TestQuotaForecastOldReading` and `TestQuotaForecastStaysOutOfSync`. Browser
+checks use Node and Playwright:
+
+```sh
+node --test internal/gui/tests/quota-curve.test.cjs internal/gui/tests/quota-forecast.test.cjs internal/gui/tests/balance-curve.test.cjs
 ```
 
 The package's tests use a home of their own (`testenv`). Never point them at
