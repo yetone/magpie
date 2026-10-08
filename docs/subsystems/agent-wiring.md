@@ -34,29 +34,7 @@ something else shows up as drift.
 ## Constraints and failure behavior
 
 - magpie only removes what it wrote. Anything else in an agent's config stays as it was.
-- OpenClaw's adapter ([`openclaw.go`](../../internal/agent/openclaw.go)) writes
-  `models.providers.magpie` and the default primary model in
-  `agents.defaults.model`. Its model catalog includes context/output limits,
-  image input, reasoning and known prices; native Responses and Anthropic
-  models use their respective API adapters. A nonempty `agents.defaults.models`
-  menu gets magpie's entries beside its own; an explicit `modelPolicy.allow`
-  gets `magpie/*`. Sync updates only a provider carrying magpie's key and
-  removes obsolete, unedited menu entries. Disconnect restores the prior
-  primary (including string shorthand), provider and policy, preserving
-  fallback lists and later user edits. It does not override per-agent models
-  or session picks. JSON/JSONC keeps comments and layout; other JSON5 syntax
-  is normalized to JSON without changing numeric types or precision.
-  Malformed configs, `$include` configs and OpenClaw's read-only/Nix flags
-  fail without writing. Config location follows `OPENCLAW_CONFIG_PATH`, then
-  `OPENCLAW_STATE_DIR`, then `.openclaw` under `OPENCLAW_HOME` or the user's
-  home; absolute overrides use `appdir.Getenv` and join `agentenv.Vars` for
-  sandboxing. WSL uses the distro's default folder and gateway address, not
-  Windows' overrides. When neither its config nor CLI is present, the Agents
-  page still offers OpenClaw under **Install other agents**, using its vendor
-  installer labeled `shell` for macOS/Linux or PowerShell on Windows, plus
-  `npm i -g openclaw` on each platform for users who already manage Node.js
-  ([`install.go`](../../internal/agent/install.go)). Listing these commands
-  neither runs an installer nor creates an OpenClaw config.
+- JetBrains Air's `magpie-opencode.json` keeps user-added fields in `provider.magpie`, including nested options, on sync and model picks (`air` in [`air.go`](../../internal/agent/air.go), using `theirsKept` in [`sync.go`](../../internal/agent/sync.go)). The gateway fields and complete model list are still replaced, so removed models leave the list.
 - Codex signed in to ChatGPT stays beside its sign-in (`openai_base_url`) unless the user picks magpie API. magpie becomes its provider only while the Codex app holds the active account, which it sends nothing for: `/wham/usage` says it isn't allowed, and it has no credits and isn't a workspace still within its overage (`codexHeld`, read by `provider.CodexUsedUp`). Where the app goes by what usage can't show (an experiment's gate, a reserve, a Team plan's overage under the reserve experiment), it counts as held: a wrong move costs ChatGPT extras, a missed one every turn. A saved reading kept through a failed read stops saying held once its used-up window has started again; a hold with no window used up stays till a fresh read. The app then loses its ChatGPT state (durable threads, remote control), so a window at 100% alone, which credits get past, doesn't move it (`codex.out` marks the move, and Sync undoes it once the account has room).
 - Moving a field from one of magpie's models to another (the agent's own picker) is not drift. Moving it off magpie is.
 - A field that follows another while empty (`Follows`: Claude Code's tiers and subagents on its main model) is read by `Drift` as on that field's model. The main model moved, in Claude Code's own `/model`, onto the model magpie had set a tier to is not drift (#1050).
@@ -70,11 +48,41 @@ something else shows up as drift.
 - An agent's config is written in the form the installed version reads, taken from what that version declares, not the latest one. VSCodium has no Copilot Chat of its own, and the Marketplace's last one (0.48.1) has no Custom Endpoint provider, only OpenAI Compatible (`customoai`, #1014). magpie reads the provider list in the package.json of the `github.copilot-chat` installed under `~/.vscode-oss/extensions` (`vscodeChatOf`). It writes its group for `customendpoint` when that is declared, for `customoai` when only that is, with each model's window as `maxInputTokens` + `maxOutputTokens` and the token as `x-api-key` (that version drops an Authorization in `requestHeaders`). A missing or unreadable extension keeps `customendpoint`. Sync rewrites a group written for the other provider, and Check reports it, as it does a Copilot Chat declaring neither. That Copilot Chat registers its providers only while signed in to GitHub with a personal Copilot plan, which the Notice says.
 - Tests never touch the real machine. `TestMain` uses `testenv`, which points HOME, USERPROFILE, the XDG folders and APPDATA into a temporary folder, clears `agentenv.Vars` and puts failing stand-ins for keychain tools and agent CLIs on PATH. Agent-specific side effects (Aside, the Zed keychain, Codex's usage check) are also stubbed in `TestMain`.
 
+### OpenClaw
+
+OpenClaw's adapter ([`openclaw.go`](../../internal/agent/openclaw.go)) writes
+`models.providers.magpie` and the default primary model in
+`agents.defaults.model`. Its model catalog includes context/output limits,
+image input, reasoning and known prices; native Responses and Anthropic
+models use their respective API adapters. A nonempty `agents.defaults.models`
+menu gets magpie's entries beside its own; an explicit `modelPolicy.allow`
+gets `magpie/*`. Sync updates only a provider carrying magpie's key and
+removes obsolete, unedited menu entries. Disconnect restores the prior
+primary (including string shorthand), provider and policy, preserving
+fallback lists and later user edits. It does not override per-agent models
+or session picks. JSON/JSONC keeps comments and layout; other JSON5 syntax
+is normalized to JSON without changing numeric types or precision.
+Malformed configs, `$include` configs and OpenClaw's read-only/Nix flags
+fail without writing. Config location follows `OPENCLAW_CONFIG_PATH`, then
+`OPENCLAW_STATE_DIR`, then `.openclaw` under `OPENCLAW_HOME` or the user's
+home; absolute overrides use `appdir.Getenv` and join `agentenv.Vars` for
+sandboxing. WSL uses the distro's default folder and gateway address, not
+Windows' overrides. When neither its config nor CLI is present, the Agents
+page still offers OpenClaw under **Install other agents**, using its vendor
+installer labeled `shell` for macOS/Linux or PowerShell on Windows, plus
+`npm i -g openclaw` on each platform for users who already manage Node.js
+([`install.go`](../../internal/agent/install.go)). Listing these commands
+neither runs an installer nor creates an OpenClaw config.
+
+```sh
+go test -tags nogui ./internal/agent -run TestOpenClaw
+```
+
 ## Verification
 
 ```sh
 go test -tags nogui ./internal/agent -run 'TestConnect|TestDisconnect|Drift|TestKeptAddress|TestWSLAgentAddress|TestReachProbe|TestDryRunKnowsTheAskersProviders|TestReseat|TestPort|TestWSL|TestClaudeKeepsItsClaudeAISignIn|TestClaudeSignIn|TestClaudeOwnEndpointWithAnEmptyKey|TestClaudeAtAnOlderGatewayAddress'
-go test -tags nogui ./internal/agent -run TestOpenClaw
 go test -tags nogui ./internal/agent
+go test -tags nogui ./internal/agent -run '^TestAir'
 node --test internal/gui/tests/agent-connect.test.cjs internal/gui/tests/agent-disconnect-preview.test.cjs internal/gui/tests/claude-signin.test.cjs
 ```

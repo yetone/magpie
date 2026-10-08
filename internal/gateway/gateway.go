@@ -1327,10 +1327,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// a Codex subagent's task its lead sealed — the lead answered by a
 	// ChatGPT account, the group's own or Codex's — goes only to a ChatGPT
 	// account, the lead's first (#619), or back to the Responses provider
-	// that answered the lead, a relay of the ChatGPT backend (#1109); with
-	// none, it is turned away before anyone is asked
+	// that answered the lead, a relay of the ChatGPT backend (#1109); a
+	// lead's turn with its subagent's sealed reply in it, back to the one
+	// that has answered the lead's conversation (#1237); with none, it is
+	// turned away before anyone is asked
 	sealedTask := from == provider.Responses && hasSealedAgentMessage(body)
 	sealedLead := ""
+	var sealers []string
 	if sealedTask {
 		parent := metadata.Parent
 		if parent == "" {
@@ -1341,7 +1344,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			scope = provider.GroupPrefix + g.ID
 		}
 		sealedLead = leadProvider(scope, parent)
-		if !(isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool { return s.sealedReader(m.Provider, m.Model, sealedLead) }) || !isGroup && s.sealedReader(p, model, sealedLead)) {
+		sealers = []string{sealedLead, leadProvider(scope, conversationID(r.Header, body))}
+		if !(isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool { return s.sealedReader(m.Provider, m.Model, sealers) }) || !isGroup && s.sealedReader(p, model, sealers)) {
 			call.Status, call.Error = 400, "sealed subagent task"
 			writeError(w, from, 400, sealedTaskError(call.Model, sealedLead))
 			turnedAway()
@@ -1461,7 +1465,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	}
 	agentPick := provider.AgentEffort(agent)
 	if sealedTask {
-		cands, pl = s.sealedReaders(cands, pl, sealedLead)
+		cands, pl = s.sealedReaders(cands, pl, sealers)
 	}
 	var accountHeld bool // every candidate was an account or key the calling key may not use
 	if keyHeld || accHeld {

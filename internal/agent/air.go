@@ -88,7 +88,7 @@ func air(home, cfg string) *Agent {
 	// the OpenCode config magpie's agent runs on, magpie's own file
 	ocPath := filepath.Join(dir, "magpie-opencode.json")
 	entry := "agent_servers." + airAgent
-	provider := func() any { return magpieProviderJSONFor("opencode", "air") }
+	provider := theirsKept(ocPath, "provider."+magpieID, func() any { return magpieProviderJSONFor("opencode", "air") }, "models")
 	// ours: acp.json's Magpie is the agent magpie added, on its file
 	ours := func() bool {
 		v, _ := edit.GetJSON(path, entry+".env.OPENCODE_CONFIG")

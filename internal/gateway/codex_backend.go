@@ -152,33 +152,39 @@ func sealedTaskError(model, lead string) string {
 // ChatGPT backend's Responses API (Sub2API, #1109) seals its lead's tasks
 // as well and opens them again: it reads the task when it answered the
 // lead (lead, the provider id), and the task is relayed to it as it came,
-// on Responses, never translated.
-func (s *Server) sealedReader(p provider.Provider, model, lead string) bool {
+// on Responses, never translated. sealers are the providers that answered
+// the agents the sealed messages came from: the lead, for a subagent's
+// task, and the conversation itself, for a lead its subagent's sealed reply
+// comes back to (#1237) — the subagent, sent a task sealed there, had to be
+// on that provider too.
+func (s *Server) sealedReader(p provider.Provider, model string, sealers []string) bool {
 	if p.Account != nil && p.Account.Agent == "codex" {
 		return true
 	}
-	return lead != "" && p.Account == nil && p.ID == lead && slices.Contains(s.usable(p, model), provider.Responses)
+	return p.Account == nil && slices.Contains(sealers, p.ID) && slices.Contains(s.usable(p, model), provider.Responses)
 }
 
 // sealedReaders keeps of cands those that can read a sealed subagent task,
 // pl's order with them.
-func (s *Server) sealedReaders(cands []candidate, pl planned, lead string) ([]candidate, planned) {
+func (s *Server) sealedReaders(cands []candidate, pl planned, sealers []string) ([]candidate, planned) {
 	var kept []candidate
 	var order []Weighed
 	for i, c := range cands {
-		if s.sealedReader(c.p, c.model, lead) {
+		if s.sealedReader(c.p, c.model, sealers) {
 			kept = append(kept, c)
 			order = append(order, pl.order[i])
 		}
 	}
 	cands, pl.order = kept, order
-	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !s.sealedReader(c.p, c.model, lead) })
+	pl.held = slices.DeleteFunc(slices.Clone(pl.held), func(c candidate) bool { return !s.sealedReader(c.p, c.model, sealers) })
 	return cands, pl
 }
 
 // leadProvider is the provider that answered a subagent's lead, the
 // thread parent names, in any scope magpie routed it in: "" when it
 // answered none of the lead's turns, or so long ago it no longer counts.
+// Given a lead's own conversation, it is the provider that answered the
+// lead.
 func leadProvider(scope, parent string) string {
 	parent = strings.TrimSpace(parent)
 	if parent == "" {

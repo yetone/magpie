@@ -267,7 +267,39 @@ func addCopilotLogin(user, plan, token, host string) error {
 		a["host"] = host
 	}
 	auth, _ := json.Marshal(a)
-	return addSideLogin(savedLogin{Agent: "copilot", User: CopilotAccountName(user, host), Plan: plan, Auth: auth}, copilotOwnUser(copilotConfigDir()), func(savedLogin) {})
+	name := CopilotAccountName(user, host)
+	own := copilotOwnUser(copilotConfigDir())
+	// the editors' own sign-in of this account refused (#1238): this one
+	// is kept, standing for it, rather than let go as the same account
+	if strings.EqualFold(own, name) && copilotEditorRefused(copilotConfigDir(), user, host) {
+		own = ""
+	}
+	return addSideLogin(savedLogin{Agent: "copilot", User: name, Plan: plan, Auth: auth}, own, func(savedLogin) {})
+}
+
+// copilotEditorRefused says GitHub refused the editors' sign-in of user on
+// host: a stale token in apps.json, which a sign-in from magpie is not let
+// go for (#1238).
+func copilotEditorRefused(cfg, user, host string) bool {
+	gh, ghe := copilotEditorLogins(cfg)
+	for _, e := range []*copilotApp{gh, ghe} {
+		if e != nil && copilotSameAccount(*e, copilotApp{User: user, Host: host}) && copilotRefusedToken(e.Token) {
+			return true
+		}
+	}
+	return false
+}
+
+// copilotProbeEditor asks GitHub whether it still takes the editors' sign-in
+// of user on host, when magpie has not asked yet: a sign-in from magpie of
+// the same account is kept only when it doesn't (addCopilotLogin).
+func copilotProbeEditor(ctx context.Context, user, host string) {
+	gh, ghe := copilotEditorLogins(copilotConfigDir())
+	for _, e := range []*copilotApp{gh, ghe} {
+		if e != nil && copilotSameAccount(*e, copilotApp{User: user, Host: host}) && !copilotRefusedToken(e.Token) {
+			_, _ = copilotToken(ctx, *e)
+		}
+	}
 }
 
 // copilotAccount is the Copilot account in use first.
