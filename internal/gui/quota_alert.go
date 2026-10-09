@@ -47,8 +47,38 @@ func alertWindowZh(name string) string {
 	return name
 }
 
+// alertWindowZhTW is alertWindowZh in Traditional Chinese, a window
+// being a 時段 as the page's zh-TW calls it.
+func alertWindowZhTW(name string) string {
+	if m := hoursName.FindStringSubmatch(name); m != nil {
+		return m[1] + " 小時"
+	}
+	if m := daysName.FindStringSubmatch(name); m != nil {
+		return m[1] + " 天"
+	}
+	switch name {
+	case "Weekly":
+		return "每週"
+	case "Monthly":
+		return "每月"
+	case "Daily":
+		return "每日"
+	}
+	return name
+}
+
+// alertClockZhTW is alertClockZh in Traditional Chinese.
+func alertClockZhTW(at, now time.Time) string {
+	return zhClock(at, now, [...]string{"週日", "週一", "週二", "週三", "週四", "週五", "週六"})
+}
+
 // alertClockZh is provider.ResetClock in Chinese.
 func alertClockZh(at, now time.Time) string {
+	return zhClock(at, now, [...]string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"})
+}
+
+// zhClock is provider.ResetClock in Chinese with these weekday names.
+func zhClock(at, now time.Time, weekdays [7]string) string {
 	at, now = at.Local(), now.Local()
 	day := func(t time.Time) time.Time { y, m, d := t.Date(); return time.Date(y, m, d, 0, 0, 0, 0, time.Local) }
 	switch days := int(math.Round(day(at).Sub(day(now)).Hours() / 24)); {
@@ -57,7 +87,7 @@ func alertClockZh(at, now time.Time) string {
 	case days == 1:
 		return "明天 " + at.Format("15:04")
 	case days < 7:
-		return [...]string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}[at.Weekday()] + " " + at.Format("15:04")
+		return weekdays[at.Weekday()] + " " + at.Format("15:04")
 	}
 	return fmt.Sprintf("%d月%d日 %s", at.Month(), at.Day(), at.Format("15:04"))
 }
@@ -138,7 +168,7 @@ func alertClockDe(at, now time.Time) string {
 }
 
 // alertText is a usage alert as a notification says it, in the language
-// (en, zh, ja or de): the card, and what reached the line. left says a
+// (en, zh, zh-TW, ja or de): the card, and what reached the line. left says a
 // window by how much of it is left, as the Usage page does when set to.
 func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now time.Time) (title, body string) {
 	title = a.Name
@@ -153,6 +183,8 @@ func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now t
 		switch lang {
 		case "zh":
 			return title, fmt.Sprintf("余额已降至 %s（提醒线 %s）", a.Balance, line)
+		case "zh-TW":
+			return title, fmt.Sprintf("餘額已降至 %s（提醒線 %s）", a.Balance, line)
 		case "ja":
 			return title, fmt.Sprintf("残高が %s まで減りました（通知ライン %s）", a.Balance, line)
 		case "de":
@@ -172,6 +204,16 @@ func alertText(lang string, a provider.QuotaAlert, bal float64, left bool, now t
 		}
 		if a.ResetsAt != nil {
 			body += "，" + alertClockZh(*a.ResetsAt, now) + " 重置"
+		}
+		return title, body
+	}
+	if lang == "zh-TW" {
+		body = fmt.Sprintf("%s時段已用 %s", alertWindowZhTW(a.Window), pct)
+		if left {
+			body = fmt.Sprintf("%s時段剩餘 %s", alertWindowZhTW(a.Window), pct)
+		}
+		if a.ResetsAt != nil {
+			body += "，" + alertClockZhTW(*a.ResetsAt, now) + " 重置"
 		}
 		return title, body
 	}
@@ -217,6 +259,8 @@ func reminderText(lang string, a provider.QuotaAlert, now time.Time) string {
 		switch lang {
 		case "zh":
 			return fmt.Sprintf("%d 张重置卡尚未使用，将于 %s 过期", a.Credits, alertClockZh(at, now))
+		case "zh-TW":
+			return fmt.Sprintf("%d 張重置卡尚未使用，將於 %s 過期", a.Credits, alertClockZhTW(at, now))
 		case "ja":
 			return fmt.Sprintf("未使用のリセット %d 回分が %s に期限切れになります", a.Credits, alertClockJa(at, now))
 		case "de":
@@ -231,6 +275,8 @@ func reminderText(lang string, a provider.QuotaAlert, now time.Time) string {
 	switch lang {
 	case "zh":
 		return fmt.Sprintf("%s窗口还剩 %s，%s 重置，记得用掉", alertWindowZh(a.Window), pct, alertClockZh(at, now))
+	case "zh-TW":
+		return fmt.Sprintf("%s時段還剩 %s，%s 重置，記得用掉", alertWindowZhTW(a.Window), pct, alertClockZhTW(at, now))
 	case "ja":
 		return fmt.Sprintf("%s枠が %s 残っています、%s にリセット", alertWindowJa(a.Window), pct, alertClockJa(at, now))
 	case "de":

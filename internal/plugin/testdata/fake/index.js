@@ -3,6 +3,12 @@
 // built-in's plugin does.
 const ID = process.env.FAKE_ID || "fakeco"
 
+// born is when the host loaded the plugin. The accounts' windows renew at
+// times set from it, as a vendor's are: read again, an account renews when
+// it did, so two accounts read either side of an hour aren't an hour apart
+// to Smart routing, which weighs renewals to the hour.
+const born = Date.now()
+
 // fakeWho is who a team signs in as: team@fake, and a team named name/uid
 // is name@fake with that uid, as WorkBuddy's plugin keeps one
 function fakeWho(team) {
@@ -73,8 +79,9 @@ export const FakePlugin = async ({ client }) => ({
       },
     }
     // $FAKE_RESPONSES: one model more, on OpenAI's Responses (Grok's)
-    // $FAKE_FAST: fake-1 has a fast one, as a Cursor model has its -fast
-    if (process.env.FAKE_FAST) cfg.provider[ID].models["fake-1-fast"] = { name: "Fake One Fast", limit: { context: 1000, output: 100 } }
+    // $FAKE_FAST=1: fake-1 has a fast one, as Cursor's plugin 0.1.x lists
+    // a model's -fast (=tier: see the models hook)
+    if (process.env.FAKE_FAST === "1") cfg.provider[ID].models["fake-1-fast"] = { name: "Fake One Fast", limit: { context: 1000, output: 100 } }
     if (process.env.FAKE_RESPONSES) cfg.provider[ID].models["fake-resp"] = { name: "Fake Responses", provider: { npm: "@ai-sdk/openai" }, limit: { context: 4000, output: 400 } }
     // $FAKE_DEEPSEEK: a DeepSeek model, as Cline's cline-pass/deepseek-v4-pro
     if (process.env.FAKE_DEEPSEEK) cfg.provider[ID].models["deepseek-v4-pro"] = { name: "DeepSeek V4 Pro", limit: { context: 1000, output: 100 } }
@@ -140,6 +147,8 @@ export const FakePlugin = async ({ client }) => ({
       // $FAKE_USAGE: the plan is what the vendor's page there says
       if (process.env.FAKE_USAGE) {
         const r = await fetch(process.env.FAKE_USAGE)
+        // a 401 there: the vendor refused the sign-in
+        if (r.status === 401) return { error: "the FakeCo sign-in has expired — sign in again" }
         return { plan: await r.text() }
       }
       if (a.type !== "oauth") return { error: "an API key has no plan" }
@@ -163,8 +172,8 @@ export const FakePlugin = async ({ client }) => ({
         renew: "auto",
         resets: full ? { count: 3, byWindow: true, fiveHour: 2, weekly: 1 } : undefined,
         windows: [
-          { name: "5 hours", used: full ? 100 : 25, resetsAt: Date.now() + 3600e3, span: 5 * 3600, models: ["fake-claude"] },
-          { name: "Week", used: 10, resetsAt: Math.floor(Date.now() / 1000) + 86400, span: 7 * 86400, amount: 120, limit: 1200, unit: "credits" },
+          { name: "5 hours", used: full ? 100 : 25, resetsAt: born + 3600e3, span: 5 * 3600, models: ["fake-claude"] },
+          { name: "Week", used: 10, resetsAt: Math.floor(born / 1000) + 86400, span: 7 * 86400, amount: 120, limit: 1200, unit: "credits" },
           { name: "Extra", used: 250, display: "$2.50", aside: true },
         ],
       }
@@ -218,6 +227,14 @@ export const FakePlugin = async ({ client }) => ({
       if (p.models["fake-claude"]) Object.assign(p.models["fake-claude"], { rate: 0.5, rateWas: 1 })
       if (p.models["fake-gemini"]) p.models["fake-gemini"].rate = "x0.03"
       if (auth?.key === "few") return { "fake-1": p.models["fake-1"] }
+      // $FAKE_FAST=tier: as Cursor's plugin 0.2.x lists a model, once per
+      // context size, and from 0.2.2 says fast on the sizes Cursor has a
+      // fast variant at (Opus 5.5's 300k, not its 1m); no -fast model
+      if (process.env.FAKE_FAST === "tier") {
+        const sized = (id, name) => ({ ...p.models["fake-1"], id, name, api: { ...p.models["fake-1"].api, id } })
+        p.models["fake-opus@300k"] = { ...sized("fake-opus@300k", "Fake Opus @ 300k"), fast: true }
+        p.models["fake-opus@1m"] = sized("fake-opus@1m", "Fake Opus @ 1m")
+      }
       // $FAKE_MODELS: the vendor's list, whose answer names one more model
       if (process.env.FAKE_MODELS && auth) {
         const r = await fetch(process.env.FAKE_MODELS).then((r) => r.text()).catch((e) => {

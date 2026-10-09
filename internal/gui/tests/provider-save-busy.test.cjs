@@ -78,7 +78,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await busy.getAttribute("aria-busy"), "true");
         const look = await busy.evaluate((b) => {
           const s = getComputedStyle(b), svg = b.querySelector("svg"), r = b.getBoundingClientRect(), label = b.querySelector("span").getBoundingClientRect();
-          return { opacity: s.opacity, events: s.pointerEvents, spin: getComputedStyle(svg).animationName, svgW: svg.getBoundingClientRect().width, inside: label.right <= r.right + 0.5 && label.width > 0, clipped: b.scrollWidth > b.clientWidth + 1 };
+          return { opacity: s.opacity, events: s.pointerEvents, spin: getComputedStyle(svg.firstElementChild).animationName, svgW: svg.getBoundingClientRect().width, inside: label.right <= r.right + 0.5 && label.width > 0, clipped: b.scrollWidth > b.clientWidth + 1 };
         });
         assert.equal(look.opacity, "1", "readable, not faded as if off");
         assert.equal(look.events, "none", "not clicked twice");

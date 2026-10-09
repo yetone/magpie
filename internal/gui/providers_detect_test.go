@@ -28,7 +28,12 @@ func TestProviderDetect(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(io.Discard, r.Body)
 		mu.Lock()
-		auths = append(auths, r.Method+" "+r.URL.Path+" "+r.Header.Get("Authorization"))
+		// Gemini's API is asked with the key in x-goog-api-key
+		auth := r.Header.Get("Authorization")
+		if g := r.Header.Get("x-goog-api-key"); g != "" {
+			auth = "goog " + g
+		}
+		auths = append(auths, r.Method+" "+r.URL.Path+" "+auth)
 		mu.Unlock()
 		switch r.URL.Path {
 		case "/v1/chat/completions":
@@ -87,7 +92,7 @@ func TestProviderDetect(t *testing.T) {
 	}
 	mu.Lock()
 	for _, a := range auths {
-		if !strings.HasSuffix(a, "Bearer sk-saved") {
+		if !strings.HasSuffix(a, "Bearer sk-saved") && !strings.HasSuffix(a, "goog sk-saved") {
 			t.Fatalf("asked %s, not with the saved key", a)
 		}
 	}

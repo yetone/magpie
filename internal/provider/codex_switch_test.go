@@ -171,3 +171,68 @@ func mustJSONRaw(t *testing.T, v any) json.RawMessage {
 	}
 	return b
 }
+
+// An account the Codex app holds is spent whatever its windows read: a
+// Business seat at its workspace owner's limit reads 40% and isn't
+// allowed, and the app says "You're out of Codex usage" and sends nothing
+// for it. Codex on it is signed in to the next account with room, and
+// never to another the app holds (CavillZhang on X: "有的切换不了").
+func TestCodexHeldAccountSwitchedUnderTheShare(t *testing.T) {
+	home := signIn(t) // me@example.com, acct-1
+	rememberLogins(true)
+	codexSignIn(t, home, "spare@example.com", "r-spare")
+	rememberLogins(true)
+	codexSignIn(t, home, "work@example.com", "r-work")
+	rememberLogins(true)
+	held := map[string]bool{"acct-1": true, "acct-spare@example.com": true, "acct-work@example.com": true}
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		allowed := !held[r.Header.Get("chatgpt-account-id")]
+		why := map[string]any{"type": "workspace_owner_usage_limit_reached"}
+		if allowed {
+			why = nil
+		}
+		json.NewEncoder(w).Encode(map[string]any{"plan_type": "business",
+			"credits":                 map[string]any{"has_credits": false, "unlimited": false, "overage_limit_reached": false},
+			"rate_limit_reached_type": why,
+			"rate_limit": map[string]any{"allowed": allowed, "limit_reached": !allowed,
+				"primary_window": map[string]any{"used_percent": 40, "limit_window_seconds": 18000}}})
+	}))
+	defer fake.Close()
+	old := CodexBase
+	CodexBase = fake.URL + "/backend-api/codex"
+	t.Cleanup(func() { CodexBase = old })
+	switched := func() string {
+		t.Helper()
+		loginUsageCache.Lock()
+		loginUsageCache.m = nil
+		loginUsageCache.Unlock()
+		to, err := SwitchWhenSpent(context.Background(), "codex")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return to
+	}
+	for _, u := range []string{"spare@example.com", "work@example.com"} {
+		if err := SetLoginOn("codex", u, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Codex is on work@; every other account held too: nothing to go to
+	if to := switched(); to != "" {
+		t.Fatalf("switched to %s, held as well", to)
+	}
+	// one with room: that one, though the held one it is on reads 40%
+	held["acct-spare@example.com"] = false
+	if to := switched(); to != "spare@example.com" {
+		t.Fatalf("switched to %q, want spare@example.com", to)
+	}
+	// and not back to the one it left while the app still holds it
+	if to := switched(); to != "" {
+		t.Fatalf("switched again, to %s", to)
+	}
+	// once that has room again, back to it
+	held["acct-work@example.com"] = false
+	if to := switched(); to != "work@example.com" {
+		t.Fatalf("switched to %q, want back to work@example.com", to)
+	}
+}

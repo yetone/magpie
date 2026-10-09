@@ -34,6 +34,11 @@ type RequestPage struct {
 	Agents, Providers []string
 	Purposes          []string // all purposes in the period, independent of the selected filter
 	CallerKeys        []Group
+	// Through and Direct are the rows the gateway served and the rows read
+	// from the agents' own session files, which the gateway never saw. Sum
+	// is the two together; the page shows the three beside each other so a
+	// reader can tell what magpie carried from what it only read about.
+	Through, Direct Totals
 	// Accounts are the subscription accounts that answered calls in the
 	// period, by provider and account, for the Account filter (#557)
 	Accounts []Group
@@ -47,6 +52,9 @@ type RequestPage struct {
 	// other computer's calls were brought here by sync (#542)
 	Computers []Share
 	Names     map[string]string
+	// Heat is the rows by day, as the chart's filter keeps them: only for
+	// the heatmap's own period (HeatmapOf)
+	Heat *Heatmap
 }
 
 type packedRow struct {
@@ -54,7 +62,7 @@ type packedRow struct {
 	Text                           [28]uint32
 	Tokens                         [6]int64
 	Millis, TTFT, FirstText, Order int64
-	Sent                           int64
+	Sent, Flow                     int64
 	RouteID                        int64
 	Cost                           float64
 	Status                         int32
@@ -96,7 +104,7 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 		c.Bytes += int64(len(s) + 48)
 		return id
 	}
-	p := packedRow{Time: r.Time, Tokens: [6]int64{int64(r.Input), int64(r.Output), int64(r.CacheRead), int64(r.CacheWrite), int64(r.Reasoning), int64(r.CacheWrite1h)}, Millis: r.Millis, TTFT: r.TTFT, FirstText: r.FirstText, Sent: r.Sent, Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status)}
+	p := packedRow{Time: r.Time, Tokens: [6]int64{int64(r.Input), int64(r.Output), int64(r.CacheRead), int64(r.CacheWrite), int64(r.Reasoning), int64(r.CacheWrite1h)}, Millis: r.Millis, TTFT: r.TTFT, FirstText: r.FirstText, Sent: r.Sent, Flow: r.Flow, Order: order, RouteID: r.RouteID, Cost: r.Cost, Status: int32(r.Status)}
 	for i, s := range rowText(&r) {
 		p.Text[i] = intern(*s)
 	}
@@ -128,12 +136,12 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 }
 func (c *rowChunk) row(i int) Row {
 	p := &c.Rows[i]
-	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: p.Millis, TTFT: p.TTFT, FirstText: p.FirstText, Sent: p.Sent, Status: int(p.Status), Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
+	r := Row{Record: Record{RouteID: p.RouteID, Time: p.Time, Input: int(p.Tokens[0]), Output: int(p.Tokens[1]), CacheRead: int(p.Tokens[2]), CacheWrite: int(p.Tokens[3]), CacheWrite1h: int(p.Tokens[5]), Reasoning: int(p.Tokens[4]), Millis: p.Millis, TTFT: p.TTFT, FirstText: p.FirstText, Sent: p.Sent, Flow: p.Flow, Status: int(p.Status), Rejected: p.Flags&4 != 0, SessionOfficialLogin: p.Flags&8 != 0}, Cost: p.Cost, Priced: p.Flags&1 != 0, Swapped: p.Flags&2 != 0, Routed: p.Flags&32 != 0}
 	for i, s := range rowText(&r) {
 		*s = c.Strings[p.Text[i]]
 	}
-	if r.Swapped && SameSpelled(r.Model, r.Served) {
-		r.Swapped = false // kept before a name spelled otherwise was the same
+	if r.Swapped && (SameSpelled(r.Model, r.Served) || GeminiServing(r.Model, r.Served)) {
+		r.Swapped = false // kept before a name spelled otherwise, or Google's serving name, was the same
 	}
 	r.Computer = c.Computer
 	return r
@@ -777,6 +785,9 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 	selected := newestHeap{}
 	chartFilter := f
 	chartFilter.Day = ""
+	// the two source cells' own numbers, counted without the source pick
+	viaFilter := f
+	viaFilter.Through = ""
 	var first time.Time
 	visit(func(ref rowRef, r Row) {
 		agents[r.Agent] = true
@@ -786,7 +797,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 		}
 		addCallerRow(callers, r)
 		addAccountRow(accounts, r)
-		keep := f.keeps(r.Record)
+		keep := f.keepsRow(r)
 		if keep {
 			out.Total++
 			if take > 0 && len(selected) < take {
@@ -799,10 +810,22 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 				out.Sum.addRow(r)
 			}
 		}
+		// The two sources are counted with the Via pick cleared, as the
+		// dimension groups above are: the cells are what the reader
+		// switches between, so each must go on saying its own number
+		// while another is picked, or one of them would read 0 and
+		// there would be no way back.
+		if !r.IsRejected() && viaFilter.keepsRow(r) {
+			if r.Source == "log" {
+				out.Direct.addRow(r)
+			} else {
+				out.Through.addRow(r)
+			}
+		}
 		if r.IsRejected() {
 			return
 		}
-		if keep || f.Day != "" && chartFilter.keeps(r.Record) {
+		if keep || f.Day != "" && chartFilter.keepsRow(r) {
 			for _, d := range Dimensions {
 				k := keys.key(r, d)
 				s := seriesGroups[d][k]
@@ -819,7 +842,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 		if g := f; names != nil {
 			g.Computer = ""
 			g.Day = ""
-			if g.keeps(r.Record) {
+			if g.keepsRow(r) {
 				k := r.key("computer")
 				if computers[k] == nil {
 					computers[k] = &Share{ID: k}
@@ -843,7 +866,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 			}
 			if f.Day != "" {
 				g.Day = ""
-				if g.keeps(r.Record) {
+				if g.keepsRow(r) {
 					k := keys.key(r, d)
 					if chartGroups[d][k] == nil {
 						chartGroups[d][k] = &Share{ID: k}
@@ -852,7 +875,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 				}
 				g.Day = f.Day
 			}
-			if !g.keeps(r.Record) {
+			if !g.keepsRow(r) {
 				continue
 			}
 			k := keys.key(r, d)
@@ -911,7 +934,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 		}
 	}
 	visit(func(_ rowRef, r Row) {
-		if !chartFilter.keeps(r.Record) || r.IsRejected() {
+		if !chartFilter.keepsRow(r) || r.IsRejected() {
 			return
 		}
 		t := r.Time.In(time.Local)
@@ -931,6 +954,15 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 			pt.By[d][k] = part
 		}
 	})
+	if p == heatmapPeriod {
+		out.Heat = heatmapOf(since, now, func(add func(Row)) {
+			visit(func(_ rowRef, r Row) {
+				if chartFilter.keepsRow(r) {
+					add(r)
+				}
+			})
+		})
+	}
 	// Match LedgerSeries's top-24 selection on the filtered data, not facets.
 	for _, d := range Dimensions {
 		kept := map[string]bool{}
@@ -958,6 +990,23 @@ func pageFromLedger(p Period, f Filter, offset, limit int, all Ledgered) Request
 func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now time.Time) RequestPage {
 	l := all.Filtered(f)
 	out := RequestPage{Sum: l.Sum, Total: len(l.Rows), Agents: l.Agents, Providers: l.Providers, Purposes: []string{}, By: map[string][]Share{}}
+	// the same split the streaming path makes, so both pages of the ledger
+	// agree: "log" is a call read from an agent's own session file, which
+	// the gateway never saw; the rest went through it. Counted with the source
+	// pick cleared, as the streaming path does, so the three cells stay
+	// switchable whichever one is picked.
+	viaFilter := f
+	viaFilter.Through = ""
+	for _, r := range all.Rows {
+		if r.IsRejected() || !viaFilter.keepsRow(r) {
+			continue
+		}
+		if r.Source == "log" {
+			out.Direct.addRow(r)
+		} else {
+			out.Through.addRow(r)
+		}
+	}
 	callers, accounts := map[string]*Group{}, map[string]*Group{}
 	purposes := map[string]bool{}
 	for i := len(all.Rows) - 1; i >= 0; i-- {
@@ -981,6 +1030,13 @@ func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now t
 		out.ChartBy = map[string][]Share{}
 	}
 	out.Bucket, out.Series = ledgerSeriesAt(p, chartRows, now)
+	if p == heatmapPeriod {
+		out.Heat = heatmapOf(p.Since(now), now, func(add func(Row)) {
+			for _, r := range chartRows {
+				add(r)
+			}
+		})
+	}
 	for _, d := range Dimensions {
 		g := f
 		if d == "provider" {

@@ -60,9 +60,9 @@ func TestCheckNow(t *testing.T) {
 		npmCached()[p] = npmEntry{NPM{Version: "0.1.2"}, time.Now().Add(-time.Minute)}
 	}
 	npmMu.Unlock()
-	was := installLatest
-	t.Cleanup(func() { installLatest = was })
-	installLatest = func(_ context.Context, pkg string) error { t.Errorf("a check installed %s", pkg); return nil }
+	was := installNewest
+	t.Cleanup(func() { installNewest = was })
+	installNewest = func(_ context.Context, pkg, _ string) error { t.Errorf("a check installed %s", pkg); return nil }
 
 	c := CheckNow(context.Background())
 	got := map[string]string{}

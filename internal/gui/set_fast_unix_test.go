@@ -23,9 +23,13 @@ import (
 // models list` again (several times: its model's family, its options, its
 // efforts), each taking seconds, and a CLI that gave no list was asked anew
 // on the next click — the pick took 5–10s to show. Here the devin CLI takes
-// 4s to answer and a provider's model endpoint never answers; the set, and
+// 20s to answer and a provider's model endpoint never answers; the set, and
 // the state after it, must not wait on either, and Claude Code's config is
-// written as before.
+// written as before. That they didn't wait is told by order, not a clock:
+// the fake marks each answer it gives, and no answer may have landed when
+// the requests are done. The clock bound only stops a set that waits from
+// running into the fake's 20s; a 1.5s one failed at 1.6s under a loaded
+// full run (#1375).
 func TestSetAnswersWhileDevinAndProvidersHang(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
@@ -38,9 +42,34 @@ func TestSetAnswersWhileDevinAndProvidersHang(t *testing.T) {
 	os.MkdirAll(bin, 0o755)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+"/usr/bin"+string(os.PathListSeparator)+"/bin")
 
-	// a devin CLI that takes 4s over every answer
+	// a devin CLI that takes 20s over every answer and marks it landed.
+	// It sleeps in short steps and ends as soon as the test does: the
+	// background asks it is given outlive the requests, and would otherwise
+	// outlive the test (each run of it keeps a file in running/ till it ends)
 	devin := filepath.Join(bin, "devin")
-	testenv.Program(t, devin, "#!/bin/sh\nexec sleep 4\n")
+	answered := filepath.Join(h, "devin-answered")
+	stop := filepath.Join(h, "devin-stop")
+	running := filepath.Join(h, "devin-running")
+	os.MkdirAll(running, 0o755)
+	testenv.Program(t, devin, "#!/bin/sh\n"+
+		"touch '"+running+"'/$$\n"+
+		"i=0\n"+
+		"while [ $i -lt 200 ] && [ ! -e '"+stop+"' ]; do sleep 0.1; i=$((i+1)); done\n"+
+		"[ -e '"+stop+"' ] || touch '"+answered+"'\n"+
+		"rm -f '"+running+"'/$$\n")
+	t.Cleanup(func() {
+		os.WriteFile(stop, nil, 0o644)
+		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+			left, _ := os.ReadDir(running)
+			if len(left) == 0 {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Errorf("%d devin fakes still running after the test", len(left))
+				return
+			}
+		}
+	})
 	old := provider.DevinExecutable
 	provider.DevinExecutable = func() string { return devin }
 	t.Cleanup(func() { provider.DevinExecutable = old })
@@ -107,7 +136,10 @@ func TestSetAnswersWhileDevinAndProvidersHang(t *testing.T) {
 	for _, v := range []string{"claude-opus-5-5", "slow/slow-1", "claude-sonnet-5-5"} {
 		took, s := set(v)
 		t.Logf("set %s: %v", v, took)
-		if took > 1500*time.Millisecond {
+		// a fast set is milliseconds; one that waits takes the fake's 20s
+		// or, on the provider, never comes back: the bound has slack on
+		// both sides, and the marker below is what pins the guarantee
+		if took > 10*time.Second {
 			t.Errorf("set %s took %v: it waited on the devin CLI or the provider", v, took)
 		}
 		if got := shown(s); got != v {
@@ -119,9 +151,15 @@ func TestSetAnswersWhileDevinAndProvidersHang(t *testing.T) {
 			t.Fatal(err)
 		}
 		res.Body.Close()
-		if took := time.Since(start); took > 1500*time.Millisecond {
+		if took := time.Since(start); took > 10*time.Second {
 			t.Errorf("the state after set %s took %v", v, took)
 		}
+	}
+
+	// no devin answer landed while the requests ran: one that waited on
+	// the CLI came back only after an answer had, whatever the load
+	if _, err := os.Stat(answered); err == nil {
+		t.Error("a devin answer landed before the requests were done: a set or the state waited on the devin CLI")
 	}
 
 	// what is written is what it was: the last pick, Anthropic's own

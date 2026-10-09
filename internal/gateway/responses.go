@@ -219,6 +219,26 @@ type rRequest struct {
 	} `json:"reasoning,omitempty"`
 }
 
+// textFormat splits a Responses client's text into the rest of it and
+// the format it asks the answer in (text.format), which is asked for again
+// in each upstream's own words. A format of plain text stays where it was.
+func textFormat(text json.RawMessage) (json.RawMessage, *Format) {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(text, &fields) != nil {
+		return text, nil
+	}
+	f := openAIFormat(fields["format"])
+	if f == nil {
+		return text, nil
+	}
+	delete(fields, "format")
+	if len(fields) == 0 {
+		return nil, f
+	}
+	rest, _ := json.Marshal(fields)
+	return rest, f
+}
+
 // sentRaw is a raw field the client sent, unless it sent null.
 func sentRaw(v json.RawMessage) json.RawMessage {
 	if t := strings.TrimSpace(string(v)); t == "" || t == "null" {
@@ -235,8 +255,9 @@ func parseResponses(body []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: q.Model, System: q.Instructions, MaxTokens: q.MaxOutputTokens, Temp: q.Temperature,
-		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority", CacheKey: q.PromptCacheKey, Include: q.Include,
-		ClientMetadata: sentRaw(q.ClientMetadata), Text: sentRaw(q.Text)}
+		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority" || q.ServiceTier == "ultrafast", Ultrafast: q.ServiceTier == "ultrafast", Tier: q.ServiceTier, CacheKey: q.PromptCacheKey, Include: q.Include,
+		ClientMetadata: sentRaw(q.ClientMetadata)}
+	r.Text, r.Format = textFormat(sentRaw(q.Text))
 	if q.Reasoning != nil {
 		r.Effort = effortOf(q.Reasoning.Effort)
 		r.Thinking = true
@@ -532,6 +553,82 @@ func orphanedToolOutputs(body []byte) []byte {
 	return encoded
 }
 
+// pairToolItems gives a Responses request's tool call that no result in
+// the request answers a synthetic one, as pairToolMessages does for a Chat
+// request: an upstream that checks the exchange on the chat form it turns
+// the request into refuses a lone call — Volcengine's coding plan answers
+// 400 "An assistant message with 'tool_calls' must be followed by tool
+// messages responding to each 'tool_call_id'" (#1341), and OpenAI's own
+// Responses API "No tool output found for function call". The result goes
+// at the end of the run of calls and results the call is in, where a chat
+// form has its tool messages. A result with no call is left to
+// orphanedToolOutputs, and one naming a call another request carried
+// (previous_response_id) stays as it is.
+func pairToolItems(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`_call"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body
+	}
+	var input []json.RawMessage
+	if json.Unmarshal(q["input"], &input) != nil {
+		return body
+	}
+	type item struct {
+		Type   string `json:"type"`
+		CallID string `json:"call_id"`
+	}
+	items := make([]item, len(input))
+	answered := map[string]bool{}
+	for i, raw := range input {
+		if json.Unmarshal(raw, &items[i]) != nil {
+			items[i] = item{}
+		}
+		if t := items[i].Type; (t == "function_call_output" || t == "custom_tool_call_output") && items[i].CallID != "" {
+			answered[items[i].CallID] = true
+		}
+	}
+	exchange := func(t string) bool {
+		switch t {
+		case "function_call", "custom_tool_call", "tool_search_call",
+			"function_call_output", "custom_tool_call_output", "tool_search_output":
+			return true
+		}
+		return false
+	}
+	out := make([]json.RawMessage, 0, len(input)+1)
+	var synthetic []json.RawMessage // results owed by the run in progress
+	for i, raw := range input {
+		out = append(out, raw)
+		it := items[i]
+		if (it.Type == "function_call" || it.Type == "custom_tool_call") && it.CallID != "" && !answered[it.CallID] {
+			kind := "function_call_output"
+			if it.Type == "custom_tool_call" {
+				kind = "custom_tool_call_output"
+			}
+			result, _ := marshalPlain(map[string]any{"type": kind, "call_id": it.CallID,
+				"output": "[The result of this tool call is unavailable: the turn was interrupted.]"})
+			synthetic = append(synthetic, result)
+			answered[it.CallID] = true
+		}
+		if len(synthetic) > 0 && exchange(it.Type) && (i+1 == len(input) || !exchange(items[i+1].Type)) {
+			out = append(out, synthetic...)
+			synthetic = nil
+		}
+	}
+	if len(out) == len(input) {
+		return body
+	}
+	q["input"], _ = marshalPlain(out)
+	encoded, err := marshalPlain(q)
+	if err != nil {
+		return body
+	}
+	return encoded
+}
+
 // mergeTurns joins consecutive messages of the same role, since the
 // Responses API splits an assistant turn into one item per part.
 func mergeTurns(msgs []Message) []Message {
@@ -574,6 +671,74 @@ func responsesParts(raw json.RawMessage) []Part {
 	return out
 }
 
+// replaysReasoning is whether model, served by host's Responses API, wants
+// a turn's reasoning text back between tool calls (DeepSeek: "The
+// reasoning_text in the thinking mode must be passed back", #388). OpenAI's,
+// xAI's, Copilot's and Azure's read only their own sealed reasoning.
+func replaysReasoning(model, host string) bool {
+	return strings.Contains(strings.ToLower(model), "deepseek") &&
+		!slices.Contains([]string{"chatgpt.com", "api.openai.com", "api.x.ai", "api.githubcopilot.com"}, host) &&
+		!strings.HasSuffix(host, ".openai.azure.com")
+}
+
+// withReasoningText gives each reasoning item in a Responses request that
+// carries no reasoning_text its summary as one, for an upstream that wants
+// the reasoning back (replaysReasoning). Codex sends an item back as it got
+// it, and one from a turn magpie translated, or another provider served,
+// has only a summary: passed on as it is, DeepSeek refuses the whole
+// request with "The reasoning_text in the thinking mode must be passed back
+// to the API" (#1104). An item with neither is left as it is.
+func withReasoningText(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"reasoning"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(q["input"], &items) != nil {
+		return body
+	}
+	changed := false
+	for i, raw := range items {
+		var it struct {
+			Type    string  `json:"type"`
+			Summary []rText `json:"summary"`
+			Content []rText `json:"content"`
+		}
+		if json.Unmarshal(raw, &it) != nil || it.Type != "reasoning" ||
+			slices.ContainsFunc(it.Content, func(c rText) bool { return c.Type == "reasoning_text" && c.Text != "" }) {
+			continue
+		}
+		var b strings.Builder
+		for _, s := range it.Summary {
+			b.WriteString(s.Text)
+		}
+		if b.Len() == 0 {
+			continue
+		}
+		var m map[string]json.RawMessage
+		if json.Unmarshal(raw, &m) != nil {
+			continue
+		}
+		m["content"], _ = json.Marshal([]map[string]string{{"type": "reasoning_text", "text": b.String()}})
+		if nb, err := json.Marshal(m); err == nil {
+			items[i] = nb
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+	q["input"], _ = json.Marshal(items)
+	nb, err := json.Marshal(q)
+	if err != nil {
+		return body
+	}
+	return nb
+}
+
 // buildResponses renders a request for a Responses upstream.
 func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	// A turn's reasoning goes back as a reasoning item, as a model that
@@ -581,9 +746,7 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	// the thinking mode must be passed back", #388). Only a DeepSeek model
 	// gets it: OpenAI's and those in front of it read only their own
 	// sealed reasoning, and may refuse an item without it.
-	replay := strings.Contains(strings.ToLower(model), "deepseek") &&
-		!slices.Contains([]string{"chatgpt.com", "api.openai.com", "api.x.ai", "api.githubcopilot.com"}, host) &&
-		!strings.HasSuffix(host, ".openai.azure.com")
+	replay := replaysReasoning(model, host)
 	var input []map[string]any
 	for _, m := range r.Messages {
 		var content []map[string]any
@@ -655,8 +818,13 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	if len(r.ClientMetadata) > 0 {
 		out["client_metadata"] = r.ClientMetadata
 	}
-	if len(r.Text) > 0 {
-		out["text"] = r.Text
+	if len(r.Text) > 0 || r.Format != nil {
+		text := map[string]any{}
+		json.Unmarshal(r.Text, &text)
+		if r.Format != nil {
+			text["format"] = r.Format.responses()
+		}
+		out["text"] = text
 	}
 	if r.CacheKey != "" {
 		out["prompt_cache_key"] = r.CacheKey
@@ -678,6 +846,13 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	// Fast goes to OpenAI's own backends; another's may not know the tier
 	if r.Fast && (host == "chatgpt.com" || host == "api.openai.com") {
 		out["service_tier"] = "priority"
+	}
+	// Ultrafast only the ChatGPT backend offers
+	if r.Ultrafast && host == "chatgpt.com" {
+		out["service_tier"] = "ultrafast"
+	}
+	if r.OwnTier && r.Tier != "" {
+		out["service_tier"] = r.Tier
 	}
 	if r.Effort != "" {
 		out["reasoning"] = map[string]any{"effort": r.Effort, "summary": "auto"}

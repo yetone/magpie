@@ -1,0 +1,12 @@
+[
+  {"id": "hy3", "name": "Hy3", "vendor": "workbuddy"},
+  {
+    "id": "group/auto-deepseek-v4-1-flash",
+    "name": "Auto DeepSeek V4.1 Flash",
+    "vendor": "magpie",
+    "apiKey": "magpie-workbuddy",
+    "url": "http://127.0.0.1:3425/v1/chat/completions",
+    "maxInputTokens": 200000,
+    "supportsToolCall": true
+  }
+]

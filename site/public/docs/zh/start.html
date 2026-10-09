@@ -129,8 +129,8 @@
     <p><span class="ui">Agent</span> 标签页里，本机装了或配置过的每个 Agent 各占一行。magpie 支持 Claude Code、Codex、Gemini CLI、OpenCode、MiMo Code、Pi、Goose、Cursor、Copilot CLI、Crush、DeepSeek Harness、Command Code、omp、OmO、Devin、Hermes Agent、MiniMax Code、Grok Build、ZCode、OpenHanako 和 Alma。</p>
 
     <figure class="figure">
-      <img class="for-light" src="/img/agents-zh-light.png" width="2080" height="1058" loading="lazy" alt="Agent 页：每个 Agent 一行，显示当前模型，底部是保存的方案">
-      <img class="for-dark" src="/img/agents-zh-dark.png" width="2080" height="1058" loading="lazy" alt="Agent 页：每个 Agent 一行，显示当前模型，底部是保存的方案">
+      <img class="for-light" src="/img/agents-zh-light.png" width="2080" height="1256" loading="lazy" alt="Agent 页：每个 Agent 一行，显示当前模型，底部是保存的方案">
+      <img class="for-dark" src="/img/agents-zh-dark.png" width="2080" height="1256" loading="lazy" alt="Agent 页：每个 Agent 一行，显示当前模型，底部是保存的方案">
       <figcaption>每个 Agent 一行，可以选任意供应商的模型；方案一键切换全部设置。</figcaption>
     </figure>
     <ul>
@@ -227,6 +227,7 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
       <img class="for-dark" src="/img/usage-zh-dark.png" width="2080" height="842" loading="lazy" alt="用量页：剩余余额、token 与费用汇总，以及 30 天趋势图">
       <figcaption>经过网关的每次调用的余额、token、缓存命中和费用。</figcaption>
     </figure>
+    <p><b>上下文。</b><span class="ui">用量</span> 里的 <span class="ui">上下文</span> 标签页显示每个 Agent 的提示词里装了什么，在请求经过网关时读出：系统提示词、工具定义（一个 MCP 服务器的工具算作一项）、指令文件与 skills、工具读入的文件、工具的其他输出和对话，各占模型上下文窗口的多少。每个 Agent 有一个百分制得分——缓存读到了多少提示词、起步多轻、上下文涨得多快、失败多不多——以及「起步轻」「MCP 偏重」之类的标签，说明得分从何而来。打开一个会话，可以一格一格地看它最近一次请求的窗口；在 <span class="ui">路由</span> 页点选任意请求也能看到。magpie 只记名称，不保存提示词的文字。</p>
     <p><b>方案。</b>在 <span class="ui">Agent</span> 标签页底部点 <span class="ui">＋ 保存当前</span>，把所有 Agent 的设置存成一个方案；之后点这个方案就能一键全部切回。</p>
 
     <h2 id="cli"><a class="anchor" href="#cli">命令行</a></h2>
@@ -260,6 +261,9 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
     <p>不会。magpie 每次都重新读取文件，只动它设置的那几个键，你的其他设置和注释都会保留。用 <span class="ui">导入…</span> 带进来的供应商是一份拷贝：之后在 Agent 里的改动不会再同步过来。</p>
     <h3>没有梯子，安装或更新连不上 GitHub 怎么办？</h3>
     <p>给安装脚本和 <code>magpie update</code> 加代理：<code>curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890</code>，或 <code>magpie update --proxy socks5://127.0.0.1:1080</code>（支持 http、https、socks5、socks5h；环境变量 <code>HTTPS_PROXY</code>、<code>ALL_PROXY</code> 同样生效）。<code>--mirror &lt;前缀&gt;</code> 从你指定的 GitHub 下载镜像取发布文件，即 <code>&lt;前缀&gt;https://github.com/…</code>；<code>magpie update mirror &lt;前缀&gt;</code> 让之后每次更新（包括应用自己的更新）都用它，<code>magpie update mirror off</code> 取消。不指定就不用任何镜像；文件的 SHA-256 始终来自 usemagpie.ai，而不是镜像，镜像改过的文件会被拒绝安装。应用自己的更新走 <span class="ui">设置</span> → <span class="ui">代理</span>。</p>
+
+    <h3 id="privacy">magpie 会发送我的哪些信息？</h3>
+    <p>你的提示词、回复、密钥和账号只发给你用的供应商，中间没有 magpie 自己的服务器。正式发布的 magpie 每天告诉我们一次它在用，好让我们知道有多少人在用、该先照顾哪些：本机随机生成的 ID、magpie 版本和系统，以及用了哪些 agent、供应商和模型，只用 magpie 自己的 ID（<code>claude</code>、<code>deepseek</code>、<code>deepseek/deepseek-v4</code>）和各自的数量。你自己添加的供应商及其上的模型只记作 <code>custom</code>。添加供应商页里排在最前的合作伙伴，每天被展示、打开和添加的次数也一并发送，只有次数。不发送名称、Base URL、账号、密钥、提示词和用量。<span class="ui">设置</span> → <span class="ui">隐私</span> → <span class="ui">分享我用的 agent、provider 和模型</span> 可以去掉 agent、供应商、模型和合作伙伴次数这部分；<span class="ui">计入用户数</span>、<code>DO_NOT_TRACK=1</code> 或 <code>MAGPIE_NO_STATS=1</code> 全部关闭。从源码构建的版本从不发送。详见<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#counting-users">参考文档</a>。</p>
 
     <h3 id="proxy-loopback">Agent 报 502 或连不上，magpie 的路由标签页里却什么都没有？</h3>
     <p>代理软件（Surge、Clash、mihomo 等，开了系统代理、TUN 或增强模式）把 Agent 发往 <code>http://127.0.0.1:3425</code> 的请求接走、转去了别处，请求根本没到 magpie。只在跳过列表（<code>skip-proxy</code>、「绕过」）里写 127.0.0.1 不一定够：有些 Agent（比如 Codex）照样会走代理。在代理软件里加两条本地地址直连的规则，放在其他规则前面：</p>

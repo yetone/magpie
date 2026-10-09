@@ -210,6 +210,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         { ...req(10, "claude", "other-agent", 0.1), kind: "ambient_suggestions" },
         { ...req(11, "codex", "", 0.11), kind: "ambient_suggestions" },
       ];
+      // the gateway names Codex sessions from the same threads its trace's
+      // titles come from, so its answer agrees with them. The Claude Code row
+      // has the page ask for names 300ms after it draws, and an empty answer
+      // there took the titles away mid-test on a loaded machine
+      feed.names = { "named-suggestions": "Named suggestions", "named-chat": "Chat title" };
       await page.route("**/*", serve(lang, feed, fixture));
       page.on("pageerror", (e) => errors.push(e.message));
       t.after(async () => { feed.next?.([]); await browser.close(); });
@@ -299,12 +304,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".rt-session").count(), 0);
       await buttons.nth(1).click();
       await page.locator(".rt-session").nth(3).waitFor();
-      feed.next?.([]);
+      // the live trace's held answer is left held: the reload cancels it. An
+      // answer let go now has the page ask again while it is going away, and
+      // WebKit turns that ask away "due to access control checks", an error
+      // on the page (#1307)
       await page.reload();
       await page.locator(".rt-session").nth(3).waitFor();
       assert.equal(await buttons.nth(1).getAttribute("aria-pressed"), "true");
       await buttons.first().click();
-      feed.next?.([]);
       await page.reload();
       await page.locator(".rt-req").nth(5).waitFor();
       assert.equal(await buttons.first().getAttribute("aria-pressed"), "true");
@@ -396,7 +403,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".rt-day").filter({ hasText: lang === "zh" ? "今天" : "today" }).click();
       await page.waitForFunction(() => document.querySelectorAll(".rt-session").length === 2);
       assert.equal(await group(title.session).count(), 0, "history navigation lost title association");
-      feed.next?.([]);
+      // the held live trace is left for the reload to cancel (see "either
+      // choice survives a reload")
       await page.reload();
       await page.waitForFunction(() => document.querySelectorAll(".rt-session").length === 2);
       assert.equal(await group(title.session).count(), 0, "page reload lost title association");
@@ -458,5 +466,38 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.deepEqual(errors, []);
       });
     }
+  }
+}
+
+// A Claude Code session heads its group with the title in its own file, not
+// its UUID (#1293): asked for as soon as it is listed, kept across the live
+// updates that bring its rows anew, and the UUID stays in the tooltip.
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: other agents' sessions show their own names`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      const page = await browser.newPage({ viewport: { width: 1100, height: 800 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(5000);
+      const uuid = "578bd3d1-834b-43fb-b40c-ed9d17ad7731", errors = [], titleRequests = [];
+      const feed = { titleRequests, names: (input) => input.sessions ? { titles: { ["claude:" + uuid]: "路由会话名" } } : {} };
+      const fixture = [req(1, "claude", uuid, 0.01), { ...req(2, "claude", "magpie-set", 0.01), native_session: "unnamed-session" }, req(3, "codex", "chat", 0.01)];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", serve(lang, feed, fixture));
+      t.after(async () => { feed.next?.([]); await browser.close(); });
+      await page.goto("http://magpie.test/?view=routing");
+      await page.locator(".rt-group-by button").nth(1).click();
+      const named = page.locator("button.rt-session").filter({ hasText: "Claude Code · 路由会话名" });
+      await named.waitFor();
+      assert.match(await named.locator(".nm").getAttribute("title"), new RegExp(uuid));
+      const asked = titleRequests.find((x) => x.sessions);
+      assert.deepEqual([...asked.sessions].sort(), ["claude:" + uuid, "claude:unnamed-session"], "asks by the agent's own id, never Codex's");
+      assert.equal(await page.locator("button.rt-session").filter({ hasText: "Claude Code · magpie-set" }).count(), 1, "an unknown name keeps the id");
+      for (let i = 0; i < 50 && !feed.next; i++) await page.waitForTimeout(20);
+      assert(feed.next, "long poll started");
+      feed.next([...fixture, req(4, "claude", uuid, 0.02)]);
+      await page.waitForFunction(() => [...document.querySelectorAll("button.rt-session")].some((e) => e.textContent.includes("≈$0.030")));
+      assert.equal(await named.count(), 1, "a live update keeps the name");
+      assert.deepEqual(errors, []);
+    });
   }
 }

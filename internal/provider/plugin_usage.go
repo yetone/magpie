@@ -101,6 +101,7 @@ func pluginLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
+	began := pluginSignInAt()
 	u, err := plugin.AccountUsage(ctx, pp.ID, key)
 	if err != nil {
 		q.Error = err.Error()
@@ -108,17 +109,18 @@ func pluginLoginQuota(ctx context.Context, l Login) SubscriptionQuota {
 	}
 	// the plugin says what the read means for the sign-in, as a built-in's
 	// usage read marked the account or left it; one that doesn't say has
-	// an error to sign in again mark it and a clean read clear it
+	// an error to sign in again mark it and a clean read clear it. What a
+	// request was answered while it read is newer, and stands.
 	switch {
 	case u.SignIn == "expired":
-		notePluginLapse(pp, key, http.StatusUnauthorized)
+		notePluginLapseSince(pp, key, http.StatusUnauthorized, began)
 	case u.SignIn == "renewed":
-		notePluginLapse(pp, key, http.StatusOK)
+		notePluginLapseSince(pp, key, http.StatusOK, began)
 	case u.SignIn == "kept":
 	case signInGone.MatchString(u.Error):
-		notePluginLapse(pp, key, http.StatusUnauthorized)
+		notePluginLapseSince(pp, key, http.StatusUnauthorized, began)
 	case u.Error == "":
-		notePluginLapse(pp, key, http.StatusOK)
+		notePluginLapseSince(pp, key, http.StatusOK, began)
 	}
 	keepPluginPlan(pp, key, u.Plan)
 	return quotaOfPlugin(q, u)
@@ -184,8 +186,7 @@ func pluginUsageFetches(via func(string) context.Context, hidden, placed map[str
 		if len(ls) == 0 {
 			continue
 		}
-		name, icon := pluginCard(pp)
-		out = append(out, perLogin(via(id), ls, name, icon)...)
+		out = append(out, perLogin(via(id), ls, pluginCardFace(pp))...)
 	}
 	return out
 }
@@ -194,8 +195,7 @@ func pluginUsageFetches(via func(string) context.Context, hidden, placed map[str
 func pluginUsageFetchesOf(via func(string) context.Context, id string) []func() SubscriptionQuota {
 	for _, pp := range plugin.Cached() {
 		if pp.ID == id {
-			name, icon := pluginCard(pp)
-			return perLogin(via(id), pluginUsageLogins(pp), name, icon)
+			return perLogin(via(id), pluginUsageLogins(pp), pluginCardFace(pp))
 		}
 	}
 	return nil

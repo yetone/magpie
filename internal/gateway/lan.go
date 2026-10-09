@@ -125,6 +125,10 @@ func PublicHost() string {
 // host's.
 func ContainerAddrs() bool { return publicURL() == "" && inContainer("/") }
 
+// InContainer: this magpie runs in a container (Docker, Podman, a
+// Kubernetes pod), whose image is what gets updated, not its binary.
+func InContainer() bool { return inContainer("/") }
+
 // inContainer: the system under root is a container's — Docker's or
 // Podman's marker file, or a container runtime in PID 1's cgroup.
 func inContainer(root string) bool {

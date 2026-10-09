@@ -142,6 +142,9 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.openLibAgents(r)
 		case "found-mcp", "found-skill":
 			m.flash, m.flashOK = "i brings "+r.name+" into the library, for magpie to give it to other agents too", true
+			if r.kind == "found-skill" {
+				m.flash += "; d takes it out of every agent"
+			}
 		}
 	case "e":
 		switch r.kind {
@@ -178,12 +181,17 @@ func (m model) updateLibrary(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			do = library.RemoveServer
 		case "skill":
 			do = library.RemoveSkill
+		case "found-skill":
+			do = library.RemoveFoundSkill
 		default:
 			return m, nil
 		}
 		if m.confirm != "library/"+r.kind+"/"+r.name {
 			m.confirm = "library/" + r.kind + "/" + r.name
 			m.flash, m.flashOK = "press d again to take "+r.name+" out of the library and every agent", false
+			if r.kind == "found-skill" {
+				m.flash = "press d again to take " + r.name + " out of every agent that has it, kept with the backups"
+			}
 			return m, nil
 		}
 		m.confirm = ""
@@ -206,13 +214,20 @@ func libCmd(do func() (*library.Result, error), done string) tea.Cmd {
 
 // libSaid is a change's result in a line.
 func libSaid(res *library.Result, done string) (string, bool) {
+	// an install of skills the library had already added none
+	if len(res.Installed) == 0 && len(res.Had) > 0 {
+		done = strings.Join(res.Had, ", ") + " in the library already"
+	}
+	for _, p := range res.Skipped {
+		done += " · " + strings.TrimPrefix(p.What, "skill:") + " skipped: " + p.Error
+	}
 	if len(res.Changed) > 0 {
 		done += " · written into " + strings.Join(res.Changed, ", ")
 	}
 	for _, p := range res.Problems {
 		done += " · " + p.Agent + ": " + p.Error
 	}
-	return done, len(res.Problems) == 0
+	return done, len(res.Problems) == 0 && len(res.Skipped) == 0
 }
 
 // libOptions are the agents that can get a row's kind, those that get it

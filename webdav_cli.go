@@ -32,6 +32,8 @@ const webdavUsage = `usage:
   magpie webdav auto off|3|15|30|60       how often the gateway syncs by itself, in minutes; off: only when asked
   magpie webdav restore                   make this computer's setup the server's; what is here is kept first
   magpie webdav undo                      put back what the last restore replaced
+  magpie webdav upload                    put this computer's setup over a server file that isn't a backup
+                                          (empty, cut short, another app's); the server's is kept first
   magpie webdav dismiss                   clear what the last sync said it replaced
   magpie webdav off                       turn it off; the file on the server stays
 
@@ -72,6 +74,8 @@ const s3Usage = `usage:
   magpie s3 auto off|3|15|30|60           how often the gateway syncs by itself, in minutes; off: only when asked
   magpie s3 restore                       make this computer's setup the server's; what is here is kept first
   magpie s3 undo                          put back what the last restore replaced
+  magpie s3 upload                        put this computer's setup over a bucket file that isn't a backup
+                                          (empty, cut short, another app's); the bucket's is kept first
   magpie s3 dismiss                       clear what the last sync said it replaced
   magpie s3 off                           turn it off; the file in the bucket stays
 
@@ -167,6 +171,15 @@ func syncCmd(k syncKind, args []string) error {
 		} else {
 			fmt.Printf("put back: %s\n", strings.Join(parts, ", "))
 		}
+		return nil
+	case "upload":
+		if _, ok := davsync.Load(); !ok {
+			return fmt.Errorf("%s sync is off: %s", k.name, k.turnOn())
+		}
+		if err := davsync.Upload(context.Background()); err != nil {
+			return err
+		}
+		fmt.Println("this computer's setup is on the server now; what was there is kept in the sync folder")
 		return nil
 	case "dismiss":
 		if err := davsync.Dismiss(); err != nil {

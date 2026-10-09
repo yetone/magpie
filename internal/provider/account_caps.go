@@ -9,12 +9,18 @@ package provider
 // of a request (gateway/fallback.go), and Codex or Claude Code signed in
 // to it are signed in to another (NextLogin).
 //
-// One share for every window: the windows differ by vendor (five hours and
-// a week, a month, Opus's own, a plugin's per-model ones) and by name, so a
-// cap per window would need each vendor's windows named in the settings,
-// where the ask, and the risk it is about, is one share of the whole
-// allowance. The on-demand windows (Aside) are not the allowance and never
-// count.
+// One share for every window by default, and a share of its own for any
+// window the user sets one on (willz on Discord: a friend's account stops
+// at 50% of its five hours while its week may go to 40%). A window is known
+// by its name as the vendor's reading gives it, in lower case
+// (WindowCapID): "5 hours", "weekly", "7 days · opus", a pool's "gemini ·
+// 5 hours" — the name routing already tells one reading's windows from the
+// next by. The windows differ by vendor, so the overrides are kept per
+// account (AccountWindowCaps), set where the window is shown. A window's
+// own share is 1–99, or 100 for "no cap on this window" under an account
+// cap; one with none of its own takes the account's. The account is held
+// while any window is at or past its own share. The on-demand windows
+// (Aside) are not the allowance and never count.
 //
 // The cap is the user's, not the vendor's: what it holds back never spends
 // a Codex reset. The resets are spent on the vendor's own 100% (weekUsedUp,
@@ -22,6 +28,7 @@ package provider
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -53,6 +60,119 @@ func AccountCapOf(id, user string) int {
 		return s.AccountCaps[accountKey(user)]
 	}
 	return 0
+}
+
+// WindowCaps is what holds an account at a share of its windows: its usage
+// cap for every window (All), the share of each window the user set one
+// on (Windows, by WindowCapID; 100 is none on that window), and Credits
+// for a Codex account set not to spend its credits, which holds any window
+// with no cap at the vendor's own 100%.
+type WindowCaps struct {
+	All     int
+	Windows map[string]int
+	Credits bool
+}
+
+// WindowCapID is how a window is known to its cap: its name, trimmed, in
+// lower case.
+func WindowCapID(name string) string { return strings.ToLower(strings.TrimSpace(name)) }
+
+// Of is the share at which the window named name holds the account, 0 for
+// none, and whether it is the credits that hold it there.
+func (c WindowCaps) Of(name string) (share int, credits bool) {
+	share = c.All
+	if v := c.Windows[WindowCapID(name)]; v > 0 {
+		share = v
+	}
+	if share >= 100 {
+		share = 0
+	}
+	if share <= 0 && c.Credits {
+		return 100, true
+	}
+	return share, false
+}
+
+// Holds says whether any window can hold the account before the vendor
+// does.
+func (c WindowCaps) Holds() bool {
+	if c.All > 0 || c.Credits {
+		return true
+	}
+	for _, v := range c.Windows {
+		if v >= MinCap && v <= MaxCap {
+			return true
+		}
+	}
+	return false
+}
+
+// CapsOf is the caps of the account user of p: its usage cap
+// and its windows' own. As with AccountCap, an account made afresh beside
+// the agent's own reads them from providers.json.
+func (p Provider) CapsOf(user string) WindowCaps {
+	caps, wins := p.AccountCaps, p.AccountWindowCaps
+	if caps == nil && wins == nil {
+		if s, ok := storedPicks(p.ID); ok {
+			caps, wins = s.AccountCaps, s.AccountWindowCaps
+		}
+	}
+	k := accountKey(user)
+	return WindowCaps{All: caps[k], Windows: wins[k]}
+}
+
+// AccountCapsOf is CapsOf of the provider id.
+func AccountCapsOf(id, user string) WindowCaps {
+	if s, ok := storedPicks(id); ok {
+		k := accountKey(user)
+		return WindowCaps{All: s.AccountCaps[k], Windows: s.AccountWindowCaps[k]}
+	}
+	return WindowCaps{}
+}
+
+// SetWindowCap sets the share of the window named window of the account ref
+// of the subscription id: 1–99, 100 for no cap on that window whatever the
+// account's cap, or 0 to have it follow the account's cap again.
+func SetWindowCap(id, ref, window string, cap int) error {
+	if cap != 0 && (cap < MinCap || cap > 100) {
+		return fmt.Errorf("a window's cap is a share from %d%% to %d%%, or 100%% for none on it, not %d%%", MinCap, MaxCap, cap)
+	}
+	w := WindowCapID(window)
+	if w == "" {
+		return fmt.Errorf("name the usage window to cap")
+	}
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	if p.Account == nil {
+		return fmt.Errorf("%s has keys, not subscription accounts with usage windows to cap", p.Name)
+	}
+	r, ok := p.accountRef(ref)
+	if !ok {
+		return fmt.Errorf("%s has no account %q", p.Name, ref)
+	}
+	k := accountKey(r)
+	if p.AccountWindowCaps[k][w] == cap {
+		return nil
+	}
+	all := map[string]map[string]int{}
+	for u, m := range p.AccountWindowCaps {
+		all[u] = maps.Clone(m)
+	}
+	if all[k] == nil {
+		all[k] = map[string]int{}
+	}
+	if cap == 0 {
+		delete(all[k], w)
+	} else {
+		all[k][w] = cap
+	}
+	if len(all[k]) == 0 {
+		delete(all, k)
+	}
+	p.AccountWindowCaps = all
+	return Save(*p)
 }
 
 // SetAccountCap caps the account ref of the subscription id at cap percent
@@ -120,46 +240,90 @@ func normalAccountCaps(m map[string]int) map[string]int {
 	return out
 }
 
-// CapHeld says whether an allowance, as last known, has a window counting
-// model at or past cap percent at now: the account is held by its cap.
-// used is the share of the fullest such window, back when the last of them
-// renews (zero when one doesn't say). A window whose reset has passed is
-// empty again; no cap (0) holds nothing.
-func (a Allowance) CapHeld(model string, cap int, now time.Time) (held bool, used float64, back time.Time) {
-	if cap <= 0 {
-		return false, 0, time.Time{}
+// normalWindowCaps is m as it is kept: accounts and windows in lower case,
+// shares within MinCap–100, empty ones left out; nil for none.
+func normalWindowCaps(m map[string]map[string]int) map[string]map[string]int {
+	var out map[string]map[string]int
+	for u, ws := range m {
+		u = accountKey(u)
+		for w, c := range ws {
+			w = WindowCapID(w)
+			if u == "" || w == "" || c < MinCap || c > 100 {
+				continue
+			}
+			if out == nil {
+				out = map[string]map[string]int{}
+			}
+			if out[u] == nil {
+				out[u] = map[string]int{}
+			}
+			out[u][w] = c
+		}
+	}
+	return out
+}
+
+// CapHold is how an account is held by its caps for a model: the share
+// used of the fullest window holding it, that window's cap, when the last
+// of those windows renews (zero when one doesn't say), and Credits when
+// only the credits hold it, at 100%.
+type CapHold struct {
+	Used    float64
+	Cap     int
+	Back    time.Time
+	Credits bool
+}
+
+// CapHeld says how an allowance, as last known, holds the account for
+// model at now: some window counting model at or past its own share of
+// caps (WindowCaps.Of), not renewed since; nil when none is. A window
+// whose reset has passed is empty again; no caps hold nothing.
+func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHold {
+	if !caps.Holds() {
+		return nil
 	}
 	model = strings.ToLower(model)
-	unknown := false
+	var h *CapHold
+	unknown, byCap := false, false
 	for _, l := range a {
-		if !l.applies(model) || l.Used < float64(cap) {
+		share, credits := caps.Of(l.Name)
+		if share <= 0 || !l.applies(model) || l.Used < float64(share) {
 			continue
 		}
 		if !l.Resets.IsZero() && !l.Resets.After(now) {
 			continue // renewed since it was read
 		}
-		held, used = true, max(used, l.Used)
+		if h == nil {
+			h = &CapHold{}
+		}
+		if l.Used > h.Used || h.Cap == 0 {
+			h.Used, h.Cap = l.Used, share
+		}
+		byCap = byCap || !credits
 		if l.Resets.IsZero() {
 			unknown = true
-		} else if l.Resets.After(back) {
-			back = l.Resets
+		} else if l.Resets.After(h.Back) {
+			h.Back = l.Resets
 		}
 	}
-	if unknown {
-		back = time.Time{}
+	if h == nil {
+		return nil
 	}
-	return held, used, back
+	if unknown {
+		h.Back = time.Time{}
+	}
+	h.Credits = !byCap
+	return h
 }
 
 // capReached says whether an account's windows that stop it for every
-// model are, one of them, at or past cap percent at now — usedPast at the
-// cap, those renewed since they were read left out. No cap reaches nothing.
-func capReached(q SubscriptionQuota, cap int, now time.Time) bool {
-	if cap <= 0 {
-		return false
-	}
+// model are, one of them, at or past its own share of caps at now —
+// usedPast at the share, those renewed since they were read left out. No
+// caps reach nothing.
+func capReached(q SubscriptionQuota, caps WindowCaps, now time.Time) bool {
 	for _, w := range q.Windows {
-		if w.Aside || w.Model != "" || w.Used < float64(cap) {
+		share, _ := caps.Of(w.Name)
+		if share <= 0 || w.Aside || w.Model != "" || w.Used < float64(share) {
 			continue
 		}
 		if w.ResetsAt != nil && !w.ResetsAt.After(now) {
@@ -182,6 +346,9 @@ func WithCapped(m map[string]SubscriptionQuota) map[string]SubscriptionQuota {
 		for i, w := range q.Windows {
 			w.Capped = !w.Aside && !w.Unlimited
 			w.CapsSome = w.Capped && (w.Model != "" || w.matches != nil)
+			if w.Capped {
+				w.CapID = WindowCapID(w.Name)
+			}
 			ws[i] = w
 		}
 		if q.Windows != nil {

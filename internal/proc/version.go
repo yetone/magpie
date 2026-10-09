@@ -21,7 +21,7 @@ import (
 // every few minutes put one up every time magpie's window opened. An npm
 // CLI isn't run at all: its package says the version its --version would.
 func Version(bin string) string {
-	real, err := filepath.EvalSymlinks(bin)
+	real, err := RealPath(bin)
 	if err != nil {
 		real = bin
 	}

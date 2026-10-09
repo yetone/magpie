@@ -10,7 +10,9 @@ package provider
 // Kept in balance-history.json, by provider and key name: the amount only,
 // no key and nothing else of the vendor's. A balance kept from before
 // (AsOf), failed, or told as several amounts or a percent (BalanceParts)
-// isn't one to keep. Points come at least balanceHistGap apart (a nearer one
+// isn't one to keep. A balance in several currencies at once (DeepSeek's
+// "$11.12 · ¥-0.05") keeps a line for each currency under a key of its
+// own (balanceCurrencies), and its card draws the first one's. Points come at least balanceHistGap apart (a nearer one
 // moves the last instead), and a run of the same amount is its first and
 // last point only. Points older than balanceHistKept go, and a key keeps
 // balanceHistMax.
@@ -20,7 +22,10 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -56,6 +61,9 @@ type BalanceTrend struct {
 	FitNow   float64        `json:"fitNow,omitempty"`
 	PerDay   float64        `json:"perDay,omitempty"`
 	RunsOut  *time.Time     `json:"runsOut,omitempty"`
+	// Currency is the sign the points are in ("$"), set when the balance
+	// is told in several currencies and the points are only the first's
+	Currency string `json:"currency,omitempty"`
 }
 
 // balanceHist is the file: key ("provider|user") → points.
@@ -104,21 +112,71 @@ func addBalancePoint(pts []BalancePoint, n BalancePoint) []BalancePoint {
 	return append(pts, n)
 }
 
-// balancePointOf is the point q's balance makes, if it is one to keep.
-func balancePointOf(q SubscriptionQuota, now time.Time) (BalancePoint, bool) {
+// balancePointsOf is the points q's balance makes, by the key each is kept
+// under, if it is one to keep: one under the card's key, or, told in
+// several currencies, one for each under the card's key and the currency.
+func balancePointsOf(q SubscriptionQuota, now time.Time) map[string]BalancePoint {
 	if q.Error != "" || q.AsOf != nil || q.Provider == "" || q.Balance == "" || len(q.BalanceParts) > 0 {
-		return BalancePoint{}, false
-	}
-	n, ok := BalanceNumber(q.Balance)
-	if !ok {
-		return BalancePoint{}, false
+		return nil
 	}
 	at := now
 	if q.ReadAt != nil && !q.ReadAt.After(now) {
 		at = *q.ReadAt
 	}
-	return BalancePoint{At: at.UTC().Truncate(time.Second), Amount: n}, true
+	at = at.UTC().Truncate(time.Second)
+	key := quotaHistKey(q.Provider, q.User)
+	if cs := balanceCurrencies(q.Balance); cs != nil {
+		out := map[string]BalancePoint{}
+		for _, c := range cs {
+			out[currencyHistKey(key, c.Sign)] = BalancePoint{At: at, Amount: c.N}
+		}
+		return out
+	}
+	n, ok := BalanceNumber(q.Balance)
+	if !ok {
+		return nil
+	}
+	return map[string]BalancePoint{key: {At: at, Amount: n}}
 }
+
+// currencyAmount is one amount of a balance told in several currencies:
+// its sign as shown ("$", "CNY ") and its number.
+type currencyAmount struct {
+	Sign string
+	N    float64
+}
+
+var currencyPart = regexp.MustCompile(`^([^\d-]+?)(-?\d[\d,]*(?:\.\d+)?)$`)
+
+// balanceCurrencies is a balance's amounts when it is told in several
+// currencies, each a sign and a number, apart by " · " as readDeepSeek
+// writes them ("$11.12 · ¥-0.05"), in the order shown; nil for one amount,
+// or for anything else ("$3 · 2 keys", the same sign twice).
+func balanceCurrencies(s string) []currencyAmount {
+	parts := strings.Split(s, " · ")
+	if len(parts) < 2 {
+		return nil
+	}
+	var out []currencyAmount
+	seen := map[string]bool{}
+	for _, p := range parts {
+		m := currencyPart.FindStringSubmatch(strings.TrimSpace(p))
+		if m == nil {
+			return nil
+		}
+		sign := strings.TrimSpace(m[1])
+		n, err := strconv.ParseFloat(strings.ReplaceAll(m[2], ",", ""), 64)
+		if sign == "" || seen[sign] || err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+			return nil
+		}
+		seen[sign] = true
+		out = append(out, currencyAmount{m[1], n})
+	}
+	return out
+}
+
+// currencyHistKey is where one currency of a card's balance is kept.
+func currencyHistKey(key, sign string) string { return key + "|" + strings.TrimSpace(sign) }
 
 // noteBalanceHistory keeps the balance each card among qs tells, and gives
 // every card with a balance its trend.
@@ -128,11 +186,18 @@ func noteBalanceHistory(qs []SubscriptionQuota, now time.Time) {
 	var h balanceHist
 	changed := false
 	for _, q := range qs {
-		if p, ok := balancePointOf(q, now); ok {
-			if h == nil {
-				h = readBalanceHist()
-			}
-			key := quotaHistKey(q.Provider, q.User)
+		pts := balancePointsOf(q, now)
+		if len(pts) > 0 && h == nil {
+			h = readBalanceHist()
+		}
+		if card := quotaHistKey(q.Provider, q.User); len(pts) > 1 && len(h[card]) > 0 {
+			// the card's own line, kept before its currencies were told
+			// apart, took whichever came first in a read and can't be
+			// split again: it goes
+			delete(h, card)
+			changed = true
+		}
+		for key, p := range pts {
 			before := h[key]
 			k := len(before)
 			var last BalancePoint
@@ -169,7 +234,15 @@ func noteBalanceHistory(qs []SubscriptionQuota, now time.Time) {
 		if h == nil {
 			h = readBalanceHist()
 		}
-		qs[i].BalanceTrend = balanceTrend(h[quotaHistKey(q.Provider, q.User)], now)
+		key := quotaHistKey(q.Provider, q.User)
+		cs := balanceCurrencies(q.Balance)
+		if cs != nil {
+			key = currencyHistKey(key, cs[0].Sign)
+		}
+		qs[i].BalanceTrend = balanceTrend(h[key], now)
+		if cs != nil && qs[i].BalanceTrend != nil {
+			qs[i].BalanceTrend.Currency = cs[0].Sign
+		}
 	}
 }
 

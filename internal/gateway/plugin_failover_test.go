@@ -149,6 +149,15 @@ func TestPluginFailover(t *testing.T) {
 		hit := false
 		for _, first := range []string{"a", "b", "full"} {
 			reset(map[string]string{first: how})
+			if how == "gone" {
+				// the allowances the last round left to be read again are
+				// read before the 401: the fake's usage doesn't ask the
+				// upstream that refuses, so a reading that asked after the
+				// 401 would find the sign-in good and rightly take the
+				// mark off (one begun before it doesn't:
+				// TestPluginUsageReadOlderThanAnswer)
+				provider.LoginUsage(ctx, "plugin:fakeco")
+			}
 			code, body, seen := ask("fakeco/fake-1")
 			if code != 200 || servedBy(body) == "" || servedBy(body) == first {
 				t.Fatalf("%s with %s failing: %d %s (tried %v)", how, first, code, body, seen)

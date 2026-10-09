@@ -1,12 +1,16 @@
 package gateway
 
 import (
+	"compress/gzip"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -23,15 +27,15 @@ type requestLimits struct {
 }
 
 func (s *Server) requestBody(w http.ResponseWriter, r *http.Request, from provider.Protocol) ([]byte, bool) {
-	return s.readRequestBody(w, r, from, nil, 0)
+	return s.readRequestBody(w, r, from, 0)
 }
 
-func (s *Server) readRequestBody(w http.ResponseWriter, r *http.Request, from provider.Protocol, decode func(*http.Request) (io.ReadCloser, error), limit int64) ([]byte, bool) {
+func (s *Server) readRequestBody(w http.ResponseWriter, r *http.Request, from provider.Protocol, limit int64) ([]byte, bool) {
 	limits := s.requestLimits
 	if limit > 0 {
 		limits.body = limit
 	}
-	body, status, err := readBoundedRequestBody(w, r, limits, decode)
+	body, status, err := readBoundedRequestBody(w, r, limits)
 	if err != nil {
 		writeError(w, from, status, err.Error())
 		return nil, false
@@ -57,8 +61,39 @@ func (b *idleBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Read one bounded body; callers choose their protocol's error envelope.
-func readBoundedRequestBody(w http.ResponseWriter, r *http.Request, limits requestLimits, decode func(*http.Request) (io.ReadCloser, error)) ([]byte, int, error) {
+// errBodyEncoding is a Content-Encoding magpie can't decode.
+var errBodyEncoding = errors.New("unsupported Content-Encoding")
+
+// decodedBody reads r.Body through its Content-Encoding: Codex sends its
+// bodies zstd, to the ChatGPT backend path and to a custom provider's
+// /v1/responses alike (#1223), and other clients gzip. The header is
+// dropped once decoded, so nothing after this sees or forwards it.
+func decodedBody(r *http.Request) (io.ReadCloser, error) {
+	var rd io.ReadCloser = io.NopCloser(r.Body)
+	switch enc := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Encoding"))); enc {
+	case "", "identity":
+	case "zstd":
+		d, err := zstd.NewReader(r.Body, zstd.WithDecoderMaxMemory(defaultBodyLimit))
+		if err != nil {
+			return nil, err
+		}
+		rd = d.IOReadCloser()
+	case "gzip", "x-gzip":
+		g, err := gzip.NewReader(r.Body)
+		if err != nil {
+			return nil, fmt.Errorf("request body is not gzip: %w", err)
+		}
+		rd = g
+	default:
+		return nil, fmt.Errorf("%w: magpie can't read a %q body; send it as identity, gzip or zstd", errBodyEncoding, enc)
+	}
+	r.Header.Del("Content-Encoding")
+	return rd, nil
+}
+
+// Read one bounded body, decoded; callers choose their protocol's error
+// envelope. The limit holds for the decoded bytes too.
+func readBoundedRequestBody(w http.ResponseWriter, r *http.Request, limits requestLimits) ([]byte, int, error) {
 	controller := http.NewResponseController(w)
 	reject := func(status int, err error) ([]byte, int, error) {
 		// Do not let net/http drain a rejected body from a stalled client.
@@ -93,15 +128,14 @@ func readBoundedRequestBody(w http.ResponseWriter, r *http.Request, limits reque
 	original := r.Body
 	r.Body = &idleBody{original, controller, limits.readTimeout}
 	defer func() { r.Body = original }()
-	rd := r.Body
-	if decode != nil {
-		var err error
-		rd, err = decode(r)
-		if err != nil {
-			return readFailure(err)
-		}
-		defer rd.Close()
+	rd, err := decodedBody(r)
+	if errors.Is(err, errBodyEncoding) {
+		return reject(http.StatusUnsupportedMediaType, err)
 	}
+	if err != nil {
+		return readFailure(err)
+	}
+	defer rd.Close()
 	// Limit decoded bytes as well, without allocating from Content-Length.
 	body, err := io.ReadAll(io.LimitReader(rd, limits.body+1))
 	if int64(len(body)) > limits.body {

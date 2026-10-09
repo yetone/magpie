@@ -92,7 +92,9 @@ type devinDecoded struct {
 	msgs   [][]pbField
 	tools  []string
 	descs  []string
-	max    uint64
+	// schemas are the tools' parameters, as sent
+	schemas []string
+	max     uint64
 }
 
 func decodeDevinRequest(t *testing.T, b []byte) devinDecoded {
@@ -110,6 +112,7 @@ func decodeDevinRequest(t *testing.T, b []byte) devinDecoded {
 			fs := pbFields(f.data)
 			d.tools = append(d.tools, string(fs[0].data))
 			d.descs = append(d.descs, string(fs[1].data))
+			d.schemas = append(d.schemas, string(fs[2].data))
 		case 8:
 			for _, g := range pbFields(f.data) {
 				if g.num == 2 {
@@ -210,6 +213,41 @@ func TestBuildDevin(t *testing.T) {
 	}}, "m", "k"))
 	if n := len(d.msgs); n != 3 || devinSummary(d.msgs[2]) != "1:Please proceed with the task." || d.max != 50 {
 		t.Fatalf("%d %+v", n, d)
+	}
+}
+
+// TestBuildDevinObjectRoot offers #1196's tool, whose parameters have a root
+// oneOf, anyOf or allOf: Devin's Claude models answered 502 to every request
+// with one, so each goes as a plain object; a plain object goes as it came.
+func TestBuildDevinObjectRoot(t *testing.T) {
+	for _, k := range []string{"oneOf", "anyOf", "allOf"} {
+		schema := `{
+      "type": "object",
+      "properties": {"a": {"type": "string"}},
+      "` + k + `": [{"properties": {"a": {"type": "string"}}}, {"properties": {"b": {"type": "string"}}}]
+    }`
+		plain := `{"type":"object","properties":{"x":{"type":"string"}},"required":["x"]}`
+		d := decodeDevinRequest(t, buildDevin(&Request{
+			Tools: []Tool{
+				{Name: "t", Description: "t", Schema: json.RawMessage(schema)},
+				{Name: "plain", Description: "p", Schema: json.RawMessage(plain)},
+			},
+			Messages: []Message{{Role: "user", Parts: []Part{{Kind: Text, Text: "ok"}}}},
+		}, "claude-opus-5-5", "k"))
+		if len(d.schemas) != 2 {
+			t.Fatalf("%s: schemas %q", k, d.schemas)
+		}
+		var p map[string]any
+		if err := json.Unmarshal([]byte(d.schemas[0]), &p); err != nil {
+			t.Fatal(err)
+		}
+		props, _ := p["properties"].(map[string]any)
+		if p["type"] != "object" || p["anyOf"] != nil || p["oneOf"] != nil || p["allOf"] != nil || props["a"] == nil || props["b"] == nil {
+			t.Fatalf("%s: sent %s", k, d.schemas[0])
+		}
+		if d.schemas[1] != plain {
+			t.Fatalf("%s: a plain object was changed: %s", k, d.schemas[1])
+		}
 	}
 }
 

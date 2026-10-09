@@ -129,8 +129,8 @@
     <p><span class="ui">Agents</span> タブには、このマシンにインストールまたは設定されているエージェントごとに行があります。magpie が対応しているのは Claude Code、Codex、Gemini CLI、OpenCode、MiMo Code、Pi、Goose、Cursor、Copilot CLI、Crush、DeepSeek Harness、Command Code、omp、OmO、Devin、Hermes Agent、MiniMax Code、Grok Build、ZCode、OpenHanako、Alma です。</p>
 
     <figure class="figure">
-      <img class="for-light" src="/img/agents-ja-light.png" width="2080" height="1344" loading="lazy" alt="エージェントタブ：エージェントごとに使用中のモデルを示す行と、下部に保存済みのプロファイル">
-      <img class="for-dark" src="/img/agents-ja-dark.png" width="2080" height="1344" loading="lazy" alt="エージェントタブ：エージェントごとに使用中のモデルを示す行と、下部に保存済みのプロファイル">
+      <img class="for-light" src="/img/agents-ja-light.png" width="2080" height="1290" loading="lazy" alt="エージェントタブ：エージェントごとに使用中のモデルを示す行と、下部に保存済みのプロファイル">
+      <img class="for-dark" src="/img/agents-ja-dark.png" width="2080" height="1290" loading="lazy" alt="エージェントタブ：エージェントごとに使用中のモデルを示す行と、下部に保存済みのプロファイル">
       <figcaption>エージェントごとに 1 行。どのプロバイダのモデルでも選べ、プロファイルですべてを一度に切り替えられます。</figcaption>
     </figure>
     <ul>
@@ -227,6 +227,7 @@ magpie claude group/opus-anywhere    <span class="c"># これを使う</span></p
       <img class="for-dark" src="/img/usage-ja-dark.png" width="2080" height="1004" loading="lazy" alt="使用量タブ：残高、トークンとコストの合計、30 日間のグラフ">
       <figcaption>ゲートウェイを通ったすべての呼び出しの残高、トークン、キャッシュヒット、コスト。</figcaption>
     </figure>
+    <p><b>コンテキスト。</b> Usage の <span class="ui">Context</span> タブでは、ゲートウェイを通るときに読み取った各エージェントのプロンプトの中身を表示します。システムプロンプト、ツール定義（MCP サーバーのツールはまとめて 1 つ）、指示ファイルと skills、ツールが読み込んだファイル、ツールのその他の出力、会話が、モデルのコンテキストウィンドウのどれだけを占めるかがわかります。各エージェントには 100 点満点のスコア（プロンプトのうちキャッシュから読まれた割合、スタートの軽さ、埋まる速さ、失敗の頻度）と、スコアの根拠を示す「軽いスタート」「MCP が重い」などのタグが付きます。セッションを開くと最新リクエストのウィンドウをマスごとに見られ、<span class="ui">Routing</span> ページでも選んだリクエストについて同じものが表示されます。保存するのは名前だけで、プロンプトの本文は保存しません。</p>
     <p><b>プロファイル。</b> <span class="ui">Agents</span> タブの下部にある <span class="ui">＋ Save current</span> で、全エージェントの設定を名前を付けて保存できます。チップをクリックすれば、すべてを一度に元に戻せます。</p>
 
     <h2 id="cli"><a class="anchor" href="#cli">ターミナルから</a></h2>
@@ -260,6 +261,9 @@ magpie claude group/opus-anywhere    <span class="c"># これを使う</span></p
     <p>いいえ。magpie は毎回ファイルを読み直し、自分が設定するキーだけに触れるので、他の設定やコメントはそのまま残ります。<span class="ui">Import…</span> で取り込んだプロバイダはコピーなので、その後エージェント側の設定を変えても再度コピーはされません。</p>
     <h3>GitHub に届かない環境で、インストールや更新をするには？</h3>
     <p>インストーラと <code>magpie update</code> にプロキシを渡します：<code>curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890</code>、または <code>magpie update --proxy socks5://127.0.0.1:1080</code>（http・https・socks5・socks5h に対応。<code>HTTPS_PROXY</code> と <code>ALL_PROXY</code> も使われます）。<code>--mirror &lt;prefix&gt;</code> を付けると、指定した GitHub ダウンロードミラーから <code>&lt;prefix&gt;https://github.com/…</code> としてリリースファイルを取得します。<code>magpie update mirror &lt;prefix&gt;</code> でアプリ自身の更新を含め毎回使い、<code>magpie update mirror off</code> で解除します。指定しない限りミラーは使われず、ファイルの SHA-256 はミラーではなく常に usemagpie.ai から取得するので、ミラーが書き換えたファイルはインストールされません。アプリ自身の更新は <span class="ui">Settings</span> → <span class="ui">Proxy</span> を通ります。</p>
+
+    <h3 id="privacy">magpie は何を送信しますか？</h3>
+    <p>プロンプト、返答、キー、アカウントは、使っているプロバイダーにだけ送られます。間に magpie 自身のサーバーはありません。リリース版の magpie は 1 日 1 回、使われていることを知らせます。何人が使っていて、何を優先して面倒を見るべきかを知るためです。送るのは、このコンピュータで作ったランダムな ID、magpie のバージョンとシステム、そして使っているエージェント、プロバイダー、モデルを magpie 自身の ID（<code>claude</code>、<code>deepseek</code>、<code>deepseek/deepseek-v4</code>）で、それぞれの数とともに。自分で追加したプロバイダーとそのモデルは <code>custom</code> とだけ記録します。プロバイダー追加シートの先頭に載るパートナーについては、1 日に表示された回数、開かれた回数、追加された回数も送ります（回数のみ）。名前、Base URL、アカウント、キー、プロンプト、使用量は送りません。<span class="ui">設定</span> → <span class="ui">プライバシー</span> → <span class="ui">使っているエージェント、プロバイダー、モデルを共有</span> でエージェント、プロバイダー、モデルとパートナーの回数を外せます。<span class="ui">ユーザー数に含める</span>、<code>DO_NOT_TRACK=1</code>、<code>MAGPIE_NO_STATS=1</code> のどれかですべてオフになります。ソースからのビルドは送信しません。詳しくは<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#counting-users">リファレンス</a>を。</p>
 
     <h3 id="proxy-loopback">エージェントが 502 を返す、または接続できず、magpie の Routing タブに何も出ない？</h3>
     <p>プロキシアプリ（Surge、Clash、mihomo など。システムプロキシ、TUN、拡張モードのいずれかが有効）が、エージェントから <code>http://127.0.0.1:3425</code> へのリクエストを横取りして別の場所へ送っているため、magpie に届いていません。除外リスト（<code>skip-proxy</code>、バイパス）に 127.0.0.1 を書くだけでは足りないことがあります。Codex など一部のエージェントは、それでもプロキシを通します。ローカルアドレスを直結にするルールを、他のルールより前に追加してください：</p>

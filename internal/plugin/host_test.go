@@ -617,9 +617,9 @@ func TestHostStreamCreditBoundsTheQueue(t *testing.T) {
 		got := f.methods()
 		return len(got) == 1 && got[0] == "abort"
 	})
-	if f.registered(id) {
-		t.Fatal("the given-up call is still the host's")
-	}
+	// the call is the host's until its abort's write is known, which the
+	// child may read before the writer hears it went
+	waitFor(t, "the given-up call was released", func() bool { return !f.registered(id) })
 }
 
 // TestHostStreamCreditIsPerDeliveredByte: reading part of a chunk credits only

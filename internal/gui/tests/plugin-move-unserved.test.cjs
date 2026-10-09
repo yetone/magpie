@@ -99,3 +99,33 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     }
   }
 }
+
+// Try again moves with the models as the editor shows them picked, not
+// yet saved: the reason said to untick one under Models (noting_ever on
+// X: deep-model unticked, and the move failed on it all the same). The
+// first try, with the picks unchanged, sends none.
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: Try again takes the models unticked`, async (t) => {
+      const browser = await launch(engine);
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width: 900, height: 700 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      const errors = [], posts = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", serve(lang, posts, { code: "unserved", args: { models: "Model 0" } }));
+      await page.goto("http://magpie.test/?view=providers");
+      await page.locator("#movable button", { hasText: L[lang].look }).click();
+      const ed = page.locator("#modal .editor");
+      await ed.locator(".move button").click();
+      await ed.locator(".move-why").waitFor({ state: "visible" });
+      // Model 1 ticked, Model 0 unticked, nothing saved
+      await ed.locator(".mchip", { hasText: "Model 1" }).first().click();
+      await ed.locator(".mchip.on", { hasText: "Model 0" }).click();
+      await ed.locator(".move button").click();
+      await page.waitForFunction(() => document.querySelector("#modal .editor .move-why")?.hidden === false);
+      assert.deepEqual(posts.map((p) => p.body), [{ id: "zed" }, { id: "zed", models: ["m1"] }]);
+      assert.deepEqual(errors, []);
+    });
+  }
+}

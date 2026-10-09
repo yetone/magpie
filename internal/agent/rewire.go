@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // The gateway's port is set in Settings (Magic_zero on Discord): every
@@ -49,6 +50,12 @@ func Rewire(as []*Agent) (moved []string, err error) {
 		// for switching it off to put back
 		was := stashLoad()
 		e := reset(a)
+		// the address magpie wrote follows it (wiredAt)
+		for k, v := range stashLoad() {
+			if strings.HasSuffix(k, wiredAt) {
+				was[k] = v
+			}
+		}
 		stashPut(was)
 		if e != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", a.Name, e))
@@ -86,6 +93,10 @@ func reset(a *Agent) error {
 	}
 	return a.Reapply()
 }
+
+// wiredAt ends a stash key holding the gateway address magpie last wrote
+// into an agent's config, which a move of the gateway updates.
+const wiredAt = ".wired_at"
 
 // stashPut writes the stash as m has it.
 func stashPut(m map[string]string) {

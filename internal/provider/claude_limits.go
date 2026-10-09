@@ -96,3 +96,29 @@ func NoteClaudeLimits(user string, ls []ClaudeLimit) {
 	c.Unlock()
 	StaleAllowance("claude", user)
 }
+
+// KeptClaudeLimits is what is kept of user's allowance as of now, in the
+// windows Claude Code names (ClaudeLimit's kinds), each that says when it
+// renews: what Claude Code last said as it answered, or its /usage read.
+// Nil when nothing is kept.
+func KeptClaudeLimits(user string) []ClaudeLimit {
+	claudeUsage.Lock()
+	e, ok := claudeUsage.m[strings.ToLower(user)]
+	claudeUsage.Unlock()
+	if !ok {
+		return nil
+	}
+	var out []ClaudeLimit
+	for _, w := range e.windows(time.Now()) {
+		if w.ResetsAt == nil {
+			continue // a window that renews when nobody knows says nothing of its own
+		}
+		for _, k := range claudeKinds {
+			if k.name == w.Name {
+				out = append(out, ClaudeLimit{Kind: k.kind, Used: w.Used / 100, ResetsAt: w.ResetsAt.Unix()})
+				break
+			}
+		}
+	}
+	return out
+}

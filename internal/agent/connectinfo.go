@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -73,6 +74,18 @@ func (a *Agent) Source() string {
 		}
 	}
 	return ""
+}
+
+// FailoverSaid is, for an agent not connected whose requests still go
+// through magpie for account failover alone (FailingOver), what the CLI
+// and the TUI say of it, the Agents page's line in words of their own:
+// why it goes through magpie, and what turns that off (#1385). "" when it
+// doesn't.
+func (a *Agent) FailoverSaid() string {
+	if a.FailingOver == nil || !a.FailingOver() {
+		return ""
+	}
+	return "not connected · goes through magpie only to fail over to your other ChatGPT accounts; switch them off under Providers › Codex to stop it"
 }
 
 // startsWith is, for an agent that reads magpie's models only as it
@@ -165,32 +178,110 @@ func (a *Agent) changedAt(files []string, reads func() string) time.Time {
 // Stale is how many copies of the agent are running that started before
 // magpie last changed what it reads at start: they still have the list
 // they started with until reopened. Zero where it can't be told (Windows).
+func (a *Agent) Stale() int { return len(a.StaleCopies()) }
+
+// StaleCopy is a copy of an agent still running on the list it started
+// with: what kind of copy it is, which says how it is reopened, and when
+// it started.
+type StaleCopy struct {
+	// Kind, for Codex: "app" (the ChatGPT or Codex desktop app, its
+	// app-server and helpers), "ide" (an editor extension's), "daemon"
+	// (the background app-server the CLI leaves running) or "cli"; ""
+	// for other agents; "embedded" is another app's own Codex, named by
+	// App
+	Kind  string    `json:"kind,omitempty"`
+	App   string    `json:"app,omitempty"`
+	Since time.Time `json:"since"`
+}
+
+// StaleCopies are the copies Stale counts. Reopening one kind doesn't end
+// another: on macOS the Codex app keeps running, its app-server with it,
+// when its window is closed (its window-all-closed doesn't quit a packaged
+// app on darwin), an editor's Codex runs until the editor's window is
+// reloaded, and the CLI's managed daemon runs on with ppid 1 until it is
+// restarted itself. So each is told apart for the row to say which one is
+// left. One app's processes (its app-server, its exec-server) are one copy.
 // One run from another home's agent dir (an app-server daemon Codex left
 // running for a CODEX_HOME of its own, under its packages) reads other
 // files, and isn't counted.
-func (a *Agent) Stale() int {
+func (a *Agent) StaleCopies() []StaleCopy {
 	pats, files, reads := a.startsWith()
 	if len(pats) == 0 || a.WSL != "" || runtime.GOOS == "windows" {
-		return 0
+		return nil
 	}
 	changed := a.changedAt(files, reads)
 	if changed.IsZero() {
-		return 0
+		return nil
 	}
 	dir := filepath.Dir(a.Path)
 	others := "/" + filepath.Base(dir) + "/"
-	n := 0
+	var out []StaleCopy
+	apps := map[string]int{}
 	for _, pat := range pats {
 		for _, p := range running(pat) {
 			if strings.Contains(p.cmd, others) && !strings.Contains(p.cmd, dir+"/") {
 				continue
 			}
-			if time.Now().Add(-p.up).Before(changed.Add(-time.Second)) {
-				n++
+			since := time.Now().Add(-p.up)
+			if !since.Before(changed.Add(-time.Second)) {
+				continue
+			}
+			c := StaleCopy{Since: since}
+			if a.ID == "codex" {
+				var app string
+				c.Kind, app = codexCopyKind(p.cmd)
+				if c.Kind == "embedded" {
+					c.App = app
+				}
+				if app != "" {
+					if i, ok := apps[app]; ok {
+						if since.Before(out[i].Since) {
+							out[i].Since = since
+						}
+						continue
+					}
+					apps[app] = len(out)
+				}
+			}
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// codexCopyKind tells what runs a Codex process from its command line, and
+// for one of a desktop app the app's bundle.
+func codexCopyKind(cmd string) (kind, app string) {
+	exe := cmd
+	if i := strings.Index(cmd, " -"); i > 0 {
+		exe = cmd[:i]
+	}
+	switch {
+	case slices.ContainsFunc(strings.Fields(cmd), func(f string) bool {
+		return f == "--managed-daemon" || strings.HasPrefix(f, "--managed-daemon=")
+	}):
+		return "daemon", ""
+	case strings.Contains(exe, "/extensions/"):
+		return "ide", ""
+	case strings.Contains(exe, ".app/Contents/"):
+		// the outermost bundle: ChatGPT.app's codex runs from a
+		// CodexCLI.app inside it
+		return "app", exe[:strings.Index(exe, ".app/")+len(".app")]
+	case slices.Contains(strings.Fields(cmd), "app-server"):
+		// an app that ships a Codex of its own and talks to its
+		// app-server (Agents Anywhere's connector, from its folder in
+		// Application Support): reopening that app ends it. A codex
+		// installed there by a version manager (fnm) and run in a
+		// terminal is no app-server, and stays "cli".
+		for _, under := range []string{"/Library/Application Support/", "/.local/share/"} {
+			if _, rest, ok := strings.Cut(exe, under); ok {
+				if name, _, ok := strings.Cut(rest, "/"); ok && name != "" {
+					return "embedded", name
+				}
 			}
 		}
 	}
-	return n
+	return "cli", ""
 }
 
 // elapsed reads ps's etime, [[dd-]hh:]mm:ss.

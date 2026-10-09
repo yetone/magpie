@@ -67,6 +67,8 @@ type Route struct {
 	// counts: streamed replies only (#196)
 	TTFT      int64 `json:"ttft,omitempty"`
 	FirstText int64 `json:"firstText,omitempty"`
+	// Flow: the ms its content took to come (Call.Flow)
+	Flow int64 `json:"flow,omitempty"`
 	// Served: the model the reply says answered, as the last try has it;
 	// Swapped: another than the one that try asked for; Routed: that try
 	// asked another magpie's routing group, and Served is its member
@@ -75,6 +77,12 @@ type Route struct {
 	Routed  bool   `json:"routed,omitempty"`
 	// Upstream: the provider an aggregator said answered behind it
 	Upstream string `json:"upstream,omitempty"`
+	// Prompt: what the prompt held, part by part, and the window it went
+	// into (prompt.go)
+	Prompt *Prompt `json:"prompt,omitempty"`
+	// Conv: the conversation a request without a session id is part of,
+	// as a digest of its first user turn (conversationID)
+	Conv string `json:"conv,omitempty"`
 }
 
 // RouteUsage is one billable attempt's pricing inputs, kept in routing history.
@@ -242,6 +250,8 @@ type Try struct {
 	// first text, when it streamed any (#196)
 	TTFT      int64 `json:"ttft,omitempty"`
 	FirstText int64 `json:"firstText,omitempty"`
+	// Flow: the ms its content took to come (Call.Flow)
+	Flow int64 `json:"flow,omitempty"`
 	// Served: the model its reply said answered, when it named one;
 	// Swapped: another model than Model, not just its dated name; Routed:
 	// Model is another magpie's routing group, and Served the member it

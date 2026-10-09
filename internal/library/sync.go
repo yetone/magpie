@@ -27,6 +27,13 @@ type Result struct {
 	// Unremoved are, for skills or servers taken out together, the ones
 	// that couldn't be (What is skill:<name> or mcp:<name>)
 	Unremoved []Problem `json:"unremoved,omitempty"`
+	// Installed, Had and Skipped are, for skills installed together, the
+	// ones added, the ones the library had already from the same source,
+	// and the ones left out with why: another skill by that name, the
+	// user's, is never written over (What is skill:<name>)
+	Installed []string  `json:"installed,omitempty"`
+	Had       []string  `json:"had,omitempty"`
+	Skipped   []Problem `json:"skipped,omitempty"`
 }
 
 // Problem is one thing that couldn't be given to an agent.
@@ -145,7 +152,7 @@ func (l *Library) syncMCP(t *Target, b *backups, res *Result) {
 		s, _ = t.MCP.side(s)
 		old := entries[s.Name]
 		if old != nil {
-			if cur, ok := t.MCP.decode(s.Name, old); ok && cur.same(s) && t.MCP.has(s) && !t.MCP.behind(s, old) {
+			if cur, ok := t.MCP.current(s.Name, old, s); ok && cur.same(s) && t.MCP.has(s) && !t.MCP.behind(s, old) {
 				mine = append(mine, s.Name)
 				continue
 			}
@@ -177,7 +184,10 @@ type AgentView struct {
 	Note         string   `json:"note,omitempty"`
 	NoSSE        bool     `json:"noSSE,omitempty"`
 	NoRemote     bool     `json:"noRemote,omitempty"`
-	MCPVia       string   `json:"mcpVia,omitempty"`
+	// NoEnvRefs: it reads no ${NAME} from its MCP config, so a server
+	// whose headers or environment have one isn't given to it (envref.go)
+	NoEnvRefs bool   `json:"noEnvRefs,omitempty"`
+	MCPVia    string `json:"mcpVia,omitempty"`
 	// How is the way it is given its skills, link or copy, and HowOwn its
 	// own over the library's; MustCopy is one that can only take copies
 	// (in WSL)
@@ -267,6 +277,7 @@ func Read(problems []Problem) (*View, error) {
 			av.MCP = t.MCP.Path
 			av.NoSSE = t.MCP.supports(&Server{Transport: "sse"}) != nil
 			av.NoRemote = t.MCP.supports(&Server{Transport: "http"}) != nil
+			av.NoEnvRefs = t.MCP.refsOf() == envSyntax{}
 		}
 		v.Agents = append(v.Agents, av)
 	}

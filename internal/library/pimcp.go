@@ -218,7 +218,13 @@ func piMCP(h, d, version string) (*mcpFile, string) {
 	if p.ext && !p.adapter {
 		via = "pi-mcp-extension"
 	}
-	return piFiles(h, d, p), via
+	f := piFiles(h, d, p)
+	// pi-mcp-extension sends its config as written ("no env var
+	// interpolation — WYSIWYG config", src/config.ts), and with it there
+	// the servers reach its file too; pi-mcp-adapter 5 reads ${NAME} in
+	// headers and env (utils.ts interpolateEnvVars, docs/servers.md)
+	f.Literal = p.ext
+	return f, via
 }
 
 // piFiles is the file an extension reads Pi's MCP servers from:

@@ -30,7 +30,7 @@ func TestClaudeChatCacheWrites(t *testing.T) {
 			req := &Request{Model: "claude-haiku-4-5", Stream: c.stream}
 			var usage Usage
 			code, msg := relay(rec, httptest.NewRequest("POST", "/v1/chat/completions", nil), provider.Chat, "Claude Code", req, segment, &usage,
-				func() {}, func(string, string, bool) {})
+				func() {}, nil, func(string, string, bool) {})
 			if code != 200 || msg != "" {
 				t.Fatalf("reply: %d %s", code, msg)
 			}

@@ -36,7 +36,7 @@ func TestCursorConversationID(t *testing.T) {
 			}
 		}
 		got = append(got, conv)
-		http.NewResponseController(w).EnableFullDuplex()
+		cursorDuplex(w)
 		w.Header().Set("Content-Type", "application/connect+proto")
 		w.Write(cursorUpdate(1, pb{}.str(1, "ok")))
 		w.Write(cursorUpdate(14, pb{}.varint(1, 3).varint(2, 1)))

@@ -13,6 +13,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
+	"github.com/yetone/magpie/internal/omarchy"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -119,6 +120,21 @@ func (h *host) makePanel() *application.WebviewWindow {
 	trayOwnClicks()
 	w.OnWindowEvent(events.Mac.WindowShow, func(*application.WindowEvent) { trayHighlight(true) })
 	w.OnWindowEvent(events.Mac.WindowHide, func(*application.WindowEvent) { trayHighlight(false) })
+	// The system's close hides the panel, as Escape does: a title bar's X
+	// (KWin's, #1283), Alt+F4 or the window manager's close key. Closed, it
+	// was gone while the tray still opened it, and the icon did nothing
+	// until magpie restarted. One lightweight mode let go (no longer
+	// h.panel by then) is closed.
+	w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if !application.InvokeSyncWithResult(func() bool { return h.panel == w }) {
+			return
+		}
+		e.Cancel()
+		w.Hide()
+		if omarchy.Hyprland() {
+			go omarchy.StopClicks()
+		}
+	})
 	return w
 }
 
@@ -132,6 +148,7 @@ func (h *host) madeAgain(w *application.WebviewWindow) {
 	}
 	if w.Name() == "panel" {
 		nameWindow(w, panelTitle)
+		ownFrame(w)
 	} else {
 		plainTitlebar(w)
 	}
@@ -179,9 +196,8 @@ func (h *host) lighten() {
 					ticks[i] = 0
 					continue
 				}
-				shown := w.IsVisible() || i == 0 && h.closing.Load()
 				var release bool
-				if ticks[i], release = lightStep(on, shown, ticks[i]); !release {
+				if ticks[i], release = lightStep(on, h.lightShown(w), ticks[i]); !release {
 					continue
 				}
 				ticks[i] = 0
@@ -214,8 +230,17 @@ func (h *host) panelWin() (w *application.WebviewWindow, again bool) {
 	return h.panel, false
 }
 
-// mainShown says whether the main window is up; on the main thread.
-func (h *host) mainShown() bool { return h.main != nil && h.main.IsVisible() }
+// lightShown says whether lightweight mode keeps w: it is up (windowUp),
+// or it is the main window leaving full screen to be closed; on the main
+// thread. A window open under another app's was let go as closed, and
+// Command-Tab back to magpie found it blank or gone (#1381).
+func (h *host) lightShown(w *application.WebviewWindow) bool {
+	return windowUp(w) || w == h.main && h.closing.Load()
+}
+
+// mainShown says whether the main window is up (windowUp), covered or not;
+// on the main thread.
+func (h *host) mainShown() bool { return h.main != nil && windowUp(h.main) }
 
 // openMain shows the main window on url ("" where it is), making it again
 // if lightweight mode let it go; on the main thread.
@@ -232,8 +257,7 @@ func (h *host) openMain(url string) {
 		h.whenLoaded(w, func() {
 			if h.main == w {
 				h.placeMain(w)
-				w.Show()
-				w.Focus()
+				showHere(w)
 			}
 		})
 		return
@@ -245,8 +269,41 @@ func (h *host) openMain(url string) {
 		return // made again, it is shown once its page has come
 	}
 	h.placeMain(h.main)
-	h.main.Show()
-	h.main.Focus()
+	showHere(h.main)
+}
+
+// reopenMain answers a click on magpie's Dock icon (#1252). A window that is
+// open, on whichever Space, is left there, and magpie is activated as any
+// app is: the Mac takes the user to the window's Space. One closed or
+// minimised is shown as openMain shows it, on the Space the user is on.
+func (h *host) reopenMain() {
+	if h.main == nil || h.loading[h.main] || !windowOpen(h.main) {
+		h.openMain("")
+		return
+	}
+	h.closing.Store(false) // reopened while leaving full screen: it stays
+	if h.panel != nil {
+		h.panel.Hide()
+	}
+	activateApp()
+}
+
+// spaceSettle is how long a window just shown keeps moving to the active
+// Space: the Mac moves it once the order to the front is committed, after
+// Show has returned, and not at all if the flag is gone by then.
+const spaceSettle = 500 * time.Millisecond
+
+// showHere shows w and makes it key on the Space the user is on, wherever it
+// was last; on the main thread. It moves only while being shown: left on,
+// activating magpie in any way (the Dock, Command-Tab) would pull the open
+// window off its own Space onto the user's (#1252).
+func showHere(w *application.WebviewWindow) {
+	setMovesToActiveSpace(w, true)
+	w.Show()
+	w.Focus()
+	time.AfterFunc(spaceSettle, func() {
+		application.InvokeAsync(func() { setMovesToActiveSpace(w, false) })
+	})
 }
 
 // placeMain puts the main window, made and not shown yet, as it was last

@@ -1,7 +1,7 @@
 /* Routing, live: the Gateway view's stage for what routing does with each
    request (routing.js). The same stage as the site's Model Routing, only
    played by the gateway's own trace. */
-.rt { container-type: inline-size; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; margin: 0 0 18px; }
+.rt { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; margin: 0 0 18px; }
 .rt-top { display: flex; flex-direction: column; gap: 3px; }
 .rt-what { font-size: 13px; color: var(--muted); }
 .rt-what b { color: var(--fg); font-weight: 600; }
@@ -48,7 +48,7 @@
 .rt-hub i { font-style: normal; font-size: 10.5px; font-weight: 560; margin-top: 5px; padding: 1px 8px; border-radius: 999px; background: var(--fg); color: var(--card); }
 .rt-hub.tick, .rt-src.tick { animation: rttick .4s ease-out; }
 @keyframes rttick { 40% { transform: scale(1.04); } }
-.rt-accts { position: relative; z-index: 1; list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; min-width: 0; container-type: inline-size; }
+.rt-accts { position: relative; z-index: 1; list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; min-width: 0; }
 .rt-accts li { position: relative; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; column-gap: 10px; row-gap: 6px; padding: 9px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; transition: opacity .3s, border-color .3s, transform .5s cubic-bezier(.2, .8, .2, 1); }
 .rt-accts li { margin-left: calc(var(--depth, 0) * 18px); }
 /* a group in the group: a heading its models hang from, set in under it */
@@ -57,6 +57,18 @@
 .rt-accts li.rt-sub svg { flex: none; color: var(--fg-2); }
 .rt-accts li.rt-sub code.mdl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-accts li.rt-sub i { margin-left: auto; font-style: normal; font-size: 10.5px; font-weight: 560; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg-2); white-space: nowrap; }
+/* it folds from its heading (Aiirobyte on Discord): folded, it says what
+   it routes to together on a line of its own */
+.rt-accts li.rt-sub { flex-wrap: wrap; row-gap: 4px; cursor: pointer; user-select: none; }
+.rt-accts li.rt-sub .n { white-space: nowrap; }
+.rt-accts li.rt-sub .n:empty, .rt-accts li.rt-sub em:empty { display: none; }
+.rt-accts li.rt-sub .chev { display: inline-flex; color: var(--muted); transition: transform .2s; }
+.rt-accts li.rt-sub .chev svg { color: inherit; }
+.rt-accts li.rt-sub:hover .chev { color: var(--fg); }
+.rt-accts li.rt-sub.open .chev { transform: rotate(180deg); }
+.rt-accts li.rt-sub em { flex: 1 0 100%; min-width: 0; white-space: normal; padding-left: 21px; }
+.rt-accts li.rt-sub:focus { outline: none; }
+.rt-accts li.rt-sub:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .rt-accts li.idle { display: block; color: var(--muted); border-style: dashed; text-align: center; }
 .rt-accts b { font-weight: 560; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-accts b > span:not(.ic) { font-weight: 450; color: var(--muted); }
@@ -87,6 +99,16 @@
 @keyframes rthit { 20% { translate: -5px; } 40% { translate: 4px; } 60% { translate: -2px; } 80% { translate: 1px; } }
 .rt-accts .tag { position: absolute; right: 10px; top: -10px; padding: 1px 7px; border-radius: 6px; background: var(--red); color: #fff; font: var(--code-style, normal) 600 10.5px/1.5 var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); opacity: 0; transform: translateY(4px) scale(.9); transition: opacity .25s, transform .25s; pointer-events: none; }
 .rt-accts li.tagged .tag { opacity: 1; transform: none; }
+/* a provider's keys for one model, folded into one row (#1319): it opens
+   to head them, as a group in the group heads its models */
+.rt-accts li.rt-fold { grid-template-columns: 10px minmax(0, 1fr) auto auto; cursor: pointer; user-select: none; }
+.rt-accts li.rt-fold em { white-space: normal; text-align: right; }
+.rt-accts li.rt-fold .chev { display: inline-flex; color: var(--muted); transition: transform .2s; }
+.rt-accts li.rt-fold:hover .chev { color: var(--fg); }
+.rt-accts li.rt-fold.open { background: var(--card-2); }
+.rt-accts li.rt-fold.open .chev { transform: rotate(180deg); }
+.rt-accts li.rt-fold:focus { outline: none; }
+.rt-accts li.rt-fold:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .rt-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
 .rt-cap { flex: 1 1 20em; margin: 0; min-height: 3em; display: flex; align-items: center; font-size: 13px; line-height: 1.45; color: var(--fg); }
 .rt-cap.in { animation: rtin .4s ease-out; }
@@ -116,22 +138,26 @@
   .rt-accts li.on .dot, .rt-wires path.live, .rt-sky .pkt.held, .rt-accts li.new, .rt-accts li.hit, .rt-hub.tick, .rt-src.tick, .rt-cap.in, .rt-steps li.wait::before, .masking .pii { animation: none; }
   .rt-accts li { transition: none; }
 }
+/* The narrow and wide layouts below go by a box's own width, as container
+   queries would: routing.js sets max560 on a box 560px wide or less, min1150
+   on one 1150px or wider. Not container queries: in WebKit they kept the
+   page from scrolling to its end (#1249). :where() keeps each rule as
+   strong as it was inside its query. */
 /* a narrow list: what a row says goes under its name */
-@container (max-width: 460px) {
-  .rt-accts li { grid-template-columns: 10px minmax(0, 1fr); }
-  .rt-accts em { grid-column: 2; white-space: normal; }
-  .rt-accts .bar { grid-column: 2; }
-}
+.rt-accts:where(.max460) li { grid-template-columns: 10px minmax(0, 1fr); }
+.rt-accts:where(.max460) em { grid-column: 2; white-space: normal; }
+.rt-accts:where(.max460) .bar { grid-column: 2; }
+.rt-accts:where(.max460) li.rt-fold { grid-template-columns: 10px minmax(0, 1fr) auto; }
+.rt-accts:where(.max460) li.rt-fold em { grid-row: 2; text-align: left; }
+.rt-accts:where(.max460) li.rt-fold .chev { grid-column: 3; grid-row: 1; }
 /* narrow (the tray panel): magpie and the agent side by side, the
    accounts under them, on a lane down their left */
-@container (max-width: 560px) {
-  .rt-stage { grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 26px; padding: 16px 0; }
-  .rt-accts { grid-column: 1 / -1; padding-left: 22px; }
-  .rt-accts li { grid-template-columns: 10px minmax(0, 1fr); }
-  .rt-accts em { grid-column: 2; white-space: normal; }
-  .rt-accts .bar { grid-column: 2; }
-  .rt-stats { gap: 14px; }
-}
+:where(.rt.max560) .rt-stage { grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 26px; padding: 16px 0; }
+:where(.rt.max560) .rt-accts { grid-column: 1 / -1; padding-left: 22px; }
+.rt-accts:where(.max560) li { grid-template-columns: 10px minmax(0, 1fr); }
+.rt-accts:where(.max560) em { grid-column: 2; white-space: normal; }
+.rt-accts:where(.max560) .bar { grid-column: 2; }
+:where(.rt.max560) .rt-stats { gap: 14px; }
 /* the Routing view */
 #view-routing .row-head { margin: 14px 0 6px; padding: 0 2px; gap: 0; }
 #view-routing .row-head .note { font-size: 11px; color: var(--faint); margin-left: 8px; }
@@ -151,7 +177,7 @@
 .masking .pii { animation: rtpii .35s ease-out both; }
 @keyframes rtpii { from { filter: blur(0); opacity: 1; } }
 #view-routing .rt { margin: 0; }
-.rt-more { container: rt-more / inline-size; padding-bottom: 12px; }
+.rt-more { padding-bottom: 12px; }
 .rt-cols { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: 16px; }
 /* side by side, the accounts end where the requests do and scroll like
    them, not run on down the page beside an empty column: of no height of
@@ -159,16 +185,14 @@
    few accounts'. Only where the requests' column still keeps each request
    on one line (wider than 760px, see below): narrower, one column of
    one-line requests reads better than two with each request on three
-   (#860, huoranxuanyuan) */
-@container rt-more (min-width: 1150px) {
-  .rt-cols { grid-template-columns: minmax(0, 1fr) clamp(280px, 32%, 400px); }
-  .rt-cols:not(.solo) .rt-col:last-child { display: flex; flex-direction: column; }
-  .rt-cols:not(.solo) .rt-acts { flex: 1 1 auto; height: 0; min-height: 216px; overflow-y: auto; overscroll-behavior: contain; }
-}
-/* each column its own container: a request's row lays itself out by the
-   list's width, not the page's (#273: in two columns of ~470px the rows
-   kept to one line, and the reasoning was drawn over the numbers) */
-.rt-col { min-width: 0; container-type: inline-size; }
+   (#860, huoranxuanyuan). Where the page is 1150px wide or more */
+:where(.rt-more.min1150) .rt-cols { grid-template-columns: minmax(0, 1fr) clamp(280px, 32%, 400px); }
+:where(.rt-more.min1150) .rt-cols:not(.solo) .rt-col:last-child { display: flex; flex-direction: column; }
+:where(.rt-more.min1150) .rt-cols:not(.solo) .rt-acts { flex: 1 1 auto; height: 0; min-height: 216px; overflow-y: auto; overscroll-behavior: contain; }
+/* each column sized by its own width: a request's row lays itself out by
+   the list's width, not the page's (#273: in two columns of ~470px the
+   rows kept to one line, and the reasoning was drawn over the numbers) */
+.rt-col { min-width: 0; }
 .rt-reqs { padding: 4px; max-height: 420px; overflow-y: auto; display: grid; grid-template-columns: auto fit-content(36%) minmax(0, 1fr) auto; }
 .rt-req { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; column-gap: 12px; padding: 6px 8px; font: inherit; font-size: 12px; text-align: left; color: var(--fg-2); background: none; border: 1px solid transparent; border-radius: 8px; cursor: pointer; }
 .rt-req:hover { background: var(--card-2); }
@@ -249,20 +273,18 @@ button.rt-session { cursor: pointer; }
 .pop.proto-menu.rt-purpose-menu { width: 190px; max-width: calc(100vw - 16px); background: var(--card); }
 .rt-purpose-menu .pm-head, .rt-purpose-menu .pm-note { display: none; }
 .rt-purpose-menu .pm-item { align-items: center; padding: 7px 8px; }
+.rt-purpose-menu .pm-tick { height: 13px; width: 13px; border: 1px solid var(--line); border-radius: 3px; }
+.rt-purpose-menu .on .pm-tick { border-color: var(--muted); }
 .rt-purpose-menu .pm-name { font-weight: 400; overflow-wrap: anywhere; }
-@container (max-width: 440px) {
-  #view-routing .rt-req-head .note { flex: 1 1 100%; order: 1; margin: 2px 0 0; }
-  .rt-purpose { max-width: 150px; }
-}
+#view-routing :where(.rt-col.max440) .rt-req-head .note { flex: 1 1 100%; order: 1; margin: 2px 0 0; }
+:where(.rt-col.max440) .rt-purpose { max-width: 150px; }
 /* Keep the compact row on wide lists. In a narrow column the destination
    and the metrics go under the model; individual metrics stay whole. */
-@container (max-width: 760px) {
-  .rt-reqs { grid-template-columns: auto minmax(0, 1fr); }
-  .rt-req { row-gap: 2px; }
-  .rt-req .asked { grid-column: 2; grid-row: 1; }
-  .rt-req .to { grid-column: 2; grid-row: 2; }
-  .rt-req .meta { grid-column: 2; grid-row: 3; justify-content: flex-start; }
-}
+:where(.rt-col.max760) .rt-reqs { grid-template-columns: auto minmax(0, 1fr); }
+:where(.rt-col.max760) .rt-req { row-gap: 2px; }
+:where(.rt-col.max760) .rt-req .asked { grid-column: 2; grid-row: 1; }
+:where(.rt-col.max760) .rt-req .to { grid-column: 2; grid-row: 2; }
+:where(.rt-col.max760) .rt-req .meta { grid-column: 2; grid-row: 3; justify-content: flex-start; }
 .rt-acts { padding: 4px 0; }
 .rt-cols.solo { grid-template-columns: minmax(0, 1fr); }
 .rt-reqs.none { display: block; background: none; border-color: transparent; }
@@ -287,6 +309,13 @@ button.rt-session { cursor: pointer; }
 .rt-act .fix { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; }
 .rt-act .bar { height: 3px; border-radius: 2px; background: var(--card-2); overflow: hidden; }
 .rt-act .bar i { display: block; height: 100%; border-radius: 2px; background: var(--muted); }
+/* a provider's keys summed up in one row (#1319), opened to each */
+.rt-act.rt-keys { cursor: pointer; user-select: none; }
+.rt-act.rt-keys .chev { display: inline-flex; align-self: center; margin-left: auto; color: var(--muted); transition: transform .2s; }
+.rt-act.rt-keys:hover .chev { color: var(--fg); }
+.rt-act.rt-keys.open .chev { transform: rotate(180deg); }
+.rt-act.rt-keys:focus { outline: none; }
+.rt-act.rt-keys:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
 .rt-livedot { width: 6px; height: 6px; margin-left: 7px; border-radius: 50%; background: var(--green); animation: rtlive 1.8s infinite; --fg: var(--green); }
 @media (prefers-reduced-motion: reduce) { .rt-livedot { animation: none; } }
 /* routing groups, and the providers routing over several of their own */
@@ -411,13 +440,12 @@ button.rt-session { cursor: pointer; }
   body.web #view-routing > .row-head .note { flex: 1 1 100%; order: 1; margin: 0; }
 }
 .rt-gsec .segs .opt { white-space: nowrap; }
-@container (max-width: 520px) {
-  .rt-gsec .row-head .note { display: none; }
-  .rt-gsec .rt-gfilter { flex: 1 1 auto; width: auto; }
-  .rt-gedit { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-  .rt-gedit label { text-align: left; padding-top: 8px; }
-  .rt-gedit .segs .opt { padding-left: 9px; padding-right: 9px; }
-}
+/* the groups, in a page 520px wide or less */
+:where(.rt-more.max520) .rt-gsec .row-head .note { display: none; }
+:where(.rt-more.max520) .rt-gsec .rt-gfilter { flex: 1 1 auto; width: auto; }
+:where(.rt-more.max520) .rt-gedit { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+:where(.rt-more.max520) .rt-gedit label { text-align: left; padding-top: 8px; }
+:where(.rt-more.max520) .rt-gedit .segs .opt { padding-left: 9px; padding-right: 9px; }
 .rt-gedit .fbrow .n { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rt-gedit .fbrow .n small { color: var(--muted); font-size: 11.5px; }
 .rt-gedit .fbrow.off .n { color: var(--muted); text-decoration: line-through; }
@@ -453,6 +481,9 @@ button.rt-session { cursor: pointer; }
 }
 .rt-gadd:hover, .rt-gadd.open { color: var(--fg); border-color: var(--muted); background: var(--card); }
 .rt-gadd svg { flex: none; }
+/* Add a rule, and beside it a rule by what the message asks for */
+.rt-gadds { display: flex; flex-wrap: wrap; gap: 6px; }
+.rt-gadds > [hidden] { display: none; }
 /* a group's rules: when, and the model it sends that turn to first */
 .rt-rules .fbl { gap: 6px; }
 .rt-rule { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12.5px; }
@@ -487,6 +518,9 @@ button.rt-session { cursor: pointer; }
 .rt-classifier[hidden] { display: none; }
 .rt-classifier .w { color: var(--muted); font-size: 12px; }
 .rt-classifier .hint { flex-basis: 100%; }
+/* the effort's classifier offering to pick the model too: a line of its
+   own, wrapping rather than running past a narrow window */
+.rt-classifier .rt-cls-more { margin-left: -7px; white-space: normal; text-align: left; color: var(--accent); }
 /* the levels a group names for agents (#295): one toggle each */
 .rt-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 6px; }
 .rt-levels[hidden] { display: none; }
@@ -595,21 +629,6 @@ button.rt-session { cursor: pointer; }
 .pr-to .swap { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; font-size: 10.5px; line-height: 16px; padding: 0 5px; border-radius: 5px; color: var(--amber); background: var(--amber-soft); white-space: nowrap; }
 .pr-req .meta { justify-self: end; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
 @media (prefers-reduced-motion: reduce) { .pr-req.wait .pr-to > i, .ps-dst.wait > i, .ps-hub.busy, .ps-dot.wait { animation: none; } }
-/* Before Safari 16 the narrow layouts go by the window's width. */
-@supports not (container-type: inline-size) {
-  @media (max-width: 560px) {
-    .rt-stage { grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 26px; padding: 16px 0; }
-    .rt-accts { grid-column: 1 / -1; padding-left: 22px; }
-    .rt-accts li { grid-template-columns: 10px minmax(0, 1fr); }
-    .rt-accts em { grid-column: 2; white-space: normal; }
-    .rt-accts .bar { grid-column: 2; }
-    .rt-stats { gap: 14px; }
-    .rt-gsec .row-head .note { display: none; }
-    .rt-gedit { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-    .rt-gedit label { text-align: left; padding-top: 8px; }
-    .rt-gedit .segs .opt { padding-left: 9px; padding-right: 9px; }
-  }
-}
 @supports not (grid-template-columns: subgrid) {
   .rt-req { grid-template-columns: auto fit-content(36%) minmax(0, 1fr) auto; }
   @media (max-width: 700px) {

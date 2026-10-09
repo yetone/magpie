@@ -50,10 +50,10 @@ func TestCheckUpdates(t *testing.T) {
 	installedAt(t, fresh, "0.2.0")
 	latest := map[string]string{ours: "0.1.4", pinned: "0.1.4", theirs: "1.0.0", off: "0.1.4", fresh: "0.2.0"}
 	var installed []string
-	was, wasInstall := latestOf, installLatest
-	t.Cleanup(func() { latestOf, installLatest = was, wasInstall })
+	was, wasInstall := latestOf, installNewest
+	t.Cleanup(func() { latestOf, installNewest = was, wasInstall })
 	latestOf = func(context.Context, []string) map[string]string { return latest }
-	installLatest = func(_ context.Context, pkg string) error {
+	installNewest = func(_ context.Context, pkg, _ string) error {
 		installed = append(installed, pkg)
 		installedAt(t, pkg, latest[pkg])
 		return nil

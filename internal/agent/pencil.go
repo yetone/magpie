@@ -50,7 +50,7 @@ func pencil(home string) *Agent {
 			return ""
 		},
 		Sync: func() error {
-			return syncJSON(path, key, func() any { return pencilProviderJSON(gateway.URL()) })
+			return syncJSON(path, key, theirsKept(path, key, func() any { return pencilProviderJSON(gateway.URL()) }, "models"))
 		},
 		Fields: []Field{{
 			Key: "provider", Label: "provider",
@@ -64,7 +64,7 @@ func pencil(home string) *Agent {
 				if v == "" {
 					return edit.DelJSON(path, key)
 				}
-				return edit.SetJSON(path, edit.KV{Path: key, Value: pencilProviderJSON(gateway.URL())})
+				return edit.SetJSON(path, edit.KV{Path: key, Value: theirsKept(path, key, func() any { return pencilProviderJSON(gateway.URL()) }, "models")()})
 			},
 			Options: func(map[string]string) []Option {
 				return []Option{{Value: magpieID, Label: "magpie", Icon: "magpie", Note: "every magpie model in Pencil's model picker"}}

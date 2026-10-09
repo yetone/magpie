@@ -361,10 +361,12 @@ func Run(version string, showMain bool, link string) error {
 
 	onDock = func(s settings.Settings) { h.dock(s, h.MainShown()) }
 	dockOnFullscreen()
-	// The Dock icon opens the window. Wails would show every hidden window
-	// on it, the panel too, so the hook answers first and stops it.
+	watchHide()
+	// The Dock icon opens the window, or goes to it where it is open. Wails
+	// would show every hidden window on it, the panel too, so the hook
+	// answers first and stops it.
 	h.app.Event.RegisterApplicationEventHook(events.Mac.ApplicationShouldHandleReopen, func(e *application.ApplicationEvent) {
-		h.ShowMain("")
+		application.InvokeSync(h.reopenMain)
 		e.Cancel()
 	})
 
@@ -481,6 +483,7 @@ func Run(version string, showMain bool, link string) error {
 		h.app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 			plainTitlebar(h.main) // Linux: the page's header is the title bar
 			nameWindow(h.panel, panelTitle)
+			ownFrame(h.panel) // KDE: no title bar of KWin's on it (#1283)
 			markReady()
 		})
 	}
@@ -511,6 +514,9 @@ func Run(version string, showMain bool, link string) error {
 			h.Import(u)
 		}
 	})
+	// GTK 3 with no font DPI set would lay every page out at a negative
+	// width (#1371); give it one before the first webview is made.
+	fontDPI()
 	return h.app.Run()
 }
 

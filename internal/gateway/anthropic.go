@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tidwall/gjson"
 	"github.com/yetone/magpie/internal/provider"
@@ -99,7 +101,7 @@ func parseAnthropic(body []byte) (*Request, error) {
 		r.Metadata = a.Metadata
 	}
 	if oc := a.OutputConfig; oc != nil && oc.Format != nil && oc.Format.Type == "json_schema" && len(oc.Format.Schema) > 0 {
-		r.Schema = oc.Format.Schema
+		r.Format = &Format{Type: "json_schema", Name: formatName, Schema: oc.Format.Schema}
 	}
 	for _, m := range a.Messages {
 		msg := Message{Role: m.Role}
@@ -122,10 +124,10 @@ func parseAnthropic(body []byte) (*Request, error) {
 						msg.Parts = append(msg.Parts, Part{Kind: Image, MediaType: b.Source.MediaType, Data: b.Source.Data, URL: b.Source.URL})
 					}
 				case "tool_use":
-					msg.Parts = append(msg.Parts, Part{Kind: ToolCall, ID: b.ID, Name: b.Name, Args: b.Input})
+					msg.Parts = append(msg.Parts, Part{Kind: ToolCall, ID: anthropicInID(b.ID), Name: b.Name, Args: b.Input})
 				case "tool_result":
 					out, images := toolOutput(b.Content)
-					msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: b.ToolUseID, Text: out, Images: images, IsError: b.IsError})
+					msg.Parts = append(msg.Parts, Part{Kind: ToolResult, CallID: anthropicInID(b.ToolUseID), Text: out, Images: images, IsError: b.IsError})
 				case "thinking":
 					msg.Parts = append(msg.Parts, Part{Kind: Thinking, Text: b.Thinking, Signature: b.Signature})
 				}
@@ -341,6 +343,11 @@ func imageBlock(p Part) aBlock {
 
 // buildAnthropic renders a request for an Anthropic-style upstream.
 func buildAnthropic(r *Request, model string) []byte {
+	if r.Format != nil && r.Format.schema() == nil {
+		// output_config.format takes a schema only: any JSON object is
+		// asked for in words
+		r = r.inSystem()
+	}
 	type msg struct {
 		Role    string   `json:"role"`
 		Content []aBlock `json:"content"`
@@ -449,12 +456,12 @@ func buildAnthropic(r *Request, model string) []byte {
 	} else if r.TopP != nil {
 		out["top_p"] = *r.TopP
 	}
-	if len(r.Schema) > 0 {
+	if s := r.Format.schema(); len(s) > 0 {
 		oc, _ := out["output_config"].(map[string]any)
 		if oc == nil {
 			oc = map[string]any{}
 		}
-		oc["format"] = map[string]any{"type": "json_schema", "schema": r.Schema}
+		oc["format"] = map[string]any{"type": "json_schema", "schema": s}
 		out["output_config"] = oc
 	}
 	out["max_tokens"] = maxTokens
@@ -719,6 +726,53 @@ func anthropicID(id string) string {
 	return "msg_" + strings.TrimPrefix(id, "chatcmpl-")
 }
 
+// Anthropic's Messages API, and Claude Code with it, takes a tool_use id
+// only of [A-Za-z0-9_-]: Claude Code drops a call whose id has another
+// character, and the turn fails "could not be parsed" (#1304). Other
+// vendors' ids can have one (Devin's "Bash:0#a65b…", a plugin's or a
+// relay's), so a call's id goes to an Anthropic client as anthropicOutID
+// makes it, and an id that comes back in the client's request is turned
+// back by anthropicInID, so the upstream that made the call gets its own
+// id on the next turn. An id that is already
+// safe goes both ways byte for byte, and Devin's "dv_…" ids, safe already,
+// are not encoded twice.
+const anthropicIDMark = "mp_"
+
+func anthropicOutID(id string) string {
+	if id == "" {
+		return id
+	}
+	return safeCallID(anthropicIDMark, id)
+}
+
+func anthropicInID(id string) string { return rawCallID(anthropicIDMark, id) }
+
+// safeCallID is id as one of [A-Za-z0-9_-] only: an id with another
+// character, or one beginning with mark, is mark and its base64url, which
+// rawCallID turns back; any other id is itself. It keeps no state, so an
+// id comes back the same from any request, after any restart.
+func safeCallID(mark, id string) string {
+	if safeIDChars.MatchString(id) && !strings.HasPrefix(id, mark) {
+		return id
+	}
+	return mark + base64.RawURLEncoding.EncodeToString([]byte(id))
+}
+
+// rawCallID is the id safeCallID was given for id, or id itself when
+// safeCallID didn't make it.
+func rawCallID(mark, id string) string {
+	if !strings.HasPrefix(id, mark) || !safeIDChars.MatchString(id) {
+		return id
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(id[len(mark):])
+	if err != nil || len(raw) == 0 || !utf8.Valid(raw) || safeCallID(mark, string(raw)) != id {
+		return id
+	}
+	return string(raw)
+}
+
+var safeIDChars = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
 func (e *anthropicEncoder) start(ev Event) {
 	if e.started {
 		return
@@ -791,7 +845,7 @@ func (e *anthropicEncoder) event(ev Event) {
 		if id == "" {
 			id = "toolu_" + newID()
 		}
-		e.openBlock(ToolCall, map[string]any{"id": id, "name": ev.Name, "input": map[string]any{}})
+		e.openBlock(ToolCall, map[string]any{"id": anthropicOutID(id), "name": ev.Name, "input": map[string]any{}})
 	case KToolArgs:
 		if e.open == ToolCall && ev.Text != "" {
 			e.args = true
@@ -859,7 +913,7 @@ func renderAnthropic(res Result, model string) []byte {
 			if id == "" {
 				id = "toolu_" + newID()
 			}
-			content = append(content, map[string]any{"type": "tool_use", "id": id, "name": p.Name, "input": argsOf(p)})
+			content = append(content, map[string]any{"type": "tool_use", "id": anthropicOutID(id), "name": p.Name, "input": argsOf(p)})
 		case Search:
 			id := "srvtoolu_" + newID()
 			content = append(content,

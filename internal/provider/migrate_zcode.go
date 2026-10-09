@@ -21,11 +21,12 @@ import (
 func init() {
 	movers["zcode"] = &mover{
 		pkg:    "@magpie-community/opencode-zcode-auth",
-		min:    "0.1.11", // a gift plan ZCode holds but hasn't granted is named on the card, to claim in the ZCode app (plugins #30, #1001); 0.1.10's gift-only buckets and 0.1.9's trial entries (plugins #21) kept
+		min:    "0.1.14", // a gift-only account lists its gift's models by their own names, as ZCode does, so a Start Plan GLM-5.3 bucket's model is listed as GLM-5.3, not only GLM-5.3-Trial (#1261, plugins aca7c59); 0.1.13's claim line has one fixed name, which the GUI translates, so it no longer shares the "ZCode Trust Build" bucket window's name (plugins #43); 0.1.12's counted window carries its amount and limit, so the card's count follows used/left (#659, plugins #35); 0.1.11's gift plan ZCode holds but hasn't granted is named on the card, to claim in the ZCode app (plugins #30, #1001); 0.1.10's gift-only buckets and 0.1.9's trial entries (plugins #21) kept
 		agents: []string{"zcode"},
-		// a Start Plan account was never served GLM-5.3, by the built-in
-		// or by ZCode, and the plugin lists it no more than they do; its
-		// plan as its requests found it, else as it showed it, nothing
+		// the built-in never served GLM-5.3 to a Start Plan account, so
+		// its pick is no loss when the plugin doesn't list it (the plugin
+		// lists it, as ZCode does, only while a gift bucket serves it);
+		// its plan as its requests found it, else as it showed it, nothing
 		// asked of Z.ai
 		builtin: func(_ context.Context, a Moving, model string) bool {
 			for _, l := range zcodeLogins() {

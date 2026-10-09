@@ -132,3 +132,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     });
   }
 }
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: Claude Code tier pickers keep one width in a narrow window`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      const page = await browser.newPage({ viewport: { width: 560, height: 700 } });
+      page.setDefaultTimeout(5000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", server(lang, []));
+      t.after(() => browser.close());
+      await page.goto("http://magpie.test/");
+      await page.locator(cc).waitFor();
+      await page.locator(`${cc} .ag-link`).click();
+      await page.locator(`${cc} .ag-exp`).waitFor();
+
+      const picks = page.locator(`${cc} .ag-exp .field.ag-pick`);
+      assert.equal(await picks.count(), tiers.length + 1);
+      const widths = await picks.evaluateAll((es) => es.map((e) => e.getBoundingClientRect().width));
+      assert.ok(widths.every((width) => Math.abs(width - widths[0]) < 0.5), `picker widths: ${widths.join(", ")}`);
+      assert.equal(Math.round(widths[0]), 220);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "narrow Agents view must not overflow horizontally");
+      assert.deepEqual(errors, []);
+    });
+  }
+}

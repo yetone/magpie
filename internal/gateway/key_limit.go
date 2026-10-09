@@ -32,14 +32,14 @@ func keyLimited(next http.Handler) http.Handler {
 			return
 		}
 		size, model := r.ContentLength, ""
-		if who.Limit.Cost > 0 || size < 0 {
-			b, err := io.ReadAll(r.Body)
-			r.Body.Close()
+		// a compressed body (#1223) is reserved at its decoded size and model
+		if enc := r.Header.Get("Content-Encoding"); who.Limit.Cost > 0 || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
+			b, status, err := readBoundedRequestBody(w, r, requestLimits{})
 			if err != nil {
-				writeError(w, protoOfPath(r.URL.Path), http.StatusBadRequest, err.Error())
+				writeError(w, protoOfPath(r.URL.Path), status, err.Error())
 				return
 			}
-			r.Body = io.NopCloser(bytes.NewReader(b))
+			r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(b)), int64(len(b))
 			size, model = int64(len(b)), budget.ModelOf(b)
 		}
 		now := limitClock()

@@ -353,20 +353,24 @@ func TestCodexDescriptionsSetting(t *testing.T) {
 }
 
 func TestCodexDescriptionFallbackOnMagpie(t *testing.T) {
-	f := &fake{t: t, reply: sse(
-		`data: {"id":"c1","choices":[{"index":0,"delta":{"content":"Plain description"}}]}`,
-		`data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2}}`,
-		`data: [DONE]`)}
-	setup(t, provider.Chat, f)
-	s := New()
-	body := `{"model":"fake/m1","stream":true,"input":"Describe the thread",` +
-		`"text":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"description":{"type":"string","minLength":1}},"required":["description"]}}}}`
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("POST", "/v1/responses", strings.NewReader(body))
-	req.Header.Set("x-codex-turn-metadata", `{"thread_source":"thread_description"}`)
-	s.Handler().ServeHTTP(rec, req)
-	if text, _ := outputText(t, rec.Body.String()); rec.Code != 200 || text != `{"description":"Plain description"}` || f.calls != 1 {
-		t.Fatalf("fallback: %d %q, calls %d", rec.Code, rec.Body.String(), f.calls)
+	for _, path := range []string{"/v1/responses", "/backend-api/codex/responses"} {
+		t.Run(path, func(t *testing.T) {
+			f := &fake{t: t, reply: sse(
+				`data: {"id":"c1","choices":[{"index":0,"delta":{"content":"Plain description"}}]}`,
+				`data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2}}`,
+				`data: [DONE]`)}
+			setup(t, provider.Chat, f)
+			s := New()
+			body := `{"model":"fake/m1","stream":true,"input":"Describe the thread",` +
+				`"text":{"format":{"type":"json_schema","schema":{"type":"object","properties":{"description":{"type":"string","minLength":1}},"required":["description"]}}}}`
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", path, strings.NewReader(body))
+			req.Header.Set("x-codex-turn-metadata", `{"thread_source":"thread_description"}`)
+			s.Handler().ServeHTTP(rec, req)
+			if text, _ := outputText(t, rec.Body.String()); rec.Code != 200 || text != `{"description":"Plain description"}` || f.calls != 1 {
+				t.Fatalf("fallback: %d %q, calls %d", rec.Code, rec.Body.String(), f.calls)
+			}
+		})
 	}
 }
 
@@ -397,15 +401,13 @@ func TestNoDescription(t *testing.T) {
 }
 
 func TestDescriptionJSON(t *testing.T) {
-	body := `{"text":{"format":{"schema":{"properties":{"description":{"type":"string","minLength":1}}}}}}`
-	shape := descriptionShapeOf([]byte(body))
 	for in, want := range map[string]string{
 		"A short note":                               `{"description":"A short note"}`,
 		`{"description":"From JSON"}`:                `{"description":"From JSON"}`,
 		"```json\n{\"description\":\"Fenced\"}\n```": `{"description":"Fenced"}`,
 		"": "",
 	} {
-		if got := descriptionJSON(in, shape); got != want {
+		if got := descriptionJSON(in); got != want {
 			t.Errorf("descriptionJSON(%q) = %s, want %s", in, got, want)
 		}
 	}

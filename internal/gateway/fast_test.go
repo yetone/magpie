@@ -18,6 +18,18 @@ func TestResponsesFastTier(t *testing.T) {
 			t.Errorf("%q: tier sent %v, want %v: %s", host, got, want, b)
 		}
 	}
+	// Codex's Ultrafast goes to the ChatGPT backend, the one that offers
+	// it; OpenAI's API gets it as Fast
+	r, _ = parseResponses([]byte(`{"model":"gpt-5.5","input":"hi","service_tier":"ultrafast"}`))
+	if !r.Fast || !r.Ultrafast {
+		t.Fatalf("ultrafast not read: %+v", r)
+	}
+	for host, want := range map[string]string{"chatgpt.com": `"service_tier":"ultrafast"`, "api.openai.com": `"service_tier":"priority"`, "openrouter.ai": ""} {
+		b := string(buildResponses(r, "gpt-5.5", host, false))
+		if want == "" && strings.Contains(b, "service_tier") || want != "" && !strings.Contains(b, want) {
+			t.Errorf("ultrafast to %q: %s", host, b)
+		}
+	}
 	r, _ = parseResponses([]byte(`{"model":"m","input":"hi","service_tier":"flex"}`))
 	if r.Fast {
 		t.Error("flex read as fast")

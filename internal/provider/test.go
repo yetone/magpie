@@ -117,7 +117,7 @@ func (p Provider) ModelTest() string {
 		return ""
 	}
 	for _, pr := range p.Speaks() {
-		if pr == Chat || pr == Responses || pr == Anthropic {
+		if pr == Chat || pr == Responses || pr == Anthropic || pr == Gemini && p.Gemini != "" {
 			return ""
 		}
 	}
@@ -148,8 +148,11 @@ func tinyBody(q Provider, proto Protocol, model string) (url, body string) {
 	case Anthropic:
 		return q.Anthropic + "/v1/messages", fmt.Sprintf(`{"model":%q,"max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`, model)
 	case Gemini:
-		// Factory's generate route. droid sends no stream field.
-		return q.Base(Gemini) + "/generate", fmt.Sprintf(`{"model":%q,"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, model)
+		if q.FactoryGemini() {
+			// Factory's generate route. droid sends no stream field.
+			return q.Base(Gemini) + "/generate", fmt.Sprintf(`{"model":%q,"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, model)
+		}
+		return q.Gemini + GeminiPath(model, false), `{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"maxOutputTokens":16}}`
 	}
 	return "", ""
 }
@@ -356,6 +359,12 @@ func AuthHeaders(p Provider, proto Protocol) map[string]string {
 		}
 		return map[string]string{"api-key": p.Key}
 	}
+	if proto == Gemini && !p.FactoryGemini() {
+		// Google's Gemini API takes an API key here, and turns one away as
+		// a Bearer token ("Expected OAuth 2 access token"); relays that
+		// answer as it does read it here too
+		return map[string]string{"x-goog-api-key": p.Key}
+	}
 	if proto == Anthropic {
 		if strings.HasSuffix(p.Host(), "anthropic.com") || p.IsBedrock() {
 			return map[string]string{"x-api-key": p.Key}
@@ -379,7 +388,9 @@ func probe(ctx context.Context, p Provider, proto Protocol, url string, body []b
 		return r
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("anthropic-version", "2023-06-01")
+	if proto == Anthropic {
+		req.Header.Set("anthropic-version", "2023-06-01")
+	}
 	if p.IsOpenCode() {
 		OpenCodeClient(req.Header, "")
 	}

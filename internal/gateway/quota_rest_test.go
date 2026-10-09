@@ -13,7 +13,8 @@ import (
 // that is, and the trace says so (#147: ChatGPT's resets_at three hours
 // off was a rest of "59 minutes", the Retry-After magpie made of it cut to
 // an hour); a rate limit's Retry-After and a failure's backoff stay short,
-// and a Codex reset spent lifts the rest.
+// and a Codex reset spent lifts its rest out of quota, not one for a rate
+// limit or a failure.
 func TestQuotaRestsUntilItsReset(t *testing.T) {
 	old := allowances
 	defer func() { allowances = old }()
@@ -83,5 +84,18 @@ func TestQuotaRestsUntilItsReset(t *testing.T) {
 	}
 	if _, ok := restOf(acct("b@x.com").restKey()); !ok {
 		t.Fatal("another account's rest was lifted")
+	}
+	// its windows started again lift a rest out of them, not one for a
+	// rate limit or a failure
+	for _, u := range []string{"c@x.com", "e@x.com", "f@x.com"} {
+		renewed("codex", u)
+	}
+	if r, ok := restOf(acct("c@x.com").restKey()); ok {
+		t.Fatalf("failed with its week full, still resting after it started again: %+v", r)
+	}
+	for _, u := range []string{"e@x.com", "f@x.com"} {
+		if r, ok := restOf(acct(u).restKey()); !ok {
+			t.Fatalf("%s: its rest (%s) lifted by its windows started again", u, r.Why)
+		}
 	}
 }

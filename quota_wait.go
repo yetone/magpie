@@ -149,7 +149,7 @@ func (w quotaWait) run(ctx context.Context, t quotaTarget, timeout time.Duration
 				why = cmp.Or(why, q.Error)
 				continue
 			}
-			if !provider.UsedUp(q) {
+			if !provider.UsedUp(q, now) {
 				return q, nil
 			}
 			known++

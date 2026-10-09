@@ -196,6 +196,9 @@ func parseCodexModels(b []byte) []catalog.Model {
 			} `json:"supported_reasoning_levels"`
 			Context int `json:"context_window"`
 			Max     int `json:"max_context_window"`
+			Tiers   []struct {
+				ID string `json:"id"`
+			} `json:"service_tiers"`
 		} `json:"models"`
 	}
 	if json.Unmarshal(b, &list) != nil {
@@ -217,6 +220,9 @@ func parseCodexModels(b []byte) []catalog.Model {
 		}
 		for _, l := range m.Levels {
 			mm.Efforts = append(mm.Efforts, l.Effort)
+		}
+		for _, t := range m.Tiers {
+			mm.Tiers = append(mm.Tiers, t.ID)
 		}
 		out = append(out, mm)
 	}
@@ -280,13 +286,37 @@ func (a *Account) Levels(model string) (levels []string, ok bool) {
 	return nil, false
 }
 
-// codexPoolLevels gives each of ms — the list of the account Codex is
-// signed in to — the reasoning levels any other account on gives it too:
-// the provider's levels are what its accounts together take, so a Free
-// account signed in, whose plan lacks high, doesn't lower the request a
-// Plus one beside it answers (#520); the gateway sends each account only
-// what its own list takes (Account.Levels) first.
-func codexPoolLevels(ms []catalog.Model) []catalog.Model {
+// Tiers are the service tiers the account's own model list offers on
+// model, when its list says: a list that gives no model a tier doesn't
+// say, as one fetched before ChatGPT listed them.
+func (a *Account) Tiers(model string) (tiers []string, ok bool) {
+	if a == nil || a.plugin != nil {
+		return nil, false
+	}
+	live, _, found := catalog.Live(accountModels(a.Agent, a.User))
+	if !found || !slices.ContainsFunc(live, func(m catalog.Model) bool { return len(m.Tiers) > 0 }) {
+		return nil, false
+	}
+	for _, m := range live {
+		if m.ID == model {
+			return m.Tiers, true
+		}
+	}
+	return nil, false
+}
+
+// codexPoolModels is ms — the list of the account Codex is signed in to —
+// with what the other accounts on add to it. A model only another account's
+// plan has joins it (Raven on Discord: Codex signed in to a Free account
+// beside a Pro 5x one, and the codex provider listed only the Free plan's
+// three), right after the model before it in that account's list, as
+// Antigravity's pool does (mergeAntigravityModels). And each model takes
+// the reasoning levels any of them gives it: the provider's levels are what
+// its accounts together take, so a Free account signed in, whose plan lacks
+// high, doesn't lower the request a Plus one beside it answers (#520). The
+// gateway sends each account only the models and levels its own list has
+// (Account.Lists, Account.Levels) first.
+func codexPoolModels(ms []catalog.Model) []catalog.Model {
 	var lists [][]catalog.Model
 	for _, l := range Logins("codex") {
 		if l.Active || !l.On {
@@ -300,26 +330,30 @@ func codexPoolLevels(ms []catalog.Model) []catalog.Model {
 		return ms
 	}
 	out := slices.Clone(ms)
-	for i, m := range out {
-		if len(m.Efforts) == 0 {
-			continue
-		}
-		efforts := slices.Clone(m.Efforts)
-		for _, live := range lists {
-			for _, o := range live {
-				if o.ID != m.ID {
-					continue
-				}
-				for _, e := range o.Efforts {
-					if !slices.Contains(efforts, e) {
-						efforts = append(efforts, e)
-					}
+	for _, live := range lists {
+		next := 0
+		for _, o := range live {
+			i := slices.IndexFunc(out, func(m catalog.Model) bool { return m.ID == o.ID })
+			if i < 0 {
+				o.Efforts = slices.Clone(o.Efforts)
+				out = slices.Insert(out, next, o)
+				next++
+				continue
+			}
+			next = max(next, i+1)
+			if len(out[i].Efforts) == 0 {
+				continue
+			}
+			efforts := slices.Clone(out[i].Efforts)
+			for _, e := range o.Efforts {
+				if !slices.Contains(efforts, e) {
+					efforts = append(efforts, e)
 				}
 			}
-		}
-		if len(efforts) > len(m.Efforts) {
-			slices.SortStableFunc(efforts, func(a, b string) int { return levelRank(a) - levelRank(b) })
-			out[i].Efforts = efforts
+			if len(efforts) > len(out[i].Efforts) {
+				slices.SortStableFunc(efforts, func(a, b string) int { return levelRank(a) - levelRank(b) })
+				out[i].Efforts = efforts
+			}
 		}
 	}
 	return out
@@ -361,20 +395,35 @@ func CodexListed() []catalog.Model {
 	return codexListed(shown, func(id string) []Member {
 		_, ms, _ := find(id)
 		return ms
-	})
+	}, false)
+}
+
+// CodexCatalog is shown as a Codex that names magpie its model_provider is
+// handed it from GET /v1/codex/models (#1281): every model, a ChatGPT
+// account's own among them, since that Codex reaches them through magpie's
+// /v1 by magpie's id, not through the ChatGPT backend's list.
+func CodexCatalog(shown []Entry) []catalog.Model {
+	find := GroupFinder()
+	return codexListed(shown, func(id string) []Member {
+		_, ms, _ := find(id)
+		return ms
+	}, true)
 }
 
 // CodexNativeHidden is the ChatGPT account's own model slugs the user took
-// out of Codex's list (HiddenModels): the backend lists them, and the
-// gateway drops them from its /models answer as it does the ones not picked.
+// out of Codex's list (HiddenModels), or didn't pick for it when it is
+// shown only the models picked (PickedModels): the backend lists them, and
+// the gateway drops them from its /models answer as it does the ones not
+// picked.
 func CodexNativeHidden() map[string]bool {
-	off := HiddenModels("codex")
-	if len(off) == 0 {
+	_, only := PickedModels("codex")
+	if !only && len(HiddenModels("codex")) == 0 {
 		return nil
 	}
+	off := ModelOff("codex")
 	out := map[string]bool{}
 	for _, e := range Catalog() {
-		if off[e.ID] && CodexOwn(e) {
+		if CodexOwn(e) && off(e.ID) {
 			out[e.Model] = true
 		}
 	}
@@ -416,7 +465,15 @@ func CodexOrder() (map[string]int, bool) {
 // the account's own taken out of it, the order they are in, the windows set on them, the auto-review model, and whether its OpenAI models say
 // multi-agent V1 (settings.CodexAgentsV1), so any of them changing has
 // Codex ask for the list again.
-func CodexListTag() string {
+func CodexListTag() string { return codexListTag("") }
+
+// CodexOwnListTag names the list a Codex that reaches magpie for account
+// failover alone is handed, its own models without magpie's (#1385). Neither
+// it nor CodexListTag's is a part of the other, so Codex asks again when it
+// moves from one list to the other; a V1 list's mark stays in front.
+func CodexOwnListTag() string { return codexListTag("own") }
+
+func codexListTag(kind string) string {
 	ms := CodexListed()
 	off := slices.Sorted(maps.Keys(CodexNativeHidden()))
 	for _, slug := range off {
@@ -436,7 +493,7 @@ func CodexListTag() string {
 	if v := settings.Load().CodexAutoReview; v != "" {
 		ms = append(ms, catalog.Model{ID: "~autoreview:" + v})
 	}
-	return codexcat.PolicyTag(codexcat.Tag(ms))
+	return codexcat.PolicyTag(kind + codexcat.Tag(ms))
 }
 
 // CodexNativePicked is the set of the ChatGPT account's own model slugs the
@@ -504,8 +561,9 @@ func codexWindowsTag() []catalog.Model {
 
 // codexListed marks a group Fast when a ChatGPT account's GPT model is in
 // it, so Codex offers /fast there too; the tier goes out only to that
-// account (buildResponses).
-func codexListed(shown []Entry, members func(id string) []Member) []catalog.Model {
+// account (buildResponses). own keeps a ChatGPT account's own models in,
+// which a signed-in Codex has from the backend already.
+func codexListed(shown []Entry, members func(id string) []Member, own bool) []catalog.Model {
 	var ms []catalog.Model
 	// named among all shown: the account's own, which the backend lists,
 	// are in Codex's picker beside these
@@ -514,11 +572,14 @@ func codexListed(shown []Entry, members func(id string) []Member) []catalog.Mode
 	s := settings.Load()
 	find := func(id string) (Group, []Member, bool) { return Group{}, members(id), true }
 	for i, e := range shown {
-		if CodexOwn(e) {
+		if CodexOwn(e) && !own {
 			continue
 		}
 		m := catalog.Model{ID: e.ID, Name: labels[i], Efforts: e.Efforts, Images: e.Images || seen, Context: e.Context, AgentsV2: e.AgentsV2}
 		m.Compact = compactSet(s, e.ID, find)
+		// a provider the user added by its address is sent the tier Codex
+		// asks for as it is (hsiangron on X)
+		m.OwnTier = e.Group == "" && e.Provider.Preset == "" && e.Provider.Account == nil && e.Provider.ID != ""
 		if e.Group != "" {
 			for _, mb := range members(e.ID) {
 				if a := mb.Provider.Account; a != nil && a.Agent == "codex" && strings.HasPrefix(mb.Model, "gpt-") {

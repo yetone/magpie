@@ -1,8 +1,11 @@
 // Package stats counts magpie's users: once a day a running magpie tells
 // PostHog it is in use, under an id made up on this computer, with its
-// version and system. Nothing else goes: no names, accounts, keys, models,
-// prompts or usage. Settings → Privacy turns it off, and so do
-// DO_NOT_TRACK=1 and MAGPIE_NO_STATS=1; a build from source never sends it.
+// version and system, and, unless the user turned that part off, which
+// agents, providers and models it is used with, by their built-in ids
+// (Usage): a provider of the user's own is only "custom". No names, URLs,
+// accounts, keys, prompts or usage go. Settings → Privacy turns it off,
+// and so do DO_NOT_TRACK=1 and MAGPIE_NO_STATS=1; a build from source
+// never sends it.
 package stats
 
 import (
@@ -19,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -75,23 +79,50 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	at := now.UTC().Format(time.RFC3339)
+	event := func(name string, props map[string]any) map[string]any {
+		// a count, not a person: PostHog keeps no profile for the id
+		props["$process_person_profile"] = false
+		// PostHog's batch takes the id in either place: both, to be sure
+		props["distinct_id"] = id
+		return map[string]any{"event": name, "distinct_id": id, "timestamp": at, "properties": props}
+	}
+	active := map[string]any{
+		"version": version,
+		"kind":    what,
+		"$os":     osName(),
+		"arch":    runtime.GOARCH,
+	}
+	var uses []map[string]any
+	if !settings.Load().NoUsageStats {
+		u := usage()
+		active["agents"] = len(u.Agents)
+		active["providers"] = len(u.Providers)
+		active["models"] = len(u.Models)
+		active["groups"] = u.Groups
+		// one event for each, so PostHog counts the users of each id
+		for _, l := range []struct {
+			kind string
+			ids  []string
+		}{{"agent", u.Agents}, {"provider", u.Providers}, {"model", u.Models}} {
+			for _, x := range l.ids {
+				uses = append(uses, event("magpie uses", map[string]any{"kind": l.kind, "id": x}))
+			}
+		}
+		// a partner's counts of the days ended, each at its own day
+		for _, c := range provider.PartnerCounts(now) {
+			e := event("magpie partner", map[string]any{"id": c.ID, "what": c.What, "count": c.Count, "day": c.Day})
+			e["timestamp"] = c.Day + "T12:00:00Z"
+			uses = append(uses, e)
+		}
+	}
 	body, _ := json.Marshal(map[string]any{
-		"api_key":     Key,
-		"event":       "magpie active",
-		"distinct_id": id,
-		"timestamp":   now.UTC().Format(time.RFC3339),
-		"properties": map[string]any{
-			"version": version,
-			"kind":    what,
-			"$os":     osName(),
-			"arch":    runtime.GOARCH,
-			// a count, not a person: PostHog keeps no profile for the id
-			"$process_person_profile": false,
-		},
+		"api_key": Key,
+		"batch":   append([]map[string]any{event("magpie active", active)}, uses...),
 	})
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "POST", Host()+"/i/v0/e/", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", Host()+"/batch/", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -103,6 +134,9 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 	res.Body.Close()
 	if res.StatusCode/100 != 2 {
 		return fmt.Errorf("stats: %s", res.Status)
+	}
+	if !settings.Load().NoUsageStats {
+		provider.PartnerCountsSent(now)
 	}
 	return os.WriteFile(stamp, []byte(day+"\n"), 0o644)
 }

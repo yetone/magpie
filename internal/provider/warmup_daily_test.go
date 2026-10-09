@@ -24,21 +24,21 @@ func TestDailyDue(t *testing.T) {
 	}{
 		{"off", "", "", at8(28, 6, 0), idleAt, ""},
 		{"a minute before", "06:00", "", at8(28, 5, 59), idleAt, ""},
-		{"on the minute", "06:00", "", at8(28, 6, 0), idleAt, "2026-09-28"},
-		{"the reset not known", "06:00", "", at8(28, 6, 0), func(time.Time) QuotaWindow { return QuotaWindow{Name: "5 hours", Span: fiveHours} }, "2026-09-28"},
-		{"woken half an hour late", "06:00", "", at8(28, 6, 30), idleAt, "2026-09-28"},
-		{"woken just within the hour", "06:00", "2026-09-27", at8(28, 7, 0), idleAt, "2026-09-28"},
+		{"on the minute", "06:00", "", at8(28, 6, 0), idleAt, "2026-09-28 06:00"},
+		{"the reset not known", "06:00", "", at8(28, 6, 0), func(time.Time) QuotaWindow { return QuotaWindow{Name: "5 hours", Span: fiveHours} }, "2026-09-28 06:00"},
+		{"woken half an hour late", "06:00", "", at8(28, 6, 30), idleAt, "2026-09-28 06:00"},
+		{"woken just within the hour", "06:00", "2026-09-27", at8(28, 7, 0), idleAt, "2026-09-28 06:00"},
 		{"woken hours late", "06:00", "", at8(28, 7, 1), idleAt, ""},
 		{"already started today", "06:00", "2026-09-28", at8(28, 6, 5), idleAt, ""},
-		{"started yesterday", "06:00", "2026-09-27", at8(28, 6, 5), idleAt, "2026-09-28"},
+		{"started yesterday", "06:00", "2026-09-27", at8(28, 6, 5), idleAt, "2026-09-28 06:00"},
 		{"a window running", "06:00", "", at8(28, 6, 0),
 			func(now time.Time) QuotaWindow { return win("5 hours", fiveHours, 12, now.Add(2*time.Hour)) }, ""},
 		{"a window just started, nothing counted yet", "06:00", "", at8(28, 6, 0),
 			func(now time.Time) QuotaWindow { return win("5 hours", fiveHours, 0, now.Add(4*time.Hour)) }, ""},
-		{"late in the evening, woken after midnight", "23:30", "", at8(29, 0, 20), idleAt, "2026-09-28"},
+		{"late in the evening, woken after midnight", "23:30", "", at8(29, 0, 20), idleAt, "2026-09-28 23:30"},
 		{"late in the evening, the day before's", "23:30", "2026-09-28", at8(29, 0, 20), idleAt, ""},
 	} {
-		day, due := dailyDue(c.at, c.last, asOf(c.cur(c.now), c.now), c.now)
+		day, due := dailyDue(times(c.at), c.last, asOf(c.cur(c.now), c.now), c.now)
 		if !due {
 			day = ""
 		}
@@ -48,7 +48,7 @@ func TestDailyDue(t *testing.T) {
 	}
 	// the local clock's six: 06:00 in UTC+8 is 22:00 the day before in UTC
 	now := at8(28, 6, 0)
-	if _, due := dailyDue("06:00", "", asOf(idleAt(now), now), now.UTC()); due {
+	if _, due := dailyDue(times("06:00"), "", asOf(idleAt(now), now), now.UTC()); due {
 		t.Error("06:00 taken in another zone")
 	}
 }
@@ -66,7 +66,7 @@ func TestHeldForDay(t *testing.T) {
 		{"the evening's, ending in the night", "06:00", at8(28, 21, 0), false},
 		{"at the start itself", "06:00", at8(28, 6, 0), false},
 	} {
-		if got := heldForDay(c.at, fiveHours, c.now); got != c.want {
+		if got := heldForDay(times(c.at), fiveHours, c.now); got != c.want {
 			t.Errorf("%s: held %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -83,7 +83,7 @@ func TestDayStartPassed(t *testing.T) {
 		{"slept through the night", at8(27, 23, 0), at8(28, 7, 30), true},
 		{"not yet", at8(28, 4, 0), at8(28, 5, 0), false},
 	} {
-		if got := dayStartPassed("06:00", c.last, c.now); got != c.want {
+		if got := dayStartPassed(times("06:00"), c.last, c.now); got != c.want {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
 	}
@@ -97,19 +97,19 @@ func TestDayStartAcrossDaylightSaving(t *testing.T) {
 		t.Skip(err)
 	}
 	before := time.Date(2026, 3, 7, 6, 0, 0, 0, ny)
-	next, _ := nextDayStart("06:00", before)
+	next, _ := nextDayStart(times("06:00"), before)
 	if want := time.Date(2026, 3, 8, 6, 0, 0, 0, ny); !next.Equal(want) || next.Sub(before) != 23*time.Hour {
 		t.Fatalf("next %v, want %v", next, want)
 	}
 	now := next.Add(10 * time.Minute)
-	if day, due := dailyDue("06:00", "2026-03-07", QuotaWindow{Name: "5 hours", Span: fiveHours}, now); !due || day != "2026-03-08" {
+	if day, due := dailyDue(times("06:00"), "2026-03-07", QuotaWindow{Name: "5 hours", Span: fiveHours}, now); !due || day != "2026-03-08 06:00" {
 		t.Fatalf("due %v for %q", due, day)
 	}
 }
 
 func (f *fakeWarm) runAt(t *testing.T, path, which, at string) []CodexWarm {
 	t.Helper()
-	return f.warmer(path).warmNow(t.Context(), which, at)
+	return f.warmer(path).warmNow(t.Context(), which, times(at))
 }
 
 // The day's start with the reset warm-up off: an account whose 5-hour
@@ -260,4 +260,12 @@ func TestWeeklyWarmUpWaitsForTheDay(t *testing.T) {
 			t.Errorf("%s: 5-hour window running, sent %+v, want the weekly warm-up at once", which, rs)
 		}
 	}
+}
+
+// times is at as warmNow takes it, none for "".
+func times(at string) []string {
+	if at == "" {
+		return nil
+	}
+	return []string{at}
 }

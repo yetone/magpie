@@ -213,6 +213,11 @@ function askGatewayKey(k, rotate) {
 // badge says it: by who is signed in, the id itself when no provider has it.
 const accountShown = (a) => gatewayAccountNames[a] || a;
 
+// the key whose models menu waits on its list: the badge drawn last opens
+// it, so a redraw of the keys while it loads (a rename's reply, the
+// providers' poll) doesn't drop the click
+let keyModelsLoading = null;
+
 // gatewayModelsBadge picks the models and the accounts a key may use, in
 // the app's menu: "All models" on hover when it may use any, else which
 // it may, always shown. A pick is sent when the menu closes.
@@ -229,12 +234,7 @@ function gatewayModelsBadge(k) {
   b.setAttribute("aria-label", t("Models this key may use"));
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-expanded", "false");
-  b.onclick = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (b.classList.contains("open")) return closeProtoMenu();
-    let models = [], accounts = [];
-    try { ({ models, accounts } = await api("caller-keys/models")); } catch (err) { status(t(err.message), "err"); return; }
+  const open = (models, accounts) => {
     if (!b.isConnected) return;
     const opts = [{ v: "", name: "All models", note: "Any model and any account, now and later" }];
     const seen = new Set();
@@ -300,6 +300,22 @@ function gatewayModelsBadge(k) {
       })();
     }, "Models this key may use", "sess-menu", "right");
   };
+  b.onclick = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    const loading = keyModelsLoading = { id: k.id, open };
+    let models = [], accounts = [];
+    try { ({ models, accounts } = await api("caller-keys/models")); } catch (err) {
+      if (keyModelsLoading === loading) keyModelsLoading = null;
+      status(t(err.message), "err");
+      return;
+    }
+    if (keyModelsLoading !== loading) return;
+    keyModelsLoading = null;
+    loading.open(models, accounts);
+  };
+  if (keyModelsLoading?.id === k.id) keyModelsLoading.open = open;
   return b;
 }
 

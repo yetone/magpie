@@ -679,22 +679,53 @@ var tarballURL = func(repo, ref string) string {
 	return "https://codeload.github.com/" + repo + "/tar.gz/" + url.PathEscape(ref)
 }
 
-// fetch downloads the repository into a new folder and gives it back.
+// fetch downloads the repository into a new folder and gives it back. A
+// repository codeload doesn't hand out without a token, a private one, is
+// asked of GitHub's API with the user's GitHub token (37FlowAI on X): the
+// API redirects to codeload, and the token, sent to the API's host alone,
+// isn't carried over to it.
 func fetch(src Source) (string, error) {
-	req, _ := http.NewRequest("GET", tarballURL(src.Repo, src.Ref), nil)
-	req.Header.Set("User-Agent", "magpie")
 	c := &http.Client{Timeout: 2 * time.Minute}
-	resp, err := source.DoOfficial(c, req)
+	get := func(u string) (*http.Response, bool, error) {
+		req, _ := http.NewRequest("GET", u, nil)
+		req.Header.Set("User-Agent", "magpie")
+		token := withGitHubToken(req)
+		resp, err := source.DoOfficial(c, req)
+		return resp, token, err
+	}
+	resp, _, err := get(tarballURL(src.Repo, src.Ref))
 	if err != nil {
 		return "", fmt.Errorf("couldn't reach GitHub: %w", err)
 	}
+	token := false
+	if resp.StatusCode == 404 {
+		if t, _ := GitHubToken(); t != "" {
+			resp.Body.Close()
+			ref := ""
+			if src.Ref != "" {
+				ref = "/" + url.PathEscape(src.Ref)
+			}
+			if resp, token, err = get(githubAPI + "/repos/" + src.Repo + "/tarball" + ref); err != nil {
+				return "", fmt.Errorf("couldn't reach GitHub: %w", err)
+			}
+		}
+	}
 	defer resp.Body.Close()
 	switch {
-	case resp.StatusCode == 404:
+	case resp.StatusCode == 404 || resp.StatusCode == 401 && token:
+		what := "repository " + src.Repo
 		if src.Ref != "" {
-			return "", fmt.Errorf("GitHub has no %s at %s (a private repository can't be installed from)", src.Repo, src.Ref)
+			what = src.Repo + " at " + src.Ref
 		}
-		return "", fmt.Errorf("GitHub has no repository %s (a private one can't be installed from)", src.Repo)
+		if !token {
+			return "", fmt.Errorf("GitHub has no %s (a private repository installs with a GitHub token that can read it, set in Settings → Network and sharing)", what)
+		}
+		_, from := GitHubToken()
+		where := "the GitHub token in Settings → Network and sharing"
+		if from != "settings" {
+			where = from
+		}
+		return "", fmt.Errorf("GitHub has no %s that %s can read", what, where)
 	case resp.StatusCode == 403 || resp.StatusCode == 429:
 		return "", fmt.Errorf("GitHub is limiting requests from here; try again in a while")
 	case resp.StatusCode != 200:
@@ -868,68 +899,149 @@ func cachedProbe(input string) (*Probe, error) {
 }
 
 // InstallSkills adds the skills at those paths of the source to the library
-// and gives them to the agents named.
+// and gives them to the agents named. One the library has already, or
+// one whose name is taken, is left as it is and said in the result; the
+// others are installed all the same.
 func InstallSkills(input string, paths, agents []string) (*Result, error) {
 	p, err := cachedProbe(input)
 	if err != nil {
 		return nil, err
 	}
-	return change(func(l *Library) error { return installFrom(l, p, paths, agents, true) })
+	return installChange(func(l *Library, in *installed) error { return installFrom(l, p, paths, agents, true, in) })
+}
+
+// installed is what an install did with each skill picked: added, had
+// already (the same skill from the same source), or left out, and why.
+type installed struct {
+	added, had []string
+	skipped    []Problem
+}
+
+func (in *installed) skip(name string, err error) {
+	in.skipped = append(in.skipped, Problem{What: "skill:" + name, Error: err.Error()})
+}
+
+// installChange runs an install in a change of the library. Only when
+// nothing was added or had already does it fail, with the first reason a
+// skill was left out: one skill in the way of a set never stops the rest
+// (lc on Discord).
+func installChange(f func(l *Library, in *installed) error) (*Result, error) {
+	in := &installed{}
+	res, err := change(func(l *Library) error {
+		if err := f(l, in); err != nil {
+			return err
+		}
+		if len(in.added) == 0 && len(in.had) == 0 && len(in.skipped) > 0 {
+			return errors.New(in.skipped[0].Error)
+		}
+		return nil
+	})
+	if res != nil {
+		res.Installed, res.Had, res.Skipped = in.added, in.had, in.skipped
+	}
+	return res, err
+}
+
+// fromSameSource is whether the library's skill came from where the one
+// being installed comes from: that repository's folder, or that folder.
+func fromSameSource(s *Skill, src Source, path, from string) bool {
+	if s.Source == nil || s.Source.Kind != src.Kind {
+		return false
+	}
+	switch src.Kind {
+	case "github":
+		return strings.EqualFold(s.Source.Repo, src.Repo) && s.Source.Path == path
+	case "folder":
+		return realDir(s.Source.Dir) == realDir(from)
+	}
+	return false
 }
 
 // installFrom adds the skills at those paths of a probe's source to the
 // library. shown is whether the user saw every skill the probe found, in
-// the picker: those not picked aren't offered as new by a check.
-func installFrom(l *Library, p *Probe, paths, agents []string, shown bool) error {
+// the picker: those not picked aren't offered as new by a check. A skill
+// that can't be added is said in in.skipped, and the user's folder in its
+// way is never written into or taken away.
+func installFrom(l *Library, p *Probe, paths, agents []string, shown bool, in *installed) error {
+	if err := os.MkdirAll(skillsDir(), 0o755); err != nil {
+		return err
+	}
 	for _, path := range paths {
 		i := slices.IndexFunc(p.Candidates, func(c Candidate) bool { return c.Path == path })
 		if i < 0 {
-			return fmt.Errorf("no skill at %q", path)
+			in.skip(lastPart(path), fmt.Errorf("no skill at %q", path))
+			continue
 		}
 		c := p.Candidates[i]
 		if err := checkName("skill", c.Name); err != nil {
-			return err
-		}
-		if l.skill(c.Name) != nil {
-			return fmt.Errorf("the library already has a skill called %s", c.Name)
+			in.skip(c.Name, err)
+			continue
 		}
 		from := filepath.Join(p.root, filepath.FromSlash(c.Path))
 		src := p.src
-		if err := os.MkdirAll(skillsDir(), 0o755); err != nil {
-			return err
+		// the same skill from the same place is had already, whatever
+		// the user has changed in it since; another by that name is theirs
+		if s := l.skill(c.Name); s != nil {
+			if fromSameSource(s, src, c.Path, from) {
+				in.had = append(in.had, c.Name)
+			} else {
+				in.skip(c.Name, fmt.Errorf("the library already has another skill called %s, left as it is", c.Name))
+			}
+			continue
 		}
-		// a folder already in the library's own (#595): linked to itself
-		// it fails, and copied onto itself every file of it was emptied
-		if src.Kind == "folder" && realDir(from) == realDir(skillDir(c.Name)) {
-			return fmt.Errorf("%s is in the library's folder already: bring it in from the skills found there", c.Name)
-		}
+		dir := skillDir(c.Name)
 		// something by that name in the library's folder that the
 		// library doesn't list is never written into: that would mix
-		// two skills' files, and a failed copy would take it away
-		if _, err := os.Lstat(skillDir(c.Name)); err == nil {
-			return fmt.Errorf("the library's folder already has a %s in it (%s)", c.Name, skillDir(c.Name))
-		}
-		if src.Kind == "folder" {
+		// two skills' files, and a failed copy would take it away. One
+		// holding exactly this skill's files (an install that stopped
+		// before the library was saved left it) is listed where it is.
+		if _, err := os.Lstat(dir); err == nil {
+			switch {
+			case src.Kind == "folder" && linked(dir) && realDir(dir) == realDir(from):
+				src.Dir = from
+			case src.Kind == "github" && !linked(dir) && sameTree(dir, from):
+				src.Path = c.Path
+			case src.Kind == "folder" && realDir(from) == realDir(dir):
+				// a folder already in the library's own (#595): linked to
+				// itself it fails, and copied onto itself every file of it
+				// was emptied
+				in.skip(c.Name, fmt.Errorf("%s is in the library's folder already: bring it in from the skills found there", c.Name))
+				continue
+			default:
+				in.skip(c.Name, fmt.Errorf("the library's folder already has a %s that isn't this one (%s), left as it is: bring it in from the skills found there to use it", c.Name, dir))
+				continue
+			}
+			in.had = append(in.had, c.Name)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			// can't tell what is there: left alone
+			in.skip(c.Name, err)
+			continue
+		} else if src.Kind == "folder" {
 			src.Dir = from
-			if err := dirLink(from, skillDir(c.Name)); err != nil {
+			if err := dirLink(from, dir); err != nil {
 				if errors.Is(err, fs.ErrExist) {
-					return fmt.Errorf("the library already has a skill called %s", c.Name)
+					in.skip(c.Name, fmt.Errorf("the library's folder already has a %s in it (%s)", c.Name, dir))
+					continue
 				}
-				if err := copyDir(from, skillDir(c.Name)); err != nil {
-					os.RemoveAll(skillDir(c.Name))
-					return err
+				if err := copyDir(from, dir); err != nil {
+					os.RemoveAll(dir)
+					in.skip(c.Name, err)
+					continue
 				}
 			}
+			in.added = append(in.added, c.Name)
 		} else {
 			src.Path = c.Path
-			if err := copyDir(from, skillDir(c.Name)); err != nil {
-				os.RemoveAll(skillDir(c.Name))
-				return err
+			if err := copyDir(from, dir); err != nil {
+				os.RemoveAll(dir)
+				in.skip(c.Name, err)
+				continue
 			}
+			in.added = append(in.added, c.Name)
 		}
 		sk := &Skill{Name: c.Name, Source: &src, Agents: slices.Clone(agents)}
 		if src.Kind == "github" {
-			sk.Hash = hashDir(skillDir(c.Name))
+			sk.Hash = hashDir(dir)
 			// every skill the picker showed was offered: a check
 			// offers only those the repository adds later
 			l.seenAt(src.Repo, src.Ref, c.Path)
@@ -1562,6 +1674,71 @@ func importSkill(l *Library, found []FoundSkill, name string) error {
 	slices.Sort(agents)
 	l.Skills = append(l.Skills, &Skill{Name: name, Source: src, Agents: slices.Compact(agents), From: from})
 	return nil
+}
+
+// RemoveFoundSkill takes a skill the agents have of their own out of every
+// agent that has it (#1303), without bringing it into the library first:
+// each agent's folder, and its copies of the very same files, go to the
+// backups; its links are taken away. Its entry in the shared
+// ~/.agents/skills, or a folder of it left in the library's own, goes to
+// the backups too, as agents read those. A folder elsewhere that the
+// agents only linked to is left where it is, and so is another skill by
+// that name (Others): that is another skill.
+func RemoveFoundSkill(name string) (*Result, error) {
+	return change(func(l *Library) error {
+		found := foundSkills(l)
+		i := slices.IndexFunc(found, func(f FoundSkill) bool { return f.Name == name })
+		if i < 0 {
+			return fmt.Errorf("no agent has a skill called %s that the library hasn't", name)
+		}
+		f := found[i]
+		type entry struct{ who, p string }
+		var es []entry
+		for _, id := range slices.Concat(f.Agents, f.Copies) {
+			if t := targetByID(id); t != nil && t.Skills != "" {
+				es = append(es, entry{id, filepath.Join(t.Skills, name)})
+			}
+		}
+		if f.Shared != "" {
+			es = append(es, entry{"agents", f.Shared})
+		}
+		if f.Library != "" {
+			es = append(es, entry{"library", f.Library})
+		}
+		// links first, so none is left pointing at a folder already set
+		// aside; an agent reading the very same folder as another has its
+		// entry gone already
+		slices.SortStableFunc(es, func(a, b entry) int {
+			la, lb := linked(a.p), linked(b.p)
+			switch {
+			case la == lb:
+				return 0
+			case la:
+				return -1
+			}
+			return 1
+		})
+		seen := map[string]bool{}
+		for _, e := range es {
+			if seen[e.p] {
+				continue
+			}
+			seen[e.p] = true
+			if _, err := os.Lstat(e.p); errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			if linked(e.p) {
+				if err := os.Remove(e.p); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := setAside(e.who, e.p); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // ---- files ----------------------------------------------------------------

@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="library.css">
 <link rel="stylesheet" href="plugins.css">
 <link rel="stylesheet" href="sessions.css">
+<link rel="stylesheet" href="context.css">
 <link rel="stylesheet" href="omarchy.css">
 </head>
 <body>
@@ -185,12 +186,24 @@
         </div>
       </section>
     </div>
+    <section class="led-heat" id="ledHeat" hidden>
+      <div class="led-bar">
+        <div class="heat-title"><b data-t>Usage heatmap</b><span data-t>Daily usage over the last 53 weeks</span></div>
+        <span class="grow"></span>
+        <div class="segs" id="ledHeatMetric"></div>
+      </div>
+      <div class="heat-scroll" id="ledHeatScroll"></div>
+      <div class="heat-foot"></div>
+      <div class="heat-tip" id="ledHeatTip" hidden></div>
+    </section>
     <div class="led-head"><p class="led-sum" id="ledSum"></p><span class="grow"></span><span class="led-arch" id="ledArchive"></span></div>
+    <div class="led-strip led-vias" id="ledVia" hidden></div>
     <div class="led-wrap" id="ledWrap"></div>
             <div class="led-hscroll" id="ledHScroll" hidden><div></div></div>
     <div class="led-pager" id="ledPager" hidden></div>
     <p class="usage-note" id="ledNote"></p>
   </div>
+  <div class="usage-pane ctx-pane" id="contextPane" hidden></div>
   <div class="usage-pane sess-pane" id="sessionsPane" hidden>
     <div class="sess-tools">
       <div class="segs" id="sessAgent"></div>
@@ -321,6 +334,10 @@
       <div class="row pref" id="keepAwakeRow">
         <div class="who"><div class="name" data-t>Keep awake while agents work</div><div class="sub" data-t>Keeps this computer from going to sleep by itself while agents work through magpie and for ten minutes after; the display may still turn off</div></div>
         <div id="keepAwakeSegs"></div>
+      </div>
+      <div class="row pref" id="wslAgentsRow" hidden>
+        <div class="who"><div class="name" data-t>Detect agents in WSL</div><div class="sub" data-t>Looks in running WSL distros for agents to set up, their sessions and Claude Code; off, WSL is never asked anything and the agents found there are no longer shown</div></div>
+        <div id="wslAgentsSegs"></div>
       </div>
       <div class="row pref" id="sessionTerminalRow" hidden>
         <div class="who"><div class="name" data-t>Session terminal</div><div class="sub" data-t>Used by the terminal button in Sessions; only apps registered for .command files appear</div></div>
@@ -456,7 +473,7 @@
     <div class="list prefs" id="redactList"></div>
   </section>
   <section class="set-page" id="setPage-otel" role="tabpanel" aria-labelledby="setTab-otel">
-    <div class="list prefs" id="otelList"></div>
+    <div id="otelList"></div>
   </section>
   <section class="set-page" id="setPage-sync" role="tabpanel" aria-labelledby="setTab-sync">
     <div class="list prefs" id="syncList"></div>
@@ -504,5 +521,6 @@
 <script src="library.js"></script>
 <script src="plugins.js"></script>
 <script src="sessions.js"></script>
+<script src="context.js"></script>
 </body>
 </html>

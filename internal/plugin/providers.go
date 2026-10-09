@@ -69,6 +69,10 @@ type Model struct {
 	// ImageSaid is whether the plugin (or models.dev) said if it takes
 	// images: Image false without it is not known
 	ImageSaid bool `json:"imageSaid"`
+	// Fast is set by the plugin on a model it runs in its vendor's fast
+	// mode when the request says service_tier "priority" (m.fast: Cursor's
+	// plugin from 0.2.2, for a model Cursor has a fast variant of)
+	Fast bool `json:"fast"`
 }
 
 // Provider is a provider a plugin signs in to.

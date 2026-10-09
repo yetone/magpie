@@ -24,7 +24,7 @@ import (
 // — the subscriptions magpie remembers, how much of each one's allowance is
 // used, and switching the agent between them.
 func accountsCmd(args []string) error {
-	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
+	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts switch|forget copilot <login>[@<name>.ghe.com] [--host <name>.ghe.com] | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
 	agentID := func(s string) (string, error) {
 		switch strings.ToLower(s) {
 		case "claude", "cc":
@@ -41,12 +41,14 @@ func accountsCmd(args []string) error {
 			return "factory", nil
 		case "mimo", "mimo-app", "xiaomi-mimo":
 			return provider.MiMoID, nil
+		case "copilot":
+			return "copilot", nil
 		}
 		// a plugin's subscription, by its provider's id or name, as a built-in's
 		if pp, err := pluginProvider(context.Background(), s); err == nil {
 			return provider.PluginID(pp.ID), nil
 		}
-		return "", fmt.Errorf("%q: only Claude Code, Codex, Gemini CLI, Antigravity, Zed, Factory, Xiaomi MiMo and plugins' accounts can be added and switched\n%s", s, usage)
+		return "", fmt.Errorf("%q: only Claude Code, Codex, Copilot, Gemini CLI, Antigravity, Zed, Factory, Xiaomi MiMo and plugins' accounts can be added and switched\n%s", s, usage)
 	}
 	if len(args) > 1 && args[1] == "project" {
 		if len(args) != 5 {
@@ -104,12 +106,37 @@ func accountsCmd(args []string) error {
 		return addAccount(id)
 	}
 	if len(args) > 1 && (args[1] == "switch" || args[1] == "forget") {
+		// a Copilot account's host, for a login on more than one (#1220)
+		host, hasHost := "", false
+		for i := 2; i < len(args); i++ {
+			if v, ok := strings.CutPrefix(args[i], "--host="); ok {
+				host, hasHost = v, true
+				args = slices.Delete(slices.Clone(args), i, i+1)
+				break
+			}
+			if args[i] == "--host" && i+1 < len(args) {
+				host, hasHost = args[i+1], true
+				args = slices.Delete(slices.Clone(args), i, i+2)
+				break
+			}
+		}
 		if len(args) != 4 {
 			return fmt.Errorf("%s", usage)
 		}
 		id, err := agentID(args[2])
 		if err != nil {
 			return err
+		}
+		if hasHost {
+			if id != "copilot" {
+				return fmt.Errorf("--host names a Copilot account's host\n%s", usage)
+			}
+			h, err := provider.CopilotHost(host)
+			if err != nil {
+				return err
+			}
+			login, _, _ := strings.Cut(args[3], "@")
+			args[3] = provider.CopilotAccountName(login, h)
 		}
 		if args[3], err = accountNamed(id, args[3]); err != nil {
 			return err
@@ -126,7 +153,7 @@ func accountsCmd(args []string) error {
 		if err := provider.SwitchLogin(id, args[3]); err != nil {
 			return err
 		}
-		if _, plug := provider.PluginOf(id); plug || id == "gemini" || id == "antigravity" {
+		if _, plug := provider.PluginOf(id); plug || id == "gemini" || id == "antigravity" || id == "copilot" {
 			fmt.Println(green.Render("✓"), "magpie now uses", args[3], "for", id)
 			return nil
 		}
@@ -405,7 +432,11 @@ func addAccount(agentID string) error {
 	return fmt.Errorf("sign-in canceled")
 }
 
-func openInBrowser(url string) {
+// openInBrowser opens url in the user's browser. It is a variable so the
+// tests can have it go nowhere without starting a program (noBrowser).
+var openInBrowser = openURLInBrowser
+
+func openURLInBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
@@ -543,6 +574,14 @@ func checkinWorkBuddy(asJSON bool) error {
 // the agent's accounts has it.
 func accountNamed(agent, user string) (string, error) {
 	user = strings.TrimSpace(user)
+	if agent == "copilot" {
+		// "mona@github.com" is github.com's mona, named "mona"
+		if login, host, ok := strings.Cut(user, "@"); ok {
+			if h, err := provider.CopilotHost(host); err == nil {
+				user = provider.CopilotAccountName(login, h)
+			}
+		}
+	}
 	ls := provider.Logins(agent)
 	var names, same []string
 	for _, l := range ls {
@@ -552,11 +591,17 @@ func accountNamed(agent, user string) (string, error) {
 		names = append(names, l.User)
 		if email, _, _ := strings.Cut(l.User, " · "); strings.EqualFold(strings.TrimSpace(email), user) {
 			same = append(same, l.User)
+		} else if login, _, _ := strings.Cut(l.User, "@"); agent == "copilot" && strings.EqualFold(login, user) {
+			// a Copilot login alone names its one account on an
+			// enterprise's host (#1220)
+			same = append(same, l.User)
 		}
 	}
 	switch {
 	case len(same) == 1:
 		return same[0], nil
+	case len(same) > 1 && agent == "copilot":
+		return "", fmt.Errorf("copilot has %d accounts of %s: %q — name one in full (<login>@<name>.ghe.com) or add --host <name>.ghe.com", len(same), user, same)
 	case len(same) > 1:
 		return "", fmt.Errorf("%s has %d accounts of %s: %q — name one in full", agent, len(same), user, same)
 	case len(names) == 0:

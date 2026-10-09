@@ -30,7 +30,7 @@ import (
 
 	"github.com/tidwall/gjson"
 
-	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/desktopdir"
 	"github.com/yetone/magpie/internal/edit"
 )
 
@@ -40,10 +40,7 @@ const desktopManifest = "manifest.json"
 // Desktop has, in its own folder and Claude-3p's alike: each one with a
 // manifest.json or the plugin's plugin.json.
 func desktopSkillRoots(desktopDir string) []string {
-	dirs := []string{desktopDir, filepath.Dir(agent.DesktopConfig3p(home()))}
-	if d, err := os.UserConfigDir(); err == nil {
-		dirs = append(dirs, filepath.Join(d, "Claude"), filepath.Join(d, "Claude-3p"))
-	}
+	dirs := append([]string{desktopDir}, desktopdir.Here().All()...)
 	var out []string
 	seen := map[string]bool{}
 	for _, d := range dirs {

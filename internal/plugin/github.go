@@ -46,16 +46,27 @@ var (
 	githubRaw = "https://raw.githubusercontent.com"
 )
 
+// taggedTTL is how long what GitHub said stands: short, so a repository
+// tagged a moment ago shows within minutes (lee04052822 on X tagged theirs
+// and, asked six hours apart, didn't see it). A search is one request of
+// the ten a minute; what each repository's package.json and npm said is
+// kept while its last push stays the same, so asking again costs no more.
+const taggedTTL = 10 * time.Minute
+
 var (
 	taggedMu sync.Mutex
 	taggedL  []Tagged
 	taggedAt time.Time
+	// owner/repo@pushed → what its package.json and npm made of it, nil
+	// when it was left out
+	readMu   sync.Mutex
+	readRepo = map[string]*Tagged{}
 )
 
 func taggedCache() string { return filepath.Join(filepath.Dir(marketCache()), "plugin-github.json") }
 
 // TaggedRepos are the repositories tagged with Topic, the most starred
-// first: GitHub asked at most every six hours (its search lets 10 a minute
+// first: GitHub asked at most every ten minutes (its search lets 10 a minute
 // through without a token), else what it said last, kept on disk. Archived
 // repositories, forks and magpie-community's own (the market lists those)
 // are left out, as is one whose package.json doesn't parse, which bun
@@ -63,16 +74,16 @@ func taggedCache() string { return filepath.Join(filepath.Dir(marketCache()), "p
 func TaggedRepos(ctx context.Context) []Tagged {
 	taggedMu.Lock()
 	defer taggedMu.Unlock()
-	if taggedL != nil && time.Since(taggedAt) < 6*time.Hour {
+	if taggedL != nil && time.Since(taggedAt) < taggedTTL {
 		return taggedL
 	}
 	if os.Getenv("MAGPIE_PLUGIN_MARKET") == "off" {
 		return []Tagged{}
 	}
-	// a magpie started again within the six hours: what GitHub said then,
+	// a magpie started again within the ten minutes: what GitHub said then,
 	// without the wait of asking (a package.json read for each)
 	if taggedL == nil {
-		if fi, err := os.Stat(taggedCache()); err == nil && time.Since(fi.ModTime()) < 6*time.Hour {
+		if fi, err := os.Stat(taggedCache()); err == nil && time.Since(fi.ModTime()) < taggedTTL {
 			var l []Tagged
 			if b, err := os.ReadFile(taggedCache()); err == nil && json.Unmarshal(b, &l) == nil && l != nil {
 				taggedL, taggedAt = l, fi.ModTime()
@@ -96,7 +107,7 @@ func TaggedRepos(ctx context.Context) []Tagged {
 	if l == nil {
 		l = []Tagged{}
 	}
-	taggedL, taggedAt = l, time.Now().Add(-6*time.Hour+time.Minute)
+	taggedL, taggedAt = l, time.Now().Add(-taggedTTL+time.Minute)
 	return l
 }
 
@@ -134,6 +145,7 @@ func askTagged(ctx context.Context) ([]Tagged, error) {
 	keep := make([]bool, len(r.Items))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 6)
+	seen := map[string]bool{}
 	for i, it := range r.Items {
 		if it.Archived || it.Fork || strings.EqualFold(it.Owner.Login, "magpie-community") || !strings.Contains(it.FullName, "/") {
 			continue
@@ -145,11 +157,40 @@ func askTagged(ctx context.Context) ([]Tagged, error) {
 		if it.License != nil && it.License.SPDX != "NOASSERTION" {
 			t.License = it.License.SPDX
 		}
+		key := it.FullName + "@" + it.Pushed.Format(time.RFC3339)
+		seen[key] = true
+		readMu.Lock()
+		was, read := readRepo[key]
+		readMu.Unlock()
+		if read {
+			if was != nil {
+				r := *was
+				// what the search says now: stars, description, license
+				r.URL, r.Owner, r.OwnerAvatar, r.Description, r.Stars, r.License, r.Pushed = t.URL, t.Owner, t.OwnerAvatar, t.Description, t.Stars, t.License, t.Pushed
+				out[i], keep[i] = r, true
+			}
+			continue
+		}
 		wg.Add(1)
 		go func(i int, t Tagged, branch string) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			// read is whether this repository's answer is known: GitHub or
+			// npm not answering is not, and it is read again next time
+			read := false
+			defer func() {
+				if read {
+					readMu.Lock()
+					if keep[i] {
+						r := out[i]
+						readRepo[key] = &r
+					} else {
+						readRepo[key] = nil
+					}
+					readMu.Unlock()
+				}
+			}()
 			pc, cancel := context.WithTimeout(c, 6*time.Second)
 			defer cancel()
 			if branch == "" {
@@ -157,6 +198,7 @@ func askTagged(ctx context.Context) ([]Tagged, error) {
 			}
 			pb, err := fetchJSON(pc, githubRaw+"/"+t.Repo+"/"+url.PathEscape(branch)+"/package.json", 256<<10)
 			if err != nil {
+				read = errors.Is(err, errNotFound)
 				return
 			}
 			var pj struct {
@@ -169,6 +211,7 @@ func askTagged(ctx context.Context) ([]Tagged, error) {
 				} `json:"magpie"`
 			}
 			if json.Unmarshal(pb, &pj) != nil || !pkgName.MatchString(pj.Name) {
+				read = true
 				return
 			}
 			t.Package, t.Version = pj.Name, pj.Version
@@ -178,32 +221,55 @@ func askTagged(ctx context.Context) ([]Tagged, error) {
 			// published to npm from this repository: npm's copy is the one
 			// built to be installed (a repository often leaves its dist out,
 			// built only to publish), so it is installed from npm
-			if b, err := fetchJSON(pc, npmRegistry+"/"+npmPath(pj.Name)+"/latest", 1<<20); err == nil {
+			b, err := fetchJSON(pc, npmRegistry+"/"+npmPath(pj.Name)+"/latest", 1<<20)
+			known := err == nil || errors.Is(err, errNotFound)
+			// npmNames is whether npm's copy names what it loads (main,
+			// exports); one that names nothing loads an index file
+			npmNames := false
+			if err == nil {
 				var l npmLatest
 				if json.Unmarshal(b, &l) == nil && l.Version != "" && strings.EqualFold(githubRepo(repoURL(l.Repository)), t.Repo) {
 					t.Spec, t.Version = pj.Name, l.Version
+					npmNames = l.Main != "" || len(l.Exports) > 0
 				}
 			}
 			// installed from the repository, the file it loads must be in
 			// it: one whose dist is built only to publish couldn't load
 			// (GitHub not answering is no answer, and keeps it; so is a
-			// name Bun would add .js or /index.js to)
-			if IsGit(t.Spec) {
+			// name Bun would add .js or /index.js to). Installed from npm,
+			// a copy that names no file loads index.js, which the
+			// repository has too when it is a plugin at all: a package
+			// that is only a command (bin), an MCP server, has none and
+			// would never load (#1327)
+			if IsGit(t.Spec) || !npmNames {
 				entry := pj.Magpie.Middleware
 				if t.Kind != "middleware" {
 					entry = pkgEntry(pj.Exports, pj.Main)
+					if !IsGit(t.Spec) {
+						entry = pkgEntry(nil, "")
+					}
 				}
 				if path.Ext(entry) != "" {
 					_, err := fetchJSON(pc, githubRaw+"/"+t.Repo+"/"+url.PathEscape(branch)+"/"+strings.TrimPrefix(path.Clean("/"+entry), "/"), 1)
 					if errors.Is(err, errNotFound) {
+						read = known
 						return
 					}
+					known = known && err == nil
 				}
 			}
-			out[i], keep[i] = t, true
+			out[i], keep[i], read = t, true, known
 		}(i, t, it.DefaultBranch)
 	}
 	wg.Wait()
+	// a repository pushed to again, or no longer tagged, is forgotten
+	readMu.Lock()
+	for k := range readRepo {
+		if !seen[k] {
+			delete(readRepo, k)
+		}
+	}
+	readMu.Unlock()
 	l := []Tagged{}
 	for i := range out {
 		if keep[i] {

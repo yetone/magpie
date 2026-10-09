@@ -198,9 +198,14 @@ var cliShared = map[string]bool{"codex": true, "claude": true, "gemini": true, "
 // folder or config is, its command-line program isn't — not on PATH nor
 // where users' tools go (proc.FindTool), as after an uninstall that left
 // ~/.dsh behind (#843). Only for an agent that is its CLI and that magpie
-// knows an install command for, so the Agents page can offer it again.
+// knows an install command for, so the Agents page can offer it again; one
+// whose desktop app is installed (HasApp) is that app's settings, which need
+// no CLI (DeepSeek Harness Desktop, star on Discord).
 func (a *Agent) CLIMissing() bool {
 	if a.WSL != "" || a.detect != nil || a.Bin == "" || cliShared[a.ID] {
+		return false
+	}
+	if a.HasApp() {
 		return false
 	}
 	if len(installCommands(a.ID, runtime.GOOS, true)) == 0 {

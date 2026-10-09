@@ -66,7 +66,7 @@ func (p Provider) Decides() bool { return p.Decide != "" }
 
 // DecideOnly reports whether the provider has no conversation endpoint.
 func (p Provider) DecideOnly() bool {
-	return p.Decides() && p.Chat == "" && p.Responses == "" && p.Anthropic == ""
+	return p.Decides() && p.Chat == "" && p.Responses == "" && p.Anthropic == "" && p.Gemini == ""
 }
 
 // DecidesModel distinguishes Jev from the conversation models a gateway

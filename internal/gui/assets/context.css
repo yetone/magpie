@@ -1,0 +1,230 @@
+/* Context windows: a request's prompt as a card (Routing, the Usage page's
+   Context tab) and each agent's score and tags. */
+:root {
+  --k-system: var(--c6); --k-tools: var(--c2); --k-memory: var(--c4);
+  --k-files: var(--c3); --k-results: var(--c5); --k-chat: var(--c1);
+  --k-free: color-mix(in srgb, var(--fg) 7%, transparent);
+}
+.k-system { --k: var(--k-system); }
+.k-tools { --k: var(--k-tools); }
+.k-memory { --k: var(--k-memory); }
+.k-files { --k: var(--k-files); }
+.k-results { --k: var(--k-results); }
+.k-chat { --k: var(--k-chat); }
+i.dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 2.5px; background: var(--k); }
+i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent); }
+
+.ctx-card { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 14px; min-width: 0; font-variant-numeric: tabular-nums; }
+.ctx-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ctx-head .grow, .ctx-foot .grow, .ctx-contents-head .grow, .ctx-agent-head .grow, .ctx-agent-foot .grow, .ctx-tools .grow, .ctx-sess-head .grow { flex: 1; }
+.ctx-title { font-size: 13px; font-weight: 600; color: var(--fg); white-space: nowrap; }
+.ctx-model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--code-font, var(--code)); font-size: 11px; color: var(--muted); }
+.ctx-state { display: inline-flex; align-items: center; gap: 5px; flex: none; height: 20px; padding: 0 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: var(--pill); color: var(--fg-2); }
+.ctx-state i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+.ctx-state.counted i { background: var(--green); }
+.ctx-state.live { background: var(--green-soft); color: var(--green); }
+.ctx-state.live i { background: var(--green); animation: ctx-pulse 1.4s ease-in-out infinite; }
+@keyframes ctx-pulse { 50% { opacity: .35; transform: scale(.8); } }
+
+.ctx-k { display: flex; align-items: center; gap: 8px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+:root[lang="zh"] .ctx-k, :root[lang="ja"] .ctx-k { letter-spacing: .02em; }
+.ctx-top { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px 28px; }
+.ctx-top > :only-child { grid-column: 1 / -1; }
+.ctx-stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ctx-big { display: flex; align-items: baseline; gap: 0; white-space: nowrap; color: var(--muted); font-size: 13px; }
+.ctx-big b { font-size: 28px; line-height: 1.1; font-weight: 600; letter-spacing: -.02em; color: var(--fg); }
+.ctx-sub { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:root[lang="zh"] .ctx-sub, :root[lang="ja"] .ctx-sub { letter-spacing: .02em; }
+.ctx-health { height: 17px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: 9px; font-size: 10px; letter-spacing: .03em; }
+.ctx-health.ok { background: var(--green-soft); color: var(--green); }
+.ctx-health.warn { background: var(--amber-soft); color: var(--amber); }
+.ctx-health.bad { background: var(--red-soft); color: var(--red); }
+.ctx-bar { position: relative; display: block; height: 6px; border-radius: 3px; background: var(--k-free); overflow: hidden; }
+.ctx-bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--green); transform-origin: left; animation: ctx-grow .7s var(--ease, ease) both; }
+.ctx-cache .ctx-bar { margin: 3px 0 2px; }
+@keyframes ctx-grow { from { transform: scaleX(0); } }
+
+/* the window, a cell for each 1/400 of it */
+.ctx-waffle { display: grid; grid-template-columns: repeat(50, minmax(0, 1fr)); gap: 2px; }
+/* a card 520px wide or less (context.js sets max520 by its width) */
+:where(.ctx-card.max520) .ctx-waffle { grid-template-columns: repeat(25, minmax(0, 1fr)); }
+.ctx-waffle > i { aspect-ratio: 1; border-radius: 2px; background: var(--k, var(--k-free)); transition: opacity .16s, transform .16s; animation: ctx-cell .32s var(--ease, ease) both; animation-delay: var(--d, 0ms); }
+.ctx-waffle > i.free { --k: var(--k-free); }
+@keyframes ctx-cell { from { opacity: 0; transform: scale(.4); } }
+.ctx-waffle[data-f] > i { opacity: .16; }
+.ctx-waffle[data-f="system"] > i.k-system, .ctx-waffle[data-f="tools"] > i.k-tools,
+.ctx-waffle[data-f="memory"] > i.k-memory, .ctx-waffle[data-f="files"] > i.k-files,
+.ctx-waffle[data-f="results"] > i.k-results, .ctx-waffle[data-f="chat"] > i.k-chat,
+.ctx-waffle[data-f="free"] > i.free, .ctx-waffle[data-f="item"] > i.on { opacity: 1; }
+.ctx-waffle[data-f="item"] > i.on { transform: scale(1.12); }
+.ctx-tip { position: absolute; z-index: 5; min-width: 190px; max-width: 280px; padding: 8px 10px; border-radius: 9px; background: #17171b; color: #ededf1; box-shadow: 0 10px 30px rgba(0, 0, 0, .28); font-size: 11.5px; pointer-events: none; display: flex; flex-direction: column; gap: 3px; }
+.ctx-tip[hidden] { display: none; }
+.ctx-tip-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.ctx-tip-head .grow { flex: 1; }
+.ctx-tip-head span:last-child { color: #a1a1aa; }
+.ctx-tip-row { display: flex; gap: 10px; color: #b9b9c1; }
+.ctx-tip-row .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-tip-row.on { color: #fff; font-weight: 500; }
+.ctx-tip-more { color: #85858d; font-size: 10.5px; }
+
+.ctx-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: -4px; }
+.ctx-leg { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--fg-2); cursor: default; padding: 2px 0; }
+.ctx-leg .v { color: var(--muted); }
+.ctx-leg:hover .n { color: var(--fg); }
+
+.ctx-contents { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ctx-contents-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ctx-contents-head .segs { max-width: 100%; overflow-x: auto; scrollbar-width: none; flex: none; }
+.ctx-contents-head .segs .opt { height: 20px; padding: 0 9px; font-size: 11px; white-space: nowrap; flex: none; }
+:where(.ctx-card.max520) .ctx-contents-head { flex-wrap: wrap; }
+:where(.ctx-card.max520) .ctx-contents-head .segs { flex: 1 1 100%; }
+.ctx-rows { display: flex; flex-direction: column; }
+.ctx-row { display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 0 6px; margin: 0 -6px; border-radius: 6px; font-size: 12px; }
+.ctx-row:hover { background: var(--pill); }
+.ctx-name { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; white-space: nowrap; }
+.ctx-name b { font-weight: 500; color: var(--fg); overflow: hidden; text-overflow: ellipsis; flex: none; max-width: 100%; }
+.ctx-name small { color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; min-width: 0; }
+.ctx-x { font-size: 11px; color: var(--muted); }
+.ctx-tag { flex: none; font-family: var(--code-font, var(--code)); font-size: 10px; padding: 1px 5px; border-radius: 4px; background: var(--pill); color: var(--muted); }
+.ctx-mini { flex: none; width: 72px; height: 4px; border-radius: 2px; background: var(--k-free); overflow: hidden; }
+.ctx-mini i { display: block; height: 100%; border-radius: 2px; background: var(--k); }
+.ctx-v { flex: none; width: 48px; text-align: right; color: var(--fg-2); font-size: 11.5px; }
+:where(.ctx-card.max420) :is(.ctx-mini, .ctx-tag) { display: none; }
+.ctx-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
+.ctx-more { align-self: flex-start; margin-top: 2px; font-size: 11.5px; }
+
+.ctx-foot { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 11px; color: var(--muted); }
+.ctx-crumbs { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--code-font, var(--code)); font-size: 10.5px; color: var(--muted); }
+.ctx-note { white-space: nowrap; flex: none; }
+.ctx-session { display: flex; align-items: center; gap: 12px; margin-top: -4px; }
+.ctx-session .ctx-spark { flex: 1; height: 34px; }
+.ctx-spark { position: relative; display: block; width: 100%; }
+.ctx-spark svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.ctx-spark .at { position: absolute; width: 7px; height: 7px; margin: -3.5px 0 0 -3.5px; border-radius: 50%; background: var(--card); border: 1.6px solid var(--k-chat); box-sizing: border-box; pointer-events: none; }
+.ctx-spark .win { stroke: var(--line); stroke-dasharray: 3 3; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.ctx-spark .area { fill: color-mix(in srgb, var(--k-chat) 14%, transparent); }
+.ctx-spark .line { fill: none; stroke: var(--k-chat); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.ctx-spark .hit { fill: transparent; cursor: pointer; }
+.ctx-spark .hit:hover { fill: color-mix(in srgb, var(--fg) 7%, transparent); }
+
+/* Routing: the card under the story of the request */
+.rt-log .ctx-card { margin-top: 12px; }
+/* folded: its head alone, how full it is beside the title */
+.ctx-fold { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 22px; margin: -2px 0 -2px -4px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.ctx-fold:hover { background: var(--pill); }
+.ctx-fold .tw { display: inline-flex; width: 10px; flex: none; color: var(--faint); }
+.ctx-fold .tw svg { transition: transform .2s var(--ease, ease); }
+.ctx-card.shut .ctx-fold .tw svg { transform: rotate(-90deg); }
+.ctx-short { display: none; flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ctx-card.shut .ctx-short { display: inline; }
+/* the padding is the open card's, so the title stays where it is when it
+   opens and the page doesn't follow it (it moved 4px with a 10px one) */
+.ctx-card.shut > :not(.ctx-head) { display: none; }
+:where(.ctx-card.shut.max420) .ctx-model { display: none; }
+/* folded, the head is one line of a fixed height whatever a live request
+   puts in it, so nothing under it moves; a thin bar of what fills the
+   window, a part each, takes the room between the figure and the model */
+.ctx-card.shut .ctx-head { height: 20px; white-space: nowrap; }
+.ctx-stack { display: none; flex: 1 1 0; min-width: 24px; max-width: 360px; height: 6px; border-radius: 3px; background: var(--k-free); overflow: hidden; }
+.ctx-card.shut .ctx-stack { display: flex; }
+.ctx-stack i { flex: none; height: 100%; background: var(--k); transition: width .3s var(--ease, ease); }
+@media (prefers-reduced-motion: reduce) { .ctx-stack i { transition: none; } }
+
+/* the Usage page's Context tab */
+.ctx-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 12px; margin: 4px 0 18px; }
+.ctx-agent { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 12px; min-width: 0; font-variant-numeric: tabular-nums; }
+.ctx-agent-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ctx-who-box { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ctx-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ctx-who .ic { width: 20px; height: 20px; flex: none; }
+.ctx-who b { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-who-sub { font-size: 11px; color: var(--muted); }
+.ctx-grade { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; }
+.ctx-grade-word { font-size: 10.5px; font-weight: 600; }
+.ctx-ring { position: relative; width: 52px; height: 52px; --tone: var(--accent); }
+.ctx-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ctx-ring circle { fill: none; stroke-width: 5; stroke-linecap: round; }
+.ctx-ring .track { stroke: var(--k-free); }
+.ctx-ring .arc { stroke: var(--tone); stroke-dashoffset: var(--to); animation: ctx-arc .9s var(--ease, ease) both; }
+.ctx-pane.still .ctx-waffle > i, .ctx-pane.still .ctx-bar i, .ctx-pane.still .ctx-ring .arc { animation: none; }
+@keyframes ctx-arc { from { stroke-dashoffset: 163.36; } }
+.ctx-ring b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 16px; font-weight: 650; letter-spacing: -.02em; }
+.ctx-ring.great, .ctx-grade-word.great { --tone: var(--green); color: var(--green); }
+.ctx-ring.good, .ctx-grade-word.good { --tone: var(--c2); color: var(--c2); }
+.ctx-ring.fair, .ctx-grade-word.fair { --tone: var(--amber); color: var(--amber); }
+.ctx-ring.poor, .ctx-grade-word.poor { --tone: var(--red); color: var(--red); }
+.ctx-ring b { color: var(--fg); }
+.ctx-scores { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; }
+.ctx-score { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 11.5px; color: var(--fg-2); cursor: default; }
+.ctx-score .ctx-bar { height: 4px; }
+.ctx-score .ctx-bar i { background: var(--green); }
+.ctx-score.warn .ctx-bar i { background: var(--amber); }
+.ctx-score.bad .ctx-bar i { background: var(--red); }
+.ctx-score .v { color: var(--muted); font-size: 10.5px; }
+.ctx-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ctx-tags:empty { display: none; }
+.ctx-chip { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 11px; font-size: 11.5px; font-weight: 500; background: var(--pill); color: var(--fg-2); cursor: default; }
+.ctx-chip i { width: 6px; height: 6px; border-radius: 50%; background: var(--c7); }
+.ctx-chip.good { background: var(--green-soft); color: var(--green); }
+.ctx-chip.good i { background: var(--green); }
+.ctx-chip.warn { background: var(--amber-soft); color: var(--amber); }
+.ctx-chip.warn i { background: var(--amber); }
+.ctx-chip.info i { background: var(--accent); }
+.ctx-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; padding: 10px 0 2px; border-top: 1px solid var(--line); }
+.ctx-fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: default; }
+.ctx-fact b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.ctx-fact .ctx-k { font-size: 9.5px; overflow: hidden; text-overflow: ellipsis; display: block; }
+.ctx-mix { display: flex; flex-direction: column; gap: 6px; }
+.ctx-share { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; background: var(--k-free); }
+.ctx-share i { display: block; min-width: 3px; background: var(--k); }
+.ctx-mix-keys { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--muted); }
+.ctx-mix-keys span { display: inline-flex; align-items: center; gap: 5px; }
+.ctx-agent-foot { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: auto; }
+.ctx-models { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.ctx-models code { font-family: var(--code-font, var(--code)); font-size: 10.5px; padding: 2px 6px; border-radius: 5px; background: var(--pill); color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ctx-agent-foot .text { flex: none; font-size: 11.5px; }
+
+.ctx-sess-head { margin-top: 6px; }
+.ctx-sess-head .segs .opt { height: 20px; padding: 0 9px; font-size: 11px; }
+.ctx-sess-list { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ctx-sess + .ctx-sess { border-top: 1px solid var(--line-2, var(--line)); }
+.ctx-sess-row { all: unset; box-sizing: border-box; width: 100%; display: grid; grid-template-columns: 20px minmax(0, 1.3fr) minmax(80px, 1fr) 44px minmax(0, auto) 92px; align-items: center; gap: 12px; padding: 8px 14px; cursor: pointer; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ctx-sess-row:hover { background: var(--pill); }
+.ctx-sess-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ctx-sess-row .ic { width: 18px; height: 18px; }
+.ctx-sess-name { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.ctx-sess-name b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-sess-name b.raw { font-family: var(--code-font, var(--code)); font-weight: 500; letter-spacing: .02em; }
+.ctx-sess-name code { font-family: var(--code-font, var(--code)); font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx-sess-row .ctx-spark { height: 24px; }
+.ctx-sess-peak { justify-self: end; font-weight: 600; }
+.ctx-sess-peak.ok { color: var(--green); }
+.ctx-sess-peak.warn { color: var(--amber); }
+.ctx-sess-peak.bad { color: var(--red); }
+.ctx-sess-meta, .ctx-sess-when { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ctx-sess-when { text-align: right; }
+.ctx-sess.open { background: var(--card-2); }
+.ctx-sess.open > .ctx-card { margin: 0 12px 12px; }
+@media (max-width: 640px) {
+  .ctx-sess-row { grid-template-columns: 20px minmax(0, 1fr) 64px 40px; }
+  .ctx-sess-meta, .ctx-sess-when { display: none; }
+  .ctx-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ctx-scores { grid-template-columns: 1fr; }
+  .ctx-top { grid-template-columns: 1fr; }
+}
+.ctx-none { display: flex; flex-direction: column; gap: 4px; align-items: center; padding: 48px 16px; color: var(--muted); font-size: 12.5px; text-align: center; background: var(--card); border: 1px dashed var(--line); border-radius: 14px; }
+.ctx-none b { color: var(--fg); font-size: 13.5px; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ctx-waffle > i, .ctx-bar i, .ctx-ring .arc, .ctx-state.live i { animation: none; }
+  .ctx-waffle > i { transition: none; }
+}
+
+/* Safari 15: no color-mix, so the free cells and the line's area are
+   tinted by opacity */
+@supports not (color: color-mix(in srgb, red 50%, blue)) {
+  :root { --k-free: rgba(128, 128, 128, .12); }
+  i.dot.free { box-shadow: inset 0 0 0 1px var(--line); }
+  .ctx-spark .area { fill: var(--k-chat); fill-opacity: .14; }
+  .ctx-spark .hit:hover { fill: var(--line); }
+}

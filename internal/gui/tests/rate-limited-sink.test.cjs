@@ -145,8 +145,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // the providers with several accounts: set at once
       const pool = page.locator(".rt-pool", { hasText: "WorkBuddy AI" });
       await pool.waitFor();
+      // the pool sits under the window's foot: wheeled to, as the reader
+      // would (WebKit's own scroll into view is put back by the page, which
+      // undoes a scroll the reader didn't make, and the click timed out
+      // with the option outside the viewport, #1376)
+      const back = pool.locator(".sink-pick .opt", { hasText: new RegExp(`^${w.back}$`) });
+      await page.mouse.move(550, 600);
+      for (let i = 0; i < 10 && (await back.boundingBox()).y > 1400 - 260; i++) {
+        await page.mouse.wheel(0, 300);
+        await page.waitForTimeout(150);
+      }
       const y = await page.evaluate(() => document.scrollingElement.scrollTop);
-      await pool.locator(".sink-pick .opt", { hasText: new RegExp(`^${w.back}$`) }).click();
+      await back.click();
       await page.waitForTimeout(200);
       const sent = posts.find((p) => p.path === "/api/provider/sink");
       assert.deepEqual(sent?.body, { id: "workbuddy-ai", sink: true });

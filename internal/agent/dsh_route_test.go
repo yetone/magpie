@@ -778,3 +778,13 @@ func TestDshCheckSaysWhenNoCatalogAndAProfilesStartIsMagpies(t *testing.T) {
 		t.Fatalf("with no catalog, a stripped profile of magpie's own start is not said: %q", d)
 	}
 }
+
+// Without dsh, a round reads nothing: it built magpie's whole catalog every
+// 30 s for no patch list, ~34 MB a minute of garbage in a magpie at rest.
+func TestDshRoundWithoutDshBuildsNoCatalog(t *testing.T) {
+	_, dir, _ := dshRouteHome(t)
+	os.RemoveAll(dir)
+	if n := testing.AllocsPerRun(5, func() { dshWiredOnce() }); n > 50 {
+		t.Fatalf("a round without dsh made %.0f allocations", n)
+	}
+}

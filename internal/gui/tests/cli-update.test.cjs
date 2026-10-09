@@ -130,13 +130,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(150);
       assert.equal(await page.locator(`${row("codex")} .ag-up`).textContent(), "Updating…");
       assert.equal(await page.locator(`${row("codex")} .ag-up.busy`).count(), 1);
+      // its ring turns inside the svg, round the viewBox's centre: a turned
+      // svg circles about a point off its centre in WebKit (owner, 10-09)
+      assert.deepEqual(await page.locator(`${row("codex")} .ag-up svg`).evaluate((s) => [getComputedStyle(s).animationName, getComputedStyle(s.firstElementChild).animationName, getComputedStyle(s.firstElementChild).transformBox]), ["none", "spin", "view-box"]);
       // clicked again while it runs: nothing more is asked
       await page.locator(`${row("codex")} .ag-up`).click({ force: true });
       await page.waitForTimeout(900);
       assert.deepEqual(posts, ["codex"]);
       assert.equal(await page.locator(`${row("codex")} .ag-ver`).textContent(), "0.159.0");
       assert.equal(await page.locator(`${row("codex")} .ag-up`).count(), 0);
-      assert.match(await page.locator("#status").textContent(), /Codex updated to 0\.159\.0/);
+      // the version it went from too (37FlowAI on X)
+      assert.equal(await page.locator("#status").textContent(), "Codex updated: 0.155.1 → 0.159.0");
       assert.equal(await view.evaluate((v) => v.scrollTop), top, "the update moved the page");
       const now = await page.locator(`${row("codex")} .ag-ver`).evaluate((b) => b.getBoundingClientRect().top);
       assert(Math.abs(now - was) <= 3, `the row moved ${now - was}px`);

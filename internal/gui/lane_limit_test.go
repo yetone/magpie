@@ -116,3 +116,67 @@ func TestLaneLimitRoutes(t *testing.T) {
 		t.Fatalf("lanes %d %s", w.Code, w.Body)
 	}
 }
+
+// The editor's save sets a provider's requests a minute (coeo91 on
+// Discord), shows it in the providers' state, keeps it when a save leaves
+// it out, takes 0 or null for no limit, and refuses one out of range.
+func TestRPMSave(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := provider.Save(provider.Provider{ID: "or", Name: "OpenRouter", Chat: "https://example.invalid/v1", Key: "k"}); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	providerRoutes(mux, nil)
+	post := func(body string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/provider/save", strings.NewReader(body)))
+		return w
+	}
+	rpm := func() int {
+		got, err := provider.Find("or")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.MaxRPM
+	}
+	const base = `{"id":"or","name":"OpenRouter","chat":"https://example.invalid/v1"`
+	if w := post(base + `,"maxRPM":20}`); w.Code != 200 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if n := rpm(); n != 20 {
+		t.Fatalf("saved %d", n)
+	}
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/providers", nil))
+	var state providersJSON
+	if err := json.Unmarshal(w.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	shown := -1
+	for _, q := range state.Providers {
+		if q.ID == "or" {
+			shown = q.MaxRPM
+		}
+	}
+	if shown != 20 {
+		t.Fatalf("shown %d", shown)
+	}
+	if w := post(base + `}`); w.Code != 200 || rpm() != 20 {
+		t.Fatalf("an older form: %d %s, limit %d", w.Code, w.Body, rpm())
+	}
+	for _, bad := range []string{`"maxRPM":-1`, `"maxRPM":10001`, `"maxRPM":"x"`, `"maxRPM":2.5`} {
+		if w := post(base + `,` + bad + `}`); w.Code == 200 {
+			t.Fatalf("%s taken", bad)
+		}
+	}
+	if rpm() != 20 {
+		t.Fatalf("a refused save changed it: %d", rpm())
+	}
+	if w := post(base + `,"maxRPM":null}`); w.Code != 200 || rpm() != 0 {
+		t.Fatalf("null: %d %s, limit %d", w.Code, w.Body, rpm())
+	}
+}

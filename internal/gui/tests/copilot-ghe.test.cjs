@@ -44,6 +44,10 @@ for (const engine of engines) for (const lang of ["en", "zh"]) {
       const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];
       return route.fulfill({ body: await fs.readFile(file), contentType });
     });
+    // the sign-in opens GitHub's device page in a new window: it gets an
+    // empty page, not the real github.com or acme.ghe.com, whose pages a
+    // test can't control (ChatGPT's Cloudflare challenge hung clicks, #1307)
+    await page.context().route((url) => url.hostname !== "magpie.test", (route) => route.fulfill({ contentType: "text/html", body: "" }));
     await page.goto("http://magpie.test/");
     await page.waitForFunction((l) => state.settings.lang === l, lang);
     await page.evaluate(() => {

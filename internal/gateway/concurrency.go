@@ -152,13 +152,14 @@ func (l *lanes) free(who string, limit int) bool {
 }
 
 // laneMate is where, after i, the first candidate is with a slot free now
-// — another key or account of cands[i]'s provider, or in a routing group
-// any member — when cands[i]'s key or account is full; -1 when it isn't
+// and room in its minute — another key or account of cands[i]'s provider,
+// or in a routing group any member — when cands[i]'s key or account is
+// full, or has sent its MaxRPM in the last minute; -1 when it isn't
 // full, gave way once already, or none has room.
 func (s *Server) laneMate(cands []candidate, i int, group bool, gave map[string]bool) int {
 	c := cands[i]
 	who := c.who()
-	if gave[who] || s.lanes.free(who, c.p.LaneLimit()) {
+	if gave[who] || s.ready(c) {
 		return -1
 	}
 	for j := i + 1; j < len(cands); j++ {
@@ -166,16 +167,25 @@ func (s *Server) laneMate(cands []candidate, i int, group bool, gave map[string]
 		if m.who() == who || !group && m.p.ID != c.p.ID {
 			continue
 		}
-		if s.lanes.free(m.who(), m.p.LaneLimit()) {
+		if s.ready(m) {
 			return j
 		}
 	}
 	return -1
 }
 
+// ready is whether c's request would go at once: a slot free in its lane,
+// and room in its minute (rpm.go).
+func (s *Server) ready(c candidate) bool {
+	return s.lanes.free(c.who(), c.p.LaneLimit()) && s.rpms.free(c.who(), c.p.RPMLimit())
+}
+
 // laneMessage tells the agent why its request was turned away by c's
 // queue: full, or waited out.
 func laneMessage(c candidate, err error, queued int64) string {
+	if e := (*errRPM)(nil); errors.As(err, &e) {
+		return fmt.Sprintf("%s: %s; try again then", c.label(), e.Error())
+	}
 	lim := c.p.LaneLimit()
 	if errors.Is(err, errQueueFull) {
 		return fmt.Sprintf("%s: %d requests at once is its limit, and its queue is full (%d waiting); try again shortly", c.label(), lim, c.p.QueueLimit)

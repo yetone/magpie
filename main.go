@@ -71,8 +71,9 @@ const usage = `magpie — one place to pick every agent's model
   magpie models [<agent>]         every model agents can pick, as provider/model; an agent's, and why others aren't
   magpie model name <provider/model> <name>|--reset       the name a model goes by, everywhere
   magpie model efforts <provider/model> <l>,<l>|--reset   the reasoning levels a model offers (magpie model help)
-  magpie visible [<agent> <family|provider|group>,… | all]
-                                  which models an agent is shown: families (magpie provider/group set <id> family=…)
+  magpie visible [<agent> <family|provider|group>,… | all | --only-picked | --show-new]
+                                  which models an agent is shown: families (magpie provider/group set <id> family=…),
+                                  or only the models ticked for it, a new one off until it is ticked
   magpie search [add <api> <key>|rm <api>]   Tavily, Brave, Exa, Firecrawl or SearXNG for web search when no provider can search
   magpie groups                   routing groups: several models agents pick as one, group/<id>
   magpie group add <name> models=<m1>,<m2> [routing=smart|order|rotate|usage|pace] [stays=auto|session|turn|off]
@@ -211,6 +212,9 @@ func run(args []string) error {
 	// a model Claude Code names that magpie doesn't serve goes to the one
 	// it is set to use for that tier
 	gateway.StandIn = agent.StandIn
+	// a Codex that reaches magpie for account failover alone is handed
+	// only its own models (#1385)
+	gateway.CodexOwnOnly = agent.CodexOwnOnly
 	// the setup kept the same on every computer, by whichever serves
 	gateway.WhileServing = append(gateway.WhileServing, davsync.Run)
 	// and dsh's patch lists, which dsh reads live: a route left behind by
@@ -518,6 +522,10 @@ func list(agents []*agent.Agent, detectedOnly bool, dimFrom int) error {
 				r.name = faint.Render(a.Name) + " " + faint.Render("hidden")
 			}
 			r.vals = strings.Join(parts, label.Render("  ·  "))
+			// through magpie for account failover while not connected (#1385)
+			if said := a.FailoverSaid(); said != "" {
+				r.vals += label.Render("  ·  " + said)
+			}
 			if a.Import != nil {
 				if a.Added != nil && a.Added() {
 					r.vals = value.Render("magpie added")

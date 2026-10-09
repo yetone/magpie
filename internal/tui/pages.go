@@ -402,6 +402,15 @@ func (m *model) openProviderModels(id string) {
 // openPresets picks a vendor magpie knows, then asks for its key.
 func (m *model) openPresets() {
 	var items []agent.Option
+	var shown []string
+	for _, d := range provider.Partners() {
+		items = append(items, agent.Option{Value: d.ID, Note: d.Name + " · partner (sponsor)"})
+		shown = append(shown, d.ID)
+	}
+	go func() {
+		provider.CountPartner(provider.PartnerShown, shown...)
+		provider.NoticePartners(shown...)
+	}()
 	for _, d := range provider.Presets() {
 		items = append(items, agent.Option{Value: d.ID, Note: d.Name + " · " + string(d.Kind)})
 	}

@@ -216,6 +216,11 @@ func (s *s3) get(ctx context.Context, have version) (data []byte, v version, err
 	if err != nil {
 		return nil, version{}, err
 	}
+	// Go unpacks a gzip it asked for; an object stored compressed under
+	// another encoding, or without saying so, is unpacked here
+	if data, err = unpacked("S3", data, res.Header.Get("Content-Encoding")); err != nil {
+		return nil, version{}, fmt.Errorf("reading %s: %w", s.where(), err)
+	}
 	return data, versionOf(res.Header), nil
 }
 

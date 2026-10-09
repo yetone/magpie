@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -32,7 +33,7 @@ func TestBunIsGivenTheSystemsRoots(t *testing.T) {
 	}
 
 	systemCAFile = func() string { return "" }
-	if got := caEnv(nil); got != nil {
+	if got := caEnv(nil, ""); got != nil {
 		t.Fatalf("with nothing to add: %v", got)
 	}
 }
@@ -45,4 +46,30 @@ func caVars(env []string) []string {
 		}
 	}
 	return out
+}
+
+// Bun on Windows can't open a NODE_EXTRA_CA_CERTS path that isn't ASCII
+// (#1232: a Chinese user name), so there it is given the way to the file
+// from where it runs, which is under the same user folder.
+func TestBunIsGivenAnASCIIWayToTheRoots(t *testing.T) {
+	user := `C:\Users\张三`
+	ca := user + `\.cache\magpie\bun\system-ca-abc.pem`
+	for _, c := range []struct{ name, p, dir, goos, want string }{
+		{"under a Chinese user name", ca, user + `\.config\magpie\plugins`, "windows", `..\..\..\.cache\magpie\bun\system-ca-abc.pem`},
+		{"an ASCII path as it is", `C:\Users\bob\.cache\magpie\bun\system-ca-abc.pem`, `C:\Users\bob\x`, "windows", `C:\Users\bob\.cache\magpie\bun\system-ca-abc.pem`},
+		{"another drive, no way there", ca, `D:\plugins`, "windows", ca},
+		{"no way there in ASCII", ca, `C:\其他\plugins`, "windows", ca},
+		{"Bun elsewhere reads it whole", "/home/张三/.cache/magpie/bun/system-ca-abc.pem", "/home/张三/.config/magpie/plugins", "linux", "/home/张三/.cache/magpie/bun/system-ca-abc.pem"},
+	} {
+		if c.goos == "windows" && runtime.GOOS != "windows" {
+			// filepath.Rel works on this OS's paths; Windows' are tried there
+			continue
+		}
+		if got := bunReadable(c.p, c.dir, c.goos); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+	if !ascii(`..\..\x.pem`) || ascii(`C:\Users\张三`) {
+		t.Fatal("ascii")
+	}
 }

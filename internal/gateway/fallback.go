@@ -15,6 +15,7 @@ package gateway
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -50,8 +51,8 @@ type candidate struct {
 	capped *capHold
 }
 
-// capHold is how an account is held at its usage cap: the cap, the share
-// of the fullest window at or past it, and when the last such window
+// capHold is how an account is held at its usage cap: the cap of the
+// fullest window at or past its own cap, that window's share used, and when the last such window
 // renews (zero when one doesn't say). noCredits: it is a Codex account
 // held at 100% as it is set not to spend its credits (cap is 100 then).
 type capHold struct {
@@ -97,14 +98,12 @@ func (c candidate) isOpenRouterFree() bool {
 }
 
 // restID is the candidate's model's own rest key: a free OpenRouter
-// model's, whose rate limit is its free-tier limit, and a subscription's,
-// out of a pool of its allowance that counts some models only (pooled).
-// An account-level rest stays on restKey.
+// model's, whose rate limit is its free-tier limit, a subscription's, out
+// of a pool of its allowance that counts some models only (pooled), and
+// any key's or account's model its vendor said it doesn't serve it
+// (modelRefused). An account-level rest stays on restKey.
 func (c candidate) restID() string {
-	if c.isOpenRouterFree() || c.p.Account != nil {
-		return c.restKey() + "/" + c.model
-	}
-	return c.restKey()
+	return c.restKey() + "/" + c.model
 }
 
 // pooled says whether the candidate's subscription, refused for its
@@ -492,23 +491,24 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 }
 
 // capHeld is how the account acct of p is held at its usage cap for
-// model at now, or at 100% as a Codex account set not to spend its
-// credits; nil when nothing holds it or it is below the share. Its windows
+// model at now — a window at or past its own cap, else the account's — or
+// at 100% as a Codex account set not to spend its credits; nil when
+// nothing holds it or every window is below its share. Its windows
 // are those last read (allowances), as smart routing weighs them.
 func capHeld(p, acct provider.Provider, model string, now time.Time) *capHold {
 	if acct.Account == nil {
 		return nil
 	}
 	a := acct.Account
-	share, noCredits := provider.HoldShare(p, a.Agent, a.User)
-	if share <= 0 {
+	caps := provider.HoldCaps(p, a.Agent, a.User)
+	if !caps.Holds() {
 		return nil
 	}
-	held, used, back := allowances(a.UsageAgent())[a.User].CapHeld(model, share, now)
-	if !held {
+	h := allowances(a.UsageAgent())[a.User].CapHeld(model, caps, now)
+	if h == nil {
 		return nil
 	}
-	return &capHold{cap: share, used: used, back: back, noCredits: noCredits}
+	return &capHold{cap: h.Cap, used: h.Used, back: h.Back, noCredits: h.Credits}
 }
 
 // cappedError says why a request for model went nowhere when every account
@@ -709,6 +709,22 @@ var quotaWords = regexp.MustCompile(`(?i)quota|insufficient|balance|credit|billi
 // key, or this way — words another provider, or key, may not answer with.
 var unservedWords = regexp.MustCompile(`(?i)model.{0,80}(not (supported|accessible|available|found|enabled|allowed)|unsupported|does ?n[o']t exist|unknown|invalid)|(no such|unknown|invalid|unsupported) model|model_not_found|模型.{0,12}(不存在|不支持|无权|未开通)`)
 
+// modelRefused says the vendor turned the request away over its model
+// alone — not one this key's plan, or this key, may use: SenseNova's 403
+// "model is not available in the current token plan" for
+// deepseek-v4.1-flash, while the same key serves deepseek-v4-flash
+// (#1235). The key or account isn't at fault, so only its model rests,
+// and its other models are asked as before. A refusal that also says
+// quota, credit or a rate limit is about the account, and rests it.
+func modelRefused(status int, body []byte) bool {
+	switch status {
+	case 400, 403, 404, 422:
+	default:
+		return false
+	}
+	return unservedWords.Match(body) && !quotaWords.Match(body) && !refusedWords.Match(body)
+}
+
 // refusedWords are how a vendor says it won't take requests from this
 // client at all — WorkBuddy's "Illegal API invocation from an unapproved
 // channel" to a chat opening with another agent's own system prompt — a
@@ -733,6 +749,34 @@ var shapeWords = regexp.MustCompile(`(?i)failed to deserialize|unknown (item |co
 func shapeRefused(status int, body []byte) bool {
 	return (status == 400 || status == 422) && shapeWords.Match(body) &&
 		!quotaWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
+}
+
+// protectionWords are how the ChatGPT backend answers a long Codex
+// conversation it won't take as it is: 502 "response protection is
+// unavailable" (vs on Discord, 0.1.1108). It comes back the same for the
+// same history on every account and model the backend serves, and the
+// history as plain text is answered, so it is about the request, not the
+// account: asked again there, it only drains the accounts' allowances.
+var protectionWords = regexp.MustCompile(`(?i)response protection is unavailable`)
+
+// protectionRefused says the vendor turned the request's content away
+// with protectionWords: the account is not at fault, and none of its
+// provider's other accounts or models is asked the same.
+func protectionRefused(status int, body []byte) bool {
+	return status >= 400 && protectionWords.Match(body)
+}
+
+// elsewhere is, of the candidates left, those not at c's provider, whose
+// every account and model the same request reaches the same backend
+// through.
+func elsewhere(left []candidate, c candidate) []candidate {
+	var out []candidate
+	for _, x := range left {
+		if x.p.ID != c.p.ID {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // retryable says whether another provider may do better with a request
@@ -762,7 +806,7 @@ func retryable(status int, body []byte) bool {
 // vendor turned away as it reads, would fail the same at the next asked:
 // nobody rests for it.
 func lateRests(msg string) bool {
-	return !tooLong(http.StatusBadRequest, msg) && !refusedWords.MatchString(msg)
+	return !tooLong(http.StatusBadRequest, msg) && !refusedWords.MatchString(msg) && !protectionWords.MatchString(msg)
 }
 
 // unsaidMargin is how far past a model's window a request's estimate
@@ -966,6 +1010,10 @@ type holdWriter struct {
 	// to be read event by event
 	after []byte
 	whole bool // a reply that isn't streamed, held whole until release
+	// wholeUnsure: held whole only as the agent has a stream's headers,
+	// under a type that says neither JSON nor a stream: the reply's first
+	// bytes say whether it streams after all (Write)
+	wholeUnsure bool
 
 	// buffered: the vendor said it holds the reply back for safety checks,
 	// which may end in a refusal: held longer (holdBuffered)
@@ -1065,6 +1113,13 @@ func (h *holdWriter) writeHeader(code int) {
 		h.whole = true
 		return
 	}
+	if h.hold && h.alive != nil && h.alive.sent {
+		// any other reply, once the agent has a stream's headers: held
+		// whole for release to send as that stream, unless it begins as
+		// one
+		h.whole, h.wholeUnsure = true, true
+		return
+	}
 	h.pass()
 }
 
@@ -1096,6 +1151,25 @@ func (h *holdWriter) Write(b []byte) (int, error) {
 	h.see(b)
 	h.first.see(b)
 	h.heard = time.Now()
+	if h.wholeUnsure {
+		head := append(h.held.Bytes()[:h.held.Len():h.held.Len()], b...)
+		if sse, sure := sseStart(head); sure {
+			h.wholeUnsure = false
+			if sse {
+				// a stream under a type that doesn't say so: through as it
+				// comes, with what was held of its start
+				h.whole = false
+				h.held.Reset()
+				h.pass()
+				h.refusalAfter(head)
+				h.sent(head)
+				if _, err := h.w.Write(head); err != nil {
+					return 0, err
+				}
+				return len(b), nil
+			}
+		}
+	}
 	if h.first.first != 0 || h.passing {
 		h.refusalAfter(b)
 	}
@@ -1108,6 +1182,25 @@ func (h *holdWriter) Write(b []byte) (int, error) {
 		h.scan()
 	}
 	return n, err
+}
+
+// sseStart reports whether a body that begins with head is server-sent
+// events, by the field its first line begins with, and whether head is
+// enough to tell.
+func sseStart(head []byte) (sse, sure bool) {
+	head = bytes.TrimLeft(head, " \t\r\n")
+	if len(head) == 0 {
+		return false, false
+	}
+	for _, field := range []string{"data:", "event:", "id:", "retry:", ":"} {
+		if bytes.HasPrefix(head, []byte(field)) {
+			return true, true
+		}
+		if len(head) < len(field) && strings.HasPrefix(field, string(head)) {
+			return false, false
+		}
+	}
+	return false, true
 }
 
 // streamEnds are how each protocol's stream says it is over, as they can
@@ -1403,6 +1496,14 @@ func (h *holdWriter) settle() {
 	}
 	if msg, ok := refusedReply(h.held.Bytes()); ok {
 		h.failure, h.failMsg, h.refused = refusedStatus, msg, true
+		return
+	}
+	if h.alive != nil && h.alive.sent && h.status < 400 && wholeEvents(h.alive.proto, h.held.Bytes()) == nil {
+		// a 200 that is no reply of the protocol's, once the agent has a
+		// stream's headers: it can't go as that stream, so it failed, as
+		// a translated reply that didn't stream does, for the next to
+		// answer
+		h.failure, h.failMsg = http.StatusBadGateway, "did not stream: "+provider.APIError(h.held.Bytes(), "unexpected reply")
 	}
 }
 
@@ -1428,9 +1529,21 @@ func (h *holdWriter) release() {
 		return
 	}
 	if h.alive != nil && h.alive.sent && !h.stream {
-		// an error status, once the agent has a stream: told as its error
 		h.passing = true
-		streamError(h.w, h.alive.proto, h.status, provider.APIError(h.held.Bytes(), http.StatusText(h.status)))
+		switch {
+		case h.failure != 0:
+			// a 200 that is no reply of the protocol's (settle)
+			who := cmp.Or(h.header.Get(providerHeader), "the provider")
+			streamError(h.w, h.alive.proto, h.failure, who+" "+h.failMsg)
+		case h.status >= 400:
+			// an error status, once the agent has a stream: told as its error
+			streamError(h.w, h.alive.proto, h.status, provider.APIError(h.held.Bytes(), http.StatusText(h.status)))
+		default:
+			// a reply given whole by a vendor that ignored stream:true,
+			// after the agent was kept alive: sent as the stream it asked
+			// for, not as an error "OK" with the reply in it
+			wholeAsStream(h.w, h.alive.proto, h.held.Bytes())
+		}
 		return
 	}
 	h.pass()
@@ -1440,6 +1553,52 @@ func (h *holdWriter) release() {
 
 // watchEvery is how often watch looks at a try.
 var watchEvery = time.Second
+
+// keepQueued keeps the agent of a stream alive while its try waits for a
+// slot of its key's or account's (MaxConcurrency) or for room in its
+// minute (MaxRPM), before anything is sent to the vendor: past
+// keepHeldAfter it is sent the stream's 200 and SSE comments
+// (keepAlive), every keepaliveEvery for as long as the wait lasts, as a
+// try's held stream is. A wait of up to 2 minutes for the minute, or
+// QueueWait's for a slot, sent the agent nothing at all, which an agent's
+// or a proxy's timeout for its headers ended first (coeo91 on Discord:
+// WorkBuddy, Trae and Qoder said the request timed out). Once they are
+// sent the try is held (hold), so that a failure, or the queue turning it
+// away, reaches the agent as the stream's error (failTo), and another
+// candidate may still answer in the same stream. A wait shorter than
+// keepHeldAfter sends nothing, its 429 still a status with its
+// Retry-After. The returned func ends it, and returns once it has.
+func (h *holdWriter) keepQueued() func() {
+	if !h.streams || h.alive == nil || h.alive.proto == provider.Gemini {
+		return func() {}
+	}
+	done, over := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(over)
+		tick := time.NewTicker(watchEvery)
+		defer tick.Stop()
+		began := time.Now()
+		for {
+			select {
+			case <-done:
+				return
+			case <-tick.C:
+				h.mu.Lock()
+				if (time.Since(began) >= keepHeldAfter || h.alive.sent) && (h.ctx == nil || h.ctx.Err() == nil) {
+					h.keepAlive()
+					if h.alive.sent {
+						h.hold = true
+					}
+				}
+				h.mu.Unlock()
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-over
+	}
+}
 
 // watch lets the try go — stop, with slow said — once firstWait passes
 // with no first content and nothing of it sent to the agent: the stream
@@ -1527,9 +1686,10 @@ func (h *holdWriter) keepQuiet() {
 		return // a stream stuck this long is left for a timeout to end
 	}
 	if !h.passing {
-		// only a stream, or no reply yet to an agent that asked for one;
+		// only a stream, no reply yet to an agent that asked for one, or
+		// one yet to say whether it streams (wholeUnsure), none of it sent;
 		// an error held is told as the stream's own once the 200 is out
-		if h.hold && h.failure == 0 && !h.whole && h.status < 400 && (h.stream || h.status == 0) {
+		if h.hold && h.failure == 0 && (!h.whole || h.wholeUnsure) && h.status < 400 && (h.stream || h.status == 0 || h.wholeUnsure) {
 			h.keepAlive()
 		}
 		return

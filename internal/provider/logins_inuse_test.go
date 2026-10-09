@@ -156,6 +156,7 @@ func TestLoginRoom(t *testing.T) {
 	t.Cleanup(func() {
 		usedCache.Lock()
 		usedCache.m, usedCache.at, usedCache.loading = map[string]map[string]Allowance{}, map[string]time.Time{}, map[string]chan struct{}{}
+		usedCache.stale = nil
 		usedCache.Unlock()
 	})
 

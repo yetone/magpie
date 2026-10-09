@@ -58,7 +58,7 @@ func zcMakeDB(t *testing.T, path string) {
 	// the first user message ZCode's own, a reminder; the second typed
 	ocInsert(t, db, "ses_zcA", "msg_z1", 1790496001000, 1790496001000, `{"id":"msg_z1","role":"user","time":{"created":1790496001000},"semantics":{"origin":"system_reminder"}}`)
 	ocInsert(t, db, "ses_zcA", "msg_z2", 1790496002000, 1790496002000, `{"id":"msg_z2","role":"user","time":{"created":1790496002000},"semantics":{"origin":"real_user"}}`)
-	ocInsert(t, db, "ses_zcA", "msg_z3", 1790496003000, 1790496030000, `{"id":"msg_z3","role":"assistant","modelId":"glm-5.1","tokens":{"total":1540,"input":1500,"output":40,"reasoning":10,"cache":{"read":1000,"write":200}},"time":{"created":1790496003000,"completed":1790496030000}}`)
+	ocInsert(t, db, "ses_zcA", "msg_z3", 1790496003000, 1790496030000, `{"id":"msg_z3","role":"assistant","modelId":"glm-5.1","providerID":"magpie","tokens":{"total":1540,"input":1500,"output":40,"reasoning":10,"cache":{"read":1000,"write":200}},"time":{"created":1790496003000,"completed":1790496030000}}`)
 	ocInsert(t, db, "ses_zcB", "msg_z4", 1790496010000, 1790496020000, `{"id":"msg_z4","role":"assistant","modelID":"glm-5.1-air","tokens":{"input":50,"output":5,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1790496010000,"completed":1790496020000}}`)
 	ocInsert(t, db, "ses_zcC", "msg_z5", 1790496100000, 1790496110000, `{"id":"msg_z5","role":"assistant","modelId":"glm-5.1","tokens":{"input":10,"output":1,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1790496100000,"completed":1790496110000}}`)
 	for _, p := range [][3]string{
@@ -113,8 +113,8 @@ func TestZCode(t *testing.T) {
 
 func checkDsh(t *testing.T, ss []Session) {
 	t.Helper()
-	if n := count(ss, "dsh"); n != 3 {
-		t.Fatalf("want 3 dsh sessions (the subagent in its parent), got %d", n)
+	if n := count(ss, "dsh"); n != 4 {
+		t.Fatalf("want 4 dsh sessions (the subagent in its parent), got %d", n)
 	}
 	a := find(t, ss, "dsh", "dsh-a")
 	if a.Cwd != "/work/dsh" || a.Title != "Build script tidy" || a.Resume != "" {
@@ -142,7 +142,7 @@ func checkDsh(t *testing.T, ss []Session) {
 		t.Fatalf("format 0 fork: %+v", d)
 	}
 	s := statsAt(0, statsNow)
-	if got, _ := usageOn(s, "2026-09-27", "/work/dsh"); got != (Tokens{168, 40, 1200, 0, 0}) {
+	if got, _ := usageOn(s, "2026-09-27", "/work/dsh"); got != (Tokens{898, 137, 6200, 0, 0}) {
 		t.Fatalf("dsh on the 27th: %+v", got)
 	}
 }

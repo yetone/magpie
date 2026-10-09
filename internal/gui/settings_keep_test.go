@@ -112,6 +112,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		AgentsShown:         []string{"pi"},
 		Visible:             map[string][]string{"claude": {"anthropic"}},
 		HiddenModels:        map[string][]string{"claude": {"p/m"}, "codex": {"p/n", "group/g"}},
+		PickedModels:        map[string][]string{"opencode": {"p/m"}},
 		OrderedModels:       map[string][]string{"codex": {"group/g", "p/n"}},
 		FastPicks:           map[string][]string{"codex": {"p/n"}},
 		AgentEfforts:        map[string]string{"cursor-local": "high"},
@@ -154,6 +155,7 @@ func TestSettingsSaveKeepsWhatItDoesNotSend(t *testing.T) {
 		Window:              []int{900, 700},
 		WindowMaximised:     true,
 		FullContext:         true,
+		DesktopLongest:      true,
 		GatewayMode:         "off",
 	}
 	if err := settings.Save(was); err != nil {

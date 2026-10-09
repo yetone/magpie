@@ -135,7 +135,7 @@ func TestCompactPageMatchesLedger(t *testing.T) {
 		rows, sum, agents, providers := ledgerWith(since, Filter{}, rs, cs)
 		all := Ledgered{rows, sum, agents, providers}
 		day := now.AddDate(0, 0, -1).Format(time.DateOnly)
-		for _, f := range []Filter{{}, {Agent: "claude"}, {Provider: "a"}, {Failed: true}, {Query: "LOCAL"}, {Agent: "codex", Provider: UnknownProvider}, {Query: "no match"}, {Day: day}, {Day: day, Provider: "a"}, {Day: day, Model: "m", Failed: true}, {Day: "1900-01-01"}} {
+		for _, f := range []Filter{{}, {Agent: "claude"}, {Provider: "a"}, {Failed: true}, {Query: "LOCAL"}, {Agent: "codex", Provider: UnknownProvider}, {Query: "no match"}, {Day: day}, {Day: day, Provider: "a"}, {Day: day, Model: "m", Failed: true}, {Day: "1900-01-01"}, {Through: SourceGateway}, {Through: SourceSession}} {
 			for _, offset := range []int{0, 7, 500, int(^uint(0) >> 1)} {
 				t.Run(fmt.Sprintf("%s/%+v/%d", period, f, offset), func(t *testing.T) {
 					equalPage(t, buildRequestPage(period, f, offset, 7, gateway, []*rowChunk{local}), pageFromLedger(period, f, offset, 7, all))

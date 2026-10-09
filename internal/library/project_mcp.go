@@ -162,7 +162,7 @@ func (l *Library) syncProjectMCP(p *Project, fail func(what string, err error)) 
 				continue
 			}
 			if old != nil {
-				if cur, ok := f.decode(s.Name, old); ok && cur.same(s) && !f.behind(s, old) {
+				if cur, ok := f.current(s.Name, old, s); ok && cur.same(s) && !f.behind(s, old) {
 					mine = append(mine, s.Name)
 					continue
 				}

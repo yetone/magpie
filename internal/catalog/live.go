@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -322,6 +323,10 @@ func fetchOne(ctx context.Context, url, key string, anthropic bool, headers map[
 		if input != nil {
 			m.Images = *input
 		}
+		var pr *Price
+		if len(r.Price) > 0 && json.Unmarshal(r.Price, &pr) == nil && pr != nil && pr.sane() {
+			m.Price = pr
+		}
 		out = append(out, m)
 	}
 	return out, nil
@@ -384,6 +389,10 @@ type liveModel struct {
 	// how another magpie searches the web for the model: "native" or
 	// "magpie" (Model.WebSearch)
 	WebSearch string `json:"web_search"`
+	// what another magpie counts a call to the model at, asked for with
+	// its X-Magpie-Prices header: the price its user set, else its list
+	// price. Raw, as an odd value mustn't lose the whole list
+	Price json.RawMessage `json:"magpie_price"`
 	// the protocol family PipeLLM routes the model by: openai, anthropic
 	// or gemini
 	TypeTarget string `json:"type_target"`
@@ -481,4 +490,26 @@ func Decorate(live []Model, known []Model) []Model {
 		out = append(out, m)
 	}
 	return out
+}
+
+// sane reports whether a price another magpie sent is one a vendor could
+// charge: no part below zero or out of range, and tiers of a size.
+func (p Price) sane() bool {
+	ok := func(vs ...float64) bool {
+		for _, v := range vs {
+			if math.IsNaN(v) || v < 0 || v > 1e6 {
+				return false
+			}
+		}
+		return true
+	}
+	if !ok(p.Input, p.Output, p.CacheRead, p.CacheWrite, p.CacheWrite1h) {
+		return false
+	}
+	for _, t := range p.Tiers {
+		if t.Above <= 0 || !ok(t.Input, t.Output, t.CacheRead, t.CacheWrite, t.CacheWrite1h) {
+			return false
+		}
+	}
+	return true
 }

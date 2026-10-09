@@ -446,6 +446,11 @@ type host struct {
 	// failOnce makes the one failure that ends the host run once, whatever
 	// noticed it (the stdout reader or the stdin writer).
 	failOnce sync.Once
+	// proxy is the proxy the host was started with (hostProxy), which
+	// host.js keeps for its life; proxyAt is when get last compared it
+	// with magpie's now (proxyMoved), zero for a host not started here.
+	proxy   string
+	proxyAt time.Time
 }
 
 // lineLimit is the longest line this host reads from the child.
@@ -672,6 +677,10 @@ func get(ctx context.Context) (*host, error) {
 		go current.retire()
 		current = nil
 	}
+	if current != nil && current.alive() && current.proxyMoved() {
+		go current.retire()
+		current = nil
+	}
 	if current != nil && current.alive() {
 		return current, nil
 	}
@@ -728,6 +737,7 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		cancel()
 	}
 	// the host outlives the request that started it
+	proxy := hostProxy(env()) // what bunCommand gives it
 	cmd := bunCommand(context.Background(), bun, settings.Dir(), "run", js)
 	cmd.Env = hostEnv(cmd.Env)
 	in, err := cmd.StdinPipe()
@@ -757,6 +767,8 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		ctrlWake: make(chan struct{}, 1),
 		ctx:      hctx,
 		cancel:   hcancel,
+		proxy:    proxy,
+		proxyAt:  time.Now(),
 	}
 	go func() {
 		sc := bufio.NewScanner(stderr)
@@ -988,11 +1000,15 @@ func (h *host) writerLoop() {
 				return
 			}
 			_, err := h.in.Write(req.b)
+			if err != nil {
+				// End the host before the writer's caller hears of it, so a
+				// caller freed by the failure finds the host already dead.
+				h.fail(fmt.Errorf("writing to the plugin host: %w", err))
+			}
 			if req.done != nil {
 				req.done <- err
 			}
 			if err != nil {
-				h.fail(fmt.Errorf("writing to the plugin host: %w", err))
 				return
 			}
 		}
@@ -1281,6 +1297,41 @@ func forHost(choice string) string {
 		}
 		return c
 	}
+}
+
+// hostProxy is the proxy env gives a host: its *_PROXY, as netproxy.Env
+// put them there from magpie's Settings or the system's.
+func hostProxy(env []string) string {
+	var b strings.Builder
+	for _, e := range env {
+		k, _, _ := strings.Cut(e, "=")
+		switch strings.ToUpper(k) {
+		case "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY":
+			b.WriteString(e)
+			b.WriteByte(0)
+		}
+	}
+	return b.String()
+}
+
+// proxyLookEvery is how often get asks whether the proxy moved: the
+// system's is read again at most every 15 seconds anyway (netproxy.System).
+var proxyLookEvery = 15 * time.Second
+
+// proxyMoved is whether magpie's proxy is no longer the one h was started
+// with (#1363): host.js reads it once, so a host started at login before
+// the proxy app had set the system's went out with none for good. Grok's
+// sign-in, renewed by its CLI through the host, then lapsed after every
+// restart of the computer, and only a new host (moving the account back
+// to the built-in and on to the plugin again) brought it back. A proxy
+// changed in Settings never reached a running host either. Called under
+// hostMu.
+func (h *host) proxyMoved() bool {
+	if h.proxyAt.IsZero() || time.Since(h.proxyAt) < proxyLookEvery {
+		return false
+	}
+	h.proxyAt = time.Now()
+	return hostProxy(env()) != h.proxy
 }
 
 // hostEnv is env for the host, its *_PROXY named MAGPIE_*_PROXY: Bun

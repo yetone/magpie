@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -133,7 +134,7 @@ func TestMiniMaxCode(t *testing.T) {
 	}
 	c, raw := readMiniMax(t, path)
 	mp, ok := c.CustomProvider["magpie"]
-	if !ok || c.DefaultModel != "custom_provider:magpie/think/deep" || c.DefaultModelVariant != "" {
+	if !ok || c.DefaultModel != "custom_provider:magpie/think~deep" || c.DefaultModelVariant != "" {
 		t.Fatalf("config:\n%s", raw)
 	}
 	if mp.Kind != "custom" || mp.API != "anthropic-messages" || mp.Enabled == nil || !*mp.Enabled ||
@@ -141,7 +142,7 @@ func TestMiniMaxCode(t *testing.T) {
 		!reflect.DeepEqual(mp.Options["headers"], map[string]any{"User-Agent": "minimax-code"}) {
 		t.Fatalf("magpie's entry:\n%s", raw)
 	}
-	deep, flash := mp.Models["think/deep"], mp.Models["think/v1.5-flash"]
+	deep, flash := mp.Models["think~deep"], mp.Models["think~v1.5-flash"]
 	if len(mp.Models) != 2 || deep.Limit.Context != 400000 || deep.Limit.Output != 64000 || !deep.Reasoning ||
 		!reflect.DeepEqual(deep.Thinking.EffortOptions, []string{"low", "high"}) || deep.Thinking.DefaultEffort != "high" ||
 		deep.Capabilities["support_image"] != true {
@@ -176,12 +177,12 @@ func TestMiniMaxCode(t *testing.T) {
 
 	// another of magpie's keeps the default stashed first; MiniMax Code's
 	// own keys on magpie's entry and its models stay through a rewrite
-	os.WriteFile(path, []byte(strings.Replace(raw, "      think/deep:\n", "      think/deep:\n        enabled: false # hidden in /model\n", 1)), 0o644)
+	os.WriteFile(path, []byte(strings.Replace(raw, "      think~deep:\n", "      think~deep:\n        enabled: false # hidden in /model\n", 1)), 0o644)
 	if err := f.Set("magpie/think/v1.5-flash"); err != nil {
 		t.Fatal(err)
 	}
 	c, raw = readMiniMax(t, path)
-	if d := c.CustomProvider["magpie"].Models["think/deep"]; c.DefaultModel != "custom_provider:magpie/think/v1.5-flash" ||
+	if d := c.CustomProvider["magpie"].Models["think~deep"]; c.DefaultModel != "custom_provider:magpie/think~v1.5-flash" ||
 		d.Enabled == nil || *d.Enabled || !strings.Contains(raw, "# hidden in /model") {
 		t.Fatalf("second:\n%s", raw)
 	}
@@ -236,7 +237,7 @@ func TestMiniMaxCodeSync(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, raw := readMiniMax(t, path)
-	if _, ok := c.CustomProvider["magpie"].Models["think/v2"]; !ok || len(c.CustomProvider["magpie"].Models) != 3 {
+	if _, ok := c.CustomProvider["magpie"].Models["think~v2"]; !ok || len(c.CustomProvider["magpie"].Models) != 3 {
 		t.Fatalf("sync:\n%s", raw)
 	}
 	st, _ := os.Stat(path)
@@ -275,5 +276,105 @@ func TestMiniMaxCodeDataDir(t *testing.T) {
 	t.Setenv("MINIMAX_DATA_DIR", d)
 	if a := miniMax(t.TempDir()); a.Path != filepath.Join(d, "config.yaml") || a.Dir != d {
 		t.Fatalf("dir %q path %q", a.Dir, a.Path)
+	}
+}
+
+// #1387 (worksyang): MiniMax Code 3.1.0 takes a SubAgent's model only
+// when it matches mcodeOneSlash, and magpie's is
+// "custom_provider:magpie/<model>", so the model under magpie's entry has
+// no slash: bb-codex/gpt-6.1-sol is written as bb-codex~gpt-6.1-sol, which
+// the gateway takes back to that provider's model. A config an older
+// magpie wrote moves over on the next sync — the user's keys on a model
+// and every ref to it — its slashed key kept, switched off, so a session
+// begun on it still resumes; stepping out still puts back what they had.
+func TestMiniMaxCodeOneSlash(t *testing.T) {
+	home, path := miniMaxHome(t)
+	if err := provider.Save(provider.Provider{ID: "bb-codex", Name: "BB Codex", Chat: "https://example.test/v1", Key: "k",
+		Models: []string{"gpt-6.1-sol"}}); err != nil {
+		t.Fatal(err)
+	}
+	a := miniMax(home)
+	f := a.Field("model")
+	if err := f.Set("magpie/bb-codex/gpt-6.1-sol"); err != nil {
+		t.Fatal(err)
+	}
+	c, raw := readMiniMax(t, path)
+	if c.DefaultModel != "custom_provider:magpie/bb-codex~gpt-6.1-sol" || f.Get() != "magpie/bb-codex/gpt-6.1-sol" {
+		t.Fatalf("get %q:\n%s", f.Get(), raw)
+	}
+	oneSlash(t, raw)
+
+	// as an older magpie wrote it, the user's keys on it and their
+	// SubAgent memory models pointed at it
+	old := strings.ReplaceAll(raw, "~", "/")
+	old = strings.Replace(old, "      bb-codex/gpt-6.1-sol:\n", "      bb-codex/gpt-6.1-sol:\n        headers: # mine\n          X-Team: core\n", 1)
+	old = strings.Replace(old, "memory:\n  enabled: false\n", "memory:\n  enabled: false\n  captureModel: custom_provider:magpie/bb-codex/gpt-6.1-sol\n  consolidationModel: minimax/MiniMax-M2.7\n", 1)
+	old += "defaultLightModel: custom_provider:magpie/think/v1.5-flash\n"
+	if old == raw || !strings.Contains(old, "X-Team") || !strings.Contains(old, "captureModel") {
+		t.Fatalf("fixture:\n%s", old)
+	}
+	os.WriteFile(path, []byte(old), 0o644)
+	if f.Get() != "magpie/bb-codex/gpt-6.1-sol" {
+		t.Fatalf("an older magpie's default reads as %q", f.Get())
+	}
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	c, raw = readMiniMax(t, path)
+	ms := c.CustomProvider["magpie"].Models
+	sol, was := ms["bb-codex~gpt-6.1-sol"], ms["bb-codex/gpt-6.1-sol"]
+	if c.DefaultModel != "custom_provider:magpie/bb-codex~gpt-6.1-sol" ||
+		c.Memory["captureModel"] != "custom_provider:magpie/bb-codex~gpt-6.1-sol" || c.Memory["consolidationModel"] != "minimax/MiniMax-M2.7" ||
+		!strings.Contains(raw, "defaultLightModel: custom_provider:magpie/think~v1.5-flash") ||
+		sol.Enabled != nil || was.Enabled == nil || *was.Enabled || strings.Count(raw, "X-Team: core") != 2 || strings.Count(raw, "# mine") != 2 {
+		t.Fatalf("moved over:\n%s", raw)
+	}
+	oneSlash(t, raw)
+	if f.Get() != "magpie/bb-codex/gpt-6.1-sol" || a.Check() != "" {
+		t.Fatalf("get %q check %q", f.Get(), a.Check())
+	}
+	st, _ := os.Stat(path)
+	if err := a.Sync(); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(path); string(b) != raw {
+		t.Fatalf("a second sync changed it:\n%s", b)
+	} else if st2, _ := os.Stat(path); !st2.ModTime().Equal(st.ModTime()) {
+		t.Fatal("a second sync rewrote it")
+	}
+
+	if err := f.Set(""); err != nil {
+		t.Fatal(err)
+	}
+	c, raw = readMiniMax(t, path)
+	if c.DefaultModel != "minimax/MiniMax-M2.7" || c.DefaultModelVariant != "thinking" || c.CustomProvider["magpie"].Kind != "" {
+		t.Fatalf("reset:\n%s", raw)
+	}
+}
+
+// mcodeOneSlash is MiniMax Code 3.1.0's check on a SubAgent's model, as
+// worksyang quoted it in #1387 (uQn in @minimax-ai/code's chunk-2XPMNZVR.js)
+var mcodeOneSlash = regexp.MustCompile(`^[^/\s]+\/[^/\s]+$`)
+
+// oneSlash fails when a ref to magpie's entry in raw, or a model under it
+// that is switched on, would not pass mcodeOneSlash
+func oneSlash(t *testing.T, raw string) {
+	t.Helper()
+	var c miniMaxFile
+	yaml.Unmarshal([]byte(raw), &c)
+	refs := 0
+	for _, m := range regexp.MustCompile(`custom_provider:magpie/\S+`).FindAllString(raw, -1) {
+		refs++
+		if !mcodeOneSlash.MatchString(m) {
+			t.Fatalf("%s fails MiniMax Code's check:\n%s", m, raw)
+		}
+	}
+	for k, m := range c.CustomProvider["magpie"].Models {
+		if (m.Enabled == nil || *m.Enabled) && !mcodeOneSlash.MatchString("custom_provider:magpie/"+k) {
+			t.Fatalf("model %s fails MiniMax Code's check:\n%s", k, raw)
+		}
+	}
+	if refs == 0 {
+		t.Fatalf("no ref to magpie's entry:\n%s", raw)
 	}
 }

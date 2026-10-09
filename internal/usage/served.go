@@ -48,10 +48,26 @@ func bareModel(m string) string {
 // reply names the family, not the variant (#462). Another level is another
 // model, as AntigravitySentID has it. A vendor's "auto" (Copilot's,
 // Cursor's) asked it to pick, so whichever answers wasn't swapped in, nor
-// is the member another magpie's routing group sent it to (GroupRouted).
+// is the member another magpie's routing group sent it to (GroupRouted),
+// nor Google's own name for the deployment serving a Gemini model
+// (GeminiServing).
 func Swapped(sent, served string) bool {
 	a, b := bareModel(sent), bareModel(served)
-	return a != "" && b != "" && squash(a) != squash(b) && a != "auto" && squash(bareModel(provider.EffortFamily(a))) != squash(b) && !GroupRouted(sent, served)
+	return a != "" && b != "" && squash(a) != squash(b) && a != "auto" && squash(bareModel(provider.EffortFamily(a))) != squash(b) && !GroupRouted(sent, served) && !GeminiServing(sent, served)
+}
+
+// GeminiServing reports whether served is the name Google's backend gives
+// the deployment that serves the Gemini model sent: the model's own name
+// with "-n" after it. Antigravity answers every level of gemini-3.8-flash
+// (-low, -medium, -high) with modelVersion gemini-3.8-flash-n, an id no
+// request can ask for (404) and fetchAvailableModels never lists, so it is
+// that model, not another one swapped in (dumplings on Discord). It holds
+// for Gemini models only: gpt-5 answered as gpt-5-n is still a swap, as is
+// gemini-3.8-flash answered as gemini-3.8-flash-lite or gemini-3.7-flash-n.
+func GeminiServing(sent, served string) bool {
+	a := squash(bareModel(provider.EffortFamily(bareModel(sent))))
+	b, ok := strings.CutSuffix(bareModel(served), "-n")
+	return ok && strings.HasPrefix(a, "gemini") && squash(b) == a
 }
 
 // squash is a bare name without its separators, so a vendor that writes

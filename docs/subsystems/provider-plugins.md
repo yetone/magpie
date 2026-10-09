@@ -40,6 +40,8 @@ The hook returns `{outcome, credit?, streak?, message?}`. `outcome` is one of `c
 
 The switch is off by default. For a provider whose vendor magpie checked in through the plugin's fetch before (WorkBuddy, Trae CN, MiniMax Code, Qoder), it follows that vendor's existing switch until set on its own, and magpie's own check-in leaves that provider's accounts to the plugin (`pluginChecksIn`), so an account is never checked in twice.
 
+Qoder plugins without `auth.checkin` still use [`qoder_checkin.go`](../../internal/provider/qoder_checkin.go) through the plugin's fetch. The server's `CLAIMABLE` status decides whether to claim; the local `[startAt, endAt)` check only recognizes an already-claimed campaign and its expiry, including one that crosses Beijing midnight. Successful results keep the active campaign's end in the optional `until` field of `qoder-checkin.json`. Scheduled checks reuse results from the same Beijing day for at most 30 minutes and never past that end, so a long campaign cannot hide new or reset campaigns indefinitely. The existing loop looks every 30 minutes and on a Beijing day change; a midnight refresh saves today's result for the Usage card and TUI. An `inactive` result is now asked again after 30 minutes rather than settled for the day; failures retain their existing retry schedule. A manual check-in always asks immediately. Saved results without `until` remain readable and use the same 30-minute refresh, with no migration needed. Other vendors and plugins with their own check-in retain their daily settlement.
+
 ## How ownership changes
 
 Migration records use four states:
@@ -73,6 +75,10 @@ Keep the migration, host, and upstream behavior separate when investigating fail
 
 The host gets magpie's proxy only as `MAGPIE_*_PROXY` and applies it to each fetch itself. A program a plugin starts, such as the Grok plugin's `grok login`, gets it back as `HTTPS_PROXY`/`HTTP_PROXY` from the spawn wrapper in `host.js`, unless the plugin set one. A sign-in that works in the built-in and fails through the plugin may be a host difference like this one, not a plugin bug.
 
+The host reads its proxy once, when it starts. When the proxy magpie would give a new host differs from the one the running host got (the system proxy set after magpie started, as at login before Clash is up, or Settings changed), the next call to the host replaces it (`proxyMoved` in [`host.go`](../../internal/plugin/host.go), looked at no more than every 15s). Before this, a host started without a proxy kept none, so the Grok plugin's `grok models` couldn't renew its token and the account read as signed out after each restart (#1363).
+
+A plugin's account whose sign-in its vendor refused (`lapsed`, or an allowance read saying so) keeps Sign in again and Remove on its row, whether it is in use or the agent's own (`signedOut` in `renderAccounts`, `app.js`).
+
 The GUI's plugin integration includes `subOf`, `pluginSubs`, and `startPluginSignIn`. A change to sign-in or provider presentation must follow these paths as well as the built-in paths it affects.
 
 ## Verification
@@ -82,6 +88,8 @@ The GUI's plugin integration includes `subOf`, `pluginSubs`, and `startPluginSig
 Gateway parity tests in [`plugin_parity_test.go`](../../internal/gateway/plugin_parity_test.go) and other `plugin_*_test.go` files compare or exercise plugin paths. A built-in test alone does not establish moved-user behavior. Inspect each test's fixture to confirm that it covers the provider and operation being changed.
 
 [`plugin_checkin_test.go`](../../internal/provider/plugin_checkin_test.go) runs the fake plugin's `auth.checkin` (`FAKE_CHECKIN`) through the schedule: off, each outcome, no second press the same day, failures only after the retry window, the next day, cards and Settings, and the vendor check-in stepping aside. `plugin-checkin.test.cjs` covers the card row and the Settings tab.
+
+[`plugin_cliproxy_test.go`](../../internal/plugin/plugin_cliproxy_test.go)'s `TestPluginHostTakesANewProxy` starts a real host without a proxy, sets one, and checks that a program the plugin starts gets it. `plugin-signed-out-account.test.cjs` covers a moved Grok account signed out while in use and as the agent's own, in Chromium and WebKit, en and zh, 420 and 1100 wide.
 
 [`quotas_dedupe_test.go`](../../internal/provider/quotas_dedupe_test.go) checks unrelated reset collisions and ZCode deduplication, including plugin usage window conversion for both plugin ids. [`TestPlanQuotas`](../../internal/provider/planquota_test.go) checks the custom GLM endpoint, cached cards, and fallback readings restored from disk. These fixtures do not contact the live vendors or run the community ZCode plugin.
 

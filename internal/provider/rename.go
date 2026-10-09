@@ -169,5 +169,5 @@ func FreeID(id string) string { return freeID(id) }
 
 // hasEndpoint: a provider of the user's, not a subscription's model picks.
 func hasEndpoint(p Provider) bool {
-	return p.Chat != "" || p.Responses != "" || p.Anthropic != "" || p.Decide != ""
+	return p.Chat != "" || p.Responses != "" || p.Anthropic != "" || p.Gemini != "" || p.Decide != ""
 }

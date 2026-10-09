@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -215,5 +216,56 @@ func TestNewBase(t *testing.T) {
 	}
 	if got := skillDirsIn(tree, "skills"); !slices.Equal(got, []string{"skills/a", "skills/c/d/e/f"}) {
 		t.Errorf("skills in the tree: %v", got)
+	}
+}
+
+// char1eslu's report (#1217): skills from majiayu000/claude-arsenal and
+// two MCP servers, each switched off for every agent, were saved with
+// "agents": null; a check then offered the repository's other skills with
+// agents null, and the page threw drawing them. Every list of agents is
+// [] when it is empty: in library.json, and in what the page is sent.
+func TestNoAgentsIsEmptyNotNull(t *testing.T) {
+	sandbox(t)
+	fakeSkillRepo(t, map[string]string{
+		"skills/codex-fluent/SKILL.md":        "---\nname: codex-fluent\ndescription: Fluent\n---\n",
+		"skills/codex-retrospective/SKILL.md": "---\nname: codex-retrospective\ndescription: Retro\n---\n",
+		"skills/skill-usage-stats/SKILL.md":   "---\nname: skill-usage-stats\ndescription: Stats\n---\n",
+	})
+	ok(t)(InstallSkills("majiayu000/claude-arsenal", []string{"skills/codex-fluent", "skills/codex-retrospective"}, []string{"claude"}))
+	ok(t)(SkillAgents("codex-fluent", []string{}))
+	ok(t)(SkillAgents("codex-retrospective", []string{}))
+	ok(t)(SaveServer("", Server{Name: "stitch", Transport: "http", URL: "https://stitch.googleapis.com/mcp", Agents: []string{"gemini"}}))
+	ok(t)(ServerAgents("stitch", []string{}))
+	mu.Lock()
+	l, _ := load()
+	l.SeenSkills = nil // the third is new to the next check
+	l.save()
+	mu.Unlock()
+	check(t)
+
+	b, err := os.ReadFile(path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), `"agents": null`) {
+		t.Errorf("library.json has agents null:\n%s", b)
+	}
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(v.NewSkills) != 1 || v.NewSkills[0].Name != "skill-usage-stats" {
+		t.Fatalf("new skills: %+v", v.NewSkills)
+	}
+	page, _ := json.Marshal(v)
+	if strings.Contains(string(page), `"agents":null`) {
+		t.Errorf("the page is sent agents null: %s", page)
+	}
+
+	// added, it is on the agents the others are on: none, as []
+	ok(t)(AddNewSkills([]string{v.NewSkills[0].ID}))
+	b, _ = os.ReadFile(path())
+	if !strings.Contains(string(b), `"skill-usage-stats"`) || strings.Contains(string(b), `"agents": null`) {
+		t.Errorf("after adding the new one:\n%s", b)
 	}
 }

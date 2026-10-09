@@ -90,7 +90,7 @@ func TestCodexListedKeepsGroups(t *testing.T) {
 		{ID: "or/glm-5.3", Model: "glm-5.3", Provider: Provider{ID: "or"}},
 	}, func(id string) []Member {
 		return []Member{{Provider: Provider{ID: "or"}, Model: "glm-5.3"}, {Provider: acct, Model: "gpt-5.5"}}
-	})
+	}, false)
 	var ids []string
 	for _, m := range ms {
 		ids = append(ids, m.ID)

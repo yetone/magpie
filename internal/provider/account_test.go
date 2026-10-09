@@ -584,3 +584,29 @@ func TestKeychainText(t *testing.T) {
 		t.Fatal("hex that isn't JSON taken")
 	}
 }
+
+// The cached credentials are handed out by value, but their raw blob is one
+// map: marshal is called on it from several goroutines at once (the
+// gateway's limitHeaders beside a run's own read, CI's -race on 01e66e0f),
+// so it must not write into it.
+func TestClaudeCredentialsMarshalLeavesTheBlob(t *testing.T) {
+	c, ok := parseClaudeCredentials([]byte(`{"claudeAiOauth":{"accessToken":"sk-ant-oat01-a","refreshToken":"sk-ant-ort01-a","expiresAt":1},"mcpOAuth":{"x":{"accessToken":"m"}}}`))
+	if !ok {
+		t.Fatal("not parsed")
+	}
+	c.OAuth.AccessToken, c.OAuth.SubscriptionType = "sk-ant-oat01-b", "max"
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if b, err := c.marshal(); err != nil || !strings.Contains(string(b), "sk-ant-oat01-b") || !strings.Contains(string(b), "mcpOAuth") {
+				t.Errorf("marshal %s %v", b, err)
+			}
+		}()
+	}
+	wg.Wait()
+	if o := c.raw["claudeAiOauth"].(map[string]any); o["accessToken"] != "sk-ant-oat01-a" || o["subscriptionType"] != nil {
+		t.Fatalf("the blob was written into: %v", o)
+	}
+}

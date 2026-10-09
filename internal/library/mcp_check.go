@@ -36,7 +36,9 @@ type ServerHealth struct {
 	State string `json:"state"`
 	Tools int    `json:"tools"`
 	// Why is the kind of error, for the page to put in its own words:
-	// notfound, start, exited, timeout, http, refused, unreachable, protocol
+	// notfound, start, exited, timeout, http, refused, unreachable,
+	// protocol, novar (a ${NAME} magpie's environment hasn't: Detail names
+	// them)
 	Why    string `json:"why,omitempty"`
 	Code   int    `json:"code,omitempty"`   // the exit code, or the HTTP status
 	Detail string `json:"detail,omitempty"` // the last line it wrote to stderr, or the error's text
@@ -257,9 +259,13 @@ func (t *tail) last() string {
 func checkStdio(ctx context.Context, s *Server) ServerHealth {
 	// started as the agents start it: in the environment magpie has, with
 	// the server's own variables over it
+	env, unset := expandAll(s.Env)
+	if len(unset) > 0 {
+		return failed("novar", strings.Join(unset, ", "))
+	}
 	cmd := proc.Command(s.Command, s.Args...)
 	cmd.Env = os.Environ()
-	for k, v := range s.Env {
+	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 	stdin, err := cmd.StdinPipe()
@@ -384,7 +390,12 @@ func exitHealth(err error, errs *tail) ServerHealth {
 // is signed in to it: the agents reach it with that too.
 func remoteHeaders(ctx context.Context, s *Server) (http.Header, *ServerHealth) {
 	h := http.Header{}
-	for k, v := range s.Headers {
+	headers, unset := expandAll(s.Headers)
+	if len(unset) > 0 {
+		f := failed("novar", strings.Join(unset, ", "))
+		return nil, &f
+	}
+	for k, v := range headers {
 		h.Set(k, v)
 	}
 	if s.Transport == "http" && mcpauth.SignedIn(s.Name, s.URL) {

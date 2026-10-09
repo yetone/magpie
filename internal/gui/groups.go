@@ -55,6 +55,9 @@ type memberJSON struct {
 	Model    string `json:"model,omitempty"` // what the vendor is asked for
 	On       int    `json:"on"`              // its keys or accounts on
 	Group    bool   `json:"group,omitempty"` // a routing group in the group; Name is its
+	// ProviderOff: its provider is switched off, so the group skips it
+	// until it is on again; Provider, Name, Icon and Model are still said
+	ProviderOff bool `json:"providerOff,omitempty"`
 	// Of is the model's id without the effort the member is fixed at, and
 	// Effort that effort ("provider/model:low"); "" for one without
 	Of     string `json:"of,omitempty"`
@@ -236,6 +239,10 @@ func groupsState() groupsJSON {
 					}
 				}
 				gj.Ready = true
+			} else if pid, model, ok := strings.Cut(of, "/"); ok {
+				if p, err := provider.Find(pid); err == nil && !p.On() {
+					m.ProviderOff, m.Provider, m.Name, m.Icon, m.Model = true, p.ID, p.Name, p.Icon, model
+				}
 			}
 			gj.Info = append(gj.Info, m)
 		}

@@ -370,6 +370,7 @@ func TestWrongEndpoint(t *testing.T) {
 		{400, `{"type":"error","error":{"type":"ModelError","message":"Model grok-4.7 is not supported for format anthropic"}}`, true},
 		{400, `{"type":"error","error":{"type":"invalid_request_error","message":"Model does not support this protocol."}}`, true},
 		{400, "no model endpoints available given user constraints\n", true}, // Copilot's /v1/messages (#754)
+		{400, toolsOnChatRefused, true}, // a relay (#1308)
 		{400, `{"error":{"message":"The requested model is not supported.","code":"model_not_supported"}}`, false},
 		{429, `rate limit`, false},
 		{500, `use v1/responses`, false},
@@ -834,6 +835,11 @@ func TestModelsListReasoning(t *testing.T) {
 		"a/sol": "low,medium,high,max", "b/sol": "medium,high", "group/auto-sol": "medium,high",
 		"a/mixed": "low,high", "b/mixed": "", "group/auto-mixed": "", "a/plain": "",
 	}
+	// a group reasons when any member does: b/mixed has no levels and a
+	// list that says nothing of reasoning, but a/mixed does, so the group
+	// is told to reason — Levelless, with no levels to pick from (#756's
+	// rule for images, applied to reasoning)
+	reasoning := map[string]bool{"group/auto-mixed": true}
 	for _, m := range response.Data {
 		expected, ok := want[m.ID]
 		if !ok {
@@ -844,7 +850,7 @@ func TestModelsListReasoning(t *testing.T) {
 		for _, level := range m.Levels {
 			levels = append(levels, level.Effort)
 		}
-		if m.Reasoning == nil || *m.Reasoning != (expected != "") || strings.Join(levels, ",") != expected {
+		if m.Reasoning == nil || *m.Reasoning != (expected != "" || reasoning[m.ID]) || strings.Join(levels, ",") != expected {
 			t.Errorf("%s: reasoning %v, levels %v; want %q", m.ID, m.Reasoning, levels, expected)
 		}
 	}

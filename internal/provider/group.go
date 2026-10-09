@@ -242,10 +242,20 @@ func groupsIn(entries []Entry) []Group {
 	f := heldOf("file", load)
 	var out []Group
 	hidden := map[string]bool{}
+	var have map[string]bool // the providers magpie has, switched off or not
 	for _, g := range f.Groups {
 		if g.Hidden {
 			hidden[g.ID] = true
 			continue
+		}
+		if strings.HasPrefix(g.ID, "auto-") {
+			if have == nil {
+				have = map[string]bool{}
+				for _, p := range All() {
+					have[p.ID] = true
+				}
+			}
+			g = withoutRemoved(g, have)
 		}
 		out = append(out, withMatches(entries, g))
 	}
@@ -260,6 +270,40 @@ func groupsIn(entries []Entry) []Group {
 		out = append(out, g)
 	}
 	return orderedGroups(out, f.GroupOrder)
+}
+
+// withoutRemoved is a found group the user changed (an "auto-…" id kept
+// in providers.json) without the members of providers magpie no longer
+// has (have): a provider removed leaves the group as it leaves one magpie
+// finds, where they had stayed for the user to take out by hand (Discord).
+// It is how the group is read, not stored, so a provider back under its
+// id (an account shown again) is back in it. A member the user picked a
+// manual group's requests to, or a rule sends to, stays: taken out, the
+// group would send elsewhere unasked, or not save. So does every member
+// when none would be left. A provider switched off keeps its members: the
+// gateway skips them (membersIn) and they are sent to again once it is on.
+func withoutRemoved(g Group, have map[string]bool) Group {
+	gone := func(m string) bool {
+		if strings.HasPrefix(m, GroupPrefix) || IsPattern(m) {
+			return false
+		}
+		pid, _, ok := strings.Cut(m, "/")
+		if !ok || have[pid] || (g.Routing == Manual && m == g.Picked()) {
+			return false
+		}
+		return !slices.ContainsFunc(g.Rules, func(r Rule) bool { return r.Use == m })
+	}
+	if !slices.ContainsFunc(g.Members, gone) {
+		return g
+	}
+	kept := slices.DeleteFunc(slices.Clone(g.Members), gone)
+	if len(kept) == 0 && len(g.Match) == 0 {
+		return g
+	}
+	g.Members = kept
+	g.Off = slices.DeleteFunc(slices.Clone(g.Off), gone)
+	g.Fast = slices.DeleteFunc(slices.Clone(g.Fast), gone)
+	return g
 }
 
 // AutoGroupsOn reports whether magpie finds groups on its own: a model
@@ -472,7 +516,8 @@ func FindGroup(id string) (Group, []Member, bool) {
 // "group/<id>": the group of that id, else the group of that model however
 // a vendor spells it ("grok-4.7" is the group grok-4-7 or auto-grok-4-7).
 // A request for the model is the group's then, as it would be for the
-// group's own id; ok is false when no group has it. An id with a provider
+// group's own id; failing those, the group whose name it is (groupNamed);
+// ok is false when no group has it. An id with a provider
 // in it ("a/m") names that provider's model, never a group.
 func GroupFor(id string) (string, bool) {
 	id = strings.TrimSuffix(strings.TrimSpace(id), "[1m]")
@@ -486,7 +531,41 @@ func GroupFor(id string) (string, bool) {
 			return GroupPrefix + g.ID, true
 		}
 	}
-	return "", false
+	return groupNamed(all, id)
+}
+
+// groupNamed is the group whose name, not its id, the request gave: a
+// client the user typed the group's name into (ZCode's own model field)
+// asks for it so, and a group renamed keeps its id (MOMO on Discord: "DS
+// Flash" was 404 once group set name= gave it that name). The name is
+// matched as the id is, by its slug; only one group may have it, and a
+// model a provider serves by that id is the provider's, not the group's.
+func groupNamed(all []Group, id string) (string, bool) {
+	k := Slug(sameModel(id))
+	if k == "" {
+		return "", false
+	}
+	var hit *Group
+	for i, g := range all {
+		if g.Hidden || strings.TrimSpace(g.Name) == "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(g.Name), id) || Slug(sameModel(g.Name)) == k {
+			if hit != nil {
+				return "", false // two groups go by it: neither is meant
+			}
+			hit = &all[i]
+		}
+	}
+	if hit == nil {
+		return "", false
+	}
+	for _, e := range providerEntries() {
+		if e.Model == id || e.ID == id {
+			return "", false
+		}
+	}
+	return GroupPrefix + hit.ID, true
 }
 
 // GroupFinder is FindGroup for looking up many: every provider's models
@@ -562,15 +641,18 @@ func membersIn(entries []Entry, all []Group, g Group) []Member {
 
 // groupEntries are the catalog's groups: each with a member ready, named
 // as the user named it, answering for its first member when an agent asks
-// what the model can do, and offering only the reasoning levels every
-// member has — but for those fixed at an effort of their own, which take
-// whatever the agent asks, and those whose levels nothing magpie reads
-// knows (levelsUnknown), which are sent it as asked, and those that think
-// with no levels to pick from, which are sent it as asked up to high
-// (the gateway's fitFor). With every member fixed, the group offers the
-// levels they are fixed at, so that an agent still asks it to reason.
-// A group that names its own levels (Group.Levels) offers those, and so
-// does a group in it for its models.
+// what the model can do, and reasoning when any member does — a member
+// that doesn't think doesn't take reasoning from the others, as a
+// text-only member doesn't take images (#756) — offering the reasoning
+// levels the members have in common, as before, but for those fixed at
+// an effort of their own, which take whatever the agent asks, and those
+// whose levels nothing magpie reads knows (levelsUnknown), which are
+// sent it as asked, and those that think with no levels to pick from,
+// which are sent it as asked up to high (the gateway's fitFor). With
+// every member fixed, the group offers the levels they are fixed at, so
+// that an agent still asks it to reason. A group that names its own
+// levels (Group.Levels) offers those, and so does a group in it for its
+// models.
 func groupEntries(entries []Entry) []Entry {
 	var out []Entry
 	all := groupsIn(entries)
@@ -582,7 +664,7 @@ func groupEntries(entries []Entry) []Entry {
 		if len(ms) == 0 {
 			continue
 		}
-		e := Entry{ID: GroupPrefix + g.ID, Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Named: !g.Auto, Reasoning: true}
+		e := Entry{ID: GroupPrefix + g.ID, Model: ms[0].Model, Name: g.Name, Provider: ms[0].Provider, Group: g.ID, Named: !g.Auto}
 		var fixed []string // the efforts members are fixed at
 		levelled := false  // a member that follows the agent's effort was met
 		// Codex's ultra (max, with Codex handing parts of the task to agents
@@ -608,7 +690,16 @@ func groupEntries(entries []Entry) []Entry {
 					unknown = levelsUnknown(x)
 				}
 			}
-			e.Reasoning = e.Reasoning && thinks
+			// it reasons when a member does: the gateway sends the
+			// effort to the members that take it, and a member known not
+			// to think is sent none of it, as a text-only member is sent
+			// no image (#756's rule for images, applied to reasoning).
+			// One that doesn't think is no reason to tell the agent the
+			// group can't. Which levels the group offers is left as it
+			// was: a member known to take none still leaves the group
+			// none (#597), and the group is then Levelless, a shape
+			// magpie serves
+			e.Reasoning = e.Reasoning || thinks
 			// the reply agents are told is the longest a member gives: the
 			// gateway asks each member for no more than its own
 			// (withMaxOutput), so the members that write long replies aren't
@@ -720,6 +811,20 @@ func levelsUnknown(x Entry) bool {
 		return false
 	}
 	return !catalog.Knows(x.Model)
+}
+
+// Quiet reports whether the model is known not to think: magpie has a
+// word on it — its vendor's or its maker's list, or its provider's own
+// account list — and that word says no reasoning. A model nothing speaks
+// for isn't quiet: the gateway sends it the effort the agent asked for,
+// as #597 leaves it. Nor is one that takes levels — a model that thinks,
+// or one the user gave levels of their own, which the gateway fits an
+// effort to. A group's member that is quiet is sent no reasoning ask,
+// which some vendors turn away with a 400 on a model that can't think,
+// but for one the user fixed at an effort (Group's member syntax, #189):
+// the gateway leaves that alone, the user's word over magpie's.
+func (e Entry) Quiet() bool {
+	return !e.Reasoning && len(e.Efforts) == 0 && !levelsUnknown(e)
 }
 
 // SaveGroup adds or replaces a group of the user's. Changing one magpie

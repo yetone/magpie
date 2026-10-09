@@ -16,7 +16,7 @@ func init() {
 	for _, w := range []*wbSite{wbCN, wbAI} {
 		movers[w.id] = &mover{
 			pkg:    "@magpie-community/opencode-workbuddy-auth",
-			min:    "0.1.9", // Codex's and Claude Code's chats pass WorkBuddy's channel check (#182); a failure's status and its sign-in mark as the built-in's; each model's credit rate; the sign-in renewed ahead of time through auth.refresh; the credits' count beside their share (#659)
+			min:    "0.1.12", // a chat's tools get shapes WorkBuddy AI's models take, so ZCode's and DeepSeek Harness's chats on deepseek-v4.1-flash aren't 400 "Invalid request parameters" (wyh on Discord); one user send is one request in the usage list: every step carries one X-Conversation-Request-ID, and both builds name the client (使用端) (plugins #48); credits used up (code 14018) say so, with the nested error message (plugins #25); Codex's and Claude Code's chats pass WorkBuddy's channel check (#182); a failure's status and its sign-in mark as the built-in's; each model's credit rate; the sign-in renewed ahead of time through auth.refresh; the credits' count beside their share (#659)
 			agents: []string{w.id},
 			out: func() ([]Moving, error) {
 				var out []Moving

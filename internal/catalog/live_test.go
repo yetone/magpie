@@ -129,3 +129,41 @@ func TestFetchAtVersionedBase(t *testing.T) {
 		}
 	}
 }
+
+// Another magpie's list tells each model's price (magpie_price), tiers
+// and all; one no vendor could charge is not taken, and a list without
+// one leaves the model unpriced.
+func TestLiveMagpiePrice(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"data":[
+			{"id":"a/priced","magpie_price":{"input":3,"output":12,"cache_read":0.3,"cache_write":3.75,"tiers":[{"above":200000,"input":6,"output":18,"cache_read":0.6,"cache_write":7.5}]}},
+			{"id":"a/free","magpie_price":{"input":0,"output":0,"cache_read":0,"cache_write":0}},
+			{"id":"a/negative","magpie_price":{"input":-1,"output":12,"cache_read":0,"cache_write":0}},
+			{"id":"a/sizeless","magpie_price":{"input":1,"output":2,"cache_read":0,"cache_write":0,"tiers":[{"above":0,"input":2,"output":4}]}},
+			{"id":"a/odd","magpie_price":"cheap"},
+			{"id":"a/none"}]}`)
+	}))
+	defer srv.Close()
+	ms, err := FetchURL(context.Background(), srv.URL+"/v1/models", "", false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]*Price{}
+	for _, m := range ms {
+		got[m.ID] = m.Price
+	}
+	if p := got["a/priced"]; p == nil || p.Input != 3 || p.CacheWrite != 3.75 || len(p.Tiers) != 1 || p.Tiers[0].Above != 200000 || p.Tiers[0].Output != 18 {
+		t.Errorf("priced: %+v", p)
+	}
+	if p := got["a/free"]; p == nil || p.Input != 0 || p.Output != 0 {
+		t.Errorf("a price of nothing, set, is a price: %+v", p)
+	}
+	for _, id := range []string{"a/negative", "a/none"} {
+		if p := got[id]; p != nil {
+			t.Errorf("%s: %+v", id, p)
+		}
+	}
+	if len(ms) != 6 {
+		t.Errorf("an odd price lost a model: %d of 6", len(ms))
+	}
+}

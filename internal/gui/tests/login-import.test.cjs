@@ -66,6 +66,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       page.on("pageerror", (e) => errors.push(e.message));
       const posted = [];
       await page.route("**/*", serve(lang, posted));
+      // the browser sign-in opens ChatGPT's page in a new window, and the real
+      // one is Cloudflare's challenge: in Chromium, while it runs, clicks on
+      // this page hung past their 5s (#1307). The window gets an empty page
+      await context.route((url) => url.hostname !== "magpie.test", (route) => route.fulfill({ contentType: "text/html", body: "" }));
       t.after(async () => {
         if (process.env.ARTIFACT_DIR) {
           await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });

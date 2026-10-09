@@ -1,0 +1,383 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "anyOf": [
+  {
+   "type": "object",
+   "properties": {
+    "mode": {
+     "type": "string",
+     "const": "view"
+    },
+    "id": {
+     "$ref": "#/$defs/__schema0"
+    }
+   },
+   "required": [
+    "mode",
+    "id"
+   ],
+   "additionalProperties": false
+  },
+  {
+   "anyOf": [
+    {
+     "type": "object",
+     "properties": {
+      "name": {
+       "$ref": "#/$defs/__schema2"
+      },
+      "prompt": {
+       "$ref": "#/$defs/__schema3"
+      },
+      "rrule": {
+       "$ref": "#/$defs/__schema4"
+      },
+      "status": {
+       "$ref": "#/$defs/__schema5"
+      },
+      "notificationPolicy": {
+       "$ref": "#/$defs/__schema6"
+      },
+      "kind": {
+       "$ref": "#/$defs/__schema7"
+      },
+      "projectId": {
+       "$ref": "#/$defs/__schema8"
+      },
+      "model": {
+       "$ref": "#/$defs/__schema9"
+      },
+      "reasoningEffort": {
+       "$ref": "#/$defs/__schema10"
+      },
+      "mode": {
+       "$ref": "#/$defs/__schema11"
+      },
+      "destination": {
+       "type": "string",
+       "const": "local"
+      },
+      "executionEnvironment": {
+       "type": "string",
+       "const": "local"
+      }
+     },
+     "required": [
+      "name",
+      "prompt",
+      "rrule",
+      "status",
+      "kind",
+      "projectId",
+      "model",
+      "reasoningEffort",
+      "mode",
+      "executionEnvironment"
+     ],
+     "additionalProperties": false
+    },
+    {
+     "type": "object",
+     "properties": {
+      "name": {
+       "$ref": "#/$defs/__schema2"
+      },
+      "prompt": {
+       "$ref": "#/$defs/__schema3"
+      },
+      "rrule": {
+       "$ref": "#/$defs/__schema4"
+      },
+      "status": {
+       "$ref": "#/$defs/__schema5"
+      },
+      "notificationPolicy": {
+       "$ref": "#/$defs/__schema6"
+      },
+      "kind": {
+       "$ref": "#/$defs/__schema12"
+      },
+      "destination": {
+       "$ref": "#/$defs/__schema13"
+      },
+      "targetThreadId": {
+       "$ref": "#/$defs/__schema14"
+      },
+      "mode": {
+       "$ref": "#/$defs/__schema11"
+      }
+     },
+     "required": [
+      "name",
+      "prompt",
+      "rrule",
+      "status",
+      "kind",
+      "mode"
+     ],
+     "additionalProperties": false
+    }
+   ]
+  },
+  {
+   "anyOf": [
+    {
+     "type": "object",
+     "properties": {
+      "name": {
+       "$ref": "#/$defs/__schema2"
+      },
+      "prompt": {
+       "$ref": "#/$defs/__schema3"
+      },
+      "rrule": {
+       "$ref": "#/$defs/__schema15"
+      },
+      "status": {
+       "$ref": "#/$defs/__schema5"
+      },
+      "notificationPolicy": {
+       "$ref": "#/$defs/__schema6"
+      },
+      "kind": {
+       "$ref": "#/$defs/__schema7"
+      },
+      "projectId": {
+       "$ref": "#/$defs/__schema8"
+      },
+      "model": {
+       "$ref": "#/$defs/__schema9"
+      },
+      "reasoningEffort": {
+       "$ref": "#/$defs/__schema10"
+      },
+      "mode": {
+       "$ref": "#/$defs/__schema16"
+      },
+      "id": {
+       "$ref": "#/$defs/__schema0"
+      },
+      "destination": {
+       "type": "string",
+       "enum": [
+        "local",
+        "worktree"
+       ]
+      },
+      "executionEnvironment": {
+       "description": "env",
+       "type": "string",
+       "enum": [
+        "worktree",
+        "local"
+       ]
+      },
+      "localEnvironmentConfigPath": {
+       "anyOf": [
+        {
+         "type": "string",
+         "minLength": 1
+        },
+        {
+         "type": "null"
+        }
+       ]
+      }
+     },
+     "required": [
+      "name",
+      "prompt",
+      "rrule",
+      "status",
+      "kind",
+      "projectId",
+      "model",
+      "reasoningEffort",
+      "mode",
+      "id",
+      "executionEnvironment"
+     ],
+     "additionalProperties": false
+    },
+    {
+     "type": "object",
+     "properties": {
+      "name": {
+       "$ref": "#/$defs/__schema2"
+      },
+      "prompt": {
+       "$ref": "#/$defs/__schema3"
+      },
+      "rrule": {
+       "$ref": "#/$defs/__schema15"
+      },
+      "status": {
+       "$ref": "#/$defs/__schema5"
+      },
+      "notificationPolicy": {
+       "$ref": "#/$defs/__schema6"
+      },
+      "kind": {
+       "$ref": "#/$defs/__schema12"
+      },
+      "destination": {
+       "$ref": "#/$defs/__schema13"
+      },
+      "targetThreadId": {
+       "$ref": "#/$defs/__schema14"
+      },
+      "mode": {
+       "$ref": "#/$defs/__schema16"
+      },
+      "id": {
+       "$ref": "#/$defs/__schema0"
+      }
+     },
+     "required": [
+      "name",
+      "prompt",
+      "rrule",
+      "status",
+      "kind",
+      "mode",
+      "id"
+     ],
+     "additionalProperties": false
+    }
+   ]
+  },
+  {
+   "type": "object",
+   "properties": {
+    "mode": {
+     "type": "string",
+     "const": "delete"
+    },
+    "id": {
+     "$ref": "#/$defs/__schema0"
+    }
+   },
+   "required": [
+    "mode",
+    "id"
+   ],
+   "additionalProperties": false
+  }
+ ],
+ "$defs": {
+  "__schema0": {
+   "description": "Automation id.",
+   "$ref": "#/$defs/__schema1"
+  },
+  "__schema1": {
+   "type": "string",
+   "minLength": 1
+  },
+  "__schema2": {
+   "description": "name",
+   "$ref": "#/$defs/__schema1"
+  },
+  "__schema3": {
+   "description": "prompt",
+   "$ref": "#/$defs/__schema1"
+  },
+  "__schema4": {
+   "description": "rrule create",
+   "$ref": "#/$defs/__schema1"
+  },
+  "__schema5": {
+   "description": "status",
+   "type": "string",
+   "enum": [
+    "ACTIVE",
+    "PAUSED"
+   ]
+  },
+  "__schema6": {
+   "description": "np",
+   "anyOf": [
+    {
+     "type": "string",
+     "enum": [
+      "all",
+      "failed_runs_only"
+     ]
+    },
+    {
+     "type": "null"
+    }
+   ]
+  },
+  "__schema7": {
+   "description": "cron",
+   "type": "string",
+   "const": "cron"
+  },
+  "__schema8": {
+   "description": "project",
+   "anyOf": [
+    {
+     "type": "string",
+     "minLength": 1
+    },
+    {
+     "type": "null"
+    }
+   ]
+  },
+  "__schema9": {
+   "description": "model",
+   "$ref": "#/$defs/__schema1"
+  },
+  "__schema10": {
+   "description": "effort",
+   "type": "string",
+   "enum": [
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+    "ultra"
+   ]
+  },
+  "__schema11": {
+   "type": "string",
+   "enum": [
+    "create",
+    "suggested_create"
+   ]
+  },
+  "__schema12": {
+   "description": "hb",
+   "type": "string",
+   "const": "heartbeat"
+  },
+  "__schema13": {
+   "description": "dest",
+   "type": "string",
+   "enum": [
+    "local",
+    "thread"
+   ]
+  },
+  "__schema14": {
+   "format": "uuid",
+   "description": "tt",
+   "$ref": "#/$defs/__schema1"
+  },
+  "__schema15": {
+   "description": "rrule",
+   "$ref": "#/$defs/__schema1"
+  },
+  "__schema16": {
+   "type": "string",
+   "enum": [
+    "update",
+    "suggested_update"
+   ]
+  }
+ }
+}

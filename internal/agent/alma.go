@@ -10,10 +10,13 @@ package agent
 //	PUT  /api/providers/:id/models   {"models":["<id>",…],"availableModels":[{"id","name","capabilityOverrides"}]}:
 //	                                 models, kept as given, are the ones Alma offers; a model's
 //	                                 capabilityOverrides, when sent, take the place of the ones it had
-//	GET  /api/settings, PUT it back  the whole settings; chat.defaultModel is "<providerId>:<model>"
+//	GET  /api/settings, PUT it back  the whole settings; chat.defaultModel is "<providerId>:<model>",
+//	                                 imageGen.model the same ("" for Auto)
 //
 // magpie is one provider there, named magpie, of type openai at the
-// gateway's /v1; choosing one of its models makes it Alma's default model.
+// gateway's /v1; choosing one of its models makes it Alma's default model,
+// and the model magpie draws with Alma's image generation model when Alma
+// has none picked (almaSetImage).
 // Alma not running is no error: there is nothing to read or keep current.
 
 import (
@@ -25,12 +28,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/appdir"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/gateway"
 )
@@ -240,6 +245,24 @@ func almaModels() (ids []string, known []map[string]any) {
 			k["capabilityOverrides"] = caps
 		}
 		known = append(known, k)
+	}
+	// the model magpie draws with, which Alma offers for its image
+	// generation, said to make images (Settings › Image Generation lists
+	// a provider's models that make images, and shows one it doesn't list
+	// as unavailable)
+	if d := gateway.Drawer(); d != "" {
+		if i := slices.Index(ids, d); i >= 0 {
+			caps, _ := known[i]["capabilityOverrides"].(map[string]any)
+			if caps == nil {
+				caps = map[string]any{}
+				known[i]["capabilityOverrides"] = caps
+			}
+			caps["imageOutput"] = true
+		} else {
+			_, name, _ := strings.Cut(d, "/")
+			ids = append(ids, d)
+			known = append(known, map[string]any{"id": d, "name": name, "capabilityOverrides": map[string]any{"imageOutput": true}})
+		}
 	}
 	return ids, known
 }
@@ -468,6 +491,60 @@ func almaSetDefault(v string) error {
 	return almaDo("PUT", "/api/settings", s, nil)
 }
 
+// almaImage is Alma's image generation model, "" for Auto.
+func almaImage(s map[string]any) string {
+	ig, _ := s["imageGen"].(map[string]any)
+	v, _ := ig["model"].(string)
+	return v
+}
+
+// almaSetImage makes the model magpie draws with Alma's image generation
+// model (Sorghum on Discord), on magpie's provider pid, when Alma has one
+// of magpie's that magpie no longer offers it (the drawer it was given
+// before, almaModels) or, with fill, none picked (Auto): fill is the user
+// choosing one of magpie's models for Alma, not Sync, which leaves an Auto
+// the user may have gone back to. One the user picked, theirs or magpie's,
+// is left as it is. Nothing when magpie draws with none.
+func almaSetImage(pid string, fill bool) error {
+	d := gateway.Drawer()
+	if d == "" {
+		return nil
+	}
+	s, err := almaSettings()
+	if err != nil {
+		return err
+	}
+	cur, want := almaImage(s), pid+":"+d
+	if cur == want {
+		return nil
+	}
+	if cur == "" && !fill {
+		return nil
+	}
+	if cur != "" {
+		ref, ours := strings.CutPrefix(cur, pid+":")
+		if !ours {
+			return nil
+		}
+		if ids, _ := almaModels(); slices.Contains(ids, ref) {
+			return nil
+		}
+	}
+	return almaPutImage(s, want)
+}
+
+// almaPutImage sets imageGen.model to v, the rest of the settings put
+// back as they were.
+func almaPutImage(s map[string]any, v string) error {
+	ig, ok := s["imageGen"].(map[string]any)
+	if !ok {
+		ig = map[string]any{}
+		s["imageGen"] = ig
+	}
+	ig["model"] = v
+	return almaDo("PUT", "/api/settings", s, nil)
+}
+
 // almaGet is Alma's default model, one of magpie's as magpie/<model>. With
 // Alma not running it is what magpie last set there, so that isn't taken
 // for something else having changed it.
@@ -512,6 +589,15 @@ func almaSet(v string) error {
 				return err
 			}
 		}
+		// an image generation model of magpie's goes back to Auto too
+		if pid, _, _ := strings.Cut(almaImage(s), ":"); pid == p.ID {
+			if s, err = almaSettings(); err != nil {
+				return err
+			}
+			if err := almaPutImage(s, ""); err != nil {
+				return err
+			}
+		}
 		return almaDo("DELETE", "/api/providers/"+p.ID, nil, nil)
 	}
 	if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok {
@@ -519,7 +605,10 @@ func almaSet(v string) error {
 		if err != nil {
 			return err
 		}
-		return almaSetDefault(id + ":" + ref)
+		if err := almaSetDefault(id + ":" + ref); err != nil {
+			return err
+		}
+		return almaSetImage(id, true)
 	}
 	if _, _, ok := strings.Cut(v, ":"); !ok {
 		return fmt.Errorf("expected providerId:model or magpie/<model>, got %q", v)
@@ -557,13 +646,45 @@ func almaOwn() []Option {
 	return out
 }
 
-func alma() *Agent {
-	// where Alma keeps its data (~/Library/Application Support/alma on a
-	// Mac): there once Alma was installed and opened
-	dir := ""
+// almaDir is where Alma keeps its data, there once Alma was installed and
+// opened: ~/Library/Application Support/alma on a Mac, the user config
+// folder elsewhere. On Linux alma-server, Alma without a desktop, keeps it
+// in ALMA_DATA_DIR, else $XDG_DATA_HOME/alma (~/.local/share/alma), and
+// answers on the same port: with only the desktop's folder looked for it
+// was never found, so its magpie provider never got Alma's key and its
+// requests read as the AI SDK's (Lutra.x on Discord). The desktop's folder
+// comes first; "" when neither is there.
+func almaDir(goos string) string {
+	var dirs []string
 	if d, err := os.UserConfigDir(); err == nil {
-		dir = filepath.Join(d, "alma")
+		dirs = append(dirs, filepath.Join(d, "alma"))
 	}
+	if goos != "darwin" && goos != "windows" {
+		if d := appdir.Getenv("ALMA_DATA_DIR"); d != "" {
+			dirs = append(dirs, d)
+		}
+		if d := appdir.Getenv("XDG_DATA_HOME"); d != "" {
+			dirs = append(dirs, filepath.Join(d, "alma"))
+		} else if h, err := os.UserHomeDir(); err == nil {
+			dirs = append(dirs, filepath.Join(h, ".local", "share", "alma"))
+		}
+	}
+	for _, d := range dirs {
+		if st, err := os.Stat(d); err == nil && st.IsDir() {
+			return d
+		}
+	}
+	if len(dirs) > 0 {
+		return dirs[0]
+	}
+	return ""
+}
+
+// almaOS is the system almaDir looks for Alma's data on; a test sets it.
+var almaOS = runtime.GOOS
+
+func alma() *Agent {
+	dir := almaDir(almaOS)
 	return &Agent{
 		ID: "alma", Name: "Alma", Icon: "alma",
 		UA:  []string{"alma"},
@@ -605,7 +726,10 @@ func alma() *Agent {
 			if err := almaKeyed(p); err != nil {
 				return err
 			}
-			return almaSyncModels(p)
+			if err := almaSyncModels(p); err != nil {
+				return err
+			}
+			return almaSetImage(p.ID, false)
 		},
 		Fields: []Field{{
 			Key: "model", Label: "model",

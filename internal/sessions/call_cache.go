@@ -25,7 +25,16 @@ import (
 // v6: Codex response records and compact disk-only parser state.
 // v7: reconcile recent Claude message revisions.
 // v8: a Claude Code call's 1-hour cache writes.
-const callCacheVersion = "calls-v8"
+// v9: a dsh call carries the provider it named and the model that answered,
+// and a call through magpie's own gateway is left out of dsh's (the gateway
+// logs it itself).
+// v10: the calls ZCode's and WorkBuddy's session files hold are read too, and
+// WorkBuddy's that went through the gateway are left out of them as a dsh
+// one is.
+// What each version names is what a cache of the one before it cannot serve:
+// the version is part of the directory's name, so a cache written by an older
+// one is never read (pruneCalls).
+const callCacheVersion = "calls-v10"
 const maxKeptCalls = 131072
 const maxKeptFiles = 64
 
@@ -49,6 +58,16 @@ func resetCalls() {
 	callRoot = ""
 	callGeneration++
 	resetOCCalls()
+	// ZCode's listing and WorkBuddy's gateway ids name another HOME's files
+	// and models.json: a read after a Reset() would otherwise hand back
+	// sources that are not here. Both are stamped, so the stale stamp alone
+	// would miss; clearing them makes a new HOME read its own
+	zcCallList.Lock()
+	zcCallList.stamp, zcCallList.files = "", nil
+	zcCallList.Unlock()
+	wbGateway.Lock()
+	wbGateway.stamp, wbGateway.ids = "", nil
+	wbGateway.Unlock()
 }
 
 func pruneCalls(files []file) {
@@ -147,6 +166,17 @@ func keepCalls(path string, st *callFile) {
 	callOrder = append(callOrder, path)
 }
 
+// wholeCallReaders read an agent's calls from one session file at a time,
+// rather than a line at a time: its calls are not lines, or its file cannot
+// be read on from the middle of one. Every agent in callSources that is not
+// in callFiles needs an entry here, or its calls are never read.
+var wholeCallReaders = map[string]func(file) (*callFile, bool){
+	"opencode":  readOpenCodeCalls,
+	"zcode":     readZCodeCalls,
+	"dsh":       readDshCalls,
+	"workbuddy": readWorkBuddyCalls,
+}
+
 func readCalls(f file) *callFile {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(f.path))
@@ -174,18 +204,21 @@ func readCalls(f file) *callFile {
 		}
 		return &callFile{Path: f.path, Agent: f.agent}
 	}
-	if f.agent == "opencode" {
-		// rows, not lines: a session that changed is read again whole
-		st, ok := readOpenCodeCalls(f)
-		if !ok && old != nil {
+	// Agents whose calls are read whole rather than line by line: a session
+	// that changed is read again, and one that did not is kept. OpenCode's
+	// and ZCode's are rows of a database or JSON documents; dsh's file is
+	// packed in frames, so it cannot be read on from the middle of one.
+	if read, ok := wholeCallReaders[f.agent]; ok {
+		st, readOK := read(f)
+		if !readOK && old != nil {
 			return old // not readable now: what was read before
 		}
-		if ok {
+		if readOK {
 			st.Size, st.Mod = f.size, f.mod.UnixNano()
 			writeCalls(st, 0, false)
 		}
 		callsMu.Lock()
-		if ok && generation == callGeneration {
+		if readOK && generation == callGeneration {
 			keepCalls(f.path, st)
 		}
 		callsMu.Unlock()

@@ -53,7 +53,7 @@ func customIDs() map[string]bool {
 	return heldOf("customIDs", func() map[string]bool {
 		ids := map[string]bool{}
 		for _, p := range load().Providers {
-			if p.Chat != "" || p.Responses != "" || p.Anthropic != "" || p.Decide != "" {
+			if hasEndpoint(p) {
 				ids[p.ID] = true
 			}
 		}
@@ -174,6 +174,12 @@ func pluginCatalog(pp plugin.Provider) []catalog.Model {
 			Rate: m.Rate, RateWas: m.RateWas,
 		}
 		if c.Context == 0 {
+			c.Context = m.Context
+		} else if m.Context > 0 && m.Context < c.Context {
+			// the prompt cap a plugin names wins, but never above the
+			// window it also names: a row with input over context
+			// (opencode/hy3-free's 192K over 190K) was served past its
+			// window (#1286)
 			c.Context = m.Context
 		}
 		// Cursor's own ids no catalog knows: one not named a 1M model

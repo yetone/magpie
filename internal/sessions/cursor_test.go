@@ -249,6 +249,10 @@ func TestCursor(t *testing.T) {
 	want := "cursor-agent --resume " + curMain
 	if runtime.GOOS != "windows" {
 		want = "cd '/work/cur' && " + want
+	} else {
+		// the same prefix every other resume here gets on Windows
+		// (sessions.go's resumeCommand), as TestCarryPiToOmp expects
+		want = "Set-Location -LiteralPath '/work/cur'; " + want
 	}
 	if s.Resume != want {
 		t.Fatalf("resume %q, want %q", s.Resume, want)

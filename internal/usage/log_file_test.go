@@ -20,7 +20,7 @@ func TestLogFileInfoPreservesIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapped := logFileInfo{FileInfo: first, stamp: "captured"}
+	wrapped := logFileInfo{FileInfo: first}
 	if !sameLogFile(wrapped, second) || !sameLogFile(second, wrapped) || !sameLogFile(wrapped, logFileInfo{FileInfo: second}) {
 		t.Fatal("wrapped stat lost native file identity")
 	}

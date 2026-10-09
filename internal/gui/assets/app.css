@@ -227,7 +227,10 @@ body.panel .seg { display: none; }
 /* the icon turns on a layer of its own — painted in place, WebKit leaves
    ghosts of each frame behind (#16) — and always finishes its turn */
 .icon svg { transform-origin: 50% 50%; backface-visibility: hidden; }
-.icon.spin svg { animation: spin .9s linear infinite; will-change: transform; }
+/* a spinner turns its drawing inside the svg, round the viewBox's centre:
+   WebKit turns a whole svg on a layer snapped to the pixel grid, so off a
+   whole pixel its ring circles about a point a pixel or so off its centre */
+.icon.spin svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .9s linear infinite; }
 /* a newer magpie is ready: a quiet pill before the header's icons */
 .update {
   align-self: center; display: inline-flex; align-items: center; gap: 4px;
@@ -395,7 +398,11 @@ body.panel #agents > .row .ag-handle::before { left: -10px; }
 .ag-fix:active { transform: scale(.96); }
 .ag-fix:focus-visible { outline: 1.5px solid var(--drift); outline-offset: 1px; }
 .ag-fix.busy { pointer-events: none; opacity: .7; }
-.ag-fix.busy svg { animation: spin .8s linear infinite; }
+/* the accounts that keep an agent going through magpie for failover (#1385) */
+.ag-acc { display: inline-flex; align-items: center; flex: none; height: 20px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--fg-2); font: inherit; font-size: 11.5px; line-height: 1; cursor: pointer; transition: background-color .15s, color .15s; }
+.ag-acc:hover { background: var(--pill); color: var(--fg); }
+.ag-acc:focus-visible { outline: 1.5px solid var(--fg-2); outline-offset: 1px; }
+.ag-fix.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
 /* what has to listen at an address no agent reaches magpie by (#1013): long addresses wrap, and it can be copied */
 .drift-why { overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 /* the agent's CLI on its name's line (#202): its version faint, and a quiet
@@ -411,6 +418,10 @@ body.window .row.agent .who .ag-cli { flex: 0 1 auto; overflow: hidden; }
   body.window .row.agent .ag-up > span { display: none; }
 }
 @container (max-width: 150px) { body.window .row.agent .ag-ver { display: none; } }
+/* the desktop app's version (#1334) gives way first: cut with an ellipsis,
+   and gone where the pill keeps only its arrow */
+.ag-app { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@container (max-width: 250px) { body.window .row.agent .ag-app { display: none; } }
 .ag-cli { display: inline-flex; align-items: center; gap: 6px; flex: none; min-width: 0; }
 .ag-cli:empty { display: none; }
 .ag-missing { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
@@ -421,8 +432,8 @@ body.window .row.agent .who .ag-cli { flex: 0 1 auto; overflow: hidden; }
 .ag-up:focus-visible { outline: 1.5px solid var(--fg-2); outline-offset: 1px; }
 .ag-up svg { color: var(--muted); }
 .ag-up.busy { pointer-events: none; color: var(--muted); }
-.ag-up.busy svg { animation: spin .8s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .ag-up.busy svg { animation: none; } }
+.ag-up.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ag-up.busy svg > * { animation: none; } }
 /* Update all (#727): a line above the list once two or more agents' CLIs
    are behind, its pill like a row's */
 .ag-updates { flex: none; display: flex; align-items: center; gap: 10px; margin: 0 2px 10px; min-height: 22px; font-size: 12.5px; color: var(--fg-2); }
@@ -617,6 +628,9 @@ body.window .field.solo { grid-column: auto; }
 .quota-windows.stacked .quota-n > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .quota-reset { display: flex; flex-wrap: wrap; column-gap: 4px; margin-top: 4px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .quota-reset > span { white-space: nowrap; }
+/* a window's whole (WindowHolds): a line of its own under the reset */
+.quota-reset .quota-holds { flex-basis: 100%; display: flex; flex-wrap: wrap; column-gap: 4px; min-width: 0; }
+.quota-reset .quota-holds > span { white-space: nowrap; }
 .quota-track { height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; }
 .quota-track i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .subscription-error { font-size: 11px; color: var(--faint); }
@@ -711,7 +725,7 @@ body.window .field.solo { grid-column: auto; }
 .quota-refresh:focus-visible { width: 14px; margin: 0 3px 0 -2px; opacity: 1; }
 .quota-refresh:hover { color: var(--fg); background: var(--pill-hover); }
 .quota-refresh.busy { cursor: default; }
-.quota-refresh.busy svg { animation: spin .8s linear infinite; }
+.quota-refresh.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
 @media (hover: none) { .quota-refresh { width: 14px; margin: 0 3px 0 -2px; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .quota-refresh { transition: none; } }
 .skeleton { display: block; border-radius: 5px; background: linear-gradient(90deg, var(--skel, var(--pill)) 25%, var(--skel-hi, var(--pill-hover)) 45%, var(--skel, var(--pill)) 65%); background-size: 240% 100%; animation: skeleton-shift 1.4s ease-in-out infinite; }
@@ -782,6 +796,8 @@ body.window .field.solo { grid-column: auto; }
    were of — by provider, agent or model — which is also the chart's legend */
 .led-dash { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 .led-dash[hidden] { display: none; }
+/* the totals and the two sources: one block of cells, a line between them, as
+   the totals above have it */
 .led-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 .led-strip .blk { min-width: 0; padding: 11px 15px 10px; }
 .led-strip .blk + .blk { border-left: 1px solid var(--line-2); }
@@ -865,9 +881,49 @@ body.window .field.solo { grid-column: auto; }
   .led-strip .blk:nth-child(n + 3) { border-top: 1px solid var(--line-2); }
   .led-strip .blk:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
+/* the heatmap (#1369): 53 weeks of days, Monday on top, the cells growing a
+   little to take a wide card and scrolling sideways in it when narrow */
+.led-heat { position: relative; margin-bottom: 10px; padding: 10px 14px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.led-heat[hidden] { display: none; }
+.heat-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.heat-title b { font-size: 12.5px; font-weight: 600; }
+.heat-title span { font-size: 11px; color: var(--muted); }
+.heat-scroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: thin; padding-bottom: 4px; }
+.heat-grid { display: grid; grid-template-columns: auto repeat(53, minmax(10px, 1fr)); grid-template-rows: auto repeat(7, auto); gap: 3px; min-width: min-content; max-width: calc(3em + 53 * 21px); font-size: 10px; color: var(--muted); }
+.heat-grid i { aspect-ratio: 1; border-radius: 3px; min-width: 0; }
+.heat-grid i:hover { outline: 1px solid var(--fg-2); outline-offset: -1px; }
+/* the days of the week stay at the card's edge as the weeks scroll under them */
+.heat-grid .wd { position: sticky; left: 0; z-index: 1; align-self: stretch; display: flex; align-items: center; padding-right: 6px; line-height: 1; white-space: nowrap; background: var(--card); box-shadow: 3px 0 0 var(--card); }
+.heat-grid .mo { min-width: 0; white-space: nowrap; overflow: hidden; line-height: 1.2; padding-bottom: 2px; }
+.heat-foot { display: flex; justify-content: flex-end; margin-top: 4px; }
+.heat-tip { position: absolute; z-index: 3; display: flex; flex-direction: column; gap: 2px; padding: 6px 9px; background: var(--pop-bg); border-radius: 8px; box-shadow: var(--shadow); font-size: 11.5px; white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+.heat-tip[hidden] { display: none; }
+.heat-tip b { font-weight: 600; }
+.heat-tip span { color: var(--muted); }
 /* over the requests: their sum, and at its right the request archive's switch */
 .led-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 2px 7px; min-width: 0; }
 .led-head .led-sum { margin: 0; min-width: 0; }
+/* the two sources the request page counts and their total, in the same block
+   of cells as the totals above them, each one clickable to filter by it */
+.led-vias { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0 0 9px; }
+.led-vias[hidden] { display: none; }
+.led-vias .blk { cursor: pointer; text-align: left; border: 0; font: inherit; color: inherit; background: none; }
+.led-vias .blk:hover { background: var(--pill-hover); }
+.led-vias .blk:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* the one being filtered by: its own colour under the count, no blue text */
+.led-vias .blk.on { box-shadow: inset 0 -2px 0 var(--accent); }
+/* the end cells round as the strip does, inside its 1px border, so a hover,
+   the focus ring or the bar under the one filtered by doesn't square its corner */
+.led-vias .blk:first-child { border-radius: 11px 0 0 11px; }
+.led-vias .blk:last-child { border-radius: 0 11px 11px 0; }
+/* the count's unit sits after the number, small, as its label is under it */
+.led-vias .v em { margin-left: 3px; font-size: 12.5px; font-weight: 600; font-style: normal; color: var(--muted); }
+@media (max-width: 620px) {
+  .led-vias { grid-template-columns: minmax(0, 1fr); }
+  .led-vias .blk + .blk { border-left: 0; border-top: 1px solid var(--line-2); }
+  .led-vias .blk:first-child { border-radius: 11px 11px 0 0; }
+  .led-vias .blk:last-child { border-radius: 0 0 11px 11px; }
+}
 .led-arch { display: inline-flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
 .led-arch-sw { display: inline-flex; align-items: center; gap: 7px; padding: 2px 0; background: none; border: 0; font: inherit; font-size: 11.5px; color: var(--muted); cursor: pointer; }
 .led-arch-sw:hover, .led-arch-sw.on { color: var(--fg); }
@@ -917,7 +973,10 @@ body.window .field.solo { grid-column: auto; }
 .led.tight .model, .led.tight .where { max-width: 160px; }
 .led.tight th, .led.tight td { padding-left: 6px; padding-right: 6px; }
 .led.tighter .price-reference { display: none; }
-.led.tighter .model, .led.tighter .where { max-width: 110px; }
+/* the account's name is cut at 110px, but its column keeps room for the
+   source badges under it, which don't wrap: capped at 110px the cell cut
+   off the second English one ("Subscription") */
+.led.tighter .model, .led.tighter .where-name { max-width: 110px; }
 .led.tighter th, .led.tighter td { padding-left: 4px; padding-right: 4px; }
 .led.tighter th { white-space: normal; }
 .led-tight { font-size: 11.5px; color: var(--muted); }
@@ -1449,6 +1508,11 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 .text.primary { color: var(--accent-fg); background: var(--accent); font-weight: 500; }
 .text.primary:hover { filter: brightness(1.08); }
 .text.danger:hover { color: var(--red); background: var(--red-soft); }
+/* a partner listed since the add sheet last showed them (markNewPartners) */
+#addProvider.has-new::after { content: ""; display: inline-block; width: 6px; height: 6px; margin: 0 0 0 5px; border-radius: 50%; background: var(--accent); vertical-align: 6px; box-shadow: 0 0 0 0 var(--accent); animation: new-dot-in .4s cubic-bezier(.3, 1.6, .5, 1), new-dot-ring 2.4s ease-out .4s 2; }
+@keyframes new-dot-in { from { transform: scale(0); } }
+@keyframes new-dot-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); } 70%, 100% { box-shadow: 0 0 0 5px transparent; } }
+@media (prefers-reduced-motion: reduce) { #addProvider.has-new::after { animation: none; } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0 6px; min-height: 12px; }
 .chip {
   display: inline-flex; align-items: center; gap: 2px;
@@ -1917,6 +1981,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .text.quiet { opacity: 0; transition: opacity .15s; }
 .acc:hover .text.quiet { opacity: 1; }
 .acc .text.quiet:focus-visible { opacity: 1; }
+/* an account signed out (#1363) shows its Remove without a hover: it is
+   one of the two ways out of that state, beside Sign in again */
+.acc.signed-out .text.quiet { opacity: 1; }
 .acc.new { animation: sub-in .5s cubic-bezier(.2, .8, .2, 1); }
 .acc.new .dot { animation: copy-pop .45s cubic-bezier(.2, .8, .2, 1); }
 @keyframes sub-in { from { opacity: 0; transform: translateY(-4px); background: var(--pill-hover); } }
@@ -2078,6 +2145,13 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .aq-track.capped { position: relative; overflow: visible; }
 .acc .aq-track.capped i { overflow: hidden; }
 .acc .aq-cap { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--accent); }
+/* a window's meter sets its own cap (willz on Discord): a button that
+   looks as the meter does, and the window's own cap beside its figure */
+.acc .aq-win { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.acc .aq-set { padding: 1px 4px; margin: -1px -4px; border-radius: 4px; cursor: default; }
+.acc .aq-set:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.acc .aq-set:hover, .acc .aq-set.open { background: var(--pill-hover); }
+.acc .aq-own { color: var(--accent); font-weight: 500; }
 .acc .aq-w b { color: var(--fg-2); font-weight: 600; font-variant-numeric: tabular-nums; }
 .acc .aq-w.full b, .acc .aq-w.full .aq-r { color: var(--fg); }
 .acc .aq-w.full .aq-track i { background: var(--fg); }
@@ -2141,8 +2215,12 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .fbrow .grow { flex: 1; }
 .fallback .mchips:empty { display: none; }
 .after-list { display: flex; align-items: center; gap: 8px; padding: 8px 4px 0; flex: none; }
-/* the Providers page's add button stays at the view's foot over a long list */
-#view-providers .after-list { position: sticky; bottom: -8px; z-index: 2; margin: 0 -12px -8px; padding: 14px 16px 12px; background: linear-gradient(to bottom, transparent, var(--bg) 12px); transition: opacity .18s ease, visibility 0s; }
+/* the Providers page's add button stays at the view's foot over a long list;
+   its fade reaches 12px past each side from a ::before, the bar's own box
+   in the content box (a negative margin-end was sideways scroll in macOS
+   15's WebKit: see .lib-head, #1236) */
+#view-providers .after-list { position: sticky; bottom: -8px; z-index: 2; margin: 0 0 -8px; padding: 14px 4px 12px; transition: opacity .18s ease, visibility 0s; }
+#view-providers .after-list::before { content: ""; position: absolute; z-index: -1; inset: 0 -12px; pointer-events: none; background: linear-gradient(to bottom, transparent, var(--bg) 12px); }
 /* stepping aside it fades, then goes; back, it is there at once, so the
    focus can go to it as the sheet closes */
 #view-providers .after-list.away { opacity: 0; visibility: hidden; transition: opacity .18s ease, visibility 0s .18s; }
@@ -2332,6 +2410,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 :where(body:not(.mac)) :is(.segs.regions, .connect .segs, #sessAgent)::-webkit-scrollbar { height: 6px; }
 :where(body:not(.mac)) :is(.segs.regions, .connect .segs, #sessAgent)::-webkit-scrollbar-thumb { border-width: 1px; }
 .segs.regions .opt, .connect .segs .opt, #sessAgent .opt { flex: none; }
+/* a custom provider's five Base URL APIs wrap to a second row where the
+   editor is too narrow for them (#1346); the thumb follows the row */
+.segs.base-apis { max-width: 100%; flex-wrap: wrap; }
 /* an installed list's order (#481): small, beside the list's heading */
 .segs.sortby { align-self: center; flex: none; }
 .segs.sortby .opt { height: 20px; padding: 0 8px; font-size: 11px; }
@@ -2360,8 +2441,9 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .editor .editor-error.warn { color: var(--amber); }
 .busy { opacity: .55; pointer-events: none; }
 .saving { opacity: 1; display: inline-flex; align-items: center; gap: 5px; }
-.saving svg { flex: none; animation: spin .8s linear infinite; }
-@media (prefers-reduced-motion: reduce) { .saving svg { animation: none; } }
+.saving svg { flex: none; }
+.saving svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .saving svg > * { animation: none; } }
 
 /* agent chips: who is on this provider, click one to pick it a model */
 .achips { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -2539,8 +2621,6 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .font-menu .pm-head { white-space: normal; }
 .font-menu .pm-name { white-space: normal; overflow-wrap: anywhere; }
 /* Keep export consent readable, and give collector URLs their own line. */
-#otelList .otel-section { padding: 10px 14px 6px; font-size: 11px; font-weight: 600; color: var(--muted); background: var(--pill); }
-#otelList .otel-section:not(:first-child) { border-top: 1px solid var(--line-2); }
 #otelList .row .sub { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
 #otelList .row { align-items: flex-start; padding-top: 12px; padding-bottom: 12px; }
 #otelList .otel-stacked { flex-wrap: wrap; gap: 8px; }
@@ -2585,6 +2665,12 @@ input.words.search-key, input.words.search-url { flex: 1 1 120px; width: auto; m
 /* a usage alert's share or amount: a short number field, its unit beside it */
 .warm-at input.at.num { width: 64px; text-align: right; }
 .warm-at .unit { color: var(--muted); font-size: 12.5px; margin-left: -4px; }
+/* a daily warm-up's times (#1260): each with its ×, then +, wrapping under one another on a narrow window rather than past it */
+.warm-at.times { flex: 0 0 auto; max-width: 65%; align-items: flex-start; }
+.warm-at.times > :not(.warm-times) { flex: none; }
+.warm-at .warm-times { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 8px; min-width: 0; }
+.warm-at .warm-time { display: inline-flex; align-items: center; gap: 2px; }
+.warm-at .warm-rm, .warm-at .warm-add { min-width: 24px; height: 27px; padding: 0 6px; font-size: 14px; line-height: 1; }
 .row.pref .sub .warn { color: var(--amber); }
 .row.pref .sub.wraps { white-space: normal; }
 /* the field's clock and picker in the page's own palette */
@@ -2775,6 +2861,7 @@ body.panel .modal { padding: 16px 12px; }
   body.web .row.pref > .who { flex-basis: 100%; }
   body.web .row.pref .sub { white-space: normal; }
   body.web .row.pref .segs { margin-left: 0; max-width: 100%; flex-wrap: wrap; }
+  body.web .row.pref .warm-at.times { max-width: 100%; }
   body.web .proxy-segs { margin-left: 0; flex-wrap: wrap; justify-content: flex-start; }
   body.web .usage-head { height: auto; min-height: 44px; flex-wrap: wrap; gap: 8px; }
   body.web .usage-head > .segs { max-width: 100%; flex-wrap: wrap; }
@@ -2984,7 +3071,7 @@ body.panel .modal { padding: 16px 12px; }
 /* how often the Usage page reads its numbers again, and a way to read them now */
 .usage-refresh { display: inline-flex; align-items: center; gap: 2px; margin-right: 10px; }
 .usage-refresh .icon { width: 24px; height: 24px; }
-.usage-refresh .icon.busy svg { animation: spin .8s linear infinite; }
+.usage-refresh .icon.busy svg > * { transform-box: view-box; transform-origin: 50% 50%; animation: spin .8s linear infinite; }
 .usage-refresh .sess-pick { height: 24px; }
 .led-rank .rk .rk-b { overflow-wrap: anywhere; }
 
@@ -3069,6 +3156,13 @@ body.window .row.agent .who.with-models { flex-wrap: wrap; row-gap: 0; }
 .am-reset:disabled { color: var(--faint); cursor: default; }
 .am-reset[data-armed] { color: var(--red); background: var(--red-soft); }
 .am-dot { color: var(--faint); }
+/* the agent's own switch: a model that comes later shown, or off until
+   ticked (#1337); its words give way before the buttons beside it do */
+.am-only { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--fg-2); cursor: pointer; }
+.am-only[hidden] { display: none; }
+.am-only .lib-switch { flex: none; }
+.am-only > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.am-foot .am-reset { flex: none; }
 /* Codex's list in the order it shows it (#855): the whole list, dragged by
    any row; its grip shows only on the row under the pointer */
 .pop.am-pop.ordering .am-search, .pop.am-pop.ordering .am-rail { display: none; }
@@ -3167,6 +3261,15 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 :where(html[data-fonts]) .ag-code, :where(html[data-fonts]) .ag-diff code, :where(html[data-fonts]) .ag-path { font-style: var(--code-style, inherit); font-weight: var(--code-weight, inherit); font-stretch: var(--code-stretch, 100%); }
 .ag-code { padding: 1px 5px; border-radius: 4px; background: var(--pill); color: var(--fg); }
 .ag-warn { gap: 8px; font-size: 12px; }
+/* a note of several lines: its dot stays by the first line, the words wrap beside it */
+.ag-vl.ag-menu-cap { flex-wrap: nowrap; align-items: flex-start; line-height: 1.6; }
+.ag-menu-cap > .ag-dot { margin-top: calc(0.8em - 3px); }
+.ag-menu-cap > span:last-child { flex: 1; min-width: 0; }
+/* Claude Desktop's "largest window only" switch (#1272): its words beside it, the hint after them */
+.ag-longest { cursor: pointer; }
+.ag-longest-say { color: var(--fg-2); }
+/* which copy is left on the old list: a sentence that wraps as one, under the warning's words */
+.ag-vl.ag-stale-copy { display: block; padding-left: 14px; font-size: 12px; line-height: 1.6; color: var(--fg-2); }
 .ag-hint { font-size: 12px; color: var(--muted); }
 .ag-tier { width: 70px; flex: none; font-size: 12px; color: var(--fg-2); }
 .ag-vl .field.ag-pick { width: 220px; justify-content: flex-start; }
@@ -3217,7 +3320,7 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
   .ag-vl > .fields > .field.main, .ag-vl > .fields > .field.solo { flex: 1 1 100%; min-width: 0; }
   .ag-vl > .fields > .field.side { flex: 1 0 124px; }
   .ag-vl > .fields > .extras-cell { flex-wrap: wrap; max-width: 100%; }
-  .ag-vl .field.ag-pick { flex: 1 1 160px; width: auto; min-width: 0; }
+  .ag-vl .field.ag-pick { flex: 0 0 220px; width: 220px; min-width: 0; }
   /* short of room, the model it starts on takes a line of its own under
      the name, the link and the switch staying beside it */
   .row.agent.conn > .field.ag-start, .row.agent.conn > .who + .field.ag-start { order: 1; flex: 1 1 100%; width: auto; margin: 9px 0 0 34px; }

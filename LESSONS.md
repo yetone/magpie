@@ -1,4 +1,4 @@
-<!-- reviewed-through: 34bfb9ca (2026-10-06 03:48 +0800) -->
+<!-- reviewed-through: 3c629133 (2026-10-09 02:48 +0800) -->
 # Lessons from merged work
 
 magpie's code is written, reviewed, merged and released by agents. Each night
@@ -11,6 +11,18 @@ more separate days moves into [docs/code-standards.md](docs/code-standards.md).
 The day of 2026-10-05 had 220 commits and ~170 releases. About 40 of them
 fixed something released earlier the same day or the day before. Most
 fixes didn't need a second try. The ones that did fall into the patterns below.
+
+On 2026-10-07 four lessons were seen a third day and moved into the code
+standards: a fix reaches every sibling, a change re-derives what is built on
+it, a red test on main is a bug now, and a merge records what was run at
+the reviewed head. They are listed under
+[Moved to the code standards](#moved-to-the-code-standards).
+
+2026-10-08 had 192 commits and 18 releases (v0.1.1105 to v0.1.1122), each
+tagged after a green run. Two more lessons were seen a third day and moved:
+real use before building on it, and GUI tests in both engines and every
+language. The acceptance checks now include `gofmt -l` and a Linux and
+Windows `go vet`, since a cross-OS build skips `_test.go`.
 
 ## Reading the report
 
@@ -53,6 +65,10 @@ content before you rest an account.**
   prompt) as an account fault. It rested every WorkBuddy AI account for 5
   days (2033df0f).
 - Test that the same request fails the same way on a second account.
+- Done right on 10-07: bed306ae (#1062) told Google's 400 for an unsupported
+  thinking level apart from thinking_config being turned away. It now
+  remembers that the model refused reasoning off, not that the provider
+  refused thoughts.
 - Seen 1× (2026-10-05).
 
 **Fix what the error is about, not only how it is worded.**
@@ -67,26 +83,6 @@ content before you rest an account.**
 
 ## Fix the class, not the sample
 
-**When the bug is in shared logic or a repeated pattern, grep every sibling
-and fix them in one change.** Siblings are every agent, every subcommand, every
-guard of the same shape, every caller of a predicate.
-- 6fb05259 fixed #835 for OpenHanako only. 25 agents had it. Fixed in
-  165fee0d 14 minutes later.
-- 31626c15 fixed the WSL LAN key for omp only. OpenCode and 14 others were
-  fixed in e77a3737.
-- 37ec7259 lifted the forget guard for one case. 30d952cf followed 26
-  minutes later, and Codex's copy of the guard lived until 43a65950, about 50
-  releases later.
-- 2f135ed4 gave short plugin names to `plugin options` only. on, off and rm
-  failed until db812921.
-- ZCode's NAS-address fix (63f83bf1, 5daba301) was needed again in WorkBuddy.
-- bf9bd9c9 (#898) changed `Running()` on Windows, and Cline's if/else chain
-  took the wrong branch (3fad3d21).
-- #933: 7a926dd3 signed the ChatGPT API subscription in but listed only the
-  account catalog's models; the plan's Codex models followed an hour later
-  (b0607ef5).
-- Seen 2× (2026-10-05, six times; 2026-10-06).
-
 **Scope a vendor rule to that vendor.**
 - e950eb08 capped every model at 272K over one DeepSeek report. Claude [1m]
   models were capped too (531dc0aa).
@@ -96,23 +92,14 @@ guard of the same shape, every caller of a predicate.
   Add a test that another vendor's model is unchanged.
 - Seen 1× (2026-10-05).
 
-**When you change what a formula or a fetched list means, re-derive
-everything built on it.**
-- 12cba74a changed Zed's max_tokens but kept the old clamp, which cut replies
-  (69a7744a).
-- d1c19131 added facts only to lists fetched afterwards. Lists saved on
-  disk stayed empty (37231626).
-- 10-06: e0bf3e61 changed the names the catalog gives an unlisted model.
-  internal/agent's Hanako tests are built on those names and went red
-  (c0c3b20b). 2a990175 (#971) made Usage and Providers ask a new
-  /api/upstream. menu-scroll.test.cjs fails on any API it doesn't serve, and
-  it failed 24 of 24 on main until b2b72ea0. A new endpoint the GUI calls
-  means running the whole GUI suite, not only the touched page's tests.
-- Seen 2× (2026-10-05, 2026-10-06).
-
 **A restriction covers every route that reaches the thing it guards.**
 - 46f03154 (#882) held keys to some models. count_tokens and System One's
   decision model weren't covered until d7a8ddc8.
+- Done right on 10-07: 6b6113aa let a gateway key take the user's own value.
+  It found that a local request with such a value would skip key limits, and
+  moved managedKey onto access.Named, with a test that fails on the old
+  check. c83c0d5f (#1112) kept a pinned MAGPIE_ADDR host while sharing, and
+  checked that requests behind Tailscale Serve still count as remote.
 - Seen 1× (2026-10-05).
 
 ## The user's own files and settings
@@ -134,6 +121,10 @@ everything built on it.**
   sign-out wrote back as "no accounts" (d5619d5a only retried for 15ms).
   Fixed in b363327d: the accounts read before are kept, and a file that
   doesn't parse is copied aside before it is written over.
+- Done right on 10-07: d40fee80 (#1097) backs up Pi's mcp.json before
+  moving it whole, and doesn't move it when the backup fails. 2c2137be
+  deletes a dsh session only under its own folder, to the trash, with
+  Restore, and was tried with real dsh.
 - Seen 1× (2026-10-05).
 
 **Before deleting or overwriting a live credential, find every record that
@@ -163,33 +154,36 @@ could match the same key.**
 
 ## Verification
 
-**"Not tried with the real thing" means don't build more on it, and don't
-tell users it works.**
-- Cursor Private Inference shipped four times without the real app. The
-  real client's key and User-Agent never reached the new path (387afd07).
-- Add to PATH was "not tried on Windows" and failed for the site's
-  magpie-windows-amd64.exe for 8.5h (90b1ac79). The Windows box was there.
-- The Trae CN check-in shipped on three guesses (#808, #821). Design the
-  experiment that tells the guesses apart, or ask the reporter to run it.
-- A platform report (WSL, Windows) is checked on that platform: ssh to the
-  box. A GOOS build is not a test.
-- Seen 1× (2026-10-05).
+**Windows CI only compiles the tests, so a Windows-only red shows
+nowhere.** Run the package on the Windows box before calling a Windows
+failure "the same on main".
+- TestCursor was red on Windows for 3 days, from 585f7f7d until #1248.
+- 5d0c1dca's 16 and 76 Windows failures were called the same as main.
+  Neither was filed. #923 is the open work to run more of the suite there.
+- Seen 1× (2026-10-08).
 
-**A GUI change runs its tests in both Chromium and WebKit, at narrow widths,
-in every language.**
-- ~40 GUI commits ran WebKit only, without saying Chromium wasn't run.
-- 3ec6b4da squeezed key names to "…" (#841). 653cb8ee shrank the ZCode
-  question to 0px at 440px.
-- 43a65950 broke gui-ja/gui-de placeholders for 3.5h. Run gui-ja and gui-de
-  for every new `t()` string.
-- When you reword a string, `git grep` the old text under internal/gui/tests.
-  4a87b306 left routing-served red for 8 releases.
-- Test the empty case: 6fc0afe8's price editor couldn't price a model with
-  no list price (4c001cef).
-- 10-06: 4c170cba's Japanese string had a third `{agent}`, and gui-ja was red
-  until 34bfb9ca. 29e6d148 (#929) kept a clicked chip in view in Chromium
-  only; c6e318e1 did WebKit 40 minutes later.
-- Seen 2× (2026-10-05, 2026-10-06).
+**What telemetry sends is an allow-list, and a change to what is sent
+re-derives every place that discloses it.**
+- 169c23c1 sent `omp#` profile ids and the user's own model ids, which
+  aren't in the public catalog (fixed in 2cdae80a: only known ids are sent).
+- 7d663a27 sent each partner's daily counts, while the READMEs' Privacy and
+  the site's "What does magpie send about me?" still listed what was sent
+  before (b4aa62af).
+- Grep the READMEs (en, zh) and site/public/docs (en, zh, ja) for the
+  privacy text in the same commit.
+- Seen 1× (2026-10-08).
+
+**A test never loads a real third-party page.**
+- 9755201b's test opened ChatGPT, whose Cloudflare challenge hung it.
+  9f0831b2 and 88f2eb8a did the same with other vendor pages.
+- Serve the page from httptest, built from bytes saved from the real one.
+- Seen 1× (2026-10-08).
+
+**Reproduce on CI's Go version.**
+- #1184 couldn't be reproduced on go1.27.1 locally. CI ran 1.26.x, and the
+  cause was a Go 1.26.8 segfault. Docker `golang:1.26.8` with
+  `GOTOOLCHAIN=local` matches CI.
+- Seen 1× (2026-10-08).
 
 ## Concurrency and tests
 
@@ -203,47 +197,71 @@ handoff that lets another goroutine look at it.**
 - The Claude subscription run recorded run.tools after continueWith had
   already answered the agent, so a quick turn read the old tools
   (TestToolSearchLoadKeepsTheRun, c8690ca0).
-- Seen 1× (2026-10-06).
+- 10-08: 01e66e0f's claudeCredentials.marshal wrote into the raw map that
+  every copy of the struct shares. A struct copied by value that holds a
+  map is not a copy (15afd988).
+- Seen 2× (2026-10-06, 2026-10-08).
 
 **A fake or child process a test starts ends when the test does.**
 - TestClaudeSignInByPaste's fake `claude auth login` polled every 50ms for 2
   days after its test, waiting on a file in a TempDir that was gone
-  (38a0f470).
+  (38a0f470). On 10-07 #1060's kept fake Claude Code runs end with their
+  test.
 - After a test times out, check `ps` for its binary. An orphaned gateway.test
   spun at 96% CPU for 30 minutes.
 - Size -count to -timeout. A timeout panic is not a hang until its stacks
   show one.
-- Seen 1× (2026-10-06).
+- 10-08: #1318's detached goroutine outlived its test; its review caught it.
+- Seen 2× (2026-10-06, 2026-10-08).
+
+**A timing test leaves room on both sides.**
+- Leave slack against a fake's sleep (8d6e9bad). Keep a threshold
+  classifier's fixture far from every threshold it has (5e17a183). A
+  wall-clock bound fails under CI load (bc7c62dc).
+- When fixing one, list every timing assumption in the test, not only the
+  one that failed.
+- Reproduce a timing flake by injecting the delay, not by rerunning until
+  it fails (0f8e4ebc).
+- Seen 1× (2026-10-08).
+
+**A test named for a guarantee fails when the guarantee breaks.**
+- #1318's TestHistoryWriteHoldsNoWaiter still passes with the waiter held:
+  nothing in it waits while the history write is held. Filed as #1358 with
+  a design that fails on the old code.
+- Before merging, break the guarantee by hand and watch the test go red.
+- Seen 1× (2026-10-08).
 
 ## Red tests and releases
 
-**A test that fails on main is a bug to fix now, not a baseline.**
-- 19 commits from 10-01 to 10-05 said "fails the same on origin/main" and
-  shipped.
-- TestAccountsOfAPlugin was red for 5 releases after 30d952cf.
-  TestSetPortMovesTheGateway failed on contributors' clean checkouts (#872,
-  #885).
-- "Flaky, passes alone" hid a real data race in
-  TestCloudflareDecideModelsTested for 19h (a45b3e09).
-- Run `go test -race -count=20 -run X` before calling something a flake.
-  Then fix it, or name the cause in an issue, in its own commit.
-- 10-06: 4c170cba, ab47042b, 76dc5aed and aab93f9f each shipped with tests
-  that "failed under the full run's load and pass on their own". Two of them
-  weren't load: TestProvidersAnswerWhileListsComeIn depended on test order
-  (bfe8bcaf), and Kiro's identity refresh had a data race (ccdd18e3).
-- Later on 10-06: TestPluginSOCKSProxy timed out at 60s on ubuntu CI and was
-  rerun as "load jitter". It takes 3s on a Mac every time, and a dead local
-  proxy should refuse in milliseconds, so something on that path waits.
-  TestUnreadLoginsNotWrittenOver needed two writes inside one wall-clock
+**Flaky tests: find the cause.** "A test that fails on main is a bug to fix
+now" is in the code standards. What the reviews found about finding the
+cause:
+- TestPluginSOCKSProxy timed out at 60s on ubuntu CI and was rerun as "load
+  jitter". It takes 3s on a Mac every time, and a dead local proxy should
+  refuse in milliseconds, so something on that path waits. Its cause
+  isn't found yet.
+- TestUnreadLoginsNotWrittenOver needed two writes inside one wall-clock
   second (a `.bad-<second>` name) and failed on Linux CI (237d216b). Test a
   name made from time.Now() across a second boundary.
 - Before fixing a red CI run, `git log origin/main` for a commit that names
   that run or test. 85fd35ab and e34e53a1 fixed the same lost tail in two
   sessions at once.
+- 10-07: 07e246e5 named 24 GUI failures as "the same on origin/main". Run
+  alone on main, all 8 of their files pass, and so do the two the full run
+  failed (api-key-theme, fold-show-grip). They fail only under the full run,
+  and CI never runs the GUI suite, so nothing shows it. e95852e3 (#948) named
+  TestCursor (Windows) and TestOTelRetryAfterBound the same way. Both pass on
+  macOS main and on CI. Neither is filed.
+- 10-08: 6ab4c16f fixed the run 0f8e4ebc had already fixed. bc7c62dc, #1216,
+  a2a7fb11, 5d0c1dca and #950 each shipped past "fails the same on main".
+- Done right on 10-08: #1184 found the Go 1.26.8 segfault behind its flake,
+  and 30a8ce29 fixed its flake at the cause.
 - Done right: 2bd49cc5's race was fixed at its cause in 25 minutes
-  (28049bd2, -race -count=40 -cpu 1,2). 60f87223 and b1cba654 fixed two
-  flakes at their cause instead of retrying.
-- Seen 2× (2026-10-05, dozens of commits; 2026-10-06).
+  (28049bd2, -race -count=40 -cpu 1,2). 60f87223, b1cba654, 443f1cbc and
+  395c4bc5 fixed flakes at their cause instead of retrying. 06420a71 fixed
+  the macOS first-run check at its cause.
+- Seen 3× (2026-10-05, 2026-10-06, 2026-10-07); the rule itself is in the
+  code standards.
 
 **Don't tag until a CI Test run on that commit, or one containing it, has
 finished green. A cancelled run is not a pass.**
@@ -255,33 +273,28 @@ finished green. A cancelled run is not a pass.**
   v0.1.956 was announced on #856 but never built.
 - Before listing a package in market.json, check it resolves with
   `npm view`. 2f135ed4's middleware packages reached npm 5h after the
-  release.
-- Seen 1× (2026-10-05).
+  release. Done right on 10-07: 35485f2d, 01aaa8e9 and 92e4fc32 each checked
+  the package on npm first.
+- 10-08: 01e66e0f's own run was cancelled, so its red showed up on the next
+  commit's run. Every tag that day waited for a green run.
+- Seen 2× (2026-10-05, 2026-10-08).
 
 ## Merging and closing
 
-**Merge only the head you reviewed and ran.**
-- Use `gh pr merge --match-head-commit <sha>`.
-- #736 and #827 merged commits pushed after the last review. #807 and #838
-  posted their verification after merging.
-- 10-06: #974 was reviewed at 95b66f60, force-pushed 45 minutes later with a
-  rebase and a new commit, and merged with nothing said about the new head.
-  #966 is the model: re-checked at the new head, and the merge comment says
-  so.
-- Write what you ran on the PR, then merge. On 10-06, #1004, #1015, #1018,
-  #1021, #1029 and #1034 each got their "verified" comment 2 to 14 seconds
-  after the merge. #981, #1000 and #1030 got none. A merge with no record of
-  what was run can't be checked afterwards.
-- Never merge a PR whose own new test fails (#885, #826). Fix or file the
-  problems a review lists before merging. #846 merged with four known-wrong
-  translations.
-- Seen 2× (2026-10-05, 2026-10-06).
+**Never merge a PR whose own new test fails, or with known problems a
+review listed.** (Merging only the reviewed head, and writing what was run
+before the merge, are in the code standards.)
+- #885 and #826 merged with their own new test failing. #846 merged with
+  four known-wrong translations. Fix or file the problems first.
+- Seen 1× (2026-10-05).
 
 **Keep the issue open until the reporter's case works. Reopen when they say
 it doesn't.**
 - On #876 the reporter couldn't reopen it themselves and had to file #888.
 - Don't close as not-planned what the owner hasn't ruled on. #769 and #871
   were reversed.
+- Done right on 10-07: #1050, #1053, #1063 and #958 shipped a fix and stayed
+  open for the reporter.
 - Seen 1× (2026-10-05).
 
 **One commit, one goal.**
@@ -292,3 +305,40 @@ it doesn't.**
 - 76dc5aed bundled a Routing animation fix, a scrollbar fix and bringing the
   GUI tests up to date.
 - Seen 2× (2026-10-05, 2026-10-06).
+
+**A large commit has a body: what changed, why, and what was run.**
+- 586f2bce changed 5133 lines with a subject line only. bb8a3e30, ed4476b9,
+  e22d5eef and d2241a57 had no body either, so a later review can't tell
+  what was verified.
+- Seen 1× (2026-10-08).
+
+## Moved to the code standards
+
+These were seen on three or more days. The rules and their evidence are in
+[docs/code-standards.md](docs/code-standards.md); a review still checks
+each one.
+
+- **A fix reaches every sibling of the bug** (10-05, 10-06, 10-07). Seen
+  six times on 10-05. On 10-07 cd8d64a9's sub2api balance URL was left out
+  of the hint shown after a failed read.
+- **A change re-derives everything built on what it changes** (10-05,
+  10-06, 10-07). On 10-07: click-scroll red since 5d871723, four GUI tests
+  left red by page-only test runs, and ee2588c2's test race (3e38bd76).
+- **A test that fails on main is a bug to fix now** (10-05, 10-06, 10-07).
+  On 10-07 dcbae2ef, 76d82528, b2345078, 07e246e5 and e95852e3 each shipped
+  past "fails the same on origin/main".
+- **Merge only the reviewed head, and write what was run before the merge**
+  (10-05, 10-06, 10-07). On 10-07 #1037 merged with no record.
+- **Real use before building on it, or telling users it works** (10-05,
+  10-07, 10-08). Acceptance criterion 5. On 10-08 bbf99143 "not tried on
+  Linux" broke Linux vet with the WSL2 distro there, and #1185 was reviewed
+  on macOS only.
+- **GUI tests in both engines, at narrow widths, in every language**
+  (10-05, 10-06, 10-08). Acceptance criterion 4. On 10-08 aff4f9f2's zh-TW
+  missed later strings, and usage-ledger was red ~7h after 586f2bce.
+- **A fix reaches every sibling** was missed again on 10-08: #1239 fixed
+  Air 9h after a8290d27, and 173ab71e fixed Gemini bodies after #950.
+  Done right on 10-08: a8290d27 itself, 9fcd332b (cmd.exe quoting at one
+  choke point, tried on the Windows box), 74a809dc with 84f37ac9
+  (re-derived account keys), #1271/#1275 (built-in and plugin together),
+  3aeb7d1b (a refusal scoped to the model) and #1288.

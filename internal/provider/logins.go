@@ -110,6 +110,10 @@ type savedLogin struct {
 	// magpie last looked: its saved copy is that very sign-in, which
 	// Claude Code's /logout revokes (claudeLoggedOut).
 	Held bool `json:"held,omitempty"`
+	// was is the name a Copilot account read under a new one had in the
+	// file (#1220): its per-account settings are still kept by it, and
+	// move to the new one before the new name is written (renameSettled).
+	was string
 }
 
 var (
@@ -231,7 +235,10 @@ func writeLogins(ls []savedLogin) error {
 		}
 		return strings.ToLower(ls[i].User) < strings.ToLower(ls[j].User)
 	})
-	b, err := json.MarshalIndent(ls, "", "  ")
+	// a Copilot account renamed on read is written under its new name
+	// once its settings have moved to it; until they can, under its old
+	disk := renameSettled(ls)
+	b, err := json.MarshalIndent(disk, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -420,11 +427,17 @@ func codexName(ls []savedLogin, l savedLogin) string {
 
 // nameAlike gives each Codex account in ls a name of its own (codexName),
 // the first by a name keeping it: two saved by one name before are told
-// apart from the next write on.
+// apart from the next write on. A Copilot account on an enterprise's host
+// is named with it (copilotSavedName, #1220).
 func nameAlike(ls []savedLogin) []savedLogin {
 	for i := range ls {
 		if ls[i].Agent == "codex" {
 			ls[i].User = codexName(ls[:i], ls[i])
+		}
+		if ls[i].Agent == "copilot" {
+			if now := copilotSavedName(ls[i]); now != ls[i].User {
+				ls[i].renameTo(now)
+			}
 		}
 	}
 	return ls

@@ -44,7 +44,7 @@ func TestServeCursorMaxModeRequired(t *testing.T) {
 			}
 		}
 		ran = append(ran, fmt.Sprintf("%s:%d:%d", model, details, requested))
-		http.NewResponseController(w).EnableFullDuplex()
+		cursorDuplex(w)
 		w.Header().Set("Content-Type", "application/connect+proto")
 		if strings.HasPrefix(model, "gpt-5.6-luna") && details == 0 {
 			w.Write(cursorEnd(`{"error":{"code":"failed_precondition","message":"Error","details":[{"debug":{"error":"ERROR_MAX_MODE_REQUIRED","details":{"title":"Max Mode Required","detail":"The model \"` + model + `\" requires Max Mode to be enabled. Please enable Max Mode and try again."}}}]}}`))

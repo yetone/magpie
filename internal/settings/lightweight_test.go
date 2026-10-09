@@ -70,3 +70,18 @@ func TestWindowMaximisedKeptAndOwn(t *testing.T) {
 		t.Fatalf("another computer's window here: %v %v", from.Window, from.WindowMaximised)
 	}
 }
+
+// Detect agents in WSL (#1264) is this computer's own: a sync from a Mac or
+// a restored backup leaves it as it is on this Windows box.
+func TestNoWSLAgentsOwn(t *testing.T) {
+	from := Settings{Theme: "dark"}
+	from.KeepOwn(Settings{NoWSLAgents: true})
+	if !from.NoWSLAgents || from.Theme != "dark" {
+		t.Fatalf("KeepOwn: %+v", from)
+	}
+	from = Settings{NoWSLAgents: true}
+	from.KeepOwn(Settings{})
+	if from.NoWSLAgents {
+		t.Fatal("another computer's turned off here")
+	}
+}

@@ -322,7 +322,10 @@ type npmLatest struct {
 	Homepage    string `json:"homepage"`
 	Repository  any    `json:"repository"`
 	Author      any    `json:"author"`
-	NPMUser     struct {
+	// Main and Exports are what importing it loads (pkgEntry)
+	Main    string          `json:"main"`
+	Exports json.RawMessage `json:"exports"`
+	NPMUser struct {
 		Name string `json:"name"`
 	} `json:"_npmUser"`
 }
@@ -612,7 +615,7 @@ func Installed(spec string) string {
 }
 
 // Upgrade installs the newest version of one plugin: npm's, or its git
-// repository's commit now.
+// repository's commit now. One bun won't install says why.
 func Upgrade(ctx context.Context, name string) error {
 	for _, e := range Load().Plugins {
 		if (Name(e.Spec) == name || e.Spec == name) && IsGit(e.Spec) {
@@ -621,7 +624,9 @@ func Upgrade(ctx context.Context, name string) error {
 			return err
 		}
 		if Name(e.Spec) == name && !IsPath(e.Spec) {
-			_, err := Add(ctx, name)
+			// the version npm has now, not bun's "latest" (installAt);
+			// npm not answering, bun's as before
+			_, err := add(ctx, name, newestOf(ctx, name))
 			return err
 		}
 	}

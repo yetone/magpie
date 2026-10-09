@@ -11,7 +11,9 @@
 // matches the text it was made for — and one placeholder is never two
 // values. The values are held in memory only, by placeholder, as requests
 // bring them; a restart loses nothing, since the next request brings them
-// again.
+// again. A value once masked is masked wherever a request has it, whatever
+// words are around it (known.go): the vendor writes about a placeholder in
+// words no rule knows, and the agent sends that text back with the value.
 package redact
 
 import (
@@ -263,8 +265,10 @@ func placeholder(kind, v string) string {
 					break
 				}
 			}
+			reindexKnown()
 		}
 		values[p] = v
+		addKnown(p, v)
 	}
 	mu.Unlock()
 	return p
@@ -329,6 +333,15 @@ func mask(s string, o Options, put func(kind, v string) string) (string, int) {
 			found = append(found, span{a, b, r.kind})
 		}
 	}
+	// after the rules', so where a rule finds the same value it keeps the
+	// kind it has always had
+	found = append(found, knownSpans(s, o)...)
+	return apply(s, found, put)
+}
+
+// apply swaps each of found in s for what put makes of its value, the
+// first and longest where they overlap, nothing inside a placeholder.
+func apply(s string, found []span, put func(kind, v string) string) (string, int) {
 	if len(found) == 0 {
 		return s, 0
 	}

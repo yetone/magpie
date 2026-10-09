@@ -54,6 +54,17 @@ type searchForKey struct{}
 type CallFor struct {
 	Agent string `json:"agent"`
 	Model string `json:"model"`
+	// Unknown, on an image's description, is that the model was counted
+	// text-only because nothing magpie knows says whether it sees images
+	// (blindTo), not because its list or the user says it takes text only.
+	// The Routing view says which, so a user whose model does see knows
+	// to say so (#1287).
+	Unknown bool `json:"unknown,omitempty"`
+	// Missing, on an image's description, is the Image recognition model
+	// the user picked in Settings that magpie can't find any more: the
+	// model that described is the one magpie picks in its place
+	// (VisionMissing), and the Routing view names both.
+	Missing string `json:"missing,omitempty"`
 }
 
 func searchFor(ctx context.Context) *CallFor {
@@ -574,7 +585,7 @@ func (s *Server) searchReply(w http.ResponseWriter, r *http.Request, from provid
 		defer close(events)
 		s.searchRounds(ctx, &q, tool.Name, first, ask, events)
 	}()
-	return relay(w, r, from, name, req, events, usage, cancel, func(string, string, bool) {})
+	return relay(w, r, from, name, req, events, usage, cancel, nil, func(string, string, bool) {})
 }
 
 func (s *Server) searchRounds(ctx context.Context, q *Request, tool string, in <-chan Event, ask round, out chan<- Event) {

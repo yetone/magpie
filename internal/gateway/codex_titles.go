@@ -136,11 +136,10 @@ func (s *Server) codexTitle(w http.ResponseWriter, r *http.Request, body []byte,
 // {"description": ...} its schema asks for; a reply without one fails as a
 // description, not as a title.
 func (s *Server) codexDescription(w http.ResponseWriter, r *http.Request, body []byte, to string) {
-	shape := descriptionShapeOf(body)
 	body, _ = codexInput(body, true)
 	rec := &recorder{header: http.Header{}, status: 200}
 	check := func(reply string) string {
-		if res, err := compactReply([]byte(reply)); err == nil && descriptionJSON(messageText(res), shape) == "" {
+		if res, err := compactReply([]byte(reply)); err == nil && descriptionJSON(messageText(res)) == "" {
 			return noDescription(messageText(res))
 		}
 		return ""
@@ -166,7 +165,7 @@ func (s *Server) codexDescription(w http.ResponseWriter, r *http.Request, body [
 		id = fmt.Sprintf("resp_magpie_%d", time.Now().UnixNano())
 	}
 	var out []any
-	if d := descriptionJSON(messageText(res), shape); d != "" {
+	if d := descriptionJSON(messageText(res)); d != "" {
 		out = append(out, map[string]any{"type": "message", "id": "msg_" + strings.TrimPrefix(id, "resp_"), "role": "assistant", "status": "completed",
 			"content": []any{map[string]any{"type": "output_text", "text": d, "annotations": []any{}}}})
 	}
@@ -184,20 +183,9 @@ func noDescription(said string) string {
 	return "description: no description in the model's answer, so Codex got none: " + said
 }
 
-// descriptionShape is the {"description"} object a description request asks
-// for. Its max length is all magpie needs: the reply contains that one field.
-type descriptionShape struct {
-	MaxLength int
-}
-
-func descriptionShapeOf(body []byte) descriptionShape {
-	shape := titleShapeOf(body)
-	return descriptionShape{MaxLength: shape.Properties["description"].MaxLength}
-}
-
-// descriptionJSON is a model's answer as {"description": "..."}, cut to the
-// schema's length. "" when the answer gave none.
-func descriptionJSON(said string, shape descriptionShape) string {
+// descriptionJSON returns the model's text as the nonempty description
+// object Codex asks for. An unusable answer returns an empty string.
+func descriptionJSON(said string) string {
 	t := strings.TrimSpace(said)
 	if rest, ok := strings.CutPrefix(t, "<think>"); ok {
 		if _, after, ok := strings.Cut(rest, "</think>"); ok {
@@ -222,11 +210,6 @@ func descriptionJSON(said string, shape descriptionShape) string {
 	t = strings.TrimSpace(strings.Trim(strings.TrimSpace(t), "\"`'"))
 	if t == "" || strings.HasPrefix(t, "{") {
 		return ""
-	}
-	if n := shape.MaxLength; n > 0 {
-		if r := []rune(t); len(r) > n {
-			t = strings.TrimSpace(string(r[:n]))
-		}
 	}
 	b, _ := json.Marshal(map[string]string{"description": t})
 	return string(b)

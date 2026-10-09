@@ -84,9 +84,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const where = () => page.evaluate(() => [scrollX, scrollY, document.scrollingElement.scrollTop, ...[...document.querySelectorAll("*")].filter((e) => e.scrollTop).map((e) => e.scrollTop)]);
       const before = await where();
       const click = async (loc) => {
-        let b = await loc.boundingBox();
-        // the row is drawn again as the save comes back
-        for (let i = 0; i < 20 && !b; i++) { await page.waitForTimeout(50); b = await loc.boundingBox(); }
+        // the last save's answer draws Settings again, every option replaced:
+        // one measured before that is gone (null) by the time it is clicked
+        await page.waitForFunction(() => prefsBusy === 0);
+        const b = await loc.boundingBox();
         await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
       };
       await click(opt(w.on));

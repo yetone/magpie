@@ -6,12 +6,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/testenv"
+	"golang.org/x/sys/unix"
 )
 
 // A desktop app with launchd's PATH finds a claude installed under a custom
@@ -140,5 +143,37 @@ func TestShellEnvNushell(t *testing.T) {
 	}
 	if got := vars["CLAUDE_CONFIG_DIR"]; got != "" {
 		t.Fatalf("CLAUDE_CONFIG_DIR = %q, want none", got)
+	}
+}
+
+// The login shell is asked outside magpie's process group and session (DD
+// on Discord: magpie web → zsh: suspended (tty input)). An interactive zsh
+// in magpie's session puts itself in the terminal's foreground, which left
+// magpie's group in the background there: Ctrl-C no longer reached it, and
+// anything in the group that touched the terminal had the kernel stop all
+// of it. The fake shell answers with its own process group and session; a
+// real zsh, where there is one, still gives its PATH when asked that way.
+func TestAskShellOwnSession(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	sh := filepath.Join(home, "sh")
+	testenv.Program(t, sh, "#!/bin/sh\nprintf '"+shellMark+"%s %s"+shellMark+"' \"$(ps -o pgid= -p $$ | tr -d ' ')\" \"$(ps -o sess= -p $$ | tr -d ' ')\"\n")
+	out, _ := askShell(sh)
+	f := strings.Fields(out)
+	if len(f) != 2 {
+		t.Fatalf("the fake shell's answer: %q", out)
+	}
+	if mine := strconv.Itoa(syscall.Getpgrp()); f[0] == mine {
+		t.Fatalf("the login shell ran in magpie's process group %s: a shell there takes the terminal from magpie", mine)
+	}
+	if sid, err := unix.Getsid(0); err == nil && f[1] == strconv.Itoa(sid) && f[1] != "0" {
+		t.Fatalf("the login shell ran in magpie's session %s: it can take magpie's terminal", f[1])
+	}
+	zsh, err := exec.LookPath("zsh")
+	if err != nil {
+		t.Skip("zsh isn't installed")
+	}
+	if p := ShellPath(zsh); len(p) == 0 {
+		t.Fatalf("zsh asked in a session of its own gave no PATH")
 	}
 }

@@ -9,3 +9,5 @@ import "github.com/wailsapp/wails/v3/pkg/application"
 func plainTitlebar(*application.WebviewWindow) {}
 
 func nameWindow(*application.WebviewWindow, string) {}
+
+func ownFrame(*application.WebviewWindow) {}

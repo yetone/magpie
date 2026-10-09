@@ -19,6 +19,17 @@ var trayZh = map[string]string{
 	"Restart Now to Update (%d in flight)": "立即重启以更新（%d 个进行中）",
 }
 
+// trayZhTW is the tray menu in Traditional Chinese, with Taiwan's words.
+var trayZhTW = map[string]string{
+	"Open magpie":                          "開啟 magpie",
+	"Version %s":                           "版本 %s",
+	"Restart to Update":                    "重新啟動以更新",
+	"Restart to Update to %s":              "重新啟動以更新到 %s",
+	"Quit magpie":                          "結束 magpie",
+	"Restart Now to Update":                "立即重新啟動以更新",
+	"Restart Now to Update (%d in flight)": "立即重新啟動以更新（%d 個進行中）",
+}
+
 // trayJa is the tray menu in Japanese.
 var trayJa = map[string]string{
 	"Open magpie":                          "magpie を開く",
@@ -42,21 +53,24 @@ var trayDe = map[string]string{
 }
 
 // trayWords are the tray menu's translations by language.
-var trayWords = map[string]map[string]string{"zh": trayZh, "ja": trayJa, "de": trayDe}
+var trayWords = map[string]map[string]string{"zh": trayZh, "zh-TW": trayZhTW, "ja": trayJa, "de": trayDe}
 
 // onLang relabels the tray menu when the Settings page changes the
 // language; set by the process that has the tray.
 var onLang func()
 
 // trayLang is the language the tray menu is in, as the page picks its own:
-// the setting, or with "system" (or none) the system's, Chinese for any zh,
-// Japanese for any ja, German for any de.
+// the setting, or with "system" (or none) the system's: Traditional Chinese
+// for Taiwan, Hong Kong, Macau and any zh-Hant (zh_TW.UTF-8, zh-Hant-TW),
+// Simplified for any other zh, Japanese for any ja, German for any de.
 func trayLang(pref string, system func() string) string {
 	switch pref {
-	case "en", "zh", "ja", "de":
+	case "en", "zh", "zh-TW", "ja", "de":
 		return pref
 	}
-	switch sys := strings.ToLower(system()); {
+	switch sys := strings.ReplaceAll(strings.ToLower(system()), "_", "-"); {
+	case zhTraditional(sys):
+		return "zh-TW"
 	case strings.HasPrefix(sys, "zh"):
 		return "zh"
 	case strings.HasPrefix(sys, "ja"):
@@ -67,11 +81,26 @@ func trayLang(pref string, system func() string) string {
 	return "en"
 }
 
+// zhTraditional says a lowercased, dashed system tag is Traditional
+// Chinese, as the page's sysLocale does.
+func zhTraditional(sys string) bool {
+	for _, p := range []string{"zh-tw", "zh-hk", "zh-mo", "zh-hant"} {
+		if sys == p || strings.HasPrefix(sys, p+"-") || strings.HasPrefix(sys, p+".") || strings.HasPrefix(sys, p+"@") {
+			return true
+		}
+	}
+	return false
+}
+
 // notesLang is the language release notes are asked in for lang: there are
-// no German ones, so German asks for the English.
+// no German ones, so German asks for the English, and Traditional Chinese
+// asks for the Chinese ones.
 func notesLang(lang string) string {
-	if lang == "de" {
+	switch lang {
+	case "de":
 		return "en"
+	case "zh-TW":
+		return "zh"
 	}
 	return lang
 }

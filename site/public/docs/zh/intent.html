@@ -99,8 +99,8 @@
     <p>你需要一个至少有两个模型的<a href="/docs/zh/start#routing">路由组</a>，再加一个用来判断意图的模型。这个模型可以是 magpie 里的任意模型，在不在组里都行。</p>
     <ol class="steps">
       <li><b>打开分组</b>进入<span class="ui">路由</span>页，在「路由组」里找到分组，点<span class="ui">编辑</span>。</li>
-      <li><b>添加带意图的规则</b>点<span class="ui">添加规则</span>，在<span class="ui">先发给</span>里选模型，点<span class="ui">意图是</span>，写下这类消息想做什么，例如 <em>writing or fixing tests</em> 或「写测试或修测试」。同一条规则上的其他条件也必须同时满足。</li>
-      <li><b>选择意图判断模型</b>有规则带意图后，下方会出现<span class="ui">意图判断模型</span>。建议选小而快、不带推理的模型。有意图却没有判断模型时，分组无法保存。</li>
+      <li><b>添加带意图的规则</b>点<span class="ui">按意图分流</span>（或<span class="ui">添加规则</span>），在<span class="ui">先发给</span>里选模型，点<span class="ui">意图是</span>，写下这类消息想做什么，例如 <em>writing or fixing tests</em> 或「写测试或修测试」。同一条规则上的其他条件也必须同时满足。</li>
+      <li><b>选择意图判断模型</b>有规则带意图后，下方会出现<span class="ui">意图判断模型</span>；有 TypeSafe provider 时默认就是 Jev，否则建议选小而快、不带推理的模型。已经让 Jev 选推理强度的分组，判断模型下方也有同一个入口：<span class="ui">它也能挑模型</span>。有意图却没有判断模型时，分组无法保存。</li>
       <li><b>保存，然后发条消息</b>从下一轮起生效，不用重启。<span class="ui">路由</span>页会显示判断模型说了什么、这一轮去了哪里。</li>
     </ol>
     <p>命令行里也可以设置：</p>

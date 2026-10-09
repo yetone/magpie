@@ -26,8 +26,10 @@ const thinksCatalog = `{
 // A model that thinks but takes no levels is listed on /v1/models with
 // reasoning true and no levels, told apart from one that doesn't think
 // (#402) — Xiaomi's own, a relay's whose list says nothing of reasoning,
-// and a group of them. A group with a member that doesn't think doesn't
-// say it does; a model with levels still lists them.
+// and a group of them. A group reasons when a member does, whatever it
+// offers as levels, and the gateway sends a member known not to think no
+// reasoning ask (#950); a group none of whose members think says false. A
+// model with levels still lists them.
 func TestModelsReasoningWithoutLevels(t *testing.T) {
 	fresh(t)
 	if err := os.MkdirAll(filepath.Dir(catalog.CachePath()), 0o755); err != nil {
@@ -58,6 +60,7 @@ func TestModelsReasoningWithoutLevels(t *testing.T) {
 	for _, g := range []provider.Group{
 		{Name: "Auto MiMo", Members: []string{"xiaomi/mimo-v2.6-flash", "relay/mimo-v2.6-flash"}, Routing: provider.Ordered},
 		{Name: "Mixed", Members: []string{"relay/mimo-v2.6-flash", "relay/plain"}, Routing: provider.Ordered},
+		{Name: "Quiet", Members: []string{"relay/plain", "relay/mystery"}, Routing: provider.Ordered},
 	} {
 		if err := provider.SaveGroup(g); err != nil {
 			t.Fatal(err)
@@ -87,10 +90,14 @@ func TestModelsReasoningWithoutLevels(t *testing.T) {
 		"xiaomi/mimo-v2.6-flash": {true, 0},
 		"relay/mimo-v2.6-flash":  {true, 0},
 		"group/auto-mimo":        {true, 0},
-		"group/mixed":            {false, 0},
-		"relay/plain":            {false, 0},
-		"relay/mystery":          {false, 0},
-		"relay/levelled":         {true, 2},
+		// a member thinks, so the group does: the quiet member is sent no
+		// reasoning ask rather than taking reasoning from the group (#950)
+		"group/mixed":    {true, 0},
+		"relay/plain":    {false, 0},
+		"relay/mystery":  {false, 0},
+		"relay/levelled": {true, 2},
+		// none of its members thinks: still false
+		"group/quiet": {false, 0},
 	} {
 		if g, ok := got[id]; !ok || g != w {
 			t.Errorf("%s: reasoning %v with %d levels (listed %v), want %v with %d", id, g.reasoning, g.levels, ok, w.reasoning, w.levels)

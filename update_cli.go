@@ -7,8 +7,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
+)
+
+// updateExecutable, updateCanElevate and updateInContainer are
+// update.Executable, update.CanElevate and gateway.InContainer; tests stand
+// in for them.
+var (
+	updateExecutable  = update.Executable
+	updateCanElevate  = update.CanElevate
+	updateInContainer = gateway.InContainer
 )
 
 // updateEveries are the intervals magpie update auto takes, by their
@@ -178,6 +188,11 @@ func updateCmd(args []string) error {
 			fmt.Println(muted.Render("  the `magpie` command at " + tilde(stale) + " is a copy behind this app; re-run the installer, or link it: ln -sf " + tilde(bin) + " " + tilde(stale)))
 		}
 		return nil
+	}
+	// the Docker image's /magpie, run as nonroot: the image is what is
+	// updated, and a replace would only fail with "permission denied"
+	if exe, err := updateExecutable(); err == nil && !update.Writable(filepath.Dir(exe)) && !updateCanElevate() && updateInContainer() {
+		return fmt.Errorf("this magpie runs in a container and can't replace itself; pull the new image (docker pull ghcr.io/yetone/magpie:latest) and recreate the container")
 	}
 	if exe, err := update.Executable(); err == nil && update.Homebrew(exe) {
 		return fmt.Errorf("this magpie was installed with Homebrew; update it with: brew upgrade magpie")

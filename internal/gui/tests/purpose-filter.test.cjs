@@ -23,7 +23,7 @@ async function click(page, locator) {
   }
   await locator.click();
 }
-const assets = path.resolve(__dirname, "../assets");
+const assets = process.env.ASSET_DIR || path.resolve(__dirname, "../assets");
 const now = new Date();
 const day = [now.getFullYear(), now.getMonth() + 1, now.getDate()].map((v) => String(v).padStart(2, "0")).join("-");
 const titleKinds = ["thread_title", "thread_title_reconsideration", "title_generation", "title"];
@@ -85,11 +85,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const page = await context.newPage();
       page.setDefaultTimeout(7000);
       const errors = [], asked = [];
-      page.on("pageerror", (e) => errors.push(e.message));
+      // WebKit reports a ResizeObserver round left to the next frame as a page
+      // error; Chromium doesn't. A purpose picked from a long list shrinks the
+      // Usage page, the click's hold (heldSizes) gives it room again before the
+      // paint, and the page's scrollbar coming back narrows the ledger by 8px
+      // in that same frame, so its own observers are told once more. Under
+      // load that lands past the loop's depth. Nothing is lost or painted
+      // wrong: the round is delivered on the next frame.
+      page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
       await page.route("**/*", server(lang, asked));
       const choose = async (id, value) => {
-        await click(page, page.locator(id));
         const routing = id === "#rtPurpose";
+        await click(page, page.locator(id));
         const wanted = routing ? await page.evaluate((v) => v ? purposeOptions([v], v)[0].name : t("All purposes"), value) : value;
         const item = page.locator(".proto-menu .pm-item");
         const matches = await item.evaluateAll((els, { wanted, routing }) => els.map((e, i) =>
@@ -97,8 +104,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(matches.length, 1, `one menu choice for ${value}`);
         const name = await item.nth(matches[0]).locator(".pm-name").textContent();
         const label = routing ? await page.evaluate(({ value, name }) => value ? t("Purpose: {name}", { name }) : t("Purpose filter"), { value, name }) : name;
-        await item.nth(matches[0]).click();
+        const target = item.nth(matches[0]);
+        if (!routing || !value || await target.getAttribute("aria-checked") !== "true") await target.click();
+        if (routing && value) {
+          const chosen = await page.locator('.rt-purpose-menu [role="menuitemcheckbox"][aria-checked="true"] .pm-name').allTextContents();
+          for (const name of chosen) {
+            if (name !== wanted) await page.locator(".rt-purpose-menu").getByRole("menuitemcheckbox", { name, exact: true }).click();
+          }
+        }
         await page.waitForFunction(({ id, label }) => document.querySelector(id + " span").textContent === label, { id, label });
+        if (routing && await page.locator(id).getAttribute("aria-expanded") === "true") await page.keyboard.press("Escape");
       };
       const waitRows = async (n) => page.waitForFunction((n) => document.querySelectorAll("#ledWrap tbody tr.led-row").length === n, n);
       await page.goto("http://magpie.test/?view=usage&tab=requests");
@@ -186,6 +201,113 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       });
       assert(bounds.left && bounds.right, JSON.stringify(bounds));
       if (process.env.ARTIFACT_DIR) await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-routing-purpose.png`) });
+      assert.deepEqual(errors, []);
+    });
+  }
+}
+
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+    test(`${engine} ${lang}: Routing purpose checkboxes show the union and stay open`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await browser.newPage({ viewport: { width: 1100, height: 800 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(7000);
+      const errors = [];
+      page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
+      await page.route("**/*", server(lang, []));
+      await page.goto("http://magpie.test/?view=routing");
+      await page.locator(".rt-req").nth(7).waitFor();
+      const names = await page.evaluate(() => Object.fromEntries(purposeOptions(["kind:thread_title", "unmarked", "kind:review"]).map((o) => [o.v, o.name])));
+      const menu = page.locator(".rt-purpose-menu");
+      const title = menu.getByRole("menuitemcheckbox", { name: names["kind:thread_title"], exact: true });
+      const unmarked = menu.getByRole("menuitemcheckbox", { name: names.unmarked, exact: true });
+      const review = menu.getByRole("menuitemcheckbox", { name: names["kind:review"], exact: true });
+      const waitRows = async (n) => page.waitForFunction((n) => document.querySelectorAll(".rt-req").length === n, n);
+      await click(page, page.locator("#rtPurpose"));
+      assert.equal(await menu.getByRole("menuitemcheckbox").count(), purposes.length, "purposes are checkbox choices");
+      const scrollTop = await page.locator("#view-routing").evaluate((e) => e.scrollTop);
+      await title.click();
+      await waitRows(4);
+      assert.equal(await page.locator(".rt-req").count(), 4, "all four title aliases match one checkbox");
+      await unmarked.click();
+      await waitRows(5);
+      assert.equal(await page.locator(".rt-req").count(), 5, "selected purposes are combined");
+      assert.equal(await menu.isVisible(), true, "ticking keeps the menu open");
+      assert.equal(await title.getAttribute("aria-checked"), "true");
+      assert.equal(await unmarked.getAttribute("aria-checked"), "true");
+      assert.equal(await unmarked.evaluate((e) => e === document.activeElement), true);
+      assert.equal(await page.locator("#view-routing").evaluate((e) => e.scrollTop), scrollTop, "ticking does not scroll the page");
+      const label = await page.locator("#rtPurpose span").textContent();
+      assert(label.includes(names["kind:thread_title"]) && label.includes(names.unmarked), "the heading names every selected purpose");
+      await review.focus();
+      await page.keyboard.press("Space");
+      await waitRows(6);
+      assert.equal(await page.locator(".rt-req").count(), 6, "keyboard adds another purpose");
+      assert.equal(await review.getAttribute("aria-checked"), "true");
+      await page.keyboard.press("Enter");
+      await waitRows(5);
+      assert.equal(await page.locator(".rt-req").count(), 5, "keyboard removes a purpose");
+      assert.equal(await menu.isVisible(), true);
+      await page.keyboard.press("Escape");
+      assert.equal(await page.locator("#rtPurpose").evaluate((e) => e === document.activeElement), true);
+      await page.locator(".rt-group-by button").last().click();
+      assert.match(await page.locator(".rt-session .summary").textContent(), /^5/);
+      await page.locator(".rt-days .rt-day").nth(1).click();
+      assert.equal(await page.locator(".rt-req").count(), 5, "the same union applies to history and sessions");
+      // Cross-page navigation keeps the union if its target already matches.
+      await page.evaluate(() => window.openRoute(95, new Date().toISOString()));
+      assert.equal(await page.locator(".rt-req").count(), 5);
+      assert.equal(await page.locator("#rtPurpose span").textContent(), label);
+      for (const width of [1100, 560, 360]) {
+        await page.setViewportSize({ width, height: 800 });
+        await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await click(page, page.locator("#rtPurpose"));
+        const bounds = await menu.boundingBox();
+        assert(bounds.x >= 0 && bounds.x + bounds.width <= width, `menu fits at ${width}px`);
+        assert.equal(await title.getAttribute("aria-checked"), "true");
+        assert.equal(await unmarked.getAttribute("aria-checked"), "true");
+        await title.click();
+        await waitRows(1);
+        assert.equal(await page.locator(".rt-req").count(), 1, "unticking keeps the other purpose");
+        await title.click();
+        await waitRows(5);
+        assert.equal(await page.locator(".rt-req").count(), 5);
+        await page.keyboard.press("Escape");
+      }
+      await click(page, page.locator("#rtPurpose"));
+      const view = await page.locator("#view-routing").boundingBox();
+      await page.mouse.move(view.x + 10, view.y + 80);
+      await page.mouse.wheel(0, -200);
+      await menu.waitFor({ state: "detached" });
+      await click(page, page.locator("#rtPurpose"));
+      await title.click();
+      await unmarked.click();
+      await waitRows(8);
+      assert.equal(await page.locator(".rt-req").count(), 8, "unticking the last purpose restores all");
+      assert.equal(await page.locator("#rtPurposeClear").isHidden(), true);
+      assert.equal(await menu.isVisible(), true, "unticking the last purpose keeps the menu open");
+      assert.equal(await unmarked.evaluate((e) => e === document.activeElement), true, "an open menu keeps focus on the checkbox");
+      await title.click();
+      await unmarked.click();
+      const all = await page.evaluate(() => t("All purposes"));
+      const beforeAll = await page.locator("#view-routing").evaluate((e) => e.scrollTop);
+      await menu.locator(".pm-item").filter({ has: page.locator(".pm-name", { hasText: all }) }).focus();
+      await page.keyboard.press("Enter");
+      await waitRows(8);
+      assert.equal(await page.locator(".rt-req").count(), 8, "All purposes resets the whole union");
+      assert.equal(await menu.count(), 0);
+      assert.equal(await page.locator("#rtPurpose").getAttribute("aria-expanded"), "false");
+      assert.equal(await page.locator("#rtPurpose").evaluate((e) => e === document.activeElement), true, "All purposes returns keyboard focus to the purpose button");
+      assert.equal(await page.locator("#view-routing").evaluate((e) => e.scrollTop), beforeAll, "returning focus does not scroll the page");
+      await page.keyboard.press("Enter");
+      assert.equal(await menu.isVisible(), true, "the purpose button can reopen the menu with the keyboard");
+      await title.click();
+      await unmarked.click();
+      await page.keyboard.press("Escape");
+      await click(page, page.locator("#rtPurposeClear"));
+      await waitRows(8);
+      assert.equal(await page.locator(".rt-req").count(), 8, "Clear filter also resets the whole union");
       assert.deepEqual(errors, []);
     });
   }

@@ -239,14 +239,13 @@ func TestClaudeOldSessionsAreSwept(t *testing.T) {
 	long := time.Now().Add(-2 * idleLongest)
 	os.Chtimes(old, long, long)
 	newSubscriptionBridge().sweepSessions([]string{dir})
-	eventually(t, "the old session stayed", func() bool { _, err := os.Stat(old); return os.IsNotExist(err) })
+	// The sweep removes the session's file, then its folder: wait for both.
+	gone := func(p string) bool { _, err := os.Stat(p); return os.IsNotExist(err) }
+	eventually(t, "the old session stayed", func() bool { return gone(old) && gone(filepath.Join(dir, "old")) })
 	for _, f := range []string{recent, filepath.Join(dir, "notes.txt")} {
 		if _, err := os.Stat(f); err != nil {
 			t.Fatalf("%s: %v", f, err)
 		}
-	}
-	if _, err := os.Stat(filepath.Join(dir, "old")); !os.IsNotExist(err) {
-		t.Fatal("the old session's folder stayed")
 	}
 }
 

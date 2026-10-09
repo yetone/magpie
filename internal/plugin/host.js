@@ -827,7 +827,12 @@ function entries(target) {
     const p = path.join(target, f)
     if (fs.existsSync(p)) out.push(p)
   }
-  if (out.length === 0) throw new Error(`plugin ${target} has no entry (package.json main, exports or index file)`)
+  if (out.length === 0) {
+    // a command alone (bin), an MCP server, is no plugin at all (#1327)
+    const cmd = pkg?.bin ? ", only a command (bin). If it is an MCP server, add it under Library → MCP servers instead" : ""
+    // said without a stack: there is no fault in the host to trace
+    throw Object.assign(new Error(`${pkg?.name || target} isn't an OpenCode or magpie plugin: its package names no file to load (no main or exports in package.json, no index file)${cmd}`), { plain: true })
+  }
   return [...new Set(out)]
 }
 
@@ -890,7 +895,7 @@ async function loadPlugins(list) {
       for (const fn of fns) hooks.push({ spec: p.spec, target: p.target, hooks: (await fn(input, p.options)) ?? {} })
       loaded.push({ spec: p.spec })
     } catch (e) {
-      loaded.push({ spec: p.spec, error: String(e?.stack ?? e) })
+      loaded.push({ spec: p.spec, error: e?.plain ? e.message : String(e?.stack ?? e) })
     }
   }
   config = { provider: {}, ...structuredClone(userConfig) }
@@ -1169,6 +1174,8 @@ async function providers({ proxies } = {}) {
           // and before a discount running now (Qoder's price_factor)
           rate: rateOf(m.rate),
           rateWas: rateOf(m.rateWas),
+          // run fast when the request's service_tier is priority (Cursor's)
+          fast: m.fast === true,
         })),
     })
   }

@@ -50,6 +50,8 @@ func (s *Server) serveDevin(w http.ResponseWriter, r *http.Request, from provide
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
+	// the vendor's own API is told the answer's format in words
+	req = req.inSystem()
 	req.Model = model
 	ask := s.askDevin(home, model)
 	if req.WebSearch && !searching(r.Context()) {
@@ -63,7 +65,7 @@ func (s *Server) serveDevin(w http.ResponseWriter, r *http.Request, from provide
 	if events == nil {
 		return writeError(w, from, status, msg), msg
 	}
-	return relay(w, r, from, "Devin", req, events, usage, cancel, func(string, string, bool) {})
+	return relay(w, r, from, "Devin", req, events, usage, cancel, nil, func(string, string, bool) {})
 }
 
 // askDevin is a round for Devin's API.
@@ -307,6 +309,17 @@ func inlineImages(ims []Part) []Part {
 	return out
 }
 
+// Devin names a call after its tool and turn (Bash:0#a65b6a5e…), and
+// Claude Code takes a tool_use id only of [A-Za-z0-9_-]: it drops a call
+// whose id has the ':' or '#', and the turn fails "could not be parsed"
+// (#1304). Such an id goes out as "dv_" and its base64url, and comes back
+// to Devin as it was, so its result still answers its call. An id that is
+// already safe goes out as it came, unless it begins "dv_". The Devin
+// plugin (packages/devin, outID and inID) maps the same way.
+func devinOutID(id string) string { return safeCallID("dv_", id) }
+
+func devinInID(id string) string { return rawCallID("dv_", id) }
+
 // buildDevin is the GetChatMessage request for r, to the model uid.
 func buildDevin(r *Request, uid, key string) []byte {
 	var msgs []devinMsg
@@ -317,7 +330,7 @@ func buildDevin(r *Request, uid, key string) []byte {
 		}
 		pending = nil
 	}
-	for _, m := range r.Messages {
+	for _, m := range joinSplitCalls(r.Messages) {
 		if m.Role == "assistant" {
 			a := devinMsg{role: devinAssistant}
 			var texts []string
@@ -328,6 +341,7 @@ func buildDevin(r *Request, uid, key string) []byte {
 						texts = append(texts, p.Text)
 					}
 				case ToolCall:
+					p.ID = devinInID(p.ID)
 					a.calls = append(a.calls, p)
 				case Thinking:
 					if strings.HasPrefix(p.Signature, "sealed.") {
@@ -361,7 +375,7 @@ func buildDevin(r *Request, uid, key string) []byte {
 			case ToolResult:
 				// only a call just made is answered, and only once
 				for i, c := range pending {
-					if c.ID != p.CallID {
+					if c.ID != devinInID(p.CallID) {
 						continue
 					}
 					out := p.Text
@@ -425,13 +439,22 @@ func buildDevin(r *Request, uid, key string) []byte {
 	if max <= 0 {
 		max = 128000 // the server holds it to the model's own
 	}
+	// Devin answers "an internal error occurred" to a temperature or top_p
+	// of exactly 0, on every model, where 1e-6 goes through: a 0 is sent
+	// as that, as near greedy as Devin takes (plugins #50)
+	above0 := func(v float64) float64 {
+		if v == 0 {
+			return 1e-6
+		}
+		return v
+	}
 	topP := 0.95
 	if r.TopP != nil {
-		topP = *r.TopP
+		topP = above0(*r.TopP)
 	}
 	temp := 1.0
 	if r.Temp != nil {
-		temp = *r.Temp
+		temp = above0(*r.Temp)
 	}
 	out = out.bytes(8, pb{}.varint(1, 1).varint(2, uint64(max)).varint(3, 400).double(5, temp).varint(7, 40).double(8, topP))
 
@@ -446,7 +469,11 @@ func buildDevin(r *Request, uid, key string) []byte {
 			desc = name
 		}
 		offered[name] = true
-		out = out.bytes(10, pb{}.str(1, name).str(2, desc).bytes(3, schema))
+		// Devin's Claude models answer 502 "There is an issue with this
+		// request" to a tool whose parameters have a root anyOf, oneOf or
+		// allOf (#1196: Codex desktop's automation_update), as Anthropic
+		// does behind Factory (#646)
+		out = out.bytes(10, pb{}.str(1, name).str(2, desc).bytes(3, objectSchema(schema)))
 	}
 	for _, t := range tools {
 		desc := t.Description
@@ -602,7 +629,7 @@ func (d *devinDecoder) frame(b []byte) []Event {
 				if id == "" {
 					id = "call_" + randomToken()[:24]
 				}
-				evs = append(evs, Event{Kind: KToolStart, ID: id, Name: name})
+				evs = append(evs, Event{Kind: KToolStart, ID: devinOutID(id), Name: name})
 			}
 			if args != "" {
 				evs = append(evs, Event{Kind: KToolArgs, Text: args})

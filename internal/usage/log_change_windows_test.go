@@ -39,6 +39,10 @@ func requireChangeStamp(t *testing.T, path string) string {
 	if stamp == "" {
 		t.Fatal("ChangeTime is available but the snapshot has no stamp")
 	}
+	want := time.Unix(basic.ChangeTime/10_000_000-11_644_473_600, basic.ChangeTime%10_000_000*100)
+	if got := logChangeTime(info); !got.Equal(want) {
+		t.Fatalf("captured ChangeTime %v != FILETIME %v", got, want)
+	}
 	return stamp
 }
 
@@ -122,6 +126,7 @@ func TestLogChangeSnapshotStampImmutable(t *testing.T) {
 
 func TestLogChangeSnapshotReuseWithoutFingerprint(t *testing.T) {
 	pageHome(t)
+	settleLogClock(t)
 	historyLog(t, 1034)
 	first := readLogSnapshot()
 	requireChangeStamp(t, Path())
@@ -141,6 +146,7 @@ func TestLogChangeSnapshotReuseWithoutFingerprint(t *testing.T) {
 
 func TestLogChangeTrustedAppendReuse(t *testing.T) {
 	pageHome(t)
+	settleLogClock(t)
 	historyLog(t, 1034)
 	before := readLogSnapshot()
 	requireChangeStamp(t, Path())
@@ -153,12 +159,27 @@ func TestLogChangeTrustedAppendReuse(t *testing.T) {
 	if !trusted {
 		t.Fatal("append did not record trusted change-time states")
 	}
+	// The guarantee: the read after a trusted append hashes none of the
+	// historical prefix. Since #1357 its snapshot still carries a fingerprint,
+	// the old digest continued over the appended lines, so count what goes
+	// through logRecordHash instead of looking for an empty hash.
+	hash := logRecordHash
+	var hashed int64
+	logRecordHash = func(path string, n int64) string {
+		hashed += n
+		return hash(path, n)
+	}
+	t.Cleanup(func() { logRecordHash = hash })
 	after := readLogSnapshot()
-	if after.hash != "" {
-		t.Fatal("trusted append scanned the historical prefix")
+	logRecordHash = hash
+	if hashed != 0 {
+		t.Fatalf("trusted append re-hashed %d bytes of the %d-byte historical prefix", hashed, before.off)
 	}
 	if after.blocks[0] != before.blocks[0] {
 		t.Fatal("in-process append rebuilt the sealed prefix")
+	}
+	if after.off <= before.off || after.hash != recordHash(Path(), after.off) {
+		t.Fatalf("continued fingerprint does not cover the log: off %d -> %d, hash %q", before.off, after.off, after.hash)
 	}
 	got, want := Summarize(All), summarize(All, time.Now(), Load(time.Time{}))
 	if got.Totals != want.Totals {

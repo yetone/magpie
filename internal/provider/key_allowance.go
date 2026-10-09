@@ -34,6 +34,9 @@ type keyAllowance struct {
 	// stale: made stale (StaleKeyAllowance) while a reading was out, which
 	// was asked before the key said it was out and is followed by another
 	stale bool
+	// read is what routing last read of the key, for its card
+	// (withKeyReadings), which only the Usage page reads
+	read keyReading
 }
 
 // keyAllowanceAge is how long a key's windows as read go unasked again;
@@ -114,9 +117,11 @@ func KeyAllowance(p Provider) (Allowance, bool) {
 // fails keeps what was known, and is tried again a minute later: a failed
 // read is not known, never empty.
 func readKeyAllowance(p Provider, id string, gen int) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, seq := quotaReading(context.Background())
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	ws, err := keyWindows(ctx, p)
+	r, err := keyWindows(ctx, p)
+	ws := r.ws
 	now := time.Now()
 	c := &keyAllowances
 	c.Lock()
@@ -127,6 +132,10 @@ func readKeyAllowance(p Provider, id string, gen int) {
 	}
 	e.loading, e.at = false, now
 	renewed := err == nil && e.keep(allowanceOf(ws, now), SpentShareOf(p.Routing), now)
+	if err == nil {
+		r.at, r.seq = now, seq
+		e.read = r
+	}
 	if e.stale {
 		e.stale, e.loading, e.at = false, true, time.Time{}
 		go readKeyAllowance(p, id, gen)
@@ -151,18 +160,22 @@ func (e *keyAllowance) keep(a Allowance, share float64, now time.Time) (renewed 
 // is asked (KeyBalances, PlanQuotas): the provider as saved, with the key,
 // rather than as a request has it, which leaves out the base URLs of the
 // protocols a key isn't made for.
-func keyWindows(ctx context.Context, p Provider) ([]QuotaWindow, error) {
+func keyWindows(ctx context.Context, p Provider) (keyReading, error) {
 	q := p
 	if saved, err := Find(p.ID); err == nil {
 		q = *saved
 		q.Key = p.Key
 	}
+	var r keyReading
+	var err error
 	if src, ok := planQuotaSourceOf(q); ok && !sub2APIKeyLimits(q) {
-		_, ws, _, err := planKeyWindows(q.Via(ctx), q, src, q.Key)
-		return ws, err
+		r.plan, r.ws, _, err = planKeyWindows(q.Via(ctx), q, src, q.Key)
+		return r, err
 	}
-	_, _, ws, _, err := balanceRead(ctx, q)
-	return ws, err
+	var parts []BalancePart
+	r.balance, parts, r.ws, _, err = balanceRead(ctx, q)
+	r.parts = cardParts(parts)
+	return r, err
 }
 
 // keyCardTag is what p's key's card is kept on disk by (keepLast): its
@@ -230,7 +243,8 @@ func StaleKeyAllowance(p Provider) {
 // forgetKeyAllowances has every key's windows read again at its next ask:
 // a key or its Balance URL changed (ForgetBalances). What was read stands
 // until then — fresher than its card's, which routing's reads never write
-// — and a key changed is another key, with windows of its own.
+// (they are laid over it only for another magpie, withKeyReadings) — and
+// a key changed is another key, with windows of its own.
 func forgetKeyAllowances() {
 	c := &keyAllowances
 	c.Lock()

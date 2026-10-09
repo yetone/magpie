@@ -65,13 +65,13 @@ func TestHostRunsAsMagpieBun(t *testing.T) {
 	}
 	bunHome(t, BunVersion, time.Now())
 	t.Cleanup(Settle)
-	// a real Bun as magpie downloaded it before: a copy (not a link, whose
-	// process would take the target's name) at the old name
+	// a real Bun as magpie downloaded it before, at the old name: a hard
+	// link, not a symlink (whose process would take the target's name)
 	old := filepath.Join(bunDirOf(BunVersion), bunExe())
 	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	copyExe(t, real, old)
+	placeBun(t, real, old)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -100,6 +100,23 @@ func TestHostRunsAsMagpieBun(t *testing.T) {
 	}
 	if got := filepath.Base(strings.TrimSpace(string(out))); got != "magpie-bun" {
 		t.Fatalf("ps says the host is %q", got)
+	}
+}
+
+// placeBun puts the Bun at from at to, as a file that has run before. A
+// hard link is the Bun on PATH itself, which has. A copy is a new program,
+// and macOS checks a new program before its first run: a second alone,
+// tens of seconds while a go test ./... starts its test binaries, which
+// came out of the host's start and its minute (#1306). So a copy, where
+// no link can be made, is run once here, before that minute starts.
+func placeBun(t *testing.T, from, to string) {
+	t.Helper()
+	if src, err := filepath.EvalSymlinks(from); err == nil && os.Link(src, to) == nil {
+		return
+	}
+	copyExe(t, from, to)
+	if out, err := exec.Command(to, "--version").CombinedOutput(); err != nil {
+		t.Fatalf("the copied bun: %v %s", err, out)
 	}
 }
 
