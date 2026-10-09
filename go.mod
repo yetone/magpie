@@ -4,6 +4,7 @@ go 1.26.8
 
 require (
 	github.com/Calcium-Ion/moejs v0.1.0-alpha.4
+	github.com/DataDog/sketches-go v1.4.8
 	github.com/charmbracelet/bubbles v0.21.1
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
@@ -52,6 +53,7 @@ require (
 	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

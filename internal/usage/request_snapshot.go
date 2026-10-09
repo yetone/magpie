@@ -26,6 +26,7 @@ func (c *rowChunk) pack() *rowChunk {
 	data := make([]byte, 0, len(c.Rows)*64)
 	put := func(v uint64) { data = binary.AppendUvarint(data, v) }
 	put(uint64(len(c.Rows)))
+	put(uint64(c.EndOrder))
 	put(uint64(len(c.Strings)))
 	for _, s := range c.Strings {
 		put(uint64(len(s)))
@@ -94,12 +95,13 @@ func (c *rowChunk) unpack() *rowChunk {
 		data = data[k:]
 		return n
 	}
-	rows, strs := take(), take()
+	rows, endOrder, strs := take(), int64(take()), take()
 	if rows > uint64(len(data)) || strs > uint64(len(data)) {
 		return nil
 	}
 	next := *c
 	next.Archive, next.Locations = nil, nil
+	next.EndOrder = endOrder
 	next.Rows = make([]packedRow, int(rows))
 	next.Strings = make([]string, int(strs))
 	next.Bytes = int64(len(next.Rows)) * int64(unsafe.Sizeof(packedRow{}))

@@ -12,13 +12,15 @@
   if (!box) return;
   const NS = "http://www.w3.org/2000/svg";
   const still = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const shown = () => !$("#view-routing").hidden && !document.hidden;
+  let inlineMounted = false;
+  let inlineRoute = null;   // the route the inline drill shows, kept across re-renders
+  const shown = () => (!document.hidden) && (!$("#view-routing").hidden || (inlineMounted && !$("#view-analytics").hidden));
   // steady redraws a part of the page where the reader is: WebKit has no
   // scroll anchoring, and a part emptied and filled again, measured between,
   // pulls the page up to what was left of it for that moment
   function steady(fn) {
-    const v = $("#view-routing"), top = v.scrollTop;
-    try { return fn(); } finally { if (v.scrollTop !== top) v.scrollTop = top; }
+    const v = inlineMounted ? $("#view-analytics") : $("#view-routing"), top = v ? v.scrollTop : 0;
+    try { return fn(); } finally { if (v && v.scrollTop !== top) v.scrollTop = top; }
   }
 
   // ---------- the stage ----------
@@ -59,6 +61,7 @@
       s.classList.add("rt-errs");
       s.title = t("Show the latest request that failed");
       s.addEventListener("click", () => {
+        if (inlineMounted) return;
         const r = listed().find(failedRoute);
         if (r) pick(r);
       });
@@ -247,6 +250,7 @@
     const hm = HM.format(d);
     return d.toDateString() === n.toDateString() ? hm : WD.format(d) + " " + hm;
   }
+
   // how long a reply took to begin, and how fast it wrote after (#196):
   // none for one whose window from its first content to its end is under
   // 100 ms or would have it write over 10,000 tok/s, as it came in one
@@ -1473,7 +1477,7 @@
     log.hidden = !r;
     if (!r) return;
     const on = () => listed().filter((x) => x.id >= logR.id);
-    const head = JSON.stringify([document.documentElement.lang, !!rp, pinned?.id, r.id, r.time, r.done, !!pinned && on().length > 1]);
+    const head = JSON.stringify([document.documentElement.lang, !!rp, pinned?.id, r.id, r.time, r.done, !!pinned && on().length > 1, inlineMounted]);
     if (headKey !== head) {
       headKey = head;
       logHead.replaceChildren(
@@ -1487,14 +1491,14 @@
         const again = el("button", "text", t("Replay"));
         again.onclick = () => replay([logR], pinned);
         logHead.append(again);
-        // and on from it: the requests listed after it, as they came
-        if (pinned && on().length > 1) {
+        // and on from it: the requests listed after it, as they came (omitted in inline drill)
+        if (!inlineMounted && pinned && on().length > 1) {
           const from = el("button", "text", t("Replay from here"));
           from.onclick = () => replay(on(), pinned);
           logHead.append(from);
         }
       }
-      if (pinned && !rp) {
+      if (pinned && !rp && !inlineMounted) {
         const live = el("button", "text", t("Back to live"));
         live.onclick = () => { if (day) lookAt(""); else { pinned = null; followListed(); } };
         logHead.append(live);
@@ -1629,7 +1633,7 @@
   // the pointer, and the stage and its story change above it (it used to
   // go up to the stage, which read as the page jumping to its top)
   function pick(r) {
-    pinned = !day && r.id === newest()?.id ? null : r;
+    pinned = inlineMounted ? r : (!day && r.id === newest()?.id ? null : r);
     if (rp) { rp = null; rbar.hidden = true; }
     stopPlays();
     cur = r;
@@ -1637,26 +1641,132 @@
     say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r));
   }
 
-  // o.context: opened to see its context window (the Usage page's
-  // Context tab), which shows unfolded for it
-  window.openRoute = async (id, time, o = {}) => {
-    let r = routes.get(id);
+  let openRouteSeq = 0;
+  let savedRoutingState = null;
+  window.cancelOpenRoute = () => {
+    openRouteSeq++;
+    if (inlineMounted) window.unmountRoutingInline();
+  };
+  window.mountRoutingInline = async (container, id, time, options = {}) => {
+    const seq = ++openRouteSeq;
+    const isCurrent = () => seq === openRouteSeq && (!options.isCurrent || options.isCurrent());
+    // the return control is in place before anything is fetched, so the
+    // reader can leave even while it loads or when it fails
+    const bar = el("div", "an-drill-routing-head");
+    const back = el("button", "text rt-back-analytics");
+    back.type = "button";
+    back.id = "rtBackAnalytics";
+    back.dataset.t = "Back to analytics calls";
+    back.textContent = t("Back to analytics calls");
+    let left = false;
+    back.onclick = (e) => {
+      if (left) return;
+      left = true;
+      window.unmountRoutingInline();
+      options.onReturn?.(e);
+    };
+    bar.append(back, el("span", "grow"));
+    container.replaceChildren(bar);
+
+    // the route once fetched stays: a re-render (locale, costs) must not
+    // fetch it again
+    let r = (inlineRoute && inlineRoute.id === id && (!time || String(inlineRoute.time) === String(time))) ? inlineRoute : routes.get(id);
     if (!r) {
-      const res = await fetch("/api/gateway/route?id=" + encodeURIComponent(id) + "&day=" + encodeURIComponent(time.slice(0, 10)));
+      const dayStr = time ? String(time).slice(0, 10) : "";
+      const res = await fetch("/api/gateway/route?id=" + encodeURIComponent(id) + (dayStr ? "&day=" + encodeURIComponent(dayStr) : ""));
+      if (!isCurrent()) return null;
       if (res.status === 404) throw new Error(t("Routing history for this request is no longer available."));
       if (!res.ok) throw new Error(await res.text());
       r = whole(await res.json());
+      if (!isCurrent()) return null;
       noteAccounts(r);
     }
-    day = routes.has(id) ? "" : r.time.slice(0, 10);
-    if (day) {
-      await loadDays(day);
+    if (!isCurrent()) return null;
+
+    if (!inlineMounted) savedRoutingState = { cur, pinned, day, off: { hidden: off.hidden, text: off.textContent }, cap: cap.textContent };
+    inlineMounted = true;
+    inlineRoute = r;
+    container.replaceChildren(bar, box);
+    offline("");
+    headKey = "";
+    stepsKey = "";
+    pick(r);
+    start();
+    return r;
+  };
+  window.unmountRoutingInline = () => {
+    if (!inlineMounted) return;
+    inlineMounted = false;
+    const origView = $("#view-routing");
+    if (origView && box.parentElement !== origView) {
+      const ref = $("#rtMore");
+      if (ref && ref.parentElement === origView) origView.insertBefore(box, ref);
+      else origView.appendChild(box);
+    }
+    stopPlays();
+    if (rp) endReplay(true);
+    const saved = savedRoutingState;
+    savedRoutingState = null;
+    inlineRoute = null;
+    headKey = "";
+    stepsKey = "";
+    if (saved) {
+      cur = saved.cur;
+      pinned = saved.pinned;
+      day = saved.day;
+    }
+    if (cur) {
+      // the routing view's own last state is back: the graph, the story
+      // and the caption it had before the drill. With no live set to draw
+      // from, the one route is drawn on its own so no drill row is left
+      offline("");
+      if (staged().length) sync(true);
+      else rebuild([cur], true);
+      renderAll();
+      if (saved && saved.cap) show({ s: saved.cap });
+    } else {
+      // nothing to go back to: clear the stage the drill filled and put
+      // the view's own waiting/offline words back
+      empty();
+      if (saved && !saved.off.hidden) offline(saved.off.text);
+    }
+    start();
+  };
+  window.openRoute = async (id, time, o = {}) => {
+    const seq = ++openRouteSeq;
+    if (inlineMounted) window.unmountRoutingInline();
+    const isCurrent = () => seq === openRouteSeq;
+
+    let r = routes.get(id);
+    if (!r) {
+      const res = await fetch("/api/gateway/route?id=" + encodeURIComponent(id) + "&day=" + encodeURIComponent(time.slice(0, 10)));
+      if (!isCurrent()) return;
+      if (res.status === 404) throw new Error(t("Routing history for this request is no longer available."));
+      if (!res.ok) throw new Error(await res.text());
+      r = whole(await res.json());
+      if (!isCurrent()) return;
+      noteAccounts(r);
+    }
+    const targetDay = routes.has(id) ? "" : r.time.slice(0, 10);
+    let loadedRoutes = null, loadedCut = false;
+    if (targetDay) {
+      const historyData = await loadDays(targetDay, isCurrent, false);
+      if (!isCurrent()) return;
+      loadedRoutes = historyData?.routes || [];
+      loadedCut = !!historyData?.cut;
+    }
+    if (!isCurrent()) return;
+    day = targetDay;
+    if (targetDay) {
+      past = loadedRoutes;
+      pastCut = loadedCut;
       if (!past.some((x) => x.id === id)) past.push(r);
     }
     if (!matchesPurpose(r)) purpose = [];
     offline("");
-    window.show("routing");
-    if (o.context) ctxFor = r.id;
+    headKey = "";
+    await window.show("routing");
+    if (o && o.context) ctxFor = r.id;
     pick(r);
   };
 
@@ -1807,14 +1917,24 @@
     return x.toDateString() === n.toDateString() ? t("today") : x.toDateString() === y.toDateString() ? t("yesterday")
       : x.toLocaleDateString([], { month: "short", day: "numeric", weekday: "short" });
   };
-  async function loadDays(d) {
+  async function loadDays(d, guard, applyPast = true) {
+    let data = null;
     try {
-      const res = await (await fetch("/api/gateway/history?day=" + encodeURIComponent(d || ""))).json();
-      days = res.days || [];
-      noteAccounts(res.routes);
-      if (d && d === day) { past = (res.routes || []).map(whole); pastCut = !!res.cut; }
-    } catch {}
+      const response = await fetch("/api/gateway/history?day=" + encodeURIComponent(d || ""));
+      if (guard && !guard()) return null;
+      if (guard && !response.ok) throw new Error(await response.text());
+      data = await response.json();
+      if (guard && !guard()) return null;
+      days = data.days || [];
+      noteAccounts(data.routes);
+      if (guard && !guard()) return null;
+      if (applyPast && d && d === day) { past = (data.routes || []).map(whole); pastCut = !!data.cut; }
+    } catch (err) {
+      if (guard && guard()) throw err;
+    }
+    if (guard && !guard()) return null;
     renderHist(); // shown once there are days, though none are live
+    return data;
   }
   async function lookAt(d) {
     if (rp) endReplay(true);
@@ -2642,7 +2762,8 @@
     rp = null;
     rbar.hidden = true;
     if (stop) stopPlays();
-    const b = p.back && (routes.get(p.back.id) || (day && past.find((x) => x.id === p.back.id)));
+    const b = p.back && (routes.get(p.back.id) || (day && past.find((x) => x.id === p.back.id))
+      || (inlineMounted && inlineRoute && inlineRoute.id === p.back.id ? inlineRoute : null));
     pinned = b || null;
     cur = b || newest();
     if (cur) { sync(true); renderAll(); }
@@ -2748,7 +2869,10 @@
   }
   // in sight again: the view picked, the window shown, another tab left,
   // the window covered and drawing frames once more
-  new MutationObserver(start).observe($("#view-routing"), { attributes: true, attributeFilter: ["hidden"] });
+  new MutationObserver(() => {
+    start();
+    if (inlineMounted && $("#view-routing").hidden && $("#view-analytics").hidden) window.unmountRoutingInline();
+  }).observe($("#view-routing"), { attributes: true, attributeFilter: ["hidden"] });
   document.addEventListener("visibilitychange", start);
   window.addEventListener("focus", start);
   // countdowns tick once a second

@@ -269,7 +269,6 @@ func TestReasoningReplyTimedByItsAnswer(t *testing.T) {
 		}
 	}
 }
-
 // FormatCost stays in dollars unless cny is asked for and a usable rate is
 // given; it keeps the same 0/2/3-decimal rule either currency, and a rate
 // that's missing or non-positive falls back to USD rather than hiding the

@@ -157,6 +157,23 @@ and is selected at first. It selects Ghostty, changes the theme, then returns
 to the system default, reloading to verify both saved choices.
 The API is faked and no terminal app is launched.
 
+`analytics.test.cjs` covers the Quality & Analytics view (`?view=analytics`) with real assets and
+isolated mock APIs: navigation from Usage and URL params, display dimensions (all, model, provider, agent),
+mutually exclusive filters using `openProtoMenu`, header controls alignment, stale response cancellation,
+and failed dimension changes restoring a visible, clearable filter. Inline route selection
+stays tied to the Analytics call when the global error counter is clicked.
+It exercises the drilldown page view (compact chart with entity ranking and highlight, 50-call list),
+routing diagrams and request stories embedded in the right pane, with return restoration
+of period, dimension, filters, entity and scroll position. Account masking is shared by
+Routing, Usage and Analytics through the existing `magpie.maskEmails` local preference,
+including reloads and storage events between windows on the same origin. It retains
+upstream Privacy inheritance when no local account-mask choice has been made.
+The regressions also cover
+layout stability across window sizes down to 659px without horizontal overflow, monotonic bar-track fills,
+chart tooltips, speed formatting (reusing upstream `Totals.Speed()` and `Record.Decode()`
+for reasoning replies' answer windows), HTTP-200 stream error handling,
+499 cancellation percentage explanations, accessible status and busy states, email masking, and language switching.
+Run with `node --test internal/gui/tests/analytics.test.cjs` in Chromium and WebKit.
 `menu-scroll.test.cjs` loads the real HTML, CSS and JavaScript with isolated API
 fixtures. It checks session folder/model filters and the main model picker in
 Chromium and WebKit, including wheel, scrollbar track/thumb, keyboard selection

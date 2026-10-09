@@ -79,6 +79,7 @@ type rowChunk struct {
 	Used      uint64
 	Count     int
 	Latest    time.Time
+	EndOrder  int64
 	// Computer is the other computer whose day this is (#542), by id
 	Computer string
 }
@@ -132,6 +133,9 @@ func (c *rowChunk) add(r Row, msg string, order int64, failed bool) {
 	if r.Time.After(c.Latest) {
 		c.Latest = r.Time
 	}
+	if order > c.EndOrder {
+		c.EndOrder = order
+	}
 	c.Bytes += int64(unsafe.Sizeof(packedRow{}))
 }
 func (c *rowChunk) row(i int) Row {
@@ -167,13 +171,29 @@ func refNewer(a, b rowRef) bool {
 	return a.Chunk.Rows[a.Index].Order > b.Chunk.Rows[b.Index].Order
 }
 
-type newestHeap []rowRef
+// newestHeap specializes topKHeap for newest-first rowRef selection.
+type newestHeap = topKHeap[rowRef]
 
-func (h newestHeap) Len() int           { return len(h) }
-func (h newestHeap) Less(i, j int) bool { return refNewer(h[j], h[i]) }
-func (h newestHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-func (h *newestHeap) Push(v any)        { *h = append(*h, v.(rowRef)) }
-func (h *newestHeap) Pop() any          { a := *h; v := a[len(a)-1]; *h = a[:len(a)-1]; return v }
+func newNewestHeap() *newestHeap {
+	return &topKHeap[rowRef]{less: func(a, b rowRef) bool { return refNewer(b, a) }}
+}
+
+// topKHeap generalizes newestHeap with a custom comparison function.
+type topKHeap[T any] struct {
+	items []T
+	less  func(a, b T) bool // returns true if a should be popped before b (min-heap root is poorest)
+}
+
+func (h topKHeap[T]) Len() int           { return len(h.items) }
+func (h topKHeap[T]) Less(i, j int) bool { return h.less(h.items[i], h.items[j]) }
+func (h topKHeap[T]) Swap(i, j int)      { h.items[i], h.items[j] = h.items[j], h.items[i] }
+func (h *topKHeap[T]) Push(v any)        { h.items = append(h.items, v.(T)) }
+func (h *topKHeap[T]) Pop() any {
+	a := h.items
+	v := a[len(a)-1]
+	h.items = a[:len(a)-1]
+	return v
+}
 
 type pageKey struct {
 	Period        Period
@@ -192,6 +212,23 @@ type requestIndex struct {
 var requestCache requestIndex
 
 var requestCacheBytes int64 = 24 << 20
+
+// rawRequestBudget returns the budget for raw and priced log blocks.
+func rawRequestBudget() int64 {
+	b := int64(requestCacheBytes)
+	if b <= 0 {
+		return 0
+	}
+	return (b * 3) / 4
+}
+
+func analyticsBudget() int64 {
+	b := int64(requestCacheBytes)
+	if b <= 0 {
+		return 0
+	}
+	return b / 4
+}
 
 func statKey(path string) string {
 	s, e := os.Stat(path)
@@ -490,7 +527,7 @@ func queryPage(p Period, f Filter, offset, limit int, readSource func(sessions.C
 	}
 	// Raw blocks are also retained by gateway-map keys: charge their bytes once.
 	bytes := snapshot.bytes
-	budget := int64(requestCacheBytes)
+	budget := rawRequestBudget()
 	if snapshot.uncached {
 		budget = 0
 		shared.pages = map[pageKey]RequestPage{}
@@ -782,7 +819,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 	if offset < maxRows {
 		take = offset + min(limit, maxRows-offset)
 	}
-	selected := newestHeap{}
+	selected := newNewestHeap()
 	chartFilter := f
 	chartFilter.Day = ""
 	// the two source cells' own numbers, counted without the source pick
@@ -800,11 +837,11 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 		keep := f.keepsRow(r)
 		if keep {
 			out.Total++
-			if take > 0 && len(selected) < take {
-				heap.Push(&selected, ref)
-			} else if take > 0 && refNewer(ref, selected[0]) {
-				selected[0] = ref
-				heap.Fix(&selected, 0)
+			if take > 0 && selected.Len() < take {
+				heap.Push(selected, ref)
+			} else if take > 0 && refNewer(ref, selected.items[0]) {
+				selected.items[0] = ref
+				heap.Fix(selected, 0)
 			}
 			if !r.IsRejected() {
 				out.Sum.addRow(r)
@@ -887,7 +924,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 			s.addRow(r)
 		}
 	})
-	slices.SortFunc(selected, func(a, b rowRef) int {
+	slices.SortFunc(selected.items, func(a, b rowRef) int {
 		if refNewer(a, b) {
 			return -1
 		}
@@ -896,7 +933,7 @@ func buildRequestBlocks(p Period, f Filter, offset, limit int, now time.Time, ga
 		}
 		return 0
 	})
-	for _, ref := range selected[min(offset, len(selected)):] {
+	for _, ref := range selected.items[min(offset, len(selected.items)):] {
 		out.Rows = append(out.Rows, ref.row())
 	}
 	for a := range agents {

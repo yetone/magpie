@@ -158,6 +158,20 @@
 .rt-accts:where(.max560) em { grid-column: 2; white-space: normal; }
 .rt-accts:where(.max560) .bar { grid-column: 2; }
 :where(.rt.max560) .rt-stats { gap: 14px; }
+/* narrow responsive stage for analytics drill embedded right column (~401px at 659px viewport) */
+:where(.rt.max460) .rt-stage, @container (max-width: 460px) {
+  .rt-stage { grid-template-columns: minmax(56px, 72px) minmax(56px, 72px) minmax(0, 1fr); column-gap: 14px; padding: 12px 0; }
+  .rt-srcs { gap: 6px; }
+  .rt-node { padding: 6px 4px; border-radius: 8px; }
+  .rt-node .rt-ic .ic, .rt-node .rt-bird { width: 20px; height: 20px; margin-bottom: 2px; }
+  .rt-node .rt-ic .ic img, .rt-node .rt-ic .ic svg { width: 20px; height: 20px; }
+  .rt-node b { font-size: 11px; }
+  .rt-node small { font-size: 9.5px; }
+  .rt-hub i { font-size: 9px; padding: 0 5px; margin-top: 2px; }
+  .rt-accts li { padding: 6px 8px; column-gap: 6px; font-size: 11.5px; }
+  .rt-accts b { font-size: 11.5px; }
+  .rt-accts em { font-size: 10.5px; }
+}
 /* the Routing view */
 #view-routing .row-head { margin: 14px 0 6px; padding: 0 2px; gap: 0; }
 #view-routing .row-head .note { font-size: 11px; color: var(--faint); margin-left: 8px; }

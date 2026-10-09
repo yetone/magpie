@@ -190,7 +190,7 @@ func TestUsageRewriteBeforeFingerprintIsNotCached(t *testing.T) {
 	}
 }
 
-func cacheBudget(t *testing.T, n int64) {
+func cacheBudget(t testing.TB, n int64) {
 	t.Helper()
 	old := requestCacheBytes
 	requestCacheBytes = n

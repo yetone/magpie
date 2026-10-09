@@ -1563,6 +1563,10 @@ In *Usage → Requests* and the tray's *Usage* tab, click a daily bar to see
 that day's totals and details. Other days turn gray; click the selected day
 again to return to the whole period. Changing the period clears the selection.
 
+*Usage → Analytics* opens the Quality & Analytics dashboard, tracking reliability
+(success, error, and client cancel rates), response speed (TTFT and TPS), and cost & cache
+efficiency across models, providers, and agents, with drilldown into ranked calls and existing Routing details.
+
 On macOS, *Settings → Preferences → Session terminal* chooses which installed
 app opens a session from the terminal button in *Usage → Sessions*. The list
 contains apps registered to open `.command` files, with the current system

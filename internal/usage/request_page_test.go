@@ -17,7 +17,7 @@ import (
 	"github.com/yetone/magpie/internal/sessions"
 )
 
-func pageHome(t *testing.T) {
+func pageHome(t testing.TB) {
 	sessionHome(t)
 	sessions.Reset()
 	catalog.Reset()

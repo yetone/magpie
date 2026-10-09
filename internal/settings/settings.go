@@ -875,7 +875,6 @@ func SavedAddr() string {
 	}
 	return fmt.Sprintf("127.0.0.1:%d", p)
 }
-
 // Save validates and writes the settings.
 func Save(s Settings) error {
 	fileMu.Lock()
