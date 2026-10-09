@@ -38,7 +38,7 @@ func (p Provider) Test(ctx context.Context) []Result {
 	if p.DecideOnly() {
 		return p.testDecide(ctx)
 	}
-	p.Fetch(ctx)
+	_, listErr := p.Fetch(ctx)
 	if p.isClaudeAccount() {
 		return []Result{p.testClaude(ctx, p.testModel(p, Anthropic))}
 	}
@@ -53,7 +53,12 @@ func (p Provider) Test(ctx context.Context) []Result {
 		url, body := tiny(q, proto, UpstreamName(p, model))
 		out = append(out, probe(ctx, q, proto, url, q.Prepare([]byte(body)), model, testWait))
 	}
-	if p.Decides() {
+	if p.IsRemoteMagpie() {
+		// The model list already checked its key and named its decisions.
+		if model := p.Jev(); listErr == nil && model != "" {
+			out = append(out, Result{Protocol: "decide", Model: model, OK: true, Status: http.StatusOK})
+		}
+	} else if p.Decides() {
 		out = append(out, p.testDecide(ctx)...)
 	}
 	return out

@@ -58,16 +58,23 @@ to apply user model names and limits; other decision providers retain their
 previous entry formatting. The editor's `providerInfo` in
 [`providers.go`](../../internal/gui/providers.go) sends `deciders: []` when
 the remote has none, suppressing the UI's legacy name-based guessing.
+The editor offers one remote address; its System One endpoint is derived
+from that address and has no separate input. Unnamed decisions use their
+model ids for display names and provider labels.
 Refresh replaces the list: removed decisions stop routing, and an empty
 remote list never gains a fabricated Jev alias.
 An older peer without the decision-list extension continues serving its
 other APIs but must be updated before its decisions can be discovered.
 See [`decide.go`](../../internal/provider/decide.go).
 
-The TUI reports model-list fetch errors for remote and other mixed providers
+The CLI and TUI report model-list fetch errors for remote and other mixed providers
 (such as OpenRouter, serving conversation and decision models). Only a
 decision-only provider keeps the separate decision discovery behavior
-(`addKeyAsk` in [`pages.go`](../../internal/tui/pages.go)).
+(`announce` in [`providers_cli.go`](../../providers_cli.go), `addKeyAsk` in
+[`pages.go`](../../internal/tui/pages.go)). A remote's endpoint test reuses
+successful model discovery for its decision result, and reports none when
+no decision model was discovered (`Test` in
+[`test.go`](../../internal/provider/test.go)).
 
 ## Runtime path
 

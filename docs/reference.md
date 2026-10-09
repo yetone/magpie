@@ -306,7 +306,10 @@ its image generation/edit and video creation/status/content APIs. System One
 is also configured automatically at its `/v1/systemone`: refresh the remote
 provider's model list to discover its decision models, including Jev, Clef
 and models with custom names. These appear as decision models rather than
-chat models. Embeddings and rerank requests use the remote's corresponding
+chat models. A bare provider id such as `office` asks the first listed
+decision model; it does not pick another model to satisfy a key's limits.
+If the key permits only another model, use its full `office/provider/model`
+id to avoid a 403. Embeddings and rerank requests use the remote's corresponding
 APIs, and its exposed retrieval models are kept when fetching its list.
 These remain in agent model lists as on the remote; being listed does not
 mean an embedding or rerank model can hold a conversation.

@@ -648,12 +648,12 @@ func announce(id string) error {
 	defer cancel()
 	if ms, err := saved.Fetch(ctx); err == nil {
 		fmt.Println(green.Render("✓"), len(ms), "models from", fetchedFrom(*saved))
-	} else if !saved.Decides() {
+	} else if !saved.DecideOnly() {
 		// the URLs asked and what they said; the base stays as given
 		fmt.Println(amber.Render("!"), muted.Render(err.Error()))
 	}
 	n := len(saved.Exposed())
-	if saved.Decides() {
+	if saved.DecideOnly() {
 		fmt.Println("  it routes groups: magpie group set <id> effort=auto classifier="+saved.ID+"/"+saved.Jev(),
 			muted.Render("· or a rule's intent=…"))
 		return nil

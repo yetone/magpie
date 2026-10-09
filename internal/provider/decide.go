@@ -79,17 +79,20 @@ func (p Provider) DecidesModel(model string) bool {
 	if p.DecideOnly() {
 		return true
 	}
-	if p.IsRemoteMagpie() {
-		live, _, _ := catalog.Live(p.ID)
-		return slices.ContainsFunc(live, func(m catalog.Model) bool {
-			return m.ID == model && m.Decides
-		})
-	}
-	if p.listsDecisions() {
+	if p.IsRemoteMagpie() || p.listsDecisions() {
 		// OpenRouter's Jev Router (typesafe/jev-router) is a chat model
 		return slices.ContainsFunc(p.decideListed(), func(m catalog.Model) bool { return m.ID == model })
 	}
 	return jevID(model) || p.DecideVia() == ViaCloudflare && CloudflareClef(model)
+}
+
+// isDecision uses a listed remote model's marker without reading its whole
+// list again. Other providers keep their endpoint and name-based rules.
+func (p Provider) isDecision(m catalog.Model) bool {
+	if p.IsRemoteMagpie() {
+		return m.Decides
+	}
+	return p.DecidesModel(m.ID)
 }
 
 // OpenRouter lists its decision models apart from its chat models (ARNO
@@ -480,12 +483,12 @@ func Deciders() []Entry {
 			ms = p.decideModels() // the conversation picker's limit does not hide Jev
 		}
 		for _, m := range ms {
-			if p.DecidesModel(m.ID) {
-				e := Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: p}
+			if p.isDecision(m) {
 				if p.IsRemoteMagpie() {
-					e = entryFor(p, m, s)
+					out = append(out, entryFor(p, m, s))
+				} else {
+					out = append(out, Entry{ID: p.ID + "/" + m.ID, Model: m.ID, Name: m.Name, Provider: p})
 				}
-				out = append(out, e)
 			}
 		}
 	}

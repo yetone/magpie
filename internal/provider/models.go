@@ -36,7 +36,7 @@ func (p Provider) Available() []catalog.Model {
 		// a gateway's Jev among its chat models, with its window and input
 		ms = slices.Clone(ms)
 		for i, m := range ms {
-			if p.DecidesModel(m.ID) {
+			if p.isDecision(m) {
 				ms[i] = withDecideFacts([]catalog.Model{m})[0]
 			}
 		}
@@ -1268,7 +1268,7 @@ func buildEntries() []Entry {
 			continue
 		}
 		for _, m := range p.Exposed() {
-			if !p.DecidesModel(m.ID) {
+			if !p.isDecision(m) {
 				out = append(out, entryFor(p, m, s))
 			}
 		}

@@ -840,6 +840,9 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Header.Get(provider.DecidersHeader) != "" {
 		deciders := keyAllowed(r, provider.Deciders())
+		for i := range deciders {
+			deciders[i].Name = cmp.Or(deciders[i].Name, deciders[i].Model)
+		}
 		labels := provider.Labels(deciders)
 		for i, e := range deciders {
 			m := modelObject(e)

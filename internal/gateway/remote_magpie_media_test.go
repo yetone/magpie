@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -95,5 +96,33 @@ func TestRemoteMagpieMedia(t *testing.T) {
 	head := <-arrived
 	if head.Get(AgentHeader) != "pi" || head.Get(SessionHeader) != "media-session" || !strings.HasPrefix(head.Get("User-Agent"), "magpie/") {
 		t.Errorf("media caller: %v", head)
+	}
+}
+
+func TestRemoteMagpieVideoContentCaller(t *testing.T) {
+	fresh(t)
+	arrived := make(chan caller, 1)
+	remote := httptest.NewServer(withCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		arrived <- callerOf(r)
+		w.Header().Set("Content-Type", "video/mp4")
+		io.WriteString(w, "fake-mp4-bytes")
+	})))
+	t.Cleanup(remote.Close)
+	if err := provider.Save(provider.Provider{ID: "office", Preset: provider.RemoteMagpiePreset, Chat: remote.URL, Key: "remote-key"}); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := provider.Find("office")
+	req := httptest.NewRequest("GET", "/v1/videos/"+videoID(*p, "task", time.Now())+"/content", nil)
+	req.Header.Set("User-Agent", "pi/1.0")
+	req.Header.Set(SessionHeader, "video-session")
+	rec := httptest.NewRecorder()
+	New().Handler().ServeHTTP(rec, req)
+	if rec.Code != 200 || rec.Body.String() != "fake-mp4-bytes" {
+		t.Fatalf("video content: %d %s", rec.Code, rec.Body.String())
+	}
+	// Content downloads have no usage record of their own. Check the
+	// caller accepted by the remote's real receiving middleware instead.
+	if c := <-arrived; c.agent != "pi" || c.via != hostName() || c.session != "video-session" {
+		t.Errorf("remote video content lost caller: %+v", c)
 	}
 }

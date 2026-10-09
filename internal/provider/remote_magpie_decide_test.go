@@ -2,12 +2,14 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/yetone/magpie/internal/catalog"
@@ -141,5 +143,50 @@ func TestRemoteMagpieDecisionRefresh(t *testing.T) {
 		if err != nil || u != p.Chat+"/systemone" || p.DecideVia() != ViaSystemOne || !slices.Contains(p.Speaks(), Chat) {
 			t.Errorf("remote endpoints: %+v %s %v", p, u, err)
 		}
+	}
+}
+
+func TestRemoteMagpieEndpointTests(t *testing.T) {
+	for _, decisions := range []bool{false, true} {
+		t.Run(fmt.Sprint(decisions), func(t *testing.T) {
+			azureHome(t)
+			var lists atomic.Int32
+			up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/v1/models" {
+					lists.Add(1)
+					list := `{"data":[{"id":"lib/m1"}`
+					if decisions {
+						list += `,{"id":"judge/custom","kind":"decision"}`
+					}
+					io.WriteString(w, list+`]}`)
+					return
+				}
+				io.WriteString(w, `{"choices":[{"message":{"content":"hello"}}]}`)
+			}))
+			t.Cleanup(up.Close)
+			if err := Save(Provider{ID: "office", Preset: RemoteMagpiePreset, Chat: up.URL, Key: "remote-key"}); err != nil {
+				t.Fatal(err)
+			}
+			p, _ := Find("office")
+			var decide []Result
+			for _, r := range p.Test(context.Background()) {
+				if r.Protocol == "decide" {
+					decide = append(decide, r)
+				} else if !r.OK || r.Model != "lib/m1" {
+					t.Errorf("conversation probe: %+v", r)
+				}
+			}
+			if decisions {
+				if len(decide) != 1 || !decide[0].OK || decide[0].Model != "judge/custom" {
+					t.Errorf("listed decision probe: %+v", decide)
+				}
+			} else if len(decide) != 0 {
+				t.Errorf("unlisted decision reported as tested: %+v", decide)
+			}
+			if n := lists.Load(); n != 1 {
+				t.Errorf("model list fetched %d times; want once", n)
+			}
+		})
 	}
 }

@@ -10,10 +10,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/access"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/usage"
 )
 
 // Discover decision models through a real gateway, including names that
@@ -39,7 +41,8 @@ func TestRemoteMagpieSystemOne(t *testing.T) {
 	if err := provider.Save(provider.Provider{ID: "judge", Name: "Judge", Key: "vendor-key", Decide: up.URL + "/v1", Models: models}); err != nil {
 		t.Fatal(err)
 	}
-	remoteHandler := New().Handler()
+	peer := New()
+	remoteHandler := peer.Handler()
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(strings.NewReader(string(b)))
@@ -119,6 +122,23 @@ func TestRemoteMagpieSystemOne(t *testing.T) {
 	if route := s.trace.routes[0]; route.Agent != "pi" || route.Session != "decision-session" || !route.Done {
 		t.Errorf("decision trace: %+v", route)
 	}
+	for _, route := range peer.trace.routes {
+		if route.Agent != "pi" || route.Session != "decision-session" {
+			t.Errorf("remote decision trace lost caller: %+v", route)
+		}
+	}
+	var recorded int
+	for _, r := range usage.Load(time.Time{}) {
+		if r.Provider == "judge" {
+			recorded++
+			if r.Agent != "pi" || r.Via != hostName() {
+				t.Errorf("remote decision usage lost caller: %+v", r)
+			}
+		}
+	}
+	if recorded != len(models) {
+		t.Errorf("remote decision usage: %d records; want %d", recorded, len(models))
+	}
 }
 
 // Decision discovery applies the gateway key's model restrictions, while
@@ -138,10 +158,17 @@ func TestRemoteMagpieDecisionListPermissions(t *testing.T) {
 	rec := httptest.NewRecorder()
 	New().Handler().ServeHTTP(rec, req)
 	var list struct {
-		Data []struct{ ID, Kind string }
+		Data []struct {
+			ID, Kind string
+			Name     string `json:"display_name"`
+			Label    string `json:"magpie_label"`
+		}
 	}
 	if rec.Code != 200 || json.Unmarshal(rec.Body.Bytes(), &list) != nil || len(list.Data) != 1 || list.Data[0].ID != "judge/custom-a" || list.Data[0].Kind != "decision" {
 		t.Fatalf("held decision list: %d %s", rec.Code, rec.Body.String())
+	}
+	if list.Data[0].Name != "custom-a" || list.Data[0].Label != "custom-a · judge" {
+		t.Errorf("unnamed decision lost its id: %+v", list.Data[0])
 	}
 }
 
@@ -174,7 +201,11 @@ func TestRemoteMagpieRetrieval(t *testing.T) {
 		{"/v1/embeddings", `{"model":"office/lib/embed-1","input":["hello","world"],"dimensions":2,"encoding_format":"float"}`, `"embedding":[0.1,-0.2]`, "embed-1"},
 		{"/v1/rerank", `{"model":"office/lib/rerank-1","query":"magpie","documents":["a crow","a magpie"],"top_n":2,"return_documents":true}`, `"relevance_score":0.9`, "rerank-1"},
 	} {
-		code, raw := postRetrieval(t, New(), tc.path, tc.body)
+		req := httptest.NewRequest("POST", tc.path, strings.NewReader(tc.body))
+		req.Header.Set("User-Agent", "pi/1.0")
+		rec := httptest.NewRecorder()
+		New().Handler().ServeHTTP(rec, req)
+		code, raw := rec.Code, rec.Body.String()
 		if code != 200 || !strings.Contains(raw, tc.result) {
 			t.Fatalf("%s: %d %s", tc.path, code, raw)
 		}
@@ -191,5 +222,17 @@ func TestRemoteMagpieRetrieval(t *testing.T) {
 		if string(a) != string(b) {
 			t.Errorf("retrieval options changed: %s; want %s", b, a)
 		}
+	}
+	var recorded int
+	for _, r := range usage.Load(time.Time{}) {
+		if r.Provider == "lib" {
+			recorded++
+			if r.Agent != "pi" || r.Via != hostName() {
+				t.Errorf("remote retrieval usage lost caller: %+v", r)
+			}
+		}
+	}
+	if recorded != 2 {
+		t.Errorf("remote retrieval usage: %d records; want 2", recorded)
 	}
 }

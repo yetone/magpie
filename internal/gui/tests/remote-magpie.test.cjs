@@ -22,7 +22,10 @@ const presets = [
     endpointHint: "The address and API key the other computer's magpie shows in Settings, under Share on local network. Its models and routing groups are listed here; each request goes on in the API the agent spoke.",
     endpointNeeded: "The other magpie's address is needed" },
 ];
-const providers = [{ id: "openrouter", name: "OpenRouter", icon: "openai", preset: "openrouter", models: [], agents: [], key: { set: true, masked: "sk-…ab12" } }];
+const providers = [{ id: "openrouter", name: "OpenRouter", icon: "openai", preset: "openrouter", models: [], agents: [], key: { set: true, masked: "sk-…ab12" } },
+  { id: "office", name: "Office", icon: "magpie", preset: "remote-magpie", chat: "http://office/v1", responses: "http://office/v1", anthropic: "http://office", decide: "http://office/v1",
+    deciders: ["judge/custom-a", "judge/custom-b"], models: [{ id: "lib/m1", name: "Chat", on: true }, { id: "judge/custom-a", name: "custom-a · judge", on: false }, { id: "judge/custom-b", name: "custom-b · judge", on: false }], agents: [], key: { set: true, masked: "sk-…ab12" } },
+];
 
 function server(lang, saves) {
   return async (route) => {
@@ -60,7 +63,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test(lang, async () => {
         const w = L[lang];
         const saves = [];
-        const page = await (await browser.newContext({ viewport: { width: 900, height: 700 } })).newPage();
+        const page = await (await browser.newContext({ viewport: { width: 900, height: process.env.ARTIFACT_DIR ? 1500 : 700 } })).newPage();
         const errors = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", server(lang, saves));
@@ -80,6 +83,25 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           ];
         });
         assert.deepEqual(classifications, [true, true, false, false]);
+
+        // A remote's decision URL is derived from its one address. Both
+        // a current peer and one without decisions omit the separate field.
+        const saved = page.locator(".editor");
+        for (const decisions of [true, false]) {
+          if (!decisions) await page.evaluate(() => {
+            providers.providers.find((p) => p.id === "office").deciders = [];
+          });
+          await page.locator('#providers .row[data-id="office"]').click();
+          await saved.locator(".ehead b", { hasText: "Office" }).waitFor();
+          assert.equal(await saved.locator("label", { hasText: /Jev endpoint|Jev 终结点|System One endpoint|System One 终结点/ }).count(), 0);
+          assert.equal(await saved.locator('input[type="url"]').count(), 1, "only the remote's address is editable");
+          if (process.env.ARTIFACT_DIR && engine === "chromium" && lang === "en") {
+            await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+            await saved.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `remote-editor-${decisions ? "decisions" : "chat-only"}.png`) });
+          }
+          await page.keyboard.press("Escape");
+          await saved.waitFor({ state: "detached" });
+        }
         await page.locator("#addProvider").click();
         const sheet = page.locator("#addSheet");
         const tile = sheet.locator(".tile", { has: page.locator(".n", { hasText: /^Remote magpie$/ }) });
@@ -97,7 +119,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.match(await endpoint.locator("xpath=following-sibling::div[contains(@class,'hint')]").textContent(), w.hint);
         await page.waitForFunction(() => document.activeElement?.classList.contains("endpoint"));
         const key = ed.locator("input[type=password]").first();
-        const [ey, ky] = [await endpoint.boundingBox(), await key.boundingBox()].map((b) => b.y);
+        // Compare both fields in one frame while the editor opens.
+        const [ey, ky] = await ed.evaluate((editor) => [
+          editor.querySelector("input.endpoint"), editor.querySelector('input[type="password"]'),
+        ].map((input) => input.getBoundingClientRect().top));
         assert(ey < ky, "the endpoint above the key");
 
         // no endpoint: said, nothing sent, the page where it was

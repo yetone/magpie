@@ -8353,7 +8353,7 @@ function drawEditor(p, presetID) {
 
   // Jev's endpoint can be the one its gateway's docs give — Cloudflare's
   // names the account, …/accounts/<id>/ai/run — in place of the preset's
-  if (decides && !custom) {
+  if (decides && !custom && (p?.preset || pr?.id) !== "remote-magpie") {
     if (draft.decide === undefined) draft.decide = p?.decide || pr?.decide || "";
     const du = input(draft.decide, pr?.decide || "https://…", "url");
     // Bailian's is at the host of the key's workspace (#647): its id is
