@@ -294,8 +294,16 @@ type mdModel struct {
 	} `json:"limit"`
 }
 
-// efforts are the reasoning levels models.dev says the model takes. DeepSeek
-// entries with a toggle and effort levels also accept the off level (#1098);
+// reasoningOffProviders are models.dev providers whose APIs have verified
+// that their toggled models accept the off effort (#1098).
+var reasoningOffProviders = map[string]struct{}{
+	"deepseek":              {},
+	"kimi-code-plan-cn":     {},
+	"kimi-code-plan-global": {},
+}
+
+// efforts are the reasoning levels models.dev says the model takes. A
+// toggle adds the off level only for providers whose APIs verified it;
 // other providers keep their listed levels because they may reject "none".
 func (m mdModel) efforts(providerID string) []string {
 	var out []string
@@ -308,7 +316,7 @@ func (m mdModel) efforts(providerID string) []string {
 			out = r.Values
 		}
 	}
-	if providerID == "deepseek" && toggle && len(out) > 0 && !slices.Contains(out, "none") {
+	if _, ok := reasoningOffProviders[providerID]; ok && toggle && len(out) > 0 && !slices.Contains(out, "none") {
 		return append([]string{"none"}, out...)
 	}
 	return out
