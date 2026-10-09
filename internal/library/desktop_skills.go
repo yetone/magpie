@@ -276,15 +276,24 @@ func (l *Library) syncDesktopSkills(t *Target, res *Result) {
 			p := filepath.Join(dir, s.Name)
 			if ours(p, s.Name) {
 				keep(s.Name)
+				current := false
+				if !linked(p) {
+					var err error
+					current, err = copyIsFresh(p, l.libHash(s.Name), false)
+					if err != nil {
+						res.fail(id, "skill:"+s.Name, err)
+						continue
+					}
+				}
 				switch {
-				case linked(p) || !fresh(p, s.Name) && !desktopEdited(p):
+				case linked(p) || !current && !desktopEdited(p):
 					if err := desktopCopy(p, s.Name); err != nil {
 						res.fail(id, "skill:"+s.Name, err)
 						continue
 					}
 					put[s.Name] = true
 					res.changed(id)
-				case !fresh(p, s.Name):
+				case !current:
 					res.Problems = append(res.Problems, Problem{Agent: id, What: "skill:" + s.Name,
 						Error: fmt.Sprintf("%s was changed in Claude Desktop, so the library's copy isn't put over it: delete it in Desktop to have the library's again", s.Name)})
 				}

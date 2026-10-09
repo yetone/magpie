@@ -54,6 +54,9 @@ type Library struct {
 	// untouched are the agents' copies takeEdits found unchanged since
 	// magpie made them, for the sync not to look through them again
 	untouched map[string]bool
+	// blockedSkills are copies takeEdits couldn't scan, kept in place for
+	// this sync rather than replaced or removed. Keys are physical paths.
+	blockedSkills map[string]bool
 }
 
 // Instructions are one shared text, and for each agent whether it gets it

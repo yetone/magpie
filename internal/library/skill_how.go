@@ -87,13 +87,16 @@ func SetSkillHow(agent, how string) (*Result, error) {
 // which leaves the copy as it is. A copy that differs from the library's
 // skill (edited in the agent) is kept aside rather than lost.
 func relink(agent, p, name string) (bool, error) {
+	current, err := copyIsFresh(p, hashDir(realDir(skillDir(name))), false)
+	if err != nil {
+		return false, err
+	}
 	next := filepath.Join(filepath.Dir(p), "."+name+".magpie-link")
 	os.Remove(next)
 	if err := dirLink(skillDir(name), next); err != nil {
 		return false, nil
 	}
-	var err error
-	if fresh(p, name) {
+	if current {
 		old := oldPath(p, name)
 		if err = os.Rename(p, old); err == nil {
 			// best effort: what's left is tried again on the next sync
@@ -129,7 +132,12 @@ func (l *Library) behind(targets []*Target) map[string][]string {
 			if !ours(p, s.Name) || linked(p) {
 				continue
 			}
-			if h := l.libHash(s.Name); h != "" && !copyIsFresh(p, h) && !slices.Contains(out[s.Name], t.Agent.ID) {
+			h := l.libHash(s.Name)
+			if h == "" {
+				continue
+			}
+			current, _ := copyIsFresh(p, h, false)
+			if !current && !slices.Contains(out[s.Name], t.Agent.ID) {
 				out[s.Name] = append(out[s.Name], t.Agent.ID)
 			}
 		}

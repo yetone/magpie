@@ -167,8 +167,17 @@ func (p *Project) place(e, name string) error {
 		}
 		link := linkEntry(fi)
 		// a copy stands for a link on Windows without the right to make one
-		if !p.Copy && link || !link && (p.Copy || runtime.GOOS == "windows") && fresh(abs, name) {
+		if !p.Copy && link {
 			return nil
+		}
+		if !link {
+			current, err := copyIsFresh(abs, hashDir(realDir(skillDir(name))), false)
+			if err != nil {
+				return err
+			}
+			if (p.Copy || runtime.GOOS == "windows") && current {
+				return nil
+			}
 		}
 	}
 	if err := p.mkdirs(filepath.Dir(abs)); err != nil {

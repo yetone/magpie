@@ -119,6 +119,32 @@ func TestProjectSkillsCopied(t *testing.T) {
 	}
 }
 
+func TestProjectSkillScanErrorPreservesCopy(t *testing.T) {
+	h, proj := projectLib(t)
+	ok(t)(ProjectCopy(proj, true))
+	ok(t)(ProjectSkill(proj, "pdf", []string{"claude"}))
+	p := filepath.Join(proj, ".claude/skills/pdf")
+	// Copies from before marks kept hashes must reject incomplete scans too.
+	write(t, filepath.Join(p, marker), "copied from "+skillDir("pdf")+"\n")
+	write(t, filepath.Join(p, "scripts/run.sh"), "echo mine\n")
+	write(t, filepath.Join(h, "src/pdf/scripts/run.sh"), "echo library update\n")
+	blocked := filepath.Join(p, "scripts")
+	blockSkillSubtree(t, proj, blocked)
+	r, err := Sync()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Problems) != 1 || r.Problems[0].Agent != proj || !strings.Contains(r.Problems[0].Error, blocked) {
+		t.Fatalf("unreadable project copy wasn't reported: %+v", r.Problems)
+	}
+	if err := os.Chmod(blocked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, filepath.Join(p, "scripts/run.sh")); got != "echo mine\n" {
+		t.Fatalf("unreadable project copy's edit was replaced: %q", got)
+	}
+}
+
 func TestProjectRefusesForeignFolder(t *testing.T) {
 	_, proj := projectLib(t)
 	skill(t, filepath.Join(proj, ".claude/skills/pdf"), "pdf", "The project's own")

@@ -44,6 +44,37 @@ func desktopEntries(t *testing.T, root string) map[string]desktopEntry {
 	return out
 }
 
+func TestDesktopSkillScanErrorPreservesCopy(t *testing.T) {
+	h := sandbox(t)
+	p, _ := desktopFiles(t, h)
+	write(t, p, `{}`)
+	root := desktopAccount(t, filepath.Dir(p), "org", "acct", `{"skills":[]}`)
+	src := filepath.Join(h, "src/skills")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"claude-desktop"}))
+	cp := filepath.Join(root, "skills/pdf")
+	write(t, filepath.Join(cp, "scripts/run.sh"), "echo mine\n")
+	manifest := read(t, filepath.Join(root, desktopManifest))
+	blocked := filepath.Join(cp, "scripts")
+	blockSkillSubtree(t, h, blocked)
+	r, err := Sync()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Problems) != 1 || r.Problems[0].Agent != "claude-desktop" || !strings.Contains(r.Problems[0].Error, blocked) {
+		t.Fatalf("unreadable Desktop copy wasn't reported: %+v", r.Problems)
+	}
+	if got := read(t, filepath.Join(root, desktopManifest)); got != manifest {
+		t.Fatalf("unreadable Desktop copy's manifest changed: %s", got)
+	}
+	if err := os.Chmod(blocked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, filepath.Join(cp, "scripts/run.sh")); got != "echo mine\n" {
+		t.Fatalf("unreadable Desktop copy's edit was replaced: %q", got)
+	}
+}
+
 // #638: the library gives Claude Desktop's Cowork skills: a copy in every
 // account's skills-plugin (no link: Cowork won't read a linked skill's
 // other files) and an entry in its manifest, which Desktop lists from.

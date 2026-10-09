@@ -283,37 +283,32 @@ func isDigits(s string) bool {
 	return true
 }
 
-// fresh is whether both folders could be read and the copy at p holds
-// what the library's skill does. Failed hashes don't prove it can be discarded.
-func fresh(p, name string) bool {
-	return copyIsFresh(p, hashDir(realDir(skillDir(name))))
-}
-
-// copyIsFresh is fresh against the library skill's hash, lib. A copy whose
-// mark says it was made of lib, with nothing in it changed since the mark,
-// is that without its files being read: a sync used to read every file of
-// every copy in every agent, which over a WSL distro's share took a group's
-// switch 10 seconds and more (#1031). Any other copy is read and hashed.
-func copyIsFresh(p, lib string) bool {
-	return copyIsFreshAs(p, lib, false)
-}
-
-// copyIsFreshAs is copyIsFresh for a copy known to be unchanged since its
-// mark (untouched), which then isn't walked again.
-func copyIsFreshAs(p, lib string, untouched bool) bool {
+// copyIsFresh is whether the copy at p holds the skill hashed as lib.
+// A mark matching lib, with nothing changed since it was made, establishes
+// that without reading the files (#1031). A copy takeEdits found unchanged
+// (untouched) isn't walked again. An incomplete scan returns an error.
+func copyIsFresh(p, lib string, untouched bool) (bool, error) {
+	var at time.Time
+	if !untouched {
+		var err error
+		at, err = changedAt(p)
+		if err != nil {
+			return false, err
+		}
+	}
 	if lib == "" {
-		return false
+		return false, nil
 	}
 	if h, ok := markedHash(p); ok {
 		if untouched {
-			return h == lib
+			return h == lib, nil
 		}
-		if made, ok := copiedAt(p); ok && !changedAt(p).After(made) {
-			return h == lib
+		if made, ok := copiedAt(p); ok && !at.After(made) {
+			return h == lib, nil
 		}
 	}
 	h := hashDir(p)
-	return h != "" && h == lib
+	return h != "" && h == lib, nil
 }
 
 // libHash is hashDir of the library's skill by that name, read once for
@@ -508,6 +503,10 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	for _, name := range a.Skills {
 		s := l.skill(name)
 		p := filepath.Join(t.Skills, name)
+		if l.blockedSkills[realDir(p)] {
+			mine = append(mine, name)
+			continue
+		}
 		if wanted(s) && !inShared(s) || !ours(p, name) {
 			continue
 		}
@@ -524,6 +523,12 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			continue
 		}
 		p := filepath.Join(t.Skills, s.Name)
+		if l.blockedSkills[realDir(p)] {
+			if !slices.Contains(mine, s.Name) {
+				mine = append(mine, s.Name)
+			}
+			continue
+		}
 		if inShared(s) {
 			// a copy of its own of the very same files would be the skill
 			// twice as much as a link: kept aside, as it would be for one
@@ -539,6 +544,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		// the folder the library's skill links to is there already: one
 		// brought in from ~/.agents/skills, which stays where it is
 		if ours(p, s.Name) || realDir(p) == realDir(skillDir(s.Name)) {
+			mine = append(mine, s.Name)
 			// an old copy a previous swap couldn't remove is tried again
 			if ours(p, s.Name) {
 				dropOld(p, s.Name)
@@ -549,6 +555,7 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			if ours(p, s.Name) && !cp && !linked(p) {
 				if ok, err := relink(id, p, s.Name); err != nil {
 					res.fail(id, "skill:"+s.Name, err)
+					continue
 				} else if ok {
 					res.changed(id)
 				}
@@ -556,14 +563,22 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			// a copy is made again once the library's skill has changed: in
 			// an agent that takes copies, and where magpie couldn't link
 			// (Windows without the right to) and left a copy instead
-			if ours(p, s.Name) && ((cp && linked(p)) || (!linked(p) && l.libHash(s.Name) != "" && !copyIsFreshAs(p, l.libHash(s.Name), l.untouched[p]))) {
+			again := cp && linked(p)
+			if ours(p, s.Name) && !linked(p) && l.libHash(s.Name) != "" {
+				current, err := copyIsFresh(p, l.libHash(s.Name), l.untouched[p])
+				if err != nil {
+					res.fail(id, "skill:"+s.Name, err)
+					continue
+				}
+				again = !current
+			}
+			if ours(p, s.Name) && again {
 				if err := copyIn(p, s.Name); err != nil {
 					res.fail(id, "skill:"+s.Name, err)
 				} else {
 					res.changed(id)
 				}
 			}
-			mine = append(mine, s.Name)
 			continue
 		}
 		if _, err := os.Lstat(p); err == nil {
