@@ -1020,6 +1020,30 @@ func settingsState() settingsJSON {
 	}
 	searchState(&s)
 	s.ImageGenAuto, s.ImageGenModels, s.ImageGenMissing = gateway.AutoDrawer(), imageGens(s.ImageGen), gateway.DrawerMissing()
+	if v := gateway.ListedDrawer(s.ImageGen); v != s.ImageGen {
+		s.ImageGenShown = v
+	}
+	s.ImageGenHidden = gateway.DrawerHidden(s.ImageGen)
+	s.VideoGenAuto, s.VideoGenModels, s.VideoGenMissing = gateway.AutoVideomaker(), []modelRef{}, gateway.VideomakerMissing()
+	for _, p := range provider.All() {
+		if !p.On() || p.DecideOnly() {
+			continue
+		}
+		// one unticked in its editor is left out, but the one picked here
+		for _, m := range gateway.Videomakers(p) {
+			if p.VideomakerHidden(m.ID) && s.VideoGen != p.ID+"/"+m.ID {
+				continue
+			}
+			s.VideoGenModels = append(s.VideoGenModels, modelRef{ID: p.ID + "/" + m.ID, Name: cmp.Or(m.Name, m.ID), Provider: p.ID, PName: p.Name, Icon: p.Icon})
+		}
+	}
+	// the Codex subagents row's warning: magpie's multi-agent V1 doesn't reach
+	// Codex where its own multi_agent_v2 is on in the config magpie routes, and
+	// magpie writes nothing there — the setting is the user's to turn off
+	// (#141). Shown on every read, so the row carries it after a reload too.
+	if s.CodexAgentsV1 {
+		s.Notice = agent.CodexSubAgentsV1Warning()
+	}
 	return s
 }
 

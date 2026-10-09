@@ -86,18 +86,52 @@ func TestSettingsModelMustBeServed(t *testing.T) {
 	if code, _ := call("/api/settings", `{"imageGen":"fake/m1"}`); code < 400 {
 		t.Errorf("image generation accepted fake/m1, which draws nothing: %d", code)
 	}
-	// the page sends its own picks with every save, so a value already saved
-	// is checked again rather than kept: its provider may have stopped
-	// serving it since
-	s := settings.Load()
-	s.Vision = "fake/missing"
-	if err := settings.Save(s); err != nil {
-		t.Fatal(err)
+	// A pick already saved whose provider stopped serving it is not refused
+	// when the page sends it back. prefsKeep re-sends the page's own picks
+	// with every save — a theme, a language, the tray — so refusing a stale
+	// one answered 400 to every setting on the page, and a user whose vision
+	// model a vendor retired could not change anything at all until they
+	// cleared a pick they could no longer see.
+	for _, stale := range []struct {
+		name, field, value string
+		saved              func(settings.Settings) string
+	}{
+		{"image recognition", "vision", "fake/missing", func(s settings.Settings) string { return s.Vision }},
+		{"image generation", "imageGen", "fake/missing", func(s settings.Settings) string { return s.ImageGen }},
+	} {
+		s := settings.Load()
+		// the pick as it was made, before the vendor retired the model: it is
+		// written straight to disk, since Save's own check is only that it
+		// looks like a model's id
+		switch stale.field {
+		case "vision":
+			s.Vision = stale.value
+		case "imageGen":
+			s.ImageGen = stale.value
+		}
+		if err := settings.Save(s); err != nil {
+			t.Fatal(err)
+		}
+		if got := stale.saved(settings.Load()); got != stale.value {
+			t.Fatalf("%s before the save: %q, want %q", stale.name, got, stale.value)
+		}
+		// the page sends its pick back with a change the user just made
+		body := fmt.Sprintf(`{"theme":"dark",%q:%q}`, stale.field, stale.value)
+		if code, _ := call("/api/settings", body); code != 200 {
+			t.Errorf("%s: a save that re-sent its own pick answered %d", stale.name, code)
+		}
+		if got := settings.Load().Theme; got != "dark" {
+			t.Errorf("%s: the theme with it was not saved: %q", stale.name, got)
+		}
+		if got := stale.saved(settings.Load()); got != stale.value {
+			t.Errorf("%s: the pick was overwritten: %q", stale.name, got)
+		}
+		// a pick just made is still checked: this is what the guard is for
+		if code, _ := call("/api/settings", fmt.Sprintf(`{%q:%q}`, stale.field, "fake/other-missing")); code < 400 {
+			t.Errorf("%s: accepted a model magpie doesn't serve: %d", stale.name, code)
+		}
 	}
-	if code, _ := call("/api/settings", `{"theme":"dark","vision":"fake/missing"}`); code < 400 {
-		t.Errorf("a save that re-sent the stale image recognition model: %d", code)
-	}
-	if got := settings.Load().Vision; got != "fake/missing" {
-		t.Errorf("the stale image recognition model was overwritten: %q", got)
+	if got := settings.Load().Theme; got != "dark" {
+		t.Errorf("theme after the stale saves: %q, want dark", got)
 	}
 }
