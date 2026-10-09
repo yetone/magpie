@@ -1,0 +1,2366 @@
+{
+  "302ai": {
+    "id": "302ai",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-flash": {
+        "id": "deepseek-flash",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4.1 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "302.AI"
+  },
+  "abacus": {
+    "id": "abacus",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": []
+      }
+    },
+    "name": "Abacus"
+  },
+  "above": {
+    "id": "above",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "above.dev"
+  },
+  "agentrouter": {
+    "id": "agentrouter",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "AgentRouter"
+  },
+  "aihubmix": {
+    "id": "aihubmix",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash-vision-exp": {
+        "id": "deepseek-v4-flash-vision-exp",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash Vision Exp",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "AIHubMix"
+  },
+  "alibaba-cn": {
+    "id": "alibaba-cn",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Alibaba (China)"
+  },
+  "alibaba-token-plan": {
+    "id": "alibaba-token-plan",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Alibaba Token Plan"
+  },
+  "alibaba-token-plan-cn": {
+    "id": "alibaba-token-plan-cn",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Alibaba Token Plan (China)"
+  },
+  "amazon-bedrock": {
+    "id": "amazon-bedrock",
+    "models": {
+      "us.anthropic.claude-sonnet-5": {
+        "id": "us.anthropic.claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5 (US)",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Amazon Bedrock"
+  },
+  "anthropic": {
+    "id": "anthropic",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Anthropic"
+  },
+  "auriko": {
+    "id": "auriko",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Auriko"
+  },
+  "azure": {
+    "id": "azure",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek-V4-Flash",
+        "reasoning_options": []
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek-V4-Pro",
+        "reasoning_options": []
+      }
+    },
+    "name": "Azure"
+  },
+  "azure-cognitive-services": {
+    "id": "azure-cognitive-services",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Azure Cognitive Services"
+  },
+  "cortecs": {
+    "id": "cortecs",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          {
+            "min": 1024,
+            "type": "budget_tokens"
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Cortecs"
+  },
+  "crof": {
+    "id": "crof",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash-vision-exp": {
+        "id": "deepseek-v4-flash-vision-exp",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash Vision Exp",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "CrofAI"
+  },
+  "deepseek": {
+    "id": "deepseek",
+    "models": {
+      "deepseek-flash": {
+        "id": "deepseek-flash",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4.1 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash-vision-exp": {
+        "id": "deepseek-v4-flash-vision-exp",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash Vision Exp",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "DeepSeek"
+  },
+  "digitalocean": {
+    "id": "digitalocean",
+    "models": {
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Deepseek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "DigitalOcean"
+  },
+  "empiriolabs": {
+    "id": "empiriolabs",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "max"
+            ]
+          },
+          {
+            "max": 393216,
+            "min": 1,
+            "type": "budget_tokens"
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "max"
+            ]
+          },
+          {
+            "max": 393216,
+            "min": 1,
+            "type": "budget_tokens"
+          }
+        ]
+      }
+    },
+    "name": "EmpirioLabs AI"
+  },
+  "frogbot": {
+    "id": "frogbot",
+    "models": {
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek v4 Pro",
+        "reasoning_options": null
+      }
+    },
+    "name": "FrogBot"
+  },
+  "github-copilot": {
+    "id": "github-copilot",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "GitHub Copilot"
+  },
+  "inferx": {
+    "id": "inferx",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "deepseek-v4-flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          }
+        ]
+      }
+    },
+    "name": "InferX"
+  },
+  "kenari": {
+    "id": "kenari",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "xhigh"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "xhigh"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Kenari"
+  },
+  "kimi-code-plan-cn": {
+    "id": "kimi-code-plan-cn",
+    "models": {
+      "k3": {
+        "id": "k3",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "k3-256k": {
+        "id": "k3-256k",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3-256K",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "kimi-for-coding": {
+        "id": "kimi-for-coding",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "kimi-for-coding",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "kimi-for-coding-highspeed": {
+        "id": "kimi-for-coding-highspeed",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi For Coding HighSpeed",
+        "reasoning_options": []
+      }
+    },
+    "name": "Kimi For Coding (kimi.com)"
+  },
+  "kimi-code-plan-global": {
+    "id": "kimi-code-plan-global",
+    "models": {
+      "k3": {
+        "id": "k3",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "k3-256k": {
+        "id": "k3-256k",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi K3-256K",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "kimi-for-coding": {
+        "id": "kimi-for-coding",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "kimi-for-coding",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "kimi-for-coding-highspeed": {
+        "id": "kimi-for-coding-highspeed",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "video"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Kimi For Coding HighSpeed",
+        "reasoning_options": []
+      }
+    },
+    "name": "Kimi For Coding (kimi.ai)"
+  },
+  "llmgateway": {
+    "id": "llmgateway",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "DevPass (LLM Gateway)"
+  },
+  "model-oracle-ai": {
+    "id": "model-oracle-ai",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Model Oracle AI"
+  },
+  "modelis": {
+    "id": "modelis",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Modelis"
+  },
+  "nan": {
+    "id": "nan",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4.1 Flash",
+        "reasoning_options": []
+      }
+    },
+    "name": "NaN"
+  },
+  "neon": {
+    "id": "neon",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Neon"
+  },
+  "neuralwatt": {
+    "id": "neuralwatt",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "high",
+              "max"
+            ]
+          },
+          {
+            "type": "budget_tokens"
+          }
+        ]
+      }
+    },
+    "name": "Neuralwatt"
+  },
+  "ollama-cloud": {
+    "id": "ollama-cloud",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "deepseek-v4-flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "deepseek-v4-pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Ollama Cloud"
+  },
+  "opencode": {
+    "id": "opencode",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash-vision-exp": {
+        "id": "deepseek-v4-flash-vision-exp",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash Vision Exp",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "OpenCode Zen"
+  },
+  "opencode-go": {
+    "id": "opencode-go",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash-vision-exp": {
+        "id": "deepseek-v4-flash-vision-exp",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash Vision Exp",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro (New)",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "OpenCode Go"
+  },
+  "opper": {
+    "id": "opper",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": []
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": []
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": []
+      }
+    },
+    "name": "Opper"
+  },
+  "pendra": {
+    "id": "pendra",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Pendra"
+  },
+  "pioneer": {
+    "id": "pioneer",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Pioneer"
+  },
+  "requesty": {
+    "id": "requesty",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Requesty"
+  },
+  "routing-run": {
+    "id": "routing-run",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": []
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": []
+      }
+    },
+    "name": "routing.run"
+  },
+  "sensenova": {
+    "id": "sensenova",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "high"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "high",
+              "max"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "SenseNova (China)"
+  },
+  "snowflake-cortex": {
+    "id": "snowflake-cortex",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": []
+      }
+    },
+    "name": "Snowflake Cortex"
+  },
+  "unorouter": {
+    "id": "unorouter",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": []
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": []
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": []
+      }
+    },
+    "name": "UnoRouter"
+  },
+  "venice": {
+    "id": "venice",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash 0423",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Venice AI"
+  },
+  "vivgrid": {
+    "id": "vivgrid",
+    "models": {
+      "claude-sonnet-5": {
+        "id": "claude-sonnet-5",
+        "modalities": {
+          "input": [
+            "text",
+            "image",
+            "pdf"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "Claude Sonnet 5",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          },
+          {
+            "type": "effort",
+            "values": [
+              "low",
+              "high",
+              "max"
+            ]
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ]
+          }
+        ]
+      }
+    },
+    "name": "Vivgrid"
+  },
+  "volcengine-coding-plan": {
+    "id": "volcengine-coding-plan",
+    "models": {
+      "deepseek-v4-flash": {
+        "id": "deepseek-v4-flash",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Flash",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          }
+        ]
+      },
+      "deepseek-v4-pro": {
+        "id": "deepseek-v4-pro",
+        "modalities": {
+          "input": [
+            "text"
+          ],
+          "output": [
+            "text"
+          ]
+        },
+        "name": "DeepSeek V4 Pro",
+        "reasoning_options": [
+          {
+            "type": "toggle"
+          }
+        ]
+      }
+    },
+    "name": "Volcengine Ark Coding Plan"
+  }
+}

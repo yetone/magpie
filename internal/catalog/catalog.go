@@ -297,13 +297,30 @@ type mdModel struct {
 	} `json:"limit"`
 }
 
-// efforts are the reasoning levels models.dev says the model takes.
-func (m mdModel) efforts() []string {
+// reasoningOffProviders are models.dev providers whose APIs have verified
+// that their toggled models accept the off effort (#1098).
+var reasoningOffProviders = map[string]struct{}{
+	"deepseek":              {},
+	"kimi-code-plan-cn":     {},
+	"kimi-code-plan-global": {},
+}
+
+// efforts are the reasoning levels models.dev says the model takes. A
+// toggle adds the off level only for providers whose APIs verified it;
+// other providers keep their listed levels because they may reject "none".
+func (m mdModel) efforts(providerID string) []string {
 	var out []string
+	toggle := false
 	for _, r := range m.Reasoning {
-		if r.Type == "effort" {
+		switch r.Type {
+		case "toggle":
+			toggle = true
+		case "effort":
 			out = r.Values
 		}
+	}
+	if _, ok := reasoningOffProviders[providerID]; ok && toggle && len(out) > 0 && !slices.Contains(out, "none") {
+		return append([]string{"none"}, out...)
 	}
 	return out
 }
@@ -406,7 +423,7 @@ func load() map[string]mdProvider {
 								}
 								named[bareID(id)][x.Name]++
 							}
-							if e := x.efforts(); len(e) > 0 {
+							if e := x.efforts(pid); len(e) > 0 {
 								l := strings.Join(e, ",")
 								if levels[bareID(id)] == nil {
 									levels[bareID(id)] = map[string]int{}
@@ -416,7 +433,7 @@ func load() map[string]mdProvider {
 									levels[bareID(id)][l]++
 								}
 							}
-							if x.Thinks || len(x.efforts()) > 0 {
+							if x.Thinks || len(x.efforts(pid)) > 0 {
 								reasons[bareID(id)]++
 							} else {
 								reasons[bareID(id)]--
@@ -635,7 +652,7 @@ func Provider(id string) []Model {
 		}
 		mm := Model{ID: m.ID, Name: m.Name, Provider: id, Released: m.ReleaseDate, Price: m.Cost, Temperature: m.Temperature,
 			Images: slices.Contains(m.Modalities.Input, "image"), ImageInput: imageInput(m.Modalities.Input), Context: m.window(), Output: m.Limit.Output}
-		mm.Efforts = m.efforts()
+		mm.Efforts = m.efforts(id)
 		mm.Reasoning = m.Thinks || len(mm.Efforts) > 0
 		out = append(out, mm)
 	}
@@ -895,7 +912,7 @@ func ListedBy(providers []string, id string) ([]string, bool) {
 				if bareID(key) != want {
 					continue
 				}
-				if e := m.efforts(); len(e) > 0 || !m.budgeted() {
+				if e := m.efforts(pid); len(e) > 0 || !m.budgeted() {
 					return slices.Clone(e), true
 				}
 			}

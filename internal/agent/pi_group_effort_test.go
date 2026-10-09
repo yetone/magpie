@@ -62,7 +62,7 @@ func TestPiGroupThinkingIsWhatPiRuns(t *testing.T) {
 	if entry == nil || entry["reasoning"] != true {
 		t.Fatalf("group entry: %v", entry)
 	}
-	if got := piSupported(entry); !reflect.DeepEqual(got, []string{"low", "high", "max"}) {
+	if got := piSupported(entry); !reflect.DeepEqual(got, []string{"off", "low", "high", "max"}) {
 		t.Fatalf("Pi offers %v for the group: %v", got, entry["thinkingLevelMap"])
 	}
 
@@ -74,7 +74,7 @@ func TestPiGroupThinkingIsWhatPiRuns(t *testing.T) {
 		return out
 	}
 	effort := a.Field("effort")
-	if got := values(effort.Options(map[string]string{"model": "magpie/group/deepseek"})); !reflect.DeepEqual(got, []string{"low", "high", "max"}) {
+	if got := values(effort.Options(map[string]string{"model": "magpie/group/deepseek"})); !reflect.DeepEqual(got, []string{"off", "low", "high", "max"}) {
 		t.Fatalf("offered %v", got)
 	}
 	if got := effort.Get(); got != "max" {

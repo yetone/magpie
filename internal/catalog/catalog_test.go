@@ -57,6 +57,88 @@ func TestProviderReadsTemperatureCapability(t *testing.T) {
 	}
 }
 
+func TestToggleAddsOffLevelForVerifiedProviders(t *testing.T) {
+	// This trimmed fixture retains every provider row for the tested model IDs
+	// from models.dev/api.json fetched 2026-10-09 (SHA-256 of the full response:
+	// 31cd8dd78d79706d444bb7f781f0edda422e8ce098fc4da66d154b4848850654), so
+	// EffortsOf sees the real votes.
+	body, err := os.ReadFile(filepath.Join("testdata", "models.dev-2026-10-09.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeCatalog(t, string(body))
+
+	tests := []struct {
+		provider string
+		model    string
+		want     string
+	}{
+		{"deepseek", "deepseek-flash", "none,low,high,max"},
+		{"deepseek", "deepseek-v4-pro", "none,low,high,max"},
+		{"deepseek", "deepseek-v4-flash", "none,low,high,max"},
+		{"deepseek", "deepseek-v4-flash-vision-exp", "none,low,high,max"},
+		{"kimi-code-plan-global", "k3", "none,low,high,max"},
+		{"kimi-code-plan-global", "kimi-for-coding", "none,low,high,max"},
+		{"kimi-code-plan-cn", "k3", "none,low,high,max"},
+		{"kimi-code-plan-cn", "kimi-for-coding", "none,low,high,max"},
+	}
+	for _, tc := range tests {
+		var found bool
+		for _, model := range Provider(tc.provider) {
+			if model.ID != tc.model {
+				continue
+			}
+			found = true
+			if got := strings.Join(model.Efforts, ","); got != tc.want {
+				t.Errorf("Provider(%q) model %q efforts = %q, want %q", tc.provider, tc.model, got, tc.want)
+			}
+			break
+		}
+		if !found {
+			t.Fatalf("Provider(%q) does not list %q", tc.provider, tc.model)
+		}
+		if got, ok := ListedBy([]string{tc.provider}, tc.model); !ok || strings.Join(got, ",") != tc.want {
+			t.Errorf("ListedBy([%q], %q) = %v, %v; want %q, true", tc.provider, tc.model, got, ok, tc.want)
+		}
+	}
+
+	// The real catalog also lists deepseek-flash through 302ai. Its unchanged
+	// levels keep the aggregate on low/high/max even though DeepSeek itself has
+	// the verified off level.
+	if got := strings.Join(EffortsOf("deepseek-flash"), ","); got != "low,high,max" {
+		t.Errorf("EffortsOf(%q) = %q, want low,high,max", "deepseek-flash", got)
+	}
+
+	for _, tc := range []struct {
+		provider string
+		model    string
+		want     string
+	}{
+		{"302ai", "deepseek-flash", "low,high,max"},
+		{"kimi-code-plan-global", "k3-256k", "low,high,max"},
+		{"kimi-code-plan-cn", "k3-256k", "low,high,max"},
+		{"kimi-code-plan-global", "kimi-for-coding-highspeed", ""},
+		{"kimi-code-plan-cn", "kimi-for-coding-highspeed", ""},
+		{"anthropic", "claude-sonnet-5", "low,medium,high,xhigh,max"},
+		{"amazon-bedrock", "us.anthropic.claude-sonnet-5", "low,medium,high,xhigh,max"},
+	} {
+		var found bool
+		for _, model := range Provider(tc.provider) {
+			if model.ID != tc.model {
+				continue
+			}
+			found = true
+			if got := strings.Join(model.Efforts, ","); got != tc.want {
+				t.Errorf("Provider(%q) model %q efforts = %q, want %q", tc.provider, tc.model, got, tc.want)
+			}
+			break
+		}
+		if !found {
+			t.Fatalf("Provider(%q) does not list %q", tc.provider, tc.model)
+		}
+	}
+}
+
 func TestDecorateCarriesTemperature(t *testing.T) {
 	no, yes := false, true
 	live := []Model{{ID: "new-model"}, {ID: "gpt-5.5"}}
