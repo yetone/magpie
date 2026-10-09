@@ -817,7 +817,12 @@
       }
     } else if (mw && !e.providers.length) {
       // only middleware: its own line says what it does
-    } else sub.textContent = e.providers.length ? t("Signs in to {names}", { names: e.providers.join(t(", ")) }) : t("Signs in to nothing magpie can use");
+    } else if (e.providers.length) sub.textContent = t("Signs in to {names}", { names: e.providers.join(t(", ")) });
+    // an empty list only means "nothing" once the plugins have answered: a
+    // plugin installed a moment ago has no names yet, and the page says
+    // nothing rather than claiming here that it signs in to nothing magpie
+    // can use, which isn't known until the answer comes (#1112)
+    else if (e.named) sub.textContent = t("Signs in to nothing magpie can use");
     if (sub.textContent) who.append(sub);
     if (mw && !e.off && !ask) who.append(mwLine(mw));
     if (mw && !e.off && !ask && editing?.pkg === pkg) who.append(optionsEditor(e));

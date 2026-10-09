@@ -592,10 +592,21 @@ func lastLines(s string, n int) string {
 	return strings.Join(ls, " ")
 }
 
-// rtkAgents are the agents on this machine rtk can be given to.
-func rtkAgents() []*agent.Agent {
+// detected is the agents on this machine, as agent.Detected says; a var for
+// tests. Detecting them probes a file or a command for every agent magpie
+// knows of, which is a few hundred milliseconds, so it is asked once per read
+// and not once per pass over the list (see ReadRTK).
+var detected = agent.Detected
+
+// rtkAgents are the agents on this machine rtk can be given to. They are as
+// detected says, so a caller with a list already in hand passes it rather
+// than have them detected again.
+func rtkAgents(agents []*agent.Agent) []*agent.Agent {
+	if agents == nil {
+		agents = detected()
+	}
 	var out []*agent.Agent
-	for _, a := range agent.Detected() {
+	for _, a := range agents {
 		if _, ok := rtkSpecs[a.ID]; ok {
 			out = append(out, a)
 		}
@@ -612,7 +623,9 @@ func ReadRTK() *RTKView {
 			v.Install = shown(c)
 		}
 	}
-	for _, a := range rtkAgents() {
+	// the agents are detected once and the two passes below share them
+	agents := detected()
+	for _, a := range rtkAgents(agents) {
 		sp := rtkSpecs[a.ID]
 		ra := RTKAgent{ID: a.ID, Name: a.Name, Icon: a.Icon, On: sp.has(a)}
 		if sp.blocked != nil {
@@ -620,7 +633,7 @@ func ReadRTK() *RTKView {
 		}
 		v.Agents = append(v.Agents, ra)
 	}
-	for _, a := range agent.Detected() {
+	for _, a := range agents {
 		if why, ok := rtkNoHook[a.ID]; ok {
 			v.Agents = append(v.Agents, RTKAgent{ID: a.ID, Name: a.Name, Icon: a.Icon, Blocked: why, NoHook: true})
 		}
@@ -759,7 +772,8 @@ func SetRTK(id string, on bool) (*RTKView, error) {
 	rtkMu.Lock()
 	defer rtkMu.Unlock()
 	var a *agent.Agent
-	for _, x := range rtkAgents() {
+	agents := detected()
+	for _, x := range rtkAgents(agents) {
 		if x.ID == id {
 			a = x
 		}

@@ -42,12 +42,8 @@ func latestServer(t *testing.T, tag string) {
 	t.Cleanup(forgetChannels)
 }
 
-// forgetChannels forgets what winget and Homebrew were found to have.
-func forgetChannels() {
-	rtkChannels.Lock()
-	clear(rtkChannels.m)
-	rtkChannels.Unlock()
-}
+// forgetChannels is in rtk_channel_background_test.go: it clears the answers
+// and any ask marked in flight.
 
 // asJSON is the view as the page gets it.
 func asJSON(t *testing.T, v *RTKView) map[string]any {
@@ -232,8 +228,14 @@ esac
 		return []string{"winget", "upgrade", "--id", "rtk-ai.rtk", "--exact", "--silent", "--accept-package-agreements", "--accept-source-agreements", "--disable-interactivity"}
 	}
 	t.Cleanup(func() { upgraderOf = up })
+	// what the tab does with the read it draws: it takes what the package
+	// manager said last, and asks it in the background for the next time
+	// (asking it takes seconds — `winget show` refreshes its sources — which
+	// is what #1025's note must not hold the tab up for)
 	card := func() map[string]any {
 		v := ReadRTK()
+		v.CheckLatest()
+		CheckChannel(v)
 		v.CheckLatest()
 		return asJSON(t, v)
 	}

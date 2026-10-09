@@ -166,9 +166,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 	// installing rtk when the page is asked to
 	mux.HandleFunc("GET /api/library/rtk", func(rw http.ResponseWriter, r *http.Request) {
 		v := library.ReadRTK()
-		// its latest release, and whether winget or Homebrew has it yet,
-		// when they answer in time: the page is drawn without them
-		// otherwise, and has them next time
+		// its latest release, and what the package manager it was installed
+		// with has of that release, when GitHub answers in time: the page is
+		// drawn without them otherwise, and has them next time
 		if v.Path != "" {
 			checked := make(chan *library.RTKView, 1)
 			go func() { c := *v; c.CheckLatest(); checked <- &c }()
@@ -176,6 +176,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			case v = <-checked:
 			case <-time.After(3 * time.Second):
 			}
+			// what the package manager has is asked after the answer goes out:
+			// `winget show` refreshes its sources and takes seconds, which is
+			// longer than the wait above, so asking it there held the whole tab
+			// for a tag that then never arrived (#1025). It is one read of the
+			// tab away, and the answer is kept for hours either way.
+			go library.CheckChannel(v)
 		}
 		writeJSON(rw, v)
 	})

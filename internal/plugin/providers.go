@@ -398,6 +398,17 @@ var refreshing sync.WaitGroup
 // host left running: for tests that watch the providers' list on disk.
 func Refreshed() { refreshing.Wait() }
 
+// Answered is whether what Cached gives now is the plugins' own answer,
+// rather than what was kept from before they were last asked. A page that
+// would otherwise read "signs in to nothing" out of an empty list can say
+// so only when this holds: an empty list before the answer arrives means
+// "not asked yet", not "none" (#1112).
+func Answered() bool {
+	provMu.Lock()
+	defer provMu.Unlock()
+	return provGood
+}
+
 // Settle waits for Cached's refreshes to end, then stops the host: for
 // tests, whose folders the host runs in go when they end. Each ask is
 // bounded and the retries are few, so this waits a bounded time even for
