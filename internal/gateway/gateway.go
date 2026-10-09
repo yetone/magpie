@@ -1092,16 +1092,18 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 				s.codexTitle(w, r, body, to)
 				return
 			}
-			// Codex compacts remotely, a compaction_trigger here, on a
-			// provider table named "OpenAI" (CC Switch's relay tables,
-			// which magpie points here, #1301): the summary is magpie's to
-			// make, as on CodexPath, and magpie's summaries go back as text
+			if to := codexDescriptionsTo(r.Header, body, true); to != "" {
+				s.codexDescription(w, r, body, to)
+				return
+			}
+			// Codex compacts remotely on an OpenAI-named provider table too.
 			if bytes.Contains(body, []byte(`"compaction`)) {
 				var compact bool
 				if body, compact = codexInput(body, true); compact {
 					s.codexCompact(w, r, body)
 					return
 				}
+
 			}
 		}
 		s.serveAgent(w, r, from, body)

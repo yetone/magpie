@@ -90,6 +90,10 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 				s.codexTitle(w, r, body, to)
 				return
 			}
+			if to := codexDescriptionsTo(r.Header, body, false); to != "" {
+				s.codexDescription(w, r, body, to)
+				return
+			}
 		}
 		// The namespace owns the route even if a model is not in the catalog.
 		// Unknown providers/groups must fail locally, never fall through to OpenAI.

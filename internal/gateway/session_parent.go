@@ -11,6 +11,10 @@ func isTitleKind(kind string) bool {
 	return kind == "thread_title" || kind == "thread_title_reconsideration" || kind == "title_generation"
 }
 
+func isDescriptionKind(kind string) bool {
+	return kind == "thread_description"
+}
+
 // Codex projects turn metadata into headers, but its canonical transport is
 // client_metadata in the Responses body. Read only identity fields; never keep
 // prompts or the rest of the metadata in the trace.

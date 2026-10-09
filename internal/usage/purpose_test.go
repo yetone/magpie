@@ -39,6 +39,13 @@ func TestPurposeFilter(t *testing.T) {
 	}
 }
 
+func TestDescriptionPurposeLabel(t *testing.T) {
+	p := PurposeKinds()["thread_description"]
+	if p.Purpose != "kind:thread_description" || p.Name != "Description" {
+		t.Fatalf("description purpose: %+v", p)
+	}
+}
+
 func TestPurposeRequestPages(t *testing.T) {
 	pageHome(t)
 	now := holdClock(t, time.Date(2026, 9, 30, 12, 0, 0, 0, time.Local))

@@ -27,6 +27,22 @@ served by a plugin are in [Provider and plugin ownership](provider-plugins.md).
 | Trace | The Routing view's record of each decision, written where the decision is made: candidates, rests, which try answered. | [`trace.go`](../../internal/gateway/trace.go) |
 | Prompt | What each request's prompt held, part by part: the agent's system prompt, tool definitions (an MCP server's tools as one item), instruction files and skills, files its tools read, their other output, and the conversation. `inspectPrompt` reads it from the body as the agent sent it, before translation; `calibrated` scales the estimate to the prompt the vendor counted and sets the window of the model that answered. Only names are kept, never the text. It goes on the trace as `Route.Prompt`, with `Route.Conv` naming a conversation that has no session id. The GUI's `/api/context` scores each agent from it (`internal/gui/context.go`). | [`prompt.go`](../../internal/gateway/prompt.go) |
 
+## Codex titles and descriptions
+
+Codex's title and description requests are independent hidden turns. The
+settings `CodexTitles` and `CodexDescriptions` select their models separately;
+an empty setting preserves the requested model. On a Magpie model, both
+paths wrap plain model text in the object Codex requested. Titles use
+`{"title": ...}`; descriptions use `{"description": ...}` with nonempty text
+and no invented maximum length. Title Off mode does not disable descriptions.
+
+`codexTitlesTo`, `codexDescriptionsTo`, `codexTitle` and `codexDescription` in
+[`codex_titles.go`](../../internal/gateway/codex_titles.go) own this selection
+and response wrapping. Both the Responses API and Codex backend entrypoints
+use it. Usage and Routing retain the original purpose; unusable description
+answers are recorded as description failures. These helpers do not decrypt
+foreign sealed history or repair ChatGPT's response protection.
+
 ## Runtime path
 
 1. `handle(proto)` reads the body and the model (`requestBody`, `requestModel`), then calls `serveAgent`. Every route that reads an agent's body (each API, count_tokens, Gemini's, embeddings, images, videos, System One, the Codex backend path) reads it through `readBoundedRequestBody` in [`request_bounds.go`](../../internal/gateway/request_bounds.go). It decodes a `Content-Encoding` of `gzip` or `zstd` (`decodedBody`; Codex sends zstd to a custom provider's `/v1/responses` too, #1223) and drops the header, so the provider is sent plain JSON. The size limit holds for the decoded bytes (413), and any other encoding is refused 415. `keyLimited` reads a limited key's compressed body the same way, so its reservation is the decoded size. `serveAgent` runs the [middleware](gateway-middleware.md) chain, then `serve`.
