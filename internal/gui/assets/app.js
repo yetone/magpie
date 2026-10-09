@@ -7194,6 +7194,7 @@ function asTyped() {
   // many keys pasted (361 on Discord) are asked about by the first
   const keys = splitKeys(draft.key || "");
   const body = { typed: true, key: keys.length > 1 ? keys[0] : (draft.key || "").trim(), chat: (draft.chat || "").trim(), responses: (draft.responses || "").trim(), anthropic: (draft.anthropic || "").trim(), gemini: (draft.gemini || "").trim(), modelsURL: (draft.modelsURL || "").trim() };
+  Object.assign(body, movedURLs(draft));
   // a System One base is asked at POST …/systemone, not on the three APIs
   if (draft.api === "decide") body.decide = (draft.decide || "").trim();
   if (draft.headers) body.headers = headersOf(draft.headers);
@@ -8110,6 +8111,34 @@ function drawEditor(p, presetID) {
     ed.append(...field(t("Endpoint"), endpoint, pr.endpointHint ? t(pr.endpointHint) : ""));
   }
 
+  // a server on this machine (Ollama, LM Studio, oMLX, MLX-Serve) can
+  // listen on another port, or be another computer's: its address moves each URL, each API
+  // keeping its path, as provider.AtAddress does
+  let address = null, addressMore = null;
+  if (pr?.kind === "local") {
+    // a saved provider's URLs (or a duplicate's) start it; a new one's are
+    // the preset's, sent as none unless moved, so the gateway takes them
+    const own = draft.chat !== undefined;
+    draft.addressFrom ??= { chat: draft.chat ?? pr.chat ?? "", responses: draft.responses ?? pr.responses ?? "", anthropic: draft.anthropic ?? pr.anthropic ?? "" };
+    draft.addressWas ??= own ? originOf(draft.addressFrom) : "";
+    const from = draft.addressFrom, addressWas = draft.addressWas;
+    draft.address ??= addressWas;
+    address = input(draft.address, originOf(pr));
+    address.inputMode = "url";
+    address.classList.add("address");
+    address.oninput = () => { draft.address = address.value; refreshEndpoints(); };
+    const keys = address.onkeydown;
+    address.onkeydown = (e) => { keys(e); if (e.key === "Enter" && isNew) save(); };
+    // folded: most run where the preset says; open for one that doesn't,
+    // or an address typed before the editor was drawn again
+    addressMore = el("details", "more");
+    addressMore.open = (own && originOf(from) !== originOf(pr)) || draft.address.trim() !== addressWas;
+    addressMore.append(el("summary", "", t("Server address")));
+    const inner = el("div", "inner");
+    inner.append(...field(t("Address"), address, t("Where the server listens; change the port, or give another computer's address")));
+    addressMore.append(inner);
+  }
+
   // null, not false, when there is none: false?.key is undefined, and a
   // provider with no key read .set of it (willz: a local Ollama without a
   // key opened no editor, its row just toggling)
@@ -8168,6 +8197,7 @@ function drawEditor(p, presetID) {
   if (p?.keyList?.length) ed.append(...field(t("Accounts"), renderKeyAccounts(p), p.routing ? t("Tick every key to use; Routing says how requests spread over them.") : t("Tick every key to use. Requests go to the first; when it runs out of quota or hits a rate limit, the next ticked key takes over.")));
   if (p?.keyList?.filter((k) => k.on).length > 1) ed.append(...renderRouting(p));
   else ed.append(...field(t("API key"), keyWrap, isNew ? t("Kept in ~/.config/magpie/providers.json, readable by you alone. Nothing is read from your shell.") : ""));
+  if (addressMore) ed.append(addressMore);
 
   // A user-defined provider can have its own picture; presets keep theirs.
   if (custom) ed.append(...field(t("Icon"), iconPicker(ed), ""));
@@ -8382,6 +8412,7 @@ function drawEditor(p, presetID) {
     refreshEndpoints = () => {
       const base = p || pr || {};
       const src = { chat: draft.chat || base.chat || "", responses: draft.responses || base.responses || "", anthropic: draft.anthropic || base.anthropic || "", decide: base.decide || "" };
+      Object.assign(src, address && movedURLs(draft));
       ebox.replaceChildren(renderEndpoints(p, src));
     };
     refreshEndpoints();
@@ -8547,6 +8578,11 @@ function drawEditor(p, presetID) {
     if (isNew && custom && !body.name) { name.focus(); return editorError(t("Give it a name"), "warn"); }
     if (isNew && custom && !body.chat && !body.anthropic && !body.responses && !body.decide) { url.focus(); return editorError(t("A base URL is needed"), "warn"); }
     if (endpoint && !body.chat && !body.responses) { endpoint.focus(); return editorError(t(pr.endpointNeeded || "Your resource's endpoint is needed"), "warn"); }
+    if (address) {
+      const a = (draft.address || "").trim();
+      if (localAddress(a) === null) { addressMore.open = true; address.focus({ preventScroll: true }); return editorError(t("Address: {v} isn't an address like http://localhost:11434", { v: a }), "warn"); }
+      Object.assign(body, movedURLs(draft));
+    }
     editorError("");
     saving(saveBtn, t(isNew ? "Adding…" : "Saving…"));
     providerAction("save", body, t(isNew ? "{name} added" : "{name} saved", { name: draft.name || draft.id }));
@@ -12773,6 +12809,44 @@ function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^
 // dots kept (gpt-6.1-sol, #968).
 function groupSlug(s) { return s.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/\.{2,}/g, ".").replace(/^[-.]+|[-.]+$/g, ""); }
 function hostOf(u) { try { return new URL(u.includes("://") ? u : "https://" + u).host; } catch { return ""; } }
+
+// localAddress is a local server's address as typed, as provider.AtAddress
+// takes it: its origin, http when no scheme is given, any path dropped; ""
+// for nothing typed, null for what is no address.
+function localAddress(s) {
+  s = (s || "").trim();
+  if (!s) return "";
+  if (/\s/.test(s)) return null;
+  try {
+    const u = new URL(s.includes("://") ? s : "http://" + s);
+    if ((u.protocol !== "http:" && u.protocol !== "https:") || !u.hostname) return null;
+    return u.protocol + "//" + u.host;
+  } catch { return null; }
+}
+// originOf is the origin of the first of a provider's URLs that is set.
+function originOf(x) {
+  for (const u of [x?.chat, x?.responses, x?.anthropic]) {
+    if (!u) continue;
+    try { const v = new URL(u); return v.protocol + "//" + v.host; } catch {}
+  }
+  return "";
+}
+// movedURLs is a local server's URLs at the Address typed in its editor,
+// moved from the ones it opened with, or null while the Address is the one
+// it opened with or no address. Moved only then, and never into draft: URLs
+// a saved one has apart (another app's, the CLI's) stay as they are after
+// an Address is typed and put back.
+function movedURLs(d) {
+  if (!d?.addressFrom) return null;
+  const at = localAddress(d.address);
+  return at && at !== d.addressWas ? atAddress(d.addressFrom, at) : null;
+}
+// atAddress is urls each moved to origin, its path kept.
+function atAddress(urls, origin) {
+  const out = {};
+  for (const [k, v] of Object.entries(urls)) out[k] = v && origin ? v.replace(/^[a-z][\w+.-]*:\/\/[^/?#]*/i, origin) : v;
+  return out;
+}
 
 // the sheet opens below the list: it unrolls on the rows' spring and the
 // view goes down with it. The button stays at the view's foot however long

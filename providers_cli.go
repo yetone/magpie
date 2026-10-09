@@ -73,6 +73,8 @@ const providerUsage = `usage:
        magpie provider set my-relay search=yes
                                    (the relay answers Claude Code's WebSearch and Codex's web_search itself:
                                     those go to it as sent, not through magpie's own search)
+       magpie provider add ollama url=http://192.168.1.5:11434/v1 anthropic=http://192.168.1.5:11434
+                                   (Ollama, LM Studio, oMLX or MLX-Serve on another port or computer)
        magpie provider set ollama unmasked=yes
                                    (a model on this computer or the local network: Settings' redaction leaves its
                                     requests as written; not for a local relay that passes them on to a vendor)
