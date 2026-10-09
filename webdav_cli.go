@@ -15,9 +15,8 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// WebDAV and S3 sync from the terminal: what Settings › Sync does, through
-// the same davsync.Configure, Now, Off and Dismiss. One of the two is on
-// at a time; magpie webdav and magpie s3 each set up their own.
+// WebDAV, S3 and GitHub sync from the terminal: what Settings › Sync does, through
+// the same davsync.Configure, Now, Off and Dismiss. One backend is on at a time.
 
 const webdavUsage = `usage:
   magpie webdav                           whether sync is on, where to, and how the last sync went
@@ -101,20 +100,43 @@ const s3Usage = `usage:
        magpie s3 on s3://backups endpoint=http://nas.local:9000 path-style=yes access-key-id=…
 `
 
-// syncKind is magpie webdav's or magpie s3's: which server it sets up.
+const githubUsage = `usage:
+  magpie github                           whether sync is on, where to, and how the last sync went
+  magpie github on github://owner/repo[/folder] [branch=…] [keys=no] [agents=no] [library=no]
+                                          keep the encrypted setup in an existing GitHub repository; asks for a token and passphrase
+  magpie github set k=v…                  change it: address, branch, keys, agents, library, usage (yes|no)
+  magpie github now                       sync now
+  magpie github auto off|3|15|30|60       how often the gateway syncs by itself, in minutes
+  magpie github restore                   make this computer's setup the repository's; what is here is kept first
+  magpie github undo                       put back what the last restore replaced
+  magpie github upload                     put this computer's setup over a repository file that isn't a backup; the old file is kept first
+  magpie github dismiss                   clear what the last sync said it replaced
+  magpie github off                       turn it off; the encrypted file and its commit history stay
+
+  token      asked for, unechoed, and saved only for this repository. It needs
+             Contents read and write permission. The repository must already exist.
+             The first sync initializes an empty repository's default branch;
+             other branches must already exist.
+  passphrase the same on every computer; GitHub only ever receives the sealed file.
+`
+
+// syncKind is magpie webdav's, magpie s3's or magpie github's server.
 type syncKind struct {
 	name, cmd, usage string
-	s3               bool
 }
 
 var (
-	webdavKind = syncKind{"WebDAV", "webdav", webdavUsage, false}
-	s3Kind     = syncKind{"S3", "s3", s3Usage, true}
+	webdavKind = syncKind{"WebDAV", "webdav", webdavUsage}
+	s3Kind     = syncKind{"S3", "s3", s3Usage}
+	githubKind = syncKind{"GitHub", "github", githubUsage}
 )
 
 func (k syncKind) turnOn() string {
-	if k.s3 {
+	if k.cmd == "s3" {
 		return "magpie s3 on s3://<bucket>[/<prefix>] access-key-id=… [endpoint=…] turns it on"
+	}
+	if k.cmd == "github" {
+		return "magpie github on github://<owner>/<repo>[/<folder>] turns it on"
 	}
 	return "magpie webdav on <address> [user=…] turns it on"
 }
@@ -124,6 +146,9 @@ func webdavCmd(args []string) error { return syncCmd(webdavKind, args) }
 
 // s3Cmd is magpie s3 ….
 func s3Cmd(args []string) error { return syncCmd(s3Kind, args) }
+
+// githubCmd is magpie github ….
+func githubCmd(args []string) error { return syncCmd(githubKind, args) }
 
 func syncCmd(k syncKind, args []string) error {
 	if len(args) == 0 || args[0] == "show" {
@@ -188,14 +213,16 @@ func syncCmd(k syncKind, args []string) error {
 		return syncShow(k)
 	case "off":
 		// the other's is turned off by its own command, not by a slip
-		if c, ok := davsync.Load(); ok && c.S3() != k.s3 {
-			return fmt.Errorf("%s sync is on, not %s: magpie %s off turns it off", c.Kind(), k.name, other(k).cmd)
+		if c, ok := davsync.Load(); ok && c.Kind() != k.name {
+			return fmt.Errorf("%s sync is on, not %s: magpie %s off turns it off", c.Kind(), k.name, strings.ToLower(c.Kind()))
 		}
 		if err := davsync.Off(); err != nil {
 			return err
 		}
-		if k.s3 {
+		if k.cmd == "s3" {
 			fmt.Println("S3 sync is off; the file in the bucket stays")
+		} else if k.cmd == "github" {
+			fmt.Println("GitHub sync is off; the encrypted file and its commit history stay")
 		} else {
 			fmt.Println("WebDAV sync is off; the file on the server stays")
 		}
@@ -207,26 +234,19 @@ func syncCmd(k syncKind, args []string) error {
 	return fmt.Errorf("unknown %s command %q\n\n%s", k.cmd, args[0], k.usage)
 }
 
-func other(k syncKind) syncKind {
-	if k.s3 {
-		return webdavKind
-	}
-	return s3Kind
-}
-
 // syncSet turns sync on (on), or changes it (set): what is not given
 // stays as it was. On, with the other kind on, it moves there (to the
 // server of its kind kept from before, when nothing else is given), keeping
 // the passphrase and what is synced.
 func syncSet(k syncKind, args []string, on bool) error {
 	c, was := davsync.Load()
-	if was && c.S3() != k.s3 {
+	if was && c.Kind() != k.name {
 		if !on {
-			return fmt.Errorf("%s sync is on, not %s: magpie %s set changes it; %s", c.Kind(), k.name, other(k).cmd, k.turnOn())
+			return fmt.Errorf("%s sync is on, not %s: magpie %s set changes it; %s", c.Kind(), k.name, strings.ToLower(c.Kind()), k.turnOn())
 		}
 		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library, Usage: c.Usage}
-		if o := c.Other; o != nil { // its server, as it was kept when sync moved from it
-			next.URL, next.User, next.Endpoint, next.Region, next.PathStyle = o.URL, o.User, o.Endpoint, o.Region, o.PathStyle
+		if o, ok := c.Kept(k.name); ok { // its server, as it was kept when sync moved from it
+			next.URL, next.User, next.Endpoint, next.Region, next.PathStyle, next.Branch = o.URL, o.User, o.Endpoint, o.Region, o.PathStyle, o.Branch
 		}
 		c = next
 	}
@@ -239,8 +259,10 @@ func syncSet(k syncKind, args []string, on bool) error {
 	askPass, askPhrase := false, c.Passphrase == ""
 	address := false
 	secretName := "password"
-	if k.s3 {
+	if k.cmd == "s3" {
 		secretName = "secret"
+	} else if k.cmd == "github" {
+		secretName = "token"
 	}
 	var bucket, prefix *string
 	for _, a := range args {
@@ -254,15 +276,17 @@ func syncSet(k syncKind, args []string, on bool) error {
 		switch {
 		case key == "address":
 			c.URL = v
-		case key == "user" && !k.s3, key == "access-key-id" && k.s3:
+		case key == "user" && k.cmd == "webdav", key == "access-key-id" && k.cmd == "s3":
 			c.User = v
-		case key == "bucket" && k.s3:
+		case key == "branch" && k.cmd == "github":
+			c.Branch = v
+		case key == "bucket" && k.cmd == "s3":
 			bucket = &v
-		case key == "prefix" && k.s3:
+		case key == "prefix" && k.cmd == "s3":
 			prefix = &v
-		case key == "endpoint" && k.s3:
+		case key == "endpoint" && k.cmd == "s3":
 			c.Endpoint = v
-		case key == "region" && k.s3:
+		case key == "region" && k.cmd == "s3":
 			c.Region = v
 		case key == secretName, key == "passphrase": // not in the shell's history, nor in ps
 			if v != "" {
@@ -273,7 +297,7 @@ func syncSet(k syncKind, args []string, on bool) error {
 			} else {
 				askPhrase = true
 			}
-		case key == "keys", key == "agents", key == "library", key == "usage", key == "path-style" && k.s3:
+		case key == "keys", key == "agents", key == "library", key == "usage", key == "path-style" && k.cmd == "s3":
 			if v != "yes" && v != "no" {
 				return fmt.Errorf("%s=yes|no, not %q", key, v)
 			}
@@ -290,8 +314,10 @@ func syncSet(k syncKind, args []string, on bool) error {
 			default:
 				c.Library = &yes
 			}
-		case k.s3:
+		case k.cmd == "s3":
 			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, keys, agents, library, usage)", key)
+		case k.cmd == "github":
+			return fmt.Errorf("unknown field %q (address, branch, token, passphrase, keys, agents, library, usage)", key)
 		default:
 			return fmt.Errorf("unknown field %q (address, user, password, passphrase, keys, agents, library, usage)", key)
 		}
@@ -313,29 +339,37 @@ func syncSet(k syncKind, args []string, on bool) error {
 		return fmt.Errorf("no address\n\n%s", k.usage)
 	}
 	// a wrong one said before any secret is typed
-	if c.S3() != k.s3 {
-		if k.s3 {
+	if c.Kind() != k.name {
+		if k.cmd == "s3" {
 			return fmt.Errorf("%q is not an S3 address (s3://bucket or s3://bucket/prefix)", c.URL)
+		}
+		if k.cmd == "github" {
+			return fmt.Errorf("%q is not a GitHub address (github://owner/repo or github://owner/repo/folder)", c.URL)
+		}
+		if c.GitHub() {
+			return fmt.Errorf("%q is not a WebDAV address (https://...): magpie github on %s for a GitHub repository", c.URL, c.URL)
 		}
 		return fmt.Errorf("%q is not a WebDAV address (https://…): magpie s3 on %s for an S3 bucket", c.URL, c.URL)
 	}
 	if err := davsync.Check(c); err != nil {
 		return err
 	}
-	if k.s3 && strings.TrimSpace(c.User) == "" {
+	if k.cmd == "s3" && strings.TrimSpace(c.User) == "" {
 		return errors.New("no access key: access-key-id=…, the secret is asked for")
 	}
 	// the password saved goes only to the server and user it was given
 	// for: Configure keeps it there, and says when one has to be typed
 	c.Password = ""
-	if kept, needed := davsync.SavedPassword(c); needed || (c.User != "" || k.s3) && !kept {
+	if kept, needed := davsync.SavedPassword(c); needed || (c.User != "" || k.cmd != "webdav") && !kept {
 		askPass = true
 	}
 	var err error
 	if askPass {
 		prompt := "Password for " + host(c.URL) + ": "
-		if k.s3 {
+		if k.cmd == "s3" {
 			prompt = "Secret for the access key " + c.User + ": "
+		} else if k.cmd == "github" {
+			prompt = "GitHub token for " + c.URL + ": "
 		}
 		if c.Password, err = secret(secretName, prompt, false); err != nil {
 			return err
@@ -389,17 +423,18 @@ func syncShow(k syncKind) error {
 	v := davsync.Status()
 	if !v.On {
 		fmt.Println(k.name + " sync is off")
-		if k.s3 {
+		if k.cmd == "s3" {
 			fmt.Println(muted.Render("magpie s3 on s3://<bucket> keeps providers, settings, profiles, agents' models and the library the same on every computer (magpie s3 help)"))
+		} else if k.cmd == "github" {
+			fmt.Println(muted.Render("magpie github on github://<owner>/<repo>[/<folder>] keeps providers, settings, profiles, agents' models and the library in an encrypted GitHub file (magpie github help)"))
 		} else {
 			fmt.Println(muted.Render("magpie webdav on <address> keeps providers, settings, profiles, agents' models and the library the same on every computer (magpie webdav help)"))
 		}
 		return nil
 	}
-	cmd := "webdav"
+	cmd := v.Kind
 	var who []string
 	if v.Kind == "s3" {
-		cmd = "s3"
 		at := "AWS"
 		if e := v.Endpoint; e != "" {
 			if !strings.Contains(e, "://") {
@@ -421,6 +456,14 @@ func syncShow(k syncKind) error {
 			who = append(who, "secret saved")
 		}
 		fmt.Println(bold.Render("S3 sync"), v.URL, muted.Render(strings.Join(who, " · ")))
+	} else if v.Kind == "github" {
+		if v.Branch != "" {
+			who = append(who, v.Branch)
+		}
+		if v.PasswordSet {
+			who = append(who, "token saved")
+		}
+		fmt.Println(bold.Render("GitHub sync"), v.URL, muted.Render(strings.Join(who, " · ")))
 	} else {
 		if v.User != "" {
 			who = append(who, v.User)
@@ -449,6 +492,8 @@ func syncShow(k syncKind) error {
 	if o := v.Other; o != nil {
 		if o.Kind == "s3" {
 			fmt.Println(muted.Render("  S3 " + o.URL + " is kept, not synced to: magpie s3 on moves back to it"))
+		} else if o.Kind == "github" {
+			fmt.Println(muted.Render("  GitHub " + o.URL + " is kept, not synced to: magpie github on moves back to it"))
 		} else {
 			fmt.Println(muted.Render("  WebDAV " + o.URL + " is kept, not synced to: magpie webdav on moves back to it"))
 		}

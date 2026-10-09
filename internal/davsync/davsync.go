@@ -1,5 +1,5 @@
 // Package davsync keeps magpie's setup the same on every computer through
-// a WebDAV folder or an S3-compatible bucket. What goes there is a backup (see internal/backup),
+// a WebDAV folder, an S3-compatible bucket or a GitHub repository. What goes there is a backup (see internal/backup),
 // sealed with a passphrase before it leaves the computer, so the server
 // only ever holds a file it can't read.
 //
@@ -52,7 +52,9 @@ var Parts = []string{"providers", "settings", "profiles", "agents", "library"}
 // Config is the sync's setup, kept in sync.json beside magpie's other
 // files, readable by the user alone, as provider keys are. An s3://bucket/prefix
 // address is an S3-compatible bucket, User its access key ID and Password
-// the secret, kept as a WebDAV password is.
+// the secret, kept as a WebDAV password is. For github://owner/repo/prefix,
+// Password is the repository's Contents token, independent of GitHubToken
+// in settings (the library's).
 type Config struct {
 	URL        string `json:"url"`
 	User       string `json:"user,omitempty"`
@@ -63,18 +65,21 @@ type Config struct {
 	Endpoint  string `json:"endpoint,omitempty"`
 	Region    string `json:"region,omitempty"`
 	PathStyle bool   `json:"pathStyle,omitempty"`
-	Keys      bool   `json:"keys"`   // providers carry their API keys
-	Agents    bool   `json:"agents"` // the agents' models go too
+	// GitHub alone: an empty branch uses the repository's default branch.
+	Branch string `json:"branch,omitempty"`
+	Keys   bool   `json:"keys"`   // providers carry their API keys
+	Agents bool   `json:"agents"` // the agents' models go too
 	// Library is whether the library goes too; nil, as in a setup made
 	// before it could, is yes
 	Library *bool `json:"library,omitempty"`
 	// Usage is whether this computer shares its usage with the others
 	// syncing to the server, and sees theirs (#542)
 	Usage bool `json:"usage,omitempty"`
-	// Other is the other kind's server, kept when sync moved from it (a
-	// WebDAV folder's while an S3 bucket is synced to, or the other way):
-	// moving back finds it as it was, its password too. Nothing syncs to it.
+	// Other is the most recently left server, retained for older clients.
+	// Servers holds every inactive kind. Nothing syncs to them.
 	Other *Server `json:"other,omitempty"`
+	// Servers keeps every inactive kind, including Other for older clients.
+	Servers map[string]Server `json:"servers,omitempty"`
 	// AutoEvery is how many minutes apart the gateway's magpie syncs by
 	// itself: 0 is Every's 3, Manual never — then only Sync now syncs
 	// (#847). Set by SetAuto alone; Configure keeps it.
@@ -107,21 +112,37 @@ type Server struct {
 	Endpoint  string `json:"endpoint,omitempty"`
 	Region    string `json:"region,omitempty"`
 	PathStyle bool   `json:"pathStyle,omitempty"`
+	Branch    string `json:"branch,omitempty"`
 }
 
 func (c Config) where() Server {
-	return Server{URL: c.URL, User: c.User, Password: c.Password, Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle}
+	return Server{URL: c.URL, User: c.User, Password: c.Password, Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Branch: c.Branch}
 }
 
 func (s Server) config() Config {
-	return Config{URL: s.URL, User: s.User, Password: s.Password, Endpoint: s.Endpoint, Region: s.Region, PathStyle: s.PathStyle}
+	return Config{URL: s.URL, User: s.User, Password: s.Password, Endpoint: s.Endpoint, Region: s.Region, PathStyle: s.PathStyle, Branch: s.Branch}
+}
+
+// Kept is an inactive server, including setups saved before Servers existed.
+func (c Config) Kept(kind string) (Server, bool) {
+	kind = strings.ToLower(kind)
+	if s, ok := c.Servers[kind]; ok {
+		return s, true
+	}
+	if c.Other != nil && strings.EqualFold(c.Other.config().Kind(), kind) {
+		return *c.Other, true
+	}
+	return Server{}, false
 }
 
 // saved is the setup whose password c may keep: old, or, for c of the
 // other kind, the server of c's kind kept beside it, when there is one.
 func (old Config) saved(c Config) Config {
-	if o := old.Other; o != nil && old.S3() != c.S3() && o.config().S3() == c.S3() {
-		return o.config()
+	if old.Kind() != c.Kind() {
+		if s, ok := old.Kept(c.Kind()); ok {
+			return s.config()
+		}
+		return Config{}
 	}
 	return old
 }
@@ -133,8 +154,16 @@ func (c Config) S3() bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.URL)), "s3://")
 }
 
-// Kind is the server's kind, as the user reads it: "WebDAV" or "S3".
+// GitHub is whether c keeps the file in a GitHub repository.
+func (c Config) GitHub() bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.URL)), "github://")
+}
+
+// Kind is the server's kind, as the user reads it.
 func (c Config) Kind() string {
+	if c.GitHub() {
+		return "GitHub"
+	}
 	if c.S3() {
 		return "S3"
 	}
@@ -192,10 +221,18 @@ func Load() (Config, bool) {
 // and user: it is never sent to another, and is asked for again there.
 func Configure(c Config) error {
 	c.Other = nil // kept here, never given
+	c.Servers = nil
 	c.URL, c.User = strings.TrimSpace(c.URL), strings.TrimSpace(c.User)
 	c.Endpoint, c.Region = strings.TrimSpace(c.Endpoint), strings.TrimSpace(c.Region)
+	c.Branch = strings.TrimSpace(c.Branch)
 	if !c.S3() { // WebDAV's own: nothing of an S3 setup left behind
 		c.Endpoint, c.Region, c.PathStyle = "", "", false
+	}
+	if !c.GitHub() {
+		c.Branch = ""
+	} else {
+		c.User = ""
+		c.Password = strings.TrimSpace(c.Password)
 	}
 	if err := Check(c); err != nil {
 		return err
@@ -212,6 +249,9 @@ func Configure(c Config) error {
 				c.Password = old.saved(c).Password
 			}
 			if needed {
+				if c.GitHub() {
+					return errors.New("type a GitHub token for this repository: the saved token is only used with the repository it was given for")
+				}
 				if c.S3() {
 					return fmt.Errorf("type the secret for the access key %s on %s: the one saved is only used with the server and key it was given for", c.User, c.server())
 				}
@@ -227,11 +267,23 @@ func Configure(c Config) error {
 			// the other kind's server is kept: the one moved from, or the
 			// one kept before
 			c.Other = old.Other
+			c.Servers = maps.Clone(old.Servers)
+			if c.Servers == nil {
+				c.Servers = map[string]Server{}
+			}
+			if old.Other != nil {
+				c.Servers[strings.ToLower(old.Other.config().Kind())] = *old.Other
+			}
 			c.AutoEvery = old.AutoEvery // SetAuto's, not the form's
-			if old.S3() != c.S3() {
+			if old.Kind() != c.Kind() {
 				o := old.where()
 				c.Other = &o
+				c.Servers[strings.ToLower(old.Kind())] = o
 			}
+			delete(c.Servers, strings.ToLower(c.Kind()))
+		}
+		if c.GitHub() && c.Password == "" {
+			return errors.New("GitHub sync needs a token with Contents read and write permission for the repository")
 		}
 		if c.S3() && c.Password == "" {
 			return fmt.Errorf("type the secret for the access key %s", c.User)
@@ -240,6 +292,9 @@ func Configure(c Config) error {
 			return errors.New("sync needs a passphrase: the file is sealed with it before it leaves this computer")
 		}
 		if c.Password != "" && c.Passphrase == c.Password {
+			if c.GitHub() {
+				return errors.New("the passphrase is the GitHub token: GitHub receives it, and could open the file with it. Pick a passphrase of its own")
+			}
 			// the server is sent the password (an S3 server holds the
 			// secret): with it, it could open the file
 			if c.S3() {
@@ -312,6 +367,11 @@ func SavedPassword(c Config) (kept, needed bool) {
 // sameAccount is whether c and o are one user on one server: the password
 // given for one is only ever sent to the other when they are.
 func (c Config) sameAccount(o Config) bool {
+	if c.GitHub() || o.GitHub() {
+		a, ea := newGitHub(c)
+		b, eb := newGitHub(o)
+		return c.GitHub() && o.GitHub() && ea == nil && eb == nil && strings.EqualFold(a.repo, b.repo)
+	}
 	if c.S3() || o.S3() { // one access key at one endpoint, whatever the bucket
 		return c.S3() && o.S3() && strings.TrimSpace(c.User) == strings.TrimSpace(o.User) &&
 			strings.EqualFold(s3Endpoint(c.Endpoint, ""), s3Endpoint(o.Endpoint, ""))
@@ -361,10 +421,11 @@ type View struct {
 	PassphraseSet bool   `json:"passphraseSet,omitempty"`
 	Keys          bool   `json:"keys"`
 	Agents        bool   `json:"agents"`
-	Kind          string `json:"kind,omitempty"` // "webdav" or "s3", when on
+	Kind          string `json:"kind,omitempty"` // "webdav", "s3" or "github", when on
 	Endpoint      string `json:"endpoint,omitempty"`
 	Region        string `json:"region,omitempty"`
 	PathStyle     bool   `json:"pathStyle,omitempty"`
+	Branch        string `json:"branch,omitempty"`
 	Library       bool   `json:"library"`
 	Usage         bool   `json:"usage,omitempty"`
 	// UsageError is why usage couldn't be shared the last time it was tried
@@ -374,7 +435,8 @@ type View struct {
 	Notice     *Notice   `json:"notice,omitempty"`
 	// Other is the other kind's server, kept for moving back to: not
 	// synced to
-	Other *OtherView `json:"other,omitempty"`
+	Other   *OtherView           `json:"other,omitempty"`
+	Servers map[string]OtherView `json:"servers,omitempty"`
 	// Auto is how many minutes apart it syncs by itself; 0 never: only when
 	// asked
 	Auto int `json:"auto"`
@@ -387,13 +449,14 @@ type View struct {
 
 // OtherView is the other kind's server as the Settings page shows it.
 type OtherView struct {
-	Kind        string `json:"kind"` // "webdav" or "s3"
+	Kind        string `json:"kind"` // "webdav", "s3" or "github"
 	URL         string `json:"url"`
 	User        string `json:"user,omitempty"`
 	PasswordSet bool   `json:"passwordSet,omitempty"`
 	Endpoint    string `json:"endpoint,omitempty"`
 	Region      string `json:"region,omitempty"`
 	PathStyle   bool   `json:"pathStyle,omitempty"`
+	Branch      string `json:"branch,omitempty"`
 }
 
 // Status is sync's setup and how the last sync went.
@@ -405,7 +468,7 @@ func Status() View {
 	st := loadState()
 	v := View{On: true, URL: c.URL, User: c.User, PasswordSet: c.Password != "", PassphraseSet: c.Passphrase != "",
 		Keys: c.Keys, Agents: c.Agents, Library: c.library(), Error: st.Error, Notice: st.Notice,
-		Kind: strings.ToLower(c.Kind()), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle,
+		Kind: strings.ToLower(c.Kind()), Endpoint: c.Endpoint, Region: c.Region, PathStyle: c.PathStyle, Branch: c.Branch,
 		Auto: int(c.auto() / time.Minute)}
 	if st.Key == stateKey(c) {
 		v.Last = st.Last
@@ -420,7 +483,14 @@ func Status() View {
 	v.Usage = c.Usage
 	if o := c.Other; o != nil {
 		v.Other = &OtherView{Kind: strings.ToLower(o.config().Kind()), URL: o.URL, User: o.User, PasswordSet: o.Password != "",
-			Endpoint: o.Endpoint, Region: o.Region, PathStyle: o.PathStyle}
+			Endpoint: o.Endpoint, Region: o.Region, PathStyle: o.PathStyle, Branch: o.Branch}
+	}
+	for kind, s := range c.Servers {
+		if v.Servers == nil {
+			v.Servers = map[string]OtherView{}
+		}
+		v.Servers[kind] = OtherView{Kind: kind, URL: s.URL, User: s.User, PasswordSet: s.Password != "",
+			Endpoint: s.Endpoint, Region: s.Region, PathStyle: s.PathStyle, Branch: s.Branch}
 	}
 	return v
 }
@@ -453,6 +523,9 @@ func stateKey(c Config) string {
 	k := c.URL
 	if c.Endpoint != "" {
 		k += "\x00" + c.Endpoint
+	}
+	if c.GitHub() {
+		k += "\x00" + c.Branch
 	}
 	return sum([]byte(k + "\x00" + c.User + "\x00" + c.Passphrase))
 }

@@ -18667,10 +18667,16 @@ function renderSessionTerminal(s, keep) {
   };
 }
 
-// renderSync: the Settings page's sync and backup — WebDAV keeping the
+// renderSync: the Settings page's sync and backup — a remote keeping the
 // setup the same on every computer, and a sealed file to carry by hand.
 // One of the three opens a form below its row at a time.
 let syncOpen = ""; // "dav" | "export" | "import"
+const syncNames = { webdav: "WebDAV", s3: "S3", github: "GitHub" };
+function syncServers(v) {
+  const servers = { ...v.servers };
+  if (v.other) servers[v.other.kind] ||= v.other;
+  return servers;
+}
 let syncView = null;
 async function renderSync(v) {
   const box = $("#syncList");
@@ -18696,7 +18702,7 @@ async function renderSync(v) {
   const toggle = (id) => () => { syncOpen = syncOpen === id ? "" : id; renderSync(); };
   const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", usage: "usage" }[p])).join(t(", "));
 
-  // WebDAV or S3
+  // WebDAV, S3 or GitHub
   // off: what it would keep the same, named from the view's toggles as the
   // CLI names them, so the page can't promise a part the setup leaves out.
   // A view that says nothing of the toggles (a read that failed) reads as
@@ -18708,17 +18714,19 @@ async function renderSync(v) {
   let status = t("Keeps {parts} the same on every computer", {
     parts: t(v.keys === false ? "providers without their API keys" : "providers with their API keys") + t(", ") + parts(goes) });
   const s3 = v.on && v.kind === "s3";
+  const github = v.on && v.kind === "github";
   if (v.on) {
     const hostOf = (u) => { try { return new URL(u).host; } catch { return u; } };
     // a bucket is named by its address, and the server it is on unless AWS
-    const host = s3 ? [v.url, v.endpoint && hostOf(v.endpoint.includes("://") ? v.endpoint : "https://" + v.endpoint)].filter(Boolean).join(" · ") : hostOf(v.url);
-    status = v.error ? t("Couldn't sync: {error}", { error: v.serverFile ? serverFileSaid(v.serverFile) : v.error })
+    const host = github ? [v.url, v.branch].filter(Boolean).join(" · ")
+      : s3 ? [v.url, v.endpoint && hostOf(v.endpoint.includes("://") ? v.endpoint : "https://" + v.endpoint)].filter(Boolean).join(" · ") : hostOf(v.url);
+    status = v.error ? t("Couldn't sync: {error}", { error: v.serverFile ? serverFileSaid(v.serverFile) : t(v.error) })
       : v.last ? t("Synced {when} · {host}", { when: syncWhen(v.last), host }) : t("Not synced yet · {host}", { host });
     // the other kind's server, kept from before sync moved here
-    if (v.other) status += " · " + t("{kind} settings kept", { kind: v.other.kind === "s3" ? "S3" : "WebDAV" });
+    for (const kind of Object.keys(syncServers(v))) status += " · " + t("{kind} settings kept", { kind: syncNames[kind] });
     if (v.auto === 0) status += " · " + t("only when asked");
   }
-  const sub = row(t(s3 ? "S3 sync" : v.on ? "WebDAV sync" : "WebDAV or S3 sync"), status, ...(v.on
+  const sub = row(t(github ? "GitHub sync" : s3 ? "S3 sync" : v.on ? "WebDAV sync" : "WebDAV, S3 or GitHub sync"), status, ...(v.on
     ? [btn(t("Sync now"), async (e) => { e.target.classList.add("busy"); renderSync(await api("davsync/now", {}).catch((x) => ({ ...v, error: x.message }))); }),
        btn(t(syncOpen === "dav" ? "Close" : "Edit"), toggle("dav"))]
     : [btn(t(syncOpen === "dav" ? "Close" : "Set up"), toggle("dav"))]));
@@ -18923,17 +18931,16 @@ function syncBar(ed, err, ...tools) {
   return (msg) => { ed.querySelector(".editor-error").textContent = msg || ""; };
 }
 
-// davForm: the sync's settings, a WebDAV folder's or an S3 bucket's (#296).
-// Both sets of fields are made and the kind picked shows one, so what was
-// typed in the other is still there on going back. The kind not synced to
-// shows the server kept from before sync moved from it (ARNO on Discord:
-// trying S3 wiped the WebDAV setup); saving it moves sync back there.
+// davForm: the kind picked shows one set of fields; drafts survive switching.
+// Inactive servers keep their settings for moving sync back.
 function davForm(v) {
   const ed = el("div", "editor sync-form");
-  const active = v.on ? (v.kind === "s3" ? "s3" : "webdav") : "";
+  const active = v.on ? (v.kind || "webdav") : "";
   let kind = active || "webdav";
   const saved = t("saved · type a new one to replace it");
-  const dav = v.kind === "s3" ? v.other || {} : v, bk = v.kind === "s3" ? v : v.other || {};
+  const servers = syncServers(v);
+  const server = (k) => active === k ? v : servers[k] || {};
+  const dav = server("webdav"), bk = server("s3"), gh = server("github");
   const url = input(dav.url || "", "https://dav.jianguoyun.com/dav/");
   const user = input(dav.user || "", t("user name"));
   const pass = input("", dav.passwordSet ? saved : t("password, or an app password"), "password");
@@ -18946,6 +18953,11 @@ function davForm(v) {
   const keyID = input(bk.user || "", "AKIA…");
   const secret = input("", bk.passwordSet ? saved : t("secret access key"), "password");
   const [pathL, pathStyle] = tick(t("Path-style: the bucket in the path, not the host name"), !!bk.pathStyle);
+  const ghParts = /^github:\/\/([^/]+\/[^/]+)\/?(.*)$/i.exec(gh.url || "");
+  const repo = input(ghParts?.[1] || "", "owner/repo");
+  const branch = input(gh.branch || "", t("default branch"));
+  const ghPrefix = input(ghParts?.[2] || "", t("optional"));
+  const token = input("", gh.passwordSet ? saved : t("GitHub token"), "password");
   const phrase = input("", v.passphraseSet ? saved : t("the same on every computer"), "password");
   const [keysL, keys] = tick(t("Providers' API keys"), v.keys !== false);
   const [agentsL, agents] = tick(t("Agents' models"), v.agents !== false);
@@ -18964,23 +18976,27 @@ function davForm(v) {
     ...field(t("Access key"), keyID),
     ...field(t("Secret"), secret),
     ...field("", pathL, t("MinIO and most NAS servers need it."))];
-  const names = { webdav: "WebDAV", s3: "S3" };
+  const ghFields = [...field(t("Repository"), repo, t("An existing GitHub repository, in owner/repo form. A private repository is recommended.")),
+    ...field(t("Branch"), branch, t("Empty uses the repository's default branch. Empty repositories are initialized by the first sync; other branches must already exist.")),
+    ...field(t("Folder"), ghPrefix, t("The encrypted backup goes in <folder>/magpie/magpie.magpie-backup. Each update creates a commit.")),
+    ...field(t("GitHub token"), token, t("A fine-grained token for this repository with Contents: read and write. Kept on this computer, separately from the library's GitHub token."))];
   // which one is synced to, and that the other's settings stay
-  const to = field(t("Sync to"), segs([["webdav", "WebDAV"], ["s3", "S3"]].map(([id, n]) => [id, id === active ? t("{kind} · on", { kind: n }) : n]), kind, (k) => { kind = k; show(); }), " ");
+  const to = field(t("Sync to"), segs(Object.entries(syncNames).map(([id, n]) => [id, id === active ? t("{kind} · on", { kind: n }) : n]), kind, (k) => { kind = k; show(); }), " ");
   const where = to[1].querySelector(".hint");
   const save = el("button", "text primary", "");
+  const other = Object.keys(servers).map((k) => syncNames[k]).filter(Boolean).join(" / ");
   const show = () => {
     for (const x of davFields) x.hidden = kind !== "webdav";
     for (const x of s3Fields) x.hidden = kind !== "s3";
-    const other = kind === "s3" ? "webdav" : "s3";
+    for (const x of ghFields) x.hidden = kind !== "github";
     where.textContent = !active ? ""
-      : kind === active ? (v.other ? t("Syncing here now. The {other} settings are kept, not synced to: pick {other} to see them.", { other: names[other] }) : t("Syncing here now."))
-      : t("{active} is synced to now. Saving moves sync here; the {active} settings are kept for moving back.", { active: names[active] });
+      : kind === active ? (other ? t("Syncing here now. The {other} settings are kept, not synced to: pick {other} to see them.", { other }) : t("Syncing here now."))
+      : t("{active} is synced to now. Saving moves sync here; the {active} settings are kept for moving back.", { active: syncNames[active] });
     where.hidden = !active;
-    save.textContent = !active ? t("Turn on") : kind === active ? t("Save") : t("Move sync to {kind}", { kind: names[kind] });
+    save.textContent = !active ? t("Turn on") : kind === active ? t("Save") : t("Move sync to {kind}", { kind: syncNames[kind] });
   };
   ed.append(...to,
-    ...davFields, ...s3Fields,
+    ...davFields, ...s3Fields, ...ghFields,
     ...field(t("Passphrase"), phrase, t("The file is sealed with it on this computer; the server only ever sees it sealed. Keep it: without it the file can't be opened.")),
     ...field(t("Also sync"), what, t("Usage goes as a file a day: times, tokens, models and costs, never what was said. Turn it on on each computer that shares its own.")));
   show();
@@ -18992,9 +19008,15 @@ function davForm(v) {
   save.onclick = async () => {
     const b = bucket.value.trim(), p = prefix.value.trim().replace(/^\/+|\/+$/g, "");
     if (kind === "s3" && !b) return say(t("Name the bucket"));
+    const repository = repo.value.trim().replace(/^https:\/\/github\.com\//i, "").replace(/\/+$/, "").replace(/\.git$/i, "");
+    const ghFolder = ghPrefix.value.trim().replace(/^\/+|\/+$/g, "");
+    if (kind === "github" && !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) return say(t("Name the GitHub repository as owner/repo"));
+    if (kind === "github" && !gh.passwordSet && !token.value.trim()) return say(t("Enter a GitHub token with Contents read and write permission"));
     if (!v.passphraseSet && !phrase.value) return say(t("Pick a passphrase: the file is sealed with it"));
     save.classList.add("busy");
-    const where = kind === "s3"
+    const where = kind === "github"
+      ? { url: "github://" + repository + (ghFolder ? "/" + ghFolder : ""), branch: branch.value.trim(), password: token.value.trim() }
+      : kind === "s3"
       ? { url: "s3://" + b + (p ? "/" + p : ""), user: keyID.value.trim(), password: secret.value, endpoint: endpoint.value.trim(), region: region.value.trim(), pathStyle: pathStyle.checked }
       : { url: url.value.trim(), user: user.value.trim(), password: pass.value };
     try {

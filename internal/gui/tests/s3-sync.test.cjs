@@ -77,7 +77,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(300);
       };
       await toEnd();
-      assert.equal(await first.locator(".name").textContent(), zh ? "WebDAV / S3 同步" : "WebDAV or S3 sync");
+      assert.equal(await first.locator(".name").textContent(), zh ? "WebDAV / S3 / GitHub 同步" : "WebDAV, S3 or GitHub sync");
       await first.locator(".val button").click();
 
       const form = list.locator(".sync-form");

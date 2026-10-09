@@ -90,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await seen(), true, "the page must be visible, as a window's is");
 
       // off, nothing changed by anything: the description of the whole lot
-      assert.equal(await first.locator(".name").textContent(), zh ? "WebDAV / S3 同步" : "WebDAV or S3 sync");
+      assert.equal(await first.locator(".name").textContent(), zh ? "WebDAV / S3 / GitHub 同步" : "WebDAV, S3 or GitHub sync");
       assert.equal(await first.locator(".sub").textContent(), zh
         ? "让每台电脑上的供应商（含 API Key）、设置、Profile、agent 的模型、资源库保持一致"
         : "Keeps providers with their API keys, settings, profiles, agents' models, library the same on every computer");
@@ -146,7 +146,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         ? "让每台电脑上的供应商（不含 API Key）、设置、Profile、资源库保持一致"
         : "Keeps providers without their API keys, settings, profiles, library the same on every computer")), true,
         "the description must be built from the view's toggles");
-      assert.equal(await first.locator(".name").textContent(), zh ? "WebDAV / S3 同步" : "WebDAV or S3 sync");
+      assert.equal(await first.locator(".name").textContent(), zh ? "WebDAV / S3 / GitHub 同步" : "WebDAV, S3 or GitHub sync");
 
       // a view that says nothing of the toggles (a read that failed) is
       // the whole lot, as Status' off view is

@@ -44,7 +44,7 @@ type ServerFile struct {
 type notBackup struct {
 	f     ServerFile
 	where string // the file and server, as messages name them
-	cmd   string // the CLI command: "webdav" or "s3"
+	cmd   string // the CLI command: "webdav", "s3" or "github"
 	err   error
 }
 
@@ -69,6 +69,9 @@ func (e *notBackup) Error() string {
 				got += fmt.Sprintf(" (<%s>)", f.Title)
 			}
 		}
+		if e.cmd == "github" {
+			return fmt.Sprintf("%s contains %s, not a magpie backup: check the backup file in the repository, or point sync at another folder", e.where, got)
+		}
 		got += " instead of the file"
 		if f.Moved != "" {
 			got += ", after a redirect to " + f.Moved
@@ -87,6 +90,12 @@ func (e *notBackup) Error() string {
 
 // fileWhere names the backup file and the server in messages.
 func fileWhere(c Config) string {
+	if c.GitHub() {
+		if g, err := newGitHub(c); err == nil {
+			return "the file " + g.at(folder+"/"+file) + " in the GitHub repository " + g.repo
+		}
+		return "the file in the GitHub repository"
+	}
 	if c.S3() {
 		if s, err := newS3(c); err == nil {
 			return s.where()
@@ -97,6 +106,9 @@ func fileWhere(c Config) string {
 }
 
 func cmdOf(c Config) string {
+	if c.GitHub() {
+		return "github"
+	}
 	if c.S3() {
 		return "s3"
 	}

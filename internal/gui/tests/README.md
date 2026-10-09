@@ -1353,6 +1353,13 @@ works as follows, in English and Chinese:
 - Edit opens the form with S3 picked, marked "S3 · on", and the fields as
   saved. The secret field is empty, with "saved" as its placeholder.
 
+`github-sync.test.cjs` checks that Settings offers GitHub beside WebDAV and
+S3 in English, Chinese, Traditional Chinese, Japanese and German at 900px and 440px. It verifies
+the owner/repo, optional folder and branch, separate GitHub token, passphrase
+and sync toggles are posted as expected, rejects an incomplete binding and
+reopens the saved setup with the token kept secret. The API is faked; the
+test never contacts GitHub.
+
 `sync-other-kind.test.cjs` checks that moving sync between WebDAV and S3
 keeps the other's settings (ARNO on Discord: trying S3 wiped the WebDAV
 address, user and password). With S3 synced to and a WebDAV server kept,
