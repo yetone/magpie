@@ -27,6 +27,17 @@ func TestRemoteMagpieDecisionPicker(t *testing.T) {
 			t.Fatal(err)
 		}
 		out := providerInfo(*p, nil)
+		want := []string{"relay/typesafe/jev-router"}
+		for _, m := range decisions {
+			want = append(want, m.ID)
+		}
+		var got []string
+		for _, m := range out.Models {
+			got = append(got, m.ID)
+		}
+		if !slices.Equal(got, want) {
+			t.Fatalf("editor models after refresh: %v; want %v", got, want)
+		}
 		if out.Deciders == nil || len(*out.Deciders) != len(decisions) {
 			t.Fatalf("editor decision list: %v", out.Deciders)
 		}

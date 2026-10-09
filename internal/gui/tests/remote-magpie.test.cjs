@@ -89,12 +89,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const saved = page.locator(".editor");
         for (const decisions of [true, false]) {
           if (!decisions) await page.evaluate(() => {
-            providers.providers.find((p) => p.id === "office").deciders = [];
+            const remote = providers.providers.find((p) => p.id === "office");
+            remote.models = remote.models.filter((m) => !remote.deciders.includes(m.id));
+            remote.deciders = [];
           });
           await page.locator('#providers .row[data-id="office"]').click();
           await saved.locator(".ehead b", { hasText: "Office" }).waitFor();
           assert.equal(await saved.locator("label", { hasText: /Jev endpoint|Jev 终结点|System One endpoint|System One 终结点/ }).count(), 0);
           assert.equal(await saved.locator('input[type="url"]').count(), 1, "only the remote's address is editable");
+          assert.deepEqual(await saved.locator(".mchip > span:first-child").allTextContents(),
+            decisions ? ["Chat", "custom-a · judge", "custom-b · judge"] : ["Chat"]);
           if (process.env.ARTIFACT_DIR && engine === "chromium" && lang === "en") {
             await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
             await saved.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `remote-editor-${decisions ? "decisions" : "chat-only"}.png`) });

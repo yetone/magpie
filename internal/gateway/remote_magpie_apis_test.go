@@ -63,6 +63,9 @@ func TestRemoteMagpieSystemOne(t *testing.T) {
 	for _, e := range provider.Deciders() {
 		if e.Provider.ID == "office" {
 			got = append(got, e.Model)
+			if e.Model == "judge/custom-image-decision" && e.Name != "custom-image-decision · Judge" {
+				t.Errorf("unnamed remote decision in the local picker: %q", e.Name)
+			}
 		}
 	}
 	want := make([]string, len(models))
