@@ -58,8 +58,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await t.test(lang, async () => {
         const errors = [], asked = [];
         // narrower than the table even with the columns a narrow window
-        // leaves out (#860)
-        const ctx = await browser.newContext({ viewport: { width: 700, height: 640 }, reducedMotion: "reduce" });
+        // leaves out (#860), by a margin no machine's fonts take away: at
+        // 700px the Chinese table was 76px wider here and 33px on another
+        // machine, whose narrower fonts failed the check below (#1340)
+        const ctx = await browser.newContext({ viewport: { width: 600, height: 640 }, reducedMotion: "reduce" });
         const p = await ctx.newPage();
         p.setDefaultTimeout(5000);
         p.on("pageerror", (e) => errors.push(e.message));

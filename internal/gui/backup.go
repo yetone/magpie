@@ -125,6 +125,8 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			brought, err = davsync.Restore(ctx)
 		case "undo":
 			_, err = davsync.Undo()
+		case "upload": // this computer's setup over a server file that isn't a backup, kept first
+			err = davsync.Upload(ctx)
 		case "reveal":
 			err = w.OpenFolder(filepath.Join(settings.Dir(), "sync"))
 		default:

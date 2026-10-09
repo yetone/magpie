@@ -88,8 +88,41 @@ func loginUsageAt(ctx context.Context, agent string) (map[string]SubscriptionQuo
 	}
 	wg.Wait()
 	usageRead(agent, out) // a window not started: the warm-up looks now
+	if len(out) > 0 {
+		// the batch's readings are points of each account's quota history
+		// too, as a Usage-page reading is: a magpie only ever serving
+		// other magpies has nobody on its Usage page, and its quota
+		// history stayed empty otherwise (#1313). One note for the whole
+		// batch: the file is read, parsed and written once for all
+		// accounts. The note runs after every reading of the batch has
+		// completed and released its in-flight marker, so no waiter on a
+		// reading is held by a slow disk; the LoginUsage caller pays for
+		// the write, and Allowances already calls it from its own
+		// background goroutine. A detached goroutine is deliberately not
+		// used: it would outlive the caller and write after tests and
+		// commands have moved on (#1318 review). A cached reading notes
+		// nothing new, its ReadAt no newer than what is kept; a failed
+		// one is skipped.
+		qs := make([]SubscriptionQuota, 0, len(out))
+		for user, q := range out {
+			q.User = user // a login's reading itself carries no user
+			qs = append(qs, q)
+		}
+		noteHistory(qs, time.Now())
+	}
 	return out, oldest
 }
+
+// noteHistory notes a batch of accounts' readings in the quota history.
+// The write is synchronous: it runs after the batch's readings have all
+// completed, so it holds no waiter on a reading. Tests substitute their
+// own note or write.
+var noteHistory = func(qs []SubscriptionQuota, now time.Time) {
+	noteHistoryWrite(qs, now)
+}
+
+// noteHistoryWrite is the history write itself; tests count or hold it.
+var noteHistoryWrite = noteQuotaHistory
 
 // loginReading is l's allowance as LoginUsage and the Usage page both show
 // it, one reading for the two: what was read less than a minute ago comes

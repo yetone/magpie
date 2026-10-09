@@ -57,6 +57,18 @@
 .rt-accts li.rt-sub svg { flex: none; color: var(--fg-2); }
 .rt-accts li.rt-sub code.mdl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-accts li.rt-sub i { margin-left: auto; font-style: normal; font-size: 10.5px; font-weight: 560; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--fg-2); white-space: nowrap; }
+/* it folds from its heading (Aiirobyte on Discord): folded, it says what
+   it routes to together on a line of its own */
+.rt-accts li.rt-sub { flex-wrap: wrap; row-gap: 4px; cursor: pointer; user-select: none; }
+.rt-accts li.rt-sub .n { white-space: nowrap; }
+.rt-accts li.rt-sub .n:empty, .rt-accts li.rt-sub em:empty { display: none; }
+.rt-accts li.rt-sub .chev { display: inline-flex; color: var(--muted); transition: transform .2s; }
+.rt-accts li.rt-sub .chev svg { color: inherit; }
+.rt-accts li.rt-sub:hover .chev { color: var(--fg); }
+.rt-accts li.rt-sub.open .chev { transform: rotate(180deg); }
+.rt-accts li.rt-sub em { flex: 1 0 100%; min-width: 0; white-space: normal; padding-left: 21px; }
+.rt-accts li.rt-sub:focus { outline: none; }
+.rt-accts li.rt-sub:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .rt-accts li.idle { display: block; color: var(--muted); border-style: dashed; text-align: center; }
 .rt-accts b { font-weight: 560; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rt-accts b > span:not(.ic) { font-weight: 450; color: var(--muted); }
@@ -87,6 +99,16 @@
 @keyframes rthit { 20% { translate: -5px; } 40% { translate: 4px; } 60% { translate: -2px; } 80% { translate: 1px; } }
 .rt-accts .tag { position: absolute; right: 10px; top: -10px; padding: 1px 7px; border-radius: 6px; background: var(--red); color: #fff; font: var(--code-style, normal) 600 10.5px/1.5 var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); opacity: 0; transform: translateY(4px) scale(.9); transition: opacity .25s, transform .25s; pointer-events: none; }
 .rt-accts li.tagged .tag { opacity: 1; transform: none; }
+/* a provider's keys for one model, folded into one row (#1319): it opens
+   to head them, as a group in the group heads its models */
+.rt-accts li.rt-fold { grid-template-columns: 10px minmax(0, 1fr) auto auto; cursor: pointer; user-select: none; }
+.rt-accts li.rt-fold em { white-space: normal; text-align: right; }
+.rt-accts li.rt-fold .chev { display: inline-flex; color: var(--muted); transition: transform .2s; }
+.rt-accts li.rt-fold:hover .chev { color: var(--fg); }
+.rt-accts li.rt-fold.open { background: var(--card-2); }
+.rt-accts li.rt-fold.open .chev { transform: rotate(180deg); }
+.rt-accts li.rt-fold:focus { outline: none; }
+.rt-accts li.rt-fold:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .rt-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--line); }
 .rt-cap { flex: 1 1 20em; margin: 0; min-height: 3em; display: flex; align-items: center; font-size: 13px; line-height: 1.45; color: var(--fg); }
 .rt-cap.in { animation: rtin .4s ease-out; }
@@ -125,6 +147,9 @@
 .rt-accts:where(.max460) li { grid-template-columns: 10px minmax(0, 1fr); }
 .rt-accts:where(.max460) em { grid-column: 2; white-space: normal; }
 .rt-accts:where(.max460) .bar { grid-column: 2; }
+.rt-accts:where(.max460) li.rt-fold { grid-template-columns: 10px minmax(0, 1fr) auto; }
+.rt-accts:where(.max460) li.rt-fold em { grid-row: 2; text-align: left; }
+.rt-accts:where(.max460) li.rt-fold .chev { grid-column: 3; grid-row: 1; }
 /* narrow (the tray panel): magpie and the agent side by side, the
    accounts under them, on a lane down their left */
 :where(.rt.max560) .rt-stage { grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 26px; padding: 16px 0; }
@@ -284,6 +309,13 @@ button.rt-session { cursor: pointer; }
 .rt-act .fix { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; }
 .rt-act .bar { height: 3px; border-radius: 2px; background: var(--card-2); overflow: hidden; }
 .rt-act .bar i { display: block; height: 100%; border-radius: 2px; background: var(--muted); }
+/* a provider's keys summed up in one row (#1319), opened to each */
+.rt-act.rt-keys { cursor: pointer; user-select: none; }
+.rt-act.rt-keys .chev { display: inline-flex; align-self: center; margin-left: auto; color: var(--muted); transition: transform .2s; }
+.rt-act.rt-keys:hover .chev { color: var(--fg); }
+.rt-act.rt-keys.open .chev { transform: rotate(180deg); }
+.rt-act.rt-keys:focus { outline: none; }
+.rt-act.rt-keys:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
 .rt-livedot { width: 6px; height: 6px; margin-left: 7px; border-radius: 50%; background: var(--green); animation: rtlive 1.8s infinite; --fg: var(--green); }
 @media (prefers-reduced-motion: reduce) { .rt-livedot { animation: none; } }
 /* routing groups, and the providers routing over several of their own */

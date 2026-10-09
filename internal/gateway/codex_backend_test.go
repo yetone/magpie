@@ -782,3 +782,63 @@ func TestCodexOwnModelLogsEffort(t *testing.T) {
 		t.Errorf("trace %+v", rs)
 	}
 }
+
+// A Codex that reaches magpie for account failover alone, not connected to
+// it, is handed only its own models, and an ETag that is neither the full
+// list's nor contains it, so moving between the two has Codex ask again
+// (#1385: 62 of magpie's models were in its list). Its replies' models ETag
+// carries the same tag.
+func TestCodexModelListOwnOnlyForFailover(t *testing.T) {
+	setup(t, provider.Chat, &fake{t: t})
+	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/models") {
+			w.Header().Set("ETag", `"v1"`)
+			io.WriteString(w, `{"models":[{"slug":"gpt-5.5","priority":1}]}`)
+			return
+		}
+		w.Header().Set("X-Models-Etag", `W/"v1"`)
+		io.WriteString(w, sse(
+			`data: {"type":"response.created","response":{"id":"r1"}}`,
+			`data: {"type":"response.completed","response":{"id":"r1"}}`))
+	})
+	ownOnly := false
+	was := CodexOwnOnly
+	CodexOwnOnly = func() bool { return ownOnly }
+	t.Cleanup(func() { CodexOwnOnly = was })
+	list := func() ([]string, string) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", CodexPath+"/models", nil)
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		New().Handler().ServeHTTP(rec, req)
+		var got struct {
+			Models []map[string]any `json:"models"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &got)
+		var slugs []string
+		for _, m := range got.Models {
+			slug, _ := m["slug"].(string)
+			slugs = append(slugs, slug)
+		}
+		return slugs, rec.Header().Get("ETag")
+	}
+	full, fullTag := list()
+	if len(full) < 2 || !strings.Contains(strings.Join(full, " "), "fake/m1") {
+		t.Fatalf("connected list %v", full)
+	}
+	ownOnly = true
+	own, ownTag := list()
+	if len(own) != 1 || own[0] != "gpt-5.5" {
+		t.Errorf("failover-only list = %v, want just gpt-5.5", own)
+	}
+	if ownTag == fullTag || ownTag != `"v1+magpie-`+provider.CodexOwnListTag()+`"` ||
+		codexcat.Tagged(ownTag, provider.CodexListTag()) || codexcat.Tagged(fullTag, provider.CodexOwnListTag()) {
+		t.Errorf("ETag own %q, full %q", ownTag, fullTag)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(`{"model":"gpt-5.5","stream":true,"input":[]}`))
+	req.Header.Set("Authorization", "Bearer chatgpt-token")
+	New().Handler().ServeHTTP(rec, req)
+	if got := rec.Header().Get("X-Models-Etag"); rec.Code != 200 || !codexcat.Tagged(got, provider.CodexOwnListTag()) {
+		t.Errorf("%d X-Models-Etag %q", rec.Code, got)
+	}
+}

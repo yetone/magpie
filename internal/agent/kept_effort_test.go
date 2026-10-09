@@ -276,10 +276,10 @@ func TestMiniMaxKeepsTheUsersDefaultEffort(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, raw := readMiniMax(t, path)
-	if c.CustomProvider[magpieID].Models["think/wide"].Thinking.DefaultEffort != "high" {
+	if c.CustomProvider[magpieID].Models["think~wide"].Thinking.DefaultEffort != "high" {
 		t.Fatalf("magpie's default:\n%s", raw)
 	}
-	at := strings.Index(raw, "think/wide:")
+	at := strings.Index(raw, "think~wide:")
 	raw = raw[:at] + strings.Replace(raw[at:], "defaultEffort: high", "defaultEffort: low", 1)
 	os.WriteFile(path, []byte(raw), 0o644)
 	if err := a.Sync(); err != nil {
@@ -287,7 +287,7 @@ func TestMiniMaxKeepsTheUsersDefaultEffort(t *testing.T) {
 	}
 	c, raw = readMiniMax(t, path)
 	ms := c.CustomProvider[magpieID].Models
-	if ms["think/wide"].Thinking.DefaultEffort != "low" || ms["think/deep"].Thinking.DefaultEffort != "high" {
+	if ms["think~wide"].Thinking.DefaultEffort != "low" || ms["think~deep"].Thinking.DefaultEffort != "high" {
 		t.Fatalf("after sync:\n%s", raw)
 	}
 }

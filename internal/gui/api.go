@@ -203,6 +203,9 @@ type agentJSON struct {
 	// Joined: connected with its own models still in its list (Codex
 	// signed in with ChatGPT, agent.Agent.Join)
 	Joined bool `json:"joined,omitempty"`
+	// Failover: not connected, yet its requests go through magpie for
+	// account failover alone (agent.Agent.FailingOver, #1385)
+	Failover bool `json:"failover,omitempty"`
 	// CLIMissing: its settings are here, its CLI isn't (#843), which
 	// the row says, and Install another agent offers it again
 	CLIMissing bool               `json:"cliMissing,omitempty"`
@@ -996,10 +999,11 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// its own. The per-model maps are carried whole rather than named one
 		// by one, so a map added later is not silently dropped here.
 		//
-		// HiddenModels and OrderedModels are the other way round — keyed by
-		// agent, not by "<provider>/<model>" — so they are not among them,
-		// and belong to the Agents page.
+		// HiddenModels, PickedModels and OrderedModels are the other way
+		// round — keyed by agent, not by "<provider>/<model>" — so they are
+		// not among them, and belong to the Agents page.
 		in.Visible, in.HiddenModels, in.OrderedModels = cur.Visible, cur.HiddenModels, cur.OrderedModels
+		in.PickedModels = cur.PickedModels     // "only models I pick" (#1337)
 		in.FastPicks = cur.FastPicks           // switched in the agents' pickers (#954)
 		in.AgentEfforts = cur.AgentEfforts     // picked in an agent's row (#1003)
 		in.PluginCheckins = cur.PluginCheckins // set on its own (plugin-checkin below)
@@ -1726,6 +1730,7 @@ func state() stateJSON {
 			aj.Joined = a.Joined != nil && a.Joined()
 		} else {
 			aj.Source = a.Source()
+			aj.Failover = a.FailingOver != nil && a.FailingOver()
 		}
 		if a.Import != nil {
 			aj.Import, aj.Added = a.Import(), a.Added != nil && a.Added()

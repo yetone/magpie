@@ -190,6 +190,76 @@ func TestCodexPausedOwnAccountPassedOver(t *testing.T) {
 	}
 }
 
+// Native compaction of one of Codex's own models, with the account Codex
+// is signed in to paused in magpie while another is on (#263, the free
+// ChatGPT account kept for Codex's remote control and Computer Use):
+// it goes to the account that is on, signed as that account, not relayed
+// on the paused one's sign-in as it came. With nothing else on, or not
+// paused, it relays on the sign-in as before.
+func TestCodexPausedOwnAccountNotCompactedOn(t *testing.T) {
+	codexSignedIn(t, "spare@example.com")
+	var tried, auths, paths []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tried = append(tried, r.Header.Get("chatgpt-account-id"))
+		auths = append(auths, r.Header.Get("Authorization"))
+		paths = append(paths, r.URL.Path)
+		io.WriteString(w, `{"output":[{"type":"compaction","encrypted_content":"gAAAAAx"}]}`)
+	}))
+	t.Cleanup(up.Close)
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	t.Cleanup(func() { provider.CodexBase = was })
+	compact := func() int {
+		t.Helper()
+		tried, auths, paths = nil, nil, nil
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", CodexPath+"/responses/compact", strings.NewReader(`{"model":"gpt-5.5","input":[{"type":"message","role":"user","content":"ping"}]}`))
+		req.Header.Set("Authorization", "Bearer chatgpt-token")
+		req.Header.Set("chatgpt-account-id", "acct-1")
+		New().Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if code := compact(); code != 200 || strings.Join(tried, ",") != "acct-1" || auths[0] != "Bearer chatgpt-token" {
+		t.Fatalf("in use: %d tried %v auth %v", code, tried, auths)
+	}
+	if err := provider.SetLoginOn("codex", "me@example.com", false); err != nil {
+		t.Fatal(err)
+	}
+	if code := compact(); code != 200 || strings.Join(tried, ",") != "acct-2" || auths[0] == "Bearer chatgpt-token" || paths[0] != "/backend-api/codex/responses/compact" {
+		t.Fatalf("paused: %d tried %v auth %v path %v", code, tried, auths, paths)
+	}
+	// a key held to some accounts (#905) is asked of the account it goes
+	// to: held to the paused sign-in alone, refused with nothing asked;
+	// held to the one on, compacted there
+	keys, secrets := newCaller(t, "Held")
+	keyed := func(as string) int {
+		t.Helper()
+		if _, err := access.Update("accounts-key", access.Change{Key: keys[0].ID, Accounts: []string{as}}); err != nil {
+			t.Fatal(err)
+		}
+		tried = nil
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", CodexPath+"/responses/compact", strings.NewReader(`{"model":"gpt-5.5","input":[]}`))
+		req.Header.Set("Authorization", "Bearer "+secrets[0])
+		New().Handler().ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := keyed("codex/me@example.com"); code != 403 || len(tried) != 0 {
+		t.Fatalf("held to the paused sign-in: %d tried %v", code, tried)
+	}
+	if code := keyed("codex/spare@example.com"); code != 200 || strings.Join(tried, ",") != "acct-2" {
+		t.Fatalf("held to the one on: %d tried %v", code, tried)
+	}
+	// the other off: the paused one is all there is, and is used
+	if err := provider.SetLoginOn("codex", "spare@example.com", false); err != nil {
+		t.Fatal(err)
+	}
+	if code := compact(); code != 200 || strings.Join(tried, ",") != "acct-1" || auths[0] != "Bearer chatgpt-token" {
+		t.Fatalf("with the other off: %d tried %v auth %v", code, tried, auths)
+	}
+}
+
 // A gateway key held to some accounts (#905) holds Codex's own models
 // too: asked for by its bare native name — the request Codex would relay
 // to its own sign-in when that one account is all that is on — the turn

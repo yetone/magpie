@@ -91,8 +91,9 @@ var (
 		}
 		return out
 	}
-	// installLatest installs the package's newest version (tests stub it)
-	installLatest = func(ctx context.Context, pkg string) error { return install(ctx, pkg+"@latest") }
+	// installNewest installs the version of the package npm has as its
+	// newest (installAt; tests stub it)
+	installNewest = installAt
 )
 
 func updatesPath() string { return filepath.Join(settings.Dir(), "plugin-updates.json") }
@@ -170,7 +171,7 @@ func CheckUpdates(ctx context.Context) (Updates, error) {
 			waiting = append(waiting, Waiting{Spec: e.Spec, Package: pkg, Version: have, Latest: now})
 			continue
 		}
-		if err := installLatest(ctx, pkg); err != nil {
+		if err := installNewest(ctx, pkg, now); err != nil {
 			errs = append(errs, err)
 			log.Printf("updating the plugin %s: %s", pkg, err)
 			waiting = append(waiting, Waiting{Spec: e.Spec, Package: pkg, Version: have, Latest: now})

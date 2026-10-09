@@ -14,7 +14,7 @@ import (
 func init() {
 	movers[MiMoID] = &mover{
 		pkg:    "@magpie-community/opencode-mimo-auth",
-		min:    "0.1.8", // a Token Plan bought at the open platform shows on the card, not Free
+		min:    "0.1.9", // an account with a Token Plan and no app membership is answered by its Token Plan
 		agents: []string{MiMoID},
 		out: func() ([]Moving, error) {
 			var out []Moving

@@ -151,6 +151,8 @@ func Entries(ms []catalog.Model, after int) []any {
 		// GPT models
 		if slug, ok := strings.CutPrefix(m.ID, "codex/"); m.Fast || ok && strings.HasPrefix(slug, "gpt-") {
 			e.Tiers = append(e.Tiers, tier{ID: "priority", Name: "Fast", Description: "1.5x speed, increased usage"})
+		} else if m.OwnTier {
+			e.Tiers = ownTiers(own, m)
 		}
 		// an OpenAI model: a ChatGPT account's (codex/), or a group one is
 		// in (Fast, see provider.codexListed)
@@ -212,6 +214,41 @@ func agentsEffort(own map[string]map[string]any, m catalog.Model) string {
 		return ""
 	}
 	return ef
+}
+
+// gptModel is an OpenAI model's id, as a relay may serve it: gpt-6-sol, o4.
+var gptModel = regexp.MustCompile(`^(gpt-|o\d)`)
+
+// ownTiers are the service tiers Codex's own entry gives the model a
+// provider the user added by its address serves (openai/gpt-6-sol on a
+// relay, a dated snapshot), Ultrafast among them where the entry has it;
+// Fast on another GPT model; none on any other.
+func ownTiers(own map[string]map[string]any, m catalog.Model) []tier {
+	slug := strings.ToLower(m.ID)
+	if i := strings.LastIndex(slug, "/"); i >= 0 {
+		slug = slug[i+1:]
+	}
+	slug = datedSuffix.ReplaceAllString(slug, "")
+	if raw, ok := own[slug]["service_tiers"].([]any); ok {
+		var ts []tier
+		for _, r := range raw {
+			t, _ := r.(map[string]any)
+			id, _ := t["id"].(string)
+			if id == "" {
+				continue
+			}
+			name, _ := t["name"].(string)
+			desc, _ := t["description"].(string)
+			ts = append(ts, tier{ID: id, Name: name, Description: desc})
+		}
+		if len(ts) > 0 {
+			return ts
+		}
+	}
+	if gptModel.MatchString(slug) {
+		return []tier{{ID: "priority", Name: "Fast", Description: "1.5x speed, increased usage"}}
+	}
+	return []tier{}
 }
 
 // Order ranks entries — Codex's own, as the backend gives them, and

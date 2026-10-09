@@ -275,8 +275,12 @@ type Call struct {
 	// TTFT: ms from the request to its reply's first content — text,
 	// reasoning or a tool call — and FirstText to its first text, when
 	// it was streamed (#196)
-	TTFT              int64  `json:"ttft,omitempty"`
-	FirstText         int64  `json:"firstText,omitempty"`
+	TTFT      int64 `json:"ttft,omitempty"`
+	FirstText int64 `json:"firstText,omitempty"`
+	// Flow: the ms its content took to come, from where its speed is
+	// counted (firstToken.flowMs): next to none for a reply that came in
+	// a burst, so it tells no speed
+	Flow              int64  `json:"flow,omitempty"`
 	Error             string `json:"error,omitempty"`
 	Fallback          string `json:"fallback,omitempty"` // providers that failed first, and why
 	Usage             Usage  `json:"usage"`
@@ -320,7 +324,10 @@ type Server struct {
 	sightOrder []string
 	// the requests out at each key or account with a MaxConcurrency, and
 	// those waiting their turn (concurrency.go)
-	lanes         lanes
+	lanes lanes
+	// the requests each key or account with a MaxRPM sent in the last
+	// minute, and those about to go (rpm.go)
+	rpms          rpms
 	requestLimits requestLimits
 	// what a restart would cut short (busy.go)
 	busyCounters
@@ -331,14 +338,15 @@ func New() *Server {
 	redact.SetKeyPath(filepath.Join(settings.Dir(), "redact.key"))
 	return &Server{
 		// a provider with a proxy of its own is sent through a transport
-		// kept for that proxy (#237)
-		client: &http.Client{Transport: netproxy.Dispatch(&http.Transport{
+		// kept for that proxy (#237); a request counted against a MaxRPM
+		// waits for room in its minute first (rpm.go)
+		client: &http.Client{Transport: rpmTransport{netproxy.Dispatch(&http.Transport{
 			Proxy:                 netproxy.Func,
 			ResponseHeaderTimeout: 10 * time.Minute,
 			MaxIdleConnsPerHost:   8,
 			IdleConnTimeout:       90 * time.Second,
 			ForceAttemptHTTP2:     true,
-		})},
+		})}},
 		unfit:        make(map[string]bool),
 		subscription: newSubscriptionBridge(),
 		debug:        os.Getenv("MAGPIE_DEBUG") != "",
@@ -791,11 +799,26 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 		// for another magpie: how it searches the web for each model
 		magpie := r.Header.Get(provider.DrawersHeader) != ""
 		searches := magpie && canSearch()
+		// for another magpie, what each model costs here, so its usage
+		// there is counted at the same price: told only to this computer
+		// and to one this magpie is shared with by a gateway key, as the
+		// prices are the user's own settings
+		var st settings.Settings
+		var find func(string) (provider.Group, []provider.Member, bool)
+		prices := r.Header.Get(provider.PricesHeader) != "" && (local(r) || sharedWith(r))
+		if prices {
+			st, find = settings.Load(), provider.GroupFinder()
+		}
 		for i, e := range shown {
 			m := modelObject(e)
 			if magpie {
 				if how := webSearchOf(e, searches); how != "" {
 					m["web_search"] = how
+				}
+			}
+			if prices {
+				if pr, ok := provider.EntryPriceIn(st, find, e); ok {
+					m["magpie_price"] = pr
 				}
 			}
 			// for another magpie: its name as the agents' lists here call
@@ -849,10 +872,14 @@ func (s *Server) model(w http.ResponseWriter, r *http.Request) {
 // unprefixed is the model magpie serves by an id Claude Desktop was given
 // for it (claudeLooking): anthropic/magpie-<number>, mythos-magpie-<number>,
 // magpie-<number>.anthropic.<Claude model>, or, as it listed them
-// before, "anthropic/" put in front of magpie's id. An id that is magpie's
-// as it stands (a provider named anthropic) is left alone.
+// before, "anthropic/" put in front of magpie's id — or by its flat
+// spelling (unflat). An id that is magpie's as it stands (a provider named
+// anthropic) is left alone.
 func unprefixed(id string) string {
 	if real, ok := aliased(id); ok {
+		return real
+	}
+	if real := unflat(id); real != id {
 		return real
 	}
 	rest, ok := strings.CutPrefix(id, "anthropic/")
@@ -965,12 +992,19 @@ func (s *Server) countOn(w http.ResponseWriter, r *http.Request, p provider.Prov
 		if who, held := accountHolds(r); held {
 			counts = slices.DeleteFunc(counts, func(c candidate) bool { return !accountAllowed(who, c) })
 		}
+		// a count doesn't wait for room in a MaxRPM's minute: one with
+		// none now is left out, and where none has room the estimate
+		// below says the count (rpm.go)
+		counts = slices.DeleteFunc(counts, func(c candidate) bool { return !s.rpms.free(c.who(), c.p.RPMLimit()) })
 	}
 	// the names in force, read at most once however many candidates are
 	// counted, and not at all where there are none
 	wires := sync.OnceValue(func() map[string]string { return settings.Load().ModelWires })
 	for i, c := range counts {
 		res, err := s.forward(r.Context(), c.p, provider.Anthropic, "/v1/messages/count_tokens", rewriteModel(body, provider.UpstreamNameIn(wires(), c.p.ID, model)), r.Header)
+		if tooMany := (*errRPM)(nil); errors.As(err, &tooMany) {
+			break // its minute filled since: nobody rests, the estimate answers
+		}
 		if err != nil {
 			if r.Context().Err() == nil {
 				s.restAfter(c, http.StatusBadGateway, nil, []byte(err.Error()))
@@ -1355,9 +1389,25 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		if isGroup {
 			scope = provider.GroupPrefix + g.ID
 		}
+		conv := conversationID(r.Header, body)
 		sealedLead = leadProvider(scope, parent)
-		sealers = []string{sealedLead, leadProvider(scope, conversationID(r.Header, body))}
-		if !(isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool { return s.sealedReader(m.Provider, m.Model, sealers) }) || !isGroup && s.sealedReader(p, model, sealers)) {
+		sealers = []string{sealedLead, leadProvider(scope, conv)}
+		readable := func() bool {
+			return isGroup && slices.ContainsFunc(ms, func(m provider.Member) bool { return s.sealedReader(m.Provider, m.Model, sealers) }) || !isGroup && s.sealedReader(p, model, sealers)
+		}
+		if !readable() {
+			// affinity let the lead go (a day since, a restart, its reply
+			// broken off): the usage log still has who answered it (#1367)
+			logged := loggedAnswerers(parent, conv)
+			sealers = append(sealers, logged...)
+			if sealedLead == "" && len(logged) > 0 {
+				sealedLead = logged[0]
+			}
+		}
+		if sealedLead == "" {
+			sealedLead = sealers[1] // a lead's own turn: who answered it
+		}
+		if !readable() {
 			call.Status, call.Error = 400, "sealed subagent task"
 			writeError(w, from, 400, sealedTaskError(call.Model, sealedLead))
 			turnedAway()
@@ -1552,6 +1602,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// (#63): its reasoning, sealed by the account that wrote it, is refused
 	// by another.
 	cands, pl, aff, stuck := affine(scope, mode, rotate, r.Header, from, body, cands, pl)
+	defer opened(stuck)
 	leadAccount := ""
 	if sealedTask && !aff.Kept {
 		parent := metadata.Parent
@@ -1831,6 +1882,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				continue
 			}
 		}
+		// Ultrafast goes first to an account whose plan offers it, and an
+		// account whose own list doesn't is asked for priority (Fast)
+		// instead, which every plan with Fast takes (yxinyu715 on X)
+		if from == provider.Responses && askedTier(attemptBody) == "ultrafast" && !takesTier(c, "ultrafast") {
+			if j := tierMate(cands[i+1:], c, "ultrafast"); j >= 0 {
+				j += i + 1
+				cs := slices.Clone(cands)
+				cands = slices.Insert(slices.Delete(cs, i, i+1), j, c)
+				i--
+				continue
+			}
+			attemptBody = withFields(attemptBody, map[string]any{"service_tier": "priority"})
+		}
 		// an effort changed mid-thread goes as an update in the history,
 		// which keeps the prompt the upstream cached (#617)
 		updated := false
@@ -1881,9 +1945,23 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// its queue full, or waited out (QueueLimit, QueueWait), it is
 			// turned away below
 			waited := time.Now()
+			// a streaming agent waiting is kept alive meanwhile
+			queuedAlive := hw.keepQueued()
 			release, err := s.lanes.take(ctx, c.who(), c.p.LaneLimit(), c.p.QueueLimit, time.Duration(c.p.QueueWait)*time.Second)
+			if err == nil && c.p.RPMLimit() > 0 {
+				// with a MaxRPM, it then waits for room in the minute, and
+				// goes counted in it; the requests it makes on the way
+				// count too (rpm.go)
+				if _, err = s.rpms.wait(ctx, c.who(), c.p.RPMLimit(), rpmWait(c.p)); err != nil {
+					release()
+				} else {
+					ctx = s.paidFor(ctx, c.p, c.who())
+				}
+			}
+			queuedAlive()
 			queued = time.Since(waited).Milliseconds()
-			if errors.Is(err, errQueueFull) || errors.Is(err, errQueueWait) {
+			var tooMany *errRPM
+			if errors.Is(err, errQueueFull) || errors.Is(err, errQueueWait) || errors.As(err, &tooMany) {
 				laneErr = err
 			}
 			if err == nil {
@@ -1914,7 +1992,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				continue
 			}
 			if !kept.sent {
-				w.Header().Set("Retry-After", "1")
+				after := "1"
+				if e := (*errRPM)(nil); errors.As(laneErr, &e) {
+					after = e.retryAfter() // when the minute has room
+				}
+				w.Header().Set("Retry-After", after)
 			}
 			failTo(w, kept, from, call.Status, call.Error)
 			// nobody was asked, and the agent is told: the ledger gets
@@ -1954,6 +2036,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		asName := provider.SentNameOnIn(wiresOf(r.Context()), c.p.ID, accountAgent(c.p), c.model, sent)
 		try.Swapped, try.Routed = swapped(asName, call.Usage.Served), usage.GroupRouted(asName, call.Usage.Served)
 		try.TTFT, try.FirstText = hw.first.ms()
+		try.Flow = hw.first.flowFor(call.Usage.Reasoning)
+		call.Flow = try.Flow
 		// the request's, from when it came as its ms are: the time before
 		// this try, the ones that failed first, is in it
 		call.TTFT, call.FirstText = sinceStart(began.Sub(start), hw.first.first), sinceStart(began.Sub(start), hw.first.text)
@@ -1975,7 +2059,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			// rest, a long prompt being slow to start anywhere
 			call.Status, call.Error = http.StatusGatewayTimeout, fmt.Sprintf("%s: no first token in %ds", c.p.Name, g.FirstToken)
 			try.Status, try.Error, try.Fail = call.Status, call.Error, failSlow
-			call.TTFT, call.FirstText = 0, 0
+			call.TTFT, call.FirstText, call.Flow = 0, 0, 0
 			telemetry.attempt(call, try, c.p.ID, sent, hw, capture)
 			s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 			if other == nil {
@@ -2065,7 +2149,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					Requested: call.Model, Served: call.Usage.Served, Upstream: call.Usage.Upstream,
 					Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 					CacheWrite: call.Usage.CacheWrite, CacheWrite1h: call.Usage.CacheWrite1h, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: time.Since(began).Milliseconds(), Status: call.Status,
-					TTFT: try.TTFT, FirstText: try.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
+					TTFT: try.TTFT, FirstText: try.FirstText, Flow: try.Flow, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To), Archive: call.archiveName()}
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 				// what this account answered is its refusal, the reply
@@ -2102,7 +2186,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 					Requested: call.Model, Served: call.Usage.Served,
 					Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 					CacheWrite: call.Usage.CacheWrite, CacheWrite1h: call.Usage.CacheWrite1h, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: time.Since(began).Milliseconds(), Status: call.Status,
-					TTFT: try.TTFT, FirstText: try.FirstText, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
+					TTFT: try.TTFT, FirstText: try.FirstText, Flow: try.Flow, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 					RequestID: call.Usage.RequestID, Endpoint: endpointOf(r, from, call.To), Archive: call.archiveName()}
 				failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 				// what this account answered is its refusal, the reply
@@ -2415,7 +2499,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			t.Usage = append(t.Usage, routeUsage(call.Provider, model, call.Usage)...)
 		}
 		t.Tokens = call.Usage.Input + call.Usage.Output + call.Usage.CacheRead + call.Usage.CacheWrite
-		t.Output, t.Reasoning, t.TTFT, t.FirstText = call.Usage.Output, call.Usage.Reasoning, call.TTFT, call.FirstText
+		t.Output, t.Reasoning, t.TTFT, t.FirstText, t.Flow = call.Usage.Output, call.Usage.Reasoning, call.TTFT, call.FirstText, call.Flow
 		if prompt != nil {
 			t.Prompt = prompt.calibrated(promptCounted(t.Usage), window)
 		}
@@ -2431,7 +2515,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			Requested: call.Model, Served: call.Usage.Served, Upstream: call.Usage.Upstream,
 			Input: call.Usage.Input, Output: call.Usage.Output, CacheRead: call.Usage.CacheRead,
 			CacheWrite: call.Usage.CacheWrite, CacheWrite1h: call.Usage.CacheWrite1h, Reasoning: call.Usage.Reasoning, Effort: sent, Millis: call.Millis, Status: call.Status,
-			TTFT: call.TTFT, FirstText: call.FirstText, Sent: sentMs, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
+			TTFT: call.TTFT, FirstText: call.FirstText, Flow: call.Flow, Sent: sentMs, Session: sessionOf(r.Header), NativeSession: nativeSessionOf(r.Header), Kind: call.Kind,
 			RequestID: call.Usage.RequestID, ResponseID: call.Usage.ResponseID, Endpoint: endpointOf(r, from, call.To), Stop: call.Usage.Stop, Archive: call.archiveName()}
 		failedWith(&rec, call.Status, call.Error, call.Usage.ErrType)
 		withBodies(&rec, &call)
@@ -2461,6 +2545,7 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	// Native ChatGPT accounts accept standalone tool outputs themselves.
 	if from == provider.Responses && (p.Account == nil || p.Account.Agent != "codex") {
 		body = orphanedToolOutputs(body)
+		body = pairToolItems(body)
 	}
 	// every request to the provider goes through its own proxy, if it has
 	// one (#237)
@@ -2550,9 +2635,10 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 		relay = false
 	}
 	// Factory's generate route always answers SSE, and droid sends no stream
-	// field. A client that asked for one JSON body is translated, which
-	// reads that SSE and writes the JSON. Relaying it would hand the client
-	// the data: lines under a 200.
+	// field; a Gemini API is always asked streamGenerateContent
+	// (upstreamPath). A client that asked for one JSON body is translated,
+	// which reads that SSE and writes the JSON. Relaying it would hand the
+	// client the data: lines under a 200.
 	if relay && from == provider.Gemini && !streamOf(body) {
 		relay = false
 	}
@@ -2565,7 +2651,15 @@ func (s *Server) attempt(w http.ResponseWriter, r *http.Request, from provider.P
 	}
 	to := s.usable(p, model)
 	if len(to) == 0 {
-		to = p.Speaks()
+		// every API turned the model away: the one the user picked for it
+		// is asked again, not the first the provider has a URL for, which
+		// they said it isn't asked on (01huadalang: picked for Responses,
+		// sent as chat after one refusal there)
+		if proto, ok := p.ModelAPI(model); ok {
+			to = []provider.Protocol{proto}
+		} else {
+			to = p.Speaks()
+		}
 	}
 	if len(to) == 0 {
 		msg := p.Name + " has no endpoint configured"
@@ -2700,11 +2794,16 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 
 // forwardOnce is one request to the provider, as forward makes it.
 func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provider.Protocol, path string, body []byte, in http.Header) (*http.Response, error) {
-	ctx = p.Via(ctx)
+	ctx = s.metered(p.Via(ctx), p, "")
 	body = deepseekToolPatterns(p, to, body)
 	body = toolOneOfAsAnyOf(p, to, body)
 	body = kimiToolEnumTypes(p, to, body)
 	body = clinePin(p, to, body)
+	if to == provider.Gemini && !p.FactoryGemini() {
+		// the model is in a Gemini API's path (upstreamPath); Factory's
+		// generate route reads it from the body
+		body = withoutFields(body, "model")
+	}
 	if to == provider.Anthropic {
 		body = s.bodyBetas(p, body)
 		body = s.withoutRefusedShapes(p, body)
@@ -2949,7 +3048,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if e := fitFor(p, model, asked); asked != "" && e != asked {
 		body = withBodyEffort(proto, body, e)
 	}
-	path := pathOf(proto)
+	path := upstreamPath(p, proto, upstream)
 	if proto == provider.Anthropic && p.Account == nil && fromClaudeCode(r.Header) && r.URL.Query().Get("beta") == "true" {
 		path += "?beta=true" // as Claude Code asks it
 	}
@@ -3109,7 +3208,7 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 				u.RequestID = "" // another endpoint answers, with its own id
 				return res.StatusCode, msg, false
 			}
-			msg += wrongAPINote(p, model, res)
+			msg += wrongAPINote(p, model, res, b)
 		}
 		if p.Preset == "openrouter" && openRouterSharedPool(b) {
 			markOpenRouterSharedPool(w)
@@ -3425,7 +3524,13 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				r.OffLevel, req = l, &r
 			}
 		}
-		body, err := build(to, req, model, p.Host(), p.RejectsTemperature(model))
+		// the tier the client asked for goes to a provider the user added
+		// by its address as it was asked (Request.Tier)
+		if own := p.Preset == "" && p.Account == nil && s.fits(p.ID, tierField, to); own != req.OwnTier {
+			r := *req
+			r.OwnTier, req = own, &r
+		}
+		body, err := build(to, req, model, buildHost(p), p.RejectsTemperature(model))
 		if err != nil {
 			return nil, to, err
 		}
@@ -3441,14 +3546,16 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 			// known: on Antigravity that is the variant the effort picked,
 			// not the model magpie knows
 			body = codeAssistBody(p, req, model, wires)
-		} else if wire := provider.UpstreamNameIn(wires, p.ID, model); wire != model {
+		}
+		wire := provider.UpstreamNameIn(wires, p.ID, model)
+		if wire != model && !(to == provider.CodeAssist && p.Account != nil) {
 			// the vendor's own name for the model goes in the model field
 			// and nowhere else: everything above shaped the request from
 			// the model magpie knows, which is what those decisions are
 			// about
 			body = rewriteModel(body, wire)
 		}
-		path := pathOf(to)
+		path := upstreamPath(p, to, wire)
 		if req.Resume && to == provider.Chat && chatPrefill(p.Host(), model) == "prefix" {
 			// DeepSeek serves its prefix mode under /beta, beside the /v1
 			// the base carries
@@ -3539,6 +3646,15 @@ func (s *Server) forwardTranslated(ctx context.Context, p provider.Provider, to 
 				continue
 			}
 		}
+		if req.OwnTier && req.Tier != "" && slices.Contains(refusedOptional(res.StatusCode, b, body), tierField) {
+			// the field turned away: asked again without it, and not sent
+			// it again. A value it doesn't offer reaches the client as the
+			// upstream said it, as on a relayed request
+			s.markUnfit(p.ID, tierField, to)
+			r := *req
+			r.Tier, req = "", &r
+			continue
+		}
 		if req.CacheKey != "" && badRequest(res.StatusCode) && !wrongEndpoint(res.StatusCode, b) && !provider.CopilotRefusal(b) {
 			// a vendor that turns away fields it doesn't know is asked again
 			// without the cache key, and not sent it again once that works —
@@ -3593,10 +3709,14 @@ func refusesField(status int, body []byte, field string) bool {
 	return badRequest(status) && bytes.Contains(body, []byte(field))
 }
 
+// tierField is the client's service tier as a request carries it upstream
+// (Request.Tier); a provider that refused it is remembered under it in unfit.
+const tierField = "service_tier"
+
 // optionalFields are request fields OpenAI's APIs (or an agent's own
 // vendor, Kimi's and Qwen's thinking switches) take that a request does
 // without: an upstream that refuses one by name is asked again without it.
-var optionalFields = []string{"store", "metadata", "service_tier", cacheKeyField, "prompt_cache_retention",
+var optionalFields = []string{"store", "metadata", tierField, cacheKeyField, "prompt_cache_retention",
 	"safety_identifier", "stream_options", "parallel_tool_calls", "verbosity", "thinking", "enable_thinking"}
 
 // refusedOptional lists optional fields an upstream explicitly rejects as
@@ -3830,6 +3950,10 @@ func wrongEndpoint(status int, body []byte) bool {
 		"no model endpoints available given user constraints",
 		"is not supported for format",    // OpenCode: "Model grok-4.7 is not supported for format anthropic"
 		"does not support this protocol", // OpenCode, with a key: "Model does not support this protocol"
+		// a relay serving a model with tools on Responses alone (#1308:
+		// "gpt-6.1-sol requires Responses for tool calls; this account
+		// only supports Chat Completions")
+		"requires responses",
 	} {
 		if strings.Contains(msg, phrase) {
 			return true
@@ -3843,7 +3967,7 @@ func wrongEndpoint(status int, body []byte) bool {
 // ask: the URL asked, and the APIs the vendor's list serves the model on
 // that the provider has no URL for, so "Model does not support this
 // protocol" says which protocol, and what to set (#1215).
-func wrongAPINote(p provider.Provider, model string, res *http.Response) string {
+func wrongAPINote(p provider.Provider, model string, res *http.Response, body []byte) string {
 	note := ""
 	if res != nil && res.Request != nil && res.Request.URL != nil {
 		u := *res.Request.URL
@@ -3852,7 +3976,12 @@ func wrongAPINote(p provider.Provider, model string, res *http.Response) string 
 	}
 	paths := map[provider.Protocol]string{provider.Chat: "/v1/chat/completions", provider.Responses: "/v1/responses", provider.Anthropic: "/v1/messages"}
 	var missing []string
-	for _, a := range p.APIs(model) {
+	apis := p.APIs(model)
+	if asksResponses(body) && !slices.Contains(apis, provider.Responses) {
+		// the vendor's error names the API, where its list doesn't (#1308)
+		apis = append(apis, provider.Responses)
+	}
+	for _, a := range apis {
 		if paths[a] != "" && p.Base(a) == "" {
 			missing = append(missing, paths[a])
 		}
@@ -3869,6 +3998,19 @@ func wrongAPINote(p provider.Provider, model string, res *http.Response) string 
 		note += ")"
 	}
 	return note
+}
+
+// asksResponses is an upstream's word that the model is served, or served
+// with what was asked, on OpenAI's Responses API: where a provider has no
+// URL for it, wrongAPINote says to set one.
+func asksResponses(body []byte) bool {
+	msg := strings.ToLower(string(body))
+	for _, phrase := range []string{"requires responses", "use v1/responses", "use /v1/responses", "only supported in v1/responses", "only supported in /v1/responses"} {
+		if strings.Contains(msg, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 // translate serves a client API the provider lacks by speaking another
@@ -3929,7 +4071,7 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 		msg := p.Explain(p.Name+": "+provider.APIError(b, res.Status), res.StatusCode, b)
 		if wrongEndpoint(res.StatusCode, b) {
-			msg += wrongAPINote(p, model, res)
+			msg += wrongAPINote(p, model, res, b)
 		}
 		if res.StatusCode == http.StatusTooManyRequests && accountAgent(p) == "antigravity" && antigravityTurnsAway(request.System) {
 			msg += " — " + antigravityTurnedAwayHint
@@ -4041,10 +4183,22 @@ func pathOf(proto provider.Protocol) string {
 	case provider.CodeAssist:
 		return "/v1internal:streamGenerateContent?alt=sse"
 	case provider.Gemini:
-		// Factory's generateContent. No other provider speaks Gemini upstream.
+		// Factory's generateContent; a Gemini API's path names the model
+		// (upstreamPath)
 		return "/generate"
 	}
 	return "/v1/messages"
+}
+
+// upstreamPath is the path under p's base for proto a request for model
+// (the vendor's name for it) goes to: a Gemini API's names the model, and
+// is always the stream, as Factory's generate route always answers one;
+// any other API's is pathOf's.
+func upstreamPath(p provider.Provider, proto provider.Protocol, model string) string {
+	if proto == provider.Gemini && !p.FactoryGemini() {
+		return provider.GeminiPath(model, true)
+	}
+	return pathOf(proto)
 }
 
 // parse is shared by translated routes and account/subscription backends.
@@ -4239,7 +4393,25 @@ func validateModel(model string) (string, error) {
 	if p, m, ok := strings.Cut(model, "/"); ok && (p == "" || m == "") {
 		return "", errors.New("invalid request: expected provider/model with both parts nonempty")
 	}
-	return model, nil
+	return unflat(model), nil
+}
+
+// unflat is the catalog id a flat one stands for (provider.Unflat): MiniMax
+// Code asks for "bb-codex~gpt-6.1-sol", as its SubAgents can't name a model
+// with a slash in it (#1387). The request goes on as the catalog id, so its
+// key's models, its routing, the middleware and the usage row see that. An
+// id that resolves as it is stays as it is.
+func unflat(id string) string {
+	if !strings.Contains(id, provider.FlatSep) || strings.Contains(id, "/") {
+		return id
+	}
+	if _, _, ok := provider.Resolve(id); ok {
+		return id
+	}
+	if real, ok := provider.Unflat(id); ok {
+		return real
+	}
+	return id
 }
 
 // requestModel checks the envelope without restricting vendor-specific fields.

@@ -78,7 +78,7 @@ func TestNoteCodexLimitsHoldsTheCap(t *testing.T) {
 			{Name: "7 days", Used: 40, ResetsAt: &week, Span: 7 * 24 * time.Hour}}}}}
 	loginUsageCache.Unlock()
 	handed := Allowances("codex") // what routing holds already isn't changed under it
-	if held, _, _ := handed["Me@example.com"].CapHeld("gpt-5.5", 99, now); held {
+	if h := handed["Me@example.com"].CapHeld("gpt-5.5", WindowCaps{All: 99}, now); h != nil {
 		t.Fatal("held at 96%")
 	}
 
@@ -87,9 +87,9 @@ func TestNoteCodexLimitsHoldsTheCap(t *testing.T) {
 	NoteCodexLimits("codex", "new@example.com", []CodexLimit{{Used: 99, Span: 5 * time.Hour}})
 
 	m := Allowances("codex")
-	held, used, back := m["Me@example.com"].CapHeld("gpt-5.5", 99, now)
-	if !held || used != 99 || !back.Equal(renews) {
-		t.Fatalf("after the reply: held %v at %v%% till %s", held, used, back)
+	h := m["Me@example.com"].CapHeld("gpt-5.5", WindowCaps{All: 99}, now)
+	if h == nil || h.Used != 99 || !h.Back.Equal(renews) {
+		t.Fatalf("after the reply: held %+v", h)
 	}
 	if u := m["Me@example.com"][1].Used; u != 40 {
 		t.Fatalf("the week took the five hours' share: %v%%", u)

@@ -8,6 +8,7 @@
 //                          Both take ?lang=zh for the notes in Chinese, where a
 //                          release has them (below its <!-- lang:zh --> marker);
 //                          any other lang, or none, is the English alone.
+//   /api/partners          {partners: [...]}: the add sheet's Partners (partners.js)
 //   /download              the Apple Silicon dmg
 //   /download/mac-arm64    the same;  /download/mac-intel  the Intel dmg
 //   /download/windows      the Windows app (x64);  /download/windows-arm64
@@ -22,6 +23,7 @@
 // Everything else is the static site in public/.
 
 import { LANGS } from "./i18n.js";
+import { PARTNERS } from "./partners.js";
 
 const REPO = "yetone/magpie-releases";
 const TTL = 300; // seconds the newest release is remembered
@@ -55,6 +57,9 @@ export default {
       if (!got) return json({ error: "no release yet" }, 503, NO_STORE);
       const lang = url.searchParams.get("lang");
       return json({ ...got.rel, notes: inLang(got.rel.notes, lang) }, 200, cacheFor(got));
+    }
+    if (url.pathname === "/api/partners") {
+      return json({ partners: PARTNERS }, 200, { "Cache-Control": "public, max-age=600" });
     }
     if (url.pathname === "/api/notes") {
       const got = await releases(ctx, env);

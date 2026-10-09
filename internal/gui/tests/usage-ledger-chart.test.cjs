@@ -413,10 +413,29 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await p.locator("#usageTab .opt").nth(1).click();
       await p.locator("#ledVia .blk").first().waitFor();
       assert.equal(await p.locator("#ledVia .blk").nth(1).evaluate((b) => getComputedStyle(b).borderLeftWidth), "0px", "a source cell carries no line between cells of one bar");
+      // a hovered end cell rounds as the bar does, never a square corner over
+      // its rounded one: stacked, the first rounds on top and the last below
+      const hoverFirst = async () => {
+        // wheel to it as a reader would: the app puts back a scroll no reader asked for
+        const first = p.locator("#ledVia .blk").first();
+        await p.mouse.move(280, 400);
+        for (let i = 0; i < 20 && (await first.boundingBox()).y > 300; i++) await p.mouse.wheel(0, 200), await p.waitForTimeout(60);
+        const r = await first.boundingBox();
+        await p.mouse.move(r.x + 8, r.y + 8);
+      };
+      const corners = (n) => p.locator("#ledVia .blk").nth(n).evaluate((b) => { const c = getComputedStyle(b); return [c.borderTopLeftRadius, c.borderTopRightRadius, c.borderBottomRightRadius, c.borderBottomLeftRadius].join(" "); });
+      await hoverFirst();
+      if (process.env.ARTIFACT_DIR) await p.screenshot({ clip: await p.locator("#ledVia").boundingBox(), path: path.join(process.env.ARTIFACT_DIR, `via-hover-${engine}-narrow.png`) });
+      assert.equal(await corners(0), "11px 11px 0px 0px", "the first source rounds on top");
+      assert.equal(await corners(-1), "0px 0px 11px 11px", "the last rounds below");
       // the chart follows the window
       await p.setViewportSize({ width: 1100, height: 760 });
       await p.waitForTimeout(300);
       const wider = await p.locator("#ledChart svg").boundingBox();
+      await hoverFirst();
+      if (process.env.ARTIFACT_DIR) await p.screenshot({ clip: await p.locator("#ledVia").boundingBox(), path: path.join(process.env.ARTIFACT_DIR, `via-hover-${engine}-wide.png`) });
+      assert.equal(await corners(0), "11px 0px 0px 11px", "in a row the first source rounds at its left");
+      assert.equal(await corners(-1), "0px 11px 11px 0px", "and the last at its right");
       assert(wider.width > 500 && (await p.locator("#ledRank").boundingBox()).x > wider.x + wider.width - 5, `beside it again: ${svg.width} → ${wider.width}`);
       if (process.env.ARTIFACT_DIR) await p.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `chart-${engine}-dark.png`) });
       assert.deepEqual(errors, []);

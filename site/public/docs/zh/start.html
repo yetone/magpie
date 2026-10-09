@@ -262,6 +262,9 @@ magpie claude group/opus-anywhere    <span class="c"># 使用它</span></pre>
     <h3>没有梯子，安装或更新连不上 GitHub 怎么办？</h3>
     <p>给安装脚本和 <code>magpie update</code> 加代理：<code>curl -fsSL https://usemagpie.ai/install.sh | sh -s -- --proxy http://127.0.0.1:7890</code>，或 <code>magpie update --proxy socks5://127.0.0.1:1080</code>（支持 http、https、socks5、socks5h；环境变量 <code>HTTPS_PROXY</code>、<code>ALL_PROXY</code> 同样生效）。<code>--mirror &lt;前缀&gt;</code> 从你指定的 GitHub 下载镜像取发布文件，即 <code>&lt;前缀&gt;https://github.com/…</code>；<code>magpie update mirror &lt;前缀&gt;</code> 让之后每次更新（包括应用自己的更新）都用它，<code>magpie update mirror off</code> 取消。不指定就不用任何镜像；文件的 SHA-256 始终来自 usemagpie.ai，而不是镜像，镜像改过的文件会被拒绝安装。应用自己的更新走 <span class="ui">设置</span> → <span class="ui">代理</span>。</p>
 
+    <h3 id="privacy">magpie 会发送我的哪些信息？</h3>
+    <p>你的提示词、回复、密钥和账号只发给你用的供应商，中间没有 magpie 自己的服务器。正式发布的 magpie 每天告诉我们一次它在用，好让我们知道有多少人在用、该先照顾哪些：本机随机生成的 ID、magpie 版本和系统，以及用了哪些 agent、供应商和模型，只用 magpie 自己的 ID（<code>claude</code>、<code>deepseek</code>、<code>deepseek/deepseek-v4</code>）和各自的数量。你自己添加的供应商及其上的模型只记作 <code>custom</code>。添加供应商页里排在最前的合作伙伴，每天被展示、打开和添加的次数也一并发送，只有次数。不发送名称、Base URL、账号、密钥、提示词和用量。<span class="ui">设置</span> → <span class="ui">隐私</span> → <span class="ui">分享我用的 agent、provider 和模型</span> 可以去掉 agent、供应商、模型和合作伙伴次数这部分；<span class="ui">计入用户数</span>、<code>DO_NOT_TRACK=1</code> 或 <code>MAGPIE_NO_STATS=1</code> 全部关闭。从源码构建的版本从不发送。详见<a href="https://github.com/yetone/magpie/blob/main/docs/reference.md#counting-users">参考文档</a>。</p>
+
     <h3 id="proxy-loopback">Agent 报 502 或连不上，magpie 的路由标签页里却什么都没有？</h3>
     <p>代理软件（Surge、Clash、mihomo 等，开了系统代理、TUN 或增强模式）把 Agent 发往 <code>http://127.0.0.1:3425</code> 的请求接走、转去了别处，请求根本没到 magpie。只在跳过列表（<code>skip-proxy</code>、「绕过」）里写 127.0.0.1 不一定够：有些 Agent（比如 Codex）照样会走代理。在代理软件里加两条本地地址直连的规则，放在其他规则前面：</p>
     <div class="code">

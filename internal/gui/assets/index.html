@@ -186,6 +186,16 @@
         </div>
       </section>
     </div>
+    <section class="led-heat" id="ledHeat" hidden>
+      <div class="led-bar">
+        <div class="heat-title"><b data-t>Usage heatmap</b><span data-t>Daily usage over the last 53 weeks</span></div>
+        <span class="grow"></span>
+        <div class="segs" id="ledHeatMetric"></div>
+      </div>
+      <div class="heat-scroll" id="ledHeatScroll"></div>
+      <div class="heat-foot"></div>
+      <div class="heat-tip" id="ledHeatTip" hidden></div>
+    </section>
     <div class="led-head"><p class="led-sum" id="ledSum"></p><span class="grow"></span><span class="led-arch" id="ledArchive"></span></div>
     <div class="led-strip led-vias" id="ledVia" hidden></div>
     <div class="led-wrap" id="ledWrap"></div>
@@ -459,7 +469,7 @@
     <div class="list prefs" id="redactList"></div>
   </section>
   <section class="set-page" id="setPage-otel" role="tabpanel" aria-labelledby="setTab-otel">
-    <div class="list prefs" id="otelList"></div>
+    <div id="otelList"></div>
   </section>
   <section class="set-page" id="setPage-sync" role="tabpanel" aria-labelledby="setTab-sync">
     <div class="list prefs" id="syncList"></div>

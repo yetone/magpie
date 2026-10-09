@@ -181,7 +181,7 @@ func resolveRetrievalModel(id string) (provider.Provider, string, bool) {
 // retrieveFrom posts body to url as the provider signs its requests, and
 // reads the answer; a failure's code is the vendor's, with its message.
 func (s *Server) retrieveFrom(ctx context.Context, p provider.Provider, url string, body []byte) ([]byte, int, error) {
-	ctx = p.Via(ctx)
+	ctx = s.metered(p.Via(ctx), p, "") // counted against its MaxRPM (rpm.go)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, 500, err

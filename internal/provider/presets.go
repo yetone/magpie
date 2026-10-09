@@ -493,6 +493,9 @@ var presets = []PresetDef{
 	{ID: "omlx", Name: "oMLX", Icon: "omlx", Kind: KindLocal, NoKey: true,
 		Chat: "http://localhost:8000/v1", Responses: "http://localhost:8000/v1", Anthropic: "http://localhost:8000",
 		Note: "local server on :8000", Website: "https://omlx.ai"},
+	{ID: "mlx-serve", Name: "MLX-Serve", Icon: "mlx-serve", Kind: KindLocal, NoKey: true,
+		Chat: "http://localhost:11234/v1", Responses: "http://localhost:11234/v1", Anthropic: "http://localhost:11234",
+		Note: "local server on :11234", Website: "https://github.com/ddalcu/mlx-serve"},
 }
 
 func bedrockChat(region string) string {
@@ -543,8 +546,17 @@ var presetAliases = map[string]struct{ preset, region string }{
 }
 
 // Preset finds a preset by id, or by an id it carried before
-// (presetAliases).
+// (presetAliases), or a partner listed now or before (partners.go).
 func Preset(id string) *PresetDef {
+	if pr := builtinPreset(id); pr != nil {
+		return pr
+	}
+	return partnerPreset(id)
+}
+
+// builtinPreset is the preset of that id built into magpie, partners'
+// aside.
+func builtinPreset(id string) *PresetDef {
 	if a, ok := presetAliases[id]; ok {
 		id = a.preset
 	}

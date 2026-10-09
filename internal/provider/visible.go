@@ -57,12 +57,13 @@ func described() bool { return Described != nil && Described() }
 
 // CatalogFor is the catalog as agent is shown it, and what is kept from it
 // (none when its lists aren't narrowed): its visibility's, less the models
-// taken out of its lists one by one (HiddenModels).
+// taken out of its lists one by one (HiddenModels), or, when it is shown
+// only the models picked for it, those alone (PickedModels).
 func CatalogFor(agent string) (shown, hidden []Entry) {
 	listed, hidden := ListedFor(agent)
-	off := HiddenModels(agent)
+	off := ModelOff(agent)
 	for _, e := range listed {
-		if off[e.ID] {
+		if off(e.ID) {
 			hidden = append(hidden, e)
 		} else {
 			shown = append(shown, e)
@@ -97,6 +98,135 @@ func HiddenModels(agent string) map[string]bool {
 		out[id] = true
 	}
 	return out
+}
+
+// PickedModels are the only entries agent's lists show, by id, and whether
+// it is shown only those (#1337): a model not among them, one that came
+// after the user switched to it among them, is not shown.
+func PickedModels(agent string) (map[string]bool, bool) {
+	ids, only := heldSettings().PickedModels[strings.ToLower(agent)]
+	if !only {
+		return nil, false
+	}
+	out := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		out[id] = true
+	}
+	return out, true
+}
+
+// ModelOff reports whether agent's lists leave an entry out by the picks
+// made one model at a time: every one not picked, when it is shown only
+// the models picked for it, else the ones taken out (HiddenModels).
+func ModelOff(agent string) func(id string) bool {
+	if on, only := PickedModels(agent); only {
+		return func(id string) bool { return !on[id] }
+	}
+	off := HiddenModels(agent)
+	return func(id string) bool { return off[id] }
+}
+
+// SetOnlyPicked switches agent between being shown every model not taken
+// out of its lists, a new one among them, and being shown only the ones
+// picked for it (#1337). Either way the models it is shown now stay as
+// they are: switched on, they are its picks; switched off, the ones listed
+// for it and not picked are taken out, and a model that comes later is
+// shown again.
+func SetOnlyPicked(agent string, on bool) error {
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	if agent == "" {
+		return errors.New("no agent")
+	}
+	if _, only := PickedModels(agent); only == on {
+		return nil
+	}
+	listed, _ := ListedFor(agent)
+	off := ModelOff(agent)
+	var shown, hidden []string
+	for _, e := range listed {
+		if off(e.ID) {
+			hidden = append(hidden, e.ID)
+		} else {
+			shown = append(shown, e.ID)
+		}
+	}
+	s := settings.Load()
+	if on {
+		if s.PickedModels == nil {
+			s.PickedModels = map[string][]string{}
+		}
+		s.PickedModels[agent] = sortedIDs(shown)
+		delete(s.HiddenModels, agent)
+	} else {
+		delete(s.PickedModels, agent)
+		if hidden = sortedIDs(hidden); len(hidden) > 0 {
+			if s.HiddenModels == nil {
+				s.HiddenModels = map[string][]string{}
+			}
+			s.HiddenModels[agent] = hidden
+		} else {
+			delete(s.HiddenModels, agent)
+		}
+	}
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
+// SetPickedModels makes these entries the only ones agent's lists show, for
+// an agent shown only the models picked for it. A pick of an entry not
+// listed for it now (its provider switched off for a while, a model its
+// vendor dropped from the list) is kept, so it is shown again when it is
+// back, as it was picked.
+func SetPickedModels(agent string, ids []string) error {
+	agent = strings.ToLower(strings.TrimSpace(agent))
+	if agent == "" {
+		return errors.New("no agent")
+	}
+	was, only := PickedModels(agent)
+	if !only {
+		return errors.New(agent + " is shown every model not taken out of its lists, not only the ones picked")
+	}
+	listed, _ := ListedFor(agent)
+	now := map[string]bool{}
+	for _, e := range listed {
+		now[e.ID] = true
+	}
+	keep := slices.Clone(ids)
+	for id := range was {
+		if !now[id] {
+			keep = append(keep, id)
+		}
+	}
+	keep = sortedIDs(keep)
+	s := settings.Load()
+	if slices.Equal(s.PickedModels[agent], keep) {
+		return nil
+	}
+	if s.PickedModels == nil {
+		s.PickedModels = map[string][]string{}
+	}
+	s.PickedModels[agent] = keep
+	if err := settings.Save(s); err != nil {
+		return err
+	}
+	catalog.Touched()
+	return nil
+}
+
+// sortedIDs is ids trimmed, without blanks or twins, sorted; never nil, so
+// an agent shown only its picks with none picked is still saved as one.
+func sortedIDs(ids []string) []string {
+	keep := []string{}
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" && !slices.Contains(keep, id) {
+			keep = append(keep, id)
+		}
+	}
+	slices.Sort(keep)
+	return keep
 }
 
 // SetHiddenModels takes these entries out of agent's lists, and puts back

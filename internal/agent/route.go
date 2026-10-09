@@ -117,7 +117,7 @@ func magpieModels(agent string) []catalog.Model {
 		// model, which codexcat answers from the settings it is given
 		m.Compact = provider.CompactSetIn(st, e.ID, find)
 		// what a call costs the user (Pi's cost, #781)
-		if pr, ok := entryPrice(st, find, e); ok {
+		if pr, ok := provider.EntryPriceIn(st, find, e); ok {
 			m.Price = &pr
 		}
 		if seen && !e.Images {
@@ -134,28 +134,6 @@ func magpieModels(agent string) []catalog.Model {
 		out = append(out, m)
 	}
 	return out
-}
-
-// entryPrice is what a call to e costs the user, as the usage pages count
-// it: a group's when every member costs the same, none in a fast mode,
-// since which of them answers isn't known beforehand.
-func entryPrice(st settings.Settings, find func(string) (provider.Group, []provider.Member, bool), e provider.Entry) (catalog.Price, bool) {
-	if e.Group == "" {
-		return provider.EffectivePriceIn(st, e.Provider.ID, e.Model)
-	}
-	_, ms, ok := find(e.ID)
-	if !ok || len(ms) == 0 {
-		return catalog.Price{}, false
-	}
-	var first catalog.Price
-	for i, m := range ms {
-		pr, ok := provider.EffectivePriceIn(st, m.Provider.ID, m.Model)
-		if !ok || m.Fast || i > 0 && !pr.Same(first) {
-			return catalog.Price{}, false
-		}
-		first = pr
-	}
-	return first, true
 }
 
 // maxTokens is the output limit an agent is handed for m, kept within the

@@ -2,11 +2,16 @@ package gateway
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -109,5 +114,71 @@ func TestRemoteMagpieQuotas(t *testing.T) {
 	}
 	if n := reads.Load(); n != 2 {
 		t.Errorf("refused requests read the vendor: %d", n)
+	}
+}
+
+// #1313 (jorben): a magpie in a container serves only other magpies, so
+// nobody opens its Usage page, while its Codex account's usage is read
+// behind the requests (the account switching, CodexUsedUp). A GUI on
+// another computer with that magpie as its provider is shown the
+// reading on the account's card, through the gateway, and asking for the
+// cards asks ChatGPT nothing.
+func TestRemoteMagpieShowsBackgroundReadings(t *testing.T) {
+	fresh(t)
+	t.Setenv("MAGPIE_ADDR", "")
+	home := os.Getenv("HOME")
+	jwt := func(m map[string]any) string {
+		b, _ := json.Marshal(m)
+		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
+	}
+	// an account no other test reads, so no reading of it is cached
+	os.MkdirAll(filepath.Join(home, ".codex"), 0o755)
+	os.WriteFile(filepath.Join(home, ".codex", "auth.json"), mustJSON(map[string]any{"auth_mode": "chatgpt", "tokens": map[string]any{
+		"id_token":      jwt(map[string]any{"email": "jorben-1313@example.com", "https://api.openai.com/auth": map[string]any{"chatgpt_plan_type": "pro", "chatgpt_account_id": "acct-1313"}}),
+		"access_token":  jwt(map[string]any{"exp": time.Now().Add(time.Hour).Unix()}),
+		"refresh_token": "r", "account_id": "acct-1313"}}), 0o600)
+	provider.ForgetAccounts()
+	t.Cleanup(provider.ForgetAccounts)
+	var asked atomic.Int32
+	chatgpt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/backend-api/wham/usage" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		asked.Add(1)
+		w.Write([]byte(`{"plan_type":"pro","rate_limit":{"allowed":true,"limit_reached":false,
+			"primary_window":{"used_percent":37,"limit_window_seconds":18000,"reset_after_seconds":3600},
+			"secondary_window":{"used_percent":12,"limit_window_seconds":604800,"reset_after_seconds":86400}}}`))
+	}))
+	defer chatgpt.Close()
+	was := provider.CodexBase
+	provider.CodexBase = chatgpt.URL + "/backend-api/codex"
+	t.Cleanup(func() { provider.CodexBase = was })
+
+	gw := httptest.NewServer(lanGuard(New().Handler()))
+	defer gw.Close()
+	if err := provider.Save(provider.Provider{ID: "office", Name: "Office", Preset: provider.RemoteMagpiePreset, Key: "sk-magpie-office", Chat: gw.URL}); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	// read behind the requests, as the account switching reads it
+	if provider.CodexUsedUp(ctx) {
+		t.Fatal("held at 37%")
+	}
+	if n := asked.Load(); n != 1 {
+		t.Fatalf("the background read asked ChatGPT %d times", n)
+	}
+	var codex *provider.SubscriptionQuota
+	cs := provider.RemoteCards(ctx)
+	for i, q := range cs {
+		if q.Provider == "office/codex" && q.User == "jorben-1313@example.com" {
+			codex = &cs[i]
+		}
+	}
+	if codex == nil || len(codex.Windows) == 0 || codex.Windows[0].Used != 37 || codex.Error != "" || codex.Kind != "subscription" {
+		t.Fatalf("the remote's Codex card: %+v (all: %+v)", codex, cs)
+	}
+	if n := asked.Load(); n != 1 {
+		t.Fatalf("asking for the cards asked ChatGPT: %d", n)
 	}
 }

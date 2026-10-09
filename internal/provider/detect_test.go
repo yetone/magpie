@@ -47,7 +47,7 @@ func relay(t *testing.T) (*httptest.Server, func() []asked) {
 		json.Unmarshal(b, &body)
 		m, _ := body["model"].(string)
 		mu.Lock()
-		got = append(got, asked{r.Method, r.URL.Path, r.Header.Get("Authorization") + r.Header.Get("x-api-key"), m, body})
+		got = append(got, asked{r.Method, r.URL.Path, r.Header.Get("Authorization") + r.Header.Get("x-api-key") + r.Header.Get("x-goog-api-key"), m, body})
 		mu.Unlock()
 		switch r.Method + " " + r.URL.Path {
 		case "GET /v1/models":
@@ -81,7 +81,7 @@ func TestDetectProtocols(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(res) != 3 {
+		if len(res) != 4 {
 			t.Fatalf("%s: %+v", typed, res)
 		}
 		want := []struct {
@@ -93,6 +93,9 @@ func TestDetectProtocols(t *testing.T) {
 			{Chat, true, srv.URL + "/v1", "gpt-5.5"},
 			{Responses, false, srv.URL + "/v1", "gpt-5.5"},
 			{Anthropic, true, srv.URL, "claude-sonnet-5"},
+			// no Gemini model listed: the first that chats, at the
+			// …/v1beta beside the …/v1, where this relay serves none
+			{Gemini, false, srv.URL + "/v1beta", "gpt-5.5"},
 		}
 		for i, w := range want {
 			r := res[i]
@@ -123,7 +126,7 @@ func TestDetectProtocols(t *testing.T) {
 			}
 		}
 		slices.Sort(posts)
-		if !slices.Equal(posts, []string{"/v1/chat/completions", "/v1/messages", "/v1/responses"}) {
+		if !slices.Equal(posts, []string{"/v1/chat/completions", "/v1/messages", "/v1/responses", "/v1beta/models/gpt-5.5:generateContent"}) {
 			t.Fatalf("%s: asked %v", typed, posts)
 		}
 	}
@@ -179,14 +182,14 @@ func TestResponsesProbesUseArrayInput(t *testing.T) {
 	}
 	t.Run("Detect", func(t *testing.T) {
 		rs, err := p.Detect(ctx, srv.URL, model)
-		if err != nil || len(rs) != len(Protocols) {
+		if err != nil || len(rs) != len(detectProtocols) {
 			t.Fatalf("Detect: %v, %+v", err, rs)
 		}
 		check(t, rs[1].Result)
 	})
 	t.Run("DetectModels", func(t *testing.T) {
 		each, sum, err := p.DetectModels(ctx, srv.URL, []string{model})
-		if err != nil || len(each) != 1 || len(each[0].Results) != len(Protocols) || len(sum) != len(Protocols) {
+		if err != nil || len(each) != 1 || len(each[0].Results) != len(detectProtocols) || len(sum) != len(detectProtocols) {
 			t.Fatalf("DetectModels: %v, %+v, %+v", err, each, sum)
 		}
 		check(t, each[0].Results[1].Result)
@@ -357,24 +360,24 @@ func TestDetectModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string][3]bool{ // chat, responses, anthropic
-		"gpt-both":    {true, true, false},
-		"gpt-resp":    {false, true, false},
-		"glm-chat":    {true, false, false},
-		"claude-only": {false, false, true},
-		"gpt-image-2": {false, false, false},
+	want := map[string][4]bool{ // chat, responses, anthropic, gemini
+		"gpt-both":    {true, true, false, false},
+		"gpt-resp":    {false, true, false, false},
+		"glm-chat":    {true, false, false, false},
+		"claude-only": {false, false, true, false},
+		"gpt-image-2": {false, false, false, false},
 	}
 	if len(each) != len(want) {
 		t.Fatalf("asked %d models: %+v", len(each), each)
 	}
 	for _, md := range each {
 		w, ok := want[md.Model]
-		if !ok || len(md.Results) != 3 {
+		if !ok || len(md.Results) != 4 {
 			t.Fatalf("%+v", md)
 		}
 		for i, r := range md.Results {
-			if r.OK != w[i] || r.Model != md.Model || r.Protocol != Protocols[i] {
-				t.Fatalf("%s on %s: %+v, want ok=%v", md.Model, Protocols[i], r, w[i])
+			if r.OK != w[i] || r.Model != md.Model || r.Protocol != detectProtocols[i] {
+				t.Fatalf("%s on %s: %+v, want ok=%v", md.Model, detectProtocols[i], r, w[i])
 			}
 			if !r.OK && md.Model != "gpt-image-2" && (r.Status != 400 || !strings.Contains(r.Error, "not supported")) {
 				t.Fatalf("%s on %s said %+v", md.Model, r.Protocol, r)
@@ -384,14 +387,14 @@ func TestDetectModels(t *testing.T) {
 	if each[len(each)-1].Results[0].Error == "" {
 		t.Fatal("an image model was asked on chat")
 	}
-	if asked != 12 {
-		t.Fatalf("%d requests for 4 models on 3 APIs", asked)
+	if asked != 16 {
+		t.Fatalf("%d requests for 4 models on 4 APIs", asked)
 	}
 	for i, w := range []struct {
 		model, base string
 	}{{"gpt-both", srv.URL + "/v1"}, {"gpt-both", srv.URL + "/v1"}, {"claude-only", srv.URL}} {
 		if !sum[i].OK || sum[i].Model != w.model || sum[i].Base != w.base {
-			t.Fatalf("by API %s: %+v", Protocols[i], sum[i])
+			t.Fatalf("by API %s: %+v", detectProtocols[i], sum[i])
 		}
 	}
 
@@ -407,7 +410,7 @@ func TestDetectModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(each) != DetectMax || asked != 3*DetectMax || most > DetectWide {
+	if len(each) != DetectMax || asked != 4*DetectMax || most > DetectWide {
 		t.Fatalf("%d models, %d requests, %d at once", len(each), asked, most)
 	}
 	if _, _, err := (Provider{Key: "k"}).DetectModels(context.Background(), srv.URL, []string{" "}); err == nil {
@@ -437,5 +440,84 @@ func TestDetectModelsOutOfTime(t *testing.T) {
 	}
 	if n := len(got()); n != 0 {
 		t.Fatalf("%d sent past the time", n)
+	}
+}
+
+// A Gemini API is detected too (#1346, NagaseMinato: 「检测」不会探测 Gemini
+// 端点，为什么呢？): typed as the relay's …/v1, the bare host, Google's
+// …/v1beta or a generateContent URL pasted whole, it is asked at the
+// …/v1beta, a Gemini model from its own list, the key in x-goog-api-key, the
+// smallest request generateContent takes; a provider's own Gemini URL is
+// asked as it is.
+func TestDetectGemini(t *testing.T) {
+	detectHome(t)
+	var mu sync.Mutex
+	var gem []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1beta/models" && r.Method == "GET":
+			if r.Header.Get("x-goog-api-key") != "AIza-k" {
+				http.Error(w, `{"error":{"code":401,"message":"API key not valid","status":"UNAUTHENTICATED"}}`, http.StatusUnauthorized)
+				return
+			}
+			io.WriteString(w, `{"models":[{"name":"models/text-embedding-004","supportedGenerationMethods":["embedContent"]},{"name":"models/gemini-2.5-flash","supportedGenerationMethods":["generateContent","countTokens"]}]}`)
+		case strings.HasPrefix(r.URL.Path, "/v1beta/models/") && r.Method == "POST":
+			b, _ := io.ReadAll(r.Body)
+			mu.Lock()
+			gem = append(gem, r.URL.Path+" "+r.Header.Get("x-goog-api-key")+" "+r.Header.Get("Authorization")+" "+string(b))
+			mu.Unlock()
+			if r.Header.Get("x-goog-api-key") != "AIza-k" {
+				http.Error(w, `{"error":{"code":401,"message":"API key not valid","status":"UNAUTHENTICATED"}}`, http.StatusUnauthorized)
+				return
+			}
+			io.WriteString(w, `{"candidates":[{"content":{"parts":[{"text":"Hi"}],"role":"model"},"finishReason":"MAX_TOKENS","index":0}],"usageMetadata":{"promptTokenCount":1,"candidatesTokenCount":1,"totalTokenCount":2},"modelVersion":"gemini-2.5-flash"}`)
+		default:
+			http.Error(w, `{"error":{"code":404,"message":"Not Found","status":"NOT_FOUND"}}`, http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	for _, typed := range []string{srv.URL + "/v1", srv.URL, srv.URL + "/v1beta", srv.URL + "/v1beta/models/gemini-2.5-flash:generateContent"} {
+		mu.Lock()
+		gem = nil
+		mu.Unlock()
+		res, err := Provider{Key: "AIza-k"}.Detect(context.Background(), typed, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		g := res[len(res)-1]
+		if g.Protocol != Gemini || !g.OK || g.Base != srv.URL+"/v1beta" || g.Model != "gemini-2.5-flash" {
+			t.Fatalf("%s: gemini = %+v", typed, g)
+		}
+		mu.Lock()
+		if len(gem) != 1 || gem[0] != `/v1beta/models/gemini-2.5-flash:generateContent AIza-k  {"contents":[{"role":"user","parts":[{"text":"hi"}]}],"generationConfig":{"maxOutputTokens":16}}` {
+			t.Fatalf("%s: asked %q", typed, gem)
+		}
+		mu.Unlock()
+		for _, r := range res[:len(res)-1] {
+			if r.OK {
+				t.Fatalf("%s: %s answered on a Gemini-only relay: %+v", typed, r.Protocol, r)
+			}
+		}
+	}
+
+	// the provider's own Gemini URL, and a model typed, asked as they are
+	res, err := Provider{Key: "AIza-k", Gemini: srv.URL + "/v1beta"}.Detect(context.Background(), "https://elsewhere.invalid/v1", "gemini-2.5-flash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := res[3]; !g.OK || g.Base != srv.URL+"/v1beta" {
+		t.Fatalf("own URL: %+v", g)
+	}
+
+	// each model on each API: Gemini's the fourth
+	each, sum, err := Provider{Key: "AIza-k"}.DetectModels(context.Background(), srv.URL+"/v1beta", []string{"gemini-2.5-flash"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(each) != 1 || len(each[0].Results) != 4 || !each[0].Results[3].OK || !sum[3].OK || sum[3].Base != srv.URL+"/v1beta" {
+		t.Fatalf("each %+v, sum %+v", each, sum)
+	}
+	if ps := All(); len(ps) != 0 {
+		t.Fatalf("detecting saved %+v", ps)
 	}
 }

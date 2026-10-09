@@ -31,7 +31,7 @@ type reading struct {
 // still full: the five hours started again in a week used up.
 func (a Allowance) renewedFrom(was Allowance, wasAt time.Time, share float64, now time.Time) bool {
 	type key struct{ name, model string }
-	keyOf := func(l Limit) key { return key{l.name, l.Model} }
+	keyOf := func(l Limit) key { return key{l.Name, l.Model} }
 	read := map[key]bool{}
 	for _, l := range a {
 		read[keyOf(l)] = true

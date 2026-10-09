@@ -70,7 +70,7 @@ func Restore(ctx context.Context) ([]string, error) {
 			return errors.New("the passphrase doesn't open the file on the server: it was sealed with another one; use the passphrase set on your other computers")
 		}
 		if err != nil {
-			return err
+			return described(c, data, err)
 		}
 		local, err := collect(c)
 		if err != nil {
@@ -112,6 +112,77 @@ func Restore(ctx context.Context) ([]string, error) {
 		return nil
 	})
 	return brought, err
+}
+
+// Upload writes this computer's setup over the server's file when that
+// file isn't a backup a sync can read — empty, cut short, another app's —
+// so a sync stopped on it has a way on that the user chooses. A file that
+// opens as a backup, one sealed with another passphrase, a newer magpie's,
+// and a page the server answered with instead of a file are never written
+// over. What the server held is kept in the sync folder first, and nothing
+// is written when it can't be. The write is made over the version read, so
+// a file another computer wrote meanwhile isn't.
+func Upload(ctx context.Context) error {
+	return locked(func() error {
+		c, ok := Load()
+		if !ok {
+			return ErrOff
+		}
+		d, err := newRemote(c)
+		if err != nil {
+			return err
+		}
+		data, ver, err := d.get(ctx, version{})
+		if err != nil {
+			return err
+		}
+		if data != nil {
+			_, err := backup.Open(data, c.Passphrase)
+			switch {
+			case err == nil:
+				return errors.New("the file on the server is a magpie backup this computer can open: Sync now merges with it instead, and nothing was written over it")
+			case errors.Is(err, backup.ErrPassphrase):
+				return errors.New("the file on the server is a magpie backup sealed with another passphrase, so it wasn't written over: use the passphrase set on your other computers")
+			}
+			err = described(c, data, err)
+			var nb *notBackup
+			if !errors.As(err, &nb) || !nb.f.Replace {
+				return err
+			}
+			if len(data) > 0 {
+				if err := keepAside(data, "server-replaced", 5); err != nil {
+					return fmt.Errorf("keeping the server's file before writing over it, so nothing was written: %w", err)
+				}
+			}
+		}
+		local, err := collect(c)
+		if err != nil {
+			return err
+		}
+		b := local
+		b.Created, b.App = time.Now().UTC(), "magpie"
+		sealed, err := backup.Seal(b, c.Passphrase)
+		if err != nil {
+			return err
+		}
+		v, err := d.put(ctx, sealed, ver.ETag)
+		if errors.Is(err, errChanged) {
+			return errors.New("the file on the server changed while it was being replaced, so it wasn't: sync now to see what it is")
+		}
+		if err != nil {
+			return err
+		}
+		st := loadState()
+		if st.Key != stateKey(c) {
+			st = state{Key: stateKey(c)}
+		}
+		// as the first sync to an empty server leaves it
+		st.Local, st.Remote, st.Sum, st.Server = hashes(local), hashes(b), sum(sealed), v
+		remember(sealed)
+		st.Last, st.Error, st.File = time.Now(), "", nil
+		saveState(st)
+		return nil
+	})
 }
 
 // Undo puts back the setup the last Restore replaced. The next sync takes

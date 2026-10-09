@@ -51,6 +51,9 @@ type modelJSON struct {
 	// provider's price rate
 	Price *catalog.Price `json:"price,omitempty"`
 	List  *catalog.Price `json:"list,omitempty"`
+	// RemoteList says the list price is what the other magpie counts the
+	// model at, as its list told (a Remote magpie's), not models.dev's
+	RemoteList bool `json:"remoteList,omitempty"`
 }
 
 type providerJSON struct {
@@ -62,6 +65,7 @@ type providerJSON struct {
 	Chat      string            `json:"chat"`
 	Responses string            `json:"responses"`
 	Anthropic string            `json:"anthropic"`
+	Gemini    string            `json:"gemini,omitempty"` // a Gemini API's base (#1346)
 	Decide    string            `json:"decide,omitempty"` // a decision API: it only routes groups
 	Catalog   string            `json:"catalog"`
 	Website   string            `json:"website"`
@@ -90,6 +94,10 @@ type providerJSON struct {
 	// the usage cap each account the user capped is held at, in percent
 	// of its windows, by its name in lower case (provider.AccountCaps)
 	AccountCaps map[string]int `json:"accountCaps,omitempty"`
+	// the share of a window each account is held at where the user set
+	// one for that window apart, by the account and then the window's
+	// capId (provider.AccountWindowCaps); 100 is none on that window
+	AccountWindowCaps map[string]map[string]int `json:"accountWindowCaps,omitempty"`
 	// where a custom provider's balance is asked (see provider.Balance)
 	BalanceURL  string `json:"balanceURL,omitempty"`
 	BalancePath string `json:"balancePath,omitempty"`
@@ -149,6 +157,9 @@ type providerJSON struct {
 	// (0: no bound)
 	QueueLimit int `json:"queueLimit,omitempty"`
 	QueueWait  int `json:"queueWait,omitempty"`
+	// how many requests each key or account sends the vendor in any
+	// minute, 0 for no limit (coeo91 on Discord)
+	MaxRPM int `json:"maxRPM,omitempty"`
 	// what it charges against the official price, 0 for that (#819)
 	PriceRate float64     `json:"priceRate,omitempty"`
 	Models    []modelJSON `json:"models"`            // everything the vendor lists, exposed ones flagged
@@ -282,6 +293,12 @@ type presetJSON struct {
 	// ZhipuTeam: a key of it may be on a team's GLM Coding Plan, whose
 	// organization and project the editor offers to take
 	ZhipuTeam bool `json:"zhipuTeam,omitempty"`
+	// a partner's tagline by language, and the languages it is listed in
+	Notes map[string]string `json:"notes,omitempty"`
+	Langs []string          `json:"langs,omitempty"`
+	// New: a partner listed since the add sheet last showed the partners,
+	// and not added; the add button marks it
+	New bool `json:"new,omitempty"`
 }
 
 type gatewayJSON struct {
@@ -405,13 +422,13 @@ func agentUses(agents []*agent.Agent, findGroup func(string) (provider.Group, []
 func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 	out := providerJSON{
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
-		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), DecideTest: p.AsksDecideModels(),
+		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), DecideTest: p.AsksDecideModels(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, Headers: p.Headers, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, Headers: p.Headers, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Models, Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Unlisted: p.Unlisted, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
-		AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait,
+		AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
 	}
 	if out.Fallback == nil {
@@ -535,7 +552,7 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 			}
 		}
 		if pr, ok := p.ListPrice(m.ID); ok {
-			j.List = &pr
+			j.List, j.RemoteList = &pr, p.RemotePriced(m.ID)
 		} else if pr, ok := provider.MakerPrice(m.ID); ok {
 			j.List = &pr
 		}
@@ -635,6 +652,10 @@ func providersState() providersJSON {
 		// a preset is added once any provider is its, whatever its id
 		have[p.ID], have[p.Preset] = true, true
 		s.Providers = append(s.Providers, providerInfo(p, uses))
+	}
+	// partners first, as the add sheet lists them
+	for _, pa := range provider.Partners() {
+		s.Presets = append(s.Presets, presetJSON{PresetDef: pa.PresetDef, Added: have[pa.ID], Notes: pa.Notes, Langs: pa.Langs, New: !have[pa.ID] && !provider.PartnerNoticed(pa.ID)})
 	}
 	for _, pr := range provider.Presets() {
 		team := provider.TakesZhipuTeam(provider.Provider{Chat: pr.Chat, Responses: pr.Responses, Anthropic: pr.Anthropic})
@@ -826,6 +847,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// null for no bound; a save that leaves them out keeps them
 			QueueLimit json.RawMessage `json:"queueLimit"`
 			QueueWait  json.RawMessage `json:"queueWait"`
+			// MaxRPM is how many requests each key or account sends the
+			// vendor in any minute: a number, 0 or null for no limit; a
+			// save that leaves it out keeps it
+			MaxRPM json.RawMessage `json:"maxRPM"`
 			// Limit, for accountconcurrency: the account's or key's own
 			// limit, 0 for none, null for the provider's (#892)
 			Limit *int `json:"limit"`
@@ -892,8 +917,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			Account string   `json:"account"`
 			Allow   []string `json:"allow"`
 			// Cap, for accountcap: the share (1–99) of its windows the
-			// account is used to at most, 0 for no cap
-			Cap int `json:"cap"`
+			// account is used to at most, 0 for no cap; for windowcap, the
+			// share of Window alone (1–99, 100 for none on it), 0 to have
+			// it follow the account's cap
+			Cap    int    `json:"cap"`
+			Window string `json:"window"`
 			// Typed, for test and models: the request carries the editor's
 			// form, which is tried as it stands before a Save (see typed)
 			Typed bool `json:"typed"`
@@ -924,7 +952,19 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 		case "move":
-			// a built-in subscription's accounts onto its community plugin
+			// a built-in subscription's accounts onto its community plugin,
+			// with the models the editor has picked kept first: a failed
+			// move says to untick one the plugin doesn't serve, and the
+			// editor's Try again is pressed with it unticked but not saved
+			// (noting_ever on X: deep-model unticked, and the move failed
+			// on it all the same)
+			if in.Models != nil {
+				var err error
+				if moved, err = agent.Reseat(func() error { return provider.SetModels(in.ID, in.Models) }); err != nil {
+					fail(rw, err)
+					return
+				}
+			}
 			ctx, cancel := moveContext(r)
 			defer cancel()
 			if err := moveProvider(ctx, in.ID); err != nil {
@@ -970,7 +1010,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		case "save":
 			// a preset needs nothing but the key; a saved provider keeps
 			// its key when the form left it blank
-			if pr, err := provider.FromPreset(in.Preset); err == nil && in.Chat == "" && in.Responses == "" && in.Anthropic == "" {
+			if pr, err := provider.FromPreset(in.Preset); err == nil && in.Chat == "" && in.Responses == "" && in.Anthropic == "" && in.Gemini == "" {
 				pr.Key, pr.Models, pr.Fallback, pr.Headers, pr.BalanceToken, pr.Contexts = in.Key, in.Models, in.Fallback, in.Headers, in.BalanceToken, in.Contexts
 				pr.ZhipuTeam = in.ZhipuTeam
 				pr.Searches = in.Searches
@@ -1010,6 +1050,16 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				return
 			}
 			in.QueueLimit, in.QueueWait = ql, qw
+			rpm, keepRPM, err := queueOf(req.MaxRPM, "requests a minute")
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			if err := provider.CheckRPM(rpm); err != nil {
+				fail(rw, err)
+				return
+			}
+			in.MaxRPM = rpm
 			rate, keepRate, err := priceRateOf(req.PriceRate)
 			if err != nil {
 				fail(rw, err)
@@ -1072,6 +1122,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if keepQW && old != nil {
 					in.QueueWait = old.QueueWait
 				}
+				if keepRPM && old != nil {
+					in.MaxRPM = old.MaxRPM
+				}
 				if keepRate && old != nil {
 					in.PriceRate = old.PriceRate
 				}
@@ -1084,10 +1137,10 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if old != nil {
 					in.AccountModels = old.AccountModels
 				}
-				// and their usage caps, with accountcap, and their limits on
-				// requests at once, with accountconcurrency
+				// and their usage caps, with accountcap and windowcap, and their
+				// limits on requests at once, with accountconcurrency
 				if old != nil {
-					in.AccountCaps = old.AccountCaps
+					in.AccountCaps, in.AccountWindowCaps = old.AccountCaps, old.AccountWindowCaps
 					in.AccountConcurrency = old.AccountConcurrency
 				}
 				// a Zhipu key's team likewise: {} clears it
@@ -1231,6 +1284,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 		case "accountcap":
 			if err := provider.SetAccountCap(in.ID, req.Account, req.Cap); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "windowcap":
+			if err := provider.SetWindowCap(in.ID, req.Account, req.Window, req.Cap); err != nil {
 				fail(rw, err)
 				return
 			}
@@ -1701,6 +1759,23 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 		}
 		rw.WriteHeader(http.StatusNoContent)
 	})
+	// the add sheet counts what it showed of the partners and what was
+	// opened of them (provider.CountPartner); only listed partners count.
+	// Those shown are no longer new (provider.NoticePartners).
+	mux.HandleFunc("POST /api/partner", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			What string
+			IDs  []string
+		}
+		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&in)
+		if len(in.IDs) <= provider.MaxPartners {
+			provider.CountPartner(in.What, in.IDs...)
+			if in.What == provider.PartnerShown {
+				provider.NoticePartners(in.IDs...)
+			}
+		}
+		rw.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("POST /api/open", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct{ URL string }
 		_ = json.NewDecoder(r.Body).Decode(&in)
@@ -1723,7 +1798,7 @@ func typed(p, in provider.Provider, proxy *string) provider.Provider {
 	for _, f := range []struct {
 		to *string
 		v  string
-	}{{&p.Chat, in.Chat}, {&p.Responses, in.Responses}, {&p.Anthropic, in.Anthropic}, {&p.Decide, in.Decide}, {&p.ModelsURL, in.ModelsURL}} {
+	}{{&p.Chat, in.Chat}, {&p.Responses, in.Responses}, {&p.Anthropic, in.Anthropic}, {&p.Gemini, in.Gemini}, {&p.Decide, in.Decide}, {&p.ModelsURL, in.ModelsURL}} {
 		if v := strings.TrimSpace(f.v); v != "" {
 			*f.to = v
 		}

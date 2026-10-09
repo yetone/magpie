@@ -53,10 +53,19 @@ func (g Group) IsFast(id string) bool {
 // (Bedrock, Vertex) may refuse the field, so neither is.
 func CanFast(p Provider, model string) bool {
 	if p.IsPlugin() {
-		// Cursor's plugin, as the built-in, asks for the model's -fast one
-		// when the chat request says service_tier "priority"
+		// Cursor's plugin runs a model as its fast variant when the chat
+		// request says service_tier "priority". From 0.2.2 it lists a model
+		// once per context size (claude-opus-5-5@300k) and says fast on
+		// the ones Cursor has a fast variant of (#1360); 0.1.x listed the
+		// fast one as a model of its own, -fast, as the built-in does
 		pp, ok := PluginOf(p.ID)
-		if !ok || p.PluginProvider() != "cursor" || strings.HasSuffix(model, "-fast") {
+		if !ok || p.PluginProvider() != "cursor" {
+			return false
+		}
+		if m, ok := pluginModel(pp, model); ok && m.Fast {
+			return true
+		}
+		if strings.HasSuffix(model, "-fast") {
 			return false
 		}
 		_, ok = pluginModel(pp, model+"-fast")

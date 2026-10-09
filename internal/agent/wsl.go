@@ -335,6 +335,18 @@ var wslKinds = []wslKind{
 				return append(kimiOwnOptions("", cur["model"]), viaMagpie("kimi", magpieID+"/")...)
 			}
 		}},
+	// Qwen Code's ~/.qwen, one settings.json of the same shape as this
+	// machine's; a stopped distro's is looked at once it is started
+	{id: "qwen", name: "Qwen Code", dir: ".qwen", bin: "qwen", in: qwenIn,
+		restart: "reads a session's model at start-up — start a new session, or /model anew, to use this.",
+		asleep: func(key string) func(map[string]string) []Option {
+			if key != "model" {
+				return nil
+			}
+			return func(cur map[string]string) []Option {
+				return append(qwenOwnOptions("", cur["model"]), viaMagpie("qwen", magpieID+"/")...)
+			}
+		}},
 	{id: "omp", name: "omp", dir: ".omp", bin: "omp", in: ompIn, version: true,
 		restart: "reads its settings at start-up — restart open omp sessions to use this.",
 		asleep: func(key string) func(map[string]string) []Option {

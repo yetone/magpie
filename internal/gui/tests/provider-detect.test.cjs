@@ -144,7 +144,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(save.body.modelPrefs, { "m-mixed": { api: "anthropic" } });
 
       const missing = await page.evaluate(() => [
-        "Detect APIs", "Send the smallest request to each API (OpenAI chat completions, Responses, Anthropic messages) at this URL, to see which answer",
+        "Detect APIs", "Send the smallest request to each API (OpenAI chat completions, Responses, Anthropic messages, Gemini generateContent) at this URL, to see which answer",
         "model to try · empty picks one from the vendor's list", "Type the base URL first", "Asking each API…", "model {model}",
         "None answered: check the URL and the key, or type a model the vendor serves", "Use these", "Set the URLs of the APIs that answered; one not found there is cleared",
         "Taken · save to keep", "Ask {model} on {api} only", "Staged in Names & levels and made with the Save; Auto there gives it back", "{model} is asked on {api} once saved",

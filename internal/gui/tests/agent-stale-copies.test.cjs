@@ -20,13 +20,13 @@ const codex = {
   stale: 3, staleCopies: [{ kind: "app", since: days(3) }, { kind: "daemon", since: days(1) }, { kind: "embedded", app: "Agents Anywhere", since: days(1) }],
 };
 
-function serve(lang) {
+function serve(lang, agent = codex) {
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:false};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-    if (url.pathname === "/api/state") return json({ agents: [codex], profiles: [], settings: { lang, theme: "light" } });
+    if (url.pathname === "/api/state") return json({ agents: [agent], profiles: [], settings: { lang, theme: "light" } });
     if (url.pathname === "/api/usage/quotas") return json([]);
     if (url.pathname === "/api/groups") return json({ groups: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
@@ -77,6 +77,62 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // told: the lines go with the warning
         await page.locator(`${row} .ag-warn button`).click();
         await page.waitForFunction((r) => !document.querySelector(r + " .ag-stale-copy"), row);
+        assert.deepEqual(errors, []);
+      });
+    }
+  }
+}
+
+// #1374 (SivanCola): folded, the row said only "reopen Codex", so the app
+// was reopened while VS Code's Codex was the copy left. Folded, it names
+// the one kind left and how it is reopened, counts several, and its hover
+// has each copy whole. The reporter's case first: one editor's Codex.
+const folded = {
+  ide: { copies: [{ kind: "ide", since: days(1) }],
+    say: { en: "reload the editor's window", zh: "重新加载编辑器窗口", "zh-TW": "重新載入編輯器視窗", ja: "エディタのウィンドウを再読み込み", de: "Editorfenster neu laden" } },
+  app: { copies: [{ kind: "app", since: days(1) }],
+    say: { en: "quit and reopen the Codex app", zh: "退出并重开 Codex 应用", "zh-TW": "結束並重開 Codex 應用程式", ja: "Codex アプリを終了", de: "Codex-App beenden" } },
+  embedded: { copies: [{ kind: "embedded", app: "Agents Anywhere", since: days(1) }],
+    say: { en: "reopen Agents Anywhere", zh: "重开 Agents Anywhere", "zh-TW": "重開 Agents Anywhere", ja: "Agents Anywhere を開き直す", de: "Agents Anywhere neu öffnen" } },
+  several: { copies: codex.staleCopies,
+    say: { en: "3 copies of Codex", zh: "3 个运行中的 Codex", "zh-TW": "3 個執行中的 Codex", ja: "Codex 3 件", de: "3 Codex-Instanzen" } },
+};
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+    for (const width of [980, 440]) {
+      test(`${engine} ${lang} ${width}px: the folded row says which Codex to reopen`, async (t) => {
+        const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+        t.after(() => browser.close());
+        const page = await browser.newPage({ viewport: { width, height: 800 } });
+        page.setDefaultTimeout(5000);
+        const errors = [];
+        page.on("pageerror", (e) => errors.push(e.message));
+        for (const [name, c] of Object.entries(folded)) {
+          await page.unrouteAll();
+          await page.route("**/*", serve(lang, { ...codex, stale: c.copies.length, staleCopies: c.copies }));
+          await page.goto("http://magpie.test/?view=agents");
+          const words = page.locator(`${row} .ag-st-t`);
+          await page.locator(`${row} .ag-conn`).waitFor();
+          const said = await words.textContent();
+          assert.ok(said.includes(c.say[lang]), `${name}: ${said}`);
+          assert.doesNotMatch(said, /\{\w+\}/, `${name}: a placeholder left`);
+          // the hover has every copy whole, with its command
+          const title = await words.getAttribute("title");
+          assert.equal(title.split("\n").length, c.copies.length, `${name}: ${title}`);
+          if (name === "app") assert.ok(title.includes("⌘Q"), title);
+          assert.doesNotMatch(title, /\{\w+\}/, `${name}: a placeholder left in ${title}`);
+          // one line, nothing past the row
+          const box = await words.evaluate((e) => ({ right: e.getBoundingClientRect().right, lines: Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight)) }));
+          assert.ok(box.right <= width, `${name}: past the window`);
+          assert.equal(box.lines, 1, `${name}: one line`);
+          if (process.env.ARTIFACT_DIR) await page.locator(row).screenshot({ path: path.join(process.env.ARTIFACT_DIR, `stale-${engine}-${lang}-${width}-${name}.png`) });
+        }
+        // a copy of no kind magpie knows keeps the plain words
+        await page.unrouteAll();
+        await page.route("**/*", serve(lang, { ...codex, stale: 1, staleCopies: [{ since: days(1) }] }));
+        await page.goto("http://magpie.test/?view=agents");
+        await page.locator(`${row} .ag-conn`).waitFor();
+        assert.equal(await page.locator(`${row} .ag-st-t`).getAttribute("title"), null);
         assert.deepEqual(errors, []);
       });
     }

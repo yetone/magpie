@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -190,6 +191,11 @@ func readOpenCodeGo(b []byte) (string, []QuotaWindow, error) {
 // comes as both windows unlimited (status 3) with no totals, and is left
 // out; status 2 is used up, whatever the percentage says. MiniMax answers
 // 200 to a key it refuses, with the reason in base_resp.
+//
+// A bucket counted in items (video's 5 a day, 35 a week) also tells
+// current_interval_usage_count and current_weekly_usage_count beside the
+// totals, and the window carries them as a count, as MiniMax's own CLI
+// (mmx quota show) shows "4 / 5" (#1366); see miniMaxCount.
 func readMiniMaxPlan(b []byte) (string, []QuotaWindow, error) {
 	type bucket struct {
 		Model      string   `json:"model_name"`
@@ -198,11 +204,13 @@ func readMiniMaxPlan(b []byte) (string, []QuotaWindow, error) {
 		Left       *float64 `json:"current_interval_remaining_percent"`
 		Status     int      `json:"current_interval_status"`
 		Total      *float64 `json:"current_interval_total_count"`
+		Count      *float64 `json:"current_interval_usage_count"`
 		WeekStart  int64    `json:"weekly_start_time"`
 		WeekEnd    int64    `json:"weekly_end_time"`
 		WeekLeft   *float64 `json:"current_weekly_remaining_percent"`
 		WeekStatus int      `json:"current_weekly_status"`
 		WeekTotal  *float64 `json:"current_weekly_total_count"`
+		WeekCount  *float64 `json:"current_weekly_usage_count"`
 	}
 	var r struct {
 		Remains []bucket `json:"model_remains"`
@@ -238,11 +246,12 @@ func readMiniMaxPlan(b []byte) (string, []QuotaWindow, error) {
 		}
 		general := strings.EqualFold(name, "general")
 		for _, x := range []struct {
-			left       *float64
-			status     int
-			start, end int64
-			week       bool
-		}{{k.Left, k.Status, k.Start, k.End, false}, {k.WeekLeft, k.WeekStatus, k.WeekStart, k.WeekEnd, true}} {
+			left         *float64
+			status       int
+			start, end   int64
+			week         bool
+			count, total *float64
+		}{{k.Left, k.Status, k.Start, k.End, false, k.Count, k.Total}, {k.WeekLeft, k.WeekStatus, k.WeekStart, k.WeekEnd, true, k.WeekCount, k.WeekTotal}} {
 			if x.status == 3 || x.left == nil && x.status != 2 {
 				continue // unlimited, or nothing told
 			}
@@ -271,6 +280,15 @@ func readMiniMaxPlan(b []byte) (string, []QuotaWindow, error) {
 			default:
 				w.Name = "Allowance"
 			}
+			if used, total, ok := miniMaxCount(x.count, x.total, x.left); ok {
+				w.Amount, w.Limit = used, total
+				if x.status == 2 {
+					w.Amount = total
+				}
+				if strings.EqualFold(name, "video") {
+					w.Unit = "videos"
+				}
+			}
 			if !general {
 				w.Name = strings.ToUpper(name[:1]) + name[1:] + " · " + w.Name
 				w.Aside = true
@@ -279,6 +297,29 @@ func readMiniMaxPlan(b []byte) (string, []QuotaWindow, error) {
 		}
 	}
 	return "", out, nil
+}
+
+// miniMaxCount is a MiniMax window's count, used of total, as mmx-cli's
+// quota panel reads it (1.0.27, dist/mmx.mjs): the usage_count field has
+// been seen to hold what remains rather than what is used, so it is
+// taken as whichever of the two the remaining percentage agrees with,
+// within a point, and as no count when neither does. A total of 0 (the
+// general bucket, metered in tokens) or a count outside it is no count.
+func miniMaxCount(count, total, left *float64) (used, of float64, ok bool) {
+	if count == nil || total == nil || left == nil || *total <= 0 || *count < 0 || *count > *total {
+		return 0, 0, false
+	}
+	c, t := *count, *total
+	asUsed := math.Abs((t-c)/t*100 - *left) // c is what is used: t-c remains
+	asLeft := math.Abs(c/t*100 - *left)     // c is what remains
+	switch {
+	case min(asUsed, asLeft) > 1:
+		return 0, 0, false
+	case asUsed < asLeft:
+		return c, t, true
+	default:
+		return t - c, t, true
+	}
 }
 
 // kimiCodeBase is Kimi Code's OpenAI endpoint, /coding/v1, for either of

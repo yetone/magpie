@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -31,8 +32,7 @@ func readUsage() Usage {
 		if !a.Wired() {
 			continue
 		}
-		id, _, _ := strings.Cut(a.ID, "@wsl:")
-		u.Agents = with(u.Agents, id)
+		u.Agents = with(u.Agents, agentLabel(a.ID))
 		for _, ref := range a.Models() {
 			u.Models = with(u.Models, modelLabel(ref))
 		}
@@ -75,9 +75,21 @@ func providerLabel(p provider.Provider) string {
 	return "custom"
 }
 
+// agentLabel is an agent as stats name it: its built-in id, without the
+// WSL distro or the omp profile (omp#<name>) the user named.
+func agentLabel(id string) string {
+	id, _, _ = strings.Cut(id, "@wsl:")
+	id, _, _ = strings.Cut(id, "#")
+	return id
+}
+
 // modelLabel is an agent's model as stats name it: the provider's label
 // and the vendor's model id, "group" for a routing group, and the label
 // alone for a provider of the user's own; "" for one magpie can't find.
+// On a key's provider the model id is the user's to type (an Ollama
+// model they named, a fine-tune with their organisation in it), so it
+// goes only when models.dev knows it, else as "other"; a subscription's
+// or plugin's ids are its vendor's.
 func modelLabel(ref string) string {
 	if strings.HasPrefix(ref, provider.GroupPrefix) {
 		return "group"
@@ -89,6 +101,9 @@ func modelLabel(ref string) string {
 	l := providerLabel(p)
 	if l == "custom" || l == "plugin" {
 		return l
+	}
+	if p.Account == nil && !p.IsPlugin() && !catalog.Knows(m) {
+		return l + "/other"
 	}
 	return l + "/" + m
 }

@@ -170,6 +170,9 @@ type state struct {
 	// Undo is the file the last Restore kept this computer's setup in, from
 	// just before it: Undo brings it back
 	Undo string `json:"undo,omitempty"`
+	// File is what the server held where the backup should be, when the
+	// last sync couldn't read it as one
+	File *ServerFile `json:"file,omitempty"`
 }
 
 func path(name string) string { return filepath.Join(settings.Dir(), name) }
@@ -377,6 +380,9 @@ type View struct {
 	Auto int `json:"auto"`
 	// Undo is whether the last Restore can be undone
 	Undo bool `json:"undo,omitempty"`
+	// File is what the server holds instead of a backup, when Error is
+	// that it isn't one; File.Replace offers Upload
+	File *ServerFile `json:"serverFile,omitempty"`
 }
 
 // OtherView is the other kind's server as the Settings page shows it.
@@ -404,6 +410,9 @@ func Status() View {
 	if st.Key == stateKey(c) {
 		v.Last = st.Last
 		v.Undo = st.Undo != "" && isFile(st.Undo)
+		if st.Error != "" {
+			v.File = st.File
+		}
 		if c.Usage && st.Usage != nil {
 			v.UsageError = st.Usage.Error
 		}
@@ -480,21 +489,27 @@ func cached(want string) []byte {
 // that always answers the same unreadable way) would otherwise pile up a
 // copy each time. The name is sorted by time, so the oldest are the first
 // to go.
-func keepDamaged(data []byte) {
+func keepDamaged(data []byte) { keepAside(data, "server-damaged", 3) }
+
+// keepAside writes data under the sync folder as <time>-<tag>, keeping the
+// newest n so tagged.
+func keepAside(data []byte, tag string, n int) error {
 	dir := path("sync")
-	if os.MkdirAll(dir, 0o700) != nil {
-		return
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
 	}
-	name := filepath.Join(dir, time.Now().Format("2006-01-02-150405")+"-server-damaged"+backup.Ext)
-	if edit.WriteAtomic(name, data) != nil {
-		return
+	name := filepath.Join(dir, time.Now().Format("2006-01-02-150405")+"-"+tag+backup.Ext)
+	if err := edit.WriteAtomic(name, data); err != nil {
+		return err
 	}
-	old, _ := filepath.Glob(filepath.Join(dir, "*-server-damaged"+backup.Ext))
+	os.Chmod(name, 0o600)
+	old, _ := filepath.Glob(filepath.Join(dir, "*-"+tag+backup.Ext))
 	slices.Sort(old) // names begin with the time, so oldest first
-	for len(old) > 3 {
+	for len(old) > n {
 		os.Remove(old[0])
 		old = old[1:]
 	}
+	return nil
 }
 
 func sum(b []byte) string {
@@ -540,7 +555,11 @@ func syncNow(ctx context.Context, force bool) error {
 	if errors.Is(err, errChanged) { // another computer got in between: again, over its version
 		err = syncOnce(ctx, c, &st)
 	}
-	st.Error = ""
+	st.Error, st.File = "", nil
+	var nb *notBackup
+	if errors.As(err, &nb) {
+		st.File = &nb.f
+	}
 	if err != nil {
 		st.Error = err.Error()
 	} else {
@@ -950,7 +969,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		// still checked against the server and another computer's parts
 		// survive the way they would on any sync.
 		if !errors.Is(err, backup.ErrCorrupt) || st.Local == nil {
-			return err
+			return described(c, data, err)
 		}
 		good := cached(st.Sum) // the version this computer last read whole
 		// The damaged body must be that version cut short — a prefix of it,
@@ -970,7 +989,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		// smallest — and a relay cuts a real write deep into the data, well
 		// past "data", so legit rebuilds still go.
 		if good == nil || !bytes.HasPrefix(good, data) || len(data) <= bytes.Index(good, []byte(`"data"`)) {
-			return err
+			return described(c, data, err)
 		}
 		remote, err = backup.Open(good, c.Passphrase)
 		if err != nil {

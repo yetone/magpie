@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -108,6 +109,12 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 				uses = append(uses, event("magpie uses", map[string]any{"kind": l.kind, "id": x}))
 			}
 		}
+		// a partner's counts of the days ended, each at its own day
+		for _, c := range provider.PartnerCounts(now) {
+			e := event("magpie partner", map[string]any{"id": c.ID, "what": c.What, "count": c.Count, "day": c.Day})
+			e["timestamp"] = c.Day + "T12:00:00Z"
+			uses = append(uses, e)
+		}
 	}
 	body, _ := json.Marshal(map[string]any{
 		"api_key": Key,
@@ -127,6 +134,9 @@ func Send(ctx context.Context, version, what string, now time.Time) error {
 	res.Body.Close()
 	if res.StatusCode/100 != 2 {
 		return fmt.Errorf("stats: %s", res.Status)
+	}
+	if !settings.Load().NoUsageStats {
+		provider.PartnerCountsSent(now)
 	}
 	return os.WriteFile(stamp, []byte(day+"\n"), 0o644)
 }

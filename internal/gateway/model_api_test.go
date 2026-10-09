@@ -91,3 +91,82 @@ data: {"type":"message_stop"}`))
 		}
 	}
 }
+
+// A model the user picked Responses for stays on Responses after the relay
+// once answers it there with "use /v1/chat/completions" (01huadalang on
+// Discord: 为什么会转成 chat，我都设置的 response): the next request was
+// sent on chat completions, the first API the provider has a URL for,
+// for as long as magpie ran. Now it is asked on Responses again, and the
+// relay's error reaches the agent rather than a request on an API the
+// user said the model isn't asked on.
+func TestModelAPIPickHoldsAfterWrongEndpoint(t *testing.T) {
+	var mu sync.Mutex
+	var hits []string
+	refused := false
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits = append(hits, r.URL.Path)
+		first := !refused
+		refused = true
+		mu.Unlock()
+		if r.URL.Path != "/v1/responses" {
+			http.Error(w, `{"error":{"message":"no available channel for model resp under group default"}}`, 503)
+			return
+		}
+		if first {
+			http.Error(w, `{"error":{"message":"this request is not supported in /v1/responses, use /v1/chat/completions","type":"invalid_request_error"}}`, 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		io.WriteString(w, sse(`event: response.created
+data: {"type":"response.created","response":{"id":"r","object":"response","status":"in_progress","model":"resp","output":[]}}`,
+			`event: response.output_text.delta
+data: {"type":"response.output_text.delta","item_id":"m","output_index":0,"content_index":0,"delta":"from responses"}`,
+			`event: response.completed
+data: {"type":"response.completed","response":{"id":"r","object":"response","status":"completed","model":"resp","output":[{"type":"message","id":"m","role":"assistant","content":[{"type":"output_text","text":"from responses"}]}],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}}`))
+	}))
+	defer up.Close()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k", Chat: up.URL + "/v1", Responses: up.URL + "/v1", Models: []string{"resp"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetModelAPI("relay/resp", "responses"); err != nil {
+		t.Fatal(err)
+	}
+	// each agent API on a gateway of its own, whose memory of the
+	// refusal starts empty
+	for _, c := range []struct{ path, body string }{
+		{"/v1/responses", `{"model":"relay/resp","stream":true,"input":"hi"}`},
+		{"/v1/chat/completions", `{"model":"relay/resp","stream":true,"messages":[{"role":"user","content":"hi"}]}`},
+	} {
+		mu.Lock()
+		hits, refused = nil, false
+		mu.Unlock()
+		srv := New()
+		gw := httptest.NewServer(srv.Handler())
+		for i := range 2 {
+			res, err := http.Post(gw.URL+c.path, "application/json", strings.NewReader(c.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			b, _ := io.ReadAll(res.Body)
+			res.Body.Close()
+			if i == 1 && (res.StatusCode != 200 || !strings.Contains(string(b), "from responses")) {
+				mu.Lock()
+				h := append([]string(nil), hits...)
+				mu.Unlock()
+				t.Errorf("%s, after the refusal: %d %s (upstream %v)", c.path, res.StatusCode, b, h)
+			}
+		}
+		gw.Close()
+		mu.Lock()
+		for _, h := range hits {
+			if h != "/v1/responses" {
+				t.Errorf("%s: asked on %s, though the model is picked for Responses (upstream %v)", c.path, h, hits)
+				break
+			}
+		}
+		mu.Unlock()
+	}
+}

@@ -21,11 +21,16 @@ const visibleUsage = `usage:
                                           magpie provider set <id> family=relay, or magpie group set),
                                           provider ids and group ids
   magpie visible <agent> all              show the agent every model again
+  magpie visible <agent> --only-picked    show the agent only the models ticked for it now; a model
+                                          that comes later, of any provider, stays off until it is
+                                          ticked in its list on the Agents page
+  magpie visible <agent> --show-new       show it the models that come later again (the default)
 
   An agent not narrowed is shown every model. The gateway's model list and the model lists
   magpie writes into the agents' files are narrowed alike; a model kept from an agent still
   answers when the agent asks for it by name. magpie models <agent> shows what it is shown,
-  and why the others aren't.
+  and why the others aren't. --only-picked and --show-new keep the models shown as they are,
+  and keep the providers, families and groups the agent is narrowed to.
 
   e.g. magpie provider set opencode-go family=ocgo
        magpie group set gpt-plus-auto family=relay
@@ -66,12 +71,26 @@ func visibleCmd(args []string) error {
 	}
 	s := settings.Load()
 	if len(args) == 0 {
-		if len(s.Visible) == 0 {
+		if len(s.Visible) == 0 && len(s.PickedModels) == 0 {
 			fmt.Println(muted.Render("  every agent is shown every model · magpie visible <agent> <family>,… narrows one"))
 		}
-		for _, id := range slices.Sorted(maps.Keys(s.Visible)) {
+		ids := slices.Collect(maps.Keys(s.Visible))
+		for id := range s.PickedModels {
+			if !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
+		}
+		slices.Sort(ids)
+		for _, id := range ids {
 			shown, hidden := provider.CatalogFor(id)
-			fmt.Printf("  %s  %s  %s\n", pad(id, 12), strings.Join(s.Visible[id], ", "),
+			var says []string
+			if names, ok := s.Visible[id]; ok {
+				says = append(says, strings.Join(names, ", "))
+			}
+			if _, ok := s.PickedModels[id]; ok {
+				says = append(says, "only models picked")
+			}
+			fmt.Printf("  %s  %s  %s\n", pad(id, 12), strings.Join(says, " · "),
 				muted.Render(fmt.Sprintf("%d shown, %d not", len(shown), len(hidden))))
 		}
 		if fs := provider.Families(); len(fs) > 0 {
@@ -84,6 +103,13 @@ func visibleCmd(args []string) error {
 		return fmt.Errorf("no agent %q (%s)", args[0], strings.Join(agentIDs(), ", "))
 	}
 	if len(args) == 1 {
+		return models([]string{id})
+	}
+	if len(args) == 2 && (args[1] == "--only-picked" || args[1] == "--show-new") {
+		if err := provider.SetOnlyPicked(id, args[1] == "--only-picked"); err != nil {
+			return err
+		}
+		fmt.Println(green.Render("✓"), "saved")
 		return models([]string{id})
 	}
 	list := splitList(strings.Join(args[1:], ","))
@@ -122,11 +148,24 @@ func orNone(xs []string) string {
 }
 
 // explainHidden says what is kept from an agent, and why: what the kept
-// models go by, none of which its visibility names.
+// models go by, none of which its visibility names, and how many its list
+// on the Agents page leaves out besides — the ones not picked, for an
+// agent shown only the models picked for it.
 func explainHidden(id string, hidden []provider.Entry) {
+	_, kept := provider.ListedFor(id)
+	if n := len(hidden) - len(kept); n > 0 {
+		if _, only := provider.PickedModels(id); only {
+			fmt.Println(faint.Render("  " + id + " is shown only the models picked for it: " + fmt.Sprint(n) + " not picked, and a new one stays off until it is ticked · magpie visible " + id + " --show-new shows new ones"))
+		} else {
+			fmt.Println(faint.Render("  " + fmt.Sprint(n) + " taken out of " + id + "'s list on the Agents page"))
+		}
+	} else if _, only := provider.PickedModels(id); only {
+		fmt.Println(faint.Render("  " + id + " is shown only the models picked for it; a new one stays off until it is ticked · magpie visible " + id + " --show-new shows new ones"))
+	}
+	hidden = kept
 	names, ok := provider.VisibleTo(id)
 	if !ok {
-		fmt.Println(faint.Render("  " + id + " is shown every model · magpie visible " + id + " <family>,… narrows it"))
+		fmt.Println(faint.Render("  " + id + " is shown every provider's models · magpie visible " + id + " <family>,… narrows it"))
 		return
 	}
 	fmt.Println(faint.Render("  " + id + " is shown " + strings.Join(names, ", ")))

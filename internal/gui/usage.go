@@ -261,7 +261,7 @@ func ledgerPage(p usage.Period, f usage.Filter, offset, limit int) ledgerJSON {
 			lr.Access = access[r.Provider]
 		}
 		if r.Priced {
-			if model := provider.PricedName(r.Model); model != r.Model {
+			if model := provider.PricedNameFor(r.Provider, r.Model); model != r.Model {
 				lr.PricingModel = model
 			}
 		}
@@ -390,6 +390,11 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 		limit, _ := strconv.Atoi(q.Get("limit"))
 		writeJSON(rw, ledgerPage(periodOf(q.Get("period")), ledgerFilter(q), offset, limit))
 	})
+	// the heatmap (#1369): the last 53 weeks a day each, of the requests the
+	// page's filters keep, read from the same index as the page
+	mux.HandleFunc("GET /api/usage/heatmap", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, usage.HeatmapOf(ledgerFilter(r.URL.Query())))
+	})
 	// what was said in one request, read from the agent's session file when the
 	// row is opened, between two times (the call's own, or a gateway request's
 	// span): magpie keeps no copy
@@ -462,6 +467,8 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 		// a WorkBuddy (China) account's card says how its daily check-in
 		// went (#694)
 		qs := provider.WithCheckins(provider.Quotas(ctx))
+		// and what each window holds whole, by what magpie routed in it
+		qs = usage.WithWindowHolds(qs, usage.Clock())
 		// an account's card may be the stale copy a read under way will
 		// replace: the page asks again until it has landed (#959)
 		if provider.SubscriptionUsageReading() {
@@ -481,7 +488,7 @@ func usageRoutes(mux *http.ServeMux, w Windows) {
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 		defer cancel()
 		provider.RefreshUsage(ctx, id, r.URL.Query().Get("user"))
-		writeJSON(rw, provider.WithCheckins(provider.Quotas(ctx)))
+		writeJSON(rw, usage.WithWindowHolds(provider.WithCheckins(provider.Quotas(ctx)), usage.Clock()))
 	})
 	// WorkBuddy's daily check-in pressed now, from the Usage card, for
 	// each account not in yet today, as `magpie accounts checkin` does; the

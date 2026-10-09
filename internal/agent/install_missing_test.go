@@ -18,6 +18,10 @@ func TestCLIMissing(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("PATH", t.TempDir())
+	// no desktop app either, whatever this machine has installed
+	was := appFolders
+	appFolders = func() []string { return nil }
+	t.Cleanup(func() { appFolders = was })
 	bin := "magpie-test-gone-dsh"
 	dir := filepath.Join(home, ".dsh")
 	if err := os.MkdirAll(dir, 0o700); err != nil {

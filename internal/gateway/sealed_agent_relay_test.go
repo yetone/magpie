@@ -154,7 +154,7 @@ func TestSealedReplyRefusedWhereTheLeadWasNotAnswered(t *testing.T) {
 		t.Fatalf("lead: %d %s", rec.Code, rec.Body.String())
 	}
 	rec := codexSubTurn(s, "other/gpt-6-astra", "lead-1", "", leadAsk+","+sealedReply)
-	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "other/gpt-6-astra is neither") || strings.Contains(rec.Body.String(), "gAAAAA") {
+	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "(third)") || !strings.Contains(rec.Body.String(), "other/gpt-6-astra can't") || strings.Contains(rec.Body.String(), "gAAAAA") {
 		t.Fatalf("lead moved to another provider: %d %s", rec.Code, rec.Body.String())
 	}
 	rec = codexSubTurn(s, "third/gpt-6-astra", "lead-unknown", "", leadAsk+","+sealedReply)

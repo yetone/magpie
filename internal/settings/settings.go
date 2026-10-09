@@ -365,6 +365,12 @@ type Settings struct {
 	// or a group's) taken out of an agent's lists one by one, by agent id,
 	// after Visible: a model not named here, a new one among them, is shown.
 	HiddenModels map[string][]string `json:"hiddenModels,omitempty"`
+	// PickedModels, for an agent it names, are the only catalog entries its
+	// lists show, after Visible (#1337): the user switched the agent to
+	// "only models I pick", so a model that comes later, of a new provider
+	// or an old one, is not shown until it is ticked. HiddenModels is not
+	// read for such an agent. An agent named with no entries is shown none.
+	PickedModels map[string][]string `json:"pickedModels,omitempty"`
 	// AgentEfforts are the reasoning efforts the gateway asks for on an
 	// agent's requests, by agent id, for an agent whose own config can't
 	// carry one (Cursor Private Inference, #1003): one of the levels in

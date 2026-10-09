@@ -132,3 +132,90 @@ func TestAccountCapSpendsNoCodexReset(t *testing.T) {
 		t.Fatalf("cap lifted: %d %s tried %q spent %q", code, body, tried, spent)
 	}
 }
+
+// windowUsage stands in for the accounts' windows as last read, named as
+// the vendor's reading names them: each user's five hours and week.
+func windowUsage(t *testing.T, used map[string][2]float64) {
+	t.Helper()
+	old := allowances
+	t.Cleanup(func() { allowances = old })
+	five, week := time.Now().Add(3*time.Hour), time.Now().Add(4*24*time.Hour)
+	allowances = func(string) map[string]provider.Allowance {
+		out := map[string]provider.Allowance{}
+		for u, n := range used {
+			out[u] = provider.Allowance{
+				{Name: "5 hours", Used: n[0], Resets: five, Span: 5 * time.Hour},
+				{Name: "Weekly", Used: n[1], Resets: week, Span: 7 * 24 * time.Hour},
+			}
+		}
+		return out
+	}
+}
+
+// Each window can have a cap of its own (willz on Discord): a friend's
+// account stops when its five hours reach 50%, while its week may go to
+// 40%. At 60% of its five hours it is held, though its week is low, and
+// the request goes to the next account; at 20% and 30% it is under both
+// and takes the request. The other account, with one cap for every window
+// as before, is held by that one alone.
+func TestWindowCapsHoldTheAccount(t *testing.T) {
+	codexSignedIn(t, "spare@example.com")
+	b := newResetBackend(t)
+	if err := provider.SetRouting("codex", provider.Ordered); err != nil {
+		t.Fatal(err)
+	}
+	for w, c := range map[string]int{"5 hours": 50, "Weekly": 40} {
+		if err := provider.SetWindowCap("codex", "me@example.com", w, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := provider.SetAccountCap("codex", "spare@example.com", 10); err != nil {
+		t.Fatal(err)
+	}
+	try := func(used map[string][2]float64) (int, string, string, *Server) {
+		t.Helper()
+		windowUsage(t, used)
+		b.mu.Lock()
+		b.tried = nil
+		b.mu.Unlock()
+		srv := New()
+		code, body := resetPost(t, srv)
+		tried, _ := b.seen()
+		return code, body, tried, srv
+	}
+
+	// five hours at 60% of its 50%: held, the spare (5% of its 10%) answers
+	code, body, tried, srv := try(map[string][2]float64{"me@example.com": {60, 10}, "spare@example.com": {5, 5}})
+	if code != 200 || tried != "acct-2" {
+		t.Fatalf("5 hours past its own cap: %d %s tried %s", code, body, tried)
+	}
+	var left []string
+	for _, r := range srv.Trace(t.Context(), 0, 0).Routes {
+		for _, w := range r.Left {
+			if w.Capped > 0 && !w.Barred {
+				left = append(left, fmt.Sprintf("%s %g/%d", w.Who, w.Used, w.Capped))
+			}
+		}
+	}
+	if len(left) != 1 || left[0] != "me@example.com 60/50" {
+		t.Fatalf("traced as capped: %v", left)
+	}
+
+	// five hours at 20% of 50%, week at 30% of 40%: used, first in order
+	if code, body, tried, _ := try(map[string][2]float64{"me@example.com": {20, 30}, "spare@example.com": {5, 5}}); code != 200 || tried != "acct-1" {
+		t.Fatalf("under both its windows' caps: %d %s tried %s", code, body, tried)
+	}
+
+	// week at 45%, past its own 40% though under the five hours' 50%; the
+	// spare's week at 12%, past its one cap of 10%: both held, refused,
+	// each named with the cap of the window that holds it
+	code, body, tried, _ = try(map[string][2]float64{"me@example.com": {20, 45}, "spare@example.com": {5, 12}})
+	if code != 429 || tried != "" {
+		t.Fatalf("both held: %d tried %q", code, tried)
+	}
+	for _, want := range []string{"usage cap reached", "(me@example.com) is at 45%", "past its 40% cap", "spare@example.com", "past its 10% cap"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("no %q in %s", want, body)
+		}
+	}
+}

@@ -51,8 +51,8 @@ type candidate struct {
 	capped *capHold
 }
 
-// capHold is how an account is held at its usage cap: the cap, the share
-// of the fullest window at or past it, and when the last such window
+// capHold is how an account is held at its usage cap: the cap of the
+// fullest window at or past its own cap, that window's share used, and when the last such window
 // renews (zero when one doesn't say). noCredits: it is a Codex account
 // held at 100% as it is set not to spend its credits (cap is 100 then).
 type capHold struct {
@@ -491,23 +491,24 @@ func planLevel(g provider.Group, ms []provider.Member, depth int, from provider.
 }
 
 // capHeld is how the account acct of p is held at its usage cap for
-// model at now, or at 100% as a Codex account set not to spend its
-// credits; nil when nothing holds it or it is below the share. Its windows
+// model at now — a window at or past its own cap, else the account's — or
+// at 100% as a Codex account set not to spend its credits; nil when
+// nothing holds it or every window is below its share. Its windows
 // are those last read (allowances), as smart routing weighs them.
 func capHeld(p, acct provider.Provider, model string, now time.Time) *capHold {
 	if acct.Account == nil {
 		return nil
 	}
 	a := acct.Account
-	share, noCredits := provider.HoldShare(p, a.Agent, a.User)
-	if share <= 0 {
+	caps := provider.HoldCaps(p, a.Agent, a.User)
+	if !caps.Holds() {
 		return nil
 	}
-	held, used, back := allowances(a.UsageAgent())[a.User].CapHeld(model, share, now)
-	if !held {
+	h := allowances(a.UsageAgent())[a.User].CapHeld(model, caps, now)
+	if h == nil {
 		return nil
 	}
-	return &capHold{cap: share, used: used, back: back, noCredits: noCredits}
+	return &capHold{cap: h.Cap, used: h.Used, back: h.Back, noCredits: h.Credits}
 }
 
 // cappedError says why a request for model went nowhere when every account
@@ -1552,6 +1553,52 @@ func (h *holdWriter) release() {
 
 // watchEvery is how often watch looks at a try.
 var watchEvery = time.Second
+
+// keepQueued keeps the agent of a stream alive while its try waits for a
+// slot of its key's or account's (MaxConcurrency) or for room in its
+// minute (MaxRPM), before anything is sent to the vendor: past
+// keepHeldAfter it is sent the stream's 200 and SSE comments
+// (keepAlive), every keepaliveEvery for as long as the wait lasts, as a
+// try's held stream is. A wait of up to 2 minutes for the minute, or
+// QueueWait's for a slot, sent the agent nothing at all, which an agent's
+// or a proxy's timeout for its headers ended first (coeo91 on Discord:
+// WorkBuddy, Trae and Qoder said the request timed out). Once they are
+// sent the try is held (hold), so that a failure, or the queue turning it
+// away, reaches the agent as the stream's error (failTo), and another
+// candidate may still answer in the same stream. A wait shorter than
+// keepHeldAfter sends nothing, its 429 still a status with its
+// Retry-After. The returned func ends it, and returns once it has.
+func (h *holdWriter) keepQueued() func() {
+	if !h.streams || h.alive == nil || h.alive.proto == provider.Gemini {
+		return func() {}
+	}
+	done, over := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(over)
+		tick := time.NewTicker(watchEvery)
+		defer tick.Stop()
+		began := time.Now()
+		for {
+			select {
+			case <-done:
+				return
+			case <-tick.C:
+				h.mu.Lock()
+				if (time.Since(began) >= keepHeldAfter || h.alive.sent) && (h.ctx == nil || h.ctx.Err() == nil) {
+					h.keepAlive()
+					if h.alive.sent {
+						h.hold = true
+					}
+				}
+				h.mu.Unlock()
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-over
+	}
+}
 
 // watch lets the try go — stop, with slow said — once firstWait passes
 // with no first content and nothing of it sent to the agent: the stream

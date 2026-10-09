@@ -309,6 +309,17 @@ func inlineImages(ims []Part) []Part {
 	return out
 }
 
+// Devin names a call after its tool and turn (Bash:0#a65b6a5e…), and
+// Claude Code takes a tool_use id only of [A-Za-z0-9_-]: it drops a call
+// whose id has the ':' or '#', and the turn fails "could not be parsed"
+// (#1304). Such an id goes out as "dv_" and its base64url, and comes back
+// to Devin as it was, so its result still answers its call. An id that is
+// already safe goes out as it came, unless it begins "dv_". The Devin
+// plugin (packages/devin, outID and inID) maps the same way.
+func devinOutID(id string) string { return safeCallID("dv_", id) }
+
+func devinInID(id string) string { return rawCallID("dv_", id) }
+
 // buildDevin is the GetChatMessage request for r, to the model uid.
 func buildDevin(r *Request, uid, key string) []byte {
 	var msgs []devinMsg
@@ -330,6 +341,7 @@ func buildDevin(r *Request, uid, key string) []byte {
 						texts = append(texts, p.Text)
 					}
 				case ToolCall:
+					p.ID = devinInID(p.ID)
 					a.calls = append(a.calls, p)
 				case Thinking:
 					if strings.HasPrefix(p.Signature, "sealed.") {
@@ -363,7 +375,7 @@ func buildDevin(r *Request, uid, key string) []byte {
 			case ToolResult:
 				// only a call just made is answered, and only once
 				for i, c := range pending {
-					if c.ID != p.CallID {
+					if c.ID != devinInID(p.CallID) {
 						continue
 					}
 					out := p.Text
@@ -617,7 +629,7 @@ func (d *devinDecoder) frame(b []byte) []Event {
 				if id == "" {
 					id = "call_" + randomToken()[:24]
 				}
-				evs = append(evs, Event{Kind: KToolStart, ID: id, Name: name})
+				evs = append(evs, Event{Kind: KToolStart, ID: devinOutID(id), Name: name})
 			}
 			if args != "" {
 				evs = append(evs, Event{Kind: KToolArgs, Text: args})

@@ -3,8 +3,10 @@
 // itself where it runs: a magpie.exe kept at C:\ (#1277) said only that a new
 // version was out, and its Download opened the release page with nothing
 // saying why. Both now say the folder magpie may not write to, in English,
-// Chinese, Japanese and German, at a narrow window too. No backend, the API
-// is faked here.
+// Chinese, Japanese and German, at a narrow window too. In a container (the
+// Docker image's /magpie, run as nonroot) they say to pull the new image
+// rather than to move magpie to another folder. No backend, the API is
+// faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -21,9 +23,21 @@ const words = {
   de: { why: "magpie kann nicht in den Ordner schreiben, aus dem es läuft (C:\\), und kann sich daher nicht selbst aktualisieren; verschieben Sie es in einen Ordner mit Schreibrechten und öffnen Sie es von dort." },
 };
 
-const update = { state: "available", current: "0.1.400", latest: "0.1.401", url: "https://github.com/yetone/magpie-releases/releases/tag/v0.1.401", stuck: "not-writable", stuckDir: DIR };
+const folder = { state: "available", current: "0.1.400", latest: "0.1.401", url: "https://github.com/yetone/magpie-releases/releases/tag/v0.1.401", stuck: "not-writable", stuckDir: DIR };
+const container = { state: "available", current: "0.1.400", latest: "0.1.401", url: "https://github.com/yetone/magpie-releases/releases/tag/v0.1.401", stuck: "container" };
+const pull = {
+  en: "magpie runs in a container, so it can't update itself; pull the new image (docker pull ghcr.io/yetone/magpie:latest) and recreate the container.",
+  zh: "magpie 运行在容器里，无法自动更新；请拉取新镜像（docker pull ghcr.io/yetone/magpie:latest）并重新创建容器。",
+  "zh-TW": "magpie 在容器中執行，無法自動更新；請拉取新映像（docker pull ghcr.io/yetone/magpie:latest）並重新建立容器。",
+  ja: "magpie はコンテナで実行されているため、自動アップデートできません。新しいイメージを取得し（docker pull ghcr.io/yetone/magpie:latest）、コンテナを作り直してください。",
+  de: "magpie läuft in einem Container und kann sich daher nicht selbst aktualisieren; laden Sie das neue Image (docker pull ghcr.io/yetone/magpie:latest) und erstellen Sie den Container neu.",
+};
+const cases = [
+  { name: "a magpie that can't write to its folder says why it can't update", update: folder, langs: ["en", "zh", "ja", "de"], why: (lang) => words[lang].why },
+  { name: "a magpie in a container says to pull the new image", update: container, langs: ["en", "zh", "zh-TW", "ja", "de"], why: (lang) => pull[lang] },
+];
 
-function server(lang, ctl) {
+function server(lang, ctl, update) {
   const settings = {
     theme: "light", lang, tray: "panel", quotaLeft: false, currency: "usd",
     version: "0.1.400", dir: "~/.config/magpie", gateway: "http://127.0.0.1:3999",
@@ -50,10 +64,10 @@ function server(lang, ctl) {
 }
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  test(engine + ": a magpie that can't write to its folder says why it can't update", async (t) => {
+  for (const c of cases) test(engine + ": " + c.name, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
-    for (const lang of ["en", "zh", "ja", "de"]) {
+    for (const lang of c.langs) {
       for (const width of [1000, 440]) {
         await t.test(`${lang} at ${width}px`, async () => {
           const ctl = { installs: 0 };
@@ -61,9 +75,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const page = await (await browser.newContext({ viewport: { width, height: 700 }, reducedMotion: "reduce" })).newPage();
           page.setDefaultTimeout(5000);
           page.on("pageerror", (e) => errors.push(e.message));
-          await page.route("**/*", server(lang, ctl));
+          await page.route("**/*", server(lang, ctl, c.update));
           await page.goto("http://magpie.test/?view=settings&tab=about");
-          const want = words[lang].why;
+          const want = c.why(lang);
           // the Version row: the version out, then why it can't be put in here
           // (the row is drawn again as the answer is read, so it is found
           // and read in one go)

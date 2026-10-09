@@ -152,7 +152,7 @@ func TestWrongAPINote(t *testing.T) {
 	p := provider.Provider{ID: "opencode-go", Name: "OpenCode Go", Catalog: "opencode-go", Chat: "https://opencode.ai/zen/go/v1"}
 	u, _ := url.Parse("https://opencode.ai/zen/go/v1/chat/completions?key=secret")
 	res := &http.Response{Request: &http.Request{URL: u}}
-	got := wrongAPINote(p, "gpt-6-luna", res)
+	got := wrongAPINote(p, "gpt-6-luna", res, nil)
 	for _, want := range []string{"asked at https://opencode.ai/zen/go/v1/chat/completions", "gpt-6-luna is served on /v1/responses, which OpenCode Go has no URL for"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("note %q lacks %q", got, want)
@@ -161,7 +161,7 @@ func TestWrongAPINote(t *testing.T) {
 	if strings.Contains(got, "secret") {
 		t.Errorf("note repeats the query: %q", got)
 	}
-	if got := wrongAPINote(p, "glm-5.3", res); got != " (asked at https://opencode.ai/zen/go/v1/chat/completions)" {
+	if got := wrongAPINote(p, "glm-5.3", res, nil); got != " (asked at https://opencode.ai/zen/go/v1/chat/completions)" {
 		t.Errorf("glm note %q", got)
 	}
 }

@@ -45,9 +45,14 @@ listed as not run, never left out.
    HOME. A test never reads or writes a live agent config (`~/.codex`,
    `~/.claude`, `~/.claude.json`, `~/.gemini` and the rest) or
    `~/.config/magpie`. Packages set this up in their `TestMain`, most with `testenv`.
-3. **The build and the suite.** Run `go vet ./...`, `go build`,
+3. **The build and the suite.** Run `gofmt -l` on the changed files (it
+   prints nothing), `go vet ./...`, `GOOS=linux go vet -tags nogui ./...`,
+   `GOOS=windows go vet ./...`, `go build`,
    `GOOS=linux go build -tags nogui`, `GOOS=windows go build` and
-   `go test -tags nogui ./...`. In a chain of commands, set
+   `go test -tags nogui ./...`. A cross-OS build doesn't compile
+   `_test.go` files; vet does. On 10-08 bbf99143's test called
+   `syscall.Getsid`, which Linux's syscall package doesn't have, and
+   bb8a3e30 and e7de897f shipped unformatted. In a chain of commands, set
    `set -o pipefail`, so that `go test | tail && git push` stops on a
    failure.
 4. **GUI tests in both engines.** A change to `internal/gui/assets` runs the
@@ -59,12 +64,28 @@ listed as not run, never left out.
    change adds an API the GUI calls, a selector or class other pages share,
    a CSS feature older WebKit lacks (`:has()`), or a layout breakpoint. On
    10-07, 479865bc, 134d388b, 61838f7c and 51626258 cleared four tests left
-   red by commits that had run only their own page's tests.
+   red by commits that had run only their own page's tests. On 10-08
+   aff4f9f2's zh-TW was built before 685fa5dc's and 9dc0121f's strings
+   (b1e795e5 added four 10 minutes later), and usage-ledger was red for
+   about 7 hours after 586f2bce. When you reword a string, `git grep` the
+   old text under `internal/gui/tests`, and test the empty case (a model
+   with no list price, an account with no usage).
 5. **Real use where possible.** A change to a provider, subscription or
    agent is also checked against the real thing: a real account or key, the
    agent's real config format, the vendor's real reply. Do this in a sandbox
    HOME with copies of the credentials. Never touch the live gateway or a
-   running magpie. If a real check isn't possible, say so.
+   running magpie. If a real check isn't possible, say so. What wasn't
+   tried with the real thing isn't built on and isn't told to users as
+   working. A platform report (Windows, WSL, Linux) is checked on that
+   platform; the Windows box and its WSL2 distro are there, and a GOOS
+   build is not a test. A test of a gateway guard goes through the real
+   server stack or the built binary (b2345078 called Handler without
+   lanGuard, and every such call got 401). When the guesses about a vendor
+   differ, design the check that tells them apart, or ask the reporter to
+   run it. On 10-08 bbf99143 said "not tried on Linux" and
+   broke Linux vet; #1185's Linux-only reap failure was reviewed on macOS
+   only. a24458ca (#1063), 5d0c1dca (MSIX not tried, said plainly) and
+   #1328 (on the Windows box, six break checks) are the model.
 6. **The UI rules** under [GUI](#gui) hold: `t()` strings, the app's own
    menu instead of `<select>`, no scroll on click, no colored left-border
    stripes.

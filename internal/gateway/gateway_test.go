@@ -370,6 +370,7 @@ func TestWrongEndpoint(t *testing.T) {
 		{400, `{"type":"error","error":{"type":"ModelError","message":"Model grok-4.7 is not supported for format anthropic"}}`, true},
 		{400, `{"type":"error","error":{"type":"invalid_request_error","message":"Model does not support this protocol."}}`, true},
 		{400, "no model endpoints available given user constraints\n", true}, // Copilot's /v1/messages (#754)
+		{400, toolsOnChatRefused, true}, // a relay (#1308)
 		{400, `{"error":{"message":"The requested model is not supported.","code":"model_not_supported"}}`, false},
 		{429, `rate limit`, false},
 		{500, `use v1/responses`, false},

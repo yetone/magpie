@@ -80,11 +80,17 @@ type stick struct {
 var sticks = struct {
 	sync.Mutex
 	m map[string]stick // scope|conversation → who answered it last
+	// opening: scope|conversation → who a conversation that nobody has
+	// answered yet was sent to, while its first request is out. In turn,
+	// leastHeld counts them with those answered, so a burst of new
+	// conversations spreads rather than all going to the one holding the
+	// fewest a moment before (#1342)
+	opening map[string]stick
 	// the file as last read or written: another magpie's writes (the one
 	// handing over to this one) are read again when a conversation is missed
 	from string
 	mod  time.Time
-}{m: map[string]stick{}}
+}{m: map[string]stick{}, opening: map[string]stick{}}
 
 // sticksSaving keeps one write of the file at a time, the latest last.
 var sticksSaving sync.Mutex
@@ -299,7 +305,7 @@ func affine(scope, mode string, rotate bool, in http.Header, from provider.Proto
 		}
 	case "first":
 		if rotate {
-			cs, pl = leastHeld(scope, cs, pl)
+			cs, pl = leastHeld(scope, key, cs, pl)
 		}
 	}
 	return cs, pl, a, key
@@ -315,8 +321,11 @@ const heldFor = 30 * time.Minute
 // (#946): in turn counts requests, not conversations, so a second session
 // started after the first had sent an even number of them went to the
 // model the first was kept on. Of those held on as few, routing's order
-// stands.
-func leastHeld(scope string, cs []candidate, pl planned) ([]candidate, planned) {
+// stands. A conversation whose first request is still out counts where it
+// was sent (sticks.opening, under key until opened ends it): many started
+// at once all went to the one holding the fewest before any of them was
+// answered (#1342: 24 requests at once over 5 accounts).
+func leastHeld(scope, key string, cs []candidate, pl planned) ([]candidate, planned) {
 	if len(cs) < 2 || len(pl.order) < len(cs) {
 		return cs, pl
 	}
@@ -332,12 +341,18 @@ func leastHeld(scope string, cs []candidate, pl planned) ([]candidate, planned) 
 	now := time.Now()
 	held := map[string]int{}
 	sticks.Lock()
-	for k, st := range sticks.m {
-		if strings.HasPrefix(k, scope+"|") && now.Sub(st.at) <= heldFor {
-			held[st.who+"/"+provider.WithMemberEffort(st.model, st.effort)]++
+	defer sticks.Unlock()
+	for _, m := range []map[string]stick{sticks.m, sticks.opening} {
+		for k, st := range m {
+			if strings.HasPrefix(k, scope+"|") && now.Sub(st.at) <= heldFor {
+				held[st.who+"/"+provider.WithMemberEffort(st.model, st.effort)]++
+			}
 		}
 	}
-	sticks.Unlock()
+	defer func() {
+		// counted from now until it is answered or ends
+		sticks.opening[key] = stick{rest: cs[0].rest, who: cs[0].who(), model: cs[0].model, effort: cs[0].effort, at: now}
+	}()
 	if len(held) == 0 {
 		return cs, pl
 	}
@@ -388,6 +403,7 @@ func answered(key string, c candidate, turn, cacheRead int) {
 	now := time.Now()
 	sticks.Lock()
 	sticks.m[key] = stick{rest: c.rest, who: c.who(), model: c.model, effort: c.effort, turn: turn, at: now, cacheRead: cacheRead}
+	delete(sticks.opening, key)
 	if len(sticks.m) > 4096 {
 		for k, st := range sticks.m {
 			if now.Sub(st.at) > stickKeep {
@@ -405,6 +421,14 @@ func answered(key string, c candidate, turn, cacheRead int) {
 // widest match keeps a conversation on an account whose answerer's model
 // has since left the group, so a stick that only matched by its model
 // would leave the next request kept on the account that just broke off.
+// opened ends a request's part in leastHeld's count of conversations being
+// opened, however it ended.
+func opened(key string) {
+	sticks.Lock()
+	delete(sticks.opening, key)
+	sticks.Unlock()
+}
+
 func unanswered(key string, c candidate) {
 	sticks.Lock()
 	st, ok := stickOf(key)

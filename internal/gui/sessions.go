@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -320,10 +321,25 @@ func warmSessions() {
 	}
 	go func() {
 		time.Sleep(3 * time.Second)
-		statsFor(0)
-		statsFor(30)
-		usage.QueryPage(usage.All, usage.Filter{}, 0, 50)
+		warmUp(
+			func() { statsFor(0) },
+			func() { statsFor(30) },
+			func() { usage.QueryPage(usage.All, usage.Filter{}, 0, 50) },
+		)
 	}()
+}
+
+// warmUp runs the warm-up's reads, then hands what they threw away back to
+// the system at once. Reading a long history allocates many times what it
+// keeps (a 13k-session Codex and Claude Code history: ~830 MB allocated to
+// keep ~80 MB of indexes), and Go's scavenger returns those pages only over
+// the next minutes: a magpie that had just started read ~470 MB for its
+// first two minutes at rest.
+func warmUp(steps ...func()) {
+	for _, step := range steps {
+		step()
+	}
+	debug.FreeOSMemory()
 }
 
 // openTerminal runs a command in the chosen Mac terminal through a .command

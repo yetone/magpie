@@ -43,6 +43,9 @@ type CLI struct {
 	Command string `json:"command,omitempty"`
 	// Update: Latest is after Version, and magpie knows how to get it
 	Update bool `json:"update,omitempty"`
+	// App is the version of the agent's desktop app installed beside it
+	// (the Codex app, AppVersion); shown even with no CLI on PATH
+	App string `json:"app,omitempty"`
 }
 
 // cliSpec is where an agent's CLI is published.
@@ -67,7 +70,9 @@ var cliSpecs = map[string]cliSpec{
 		}},
 	"codex": {npm: []string{"@openai/codex"}, brew: []string{"codex"},
 		self: func(bin, real string) []string {
-			// its standalone installer's ~/.codex/packages/standalone/releases/…
+			// its standalone installer's ~/.codex/packages/standalone/releases/…,
+			// reached on Windows through install.ps1's junctions
+			// (%LOCALAPPDATA%\Programs\OpenAI\Codex\bin → …\current\bin)
 			if strings.Contains(real, "/.codex/packages/standalone/") {
 				return []string{bin, "update"}
 			}
@@ -126,7 +131,7 @@ var brewPath = regexp.MustCompile(`/(Cellar|Caskroom)/([^/]+)/`)
 // howInstalled says how the CLI at bin was installed, from where it is;
 // nil when that says nothing sure.
 func howInstalled(spec cliSpec, bin string) *updater {
-	real, err := filepath.EvalSymlinks(bin)
+	real, err := proc.RealPath(bin)
 	if err != nil {
 		real = bin
 	}
@@ -384,9 +389,11 @@ func (m *memo) forget(key string) {
 var versions, latests memo
 
 // installedVersion is what the CLI at bin says its version is, asked again
-// only once the binary changes.
+// only once the binary changes: the file its links and junctions lead to,
+// its size or its time (an update's release folder is a new path even where
+// the archive gave every version's binary the same time).
 func installedVersion(bin string) string {
-	real, err := filepath.EvalSymlinks(bin)
+	real, err := proc.RealPath(bin)
 	if err != nil {
 		real = bin
 	}
@@ -501,11 +508,13 @@ func (a *Agent) cliBin() (string, cliSpec) {
 }
 
 // CLI is the agent's CLI: its version, the newest, and whether magpie can
-// update it. ok is false for an agent without a CLI magpie knows.
+// update it, with its desktop app's version. ok is false for an agent with
+// neither a CLI magpie knows nor its app.
 func (a *Agent) CLI() (c CLI, ok bool) {
+	c.App = a.AppVersion()
 	bin, spec := a.cliBin()
 	if bin == "" {
-		return CLI{}, false
+		return c, c.App != ""
 	}
 	c.Version = installedVersion(bin)
 	u := howInstalled(spec, bin)

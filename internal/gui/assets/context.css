@@ -109,6 +109,26 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 
 /* Routing: the card under the story of the request */
 .rt-log .ctx-card { margin-top: 12px; }
+/* folded: its head alone, how full it is beside the title */
+.ctx-fold { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 22px; margin: -2px 0 -2px -4px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.ctx-fold:hover { background: var(--pill); }
+.ctx-fold .tw { display: inline-flex; width: 10px; flex: none; color: var(--faint); }
+.ctx-fold .tw svg { transition: transform .2s var(--ease, ease); }
+.ctx-card.shut .ctx-fold .tw svg { transform: rotate(-90deg); }
+.ctx-short { display: none; flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.ctx-card.shut .ctx-short { display: inline; }
+/* the padding is the open card's, so the title stays where it is when it
+   opens and the page doesn't follow it (it moved 4px with a 10px one) */
+.ctx-card.shut > :not(.ctx-head) { display: none; }
+:where(.ctx-card.shut.max420) .ctx-model { display: none; }
+/* folded, the head is one line of a fixed height whatever a live request
+   puts in it, so nothing under it moves; a thin bar of what fills the
+   window, a part each, takes the room between the figure and the model */
+.ctx-card.shut .ctx-head { height: 20px; white-space: nowrap; }
+.ctx-stack { display: none; flex: 1 1 0; min-width: 24px; max-width: 360px; height: 6px; border-radius: 3px; background: var(--k-free); overflow: hidden; }
+.ctx-card.shut .ctx-stack { display: flex; }
+.ctx-stack i { flex: none; height: 100%; background: var(--k); transition: width .3s var(--ease, ease); }
+@media (prefers-reduced-motion: reduce) { .ctx-stack i { transition: none; } }
 
 /* the Usage page's Context tab */
 .ctx-agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 12px; margin: 4px 0 18px; }

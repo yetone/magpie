@@ -196,9 +196,8 @@ func (h *host) lighten() {
 					ticks[i] = 0
 					continue
 				}
-				shown := w.IsVisible() || i == 0 && h.closing.Load()
 				var release bool
-				if ticks[i], release = lightStep(on, shown, ticks[i]); !release {
+				if ticks[i], release = lightStep(on, h.lightShown(w), ticks[i]); !release {
 					continue
 				}
 				ticks[i] = 0
@@ -231,8 +230,17 @@ func (h *host) panelWin() (w *application.WebviewWindow, again bool) {
 	return h.panel, false
 }
 
-// mainShown says whether the main window is up; on the main thread.
-func (h *host) mainShown() bool { return h.main != nil && h.main.IsVisible() }
+// lightShown says whether lightweight mode keeps w: it is up (windowUp),
+// or it is the main window leaving full screen to be closed; on the main
+// thread. A window open under another app's was let go as closed, and
+// Command-Tab back to magpie found it blank or gone (#1381).
+func (h *host) lightShown(w *application.WebviewWindow) bool {
+	return windowUp(w) || w == h.main && h.closing.Load()
+}
+
+// mainShown says whether the main window is up (windowUp), covered or not;
+// on the main thread.
+func (h *host) mainShown() bool { return h.main != nil && windowUp(h.main) }
 
 // openMain shows the main window on url ("" where it is), making it again
 // if lightweight mode let it go; on the main thread.

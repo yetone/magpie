@@ -306,7 +306,11 @@ func modelPrice(args []string) error {
 		case "ignored":
 			fmt.Println(faint.Render("  · a price you gave is not usable and is ignored"))
 		default:
-			fmt.Println(faint.Render("  · what its provider lists, else its maker's on models.dev · magpie model price " +
+			from := "what its provider lists, else its maker's on models.dev"
+			if p.RemotePriced(model) {
+				from = "what the other magpie counts it at"
+			}
+			fmt.Println(faint.Render("  · " + from + " · magpie model price " +
 				typedRef(id) + " <in>,<out>,<cache read>,<cache write> to change it"))
 		}
 		return nil

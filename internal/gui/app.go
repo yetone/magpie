@@ -361,6 +361,7 @@ func Run(version string, showMain bool, link string) error {
 
 	onDock = func(s settings.Settings) { h.dock(s, h.MainShown()) }
 	dockOnFullscreen()
+	watchHide()
 	// The Dock icon opens the window, or goes to it where it is open. Wails
 	// would show every hidden window on it, the panel too, so the hook
 	// answers first and stops it.
@@ -513,6 +514,9 @@ func Run(version string, showMain bool, link string) error {
 			h.Import(u)
 		}
 	})
+	// GTK 3 with no font DPI set would lay every page out at a negative
+	// width (#1371); give it one before the first webview is made.
+	fontDPI()
 	return h.app.Run()
 }
 

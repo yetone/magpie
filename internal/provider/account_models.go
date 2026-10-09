@@ -177,6 +177,21 @@ func AccountModelsOf(id, ref string) (string, []string, error) {
 	return r, p.AccountModels[accountKey(r)], nil
 }
 
+// SetModels gives the provider id the models the user picked for its
+// agents; none gives them the vendor's list again.
+func SetModels(id string, models []string) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	ms := normalModels(models)
+	if slices.Equal(ms, normalModels(p.Models)) {
+		return nil
+	}
+	p.Models = ms
+	return Save(*p)
+}
+
 // normalModels is a list of model ids as it is kept: trimmed, each once,
 // in the order given.
 func normalModels(ms []string) []string {

@@ -81,7 +81,7 @@ func TestCodexCreditsSwitch(t *testing.T) {
 		{"claude", "me@example.com", 0, false},
 		{"codex", "capped@example.com", 70, false},
 	} {
-		if share, no := HoldShare(p, c.agent, c.user); share != c.share || no != c.noCredits {
+		if share, no := HoldCaps(p, c.agent, c.user).Of("5 hours"); share != c.share || no != c.noCredits {
 			t.Errorf("%s %s: held at %d (credits %v)", c.agent, c.user, share, no)
 		}
 	}

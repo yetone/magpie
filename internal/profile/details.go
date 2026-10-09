@@ -22,6 +22,17 @@ type Group struct {
 	Servers      []string `json:"servers,omitempty"`
 	Skills       []string `json:"skills,omitempty"`
 	Instructions bool     `json:"instructions,omitempty"`
+	// Models is the model list it is switched to (#1368); nil when the
+	// profile keeps none for it, which leaves its list as it is
+	Models *Models `json:"models,omitempty"`
+}
+
+// Models is a model list as a profile's details tell it: how many models
+// are taken out, or, Only, how many are the only ones picked.
+type Models struct {
+	Hidden int  `json:"hidden"`
+	Only   bool `json:"only,omitempty"`
+	Picked int  `json:"picked,omitempty"`
 }
 
 // Item is one saved field. Value "" is the agent's own default, or, with
@@ -91,6 +102,13 @@ func Details(p Profile) []Group {
 			take(id)
 		}
 	}
+	// a list nobody picked for is told only beside the agent's model: an
+	// agent of no fields and no list of its own is no line of the details
+	for id, ml := range p.Models {
+		if !ml.Default() {
+			take(id)
+		}
+	}
 	var unknown []string
 	for id := range byID {
 		if known[id] == nil {
@@ -147,7 +165,10 @@ func Details(p Profile) []Group {
 			i := l.Instructions
 			g.Instructions = i.Extra[id] != "" || i.Shared != "" && slices.Contains(i.Agents, id)
 		}
-		if len(g.Fields) == 0 && len(g.Servers) == 0 && len(g.Skills) == 0 && !g.Instructions {
+		if ml, ok := p.Models[id]; ok && (!ml.Default() || len(g.Fields) > 0) {
+			g.Models = &Models{Hidden: len(ml.Hidden), Only: ml.Only, Picked: len(ml.Picked)}
+		}
+		if len(g.Fields) == 0 && len(g.Servers) == 0 && len(g.Skills) == 0 && !g.Instructions && g.Models == nil {
 			continue
 		}
 		out = append(out, g)

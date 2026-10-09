@@ -257,14 +257,21 @@
   // the reasoning was written before the stream showed any, OpenAI's
   // encrypted and its summary sent when done, and counting it read
   // gpt-6.1-sol at 163 tok/s. The reply's reasoning is its served try's.
-  function decodeOf(r, ms, ttft, firstText) {
+  // A reply held back and let go in a burst at its end tells no speed
+  // (usage.DecodeOf, John on Discord: Kimi Code at 2,237 tok/s): its
+  // content came in under a quarter of its window (flow), or its answer
+  // at over 20 times the pace its reasoning came before its first text.
+  function decodeOf(r, ms, ttft, firstText, flow = r.flow) {
     const think = reasoningOf(r), n = think > 0 ? r.out - think : r.out, from = think > 0 ? firstText : ttft;
     const w = ms - from;
-    return n > 0 && ttft > 0 && from > 0 && w >= 100 && n * 1000 <= 10000 * w ? { n, w } : null;
+    if (!(n > 0 && ttft > 0 && from > 0 && w >= 100 && n * 1000 <= 10000 * w)) return null;
+    if (flow > 0 && flow * 4 < w) return null;
+    if (think > 0 && n * (firstText - ttft) > 20 * think * w) return null;
+    return { n, w };
   }
   const reasoningOf = (r) => r.reasoning ?? (r.usage?.length ? r.usage[r.usage.length - 1].reasoning || 0 : 0);
-  const speedOf = (r, ms = r.ms, ttft = r.ttft, firstText = r.firstText) => {
-    const d = decodeOf(r, ms, ttft, firstText);
+  const speedOf = (r, ms = r.ms, ttft = r.ttft, firstText = r.firstText, flow = r.flow) => {
+    const d = decodeOf(r, ms, ttft, firstText, flow);
     return d ? d.n / (d.w / 1000) : 0;
   };
   function promptOf(r) {
@@ -326,7 +333,7 @@
   function firstNote(r, tr) {
     let s = tr.ttft ? " · " + t("first token in {ms}", { ms: took(tr.ttft) }) : "";
     if (tr.ttft && tr.firstText > tr.ttft) s += " · " + t("first text in {ms}", { ms: took(tr.firstText) });
-    const v = speedOf(r, tr.ms, tr.ttft, tr.firstText);
+    const v = speedOf(r, tr.ms, tr.ttft, tr.firstText, tr.flow);
     if (v) s += " · " + t("{n} tok/s", { n: Math.round(v) });
     const { prompt, read } = promptOf(r);
     if (prompt) s += " · " + t("request cache hit rate {p}", { p: pct(100 * read / prompt) });
@@ -823,6 +830,29 @@
   let pinned = null;        // a past route picked from the strip
   let rows = new Map();     // id → { li, wire, st, bi, tg, w, rid, up }
   const subs = new Map();   // a group in the group's way down → its heading { li, wire, key, up }
+  // A provider's keys serving one model, FOLD_AT or more of them side by
+  // side, fold into one row that tells of them all (#1319: 53 keys for one
+  // model were 53 rows alike); opened, it heads them as a group in the
+  // group does. Which are open is remembered by provider and model.
+  // A provider's accounts for one model fold the same way, and so does a
+  // group in the group, from its heading (Aiirobyte on Discord: a group of
+  // many accounts pushed the groups to edit far down the page). Keys start
+  // folded; accounts and a group in the group start folded when LONG or
+  // more of them, else open. Which the reader opened or folded is kept, by
+  // provider and model, or "group/<id>", whatever the default.
+  const FOLD_AT = 3, LONG = 6;
+  const folds = new Map();  // foldKey → { li, wire, st, tg, n, w, ids, up, open, pk }
+  let keysOpen = new Set(), keysShut = new Set();
+  try { keysOpen = new Set(JSON.parse(localStorage.getItem("magpie.routingKeysOpen") || "[]")); } catch {}
+  try { keysShut = new Set(JSON.parse(localStorage.getItem("magpie.routingFolded") || "[]")); } catch {}
+  const isOpen = (k, dflt) => keysShut.has(k) ? false : keysOpen.has(k) ? true : dflt;
+  function keepOpen(k, open) {
+    if (open) { keysOpen.add(k); keysShut.delete(k); } else { keysOpen.delete(k); keysShut.add(k); }
+    try {
+      localStorage.setItem("magpie.routingKeysOpen", JSON.stringify([...keysOpen]));
+      localStorage.setItem("magpie.routingFolded", JSON.stringify([...keysShut]));
+    } catch {}
+  }
   const agents = new Map(); // agent → { node, ic, name, sub, wire }
   let sets = [];            // the account sets on the stage, in the order they came
   const playing = new Map(); // the routes being played → the gen playing each
@@ -923,8 +953,16 @@
       const up = s.up && subs.get(s.up);
       s.wire.setAttribute("d", up ? fromSub(up, b(s.li)) : fromHub(b(s.li)));
     }
+    for (const f of folds.values()) {
+      if (!f.li.isConnected) { f.wire.removeAttribute("d"); continue; }
+      const up = f.up && subs.get(f.up);
+      f.wire.setAttribute("d", up ? fromSub(up, b(f.li)) : fromHub(b(f.li)));
+    }
     for (const row of rows.values()) {
-      const up = row.up && subs.get(row.up), a = b(row.li);
+      // a key folded away has no wire: its fold's is the way to it
+      if (!row.li.isConnected) { row.wire.removeAttribute("d"); continue; }
+      const f = row.fold && folds.get(row.fold);
+      const up = f?.open ? f : row.up && subs.get(row.up), a = b(row.li);
       row.wire.setAttribute("d", up ? fromSub(up, a) : fromHub(a));
     }
   }
@@ -1033,28 +1071,107 @@
 
   // subNode is the heading of a group in the group, key its way down
   // ("fast>cheap"), at depth d
+  // It folds from its heading: what it routes to is then the heading's,
+  // which says what they do together, as a fold of keys does.
   function subNode(key, info, d) {
     let s = subs.get(key);
     if (!s) {
-      const li = el("li", "rt-sub"), name = el("b"), id = el("code", "mdl"), mode = el("i");
-      li.append(svg(FAN, 14, 1.5), name, id, mode);
-      s = { li, name, id, mode, wire: path(), key };
+      const li = el("li", "rt-sub"), name = el("b"), id = el("code", "mdl"), mode = el("i"), n = el("span", "n"), chev = el("span", "chev");
+      const st = el("em"), tg = el("span", "tag");
+      chev.append(svg(CHEV, 12, 1.7));
+      li.append(svg(FAN, 14, 1.5), name, id, n, mode, chev, st, tg);
+      li.tabIndex = 0;
+      li.setAttribute("role", "button");
+      s = { li, name, id, mode, n, st, tg, wire: path(), key, sub: true };
+      li.onclick = () => toggleSub(s);
+      li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleSub(s); } };
       subs.set(key, s);
     }
     s.up = d ? key.slice(0, key.lastIndexOf(">")) : null;
+    s.pk = "group/" + info.id;
     s.li.style.setProperty("--depth", d);
     s.name.textContent = info.name || info.id;
     s.id.textContent = "group/" + info.id;
     s.mode.textContent = t((MODES[info.routing || ""] || MODES[""])[0]);
-    s.li.title = info.rules ? t(info.rules === 1 ? "1 rule" : "{n} rules", { n: info.rules }) : "";
+    s.rules = info.rules ? t(info.rules === 1 ? "1 rule" : "{n} rules", { n: info.rules }) : "";
     return s;
+  }
+  // shut marks a heading or a fold open or folded, as the reader sees it
+  function shut(f, open, folded, opened) {
+    f.open = open;
+    f.li.classList.toggle("open", open);
+    f.li.setAttribute("aria-expanded", String(open));
+    const tip = t(open ? folded : opened);
+    f.li.title = f.rules ? f.rules + "\n" + tip : tip;
+  }
+  function toggleSub(s) {
+    keepOpen(s.pk, !s.open);
+    const rs = staged();
+    if (rs.length) steady(() => rebuild(rs, false));
+    render();
   }
   // wiresTo is the way from magpie to a row: through the headings of the
   // groups it is in, then its own wire
   function wiresTo(row) {
-    const via = row.w.via || [], out = [];
+    const out = [];
+    if (row.sub) { // a group in the group folded: the way down to its heading
+      const via = row.key.split(">");
+      for (let d = 1; d <= via.length; d++) { const s = subs.get(via.slice(0, d).join(">")); if (s) out.push(s.wire); }
+      return out;
+    }
+    const via = row.w.via || [];
     for (let d = 1; d <= via.length; d++) { const s = subs.get(via.slice(0, d).join(">")); if (s) out.push(s.wire); }
+    const f = row.fold && folds.get(row.fold);
+    if (f?.open) out.push(f.wire);
     return [...out, row.wire];
+  }
+  // shownRow is where a seat is on the stage: its own row, the fold it is
+  // folded into, or the heading of the group in the group folded over it —
+  // where a request to it flies, and its failure is tagged
+  function shownRow(id) {
+    const row = rows.get(id);
+    if (row?.shut && subs.has(row.shut)) return subs.get(row.shut);
+    const f = row?.fold && folds.get(row.fold);
+    return f && !f.open ? f : row;
+  }
+
+  // foldKey: keys or accounts side by side that fold together — one
+  // provider's, for one model at one effort, on one way down a group, all
+  // fallbacks or none
+  const foldKey = (w) => [(w.via || []).join(">"), w.kind, w.provider, w.model || "", w.fixed || "", w.fallback ? 1 : 0, w.aside ? 1 : 0].join("\u0000");
+  const folding = (w) => w.kind === "key" || w.kind === "account";
+  // what is remembered open: the provider and model, whichever request
+  const openKey = (w) => w.provider + "/" + (w.model || "") + (w.fixed ? ":" + w.fixed : "");
+  function foldNode(key, w) {
+    let f = folds.get(key);
+    if (!f) {
+      const li = el("li", "rt-fold"), b = el("b"), st = el("em"), tg = el("span", "tag");
+      const n = el("span", "n"), chev = el("span", "chev");
+      chev.append(svg(CHEV, 12, 1.7));
+      li.append(el("i", "dot"), b, st, chev, tg);
+      li.tabIndex = 0;
+      li.setAttribute("role", "button");
+      li.onclick = () => toggleFold(f);
+      li.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleFold(f); } };
+      f = { li, b, st, tg, n, wire: path(), key };
+      folds.set(key, f);
+    }
+    f.w = w;
+    f.pk = openKey(w) + (w.kind === "account" ? "@" : "");
+    const name = w.fallback ? w.name : w.name || w.provider;
+    const head = [icon(w.icon || (w.preset ? w.preset : "generic")), el("span", "who", name), " ", f.n,
+      el("code", "mdl", w.fixed ? `${w.model}:${w.fixed}` : w.model)];
+    if (w.fallback) head.push(el("small", "fb", t("fallback")));
+    if (f.b.dataset.head !== openKey(w) + (w.fallback ? "|fb" : "")) { f.b.replaceChildren(...head); f.b.dataset.head = openKey(w) + (w.fallback ? "|fb" : ""); }
+    return f;
+  }
+  // toggleFold opens a fold's keys in place, or folds them again: the row
+  // clicked stays where it is (app.js holds it under the pointer)
+  function toggleFold(f) {
+    keepOpen(f.pk, !f.open);
+    const rs = staged();
+    if (rs.length) steady(() => rebuild(rs, false));
+    render();
   }
 
   function makeRow(w) {
@@ -1096,6 +1213,8 @@
       rows = new Map();
       for (const s of subs.values()) s.wire.remove();
       subs.clear();
+      for (const f of folds.values()) f.wire.remove();
+      folds.clear();
       list.replaceChildren();
       for (const a of agents.values()) a.wire.remove();
       agents.clear();
@@ -1124,7 +1243,9 @@
       for (const w of seated(r)) if (!ids.includes(seat(w))) ids.push(seat(w));
     }
     for (const r of rs) for (const w of [...r.order, ...(r.left || [])]) { wOf.set(seat(w), w); rOf.set(seat(w), r.id); }
-    const before = new Map([...rows].map(([id, row]) => [id, row.li.getBoundingClientRect().top]));
+    // where each was, of those on the stage: a key folded away was nowhere
+    const before = new Map([...[...rows].map(([id, row]) => [id, row.li]), ...[...folds].map(([k, f]) => ["\u0001" + k, f.li])]
+      .filter(([, li]) => li.isConnected).map(([id, li]) => [id, li.getBoundingClientRect().top]));
     for (const [id, row] of rows) if (!ids.includes(id)) { row.li.remove(); row.wire.remove(); rows.delete(id); }
     if (list.querySelector(".idle")) list.replaceChildren();
     for (const id of ids) {
@@ -1139,22 +1260,63 @@
     }
     // a group in the group heads its models, which it routes by its own
     // routing, set in under it
-    const els = [], want = new Set(), infos = rs.flatMap((r) => r.group?.subs || []);
-    let prev = [];
+    // keys or accounts side by side that fold together, FOLD_AT or more
+    const foldOf = new Map();
+    let run = [];
+    const flush = () => {
+      if (run.length >= FOLD_AT) {
+        const w = rows.get(run[0]).w, f = foldNode(foldKey(w), w), acct = w.kind === "account";
+        f.ids = run;
+        shut(f, isOpen(f.pk, acct && run.length < LONG),
+          acct ? "Fold these accounts into one row" : "Fold these keys into one row", acct ? "Show each account" : "Show each key");
+        for (const id of run) foldOf.set(id, f);
+      }
+      run = [];
+    };
     for (const id of ids) {
-      const row = rows.get(id), via = row.w.via || [];
-      row.li.style.setProperty("--depth", via.length);
+      const w = rows.get(id).w;
+      if (folding(w) && run.length && foldKey(rows.get(run[0]).w) === foldKey(w)) run.push(id);
+      else { flush(); if (folding(w)) run = [id]; }
+    }
+    flush();
+    // how many each group in the group routes to, which folds it when LONG
+    const under = new Map();
+    for (const id of ids) {
+      const via = rows.get(id).w.via || [];
+      for (let d = 1; d <= via.length; d++) { const k = via.slice(0, d).join(">"); under.set(k, (under.get(k) || 0) + 1); }
+    }
+    const els = [], want = new Set(), infos = rs.flatMap((r) => r.group?.subs || []);
+    for (const id of ids) {
+      const row = rows.get(id), via = row.w.via || [], f = foldOf.get(id);
+      row.fold = f ? f.key : null;
+      row.li.style.setProperty("--depth", via.length + (f ? 1 : 0));
       row.up = via.length ? via.join(">") : null;
-      via.forEach((g, d) => {
+      row.shut = null;
+      for (let d = 0; d < via.length; d++) {
         const key = via.slice(0, d + 1).join(">");
-        if (prev.slice(0, d + 1).join(">") === key || want.has(key)) return;
-        want.add(key);
-        els.push(subNode(key, infos.find((x) => x.id === g) || { id: g, name: g }, d).li);
-      });
+        if (!want.has(key)) {
+          want.add(key);
+          const s = subNode(key, infos.find((x) => x.id === via[d]) || { id: via[d], name: via[d] }, d);
+          shut(s, isOpen(s.pk, under.get(key) < LONG), "Fold this group into one row", "Show what this group routes to");
+          els.push(s.li);
+        }
+        // folded: what it routes to is its heading's
+        if (!subs.get(key).open) { row.shut = key; break; }
+      }
+      if (row.shut) continue;
+      if (f) {
+        if (!want.has("\u0001" + f.key)) {
+          want.add("\u0001" + f.key);
+          f.up = row.up;
+          f.li.style.setProperty("--depth", via.length);
+          els.push(f.li);
+        }
+        if (!f.open) continue;
+      }
       els.push(row.li);
-      prev = via;
     }
     for (const [k, s] of subs) if (!want.has(k)) { s.li.remove(); s.wire.remove(); subs.delete(k); }
+    for (const [k, f] of folds) if (!want.has("\u0001" + k)) { f.li.remove(); f.wire.remove(); folds.delete(k); }
     const mine = new Set(els);
     for (const li of [...list.children]) if (!mine.has(li)) li.remove();
     // moved only when the order changed: moving a node restarts what it plays
@@ -1163,16 +1325,17 @@
     }
     // FLIP: from where each was to its new place
     let moved = false;
-    for (const [id, row] of rows) {
-      const dy = before.has(id) ? before.get(id) - row.li.getBoundingClientRect().top : 0;
+    const placed = [...[...rows].map(([id, row]) => [id, row.li]), ...[...folds].map(([k, f]) => ["\u0001" + k, f.li])].filter(([, li]) => li.isConnected);
+    for (const [id, li] of placed) {
+      const dy = before.has(id) ? before.get(id) - li.getBoundingClientRect().top : 0;
       if (!dy || still()) continue;
       moved = true;
-      row.li.style.transition = "none";
-      row.li.style.transform = `translateY(${dy}px)`;
+      li.style.transition = "none";
+      li.style.transform = `translateY(${dy}px)`;
     }
     if (moved) {
       void list.offsetWidth;
-      for (const row of rows.values()) { row.li.style.transition = ""; row.li.style.transform = ""; }
+      for (const [, li] of placed) { li.style.transition = ""; li.style.transform = ""; }
       flipUntil = performance.now() + 520;
     }
     header(cur, ags.length);
@@ -1249,8 +1412,43 @@
       if (on) row.wire.style.setProperty("--agent", hueOf(r.agent));
       row.wire.classList.toggle("rest", !!resting || !!w.unlisted);
     }
+    // a fold tells of its keys together: the one answering or that
+    // answered, by name, then how many are there to route to and how many
+    // rest
+    const together = (f, ms) => {
+      const has = (m, c) => m.li.classList.contains(c);
+      const on = ms.find((m) => has(m, "on")), resting = ms.filter((m) => has(m, "rest")).length;
+      const parts = [];
+      if (on) parts.push(`${who(on.w)}: ${on.st.textContent}`);
+      if (resting < ms.length) parts.push(t("{n} available", { n: ms.length - resting }));
+      if (resting) parts.push(t("{n} resting", { n: resting }));
+      setText(f.st, parts.join(" · "));
+      f.li.classList.toggle("on", !!on);
+      f.wire.classList.toggle("live", !!on);
+      if (on) f.wire.style.setProperty("--agent", on.wire.style.getPropertyValue("--agent"));
+      return !!ms.length && resting === ms.length;
+    };
+    for (const f of folds.values()) {
+      const ms = (f.ids || []).map((id) => rows.get(id)).filter(Boolean);
+      setText(f.n, t(f.w.kind === "account" ? "{n} accounts" : "{n} keys", { n: ms.length }));
+      const all = together(f, ms);
+      f.li.classList.toggle("rest", all);
+      f.wire.classList.toggle("rest", all);
+    }
+    // a group in the group lights while one it routes to answers; folded,
+    // it tells of them together, as a fold does
     for (const s of subs.values()) {
-      const lit = [...rows.values()].find((row) => row.li.classList.contains("on") && (row.up === s.key || row.up?.startsWith(s.key + ">")));
+      const ms = [...rows.values()].filter((row) => row.up === s.key || row.up?.startsWith(s.key + ">"));
+      if (!s.open) {
+        setText(s.n, t(ms.length === 1 ? "one on" : "{n} on", { n: ms.length }));
+        const all = together(s, ms);
+        s.li.classList.toggle("rest", all);
+        continue;
+      }
+      setText(s.n, "");
+      setText(s.st, "");
+      s.li.classList.remove("rest");
+      const lit = ms.find((row) => row.li.classList.contains("on"));
       s.li.classList.toggle("on", !!lit);
       s.wire.classList.toggle("live", !!lit);
       if (lit) s.wire.style.setProperty("--agent", lit.wire.style.getPropertyValue("--agent"));
@@ -1300,10 +1498,22 @@
   }
   // renderCtx draws the request's context window under its story, with
   // its session's prompts request by request; drawn again only when what
-  // it shows changes, and its cells come in only for a request newly shown
-  let ctxKey = "", ctxShown = 0, ctxTab = "all";
+  // it shows changes. Live, the next request is patched into the card
+  // that is there, so only what changed changes and nothing under it moves
+  // (Zhenzhen on Discord: each new request flashed the whole card, and its
+  // grid went and came back); a request the reader picks comes in afresh,
+  // its cells one after another
+  //
+  // ctxFor is a request opened to see its context window (the Usage
+  // page's Context tab): its card shows unfolded, it alone, whatever the
+  // reader keeps folded
+  let ctxKey = "", ctxShown = 0, ctxTab = "all", ctxFor = 0;
   function renderCtx(r) {
     if (!r.prompt || !window.ctxCard) {
+      // a live request whose prompt the gateway is still reading keeps
+      // the card in its place until it has it, rather than the card
+      // going and coming back a moment later
+      if (!r.prompt && !r.done && !pinned && ctxBox.firstElementChild?.ctxUpdate) return;
       if (ctxKey) { ctxKey = ""; ctxBox.replaceChildren(); }
       return;
     }
@@ -1312,21 +1522,25 @@
     const series = (sk || r.conv) && !r.kind ? listed().filter(same).sort((a, b) => a.id - b.id)
       .map((x) => ({ id: x.id, tokens: x.prompt.tokens, time: x.time })) : null;
     if (series && !series.some((x) => x.id === r.id)) series.push({ id: r.id, tokens: r.prompt.tokens, time: r.time });
-    const key = JSON.stringify([document.documentElement.lang, r.id, r.done, r.prompt.tokens, r.prompt.counted, r.prompt.window, r.usage?.length, series?.map((x) => x.id + ":" + x.tokens).join()]);
+    if (ctxFor && ctxFor !== r.id) ctxFor = 0;
+    const key = JSON.stringify([document.documentElement.lang, ctxFor, r.id, r.done, r.prompt.tokens, r.prompt.counted, r.prompt.window, r.usage?.length, series?.map((x) => x.id + ":" + x.tokens).join()]);
     if (key === ctxKey) return;
     ctxKey = key;
     const still = ctxShown === r.id;
     ctxShown = r.id;
     const sess = groupSession(r) || r.conv || "";
-    ctxBox.replaceChildren(window.ctxCard(r, {
-      still, series, tab: ctxTab, place: "routing",
+    const card = ctxBox.firstElementChild;
+    const draw = card?.ctxUpdate && (still || !pinned) ? card.ctxUpdate : (r, o) => ctxBox.replaceChildren(window.ctxCard(r, o));
+    draw(r, {
+      still, series, tab: ctxTab, place: "routing", foldable: true,
+      open: ctxFor === r.id, onFold: () => { ctxFor = 0; },
       onTab: (id) => { ctxTab = id; },
       crumbs: [agentName(r.agent), sess && (sess.length > 14 ? sess.slice(0, 12) + "…" : sess), "#" + r.id],
       onPoint: (pt) => {
         const x = routes.get(pt.id) || listed().find((y) => y.id === pt.id);
         if (x) pick(x);
       },
-    }));
+    });
   }
   // logoed puts the provider's logo before the first account, key or
   // provider a line of the story names, so who it is about reads at a
@@ -1416,7 +1630,9 @@
     say(affWhy(r, true) || ruleWhy(r, true) || firstWhy(r));
   }
 
-  window.openRoute = async (id, time) => {
+  // o.context: opened to see its context window (the Usage page's
+  // Context tab), which shows unfolded for it
+  window.openRoute = async (id, time, o = {}) => {
     let r = routes.get(id);
     if (!r) {
       const res = await fetch("/api/gateway/route?id=" + encodeURIComponent(id) + "&day=" + encodeURIComponent(time.slice(0, 10)));
@@ -1433,6 +1649,7 @@
     if (!matchesPurpose(r)) purpose = [];
     offline("");
     window.show("routing");
+    if (o.context) ctxFor = r.id;
     pick(r);
   };
 
@@ -1971,6 +2188,17 @@
         h.append(el("span", "", t(w.kind === "key" && !w.routing ? "Smart" : m[0])));
         out.push(h);
       }
+      // a provider's keys, FOLD_AT or more, under one row that sums them
+      // up (#1319), opened to each in place; its accounts too, folded
+      // when LONG or more
+      if (folding(w)) {
+        const ks = list.filter((x) => x.w.provider === w.provider && x.w.kind === w.kind);
+        if (ks.length >= FOLD_AT) {
+          const pk = w.provider + (w.kind === "account" ? "/@" : "/*"), open = isOpen(pk, w.kind === "account" && ks.length < LONG);
+          if (ks[0] === a) out.push(keysRow(ks, pk, open, n, w.kind));
+          if (!open) continue;
+        }
+      }
       const row = el("div", "rt-act");
       const name = el("div", "nm");
       // a provider's own row: its model, the provider's name is the heading
@@ -2024,6 +2252,59 @@
       out.push(row);
     }
     patch(acts, out);
+  }
+
+  // keysRow sums a provider's keys up over the requests listed: how many,
+  // how many rest now, and what they were tried and answered together
+  // The row is kept from one drawing to the next, as the one clicked is
+  // held where it is on the screen (app.js) while what's under it opens.
+  const keysRows = new Map(); // provider/* (its keys) or provider/@ (its accounts) → its row
+  function keysRow(ks, pk, open, n, kind) {
+    let row = keysRows.get(pk);
+    if (!row) {
+      row = el("div", "rt-act rt-keys");
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      const flip = () => {
+        keepOpen(pk, row.getAttribute("aria-expanded") !== "true");
+        steady(() => renderActs(listed()));
+      };
+      row.onclick = flip;
+      row.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } };
+      keysRows.set(pk, row);
+    }
+    row.classList.toggle("open", open);
+    row.setAttribute("aria-expanded", String(open));
+    const acct = kind === "account";
+    row.title = t(open ? (acct ? "Fold these accounts into one row" : "Fold these keys into one row") : (acct ? "Show each account" : "Show each key"));
+    const chev = el("span", "chev");
+    chev.append(svg(CHEV, 12, 1.7));
+    const name = el("div", "nm");
+    name.append(el("b", "", t(acct ? "{n} accounts" : "{n} keys", { n: ks.length })), chev);
+    const resting = ks.filter((a) => a.rest && at(a.rest.until) > n).length;
+    const st = [];
+    if (resting < ks.length) st.push(t("{n} available", { n: ks.length - resting }));
+    if (resting) st.push(t("{n} resting", { n: resting }));
+    const sum = (f) => ks.reduce((x, a) => x + f(a), 0), fails = {};
+    for (const a of ks) for (const [k, v] of Object.entries(a.fails)) fails[k] = (fails[k] || 0) + v;
+    const last = Math.max(0, ...ks.map((a) => a.last));
+    const tally = el("div", "tally");
+    const bad = Object.entries(fails).map(([k, v]) => `${v} ${failWord(k)}`);
+    tally.append(
+      el("span", "", t("tried {n}", { n: sum((a) => a.tried) })),
+      el("span", "ok", t("answered {n}", { n: sum((a) => a.ok) })),
+      ...(bad.length ? [el("span", "bad", bad.join(", "))] : []),
+      ...(last ? [el("span", "", t("last answered {time}", { time: clock(last) }))] : []));
+    const kids = [name, el("div", "st" + (resting === ks.length ? " rest" : ""), st.join(" · ")), tally];
+    const mdls = [...new Set(ks.flatMap((a) => [...a.models]))];
+    if (mdls.length) {
+      const ms = el("div", "mdls");
+      ms.append(...mdls.map((m) => el("code", "mdl", m)));
+      kids.push(ms);
+    }
+    // drawn again only when what it says changes
+    if (kids.length !== row.children.length || kids.some((k, i) => !k.isEqualNode(row.children[i]))) row.replaceChildren(...kids);
+    return row;
   }
 
   // patch puts a list's new rows in, keeping each old one that is the same
@@ -2129,7 +2410,7 @@
           await until(() => g !== gen || rt().tries.length > i || rt().done);
           continue;
         }
-        const row = rows.get(tryseat(r, r.tries[i]));
+        const row = shownRow(tryseat(r, r.tries[i])); // a folded key's fold
         if (!row) { i++; continue; }
         flying.set(dot, { id: tryseat(r, r.tries[i]), agent: r.agent });
         if (!carrier) carrier = bird("req");
@@ -2483,6 +2764,8 @@
     rows = new Map();
     for (const s of subs.values()) s.wire.remove();
     subs.clear();
+    for (const f of folds.values()) f.wire.remove();
+    folds.clear();
     chip.hidden = true;
     hubText();
     list.replaceChildren(el("li", "idle", t(purpose.length || day ? "No requests match these filters." : "No request yet")));
@@ -2648,8 +2931,12 @@
   }
   const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   let groups = null, gEdit = null; // gEdit: { id: "" for a new one, draft }
-  async function loadGroups() {
-    try { groups = await api("groups"); } catch { return; }
+  // quiet: the window focused again; the same groups aren't drawn again
+  async function loadGroups(quiet) {
+    let next;
+    try { next = await api("groups"); } catch { return; }
+    if (quiet === true && groups && JSON.stringify(next) === JSON.stringify(groups)) return;
+    groups = next;
     if (!gEdit && !gsec.contains(document.activeElement)) renderGroups(); // not under someone's hands
   }
   const groupDirty = () => !!gEdit && gEdit.was !== undefined &&
@@ -2723,9 +3010,14 @@
     return true;
   };
   const groupIcons = (g) => [...new Map((g.memberInfo || []).filter((i) => i.icon).map((i) => [i.provider || i.icon, i.icon])).values()];
-  const memberIcon = (id) => { const s = subOf(id); return s ? stackIcon(groupIcons(s)) : icon(modelOf(id)?.icon || "generic"); };
-  const memberName = (id) => { const s = subOf(id), m = modelOf(id); return s ? s.name : m ? m.name || m.id : id; };
-  const memberNote = (id) => subOf(id) ? t("routing group") : [modelOf(id)?.providerName, fixedOf(id) && fixedWords(fixedOf(id))].filter(Boolean).join(" · ");
+  // offOf: a member whose provider is switched off (groupsState's
+  // providerOff), said by its provider's name and model rather than a bare
+  // id: the group skips it until the provider is on again
+  const offOf = (id) => { for (const g of groups?.groups || []) { const i = g.memberInfo?.find((x) => x.id === id && x.providerOff); if (i) return i; } };
+  const offWords = (i) => t("{name} is switched off: the group skips it until it is on again", { name: i.name });
+  const memberIcon = (id) => { const s = subOf(id); return s ? stackIcon(groupIcons(s)) : icon(modelOf(id)?.icon || offOf(id)?.icon || "generic"); };
+  const memberName = (id) => { const s = subOf(id), m = modelOf(id), o = !m && offOf(id); return s ? s.name : m ? m.name || m.id : o ? o.model : id; };
+  const memberNote = (id) => { const o = !subOf(id) && !modelOf(id) && offOf(id); return subOf(id) ? t("routing group") : [modelOf(id)?.providerName || o && `${o.name} · ${t("switched off")}`, fixedOf(id) && fixedWords(fixedOf(id))].filter(Boolean).join(" · "); };
   // a member the group sends in its vendor's fast mode (Group.Fast)
   const fastIn = (g, id) => !!g?.fast?.includes(id) && !subOf(id);
   function memberLabel(g, id) {
@@ -2733,6 +3025,7 @@
     if (s) return `${t("routing group")} · ${s.name}`;
     const at = (f ? ` · ${fixedWords(f)}` : "") + (fastIn(g, id) ? ` · ${t("fast")}` : "");
     if (m) return `${m.providerName} · ${m.name || m.id}${at}`;
+    if (i?.providerOff) return `${i.name} · ${i.model}${at} (${t("switched off")})`;
     return i?.name ? `${i.name} · ${i.model}${at}` : id;
   }
   function renderGroups() {
@@ -3108,6 +3401,7 @@
       const note = [memberNote(id), fastIn(g, id) && t("fast")].filter(Boolean).join(" · ");
       if (note) b.append(el("small", "", note));
       b.title = on ? t("Every request goes to {name}", { name: memberLabel(g, id) })
+        : info?.providerOff ? offWords(info)
         : info && !info.ready ? t("No provider serves {id} now; it is skipped", { id })
         : t("Send every request to {name}", { name: memberLabel(g, id) });
       b.onclick = (e) => {
@@ -3249,6 +3543,7 @@
         const n = el("span", "n");
         n.append(el("span", "", memberName(id)));
         if (m || s) n.append(el("small", "", subOf(id) ? memberNote(id) : m.providerName));
+        else if (info?.providerOff) n.append(el("small", "", `${info.name} · ${t("switched off")}`));
         const matched = d.matched.includes(id);
         if (matched) n.append(el("small", "", t("by pattern")));
         // switched off, it keeps its place and its rules but is sent
@@ -3328,7 +3623,7 @@
           row.append(hx);
         }
         if (s) row.title = s.members.map((x) => memberLabel(s, x)).join(s.routing === "order" ? " → " : " · ");
-        if (!m && !s) { row.classList.add("off"); row.title = t("No provider serves {id} now; it is skipped", { id }); }
+        if (!m && !s) { row.classList.add("off"); row.title = info?.providerOff ? offWords(info) : t("No provider serves {id} now; it is skipped", { id }); }
         if (matched) {
           // a pattern's: it follows the catalog, so it is switched off
           // rather than taken out — the pattern would find it again
@@ -3846,7 +4141,7 @@
   }
   // loaded when the view is shown, and again when the window comes back
   new MutationObserver(() => { if (!$("#view-routing").hidden) loadGroups(); }).observe($("#view-routing"), { attributes: true, attributeFilter: ["hidden"] });
-  window.addEventListener("focus", () => { if (shown()) loadGroups(); });
+  window.addEventListener("focus", () => { if (shown()) loadGroups(true); });
   // newGroupWith: a new group's editor, opened with the model in it — a
   // model of a provider kept for routing groups that no group has, which
   // agents can reach no other way. The picker and the provider's editor
@@ -3894,12 +4189,21 @@
   // app.js): the groups, while they are in the upper half of the view or a
   // field in them has the focus, else the lists, while they are; with
   // neither (the stage in sight at the top), the view stays as it is.
+  // The groups too while the pointer is on them, low in the view as they
+  // are at the page's foot: a manual group's card, its pick a click away,
+  // slid down from under the pointer as the requests list above it grew
+  // (cwfox67 on X).
   const rv = $("#view-routing");
   keepInView(rv, () => {
     const mid = rv.getBoundingClientRect().top + rv.clientHeight / 2;
-    if (gsec.contains(document.activeElement) && gsec.offsetParent) return gsec;
+    if ((gsec.contains(document.activeElement) || gsec.matches(":hover")) && gsec.offsetParent) return gsec;
     return [gsec, hist].find((p) => p.offsetParent && p.getBoundingClientRect().top <= mid) || null;
   });
+  // the pointer coming onto the groups or off them changes the part kept,
+  // so where the reader is is taken again, as their scroll would
+  const repin = () => { if (held?.v !== rv && !rv.hidden) readerLeaves(rv); };
+  gsec.addEventListener("pointerenter", repin);
+  gsec.addEventListener("pointerleave", repin);
 
   // ---------- the tray panel's Routing tab ----------
   // The gateway's latest requests, as they come, from the same trace the

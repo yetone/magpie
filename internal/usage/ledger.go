@@ -167,6 +167,8 @@ func (p Period) Since(now time.Time) time.Time {
 		return day.AddDate(0, 0, -6)
 	case Month:
 		return day.AddDate(0, 0, -29)
+	case heatmapPeriod:
+		return heatmapSince(now)
 	}
 	return time.Time{}
 }

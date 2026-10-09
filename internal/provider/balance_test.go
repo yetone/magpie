@@ -23,6 +23,8 @@ func TestBalanceReaders(t *testing.T) {
 	}{
 		{"deepseek", readDeepSeek, `{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"110.00","granted_balance":"10.00"}]}`, "¥110.00"},
 		{"deepseek two", readDeepSeek, `{"balance_infos":[{"currency":"CNY","total_balance":"1"},{"currency":"USD","total_balance":"2.5"}]}`, "¥1.00 · $2.50"},
+		{"deepseek two, USD first", readDeepSeek, `{"balance_infos":[{"currency":"USD","total_balance":"2.5"},{"currency":"CNY","total_balance":"1"}]}`, "¥1.00 · $2.50"},
+		{"deepseek, the CNY spent", readDeepSeek, `{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"-0.05","granted_balance":"0.00","topped_up_balance":"-0.05"},{"currency":"USD","total_balance":"11.12","granted_balance":"0.00","topped_up_balance":"11.12"}]}`, "$11.12 · ¥-0.05"},
 		{"kimi", readMoonshot("¥"), `{"code":0,"data":{"available_balance":49.58894,"voucher_balance":46.5,"cash_balance":3.0},"status":true}`, "¥49.59"},
 		{"openrouter", readOpenRouter, `{"data":{"total_credits":20,"total_usage":3.5}}`, "$16.50"},
 		{"commandcode", readCommandCode, `{"credits":{"monthlyCredits":12.3,"purchasedCredits":2,"freeCredits":0},"windowLimits":{"limited":true,"fiveHour":{"used":4.2,"cap":10},"weekly":{"used":9,"cap":50}}}`, "$14.30"},

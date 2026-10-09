@@ -60,6 +60,13 @@ func drawer() (string, bool) {
 	return m, m != ""
 }
 
+// Drawer is the model a request that names none draws with (drawer), as
+// provider/model: "" when image generation is off or no provider draws.
+func Drawer() string {
+	m, _ := drawer()
+	return m
+}
+
 // DrawerMissing is the model Settings › Models › Image generation names
 // when magpie can't find it any more, so that AutoDrawer's draws in its
 // place, as VisionMissing is Image recognition's. "" when none is named,
@@ -686,7 +693,7 @@ func (s *Server) sendAs(ctx context.Context, p provider.Provider, method, url, c
 
 // sendWith is sendAs with headers of the vendor's own besides.
 func (s *Server) sendWith(ctx context.Context, p provider.Provider, method, url, contentType string, body []byte, sign bool, extra http.Header) ([]byte, int, error) {
-	ctx = p.Via(ctx)
+	ctx = s.metered(p.Via(ctx), p, "") // counted against its MaxRPM (rpm.go)
 	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, 500, err

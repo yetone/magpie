@@ -70,7 +70,7 @@ func parseChat(body []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: c.Model, MaxTokens: c.MaxCompletionTokens, Temp: c.Temperature, TopP: c.TopP,
-		Stream: c.Stream, Effort: effortOf(c.ReasoningEffort), Parallel: c.ParallelToolCalls, Fast: c.ServiceTier == "priority",
+		Stream: c.Stream, Effort: effortOf(c.ReasoningEffort), Parallel: c.ParallelToolCalls, Fast: c.ServiceTier == "priority", Tier: c.ServiceTier,
 		CacheKey: c.PromptCacheKey, Format: openAIFormat(c.ResponseFormat)}
 	if r.MaxTokens == 0 {
 		r.MaxTokens = c.MaxTokens
@@ -215,6 +215,17 @@ func dataURL(p Part) string {
 }
 
 // buildChat renders a request for a Chat Completions upstream.
+// buildHost is the host a request for p is built for. Cursor's plugin is
+// "cursor" (plugin://cursor) moved or not: a moved one's Host is the
+// built-in's, for show, which Cursor's is none, and its fast mode was lost
+// on every request magpie translated (#1360).
+func buildHost(p provider.Provider) string {
+	if p.IsPlugin() && p.PluginProvider() == "cursor" {
+		return "cursor"
+	}
+	return p.Host()
+}
+
 func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 	var msgs []map[string]any
 	if r.System != "" {
@@ -397,6 +408,9 @@ func buildChat(r *Request, model, host string, rejectTemp bool) []byte {
 	// another's chat upstream may not know the tier
 	if r.Fast && host == "cursor" {
 		out["service_tier"] = "priority"
+	}
+	if r.OwnTier && r.Tier != "" {
+		out["service_tier"] = r.Tier
 	}
 	if r.MaxTokens > 0 {
 		if strings.HasSuffix(host, "openai.com") {

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/yetone/magpie/internal/backup"
 )
 
 // folder and file are where the backup lives under the address given.
@@ -240,9 +242,21 @@ func (d *dav) there(ctx context.Context, u string) bool {
 // get reads the backup; nil data and no error when there is none yet, and
 // errNotModified when it is still have. A server that doesn't do
 // conditional reads sends the file, as it always did.
+//
+// The read asks for the file as it is, not compressed: the ETag it gives
+// back is what the write after it matches with If-Match, and a server that
+// compresses changes that ETag for the compressed copy. Apache's
+// mod_deflate — InfiniCLOUD's (TeraCloud's) WebDAV is Apache — adds
+// "-gzip" inside the quotes, and nginx and other proxies weaken it to
+// W/"…"; either never matches the file in an If-Match, so every write after
+// such a read was refused as changed meanwhile (#1362).
 func (d *dav) get(ctx context.Context, have version) (data []byte, v version, err error) {
 	cond := have.conditions()
-	res, err := d.send(ctx, http.MethodGet, d.url(folder, file), nil, cond)
+	h := map[string]string{"Accept-Encoding": "identity"}
+	for k, v := range cond {
+		h[k] = v
+	}
+	res, err := d.send(ctx, http.MethodGet, d.url(folder, file), nil, h)
 	if err != nil {
 		return nil, version{}, err
 	}
@@ -269,6 +283,22 @@ func (d *dav) get(ctx context.Context, have version) (data []byte, v version, er
 	data, err = io.ReadAll(io.LimitReader(res.Body, 64<<20))
 	if err != nil {
 		return nil, version{}, err
+	}
+	// asked for as it is, the file still came compressed: Go unpacks it
+	// only when it asked for gzip itself
+	if data, err = unpacked("WebDAV", data, res.Header.Get("Content-Encoding")); err != nil {
+		return nil, version{}, fmt.Errorf("reading %s from the WebDAV server: %w", file, err)
+	}
+	// a redirect that ended at something other than the file — a web
+	// app's sign-in or files page — is said with where it went: the
+	// address is the thing to fix
+	if res.Request != nil && res.Request.Response != nil && !backupHead(bytes.TrimSpace(data)) {
+		if f := whatIs(data); !f.Replace {
+			to := *res.Request.URL
+			to.RawQuery, to.Fragment, to.User = "", "", nil
+			f.Moved = to.Host + to.Path
+			return nil, version{}, &notBackup{f: f, where: "the file " + folder + "/" + file + " on the WebDAV server", cmd: "webdav", err: backup.ErrNotBackup}
+		}
 	}
 	return data, versionOf(res.Header), nil
 }

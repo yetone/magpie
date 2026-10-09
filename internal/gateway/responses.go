@@ -255,7 +255,7 @@ func parseResponses(body []byte) (*Request, error) {
 		return nil, fmt.Errorf("invalid request: %v", err)
 	}
 	r := &Request{Model: q.Model, System: q.Instructions, MaxTokens: q.MaxOutputTokens, Temp: q.Temperature,
-		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority" || q.ServiceTier == "ultrafast", Ultrafast: q.ServiceTier == "ultrafast", CacheKey: q.PromptCacheKey, Include: q.Include,
+		TopP: q.TopP, Stream: q.Stream, Parallel: q.ParallelToolCalls, Fast: q.ServiceTier == "priority" || q.ServiceTier == "ultrafast", Ultrafast: q.ServiceTier == "ultrafast", Tier: q.ServiceTier, CacheKey: q.PromptCacheKey, Include: q.Include,
 		ClientMetadata: sentRaw(q.ClientMetadata)}
 	r.Text, r.Format = textFormat(sentRaw(q.Text))
 	if q.Reasoning != nil {
@@ -553,6 +553,82 @@ func orphanedToolOutputs(body []byte) []byte {
 	return encoded
 }
 
+// pairToolItems gives a Responses request's tool call that no result in
+// the request answers a synthetic one, as pairToolMessages does for a Chat
+// request: an upstream that checks the exchange on the chat form it turns
+// the request into refuses a lone call — Volcengine's coding plan answers
+// 400 "An assistant message with 'tool_calls' must be followed by tool
+// messages responding to each 'tool_call_id'" (#1341), and OpenAI's own
+// Responses API "No tool output found for function call". The result goes
+// at the end of the run of calls and results the call is in, where a chat
+// form has its tool messages. A result with no call is left to
+// orphanedToolOutputs, and one naming a call another request carried
+// (previous_response_id) stays as it is.
+func pairToolItems(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`_call"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body
+	}
+	var input []json.RawMessage
+	if json.Unmarshal(q["input"], &input) != nil {
+		return body
+	}
+	type item struct {
+		Type   string `json:"type"`
+		CallID string `json:"call_id"`
+	}
+	items := make([]item, len(input))
+	answered := map[string]bool{}
+	for i, raw := range input {
+		if json.Unmarshal(raw, &items[i]) != nil {
+			items[i] = item{}
+		}
+		if t := items[i].Type; (t == "function_call_output" || t == "custom_tool_call_output") && items[i].CallID != "" {
+			answered[items[i].CallID] = true
+		}
+	}
+	exchange := func(t string) bool {
+		switch t {
+		case "function_call", "custom_tool_call", "tool_search_call",
+			"function_call_output", "custom_tool_call_output", "tool_search_output":
+			return true
+		}
+		return false
+	}
+	out := make([]json.RawMessage, 0, len(input)+1)
+	var synthetic []json.RawMessage // results owed by the run in progress
+	for i, raw := range input {
+		out = append(out, raw)
+		it := items[i]
+		if (it.Type == "function_call" || it.Type == "custom_tool_call") && it.CallID != "" && !answered[it.CallID] {
+			kind := "function_call_output"
+			if it.Type == "custom_tool_call" {
+				kind = "custom_tool_call_output"
+			}
+			result, _ := marshalPlain(map[string]any{"type": kind, "call_id": it.CallID,
+				"output": "[The result of this tool call is unavailable: the turn was interrupted.]"})
+			synthetic = append(synthetic, result)
+			answered[it.CallID] = true
+		}
+		if len(synthetic) > 0 && exchange(it.Type) && (i+1 == len(input) || !exchange(items[i+1].Type)) {
+			out = append(out, synthetic...)
+			synthetic = nil
+		}
+	}
+	if len(out) == len(input) {
+		return body
+	}
+	q["input"], _ = marshalPlain(out)
+	encoded, err := marshalPlain(q)
+	if err != nil {
+		return body
+	}
+	return encoded
+}
+
 // mergeTurns joins consecutive messages of the same role, since the
 // Responses API splits an assistant turn into one item per part.
 func mergeTurns(msgs []Message) []Message {
@@ -774,6 +850,9 @@ func buildResponses(r *Request, model, host string, rejectTemp bool) []byte {
 	// Ultrafast only the ChatGPT backend offers
 	if r.Ultrafast && host == "chatgpt.com" {
 		out["service_tier"] = "ultrafast"
+	}
+	if r.OwnTier && r.Tier != "" {
+		out["service_tier"] = r.Tier
 	}
 	if r.Effort != "" {
 		out["reasoning"] = map[string]any{"effort": r.Effort, "summary": "auto"}

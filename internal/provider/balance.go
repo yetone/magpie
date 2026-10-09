@@ -230,14 +230,37 @@ func readDeepSeek(b []byte) (string, error) {
 	if err := json.Unmarshal(b, &r); err != nil {
 		return "", err
 	}
-	var parts []string
+	type amount struct {
+		code string
+		v    float64
+	}
+	var amts []amount
 	for _, in := range r.Infos {
 		if v, ok := number(in.Total); ok {
-			parts = append(parts, money(currencySign(in.Currency), v))
+			amts = append(amts, amount{strings.ToUpper(in.Currency), v})
 		}
 	}
-	if len(parts) == 0 {
+	if len(amts) == 0 {
 		return "", errors.New("no balance in the reply")
+	}
+	// DeepSeek lists an account's currencies (CNY, USD) in an order that
+	// changes from one read to the next (gakki on Discord), so they are
+	// put in one of magpie's own: a currency with money left first, then
+	// by its code. The first is the one the trend follows and an alert
+	// reads (balanceSeries, BalanceNumber), so it mustn't swap places
+	// between reads either.
+	slices.SortStableFunc(amts, func(a, b amount) int {
+		if (a.v > 0) != (b.v > 0) {
+			if a.v > 0 {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.code, b.code)
+	})
+	parts := make([]string, len(amts))
+	for i, a := range amts {
+		parts[i] = money(currencySign(a.code), a.v)
 	}
 	return strings.Join(parts, " · "), nil
 }

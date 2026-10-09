@@ -210,6 +210,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         { ...req(10, "claude", "other-agent", 0.1), kind: "ambient_suggestions" },
         { ...req(11, "codex", "", 0.11), kind: "ambient_suggestions" },
       ];
+      // the gateway names Codex sessions from the same threads its trace's
+      // titles come from, so its answer agrees with them. The Claude Code row
+      // has the page ask for names 300ms after it draws, and an empty answer
+      // there took the titles away mid-test on a loaded machine
+      feed.names = { "named-suggestions": "Named suggestions", "named-chat": "Chat title" };
       await page.route("**/*", serve(lang, feed, fixture));
       page.on("pageerror", (e) => errors.push(e.message));
       t.after(async () => { feed.next?.([]); await browser.close(); });
@@ -299,12 +304,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".rt-session").count(), 0);
       await buttons.nth(1).click();
       await page.locator(".rt-session").nth(3).waitFor();
-      feed.next?.([]);
+      // the live trace's held answer is left held: the reload cancels it. An
+      // answer let go now has the page ask again while it is going away, and
+      // WebKit turns that ask away "due to access control checks", an error
+      // on the page (#1307)
       await page.reload();
       await page.locator(".rt-session").nth(3).waitFor();
       assert.equal(await buttons.nth(1).getAttribute("aria-pressed"), "true");
       await buttons.first().click();
-      feed.next?.([]);
       await page.reload();
       await page.locator(".rt-req").nth(5).waitFor();
       assert.equal(await buttons.first().getAttribute("aria-pressed"), "true");
@@ -396,7 +403,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".rt-day").filter({ hasText: lang === "zh" ? "今天" : "today" }).click();
       await page.waitForFunction(() => document.querySelectorAll(".rt-session").length === 2);
       assert.equal(await group(title.session).count(), 0, "history navigation lost title association");
-      feed.next?.([]);
+      // the held live trace is left for the reload to cancel (see "either
+      // choice survives a reload")
       await page.reload();
       await page.waitForFunction(() => document.querySelectorAll(".rt-session").length === 2);
       assert.equal(await group(title.session).count(), 0, "page reload lost title association");

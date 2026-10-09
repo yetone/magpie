@@ -140,6 +140,15 @@ type Request struct {
 	// ChatGPT account on a plan with it offers on its models; Fast is set
 	// with it, so where there is no Ultrafast the request goes fast
 	Ultrafast bool
+	// Tier is the service_tier the client sent, as it sent it. It goes on
+	// as it is to a provider the user added by its address (OwnTier):
+	// a relay of theirs may serve Fast and Ultrafast where magpie can't
+	// tell (hsiangron on X: both were left out)
+	Tier string
+	// OwnTier is set for such a provider (gateway.go, as each attempt is
+	// built); one that turns the field away is asked again without it
+	// (optionalFields)
+	OwnTier bool
 	// CacheKey is the client's prompt_cache_key (Codex sends its thread's
 	// id), which OpenAI, and relays in front of it, route a conversation by
 	// to where its prompt is cached.

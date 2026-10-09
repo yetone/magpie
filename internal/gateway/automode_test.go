@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -453,7 +454,9 @@ func TestClaudeBridgeSafeguardWSLEnv(t *testing.T) {
 }
 
 // A context update and its tool-result handoff own the run together, through
-// the reply's end. Another caller cannot update it or abort its owner.
+// the reply's end. Another caller cannot update it or abort its owner: it is
+// a conversation of its own from there (a fork sub-agent of the same lead),
+// and gets a run of its own, not a 409 (ylorn on Discord).
 func TestClaudeBridgeSafeguardConcurrentHandoff(t *testing.T) {
 	s := New()
 	b := s.subscription
@@ -491,21 +494,23 @@ func TestClaudeBridgeSafeguardConcurrentHandoff(t *testing.T) {
 		t.Helper()
 		body := []byte(`{"model":"claude-sonnet-5","max_tokens":64,"safeguards":[{"context":"B"}],"messages":[{"role":"assistant","content":"call"},{"role":"user","content":[{"type":"tool_result","tool_use_id":"` + id + `","content":"B"}]}]}`)
 		done := make(chan int, 1)
+		var started atomic.Bool
 		go func() {
 			rec := httptest.NewRecorder()
 			code, _ := s.serveSubscription(rec, httptest.NewRequest("POST", "/v1/messages", nil), provider.Anthropic, "Claude Code", req.Model, "", body, &Usage{},
 				func(context.Context, *Request) (*subscriptionRun, <-chan Event, error) {
-					return nil, nil, fmt.Errorf("must not start another run")
+					started.Store(true)
+					return nil, nil, fmt.Errorf("a run of its own")
 				})
 			done <- code
 		}()
 		select {
 		case code := <-done:
-			if code != 409 || run.closed || string(run.safeguards) != string(req.Safeguards) {
-				t.Fatalf("second caller: status %d, closed %v, context %s", code, run.closed, run.safeguards)
+			if code == 409 || !started.Load() || run.closed || string(run.safeguards) != string(req.Safeguards) {
+				t.Fatalf("second caller: status %d, own run %v, closed %v, context %s", code, started.Load(), run.closed, run.safeguards)
 			}
 		case <-time.After(2 * time.Second):
-			t.Fatal("second caller did not reject the claimed run")
+			t.Fatal("second caller was held on the claimed run")
 		}
 	}
 	blocked("a")

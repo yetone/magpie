@@ -129,8 +129,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => /didn't/.test(document.querySelector("#agentsUpdates .ag-updates-say")?.textContent || ""), null, { timeout: 4000 });
       assert.deepEqual(log.posts, ["codex", "gemini", "crush"]);
       assert.equal(log.most, 1, "two updates ran at once");
-      assert.equal(await bar.locator(".ag-updates-say").textContent(), "2 of 3 agents updated · 1 didn't: Gemini CLI");
-      assert.match(await bar.locator(".ag-updates-say").getAttribute("title"), /EACCES/);
+      // each one updated with the versions it went from and to (37FlowAI on X)
+      assert.equal(await bar.locator(".ag-updates-say").textContent(), "2 of 3 agents updated: Codex 0.155.1 → 0.159.0, Crush 0.3.0 → 0.4.0 · 1 didn't: Gemini CLI");
+      assert.match(await bar.locator(".ag-updates-say").getAttribute("title"), /^Codex 0\.155\.1 → 0\.159\.0\nCrush 0\.3\.0 → 0\.4\.0\n.*EACCES/);
       assert.match(await page.locator("#status").textContent(), /EACCES/);
       // updated ones lose their pill; the failed one keeps it to try again
       assert.equal(await page.locator(`${row("codex")} .ag-ver`).textContent(), "0.159.0");
@@ -140,6 +141,30 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // one left behind is no reason to offer Update all again
       assert.equal(await bar.locator("button").count(), 0);
       assert.equal(await view.evaluate((v) => v.scrollTop), top, "the run moved the page");
+    });
+
+    await t.test("all updated: the line lists each one's versions, in one line", async () => {
+      for (const [lang, want] of [
+        ["en", "2 agents updated: Codex 0.155.1 → 0.159.0, Crush 0.3.0 → 0.4.0"],
+        ["zh", "已更新 2 个 Agent：Codex 0.155.1 → 0.159.0, Crush 0.3.0 → 0.4.0"],
+        ["ja", "2 個のエージェントをアップデートしました：Codex 0.155.1 → 0.159.0, Crush 0.3.0 → 0.4.0"],
+        ["de", "2 Agenten aktualisiert: Codex 0.155.1 → 0.159.0, Crush 0.3.0 → 0.4.0"],
+      ]) {
+        const page = await open(lang, { clis: { codex: CLIS.codex, crush: CLIS.crush } });
+        const bar = page.locator("#agentsUpdates");
+        await bar.waitFor();
+        const h = await bar.evaluate((b) => b.getBoundingClientRect().height);
+        await bar.locator("button").click();
+        await page.waitForFunction(() => !document.querySelector("#agentsUpdates button"), null, { timeout: 4000 });
+        assert.equal(await bar.locator(".ag-updates-say").textContent(), want);
+        assert.equal(await page.locator("#status").textContent(), want);
+        assert.equal(await bar.locator(".ag-updates-say").getAttribute("title"), "Codex 0.155.1 → 0.159.0\nCrush 0.3.0 → 0.4.0");
+        // narrow: still one line, cut short, the list under it not pushed down
+        await page.setViewportSize({ width: 420, height: 520 });
+        await page.waitForTimeout(200);
+        assert.equal(await bar.evaluate((b) => b.getBoundingClientRect().height), h, "the line grew");
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "the page scrolls sideways");
+      }
     });
 
     await t.test("a row's own pill leaves the line where it is", async () => {

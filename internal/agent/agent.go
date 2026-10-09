@@ -144,6 +144,12 @@ type Agent struct {
 	// provider), so a model's name the gateway takes as a routing group
 	// is that group's (#750).
 	Routed func() bool
+	// FailingOver reports an agent that isn't connected whose requests
+	// still go through magpie's gateway, for account failover alone (Codex
+	// signed in to ChatGPT with more of its accounts on in magpie, #1385):
+	// the Agents page says so and what turns it off, and the gateway lists
+	// it only its own models.
+	FailingOver func() bool
 	// Follow, for an agent whose own picker moves its main model where
 	// magpie keeps other settings following it (Claude Code's /model and
 	// its tiers), brings those along to the model picked there. Run as the

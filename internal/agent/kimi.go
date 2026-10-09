@@ -15,6 +15,7 @@ package agent
 // and out the other way round.
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -58,9 +59,12 @@ func kimiDir(at place) (dir string, legacy bool) {
 }
 
 // kimiModelTables are magpie's model tables; the new Kimi Code is told of
-// tool calling too, which kimi-cli has no word for and refuses.
-func kimiModelTables(path string, legacy bool) []edit.Table {
+// tool calling too, which kimi-cli has no word for and refuses. wrote is
+// what magpie wrote in them last (kimiOwn), and the tables come back with
+// what this write puts there.
+func kimiModelTables(path string, legacy bool, wrote map[string]map[string]string) ([]edit.Table, map[string]map[string]string) {
 	var out []edit.Table
+	now := map[string]map[string]string{}
 	names, _ := edit.TOMLTables(path)
 	for _, m := range magpieModels("kimi") {
 		name := "models." + strconv.Quote(magpieID+"/"+m.ID)
@@ -68,10 +72,26 @@ func kimiModelTables(path string, legacy bool) []edit.Table {
 		if ctx <= 0 {
 			ctx = kimiContext
 		}
+		var was map[string]string
+		if slices.Contains(names, name) {
+			was, _ = edit.GetTOMLTable(path, name)
+		}
 		kvs := []edit.KV{
 			{Path: "provider", Value: magpieID},
 			{Path: "model", Value: m.ID},
 			{Path: "max_context_size", Value: ctx},
+		}
+		// the name Kimi's /model picker and status line show (kimi-cli 1.37
+		// on; one before ignores it), else the model's id
+		mine := ""
+		if m.Name != m.ID {
+			mine = m.Name
+		}
+		if v, by := kimiOwn(was, wrote[name], "display_name", mine); v != "" {
+			kvs = append(kvs, edit.KV{Path: "display_name", Value: v})
+			if by {
+				setWrote(now, name, "display_name", v)
+			}
 		}
 		var caps []string
 		if len(m.Efforts) > 0 {
@@ -87,15 +107,61 @@ func kimiModelTables(path string, legacy bool) []edit.Table {
 			kvs = append(kvs, edit.KV{Path: "capabilities", Value: edit.Raw("[" + strings.Join(caps, ", ") + "]")})
 		}
 		if !legacy {
-			// a default effort set by hand stays while the model has it
-			var was string
-			if slices.Contains(names, name) {
-				t, _ := edit.GetTOMLTable(path, name)
-				was = t["default_effort"]
+			// the new Kimi Code's cap on a reply (max_completion_tokens),
+			// where magpie knows the model's; kimi-cli has no such key
+			if was["max_output_size"] != "" && !kimiInt(was["max_output_size"]) {
+				delete(was, "max_output_size")
 			}
-			kvs = append(kvs, kimiEfforts(m.Efforts, was)...)
+			mine := ""
+			if n := maxTokens(m); n > 0 {
+				mine = strconv.Itoa(n)
+			}
+			if v, by := kimiOwn(was, wrote[name], "max_output_size", mine); v != "" {
+				kvs = append(kvs, edit.KV{Path: "max_output_size", Value: edit.Raw(v)})
+				if by {
+					setWrote(now, name, "max_output_size", v)
+				}
+			}
+			// a default effort set by hand stays while the model has it
+			kvs = append(kvs, kimiEfforts(m.Efforts, was["default_effort"])...)
 		}
 		out = append(out, edit.Table{Name: name, KVs: kvs})
+	}
+	return out, now
+}
+
+// kimiOwn is the value of key in one of magpie's model tables: one the user
+// set there themselves (was, other than what magpie wrote last) stays,
+// else magpie's own (mine, "" for none), and by says it is magpie's.
+func kimiOwn(was, wrote map[string]string, key, mine string) (v string, by bool) {
+	if v, ok := was[key]; ok && v != "" && v != wrote[key] {
+		return v, false
+	}
+	return mine, mine != ""
+}
+
+// kimiInt reports whether v, a value as edit.GetTOMLTable reads it, is a
+// TOML integer, which is all Kimi Code takes for a size.
+func kimiInt(v string) bool {
+	_, err := strconv.Atoi(strings.ReplaceAll(v, "_", ""))
+	return err == nil
+}
+
+func setWrote(m map[string]map[string]string, table, key, v string) {
+	if m[table] == nil {
+		m[table] = map[string]string{}
+	}
+	m[table][key] = v
+}
+
+// kimiWroteKey is where the stash keeps what magpie last wrote in its model
+// tables of the config at path, as JSON: {table: {key: value}}.
+func kimiWroteKey(path string) string { return "kimi:" + path + ":wrote" }
+
+func kimiWrote(path string) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	if v := stashLoad()[kimiWroteKey(path)]; v != "" {
+		json.Unmarshal([]byte(v), &out)
 	}
 	return out
 }
@@ -147,12 +213,19 @@ func kimiIn(at place) *Agent {
 		); err != nil {
 			return err
 		}
-		return edit.SetTOMLTables(path, []string{kimiModelTable}, kimiModelTables(path, legacy))
+		tables, wrote := kimiModelTables(path, legacy, kimiWrote(path))
+		if err := edit.SetTOMLTables(path, []string{kimiModelTable}, tables); err != nil {
+			return err
+		}
+		b, _ := json.Marshal(wrote)
+		stash(map[string]string{kimiWroteKey(path): string(b)})
+		return nil
 	}
 	dropMagpie := func() error {
 		if err := edit.SetTOMLTables(path, []string{kimiModelTable}, nil); err != nil {
 			return err
 		}
+		forget(kimiWroteKey(path))
 		return edit.DelTOMLTable(path, providerTable)
 	}
 	// setDefault sets default_model, or takes it out for ""

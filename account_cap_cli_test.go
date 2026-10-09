@@ -65,6 +65,35 @@ func TestAccountCapCmd(t *testing.T) {
 	if c := provider.AccountCapOf("codex", "me@example.com"); c != 0 {
 		t.Fatalf("off left %d", c)
 	}
+	// a window's own (willz on Discord): the five hours at 50%, the week
+	// with none, then back to the account's
+	if err := providerCmd([]string{"provider", "account-cap", "codex", "me@example.com", "--window", "5 Hours", "50%"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := providerCmd([]string{"provider", "account-cap", "codex", "me@example.com", "--window=Weekly", "none"}); err != nil {
+		t.Fatal(err)
+	}
+	c := provider.AccountCapsOf("codex", "me@example.com")
+	if five, _ := c.Of("5 hours"); five != 50 || c.Windows["weekly"] != 100 || c.All != 0 {
+		t.Fatalf("window caps %+v", c)
+	}
+	if err := providerCmd([]string{"provider", "account-cap", "codex", "me@example.com", "--window", "5 hours"}); err != nil {
+		t.Fatal(err) // shown
+	}
+	if err := providerCmd([]string{"provider", "account-cap", "codex", "me@example.com", "--window", "5 hours", "lots"}); err == nil {
+		t.Fatal("a window's share of lots taken")
+	}
+	if err := providerCmd([]string{"provider", "account-cap", "codex", "--window", "5 hours"}); err == nil {
+		t.Fatal("a window with no account taken")
+	}
+	for _, w := range []string{"5 hours", "weekly"} {
+		if err := providerCmd([]string{"provider", "account-cap", "codex", "me@example.com", "--window", w, "default"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c := provider.AccountCapsOf("codex", "me@example.com"); c.Windows != nil {
+		t.Fatalf("default left %+v", c)
+	}
 	if err := provider.Save(provider.Provider{ID: "relay", Name: "Relay", Key: "k1", Chat: "http://127.0.0.1:1/v1"}); err != nil {
 		t.Fatal(err)
 	}

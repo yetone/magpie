@@ -43,17 +43,13 @@ func SetCodexCredits(user string, on bool) error {
 	return settings.Save(s)
 }
 
-// HoldShare is the share of its windows (in percent) at which routing
-// holds the account user of p, of agent, as used up: its usage cap when it
-// has one, 100 for a Codex account set not to spend its credits, 0 when
-// nothing holds it before the vendor does. noCredits says it is the credits
-// that hold it.
-func HoldShare(p Provider, agent, user string) (share int, noCredits bool) {
-	if c := p.AccountCap(user); c > 0 {
-		return c, false
-	}
-	if agent == "codex" && user != "" && !CodexCredits(user) {
-		return 100, true
-	}
-	return 0, false
+// HoldCaps is the shares of its windows at which routing holds the
+// account user of p, of agent, as used up: its usage cap and its windows'
+// own (account_caps.go), and for a Codex account set not to spend its
+// credits 100% of any window with no cap. Holds() is false when nothing
+// holds it before the vendor does.
+func HoldCaps(p Provider, agent, user string) WindowCaps {
+	c := p.CapsOf(user)
+	c.Credits = agent == "codex" && user != "" && !CodexCredits(user)
+	return c
 }

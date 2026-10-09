@@ -1,0 +1,192 @@
+{
+ "moonshotai": {
+  "id": "moonshotai",
+  "models": {
+   "kimi-k3": {
+    "id": "kimi-k3",
+    "name": "Kimi K3",
+    "cost": {
+     "input": 3,
+     "output": 15,
+     "cache_read": 0.3,
+     "cache_write": 3
+    },
+    "canonical_model_id": "moonshotai/kimi-k3"
+   },
+   "kimi-k2.7-code-highspeed": {
+    "id": "kimi-k2.7-code-highspeed",
+    "name": "Kimi K2.7 Code HighSpeed",
+    "cost": {
+     "input": 1.9,
+     "output": 8,
+     "cache_read": 0.38
+    },
+    "canonical_model_id": "moonshotai/kimi-k2.7-code"
+   },
+   "kimi-k2.6": {
+    "id": "kimi-k2.6",
+    "name": "Kimi K2.6",
+    "cost": {
+     "input": 0.95,
+     "output": 4,
+     "cache_read": 0.16
+    }
+   },
+   "kimi-k2.7-code": {
+    "id": "kimi-k2.7-code",
+    "name": "Kimi K2.7 Code",
+    "cost": {
+     "input": 0.95,
+     "output": 4,
+     "cache_read": 0.19
+    },
+    "canonical_model_id": "moonshotai/kimi-k2.7-code"
+   }
+  }
+ },
+ "kimi-code-plan-global": {
+  "id": "kimi-code-plan-global",
+  "models": {
+   "kimi-for-coding-highspeed": {
+    "id": "kimi-for-coding-highspeed",
+    "name": "Kimi For Coding HighSpeed",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0,
+     "cache_write": 0
+    },
+    "canonical_model_id": "moonshotai/kimi-k2.7-code-highspeed"
+   },
+   "kimi-for-coding": {
+    "id": "kimi-for-coding",
+    "name": "kimi-for-coding",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0,
+     "cache_write": 0
+    },
+    "canonical_model_id": "moonshotai/kimi-k2.8-preview"
+   },
+   "k3-256k": {
+    "id": "k3-256k",
+    "name": "Kimi K3-256K",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0,
+     "cache_write": 0
+    },
+    "canonical_model_id": "moonshotai/kimi-k3"
+   },
+   "k3": {
+    "id": "k3",
+    "name": "Kimi K3",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0,
+     "cache_write": 0
+    },
+    "canonical_model_id": "moonshotai/kimi-k3"
+   }
+  }
+ },
+ "kimi-code-plan-cn": {
+  "id": "kimi-code-plan-cn",
+  "models": {
+   "kimi-for-coding-highspeed": {
+    "id": "kimi-for-coding-highspeed",
+    "name": "Kimi For Coding HighSpeed",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0,
+     "cache_write": 0
+    },
+    "canonical_model_id": "moonshotai/kimi-k2.7-code-highspeed"
+   },
+   "kimi-for-coding": {
+    "id": "kimi-for-coding",
+    "name": "kimi-for-coding",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0,
+     "cache_write": 0
+    },
+    "canonical_model_id": "moonshotai/kimi-k2.8-preview"
+   },
+   "k3-256k": {
+    "id": "k3-256k",
+    "name": "Kimi K3-256K",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0,
+     "cache_write": 0
+    },
+    "canonical_model_id": "moonshotai/kimi-k3"
+   },
+   "k3": {
+    "id": "k3",
+    "name": "Kimi K3",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0,
+     "cache_write": 0
+    },
+    "canonical_model_id": "moonshotai/kimi-k3"
+   }
+  }
+ },
+ "openai": {
+  "id": "openai",
+  "models": {
+   "gpt-6-luna": {
+    "id": "gpt-6-luna",
+    "name": "GPT-6 Luna",
+    "cost": {
+     "input": 0.1,
+     "output": 0.5,
+     "cache_read": 0.01,
+     "cache_write": 0.125,
+     "tiers": [
+      {
+       "input": 0.2,
+       "output": 0.75,
+       "cache_read": 0.02,
+       "cache_write": 0.25,
+       "tier": {
+        "type": "context",
+        "size": 272000
+       }
+      }
+     ],
+     "context_over_200k": {
+      "input": 0.2,
+      "output": 0.75,
+      "cache_read": 0.02,
+      "cache_write": 0.25
+     }
+    }
+   }
+  }
+ },
+ "opencode": {
+  "id": "opencode",
+  "models": {
+   "qwen3.6-plus-free": {
+    "id": "qwen3.6-plus-free",
+    "name": "Qwen3.6 Plus Free",
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cache_read": 0
+    }
+   }
+  }
+ }
+}

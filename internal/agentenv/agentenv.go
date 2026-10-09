@@ -51,11 +51,15 @@ var Vars = []string{
 	"GROK_HOME", "GROK_BIN_DIR",
 	// Kimi Code and its shared folder
 	"KIMI_CODE_HOME", "KIMI_SHARE_DIR",
+	// Qwen Code's home, ~/.qwen without it
+	"QWEN_HOME",
 	// Ante
 	"ANTE_HOME",
 	// MiMo Code, MiniMax Code, OpenHanako, Hermes, dsh, WorkBuddy, CodeBuddy Code
 	"MIMOCODE_HOME", "MINIMAX_DATA_DIR", "HANA_HOME", "HERMES_HOME", "DSH_HOME",
 	"WORKBUDDY_CONFIG_DIR", "CODEBUDDY_CONFIG_DIR",
+	// alma-server's data folder (Alma without a desktop, on Linux)
+	"ALMA_DATA_DIR",
 	// Reasonix Studio and its native CLI share this config home
 	"REASONIX_HOME",
 	// Mister Morph's config file

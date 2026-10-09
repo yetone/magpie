@@ -83,3 +83,47 @@ func TestAccountConcurrencyCmd(t *testing.T) {
 		}
 	}
 }
+
+// magpie provider rpm sets how many requests each key sends in a minute
+// (coeo91 on Discord), off for none; a number out of range is an error.
+func TestRPMCmd(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("DSH_HOME", "")
+	if err := provider.Save(provider.Provider{ID: "or", Name: "OpenRouter", Key: "k1", Chat: "http://127.0.0.1:1/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	rpm := func() int {
+		p, err := provider.Find("or")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p.RPMLimit()
+	}
+	if err := providerCmd([]string{"provider", "rpm", "or", "20"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := rpm(); n != 20 {
+		t.Fatalf("set: %d, want 20", n)
+	}
+	if err := providerCmd([]string{"provider", "rpm", "or"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range [][]string{{"-3"}, {"20000"}, {"x"}, {"2", "3"}} {
+		if err := providerCmd(append([]string{"provider", "rpm", "or"}, bad...)); err == nil {
+			t.Fatalf("%v taken", bad)
+		}
+	}
+	if n := rpm(); n != 20 {
+		t.Fatalf("after refused ones: %d, want 20", n)
+	}
+	if err := providerCmd([]string{"provider", "rpm", "or", "off"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := rpm(); n != 0 {
+		t.Fatalf("off: %d", n)
+	}
+}

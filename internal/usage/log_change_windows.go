@@ -3,8 +3,8 @@
 package usage
 
 import (
-	"fmt"
 	"os"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -91,15 +91,16 @@ func stampLogHandle(f *os.File, info os.FileInfo) os.FileInfo {
 	if raw.ChangeTime == 0 {
 		return info
 	}
-	return logFileInfo{FileInfo: info, stamp: fmt.Sprint(raw.ChangeTime)}
+	changed := time.Unix(raw.ChangeTime/10_000_000-11_644_473_600, raw.ChangeTime%10_000_000*100)
+	return logFileInfo{FileInfo: info, changeTime: changed}
 }
 
-// logChangeStamp extracts the stamp captured at snapshot time. It never
+// nativeLogChangeTime extracts the time captured at snapshot time. It never
 // re-opens or re-stats the path: an old snapshot must keep its old stamp even
 // after the log has been rewritten or appended to.
-func logChangeStamp(info os.FileInfo) string {
+func nativeLogChangeTime(info os.FileInfo) time.Time {
 	if stamped, ok := info.(logFileInfo); ok {
-		return stamped.stamp
+		return stamped.changeTime
 	}
-	return ""
+	return time.Time{}
 }

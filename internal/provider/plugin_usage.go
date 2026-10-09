@@ -186,8 +186,7 @@ func pluginUsageFetches(via func(string) context.Context, hidden, placed map[str
 		if len(ls) == 0 {
 			continue
 		}
-		name, icon := pluginCard(pp)
-		out = append(out, perLogin(via(id), ls, name, icon)...)
+		out = append(out, perLogin(via(id), ls, pluginCardFace(pp))...)
 	}
 	return out
 }
@@ -196,8 +195,7 @@ func pluginUsageFetches(via func(string) context.Context, hidden, placed map[str
 func pluginUsageFetchesOf(via func(string) context.Context, id string) []func() SubscriptionQuota {
 	for _, pp := range plugin.Cached() {
 		if pp.ID == id {
-			name, icon := pluginCard(pp)
-			return perLogin(via(id), pluginUsageLogins(pp), name, icon)
+			return perLogin(via(id), pluginUsageLogins(pp), pluginCardFace(pp))
 		}
 	}
 	return nil

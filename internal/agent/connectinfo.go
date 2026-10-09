@@ -76,6 +76,18 @@ func (a *Agent) Source() string {
 	return ""
 }
 
+// FailoverSaid is, for an agent not connected whose requests still go
+// through magpie for account failover alone (FailingOver), what the CLI
+// and the TUI say of it, the Agents page's line in words of their own:
+// why it goes through magpie, and what turns that off (#1385). "" when it
+// doesn't.
+func (a *Agent) FailoverSaid() string {
+	if a.FailingOver == nil || !a.FailingOver() {
+		return ""
+	}
+	return "not connected · goes through magpie only to fail over to your other ChatGPT accounts; switch them off under Providers › Codex to stop it"
+}
+
 // startsWith is, for an agent that reads magpie's models only as it
 // starts, how to find its processes (patterns for pgrep -f), the files it
 // reads them from, and the part of those files magpie writes for it. The
