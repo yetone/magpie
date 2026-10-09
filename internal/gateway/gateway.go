@@ -29,7 +29,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/yetone/magpie/internal/awake"
-
+	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
@@ -831,6 +831,26 @@ func (s *Server) models(w http.ResponseWriter, r *http.Request) {
 			}
 			data = append(data, m)
 		}
+		if local(r) && agentOf(r) == "claude" && settings.Load().ClaudePassthrough && isClaudeOAuth(r) {
+			seen := make(map[string]bool)
+			for _, m := range data {
+				if id, ok := m["id"].(string); ok {
+					seen[id] = true
+				}
+			}
+			for _, m := range catalog.Provider("anthropic") {
+				if !seen[m.ID] {
+					seen[m.ID] = true
+					data = append(data, map[string]any{
+						"id":           m.ID,
+						"object":       "model",
+						"type":         "model",
+						"display_name": m.Name,
+						"owned_by":     "anthropic",
+					})
+				}
+			}
+		}
 	}
 	if r.Header.Get(provider.DrawersHeader) != "" {
 		data = append(data, drawerObjects()...)
@@ -926,6 +946,10 @@ func (s *Server) countTokens(w http.ResponseWriter, r *http.Request) {
 	body, model, err = requestModel(body)
 	if err != nil {
 		writeError(w, provider.Anthropic, 400, err.Error())
+		return
+	}
+	if isClaudePassthrough(r, model) {
+		s.claudeUpstream(w, r, r.URL.Path, body)
 		return
 	}
 	// Count the same masked prompt that generation sends to the vendor.
@@ -1080,6 +1104,13 @@ func (s *Server) handle(from provider.Protocol) http.HandlerFunc {
 		}
 		if from == provider.Chat {
 			body = thinkingEffort(body)
+		}
+		if from == provider.Anthropic {
+			model := modelOf(body)
+			if isClaudePassthrough(r, model) {
+				s.claudeUpstream(w, r, r.URL.Path, body)
+				return
+			}
 		}
 		// Codex with magpie as its provider asks for a thread's title
 		// here (#743)

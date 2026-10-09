@@ -435,7 +435,9 @@ func claudeIn(at place) *Agent {
 	// where set("") and Unwire leave it for the next time it is routed.
 	loginKey := at.key("claude.login")
 	signInHere := func() bool { return at.gwKey() == gateway.Token }
-	keepSignIn := func() bool { return stashLoad()[loginKey] == "claudeai" && signInHere() }
+	keepSignIn := func() bool {
+		return (stashLoad()[loginKey] == "claudeai" || (at.id == "" && settings.Load().ClaudePassthrough)) && signInHere()
+	}
 	wiredKey := func() string {
 		if keepSignIn() {
 			return ""
@@ -900,6 +902,11 @@ func claudeIn(at place) *Agent {
 				return err
 			}
 		}
+		if wiredKey() == "" {
+			if err := edit.DelJSON(path, "env.ANTHROPIC_AUTH_TOKEN"); err != nil {
+				return err
+			}
+		}
 		if sub != "" {
 			kvs = append(kvs, edit.KV{Path: "env.CLAUDE_CODE_SUBAGENT_MODEL", Value: mark(sub)})
 		} else if err := edit.DelJSON(path, "env.CLAUDE_CODE_SUBAGENT_MODEL"); err != nil {
@@ -1228,6 +1235,40 @@ func claudeIn(at place) *Agent {
 		fields = append(fields, effortField(tier+"_effort", tier+" effort", tier, at, put))
 	}
 	fields = append(fields, effortField("subagent_effort", "subagent effort", "its subagents", subagentAt, setSubagent))
+	if at.id == "" {
+		fields = append(fields, Field{
+			Key: "passthrough", Label: "passthrough", Quiet: true,
+			Get: func() string {
+				if settings.Load().ClaudePassthrough {
+					return "on"
+				}
+				return ""
+			},
+			Set: func(v string) error {
+				s := settings.Load()
+				switch v {
+				case "", "off":
+					s.ClaudePassthrough = false
+				case "on":
+					s.ClaudePassthrough = true
+				default:
+					return fmt.Errorf("passthrough is on or off, not %q", v)
+				}
+				if err := settings.Save(s); err != nil {
+					return err
+				}
+				if m := get(); isMagpie(m) {
+					return set(m)
+				}
+				return nil
+			},
+			Options: func(map[string]string) []Option {
+				return []Option{
+					{Value: "on", Note: "use Claude Code's own sign-in for Anthropic models (Claude Code must be signed in with /login)"},
+				}
+			},
+		})
+	}
 	// its sign-in while it runs through magpie: magpie's key, or its own
 	// claude.ai sign-in kept (loginKey), where the gateway takes any key
 	fields = append(fields, Field{

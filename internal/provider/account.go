@@ -302,9 +302,9 @@ func Excluded() []Exclusion {
 	return append(out, savedButSignedOut()...)
 }
 
-// claudeBase is Anthropic's API root, which Claude Code asks; magpie never
-// does with a Claude sign-in.
-var claudeBase = "https://api.anthropic.com"
+// ClaudeBase is Anthropic's API root, which Claude Code asks; magpie never
+// does with a Claude sign-in. A var so tests can point it elsewhere.
+var ClaudeBase = "https://api.anthropic.com"
 
 // claudeKeychain reads credentials from the macOS Keychain; a var so tests
 // never touch the machine's own login.
@@ -664,9 +664,9 @@ func claudeProvider(acct *Account) Provider {
 	// Anthropic with the account's sign-in, which magpie never does
 	acct.fetch = func(context.Context) ([]catalog.Model, error) {
 		ms := catalog.Provider("anthropic")
-		return ms, catalog.SaveLive("claude", claudeBase, ms)
+		return ms, catalog.SaveLive("claude", ClaudeBase, ms)
 	}
-	return Provider{ID: "claude", Name: "Claude Code", Icon: "claudecode-color", Anthropic: claudeBase,
+	return Provider{ID: "claude", Name: "Claude Code", Icon: "claudecode-color", Anthropic: ClaudeBase,
 		Catalog: "anthropic", Website: "https://claude.ai", Account: acct}
 }
 

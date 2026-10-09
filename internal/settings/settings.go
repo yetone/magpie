@@ -128,6 +128,10 @@ type Settings struct {
 	// ClaudeWarmAts is the Claude accounts'.
 	CodexWarmAts  []string `json:"codexWarmAts,omitempty"`
 	ClaudeWarmAts []string `json:"claudeWarmAts,omitempty"`
+	// ClaudePassthrough lets Claude Code use its own OAuth sign-in for Anthropic
+	// models while routed through magpie, omitting ANTHROPIC_AUTH_TOKEN so
+	// Claude Code keeps its subscription and session history (#455).
+	ClaudePassthrough bool `json:"claudePassthrough,omitempty"`
 	// CodexWarmAtOf is a ChatGPT account's own time of day for that, by
 	// its name in lower case, "off" for none: two accounts started hours
 	// apart take over from one another, where at one time they run out

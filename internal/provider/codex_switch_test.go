@@ -112,7 +112,7 @@ func TestClaudeSwitchedWhenSpent(t *testing.T) {
 		t.Errorf("usage endpoint read: %s", r.URL)
 	}))
 	defer fake.Close()
-	claudeBase = fake.URL // isolate puts it back
+	ClaudeBase = fake.URL // isolate puts it back
 	switched := func() string {
 		t.Helper()
 		loginUsageCache.Lock()
