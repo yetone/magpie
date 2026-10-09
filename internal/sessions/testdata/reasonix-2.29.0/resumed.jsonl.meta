@@ -1,0 +1,12 @@
+{
+  "id": "20261007-024620.884235000-fake-model",
+  "created_at": "2026-10-07T02:46:20.968617Z",
+  "updated_at": "2026-10-07T02:46:22.062019Z",
+  "model": "fake/fake-model",
+  "revision": 6,
+  "content_digest": "bd6442f87f367c121dc8b461415af37f44b0c4115f82ae63ef998a23f1ffa3f4",
+  "writer_id": "fixture-host",
+  "schema_version": 2,
+  "turns": 3,
+  "preview": "hello there"
+}

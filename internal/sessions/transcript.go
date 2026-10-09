@@ -28,7 +28,7 @@ var ErrNoTranscript = errors.New("this agent's conversations can't be shown")
 // transcript.
 func HasTranscript(agent string) bool {
 	switch agent {
-	case "claude", "qoder", "qoder-cn", "codex", "pi", "omp":
+	case "claude", "qoder", "qoder-cn", "codex", "pi", "omp", "reasonix":
 		return true
 	}
 	return false
@@ -67,6 +67,8 @@ func readTranscript(s Session, add func(bool, Part) bool) error {
 		return codexContent(whole, add)
 	case "pi", "omp":
 		return piTranscript(s.Path, add)
+	case "reasonix":
+		return reasonixTranscript(s.Path, add)
 	default:
 		return claudeContent(whole, add)
 	}

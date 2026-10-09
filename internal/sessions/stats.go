@@ -23,12 +23,13 @@ type Stats struct {
 
 // Summary is one session's share of a range.
 type Summary struct {
-	Key   string    `json:"key"` // agent:id as its files are grouped, for Get
-	Agent string    `json:"agent"`
-	ID    string    `json:"id"`
-	Cwd   string    `json:"cwd"`
-	Title string    `json:"title"`
-	Last  time.Time `json:"last"`
+	Key             string    `json:"key"` // agent:id as its files are grouped, for Get
+	Agent           string    `json:"agent"`
+	ID              string    `json:"id"`
+	Cwd             string    `json:"cwd"`
+	Title           string    `json:"title"`
+	UsageIncomplete bool      `json:"usage_incomplete,omitempty"`
+	Last            time.Time `json:"last"`
 	Tokens
 	Cost   float64  `json:"cost"`
 	Priced bool     `json:"priced"` // every model it used has a price
@@ -200,7 +201,8 @@ func statsAt(days int, now time.Time) Stats {
 				sh.perDate[date] = pd
 			}
 			for model, t := range d.Models {
-				if !t.zero() {
+				// Reasonix 2.x records model presence without session token counts.
+				if !t.zero() || f.agent == "reasonix" {
 					u := sh.models[model]
 					u.add(t)
 					sh.models[model] = u
@@ -211,6 +213,11 @@ func statsAt(days int, now time.Time) Stats {
 			sh.prompts += d.Prompts
 			sh.replies += d.Replies
 			pd.messages += d.Prompts + d.Replies
+			// A Reasonix history can retain authored turns without a token
+			// receipt or per-message model. Presence is still known.
+			if f.agent == "reasonix" && d.Prompts+d.Replies > 0 {
+				sh.dates[date] = true
+			}
 			for name, n := range d.Tools {
 				sh.tools[name] += n
 				pd.tools[ToolCategory(name)] += n
@@ -294,7 +301,7 @@ func statsAt(days int, now time.Time) Stats {
 			continue
 		}
 		sum := Summary{Key: key, Agent: s.Agent, ID: s.ID, Cwd: cmp.Or(folder[key], s.Cwd), Title: clip(s.Title, 160),
-			Last: s.Last, Priced: true, Active: sh.active / 1000, Models: []string{}, Days: []int{},
+			Last: s.Last, Priced: true, Active: sh.active / 1000, Models: []string{}, Days: []int{}, UsageIncomplete: s.UsageIncomplete,
 			Prompts: sh.prompts, Replies: sh.replies, tools: sh.tools, skills: sh.skills, skillLast: sh.skillLast,
 			perDay: map[int]*summaryDay{}}
 		for _, n := range sh.tools {

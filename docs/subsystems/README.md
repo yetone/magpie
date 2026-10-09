@@ -11,6 +11,7 @@ These pages describe current responsibilities, runtime paths, state, and contrac
 | Connecting an agent's config to the gateway, drift, disconnect, WSL twins | [Agent wiring](agent-wiring.md) |
 | Providers, keys, subscription accounts, refresh and allowance | [Providers and accounts](providers-accounts.md) |
 | Instructions, MCP servers, skills and RTK written into agents | [Library](library.md) |
+| Reasonix local conversations and retained native usage | [Reasonix sessions](reasonix-sessions.md) |
 | Tray, panel, window, `magpie web` and the page's JSON API | [GUI app shell](gui-shell.md) |
 
 A subsystem can span several packages or repositories. Its reference describes the behavior those parts provide together; it does not need to list every function.

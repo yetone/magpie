@@ -4,6 +4,9 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Reasonix has {n} session stores with unreadable or unknown data. Their history may be incomplete.": "有 {n} 个 Reasonix 会话存储存在无法读取或未知的数据，其历史可能不完整。",
+    "Partial usage history": "用量历史不完整",
+    "Only retained native usage is counted; older records are unavailable.": "仅统计现存的本地用量记录，缺失的历史记录无法计入。",
     // the context window (context.js)
     "1 request": "1 个请求",
     "1 session": "1 个会话",
@@ -7741,6 +7744,9 @@ const I18N = {
     "Video · 7 days": "影片 · 7 天",
   },
   ja: {
+    "Reasonix has {n} session stores with unreadable or unknown data. Their history may be incomplete.": "読み取れない、または未知のデータを含む Reasonix セッションストアが {n} 件あります。履歴が不完全な可能性があります。",
+    "Partial usage history": "使用履歴が不完全です",
+    "Only retained native usage is counted; older records are unavailable.": "保存されているローカル使用記録のみを集計します。失われた履歴は含まれません。",
     // the context window (context.js)
     "1 request": "1 件のリクエスト",
     "1 session": "1 件のセッション",
@@ -11603,6 +11609,9 @@ const I18N = {
     "Main navigation": "メインナビゲーション",
   },
   de: {
+    "Reasonix has {n} session stores with unreadable or unknown data. Their history may be incomplete.": "{n} Reasonix-Sitzungsspeicher enthalten unlesbare oder unbekannte Daten. Ihr Verlauf ist möglicherweise unvollständig.",
+    "Partial usage history": "Unvollständiger Nutzungsverlauf",
+    "Only retained native usage is counted; older records are unavailable.": "Nur erhaltene lokale Nutzungsdaten werden gezählt; ältere Datensätze sind nicht verfügbar.",
     // the context window (context.js)
     "1 request": "1 Anfrage",
     "1 session": "1 Sitzung",
