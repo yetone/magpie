@@ -42,6 +42,14 @@ func corsGuard(next http.Handler) http.Handler {
 		}
 		h := w.Header()
 		h.Set("Access-Control-Allow-Origin", origin)
+		// Claude for Microsoft 365 asks its gateway with credentials and
+		// reads Anthropic's request and rate-limit headers. Keep those
+		// additions scoped to its origin; existing browser callers retain
+		// the CORS contract they had before this integration.
+		if origin == M365Origin {
+			h.Set("Access-Control-Allow-Credentials", "true")
+			h.Set("Access-Control-Expose-Headers", "request-id, anthropic-ratelimit-requests-limit, anthropic-ratelimit-requests-remaining, anthropic-ratelimit-requests-reset, anthropic-ratelimit-tokens-limit, anthropic-ratelimit-tokens-remaining, anthropic-ratelimit-tokens-reset")
+		}
 		h.Add("Vary", "Origin")
 		if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
