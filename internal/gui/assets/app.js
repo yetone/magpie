@@ -939,7 +939,11 @@ const NO_PICKER = new Set(["gemini", "hermes", "morph", "agy", "muse"]);
 // start on, but which of magpie's it offers (Claude Desktop and Cursor
 // Private Inference read /v1/models, and the user switches among them in it)
 const MENU_FROM_LIST = new Set(["claude-desktop", "cursor-local"]);
-const menuFromList = (a) => MENU_FROM_LIST.has(a.id) && a.wired && !!a.models;
+// or the server says so (agent.ListsModels): ZCode, Pencil, T3 Code,
+// WorkBuddy's and Copilot in JetBrains put magpie's models in their own
+// picker (#1508)
+const listsMenu = (a) => MENU_FROM_LIST.has(a.id) || !!a.menu;
+const menuFromList = (a) => listsMenu(a) && a.wired && !!a.models;
 
 // menuSaid: the models such an agent lists, by name while they are few
 function menuSaid(c) {
@@ -1130,7 +1134,7 @@ function expandLink(a) {
   const b = el("button", "ag-link" + (open ? " open" : ""));
   b.type = "button";
   b.setAttribute("aria-expanded", String(open));
-  b.append(el("span", "", open ? t("Collapse") : a.id === "claude" ? t("Tiers") : a.models && !MENU_FROM_LIST.has(a.id) ? t("Models {n}", { n: a.models.shown }) : t("Details")));
+  b.append(el("span", "", open ? t("Collapse") : a.id === "claude" ? t("Tiers") : a.models && !listsMenu(a) ? t("Models {n}", { n: a.models.shown }) : t("Details")));
   if (!open) {
     const c = el("span", "chev");
     c.append(svg(CHEV_R, 10, 1.6));
@@ -1215,7 +1219,7 @@ function connectRow(a, row, who, { fields, extras, fieldBtn, sw, kind }) {
   if (back) row.append(back);
   // the model it starts on, one click away beside the switch (the owner:
   // both ways at once): picked here, it is connected first if it wasn't
-  const start = kind === "ok" && !MENU_FROM_LIST.has(a.id) ? startField(a) : null;
+  const start = kind === "ok" && !listsMenu(a) ? startField(a) : null;
   if (start) fields.querySelector(`:scope > [data-key="${CSS.escape(start.key)}"]`)?.remove();
   if (kind === "ok") {
     if (a.wired) row.append(expandLink(a));

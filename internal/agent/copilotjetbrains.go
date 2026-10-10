@@ -156,6 +156,8 @@ func copilotJetBrainsAt(path string, installed func() bool) *Agent {
 				return edit.GetJSON(path, k)
 			}, "deploymentUrl", vscodeURL(), copilotJBKey, gateway.TokenFor(copilotJBID))
 		},
+		// its picker lists the models picked for it (#1508)
+		ListsModels: true,
 		Fields: []Field{{
 			Key: "provider", Label: "provider",
 			Get: func() string {

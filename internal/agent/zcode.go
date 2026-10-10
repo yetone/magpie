@@ -65,6 +65,8 @@ func zcode(home string) *Agent {
 		ID: "zcode", Name: "ZCode", Icon: "zcode", Aliases: []string{"z-code"},
 		UA:  []string{"zcode"},
 		Dir: dir, Path: path,
+		// its picker lists the models picked for it, in both files (#1508)
+		ListsModels: true,
 		Notice: func() string {
 			if Running(`ZCode\.app/`, `(^|/)ZCode( |$)`) {
 				return noticeZcode.String()

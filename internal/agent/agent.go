@@ -112,10 +112,12 @@ type Agent struct {
 	// UA is what the agent's User-Agent begins with, lower-case: how the
 	// gateway tells its requests from others'
 	UA []string
-	// ListsModels: the agent's own model menu is the gateway's /v1/models
-	// as asked with its key, so the models picked on the Agents page for it
-	// (settings.HiddenModels) are its menu, though no field of its picks
-	// among the catalog (Cursor Private Inference)
+	// ListsModels: the agent's own model menu is magpie's models as picked
+	// on the Agents page for it (settings.HiddenModels, PickedModels),
+	// though no field of its picks among the catalog: the gateway's
+	// /v1/models as asked with its key (Cursor Private Inference), or the
+	// list magpie writes into its files, magpieModels(id), where its only
+	// field puts magpie in its picker (ZCode, Pencil: #1508)
 	ListsModels bool
 	// Sync, for an agent that reads magpie's models from a file of its own
 	// rather than asking the gateway, rewrites that list as the catalog is

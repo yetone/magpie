@@ -68,6 +68,8 @@ func t3code(home string) *Agent {
 		Sync: func() error {
 			return syncJSON(path, t3Instance, func() any { return t3InstanceJSON(path, gateway.URL()) })
 		},
+		// its custom models are the models picked for it (#1508)
+		ListsModels: true,
 		Fields: []Field{{
 			Key: "provider", Label: "provider",
 			Get: func() string {

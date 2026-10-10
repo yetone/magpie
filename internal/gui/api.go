@@ -193,6 +193,9 @@ type agentJSON struct {
 	// Models: how many of the catalog its lists show, for an agent that
 	// picks among it (agent_models.go)
 	Models *modelCountJSON `json:"models,omitempty"`
+	// Menu: its own model menu is the models picked here, no one model to
+	// start on (agent.ListsModels): ZCode's, Cursor Private Inference's
+	Menu bool `json:"menu,omitempty"`
 	// Source: what an agent not connected runs on now (agent.Source), and
 	// Stale: copies of a connected one still running on the list they
 	// started with (agent.Stale), for the line under its name
@@ -1780,6 +1783,7 @@ func state() stateJSON {
 		vals := a.Values()
 		aj := agentJSON{ID: a.ID, Name: a.Name, Icon: a.Icon, Path: tilde(a.Path), Fields: agentFields(a, vals)}
 		aj.Models = agentModelCount(a, aj.Fields)
+		aj.Menu = a.ListsModels
 		aj.Drift = a.Drift()
 		aj.Wired = a.Wired()
 		if aj.Wired {

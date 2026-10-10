@@ -68,6 +68,8 @@ func workbuddyBuild(id, name, dir string, aliases []string) *Agent {
 			}
 			return write(true)
 		},
+		// its picker lists the models picked for it (#1508)
+		ListsModels: true,
 		Fields: []Field{{
 			Key: "provider", Label: "provider",
 			Get: func() string {
