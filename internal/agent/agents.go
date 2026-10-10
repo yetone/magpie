@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"sort"
@@ -89,6 +91,7 @@ func builtins(home, cfg string) []*Agent {
 		pi(home),
 		aside(home),
 		omo(home),
+		primeAgent(home),
 		goose(home, cfg),
 		cursor(home),
 		cursorLocal(),
@@ -834,10 +837,96 @@ func homeDir(home, d string) string {
 	return filepath.Clean(d)
 }
 
+// beforeMagpie is a copy of an agent's own files taken before magpie first
+// writes them (file.before-magpie beside each), which Disconnect puts back
+// byte for byte when what it left says the same as the copy: the same
+// JSON, in the user's own order, spacing and comments-free layout. Where
+// they differ (the user changed something while connected), what
+// Disconnect left stands. A file that wasn't there (named in the stash
+// under absent) goes again when nothing but empty objects is left in it.
+type beforeMagpie struct {
+	absent string
+	files  []string
+}
+
+// take copies each file aside, or notes it absent; a file that can't be
+// read is neither, and isn't put back.
+func (b beforeMagpie) take() {
+	var gone []string
+	for _, f := range b.files {
+		raw, err := os.ReadFile(f)
+		switch {
+		case err == nil:
+			if edit.WriteAtomic(f+".before-magpie", raw) != nil {
+				os.Remove(f + ".before-magpie")
+			}
+		case errors.Is(err, fs.ErrNotExist):
+			os.Remove(f + ".before-magpie")
+			gone = append(gone, filepath.Base(f))
+		default:
+			os.Remove(f + ".before-magpie")
+		}
+	}
+	stash(map[string]string{b.absent: strings.Join(gone, "\n")})
+}
+
+// restore puts back what take kept, where Disconnect left the same.
+func (b beforeMagpie) restore() error {
+	gone := strings.Split(unstash(b.absent), "\n")
+	for _, f := range b.files {
+		cur, err := os.ReadFile(f)
+		if err != nil {
+			os.Remove(f + ".before-magpie")
+			continue
+		}
+		var now any
+		if json.Unmarshal(cur, &now) != nil {
+			continue
+		}
+		if was, err := os.ReadFile(f + ".before-magpie"); err == nil {
+			var then any
+			if json.Unmarshal(was, &then) == nil && reflect.DeepEqual(now, then) && !bytes.Equal(cur, was) {
+				if err := edit.WriteAtomic(f, was); err != nil {
+					return err
+				}
+			}
+			os.Remove(f + ".before-magpie")
+			continue
+		}
+		if slices.Contains(gone, filepath.Base(f)) && emptyJSON(now) {
+			if err := os.Remove(f); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// emptyJSON says v is an object holding nothing but empty objects.
+func emptyJSON(v any) bool {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, x := range m {
+		if !emptyJSON(x) {
+			return false
+		}
+	}
+	return true
+}
+
 // piLike is Pi, or a fork of it that keeps Pi's settings.json and
 // models.json in an agent folder of its own (OmO, omo.go): id is its id,
 // icon and command, dir its agent folder.
 func piLike(at place, id, name, dir string) *Agent {
+	return piLikeKeyed(at, id, name, dir, at.gwKey)
+}
+
+// piLikeKeyed is piLike whose provider "magpie" carries key's key: one
+// that names the agent (agentKeyAt) for an agent whose requests carry
+// nothing else of it (Prime Agent, primeagent.go).
+func piLikeKeyed(at place, id, name, dir string, key func() string) *Agent {
 	path := filepath.Join(dir, "settings.json")
 	modelsPath := filepath.Join(dir, "models.json")
 	auth := filepath.Join(dir, "auth.json")
@@ -846,18 +935,26 @@ func piLike(at place, id, name, dir string) *Agent {
 	pair := pairSet(set, "defaultProvider", "defaultModel")
 	// the model a new session starts on, as the model field shows it
 	startup := func() string { return piStartup(path, pairGet(get, "defaultProvider", "defaultModel")()) }
-	block := piBlockKept(modelsPath, func() any { return magpieProviderJSONAt("pi", id, at.gw()) })
+	block := piBlockKept(modelsPath, func() any {
+		b := magpieProviderJSONAt("pi", id, at.gw()).(map[string]any)
+		b["apiKey"] = key()
+		return b
+	})
 	writeMagpie := func() error {
 		return edit.SetJSON(modelsPath, edit.KV{Path: "providers." + magpieID, Value: block()})
 	}
+	// the user's two files as they were before magpie's first write, put
+	// back byte for byte by Disconnect where it leaves them saying the same
+	before := beforeMagpie{at.key(id + ".before.absent"), []string{path, modelsPath}}
 	return &Agent{
 		ID: id, Name: name, Icon: id, Bin: id, Dir: dir, Path: path, Spelled: prefixed,
+		Restore: before.restore,
 		Check: func() string {
 			if p, _ := get("defaultProvider"); p != magpieID {
 				return ""
 			}
 			return wiringOff(name, modelsPath, func(k string) (string, bool) { return edit.GetJSON(modelsPath, "providers."+magpieID+"."+k) },
-				"baseUrl", at.v1(), "apiKey", at.gwKey())
+				"baseUrl", at.v1(), "apiKey", key())
 		},
 		Sync: func() error {
 			return syncJSON(modelsPath, "providers."+magpieID, block)
@@ -878,6 +975,11 @@ func piLike(at place, id, name, dir string) *Agent {
 						return piScopeWithout(path)
 					}
 					if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
+						if _, has := edit.GetJSON(modelsPath, "providers."+magpieID); !has {
+							if p, _ := get("defaultProvider"); p != magpieID {
+								before.take()
+							}
+						}
 						if err := writeMagpie(); err != nil {
 							return err
 						}

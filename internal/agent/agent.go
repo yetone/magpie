@@ -129,6 +129,10 @@ type Agent struct {
 	// kept: the endpoint, provider and model the user had. Disconnect runs
 	// it before the fields' defaults.
 	Unwire func() error
+	// Restore, for an agent whose files magpie copied aside before its
+	// first write (beforeMagpie), puts them back as they were where what
+	// Disconnect left says the same. Disconnect runs it last.
+	Restore func() error
 	// Join, for an agent that can have magpie's models in its own list
 	// while it stays on the model it was on (Codex signed in with ChatGPT),
 	// connects it so, its model left as its own last pick; false where it

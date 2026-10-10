@@ -290,6 +290,17 @@ var wslKinds = []wslKind{
 			}
 			return nil
 		}},
+	// Prime Agent, Pi's files in a folder of its own, at its default
+	// folder: the distro's variable that moves it isn't read
+	{id: "prime-agent", name: "Prime Agent", dir: ".prime/agent", bin: "prime-agent", in: primeAgentIn,
+		asleep: func(key string) func(map[string]string) []Option {
+			if key == "model" {
+				return func(cur map[string]string) []Option {
+					return append(ownOptions("", cur["model"]), viaMagpie("prime-agent", magpieID+"/")...)
+				}
+			}
+			return nil
+		}},
 	// only its settings.json: its sign-in, sessions and prompt history,
 	// read on this machine for Claude Code here, aren't read in a distro
 	{id: "claude", name: "Claude Code", dir: ".claude", bin: "claude", in: claudeIn,

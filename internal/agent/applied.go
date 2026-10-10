@@ -695,6 +695,11 @@ func (a *Agent) Disconnect() error {
 			}
 		}
 	}
+	if a.Restore != nil {
+		if err := a.Restore(); err != nil {
+			return err
+		}
+	}
 	// what it was on through magpie, for switching it on again
 	back := reconnection{Magpie: map[string]string{}, Left: a.Values()}
 	for _, f := range a.Fields {

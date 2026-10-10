@@ -117,6 +117,10 @@ func TestTildeFolderVariables(t *testing.T) {
 		{"HANA_HOME", "~other/hanako", false},
 		{"PI_CODING_AGENT_DIR", "~other/pi", false},
 		{"PI_CODING_AGENT_DIR", `~\pi`, runtime.GOOS == "windows"},
+		{"PRIME_AGENT_CODING_AGENT_DIR", "~", true},
+		{"PRIME_AGENT_CODING_AGENT_DIR", "~/pa", true},
+		{"PRIME_AGENT_CODING_AGENT_DIR", "~other/pa", false},
+		{"PRIME_AGENT_CODING_AGENT_DIR", `~\pa`, runtime.GOOS == "windows"},
 	} {
 		t.Run(tc.name+"="+tc.value, func(t *testing.T) {
 			t.Setenv(tc.name, tc.value)

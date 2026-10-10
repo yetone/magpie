@@ -2961,7 +2961,7 @@ const grouped = (a, f) => menuRoles(a).includes(f.label) || roleLevel(f.label);
 const ROLE_MODELS = [...FOLLOWS_MODEL, ...OMP_OWN_PICK];
 // agents with no default model of their own, whose Default leaves the pick
 // to them (#709)
-const PICKS_ITSELF = ["pi", "omo"];
+const PICKS_ITSELF = ["pi", "omo", "prime-agent"];
 
 // A field that follows the model unless set — Codex's subagents, Claude
 // Code's tiers, omp's roles — is a small square after the pickers rather
