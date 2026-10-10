@@ -50,8 +50,10 @@ function server(lang, saves) {
 }
 
 const L = {
-  en: { field: "Endpoint", hint: /Share on local network.*the API the agent spoke/, needed: "The other magpie's address is needed", note: "another computer's magpie, shared on its network", add: "Add" },
-  zh: { field: "终结点", hint: /设置 → 局域网共享.*原样转发/, needed: "需要填写另一台 magpie 的地址", note: "另一台电脑上的 magpie，局域网共享", add: "添加" },
+  en: { field: "Endpoint", hint: /Share on local network.*the API the agent spoke/, needed: "The other magpie's address is needed", note: "another computer's magpie, shared on its network", add: "Add",
+    decide: ["Jev endpoint", "System One endpoint"] },
+  zh: { field: "终结点", hint: /设置 → 局域网共享.*原样转发/, needed: "需要填写另一台 magpie 的地址", note: "另一台电脑上的 magpie，局域网共享", add: "添加",
+    decide: ["Jev 端点", "System One 端点"] },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -95,7 +97,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           });
           await page.locator('#providers .row[data-id="office"]').click();
           await saved.locator(".ehead b", { hasText: "Office" }).waitFor();
-          assert.equal(await saved.locator("label", { hasText: /Jev endpoint|Jev 终结点|System One endpoint|System One 终结点/ }).count(), 0);
+          // the decision model's own address field, by its label as i18n.js has it
+          for (const label of w.decide) assert.equal(await saved.locator("label", { hasText: label }).count(), 0, label);
           assert.equal(await saved.locator('input[type="url"]').count(), 1, "only the remote's address is editable");
           assert.deepEqual(await saved.locator(".mchip > span:first-child").allTextContents(),
             decisions ? ["Chat", "custom-a · judge", "custom-b · judge"] : ["Chat"]);
