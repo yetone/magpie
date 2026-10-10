@@ -26,12 +26,13 @@ today.setHours(0, 0, 0, 0);
 const from = new Date(today);
 from.setDate(from.getDate() - ((today.getDay() + 6) % 7) - 7 * 52);
 const SPAN = Math.round((today - from) / 864e5) + 1; // 7 × 52 + this week's days so far
-// a day of every fifth quiet; the busiest by tokens is today, by requests ten days ago
+// a day of every fifth quiet; the busiest by tokens is today, by requests ten
+// days ago (never one of the quiet: on a Sunday SPAN - 11 is a fifth day)
 const DAYS = [];
 for (let i = 0; i < SPAN; i++) {
   const d = new Date(from);
   d.setDate(d.getDate() + i);
-  if (i % 5 === 0 && i !== SPAN - 1) continue;
+  if (i % 5 === 0 && i !== SPAN - 1 && i !== SPAN - 11) continue;
   const calls = i === SPAN - 11 ? 500 : (i % 13) + 1;
   DAYS.push({ date: iso(d), calls, tokens: i === SPAN - 1 ? 9e9 : calls * 1e5 * (1 + (i % 7)), cost: calls * 0.5 });
 }
@@ -141,7 +142,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         else assert(!sc.over, "a wide card holds every week");
 
         // the pointer on a day: its date and what it had, inside the card
-        const busy = DAYS.find((d) => d.date === iso(new Date(today.getTime() - 10 * 864e5)));
+        const busy = DAYS.find((d) => d.date === iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 10)));
         const cell = heat.locator(`.heat-grid i[data-date="${busy.date}"]`);
         // the reader wheels the page to the card (magpie puts back a scroll by
         // code), and the pointer then rests on a day
