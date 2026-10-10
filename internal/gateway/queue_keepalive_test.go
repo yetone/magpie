@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"io"
 	"net"
@@ -68,19 +69,50 @@ func (v *streamVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // idleConn is a connection whose reads time out after idle with nothing
 // read, as an agent's HTTP client with an idle timeout (WorkBuddy, Trae,
-// Qoder): any byte, a comment's too, starts it again.
+// Qoder): any byte, a comment's too, starts it again. Once it has read
+// the reply's last event (replyEnds) it waits closeAfterLast for the
+// stream to close instead: what the gateway does after it (the usage
+// ledger, the route's trace, affinity) is no wait an agent's idle timeout
+// counts, as TestTranslatedStreamKeepsClientAlive has it. Under load that
+// passed 400ms with the whole reply read, the stream not yet closed.
 type idleConn struct {
 	net.Conn
-	idle time.Duration
+	idle  time.Duration
+	tail  []byte // the end of what was read, for a marker split across reads
+	ended bool
 }
 
-func (c idleConn) Read(b []byte) (int, error) {
-	c.SetReadDeadline(time.Now().Add(c.idle))
-	return c.Conn.Read(b)
+// closeAfterLast is how long a stream may stay open after its reply's last
+// event before the test fails rather than hangs.
+const closeAfterLast = 5 * time.Second
+
+// replyEnds are the last events of a streamed reply, or of its error, in
+// each protocol.
+var replyEnds = []string{"data: [DONE]", `"type":"response.completed"`, `"type":"response.failed"`, `"type":"message_stop"`, "event: error", `data: {"error"`}
+
+func (c *idleConn) Read(b []byte) (int, error) {
+	wait := c.idle
+	if c.ended {
+		wait = closeAfterLast
+	}
+	c.SetReadDeadline(time.Now().Add(wait))
+	n, err := c.Conn.Read(b)
+	if n > 0 && !c.ended {
+		c.tail = append(c.tail, b[:n]...)
+		for _, e := range replyEnds {
+			if bytes.Contains(c.tail, []byte(e)) {
+				c.ended = true
+			}
+		}
+		if len(c.tail) > 64 {
+			c.tail = c.tail[len(c.tail)-64:]
+		}
+	}
+	return n, err
 }
 
 // idleClient is an HTTP client that gives up once it hears nothing for
-// idle, headers or body.
+// idle, headers or body, until the reply's last event.
 func idleClient(idle time.Duration) *http.Client {
 	d := &net.Dialer{}
 	return &http.Client{Transport: &http.Transport{
@@ -90,7 +122,7 @@ func idleClient(idle time.Duration) *http.Client {
 			if err != nil {
 				return nil, err
 			}
-			return idleConn{c, idle}, nil
+			return &idleConn{Conn: c, idle: idle}, nil
 		},
 	}}
 }
@@ -148,6 +180,10 @@ func TestQueuedStreamKeptAliveForTheMinute(t *testing.T) {
 		t.Run(a.name, func(t *testing.T) {
 			shortMinute(t, 1200*time.Millisecond, time.Minute)
 			gw := queueGateway(t, &streamVendor{}, func(p *provider.Provider) { p.MaxRPM = 1 })
+			// the minute counts from the first request's start, which is
+			// after this: the second is answered no sooner than a minute
+			// after it, however long the first took to close
+			first := time.Now()
 			if code, body, err := askIdle(gw, a.path, a.body, 400*time.Millisecond); err != nil || code != 200 {
 				t.Fatalf("first: %d %v %s", code, err, body)
 			}
@@ -159,8 +195,8 @@ func TestQueuedStreamKeptAliveForTheMinute(t *testing.T) {
 			if code != 200 || !strings.Contains(body, ": keepalive") || !strings.Contains(body, "queued ok") {
 				t.Fatalf("queued = %d %q, want 200, keepalives, then the reply", code, body)
 			}
-			if d := time.Since(began); d < time.Second {
-				t.Fatalf("answered after %s, inside the minute", d)
+			if d := time.Since(first); d < rpmWindow {
+				t.Fatalf("answered %s after the first request, inside the minute (%s)", d, rpmWindow)
 			}
 		})
 	}
