@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/klauspost/compress/gzhttp"
+
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -88,7 +90,7 @@ func StartWeb(addr, version string) (*Web, error) {
 	quit := func() { once.Do(func() { close(w.quit) }) }
 	w.Link = "http://" + net.JoinHostPort(host, port) + "/?k=" + url.QueryEscape(key)
 	w.srv = &http.Server{
-		Handler:           webGuard("magpie_web_"+port, key, keep, Handler(webHost{quit}, startBackend())),
+		Handler:           webHandler(port, key, keep, Handler(webHost{quit}, startBackend())),
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 	go w.srv.Serve(ln)
@@ -208,6 +210,58 @@ func LANAddrs() []string {
 		out = append(out, n.IP.String())
 	}
 	return out
+}
+
+// webHandler is what `magpie web` on port serves: the page and its API
+// behind the key, compressed for the browser.
+func webHandler(port, key string, keep time.Duration, page http.Handler) http.Handler {
+	return webCompressed(webGuard("magpie_web_"+port, key, keep, page))
+}
+
+// webCompressed gzips what `magpie web` sends a browser that takes it: the
+// page's scripts, styles and SVG icons, and the API's JSON. They went out
+// as they are, about 4 MB for a first load before any data, and the
+// routing trace's JSON grows with every account a request could go to; a
+// browser over a 3 Mbps link to a server waited for all of it (akic404 on
+// Discord). They shrink to about a quarter, the JSON to a twentieth.
+// Pictures already compressed go as they are.
+//
+// The app's own window gets the page from inside the process, with no
+// network between, so only `magpie web` compresses.
+//
+// A gzipped file's ETag says so ("…-gzip"), as a validator of other bytes;
+// asked for again with it, the file is still a 304. A few bytes of padding
+// keyed to the content keep a response's compressed size from telling
+// exactly what it holds (BREACH): the page carries keys.
+func webCompressed(next http.Handler) http.Handler {
+	wrap, err := gzhttp.NewWrapper(
+		gzhttp.ContentTypeFilter(compressible),
+		gzhttp.SuffixETag(gzipETag),
+		gzhttp.RandomJitter(32, 0, false),
+	)
+	if err != nil {
+		return next
+	}
+	gz := wrap(next)
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if tag := r.Header.Get("If-None-Match"); strings.Contains(tag, gzipETag+`"`) {
+			r.Header.Set("If-None-Match", strings.ReplaceAll(tag, gzipETag+`"`, `"`))
+		}
+		gz.ServeHTTP(rw, r)
+	})
+}
+
+// gzipETag ends the ETag of a gzipped response.
+const gzipETag = "-gzip"
+
+// compressible: text, scripts, JSON and SVG; not PNG, WebP, ICO or JPEG.
+func compressible(ct string) bool {
+	ct = strings.ToLower(strings.TrimSpace(ct))
+	if i := strings.IndexByte(ct, ';'); i >= 0 {
+		ct = strings.TrimSpace(ct[:i])
+	}
+	return strings.HasPrefix(ct, "text/") || strings.HasSuffix(ct, "javascript") ||
+		strings.HasSuffix(ct, "json") || ct == "image/svg+xml"
 }
 
 // isWeb: the page is served to a browser by `magpie web`.

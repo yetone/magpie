@@ -630,6 +630,14 @@ func revalidated(next http.Handler) http.Handler {
 		sum := sha256.Sum256(b)
 		rw.Header().Set("ETag", `"`+hex.EncodeToString(sum[:12])+`"`)
 		rw.Header().Set("Cache-Control", "no-cache")
+		// a file asked for by the address the page names it by, its
+		// content's hash, is the same at that address for good: a browser
+		// keeps it and doesn't ask again, which a slow link to `magpie web`
+		// feels at every load (akic404 on Discord). Another version's hash,
+		// or none, is asked for again as before.
+		if v := r.URL.Query().Get("v"); v != "" && v == hex.EncodeToString(sum[:6]) {
+			rw.Header().Set("Cache-Control", "max-age=31536000, immutable")
+		}
 		if r.URL.Path == "/" {
 			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 			http.ServeContent(rw, r, "index.html", time.Time{}, bytes.NewReader(b))
