@@ -167,6 +167,7 @@ func moveAccountSettings(id string, moves map[string]string) error {
 			moved = moveKey(p.AccountCaps, from, to) || moved
 			moved = moveKey(p.AccountWindowCaps, from, to) || moved
 			moved = moveKey(p.AccountConcurrency, from, to) || moved
+			moved = moveKey(p.AccountNames, from, to) || moved
 		}
 	}
 	if !moved {

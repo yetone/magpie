@@ -595,6 +595,11 @@ body.window .field.solo { grid-column: auto; }
 .subscription-card.several .credit-days:not([hidden]) + .subscription-account,
 .subscription-card.several .quota-curve:not([hidden]) + .subscription-account { margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
 .subscription-account .user { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* an account the user named (#1515): the name, then the account and the
+   key plan it stands in for, muted, giving their room up first */
+.subscription-account .quota-alias { flex: 0 1 auto; color: var(--fg); font-weight: 500; }
+.quota-of, .quota-seat { min-width: 0; flex: 0 3 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
+.subscription-head .quota-alias, .subscription-head .quota-seat { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--fg-2); }
 /* an account of several in brief (ARNO): its windows' names, figures and
    bars, closer to the next (its line where a full one's is, so a fold keeps it in place); its fold at the row's end */
 .subscription-card.several .subscription-account.brief:not(:nth-child(2)) { padding-top: 7px; }
@@ -2087,6 +2092,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc .acct-models .hint { font-size: 11px; color: var(--muted); line-height: 1.4; flex: 1 1 220px; }
 .acc .acct-models .acm-foot .grow { flex: 0 0 0; }
 .acc .n, .acc .rename { flex: 0 1 auto; }
+/* an account's name of the user's own, the account beside it (#1515) */
+.acc .acct-who { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+.acc .acct-user, .acc .acct-seat { color: var(--muted); font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acc .acct-who .n { flex: 0 1 auto; }
 .acc .plan { flex: none; }
 /* a key's row (#841): what shows only on hover takes no room till then,
    so a key's weight never squeezes its name away; the room it takes on

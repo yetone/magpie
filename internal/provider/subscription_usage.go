@@ -140,6 +140,13 @@ type SubscriptionQuota struct {
 	// request through this computer's gateway, nil when it hasn't in the
 	// last 30 days (served.go); set by Quotas, never cached.
 	LastServedAt *time.Time `json:"lastServedAt,omitempty"`
+	// Alias is the account's name of the user's own (AccountNames), else
+	// Seat; Seat is the name of the key plan this account's card stands
+	// in for (seatCards, #1515): the same GLM seat added both as a key
+	// and as a signed-in account. Both "" when none; set as cards are
+	// handed out, never cached.
+	Alias string `json:"alias,omitempty"`
+	Seat  string `json:"seat,omitempty"`
 	// In-process read order, separate from the vendor's ReadAt and never
 	// persisted: restarting starts a new sequence.
 	readSeq uint64

@@ -11333,7 +11333,7 @@ function renderAccounts(a, p) {
       dot.title = on ? t("Stop using this account") : t("Use this account too");
       dot.onclick = () => accountAction("login/" + (on ? "off" : "on"), { agent: a.agent, user: l.user });
     }
-    row.append(dot, el("span", "n", l.user), el("span", "plan", accountPlan({ agent: a.agent, builtin: a.builtin, plan: l.plan })));
+    row.append(dot, accountNameButton(p, l.user), el("span", "plan", accountPlan({ agent: a.agent, builtin: a.builtin, plan: l.plan })));
     // its own models (#474), when there is another account to send the rest to
     const [amPill, amBox] = ls.length > 1 || accountModelsOf(p, l.user).length ? accountModels(p, l.user, false, l.user) : [];
     if (amPill) row.append(amPill);
@@ -11896,6 +11896,52 @@ function poolLine(line, ws, q, capFor = () => 0, settable = null) {
 // the cap and opens the app's menu of shares; a mark on each meter the cap
 // counts shows where it is, and a note says when it holds the account.
 const CAP_SHARES = [50, 60, 70, 80, 90];
+// An account's name of the user's own (#1515): a team's GLM seats under
+// masked emails told apart. Kept by magpie (provider.AccountNames), never
+// in the vendor's or plugin's sign-in. accountSeatOf is the key plan the
+// account was found to stand in for, the name it goes by till it has one.
+function accountNameOf(p, user) { return p?.accountNames?.[String(user).toLowerCase()] || ""; }
+function accountSeatOf(p, user) { return p?.accountSeats?.[String(user).toLowerCase()] || ""; }
+// accountNameButton is the account's name on its editor row: the name of
+// its own, the account beside it, and a click renames it.
+function accountNameButton(p, user) {
+  const own = accountNameOf(p, user), seat = accountSeatOf(p, user);
+  if (!p) return el("span", "n", user);
+  const wrap = el("span", "acct-who");
+  // a span, not a button: the address stays selectable, and a drag that
+  // selects it renames nothing
+  const name = el("span", "n rename", own || user);
+  name.tabIndex = 0;
+  name.setAttribute("role", "button");
+  name.title = own ? t("{user} · click to rename", { user }) : t("Name this account");
+  name.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); name.onclick(); } };
+  name.onclick = () => {
+    if (String(getSelection?.() || "").length) return;
+    const i = input(own, seat || t("Name, e.g. Personal or Team"));
+    i.className = "rename-in";
+    i.maxLength = 64;
+    // once: Enter re-renders the row, and the input's blur then follows
+    let over = false;
+    const done = (save) => {
+      if (over) return;
+      over = true;
+      if (save && i.value.trim() !== own) accountAction("provider/accountname", { id: p.id, account: user, alias: i.value });
+      else renderProviders();
+    };
+    i.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") done(true); else if (e.key === "Escape") done(false); };
+    i.onblur = () => done(true);
+    wrap.replaceWith(i);
+    i.focus();
+  };
+  wrap.append(name);
+  if (own) wrap.append(el("span", "acct-user", user));
+  else if (seat) {
+    const s = el("span", "acct-seat", "≡ " + seat);
+    s.title = t("The same seat as the key plan {name}, shown once, on this account's card", { name: seat });
+    wrap.append(s);
+  }
+  return wrap;
+}
 function accountCapOf(p, user) { return p?.accountCaps?.[String(user).toLowerCase()] || 0; }
 // A window's own cap (provider.AccountWindowCaps, willz on Discord): a
 // friend's account stops at 50% of its five hours while its week may go to
@@ -13567,6 +13613,34 @@ function renderCosts() {
 }
 const tokensOf = (t) => t.input + t.output;
 
+// quotaWho is how an account's card names it (#1515): by the name the user
+// gave it, the account beside it, else the account; and the key plan it
+// stands in for (seat) when that isn't already its name. A team's GLM
+// seats read as the user tells them apart, not as 31****36@qq.com.
+function quotaWho(q) {
+  const out = [];
+  if (q.alias) {
+    const a = el("span", "user quota-alias", q.alias);
+    a.title = q.user ? q.alias + " · " + q.user : q.alias;
+    out.push(a);
+    if (q.user) {
+      const u = el("span", "quota-of", q.user);
+      u.title = q.user;
+      out.push(u);
+    }
+  } else if (q.user) {
+    const u = el("span", "user", q.user);
+    u.title = q.user;
+    out.push(u);
+  }
+  if (q.seat && q.seat !== q.alias) {
+    const s = el("span", "quota-seat", "≡ " + q.seat);
+    s.title = t("The same seat as the key plan {name}, shown once, on this account's card", { name: q.seat });
+    out.push(s);
+  } else if (q.seat) out[0].title += "\n" + t("The same seat as the key plan {name}, shown once, on this account's card", { name: q.seat });
+  return out;
+}
+
 function renderQuotas() {
   renderPanelQuota();
   const subscriptions = $("#subscriptionUsage");
@@ -13618,6 +13692,9 @@ function renderQuotas() {
     if (!first.user) card.dataset.card = first.provider;
     const head = el("div", "subscription-head");
     head.append(groups.length > 1 ? usageHandle(first, card) : icon(first.icon), el("b", "", first.name));
+    // a card with no account's name to it (a plugin's ZCode) is named in
+    // its head, as the user named it or for the key plan it stands in for
+    if (!first.user && first.alias) head.append(...quotaWho(first));
     if (!first.user && (first.plan || first.until)) head.append(planSpan(first));
     card.append(head);
     // a provider's keys, each its balance: past a few, the rest folded
@@ -13643,9 +13720,7 @@ function renderQuotas() {
       if (sub.user) {
         const who = el("div", "subscription-account" + (brief ? " brief" : ""));
         who.dataset.card = trayCardID(sub);
-        const u = el("span", "user", sub.user);
-        u.title = sub.user;
-        who.append(u);
+        who.append(...quotaWho(sub));
         // in brief, its resets and whether it uses them by itself (#719)
         const auto = brief && autoResetBrief(sub);
         if (auto) who.append(auto);
@@ -14974,8 +15049,10 @@ function shortWindow(name) {
 function panelQuotaCard(q) {
   const card = el("div", "pq-card");
   card.dataset.card = trayCardID(q);
-  card.append(el("span", "pq-user", q.user || q.name));
-  card.title = [q.name, q.user, q.plan, q.until ? planTerm(q) : "", q.balance && t("Balance") + " " + q.balance].filter(Boolean).join(" · ");
+  // by the name the user gave the account, or the key plan it stands
+  // in for (#1515), before the account itself
+  card.append(el("span", "pq-user", q.alias || q.user || q.name));
+  card.title = [q.name, q.alias, q.user, q.seat && q.seat !== q.alias && "≡ " + q.seat, q.plan, q.until ? planTerm(q) : "", q.balance && t("Balance") + " " + q.balance].filter(Boolean).join(" · ");
   if (q.error) {
     card.classList.add("err");
     card.append(el("span", "pq-sub err", quotaError(q.error)));
@@ -15397,7 +15474,7 @@ function askReset(q) {
   const head = el("div", "ehead");
   head.append(icon(q.icon || "codex"), el("b", "", t("Use a Codex reset?")));
   ed.append(head);
-  const who = q.user || q.name;
+  const who = q.alias || q.user || q.name;
   ed.append(el("p", "lib-confirm", t(q.resets.count === 1
     ? "{who} has 1 reset. Using it starts its windows again at once, as if none of them had been used. It can't be undone."
     : "{who} has {n} resets. Using one starts its windows again at once, as if none of them had been used. It can't be undone.", { who, n: q.resets.count })));
@@ -19869,7 +19946,7 @@ function renderTrayUsage(s, keep) {
       // it is now, before each by name
       if (q.user && !opts.some((o) => o.v === q.provider + IN_USE) && cards.filter((c) => c.provider === q.provider).length > 1)
         opts.push({ v: q.provider + IN_USE, name: q.name, note: "Account in use" });
-      opts.push({ v: trayCardID(q), name: q.name, note: [q.plan, q.user].filter(Boolean).join(" · ") });
+      opts.push({ v: trayCardID(q), name: q.name, note: [q.plan, q.alias, q.user].filter(Boolean).join(" · ") });
     }
     // one ticked that isn't there now (signed out, or not answering) stays
     // to be unticked
@@ -21930,7 +22007,7 @@ function noteAccounts(x, depth = 0) {
   if (Array.isArray(x)) { for (const v of x) noteAccounts(v, depth + 1); return; }
   for (const [k, v] of Object.entries(x)) {
     if (typeof v === "string") {
-      if (k === "user" || k === "account" || (k === "who" && x.kind === "account")) noteAccount(v);
+      if (k === "user" || k === "account" || k === "alias" || (k === "who" && x.kind === "account")) noteAccount(v);
     } else if (k === "who" && x.kind === "account" && Array.isArray(v)) for (const w of v) noteAccount(w);
     else if (v && typeof v === "object") noteAccounts(v, depth + 1);
   }
@@ -21955,10 +22032,13 @@ window.noteAccounts = noteAccounts;
     for (const p of providers?.providers || []) {
       for (const n of [p.id, p.name, p.account?.agentName, p.account?.agent]) if (n) not.add(String(n).toLowerCase());
       if (p.account) { all.add((p.account.user || "").trim()); for (const l of p.account.logins || []) all.add((l.user || "").trim()); }
+      // the names the user gave accounts (#1515), as the accounts are
+      for (const n of Object.values(p.accountNames || {})) all.add(String(n).trim());
     }
     for (const q of quotas || []) {
       for (const n of [q.provider, q.name, q.plan]) if (n) not.add(String(n).toLowerCase());
       all.add((q.user || "").trim());
+      if (q.alias && q.alias !== q.seat) all.add(q.alias.trim());
     }
     for (const a of state?.agents || []) for (const n of [a.id, a.name]) if (n) not.add(String(n).toLowerCase());
     return [...all].filter((n) => n.length >= 2 && !IS_EMAIL.test(n) && !not.has(n.toLowerCase())).sort((a, b) => b.length - a.length);

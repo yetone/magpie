@@ -100,6 +100,12 @@ type providerJSON struct {
 	// one for that window apart, by the account and then the window's
 	// capId (provider.AccountWindowCaps); 100 is none on that window
 	AccountWindowCaps map[string]map[string]int `json:"accountWindowCaps,omitempty"`
+	// the names the user gave its accounts, by the account in lower
+	// case (provider.AccountNames, #1515), and the name of the key plan
+	// each account was found to stand in for (provider.SeatNameOf): the
+	// name an account has until the user gives it one
+	AccountNames map[string]string `json:"accountNames,omitempty"`
+	AccountSeats map[string]string `json:"accountSeats,omitempty"`
 	// where a custom provider's balance is asked (see provider.Balance)
 	BalanceURL  string `json:"balanceURL,omitempty"`
 	BalancePath string `json:"balancePath,omitempty"`
@@ -458,12 +464,22 @@ func providerInfo(p provider.Provider, agents []agentUse) providerJSON {
 		ID: p.ID, Name: p.Name, Icon: p.Icon, Preset: p.Preset, Host: p.Host(),
 		Chat: p.Chat, Responses: p.Responses, Anthropic: p.Anthropic, Gemini: p.Gemini, Decide: p.Decide, BaseAPI: p.BaseAPI, ModelTest: p.ModelTest(), TestsAs: p.TestClients(), DecideTest: p.AsksDecideModels(),
 		Catalog: p.Catalog, Website: p.Website, KeysURL: p.KeysURL,
-		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, Headers: p.Headers, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
+		Proxy: p.Proxy, AccountProxies: p.AccountProxies, AccountModels: p.AccountModels, AccountCaps: p.AccountCaps, AccountWindowCaps: p.AccountWindowCaps, AccountNames: p.AccountNames, Headers: p.Headers, Searches: p.Searches, Cline: p.ClinePinnable(), PinUpstream: p.PinUpstream, Unredacted: p.Unredacted, BalanceURL: p.BalanceURL, BalancePath: p.BalancePath, ModelsURL: p.ModelsURL,
 		Ready: p.Ready(), Chosen: p.Picks(), Models: []modelJSON{}, Agents: []providerAgent{},
 		Fallback: p.Fallback, Routing: p.Routing, Sink: p.Sink, Affinity: p.Affinity, KeepLogin: p.KeepLogin, KeepLoginAs: p.KeepLoginAs, Unlisted: p.Unlisted, Off: p.Off, Contexts: p.Contexts,
 		MaxConcurrency: p.MaxConcurrency, PluginConcurrency: p.PluginConcurrency(), PriceRate: p.PriceRate,
 		AccountConcurrency: p.AccountConcurrency, QueueLimit: p.QueueLimit, QueueWait: p.QueueWait, MaxRPM: p.MaxRPM,
 		Outputs: provider.OutputsOf(p.ID), Compacts: provider.CompactsOf(p.ID),
+	}
+	if p.Account != nil {
+		for _, r := range p.AccountRefs() {
+			if s := provider.SeatNameOf(p.ID, r); s != "" {
+				if out.AccountSeats == nil {
+					out.AccountSeats = map[string]string{}
+				}
+				out.AccountSeats[strings.ToLower(strings.TrimSpace(r))] = s
+			}
+		}
 	}
 	if out.Fallback == nil {
 		out.Fallback = []string{}
@@ -1011,6 +1027,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// it follow the account's cap
 			Cap    int    `json:"cap"`
 			Window string `json:"window"`
+			// Alias, for accountname: the account's name of the user's
+			// own, "" to take it off (#1515)
+			Alias string `json:"alias"`
 			// Typed, for test and models: the request carries the editor's
 			// form, which is tried as it stands before a Save (see typed)
 			Typed bool `json:"typed"`
@@ -1237,6 +1256,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if old != nil {
 					in.AccountCaps, in.AccountWindowCaps = old.AccountCaps, old.AccountWindowCaps
 					in.AccountConcurrency = old.AccountConcurrency
+					in.AccountNames = old.AccountNames // with accountname
 				}
 				// a Zhipu key's team likewise: {} clears it
 				if in.ZhipuTeam == nil && old != nil {
@@ -1406,6 +1426,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			}
 		case "accountcap":
 			if err := provider.SetAccountCap(in.ID, req.Account, req.Cap); err != nil {
+				fail(rw, err)
+				return
+			}
+		case "accountname":
+			if err := provider.SetAccountName(in.ID, req.Account, req.Alias); err != nil {
 				fail(rw, err)
 				return
 			}

@@ -63,6 +63,7 @@ func trayWindows(q provider.SubscriptionQuota) []provider.QuotaWindow {
 // spells it out: each window's use, or what is left of it (left), and when
 // it starts again.
 func trayUsageText(q provider.SubscriptionQuota, now time.Time, left bool) (label, tip string) {
+	q.Name = trayName(q)
 	if q.Error != "" {
 		return "", q.Name + ": " + q.Error
 	}
@@ -217,10 +218,19 @@ func trayInUseCard(cards []provider.SubscriptionQuota, pid string, now time.Time
 			q = mine[last]
 		}
 	}
-	if q.User != "" {
-		q.Name += " · " + q.User
+	if q.User != "" && q.Alias == "" {
+		q.Name += " · " + q.User // a named account's name is trayName's
 	}
 	return q, true
+}
+
+// trayName is how the tooltip names a card: by the name the user gave its
+// account, or the key plan it stands in for, after the card's (#1515).
+func trayName(q provider.SubscriptionQuota) string {
+	if q.Alias != "" {
+		return q.Name + " · " + q.Alias
+	}
+	return q.Name
 }
 
 // trayCell is a card as the Mac's menu bar draws it: its logo, and its

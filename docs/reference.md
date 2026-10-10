@@ -1469,6 +1469,20 @@ It changes the gateway's routing only, never the account Codex is signed in
 to. The credits an account holds show beside its windows in `magpie quota`,
 `magpie accounts`, the Usage page and the menu bar panel.
 
+An account can have a name of your own, for telling apart seats the vendor
+names alike (a team's GLM seats under masked emails): click the account's
+name in its provider's editor, or `magpie accounts alias <agent> <email>
+<name>` (`--clear` takes it off). The name is magpie's, kept in
+providers.json; the vendor's or plugin's sign-in is never written to. It
+shows on the account's Usage card, in the menu bar, in `magpie accounts`,
+`magpie quota` and `GET /v1/magpie/quotas` (`alias`). A GLM Coding Plan
+seat added both as a key and as a signed-in ZCode account is shown once, on
+the account's card (two cards would count its allowance twice); that card
+is then named for the key's provider until you name it yourself, and says
+so (`seat`). Once the two are found to be one seat, a failed read of either
+doesn't bring the key's card back: only the account signed out, or windows
+that no longer agree, do.
+
 The Usage page's cards and the menu bar panel's *Allowances* tab are in one
 order: drag a card's logo on the Usage page (or Alt+arrow keys on it), or
 press *Arrange* at the foot of the panel's tab and move the rows there. The

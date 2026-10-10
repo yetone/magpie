@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
@@ -20,11 +22,12 @@ import (
 
 // accountsCmd: `magpie accounts [agent] [--json]`, `magpie accounts add <agent>`,
 // `magpie accounts switch|forget <agent> <email>`,
-// `magpie accounts project <gemini|antigravity> <email> <project>`
+// `magpie accounts project <gemini|antigravity> <email> <project>`,
+// `magpie accounts alias <agent> <email> [<name>|--clear]`
 // — the subscriptions magpie remembers, how much of each one's allowance is
 // used, and switching the agent between them.
 func accountsCmd(args []string) error {
-	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts switch|forget copilot <login>[@<name>.ghe.com] [--host <name>.ghe.com] | magpie accounts project <gemini|antigravity> <email> <gcp-project-id>"
+	const usage = "usage: magpie accounts [claude|codex|grok|copilot|gemini|antigravity|zed|factory|mimo|<plugin>] [--json] | magpie accounts add <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> | magpie accounts add copilot [--host <name>.ghe.com] | magpie accounts import <codex|claude|antigravity|factory> <file>... [--yes] | magpie accounts refresh [--json] | magpie accounts checkin [--json] | magpie accounts switch|forget <claude|codex|gemini|antigravity|zed|factory|mimo|<plugin>> <email> | magpie accounts switch|forget copilot <login>[@<name>.ghe.com] [--host <name>.ghe.com] | magpie accounts project <gemini|antigravity> <email> <gcp-project-id> | magpie accounts alias <agent|<plugin>> <email> [<name>|--clear]"
 	agentID := func(s string) (string, error) {
 		switch strings.ToLower(s) {
 		case "claude", "cc":
@@ -65,6 +68,45 @@ func accountsCmd(args []string) error {
 			fmt.Println(green.Render("✓"), args[3], "no longer names a Google Cloud project")
 		} else {
 			fmt.Println(green.Render("✓"), args[3], "now uses Google Cloud project", args[4])
+		}
+		return nil
+	}
+	if len(args) > 1 && args[1] == "alias" {
+		// a name of the user's own for an account (#1515): magpie's,
+		// never written to the vendor's or plugin's sign-in
+		if len(args) < 4 {
+			return fmt.Errorf("%s", usage)
+		}
+		id, err := agentID(args[2])
+		if err != nil {
+			return err
+		}
+		user, err := accountNamed(id, args[3])
+		if err != nil {
+			return err
+		}
+		name := strings.Join(args[4:], " ")
+		if name == "--clear" {
+			name = ""
+		}
+		if len(args) == 4 {
+			// no name: say what it is
+			if a := provider.AccountNameOf(id, user); a != "" {
+				fmt.Println(a)
+			} else if s := provider.SeatNameOf(id, user); s != "" {
+				fmt.Println(s, muted.Render("· the key plan this account stands in for; name it: magpie accounts alias "+args[2]+" "+args[3]+" <name>"))
+			} else {
+				fmt.Println(muted.Render(user + " has no name of its own · name it: magpie accounts alias " + args[2] + " " + args[3] + " <name>"))
+			}
+			return nil
+		}
+		if err := provider.SetAccountName(id, user, name); err != nil {
+			return err
+		}
+		if name = provider.AccountNameOf(id, user); name == "" {
+			fmt.Println(green.Render("✓"), user, "no longer has a name of its own")
+		} else {
+			fmt.Println(green.Render("✓"), user, "is now named", name)
 		}
 		return nil
 	}
@@ -198,9 +240,17 @@ func accountsCmd(args []string) error {
 		fmt.Println(muted.Render("no accounts yet ·"), "add one: magpie accounts add <claude|codex|gemini|antigravity>")
 		return nil
 	}
+	// an account named by the user, or for the key plan it stands in
+	// for, by that name first (#1515)
+	who := func(r accountRow) string {
+		if r.Alias != "" {
+			return r.Alias + " · " + r.User
+		}
+		return r.User
+	}
 	width := 0
 	for _, r := range rows {
-		width = max(width, len(r.User))
+		width = max(width, lipgloss.Width(who(r)))
 	}
 	now := time.Now() // one instant for every window's reset time
 	for _, r := range rows {
@@ -215,7 +265,7 @@ func accountsCmd(args []string) error {
 		if r.Plan != "" {
 			plan = " · " + r.Plan
 		}
-		line := fmt.Sprintf("%s%-7s %-*s %s", mark, r.Agent, width, r.User, muted.Render(fmt.Sprintf("%-8s", plan)))
+		line := fmt.Sprintf("%s%-7s %s %s", mark, r.Agent, pad(who(r), width), muted.Render(fmt.Sprintf("%-8s", plan)))
 		for _, w := range r.Windows {
 			line += "  " + quotaCell(w, now)
 		}
@@ -254,6 +304,10 @@ type accountRow struct {
 	// Balance is what the account holds beside its windows, a ChatGPT
 	// account's credits, when the vendor tells it.
 	Balance string `json:"balance,omitempty"`
+	// Alias is the account's name of the user's own, else Seat: the name
+	// of the key plan whose card this account's stands in for (#1515).
+	Alias string `json:"alias,omitempty"`
+	Seat  string `json:"seat,omitempty"`
 }
 
 type quotaSpan = provider.QuotaSpan
@@ -287,6 +341,8 @@ func accountRows(ls []provider.Login, now time.Time) []accountRow {
 	rows := []accountRow{}
 	for _, l := range ls {
 		r := accountRow{Agent: l.Agent, User: l.User, Plan: l.Plan, Active: l.Active, On: l.On, Windows: []quotaSpan{}, Lapsed: l.Lapsed}
+		r.Seat = provider.SeatNameOf(l.Agent, l.User)
+		r.Alias = cmp.Or(provider.AccountNameOf(l.Agent, l.User), r.Seat)
 		for user, q := range usage[l.Agent] {
 			if !strings.EqualFold(user, l.User) {
 				continue

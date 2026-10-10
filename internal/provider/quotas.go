@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"math"
-	"slices"
 	"time"
 )
 
@@ -20,8 +19,8 @@ func Quotas(ctx context.Context) []SubscriptionQuota {
 // whose allowance runs out and starts again, which is what magpie quota
 // wait waits on; no key's balance is asked for.
 func Allotted(ctx context.Context) []SubscriptionQuota {
-	subs := SubscriptionUsage(ctx)
-	return append(subs, notShown(PlanQuotas(ctx), subs)...)
+	plans, subs := seatCards(PlanQuotas(ctx), SubscriptionUsage(ctx))
+	return append(withAccountNames(subs), plans...)
 }
 
 func quotas(ctx context.Context) (subs, plans, balances []SubscriptionQuota) {
@@ -31,8 +30,8 @@ func quotas(ctx context.Context) (subs, plans, balances []SubscriptionQuota) {
 	go func() { b <- KeyBalances(ctx) }()
 	go func() { p <- PlanQuotas(ctx) }()
 	go func() { r <- RemoteCards(ctx) }()
-	subs = SubscriptionUsage(ctx)
-	plans, balances = notShown(<-p, subs), <-b
+	plans, subs = seatCards(<-p, SubscriptionUsage(ctx))
+	subs, balances = withAccountNames(subs), <-b
 	// a remote magpie's cards, each after this computer's of its kind
 	for _, q := range <-r {
 		switch q.Kind {
@@ -45,43 +44,6 @@ func quotas(ctx context.Context) (subs, plans, balances []SubscriptionQuota) {
 		}
 	}
 	return subs, plans, balances
-}
-
-// notShown is the plans not already on a subscription's card: a GLM
-// Coding plan read with a Zhipu or Z.ai key is the ZCode account's own
-// when ZCode is signed in to the same account, and shown once, on its
-// card, which counts the calls. plans, PlanQuotas' cache, is left as it is.
-func notShown(plans, subs []SubscriptionQuota) []SubscriptionQuota {
-	return slices.DeleteFunc(slices.Clone(plans), func(p SubscriptionQuota) bool {
-		return slices.ContainsFunc(subs, func(s SubscriptionQuota) bool { return sameAccount(p, s) })
-	})
-}
-
-// sameAccount matches a GLM key's plan to ZCode (built-in or plugin) by
-// their account-relative resets. A plan's User is a key label, not the
-// subscription's login, so it cannot identify the shared account. Every
-// comparable window must agree, with at least one match. This heuristic
-// must not compare unrelated vendors whose reset schedules can coincide.
-func sameAccount(a, b SubscriptionQuota) bool {
-	if !a.glmPlan || (b.Provider != "zcode" && b.Provider != "zcode-plugin") {
-		return false
-	}
-	if a.Error != "" || b.Error != "" {
-		return false
-	}
-	matched := false
-	for _, x := range a.Windows {
-		for _, y := range b.Windows {
-			if x.Aside || y.Aside || x.Span == 0 || x.Span != y.Span || x.ResetsAt == nil || y.ResetsAt == nil {
-				continue
-			}
-			if !x.ResetsAt.Equal(*y.ResetsAt) {
-				return false
-			}
-			matched = true
-		}
-	}
-	return matched
 }
 
 // Quota is one account's or key's allowance as magpie quota --json and
@@ -116,6 +78,10 @@ type Quota struct {
 	// From is the remote magpie whose account this is, by its name here
 	// (remote_quotas.go); "" for this computer's own.
 	From string `json:"from,omitempty"`
+	// Alias is the account's name of the user's own, else Seat: the name
+	// of the key plan whose card this account's stands in for (#1515).
+	Alias string `json:"alias,omitempty"`
+	Seat  string `json:"seat,omitempty"`
 }
 
 // QuotaSpan is one window of an allowance: how much of it is used and
@@ -150,7 +116,7 @@ func quotaReport(subs, plans, balances []SubscriptionQuota, now time.Time) []Quo
 	}{{"subscription", subs}, {"plan", plans}, {"balance", balances}} {
 		for _, q := range g.qs {
 			r := Quota{Provider: q.Provider, Name: q.Name, Kind: g.kind, Plan: q.Plan, User: q.User, AsOf: q.AsOf, ReadAt: q.ReadAt,
-				Windows: []QuotaSpan{}, Balance: q.Balance, Error: q.Error, Until: q.Until, Renew: q.Renew, Resets: q.Resets, From: q.From}
+				Windows: []QuotaSpan{}, Balance: q.Balance, Error: q.Error, Until: q.Until, Renew: q.Renew, Resets: q.Resets, From: q.From, Alias: q.Alias, Seat: q.Seat}
 			// a pool's own windows stand in for the models' drawing on it,
 			// as the usage page shows them
 			for _, w := range PooledWindows(q.Windows) {

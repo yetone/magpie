@@ -93,11 +93,13 @@ func CachedCards(now time.Time) []SubscriptionQuota {
 		}
 	}
 	plans, balances = withKeyReadings(plans, ps, "plan"), withKeyReadings(balances, ps, "balance")
+	plans, subs = seatCards(plans, subs)
+	subs = withAccountNames(subs)
 	out := []SubscriptionQuota{}
 	for _, g := range []struct {
 		kind string
 		qs   []SubscriptionQuota
-	}{{"subscription", subs}, {"plan", notShown(plans, subs)}, {"balance", balances}} {
+	}{{"subscription", subs}, {"plan", plans}, {"balance", balances}} {
 		for _, q := range g.qs {
 			if q.From == "" {
 				q.Kind = g.kind

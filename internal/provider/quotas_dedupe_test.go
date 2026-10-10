@@ -11,6 +11,7 @@ import (
 
 // A reset shared by unrelated vendors is not evidence of a shared account.
 func TestUnrelatedPlanWithSameResetStays(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	reset := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
 	windows := []QuotaWindow{{Name: "Weekly", Span: 7 * 24 * time.Hour, ResetsAt: &reset}}
 	for _, pair := range [][2]string{
@@ -35,6 +36,7 @@ func TestUnrelatedPlanWithSameResetStays(t *testing.T) {
 // A Zhipu plan read with a key of the account ZCode is signed in to is
 // shown once, on ZCode's card; another account's plan stays.
 func TestPlanOfASignedInAccountShownOnce(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	at := func(h int) *time.Time {
 		x := time.UnixMilli(1790000000000).Add(time.Duration(h) * time.Hour)
 		return &x
@@ -58,9 +60,10 @@ func TestPlanOfASignedInAccountShownOnce(t *testing.T) {
 	if len(got) != 2 || got[0].Provider != "zai" || got[1].Plan != "Lite" {
 		t.Fatalf("%+v", got)
 	}
-	// ZCode not answering: the plan is the only card there is
+	// ZCode not answering: still the seat they were found to be, on
+	// ZCode's card (#1515; TestSeatKeptThroughAFailedRead)
 	zcode.Error = "timeout"
-	if got := notShown([]SubscriptionQuota{same}, []SubscriptionQuota{zcode}); len(got) != 1 {
+	if got := notShown([]SubscriptionQuota{same}, []SubscriptionQuota{zcode}); len(got) != 0 {
 		t.Fatalf("%+v", got)
 	}
 }
@@ -68,6 +71,7 @@ func TestPlanOfASignedInAccountShownOnce(t *testing.T) {
 // Moved ZCode keeps its id; an independently installed plugin has the
 // -plugin suffix. Both carry the same windows through quotaOfPlugin.
 func TestGLMPlanMatchesZCodePlugin(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	reset := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
 	for _, id := range []string{"zcode", "zcode-plugin"} {
 		t.Run(id, func(t *testing.T) {
@@ -88,6 +92,7 @@ func TestGLMPlanMatchesZCodePlugin(t *testing.T) {
 // Leaving a plan out doesn't touch the list it was left out of, which is
 // PlanQuotas' cache.
 func TestPlanLeftOutOfACopy(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	r := time.Now()
 	w := []QuotaWindow{{Span: time.Hour, ResetsAt: &r}}
 	plans := []SubscriptionQuota{{Provider: "a", glmPlan: true, Windows: w}, {Provider: "b"}}
