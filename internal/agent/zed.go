@@ -58,7 +58,7 @@ func zedAtWith(dir, bin string, processes []string) *Agent {
 		UA: []string{"zed"},
 		Notice: func() string {
 			if usesMagpie(model()) && Running(processes...) {
-				return "Restart Zed if it still asks for an API key: magpie has configured its gateway credential in the system credential store."
+				return noticeZed.String()
 			}
 			return ""
 		},
@@ -240,3 +240,8 @@ func zedProviderJSON(path string) map[string]any {
 	}
 	return map[string]any{"api_url": gatewayV1(), "available_models": models}
 }
+
+// what zed says after a change (notice.go)
+var (
+	noticeZed = newNotice("Restart Zed if it still asks for an API key: magpie has configured its gateway credential in the system credential store.")
+)

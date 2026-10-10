@@ -235,7 +235,7 @@ func snowIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)snow( |$)`) {
-				return "Snow CLI reads its profile at start-up — restart open snow sessions to use this."
+				return noticeSnow.String()
 			}
 			return ""
 		},
@@ -636,3 +636,8 @@ func snowOwnOptions(dir, cur string) []Option {
 }
 
 func jsonString(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+// what snow says after a change (notice.go)
+var (
+	noticeSnow = newNotice("Snow CLI reads its profile at start-up — restart open snow sessions to use this.")
+)

@@ -67,7 +67,7 @@ func fxIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)fx( |$)`) {
-				return "fx reads its settings at start-up — restart open fx sessions to use this."
+				return noticeFx.String()
 			}
 			return ""
 		},
@@ -178,3 +178,8 @@ func fxProviderAt(cur, v1 string) any {
 		"tool_choice_mode": "send", "model_metadata": ms,
 	}
 }
+
+// what fx says after a change (notice.go)
+var (
+	noticeFx = newNotice("fx reads its settings at start-up — restart open fx sessions to use this.")
+)

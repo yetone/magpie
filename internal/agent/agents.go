@@ -970,7 +970,7 @@ func gooseIn(at place, cfg string) *Agent {
 		// goose loads custom_providers when it starts
 		Notice: func() string {
 			if p, _ := gooseActive(path); p == gooseProviderID && Running(`Goose\.app/`, `(^|/)goose( |$)`) {
-				return "Goose loads its providers at start-up — quit and reopen Goose (and open goose sessions) to use magpie's models."
+				return noticeGoose.String()
 			}
 			return ""
 		},
@@ -1256,3 +1256,8 @@ func crushAt(at place, path, data string) *Agent {
 		},
 	}
 }
+
+// what goose says after a change (notice.go)
+var (
+	noticeGoose = newNotice("Goose loads its providers at start-up — quit and reopen Goose (and open goose sessions) to use magpie's models.")
+)

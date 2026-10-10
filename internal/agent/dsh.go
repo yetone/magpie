@@ -102,17 +102,17 @@ func dshAt(at place) *Agent {
 			var notes []string
 			if Running(`DeepSeek Harness\.app/`, `(^|/)dsh( |$)`) {
 				if len(dshProfiles(dir)) > 0 {
-					notes = append(notes, "New dsh sessions start on this; one already open keeps its model until you pick another in it. A dsh started with -p or in a terminal reads it at start-up.")
+					notes = append(notes, noticeDsh1.String())
 				} else {
-					notes = append(notes, "dsh reads its config at start-up — restart open dsh sessions to use this.")
+					notes = append(notes, noticeDsh2.String())
 				}
 			}
 			if dshSearchesHere(dir) && !gateway.CanSearch() {
-				notes = append(notes, "dsh's web search goes through magpie, which has nothing to search with yet: set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Web search.")
+				notes = append(notes, noticeDsh3.String())
 			}
 			// only before 0.1.5 does magpie go through llm-deepseek
 			if len(dshProfiles(dir)) == 0 && dshSettingsEndpoint(filepath.Join(dir, "settings.yaml")) {
-				notes = append(notes, "~/.dsh/settings.yaml sets its own DeepSeek endpoint or key, which dsh puts over magpie's; clear it in dsh's Models page to go through magpie.")
+				notes = append(notes, noticeDsh4.String())
 			}
 			return strings.Join(notes, " ")
 		},
@@ -1850,3 +1850,11 @@ func dshSettingsEndpoint(path string) bool {
 	}
 	return false
 }
+
+// what dsh says after a change (notice.go)
+var (
+	noticeDsh1 = newNotice("New dsh sessions start on this; one already open keeps its model until you pick another in it. A dsh started with -p or in a terminal reads it at start-up.")
+	noticeDsh2 = newNotice("dsh reads its config at start-up — restart open dsh sessions to use this.")
+	noticeDsh3 = newNotice("dsh's web search goes through magpie, which has nothing to search with yet: set up a provider that searches by itself (DeepSeek, Claude, Codex, …) or a search API under Settings › Web search.")
+	noticeDsh4 = newNotice("~/.dsh/settings.yaml sets its own DeepSeek endpoint or key, which dsh puts over magpie's; clear it in dsh's Models page to go through magpie.")
+)

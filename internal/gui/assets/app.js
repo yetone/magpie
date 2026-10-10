@@ -905,7 +905,7 @@ function connectSwitch(a) {
       state = await api("agents/connect/" + a.id, {});
       renderAgents();
       const msg = connectedSaid(a, state.connected);
-      if (state.notice) status(`${msg}. ${t(state.notice)}`, "warn", 9000);
+      if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
       else if (msg !== t("{agent} is connected to magpie", { agent: a.name })) status(msg, "ok", 7000);
       else status(msg, "ok");
     } catch (err) {
@@ -1619,7 +1619,7 @@ function askDisconnect(a) {
       if (agentExpanded === a.id) agentExpanded = null;
       renderAgents();
       const msg = t(offline ? "Saved settings restored; magpie was removed from {agent}" : "{agent} no longer goes through magpie; its own settings are back", { agent: a.name });
-      if (state.notice) status(`${msg}. ${t(state.notice)}`, "warn", 9000);
+      if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
       else status(msg, "ok");
     } catch (err) {
       go.disabled = false;
@@ -1657,7 +1657,7 @@ async function reapplyAgent(a, btn) {
     renderAgents();
     document.querySelector(`.agent[data-id="${CSS.escape(a.id)}"] .field`)?.classList.add("flash");
     const msg = t("{agent} goes through magpie again", { agent: a.name });
-    if (state.notice) status(`${msg}. ${t(state.notice)}`, "warn", 9000);
+    if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
     else status(msg, "ok");
   } catch (e) {
     btn?.classList.remove("busy");
@@ -3728,7 +3728,7 @@ function ultracodeToggle(a, f) {
       state = await api("set", { agent: a.id, field: f.key, value: on ? "" : "on" });
       renderAgents();
       const msg = t("{agent} ultracode → {value}", { agent: a.name, value: t(on ? "off" : "on") });
-      if (state.notice) status(`${msg}. ${t(state.notice)}`, "warn", 9000);
+      if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
       else status(msg, "ok");
     } catch (e) { status(e.message, "err"); }
   };
@@ -3995,7 +3995,7 @@ function effortSeg(a, f) {
 // open Claude Code session keeps the level it started with.
 function effortSaid(a, f, o) {
   const msg = `${a.name} ${t(f.label)} → ${effortName(o)}`;
-  if (state.notice) status(`${msg}. ${t(state.notice)}`, "warn", 9000);
+  if (state.notice) status(withNotice(msg, state.notice), "warn", 9000);
   else status(msg, "ok");
 }
 
@@ -4582,7 +4582,7 @@ async function setPick(agent, field, value, opt) {
     renderAgents();
     flash();
     const shown = opt?.label || value;
-    if (state.notice) status(`${agent.name} → ${shown}. ${t(state.notice)}`, "warn", 9000);
+    if (state.notice) status(withNotice(`${agent.name} → ${shown}`, state.notice), "warn", 9000);
     else if (leaving && value === "") status(t(agent.id === "reasonix" ? "{agent} no longer goes through magpie; its own settings are back" : "{agent} no longer goes through magpie · on its own default", { agent: agent.name }), "ok", 6000);
     else if (opt?.direct) status(`${agent.name} ${t(field.label)} → ${shown} · ${t("straight to {vendor}, not through magpie", { vendor: opt.direct })}`, "ok", 6000);
     else status(`${agent.name} ${t(field.label)} → ${shown}`, "ok");

@@ -219,7 +219,7 @@ func droidIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)droid( |$)`) {
-				return "Droid reads its settings at start-up — restart open droid sessions to use this."
+				return noticeDroid.String()
 			}
 			return ""
 		},
@@ -290,3 +290,8 @@ func droidIn(at place) *Agent {
 		}},
 	}
 }
+
+// what droid says after a change (notice.go)
+var (
+	noticeDroid = newNotice("Droid reads its settings at start-up — restart open droid sessions to use this.")
+)

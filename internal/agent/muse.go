@@ -82,7 +82,7 @@ func museAt(at place, cfg string) *Agent {
 		Bin: "muse", Dir: dir, Path: path,
 		Notice: func() string {
 			if Running(`(^|/)muse( |$)`) {
-				return "Muse Code reads its settings at start-up — restart open muse sessions to use this."
+				return noticeMuse.String()
 			}
 			return ""
 		},
@@ -167,3 +167,8 @@ func museIcon(id string) string {
 	}
 	return modelIcon("", id)
 }
+
+// what muse says after a change (notice.go)
+var (
+	noticeMuse = newNotice("Muse Code reads its settings at start-up — restart open muse sessions to use this.")
+)

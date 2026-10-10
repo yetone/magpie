@@ -120,7 +120,7 @@ func miniMaxAt(at place, dir string) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)mcode( |$)`) {
-				return "MiniMax Code reads its settings at start-up — restart open mcode sessions to use this."
+				return noticeMinimax.String()
 			}
 			return ""
 		},
@@ -456,3 +456,8 @@ func miniMaxIcon(provider, model string) string {
 	}
 	return ""
 }
+
+// what minimax says after a change (notice.go)
+var (
+	noticeMinimax = newNotice("MiniMax Code reads its settings at start-up — restart open mcode sessions to use this.")
+)

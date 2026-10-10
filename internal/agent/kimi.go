@@ -253,7 +253,7 @@ func kimiIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)kimi( |$)`, `(^|/)kimi-cli( |$)`) {
-				return "Kimi Code reads its settings at start-up — restart open kimi sessions to use this."
+				return noticeKimi.String()
 			}
 			return ""
 		},
@@ -367,3 +367,8 @@ func kimiModelTableForKey(path, key string) (map[string]string, error) {
 	}
 	return nil, nil
 }
+
+// what kimi says after a change (notice.go)
+var (
+	noticeKimi = newNotice("Kimi Code reads its settings at start-up — restart open kimi sessions to use this.")
+)

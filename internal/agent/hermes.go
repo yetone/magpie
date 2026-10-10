@@ -70,7 +70,7 @@ func hermesIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)hermes( |$)`) {
-				return "Hermes reads its settings at start-up — restart open Hermes sessions to use this."
+				return noticeHermes.String()
 			}
 			return ""
 		},
@@ -172,3 +172,8 @@ func hermesProviderAt(gw string) hermesProviderEntry {
 		Headers: map[string]string{"User-Agent": "hermes-agent"}, Models: ms,
 	}
 }
+
+// what hermes says after a change (notice.go)
+var (
+	noticeHermes = newNotice("Hermes reads its settings at start-up — restart open Hermes sessions to use this.")
+)

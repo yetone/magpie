@@ -128,7 +128,7 @@ func copilotJetBrainsAt(path string, installed func() bool) *Agent {
 			if !wired() {
 				return ""
 			}
-			return "magpie's models are in Copilot Chat's model picker in your JetBrains IDE, under magpie, once the IDE restarts. They need Copilot signed in to GitHub on a plan with Bring Your Own Key: Copilot Free, Pro and Pro+ have it, Business and Enterprise when the organisation's policy allows it."
+			return noticeCopilotjetbrains.String()
 		},
 		Sync: func() error {
 			if !wired() {
@@ -244,3 +244,8 @@ func copilotJBModelsJSON(hidden map[string]bool) map[string]any {
 	}
 	return out
 }
+
+// what copilotjetbrains says after a change (notice.go)
+var (
+	noticeCopilotjetbrains = newNotice("magpie's models are in Copilot Chat's model picker in your JetBrains IDE, under magpie, once the IDE restarts. They need Copilot signed in to GitHub on a plan with Bring Your Own Key: Copilot Free, Pro and Pro+ have it, Business and Enterprise when the organisation's policy allows it.")
+)

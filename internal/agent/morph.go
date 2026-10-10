@@ -96,7 +96,7 @@ func morphIn(at place) *Agent {
 		Dir: dir, Path: path,
 		Notice: func() string {
 			if Running(`(^|/)morph( |$)`, `(^|/)mistermorph( |$)`) {
-				return "Mister Morph's Console uses this for new tasks; restart open morph chats to use it there."
+				return noticeMorph.String()
 			}
 			return ""
 		},
@@ -171,3 +171,8 @@ func morphIn(at place) *Agent {
 		}},
 	}
 }
+
+// what morph says after a change (notice.go)
+var (
+	noticeMorph = newNotice("Mister Morph's Console uses this for new tasks; restart open morph chats to use it there.")
+)

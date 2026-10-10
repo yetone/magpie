@@ -203,7 +203,7 @@ func anteAt(at place) *Agent {
 		Bin: "ante", Dir: dir, Path: path,
 		Notice: func() string {
 			if Running(`(^|/)ante( |$)`) {
-				return "Ante reads its catalog at start-up — restart open ante sessions to use this."
+				return noticeAnte.String()
 			}
 			return ""
 		},
@@ -428,3 +428,8 @@ func anteEfforts(levels []string) []string {
 	}
 	return out
 }
+
+// what ante says after a change (notice.go)
+var (
+	noticeAnte = newNotice("Ante reads its catalog at start-up — restart open ante sessions to use this.")
+)

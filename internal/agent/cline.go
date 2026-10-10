@@ -182,13 +182,13 @@ func clineIn(at place) *Agent {
 		Notice: func() string {
 			if runtime.GOOS == "windows" {
 				// Running can't tell the desktop app from the CLI there
-				return "Cline reads its provider as a session starts — open sessions keep the model they have; new ones use this. Reload VS Code's window for its extension; Cline's desktop app keeps the model picked in its own composer — pick magpie's there."
+				return noticeCline1.String()
 			}
 			if Running(`Cline\.app/`, `(^|/)cline-app( |$)`) {
-				return "Cline's desktop app keeps the model and effort picked in its own composer — pick magpie's there; this sets Cline's CLI and VS Code extension."
+				return noticeCline2.String()
 			}
 			if Running(`(^|/)cline( |$)`) {
-				return "Cline reads its provider as a session starts — open sessions keep the model they have; new ones use this. Reload VS Code's window for its extension."
+				return noticeCline3.String()
 			}
 			return ""
 		},
@@ -414,3 +414,10 @@ func clineWrite(path, empty string, kvs ...edit.KV) error {
 	}
 	return edit.SetJSON(path, kvs...)
 }
+
+// what cline says after a change (notice.go)
+var (
+	noticeCline1 = newNotice("Cline reads its provider as a session starts — open sessions keep the model they have; new ones use this. Reload VS Code's window for its extension; Cline's desktop app keeps the model picked in its own composer — pick magpie's there.")
+	noticeCline2 = newNotice("Cline's desktop app keeps the model and effort picked in its own composer — pick magpie's there; this sets Cline's CLI and VS Code extension.")
+	noticeCline3 = newNotice("Cline reads its provider as a session starts — open sessions keep the model they have; new ones use this. Reload VS Code's window for its extension.")
+)

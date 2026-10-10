@@ -465,7 +465,7 @@ func ompAt(at place, dir string, entry func() ompProviderEntry) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)omp( |$)`, `@oh-my-pi/pi-coding-agent`) {
-				return "omp reads its settings at start-up — restart open omp sessions to use this."
+				return noticeOmp.String()
 			}
 			return ""
 		},
@@ -698,3 +698,8 @@ func ompOwnOptions(modelsFile, cur string) []Option {
 	sort.SliceStable(out, func(i, j int) bool { return first[out[i].Group] < first[out[j].Group] })
 	return out
 }
+
+// what omp says after a change (notice.go)
+var (
+	noticeOmp = newNotice("omp reads its settings at start-up — restart open omp sessions to use this.")
+)

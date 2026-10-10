@@ -58,7 +58,7 @@ func codebuddyIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)(codebuddy|cbc|codebuddy-code)( |$)`) {
-				return "CodeBuddy Code reads its model when a session starts — restart open codebuddy sessions, or run /clear in them, to use this."
+				return noticeCodebuddy.String()
 			}
 			return ""
 		},
@@ -97,3 +97,8 @@ func codebuddyIn(at place) *Agent {
 		}},
 	}
 }
+
+// what codebuddy says after a change (notice.go)
+var (
+	noticeCodebuddy = newNotice("CodeBuddy Code reads its model when a session starts — restart open codebuddy sessions, or run /clear in them, to use this.")
+)

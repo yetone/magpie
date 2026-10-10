@@ -207,7 +207,7 @@ func geminiIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)gemini( |$)`) {
-				return "Gemini CLI reads its settings at start-up — restart open gemini sessions to see this."
+				return noticeGemini.String()
 			}
 			return ""
 		},
@@ -271,3 +271,8 @@ func delModelName(path string) error {
 	}
 	return nil
 }
+
+// what gemini says after a change (notice.go)
+var (
+	noticeGemini = newNotice("Gemini CLI reads its settings at start-up — restart open gemini sessions to see this.")
+)

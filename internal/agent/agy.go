@@ -117,7 +117,7 @@ func agy(home string) *Agent {
 			if !usesMagpie(v) {
 				return ""
 			}
-			return "agy takes magpie's gateway and model only from how it is started — start it with " + AgyLaunch(v)
+			return noticeAgy.say("command", AgyLaunch(v))
 		},
 		Check: func() string {
 			v := get()
@@ -187,3 +187,6 @@ func agy(home string) *Agent {
 		}},
 	}
 }
+
+// what agy says after a change (notice.go)
+var noticeAgy = newNotice("agy takes magpie's gateway and model only from how it is started — start it with {command}")

@@ -246,7 +246,7 @@ func astrbotAt(at place) *Agent {
 		ID: "astrbot", Name: "AstrBot", Icon: "astrbot", Spelled: prefixed,
 		Bin: "astrbot", Dir: data, Path: path,
 		Notice: func() string {
-			return "AstrBot reads cmd_config.json at start-up and writes it back whole when its WebUI saves settings — restart AstrBot to use this, before saving anything in its WebUI."
+			return noticeAstrbot.String()
 		},
 		Joined: wired,
 		Unwire: func() error {
@@ -488,3 +488,6 @@ func astrbotModelJSON(m catalog.Model) map[string]any {
 		"max_context_tokens": m.Context,
 	}
 }
+
+// what astrbot says after a change (notice.go)
+var noticeAstrbot = newNotice("AstrBot reads cmd_config.json at start-up and writes it back whole when its WebUI saves settings — restart AstrBot to use this, before saving anything in its WebUI.")

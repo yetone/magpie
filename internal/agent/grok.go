@@ -132,7 +132,7 @@ func grokIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)grok( |$)`) {
-				return "Grok Build reads its settings at start-up — restart open grok sessions to use this."
+				return noticeGrok.String()
 			}
 			return ""
 		},
@@ -284,3 +284,8 @@ func grokOwnOptions(dir, path, cur string) []Option {
 	}
 	return group("Grok Build", out)
 }
+
+// what grok says after a change (notice.go)
+var (
+	noticeGrok = newNotice("Grok Build reads its settings at start-up — restart open grok sessions to use this.")
+)

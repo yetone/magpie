@@ -129,7 +129,7 @@ func atomcodeIn(at place) *Agent {
 		},
 		Notice: func() string {
 			if Running(`(^|/)atomcode( |$)`) {
-				return "AtomCode reads its settings at start-up — restart open atomcode sessions to use this."
+				return noticeAtomcode.String()
 			}
 			return ""
 		},
@@ -460,3 +460,8 @@ func atomcodeSupportedEfforts(efforts []string) []string {
 	}
 	return out
 }
+
+// what atomcode says after a change (notice.go)
+var (
+	noticeAtomcode = newNotice("AtomCode reads its settings at start-up — restart open atomcode sessions to use this.")
+)

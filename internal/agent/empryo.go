@@ -106,7 +106,7 @@ func empryoAt(at place) *Agent {
 		Bin: "empryo", Dir: dir, Path: path,
 		Notice: func() string {
 			if Running(`(^|/)empryo( |$)`) {
-				return "Empryo reads its config at start-up — restart open empryo sessions to use this."
+				return noticeEmpryo.String()
 			}
 			return ""
 		},
@@ -175,3 +175,8 @@ func empryoAt(at place) *Agent {
 		}},
 	}, path)
 }
+
+// what empryo says after a change (notice.go)
+var (
+	noticeEmpryo = newNotice("Empryo reads its config at start-up — restart open empryo sessions to use this.")
+)

@@ -45,7 +45,7 @@ func pencil(home string) *Agent {
 		detect: func() bool { return isDir(dir) || pencilApp(home) },
 		Notice: func() string {
 			if runtime.GOOS == "windows" || Running(`Pencil\.app/`, `pen\.dev\.app/`, `(^|/)[Pp]encil( |$)`) {
-				return "Pencil reads its custom models at start-up — restart Pencil to see magpie's models in its model picker."
+				return noticePencil.String()
 			}
 			return ""
 		},
@@ -114,3 +114,8 @@ func pencilProviderJSON(gw string) map[string]any {
 	return map[string]any{"name": "magpie", "baseUrl": gw + "/v1", "api": "openai-completions",
 		"apiKey": gateway.TokenFor("pencil"), "models": ms}
 }
+
+// what pencil says after a change (notice.go)
+var (
+	noticePencil = newNotice("Pencil reads its custom models at start-up — restart Pencil to see magpie's models in its model picker.")
+)

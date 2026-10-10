@@ -46,9 +46,9 @@ func commandCodeIn(at place) *Agent {
 			return syncJSON(providers, "provider."+magpieID, theirsKept(providers, "provider."+magpieID, ccProviderJSON, "models"))
 		},
 		Notice: func() string {
-			notes := []string{"Command Code wants its own sign-in (cmd login) even for models through magpie."}
+			notes := []string{noticeCommandcode1.String()}
 			if Running(`(^|/)(cmd|cmdc|command-code|commandcode)( |$)`) {
-				notes = append(notes, "It reads its settings at start-up — restart open Command Code sessions to use this.")
+				notes = append(notes, noticeCommandcode2.String())
 			}
 			return strings.Join(notes, " ")
 		},
@@ -186,3 +186,9 @@ func ccEffortMap(path string) map[string]string {
 	}
 	return out
 }
+
+// what commandcode says after a change (notice.go)
+var (
+	noticeCommandcode1 = newNotice("Command Code wants its own sign-in (cmd login) even for models through magpie.")
+	noticeCommandcode2 = newNotice("It reads its settings at start-up — restart open Command Code sessions to use this.")
+)

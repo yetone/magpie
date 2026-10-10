@@ -207,12 +207,11 @@ func (d *distro) mirror(cfg string) {
 // notMirrored is the notice of an agent in a distro not known to be in
 // mirrored networking: what WSL said, or that only .wslconfig was read.
 func (d distro) notMirrored(agent string) string {
-	why := "WSL " + d.Name + " is in " + d.Net + " networking, not mirrored"
+	n := noticeWSLNotMirrored
 	if d.Net == "" {
-		why = "magpie couldn't ask WSL " + d.Name + " its networking mode (it has no wslinfo) and %UserProfile%\\.wslconfig doesn't set it to mirrored"
+		n = noticeWSLNoMode
 	}
-	return why + ", so its " + agent + " was pointed at Windows (" + d.base() + ") rather than 127.0.0.1; that answers only while the gateway listens beyond loopback and Windows' firewall lets WSL in. " +
-		"For 127.0.0.1, set networkingMode=mirrored under [wsl2] in %UserProfile%\\.wslconfig and run wsl --shutdown, then pick the model again."
+	return n.say("distro", d.Name, "net", d.Net, "agent", agent, "url", d.base())
 }
 
 // base is the gateway's URL from inside the distro.
@@ -242,7 +241,7 @@ type wslKind struct {
 	// for one that says nothing (a folder other tools keep too)
 	dir, bin string
 	in       func(place) *Agent // the agent at a place, as on this machine
-	restart  string             // advice after a change, when mirrored; "" none
+	restart  notice             // advice after a change, when mirrored; "" none
 	// version: the probe asks the distro's own bin its version (--version),
 	// for an agent whose config depends on it
 	version bool
@@ -256,7 +255,7 @@ type wslKind struct {
 
 var wslKinds = []wslKind{
 	{id: "codex", name: "Codex", dir: ".codex", bin: "codex", in: codexIn,
-		restart: "builds its model list at start-up — restart it, the app-server its sessions share (" + provider.CodexDaemonRestart + " there) and the Codex app's WSL connection to see this.",
+		restart: newNotice("{agent} in WSL {distro} builds its model list at start-up — restart it, the app-server its sessions share ({command} there) and the Codex app's WSL connection to see this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			switch key {
 			case "model", "subagent":
@@ -325,15 +324,15 @@ var wslKinds = []wslKind{
 	// move them (OPENCODE_CONFIG_DIR, KIMI_CODE_HOME, HERMES_HOME, …)
 	// aren't read. Each one's restart advice is its own Notice's.
 	{id: "opencode", name: "OpenCode", dir: ".config/opencode", bin: "opencode", in: opencodeIn,
-		restart: "reads its config at start-up — restart open opencode sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open opencode sessions to use this."),
 		asleep:  wslOwnAsleep("opencode", "model", "small")},
 	{id: "mimocode", name: "MiMo Code", dir: ".config/mimocode", bin: "mimo", in: mimocodeIn,
-		restart: "reads its config at start-up — restart open mimo sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open mimo sessions to use this."),
 		asleep:  wslOwnAsleep("mimocode", "model", "small")},
 	// Kimi Code's ~/.kimi-code, or the old kimi-cli's ~/.kimi where that is
 	// all there is; a stopped distro's is looked at once it is started
 	{id: "kimi", name: "Kimi Code", dir: ".kimi-code", bin: "kimi", in: kimiIn,
-		restart: "reads its settings at start-up — restart open kimi sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open kimi sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			if key != "model" {
 				return nil
@@ -345,7 +344,7 @@ var wslKinds = []wslKind{
 	// Qwen Code's ~/.qwen, one settings.json of the same shape as this
 	// machine's; a stopped distro's is looked at once it is started
 	{id: "qwen", name: "Qwen Code", dir: ".qwen", bin: "qwen", in: qwenIn,
-		restart: "reads a session's model at start-up — start a new session, or /model anew, to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads a session's model at start-up — start a new session, or /model anew, to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			if key != "model" {
 				return nil
@@ -355,7 +354,7 @@ var wslKinds = []wslKind{
 			}
 		}},
 	{id: "omp", name: "omp", dir: ".omp", bin: "omp", in: ompIn, version: true,
-		restart: "reads its settings at start-up — restart open omp sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open omp sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			if key == "effort" {
 				return nil
@@ -365,18 +364,18 @@ var wslKinds = []wslKind{
 			}
 		}},
 	{id: "crush", name: "Crush", dir: ".config/crush", bin: "crush", in: crushIn,
-		restart: "reads its settings at start-up — restart open crush sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open crush sessions to use this."),
 		asleep:  wslOwnAsleep("crush", "model", "small")},
 	{id: "hermes", name: "Hermes Agent", dir: ".hermes", bin: "hermes", in: hermesIn,
-		restart: "reads its settings at start-up — restart open Hermes sessions to use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open Hermes sessions to use this.")},
 	// no bin: morph is other tools' name too
 	{id: "morph", name: "Mister Morph", dir: ".morph", in: morphIn,
-		restart: "uses this for new tasks in its Console — restart open morph chats to use it there."},
+		restart: newNotice("{agent} in WSL {distro} uses this for new tasks in its Console — restart open morph chats to use it there.")},
 	// no bin: grok is also other tools' name, as on this machine
 	{id: "grok", name: "Grok Build", dir: ".grok", in: grokIn,
-		restart: "reads its settings at start-up — restart open grok sessions to use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open grok sessions to use this.")},
 	{id: "droid", name: "Droid", dir: ".factory", bin: "droid", in: droidIn,
-		restart: "reads its settings at start-up — restart open droid sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open droid sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			if key != "model" {
 				return nil
@@ -391,11 +390,11 @@ var wslKinds = []wslKind{
 		}},
 	// no bin: fx is also the JSON viewer's name
 	{id: "fx", name: "fx", dir: ".fx", in: fxIn,
-		restart: "reads its settings at start-up — restart open fx sessions to use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open fx sessions to use this.")},
 	{id: "commandcode", name: "Command Code", dir: ".commandcode", bin: "command-code", in: commandCodeIn,
-		restart: "wants its own sign-in there (cmd login) even for models through magpie, and reads its settings at start-up — restart open Command Code sessions to use this."},
+		restart: newNotice("{agent} in WSL {distro} wants its own sign-in there (cmd login) even for models through magpie, and reads its settings at start-up — restart open Command Code sessions to use this.")},
 	{id: "minimax-code", name: "MiniMax Code", dir: ".minimax", bin: "mcode", in: miniMaxIn,
-		restart: "reads its settings at start-up — restart open mcode sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open mcode sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			if key != "model" {
 				return nil
@@ -405,7 +404,7 @@ var wslKinds = []wslKind{
 			}
 		}},
 	{id: "dsh", name: "DeepSeek Harness", dir: ".dsh", bin: "dsh", in: dshIn,
-		restart: "reads its config at start-up — restart open dsh sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open dsh sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			// the thinking levels hang on which patch lists there are, the
 			// distro's files: a dsh of today's (0.1.5 on) is taken
@@ -420,27 +419,27 @@ var wslKinds = []wslKind{
 			}
 		}},
 	{id: "empryo", name: "Empryo", dir: ".empryo", bin: "empryo", in: empryoIn,
-		restart: "reads its config at start-up — restart open empryo sessions to use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open empryo sessions to use this.")},
 	// Ante ships macOS and Linux builds alone, and suggests WSL on Windows,
 	// so a Windows machine's Ante is usually this one
 	{id: "ante", name: "Ante", dir: ".ante", bin: "ante", in: anteIn,
-		restart: "reads its catalog at start-up — restart open ante sessions to use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its catalog at start-up — restart open ante sessions to use this.")},
 	{id: "muse", name: "Muse Code", dir: ".config/muse", bin: "muse", in: museIn,
-		restart: "reads its settings at start-up — restart open muse sessions to use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open muse sessions to use this.")},
 	{id: "qoder", name: "Qoder", dir: ".qoder", bin: "qodercli", in: qoderIn,
-		restart: "reads its settings as a session starts — open sessions keep the model they have; new ones use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its settings as a session starts — open sessions keep the model they have; new ones use this.")},
 	{id: "qoder-cn", name: "Qoder CN", dir: ".qoder-cn", bin: "qoderclicn", in: qoderCNIn,
-		restart: "reads its settings as a session starts — open sessions keep the model they have; new ones use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its settings as a session starts — open sessions keep the model they have; new ones use this.")},
 	// lgtm on Discord: magpie didn't find a CodeBuddy Code installed in WSL
 	{id: "codebuddy", name: "CodeBuddy Code", dir: ".codebuddy", bin: "codebuddy", in: codebuddyIn,
-		restart: "reads its model when a session starts — restart open codebuddy sessions, or run /clear in them, to use this."},
+		restart: newNotice("{agent} in WSL {distro} reads its model when a session starts — restart open codebuddy sessions, or run /clear in them, to use this.")},
 	// Cline's CLI, and its VS Code extension in a Remote - WSL window, which
 	// keep the same ~/.cline
 	{id: "cline", name: "Cline", dir: ".cline", bin: "cline", in: clineIn,
-		restart: "reads its provider as a session starts — open sessions keep the model they have; new ones use this. Reload VS Code's window for its extension.",
+		restart: newNotice("{agent} in WSL {distro} reads its provider as a session starts — open sessions keep the model they have; new ones use this. Reload VS Code's window for its extension."),
 		asleep:  wslOwnAsleep("cline", "model")},
 	{id: "atomcode", name: "AtomCode", dir: ".atomcode", bin: "atomcode", in: atomcodeIn,
-		restart: "reads its settings at start-up — restart open atomcode sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open atomcode sessions to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			if key != "model" {
 				return nil
@@ -453,12 +452,12 @@ var wslKinds = []wslKind{
 	// Snow CLI's ~/.snow, its profiles the distro's own; a stopped
 	// distro's are looked at once it is started
 	{id: "snow", name: "Snow CLI", dir: ".snow", bin: "snow", in: snowIn,
-		restart: "reads its profile at start-up — restart open snow sessions to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its profile at start-up — restart open snow sessions to use this."),
 		asleep:  wslOwnAsleep("snow", "model")},
 	// no dir: Antigravity keeps its folders in ~/.gemini too, so only the
 	// command says Gemini CLI is there
 	{id: "gemini", name: "Gemini CLI", bin: "gemini", in: geminiIn,
-		restart: "reads its settings at start-up — restart open gemini sessions to see this.",
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — restart open gemini sessions to see this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			if key != "provider" {
 				return nil
@@ -479,7 +478,7 @@ var wslKinds = []wslKind{
 	// Block's goose, by its folder alone: a goose command may be pressly's
 	// database migration tool
 	{id: "goose", name: "Goose", dir: ".config/goose", in: func(at place) *Agent { return gooseIn(at, filepath.Join(at.home, ".config")) },
-		restart: "loads its providers at start-up — restart open goose sessions to use magpie's models.",
+		restart: newNotice("{agent} in WSL {distro} loads its providers at start-up — restart open goose sessions to use magpie's models."),
 		asleep:  wslOwnAsleep("goose", "model")},
 	// Reasonix's native CLI (1.39 on), by its command and the version it
 	// gives: the historical npm client is reasonix too, and ~/.reasonix is
@@ -489,7 +488,7 @@ var wslKinds = []wslKind{
 			v := d.Versions["reasonix"]
 			return strings.HasPrefix(v, "2.") || strings.HasPrefix(v, "1.39.")
 		},
-		restart: "reads its settings at start-up — start a new reasonix process to use this.",
+		restart: newNotice("{agent} in WSL {distro} reads its settings at start-up — start a new reasonix process to use this."),
 		asleep: func(key string) func(map[string]string) []Option {
 			switch key {
 			case "model", "planner":
@@ -608,13 +607,12 @@ func wslAgent(k wslKind, d distro) *Agent {
 			return d.notMirrored(k.name)
 		}
 		if d.noRelay {
-			return "WSL " + d.Name + " is in " + d.Net + " networking with localhostForwarding=false in %UserProfile%\\.wslconfig, so 127.0.0.1 there, where its " + k.name +
-				" was pointed, isn't relayed to Windows, where magpie listens. Remove localhostForwarding=false under [wsl2] (it is on by default) and run wsl --shutdown."
+			return noticeWSLNoRelay.say("distro", d.Name, "net", d.Net, "agent", k.name)
 		}
 		if k.restart == "" {
 			return ""
 		}
-		return k.name + " in WSL " + d.Name + " " + k.restart
+		return k.restart.say("agent", k.name, "distro", d.Name, "command", provider.CodexDaemonRestart)
 	}
 	if !d.Running {
 		return asleep(a, k, d)
@@ -696,7 +694,7 @@ func asleep(live *Agent, k wslKind, d distro) *Agent {
 			if started {
 				return live.Notice()
 			}
-			return "WSL " + d.Name + " isn't running: magpie shows what it last saw there, and starts it only to change something."
+			return noticeWSLAsleep.say("distro", d.Name)
 		}}
 	for _, lf := range live.Fields {
 		key := lf.Key
@@ -1302,3 +1300,12 @@ func wslSetting(cfg, key string) (val string, ok bool) {
 	}
 	return val, ok
 }
+
+// what an agent in WSL says after a change, besides its kind's restart
+// (notice.go)
+var (
+	noticeWSLNotMirrored = newNotice("WSL {distro} is in {net} networking, not mirrored, so its {agent} was pointed at Windows ({url}) rather than 127.0.0.1; that answers only while the gateway listens beyond loopback and Windows' firewall lets WSL in. For 127.0.0.1, set networkingMode=mirrored under [wsl2] in %UserProfile%\\.wslconfig and run wsl --shutdown, then pick the model again.")
+	noticeWSLNoMode      = newNotice("magpie couldn't ask WSL {distro} its networking mode (it has no wslinfo) and %UserProfile%\\.wslconfig doesn't set it to mirrored, so its {agent} was pointed at Windows ({url}) rather than 127.0.0.1; that answers only while the gateway listens beyond loopback and Windows' firewall lets WSL in. For 127.0.0.1, set networkingMode=mirrored under [wsl2] in %UserProfile%\\.wslconfig and run wsl --shutdown, then pick the model again.")
+	noticeWSLNoRelay     = newNotice("WSL {distro} is in {net} networking with localhostForwarding=false in %UserProfile%\\.wslconfig, so 127.0.0.1 there, where its {agent} was pointed, isn't relayed to Windows, where magpie listens. Remove localhostForwarding=false under [wsl2] (it is on by default) and run wsl --shutdown.")
+	noticeWSLAsleep      = newNotice("WSL {distro} isn't running: magpie shows what it last saw there, and starts it only to change something.")
+)

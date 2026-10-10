@@ -108,9 +108,9 @@ func air(home, cfg string) *Agent {
 				return ""
 			}
 			if airOpenCode(home) == "" {
-				return "Air runs magpie's models through OpenCode's ACP server, and OpenCode isn't installed here: install OpenCode (npm i -g opencode-ai), then pick Magpie in a new Air task."
+				return noticeAir1.String()
 			}
-			return "In Air, start a new task and pick Magpie in its agent menu: magpie's models and routing groups are in its model menu."
+			return noticeAir2.String()
 		},
 		Check: func() string {
 			if !usesMagpie(model()) {
@@ -167,3 +167,9 @@ func air(home, cfg string) *Agent {
 		}},
 	}, path, ocPath)
 }
+
+// what air says after a change (notice.go)
+var (
+	noticeAir1 = newNotice("Air runs magpie's models through OpenCode's ACP server, and OpenCode isn't installed here: install OpenCode (npm i -g opencode-ai), then pick Magpie in a new Air task.")
+	noticeAir2 = newNotice("In Air, start a new task and pick Magpie in its agent menu: magpie's models and routing groups are in its model menu.")
+)

@@ -1483,7 +1483,10 @@ func claudeIn(at place) *Agent {
 			if stale == "" || !claudeRunning() {
 				return ""
 			}
-			return "an open Claude Code session keeps the " + stale + " it started with — restart it to use this."
+			if stale == "ultracode" {
+				return noticeClaudeUltracode.String()
+			}
+			return noticeClaudeEffort.String()
 		},
 	}
 	return self
@@ -1920,3 +1923,9 @@ func claudeMain(path string) string {
 	m, _ = tierAt(provider.ClaudeRead(m))
 	return m
 }
+
+// what an open Claude Code session keeps (notice.go)
+var (
+	noticeClaudeEffort    = newNotice("an open Claude Code session keeps the effort it started with — restart it to use this.")
+	noticeClaudeUltracode = newNotice("an open Claude Code session keeps the ultracode it started with — restart it to use this.")
+)

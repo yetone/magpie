@@ -124,7 +124,7 @@ func qoderAt(at place, b qoderBuild) *Agent {
 		},
 		Notice: func() string {
 			if Running(b.procs...) {
-				return b.name + " reads its settings as a session starts — open sessions keep the model they have; new ones use this."
+				return noticeQoder.say("agent", b.name)
 			}
 			return ""
 		},
@@ -299,3 +299,6 @@ func qoderProviderAt(agent, model, v1 string) map[string]any {
 func qoderKeyed(key, agent string) bool {
 	return key == gateway.TokenFor(agent) || ourKey(key)
 }
+
+// what Qoder's builds say after a change (notice.go)
+var noticeQoder = newNotice("{agent} reads its settings as a session starts — open sessions keep the model they have; new ones use this.")

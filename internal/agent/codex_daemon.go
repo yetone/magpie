@@ -25,7 +25,7 @@ import (
 
 // codexRestartAll is what is said after a change while copies of Codex
 // run that magpie leaves to the user.
-const codexRestartAll = "Codex builds its model list at start-up — restart the Codex app, open codex sessions and the app-server they share (" + provider.CodexDaemonRestart + ") to see this."
+var codexRestartAll = newNotice("Codex builds its model list at start-up — restart the Codex app, open codex sessions and the app-server they share ({command}) to see this.").say("command", provider.CodexDaemonRestart)
 
 // keepCodexDaemon is provider.KeepCodexDaemonCurrent; a var so tests can
 // see what is asked of it without a codex.
@@ -65,9 +65,9 @@ func codexDaemonNotice(path string) (string, bool) {
 	c := codexDaemonCheck(path)
 	switch {
 	case c.Restarted:
-		return "magpie restarted the app-server codex sessions share, which none was on, so new codex sessions have this; restart the Codex app, if it is open, to see it there.", true
+		return noticeCodexdaemon.String(), true
 	case c.Behind && c.Attached > 0:
-		return "Codex builds its model list at start-up, and the app-server open codex sessions share started before this: restart it (Restart on magpie's Agents page, or " + provider.CodexDaemonRestart + ") and the Codex app to see this.", true
+		return noticeCodexBehind.say("command", provider.CodexDaemonRestart), true
 	}
 	return "", false
 }
@@ -120,3 +120,9 @@ func codexDaemonBehind() []StaleCopy {
 	}
 	return []StaleCopy{{Kind: "daemon", Since: c.Since}}
 }
+
+// what codexdaemon says after a change (notice.go)
+var (
+	noticeCodexBehind = newNotice("Codex builds its model list at start-up, and the app-server open codex sessions share started before this: restart it (Restart on magpie's Agents page, or {command}) and the Codex app to see this.")
+	noticeCodexdaemon = newNotice("magpie restarted the app-server codex sessions share, which none was on, so new codex sessions have this; restart the Codex app, if it is open, to see it there.")
+)

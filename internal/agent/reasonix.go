@@ -301,7 +301,7 @@ func reasonixIn(at place) *Agent {
 		Bin: "reasonix", Dir: dir, Path: path, UA: []string{"reasonix"},
 		detect: func() bool { return reasonixDetected(at.home) },
 		Notice: func() string {
-			return "Reasonix Studio 2.x and the native 1.39.x/2.x CLI read global settings at startup. Start a new process to load changes. Project/session models can override Executor and Plan."
+			return noticeReasonix.String()
 		},
 		Check: func() string {
 			ref, on := strings.CutPrefix(model(), magpieID+"/")
@@ -672,3 +672,8 @@ func reasonixArray(values []string) edit.Raw {
 	}
 	return edit.Raw("[" + strings.Join(quoted, ", ") + "]")
 }
+
+// what reasonix says after a change (notice.go)
+var (
+	noticeReasonix = newNotice("Reasonix Studio 2.x and the native 1.39.x/2.x CLI read global settings at startup. Start a new process to load changes. Project/session models can override Executor and Plan.")
+)

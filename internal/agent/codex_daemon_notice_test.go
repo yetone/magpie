@@ -29,8 +29,8 @@ func TestCodexAdviceNamesTheSharedAppServer(t *testing.T) {
 		t.Errorf("Codex's advice leaves out its app-server: %q", n)
 	}
 	for _, k := range wslKinds {
-		if k.id == "codex" && !strings.Contains(k.restart, provider.CodexDaemonRestart) {
-			t.Errorf("Codex in WSL's advice leaves out its app-server: %q", k.restart)
+		if n := k.restart.say("command", provider.CodexDaemonRestart); k.id == "codex" && !strings.Contains(n, provider.CodexDaemonRestart) {
+			t.Errorf("Codex in WSL's advice leaves out its app-server: %q", n)
 		}
 	}
 	// nothing running, nothing to restart

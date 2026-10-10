@@ -67,7 +67,7 @@ func zcode(home string) *Agent {
 		Dir: dir, Path: path,
 		Notice: func() string {
 			if Running(`ZCode\.app/`, `(^|/)ZCode( |$)`) {
-				return "ZCode reads its providers at start-up — restart ZCode to see magpie's models in its picker."
+				return noticeZcode.String()
 			}
 			return ""
 		},
@@ -504,3 +504,8 @@ func zcodeNonNil(l []any) []any {
 	}
 	return l
 }
+
+// what zcode says after a change (notice.go)
+var (
+	noticeZcode = newNotice("ZCode reads its providers at start-up — restart ZCode to see magpie's models in its picker.")
+)
