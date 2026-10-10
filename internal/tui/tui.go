@@ -177,8 +177,9 @@ func newModel() model {
 			set = append(set, a)
 		}
 	}
-	shown, hidden := settings.Arrange(settings.Load(), set, func(a *agent.Agent) string { return a.ID })
-	m := model{agents: append(shown, hidden...), hidden: len(shown), period: usage.Week, srange: 1}
+	s := settings.Load()
+	shown, hidden := settings.Arrange(s, set, func(a *agent.Agent) string { return a.ID })
+	m := model{agents: append(shown, hidden...), hidden: len(shown), period: usage.Week, srange: 1, qleft: s.QuotaLeft}
 	// no model catalog yet: Init syncs it. Set here, as Init's receiver is
 	// a copy the program never sees.
 	m.syncing = catalog.Source() == ""

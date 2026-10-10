@@ -774,7 +774,14 @@ func (m model) updateUsage(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	i := slices.Index(periods, m.period)
 	switch msg.String() {
 	case "u":
+		// the choice is Settings' QuotaLeft, which the app and the menu bar
+		// read too: u turns it for them as well (#122)
 		m.qleft = !m.qleft
+		s := settings.Load()
+		s.QuotaLeft = m.qleft
+		if err := settings.Save(s); err != nil {
+			m.flash, m.flashOK = err.Error(), false
+		}
 		return m, nil
 	case "c":
 		// WorkBuddy's daily check-in, as the app's "Check in now"

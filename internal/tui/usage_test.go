@@ -203,3 +203,34 @@ func TestQuotaLinesCreditsNotSpent(t *testing.T) {
 		t.Errorf("set not to:\n%s", got)
 	}
 }
+
+// u on the Usage page shows a window by how much of it is left rather than
+// used, as the app's toggle does, and that choice is Settings' QuotaLeft
+// where the app keeps it: the app and the tray panel change it there, so the
+// TUI starts from it (#122).
+func TestQleftSeededFromSettings(t *testing.T) {
+	home(t)
+	if err := settings.Save(settings.Settings{QuotaLeft: true}); err != nil {
+		t.Fatal(err)
+	}
+	if m := newModel(); !m.qleft {
+		t.Fatal("Settings say left, and the TUI starts showing used")
+	}
+}
+
+// u writes what it picked to Settings, so the pick survives the next start
+// and the app's own toggle and the menu bar follow it.
+func TestQleftWritesBack(t *testing.T) {
+	home(t)
+	if settings.Load().QuotaLeft {
+		t.Fatal("the sandbox's settings start with left chosen")
+	}
+	m := press(t, model{w: 120, h: 40, page: pageUsage}, "u")
+	if !m.qleft || !settings.Load().QuotaLeft {
+		t.Fatalf("after u: qleft %v, Settings %v", m.qleft, settings.Load().QuotaLeft)
+	}
+	m = press(t, m, "u")
+	if m.qleft || settings.Load().QuotaLeft {
+		t.Fatalf("after the second u: qleft %v, Settings %v", m.qleft, settings.Load().QuotaLeft)
+	}
+}
