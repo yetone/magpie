@@ -107,6 +107,7 @@ func builtins(home, cfg string) []*Agent {
 		omp(home),
 		devin(home, cfg),
 		hermes(home),
+		bub(home),
 		morph(home),
 		kimi(home),
 		qwen(home),

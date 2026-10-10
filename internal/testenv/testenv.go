@@ -169,7 +169,7 @@ func SetHome(t testing.TB, dir string) {
 // tools are the programs a test must never reach for real: the system
 // keychains (macOS' security, Linux's secret-tool), which hold the user's
 // sign-ins outside any home, and the agents' CLIs.
-var tools = []string{"security", "secret-tool", "claude", "codex", "cursor-agent", "devin", "grok", "kiro-cli"}
+var tools = []string{"security", "secret-tool", "claude", "codex", "cursor-agent", "devin", "grok", "kiro-cli", "bub"}
 
 // inertTools puts a failing stand-in for each of tools first on PATH, in
 // home/bin. Tests can still put their own fakes before it.
