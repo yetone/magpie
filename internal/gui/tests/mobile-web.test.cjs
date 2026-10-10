@@ -43,12 +43,35 @@ const agentRows = [
     modelField("small", "smol"), modelField("slow", "slow"),
   ] },
 ];
+// the labels app.js groups into omp's roles square (OMP_ROLES)
+const OMP_ROLES = ["subagents", "smol", "slow", "plan", "vision", "advisor"];
 const views = ["agents", "providers", "gateway", "routing", "usage", "library", "plugins", "settings"];
 
+// BASE_REF's assets, all read in one git call the first time one is asked
+// for. A git show per file blocked the fake server for each of the ~100
+// the original page loads: under load its goto passed the 5s timeout, or
+// its icons came after the screenshot (WebKit, the two OpenAI marks on
+// Providers, 338 pixels).
 function baselineFile(file) {
-  if (!baseline.has(file)) baseline.set(file, execFileSync("git", ["show", `${base}:internal/gui/assets/${file}`], { cwd: assets, maxBuffer: 4 * 1024 * 1024 }));
+  if (!baseline.size) {
+    const root = path.resolve(assets, "../../.."), dir = "internal/gui/assets/";
+    const names = execFileSync("git", ["ls-tree", "-r", "--name-only", base, dir], { cwd: root }).toString().split("\n").filter(Boolean);
+    const out = execFileSync("git", ["cat-file", "--batch"], { cwd: root, input: names.map((n) => `${base}:${n}\n`).join(""), maxBuffer: 256 * 1024 * 1024 });
+    let at = 0;
+    for (const name of names) {
+      const nl = out.indexOf(10, at);
+      const size = Number(out.subarray(at, nl).toString().split(" ")[2]);
+      baseline.set(name.slice(dir.length), out.subarray(nl + 1, nl + 1 + size));
+      at = nl + 1 + size + 1;
+    }
+  }
+  if (!baseline.has(file)) throw new Error(`${file} isn't in ${base}`);
   return baseline.get(file);
 }
+
+// the files being served now: a picture still on its way (an icon's mask is
+// fetched by the page itself, apart from any preload) isn't drawn yet
+let serving = 0;
 
 function server(lang, original = false, opened = []) {
   return async route => {
@@ -78,12 +101,13 @@ function server(lang, original = false, opened = []) {
     if (url.pathname.startsWith("/api/")) return json({});
     const file = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
     const contentType = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png" }[path.extname(file)];
+    serving++;
     try {
       let body;
       if (original) body = baselineFile(file);
       else body = await fs.readFile(path.join(assets, file));
       await route.fulfill({ body, contentType });
-    } catch { await route.fulfill({ status: 404 }); }
+    } catch { await route.fulfill({ status: 404 }); } finally { serving--; }
   };
 }
 
@@ -115,7 +139,27 @@ async function go(page, view) {
     await page.locator("#quotaHead").waitFor({ state: "hidden" });
   }
   await page.evaluate(() => document.fonts.ready);
+  // every icon drawn: a mask's picture paints once it has come, which the
+  // 800ms below doesn't promise on a loaded machine (nothing served for a
+  // while, then a frame)
+  for (let quiet = 0; quiet < 3; quiet = serving ? 0 : quiet + 1) await page.waitForTimeout(50);
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await page.waitForTimeout(800); // let the tab's spring and content entrance settle
+}
+
+// a screenshot once two in a row are the same: WebKit fetches a mask's
+// picture first when it paints it, which a screenshot can be the first to do
+// (an icon still on its way when the page was drawn), so the screenshot
+// waits for what it asked for and is taken again
+async function still(page) {
+  let last;
+  for (let i = 0; i < 10; i++) {
+    const png = await page.screenshot({ animations: "disabled" });
+    if (last && png.equals(last)) break;
+    last = png;
+    for (let quiet = 0; quiet < 3; quiet = serving ? 0 : quiet + 1) await page.waitForTimeout(50);
+  }
+  return last;
 }
 
 async function save(page, name) {
@@ -150,10 +194,13 @@ async function agentsFit(page) {
       return bad;
     });
     assert.deepEqual(bad, [], agent.name + ": every control and model name must be visible");
-    for (const field of agent.fields) {
-      await row.locator(`.field[data-key="${field.key}"]`).click();
+    // omp's subagents, smol and slow roles share one square, as Claude
+    // Code's tiers do (#1397, fc5dfa3c): it opens their menu
+    const keys = [...new Set(agent.fields.map((f) => agent.id === "omp" && OMP_ROLES.includes(f.label) ? "tiers" : f.key))];
+    for (const key of keys) {
+      await row.locator(`.field[data-key="${key}"]`).click();
       await page.locator("#pop").waitFor();
-      assert.equal(await page.locator("#pop").isVisible(), true, agent.name + ": " + field.key + " opens");
+      assert.equal(await page.locator("#pop").isVisible(), true, agent.name + ": " + key + " opens");
       await page.locator('#nav [data-view="agents"]').click();
       await page.locator("#pop").waitFor({ state: "hidden" });
     }
@@ -265,8 +312,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               await current.mouse.move(0, 0); await original.mouse.move(0, 0);
               // Removing hover can repaint the tab's shadow in a later frame.
               await current.waitForTimeout(350); await original.waitForTimeout(350);
-              const before = PNG.sync.read(await original.screenshot({ animations: "disabled" }));
-              const after = PNG.sync.read(await current.screenshot({ animations: "disabled" }));
+              const before = PNG.sync.read(await still(original));
+              const after = PNG.sync.read(await still(current));
               const sameSize = before.width === after.width && before.height === after.height;
               let changedPixels = 0;
               // Chromium can repaint antialiased edges differently even when
