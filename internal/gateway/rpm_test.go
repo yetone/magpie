@@ -22,11 +22,22 @@ type minuteVendor struct {
 	at   []time.Time
 	path []string
 	fail int
+	// late is how much later than the rest the first request arrives, as
+	// when its connection has to be dialed (and, to a real vendor, its TLS
+	// handshake made) while the later ones reuse it
+	late time.Duration
+	n    int
 }
 
 func (v *minuteVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.Copy(io.Discard, r.Body)
 	v.mu.Lock()
+	v.n++
+	if v.n == 1 && v.late > 0 {
+		v.mu.Unlock()
+		time.Sleep(v.late)
+		v.mu.Lock()
+	}
 	v.at = append(v.at, time.Now())
 	v.path = append(v.path, r.URL.Path)
 	failing := v.fail > 0 && strings.HasSuffix(r.URL.Path, "/chat/completions")
@@ -55,12 +66,20 @@ func (v *minuteVendor) times() []time.Time {
 }
 
 // shortMinute makes MaxRPM's window and longest wait w and longest for the
-// test.
+// test, with no slack unless the test gives it one (slackMinute).
 func shortMinute(t *testing.T, w, longest time.Duration) {
 	t.Helper()
-	ow, ol := rpmWindow, rpmLongest
-	rpmWindow, rpmLongest = w, longest
-	t.Cleanup(func() { rpmWindow, rpmLongest = ow, ol })
+	ow, ol, os := rpmWindow, rpmLongest, rpmSlack
+	rpmWindow, rpmLongest, rpmSlack = w, longest, 0
+	t.Cleanup(func() { rpmWindow, rpmLongest, rpmSlack = ow, ol, os })
+}
+
+// slackMinute is shortMinute with a slack of a sixth of the window, as the
+// real one is to its minute, for a test that times what the vendor sees.
+func slackMinute(t *testing.T, w, longest time.Duration) {
+	t.Helper()
+	shortMinute(t, w, longest)
+	rpmSlack = w / 6
 }
 
 // rpmGateway is a gateway as the real server serves it (lanGuard in
@@ -97,8 +116,9 @@ func chatOnce(ctx context.Context, gw string) (*http.Response, string, error) {
 // first is a minute old, then is answered.
 func TestMaxRPMWaitsForRoomInTheMinute(t *testing.T) {
 	window := 1500 * time.Millisecond
-	shortMinute(t, window, time.Minute)
-	v := &minuteVendor{}
+	slackMinute(t, window, time.Minute)
+	// the first dials the connection the others reuse
+	v := &minuteVendor{late: 150 * time.Millisecond}
 	_, gw := rpmGateway(t, v, 2)
 	start := time.Now()
 	for i := range 3 {
@@ -114,8 +134,8 @@ func TestMaxRPMWaitsForRoomInTheMinute(t *testing.T) {
 	if d := at[1].Sub(start); d > window/2 {
 		t.Fatalf("the second waited %s with room in the minute", d)
 	}
-	if d := at[2].Sub(at[0]); d < window-50*time.Millisecond {
-		t.Fatalf("the third went %s after the first, inside the %s window", d, window)
+	if d := at[2].Sub(at[0]); d < window {
+		t.Fatalf("the vendor saw the third %s after the first, inside the %s window", d, window)
 	}
 }
 
@@ -188,8 +208,8 @@ func TestMaxRPMAgentGoneWhileWaiting(t *testing.T) {
 // room, so the next chat waits for the minute.
 func TestMaxRPMCountsRetriesAndCounts(t *testing.T) {
 	window := 1500 * time.Millisecond
-	shortMinute(t, window, time.Minute)
-	v := &minuteVendor{fail: 1}
+	slackMinute(t, window, time.Minute)
+	v := &minuteVendor{fail: 1, late: 150 * time.Millisecond}
 	_, gw := rpmGateway(t, v, 3)
 	if res, body, err := chatOnce(context.Background(), gw); err != nil || res.StatusCode != 200 {
 		t.Fatalf("first: %v %v %s", err, res, body)
@@ -235,7 +255,7 @@ func TestMaxRPMCountsRetriesAndCounts(t *testing.T) {
 	if len(at) != 4 {
 		t.Fatalf("the vendor saw %d (%v), want 4", len(at), v.path)
 	}
-	if d := at[3].Sub(at[0]); d < window-50*time.Millisecond {
+	if d := at[3].Sub(at[0]); d < window {
 		t.Fatalf("the last went %s after the first, inside the %s window: the retry or the count wasn't counted", d, window)
 	}
 }
@@ -351,6 +371,30 @@ func TestRPMReserve(t *testing.T) {
 	}
 	if l.free("x", 0) != true {
 		t.Fatal("no limit isn't free")
+	}
+}
+
+// The slack is part of the minute both ways: a request waits for a minute
+// and the slack after the limit-th from the end, and one that old no longer
+// counts only once the slack has passed too.
+func TestRPMReserveKeepsTheSlack(t *testing.T) {
+	shortMinute(t, time.Minute, 2*time.Minute)
+	rpmSlack = time.Second
+	var l rpms
+	t0 := time.Now()
+	for _, c := range []struct{ now, want time.Duration }{
+		{0, 0}, {10 * time.Second, 61 * time.Second},
+		{70 * time.Second, 122 * time.Second}, // a minute and the slack after 61
+	} {
+		got, err := l.reserve("x", 1, 0, t0.Add(c.now))
+		if err != nil || got.Sub(t0) != c.want {
+			t.Fatalf("at %s: %s %v, want %s", c.now, got.Sub(t0), err, c.want)
+		}
+	}
+	l = rpms{}
+	l.reserve("x", 1, 0, t0)
+	if got, _ := l.reserve("x", 1, 0, t0.Add(60500*time.Millisecond)); got.Sub(t0) != 61*time.Second {
+		t.Fatalf("half a second into the slack: %s, want 61s", got.Sub(t0))
 	}
 }
 

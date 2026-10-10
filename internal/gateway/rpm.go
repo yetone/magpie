@@ -43,6 +43,17 @@ import (
 // rpmWindow is the rolling window MaxRPM counts over; tests shorten it.
 var rpmWindow = time.Minute
 
+// rpmSlack is added to the window. A request is counted when it starts to
+// go, but the vendor counts it when it arrives: the first on a connection
+// arrives later than the next ones by its dial and TLS handshake, so with
+// the bare window the vendor could see one more than the limit in its own
+// minute (TestMaxRPMWaitsForRoomInTheMinute went red under CI load, and
+// does every time when the first is held 150ms on its way).
+var rpmSlack = time.Second
+
+// rpmSpan is how long a request counted stays counted.
+func rpmSpan() time.Duration { return rpmWindow + rpmSlack }
+
 // rpmLongest is the longest a request waits for room in the minute when
 // the provider's QueueWait isn't shorter; tests shorten it.
 var rpmLongest = 2 * time.Minute
@@ -78,11 +89,11 @@ func rpmWait(p provider.Provider) time.Duration {
 	return rpmLongest
 }
 
-// prune drops who's times a minute old or older, at now.
+// prune drops who's times a minute (and rpmSlack) old or older, at now.
 func (l *rpms) prune(who string, now time.Time) []time.Time {
 	ts := l.m[who]
 	i := 0
-	for i < len(ts) && !ts[i].After(now.Add(-rpmWindow)) {
+	for i < len(ts) && !ts[i].After(now.Add(-rpmSpan())) {
 		i++
 	}
 	ts = ts[i:]
@@ -95,8 +106,8 @@ func (l *rpms) prune(who string, now time.Time) []time.Time {
 }
 
 // reserve takes who's next time to go, at most longest from now (0: no
-// bound): now when the minute has room, else a minute after the limit-th
-// from the end.
+// bound): now when the minute has room, else a minute (and rpmSlack) after
+// the limit-th from the end.
 func (l *rpms) reserve(who string, limit int, longest time.Duration, now time.Time) (time.Time, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -106,7 +117,7 @@ func (l *rpms) reserve(who string, limit int, longest time.Duration, now time.Ti
 	ts := l.prune(who, now)
 	at := now
 	if len(ts) >= limit {
-		at = ts[len(ts)-limit].Add(rpmWindow)
+		at = ts[len(ts)-limit].Add(rpmSpan())
 	}
 	if d := at.Sub(now); longest > 0 && d > longest {
 		return time.Time{}, &errRPM{limit: limit, after: d, wait: longest}
