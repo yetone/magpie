@@ -66,7 +66,7 @@ async function stays(page, what, sel, watch = sel) {
 // are in sight or the button is at the view's top.
 async function unrolls(page, what) {
   await page.evaluate(() => {
-    const more = document.querySelector(".agent-more"), above = more.previousElementSibling;
+    const more = document.querySelector(".agent-more"), above = (more.closest(".ag-manage-bar") || more).previousElementSibling;
     window.frames = [];
     window.ro?.disconnect();
     window.ro = new ResizeObserver(() => {
@@ -75,7 +75,7 @@ async function unrolls(page, what) {
     });
     window.ro.observe(document.querySelector("#agents"));
   });
-  const gap = await page.locator(".agent-more").evaluate((m) => m.getBoundingClientRect().top - m.previousElementSibling.getBoundingClientRect().top);
+  const gap = await page.locator(".agent-more").evaluate((m) => m.getBoundingClientRect().top - (m.closest(".ag-manage-bar") || m).previousElementSibling.getBoundingClientRect().top);
   await page.locator(".agent-more").click();
   await page.waitForTimeout(1200);
   const frames = await page.evaluate(() => window.frames);

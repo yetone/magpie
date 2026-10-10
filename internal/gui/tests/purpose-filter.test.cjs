@@ -291,10 +291,16 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await title.click();
       await unmarked.click();
       const all = await page.evaluate(() => t("All purposes"));
+      // The checkbox redraw can clamp WebKit's scroll for a frame before
+      // the click guard restores it. Measure All purposes from that settled
+      // position, not in the middle of the preceding checkbox's layout.
+      const settle = () => page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await settle();
       const beforeAll = await page.locator("#view-routing").evaluate((e) => e.scrollTop);
       await menu.locator(".pm-item").filter({ has: page.locator(".pm-name", { hasText: all }) }).focus();
       await page.keyboard.press("Enter");
       await waitRows(8);
+      await settle();
       assert.equal(await page.locator(".rt-req").count(), 8, "All purposes resets the whole union");
       assert.equal(await menu.count(), 0);
       assert.equal(await page.locator("#rtPurpose").getAttribute("aria-expanded"), "false");

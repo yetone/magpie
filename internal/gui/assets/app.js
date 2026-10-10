@@ -573,6 +573,8 @@ function renderAgents() {
     list.append(more, fold);
   }
 
+  agentsManageButton(list);
+  confirmAsk?.refreshAgents?.();
   paintUpdateAll();
   paintInstalls();
   renderProfiles();
@@ -2067,6 +2069,140 @@ async function saveArrangement(order, hidden, shown) {
   }
 }
 
+// Bulk visibility changes only magpie's arrangement, never agent configs.
+let agentsVisibilitySaving = false;
+// Ignore state reads begun before a completed visibility write. A fresh read
+// still owns the truth, including changes made by the tray or another window.
+let agentsVisibilityRevision = 0;
+function agentsManageButton(list) {
+  if (mode === "panel" || !state.agents.length) return;
+  let bar = $("#agentsManage");
+  if (!bar) {
+    bar = el("div", "ag-manage-bar");
+    bar.id = "agentsManage";
+    const more = list.querySelector(":scope > .agent-more");
+    if (more) { more.before(bar); bar.append(more); }
+    else list.append(bar);
+    const button = el("button", "ag-manage-button");
+    button.type = "button";
+    button.append(svg("M2 3.5h2M6 3.5h8M2 8h2M6 8h8M2 12.5h2M6 12.5h8", 14, 1.5), el("span", "", t("Manage")));
+    button.setAttribute("aria-label", t("Manage agents"));
+    button.title = t("Manage agents");
+    button.onclick = openAgentsManager;
+    bar.append(button);
+  }
+  bar.querySelector(".ag-manage-button").disabled = agentsVisibilitySaving;
+}
+
+function openAgentsManager() {
+  if (agentsVisibilitySaving) return;
+  const selected = new Set();
+  const ed = el("div", "editor ag-manager");
+  const head = el("div", "ehead");
+  head.append(el("b", "", t("Manage agents")));
+  const note = el("p", "lib-confirm", t("Hiding only changes this list, not an agent's connection or settings. Unhidden agents may stay under Not set up."));
+  const search = el("input", "words ag-manage-search");
+  search.type = "search";
+  search.placeholder = t("Search agents…");
+  search.setAttribute("aria-label", t("Search agents…"));
+  const actions = el("div", "ag-manage-actions");
+  const rows = el("div", "ag-manage-rows");
+  const count = el("span", "ag-manage-count");
+  const result = el("p", "ag-manage-result");
+  result.setAttribute("role", "status");
+  const bar = el("div", "bar");
+  const button = (label, run, parent = actions) => {
+    const b = el("button", "text", t(label));
+    b.type = "button";
+    b.onclick = run;
+    parent.append(b);
+    return b;
+  };
+  const matching = () => arrangeAgents().all.filter((a) =>
+    (a.name + " " + a.id).toLocaleLowerCase().includes(search.value.trim().toLocaleLowerCase()));
+  button("Select search results", () => { matching().forEach((a) => selected.add(a.id)); draw(); });
+  button("Invert search selection", () => { matching().forEach((a) => selected.has(a.id) ? selected.delete(a.id) : selected.add(a.id)); draw(); });
+  button("Select unconnected agents", () => {
+    selected.clear();
+    matching().filter((a) => !onMagpie(a)).forEach((a) => selected.add(a.id));
+    draw();
+  });
+  button("Clear selection", () => { selected.clear(); draw(); });
+  const hide = button("Hide selected", () => save(true), bar);
+  const show = button("Unhide selected", () => save(false), bar);
+  bar.append(el("span", "grow"));
+  button("Done", () => closeConfirmAsk(), bar);
+  const controls = () => {
+    ed.querySelectorAll("button, input").forEach((b) => { b.disabled = agentsVisibilitySaving; });
+    hide.disabled ||= ![...selected].some((id) => !hiddenIds().includes(id));
+    show.disabled ||= ![...selected].some((id) => hiddenIds().includes(id));
+    count.textContent = t(selected.size === 1 ? "{n} agent selected" : "{n} agents selected", { n: selected.size });
+  };
+  // Update status in place: a state refresh must keep search, selection and
+  // keyboard focus on the control the reader is using.
+  ed.refreshAgents = () => {
+    const hidden = new Set(hiddenIds());
+    for (const row of rows.querySelectorAll(".ag-manage-row")) {
+      row.querySelector(".ag-manage-state").textContent = t(hidden.has(row.dataset.id) ? "Hidden" : "Not hidden");
+    }
+    controls();
+  };
+  function draw() {
+    rows.replaceChildren();
+    for (const a of matching()) {
+      const row = el("label", "ag-manage-row");
+      row.dataset.id = a.id;
+      const check = el("input");
+      check.type = "checkbox";
+      check.checked = selected.has(a.id);
+      check.setAttribute("aria-label", a.name);
+      check.onchange = () => { check.checked ? selected.add(a.id) : selected.delete(a.id); controls(); };
+      row.append(check, icon(a.icon), el("span", "ag-manage-name", a.name), el("span", "ag-manage-state", t(isHidden(a) ? "Hidden" : "Not hidden")));
+      rows.append(row);
+    }
+    if (!rows.children.length) rows.append(el("p", "lib-confirm", t("No matching agents")));
+    controls();
+  }
+  async function save(hidden) {
+    if (agentsVisibilitySaving) return;
+    const ids = [...selected].filter((id) => hiddenIds().includes(id) !== hidden);
+    if (!ids.length) return;
+    const next = new Set(hiddenIds());
+    ids.forEach((id) => hidden ? next.add(id) : next.delete(id));
+    agentsVisibilitySaving = true;
+    controls();
+    result.textContent = "";
+    agentsManageButton($("#agents"));
+    try {
+      // Commit once, then publish only the arrangement returned by the server.
+      // A failed save leaves both the visible list and selection unchanged.
+      const s = await api("agents/arrange", {
+        order: state.settings?.agentOrder || [], hidden: [...next], shown: state.settings?.agentsShown || [],
+      });
+      if (hidden) ids.forEach((id) => unhid.delete(id));
+      agentsVisibilityRevision++;
+      state.settings = { ...state.settings, agentOrder: s.agentOrder || [], agentsHidden: s.agentsHidden || [], agentsShown: s.agentsShown || [] };
+      selected.clear();
+      result.textContent = hidden
+        ? t(ids.length === 1 ? "{n} agent hidden" : "{n} agents hidden", { n: ids.length })
+        : t(ids.length === 1 ? "{n} agent unhidden" : "{n} agents unhidden", { n: ids.length });
+      renderAgents();
+    } catch (e) {
+      result.textContent = e.message;
+    } finally {
+      agentsVisibilitySaving = false;
+      agentsManageButton($("#agents"));
+      draw();
+    }
+  }
+  search.oninput = draw;
+  ed.append(head, note, search, actions, count, rows, result, bar);
+  draw();
+  confirmAsk = ed;
+  openModal(ed);
+  $("#modal").classList.add("lib");
+}
+
 // moveAgent puts the agent at index `to` among the rows in view; the folded
 // ones keep their places after them.
 function moveAgent(id, to) {
@@ -3166,11 +3302,15 @@ async function load(again) {
   if (view === "providers" && !providers) renderProvidersLoading();
   if (view === "gateway" && !providers) renderGatewayLoading();
   try {
-    const since = prefsWrites;
+    const since = prefsWrites, visibilitySince = agentsVisibilityRevision;
     const next = await api("state");
     // a setting changed while this was on its way (it can take seconds):
     // what came back is from before it, and would put the old theme back
     if (!prefsSettled(since) && load.done) next.settings = state.settings;
+    if (visibilitySince !== agentsVisibilityRevision) {
+      const { agentOrder, agentsHidden, agentsShown } = state.settings;
+      next.settings = { ...next.settings, agentOrder, agentsHidden, agentsShown };
+    }
     state = next;
     load.done = true;
     // the library may have drawn itself before the saved language was known
@@ -15134,6 +15274,9 @@ function askReset(q) {
 }
 function closeConfirmAsk() {
   if (!confirmAsk) return;
+  // Escape and the backdrop must not expose row actions while a bulk write
+  // still holds an older full arrangement. Done is disabled for the same reason.
+  if (agentsVisibilitySaving && confirmAsk.classList.contains("ag-manager")) return;
   // one asked from an editor goes back to it rather than close it too
   const back = confirmAsk.back;
   confirmAsk = null;

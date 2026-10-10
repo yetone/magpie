@@ -576,7 +576,13 @@
     } catch (e) {
       if (hits?.q === s) hits = { q: s, error: e.message };
     }
-    if (hits?.q === s) drawBody();
+    // Search results belong to their own section. Rebuilding the suggested
+    // cards here can remove one between pointerdown and pointerup, losing
+    // the reader's click just as the search answer arrives.
+    if (hits?.q === s && tab === "discover") {
+      const box = body?.querySelector(".pm-search-results");
+      if (box) drawSearchResults(box);
+    }
   }
 
   page.addEventListener("scroll", () => page.querySelector(".pm-head")?.classList.toggle("stuck", page.scrollTop > 0), { passive: true });
@@ -627,8 +633,15 @@
     }
     if (ls.length) body.append(section(t("Suggested"), "", ls));
     if (gh.length) body.append(section(t("Unofficial, on GitHub"), t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic }), gh));
-    const known = new Set([...listings.map((l) => l.package), ...(tagged || []).map((l) => l.github.package).filter(Boolean)]);
-    const box = el("section", "pm-sec");
+    const box = el("section", "pm-sec pm-search-results");
+    box.hasSuggestions = ls.length > 0;
+    drawSearchResults(box);
+    body.append(box);
+  }
+
+  function drawSearchResults(box) {
+    box.replaceChildren();
+    const known = new Set([...(listings || []).map((l) => l.package), ...(tagged || []).map((l) => l.github.package).filter(Boolean)]);
     const h = el("div", "pm-sechead");
     h.append(el("h3", "", t("On npm")), el("span", "", t("OpenCode plugins and pi packages anyone published — read what one does before you install it")));
     box.append(h);
@@ -637,12 +650,11 @@
     else if (hits.error) box.append(el("p", "pm-note bad", hits.error));
     else {
       const list = hits.list.filter((x) => !known.has(x.package));
-      if (!list.length) box.append(el("p", "pm-note", ls.length ? t("Nothing else on npm") : t("No plugin called “{q}”", { q: query.trim() })));
+      if (!list.length) box.append(el("p", "pm-note", box.hasSuggestions ? t("Nothing else on npm") : t("No plugin called “{q}”", { q: query.trim() })));
       const g = el("div", "pm-grid");
       for (const x of list) g.append(card({ package: x.package, name: x.package, npm: x }));
       box.append(g);
     }
-    body.append(box);
   }
 
   function intro() {

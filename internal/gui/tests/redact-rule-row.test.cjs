@@ -47,7 +47,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const errors = [];
         page.on("pageerror", (e) => errors.push(e.message));
         await page.route("**/*", serve(lang));
-        await page.goto("http://magpie.test/?view=settings&tab=privacy");
+        // Direct Settings startup loads it both from navigation and from
+        // load(). The second render can detach the row while WebKit scrolls
+        // it. This layout check opens Settings after the initial state read,
+        // so one settings read owns the row measured below.
+        await page.goto("http://magpie.test/");
+        await page.waitForFunction(() => load.done);
+        await page.locator("#prefs").click();
+        await page.locator("#setTab-privacy").click();
         const row = page.locator("#redactList .row.rule-row");
         await row.waitFor();
         await row.scrollIntoViewIfNeeded();

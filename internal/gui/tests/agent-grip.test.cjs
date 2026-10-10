@@ -125,7 +125,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // the fold says something is hidden; opened, its Show is there with
         // the pointer away, and brings the row back
-        const more = page.locator("#agents > .agent-more");
+        const more = page.locator("#agents .agent-more");
         assert.match(await more.textContent(), /1/);
         await more.click();
         await page.mouse.move(1, 1);

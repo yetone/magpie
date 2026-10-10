@@ -233,3 +233,38 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     }
   });
 }
+
+// The npm answer can arrive while a suggested card is being pressed.
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  for (const lang of ["en", "zh"]) {
+    test(`${engine} ${lang}: a search answer keeps a suggested card's click`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await browser.newPage({ viewport: { width: 980, height: 820 }, reducedMotion: "reduce" });
+      page.setDefaultTimeout(5000);
+      const asked = [];
+      await page.route("**/*", server(lang, asked));
+      let release, started;
+      const ready = new Promise((r) => { started = r; });
+      const hold = new Promise((r) => { release = r; });
+      t.after(() => release());
+      await page.route("**/api/plugins/search?*", async (route) => {
+        started();
+        await hold;
+        await route.fallback();
+      });
+      await page.goto("http://magpie.test/?view=plugins");
+      await page.locator(".pm-find input").fill("copilot");
+      await ready;
+      const card = page.locator('.pm-card[data-pkg="opencode-copilot-auth"] .pm-sum');
+      const box = await card.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      release();
+      await page.locator('.pm-card[data-pkg="opencode-copilot-proxy-auth"]').waitFor();
+      await page.mouse.up();
+      await page.locator("#modal .pm-md h4", { hasText: "Install" }).waitFor();
+      assert.deepEqual(asked.filter(([op]) => op === "page"), [["page", "opencode-copilot-auth"]], "one click opens the intended plugin once");
+    });
+  }
+}
