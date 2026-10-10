@@ -44,3 +44,23 @@ func TestGroupMemberEffortAndFast(t *testing.T) {
 	m = press(t, m, "down", "F")
 	wantFlash(t, m, false, "no fast mode")
 }
+
+// Taking a model out of a group whose other one is off is refused; while
+// the in-process gateway holds the catalog, the group stays as it was, not
+// shifted down a model with an empty one at its end.
+func TestGroupTakeOutRefusedWhileHeld(t *testing.T) {
+	home(t)
+	if err := provider.SaveGroup(provider.Group{ID: "pair", Name: "Pair", Members: []string{"a/m", "b/gpt-5.5"}, Off: []string{"b/gpt-5.5"}, Rules: []provider.Rule{{Use: "a/m", Tokens: 5}}}); err != nil {
+		t.Fatal(err)
+	}
+	defer provider.Hold()()
+	m := press(t, model{w: 120, h: 40}, "3", "enter")
+	if m.mode != modeGroup || m.gsel != 0 {
+		t.Fatalf("mode %d, picked %d", m.mode, m.gsel)
+	}
+	m = press(t, m, "d", "d")
+	wantFlash(t, m, false, "switched off")
+	if g := group(t, "pair"); !slices.Equal(g.Members, []string{"a/m", "b/gpt-5.5"}) || len(g.Rules) != 1 || g.Rules[0].Use != "a/m" {
+		t.Fatalf("members %v rules %+v", g.Members, g.Rules)
+	}
+}

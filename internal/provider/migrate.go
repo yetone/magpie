@@ -351,7 +351,14 @@ func setMigration(id string, f func(m *Migration)) error {
 	for k, v := range readMigrationsFile() {
 		all[k] = v
 	}
+	// f changes its own copy: the lists read are shared with every reader
+	// (filememo), and a write that fails leaves them as the file has them
 	m := all[id]
+	m.Accounts = slices.Clone(m.Accounts)
+	for i := range m.Accounts {
+		m.Accounts[i].Was = maps.Clone(m.Accounts[i].Was)
+	}
+	m.Backup = slices.Clone(m.Backup)
 	f(&m)
 	all[id] = m
 	b, err := json.MarshalIndent(all, "", "  ")

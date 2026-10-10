@@ -197,3 +197,64 @@ func TestHoldReadsMigrationsOnce(t *testing.T) {
 		t.Fatalf("a move written while held: %v %v", Moved("held-sub"), Moved("other-sub"))
 	}
 }
+
+// A group read while a request holds the catalog is the caller's own: the
+// TUI changes its group in place before saving it, and a save that fails
+// left that change in every look-up's providers.json for the rest of the
+// hold (SyncCatalog and the gateway's routes read it meanwhile); a group
+// handed to SaveGroup isn't cleaned in the caller's lists either.
+func TestHeldGroupsAreTheCallers(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, id := range []string{"a", "b"} {
+		if err := Save(Provider{ID: id, Name: id, Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m", "big"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	saved := Group{ID: "pair", Name: "Pair", Members: []string{"a/m", "b/big"}, Off: []string{"b/big"}, Levels: []string{"low", "high"},
+		Rules: []Rule{{Use: "a/m", Tokens: 5}, {Use: "b/big", Agents: []string{"codex"}, Time: &TimeWindow{From: "09:00", To: "18:00", Days: []string{"mon"}}}}}
+	if err := SaveGroup(saved); err != nil {
+		t.Fatal(err)
+	}
+	defer Hold()()
+	pair := func() Group {
+		t.Helper()
+		for _, g := range Groups() {
+			if g.ID == "pair" {
+				return g
+			}
+		}
+		t.Fatal("no group pair")
+		return Group{}
+	}
+	same := func(why string) {
+		t.Helper()
+		g := pair()
+		if !slices.Equal(g.Members, saved.Members) || !slices.Equal(g.Off, saved.Off) || !slices.Equal(g.Levels, saved.Levels) ||
+			len(g.Rules) != 2 || g.Rules[0].Use != "a/m" || g.Rules[1].Use != "b/big" ||
+			!slices.Equal(g.Rules[1].Agents, []string{"codex"}) || g.Rules[1].Time == nil || !slices.Equal(g.Rules[1].Time.Days, []string{"mon"}) {
+			t.Fatalf("%s: %+v", why, g)
+		}
+	}
+	// taking a/m out, as the TUI's d does: b/big alone is off, so it fails
+	g := pair()
+	g.Members = slices.DeleteFunc(g.Members, func(m string) bool { return m == "a/m" })
+	g.Rules = slices.DeleteFunc(g.Rules, func(r Rule) bool { return r.Use == "a/m" })
+	if err := SaveGroup(g); err == nil || !strings.Contains(err.Error(), "switched off") {
+		t.Fatalf("saved: %v", err)
+	}
+	same("a failed save's change is in the held groups")
+	g = pair()
+	g.Levels[0], g.Rules[1].Agents[0], g.Rules[1].Time.Days[0] = "max", "x", "sun"
+	same("a caller's change is in the held groups")
+
+	// the caller's group, cleaned for saving: as it gave it, saved or not
+	in := Group{Name: "R", Members: []string{"a/m", "b/big"}, Rules: []Rule{{Use: " b/big ", Intent: "tests"}}}
+	if err := SaveGroup(in); err == nil || !strings.Contains(err.Error(), "classifier") {
+		t.Fatalf("saved: %v", err)
+	}
+	if in.Rules[0].Use != " b/big " {
+		t.Fatalf("SaveGroup changed the caller's rule: %q", in.Rules[0].Use)
+	}
+}
