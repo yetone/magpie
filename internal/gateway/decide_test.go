@@ -367,6 +367,19 @@ func TestJevLevels(t *testing.T) {
 	if r.Rule.N != 0 || r.Rule.Classified.Intent != "" {
 		t.Fatalf("topics: %+v", r.Rule.Classified)
 	}
+	// one kind is no scale, whatever Jev would say of it: a message may be
+	// none of it, and "none of these" stands
+	s, _, _, j = jevved(t, "", provider.Rule{Use: "b/big", Intent: "a quick question"})
+	j.choice, j.level, j.sure, j.levels = noIntent, "a quick question", 0.9, 0.9
+	_, r = postOK(t, s, "s4", chat("refactor the parser", nil, 0, ""))
+	if r.Rule.N != 0 || r.Rule.Classified.Intent != "" {
+		t.Fatalf("one kind: %+v", r.Rule.Classified)
+	}
+	j.choice = "a quick question"
+	_, r = postOK(t, s, "s5", chat("what time is it in Tokyo?", nil, 0, ""))
+	if r.Rule.N != 1 || r.Rule.Classified.Intent != "a quick question" || j.n() != 2 { // a turn each, no levels asked about
+		t.Fatalf("one kind picked: %+v, %d calls", r.Rule.Classified, j.n())
+	}
 }
 
 // A group whose effort is auto has Jev pick each turn's reasoning, where
@@ -552,7 +565,7 @@ func TestJevOnVercelTypeSafe(t *testing.T) {
 	j := &jevUp{choice: "crashes", sure: 0.9, score: 2}
 	up := httptest.NewServer(http.StripPrefix("/typesafe", j))
 	defer up.Close()
-	s := jevAt(t, up.URL+"/typesafe", "jv/typesafe-ai/jev", provider.Rule{Use: "b/big", Intent: "crashes"})
+	s := jevAt(t, up.URL+"/typesafe", "jv/typesafe-ai/jev", provider.Rule{Use: "b/big", Intent: "crashes"}, provider.Rule{Use: "a/small", Intent: "renames"})
 	out, r := postOK(t, s, "s1", chat("why does this crash?", nil, 0, `,"reasoning_effort":"low"`))
 	if c := r.Rule.Classified; !strings.Contains(out, "from kb") || c.Intent != "crashes" || c.Sure != 0.9 || r.Rule.Pick != "high" {
 		t.Fatalf("%s %+v %+v", out, r.Rule, c)
@@ -627,7 +640,7 @@ func TestJevOnVercel(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{"answers": answers, "usage": map[string]int{"inputTokens": 90}})
 	}))
 	defer up.Close()
-	s := jevAt(t, up.URL+"/v4/ai", "jv/typesafe-ai/jev", provider.Rule{Use: "b/big", Intent: "debugging"})
+	s := jevAt(t, up.URL+"/v4/ai", "jv/typesafe-ai/jev", provider.Rule{Use: "b/big", Intent: "debugging"}, provider.Rule{Use: "a/small", Intent: "docs"})
 	out, r := postOK(t, s, "s1", chat("why does this crash?", nil, 0, `,"reasoning_effort":"low"`))
 	c := r.Rule.Classified
 	if !strings.Contains(out, "from kb") || c.Intent != "debugging" || c.Sure < 0.73 || c.Sure > 0.75 || r.Rule.Pick != "high" {
@@ -676,7 +689,7 @@ func TestJevOnCloudflare(t *testing.T) {
 		}
 	}))
 	defer up.Close()
-	s := jevAt(t, up.URL+"/client/v4", "jv/typesafe/jev", provider.Rule{Use: "b/big", Intent: "debugging"})
+	s := jevAt(t, up.URL+"/client/v4", "jv/typesafe/jev", provider.Rule{Use: "b/big", Intent: "debugging"}, provider.Rule{Use: "a/small", Intent: "docs"})
 	for i, sess := range []string{"s1", "s2"} {
 		out, r := postOK(t, s, sess, chat([]string{"why does this crash?", "and this one?"}[i], nil, 0, `,"reasoning_effort":"low"`))
 		if c := r.Rule.Classified; !strings.Contains(out, "from kb") || c.Intent != "debugging" || c.Sure != 0.9 || r.Rule.Pick != "medium" {
@@ -753,6 +766,14 @@ func TestClefOnCloudflare(t *testing.T) {
 		if _, ok := q["input"]; ok || q["questions"] == nil {
 			http.Error(w, `{"success":false,"errors":[{"message":"bad input"}]}`, 400)
 			return
+		}
+		// Clef turns away a choice of fewer than two options, as Workers AI
+		// answered one with a single intent rule's level question
+		for _, v := range q["questions"].(map[string]any) {
+			if x := v.(map[string]any); x["type"] == "choice" && len(x["criteria"].(map[string]any)) < 2 {
+				http.Error(w, `{"errors":[{"message":"AiError: AiError: {\"error\":{\"type\":\"invalid_request\",\"message\":\"Request body failed validation\",\"details\":{\"formErrors\":[],\"fieldErrors\":{\"questions\":[\"Dictionary should have at least 2 items after validation, not 1\"]}}}} (5a7c7e33-f74b-4b92-a602-47898cef2bfd)","code":5012}],"success":false,"result":{},"messages":[]}`, 422)
+				return
+			}
 		}
 		mu.Lock()
 		models = append(models, fmt.Sprint(q["model"]))
