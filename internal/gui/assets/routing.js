@@ -3001,6 +3001,21 @@
       groups = await api("groups/" + action, body);
       gEdit = null;
       renderGroups();
+      // The editor closed on its Save, and the page is shorter by its height: the
+      // click-hold then has nothing of the editor left to hold, and left to the
+      // browser's own clamp the reader lands at the foot of the list — rows away
+      // from the group saved, which was where they clicked. Its row comes back
+      // into sight, as the reader's own scroll — and only when it really is out
+      // of sight: readerScrolls lets go of the held element for a second, so
+      // calling it on a row already in view would drop the hold the next editor
+      // opens under (backToReader, app.js, guards the same way).
+      const saved = body.id || body.from || "";
+      const row = saved && document.querySelector(`#view-routing .rt-group[data-id="${CSS.escape(saved)}"]`);
+      const view = row && document.getElementById("view-routing");
+      if (view) {
+        const rr = row.getBoundingClientRect(), vb = view.getBoundingClientRect();
+        if (rr.bottom > vb.bottom || rr.top < vb.top) { readerScrolls(1000); row.scrollIntoView({ block: "nearest" }); }
+      }
       if (ok) status(ok, "ok");
       load(); // the gateway's model list, the agents' pickers
     } catch (e) { status(e.message, "err"); }

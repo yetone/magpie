@@ -2,7 +2,6 @@ package agent
 
 import (
 	"cmp"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -1392,11 +1391,15 @@ func codexStaleCache(path, tag string) error {
 
 // codexUsedUp reports whether the ChatGPT account Codex is signed in to
 // is held by the Codex app, out of its allowance with no credits to go on
-// with (provider.CodexUsedUp). A var so tests can say.
+// with (provider.CodexUsedUpKnown). A var so tests can say.
+//
+// What is known is used, never a reading asked for here: this runs from
+// SyncCatalog, which a write's own request runs before it answers (a
+// routing group's Save), and asking waits on the vendor — 1.1s of a
+// user's Save. KeepOnAnAccountWithRoom asks on its own loop with the time
+// for it, and tells the catalog when the answer changes.
 var codexUsedUp = func() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return provider.CodexUsedUp(ctx)
+	return provider.CodexUsedUpKnown()
 }
 
 // codexFailover reports whether Codex is signed in to a ChatGPT account
