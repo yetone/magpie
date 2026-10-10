@@ -324,8 +324,9 @@ var newFetches = struct {
 // restarted by hand).
 var newFetchRetry = time.Minute
 
-// fetchingNew is set while a FetchNewSoon runs; newSoonAt is when the last
-// one started.
+// fetchingNew is set while a FetchNew started in the background
+// (FetchNewSoon, FetchNewBehind) picks the accounts due or runs; newSoonAt
+// is when the last one started.
 var (
 	fetchingNew atomic.Bool
 	newSoonAt   atomic.Int64
@@ -344,10 +345,7 @@ func FetchNewSoon(timeout time.Duration) {
 		return
 	}
 	newSoonAt.Store(now)
-	go func() {
-		defer fetchingNew.Store(false)
-		FetchNew(timeout)
-	}()
+	fetchNewGo(timeout)
 }
 
 // FetchNewBehind is FetchNew in the background, started at once unless one
@@ -359,18 +357,48 @@ func FetchNewBehind(timeout time.Duration) {
 		return
 	}
 	newSoonAt.Store(time.Now().UnixNano())
+	fetchNewGo(timeout)
+}
+
+// fetchNewGo is FetchNew in the background, counted in newRunning before
+// it returns when an account is due, so a page reading FetchingNew straight
+// after is told; with none due nothing is started or counted.
+func fetchNewGo(timeout time.Duration) {
+	if !newFetches.TryLock() {
+		// behind a FetchNew under way, which the page doesn't wait on (#541)
+		newRunning.Add(1)
+		go func() {
+			defer newRunning.Add(-1)
+			defer fetchingNew.Store(false)
+			FetchNew(timeout)
+		}()
+		return
+	}
+	due := newDue()
+	if len(due) == 0 {
+		newFetches.Unlock()
+		fetchingNew.Store(false)
+		return
+	}
+	newRunning.Add(1)
 	go func() {
+		defer newRunning.Add(-1)
 		defer fetchingNew.Store(false)
-		FetchNew(timeout)
+		defer newFetches.Unlock()
+		fetchDue(due, timeout)
 	}()
 }
 
-// newRunning counts the FetchNew calls under way.
+// newRunning counts the FetchNew calls under way, those started in the
+// background included.
 var newRunning atomic.Int32
 
 // FetchingNew reports whether a FetchNew is under way (start-up's, or one
-// started behind a page): accounts' lists may be on their way still.
-func FetchingNew() bool { return newRunning.Load() > 0 }
+// started behind a page): accounts' lists may be on their way still. One
+// started behind a page counts from its start, while it still picks the
+// accounts due: a page whose FetchNewBehind found it so returned at once,
+// and was told none was on its way until the one picking counted itself.
+func FetchingNew() bool { return newRunning.Load() > 0 || fetchingNew.Load() }
 
 // FetchNew asks each signed-in account whose vendor list magpie hasn't
 // fetched yet for it, each for at most timeout. Start-up does this for the
@@ -383,6 +411,20 @@ func FetchNew(timeout time.Duration) {
 	defer newRunning.Add(-1)
 	newFetches.Lock()
 	defer newFetches.Unlock()
+	fetchDue(newDue(), timeout)
+}
+
+// newFetch is a provider FetchNew asks for its list, and whether for its
+// decision models.
+type newFetch struct {
+	p      Provider
+	decide bool
+}
+
+// newDue is the providers FetchNew asks for their lists now, newFetches
+// held.
+func newDue() []newFetch {
+	var due []newFetch
 	for _, p := range All() {
 		// a list of decision models fetched before magpie kept their
 		// windows and input, or not fetched yet (ARNO on Discord)
@@ -397,10 +439,24 @@ func FetchNew(timeout time.Duration) {
 		if t, ok := newFetches.m[p.ID]; ok && time.Since(t) < newFetchRetry {
 			continue
 		}
+		due = append(due, newFetch{p, decide})
+	}
+	return due
+}
+
+// fetchDue asks each of due for its list, each for at most timeout,
+// newFetches held.
+func fetchDue(due []newFetch, timeout time.Duration) {
+	for _, f := range due {
+		p := f.p
+		// listed since by another's fetch, as a plugin's accounts are
+		if _, ok := p.Listed(); ok && !f.decide {
+			continue
+		}
 		newFetches.m[p.ID] = time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		var err error
-		if decide && p.Account == nil {
+		if f.decide && p.Account == nil {
 			_, err = p.fetchDecide(p.Via(ctx))
 		} else {
 			_, err = p.Fetch(ctx)
