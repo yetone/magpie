@@ -3195,7 +3195,7 @@ async function load(again) {
   if (view === "providers" && !providers) renderProvidersLoading();
   if (view === "gateway" && !providers) renderGatewayLoading();
   try {
-    const since = prefsWrites;
+    const since = prefsWrites, hid = hiddenIds().join();
     const asked = api("state");
     // the first load draws the state magpie kept from its last read while
     // the fresh one is read (#1519, fatkun): reading every agent's config,
@@ -3230,6 +3230,8 @@ async function load(again) {
       if (view === "plugins") window.loadPlugins?.();
       if (view === "sessions") window.loadSessionsPage?.();
     }
+    // a Library drawn before the state came counted the hidden agents too
+    else if (view === "library" && hiddenIds().join() !== hid) window.redrawLibrary?.();
     tintPanel();
     tintTitleBar();
     renderAgents();

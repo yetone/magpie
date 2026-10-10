@@ -85,6 +85,9 @@ function server(lang, state, posts) {
 // page (app.js's guard holds it). The window is tall enough for the whole
 // list, as the pick bar stays over the last rows of a longer one.
 const press = async (page, loc) => {
+  // where it is once the page has faded in (content-in slides it 2px), not
+  // on the way: a reader clicks what they see standing still
+  await page.waitForFunction(() => !document.querySelector("#view-library").getAnimations({ subtree: true }).some((a) => a.effect?.getComputedTiming().endTime !== Infinity));
   const b = await loc.boundingBox();
   const sel = String(loc);
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
@@ -131,6 +134,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator('button[data-view="library"]').click();
         const v = page.locator("#view-library");
         await v.locator(".lib-server").first().waitFor();
+        // the state can come after the list: the hidden Copilot CLI is then
+        // left out once it has, from the count and from Turn all on
+        await page.waitForFunction((tip) => document.querySelector("#view-library .lib-serverhead .lib-everyon")?.title === tip,
+          w("Give every server to all {n} agents, each the ones it can reach", { n: 3 }));
         const row = (name) => v.locator(".lib-server").filter({ has: page.locator(".name", { hasText: new RegExp("^" + name) }) });
         const agentsOf = (name) => state.servers.find((s) => s.name === name)?.agents;
 

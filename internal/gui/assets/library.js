@@ -461,6 +461,10 @@
     }
   }
   window.loadLibrary = load;
+  // drawn again as it is: the agents hidden are known only from the state,
+  // which can come after the page was drawn (it counted them, and Turn all
+  // on gave them the servers)
+  window.redrawLibrary = () => { if (lib) render(); };
   // the library as the page shows it: what a change did is said once, not shown
   const seen = (v) => JSON.stringify({ ...v, result: undefined });
 
