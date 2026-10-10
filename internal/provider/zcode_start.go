@@ -510,7 +510,10 @@ func zcodeStartQuota(ctx context.Context, l Login, jwt string) SubscriptionQuota
 			used = total - left
 		}
 		if hasTotal && total > 0 {
+			// the bucket's count as amount of limit (#659): the card says it
+			// as used or as left, as it says the share beside it
 			w.Used = 100 * used / total
+			w.Amount, w.Limit = used, total
 			w.Display = fmt.Sprintf("%s / %s", compactNumber(used), compactNumber(total))
 		}
 		if t, ok := zcodeNum(x.ExpiresAt); ok && t > 0 {

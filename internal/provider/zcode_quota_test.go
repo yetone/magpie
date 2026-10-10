@@ -52,3 +52,30 @@ func TestZCodeNoMonthlyCap(t *testing.T) {
 		t.Fatalf("capped full until %v", full)
 	}
 }
+
+// A window whose whole is told carries the count itself, as amount of limit
+// (#659): the card says it as used or as left, as it says the share beside
+// it — the remaining branch and the currentValue branch alike.
+func TestZCodeWindowsCarryTheirCount(t *testing.T) {
+	var d zhipuLimits
+	if err := json.Unmarshal([]byte(`{"limits":[
+		{"type":"CREDIT_LIMIT","unit":3,"number":5,"usage":2000,"remaining":1500,"percentage":25},
+		{"type":"CREDIT_LIMIT","unit":6,"number":1,"usage":8000,"currentValue":2000}
+	]}`), &d); err != nil {
+		t.Fatal(err)
+	}
+	ws := d.windows()
+	if len(ws) != 2 {
+		t.Fatalf("windows: %+v", ws)
+	}
+	if w := ws[0]; w.Amount != 500 || w.Limit != 2000 ||
+		w.Count(false) != groupedNumber(500)+" / "+groupedNumber(2000) ||
+		w.Count(true) != groupedNumber(1500)+" / "+groupedNumber(2000) {
+		t.Fatalf("remaining: %+v", w)
+	}
+	if w := ws[1]; w.Amount != 2000 || w.Limit != 8000 || w.Used != 25 ||
+		w.Count(false) != groupedNumber(2000)+" / "+groupedNumber(8000) ||
+		w.Count(true) != groupedNumber(6000)+" / "+groupedNumber(8000) {
+		t.Fatalf("currentValue: %+v", w)
+	}
+}

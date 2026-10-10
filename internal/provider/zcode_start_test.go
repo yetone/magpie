@@ -147,6 +147,7 @@ func TestZCodeStartPlanOwnAccount(t *testing.T) {
 	}
 	w := q.Windows[0]
 	if w.Name != "GLM-5.1" || w.Used != 25 || w.Display != compactNumber(250000)+" / "+compactNumber(1000000) ||
+		w.Amount != 250000 || w.Limit != 1000000 ||
 		w.ResetsAt == nil || w.Span != 24*time.Hour || w.matches == nil || !w.matches("glm-5.1") || w.matches("GLM-5-Turbo") {
 		t.Fatalf("window: %+v", w)
 	}
@@ -163,6 +164,55 @@ func TestZCodeStartPlanOwnAccount(t *testing.T) {
 		t.Fatalf("past its end: %v %+v", err, b)
 	} else if _, _, ok := b.active(); ok {
 		t.Fatal("past its end is active")
+	}
+}
+
+// A bucket counted in amounts says its count as used or as left, as the
+// share beside it is said (#659): the window carries what is used of the
+// whole. A window that kept only the vendor's used-first text froze that
+// count beside a "% left" figure (28746939 / 100000000 beside 71.3% left).
+func TestZCodeStartBucketsCarryTheirCount(t *testing.T) {
+	now := time.Now()
+	jwt := zcodeTestJWT(time.Now().Add(24 * time.Hour))
+	for _, tt := range []struct {
+		name            string
+		used, remaining any
+		amount          float64
+	}{
+		{"used told", 250000, 750000, 250000},
+		{"left only", nil, 750000, 250000},
+	} {
+		u := newZCodeStartUpstream(t, jwt)
+		x := map[string]any{
+			"plan_id": "zai-start-plan", "user_plan_id": "up1", "entitlement_id": "e1",
+			"show_name": "GLM-5.1", "capabilities": []any{"model:GLM-5.1"},
+			"total_units": "1000000", "expires_at": now.Add(time.Hour).Unix(),
+		}
+		if tt.used != nil {
+			x["used_units"] = tt.used
+		}
+		if tt.remaining != nil {
+			x["remaining_units"] = tt.remaining
+		}
+		u.balance = map[string]any{
+			"server_time": now.Unix(),
+			"plans": []any{map[string]any{"plan_id": "zai-start-plan", "user_plan_id": "up1", "name": "Start Plan", "status": "active",
+				"ends_at":      now.Add(7 * 24 * time.Hour).Unix(),
+				"entitlements": []any{map[string]any{"entitlement_id": "e1", "period": "daily"}}}},
+			"balances": []any{x},
+		}
+		q := zcodeStartQuota(context.Background(), Login{User: "trial@example.com"}, jwt)
+		if len(q.Windows) != 1 {
+			t.Fatalf("%s: usage: %+v", tt.name, q)
+		}
+		w := q.Windows[0]
+		if w.Amount != tt.amount || w.Limit != 1000000 {
+			t.Fatalf("%s: count: %v of %v", tt.name, w.Amount, w.Limit)
+		}
+		if w.Count(false) != groupedNumber(tt.amount)+" / "+groupedNumber(1000000) ||
+			w.Count(true) != groupedNumber(1000000-tt.amount)+" / "+groupedNumber(1000000) {
+			t.Fatalf("%s: count as used or as left: %q %q", tt.name, w.Count(false), w.Count(true))
+		}
 	}
 }
 

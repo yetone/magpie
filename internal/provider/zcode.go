@@ -417,10 +417,12 @@ type zhipuLimits struct {
 
 // windows are the limits as windows: what is used of the whole when both
 // are told (the whole less what remains, or the current value), else the
-// percentage the vendor gives. TIME_LIMIT is the month's MCP tool calls,
-// which ZCode shows but never stops the models on, so it is set aside, as
-// is a limit whose whole is told as 0: no cap (an older plan's), which
-// the vendor may still give as 100% used.
+// percentage the vendor gives. A window whose whole is told carries the
+// count itself, as amount of limit, for a card that says it as used or as
+// left, as it says the share beside it (#659). TIME_LIMIT is the month's
+// MCP tool calls, which ZCode shows but never stops the models on, so it is
+// set aside, as is a limit whose whole is told as 0: no cap (an older
+// plan's), which the vendor may still give as 100% used.
 func (d zhipuLimits) windows() []QuotaWindow {
 	out := []QuotaWindow{}
 	for _, x := range d.Limits {
@@ -441,11 +443,13 @@ func (d zhipuLimits) windows() []QuotaWindow {
 			case x.Remaining != nil:
 				used := total - *x.Remaining
 				w.Used = 100 * used / total
+				w.Amount, w.Limit = used, total
 				w.Display = fmt.Sprintf("%s / %s", compactNumber(used), compactNumber(total))
 			case x.Current != nil:
 				if x.Percent == nil {
 					w.Used = 100 * *x.Current / total
 				}
+				w.Amount, w.Limit = *x.Current, total
 				w.Display = fmt.Sprintf("%s / %s", compactNumber(*x.Current), compactNumber(total))
 			}
 		}

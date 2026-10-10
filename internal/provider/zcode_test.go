@@ -171,6 +171,18 @@ func TestZCodeAccounts(t *testing.T) {
 	if r := q.Resets; r == nil || r.Count != 2 || r.FiveHour != 1 || r.Weekly != 1 || r.Team {
 		t.Fatalf("resets: %+v", r)
 	}
+	// a window whose whole is told carries the count itself, as amount of
+	// limit (#659): the card says it as used or as left, as it says the share
+	w := q.Windows[0]
+	if w.Amount != 500 || w.Limit != 2000 {
+		t.Fatalf("5 hours count: %v of %v", w.Amount, w.Limit)
+	}
+	if w.Count(false) != groupedNumber(500)+" / "+groupedNumber(2000) || w.Count(true) != groupedNumber(1500)+" / "+groupedNumber(2000) {
+		t.Fatalf("5 hours count as used or as left: %q %q", w.Count(false), w.Count(true))
+	}
+	if w := q.Windows[1]; w.Amount != 1000 || w.Limit != 10000 {
+		t.Fatalf("Weekly count: %v of %v", w.Amount, w.Limit)
+	}
 
 	if err := SwitchLogin("zcode", "two@example.com"); err != nil {
 		t.Fatal(err)
