@@ -162,7 +162,7 @@ func bodyForExport(body string, cut bool) string {
 	if body == "" {
 		return ""
 	}
-	body = string(redact.ScrubJSON([]byte(body)))
+	body = string(redact.ScrubJSONWith([]byte(body), scrubOptions()))
 	if cut {
 		body += usage.BodyCut
 	}

@@ -13,7 +13,7 @@ import (
 // writes what the wrapper still holds. Nothing masked, nothing wrapped.
 func redacted(w http.ResponseWriter, body []byte) (http.ResponseWriter, []byte, func()) {
 	o := redactionOptions()
-	if !o.Secrets && !o.Personal && len(o.Words) == 0 {
+	if !o.Secrets && !o.Personal && len(o.Words) == 0 && len(o.Rules) == 0 {
 		return w, body, func() {}
 	}
 	masked, n := redact.MaskJSON(body, o)
@@ -35,9 +35,23 @@ func redactedPrompt(w http.ResponseWriter, prompt string) (http.ResponseWriter, 
 	return rw, masked, rw.Finish
 }
 
-func redactionOptions() redact.Options {
-	st := settings.Load()
-	return redact.Options{Secrets: st.Redact, Personal: st.RedactPersonal, Kinds: st.RedactKinds, Words: st.RedactWords, Rules: st.RedactRules}
+func redactionOptions() redact.Options { return settings.Load().Redaction() }
+
+// scrubOptions is what the request archive and the OTLP bodies take out of
+// what they keep: what the user asked masked, and every secret beside it.
+// What they keep is sent nowhere — the user's own bucket, or their
+// collector — so a secret goes from it whether or not Mask secrets is on,
+// which is the archive's contract. Secrets forced this way are magpie's
+// own rules, and nothing else: a masking rule of the user's own stays
+// gated on Mask secrets as settings documents it, since forcing Secrets on
+// would switch those on with them (redact.mask gates the user's rules on
+// Secrets). Their words and personal data follow their own switches as
+// before.
+func scrubOptions() redact.Options {
+	o := redactionOptions()
+	// the user's rules are left out: they are gated on Mask secrets, which
+	// is settings' documented meaning of them
+	return redact.Options{Secrets: true, Personal: o.Personal, Words: o.Words}
 }
 
 // unredactedRoute says a request resolved to p, or to the group whose

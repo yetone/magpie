@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/sessions"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/testenv"
@@ -56,6 +57,39 @@ func TestSessionTraceWirePrivacyAndTokenOwnership(t *testing.T) {
 	cfg.BodiesWhole = true
 	if got := sessionBody(long, cfg); got != long {
 		t.Fatal("whole body truncated")
+	}
+}
+
+// A secret of magpie's own goes out of an exported session body whether
+// masking is on for the vendor or not, since what the export keeps goes to
+// the collector (#195). A masking rule of the user's own is left behind:
+// mask gates it on Mask secrets, so forcing the secrets on for what is kept
+// would switch their rule on where the vendor side left it off.
+func TestSessionBodyKeepsTheUsersRules(t *testing.T) {
+	const relay = "rz_RelayKey1234567"
+	secret := "sk-ant-api03-" + strings.Repeat("Q7x", 10)
+	rules := []redact.Rule{{Kind: "RELAY", Prefix: "rz_"}}
+	cfg := settings.OTel{Bodies: true}
+	for _, tc := range []struct {
+		name   string
+		redact bool
+		want   string
+	}{
+		{"masking_on", true, relay},
+		{"masking_off", false, relay},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := settings.Save(settings.Settings{Redact: tc.redact, RedactRules: rules}); err != nil {
+				t.Fatal(err)
+			}
+			got := sessionBody(`{"prompt":"send it to `+secret+` and `+relay+`}`, cfg)
+			if strings.Contains(got, secret) {
+				t.Errorf("the secret is in the exported session body: %s", got)
+			}
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("want %s in the exported session body: %s", tc.want, got)
+			}
+		})
 	}
 }
 

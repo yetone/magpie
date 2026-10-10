@@ -749,6 +749,12 @@ func (s Settings) Compact() int {
 	return WorkingWindow
 }
 
+// Redaction is what the gateway masks on the way to a vendor, and what the
+// request archive and the OTLP bodies take out of what they keep.
+func (s Settings) Redaction() redact.Options {
+	return redact.Options{Secrets: s.Redact, Personal: s.RedactPersonal, Kinds: s.RedactKinds, Words: s.RedactWords, Rules: s.RedactRules}
+}
+
 // KeepOwn puts back cur's settings that are this computer's own, which a
 // sync or a restored backup never brings from another: the window's size
 // and whether it was maximised, the proxy, the gateway's port, the Dock, gateway mode, whether WSL is looked in, and what the menu bar or tray shows beside magpie's

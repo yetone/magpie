@@ -1,10 +1,11 @@
 package gateway
 
 // The request archive: with it on (settings' RequestArchive), each call the
-// gateway serves is kept — the headers and bodies both ways, every secret
-// taken out first — in the user's own S3 bucket, the one sync keeps its
-// backup in, at <prefix>/magpie/archive/<date>/<id>.json: the call's date,
-// in UTC, and an id of its own, sent back on the response as
+// gateway serves is kept — the headers and bodies both ways, with every
+// secret, and whatever the user's own masking rules, words and personal
+// data cover, taken out first — in the user's own S3 bucket, the one sync
+// keeps its backup in, at <prefix>/magpie/archive/<date>/<id>.json: the
+// call's date, in UTC, and an id of its own, sent back on the response as
 // X-Magpie-Archive-Id. The call, and its rows in the usage log, carry
 // "<date>/<id>", for the Gateway and Usage pages to read it back by.
 //
@@ -74,6 +75,7 @@ type wire struct {
 	reqFull      *spool
 	res          *captureResponseWriter
 	to           Putter
+	o            redact.Options // what its secrets are taken out with
 }
 
 // archiving is r's wire when the archive is on and has a bucket, nil
@@ -93,7 +95,7 @@ func archiving(r *http.Request, res *captureResponseWriter, start time.Time, bod
 	res.Header().Set(ArchiveHeader, id)
 	res.full = &spool{limit: archiveLimit()}
 	return &wire{name: start.UTC().Format("2006-01-02") + "/" + id, method: r.Method, path: r.URL.Path,
-		query: r.URL.RawQuery, req: r.Header.Clone(), body: body, res: res, to: to}
+		query: r.URL.RawQuery, req: r.Header.Clone(), body: body, res: res, to: to, o: scrubOptions()}
 }
 
 // archiveName is where the archive keeps c, "<date>/<id>", or "" when it
@@ -210,22 +212,23 @@ func upload(j archiveJob) {
 	c := j.c
 	c.wire = nil
 	c.RequestBody, c.ResponseBody = "", ""
+	o := j.w.o
 	reqBody, err1 := j.req.read()
 	resBody, err2 := j.res.read()
 	if err := errors.Join(err1, err2); err != nil {
 		archiveFailed(j.w.name, err)
 		return
 	}
-	c.Error, c.Fallback = redact.Scrub(c.Error), redact.Scrub(c.Fallback)
+	c.Error, c.Fallback = redact.ScrubWith(c.Error, o), redact.ScrubWith(c.Fallback, o)
 	path := j.w.path
 	if j.w.query != "" {
-		path += "?" + scrubQuery(j.w.query)
+		path += "?" + scrubQuery(j.w.query, o)
 	}
 	a := Archived{ID: j.w.name, Call: c,
-		Request: ArchivePart{Method: j.w.method, Path: path, Headers: scrubHeaders(j.w.req),
-			Body: string(redact.ScrubJSON(reqBody)), Size: j.req.size, Truncated: j.req.cut()},
-		Response: ArchivePart{Status: c.Status, Headers: scrubHeaders(j.resHead),
-			Body: string(redact.ScrubJSON(resBody)), Size: j.res.size, Truncated: j.res.cut()},
+		Request: ArchivePart{Method: j.w.method, Path: path, Headers: scrubHeaders(j.w.req, o),
+			Body: string(redact.ScrubJSONWith(reqBody, o)), Size: j.req.size, Truncated: j.req.cut()},
+		Response: ArchivePart{Status: c.Status, Headers: scrubHeaders(j.resHead, o),
+			Body: string(redact.ScrubJSONWith(resBody, o)), Size: j.res.size, Truncated: j.res.cut()},
 	}
 	// as it reads in the bucket: a query's & and a body's <tags> as they are
 	var buf bytes.Buffer
@@ -263,12 +266,12 @@ func ArchiveError() (string, time.Time) {
 	return archiveErr, archiveErrAt
 }
 
-func scrubHeaders(h http.Header) map[string][]string {
+func scrubHeaders(h http.Header, o redact.Options) map[string][]string {
 	out := make(map[string][]string, len(h))
 	for k, vs := range h {
 		s := make([]string, len(vs))
 		for i, v := range vs {
-			s[i] = redact.ScrubHeader(k, v)
+			s[i] = redact.ScrubHeaderWith(k, v, o)
 		}
 		out[k] = s
 	}
@@ -277,17 +280,17 @@ func scrubHeaders(h http.Header) map[string][]string {
 
 // scrubQuery is a query string with the values of secret-named fields
 // (key=, access_token=) and any secret in the others taken out.
-func scrubQuery(q string) string {
+func scrubQuery(q string, o redact.Options) string {
 	vs, err := url.ParseQuery(q)
 	if err != nil {
-		return redact.Scrub(q)
+		return redact.ScrubWith(q, o)
 	}
 	for k, v := range vs {
 		for i := range v {
 			if redact.SecretName(k) {
 				v[i] = redact.Scrubbed
 			} else {
-				v[i] = redact.Scrub(v[i])
+				v[i] = redact.ScrubWith(v[i], o)
 			}
 		}
 	}
