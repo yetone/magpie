@@ -72,7 +72,11 @@ func TestCodexStandIn(t *testing.T) {
 		t.Errorf("magpie as provider: %q", got)
 	}
 	// the gateway knows the request as Codex's by its User-Agent
-	for _, ua := range []string{"codex_cli_rs/0.160.0 (Mac OS 26.6.0; arm64) Apple_Terminal/455", "Codex Desktop/0.160.0"} {
+	for _, ua := range []string{
+		"codex_cli_rs/0.160.0 (Mac OS 26.6.0; arm64) Apple_Terminal/455",
+		"Codex Desktop/0.160.0",
+		"acp-extension-codex/0.160.1 (Mac OS 26.2.0; arm64) unknown (acp-extension-codex; 0.9.0)",
+	} {
 		if got := usage.AgentOf(ua); got != "codex" {
 			t.Errorf("%s: agent %q", ua, got)
 		}
