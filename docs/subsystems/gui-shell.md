@@ -126,6 +126,24 @@ ties. Family changes keep a matching style where possible, otherwise the
 nearest regular face; named variable instances are offered without arbitrary
 axis controls.
 
+### Recent-call bodies
+
+`providersState` in [`providers.go`](../../internal/gui/providers.go) sends
+recent-call metadata without request or response bodies, including after
+provider writes (#1521: forty calls' bodies made `/api/providers` about
+20 MB). Each call in the gateway's 40-call ring has an `id`, numbered in
+`Server.record`. Opening a recent call on Gateway fetches its captured
+previews from `GET /api/gateway/call?id=…` (`Server.RecentCall`), sent
+`Cache-Control: no-store`. The route sits on the same mux as the rest of
+the API, so `magpie web`'s key guard covers it. The bodies are the ones the
+ring kept, masked as the request was (`redacted`); the route doesn't fetch
+S3 or change capture, export or archival. A call evicted from the ring, or
+a gateway served by another magpie, returns 404. The page keys a row by
+that id (`callRow`), keeps fetched bodies in memory while their calls
+remain in the list, preserves them across summary refreshes, and offers a
+retry after a failed read. See `TestRecentCallBodiesOnDemand` and
+`recent-call-bodies.test.cjs`.
+
 ### Shared UI rules
 
 - Settings' search-provider picker offers **Off**, saved as `searcher: "off"`. Its help explains API-only search and suppresses provider fallback/own-search hints while off; the search priority row is hidden because no provider competes with the APIs. See [gateway search behavior](gateway-routing.md#turning-provider-search-off), [`renderSearcher`](../../internal/gui/assets/app.js), `TestSettingsSearchProviderOff` and `searcher-pick.test.cjs`.

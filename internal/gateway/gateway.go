@@ -258,6 +258,9 @@ func ServedBy() Served {
 
 // Call is one request the gateway handled, for the status views.
 type Call struct {
+	// ID numbers the call in the Recent-calls ring, from 1, for the page
+	// to ask for its bodies by (the ring's summary leaves them out, #1521)
+	ID    uint64    `json:"id,omitempty"`
 	Time  time.Time `json:"time"`
 	Agent string    `json:"agent"`         // who called, from the client's User-Agent
 	Via   string    `json:"via,omitempty"` // the computer a remote magpie's request came from (AgentHeader)
@@ -304,6 +307,7 @@ type Server struct {
 	client *http.Client
 	mu     sync.Mutex
 	recent []Call
+	calls  uint64 // the last Call.ID given
 	// unfit remembers the endpoints each provider's models were turned away
 	// from, so every later turn goes straight to one that takes them.
 	unfit        map[string]bool
@@ -364,6 +368,18 @@ func (s *Server) Recent() []Call {
 	return out
 }
 
+// RecentCall is the call numbered id while it is still in the ring.
+func (s *Server) RecentCall(id uint64) (Call, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.recent {
+		if c.ID == id {
+			return c, true
+		}
+	}
+	return Call{}, false
+}
+
 func (s *Server) record(c Call) {
 	// Whole bodies belong only to the export, never to the Recent-calls ring.
 	// This is a copy: the serving call still needs them for withBodies.
@@ -375,6 +391,8 @@ func (s *Server) record(c Call) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.calls++
+	c.ID = s.calls
 	s.recent = append(s.recent, c)
 	if len(s.recent) > 40 {
 		s.recent = s.recent[len(s.recent)-40:]

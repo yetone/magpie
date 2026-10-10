@@ -57,6 +57,7 @@ let decideModel = localStorage.getItem("magpie.decideModel") || ""; // the Syste
 let connectFolded = false; // Connect folded away under its heading
 try { connectFolded = localStorage.getItem("magpie.gwConnectFolded") === "1"; } catch {}
 const expandedCalls = new Set(); // recent-call ids whose wire bodies are open
+const callBodies = new Map(); // callRow → its bodies, read when it is opened (#1521)
 const CALLS_PAGE = 20;
 let callsShown = CALLS_PAGE; // recent calls drawn a page at a time
 // a streamed reply's body is read as its reply, its events or as it came;
@@ -6573,8 +6574,27 @@ function archivePanel(name, id, redraw) {
   return box;
 }
 
+// A recent call's bodies, which /api/providers leaves out: forty calls'
+// bodies made every refresh of it 20 MB (#1521).
+function loadCallBodies(c, id) {
+  const pending = { busy: true };
+  callBodies.set(id, pending);
+  api(`gateway/call?id=${encodeURIComponent(c.id)}`)
+    .then((body) => { if (callBodies.get(id) === pending) callBodies.set(id, body); })
+    .catch((e) => { if (callBodies.get(id) === pending) callBodies.set(id, { error: t(e.message) }); })
+    .finally(() => { if (view === "gateway" && providers) renderActivity(); });
+}
+
+// a recent call's row: by the gateway's number for it, as two calls of
+// one agent to one model can come in the same instant
+const callRow = (c) => (c.id ? `#${c.id}` : `${c.time}|${c.agent}|${c.model}`);
+
 function renderActivity() {
   const g = providers.gateway;
+  // what calls left the ring keep, they let go of
+  const ids = new Set(g.calls.map(callRow));
+  for (const id of callBodies.keys()) if (!ids.has(id)) callBodies.delete(id);
+  for (const id of expandedCalls) if (!ids.has(id)) expandedCalls.delete(id);
   const box = $("#activity");
   // a body being read keeps its place as new calls come in
   const kept = new Map();
@@ -6584,7 +6604,7 @@ function renderActivity() {
   const calls = g.calls.slice(0, callsShown);
   if (!calls.length) { box.append(el("div", "none", t("No requests yet. Point an agent at a model, or run the example above; every call shows up here as it happens."))); return; }
   for (const c of calls) {
-    const id = `${c.time}|${c.agent}|${c.model}`;
+    const id = callRow(c);
     const open = expandedCalls.has(id);
     const item = el("div", "call-item" + (open ? " open" : "") + (c.status >= 400 ? " bad" : ""));
     const r = el("div", "call");
@@ -6611,10 +6631,18 @@ function renderActivity() {
     };
     item.append(r);
     if (open) {
-      const details = el("div", "call-details");
-      details.append(
-        callBodyPanel("Request Body", c.requestBody, c.requestTruncated, undefined, id + "|req"),
-        callBodyPanel("Response Body", c.responseBody, c.responseTruncated, id),
+      if (!callBodies.has(id)) loadCallBodies(c, id);
+      const body = callBodies.get(id);
+      const details = el("div", body.busy || body.error ? "" : "call-details");
+      if (body.busy) details.append(el("div", "none", t("Fetching…")));
+      else if (body.error) {
+        details.append(el("div", "call-archive-err", body.error));
+        const retry = el("button", "text", t("Try again"));
+        retry.onclick = () => { loadCallBodies(c, id); renderActivity(); };
+        details.append(retry);
+      } else details.append(
+        callBodyPanel("Request Body", body.requestBody, body.requestTruncated, undefined, id + "|req"),
+        callBodyPanel("Response Body", body.responseBody, body.responseTruncated, id),
       );
       item.dataset.id = id;
       item.append(details);

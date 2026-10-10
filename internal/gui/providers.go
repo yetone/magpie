@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -739,7 +740,12 @@ func providersState() providersJSON {
 	}
 	if gw := served.Load(); gw != nil {
 		s.Gateway.Running, s.Gateway.Mine, s.Gateway.Window = true, true, true
+		// the calls without their bodies, which only an opened row reads
+		// (GET /api/gateway/call)
 		s.Gateway.Calls = gw.Recent()
+		for i := range s.Gateway.Calls {
+			s.Gateway.Calls[i].RequestBody, s.Gateway.Calls[i].ResponseBody = "", ""
+		}
 		s.Gateway.Lanes = gw.Lanes()
 	} else {
 		o := gateway.ServedBy()
@@ -818,6 +824,26 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			provider.FetchNew(8 * time.Second)
 		}
 		writeJSON(rw, providersState())
+	})
+	// Recent-call bodies are read only when their row is opened, not with
+	// every Providers or Gateway refresh (#1521): forty calls' bodies made
+	// /api/providers 20 MB. The ring may have moved on by then.
+	mux.HandleFunc("GET /api/gateway/call", func(rw http.ResponseWriter, r *http.Request) {
+		rw.Header().Set("Cache-Control", "no-store")
+		if gw := served.Load(); gw != nil {
+			if id, err := strconv.ParseUint(r.URL.Query().Get("id"), 10, 64); err == nil {
+				if c, ok := gw.RecentCall(id); ok {
+					writeJSON(rw, map[string]any{
+						"requestBody": c.RequestBody, "responseBody": c.ResponseBody,
+						"requestTruncated": c.RequestTruncated, "responseTruncated": c.ResponseTruncated,
+					})
+					return
+				}
+			}
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusNotFound)
+		writeJSON(rw, map[string]string{"error": "This request is no longer in the recent calls."})
 	})
 	// the order the Providers tab lists them in, which is the order they
 	// are tried in too (#499)

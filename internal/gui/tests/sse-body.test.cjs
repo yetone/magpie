@@ -70,7 +70,9 @@ function serve(lang) {
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: { lang, theme: "light" } });
-    if (url.pathname === "/api/providers") return json(providers);
+    // the list leaves the bodies out, and an opened row asks for its own by id (#1521)
+    if (url.pathname === "/api/providers") return json({ ...providers, gateway: { ...providers.gateway, calls: providers.gateway.calls.map(({ requestBody, responseBody, ...c }, i) => ({ id: i + 1, ...c })) } });
+    if (url.pathname === "/api/gateway/call") return json(providers.gateway.calls[Number(url.searchParams.get("id")) - 1]);
     if (url.pathname === "/api/groups") return json({ groups: [] });
     if (url.pathname === "/api/plugins") return json({ plugins: [] });
     if (url.pathname === "/api/gateway/trace") {
@@ -141,7 +143,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       };
       const snap = (name) => process.env.ARTIFACT_DIR && fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true })
         .then(() => page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-sse-${name}.png`) }));
-      const open = (i) => press(rows.nth(i).locator(".call"));
+      const open = async (i) => { await press(rows.nth(i).locator(".call")); await body(i).waitFor(); };
       const pick = press;
       const shown = async (i) => (await body(i).locator("pre").innerText()).trim();
 
