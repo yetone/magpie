@@ -90,11 +90,14 @@ async function open(browser, lang, width, height) {
 // does): a card opened afresh can sit under the window's bottom
 async function click(page, b) {
   const h = page.viewportSize().height;
+  // the page starts under the window's header, which takes a click over it:
+  // a button scrolled to just under the window's top edge is still hidden
+  const top = (await page.locator("#view-routing").boundingBox()).y;
   for (let i = 0; i < 20; i++) {
     const r = await b.boundingBox();
-    if (r && r.y >= 0 && r.y + r.height <= h) break;
+    if (r && r.y >= top && r.y + r.height <= h) break;
     await page.mouse.move(page.viewportSize().width / 2, h / 2);
-    await page.mouse.wheel(0, r && r.y < 0 ? -200 : 200);
+    await page.mouse.wheel(0, r && r.y < top ? -200 : 200);
     await page.waitForTimeout(100);
   }
   await b.click();
