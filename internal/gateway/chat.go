@@ -36,7 +36,9 @@ type cRequest struct {
 	Messages []struct {
 		Role             string          `json:"role"`
 		Content          json.RawMessage `json:"content"`
-		ReasoningContent string          `json:"reasoning_content,omitempty"`
+		ReasoningContent json.RawMessage `json:"reasoning_content,omitempty"`
+		Reasoning        json.RawMessage `json:"reasoning,omitempty"`
+		ReasoningDetails json.RawMessage `json:"reasoning_details,omitempty"`
 		ToolCalls        []cToolCall     `json:"tool_calls,omitempty"`
 		ToolCallID       string          `json:"tool_call_id,omitempty"`
 	} `json:"messages"`
@@ -94,8 +96,15 @@ func parseChat(body []byte) (*Request, error) {
 			r.Messages = append(r.Messages, Message{Role: "user", Parts: chatParts(m.Content)})
 		case "assistant":
 			msg := Message{Role: "assistant"}
-			if m.ReasoningContent != "" {
-				msg.Parts = append(msg.Parts, Part{Kind: Thinking, Text: m.ReasoningContent})
+			// an earlier turn's thinking comes back in any of
+			// messageReasoning's spellings, and every upstream that
+			// thinks wants it as the thinking part
+			if think := reasoningText(map[string]json.RawMessage{
+				"reasoning_content": m.ReasoningContent,
+				"reasoning":         m.Reasoning,
+				"reasoning_details": m.ReasoningDetails,
+			}); think != "" {
+				msg.Parts = append(msg.Parts, Part{Kind: Thinking, Text: think})
 			}
 			msg.Parts = append(msg.Parts, chatParts(m.Content)...)
 			for _, tc := range m.ToolCalls {
