@@ -10,11 +10,23 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
+
+// copilotPollMisses is how many polls of GitHub's token endpoint in a row
+// may fail (no answer, an error status, a body that isn't JSON) before the
+// sign-in fails with the last one's error, rather than wait out
+// signInTimeout saying nothing (#723).
+var copilotPollMisses = 5
+
+// copilotFinishWait bounds what follows GitHub's token: asking whose
+// account it is and its Copilot plan. An answer that never comes (a proxy
+// that holds api.github.com) failed nothing until signInTimeout (#723).
+var copilotFinishWait = time.Minute
 
 // copilotClientID is the OAuth app of Copilot's editors.
 const copilotClientID = "Iv1.b507a08c87ecfe98"
@@ -73,8 +85,13 @@ func startCopilotSignIn(s *signInFlow) error {
 	}
 	s.stop = cancel
 	interval := time.Duration(max(dc.Interval, 1)) * time.Second
+	site := firstNonEmpty(host, "github.com")
 	go func() {
-		fail := func(msg string) { s.finish(SignInState{State: "failed", Error: msg}) }
+		fail := func(msg string) {
+			log.Printf("copilot sign-in on %s failed: %s", site, msg)
+			s.finish(SignInState{State: "failed", Error: msg})
+		}
+		misses := 0
 		for {
 			select {
 			case <-ctx.Done():
@@ -92,7 +109,17 @@ func startCopilotSignIn(s *signInFlow) error {
 			case ctx.Err() != nil:
 				return
 			case err != nil:
-				continue // a hiccup: ask again
+				// a hiccup: ask again, unless it keeps failing
+				misses++
+				log.Printf("copilot sign-in on %s: asking GitHub for the token failed (%d in a row): %v", site, misses, err)
+				if misses >= copilotPollMisses {
+					fail("couldn't get the token from GitHub: " + err.Error())
+					return
+				}
+				continue
+			}
+			misses = 0
+			switch {
 			case tok.Error == "authorization_pending":
 				continue
 			case tok.Error == "slow_down":
@@ -108,12 +135,22 @@ func startCopilotSignIn(s *signInFlow) error {
 				fail("GitHub: " + strings.TrimSpace(tok.Error+" "+tok.Desc))
 				return
 			}
-			user, plan, err := copilotUser(ctx, tok.Token, host)
+			log.Printf("copilot sign-in on %s: GitHub gave the token; asking whose account it is", site)
+			fctx, fcancel := context.WithTimeout(ctx, copilotFinishWait)
+			user, plan, err := copilotUser(fctx, tok.Token, host)
 			if err != nil {
+				fcancel()
+				if ctx.Err() != nil {
+					return
+				}
+				if fctx.Err() != nil {
+					err = errors.New("GitHub gave the token, but didn't answer within " + copilotFinishWait.String() + " whose account it is: " + err.Error())
+				}
 				fail(err.Error())
 				return
 			}
-			copilotProbeEditor(ctx, user, host)
+			copilotProbeEditor(fctx, user, host)
+			fcancel()
 			if err := addCopilotLogin(user, plan, tok.Token, host); err != nil {
 				fail(err.Error())
 				return
