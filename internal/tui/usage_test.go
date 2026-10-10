@@ -79,6 +79,9 @@ func TestQuotaLines(t *testing.T) {
 // — never touching a vendor's own balance string (that's quotaLines above).
 func TestFmtCostShowsChosenCurrency(t *testing.T) {
 	home(t)
+	// a currency read in the last second (an earlier run's ¥, -count) is
+	// kept; read this home's
+	costAt = time.Time{}
 
 	if got := fmtCost(usage.Totals{Cost: 1.23}); got != "≈$1.23" {
 		t.Fatalf("default currency: %q", got)

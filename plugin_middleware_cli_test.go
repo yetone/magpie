@@ -16,6 +16,7 @@ import (
 // to, so the list had nothing under it.
 func TestPluginListSaysMiddleware(t *testing.T) {
 	groupsHome(t)
+	t.Cleanup(plugin.Settle) // what adding the plugins told ends with the test
 	dir := t.TempDir()
 	good := filepath.Join(dir, "alias.middleware.js")
 	bad := filepath.Join(dir, "bad.middleware.js")
@@ -47,6 +48,7 @@ func TestPluginListSaysMiddleware(t *testing.T) {
 // does: `magpie plugin off think-tags` said there was no such plugin.
 func TestPluginOnOffRmShortName(t *testing.T) {
 	groupsHome(t)
+	t.Cleanup(plugin.Settle)
 	dir := filepath.Join(t.TempDir(), "middleware-zz-tags")
 	os.MkdirAll(dir, 0o755)
 	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name": "@magpie-community/middleware-zz-tags", "magpie": {"middleware": "./zz.middleware.js"}}`), 0o644)

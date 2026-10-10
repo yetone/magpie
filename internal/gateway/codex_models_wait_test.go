@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -65,6 +66,10 @@ func TestCodexModelListBackendSlow(t *testing.T) {
 // its own list): the catalog, the codex provider's picks and windows and
 // the list's tag all read the one build.
 func TestCodexModelListBuildsProvidersOnce(t *testing.T) {
+	// not from the plugins' list an earlier test's folder had: seen last,
+	// it reads as changed in setup's folder, and the change, told in the
+	// background, has the providers built again for the list
+	plugin.UseCached(nil)
 	setup(t, provider.Chat, &fake{t: t})
 	chatgpt(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"models":[{"slug":"gpt-5.5","priority":1}]}`))

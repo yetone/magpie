@@ -15,6 +15,7 @@ import (
 // sure nobody is signed in still signs it out
 func TestCLIIdentityUnsureKeepsAnswer(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepingIdentities(t)
 	c := &cliIdentity{name: "x", exe: func() string { return "/bin/sh" },
 		ask: func() (string, string, bool, error) { return "me@example.com", "Pro", true, nil }}
 	if _, _, ok := c.get(); !ok {

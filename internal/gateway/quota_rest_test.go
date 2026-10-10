@@ -16,6 +16,7 @@ import (
 // and a Codex reset spent lifts its rest out of quota, not one for a rate
 // limit or a failure.
 func TestQuotaRestsUntilItsReset(t *testing.T) {
+	forgetRouting()
 	old := allowances
 	defer func() { allowances = old }()
 	now := time.Now()

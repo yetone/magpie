@@ -26,6 +26,7 @@ func restsOf(cs []candidate) string {
 }
 
 func TestRouting(t *testing.T) {
+	forgetRouting()
 	cs := []candidate{{rest: "r#a"}, {rest: "r#b"}, {rest: "r#c"}}
 	p := provider.Provider{ID: "r"}
 	if got := restsOf(route(p, cs, "m", provider.Chat)); got != "r#a r#b r#c " {
@@ -98,6 +99,7 @@ func TestRoutingKeepsModelAllowancesSeparate(t *testing.T) {
 // Smart routing keeps the first while it has quota to spare, then goes to
 // whichever has the most; a failure rests as long as it says.
 func TestSmartRouting(t *testing.T) {
+	forgetRouting()
 	old := allowances
 	defer func() { allowances = old }()
 	one := func(used float64, resets time.Time) provider.Allowance {

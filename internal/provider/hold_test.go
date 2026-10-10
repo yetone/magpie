@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yetone/magpie/internal/plugin"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/testenv"
 )
@@ -104,6 +105,10 @@ func TestHoldSeesWrites(t *testing.T) {
 // its list changes no one else's.
 func TestHoldBuildsProvidersOnce(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // a run starts from no files, not the last run's
+	// nor from the plugins' list an earlier test's folder had: seen last,
+	// it reads as changed here, and the change, told in the background,
+	// has the providers built again while held
+	plugin.UseCached(nil)
 	if err := Save(Provider{ID: "once", Name: "Once", Chat: "https://once.example/v1", Key: "k", Models: []string{"a"}}); err != nil {
 		t.Fatal(err)
 	}

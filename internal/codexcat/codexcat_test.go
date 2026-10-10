@@ -75,6 +75,7 @@ func TestCodexCatalogImages(t *testing.T) {
 func TestCodexCatalogToolSearch(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(os.Getenv("HOME"), ".config"))
 	var got struct {
 		Models []map[string]any `json:"models"`
 	}

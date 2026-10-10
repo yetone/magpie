@@ -39,6 +39,9 @@ func TestMiddlewareThroughGateway(t *testing.T) {
 	defer up.Close()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	// the plugins' list written below reads as changed, and what that
+	// tells the plugins' hooks ends with the test
+	t.Cleanup(plugin.Settle)
 	if err := provider.Save(provider.Provider{ID: "fake", Name: "Fake", Key: "k", Models: []string{"m1"}, Chat: up.URL + "/v1"}); err != nil {
 		t.Fatal(err)
 	}
