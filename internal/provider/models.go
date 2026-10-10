@@ -324,8 +324,8 @@ var newFetches = struct {
 // restarted by hand).
 var newFetchRetry = time.Minute
 
-// fetchingNew is set while a FetchNewSoon runs; newSoonAt is when the last
-// one started.
+// fetchingNew is set while a background fetch is queued or running;
+// newSoonAt is when the last one started.
 var (
 	fetchingNew atomic.Bool
 	newSoonAt   atomic.Int64
@@ -340,14 +340,10 @@ var newSoonEvery = 15 * time.Second
 // nothing while one runs or within newSoonEvery of the last.
 func FetchNewSoon(timeout time.Duration) {
 	now := time.Now().UnixNano()
-	if now-newSoonAt.Load() < int64(newSoonEvery) || !fetchingNew.CompareAndSwap(false, true) {
+	if now-newSoonAt.Load() < int64(newSoonEvery) {
 		return
 	}
-	newSoonAt.Store(now)
-	go func() {
-		defer fetchingNew.Store(false)
-		FetchNew(timeout)
-	}()
+	FetchNewBehind(timeout)
 }
 
 // FetchNewBehind is FetchNew in the background, started at once unless one
@@ -355,17 +351,21 @@ func FetchNewSoon(timeout time.Duration) {
 // (#541: ten seconds and more of placeholders, an account at a time and
 // behind start-up's own run). FetchingNew says when it is done.
 func FetchNewBehind(timeout time.Duration) {
+	// Count before publishing the background run, so a page sharing it
+	// also sees the work before its goroutine starts.
+	newRunning.Add(1)
 	if !fetchingNew.CompareAndSwap(false, true) {
+		newRunning.Add(-1)
 		return
 	}
 	newSoonAt.Store(time.Now().UnixNano())
 	go func() {
 		defer fetchingNew.Store(false)
-		FetchNew(timeout)
+		fetchNew(timeout)
 	}()
 }
 
-// newRunning counts the FetchNew calls under way.
+// newRunning counts the FetchNew calls queued or running.
 var newRunning atomic.Int32
 
 // FetchingNew reports whether a FetchNew is under way (start-up's, or one
@@ -380,6 +380,11 @@ func FetchingNew() bool { return newRunning.Load() > 0 }
 // fails is asked again after newFetchRetry, not each time.
 func FetchNew(timeout time.Duration) {
 	newRunning.Add(1)
+	fetchNew(timeout)
+}
+
+// fetchNew finishes a fetch already counted by its caller.
+func fetchNew(timeout time.Duration) {
 	defer newRunning.Add(-1)
 	newFetches.Lock()
 	defer newFetches.Unlock()
