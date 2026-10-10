@@ -10,7 +10,6 @@ import (
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
-	stats "github.com/yetone/magpie/internal/usage"
 )
 
 // Which models each agent is shown, from the terminal: magpie visible.
@@ -35,21 +34,6 @@ const visibleUsage = `usage:
   e.g. magpie provider set opencode-go family=ocgo
        magpie group set gpt-plus-auto family=relay
        magpie visible zcode relay,ocgo`
-
-func agentIDs() []string {
-	var ids []string
-	for _, a := range agent.All() {
-		ids = append(ids, a.ID)
-	}
-	return ids
-}
-
-// agentID is the agent a typed name is, by its id or an alias.
-func agentOf(name string) string {
-	return stats.AgentOf(strings.ToLower(strings.TrimSpace(name)))
-}
-
-func knownAgent(id string) bool { return slices.Contains(agentIDs(), id) }
 
 // names is every name a visibility can hold: the families, and the
 // providers' and groups' ids.
@@ -98,10 +82,13 @@ func visibleCmd(args []string) error {
 		}
 		return nil
 	}
-	id := agentOf(args[0])
-	if !knownAgent(id) {
-		return fmt.Errorf("no agent %q (%s)", args[0], strings.Join(agentIDs(), ", "))
+	a, err := agent.Find(args[0])
+	if err != nil {
+		return err
 	}
+	// VisibleTo looks the id up lowered, so the key kept here — and taken
+	// back out — is lowered alike, a WSL id's case and all
+	id := strings.ToLower(a.ID)
 	if len(args) == 1 {
 		return models([]string{id})
 	}

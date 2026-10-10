@@ -259,13 +259,15 @@ func models(args []string) error {
 	var hidden []provider.Entry
 	agentID := ""
 	if len(args) > 0 {
-		agentID = strings.ToLower(strings.TrimPrefix(args[0], "--agent="))
-		if agentID == "--agent" && len(args) > 1 {
-			agentID = strings.ToLower(args[1])
+		q := strings.TrimPrefix(args[0], "--agent=")
+		if q == "--agent" && len(args) > 1 {
+			q = args[1]
 		}
-		if agentID = agentOf(agentID); !knownAgent(agentID) {
-			return fmt.Errorf("no agent %q (%s)", agentID, strings.Join(agentIDs(), ", "))
+		a, err := agent.Find(q)
+		if err != nil {
+			return err
 		}
+		agentID = a.ID
 		entries, hidden = provider.CatalogFor(agentID)
 	}
 	if _, only := provider.PickedModels(agentID); len(entries) == 0 && agentID != "" && only {
