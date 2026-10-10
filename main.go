@@ -116,7 +116,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie update mirror [<prefix>|off]  the mirror every update, the app's own too, is downloaded through
   magpie update auto [on|off] [30m|1h|6h|24h]  whether the app looks for updates by itself, and how often (6h)
 
-agents: claude (cc), codex, gemini, opencode (oc), mimocode, pi, goose, cursor, zed, copilot, crush, aside
+agents: claude (cc), codex, gemini, opencode (oc), openclaw, mimocode, pi, goose, cursor, zed, copilot, crush, aside
 `
 
 var (

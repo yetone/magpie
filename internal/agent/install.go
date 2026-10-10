@@ -8,10 +8,12 @@ package agent
 // install needs what a new machine may not have yet (Node.js for npm,
 // Homebrew), and a global npm prefix that may want sudo.
 //
-// Where no Node.js is found, each npm command installs it first (#727,
-// Sun1090: "curl xxx && npm xxxx"): nvm's installer and its LTS Node on a
-// Mac or Linux, as nodejs.org's download page gives, winget's Node.js LTS
-// on Windows; the npm install follows in the same line.
+// Where no Node.js is found, npm commands generated from cliSpecs install
+// it first (#727, Sun1090: "curl xxx && npm xxxx"): nvm's installer and
+// its LTS Node on a Mac or Linux, as nodejs.org's download page gives,
+// winget's Node.js LTS on Windows; the npm install follows in the same
+// line. OpenClaw also offers a direct npm command for users who already
+// manage Node.js.
 
 import (
 	"os"
@@ -26,7 +28,8 @@ import (
 // InstallCmd is one way to install an agent's CLI.
 type InstallCmd struct {
 	// Via is what runs it: script (the vendor's installer, in a shell),
-	// powershell (the vendor's installer, on Windows), brew or npm
+	// shell (OpenClaw's installer), powershell (the vendor's installer,
+	// on Windows), brew or npm
 	Via     string `json:"via"`
 	Command string `json:"command"`
 	// Node is how the command installs Node.js before npm, where none is
@@ -51,7 +54,8 @@ type Install struct {
 // Codex's (github.com/openai/codex's README) and OpenCode's
 // (opencode.ai/docs), the ones whose own updaters cliSpecs knows by where
 // they put the binary — and the Homebrew cask and formula the READMEs name
-// (Codex's, Gemini CLI's).
+// (Codex's, Gemini CLI's). OpenClaw's installer (docs.openclaw.ai/install)
+// also sets up the Node.js version its CLI needs.
 var vendorInstall = map[string]func(goos string) []InstallCmd{
 	"claude": func(goos string) []InstallCmd {
 		if goos == "windows" {
@@ -64,6 +68,13 @@ var vendorInstall = map[string]func(goos string) []InstallCmd{
 			return nil
 		}
 		return []InstallCmd{{Via: "script", Command: "curl -fsSL https://opencode.ai/install | bash"}}
+	},
+	"openclaw": func(goos string) []InstallCmd {
+		installer := InstallCmd{Via: "shell", Command: "curl -fsSL https://openclaw.ai/install.sh | bash"}
+		if goos == "windows" {
+			installer = InstallCmd{Via: "powershell", Command: "iwr -useb https://openclaw.ai/install.ps1 | iex"}
+		}
+		return []InstallCmd{installer, {Via: "npm", Command: "npm i -g openclaw"}}
 	},
 	"codex": func(goos string) []InstallCmd {
 		switch goos {

@@ -72,6 +72,7 @@ func All() []*Agent {
 		gemini(home),
 		agy(home),
 		opencode(home, cfg),
+		openclaw(home),
 		openChamber(home, cfg),
 		mimocode(home, cfg),
 		pi(home),
