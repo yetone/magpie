@@ -172,11 +172,34 @@ var copilotCLISecret = func(account string) string {
 		out, _ = proc.Command("security", "find-generic-password", "-s", "copilot-cli", "-a", account, "-w").Output()
 	case "linux":
 		if p, err := exec.LookPath("secret-tool"); err == nil {
-			out, _ = proc.Command(p, "lookup", "service", "copilot-cli", "account", account).Output()
+			out = []byte(copilotSecretTool(p, account))
 		}
 	}
 	c.at[account], c.tok[account] = time.Now(), string(bytes.TrimSpace(out))
 	return c.tok[account]
+}
+
+// copilotSecretWait bounds one secret-tool lookup: a keyring that waits on
+// a prompt nobody answers would hold the sign-in that asked (#723).
+var copilotSecretWait = 5 * time.Second
+
+// copilotSecretTool is the CLI's token in the Secret Service, as
+// secret-tool (at path) finds it. The CLI before 1.0 (keytar, libsecret)
+// keyed it by service and account; 1.0's own keyring store
+// (zbus-secret-service-keyring-store) by service and username, so both
+// are asked (#723).
+func copilotSecretTool(path, account string) string {
+	for _, attr := range []string{"account", "username"} {
+		ctx, cancel := context.WithTimeout(context.Background(), copilotSecretWait)
+		cmd := proc.CommandContext(ctx, path, "lookup", "service", "copilot-cli", attr, account)
+		cmd.WaitDelay = time.Second
+		out, _ := cmd.Output()
+		cancel()
+		if tok := strings.TrimSpace(string(out)); tok != "" {
+			return tok
+		}
+	}
+	return ""
 }
 
 // copilotDirect is the session a CLI token makes: the token itself, at the

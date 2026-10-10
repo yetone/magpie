@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +73,36 @@ func TestCopilotCLILogin(t *testing.T) {
 	os.WriteFile(filepath.Join(cli, "config.json"), []byte(`{"lastLoggedInUser":{"host":"https://github.com","login":"hubot"},"copilotTokens":{"https://github.com:hubot":"gho_plain"}}`), 0o600)
 	if app, ok := copilotLogin(filepath.Join(home, ".config")); !ok || app.User != "hubot" || app.Token != "gho_plain" || asked != "" {
 		t.Fatalf("plaintext: %+v asked %q", app, asked)
+	}
+}
+
+// On Linux the CLI 1.0's keyring store keys its token by service and
+// username, not keytar's account (#723); a keyring that never answers
+// doesn't hold the caller.
+func TestCopilotSecretToolUsername(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a shell script stands in for secret-tool")
+	}
+	dir := t.TempDir()
+	tool := filepath.Join(dir, "secret-tool")
+	os.WriteFile(tool, []byte(`#!/bin/sh
+[ "$*" = "lookup service copilot-cli username https://github.com:octocat" ] && { echo gho_keyring; exit 0; }
+exit 1
+`), 0o755)
+	if got := copilotSecretTool(tool, "https://github.com:octocat"); got != "gho_keyring" {
+		t.Fatalf("token %q, want the one under username", got)
+	}
+	if got := copilotSecretTool(tool, "https://github.com:hubot"); got != "" {
+		t.Fatalf("another account's token: %q", got)
+	}
+	old := copilotSecretWait
+	copilotSecretWait = 200 * time.Millisecond
+	defer func() { copilotSecretWait = old }()
+	hang := filepath.Join(dir, "secret-tool-hang")
+	os.WriteFile(hang, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755)
+	start := time.Now()
+	if got := copilotSecretTool(hang, "https://github.com:octocat"); got != "" || time.Since(start) > 10*time.Second {
+		t.Fatalf("a keyring that never answers: %q after %v", got, time.Since(start))
 	}
 }
 
