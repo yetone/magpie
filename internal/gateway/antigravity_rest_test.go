@@ -33,6 +33,10 @@ const claudeCodeSystem = "x-anthropic-billing-header: cc_version=2.1.288.e3f; cc
 // answers. The second value counts how often an account's usage was asked of
 // the vendor again.
 func antigravityTurnedAwayGroup(t *testing.T, users []string, say func(w http.ResponseWriter, r *http.Request)) (*Server, *int) {
+	return antigravityGroupFor(t, users, "m", say)
+}
+
+func antigravityGroupFor(t *testing.T, users []string, model string, say func(w http.ResponseWriter, r *http.Request)) (*Server, *int) {
 	t.Helper()
 	fresh(t)
 	var logins []map[string]any
@@ -59,7 +63,7 @@ func antigravityTurnedAwayGroup(t *testing.T, users []string, say func(w http.Re
 		case strings.Contains(r.URL.Path, ":loadCodeAssist"):
 			body = `{"currentTier":{"id":"standard-tier"},"cloudaicompanionProject":"p1"}`
 		case strings.Contains(r.URL.Path, ":fetchAvailableModels"):
-			body = `{"models":{"m":{}}}`
+			body = fmt.Sprintf(`{"models":{%q:{}}}`, model)
 		default:
 			return nil, fmt.Errorf("unexpected request to %s", r.URL)
 		}
@@ -84,10 +88,10 @@ func antigravityTurnedAwayGroup(t *testing.T, users []string, say func(w http.Re
 			`event: message_stop`+"\n"+`data: {"type":"message_stop"}`))
 	}))
 	t.Cleanup(other.Close)
-	if err := provider.Save(provider.Provider{ID: "other", Name: "Other", Key: "k", Models: []string{"m"}, Anthropic: other.URL}); err != nil {
+	if err := provider.Save(provider.Provider{ID: "other", Name: "Other", Key: "k", Models: []string{model}, Anthropic: other.URL}); err != nil {
 		t.Fatal(err)
 	}
-	if err := provider.SaveGroup(provider.Group{Name: "G", Members: []string{"antigravity/m", "other/m"}, Routing: provider.Ordered}); err != nil {
+	if err := provider.SaveGroup(provider.Group{Name: "G", Members: []string{"antigravity/" + model, "other/" + model}, Routing: provider.Ordered}); err != nil {
 		t.Fatal(err)
 	}
 	askedUsage := new(int)

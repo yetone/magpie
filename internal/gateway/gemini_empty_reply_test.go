@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -160,3 +161,52 @@ func TestGeminiEmptyRepliesAskedAgain(t *testing.T) {
 		}
 	}
 }
+
+func TestLateRestsEmptyReply(t *testing.T) {
+	if lateRests("Antigravity: an empty reply (the model answered nothing; try again)") {
+		t.Errorf("lateRests should be false for empty reply")
+	}
+	if !lateRests("some generic provider failure") {
+		t.Errorf("lateRests should be true for generic provider failure")
+	}
+}
+
+// When Antigravity accounts answer Gemini with only thinking and an empty STOP,
+// the accounts must not be put into rest backoff, and the routing group must
+// fall over to another member to answer (#1221).
+func TestGeminiEmptyReplyGroupFailover(t *testing.T) {
+	for _, stream := range []bool{true, false} {
+		t.Run(map[bool]string{true: "stream", false: "nostream"}[stream], func(t *testing.T) {
+			s, _ := antigravityGroupFor(t, []string{"u1@example.com", "u2@example.com"}, "gemini-3.8-flash", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				io.WriteString(w, sse(
+					`data: {"response":{"candidates":[{"content":{"role":"model","parts":[{"text":"thinking...","thought":true}]}}]}}`,
+					`data: {"response":{"candidates":[{"content":{"role":"model","parts":[]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"thoughtsTokenCount":5}}}`))
+			})
+			reqBody := fmt.Sprintf(`{"model":"group/g","stream":%t,"max_tokens":100,"messages":[{"role":"user","content":"hello"}]}`, stream)
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/messages", strings.NewReader(reqBody)))
+			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "from the other") {
+				t.Fatalf("status %d, body %s", rec.Code, rec.Body.String())
+			}
+			r := lastRoute(s)
+			if len(r.Tries) != 2 {
+				t.Fatalf("expected exactly 2 tries, got %d: %+v", len(r.Tries), r.Tries)
+			}
+			if r.Tries[0].ID != "antigravity" || r.Tries[1].ID != "other" {
+				t.Fatalf("expected tries [antigravity, other], got [%s, %s]", r.Tries[0].ID, r.Tries[1].ID)
+			}
+			for i, try := range r.Tries {
+				if try.Rest != nil {
+					t.Fatalf("try %d unexpectedly rested: %+v", i, try)
+				}
+			}
+			for _, user := range []string{"u1@example.com", "u2@example.com"} {
+				if _, ok := restOf("antigravity@" + user); ok {
+					t.Fatalf("antigravity@%s unexpectedly placed in rest", user)
+				}
+			}
+		})
+	}
+}
+
