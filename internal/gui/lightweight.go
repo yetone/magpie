@@ -139,9 +139,9 @@ func (h *host) makePanel() *application.WebviewWindow {
 }
 
 // madeAgain gives a window made again after lightweight mode let it go
-// what the start gave the
-// first: the Mac's text size (Windows' and Linux's took it with the
-// options), Linux's title bar or the panel's name for Hyprland.
+// what the start gave the first: the Mac's text size (Windows' and
+// Linux's took it with the options), the main window's title bar
+// (plainTitlebar) or the panel's name for Hyprland.
 func (h *host) madeAgain(w *application.WebviewWindow) {
 	if runtime.GOOS == "darwin" && h.zoom() != 1 {
 		setPageZoom(w, h.zoom())

@@ -21,7 +21,9 @@ import (
 func mainMacWindow() application.MacWindow {
 	return application.MacWindow{
 		// no InvisibleTitleBarHeight: that strip drags from anywhere in
-		// it, tabs included; the header marks what drags instead
+		// it, tabs included; the header marks what drags instead. On
+		// macOS 26 and later its toolbar is taken off once it has placed
+		// the traffic lights (plainTitlebar)
 		TitleBar: application.MacTitleBarHiddenInset,
 		CollectionBehavior: application.MacWindowCollectionBehaviorMoveToActiveSpace |
 			application.MacWindowCollectionBehaviorFullScreenPrimary,

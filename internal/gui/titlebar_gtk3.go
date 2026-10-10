@@ -49,8 +49,9 @@ import (
 // header of its own. GNOME draws one over it, the name and a close button
 // stacked on the tabs; frameless, the window would lose its shadow, rounded
 // corners and the edges it is resized by. A hidden widget as its titlebar
-// keeps all those and shows no bar: the page's header drags it, and has the
-// close button.
+// keeps the shadow and the edges and shows no bar: the page's header drags
+// it, and has the close button. The corners stay square: GTK 3 rounds only
+// a title bar it draws, and doesn't clip the page to the window's corners.
 func plainTitlebar(w *application.WebviewWindow) {
 	application.InvokeSync(func() {
 		if p := w.NativeWindow(); p != nil {
