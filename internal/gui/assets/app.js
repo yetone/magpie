@@ -10303,11 +10303,19 @@ const movedSub = (agent) => (providers?.onPlugins || []).includes(agent);
 // the built-in had one click — its first, the browser's, or on a site the
 // one for that site (ZCode's "ZCode: Z.ai GLM Coding Plan"). None for a
 // plugin's own provider, which asks.
+//
+// A plugin with several ways and no site to tell them apart is asked too:
+// forcing the first would hide a way the plugin documents (WorkBuddy offers
+// "WorkBuddy account (browser)" and "WorkBuddy desktop's sign-in", which are
+// not the same sign-in), and the CLI already asks in exactly this case.
 function pluginMethod(sub, site) {
   if (!sub.moved) return undefined;
   const label = (sub.sites || []).find(([id]) => id === site)?.[1];
   const at = label ? sub.plugin.methods.findIndex((m) => (m.label || "").includes(label)) : -1;
-  return at < 0 ? 0 : at;
+  if (at >= 0) return at;
+  // one way: that is the way. More than one: the plugin's own list is the
+  // answer, and startPluginSignIn puts the question.
+  return (sub.plugin.methods || []).length > 1 ? undefined : 0;
 }
 
 // pluginSubs: the providers OpenCode plugins sign in to (Settings →
