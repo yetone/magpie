@@ -577,23 +577,31 @@ func codexListed(shown []Entry, members func(id string) []Member, own bool) []ca
 		}
 		m := catalog.Model{ID: e.ID, Name: labels[i], Efforts: e.Efforts, Images: e.Images || seen, Context: e.Context, AgentsV2: e.AgentsV2}
 		m.Compact = compactSet(s, e.ID, find)
-		// a provider the user added by its address is sent the tier Codex
-		// asks for as it is (hsiangron on X)
-		m.OwnTier = e.Group == "" && e.Provider.Preset == "" && e.Provider.Account == nil && e.Provider.ID != ""
-		// another magpie offers the tiers its own Codex is offered on the
-		// model, and is sent the one Codex asks for as it is (#1234)
-		if e.Group == "" && e.Provider.IsRemoteMagpie() {
-			m.Tiers = e.Tiers
-		}
-		if e.Group != "" {
-			for _, mb := range members(e.ID) {
-				if a := mb.Provider.Account; a != nil && a.Agent == "codex" && strings.HasPrefix(mb.Model, "gpt-") {
-					m.Fast = true
-					break
-				}
-			}
-		}
+		CodexTiers(&m, e, members)
 		ms = append(ms, m)
 	}
 	return ms
+}
+
+// CodexTiers sets on m what Codex is offered on e's service tiers
+// (codexcat.Entries turns them into the entry's service_tiers): one source
+// for every list Codex is handed, the gateway's and the models.json file
+// magpie writes for a Codex CLI that names magpie its provider (#1530).
+func CodexTiers(m *catalog.Model, e Entry, members func(id string) []Member) {
+	// a provider the user added by its address is sent the tier Codex
+	// asks for as it is (hsiangron on X)
+	m.OwnTier = e.Group == "" && e.Provider.Preset == "" && e.Provider.Account == nil && e.Provider.ID != ""
+	// another magpie offers the tiers its own Codex is offered on the
+	// model, and is sent the one Codex asks for as it is (#1234)
+	if e.Group == "" && e.Provider.IsRemoteMagpie() {
+		m.Tiers = e.Tiers
+	}
+	if e.Group != "" {
+		for _, mb := range members(e.ID) {
+			if a := mb.Provider.Account; a != nil && a.Agent == "codex" && strings.HasPrefix(mb.Model, "gpt-") {
+				m.Fast = true
+				break
+			}
+		}
+	}
 }

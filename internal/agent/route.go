@@ -110,6 +110,10 @@ func magpieModels(agent string) []catalog.Model {
 	// a model magpie describes images to takes them (provider.Described)
 	seen := provider.Described != nil && provider.Described()
 	st, find := settings.Load(), provider.GroupFinder()
+	members := func(id string) []provider.Member {
+		_, ms, _ := find(id)
+		return ms
+	}
 	for i, e := range shown {
 		m := catalog.Model{ID: e.ID, Name: labels[i], Provider: firstOf(e.Provider.Catalogs()), Efforts: e.Efforts, Images: e.Images || seen, ImageInput: e.ImageInput, Context: e.Context, Output: e.Output, AgentsV2: e.AgentsV2, Reasoning: e.Reasoning}
 		// where Codex and Claude Code compact it (#876): a threshold the
@@ -131,6 +135,10 @@ func magpieModels(agent string) []catalog.Model {
 				m.APIs = []string{string(n)}
 			}
 		}
+		// the service tiers Codex is offered on it, as the gateway's own
+		// lists offer them: Fast in the Codex CLI magpie writes
+		// magpie-models.json for (#1530)
+		provider.CodexTiers(&m, e, members)
 		out = append(out, m)
 	}
 	return out
