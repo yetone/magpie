@@ -541,7 +541,17 @@ func settingsState() settingsJSON {
 		}
 	}
 	searchState(&s)
-	s.ImageGenAuto, s.ImageGenModels, s.ImageGenMissing = gateway.AutoDrawer(), []modelRef{}, gateway.DrawerMissing()
+	s.ImageGenAuto, s.ImageGenModels, s.ImageGenMissing = gateway.AutoDrawer(), imageGens(), gateway.DrawerMissing()
+	return s
+}
+
+// imageGens are the models the image generation picker offers, and the ones a
+// save of that setting accepts: every model an on provider draws with
+// (gateway.Drawers), spelled "<provider>/<model>". Some of them are not in
+// the served catalog — a plan draws with models it doesn't chat with, and a
+// key's own list may name image models it exposes for drawing alone.
+func imageGens() []modelRef {
+	out := []modelRef{}
 	for _, p := range provider.All() {
 		if !p.On() || p.DecideOnly() {
 			continue
@@ -551,10 +561,10 @@ func settingsState() settingsJSON {
 			if name == "" {
 				name = m.ID
 			}
-			s.ImageGenModels = append(s.ImageGenModels, modelRef{ID: p.ID + "/" + m.ID, Name: name, Provider: p.ID, PName: p.Name, Icon: p.Icon})
+			out = append(out, modelRef{ID: p.ID + "/" + m.ID, Name: name, Provider: p.ID, PName: p.Name, Icon: p.Icon})
 		}
 	}
-	return s
+	return out
 }
 
 // latest is the latest of ts, nil when there is none.
@@ -1050,14 +1060,26 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		in.UpdateMirror = cur.UpdateMirror
 		// gateway mode, set on its own (gateway-mode)
 		in.GatewayMode = cur.GatewayMode
+		// A pick whose provider stopped serving it is kept as it is here,
+		// not refused: prefsKeep sends the page's own picks with every save
+		// (a theme, a language, the tray), so refusing a stale one answers
+		// 400 to every setting the page has and the user can change nothing
+		// at all until they clear the pick they can no longer see. Only a
+		// pick just made is checked — the three below.
 		if v := strings.TrimSpace(in.Vision); v != "" && v != "off" && v != cur.Vision {
-			if _, _, ok := provider.Resolve(v); !ok {
+			// Resolve intentionally accepts arbitrary names under a known
+			// provider. A model describing images has to be one magpie serves,
+			// as the page's picker lists them.
+			if !slices.ContainsFunc(provider.Served(), func(e provider.Entry) bool { return e.ID == v }) {
 				fail(rw, fmt.Errorf("no model %s to describe images", v))
 				return
 			}
 		}
 		if v := strings.TrimSpace(in.ImageGen); v != "" && v != "off" && v != cur.ImageGen {
-			if _, _, ok := provider.Resolve(v); !ok {
+			// what draws is the imageGens list the picker offers, which the
+			// served catalog doesn't hold: a plan draws with models it doesn't
+			// chat with (a ChatGPT account's gpt-image-2)
+			if !slices.ContainsFunc(imageGens(), func(m modelRef) bool { return m.ID == v }) {
 				fail(rw, fmt.Errorf("no model %s to generate images", v))
 				return
 			}
@@ -1238,7 +1260,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		v := strings.TrimSpace(in.Model)
 		if v != "" && v != "off" {
-			if _, _, ok := provider.Resolve(v); !ok {
+			// Resolve intentionally accepts arbitrary names under a known
+			// provider. A title has to be written by a model or group magpie
+			// serves, as the page's picker lists them.
+			if !slices.ContainsFunc(provider.Served(), func(e provider.Entry) bool { return e.ID == v }) {
 				fail(rw, fmt.Errorf("no model %s to write Codex's titles", v))
 				return
 			}
