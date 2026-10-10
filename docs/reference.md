@@ -1730,9 +1730,12 @@ magpie web                      # the app's window in a browser (WSL, a server o
                                 # (a new key each run; MAGPIE_WEB_KEY keeps one, for a page run as a service)
                                 # (behind a reverse proxy, MAGPIE_WEB_URL=https://<the page there> prints the link through it)
 magpie ls                       # list every agent and its current settings
+magpie save p1 --help           # any command's usage, wherever --help, -h or help comes; nothing runs
+magpie codex help               # one agent's fields, and how to set them (--help, -h)
 magpie claude opus              # set a model (agent names accept prefixes: cc, oc, gem …)
 magpie codex gpt-5.6-sol
 magpie codex effort high        # other fields
+magpie codex effort             # one field, as it is now
 magpie codex xhigh              # bare effort levels are recognised too
 magpie codex deepseek/deepseek-chat   # any catalog model, through the gateway
 magpie claude moonshot/kimi-k2.5

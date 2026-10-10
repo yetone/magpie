@@ -45,7 +45,9 @@ const usage = `magpie — one place to pick every agent's model
                                   --gateway: gateway mode, no Agents, Sessions or Library (on by itself with no agents here; Settings › General turns it off)
   magpie ls                       list detected agents and their settings
   magpie <agent>                  show one agent
+  magpie <agent> help             its fields, and how to set them
   magpie <agent> <model>          set an agent's model   e.g. magpie claude deepseek/deepseek-chat
+  magpie <agent> <field>          show one field   e.g. magpie codex effort
   magpie <agent> <field> <value>  set another field   e.g. magpie codex effort high
   magpie <agent> default          take magpie out: the agent back on what it had before
   magpie <agent> <field> default  that field back to the agent's own default
@@ -248,6 +250,14 @@ func run(args []string) error {
 		}
 		return runGUI(false, args[0])
 	}
+	// `magpie save --help` saved a profile named --help, `magpie provider
+	// key deepseek -h` made -h DeepSeek's key and `magpie rm p1 help`
+	// deleted p1: after a command's name, the help words were its values,
+	// or ignored. Wherever they come they now show the command's usage,
+	// as they do an agent's below
+	if help, ok := commandHelp(args[0]); ok && helpAsked(args) {
+		return help()
+	}
 	switch args[0] {
 	case "tui":
 		return runTUI()
@@ -352,6 +362,21 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	// `magpie codex --help` asks how, and a word that starts with "-" is a
+	// flag: no field takes either, and both were written into the agent's
+	// config as its model (model = "--help"), magpie taken out first. Ahead
+	// of Cindy's link too, which any word opened
+	for _, v := range args[1:] {
+		if isHelp(v) {
+			fmt.Print(agentUsage(a))
+			return nil
+		}
+	}
+	for _, v := range args[1:] {
+		if strings.HasPrefix(v, "-") {
+			return fmt.Errorf("unknown flag %s (magpie %s help)", v, a.ID)
+		}
+	}
 	if len(a.Fields) == 0 && a.Import != nil {
 		// `magpie cindy`: it takes magpie through its own link, confirmed there
 		if len(args) > 1 {
@@ -366,11 +391,19 @@ func run(args []string) error {
 	case 1:
 		return list([]*agent.Agent{a}, true, -1)
 	case 2:
-		if args[1] == "default" {
+		// default is magpie's word in any case, as help and a field's name
+		// are: magpie codex DEFAULT wrote model = "DEFAULT"
+		if strings.EqualFold(args[1], "default") {
 			if a.Wired() {
 				return disconnect(a)
 			}
 			return set(a, a.Fields[0].Key, "")
+		}
+		// `magpie codex model`: a field's name alone asks what it is set to,
+		// where it was set as the model (model = "model"). Claude Code's
+		// opus is a model's name as well as a tier's, and stays the model
+		if f := a.Field(args[1]); f != nil && !modelAlias(a, args[1]) {
+			return showField(a, f)
 		}
 		// `magpie codex xhigh`: a bare value that belongs to a non-model field
 		// (effort levels, for instance) is routed there; anything else is a model.
@@ -379,10 +412,11 @@ func run(args []string) error {
 		}
 		return set(a, a.Fields[0].Key, args[1])
 	case 3:
-		if args[2] == "default" {
-			args[2] = ""
+		value := args[2]
+		if strings.EqualFold(value, "default") {
+			value = ""
 		}
-		return set(a, args[1], args[2])
+		return set(a, args[1], value)
 	}
 	return fmt.Errorf("too many arguments\n\n%s", usage)
 }
@@ -395,6 +429,12 @@ func set(a *agent.Agent, key, value string) error {
 			keys = append(keys, f.Key)
 		}
 		return fmt.Errorf("%s has no field %q (fields: %s)", a.Name, key, strings.Join(keys, ", "))
+	}
+	// a field's name is no value: magpie codex subagent effort ran Codex's
+	// subagents on a model called effort. Claude Code's opus is a model's
+	// name as well as a tier's
+	if g := a.Field(value); value != "" && g != nil && !modelAlias(a, value) {
+		return fieldAsValue(a, f, g, value)
 	}
 	value, err := a.Spell(f.Key, value)
 	if err != nil {
@@ -421,6 +461,41 @@ func set(a *agent.Agent, key, value string) error {
 			fmt.Println(muted.Render("  ↻ " + n))
 		}
 	}
+	return nil
+}
+
+// modelAlias says whether a word names the agent's model, in any case,
+// though a field goes by it too: Claude Code's opus, a tier's name as well
+func modelAlias(a *agent.Agent, w string) bool {
+	return slices.ContainsFunc(a.ModelAliases, func(m string) bool { return strings.EqualFold(m, w) })
+}
+
+// fieldAsValue refuses field g's name given as field f's value, for what
+// was meant: two words that are one field's label (magpie codex subagent
+// effort), a switch, which is turned on (Claude Code's ultracode), or the
+// field, which its name alone shows.
+func fieldAsValue(a *agent.Agent, f, g *agent.Field, value string) error {
+	for _, name := range []string{f.Key + " " + value, f.Key + "_" + value} {
+		if h := a.Field(name); h != nil {
+			return fmt.Errorf("%q is one field of %s's: magpie %s %s shows it", h.Label, a.Name, a.ID, h.Key)
+		}
+	}
+	if g.Options != nil {
+		if o := g.Options(a.Values()); len(o) == 1 && o[0].Value == "on" {
+			return fmt.Errorf("%q is a switch of %s's, not a value for its %s: magpie %s %s on", value, a.Name, f.Label, a.ID, g.Key)
+		}
+	}
+	return fmt.Errorf("%q is a field of %s's, not a value for its %s: magpie %s %s shows it", value, a.Name, f.Label, a.ID, g.Key)
+}
+
+// showField is `magpie <agent> <field>`: what the field is set to, as set
+// prints it
+func showField(a *agent.Agent, f *agent.Field) error {
+	v := f.Get()
+	if v == "" {
+		v = muted.Render("default")
+	}
+	fmt.Println(bold.Render(a.Name), muted.Render(f.Label), v)
 	return nil
 }
 
@@ -481,6 +556,162 @@ func fieldForValue(a *agent.Agent, v string) *agent.Field {
 		}
 	}
 	return nil
+}
+
+// isHelp says whether a word asks how: help, -h or --help, in any case
+// (magpie codex Help wrote model = "Help")
+func isHelp(w string) bool {
+	switch strings.ToLower(w) {
+	case "help", "-h", "--help":
+		return true
+	}
+	return false
+}
+
+// helpAsked says whether a help word follows the command args[0] names.
+// What follows an MCP server's command in magpie library mcp add <name>
+// <command> [args…] is that server's own, -h too.
+func helpAsked(args []string) bool {
+	rest := args[1:]
+	if (args[0] == "library" || args[0] == "lib") && len(args) > 5 && args[1] == "mcp" && args[2] == "add" {
+		rest = args[1:5]
+	}
+	return slices.ContainsFunc(rest, isHelp)
+}
+
+// commandHelp is how a command of magpie's shows its usage: its own help
+// where it has one, else its lines of magpie help. Not an agent's
+// (agentUsage), nor what only magpie or a container runs
+// (claude-mcp-helper, -Embedding, healthcheck).
+func commandHelp(cmd string) (func() error, bool) {
+	lines := func(words ...string) func() error {
+		return func() error {
+			fmt.Print(usageOf(words...))
+			return nil
+		}
+	}
+	switch cmd {
+	case "group":
+		return func() error { return groupCmd([]string{cmd, "help"}) }, true
+	case "library", "lib":
+		return func() error { return libraryCmd([]string{cmd, "help"}) }, true
+	case "model":
+		return func() error { return modelCmd([]string{"help"}) }, true
+	case "plugin", "plugins":
+		return func() error { return pluginCmd([]string{cmd, "help"}) }, true
+	case "quota", "quotas":
+		return func() error { return quotaCmd([]string{cmd, "help"}) }, true
+	case "search":
+		return func() error { return searchCmd([]string{"help"}) }, true
+	case "webdav", "dav":
+		return func() error { return webdavCmd([]string{"help"}) }, true
+	case "s3":
+		return func() error { return s3Cmd([]string{"help"}) }, true
+	case "sessions":
+		return func() error {
+			fmt.Println(sessionsUsage)
+			return nil
+		}, true
+	case "save", "use", "rm", "profiles":
+		return lines("save", "use", "profiles", "rm"), true
+	case "ls", "list":
+		return lines("ls"), true
+	case "accounts", "account":
+		return lines("accounts"), true
+	case "app", "gui":
+		return lines(), true
+	case "tui", "web", "tray", "panel", "autostart", "agents", "sync", "import", "providers", "presets",
+		"provider", "models", "visible", "groups", "serve", "gateway-key", "usage", "update", "backup",
+		"restore", "mcp":
+		return lines(cmd), true
+	}
+	return nil, false
+}
+
+// usageOf is the lines of magpie help for the commands words names, a line
+// that wraps with the line it wraps from; all of it for none.
+func usageOf(words ...string) string {
+	var b strings.Builder
+	in := false
+	for _, l := range strings.Split(usage, "\n") {
+		t := strings.TrimLeft(l, " ")
+		if f := strings.Fields(t); strings.HasPrefix(t, "magpie ") && len(f) > 1 {
+			in = slices.Contains(words, f[1])
+		} else if !strings.HasPrefix(l, "      ") {
+			in = false
+		}
+		if in {
+			b.WriteString(l + "\n")
+		}
+	}
+	if b.Len() == 0 {
+		return usage
+	}
+	return b.String()
+}
+
+// agentUsage is `magpie <agent> help`: the commands for that agent, and
+// the names its fields go by, the key and the label it is shown with
+func agentUsage(a *agent.Agent) string {
+	at := "magpie " + a.ID
+	rows := [][2]string{{at, "show " + a.Name}}
+	if len(a.Fields) == 0 {
+		// Cindy: it takes magpie through its own link, confirmed there
+		rows = append(rows, [2]string{at + " add", "open the link that adds magpie, to confirm it in " + a.Name})
+	} else {
+		first := a.Fields[0].Label
+		rows = append(rows,
+			[2]string{at + " <" + first + ">", "set its " + first},
+			[2]string{at + " <field>", "show one field"},
+			[2]string{at + " <field> <value>", "set a field"},
+			[2]string{at + " default", "take magpie out: " + a.Name + " back on what it had before"},
+			[2]string{at + " <field> default", "that field back to " + a.Name + "'s own default"})
+	}
+	w := 0
+	for _, r := range rows {
+		w = max(w, lipgloss.Width(r[0]))
+	}
+	var b strings.Builder
+	b.WriteString("usage:\n")
+	for _, r := range rows {
+		fmt.Fprintf(&b, "  %s  %s\n", pad(r[0], w), r[1])
+	}
+	if len(a.Fields) == 0 {
+		return b.String()
+	}
+	b.WriteString("\n")
+	line := "  fields:"
+	for i, f := range a.Fields {
+		name := f.Key
+		if f.Label != f.Key {
+			name += " (" + f.Label + ")"
+		}
+		if i < len(a.Fields)-1 {
+			name += ","
+		}
+		// Claude Code's thirteen wrap, under the first
+		if i > 0 && lipgloss.Width(line)+1+lipgloss.Width(name) > 100 {
+			b.WriteString(line + "\n")
+			line = "         "
+		}
+		line += " " + name
+	}
+	b.WriteString(line + "\n")
+	// Claude Code's tiers are named as its model's aliases are
+	var both []string
+	for _, f := range a.Fields {
+		if slices.Contains(a.ModelAliases, f.Key) {
+			both = append(both, f.Key)
+		}
+	}
+	if n := len(both); n > 0 {
+		names := both[0]
+		if n > 1 {
+			names = strings.Join(both[:n-1], ", ") + " and " + both[n-1]
+		}
+		fmt.Fprintf(&b, "  %s alone name the %s: %s %s sets its %s to %s\n", names, a.Fields[0].Label, at, both[0], a.Fields[0].Label, both[0])
+	}
+	return b.String()
 }
 
 // list prints the agents; those from dimFrom on (when not -1) are the ones

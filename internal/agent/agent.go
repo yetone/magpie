@@ -219,6 +219,11 @@ type Agent struct {
 	// has a provider of the same name (OpenHanako's own
 	// deepseek/deepseek-v4-pro read as magpie's deepseek, #835).
 	Spelled func(v string) bool
+	// ModelAliases are the names the agent's model takes besides ids
+	// (Claude Code's opus, best, opusplan). One that names a field as well
+	// is the model's on the command line: magpie claude opus sets the
+	// model, where another field's name alone shows that field.
+	ModelAliases []string
 	// detect, when set, says whether the agent is here in place of looking
 	// for its files and binary: a distro's, probed once.
 	detect func() bool
@@ -242,8 +247,10 @@ type Agent struct {
 // "open a new dsh session"), and a Windows that answered no here dropped
 // that advice silently — a model picked in magpie looked like it had done
 // nothing at all. claudeRunning and Pencil's own check already say they
-// can't be told, and say yes for the same reason.
-func Running(patterns ...string) bool {
+// can't be told, and say yes for the same reason. A var so tests can say
+// what runs, as claudeRunning is: magpie's own CLI tests printed "restart
+// the Codex app" on a Mac with Codex open, and on every Windows.
+var Running = func(patterns ...string) bool {
 	if runtime.GOOS == "windows" {
 		return len(patterns) > 0
 	}
@@ -355,15 +362,16 @@ var goPrograms struct {
 	m map[goProgramKey]bool
 }
 
-// Field looks a field up by key.
+// Field looks a field up by key, in any case, as Find looks an agent up
+// (magpie codex Model was written as the model).
 func (a *Agent) Field(key string) *Field {
 	for i := range a.Fields {
-		if a.Fields[i].Key == key {
+		if strings.EqualFold(a.Fields[i].Key, key) {
 			return &a.Fields[i]
 		}
 	}
 	for i := range a.Fields {
-		if a.Fields[i].Label == key { // `magpie gemini auth …`: the label as shown
+		if strings.EqualFold(a.Fields[i].Label, key) { // `magpie gemini auth …`: the label as shown
 			return &a.Fields[i]
 		}
 	}

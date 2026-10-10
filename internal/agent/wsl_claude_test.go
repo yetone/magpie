@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -248,6 +249,11 @@ func TestWSLClaudeStopped(t *testing.T) {
 	}
 	if v := a.Values(); v["model"] != "relay/glm-4.6" || v["effort"] != "low" {
 		t.Fatalf("values %v", v)
+	}
+	// magpie claude@wsl:Stopped opus is its model, as on a running distro,
+	// not its opus tier shown
+	if !slices.Equal(a.ModelAliases, claudeAliases) {
+		t.Fatalf("model aliases %v", a.ModelAliases)
 	}
 	opts := a.Field("model").Options(a.Values())
 	if len(opts) == 0 {
