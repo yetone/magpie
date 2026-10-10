@@ -10,6 +10,10 @@ semantic change description, and review rules.
 ## Code standards
 
 Write and review changes against the [code standards](docs/code-standards.md).
+Before submitting or updating a PR, and when reviewing one, use the
+[AI reviewer guide](docs/ai-reviewer.md) to select
+risk-based checks and record evidence. It supplements the existing rules; it
+does not grant merge or execution authority.
 
 ## Community PRs
 
