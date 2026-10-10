@@ -37,6 +37,8 @@ func init() {
 	sessions.WSLHomes = wslHomes
 	sessions.WSLRunning = WSLRunning
 	sessions.WSLOff = func() bool { return !wslLooks() }
+	// a Copilot CLI signed in inside a running distro (#723)
+	provider.CopilotWSLHomes = copilotWSLHomes
 }
 
 // others are clients that reach the gateway without being agents magpie

@@ -53,10 +53,57 @@ func copilotCLIHome() string {
 	return filepath.Join(home, ".copilot")
 }
 
+// CopilotWSLHomes, set by internal/agent, are the homes, as magpie opens
+// them, of the WSL distros that run now: magpie on Windows finds a Copilot
+// CLI signed in inside one (#723, jia2). nil, or none, off Windows. A
+// stopped distro isn't in it: reading its files would start it.
+var CopilotWSLHomes func() []string
+
+// copilotWSLAge is how long a WSL distro's Copilot CLI sign-in is kept as
+// read: its files are read over WSL's file share, slower than a disk's.
+var copilotWSLAge = 20 * time.Second
+
+var copilotWSL struct {
+	sync.Mutex
+	at  time.Time
+	app copilotApp
+	ok  bool
+}
+
 // copilotCLILogin is the account the Copilot CLI is signed in to, with its
-// token.
+// token: on this machine, or, for magpie on Windows, in a WSL distro that
+// runs now. A distro's token is read only from its config.json, where the
+// CLI keeps it when the distro has no keyring to put it in (WSL has none
+// unless one is set up): magpie can't reach a distro's keyring.
 func copilotCLILogin() (copilotApp, bool) {
-	raw, err := os.ReadFile(filepath.Join(copilotCLIHome(), "config.json"))
+	if app, ok := copilotCLILoginIn(copilotCLIHome(), copilotCLISecret); ok {
+		return app, true
+	}
+	if CopilotWSLHomes == nil {
+		return copilotApp{}, false
+	}
+	c := &copilotWSL
+	c.Lock()
+	defer c.Unlock()
+	if !c.at.IsZero() && time.Since(c.at) < copilotWSLAge {
+		return c.app, c.ok
+	}
+	c.app, c.ok = copilotApp{}, false
+	for _, home := range CopilotWSLHomes() {
+		if app, ok := copilotCLILoginIn(filepath.Join(home, ".copilot"), nil); ok {
+			c.app, c.ok = app, true
+			break
+		}
+	}
+	c.at = time.Now()
+	return c.app, c.ok
+}
+
+// copilotCLILoginIn is the account the Copilot CLI whose settings are in
+// dir is signed in to, with its token: from its config.json, else from
+// secret (the keychain), when given.
+func copilotCLILoginIn(dir string, secret func(string) string) (copilotApp, bool) {
+	raw, err := os.ReadFile(filepath.Join(dir, "config.json"))
 	if err != nil {
 		return copilotApp{}, false
 	}
@@ -86,8 +133,8 @@ func copilotCLILogin() (copilotApp, bool) {
 				key = strings.TrimSuffix(u.Host, "/") + ":" + u.Login
 			}
 			tok := cfg.Tokens[key]
-			if tok == "" {
-				tok = copilotCLISecret(key)
+			if tok == "" && secret != nil {
+				tok = secret(key)
 			}
 			if tok != "" {
 				return copilotApp{User: u.Login, Token: tok, Host: host, cli: true}, true

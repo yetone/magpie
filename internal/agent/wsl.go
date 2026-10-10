@@ -569,6 +569,10 @@ func wslFound(d distro) bool {
 	return false
 }
 
+// wslKept is whether magpie keeps a distro it probed: one of wslKinds is
+// there, or the Copilot CLI's folder, whose sign-in it reads (#723).
+func wslKept(d distro) bool { return wslFound(d) || d.Has["dir:"+wslCopilotDir] }
+
 // ListsFor is whose model lists an agent's are (provider.CatalogFor): its
 // own id's, or, for one in a WSL distro, its Windows twin's (claude for
 // claude@wsl:Ubuntu). A distro's agent is written magpie's models under
@@ -784,7 +788,8 @@ func wslAgentsOf(ds []distro) []*Agent {
 	return out
 }
 
-// wslHomes are the distros agents were found in, each user's home as magpie
+// wslHomes are the distros agents (or the Copilot CLI's folder, wslKept)
+// were found in, each user's home as magpie
 // opens it, for internal/sessions to read their sessions in; none off
 // Windows. A stopped distro's is its home as last probed.
 func wslHomes() []sessions.WSLHome {
@@ -799,6 +804,32 @@ func wslHomes() []sessions.WSLHome {
 		out = append(out, sessions.WSLHome{Distro: d.Name, Home: d.local(d.Home), Running: d.Running})
 	}
 	return out
+}
+
+// wslCopilotDir is the Copilot CLI's folder under a distro's $HOME: not an
+// agent magpie sets up, but a sign-in it uses (provider.CopilotWSLHomes),
+// so a distro that has only it is kept as one agents are found in (#723).
+const wslCopilotDir = ".copilot"
+
+// copilotWSLHomes are the homes, as magpie opens them, of the running
+// distros the Copilot CLI's folder was found in, for provider to read its
+// sign-in in; none off Windows. A stopped distro is left out: reading it
+// would start it.
+func copilotWSLHomes() []string {
+	var out []string
+	for _, h := range wslHomes() {
+		if h.Running && wslHasCopilot(h.Distro) {
+			out = append(out, h.Home)
+		}
+	}
+	return out
+}
+
+func wslHasCopilot(name string) bool {
+	wsl.Lock()
+	defer wsl.Unlock()
+	d := wsl.seen[name]
+	return d != nil && d.Has["dir:"+wslCopilotDir]
 }
 
 // Only running distros are probed — asking one anything starts it — once
@@ -887,7 +918,7 @@ func wslDistros() []distro {
 					wsl.failed[n] = time.Now()
 				} else {
 					wsl.probed[n] = true
-					if wslFound(*d) {
+					if wslKept(*d) {
 						if old := wsl.seen[n]; old != nil {
 							d.Values = old.Values
 							d.Was = wslWas(old.Was, old.Gateway, d.Gateway)
@@ -953,7 +984,7 @@ func wslForgetOldBins() {
 				wsl.dirty = true
 			}
 		}
-		if !wslFound(*d) {
+		if !wslKept(*d) {
 			delete(wsl.seen, n)
 			wsl.dirty = true
 		}
@@ -1100,6 +1131,7 @@ var wslProbeScript = func() string {
 			s += `; `
 		}
 	}
+	s += `[ -d "$HOME/` + wslCopilotDir + `" ] && echo dir:` + wslCopilotDir + `; `
 	// a drive's source in /proc/mounts is C:\ (written C:\134), under any automount root
 	s += `awk '$1 ~ /^[A-Za-z]:/ {print "win:" $2}' /proc/mounts 2>/dev/null; `
 	// named omp profiles: the probe runs only in a distro that is running,
@@ -1119,7 +1151,7 @@ func wslProbe(name string) *distro {
 	if d == nil {
 		return nil
 	}
-	if wslFound(*d) {
+	if wslKept(*d) {
 		d.Root = wslRoot(name)
 	}
 	return d

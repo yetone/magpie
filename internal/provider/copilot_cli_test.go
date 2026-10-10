@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The standalone CLI's sign-in: who in a JSONC config.json, the token in
@@ -71,5 +72,47 @@ func TestCopilotCLILogin(t *testing.T) {
 	os.WriteFile(filepath.Join(cli, "config.json"), []byte(`{"lastLoggedInUser":{"host":"https://github.com","login":"hubot"},"copilotTokens":{"https://github.com:hubot":"gho_plain"}}`), 0o600)
 	if app, ok := copilotLogin(filepath.Join(home, ".config")); !ok || app.User != "hubot" || app.Token != "gho_plain" || asked != "" {
 		t.Fatalf("plaintext: %+v asked %q", app, asked)
+	}
+}
+
+// magpie on Windows, the Copilot CLI signed in inside a WSL distro that
+// runs (#723, jia2): WSL has no keyring, so the CLI kept its token in the
+// distro's ~/.copilot/config.json, which magpie reads over WSL's share.
+func TestCopilotCLIInWSL(t *testing.T) {
+	home := signIn(t)
+	os.Remove(filepath.Join(home, ".config", "github-copilot", "apps.json"))
+	t.Setenv("COPILOT_HOME", filepath.Join(home, "no-copilot-here"))
+	oldSecret := copilotCLISecret
+	copilotCLISecret = func(string) string { return "" }
+	distro := filepath.Join(t.TempDir(), "home", "jia")
+	os.MkdirAll(filepath.Join(distro, ".copilot"), 0o700)
+	os.WriteFile(filepath.Join(distro, ".copilot", "config.json"), []byte(`{
+  "lastLoggedInUser": {"host": "https://github.com", "login": "jia2"},
+  "loggedInUsers": [{"host": "https://github.com", "login": "jia2"}],
+  "copilotTokens": {"https://github.com:jia2": "gho_wsl"}
+}`), 0o600)
+	oldHomes := CopilotWSLHomes
+	homes := []string{filepath.Join(t.TempDir(), "other"), distro}
+	CopilotWSLHomes = func() []string { return homes }
+	copilotWSL.at = time.Time{}
+	defer func() {
+		copilotCLISecret, CopilotWSLHomes = oldSecret, oldHomes
+		copilotWSL.at = time.Time{}
+	}()
+
+	app, ok := copilotLogin(filepath.Join(home, ".config"))
+	if !ok || app.User != "jia2" || app.Token != "gho_wsl" || !app.cli {
+		t.Fatalf("the WSL distro's Copilot CLI isn't found: %+v %v", app, ok)
+	}
+	if p, ok := find(All(), "copilot"); !ok || p.Account.User != "jia2" {
+		t.Fatalf("copilot: %+v %v", p, ok)
+	}
+
+	// the distro stopped: it isn't listed, and isn't read once the
+	// sign-in read before is older than copilotWSLAge
+	homes = nil
+	copilotWSL.at = time.Time{}
+	if app, ok := copilotLogin(filepath.Join(home, ".config")); ok {
+		t.Fatalf("a stopped distro's sign-in is used: %+v", app)
 	}
 }
