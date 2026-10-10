@@ -463,8 +463,9 @@ func readClaudeCredential() (claudeCredentials, claudeCredentialLocation, bool) 
 	if wasHex {
 		// written by magpie before it wrote them on one line: Claude Code
 		// reads that hex as no sign-in, so it is written again as it
-		// writes it
-		saveClaudeCredential(loc, c)
+		// writes it. Not through saveClaudeCredential: claudeCredential
+		// reads under claudeCacheMu, which caching would take again
+		writeClaudeCredential(loc, c)
 	}
 	return c, loc, ok
 }
@@ -525,6 +526,15 @@ func forgetClaudeCredential() {
 }
 
 func saveClaudeCredential(loc claudeCredentialLocation, c claudeCredentials) error {
+	if err := writeClaudeCredential(loc, c); err != nil {
+		return err
+	}
+	cacheClaudeCredential(c, loc)
+	return nil
+}
+
+// writeClaudeCredential writes c where loc says, leaving the cache alone.
+func writeClaudeCredential(loc claudeCredentialLocation, c claudeCredentials) error {
 	b, err := c.marshal()
 	if err != nil {
 		return err
@@ -553,7 +563,6 @@ func saveClaudeCredential(loc claudeCredentialLocation, c claudeCredentials) err
 			return fmt.Errorf("save Claude Code credentials: %v: %s", err, strings.TrimSpace(string(out)))
 		}
 	}
-	cacheClaudeCredential(c, loc)
 	return nil
 }
 
