@@ -196,11 +196,11 @@ func apiGet(u string) ([]byte, int, bool, error) {
 
 // hashDir is a hash of a skill's files, their names and what's in them,
 // as copyDir copies them.
-func hashDir(dir string) string { return hashFiles(dir, false) }
+func hashDir(dir string) string { return hashFiles(dir) }
 
-// hashFiles is hashDir, leaving aside the .DS_Store files Finder leaves in
-// a folder it shows when noFinder is set.
-func hashFiles(dir string, noFinder bool) string {
+// hashFiles is hashDir, leaving aside what isn't part of the skill
+// (SkipInSkill): the file managers' own files among them.
+func hashFiles(dir string) string {
 	h := sha256.New()
 	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -208,15 +208,18 @@ func hashFiles(dir string, noFinder bool) string {
 		}
 		rel, _ := filepath.Rel(dir, p)
 		rel = filepath.ToSlash(rel)
-		switch {
-		case d.IsDir():
-			if d.Name() == ".git" && p != dir {
+		if p != dir && SkipInSkill(d.Name()) {
+			if d.IsDir() {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+		switch {
+		case d.IsDir():
 		case d.Type()&fs.ModeSymlink != 0:
 			t, _ := os.Readlink(p)
 			fmt.Fprintf(h, "link %s %s\n", rel, filepath.ToSlash(t))
-		case d.Type().IsRegular() && rel != marker && !(noFinder && d.Name() == ".DS_Store"):
+		case d.Type().IsRegular():
 			f, err := os.Open(p)
 			if err != nil {
 				return err

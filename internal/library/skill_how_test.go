@@ -175,3 +175,54 @@ func TestSkillRelinkKeepsUnreadableCopy(t *testing.T) {
 		t.Fatalf("the unreadable copy's edits weren't kept: %v", kept)
 	}
 }
+
+// What a file manager writes into a folder the user opened — desktop.ini
+// and Thumbs.db from Windows Explorer, .DS_Store from Finder — is not the
+// user editing the skill. A copy with any of it in it was read as edited:
+// the page said the copy differed from the library's, and a sync took them
+// into the library's own folder for every other agent to be given.
+func TestSkillCopyIgnoresExplorerMetadata(t *testing.T) {
+	h := sandbox(t)
+	src := filepath.Join(h, "src/skills")
+	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
+	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"claude", "codex"}))
+	ok(t)(SetSkillHow("", HowCopy))
+	cl, cx := filepath.Join(h, ".claude/skills/pdf"), filepath.Join(h, ".codex/skills/pdf")
+	lib := skillDir("pdf")
+	time.Sleep(20 * time.Millisecond) // after the copy's mark
+	// what Explorer leaves in a folder the user opened, and Finder on macOS,
+	// in the copy itself and in a folder of the skill's own
+	write(t, filepath.Join(cl, "desktop.ini"), "[.ShellClassInfo]\n")
+	write(t, filepath.Join(cl, "Thumbs.db"), "thumbnails")
+	write(t, filepath.Join(cl, ".DS_Store"), "finder")
+	write(t, filepath.Join(cl, "scripts", "THUMBS.DB"), "thumbnails")
+
+	v, err := Read(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := v.Skills[0].Behind; len(b) != 0 {
+		t.Fatalf("the file manager's files made the copy look edited: %v", b)
+	}
+
+	// the library's own keeps what it has, and the copy stands as it is
+	meta := []string{"desktop.ini", "Thumbs.db", ".DS_Store", filepath.Join("scripts", "THUMBS.DB")}
+	ok(t)(Sync())
+	for _, name := range meta {
+		if _, err := os.Lstat(filepath.Join(lib, name)); !os.IsNotExist(err) {
+			t.Errorf("the library took %s in from the agent's copy", name)
+		}
+		if _, err := os.Lstat(filepath.Join(cx, name)); !os.IsNotExist(err) {
+			t.Errorf("codex's copy was made again with %s in it", name)
+		}
+	}
+	if kept, _ := filepath.Glob(filepath.Join(BackupDir(), "*", "library", "skills", "pdf", "SKILL.md")); len(kept) != 0 {
+		t.Errorf("the library's skill was kept aside for an edit nobody made: %v", kept)
+	}
+	if s := read(t, filepath.Join(cl, "scripts/run.sh")); s != "echo hi\n" {
+		t.Errorf("claude's copy lost a file of the skill's: %q", s)
+	}
+	if isLink(t, cx) {
+		t.Error("codex's copy went with claude's")
+	}
+}

@@ -104,9 +104,10 @@ func orNone(xs []string) []string {
 	return xs
 }
 
-// readSkills is each skill folder's files. Links in it, .git and what
-// isn't a plain file stay out. What goes is chosen smallest first across
-// every skill, so the text of them all comes before any big file.
+// readSkills is each skill folder's files. Links in it, and what isn't
+// part of the skill, stay out (SkipInSkill). What goes is chosen smallest
+// first across every skill, so the text of them all comes before any big
+// file.
 func readSkills(dirs []string) []*CarriedSkill {
 	type file struct {
 		skill  int
@@ -122,13 +123,16 @@ func readSkills(dirs []string) []*CarriedSkill {
 			if err != nil {
 				return nil
 			}
-			if d.IsDir() {
-				if p != dir && (d.Name() == ".git" || d.Name() == marker) {
+			if p != dir && SkipInSkill(d.Name()) {
+				if d.IsDir() {
 					return filepath.SkipDir
 				}
 				return nil
 			}
-			if !d.Type().IsRegular() || d.Name() == marker {
+			if d.IsDir() {
+				return nil
+			}
+			if !d.Type().IsRegular() {
 				return nil
 			}
 			rel, err := filepath.Rel(dir, p)

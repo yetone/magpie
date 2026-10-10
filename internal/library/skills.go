@@ -1791,10 +1791,13 @@ func copyDir(from, to string) error {
 		rel, _ := filepath.Rel(from, p)
 		dst := filepath.Join(to, rel)
 		if d.IsDir() {
-			if d.Name() == ".git" && p != from {
+			if p != from && SkipInSkill(d.Name()) {
 				return filepath.SkipDir
 			}
 			return os.MkdirAll(dst, 0o755)
+		}
+		if SkipInSkill(d.Name()) {
+			return nil
 		}
 		if d.Type()&fs.ModeSymlink != 0 {
 			if t, err := os.Readlink(p); err == nil {
@@ -1867,8 +1870,8 @@ func setAside(agent, p string) (string, error) {
 }
 
 // sameTree is whether two skill folders (links followed) hold the same
-// files with the same bytes, leaving aside what Finder or version control
-// keeps in one (.DS_Store, .git) and the mark on magpie's own copy.
+// files with the same bytes, leaving aside what isn't part of the skill
+// (SkipInSkill).
 func sameTree(a, b string) bool {
 	a, b = realDir(a), realDir(b)
 	fa, okA := treeOf(a)
@@ -1908,7 +1911,7 @@ func treeOf(root string) (map[string]treeEntry, bool) {
 			}
 			return nil
 		}
-		if n := d.Name(); n == ".DS_Store" || n == marker || n == ".git" {
+		if p != root && SkipInSkill(d.Name()) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}

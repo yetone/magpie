@@ -42,7 +42,8 @@ type editMemo struct {
 }
 
 // libraryHash is the hash of the library's folder of a skill, leaving
-// aside what Finder keeps in it: "" when it can't be read.
+// aside what isn't part of the skill (SkipInSkill): "" when it can't be
+// read.
 func libraryHash(name string) string {
 	dir := skillDir(name)
 	at := changedAt(dir)
@@ -52,7 +53,7 @@ func libraryHash(name string) string {
 	if ok && !at.IsZero() && m.at.Equal(at) {
 		return m.hash
 	}
-	h := hashFiles(dir, true)
+	h := hashFiles(dir)
 	if h != "" && !at.IsZero() {
 		edits.Lock()
 		edits.m[dir] = editMemo{at: at, hash: h}
@@ -79,8 +80,9 @@ func (l *Library) editState(s *Skill, targets []*Target) (edited, known bool) {
 	if h == "" {
 		return false, false
 	}
-	// the fetched files may hold a .DS_Store of their own
-	if h != s.Hash && hashDir(lib) != s.Hash {
+	// what a file manager writes into a folder the user opened isn't
+	// part of the skill, so it is left out of both hashes alike
+	if h != s.Hash {
 		return true, true
 	}
 	for _, t := range targets {
