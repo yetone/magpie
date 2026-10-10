@@ -1101,9 +1101,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			onLang()
 		}
 		// an update check that failed, without the proxy set just now, is
-		// tried again through it, not in six hours (#294)
-		if strings.TrimSpace(in.Proxy) != strings.TrimSpace(cur.Proxy) && updates.json().State == "error" {
-			go updates.check()
+		// tried again through it, not in six hours (#294), and marked so
+		// before this answers: the page stops asking on the old error
+		if strings.TrimSpace(in.Proxy) != strings.TrimSpace(cur.Proxy) && updates.json().State == "error" && updates.begin() {
+			go updates.run()
 		}
 		writeJSON(rw, settingsState())
 	})

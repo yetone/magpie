@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,7 +17,11 @@ import (
 
 // An update check that failed going direct is tried again as soon as a
 // proxy is set on the Settings page, through it (#294), rather than the
-// error staying up till the next check six hours on.
+// error staying up till the next check six hours on. The answer to the
+// save already finds it checking: the page reads /api/update straight
+// after, and an error still up then was drawn with nothing asking again.
+// Marked inside the check's goroutine, it was still up in about a third of
+// runs here.
 func TestSettingsProxyRechecksAFailedUpdate(t *testing.T) {
 	h := t.TempDir()
 	t.Setenv("HOME", h)
@@ -48,9 +53,16 @@ func TestSettingsProxyRechecksAFailedUpdate(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	Handler(nil, nil).ServeHTTP(rec, httptest.NewRequest("POST", "/api/settings", strings.NewReader(`{"proxy":"`+px.URL+`"}`)))
+	mux := Handler(nil, nil)
+	procs := runtime.GOMAXPROCS(1)
+	mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/settings", strings.NewReader(`{"proxy":"`+px.URL+`"}`)))
+	j := updates.json()
+	runtime.GOMAXPROCS(procs)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if j.State == "error" {
+		t.Fatalf("the save answered with the old error up: %+v", j)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
