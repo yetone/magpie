@@ -1,0 +1,20 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1165 界面预览 · e63cf18</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1165 界面预览</h1><p class="m">commit e63cf18 · <a href="https://github.com/yetone/magpie/pull/1165">回到 PR</a> · 本地预设（Ollama、LM Studio、oMLX、MLX-Serve）的添加/编辑编辑器在密钥下方新增「服务器地址」区（默认折叠），可把各 API 的 URL 移到别的端口或另一台电脑上：终结点预览随所填地址变化，测试与保存按新地址走，地址不合法时保存被拒并展开该区；同时 LM Studio/oMLX/MLX-Serve 的说明改为「local server, port …by default」。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-add-sheet-local-presets.png" alt="添加面板里的本地预设"><figcaption>本地预设填服务器地址并添加 · 添加面板里的本地预设</figcaption></figure>
+<figure><img src="02-editor-address-folded.png" alt="Ollama 编辑器：密钥下方折叠的「服务器地址」"><figcaption>本地预设填服务器地址并添加 · Ollama 编辑器：密钥下方折叠的「服务器地址」</figcaption></figure>
+<figure><img src="03-editor-address-folded.png" alt="Ollama 编辑器：密钥下方折叠的「服务器地址」"><figcaption>本地预设填服务器地址并添加 · Ollama 编辑器：密钥下方折叠的「服务器地址」</figcaption></figure>
+<figure><img src="04-server-address-open.png" alt="地址为空，占位符是预设默认地址"><figcaption>本地预设填服务器地址并添加 · 地址为空，占位符是预设默认地址</figcaption></figure>
+<figure><img src="05-endpoints-after-address.png" alt="填入地址后的编辑器与终结点预览"><figcaption>本地预设填服务器地址并添加 · 填入地址后的编辑器与终结点预览</figcaption></figure>
+<figure><img src="06-providers-after-add.png" alt="添加后的供应商列表"><figcaption>本地预设填服务器地址并添加 · 添加后的供应商列表</figcaption></figure>
+<figure><img src="07-editor-address-open-by-default.png" alt="再次打开：地址区展开，显示保存的地址"><figcaption>编辑已保存的本地预设：地址、测试与非法地址 · 再次打开：地址区展开，显示保存的地址</figcaption></figure>
+<figure><img src="08-test-with-typed-address.png" alt="测试用编辑器里的地址发起"><figcaption>编辑已保存的本地预设：地址、测试与非法地址 · 测试用编辑器里的地址发起</figcaption></figure>
+<figure><img src="09-address-refused.png" alt="点「保存」之后的编辑器"><figcaption>编辑已保存的本地预设：地址、测试与非法地址 · 点「保存」之后的编辑器</figcaption></figure>
+</main></html>

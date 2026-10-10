@@ -1,0 +1,52 @@
+{
+  "summary": "在 Agent 页 Claude Code 行新增了一个 passthrough 字段（可设为 on），开启后本机 Claude Code 不再写入 ANTHROPIC_AUTH_TOKEN，从而保留它自己的登录，让 Anthropic 模型由 Claude Code 直连；网关侧对这类请求走 Anthropic 直通。",
+  "scenes": [
+    {
+      "title": "Claude Code 的 passthrough 字段",
+      "shots": [
+        {
+          "file": "01-claude-row-before.png",
+          "caption": "Claude Code 这一行的各个字段，passthrough 当前是什么",
+          "width": 2492
+        },
+        {
+          "file": "02-claude-connected.png",
+          "caption": "接入后 Claude Code 这一行",
+          "width": 2560
+        },
+        {
+          "file": "03-claude-detail.png",
+          "caption": "详情里 Claude Code 的全部字段",
+          "width": 2560
+        },
+        {
+          "file": "04-passthrough-options.png",
+          "caption": "passthrough 弹出的选项与说明文字",
+          "width": 2560
+        },
+        {
+          "file": "05-passthrough-on.png",
+          "caption": "选过之后，Claude Code 行上 passthrough 显示的值",
+          "width": 2492
+        },
+        {
+          "file": "06-passthrough-reopened.png",
+          "caption": "重新打开后的选项列表",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "Claude Code 的 passthrough 字段 · click .row.agent[data-id=\"claude\"] [data-key=\"passthrough\"]: nothing visible matches .row.agent[data-id=\"claude\"] [data-key=\"passthrough\"] (0 in the page)",
+    "Claude Code 的 passthrough 字段 · click [data-key=\"passthrough\"]: nothing visible matches [data-key=\"passthrough\"] with \"use Claude Code's own sign-in\" (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里没有以自带登录（sk-ant-oat 令牌）运行的 Claude Code，所以直通本身看不到：请求被送到 Anthropic、/v1/models 里合并出官方 Claude 模型、提示词不被改写，以及在网关「最近调用」里出现的 Anthropic 记录，都无法在这个环境里演示；只能展示新增的 passthrough 字段及其选项。",
+  "interactive": true,
+  "pages": 1
+}

@@ -1,0 +1,15 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1093 界面预览 · 83e88d5</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1093 界面预览</h1><p class="m">commit 83e88d5 · <a href="https://github.com/yetone/magpie/pull/1093">回到 PR</a> · 路由页保存组时不再同步等一次会联网的 Codex 账号额度读取（同步改用「已经读到的值」，改由后台循环刷新），并且保存后如果被保存的那一行不在视野里，就把它滚回视野（真的出界才滚，避免让出点击保持）。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-group-row-before-edit.png" alt="编辑前，记下「Coding」组在这页的位置"><figcaption>保存路由组后，那一行回到视野 · 编辑前，记下「Coding」组在这页的位置</figcaption></figure>
+<figure><img src="02-editor-in-place-of-row.png" alt="编辑器顶替了组的那一行"><figcaption>保存路由组后，那一行回到视野 · 编辑器顶替了组的那一行</figcaption></figure>
+<figure><img src="03-scrolled-to-save.png" alt="滚到「保存」时的画面"><figcaption>保存路由组后，那一行回到视野 · 滚到「保存」时的画面</figcaption></figure>
+<figure><img src="04-after-save.png" alt="保存后：编辑器收起，页面高度变了"><figcaption>保存路由组后，那一行回到视野 · 保存后：编辑器收起，页面高度变了</figcaption></figure>
+</main></html>

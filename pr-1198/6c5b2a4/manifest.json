@@ -1,0 +1,34 @@
+{
+  "summary": "网关开始独立处理 Codex 的会话描述请求（thread_description）：设置 › 常规 里「Codex 会话标题」下方新增一行「Codex 会话描述」，可从 Codex 自带的 ChatGPT 模型切换到 magpie 的任意模型或路由组；用量与路由中该用途显示为「描述」。",
+  "scenes": [
+    {
+      "title": "设置里的 Codex 会话描述行",
+      "shots": [
+        {
+          "file": "01-codex-descriptions-default.png",
+          "caption": "「Codex 会话标题」下方新增的「Codex 会话描述」一行",
+          "width": 2492
+        },
+        {
+          "file": "02-codex-descriptions-picker-open.png",
+          "caption": "展开的选择列表，可以看看都有哪些项",
+          "width": 2560
+        },
+        {
+          "file": "03-codex-descriptions-after-pick.png",
+          "caption": "选完之后这一行，以及它上方「Codex 会话标题」那一行",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "用量/路由页把 thread_description 记为「描述」这一处，以及描述请求真正改道后模型回答被包成 {\"description\": …} 的效果，都要有真实的 thread_description 请求才会出现；这类请求由 Codex 自己发出，沙盒现有记录里没有，因此只能看到设置页新增的这一行，看不到用量里的「描述」标签与实际改道结果。",
+  "interactive": true,
+  "pages": 1
+}

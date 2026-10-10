@@ -1,0 +1,34 @@
+{
+  "summary": "用量页「会话」页签的列表不再按会话文件最后一行的时间去猜区间，而是按 stats 返回的 keys（区间内真正有工作的会话 agent:id）来画行；同时 stats 把「说过话但没花 token」的会话也算作区间内有工作，于是 KPI、列表注脚与列表行数三者一致。",
+  "scenes": [
+    {
+      "title": "「会话」页签：会话数、行数与注脚",
+      "shots": [
+        {
+          "file": "01-sessions-tab.png",
+          "caption": "「会话」页签：上面的会话数、列表的行数与列表下方的注脚",
+          "width": 2560
+        },
+        {
+          "file": "02-sessions-rows.png",
+          "caption": "列表里的会话行",
+          "width": 2560
+        },
+        {
+          "file": "03-sessions-note.png",
+          "caption": "列表下方的注脚",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒运行的就是本 PR 的二进制，看不到改动前按 s.last 猜出来的列表（也就看不到 KPI 与行数对不上的样子），也看不到 stats 不带 keys 时回落到旧筛选的分支。沙盒的会话数据里不一定存在「最后一行是 fork 种子/设置、区间内没花钱」或「只说过话没花 token」（首请求失败的 Claude Code 会话、Cursor 对话）这类会话，所以数值在改动前后的差别、以及这些会话仍留在列表里，未必能在这份数据上复现。",
+  "interactive": true,
+  "pages": 1
+}

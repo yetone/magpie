@@ -1,0 +1,16 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1028 界面预览 · 359db65</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1028 界面预览</h1><p class="m">commit 359db65 · <a href="https://github.com/yetone/magpie/pull/1028">回到 PR</a> · 设置页「常规」里的 Codex 子代理一行改了名称（Codex 子代理可用其他模型）和说明文字，并在行内新增一条默认隐藏的提示 #codexAgentsV1Warn：当 Codex 接管的配置里显式开着它自己的 features.multi_agent_v2 时显示，且开关切到开启时还会弹出一条警告状态。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-codex-subagents-row.png" alt="设置常规页里 Codex 子代理这一行的名称、说明与开关（当前关闭）"><figcaption>设置里的 Codex 子代理一行 · 设置常规页里 Codex 子代理这一行的名称、说明与开关（当前关闭）</figcaption></figure>
+<figure><img src="02-codex-subagents-on.png" alt="点击「开启」后这一行与页面状态"><figcaption>设置里的 Codex 子代理一行 · 点击「开启」后这一行与页面状态</figcaption></figure>
+<figure><img src="03-codex-subagents-off.png" alt="点击「关闭」后这一行"><figcaption>设置里的 Codex 子代理一行 · 点击「关闭」后这一行</figcaption></figure>
+<figure><img src="04-agents-unrolled.png" alt="展开后的 Agent 列表"><figcaption>Agents 页里 Codex 一行 · 展开后的 Agent 列表</figcaption></figure>
+<figure><img src="05-codex-agent-row.png" alt="Agent 列表里 Codex 一行：它的提示（如有多 agent V2 冲突或需重启）会显示在这条状态里"><figcaption>Agents 页里 Codex 一行 · Agent 列表里 Codex 一行：它的提示（如有多 agent V2 冲突或需重启）会显示在这条状态里</figcaption></figure>
+</main></html>

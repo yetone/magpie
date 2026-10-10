@@ -1,0 +1,14 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1148 界面预览 · d182c1a</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1148 界面预览</h1><p class="m">commit d182c1a · <a href="https://github.com/yetone/magpie/pull/1148">回到 PR</a> · 改的是设置页保存代理时的行为：当更新检查此前失败、用户又改了代理，POST /api/settings 现在先调用 begin() 把状态标成「检查中」，再异步重跑检查，于是保存在后立刻读取 /api/update 的页面画出来的是正在检查，而不是那条不会再自动轮询的旧错误。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-settings-general.png" alt="打开设置后的默认标签页"><figcaption>设置里的更新检查与代理 · 打开设置后的默认标签页</figcaption></figure>
+<figure><img src="02-settings-about.png" alt="「关于」标签页里的更新检查区域"><figcaption>设置里的更新检查与代理 · 「关于」标签页里的更新检查区域</figcaption></figure>
+<figure><img src="03-settings-network.png" alt="「网络与共享」标签页里的代理设置"><figcaption>设置里的更新检查与代理 · 「网络与共享」标签页里的代理设置</figcaption></figure>
+</main></html>

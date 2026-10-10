@@ -1,0 +1,20 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#704 界面预览 · 4cb9851</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#704 界面预览</h1><p class="m">commit 4cb9851 · <a href="https://github.com/yetone/magpie/pull/704">回到 PR</a> · 用量页顶部新增「分析」入口，打开独立的「质量与分析」看板（#view-analytics）：周期/维度分段与模型、供应商、Agent 筛选，可靠性（成功率、429/5xx、错误率、异常趋势）、响应速度（TTFT P95、TPS）、费用与缓存率的 KPI 与排行条；点排行行或 KPI 进入左右两栏下钻页（左侧紧凑排行、右侧前 50 条调用，点调用在右侧内嵌路由过程），下钻页标题行新增「隐藏账号」按钮，账号打码也覆盖分析页的文本、title 与 aria-label。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-analytics-dashboard.png" alt="分析看板：周期、维度、筛选，以及可靠性、响应速度、费用与缓存"><figcaption>分析看板与筛选 · 分析看板：周期、维度、筛选，以及可靠性、响应速度、费用与缓存</figcaption></figure>
+<figure><img src="02-analytics-filter-menu.png" alt="模型筛选的候选值"><figcaption>分析看板与筛选 · 模型筛选的候选值</figcaption></figure>
+<figure><img src="03-analytics-filter-clear.png" alt="已选的模型筛选，看它上面的清空按钮"><figcaption>分析看板与筛选 · 已选的模型筛选，看它上面的清空按钮</figcaption></figure>
+<figure><img src="04-analytics-by-model.png" alt="「按模型」维度下的指标与排行"><figcaption>分析看板与筛选 · 「按模型」维度下的指标与排行</figcaption></figure>
+<figure><img src="05-drill-page.png" alt="下钻页：左侧该指标的排行，右侧前 50 条调用"><figcaption>下钻页与调用的路由过程 · 下钻页：左侧该指标的排行，右侧前 50 条调用</figcaption></figure>
+<figure><img src="06-call-route-inline.png" alt="这条调用在右侧展开的请求过程"><figcaption>下钻页与调用的路由过程 · 这条调用在右侧展开的请求过程</figcaption></figure>
+<figure><img src="07-call-route-inline.png" alt="打开这条调用后右侧显示的内容"><figcaption>下钻页与调用的路由过程 · 打开这条调用后右侧显示的内容</figcaption></figure>
+<figure><img src="08-drill-back-to-calls.png" alt="返回后的下钻页调用列表"><figcaption>下钻页与调用的路由过程 · 返回后的下钻页调用列表</figcaption></figure>
+<figure><img src="09-analytics-restored.png" alt="回到看板后的页面"><figcaption>下钻页与调用的路由过程 · 回到看板后的页面</figcaption></figure>
+</main></html>

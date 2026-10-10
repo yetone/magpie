@@ -1,0 +1,44 @@
+{
+  "summary": "这个 PR 给会话子系统接入了 Reasonix：用量 › 会话页在存在无法读取的 Reasonix 存储时，把统计行（#sessNote）和空列表文案换成兼容性提示；用量历史不完整的会话会在会话行和会话详情里显示「用量历史不完整」及一行说明，并补上中/日/德翻译。",
+  "scenes": [
+    {
+      "title": "用量 › 会话页的提示位置",
+      "shots": [
+        {
+          "file": "01-sessions-tab.png",
+          "caption": "用量 › 会话：会话统计行与列表",
+          "width": 2560
+        },
+        {
+          "file": "02-sess-note.png",
+          "caption": "会话统计行：本次改动改的就是这一行的文案",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "会话行与会话详情里的用量标记",
+      "shots": [
+        {
+          "file": "03-session-row.png",
+          "caption": "会话列表中的一行：标题、模型、用量与费用",
+          "width": 2560
+        },
+        {
+          "file": "04-sess-detail.png",
+          "caption": "会话详情面板顶部：用量说明加在这一段的前面",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里没有安装 Reasonix，也没有它的会话文件或存储目录，所以 unsupported_reasonix 与 usage_incomplete 都不会为真：新增的「有 N 个 Reasonix 会话存储存在无法读取或未知的数据」提示和会话行/详情里的「用量历史不完整」都不会出现，Agent 筛选条里也没有 Reasonix 这一项。场景只能展示这些文案会落到的位置（会话统计行、会话行、会话详情），内容仍是沙盒里 Claude Code、Codex 等既有会话。",
+  "interactive": true,
+  "pages": 1
+}

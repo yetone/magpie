@@ -1,0 +1,54 @@
+{
+  "summary": "在 Agent 列表页脚的折叠控件旁新增「管理」按钮，点开批量管理对话框：可按名称/ID 搜索、全选或反选搜索结果、选择未接入项、清空选择，并批量隐藏或取消隐藏所选 Agent，每行显示可见状态与已选数量。另外 Plugins 页的 npm 搜索结果改为原位更新，避免建议卡片在点击瞬间被重建。",
+  "scenes": [
+    {
+      "title": "Agent 列表页脚的「管理」入口",
+      "shots": [
+        {
+          "file": "01-agents-footer-manage.png",
+          "caption": "Agent 列表底部的页脚：折叠控件与新增的「管理」按钮",
+          "width": 2492
+        },
+        {
+          "file": "02-agents-manage-dialog.png",
+          "caption": "批量管理对话框：搜索框、选择按钮、已选数量与每行状态",
+          "width": 1296
+        }
+      ]
+    },
+    {
+      "title": "批量选择与隐藏所选",
+      "shots": [
+        {
+          "file": "03-agents-manage-selected.png",
+          "caption": "选择后各行复选框与「已选择 N 个 Agent」",
+          "width": 1296
+        },
+        {
+          "file": "04-agents-manage-search.png",
+          "caption": "搜索后的行与已选数量",
+          "width": 1296
+        },
+        {
+          "file": "05-agents-manage-hidden.png",
+          "caption": "保存后对话框中的提示与各行状态",
+          "width": 1296
+        },
+        {
+          "file": "06-agents-list-after-hide.png",
+          "caption": "关闭对话框后的 Agent 列表",
+          "width": 2496
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "Plugins 页「搜索结果回答到达时不丢掉建议卡片的点击」是时序竞态修复，沙盒里难以稳定复现该指针按下/抬起之间的响应到达时刻，故未录制；批量隐藏的完整效果需要较多可见行与已隐藏项对比，沙盒中 Agent 数量有限。",
+  "interactive": true,
+  "pages": 1
+}

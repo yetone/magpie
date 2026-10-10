@@ -1,0 +1,44 @@
+{
+  "summary": "该 diff 给用量页和托盘面板的每个额度窗口加了预测：窗口上方一行结论（撑得到重置 · 余量倍数、多久后用完、已用完）与领先/落后对比，配一张该窗口自己的走势图（实际剩余、匀速消耗、按当前速度预测），图例从每张卡片移到「额度」标题栏统一显示，托盘卡片上则是一行一窗口的紧凑结论。",
+  "scenes": [
+    {
+      "title": "用量页：每个额度窗口的预测",
+      "shots": [
+        {
+          "file": "01-usage-quota-legend.png",
+          "caption": "「额度」标题栏：新增的统一图例和走势范围选择",
+          "width": 2560
+        },
+        {
+          "file": "02-usage-codex-windows.png",
+          "caption": "Codex 卡片：每个额度窗口上方的预测结论与下方的走势图",
+          "width": 1120
+        },
+        {
+          "file": "03-usage-range-2d.png",
+          "caption": "切成 2 天后：走势图重画，窗口上方的预测结论仍在该处",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "托盘面板的额度预测行",
+      "shots": [
+        {
+          "file": "04-panel-verdicts.png",
+          "caption": "额度卡片上每个窗口一行的预测结论",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "本沙箱的 Sub2API Relay 窗口没有额度历史，卡片上只画额度条、看不到它三个美元窗口（5 小时 / 1 天 / 7 天）的预测与走势；卡片墙按数量收窄列数（六张卡排三列）在本沙箱的卡片数下也看不出来；德语托盘判词换行的修复需要把界面语言切到 Deutsch 才看得到，本片段以 zh-CN 录制。",
+  "interactive": true,
+  "pages": 2
+}

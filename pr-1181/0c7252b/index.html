@@ -1,0 +1,13 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1181 界面预览 · 0c7252b</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1181 界面预览</h1><p class="m">commit 0c7252b · <a href="https://github.com/yetone/magpie/pull/1181">回到 PR</a> · 路由页在实时舞台下方新增「当前额度」区块：为当前舞台上的供应商显示用量页那套额度卡片（窗口、重置时间、读数时间、已用/剩余偏好），共享用量页的额度缓存与加载器并每分钟刷新；选中历史请求、过去的日期或重放时该区块隐藏（并保留占位），读取失败时保留上次卡片并显示不可用提示。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-routing-live-stage.png" alt="路由页：网关实时决策的舞台"><figcaption>路由页舞台下方的「当前额度」区块 · 路由页：网关实时决策的舞台</figcaption></figure>
+<figure><img src="02-below-the-stage.png" alt="舞台下方、统计与请求日志之间的「当前额度」区块"><figcaption>路由页舞台下方的「当前额度」区块 · 舞台下方、统计与请求日志之间的「当前额度」区块</figcaption></figure>
+</main></html>

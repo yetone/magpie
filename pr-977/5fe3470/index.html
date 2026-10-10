@@ -1,0 +1,15 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#977 界面预览 · 5fe3470</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#977 界面预览</h1><p class="m">commit 5fe3470 · <a href="https://github.com/yetone/magpie/pull/977">回到 PR</a> · 该 diff 给用量页和托盘面板的每个额度窗口加了预测：窗口上方一行结论（撑得到重置 · 余量倍数、多久后用完、已用完）与领先/落后对比，配一张该窗口自己的走势图（实际剩余、匀速消耗、按当前速度预测），图例从每张卡片移到「额度」标题栏统一显示，托盘卡片上则是一行一窗口的紧凑结论。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-usage-quota-legend.png" alt="「额度」标题栏：新增的统一图例和走势范围选择"><figcaption>用量页：每个额度窗口的预测 · 「额度」标题栏：新增的统一图例和走势范围选择</figcaption></figure>
+<figure><img src="02-usage-codex-windows.png" alt="Codex 卡片：每个额度窗口上方的预测结论与下方的走势图"><figcaption>用量页：每个额度窗口的预测 · Codex 卡片：每个额度窗口上方的预测结论与下方的走势图</figcaption></figure>
+<figure><img src="03-usage-range-2d.png" alt="切成 2 天后：走势图重画，窗口上方的预测结论仍在该处"><figcaption>用量页：每个额度窗口的预测 · 切成 2 天后：走势图重画，窗口上方的预测结论仍在该处</figcaption></figure>
+<figure><img src="04-panel-verdicts.png" alt="额度卡片上每个窗口一行的预测结论"><figcaption>托盘面板的额度预测行 · 额度卡片上每个窗口一行的预测结论</figcaption></figure>
+</main></html>

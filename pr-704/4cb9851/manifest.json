@@ -1,0 +1,71 @@
+{
+  "summary": "用量页顶部新增「分析」入口，打开独立的「质量与分析」看板（#view-analytics）：周期/维度分段与模型、供应商、Agent 筛选，可靠性（成功率、429/5xx、错误率、异常趋势）、响应速度（TTFT P95、TPS）、费用与缓存率的 KPI 与排行条；点排行行或 KPI 进入左右两栏下钻页（左侧紧凑排行、右侧前 50 条调用，点调用在右侧内嵌路由过程），下钻页标题行新增「隐藏账号」按钮，账号打码也覆盖分析页的文本、title 与 aria-label。",
+  "scenes": [
+    {
+      "title": "分析看板与筛选",
+      "shots": [
+        {
+          "file": "01-analytics-dashboard.png",
+          "caption": "分析看板：周期、维度、筛选，以及可靠性、响应速度、费用与缓存",
+          "width": 2560
+        },
+        {
+          "file": "02-analytics-filter-menu.png",
+          "caption": "模型筛选的候选值",
+          "width": 1120
+        },
+        {
+          "file": "03-analytics-filter-clear.png",
+          "caption": "已选的模型筛选，看它上面的清空按钮",
+          "width": 1120
+        },
+        {
+          "file": "04-analytics-by-model.png",
+          "caption": "「按模型」维度下的指标与排行",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "下钻页与调用的路由过程",
+      "shots": [
+        {
+          "file": "05-drill-page.png",
+          "caption": "下钻页：左侧该指标的排行，右侧前 50 条调用",
+          "width": 2560
+        },
+        {
+          "file": "06-call-route-inline.png",
+          "caption": "这条调用在右侧展开的请求过程",
+          "width": 2560
+        },
+        {
+          "file": "07-call-route-inline.png",
+          "caption": "打开这条调用后右侧显示的内容",
+          "width": 2124
+        },
+        {
+          "file": "08-drill-back-to-calls.png",
+          "caption": "返回后的下钻页调用列表",
+          "width": 2560
+        },
+        {
+          "file": "09-analytics-restored.png",
+          "caption": "回到看板后的页面",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "下钻页与调用的路由过程 · click #rtBackAnalytics: nothing visible matches #rtBackAnalytics (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述说下钻页点击调用后右侧切换为「单列 KV 详情」，本次 diff 里点击调用是在右侧内嵌这条调用的路由过程（Routing 舞台与请求经过），没有 KV 详情列表。",
+  "unseen": "下钻页「隐藏账号」按钮的打码效果只在数据里出现邮箱/账号名（如 host as 邮箱）时才看得出来，沙盒的分析数据里不保证有这类文本，因此只展示按钮本身。",
+  "interactive": true,
+  "pages": 1
+}

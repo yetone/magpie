@@ -1,0 +1,48 @@
+{
+  "summary": "设置 →「同步与备份」把 GitHub 加为第三种同步后端：条目名改为「WebDAV / S3 / GitHub 同步」，同步表单的「同步到」多出 GitHub 一项，选中后显示仓库、分支、文件夹和独立的 GitHub Token 字段，并有仓库格式与 Token 的校验提示。",
+  "scenes": [
+    {
+      "title": "同步与备份里的 GitHub",
+      "shots": [
+        {
+          "file": "01-sync-row-name.png",
+          "caption": "同步条目的名称与说明",
+          "width": 2492
+        },
+        {
+          "file": "02-github-sync-fields.png",
+          "caption": "选 GitHub 后表单里的字段",
+          "width": 2492
+        }
+      ]
+    },
+    {
+      "title": "仓库地址的校验提示",
+      "shots": [
+        {
+          "file": "03-github-repo-error.png",
+          "caption": "表单底部的提示",
+          "width": 2492
+        },
+        {
+          "file": "04-github-repo-filled.png",
+          "caption": "填好仓库后的表单",
+          "width": 2492
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "仓库地址的校验提示 · click .sync-form .segs .opt: nothing visible matches .sync-form .segs .opt with \"GitHub\" (0 in the page)",
+    "仓库地址的校验提示 · click .sync-form .segs .opt: nothing visible matches .sync-form .segs .opt with \"GitHub\" (0 in the page)",
+    "仓库地址的校验提示 · click .sync-form .segs .opt: nothing visible matches .sync-form .segs .opt with \"GitHub\" (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里没有 GitHub 仓库和 Token，也没有开启任何同步，所以看不到 GitHub 同步真正跑起来之后的样子：状态行里的仓库·分支与同步时间/错误、同步到 GitHub 后「WebDAV / S3 设置已保留」的提示，以及空仓库首次同步、分支不存在等来自 GitHub 的报错。下面只能展示设置里的表单与本地校验。",
+  "interactive": true,
+  "pages": 1
+}

@@ -1,0 +1,51 @@
+{
+  "summary": "设置页「常规」里的 Codex 子代理一行改了名称（Codex 子代理可用其他模型）和说明文字，并在行内新增一条默认隐藏的提示 #codexAgentsV1Warn：当 Codex 接管的配置里显式开着它自己的 features.multi_agent_v2 时显示，且开关切到开启时还会弹出一条警告状态。",
+  "scenes": [
+    {
+      "title": "设置里的 Codex 子代理一行",
+      "shots": [
+        {
+          "file": "01-codex-subagents-row.png",
+          "caption": "设置常规页里 Codex 子代理这一行的名称、说明与开关（当前关闭）",
+          "width": 2560
+        },
+        {
+          "file": "02-codex-subagents-on.png",
+          "caption": "点击「开启」后这一行与页面状态",
+          "width": 2560
+        },
+        {
+          "file": "03-codex-subagents-off.png",
+          "caption": "点击「关闭」后这一行",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "Agents 页里 Codex 一行",
+      "shots": [
+        {
+          "file": "04-agents-unrolled.png",
+          "caption": "展开后的 Agent 列表",
+          "width": 2560
+        },
+        {
+          "file": "05-codex-agent-row.png",
+          "caption": "Agent 列表里 Codex 一行：它的提示（如有多 agent V2 冲突或需重启）会显示在这条状态里",
+          "width": 2492
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "Agents 页里 Codex 一行 · click div.row.agent[data-id=\"codex\"] button.ag-link: nothing visible matches div.row.agent[data-id=\"codex\"] button.ag-link (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "行内提示 #codexAgentsV1Warn 的文字只有在 Codex 路由到的 config.toml 里显式把 features.multi_agent_v2 打开（或读不到该配置）时才会出现，沙盒里 Codex 的配置没有这个键，所以看不到提示本身，也看不到开启开关时那条警告状态；Agents 页里 Codex 行上与之合并的同一提示（与「重启 Codex」建议并存）同样看不到。",
+  "interactive": true,
+  "pages": 3
+}

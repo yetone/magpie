@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#616 界面预览 · 31dc23d</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#616 界面预览</h1><p class="m">commit 31dc23d · <a href="https://github.com/yetone/magpie/pull/616">回到 PR</a> · 在 Agent 页 Claude Code 行新增了一个 passthrough 字段（可设为 on），开启后本机 Claude Code 不再写入 ANTHROPIC_AUTH_TOKEN，从而保留它自己的登录，让 Anthropic 模型由 Claude Code 直连；网关侧对这类请求走 Anthropic 直通。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-claude-row-before.png" alt="Claude Code 这一行的各个字段，passthrough 当前是什么"><figcaption>Claude Code 的 passthrough 字段 · Claude Code 这一行的各个字段，passthrough 当前是什么</figcaption></figure>
+<figure><img src="02-claude-connected.png" alt="接入后 Claude Code 这一行"><figcaption>Claude Code 的 passthrough 字段 · 接入后 Claude Code 这一行</figcaption></figure>
+<figure><img src="03-claude-detail.png" alt="详情里 Claude Code 的全部字段"><figcaption>Claude Code 的 passthrough 字段 · 详情里 Claude Code 的全部字段</figcaption></figure>
+<figure><img src="04-passthrough-options.png" alt="passthrough 弹出的选项与说明文字"><figcaption>Claude Code 的 passthrough 字段 · passthrough 弹出的选项与说明文字</figcaption></figure>
+<figure><img src="05-passthrough-on.png" alt="选过之后，Claude Code 行上 passthrough 显示的值"><figcaption>Claude Code 的 passthrough 字段 · 选过之后，Claude Code 行上 passthrough 显示的值</figcaption></figure>
+<figure><img src="06-passthrough-reopened.png" alt="重新打开后的选项列表"><figcaption>Claude Code 的 passthrough 字段 · 重新打开后的选项列表</figcaption></figure>
+</main></html>

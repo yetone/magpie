@@ -1,0 +1,14 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1251 界面预览 · fcab202</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1251 界面预览</h1><p class="m">commit fcab202 · <a href="https://github.com/yetone/magpie/pull/1251">回到 PR</a> · 用量页「会话」页签的列表不再按会话文件最后一行的时间去猜区间，而是按 stats 返回的 keys（区间内真正有工作的会话 agent:id）来画行；同时 stats 把「说过话但没花 token」的会话也算作区间内有工作，于是 KPI、列表注脚与列表行数三者一致。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-sessions-tab.png" alt="「会话」页签：上面的会话数、列表的行数与列表下方的注脚"><figcaption>「会话」页签：会话数、行数与注脚 · 「会话」页签：上面的会话数、列表的行数与列表下方的注脚</figcaption></figure>
+<figure><img src="02-sessions-rows.png" alt="列表里的会话行"><figcaption>「会话」页签：会话数、行数与注脚 · 列表里的会话行</figcaption></figure>
+<figure><img src="03-sessions-note.png" alt="列表下方的注脚"><figcaption>「会话」页签：会话数、行数与注脚 · 列表下方的注脚</figcaption></figure>
+</main></html>

@@ -1,0 +1,34 @@
+{
+  "summary": "会话页的 Claude Code 项目分组行新增「迁移项目会话」入口，点开一个对话框：显示原项目路径与警告说明、可填写新的绝对路径，点「预览迁移」后同一按钮变为「确认迁移」，并配有全套中文文案。",
+  "scenes": [
+    {
+      "title": "会话页的迁移入口与对话框",
+      "shots": [
+        {
+          "file": "01-sessions-claude-projects.png",
+          "caption": "会话页：Claude Code 的项目分组列表",
+          "width": 2560
+        },
+        {
+          "file": "02-relocate-dialog.png",
+          "caption": "对话框：原路径、关闭客户端的说明与新路径输入框",
+          "width": 1296
+        },
+        {
+          "file": "03-relocate-after-preview.png",
+          "caption": "点击「预览迁移」后对话框里的内容",
+          "width": 1296
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里的 Claude Code 会话是虚构数据，其项目路径对应的目标目录无法确定，所以不能真正完成一次迁移：对话框里「预览」显示会话数/大小、「确认迁移」按钮、以及迁移完成后的备份路径提示在本沙盒都触发不了（能看到的是对话框本身和「预览」失败时的提示）。另外该入口只在 Claude Code 且整个项目分组的会话都可写、WSL 分布一致时出现，是否出现取决于沙盒数据；WSL 分布那一支需要 Windows 才能看到。",
+  "interactive": true,
+  "pages": 2
+}

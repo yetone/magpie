@@ -1,0 +1,39 @@
+{
+  "summary": "插件页「已安装」列表每行的订阅名改为读缓存（不再逐个插件现场问厂商拉模型列表），并且名字还没到时不再写「没有 magpie 能用的登录」；资源库 RTK 页把「包管理器有没有这个版本」的检查挪到首屏之后的后台问一次，本机 agent 探测也从两遍并为一遍。",
+  "scenes": [
+    {
+      "title": "插件页「已安装」列表",
+      "shots": [
+        {
+          "file": "01-plugins-installed-list.png",
+          "caption": "插件页的「已安装」列表：每行写它登录的订阅，以及写不写「没有 magpie 能用的登录」",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "资源库 RTK 标签",
+      "shots": [
+        {
+          "file": "02-rtk-first-open.png",
+          "caption": "第一次打开 RTK 标签时的卡片",
+          "width": 2560
+        },
+        {
+          "file": "03-rtk-second-open.png",
+          "caption": "再次打开 RTK 标签时的卡片",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述里提到 RTK 页上还有「Check again」可以立即刷新，但 diff 没有新增或改动这个按钮，视频里不会去找它、也不展示它。",
+  "unseen": "本沙盒不是 Windows、没有 winget，「等待 winget」的灰色标签不会出现；RTK 页首屏 3.9 秒→1.6 秒、已安装列表 2.2 秒→13 毫秒都是耗时差别，截图看不出来。另外「已安装」列表里「名字还没到、于是什么都不说」的那一行需要有一个刚装上、缓存里还没名字的插件，沙盒的插件列表未必有这种行；插件页默认停在哪个标签页也由沙盒决定，若不在「已安装」上，需要先切过去。",
+  "interactive": true,
+  "pages": 2
+}

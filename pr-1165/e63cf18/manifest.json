@@ -1,0 +1,71 @@
+{
+  "summary": "本地预设（Ollama、LM Studio、oMLX、MLX-Serve）的添加/编辑编辑器在密钥下方新增「服务器地址」区（默认折叠），可把各 API 的 URL 移到别的端口或另一台电脑上：终结点预览随所填地址变化，测试与保存按新地址走，地址不合法时保存被拒并展开该区；同时 LM Studio/oMLX/MLX-Serve 的说明改为「local server, port …by default」。",
+  "scenes": [
+    {
+      "title": "本地预设填服务器地址并添加",
+      "shots": [
+        {
+          "file": "01-add-sheet-local-presets.png",
+          "caption": "添加面板里的本地预设",
+          "width": 2496
+        },
+        {
+          "file": "02-editor-address-folded.png",
+          "caption": "Ollama 编辑器：密钥下方折叠的「服务器地址」",
+          "width": 1296
+        },
+        {
+          "file": "03-editor-address-folded.png",
+          "caption": "Ollama 编辑器：密钥下方折叠的「服务器地址」",
+          "width": 1296
+        },
+        {
+          "file": "04-server-address-open.png",
+          "caption": "地址为空，占位符是预设默认地址",
+          "width": 1296
+        },
+        {
+          "file": "05-endpoints-after-address.png",
+          "caption": "填入地址后的编辑器与终结点预览",
+          "width": 1296
+        },
+        {
+          "file": "06-providers-after-add.png",
+          "caption": "添加后的供应商列表",
+          "width": 2496
+        }
+      ]
+    },
+    {
+      "title": "编辑已保存的本地预设：地址、测试与非法地址",
+      "shots": [
+        {
+          "file": "07-editor-address-open-by-default.png",
+          "caption": "再次打开：地址区展开，显示保存的地址",
+          "width": 1296
+        },
+        {
+          "file": "08-test-with-typed-address.png",
+          "caption": "测试用编辑器里的地址发起",
+          "width": 1296
+        },
+        {
+          "file": "09-address-refused.png",
+          "caption": "点「保存」之后的编辑器",
+          "width": 1296
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "本地预设填服务器地址并添加 · click .editor details.more summary: nothing visible matches .editor details.more summary (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "TUI（新增本地预设先问地址、w 改地址）和 CLI 的 url=… 用法只在其自身终端里，浏览器沙盒看不到；本沙盒原本没有本地预设供应商，编辑器对已改地址的供应商默认展开这一状态需先添加一个本地预设才看得到（片中通过添加 Ollama 展示），MLX-Serve 预设未出现在沙盒数据里。",
+  "interactive": true,
+  "pages": 1
+}

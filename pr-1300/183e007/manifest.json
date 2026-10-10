@@ -1,0 +1,34 @@
+{
+  "summary": "这次改动只换了供应商账号行上「用量上限」胶囊（button.acap）的悬浮提示文案：英文改为「以最近一次读数为准（读数约每分钟刷新一次，可能已是一两分钟前的读数）」再去讲超过上限后的处理，简中、繁中、日文、德文和测试里的字符串清单同步更新。",
+  "scenes": [
+    {
+      "title": "用量上限胶囊的新提示文案",
+      "shots": [
+        {
+          "file": "01-codex-account-rows.png",
+          "caption": "Codex 账号行和行内的用量上限胶囊",
+          "width": 2560
+        },
+        {
+          "file": "02-cap-pill-tooltip.png",
+          "caption": "悬停后胶囊显示的提示文字",
+          "width": 2560
+        },
+        {
+          "file": "03-cap-pill-menu.png",
+          "caption": "胶囊打开的用量上限菜单",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述里引用英文文案为「…as last read (readings refresh about once a minute, so a window can run past it first)」，实际 diff 的 app.js 里多了一句「and can be a minute or two old」（读数可能已有一两分钟旧）；另外描述提到的内部 provider/routing.go、reference.md 等均不在本次 diff 内。",
+  "unseen": "改动只是一条浏览器原生 title 悬浮提示，录屏/截图不一定能把它拍出来，得靠悬停这一动作去读；而且新文案只在账号已设置用量上限时出现，如果沙盒里的 Codex 账号当前没有上限，胶囊显示的是未改动的「无上限」那条提示。",
+  "interactive": true,
+  "pages": 1
+}

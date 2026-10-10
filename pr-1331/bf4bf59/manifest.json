@@ -1,0 +1,39 @@
+{
+  "summary": "在设置 ›「网络与共享」里新增「Microsoft 365」一节：一个关闭/开启的分段开关，开启后显示仅限本机的 HTTPS 网关地址、证书信任按钮、网关密钥（可复制）以及自动加入的允许网页，并补齐了 zh/zh-TW/ja/de 的对应文案。",
+  "scenes": [
+    {
+      "title": "设置里的 Microsoft 365 一节",
+      "shots": [
+        {
+          "file": "01-m365-off.png",
+          "caption": "关闭状态下的「Microsoft 365」一节",
+          "width": 2496
+        },
+        {
+          "file": "02-m365-on.png",
+          "caption": "点击「开启」后的「Microsoft 365」一节",
+          "width": 2496
+        }
+      ]
+    },
+    {
+      "title": "复制网关密钥",
+      "shots": [
+        {
+          "file": "03-m365-copy-key.png",
+          "caption": "点击「复制密钥」后的页面",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "证书信任的安装/移除会写入系统信任库，本次不执行；Office 加载项真实经由 https://127.0.0.1:8787 调用网关、以及该地址对浏览器返回的 CORS 头，也不在界面里显示——录屏只展示设置页里这一节的状态。",
+  "interactive": true,
+  "pages": 2
+}

@@ -1,0 +1,54 @@
+{
+  "summary": "路由页的实时卡片改为可折叠：请求路径整行成为「展开详情/收起详情」控件，展开后才显示决策原因、用途说明与「当前路由策略说明」；上下文窗口只留一个可点击标题（已用/窗口、占比、缓存与占用条），展开才构建网格与内容列表，两处折叠状态各自记住。性能指标上移到请求路径之前，常规成功文案与重复的账号/模型名被去掉。",
+  "scenes": [
+    {
+      "title": "请求详情的展开与收起",
+      "shots": [
+        {
+          "file": "01-routing-request-closed.png",
+          "caption": "路由卡片收起时：指标在上，请求路径渐隐成一行，右侧写着「展开详情」",
+          "width": 2524
+        },
+        {
+          "file": "02-routing-request-open.png",
+          "caption": "展开后出现的决策原因、用途说明与「当前路由策略说明」",
+          "width": 2524
+        },
+        {
+          "file": "03-routing-request-closed-again.png",
+          "caption": "收起后回到一行渐隐的请求路径，性能指标仍然可见",
+          "width": 2524
+        }
+      ]
+    },
+    {
+      "title": "上下文窗口的展开与收起",
+      "shots": [
+        {
+          "file": "04-routing-context-closed.png",
+          "caption": "上下文收起时：只有一行标题，带已用/窗口、占比、缓存与占用条",
+          "width": 2524
+        },
+        {
+          "file": "05-routing-context-open.png",
+          "caption": "展开后构建出的提示词网格与内容列表，标题里不再重复计数",
+          "width": 2524
+        },
+        {
+          "file": "06-routing-context-closed-again.png",
+          "caption": "收起后只剩标题一行与占用条，网格与列表已移除",
+          "width": 2524
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "卡片宽度 ≥1280px 时「路由阶段与请求故事并列」的布局，以及上下文概述与内容列表在卡片宽 ≥800px 时并排、两处分隔线对齐的效果：录制固定在 1280×800，卡片本身窄于 1280px，只能看到上下堆叠的布局。沙盒当前列表里只有成功的 curl 请求，没有 429/502 失败或「实际服务模型不同」的请求，因此「收起时失败与改道行仍完整可读」看不到；从用量页「上下文」入口临时展开单个请求、以及折叠偏好跨刷新保留也没有演示。",
+  "interactive": true,
+  "pages": 1
+}

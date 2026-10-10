@@ -1,0 +1,13 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1042 界面预览 · d704591</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1042 界面预览</h1><p class="m">commit d704591 · <a href="https://github.com/yetone/magpie/pull/1042">回到 PR</a> · macOS 26 上主窗口不再用带工具栏的标题栏：窗口圆角变成普通标题栏那种（TextEdit 的小圆角），同时把红绿灯位置、标题栏高度、sheet 起点和「另一应用在前时第一次按下即拖动窗口」的判定保留在原来工具栏的位置；判定在运行时读 macOS 版本、SDK 与 Info.plist，只在 macOS 26 且以 macOS 26 SDK 链接时生效。页面本身没有任何改动。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-main-window-header.png" alt="主窗口打开在 Agent 页：请注意窗口最顶部，标题栏与页头/标签栏叠在同一处"><figcaption>主窗口顶部（标题栏）区域 · 主窗口打开在 Agent 页：请注意窗口最顶部，标题栏与页头/标签栏叠在同一处</figcaption></figure>
+<figure><img src="02-header-after-switch.png" alt="切换标签后看一眼窗口顶部的页头与标签栏"><figcaption>主窗口顶部（标题栏）区域 · 切换标签后看一眼窗口顶部的页头与标签栏</figcaption></figure>
+</main></html>

@@ -1,0 +1,44 @@
+{
+  "summary": "局域网共享这一行改了：开关不再轮换或重启用密钥（密钥库为空时才自动创建第一个默认密钥），共享开启时行内多出「网关密钥」按钮跳到网关页；密钥都不可用时在开关旁显示提示文案（role=alert）并本地化。网关页密钥列表为空时的占位改用应用统一的 empty-state 样式。",
+  "scenes": [
+    {
+      "title": "局域网共享行新增「网关密钥」入口",
+      "shots": [
+        {
+          "file": "01-lan-row-before.png",
+          "caption": "共享关闭时的这一行",
+          "width": 2492
+        },
+        {
+          "file": "02-lan-row-after-on.png",
+          "caption": "开启共享后这一行的样子",
+          "width": 2492
+        },
+        {
+          "file": "03-gateway-keys-from-sharing.png",
+          "caption": "跳转后网关页的网关密钥列表",
+          "width": 2496
+        }
+      ]
+    },
+    {
+      "title": "来回开关共享后的网关密钥列表",
+      "shots": [
+        {
+          "file": "04-gateway-keys-after-toggles.png",
+          "caption": "反复开关共享后的网关密钥列表",
+          "width": 2496
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述说「Key management stays available before sharing」（开启共享前仍可管理密钥），但 diff 里设置页的「网关密钥」入口只在共享已开启时才追加到共享行（s.lan 时才 append），共享关闭时该入口不存在。",
+  "unseen": "两点看不到：1) 密钥都不可用时的提示（API 返回 lan_key_required 时共享行副标题变红并 role=alert），沙盒里没有“所有网关密钥都被停用或凭据为空”的密钥库，只有把唯一密钥停用才可能出现，沙盒里没有这样的数据；2) 网关密钥列表的 empty-state 空状态：密钥库为空时开启共享会先创建第一个密钥，所以列表在可见时不会是空的，这处样式改动在沙盒里无法呈现。",
+  "interactive": true,
+  "pages": 1
+}

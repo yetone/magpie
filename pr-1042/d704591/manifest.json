@@ -1,0 +1,29 @@
+{
+  "summary": "macOS 26 上主窗口不再用带工具栏的标题栏：窗口圆角变成普通标题栏那种（TextEdit 的小圆角），同时把红绿灯位置、标题栏高度、sheet 起点和「另一应用在前时第一次按下即拖动窗口」的判定保留在原来工具栏的位置；判定在运行时读 macOS 版本、SDK 与 Info.plist，只在 macOS 26 且以 macOS 26 SDK 链接时生效。页面本身没有任何改动。",
+  "scenes": [
+    {
+      "title": "主窗口顶部（标题栏）区域",
+      "shots": [
+        {
+          "file": "01-main-window-header.png",
+          "caption": "主窗口打开在 Agent 页：请注意窗口最顶部，标题栏与页头/标签栏叠在同一处",
+          "width": 2560
+        },
+        {
+          "file": "02-header-after-switch.png",
+          "caption": "切换标签后看一眼窗口顶部的页头与标签栏",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "改动全在原生窗口层，页面里没有可见的 CSS/标记/文本差异：窗口圆角大小、header 里红绿灯的位置、sheet（文件夹选择器）从标题栏下方开始、以及另一应用在前时在 32–66pt 区域按下即拖动窗口，都只有在 macOS 26（且程序以 macOS 26 SDK 链接）上运行真实 magpie 窗口时才看得出；旧设计、从右到左界面和全屏时窗口保持原样，也无测试之外的可见变化。本沙箱是在浏览器里渲染 1280x800 的页面，既看不到系统窗口的圆角，也看不到红绿灯，只能展示它们所在的窗口顶部（页头/标签栏）区域。",
+  "interactive": true,
+  "pages": 2
+}

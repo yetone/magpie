@@ -1,0 +1,34 @@
+{
+  "summary": "改的是设置页保存代理时的行为：当更新检查此前失败、用户又改了代理，POST /api/settings 现在先调用 begin() 把状态标成「检查中」，再异步重跑检查，于是保存在后立刻读取 /api/update 的页面画出来的是正在检查，而不是那条不会再自动轮询的旧错误。",
+  "scenes": [
+    {
+      "title": "设置里的更新检查与代理",
+      "shots": [
+        {
+          "file": "01-settings-general.png",
+          "caption": "打开设置后的默认标签页",
+          "width": 2560
+        },
+        {
+          "file": "02-settings-about.png",
+          "caption": "「关于」标签页里的更新检查区域",
+          "width": 2560
+        },
+        {
+          "file": "03-settings-network.png",
+          "caption": "「网络与共享」标签页里的代理设置",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里无法把更新检查稳定地置于失败（error）状态，也无法确定新的代理是否能让检查成功，因此「改代理后旧错误立刻变成正在检查」这一即时切换本身拍不出来；只能展示设置里会发生这件事的两个位置（更新检查所在的标签页与代理设置所在的标签页），以及保存前后的页面状态由评审者自行判断。",
+  "interactive": true,
+  "pages": 1
+}

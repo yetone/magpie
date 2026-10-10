@@ -1,0 +1,29 @@
+{
+  "summary": "该 PR 把 OpenClaw 接入 Agent 页：未安装时出现在「安装其他 Agent」列表中，给出 shell/PowerShell 与 npm 两条带复制按钮的安装命令并使用官方彩色图标；已接入时用同一套连接开关，并提示在 OpenClaw 的 /model 里选模型。同时为只读配置和 $include 配置补了简中、繁中、日文、德文错误文案。",
+  "scenes": [
+    {
+      "title": "「安装其他 Agent」里的 OpenClaw",
+      "shots": [
+        {
+          "file": "01-install-folded.png",
+          "caption": "展开前的「安装其他 Agent」条目",
+          "width": 2496
+        },
+        {
+          "file": "02-openclaw-install-list.png",
+          "caption": "展开后的安装列表，OpenClaw 一行及其命令与复制按钮",
+          "width": 2496
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里没有安装 OpenClaw CLI、也没有 .openclaw 配置，所以已安装/已接入形态看不到：Agent 列表中的 OpenClaw 行、官方彩色图标在列表与面板里的渲染、连接开关换成「已接入 · 在 /model 中选择模型」后的文案，以及模型下拉里 magpie 的模型与 OpenClaw 自有模型的合并结果。两条新增错误文案（只读配置、$include 分文件配置）同样无法在这里触发。",
+  "interactive": true,
+  "pages": 1
+}

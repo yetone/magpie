@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1354 界面预览 · b60224b</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1354 界面预览</h1><p class="m">commit b60224b · <a href="https://github.com/yetone/magpie/pull/1354">回到 PR</a> · 路由页的实时卡片改为可折叠：请求路径整行成为「展开详情/收起详情」控件，展开后才显示决策原因、用途说明与「当前路由策略说明」；上下文窗口只留一个可点击标题（已用/窗口、占比、缓存与占用条），展开才构建网格与内容列表，两处折叠状态各自记住。性能指标上移到请求路径之前，常规成功文案与重复的账号/模型名被去掉。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-routing-request-closed.png" alt="路由卡片收起时：指标在上，请求路径渐隐成一行，右侧写着「展开详情」"><figcaption>请求详情的展开与收起 · 路由卡片收起时：指标在上，请求路径渐隐成一行，右侧写着「展开详情」</figcaption></figure>
+<figure><img src="02-routing-request-open.png" alt="展开后出现的决策原因、用途说明与「当前路由策略说明」"><figcaption>请求详情的展开与收起 · 展开后出现的决策原因、用途说明与「当前路由策略说明」</figcaption></figure>
+<figure><img src="03-routing-request-closed-again.png" alt="收起后回到一行渐隐的请求路径，性能指标仍然可见"><figcaption>请求详情的展开与收起 · 收起后回到一行渐隐的请求路径，性能指标仍然可见</figcaption></figure>
+<figure><img src="04-routing-context-closed.png" alt="上下文收起时：只有一行标题，带已用/窗口、占比、缓存与占用条"><figcaption>上下文窗口的展开与收起 · 上下文收起时：只有一行标题，带已用/窗口、占比、缓存与占用条</figcaption></figure>
+<figure><img src="05-routing-context-open.png" alt="展开后构建出的提示词网格与内容列表，标题里不再重复计数"><figcaption>上下文窗口的展开与收起 · 展开后构建出的提示词网格与内容列表，标题里不再重复计数</figcaption></figure>
+<figure><img src="06-routing-context-closed-again.png" alt="收起后只剩标题一行与占用条，网格与列表已移除"><figcaption>上下文窗口的展开与收起 · 收起后只剩标题一行与占用条，网格与列表已移除</figcaption></figure>
+</main></html>

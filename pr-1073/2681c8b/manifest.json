@@ -1,0 +1,44 @@
+{
+  "summary": "设置页三处模型选择（Codex 会话标题、图像识别、图像生成）改为在保存时按各自选择器列出的清单校验：模型不在清单里就返回 400 并保留原值，不再静默保存；同时把图像生成的候选清单抽成 imageGens（选择器内容不变）。",
+  "scenes": [
+    {
+      "title": "Codex 会话标题的模型选择器",
+      "shots": [
+        {
+          "file": "01-settings-codex-titles-row.png",
+          "caption": "设置 · 常规：Codex 会话标题一行当前的取值",
+          "width": 2492
+        },
+        {
+          "file": "02-codex-titles-picker-open.png",
+          "caption": "Codex 会话标题选择器展开后的模型清单",
+          "width": 2560
+        }
+      ]
+    },
+    {
+      "title": "设置 · 模型页的两个模型选择",
+      "shots": [
+        {
+          "file": "03-settings-models-picks.png",
+          "caption": "设置 · 模型：图像识别与图像生成两个模型选择",
+          "width": 2560
+        },
+        {
+          "file": "04-settings-models-picks-scrolled.png",
+          "caption": "设置 · 模型页向下滚动后的模型选择区域",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "描述说「设置页每次保存都会重发自己的选择，因而已保存的值会被重新校验，供应商停止提供的值会被拒绝而不是保留」；diff 里只在取值与已保存值不同时才校验（vision/imageGen 与 cur 比较，标题同理），重发同一个已保存的旧值仍然通过并原样保留——与描述写的语义相反，diff 的注释也明确说旧值「保留，不拒绝」。",
+  "unseen": "沙盒里这三个选择器只列出 magpie 实际提供的模型（图像生成只列出 gateway.Drawers 画图用的模型），界面上选不出不在清单里的模型，因此「保存被拒 400 及随之出现在页面上的报错」这条新行为无法在沙盒里演示；同样也没有「模型被供应商改名/下架后残留的旧值」这种状态可造。只能展示这三个选择器本身的候选清单。",
+  "interactive": true,
+  "pages": 1
+}

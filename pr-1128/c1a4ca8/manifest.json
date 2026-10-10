@@ -1,0 +1,53 @@
+{
+  "summary": "本次改动让 Bub 成为 magpie 支持的 Agent：Agent 页（以及快捷面板）多出 Bub 一行，带 Bub 的 logo 图标，并给它两个可编辑字段——model（可选自家模型，也可选 magpie 的模型）与 effort（reasoning effort）。选 magpie 的模型时会把 magpie 作为 provider 写进 ~/.bub/config.yml；Bub 未安装时则出现在「安装其他 Agent」列表里。",
+  "scenes": [
+    {
+      "title": "Agent 列表里的 Bub",
+      "shots": [
+        {
+          "file": "01-agents-list-expanded.png",
+          "caption": "展开后的 Agent 列表",
+          "width": 2496
+        },
+        {
+          "file": "02-agents-install-list.png",
+          "caption": "安装列表",
+          "width": 2496
+        }
+      ]
+    },
+    {
+      "title": "Bub 的模型与 effort 选择",
+      "shots": [
+        {
+          "file": "03-agents-list-expanded.png",
+          "caption": "展开后的 Agent 列表",
+          "width": 2496
+        },
+        {
+          "file": "04-agents-expanded-list.png",
+          "caption": "展开后的 Agent 列表",
+          "width": 2496
+        },
+        {
+          "file": "05-agents-install-list.png",
+          "caption": "「安装其他 Agent」列表",
+          "width": 2496
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [
+    "Bub 的模型与 effort 选择 · click div.row.agent[data-id=\"bub\"] button.field[data-key=\"model\"]: nothing visible matches div.row.agent[data-id=\"bub\"] button.field[data-key=\"model\"] (0 in the page)",
+    "Bub 的模型与 effort 选择 · click #sync.icon: won't press \"重新检测本机的 Agent：刚安装或卸载的，或在别处改过配置的\"",
+    "Bub 的模型与 effort 选择 · click div.row.agent[data-id=\"bub\"] button.field[data-key=\"model\"]: nothing visible matches div.row.agent[data-id=\"bub\"] button.field[data-key=\"model\"] (0 in the page)"
+  ],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒里是否真有 Bub 无法确定：Bub 的检测依赖 ~/.bub 或 PATH 上的 bub，若没有，它就只出现在「安装其他 Agent」列表里，行上的 model / effort 选择器打不开，也看不到写进 ~/.bub/config.yml 的 providers.magpie、model: magpie:<provider>/<model>。旧版 Bub（缺 bubbuild/bub#343）会被拒绝并给出「更新 Bub」的提示，这需要在 PATH 上放一个旧 bub 才能看到，沙盒没有。",
+  "interactive": true,
+  "pages": 1
+}

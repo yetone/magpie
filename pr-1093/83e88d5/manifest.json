@@ -1,0 +1,39 @@
+{
+  "summary": "路由页保存组时不再同步等一次会联网的 Codex 账号额度读取（同步改用「已经读到的值」，改由后台循环刷新），并且保存后如果被保存的那一行不在视野里，就把它滚回视野（真的出界才滚，避免让出点击保持）。",
+  "scenes": [
+    {
+      "title": "保存路由组后，那一行回到视野",
+      "shots": [
+        {
+          "file": "01-group-row-before-edit.png",
+          "caption": "编辑前，记下「Coding」组在这页的位置",
+          "width": 2560
+        },
+        {
+          "file": "02-editor-in-place-of-row.png",
+          "caption": "编辑器顶替了组的那一行",
+          "width": 2560
+        },
+        {
+          "file": "03-scrolled-to-save.png",
+          "caption": "滚到「保存」时的画面",
+          "width": 2560
+        },
+        {
+          "file": "04-after-save.png",
+          "caption": "保存后：编辑器收起，页面高度变了",
+          "width": 2560
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "「保存变快」这一半在沙盒里看不出来：这里的供应商用量由本地 mock 立即应答，额度读取不走网络，保存前后耗时差异肉眼不可见；只有「保存后那一行回到视野」能拍到，而且它只在编辑器比窗口高、组行被推出视野时才触发滚动。",
+  "interactive": true,
+  "pages": 1
+}

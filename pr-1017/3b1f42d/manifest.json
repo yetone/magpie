@@ -1,0 +1,39 @@
+{
+  "summary": "「用量」页的 show() 与 load() 两条路径现在都会一并读取供应商状态（load() 里与用量并发），于是 renderArchive 画的请求存档开关不再因为模块级 providers 未加载而在「请求」栏缺席。",
+  "scenes": [
+    {
+      "title": "用量页「请求」栏的请求存档开关",
+      "shots": [
+        {
+          "file": "01-usage-overview.png",
+          "caption": "「用量」页打开时的「概览」栏",
+          "width": 2560
+        },
+        {
+          "file": "02-usage-requests-tab.png",
+          "caption": "「请求」栏顶部这一行",
+          "width": 2560
+        },
+        {
+          "file": "03-requests-archive-switch.png",
+          "caption": "「请求」栏上的请求存档开关及其提示",
+          "width": 1120
+        },
+        {
+          "file": "04-requests-head.png",
+          "caption": "同一行左侧的请求合计",
+          "width": 1120
+        }
+      ]
+    }
+  ],
+  "video": "preview.mp4",
+  "poster": "poster.png",
+  "errors": [],
+  "leak": false,
+  "skipped": null,
+  "mismatch": "",
+  "unseen": "沙盒跑的是本分支的构建，只能拍到修复后开关出现的样子；修复前（直接打开『用量』页时「请求」栏没有这个开关）无法在同一实例里重现。",
+  "interactive": true,
+  "pages": 1
+}

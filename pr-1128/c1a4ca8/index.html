@@ -1,0 +1,16 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>#1128 界面预览 · c1a4ca8</title>
+<style>:root{color-scheme:light dark;--bg:#f6f6f7;--fg:#1d1d1f;--muted:#6e6e73;--card:#fff;--line:#e5e5ea}
+@media (prefers-color-scheme:dark){:root{--bg:#111113;--fg:#f2f2f4;--muted:#9a9aa0;--card:#1c1c1f;--line:#2c2c30}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 -apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:28px 16px 60px}h1{font-size:20px;margin:0 0 4px}.m{color:var(--muted);font-size:13px;margin:0 0 20px}
+video,img{display:block;width:100%;border-radius:10px;border:1px solid var(--line);background:var(--card)}figure{margin:0 0 28px}figcaption{color:var(--muted);font-size:13px;margin-top:8px}
+a{color:inherit}</style>
+<main><h1>#1128 界面预览</h1><p class="m">commit c1a4ca8 · <a href="https://github.com/yetone/magpie/pull/1128">回到 PR</a> · 本次改动让 Bub 成为 magpie 支持的 Agent：Agent 页（以及快捷面板）多出 Bub 一行，带 Bub 的 logo 图标，并给它两个可编辑字段——model（可选自家模型，也可选 magpie 的模型）与 effort（reasoning effort）。选 magpie 的模型时会把 magpie 作为 provider 写进 ~/.bub/config.yml；Bub 未安装时则出现在「安装其他 Agent」列表里。</p>
+<figure><video src="preview.mp4" controls autoplay muted playsinline poster="poster.png"></video><figcaption>红线是鼠标走过的轨迹，红色圆环是一次点击；底部文字是这一步在做什么。空格暂停，← → 逐段查看。</figcaption></figure>
+<figure><img src="01-agents-list-expanded.png" alt="展开后的 Agent 列表"><figcaption>Agent 列表里的 Bub · 展开后的 Agent 列表</figcaption></figure>
+<figure><img src="02-agents-install-list.png" alt="安装列表"><figcaption>Agent 列表里的 Bub · 安装列表</figcaption></figure>
+<figure><img src="03-agents-list-expanded.png" alt="展开后的 Agent 列表"><figcaption>Bub 的模型与 effort 选择 · 展开后的 Agent 列表</figcaption></figure>
+<figure><img src="04-agents-expanded-list.png" alt="展开后的 Agent 列表"><figcaption>Bub 的模型与 effort 选择 · 展开后的 Agent 列表</figcaption></figure>
+<figure><img src="05-agents-install-list.png" alt="「安装其他 Agent」列表"><figcaption>Bub 的模型与 effort 选择 · 「安装其他 Agent」列表</figcaption></figure>
+</main></html>
