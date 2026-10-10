@@ -84,3 +84,48 @@ func TestRefreshOlderLaunchAgent(t *testing.T) {
 		t.Fatalf("a launch agent magpie didn't write was changed:\n%s", b)
 	}
 }
+
+// A record a write cut short is not one that opens magpie at login: launchd
+// refuses a job with no program to run, and one with nothing in it at all,
+// so Open at login reads off rather than saying on for a record that never
+// starts anything.
+func TestSetThenTruncatedRecordReadsAsOff(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if err := Set(true); err != nil {
+		t.Fatal(err)
+	}
+	if !Enabled() {
+		t.Fatal("not on after Set(true)")
+	}
+	p := record()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the head of the launch agent, cut off before the program it names,
+	// which is what a write that goes no further leaves behind
+	head := b[:strings.Index(string(b), "<key>ProgramArguments</key>")]
+	if err := os.WriteFile(p, head, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if Enabled() {
+		t.Errorf("a launch agent with no ProgramArguments reads as on:\n%s", head)
+	}
+	if err := os.WriteFile(p, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if Enabled() {
+		t.Error("an empty launch agent reads as on")
+	}
+	// a program named as nothing is no program to run either, and launchd
+	// refuses the job
+	empty := strings.Replace(string(b), "<array><string>", "<array><string></string><string>", 1)
+	if err := os.WriteFile(p, []byte(empty), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if Enabled() {
+		t.Errorf("a launch agent with no program reads as on:\n%s", empty)
+	}
+}

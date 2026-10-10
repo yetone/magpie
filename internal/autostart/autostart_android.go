@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/yetone/magpie/internal/edit"
 )
 
 // Termux:Boot runs executable scripts in ~/.termux/boot after Android boots.
@@ -25,7 +27,7 @@ func enable(exe string) error {
 	// Android's shell is available even before Termux's PATH is loaded.
 	q := "'" + strings.ReplaceAll(exe, "'", "'\"'\"'") + "'"
 	body := "#!/system/bin/sh\nexec " + q + " serve </dev/null >/dev/null 2>&1 &\n"
-	if err := os.WriteFile(p, []byte(body), 0o700); err != nil {
+	if err := edit.WriteAtomic(p, []byte(body)); err != nil {
 		return err
 	}
 	return os.Chmod(p, 0o700)
