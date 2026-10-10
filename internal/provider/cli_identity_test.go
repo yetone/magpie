@@ -8,8 +8,16 @@ import (
 	"time"
 )
 
+// keepIdentities has this test keep the answers on disk, as magpie does
+// outside a test binary.
+func keepIdentities(t *testing.T) {
+	keepInSandbox = true
+	t.Cleanup(func() { keepInSandbox = false })
+}
+
 func TestCLIIdentityKeptAcrossStarts(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepIdentities(t)
 	var asked atomic.Int32
 	answer := func() (string, string, bool, error) { asked.Add(1); return "me@example.com", "Pro", true, nil }
 	exe := func() string { return "/bin/sh" }
@@ -68,6 +76,7 @@ func TestCLIIdentityKeptAcrossStarts(t *testing.T) {
 
 func TestCLIIdentityKeptIgnoredWithoutTheCLI(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepIdentities(t)
 	(&cliIdentity{name: "x", exe: func() string { return "/bin/sh" }, ask: func() (string, string, bool, error) { return "me@example.com", "", true, nil }}).get()
 	gone := &cliIdentity{name: "x", exe: func() string { return "" }, ask: func() (string, string, bool, error) { return "", "", false, nil }}
 	if u, _, ok := gone.get(); ok || u != "" {
@@ -79,6 +88,7 @@ func TestCLIIdentityKeptIgnoredWithoutTheCLI(t *testing.T) {
 // nobody is signed in until it answers, and then its answer is served
 func TestCLIIdentityFirstAskBounded(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepIdentities(t)
 	old := firstAsk
 	firstAsk = 100 * time.Millisecond
 	t.Cleanup(func() { firstAsk = old })
@@ -117,6 +127,7 @@ func TestCLIIdentityFirstAskBounded(t *testing.T) {
 // rather than waiting for it again
 func TestCLIIdentitySignedOutKept(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepIdentities(t)
 	(&cliIdentity{name: "x", exe: func() string { return "/bin/sh" }, ask: func() (string, string, bool, error) { return "", "", false, nil }}).get()
 	if _, found := readIdentities()["x"]; !found {
 		t.Fatal("a signed-out answer wasn't kept")
@@ -195,19 +206,20 @@ func TestCLIIdentityFailingAskedLessOften(t *testing.T) {
 	}
 }
 
-// With KeepCLIIdentities off, an answer is served but nothing is written:
-// the gateway's tests turn it off, as an ask still going when a test ended
-// wrote into the config folder being removed (#1524).
-func TestCLIIdentityNotKeptWhenOff(t *testing.T) {
+// In a test binary testenv isolated an answer is served but nothing is
+// written: an ask still going when a test ended wrote into the config
+// folder being removed (#1524, #1538).
+func TestCLIIdentityNotKeptInATestBinary(t *testing.T) {
+	if os.Getenv(testSandbox) == "" {
+		t.Fatal("provider's tests run without testenv's sandbox")
+	}
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	KeepCLIIdentities = false
-	t.Cleanup(func() { KeepCLIIdentities = true })
 	c := &cliIdentity{name: "x", exe: func() string { return "/bin/sh" }, ask: func() (string, string, bool, error) { return "me@example.com", "Pro", true, nil }}
 	if u, _, ok := c.get(); !ok || u != "me@example.com" {
 		t.Fatalf("get: %q %v", u, ok)
 	}
 	if es, _ := os.ReadDir(dir); len(es) != 0 {
-		t.Fatalf("written with KeepCLIIdentities off: %v", es)
+		t.Fatalf("written in a test binary: %v", es)
 	}
 }

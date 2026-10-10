@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/agentenv"
-	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -77,22 +76,9 @@ func isolatedTests(m *testing.M) (int, error) {
 	// no route is written to disk behind a test's back; the history's own
 	// tests call saveRoute themselves
 	keepRoutes = false
-	// nor a CLI's identity: a request's look at Cursor's or Devin's account
-	// asks the stand-in behind it, and the answer was kept in the config
-	// folder of whichever test was running then, as it was removed (#1524)
-	provider.KeepCLIIdentities = false
 	// no test asks a vendor: a provider with a real base URL and a made-up
 	// key would, in the background (a plan key's windows, #1016), and a
 	// plugin host's first start fetched models.dev
 	testenv.Offline()
 	return m.Run(), nil
-}
-
-// The package's tests keep no CLI identity on disk: an ask runs behind the
-// request that started it, and one still going when its test ended wrote
-// cli-identity.json into the config folder being removed (#1524).
-func TestNoCLIIdentityKeptInTests(t *testing.T) {
-	if provider.KeepCLIIdentities {
-		t.Fatal("TestMain left provider.KeepCLIIdentities on")
-	}
 }
