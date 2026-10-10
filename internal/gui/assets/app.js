@@ -7768,6 +7768,16 @@ function thumbKey(box, choices) {
   }
   return null;
 }
+// Before Usage rebuilds a period strip, retain the visible position of its
+// current transition. A quick second pick then continues there, not at the
+// first pick's starting point or at a target it has not reached yet.
+function keepThumb(box, key) {
+  const th = box?.querySelector(":scope > .thumb");
+  const last = box && thumbs.get(thumbKey(box, key));
+  if (!th || !last) return;
+  const style = getComputedStyle(th);
+  last.current = { x: new DOMMatrixReadOnly(style.transform).m41, w: parseFloat(style.width) };
+}
 function slide(box, key) {
   let th = box.querySelector(":scope > .thumb");
   const fresh = !th;
@@ -7785,7 +7795,8 @@ function slide(box, key) {
   let from = to;
   const put = (p) => { th.style.transform = p.y ? `translate(${p.x}px, ${p.y}px)` : `translateX(${p.x}px)`; th.style.width = p.w + "px"; th.style.height = p.h ? p.h + "px" : ""; };
   if (fresh) {
-    from = last ? (performance.now() - last.at < 300 ? last.from : last) : to;
+    const same = last && last.x === to.x && last.w === to.w;
+    from = last ? (same ? to : last.current || (performance.now() - last.at < 300 ? last.from : last)) : to;
     th.classList.add("still");
     put(from);
     void th.offsetWidth;
@@ -13059,6 +13070,7 @@ function loadQuotas(asked, again) {
 // the period picker, in the page's head, for the Overview and Requests
 function renderPeriod(loading) {
   const seg = $("#period");
+  keepThumb(seg, "period");
   seg.replaceChildren();
   for (const [id, name] of PERIODS) {
     const b = el("button", "opt" + (id === period ? " on" : ""), t(name));
@@ -14099,10 +14111,14 @@ function renderPanelUse() {
   const focusDay = box.contains(document.activeElement) ? document.activeElement.dataset.day : "";
   const l = panelUse;
   box.hidden = false;
-  const bar = el("div", "pu-bar");
-  const per = el("div", "segs");
-  for (const [id, name] of PANEL_USE_PERIODS) {
-    const b = el("button", "opt" + (id === panelUsePeriod ? " on" : ""), t(name));
+  // Keep the period buttons connected while an answer redraws the totals:
+  // replacing one between pointerdown and pointerup would lose its click.
+  const bar = box.querySelector(":scope > .pu-bar") || el("div", "pu-bar");
+  const per = bar.querySelector(":scope > .segs") || el("div", "segs");
+  for (const [i, [id, name]] of PANEL_USE_PERIODS.entries()) {
+    const b = per.querySelectorAll(":scope > .opt")[i] || el("button", "opt");
+    b.classList.toggle("on", id === panelUsePeriod);
+    if (b.textContent !== t(name)) b.textContent = t(name);
     b.onclick = () => {
       if (id === panelUsePeriod) return;
       panelUsePeriod = id;
@@ -14111,7 +14127,7 @@ function renderPanelUse() {
       renderPanelUse();
       loadPanelUse().catch(() => {});
     };
-    per.append(b);
+    if (!b.parentElement) per.append(b);
   }
   const pick = el("button", "sess-pick");
   pick.type = "button";
@@ -14142,8 +14158,15 @@ function renderPanelUse() {
     b.classList.add("spin");
     loadPanelUse().catch(() => {}).finally(() => setTimeout(() => $("#panelUsage .pu-again")?.classList.remove("spin"), 300));
   };
-  bar.append(per, ...(copts.length ? [comp] : []), pick, el("span", "grow"), again, open);
-  const out = [bar, el("p", "usage-note", t("Gateway and session-log calls; local rejections excluded from totals."))];
+  for (const child of [...bar.children]) if (child !== per) child.remove();
+  if (!per.parentElement) bar.append(per);
+  bar.append(...(copts.length ? [comp] : []), pick, el("span", "grow"), again, open);
+  const out = [el("p", "usage-note", t("Gateway and session-log calls; local rejections excluded from totals."))];
+  const paint = () => {
+    for (const child of [...box.children]) if (child !== bar) child.remove();
+    if (!bar.parentElement) box.append(bar);
+    box.append(...out);
+  };
   if (!l) {
     out.push(el("span", "skeleton pu-sk"), el("span", "skeleton pu-sk"));
   } else if (!l.total && !l.day) {
@@ -14185,7 +14208,7 @@ function renderPanelUse() {
     const chart = el("div", "led-chart"), rank = el("div", "led-rank");
     card.append(head, chart, rank);
     out.push(tot, card);
-    box.replaceChildren(...out);
+    paint();
     slide(per, "puPeriod");
     slide(met, "puMetric");
     drawLedColumns(chart, l, split, panelUseMetric, true, (day) => {
@@ -14203,7 +14226,7 @@ function renderPanelUse() {
     fit();
     return;
   }
-  box.replaceChildren(...out);
+  paint();
   slide(per, "puPeriod");
   if (v.scrollTop !== keep) v.scrollTop = keep;
   fit();
@@ -15144,12 +15167,15 @@ function quotaWindows(sub) {
 
 // Keep the last date and as many earlier dates as fit, without clipping their
 // text. Visibility keeps each label aligned to its bar; resizing restores them.
+// This ran for the browser's phones alone; a native window is narrow too, and
+// nothing there says so (a user at 950px: the dates ran one into the next), so
+// a label is now hidden wherever it would collide with its neighbour.
 function fitChartLabels() {
-  const narrow = web && matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").matches;
+  const fits = !web || matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").matches;
   for (const labels of document.querySelectorAll(".chart .labels")) {
     const spans = [...labels.children];
     for (const span of spans) span.style.visibility = "";
-    if (!narrow || !labels.offsetWidth) continue;
+    if (!fits || !labels.offsetWidth) continue;
     const box = labels.getBoundingClientRect();
     let right = box.right + 8;
     for (const span of spans.reverse()) {
@@ -21168,7 +21194,7 @@ if (mode === "window") new ResizeObserver(() => {
   thumbs.set(thumbKey($("#nav"), "nav"), { x: on.offsetLeft, w: on.offsetWidth });
   requestAnimationFrame(() => th.classList.remove("still"));
 }).observe($("#nav"));
-document.fonts?.ready.then(fitTop);
+document.fonts?.ready.then(() => { fitTop(); fitChartLabels(); });
 
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { load(true); wag(); } });
 // an agent's config can be rewritten, or the agent run round magpie, while the
