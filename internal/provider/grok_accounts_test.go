@@ -88,6 +88,76 @@ func TestLoginUsageGrokMixedCache(t *testing.T) {
 	}
 }
 
+// The Usage page's whole-page read of a Grok account and the per-home read
+// LoginUsage makes of the same account write the one key on disk: the page's
+// started first, so its late answer is the older reading, and must not
+// become what the next failed read falls back to.
+func TestGrokPerHomeReadKeepsTheNewerReading(t *testing.T) {
+	home := signIn(t)
+	t.Setenv("GROK_HOME", filepath.Join(home, ".grok"))
+	grokSignedIn(t, GrokHome(), "grok@example.com")
+	reset := func() {
+		lastQuotas.Lock()
+		lastQuotas.m, lastQuotas.loaded = nil, false
+		lastQuotas.Unlock()
+		grokHomeUsage.Lock()
+		grokHomeUsage.m = nil
+		grokHomeUsage.Unlock()
+	}
+	reset()
+	t.Cleanup(reset)
+
+	// what the CLI's own /usage says, and whether the vendor is refusing it:
+	// the httptest handler reads both off its own goroutine, while the test
+	// writes them here
+	used, refused := atomic.Int32{}, atomic.Bool{}
+	used.Store(80)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if refused.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		fmt.Fprintf(w, `{"config":{"creditUsagePercent":%d,"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY"}}}`, used.Load())
+	}))
+	t.Cleanup(srv.Close)
+	oldBase := GrokBase
+	GrokBase = srv.URL
+	t.Cleanup(func() { GrokBase = oldBase })
+
+	// the page's read starts first
+	pageCtx, _ := quotaReading(context.Background())
+
+	used.Store(80) // the per-home read, started later, answers first
+	u := grokLoginUsage(context.Background())
+	if got := u["grok@example.com"].Windows[0].Used; got != 80 {
+		t.Fatalf("per-home read %v%%, want 80", got)
+	}
+
+	used.Store(10) // the page's answer: started first, so the older reading
+	keepReading(pageCtx, readNow(grokSubscriptionUsage(pageCtx)), "")
+
+	c := &lastQuotas
+	c.Lock()
+	kept := c.m["grok/grok@example.com"].Q
+	c.Unlock()
+	if kept.Windows[0].Used != 80 {
+		t.Fatalf("last reading on disk is %v%%, want the newer 80", kept.Windows[0].Used)
+	}
+
+	// the vendor has a hiccup: the last reading kept is what the account
+	// falls back to, the file read again as after a restart
+	c.Lock()
+	c.m, c.loaded = nil, false
+	c.Unlock()
+	refused.Store(true)
+	failCtx, _ := quotaReading(context.Background())
+	q := keepReading(failCtx, grokUsageAt(failCtx, GrokHome()), "grok@example.com")
+	if q.Error != "" || q.AsOf == nil || len(q.Windows) != 1 || q.Windows[0].Used != 80 {
+		t.Fatalf("after a failed read %+v, want the kept 80%%", q)
+	}
+}
+
 // A further Grok account signs in in a home of magpie's: the CLI's own
 // stays as it is, both are in use, and either can go first.
 func TestGrokAccounts(t *testing.T) {

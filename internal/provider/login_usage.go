@@ -202,7 +202,7 @@ func loginReading(ctx context.Context, l Login) loginUsageEntry {
 		return r.e
 	case <-ctx.Done():
 		// given up on: as a reading cut short would have said
-		return entry(keepLast(SubscriptionQuota{Provider: loginProvider(l), Plan: l.Plan, Windows: []QuotaWindow{}, Error: ctx.Err().Error()}, l.User))
+		return entry(keepReading(ctx, SubscriptionQuota{Provider: loginProvider(l), Plan: l.Plan, Windows: []QuotaWindow{}, Error: ctx.Err().Error()}, l.User))
 	}
 }
 

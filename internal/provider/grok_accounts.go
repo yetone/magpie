@@ -135,6 +135,7 @@ var grokHomeUsage struct {
 // grokLoginUsage is each Grok account's allowance, by user, as LoginUsage
 // answers it.
 func grokLoginUsage(ctx context.Context) map[string]SubscriptionQuota {
+	ctx, _ = quotaReading(ctx) // the page's read asks this account too: order the two
 	out := map[string]SubscriptionQuota{}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -160,7 +161,7 @@ func grokLoginUsage(ctx context.Context) map[string]SubscriptionQuota {
 		wg.Add(1)
 		go func(g grokLogin) {
 			defer wg.Done()
-			q := keepLast(grokUsageAt(ctx, g.Home), g.User)
+			q := keepReading(ctx, grokUsageAt(ctx, g.Home), g.User)
 			if q.Error != "" && ok {
 				q = e.q // a hiccup keeps what was known
 			}
