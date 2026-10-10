@@ -86,6 +86,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       const tags = await page.locator(".rt-req").evaluateAll((rows) => rows.map((r) => r.querySelector(".asked .kind")?.textContent || ""));
       assert.deepEqual(tags, want[lang].tags);
+      await page.locator(".rt-detail-toggle").click();
 
       const story = async (i) => {
         const row = page.locator(".rt-req").nth(i);
@@ -98,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         return page.locator(".rt-steps li.kind");
       };
       let s = await story(0);
-      assert.equal(await s.locator(".kind").textContent(), want[lang].tags[0]);
+      assert.equal(await page.locator(".rt-brief-path .kind").textContent(), want[lang].tags[0]);
       assert.match(await s.textContent(), want[lang].story);
       s = await story(1);
       assert.match(await s.textContent(), want[lang].bare);

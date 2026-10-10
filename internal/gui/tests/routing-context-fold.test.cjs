@@ -17,7 +17,7 @@ const path = require("node:path");
 const { test } = require("node:test");
 const { chromium, webkit } = require("playwright");
 
-const assets = path.resolve(__dirname, "../assets");
+const assets = process.env.ASSET_DIR || path.resolve(__dirname, "../assets");
 const now = Date.now();
 const iso = (ms) => new Date(ms).toISOString();
 const seat = { id: "codex@me", provider: "codex", name: "ChatGPT", who: "me@example.com", kind: "account", model: "gpt-6.1-sol", known: true, plan: "Pro" };
@@ -101,7 +101,7 @@ async function click(page, b) {
   await page.waitForTimeout(300);
 }
 const scrollTop = (page) => page.evaluate(() => document.querySelector("#view-routing").scrollTop);
-const stored = (page) => page.evaluate(() => localStorage.getItem("magpie.ctxShut"));
+const stored = (page) => page.evaluate(() => localStorage.getItem("magpie.routingContext") ?? (localStorage.getItem("magpie.ctxShut") === "1" ? "0" : "1"));
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   test(`${engine}: the context window on Routing folds to one line`, async (t) => {
@@ -113,18 +113,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await t.test(`${lang} ${width}x${height}: folded to one line, the stage and the requests in view`, async () => {
           const { context, page, errors } = await open(browser, lang, width, height);
           const box = page.locator(".rt-ctx");
-          const fold = box.locator(".ctx-fold");
-          assert.equal(await box.locator(".ctx-card.shut").count(), 1, "folded, as the reader keeps it");
+          const fold = box.locator(".rt-ctx-toggle");
+          assert.equal(await box.locator(".ctx-waffle").count(), 0, "folded details are not built");
           assert.equal(await fold.getAttribute("aria-expanded"), "false");
-          assert.equal(await fold.innerText(), words[lang]);
-          assert.equal(await box.locator(".ctx-short").innerText(), "186K / 272K · 68%");
-          assert.match(await box.locator(".ctx-crumbs").textContent(), /#112$/);
+          assert.equal(await fold.locator(".ctx-title").innerText(), words[lang]);
+          assert.equal(await box.locator(".ctx-summary-used").innerText(), "186K / 272K");
+          assert.equal(await box.locator(".ctx-health").innerText(), "68%");
+          assert.equal(await box.locator(".ctx-title").count(), 1, "the folded header is the only context title");
           // a bar of what fills the window, a part each (this prompt has no memory)
           assert.deepEqual(await box.locator(".ctx-stack > i").evaluateAll((is) => is.map((i) => i.className + " " + i.style.width)),
             ["k-system 3.31%", "k-tools 4.41%", "k-memory 0%", "k-files 28.68%", "k-results 16.18%", "k-chat 15.81%"]);
           const at = await page.evaluate(() => {
             const r = (s) => document.querySelector(s).getBoundingClientRect();
-            const card = r(".rt-ctx .ctx-card"), head = r(".rt-ctx .ctx-head"), bar = r(".rt-ctx .ctx-stack"), c = document.querySelector(".rt-ctx .ctx-card");
+            const card = r(".rt-ctx"), head = r(".rt-ctx .ctx-summary"), bar = r(".rt-ctx .ctx-stack"), c = document.querySelector(".rt-ctx");
             return { vh: innerHeight, stage: r(".rt-stage").bottom, head: r(".rt-req-head").top + 24, row: r(".rt-req").bottom, cardH: card.height, headH: head.height,
               bar: bar.width, barIn: bar.right <= head.right + 0.5, over: c.scrollWidth - c.clientWidth, wide: document.documentElement.scrollWidth <= innerWidth };
           });
@@ -151,56 +152,56 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(400);
       const y = await scrollTop(page);
       assert(y > 0, "the page scrolled");
-      const fold = page.locator(".rt-ctx .ctx-fold");
+      const fold = page.locator(".rt-ctx-toggle");
       const foldTop = await fold.evaluate((e) => e.getBoundingClientRect().top);
       await fold.click();
-      await page.locator(".rt-ctx .ctx-card:not(.shut) .ctx-waffle").waitFor();
+      await page.locator(".rt-ctx .ctx-waffle").waitFor();
       assert.equal(await page.locator(".rt-ctx .ctx-waffle > i").count(), 400);
       assert.equal(await fold.getAttribute("aria-expanded"), "true");
-      assert.equal(await page.locator(".rt-ctx .ctx-stack").evaluate((e) => e.getClientRects().length), 0, "open, the bar is the card's own legend");
+      assert.equal(await page.locator(".rt-ctx .ctx-stack").count(), 0, "open, the bar is the card's own legend");
       await page.waitForTimeout(800);
       assert.equal(await scrollTop(page), y, "unfolding doesn't move the page");
       const after = await fold.evaluate((e) => e.getBoundingClientRect().top);
       assert(Math.abs(after - foldTop) <= 1, `the title stays under the pointer: ${foldTop} → ${after}`);
-      assert.equal(await stored(page), "0");
+      assert.equal(await stored(page), "1");
       assert.deepEqual(errors, []);
       await context.close();
     });
 
     await t.test("a request picked keeps the fold; one opened for its context window shows it, for itself only", async () => {
       const { context, page, errors } = await open(browser, "en", 1440, 900);
-      const shut = () => page.locator(".rt-ctx .ctx-card").evaluate((c) => c.classList.contains("shut"));
+      const shut = () => page.locator(".rt-ctx-toggle").evaluate((c) => c.getAttribute("aria-expanded") === "false");
       const crumb = () => page.locator(".rt-ctx .ctx-crumbs").evaluate((c) => c.textContent.split(" › ").pop());
       const y = await scrollTop(page);
       await page.locator(".rt-req").nth(3).click();
       await page.waitForTimeout(300);
       assert.equal(await shut(), true, "a request picked stays folded");
-      assert.equal(await crumb(), "#109");
+      assert.equal(await page.locator(".ctx-summary-used b").innerText(), "162K");
       assert.equal(await scrollTop(page), y, "the pick doesn't move the page");
 
       // the Usage page's Context tab's Latest request, or a point of its line
       await page.evaluate((r) => window.openRoute(r.id, r.time, { context: true }), routes[2]);
-      await page.locator(".rt-ctx .ctx-card:not(.shut) .ctx-waffle").waitFor();
+      await page.locator(".rt-ctx .ctx-waffle").waitFor();
       assert.equal(await crumb(), "#103");
-      assert.equal(await page.locator(".rt-ctx .ctx-fold").getAttribute("aria-expanded"), "true");
-      assert.equal(await stored(page), "1", "the reader's own choice is untouched");
+      assert.equal(await page.locator(".rt-ctx-toggle").getAttribute("aria-expanded"), "true");
+      assert.equal(await stored(page), "0", "the reader's own choice is untouched");
 
       await page.locator(".rt-req").nth(5).click();
       await page.waitForTimeout(300);
       assert.equal(await shut(), true, "the next request is folded again");
-      assert.equal(await crumb(), "#107");
-      assert.equal(await page.locator(".rt-ctx .ctx-fold").getAttribute("aria-expanded"), "false");
+      assert.equal(await page.locator(".ctx-summary-used b").innerText(), "146K");
+      assert.equal(await page.locator(".rt-ctx-toggle").getAttribute("aria-expanded"), "false");
 
       // opened for it again, then folded by its title: folded it stays, for it and the next
       await page.evaluate((r) => window.openRoute(r.id, r.time, { context: true }), routes[2]);
-      await page.locator(".rt-ctx .ctx-card:not(.shut)").waitFor();
-      await click(page, page.locator(".rt-ctx .ctx-fold"));
+      await page.locator(".rt-ctx .ctx-waffle").waitFor();
+      await click(page, page.locator(".rt-ctx-toggle"));
       assert.equal(await shut(), true, "the title folds it");
-      assert.equal(await stored(page), "1");
+      assert.equal(await stored(page), "0");
       await click(page, page.locator(".rt-req").nth(5));
       await page.evaluate((r) => window.openRoute(r.id, r.time), routes[2]);
       await page.waitForTimeout(300);
-      assert.equal(await crumb(), "#103");
+      assert.equal(await page.locator(".ctx-summary-used b").innerText(), "114K");
       assert.equal(await shut(), true, "a request opened from the list or a link stays folded");
       assert.deepEqual(errors, []);
       await context.close();

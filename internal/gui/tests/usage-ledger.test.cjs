@@ -354,7 +354,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await link.click();
         await page.locator("#view-routing").waitFor({ state: "visible" });
         await page.locator(".rt-log-head").getByText(usageTitle, { exact: true }).waitFor();
-        assert.match(await page.locator(".rt-steps").textContent(), /gpt-6-sol/);
+        assert.match(await page.locator(".rt-brief-path").textContent(), /gpt-6-sol/);
         assert.equal(lookups[0].searchParams.get("day"), ROWS[0].t.slice(0,10));
         // History stays usable even when another process serves the gateway.
         await page.waitForTimeout(5200);

@@ -1,7 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Phone navigation and content stay usable in both languages (#391). The
 // desktop screenshots match BASE_REF within a small rendering tolerance
-// (origin/main by default), but for the Agents page while BASE_REF hasn't its
+// (origin/main by default), but for Routing's intentionally redesigned
+// content (covered by routing-details.test.cjs), and the Agents page while BASE_REF hasn't its
 // 「接入」 rows yet; only API boundaries are faked, never the page's layout or
 // scrolling helpers.
 const assert = require("node:assert/strict");
@@ -265,8 +266,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
               await current.mouse.move(0, 0); await original.mouse.move(0, 0);
               // Removing hover can repaint the tab's shadow in a later frame.
               await current.waitForTimeout(350); await original.waitForTimeout(350);
-              const before = PNG.sync.read(await original.screenshot({ animations: "disabled" }));
-              const after = PNG.sync.read(await current.screenshot({ animations: "disabled" }));
+              // Routing has an intentional desktop layout change. Compare
+              // its surrounding shell here; the detail matrix checks the
+              // content at nine widths in both engines and all languages.
+              const shot = (page) => page.screenshot({ animations: "disabled",
+                ...(view === "routing" ? { mask: [page.locator("#view-routing")] } : {}) });
+              const before = PNG.sync.read(await shot(original));
+              const after = PNG.sync.read(await shot(current));
               const sameSize = before.width === after.width && before.height === after.height;
               let changedPixels = 0;
               // Chromium can repaint antialiased edges differently even when

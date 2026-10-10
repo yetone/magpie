@@ -29,6 +29,67 @@ three.
 
 ## Constraints and failure behavior
 
+### Routing request details
+
+Routing shows the chosen request metrics before the compact request path,
+with duration and first-response values slightly emphasised. The full
+request-path row is a disclosure control, with a quiet Show/Hide details
+label at its right edge. It remains in place as it reveals decision reasons,
+purpose explanations and the request's general routing policy. The purpose badge is
+shown once in the request path. Closed details retain the metrics, fade a
+single line of the request path and hide the decision reasons. The result
+dot and explanation dots share one left edge. The result dot marks an
+answered, failed or pending request; explanation dots mark prose entries.
+The control's accessible label names the action. It uses the existing
+unroll scroll guard to anchor the row. The policy title identifies it as
+the current request's routing policy. Routing reserves its scrollbar width
+so opening details cannot change the available width and switch columns.
+Expanded path tooltips remain reachable. Failed attempts, vendor errors
+and a changed served model remain fully readable
+when it is closed.
+The duplicate live caption is a screen-reader announcement only. A routine
+success uses the summary's metrics instead of a second result paragraph.
+The requested and served model are shown separately only if the provider prefix does not
+explain their difference. The selected account's address appears in the
+summary; decision prose refers to it as the selected account, while other
+seats and exceptional attempts keep their names.
+
+A request with prompt data shows a closed context summary: used tokens,
+model window, fill, estimation/live state, the final attempt's cache rate,
+and the thin bar of prompt parts. The summary and bar are patched in place
+and keep one line's height as live requests arrive,
+using the same counts as `ctxCard` in
+[`context.js`](../../internal/gui/assets/context.js). Opening it builds the
+details under the same clickable header; its closed counts disappear from
+the header while open. Closing removes the detail body. Request details
+(including policy) and context keep independent preferences in browser
+local storage. The context preference takes precedence over the original
+`magpie.ctxShut` choice, which is retained when no new preference exists.
+Opening a request from Usage's Context tab opens that request's context
+only, without changing the saved preference. Choosing another request or
+reloading restores the preference.
+Incoming requests do not open them and continue updating
+the visible request even while details are open. An open context keeps its
+card, grid and unchanged rows in place as live requests arrive; a prompt
+still being read retains the previous context until its counts arrive.
+While following live, the request heading and summary retain their largest
+height at the current width and detail preference. Opening or closing details
+measures them again. The context state pill keeps one width across its labels;
+an in-progress request keeps its session's last cache figure dimmed until the
+vendor reports its own. A missing cache keeps the same space with an explanation.
+On a wide routing card
+(1280px or more), the routing stage and request story sit beside each other.
+Context remains below both, pairing its overview with the content list at
+800px or more. Both column pairs use the same split, aligning their
+separators. Smaller cards stack these regions. The content label and
+filters stay on one line, with the filters scrolling when needed. A long
+content list scrolls inside the card instead of creating an empty column
+beside the routing stage.
+The routing context grid has a fixed row height, so a wider window does not
+make the free space taller. Usage's context cards keep their own layout.
+See `routing-details.test.cjs` for both engines, all five languages, narrow
+windows, updates and disclosure persistence.
+
 ### Routing purpose filter
 
 The request heading's purpose menu in [`routing.js`](../../internal/gui/assets/routing.js)

@@ -51,12 +51,12 @@ function req(id, step, session = "019a-session") {
 }
 const first = [req(101, "done"), req(102, "done"), req(103, "done")];
 
-function serve(lang, feed) {
+function serve(lang, feed, details) {
   const state = { agents: [{ id: "codex", name: "Codex", path: "/test/codex", fields: [] }], profiles: [], settings: { lang, theme: "light" } };
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
-    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });
+    if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true}; localStorage.setItem("magpie.routingContext", "1"); localStorage.setItem("magpie.routingDetails", "${details ? "1" : "0"}");` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state);
     if (url.pathname === "/api/gateway/trace") {
@@ -75,10 +75,10 @@ function serve(lang, feed) {
   };
 }
 
-const sizes = [["en", 420], ["en", 1100], ["zh", 420], ["zh", 1100], ["zh-TW", 900], ["ja", 900], ["de", 420]];
+const sizes = [["en", 420], ["en", 1100], ["zh", 420], ["zh", 1100], ["zh-TW", 900], ["ja", 900], ["de", 420], ["en", 420, true], ["en", 1354, true], ["zh", 1100, true]];
 // the parts of the card watched on every frame
 const WATCH = {
-  card: ".rt-ctx .ctx-card", model: ".rt-ctx .ctx-model", state: ".rt-ctx .ctx-state", used: ".rt-ctx .ctx-stat .ctx-big b",
+  card: ".rt-ctx-detail .ctx-body", model: ".rt-brief-path code", state: ".rt-ctx-toggle .ctx-state", used: ".rt-ctx .ctx-stat .ctx-big b",
   cache: ".rt-ctx .ctx-cache", figure: ".rt-ctx .ctx-cache .ctx-big b", bar: ".rt-ctx .ctx-cache .ctx-bar", grid: ".rt-ctx .ctx-waffle",
   legend: ".rt-ctx .ctx-legend", foot: ".rt-ctx .ctx-foot",
 };
@@ -87,15 +87,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
   test(`${engine}: the context window holds still as requests stream in`, async (t) => {
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
-    for (const [lang, width] of sizes) {
-      await t.test(`${lang} ${width}px`, async () => {
+    for (const [lang, width, details = false] of sizes) {
+      await t.test(`${lang} ${width}px, details ${details ? "open" : "closed"}`, async () => {
         const context = await browser.newContext({ viewport: { width, height: 900 } });
         const page = await context.newPage();
         page.setDefaultTimeout(5000);
         const errors = [];
         page.on("pageerror", (e) => errors.push(e.message));
         const feed = { next: null };
-        await page.route("**/*", serve(lang, feed));
+        await page.route("**/*", serve(lang, feed, details));
         await page.goto("http://magpie.test/?view=routing");
         await page.locator(".rt-req").nth(first.length - 1).waitFor();
         await page.locator(".rt-ctx .ctx-cache").waitFor();
@@ -108,6 +108,21 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const tr = (s) => page.evaluate(([l, s]) => (l === "en" ? s : I18N[l][s]), [lang, s]);
         const w = { last: await tr("The last request's · this one is on its way"), none: await tr("The vendor didn't say"), soon: await tr("Read once the vendor answers") };
         for (const [k, v] of Object.entries(w)) assert.ok(v, `${k} has its ${lang}`);
+        const send = async (r) => {
+          for (let i = 0; i < 60 && !feed.next; i++) await page.waitForTimeout(50);
+          const next = feed.next;
+          assert(next, "the page asks for the next trace");
+          feed.next = null;
+          next(r);
+          await page.waitForTimeout(400);
+        };
+        // An open story gains its waiting explanation the first time it
+        // runs. Once both states have appeared, later requests keep that
+        // peak height, rather than moving the context on every request.
+        if (details) {
+          await send(req(104, "read"));
+          await send(req(104, "done"));
+        }
 
         // every frame from here on: where each part is, what the cache says
         await page.evaluate((watch) => {
@@ -127,14 +142,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           };
           requestAnimationFrame(tick);
         }, WATCH);
-        const send = async (r) => {
-          for (let i = 0; i < 60 && !feed.next; i++) await page.waitForTimeout(50);
-          const next = feed.next;
-          assert(next, "the page asks for the next trace");
-          feed.next = null;
-          next(r);
-          await page.waitForTimeout(400);
-        };
         const cacheNow = () => page.evaluate(() => {
           const c = document.querySelector(".rt-ctx .ctx-cache"), b = c.querySelector(".ctx-big b"), s = c.querySelector(".ctx-big span");
           return {
@@ -144,13 +151,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           };
         });
         const seen = [];
-        for (const id of [104, 105]) {
+        for (const id of [105, 106]) {
           for (const step of ["start", "read", "done"]) {
             await send(req(id, step));
             seen.push([id, step, await cacheNow()]);
-            if (process.env.ARTIFACT_DIR && id === 104 && step !== "start") {
+            if (process.env.ARTIFACT_DIR && id === 105 && step !== "start") {
               await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
-              await page.locator(".rt-ctx .ctx-card").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-${step === "read" ? "live" : "done"}.png`) });
+              await page.locator(".rt-ctx-detail .ctx-body").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-${step === "read" ? "live" : "done"}.png`) });
             }
           }
         }
@@ -187,7 +194,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // a request done whose cache the vendor didn't report: a dash set
         // apart from its word, why, no bar, and the card still in its place
         const before = await page.evaluate((s) => [...document.querySelectorAll(s)].map((e) => e.getBoundingClientRect().y), Object.values(WATCH).join(","));
-        await send(req(106, "est"));
+        await send(req(107, "est"));
         const est = await cacheNow();
         assert.equal(est.figure, "—");
         assert.match(est.cls, /\bnone\b/);
@@ -196,11 +203,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(est.bar, "hidden", "no empty bar under the dash");
         const after = await page.evaluate((s) => [...document.querySelectorAll(s)].map((e) => e.getBoundingClientRect().y), Object.values(WATCH).join(","));
         assert.deepEqual(after.map(Math.round), before.map(Math.round), "nothing moved for the estimated request");
-        if (process.env.ARTIFACT_DIR) await page.locator(".rt-ctx .ctx-card").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-none.png`) });
+        if (process.env.ARTIFACT_DIR) await page.locator(".rt-ctx-detail .ctx-body").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-none.png`) });
         // another session's first request, under way: no last request of
         // its own to show, so a dash till it is read, in the same place
         const top = await page.locator(".rt-ctx .ctx-cache").evaluate((e) => e.getBoundingClientRect().y);
-        await send(req(107, "read", "019b-other"));
+        await send(req(108, "read", "019b-other"));
         const soon = await cacheNow();
         assert.equal(soon.figure, "—");
         assert.match(soon.cls, /\bnone\b/);
@@ -208,7 +215,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(soon.gap >= 3, `the dash and its word are apart: ${soon.gap}px`);
         assert.equal(soon.bar, "hidden");
         assert(Math.abs(await page.locator(".rt-ctx .ctx-cache").evaluate((e) => e.getBoundingClientRect().y) - top) <= 0.5, "the cache kept its place");
-        if (process.env.ARTIFACT_DIR) await page.locator(".rt-ctx .ctx-card").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-soon.png`) });
+        if (process.env.ARTIFACT_DIR) await page.locator(".rt-ctx-detail .ctx-body").screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-${width}-ctx-soon.png`) });
         assert.deepEqual(errors, []);
         feed.next?.(req(999, "done"));
         await context.close();

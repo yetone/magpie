@@ -90,19 +90,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=routing");
       await page.locator(".rt-days .rt-day").nth(1).click();
       await page.locator(".rt-req").nth(routes.length - 1).waitFor();
+      await page.locator(".rt-detail-toggle").click();
       const story = async (i) => {
         await page.locator(".rt-req").nth(i).click();
         await page.waitForTimeout(400);
         return page.locator(".rt-steps li.kind");
       };
       let s = await story(0);
-      assert.equal(await s.locator(".kind").textContent(), want[lang].tag);
+      assert.equal(await page.locator(".rt-brief-path .kind").textContent(), want[lang].tag);
       for (const re of want[lang].unknown) assert.match(await s.textContent(), re);
       s = await story(1);
       for (const re of want[lang].listed) assert.match(await s.textContent(), re);
       assert.doesNotMatch(await s.textContent(), /nothing magpie knows|所知的信息/);
       s = await story(2);
-      assert.equal(await s.locator(".kind").textContent(), want[lang].tag);
+      assert.equal(await page.locator(".rt-brief-path .kind").textContent(), want[lang].tag);
       for (const re of want[lang].missing) assert.match(await s.textContent(), re);
       assert.deepEqual(errors, []);
     });

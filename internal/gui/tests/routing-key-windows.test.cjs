@@ -104,6 +104,7 @@ async function open(t, engine, lang, scene, width = 1100) {
   const req = page.locator(".rt-req").first();
   await req.waitFor();
   if (await req.getAttribute("aria-pressed") !== "true") await req.click();
+  await page.locator(".rt-detail-toggle").click();
   await page.locator(".rt-steps li.why").first().waitFor();
   // each row's state is filled on the next frame, after the story
   await page.waitForFunction(() => [...document.querySelectorAll("li")].filter((li) => li.querySelector(".who")).every((li) => li.querySelector("em")?.textContent.trim()));

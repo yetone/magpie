@@ -69,7 +69,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const counts = () => page.locator("#rt .rt-stats b").allTextContents();
       const story = async (id) => page.waitForFunction((id) => {
         const row = document.querySelector('.rt-req[aria-pressed="true"]');
-        return row?.textContent.includes("model-" + id) && document.querySelector(".rt-steps")?.textContent.includes("model-" + id);
+        return row?.textContent.includes("model-" + id) && document.querySelector(".rt-brief")?.textContent.includes("model-" + id);
       }, id);
       const choose = async (value) => {
         await click(page, page.locator("#rtPurpose"));

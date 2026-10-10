@@ -68,6 +68,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=agents");
       await page.locator(`${row} .ag-conn`).waitFor();
 
+      // The page enters on a transform of its own. WebKit rounds child
+      // rectangles separately at fractional translations, so a switch's
+      // measured offset can differ by 1px until that unrelated motion ends.
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        await Promise.all(document.querySelector('#view-agents').getAnimations()
+          .map((a) => a.finished.catch(() => {})));
+      });
       const shut = await where(page);
       const opening = await heights(page, 800);
       const open = await where(page);

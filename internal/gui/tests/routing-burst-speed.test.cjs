@@ -60,8 +60,8 @@ function serve(lang) {
 }
 
 const want = {
-  en: { first: /first token in 24 s/, speed: /tok\/s/, normal: /· 100 tok\/s/, slow: /· 50 tok\/s/ },
-  zh: { first: /24 秒 后首响/, speed: /token\/秒/, normal: /· 100 token\/秒/, slow: /· 50 token\/秒/ },
+  en: { first: /First token\s+24 s/, speed: /tok\/s/, normal: /100 tok\/s/, slow: /50 tok\/s/ },
+  zh: { first: /首响\s+24 秒/, speed: /token\/秒/, normal: /100 token\/秒/, slow: /50 token\/秒/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -95,7 +95,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(300);
         assert(Math.abs((await row.evaluate((e) => e.getBoundingClientRect().top)) - was) <= 1, "picking the request moved the page");
         assert.deepEqual(await page.evaluate(() => [scrollX, scrollY, document.scrollingElement.scrollTop]), scrolled);
-        return page.locator(".rt-steps").textContent();
+        return page.locator(".rt-brief").innerText();
       };
       // the report: its first token, and no speed
       const burst = await story(0);

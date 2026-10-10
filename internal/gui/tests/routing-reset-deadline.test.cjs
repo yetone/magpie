@@ -75,7 +75,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator(".rt-req").nth(n).click();
         await page.waitForFunction(([who, src]) => {
           const li = document.querySelector(".rt-steps li.why");
-          return li && li.textContent.includes(who) && new RegExp(src).test(li.textContent);
+          return li && document.querySelector(".rt-brief").textContent.includes(who) && new RegExp(src).test(li.textContent);
         }, [who, want.source]);
       };
       await open(0, "a@example.com", w.pace);

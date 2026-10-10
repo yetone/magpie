@@ -102,8 +102,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(await reqs.nth(0).locator(".speed").getAttribute("title"), w.rule);
       await reqs.nth(0).click();
       await page.waitForTimeout(200);
-      const story = await page.locator(".rt-steps").textContent();
-      assert(story.includes(w.s(133)) && !/1[,.]?467/.test(story), "the story's speed: " + story);
+      // The result is now a metric, without a second prose copy in the
+      // folded explanation. It keeps the same reasoning-aware timing.
+      const speed = page.locator(".rt-brief-metrics .speed");
+      assert.equal((await speed.locator(".v").textContent()).trim(), w.s(133));
+      assert.match(await speed.getAttribute("title"), w.rule);
       await page.locator(".rt-group-by button").nth(1).click();
       const group = page.locator("button.rt-session").first();
       await group.waitFor();

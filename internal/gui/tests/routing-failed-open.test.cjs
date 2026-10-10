@@ -51,8 +51,8 @@ function serve(lang, live) {
 }
 
 const want = {
-  en: { head: "How the request at", said: "It said: " + vendor },
-  zh: { head: "的请求是怎么路由的", said: "原话：" + vendor },
+  en: { head: "Request at", said: "It said: " + vendor },
+  zh: { head: "的请求", said: "原话：" + vendor },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -82,7 +82,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // Live, the page follows the newest request and draws its story above
         // the list once the trace is in; measure after that, not mid-load.
         if (live) await page.locator(".rt-req").nth(0).and(page.locator('[aria-pressed="true"]')).waitFor();
-        await page.locator(".rt-steps li").first().waitFor();
+        await page.locator(".rt-brief").waitFor();
         let was = await row.evaluate((e) => e.getBoundingClientRect().top);
         for (let i = 0, same = 0; i < 40 && same < 3; i++) {
           await page.waitForTimeout(50);

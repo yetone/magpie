@@ -140,6 +140,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await stage.waitFor();
       await page.waitForFunction((s) => document.body.innerText.includes(s), w.row);
       assert.match(await stage.textContent(), new RegExp(w.row));
+      await page.locator(".rt-detail-toggle").click();
       await page.waitForFunction((s) => document.body.innerText.includes(s), zh ? "已排到最后" : "so it went to the back");
 
       // the providers with several accounts: set at once

@@ -87,6 +87,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert(cls.includes("bad"), `row class ${cls}`);
       assert(!cls.includes("ok") && !cls.includes("moved"), `row class ${cls}`);
       // the stat's click picks it, over the noted 200 that answers and is newer
+      // Counts now sit in the card header. Use reader input to bring the
+      // header back into view; magpie deliberately blocks script scroll.
+      await page.mouse.move(10, 200);
+      await page.mouse.wheel(0, -3000);
+      await page.waitForTimeout(150);
       await page.locator(".rt-errs").click();
       await page.waitForTimeout(300);
       assert.equal(await first.getAttribute("aria-pressed"), "true", "the errors stat picks a 200 with a note of its own, not the broken-off request");

@@ -1,5 +1,34 @@
 # Dropdown browser regression
 
+## Routing request details
+
+`routing-details.test.cjs` checks the closed request/context summaries,
+independent disclosure preferences across requests and reloads, visible
+failures, prompt updates without moving the request list, unknown capacity,
+estimated counts, one context header, nonrepeating routine results, and
+single-line content filters, centred account icons, faded disclosure text,
+unfilled context-header hover, aligned column separators, metrics preceding
+the request path, a faded path preview with decision reasons hidden,
+aligned result/explanation dots, an inline whole-row disclosure with mouse
+and keyboard controls, stable width as details open, reachable field hints,
+the translated current-policy label, and policy at the bottom of the
+same disclosure. Incoming requests still update an opened story. It runs both
+engines in all five languages at 2048/1440/1354/1280/900/880/860/420/360px,
+including both sides of the card-width breakpoints.
+`MAGPIE_DETAIL_ASSETS` points it at original assets to verify the
+closed-context assertion fails on an eagerly constructed detail grid.
+`routing-context-fold.test.cjs` and `routing-live-patch.test.cjs` also retain
+the upstream thin occupancy bar, a single fixed-height folded line, its
+nodes across incoming requests, and the one-request expansion reached
+from Usage's Context tab without changing the saved preference.
+`routing-ctx-still.test.cjs` opens the unified context header and watches
+each animation frame for stable geometry, state labels and cache figures
+as requests begin, gain prompt data and finish.
+
+```sh
+node --test internal/gui/tests/routing-details.test.cjs
+```
+
 ## Installed desktop fonts
 
 `fonts.test.cjs` exercises the interface/code font controls with installed

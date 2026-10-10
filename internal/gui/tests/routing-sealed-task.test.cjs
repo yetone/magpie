@@ -106,7 +106,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.match(await story(), allowance);
 
       await page.locator(".rt-req").nth(2).click();
-      await page.waitForFunction(() => document.querySelector(".rt-steps li.why").textContent.includes("enterprise@example.com"));
+      await page.waitForFunction(() => document.querySelector(".rt-brief").textContent.includes("enterprise@example.com"));
       assert.doesNotMatch(await story(), sealed);
       assert.match(await story(), selected);
       assert.match(await story(), allowance);

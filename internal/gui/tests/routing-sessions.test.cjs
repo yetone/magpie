@@ -102,8 +102,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await page.locator(".rt-session").count(), 4);
       // Original request selection and its routing story still work.
       await page.locator(".rt-req").filter({ hasText: "model-a" }).click();
-      await page.waitForFunction(() => document.querySelector(".rt-steps").textContent.includes("model-a"));
-      assert.match(await page.locator(".rt-steps").textContent(), /model-a/);
+      await page.waitForFunction(() => document.querySelector(".rt-brief").textContent.includes("model-a"));
+      assert.match(await page.locator(".rt-brief").textContent(), /model-a/);
       for (const width of [1440, 560]) {
         await page.setViewportSize({ width, height: 800 });
         await page.waitForTimeout(150);

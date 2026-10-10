@@ -82,6 +82,74 @@
     return { read: u.cache_read || 0, total };
   }
 
+  // Routing's closed card uses the same counts, health and final-attempt
+  // cache as the full card, including the estimate while a request runs.
+  function ctxState(r) {
+    const p = r.prompt, live = !r.done;
+    // Keep the pill as wide as its widest state in this language, on
+    // both the shared card and Routing's unified header.
+    const state = live ? "live" : p.counted ? "counted" : "est";
+    const st = el("span", "ctx-state " + state), words = el("span", "ctx-state-w");
+    for (const [k, w] of [["live", "Live"], ["counted", "Counted"], ["est", "Estimated"]]) {
+      const word = el("span", k === state ? "on" : "", t(w));
+      if (k !== state) word.setAttribute("aria-hidden", "true");
+      words.append(word);
+    }
+    st.append(el("i"), words);
+    st.title = t(live ? "The request is on its way: the prompt is estimated from what the agent sent"
+      : p.counted ? "As many tokens as the vendor counted; the parts are measured from the request and scaled to it"
+      : "Estimated from what the agent sent: the vendor didn't say how many tokens it read");
+    return st;
+  }
+  function ctxStack(p) {
+    const window = p.window || 0, bar = el("span", "ctx-stack");
+    bar.setAttribute("role", "img");
+    bar.setAttribute("aria-label", t("{used} of {window} tokens used", { used: fmtK(p.tokens), window: fmtK(window || p.tokens) }));
+    const scale = Math.max(window, p.tokens, 1);
+    for (const k of PARTS) {
+      const n = p.parts.find((x) => x.kind === k)?.tokens || 0;
+      const i = el("i", "k-" + k);
+      i.title = partName(k);
+      i.style.width = +(Math.max(0, n) / scale * 100).toFixed(2) + "%";
+      bar.append(i);
+    }
+    return bar;
+  }
+  function ctxSummary(r, open = false, into = null) {
+    const p = r.prompt, window = p.window || 0;
+    const summary = el("span", "ctx-summary");
+    summary.append(el("span", "ctx-title", t("Context window")));
+    if (open) {
+      summary.append(el("span", "grow"), ctxState(r));
+    } else {
+      const figures = el("span", "ctx-summary-numbers");
+      summary.append(figures);
+      const used = el("span", "ctx-summary-used");
+      used.append(el("b", "", fmtK(p.tokens)), window ? " / " + fmtK(window) : " " + t("tokens"));
+      used.title = t(p.counted ? "Counted" : "Estimated");
+      figures.append(used);
+      if (window) {
+        const fill = p.tokens / window, [tone, word] = health(fill);
+        const h = el("span", "ctx-health " + tone, pct(fill));
+        h.title = t(word) + " · " + t("{tokens} free", { tokens: fmtK(Math.max(0, window - p.tokens)) });
+        figures.append(h);
+      }
+      if (!p.counted || !r.done) figures.append(el("span", "ctx-summary-est", t(!r.done ? "Live" : "Estimated")));
+      const cache = cacheOf(r);
+      if (cache && p.counted !== false) figures.append(el("span", "ctx-summary-cache", t("Cache") + " " + pct(cache.read / cache.total)));
+      summary.append(ctxStack(p));
+    }
+    // A disclosure changes what the head contains. Reusing its figures as
+    // the empty spacer would make the click guard follow that child's new
+    // position, even though the head itself stayed put.
+    if (into && !!into.querySelector(".ctx-summary-numbers") === open) {
+      into.replaceChildren(...summary.childNodes);
+      return into;
+    }
+    return into ? morph(into, summary) : summary;
+  }
+  window.ctxSummary = ctxSummary;
+
   // the cells of the grid, each the part and item it shows; a window
   // smaller than the prompt (not known, or overrun) is the prompt
   function cellsOf(p, window) {
@@ -223,7 +291,8 @@
   // ctxCard draws a route's prompt. opts: series (the session's prompts,
   // [{id, tokens, time}]), onPoint (a point of it clicked), cache ({read,
   // total}, when the route carries no usage), crumbs (the footer's path),
-  // place (where it is drawn, for its width: see cardWidth). The card's
+  // place (where it is drawn, for its width: see cardWidth), headless
+  // (Routing supplies a persistent clickable header and overview columns). The card's
   // ctxUpdate(r, opts) draws another route, or the same one further on, in
   // it: what is the same stays the same nodes, its grid's cells among them,
   // so nothing flashes or comes in again and the grid keeps its height
@@ -237,7 +306,9 @@
   // Usage page's Context tab), so it shows unfolded, it alone: the next
   // request drawn in the card takes the reader's choice again
   function ctxCard(r, opts = {}) {
-    const card = el("div", "ctx-card" + (opts.foldable && ctxShut && !opts.open ? " shut" : ""));
+    const headless = !!opts.headless;
+    const card = el("div", (headless ? "ctx-body" : "ctx-card") + (opts.foldable && ctxShut && !opts.open ? " shut" : ""));
+    const overview = headless ? el("div", "ctx-overview") : card;
     card.dataset.place = opts.place || "";
     if (cardWidth[card.dataset.place] !== undefined) sizeCard(card, cardWidth[card.dataset.place]);
     cardSizes.observe(card);
@@ -372,43 +443,16 @@
         };
         title = fold;
       }
-      // the state's words are all there, one shown: the pill is as wide as
-      // the widest in any language, so the model beside it doesn't move as
-      // a request goes from Live to Counted (dumplings on Discord: each
-      // request made the card jitter)
-      const state = live ? "live" : p.counted ? "counted" : "est";
-      const st = el("span", "ctx-state " + state);
-      const words = el("span", "ctx-state-w");
-      for (const [k, w] of [["live", "Live"], ["counted", "Counted"], ["est", "Estimated"]]) {
-        const word = el("span", k === state ? "on" : "", t(w));
-        if (k !== state) word.setAttribute("aria-hidden", "true");
-        words.append(word);
-      }
-      st.append(el("i"), words);
-      st.title = t(live ? "The request is on its way: the prompt is estimated from what the agent sent"
-        : p.counted ? "As many tokens as the vendor counted; the parts are measured from the request and scaled to it"
-        : "Estimated from what the agent sent: the vendor didn't say how many tokens it read");
       head.append(title);
       if (opts.foldable) {
         head.append(el("span", "ctx-short", fmtK(p.tokens) + (window ? " / " + fmtK(window) + " · " + pct(full) : "")));
         // folded, a thin bar of what fills the window, a part each; it is
         // morphed with the head, so a live request moves its widths only
-        const bar = el("span", "ctx-stack");
-        bar.setAttribute("role", "img");
-        bar.setAttribute("aria-label", t("{used} of {window} tokens used", { used: fmtK(p.tokens), window: fmtK(window || p.tokens) }));
-        const scale = Math.max(window, p.tokens, 1);
-        for (const k of PARTS) {
-          const n = p.parts.find((x) => x.kind === k)?.tokens || 0;
-          const i = el("i", "k-" + k);
-          i.title = partName(k);
-          i.style.width = +(Math.max(0, n) / scale * 100).toFixed(2) + "%";
-          bar.append(i);
-        }
-        head.append(bar);
+        head.append(ctxStack(p));
       }
       head.append(el("span", "grow"));
       if (r.model) head.append(el("code", "ctx-model", r.model));
-      head.append(st);
+      head.append(ctxState(r));
 
       // how full, and the cache
       const top = el("div", "ctx-top");
@@ -534,12 +578,18 @@
 
       if (!parts) {
         parts = { head, top, legend, foot, sp };
-        card.append(head, top, grid, legend, contents, foot, ...(sp ? [sp] : []), tip);
+        if (headless) {
+          overview.append(top, grid, legend, foot, ...(sp ? [sp] : []));
+          card.append(overview, contents, tip);
+        } else card.append(head, top, grid, legend, contents, foot, ...(sp ? [sp] : []), tip);
         return;
       }
       for (const k of ["head", "top", "legend", "foot"]) parts[k] = morph(parts[k], { head, top, legend, foot }[k]);
       if (sp && parts.sp) parts.sp = morph(parts.sp, sp);
-      else if (sp) card.insertBefore(parts.sp = sp, tip);
+      else if (sp) {
+        parts.sp = sp;
+        if (headless) overview.append(sp); else card.insertBefore(sp, tip);
+      }
       else if (parts.sp) { parts.sp.remove(); parts.sp = null; }
     };
     card.ctxUpdate = fill;

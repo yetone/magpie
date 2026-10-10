@@ -26,7 +26,12 @@
   const top = el("div", "rt-top");
   const what = el("div", "rt-what");
   const mode = el("p", "rt-mode");
-  top.append(what, mode);
+  const policy = el("div", "rt-policy"), policyTitle = el("div", "rt-policy-title");
+  policy.id = "rtRoutingPolicy";
+  policy.append(policyTitle, mode);
+  const topLine = el("div", "rt-top-line");
+  topLine.append(what);
+  top.append(topLine);
   const stage = el("div", "rt-stage");
   const wires = document.createElementNS(NS, "svg");
   wires.setAttribute("class", "rt-wires");
@@ -66,13 +71,81 @@
     statB.push(b);
     stats.append(s);
   }
-  foot.append(cap, stats);
+  topLine.append(stats);
+  foot.append(cap);
   const log = el("div", "rt-log");
+  const main = el("div", "rt-main");
+  const story = el("div", "rt-story");
   const logHead = el("div", "rt-log-head");
+  const brief = el("div", "rt-brief");
+  const details = el("div", "rt-details");
+  const detailHint = el("span", "rt-detail-hint");
+  detailHint.setAttribute("aria-hidden", "true");
+  const preview = el("div", "rt-detail-preview");
+  preview.id = "rtRoutingDetails";
+  const storyToggle = el("button", "rt-path-row rt-detail-toggle");
+  storyToggle.type = "button";
+  storyToggle.setAttribute("aria-describedby", "rtRequestPath");
+  // Hold the request row in place while its details unroll beneath it.
+  storyToggle.dataset.unrolls = "";
   const steps = el("ol", "rt-steps");
+  storyToggle.setAttribute("aria-controls", "rtRequestPath " + preview.id + " " + policy.id);
   // what the request's prompt held: its context window (context.js)
   const ctxBox = el("div", "rt-ctx");
-  log.append(logHead, steps, ctxBox);
+  ctxBox.hidden = true;
+  const ctxToggle = el("button", "ctx-head rt-ctx-toggle");
+  ctxToggle.type = "button";
+  const ctxDetail = el("div", "rt-ctx-detail");
+  ctxDetail.id = "rtContextDetails";
+  ctxToggle.setAttribute("aria-controls", ctxDetail.id);
+  ctxBox.append(ctxToggle, ctxDetail);
+  preview.append(steps);
+  details.append(storyToggle, preview, policy);
+  story.append(logHead, brief);
+  log.append(story);
+  let storyOpen = false, contextOpen = false, ctxFor = 0, disclosureKey = "";
+  try {
+    storyOpen = localStorage.getItem("magpie.routingDetails") === "1";
+    const contextPref = localStorage.getItem("magpie.routingContext");
+    // Preserve the choice made with the original context-card fold.
+    contextOpen = contextPref !== null ? contextPref === "1" : localStorage.getItem("magpie.ctxShut") === "0";
+  } catch {}
+  function detailVisibility() {
+    preview.setAttribute("aria-hidden", String(!storyOpen && !story.classList.contains("has-events")));
+    storyToggle.querySelector(".rt-brief-path")?.setAttribute("aria-hidden", String(!storyOpen && !story.classList.contains("has-events")));
+  }
+  function disclosures() {
+    const contextShown = contextOpen || !!ctxFor;
+    const key = JSON.stringify([document.documentElement.lang, storyOpen, contextShown]);
+    if (key === disclosureKey) return;
+    disclosureKey = key;
+    story.classList.toggle("expanded", storyOpen);
+    storyToggle.setAttribute("aria-expanded", String(storyOpen));
+    storyToggle.title = t(storyOpen ? "Hide details" : "Show details");
+    storyToggle.setAttribute("aria-label", storyToggle.title);
+    detailHint.textContent = storyToggle.title;
+    detailVisibility();
+    // The same decision is explained once in the request's details.
+    // Keep the live caption for screen readers, outside the visual layout.
+    cap.classList.add("rt-announcement");
+    policy.hidden = !storyOpen;
+    policyTitle.textContent = t("Current routing policy");
+    ctxToggle.setAttribute("aria-expanded", String(contextShown));
+    ctxDetail.hidden = !contextShown;
+  }
+  function saveDisclosure(key, open) {
+    try { localStorage.setItem(key, open ? "1" : "0"); } catch {}
+    steady(() => { disclosures(); if (logR) holdStory(); });
+  }
+  storyToggle.onclick = () => { storyOpen = !storyOpen; saveDisclosure("magpie.routingDetails", storyOpen); };
+  ctxToggle.onclick = () => {
+    contextOpen = !(contextOpen || !!ctxFor);
+    ctxFor = 0;
+    saveDisclosure("magpie.routingContext", contextOpen);
+    ctxKey = "";
+    steady(() => { if (logR) renderCtx(logR); });
+  };
+  disclosures();
   const off = el("div", "none rt-off");
   // over the stage while a replay plays: the time it is replaying, which
   // requests are in flight then, and where it is among them
@@ -85,7 +158,8 @@
   rTrack.append(rHead);
   rbar.append(rTop, rWhat, rTrack);
   rbar.hidden = true;
-  box.append(top, rbar, stage, foot, log, off);
+  main.append(top, rbar, stage, foot, log, off);
+  box.append(main, ctxBox);
 
   // under the stage: every request the gateway keeps, and each account or
   // key as those requests found it
@@ -212,7 +286,8 @@
       for (const [cls, fits] of Object.entries(marks)) node.classList.toggle(cls, fits(w));
     });
   }).observe(node);
-  byWidth(box, { max560: (w) => w <= 560 });
+  byWidth(box, { min800: (w) => w >= 800, min1280: (w) => w >= 1280 });
+  byWidth(main, { max560: (w) => w <= 560 });
   byWidth(list, { max460: (w) => w <= 460, max560: (w) => w <= 560 });
   byWidth(more, { max520: (w) => w <= 520, min1150: (w) => w >= 1150 });
   for (const col of [colA, colB]) byWidth(col, { max440: (w) => w <= 440, max760: (w) => w <= 760 });
@@ -1471,14 +1546,13 @@
   function renderLog() {
     const r = logR = pinned || cur;
     log.hidden = !r;
-    if (!r) return;
+    if (!r) { hideCtx(); return; }
     const on = () => listed().filter((x) => x.id >= logR.id);
     const head = JSON.stringify([document.documentElement.lang, !!rp, pinned?.id, r.id, r.time, r.done, !!pinned && on().length > 1]);
     if (headKey !== head) {
       headKey = head;
       logHead.replaceChildren(
-        el("span", "", rp ? t("How the request at {time} was routed", { time: clock(r.time) })
-          : pinned ? t("How the request at {time} was routed", { time: clock(r.time) }) : t("How the last request was routed")),
+        el("span", "", rp || pinned ? t("Request at {time}", { time: clock(r.time) }) : t("Latest request")),
         el("span", "grow"));
       if (!rp && r.done) {
         const usage = el("button", "text", t("View usage"));
@@ -1500,30 +1574,80 @@
         logHead.append(live);
       }
     }
+    disclosures();
+    renderBrief(r);
     renderSteps(r);
     holdStory();
     renderCtx(r);
   }
+  let briefKey = "";
+  const sameModel = (asked, sent, provider) => asked === sent || asked === provider + "/" + sent;
+  function renderBrief(r) {
+    const tr = r.tries[r.tries.length - 1];
+    const w = tr && tried(r, tr);
+    const how = !r.done ? "wait" : failedRoute(r) ? "bad" : "ok";
+    const metrics = requestMetrics(r, how);
+    const key = JSON.stringify([document.documentElement.lang, r.agent, r.model, r.kind, w, tr, how, metrics, r.firstText]);
+    if (briefKey === key) return;
+    briefKey = key;
+    const path = el("span", "rt-brief-path " + how);
+    path.id = "rtRequestPath";
+    const status = el("i", "rt-brief-state");
+    status.title = t(how === "wait" ? "In progress" : how === "bad" ? "Failed" : "Answered");
+    status.setAttribute("role", "img");
+    status.setAttribute("aria-label", status.title);
+    path.append(status, el("span", "", agentName(r.agent)), el("code", "", r.model));
+    if (r.kind) { const tag = kindTag(r); tag.title = kindWhy(r); path.append(tag); }
+    if (w) {
+      const account = el("span", "rt-named");
+      account.append(icon(logoOf(w)), el("span", "rt-account-name", who(w)));
+      path.append(el("span", "rt-brief-arrow", "→"), account);
+      const sent = tr.served || tr.model || w.model;
+      if (sent && !sameModel(r.model, sent, w.provider)) path.append(el("code", "", sent));
+      if (tr.effort) { const effort = el("span", "rt-brief-effort", tr.effort); effort.title = effortNote(r, tr); path.append(effort); }
+    }
+    const measures = el("div", "rt-brief-metrics");
+    measures.append(...metrics.map((m) => metricElement(m)));
+    // First response and first text can differ for a reasoning reply.
+    // Its first text belongs to the timing tooltip, not a second metrics
+    // paragraph repeating all of the result.
+    const first = measures.querySelector(".ttft");
+    if (first && r.firstText > r.ttft) first.title += " · " + t("first text in {ms}", { ms: took(r.firstText) });
+    path.setAttribute("aria-hidden", String(!storyOpen && !story.classList.contains("has-events")));
+    storyToggle.replaceChildren(path, detailHint);
+    brief.replaceChildren(measures, details);
+  }
+  // The summary follows requests without constructing the full card until
+  // the reader opens it. Both disclosures survive requests and reloads.
+  let ctxKey = "", ctxShown = 0, ctxTab = "all";
+  function hideCtx() {
+    ctxBox.hidden = true;
+    box.classList.remove("has-context");
+    ctxKey = "";
+    ctxDetail.replaceChildren();
+    ctxShown = 0;
+  }
   // holdStory keeps the story of the live request, its head and its lines,
   // as tall as it has been since the reader began following live, at this
-  // width: a request under way is told in fewer lines than one answered
-  // ("is answering…", then "answered in 4.0 s…" over two lines at a
-  // phone's width), and its head gets View usage and Replay, taller than
+  // width and disclosure choice: a request under way can have fewer
+  // metrics or explanation lines, and its head gets View usage and Replay, taller than
   // the words, once it is done. So each new request moved the context
   // window under it up and back down (dumplings on Discord: the card
   // jittered on every request). A request picked, a replay or a past day
   // is drawn at its own height. A change of width measures it again at
   // once, as it is then (the list coming in under it can take a
   // scrollbar's width off it before the first live request)
-  let storyHold = { key: "", h: [0, 0] }, storyDrawn = "";
+  let storyHold = { key: "", h: [0, 0, 0] }, storyDrawn = "";
+  const storyParts = () => [logHead, brief.firstElementChild, brief];
   function holdStory() {
     const follow = !pinned && !rp && !day;
-    const w = steps.clientWidth;
-    const key = JSON.stringify([follow, w, document.documentElement.lang]);
-    if (key === storyHold.key && storyDrawn === headKey + stepsKey) return;
-    if (key !== storyHold.key) storyHold = { key, h: [0, 0] };
-    storyDrawn = headKey + stepsKey;
-    [logHead, steps].forEach((e, i) => {
+    const w = brief.clientWidth;
+    const key = JSON.stringify([follow, w, document.documentElement.lang, storyOpen]);
+    if (key === storyHold.key && storyDrawn === headKey + briefKey + stepsKey) return;
+    if (key !== storyHold.key) storyHold = { key, h: [0, 0, 0] };
+    storyDrawn = headKey + briefKey + stepsKey;
+    storyParts().forEach((e, i) => {
+      if (!e) return;
       e.style.minHeight = "";
       if (!follow || !w) return;
       const h = e.getBoundingClientRect().height;
@@ -1534,46 +1658,42 @@
   new ResizeObserver(() => {
     holdStory();
     // grown since it was measured (a font come in): that is its height
-    [logHead, steps].forEach((e, i) => { storyHold.h[i] = Math.max(storyHold.h[i], e.getBoundingClientRect().height); });
-  }).observe(steps);
-  // renderCtx draws the request's context window under its story, with
-  // its session's prompts request by request; drawn again only when what
-  // it shows changes. Live, the next request is patched into the card
-  // that is there, so only what changed changes and nothing under it moves
-  // (Zhenzhen on Discord: each new request flashed the whole card, and its
-  // grid went and came back); a request the reader picks comes in afresh,
-  // its cells one after another
-  //
-  // ctxFor is a request opened to see its context window (the Usage
-  // page's Context tab): its card shows unfolded, it alone, whatever the
-  // reader keeps folded
-  let ctxKey = "", ctxShown = 0, ctxTab = "all", ctxFor = 0;
+    storyParts().forEach((e, i) => { if (e) storyHold.h[i] = Math.max(storyHold.h[i], e.getBoundingClientRect().height); });
+  }).observe(brief);
   function renderCtx(r) {
-    if (!r.prompt || !window.ctxCard) {
-      // a live request whose prompt the gateway is still reading keeps
-      // the card in its place until it has it, rather than the card
-      // going and coming back a moment later
-      if (!r.prompt && !r.done && !pinned && ctxBox.firstElementChild?.ctxUpdate) return;
-      if (ctxKey) { ctxKey = ""; ctxBox.replaceChildren(); }
+    // A Usage context link opens this request only, without changing the
+    // reader's saved preference for the next request or a reload.
+    if (ctxFor && ctxFor !== r.id) { ctxFor = 0; disclosures(); }
+    const open = contextOpen || ctxFor === r.id;
+    // Keep the last live context in place while the next prompt is read,
+    // including the closed summary. A deliberately picked request is fresh.
+    if (!r.prompt && !r.done && !pinned && !ctxBox.hidden && ctxKey) return;
+    ctxBox.hidden = !r.prompt || !window.ctxCard;
+    box.classList.toggle("has-context", !ctxBox.hidden);
+    if (ctxBox.hidden) {
+      ctxKey = "";
+      ctxDetail.replaceChildren();
       return;
     }
-    const sk = sessionKey(r);
+    const sk = open ? sessionKey(r) : "";
     const same = (x) => x.prompt && x.agent === r.agent && !x.kind && (sk ? sessionKey(x) === sk : r.conv && x.conv === r.conv);
-    const series = (sk || r.conv) && !r.kind ? listed().filter(same).sort((a, b) => a.id - b.id)
+    const series = open && (sk || r.conv) && !r.kind ? listed().filter(same).sort((a, b) => a.id - b.id)
       .map((x) => ({ id: x.id, tokens: x.prompt.tokens, time: x.time })) : null;
     if (series && !series.some((x) => x.id === r.id)) series.push({ id: r.id, tokens: r.prompt.tokens, time: r.time });
-    if (ctxFor && ctxFor !== r.id) ctxFor = 0;
-    const key = JSON.stringify([document.documentElement.lang, ctxFor, r.id, r.done, r.prompt.tokens, r.prompt.counted, r.prompt.window, r.usage?.length, series?.map((x) => x.id + ":" + x.tokens).join()]);
+    const key = JSON.stringify([document.documentElement.lang, r.id, r.done,
+      r.prompt, r.usage, series, open]);
     if (key === ctxKey) return;
     ctxKey = key;
+    if (ctxToggle.firstElementChild) window.ctxSummary(r, open, ctxToggle.firstElementChild);
+    else ctxToggle.replaceChildren(window.ctxSummary(r, open), svg(CHEV, 12, 1.6));
+    if (!open) { ctxDetail.replaceChildren(); return; }
+    const sess = groupSession(r) || r.conv || "";
     const still = ctxShown === r.id;
     ctxShown = r.id;
-    const sess = groupSession(r) || r.conv || "";
-    const card = ctxBox.firstElementChild;
-    const draw = card?.ctxUpdate && (still || !pinned) ? card.ctxUpdate : (r, o) => ctxBox.replaceChildren(window.ctxCard(r, o));
+    const card = ctxDetail.firstElementChild;
+    const draw = card?.ctxUpdate && (still || !pinned) ? card.ctxUpdate : (r, o) => ctxDetail.replaceChildren(window.ctxCard(r, o));
     draw(r, {
-      still, series, tab: ctxTab, place: "routing", foldable: true,
-      open: ctxFor === r.id, onFold: () => { ctxFor = 0; },
+      still: true, series, tab: ctxTab, place: "routing", headless: true,
       onTab: (id) => { ctxTab = id; },
       crumbs: [agentName(r.agent), sess && (sess.length > 14 ? sess.slice(0, 12) + "…" : sess), "#" + r.id],
       onPoint: (pt) => {
@@ -1586,7 +1706,7 @@
   // provider a line of the story names, so who it is about reads at a
   // glance (the owner: 这里在前面显示对应的 provider 图标会不会更直观一点)
   const logoOf = (w) => w.icon || w.preset || "generic";
-  function logoed(s, r) {
+  function logoed(s, r, selected) {
     const word = /[A-Za-z0-9_]/;
     let hit = null;
     for (const w of r.order) {
@@ -1600,27 +1720,32 @@
     }
     if (!hit) return [s];
     const name = el("span", "rt-named");
-    name.append(icon(logoOf(hit.w)), hit.n);
+    const chosen = selected?.kind === "account" && hit.n === who(selected)
+      && hit.w.id === selected.id && hit.w.model === selected.model;
+    // The identity is already in the result line. Decision prose can
+    // refer to it without printing the same address again. Other seats
+    // keep their names, so comparisons and failed attempts stay clear.
+    name.append(icon(logoOf(hit.w)), chosen ? t("Selected account") : hit.n);
+    if (chosen) name.title = hit.n;
     return [s.slice(0, hit.i), name, s.slice(hit.i + hit.n.length)].filter((x) => x !== "");
   }
 
   function renderSteps(r) {
     const items = [];
-    const main = r.order.find((x) => !x.fallback);
-    items.push([r.group
-      ? t("{agent} asked for the routing group {name}: {members}", { agent: agentName(r.agent), name: r.group.name, members: treeText(r.group) })
-      : main && main.model !== r.model && wentOn(r) === r.model
-      ? t("{agent} asked for {model}: {name} serves it, and the vendor is asked for {sent}", { agent: agentName(r.agent), model: r.model, name: main.name, sent: main.model })
-      : t("{agent} asked for {model}", { agent: agentName(r.agent), model: r.model }) + " → " + (main?.name || r.provider), ""]);
+    const only = r.order.length === 1 && r.order[0].kind === "account" && !r.order[0].rest && !r.sealedTask;
+    items.push([affWhy(r, true) || ruleWhy(r, true) || (only ? t("Only one account is enabled for this model.") : firstWhy(r)), "why"]);
+    for (const s of nestedWhy(r)) items.push([s, "why"]);
+    if (r.group) items.push([t("{agent} asked for the routing group {name}: {members}", { agent: agentName(r.agent), name: r.group.name, members: treeText(r.group) }), ""]);
     if (r.kind) items.push([kindWhy(r), "aside kind"]);
     if (r.sealedTask) items.push([t(r.group
       ? "This subagent task is encrypted. Only ChatGPT accounts can read it; other providers (such as Claude) are excluded regardless of quota."
       : "This subagent task is encrypted. Only ChatGPT accounts can read it."), "aside"]);
-    items.push([affWhy(r, true) || ruleWhy(r, true) || firstWhy(r), "why"]);
-    for (const s of nestedWhy(r)) items.push([s, "why"]);
     for (const a of asides(r)) items.push([a, "aside"]);
     r.tries.forEach((tr, i) => {
-      items.push([tryWhy(r, i), tr.done ? (tryOk(tr) ? "ok" : "bad") : "wait"]);
+      // A routine result is already in the summary. Retries, resets and
+      // changed reasoning still need their attempt-specific explanation.
+      if (r.tries.length > 1 || !tryOk(tr) || tr.reset || (r.effort && tr.effort && r.effort !== tr.effort))
+        items.push([tryWhy(r, i), tr.done ? (tryOk(tr) ? "ok" : "bad") : "wait"]);
       // each model Copilot's Auto picked for it, where from, and whether
       // Copilot refused it, on which API and with Auto's session token or
       // without (#256)
@@ -1645,13 +1770,17 @@
       if (tr.done && tryOk(tr) && tr.upstream) items.push([upstreamWhy(tr), "aside upstream-said", tr]);
     });
     if (r.done && !r.tries.length) items.push([t("Nothing was tried: {error}", { error: r.error || r.status }), "bad"]);
-    const key = JSON.stringify([r.kind, items.map(([s, c, tr]) => [s, c, tr?.model, tr?.served]), r.order.map(logoOf)]);
+    const selected = r.tries.length === 1 && tried(r, r.tries[0]);
+    const key = JSON.stringify([r.kind, items.map(([s, c, tr]) => [s, c, tr?.model, tr?.served]), r.order.map(logoOf), selected?.id, selected?.model]);
     if (stepsKey === key) return;
     stepsKey = key;
+    // Failures and changed replies stay readable even when routine
+    // explanations are only a faded preview.
+    story.classList.toggle("has-events", items.some(([, c]) => /\b(bad|said|swap|upstream-said)\b/.test(c)));
+    detailVisibility();
     steps.replaceChildren(...items.map(([s, c, tr]) => {
       const li = el("li", c);
-      li.append(...(/^(why|ok|bad|wait|aside)$/.test(c) ? logoed(s, r) : [s]));
-      if (c === "aside kind") li.prepend(kindTag(r), " ");
+      li.append(...(/^(why|ok|bad|wait|aside)$/.test(c) ? logoed(s, r, c === "why" ? selected : null) : [s]));
       if (c === "swap") li.prepend(swapTag(tr), " ");
       return li;
     }));
@@ -1689,7 +1818,7 @@
     if (!matchesPurpose(r)) purpose = [];
     offline("");
     window.show("routing");
-    if (o.context) ctxFor = r.id;
+    ctxFor = o.context ? r.id : 0;
     pick(r);
   };
 
@@ -2791,6 +2920,7 @@
     off.textContent = msg;
     off.hidden = !msg;
     for (const e of [top, stage, foot, log]) e.hidden = !!msg;
+    if (msg) hideCtx();
     more.hidden = !!msg;
   }
 
@@ -2816,6 +2946,7 @@
     list.replaceChildren(el("li", "idle", t(purpose.length || day ? "No requests match these filters." : "No request yet")));
     say(t("Every request an agent sends to magpie shows up here, routed for real."));
     log.hidden = true;
+    hideCtx();
     renderHist(); // none live, but the days the history keeps are still there to look at
     layout();
   }

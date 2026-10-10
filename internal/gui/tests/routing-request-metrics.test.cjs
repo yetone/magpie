@@ -121,10 +121,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await group.locator(".cache-hit .v").textContent(), "63%", "closed sessions retain their metrics");
       await group.click();
       await rows.nth(0).click();
-      assert.match(await page.locator(".rt-steps").textContent(), lang === "zh" ? /请求缓存命中率 60%/ : /request cache hit rate 60%/);
+      assert.match(await page.locator(".rt-brief .cache-hit").textContent(), /60%$/);
       if (lang === "zh") {
-        assert.match(await page.locator(".rt-steps").textContent(), /后首响/);
-        assert.doesNotMatch(await page.locator(".rt-steps").textContent(), /首字/);
+        assert.match(await page.locator(".rt-brief .ttft").textContent(), /首响/);
+        assert.doesNotMatch(await page.locator(".rt-brief .ttft").textContent(), /首字/);
       }
       for (const width of [1280, 1000, 700, 480, 360]) {
         await page.setViewportSize({ width, height: 900 });

@@ -182,7 +182,12 @@ for (const engine of engines) {
           const story = await page.locator(".rt-steps").textContent();
           assert(story.includes(said), `${said}\nnot in\n${story}`);
           // nothing says ChatGPT served the model the lead asked for
-          if (i === 0 && lang === "en") assert(!story.includes("ChatGPT serves it") && story.includes("only account on for codex/gpt-6-astra"), story);
+          if (i === 0 && lang === "en") {
+            assert(!story.includes("ChatGPT serves it"), story);
+            const models = await page.locator(".rt-brief-path code").allTextContents();
+            assert.deepEqual(models, ["gpt-5.5", "gpt-6-astra"], "the requested and actual subagent models are distinct");
+            assert(story.includes("Only one account is enabled for this model."), story);
+          }
         }
         assert.deepEqual(errors, []);
       });
