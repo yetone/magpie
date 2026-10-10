@@ -280,6 +280,59 @@ func TestHistoryLeavesADayItCantRead(t *testing.T) {
 	}
 }
 
+// A day dropped for the size kept is dropped whole: a late route's file left
+// beside its day's .gz goes with the .gz. The .gz can't be read at the prune,
+// which leaves the file beside it, and reads again before the day is listed:
+// the day isn't left listed without its late route.
+func TestHistoryDropsADayWhole(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	now := historyNoon(t)
+	y, m, d := now.AddDate(0, 0, -2).Date()
+	late := time.Date(y, m, d, 23, 59, 0, 0, time.Local)
+	day, dir := late.Format(dayForm), HistoryDir()
+	path := filepath.Join(dir, day+".jsonl")
+	saveRoute(Route{ID: 1, Time: late, Model: "a", Done: true})
+	pruneHistory(dir, now)
+	saveRoute(Route{ID: 2, Time: late.Add(10 * time.Second), Model: "b", Done: true}) // done after the prune
+	if err := os.Chmod(path+".gz", 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.ReadFile(path + ".gz"); err == nil {
+		t.Skip("a file at mode 0 still reads here: root, Windows, or a file system without Unix permissions")
+	}
+	gz, err := os.Stat(path + ".gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a newer day takes the rest of the size kept: the day's two files are
+	// over it, and either of them alone isn't
+	newer := filepath.Join(dir, now.AddDate(0, 0, -1).Format(dayForm)+".jsonl.gz")
+	if err := os.WriteFile(newer, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(newer, historyBytes-max(gz.Size(), file.Size())); err != nil {
+		t.Fatal(err)
+	}
+	pruneHistory(dir, now)
+	os.Chmod(path+".gz", 0o600)
+	var left []string
+	for _, f := range historyFiles(dir) {
+		left = append(left, filepath.Base(f.path))
+	}
+	days, rs, _ := History(day)
+	var got []int64
+	for _, r := range rs {
+		got = append(got, r.ID)
+	}
+	if want := []string{filepath.Base(newer)}; !slices.Equal(left, want) || len(got) > 0 {
+		t.Errorf("kept %v, days %+v, routes %v; want %v alone: the day dropped whole", left, days, got, want)
+	}
+}
+
 func TestRouteUsageCompactAndLegacyJSON(t *testing.T) {
 	// Ignore fields that full ledger records wrote into earlier route history.
 	var old Route

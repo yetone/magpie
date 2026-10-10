@@ -84,7 +84,10 @@ func saveRoute(r Route) {
 }
 
 // pruneHistory gzips the days that are over, and drops the days older than
-// historyDays, then the oldest until what is left fits historyBytes.
+// historyDays, then the oldest until what is left fits historyBytes. A day
+// goes whole, as it does once its late routes are in its .gz: a late route's
+// file left beside the .gz (gzipFile) goes with it. A file that can't be
+// removed stays.
 func pruneHistory(dir string, now time.Time) {
 	// a .gz.tmp left by a magpie stopped before renaming it (gzipFile) goes
 	// once it is an hour old: a younger one may be another magpie's, still
@@ -110,10 +113,12 @@ func pruneHistory(dir string, now time.Time) {
 	for _, d := range days {
 		total += d.size
 	}
+	drop := ""               // the day being dropped, whole: historyFiles puts its files next to each other
 	for _, d := range days { // oldest first
-		if d.day >= oldest && total <= historyBytes || d.day == today {
+		if d.day != drop && (d.day >= oldest && total <= historyBytes || d.day == today) {
 			continue
 		}
+		drop = d.day
 		if os.Remove(d.path) == nil {
 			total -= d.size
 		}
