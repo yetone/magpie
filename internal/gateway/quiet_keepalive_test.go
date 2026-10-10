@@ -241,6 +241,8 @@ func TestQuietStreamsKeptAliveEveryProtocol(t *testing.T) {
 			func(string) string { return chatRole }, chatText, func(string) string { return chatEnd }},
 		{"anthropic from chat", "/v1/messages", `{"model":"q/m","stream":true,"max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`, provider.Chat,
 			func(string) string { return chatRole }, chatText, func(string) string { return chatEnd }},
+		{"chat from anthropic", "/v1/chat/completions", `{"model":"q/m","stream":true,"messages":[{"role":"user","content":"hi"}]}`, provider.Anthropic,
+			func(string) string { return anthropicStart + anthropicBlock }, anthropicText, func(string) string { return anthropicEnd }},
 	} {
 		for _, mid := range []bool{false, true} {
 			t.Run(c.name+map[bool]string{false: " held", true: " mid-reply"}[mid], func(t *testing.T) {
