@@ -27,7 +27,8 @@ func TestSuffixModesReachAgentFiles(t *testing.T) {
 	writeFile(t, piModels, `{"providers":{"magpie":{"name":"magpie","models":[]}}}`)
 	codexDir := filepath.Join(home, ".codex")
 	codexCat := filepath.Join(codexDir, "magpie-models.json")
-	writeFile(t, filepath.Join(codexDir, "config.toml"), "model = \"relay/glm-4.6\"\nmodel_provider = \"magpie\"\nmodel_catalog_json = \""+codexCat+"\"\n")
+	// a literal string: a Windows path's backslashes are no TOML escapes
+	writeFile(t, filepath.Join(codexDir, "config.toml"), "model = \"relay/glm-4.6\"\nmodel_provider = \"magpie\"\nmodel_catalog_json = '"+codexCat+"'\n")
 	writeFile(t, codexCat, `{"models":[]}`)
 	catalog.Changed = SyncCatalog
 	t.Cleanup(func() { catalog.Changed = nil })

@@ -24,7 +24,7 @@ func TestCodexStaleOnlyForMagpiesChange(t *testing.T) {
 	os.MkdirAll(dir, 0o755)
 	cfg := filepath.Join(dir, "config.toml")
 	list := filepath.Join(dir, "magpie-models.json")
-	conf := "model = \"magpie/gpt-6-luna\"\nmodel_provider = \"magpie\"\nmodel_catalog_json = \"" + list + "\"\n\n" +
+	conf := "model = \"magpie/gpt-6-luna\"\nmodel_provider = \"magpie\"\nmodel_catalog_json = '" + list + "'\n\n" +
 		"[model_providers.magpie]\nname = \"magpie\"\nbase_url = \"http://127.0.0.1:3425/v1\"\n"
 	os.WriteFile(cfg, []byte(conf), 0o600)
 	os.WriteFile(list, []byte(`{"models":[{"slug":"magpie/gpt-6-luna"}]}`), 0o644)

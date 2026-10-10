@@ -398,9 +398,14 @@ func TestZedCustomProcessNames(t *testing.T) {
 func TestZedRelativeConfigDirUsesDefault(t *testing.T) {
 	home := t.TempDir()
 	cfg := filepath.Join(home, ".config")
+	t.Setenv("APPDATA", filepath.Join(home, "AppData", "Roaming"))
 	t.Setenv("MAGPIE_ZED_CONFIG_DIR", "zedg-config")
 	a := zed(home, cfg)
 	want := filepath.Join(cfg, "zed", "settings.json")
+	if runtime.GOOS == "windows" {
+		// Zed's folder on Windows is %APPDATA%\Zed, whatever cfg magpie was given
+		want = filepath.Join(home, "AppData", "Roaming", "Zed", "settings.json")
+	}
 	if a.Path != want {
 		t.Fatalf("relative config directory escaped default: %q, want %q", a.Path, want)
 	}
