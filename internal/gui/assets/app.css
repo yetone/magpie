@@ -747,9 +747,10 @@ body.window .field.solo { grid-column: auto; }
 #view-usage.loading .opt { cursor: default; }
 .usage-cost { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
 .usage-cost b { font-size: 15px; font-weight: 600; color: var(--fg); }
-/* a tab with no sum leaves the refresh at the content's right edge */
+/* a tab with no sum leaves the refresh at the content's right edge (a
+   class app.js sets, not :has(), which Safari before 15.4 can't parse) */
 .usage-cost:empty { display: none; }
-.usage-head:has(> .usage-cost:empty) .usage-refresh { margin-right: 0; }
+.usage-head.no-sum .usage-refresh { margin-right: 0; }
 /* a narrow window, three tabs and the periods beside it: the words after the
    sum give way, never the page sideways */
 .usage-cost span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -2156,7 +2157,10 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .pop.proto-menu.range-menu { width: 252px; max-height: none; display: block; padding: 4px 6px 8px; }
 .range-menu .rm-quick { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 2px 6px; border-bottom: 1px solid var(--line-2); }
 .range-menu .rm-span { height: 22px; padding: 0 8px; border-radius: 6px; background: var(--pill); color: var(--fg-2); font-size: 11.5px; }
-.range-menu .rm-span:hover, .range-menu .rm-span:focus-visible { color: var(--fg); }
+/* :focus-visible in rules of its own: Safari before 15.4 drops a list
+   holding it whole, hover included */
+.range-menu .rm-span:hover { color: var(--fg); }
+.range-menu .rm-span:focus-visible { color: var(--fg); }
 .range-menu .rm-span.on { color: var(--fg); background: color-mix(in srgb, var(--accent) 18%, var(--pill)); }
 .range-menu .rm-nav { display: flex; align-items: center; justify-content: space-between; padding: 6px 2px 4px; }
 .range-menu .rm-month { font-size: 12.5px; font-weight: 600; }
@@ -2166,7 +2170,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .range-menu .rm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px 0; }
 .range-menu .rm-wd { height: 20px; display: grid; place-items: center; font-size: 10.5px; color: var(--faint); }
 .range-menu .rm-day { height: 28px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--fg); border-radius: 7px; outline: none; }
-.range-menu .rm-day:hover:not(:disabled), .range-menu .rm-day:focus-visible { background: var(--pill); }
+.range-menu .rm-day:hover:not(:disabled) { background: var(--pill); }
+.range-menu .rm-day:focus-visible { background: var(--pill); }
 .range-menu .rm-day.today { font-weight: 650; color: var(--accent); }
 .range-menu .rm-day.in { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 0; }
 .range-menu .rm-day.end { background: var(--accent); color: var(--accent-fg, #fff); }

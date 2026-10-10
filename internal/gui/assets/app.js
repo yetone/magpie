@@ -21732,6 +21732,14 @@ setInterval(async () => {
   }
   if (changed) renderAgents();
 }, 15000);
+// the Usage head says when its sum is empty, which leaves the refresh at
+// the content's edge: a class for app.css, as Safari before 15.4 has no
+// :has() (#usageCost is filled and emptied in many places)
+{
+  const cost = $("#usageCost"), noSum = () => cost.parentElement.classList.toggle("no-sum", !cost.childNodes.length);
+  noSum();
+  new MutationObserver(noSum).observe(cost, { childList: true });
+}
 // The Usage page reads its numbers again while it is looked at, as often as
 // the reader says — off, or every 5 s to a minute (a request through the gateway
 // shows within that; the subscriptions' windows each minute at most, the vendors'

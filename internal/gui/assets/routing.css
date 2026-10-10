@@ -297,8 +297,12 @@ button.rt-session { cursor: pointer; }
 /* a routing named where it can be changed: a way to where it is set */
 .rt-go { cursor: pointer; }
 .rt-go::after { content: " ›"; }
-.rt-prov > span.rt-go:hover, .rt-prov > span.rt-go:focus-visible { color: var(--fg); border-color: var(--fg); }
-.rt-hub i.rt-go:hover, .rt-hub i.rt-go:focus-visible { box-shadow: 0 0 0 3px var(--card-2), 0 0 0 4px var(--fg); }
+/* :focus-visible in rules of its own: Safari before 15.4 drops a list
+   holding it whole, hover included */
+.rt-prov > span.rt-go:hover { color: var(--fg); border-color: var(--fg); }
+.rt-prov > span.rt-go:focus-visible { color: var(--fg); border-color: var(--fg); }
+.rt-hub i.rt-go:hover { box-shadow: 0 0 0 3px var(--card-2), 0 0 0 4px var(--fg); }
+.rt-hub i.rt-go:focus-visible { box-shadow: 0 0 0 3px var(--card-2), 0 0 0 4px var(--fg); }
 .rt-go:focus-visible { outline: none; }
 .rt-found { animation: rtfound 1.4s ease-out; }
 @keyframes rtfound { 0%, 40% { box-shadow: inset 0 0 0 2px var(--fg); } 100% { box-shadow: inset 0 0 0 2px transparent; } }
