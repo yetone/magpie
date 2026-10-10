@@ -38,10 +38,12 @@ func TestGrok(t *testing.T) {
 	if !g.Start.Equal(at("2026-09-27T08:00:00Z")) || !g.Last.Equal(at("2026-09-27T08:02:10Z")) {
 		t.Fatalf("grok times %s %s", g.Start, g.Last)
 	}
-	if runtime.GOOS != "windows" {
-		if want := "cd '/work/grok' && grok --resume " + grokMain; g.Resume != want {
-			t.Fatalf("resume %q", g.Resume)
-		}
+	want := "cd '/work/grok' && grok --resume " + grokMain
+	if runtime.GOOS == "windows" {
+		want = "Set-Location -LiteralPath '/work/grok'; grok --resume " + grokMain
+	}
+	if g.Resume != want {
+		t.Fatalf("resume %q", g.Resume)
 	}
 	// the fork: what it copied counted in the session it came from
 	f := find(t, ss, "grok", grokFork)

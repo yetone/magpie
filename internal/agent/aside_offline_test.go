@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
+	"runtime"
 	"testing"
 
 	"github.com/yetone/magpie/internal/edit"
@@ -125,11 +125,7 @@ func TestAsidePostReadFailuresNeverOfferOffline(t *testing.T) {
 				if err := a.Native.Stage("model", "magpie/relay/glm-4.6"); err != nil {
 					t.Fatal(err)
 				}
-				dir := filepath.Dir(c.record)
-				if err := os.Chmod(dir, 0500); err != nil {
-					t.Fatal(err)
-				}
-				t.Cleanup(func() { os.Chmod(dir, 0700) })
+				refuseWrites(t, c.record)
 			case "set refusal":
 				asideSet = func(string, string) error { return errors.New("refused") }
 			case "readback mismatch":
@@ -211,9 +207,12 @@ func TestAsideOfflineRestoresCompleteSelectionsAndPreservesUserChanges(t *testin
 	if err != nil || len(r.Fields) != 0 {
 		t.Fatalf("record not cleared: %+v %v", r, err)
 	}
-	mode, err := os.Stat(c.record)
-	if err != nil || mode.Mode().Perm() != 0600 {
-		t.Fatalf("record mode: %v %v", mode, err)
+	// a file's mode is Unix's: Windows keeps the read-only bit and no more
+	if runtime.GOOS != "windows" {
+		mode, err := os.Stat(c.record)
+		if err != nil || mode.Mode().Perm() != 0600 {
+			t.Fatalf("record mode: %v %v", mode, err)
+		}
 	}
 }
 
@@ -287,9 +286,11 @@ func TestAsideOfflineLegacyRecordDoesNotResurrect(t *testing.T) {
 	if err != nil || len(r.Fields) != 0 {
 		t.Fatal("legacy restore points resurrected")
 	}
-	mode, err := os.Stat(c.record)
-	if err != nil || mode.Mode().Perm() != 0600 {
-		t.Fatalf("record mode: %v %v", mode, err)
+	if runtime.GOOS != "windows" {
+		mode, err := os.Stat(c.record)
+		if err != nil || mode.Mode().Perm() != 0600 {
+			t.Fatalf("record mode: %v %v", mode, err)
+		}
 	}
 }
 
@@ -305,13 +306,13 @@ func TestAsideOfflineWriteFailureRollsBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := readFile(settings) + readFile(models) + readFile(c.record)
-	dir := filepath.Dir(c.record)
-	if err := os.Chmod(dir, 0500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chmod(dir, 0700) })
+	// the settings file refuses a write: the first of the three the plan
+	// restores, so nothing of them goes through
+	refuseWrites(t, settings)
 	err = a.Native.ExecuteOffline(plan)
-	if err == nil || !strings.Contains(err.Error(), "permission") {
+	// the refusal each platform names its own way: Unix "permission denied",
+	// Windows "Access is denied"
+	if err == nil || !refused(err) {
 		t.Fatalf("expected write refusal after settings restoration: %v", err)
 	}
 	if readFile(settings)+readFile(models)+readFile(c.record) != before {
@@ -335,9 +336,7 @@ func TestAsideDisconnectUnavailableOnlyAtInitialRead(t *testing.T) {
 			case "initial":
 				asideRead = func() (map[string]json.RawMessage, error) { return nil, errors.New("offline") }
 			case "record":
-				dir := filepath.Dir(newAsideConnection(here("")).record)
-				os.Chmod(dir, 0500)
-				t.Cleanup(func() { os.Chmod(dir, 0700) })
+				refuseWrites(t, newAsideConnection(here("")).record)
 			case "refusal":
 				asideSet = func(string, string) error { return errors.New("refused") }
 			case "mismatch":
@@ -491,6 +490,11 @@ func TestAsideOfflineImageRestoresFullSavedObject(t *testing.T) {
 }
 
 func TestAsideOfflineProviderWriteFailureRollsBackAllFiles(t *testing.T) {
+	// the rollback is over hard links to a symlink, which needs a privilege
+	// Windows does not grant by default
+	if runtime.GOOS == "windows" {
+		t.Skip("a symlink needs a privilege Windows does not grant by default")
+	}
 	settings, models := asideHome(t)
 	a := mustFindAside(t)
 	if err := a.Native.Stage("model", "magpie/relay/glm-4.6"); err != nil {

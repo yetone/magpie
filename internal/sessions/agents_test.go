@@ -212,10 +212,12 @@ func TestCline(t *testing.T) {
 	if !c.Start.Equal(at("2026-09-27T10:00:00Z")) || !c.Last.Equal(at("2026-09-27T10:02:00Z")) {
 		t.Fatalf("cline times %s %s", c.Start, c.Last)
 	}
-	if runtime.GOOS != "windows" {
-		if want := "cd '/work/cline' && cline --id " + clineMain; c.Resume != want {
-			t.Fatalf("resume %q", c.Resume)
-		}
+	want := "cd '/work/cline' && cline --id " + clineMain
+	if runtime.GOOS == "windows" {
+		want = "Set-Location -LiteralPath '/work/cline'; cline --id " + clineMain
+	}
+	if c.Resume != want {
+		t.Fatalf("resume %q", c.Resume)
 	}
 	// the fork: what it copied counted in the session it came from
 	f := find(t, ss, "cline", clineFork)
@@ -256,10 +258,12 @@ func TestQoder(t *testing.T) {
 		if m := model(q, c.model); m.Tokens != (Tokens{45, 30, 300, 0, 0}) {
 			t.Fatalf("%s, the subagent's in: %+v", c.agent, m)
 		}
-		if runtime.GOOS != "windows" {
-			if want := "cd '/work/q' && " + c.run + " --resume " + c.id; q.Resume != want {
-				t.Fatalf("resume %q", q.Resume)
-			}
+		want := "cd '/work/q' && " + c.run + " --resume " + c.id
+		if runtime.GOOS == "windows" {
+			want = "Set-Location -LiteralPath '/work/q'; " + c.run + " --resume " + c.id
+		}
+		if q.Resume != want {
+			t.Fatalf("resume %q", q.Resume)
 		}
 	}
 	moved := filepath.Join(filepath.Dir(home), "qcn")

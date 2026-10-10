@@ -46,10 +46,12 @@ func TestOmp(t *testing.T) {
 	if !m.Start.Equal(at("2026-09-28T08:00:00Z")) || !m.Last.Equal(at("2026-09-28T08:02:00Z")) {
 		t.Fatalf("omp times %s %s", m.Start, m.Last)
 	}
-	if runtime.GOOS != "windows" {
-		if want := "cd '/work/omp' && omp --resume " + ompMain; m.Resume != want {
-			t.Fatalf("resume %q", m.Resume)
-		}
+	want := "cd '/work/omp' && omp --resume " + ompMain
+	if runtime.GOOS == "windows" {
+		want = "Set-Location -LiteralPath '/work/omp'; omp --resume " + ompMain
+	}
+	if m.Resume != want {
+		t.Fatalf("resume %q", m.Resume)
 	}
 
 	// the fork: what it copied counted in the session it came from

@@ -246,13 +246,9 @@ func TestCursor(t *testing.T) {
 	if !s.Tokens.zero() || len(s.Models) != 0 {
 		t.Fatalf("Cursor's chats say nothing of tokens: %+v", s)
 	}
-	want := "cursor-agent --resume " + curMain
-	if runtime.GOOS != "windows" {
-		want = "cd '/work/cur' && " + want
-	} else {
-		// the same prefix every other resume here gets on Windows
-		// (sessions.go's resumeCommand), as TestCarryPiToOmp expects
-		want = "Set-Location -LiteralPath '/work/cur'; " + want
+	want := "cd '/work/cur' && cursor-agent --resume " + curMain
+	if runtime.GOOS == "windows" {
+		want = "Set-Location -LiteralPath '/work/cur'; cursor-agent --resume " + curMain
 	}
 	if s.Resume != want {
 		t.Fatalf("resume %q, want %q", s.Resume, want)

@@ -129,13 +129,19 @@ func TestList(t *testing.T) {
 	if !cx.Last.Equal(time.Date(2026, 9, 23, 0, 27, 20, 0, time.UTC)) {
 		t.Fatalf("codex last %s", cx.Last)
 	}
-	if runtime.GOOS != "windows" {
-		if want := `cd '/work/it'\''s' && codex resume 01a0bdc9-b5fd-7e63-9658-68bc8dce5ecd`; cx.Resume != want {
-			t.Fatalf("resume %q", cx.Resume)
-		}
-		if want := "cd '/work/app' && claude --resume 11111111-2222-3333-4444-555555555555"; cc.Resume != want {
-			t.Fatalf("resume %q", cc.Resume)
-		}
+	want := `cd '/work/it'\''s' && codex resume 01a0bdc9-b5fd-7e63-9658-68bc8dce5ecd`
+	if runtime.GOOS == "windows" {
+		want = `Set-Location -LiteralPath '/work/it''s'; codex resume 01a0bdc9-b5fd-7e63-9658-68bc8dce5ecd`
+	}
+	if cx.Resume != want {
+		t.Fatalf("resume %q", cx.Resume)
+	}
+	want = "cd '/work/app' && claude --resume 11111111-2222-3333-4444-555555555555"
+	if runtime.GOOS == "windows" {
+		want = "Set-Location -LiteralPath '/work/app'; claude --resume 11111111-2222-3333-4444-555555555555"
+	}
+	if cc.Resume != want {
+		t.Fatalf("resume %q", cc.Resume)
 	}
 	if got := List(1); len(got) != 1 {
 		t.Fatalf("limit: %d", len(got))

@@ -79,10 +79,12 @@ func TestDroid(t *testing.T) {
 	if !d.Start.Equal(at("2026-09-27T08:00:00Z")) || !d.Last.Equal(at("2026-09-27T08:02:00Z")) {
 		t.Fatalf("droid times %s %s", d.Start, d.Last)
 	}
-	if runtime.GOOS != "windows" {
-		if want := "cd '/work/droid' && droid --resume " + droidMain; d.Resume != want {
-			t.Fatalf("resume %q", d.Resume)
-		}
+	want := "cd '/work/droid' && droid --resume " + droidMain
+	if runtime.GOOS == "windows" {
+		want = "Set-Location -LiteralPath '/work/droid'; droid --resume " + droidMain
+	}
+	if d.Resume != want {
+		t.Fatalf("resume %q", d.Resume)
 	}
 	// the fork: what it copied is its source's; a custom model of the
 	// user's own by its name

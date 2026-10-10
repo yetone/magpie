@@ -76,10 +76,12 @@ func checkOpenCode(t *testing.T, ss []Session) {
 	if !oc.Start.Equal(at("2026-09-26T10:00:00Z")) || !oc.Last.Equal(at("2026-09-26T10:03:00Z")) {
 		t.Fatalf("opencode times %s %s", oc.Start, oc.Last)
 	}
-	if runtime.GOOS != "windows" {
-		if want := "cd '/work/oc' && opencode --session " + ocMain; oc.Resume != want {
-			t.Fatalf("resume %q", oc.Resume)
-		}
+	want := "cd '/work/oc' && opencode --session " + ocMain
+	if runtime.GOOS == "windows" {
+		want = "Set-Location -LiteralPath '/work/oc'; opencode --session " + ocMain
+	}
+	if oc.Resume != want {
+		t.Fatalf("resume %q", oc.Resume)
 	}
 }
 
@@ -224,10 +226,12 @@ func TestPi(t *testing.T) {
 	if !p.Start.Equal(at("2026-09-24T08:00:00Z")) || !p.Last.Equal(at("2026-09-24T08:04:00Z")) {
 		t.Fatalf("pi times %s %s", p.Start, p.Last)
 	}
-	if runtime.GOOS != "windows" {
-		if want := "cd '/work/pi' && pi --session " + piFirst; p.Resume != want {
-			t.Fatalf("resume %q", p.Resume)
-		}
+	want := "cd '/work/pi' && pi --session " + piFirst
+	if runtime.GOOS == "windows" {
+		want = "Set-Location -LiteralPath '/work/pi'; pi --session " + piFirst
+	}
+	if p.Resume != want {
+		t.Fatalf("resume %q", p.Resume)
 	}
 
 	// the fork: what it copied counted in the session it came from

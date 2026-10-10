@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,12 @@ import (
 // CODEX_HOME was counted too (#729). Only magpie's own change counts, for
 // copies of this home's Codex.
 func TestCodexStaleOnlyForMagpiesChange(t *testing.T) {
+	// Stale counts a copy that started before magpie's change from ps's
+	// etime, which Windows has no way to give: it says 0 there by design,
+	// so this test's counts mean nothing on it.
+	if runtime.GOOS == "windows" {
+		t.Skip("Stale reads ps's etime, which Windows does not have (connectinfo.go)")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
