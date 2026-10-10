@@ -457,6 +457,68 @@ func TestKeepMovedCurrent(t *testing.T) {
 	}
 }
 
+// The plugin a move installs is installed at the spec the user pinned, not at
+// <pkg>@latest. Add installs what it is given and appends @latest to a bare
+// package name, so handing it a bare name replaced the pin with the newest
+// version behind the user's back, and switched one they turned off back on.
+func TestInstallPluginKeepsTheUsersPin(t *testing.T) {
+	claudeHome(t)
+	// where plugin.Load reads the list from: settings.Dir(), the plugins
+	// folder's parent. The installed package's package.json is what
+	// plugin.Version reads, so it is where the plugins folder keeps it.
+	list := filepath.Join(filepath.Dir(plugin.Dir()), "plugins.json")
+	pkg := filepath.Join(plugin.Dir(), "node_modules", "fake")
+	writeList := func(body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(list), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(list, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeInstalled := func(version string) {
+		t.Helper()
+		if err := os.MkdirAll(pkg, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		pj := `{"name":"fake","version":"` + version + `"}`
+		if err := os.WriteFile(filepath.Join(pkg, "package.json"), []byte(pj), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeList(`{"plugins":[{"spec":"fake@0.1.5"}]}`)
+	writeInstalled("0.1.5")
+	old := addPlugin
+	t.Cleanup(func() { addPlugin = old })
+	var asked []string
+	addPlugin = func(_ context.Context, spec string) (plugin.Entry, error) {
+		asked = append(asked, spec)
+		return plugin.Entry{}, nil
+	}
+
+	// what is installed is still the pin, and the move needs newer, so the
+	// spec handed over is the pin and the move says so — rather than Add
+	// quietly installing <pkg>@latest and the check finding nothing wrong
+	err := installPlugin(context.Background(), "fake", "0.2.0")
+	if strings.Join(asked, " ") != "fake@0.1.5" {
+		t.Fatalf("asked Add for %v, want the pinned fake@0.1.5", asked)
+	}
+	if err == nil || !strings.Contains(err.Error(), "0.2.0 or newer") {
+		t.Fatalf("a pin older than the move needs: %v, want the version it needs named", err)
+	}
+
+	// a plugin the user turned off is not switched back on either
+	writeList(`{"plugins":[{"spec":"fake@0.1.5","off":true}]}`)
+	asked = nil
+	if err := installPlugin(context.Background(), "fake", "0.2.0"); err == nil {
+		t.Fatal("a plugin the user turned off was installed")
+	}
+	if len(asked) != 0 {
+		t.Fatalf("a plugin the user turned off was asked for: %v", asked)
+	}
+}
+
 // Removing the plugin a built-in is moved onto, or turning it off, moves
 // the built-in back first: its accounts go back to it rather than out of
 // sight with the plugin.

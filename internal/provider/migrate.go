@@ -396,7 +396,11 @@ func lockMoves() (func(), error) {
 // Hooks the tests stand in for.
 var (
 	installPlugin = func(ctx context.Context, pkg, min string) error {
-		older := false
+		// what the user has is theirs, as in Upgrade: Add installs the
+		// spec it is given, so a bare name here would replace a version
+		// they pinned with <pkg>@latest — and switch one they turned off
+		// back on
+		found := pkg
 		for _, e := range plugin.Load().Plugins {
 			if plugin.PackageName(e.Spec) != pkg {
 				continue
@@ -411,18 +415,10 @@ var (
 			if plugin.IsPath(e.Spec) {
 				return fmt.Errorf("%s at %s is %s; moving needs %s or newer", pkg, e.Spec, v, min)
 			}
-			older = !plugin.IsGit(e.Spec)
+			found = e.Spec
 			break
 		}
-		var err error
-		if older {
-			// npm's newest, which bun says why it won't install (a
-			// minimumReleaseAge), where bun's own latest is an older
-			// version without a word (sweanng424 on Discord)
-			err = plugin.Upgrade(ctx, pkg)
-		} else {
-			_, err = plugin.Add(ctx, pkg)
-		}
+		_, err := addPlugin(ctx, found)
 		if err == nil && min != "" {
 			if v := plugin.Version(pkg); update.Newer(min, v) {
 				return fmt.Errorf("%s %s is installed; moving needs %s or newer", pkg, v, min)
@@ -432,6 +428,9 @@ var (
 	}
 	pluginProviders = plugin.Providers
 	removePlugin    = plugin.Remove
+	// addPlugin installs what installPlugin decided: a var so a test can read
+	// the spec it is handed
+	addPlugin = plugin.Add
 )
 
 // modelsInUse are the models the built-in id serves now: the ones agents,

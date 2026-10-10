@@ -54,9 +54,10 @@ func TestIsGit(t *testing.T) {
 }
 
 // The test binary stands in for bun when MAGPIE_FAKE_BUN is set: add,
-// update and remove as bun does them for a git spec, fetching from local
-// repositories ($MAGPIE_FAKE_GITHUB/owner/repo.git for GitHub's), and,
-// like bun, keeping the commit its lock has when a spec is added again.
+// update and remove as bun does them — a git spec fetched from local
+// repositories ($MAGPIE_FAKE_GITHUB/owner/repo.git for GitHub's), and, like
+// bun, keeping the commit its lock has when a spec is added again; an npm
+// one put at node_modules/<its name>, at the version its spec names.
 func init() {
 	if os.Getenv("MAGPIE_FAKE_BUN") == "1" {
 		if err := fakeBun(os.Args[1:]); err != nil {
@@ -100,6 +101,25 @@ func fakeBun(args []string) error {
 			if s == spec && lock[n] != "" {
 				return nil // as bun: the lock's commit stays
 			}
+		}
+		if !IsGit(spec) {
+			name := Name(spec)
+			at := filepath.Join("node_modules", filepath.FromSlash(name))
+			if err := os.MkdirAll(at, 0o755); err != nil {
+				return err
+			}
+			v := strings.TrimPrefix(strings.TrimPrefix(spec, name), "@")
+			// a file to load, as a plugin's package has: add says why it
+			// won't take a package that names none (notPlugin)
+			b, _ := json.Marshal(map[string]string{"name": name, "version": v, "main": "index.js"})
+			if err := os.WriteFile(filepath.Join(at, "index.js"), []byte("export default async () => ({})\n"), 0o644); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(at, "package.json"), b, 0o644); err != nil {
+				return err
+			}
+			deps[name] = spec
+			break
 		}
 		name, commit, err := fakeFetch(spec)
 		if err != nil {

@@ -94,6 +94,9 @@ New users do not see an unused deprecated built-in in the Add sheet. `unusedSub`
 
 `keepMovedCurrent` maintains the required plugin version for moved subscriptions. Raising the owning mover's `min` after publishing a plugin fix triggers this update path. Update failures are logged; disabled packages and local-folder installations are not automatically replaced.
 
+The editor's *Update* button and *Update all* install npm's newest version; a pin the user set is kept until they update it themselves, and is then unpinned. `keepMovedCurrent` is the one path that acts without the user pressing anything, so it installs what the user already chose — `installPlugin` hands `plugin.Add` the entry's own spec, since `Add` installs what it is given and appends `@latest` to a bare name. A plugin pinned below the version a move needs is installed at the pin and the move then says it needs newer; a plugin the user turned off is left alone.
+
+A plugin the user turned off stays off through every install path: `add` keeps `Off` when it replaces an existing entry, so Add, Update, Update all and Upgrade all leave it as the user left it.
 ## Constraints for fixes
 
 Determine ownership before choosing the fix location. A bug affecting a moved subscription usually needs a change in the community plugin. A built-in-only fix does not reach moved users.

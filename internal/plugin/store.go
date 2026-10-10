@@ -412,6 +412,8 @@ func add(ctx context.Context, spec, version string) (Entry, error) {
 		return x.Spec == spec || n == name
 	}); i >= 0 {
 		e.Options = l.Plugins[i].Options
+		// whether they turned it off, which an add never changes
+		e.Off = l.Plugins[i].Off
 		// a provider id the user picked it for stays its (another version,
 		// or its package from a git repository in place of npm's)
 		for id, s := range l.Prefer {
