@@ -2,6 +2,7 @@ package backup
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"os"
@@ -398,5 +399,34 @@ func TestProfileKeys(t *testing.T) {
 	want := []string{"codex.provider", "claude.model", "codex.model", "codex.effort"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("%v", got)
+	}
+}
+
+// A sync seals a backup every round and opens the one on the server: the
+// key is derived once a run, not once a backup, PBKDF2 being slow on
+// purpose (davsync's tests ran past go test's 10 minutes under -race).
+func TestSealDerivesOnce(t *testing.T) {
+	pass := rand.Text() // one no earlier run derived a key for
+	keysMu.Lock()
+	before := len(keys)
+	keysMu.Unlock()
+	var sealed [][]byte
+	for range 2 {
+		data, err := Seal(Bundle{Version: 1}, pass)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sealed = append(sealed, data)
+	}
+	for _, data := range sealed {
+		if _, err := Open(data, pass); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keysMu.Lock()
+	derivedNow := len(keys) - before
+	keysMu.Unlock()
+	if derivedNow != 1 {
+		t.Fatalf("derived %d keys for two backups under one passphrase, want 1", derivedNow)
 	}
 }

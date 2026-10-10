@@ -260,8 +260,7 @@ func Seal(b Bundle, pass string) ([]byte, error) {
 		return nil, err
 	}
 	e := envelope{Format: format, Version: 1, KDF: "pbkdf2-sha256", Iterations: iterations,
-		Salt: make([]byte, 16), Nonce: make([]byte, 12)}
-	rand.Read(e.Salt)
+		Salt: saltFor(pass), Nonce: make([]byte, 12)}
 	rand.Read(e.Nonce)
 	gcm, err := aead(pass, e)
 	if err != nil {
@@ -317,7 +316,7 @@ func header(e envelope) []byte {
 }
 
 func aead(pass string, e envelope) (cipher.AEAD, error) {
-	key, err := deriveKey(pass, e)
+	key, err := derived(pass, e)
 	if err != nil {
 		return nil, err
 	}
