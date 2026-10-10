@@ -91,6 +91,7 @@ func builtins(home, cfg string) []*Agent {
 		openChamber(home, cfg),
 		mimocode(home, cfg),
 		pi(home),
+		stepcode(home),
 		aside(home),
 		omo(home),
 		primeAgent(home),

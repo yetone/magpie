@@ -301,6 +301,8 @@ var wslKinds = []wslKind{
 			}
 			return nil
 		}},
+	{id: "stepcode", name: "StepCode", dir: ".stepcode", in: stepcodeIn,
+		asleep: wslOwnAsleep("stepcode", "model")},
 	// only its settings.json: its sign-in, sessions and prompt history,
 	// read on this machine for Claude Code here, aren't read in a distro
 	{id: "claude", name: "Claude Code", dir: ".claude", bin: "claude", in: claudeIn,
