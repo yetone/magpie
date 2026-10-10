@@ -124,15 +124,15 @@ func TestCachedCardsTellKeyReadings(t *testing.T) {
 	keyLimitsHome(t)
 	week := time.Now().Add(72 * time.Hour).Truncate(time.Second)
 	srv, asked := sub2apiServer(t, func() ([]byte, int) { return weekUsed(t, "720", week), 200 })
-	p := sub2apiKey(srv)
+	p := sub2apiKey(t, srv)
 	if err := Save(p); err != nil {
 		t.Fatal(err)
 	}
-	if q := cardOf(CachedCards(time.Now()), "sub2api", ""); q != nil {
+	if q := cardOf(CachedCards(time.Now()), p.ID, ""); q != nil {
 		t.Fatalf("a card before anything was read: %+v", q)
 	}
 	waitAllowance(t, p, func(Allowance) bool { return true })
-	q := cardOf(CachedCards(time.Now()), "sub2api", "")
+	q := cardOf(CachedCards(time.Now()), p.ID, "")
 	if q == nil || q.Kind != "balance" || len(q.Windows) != 2 || q.Windows[1].Name != "7 days" || q.Windows[1].Used != 90 || q.Name != "Sub2API" || q.ReadAt == nil {
 		t.Fatalf("after routing's read: %+v", q)
 	}
