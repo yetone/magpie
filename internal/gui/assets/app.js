@@ -17589,11 +17589,18 @@ function renderSessions() {
   sessPick($("#sessModel"), "All models", sessModel, models, "Model", (v) => { sessModel = v; renderSessions(); });
   sessPick($("#sessFolder"), "All folders", sessFolder, folders, "Folder", (v) => { sessFolder = v; renderSessions(); });
 
-  // the list: the latest sessions active in the range, under every filter
-  const from = sessDays() && st.from ? sessDate(st.from) : null;
+  // the list: the sessions at work in the range, under every filter. Which
+  // ones were at work is the range's own answer (st.keys, the sessions
+  // stats counted), not a guess from s.last: a session's file goes on being
+  // written after its last call — a fork's seed, a setting — so one whose
+  // last line falls in the range spent nothing in it, and it was listed but
+  // not counted, the note beside the list saying more than the KPI above it.
+  const inRange = st.keys ? new Set(st.keys) : null;
+  const from = !inRange && sessDays() && st.from ? sessDate(st.from) : null;
   const q = sessQuery.trim().toLowerCase();
   const list = all.filter((s) => byAgent(s) && (!sessFolder || s.cwd === sessFolder) &&
-    (!sessModel || s.models.some((m) => m.model === sessModel)) && (!from || new Date(s.last) >= from) &&
+    (!sessModel || s.models.some((m) => m.model === sessModel)) &&
+    (inRange ? inRange.has(s.agent + ":" + s.id) : !from || new Date(s.last) >= from) &&
     (!q || [s.title, s.cwd, s.id, s.name, ...s.models.map((m) => m.model)].some((x) => (x || "").toLowerCase().includes(q))));
 
   // the range's totals, of every session under the filters

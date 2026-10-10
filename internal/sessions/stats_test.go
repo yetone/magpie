@@ -3,6 +3,7 @@ package sessions
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -226,6 +227,27 @@ func TestStatsHoursAndSessions(t *testing.T) {
 	}
 	if len(day.Sessions) != 1 {
 		t.Fatalf("the 21st: %d sessions", len(day.Sessions))
+	}
+	// Keys names the same sessions, in the same order: the page's list is
+	// every session ever, so it is told which of them the range counted
+	keysOf := func(s Stats) []string {
+		out := make([]string, len(s.Sessions))
+		for i, x := range s.Sessions {
+			out[i] = x.Key
+		}
+		return out
+	}
+	if !slices.Equal(s.Keys, keysOf(s)) || !slices.Equal(day.Keys, keysOf(day)) {
+		t.Fatalf("keys %v of %v, the 21st's %v of %v", s.Keys, keysOf(s), day.Keys, keysOf(day))
+	}
+	// and a range the session was not at work in does not name it: it was
+	// last at work on the 21st, so the 22nd alone leaves it out
+	after := statsAt(1, time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC))
+	if slices.Contains(after.Keys, key) {
+		t.Fatalf("the 21st's work is not in a range of the 22nd: %v", after.Keys)
+	}
+	if len(after.Keys) != 0 || len(after.Keys) != len(after.Sessions) {
+		t.Fatalf("the 22nd: %v", after.Keys)
 	}
 
 	// Get reads a session by its key, as Find does past the listed ones
