@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -178,7 +179,7 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 	// it has (yetone on #1147, #1789)
 	wasDevin, wasFirst := devinStatus, firstAsk
 	defer func() { devinStatus, firstAsk = wasDevin, wasFirst }()
-	firstAsk = 50 * time.Millisecond
+	firstAsk = 5 * time.Second // long, to tell a look's wait from none
 	for _, asked := range []bool{false, true} {
 		answer := make(chan struct{})
 		devinStatus = &cliIdentity{name: "devin-test", exe: func() string { return "" }, read: true,
@@ -193,13 +194,55 @@ func TestFetchingNewOnceStarted(t *testing.T) {
 		FetchNewBehind(5 * time.Second)
 		took = time.Since(start)
 		busy = FetchingNew()
-		if took >= firstAsk || !busy {
+		if took > time.Second || !busy {
 			close(answer)
 			waitFetchingNew(t)
 			t.Fatalf("with a CLI asked %v who is signed in: took %v, fetching %v", asked, took, busy)
 		}
 		close(answer)
 		waitFetchingNew(t)
+	}
+}
+
+// A CLI forgotten while the Providers page's FetchNewBehind lists the
+// accounts (a sign-in finishing then) left its account out of that list:
+// the fetch is asked behind the page, which is told lists are on their
+// way, not that none is due.
+func TestFetchingNewForgottenWhileListed(t *testing.T) {
+	isolate(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	newFetches.Lock()
+	newFetches.m = map[string]time.Time{}
+	newFetches.Unlock()
+	newSoonAt.Store(0)
+	ForgetAccounts()
+	wasCursor, wasDevin, wasGrok := cursorStatus, devinStatus, GrokExecutable
+	t.Cleanup(func() {
+		waitFetchingNew(t)
+		cursorStatus, devinStatus, GrokExecutable = wasCursor, wasDevin, wasGrok
+		ForgetAccounts()
+	})
+	nobody := func() (string, string, bool, error) { return "", "", false, nil }
+	now := time.Now()
+	cursor := &cliIdentity{name: "cursor-test", exe: func() string { return "" }, read: true, at: now, ask: nobody}
+	cursorStatus = cursor
+	devinStatus = &cliIdentity{name: "devin-test", exe: func() string { return "" }, read: true, at: now, ask: nobody}
+	// Grok's account is read after Cursor's: the sign-in lands there
+	var once sync.Once
+	GrokExecutable = func() string {
+		once.Do(cursor.forget)
+		return ""
+	}
+
+	FetchNewBehind(5 * time.Second)
+	busy := FetchingNew()
+	waitFetchingNew(t)
+	if !busy {
+		t.Fatal("a CLI forgotten while the accounts were listed, and FetchingNew says none is on its way")
 	}
 }
 

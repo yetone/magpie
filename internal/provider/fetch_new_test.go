@@ -176,3 +176,71 @@ esac
 		t.Fatalf("FetchNew didn't wait for cursor-agent about: %v", ids)
 	}
 }
+
+// A CLI that answers while the accounts are listed, after its look gave up
+// waiting, has its account's list fetched in the same pass: with nothing
+// left to wait on, awaitIdentities didn't wait, and the account it said is
+// signed in was missing from the list read before (yetone on #1147).
+func TestFetchNewListsAgainForAnAnswerWhileListing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake cursor-agent is a shell script")
+	}
+	isolate(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	newFetches.Lock()
+	newFetches.m = map[string]time.Time{}
+	newFetches.Unlock()
+	exe := filepath.Join(home, "cursor-agent")
+	testenv.Program(t, exe, `#!/bin/sh
+case "$1" in
+models) printf 'Available models\n\nauto - Auto (default)\ncomposer-2.5 - Composer 2.5\n' ;;
+*) exit 1 ;;
+esac
+`)
+	wasExe, wasOut, wasFirst := CursorExecutable, cursorSignedOut, firstAsk
+	wasCursor, wasDevin := cursorStatus, devinStatus
+	CursorExecutable = func() string { return exe }
+	cursorSignedOut = func() bool { return false }
+	firstAsk = 5 * time.Second // Devin's look waits for its answer
+	t.Cleanup(func() {
+		cursorStatus, devinStatus = wasCursor, wasDevin
+		CursorExecutable, cursorSignedOut, firstAsk = wasExe, wasOut, wasFirst
+		ForgetAccounts()
+	})
+	ForgetAccounts()
+
+	// Cursor's look gave up waiting already, so the list leaves it out;
+	// it answers while Devin's look, read after it, waits
+	cursorAnswer := make(chan struct{})
+	cursor := &cliIdentity{name: "cursor-test", exe: func() string { return exe }, read: true, waited: true,
+		ask: func() (string, string, bool, error) { <-cursorAnswer; return "cursor@example.com", "pro", true, nil }}
+	devin := &cliIdentity{name: "devin-test", exe: func() string { return "" }, read: true,
+		ask: func() (string, string, bool, error) {
+			cursor.Lock()
+			done := cursor.done
+			cursor.Unlock()
+			close(cursorAnswer)
+			<-done
+			return "", "", false, nil
+		}}
+	cursorStatus, devinStatus = cursor, devin
+
+	if FetchNew(time.Minute) {
+		t.Fatal("Cursor's list said missing")
+	}
+	p, err := Find("cursor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, m := range p.Available() {
+		ids = append(ids, m.ID)
+	}
+	if !slices.Contains(ids, "composer-2.5") {
+		t.Fatalf("Cursor's list not fetched in the pass its CLI answered in: %v", ids)
+	}
+}

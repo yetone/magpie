@@ -382,10 +382,9 @@ func FetchNewSoon(timeout time.Duration) {
 	}
 	newSoonAt.Store(now)
 	// the panel reads nothing first, and /api/state?last=1 answers at once
-	// (#1519): even the accounts are listed behind it
-	newRunning.Add(1)
+	// (#1519): even the accounts are listed behind it, told by fetchingNew
+	// until FetchNew counts itself
 	go func() {
-		defer newRunning.Add(-1)
 		defer fetchingNew.Store(false)
 		FetchNew(timeout)
 	}()
@@ -435,9 +434,10 @@ func fetchNewGo(timeout time.Duration) {
 		behind()
 		return
 	}
-	// a CLI forgotten, or one that answered, while they were listed
-	ps, answered := listForNew()
-	if identitiesUnsettled() || answered != identitiesAnswered() {
+	// no CLI left to ask, unless one was forgotten while they were listed
+	// (a sign-in just finished): asked behind the page, as left out
+	ps := All()
+	if identitiesUnsettled() {
 		behind()
 		return
 	}
@@ -485,7 +485,10 @@ func FetchNew(timeout time.Duration) (missing bool) {
 func fetchNewHeld(timeout time.Duration) (missing bool) {
 	// listing them asks a CLI who is signed in, if never asked: one that
 	// hasn't answered yet is waited for, and they are listed again
-	ps, answered := listForNew()
+	answered := identitiesAnswered()
+	ps := All()
+	// one answered since, while they were listed (its look gave up
+	// waiting) or after: an account it says is signed in was left out
 	if waited, unknown := awaitIdentities(timeout); unknown {
 		missing = true
 	} else if waited || answered != identitiesAnswered() {
@@ -502,19 +505,6 @@ func fetchNewHeld(timeout time.Duration) (missing bool) {
 		}
 	}
 	return missing
-}
-
-// listForNew lists the providers for FetchNew, listed again if a CLI
-// answered who is signed in while they were: an account it says is signed
-// in was left out (its look gave up waiting), and isn't any more. answered
-// is how many CLIs have answered, for a caller that waits on more.
-func listForNew() (ps []Provider, answered int) {
-	before := identitiesAnswered()
-	ps = All()
-	if answered = identitiesAnswered(); answered != before {
-		ps = All()
-	}
-	return ps, answered
 }
 
 // newFetch is a provider FetchNew asks for its list, and whether for its
