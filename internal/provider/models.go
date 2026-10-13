@@ -360,8 +360,9 @@ var newFetches = struct {
 // restarted by hand).
 var newFetchRetry = time.Minute
 
-// fetchingNew is set while a FetchNewSoon runs; newSoonAt is when the last
-// one started.
+// fetchingNew is set while a FetchNew started in the background
+// (FetchNewSoon, FetchNewBehind) picks the accounts due or runs; newSoonAt
+// is when the last one started.
 var (
 	fetchingNew atomic.Bool
 	newSoonAt   atomic.Int64
@@ -380,7 +381,11 @@ func FetchNewSoon(timeout time.Duration) {
 		return
 	}
 	newSoonAt.Store(now)
+	// the panel reads nothing first, and /api/state?last=1 answers at once
+	// (#1519): even the accounts are listed behind it
+	newRunning.Add(1)
 	go func() {
+		defer newRunning.Add(-1)
 		defer fetchingNew.Store(false)
 		FetchNew(timeout)
 	}()
@@ -395,18 +400,69 @@ func FetchNewBehind(timeout time.Duration) {
 		return
 	}
 	newSoonAt.Store(time.Now().UnixNano())
-	go func() {
-		defer fetchingNew.Store(false)
-		FetchNew(timeout)
-	}()
+	fetchNewGo(timeout)
 }
 
-// newRunning counts the FetchNew calls under way.
+// fetchNewGo is FetchNew in the background, counted in newRunning before
+// it returns when there is work, so a page reading FetchingNew straight
+// after is told; with none nothing is started or counted. Which accounts
+// are due is known at once unless a CLI is still asked who is signed in:
+// then the fetch is counted and waits for it in its goroutine, as the page
+// doesn't wait on a CLI (#541), and isn't told nothing is coming before
+// that account's list does (#1789). The accounts are listed here only once
+// no CLI is left to wait on.
+func fetchNewGo(timeout time.Duration) {
+	run := func(fetch func()) {
+		newRunning.Add(1)
+		go func() {
+			defer newRunning.Add(-1)
+			defer fetchingNew.Store(false)
+			fetch()
+		}()
+	}
+	if !newFetches.TryLock() {
+		// behind a FetchNew under way, which the page doesn't wait on
+		run(func() { FetchNew(timeout) })
+		return
+	}
+	behind := func() {
+		run(func() {
+			defer newFetches.Unlock()
+			fetchNewHeld(timeout)
+		})
+	}
+	if identitiesUnsettled() {
+		behind()
+		return
+	}
+	// a CLI forgotten, or one that answered, while they were listed
+	ps, answered := listForNew()
+	if identitiesUnsettled() || answered != identitiesAnswered() {
+		behind()
+		return
+	}
+	due, _ := newDue(ps)
+	if len(due) == 0 {
+		newFetches.Unlock()
+		fetchingNew.Store(false)
+		return
+	}
+	run(func() {
+		defer newFetches.Unlock()
+		fetchDue(due, timeout)
+	})
+}
+
+// newRunning counts the FetchNew calls under way, those started in the
+// background included.
 var newRunning atomic.Int32
 
 // FetchingNew reports whether a FetchNew is under way (start-up's, or one
-// started behind a page): accounts' lists may be on their way still.
-func FetchingNew() bool { return newRunning.Load() > 0 }
+// started behind a page): accounts' lists may be on their way still. One
+// started behind a page counts from its start, while it still picks the
+// accounts due: a page whose FetchNewBehind found it so returned at once,
+// and was told none was on its way until the one picking counted itself.
+func FetchingNew() bool { return newRunning.Load() > 0 || fetchingNew.Load() }
 
 // FetchNew asks each signed-in account whose vendor list magpie hasn't
 // fetched yet for it, each for at most timeout. Start-up does this for the
@@ -422,14 +478,55 @@ func FetchNew(timeout time.Duration) (missing bool) {
 	defer newRunning.Add(-1)
 	newFetches.Lock()
 	defer newFetches.Unlock()
+	return fetchNewHeld(timeout)
+}
+
+// fetchNewHeld is FetchNew with newFetches held.
+func fetchNewHeld(timeout time.Duration) (missing bool) {
 	// listing them asks a CLI who is signed in, if never asked: one that
 	// hasn't answered yet is waited for, and they are listed again
-	ps := All()
+	ps, answered := listForNew()
 	if waited, unknown := awaitIdentities(timeout); unknown {
 		missing = true
-	} else if waited {
+	} else if waited || answered != identitiesAnswered() {
 		ps = All()
 	}
+	due, skipped := newDue(ps)
+	if fetchDue(due, timeout) {
+		missing = true
+	}
+	// one waiting to be asked again, unless another's fetch listed it
+	for _, f := range skipped {
+		if _, ok := f.p.Listed(); !ok || f.decide {
+			missing = true
+		}
+	}
+	return missing
+}
+
+// listForNew lists the providers for FetchNew, listed again if a CLI
+// answered who is signed in while they were: an account it says is signed
+// in was left out (its look gave up waiting), and isn't any more. answered
+// is how many CLIs have answered, for a caller that waits on more.
+func listForNew() (ps []Provider, answered int) {
+	before := identitiesAnswered()
+	ps = All()
+	if answered = identitiesAnswered(); answered != before {
+		ps = All()
+	}
+	return ps, answered
+}
+
+// newFetch is a provider FetchNew asks for its list, and whether for its
+// decision models.
+type newFetch struct {
+	p      Provider
+	decide bool
+}
+
+// newDue is those of ps FetchNew asks for their lists now, and those
+// skipped as they failed less than newFetchRetry ago; newFetches held.
+func newDue(ps []Provider) (due, skipped []newFetch) {
 	for _, p := range ps {
 		// a list of decision models fetched before magpie kept their
 		// windows and input, or not fetched yet (ARNO on Discord)
@@ -442,24 +539,38 @@ func FetchNew(timeout time.Duration) (missing bool) {
 			continue
 		}
 		if t, ok := newFetches.m[p.ID]; ok && time.Since(t) < newFetchRetry {
-			missing = true
+			skipped = append(skipped, newFetch{p, decide})
+			continue
+		}
+		due = append(due, newFetch{p, decide})
+	}
+	return due, skipped
+}
+
+// fetchDue asks each of due for its list, each for at most timeout, and
+// reports whether one failed; newFetches held.
+func fetchDue(due []newFetch, timeout time.Duration) (failed bool) {
+	for _, f := range due {
+		p := f.p
+		// listed since by another's fetch, as a plugin's accounts are
+		if _, ok := p.Listed(); ok && !f.decide {
 			continue
 		}
 		newFetches.m[p.ID] = time.Now()
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		var err error
-		if decide && p.Account == nil {
+		if f.decide && p.Account == nil {
 			_, err = p.fetchDecide(p.Via(ctx))
 		} else {
 			_, err = p.Fetch(ctx)
 		}
 		if err != nil {
 			log.Println(p.ID + ": " + err.Error())
-			missing = true
+			failed = true
 		}
 		cancel()
 	}
-	return missing
+	return failed
 }
 
 // a fetched list: every endpoint's models merged, the base kept for

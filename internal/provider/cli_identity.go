@@ -188,9 +188,7 @@ func cliIdentities() []*cliIdentity { return []*cliIdentity{cursorStatus, devinS
 func awaitIdentities(timeout time.Duration) (waited, unknown bool) {
 	deadline := time.After(timeout)
 	for _, c := range cliIdentities() {
-		c.Lock()
-		pending, done := c.at.IsZero() && c.refreshing, c.done
-		c.Unlock()
+		pending, done := c.asking()
 		if !pending {
 			continue
 		}
@@ -202,6 +200,45 @@ func awaitIdentities(timeout time.Duration) (waited, unknown bool) {
 		}
 	}
 	return waited, false
+}
+
+// asking says whether the CLI is being asked who is signed in for the
+// first time, and the channel closed when it has answered.
+func (c *cliIdentity) asking() (pending bool, done chan struct{}) {
+	c.Lock()
+	defer c.Unlock()
+	return c.at.IsZero() && c.refreshing, c.done
+}
+
+// identitiesUnsettled says whether a CLI never answered who is signed in
+// is being asked, or would be asked and waited for by the next look:
+// listing the accounts then may wait on it, as FetchNew does, which a page
+// doesn't (#541). Not while discovery is off, as no look asks then.
+func identitiesUnsettled() bool {
+	if settings.AccountDiscoveryOff() {
+		return false
+	}
+	for _, c := range cliIdentities() {
+		c.Lock()
+		unsettled := c.at.IsZero() && (c.refreshing || !c.waited)
+		c.Unlock()
+		if unsettled {
+			return true
+		}
+	}
+	return false
+}
+
+// identitiesAnswered is how many CLIs have answered who is signed in.
+func identitiesAnswered() (n int) {
+	for _, c := range cliIdentities() {
+		c.Lock()
+		if !c.at.IsZero() {
+			n++
+		}
+		c.Unlock()
+	}
+	return n
 }
 
 // forget has the next look ask the CLI and wait for it: after a sign-in or
