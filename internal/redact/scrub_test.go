@@ -59,3 +59,53 @@ func TestScrub(t *testing.T) {
 		t.Errorf("cut body: %q", got)
 	}
 }
+
+// What the request archive and the OTLP bodies keep is masked as what the
+// vendor is sent: the user's own rules — a relay's key magpie's own rules
+// don't know (#195) — their words and their personal data go out of it for
+// good, with no placeholder made and nothing held to put back.
+func TestScrubWithOptions(t *testing.T) {
+	const relay = "rz_RelayKey1234567"
+	rules := []Rule{{Kind: "RELAY", Prefix: "rz_"}}
+	body := `{"prompt":"send it to ` + relay + `","note":"keep this"}`
+	o := Options{Secrets: true, Rules: rules}
+
+	// before any of them has masked this key: without the options each of
+	// them takes only the secrets magpie's own rules know out, and nothing
+	// knows rz_, as they always have. Asked after the ones below, a value
+	// once masked is masked again wherever a request has it (known.go), so
+	// the question has to be asked of a key nothing has masked yet.
+	if got := string(ScrubJSON([]byte(body))); !strings.Contains(got, relay) {
+		t.Errorf("ScrubJSON: %s", got)
+	}
+	if got := Scrub("send it to " + relay); got != "send it to "+relay {
+		t.Errorf("Scrub: %q", got)
+	}
+	if got := ScrubHeader("X-Note", "key "+relay); got != "key "+relay {
+		t.Errorf("ScrubHeader: %q", got)
+	}
+	if masked, n := MaskJSON([]byte(body), o); n != 1 || strings.Contains(string(masked), relay) || !strings.Contains(string(masked), "{{RELAY_") {
+		t.Errorf("MaskJSON %d: %s", n, masked)
+	}
+	kept := string(ScrubJSONWith([]byte(body), o))
+	if strings.Contains(kept, relay) || !strings.Contains(kept, "[REDACTED:RELAY]") || !strings.Contains(kept, `"note":"keep this"`) {
+		t.Errorf("ScrubJSONWith: %s", kept)
+	}
+	if strings.Contains(kept, "{{") {
+		t.Errorf("a placeholder made: %s", kept)
+	}
+	// text and headers too, the user's words and their personal data with
+	// the rules
+	if got := ScrubWith("send it to "+relay, o); got != "send it to [REDACTED:RELAY]" {
+		t.Errorf("ScrubWith: %q", got)
+	}
+	if got := ScrubHeaderWith("X-Note", "key "+relay, o); got != "key [REDACTED:RELAY]" {
+		t.Errorf("ScrubHeaderWith: %q", got)
+	}
+	if got := ScrubWith("Project Nightjar ships", Options{Secrets: true, Words: []string{"Nightjar"}}); got != "Project [REDACTED:TERM] ships" {
+		t.Errorf("words: %q", got)
+	}
+	if got := ScrubWith("write to agent@relay.acme-corp.dev", Options{Secrets: true, Personal: true}); got != "write to [REDACTED:EMAIL]" {
+		t.Errorf("personal: %q", got)
+	}
+}

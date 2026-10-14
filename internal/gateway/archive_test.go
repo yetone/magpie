@@ -14,6 +14,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/yetone/magpie/internal/redact"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -281,4 +282,90 @@ func keys(m map[string][]byte) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// relayKey is a relay's key of a format of the user's own: magpie's rules
+// know nothing of it, so only their masking rule finds it (#195).
+const relayKey = "rz_RelayKey1234567"
+
+// relayVendor answers with the relay key in its reply, as a vendor that
+// names a key back does.
+type relayVendor struct{}
+
+func (relayVendor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	req, _ := io.ReadAll(r.Body)
+	key := relayKey
+	// echo the key the agent sent, so a check using one of its own reads it
+	// back: masking off, the vendor saw the user's rule take nothing out
+	if i := strings.Index(string(req), "rz_"); i >= 0 {
+		rest := string(req)[i:]
+		if j := strings.IndexAny(rest, `"`); j > 0 {
+			key = rest[:j]
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	io.WriteString(w, `{"id":"c1","object":"chat.completion","model":"m1","choices":[{"index":0,"message":{"role":"assistant","content":"using `+key+`"},"finish_reason":"stop"}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`)
+}
+
+// Every secret of magpie's own goes out of the archive whether masking is
+// on for the vendor or not: what the archive keeps is sent nowhere, so a
+// magpie rule's match goes from it either way. A masking rule of the user's
+// own is left behind: mask gates it on Mask secrets, so forcing the secrets
+// on for what is kept would switch their rule on where the vendor side left
+// it off. With masking on the vendor was sent a placeholder and the archive
+// keeps that one; with it off the agent's own text is what the archive
+// keeps, the relay key and all, since no rule of magpie's knows rz_.
+func TestArchiveKeepsTheUsersRules(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		redact bool
+		key    string
+	}{{"masking_on", true, "rz_RelayKey1234567"}, {"masking_off", false, "rz_RelayKey7654321"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh(t)
+			serveOn(t, "fake", "k", []string{"m1"}, relayVendor{})
+			if err := settings.Save(settings.Settings{RequestArchive: true, Redact: tc.redact,
+				RedactRules: []redact.Rule{{Kind: "RELAY", Prefix: "rz_"}}}); err != nil {
+				t.Fatal(err)
+			}
+			b := &memBucket{objs: map[string][]byte{}}
+			archiveTo(t, b)
+			s := New()
+			body := `{"model":"fake/m1","messages":[{"role":"user","content":"send it to ` + tc.key + `"}]}`
+			rec := httptest.NewRecorder()
+			s.Handler().ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(body)))
+			archivePending.Wait()
+			if rec.Code != 200 || !strings.Contains(rec.Body.String(), tc.key) {
+				t.Fatalf("%d %s", rec.Code, rec.Body)
+			}
+			data, ok := b.objs["archive/"+s.Recent()[0].Archive+".json"]
+			if !ok || len(b.objs) != 1 {
+				t.Fatalf("uploaded %v", keys(b.objs))
+			}
+			var a Archived
+			if err := json.Unmarshal(data, &a); err != nil {
+				t.Fatal(err)
+			}
+			// masking on, the vendor was sent a placeholder and the archive
+			// keeps that one; off, the user's rule took nothing out of what
+			// the vendor was sent, and no rule of magpie's knows rz_, so the
+			// key is in the archived request as it was in the agent's
+			want := tc.key
+			if tc.redact {
+				want = "{{RELAY_"
+			}
+			if !strings.Contains(a.Request.Body, want) {
+				t.Errorf("want %s in the archived request:\n%s", want, a.Request.Body)
+			}
+			if tc.redact == strings.Contains(a.Request.Body, tc.key) {
+				t.Errorf("masking %v: the relay key in the archived request:\n%s", tc.redact, a.Request.Body)
+			}
+			// the reply was masked on its way back only where the vendor
+			// echoed the placeholder: with masking on the key is restored
+			// for the agent, and with it off the vendor never saw one
+			if !tc.redact && !strings.Contains(a.Response.Body, tc.key) {
+				t.Errorf("the relay key is not in the archived reply, and no rule knows it:\n%s", a.Response.Body)
+			}
+		})
+	}
 }
