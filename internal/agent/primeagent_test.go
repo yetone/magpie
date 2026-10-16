@@ -20,6 +20,7 @@ import (
 // files back as they were, byte for byte.
 func TestPrimeAgent(t *testing.T) {
 	home := syncHome(t)
+	t.Setenv("PATH", t.TempDir()) // test config detection, not an installed CLI
 	var a *Agent
 	for _, x := range All() {
 		if x.ID == "prime-agent" {
