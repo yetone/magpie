@@ -251,6 +251,20 @@ func identitiesAnswered() (n int) {
 func (c *cliIdentity) forget() {
 	c.Lock()
 	c.at, c.read = time.Time{}, true
+	c.user, c.plan, c.ok = "", "", false
+	// A failed ask after an explicit account change must not restore the
+	// old account from disk on the next start either.
+	if keepsIdentities() {
+		identityFile.Lock()
+		m := readIdentities()
+		if _, found := m[c.name]; found {
+			delete(m, c.name)
+			if b, err := json.MarshalIndent(m, "", "  "); err == nil {
+				_ = writePrivate(identityPath(), append(b, '\n'))
+			}
+		}
+		identityFile.Unlock()
+	}
 	c.gen++
 	c.refreshing, c.waited = false, false
 	c.retry = 0
