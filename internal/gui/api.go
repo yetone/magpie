@@ -181,11 +181,12 @@ type fieldJSON struct {
 }
 
 type agentJSON struct {
-	ID     string      `json:"id"`
-	Name   string      `json:"name"`
-	Icon   string      `json:"icon"`
-	Path   string      `json:"path"`
-	Fields []fieldJSON `json:"fields"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Icon       string            `json:"icon"`
+	Path       string            `json:"path"`
+	Fields     []fieldJSON       `json:"fields"`
+	ModelChain *agent.ModelChain `json:"modelChain,omitempty"`
 	// Drift: its config no longer does what magpie set, and how to set it again
 	Drift *agent.Drift `json:"drift,omitempty"`
 	// Wired: magpie is in its config, which its menu's Disconnect takes out
@@ -1032,6 +1033,15 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		var how *agent.Connection
 		switch r.PathValue("action") {
+		case "model-chain":
+			if a.SetModelChain == nil {
+				http.NotFound(rw, r)
+				return
+			}
+			var c agent.ModelChain
+			if err = json.NewDecoder(r.Body).Decode(&c); err == nil {
+				err = a.ApplyModelChain(c)
+			}
 		case "reapply":
 			err = a.Reapply()
 		case "keep":
@@ -2301,6 +2311,11 @@ func state() stateJSON {
 		vals := a.Values()
 		now[a.ID] = vals
 		aj := agentJSON{ID: a.ID, Name: a.Name, Icon: a.Icon, Path: tilde(a.Path), Fields: agentFields(a, vals)}
+		if a.ReadModelChain != nil {
+			if c, err := a.ReadModelChain(); err == nil {
+				aj.ModelChain = &c
+			}
+		}
 		aj.Models = agentModelCount(a, aj.Fields)
 		aj.Menu = a.ListsModels
 		aj.NoNames = a.NoNames

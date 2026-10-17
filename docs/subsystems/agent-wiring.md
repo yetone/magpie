@@ -108,6 +108,58 @@ something else shows up as drift.
 - Detection goes by an agent's folder, which an uninstall leaves behind, so an agent found by that alone is shown as gone (`CLIMissing`; #843, #2177, #2173): its CLI is on no PATH and in none of `proc.FindTool`'s folders nor where its own installer puts it (`~/.claude/local`, `~/.codex/packages/standalone`, `~/.opencode/bin`, Hermes' `hermes-agent` checkout), and nothing else that reads the folder is here (`cliHeld`): its desktop app (`HasApp`), an editor's extension (`~/.<editor>/extensions/<id>-*`: `anthropic.claude-code`, `openai.chatgpt`, `saoudrizwan.claude-dev`), Claude.app, OpenCode.app and Goose.app on a Mac, a JetBrains IDE's settings (its AI Assistant's agents and Cline's plugin) or Zed's `external_agents` (its Claude Code and Codex adapters). Where magpie can't tell (every shared folder, `cliShared`, on Windows, whose readers can be a Store app, a portable editor or a PATH only a shell profile sets, #1482, and there too one a desktop app of the agent's reads, `desktopApps`: DeepSeek Harness Desktop installs to any folder and puts its `dsh.cmd` in one the user picks, #2300, #2304; OpenCode and Goose off a Mac, Gemini, an agent detected its own way or by a command name other tools share, one with no install command but `cliOnly`'s Hermes), it is never gone. A gone row in the GUI shows "CLI not found" and none of its settings, nor Apply again; while connected it keeps its switch and Disconnect, and it folds under Not set up once not. Get started never offers it (`connectKind` is "no"). The TUI leaves it out and `magpie ls` says "CLI not found" (`TestCLIMissing*`, `agent-cli-missing.test.cjs`, `getting-started.test.cjs`).
 - Tests never touch the real machine. `TestMain` uses `testenv`, which points HOME, USERPROFILE, the XDG folders and APPDATA into a temporary folder, clears `agentenv.Vars` and puts failing stand-ins for keychain tools and agent CLIs on PATH. Agent-specific side effects (Aside, the Zed keychain, Codex's usage check) are also stubbed in `TestMain`.
 
+### OpenClaw
+
+The OpenClaw model-chain editor uses the shared model picker for both the primary
+model and each ordered fallback, including catalog groups and custom model IDs.
+The controls sit in the expanded agent page. Selecting, adding, reordering or
+removing a model immediately saves the whole sequence; failed writes retain the
+previous selection and show an inline error.
+
+OpenClaw's adapter ([`openclaw.go`](../../internal/agent/openclaw.go)) writes
+`models.providers.magpie` and the default primary model in
+`agents.defaults.model`. Its model catalog includes context/output limits,
+image input, reasoning and known prices; native Responses and Anthropic
+models use their respective API adapters. A nonempty `agents.defaults.models`
+menu gets magpie's entries beside its own; an explicit `modelPolicy.allow`
+gets `magpie/*`. Sync updates only a provider carrying magpie's key and
+removes obsolete, unedited menu entries. Disconnect restores the prior
+primary (including string shorthand), provider and policy, preserving
+fallback lists and later user edits. The GUI's inline model controls read
+and atomically saves the primary and ordered fallbacks through
+`/api/agents/model-chain/openclaw`. It accepts qualified native model IDs as
+well as magpie groups. A restricted model menu and policy admit these picks;
+Sync retains them. Saving an empty list clears fallbacks. Disconnect restores
+the pre-edit list (or removes a newly added one), unless the user changed it
+outside magpie. Reconnecting restores the saved sequence only if the disconnected
+configuration has not changed. A registered provider keeps the connection active even when
+the primary is native, so magpie can serve a fallback. The editor reads the effective model of the configured default or sole agent
+(`agents.entries` or legacy `agents.list`). When that agent has a model override,
+saving also updates it, preserving other agents and restoring the original override
+on disconnect if it is unchanged. An agent primary without fallbacks disables
+inherited fallbacks, matching OpenClaw. Ambiguous fleets use global defaults;
+session picks are not changed. JSON/JSONC keeps comments and layout. Other JSON5 syntax
+is parsed without changing numeric types or precision, then normalized only for
+the first edit; the original file is copied to `openclaw.json.before-magpie`
+and Disconnect puts it back byte for byte when the values still match.
+When values have changed, Disconnect keeps those changes and removes the
+obsolete copy, so the next connection backs up the current JSON5 text.
+Malformed configs, `$include` configs and OpenClaw's read-only/Nix flags
+fail without writing. Config location follows `OPENCLAW_CONFIG_PATH`, then
+`OPENCLAW_STATE_DIR`, then `.openclaw` under `OPENCLAW_HOME` or the user's
+home; absolute overrides use `appdir.Getenv` and join `agentenv.Vars` for
+sandboxing. WSL uses the distro's default folder and gateway address, not
+Windows' overrides. When neither its config nor CLI is present, the Agents
+page still offers OpenClaw under **Install other agents**, using its vendor
+installer labeled `shell` for macOS/Linux or PowerShell on Windows, plus
+`npm i -g openclaw` on each platform for users who already manage Node.js
+([`install.go`](../../internal/agent/install.go)). Listing these commands
+neither runs an installer nor creates an OpenClaw config.
+
+```sh
+go test -tags nogui ./internal/agent -run TestOpenClaw
+```
+
 ## Verification
 
 ```sh

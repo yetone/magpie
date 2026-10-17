@@ -120,6 +120,20 @@ func (a *Agent) Apply(key, v string) error {
 	return nil
 }
 
+// ApplyModelChain saves a complete model sequence and tracks the primary pick.
+func (a *Agent) ApplyModelChain(c ModelChain) error {
+	if err := a.SetModelChain(c); err != nil {
+		return err
+	}
+	if f := a.Field("model"); f != nil {
+		record(a.ID, f.Key, f.Get())
+	}
+	if a.Wired() {
+		forget(a.ID + disconnectedKey)
+	}
+	return nil
+}
+
 // Drift is how an agent differs from what magpie set on it.
 type Drift struct {
 	// Kind says what is off:
@@ -732,6 +746,14 @@ func (a *Agent) Disconnect() error {
 	// in, this Disconnect's own writes included (paynezhuang on Discord)
 	stash(map[string]string{a.ID + disconnectedKey: "1"})
 	before, rec := a.Values(), appliedOf(a.ID)
+	var chain *ModelChain
+	if a.ReadModelChain != nil {
+		c, err := a.ReadModelChain()
+		if err != nil {
+			return err
+		}
+		chain = &c
+	}
 	if a.Unwire != nil {
 		if err := a.Unwire(); err != nil {
 			return err
@@ -767,7 +789,14 @@ func (a *Agent) Disconnect() error {
 		}
 	}
 	// what it was on through magpie, for switching it on again
-	back := reconnection{Magpie: map[string]string{}, Left: a.Values()}
+	back := reconnection{Magpie: map[string]string{}, Left: a.Values(), Chain: chain}
+	if chain != nil {
+		c, err := a.ReadModelChain()
+		if err != nil {
+			return err
+		}
+		back.LeftChain = &c
+	}
 	for _, f := range a.Fields {
 		if v := before[f.Key]; v != back.Left[f.Key] {
 			back.Magpie[f.Key] = v
@@ -799,9 +828,11 @@ func (a *Agent) DisconnectOffline() error {
 // fields it changed (Routed: those that were magpie's) and what it left
 // every field at.
 type reconnection struct {
-	Magpie map[string]string `json:"magpie"`
-	Routed []string          `json:"routed,omitempty"`
-	Left   map[string]string `json:"left"`
+	Chain     *ModelChain       `json:"chain,omitempty"`
+	LeftChain *ModelChain       `json:"leftChain,omitempty"`
+	Magpie    map[string]string `json:"magpie"`
+	Routed    []string          `json:"routed,omitempty"`
+	Left      map[string]string `json:"left"`
 }
 
 // reconnect puts back the models an agent was on when it was disconnected
@@ -809,7 +840,20 @@ type reconnection struct {
 // it since and magpie still routes them; false when it doesn't apply.
 func (a *Agent) reconnect(now map[string]string) (bool, error) {
 	var rec reconnection
-	if json.Unmarshal([]byte(unstash(a.ID+".reconnect")), &rec) != nil || len(rec.Routed) == 0 {
+	if json.Unmarshal([]byte(unstash(a.ID+".reconnect")), &rec) != nil {
+		return false, nil
+	}
+	if rec.Chain != nil && rec.LeftChain != nil && a.ReadModelChain != nil && a.SetModelChain != nil {
+		c, err := a.ReadModelChain()
+		if err != nil {
+			return false, err
+		}
+		if c.Primary != rec.LeftChain.Primary || !slices.Equal(c.Fallbacks, rec.LeftChain.Fallbacks) {
+			return false, nil
+		}
+		return true, a.ApplyModelChain(*rec.Chain)
+	}
+	if len(rec.Routed) == 0 {
 		return false, nil
 	}
 	for k, v := range rec.Left {

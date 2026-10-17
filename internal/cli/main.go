@@ -142,7 +142,7 @@ const usage = `magpie — one place to pick every agent's model
                                   whether the app looks for updates by itself, how often (6h), and whether
                                   it downloads one at once or only says it is out (notify: for metered networks)
 
-agents: claude (cc), codex, gemini, opencode (oc), mimocode, deveco, pi, goose, cursor, zed, copilot, crush, aside
+agents: claude (cc), codex, gemini, opencode (oc), openclaw, mimocode, deveco, pi, goose, cursor, zed, copilot, crush, aside
 `
 
 var (
