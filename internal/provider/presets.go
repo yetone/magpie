@@ -487,13 +487,14 @@ var presets = []PresetDef{
 	{ID: "fireworks", Name: "Fireworks", Icon: "fireworks-color", Kind: KindRelay, Catalog: "fireworks-ai",
 		Chat:    "https://api.fireworks.ai/inference/v1",
 		Website: "https://fireworks.ai", KeysURL: "https://app.fireworks.ai/settings/users/api-keys"},
-	{ID: "siliconflow", Name: "SiliconFlow", Icon: "siliconcloud-color", Kind: KindRelay, Catalog: "siliconflow",
+	{ID: "siliconflow", Name: "SiliconFlow", Icon: "siliconcloud-color", Kind: KindRelay, Catalog: "siliconflow-cn",
 		Chat:    "https://api.siliconflow.cn/v1",
 		Website: "https://cloud.siliconflow.cn", KeysURL: "https://cloud.siliconflow.cn/account/ak",
 		// the international site is another account, keys and balance (in $)
 		Regions: []Region{
-			{ID: "cn", Name: "China", Chat: "https://api.siliconflow.cn/v1"},
-			{ID: "intl", Name: "Global", Chat: "https://api.siliconflow.com/v1",
+			{ID: "cn", Name: "China", Chat: "https://api.siliconflow.cn/v1", Catalog: "siliconflow-cn",
+				Website: "https://cloud.siliconflow.cn", KeysURL: "https://cloud.siliconflow.cn/account/ak"},
+			{ID: "intl", Name: "Global", Chat: "https://api.siliconflow.com/v1", Catalog: "siliconflow",
 				Website: "https://cloud.siliconflow.com", KeysURL: "https://cloud.siliconflow.com/account/ak"},
 		}},
 	// NVIDIA's hosted NIM endpoints (#197): chat completions only; its

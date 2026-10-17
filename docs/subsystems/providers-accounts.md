@@ -192,6 +192,29 @@ the cost is at today's API list prices. See
 and `TestHistoricalWindowHoldsUsesEachWindowsOwnReading`.
 
 - A successful Codex allowance reset invalidates an account's in-flight reading even when the read and reset have the same clock timestamp. `Allowances` snapshots `usedCache.generation` under its lock, and `forgetAllowance` advances the generation for that account; a reading from before the reset is dropped before routing can use it. [`routing.go`](../../internal/provider/routing.go), `TestResetAllowanceKnownAtOnce`.
+
+- SiliconFlow is an API-key preset with China (`cn`, default) and
+  Global (`intl`) regions in [`presets.go`](../../internal/provider/presets.go).
+  The region selects the `.cn` or `.com` Chat endpoint, cloud website, key
+  page, and models.dev catalogue (`siliconflow-cn` or `siliconflow`). The
+  existing editor, CLI `region=`, import links, and app imports use these
+  choices. The sites' accounts are independent; adding another provider
+  keeps each region's key and fetched model list separate. `normalize` in
+  [`provider.go`](../../internal/provider/provider.go) corrects the old China
+  preset's international catalogue while preserving the provider's ID,
+  endpoints, keys, model picks, and a custom catalogue. `balanceSourceOf` in
+  [`balance.go`](../../internal/provider/balance.go) recognizes both API hosts
+  and queries `/v1/user/info`; its reader formats `totalBalance` with `¥`
+  for China and `$` for Global when that endpoint answers successfully.
+  The [vendor's China release notes](https://docs.siliconflow.cn/docs/release-notes/overview)
+  announce that endpoint's retirement. Real Global verification on
+  2026-10-06 returned HTTP 410, code `20092`, with a deprecation message.
+  `siliconFlowGone` in `balance.go` explains that retirement on the usage
+  card and links to the selected site's console; model discovery and Chat
+  requests still work. See that console for the balance.
+  See [`siliconflow_test.go`](../../internal/provider/siliconflow_test.go) for
+  regional imports, compatibility, simultaneous accounts, and model metadata.
+
 - Each refresh token has exactly one holder. Vendors rotate tokens on refresh, so two copies of one token would sign each other out. `savedTokenMu` stops two requests refreshing one saved account at once.
 - A Claude subscription account is used only for Claude Code, through the genuine Claude Code binary (see [Claude subscription bridge](claude-subscription-bridge.md)).
 - Claude usage asks are ordered by `claudeAskGeneration`, not wall-clock timestamps. `AskClaudeUsage` and a Claude card's `RefreshUsage` advance it while holding the subscription cache then the login cache lock (`markClaudeUsageAsked`). Each cache captures it under its own lock before launching a read and checks it under that lock when publishing: a newer ask prevents `LoginUsage` from keeping the older reading and leaves `SubscriptionUsage` due to read again. Each `claudeWindows` entry records the generation its run answered. The timestamp's zero sentinel, `tried`/`wait`, the 30-second floor, idle behavior and saved-account scope remain unchanged. [`login_usage.go`](../../internal/provider/login_usage.go), [`subscription_usage.go`](../../internal/provider/subscription_usage.go), [`quota_refresh.go`](../../internal/provider/quota_refresh.go).
@@ -228,6 +251,8 @@ and `TestHistoricalWindowHoldsUsesEachWindowsOwnReading`.
 ## Verification
 
 ```sh
+go test -tags nogui ./internal/provider -run 'TestSiliconFlow|TestBalanceReaders|TestBalanceSourceByHost'
+go test -tags nogui ./internal/cli ./internal/gateway -run TestSiliconFlow
 go test -tags nogui ./internal/provider -run 'GoesThroughItsProxy'
 go test -tags nogui ./internal/provider -run 'TestClaudeSwitchTakesTheAccountsProxy|TestClaudeAccountProxy'
 go test -tags nogui ./internal/plugin -run TestPluginSignInProxy
