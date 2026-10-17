@@ -15673,7 +15673,7 @@ function quotaLines(sub) {
     const name = w.pool ? w.pool + " · " + w.name : w.name;
     const l = h.lines.find((x) => x.name === name);
     if (!l?.points?.length || out.some((x) => x.name === l.name)) continue;
-    out.push({ name, label: w.pool ? w.pool + " · " + t(w.name) : t(w.name), window: w, points: l.points.map((p) => ({
+    out.push({ name, label: w.pool ? w.pool + " · " + t(w.name) : t(w.name), window: w, forecast: l.forecast || null, points: l.points.map((p) => ({
       at: Date.parse(p.at), left: p.left,
       start: p.start ? Date.parse(p.start) : null, reset: p.resetsAt ? Date.parse(p.resetsAt) : null,
     })) });
@@ -16090,6 +16090,55 @@ function setQuotaRange(id) {
 function quotaWindowLine(q, w) {
   if (!w) return null;
   return quotaLines({ ...q, windows: [w.window ? { ...w, name: w.window } : w] })[0] || null;
+}
+// durText: a span of time as the forecast's copy says it — "2h 10m",
+// "1d 10h", "2 小时 10 分" — beside untilText's "in 2h".
+function durText(ms) {
+  const mins = Math.max(1, Math.round(ms / 60000));
+  const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60), m = mins % 60;
+  const parts = [];
+  if (d) parts.push(t("{n}d", { n: d }));
+  if (h) parts.push(t("{n}h", { n: h }));
+  if (!d && m) parts.push(t("{n}m", { n: m }));
+  return parts.join(" ");
+}
+// forecastVerdict: what a window's forecast (quota_forecast.go) says, as a
+// class and the words a card shows. The backend sends numbers, never display
+// strings; a window with no forecast, or one too young or too little used to
+// say (state "none"), has no verdict, rather than one that isn't true.
+function forecastVerdict(f) {
+  if (!f || f.state === "none") return null;
+  if (f.state === "spent") return { cls: "risk", hist: false, text: t("Used up") };
+  const hist = f.source === "history";
+  if (f.lastsToReset) {
+    // a window resetting in minutes leaves a multiple that says nothing: past
+    // ten times the even burn it is capped there rather than shown absurd
+    const px = typeof f.headroom === "number" && isFinite(f.headroom) ? Math.round(f.headroom * 10) / 10 : null;
+    const capped = px != null && px > 10;
+    return { cls: "safe", hist, text: t("Lasts to reset") + (px == null ? ""
+      : " · " + t(capped ? "{n}×+" : "{n}×", { n: String(capped ? 10 : px) })) };
+  }
+  // a run-out the backend gave no usable time for still says it runs out,
+  // rather than trailing off into an empty "in"; which layer answered is the
+  // history marker's job, not the sentence's
+  const eta = typeof f.etaSeconds === "number" && isFinite(f.etaSeconds) && f.etaSeconds > 0 ? durText(f.etaSeconds * 1000) : "";
+  return { cls: "warn", hist, text: eta ? t("Runs out in {eta}", { eta }) : t("Runs out") };
+}
+// quotaVerdict: a window's forecast verdict as a line of its own on the
+// window's reset line (the Usage card) — "Lasts to reset · 1.3×", "Runs out
+// in 5h", "Used up" — with "history" after it when the past cycles said it
+// rather than an even rate; null with none.
+function quotaVerdict(line) {
+  const v = forecastVerdict(line?.forecast);
+  if (!v) return null;
+  const e = el("span", "quota-verdict k-" + v.cls, v.text);
+  e.title = v.text;
+  if (v.hist) {
+    const src = el("i", "qv-src", t("history"));
+    src.title = t("Projected from this window's history, not an even rate");
+    e.append(" ", src);
+  }
+  return e;
 }
 // quotaSpark: the tray card's line of a window's current cycle, the even
 // burn faint under it; none while the curves are off. In a card's width a
@@ -16874,6 +16923,20 @@ function panelQuotaCard(q) {
   }
   card.append(rings);
   if (balance) card.append(balance);
+  // the same verdict the Usage page's windows carry, one compact line a
+  // window, for windows magpie has readings of
+  const vs = el("div", "pq-verdicts");
+  for (const w of ws) {
+    const v = forecastVerdict(quotaWindowLine(q, w)?.forecast);
+    if (!v) continue;
+    const r = el("span", "pq-verdict k-" + v.cls);
+    const say = el("span", "", v.text);
+    if (v.hist) say.append(" ", el("i", "pq-src", t("history")));
+    r.append(el("b", "", ringName(w)), say);
+    r.title = t(w.name) + " · " + v.text;
+    vs.append(r);
+  }
+  if (vs.children.length) card.append(vs);
   // the first window's cycle, a thin line under the card (#651)
   const spark = ws[0] && !ws[0].tiers ? quotaSpark(q, ws[0]) : null;
   if (spark) card.append(spark);
@@ -17771,6 +17834,14 @@ function quotaWindows(sub) {
       else r.append(" · ");
       r.append(el("span", "", out + " ·"), " ", el("span", "", untilText(new Date(w.runsOutAt))));
       quota.title = [quota.title, runsOutText(w, (at) => at.toLocaleString(intlLang()))].filter(Boolean).join("\n");
+    }
+    // whether this cycle lasts to its reset, from the window's own readings
+    // (quota_forecast.go), on a line of its own under the reset, so the
+    // window keeps its three rows; a past cycle picked has no forecast
+    const verdict = !sub.history && !w.historyMissing && quotaVerdict(quotaWindowLine(sub, w));
+    if (verdict) {
+      if (!r) quota.append(r = el("div", "quota-reset"));
+      r.append(verdict);
     }
     // what the whole window holds, by what magpie routed in it (Chiao), on
     // the reset's line, so the window keeps its three rows

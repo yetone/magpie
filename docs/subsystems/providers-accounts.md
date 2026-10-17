@@ -141,6 +141,50 @@ that the upstream does not list are named against all listed names and ids;
 listed models keep their `Available` names unchanged
 ([`Exposed`](../../internal/provider/models.go)).
 
+## Allowance history and forecasts
+
+[`quota_history.go`](../../internal/provider/quota_history.go) records each
+window's observed percent left, observation time, cycle start and reset.
+`QuotaHistories` serves those lines through `GET /api/usage/quotas/history`
+and `GET /v1/magpie/quotas/history`. Each line may also carry a derived
+`forecast`; changing the requested `days` trims the displayed points, not
+the full history used to forecast. Forecasts are never persisted or synced.
+
+[`quota_forecast.go`](../../internal/provider/quota_forecast.go) compares
+current consumption with an even burn. Windows of at least two days may
+also use at least three completed cycles with sufficient readings and
+coverage. The more conservative result wins: either layer can warn that the
+allowance runs out. Unknown cycles, insufficient readings and expired resets
+have no forecast; `state: "none"` means the cycle is too young or too little
+is consumed, `"spent"` means an observed depleted allowance, and `"ok"`
+means a projection is available. Below 8% of a cycle, a clear early run-out
+still gets a projection once 30 minutes have elapsed, at least 10% has been
+used and the even-burn ETA is at most half the time remaining to reset.
+Smaller or younger early burns wait for more of the cycle. The backend
+returns numbers and enums; labels belong to the UI's translations.
+
+A forecast's `asOf` is its last observation, which fixes its rate, ahead
+percentage, verdict, projected `leftAtReset` and `headroom`. Unobserved time
+never counts as zero consumption. `runsOutAt`, when present, is that
+projection's fixed crossing; `etaSeconds` counts down from the query's clock
+and floors at zero after the crossing. An expired projection does not claim
+an observed `"spent"` state. A reset that has passed ends the forecast,
+and readings from a new cycle cannot reuse the previous cycle's verdict.
+
+The Usage page and tray show the same verdict, from `forecastVerdict` in
+[`app.js`](../../internal/gui/assets/app.js): "Lasts to reset" with the
+headroom multiple, "Runs out in …", or "Used up", with a quiet "history"
+marker when past cycles answered. An absent forecast or `"none"` state shows
+no verdict rather than one that isn't true. On a Usage card the verdict is a
+line of its own on each window's reset line (`quotaVerdict`), after the Pace
+number, so the window keeps its three rows; a brief account hides it with the
+reset line, and a past cycle picked from the curve's menu shows none, since a
+forecast is about the current cycle. A remote magpie's gateway-key card and a
+Sub2API key's own windows get it the same way, from their own history lines.
+The tray card has one compact line a window under its rings, wrapping rather
+than cut off. The curve, its readings tooltip (#802) and its pace sentence
+(`quotaEta`) are unchanged.
+
 ## Constraints and failure behavior
 
 An allowance deliberately not requested (a saved Claude account outside
@@ -260,6 +304,14 @@ node --test internal/gui/tests/account-discovery.test.cjs
 go test -tags nogui ./internal/provider ./internal/gateway ./internal/gui -run ExtraBody
 go test -tags nogui ./internal/provider ./internal/davsync ./internal/gui -run 'KeepsAccessKey|ProvidersFileWithBOM|AccessKeySecret|PlanCardWithoutAccessKey|KeepsVolcengineSecret'
 node --test internal/gui/tests/extra-body.test.cjs
+```
+
+The forecast regressions include `TestQuotaHistoriesForecastIgnoresDisplayDays`,
+`TestQuotaForecastOldReading` and `TestQuotaForecastStaysOutOfSync`. Browser
+checks use Node and Playwright:
+
+```sh
+node --test internal/gui/tests/quota-forecast.test.cjs internal/gui/tests/quota-curve.test.cjs internal/gui/tests/quota-read-at.test.cjs internal/gui/tests/quota-pace.test.cjs
 ```
 
 The package's tests use a home of their own (`testenv`). Never point them at

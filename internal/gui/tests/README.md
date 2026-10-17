@@ -1969,6 +1969,23 @@ line, the 2 days / Cycle control turning every card without moving the page,
 no curve without readings, the theme's chart colours in light and dark, and
 the tray card's thin current-cycle line, in Chinese and English.
 
+`quota-forecast.test.cjs` checks what each window's forecast
+(`quota_forecast.go`) says, from the backend's numbers alone: "Lasts to
+reset" with the multiple it leaves (capped at "10×+"), "Runs out in …" with
+the time left, or only "Runs out" when no time is usable, and "Used up", the
+history marker beside it where past cycles answered. On a Usage card the
+verdict is a line of its own on its window's reset line, after the Pace
+number, in the theme's colours; on the tray card it is one compact line a
+window, which wraps rather than being cut off (tried at 260px as well as the
+tray's 440px). A window with no forecast, state `none` or no readings has no
+verdict on either, and its readings stay in the curve's legend (#802); the
+verdicts stay with the curves off; a brief account and a past cycle picked
+from the curve's menu show none. A Sub2API key's own windows (#1004) and a
+remote magpie's gateway-key card carry it too. "Every model" and back
+rebuilds an Antigravity card's windows: each pool's window has its verdict
+before and after, the models' own windows (no line of their own) none.
+Every language, light and dark, at 1180 and 560px, on Chromium and WebKit.
+
 `balance-curve.test.cjs` checks a key's balance over time on the Usage page:
 its readings as a line, the least-squares line since the last top-up dashed
 on to zero, "Runs out in 3d at this pace" and the spend a day, a click (or

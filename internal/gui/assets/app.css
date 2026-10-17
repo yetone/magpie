@@ -866,6 +866,14 @@ body.window .field.solo { grid-column: auto; }
 .quota-reset .quota-holds { flex-basis: 100%; display: flex; flex-wrap: wrap; column-gap: 4px; min-width: 0; }
 .quota-reset .quota-holds > span { white-space: normal; min-width: 0; }
 .quota-reset .quota-holds-why { flex-basis: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .75; cursor: help; }
+/* a window's forecast verdict (quota_forecast.go): a line of its own under
+   the reset, green when it lasts, amber when it runs out first, red when it
+   is used up; "history" after it, quiet, when past cycles said it */
+.quota-reset .quota-verdict { flex-basis: 100%; min-width: 0; white-space: normal; font-weight: 600; }
+.quota-verdict.k-safe { color: var(--tk-s); }
+.quota-verdict.k-warn { color: var(--tk-n); }
+.quota-verdict.k-risk { color: var(--drift); }
+.quota-verdict .qv-src { font-style: normal; font-weight: 400; color: var(--faint); cursor: help; }
 .quota-track { height: 4px; border-radius: 2px; background: var(--pill); overflow: hidden; }
 .quota-track i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 .subscription-error { font-size: 11px; color: var(--faint); }
@@ -1785,6 +1793,17 @@ body.panel .profiles #save { height: 25px; } /* the field's: the line keeps its 
 .pq-user { font-size: 12.5px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pq-sub { font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pq-sub.err { color: var(--muted); white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+/* the tray card's one compact verdict line a window, as the Usage page's */
+.pq-verdicts { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 3px; margin-top: 3px; font-size: 10.5px; color: var(--muted); }
+.pq-verdict { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.pq-verdict > b { flex: none; font-weight: 600; color: var(--fg-2); font-variant-numeric: tabular-nums; }
+.pq-verdict .pq-src { font-style: normal; font-size: 9.5px; color: var(--muted); }
+/* the tray is narrow and German's line is long, so the text wraps onto a
+   second line rather than being cut off; the window label (b) stays whole */
+.pq-verdict > span { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.pq-verdict.k-safe > span { color: var(--tk-s); }
+.pq-verdict.k-warn > span { color: var(--tk-n); }
+.pq-verdict.k-risk > span { color: var(--drift); }
 .pq-rings { grid-row: 1 / 3; grid-column: 2; display: flex; gap: 12px; }
 .pq-ring { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; }
 .pq-dial { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--fg-2) calc(var(--p) * 1%), color-mix(in srgb, var(--fg) 9%, transparent) 0); }
