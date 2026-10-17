@@ -85,3 +85,18 @@ func TestNoWSLAgentsOwn(t *testing.T) {
 		t.Fatal("another computer's turned off here")
 	}
 }
+
+// Microsoft 365 HTTPS is this computer's own: its certificate trust and
+// loopback listener cannot be carried to another computer by sync or backup.
+func TestM365Own(t *testing.T) {
+	from := Settings{Theme: "dark"}
+	from.KeepOwn(Settings{M365: true, M365KeyID: "local-key"})
+	if !from.M365 || from.M365KeyID != "local-key" || from.Theme != "dark" {
+		t.Fatalf("KeepOwn: %+v", from)
+	}
+	from = Settings{M365: true, M365KeyID: "other-key"}
+	from.KeepOwn(Settings{})
+	if from.M365 || from.M365KeyID != "" {
+		t.Fatalf("another computer's Microsoft 365 gateway here: %+v", from)
+	}
+}

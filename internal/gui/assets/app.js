@@ -19176,6 +19176,7 @@ function renderSettings() {
   renderOTel(s, keep);
   renderPort(s);
   renderBareIds(s);
+  renderM365(s);
   renderLAN(s);
   renderAllow(s);
   renderCORS(s);
@@ -21646,6 +21647,68 @@ function renderBareIds(s) {
   $("#bareIdsSegs").replaceChildren(segs([[false, t("Off")], [true, t("On")]], !!s.bareModelIDs, (on) =>
     writingPrefs(api("settings/bare-ids", { on })).then((ns) => { prefs = state.settings = ns; renderSettings(); })
       .catch((e) => { status(t(e.message), "err"); renderSettings(); })));
+}
+
+// renderM365: the loopback HTTPS endpoint the Claude add-in in Word,
+// Excel and PowerPoint calls. Its key is a normal named gateway key, so
+// Routing, limits and usage continue to identify the caller.
+function renderM365(s) {
+  const box = $("#m365List");
+  box.replaceChildren();
+  const row = (name, sub, value, ...tools) => {
+    const r = el("div", "row pref");
+    const who = el("div", "who");
+    who.append(el("div", "name", name));
+    if (sub) who.append(el("div", "sub", sub));
+    const val = el("div", "val");
+    if (value) val.append(el("code", "", value));
+    val.append(...tools);
+    r.append(who, val);
+    box.append(r);
+    return r;
+  };
+  const set = (on) => writingPrefs(api("settings/m365", { on })).then((out) => {
+    prefs = out.settings;
+    renderSettings();
+    const warnings = [];
+    if (out.stopWarning) warnings.push(t("Microsoft 365 support is off, but its HTTPS listener could not be stopped: {error}", { error: out.stopWarning }));
+    if (out.trustWarning) warnings.push(t("Microsoft 365 support is off, but certificate trust could not be removed. Remove ‘Magpie M365 Local CA’ from the current user's trust store by hand. {error}", { error: out.trustWarning }));
+    status(warnings.join("\n") || t(on ? "Claude for Microsoft 365 is ready" : "Claude for Microsoft 365 is off"), warnings.length ? "err" : "ok", warnings.length ? 7000 : 1800);
+  }).catch(async (e) => { prefs = await api("settings").catch(() => prefs); status(t(e.message), "err"); renderSettings(); });
+  row("Claude for Microsoft 365", t("A loopback-only HTTPS gateway for the Claude add-in in Word, Excel and PowerPoint"), "",
+    segs([["off", t("Off")], ["on", t("On")]], s.m365 ? "on" : "off", (v) => set(v === "on")));
+  const ms = s.m365Status || {};
+  if (!s.m365) {
+    if (ms.error) row(t("Gateway URL"), ms.error, ms.url || "https://127.0.0.1:8787");
+    return;
+  }
+  const url = ms.url || "https://127.0.0.1:8787";
+  row(t("Gateway URL"), ms.running ? t("Running on this computer") : (ms.error || t("The HTTPS gateway is not running")), url,
+    copyBtn(url, t("Gateway URL")));
+  const cert = ms.certificate || {};
+  let certButton = null;
+  if (s.m365CertificateActions) {
+    certButton = el("button", "text", t(cert.trusted ? "Remove trust" : "Trust certificate"));
+    certButton.onclick = async () => {
+      certButton.disabled = true;
+      try {
+        await api("settings/m365/certificate/" + (cert.trusted ? "remove" : "install"), {});
+        prefs = await api("settings");
+        renderSettings();
+        status(t(cert.trusted ? "Certificate trust removed" : "HTTPS certificate trusted"), "ok", 1800);
+      } catch (e) { certButton.disabled = false; status(t(e.message), "err"); }
+    };
+  }
+  row(t("HTTPS certificate"), t(s.m365CertificateActions ? (cert.message || "Trust the certificate before connecting from Microsoft 365") : "Install this certificate manually in the current user's trust store"), s.m365CertificateActions ? "" : (cert.certificate || ""), certButton);
+  const keyButton = el("button", "text", t("Copy key"));
+  keyButton.onclick = async () => {
+    try {
+      const out = await api("settings/m365/key", {});
+      await copy(out.secret, t("Gateway key"), keyButton);
+    } catch (e) { status(t(e.message), "err"); }
+  };
+  row(t("Gateway key"), t("Paste this key into the add-in; it never exposes a provider key"), s.m365KeyMasked || "", keyButton);
+  row(t("Allowed web page"), t("Added automatically while Microsoft 365 support is on"), "https://pivot.claude.ai");
 }
 
 // renderCORS: the web pages whose scripts may call the gateway from a
