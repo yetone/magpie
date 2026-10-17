@@ -1066,6 +1066,11 @@ body.window .field.solo { grid-column: auto; }
 .kpi b .u:last-child { margin-right: 0; }
 .kpi span { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
 .kpi small { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The native window is a narrow one too, and a figure there would rather
+   wrap its sub-line than cut it short ("median 120K · p90 880K" needs 130px
+   of the 152px a sixth of a 918px page gives it, and a longer project name
+   more). */
+@media (max-width: 1080px) { body.window:not(.web) .kpi small { white-space: normal; overflow: visible; } }
 /* the Overview's tokens tile names how they are counted, a pop-up of the two
    ways (#2378): the label's own look, a small chevron after it */
 .kpi .kpi-pick { align-self: flex-start; display: inline-flex; align-items: center; gap: 3px; max-width: 100%; margin: 2px 0 -1px -4px; padding: 1px 4px; border-radius: 5px; color: var(--muted); transition: background .12s, color .12s; }
@@ -1470,6 +1475,13 @@ details.cx-part[open] > summary .cx-h { margin-bottom: 2px; }
 .stats.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 @container (max-width: 960px) { .stats.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @container (max-width: 420px) { .stats.six { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* A native window is narrow without being a phone: six figures on a 918px
+   page are 152px each and their sub-lines end in an ellipsis, so between the
+   desk's six columns and the phone's three the window takes three to a row.
+   Agent chips retain their own scrolling strip (#929). */
+@container (min-width: 961px) and (max-width: 1100px) {
+  body.window:not(.web) .stats.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .kpi.stale, .sess-card.stale .sess-tops { opacity: .55; transition: opacity .2s; }
 .l0 { background: var(--pill); }
 .l1 { background: color-mix(in srgb, var(--accent) 22%, var(--pill)); }

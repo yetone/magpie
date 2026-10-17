@@ -397,6 +397,15 @@ leaving suggested plugin cards in place so a click begun before the answer still
 opens the intended plugin. `plugin-market.test.cjs` holds the search response
 between pointerdown and pointerup to check this in Chromium and WebKit.
 
+In a narrow native window the Usage page keeps the head row of #1599 (the sum
+at the right, `.usage-head.tight`), wraps KPI sub-lines rather than cutting
+them short, and hides any chart date that would collide with its neighbour.
+Sessions' agent strip keeps its own horizontal scrolling and retains the
+selected agent in view (#929). The tray's period buttons stay connected across
+an answer, so a redraw between pressing and releasing one still delivers its
+click. `usage-narrow.test.cjs` and `panel-usage-period.test.cjs` guard these
+layout and interaction paths.
+
 ## Verification
 
 The session readers include Cursor CLI chat stores, Cursor editor project
