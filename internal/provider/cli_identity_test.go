@@ -239,3 +239,58 @@ func TestCLIIdentityNotKeptInATestBinary(t *testing.T) {
 		t.Fatalf("written in a test binary: %v", es)
 	}
 }
+
+// Explicit invalidation must not serve a previous account when the next
+// identity check fails, including after a restart.
+func TestCLIIdentityForgetThenUnanswered(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepIdentities(t)
+	exe := func() string { return "/bin/sh" }
+	c := &cliIdentity{name: "x", exe: exe, ask: func() (string, string, bool, error) {
+		return "old@example.com", "Pro", true, nil
+	}}
+	c.get()
+	// Another CLI's persisted answer must survive this invalidation.
+	other := &cliIdentity{name: "other", exe: exe, ask: c.ask}
+	other.get()
+	c.forget()
+	c.ask = func() (string, string, bool, error) { return "", "", false, errors.New("timed out") }
+	if u, p, ok := c.get(); u != "" || p != "" || ok {
+		t.Fatalf("forget followed by failed ask served old account: %q %q %v", u, p, ok)
+	}
+	if k, found := readIdentities()["x"]; found {
+		t.Fatalf("forget retained the old disk identity: %+v", k)
+	}
+	if k := readIdentities()["other"]; !k.OK || k.User != "old@example.com" {
+		t.Fatalf("forget changed another CLI's identity: %+v", k)
+	}
+	again := &cliIdentity{name: "x", exe: exe, ask: c.ask}
+	if u, p, ok := again.get(); u != "" || p != "" || ok {
+		t.Fatalf("restart restored forgotten account: %q %q %v", u, p, ok)
+	}
+}
+
+func TestCLIIdentityForgetDropsInflightAnswer(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	keepIdentities(t)
+	started, release := make(chan struct{}), make(chan struct{})
+	c := &cliIdentity{name: "x", exe: func() string { return "/bin/sh" }, ask: func() (string, string, bool, error) {
+		close(started)
+		<-release
+		return "old@example.com", "Pro", true, nil
+	}}
+	c.Lock()
+	done := c.refresh()
+	c.Unlock()
+	<-started
+	c.forget()
+	close(release)
+	<-done
+	c.ask = func() (string, string, bool, error) { return "", "", false, errors.New("timed out") }
+	if u, p, ok := c.get(); u != "" || p != "" || ok {
+		t.Fatalf("pre-forget ask restored old account: %q %q %v", u, p, ok)
+	}
+	if _, found := readIdentities()["x"]; found {
+		t.Fatal("pre-forget ask persisted its old answer")
+	}
+}
