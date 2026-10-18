@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -910,6 +911,28 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 		}
 		return "object"
 	}
+	// oneSays is the schema every member of a tuple that says anything
+	// says alike ({} and whatever isn't an object say nothing), or nil when
+	// they differ or none says anything: one member's schema would tell the
+	// model every item is that kind, and a [field, op, value] is not three
+	// fields
+	oneSays := func(members []any) any {
+		var one map[string]any
+		for _, m := range members {
+			s, ok := m.(map[string]any)
+			if !ok || len(s) == 0 {
+				continue
+			}
+			if one != nil && !reflect.DeepEqual(one, s) {
+				return nil
+			}
+			one = s
+		}
+		if one == nil {
+			return nil
+		}
+		return one
+	}
 	var walk func(v any, depth int, path string) any
 	walk = func(v any, depth int, path string) any {
 		switch x := v.(type) {
@@ -1121,12 +1144,30 @@ func plainSchema(raw json.RawMessage) json.RawMessage {
 					out["type"] = "array"
 				}
 			}
-			if out["type"] == "array" && out["items"] == nil {
-				// Google wants items on every array, and turns the whole
-				// request away over one with none ("…properties[batch].
-				// items: missing field", Claude Desktop's own MCP tools,
-				// plugins#375): any item is what JSON Schema means by none
-				out["items"] = map[string]any{}
+			if out["type"] == "array" {
+				if t, ok := out["items"].([]any); ok {
+					// a tuple (draft 07's items as an array) stands as one
+					// schema: Gemini takes an items object and nothing
+					// else, so members alike are said once, and members
+					// that differ as any item ({} below)
+					out["items"] = oneSays(t)
+				}
+				if out["items"] == nil {
+					// the members prefixItems said are gone from the subset;
+					// when they are alike, their schema stands in for them
+					if pfx, _ := x["prefixItems"].([]any); len(pfx) > 0 {
+						if s := oneSays(pfx); s != nil {
+							out["items"] = walk(s, depth+1, path+"/items")
+						}
+					}
+					if out["items"] == nil {
+						// an array says what its members are, or Google turns
+						// the whole request away over the missing field (#2826;
+						// plugins#375): any item is what JSON Schema means by
+						// none, and {} answers 200
+						out["items"] = map[string]any{}
+					}
+				}
 			}
 			if t, ok := out["type"].(string); ok {
 				// JSON Schema reads an array's keywords only on an array

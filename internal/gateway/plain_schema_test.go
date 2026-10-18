@@ -120,3 +120,45 @@ func TestPlainSchemaKeepsOnlyWhatAntigravityTakes(t *testing.T) {
 		t.Errorf("got %s", b)
 	}
 }
+
+// Google refuses a whole request over an array schema that says no items,
+// at any depth ("...properties[where].items.items: missing field", #2826),
+// and takes an items that is one object, not a tuple. Claude Code's tools
+// (ArtifactData's query.where) say an array of arrays in JSON Schema
+// 2020-12 tuples (prefixItems), outside what Antigravity's subset takes;
+// draft 07 says a tuple as an items array. Members alike are said once;
+// members that differ are any item, as one member's schema would tell the
+// model every item is that kind.
+func TestPlainSchemaArrayAlwaysHasItems(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+	}{
+		{"a tuple whose members differ is any item", `{"type":"object","properties":{"query":{"type":"object","properties":{"where":{"type":"array","maxItems":10,
+			"items":{"type":"array","prefixItems":[{"type":"string"},{"type":"string","enum":["eq","ne","in"]},{}]}}}}},"required":["query"]}`,
+			`{"type":"object","properties":{"query":{"type":"object","properties":{"where":{"type":"array","maxItems":10,
+			"items":{"type":"array","items":{}}}}}},"required":["query"]}`},
+		{"a prefixItems tuple of members alike is said once", `{"type":"array","prefixItems":[{"type":"number","description":"x"},{},{"type":"number","description":"x"}]}`,
+			`{"type":"array","items":{"type":"number","description":"x"}}`},
+		{"an array that never said items", `{"type":"array","maxItems":3}`,
+			`{"type":"array","maxItems":3,"items":{}}`},
+		{"a draft 07 tuple of members that differ is one object", `{"type":"array","items":[{"type":"number"},{"type":"boolean"},{}]}`,
+			`{"type":"array","items":{}}`},
+		{"a draft 07 tuple of members alike is said once", `{"type":"array","items":[{"type":"string"},{"type":"string"}]}`,
+			`{"type":"array","items":{"type":"string"}}`},
+		{"a tuple of nothing gets the default", `{"type":"array","prefixItems":[{},{}]}`,
+			`{"type":"array","items":{}}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var got, exp any
+			if err := json.Unmarshal(plainSchema(json.RawMessage(tc.in)), &got); err != nil {
+				t.Fatal(err)
+			}
+			json.Unmarshal([]byte(tc.want), &exp)
+			if !reflect.DeepEqual(got, exp) {
+				b, _ := json.Marshal(got)
+				t.Errorf("got %s", b)
+			}
+		})
+	}
+}
