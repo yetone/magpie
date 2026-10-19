@@ -1537,6 +1537,19 @@ func (r *subscriptionRun) claimResume() bool {
 	return true
 }
 
+// released gives up a claimed handoff whose request turned out to carry
+// another conversation's rewrite of the run's: the run goes on waiting for
+// the results of the client that has not rewritten anything, parkLongest
+// more, as a run whose caller stopped does (#2933).
+func (r *subscriptionRun) released() {
+	r.mu.Lock()
+	r.resuming = false
+	r.mu.Unlock()
+	if r.timer != nil {
+		r.endIn(parkLongest)
+	}
+}
+
 // resume hands a conversation's next turn to the run that had its last
 // one, when one is waiting: the user's messages since, and nothing else.
 func (b *subscriptionBridge) resume(req *Request, owner string) (*subscriptionRun, <-chan Event) {
@@ -5772,14 +5785,21 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 		run.abort()
 		run, how = nil, accountChanged
 	}
-	// the client rewrote the conversation since the run's last reply, as Pi
-	// does compacting it mid-turn: the run's agent holds the one from before,
-	// would answer from it, and tell the client a context as large as ever,
-	// so the client compacts again at each tool call. It is let go, and a
-	// run started anew is told the conversation as the client now has it.
+	// the request's conversation was rewritten since the run's last reply —
+	// the client's own, as Pi does compacting it mid-turn, or another
+	// session's: Claude Code's fork sub-agents and resumed sessions answer
+	// the very calls the run waits on, by their ids, and theirs is the
+	// history this request carries. The run's agent holds the conversation
+	// from before, would answer from it, and tell the client a context as
+	// large as ever, so the client compacted again at each tool call: these
+	// results go on in a run of their own, told the conversation as the
+	// request has it. The run that made the calls is not ended for them
+	// (#2933): the results of the client that has not rewritten anything are
+	// still to come, and it goes on waiting for them, parkLongest more, as a
+	// run whose caller stopped does.
 	if run != nil && !run.follows(req.Messages) {
-		log.Printf("%s run on %s let go: earlier messages changed while it waited for tool results", name, model)
-		run.abort()
+		log.Printf("%s on %s: tool results go on in a run of their own: earlier messages changed while the run that made the calls waits for them", name, model)
+		run.released()
 		run, how = nil, ""
 	}
 	// the client offers a tool the run's agent was never told of, as Claude
