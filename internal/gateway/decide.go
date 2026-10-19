@@ -706,6 +706,20 @@ func requestEffort(proto provider.Protocol, body []byte) string {
 	return effortOfBudget(v.Thinking.Budget)
 }
 
+// outputConfigEffort is the effort an Anthropic request's output_config
+// names, whatever it asks of thinking; "" when it names none.
+func outputConfigEffort(body []byte) string {
+	var v struct {
+		OutputConfig struct {
+			Effort string `json:"effort"`
+		} `json:"output_config"`
+	}
+	if decodeJSON(body, &v) != nil {
+		return ""
+	}
+	return effortOf(v.OutputConfig.Effort)
+}
+
 // sentEffort is the reasoning a request goes to model at: what it asks
 // for, fitted to the model's levels as it is fitted on the way out.
 func sentEffort(proto provider.Protocol, body []byte, p provider.Provider, model string) string {

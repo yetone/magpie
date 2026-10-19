@@ -5657,6 +5657,17 @@ func (s *Server) serveSubscription(w http.ResponseWriter, r *http.Request, from 
 	if err != nil {
 		return writeError(w, from, 400, err.Error()), err.Error()
 	}
+	// output_config's effort is the level the CLI thinks at (--effort), which
+	// works whatever the turn thinks: taken also when the request asks no
+	// thinking, which upstream a reasoning ask would turn on though the
+	// request never asked for it (Claude Code's title requests carry an
+	// effort and no thinking) (#2899). Claude Code's auto mode classifier
+	// is still asked at low (#250), whatever effort it carries.
+	if from == provider.Anthropic && req.Effort == "" && !req.ThinkOff && !autoModeClassifier(req) {
+		if e := outputConfigEffort(body); e != "" {
+			req.Effort = e
+		}
+	}
 	req.Model = model
 	if req.clientCache != nil {
 		req.clientCache.report = func() { cacheReportReady(w, req) }
