@@ -16486,10 +16486,14 @@ function renderPanelUse() {
   const focusDay = box.contains(document.activeElement) ? document.activeElement.dataset.day : "";
   const l = panelUse;
   box.hidden = false;
-  const bar = el("div", "pu-bar");
-  const per = el("div", "segs");
-  for (const [id, name] of PANEL_USE_PERIODS) {
-    const b = el("button", "opt" + (id === panelUsePeriod ? " on" : ""), t(name));
+  // Keep the period buttons connected while an answer redraws the totals:
+  // replacing one between pointerdown and pointerup would lose its click.
+  const bar = box.querySelector(":scope > .pu-bar") || el("div", "pu-bar");
+  const per = bar.querySelector(":scope > .segs") || el("div", "segs");
+  for (const [i, [id, name]] of PANEL_USE_PERIODS.entries()) {
+    const b = per.querySelectorAll(":scope > .opt")[i] || el("button", "opt");
+    b.classList.toggle("on", id === panelUsePeriod);
+    if (b.textContent !== t(name)) b.textContent = t(name);
     b.onclick = () => {
       if (id === panelUsePeriod) return;
       panelUsePeriod = id;
@@ -16498,7 +16502,7 @@ function renderPanelUse() {
       renderPanelUse();
       loadPanelUse().catch(() => {});
     };
-    per.append(b);
+    if (!b.parentElement) per.append(b);
   }
   const pick = el("button", "sess-pick");
   pick.type = "button";
@@ -16530,8 +16534,15 @@ function renderPanelUse() {
     b.classList.add("spin");
     loadPanelUse().catch(() => {}).finally(() => setTimeout(() => $("#panelUsage .pu-again")?.classList.remove("spin"), 300));
   };
-  bar.append(per, ...(copts.length ? [comp] : []), pick, el("span", "grow"), again, open);
-  const out = [bar, el("p", "usage-note", t("Gateway and session-log calls; local rejections excluded from totals."))];
+  for (const child of [...bar.children]) if (child !== per) child.remove();
+  if (!per.parentElement) bar.append(per);
+  bar.append(...(copts.length ? [comp] : []), pick, el("span", "grow"), again, open);
+  const out = [el("p", "usage-note", t("Gateway and session-log calls; local rejections excluded from totals."))];
+  const paint = () => {
+    for (const child of [...box.children]) if (child !== bar) child.remove();
+    if (!bar.parentElement) box.append(bar);
+    box.append(...out);
+  };
   if (!l) {
     out.push(el("span", "skeleton pu-sk"), el("span", "skeleton pu-sk"));
   } else if (!l.total && !l.day) {
@@ -16577,7 +16588,7 @@ function renderPanelUse() {
     const chart = el("div", "led-chart"), rank = el("div", "led-rank");
     card.append(head, chart, rank);
     out.push(tot, card);
-    box.replaceChildren(...out);
+    paint();
     slide(per, "puPeriod");
     slide(met, "puMetric");
     drawLedColumns(chart, l, split, panelUseMetric, true, (day) => {
@@ -16595,7 +16606,7 @@ function renderPanelUse() {
     fit();
     return;
   }
-  box.replaceChildren(...out);
+  paint();
   slide(per, "puPeriod");
   if (v.scrollTop !== keep) v.scrollTop = keep;
   fit();

@@ -275,12 +275,15 @@ function quotaReadings(l, now) {
 }
 // Keep the last date and as many earlier dates as fit, without clipping their
 // text. Visibility keeps each label aligned to its bar; resizing restores them.
+// This ran for the browser's phones alone; a native window is narrow too, and
+// nothing there says so (a user at 950px: the dates ran one into the next), so
+// a label is now hidden wherever it would collide with its neighbour.
 function fitChartLabels() {
-  const narrow = web && matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").matches;
+  const fits = !web || matchMedia("(max-width: 760px), (pointer: coarse) and (max-width: 1024px)").matches;
   for (const labels of document.querySelectorAll(".chart .labels")) {
     const spans = [...labels.children];
     for (const span of spans) span.style.visibility = "";
-    if (!narrow || !labels.offsetWidth) continue;
+    if (!fits || !labels.offsetWidth) continue;
     const box = labels.getBoundingClientRect();
     let right = box.right + 8;
     for (const span of spans.reverse()) {
@@ -294,6 +297,8 @@ function fitChartLabels() {
   }
 }
 new ResizeObserver(fitChartLabels).observe($("#view-usage"));
+// the dates are measured in the page's font, which can land after the first draw
+document.fonts?.ready.then(fitChartLabels);
 
 // The Overview's lists — Agents, Models, Accounts, Gateway keys — each fold
 // away under their heading (#2378: 日常看账号维度较多，都要拉到最底下), and
