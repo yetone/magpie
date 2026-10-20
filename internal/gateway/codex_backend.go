@@ -1679,9 +1679,12 @@ func codexRelayedAccount(base string, h http.Header, on *provider.Provider) (pro
 	return *p, true
 }
 
-// unreadableItem is the item OpenAI's refusal names: sealed content it
-// can't verify, or an id it doesn't have ("Item with id 'rs_…' not found").
-var unreadableItem = regexp.MustCompile(`(?i)(?:encrypted content for item|item with id) '?([A-Za-z]+_[A-Za-z0-9_-]+)'?`)
+// unreadableItem is the item a refusal names: sealed content OpenAI
+// can't verify, or an id it doesn't have ("Item with id 'rs_…' not
+// found"), which a relay in front of one answers in words of its own
+// ("Referenced reasoning item 'rs_…' was not found or has expired",
+// #3062).
+var unreadableItem = regexp.MustCompile(`(?i)(?:encrypted content for item|item with id|referenced reasoning item) '?([A-Za-z]+_[A-Za-z0-9_-]+)'?`)
 
 // withoutUnreadable is body without what OpenAI's refusal msg says it
 // can't read: the item it names, the reasoning another account sealed, or

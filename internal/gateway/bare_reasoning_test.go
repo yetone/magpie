@@ -16,14 +16,17 @@ import (
 // reporter captured it: a request whose input has reasoning with nothing
 // sealed in it is turned away with the relay's own 400, word for word,
 // naming only the input; without such reasoning the turn is answered. With
-// refuse unset it takes the reasoning, as a relay for a DeepSeek model does
-// (#388). With status set, every request gets that error instead.
+// expired set it turns the same reasoning away in an OpenCode Go relay's
+// own words, naming the id it can't resolve (#3062). With refuse unset it
+// takes the reasoning, as a relay for a DeepSeek model does (#388). With
+// status set, every request gets that error instead.
 type relayUpstream struct {
-	mu     sync.Mutex
-	refuse bool
-	status int
-	errMsg string
-	inputs [][]map[string]any
+	mu      sync.Mutex
+	refuse  bool
+	expired bool
+	status  int
+	errMsg  string
+	inputs  [][]map[string]any
 }
 
 func (u *relayUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +50,12 @@ func (u *relayUpstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			io.WriteString(w, `{"error":{"message":"bad response status code 400 (request id: 20261007000605227481978n1OdHdSC)","type":"invalid_request_error","param":"input","code":null}}`)
+			return
+		}
+		if u.expired && it["type"] == "reasoning" && enc == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, `{"error":{"message":"OpenCode Go: Referenced reasoning item '`+it["id"].(string)+`' was not found or has expired.","type":"invalid_request_error"}}`)
 			return
 		}
 	}
@@ -169,6 +178,52 @@ func TestBareReasoningLeftOutWhereRefused(t *testing.T) {
 	}
 }
 
+// #3062: a Codex thread behind a Responses passthrough relay collects
+// reasoning ids the relay can't resolve — ones magpie minted in a
+// translated reply, or the relay's own whose seal lapsed after a resume
+// gap — and Codex replays them on every turn. The relay answers 400 in
+// its own words, naming no input ("OpenCode Go: Referenced reasoning item
+// 'rs_…' was not found or has expired."), and the thread stayed broken for
+// good. The refusal is read as OpenAI's own unreadable item: asked once
+// more without the bare reasoning, every other item kept, and that
+// provider's model isn't sent them again.
+func TestRelayRefusedReasoningItemReadAsUnreadable(t *testing.T) {
+	for _, tc := range bareRequests("relay/gpt-5.4") {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh(t)
+			u := &relayUpstream{expired: true}
+			saveRelay(t, u)
+			s := New()
+			rec := codexPostTo(s, tc.body)
+			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "SUMMARY") && !strings.Contains(rec.Body.String(), "U1VNTUFSWQ") {
+				t.Fatalf("%d %s", rec.Code, rec.Body)
+			}
+			got := u.asked()
+			if len(got) != 2 {
+				t.Fatalf("asked the relay %d times, want 2", len(got))
+			}
+			if ids := strings.Join(reasoningIDs(got[0]), ","); ids != "rs_18dbe693b3dce4800000003c,rs_18dbe693b3dce4800000003d,rs_sealed" {
+				t.Errorf("first ask's reasoning: %s", ids)
+			}
+			if ids := strings.Join(reasoningIDs(got[1]), ","); ids != "rs_sealed" {
+				t.Errorf("asked again with reasoning %s, want the sealed only", ids)
+			}
+			before, after := kinds(got[0]), kinds(got[1])
+			for _, k := range []string{"message", "function_call", "function_call_output", "custom_tool_call", "custom_tool_call_output"} {
+				if after[k] == 0 || after[k] != before[k] {
+					t.Errorf("%s: %d asked again, %d first", k, after[k], before[k])
+				}
+			}
+
+			// the next request goes without them at once
+			rec = codexPostTo(s, tc.body)
+			if got = u.asked(); rec.Code != 200 || len(got) != 3 || strings.Join(reasoningIDs(got[2]), ",") != "rs_sealed" {
+				t.Fatalf("again: %d, %d asks, reasoning %v", rec.Code, len(got), reasoningIDs(got[len(got)-1]))
+			}
+		})
+	}
+}
+
 // An upstream that takes reasoning with nothing sealed in it, as a relay
 // for a DeepSeek model wants it back (#388), still gets it as Codex sent
 // it, and is asked once.
@@ -222,6 +277,7 @@ func TestRefusesInput(t *testing.T) {
 		{400, `{"error":{"message":"bad response status code 400 (request id: x)","type":"invalid_request_error","param":"input","code":null}}`, true},
 		{400, `{"error":{"message":"Invalid 'input[3].id'","type":"invalid_request_error","param":"input[3].id"}}`, true},
 		{400, `{"error":{"code":null,"message":"Item with id 'rs_1' not found.","param":null,"type":"invalid_request_error"}}`, true},
+		{400, `{"error":{"message":"OpenCode Go: Referenced reasoning item 'rs_18e02568274e11f100000242' was not found or has expired.","type":"invalid_request_error"}}`, true},
 		{400, `{"error":{"message":"bad response status code 400","type":"invalid_request_error"}}`, false},
 		{400, `{"error":{"message":"Invalid value for 'reasoning.effort'","param":"reasoning.effort"}}`, false},
 		{400, `{"error":{"message":"bad","param":"inputs"}}`, false},
