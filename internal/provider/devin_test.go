@@ -229,6 +229,8 @@ func TestAskDevinStatus(t *testing.T) {
 		sure         bool // the CLI is sure of nobody, not merely unable to tell
 	}{
 		{"signed in", devinSigned, true, "dev@example.com", true},
+		{"signed in, nonzero exit", devinSigned + "\nexit 1", true, "dev@example.com", true},
+		{"says nobody, nonzero exit and key left behind", `echo 'Not logged in.'; exit 1`, true, "", true},
 		{"says nobody", `echo 'Not logged in.'`, false, "", true},
 		{"says nobody, a key left behind", `echo 'Not logged in. Please run auth login first.'`, true, "", true},
 		{"the key was refused", devinKeyRefused, true, "", true},
