@@ -30,6 +30,7 @@ func TestMissingCommandsReadEachFolderOnce(t *testing.T) {
 		os.WriteFile(filepath.Join(d, fmt.Sprintf("tool%d.exe", i)), []byte("x"), 0o755)
 		dirs = append(dirs, d)
 	}
+	settled(t, dirs...)
 	t.Setenv("PATH", joinList(dirs))
 	t.Setenv("NoDefaultCurrentDirectoryInExePath", "1")
 	lookWindowFor(t, lookFresh)

@@ -22,6 +22,18 @@ func installTool(t *testing.T, dir, name string) string {
 	return p
 }
 
+// settled dates dirs an hour back, as folders nothing has changed in a
+// while: a stamp naming one changed within lookSettle isn't kept.
+func settled(t *testing.T, dirs ...string) {
+	t.Helper()
+	old := time.Now().Add(-time.Hour)
+	for _, d := range dirs {
+		if err := os.Chtimes(d, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // lookWindowFor sets the window a test binary trusts the folders' stamp
 // for, as the app does (lookFresh), and puts it back after.
 func lookWindowFor(t *testing.T, d time.Duration) {
@@ -38,6 +50,7 @@ func lookWindowFor(t *testing.T, d time.Duration) {
 func TestLookPathAsksOnceWhileFoldersAreUnchanged(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PATH", dir)
+	settled(t, dir)
 	// within the app's window, and past it with the folders unchanged
 	for _, window := range []time.Duration{lookFresh, 0} {
 		lookWindowFor(t, window)
@@ -63,7 +76,6 @@ func TestLookPathSeesAnInstallAndARemoval(t *testing.T) {
 	if p := FindTool("magpie-fake-agent"); p != "" {
 		t.Fatalf("FindTool found %q before it was installed", p)
 	}
-	time.Sleep(20 * time.Millisecond) // a folder time a coarse clock tells apart
 	want := installTool(t, dir, "magpie-fake-agent")
 	if p, err := LookPath("magpie-fake-agent"); err != nil || p != want {
 		t.Fatalf("after installing: %q, %v; want %q", p, err, want)
@@ -71,7 +83,6 @@ func TestLookPathSeesAnInstallAndARemoval(t *testing.T) {
 	if p := FindTool("magpie-fake-agent"); p != want {
 		t.Fatalf("FindTool after installing: %q, want %q", p, want)
 	}
-	time.Sleep(20 * time.Millisecond)
 	os.Remove(want)
 	if p, err := LookPath("magpie-fake-agent"); err == nil {
 		t.Fatalf("after removing it, still found %q", p)
@@ -81,12 +92,71 @@ func TestLookPathSeesAnInstallAndARemoval(t *testing.T) {
 	}
 }
 
+// A tool installed in the same clock tick as the folder's change before it
+// leaves the folder's time as it was. A stamp taken between the two named
+// that time, so the miss before the install was kept until something else
+// changed the folder (TestHowInstalled's pnpm, 2 of 3 runs on Linux): a
+// stamp naming a folder changed within lookSettle is taken again, and
+// what was looked up under it isn't kept.
+func TestLookPathSeesAnInstallInTheSameTick(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	lookWindowFor(t, 0)
+	// Freeze the clock: scheduling delays must not make the folder settle.
+	now := time.Now()
+	oldNow := lookNow
+	lookNow = func() time.Time { return now }
+	t.Cleanup(func() { lookNow = oldNow })
+	tick := now.Truncate(time.Millisecond)
+	if err := os.Chtimes(dir, tick, tick); err != nil { // the change before
+		t.Fatal(err)
+	}
+	if p, err := LookPath("magpie-fake-agent"); err == nil {
+		t.Fatalf("found %q before it was installed", p)
+	}
+	want := installTool(t, dir, "magpie-fake-agent")
+	if err := os.Chtimes(dir, tick, tick); err != nil { // within the same tick
+		t.Fatal(err)
+	}
+	if p, err := LookPath("magpie-fake-agent"); err != nil || p != want {
+		t.Fatalf("installed in the same tick: %q, %v; want %q", p, err, want)
+	}
+	if p := FindTool("magpie-fake-agent"); p != want {
+		t.Fatalf("FindTool, installed in the same tick: %q, want %q", p, want)
+	}
+
+	// once the folder has settled its answers are kept again
+	settled(t, dir)
+	asks := 0
+	for i := 0; i < 50; i++ {
+		looked("look\x00magpie-settled", func() lookAnswer { asks++; return lookAnswer{} })
+	}
+	if asks != 1 {
+		t.Fatalf("a settled folder's lookups asked %d times, want 1", asks)
+	}
+
+	// and so are a folder's dated ahead of the clock (a skewed share, a
+	// restored backup): the next change sets its time to now
+	ahead := time.Now().Add(time.Hour)
+	if err := os.Chtimes(dir, ahead, ahead); err != nil {
+		t.Fatal(err)
+	}
+	asks = 0
+	for i := 0; i < 50; i++ {
+		looked("look\x00magpie-ahead", func() lookAnswer { asks++; return lookAnswer{} })
+	}
+	if asks != 1 {
+		t.Fatalf("a folder dated ahead: 50 lookups asked %d times, want 1", asks)
+	}
+}
+
 // Within the app's window an answer is kept without a stat; a changed PATH
 // is asked about at once, and so is everything after Forget (the Agents
 // page's "Look again").
 func TestLookPathWindowPathAndForget(t *testing.T) {
 	a, b := t.TempDir(), t.TempDir()
 	t.Setenv("PATH", a)
+	settled(t, a, b)
 	lookWindowFor(t, time.Hour)
 	if _, err := LookPath("magpie-fake-agent"); err == nil {
 		t.Fatal("found before installing")
