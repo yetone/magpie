@@ -131,6 +131,11 @@ type Settings struct {
 	// reply, each with an enabled gateway key. None by default: a page
 	// gets no CORS headers, as before.
 	CORSOrigins []string `json:"corsOrigins,omitempty"`
+	// M365 serves the Anthropic gateway to Claude for Microsoft 365 over a
+	// second, loopback-only HTTPS listener. M365KeyID is the named gateway
+	// key made for the add-in; the credential itself stays in caller-keys.json.
+	M365      bool   `json:"m365,omitempty"`
+	M365KeyID string `json:"m365KeyId,omitempty"`
 	// AllowIPs are the addresses (IPs and CIDR ranges) other computers may
 	// reach the gateway from at all (lc on Discord); any other is refused
 	// 403 even with a gateway key. None: every address, as before. This
@@ -1072,6 +1077,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.WindowMaximised, s.KeepAwake, s.KeepAwakeDisplay = cur.WindowMaximised, cur.KeepAwake, cur.KeepAwakeDisplay
 	s.TrayUsages, s.TrayUsage, s.TrayUsageEvery, s.TrayNoLogos, s.TrayNoBird, s.TrayPace, s.TrayNoCost = cur.TrayUsages, cur.TrayUsage, cur.TrayUsageEvery, cur.TrayNoLogos, cur.TrayNoBird, cur.TrayPace, cur.TrayNoCost
 	s.GatewayMode = cur.GatewayMode
+	s.M365, s.M365KeyID = cur.M365, cur.M365KeyID
 	s.NoWSLAgents = cur.NoWSLAgents
 	s.QuotaReads = cur.QuotaReads
 	s.NoAccountDiscovery = cur.NoAccountDiscovery
