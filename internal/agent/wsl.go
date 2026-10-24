@@ -376,6 +376,8 @@ var wslKinds = []wslKind{
 	{id: "opencode", name: "OpenCode", dir: ".config/opencode", bin: "opencode", in: opencodeIn,
 		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open opencode sessions to use this."),
 		asleep:  wslOwnAsleep("opencode", "model", "small")},
+	{id: "openclaw", name: "OpenClaw", dir: ".openclaw", bin: "openclaw", in: openclawIn,
+		asleep: wslOwnAsleep("openclaw", "model")},
 	{id: "mimocode", name: "MiMo Code", dir: ".config/mimocode", bin: "mimo", in: mimocodeIn,
 		restart: newNotice("{agent} in WSL {distro} reads its config at start-up — restart open mimo sessions to use this."),
 		asleep:  wslOwnAsleep("mimocode", "model", "small")},

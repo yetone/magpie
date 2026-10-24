@@ -4416,6 +4416,14 @@ input[type="checkbox"]:disabled { opacity: .45; }
 
 /* a disabled model's pattern, as typed (#1867): an id or a glob */
 .disabled-model .name { font-family: var(--code); font-size: 12px; overflow-wrap: anywhere; }
+
+/* OpenClaw uses the same inline rows and picker as Claude's tiers. */
+.model-chain-inline { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.model-chain-inline .ag-tier { width: 130px; }
+.model-chain-inline .model-chain-pick { width: 220px; max-width: 100%; min-width: 0; }
+.model-chain-inline .model-chain-pick .v { flex: 1; text-align: left; }
+.model-chain-inline > .model-chain-add { align-self: flex-start; margin-left: 138px; padding-left: 0; }
+.model-chain-error { color: var(--red); }
 /* Settings › Images: the way to the Magpie Image tool, under its words (#2091) */
 .image-gen-how .link { padding-left: 0; padding-right: 0; white-space: normal; text-align: start; }
 /* Settings › Proxy's Test result (#2076): under the row's text */

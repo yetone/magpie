@@ -35,6 +35,9 @@ func TestInstallCommands(t *testing.T) {
 		{"gemini", "windows", []string{"npm: npm install -g @google/gemini-cli"}},
 		{"opencode", "darwin", []string{"script: curl -fsSL https://opencode.ai/install | bash", "npm: npm install -g opencode-ai"}},
 		{"opencode", "windows", []string{"npm: npm install -g opencode-ai"}},
+		{"openclaw", "darwin", []string{"script: curl -fsSL https://openclaw.ai/install.sh | bash"}},
+		{"openclaw", "linux", []string{"script: curl -fsSL https://openclaw.ai/install.sh | bash"}},
+		{"openclaw", "windows", []string{"powershell: iwr -useb https://openclaw.ai/install.ps1 | iex"}},
 		{"deveco", "darwin", []string{"npm: npm install -g @deveco/deveco-code"}},
 		{"deveco", "windows", []string{"npm: npm install -g @deveco/deveco-code"}},
 		{"deveco", "linux", nil}, // no Linux build in its package

@@ -95,6 +95,7 @@ func builtins(home, cfg string) []*Agent {
 		gemini(home),
 		agy(home),
 		opencode(home, cfg),
+		openclaw(home),
 		openChamber(home, cfg),
 		mimocode(home, cfg),
 		deveco(home, cfg),

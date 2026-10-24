@@ -108,6 +108,12 @@ type Field struct {
 	Follows string
 }
 
+// ModelChain is an agent's primary model and ordered fallback models.
+type ModelChain struct {
+	Primary   string   `json:"primary"`
+	Fallbacks []string `json:"fallbacks"`
+}
+
 // Agent is one supported coding agent.
 type Agent struct {
 	ID      string
@@ -120,8 +126,12 @@ type Agent struct {
 	// Plugin is the spec of the plugin that adds this agent (plugged.go),
 	// "" for magpie's own
 	Plugin string
-	Fields []Field
-	Native *NativeConnection
+	// ReadModelChain and SetModelChain edit the whole sequence atomically.
+	// Nil means the agent has no configurable fallback sequence.
+	ReadModelChain func() (ModelChain, error)
+	SetModelChain  func(ModelChain) error
+	Fields         []Field
+	Native         *NativeConnection
 	// Notice, if set, is advice worth showing after a change: agents that
 	// read their config once at start-up need a restart to see it.
 	Notice func() string

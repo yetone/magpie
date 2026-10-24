@@ -1077,7 +1077,7 @@ function connectable(a) {
 }
 
 // PICKS_IN is where an agent picks a model itself, for the words under it.
-const PICKS_IN = { codex: "/model", claude: "/model", opencode: "/models", pi: "/model", droid: "/model", kimi: "/model", grok: "/model", "minimax-code": "/model", dsh: "/model", crush: "ctrl+p", omp: "/model", qwen: "/model", mimocode: "/model", deveco: "/models" };
+const PICKS_IN = { codex: "/model", claude: "/model", opencode: "/models", openclaw: "/model", pi: "/model", droid: "/model", kimi: "/model", grok: "/model", "minimax-code": "/model", dsh: "/model", crush: "ctrl+p", omp: "/model", qwen: "/model", mimocode: "/model", deveco: "/models" };
 
 function connectSaid(a) {
   if (!a.wired) return t("Not connected · {agent} uses its own settings", { agent: a.name });
@@ -1956,6 +1956,7 @@ function connectPanel(a, { fields, fieldBtn }) {
       kv(t("Claude models"), line(t("claude-* models need a Claude subscription in magpie"), add));
     }
   }
+  if (a.modelChain) kv(t("Configure models"), modelChainFields(a));
   // which of magpie's models it lists, by whose they are
   if (a.models) {
     const chips = line();
@@ -2003,7 +2004,7 @@ function connectPanel(a, { fields, fieldBtn }) {
     // Cursor Private Inference's are magpie's own, its effort asked on
     // every request it sends from then on, not what a new session starts
     // with (#1003)
-    kv(t(a.id === "cursor-local" ? "Settings" : "New sessions"), line(fields));
+    kv(t(a.modelChain ? "Primary model" : a.id === "cursor-local" ? "Settings" : "New sessions"), line(fields));
   }
   if (a.native) for (const [key, detail] of Object.entries(a.native.fields || {})) {
     if (detail.detail) { const f = a.fields.find((x) => x.key === key); kv(t(f?.label || key), line(t(detail.detail))); }
@@ -4672,6 +4673,8 @@ function openPicker(agent, field, anchor, ev, only) {
   pop.classList.toggle("effort-picker", effortPicker);
   // a choice explained in a sentence (Codex's sign-in) shows all of it
   pop.classList.toggle("explained", field.label === "sign-in");
+  // Keep a dialog's picker inside its active surface; background siblings are inert.
+  if ($("#modal").contains(anchor)) { $("#modal").append(pop); pop.inert = false; }
   pop.hidden = false;
   $("#effortControl").hidden = !effortPicker;
   pop.querySelector(".search").hidden = effortPicker;
@@ -5399,6 +5402,7 @@ function asideAccount(a, f) {
 // directly (Claude Code's own, which unroutes it). From one of its own
 // models already, the pick doesn't move it off magpie.
 function leavesMagpie(a, field, value, opt) {
+  if (a.modelChain?.fallbacks.length && value) return false;
   if (a?.native || !a?.wired || !connectable(a)) return false;
   // Reasonix restores each role separately; either role can keep its provider.
   if (a.id === "reasonix" && value === "") {
@@ -5531,6 +5535,11 @@ function popGhost(pop) {
 }
 
 function closePicker() {
+  const pop = $("#pop");
+  if (pop.parentElement === $("#modal")) {
+    document.body.append(pop);
+    pop.inert = modalBackgroundElements.includes(pop);
+  }
   if (!pick) return;
   hideRailTip();
   pick.groupAnimation?.cancel();
@@ -17892,6 +17901,7 @@ function closeConfirmAsk() {
   // still holds an older full arrangement. Done is disabled for the same reason.
   if (agentsVisibilitySaving && confirmAsk.classList.contains("ag-manager")) return;
   // one asked from an editor goes back to it rather than close it too
+  if (pick && confirmAsk.contains(pick.anchor)) closePicker();
   const back = confirmAsk.back;
   confirmAsk = null;
   if (back) { $("#modal").classList.remove("lib"); back(); return; }
@@ -17903,7 +17913,11 @@ $("#modal").addEventListener("click", (e) => {
   if (confirmAsk && modalBackdrop(e)) { e.stopImmediatePropagation(); closeConfirmAsk(); }
 }, true);
 document.addEventListener("keydown", (e) => {
-  if (!confirmationPending && confirmAsk && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeConfirmAsk(); }
+  if (!confirmationPending && confirmAsk && e.key === "Escape") {
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (pick && confirmAsk.contains(pick.anchor)) { const anchor = pick.anchor; closePicker(); anchor.focus(); }
+    else closeConfirmAsk();
+  }
 }, true);
 function resetOutcome(out) {
   switch (out.code) {
@@ -25349,3 +25363,71 @@ if (mode === "window" && params.get("import")) {
   }).catch(() => {});
 }
 if (mode === "window" && params.get("view") === "providers" && params.get("edit")) editing = params.get("edit");
+// Each inline action saves the whole sequence; failed writes keep the old picks.
+function modelChainFields(a) {
+  const box = el("div", "model-chain-inline");
+  const options = (a.fields.find((f) => f.key === "model")?.options || []).filter((o) => o.value);
+  const error = el("span", "model-chain-error");
+  error.setAttribute("role", "alert");
+  let pending = false;
+  const save = async (sequence) => {
+    if (pending) return;
+    const all = [sequence.primary, ...sequence.fallbacks];
+    if (all.some((v) => !/^[^\s/]+\/\S+$/.test(v)) || new Set(all).size !== all.length) {
+      error.textContent = t("Enter a different provider/model for each model."); return;
+    }
+    pending = true; error.textContent = "";
+    const buttons = [...box.querySelectorAll("button")];
+    const disabled = buttons.map((b) => b.disabled);
+    buttons.forEach((b) => { b.disabled = true; });
+    try {
+      state = await api("agents/model-chain/" + encodeURIComponent(a.id), sequence);
+      renderAgents();
+    } catch (e) {
+      error.textContent = e.message;
+      buttons.forEach((b, i) => { b.disabled = disabled[i]; });
+    } finally { pending = false; }
+  };
+  const choose = (b, value, selected, ev) => openPicker(a, {
+    key: "model", label: "model", value, options, onPick: selected,
+  }, b, ev);
+  const modelButton = (value, label, selected) => {
+    const b = el("button", "field ag-pick model-chain-pick");
+    b.type = "button"; b.setAttribute("aria-label", label);
+    const opt = options.find((o) => o.value === value);
+    if (opt?.icon || opt?.icons?.length) b.append(optionIcon(opt));
+    b.append(el("span", "v", opt?.label || value));
+    const arrow = el("span", "chev"); arrow.append(svg(CHEV, 11, 1.7)); b.append(arrow);
+    b.title = value; b.dataset.value = value;
+    b.onclick = (ev) => choose(b, value, selected, ev);
+    return b;
+  };
+  const primary = el("div", "ag-vl model-chain-primary");
+  primary.append(el("span", "ag-tier", t("Primary model")), modelButton(a.modelChain.primary, t("Primary model"),
+    (value) => save({ ...a.modelChain, primary: value })));
+  box.append(primary);
+  a.modelChain.fallbacks.forEach((value, i) => {
+    const row = el("div", "ag-vl model-chain-fallback");
+    const label = t("Fallback model {n}", { n: i + 1 });
+    row.append(el("span", "ag-tier", i === 0 ? t("Fallback models") : ""), modelButton(value, label, (v) => {
+      const fallbacks = [...a.modelChain.fallbacks]; fallbacks[i] = v;
+      return save({ ...a.modelChain, fallbacks });
+    }));
+    const up = el("button", "ag-quiet model-chain-up", t("Up"));
+    up.type = "button"; up.disabled = i === 0;
+    up.onclick = () => {
+      const fallbacks = [...a.modelChain.fallbacks];
+      [fallbacks[i - 1], fallbacks[i]] = [fallbacks[i], fallbacks[i - 1]];
+      save({ ...a.modelChain, fallbacks });
+    };
+    const remove = el("button", "ag-quiet model-chain-remove", t("Remove"));
+    remove.type = "button";
+    remove.onclick = () => save({ ...a.modelChain, fallbacks: a.modelChain.fallbacks.filter((_, at) => at !== i) });
+    row.append(up, remove); box.append(row);
+  });
+  const add = el("button", "ag-quiet accent model-chain-add", t("Add fallback model"));
+  add.type = "button";
+  add.onclick = (ev) => choose(add, "", (value) => save({ ...a.modelChain, fallbacks: [...a.modelChain.fallbacks, value] }), ev);
+  box.append(add, error);
+  return box;
+}

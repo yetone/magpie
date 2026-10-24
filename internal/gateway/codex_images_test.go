@@ -354,16 +354,23 @@ func TestCodexFittedImagesPastTheBudget(t *testing.T) {
 	made := freshFitted(t, 10*one+one/2)
 	body := computerUseRequest(shots)
 	was := int64(0)
+	kept := 0
 	for turn := 1; turn <= 3; turn++ {
 		codexImagesFit(codexAccount(), provider.Responses, body)
 		n := made() - was
 		was += n
-		if turn == 1 && n != 30 || turn > 1 && n != 20 {
-			t.Errorf("turn %d made %d of 30 images, with 10 kept", turn, n)
+		if want := int64(len(shots) - kept); n != want {
+			t.Errorf("turn %d made %d of %d images, with %d kept", turn, n, len(shots), kept)
 		}
 		fitted.Lock()
 		held := fitted.bytes
+		// PNG sizes differ across screenshots and encoder versions; a byte
+		// budget based on one image does not always hold exactly ten.
+		kept = len(fitted.m)
 		fitted.Unlock()
+		if kept == 0 || kept >= len(shots) {
+			t.Fatalf("turn %d kept %d images: need a partially cached conversation", turn, kept)
+		}
 		if held > fittedBudget {
 			t.Errorf("turn %d: %d bytes held, past the budget of %d", turn, held, fittedBudget)
 		}
