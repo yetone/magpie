@@ -401,6 +401,16 @@ func RemoveProject(dir string, keep bool) (*Result, error) {
 			l.Projects = slices.DeleteFunc(l.Projects, func(x *Project) bool { return x == p })
 			return nil
 		}
+		// a folder that's gone has nothing of magpie's on disk to take
+		// back: the records of what it placed and wrote go with the
+		// entry, as a skill's do when its folder is gone already (#3510).
+		// A folder that couldn't be looked at (no permission, a drive
+		// that answers with an error) isn't known to be gone: its records
+		// stay, and the removal goes as before.
+		if fi, err := os.Stat(p.Dir); errors.Is(err, os.ErrNotExist) || err == nil && !fi.IsDir() {
+			l.Projects = slices.DeleteFunc(l.Projects, func(x *Project) bool { return x == p })
+			return nil
+		}
 		p.Skills, p.Servers = nil, nil
 		l.syncProject(p, &Result{})
 		if len(p.Placed) == 0 && len(p.Wrote) == 0 {
