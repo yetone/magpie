@@ -32,6 +32,8 @@ body.window .lib-head { top: -2px; margin: -2px 0 0; padding: 8px 0 4px; --bleed
   body.web .lib-more, body.web .lib-discover, body.web .lib-backups { flex: none; }
   /* a phone's inputs are 44pt with 16px text: the search box grows round it */
   body.web .editor.lib-hubsheet label.lib-hubsearch { height: 44px; border-radius: 10px; }
+  /* the card's × as big to tap as the buttons beside it */
+  body.web .lib-problems-head .lib-x { width: 44px; }
 }
 /* a window too narrow for the tabs and the buttons beside them (Discover,
    Library folder, Backups) on one line has the buttons on a line of their own, at
@@ -279,9 +281,13 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-warn .lib-path { display: inline; }
 /* what the last change couldn't write: for which agent, and why */
 .lib-problems { flex: none; margin: 8px 0 6px; padding: 9px 12px 10px; border-radius: 10px; background: var(--amber-soft); color: var(--fg); font-size: 12px; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
-.lib-problems-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.lib-problems-head b { font-weight: 600; min-width: 0; }
-.lib-problems-head .action { flex: none; }
+/* the title keeps its words whole: with less than 10em left beside it,
+   Try again and the × go to a line of their own, at its end (German on a
+   320px phone broke "Bibliothek" with the × beside it) */
+.lib-problems-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.lib-problems-head b { flex: 1 1 10em; font-weight: 600; min-width: 0; overflow-wrap: break-word; }
+.lib-problems-head .action { flex: none; margin-left: auto; }
+.lib-problems-head .lib-x { margin: -4px -6px -4px -2px; color: var(--muted); }
 .lib-problems-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
 .lib-problems ul { list-style: none; margin: 6px 0 0; padding: 0 0 0 15px; display: grid; gap: 4px; }
 .lib-problems li { min-width: 0; }

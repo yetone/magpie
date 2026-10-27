@@ -30,6 +30,7 @@ magpie.plugin("library", (ctx) => {
   let autoChecked = false; // the page checked by itself, as the server said it was due (#1449)
   let regrouping = false; // the skills' repositories fetched to group them again
   let modal = null;      // what the library has open in the dialog
+  const hid = new Set(); // the write failures the reader hid, by agent and what (#3745)
 
   const GLYPH = {
     cmd: "M3 4.5h10v7H3z M5.5 7l1.5 1.2-1.5 1.3 M8.5 9.5h2",
@@ -445,6 +446,14 @@ magpie.plugin("library", (ctx) => {
   // removed or renamed changes what the market calls added (#300): one gone
   // from the library loses its mark at once, and the market is asked again.
   function take(v) {
+    // What the reader hid stays hidden while it still fails and nothing
+    // else does: every change writes every agent again, so a file magpie
+    // can't stat fails at each one (#3745). A failure not hidden brings the
+    // card back whole, and an item written meanwhile is new when it fails
+    // again. v.problems is everything that stands, whatever answered.
+    const failing = new Set((v.problems || []).filter(failure).map(problemKey));
+    for (const k of hid) if (!failing.has(k)) hid.delete(k);
+    if ([...failing].some((k) => !hid.has(k))) hid.clear();
     const was = lib && shelf();
     lib = v;
     taken++;
@@ -606,7 +615,11 @@ magpie.plugin("library", (ctx) => {
   // the agent, settled together, not a write that failed: Try again, which
   // can't change them, is offered only beside a write that did fail.
   function problemsCard() {
-    const list = lib.problems || [];
+    // the write failures the reader hid are left out while they are all
+    // that fails; an agent's own skills, still to settle, stay
+    const all = lib.problems || [];
+    const quiet = all.some(failure) && all.filter(failure).every((p) => hid.has(problemKey(p)));
+    const list = quiet ? all.filter((p) => !failure(p)) : all;
     if (!list.length) return null;
     const here = list.filter((p) => !problemTab(p.what) || problemTab(p.what) === tab);
     const away = {};
@@ -614,7 +627,7 @@ magpie.plugin("library", (ctx) => {
     const owns = new Map(); // agent → its own skills by the library's names
     const rest = [];
     for (const p of here) {
-      if (p.own && p.what.startsWith("skill:") && p.agent) {
+      if (!failure(p)) {
         if (!owns.has(p.agent)) owns.set(p.agent, []);
         owns.get(p.agent).push(p.what.slice("skill:".length));
       } else rest.push(p);
@@ -622,12 +635,18 @@ magpie.plugin("library", (ctx) => {
     const card = el("div", "lib-problems");
     card.setAttribute("role", "status");
     const ttl = el("div", "lib-problems-head");
-    const failed = rest.length || list.some((p) => !here.includes(p) && !p.own);
-    ttl.append(el("span", "lib-problems-dot"), el("b", "", failed ? t("Some of the Library couldn't be written") : t("Some agents have skills of their own by the library's names")), el("span", "grow"));
+    const failed = rest.length || list.some((p) => !here.includes(p) && failure(p));
+    ttl.append(el("span", "lib-problems-dot"), el("b", "", failed ? t("Some of the Library couldn't be written") : t("Some agents have skills of their own by the library's names")));
     if (failed) {
       const again = button(t("Try again"), "action", () => change("all/sync", {}));
       again.title = t("Writes the library into every agent again");
-      ttl.append(again);
+      // the reader who can't mend it here, or won't now, puts it away; a
+      // change's toast still says what failed, and something new that
+      // can't be written brings it back (#3745)
+      const hide = button("", "lib-x", () => hideFailed(card));
+      hide.append(svg("M4.5 4.5l7 7M11.5 4.5l-7 7", 11, 1.6));
+      hide.title = t("Hide until something new can't be written");
+      ttl.append(again, hide);
     }
     card.append(ttl);
     const ul = el("ul");
@@ -677,6 +696,27 @@ magpie.plugin("library", (ctx) => {
       card.append(more);
     }
     return card;
+  }
+  // a write that failed, as against an agent's own skill in the library's
+  // way, which is the agent's to settle
+  function failure(p) {
+    return !(p.own && p.what.startsWith("skill:") && p.agent);
+  }
+  // a failure is the same from one sync to the next by its agent and its
+  // item: the error can name a temp file new at each write (edit.WriteAtomic)
+  function problemKey(p) {
+    return p.agent + "\n" + p.what;
+  }
+  function hideFailed(card) {
+    const focused = card.contains(document.activeElement);
+    for (const p of lib.problems || []) if (failure(p)) hid.add(problemKey(p));
+    // the view keeps its scroll, as render keeps it for Try again:
+    // Chromium's scroll anchoring would move it as the card goes
+    const top = page.scrollTop;
+    syncProblems();
+    page.scrollTop = top;
+    // the keyboard's place: the card's next button, or the tab open
+    if (focused) (page.querySelector(":scope > .lib-problems button") || page.querySelector(".lib-tabs .opt.on"))?.focus({ preventScroll: true });
   }
   // the tab a problem is about; "" is one shown on every tab
   function problemTab(what) {

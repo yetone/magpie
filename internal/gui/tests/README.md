@@ -1442,6 +1442,21 @@ found skill with a byte copy in another agent shows both agents' icons and
 no "differs in"; one that really differs still says so. Chromium and
 WebKit, in English and Chinese, with `/api/plugins` faked.
 
+`library-problems-hide.test.cjs` opens the Library with Grok Build's
+AGENTS.md failing to stat at every sync (Zachary-wW, #3745), the API
+answering as `library.go` does, the error texts as magpie's own sync gave
+them in a sandbox. The card's × hides what it lists on every tab, sends
+nothing and moves no view; a read, and in the window an Instructions
+change and a chip's change that fail only on what was hidden, keep it
+hidden, the toast still naming the failure, and so does the same failure
+under a temp file named anew at each write. A failure not hidden, one whose item was written in
+between, or one after none stood brings the card back with all it lists.
+An agent's own skills stay, under their own title, with no ×, and the
+keyboard's focus goes to the card's next button or the tab open. The × is
+named and inside the card in English, Chinese (both), Japanese and German,
+in a browser at 980, 440 and 320px (44px wide on a phone) and in the
+window at 980 and 560px, the title's words whole. Chromium and WebKit.
+
 `model-pick.test.cjs` picks Claude Code's model with the Agents page
 scrolled while a faked `/api/set` takes 2.5s to answer: the row shows the
 new model at once, in the window and in the tray panel's opened row and its
