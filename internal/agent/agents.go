@@ -1017,7 +1017,8 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 			break
 		}
 	}
-	provider := openCodeKept(path, func() any { return magpieProviderJSONAt("opencode", id, at.gw()) })
+	block := func() any { return magpieProviderJSONAt("opencode", id, at.gw()) }
+	provider := openCodeKept(path, block)
 	opts := func(key string) func(map[string]string) []Option {
 		return func(cur map[string]string) []Option {
 			return withVia(ownOptions(auth, cur[key]), id, magpieID+"/")
@@ -1039,7 +1040,7 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 				if onMagpie() {
 					return nil
 				}
-				return edit.DelJSON(path, "provider."+magpieID)
+				return edit.DelJSON(path, "provider."+magpieID, openCodeNativeKey)
 			}
 			v, err := openCodeRefAt(at, path, id, v)
 			if err != nil {
@@ -1056,17 +1057,21 @@ func openCodeLike(at place, id, name, icon, bin, dir, auth string, ua []string, 
 			if !usesMagpie(get("model"), get("small_model")) {
 				return ""
 			}
-			return wiringOff(name, path, func(k string) (string, bool) { return edit.GetJSON(path, "provider."+magpieID+".options."+k) },
-				"baseURL", at.v1(), "apiKey", openCodeKeyAt(id, at.gw()))
+			return openCodeWiringOff(name, path, at.v1(), openCodeKeyAt(id, at.gw()))
 		},
 		ListOnly: true,
 		Sync: func() error {
+			var err error
 			// a model of magpie's chosen, but its provider gone from the
 			// file: put it back, or the agent has nothing to send it to
 			if _, ok := edit.GetJSON(path, "provider."+magpieID); !ok && onMagpie() {
-				return edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: provider()})
+				err = edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: provider()})
+			} else {
+				err = syncJSONInOrder(path, "provider."+magpieID, provider)
 			}
-			return syncJSONInOrder(path, "provider."+magpieID, provider)
+			// and where the file keeps it under providers too, which
+			// OpenCode 2 reads instead, there as well (#3883)
+			return errors.Join(err, syncOpenCodeNative(path, block))
 		},
 		Fields: []Field{
 			{Key: "model", Label: "model", Get: jsonGet(path, "model"), Set: set("model"), Options: opts("model")},
@@ -1105,8 +1110,11 @@ func openCodeRefAt(at place, path, id, v string) (string, error) {
 	if own := ownGatewayProvider(path, ref, at.v1()); own != "" {
 		return own + "/" + ref, nil
 	}
-	provider := openCodeKept(path, func() any { return magpieProviderJSONAt("opencode", id, at.gw()) })
-	return v, edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: provider()})
+	block := func() any { return magpieProviderJSONAt("opencode", id, at.gw()) }
+	if err := edit.SetJSON(path, edit.KV{Path: "provider." + magpieID, Value: openCodeKept(path, block)()}); err != nil {
+		return v, err
+	}
+	return v, syncOpenCodeNative(path, block)
 }
 
 // ownGatewayProvider is the provider in an OpenCode config, other than

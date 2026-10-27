@@ -164,7 +164,8 @@ func openChamber(home, cfg string) *Agent {
 	oc := opencode(home, cfg)
 	ocPath := oc.Path
 	auth := filepath.Join(home, ".local", "share", "opencode", "auth.json")
-	provider := openCodeKept(ocPath, func() any { return magpieProviderJSONFor("opencode", "opencode") })
+	block := func() any { return magpieProviderJSONFor("opencode", "opencode") }
+	provider := openCodeKept(ocPath, block)
 	opts := func(key string) func(map[string]string) []Option {
 		return func(cur map[string]string) []Option {
 			return withVia(ownOptions(auth, cur[key]), "opencode", magpieID+"/")
@@ -178,7 +179,7 @@ func openChamber(home, cfg string) *Agent {
 		if usesMagpie(m, sm, s.model(), s.small()) {
 			return nil
 		}
-		return edit.DelJSON(ocPath, "provider."+magpieID)
+		return edit.DelJSON(ocPath, "provider."+magpieID, openCodeNativeKey)
 	}
 	return &Agent{
 		ID: "openchamber", Name: "OpenChamber", Icon: "openchamber", Aliases: []string{"chamber"}, Spelled: openCodeSpelled(ocPath, gatewayV1),
@@ -203,15 +204,18 @@ func openChamber(home, cfg string) *Agent {
 			if !usesMagpie(s.model(), s.small()) {
 				return ""
 			}
-			return wiringOff("OpenChamber", ocPath, func(k string) (string, bool) { return edit.GetJSON(ocPath, "provider."+magpieID+".options."+k) },
-				"baseURL", gatewayV1(), "apiKey", hereKey())
+			return openCodeWiringOff("OpenChamber", ocPath, gatewayV1(), hereKey())
 		},
 		ListOnly: true,
 		Sync: func() error {
+			var err error
 			if _, ok := edit.GetJSON(ocPath, "provider."+magpieID); !ok && usesMagpie(s.model(), s.small()) {
-				return edit.SetJSON(ocPath, edit.KV{Path: "provider." + magpieID, Value: provider()})
+				err = edit.SetJSON(ocPath, edit.KV{Path: "provider." + magpieID, Value: provider()})
+			} else {
+				err = syncJSONInOrder(ocPath, "provider."+magpieID, provider)
 			}
-			return syncJSONInOrder(ocPath, "provider."+magpieID, provider)
+			// and the copy under providers its own form writes (#3883)
+			return errors.Join(err, syncOpenCodeNative(ocPath, block))
 		},
 		Fields: []Field{
 			{Key: "model", Label: "model", Get: s.model, Options: opts("model"), Set: func(v string) error {
