@@ -950,10 +950,18 @@ func (a *Agent) reconnect(now map[string]string) (bool, error) {
 	// alone, Codex was beside its sign-in and not joined, so picking one
 	// of its own on the Agents page took it off magpie, every OpenAI model
 	// then said direct, and after a group again they said via magpie
-	// though a pick still went straight to OpenAI (NancyTom18 on X)
+	// though a pick still went straight to OpenAI (NancyTom18 on X). One
+	// that can't join now (a provider of the user's own, magpie API) is
+	// connected as at first unless its model was one of magpie's, which
+	// routes it: its subagents' or memories' model put back alone read as
+	// connected while its own model stayed off magpie (#3868)
 	if a.Join != nil {
-		if _, err := a.Join(); err != nil {
+		ok, err := a.Join()
+		if err != nil {
 			return true, err
+		}
+		if !ok && !slices.Contains(rec.Routed, a.Fields[0].Key) {
+			return false, nil
 		}
 	}
 	// the models on magpie first, as Connect sets them (setting Gemini
