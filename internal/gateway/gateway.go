@@ -3235,8 +3235,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		var nt netTrace // where the try's time went (TryNet)
 		attemptBody := body
 		if from == provider.Responses {
-			// reasoning another sealed, which this one refused earlier in
-			// the conversation, isn't sent to be refused again; its own is
+			// what another sealed, which this one refused earlier in the
+			// conversation, isn't sent to be refused again; its own is
 			if b, ok := withoutRefused(stuck, c.vendor(), attemptBody); ok {
 				attemptBody = b
 			}
@@ -3832,17 +3832,19 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		if resealed < 2 && from == provider.Responses && !hw.passing && hw.code() >= 400 && foreignReasoning.Match(hw.errBody()) {
 			// the conversation moved here from another account or vendor,
-			// whose sealed reasoning this one can't read: asked again
-			// without it, and what it refused isn't sent here again. xAI
-			// says so as a 400, or as the stream's error, which may be
-			// read as another status. Refused again, or with no reasoning
-			// to leave out, it's the compaction OpenAI sealed that goes
-			// (waroy: Codex compacted on GPT, then switched to Grok)
+			// whose seals this one can't read: asked again without them
+			// (its reasoning, and each message's, call's and web search's
+			// sealed copy, #3887), and what it refused isn't sent here
+			// again. xAI says so as a 400, or as the stream's error, which
+			// may be read as another status. Refused again, or with
+			// nothing else sealed to leave out, it's the compaction OpenAI
+			// sealed that goes (waroy: Codex compacted on GPT, then
+			// switched to Grok)
 			b, ok := []byte(nil), false
 			if resealed == 0 {
 				resealed = 1
-				if b, ok = withoutReasoning(body); ok {
-					refused(stuck, c.vendor(), attemptBody, "reasoning")
+				if b, ok = withoutSeals(body); ok {
+					refused(stuck, c.vendor(), attemptBody, b)
 				}
 			}
 			// a compaction sealed where native compaction is on is never
@@ -3850,7 +3852,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			if !ok && checkpoint == nil && !s.compactsNatively(c.p, c.model) {
 				resealed = 2
 				if b, ok = withoutCompaction(body); ok {
-					refused(stuck, c.vendor(), attemptBody, compactionKinds...)
+					refused(stuck, c.vendor(), attemptBody, b)
 				}
 			}
 			if ok {

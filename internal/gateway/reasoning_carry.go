@@ -166,7 +166,7 @@ func unreasonCalls(r *Request) {
 // client's history, so every later turn carried the same item and was
 // refused the same way (#4798, zane668: Pi's Chat to Grok, then Codex;
 // ZanderH-code: Claude Desktop's Messages to Codex). A Responses client's
-// own items are asked again without them (withoutReasoning) and left out
+// own items are asked again without them (withoutSeals) and left out
 // of the conversation's later requests there (withoutRefused); a carried
 // item goes the same way: refused, the items the request carried are
 // remembered as refused by that key or account in the conversation
