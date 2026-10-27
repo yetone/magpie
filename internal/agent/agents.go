@@ -345,11 +345,25 @@ func openCodeSpelled(path string, v1 func() string) func(string) bool {
 			return false
 		}
 		if !strings.Contains(p, ".") {
-			base, _ := edit.GetJSON(path, "provider."+p+".options.baseURL")
-			return sameGateway(base, v1())
+			return sameGateway(openCodeBaseURL(path, p), v1())
 		}
 		return ownGatewayProvider(path, ref, v1()) == p
 	}
+}
+
+// openCodeBaseURL is the base URL of the provider named p in an OpenCode
+// config at path. OpenCode 2 keeps a provider under providers, its base
+// URL in settings, and reads one there before the same name under
+// provider, OpenCode 1's spelling (packages/core/src/config/normalize.ts,
+// mergeMaps, at v2.1.4); OpenChamber's provider form saves one there and
+// takes it out of provider (#3915).
+func openCodeBaseURL(path, p string) string {
+	if _, ok := edit.GetJSON(path, "providers."+p); ok {
+		base, _ := edit.GetJSON(path, "providers."+p+".settings.baseURL")
+		return base
+	}
+	base, _ := edit.GetJSON(path, "provider."+p+".options.baseURL")
+	return base
 }
 
 // pair joins a provider field and a model field into one "provider/model"
@@ -1120,20 +1134,40 @@ func openCodeRefAt(at place, path, id, v string) (string, error) {
 // ownGatewayProvider is the provider in an OpenCode config, other than
 // magpie's own, whose baseURL is magpie's gateway (v1, as the agent reaches
 // it) and that lists the model ref, as a layout of one provider per family
-// of magpie's models has; "" when there is none.
+// of magpie's models has; "" when there is none. A provider under
+// providers is read as OpenCode 2 reads it, before the same name under
+// provider (openCodeBaseURL).
 func ownGatewayProvider(path, ref, v1 string) string {
-	raw, ok := edit.GetJSON(path, "provider")
-	if !ok {
-		return ""
+	type own struct {
+		base   string
+		models map[string]json.RawMessage
 	}
-	var ps map[string]struct {
-		Options struct {
-			BaseURL string `json:"baseURL"`
-		} `json:"options"`
-		Models map[string]json.RawMessage `json:"models"`
+	ps := map[string]own{}
+	if raw, ok := edit.GetJSON(path, "provider"); ok {
+		var v1s map[string]struct {
+			Options struct {
+				BaseURL string `json:"baseURL"`
+			} `json:"options"`
+			Models map[string]json.RawMessage `json:"models"`
+		}
+		if json.Unmarshal([]byte(raw), &v1s) == nil {
+			for name, p := range v1s {
+				ps[name] = own{p.Options.BaseURL, p.Models}
+			}
+		}
 	}
-	if json.Unmarshal([]byte(raw), &ps) != nil {
-		return ""
+	if raw, ok := edit.GetJSON(path, "providers"); ok {
+		var v2s map[string]struct {
+			Settings struct {
+				BaseURL string `json:"baseURL"`
+			} `json:"settings"`
+			Models map[string]json.RawMessage `json:"models"`
+		}
+		if json.Unmarshal([]byte(raw), &v2s) == nil {
+			for name, p := range v2s {
+				ps[name] = own{p.Settings.BaseURL, p.Models}
+			}
+		}
 	}
 	names := make([]string, 0, len(ps))
 	for name := range ps {
@@ -1142,7 +1176,7 @@ func ownGatewayProvider(path, ref, v1 string) string {
 	sort.Strings(names)
 	for _, name := range names {
 		p := ps[name]
-		if _, has := p.Models[ref]; name != magpieID && has && sameGateway(p.Options.BaseURL, v1) {
+		if _, has := p.models[ref]; name != magpieID && has && sameGateway(p.base, v1) {
 			return name
 		}
 	}
