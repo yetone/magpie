@@ -12,6 +12,7 @@ These pages describe current responsibilities, runtime paths, state, and contrac
 | Claude subscription turns across Claude Code runs | [Claude subscription bridge](claude-subscription-bridge.md) |
 | How the gateway picks a provider, key or account, and falls back | [Gateway routing and fallback](gateway-routing.md) |
 | Gateway Session Aggregation | [Gateway Session Aggregation](gateway-sessions.md) |
+| Claude for Microsoft 365 over local HTTPS | [Claude for Microsoft 365 HTTPS gateway](m365.md) |
 | Connecting an agent's config to the gateway, drift, disconnect, WSL twins | [Agent wiring](agent-wiring.md) |
 | Providers, keys, subscription accounts, refresh and allowance | [Providers and accounts](providers-accounts.md) |
 | Instructions, MCP servers, skills and RTK written into agents | [Library](library.md) |
