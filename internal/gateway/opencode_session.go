@@ -18,7 +18,7 @@ import (
 // client's own x-opencode-session when it sent one, else the session the
 // client names (X-Magpie-Session, Codex's session_id, Claude Code's
 // session, Pi's affinity: sessionOf), else the body's prompt_cache_key
-// (Codex's thread), else the conversation's first user message
+// (Codex's thread), else how the conversation opens
 // (conversationID). OpenCode itself sends one session id for every turn of
 // a session (packages/core/src/session/affinity.ts), and Zen and Go route
 // a session to the backend that has its prompt cached: every turn of one

@@ -13,8 +13,8 @@ package provider
 //     it replaces the body's own.
 //   - ${sessionId} in a string value, at any depth, is the conversation's
 //     id: the session the agent names (its session header), else one
-//     magpie derives from the conversation's first user message — the same
-//     for every turn of it. A fixed string would put every session on one
+//     magpie derives from how the conversation opens (the gateway's
+//     conversationID), the same for every turn of it. A fixed string would put every session on one
 //     cache key. ${threadId} is the thread's (conversation.go); Headers
 //     take both too.
 //   - ${subagentId} in a string value is the Claude Code subagent the

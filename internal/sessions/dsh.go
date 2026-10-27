@@ -439,6 +439,8 @@ func dshNum(b []byte, key string) int64 {
 // of one text part goes out as a plain string, or, as the last user
 // message on the messages route, as that part with a cache mark: each
 // spelling is hashed. Anything else (an image, several parts) gives none.
+// That message is what the user typed, which the gateway hashes alone
+// (conversationOpening), without the runtime context dsh sends after it.
 func dshConvs(content json.RawMessage) []string {
 	var parts []struct {
 		Type string `json:"type"`
