@@ -39,10 +39,12 @@ func TestStandInsComeBeforeTheInstalled(t *testing.T) {
 }
 
 func TestIsolate(t *testing.T) {
-	for _, k := range append(folderVars, "CODEX_HOME", "PATH", Marker) {
+	for _, k := range append(folderVars, "XDG_CONFIG_DIRS", "CODEX_HOME", "PATH", Marker) {
 		t.Setenv(k, os.Getenv(k)) // restored after the test
 	}
 	os.Setenv("CODEX_HOME", filepath.Join(t.TempDir(), "codex"))
+	// the machine's system folders, where a package keeps its autostart entry
+	os.Setenv("XDG_CONFIG_DIRS", "/etc/xdg")
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:9") // the machine's own, which net/http would freeze into its first read
 	home, err := Isolate()
 	if err != nil {
@@ -58,6 +60,9 @@ func TestIsolate(t *testing.T) {
 		if p, err := f(); err != nil || !within(p, home) {
 			t.Errorf("%q (%v) is outside %q", p, err, home)
 		}
+	}
+	if p := os.Getenv("XDG_CONFIG_DIRS"); !within(p, home) {
+		t.Errorf("XDG_CONFIG_DIRS is %q, outside %q", p, home)
 	}
 	if _, ok := os.LookupEnv("CODEX_HOME"); ok {
 		t.Error("CODEX_HOME is still set")

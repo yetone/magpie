@@ -105,7 +105,9 @@ func RunIn(m *testing.M, setup func(home string)) int {
 // Isolate points the home and the config, cache and data folders into a
 // new temporary folder, clears the agents' variables, puts the stand-ins
 // first on PATH and gives the folder. It fails when Go would still
-// resolve any of them, or a stand-in's tool, outside that folder.
+// resolve any of them, or a stand-in's tool, outside that folder. The
+// system's config folders ($XDG_CONFIG_DIRS, /etc/xdg when unset), where
+// a package keeps its autostart entry (#3372), are one in it too.
 func Isolate() (string, error) {
 	home, err := os.MkdirTemp("", prefix)
 	if err != nil {
@@ -114,6 +116,7 @@ func Isolate() (string, error) {
 	for k, v := range map[string]string{
 		"HOME": home, "USERPROFILE": home,
 		"XDG_CONFIG_HOME": filepath.Join(home, ".config"),
+		"XDG_CONFIG_DIRS": filepath.Join(home, "etc", "xdg"),
 		"XDG_CACHE_HOME":  filepath.Join(home, ".cache"),
 		"XDG_DATA_HOME":   filepath.Join(home, ".local", "share"),
 		"XDG_STATE_HOME":  filepath.Join(home, ".local", "state"),
