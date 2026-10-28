@@ -17,6 +17,8 @@ func TestSet(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("XDG_CONFIG_HOME", home+"/.config")
+	// Linux's system folders, a package's entry in them: the test's own
+	t.Setenv("XDG_CONFIG_DIRS", home+"/etc/xdg")
 	t.Setenv("APPIMAGE", "/opt/my apps/magpie.AppImage")
 	if Enabled() != Off {
 		t.Fatal("on before it was turned on")

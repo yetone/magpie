@@ -48,7 +48,8 @@ func Enabled() State {
 	return On
 }
 
-// Set has magpie open at login, or not, as this copy of it.
+// Set has magpie open at login, or not, as this copy of it; on Linux,
+// where a package's own autostart entry starts magpie, as that package's.
 func Set(on bool) error {
 	if !on {
 		return disable()
