@@ -201,6 +201,26 @@ func TestConversationsOnOneEnvironmentMessageAreApart(t *testing.T) {
 	}
 }
 
+// keeyangyy's client (#3938), Reasonix 1.x, sends no session header and
+// opens every conversation on its snapshot of the workspace, the same for
+// each one started there, before what the user typed: the snapshot is the
+// agent's (injected), so its conversations are apart as Codex's are, in
+// each protocol, and each keeps its id on later turns.
+func TestReasonixConversationsInOneWorkspaceAreApart(t *testing.T) {
+	id := func(body string) string { return conversationID(http.Header{}, []byte(body)) }
+	for _, p := range openingProtocols() {
+		snap := p.user(reasonixContext)
+		a := id(p.body(snap, p.user(openingAsked)))
+		b := id(p.body(snap, p.user(openingOther)))
+		if a == b || a == openingID(snap) {
+			t.Errorf("%s: two conversations opened on one snapshot: %s and %s (the snapshot alone: %s)", p.name, a, b, openingID(snap))
+		}
+		if got := id(p.body(snap, p.user(openingAsked), p.reply("Looked into it."), p.user("thanks, now the tests"))); got != a {
+			t.Errorf("%s: the first conversation's next turn is %s, not %s", p.name, got, a)
+		}
+	}
+}
+
 // An agent marks its newest user message for the cache and moves the mark
 // on to the next turn's: the report's opening goes out as [environment]
 // [typed, marked], then [environment][typed][reply][next, marked], and so
@@ -325,7 +345,7 @@ func (k *keyedStreams) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // in turn. A second conversation started in the same folder goes to the
 // key the first isn't on, as a new one, and each one's next turn stays
 // where it began. So does a conversation on /v1/messages, its cache mark
-// moving on to each turn's newest message.
+// moving on to each turn's newest message, and the reporter's client's.
 func TestNewConversationsInOneFolderAreRoutedApart(t *testing.T) {
 	fresh(t)
 	v := &keyedStreams{}
@@ -348,8 +368,8 @@ func TestNewConversationsInOneFolderAreRoutedApart(t *testing.T) {
 		}
 		return v.tried[len(v.tried)-1] + " " + r.Affinity.Why + " " + r.Conv
 	}
-	turn := func(typed ...string) string {
-		msgs := `{"role":"system","content":"..."},{"role":"user","content":"` + openingEnv + `"}`
+	turn := func(opening string, typed ...string) string {
+		msgs := `{"role":"system","content":"..."},{"role":"user","content":` + strconv.Quote(opening) + `}`
 		for i, said := range typed {
 			if i > 0 {
 				msgs += `,{"role":"assistant","content":"Done."}`
@@ -358,8 +378,8 @@ func TestNewConversationsInOneFolderAreRoutedApart(t *testing.T) {
 		}
 		return routed("/v1/chat/completions", `{"model":"aff/m","messages":[`+msgs+`]}`)
 	}
-	first := strings.Fields(turn(openingAsked))
-	second := strings.Fields(turn(openingOther))
+	first := strings.Fields(turn(openingEnv, openingAsked))
+	second := strings.Fields(turn(openingEnv, openingOther))
 	if first[1] != "first" || second[1] != "first" || second[0] == first[0] || second[2] == first[2] {
 		t.Fatalf("the second conversation went to %s as %q, conv %s; the first is on %s, conv %s", second[0], second[1], second[2], first[0], first[2])
 	}
@@ -370,7 +390,7 @@ func TestNewConversationsInOneFolderAreRoutedApart(t *testing.T) {
 		{[]string{openingAsked, "thanks, now the tests"}, first},
 		{[]string{openingOther, "and the changelog"}, second},
 	} {
-		if got := strings.Fields(turn(c.typed...)); got[0] != c.was[0] || got[1] != "session" || got[2] != c.was[2] {
+		if got := strings.Fields(turn(openingEnv, c.typed...)); got[0] != c.was[0] || got[1] != "session" || got[2] != c.was[2] {
 			t.Errorf("%q's next turn went to %s as %q, conv %s; it began on %s, conv %s", c.typed[0], got[0], got[1], got[2], c.was[0], c.was[2])
 		}
 	}
@@ -394,6 +414,22 @@ func TestNewConversationsInOneFolderAreRoutedApart(t *testing.T) {
 	} {
 		if got := strings.Fields(messages(turns...)); got[0] != third[0] || got[1] != "session" || got[2] != third[2] {
 			t.Errorf("its turn %d on /v1/messages went to %s as %q, conv %s; it began on %s, conv %s", n+2, got[0], got[1], got[2], third[0], third[2])
+		}
+	}
+
+	// the report's client, Reasonix 1.x, opening each conversation on its
+	// snapshot of the workspace, the same in every one started there
+	fourth := strings.Fields(turn(reasonixContext, openingAsked))
+	fifth := strings.Fields(turn(reasonixContext, openingOther))
+	if fourth[1] != "first" || fifth[1] != "first" || fifth[0] == fourth[0] || fifth[2] == fourth[2] {
+		t.Fatalf("Reasonix's second conversation went to %s as %q, conv %s; its first is on %s, conv %s", fifth[0], fifth[1], fifth[2], fourth[0], fourth[2])
+	}
+	for _, c := range []struct{ typed, was []string }{
+		{[]string{openingAsked, "thanks, now the tests"}, fourth},
+		{[]string{openingOther, "and the changelog"}, fifth},
+	} {
+		if got := strings.Fields(turn(reasonixContext, c.typed...)); got[0] != c.was[0] || got[1] != "session" || got[2] != c.was[2] {
+			t.Errorf("Reasonix's %q next turn went to %s as %q, conv %s; it began on %s, conv %s", c.typed[0], got[0], got[1], got[2], c.was[0], c.was[2])
 		}
 	}
 }

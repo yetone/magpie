@@ -33,6 +33,12 @@ const (
 	codexPage        = `<external_codex_apps_open_page>{"page_id":null}</external_codex_apps_open_page>`
 	pastedRequest    = "# Files pasted by the user:\n\n## \"Fix a race...\": /tmp/fixture/task.txt\n\n" +
 		"Pasted text contains the user's request.\n\n## My request:\n"
+	// Reasonix 1.x's snapshot of the workspace, which opens each of its
+	// conversations: as keeyangyy (#3938) read it from Reasonix's source
+	// (internal/sessioncontext), the folder and digest left out as there
+	reasonixContext = "<session-context version=\"1\">\nThis host-generated snapshot supersedes every earlier session-context snapshot.\n\n" +
+		"## Environment\n- OS: windows/amd64\n- Shell: powershell\n\n## Workspace\nCurrent workspace: \"<dir>\"\n\n" +
+		"## Background memory\n...\n\n## Skills catalog\n...\n\nDigest: sha256:<hex>\n</session-context>"
 )
 
 func userMsg(texts ...string) Message {
@@ -74,6 +80,7 @@ func TestTurnInSkipsWhatTheAgentPutIn(t *testing.T) {
 		{"Codex app's context and request", []Message{userMsg(envContext, "fix the bug"), saidAnswer, userMsg(inAppBrowser + "## My request for Codex:\nnow the test")}, 2, false},
 		{"Codex app's context alone", []Message{userMsg(envContext, "fix the bug"), saidAnswer, userMsg(inAppBrowser + "## My request for Codex:\n")}, 1, true},
 		{"nothing said yet", []Message{userMsg(envContext)}, 0, false},
+		{"Reasonix's snapshot, then the user's words", []Message{userMsg(reasonixContext), userMsg("fix the bug")}, 1, false},
 	} {
 		turn, within := turnIn(&Request{Messages: tc.ms})
 		if turn != tc.turn || within != tc.within {
@@ -132,6 +139,7 @@ func TestFirstWordsAreWhatTheUserSaid(t *testing.T) {
 		{userMsg(first, pluginRef), userMsg(agentList)},
 		{userMsg(goalContinuation), saidAnswer, userMsg(first)},
 		{userMsg(codexAgents, envContext, first)},
+		{userMsg(reasonixContext), userMsg(first)},
 	} {
 		if got := firstWords(&Request{Messages: ms}); got != a {
 			t.Errorf("key changed for conversation %d", i)

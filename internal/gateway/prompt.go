@@ -720,12 +720,12 @@ var (
 	myRequest = regexp.MustCompile(`(?m)^## My request(?: for Codex)?:[ \t]*\n?`)
 	// injected are how a text the agent put in as the user begins, beside
 	// agentsFor and the reminders: Codex's and the Codex app's context,
-	// Claude Code's and ZCode's notices, plugin metadata, agent lists and
-	// todo nudges.
+	// Reasonix's snapshot of the workspace, Claude Code's and ZCode's
+	// notices, plugin metadata, agent lists and todo nudges.
 	injected = []string{
 		"<system-reminder", "<environment_context>", "<user_instructions>", "<turn_aborted>",
 		"<user_shell_command>", "<subagent_notification>", "<in-app-browser-context",
-		"<external_codex_apps_open_page>",
+		"<external_codex_apps_open_page>", "<session-context",
 		"<task-notification>", "<subagent-notification>", "<plugin_reference>",
 		"Available agent types for the Agent tool:", "Available agent types and the tools they have access to:",
 		"New agent types are now available for the Agent tool:",
