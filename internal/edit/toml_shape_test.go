@@ -54,40 +54,58 @@ func tomlBigFile(size int) []string {
 	return splitLines("model_provider = \"x\"\n" + b.String())
 }
 
-// parseTOMLTimed parses lines five times and keeps the fastest, which a
-// loaded runner can still reach, and the file it read.
-func parseTOMLTimed(t *testing.T, lines []string) (tomlFile, time.Duration) {
+// parseTOMLRatio times one 8 MB parse against eight 1 MB parses on the same
+// CPU budget: each round parses the small file eight times (the sizes differ
+// 8×, so that costs about what one large parse does) and the large file
+// once, and the smallest of three rounds' ratios is kept. A loaded runner
+// slows both sides alike, when minima per size cannot: the short 1 MB parse
+// dodges preemption while the 8 MB one eats the scheduler's queue, and at
+// load ~200 that read 32.8×, past the bound of 24 the fastest-of-five of
+// 99299c7b1 left (#4109). A parse that grows with size squared costs 8× the
+// small budget where a linear one costs 1×, so the bound of 3 leaves about
+// 3× on both sides.
+func parseTOMLRatio(t *testing.T, small, large []string) (tomlFile, float64, time.Duration, time.Duration) {
 	t.Helper()
 	var f tomlFile
-	var best time.Duration
-	for rep := 0; rep < 5; rep++ {
+	var best float64
+	var smallSum, largeAt time.Duration
+	for rep := 0; rep < 3; rep++ {
+		var sum time.Duration
+		for i := 0; i < 8; i++ {
+			start := time.Now()
+			got, err := parseTOMLFile(small)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rep == 0 && i == 0 {
+				f = got
+			}
+			sum += time.Since(start)
+		}
 		start := time.Now()
-		got, err := parseTOMLFile(lines)
-		if err != nil {
+		if _, err := parseTOMLFile(large); err != nil {
 			t.Fatal(err)
 		}
-		if d := time.Since(start); rep == 0 || d < best {
-			best = d
+		d := time.Since(start)
+		if r := float64(d) / float64(sum); rep == 0 || r < best {
+			best, smallSum, largeAt = r, sum, d
 		}
-		f = got
 	}
-	return f, best
+	return f, best, smallSum, largeAt
 }
 
 // A big config.toml is parsed in a time that grows with its size, not its
 // square: Codex's own reached 1.5 MB, and each key's line was counted from
 // the top of the file, a third of a second at every magpie start.
 //
-// The check is the ratio between parsing a 1 MB and an 8 MB file, not a bound
-// in seconds: a runner at load ~190 took the still-linear 3 MB parse past the
-// old 1s bound and went red without anything quadratic (#2219). Load slows
-// both parses, if not always alike. A parse that grows with size squared
-// needs 64× the time for the 8× bigger file, where the linear one needs 8×,
-// so the bound of 24 leaves about 3× on both sides: at 2 MB and 8 MB with a
-// bound of 8 (2× each side), mote at load 250 went red 1 run in 13.
+// The check is a ratio of parses, not a bound in seconds: a runner at load
+// ~190 took the still-linear 3 MB parse past the old 1s bound and went red
+// without anything quadratic (#2219). A parse that grows with size squared
+// costs 8× the 1 MB budget where a linear one costs 1×, so the bound of 3
+// leaves about 3× on both sides.
 func TestTOMLBigFileParsesInLinearTime(t *testing.T) {
 	small, large := tomlBigFile(1<<20), tomlBigFile(8<<20)
-	f, dSmall := parseTOMLTimed(t, small)
+	f, ratio, smallSum, largeAt := parseTOMLRatio(t, small, large)
 	if len(f.tables) < 10000 || f.root.keys[0].name != "model_provider" {
 		t.Fatalf("parsed %d tables, root %+v", len(f.tables), f.root.keys)
 	}
@@ -95,8 +113,7 @@ func TestTOMLBigFileParsesInLinearTime(t *testing.T) {
 	if k := last.keys[len(last.keys)-1]; k.name != "model_provider" || k.from != len(small)-2 && k.from != len(small)-1 {
 		t.Errorf("last key %+v of %d lines", k, len(small))
 	}
-	_, dLarge := parseTOMLTimed(t, large)
-	if ratio := float64(dLarge) / float64(dSmall); ratio > 24 {
-		t.Errorf("an 8 MB file took %v to parse, %.1f× the 1 MB one's %v: near the 64× of size squared, not the 8× of size", dLarge, ratio, dSmall)
+	if ratio > 3 {
+		t.Errorf("an 8 MB file cost %.1f× the eight 1 MB parses (%v against %v): near the 8× of size squared, not the 1× of size", ratio, largeAt, smallSum)
 	}
 }
