@@ -3941,19 +3941,24 @@ function routingPage(part) {
     return b;
   }
 
-  // cardOf: the Usage page's reading of a subscription account the stage
-  // or the list shows (#1833): its card by the agent it is signed in to
-  // (a plugin's by its provider) and its user, this computer's own; null
-  // when there is none, or it holds no windows. Nothing is read for it:
-  // the readings are app.js's quotas, as the Usage page has them.
+  // cardOf: the Usage page's reading of an account or key the stage or
+  // the list shows (#1833, #1016). A subscription account's card is by
+  // the agent it is signed in to (a plugin's by its provider) and its
+  // user. A key's plan card is by its provider and, when there are
+  // several, its name. Only this computer's readings count; null when
+  // there is none, or it holds no windows. Nothing is read for it: the
+  // readings are app.js's quotas, as the Usage page has them.
   function cardOf(w) {
-    if (w.kind !== "account" || !Array.isArray(quotas)) return null;
+    if (!Array.isArray(quotas)) return null;
     const user = (w.who || "").trim().toLowerCase();
-    const mine = quotas.filter((q) => !q.from && q.kind === "subscription" && (q.provider === w.agent || q.provider === w.provider));
-    const q = mine.find((q) => (q.user || "").trim().toLowerCase() === user) || (mine.length === 1 && !mine[0].user ? mine[0] : null);
+    const mine = quotas.filter((q) => !q.from && (w.kind === "account"
+      ? q.kind === "subscription" && (q.provider === w.agent || q.provider === w.provider)
+      : (w.kind === "key" || w.kind === "provider") && q.kind === "plan" && q.provider === w.provider));
+    const q = mine.find((q) => user && (q.user || "").trim().toLowerCase() === user)
+      || (mine.length === 1 && (!mine[0].user || !user) ? mine[0] : null);
     return q && !q.error && q.windows?.length ? q : null;
   }
-  // winsOf: each of an account's windows, as the Usage page's card names
+  // winsOf: each of an account or key's windows, as the Usage page names
   // it: "5 hours 40% used · resets in 2h"
   function winsOf(w) {
     const q = cardOf(w);
