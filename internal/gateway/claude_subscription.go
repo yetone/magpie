@@ -3169,9 +3169,13 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 	// its MCP calls one at a time), and the message written later is left
 	// out, its usage told with the next reply's. That message is the first
 	// written after such a call: Claude Code writes no other before it.
+	// Calls of one message may now come in side by side (#4611), and a
+	// second one before its input is written: such a call is held back and
+	// told by the message itself, which carries its input whole.
 	told := map[string]bool{}    // the client's calls it was shown
 	awaited := map[string]bool{} // calls told by themselves, their message not written yet
 	written := map[string]bool{} // calls in a message left out, not made yet
+	unheard := map[string]bool{} // calls held back: no reply to tell them in, or their input not written yet
 	lateID := ""                 // the message left out
 	over := false                // the output has ended
 	if r.tui {
@@ -3187,7 +3191,13 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 				r.mu.Lock()
 				waits := r.segment != nil && r.pending[id] != nil
 				r.mu.Unlock()
-				if !waits {
+				if !waits || len(args) == 0 || string(args) == "null" {
+					// A call the client is not hearing now, or one with no
+					// arguments to run (#4611: Claude Code calls a second
+					// tool while its input is still being streamed), would
+					// reach the client broken. The message written after it
+					// carries its input whole: it tells the call from there.
+					unheard[id] = true
 					return
 				}
 				begin("msg_"+strings.ReplaceAll(newUUID(), "-", ""), r.model, cliUsage{})
@@ -3452,17 +3462,24 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			if !next {
 				return
 			}
+			anyUnheard := false
+			for _, c := range whole.Content {
+				if c.Type == "tool_use" && unheard[c.ID] {
+					anyUnheard = true
+					break
+				}
+			}
 			if whole.ID != lateID && whole.ID != unstreamed {
 				if lateID != "" && len(awaited) > 0 {
 					log.Printf("claude: %d calls told by themselves were not in the message written after them", len(awaited))
 					clear(awaited)
 				}
 				lateID = ""
-				if len(awaited) > 0 {
+				if len(awaited) > 0 && !anyUnheard {
 					lateID = whole.ID
 				}
 			}
-			if whole.ID == lateID {
+			if whole.ID == lateID && !anyUnheard {
 				lateUsage = whole.Usage
 				for _, c := range whole.Content {
 					if c.Type != "tool_use" {
@@ -3509,6 +3526,12 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 				case "text":
 					said(c.Text)
 				case "tool_use":
+					delete(awaited, c.ID)
+					if told[c.ID] {
+						continue // its call told the client itself already
+					}
+					// a call held back (#4611) is told here, whole
+					delete(unheard, c.ID)
 					name, theirs := toolStart(index, c.Name)
 					if !theirs {
 						continue

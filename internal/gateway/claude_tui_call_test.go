@@ -59,13 +59,19 @@ func (c *tuiCalls) write(lines ...string) {
 }
 
 // call makes Claude Code's call of a client's tool; it returns once the
-// client's result is in.
+// client's result is in. args "" makes the call carry no arguments field
+// at all, as it does while its input is still being written (#4611).
 func (c *tuiCalls) call(id, args string) {
 	done := make(chan struct{})
 	c.called[id] = done
 	go func() {
 		defer close(done)
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"tool_call_id":"`+id+`","name":"Read","arguments":`+args+`}`))
+		body := `{"tool_call_id":"` + id + `","name":"Read"`
+		if args != "" {
+			body += `,"arguments":` + args
+		}
+		body += `}`
+		r := httptest.NewRequest("POST", "/", strings.NewReader(body))
 		r.SetPathValue("token", "run")
 		c.bridge.mcpCall(httptest.NewRecorder(), r)
 	}()
@@ -252,6 +258,32 @@ func TestClaudeTUIParallelCallsBeforeTheirMessage(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A message's second call may come in before its input is written: Claude
+// Code makes the calls of one message side by side, and the input of one
+// still being streamed is left out of the call it hands over (#4611). Told
+// as it came, it reaches the client with no arguments and fails; held, it
+// is told whole by the message written after it.
+func TestClaudeTUICallWithNoInputYetWaitsForItsMessage(t *testing.T) {
+	c := newTUICalls(t)
+	first := c.run.segment
+	c.call("toolu_a", `{"p":1}`)
+	if _, calls, _, _, raw := c.reply(first); len(calls) != 1 || calls[0] != `toolu_a{"p":1}` {
+		t.Fatalf("first reply %v:\n%s", calls, raw)
+	}
+	seg := c.answer("toolu_a")
+	c.call("toolu_b", "")     // its input not written yet: no arguments at all
+	time.Sleep(3 * callFirst) // the call's own turn to tell the client passes
+	c.write(
+		tuiRow("msg_late", tuiCall("toolu_a", 1), "tool_use", 40),
+		tuiRow("msg_late", tuiCall("toolu_b", 2), "tool_use", 40),
+	)
+	text, calls, stop, _, raw := c.reply(seg)
+	if text != "" || len(calls) != 1 || calls[0] != `toolu_b{"p":2}` || stop != "tool_use" {
+		t.Fatalf("second reply %q %v %q:\n%s", text, calls, stop, raw)
+	}
+	c.answer("toolu_b") // the result, once the client has run it
 }
 
 // se is a stream_event line, as the helper tells what its tap read.
