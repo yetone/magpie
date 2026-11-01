@@ -3133,6 +3133,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		}
 		// a middleware's onProvider changes what this provider is sent
 		attemptBody = triedOn(r.Context(), c.p, c.model, attemptBody)
+		if !s.fits(c.p.ID, webpRefused, from) {
+			// a provider that took a webp picture for one it can't read
+			// (webp.go) has every one of its requests' webps written again
+			// before they leave, its later turns not paying the refusal
+			// again (#4732)
+			attemptBody = webpAsJPEG(from, attemptBody)
+		}
 		// a value masking swapped for a placeholder: the model is told to
 		// use it as written (treeMan on Discord). A conversation's values
 		// are masked again on every turn, so once one is, every later
@@ -3958,6 +3965,22 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
 				skipped = append(skipped, c.label()+": "+call.Error)
 				cands = append(cands[:i+1:i+1], left...)
+				continue
+			}
+		}
+		if !hw.passing && badRequest(hw.code()) && hw.mayAskAgain() && zhipuImageRefusal.Match(wordsOf(hw.errBody())) {
+			if b := webpAsJPEG(from, attemptBody); !bytes.Equal(b, attemptBody) {
+				// GLM can't read a webp picture (Claude Desktop's browser
+				// screenshot, #4732), and the session's history carries it,
+				// so every turn was refused again: written here as a JPEG,
+				// which it takes, and this member asked once more — from
+				// then on written before the request leaves (webpRefused).
+				// A picture gone as an URL is none's to write: the member
+				// falls through, and the next is asked (shapeRefused)
+				s.markUnfit(c.p.ID, webpRefused, from)
+				try.Fail = failShape
+				s.trace.update(tr, func(t *Route) { t.Tries[len(t.Tries)-1] = try })
+				i--
 				continue
 			}
 		}

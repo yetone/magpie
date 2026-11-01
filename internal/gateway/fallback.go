@@ -1544,12 +1544,14 @@ var unsaidWords = regexp.MustCompile(`(?i)(^|"|\\"|: )invalid request error trac
 // request's — the words the Codex compaction already reads (#866, #1511) —
 // and another member may answer (#4632: the group's second member never
 // ran, and every turn died on the first seat).
-// One that also says the account is out of quota or credit (quotaWords,
-// creditWords: "请充值") is that, and rests it (#4095).
+// GLM's word for a picture it can't read (zhipuImageRefusal, #4732) is
+// one: another vendor takes the webp as it is. One that also says the
+// account is out of quota or credit (quotaWords, creditWords: "请充值")
+// is that, and rests it (#4095).
 func shapeRefused(status int, body []byte) bool {
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
-	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body) || wrongEndpoint(status, body) || upstreamFailedWords.Match(body)) &&
+	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body) || zhipuImageRefusal.Match(body) || wrongEndpoint(status, body) || upstreamFailedWords.Match(body)) &&
 		!quotaWords.Match(body) && !creditWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
 }
 
@@ -1670,7 +1672,7 @@ func retryable(status int, body []byte) bool {
 		// mycf_711)
 		return true
 	case status == 400, status == 422:
-		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || unsaidWords.Match(body) || regionWords.Match(body) || wrongEndpoint(status, body) ||
+		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || unsaidWords.Match(body) || regionWords.Match(body) || zhipuImageRefusal.Match(body) || wrongEndpoint(status, body) ||
 			// a relay's own word that the provider behind it turned the
 			// request away (#4632): another member may answer
 			upstreamFailedWords.Match(body)

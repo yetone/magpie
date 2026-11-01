@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"image"
 	"image/jpeg"
 	"image/png"
 	"runtime/debug"
@@ -166,6 +167,12 @@ var heicSlots = make(chan struct{}, 1)
 // heicConverted is the HEIC raw written again, from the cache when it was
 // before: an agent sends its conversation's images on every turn.
 func heicConverted(raw []byte) (string, []byte) {
+	return converted(raw, heicEncode)
+}
+
+// converted is heicConverted for an encode: the raw written again by enc,
+// from the cache when it was before.
+func converted(raw []byte, enc func([]byte) (string, []byte)) (string, []byte) {
 	k := sha256.Sum256(raw)
 	heicCache.Lock()
 	r, ok := heicCache.m[k]
@@ -184,7 +191,7 @@ func heicConverted(raw []byte) (string, []byte) {
 					r = heicResult{} // the decoder's fault on a bad file
 				}
 			}()
-			r.mime, r.data = heicEncode(raw)
+			r.mime, r.data = enc(raw)
 		}()
 		heicKeep(k, r)
 		done <- r
@@ -231,7 +238,15 @@ func encodeHEIC(raw []byte) (string, []byte) {
 	if err != nil {
 		return "", nil
 	}
-	if cfg.Width*cfg.Height > heicFreeAbove {
+	return pictureWritten(img, cfg.Width*cfg.Height)
+}
+
+// pictureWritten is img written as JPEG, or as PNG when it has
+// transparency, its longest side heicMaxSide at most; "", nil when it
+// can't. pixels is the count of what the decode held, a big one's home
+// going back to the system once it is written.
+func pictureWritten(img image.Image, pixels int) (string, []byte) {
+	if pixels > heicFreeAbove {
 		// a 48 MP photo held about a gigabyte while it was written
 		// again (1.6s on an M5 Pro); what it held goes back to the system
 		// now, not minutes later
