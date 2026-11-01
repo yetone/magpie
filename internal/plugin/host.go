@@ -120,7 +120,7 @@ type call struct {
 	// the body's reader takes them: the host's reader queues them without
 	// ever waiting on one request's consumer (see push).
 	stream      bool
-	cancellable bool // a gateway request or sign-in step owns asynchronous I/O, without a stream slot
+	cancellable bool // asynchronous I/O of its own, without a stream slot: an aborted call is told to the host
 	mu          sync.Mutex
 	queue       []message
 	queued      int           // the queued chunks' decoded bytes
@@ -1751,11 +1751,6 @@ func (h *host) releaseSlot(c *call) {
 	}
 }
 
-// cancellable are the methods whose work the host ends when their caller
-// gives up: a gateway request's I/O, and a sign-in's steps, so a sign-in
-// cancelled or timed out saves nothing the plugin answers after (#5016).
-var cancellable = map[string]bool{"gatewayRequest": true, "authorize": true, "callback": true, "apiKey": true}
-
 // call asks the host method with params and reads its answer into out.
 func (h *host) call(ctx context.Context, method string, params, out any) error {
 	id, c, err := h.begin(false)
@@ -1763,7 +1758,14 @@ func (h *host) call(ctx context.Context, method string, params, out any) error {
 		return err
 	}
 	c.mu.Lock()
-	c.cancellable = cancellable[method]
+	// An ordinary RPC is cancellable too: a caller whose context ends has
+	// the host told, so its plugin work is not left running unseen (#4678).
+	// A gateway request and a sign-in's steps were already; now every other
+	// call but init is as well, and a sign-in cancelled or timed out still
+	// saves nothing the plugin answers after (#5016). init is the exception:
+	// a start that overruns is stopped whole, and aborting it would only
+	// interrupt its own load.
+	c.cancellable = method != "init"
 	c.mu.Unlock()
 	if err := h.enqueueCall(ctx, map[string]any{"id": id, "method": method, "params": params}, nil, c); err != nil {
 		c.settle(err)

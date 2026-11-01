@@ -355,12 +355,17 @@ let listWait = 20 * 1000
 
 // late is what a step that took longer than ms gives instead of its own
 // result: an error saying so. The step goes on by itself; what it gives
-// later is dropped.
+// later is dropped. A step handed a signal of its own (a model hook's) has
+// its controller aborted here, so the I/O a deadline gives up on stops too
+// rather than waiting for a caller that has moved on (#4678).
 class Late extends Error {}
-function inTime(step, ms, what) {
+function inTime(step, ms, what, ctl) {
   let timer
   const late = new Promise((_, no) => {
-    timer = setTimeout(() => no(Object.assign(new Late(`${what} didn't finish in ${Math.round(ms / 1000)}s`), { plain: true })), ms)
+    timer = setTimeout(() => {
+      ctl?.abort()
+      no(Object.assign(new Late(`${what} didn't finish in ${Math.round(ms / 1000)}s`), { plain: true }))
+    }, ms)
   })
   return Promise.race([Promise.resolve().then(step), late]).finally(() => clearTimeout(timer))
 }
@@ -1973,8 +1978,10 @@ function fromModelsDev(p, m) {
 // lists them for account key (the first when none); strict fails where the
 // plugin's list does, rather than keeping the list it was given.
 // quiet asks no models hook (a provider switched off in magpie): the
-// list is told as fallen back, which keeps the one magpie had.
-async function info(id, key, strict, limit, quiet) {
+// list is told as fallen back, which keeps the one magpie had. The
+// listing's caller may give up (signal), which a hook is told through
+// its own options' signal too (#4678).
+async function info(id, key, strict, limit, quiet, signal) {
   const md = mdev()[id]
   const cfg = config.provider?.[id]
   const out = {
@@ -2042,11 +2049,16 @@ async function info(id, key, strict, limit, quiet) {
     const began = Date.now()
     await fresh(id, k)
     const all = readAuth()
+    // the hook's own signal: its listWait deadline aborts it, and so does
+    // the listing's caller going away, whichever comes first (#4678)
+    const ctl = new AbortController()
+    if (signal?.aborted) ctl.abort()
+    else signal?.addEventListener("abort", () => ctl.abort(), { once: true })
     try {
       const given = JSON.parse(JSON.stringify(out))
       const l = { tried: false, lastOk: false }
-      const ask = () => listing.run(l, () => inScope(id, k, () => ph.models(given, { auth: authCopy(k) })))
-      const next = limit > 0 ? await inTime(ask, Math.max(limit - (Date.now() - began), 0), "the plugin's model list") : await ask()
+      const ask = () => listing.run(l, () => inScope(id, k, () => ph.models(given, { auth: authCopy(k), signal: ctl.signal })))
+      const next = limit > 0 ? await inTime(ask, Math.max(limit - (Date.now() - began), 0), "the plugin's model list", ctl) : await ask()
       // a hook that asked its vendor, got no list and gave back the one it
       // was given fell back: magpie keeps the list it had, as a built-in
       // whose fetch failed keeps the one it fetched last; so does one that
@@ -2075,7 +2087,9 @@ async function info(id, key, strict, limit, quiet) {
       // magpie keeps the one it had, as for one that gave its defaults back
       out.fellBack = true
       out.listError = e?.message ?? String(e)
-      send({ event: "log", level: "error", message: `${h.spec}: provider.models: ${e?.message ?? e}` })
+      // a listing the caller gave up on says its abort itself, not as if
+      // the vendor had failed
+      if (!ctl.signal.aborted) send({ event: "log", level: "error", message: `${h.spec}: provider.models: ${e?.message ?? e}` })
     }
   }
   for (const [k, m] of Object.entries(cfg?.models ?? {})) if (m?.disabled) delete out.models[k]
@@ -2315,8 +2329,11 @@ function tiersOf(v) {
 
 // providers lists each provider and its accounts' models, each asked
 // through its proxy (proxies[provider][key], "" the provider's own), as a
-// built-in fetches each account's list through the account's.
-async function providers({ proxies, off } = {}) {
+// built-in fetches each account's list through the account's. A caller
+// that gave up (signal) has every hook it would still have asked told, so
+// a timed-out listing stops its vendor reads instead of multiplying them
+// (#4678).
+async function providers({ proxies, off } = {}, signal) {
   const stored = readAuth()
   // a provider switched off in magpie is asked nothing: its models hook
   // (and the sign-in renewal before it) would reach its vendor. It is
@@ -2337,12 +2354,12 @@ async function providers({ proxies, off } = {}) {
     // listWaits back to back took one provider past refreshDeadline twice
     // over (#4065)
     const [p, own] = await Promise.all([
-      via.run(through(), () => info(id, undefined, false, listWait)).then((q) => (keepInfo(keys[0] ?? id, q, gen), q)),
+      via.run(through(), () => info(id, undefined, false, listWait, false, signal)).then((q) => (keepInfo(keys[0] ?? id, q, gen), q)),
       // each account's own models, as the built-ins read each account's: a
       // plan may serve fewer, or others, than the first account's. One that
       // can't be read is taken to have them all, or the ones it was last
       // told to have, as a built-in account whose fetch failed keeps its own.
-      Promise.all(keys.slice(1).map((k) => via.run(through(k), () => info(id, k, true, listWait)).then((q) => (keepInfo(k, q, gen), q)).catch((e) => ({ failed: true, listError: e?.message ?? String(e) })))),
+      Promise.all(keys.slice(1).map((k) => via.run(through(k), () => info(id, k, true, listWait, false, signal)).then((q) => (keepInfo(k, q, gen), q)).catch((e) => ({ failed: true, listError: e?.message ?? String(e) })))),
     ])
     return rowOf(id, a, keys, stored, p, own)
   }
@@ -2883,18 +2900,20 @@ async function load({ provider, account, proxy }) {
 //       a clean read clears it)
 //   }
 // Run in the account's scope, a token it renews is saved to that account.
-async function usage({ provider, account, proxy }) {
-  return via.run(proxy ?? "", () => usageOf(provider, account))
+// A caller that gave up (signal) is what the hook is handed as its own
+// options, so a vendor read that supports stopping stops (#4678).
+async function usage({ provider, account, proxy }, signal) {
+  return via.run(proxy ?? "", () => usageOf(provider, account, signal))
 }
 
-async function usageOf(provider, account) {
+async function usageOf(provider, account, signal) {
   const a = auths().get(provider)?.auth
   if (typeof a?.usage !== "function") throw new Error(`${provider}'s plugin doesn't tell its usage`)
   const key = accountKey(provider, account)
   if (!readAuth()[key]) throw new Error("not signed in")
   await fresh(provider, key)
   const p = await infoOf(provider, key)
-  const u = (await inScope(provider, key, () => a.usage(async () => authCopy(key), JSON.parse(JSON.stringify(p))))) ?? {}
+  const u = (await inScope(provider, key, () => a.usage(async () => authCopy(key), JSON.parse(JSON.stringify(p)), signal === undefined ? undefined : { signal }))) ?? {}
   const when = (v) => {
     if (v === undefined || v === null || v === "") return ""
     const d = new Date(typeof v === "number" && v < 1e11 ? v * 1000 : v)
@@ -3173,7 +3192,7 @@ const handlers = {
     await loadPlugins(p.plugins ?? [])
     return { plugins: loaded.map(withProviders) }
   },
-  providers: (p) => providers(p ?? {}),
+  providers: (p, signal) => providers(p ?? {}, signal),
   prompt: async (p) => ({ prompt: await nextPrompt(p.provider, p.method, p.inputs ?? {}) }),
   validate: (p) => ({ error: validate(p.provider, p.method, p.key, p.value) }),
   authorize,
@@ -3200,13 +3219,13 @@ const handlers = {
   // vendor turned the sign-in away. A models hook may fall back to a list
   // it keeps when the vendor can't be reached, so a check that reached
   // none of the places it asked proves nothing, and fails.
-  async check(p) {
+  async check(p, signal) {
     const key = accountKey(p.provider, p.account)
     const r = { reached: false, failed: null, refused: null }
     return via.run(p.proxy ?? "", () => reach.run(r, async () => {
       await load({ provider: p.provider, account: key })
-      const pi = await info(p.provider, key, true)
-      const u = typeof auths().get(p.provider)?.auth?.usage === "function" ? await usageOf(p.provider, key) : null
+      const pi = await info(p.provider, key, true, undefined, false, signal)
+      const u = typeof auths().get(p.provider)?.auth?.usage === "function" ? await usageOf(p.provider, key, signal) : null
       if (r.failed && !r.reached) throw new Error(`couldn't reach ${pi.name}: ${r.failed?.message ?? r.failed}`)
       return { models: Object.keys(pi.models), usage: u, refused: r.refused ?? "" }
     }))
@@ -3306,6 +3325,7 @@ const gatewayInflight = new Map() // RPC id -> AbortController
 // plugin's wait ends or not (#5016).
 const signInSteps = new Set(["authorize", "callback", "apiKey"])
 const signInInflight = new Map() // RPC id -> AbortController
+const rpcInflight = new Map() // an ordinary RPC's id -> its AbortController (#4678)
 const rl = readline.createInterface({ input: process.stdin, terminal: false })
 rl.on("line", (line) => {
   if (!line.trim()) return
@@ -3321,6 +3341,7 @@ rl.on("line", (line) => {
     if (record) transitionFetch(record, "cancelled")
     gatewayInflight.get(id)?.abort()
     signInInflight.get(id)?.abort()
+    rpcInflight.get(id)?.abort()
     return
   }
   if (msg.method === "credit") {
@@ -3411,13 +3432,24 @@ rl.on("line", (line) => {
     done()
     return
   }
+  // An ordinary RPC is told when magpie gives up on it, as a fetch and a
+  // gateway request are: the handler is handed the signal, so the work
+  // that supports stopping stops (#4678), and its answer, nobody's then,
+  // is not sent. It stays pending until the handler ends all the same: a
+  // handler that ignores the signal may still be renewing or saving a
+  // sign-in, and a host whose stdin closed must not exit under it.
+  const ctl = new AbortController()
+  rpcInflight.set(msg.id, ctl)
   wait
-    .then(() => fn(msg.params ?? {}))
+    .then(() => fn(msg.params ?? {}, ctl.signal))
     .then(
-      (result) => send({ id: msg.id, result: result ?? null }),
-      (e) => send({ id: msg.id, error: { message: String(e?.message ?? e) } }),
+      (result) => { if (!ctl.signal.aborted) send({ id: msg.id, result: result ?? null }) },
+      (e) => { if (!ctl.signal.aborted) send({ id: msg.id, error: { message: String(e?.message ?? e) } }) },
     )
-    .finally(done)
+    .finally(() => {
+      rpcInflight.delete(msg.id)
+      done()
+    })
 })
 rl.on("close", () => {
   closed = true
