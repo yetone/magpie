@@ -368,8 +368,24 @@ recorded as a prediction failure (`noPrediction`).
   [`redact_phase_test.go`](../../internal/gateway/redact_phase_test.go),
   `routing-masking.test.cjs`. It is answered 504 after
   `unroutedUnknown` (30s) held in no wait magpie knows of, or after
-  `unroutedMost` (2m) in all but masking (sharwowwow on X: two minutes of
-  spinning before a 504). Masking's time, its wait for the local model's
+  `unroutedMost` (2m) excluding masking and earned upload time
+  (sharwowwow on X: two minutes of spinning before a 504). An upload
+  earns one second per 32 KiB actually read from the wire, capped at the
+  time spent in body reads (`unmaskedLocked`, `unroutedUploadRate`). A
+  large conversation on a slow link can finish past two minutes (#4775);
+  a trickle still exhausts the base budget. Declared length and decoded
+  bytes earn nothing, and a fast upload cannot bank time for a later
+  internal hold. The 60s wire-idle deadline and 512 MiB decoded size cap
+  still apply ([`request_bounds.go`](../../internal/gateway/request_bounds.go)).
+  An upload that exhausts its allowance is answered 408 with its received
+  byte count and advice to check the link or proxy, compact the conversation
+  or reduce inline images. An internal hold remains a 504; waiting for
+  body room is internal, including before the first read (#4511).
+  `TestUnroutedProgressingUploadOutlastsMost` covers TLS through `Front`
+  with declared, chunked, gzip and zstd bodies;
+  `TestUnroutedUploadCreditKeepsIdleDeadline`, `TestUnroutedUploadTimeIsBounded`
+  and `TestUnroutedTrickledBodyAnswered408` cover the remaining bounds.
+  Masking's time, its wait for the local model's
   turn with it, counts toward neither (`masked`, `checkMost`): the model
   is bounded per piece it reads (`classifyTimeout`) and per load, and a
   480 KB request it took 90s over on an RX 470/580, behind the requests
@@ -386,7 +402,7 @@ recorded as a prediction failure (`noPrediction`).
   report below. What is left is magpie's own work
   (the catalog, parsing, planning, reading the usage log), ~8.5s at its
   slowest (a cold catalog sync), so 30s gives it room on a loaded machine.
-  With no route and nothing written, it is answered 504 in its client's
+  With no route and nothing written, the error is sent in its client's
   protocol, whole (`Content-Length`, `Connection: close`) so the client
   has it while the handler may still be held; its context ends with
   `errUnrouted`, its route ends with the error, and the log has every

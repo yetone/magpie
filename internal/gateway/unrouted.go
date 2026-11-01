@@ -56,9 +56,15 @@ import (
 // (internal/pii). A 480 KB request on an RX 470/580 took 90s of the
 // model's work, more on its CPU, and was answered 504 at 2 minutes, its
 // work thrown away, however often it was sent again (#3682). What isn't
-// masking still has unroutedMost, so a hook or a describe that hangs
-// after masking is still answered.
+// masking still has unroutedMost, with bounded upload credit below, so
+// a hook or a describe that hangs after masking is still answered.
 var unroutedShow, unroutedUnknown, unroutedMost = 15 * time.Second, 30 * time.Second, 2 * time.Minute
+
+// Uploads earn time at 32 KiB/s, only for time actually spent reading
+// wire bytes. A large conversation over a slow link can finish (#4775),
+// while a trickle still runs out of the ordinary two-minute hold. The
+// socket's idle deadline and the decoded body size limit also still hold.
+const unroutedUploadRate = 32 << 10
 
 // unroutedWatched is whether a request to path is an agent's turn, which
 // is given a route once magpie knows where it goes: Chat, Responses,
@@ -290,18 +296,29 @@ func (u *unroutedHold) masked() {
 }
 
 // unmaskedLocked is how long the request has been held other than
-// masking; wmu is held.
+// masking and the upload time earned by received bytes; wmu is held.
 func (u *unroutedHold) unmaskedLocked(now time.Time) time.Duration {
 	d := now.Sub(u.f.start) - u.mexcused
 	if u.mwaits > 0 {
 		d -= now.Sub(u.msince)
 	}
+	for _, k := range u.kinds {
+		if k.kind == "body" {
+			spent := k.spent
+			if k.n > 0 {
+				spent += now.Sub(k.since)
+			}
+			earned := time.Duration(u.bodyRead.Load()) * time.Second / unroutedUploadRate
+			d -= min(spent, earned)
+			break
+		}
+	}
 	return d
 }
 
 // checkMost is most's timer: a request held unroutedMost other than
-// masking is answered for; one masking now is looked at again when that
-// ends, and one with time left, when that is up.
+// masking and earned upload time is answered for; one masking now is
+// looked at again when that ends, and one with time left, when that is up.
 func (u *unroutedHold) checkMost() {
 	u.wmu.Lock()
 	if u.mwaits > 0 {
@@ -533,7 +550,7 @@ func byteWord(n int64) string {
 // when it had been held for held: the time went to the client sending it,
 // not to magpie, and it says so.
 func unroutedBodyMsg(held time.Duration, body string) string {
-	return fmt.Sprintf("magpie stopped this request after %s because its body was still arriving from the client (read: %s), before it could be routed to any provider. The client is sending its body slowly (or a proxy between them is). Send it again. "+heldSay, held, body, heldWhere())
+	return fmt.Sprintf("magpie stopped this request after %s because its body was still arriving from the client (read: %s), before it could be routed to any provider. The upload exhausted its time allowance (32 KiB/s with a two-minute grace period). Check the connection or proxy to magpie, or compact the conversation and reduce inline images before retrying. "+heldSay, held, body, heldWhere())
 }
 
 // watchUnrouted watches r, counted as f, until the func it answers is
@@ -618,7 +635,8 @@ func (u *unroutedHold) routed() (drop *Route) {
 // giveUp answers the request with an error, when no route was begun for it
 // and its handler wrote nothing, ends its context, and says on its route
 // and in the log what held it. unknown: it was held unroutedUnknown in no
-// wait magpie knows of, rather than unroutedMost other than masking.
+// wait magpie knows of, rather than unroutedMost other than masking and
+// earned upload time.
 func (u *unroutedHold) giveUp(unknown bool) {
 	f := u.f
 	f.mu.Lock()
