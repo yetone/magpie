@@ -34,7 +34,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -136,11 +138,100 @@ func acpOpenCode(home, name, goos string) string {
 
 func air(home, cfg string) *Agent {
 	dir := airDir(home, cfg)
+	return airAt(home, &Agent{
+		ID: "air", Name: "JetBrains Air", Icon: "air", Aliases: []string{"jetbrains-air"},
+		// no Bin: air is other tools' name too (Go's live reloader); its
+		// requests are its OpenCode's, and counted as OpenCode's
+		Dir: dir,
+	}, filepath.Join(dir, "acp.json"), noticeAir2)
+}
+
+// airIDE is Air in JetBrains IDEs: the Air plugin, bundled with 2026.3
+// IDEs and installed from JetBrains Marketplace in 2026.2 (com.intellij.air;
+// Settings › AI › Air). It isn't the standalone app's code: its
+// AcpConfigurationLoader (intellij.air.backend.acp.runtime in
+// air-plugin-262.8665.521) reads the custom ACP agents from
+// user.home/.jetbrains/acp.json on every system, the file AI Assistant's
+// "Add Custom Agent" writes too, where the app reads acp.json in its own
+// config folder. An entry takes command, args, env, use_idea_mcp and
+// use_custom_mcp. Its own agents (Claude Agent, Codex, Junie, …) run on
+// JetBrains AI, the agent's own login, or an Anthropic, OpenAI, Gemini or
+// OpenRouter key under AI › Air › Accounts, none with a base URL (an
+// installed agent on its own login runs on its existing configuration, as
+// JetBrains' docs say, so a Codex there would read the ~/.codex magpie's
+// Codex wires; not tried in an IDE). So magpie adds the same Magpie agent
+// as the app's, with its OpenCode config beside acp.json.
+func airIDE(home, cfg string) *Agent {
+	dir := filepath.Join(home, ".jetbrains")
 	path := filepath.Join(dir, "acp.json")
+	return airAt(home, &Agent{
+		ID: "air-ide", Name: "Air (JetBrains IDEs)", Icon: "air",
+		Aliases: []string{"air-plugin", "air-in-ides", "jetbrains-acp"},
+		Dir:     dir,
+		// ~/.jetbrains is there for AI Assistant's agents too: an IDE of
+		// 2026.2 or later, or magpie's agent already in acp.json, says Air
+		// can be
+		detect: func() bool {
+			if jetBrainsIDESince(home, cfg, 2026, 2) {
+				return true
+			}
+			v, _ := edit.GetJSON(path, "agent_servers."+airAgent+".env.OPENCODE_CONFIG")
+			return v == filepath.Join(dir, "magpie-opencode.json")
+		},
+	}, path, noticeAirIDE)
+}
+
+// jetBrainsIDESince reports whether a JetBrains IDE of year.minor or later
+// has kept its settings here: a config folder named for the IDE and its
+// version (IntelliJIdea2026.3, PyCharm2026.2, …) under JetBrains' folder
+// (Library/Application Support on macOS, %APPDATA% on Windows,
+// $XDG_CONFIG_HOME on Linux).
+func jetBrainsIDESince(home, cfg string, year, minor int) bool {
+	var base string
+	switch runtime.GOOS {
+	case "darwin":
+		base = filepath.Join(home, "Library", "Application Support", "JetBrains")
+	case "windows":
+		d := appdir.Getenv("APPDATA")
+		if d == "" {
+			d = filepath.Join(home, "AppData", "Roaming")
+		}
+		base = filepath.Join(d, "JetBrains")
+	default:
+		base = filepath.Join(cfg, "JetBrains")
+	}
+	es, _ := os.ReadDir(base)
+	for _, e := range es {
+		if !e.IsDir() {
+			continue
+		}
+		m := jetBrainsVersioned.FindStringSubmatch(e.Name())
+		if m == nil {
+			continue
+		}
+		y, _ := strconv.Atoi(m[1])
+		n, _ := strconv.Atoi(m[2])
+		if y > year || y == year && n >= minor {
+			return true
+		}
+	}
+	return false
+}
+
+// jetBrainsVersioned is an IDE's config folder name: the product, then its
+// year and release.
+var jetBrainsVersioned = regexp.MustCompile(`^[A-Za-z]+(\d{4})\.(\d+)$`)
+
+// airAt is an Air agent on the acp.json at path: a, with its id, name,
+// icon and detection, gets the Magpie entry there and its OpenCode config
+// beside it; done is the notice once it is there.
+func airAt(home string, a *Agent, path string, done notice) *Agent {
+	dir := filepath.Dir(path)
 	// the OpenCode config magpie's agent runs on, magpie's own file
 	ocPath := filepath.Join(dir, "magpie-opencode.json")
 	entry := "agent_servers." + airAgent
-	provider := openCodeKept(ocPath, func() any { return magpieProviderJSONFor("opencode", "air") })
+	id := a.ID
+	provider := openCodeKept(ocPath, func() any { return magpieProviderJSONFor("opencode", id) })
 	// ours: acp.json's Magpie is the agent magpie added, on its file
 	ours := func() bool {
 		v, _ := edit.GetJSON(path, entry+".env.OPENCODE_CONFIG")
@@ -150,79 +241,76 @@ func air(home, cfg string) *Agent {
 	// Magpie gone from acp.json it still reads, for Check to say so and a
 	// set again to put the entry back
 	model := func() string { v, _ := edit.GetJSON(ocPath, "model"); return v }
-	return atomic(&Agent{
-		ID: "air", Name: "JetBrains Air", Icon: "air", Aliases: []string{"jetbrains-air"},
-		// no Bin: air is other tools' name too (Go's live reloader); its
-		// requests are its OpenCode's, and counted as OpenCode's
-		Dir: dir, Path: path,
-		Notice: func() string {
-			if !ours() {
-				return ""
-			}
-			if airOpenCode(home) == "" {
-				return noticeAir1.String()
-			}
-			return noticeAir2.String()
-		},
-		Check: func() string {
-			if !usesMagpie(model()) {
-				return ""
-			}
-			if !ours() {
-				return "Air's Magpie agent (" + filepath.Base(path) + ") is gone, so Air no longer reaches magpie"
-			}
-			return wiringOff("Air", ocPath, func(k string) (string, bool) { return edit.GetJSON(ocPath, "provider."+magpieID+".options."+k) },
-				"baseURL", gatewayV1(), "apiKey", hereKey())
-		},
-		ListOnly: true,
-		Sync: func() error {
-			return syncJSONInOrder(ocPath, "provider."+magpieID, provider)
-		},
-		Fields: []Field{{
-			Key: "model", Label: "model",
-			Get: model,
-			Set: func(v string) error {
-				if v == "" {
-					if err := edit.DelJSON(path, entry); err != nil {
-						return err
-					}
-					if err := edit.Remove(ocPath); err != nil && !os.IsNotExist(err) {
-						return err
-					}
-					return nil
-				}
-				ref, ok := strings.CutPrefix(v, magpieID+"/")
-				if !ok || !isMagpie(ref) {
-					return fmt.Errorf("Air takes only magpie's models here (its own agents are picked in Air): %s isn't one", v)
-				}
-				// each key new to the file goes in at its top: last first,
-				// so a new file reads $schema, model, …, provider
-				if err := edit.SetJSON(ocPath,
-					edit.KV{Path: "provider." + magpieID, Value: provider()},
-					edit.KV{Path: "enabled_providers", Value: []string{magpieID}},
-					// titles and summaries too, as the user's own small
-					// model may be a provider left out here
-					edit.KV{Path: "small_model", Value: v},
-					edit.KV{Path: "model", Value: v},
-					edit.KV{Path: "$schema", Value: "https://opencode.ai/config.json"}); err != nil {
+	a.Path = path
+	a.Notice = func() string {
+		if !ours() {
+			return ""
+		}
+		if airOpenCode(home) == "" {
+			return noticeAir1.String()
+		}
+		return done.String()
+	}
+	a.Check = func() string {
+		if !usesMagpie(model()) {
+			return ""
+		}
+		if !ours() {
+			return "Air's Magpie agent (" + filepath.Base(path) + ") is gone, so Air no longer reaches magpie"
+		}
+		return wiringOff("Air", ocPath, func(k string) (string, bool) { return edit.GetJSON(ocPath, "provider."+magpieID+".options."+k) },
+			"baseURL", gatewayV1(), "apiKey", hereKey())
+	}
+	a.ListOnly = true
+	a.Sync = func() error {
+		return syncJSONInOrder(ocPath, "provider."+magpieID, provider)
+	}
+	a.Fields = []Field{{
+		Key: "model", Label: "model",
+		Get: model,
+		Set: func(v string) error {
+			if v == "" {
+				if err := edit.DelJSON(path, entry); err != nil {
 					return err
 				}
-				bin := airOpenCode(home)
-				if bin == "" {
-					bin = "opencode"
+				if err := edit.Remove(ocPath); err != nil && !os.IsNotExist(err) {
+					return err
 				}
-				return edit.SetJSON(path, edit.KV{Path: entry, Value: map[string]any{
-					"command": bin, "args": []string{"acp"},
-					"env": map[string]string{"OPENCODE_CONFIG": ocPath},
-				}})
-			},
-			Options: func(map[string]string) []Option { return viaMagpie("air", magpieID+"/") },
-		}},
-	}, path, ocPath)
+				return nil
+			}
+			ref, ok := strings.CutPrefix(v, magpieID+"/")
+			if !ok || !isMagpie(ref) {
+				return fmt.Errorf("Air takes only magpie's models here (its own agents are picked in Air): %s isn't one", v)
+			}
+			// each key new to the file goes in at its top: last first,
+			// so a new file reads $schema, model, …, provider
+			if err := edit.SetJSON(ocPath,
+				edit.KV{Path: "provider." + magpieID, Value: provider()},
+				edit.KV{Path: "enabled_providers", Value: []string{magpieID}},
+				// titles and summaries too, as the user's own small
+				// model may be a provider left out here
+				edit.KV{Path: "small_model", Value: v},
+				edit.KV{Path: "model", Value: v},
+				edit.KV{Path: "$schema", Value: "https://opencode.ai/config.json"}); err != nil {
+				return err
+			}
+			bin := airOpenCode(home)
+			if bin == "" {
+				bin = "opencode"
+			}
+			return edit.SetJSON(path, edit.KV{Path: entry, Value: map[string]any{
+				"command": bin, "args": []string{"acp"},
+				"env": map[string]string{"OPENCODE_CONFIG": ocPath},
+			}})
+		},
+		Options: func(map[string]string) []Option { return viaMagpie(id, magpieID+"/") },
+	}}
+	return atomic(a, path, ocPath)
 }
 
 // what air says after a change (notice.go)
 var (
-	noticeAir1 = newNotice("Air runs magpie's models through OpenCode's ACP server, and OpenCode isn't installed here: install OpenCode (npm i -g opencode-ai), then pick Magpie in a new Air task.")
-	noticeAir2 = newNotice("In Air, start a new task and pick Magpie in its agent menu: magpie's models and routing groups are in its model menu.")
+	noticeAir1   = newNotice("Air runs magpie's models through OpenCode's ACP server, and OpenCode isn't installed here: install OpenCode (npm i -g opencode-ai), then pick Magpie in a new Air task.")
+	noticeAir2   = newNotice("In Air, start a new task and pick Magpie in its agent menu: magpie's models and routing groups are in its model menu.")
+	noticeAirIDE = newNotice("In your JetBrains IDE (2026.3, or 2026.2 with the Air plugin), pick Magpie in Air's agent menu — restart the IDE if it isn't listed yet: magpie's models and routing groups are in its model menu.")
 )

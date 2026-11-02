@@ -242,6 +242,7 @@ func onMachine(home, cfg string) []*Agent {
 		zooCode(home, cfg),
 		copilotJetBrains(home),
 		air(home, cfg),
+		airIDE(home, cfg),
 		copilot(home),
 		crush(home, cfg),
 		dsh(home),
