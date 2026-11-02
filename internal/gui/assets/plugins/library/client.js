@@ -3555,6 +3555,10 @@ magpie.plugin("library", (ctx) => {
   // Heights the rows are held to (library.css): a list's room is known
   // without drawing it.
   const ROW_H = 51, ROW_SRC_H = 67, SUB_H = 36;
+  // and a skill off on this computer has its tag on a line of its own
+  // under the name (Tao on Discord: its description and path were cut off)
+  const HERE_H = 23;
+  const skillH = (s) => (s.source ? ROW_SRC_H : ROW_H) + (s.offHere ? HERE_H : 0);
 
   // By source (the groups, as they always were) or one flat list of every
   // skill by name, A→Z or Z→A (#481)
@@ -3789,7 +3793,7 @@ magpie.plugin("library", (ctx) => {
 
   // A group's list: its skills, or its parts, each a heading over its own.
   function groupItems(g, hits, all, filtering, redraw) {
-    const row = (s) => ({ key: "s\n" + s.name, h: s.source ? ROW_SRC_H : ROW_H, make: () => skillRow(skillNamed(s.name) || s, all) });
+    const row = (s) => ({ key: "s\n" + s.name, h: skillH(skillNamed(s.name) || s), make: () => skillRow(skillNamed(s.name) || s, all) });
     if (!g.parts) return hits.map(row);
     const hit = hits.length === g.skills.length ? null : new Set(hits);
     const items = [];

@@ -694,6 +694,10 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-vl.bare > .row.first { border-top: 0; }
 .lib-vl > .row.lib-skill { height: 51px; min-height: 0; padding: 7px 10px 7px 12px; gap: 11px; }
 .lib-vl > .row.lib-skill.src { height: 67px; }
+/* the "Off on this computer" tag's line (.lib-hereline: 20px and 3px
+   above it) is room the list counts too (library.js, HERE_H) */
+.lib-vl > .row.lib-skill.offhere { height: 74px; }
+.lib-vl > .row.lib-skill.src.offhere { height: 90px; }
 .lib-vl > .lib-skill .sub { display: block; white-space: nowrap; -webkit-line-clamp: none; }
 .lib-vl > .lib-skill .lib-src { margin-top: 2px; }
 /* a part of a group: the folder its skills sit in, or the start of their names */
