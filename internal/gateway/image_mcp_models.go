@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"slices"
@@ -62,6 +63,44 @@ func mediaModels(video bool) (all []string, def string) {
 		}
 	}
 	return all, def
+}
+
+// ImageModel is a model magpie draws with, as an agent's own list of
+// image models names it (Pi's, internal/agent/pi_extension.go).
+type ImageModel struct {
+	ID     string // provider/model, what /v1/images takes as model
+	Name   string // the model's name · its provider's, as /v1/models labels it
+	Images bool   // it takes images as input too
+}
+
+// ImageModels are the models generate_image may be asked for
+// (mediaModels), the Settings › Images default first, each with its label;
+// none when image generation is off.
+func ImageModels() []ImageModel {
+	all, _ := mediaModels(false)
+	if len(all) == 0 {
+		return nil
+	}
+	known := map[string]ImageModel{}
+	for _, p := range provider.All() {
+		if !p.On() || p.DecideOnly() {
+			continue
+		}
+		// every drawer, so a default the user unticked is labelled too
+		for _, m := range Drawers(p) {
+			ref := p.ID + "/" + m.ID
+			known[ref] = ImageModel{ID: ref, Name: cmp.Or(m.Name, m.ID) + " · " + p.Name, Images: m.Images}
+		}
+	}
+	out := make([]ImageModel, 0, len(all))
+	for _, ref := range all {
+		m, ok := known[ref]
+		if !ok {
+			m = ImageModel{ID: ref, Name: ref}
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // mediaModelsFor is mediaModels less those r's gateway key may not use.
