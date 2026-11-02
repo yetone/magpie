@@ -637,6 +637,25 @@ on the key that started the video. A gateway key's account and model holds
 apply to all three routes (`videoAsker`, `videoModelHeld`), and to Grok's
 and Volcengine's polls and downloads as well.
 
+Volcengine Ark has no OpenAI-shaped videos API, so no Ark key is asked at
+`<base>/videos` (`filmsOpenAI` is false for `isArk`). Its Seedance models go
+to Ark's asynchronous content-generation tasks (`arkFilms`, `arkTasks`:
+`POST <base>/contents/generations/tasks`, polled at `GET …/tasks/<id>`,
+https://www.volcengine.com/docs/82379/1520757): the preset's Agent Plan's
+(`PlanVideos`), and any other Ark key's (pay-as-you-go `/api/v3`, or an Ark
+endpoint added by hand) whose list or picked models name `seedance`
+(`arkVideoModel`, added in `customVideomakers`; axelburks on Discord). Such a
+key's video id ends with the key's fingerprint, as a plan key's does, and
+its poll and download go on that key (`videoAsker` checks the calling key
+may use it). `volcengineVideoBody` turns OpenAI's request into Ark's: the
+prompt as a `text` item in `content`, `input_reference` as an `image_url`
+item with role `first_frame`, `reference_images` as `reference_image`,
+`seconds` as `duration`, and `size` (WIDTHxHEIGHT) as `ratio` and
+`resolution`. Ark's `succeeded`/`running`/`failed`/`expired` and its
+`content.video_url` are read back into OpenAI's video object
+(`videoObject`), and `/content` fetches that URL (`vendorClient`).
+`TestArkKeyMakesSeedanceVideos`.
+
 A MiniMax API key (no account, a Chat, Anthropic or Responses base on
 api.minimax.io, api.minimaxi.com or api.minimax.cn: `filmsMiniMax`,
 `minimaxHost`; a relay serving MiniMax's models is not one) makes videos
