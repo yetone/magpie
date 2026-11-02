@@ -62,9 +62,14 @@ func TestReplyNamesMember(t *testing.T) {
 				{"asked", "", "member", "", "b/glm-5.3-flash"},
 				{"on, vendor asked", "member", "vendor", "", served},
 				{"vendor asked", "", "vendor", "", served},
-				{"on, codex", "member", "", TokenFor("codex"), "group/auto"},
-				{"on, claude code", "member", "", TokenFor("claude"), "group/auto"},
-				{"old file on, codex", "old", "", TokenFor("codex"), "group/auto"},
+				// ZoeCats on Discord (after v0.1.2760): member picked in
+				// Settings names the member to Claude Code and Codex too,
+				// as vendor does; they got the name asked for
+				{"on, codex", "member", "", TokenFor("codex"), "b/glm-5.3-flash"},
+				{"on, claude code", "member", "", TokenFor("claude"), "b/glm-5.3-flash"},
+				{"on, claude desktop", "member", "", TokenFor("claude-desktop"), "b/glm-5.3-flash"},
+				{"old file on, codex", "old", "", TokenFor("codex"), "b/glm-5.3-flash"},
+				{"on, codex, name asked", "member", "asked", TokenFor("codex"), "group/auto"},
 				// ZoeCats on Discord: the vendor's own name, as before the
 				// asked-for name, for every agent and every request
 				{"vendor", "vendor", "", "", served},
@@ -391,36 +396,42 @@ func TestReplyToMagpieAliasKeepsVendorName(t *testing.T) {
 // A Gemini agent asks in the URL, and the reply's modelVersion names that
 // model when the request went out under another name.
 func TestGeminiReplyNamesAskedModel(t *testing.T) {
-	for _, stream := range []bool{false, true} {
-		t.Run(fmt.Sprint("stream ", stream), func(t *testing.T) {
-			fresh(t)
-			up := httptest.NewServer(servedBy(provider.Chat, "deepseek-v4.1-flash-1017"))
-			t.Cleanup(up.Close)
-			if err := provider.Save(provider.Provider{ID: "d", Name: "D", Key: "k", Chat: up.URL + "/v1", Models: []string{"deepseek-v4.1-flash"}}); err != nil {
-				t.Fatal(err)
-			}
-			if err := settings.Save(settings.Settings{ModelIDs: map[string]string{"d/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017"}}); err != nil {
-				t.Fatal(err)
-			}
-			path := "/v1beta/models/deepseek-v4.1-flash:generateContent"
-			if stream {
-				path = "/v1beta/models/deepseek-v4.1-flash:streamGenerateContent?alt=sse"
-			}
-			rec := httptest.NewRecorder()
-			New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(`{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)))
-			if rec.Code != 200 || !strings.Contains(rec.Body.String(), "hi") {
-				t.Fatalf("%d %s", rec.Code, rec.Body)
-			}
-			names := modelsNamed(rec.Body.String(), stream)
-			if len(names) == 0 {
-				t.Fatalf("no model named in %s", rec.Body)
-			}
-			for _, n := range names {
-				if n != "deepseek-v4.1-flash" {
-					t.Fatalf("the reply names %q:\n%s", n, rec.Body)
+	for _, c := range []struct{ reply, want string }{
+		{"", "deepseek-v4.1-flash"},
+		{"member", "d/deepseek-v4.1-flash"},
+		{"vendor", "deepseek-v4.1-flash-1017"},
+	} {
+		for _, stream := range []bool{false, true} {
+			t.Run(fmt.Sprint(c.reply, " stream ", stream), func(t *testing.T) {
+				fresh(t)
+				up := httptest.NewServer(servedBy(provider.Chat, "deepseek-v4.1-flash-1017"))
+				t.Cleanup(up.Close)
+				if err := provider.Save(provider.Provider{ID: "d", Name: "D", Key: "k", Chat: up.URL + "/v1", Models: []string{"deepseek-v4.1-flash"}}); err != nil {
+					t.Fatal(err)
 				}
-			}
-		})
+				if err := settings.Save(settings.Settings{ReplyModel: c.reply, ModelIDs: map[string]string{"d/deepseek-v4.1-flash": "deepseek-v4.1-flash-1017"}}); err != nil {
+					t.Fatal(err)
+				}
+				path := "/v1beta/models/deepseek-v4.1-flash:generateContent"
+				if stream {
+					path = "/v1beta/models/deepseek-v4.1-flash:streamGenerateContent?alt=sse"
+				}
+				rec := httptest.NewRecorder()
+				New().Handler().ServeHTTP(rec, httptest.NewRequest("POST", path, strings.NewReader(`{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`)))
+				if rec.Code != 200 || !strings.Contains(rec.Body.String(), "hi") {
+					t.Fatalf("%d %s", rec.Code, rec.Body)
+				}
+				names := modelsNamed(rec.Body.String(), stream)
+				if len(names) == 0 {
+					t.Fatalf("no model named in %s", rec.Body)
+				}
+				for _, n := range names {
+					if n != c.want {
+						t.Fatalf("the reply names %q, want %q:\n%s", n, c.want, rec.Body)
+					}
+				}
+			})
+		}
 	}
 }
 

@@ -361,11 +361,10 @@ type Settings struct {
 	// (workbuddy/glm-5.3-flash), for agents that count usage by it (#822),
 	// "vendor" the vendor's own text, as every reply said before the
 	// asked-for name (ZoeCats on Discord). One the vendor named as asked
-	// keeps the vendor's name, a dated one too. Claude Code, Claude
-	// Desktop and Codex never get the member's id: they read the name
-	// themselves (gateway's replyNamingOf). A request's
-	// X-Magpie-Response-Model says it for that request alone. "asked" is
-	// read as "".
+	// keeps the vendor's name, a dated one too. Each is for every agent,
+	// Claude Code, Claude Desktop and Codex included (gateway's
+	// replyNamingOf). A request's X-Magpie-Response-Model says it for
+	// that request alone. "asked" is read as "".
 	ReplyModel string `json:"replyModel,omitempty"`
 	// MemberModel is ReplyModel "member" as a magpie before ReplyModel
 	// kept it: read as that when ReplyModel isn't set, and written beside

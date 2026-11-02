@@ -111,6 +111,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(shown.names, [w.asked, w.member, w.vendor]);
       assert.deepEqual(shown.ticked, [w.member]);
       assert(shown.notes[2].includes(w.note), shown.notes[2]);
+      // the member is named to every agent too, Claude Code and Codex
+      // included (ZoeCats, after v0.1.2760)
+      assert(shown.notes[1].includes(w.note), shown.notes[1]);
+      assert(!/Claude Code/.test(shown.notes[1]), shown.notes[1]);
       assert.equal(saved.length, 1, "saved once");
       assert.equal(saved[0].replyModel, "vendor");
       assert(!("memberModel" in saved[0]), "memberModel isn't sent beside replyModel");

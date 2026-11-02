@@ -21607,7 +21607,7 @@ function sideEffortChip(val, levels, saved, now, cls, dflt, save) {
 // a reply's model (replyModel): asked for, the member (#822), or the vendor's (ZoeCats)
 const REPLY_MODELS = [
   ["", "The model asked for", "The group, alias or provider/model the agent asked for. A reply the vendor named as asked keeps the vendor's name"],
-  ["member", "The member that answered", "magpie's provider/model that answered (workbuddy/glm-5.3-flash), for agents that count usage by it. Claude Code, Claude Desktop and Codex get the model asked for"],
+  ["member", "The member that answered", "magpie's provider/model that answered (workbuddy/glm-5.3-flash), for every agent, groups included"],
   ["vendor", "The vendor's own name", "As the vendor wrote it (glm-5.3-flash-202606), for every agent, groups included"],
 ];
 function replyModelRow(s, keep) {
