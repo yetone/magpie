@@ -120,6 +120,33 @@ func TestNotesBetween(t *testing.T) {
 	}
 }
 
+// sujingshen on X: v0.1.2606 to v0.1.2762 showed the newest MaxNotes and
+// read "40 releases". The total counts every release in the range, so the
+// list cut short can say how many there are.
+func TestNotesBetweenTotalPastTheCap(t *testing.T) {
+	var rel []Note
+	for i := 1; i <= MaxNotes+16; i++ {
+		rel = append(rel, Note{Version: fmt.Sprintf("0.1.%d", 600+i), Notes: "- x"})
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"releases": rel})
+	}))
+	defer srv.Close()
+	t.Setenv("MAGPIE_NOTES_FEED", srv.URL)
+	upto := fmt.Sprintf("0.1.%d", 600+MaxNotes+16)
+	got, total, err := NotesBetweenTotal(context.Background(), "0.1.600", upto, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != MaxNotes || got[0].Version != upto || total != MaxNotes+16 {
+		t.Fatalf("kept %d of %d, newest %s", len(got), total, got[0].Version)
+	}
+	got, total, err = NotesBetweenTotal(context.Background(), "0.1.650", upto, "")
+	if err != nil || len(got) != 6 || total != 6 {
+		t.Fatalf("under the cap: kept %d of %d (%v)", len(got), total, err)
+	}
+}
+
 // Settings' What's new can show this version and the 10, 20, 50 or 100
 // before it (Linka on Discord): the site is asked for that many alone, and
 // a site that sends more (from before it took a limit) is cut to them.

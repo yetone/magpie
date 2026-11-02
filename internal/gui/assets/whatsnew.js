@@ -36,7 +36,7 @@ function showWhatsNew(releases, auto, more = {}) {
       h.append(el("b", "", "v" + wait.at(-1).version + (wait.length > 1 ? " – v" + wait[0].version : "")), el("span", "badge", t("Not installed yet")));
       sec.append(h);
     }
-    sec.append(mergedNotes(releases));
+    sec.append(mergedNotes(releases, more.total));
     ed.append(sec);
   }
   else for (const r of releases) {
@@ -120,7 +120,10 @@ const NOTE_ORDER = ["Features", "Improvements", "Performance Improvements", "Bug
 // one heading per kind, New features first, each with the version it came
 // in, newest first, and a line that says the range. A line outside a list
 // is a bullet of its own; a release with no notes is left out.
-function mergedNotes(releases) {
+// total: how many releases there are in all when the server kept only the
+// newest (update.MostNotes), so 156 behind doesn't read "40 releases"
+// (sujingshen on X).
+function mergedNotes(releases, total = 0) {
   const secs = new Map();
   for (const r of releases) {
     const of = (k) => secs.get(k) || secs.set(k, []).get(k);
@@ -145,7 +148,10 @@ function mergedNotes(releases) {
   const rank = (k) => { const i = NOTE_ORDER.findIndex((o) => t(o) === k); return i < 0 ? NOTE_ORDER.length : i; };
   const box = el("div", "wn-notes wn-merged");
   const vs = releases.map((r) => r.version);
-  box.append(el("div", "wn-span", t("{n} releases · {from} – {to}", { n: vs.length, from: "v" + vs.at(-1), to: "v" + vs[0] })));
+  const span = total > vs.length
+    ? t("{n} releases · the newest {m} shown, {from} – {to}", { n: total, m: vs.length, from: "v" + vs.at(-1), to: "v" + vs[0] })
+    : t("{n} releases · {from} – {to}", { n: vs.length, from: "v" + vs.at(-1), to: "v" + vs[0] });
+  box.append(el("div", "wn-span", span));
   for (const [k, items] of [...secs].filter(([, x]) => x.length).sort((a, b) => rank(a[0]) - rank(b[0]))) {
     const h = el("div", "wn-h wn-h2");
     h.append(k, el("span", "wn-n", String(items.length)));
@@ -201,11 +207,11 @@ async function confirmUpdate(u, go) {
   head.append(title);
   if (u.current) head.append(el("span", "wn-since", t("What changed since {v}", { v: "v" + u.current })));
   const box = el("div", "wn-list");
-  const draw = (releases) => {
+  const draw = (releases, total) => {
     box.replaceChildren();
     if (releases.length > 1) {
       const sec = el("section", "wn-rel");
-      sec.append(mergedNotes(releases));
+      sec.append(mergedNotes(releases, total));
       box.append(sec);
     }
     else for (const r of releases) {
@@ -239,7 +245,7 @@ async function confirmUpdate(u, go) {
   const w = await api(updatePath("update/notes")).catch(() => null);
   if (confirmAsk !== ed) return;
   if (w?.latest && w.latest !== u.latest) title.textContent = t("Update to {v}", { v: "v" + w.latest });
-  if (w?.releases?.length) draw(w.releases);
+  if (w?.releases?.length) draw(w.releases, w.total);
 }
 
 window.wnShow = showWhatsNew;

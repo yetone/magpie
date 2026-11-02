@@ -77,7 +77,7 @@ function serve(lang, ctl) {
       const releases = show || (all && ctl.upgraded) ? RELEASES : all ? [RELEASES[0]] : [];
       // Settings' ask: the app puts every release up to the waiting update
       // first, marked pending (小八: 0.1.1399 to 0.1.1408 were missing)
-      return json({ show, current: "0.1.604", releases: all && ctl.ahead ? [...ctl.ahead, ...releases] : releases });
+      return json({ show, current: "0.1.604", releases: all && ctl.ahead ? [...ctl.ahead, ...releases] : releases, ...(show && ctl.total ? { total: ctl.total } : {}) });
     }
     if (url.pathname === "/api/whatsnew/seen") { ctl.seen++; return route.fulfill({ status: 204 }); }
     if (url.pathname === "/api/whatsnew/today") { (ctl.today ||= []).push(req.postDataJSON().on); return route.fulfill({ status: 204 }); }
@@ -93,8 +93,8 @@ function serve(lang, ctl) {
 const heads = (box) => box.locator(".wn-h").evaluateAll((hs) => hs.map((h) => [h.firstChild.textContent, h.querySelector(".wn-n")?.textContent]));
 
 const words = {
-  en: { span: "2 releases · v0.1.603 – v0.1.604", heads: [["Improvements", "1"], ["Bug Fixes", "4"], ["Thanks", "1"]], span5: "5 releases · v0.1.603 – v0.1.607", headsPending: [["Features", "1"], ["Improvements", "1"], ["Bug Fixes", "4"], ["Changes", "2"], ["Thanks", "1"]], quiet: "Don't show again today", title: "What's new in v0.1.604", pendingTitle: "What's new in v0.1.607", close: "Close", again: "What's new", open: "Open", pending: "Not installed yet" },
-  zh: { span: "2 个版本 · v0.1.603 – v0.1.604", heads: [["改进", "1"], ["错误修复", "4"], ["Thanks", "1"]], span5: "5 个版本 · v0.1.603 – v0.1.607", headsPending: [["新功能", "1"], ["改进", "1"], ["错误修复", "4"], ["更新", "2"], ["Thanks", "1"]], quiet: "今天不再弹出", title: "v0.1.604 更新内容", pendingTitle: "v0.1.607 更新内容", close: "关闭", again: "更新内容", open: "打开", pending: "尚未安装" },
+  en: { spanMore: "156 releases · the newest 2 shown, v0.1.603 – v0.1.604", span: "2 releases · v0.1.603 – v0.1.604", heads: [["Improvements", "1"], ["Bug Fixes", "4"], ["Thanks", "1"]], span5: "5 releases · v0.1.603 – v0.1.607", headsPending: [["Features", "1"], ["Improvements", "1"], ["Bug Fixes", "4"], ["Changes", "2"], ["Thanks", "1"]], quiet: "Don't show again today", title: "What's new in v0.1.604", pendingTitle: "What's new in v0.1.607", close: "Close", again: "What's new", open: "Open", pending: "Not installed yet" },
+  zh: { spanMore: "156 个版本 · 显示最新 2 个，v0.1.603 – v0.1.604", span: "2 个版本 · v0.1.603 – v0.1.604", heads: [["改进", "1"], ["错误修复", "4"], ["Thanks", "1"]], span5: "5 个版本 · v0.1.603 – v0.1.607", headsPending: [["新功能", "1"], ["改进", "1"], ["错误修复", "4"], ["更新", "2"], ["Thanks", "1"]], quiet: "今天不再弹出", title: "v0.1.604 更新内容", pendingTitle: "v0.1.607 更新内容", close: "关闭", again: "更新内容", open: "打开", pending: "尚未安装" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -155,6 +155,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.waitForTimeout(500);
         assert.equal(await dialog(page).count(), 0, "no dialog in the panel");
         assert.deepEqual(ctl.asked, []);
+        assert.deepEqual(errors, []);
+        await page.close();
+      }
+
+      // sujingshen on X: 156 releases behind, the app keeps the newest
+      // (MostNotes) and the line says how many there are in all
+      {
+        const ctl = fresh({ upgraded: true, total: 156 });
+        const { page, errors } = await open(ctl);
+        await dialog(page).waitFor();
+        assert.equal(await dialog(page).locator(".wn-span").textContent(), w.spanMore);
         assert.deepEqual(errors, []);
         await page.close();
       }

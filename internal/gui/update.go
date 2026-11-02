@@ -682,12 +682,18 @@ func updateRoutes(mux *http.ServeMux, w Windows) {
 		out := struct {
 			Latest   string        `json:"latest,omitempty"`
 			Releases []update.Note `json:"releases"`
-			Error    string        `json:"error,omitempty"`
+			// Total: how many releases there are since this one when
+			// more than Releases holds (MostNotes keeps the newest)
+			Total int    `json:"total,omitempty"`
+			Error string `json:"error,omitempty"`
 		}{Latest: j.Latest, Releases: []update.Note{}}
 		if j.Latest != "" {
-			notes, err := fetchNotes(r.Context(), Version, j.Latest, pageLang(r))
+			notes, total, err := fetchNotes(r.Context(), Version, j.Latest, pageLang(r))
 			if len(notes) == 0 && strings.TrimSpace(j.Notes) != "" {
 				notes = []update.Note{{Version: j.Latest, Notes: j.Notes, URL: j.URL}}
+			}
+			if total > len(notes) {
+				out.Total = total
 			}
 			if len(notes) > 0 {
 				out.Releases = notes

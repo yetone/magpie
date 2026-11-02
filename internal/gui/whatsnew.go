@@ -41,6 +41,7 @@ type whatsNew struct {
 	quiet   bool                     // the upgrade was the user's own restart to update: not shown by itself
 	shown   bool                     // a page has shown them
 	notes   map[string][]update.Note // by language and channel (notesKey)
+	totals  map[string]int           // how many releases each of notes covers, past MostNotes too
 	// again: when notes kept by that key, some in English though asked in
 	// Chinese, are asked for again (see untranslated)
 	again map[string]time.Time
@@ -190,6 +191,9 @@ type whatsNewJSON struct {
 	Show     bool          `json:"show"`
 	Current  string        `json:"current"`
 	Releases []update.Note `json:"releases"`
+	// Total: how many releases the notes since the last update cover when
+	// more than Releases holds (MostNotes keeps the newest)
+	Total int `json:"total,omitempty"`
 	// Error: the notes couldn't be had (the site down, or GitHub failing
 	// it), as opposed to releases that have none (#661); URL is the
 	// current version's release page, where they can be read instead
@@ -219,7 +223,7 @@ func (n *whatsNew) get(ctx context.Context, all bool, lang string) whatsNewJSON 
 	}
 	j.URL = update.ReleasePage(Version)
 	if notes == nil || again {
-		got, err := fetchNotes(ctx, after, Version, lang)
+		got, total, err := fetchNotes(ctx, after, Version, lang)
 		if err != nil && !again {
 			j.Error = err.Error()
 		}
@@ -232,6 +236,10 @@ func (n *whatsNew) get(ctx context.Context, all bool, lang string) whatsNewJSON 
 				n.notes = map[string][]update.Note{}
 			}
 			n.notes[key] = got
+			if n.totals == nil {
+				n.totals = map[string]int{}
+			}
+			n.totals[key] = total
 		}
 		if len(got) > 0 || again {
 			if n.again == nil {
@@ -245,6 +253,11 @@ func (n *whatsNew) get(ctx context.Context, all bool, lang string) whatsNewJSON 
 	}
 	if len(notes) > 0 {
 		j.Releases = notes
+		n.mu.Lock()
+		if t := n.totals[key]; t > len(notes) {
+			j.Total = t
+		}
+		n.mu.Unlock()
 	}
 	j.Show = popup && len(j.Releases) > 0
 	return j
@@ -337,7 +350,7 @@ func withWaiting(ctx context.Context, list []update.Note, u updateJSON, lang str
 	if !update.Released(Version) || u.Latest == "" || !update.Newer(u.Latest, Version) {
 		return list
 	}
-	ahead, _ := fetchNotes(ctx, Version, u.Latest, lang)
+	ahead, _, _ := fetchNotes(ctx, Version, u.Latest, lang)
 	if len(ahead) == 0 && strings.TrimSpace(u.Notes) != "" {
 		ahead = []update.Note{{Version: u.Latest, Notes: u.Notes, URL: u.URL}}
 	}
@@ -366,25 +379,28 @@ func (n *whatsNew) seen() {
 // newest release has its notes, for when that is the current one. The
 // error says the notes couldn't be had, which the page tells apart from
 // releases without notes (#661): the list failed and the feed had none.
-func fetchNotes(ctx context.Context, after, upto, lang string) ([]update.Note, error) {
+//
+// total is how many releases have notes in that range, the ones past
+// MostNotes too, so a list cut short says how many it left out.
+func fetchNotes(ctx context.Context, after, upto, lang string) (notes []update.Note, total int, _ error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	notes, failed := update.NotesBetween(ctx, after, upto, lang)
+	notes, total, failed := update.NotesBetweenTotal(ctx, after, upto, lang)
 	if failed == nil && len(notes) > 0 {
-		return notes, nil
+		return notes, total, nil
 	}
 	if failed != nil {
 		log.Println("release notes:", failed)
 	}
 	rel, err := update.LatestIn(ctx, lang)
 	if err != nil {
-		return nil, failed
+		return nil, 0, failed
 	}
 	notes = update.Between([]update.Note{{Version: rel.Version, Notes: rel.Notes, URL: rel.URL}}, after, upto)
 	if len(notes) == 0 {
-		return nil, failed
+		return nil, 0, failed
 	}
-	return notes, nil
+	return notes, len(notes), nil
 }
 
 // pageLang is the language a page asks in, its own (?lang=, zh or en), or
@@ -418,7 +434,11 @@ func whatsNewRoutes(mux *http.ServeMux) {
 		}
 		j := news.get(r.Context(), all, lang)
 		if all {
+			had := len(j.Releases)
 			j.Releases = withWaiting(r.Context(), j.Releases, updates.jsonIn(askedLang(r)), lang)
+			if len(j.Releases) != had || (had > 0 && j.Releases[0].Pending) {
+				j.Total = 0 // counted the installed releases alone
+			}
 		}
 		writeJSON(rw, j)
 	})

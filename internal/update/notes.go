@@ -44,15 +44,24 @@ func ReleasePage(version string) string {
 // (none when "") up to and including upto, newest first, in lang (see
 // InLang).
 func NotesBetween(ctx context.Context, after, upto, lang string) ([]Note, error) {
+	notes, _, err := NotesBetweenTotal(ctx, after, upto, lang)
+	return notes, err
+}
+
+// NotesBetweenTotal is NotesBetween with how many releases there are in
+// all before MostNotes keeps the newest, so a list cut short can say so
+// (sujingshen on X: 156 releases behind read "40 releases").
+func NotesBetweenTotal(ctx context.Context, after, upto, lang string) ([]Note, int, error) {
 	q := url.Values{"upto": {upto}}
 	if after != "" {
 		q.Set("after", after)
 	}
 	notes, err := askNotes(ctx, q, lang)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return Between(notes, after, upto), nil
+	all := between(notes, after, upto)
+	return capNotes(all), len(all), nil
 }
 
 // BackCounts are the ranges Settings' What's new offers besides the notes
@@ -182,6 +191,19 @@ func withChannel(feed string) string {
 // upto, newest first, at most MostNotes; with after "" only upto's. Each
 // one's Install section is taken out, and one left empty is dropped.
 func Between(notes []Note, after, upto string) []Note {
+	return capNotes(between(notes, after, upto))
+}
+
+// capNotes keeps the newest MostNotes of notes, newest first.
+func capNotes(notes []Note) []Note {
+	if most := MostNotes(); len(notes) > most {
+		return notes[:most]
+	}
+	return notes
+}
+
+// between is Between with every release kept.
+func between(notes []Note, after, upto string) []Note {
 	var out []Note
 	seen := map[string]bool{}
 	for _, n := range notes {
@@ -204,9 +226,6 @@ func Between(notes []Note, after, upto string) []Note {
 		out = append(out, n)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return Newer(out[i].Version, out[j].Version) })
-	if most := MostNotes(); len(out) > most {
-		out = out[:most]
-	}
 	return out
 }
 

@@ -15,8 +15,8 @@ const { chromium, webkit } = require("playwright");
 const assets = path.resolve(__dirname, "../assets");
 
 const words = {
-  en: { pill: "Update", restart: "Restart to update", later: "Later", head: "Update to v0.1.402", newer: "Update to v0.1.403", since: "What changed since v0.1.400", span: "2 releases · v0.1.401 – v0.1.402", span3: "3 releases · v0.1.401 – v0.1.403", version: "Version" },
-  zh: { pill: "更新", restart: "重启以更新", later: "稍后", head: "更新到 v0.1.402", newer: "更新到 v0.1.403", since: "自 v0.1.400 以来的更新内容", span: "2 个版本 · v0.1.401 – v0.1.402", span3: "3 个版本 · v0.1.401 – v0.1.403", version: "版本" },
+  en: { pill: "Update", restart: "Restart to update", later: "Later", head: "Update to v0.1.402", newer: "Update to v0.1.403", since: "What changed since v0.1.400", span: "2 releases · v0.1.401 – v0.1.402", span3: "3 releases · v0.1.401 – v0.1.403", spanMore: "156 releases · the newest 3 shown, v0.1.401 – v0.1.403", version: "Version" },
+  zh: { pill: "更新", restart: "重启以更新", later: "稍后", head: "更新到 v0.1.402", newer: "更新到 v0.1.403", since: "自 v0.1.400 以来的更新内容", span: "2 个版本 · v0.1.401 – v0.1.402", span3: "3 个版本 · v0.1.401 – v0.1.403", spanMore: "156 个版本 · 显示最新 3 个，v0.1.401 – v0.1.403", version: "版本" },
 };
 
 function server(lang, ctl) {
@@ -34,7 +34,7 @@ function server(lang, ctl) {
       await new Promise((r) => setTimeout(r, 200));
       // #910: the feed asked again names a release out since the download
       // a line two releases both carry is said once, at the newest
-      if (ctl.newer) return json({ latest: "0.1.403", releases: [{ version: "0.1.403", notes: "- Three: out since\n- One: a fix" }, { version: "0.1.402", notes: "- Two: the pill asks first" }, { version: "0.1.401", notes: "- One: a fix" }] });
+      if (ctl.newer) return json({ latest: "0.1.403", releases: [{ version: "0.1.403", notes: "- Three: out since\n- One: a fix" }, { version: "0.1.402", notes: "- Two: the pill asks first" }, { version: "0.1.401", notes: "- One: a fix" }], ...(ctl.total ? { total: ctl.total } : {}) });
       if (ctl.one) return json({ latest: "0.1.402", releases: [{ version: "0.1.402", notes: "- Two: the pill asks first" }] });
       return json({ latest: "0.1.402", releases: [{ version: "0.1.402", notes: "- Two: the pill asks first" }, { version: "0.1.401", notes: "- One: a fix" }] });
     }
@@ -168,6 +168,28 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await ask.locator(".wn-since").textContent()).trim(), w.since);
       assert.deepEqual(await shown(page), [["v0.1.403", "Three: out since"], ["v0.1.403", "One: a fix"], ["v0.1.402", "Two: the pill asks first"]]);
       assert.equal(await ask.locator(".wn-span").textContent(), w.span3);
+      assert.deepEqual(errors, []);
+    });
+
+    // sujingshen on X: v0.1.2606 to v0.1.2762 read "40 releases", the
+    // newest 40 the app keeps (MostNotes); the line says how many in all
+    test(`${engine} ${lang}: a list cut short says how many releases there are`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const w = words[lang], ctl = { installs: [], asked: [], newer: true, total: 156 }, errors = [];
+      const page = await (await browser.newContext({ viewport: { width: 1000, height: 640 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      page.on("pageerror", (e) => { if (!/^ResizeObserver loop completed with undelivered notifications/.test(e.message)) errors.push(e.message); });
+      await page.route("**/*", server(lang, ctl));
+      await page.goto("http://magpie.test/?view=agents");
+      const pill = page.locator("#update");
+      await pill.waitFor({ state: "visible" });
+      await pill.click();
+      const ask = page.locator("#modal .update-ask");
+      await ask.waitFor();
+      await page.waitForFunction(lines, 3);
+      assert.equal(await ask.locator(".wn-span").textContent(), w.spanMore);
       assert.deepEqual(errors, []);
     });
   }

@@ -4611,7 +4611,7 @@ async function whatsNewOnce() {
   // something else opened meanwhile: the notes wait for the next load
   if (!w?.show || !w.releases?.length || !$("#modal").hidden) { if (w?.show) whatsNewAsked = false; return; }
   api("whatsnew/seen", {}).catch(() => {});
-  showWhatsNew(w.releases, true);
+  showWhatsNew(w.releases, true, { total: w.total });
 }
 
 // openWhatsNew is Settings' way back to the notes: the current version's (or
