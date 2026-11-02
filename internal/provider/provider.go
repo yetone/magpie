@@ -99,6 +99,10 @@ type Provider struct {
 	// under it, with the key in x-goog-api-key, and models under it lists
 	// them (#1346).
 	Gemini string `json:"gemini,omitempty"`
+	// GeminiFilled is that magpie filled Gemini in once, for a provider
+	// at AI Studio's OpenAI-compatible URL (aiStudioNative): a Gemini URL
+	// the user cleared after that stays empty.
+	GeminiFilled bool `json:"geminiFilled,omitempty"`
 	// Decide is the base of a decision API (TypeSafe's System One, which
 	// Jev answers), for routing groups' choices of model and effort. The
 	// provider may also serve conversations on the other endpoints.

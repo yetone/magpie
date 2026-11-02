@@ -1799,6 +1799,11 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				if !in.PromptAsWritten && old != nil {
 					in.PromptAsWritten = old.PromptAsWritten
 				}
+				// and that magpie filled the Gemini URL in once, which the
+				// form doesn't send: a URL cleared in it stays cleared
+				if !in.GeminiFilled && old != nil {
+					in.GeminiFilled = old.GeminiFilled
+				}
 				// and additional_tools taken, set with `magpie provider
 				// set <id> additional-tools=on` (#2660)
 				if !in.AdditionalTools && old != nil {

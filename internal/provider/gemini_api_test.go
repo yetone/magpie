@@ -145,3 +145,41 @@ func TestAIStudioSpeaksGemini(t *testing.T) {
 		}
 	}
 }
+
+// The Gemini URL magpie gives an AI Studio key is filled in once: one the
+// user clears stays empty, on every load and save after.
+func TestAIStudioGeminiClearedStays(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := Save(Provider{ID: "google", Name: "Google Gemini", Preset: "google", Chat: AIStudioChat, Key: "AIza-k"}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := Find("google")
+	if err != nil || p.Gemini != AIStudioGemini || !p.GeminiFilled {
+		t.Fatalf("filled: %+v %v", p, err)
+	}
+	// one 3e61d814e filled in, before GeminiFilled, is recorded too
+	p.GeminiFilled = false
+	if err := Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	if p, err = Find("google"); err != nil || p.Gemini != AIStudioGemini || !p.GeminiFilled {
+		t.Fatalf("an earlier fill isn't recorded: %+v %v", p, err)
+	}
+	p.Gemini = ""
+	if err := Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		got, err := Find("google")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Gemini != "" || slices.Contains(got.Speaks(), Gemini) {
+			t.Fatalf("the cleared Gemini URL came back: %q", got.Gemini)
+		}
+		if err := Save(*got); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

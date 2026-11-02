@@ -56,11 +56,16 @@ const AIStudioGemini = "https://generativelanguage.googleapis.com/v1beta"
 // place with the same key (cocoasoda on Discord): Gemini's own clients are
 // relayed there as they ask, and googleSearch, which the OpenAI-compatible
 // API has no tool for, is run there. Its other requests stay on chat
-// completions, which Speaks names first. A Gemini URL of the provider's
-// own is kept.
+// completions, which Speaks names first. It is filled in once
+// (GeminiFilled): a Gemini URL of the provider's own is kept, and one the
+// user cleared stays empty.
 func (p *Provider) aiStudioNative() {
-	if p.Gemini == "" && p.Account == nil && strings.EqualFold(p.Chat, AIStudioChat) {
-		p.Gemini = AIStudioGemini
+	if p.GeminiFilled || p.Account != nil || !strings.EqualFold(p.Chat, AIStudioChat) {
+		return
+	}
+	// one filled in before it was recorded is recorded as it is
+	if p.Gemini == "" || strings.EqualFold(p.Gemini, AIStudioGemini) {
+		p.Gemini, p.GeminiFilled = AIStudioGemini, true
 	}
 }
 
