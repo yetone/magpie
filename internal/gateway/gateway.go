@@ -611,7 +611,68 @@ func (s *Server) record(c Call) {
 	s.recent = keepRecent(s.recent, c)
 	if s.debug {
 		log.Printf("%s %s → %s (%s→%s) %d %dms %s", c.Model, c.Provider, c.Provider, c.From, c.To, c.Status, c.Millis, c.Error)
+	} else if line, ok := failedCallLine(c, time.Now()); ok {
+		log.Print(line)
 	}
+}
+
+// failedCallLine is the app.log line of a call that failed: its status,
+// or a 200 whose reply was cut, canceled or failed on its stream. Every
+// failure was the Routing page's and the usage ledger's alone, so a
+// report that came with app.log had no trace of it (wjh66 on Discord:
+// Codex's "error decoding response body" after "reconnecting 5/5", and
+// nothing in the log about the turns). The same failure again within
+// failedLogEvery is counted, not logged again, so a client asking in a
+// loop can't fill the log.
+func failedCallLine(c Call, now time.Time) (string, bool) {
+	if c.Status < 400 && c.Error == "" {
+		return "", false
+	}
+	said := c.Error
+	if r := []rune(said); len(r) > 300 {
+		said = string(r[:300]) + "…"
+	}
+	key := c.Agent + "|" + c.Provider + "|" + c.Model + "|" + strconv.Itoa(c.Status) + "|" + said
+	failedLog.Lock()
+	defer failedLog.Unlock()
+	if failedLog.last == nil {
+		failedLog.last = map[string]failedSeen{}
+	}
+	seen := failedLog.last[key]
+	if !seen.at.IsZero() && now.Sub(seen.at) < failedLogEvery {
+		seen.skipped++
+		failedLog.last[key] = seen
+		return "", false
+	}
+	if len(failedLog.last) >= 256 {
+		for k, v := range failedLog.last {
+			if now.Sub(v.at) >= failedLogEvery {
+				delete(failedLog.last, k)
+			}
+		}
+	}
+	failedLog.last[key] = failedSeen{at: now}
+	agent := cmp.Or(c.Agent, "a client")
+	line := fmt.Sprintf("gateway: %s's call to %s on %s failed: %d after %s: %s",
+		agent, cmp.Or(c.Model, "(no model)"), cmp.Or(c.Provider, "(none)"), c.Status,
+		(time.Duration(c.Millis) * time.Millisecond).Round(time.Millisecond), cmp.Or(said, "(nothing said)"))
+	if seen.skipped > 0 {
+		line += fmt.Sprintf(" (and %d times more like it since the last line)", seen.skipped)
+	}
+	return line, true
+}
+
+// failedLogEvery is how often the same failure is logged at most.
+const failedLogEvery = time.Minute
+
+type failedSeen struct {
+	at      time.Time
+	skipped int
+}
+
+var failedLog struct {
+	sync.Mutex
+	last map[string]failedSeen
 }
 
 // recentMost is how many calls the Recent-calls ring keeps.
@@ -787,7 +848,12 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		// Shutdown doesn't wait for it: each ends after its turn in flight
 		sockets := make(chan struct{})
 		go func() { defer close(sockets); s.sockets.drain(c) }()
-		srv.Shutdown(c)
+		if err := srv.Shutdown(c); err != nil {
+			// the requests still answering are cut where they are, and
+			// an agent streaming one reads a reply broken off (Codex:
+			// "error decoding response body")
+			log.Printf("gateway: ending after %s with requests still in flight; they are cut (%v)", s.drainFor(), err)
+		}
 		<-sockets
 		s.subscription.abortAll()
 		provider.FlushServed() // what answered last, kept for the next start and the CLI

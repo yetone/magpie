@@ -1150,7 +1150,12 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	}
 	var sniff *usageSniffer
 	var refusal []byte // what OpenAI said, of a request it turned away
-	relayedAcct := ""  // magpie's ChatGPT account the turn went out on, if any
+	// how the last try's reply ended, for the log of one that ended early
+	// (codexEndedEarly): the read of OpenAI's that failed, the write to
+	// the client that did, and the bytes it was passed
+	var readErr, writeErr error
+	var passed int64
+	relayedAcct := "" // magpie's ChatGPT account the turn went out on, if any
 	if rest == "/responses" && base != codexAPIBase {
 		// the account goes on its credits, its week used up: a reset it
 		// spends by itself when the week runs out goes first
@@ -1411,8 +1416,12 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		f, _ := out.(http.Flusher)
 		buf := make([]byte, 32<<10)
 		refusal = nil
+		readErr, writeErr, passed = nil, nil, 0
 		for {
 			n, err := res.Body.Read(buf)
+			if err != nil && err != io.EOF {
+				readErr = err
+			}
 			if n > 0 {
 				if captureTitle {
 					titleReply.add(buf[:n])
@@ -1425,7 +1434,10 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				if res.StatusCode >= 400 && len(refusal) < 8<<10 {
 					refusal = append(refusal, buf[:n]...)
 				}
-				if _, werr := out.Write(buf[:n]); werr != nil {
+				m, werr := out.Write(buf[:n])
+				passed += int64(m)
+				if werr != nil {
+					writeErr = werr
 					break
 				}
 				if f != nil {
@@ -1511,6 +1523,9 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		// take the events streamError writes into its data (#2446, #2580)
 		w.Write([]byte("\n\n"))
 		streamError(w, provider.Responses, call.Model, call.Status, said)
+	}
+	if line := codexEndedEarly(res, sniff, call.Model, callerOf(r).agent, began, passed, readErr, writeErr, r.Context()); line != "" {
+		log.Print(line)
 	}
 	end(call.Status, call.Error, uu.Input+uu.Output+uu.CacheRead+uu.CacheWrite, uu.Output)
 	call.Route = tr.ID
@@ -1828,6 +1843,51 @@ func codexStreamCut(res *http.Response, sniff *usageSniffer, began time.Time, ct
 	return "OpenAI closed the stream " + time.Since(began).Round(time.Second).String() + " into the reply, " +
 		"before its last event: response.completed never came, and the usage with it. " +
 		"The reply is lost, and asking again sends the turn whole"
+}
+
+// codexEndedEarly is the app.log line of a relayed Codex stream that
+// ended before its last event, "" for one that came whole or failed with
+// a status: which side ended it, and how. Codex says only what its HTTP
+// client says of a connection that broke under a reply, "error decoding
+// response body" (reqwest's words for any failed read of a body), so the
+// log tells a reply OpenAI broke off (its read's error, or a clean end
+// before response.completed) from a client that went away or couldn't be
+// written to (wjh66 on Discord: "reconnecting 5/5", then that error, and
+// nothing in app.log).
+func codexEndedEarly(res *http.Response, sniff *usageSniffer, model, agent string, began time.Time, passed int64, readErr, writeErr error, ctx context.Context) string {
+	if res == nil || sniff == nil || res.StatusCode >= 400 {
+		return ""
+	}
+	if sniff.sse && sniff.whole() {
+		return ""
+	}
+	// a body not a stream's has no last event to miss: only a read or a
+	// write that failed, or a client gone, ended it early
+	if !sniff.sse && readErr == nil && writeErr == nil && ctx.Err() == nil {
+		return ""
+	}
+	agent = cmp.Or(agent, "the client")
+	upstream := "OpenAI ended the stream"
+	if readErr != nil {
+		upstream = "reading OpenAI's stream failed (" + readErr.Error() + ")"
+	}
+	var client string
+	switch {
+	case writeErr != nil:
+		client = "writing to " + agent + " failed (" + writeErr.Error() + ")"
+	case ctx.Err() != nil:
+		client = agent + " went away (" + context.Cause(ctx).Error() + ")"
+	case sniff.failed != "":
+		client = agent + " was passed OpenAI's failure"
+	default:
+		client = agent + " was told it as response.failed"
+	}
+	before := "before its last event"
+	if !sniff.sse {
+		before = "before its end"
+	}
+	return fmt.Sprintf("gateway: codex: the reply of %s ended %s in, %s, %d bytes passed on: %s; %s",
+		cmp.Or(model, "(no model)"), time.Since(began).Round(time.Millisecond), before, passed, upstream, client)
 }
 
 // routeOf is the id of the route a Codex relay opened, so the call it
