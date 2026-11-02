@@ -400,6 +400,14 @@ func (s *shim) ready() error {
 	// being drawn again, and nothing then draws it once more
 	shownAt := map[string]time.Time{}
 	pressed := map[string]int{}
+	// the folder the trust question is about, for the reason a run that
+	// ends on it gives: "showed no prompt" said nothing of the question
+	// a saved account's reads waited out on (#4830, mydosu)
+	folder, _ := os.Getwd()
+	if folder == "" {
+		folder = "the folder it runs in"
+	}
+	asking := "asked whether to trust " + folder + ", not answered"
 	onboard := func(screen, key string) error {
 		if shownAt[screen].IsZero() {
 			shownAt[screen] = time.Now()
@@ -419,6 +427,11 @@ func (s *shim) ready() error {
 	for {
 		p := s.plain()
 		words := strings.Join(strings.Fields(p), " ")
+		doing := "showed no prompt"
+		if strings.Contains(p, "trust this folder") {
+			doing = asking
+		}
+		s.doing.Store(doing)
 		switch {
 		case strings.Contains(p, "trust this folder") && os.Getenv(TrustEnv) != "1":
 			return errUntrusted
@@ -489,7 +502,8 @@ func (s *shim) ready() error {
 			if prompted {
 				return fmt.Errorf("Claude Code showed its prompt, but hadn't listed the tools of magpie's tool server in %s", readyWait)
 			}
-			return fmt.Errorf("Claude Code showed no prompt in %s: %s", readyWait, s.lastScreen())
+			doing, _ := s.doing.Load().(string)
+			return fmt.Errorf("Claude Code %s in %s: %s", doing, readyWait, s.lastScreen())
 		}
 	}
 }

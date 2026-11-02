@@ -11,16 +11,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/claudetui"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/redact"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -131,7 +134,9 @@ func askClaudeTUI(ctx context.Context, binary claudeCLI, configDir, model string
 		}
 		return nil
 	}
-	return oneOffErr(ctx, stderr.String(), runErr)
+	err = oneOffErr(ctx, stderr.String(), runErr)
+	logOneOff("a test on "+model, configDir, stderr.String(), err)
+	return err
 }
 
 // resultLines reads the helper's stream-json for its first result, and
@@ -285,7 +290,9 @@ func claudeUsageTUI(ctx context.Context, binary claudeCLI, configDir string) (st
 		}
 		return out.res.Result, nil
 	}
-	return "", oneOffErr(ctx, stderr.String(), runErr)
+	err = oneOffErr(ctx, stderr.String(), runErr)
+	logOneOff("a /usage read", configDir, stderr.String(), err)
+	return "", err
 }
 
 // oneOffDir is the folder a one-off interactive run (a test, a /usage)
@@ -392,6 +399,54 @@ func oneOffErr(ctx context.Context, stderr string, runErr error) error {
 		return runErr
 	}
 	return errors.New("Claude Code ended with no answer")
+}
+
+// logOneOff writes to app.log why a one-off interactive run (what) of
+// the account in configDir failed (err): the reason the helper gave on
+// stderr and the end of Claude Code's last screen, which err, the card's
+// text, clips to its first 300 bytes. mydosu (#4830) found nothing in
+// app.log to say why every read of a saved account failed. Secrets and
+// the user's folders are taken out (logSafe).
+func logOneOff(what, configDir, stderr string, err error) {
+	if err == nil {
+		return
+	}
+	why := strings.TrimSpace(stderr)
+	if why == "" {
+		why = err.Error()
+	}
+	who := "the account Claude Code is signed in to"
+	if configDir != "" {
+		who = "saved account " + filepath.Base(configDir)
+	}
+	log.Printf("claude: %s of %s failed: %s", what, who, logSafe(why))
+}
+
+// homePath is a user's home folder in a path, on Windows, a Mac or
+// Linux, with either slash: what follows it is kept, the user's name not.
+var homePath = regexp.MustCompile(`(?i)(?:\b[a-z]:)?[\\/]+(?:users|home)[\\/]+[^\\/\s"'│:]+`)
+
+// logSafe is s for app.log: secrets out (redact.Scrub), this user's home
+// folder and any other home folder in it written ~, its spaces
+// collapsed, and only its start and end kept when it is long.
+func logSafe(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if home, err := os.UserHomeDir(); err == nil && len(home) > 1 {
+		for _, h := range []string{home, filepath.ToSlash(home), strings.ReplaceAll(home, "/", `\`)} {
+			s = strings.ReplaceAll(s, h, "~")
+		}
+	}
+	s = homePath.ReplaceAllString(s, "~")
+	s = redact.Scrub(s)
+	const head, tail = 300, 500
+	if len(s) > head+tail {
+		i := head
+		for i > 0 && !utf8.RuneStart(s[i]) {
+			i--
+		}
+		s = s[:i] + " " + clipTail(s, tail)
+	}
+	return s
 }
 
 // runClaudeTree runs a one-off Claude Code (a test, a /usage) and ends,

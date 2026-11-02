@@ -386,8 +386,16 @@ reading's error was "exit status 1" alone. A run that still says nothing
 is "Claude Code's interactive mode said nothing before magpie stopped
 waiting for it" (`oneOffErr`), and the card says the reason
 (`quotaError`'s "Allowance unavailable: {why}"), its full text kept for the
-tooltip. The `-p` asks keep a temp folder each, which they remove: `-p`
-asks nothing about trust.
+tooltip. A question about trust left unanswered at the deadline is named
+with its folder ("Claude Code asked whether to trust <folder>, not answered
+in the 16.8s …"), where it said "showed no prompt" before (#4830). A failed
+run also goes to app.log (`logOneOff`: "claude: a /usage read of saved
+account <dir> failed: …"), with the helper's whole reason, which the card
+clips to 300 bytes, on one line: the home folder and any
+`/Users/<name>` or `C:\Users\<name>` become `~`, secrets go through
+`redact.Scrub`, and past 800 bytes it keeps the first 300 and the last 500,
+so the end of the last screen stays. The `-p` asks keep a temp folder
+each, which they remove: `-p` asks nothing about trust.
 
 The Claude Code provider editor's "Claude Code runs as" row
 (`claudeModeRow` in app.js, drawn by claudemode.js, which it loads with
