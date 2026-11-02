@@ -101,11 +101,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await save.waitFor();
       const view = page.locator("#view-routing");
       const box = await view.boundingBox();
-      // the reader scrolls down to the Save, as they must: the editor is taller
-      // than the window
+      // the reader scrolls down to the editor's foot: the editor is taller
+      // than the window (its Save stays in sight on the way, held at the
+      // view's foot, but the case here is a Save from down the page)
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       for (let i = 0; i < 200; i++) {
-        const b = await save.boundingBox();
+        const b = await page.locator(".rt-gedit").boundingBox();
         if (b && b.y + b.height <= box.y + box.height) break;
         if (await view.evaluate((v) => v.scrollTop + v.clientHeight >= v.scrollHeight - 1)) break;
         await page.mouse.wheel(0, 120);
