@@ -837,16 +837,77 @@ var periods = []usage.Period{usage.Today, usage.Week, usage.Month, usage.All}
 var periodNames = map[usage.Period]string{usage.Today: "today", usage.Week: "7 days", usage.Month: "30 days", usage.All: "all time"}
 
 // quotaMsg is what is left of every subscription, plan bought with a key
-// and key balance, as the app's Usage page shows them.
-type quotaMsg []provider.SubscriptionQuota
+// and key balance, as the app's Usage page shows them. reading is that a
+// read of the accounts' usage was still under way, so qs may be the stale
+// copy it replaces; gen is the load it answers (model.qgen).
+type quotaMsg struct {
+	qs      []provider.SubscriptionQuota
+	reading bool
+	gen     int
+}
 
-func quotasCmd() tea.Msg {
-	provider.AskClaudeUsage() // the page opened, or r pressed
-	ctx, cancel := context.WithTimeout(provider.Asked(context.Background()), 12*time.Second)
+// The Usage page reads as the app's does (loadQuotas in app.js): opening
+// it is asking (an asked read, Claude Code's /usage run) unless the last
+// ask was within quotasOpenGap, and an answer given while a read is under
+// way is asked for again every quotasAgain, quotasTries times at most,
+// until the new one has landed (#959). The terminal asked only once a
+// session, so the page kept what it first read till r was pressed
+// (sean_80289 on Discord).
+var (
+	quotasOpenGap = 30 * time.Second
+	quotasAgain   = 1500 * time.Millisecond
+)
+
+const quotasTries = 20
+
+// readQuotas is every card, and whether a read is still under way; a var
+// so tests can stand in for the vendors.
+var readQuotas = func(asked bool) ([]provider.SubscriptionQuota, bool) {
+	ctx := context.Background()
+	if asked {
+		provider.AskClaudeUsage() // the page opened, or r pressed
+		ctx = provider.Asked(ctx)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
 	// a WorkBuddy (China) account's line says how its daily check-in went,
 	// as its card in the app does
-	return quotaMsg(provider.InProviderOrder(provider.WithCheckins(provider.Quotas(ctx))))
+	qs := provider.InProviderOrder(provider.WithCheckins(provider.Quotas(ctx)))
+	return qs, provider.SubscriptionUsageReading()
+}
+
+func quotasCmd(asked bool, gen int) tea.Cmd {
+	return func() tea.Msg {
+		qs, reading := readQuotas(asked)
+		return quotaMsg{qs: qs, reading: reading, gen: gen}
+	}
+}
+
+// loadQuotas starts a read of the cards, asked or not, which stands in
+// for any read before it still on its way.
+func (m *model) loadQuotas(asked bool) tea.Cmd {
+	if asked {
+		m.qaskedAt = time.Now()
+	}
+	m.qasked = true
+	m.qgen++
+	m.qtries = 0
+	return quotasCmd(asked, m.qgen)
+}
+
+// gotQuotas takes a read's answer, and asks again while the read it was
+// given under is still on its way and the page is up.
+func (m *model) gotQuotas(msg quotaMsg) tea.Cmd {
+	if msg.gen != m.qgen {
+		return nil // a load since stands in for it
+	}
+	m.quotas = msg.qs
+	if !msg.reading || m.page != pageUsage || m.qtries >= quotasTries {
+		return nil
+	}
+	m.qtries++
+	gen := m.qgen
+	return tea.Tick(quotasAgain, func(time.Time) tea.Msg { return quotasCmd(false, gen)() })
 }
 
 // checkinMsg is what came of c, WorkBuddy's daily check-in pressed now.

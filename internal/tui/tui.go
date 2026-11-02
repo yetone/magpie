@@ -127,6 +127,9 @@ type model struct {
 	direct    usage.Summary                // the agents' own calls, read from their session files
 	quotas    []provider.SubscriptionQuota // nil while the vendors are asked
 	qasked    bool                         // quotas were asked for
+	qaskedAt  time.Time                    // when they were last asked for (an asked read)
+	qgen      int                          // the quotas load the page waits for
+	qtries    int                          // that load's asks again while a read was under way
 	qleft     bool                         // windows read as what is left, not what is used
 	sstats    sessions.Stats               // the sessions' usage in the range picked
 	srange    int                          // in sessRanges
@@ -230,9 +233,10 @@ func (m *model) goTo(p page) tea.Cmd {
 		m.asked = true
 		return balancesCmd(m.provs)
 	}
-	if p == pageUsage && !m.qasked {
-		m.qasked = true
-		return quotasCmd
+	if p == pageUsage {
+		// opened: an asked read, or what is kept within quotasOpenGap of
+		// the last ask (going to another page and back)
+		return m.loadQuotas(!m.qasked || time.Since(m.qaskedAt) >= quotasOpenGap)
 	}
 	return nil
 }
@@ -304,8 +308,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case quotaMsg:
-		m.quotas = msg
-		return m, nil
+		return m, m.gotQuotas(msg)
 	case checkinMsg:
 		m.flash, m.flashOK = msg.text, msg.ok
 		// the accounts' lines say today's check-in now, with nothing asked
@@ -378,8 +381,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.reload()
 					m.flash, m.flashOK = "reloaded", true
 					if m.page == pageUsage {
-						m.quotas, m.qasked = nil, true
-						return m, quotasCmd
+						m.quotas = nil
+						return m, m.loadQuotas(true)
 					}
 					return m, nil
 				}
