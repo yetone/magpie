@@ -712,6 +712,13 @@ member, and is refused any other model with a 403 in the API's error shape
 before a provider is asked; a fallback it may not use is skipped. A key with
 no models listed may use every model.
 
+A decision model (Jev, Clef and the like) is a model too: a routing group
+the key names asks its own decision model for every turn, whatever the key
+lists, but the key may ask one itself, at `/v1/systemone` or in another
+magpie's list of decision models, only when it names it (or its
+`<provider>/*`). The menu lists the decision models after their provider's
+chat models, each marked as one (Kautism on Discord).
+
 A gateway key can also be held to some **accounts** (#905): the accounts
 and keys its requests may use, picked in the same menu right after their
 provider's models — an account by who is signed in, a key by its

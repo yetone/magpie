@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"encoding/json"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
@@ -31,6 +33,10 @@ type keyModelJSON struct {
 	Account      bool   `json:"account,omitempty"` // a signed-in account the key may be held to (#905)
 	Key          bool   `json:"key,omitempty"`     // one of a provider's keys, by its KeyID
 	Plan         string `json:"plan,omitempty"`    // the account's subscription, for the menu's note
+	// Decides marks a decision model (Jev, Clef…), which no agent lists:
+	// a key held to some models reaches it at /v1/systemone, and another
+	// magpie lists it, only when it is picked (Kautism on Discord)
+	Decides bool `json:"decides,omitempty"`
 }
 
 func withLimits(keys []access.Key) []keyRow {
@@ -73,6 +79,27 @@ func callerKeyRoutes(mux *http.ServeMux) {
 				continue
 			}
 			out = append(out, keyModelJSON{ID: e.Provider.ID + "/" + e.Model, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID)})
+		}
+		// the decision models the routing groups' pickers offer, each
+		// after its provider's chat models: the gateway holds a key to
+		// them as to any model (serveSystemOne, and another magpie's list
+		// of them), so a key held to some models had no way to be let use
+		// one but All models (Kautism on Discord: a key held to two
+		// groups, and Clef and Jev listed nowhere)
+		for _, e := range provider.OfferedDeciders(nil) {
+			id := e.Provider.ID + "/" + e.Model
+			if slices.ContainsFunc(out, func(m keyModelJSON) bool { return strings.EqualFold(m.ID, id) }) {
+				continue
+			}
+			m := keyModelJSON{ID: id, Name: cmp.Or(e.Name, e.Model), Provider: e.Provider.ID, ProviderName: cmp.Or(e.Provider.Name, e.Provider.ID), Decides: true}
+			at := len(out)
+			for i := len(out) - 1; i >= 0; i-- {
+				if out[i].Provider == m.Provider {
+					at = i + 1
+					break
+				}
+			}
+			out = slices.Insert(out, at, m)
 		}
 		for _, p := range provider.All() {
 			if !p.On() {

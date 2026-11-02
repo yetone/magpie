@@ -453,3 +453,59 @@ func TestGatewayKeyAccountsHoldTheImageAndVideoLists(t *testing.T) {
 		t.Fatalf("a key whose account serves no image or video model is told of image %v, video %v", image, video)
 	}
 }
+
+// A gateway key held to a routing group (Kautism on Discord: a key held to
+// two groups, and Clef and Jev listed nowhere) has the group's own
+// decision model asked for every turn, whatever the key's models: Jev
+// picks the turn's rule. Asking Jev itself, at /v1/systemone or in
+// another magpie's list of decision models, is a model of its own, which
+// the key reaches only once it names it, as the key editor now lets it.
+func TestGatewayKeyHeldToAGroupKeepsItsDecider(t *testing.T) {
+	s, _, _, j := jevved(t, "", provider.Rule{Use: "b/big", Intent: "debugging"})
+	j.choice, j.sure = "debugging", 0.9
+	keys, secrets := newCaller(t, "Groups")
+	if _, err := access.Update("models-key", access.Change{Key: keys[0].ID, Models: []string{"group/r"}}); err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	do := func(path, body string, header ...string) *httptest.ResponseRecorder {
+		method := "POST"
+		if body == "" {
+			method = "GET"
+		}
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+secrets[0])
+		for i := 0; i+1 < len(header); i += 2 {
+			r.Header.Set(header[i], header[i+1])
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	if w := do("/v1/chat/completions", chat("why does this crash?", nil, 0, "")); w.Code != 200 || !strings.Contains(w.Body.String(), "from kb") {
+		t.Fatalf("the group's turn: %d %s", w.Code, w.Body.String())
+	}
+	if r := lastRoute(s); r.Rule == nil || r.Rule.Classified.Intent != "debugging" || len(j.turns()) != 1 {
+		t.Fatalf("the group's Jev wasn't asked for the held key: %+v, %d asks", r.Rule, len(j.turns()))
+	}
+	const ask = `{"model":"ts/jev-latest","state":{"message":"hi"},"questions":{"intent":{"type":"choice"}}}`
+	listed := func() bool {
+		w := do("/v1/models", "", provider.DecidersHeader, "1")
+		return strings.Contains(w.Body.String(), `"ts/jev-latest"`)
+	}
+	if w := do("/v1/systemone", ask); w.Code != 403 || len(j.turns()) != 1 {
+		t.Fatalf("Jev asked by a key held to a group alone: %d %s", w.Code, w.Body.String())
+	}
+	if listed() {
+		t.Fatal("Jev listed to a key held to a group alone")
+	}
+	if _, err := access.Update("models-key", access.Change{Key: keys[0].ID, Models: []string{"group/r", "ts/jev-latest"}}); err != nil {
+		t.Fatal(err)
+	}
+	if w := do("/v1/systemone", ask); w.Code != 200 || len(j.turns()) != 2 {
+		t.Fatalf("Jev picked for the key: %d %s", w.Code, w.Body.String())
+	}
+	if !listed() {
+		t.Fatal("Jev picked for the key isn't listed to it")
+	}
+}

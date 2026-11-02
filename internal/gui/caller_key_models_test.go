@@ -120,3 +120,55 @@ func TestCallerKeyAccountsRoutes(t *testing.T) {
 		t.Fatal("every account", w.Code, w.Body)
 	}
 }
+
+// The key editor offers the decision models (Kautism on Discord: Clef and
+// Jev listed nowhere for a key held to two groups), each after its own
+// provider's chat models and marked as one, so a key held to some models
+// can be let ask one: the gateway holds a key to them as to any model.
+func TestCallerKeyModelsOfferDeciders(t *testing.T) {
+	sandboxHome(t)
+	for _, p := range []provider.Provider{
+		{ID: "relay", Name: "Relay", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"m"}},
+		{ID: "ts", Name: "TypeSafe", Key: "k", Decide: "http://127.0.0.1:1/v1"},
+		{ID: "cf", Name: "Cloudflare", Key: "k", Decide: "https://api.cloudflare.com/client/v4/accounts/test/ai", Models: []string{provider.CloudflareJev, provider.CloudflareClefModel}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mux := http.NewServeMux()
+	callerKeyRoutes(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/api/caller-keys/models", nil))
+	var l struct{ Models []keyModelJSON }
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &l) != nil {
+		t.Fatal(w.Code, w.Body)
+	}
+	var ids, deciders []string
+	for _, m := range l.Models {
+		ids = append(ids, m.ID)
+		if m.Decides {
+			deciders = append(deciders, m.ID)
+			if m.Provider == "" || m.ProviderName == "" || m.Name == "" {
+				t.Fatalf("decider %+v", m)
+			}
+		}
+	}
+	for _, id := range []string{"ts/" + provider.JevLatest, "cf/" + provider.CloudflareJev, "cf/" + provider.CloudflareClefModel} {
+		if !slices.Contains(deciders, id) {
+			t.Fatalf("%s not offered as a decision model: %v", id, ids)
+		}
+	}
+	if slices.Contains(deciders, "relay/m") {
+		t.Fatal("a chat model marked a decision model", ids)
+	}
+	// a provider's models stay together
+	seen := map[string]bool{}
+	last := ""
+	for _, m := range l.Models {
+		if m.Provider != last && seen[m.Provider] {
+			t.Fatalf("%s's models split: %v", m.Provider, ids)
+		}
+		seen[m.Provider], last = true, m.Provider
+	}
+}

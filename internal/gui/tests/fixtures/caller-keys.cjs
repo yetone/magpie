@@ -108,6 +108,11 @@ function fixture(lang, theme, events, options = {}) {
       { id: "relay/m", name: "Model", provider: "relay", providerName: "Relay" },
       { id: "relay/m-mini", name: "Model mini", provider: "relay", providerName: "Relay" },
       { id: "openai/gpt-5", name: "GPT-5", provider: "openai", providerName: "OpenAI" },
+      // options.deciders: decision models, which no agent lists
+      ...(options.deciders ? [
+        { id: "cf/@cf/cloudflare/clef", name: "Clef", provider: "cf", providerName: "Cloudflare", decides: true },
+        { id: "ts/jev-latest", name: "Jev", provider: "ts", providerName: "TypeSafe", decides: true },
+      ] : []),
     ], accounts: options.accounts === false ? [] : [
       { id: "relay/me@example.com", name: "me@example.com", provider: "relay", providerName: "Relay", account: true, plan: "Pro" },
       { id: "relay/spare@example.com", name: "spare@example.com", provider: "relay", providerName: "Relay", account: true },
