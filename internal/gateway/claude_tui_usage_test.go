@@ -45,6 +45,7 @@ cat > /dev/null
 	}
 	b, _ := os.ReadFile(log)
 	for _, want := range []string{"[-p][--output-format][stream-json][--input-format][stream-json]", "[--tools][]", "[--setting-sources][]",
+		`[--settings][{"disableDeepLinkRegistration":"disable"}]`,
 		"trust:1\n", "traffic:\n", "telemetry:1\n", `told:{"type":"command","command":"/usage"}`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("the helper's run lacks %q:\n%s", want, b)

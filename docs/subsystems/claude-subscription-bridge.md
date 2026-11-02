@@ -1135,7 +1135,12 @@ of its first message, so the last is the caller's. Not measured: whether
 a real model on a Windows gateway then stops writing PowerShell.
 
 Nothing else of the folder reaches the run. `--setting-sources ""` loads
-no CLAUDE.md, settings or skills from it. Auto memory is off, and
+no CLAUDE.md, settings or skills from it. That also kept the user's own
+`disableDeepLinkRegistration` from every run, its warm-up and its usage
+helper, and each registered the `claude-cli://` URL handler again (#4928):
+they are given `--settings {"disableDeepLinkRegistration":"disable"}`,
+flag settings, which `--setting-sources` doesn't control
+(`disableDeepLinkSettings`). Auto memory is off, and
 `CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS=1` keeps the repository's status out
 of the prompt, which would change it, and Anthropic's cache with it,
 whenever a file changes. The system prompt magpie sends is unchanged; only

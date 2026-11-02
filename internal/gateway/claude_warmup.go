@@ -500,28 +500,36 @@ func claudeResult(b []byte) (claudeRun, bool) {
 	return claudeRun{}, false
 }
 
+// disableDeepLinkSettings keeps every spawned Claude Code from registering
+// the claude-cli:// OS URL handler (#4928): --setting-sources "" keeps the
+// user's own disableDeepLinkRegistration from loading, and a headless run
+// has no use for the handler. --settings is not one of the sources
+// --setting-sources controls, so this applies however the user's settings
+// read.
+const disableDeepLinkSettings = `{"disableDeepLinkRegistration":"disable"}`
+
 func claudeUsageArgs() []string {
 	return []string{"-p", "/usage", "--output-format", "json",
-		"--tools", "", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence"}
+		"--tools", "", "--strict-mcp-config", "--setting-sources", "", "--settings", disableDeepLinkSettings, "--no-session-persistence"}
 }
 
 // claudeTUIUsageArgs are claudeUsageArgs for the interactive mode's
 // helper, /usage typed in it rather than given.
 func claudeTUIUsageArgs() []string {
 	return []string{"-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose",
-		"--tools", "", "--strict-mcp-config", "--setting-sources", ""}
+		"--tools", "", "--strict-mcp-config", "--setting-sources", "", "--settings", disableDeepLinkSettings}
 }
 
 func claudeWarmArgs(model string) []string {
 	return []string{"-p", "--output-format", "json", "--model", model,
-		"--tools", "", "--strict-mcp-config", "--setting-sources", "", "--no-session-persistence"}
+		"--tools", "", "--strict-mcp-config", "--setting-sources", "", "--settings", disableDeepLinkSettings, "--no-session-persistence"}
 }
 
 // claudeTUIWarmArgs are claudeWarmArgs for the interactive mode's
 // helper, which takes the bridge's stream-json.
 func claudeTUIWarmArgs(model string) []string {
 	return []string{"-p", "--output-format", "stream-json", "--input-format", "stream-json", "--verbose", "--model", model,
-		"--tools", "", "--strict-mcp-config", "--setting-sources", ""}
+		"--tools", "", "--strict-mcp-config", "--setting-sources", "", "--settings", disableDeepLinkSettings}
 }
 
 func clip(s string) string {

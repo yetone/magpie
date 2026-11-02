@@ -46,6 +46,7 @@ func TestWarmClaudeAsksClaudeCodeOnce(t *testing.T) {
 	b, _ := os.ReadFile(log)
 	got := string(b)
 	for _, want := range []string{"[-p]", "[--model][haiku]", "[--tools][]", "[--setting-sources][]", "[--no-session-persistence]",
+		`[--settings][{"disableDeepLinkRegistration":"disable"}]`,
 		"dir:/saved/account\n", "base:\n", "stdin:hi", "magpie-claude-"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("run lacks %q:\n%s", want, got)
@@ -118,7 +119,8 @@ func TestClaudeUsageRunsClaudeCode(t *testing.T) {
 		t.Fatalf("usage %q %v", got, err)
 	}
 	b, _ = os.ReadFile(log)
-	for _, want := range []string{"[-p][/usage]", "[--setting-sources][]", "[--strict-mcp-config]", "[--no-session-persistence]", "token:\n"} {
+	for _, want := range []string{"[-p][/usage]", "[--setting-sources][]", "[--strict-mcp-config]", "[--no-session-persistence]", "token:\n",
+		`[--settings][{"disableDeepLinkRegistration":"disable"}]`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("run lacks %q:\n%s", want, b)
 		}
