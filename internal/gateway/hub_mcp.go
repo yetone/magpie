@@ -117,7 +117,23 @@ type Hub interface {
 
 // HubServer is a server behind the hub as an agent is told of it: About
 // is what it is for, "" when magpie doesn't know.
-type HubServer struct{ Name, About string }
+type HubServer struct {
+	Name, About string
+	// Title is the name the server gives itself (initialize's
+	// serverInfo.title), "" when it gives none: another magpie's router
+	// says "Magpie MCP hub · <its name>"
+	Title string
+	// Tools are its tools as it last listed them, each with what its
+	// description says first; Known is whether magpie has listed them for
+	// the server as it is now
+	Tools []HubToolNote
+	Known bool
+}
+
+// HubToolNote is one tool of a server behind the hub, as the instructions
+// name it: its name on that server, and the first clause of its
+// description.
+type HubToolNote struct{ Name, About string }
 
 // MCPHub is set by the library; nil, the hub has no server.
 var MCPHub Hub
@@ -186,20 +202,141 @@ func hubTools(ctx context.Context, agent string) []hubTool {
 // cloned it instead of asking DeepWiki, 11-01).
 const hubLineMax = 250
 
-// hubAbout is what the instructions say first: HubLine, then a line for
-// each server with all it is for. It is "" when there is no server.
-func hubAbout(ss []HubServer) string {
+// hubSayMax is how long the instructions are at most, in characters: half
+// the 4096 Claude Code keeps of a server's instructions, so a model given
+// several routers reads a few lines of each. The lines that describe each
+// server take what the rest leaves.
+const hubSayMax = 2000
+
+// hubAbout is the instructions: HubLine, then here (what the router says
+// of where it is, when it has a name), then a line for each server with
+// what it is for and its tools (hubDetails), then tail, within hubSayMax.
+// With no server it is tail, then here.
+func hubAbout(ss []HubServer, here, tail string) string {
 	if len(ss) == 0 {
-		return ""
+		if here != "" {
+			return tail + " " + here
+		}
+		return tail
 	}
 	out := HubLine(ss) + "\n"
-	for _, s := range ss {
-		if a := strings.Join(strings.Fields(s.About), " "); a != "" {
-			out += "- " + s.Name + ": " + a + "\n"
+	if here != "" {
+		out += here + "\n"
+	}
+	return out + hubDetails(ss, hubSayMax-runeLen(out)-runeLen(tail)) + tail
+}
+
+// hubDetails is a line for each server that magpie knows anything of,
+// within max characters in all: its name, its own title, what it is for,
+// and its tools, each with the first clause of its description. A line
+// too long for its share says its tools by name only, then as many of
+// them as fit; the room a short line leaves goes to the others.
+func hubDetails(ss []HubServer, max int) string {
+	order := make([]int, 0, len(ss))
+	full := make([]string, len(ss))
+	for i, s := range ss {
+		if full[i] = hubServerLine(s, 1<<20); full[i] != "" {
+			order = append(order, i)
 		}
 	}
-	return out
+	slices.SortStableFunc(order, func(a, b int) int { return runeLen(full[a]) - runeLen(full[b]) })
+	lines := make([]string, len(ss))
+	left := max
+	for j, i := range order {
+		share := left/(len(order)-j) - len("\n")
+		if l := hubServerLine(ss[i], share); l != "" {
+			lines[i] = l
+			left -= runeLen(l) + len("\n")
+		}
+	}
+	var out strings.Builder
+	for _, l := range lines {
+		if l != "" {
+			out.WriteString(l + "\n")
+		}
+	}
+	return out.String()
 }
+
+// hubServerLine is s's line in at most room characters: "- name (title):
+// what it is for. Tools: a (what a does), b.", "" when magpie knows
+// nothing of it or not even its name fits.
+func hubServerLine(s HubServer, room int) string {
+	head := "- " + s.Name
+	if t := oneLine(s.Title); t != "" && !strings.EqualFold(t, s.Name) {
+		head += " (" + t + ")"
+	}
+	about := strings.TrimSuffix(oneLine(s.About), ".")
+	if about == "" && len(s.Tools) == 0 {
+		return ""
+	}
+	if runeLen(head)+len(": .") > room {
+		return ""
+	}
+	say := func(about string, tools []string, more int) string {
+		var parts []string
+		if about != "" {
+			parts = append(parts, about)
+		}
+		switch {
+		case len(tools) == 0 && more > 0:
+			parts = append(parts, strconv.Itoa(more)+" tools")
+		case more > 0:
+			parts = append(parts, "Tools: "+strings.Join(tools, ", ")+", and "+strconv.Itoa(more)+" more")
+		case len(tools) > 0:
+			parts = append(parts, "Tools: "+strings.Join(tools, ", "))
+		}
+		return head + ": " + strings.Join(parts, ". ") + "."
+	}
+	names := make([]string, len(s.Tools))
+	described := make([]string, len(s.Tools))
+	for i, t := range s.Tools {
+		names[i] = t.Name
+		described[i] = t.Name
+		if a := hubToolClause(t.About); a != "" {
+			described[i] += " (" + a + ")"
+		}
+	}
+	for _, tools := range [][]string{described, names} {
+		if l := say(about, tools, 0); runeLen(l) <= room {
+			return l
+		}
+	}
+	// too long: what it is for in half the room at most, then as many
+	// names as fit, the rest counted
+	if about != "" {
+		if n := room/2 - runeLen(head) - len(": ."); n < 12 {
+			about = ""
+		} else {
+			about = strings.TrimSuffix(hubCut(about, n), "…")
+		}
+	}
+	for kept := len(names); kept >= 0; kept-- {
+		if l := say(about, names[:kept], len(names)-kept); runeLen(l) <= room {
+			return l
+		}
+	}
+	if about != "" {
+		return hubCut(say(about, nil, 0), room)
+	}
+	return ""
+}
+
+// hubToolClause is what a tool's description says first, in a few words:
+// a router's own "[name] " before it left out, since the line names the
+// server already.
+func hubToolClause(d string) string {
+	d = oneLine(d)
+	if strings.HasPrefix(d, "[") {
+		if i := strings.Index(d, "] "); i > 0 {
+			d = d[i+2:]
+		}
+	}
+	return hubCut(hubClause(d), 80)
+}
+
+// oneLine is s with every run of spaces and line breaks one space.
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 // HubLine is one line naming the servers behind the hub, each with what
 // it is for cut to fit hubLineMax: "" when there is none.
@@ -211,7 +348,9 @@ func HubLine(ss []HubServer) string {
 	const room = hubLineMax - len(".")
 	short := make([]string, len(ss))
 	for i, s := range ss {
-		short[i] = hubClause(s.About)
+		// another magpie's router says "Tools of a (…), b.": the line
+		// says "Tools of" once
+		short[i] = hubClause(strings.TrimPrefix(oneLine(s.About), head))
 	}
 	line := func(abouts []string, kept int) string {
 		parts := make([]string, 0, kept+1)
@@ -256,14 +395,20 @@ func HubLine(ss []HubServer) string {
 }
 
 // hubClause is the first part of a description: up to its first comma,
-// colon, semicolon or full stop, on one line.
+// colon, semicolon or full stop outside brackets, on one line, so another
+// magpie's "Tools of a (what a is for, …), b." isn't cut inside a's.
 func hubClause(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if i := strings.IndexAny(s, ",:;"); i > 0 {
-		s = s[:i]
-	}
-	if i := strings.Index(s, ". "); i > 0 {
-		s = s[:i]
+	s = oneLine(s)
+	depth := 0
+	for i, c := range s {
+		switch {
+		case c == '(' || c == '[':
+			depth++
+		case (c == ')' || c == ']') && depth > 0:
+			depth--
+		case depth == 0 && i > 0 && (c == ',' || c == ':' || c == ';' || c == '.' && strings.HasPrefix(s[i:], ". ")):
+			return strings.TrimSuffix(s[:i], ".")
+		}
 	}
 	return strings.TrimSuffix(s, ".")
 }
@@ -283,6 +428,26 @@ func hubCut(s string, n int) string {
 
 func runeLen(s string) int { return len([]rune(s)) }
 
+// hubDescribeWait is how long initialize waits for the tools of servers
+// magpie hasn't listed yet (one just added, edited or signed in to), to
+// name them in its instructions: the agent's tools/list, which comes next,
+// waits for the same servers anyway. One not listed by then is named
+// without its tools, and with them to the next agent that connects.
+var hubDescribeWait = 5 * time.Second
+
+// hubServersFor are the servers behind agent's tools, as the instructions
+// describe them, their tools listed first when magpie hasn't yet.
+func hubServersFor(ctx context.Context, agent string) []HubServer {
+	ss := MCPHub.Servers(agent)
+	if !MCPHub.On() || !slices.ContainsFunc(ss, func(s HubServer) bool { return !s.Known }) {
+		return ss
+	}
+	ctx, cancel := context.WithTimeout(ctx, hubDescribeWait)
+	defer cancel()
+	MCPHub.Tools(ctx, agent)
+	return MCPHub.Servers(agent)
+}
+
 func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, map[string]any) {
 	switch m.Method {
 	case "initialize":
@@ -290,14 +455,16 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		if agent == "" {
 			say = "The tools of every MCP server in magpie's Library, each named <server>__<tool>. Add servers in magpie's Library → MCP."
 		}
-		if MCPHub != nil {
-			say = hubAbout(MCPHub.Servers(agent)) + say
-		}
-		title := "Magpie MCP hub"
+		title, here := "Magpie MCP hub", ""
 		if w := hubWhere(r); w != "" {
-			say += " This router: " + w + ". Each of its tools' descriptions starts with [" + w + "]; when another MCP server gives the same tools, choose between them by this."
+			here = "This router: " + w + ". Each of its tools' descriptions starts with [" + w + "]; when another MCP server gives the same tools, choose between them by this."
 			title += " · " + w
 		}
+		var ss []HubServer
+		if MCPHub != nil {
+			ss = hubServersFor(r.Context(), agent)
+		}
+		say = hubAbout(ss, here, say)
 		if MCPHub == nil || !MCPHub.On() {
 			say = errHubOff
 		}

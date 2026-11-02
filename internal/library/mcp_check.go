@@ -799,6 +799,8 @@ type httpSession struct {
 	tok              string
 	renewed          bool
 	session, version string
+	// init is initialize's result
+	init json.RawMessage
 }
 
 func newHTTPSession(ctx context.Context, s *Server) (*httpSession, *ServerHealth) {
@@ -898,11 +900,12 @@ func (c *httpSession) initialize(ctx context.Context, init []byte) *ServerHealth
 	var r struct {
 		ProtocolVersion string `json:"protocolVersion"`
 	}
+	c.mu.Lock()
+	c.init = m.Result
 	if json.Unmarshal(m.Result, &r) == nil && r.ProtocolVersion != "" {
-		c.mu.Lock()
 		c.version = r.ProtocolVersion
-		c.mu.Unlock()
 	}
+	c.mu.Unlock()
 	stepTo(ctx, "notifications/initialized")
 	if res, err := c.post(ctx, initializedNote); err == nil {
 		io.Copy(io.Discard, io.LimitReader(res.Body, 1<<16))

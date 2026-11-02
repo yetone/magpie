@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -626,11 +627,11 @@ func TestHubSaysWhatServersAreFor(t *testing.T) {
 	m, _ := marketServer("deepwiki")
 	c, _ := marketServer("context7")
 	want := []gateway.HubServer{{Name: "context7", About: c.Description}, {Name: "notes"}, {Name: "wiki", About: m.Description}}
-	if got := (theHub{}).Servers("pi"); !slices.Equal(got, want) || m.Description == "" || c.Description == "" {
-		t.Fatalf("pi's servers %q, want %q", got, want)
+	if got := (theHub{}).Servers("pi"); !reflect.DeepEqual(got, want) || m.Description == "" || c.Description == "" {
+		t.Fatalf("pi's servers %+v, want %+v", got, want)
 	}
-	if got := (theHub{}).Servers("claude"); !slices.Equal(got, []gateway.HubServer{{Name: "notes"}}) {
-		t.Fatalf("claude's servers %q", got)
+	if got := (theHub{}).Servers("claude"); !reflect.DeepEqual(got, []gateway.HubServer{{Name: "notes"}}) {
+		t.Fatalf("claude's servers %+v", got)
 	}
 }
 
