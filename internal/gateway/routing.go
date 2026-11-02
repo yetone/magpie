@@ -402,7 +402,9 @@ const (
 	// asked for (#520) — another account is asked, and nobody rests
 	failEffort = "effort"
 	// failProxy: the proxy magpie sends through (its own setting, the
-	// *_PROXY variables, the system's) didn't take the connection (#381) —
+	// *_PROXY variables, the system's) didn't take the connection (#381),
+	// or the network closed each new connection before the request went
+	// out (errClosedUnsent) —
 	// nothing reached the vendor, so the next one is asked, and nobody rests
 	failProxy = "proxy"
 	// failOffline: this computer had no network (offline.go) — nothing
@@ -475,7 +477,13 @@ func carriedStatus(status int, body []byte) int {
 // failure says why a reply failed.
 func failure(status int, body []byte) string {
 	status = carriedStatus(status, body)
-	if status == http.StatusBadGateway && proxyDown.Match(body) {
+	if status == http.StatusBadGateway && (proxyDown.Match(body) || bytes.Contains(body, []byte(closedUnsentWords))) {
+		// the proxy didn't take the connection, or the network closed
+		// each new one before the request was sent (errClosedUnsent):
+		// nothing reached the vendor, and the account is as good as it
+		// was. Read as the account's failure, it rested ChatGPT accounts
+		// whose window was full till the window renewed, days off,
+		// shown as "502 · 失败" (dealyang_ on X)
 		return failProxy
 	}
 	if _, ok := provider.Verification(body); ok && (status == 401 || status == 403) {

@@ -2,7 +2,11 @@ package gateway
 
 import (
 	"crypto/tls"
+	"errors"
+	"fmt"
+	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -153,17 +157,95 @@ func lostPing(err error) bool {
 // so nothing is sent that wasn't before, only sooner.
 type replayable struct{ http.RoundTripper }
 
+// RoundTrip sends req, marked so. A new connection closed by the far side
+// as soon as it opened — right after the TLS handshake, while the request
+// was being written — Go gives up on at once, as it isn't a kept-alive
+// one: "write tcp …: use of closed network connection". The vendor never
+// had the whole request, so it is sent again on another new connection,
+// after a moment, up to unsentAgain times (dealyang_ on X: a Codex turn through a TUN proxy's
+// fake IP, 198.18.0.17, failed with it on every reconnect). Still closed,
+// the error says why (errClosedUnsent), and the routing rests nobody for
+// it (failProxy).
 func (t replayable) RoundTrip(req *http.Request) (*http.Response, error) {
 	_, marked := req.Header["Idempotency-Key"]
 	if _, ok := req.Header["X-Idempotency-Key"]; ok {
 		marked = true
 	}
-	if marked || req.Method == http.MethodGet || req.Method == http.MethodHead ||
-		(req.Body != nil && req.Body != http.NoBody && req.GetBody == nil) {
-		return t.RoundTripper.RoundTrip(req)
+	r := req
+	if !marked && req.Method != http.MethodGet && req.Method != http.MethodHead &&
+		(req.Body == nil || req.Body == http.NoBody || req.GetBody != nil) {
+		// a copy, as a RoundTripper leaves its caller's request as it was
+		r = req.Clone(req.Context())
+		r.Header["X-Idempotency-Key"] = nil
 	}
-	// a copy, as a RoundTripper leaves its caller's request as it was
-	r := req.Clone(req.Context())
-	r.Header["X-Idempotency-Key"] = nil
-	return t.RoundTripper.RoundTrip(r)
+	for n := 0; ; n++ {
+		var fresh, h2 atomic.Bool
+		trace := &httptrace.ClientTrace{GotConn: func(i httptrace.GotConnInfo) {
+			fresh.Store(!i.Reused)
+			if tc, ok := i.Conn.(interface{ ConnectionState() tls.ConnectionState }); ok {
+				h2.Store(tc.ConnectionState().NegotiatedProtocol == "h2")
+			}
+		}}
+		try := r.WithContext(httptrace.WithClientTrace(r.Context(), trace))
+		res, err := t.RoundTripper.RoundTrip(try)
+		if err == nil || !fresh.Load() || h2.Load() || !closedBeforeSent(err) || req.Context().Err() != nil {
+			return res, err
+		}
+		if n >= len(unsentAgain) || (r.Body != nil && r.Body != http.NoBody && r.GetBody == nil) {
+			return nil, errClosedUnsent{err: err, tries: n + 1}
+		}
+		select {
+		case <-req.Context().Done():
+			return nil, err
+		case <-time.After(unsentAgain[n]):
+		}
+		again := r.Clone(r.Context())
+		if r.GetBody != nil {
+			body, gerr := r.GetBody()
+			if gerr != nil {
+				return nil, err
+			}
+			again.Body = body
+		}
+		r = again
+	}
 }
+
+// unsentAgain is the pause before each new try of a request whose new
+// connection was closed before the whole of it was sent.
+var unsentAgain = []time.Duration{250 * time.Millisecond, time.Second}
+
+// closedBeforeSent says err is Go's HTTP/1.1 transport failing to write
+// the request: the far side had closed the connection, so the write found
+// it closed by the reader ("use of closed network connection") or broken
+// ("broken pipe", "connection reset by peer"). The request never went out
+// whole, so the vendor had no request to act on; a reply the vendor sent
+// before closing is a reply, and a connection ending after the whole
+// request went out is a read error, never sent again here. (Go's
+// "nothing written" doesn't hold over TLS: a server had read 1186 bytes
+// of a request Go called unwritten.) A TLS connection the reader closed
+// first fails the write with a bare net.ErrClosed; the reader's own end is
+// "EOF" or a read error. A close the reader saw before the write began is
+// Go's errServerClosedIdle (seen on Windows).
+func closedBeforeSent(err error) bool {
+	var op *net.OpError
+	return errors.As(err, &op) && op.Op == "write" || errors.Is(err, net.ErrClosed) ||
+		strings.Contains(err.Error(), "http: server closed idle connection")
+}
+
+// errClosedUnsent is a request's error once every new connection it was
+// tried on was closed before the whole of it was sent: what went wrong and
+// where to look, read by failure as nobody's fault (closedUnsentWords).
+type errClosedUnsent struct {
+	err   error
+	tries int
+}
+
+func (e errClosedUnsent) Error() string {
+	return fmt.Sprintf("%v (%s, %d times: the connection was closed by the network or a proxy before the whole request was sent, so the vendor had nothing to act on; check the proxy or VPN this computer goes through)", e.err, closedUnsentWords, e.tries)
+}
+
+func (e errClosedUnsent) Unwrap() error { return e.err }
+
+// closedUnsentWords mark errClosedUnsent in a failure's message.
+const closedUnsentWords = "closed before sent"
