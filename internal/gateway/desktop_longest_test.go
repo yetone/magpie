@@ -99,14 +99,26 @@ func TestClaudeDesktopLongestOnly(t *testing.T) {
 			t.Errorf("on: %s listed as %q, want %q", id, r.ID, want)
 		}
 	}
+	// a row Desktop names after its catalog says its provider as well
+	// (desktopSaidBy)
+	said := func(r row, oneM bool) string {
+		var s []string
+		if oneM {
+			s = append(s, "1M context window")
+		}
+		if strings.Contains(r.ID, ".anthropic.") {
+			s = append(s, "Vend")
+		}
+		return strings.Join(s, " · ")
+	}
 	for id, r := range on {
-		if want := map[bool]string{true: "1M context window"}[strings.HasSuffix(r.ID, "[1m]")]; r.Said != want {
+		if want := said(r, strings.HasSuffix(r.ID, "[1m]")); r.Said != want {
 			t.Errorf("on: %s (%s) described %q, want %q", id, r.ID, r.Said, want)
 		}
 	}
 	for id, r := range off {
-		if r.Said != "" {
-			t.Errorf("off: %s described %q", id, r.Said)
+		if want := said(r, false); r.Said != want {
+			t.Errorf("off: %s (%s) described %q, want %q", id, r.ID, r.Said, want)
 		}
 	}
 	if r := on["vend/exo-free"]; r.MaxInput != 872_000 {

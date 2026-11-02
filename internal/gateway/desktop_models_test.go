@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Claude Desktop's model menu lists the models picked for it on the Agents
@@ -303,5 +304,109 @@ func TestDesktopNames(t *testing.T) {
 	}
 	if got, want := desktopNames(es), []string{"X · A", "x · B", "Y", "Z · D (d/z)", "Z · D (d/z2)"}; !slices.Equal(got, want) {
 		t.Fatalf("desktopNames (names plain) = %q, want %q", got, want)
+	}
+}
+
+// Claude Desktop names a Claude model with reasoning levels after its own
+// catalog ("Opus 5.5"), not by display_name, so four relays' claude-opus-5-5
+// read alike and its menu told them apart only by the id's tail,
+// "Opus 5.5 (…7922287072.anthropic.claude-opus-5-5)" (4 v5 on Discord:
+// 老林夕, 新林夕, 百德 and chatflowsai, Provider in model names on). Such
+// a row says its provider in the description Desktop shows under the
+// name, by the same setting the name follows: on, every one; off, only
+// two of one name, as display_name keeps their provider then. Its id stays
+// as it was, and a row Desktop names by display_name says nothing more.
+func TestClaudeDesktopCatalogNamedSaysProvider(t *testing.T) {
+	setup(t, provider.Anthropic, &fake{})
+	levels := []string{"low", "medium", "high", "max"}
+	for _, p := range []provider.Provider{
+		{ID: "laolin", Name: "老林夕", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-opus-5-5"}},
+		{ID: "xinlin", Name: "新林夕", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-opus-5-5"}},
+		{ID: "baide", Name: "百德", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-opus-5-5"}},
+		{ID: "chatflowsai", Name: "chatflowsai", Key: "k", Anthropic: "http://127.0.0.1:1", Models: []string{"claude-opus-5-5", "claude-sonnet-5-5", "glm-5.3"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range p.Models {
+			if err := provider.SetModelEfforts(p.ID+"/"+m, levels); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	list := func() map[string]desktopRow {
+		t.Helper()
+		req := httptest.NewRequest("GET", "/v1/models?limit=1000", nil)
+		req.Header.Set("x-api-key", TokenFor("claude-desktop"))
+		rec := httptest.NewRecorder()
+		New().Handler().ServeHTTP(rec, req)
+		var out struct {
+			Data []desktopRow `json:"data"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]desktopRow{}
+		for _, d := range out.Data {
+			got[DesktopCatalogID(strings.TrimSuffix(d.ID, "[1m]"))] = d
+		}
+		return got
+	}
+	opus := map[string]string{"laolin/claude-opus-5-5": "老林夕", "xinlin/claude-opus-5-5": "新林夕", "baide/claude-opus-5-5": "百德", "chatflowsai/claude-opus-5-5": "chatflowsai"}
+	ids := map[string]string{}
+	for _, c := range []struct {
+		mode   string
+		sonnet string // what the lone Sonnet 5.5 says
+	}{
+		{provider.SuffixOn, "chatflowsai"},
+		{provider.SuffixOwn, "chatflowsai"},
+		{provider.SuffixOff, ""},
+	} {
+		if err := provider.SetSuffixMode(c.mode); err != nil {
+			t.Fatal(err)
+		}
+		got := list()
+		for ref, by := range opus {
+			r := got[ref]
+			if !regexp.MustCompile(`^magpie-\d{10}\.anthropic\.claude-opus-5-5$`).MatchString(r.ID) {
+				t.Fatalf("%s: %s listed as %q, not one Desktop names after its catalog", c.mode, ref, r.ID)
+			}
+			if r.Description != by {
+				t.Errorf("%s: %s described %q, want %q", c.mode, ref, r.Description, by)
+			}
+			if ids[ref] == "" {
+				ids[ref] = r.ID
+			} else if ids[ref] != r.ID {
+				t.Errorf("%s: %s's id moved from %s to %s", c.mode, ref, ids[ref], r.ID)
+			}
+		}
+		if r := got["chatflowsai/claude-sonnet-5-5"]; r.Description != c.sonnet {
+			t.Errorf("%s: the lone Sonnet 5.5 described %q, want %q", c.mode, r.Description, c.sonnet)
+		}
+		// named by display_name (mythos-magpie-<n>), which says it already
+		if r := got["chatflowsai/glm-5.3"]; r.ID == "" || r.Description != "" {
+			t.Errorf("%s: glm-5.3 (%s) described %q, want nothing", c.mode, r.ID, r.Description)
+		}
+	}
+
+	// a 1M row listed by its "[1m]" id says both
+	if err := provider.SetSuffixMode(provider.SuffixOn); err != nil {
+		t.Fatal(err)
+	}
+	now, err := provider.Find("baide")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetContext(*now, "claude-opus-5-5", 1_000_000); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Load()
+	s.DesktopLongest = true
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	r := list()["baide/claude-opus-5-5"]
+	if r.ID != ids["baide/claude-opus-5-5"]+"[1m]" || r.Description != "1M context window · 百德" {
+		t.Errorf("1M: listed as %s, described %q", r.ID, r.Description)
 	}
 }
