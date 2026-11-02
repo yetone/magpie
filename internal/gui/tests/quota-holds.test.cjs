@@ -91,7 +91,9 @@ for (const [name, engine] of [["webkit", webkit], ["chromium", chromium]]) {
                 return {
                   text: l.textContent, title: l.title, window: l.closest(".quota").querySelector(".quota-labels > span").textContent,
                   inReset: !!l.closest(".quota-reset"), cut: l.scrollWidth > l.clientWidth + 1, inCard: b.left >= card.left - 1 && b.right <= card.right + 1,
-                  muted: Number(cs.opacity) < 1 && cs.color === getComputedStyle(l.closest(".quota-reset")).color,
+                  // muted as the reset line is: its caption colour, not faded below it
+                  // (a card's captions read at 4.5:1, Jiabubu)
+                  muted: cs.color === getComputedStyle(l.closest(".quota-reset")).color && cs.color !== getComputedStyle(l.closest(".quota")).color,
                 };
               }),
               pageScroll: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
