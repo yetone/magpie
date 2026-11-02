@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
-// errAppMain is what a probe of an app's own program ends with, unrun.
-var errAppMain = errors.New("not run: it is a macOS app's own program, which opens the app's window")
+// errAppMain is what a probe of an app's own program (a Mac bundle's, a
+// Windows GUI program) ends with, unrun.
+var errAppMain = errors.New("not run: it is an app's own program, which opens the app's window")
 
 // appMain reports whether the program at path is the main executable of
 // an app a user opens (…/X.app/Contents/MacOS/<CFBundleExecutable>, X.app
