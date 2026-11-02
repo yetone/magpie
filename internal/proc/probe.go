@@ -20,6 +20,11 @@ func ProbeContext(ctx context.Context, name string, args ...string) *exec.Cmd {
 	ctx, cancel := context.WithCancel(ctx)
 	p := &probe{cancel: cancel, killing: make(chan struct{}), ended: make(chan struct{})}
 	cmd := CommandContext(ctx, name, args...)
+	// a probe never opens an app: asked its version, an app's own program
+	// puts its window up instead (appMain)
+	if cmd.Err == nil && appMain(cmd.Path) {
+		cmd.Err = errAppMain
+	}
 	probeGroup(cmd, p)
 	probes.Lock()
 	probes.m[p] = struct{}{}
