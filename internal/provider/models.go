@@ -480,6 +480,17 @@ func (p Provider) fetchList(ctx context.Context) ([]catalog.Model, error) {
 		return p.fetchPerKey(ctx, keys)
 	}
 	l, err := p.fetchOne(ctx)
+	if err != nil && p.IsOpenCode() && p.Key != "" {
+		// OpenCode's lists are public: the vendor answers its /models
+		// without a key, so a list the key is refused is asked again
+		// bare, and the picker says what OpenCode serves, not what
+		// models.dev remembers of it (#4900)
+		bare := p
+		bare.Key = ""
+		if b, berr := bare.fetchOne(ctx); berr == nil {
+			l, err = b, nil
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
