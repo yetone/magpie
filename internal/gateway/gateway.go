@@ -484,6 +484,9 @@ type Server struct {
 	// get in a row, for a compaction that keeps failing to stop being
 	// asked (codex_compact_guard.go, #2274)
 	compactFails compactFails
+	// bodyCaps are the byte caps providers refused a request over
+	// (body_cap.go)
+	bodyCaps bodyCaps
 	// codexTurns is the model each Codex last had a turn of its own
 	// answered on, by caller (codexMemoryStandIn)
 	codexTurns sync.Map
@@ -4849,6 +4852,11 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 		}
 	}()
 	res, err = s.forwardOnce(ctx, p, to, path, body, in)
+	if err == nil && res.StatusCode >= 400 {
+		// a body over the provider's byte cap: asked again with its
+		// oldest images left out, or said as a 413 (body_cap.go)
+		res, err = s.refitOverCap(ctx, p, to, path, body, in, res)
+	}
 	if err == nil && mantleRoutes(p, to) {
 		res, err = s.mantleReroute(ctx, p, to, path, body, in, res)
 	}
@@ -4915,6 +4923,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	body = kimiLockedSampling(p, to, body)
 	body = clinePin(p, to, body)
 	body = codexImagesFit(p, to, body)
+	// under the byte cap the provider refused a larger request over,
+	// its oldest images left out (body_cap.go)
+	body = s.withinCap(p, to, path, body)
 	if to == provider.Responses {
 		// whatever the route, Claude's blocks never reach a Responses API
 		body = withoutClaudeSeals(body)

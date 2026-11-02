@@ -114,7 +114,11 @@ bounded hook timeout. Request-owned state is released after notification.
 - `internal/gateway/middleware.go`: `gatewayHooks`, before routing and around the
   middleware, so `onResponse` sees what the agent got. `serveAgent` runs it for
   every agent request; Codex's own ChatGPT sign-in passthrough
-  (`codex_backend.go`) runs it without the synchronous middleware.
+  (`codex_backend.go`) runs it without the synchronous middleware. The
+  requests magpie makes on its own call `serve` directly and run no hooks:
+  Codex's compaction and its fallback turn, titles, System One's
+  classifier, search and vision (#4847). A request over a provider's byte
+  cap is fitted in the gateway itself, not by a hook (`body_cap.go`).
 - `internal/gateway/gateway_hooks.go`: bounded response observation and
   `gatewayReply`, a stream made one reply.
 - `internal/plugin/gateway_test.go` and `internal/gateway/gateway_hook_test.go`:
