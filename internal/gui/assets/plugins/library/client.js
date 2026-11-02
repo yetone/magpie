@@ -3406,7 +3406,7 @@ magpie.plugin("library", (ctx) => {
       drawSkills(box, all);
       body.append(box);
       // under the list, so the skills stay where they were above it
-      if (all.length) body.append(skillHowBar());
+      if (all.length) body.append(skillHowBar(), skillWhereBar());
       if (picking) body.append(pickBar(all));
     }
     if (lib.newSkills?.length) renderNewSkills(body);
@@ -4741,6 +4741,23 @@ magpie.plugin("library", (ctx) => {
     bar.append(by, el("span", "note", how === "copy"
       ? t("Each agent gets a folder of its own, made again when the library's skill changes; edits made in a copy are replaced.")
       : t("Links follow the library's skill: an update reaches the agents at once.")));
+    return bar;
+  }
+
+  // Where the skills go (usrname1833): to the agents each is ticked for,
+  // in their own folders, or also into ~/.agents/skills, which many agents
+  // and tools read, so each of them has every skill. The files stay in the
+  // library's folder either way; ~/.agents/skills gets links to them.
+  function skillWhereBar() {
+    const bar = el("div", "lib-skillhow lib-skillwhere");
+    bar.id = "lib-skillwhere";
+    const where = lib.sharedSkills ? "shared" : "agents";
+    bar.append(el("span", "label", t("Put skills in")), segs([["agents", t("Each agent's own folder")], ["shared", "~/.agents/skills"]], where, (w) => {
+      if (w !== where) change("skills/where", { how: w }, w === "shared" ? t("Every skill is in ~/.agents/skills now") : t("Skills go to the agents they're ticked for now"));
+    }));
+    bar.append(el("span", "note", where === "shared"
+      ? t("Every skill on here is linked into ~/.agents/skills too: each agent that reads that folder has every skill, whatever is ticked. The files stay in the library.")
+      : t("Each agent gets the skills ticked for it, in its own folder.")));
     return bar;
   }
 

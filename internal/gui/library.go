@@ -583,6 +583,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.UseLibrarySkills(oneOrMore(in.Name, in.Names), in.Agent)
 		case "skills/how":
 			res, err = library.SetSkillHow(in.Agent, in.How)
+		case "skills/where":
+			// each agent's own folder, or ~/.agents/skills too (skills_shared.go)
+			res, err = library.SetSkillsWhere(in.How)
 		case "skills/keep-own":
 			res, err = library.KeepAgentSkills(oneOrMore(in.Name, in.Names), in.Agent)
 		case "market/server":

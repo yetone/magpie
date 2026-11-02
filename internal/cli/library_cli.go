@@ -40,6 +40,7 @@ const libraryUsage = `magpie library                     what the library gives 
                                      (one changed here is left as it is; update it by name with --replace-edits)
   magpie library skill how link|copy [agent]   give skills as links to the library's or as copies: every agent's way, or one agent's
   magpie library skill how default <agent>     the agent goes the library's way again
+  magpie library skill where agents|shared     skills go to the agents ticked, or also into ~/.agents/skills for every agent and tool that reads it
   magpie library skill use-library <name> <agent>   an agent's own skill by that name is in the way: set it aside, link the library's
   magpie library skill keep-own <name> <agent>      …or keep the agent's, and take the agent off the library's
   magpie library rtk                 which agents run their shell commands through RTK (rtk-ai.app), to save tokens
@@ -209,6 +210,8 @@ func libraryCmd(args []string) error {
 				how = ""
 			}
 			res, err = library.SetSkillHow(agent, how)
+		case len(rest) == 2 && rest[0] == "where" && (rest[1] == library.SkillsInAgents || rest[1] == library.SkillsInShared):
+			res, err = library.SetSkillsWhere(rest[1])
 		default:
 			return fmt.Errorf("usage:\n  %s", libraryUsage)
 		}

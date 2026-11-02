@@ -81,7 +81,7 @@ func readsSharedHere(ts []*Target) []string {
 	sh := realDir(sharedSkillsDir())
 	var out []string
 	for _, t := range ts {
-		if t.Skills != "" && !t.Gone && t.Desktop == nil && (slices.Contains(readsShared, t.Agent.ID) || realDir(t.Skills) == sh) {
+		if t.Skills != "" && !t.Gone && t.Desktop == nil && (t.readsSharedDir() || realDir(t.Skills) == sh) {
 			out = append(out, t.Agent.ID)
 		}
 	}

@@ -564,6 +564,11 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		if s == nil {
 			return false
 		}
+		// the folder is ~/.agents/skills itself: what the setting puts
+		// there (skills_shared.go) stays
+		if l.keepsShared(s) && realDir(t.Skills) == realDir(sharedSkillsDir()) {
+			return true
+		}
 		return s.gives(id) || slices.ContainsFunc(sharers, s.gives)
 	}
 	// an agent that reads ~/.agents/skills as well as its own folder finds
@@ -572,12 +577,12 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 	shared := realDir(sharedSkillsDir())
 	isShared := realDir(t.Skills) == shared
 	inShared := func(s *Skill) bool {
-		if s == nil || !slices.Contains(readsShared, id) || realDir(t.Skills) == shared {
+		if s == nil || !t.readsSharedDir() || realDir(t.Skills) == shared {
 			return false
 		}
 		// the library's skill is kept in the shared folder itself (brought
 		// in from there): every agent reading it has it, ticked or not (#595)
-		if sharedHas(s.Name) {
+		if sharedHas(s.Name) || l.inSharedHere(s) {
 			return true
 		}
 		p := filepath.Join(sharedSkillsDir(), s.Name)
@@ -739,7 +744,8 @@ func (l *Library) sweepShared(all []*Target, res *Result) {
 			continue
 		}
 		s := l.skill(name)
-		if slices.ContainsFunc(holders, func(o *Target) bool { return s.gives(o.Agent.ID) }) {
+		// one the setting keeps there stays (skills_shared.go)
+		if l.keepsShared(s) || slices.ContainsFunc(holders, func(o *Target) bool { return s.gives(o.Agent.ID) }) {
 			continue
 		}
 		if err := unlink(p); err != nil {
