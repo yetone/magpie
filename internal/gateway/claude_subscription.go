@@ -3127,11 +3127,21 @@ func (r *subscriptionRun) readOutput(rd io.Reader) {
 			own[index] = true
 			return "", false
 		}
-		name, ok := strings.CutPrefix(name, "mcp__magpie__")
+		rest, ok := strings.CutPrefix(name, "mcp__magpie__")
 		r.mu.Lock()
-		name = declaredName(r.names, name)
+		called := name
+		name = declaredName(r.names, rest)
 		search := r.search != nil && name == r.searchName || r.answerName != "" && name == r.answerName
 		refused := r.allowed != nil && !r.allowed[name]
+		// a tool the client announced but hasn't loaded yet (Claude
+		// Code's deferred MCP tools, told by name in the conversation
+		// and not in tools until a ToolSearch) is called by the
+		// client's own name, which is the name the run's agent called:
+		// the bare name cut from it is no tool the client has, and it
+		// answered "No such tool available" before a retry (packinggoods)
+		if ok && !search && name == rest && r.tools != nil && !r.tools[rest] {
+			name = called
+		}
 		r.mu.Unlock()
 		// magpie answers its own web search, as Claude Code does
 		// its WebSearch, and a call of a tool the turn may not call
