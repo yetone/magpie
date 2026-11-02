@@ -429,8 +429,8 @@ func (c *rowChunk) row(i int) Row {
 	}
 	if r.Swapped && p.Flags&swapKnown == 0 && (SameSpelled(r.Model, r.Served) || ServingName(r.Model, r.Served) || RelayRenamed(r.Model, r.Served) || VendorAlias(r.Model, r.Served)) {
 		r.Swapped = false // kept before a name spelled otherwise, a vendor's serving name, a relay's rename or the vendor's own alias was the same
-	} else if r.Swapped && ListedAs(r.Provider, r.Model, r.Served) {
-		r.Swapped = false // the name the provider's list gives the model asked for
+	} else if r.Swapped && (RegionTail(r.Model, r.Served) || ListedAs(r.Provider, r.Model, r.Served)) {
+		r.Swapped = false // a region's deployment of the model (kept before plugins#628), or the name the provider's list gives the model asked for
 	}
 	if r.cacheNotCounted() {
 		r.CacheUnknown = true // kept before its plugin said its vendor counts no cache

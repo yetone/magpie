@@ -436,7 +436,7 @@ func (r *Route) routedAgain() {
 	for i := range r.Tries {
 		if tr := &r.Tries[i]; tr.Swapped && usage.GroupRouted(tr.Model, tr.Served) {
 			tr.Swapped, tr.Routed = false, true
-		} else if tr.Swapped && (usage.SameSpelled(tr.Model, tr.Served) || usage.ServingName(tr.Model, tr.Served) || usage.VendorAlias(tr.Model, tr.Served) || usage.ListedAs(tr.ID, tr.Model, tr.Served)) {
+		} else if tr.Swapped && (usage.SameSpelled(tr.Model, tr.Served) || usage.ServingName(tr.Model, tr.Served) || usage.VendorAlias(tr.Model, tr.Served) || usage.RegionTail(tr.Model, tr.Served) || usage.ListedAs(tr.ID, tr.Model, tr.Served)) {
 			tr.Swapped = false
 		}
 	}

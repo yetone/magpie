@@ -64,10 +64,30 @@ func bareModel(m string) string {
 // is the member another magpie's routing group sent it to (GroupRouted),
 // nor a vendor's own name for the deployment serving the model
 // (ServingName), nor the model a relay sold under a name of its own
-// (RelayRenamed).
+// (RelayRenamed), nor the model at a region's deployment (RegionTail).
 func Swapped(sent, served string) bool {
 	a, b := bareModel(sent), bareModel(served)
-	return a != "" && b != "" && squash(a) != squash(b) && a != "auto" && squash(bareModel(provider.EffortFamily(a))) != squash(b) && !GroupRouted(sent, served) && !ServingName(sent, served) && !RelayRenamed(sent, served) && !VendorAlias(sent, served)
+	return a != "" && b != "" && squash(a) != squash(b) && a != "auto" && squash(bareModel(provider.EffortFamily(a))) != squash(b) && !GroupRouted(sent, served) && !ServingName(sent, served) && !RelayRenamed(sent, served) && !VendorAlias(sent, served) && !RegionTail(sent, served)
+}
+
+// regionTail is a region a vendor's id names its deployment of a model
+// by: WorkBuddy AI lists DeepSeek V4.1 Flash as deepseek-v4.1-flash-sg,
+// its paid id for the Singapore deployment (the plugin's product config
+// names it paidId to the free deepseek-v4.1-flash, one window for both),
+// and answers under the model's own name.
+var regionTail = regexp.MustCompile(`[-_](?:sg|us|eu|cn|intl|global)$`)
+
+// RegionTail reports whether one of sent and served is the other with a
+// region after it: the same model at that region's deployment, not
+// another model swapped in (plugins#628, chansee97). A region in both,
+// or a name that differs besides it, is not this.
+func RegionTail(sent, served string) bool {
+	a, b := bareModel(sent), bareModel(served)
+	if a == "" || b == "" {
+		return false
+	}
+	ra, rb := regionTail.ReplaceAllString(a, ""), regionTail.ReplaceAllString(b, "")
+	return (ra != a) != (rb != b) && ra != "" && squash(ra) == squash(rb)
 }
 
 // vendorAlias is a vendor's own alias for one of its models, as the
