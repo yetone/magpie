@@ -2031,6 +2031,19 @@ func ImagesAPI(id string) bool {
 	return false
 }
 
+// FilmsID is whether a model's id names one that makes videos, for a model
+// whose list says nothing of a kind: OpenAI's sora-2 and sora-2-pro are
+// made at its OpenAI-shaped videos API, which the gateway speaks, but
+// textModel counts their ids out of the chat models, and a list that
+// marks no kind left them unlisted at all — never offered to talk to, and
+// never marked a video model in the provider's editor (#4954). The other
+// video families keep the faces their own APIs are asked on: Ark's
+// Seedance at its tasks (gateway arkVideoModel), a MiniMax key's H3
+// (video_minimax.go), and a model the user says makes videos (#1399).
+func FilmsID(id string) bool {
+	return strings.Contains(strings.ToLower(id), "sora")
+}
+
 // PointsToImagesAPI is whether a vendor's refusal of a chat request names
 // its images API as the one the model is asked on: Agnes answers
 // agnes-image-2.5-flash on chat completions with 400 "Model

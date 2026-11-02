@@ -19,9 +19,9 @@ import (
 
 // openAIVideos is an upstream serving OpenAI's Videos API under /v1, as a
 // provider set up with a base URL does (#1446): its model list marks
-// vid-1 "kind": "video" and lists sora-like-2 with no kind, a video takes
-// two polls to be made, and what each request was sent and signed with is
-// kept.
+// vid-1 "kind": "video" and lists agnes-video-2.5-flash with no kind, a
+// video takes two polls to be made, and what each request was sent and
+// signed with is kept.
 type openAIVideos struct {
 	*httptest.Server
 	mu     sync.Mutex
@@ -47,7 +47,7 @@ func newOpenAIVideos(t *testing.T) *openAIVideos {
 		const vid = "video_68d7.abc"
 		switch {
 		case r.Method == "GET" && r.URL.Path == "/v1/models":
-			io.WriteString(w, `{"object":"list","data":[{"id":"gpt-5.5","object":"model"},{"id":"vid-1","object":"model","kind":"video"},{"id":"sora-like-2","object":"model"}]}`)
+			io.WriteString(w, `{"object":"list","data":[{"id":"gpt-5.5","object":"model"},{"id":"vid-1","object":"model","kind":"video"},{"id":"agnes-video-2.5-flash","object":"model"}]}`)
 		case r.Method == "POST" && r.URL.Path == "/v1/videos" && key == u.lacks:
 			w.WriteHeader(404)
 			io.WriteString(w, `{"error":{"message":"Model \"vid-1\" is not supported by any configured account in this group","type":"invalid_request_error"}}`)
@@ -177,7 +177,7 @@ func TestCustomProviderVideoNeedsTheListsWord(t *testing.T) {
 	up := newOpenAIVideos(t)
 	saveFetched(t, provider.Provider{ID: "studio", Name: "Studio", Chat: up.URL + "/v1", Key: "sk-studio"})
 	h := New().Handler()
-	for _, model := range []string{"studio/sora-like-2", "studio/gpt-5.5", "studio/grok-imagine-video"} {
+	for _, model := range []string{"studio/agnes-video-2.5-flash", "studio/gpt-5.5", "studio/grok-imagine-video"} {
 		code, obj, raw := asKey(t, h, "", "POST", "/v1/videos", `{"model":"`+model+`","prompt":"a cat"}`)
 		if code != 400 || !strings.Contains(errorOf(obj), "can't make videos") {
 			t.Fatalf("%s: %d %s", model, code, raw)
@@ -337,8 +337,8 @@ func TestGrokVideoPollHeldByKeyModels(t *testing.T) {
 func TestCustomProviderVideoTheUserMarks(t *testing.T) {
 	fresh(t)
 	up := newOpenAIVideos(t)
-	p := saveFetched(t, provider.Provider{ID: "studio", Name: "Studio", Chat: up.URL + "/v1", Key: "sk-studio", Models: []string{"gpt-5.5", "sora-like-2", "typed-video-1"}})
-	for ref, kind := range map[string]string{"studio/sora-like-2": "video", "studio/typed-video-1": "video", "studio/vid-1": "image", "studio/gpt-5.5": "image"} {
+	p := saveFetched(t, provider.Provider{ID: "studio", Name: "Studio", Chat: up.URL + "/v1", Key: "sk-studio", Models: []string{"gpt-5.5", "agnes-video-2.5-flash", "typed-video-1"}})
+	for ref, kind := range map[string]string{"studio/agnes-video-2.5-flash": "video", "studio/typed-video-1": "video", "studio/vid-1": "image", "studio/gpt-5.5": "image"} {
 		if err := provider.SetModelKind(ref, kind); err != nil {
 			t.Fatalf("%s: %v", ref, err)
 		}
@@ -354,14 +354,14 @@ func TestCustomProviderVideoTheUserMarks(t *testing.T) {
 		slices.Sort(out)
 		return out
 	}
-	if got := ids(Videomakers(p)); !slices.Equal(got, []string{"sora-like-2", "typed-video-1"}) {
+	if got := ids(Videomakers(p)); !slices.Equal(got, []string{"agnes-video-2.5-flash", "typed-video-1"}) {
 		t.Fatalf("videomakers %v", got)
 	}
 	if got := ids(Drawers(p)); !slices.Equal(got, []string{"gpt-5.5", "vid-1"}) {
 		t.Fatalf("drawers %v", got)
 	}
 	h := New().Handler()
-	for i, model := range []string{"sora-like-2", "typed-video-1"} {
+	for i, model := range []string{"agnes-video-2.5-flash", "typed-video-1"} {
 		code, obj, raw := asKey(t, h, "", "POST", "/v1/videos", `{"model":"studio/`+model+`","prompt":"waves on a rock"}`)
 		if id, _ := obj["id"].(string); code != 200 || !strings.HasPrefix(id, "video_studio.") {
 			t.Fatalf("%s: %d %s", model, code, raw)
@@ -379,10 +379,10 @@ func TestCustomProviderVideoTheUserMarks(t *testing.T) {
 	if err := provider.SetModelKind("studio/nope-9", "video"); err == nil {
 		t.Fatal("a model studio doesn't have was marked")
 	}
-	if err := provider.SetModelKind("studio/sora-like-2", "audio"); err == nil {
+	if err := provider.SetModelKind("studio/agnes-video-2.5-flash", "audio"); err == nil {
 		t.Fatal("a kind magpie doesn't know was taken")
 	}
-	for _, ref := range []string{"studio/sora-like-2", "studio/typed-video-1", "studio/vid-1", "studio/gpt-5.5"} {
+	for _, ref := range []string{"studio/agnes-video-2.5-flash", "studio/typed-video-1", "studio/vid-1", "studio/gpt-5.5"} {
 		if err := provider.SetModelKind(ref, ""); err != nil {
 			t.Fatal(err)
 		}

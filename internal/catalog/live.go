@@ -680,8 +680,10 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		// where the list marks no kind, Ark's domain "VideoGeneration" or
 		// an output of video without text (doubao-seedance-*, wan2-1-*),
 		// which is no model to chat with (axelburks on Discord: Ark's
-		// Seedance sat among its chat models, not under Video models)
-		films := r.Kind == "video" || r.Kind == "" && (r.Domain == "VideoGeneration" || slices.Contains(outs, "video") && !slices.Contains(outs, "text"))
+		// Seedance sat among its chat models, not under Video models);
+		// OpenAI's sora ids, whose bare list marks no kind and says no
+		// modalities at all (#4954)
+		films := r.Kind == "video" || r.Kind == "" && (r.Domain == "VideoGeneration" || slices.Contains(outs, "video") && !slices.Contains(outs, "text")) || FilmsID(id)
 		drawer := !films && !decision && (DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research") || r.Kind == "image" ||
 			r.Kind == "" && (r.Domain == "ImageGeneration" || slices.Contains(outs, "image") && !slices.Contains(outs, "text")))
 		// and none the list says answers without text (Ark's 3D models)
