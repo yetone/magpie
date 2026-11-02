@@ -1406,9 +1406,7 @@ function connectLine(a, kind) {
     const src = a.source || "";
     const sw = switchEntry(a);
     if (kindOf(a) === "agy") say(t("Not connected · once connected, start it with magpie's command"));
-    // not connected, yet through magpie for account failover (#1385): it
-    // read as Codex on its own while magpie served every request, so the
-    // line says why, and its account switch (below) turns it off
+    // through magpie only for failover (#1385): the line says so
     else if (a.failover) {
       say(t("Not connected · goes through magpie only to fail over to your other ChatGPT accounts"));
       words.title = t("magpie set openai_base_url in {agent}'s config.toml, so a request the ChatGPT account {agent} is signed in to has no allowance for goes on to your other ChatGPT accounts on in magpie. {agent} keeps to its own models. To stop it, tick Only switch {agent}'s sign-in under Providers › Codex, or switch those accounts off; connecting {agent} adds magpie's models.", { agent: a.name });
@@ -1418,7 +1416,10 @@ function connectLine(a, kind) {
     else if (src === "sub") say(t("Not connected · now on its Claude subscription"));
     else if (src === "chatgpt") say(t("Not connected · now signed in with ChatGPT · OpenAI's models stay available once connected"));
     else if (src === "key") say(t("Not connected · now on an API key of its own"));
-    else if (src.startsWith("providers:")) say(t("Not connected · now has {n} providers of its own", { n: src.slice(10) }));
+    else if (src.startsWith("providers:")) {
+      const n = src.slice(10);
+      say(t(n === "1" ? "Not connected · now has 1 provider of its own" : "Not connected · now has {n} providers of its own", { n }));
+    }
     else say(t("Not connected · {agent} uses its own settings", { agent: a.name }));
     if (sw) line.append(sw.button);
     if (a.appRestart) line.append(appRestart(a));
