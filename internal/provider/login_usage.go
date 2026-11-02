@@ -558,6 +558,14 @@ func codexReadingHeld(u map[string]SubscriptionQuota) bool {
 	return false
 }
 
+// codexHeldKnown is whether user's ChatGPT account was held by the Codex
+// app (codexReadingHeld's held) at its last reading, asking no one; false
+// when it was never read or the read failed.
+func codexHeldKnown(user string) bool {
+	e, ok := loginReadingKnown(Login{Agent: "codex", User: user})
+	return ok && e.q.Error == "" && e.q.Held
+}
+
 // knownLoginUsage is LoginUsage over the readings already in hand, with
 // no reading asked for: an account not read yet is left out, which its
 // callers read as "not known".

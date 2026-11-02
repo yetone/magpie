@@ -956,6 +956,96 @@ func TestCodexAppServerRestartedPastATurnStuckOnTheSpentAccount(t *testing.T) {
 	}
 }
 
+// When magpie becomes Codex's provider for the used-up account, the Codex
+// app's app-server is on that account as a switch off it leaves it: a
+// turn left open when quota ran out mid-turn held the restart for up to
+// codexTurnWindow, and the app kept Send grey though another provider's
+// model was picked (xiaoq6285 on Discord). Past a quiet one it is
+// restarted, as after SwitchWhenSpent; a turn still writing, or sending
+// through magpie, holds it, and the way back at the reset waits for any
+// open turn as before.
+func TestCodexAppServerRestartedPastATurnStuckWhenMagpieTakesOver(t *testing.T) {
+	signIn(t)
+	s := stubCodexApp(t)
+	now := time.Now()
+	quiet := func() (int, time.Time) { return 0, now.Add(-codexTurnStuckAfter - time.Second) }
+	step := func(busy func() (int, time.Time)) []int { return codexAppStep(context.Background(), now, busy) }
+
+	s.running, s.turnOpen = []int{60}, true
+	if got := step(quiet); got != nil {
+		t.Fatalf("on its account with room: ended %v", got)
+	}
+	s.on = true // the account is out: magpie is Codex's provider
+	if got := step(func() (int, time.Time) { return 0, now.Add(-time.Minute) }); got != nil {
+		t.Fatalf("Codex's last request through magpie a minute ago: ended %v", got)
+	}
+	s.written = true
+	if got := step(quiet); got != nil {
+		t.Fatalf("the turn still writing to its session: ended %v", got)
+	}
+	s.written = false
+	if got := step(quiet); !slices.Equal(got, []int{60}) {
+		t.Fatalf("a turn stuck on the used-up account as magpie took over: ended %v, want [60]", got)
+	}
+	if got := step(quiet); got != nil {
+		t.Fatalf("the new app-server read magpie as it started: ended %v", got)
+	}
+	// the reset: back on the account, whose app-server may run a real turn
+	s.on = false
+	if got := step(quiet); got != nil {
+		t.Fatalf("back on the account with a turn open: ended %v", got)
+	}
+	s.turnOpen = false
+	if got := step(quiet); !slices.Equal(got, []int{100}) {
+		t.Fatalf("back on the account, idle: ended %v, want [100]", got)
+	}
+}
+
+// A switch by hand in magpie off an account the Codex app holds (used up)
+// is one off a used-up account, as SwitchWhenSpent's is: the app-server is
+// restarted past a turn left stuck on it (xiaoq6285 on Discord switched
+// accounts after Codex said the quota ran out, and Send stayed grey). A
+// switch off an account with room, or one never read, waits for an open
+// turn as before.
+func TestCodexHandSwitchOffAHeldAccountIsSpent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
+	stubCodexApp(t)
+	old := listProcesses
+	listProcesses = func(context.Context) ([]proc.Process, error) { return nil, nil }
+	loginUsageCache.Lock()
+	oldCache := loginUsageCache.m
+	loginUsageCache.m = map[string]loginUsageEntry{
+		"codex/out@x":  {at: time.Now(), q: SubscriptionQuota{Provider: "codex", User: "out@x", Held: true}},
+		"codex/room@x": {at: time.Now(), q: SubscriptionQuota{Provider: "codex", User: "room@x"}},
+		"codex/fail@x": {at: time.Now(), q: SubscriptionQuota{Provider: "codex", User: "fail@x", Held: true, Error: "fetch failed"}},
+	}
+	loginUsageCache.Unlock()
+	t.Cleanup(func() {
+		listProcesses = old
+		loginUsageCache.Lock()
+		loginUsageCache.m = oldCache
+		loginUsageCache.Unlock()
+		DismissCodexDaemon()
+		DismissCodexApp()
+	})
+	for _, c := range []struct {
+		from  string
+		spent bool
+	}{{"out@x", true}, {"OUT@x", true}, {"room@x", false}, {"fail@x", false}, {"never@x", false}} {
+		codexApp.Lock()
+		codexApp.switched, codexApp.spent = false, false
+		codexApp.Unlock()
+		noteCodexSwitch(c.from, "b@x")
+		codexApp.Lock()
+		switched, spent := codexApp.switched, codexApp.spent
+		codexApp.Unlock()
+		if !switched || spent != c.spent {
+			t.Errorf("switched off %s: switched %v, spent %v, want true, %v", c.from, switched, spent, c.spent)
+		}
+	}
+}
+
 // codexSessionsQuietFor reads the sessions' write times: a file written
 // within d is not quiet, an older one or none is, and a sessions folder
 // that can't be read is not.

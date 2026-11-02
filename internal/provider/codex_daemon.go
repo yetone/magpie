@@ -168,8 +168,15 @@ func noteCodexSwitch(from, to string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// the Codex app's app-servers are found and restarted on
-	// KeepCodexAppOnItsProvider's own look, whatever this listing finds
-	codexAppAccountSwitched()
+	// KeepCodexAppOnItsProvider's own look, whatever this listing finds.
+	// A switch by hand off an account known held is one off a used-up
+	// account, as SwitchWhenSpent's is: a turn left open on it when quota
+	// ran out mid-turn is restarted past once quiet (xiaoq6285 on Discord)
+	if codexHeldKnown(from) {
+		codexAppSpentSwitch()
+	} else {
+		codexAppAccountSwitched()
+	}
 	ps, err := listProcesses(ctx)
 	known := err == nil
 	codexDaemonMu.Lock()

@@ -255,6 +255,9 @@ var codexApp struct {
 	sync.Mutex
 	seen  bool
 	route string
+	// out: whether the route last seen was magpie as Codex's provider for
+	// its used-up account (CodexAppRoute's out)
+	out bool
 	// stale: the app-servers started before Codex's provider last changed,
 	// each with how often it was ended
 	stale map[int]int
@@ -263,8 +266,10 @@ var codexApp struct {
 	// switched: Codex's ChatGPT account changed since the app-servers were
 	// last listed (codexAppAccountSwitched)
 	switched bool
-	// spent: the switch was off an account used up (SwitchWhenSpent), so a
-	// turn the app-servers left open can't be served by them any more
+	// spent: the app-servers are on an account used up, so a turn they
+	// left open can't be served by them any more: Codex was switched off
+	// it (SwitchWhenSpent, or by hand off one known held, noteCodexSwitch),
+	// or magpie became Codex's provider for it (out)
 	spent bool
 	// ended: the app-servers ended and no new one seen since, and by when
 	// one has to start (codexAppBackWait after the last end)
@@ -367,8 +372,13 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 	// at the first look only a used-up account's app-servers are ended:
 	// what the others read before magpie started isn't known
 	changed := !c.seen && out || c.seen && c.route != route || c.switched
+	// magpie becoming Codex's provider for the used-up account: the
+	// app-servers are on that account, and a turn left open on it when
+	// quota ran out mid-turn would hold their restart, and the app's grey
+	// Send, for up to codexTurnWindow (xiaoq6285 on Discord)
+	into := changed && out && (!c.seen || !c.out)
 	if !changed {
-		c.seen, c.route = true, route
+		c.seen, c.route, c.out = true, route, out
 	}
 	c.Unlock()
 	if changed {
@@ -384,12 +394,13 @@ func codexAppStep(ctx context.Context, now time.Time, busy func() (int, time.Tim
 		switch {
 		case c.switched:
 			c.why = "Codex's ChatGPT account was switched"
-		case !c.seen:
+		case into:
 			c.why = "Codex's account is used up, so magpie serves it"
 		default:
 			c.why = "where Codex's config sends it changed"
 		}
-		c.seen, c.route, c.switched = true, route, false
+		c.spent = c.spent || into
+		c.seen, c.route, c.out, c.switched = true, route, out, false
 		c.stale, c.stuck = map[int]int{}, false
 		for _, p := range pids {
 			c.stale[p] = 0
