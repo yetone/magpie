@@ -1492,6 +1492,15 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			// (codex.out) and the Codex app is told without a restart
 			codexMayBeUsedUp(relayedAcct)
 		}
+	} else if r.Context().Err() != nil && !sniff.whole() {
+		// Codex went away mid-reply (Esc, a closed window): nobody
+		// failed, and the row says it was canceled, as a routed turn's
+		// does, not a clean 200 (#4866)
+		call.Status, call.Error = canceled(r.Context())
+	} else if sniff.failed != "" {
+		// the backend's response.failed (or error event) under a 200:
+		// what it said, as serve tells a routed reply's (#4866)
+		call.Error, errType = sniff.failed, uu.ErrType
 	} else if said := codexStreamCut(res, sniff, began, r.Context()); said != "" {
 		// the stream's bytes stopped mid-reply, no failure said and no
 		// last event reached: the client still there hears it as the

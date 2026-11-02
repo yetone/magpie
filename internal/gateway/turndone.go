@@ -17,6 +17,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -123,7 +124,7 @@ func (ts *turns) begin(r *Route, now time.Time) {
 }
 
 // end is a request of a turn ending; final when its reply went whole to
-// the agent and called no tool.
+// the agent, finished, and called no tool (turnFinal).
 func (ts *turns) end(r *Route, final bool, now time.Time) {
 	if !r.turn {
 		return
@@ -165,9 +166,19 @@ func (ts *turns) end(r *Route, final bool, now time.Time) {
 // JSON value is looked at ("type":"tool_use"), never a key, as a Chat
 // delta may hold "tool_calls":[] with none; a string's escaped quotes
 // (\"tool_use\") never match.
+//
+// It sees too whether the reply ended unfinished (#4866, emo172): an error
+// event under a 200 (Anthropic's and Responses' "type":"error", Chat's and
+// Gemini's "error":{…}), a Responses reply failed or incomplete, a reply
+// cut at its length (max_tokens, length, MAX_TOKENS); and whether the
+// agent went away before the reply's last event, Esc or a closed window.
+// None of these is the task done, whatever status the request ends with.
 type toolScan struct {
-	tail []byte
-	saw  bool
+	tail  []byte
+	saw   bool
+	cut   bool            // the reply said it ended unfinished
+	ended bool            // the reply's last event, or a stop reason, went by
+	ctx   context.Context // the agent's request: done when it went away
 }
 
 var toolValues = [][]byte{
@@ -178,14 +189,78 @@ var toolValues = [][]byte{
 
 var geminiCall = []byte(`"functionCall"`)
 
+// replyMark is a member of a reply's JSON: a key and how its value starts.
+// The key is matched with its quotes, so a key a string holds, escaped
+// (\"type\"), never matches.
+type replyMark struct{ key, value []byte }
+
+func mark(key, value string) replyMark { return replyMark{[]byte(key), []byte(value)} }
+
+// cutMarks say a reply ended unfinished, in each wire format.
+var cutMarks = []replyMark{
+	mark(`"type"`, `"error"`), // Anthropic's and Responses' error event
+	mark(`"type"`, `"response.failed"`), mark(`"type"`, `"response.incomplete"`), mark(`"type"`, `"response.cancelled"`),
+	mark(`"error"`, `{`), // Chat's and Gemini's error, a failed response's; a success has "error":null
+	mark(`"stop_reason"`, `"max_tokens"`), mark(`"stop_reason"`, `"model_context_window_exceeded"`),
+	mark(`"finish_reason"`, `"length"`), mark(`"finishReason"`, `"MAX_TOKENS"`),
+}
+
+// endMarks say a reply got to its end; a cut one ends it too.
+var endMarks = []replyMark{
+	mark(`"type"`, `"response.completed"`), mark(`"type"`, `"message_stop"`),
+	mark(`"stop_reason"`, `"`), mark(`"finish_reason"`, `"`), mark(`"finishReason"`, `"`),
+}
+
+// clientTool is a Responses item Codex runs itself that isn't one of
+// toolValues: a tool_search_call it runs ("execution":"client"), which a
+// search the backend ran itself doesn't say.
+var clientTool = mark(`"execution"`, `"client"`)
+
 func (s *toolScan) add(p []byte) {
-	if s == nil || s.saw || len(p) == 0 {
+	if s == nil || len(p) == 0 || s.saw && s.cut {
 		return
 	}
 	b := append(s.tail, p...)
-	s.saw = toolIn(b)
+	s.saw = s.saw || toolIn(b) || marked(b, clientTool)
+	if !s.cut {
+		for _, m := range cutMarks {
+			if marked(b, m) {
+				s.cut, s.ended = true, true
+				break
+			}
+		}
+	}
+	if !s.ended {
+		for _, m := range endMarks {
+			if marked(b, m) {
+				s.ended = true
+				break
+			}
+		}
+		s.ended = s.ended || bytes.Contains(b, []byte("data: [DONE]")) || bytes.Contains(b, []byte("data:[DONE]")) ||
+			bytes.Contains(b, []byte("event: message_stop")) || bytes.Contains(b, []byte("event:message_stop"))
+	}
 	keep := min(len(b), 64) // longer than any value with its colon and spaces
 	s.tail = append(s.tail[:0:0], b[len(b)-keep:]...)
+}
+
+// marked reports whether b holds m's key, a colon and a value starting as
+// m's does, with any spaces between.
+func marked(b []byte, m replyMark) bool {
+	for i := 0; ; {
+		j := bytes.Index(b[i:], m.key)
+		if j < 0 {
+			return false
+		}
+		i += j + len(m.key)
+		rest := bytes.TrimLeft(b[i:], " \t\r\n")
+		if len(rest) == 0 || rest[0] != ':' {
+			continue
+		}
+		if bytes.HasPrefix(bytes.TrimLeft(rest[1:], " \t\r\n"), m.value) {
+			return true
+		}
+	}
 }
 
 func toolIn(b []byte) bool {
@@ -218,6 +293,21 @@ func toolIn(b []byte) bool {
 // called reports whether the reply called a tool; false for a nil scan.
 func (s *toolScan) called() bool { return s != nil && s.saw }
 
+// unfinished reports whether the reply ended without the task done: it said
+// it failed or was cut, or the agent went away before its end; false for a
+// nil scan.
+func (s *toolScan) unfinished() bool {
+	return s != nil && (s.cut || s.ctx != nil && s.ctx.Err() != nil && !s.ended)
+}
+
+// turnFinal says whether r's reply ends its turn: it went whole to the
+// agent and called no tool. A failure, a reply cut short or failed under a
+// 200, and the agent gone before the reply's end (Esc, a closed window)
+// are none (#4866).
+func turnFinal(r *Route) bool {
+	return r.Status < 400 && r.Error == "" && !r.tools.called() && !r.tools.unfinished()
+}
+
 // TurnFolder is the last part of a folder, for a notification.
 func TurnFolder(dir string) string {
 	dir = strings.TrimRight(strings.ReplaceAll(dir, `\`, "/"), "/")
@@ -234,7 +324,7 @@ func agentTurnOf(r *http.Request, kind string) (bool, *toolScan) {
 	if sub, _ := subagentOf(r.Header); kind != "" || sub != "" {
 		return false, nil
 	}
-	return true, &toolScan{}
+	return true, &toolScan{ctx: r.Context()}
 }
 
 // dirOf reads the folder body says its agent works in, when asked.
