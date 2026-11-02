@@ -135,6 +135,10 @@ type memberJSON struct {
 	// own `images` decides then). Named apart from the Gateway page's
 	// `imageSet`, which means the user answered for the model themselves
 	ImagesUnknown bool `json:"imagesUnknown,omitempty"`
+	// Free: Free first and Cheapest first count it as costing nothing
+	// (provider.FreeModel): its provider is the user's Free for me, or its
+	// vendor serves it free. The Routing page tags it (jiabubu on Discord)
+	Free bool `json:"free,omitempty"`
 }
 
 type modelRef struct {
@@ -370,6 +374,7 @@ func groupsState() groupsJSON {
 				m.CanFast = provider.CanFast(p, model)
 				m.OwnFast = m.CanFast && provider.OwnFast(p, model)
 				m.Fast = m.CanFast && g.IsFast(id)
+				m.Free = p.FreeModel(model)
 				for _, e := range served {
 					if e.Group == "" && e.Provider.ID == p.ID && e.Model == model {
 						m.Context, m.Images, m.ImagesUnknown = e.Context, seesImages(e), imagesUnknown(e)

@@ -281,3 +281,41 @@ func TestGroupModelImagesOnTheWire(t *testing.T) {
 		}
 	}
 }
+
+// A group's member says it is free when Free first would count it so
+// (provider.FreeModel): every model of a provider the user marked Free for
+// me, and none of one they didn't (jiabubu on Discord)
+func TestGroupMemberSaysFree(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", os.Getenv("HOME"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	for _, p := range []provider.Provider{
+		{ID: "scope", Name: "Scope", Key: "k", Chat: "http://127.0.0.1:1/v1", Models: []string{"qwen"}, CountFree: true},
+		{ID: "paid", Name: "Paid", Key: "k", Chat: "http://127.0.0.1:2/v1", Models: []string{"qwen"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := provider.SaveGroup(provider.Group{ID: "g", Name: "G", Members: []string{"scope/qwen", "paid/qwen"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range groupsState().Groups {
+		if g.ID != "g" {
+			continue
+		}
+		free := map[string]bool{}
+		for _, m := range g.Info {
+			if !m.Ready {
+				t.Fatalf("%s is not served", m.ID)
+			}
+			free[m.ID] = m.Free
+		}
+		if !free["scope/qwen"] || free["paid/qwen"] {
+			t.Fatalf("free: %v, want scope/qwen only", free)
+		}
+		return
+	}
+	t.Fatal("group g is not in the state")
+}
