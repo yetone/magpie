@@ -182,6 +182,12 @@ const (
 	// and a day over
 	longestQuota = 8 * 24 * time.Hour
 	longestRetry = 10 * time.Minute // failing again and again
+	// overloadRest: a vendor too busy for the request (vendorOverloaded)
+	// rests the model on that account this long when it says nothing of
+	// when, and no longer than overloadRestMost when it does: the same
+	// every time, never a step on the backoff ladder
+	overloadRest     = 30 * time.Second
+	overloadRestMost = time.Minute
 	// longestRateRest is the most a rate limit that keeps coming back as
 	// soon as its rest is over is waited out, when the vendor says nothing
 	// of when (rateRest)
@@ -1246,6 +1252,9 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// trial entry zcode.z.ai's firewall blocked (zcodeTrialBlocked): the
 	// account's GLM Coding Plan goes to another host
 	unserved := why == failOther && (modelRefused(status, body) || codeAssistModelMissing(c.p, status, body) || zcodeTrialBlocked(c, status, body))
+	// the vendor too busy for the request: the model's moment, not the
+	// account's fault (vendorOverloaded)
+	overloaded := why == failOther && !unserved && c.model != "" && vendorOverloaded(status, body)
 	r := Rest{Why: why, Status: status, By: "cooldown", Error: restError(status, body)}
 	// out of allowance or credit for as long as magpie guessed: the vendor
 	// named no time, nor did the user (asksAt)
@@ -1395,6 +1404,21 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 			r.By, r.Until = "off", now
 			return r
 		}
+		if overloaded {
+			// the vendor's servers too busy for anyone (celestial_eagle_99230
+			// on Discord: ChatGPT's 529 server_is_overloaded on gpt-6-sol
+			// rested eight Plus accounts each up to the 10-minute cap,
+			// "failed 5 times in a row", and left nothing to answer). It
+			// says nothing of the account: its model sits out a moment on
+			// it, as long as the vendor's Retry-After asks up to a minute,
+			// and no failure is counted, so the next overload rests it as
+			// briefly and its own failures climb as they did
+			d, r.By = overloadRest, "cooldown"
+			if w := retryAfter(header, now); w > 0 {
+				d, r.By = min(w, overloadRestMost), "retry-after"
+			}
+			break
+		}
 		counted := c.restKey()
 		if unserved {
 			counted = c.restID()
@@ -1475,7 +1499,7 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 	// a refusal that names its reset and points to the account's other
 	// models is the model's limit: the others still answer (WorkBuddy's
 	// "您也可以切换其他模型继续使用", #1669)
-	if pooled || unserved || modelBackoff || why == failQuota && resetsWhen.Match(wordsOf(body)) && otherModels.Match(wordsOf(body)) {
+	if pooled || unserved || modelBackoff || overloaded || why == failQuota && resetsWhen.Match(wordsOf(body)) && otherModels.Match(wordsOf(body)) {
 		id = c.restID()
 	}
 	// Cline's daily limit of one free model is that model's: its others,
@@ -1559,6 +1583,15 @@ func (s *Server) restAfterMarked(c candidate, status int, header http.Header, bo
 		go narrowWhenRead(c, r)
 	}
 	return r
+}
+
+// vendorOverloaded says a failure is the vendor's servers too busy for
+// the request — a 529 (Anthropic's overloaded_error, the ChatGPT backend's
+// server_is_overloaded), or a 5xx whose words say overloaded (Gemini's
+// 503 "The model is overloaded") — which any account of it would have
+// met alike (saidOverloaded).
+func vendorOverloaded(status int, body []byte) bool {
+	return saidOverloaded(status, string(wordsOf(body)))
 }
 
 // modelCooledDown is a relay's refusal of one model whose pooled
