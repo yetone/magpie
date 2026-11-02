@@ -1504,7 +1504,15 @@ func anthropicOutID(id string) string {
 	return safeCallID(anthropicIDMark, id)
 }
 
-func anthropicInID(id string) string { return rawCallID(anthropicIDMark, id) }
+func anthropicInID(id string) string {
+	// an id a relayed reply's was salted to (saltCallID, #4910) goes to a
+	// translated upstream as the client holds it: unique, and safe as it
+	// is, where decoding it would hand the upstream the salt's NUL
+	if _, salted := unsaltCallID(id); salted {
+		return id
+	}
+	return rawCallID(anthropicIDMark, id)
+}
 
 // safeCallID is id as one of [A-Za-z0-9_-] only: an id with another
 // character, or one beginning with mark, is mark and its base64url, which

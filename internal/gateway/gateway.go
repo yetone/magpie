@@ -5467,8 +5467,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		gather = &gathered{h: http.Header{}, status: http.StatusOK}
 		body = withFields(body, map[string]any{"stream": true})
 	}
-	searchFn := false    // Codex's tool search sent as a function
-	geminiWhole := false // a Gemini client's generateContent
+	searchFn := false            // Codex's tool search sent as a function
+	geminiWhole := false         // a Gemini client's generateContent
+	var toolSeen map[string]bool // the call ids the client holds (tool_use_ids.go)
 	// a model that wants its reasoning text back (#388, #1104)
 	replay := proto == provider.Responses && (replaysReasoning(model, p.Host()) || replaysReasoning(upstream, p.Host()))
 	switch proto {
@@ -5602,6 +5603,11 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		geminiWhole = !streamOf(body)
 		body = withoutFields(body, "stream")
 	case provider.Anthropic:
+		// what the client holds, taken before the upstream gets its own
+		// call ids back below, and those given back to it (tool_use_ids.go,
+		// #4910)
+		toolSeen = clientToolUseIDs(body)
+		body = saltedCallIDsBack(body)
 		// Claude Code's advisor, named by magpie's id (advisor.go)
 		body = advisorTools(body, p, upstream, wiresOf(r.Context()))
 		if p.IsBedrock() {
@@ -6192,13 +6198,23 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	if proto == provider.Anthropic {
 		thinkSigs = &sigFieldTidy{sse: sse}
 	}
-	// out is what a filter let through, through ids, phases and thinkSigs
+	// and a tool_use id the client has seen again is salted, so Claude
+	// Code's Set of the session keeps both (#4910, tool_use_ids.go)
+	var toolIDs *toolUseIDs
+	if proto == provider.Anthropic {
+		toolIDs = &toolUseIDs{seen: toolSeen, sse: sse}
+	}
+	// out is what a filter let through, through ids, phases, toolIDs and
+	// thinkSigs
 	out := func(b []byte) []byte {
 		if ids != nil {
 			b = ids.write(b)
 		}
 		if phases != nil {
 			b = phases.write(b)
+		}
+		if toolIDs != nil {
+			b = toolIDs.write(b)
 		}
 		if thinkSigs != nil {
 			b = thinkSigs.write(b)
@@ -6318,6 +6334,9 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			if phases != nil {
 				out = phases.write(out)
 			}
+			if toolIDs != nil {
+				out = toolIDs.write(out)
+			}
 			if thinkSigs != nil {
 				out = thinkSigs.write(out)
 			}
@@ -6424,6 +6443,15 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	}
 	if phases != nil {
 		write(phases.flush())
+	}
+	if toolIDs != nil {
+		// the salted tail goes on through thinkSigs, which holds a whole
+		// reply until its own drain below
+		b := toolIDs.flush()
+		if thinkSigs != nil {
+			b = thinkSigs.write(b)
+		}
+		write(b)
 	}
 	if thinkSigs != nil {
 		write(thinkSigs.flush())
