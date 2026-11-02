@@ -139,6 +139,19 @@ Each is left off when it isn't known: no folder said, or a folder the agent didn
 
 `TestPluginToldWhereTheAgentWorks` ([`plugin_workdir_test.go`](../../internal/gateway/plugin_workdir_test.go)) sends Claude Code's and Codex's captured requests and Pi-style ones from a folder in a repository, one not and one under an empty `.git`, through the fake plugin, and checks what the plugin read and that the vendor got neither header. `TestGitOnDiskIsWhatGitFinds`, `TestGitOnDiskAgreesWithGit` (each folder asked of `git rev-parse --git-common-dir` too, beside worktrees and a separate git dir git made itself) and `TestGitOnDiskUnreadIsUnknown` in [`workplace_test.go`](../../internal/provider/workplace_test.go) hold `GitOnDisk` to what git finds, and `GitAt` to the folder git finds the repository in.
 
+## The session the agent named, for a plugin's fetch
+
+The agent's own headers never reach a plugin's fetch: `forwardOnce` builds the plugin's request afresh. A plugin that keeps state per conversation had only the request's text to go by. Devin's cache keepalive keyed Claude Code Auto's permission check by its first user message, which magpie's translation merges with the transcript, so the history grew in the middle of it and every check looked new; a check left its older pings running beside the new ones (magpie-community/plugins#620, zelong77).
+
+So `forwardOnce` sets two more headers on every plugin request, each dropped first when the agent sent one and left off when the agent named none:
+
+| Header | Value |
+| --- | --- |
+| `x-magpie-session` (`provider.SessionToPluginHeader`) | The session the request names, as `sessionOf` reads it: the caller's own `X-Magpie-Session`, else the agent's header (Claude Code's `x-claude-code-session-id`, OpenCode's `x-opencode-session`, Codex's `session_id` and the rest of `sessionHeaders`). |
+| `x-magpie-subagent` (`provider.SubagentToPluginHeader`) | The Claude Code subagent the request is of (`x-claude-code-agent-id`, `subOf`); never sent for the lead's own turns. |
+
+`unsaid` in `host.js` takes both off whatever the plugin sends on. Devin 0.1.34 keys its keepalive by them. `TestPluginToldTheSession` ([`plugin_session_test.go`](../../internal/gateway/plugin_session_test.go)) sends Claude Code's lead and subagent, a caller's `X-Magpie-Session`, OpenCode's header and none, to a relayed Anthropic model and a translated Chat one, unstreamed, and checks what the plugin read and that the vendor got neither header.
+
 ## Whether another candidate follows
 
 A free model's vendor may queue a request for minutes: Qoder answers its code 10605 and its plugin waits in Qoder's queue as Qoder's client does (up to 4 minutes), CodeArts answers a 429 with `queue-status: queued` and its plugin polls the trace for up to 5 minutes. While another account, provider or routing group member could answer at once, that wait only keeps the agent waiting (axuhere on X: "模型请求正在排队 · 预计等待超过 10 分钟").

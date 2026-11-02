@@ -55,6 +55,22 @@ const (
 // (host.js), as it does the two above.
 const FallbackHeader = "X-Magpie-Fallback"
 
+// SessionToPluginHeader and SubagentToPluginHeader tell a plugin's fetch
+// the session the agent named (sessionOf: Claude Code's
+// x-claude-code-session-id and the rest) and the Claude Code subagent the
+// request is of (x-claude-code-agent-id). The agent's own headers never
+// reach a plugin, so a plugin that keeps state per conversation (Devin's
+// cache keepalive) had only the request's text to go by, and Claude Code
+// Auto's permission check, whose history grows in its one merged user
+// message, looked like a new conversation each time
+// (magpie-community/plugins#620). Each is left off when the agent named
+// none. The plugin host takes them off whatever the plugin sends on, as it
+// does the ones above.
+const (
+	SessionToPluginHeader  = "X-Magpie-Session"
+	SubagentToPluginHeader = "X-Magpie-Subagent"
+)
+
 // warmPlugin starts p's plugin host and runs its account's loader, which
 // may renew the sign-in, under ctx and through the account's proxy: what
 // a plugin's first fetch waits for besides its vendor. A failure is left

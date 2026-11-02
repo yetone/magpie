@@ -5217,6 +5217,16 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	}
 	if p.IsPlugin() {
 		req.Header.Set(provider.ConversationHeader, conversationID(in, body))
+		// the session and subagent the agent named, for a plugin that
+		// keeps state per conversation (plugins#620)
+		req.Header.Del(provider.SessionToPluginHeader)
+		req.Header.Del(provider.SubagentToPluginHeader)
+		if v := sessionOf(in); v != "" {
+			req.Header.Set(provider.SessionToPluginHeader, v)
+		}
+		if v := subOf(in); v != "" {
+			req.Header.Set(provider.SubagentToPluginHeader, v)
+		}
 		tellWorkPlace(req.Header, to, body)
 		req.Header.Del(provider.FallbackHeader)
 		if hasFallback(ctx) {

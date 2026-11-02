@@ -581,11 +581,12 @@ function asked(input, init) {
 }
 
 // MAGPIE_ONLY are the headers magpie tells a plugin's fetch where the agent
-// that asked works (WorkDirHeader and WorkGitHeader in internal/provider)
-// and that a queue needn't be waited out (FallbackHeader): for the plugin
-// to read, never for its vendor, so a plugin that sends on the headers it
-// was given sends them nowhere.
-const MAGPIE_ONLY = ["x-magpie-work-dir", "x-magpie-work-git", "x-magpie-fallback"]
+// that asked works (WorkDirHeader and WorkGitHeader in internal/provider),
+// that a queue needn't be waited out (FallbackHeader), and the session and
+// subagent the agent named (SessionToPluginHeader, SubagentToPluginHeader):
+// for the plugin to read, never for its vendor, so a plugin that sends on
+// the headers it was given sends them nowhere.
+const MAGPIE_ONLY = ["x-magpie-work-dir", "x-magpie-work-git", "x-magpie-fallback", "x-magpie-session", "x-magpie-subagent"]
 
 function unsaid(input, init) {
   if (input instanceof Request && MAGPIE_ONLY.some((k) => input.headers.has(k))) {
