@@ -384,9 +384,10 @@ func ompAt(at place, dir string, entry func() ompProviderEntry) *Agent {
 		// (commit/model-selection.ts), tiny names sessions and classifies
 		// and takes smol's model, memory takes tiny's, else smol's
 		// (ROLE_CONFIGURED_FALLBACK). omp's other roles (KIND_ROLE_IDS)
-		// are for kinds of model other than the chat models magpie writes
-		// for omp: image making, web search, speech, dictation, and the
-		// judge its find tool turns on for a TypeSafe jev model
+		// are for kinds of model other than chat: image making, web
+		// search, speech, dictation, and the judge its find tool turns on
+		// for a TypeSafe jev model. Of those magpie writes image models
+		// for omp (ompImageModels), picked in omp's own Roles view
 		role("commit", "commit", "commit", true),
 		role("tiny", "tiny", "tiny", true),
 		role("memory", "memory", "memory", true),
@@ -562,6 +563,10 @@ type ompModel struct {
 	Context   int          `yaml:"contextWindow,omitempty"`
 	MaxTokens int          `yaml:"maxTokens,omitempty"`
 	Input     []string     `yaml:"input,omitempty"`
+	// Kind is what the model is for when it isn't chat: "image" for one
+	// that draws, which omp's image role takes and no chat role does
+	// (ompImageModels)
+	Kind string `yaml:"kind,omitempty"`
 	// Cost is the model's price in USD per million tokens, the unit omp's
 	// calculateUsageCost divides by (omp 18.9.1, pi-catalog
 	// src/models.ts). omp's custom provider prices a call by it alone;
@@ -700,6 +705,8 @@ func ompProviderAt(gw, version string) ompProviderEntry {
 		}
 		ms = append(ms, e)
 	}
+	images := ompImageModels(version, ms)
+	ms = append(ms, images...)
 	e := ompProviderEntry{BaseURL: gw + "/v1", API: "openai-completions", Auth: "none",
 		Headers: map[string]string{"User-Agent": "omp"}, Models: ms}
 	if version != "" && !Newer(ompSessionSince, version) {
@@ -707,10 +714,50 @@ func ompProviderAt(gw, version string) ompProviderEntry {
 	}
 	// whqtian on Discord: a WSL omp under NAT asks Windows' address, where
 	// the gateway turns a request without a named key away
-	if key := keyAt(gw); key != gateway.Token {
+	// on loopback too once an image model is listed: omp's generate_image
+	// skips a model of a keyless provider as "credentials unavailable"
+	// (image-gen.ts, isAuthenticated turns auth: none's kNoAuth away; omp
+	// 18.15.0 run against a stand-in gateway), where chat goes without one
+	if key := keyAt(gw); key != gateway.Token || len(images) > 0 {
 		e.Auth, e.APIKey = "", key
 	}
 	return e
+}
+
+// ompKindSince is the first omp whose models.yml takes a model's kind and
+// a runner API such as openai-images (pi-coding-agent 18.7.0,
+// models-config-schema-bundle.ts); 18.6.3's schema knows neither and turns
+// the whole file away over an api it doesn't list.
+const ompKindSince = "18.7.0"
+
+// ompImageModels are magpie's image models (Settings › Images, as
+// generate_image offers them) as omp's image role takes them (treeman_26897
+// on Discord): kind image on openai-images, which omp's generate_image
+// posts to the provider's baseUrl + /images/generations, or /images/edits
+// with images to change (pi-ai images/openai-images.ts, omp 18.7.0 to
+// 18.15.0), the gateway's /v1/images. The role accepts a model of kind
+// image alone (model-roles.ts), and a chat model is of kind chat, so before
+// these the role listed none of magpie's. With one listed, the provider
+// takes the gateway's key in place of auth: none (ompProviderAt). None for
+// an omp before ompKindSince, or one whose version isn't known, as
+// ompTakesMax; nor one whose id a chat model in chat has already, which one
+// id can't be both.
+func ompImageModels(version string, chat []ompModel) []ompModel {
+	if version == "" || Newer(ompKindSince, version) {
+		return nil
+	}
+	var out []ompModel
+	for _, m := range gateway.ImageModels() {
+		if slices.ContainsFunc(chat, func(c ompModel) bool { return c.ID == m.ID }) {
+			continue
+		}
+		in := []string{"text"}
+		if m.Images {
+			in = append(in, "image")
+		}
+		out = append(out, ompModel{ID: m.ID, Name: m.Name, API: "openai-images", Kind: "image", Input: in})
+	}
+	return out
 }
 
 // ompGeminiMode is how omp asks a Gemini model on google-generative-ai
