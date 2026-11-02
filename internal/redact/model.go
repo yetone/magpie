@@ -344,6 +344,15 @@ func modelFits(s string, a, b int, kind string) bool {
 		}
 		return strings.IndexFunc(v, unicode.IsLetter) >= 0
 	case "SECRET":
+		// a name a call is made on is no value: gctx.GetInt64 in
+		// gctx.GetInt64("user_id") went as a made-up key (#4444). Only a
+		// name the '(' touches is a call's: in prose a secret may stand
+		// before a bracket of words ("the token is k3Xq9vB2mZ (rotated)"),
+		// and the model is asked about prose too, so notCode's wider
+		// reading of the rules' values isn't taken here
+		if b < len(s) && s[b] == '(' && identPath.MatchString(v) {
+			return false
+		}
 		if !wordByte(v[0]) || patternWords(v) || regexpLike(v) || idAfter(s, a) || strings.ContainsRune(v, ' ') && clockIn.MatchString(v) || uuidIn.MatchString(v) || strings.Contains(v, `": `) || strings.Contains(v, `", "`) || linkRe.MatchString(v) {
 			return false
 		}
