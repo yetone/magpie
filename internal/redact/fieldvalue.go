@@ -32,6 +32,15 @@ import (
 //     "2.4.0-beta02" (dniray on Discord, v0.1.1917: package names and
 //     their versions were replaced). A release's version is published for
 //     anyone to read (versionValue).
+//   - the next field, when the one named has no value: a command line
+//     sets UI_PASSWORD to nothing in env -i UI_PASSWORD= UI_ADDR=127.0.0.1:39117
+//     ./syncer serve, and the SECRET rule, which lets a space stand after
+//     = (password = hunter2 in a config), took UI_ADDR=127.0.0.1 for
+//     UI_PASSWORD's value (mx_albert on Discord). A value that starts as
+//     an assignment of its own, after a space, is the next field
+//     (nextField), and that field is read on its own: UI_ADDR's address
+//     goes as written, and UI_PASSWORD= UI_TOKEN=t0k3nValue2 still masks
+//     the token.
 //
 // A secret written down still masks: password=hunter2pass9,
 // API_KEY=AbC123dEf456GhI789, token: t0k3nValue2, a password of one word
@@ -226,4 +235,49 @@ func identWords(v string) []string {
 		out = append(out, part[start:])
 	}
 	return out
+}
+
+// nextFieldRe is a field being set at a value's start, as a command
+// line, a logfmt line or a flag sets one: an env var's name in capitals
+// (UI_ADDR=), one in lower case (addr=, data-dir=), or a flag
+// (--listen=); then =, and something other than another =, so a base64
+// value's padding (dGVzdA==) is never taken for one.
+var nextFieldRe = regexp.MustCompile(`^(?:[A-Z_][A-Z0-9_]*|[a-z_][a-z0-9_-]*|--?[A-Za-z][A-Za-z0-9_-]*)=[^=]`)
+
+// nextField says the value at s[a:b] is not the value of the field before
+// it but the next field: the name before it was set to nothing (UI_PASSWORD=
+// UI_ADDR=127.0.0.1:39117), as a space stands between the separator and
+// a value that is itself an assignment.
+func nextField(s string, a, b int) bool {
+	return a > 0 && (s[a-1] == ' ' || s[a-1] == '\t') && nextFieldRe.MatchString(s[a:b])
+}
+
+// fieldMatches are re's matches in s as FindAllStringSubmatchIndex has
+// them, but where a match's value (group 1) is the next field (nextField)
+// the match is dropped and the search goes on from that value, so the
+// next field is read with its own name: UI_PASSWORD= UI_TOKEN=t0k3nValue2
+// masks the token as UI_TOKEN's, and UI_PASSWORD= UI_ADDR=127.0.0.1 masks
+// nothing. The search from the value starts where a space is before it,
+// so a pattern's ^ there is the start of a word, as it is after a space.
+func fieldMatches(re *regexp.Regexp, s string) [][]int {
+	var out [][]int
+	for at := 0; ; {
+		again := -1
+		for _, m := range re.FindAllStringSubmatchIndex(s[at:], -1) {
+			for x := range m {
+				if m[x] >= 0 {
+					m[x] += at
+				}
+			}
+			if len(m) > 3 && m[2] > at && nextField(s, m[2], m[3]) {
+				again = m[2]
+				break
+			}
+			out = append(out, m)
+		}
+		if again < 0 {
+			return out
+		}
+		at = again
+	}
 }
