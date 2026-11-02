@@ -109,7 +109,7 @@ func TestPluginPageServedShutIn(t *testing.T) {
 		t.Fatalf("the page: %d %s", w.Code, w.Body)
 	}
 	csp := w.Header().Get("Content-Security-Policy")
-	for _, want := range []string{"sandbox allow-scripts", "default-src 'none'", "connect-src 'none'", "script-src 127.0.0.1:3437" + pluginPagePrefix + tok + "/;", "form-action 'none'", "frame-src 'none'"} {
+	for _, want := range []string{"sandbox allow-scripts", "default-src 'none'", "connect-src 'none'", "script-src https://127.0.0.1:3437" + pluginPagePrefix + tok + "/ http://127.0.0.1:3437" + pluginPagePrefix + tok + "/;", "form-action 'none'", "frame-src 'none'"} {
 		if !strings.Contains(csp, want) {
 			t.Errorf("policy %q has no %q", csp, want)
 		}

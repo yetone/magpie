@@ -39,6 +39,52 @@ const pageServicePath = "_magpie/service/"
 // plugin's scripts would have the window's cookie and its /api.
 const pageServicePolicy = "sandbox allow-scripts; frame-ancestors 'self'"
 
+// serviceSelf is policy, a Content-Security-Policy the page's service
+// sent, with every 'self' followed by self, the service's root under this
+// server named with its scheme (ownSources). To the service, 'self' is
+// all of 127.0.0.1:<port>, which is that root here. But what it sends runs
+// sandboxed (pageServicePolicy), in an opaque origin, and WebKit doesn't
+// match a fetch to 'self' there: the service's own page refused its every
+// fetch of api/… (YangHonghang on #4198, `connect-src 'self'`), while
+// Chromium let it through. connect-src gets ws:// and wss:// too, for a WebSocket,
+// which 'self' covers and an http(s) source doesn't. 'self' stays, so
+// nothing a browser allowed before is taken away. A policy in a <meta>
+// tag of the service's page isn't seen here, and is the plugin's to write
+// with whole sources.
+func serviceSelf(policy string, self []string) string {
+	ds := strings.Split(policy, ";")
+	for i, d := range ds {
+		f := strings.Fields(d)
+		if len(f) < 2 {
+			continue
+		}
+		add := append([]string(nil), self...)
+		if strings.EqualFold(f[0], "connect-src") || strings.EqualFold(f[0], "default-src") {
+			for _, s := range self {
+				if rest, ok := strings.CutPrefix(s, "http"); ok {
+					add = append(add, "ws"+rest)
+				}
+			}
+		}
+		out := []string{f[0]}
+		named := false
+		for _, src := range f[1:] {
+			out = append(out, src)
+			if strings.EqualFold(src, "'self'") && !named {
+				out = append(out, add...)
+				named = true
+			}
+		}
+		if named {
+			ds[i] = " " + strings.Join(out, " ")
+			if i == 0 {
+				ds[i] = ds[i][1:]
+			}
+		}
+	}
+	return strings.Join(ds, ";")
+}
+
 // pageServiceTransport dials the service on loopback, never through a
 // proxy.
 var pageServiceTransport = &http.Transport{
@@ -115,6 +161,16 @@ func servePageService(rw http.ResponseWriter, r *http.Request, p *pluginPage, to
 		ModifyResponse: func(res *http.Response) error {
 			h := res.Header
 			h.Del("Set-Cookie")
+			// the service's own policy, its 'self' named for WebKit
+			// (serviceSelf); then magpie's sandbox
+			if v := h.Values("Content-Security-Policy"); len(v) > 0 {
+				self := ownSources(r, root)
+				out := make([]string, len(v))
+				for i, policy := range v {
+					out[i] = serviceSelf(policy, self)
+				}
+				h["Content-Security-Policy"] = out
+			}
 			h.Add("Content-Security-Policy", pageServicePolicy)
 			h.Set("Referrer-Policy", "no-referrer")
 			h.Set("X-Content-Type-Options", "nosniff")

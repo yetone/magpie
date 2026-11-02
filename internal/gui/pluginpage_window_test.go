@@ -28,8 +28,8 @@ func TestPluginPageWindowPolicy(t *testing.T) {
 		source string
 	}{
 		{"desktop", desktopHost, true, desktop},
-		{"web", "127.0.0.1:3437", false, "127.0.0.1:3437"},
-		{"web localhost", "localhost", false, "localhost"},
+		{"web", "127.0.0.1:3437", false, "https://127.0.0.1:3437"},
+		{"web localhost", "localhost", false, "https://localhost"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			var handler http.Handler = pageMux()
@@ -61,5 +61,62 @@ func TestPluginPageWindowPolicy(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A browser's page (magpie web) names its folder with a scheme: WebKit
+// takes a scheme-less source's scheme from the sandboxed frame's opaque
+// origin and matched nothing, so iOS Safari loaded no script (#4198).
+// Served over http, or https with TLS ended by a proxy in front, both
+// schemes are named, on the Host the browser asked for; what the proxy
+// says in its forwarding headers changes nothing.
+func TestPluginPageWebPolicyNamesItsScheme(t *testing.T) {
+	pagePlugins(t)
+	page := pluginPages()[0]
+	for _, c := range []struct {
+		name, host string
+		hdr        map[string]string
+	}{
+		{"http", "192.168.1.5:3430", nil},
+		{"https behind nginx", "magpie.test.xyz", map[string]string{"X-Forwarded-Proto": "https", "X-Forwarded-For": "1.2.3.4"}},
+		{"https behind Cloudflare", "magpie.test.xyz", map[string]string{"X-Forwarded-Proto": "https", "Cf-Visitor": `{"scheme":"https"}`, "X-Forwarded-Host": "evil.example"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", pluginPagePrefix+page.token+"/index.html", nil)
+			r.Host = c.host
+			for k, v := range c.hdr {
+				r.Header.Set(k, v)
+			}
+			w := do(pageMux(), r)
+			if w.Code != http.StatusOK {
+				t.Fatalf("HTTP %d", w.Code)
+			}
+			policy := w.Header().Get("Content-Security-Policy")
+			folder := c.host + pluginPagePrefix + page.token + "/"
+			want := "https://" + folder + " http://" + folder
+			for _, d := range []string{"script-src " + want + ";", "style-src " + want + " 'unsafe-inline';", "img-src " + want + " data:;", "font-src " + want + ";", "media-src " + want + ";"} {
+				if !strings.Contains(policy, d) {
+					t.Errorf("policy has no %q: %s", d, policy)
+				}
+			}
+			// no source without its scheme is left
+			for _, d := range strings.Split(policy, ";") {
+				for _, src := range strings.Fields(d)[1:] {
+					if strings.Contains(src, "/_magpie/") && !strings.HasPrefix(src, "https://") && !strings.HasPrefix(src, "http://") {
+						t.Errorf("scheme-less source %q in %s", src, policy)
+					}
+				}
+			}
+			if strings.Contains(policy, "evil.example") {
+				t.Errorf("a forwarding header named a host: %s", policy)
+			}
+		})
+	}
+	// the desktop window names its own transport alone
+	r := httptest.NewRequest("GET", pluginPagePrefix+page.token+"/index.html", nil)
+	r.Host = "localhost"
+	w := do(ownWindow(pageMux()), r)
+	if policy := w.Header().Get("Content-Security-Policy"); strings.Contains(policy, "https://") {
+		t.Errorf("the window's policy names https: %s", policy)
 	}
 }

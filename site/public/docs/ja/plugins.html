@@ -912,6 +912,7 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
     <ul>
       <li>ページはスクリプトだけを許したサンドボックスのフレーム（<code>sandbox="allow-scripts"</code>、<code>Content-Security-Policy</code> でも同じ）で、独自のオリジンで動きます。ウィンドウにも、magpie の cookie にも、ウィンドウのストレージにも届きません。</li>
       <li>ポリシーで読み込めるのは自分のファイルだけです。<code>connect-src 'none'</code> なので <code>fetch</code>、WebSocket、beacon は使えず、フォームやフレームもありません。スクリプトはファイル（<code>&lt;script src&gt;</code>）にする必要があり、インラインは使えません。インラインのスタイルと <code>data:</code> の画像は使えます。</li>
+      <li>sandbox のフレームでは、WebKit（iPhone と Mac の Safari、Mac と Linux のウィンドウ）は <code>'self'</code> やスキームのないソースを何にも一致させないことがあります。<code>connect-src 'self'</code> の <code>fetch</code> は拒否されます。プラグインのサービスが返すページも sandbox で動くので、自分のポリシーには完全なソース（<code>https://…</code>）を書いてください。サービスが <code>magpie web</code> 経由で送る <code>Content-Security-Policy</code> ヘッダーでは、magpie が各 <code>'self'</code> の後にサービスのアドレスを足します。<code>&lt;meta&gt;</code> タグのものには足しません。</li>
       <li>このようなフレームが送れるリクエスト（<code>Origin: null</code>、フレームからのリクエスト、ほかのサイトのリクエスト）は magpie の API がすべて拒否するので、ポリシーがなくてもページは API に入れません。ファイルは <code>/_magpie/plugin/&lt;token&gt;/</code> から配信され、token は magpie を起動するたびに変わります。</li>
       <li>それでもページは自分をほかのサイトへ移動できます。そのサイトがフレームを持つことになるので、読み取りは秘密でないものだけを返します。ページが読めるものは公開されたものとして扱ってください。</li>
       <li>ページが捕まえなかったエラーは、その場所に<span class="ui">このページは動作を停止しました</span>と<span class="ui">再試行</span>を表示します。ページ自身のスクリプトのエラーはページには「Script error.」としか届かないので、詳しくはウィンドウのコンソールを見てください。</li>

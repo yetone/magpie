@@ -912,6 +912,7 @@ document.getElementById(<span class="s">"calls"</span>).textContent = `${s.calls
     <ul>
       <li>页面运行在只允许脚本的沙盒框架里（<code>sandbox="allow-scripts"</code>，它的 <code>Content-Security-Policy</code> 里也一样），有自己独立的 origin。它碰不到窗口、magpie 的 cookie 和窗口的存储。</li>
       <li>它的策略只允许加载自己的文件：<code>connect-src 'none'</code>，所以没有 <code>fetch</code>、WebSocket 或 beacon，也没有表单和框架。脚本必须是文件（<code>&lt;script src&gt;</code>），不能内联；内联样式和 <code>data:</code> 图片可以。</li>
+      <li>在 sandbox 框架里，WebKit（iPhone 和 Mac 上的 Safari、Mac 和 Linux 的窗口）的 <code>'self'</code> 和不带 scheme 的源可能什么都匹配不上：<code>connect-src 'self'</code> 下的 <code>fetch</code> 会被拦下。插件服务提供的页面同样在 sandbox 里运行，它自己的策略应写完整的源（<code>https://…</code>）。服务经 <code>magpie web</code> 发出的 <code>Content-Security-Policy</code> 响应头里，magpie 会在每个 <code>'self'</code> 后面补上服务的地址，<code>&lt;meta&gt;</code> 标签里的不会。</li>
       <li>这种框架能发出的请求（<code>Origin: null</code>、框架请求、别的网站的请求），magpie 的 API 都会拒绝，所以就算没有策略，页面也进不了 API。它的文件从 <code>/_magpie/plugin/&lt;token&gt;/</code> 提供，token 每次 magpie 启动都会变。</li>
       <li>页面仍然可以把自己跳转到别的网站，那个网站就接管了它的框架。所以读取只给不机密的东西：把页面能读到的都当作公开的。</li>
       <li>页面没接住的错误会在它的位置显示<span class="ui">此页面已停止工作</span>和<span class="ui">重试</span>。它自己脚本的错误在页面里只显示为“Script error.”，详细内容看窗口的控制台。</li>

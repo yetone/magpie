@@ -38,11 +38,11 @@ const pages = [
   entry(BROKEN, "broken", "Broken", []),
 ];
 
-// what pluginpage.go's pagePolicy sends, for this host: the page's folder
-// under each scheme the window is served on
+// what pluginpage.go's pagePolicy sends a browser, for this host: the
+// page's folder under https and http (ownSources, #4198)
 const policy = (tok) => {
   const dir = `magpie.test/_magpie/plugin/${tok}/`;
-  const own = `wails://${dir} http://${dir} https://${dir}`;
+  const own = `https://${dir} http://${dir}`;
   return [
     "sandbox allow-scripts", "default-src 'none'", `script-src ${own}`, `style-src ${own} 'unsafe-inline'`,
     `img-src ${own} data:`, `font-src ${own}`, `media-src ${own}`, "connect-src 'none'", "frame-src 'none'",

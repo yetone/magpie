@@ -228,13 +228,7 @@ func pagePolicy(r *http.Request, tok string) string {
 	own := "'self'"
 	if r.Host != "" {
 		// the page's own folder: not the window's files, nor /api
-		own = r.Host + pluginPagePrefix + tok + "/"
-		// WebKit does not match a scheme-less host source under wails://.
-		// Only the native handler supplies this scheme; web keeps its
-		// relative source so HTTP, HTTPS and reverse proxies still work.
-		if scheme, _ := r.Context().Value(windowSchemeKey{}).(string); scheme != "" {
-			own = scheme + "://" + own
-		}
+		own = strings.Join(ownSources(r, pluginPagePrefix+tok+"/"), " ")
 	}
 	return strings.Join([]string{
 		"sandbox allow-scripts",
@@ -252,6 +246,27 @@ func pagePolicy(r *http.Request, tok string) string {
 		"base-uri 'none'",
 		"frame-ancestors 'self'",
 	}, "; ")
+}
+
+// ownSources are the sources, with their scheme, that name path on the
+// address r came to. A sandboxed frame's origin is opaque, and a source
+// with no scheme takes its scheme from that origin: iOS Safari (iOS 18.7)
+// matched the scheme-less host/path to nothing and never asked for a
+// page's scripts, so the page was broken at 10s (#4198, orinsid and
+// YangHonghang). Chromium, and the newer WebKit Playwright runs, take
+// the scheme from the URL loaded, which is why only the iPhone failed.
+//
+// The desktop window names its own transport (ownWindow): wails://, or
+// http:// on Windows (#2501). A browser's page (magpie web) can come over
+// http or https, directly or through a proxy that ends TLS before magpie
+// (nginx, Cloudflare), and nothing magpie trusts says which, so both are
+// named: the same host, port and folder either way, and an https page
+// can't load http:// files anyway (mixed content).
+func ownSources(r *http.Request, path string) []string {
+	if scheme, _ := r.Context().Value(windowSchemeKey{}).(string); scheme != "" {
+		return []string{scheme + "://" + r.Host + path}
+	}
+	return []string{"https://" + r.Host + path, "http://" + r.Host + path}
 }
 
 // pageHostWait is how long a page's HTML waits for its plugin's host,

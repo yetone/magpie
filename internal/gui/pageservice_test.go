@@ -45,6 +45,8 @@ func newFakeService(t *testing.T) *fakeService {
 		switch r.URL.Path {
 		case "/":
 			http.SetCookie(rw, &http.Cookie{Name: "svc", Value: "1"})
+			// YangHonghang's chat service on #4198
+			rw.Header().Set("Content-Security-Policy", "default-src 'self'; connect-src 'self'; img-src 'self' data:")
 			rw.Header().Set("Content-Type", "text/html; charset=utf-8")
 			fmt.Fprint(rw, `<!doctype html><title>chat</title><script src="app.js"></script>`)
 		case "/api/chat":
@@ -255,6 +257,15 @@ func TestPluginPageServiceProxied(t *testing.T) {
 	if res.Header.Get("Referrer-Policy") != "no-referrer" {
 		t.Errorf("Referrer-Policy %q", res.Header.Get("Referrer-Policy"))
 	}
+	// the service's own 'self' named with its scheme, for WebKit's
+	// sandboxed frame (#4198); magpie's sandbox still after it
+	root := strings.TrimPrefix(srv.URL, "http://") + strings.TrimSuffix(p.URL, "index.html") + pageServicePath
+	if v := res.Header.Values("Content-Security-Policy"); len(v) != 2 || v[1] != pageServicePolicy ||
+		v[0] != "default-src 'self' https://"+root+" http://"+root+" wss://"+root+" ws://"+root+
+			"; connect-src 'self' https://"+root+" http://"+root+" wss://"+root+" ws://"+root+
+			"; img-src 'self' https://"+root+" http://"+root+" data:" {
+		t.Errorf("the service's policy: %q", v)
+	}
 
 	// a path and query of the service's own
 	res = get(base + "api/icon/a%2Fb.png?size=2")
@@ -372,6 +383,24 @@ func TestServiceLocation(t *testing.T) {
 	} {
 		if got := serviceLocation(c.loc, 3477, c.up); got != c.want {
 			t.Errorf("serviceLocation(%q, %q) = %q, want %q", c.loc, c.up, got, c.want)
+		}
+	}
+}
+
+// serviceSelf names the service's root beside each 'self', in any case,
+// once a directive, and leaves a policy with none as it came.
+func TestServiceSelf(t *testing.T) {
+	self := []string{"https://h/r/", "http://h/r/"}
+	for _, c := range []struct{ in, want string }{
+		{"connect-src 'self'", "connect-src 'self' https://h/r/ http://h/r/ wss://h/r/ ws://h/r/"},
+		{"script-src 'SELF' 'unsafe-inline'; frame-ancestors 'none'", "script-src 'SELF' https://h/r/ http://h/r/ 'unsafe-inline'; frame-ancestors 'none'"},
+		{"img-src 'self' 'self'", "img-src 'self' https://h/r/ http://h/r/ 'self'"},
+		{"default-src 'none'; style-src https://cdn.example", "default-src 'none'; style-src https://cdn.example"},
+		{"", ""},
+		{"upgrade-insecure-requests; script-src 'self'", "upgrade-insecure-requests; script-src 'self' https://h/r/ http://h/r/"},
+	} {
+		if got := serviceSelf(c.in, self); got != c.want {
+			t.Errorf("serviceSelf(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }

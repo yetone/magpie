@@ -316,8 +316,19 @@ starts a Bun host.
   (macOS, Linux), and a sandboxed frame has an opaque origin, so a CSP
   source without a scheme matches only http(s) there. `ownWindow` puts the
   native scheme on the request's context and `pagePolicy` names the folder
-  under it (#2501); the web keeps a scheme-less source.
-  `TestPluginPageWindowPolicy` checks the policy, and
+  under it (#2501). iOS Safari (18.7) takes a missing scheme from that
+  opaque origin on http(s) too, and loaded none of a page's scripts from
+  `magpie web` (#4198): a browser's policy names the folder
+  under both `https://` and `http://` (`ownSources`), since a proxy that
+  ends TLS (nginx, Cloudflare) leaves magpie nothing it trusts to say
+  which. A page's service sends its own policy, where `'self'` meant its
+  whole 127.0.0.1 origin; sandboxed, WebKit refused the service page's
+  fetches under `connect-src 'self'`. `serviceSelf` names the service's
+  root under both schemes after each `'self'` in a policy header it sends
+  (and `ws://`, `wss://` in `connect-src` and `default-src`); a `<meta>`
+  policy is the plugin's to write with whole sources.
+  `TestPluginPageWindowPolicy`, `TestPluginPageWebPolicyNamesItsScheme`,
+  `TestServiceSelf` and `TestPluginPageServiceProxied` check the policies, and
   `TestPluginPageLoadsItsFilesInTheWindow` loads a page through
   `ownWindow` in a real WKWebView; Playwright, on http, can't see it.
 - **Slots.** A page names a slot with `<div class="plugin-slot"

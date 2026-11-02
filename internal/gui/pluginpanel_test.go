@@ -105,7 +105,7 @@ func TestPluginPanelsServedShutIn(t *testing.T) {
 			t.Fatalf("panel %d: %d %s", i, w.Code, w.Body)
 		}
 		csp := w.Header().Get("Content-Security-Policy")
-		for _, want := range []string{"sandbox allow-scripts", "connect-src 'none'", "script-src 127.0.0.1:3437" + pluginPagePrefix + tok + "/;"} {
+		for _, want := range []string{"sandbox allow-scripts", "connect-src 'none'", "script-src https://127.0.0.1:3437" + pluginPagePrefix + tok + "/ http://127.0.0.1:3437" + pluginPagePrefix + tok + "/;"} {
 			if !strings.Contains(csp, want) {
 				t.Errorf("panel %d: policy %q has no %q", i, csp, want)
 			}
