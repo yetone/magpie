@@ -171,6 +171,33 @@ func TestPluginFailover(t *testing.T) {
 				t.Fatalf("%s: the next request tried %s again: %d %s (tried %v)", how, first, code, body, seen)
 			}
 			if how == "gone" {
+				// one 401 on an access token not due yet, with a
+				// refresh token beside it, makes the token due and
+				// keeps the sign-in (plugins#618): the account is
+				// marked when the token renewed for its next request
+				// is turned away too
+				for _, l := range provider.Logins("fakeco") {
+					if strings.HasPrefix(l.User, first+"@") && l.Lapsed != "" {
+						t.Fatalf("%s is marked for one 401 its refresh token can renew: %+v", first, l)
+					}
+				}
+				for again := 0; ; again++ {
+					restingUntil.Lock()
+					restingUntil.m = map[string]time.Time{}
+					restingUntil.Unlock()
+					sticks.Lock()
+					sticks.m = map[string]stick{}
+					sticks.Unlock()
+					mu.Lock()
+					tried = nil
+					mu.Unlock()
+					if _, _, seen := ask("fakeco/fake-1"); contains(seen, first) {
+						break
+					}
+					if again == 20 {
+						t.Fatalf("%s wasn't tried again", first)
+					}
+				}
 				for _, l := range provider.Logins("fakeco") {
 					if strings.HasPrefix(l.User, first+"@") && !strings.Contains(l.Lapsed, "sign-in has expired") {
 						t.Fatalf("%s refused isn't marked: %+v", first, l)

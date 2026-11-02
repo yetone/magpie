@@ -2699,9 +2699,43 @@ async function doFetch(id, record, params) {
   return via.run(params.proxy ?? "", () => inScope(params.provider, key, () => fetchAs(id, record, key, params)))
 }
 
+// staleAccess is what a bare 401 says of the OAuth sign-in at key that
+// had a refresh token when the request began (before): "kept" when the
+// access token alone was turned away, so the next request renews it, and
+// nothing, for the 401 to mark the account, when the refresh is what
+// failed. An access token the vendor dropped before the expiry it was
+// stored with (an idle account, another client trading the same refresh
+// token: plugins#618) isn't the sign-in gone. So such a 401, with the
+// access token the request began with still the stored one and not due
+// yet, makes it due (expires 1) and keeps the sign-in: the plugin's
+// loader, or magpie's auth.refresh, renews it on the next request. The
+// account is marked when the token was renewed for this request and
+// still turned away, or was due and the plugin didn't renew it; a
+// refresh the vendor refuses says so itself (signIn "expired"). A
+// sign-in that can't be read now is unknown: kept, not marked.
+function staleAccess(key, before) {
+  const now = readAuthState()
+  if (!now.known) return "kept"
+  if (before?.type !== "oauth" || !before.refresh) return ""
+  const cur = now.all[key]
+  if (cur?.type !== "oauth" || cur.refresh !== before.refresh || cur.access !== before.access) return ""
+  const exp = Number(before.expires)
+  if (!Number.isFinite(exp) || exp <= Date.now()) return ""
+  changeAuth((all) => {
+    const a = all[key]
+    if (a?.type !== "oauth" || a.access !== before.access || a.refresh !== before.refresh) return false
+    all[key] = { ...a, expires: 1 }
+  })
+  forgetAccount(key)
+  return "kept"
+}
+
 async function fetchAs(id, record, key, params) {
   const { controller: ctl, gate } = record
   const { provider, model, npm, url, method, headers, body, session } = params
+  // the sign-in as the request found it, before its loader or magpie
+  // renewed it: a 401 is judged against it (staleAccess)
+  const before = key ? readAuth()[key] : undefined
   try {
     const o = await options(provider, key)
     checkFetch(record)
@@ -2755,6 +2789,10 @@ async function fetchAs(id, record, key, params) {
     transitionFetch(record, "streaming")
     const rh = {}
     res.headers.forEach((v, k) => (rh[k] = v))
+    if (res.status === 401 && !("x-magpie-sign-in" in rh) && key) {
+      const said = staleAccess(key, before)
+      if (said) rh["x-magpie-sign-in"] = said
+    }
     const head = headCost(rh)
     if (head.entries > HEAD_ENTRIES || head.n > HEAD_MAX) {
       // the reply's head is past magpie's envelope: give the fetch up rather
