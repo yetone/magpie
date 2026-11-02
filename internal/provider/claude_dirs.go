@@ -283,6 +283,7 @@ func claudeSavedDir(user string) (string, error) {
 		return "", errors.New(why)
 	}
 	if has {
+		claudeOnboarded(dir, nil)
 		return dir, nil
 	}
 	c, _ := parseClaudeCredentials(ls[i].Auth)
@@ -297,15 +298,54 @@ func claudeSavedDir(user string) (string, error) {
 		return "", err
 	}
 	// who it is, as Claude Code keeps it beside a sign-in it made
-	profile := filepath.Join(dir, ".claude.json")
-	if _, err := os.Stat(profile); os.IsNotExist(err) && len(ls[i].Profile) > 0 {
-		var acct map[string]any
-		if json.Unmarshal(ls[i].Profile, &acct) == nil {
-			pb, _ := json.MarshalIndent(map[string]any{"oauthAccount": acct, "hasCompletedOnboarding": true}, "", "  ")
-			_ = writePrivate(profile, append(pb, '\n'))
-		}
+	var acct map[string]any
+	if len(ls[i].Profile) > 0 && json.Unmarshal(ls[i].Profile, &acct) != nil {
+		acct = nil
 	}
+	claudeOnboarded(dir, acct)
 	return dir, nil
+}
+
+// claudeOnboarded marks Claude Code's onboarding done in config directory
+// dir's .claude.json, as Claude Code does once a person has gone through
+// it. Without the mark its interactive mode starts on its first-run
+// screens, and from 2.1.316 on one that asks for a login method beside a
+// sign-in that works (Jaxxxxnn on X), which a run can only end on. A
+// directory -p alone ran in, or one made before magpie wrote the mark,
+// has a .claude.json without it, so the mark is added to what is there,
+// every other key kept. A new file gets the account's profile (acct) too.
+// A file that can't be read or parsed, which Claude Code may be writing,
+// is left as it is.
+func claudeOnboarded(dir string, acct map[string]any) {
+	profile := filepath.Join(dir, ".claude.json")
+	b, err := os.ReadFile(profile)
+	if os.IsNotExist(err) {
+		m := map[string]any{"hasCompletedOnboarding": true}
+		if acct != nil {
+			m["oauthAccount"] = acct
+		}
+		pb, _ := json.MarshalIndent(m, "", "  ")
+		_ = writePrivate(profile, append(pb, '\n'))
+		return
+	}
+	if err != nil {
+		return
+	}
+	var m map[string]any
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber() // Claude Code's numbers go back as they were written
+	if d.Decode(&m) != nil || m == nil {
+		return
+	}
+	if done, _ := m["hasCompletedOnboarding"].(bool); done {
+		return
+	}
+	m["hasCompletedOnboarding"] = true
+	pb, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = writePrivate(profile, append(pb, '\n'))
 }
 
 // syncClaudeDir brings the saved Claude login l up to what Claude Code

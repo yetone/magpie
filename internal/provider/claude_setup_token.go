@@ -165,9 +165,6 @@ func claudeTokenDir(user string) (string, error) {
 	if err := os.Remove(filepath.Join(dir, ".credentials.json")); err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("a sign-in left in %s: %w", dir, err)
 	}
-	profile := filepath.Join(dir, ".claude.json")
-	if _, err := os.Stat(profile); os.IsNotExist(err) {
-		_ = writePrivate(profile, []byte("{\n  \"hasCompletedOnboarding\": true\n}\n"))
-	}
+	claudeOnboarded(dir, nil)
 	return dir, nil
 }
