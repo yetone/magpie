@@ -397,6 +397,12 @@ button.rt-session { cursor: pointer; }
 :where(.rt-col.max760) :is(.rt-req, .rt-probe) .to { grid-column: 2; grid-row: 2; }
 :where(.rt-col.max760) :is(.rt-req, .rt-probe) .meta { grid-column: 2; grid-row: 3; justify-content: flex-start; }
 .rt-acts { padding: 4px 0; }
+/* under the requests, as wide as the page, the accounts and keys sit
+   several to a line, each provider's heading across them: one to a line,
+   a page of many accounts ran on far below the requests (Jiabubu on
+   Discord). Beside the requests (min1150) the column holds one */
+:where(.rt-more:not(.min1150)) .rt-acts, .rt-cols.solo .rt-acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); align-content: start; }
+:where(.rt-more:not(.min1150)) .rt-acts > :is(.rt-prov, .rt-keys.open), .rt-cols.solo .rt-acts > :is(.rt-prov, .rt-keys.open) { grid-column: 1 / -1; }
 .rt-cols.solo { grid-template-columns: minmax(0, 1fr); }
 .rt-reqs.none { display: block; background: none; border-color: transparent; }
 .rt-reqs.none .empty-state { padding: 14px 12px 18px; font-size: 12px; line-height: 1.6; }
