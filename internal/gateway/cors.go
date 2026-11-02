@@ -67,7 +67,7 @@ func corsGuard(next http.Handler) http.Handler {
 		h.Set("Access-Control-Allow-Origin", origin)
 		h.Add("Access-Control-Expose-Headers", SessionHeader)
 		h.Add("Vary", "Origin")
-		if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+		if corsPreflight(r) {
 			h.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			if asked := corsHeaders(r.Header.Get("Access-Control-Request-Headers")); asked != "" {
 				h.Set("Access-Control-Allow-Headers", asked)
@@ -205,6 +205,15 @@ func corsAllowed(origin string) bool {
 	list, _ := settings.CleanOrigins(saved)
 	o, err := settings.CleanOrigins([]string{origin})
 	return err == nil && len(o) == 1 && slices.Contains(list, o[0])
+}
+
+// corsPreflight: r is a browser's CORS preflight, an OPTIONS that
+// declares the actual call to come. A browser puts no key on one —
+// neither an Origin-headered one on the headers it asks for — which is
+// why lanGuard passes one to this file's guard before asking for a key
+// (#4931).
+func corsPreflight(r *http.Request) bool {
+	return r.Method == http.MethodOptions && r.Header.Get("Origin") != "" && r.Header.Get("Access-Control-Request-Method") != ""
 }
 
 // corsHeaders is a preflight's Access-Control-Request-Headers as the
