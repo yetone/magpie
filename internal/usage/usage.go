@@ -194,6 +194,19 @@ type Record struct {
 	// index tells HandedOn from such a record's route (handedOn).
 	Tries    int  `json:"tries,omitempty"`
 	HandedOn bool `json:"handed_on,omitempty"`
+	// UpBytes is how many bytes of this call's request actually went up to
+	// the vendor on the wire, its tries summed: the plain body where it
+	// goes as read, less where it went compressed (zstd to a ChatGPT
+	// backend, provider.CodexCompressed). A try gone over a connection
+	// that then failed still counts, as a connection's own counter would,
+	// and so does a single ask's second request (RetryOneAuth …). A
+	// record from before it was kept has none (#4456).
+	UpBytes int `json:"up_bytes,omitempty"`
+	// PlainBytes is the request's last try as it went into that ask,
+	// before compression, what UpBytes would have been without one: beside
+	// it, a compressed turn's discount and a retried request's re-sends
+	// both read off the row. None when no try went out.
+	PlainBytes int `json:"plain_bytes,omitempty"`
 	// Kind is what the agent made the call for when it isn't a turn of
 	// the conversation: a Codex subagent's (review, compact, guardian…)
 	Kind string `json:"kind,omitempty"`
