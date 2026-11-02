@@ -1545,13 +1545,18 @@ var unsaidWords = regexp.MustCompile(`(?i)(^|"|\\"|: )invalid request error trac
 // and another member may answer (#4632: the group's second member never
 // ran, and every turn died on the first seat).
 // GLM's word for a picture it can't read (zhipuImageRefusal, #4732) is
-// one: another vendor takes the webp as it is. One that also says the
-// account is out of quota or credit (quotaWords, creditWords: "请充值")
-// is that, and rests it (#4095).
+// one: another vendor takes the webp as it is.
+// A model's demand for an earlier turn's reasoning the history doesn't
+// have (reasoningBackRefused: Beam's "Missing required parameter:
+// 'messages[1].reasoning_content'", EDwinpzy) is one too: the client's
+// request is whole, and a group of Beam then another model stopped at
+// Beam before.
+// One that also says the account is out of quota or credit (quotaWords,
+// creditWords: "请充值") is that, and rests it (#4095).
 func shapeRefused(status int, body []byte) bool {
 	// the words are matched decoded, too (#1669)
 	body = wordsOf(body)
-	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body) || zhipuImageRefusal.Match(body) || wrongEndpoint(status, body) || upstreamFailedWords.Match(body)) &&
+	return (status == 400 || status == 422) && (shapeWords.Match(body) || unsaidWords.Match(body) || customToolRefusal.Match(body) || zhipuImageRefusal.Match(body) || wrongEndpoint(status, body) || upstreamFailedWords.Match(body) || reasoningBackRefused(body)) &&
 		!quotaWords.Match(body) && !creditWords.Match(body) && !unservedWords.Match(body) && !refusedWords.Match(body)
 }
 
@@ -1675,7 +1680,10 @@ func retryable(status int, body []byte) bool {
 		return quotaWords.Match(body) || unservedWords.Match(body) || refusedWords.Match(body) || shapeWords.Match(body) || unsaidWords.Match(body) || regionWords.Match(body) || zhipuImageRefusal.Match(body) || wrongEndpoint(status, body) ||
 			// a relay's own word that the provider behind it turned the
 			// request away (#4632): another member may answer
-			upstreamFailedWords.Match(body)
+			upstreamFailedWords.Match(body) ||
+			// a model's demand for an earlier turn's reasoning (EDwinpzy):
+			// another member's model may not make it
+			reasoningBackRefused(body)
 	}
 	return false
 }

@@ -19,6 +19,23 @@ import (
 // replies without.
 var thinkingBackRefusal = regexp.MustCompile("(?i)`?(?:content\\[\\]\\.thinking|reasoning_content)`? in the thinking mode must be passed back")
 
+// reasoningBackWords are a model asking for an earlier assistant
+// message's reasoning in other words than thinkingBackRefusal's:
+// Reflection's Beam on Command Code, 400 "Missing required parameter:
+// 'messages[1].reasoning_content'" for a second turn whose first reply
+// has none (EDwinpzy on Discord, magpie 0.1.2717), and the like that name
+// reasoning_content as missing or required. A request missing what every
+// API requires ("Missing required parameter: 'messages'") isn't one.
+var reasoningBackWords = regexp.MustCompile(`(?i)\breasoning_content\b[^"]{0,40}\b(?:is (?:missing|required)|must be (?:passed|provided|included))|\b(?:missing|required)\b[^"]{0,80}\breasoning_content\b`)
+
+// reasoningBackRefused says a model turned the request away for an
+// earlier turn's reasoning it didn't have: a demand of that model's on the
+// history, which another member's model, that asks nothing of the kind,
+// may well take as it is (shapeRefused).
+func reasoningBackRefused(body []byte) bool {
+	return thinkingBackRefusal.Match(body) || reasoningBackWords.Match(body)
+}
+
 // thinkingBackNeeded is how unfit remembers a provider's model asking
 // for its thinking back on every tool turn (thinkingBackRefusal).
 func thinkingBackNeeded(model string) string { return "thinking back\x00" + model }
