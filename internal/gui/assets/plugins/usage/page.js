@@ -693,7 +693,7 @@ function renderUsage() {
   const hit = u.cache_read && hitRate !== null ? t("hit rate {p}", { p: Math.round(100 * hitRate) + "%" }) : "";
   tile(fmtN(u.cache_read), t("cache read"), hit, u.cache_write ? t("{n} written", { n: fmtN(u.cache_write) }) + cacheTTLs(u, fmtN) : "");
   tile(fmtN(u.reasoning), t("reasoning"), t("inside output"));
-  tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), [u.errors ? t("{n} failed", { n: u.errors }) : "", u.retried ? t("{n} answered on a retry", { n: u.retried }) : "", u.unpriced ? t("{n} unpriced", { n: u.unpriced }) : ""].filter(Boolean).join(" · "), u.unpriced ? unpricedCallsWhy(u.unpriced) : "");
+  tile(String(u.calls), t(u.calls === 1 ? "call" : "calls"), [u.credited ? ledCredits(u).textContent : "", u.errors ? t("{n} failed", { n: u.errors }) : "", u.retried ? t("{n} answered on a retry", { n: u.retried }) : "", u.unpriced ? t("{n} unpriced", { n: u.unpriced }) : ""].filter(Boolean).join(" · "), u.unpriced ? unpricedCallsWhy(u.unpriced) : "");
 
   // the timeline: one bar per hour, day or week; output sits on top of input
   const chart = $("#chart");
@@ -734,6 +734,10 @@ function renderUsage() {
       const sub = [];
       if (g.sub) sub.push(g.sub);
       sub.push(t(g.calls === 1 ? "{n} call" : "{n} calls", { n: g.calls }));
+      // what the calls cost in their plan's credits, as the replies said
+      // (WorkBuddy's 积分): an account's, a model's, an agent's (lcyksp
+      // on Discord), not only their tokens
+      if (g.credited) sub.push(ledCredits(g).textContent);
       // magpie's own calls apart from the agents' (#1839): magpie's row
       // says it is, and a model's, a key's or an account's how many of
       // its calls were
