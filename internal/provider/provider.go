@@ -1545,6 +1545,7 @@ func normalize(p Provider) Provider {
 		}
 	}
 	p.Gemini = GeminiBase(p.Gemini)
+	p.aiStudioNative()
 	// a pick whose URL is gone (cleared from the CLI) is no pick
 	if p.BaseAPI != "" && p.baseOf(p.BaseAPI) == "" {
 		p.BaseAPI = ""

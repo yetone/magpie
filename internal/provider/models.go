@@ -774,6 +774,11 @@ func (p Provider) fetchOne(ctx context.Context) (fetched, error) {
 			if p.Gemini == "" {
 				continue // Factory's, whose list is its sign-in's
 			}
+			if p.AIStudioPair() {
+				// AI Studio's OpenAI-compatible list is its Gemini API's
+				// list, asked once
+				continue
+			}
 			if p.IsOpenCode() {
 				// OpenCode's Gemini models are in the list its other
 				// APIs share, asked at its chat URL; it has no Gemini

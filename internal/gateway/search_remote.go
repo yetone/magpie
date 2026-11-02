@@ -57,7 +57,7 @@ func remoteSearchesAny(p provider.Provider) bool {
 // provider's.
 func searchableModel(p provider.Provider, model string) bool {
 	switch {
-	case googleAccount(p):
+	case googleAccount(p), geminiKeySearches(p):
 		return searchModel(model)
 	case p.IsRemoteMagpie():
 		return remoteSearch(p, model) == searchNative

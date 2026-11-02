@@ -147,6 +147,17 @@ func codeAssistSearches(p provider.Provider, proto provider.Protocol, model stri
 	return proto == provider.CodeAssist && googleAccount(p) && searchModel(model)
 }
 
+// geminiKeySearches is a provider asked with a key at Google AI Studio's
+// Gemini API, the Google Gemini preset's beside its OpenAI-compatible one
+// (provider.AIStudioGemini; cocoasoda on Discord): Gemini runs googleSearch
+// there for a request that declares no function, as on Code Assist. One
+// that does — Codex's every turn, Claude Code's — is given magpie's search,
+// which the provider answers itself (searchesOwn), so the searches spend
+// the user's own Gemini API credit. No other vendor's API is read as one.
+func geminiKeySearches(p provider.Provider) bool {
+	return p.Account == nil && !p.IsPlugin() && !p.IsVertex() && searchesItself(p, provider.Gemini)
+}
+
 // searchModel is a model Code Assist runs googleSearch for: Gemini's, not
 // Claude's or GPT-OSS's on Antigravity, nor an image model.
 func searchModel(model string) bool {
@@ -157,6 +168,9 @@ func searchModel(model string) bool {
 // searchesFor is searchesItself for one request: a Google sign-in's Gemini
 // searches by itself only for a request without function tools.
 func searchesFor(p provider.Provider, proto provider.Protocol, model string, req *Request) bool {
+	if proto == provider.Gemini && geminiKeySearches(p) {
+		return searchModel(model) && (len(req.Tools) == 0 || req.ToolChoice == "none")
+	}
 	if searchesModel(p, proto, model) {
 		return true
 	}
@@ -675,7 +689,7 @@ func searcherReady(p provider.Provider) (string, bool) {
 	// what searchableModel says of a model is the model's and the
 	// provider's list's, which keptSmallCands is kept by
 	var keep func(catalog.Model) bool
-	if googleAccount(p) || p.IsRemoteMagpie() || partSearcher(p) {
+	if googleAccount(p) || geminiKeySearches(p) || p.IsRemoteMagpie() || partSearcher(p) {
 		keep = func(m catalog.Model) bool { return searchableModel(p, m.ID) }
 	}
 	c, ready := smallReadyOf(p, keptSmallCands(p, "search", keep), provider.Anthropic)

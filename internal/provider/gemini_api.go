@@ -42,3 +42,30 @@ func GeminiPath(model string, stream bool) string {
 	}
 	return "/models/" + m + ":generateContent"
 }
+
+// AIStudioChat is Google AI Studio's OpenAI-compatible base, the Google
+// Gemini preset's Chat URL.
+const AIStudioChat = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+// AIStudioGemini is Google AI Studio's own Gemini API (generateContent),
+// beside its OpenAI-compatible one.
+const AIStudioGemini = "https://generativelanguage.googleapis.com/v1beta"
+
+// aiStudioNative gives a provider at AI Studio's OpenAI-compatible base,
+// the Google Gemini preset's or one typed in, the Gemini API at the same
+// place with the same key (cocoasoda on Discord): Gemini's own clients are
+// relayed there as they ask, and googleSearch, which the OpenAI-compatible
+// API has no tool for, is run there. Its other requests stay on chat
+// completions, which Speaks names first. A Gemini URL of the provider's
+// own is kept.
+func (p *Provider) aiStudioNative() {
+	if p.Gemini == "" && p.Account == nil && strings.EqualFold(p.Chat, AIStudioChat) {
+		p.Gemini = AIStudioGemini
+	}
+}
+
+// AIStudioPair is a provider at both of AI Studio's APIs: its models are
+// the OpenAI-compatible list's, which is the Gemini API's list again.
+func (p Provider) AIStudioPair() bool {
+	return strings.EqualFold(p.Chat, AIStudioChat) && strings.EqualFold(p.Gemini, AIStudioGemini)
+}
