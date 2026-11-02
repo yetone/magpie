@@ -7,8 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +21,7 @@ import (
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
+	"golang.org/x/text/unicode/norm"
 )
 
 // claudeProxy is the proxy a Claude Code run on an account's behalf goes
@@ -95,6 +99,7 @@ func askClaudeTUI(ctx context.Context, binary claudeCLI, configDir, model string
 		return err
 	}
 	defer done()
+	trustWork(binary, configDir, work)
 	cmd, err := binary.tuiCommand(ctx, claudeTUIWarmArgs(model)...)
 	if err != nil {
 		return err
@@ -246,6 +251,7 @@ func claudeUsageTUI(ctx context.Context, binary claudeCLI, configDir string) (st
 		return "", err
 	}
 	defer done()
+	trustWork(binary, configDir, work)
 	cmd, err := binary.tuiCommand(ctx, claudeTUIUsageArgs()...)
 	if err != nil {
 		return "", err
@@ -299,6 +305,51 @@ func oneOffDir() (dir string, done func(), err error) {
 		return "", nil, err
 	}
 	return tmp, func() { _ = os.RemoveAll(tmp) }, nil
+}
+
+// trustWork records, in a saved account's config directory (configDir,
+// "" for the account Claude Code is signed in to, whose ~/.claude.json
+// magpie never writes), that Claude Code may work in magpie's own folder
+// work, before a run there: asked whether to trust it, a run of that
+// account waited out its caller's time on the question (#4830, mydosu).
+// A folder of the run's own (oneOffDir's fallback) is not recorded, so
+// entries don't pile up.
+func trustWork(binary claudeCLI, configDir, work string) {
+	if configDir == "" {
+		return
+	}
+	if filepath.Clean(work) != filepath.Join(os.TempDir(), claudeWorkName()) {
+		return
+	}
+	if err := provider.ClaudeTrustFolder(configDir, claudeTrustKeys(binary, work)...); err != nil {
+		log.Printf("claude: magpie's work folder not recorded as trusted for %s: %v", configDir, err)
+	}
+}
+
+// trustGOOS is the system claudeTrustKeys keys for; a var for tests.
+var trustGOOS = runtime.GOOS
+
+// claudeTrustKeys are the projects keys Claude Code looks a trusted folder
+// up by when it runs in work (2.1.316, its trust check): the folder's path
+// in NFC, on Windows with forward slashes ("C:/Users/<me>/AppData/Local/
+// Temp/magpie-claude-work"), and the path its links lead to, which is the
+// one a Mac's getcwd says (/private/var/… for /var/…). One in WSL runs in
+// the distro's mount of it.
+func claudeTrustKeys(binary claudeCLI, work string) []string {
+	if binary.wsl != nil {
+		return []string{binary.file(work)}
+	}
+	var keys []string
+	for _, w := range []string{work, evalSymlinks(work)} {
+		k := norm.NFC.String(filepath.Clean(w))
+		if trustGOOS == "windows" {
+			k = strings.ReplaceAll(k, `\`, "/")
+		}
+		if !slices.Contains(keys, k) {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 // dropOneOff removes the session a one-off interactive run left in

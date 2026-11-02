@@ -348,6 +348,78 @@ func claudeOnboarded(dir string, acct map[string]any) {
 	_ = writePrivate(profile, append(pb, '\n'))
 }
 
+// claudeTrustMu keeps two runs' ClaudeTrustFolder from writing one
+// .claude.json at once.
+var claudeTrustMu sync.Mutex
+
+// ClaudeTrustFolder records, in saved account config directory dir, that
+// Claude Code may work in magpie's own folder, which keys names as Claude
+// Code keys its projects (2.1.316: the folder's path, on Windows with
+// forward slashes, "C:/Users/<me>/AppData/Local/Temp/magpie-claude-work"),
+// as Claude Code itself records it once the trust question is answered
+// yes. On mydosu's Windows (#4830) a saved account's directory had no
+// such entry, and every /usage read of that account waited out its time
+// on the question.
+// Only a directory of magpie's saved accounts is written, never the
+// user's own ~/.claude.json; every other key is kept, and a file that
+// can't be read or parsed, which Claude Code may be writing, is left as it
+// is.
+func ClaudeTrustFolder(dir string, keys ...string) error {
+	root := filepath.Clean(claudeDirsRoot())
+	dir = filepath.Clean(dir)
+	if rel, err := filepath.Rel(root, dir); err != nil || rel == "." || strings.HasPrefix(rel, "..") || strings.ContainsAny(rel, `/\`) {
+		return fmt.Errorf("%s is not a saved Claude account's folder", dir)
+	}
+	claudeTrustMu.Lock()
+	defer claudeTrustMu.Unlock()
+	profile := filepath.Join(dir, ".claude.json")
+	m := map[string]any{}
+	b, err := os.ReadFile(profile)
+	switch {
+	case os.IsNotExist(err):
+	case err != nil:
+		return err
+	default:
+		d := json.NewDecoder(bytes.NewReader(b))
+		d.UseNumber() // Claude Code's numbers go back as they were written
+		if err := d.Decode(&m); err != nil || m == nil {
+			return fmt.Errorf("%s can't be read: %v", profile, err)
+		}
+	}
+	projects, ok := m["projects"].(map[string]any)
+	if !ok {
+		if _, there := m["projects"]; there {
+			return fmt.Errorf("%s has projects that aren't an object", profile)
+		}
+		projects = map[string]any{}
+	}
+	changed := false
+	for _, k := range keys {
+		if k == "" {
+			continue
+		}
+		p, ok := projects[k].(map[string]any)
+		if !ok {
+			p = map[string]any{}
+		}
+		if t, _ := p["hasTrustDialogAccepted"].(bool); t {
+			continue
+		}
+		p["hasTrustDialogAccepted"] = true
+		projects[k] = p
+		changed = true
+	}
+	if !changed {
+		return nil
+	}
+	m["projects"] = projects
+	pb, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return writePrivate(profile, append(pb, '\n'))
+}
+
 // syncClaudeDir brings the saved Claude login l up to what Claude Code
 // keeps in the account's config directory: the sign-in it refreshed to
 // there, or, when it emptied that sign-in, Anthropic's refusal of the one
