@@ -3,6 +3,7 @@ package provider
 import (
 	"cmp"
 	"slices"
+	"strings"
 )
 
 // A preset is a vendor magpie already knows: adding one only asks for the key.
@@ -310,11 +311,19 @@ var presets = []PresetDef{
 	// pay as you go picked inside it, as Xiaomi MiMo's are), once three
 	// presets, whose ids still name it, each at its region (presetAliases):
 	//
-	// Its Token Plan (TokenHub's subscription): a general and a Hy plan on
-	// one sk-tp- key, served at their own endpoints under /plan, chat
-	// completions and Anthropic messages only (its Codex page asks for
-	// wire_api "chat"). models.dev lists just its Hy models, so the plan's
-	// are given here, and none of its catalogs names them.
+	// Its Token Plan (TokenHub's subscription): 个人版, a general and a Hy
+	// plan on one sk-tp- key, and 企业版 (#1574), a team's monthly plan, its
+	// 专业套餐 counted in credits and its 轻享套餐 in tokens. Both are served
+	// at the same endpoints on TokenHub's hosts under /plan: chat
+	// completions and Responses at /plan/v3, Anthropic messages at
+	// /plan/anthropic (个人版 product/1823/130060, 130119, its Codex page
+	// 130071 with wire_api "responses"; 企业版 130659), the key telling the
+	// plan. China's is one region for both, so its models are the two
+	// plans' together; 企业版 alone is sold in Singapore too. models.dev
+	// lists just the plans' Hy models, so they are given here, and none of
+	// its catalogs names them. 个人版 was at api.lkeap.cloud.tencent.com
+	// until Tencent moved it (ysm119 on Discord, 11-02): a provider saved
+	// there is moved (movedEndpoints).
 	//
 	// TokenHub pay as you go: an API key of TokenHub's own (not the plan's
 	// sk-tp-), at tokenhub.tencentmaas.com in Guangzhou and
@@ -324,29 +333,20 @@ var presets = []PresetDef{
 	// messages at /v1/messages, with its list at /v1/models. It serves Hy
 	// and other makers' models (DeepSeek, GLM, Kimi, MiniMax, Qwen …):
 	// Hosts, and models.dev's tencent-tokenhub for their names and prices.
-	//
-	// Token Plan 企业版 (#1574): a team's monthly plan, its 专业套餐 counted
-	// in credits and its 轻享套餐 in tokens, on TokenHub's hosts under /plan
-	// (chat completions and Responses at /plan/v3, Anthropic messages at
-	// /plan/anthropic; product/1823/130659 and 131173), a key of the team's.
 	{ID: "tencent-cloud", Name: "Tencent Cloud", Icon: "tencentcloud-color", Kind: KindVendor, Hosts: true,
-		Chat: "https://api.lkeap.cloud.tencent.com/plan/v3", Anthropic: "https://api.lkeap.cloud.tencent.com/plan/anthropic",
+		Chat: "https://tokenhub.tencentmaas.com/plan/v3", Responses: "https://tokenhub.tencentmaas.com/plan/v3", Anthropic: "https://tokenhub.tencentmaas.com/plan/anthropic",
 		Note:    "Token Plan · pay as you go",
 		Website: "https://cloud.tencent.com/document/product/1823/130060", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
 		KeyPlans: true, Regions: []Region{
-			{ID: "plan", Name: "Plan · China", Chat: "https://api.lkeap.cloud.tencent.com/plan/v3", Anthropic: "https://api.lkeap.cloud.tencent.com/plan/anthropic",
+			{ID: "plan", Name: "Plan · China", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Responses: "https://tokenhub.tencentmaas.com/plan/v3", Anthropic: "https://tokenhub.tencentmaas.com/plan/anthropic",
 				Website: "https://cloud.tencent.com/document/product/1823/130060", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
-				Models: []string{"tc-code-latest", "glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3", "kimi-k2.7-code",
-					"deepseek-v4-pro-202606", "deepseek-v4-flash-202605", "minimax-m3", "minimax-m2.7", "hy4-preview", "hy3"}},
+				Models: []string{"tc-code-latest", "auto", "glm-5.3", "glm-5.3-flash", "glm-5.2", "glm-5.1", "glm-5", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6",
+					"deepseek-v4-pro-202606", "deepseek-v4-flash-202605", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-flash-0731",
+					"minimax-m3", "minimax-m2.7", "hy4-preview", "hy3", "mimo-v2.6-pro", "mimo-v2.6-flash"}},
 			{ID: "cn", Name: "Pay as you go · China", Chat: "https://tokenhub.tencentmaas.com/v1", Responses: "https://tokenhub.tencentmaas.com/v1", Anthropic: "https://tokenhub.tencentmaas.com",
 				Website: "https://cloud.tencent.com/document/product/1823/130078", KeysURL: "https://console.cloud.tencent.com/tokenhub/apikey", Catalog: "tencent-tokenhub"},
 			{ID: "intl", Name: "Pay as you go · Global", Chat: "https://tokenhub-intl.tencentmaas.com/v1", Responses: "https://tokenhub-intl.tencentmaas.com/v1", Anthropic: "https://tokenhub-intl.tencentmaas.com",
 				Website: "https://www.tencentcloud.com/document/product/1300/78939", KeysURL: "https://console.tencentcloud.com/tokenhub/apikey", Catalog: "tencent-tokenhub"},
-			{ID: "enterprise", Name: "Enterprise plan · China", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Responses: "https://tokenhub.tencentmaas.com/plan/v3", Anthropic: "https://tokenhub.tencentmaas.com/plan/anthropic",
-				Website: "https://cloud.tencent.com/document/product/1823/130659", KeysURL: "https://console.cloud.tencent.com/tokenhub/tokenplan",
-				Models: []string{"auto", "hy4-preview", "glm-5.3", "glm-5.3-flash", "glm-5.2", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed", "kimi-k2.6",
-					"minimax-m3", "minimax-m2.7", "deepseek-v4.1-flash", "deepseek-v4-pro", "deepseek-v4-pro-0813", "deepseek-v4-flash-0731",
-					"deepseek-v4-pro-202606", "deepseek-v4-flash-202605", "mimo-v2.6-pro", "mimo-v2.6-flash"}},
 			{ID: "enterprise-intl", Name: "Enterprise plan · Global", Chat: "https://tokenhub-intl.tencentmaas.com/plan/v3", Responses: "https://tokenhub-intl.tencentmaas.com/plan/v3", Anthropic: "https://tokenhub-intl.tencentmaas.com/plan/anthropic",
 				Website: "https://cloud.tencent.com/document/product/1823/130659", KeysURL: "https://console.tencentcloud.com/tokenhub/tokenplan",
 				Models: []string{"auto", "hy4-preview", "glm-5.3", "glm-5.3-flash", "glm-5.2", "kimi-k3", "kimi-k2.7-code", "kimi-k2.7-code-highspeed",
@@ -780,6 +780,71 @@ var presetAliases = map[string]struct{ preset, region string }{
 	"tencent-token-plan":  {"tencent-cloud", "plan"},
 	"tencent-tokenhub-cn": {"tencent-cloud", "cn"},
 	"tencent-tokenhub":    {"tencent-cloud", "intl"},
+}
+
+// movedEndpoints are base URLs a preset gave before its vendor moved
+// them, each the one it is at now: Tencent Cloud's Token Plan 个人版 left
+// api.lkeap.cloud.tencent.com for TokenHub's host (ysm119 on Discord,
+// 11-02; product/1823/130060), where its 企业版 already was, and it serves
+// Responses there too.
+var movedEndpoints = map[string]struct{ chat, responses, anthropic string }{
+	"https://api.lkeap.cloud.tencent.com/plan/v3":        {chat: "https://tokenhub.tencentmaas.com/plan/v3", responses: "https://tokenhub.tencentmaas.com/plan/v3"},
+	"https://api.lkeap.cloud.tencent.com/plan/anthropic": {anthropic: "https://tokenhub.tencentmaas.com/plan/anthropic"},
+}
+
+// regionAliases are region ids a preset's keys may name from before its
+// regions were made one: Tencent Cloud's 企业版 in China is its plan.
+var regionAliases = map[string]map[string]string{
+	"tencent-cloud": {"enterprise": "plan"},
+}
+
+// RegionID is the region a preset's region id names now: an id from
+// before regions were made one (a key's plan, an import link, region= on
+// the command line) is the region it became.
+func RegionID(preset, id string) string {
+	if a, ok := regionAliases[preset][strings.ToLower(id)]; ok {
+		return a
+	}
+	return id
+}
+
+// moveEndpoints puts a preset's provider saved at endpoints its vendor
+// has since moved (movedEndpoints) at where they are now, with the APIs
+// served beside them there that it has none of. Only an endpoint the
+// preset gave is moved: one a provider of no preset was given (the
+// user's own, a relay's) is left as it is, and so is the rest of the
+// provider. A key's plan named by an old region id is its region since.
+func (p *Provider) moveEndpoints() {
+	if p.Preset == "" || builtinPreset(p.Preset) == nil {
+		return
+	}
+	var to struct{ chat, responses, anthropic string }
+	for _, u := range []*string{&p.Chat, &p.Responses, &p.Anthropic} {
+		m, ok := movedEndpoints[strings.ToLower(*u)]
+		if !ok {
+			continue
+		}
+		*u = cmp.Or(m.chat, m.responses, m.anthropic)
+		to.chat, to.responses, to.anthropic = cmp.Or(to.chat, m.chat), cmp.Or(to.responses, m.responses), cmp.Or(to.anthropic, m.anthropic)
+	}
+	for _, f := range []struct {
+		have *string
+		to   string
+	}{{&p.Chat, to.chat}, {&p.Responses, to.responses}, {&p.Anthropic, to.anthropic}} {
+		if *f.have == "" && f.to != "" {
+			*f.have = f.to
+		}
+	}
+	if as := regionAliases[p.Preset]; as != nil {
+		if r, ok := as[p.KeyPlan]; ok {
+			p.KeyPlan = r
+		}
+		for i := range p.Keys {
+			if r, ok := as[p.Keys[i].Plan]; ok {
+				p.Keys[i].Plan = r
+			}
+		}
+	}
 }
 
 // Preset finds a preset by id, or by an id it carried before

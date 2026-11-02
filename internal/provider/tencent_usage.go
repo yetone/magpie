@@ -7,10 +7,15 @@ package provider
 // 2026-03-22, signed TC3-HMAC-SHA256 with the account's API key, a
 // SecretId and SecretKey (AccessKeyID, SecretAccessKey), never with the
 // plan's own sk- key. The plan a provider is on is its endpoint's: /plan
-// on tokenhub.tencentmaas.com is the enterprise plan in Guangzhou, on
-// tokenhub-intl.tencentmaas.com in Singapore. The personal plan
-// (api.lkeap.cloud.tencent.com) has no API for its usage, only the
-// console, and TokenHub's pay as you go no plan: neither has a card.
+// on tokenhub.tencentmaas.com is a Token Plan in Guangzhou, on
+// tokenhub-intl.tencentmaas.com 企业版 in Singapore. Guangzhou's is 个人版
+// too, at the same endpoints since Tencent moved it there from
+// api.lkeap.cloud.tencent.com (ysm119, 11-02), and the key alone tells
+// which: 个人版 has no API for its usage, only the console. So a provider
+// there is asked for the access key, but given none it has no card
+// saying so, which a personal plan would show for nothing; in Singapore,
+// where 企业版 alone is sold, it has. TokenHub's pay as you go has no
+// plan and no card.
 //
 // The request is signed as Tencent's signing doc (api/213/30654) says:
 // the canonical request with content-type, host and x-tc-action signed,
@@ -41,7 +46,10 @@ const (
 	tcAPIService  = "tokenhub"
 	tcContentType = "application/json; charset=utf-8"
 	tcPlanName    = "Token Plan Enterprise"
-	tcKeyHint     = "check the SecretId and SecretKey in the provider's editor (Tencent Cloud console → Access management → API keys), and that the key may read TokenHub (CAM)"
+	// tcSharedRegion is the cloud API region whose /plan endpoints serve
+	// Token Plan 个人版 as well as 企业版
+	tcSharedRegion = "ap-guangzhou"
+	tcKeyHint      = "check the SecretId and SecretKey in the provider's editor (Tencent Cloud console → Access management → API keys), and that the key may read TokenHub (CAM)"
 )
 
 // TakesTencentAccessKey says p is on Tencent Cloud's Token Plan 企业版 (at
@@ -66,9 +74,9 @@ func AccessKeyVendor(p Provider) string {
 }
 
 // tencentPlanRegion is the cloud API region of the enterprise plan p's
-// endpoint is on: ap-guangzhou for tokenhub.tencentmaas.com/plan,
-// ap-singapore for tokenhub-intl.tencentmaas.com/plan; ok false for
-// TokenHub's pay as you go, the personal plan or another vendor.
+// endpoint is on: ap-guangzhou for tokenhub.tencentmaas.com/plan (which
+// is 个人版's too), ap-singapore for tokenhub-intl.tencentmaas.com/plan;
+// ok false for TokenHub's pay as you go or another vendor.
 func tencentPlanRegion(p Provider) (string, bool) {
 	if p.Account != nil {
 		return "", false
@@ -142,7 +150,7 @@ func tencentPlanQuotas(ctx context.Context) []SubscriptionQuota {
 		out = append(out, qs...)
 	}
 	for _, j := range keyless {
-		if keyed[j.region] || seen["none "+j.region] || !wantsCard(ctx, j.p.ID, "") {
+		if keyed[j.region] || seen["none "+j.region] || j.region == tcSharedRegion || !wantsCard(ctx, j.p.ID, "") {
 			continue
 		}
 		seen["none "+j.region] = true

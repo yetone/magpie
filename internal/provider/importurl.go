@@ -67,6 +67,7 @@ func ParseImport(link string) (Provider, error) {
 		if r := get("region"); r != "" {
 			found := false
 			pr := Preset(p.Preset)
+			r = RegionID(p.Preset, r) // a link made before its region was merged still adds
 			for _, reg := range pr.Regions {
 				if reg.ID == r {
 					// atRegionOf is where a region's endpoints land: chat,

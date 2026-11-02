@@ -176,7 +176,10 @@ func TestPlanCardWithoutAccessKey(t *testing.T) {
 		// pay-as-you-go reads nothing with an access key
 		{ID: "volc-payg", Name: "Ark API", Chat: "https://ark.cn-beijing.volces.com/api/v3", Key: "ark-k"},
 		{ID: "volc-off", Name: "Ark off", Chat: "https://ark.cn-beijing.volces.com/api/plan/v3", Key: "ark-k", Off: true},
-		{ID: "tencent-cloud", Name: "Tencent Cloud", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Key: "sk-tp-1"},
+		{ID: "tencent-cloud", Name: "Tencent Cloud", Chat: "https://tokenhub-intl.tencentmaas.com/plan/v3", Key: "sk-tp-1"},
+		// China's /plan is Token Plan 个人版's too, which has no usage to
+		// read (ysm119): no card asks it for an access key
+		{ID: "tc-gz", Name: "Tencent China", Chat: "https://tokenhub.tencentmaas.com/plan/v3", Key: "sk-tp-2"},
 	} {
 		if err := Save(p); err != nil {
 			t.Fatal(err)

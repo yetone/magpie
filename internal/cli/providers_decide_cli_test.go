@@ -81,3 +81,18 @@ func TestRemoteMagpieAddReportsModels(t *testing.T) {
 		})
 	}
 }
+
+// region=enterprise on Tencent Cloud, from before Token Plan 个人版 and
+// 企业版 in China were served at one endpoint (ysm119), is the plan's.
+func TestTencentOldRegionAtCLI(t *testing.T) {
+	p, _ := provider.FromPreset("tencent-cloud")
+	if err := applyPairs(&p, []string{"region=intl"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyPairs(&p, []string{"region=enterprise"}); err != nil {
+		t.Fatal(err)
+	}
+	if p.Chat != "https://tokenhub.tencentmaas.com/plan/v3" || p.Anthropic != "https://tokenhub.tencentmaas.com/plan/anthropic" {
+		t.Fatalf("region=enterprise: %s %s", p.Chat, p.Anthropic)
+	}
+}

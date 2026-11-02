@@ -1552,6 +1552,9 @@ func normalize(p Provider) Provider {
 	if a, ok := presetAliases[p.Preset]; ok {
 		p.Preset = a.preset
 	}
+	// a preset's endpoints its vendor has moved since (Tencent Cloud's
+	// Token Plan 个人版, ysm119) are where they are now
+	p.moveEndpoints()
 	// OpenCode Zen serves its free models (-free) signed out, to the key
 	// OpenCode itself sends then: a Zen provider saved with no key of its
 	// own asks with that one

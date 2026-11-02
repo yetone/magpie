@@ -377,6 +377,14 @@ type endpoints struct{ chat, responses, anthropic, gemini string }
 // host, like a coding plan), a custom one otherwise.
 func imported(name, key string, e endpoints, models []string) (Provider, string) {
 	e.chat, e.responses, e.anthropic, e.gemini = cleanBase(e.chat), cleanBase(e.responses), cleanBase(e.anthropic), cleanBase(e.gemini)
+	// an app still set up at an endpoint its vendor has moved since
+	// (Tencent's OpenClaw page still gives the Token Plan's old host) is
+	// imported at where it is now
+	for _, u := range []*string{&e.chat, &e.responses, &e.anthropic} {
+		if m, ok := movedEndpoints[strings.ToLower(*u)]; ok {
+			*u = cmp.Or(m.chat, m.responses, m.anthropic)
+		}
+	}
 	for _, u := range []string{e.chat, e.responses, e.anthropic, e.gemini} {
 		if u == "" {
 			continue

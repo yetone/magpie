@@ -1078,7 +1078,8 @@ func applyPairs(p *provider.Provider, pairs []string) error {
 			for _, r := range pr.Regions {
 				ids = append(ids, r.ID)
 			}
-			i := slices.IndexFunc(pr.Regions, func(r provider.Region) bool { return strings.EqualFold(r.ID, v) })
+			id := provider.RegionID(p.Preset, v)
+			i := slices.IndexFunc(pr.Regions, func(r provider.Region) bool { return strings.EqualFold(r.ID, id) })
 			if i < 0 {
 				return fmt.Errorf("%s=%s: %s's are %s", k, v, pr.Name, strings.Join(ids, ", "))
 			}

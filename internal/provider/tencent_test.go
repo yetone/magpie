@@ -14,16 +14,19 @@ import (
 )
 
 const (
-	tcPlanChat = "https://api.lkeap.cloud.tencent.com/plan/v3"
-	tcPlanMsgs = "https://api.lkeap.cloud.tencent.com/plan/anthropic"
-	tcPlanKeys = "https://console.cloud.tencent.com/tokenhub/tokenplan"
-	tcPlanDocs = "https://cloud.tencent.com/document/product/1823/130060"
-	tcCNHost   = "https://tokenhub.tencentmaas.com"
-	tcCNKeys   = "https://console.cloud.tencent.com/tokenhub/apikey"
-	tcCNDocs   = "https://cloud.tencent.com/document/product/1823/130078"
-	tcIntlHost = "https://tokenhub-intl.tencentmaas.com"
-	tcIntlKeys = "https://console.tencentcloud.com/tokenhub/apikey"
-	tcIntlDocs = "https://www.tencentcloud.com/document/product/1300/78939"
+	tcPlanChat = "https://tokenhub.tencentmaas.com/plan/v3"
+	tcPlanMsgs = "https://tokenhub.tencentmaas.com/plan/anthropic"
+	// where Token Plan 个人版 was before Tencent moved it (ysm119)
+	tcOldPlanChat = "https://api.lkeap.cloud.tencent.com/plan/v3"
+	tcOldPlanMsgs = "https://api.lkeap.cloud.tencent.com/plan/anthropic"
+	tcPlanKeys    = "https://console.cloud.tencent.com/tokenhub/tokenplan"
+	tcPlanDocs    = "https://cloud.tencent.com/document/product/1823/130060"
+	tcCNHost      = "https://tokenhub.tencentmaas.com"
+	tcCNKeys      = "https://console.cloud.tencent.com/tokenhub/apikey"
+	tcCNDocs      = "https://cloud.tencent.com/document/product/1823/130078"
+	tcIntlHost    = "https://tokenhub-intl.tencentmaas.com"
+	tcIntlKeys    = "https://console.tencentcloud.com/tokenhub/apikey"
+	tcIntlDocs    = "https://www.tencentcloud.com/document/product/1300/78939"
 )
 
 // tcRegions are Tencent Cloud's three, as the three presets they were
@@ -34,7 +37,7 @@ var tcRegions = []struct {
 	chat, responses, anthropic string
 	catalog, keys, website     string
 }{
-	{"tencent-token-plan", "plan", tcPlanChat, "", tcPlanMsgs, "", tcPlanKeys, tcPlanDocs},
+	{"tencent-token-plan", "plan", tcPlanChat, tcPlanChat, tcPlanMsgs, "", tcPlanKeys, tcPlanDocs},
 	{"tencent-tokenhub-cn", "cn", tcCNHost + "/v1", tcCNHost + "/v1", tcCNHost, "tencent-tokenhub", tcCNKeys, tcCNDocs},
 	{"tencent-tokenhub", "intl", tcIntlHost + "/v1", tcIntlHost + "/v1", tcIntlHost, "tencent-tokenhub", tcIntlKeys, tcIntlDocs},
 }
@@ -55,7 +58,7 @@ func TestTencentCloud(t *testing.T) {
 		t.Fatalf("Tencent Cloud's presets: %+v", tc)
 	}
 	pr := &tc[0]
-	if len(pr.Regions) != 5 {
+	if len(pr.Regions) != 4 {
 		t.Fatalf("regions: %+v", pr.Regions)
 	}
 	for i, c := range tcRegions {
@@ -83,7 +86,7 @@ func TestTencentCloud(t *testing.T) {
 	}
 	// the default is the plan, as the add sheet's Tencent Cloud was
 	p, _ := FromPreset("tencent-cloud")
-	if p.Chat != tcPlanChat || p.Anthropic != tcPlanMsgs || p.Responses != "" || p.Catalog != "" || p.KeysURL != tcPlanKeys {
+	if p.Chat != tcPlanChat || p.Anthropic != tcPlanMsgs || p.Responses != tcPlanChat || p.Catalog != "" || p.KeysURL != tcPlanKeys {
 		t.Fatalf("default: %+v", p)
 	}
 	for _, id := range pr.Regions[0].Models {
@@ -149,17 +152,18 @@ func TestTencentCloud(t *testing.T) {
 	}
 }
 
-// Token Plan 企业版 (#1574) is a region of Tencent Cloud's in China and
-// one in Singapore, at TokenHub's hosts under /plan with chat completions,
-// Responses and Anthropic messages, its own models before a list: an
-// entry imported at its endpoints, a link and a provider moved there in
-// the editor each land on it, and TokenHub's pay as you go at the same
-// hosts stays where it was.
+// Token Plan 企业版 (#1574) is at TokenHub's hosts under /plan with chat
+// completions, Responses and Anthropic messages: in China at the plan's
+// region, which 个人版 is at too since Tencent moved it there (ysm119), in
+// Singapore at a region of its own, each with its own models before a
+// list: an entry imported at its endpoints, a link and a provider moved
+// there in the editor each land on it, and TokenHub's pay as you go at
+// the same hosts stays where it was.
 func TestTencentCloudEnterprisePlan(t *testing.T) {
 	pr := Preset("tencent-cloud")
-	for _, c := range []struct{ region, host, keys string }{
-		{"enterprise", tcCNHost, tcPlanKeys},
-		{"enterprise-intl", tcIntlHost, "https://console.tencentcloud.com/tokenhub/tokenplan"},
+	for _, c := range []struct{ region, host, keys, docs, first string }{
+		{"plan", tcCNHost, tcPlanKeys, tcPlanDocs, "tc-code-latest"},
+		{"enterprise-intl", tcIntlHost, "https://console.tencentcloud.com/tokenhub/tokenplan", "https://cloud.tencent.com/document/product/1823/130659", "auto"},
 	} {
 		var r *Region
 		for i := range pr.Regions {
@@ -168,8 +172,8 @@ func TestTencentCloudEnterprisePlan(t *testing.T) {
 			}
 		}
 		if r == nil || r.Chat != c.host+"/plan/v3" || r.Responses != c.host+"/plan/v3" || r.Anthropic != c.host+"/plan/anthropic" ||
-			r.Catalog != "" || r.KeysURL != c.keys || r.Website != "https://cloud.tencent.com/document/product/1823/130659" ||
-			len(r.Models) == 0 || r.Models[0] != "auto" {
+			r.Catalog != "" || r.KeysURL != c.keys || r.Website != c.docs ||
+			len(r.Models) == 0 || r.Models[0] != c.first {
 			t.Fatalf("%s: %+v", c.region, r)
 		}
 		for _, id := range r.Models {
@@ -190,7 +194,7 @@ func TestTencentCloudEnterprisePlan(t *testing.T) {
 		if err != nil || p.Chat != r.Chat || p.Responses != r.Responses || p.Anthropic != r.Anthropic || p.KeysURL != c.keys {
 			t.Fatalf("link: %v %+v", err, p)
 		}
-		if got := p.planModels(nil); len(got) != len(r.Models) || got[0].ID != "auto" {
+		if got := p.planModels(nil); len(got) != len(r.Models) || got[0].ID != c.first {
 			t.Fatalf("%s's models: %+v", c.region, got)
 		}
 		// pay as you go at the same host moved here takes the plan's key
@@ -221,7 +225,7 @@ func TestTencentCloudOldPresetsKeepWorking(t *testing.T) {
 	// providers.json as an older magpie wrote it
 	old := `{"providers":[
 {"id":"tencent-token-plan","name":"Tencent Cloud Token Plan","icon":"tencentcloud-color","preset":"tencent-token-plan","key":"sk-tp-plan",
- "chat":"` + tcPlanChat + `","anthropic":"` + tcPlanMsgs + `","models":["glm-5.3","hy3"],"website":"` + tcPlanDocs + `","keysUrl":"` + tcPlanKeys + `"},
+ "chat":"` + tcOldPlanChat + `","anthropic":"` + tcOldPlanMsgs + `","models":["glm-5.3","hy3"],"website":"` + tcPlanDocs + `","keysUrl":"` + tcPlanKeys + `"},
 {"id":"tencent-tokenhub-cn","name":"Tencent Cloud TokenHub (China)","icon":"tencentcloud-color","preset":"tencent-tokenhub-cn","key":"sk-cn",
  "chat":"` + tcCNHost + `/v1","responses":"` + tcCNHost + `/v1","anthropic":"` + tcCNHost + `","models":["hy3","deepseek-v4-pro"],"catalog":"tencent-tokenhub","website":"` + tcCNDocs + `","keysUrl":"` + tcCNKeys + `"},
 {"id":"tencent-tokenhub","name":"Tencent Cloud TokenHub","icon":"tencentcloud-color","preset":"tencent-tokenhub","key":"sk-intl",
@@ -317,5 +321,68 @@ func TestTencentTokenHubList(t *testing.T) {
 	}
 	if len(ms) != 2 || ms[0].ID != "hy3" || ms[1].ID != "deepseek-v4-pro" {
 		t.Fatalf("%+v", ms)
+	}
+}
+
+// Tencent moved Token Plan 个人版 from api.lkeap.cloud.tencent.com to
+// TokenHub's host (ysm119 on Discord, 11-02; product/1823/130060): a
+// Tencent Cloud provider saved at the old endpoints is at the new ones,
+// with the Responses API served there beside them, and at the plan's
+// region; an endpoint the user gave a provider of no preset, or another
+// API's they set, is left as it is. A key on 企业版 in China, a region
+// now the plan's, is on the plan. An app still set up at the old host
+// (Tencent's OpenClaw page gives it) is imported at the new one.
+func TestTencentPlanMovedFromLkeap(t *testing.T) {
+	pr := Preset("tencent-cloud")
+	n := normalize(Provider{ID: "tc", Preset: "tencent-cloud", Chat: tcOldPlanChat, Anthropic: tcOldPlanMsgs, Key: "sk-tp-1"})
+	if n.Chat != tcPlanChat || n.Responses != tcPlanChat || n.Anthropic != tcPlanMsgs {
+		t.Fatalf("moved: %+v", n)
+	}
+	if r := n.regionOf(pr); r == nil || r.ID != "plan" {
+		t.Fatalf("at %+v", r)
+	}
+	// as a hand-edited file may have it
+	if n := normalize(Provider{ID: "tc", Preset: "tencent-token-plan", Chat: "HTTPS://api.lkeap.cloud.tencent.com/plan/v3/ "}); n.Chat != tcPlanChat || n.Responses != tcPlanChat || n.Anthropic != "" {
+		t.Fatalf("written another way: %+v", n)
+	}
+	// Anthropic's alone: no other API is added
+	if n := normalize(Provider{ID: "tc", Preset: "tencent-cloud", Anthropic: tcOldPlanMsgs}); n.Anthropic != tcPlanMsgs || n.Chat != "" || n.Responses != "" {
+		t.Fatalf("messages alone: %+v", n)
+	}
+	// a Responses endpoint the user set stays theirs
+	if n := normalize(Provider{ID: "tc", Preset: "tencent-cloud", Chat: tcOldPlanChat, Responses: "https://relay.example.com/v1"}); n.Chat != tcPlanChat || n.Responses != "https://relay.example.com/v1" {
+		t.Fatalf("own Responses: %+v", n)
+	}
+	// a provider of no preset is asked where the user said
+	if n := normalize(Provider{ID: "mine", Chat: tcOldPlanChat, Anthropic: tcOldPlanMsgs}); n.Chat != tcOldPlanChat || n.Responses != "" || n.Anthropic != tcOldPlanMsgs {
+		t.Fatalf("own endpoints: %+v", n)
+	}
+	// keys on the China 企业版 region are on the plan's
+	k := normalize(Provider{ID: "tc", Preset: "tencent-cloud", Chat: tcIntlHost + "/plan/v3", KeyPlan: "enterprise",
+		Keys: []KeyAccount{{Key: "sk-tp-2", Plan: "enterprise"}, {Key: "sk-tp-3", Plan: "cn"}}})
+	if k.KeyPlan != "plan" || k.Keys[0].Plan != "plan" || k.Keys[1].Plan != "cn" {
+		t.Fatalf("key plans: %q %+v", k.KeyPlan, k.Keys)
+	}
+	if got := k.atKeyPlan(k.KeyPlan); got.Chat != tcCNHost+"/plan/v3" {
+		t.Fatalf("a China 企业版 key asked at %s", got.Chat)
+	}
+	// another preset's key plan named so is its own
+	if v := normalize(Provider{ID: "v", Preset: "volcengine", Chat: "https://ark.cn-beijing.volces.com/api/coding/v3", KeyPlan: "enterprise"}); v.KeyPlan != "enterprise" {
+		t.Fatalf("volcengine: %q", v.KeyPlan)
+	}
+	// an import link made when 企业版 China was a region of its own
+	l, err := ParseImport("magpie://import?preset=tencent-cloud&region=enterprise")
+	if err != nil || l.Chat != tcPlanChat || l.Anthropic != tcPlanMsgs {
+		t.Fatalf("link to the old region: %+v %v", l, err)
+	}
+	// Tencent's OpenClaw page's baseUrl, imported from the app
+	for _, e := range []endpoints{{chat: tcOldPlanChat}, {anthropic: tcOldPlanMsgs + "/"}} {
+		im, _ := imported("TencentCloud_Token_Plan", "sk-tp-x", e, nil)
+		if im.Preset != "tencent-cloud" || strings.Contains(im.Chat+im.Responses+im.Anthropic, "lkeap") || im.KeysURL != tcPlanKeys {
+			t.Fatalf("imported from %+v: %+v", e, im)
+		}
+		if r := im.regionOf(pr); r == nil || r.ID != "plan" {
+			t.Fatalf("imported from %+v at %+v", e, r)
+		}
 	}
 }
