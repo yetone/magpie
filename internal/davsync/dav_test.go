@@ -21,7 +21,7 @@ func TestDAVForbidden(t *testing.T) {
 		}
 		path := strings.TrimSuffix(r.URL.Path, "/")
 		switch {
-		case r.Method == "PROPFIND" && (path == "" || path == "/ro"):
+		case r.Method == "PROPFIND" && (path == "" || path == "/ro" || path == "/ro/magpie"):
 			w.WriteHeader(http.StatusMultiStatus)
 		case r.Method == "PROPFIND" && path == "/missing":
 			w.WriteHeader(http.StatusNotFound)
@@ -35,8 +35,10 @@ func TestDAVForbidden(t *testing.T) {
 	ctx := context.Background()
 	for _, c := range []struct{ dir, pass, want string }{
 		{"/missing", "pw", "there is no folder /missing"},
-		{"/ro", "pw", "doesn't let this account write in /ro"},
+		{"/ro", "pw", "doesn't let this account change files in /ro/magpie"},
 		{"/secret", "pw", "doesn't let this account use /secret"},
+		// the server's root in the address: its folder is /magpie, not //magpie
+		{"", "pw", "doesn't let magpie make its folder /magpie ("},
 		{"/missing", "bad", "user name or password"},
 	} {
 		d, err := newDAV(Config{URL: srv.URL + c.dir, User: "me", Password: c.pass})
@@ -50,6 +52,73 @@ func TestDAVForbidden(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want %q", c.dir, err, c.want)
 		}
+	}
+}
+
+// A 403 on the write itself, with everything listing fine, is told apart by
+// magpie's own folder: there, the server refuses to change files in it —
+// 坚果云 (Nutstore)'s free tier refuses writes with 403 once the account's
+// upload quota is used up (#4927) — and the error names the folder the write
+// went to, not just the address's, and says the quota. Missing, the server
+// refused to have magpie make it, and the error says to make it by hand.
+func TestDAVWriteRefused(t *testing.T) {
+	ctx := context.Background()
+	refuse := func(statusOf func(r *http.Request) int) *dav {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(statusOf(r))
+		}))
+		t.Cleanup(srv.Close)
+		d, err := newDAV(Config{URL: srv.URL + "/dav/"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+
+	// the folder is there (an earlier sync made it), the write is refused
+	d := refuse(func(r *http.Request) int {
+		switch {
+		case r.Method == "PROPFIND" && (r.URL.Path == "/dav/" || r.URL.Path == "/dav/magpie/"):
+			return http.StatusMultiStatus
+		default:
+			return http.StatusForbidden
+		}
+	})
+	if _, err := d.put(ctx, []byte("x"), ""); err == nil || !strings.Contains(err.Error(), "change files in /dav/magpie") || !strings.Contains(err.Error(), "quota") {
+		t.Fatalf("a refused write into the folder there: %v", err)
+	}
+
+	// the folder isn't there, and the server refuses to have magpie make it
+	d = refuse(func(r *http.Request) int {
+		switch {
+		case r.Method == "PROPFIND" && r.URL.Path == "/dav/":
+			return http.StatusMultiStatus
+		case r.Method == "MKCOL":
+			return http.StatusForbidden
+		default:
+			return http.StatusConflict
+		}
+	})
+	if _, err := d.put(ctx, []byte("x"), ""); err == nil || !strings.Contains(err.Error(), "doesn't let magpie make its folder /dav/magpie") || !strings.Contains(err.Error(), "make the folder magpie there first") {
+		t.Fatalf("a refused folder: %v", err)
+	}
+
+	// an address with no folder of its own: magpie's is at the root,
+	// named once, not "//magpie"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PROPFIND" && (r.URL.Path == "/" || r.URL.Path == "/magpie/") {
+			w.WriteHeader(http.StatusMultiStatus)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	t.Cleanup(srv.Close)
+	d, err := newDAV(Config{URL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.put(ctx, []byte("x"), ""); err == nil || !strings.Contains(err.Error(), "change files in /magpie ") || strings.Contains(err.Error(), "//") {
+		t.Fatalf("a refused write under an address with no folder: %v", err)
 	}
 }
 
