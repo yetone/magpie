@@ -31,7 +31,7 @@ var Keys = []string{
 	"theme", "colorblind", "reduceMotion", "noBird", "lang", "uiFont", "codeFont",
 	// the tray, the Dock and this computer
 	"tray", "dock", "dockWindow", "dockNever", "lightweight", "keepAwake", "keepAwakeDisplay",
-	"noWSLAgents", "sessionTerminal", "signInLinkOnly",
+	"noWSLAgents", "sessionTerminal", "signInLinkOnly", "quitNoAsk",
 	// the menu bar's allowance cards
 	"trayUsages", "trayUsage", "trayUsageEvery", "trayNoLogos", "trayNoBird", "trayNoNumber", "trayPace", "trayNoCost", "trayWindows",
 	// usage and alerts
@@ -213,6 +213,11 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	// nor whether the loading bird is kept off
 	if _, sent := fields["noBird"]; !sent {
 		in.NoBird = cur.NoBird
+	}
+	// nor whether a Quit asks first while agents go through magpie
+	// (zhujiu on Discord), which the Quit question sets too
+	if _, sent := fields["quitNoAsk"]; !sent {
+		in.QuitNoAsk = cur.QuitNoAsk
 	}
 	// nor whether a value masked for the first time is told (Must2333)
 	if _, sent := fields["maskAlert"]; !sent {

@@ -641,13 +641,23 @@ that one keeps serving the agents and the Quit goes on).
   line. With nothing connected any more it quits without drawing.
 - A second Quit within a minute of the question (`quitNow`, `quitAgain`)
   quits, so a window that can't show the question doesn't trap the user.
+- Don't ask again (zhujiu on Discord), a tick above the buttons, unticked
+  each time, goes with the Quit or Disconnect and quit chosen as
+  `noAsk=1`: the handler saves `settings.QuitNoAsk` (`SetQuitNoAsk`, that
+  field alone) before quitting, and a save that fails keeps magpie open.
+  Cancel saves nothing. With `QuitNoAsk` set, `quitAtOnce` quits without
+  asking; a settings file that can't be read asks. Settings › General ›
+  Ask before quitting (`#quitAskRow`, the app's only) shows it as On/Off
+  and saves `quitNoAsk` through `POST /api/settings`, which keeps it when a
+  page doesn't send it.
 - Not asked: a restart to update, Uninstall, a browser's page (`magpie
   web`), logging out or shutting down, and the Dock's Quit (AppKit's
   `terminate:`).
 
 See `TestWindowQuitAsksFirst`, `TestQuitListsWiredAgents`,
-`TestQuitAPIListsAgents`, `TestQuitNow`, `TestCommandQAsksFirst` and
-`quit-ask.test.cjs`.
+`TestQuitAPIListsAgents`, `TestQuitNow`, `TestCommandQAsksFirst`,
+`TestQuitDontAskAgain`, `TestSetQuitNoAsk`, `TestQuitNoAskKeptUnlessSent`,
+`quit-ask.test.cjs` and `quit-ask-setting.test.cjs`.
 
 ### A restart to update hands the gateway over
 

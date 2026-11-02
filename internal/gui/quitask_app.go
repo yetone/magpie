@@ -16,11 +16,11 @@ const (
 )
 
 // AskQuit is a Quit the user chose: at once while no agent is connected to
-// the gateway this process serves, else the window comes up and asks
+// the gateway this process serves or the user said not to ask, else the window comes up and asks
 // (quitask.go). A second Quit within quitAgain of the question quits: the
 // user has been told, and it is the way out should the window not show it.
 func (h *host) AskQuit() {
-	if quitNow(h.quitAt.Load(), time.Now(), len(quitAgents())) {
+	if quitAtOnce(h.quitAt.Load(), time.Now()) {
 		h.app.Quit()
 		return
 	}

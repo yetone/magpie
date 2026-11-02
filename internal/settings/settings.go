@@ -565,6 +565,12 @@ type Settings struct {
 	// opening was too slow to have by default (the owner, 10-21: "太卡");
 	// one who turned it on keeps it on (LightweightOn).
 	Lightweight *bool `json:"lightweight,omitempty"`
+	// QuitNoAsk lets a Quit the user chooses quit at once while agents go
+	// through magpie, without the question that names them (gui's
+	// quitask.go). Off by default, it asks; the question's "Don't ask
+	// again" sets it, and Settings › General › Ask before quitting turns
+	// it back off (zhujiu on Discord).
+	QuitNoAsk bool `json:"quitNoAsk,omitempty"`
 	// KeepAwake keeps this computer from going to sleep by itself while
 	// agents work through the gateway and for a while after (xiao_wang24004
 	// on X; internal/awake). This computer's own (KeepOwn).
@@ -1799,6 +1805,19 @@ func SetGatewayConversations(on bool) error {
 	s := load()
 	s.GatewayConversations = on
 	return save(s, true)
+}
+
+// SetQuitNoAsk sets QuitNoAsk alone, from what the file holds now (the
+// Quit question's "Don't ask again"). A settings file that can't be read
+// is left as it is, with the error.
+func SetQuitNoAsk(on bool) error {
+	defer lockFile()()
+	s, err := loadChecked()
+	if err != nil {
+		return err
+	}
+	s.QuitNoAsk = on
+	return save(s, false)
 }
 
 // RouterNoteMost is how many characters RouterNote keeps: a few words,

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // A Quit the user chose while agents go through magpie asks first
@@ -126,5 +127,46 @@ func TestQuitNow(t *testing.T) {
 		if got := quitNow(c.asked, now, c.wired); got != c.want {
 			t.Errorf("%s: quitNow = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// "Don't ask again" (zhujiu on Discord): the question's Quit sent with
+// noAsk=1 saves settings.QuitNoAsk and quits; from then on a Quit with
+// agents connected quits at once, until Settings › General › Ask before
+// quitting turns the question back on.
+func TestQuitDontAskAgain(t *testing.T) {
+	sandboxHome(t)
+	old := quitAgents
+	t.Cleanup(func() { quitAgents = old })
+	quitAgents = func() []quitAgentJSON { return []quitAgentJSON{{ID: "codex", Name: "Codex", Icon: "openai"}} }
+	now := time.Now()
+	if quitAtOnce(0, now) {
+		t.Fatal("with Codex connected, the first Quit quit without asking")
+	}
+
+	quits := 0
+	h := Handler(askingHost{webHost{quit: func() { quits++ }}, make(chan struct{}, 1)}, nil)
+	r := httptest.NewRecorder()
+	h.ServeHTTP(r, httptest.NewRequest("POST", "/api/window/quit?now=1&noAsk=1", nil))
+	if r.Code != 204 || quits != 1 {
+		t.Fatalf("the question's Quit with Don't ask again: %d %s, %d quits", r.Code, r.Body, quits)
+	}
+	if !settings.Load().QuitNoAsk {
+		t.Fatal("Don't ask again wasn't saved")
+	}
+	if !quitAtOnce(0, now) {
+		t.Fatal("after Don't ask again, a Quit with Codex connected still asks")
+	}
+
+	if err := settings.SetQuitNoAsk(false); err != nil {
+		t.Fatal(err)
+	}
+	if quitAtOnce(0, now) {
+		t.Fatal("with Ask before quitting on again, a Quit didn't ask")
+	}
+	// a plain Quit from the question saves nothing
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/api/window/quit?now=1", nil))
+	if settings.Load().QuitNoAsk {
+		t.Fatal("the question's Quit without Don't ask again saved it")
 	}
 }

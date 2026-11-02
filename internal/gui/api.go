@@ -2528,6 +2528,15 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		case "main":
 			w.ShowMain(mainView(r.URL.Query()))
 		case "quit":
+			// the question's "Don't ask again" (noAsk=1, zhujiu on
+			// Discord) is saved before the quit; a save that fails keeps
+			// magpie open, saying why
+			if r.URL.Query().Get("noAsk") == "1" {
+				if err := settings.SetQuitNoAsk(true); err != nil {
+					fail(rw, err)
+					return
+				}
+			}
 			// the user's Quit asks first while agents are connected
 			// (quitask.go); the question's own Quit is now=1
 			if a, ok := w.(quitAsker); ok && r.URL.Query().Get("now") == "" {

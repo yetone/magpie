@@ -9,7 +9,10 @@
 // and Cancel. Cancel posts nothing; Quit posts window/quit?now=1, which
 // quits without asking again; Disconnect and quit disconnects each agent
 // in turn and then quits, and a disconnect that fails keeps magpie open.
-// With nothing connected any more it quits at once. In every language and
+// With nothing connected any more it quits at once. Don't ask again
+// (zhujiu on Discord), above the buttons and unticked, goes with the Quit
+// chosen as noAsk=1 (the server saves settings.QuitNoAsk), and its tooltip
+// names Settings › General › Ask before quitting. In every language and
 // both engines; no backend, the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -32,6 +35,8 @@ const keys = [
   "Puts back each agent's own settings first, so they work without magpie",
   "Quit",
   "Cancel",
+  "Don't ask again",
+  "Settings › General › Ask before quitting turns it back on",
 ];
 
 // until waits for f to hold (the posts the page makes), at most 5s
@@ -135,6 +140,44 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await ask.locator(".bar button", { hasText: await tr("Disconnect and quit") }).click();
       await until(() => posts.length >= 3);
       assert.deepEqual(posts, ["/api/agents/disconnect/codex", "/api/agents/disconnect/claude", "/api/window/quit?now=1"]);
+    });
+
+    test(`${engine} ${lang}: Don't ask again goes with the Quit, narrow too`, async (t) => {
+      const { page, posts, tr } = await open(t, { agents: two }, "Win32", "/?ask=quit", 420);
+      const ask = page.locator(".editor.quit-ask");
+      await ask.waitFor();
+      const never = ask.locator("label.quit-never");
+      assert.equal((await never.textContent()).trim(), await tr("Don't ask again"));
+      assert.equal(await never.getAttribute("title"), await tr("Settings › General › Ask before quitting turns it back on"));
+      const box = never.locator("input[type=checkbox]");
+      assert.equal(await box.isChecked(), false, "unticked at first");
+      const [sheet, line, bar] = await Promise.all([ask.boundingBox(), never.boundingBox(), ask.locator(".bar").boundingBox()]);
+      assert.ok(line.x >= sheet.x - 1 && line.x + line.width <= sheet.x + sheet.width + 1, "it fits a narrow window");
+      assert.ok(line.y + line.height <= bar.y + 1, "above the buttons");
+      // ticked then Cancel saves nothing
+      await never.click();
+      assert.equal(await box.isChecked(), true);
+      await ask.locator(".bar button", { hasText: await tr("Cancel") }).click();
+      await ask.waitFor({ state: "detached" });
+      assert.deepEqual(posts, []);
+      // asked again, it is unticked; ticked, the Quit carries it
+      await page.evaluate(() => window.askQuit());
+      await ask.waitFor();
+      assert.equal(await box.isChecked(), false, "a new question starts unticked");
+      await never.click();
+      await ask.locator(".bar button.primary").click();
+      await until(() => posts.length);
+      assert.deepEqual(posts, ["/api/window/quit?now=1&noAsk=1"]);
+    });
+
+    test(`${engine} ${lang}: Don't ask again goes with Disconnect and quit too`, async (t) => {
+      const { page, posts, tr } = await open(t, { agents: two.slice(0, 1) });
+      const ask = page.locator(".editor.quit-ask");
+      await ask.waitFor();
+      await ask.locator("label.quit-never").click();
+      await ask.locator(".bar button", { hasText: await tr("Disconnect and quit") }).click();
+      await until(() => posts.length >= 2);
+      assert.deepEqual(posts, ["/api/agents/disconnect/codex", "/api/window/quit?now=1&noAsk=1"]);
     });
 
     test(`${engine} ${lang}: a disconnect that fails keeps magpie open`, async (t) => {

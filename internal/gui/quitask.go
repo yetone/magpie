@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/agent"
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // Quitting magpie ends the gateway, and every agent connected to it fails
@@ -14,7 +15,9 @@ import (
 // menu, the panel's Quit, Command-Q on the Mac) while agents are connected
 // opens the window on a question first, naming them (quitask.js): Quit,
 // Disconnect and quit (each one's own settings put back, as its row's
-// Disconnect does), or Cancel. A quit magpie makes itself (a restart to
+// Disconnect does), or Cancel, with "Don't ask again" (zhujiu on Discord),
+// which Settings › General › Ask before quitting turns back on
+// (settings.QuitNoAsk). A quit magpie makes itself (a restart to
 // update, Uninstall) and the system's own (logging out, shutting down,
 // the Dock's Quit) don't ask.
 
@@ -65,4 +68,14 @@ func quitNow(asked int64, now time.Time, wired int) bool {
 		return true
 	}
 	return asked != 0 && now.Sub(time.Unix(0, asked)) < quitAgain
+}
+
+// quitAtOnce says whether a Quit chosen at now quits without asking: the
+// user said not to ask (settings.QuitNoAsk, the question's "Don't ask
+// again"), or quitNow. A settings file that can't be read asks.
+func quitAtOnce(asked int64, now time.Time) bool {
+	if s, err := settings.LoadChecked(); err == nil && s.QuitNoAsk {
+		return true
+	}
+	return quitNow(asked, now, len(quitAgents()))
 }

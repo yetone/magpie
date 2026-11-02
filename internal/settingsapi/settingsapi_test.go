@@ -213,3 +213,26 @@ func TestRefusedValueWritesNothing(t *testing.T) {
 		t.Error("Body took port, which has a route of its own")
 	}
 }
+
+// "Don't ask again" on the Quit question (zhujiu on Discord) holds across
+// a save from a page that doesn't send quitNoAsk (the tray panel, or a
+// page from before it), and Settings › General's Ask before quitting
+// sending it false turns the question back on.
+func TestQuitNoAskKeptUnlessSent(t *testing.T) {
+	cur := settings.Defaults()
+	cur.QuitNoAsk = true
+	in, err := Merge([]byte(`{"theme":"dark"}`), cur, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !in.QuitNoAsk {
+		t.Error("a save that didn't send quitNoAsk turned the Quit question back on")
+	}
+	in, err = Merge([]byte(`{"theme":"dark","quitNoAsk":false}`), cur, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if in.QuitNoAsk {
+		t.Error("quitNoAsk sent false left the Quit question off")
+	}
+}

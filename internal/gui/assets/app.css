@@ -4674,6 +4674,7 @@ body.window .row + .row.agent.conn > .who { min-height: 41px; } /* the line abov
 .quit-ask .quit-agents li { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
 .quit-ask .quit-agents li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quit-ask .ag-note { grid-column: 1 / -1; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+.quit-ask .quit-never { grid-column: 1 / -1; margin: 0 0 10px; font-size: 12px; }
 @media (max-width: 600px) {
   body.window .row.agent.conn { display: flex; }
   /* the name beside its logo; the link and the switch wrap under it when short of room */
