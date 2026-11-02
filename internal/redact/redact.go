@@ -1501,11 +1501,20 @@ func (r rule) matches(s, lower string) [][]int {
 }
 
 // lowerASCII is s with its ASCII letters in lower case, as long as s, so a
-// place in one is the same place in the other.
+// place in one is the same place in the other (a byte of a character
+// outside ASCII is never an ASCII letter). It is s itself, not a copy,
+// where s has no capital.
 func lowerASCII(s string) string {
+	i := 0
+	for i < len(s) && !('A' <= s[i] && s[i] <= 'Z') {
+		i++
+	}
+	if i == len(s) {
+		return s
+	}
 	b := []byte(s)
-	for i, c := range b {
-		if 'A' <= c && c <= 'Z' {
+	for ; i < len(b); i++ {
+		if c := b[i]; 'A' <= c && c <= 'Z' {
 			b[i] = c + 'a' - 'A'
 		}
 	}

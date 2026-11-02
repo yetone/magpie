@@ -194,42 +194,74 @@ func shaped(kind, v string) string {
 // needs no escaping, nor does the value it stands for. An address's
 // stand-in is put back only where it is a whole name: public-ip-kvxqmrtz
 // is no part of public-ip-kvxqmrtzab or my-public-ip-kvxqmrtz.
+//
+// A user name's and an address's stand-ins are put back in any case
+// (foldStandIn). A model takes a made-up login name for the user's own
+// name and writes it as one: "Hi Qmzvkrta," or "作者：Qmzvkrta", which
+// came back to the user as letters that are no one's (yapechan on
+// Discord: a name was put back as garbage, with no braces). A host's name
+// is the same in any case too. Eight made-up letters are in no other text
+// by chance in any case, as a placeholder's 8 of its hash are not
+// (canonical). A key's made-up form is put back only as written: a key's
+// case is part of it.
 func restoreShapes(s string, put map[string]int) string {
+	lower, stale := "", true // s in small letters, made when first needed
 	for f, kind := range shapes {
-		if kind == "IP" {
-			s = restoreAddr(s, f, values[f], put)
+		if !foldStandIn(kind) {
+			if n := strings.Count(s, f); n > 0 {
+				s = strings.ReplaceAll(s, f, values[f])
+				stale = true
+				if put != nil {
+					put[f] += n
+				}
+			}
 			continue
 		}
-		if n := strings.Count(s, f); n > 0 {
-			s = strings.ReplaceAll(s, f, values[f])
-			if put != nil {
-				put[f] += n
-			}
+		if stale {
+			lower, stale = lowerASCII(s), false
+		}
+		if !strings.Contains(lower, f) {
+			continue
+		}
+		whole := wholeAddr
+		if kind != "IP" {
+			whole = nil
+		}
+		if out := replaceStandIn(s, lower, f, values[f], put, whole); out != s {
+			s, stale = out, true
 		}
 	}
 	return s
 }
 
-// restoreAddr is s with each whole stand-in f in it put back as the
-// address v, counted in put where put isn't nil: not where a letter, a
-// digit, '-' or '_' is against it, or a dot before it or before a letter
-// or digit after it, which make it a piece of another name
-// (public-ip-kvxqmrtz.lan); a port, a path or a full stop may follow it.
-func restoreAddr(s, f, v string, put map[string]int) string {
-	if !strings.Contains(s, f) {
-		return s
-	}
+// foldStandIn says a made-up key of kind is a stand-in of lowercase
+// letters (standInOf, ipStandIns), found in any case.
+func foldStandIn(kind string) bool { return kind == "USERNAME" || kind == "IP" }
+
+// wholeAddr says s[a:z], an address's stand-in, is a whole name: not
+// where a letter, a digit, '-' or '_' is against it, or a dot before it
+// or before a letter or digit after it, which make it a piece of another
+// name (public-ip-kvxqmrtz.lan); a port, a path or a full stop may
+// follow it.
+func wholeAddr(s string, a, z int) bool {
+	return !(a > 0 && (nameByte(s[a-1]) || s[a-1] == '.') || z < len(s) && nameByte(s[z]) ||
+		z+1 < len(s) && s[z] == '.' && nameByte(s[z+1]))
+}
+
+// replaceStandIn is s with each stand-in f in it, in any case (found in
+// lower, lowerASCII(s)), put back as v where whole says it may be
+// (anywhere with whole nil), counted in put where put isn't nil.
+func replaceStandIn(s, lower, f, v string, put map[string]int, whole func(s string, a, z int) bool) string {
 	var b strings.Builder
 	last := 0
 	for i := 0; ; {
-		j := strings.Index(s[i:], f)
+		j := strings.Index(lower[i:], f)
 		if j < 0 {
 			break
 		}
 		a, z := i+j, i+j+len(f)
 		i = a + 1
-		if a > 0 && (nameByte(s[a-1]) || s[a-1] == '.') || z < len(s) && nameByte(s[z]) ||
-			z+1 < len(s) && s[z] == '.' && nameByte(s[z+1]) {
+		if whole != nil && !whole(s, a, z) {
 			continue
 		}
 		b.WriteString(s[last:a])
@@ -259,16 +291,21 @@ func nameByte(c byte) bool {
 func shapeTail(s string) int {
 	mu.RLock()
 	defer mu.RUnlock()
+	lower := lowerASCII(s)
 	whole := 0
-	for f := range shapes {
-		if i := strings.LastIndex(s, f); i >= 0 {
+	for f, kind := range shapes {
+		i := strings.LastIndex(s, f)
+		if foldStandIn(kind) {
+			i = strings.LastIndex(lower, f)
+		}
+		if i >= 0 {
 			whole = max(whole, i+len(f))
 		}
 	}
 	best := 0
-	for f := range shapes {
+	for f, kind := range shapes {
 		for k := min(len(f)-1, len(s)-whole); k > best; k-- {
-			if strings.HasSuffix(s, f[:k]) {
+			if strings.HasSuffix(s, f[:k]) || foldStandIn(kind) && strings.HasSuffix(lower, f[:k]) {
 				best = k
 				break
 			}
@@ -286,9 +323,18 @@ func hasShapes(b []byte) bool {
 		return false
 	}
 	s := string(b)
-	for f := range shapes {
+	lower := ""
+	for f, kind := range shapes {
 		if strings.Contains(s, f) {
 			return true
+		}
+		if foldStandIn(kind) {
+			if lower == "" {
+				lower = lowerASCII(s)
+			}
+			if strings.Contains(lower, f) {
+				return true
+			}
 		}
 	}
 	return false
@@ -300,13 +346,19 @@ func hasShapes(b []byte) bool {
 func outsideShapes(s string, found []span) []span {
 	mu.RLock()
 	defer mu.RUnlock()
-	for f := range shapes {
+	lower := lowerASCII(s)
+	for f, kind := range shapes {
+		in := s
+		if foldStandIn(kind) {
+			in = lower
+		}
 		for i := 0; ; {
-			j := strings.Index(s[i:], f)
-			if j < 0 {
+			a := strings.Index(in[i:], f)
+			if a < 0 {
 				break
 			}
-			a, z := i+j, i+j+len(f)
+			a += i
+			z := a + len(f)
 			found = slices.DeleteFunc(found, func(x span) bool { return x.start < z && x.end > a })
 			i = z
 		}
@@ -359,7 +411,7 @@ func standInOf(v string) string {
 // with no dot in it is no one's on the internet, so a stand-in the vendor
 // tries itself reaches nobody. The same address gets the same stand-in
 // every turn while magpie runs, and two addresses never share one; it is
-// put back only as a whole name (restoreAddr).
+// put back only as a whole name (wholeAddr).
 
 // ipStandInHead starts every address's stand-in, and ipStandInLen
 // letters follow it.
