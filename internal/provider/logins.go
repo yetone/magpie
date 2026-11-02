@@ -732,6 +732,18 @@ func CodexSignInPlan() string {
 
 func init() { codexcat.SignInPlan = CodexSignInPlan }
 
+// CodexSignInWho names the ChatGPT account this machine's Codex is signed
+// in to now and its plan, "" when it isn't: what the backend's model list
+// (CodexLiveList) is the list of. A Pro account lists models a Plus one
+// doesn't (chzbz on X: GPT-6.1 Sol).
+func CodexSignInWho() string {
+	l, ok := liveLogin("codex")
+	if !ok {
+		return ""
+	}
+	return l.User + "\x00" + l.Plan
+}
+
 // codexLoginIn is the ChatGPT account Codex is signed in to in its folder
 // home, as Codex keeps it there (auth.json, or the keychain item named by
 // the folder).

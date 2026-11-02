@@ -1,10 +1,14 @@
 package gateway
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +29,7 @@ func codexDeskReset(t *testing.T) {
 		}
 		codexDesk.Lock()
 		codexDesk.body, codexDesk.got, codexDesk.tried, codexDesk.asking, codexDesk.done, codexDesk.revoked = nil, time.Time{}, time.Time{}, false, nil, false
+		codexDesk.who, codexDesk.asked, codexDesk.want = "", "", ""
 		codexDesk.Unlock()
 	}
 	reset()
@@ -120,5 +125,78 @@ func TestCodexDesktopCatalog(t *testing.T) {
 	}
 	if changed.Load() != 1 {
 		t.Fatalf("a failed ask told as a change")
+	}
+}
+
+// The list is the list of the account Codex is signed in to. Switched to
+// another account (chzbz on X: a 20x one, GPT-6.1 Sol not in the Codex
+// app's picker), the list from before is not handed out as this one's:
+// the backend is asked at once, not an hour on, and the file then has
+// the new account's models.
+func TestCodexDesktopCatalogFollowsTheSignIn(t *testing.T) {
+	codexSignedIn(t)
+	codexDeskReset(t)
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// the access token's claims say whose sign-in asked
+		var tok []byte
+		if parts := strings.Split(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), "."); len(parts) == 3 {
+			tok, _ = base64.RawURLEncoding.DecodeString(parts[1])
+		}
+		if strings.Contains(string(tok), `"acct-pro"`) {
+			io.WriteString(w, `{"models":[{"slug":"gpt-6.1-sol","priority":1,"visibility":"list"},{"slug":"gpt-5.5","priority":2,"visibility":"list"}]}`)
+			return
+		}
+		io.WriteString(w, `{"models":[{"slug":"gpt-5.5","priority":1,"visibility":"list"}]}`)
+	}))
+	defer up.Close()
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	defer func() { provider.CodexBase = was }()
+	var changed atomic.Int32
+	CodexDesktopChanged = func() { changed.Add(1) }
+	has := func(b []byte, slug string) bool {
+		var got struct {
+			Models []map[string]any `json:"models"`
+		}
+		json.Unmarshal(b, &got)
+		for _, m := range got.Models {
+			if m["slug"] == slug {
+				return true
+			}
+		}
+		return false
+	}
+
+	CodexDesktopCatalog()
+	codexDeskAsked(t)
+	b, ok := CodexDesktopCatalog()
+	if !ok || has(b, "gpt-6.1-sol") {
+		t.Fatalf("the Plus account's list: %v\n%s", ok, b)
+	}
+
+	// Codex signed in to the Pro account now, as magpie's switch writes it
+	claims := func(m map[string]any) string {
+		b, _ := json.Marshal(m)
+		return "h." + base64.RawURLEncoding.EncodeToString(b) + ".s"
+	}
+	pro := map[string]any{"auth_mode": "chatgpt", "tokens": map[string]any{
+		"id_token": claims(map[string]any{"email": "pro@example.com",
+			"https://api.openai.com/auth": map[string]any{"chatgpt_plan_type": "pro"}}),
+		"access_token":  claims(map[string]any{"exp": time.Now().Add(time.Hour).Unix(), "who": "acct-pro"}),
+		"refresh_token": "r-pro", "account_id": "acct-pro"}}
+	home, _ := os.UserHomeDir()
+	if err := os.WriteFile(filepath.Join(home, ".codex", "auth.json"), mustJSON(pro), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	told := changed.Load()
+	if b, ok := CodexDesktopCatalog(); ok {
+		t.Fatalf("the other account's list handed out as the Pro account's:\n%s", b)
+	}
+	codexDeskAsked(t)
+	if changed.Load() == told {
+		t.Fatal("the Pro account's list not told as a change")
+	}
+	if b, ok := CodexDesktopCatalog(); !ok || !has(b, "gpt-6.1-sol") {
+		t.Fatalf("the Pro account's list: %v\n%s", ok, b)
 	}
 }

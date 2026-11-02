@@ -29,6 +29,10 @@ var CodexDesktopChanged func()
 // codexDeskFetch asks the backend for its list (a test's stands in).
 var codexDeskFetch = provider.CodexLiveList
 
+// codexDeskWho names the sign-in Codex is on now, whose list the backend
+// gives (a test's stands in).
+var codexDeskWho = provider.CodexSignInWho
+
 const (
 	// codexDeskFor is how long a list the backend gave stands before it
 	// is asked for again; codexDeskRetry how long after one it didn't
@@ -45,7 +49,10 @@ var codexDesk struct {
 	// revoked: the last ask had the backend call the sign-in revoked
 	// (provider.CodexListRevoked)
 	revoked bool
-	done    chan struct{} // closed as the ask under way ends
+	// who is the sign-in body and revoked are of (codexDeskWho); asked
+	// the one the last ask was for; want the one a caller last asked about
+	who, asked, want string
+	done             chan struct{} // closed as the ask under way ends
 }
 
 // CodexDesktopCatalog is the list a Codex beside its ChatGPT sign-in is
@@ -62,14 +69,27 @@ var codexDesk struct {
 // codexModels answers Codex then (#4308): the backend has said all it
 // will for that sign-in, and without it the app's picker had none of
 // magpie's models until the user signed in again.
+//
+// The list is the list of the account Codex is signed in to, and a Pro
+// account lists models a Plus one doesn't. Once Codex is on another
+// account, the list from before is not known for it: the backend is asked
+// at once, and the file stands as it was until it answers (chzbz on X: a
+// 20x account added and switched to, GPT-6.1 Sol not in the app's picker,
+// the file kept the other account's list up to an hour).
 func CodexDesktopCatalog() (b []byte, ok bool) {
+	who := codexDeskWho()
 	codexDesk.Lock()
+	codexDesk.want = who
 	body, revoked := codexDesk.body, codexDesk.revoked
+	mine := codexDesk.who == who
+	if !mine {
+		body, revoked = nil, false
+	}
 	stale := body == nil || time.Since(codexDesk.got) >= codexDeskFor
-	if stale && !codexDesk.asking && time.Since(codexDesk.tried) >= codexDeskRetry {
-		codexDesk.asking, codexDesk.tried = true, time.Now()
+	if stale && !codexDesk.asking && (codexDesk.asked != who || time.Since(codexDesk.tried) >= codexDeskRetry) {
+		codexDesk.asking, codexDesk.tried, codexDesk.asked = true, time.Now(), who
 		codexDesk.done = make(chan struct{})
-		go codexDeskRefresh(codexDesk.done)
+		go codexDeskRefresh(codexDesk.done, who)
 	}
 	codexDesk.Unlock()
 	if body == nil && revoked {
@@ -97,12 +117,17 @@ func CodexDesktopCatalog() (b []byte, ok bool) {
 	return b, true
 }
 
-func codexDeskRefresh(done chan struct{}) {
+// codexDeskRefresh asks the backend for who's list.
+func codexDeskRefresh(done chan struct{}, who string) {
 	ctx, cancel := context.WithTimeout(context.Background(), codexDeskWait)
 	defer cancel()
 	b, err := codexDeskFetch(ctx)
 	codexDesk.Lock()
 	changed := false
+	if codexDesk.who != who {
+		// another sign-in's list, and what was said of it, is not who's
+		codexDesk.body, codexDesk.revoked, codexDesk.who = nil, false, who
+	}
 	if err == nil {
 		changed = !bytes.Equal(b, codexDesk.body) || codexDesk.revoked
 		codexDesk.body, codexDesk.got, codexDesk.revoked = b, time.Now(), false
@@ -111,6 +136,11 @@ func codexDeskRefresh(done chan struct{}) {
 		// from before (CodexDesktopCatalog)
 		changed = codexDesk.body == nil
 		codexDesk.revoked = revoked
+	}
+	// Codex went on to another sign-in while this one was asked about:
+	// told, for the next look to ask about that one
+	if codexDesk.want != who {
+		changed = true
 	}
 	codexDesk.asking = false
 	codexDesk.Unlock()
