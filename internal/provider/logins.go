@@ -49,6 +49,10 @@ type Login struct {
 	// Lapsed says the vendor refused to refresh a saved account's sign-in:
 	// it has to be signed in again before it can be used.
 	Lapsed string `json:"lapsed,omitempty"`
+	// Until is when the account's paid plan ends, as its sign-in says (a
+	// ChatGPT one's chatgpt_subscription_active_until, codexUntil): nil
+	// when it doesn't, or names a time gone by.
+	Until *time.Time `json:"until,omitempty"`
 	// Own is the agent's own sign-in, which magpie only reads: removed, it
 	// is hidden rather than deleted (side_logins.go).
 	Own bool `json:"own,omitempty"`
@@ -1027,9 +1031,13 @@ func loginsNow(agent string) []Login {
 	loginsMu.Lock()
 	defer loginsMu.Unlock()
 	active := map[string]string{}
+	var liveCodex json.RawMessage
 	for _, a := range loginAgents {
 		if l, ok := liveLogin(a); ok {
 			active[a] = l.User
+			if a == "codex" {
+				liveCodex = l.Auth
+			}
 		}
 	}
 	var out []Login
@@ -1058,6 +1066,19 @@ func loginsNow(agent string) []Login {
 			Paused: (using || first) && pausedOwn(ls, l.Agent, l.User), first: first}
 		if !using && l.Agent == "codex" {
 			lg.home = l.Home
+		}
+		if l.Agent == "codex" {
+			// from the sign-in Codex holds, where it holds this one: it
+			// refreshes it there, and logins.json's copy may be older
+			auth := l.Auth
+			if using {
+				auth = liveCodex
+			} else if home := codexHeldIn(l); home != "" {
+				if in, ok := codexLoginIn(home); ok {
+					auth = in.Auth
+				}
+			}
+			lg.Until = codexUntil(auth, time.Now())
 		}
 		if l.Agent == "claude" {
 			lg.Lapsed = claudeSignedOut(l)

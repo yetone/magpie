@@ -1016,12 +1016,25 @@ func codexUntil(auth []byte, now time.Time) *time.Time {
 	if json.Unmarshal(auth, &a) != nil {
 		return nil
 	}
-	s := claimString(jwtClaims(a.Tokens.IDToken), "https://api.openai.com/auth", "chatgpt_subscription_active_until")
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil || !t.After(now) {
-		return nil
+	return chatgptUntil(now, a.Tokens.IDToken)
+}
+
+// chatgptUntil is when the ChatGPT plan the first of tokens to name one
+// is paid until (chatgpt_subscription_active_until), nil when none does
+// or the time it names is gone by.
+func chatgptUntil(now time.Time, tokens ...string) *time.Time {
+	for _, tok := range tokens {
+		s := claimString(jwtClaims(tok), "https://api.openai.com/auth", "chatgpt_subscription_active_until")
+		if s == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, s)
+		if err != nil || !t.After(now) {
+			return nil
+		}
+		return &t
 	}
-	return &t
+	return nil
 }
 
 // codexWindows is the plan, allowance, rate-limit resets and credits of

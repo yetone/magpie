@@ -114,6 +114,9 @@ func siwcLoginList() []Login {
 		if ls[i].Lapsed == "" {
 			ls[i].Lapsed = ls[i].saved.Lapsed
 		}
+		if c, ok := siwcSaved(ls[i].saved); ok {
+			ls[i].Until = chatgptUntil(time.Now(), c.IDToken, c.Access)
+		}
 	}
 	return loginsOf(ls)
 }
