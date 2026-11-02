@@ -108,13 +108,44 @@ func archiving(r *http.Request, res *captureResponseWriter, start time.Time, bod
 	if !ok {
 		return nil
 	}
-	b := make([]byte, 8)
-	rand.Read(b)
-	id := start.UTC().Format("150405") + "-" + hex.EncodeToString(b)
+	name, id := archiveID(start)
 	res.Header().Set(ArchiveHeader, id)
 	res.full = &spool{limit: archiveLimit()}
-	return &wire{name: start.UTC().Format("2006-01-02") + "/" + id, method: r.Method, path: r.URL.Path,
+	return &wire{name: name, method: r.Method, path: r.URL.Path,
 		query: r.URL.RawQuery, req: r.Header.Clone(), body: body, res: res, to: to}
+}
+
+// archiveID is a new call's name in the archive, "<date>/<id>", and its
+// id: the date it began, in UTC, and an id of its own.
+func archiveID(start time.Time) (name, id string) {
+	b := make([]byte, 8)
+	rand.Read(b)
+	id = start.UTC().Format("150405") + "-" + hex.EncodeToString(b)
+	return start.UTC().Format("2006-01-02") + "/" + id, id
+}
+
+// archiveOwn keeps a call magpie made itself, which no client sent it
+// (a Jev classifier's System One question, systemOne), as archive keeps
+// one it served: sent is the request as it went, with the headers magpie
+// signed it with (their secrets are taken out as a client's are), and
+// status, head and answer what came back. It is the name c is kept at,
+// "" with the archive off.
+func archiveOwn(c Call, sent *http.Request, body []byte, status int, head http.Header, answer []byte) string {
+	to, ok := archiveDest()
+	if !ok || sent == nil {
+		return ""
+	}
+	name, _ := archiveID(c.Time)
+	c.Archive, c.Status, c.wire = name, status, nil
+	w := &wire{name: name, method: sent.Method, path: sent.URL.Path, query: sent.URL.RawQuery, req: sent.Header.Clone(), to: to}
+	req, res := &spool{limit: archiveLimit()}, &spool{limit: archiveLimit()}
+	req.add(body)
+	res.add(answer)
+	if head == nil {
+		head = http.Header{}
+	}
+	queueArchive(archiveJob{c: c, w: w, resHead: head.Clone(), req: req, res: res})
+	return name
 }
 
 // archiveName is where the archive keeps c, "<date>/<id>", or "" when it
@@ -194,15 +225,6 @@ var (
 // archive queues c's upload; c.wire is set.
 func archive(c Call) {
 	w := c.wire
-	archiveOnce.Do(func() {
-		archiveJobs = make(chan archiveJob, archiveQueue)
-		go func() {
-			for j := range archiveJobs {
-				upload(j)
-				archivePending.Done()
-			}
-		}()
-	})
 	// the response's file is the job's now, and the request's body goes
 	// to one, so nothing whole is held while the call waits
 	req := &spool{limit: archiveLimit()}
@@ -213,7 +235,23 @@ func archive(c Call) {
 	if res == nil {
 		res = &spool{}
 	}
-	j := archiveJob{c: c, w: w, resHead: w.res.Header().Clone(), req: req, res: res}
+	queueArchive(archiveJob{c: c, w: w, resHead: w.res.Header().Clone(), req: req, res: res})
+}
+
+// queueArchive puts j in the upload queue, or drops it when the queue is
+// full.
+func queueArchive(j archiveJob) {
+	w := j.w
+	archiveOnce.Do(func() {
+		archiveJobs = make(chan archiveJob, archiveQueue)
+		go func() {
+			for j := range archiveJobs {
+				upload(j)
+				archivePending.Done()
+			}
+		}()
+	})
+	req, res := j.req, j.res
 	archivePending.Add(1)
 	select {
 	case archiveJobs <- j:

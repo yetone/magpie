@@ -422,14 +422,23 @@ A request on the Routing page opens to the same bodies (Fate on Discord):
 its story's head has "Request and response", which fetches
 `GET /api/gateway/call?route=…` (`Server.RouteCall`) only when pressed.
 A call carries the Routing request it was (`Call.Route`, the trace's
-`Route.ID`, set where `serve`, the Codex backend and a refused title
+`Route.ID`, set where `serve`, the Codex backend, a refused title and a
+System One request an app sends (`/v1/systemone`, `serveDecideTries`)
 record it; the Codex backend's refused key and empty failure too, but not
 a compaction's, which opens no route: `TestCodexKeyRefusedCarriesItsRoute`);
 a route id is not a call id. When the ring no longer has it,
 the story shows the request archive's copy through `archivePanel` if the
 route names one (`Route.Archive`, `call.archiveName()`, set only when the
 archive was on for that request), and otherwise says how to turn the
-archive on. Nothing more is captured than before. The archive's switch
+archive on; with the archive on (`gateway.archive.on` in
+`/api/providers`) it says instead that this request isn't in it, made
+while the archive was off or not saved (wangb on Discord). With the archive
+on, `/v1/systemone` is kept as a chat request is, and a routing group's
+Jev classifier, which magpie asks itself, is kept as it went (`archiveOwn`
+in `systemOne`; its usage row names it): `TestArchiveKeepsSystemOne`,
+`TestArchiveKeepsJevClassifier`. Still not archived: the Codex backend,
+draw, embeddings and video, and replies magpie writes itself
+(`answeredHere`). The Routing page captures nothing of its own. The archive's switch
 (`POST /api/settings/archive`) sets `RequestArchive` while sync has an S3
 bucket and `RequestArchiveLocal` while it has none; `GET
 /api/archive?name=…` reads this computer's copy first and then the bucket's

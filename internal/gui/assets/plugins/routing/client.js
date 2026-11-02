@@ -2871,7 +2871,7 @@ function routingPage(part) {
     }
     if (!bodiesGot.has(r.id)) loadBodies(r.id);
     const got = bodiesGot.get(r.id);
-    const key = JSON.stringify([document.documentElement.lang, r.id, r.archive || "", got.busy ? "busy" : got.gone ? "gone" : got.error ? "error" : "in"]);
+    const key = JSON.stringify([document.documentElement.lang, r.id, r.archive || "", !!providers?.gateway?.archive?.on, got.busy ? "busy" : got.gone ? "gone" : got.error ? "error" : "in"]);
     if (key === bodiesKey) return;
     bodiesKey = key;
     if (got.busy) { bodies.replaceChildren(el("div", "none", t("Fetching…"))); return; }
@@ -2887,7 +2887,12 @@ function routingPage(part) {
         draw();
         return;
       }
-      bodies.replaceChildren(el("p", "rt-bodies-gone", t("magpie keeps the request and response of only the last 40 requests, until it quits. To keep every request's, turn on Request archive at the top of Usage › Requests.")));
+      // with the archive on, the request is one it didn't keep (made while
+      // it was off, or not saved): saying to turn it on read as if it were
+      // off (wangb on Discord)
+      bodies.replaceChildren(el("p", "rt-bodies-gone", providers?.gateway?.archive?.on
+        ? t("magpie keeps the request and response of only the last 40 requests, until it quits. Request archive is on, but this request isn't in it: it was made while the archive was off, or it couldn't be saved.")
+        : t("magpie keeps the request and response of only the last 40 requests, until it quits. To keep every request's, turn on Request archive at the top of Usage › Requests.")));
       return;
     }
     const grid = el("div", "call-details");

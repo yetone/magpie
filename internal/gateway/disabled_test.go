@@ -159,7 +159,7 @@ func TestDisabledModelRefusedOnEveryRoute(t *testing.T) {
 		t.Fatal(err)
 	}
 	jp := *jpp
-	if _, _, _, err := New().postDecide(context.Background(), jp, "jev-latest", []byte(ask)); err == nil || !strings.Contains(err.Error(), "disabled") {
+	if _, err := New().postDecideSent(context.Background(), jp, "jev-latest", []byte(ask)); err == nil || !strings.Contains(err.Error(), "disabled") {
 		t.Fatal("magpie's own decision call", err)
 	}
 	if err := jp.AskSystemOne(context.Background(), "jev-latest"); err == nil || !strings.Contains(err.Error(), "disabled") {
