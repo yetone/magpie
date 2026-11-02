@@ -3975,6 +3975,10 @@ html.theming, html.theming *, html.theming *::before, html.theming *::after {
   border-radius: 14px; background: var(--card);
   box-shadow: 0 0 0 1px var(--line), 0 24px 60px rgba(0, 0, 0, .32), 0 2px 8px rgba(0, 0, 0, .12);
 }
+/* a provider's editor (accounts, meters, many rows) grows with a large
+   window, as a Mac sheet takes the room its content needs: 600 up to a
+   1071px window, then 56% of it, at most 880 */
+.modal .dialog.roomy { width: min(max(600px, 56vw), 880px, 100%); }
 .modal .dialog.swap { animation: content-in .22s var(--ease); }
 /* In a dialog the editor's head and buttons stay put and only the fields
    between them scroll; both bars are the same height, their contents

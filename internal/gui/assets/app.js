@@ -8757,8 +8757,8 @@ function openModal(content, quiet) {
   d.classList.remove("swap");
   if (!fresh && !quiet) { void d.offsetWidth; d.classList.add("swap"); } // content changed: a soft refresh, not a re-entrance
   frame(content);
-  // an editor of long text (a prompt's) takes a wider dialog
-  d.classList.toggle("wide", content.classList.contains("wide"));
+  // a prompt's editor is wider, a provider's grows with the window
+  for (const c of ["wide", "roomy"]) d.classList.toggle(c, content.classList.contains(c));
   // Keep focus through a redraw of an open editor.
   const active = d.contains(document.activeElement) ? document.activeElement : null;
   const focusID = active?.id;
@@ -9083,7 +9083,7 @@ function drawEditor(p, presetID) {
     : pr
       ? { id: pr.id, name: pr.name, preset: pr.id, key: "", chosen: [], extra: [], headers: [] }
       : { id: "", name: "", preset: "", chat: "", responses: "", anthropic: "", decide: "", catalog: "", key: "", api: "openai", chosen: [], extra: [], headers: [], icon: "" });
-  const ed = el("div", "editor" + (isNew ? " new" : ""));
+  const ed = el("div", "editor roomy" + (isNew ? " new" : ""));
   ed.onclick = (e) => e.stopPropagation();
 
   {
