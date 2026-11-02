@@ -186,6 +186,12 @@ type Archived struct {
 	Call     Call        `json:"call"` // as Recent calls has it, its bodies below
 	Request  ArchivePart `json:"request"`
 	Response ArchivePart `json:"response"`
+	// Upstream: each request magpie sent upstream for it, its headers
+	// both ways (wire_headers.go), their secrets taken out; none in an
+	// archive from before them
+	Upstream []UpstreamHeaders `json:"upstream,omitempty"`
+	// UpstreamMore: the upstream requests past those, not kept
+	UpstreamMore int `json:"upstreamMore,omitempty"`
 }
 
 // ArchivePart is one way of a call: the request, or the response.
@@ -285,6 +291,9 @@ func upload(j archiveJob) {
 			Body: string(redact.ScrubJSON(reqBody)), Size: j.req.size, Truncated: j.req.cut()},
 		Response: ArchivePart{Status: c.Status, Headers: scrubHeaders(j.resHead),
 			Body: string(redact.ScrubJSON(resBody)), Size: j.res.size, Truncated: j.res.cut()},
+	}
+	if h := j.c.headers.masked(); h != nil {
+		a.Upstream, a.UpstreamMore = h.Upstream, h.More
 	}
 	// as it reads in the bucket: a query's & and a body's <tags> as they are
 	var buf bytes.Buffer

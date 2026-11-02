@@ -2608,6 +2608,14 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .jt-sum::after { content: " " attr(data-n) " "; font-size: .9em; color: var(--faint); }
 .call-body code.empty { color: var(--faint); font-family: var(--ui-font, var(--font)); }
 :where(html[data-fonts]) .call-body code.empty { font-style: var(--ui-style, inherit); font-weight: var(--ui-weight, inherit); font-stretch: var(--ui-stretch, 100%); }
+/* a call's HTTP headers both ways, folded under its bodies (wireHeadersView) */
+.call-wire { border-top: 1px solid var(--line-2); background: var(--card); }
+.call-wire-toggle { display: flex; align-items: center; gap: 6px; width: 100%; height: 27px; padding: 0 10px; border-radius: 0; font-size: 10.5px; font-weight: 600; color: var(--muted); justify-content: flex-start; }
+.call-wire-toggle:hover { color: var(--fg); background: var(--pill); }
+.call-wire.open > .call-wire-toggle .call-chev { transform: rotate(90deg); }
+.call-wire:not(.open) > .call-wire-toggle .call-chev { transform: none; } /* not the open call's turn */
+.call-wire-wide, .call-wire-note { grid-column: 1 / -1; }
+.call-wire-note { margin: 0; padding: 8px 10px; font-size: 11px; line-height: 1.45; color: var(--muted); background: var(--card); }
 @media (max-width: 760px) { .call-details { grid-template-columns: 1fr; } }
 /* a call the request archive kept: read back under the bodies, the whole width */
 .call-archive { grid-column: 1 / -1; min-width: 0; background: var(--card); }

@@ -59,3 +59,34 @@ func TestScrub(t *testing.T) {
 		t.Errorf("cut body: %q", got)
 	}
 }
+
+// A header's name says whether it holds a credential, by its words, for
+// the names vendors and clients really send (usrname1833's header view
+// shows them all): a count of tokens, a request id or an idempotency key
+// is what debugging reads, and stays.
+func TestSecretHeaderRealNames(t *testing.T) {
+	for _, name := range []string{
+		"Authorization", "Proxy-Authorization", "x-api-key", "api-key", "X-Goog-Api-Key", "Cookie", "Set-Cookie",
+		"Copilot-Session-Token", "X-Amz-Security-Token", "cf-access-client-secret", "X-Client-Key", "X-Auth-Token",
+		"X-Csrf-Token", "X-Amz-Signature", "Ocp-Apim-Subscription-Key", "X-Github-Token", "x-goog-user-project-key",
+	} {
+		if !SecretHeader(name) {
+			t.Errorf("%s shown", name)
+		}
+	}
+	for _, name := range []string{
+		"anthropic-ratelimit-tokens-remaining", "anthropic-ratelimit-input-tokens-limit", "x-ratelimit-remaining-tokens",
+		"x-ratelimit-limit-tokens", "Idempotency-Key", "Content-Type", "User-Agent", "Anthropic-Version", "request-id",
+		"X-Request-Id", "Anthropic-Beta", "Openai-Processing-Ms", "Retry-After", "Content-Length", "Cf-Ray",
+	} {
+		if SecretHeader(name) {
+			t.Errorf("%s taken out", name)
+		}
+	}
+	if got := ScrubHeader("X-Forwarded-Client", "Bearer abcdef"); got != Scrubbed {
+		t.Errorf("a Bearer in another header: %q", got)
+	}
+	if got := ScrubHeader("anthropic-ratelimit-tokens-remaining", "9000"); got != "9000" {
+		t.Errorf("a count of tokens: %q", got)
+	}
+}

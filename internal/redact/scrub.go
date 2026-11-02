@@ -141,11 +141,51 @@ func (m *memo) add(k [32]byte, e scrubEntry) {
 // Scrub finds in it.
 func ScrubHeader(name, value string) string {
 	v := strings.ToLower(strings.TrimSpace(value))
-	if SecretName(name) || strings.HasPrefix(v, "bearer ") || strings.HasPrefix(v, "basic ") {
+	if SecretHeader(name) || strings.HasPrefix(v, "bearer ") || strings.HasPrefix(v, "basic ") {
 		return Scrubbed
 	}
 	return Scrub(value)
 }
+
+// SecretHeader says a header called name carries a credential, by the
+// words of its name: Authorization, Cookie and Set-Cookie, x-api-key and
+// api-key, X-Goog-Api-Key, an X-Client-Key, any *-Token (Copilot's
+// Copilot-Session-Token, X-Amz-Security-Token), *-Secret, *-Auth, a
+// request's *-Signature. A count of tokens is no secret: Anthropic's
+// anthropic-ratelimit-tokens-remaining and OpenAI's
+// x-ratelimit-remaining-tokens are what a rate limit is debugged by. Nor
+// is a key that names no credential: Idempotency-Key.
+func SecretHeader(name string) bool {
+	n := strings.ToLower(name)
+	words := strings.FieldsFunc(n, func(r rune) bool { return r == '-' || r == '_' || r == '.' })
+	kept := words[:0:0]
+	for i, w := range words {
+		switch w {
+		case "authorization", "authorisation", "auth", "cookie", "token", "secret", "password", "passwd",
+			"pass", "credential", "credentials", "signature", "apikey", "csrf", "xsrf":
+			return true
+		case "key":
+			if i == 0 || !headerKeyNotSecret[words[i-1]] {
+				return true
+			}
+		case "tokens":
+			continue // a count of them
+		}
+		for _, end := range []string{"token", "secret", "cookie", "apikey", "password"} {
+			if strings.HasSuffix(w, end) {
+				return true // accesstoken, clientsecret, setcookie
+			}
+		}
+		kept = append(kept, w)
+	}
+	// what a field's name says (x-access-key, x-private-key-id), its count
+	// of tokens left out
+	return SecretName(strings.Join(kept, "-"))
+}
+
+// headerKeyNotSecret are the words before "key" in a header that names no
+// credential.
+var headerKeyNotSecret = map[string]bool{"idempotency": true, "cache": true, "public": true, "sort": true, "partition": true}
 
 // ScrubJSON is a body with its secrets taken out: a JSON one string by
 // string, a field named for a secret wholly; a stream's events each as

@@ -500,7 +500,7 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 			return
 		}
 		who := callerOf(r)
-		call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: d.Model}
+		call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: d.Model, headers: headerLogOf(r.Context())}
 		usage.Saw(agentOf(r))
 		fail := func(code int, msg string) {
 			call.Status, call.Error, call.Millis = code, msg, time.Since(start).Milliseconds()

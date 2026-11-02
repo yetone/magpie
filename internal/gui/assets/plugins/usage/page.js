@@ -18,6 +18,50 @@ function headersPanel(label, first, headers) {
   return panel;
 }
 
+// A call's HTTP headers both ways (usrname1833 on Discord: 查看原始请求和
+// 原始响应的http头, to debug what a capture would show), as the gateway
+// read them out, secrets taken out: the client's, then each request magpie
+// sent upstream for it and the head of its answer. Folded under the bodies
+// on the Gateway page's recent calls and on Routing; open when open is.
+// h is /api/gateway/call's headers, or the archive's upstream ones.
+function wireHeadersView(h, open, toggle) {
+  const box = el("section", "call-wire" + (open ? " open" : ""));
+  const b = el("button", "text call-wire-toggle");
+  b.setAttribute("aria-expanded", String(open));
+  const chev = el("span", "call-chev");
+  chev.append(svg(CHEV_R, 11, 1.6));
+  b.append(chev, el("span", "", t("HTTP headers")));
+  b.onclick = (ev) => { ev.stopPropagation(); toggle(); };
+  box.append(b);
+  if (!open) return box;
+  box.append(wireHeadersGrid(h, true));
+  return box;
+}
+
+// the panels: the client's request (when withClient), and each upstream
+// request with its answer
+function wireHeadersGrid(h, withClient) {
+  const grid = el("div", "call-details call-wire-grid");
+  if (withClient) {
+    const client = headersPanel(t("From the client"), "", h.request);
+    client.classList.add("call-wire-wide");
+    grid.append(client);
+  }
+  const ups = h.upstream || [];
+  if (!ups.length) grid.append(el("p", "call-wire-note", t("No request went upstream.")));
+  let plugin = false;
+  for (const u of ups) {
+    plugin ||= !!u.plugin;
+    grid.append(
+      headersPanel(u.plugin ? t("Handed to plugin {name}", { name: u.plugin }) : t("Sent upstream"), `${u.method} ${u.url}`, u.request),
+      headersPanel(t("Upstream response"), u.error ? u.error : `${u.proto || "HTTP"} ${u.status} · ${ledTook(u.ms)}`, u.response),
+    );
+  }
+  if (h.more) grid.append(el("p", "call-wire-note", t("{n} more requests upstream, not kept", { n: h.more })));
+  if (plugin) grid.append(el("p", "call-wire-note", t("A plugin sends a request on to its vendor with headers of its own, which magpie doesn't see.")));
+  return grid;
+}
+
 // The archived file, whole, however large: to the browser in magpie web,
 // to Downloads in the app (#447).
 async function downloadArchive(name, b) {
@@ -102,6 +146,8 @@ function archivePanel(name, id, redraw) {
     archiveBodyPanel("Response Body", got.response, id + "|archive"),
   );
   box.append(grid);
+  // what magpie sent upstream for it, and the heads that came back
+  if (got.upstream?.length) box.append(wireHeadersGrid({ upstream: got.upstream, more: got.upstreamMore }, false));
   return box;
 }
 

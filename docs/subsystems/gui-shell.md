@@ -446,6 +446,37 @@ bucket and `RequestArchiveLocal` while it has none; `GET
 `TestRoutingRequestOpensItsBodies`, `TestArchiveWholeBodies` and
 `routing-bodies.test.cjs`.
 
+Under the bodies, on Gateway and on Routing, "HTTP headers" folds open a
+call's headers both ways (usrname1833 on Discord: 查看原始请求和原始响应的
+http头): the client's, as they reached magpie, then each request magpie
+sent upstream for the call, its method, address and headers, and the
+status, protocol, headers and time of its answer, or the error in place of
+one (`wireHeadersView` in plugins/usage/page.js; `headers` in
+`/api/gateway/call`, `Call.Headers`,
+[`wire_headers.go`](../../internal/gateway/wire_headers.go)). The client's
+are taken by `headerLogged` in `Handler()` for every request that isn't a
+GET, HEAD or OPTIONS; what goes upstream by `rpmTransport`, under
+`s.client`, as it is sent (so a header Go's transport adds itself,
+`Accept-Encoding` or `Content-Length`, isn't there), and by
+`provider.SendsThroughPlugin` for an account served by a plugin, which is
+shown as handed to the plugin: the plugin sends it on to its vendor with
+headers of its own that magpie doesn't see, and the view says so. A call
+keeps its first 8 upstream requests (`headerTriesMost`) and a count of the
+rest. Recording is a copy of each header map; nothing is masked as a
+request goes. Secrets are taken out when the headers are read, by what
+each header is (`redact.SecretHeader`: Authorization, cookies, `x-api-key`,
+any `*-Key`, `*-Token`, `*-Secret`, `*-Auth`, `*-Signature` but
+`Idempotency-Key` and a count of tokens such as
+`anthropic-ratelimit-tokens-remaining`), any Bearer or Basic value, and any
+secret `redact.Scrub` finds in the rest; an address loses its password, a
+secret-named query value (`?key=`) and its fragment (`scrubURL`). They live
+with the call in the 40-call ring, and the request archive keeps the
+upstream ones as `upstream` beside the request's and response's headers,
+masked the same way; magpie's own requests (System One's decision, a
+title, a search) keep none. See `TestRecentCallHeadersBothWays`,
+`TestRecentCallHeadersEachTry`, `TestPluginHandOffHeaders`,
+`TestSecretHeaderRealNames` and `call-headers.test.cjs`.
+
 ### Plugin check-in switches
 
 A plugin's Usage-card Auto check-in button reads the persisted

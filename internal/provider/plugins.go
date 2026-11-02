@@ -928,9 +928,21 @@ func (p Provider) Do(client *http.Client, req *http.Request) (*http.Response, er
 	return p.do(client, req)
 }
 
+// SendsThroughPlugin, set by the gateway, is told of each request handed
+// to a plugin's account, which goes past the gateway's own transport, as
+// it goes, and what came back for it: the call's headers both ways, for
+// Recent calls (gateway's wire_headers.go).
+var SendsThroughPlugin func(id string, req *http.Request) func(*http.Response, error)
+
 func (p Provider) do(client *http.Client, req *http.Request) (*http.Response, error) {
 	if p.Account != nil && p.Account.transport != nil {
-		return p.Account.transport(req)
+		if SendsThroughPlugin == nil {
+			return p.Account.transport(req)
+		}
+		done := SendsThroughPlugin(p.ID, req)
+		res, err := p.Account.transport(req)
+		done(res, err)
+		return res, err
 	}
 	if p.Account != nil && p.Account.clientFor != nil {
 		if c := p.Account.clientFor(req); c != nil {

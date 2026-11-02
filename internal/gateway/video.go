@@ -744,7 +744,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	who := callerOf(r)
-	call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: f.Model}
+	call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: f.Model, headers: headerLogOf(r.Context())}
 	usage.Saw(agentOf(r))
 	fail := func(code int, msg string) {
 		call.Status, call.Error, call.Millis = code, msg, time.Since(start).Milliseconds()

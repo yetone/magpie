@@ -159,7 +159,7 @@ func (s *Server) serveDecideTries(w http.ResponseWriter, r *http.Request, body [
 	capture := &captureResponseWriter{ResponseWriter: w}
 	w = capture
 	call := Call{Time: start, From: provider.Chat, To: provider.Chat, Model: asked, Provider: cs[0].p.ID, Agent: who.agent, Via: who.via,
-		wire: archiving(r, capture, start, body)}
+		wire: archiving(r, capture, start, body), headers: headerLogOf(r.Context())}
 	call.RequestBody, call.RequestTruncated = captureRequestBody(body)
 	defer discardArchive(capture)
 	tr := s.trace.beginFor(r, Route{Time: start, Agent: who.agent, Session: sessionOf(r.Header), Model: asked, Provider: cs[0].p.ID,

@@ -88,7 +88,7 @@ func (j *jsonRetrieval) forModel(model string) ([]byte, string, error) {
 // provider, or over a group's members, and passes the answer back.
 func (s *Server) serveRetrieval(w http.ResponseWriter, r *http.Request, path, operation string, start time.Time, asked string, req retrieval) {
 	who := callerOf(r)
-	call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: asked}
+	call := Call{Time: start, From: provider.Chat, Agent: who.agent, Via: who.via, Model: asked, headers: headerLogOf(r.Context())}
 	usage.Saw(agentOf(r))
 	// a model the user disabled (#1867), or a group of them all
 	if msg, off := idOff(asked); off {

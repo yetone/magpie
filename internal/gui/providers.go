@@ -1236,6 +1236,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				writeJSON(rw, map[string]any{
 					"requestBody": c.RequestBody, "responseBody": c.ResponseBody,
 					"requestTruncated": c.RequestTruncated, "responseTruncated": c.ResponseTruncated,
+					// the headers both ways, the client's and each upstream
+					// request's, masked (usrname1833 on Discord)
+					"headers": c.Headers(),
 				})
 				return
 			}

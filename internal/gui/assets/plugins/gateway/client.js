@@ -21,6 +21,7 @@ let connectFolded = true;
 try { connectFolded = localStorage.getItem("magpie.gwConnectFolded") !== "0"; } catch {}
 const expandedCalls = new Set(); // recent-call ids whose wire bodies are open
 const callBodies = new Map(); // callRow → its bodies, read when it is opened (#1521)
+const wireOpen = new Set(); // recent-call ids whose HTTP headers are open
 // recent calls drawn a page at a time, as many as the plugin's setting
 // says (callsPage)
 let callsPage = 20;
@@ -691,6 +692,7 @@ function renderActivity() {
   const ids = new Set(g.calls.map(callRow));
   for (const id of callBodies.keys()) if (!ids.has(id)) callBodies.delete(id);
   for (const id of expandedCalls) if (!ids.has(id)) expandedCalls.delete(id);
+  for (const id of wireOpen) if (!ids.has(id)) wireOpen.delete(id);
   const box = $("#activity");
   // a body being read keeps its place as new calls come in
   const kept = new Map();
@@ -744,6 +746,11 @@ function renderActivity() {
       );
       item.dataset.id = id;
       item.append(details);
+      // the headers both ways, folded (wireHeadersView, usage/page.js)
+      if (body.headers) item.append(wireHeadersView(body.headers, wireOpen.has(id), () => {
+        if (wireOpen.has(id)) wireOpen.delete(id); else wireOpen.add(id);
+        renderActivity();
+      }));
     }
     box.append(item);
   }

@@ -52,6 +52,12 @@ func TestArchiveOnThisComputer(t *testing.T) {
 		!strings.Contains(a.Request.Body, "deploy with [REDACTED:API_KEY]") || !strings.Contains(a.Response.Body, `"content":"done"`) {
 		t.Errorf("archived %+v", a)
 	}
+	// what went upstream for it, and the head of what came back, masked
+	// as the rest (usrname1833 on Discord)
+	if len(a.Upstream) != 1 || a.Upstream[0].Status != 200 || len(a.Upstream[0].Request["Authorization"]) != 1 ||
+		a.Upstream[0].Request["Authorization"][0] != "[REDACTED]" || len(a.Upstream[0].Response["Set-Cookie"]) != 1 {
+		t.Errorf("upstream %+v", a.Upstream)
+	}
 	if fi, _ := os.Stat(path); runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
 		t.Errorf("mode %v, want 0600", fi.Mode().Perm())
 	}

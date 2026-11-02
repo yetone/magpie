@@ -286,5 +286,9 @@ func (t rpmTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 	}
-	return t.next.RoundTrip(r)
+	// its headers, both ways, for the call it is for (wire_headers.go)
+	done := upstreamBegins(r, "")
+	res, err := t.next.RoundTrip(r)
+	done(res, err)
+	return res, err
 }

@@ -1349,7 +1349,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			writeError(w, provider.Responses, res.StatusCode, codexKeyRefused(msg))
 			s.record(Call{Route: routeOf(tr), Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
 				Provider: "openai", Agent: callerOf(r).agent, Status: res.StatusCode,
-				Millis: time.Since(start).Milliseconds(), Error: res.Status})
+				Millis: time.Since(start).Milliseconds(), Error: res.Status, headers: headerLogOf(r.Context())})
 			end(res.StatusCode, res.Status, 0, 0)
 			return
 		}
@@ -1372,7 +1372,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				failWith(res.StatusCode, said)
 				s.record(Call{Route: routeOf(tr), Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
 					Provider: "openai", Agent: callerOf(r).agent, Kind: callKind(r.Header), Status: res.StatusCode,
-					Millis: time.Since(start).Milliseconds(), Error: said})
+					Millis: time.Since(start).Milliseconds(), Error: said, headers: headerLogOf(r.Context())})
 				end(res.StatusCode, said, 0, 0)
 				return
 			}
@@ -1480,7 +1480,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 	}
 	call := Call{Time: start, From: provider.Responses, To: provider.Responses, Model: modelOf(body),
 		Provider: "openai", Agent: callerOf(r).agent, Kind: kind, Status: res.StatusCode,
-		Millis: time.Since(start).Milliseconds(), Fallback: resetNote}
+		Millis: time.Since(start).Milliseconds(), Fallback: resetNote, headers: headerLogOf(r.Context())}
 	if len(tried) > 0 {
 		// the overloads it was asked again for, before the one that answered
 		call.Fallback = strings.Join(append(tried, call.Fallback), "; ")

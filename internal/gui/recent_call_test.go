@@ -78,6 +78,15 @@ func TestRecentCallBodiesOnDemand(t *testing.T) {
 	if w.Code != http.StatusOK || detail.RequestBody != first.RequestBody || detail.ResponseBody != first.ResponseBody || !detail.RequestTruncated || !detail.ResponseTruncated || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("the detail must keep both captured previews and truncation flags")
 	}
+	// and its headers both ways, the key it went upstream with taken out
+	// (usrname1833 on Discord)
+	var wire struct{ Headers *gateway.CallHeaders }
+	json.Unmarshal(w.Body.Bytes(), &wire)
+	if h := wire.Headers; h == nil || h.Request["User-Agent"][0] != "codex" || len(h.Upstream) != 1 ||
+		h.Upstream[0].Status != 200 || h.Upstream[0].Response["Content-Type"][0] != "application/json" ||
+		len(h.Upstream[0].Request["Authorization"]) != 1 || strings.Contains(w.Body.String(), "Bearer fixture") {
+		t.Fatalf("headers: %s", w.Body.String()[:min(w.Body.Len(), 2000)])
+	}
 	if s.Recent()[0].RequestBody == "" || s.Recent()[0].ResponseBody == "" {
 		t.Fatal("building a summary changed the gateway's captured bodies")
 	}

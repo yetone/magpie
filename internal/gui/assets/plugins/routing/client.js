@@ -2846,6 +2846,7 @@ function routingPage(part) {
   // request archive's copy, when it was on. Nothing more is recorded for
   // it: without the archive an older request says how to keep them.
   const bodiesGot = new Map(); // route id → { busy } | its bodies | { gone } | { error }
+  const wireOpen = new Set(); // route ids whose HTTP headers are open
   async function loadBodies(id) {
     const pending = { busy: true };
     bodiesGot.set(id, pending);
@@ -2872,7 +2873,7 @@ function routingPage(part) {
     }
     if (!bodiesGot.has(r.id)) loadBodies(r.id);
     const got = bodiesGot.get(r.id);
-    const key = JSON.stringify([document.documentElement.lang, r.id, r.archive || "", !!providers?.gateway?.archive?.on, got.busy ? "busy" : got.gone ? "gone" : got.error ? "error" : "in"]);
+    const key = JSON.stringify([document.documentElement.lang, r.id, r.archive || "", !!providers?.gateway?.archive?.on, got.busy ? "busy" : got.gone ? "gone" : got.error ? "error" : "in", wireOpen.has(r.id)]);
     if (key === bodiesKey) return;
     bodiesKey = key;
     if (got.busy) { bodies.replaceChildren(el("div", "none", t("Fetching…"))); return; }
@@ -2902,6 +2903,12 @@ function routingPage(part) {
       callBodyPanel("Response Body", got.responseBody, got.responseTruncated, "rt|" + r.id),
     );
     bodies.replaceChildren(grid);
+    // the headers both ways, folded (wireHeadersView, usage/page.js)
+    if (got.headers) bodies.append(wireHeadersView(got.headers, wireOpen.has(r.id), () => {
+      if (wireOpen.has(r.id)) wireOpen.delete(r.id); else wireOpen.add(r.id);
+      bodiesKey = "";
+      renderBodies(logR);
+    }));
   }
   // holdStory keeps the story of the live request, its head and its lines,
   // as tall as the tallest of the last few requests told, at this
