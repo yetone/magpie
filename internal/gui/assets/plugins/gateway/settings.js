@@ -406,7 +406,7 @@ function renderWebPage(asked) {
     segs([["", t("Off")], ["local", t("This computer")], ["lan", t("Local network")]], s.mode || "", (mode) => set({ mode }))).classList.add("web-page-mode");
   if (s.mode) {
     const why = s.error ? el("div", "sub err", s.error.startsWith("port ") ? t("Port {p} is taken by another program, magpie web perhaps: magpie tries again every few seconds", { p: s.port }) : t(s.error))
-      : el("div", "sub", s.serving ? t("Served; anyone with this link can change every setting") : t("Starting…"));
+      : el("div", "sub say", s.serving ? t("Served; anyone with this link can change every setting") : t("Starting…"));
     const links = [s.link, ...(s.mode === "lan" ? s.network || [] : [])].filter(Boolean);
     const box2 = el("div", "web-page-links");
     for (const l of links) {

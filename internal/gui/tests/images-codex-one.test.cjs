@@ -2,7 +2,8 @@
 // #1865: chatgpt.com's Codex images backend draws the same image for
 // gpt-image-2, gpt-image-2.5 or a made-up name, so Settings › Models ›
 // Image generation lists a ChatGPT account's one GPT Image, its note saying
-// ChatGPT picks the model, and the row says so while it draws. Before, it
+// ChatGPT picks the model, and the row says so while it draws (in its
+// hover card: the line explaining it rests out of sight). Before, it
 // listed GPT Image 2 and 2.5 as if they differed. A gpt-image-2.5 saved
 // when it was listed (imageGenShown) shows as that entry, is ticked in the
 // picker, and picking that entry again saves nothing over it. An API key's
@@ -108,14 +109,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const button = draw.locator("button.rt-cond");
           assert.equal((await button.textContent()).trim(), "GPT Image · Codex");
           const line = draw.locator(".image-gen-vendor");
-          assert.equal(await line.isVisible(), true);
+          // the line explains the list: it rests out of sight, shown whole in the
+          // row's hover card (settings-hints.test.cjs)
+          assert.equal(await line.evaluate((e) => e.isConnected && getComputedStyle(e).getPropertyValue("--hint").trim()), "1", "the explanation shows at rest");
           assert.match((await line.textContent()).trim(), want[lang].vendor);
           assert.equal(await draw.locator(".image-gen-missing").count(), 0);
           const fit = await page.evaluate(() => {
-            const l = document.querySelector("#imagesList .image-gen-vendor"), row = l.closest(".row").getBoundingClientRect(), r = l.getBoundingClientRect();
-            return { inRow: r.left >= row.left - 1 && r.right <= row.right + 1, scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+            return { scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth };
           });
-          assert.deepEqual(fit, { inRow: true, scroll: 0 });
+          assert.deepEqual(fit, { scroll: 0 });
           shots.push([`${lang}-${width}`, await page.screenshot({ fullPage: true })]);
 
           await click(page, button);

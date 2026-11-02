@@ -19481,10 +19481,10 @@ function setSetTab(tab, remember) {
     if (b) setSetTab(b.dataset.set, true);
   };
   tabKeys(tabs, "button[data-set]");
-  // the tabs held at the top (app.css, #2396): a hairline under them once
-  // the page has scrolled beneath, as the Library's
+  // held tabs (#2396): a hairline once scrolled under
   const sv = $("#view-settings"), head = sv.querySelector(":scope > .set-head");
   sv.addEventListener("scroll", () => head.classList.toggle("stuck", sv.scrollTop > 0), { passive: true });
+  import("./settingshints.js").catch(() => {});
   // opened on a part (a reload, a link): that part, and remembered
   if (mode === "window" && params.get("view") === "settings" && SET_TABS.includes(params.get("tab"))) {
     setTab = params.get("tab");
@@ -20031,6 +20031,7 @@ async function renderSync(v) {
   // a failure is shown whole: what the server sent and what to do don't
   // fit one line
   if (v.error) sub.classList.add("bad", "wraps");
+  if (v.on) sub.classList.add("say");
   // usage that couldn't be shared is a line of its own, in red: beside
   // "Synced" in the same grey it read as part of a sync that went fine
   // (#1259)
@@ -20060,8 +20061,8 @@ async function renderSync(v) {
     else if (n.here?.length) lines.push(t("Replaced here by newer ones from another computer: {parts}", { parts: parts(n.here) }));
     if (n.there?.length) lines.push(t("Replaced on the server by this computer's newer ones: {parts}", { parts: parts(n.there) }));
     const who = el("div", "who");
-    for (const l of lines) who.append(el("div", "sub", l));
-    who.append(el("div", "sub", t(n.restored ? "This computer's setup from before is kept in the sync folder." : "The copies replaced are kept in the sync folder.")));
+    for (const l of lines) who.append(el("div", "sub say", l));
+    who.append(el("div", "sub say", t(n.restored ? "This computer's setup from before is kept in the sync folder." : "The copies replaced are kept in the sync folder.")));
     const val = el("div", "val");
     if (n.restored && v.undo) val.append(btn(t("Undo"), async (e) => {
       e.target.classList.add("busy");
@@ -21868,11 +21869,8 @@ function renderRedact(s, keep) {
   }
 }
 
-// privacyModelRow: the local masking model (internal/pii), downloaded when
-// it is turned on and then asked beside the rules. Its state is its own
-// (privacy-model): read when the row is drawn, and each second while it
-// downloads or starts. Under it, once the model can run, its threshold
-// (pmScore).
+// privacyModelRow: the local masking model (internal/pii); its state read
+// on drawing, each second while it downloads or starts; then pmScore.
 let pmState = null, pmTimer = 0;
 function privacyModelRow(box, why) {
   const r = el("div", "row pref" + (why ? " pm-wait" : ""));
@@ -21885,7 +21883,7 @@ function privacyModelRow(box, why) {
   if (why) {
     clearTimeout(pmTimer);
     const who = el("div", "who");
-    who.append(name(), el("div", "sub", why));
+    who.append(name(), el("div", "sub say", why));
     r.append(who);
     return;
   }
@@ -21893,7 +21891,7 @@ function privacyModelRow(box, why) {
   const draw = (m) => {
     if (!r.isConnected) return;
     const who = el("div", "who"), val = el("div", "val");
-    who.append(name(), el("div", "sub", pmSub(m)));
+    who.append(name(), el("div", m && (m.on || m.installed || !m.supported || pmBusy(m) || m.error || m.models?.some((x) => x.error)) ? "sub say" : "sub", pmSub(m)));
     if (m?.supported || m?.installed) {
       if (m.models?.length > 1) val.append(pmPick(m, (id) => act("pick", id)));
       if (pmBusy(m)) {
@@ -22358,7 +22356,7 @@ async function renderUpdate(r, u) {
   if (u == null) {
     const bare = !r.querySelector(".sub"), early = bare && !updateBusy && Date.now() - updateLast?.at < 3e4;
     if (early) renderUpdate(r, updateLast);
-    else if (bare) r.querySelector(".who").append(el("div", "sub", "\u00a0"));
+    else if (bare) r.querySelector(".who").append(el("div", "sub say", "\u00a0"));
     u = await api(updatePath("update?fresh=1")).catch(() => null);
     if (!u || !r.isConnected || seqOf(r) !== seq) return;
     if (early) updateSeq.set(r, seq + 1); // stops timers
@@ -22366,6 +22364,7 @@ async function renderUpdate(r, u) {
   updateLast = u, u.at ??= Date.now();
   const who = r.querySelector(".who"), val = r.querySelector(".val");
   const sub = who.querySelector(".sub") || who.appendChild(el("div", "sub"));
+  sub.classList.add("say");
   sub.title = "";
   sub.classList.remove("wraps");
   // the release page's button outlives a redraw: a download redraws every

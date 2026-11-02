@@ -1,7 +1,8 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // Settings' Masking rules row (TechVerser on X: 这个地方错位了吗？): its words
-// are shown in full, and its fields — a name, prefix or regex, what to match,
-// Add — sit on one line under them, from the row's left edge to its right,
+// rest out of sight for the hover card (settingshints.js), and its fields —
+// a name, prefix or regex, what to match, Add — sit on one line under its
+// name, from the row's left edge to its right,
 // none on top of another, the rules already added listed after it as before.
 // In English and Chinese, in a wide window and a narrow one.
 const assert = require("node:assert/strict");
@@ -64,19 +65,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const val = r.querySelector(".val");
           return {
             name: r.querySelector(".name").textContent, sub: sub.textContent,
-            cut: sub.scrollWidth > sub.clientWidth + 1 || sub.scrollHeight > sub.clientHeight + 1,
-            who: box(r.querySelector(".who")), val: box(val), subBox: box(sub),
+            hint: getComputedStyle(sub).getPropertyValue("--hint").trim() === "1",
+            who: box(r.querySelector(".who")), val: box(val), nameBox: box(r.querySelector(".name")),
             tools: [...val.children].map((e) => ({ cls: e.className, ...box(e) })),
           };
         });
         assert.equal(m.name, w.name);
         assert(m.sub.includes(w.sub) && m.sub.length > 20, `the row's words: ${m.sub}`);
-        assert(!m.cut, "the row's words are shown in full");
+        assert(m.hint, "the row's words rest out of sight, for the hover card");
         assert.deepEqual(m.tools.map((e) => e.cls.split(" ")[0]), ["words", "segs", "words", "text"], "name, prefix or regex, match, Add");
         const mid = m.tools[0].mid;
         for (const e of m.tools) assert(Math.abs(e.mid - mid) < 2, `on one line: ${JSON.stringify(m.tools)}`);
         for (let i = 1; i < m.tools.length; i++) assert(m.tools[i].l >= m.tools[i - 1].r, `none on top of another: ${JSON.stringify(m.tools)}`);
-        assert(m.tools[0].t >= m.subBox.b, "the fields are under the words");
+        assert(m.tools[0].t >= m.nameBox.b, "the fields are under the name");
         assert(Math.abs(m.tools[0].l - m.who.l) < 1.5, `from the row's left edge: ${m.tools[0].l} vs ${m.who.l}`);
         assert(Math.abs(m.tools[3].r - m.val.r) < 1.5, `to its right: ${m.tools[3].r} vs ${m.val.r}`);
 

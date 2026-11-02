@@ -22,6 +22,7 @@ window.ciNowFill = function (row, s, by) {
     const said = checkinNowSaid[by];
     sub.textContent = said ? said.text : t("Checks one account in once now; the daily check-in's switches stay as they are");
     sub.classList.toggle("err", !!said?.bad);
+    sub.classList.toggle("say", !!said); // what came of it: a state, kept in sight
     const b = el("button", "text ci-now-go", t(accts.length > 1 ? "Check in…" : "Check in"));
     b.type = "button";
     b.disabled = !!said?.busy;

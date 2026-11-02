@@ -69,6 +69,9 @@ const measure = (scope) => {
     const rb = r.getBoundingClientRect();
     for (const s of r.querySelectorAll(".who .sub")) {
       if (!shown(s) || !s.textContent.trim()) continue;
+      // an explanation kept out of sight shows whole in its card on hover
+      // (settings-hints.test.cjs)
+      if (getComputedStyle(s).getPropertyValue("--hint").trim() === "1") continue;
       const cs = getComputedStyle(s);
       if (s.scrollWidth > s.clientWidth + 1 || cs.whiteSpace === "nowrap") cut.push({ text: s.textContent.slice(0, 80), scroll: s.scrollWidth, width: s.clientWidth, whiteSpace: cs.whiteSpace });
     }
@@ -115,7 +118,17 @@ for (const engine of engines) {
       await openPart(page, "models");
       for (const sel of ["#imagesList .image-gen-vendor", "#visionMcpRow .sub", ".searcher-row .who > .sub"]) {
         const s = page.locator(sel).first();
-        await s.waitFor();
+        await s.waitFor({ state: "attached" });
+        if (await s.evaluate((e) => getComputedStyle(e).getPropertyValue("--hint").trim() === "1")) {
+          // out of sight at rest: the row's card shows it whole
+          await s.evaluate((e) => e.closest(".row.pref").scrollIntoView({ block: "center" }));
+          await s.locator("xpath=ancestor::div[contains(concat(' ', @class, ' '), ' pref ')][1]").locator(":scope > .who > .name").hover();
+          const card = page.locator(".set-hint.on");
+          await card.waitFor();
+          assert.ok((await card.textContent()).includes((await s.textContent()).trim()), `${sel} isn't in its card`);
+          await page.mouse.move(0, 0);
+          continue;
+        }
         const whole = await s.evaluate((e) => e.scrollWidth <= e.clientWidth + 1 && getComputedStyle(e).whiteSpace !== "nowrap");
         assert.equal(whole, true, `${sel} is cut`);
       }

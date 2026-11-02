@@ -14,9 +14,10 @@
 // keeps the pick (prefsKeep). No click moves the page. English and Chinese, Chromium and
 // WebKit, with the API faked. Search help covers costs for every provider and
 // explains current eligibility without claiming a provider can never search.
-// The help is also checked in Japanese and German, wrapped whole beside the
-// picker at every width (arculongus on Discord: cut with an ellipsis on the
-// desktop, it couldn't be read; settings-lines-wrap.test.cjs).
+// The help is also checked in Japanese and German, whole in the hover card
+// at every width (the owner, 11-02: a row's explanation rests out of sight;
+// before, it wrapped whole beside the picker, arculongus on Discord: cut
+// with an ellipsis on the desktop, it couldn't be read).
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -355,6 +356,18 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.equal(await row.locator(".searcher-relays").innerText(), h.relays);
           assert.equal(await row.locator(".searcher-left-out").innerText(), h.left);
           assert.equal(await row.locator("button.searcher-pick").innerText(), "Claude Haiku 4.5 · MyRelay");
+          const sub = row.locator(".sub");
+          assert.equal(await sub.getAttribute("class"), "sub", "every setting row's line wraps, with no class of its own to opt in");
+          // the help explains the row: it rests out of sight and the
+          // pointer on the row shows it whole in the card (the owner,
+          // 11-02; settings-hints.test.cjs), the hover above showing it
+          if (await sub.evaluate((s) => getComputedStyle(s).getPropertyValue("--hint").trim() === "1")) {
+            const card = page.locator(".set-hint.on");
+            await card.waitFor();
+            assert((await card.innerText()).includes(h.help), "the card has the help");
+            assert((await card.innerText()).includes(h.relays), "the card has the relays");
+            continue;
+          }
           const layout = await row.evaluate((r) => {
             const sub = r.querySelector(".sub");
             const b = r.querySelector("button.searcher-pick").getBoundingClientRect();
@@ -367,8 +380,6 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
                 (s.right <= b.left + 1 || s.bottom <= b.top + 1) };
           });
           assert(layout.clipped <= 1 && layout.fits, JSON.stringify(layout));
-          const sub = row.locator(".sub");
-          assert.equal(await sub.getAttribute("class"), "sub", "every setting row's line wraps, with no class of its own to opt in");
           assert.equal(layout.whiteSpace, "normal", "the help wraps");
           assert(layout.overflow <= 1, JSON.stringify(layout));
           if (process.env.ARTIFACT_DIR) {

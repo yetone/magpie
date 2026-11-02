@@ -2,7 +2,8 @@
 // Settings › Models › Disabled models (#1867, oxsean: a model the user
 // never wants, claude-fable-5, kept being reached through a group, a
 // fallback and an old session): the list says what it covers — only
-// requests through magpie — each pattern with the models it turns off
+// requests through magpie, on hover, as Settings' explanations are (the
+// owner, 11-02) — each pattern with the models it turns off
 // now and Enable; Disable… takes a model from the picker or a glob typed
 // into it. Each saves the whole list on its own route, the page not moved
 // by the click. In English, Chinese, Japanese and German, 1100 and 420 wide.
@@ -92,10 +93,14 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await fable.locator(".sub").textContent(), w.hits);
       for (const part of [`#disabledAddRow .name`, `#disabledAddRow .sub`, `#disabledAdd`, `.disabled-model .name`, `.disabled-model .sub`, `.disabled-model button`]) {
         const fit = await page.locator("#disabledModelsList " + part).first().evaluate((e) => {
+          // the add row's line explains it: out of sight at rest, whole in
+          // the hover card (settings-hints.test.cjs)
+          if (getComputedStyle(e).getPropertyValue("--hint").trim() === "1") return "hint";
           const r = e.getBoundingClientRect();
           return e.scrollWidth <= e.clientWidth + 1 && r.width > 0 && r.right <= innerWidth + 1;
         });
-        assert(fit, `${part} fits at ${width}`);
+        if (part === "#disabledAddRow .sub") assert.equal(fit, "hint", `${part} shows at rest at ${width}`);
+        else assert.equal(fit, true, `${part} fits at ${width}`);
       }
 
       // Disable…: a glob typed into the picker is taken as typed

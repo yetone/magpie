@@ -2,9 +2,11 @@
 // Settings → Privacy's local masking model (#1977): a row under the masking
 // switches, there while either is on. On downloads the model, its progress
 // shown and a Cancel beside it; once it is on, the row says where it runs.
-// Off, a downloaded model can be deleted, after asking. Its words are shown
-// in full, in every language, in a wide window and a narrow one, and a
-// click moves nothing. Under it, the model's threshold is picked from the
+// Off, a downloaded model can be deleted, after asking. What it says while
+// downloading or on is a state, shown in full; off, its line explains it
+// and rests out of sight, for the hover card (settingshints.js), as the
+// threshold's does. In every language, in a wide window and a narrow one,
+// and a click moves nothing. Under it, the model's threshold is picked from the
 // app's menu too.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -110,8 +112,9 @@ const runs = {
   failed: { device: "CPU", gpuError: "prediction failed" }, cpu: { device: "CPU" },
 };
 
-// what the row shows: its words and its New mark, whether they are cut,
-// that it is inside the list, and that it is the page's first setting
+// what the row shows: its words and its New mark, whether they rest out of
+// sight for the hover card (hint) or are cut, that it is inside the list,
+// and that it is the page's first setting
 const look = (page) => page.evaluate(() => {
   const r = document.querySelector("#privacyModelRow"), list = r.closest(".list").getBoundingClientRect();
   const sub = r.querySelector(".sub"), b = r.getBoundingClientRect(), v = r.querySelector(".val").getBoundingClientRect();
@@ -119,6 +122,7 @@ const look = (page) => page.evaluate(() => {
     name: r.querySelector(".name").firstChild.textContent, badge: r.querySelector(".name .badge.new")?.textContent, sub: sub.textContent,
     first: r === document.querySelector("#setPage-privacy .list.prefs > .row"),
     on: r.querySelector(".segs .opt.on")?.textContent, buttons: [...r.querySelectorAll("button.text")].map((x) => x.textContent),
+    hint: getComputedStyle(sub).getPropertyValue("--hint").trim() === "1",
     cut: sub.scrollWidth > sub.clientWidth + 1 || sub.scrollHeight > sub.clientHeight + 1,
     inside: b.left >= list.left - 1 && b.right <= list.right + 1 && v.right <= b.right + 1,
     wide: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -141,7 +145,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(m.first, "the model is the first setting under the card");
         assert(m.sub.includes("1.6 GB"), `says what it downloads: ${m.sub}`);
         if (lang !== "en") assert(!/no rule can find|Turning it on/.test(m.sub), `translated: ${m.sub}`);
-        assert(!m.cut && m.inside && !m.wide, `shown in full and inside: ${JSON.stringify(m)}`);
+        assert(m.hint && m.inside && !m.wide, `off, the explanation rests out of sight, for the hover card: ${JSON.stringify(m)}`);
 
         await page.mouse.move(width / 2, 300);
         for (let i = 0; i < 20 && (await row.boundingBox()).y > 900; i++) {
@@ -157,12 +161,12 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         m = await look(page);
         assert.equal(m.buttons.length, 1, "a Cancel while it downloads");
         assert.equal(m.on, w.on);
-        assert(!m.cut && m.inside && !m.wide, `shown in full and inside: ${JSON.stringify(m)}`);
+        assert(!m.hint && !m.cut && m.inside && !m.wide, `the download's progress shown in full and inside: ${JSON.stringify(m)}`);
         // then on, on the GPU
         await page.waitForFunction((want) => document.querySelector("#privacyModelRow .sub").textContent === want, w.gpu);
         m = await look(page);
         assert.deepEqual(m.buttons, [], "nothing to cancel or delete while it is on");
-        assert(!m.cut && m.inside && !m.wide, `shown in full and inside: ${JSON.stringify(m)}`);
+        assert(!m.hint && !m.cut && m.inside && !m.wide, `shown in full and inside: ${JSON.stringify(m)}`);
         assert.deepEqual(posts, ["on"]);
         assert.deepEqual(await page.evaluate(() => [scrollX, scrollY, document.querySelector("#view-settings").scrollTop]), before, "the click moved nothing");
         assert.deepEqual(errors, []);
@@ -180,7 +184,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const m = await look(page);
           await browser.close();
           assert.equal(m.sub, runWords[lang][k], k);
-          assert(!m.cut && m.inside && !m.wide, `${k} shown in full and inside: ${JSON.stringify(m)}`);
+          assert(!m.hint && !m.cut && m.inside && !m.wide, `${k} shown in full and inside: ${JSON.stringify(m)}`);
           assert.deepEqual(errors, []);
         }
       });
@@ -248,7 +252,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await page.locator("#privacyModelRow select").count(), 0, "no native select");
         assert.equal((await pick.textContent()).trim(), "Privacy Filter");
         let m = await look(page);
-        assert(!m.cut && m.inside && !m.wide, `shown in full and inside: ${JSON.stringify(m)}`);
+        assert(!m.hint && !m.cut && m.inside && !m.wide, `where it runs shown in full and inside: ${JSON.stringify(m)}`);
         // the menu and the switch are two boxes: they stand apart, on one line
         const gap = await page.evaluate(() => {
           const p = document.querySelector("#privacyModelRow .pm-model").getBoundingClientRect(), s = document.querySelector("#privacyModelRow .segs").getBoundingClientRect();
@@ -298,6 +302,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const sub = r.querySelector(".sub"), b = r.getBoundingClientRect(), list = r.closest(".list").getBoundingClientRect();
           return {
             name: r.querySelector(".name").textContent, sub: sub.textContent, pick: r.querySelector("button.pm-score").textContent.trim(),
+            hint: getComputedStyle(sub).getPropertyValue("--hint").trim() === "1",
             cut: sub.scrollWidth > sub.clientWidth + 1 || sub.scrollHeight > sub.clientHeight + 1,
             inside: b.left >= list.left - 1 && b.right <= list.right + 1, wide: document.documentElement.scrollWidth > document.documentElement.clientWidth,
           };
@@ -306,7 +311,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(m.name, w.name);
         if (lang !== "en") assert(!/less sure/.test(m.sub), `translated: ${m.sub}`);
         assert.equal(m.pick, "0.8");
-        assert(!m.cut && m.inside && !m.wide, `shown in full and inside: ${JSON.stringify(m)}`);
+        assert(m.hint && m.inside && !m.wide, `the threshold's explanation rests out of sight, for the hover card: ${JSON.stringify(m)}`);
         const before = await page.evaluate(() => [scrollX, scrollY, document.querySelector("#view-settings").scrollTop]);
         const menu = page.locator(".proto-menu");
         const items = async () => {

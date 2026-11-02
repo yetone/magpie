@@ -3,7 +3,8 @@
 // 只有移除，能否增加一个编辑功能): each rule's row has Edit beside Remove.
 // Edit opens the rule in its own row, where it stands, with its name, prefix
 // or regex and what it matches filled in, the fields on a line under its
-// words, none on top of another. Cancel changes nothing and sends nothing.
+// words (its name, where its explanation rests out of sight for the hover
+// card), none on top of another. Cancel changes nothing and sends nothing.
 // A pattern the gateway refuses is said in the row, what was typed kept and
 // the rule as it was; a good one is saved in the same place. No click moves
 // the page. In every language, in a wide window and a narrow one.
@@ -110,7 +111,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // its fields on a line under its words, inside the row, none on top of another
         const m = await ed.evaluate((r) => {
           const box = (e) => { const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom, mid: (b.top + b.bottom) / 2, w: b.width }; };
-          return { row: box(r), sub: box(r.querySelector(".sub")), tools: [...r.querySelectorAll(".val input, .val .segs, .val button:not(.opt)")].map((e) => ({ cls: e.className, ...box(e) })), pageW: document.documentElement.scrollWidth, winW: innerWidth };
+          const sub = r.querySelector(".sub"), words = getComputedStyle(sub).getPropertyValue("--hint").trim() === "1" ? r.querySelector(".name") : sub;
+          return { row: box(r), sub: box(words), tools: [...r.querySelectorAll(".val input, .val .segs, .val button:not(.opt)")].map((e) => ({ cls: e.className, ...box(e) })), pageW: document.documentElement.scrollWidth, winW: innerWidth };
         });
         assert.deepEqual(m.tools.map((e) => e.cls.split(" ")[0]), ["words", "segs", "words", "text", "text"], "name, prefix or regex, match, Save, Cancel");
         for (const e of m.tools) assert(e.w > 0 && e.l >= m.row.l - 1 && e.r <= m.row.r + 1, `in the row: ${JSON.stringify(m)}`);

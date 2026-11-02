@@ -3809,6 +3809,33 @@ input.words.compact-num { flex: none; width: 76px; font-variant-numeric: tabular
 .row.pref.redact-kind .sub { white-space: normal; overflow-wrap: anywhere; line-height: 1.45; }
 /* an update that failed says why in full (the version row) */
 .row .sub.wraps { white-space: normal; overflow-wrap: anywhere; }
+/* Settings' lines that explain a setting rest out of sight, so the page is
+   its names and controls (the owner, 11-02): the pointer resting on a row,
+   or a key reaching it, shows them in a card under its name
+   (settingshints.js), and the rows don't move. They stay read by a screen
+   reader and by the search, which shows them in place. What isn't an
+   explanation stays: an error, a state (.say: the Version row's update,
+   a sync's last sync, the local model's, a check-in's result; the proxy
+   in use; a pattern's matches), a warning, a disclosure (what tracing
+   sends, who the allow list lets in), a line with a button or link in
+   it. A touch screen, with no hover, keeps them all. */
+@media (hover: hover) {
+  #view-settings:not(.set-searching) .row.pref > .who > .sub:not(.err, .bad, .say, .proxy-check, .lib-way, .image-gen-hidden, .sync-sign-in, .no-names, .pv-hits, .feat-why, .vision-not-marked, .font-note, .acts, [role="status"], #proxySub):not(#otelSessionsRow *, #allowList *, .disabled-model *) {
+    --hint: 1; position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  /* a row left with its name alone is as tall as any other: its control
+     (a switch, a field, a shortcut) no longer sets it apart */
+  #view-settings .row.pref:not(.feat-set) { box-sizing: content-box; min-height: 27px; } /* 51 with its padding, a line above it outside */
+  /* Check in now's result comes under its name and the row grows down,
+     its button held where it was pressed */
+  #view-settings .ci-now-row { align-items: flex-start; }
+}
+.set-hint { position: fixed; z-index: 60; max-width: min(380px, calc(100vw - 32px)); padding: 8px 11px; border-radius: 9px; background: var(--pop-bg); box-shadow: var(--shadow); -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4); font-size: 12px; line-height: 1.45; color: var(--fg-2); overflow-wrap: anywhere; pointer-events: none; opacity: 0; transform: translateY(-2px); transition: opacity .14s ease, transform .14s ease; }
+.set-hint.on { opacity: 1; transform: none; }
+.set-hint > p { margin: 0; }
+.set-hint > p + p { margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .set-hint { transition: none; transform: none; } }
+:root[data-motion="reduce"] .set-hint { transition: none; transform: none; }
 .prefs .val.rule-add { flex: 1 1 100%; max-width: none; margin-left: 0; gap: 6px; }
 input.words.rule-kind { flex: none; width: 110px; }
 input.words.gateway-port { flex: none; width: 110px; font-variant-numeric: tabular-nums; }input.words.rule-match { flex: 1 1 auto; width: auto; min-width: 0; }

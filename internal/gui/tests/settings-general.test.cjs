@@ -7,7 +7,9 @@
 // rows show only there), with the API faked:
 // - the rows whose names say enough have no line under them, and the lines
 //   kept are never cut short, one line each on a wide window (narrower,
-//   they wrap whole beside the control: arculongus on Discord);
+//   they wrap whole beside the control: arculongus on Discord); a line
+//   that explains its row rests out of sight and shows whole in the
+//   hover card instead (the owner, 11-02; settings-hints.test.cjs);
 // - Codex's and Claude Code's own settings aren't here: they are on the
 //   agents' rows (the owner, 10-20);
 // - Language is a button (never a native <select>) showing the language;
@@ -81,17 +83,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
       const rows = await page.evaluate(([bare, kept]) => {
         const row = (sel) => document.querySelector(sel)?.closest(".row");
+        // an explanation rests out of sight, its words in the hover card
+        // (settingshints.js); the row reads as its name alone
+        const hint = (s) => getComputedStyle(s).getPropertyValue("--hint").trim() === "1";
         return {
           bare: bare.map((sel) => { const r = row(sel); return [sel, !r ? "missing" : r.hidden ? "hidden" : [...r.querySelectorAll(".sub")].filter((s) => s.getClientRects().length && s.textContent.trim()).map((s) => s.textContent)]; }),
           kept: kept.map((sel) => {
             const r = row(sel), s = r?.querySelector(".sub");
-            return [sel, !r || r.hidden ? "missing" : !s ? "no line" : { text: s.textContent, lines: Math.round(s.getBoundingClientRect().height / parseFloat(getComputedStyle(s).lineHeight || 16)), cut: s.scrollWidth > s.clientWidth + 1 }];
+            return [sel, !r || r.hidden ? "missing" : !s ? "no line" : hint(s) ? { text: s.textContent, hint: true } : { text: s.textContent, lines: Math.round(s.getBoundingClientRect().height / parseFloat(getComputedStyle(s).lineHeight || 16)), cut: s.scrollWidth > s.clientWidth + 1 }];
           }),
           stripes: [...document.querySelectorAll("#setPage-general .row")].filter((r) => parseFloat(getComputedStyle(r).borderLeftWidth) > 1).length,
           sideways: document.documentElement.scrollWidth > innerWidth,
           rule: [...document.querySelectorAll("#setPage-general .row.pref")].filter((r) => r.getClientRects().length).map((r, i) => {
             const b = r.getBoundingClientRect(), w = r.querySelector(".who").getBoundingClientRect(), line = parseFloat(getComputedStyle(r).borderTopWidth);
-            const oneLine = ![...r.querySelectorAll(".who .sub")].some((s) => s.getClientRects().length && s.textContent.trim());
+            const oneLine = ![...r.querySelectorAll(".who .sub")].some((s) => s.getClientRects().length && s.textContent.trim() && !hint(s));
             return { id: r.id || r.querySelector(".name").textContent, lined: i === 0 || line >= 1, above: w.top - b.top - line, below: b.bottom - w.bottom, height: Math.round(b.height - line), oneLine };
           }),
         };
@@ -103,6 +108,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (const [sel, sub] of rows.kept) {
         assert.equal(typeof sub, "object", `${sel}: ${sub}`);
         assert.ok(sub.text.trim(), `${sel}: ${JSON.stringify(sub)}`);
+        if (sub.hint) continue; // shown whole in the hover card (settings-hints.test.cjs)
         if (width === 1000) assert.ok(sub.lines <= 1, `${sel} takes more than one line: ${JSON.stringify(sub)}`);
         assert.equal(sub.cut, false, `${sel}'s line is cut short: ${sub.text}`);
       }
