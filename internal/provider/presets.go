@@ -276,6 +276,16 @@ var presets = []PresetDef{
 			{ID: "plan-ams", Name: "Plan · Europe", Chat: "https://token-plan-ams.xiaomimimo.com/v1", Responses: "https://token-plan-ams.xiaomimimo.com/v1", Anthropic: "https://token-plan-ams.xiaomimimo.com/anthropic", Catalog: "xiaomi-token-plan-ams, xiaomi"},
 			{ID: "api", Name: "Pay as you go", Chat: "https://api.xiaomimimo.com/v1", Responses: "https://api.xiaomimimo.com/v1", Anthropic: "https://api.xiaomimimo.com/anthropic", Catalog: "xiaomi"},
 		}},
+	// Meituan's LongCat API platform (hoobnn on Discord): its own LongCat
+	// models at api.longcat.chat, one host for longcat.chat's and
+	// longcat.ai's accounts, chat completions and Responses under
+	// /openai/v1 and Anthropic messages under /anthropic, a key as a
+	// Bearer on both (x-api-key alone is "missing_api_key"); its list is
+	// /openai/v1/models (API 文档 api-docs, api/models, cc-switch, read
+	// 11-02).
+	{ID: "longcat", Name: "LongCat", Icon: "longcat", Kind: KindVendor, Catalog: "longcat",
+		Chat: "https://api.longcat.chat/openai/v1", Responses: "https://api.longcat.chat/openai/v1", Anthropic: "https://api.longcat.chat/anthropic",
+		Website: "https://longcat.chat/platform/docs/zh/api-docs", KeysURL: "https://longcat.chat/platform/api_keys"},
 	// Baidu Qianfan: a personal and an enterprise Token Plan, each at its
 	// own endpoints under qianfan.baidubce.com on a key of its own; pay as
 	// you go is the v2 API at the host's root, which serves its model list

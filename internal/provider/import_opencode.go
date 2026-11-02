@@ -47,7 +47,7 @@ var openCodePresets = map[string]string{
 	"zhipuai":      "zhipu", "zai": "zai", "alibaba": "qwen", "alibaba-cn": "qwen-cn",
 	"minimax": "minimax", "modelscope": "modelscope", "kilo": "kilo", "cline-pass": "clinepass",
 	"kimi-code-plan-cn": "kimi-code-cn", "kimi-code-plan-global": "kimi-code",
-	"stepfun-step-plan": "stepfun-cn", "stepfun-ai-step-plan": "stepfun",
+	"stepfun-step-plan": "stepfun-cn", "stepfun-ai-step-plan": "stepfun", "longcat": "longcat",
 	"volcengine-coding-plan": "volcengine",
 	"alibaba-token-plan-cn":  "bailian-token-plan", "tencent-token-plan": "tencent-cloud",
 }

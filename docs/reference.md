@@ -54,7 +54,7 @@ line; agents connected to magpie lose it when it quits.
   use its models through the gateway, with nothing copied and no key to
   paste.
 - **Providers with one field.** Pick a preset (Anthropic, OpenAI, Gemini,
-  Amazon Bedrock and its Mantle endpoint, DeepSeek, Kimi, GLM, MiniMax, StepFun, Qwen, Baidu Qianfan, Tencent Cloud Token Plan,
+  Amazon Bedrock and its Mantle endpoint, DeepSeek, Kimi, GLM, MiniMax, StepFun, LongCat, Qwen, Baidu Qianfan, Tencent Cloud Token Plan,
   Huawei Cloud MaaS, Volcengine Ark, Mistral, Groq, Nous Portal, xAI, OpenRouter, Together,
   Fireworks, SiliconFlow, NVIDIA NIM, ModelScope, AiHubMix, PipeLLM, 302.AI, Ollama, LM Studio…),
   paste a key, done. Custom vendors need a name and a base URL. magpie never
