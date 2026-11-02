@@ -5194,6 +5194,13 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// it; else the refusal says what to change (@cleverpigo on X)
 		res, err = provider.RetryZhipuCoding(p, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(s.client, r) })
 	}
+	if err == nil && provider.OpenCodeURL(req.URL.String()) {
+		// a model OpenCode Go answers "Model is unavailable": one of Zen's
+		// free models asked at Zen's free tier, signed out as OpenCode
+		// asks it; else the refusal says where it is served (51bit.eth on
+		// Discord)
+		res, err = provider.RetryOpenCodeFreeOnZen(p, to, req, res, func(r *http.Request) (*http.Response, error) { return p.Do(s.client, r) })
+	}
 	if err != nil {
 		return res, err
 	}
