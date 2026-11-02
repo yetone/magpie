@@ -57,7 +57,8 @@ func TestGatewayKeyModelsHoldAKey(t *testing.T) {
 		}
 		return ids
 	}
-	if ids := listed(secrets[0]); !slices.Contains(ids, "plan/m1") || !slices.Contains(ids, "group/solo") || slices.Contains(ids, "spare/m2") || slices.Contains(ids, "group/both") {
+	// Solo, of plan/m1 alone, is a group the key wasn't given (kautism)
+	if ids := listed(secrets[0]); !slices.Contains(ids, "plan/m1") || slices.Contains(ids, "group/solo") || slices.Contains(ids, "spare/m2") || slices.Contains(ids, "group/both") {
 		t.Fatalf("held key lists %v", ids)
 	}
 	if ids := listed(secrets[1]); !slices.Contains(ids, "spare/m2") || !slices.Contains(ids, "group/both") {
@@ -73,7 +74,7 @@ func TestGatewayKeyModelsHoldAKey(t *testing.T) {
 	chat := func(secret, model string) *httptest.ResponseRecorder {
 		return do(secret, "POST", "/v1/chat/completions", `{"model":"`+model+`","messages":[{"role":"user","content":"hi"}]}`)
 	}
-	for _, model := range []string{"spare/m2", "m2", "group/both"} {
+	for _, model := range []string{"spare/m2", "m2", "group/both", "group/solo"} {
 		w := chat(secrets[0], model)
 		var e struct {
 			Error struct{ Message, Type string }
@@ -99,7 +100,7 @@ func TestGatewayKeyModelsHoldAKey(t *testing.T) {
 	if w.Code != 403 || a.Type != "error" || a.Error.Type != "permission_error" {
 		t.Fatal("anthropic refusal", w.Code, w.Body.String())
 	}
-	for _, model := range []string{"plan/m1", "m1", "group/solo"} {
+	for _, model := range []string{"plan/m1", "m1"} {
 		if w := chat(secrets[0], model); w.Code != 200 || !strings.Contains(w.Body.String(), "from-plan") {
 			t.Fatalf("%s: %d %s", model, w.Code, w.Body.String())
 		}
@@ -157,8 +158,8 @@ func TestGatewayKeyModelsMatchTheServingProvider(t *testing.T) {
 // Discord), is shown the group and may use it, every member of it going
 // through it — the next one too when the first fails — but not the
 // members asked by name, a group it doesn't name, or a fallback outside
-// the group; "group/*" names every group, and a group named inside one
-// it doesn't name counts for its own members.
+// the group; "group/*" names every group, and a group the key doesn't
+// name is not its for a group named inside it.
 func TestGatewayKeyModelsNameAGroup(t *testing.T) {
 	fresh(t)
 	plan := &fake{t: t, ctype: "application/json", reply: `{"id":"from-plan","choices":[]}`}
@@ -206,7 +207,7 @@ func TestGatewayKeyModelsNameAGroup(t *testing.T) {
 	if ids := listed(secrets[1]); !slices.Equal(ids, []string{"group/both", "group/outer", "group/solo"}) {
 		t.Fatalf("a key naming group/* lists %v", ids)
 	}
-	if ids := listed(secrets[2]); !slices.Contains(ids, "group/outer") || !slices.Contains(ids, "group/solo") || slices.Contains(ids, "plan/m1") || slices.Contains(ids, "group/both") {
+	if ids := listed(secrets[2]); slices.Contains(ids, "group/outer") || !slices.Contains(ids, "group/solo") || slices.Contains(ids, "plan/m1") || slices.Contains(ids, "group/both") {
 		t.Fatalf("a key naming group/solo and spare/m2 lists %v", ids)
 	}
 	chat := func(secret, model string) *httptest.ResponseRecorder {
@@ -225,7 +226,8 @@ func TestGatewayKeyModelsNameAGroup(t *testing.T) {
 		{0, "group/solo", 403, ""},
 		{1, "group/solo", 200, "from-plan"},
 		{1, "plan/m1", 403, ""},
-		{2, "group/outer", 200, "from-plan"},
+		{2, "group/solo", 200, "from-plan"},
+		{2, "group/outer", 403, ""},
 		{2, "group/both", 403, ""},
 	} {
 		w := chat(secrets[c.key], c.model)
@@ -507,5 +509,122 @@ func TestGatewayKeyHeldToAGroupKeepsItsDecider(t *testing.T) {
 	}
 	if !listed() {
 		t.Fatal("Jev picked for the key isn't listed to it")
+	}
+}
+
+// kautism on Discord: a gateway key given one model, gemini 3.8, was
+// shown — and could use — a routing group the user made of gemini 3.8
+// alone, though the user never gave the key that group. A group of the
+// user's own is the key's only when it names it, on every route: the
+// model lists, chat completions, Anthropic's messages and count_tokens.
+// A bare name that is both such a group and the key's model is the model.
+// A group magpie found, one model two providers serve, is the key's when
+// it may use both, as before; a key naming the group is given it.
+func TestGatewayKeyGivenAModelIsNotGivenItsGroup(t *testing.T) {
+	fresh(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	google := &fake{t: t, ctype: "application/json", reply: `{"id":"from-google","choices":[]}`}
+	vertex := &fake{t: t, ctype: "application/json", reply: `{"id":"from-vertex","choices":[]}`}
+	for _, x := range []struct {
+		p provider.Provider
+		f *fake
+	}{
+		{provider.Provider{ID: "google", Name: "Google", Key: "k", Models: []string{"gemini-3.8", "gemini-3.1-pro"}}, google},
+		{provider.Provider{ID: "vertex", Name: "Vertex", Key: "k", Models: []string{"gemini-3.8"}}, vertex},
+	} {
+		up := httptest.NewServer(x.f)
+		t.Cleanup(up.Close)
+		x.p.Chat = up.URL + "/v1"
+		if err := provider.Save(x.p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, g := range []provider.Group{
+		{ID: "only-38", Name: "Only 3.8", Members: []string{"google/gemini-3.8"}, Routing: provider.Ordered},
+		{ID: "gemini-3-8", Name: "Gemini 3.8", Members: []string{"google/gemini-3.8"}, Routing: provider.Ordered},
+	} {
+		if err := provider.SaveGroup(g); err != nil {
+			t.Fatal(err)
+		}
+	}
+	keys, secrets := newCaller(t, "One model", "Both providers", "Given the group")
+	for i, ms := range [][]string{{"google/gemini-3.8"}, {"google/gemini-3.8", "vertex/gemini-3.8"}, {"google/gemini-3.8", "group/only-38"}} {
+		if _, err := access.Update("models-key", access.Change{Key: keys[i].ID, Models: ms}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := New().Handler()
+	do := func(secret, path, body string) *httptest.ResponseRecorder {
+		method := "POST"
+		if body == "" {
+			method = "GET"
+		}
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r.Header.Set("Authorization", "Bearer "+secret)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	listed := func(secret string) []string {
+		var l struct{ Data []struct{ ID string } }
+		w := do(secret, "/v1/models", "")
+		if err := json.Unmarshal(w.Body.Bytes(), &l); err != nil {
+			t.Fatal(w.Body.String())
+		}
+		var ids []string
+		for _, m := range l.Data {
+			ids = append(ids, m.ID)
+		}
+		slices.Sort(ids)
+		return ids
+	}
+	chat := func(secret, model string) *httptest.ResponseRecorder {
+		return do(secret, "/v1/chat/completions", `{"model":"`+model+`","messages":[{"role":"user","content":"hi"}]}`)
+	}
+	if ids := listed(secrets[0]); !slices.Equal(ids, []string{"google/gemini-3.8"}) {
+		t.Fatalf("a key given google/gemini-3.8 lists %v", ids)
+	}
+	if w := do(secrets[0], "/v1/models/group/only-38", ""); w.Code == 200 {
+		t.Fatal("a key found a group it wasn't given", w.Body.String())
+	}
+	for _, model := range []string{"group/only-38", "group/gemini-3-8", "Only 3.8", "google/gemini-3.1-pro"} {
+		if w := chat(secrets[0], model); w.Code != 403 {
+			t.Fatalf("chat %s: %d %s", model, w.Code, w.Body.String())
+		}
+		msg := `{"model":"` + model + `","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`
+		if w := do(secrets[0], "/v1/messages", msg); w.Code != 403 {
+			t.Fatalf("messages %s: %d %s", model, w.Code, w.Body.String())
+		}
+		if w := do(secrets[0], "/v1/messages/count_tokens", msg); w.Code != 403 {
+			t.Fatalf("count_tokens %s: %d %s", model, w.Code, w.Body.String())
+		}
+	}
+	if google.calls != 0 || vertex.calls != 0 {
+		t.Fatal("a refused request reached a provider", google.calls, vertex.calls)
+	}
+	// its model, by id and bare — the bare name the group Gemini 3.8 goes
+	// by too — is served, and counted
+	for _, model := range []string{"google/gemini-3.8", "gemini-3.8"} {
+		if w := chat(secrets[0], model); w.Code != 200 || !strings.Contains(w.Body.String(), "from-google") {
+			t.Fatalf("chat %s: %d %s", model, w.Code, w.Body.String())
+		}
+		if w := do(secrets[0], "/v1/messages/count_tokens", `{"model":"`+model+`","messages":[{"role":"user","content":"hi"}]}`); w.Code != 200 {
+			t.Fatalf("count_tokens %s: %d %s", model, w.Code, w.Body.String())
+		}
+	}
+	// a group magpie found: one model of both providers
+	if ids := listed(secrets[1]); !slices.ContainsFunc(ids, func(id string) bool { return strings.HasPrefix(id, "auto/") }) || slices.Contains(ids, "group/only-38") || slices.Contains(ids, "group/gemini-3-8") {
+		t.Fatalf("a key given both providers' gemini-3.8 lists %v", ids)
+	}
+	if w := chat(secrets[1], "group/auto-gemini-3-8"); w.Code != 200 {
+		t.Fatalf("the found group: %d %s", w.Code, w.Body.String())
+	}
+	// given the group, it is the key's
+	if ids := listed(secrets[2]); !slices.Equal(ids, []string{"google/gemini-3.8", "group/only-38"}) {
+		t.Fatalf("a key given group/only-38 lists %v", ids)
+	}
+	if w := chat(secrets[2], "group/only-38"); w.Code != 200 || !strings.Contains(w.Body.String(), "from-google") {
+		t.Fatalf("a group given: %d %s", w.Code, w.Body.String())
 	}
 }

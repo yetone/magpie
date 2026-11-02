@@ -256,7 +256,7 @@ func Check(secret string) (Identity, error) {
 
 // identityOf is who k is, folded into its issuer when it has one.
 func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
-	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), Accounts: k.Accounts, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Expires: k.Expires, Issues: k.Issues && k.Issuer == ""}
+	who := Identity{KeyID: k.ID, KeyName: k.Name, Limit: k.Limit, More: k.More, Models: HeldModels(k.Models, k.Accounts), AccountModels: len(k.Models) == 0 && len(k.Accounts) > 0, Accounts: k.Accounts, Quotas: k.Quotas, ReadOnly: k.ReadOnly, Expires: k.Expires, Issues: k.Issues && k.Issuer == ""}
 	// the default key as Default tells it: marked LAN, or the id the
 	// settings name (settings read only for an unmarked key)
 	who.Default = k.LAN || (k.ID != "" && settings.Load().LANKeyID == k.ID)
@@ -269,6 +269,7 @@ func identityOf(k Key, keys []Key, now time.Time) (Identity, error) {
 	}
 	p := keys[j]
 	pModels := HeldModels(p.Models, p.Accounts)
+	who.AccountModels = len(k.Models) == 0 && len(p.Models) == 0 && (len(k.Accounts) > 0 || len(p.Accounts) > 0)
 	if len(pModels) > 0 {
 		if who.Models = foldModels(who.Models, pModels); len(who.Models) == 0 {
 			return Identity{}, &Refused{Why: fmt.Sprintf("the gateway key %q may use none of its models now: the key it was issued under no longer lets it", k.Name)}

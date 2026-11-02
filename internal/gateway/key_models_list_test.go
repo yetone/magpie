@@ -179,11 +179,12 @@ func TestKeyListSeesChangesNextRequest(t *testing.T) {
 	if got := listed(); !slices.Equal(got, []string{"gemini:plan/m1", "plan/m1"}) {
 		t.Fatalf("held to plan/*: %v", got)
 	}
-	// g loses spare's member: every member is the key's, and it is back
+	// g loses spare's member: every member is the key's, but the key was
+	// never given g (kautism), so it stays out
 	if err := provider.SaveGroup(provider.Group{ID: "g", Name: "G", Members: []string{"plan/m1"}, Routing: provider.Ordered}); err != nil {
 		t.Fatal(err)
 	}
-	if got := listed(); !slices.Equal(got, []string{"gemini:group/g", "gemini:plan/m1", "group/g", "plan/m1"}) {
+	if got := listed(); !slices.Equal(got, []string{"gemini:plan/m1", "plan/m1"}) {
 		t.Fatalf("group g narrowed: %v", got)
 	}
 	// held to plan's key, which is then set to serve another model only
@@ -199,7 +200,7 @@ func TestKeyListSeesChangesNextRequest(t *testing.T) {
 	if err := provider.SetAccountModels("plan", provider.KeyID("k"), nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := listed(); len(got) != 4 {
+	if got := listed(); !slices.Equal(got, []string{"gemini:plan/m1", "plan/m1"}) {
 		t.Fatalf("plan's key serves m1 again: %v", got)
 	}
 }

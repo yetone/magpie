@@ -2071,7 +2071,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// spelling of a group's model (#750) — is that group, as asked for or
 	// as an agent's config names its stand-in
 	grouped := func(m string) string {
-		if id, ok := provider.GroupFor(m); ok {
+		if id, ok := keyGroupFor(r, m); ok {
 			return id
 		}
 		if id, ok := provider.AutoStandIn(m); ok {
@@ -2222,7 +2222,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 		r = heldByGroup(r, g)
 	}
 	// a gateway key held to some models (#882) is refused another, or a
-	// group it doesn't name with one it may not use in it
+	// group it wasn't given (groupAllowed)
 	keyWho, keyHeld := keyHolds(r)
 	_, accHeld := accountHolds(r)
 	chose, _ := r.Context().Value(magpieChoseKey{}).(bool)

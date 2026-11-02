@@ -19,8 +19,12 @@ import (
 // called it. A routing group passes when the key names it, "group/<id>"
 // (or "group/*", every group), a group magpie found by its auto/<model>
 // too, either id passing for the other (allows), and then every member of
-// it does, through it; else only when every model in it does. A group the
-// key names inside one it doesn't counts for its own members.
+// it does, through it. A group of the user's own the key doesn't name is
+// never the key's, however few models it has and all of them the key's
+// (kautism on Discord: a key given gemini 3.8 was shown, and could use, a
+// group the user made of gemini 3.8 alone, a group never handed out); a
+// group magpie found, one model several providers serve, passes when
+// every model in it does, as it is that model.
 
 // magpieChoseKey marks, in a request's context, a call magpie makes for a
 // model the user picked in its settings rather than the caller (a web
@@ -109,9 +113,47 @@ func groupNamed(who access.Identity, g provider.Group) bool {
 }
 
 // groupAllowed says the key may use the routing group g: it names it, or
-// may use every member of it.
+// g is a group magpie found (foundGroup) and the key may use every member
+// of it. A group of the user's own that a key listing models doesn't name
+// is not its, every member its or not: what the key lists is what it was
+// given (kautism). A key that names accounts and no model was given every
+// model of their providers (access.HeldModels, Linka), and a group of
+// those alone is one of them, as before.
+// Every route asks this: the model lists (entryAllowed), a request on
+// each API, count_tokens, embeddings, images, videos, the decision
+// groups, a subagent's and masking's route.
 func groupAllowed(who access.Identity, g provider.Group, ms []provider.Member) bool {
-	return groupNamed(who, g) || membersAllowed(who, ms)
+	return groupNamed(who, g) || (foundGroup(g) || who.AccountModels) && membersAllowed(who, ms)
+}
+
+// foundGroup says g is a group magpie found (one model several providers
+// serve, auto/<model>), the user's changes to it kept or not.
+func foundGroup(g provider.Group) bool {
+	return g.Auto || strings.HasPrefix(g.ID, "auto-")
+}
+
+// keyGroupFor is provider.GroupFor for the request's gateway key: a bare
+// name that is a routing group of the user's the key may not use, and a
+// model it may use, is that model for the key, as it would be were there
+// no such group — the key is held away from the group, not from the model
+// (a group the user named gemini-3.8, a key given google/gemini-3.8
+// asking for gemini-3.8). Every other name is GroupFor's.
+func keyGroupFor(r *http.Request, id string) (string, bool) {
+	gid, ok := provider.GroupFor(id)
+	if !ok {
+		return gid, ok
+	}
+	who, held := keyHolds(r)
+	if !held {
+		return gid, true
+	}
+	if g, ms, found := provider.FindGroup(gid); !found || groupAllowed(who, g, ms) {
+		return gid, true
+	}
+	if p, model, served := provider.Resolve(id); served && !provider.IsGroupRef(id) && modelAllowed(who, p, model) {
+		return "", false
+	}
+	return gid, true
 }
 
 // groupKeeps is the members of g a request through it may go to for the
@@ -467,14 +509,14 @@ func keyAccountNames(who access.Identity) string {
 // for counting tokens on one it may not use, as it would be refused
 // serving it: Anthropic's count_tokens and Gemini's :countTokens, id the
 // model as each asks it, resolved — a bare group's name, an auto group's
-// stand-in — and a group judged by its members. proto is the API the
-// error is answered on.
+// stand-in — and a group judged as a request to it is (groupAllowed).
+// proto is the API the error is answered on.
 func countHeld(w http.ResponseWriter, r *http.Request, proto provider.Protocol, id string) bool {
 	keyWho, held := keyHolds(r)
 	if !held {
 		return false
 	}
-	if gid, ok := provider.GroupFor(id); ok {
+	if gid, ok := keyGroupFor(r, id); ok {
 		id = gid
 	}
 	if sid, ok := provider.AutoStandIn(id); ok {

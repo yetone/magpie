@@ -707,10 +707,18 @@ serves the call, so a bare model name is resolved first, or a routing group,
 `group/<id>` (`group/*` for every group). A key that names a group may use
 the group with every member in it, though not those members asked for by
 name. Such a key sees only its models in `/v1/models`, `/v1/codex/models`
-and the Anthropic and Gemini lists, a routing group it doesn't name only when it may use every
-member, and is refused any other model with a 403 in the API's error shape
-before a provider is asked; a fallback it may not use is skipped. A key with
-no models listed may use every model.
+and the Anthropic and Gemini lists, and is refused any other model with a
+403 in the API's error shape before a provider is asked; a fallback it may
+not use is skipped. A routing group of your own is the key's only when it
+names it, even when every model in the group is one the key may use (a key
+given `google/gemini-3.8` neither sees nor may ask a group you made of that
+model alone; kautism on Discord); a group magpie found (`auto/<model>`,
+one model several providers serve) is the key's when it may use every
+provider's model in it. A key that names accounts and no model may use a
+group of yours made only of those accounts' providers' models, as it may
+every such model. A bare name that is both a group of yours and a model
+the key may use is that model for the key. A key with no models
+listed may use every model.
 
 A decision model (Jev, Clef and the like) is a model too: a routing group
 the key names asks its own decision model for every turn, whatever the key

@@ -158,9 +158,16 @@ type Identity struct {
 	Limit          *Limit
 	More           []Limit
 	Models         []string
-	Accounts       []string
-	Quotas         bool
-	ReadOnly       bool
+	// AccountModels says Models are only HeldModels' "<provider>/*" of
+	// a key that names accounts and no model, nor does the key it was
+	// issued under: every model of those accounts' providers is the
+	// key's, a routing group of them alone too. A key that lists models
+	// is given a routing group of the user's only by naming it (kautism
+	// on Discord).
+	AccountModels bool
+	Accounts      []string
+	Quotas        bool
+	ReadOnly      bool
 	// Expires is when the key stops working, its issuer's expiry if
 	// sooner; zero for never.
 	Expires time.Time
