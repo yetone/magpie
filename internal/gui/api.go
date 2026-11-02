@@ -2130,6 +2130,36 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		}
 		writeJSON(rw, settingsState())
 	})
+	// an agent whose picks stay on this computer, or go to the others again
+	// (settings' AgentsHere, chenxiang0010 on Discord)
+	mux.HandleFunc("POST /api/agents/here", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			Agent string
+			On    bool
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			fail(rw, err)
+			return
+		}
+		if in.Agent = strings.TrimSpace(in.Agent); in.Agent == "" {
+			fail(rw, errors.New("no agent"))
+			return
+		}
+		s, err := settings.LoadChecked()
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		s.AgentsHere = slices.DeleteFunc(s.AgentsHere, func(x string) bool { return x == in.Agent })
+		if in.On {
+			s.AgentsHere = append(s.AgentsHere, in.Agent)
+		}
+		if err := settings.Save(s); err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, settingsState())
+	})
 	// the Usage page's order of its cards, which the tray panel's Allowances
 	// tab follows, what that tab leaves out, the clients the page's Agents
 	// list leaves out, the allowance cards its Overview leaves out

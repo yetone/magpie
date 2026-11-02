@@ -490,10 +490,23 @@ func Restore(b Bundle, parts Parts) (Result, error) {
 		for _, a := range agent.Detected() {
 			here[a.ID] = true
 		}
+		// an agent whose picks stay on this computer (AgentsHere) takes
+		// none from elsewhere; unread settings tell nothing, so none go in
+		cur, err := settings.LoadChecked()
+		if err != nil {
+			return r, err
+		}
+		kept := map[string]bool{}
+		for _, id := range cur.AgentsHere {
+			kept[id] = true
+		}
 		// one value at a time, so one that fails (a model of a subscription
 		// not signed in here) leaves the rest to go in
 		for _, k := range profileKeys(b.Agents) {
 			id := k[:max(strings.LastIndex(k, "."), 0)] // codex@wsl:Ubuntu-24.04.model
+			if kept[id] {
+				continue
+			}
 			if !here[id] {
 				r.Skipped = append(r.Skipped, k)
 				continue

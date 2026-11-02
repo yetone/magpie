@@ -489,13 +489,7 @@ function renderAgents() {
     // so the controls line up down the list
     const fields = el("div", "fields");
     const wide = (f) => f.label === "model" || f.label === "large" || f.label === "executor" || f.label === "planner";
-    // an effort or ultracode the model has none of (Claude Code on Haiku
-    // 4.5, ultracode short of xhigh) isn't drawn at all, nor are subagents
-    // with no model to go on, or a sign-in with no other to take (Claude
-    // Code's, until it runs through magpie where magpie takes any key), or
-    // a small model with none to pick (Snow CLI's, on a profile of the
-    // user's own)
-    // nor Aside's account with one account only (#1499)
+    // a field with nothing to pick and nothing set isn't drawn (#1499)
     const none = (f) => (f.key === "effort" || f.key === "ultracode" || f.label === "subagents" || f.label === SUB_EFFORT || f.label === SUB_MODEL || f.label === AUTO_MODE || f.label === MEMORIES || f.label === "sign-in" || f.key === "small" || asideAccount(a, f)) && !f.options.length && !f.value;
     const shownFields = a.fields.filter((f) => !grouped(a, f) && !none(f) && !codexOwnSub(a, f) && !codexRowed(a, f) && !hermesBot(f));
     const tiers = tierMenu(a);
@@ -543,13 +537,10 @@ function renderAgents() {
     // command as its one control, in words
     const launchOnly = !!a.launch && !a.fields.length && !a.import;
     if (a.launch && !launchOnly) extras.append(launchButton(a));
-    // the panel's opened row has no room for the settings: a line of its
-    // own opens them in a sheet; the window's opened row holds them
-    // (connectPanel)
+    // the panel's settings open in a sheet (connectPanel)
     if (mode === "panel" && agentPrefsOf(a)) fields.append(agentPrefsButton(a));
     if (extras.childNodes.length) fields.append(extras);
-    // an app that takes magpie by a link of its own (Cindy) has nothing to
-    // pick: its row opens the link, and the app asks to add magpie
+    // an app taking magpie by a link (Cindy): its row opens it
     if (a.import && mode !== "panel") fields.append(importButton(a));
     if (launchOnly && mode !== "panel") fields.append(launchSolo(a));
     // the panel shows what's set as words, and a row's controls only
@@ -624,8 +615,7 @@ function renderAgents() {
         if (ev.target.closest(".ag-open, .ag-handle, .ag-fix, .ag-show")) return;
         const open = panelOpenAgent !== a.id;
         panelOpenAgent = open ? a.id : null;
-        // the rows ease open and shut, and the panel's edge moves with them:
-        // it goes now to where they will be, over the same time and curve
+        // the panel's edge moves with the rows, on their curve
         let grow = open ? openBox.querySelector(".ag-body").offsetHeight : 0;
         for (const r of $("#agents").querySelectorAll(".row.agent.open")) {
           grow -= r.querySelector(".ag-in")?.offsetHeight || 0;
@@ -643,9 +633,7 @@ function renderAgents() {
         openBox.addEventListener("transitionend", settle);
       };
     }
-    // one hidden by hand gives its way back in words, rather than being a
-    // greyed row whose way back is its menu. One nothing is set on isn't
-    // hidden: setting something on it brings it up the list.
+    // one hidden by hand says its way back in words
     if (inFold && isHidden(a)) {
       row.classList.add("put-away");
       const back = el("button", "ag-show");
@@ -655,10 +643,8 @@ function renderAgents() {
       back.onclick = (e) => { e.stopPropagation(); setAgentHidden(a, false); };
       who.append(back);
     }
-    // its CLI uninstalled, its folder left behind (#2177, #2173): none of
-    // its settings is offered, as nothing would read them, only that it is
-    // gone; one still connected keeps its switch, which puts back what it
-    // had before magpie (its menu's Disconnect too)
+    // its CLI uninstalled (#2177, #2173): only that it is gone, and the
+    // switch of one still connected
     if (a.cliMissing) {
       row.classList.add("gone");
       row.classList.remove("open");
@@ -676,9 +662,7 @@ function renderAgents() {
       if (a.wired && connectable(a)) row.append(connectSwitch(a));
       return row;
     }
-    // on the name's own line, so the row keeps its height and the pickers
-    // their columns
-    // a row with 「接入」 says it on its line under the name instead
+    // on the name's line; a row with 「接入」 says it under the name
     const kind = mode !== "panel" ? connectKind(a) : "";
     if (a.drift) {
       row.classList.add("drifted");
@@ -686,9 +670,9 @@ function renderAgents() {
     }
     // an app started before magpie's last change (the panel's row)
     else if (!kind && a.appRestart) who.append(appRestart(a));
-    // the CLI's version, and an update when one is out (#202); the panel's
-    // name column has no room for it
+    // the CLI's version and its update (#202)
     if (mode !== "panel") who.append(cliTag(a));
+    if (mode !== "panel" && isHere(a)) who.append(Object.assign(el("span", "ag-missing ag-here", t(HERE)), { title: t(HERE_TIP, { agent: a.name }) }));
     // which of magpie's models its lists show, on a line under the name
     if (mode !== "panel" && a.models && !kind) {
       const line = el("div", "ag-models-line");
@@ -3073,6 +3057,17 @@ function moveAgent(id, to) {
   saveArrangement([...ids, ...folded.map((a) => a.id)], hiddenIds(), []);
 }
 
+const HERE = "This computer only", HERE_TIP = "{agent}'s picks (model, effort…) stay as set here: sync, a Restore and a backup file neither bring another computer's in nor take these to the others";
+const HERE_GLYPH = "M3.5 4.5h9v6h-9zM2 12.5h12";
+const isHere = (a) => !!state.settings?.agentsHere?.includes(a.id);
+async function setAgentHere(a, on) {
+  try {
+    const s = await api("agents/here", { agent: a.id, on });
+    state.settings = { ...state.settings, agentsHere: s.agentsHere || [] };
+    renderAgents();
+    status(t(on ? "{agent}'s picks stay on this computer" : "{agent}'s picks sync with your other computers again", { agent: a.name }), "ok", 2500);
+  } catch (e) { statusErr(e); }
+}
 function setAgentHidden(a, hide) {
   const s = state.settings || {};
   const { all } = arrangeAgents();
@@ -3896,6 +3891,8 @@ function openAgentMenu(anchor, a, inFold) {
         ...term,
         // its own settings, as the square on its row opens them
         ...(agentPrefsOf(a) ? [{ name: t("{agent} settings", { agent: a.name }), literal: true, icon: PREFS_GLYPH, sep: true, run: () => openAgentPrefs(a) }] : []),
+        // its picks kept off sync, as an MCP server can be (chenxiang0010)
+        ...(a.fields.length ? [{ name: HERE, icon: isHere(a) ? CHECK : HERE_GLYPH, sep: !agentPrefsOf(a), tip: t(HERE_TIP, { agent: a.name }), run: () => setAgentHere(a, !isHere(a)) }] : []),
         // for a config rewritten in a way magpie can't see: set it again anyway
         ...(reapply ? [{ name: "Apply again", icon: REAPPLY, sep: true, run: () => reapplyAgent(a) }] : []),
         ...(a.drift?.kind === "replaced" ? [{ name: "Keep current settings", icon: CHECK, run: () => keepAgent(a) }] : []),

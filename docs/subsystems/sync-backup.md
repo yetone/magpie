@@ -79,6 +79,23 @@ values in and clears `Own`. A Restore brings everything and clears it too. The
 three maps survive a change of server (`TestOwnModelStaysOnEachComputer`,
 `TestNewPicksStillGoBothWays`, `sync-own-fields.test.cjs`).
 
+A whole agent's picks can be kept to one computer on purpose, as an MCP
+server can (chenxiang0010 on Discord): the Agents row's menu has **This
+computer only** (`POST /api/agents/here`), which adds the agent's id to
+`Settings.AgentsHere`, a computer's own kept by `KeepOwn` and by a save of
+the Settings page (`settingsapi.Apply`). It is off by default, so an upgrade
+changes no pick anywhere. For each such agent, `withHere` adds `<id>.*` to
+the own set (`isOwn` matches every field of it), so a sync neither pushes its
+fields nor brings the server's in, a Restore from the server leaves them,
+and `backup.Restore` skips the agent in a backup file. sync-state.json
+records the list as of the last sync (`Here`): the hashes before a sync use
+it and those after use the current list, so turning it on or off is no
+change on either side, and the list changing forces the sync past its early
+returns. Turned off, the next pick here goes up again; the other agents
+sync both ways throughout. A kept agent is not listed under Kept on this
+computer, which is the implicit own fields only (`TestAgentHereThroughSync`,
+`TestAgentsHereIsThisComputers`, `agent-here.test.cjs`).
+
 Sharing turned on at one computer never turns it on or off at another
 (Lullaby on Discord). A backup restored onto a new computer leaves sharing as
 that computer has it, off on a fresh one: sharing opens the gateway to the

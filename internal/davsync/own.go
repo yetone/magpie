@@ -53,11 +53,53 @@ func withoutOwn(b backup.Bundle, own map[string]bool) backup.Bundle {
 	if len(own) == 0 || b.Agents == nil {
 		return b
 	}
-	b.Agents = maps.Clone(b.Agents)
-	for k := range own {
-		delete(b.Agents, k)
+	a := maps.Clone(b.Agents)
+	for k := range b.Agents {
+		if isOwn(own, k) {
+			delete(a, k)
+		}
 	}
+	b.Agents = a
 	return b
+}
+
+// An agent whose picks stay on this computer (settings' AgentsHere,
+// chenxiang0010 on Discord, as an MCP server can be kept to one) is in an
+// own set as "<agent>.*": every field of it, the ones it gains later too.
+// That set is made for each sync and never kept in Own, so Settings'
+// Follow the others doesn't give it back; the agent's row does.
+
+// withHere is own with every field of here's agents.
+func withHere(own map[string]bool, here []string) map[string]bool {
+	if len(here) == 0 {
+		return own
+	}
+	out := maps.Clone(own)
+	if out == nil {
+		out = map[string]bool{}
+	}
+	for _, id := range here {
+		out[id+".*"] = true
+	}
+	return out
+}
+
+// isOwn is whether field k is in own: by itself, or as its agent's.
+func isOwn(own map[string]bool, k string) bool {
+	if own[k] {
+		return true
+	}
+	id, _ := splitField(k)
+	return own[id+".*"]
+}
+
+// hereOf is the agents whose picks stay here, as b's settings say, in
+// order; none when sync leaves the agents out.
+func hereOf(c Config, b backup.Bundle) []string {
+	if !c.Agents || b.Settings == nil {
+		return nil
+	}
+	return slices.Compact(slices.Sorted(slices.Values(b.Settings.AgentsHere)))
 }
 
 // hashesOwn is hashes of b with this computer's own fields left out.
@@ -75,11 +117,14 @@ func keepServersOwn(merged *backup.Bundle, remote backup.Bundle, own map[string]
 	if a == nil {
 		a = map[string]string{}
 	}
-	for k := range own {
-		if v, ok := remote.Agents[k]; ok {
-			a[k] = v
-		} else {
+	for k := range merged.Agents {
+		if isOwn(own, k) {
 			delete(a, k)
+		}
+	}
+	for k, v := range remote.Agents {
+		if isOwn(own, k) {
+			a[k] = v
 		}
 	}
 	merged.Agents = a
@@ -95,15 +140,17 @@ type brought struct{ was, now string }
 // each field the bring changed here.
 func bringAgents(fields map[string]string, keep map[string]bool) (map[string]brought, error) {
 	in := maps.Clone(fields)
-	for k := range keep {
-		delete(in, k)
+	for k := range fields {
+		if isOwn(keep, k) {
+			delete(in, k)
+		}
 	}
 	before := profile.Fields()
 	_, err := backup.Restore(backup.Bundle{Agents: in}, backup.Parts{Agents: true})
 	after := profile.Fields()
 	back := map[string]string{}
-	for k := range keep {
-		if v, ok := before[k]; ok && after[k] != v {
+	for k, v := range before {
+		if isOwn(keep, k) && after[k] != v {
 			back[k] = v
 		}
 	}
@@ -115,7 +162,7 @@ func bringAgents(fields map[string]string, keep map[string]bool) (map[string]bro
 	}
 	got := map[string]brought{}
 	for k, v := range after {
-		if !keep[k] && before[k] != v {
+		if !isOwn(keep, k) && before[k] != v {
 			got[k] = brought{before[k], v}
 		}
 	}

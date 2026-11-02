@@ -225,6 +225,10 @@ type state struct {
 	Replaced map[string]string `json:"replaced,omitempty"`
 	Own      map[string]bool   `json:"own,omitempty"`
 	Follow   bool              `json:"follow,omitempty"`
+	// Here is the agents whose picks stayed on this computer (settings'
+	// AgentsHere) as the last sync left them: an agent turned so since is
+	// a change the next sync settles, its hashes made as before it.
+	Here []string `json:"here,omitempty"`
 }
 
 // blind is a write the server didn't check: the file it wrote (Sum), and
@@ -693,7 +697,7 @@ func syncNow(ctx context.Context, force bool) error {
 	}
 	st := loadState()
 	if st.Key != stateKey(c) { // another folder or passphrase: start afresh
-		st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Follow: st.Follow}
+		st = state{Key: stateKey(c), Brought: st.Brought, Replaced: st.Replaced, Own: st.Own, Follow: st.Follow, Here: st.Here}
 	}
 	err = syncOnce(ctx, c, &st)
 	if errors.Is(err, errChanged) { // another computer got in between: again, over its version
@@ -1108,7 +1112,9 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 	// owned now is a change here, never a change on both sides. own is
 	// every field kept here this time, and after what the next sync's
 	// hashes leave out: none of them, once Settings gave them back.
-	prev := maps.Clone(st.Own)
+	// An agent whose picks stay here (hereOf) is own in every field, as
+	// the last sync had it in prev, as it is now in keep and afterW.
+	prev := withHere(maps.Clone(st.Own), st.Here)
 	if c.Agents {
 		noticeOwn(st, local.Agents)
 	}
@@ -1118,9 +1124,12 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		after = nil
 	}
 	st.Follow = false
+	kept := hereOf(c, local)
+	moved := !slices.Equal(kept, st.Here)
+	keep, afterW := withHere(own, kept), withHere(after, kept)
 	L := hashesOwn(local, prev)
 	if unchanged {
-		if maps.Equal(L, st.Local) && !follow {
+		if maps.Equal(L, st.Local) && !follow && !moved {
 			return nil // nothing changed on either side
 		}
 		// changed here: merged with the server's file as last seen, or,
@@ -1145,7 +1154,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		if err != nil {
 			return err
 		}
-		st.Sum, st.Server, st.Remote = sum(sealed), v, hashesOwn(b, after)
+		st.Sum, st.Server, st.Remote = sum(sealed), v, hashesOwn(b, afterW)
 		if v.Blind {
 			were.Sum = st.Sum
 			st.Blind = &were
@@ -1157,11 +1166,11 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		if err := push(local, "", blind{}); err != nil {
 			return err
 		}
-		st.Own = after
-		st.Local = hashesOwn(local, after)
+		st.Own, st.Here = after, kept
+		st.Local = hashesOwn(local, afterW)
 		return nil
 	}
-	if sum(data) == st.Sum && maps.Equal(L, st.Local) && !follow {
+	if sum(data) == st.Sum && maps.Equal(L, st.Local) && !follow && !moved {
 		st.Server = ver
 		remember(data)
 		return nil // nothing changed on either side
@@ -1226,7 +1235,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 	// R compares with the last sync as its hashes were; Rafter is the
 	// server's file as this sync leaves it read, both before the merge
 	// below changes remote (a join's unseen gateway keys)
-	R, Rafter := hashesOwn(remote, prev), hashesOwn(remote, after)
+	R, Rafter := hashesOwn(remote, prev), hashesOwn(remote, afterW)
 	first := st.Local == nil
 	merged := remote
 	var bringIn, here, there []string
@@ -1244,7 +1253,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 		case lc && !rc:
 			take(&merged, local, p)
 			if p == "agents" {
-				keepServersOwn(&merged, remote, own)
+				keepServersOwn(&merged, remote, keep)
 			}
 		case rc && !lc:
 			if first && p == "settings" {
@@ -1258,7 +1267,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 			if changed(p, c.Keys).After(remote.Created) {
 				take(&merged, local, p)
 				if p == "agents" {
-					keepServersOwn(&merged, remote, own)
+					keepServersOwn(&merged, remote, keep)
 				}
 				there = append(there, p)
 			} else {
@@ -1284,7 +1293,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 	}
 	for _, p := range bringIn {
 		if p == "agents" {
-			got, err := bringAgents(remote.Agents, after)
+			got, err := bringAgents(remote.Agents, afterW)
 			broughtIn(st, got)
 			if err != nil {
 				return fmt.Errorf("bringing in the %s: %w", p, err)
@@ -1310,7 +1319,7 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 			return fmt.Errorf("bringing in the agents: %w", err)
 		}
 	}
-	st.Own, R = after, Rafter
+	st.Own, st.Here, R = after, kept, Rafter
 	// the server's file is in; what is pushed next counts as changed here
 	// until the push is done
 	if len(bringIn) > 0 || follow {
@@ -1318,8 +1327,8 @@ func syncOnce(ctx context.Context, c Config, st *state) error {
 			return err
 		}
 	}
-	now := hashesOwn(local, after)
-	M, pending := hashesOwn(merged, after), map[string]string{}
+	now := hashesOwn(local, afterW)
+	M, pending := hashesOwn(merged, afterW), map[string]string{}
 	for _, p := range Parts {
 		pending[p] = now[p]
 		if M[p] != R[p] && st.Local != nil {

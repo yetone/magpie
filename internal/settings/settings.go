@@ -757,6 +757,11 @@ type Settings struct {
 	AgentOrder   []string `json:"agentOrder,omitempty"`
 	AgentsHidden []string `json:"agentsHidden,omitempty"`
 	AgentsShown  []string `json:"agentsShown,omitempty"`
+	// AgentsHere are the agents, by id, whose picks (model, effort…) stay
+	// on this computer (chenxiang0010 on Discord), as an MCP server can:
+	// sync, a Restore and a backup file neither bring another computer's
+	// picks in for one nor take this computer's up. This computer's own.
+	AgentsHere []string `json:"agentsHere,omitempty"`
 	// UsageOrder is how the Usage page's cards are listed, by provider id,
 	// as they were dragged there; one it doesn't name follows in magpie's
 	// own order. Only the page's: the order providers are tried in is the
@@ -1344,6 +1349,7 @@ func (s *Settings) KeepOwn(cur Settings) {
 	s.RedactModelOff, s.RedactModelAuto = cur.RedactModelOff, cur.RedactModelAuto
 	s.ClaudeRunsMost = cur.ClaudeRunsMost
 	s.RequestArchiveLocal, s.RequestArchiveLocalMB = cur.RequestArchiveLocal, cur.RequestArchiveLocalMB
+	s.AgentsHere = cur.AgentsHere
 }
 
 // Wires is ModelWires with the provider's own id of each model the user
@@ -2150,6 +2156,7 @@ func saveOwn(s Settings, recording, reads bool) error {
 		return err
 	}
 	s.AgentOrder, s.AgentsHidden, s.AgentsShown = ids(s.AgentOrder), ids(s.AgentsHidden), ids(s.AgentsShown)
+	s.AgentsHere = ids(s.AgentsHere)
 	s.UsageOrder = ids(s.UsageOrder)
 	s.PanelUsageHidden = ids(s.PanelUsageHidden)
 	s.UsageAgentsHidden = ids(s.UsageAgentsHidden)

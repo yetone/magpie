@@ -3,7 +3,6 @@
 magpie.strings({
   zh: {
     "Show more ({n} left)": "显示更多（还有 {n} 个）",
-    "This computer only": "只在这台电脑",
     "Not through the router": "不经过路由",
     "Each agent is given its own entry for it, as with the MCP router off": "每个 Agent 各自有它的条目，和关掉 MCP 路由时一样",
     "Through the MCP router": "经过 MCP 路由",
@@ -760,7 +759,6 @@ magpie.strings({
   },
   "zh-TW": {
     "Show more ({n} left)": "顯示更多（還有 {n} 個）",
-    "This computer only": "只在這台電腦",
     "Not through the router": "不經過路由",
     "Each agent is given its own entry for it, as with the MCP router off": "每個 Agent 各自有它的條目，和關掉 MCP 路由時一樣",
     "Through the MCP router": "經過 MCP 路由",
@@ -1517,7 +1515,6 @@ magpie.strings({
   },
   ja: {
     "Show more ({n} left)": "さらに表示（残り {n} 件）",
-    "This computer only": "このコンピュータだけ",
     "Not through the router": "ルーターを通さない",
     "Each agent is given its own entry for it, as with the MCP router off": "各エージェントに個別のエントリを渡します（MCP ルーターがオフのときと同じ）",
     "Through the MCP router": "MCP ルーターを通す",
@@ -2274,7 +2271,6 @@ magpie.strings({
   },
   de: {
     "Show more ({n} left)": "Mehr zeigen (noch {n})",
-    "This computer only": "Nur dieser Computer",
     "Not through the router": "Nicht über den Router",
     "Each agent is given its own entry for it, as with the MCP router off": "Jeder Agent bekommt einen eigenen Eintrag dafür, wie bei ausgeschaltetem MCP-Router",
     "Through the MCP router": "Über den MCP-Router",
