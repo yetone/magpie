@@ -257,6 +257,34 @@ func TestWholeAsStreamResponsesCitations(t *testing.T) {
 	}
 }
 
+// A citation another vendor's whole reply carries without the offsets
+// OpenAI's schema wants on every annotation (Volcengine Ark's
+// url_citation, #4921) goes to no place a client reads one: not in the
+// annotation events, nor in the parts, items and reply the client keeps,
+// for the client stores them and replays them, and where that schema
+// holds the replay is refused whole. The text and a citation that carries
+// its offsets go as the vendor wrote them.
+func TestWholeAsStreamDropsCitationsWithoutOffsets(t *testing.T) {
+	rec := httptest.NewRecorder()
+	if !wholeAsStream(rec, provider.Responses, []byte(`{"id":"resp_1","object":"response","created_at":1,"status":"completed","model":"m","output":[{"type":"message","id":"msg_1","status":"completed","role":"assistant","content":[{"type":"output_text","text":"Sun.","annotations":[`+
+		`{"type":"url_citation","url":"https://example.com/ark","title":"Ark","site_name":"example.com"},`+
+		`{"type":"url_citation","start_index":0,"end_index":3,"url":"https://example.com/w","title":"W"}]}]}]}`)) {
+		t.Fatal("not streamed")
+	}
+	got := rec.Body.String()
+	if strings.Contains(got, "example.com/ark") {
+		t.Fatalf("the offsetless citation reached the client:\n%s", got)
+	}
+	// the citation with its offsets is in every place a client reads one:
+	// its annotation event, the part, the item and the reply it keeps
+	if cited := strings.Count(got, "example.com/w"); cited != 4 {
+		t.Fatalf("the citation with its offsets is in %d places, want 4:\n%s", cited, got)
+	}
+	if said := saidIn(provider.Responses, got); said != "text:Sun.|stop:stop" {
+		t.Fatalf("the stream says %q:\n%s", said, got)
+	}
+}
+
 // A held try's reply under a type that says neither JSON nor a stream,
 // once the agent has a stream's headers: its first bytes decide, however
 // they are split. A stream is held as a stream from there, read event by

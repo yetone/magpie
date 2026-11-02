@@ -169,6 +169,9 @@ func responsesWholeEvents(b []byte) []wholeEvent {
 	if json.Unmarshal(v["output"], &output) != nil {
 		return nil
 	}
+	if dropOffsetlessCitations(output) {
+		v["output"] = raw(output)
+	}
 	var events []wholeEvent
 	seq := 0
 	send := func(typ string, fields obj) {
@@ -359,4 +362,79 @@ func orNull(r json.RawMessage) json.RawMessage {
 		return raw(nil)
 	}
 	return r
+}
+
+// dropOffsetlessCitations takes, from a whole reply's message items, the
+// output_text annotations that lack the offsets OpenAI's schema wants on
+// every annotation — another vendor's Responses endpoint writes its
+// citations so (Volcengine Ark's url_citation, #4921) — and reports
+// whether it took any. What magpie hands a client must be something it
+// could send again (#2855): the client stores the reply and replays it,
+// and where that schema holds the replay is refused whole, every turn of
+// the thread after ("Missing required parameter:
+// 'input[n].content[m].annotations[k].start_index'"). The text goes as it
+// came; so does a citation that carries its offsets.
+func dropOffsetlessCitations(output []obj) bool {
+	dropped := false
+	for _, item := range output {
+		if str(item, "type") != "message" {
+			continue
+		}
+		var parts []obj
+		if json.Unmarshal(item["content"], &parts) != nil {
+			continue
+		}
+		itemChanged := false
+		for _, part := range parts {
+			if str(part, "type") != "output_text" {
+				continue
+			}
+			var notes []json.RawMessage
+			if json.Unmarshal(part["annotations"], &notes) != nil || len(notes) == 0 {
+				continue
+			}
+			kept := notes[:0]
+			partDropped := false
+			for _, a := range notes {
+				if annotationLacksOffsets(a) {
+					partDropped = true
+					continue
+				}
+				kept = append(kept, a)
+			}
+			if partDropped {
+				part["annotations"] = raw(kept)
+				itemChanged = true
+			}
+		}
+		if itemChanged {
+			item["content"] = raw(parts)
+		}
+		dropped = dropped || itemChanged
+	}
+	return dropped
+}
+
+// annotationLacksOffsets is whether a, an output_text annotation of a
+// kind OpenAI's schema wants a start and end index of (url_citation,
+// container_file_citation), lacks either, as absent or null. A
+// file_citation or file_path places itself by its one index and is kept
+// as it came; one that isn't an object lacks nothing magpie can read.
+func annotationLacksOffsets(a json.RawMessage) bool {
+	var note map[string]json.RawMessage
+	if json.Unmarshal(a, &note) != nil || note == nil {
+		return false
+	}
+	switch t, _ := stringBytes(note["type"]); string(t) {
+	case "url_citation", "container_file_citation":
+	default:
+		return false
+	}
+	for _, k := range []string{"start_index", "end_index"} {
+		v, ok := note[k]
+		if !ok || string(bytes.TrimSpace(v)) == "null" {
+			return true
+		}
+	}
+	return false
 }

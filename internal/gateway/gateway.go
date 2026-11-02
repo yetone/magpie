@@ -5517,6 +5517,14 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 				// that has turned it away before (#1411)
 				body = withoutReasoningText(body)
 			}
+			if strings.HasSuffix(p.Host(), "openai.com") || p.IsAzure() || p.Account != nil && p.Account.Agent == "codex" || !s.fits(p.ID, citationOffsetRefused(model), proto) {
+				// a citation another vendor's reply wrote without the
+				// offsets OpenAI's schema wants (Volcengine Ark's
+				// url_citation, #4921), which the ChatGPT backend
+				// refuses the whole replay over, nor does an upstream
+				// that has turned one away before
+				body = withoutOffsetlessCitations(body)
+			}
 		}
 		// Relays enforce OpenAI's item ID prefixes too, including during
 		// compaction. call_id stays unchanged so tool outputs remain paired.
@@ -5916,6 +5924,21 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			// (#1104).
 			if nb := withoutBareReasoning(body); !replay && !bytes.Equal(nb, body) {
 				refused = append(refused, bareReasoningRefused(model))
+				body = nb
+				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
+					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true
+				}
+				continue
+			}
+		}
+		if len(fs) == 0 && len(ms) == 0 && proto == provider.Responses && refusesCitationOffsets(res.StatusCode, b) {
+			// and a citation without the offsets OpenAI's schema wants,
+			// which the ChatGPT backend and the relays in front of it
+			// turn the whole replay away over ("Missing required
+			// parameter: 'input[n].content[m].annotations[k].start_index'",
+			// #4921): asked once more without it, and not sent one again
+			if nb := withoutOffsetlessCitations(body); !bytes.Equal(nb, body) {
+				refused = append(refused, citationOffsetRefused(model))
 				body = nb
 				if res, err = s.forward(r.Context(), p, proto, path, p.Prepare(body), r.Header); err != nil {
 					return writeError(w, proto, 502, p.Name+": "+err.Error()), err.Error(), true

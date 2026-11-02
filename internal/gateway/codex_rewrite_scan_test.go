@@ -55,6 +55,7 @@ var codexRewrites = func() []codexRewrite {
 		{"plainItemIDs", plainItemIDs, wasPlainItemIDs},
 		{"withoutBareReasoning", withoutBareReasoning, wasWithoutBareReasoning},
 		{"withoutReasoningText", withoutReasoningText, wasWithoutReasoningText},
+		{"withoutOffsetlessCitations", withoutOffsetlessCitations, wasWithoutOffsetlessCitations},
 		{"withModel", func(b []byte) []byte { return withModel(b, "gpt-5.5<&>") }, func(b []byte) []byte {
 			if string(trimJSON(b)) == "null" {
 				return b // was a panic
@@ -143,6 +144,38 @@ var codexMarks = []func(it map[string]any){
 	func(it map[string]any) {
 		it["type"] = "reasoning"
 		it["content"] = []any{map[string]any{"type": "reasoning_text", "text": "t"}}
+	},
+	// a reply another vendor's Responses endpoint wrote, its citation
+	// without the offsets OpenAI's schema wants (#4921), beside one with
+	// them
+	func(it map[string]any) {
+		it["type"] = "message"
+		it["role"] = "assistant"
+		it["content"] = []any{map[string]any{"type": "output_text", "text": "t", "annotations": []any{
+			map[string]any{"type": "url_citation", "url": "https://a", "title": "A"},
+			map[string]any{"type": "url_citation", "start_index": 0, "end_index": 1, "url": "https://b"},
+		}}}
+	},
+	func(it map[string]any) {
+		it["type"] = "message"
+		it["content"] = "text"
+	},
+	func(it map[string]any) {
+		it["type"] = "message"
+		it["content"] = []any{map[string]any{"type": "output_text", "text": "t", "annotations": []any{
+			map[string]any{"type": "url_citation", "start_index": nil, "end_index": 2},
+		}}}
+	},
+	func(it map[string]any) {
+		it["type"] = "message"
+		it["content"] = []any{map[string]any{"type": "input_text", "text": "t", "annotations": []any{
+			map[string]any{"type": "url_citation", "url": "https://a"},
+		}}}
+	},
+	func(it map[string]any) {
+		it["content"] = []any{map[string]any{"type": "output_text", "text": "t", "annotations": []any{
+			map[string]any{"type": "url_citation", "url": "https://a"},
+		}}}
 	},
 	func(it map[string]any) { it["type"] = "reasoning"; it["content"] = nil },
 	func(it map[string]any) { it["type"] = "reasoning"; it["content"] = "text" },
@@ -439,6 +472,70 @@ func wasWithoutReasoningText(body []byte) []byte {
 		return body
 	}
 	return b
+}
+
+func wasWithoutOffsetlessCitations(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"annotations"`)) {
+		return body
+	}
+	var q map[string]json.RawMessage
+	if json.Unmarshal(body, &q) != nil {
+		return body
+	}
+	var items []json.RawMessage
+	if json.Unmarshal(q["input"], &items) != nil {
+		return body
+	}
+	changed := false
+	for i, raw := range items {
+		var it map[string]json.RawMessage
+		if json.Unmarshal(raw, &it) != nil {
+			continue
+		}
+		var parts []json.RawMessage
+		if json.Unmarshal(it["content"], &parts) != nil {
+			continue
+		}
+		itemChanged := false
+		for j, p := range parts {
+			var part map[string]json.RawMessage
+			if json.Unmarshal(p, &part) != nil || string(part["type"]) != `"output_text"` {
+				continue
+			}
+			var notes []json.RawMessage
+			if json.Unmarshal(part["annotations"], &notes) != nil {
+				continue
+			}
+			kept := notes[:0:0]
+			dropped := false
+			for _, a := range notes {
+				if annotationLacksOffsets(a) {
+					dropped = true
+					continue
+				}
+				kept = append(kept, a)
+			}
+			if dropped {
+				part["annotations"], _ = wasMarshalPlain(kept)
+				parts[j], _ = wasMarshalPlain(part)
+				itemChanged = true
+			}
+		}
+		if itemChanged {
+			it["content"], _ = wasMarshalPlain(parts)
+			items[i], _ = wasMarshalPlain(it)
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+	q["input"], _ = wasMarshalPlain(items)
+	nb, err := wasMarshalPlain(q)
+	if err != nil {
+		return body
+	}
+	return nb
 }
 
 func wasCallItemIDs(body []byte) []byte {

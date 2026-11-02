@@ -980,6 +980,11 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		// provider's model wrote it) turned every turn and compaction
 		// away, as on an account's (provider.CodexToolNames, wing3556)
 		body = provider.CodexToolNames(body)
+		// and a citation without the offsets the backend's schema wants,
+		// another vendor's Responses reply's (Volcengine Ark's
+		// url_citation) as Codex stored it, turned them away alike
+		// (#4921)
+		body = withoutOffsetlessCitations(body)
 	}
 	u := base + rest
 	if r.URL.RawQuery != "" {
@@ -2802,6 +2807,119 @@ func withoutReasoningText(body []byte) []byte {
 		return body
 	}
 	return b
+}
+
+// citationOffsetRefused is how unfit remembers a provider turning away,
+// for model, a citation without the offsets OpenAI's schema wants
+// (withoutOffsetlessCitations).
+func citationOffsetRefused(model string) string { return "citation offsets\x00" + model }
+
+// citationOffsetRefusal is the ChatGPT backend's refusal of an annotation
+// the offsets its schema wants are missing from, as a relay in front of
+// it passes it on: "Invalid response.create payload: Missing required
+// parameter: 'input[221].content[0].annotations[0].start_index'."
+// (#4921)
+var citationOffsetRefusal = regexp.MustCompile(`input\[\d+\]\.content\[\d+\]\.annotations\[\d+\]\.(?:start|end)_index`)
+
+// refusesCitationOffsets is a 400 refusing a Responses request over a
+// citation that lacks the offsets OpenAI's schema wants.
+func refusesCitationOffsets(status int, b []byte) bool {
+	return badRequest(status) && citationOffsetRefusal.Match(b)
+}
+
+// withoutOffsetlessCitations is a Responses request without the
+// output_text annotations that lack the offsets OpenAI's schema wants on
+// every one, as another vendor's Responses reply wrote them (Volcengine
+// Ark's url_citation, #4921): Codex stored the reply magpie relayed, and
+// where that schema holds — the ChatGPT backend, OpenAI's API, a relay in
+// front of them — the replay was refused whole, every turn of the thread
+// with it. Such an annotation goes; the text, and a citation with its
+// offsets, stay as they came.
+func withoutOffsetlessCitations(body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"annotations"`)) || !anyInputItem(body, itemCitesWithoutOffsets) {
+		return body
+	}
+	q, err := rawObject(body)
+	if err != nil {
+		return body
+	}
+	items, err := rawArray(q["input"])
+	if err != nil {
+		return body
+	}
+	changed := false
+	for i, raw := range items {
+		if !itemCitesWithoutOffsets(raw) {
+			continue
+		}
+		it, err := rawObject(raw)
+		if err != nil {
+			continue
+		}
+		parts, err := rawArray(it["content"])
+		if err != nil {
+			continue
+		}
+		itemChanged := false
+		for j, p := range parts {
+			part, err := rawObject(p)
+			if err != nil || string(part["type"]) != `"output_text"` {
+				continue
+			}
+			notes := elementsOf(part["annotations"])
+			if notes == nil {
+				continue
+			}
+			kept := notes[:0]
+			dropped := false
+			for _, a := range notes {
+				if annotationLacksOffsets(a) {
+					dropped = true
+					continue
+				}
+				kept = append(kept, a)
+			}
+			if dropped {
+				part["annotations"], _ = marshalPlain(kept)
+				parts[j], _ = marshalPlain(part)
+				itemChanged = true
+			}
+		}
+		if itemChanged {
+			it["content"], _ = marshalPlain(parts)
+			items[i], _ = marshalPlain(it)
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+	q["input"], _ = marshalPlain(items)
+	nb, err := marshalPlain(q)
+	if err != nil {
+		return body
+	}
+	return nb
+}
+
+// itemCitesWithoutOffsets is whether it, an input item, carries an
+// output_text annotation without the offsets OpenAI's schema wants, read
+// as the scan reads it, without decoding the conversation.
+func itemCitesWithoutOffsets(it []byte) bool {
+	if !bytes.Contains(it, []byte(`"annotations"`)) {
+		return false
+	}
+	for _, part := range elementsOf(memberOrNil(it, "content")) {
+		if typ, _ := stringBytes(memberOrNil(part, "type")); string(typ) != "output_text" {
+			continue
+		}
+		for _, a := range elementsOf(memberOrNil(part, "annotations")) {
+			if annotationLacksOffsets(a) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // openaiItemPrefix is the id prefix OpenAI takes for each kind of call item
