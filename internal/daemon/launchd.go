@@ -32,6 +32,8 @@ func domain() string  { return "gui/" + strconv.Itoa(os.Getuid()) }
 func service() string { return domain() + "/" + Label }
 
 // plist is the launch agent running exe with args, with env set in it.
+// ProcessType is Standard, not Background: the gateway is on the request
+// path of interactive agents, and Background throttles it on macOS.
 func plist(exe string, args, env []string) string {
 	s := func(v string) string { return "<string>" + html.EscapeString(v) + "</string>" }
 	var b strings.Builder
@@ -47,7 +49,7 @@ func plist(exe string, args, env []string) string {
 	<key>KeepAlive</key>
 	<dict><key>SuccessfulExit</key><false/></dict>
 	<key>ThrottleInterval</key><integer>5</integer>
-	<key>ProcessType</key><string>Background</string>
+	<key>ProcessType</key><string>Standard</string>
 	<key>StandardOutPath</key>` + s(logFile()) + `
 	<key>StandardErrorPath</key>` + s(logFile()) + `
 `)

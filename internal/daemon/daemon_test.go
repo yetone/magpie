@@ -258,12 +258,16 @@ func TestLaunchdInstall(t *testing.T) {
 		"<key>Label</key><string>com.yetone.magpie.serve</string>",
 		"<array><string>/opt/my magpie/magpie%1</string><string>serve</string></array>",
 		"<key>SuccessfulExit</key><false/>",
+		"<key>ProcessType</key><string>Standard</string>",
 		"<key>HTTP_PROXY</key><string>http://a&amp;b&lt;c&gt;@proxy</string>",
 		"<key>PATH</key><string>" + os.Getenv("PATH") + "</string>",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("the plist has no %q:\n%s", want, p)
 		}
+	}
+	if strings.Contains(p, "Background") {
+		t.Errorf("the plist still says Background:\n%s", p)
 	}
 	if lint := "/usr/bin/plutil"; runtime.GOOS == "darwin" {
 		if out, err := exec.Command(lint, "-lint", file).CombinedOutput(); err != nil {
@@ -313,6 +317,19 @@ func TestLaunchdInstall(t *testing.T) {
 	}
 	if got := strings.Join(calls(t, log), "\n"); got != "launchctl print "+svc+"\nlaunchctl bootout "+svc {
 		t.Errorf("uninstall ran\n%s", got)
+	}
+}
+
+// The daemon's launch agent is Standard, not Background, on every platform:
+// plist only builds text, so this runs without the shell fakes and without
+// a Mac.
+func TestLaunchdPlistProcessType(t *testing.T) {
+	p := plist("/opt/magpie", []string{"serve"}, nil)
+	if want := "<key>ProcessType</key><string>Standard</string>"; !strings.Contains(p, want) {
+		t.Errorf("the plist has no %q:\n%s", want, p)
+	}
+	if bad := "<key>ProcessType</key><string>Background</string>"; strings.Contains(p, bad) {
+		t.Errorf("the plist says %q:\n%s", bad, p)
 	}
 }
 
