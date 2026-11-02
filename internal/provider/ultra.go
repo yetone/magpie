@@ -13,8 +13,9 @@ import (
 // whose entry lists "ultra"; its own catalog (models-manager/models.json)
 // lists it for these alone — GPT-6 Luna and GPT-5.6 Luna stop at max — so
 // magpie offers it on them wherever they are served (Copilot's, a key's, a
-// relay's: #656), never on every model that reaches max.
-var ultraModels = []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"}
+// relay's: #656), never on every model that reaches max. GPT-6.1 Terra
+// carries it since #4909.
+var ultraModels = []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6.1-terra"}
 
 // datedSuffix is a snapshot's date after a model's id (-2026-09-14, -20260914).
 var datedSuffix = regexp.MustCompile(`-(\d{4}-\d{2}-\d{2}|\d{8})$`)

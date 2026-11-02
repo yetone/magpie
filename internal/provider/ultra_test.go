@@ -26,6 +26,7 @@ func TestUltraOnModelsThatOfferIt(t *testing.T) {
 	for id, want := range map[string]bool{
 		"gpt-6.1-sol": true, "openai/gpt-6.1-sol": true, "GPT-6.1-Sol": true, "gpt-6.1-sol-2026-09-14": true,
 		"gpt-6-astra": true, "gpt-6-sol": true, "gpt-5.6-sol": true, "gpt-5.6-terra": true,
+		"gpt-6.1-terra": true, "relay/gpt-6.1-terra": true,
 		"gpt-6-luna": false, "gpt-5.6-luna": false, "gpt-6.1-sol-mini": false, "claude-opus-5-5": false, "": false,
 	} {
 		if OffersUltra(id) != want {
@@ -39,6 +40,12 @@ func TestUltraOnModelsThatOfferIt(t *testing.T) {
 	sol := entryFor(copilot, catalog.Model{ID: "gpt-6.1-sol", Efforts: upToMax}, s)
 	if !slices.Equal(sol.Efforts, append(slices.Clone(upToMax), "ultra")) || !sol.AgentsV2 {
 		t.Fatalf("copilot/gpt-6.1-sol: %v v2=%v", sol.Efforts, sol.AgentsV2)
+	}
+	// gpt-6.1-terra carries Ultra in Codex's catalog now (#4909), like the
+	// Sols and Astra: another vendor's entry up to max lists it too
+	terra := entryFor(copilot, catalog.Model{ID: "gpt-6.1-terra", Efforts: upToMax}, s)
+	if !slices.Equal(terra.Efforts, append(slices.Clone(upToMax), "ultra")) || !terra.AgentsV2 {
+		t.Fatalf("copilot/gpt-6.1-terra: %v v2=%v", terra.Efforts, terra.AgentsV2)
 	}
 	luna := entryFor(copilot, catalog.Model{ID: "gpt-6-luna", Efforts: upToMax}, s)
 	if !slices.Equal(luna.Efforts, upToMax) || luna.AgentsV2 {
