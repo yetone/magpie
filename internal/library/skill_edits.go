@@ -78,6 +78,31 @@ func (l *Library) takeEdits(targets []*Target, res *Result) {
 			}
 			edits = append(edits, edit{t.Agent.ID, p, at})
 		}
+		// the shared copy too (#4958): an edit made in ~/.agents/skills,
+		// where no link could be made (Windows without the right to), is
+		// the library's to take as one in an agent's copy is — before
+		// syncShared sets the stale copy aside. An agent whose own folder
+		// that is has had its copy read above.
+		if !seen[realDir(sharedSkillsDir())] {
+			p := filepath.Join(sharedSkillsDir(), s.Name)
+			if ours(p, s.Name) && !linked(p) {
+				made, ok := copiedAt(p)
+				if ok {
+					at, err := changedAt(p)
+					switch {
+					case err != nil:
+						failed("agents", s.Name, p, err)
+					case !at.After(made):
+						if l.untouched == nil {
+							l.untouched = map[string]bool{}
+						}
+						l.untouched[p] = true
+					case !sameTree(p, lib):
+						edits = append(edits, edit{"agents", p, at})
+					}
+				}
+			}
+		}
 		if len(edits) == 0 {
 			continue
 		}
