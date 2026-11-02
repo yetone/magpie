@@ -122,6 +122,18 @@ func miniMaxAt(at place, dir string) *Agent {
 			return writeMiniMaxEntry(path)
 		},
 		Notice: func() string {
+			// MiniMax Code Desktop (on this machine; a distro has none)
+			// runs the same runtime on the same config.yaml, but its window
+			// keeps the model last picked in it and shows that, not
+			// defaultModel, while that model is still listed (3.1.10's
+			// renderer, localStorage "mavis:model-selection"). Its runtime
+			// reads config.yaml at start-up and doesn't watch it, so after a
+			// restart magpie's models are in its menu, and one picked there
+			// once is what it runs (教父 on Discord: Desktop went on with
+			// MiniMax-M3.1-Flash, and Sessions showed nothing).
+			if at.spell == nil && (&Agent{ID: "minimax-code"}).HasApp() {
+				return noticeMinimaxDesktop.String()
+			}
 			if Running(`(^|/)mcode( |$)`) {
 				return noticeMinimax.String()
 			}
@@ -462,5 +474,6 @@ func miniMaxIcon(provider, model string) string {
 
 // what minimax says after a change (notice.go)
 var (
-	noticeMinimax = newNotice("MiniMax Code reads its settings at start-up — restart open mcode sessions to use this.")
+	noticeMinimax        = newNotice("MiniMax Code reads its settings at start-up — restart open mcode sessions to use this.")
+	noticeMinimaxDesktop = newNotice("MiniMax Code's desktop app keeps the model last picked in it: restart the app, then pick a magpie model once in its model menu (under magpie). Open mcode sessions need a restart too.")
 )

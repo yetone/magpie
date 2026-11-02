@@ -88,6 +88,15 @@ var desktopApps = map[string]desktopApp{
 	// (com.google.antigravity-ide). Its Windows and Linux installs aren't
 	// known here: there the file its backend writes finds it.
 	"antigravity": {id: "com.google.antigravity", names: []string{"Antigravity.app"}},
+	// MiniMax Code Desktop (3.1.10: MiniMax Code.app, com.minimax.agent.cn
+	// from filecdn.minimax.chat, com.minimax.agent from file.cdn.minimax.io;
+	// app-identity.js) runs the mcode runtime on ~/.minimax/config.yaml, as
+	// the CLI does, and needs no CLI. Its Windows installer is
+	// electron-builder's NSIS ("MiniMax Code Setup 3.1.10.exe"), whose
+	// per-user default is %LOCALAPPDATA%\Programs\<productName>; that
+	// folder is the default's, not read from an install.
+	"minimax-code": {id: "com.minimax.agent.cn", names: []string{"MiniMax Code.app"}, win: filepath.Join("MiniMax Code", "MiniMax Code.exe"),
+		more: []desktopApp{{id: "com.minimax.agent", names: []string{"MiniMax Code.app"}}}},
 	"codebuddy": {id: "com.tencent.codebuddy", names: []string{"CodeBuddy.app"},
 		more: []desktopApp{{id: "com.tencent.codebuddycn", names: []string{"CodeBuddy CN.app"}}}},
 }
