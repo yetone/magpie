@@ -2225,6 +2225,15 @@ body.window .foot .status:not(.err):not(.warn) { pointer-events: none; }
    it shorter and move it */
 .status.ok, .status.err, .status.warn { font-size: 12.5px; line-height: 16px; font-weight: 500; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, currentColor 16%, var(--bg)); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 30%, transparent); }
 .status.lift { position: fixed; z-index: 21; font-size: 12.5px; font-weight: 500; padding: 3px 10px; border-radius: 11px; background: color-mix(in srgb, currentColor 16%, var(--card)); left: 50%; bottom: 18px; transform: translateX(-50%); max-width: calc(100vw - 32px); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 30%, transparent), 0 6px 20px rgba(0, 0, 0, .28); animation: fade-in .2s var(--ease); }
+/* Scroll to top / Scroll to bottom (scrollends.js, #1090): a quiet capsule at
+   the open page's lower right, in when the page is a screen down */
+.view-ends { position: fixed; z-index: 9; right: 16px; bottom: 16px; display: flex; flex-direction: column; align-items: center; padding: 2px; border-radius: 9px; background: var(--pop-bg); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: 0 4px 14px rgba(20, 22, 30, .12), 0 0 0 .5px var(--line-2); opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(4px); transition: opacity .18s var(--ease), transform .18s var(--ease), visibility 0s .18s; }
+.view-ends.on, .view-ends:focus-within { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: opacity .18s var(--ease), transform .18s var(--ease), visibility 0s; }
+.view-ends button { display: flex; align-items: center; justify-content: center; width: 26px; height: 24px; border-radius: 7px; color: var(--fg-2); }
+.view-ends button:hover { background: var(--pill-hover); color: var(--fg); }
+.view-ends button[aria-disabled="true"] { color: var(--faint); background: none; }
+.view-ends .ve-sep { width: 14px; height: 1px; margin: 1px 0; background: var(--line-2); }
+@media (prefers-reduced-motion: reduce) { .view-ends, .view-ends.on { transition: none; transform: none; } }
 /* a line longer than its place floats too (status), and is read whole
    (littleHong): wrapped, up to ten lines, the rest scrolled to; one line
    is still a pill (22px tall, 11px corners) */

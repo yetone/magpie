@@ -4,6 +4,8 @@
 // works. {name} slots are filled by t(str, vars).
 const I18N = {
   zh: {
+    "Scroll to top": "回到顶部",
+    "Scroll to bottom": "回到底部",
     "Claude Code runs as": "Claude Code 运行方式",
     "Interactive mode (TUI)": "交互模式（TUI）",
     "Last request {ago}: interactive mode": "上次请求 {ago}：交互模式",
@@ -4427,6 +4429,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "这份报告已经不在了：magpie 只保留最近 5 份。",
   },
   "zh-TW": {
+    "Scroll to top": "回到頂部",
+    "Scroll to bottom": "回到底部",
     "Claude Code runs as": "Claude Code 執行方式",
     "Interactive mode (TUI)": "互動模式（TUI）",
     "Last request {ago}: interactive mode": "上次請求 {ago}：互動模式",
@@ -8835,6 +8839,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "這份報告已經不在了：magpie 只保留最近 5 份。",
   },
   ja: {
+    "Scroll to top": "一番上へ",
+    "Scroll to bottom": "一番下へ",
     "Claude Code runs as": "Claude Code の実行方式",
     "Interactive mode (TUI)": "対話モード（TUI）",
     "Last request {ago}: interactive mode": "前回のリクエスト（{ago}）：対話モード",
@@ -13245,6 +13251,8 @@ const I18N = {
     "This report is no longer kept: magpie keeps the last 5.": "このレポートはもう残っていません。magpie は最新の 5 件だけを保存します。",
   },
   de: {
+    "Scroll to top": "Nach ganz oben",
+    "Scroll to bottom": "Nach ganz unten",
     "Claude Code runs as": "Claude Code läuft als",
     "Interactive mode (TUI)": "Interaktiver Modus (TUI)",
     "Last request {ago}: interactive mode": "Letzte Anfrage {ago}: interaktiver Modus",

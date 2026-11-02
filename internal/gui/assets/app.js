@@ -22708,14 +22708,12 @@ function savePrefs(body) {
 //
 // Code moves a view only in answer to a click that asks to go somewhere, and
 // shows that with the reader's event: scrollOnPurpose(e). Called without one
-// (from a load, a timer, a helper that other clicks share) it is refused,
-// and whatever scroll follows is put back.
+// it is refused, and whatever scroll follows is put back.
 let purposeUntil = 0, held = null;
 // guardUntil is purposeUntil when the window is the click guard's own (a
 // field brought back into sight, backToReader): it lets that scroll stand,
 // but it isn't the reader's, so an app menu the click opens stays open.
 let guardUntil = 0;
-// A new purposeful scroll supersedes any still-pending quota navigation.
 const readerScrolls = (ms) => { quotaFocus = ""; purposeUntil = Math.max(purposeUntil, performance.now() + ms); held = null; guardUntil = 0; };
 function scrollOnPurpose(e, ms = 1000) {
   if (!e?.isTrusted || performance.now() - e.timeStamp > 1000) {
@@ -23150,6 +23148,7 @@ for (const v of document.querySelectorAll(".view")) {
     puttingBack(v, from, h);
   }, { passive: true });
 }
+addEventListener("scroll", () => import("./scrollends.js"), { capture: true, passive: true, once: true });
 
 let settingsLoad = Promise.resolve(); // show()'s read of Settings, for openSettingsAt
 async function show(v) {
