@@ -1280,9 +1280,10 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		writeJSON(rw, s)
 	})
 	mux.HandleFunc("POST /api/profile/{action}", func(rw http.ResponseWriter, r *http.Request) {
-		var in struct{ Name string }
+		var in struct{ Name, To string }
 		_ = json.NewDecoder(r.Body).Decode(&in)
 		in.Name = strings.TrimSpace(in.Name)
+		in.To = strings.TrimSpace(in.To)
 		var err error
 		var applied profile.Applied
 		switch r.PathValue("action") {
@@ -1303,6 +1304,8 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			}
 		case "delete":
 			err = profile.Delete(in.Name)
+		case "rename":
+			err = profile.Rename(in.Name, in.To)
 		default:
 			http.NotFound(rw, r)
 			return

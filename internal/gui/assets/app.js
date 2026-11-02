@@ -853,11 +853,9 @@ function renderAgents() {
   agentsGlide = null;
 }
 
-// renderProfiles draws the saved profiles as chips, a chip whose save,
-// update or use is on its way dimmed until the answer is in. A click on a
-// chip shows what the profile holds, and its Apply applies it (#467): it was
-// applied at once, so what it held could be seen only by applying it over
-// the setup in use.
+// renderProfiles draws the saved profiles as chips, one on its way dimmed.
+// A click on a chip shows what the profile holds, and its Apply applies it
+// (#467).
 function renderProfiles() {
   const chips = $("#profiles");
   if (!state.profiles.some((p) => p.name === profileOpen)) profileOpen = null;
@@ -865,10 +863,8 @@ function renderProfiles() {
   $(".profiles > .chip-input")?.remove(); // a name field open goes with the list it was for
   $(".profiles").classList.remove("naming", "detailed");
   $("#save").textContent = t("＋ Save current");
-  // the panel's button names the profile in use, as a pop-up button shows
-  // what is picked, else how many there are (superhtoooth on X: it read
-  // 方案 1, 方案 2, a count taken for the name the profile was saved under,
-  // and nothing said which one was in use)
+  // the panel's button names the profile in use, else how many there are
+  // (superhtoooth on X: a count read as a name)
   const cur = state.profiles.find((p) => p.inUse);
   const n = $("#profN");
   n.textContent = cur ? cur.name : state.profiles.length || "";
@@ -1027,9 +1023,12 @@ function profileDetail(p, footed) {
     closeProfileDetail();
     chip?.focus(NO_SCROLL);
   };
+  const rename = el("button", "text pd-rename", t("Rename"));
+  rename.type = "button";
+  rename.onclick = () => import("./profilerename.js").then(() => profRename(d, p), statusErr);
   head.append(el("span", "pd-name", p.name));
   if (p.inUse) head.append(el("span", "pd-cur", t("In use")));
-  head.append(apply, close);
+  head.append(apply, rename, close);
   if (!footed) d.append(head);
   const groups = p.agents || [];
   if (!groups.length) d.append(el("div", "pd-none", t("No agent settings saved")));
@@ -5804,26 +5803,27 @@ function profileLibrary(l) {
   return parts.length ? t("+ Library: {what}", { what: parts.join(t(", ")) }) : t("+ Library: nothing on");
 }
 
-// profilePending are the profiles a save, update, delete or use is on its
-// way for. What the click does shows at once — the chip saved is there, the
-// one deleted gone, the name field closed — rather than when magpie has read
-// every agent again for the answer: that took seconds, and a Save or × that
-// changed nothing for that long looked broken. An error puts the list back.
+// profilePending are the profiles a save, update, delete, rename or use is
+// on its way for: the click shows at once, not seconds later when magpie
+// has read every agent again. An error puts the list back.
 const profilePending = new Set();
 
-async function profileAction(action, name, update) {
-  const before = state.profiles;
+// A rename (to) keeps what the profile holds and its details open (#2721).
+async function profileAction(action, name, update, to) {
+  const before = state.profiles, open = profileOpen, key = to || name;
+  // where magpie will list it: by name, as Go's sort.Strings has them
+  const byName = (l) => l.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   if (action === "delete") state.profiles = before.filter((p) => p.name !== name);
-  else if (action === "save" && !before.some((p) => p.name === name)) {
-    // where magpie will list it: by name, as Go's sort.Strings has them
-    state.profiles = [...before, { name, summary: "" }].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  }
-  if (action !== "delete") profilePending.add(name);
+  else if (to) {
+    state.profiles = byName(before.map((p) => (p.name === name ? { ...p, name: to } : p)));
+    if (open === name) profileOpen = to;
+  } else if (action === "save" && !before.some((p) => p.name === name)) state.profiles = byName([...before, { name, summary: "" }]);
+  if (action !== "delete") profilePending.add(key);
   renderProfiles();
   fit();
   try {
-    const data = await api("profile/" + action, { name });
-    profilePending.delete(name);
+    const data = await api("profile/" + action, { name, to });
+    profilePending.delete(key);
     state = data;
     renderAgents();
     if (action === "use") {
@@ -5839,10 +5839,12 @@ async function profileAction(action, name, update) {
       else status(msg, "ok", lib?.missing?.length ? 6000 : 3500);
     }
     else if (action === "save") status(t(update ? "Updated {name} to the current setup" : "Saved {name}", { name }), "ok");
+    else if (to) status(t("Renamed {name} to {new}", { name, new: to }), "ok");
     else status(t("Deleted {name}", { name }));
   } catch (e) {
-    profilePending.delete(name);
+    profilePending.delete(key);
     state.profiles = before;
+    profileOpen = open;
     renderProfiles();
     fit();
     statusErr(e);

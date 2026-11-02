@@ -98,6 +98,7 @@ type model struct {
 	mode    mode
 	pk      picker
 	name    textinput.Model
+	rename  string // the profile the name line renames, "" when it saves one
 	flash   string
 	flashOK bool
 	w, h    int
@@ -460,7 +461,7 @@ func (m model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, syncCmd
 		}
 	case "s":
-		m.mode = modeName
+		m.mode, m.rename = modeName, ""
 		m.name = newInput("profile name")
 	case "p":
 		m.openProfiles()
@@ -570,6 +571,15 @@ func (m model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.pk.refetch()
 		}
 		return m, nil
+	case "ctrl+e":
+		// the profile picked, renamed on a line holding its name (#2721)
+		if m.mode == modeProfiles && len(m.pk.match) > 0 {
+			m.rename = m.pk.items[m.pk.match[m.pk.cursor]].Value
+			m.name = newInput("new name")
+			m.name.SetValue(m.rename)
+			m.mode = modeName
+		}
+		return m, nil
 	case "ctrl+d":
 		if m.mode == modeProfiles && m.pk.onDel != nil && len(m.pk.match) > 0 {
 			n := m.pk.items[m.pk.match[m.pk.cursor]].Value
@@ -605,7 +615,7 @@ func (m model) updatePicker(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) updateName(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.mode = modeList
+		m.mode, m.rename = modeList, ""
 		return m, nil
 	case "enter":
 		n := strings.TrimSpace(m.name.Value())
@@ -613,6 +623,15 @@ func (m model) updateName(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = modeList
+		if old := m.rename; old != "" {
+			m.rename = ""
+			return m, func() tea.Msg {
+				if err := profile.Rename(old, n); err != nil {
+					return flashMsg{text: err.Error()}
+				}
+				return flashMsg{text: "profile " + old + " renamed to " + n, ok: true}
+			}
+		}
 		return m, func() tea.Msg {
 			p, err := profile.Snapshot()
 			if err != nil {
@@ -786,7 +805,7 @@ func (m model) View() string {
 		body = m.viewPicker()
 		switch {
 		case m.mode == modeProfiles:
-			footer = hints("↑↓", "move", "↵", "apply", "ctrl+d", "delete", "esc", "back")
+			footer = hints("↑↓", "move", "↵", "apply", "ctrl+e", "rename", "ctrl+d", "delete", "esc", "back")
 		case m.pk.refetch != nil:
 			footer = hints("↑↓", "move", "↵", "on / off", "ctrl+r", "fetch models again", "esc", "back")
 		case m.pk.toggle != nil:
@@ -805,6 +824,9 @@ func (m model) View() string {
 	case modeName:
 		body = m.viewName()
 		footer = hints("↵", "save", "esc", "cancel")
+		if m.rename != "" {
+			footer = hints("↵", "rename", "esc", "cancel")
+		}
 	}
 
 	status := ""
@@ -966,6 +988,11 @@ func (m model) viewPicker() string {
 
 func (m model) viewName() string {
 	var b strings.Builder
+	if m.rename != "" {
+		b.WriteString(m.header("rename profile") + "\n\n" + pad + sCursor.Render("❯ ") + m.name.View() + "\n\n")
+		b.WriteString(pad + "  " + sMuted.Render("renames "+m.rename+" · the settings it holds stay as they are"))
+		return b.String()
+	}
 	b.WriteString(m.header("save profile"))
 	b.WriteString("\n\n")
 	b.WriteString(pad + sCursor.Render("❯ ") + m.name.View())

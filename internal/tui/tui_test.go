@@ -14,6 +14,7 @@ import (
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/agentenv"
 	"github.com/yetone/magpie/internal/library"
+	"github.com/yetone/magpie/internal/profile"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/testenv"
 )
@@ -81,6 +82,8 @@ func keyMsg(k string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyCtrlU}
 	case "ctrl+r":
 		return tea.KeyMsg{Type: tea.KeyCtrlR}
+	case "ctrl+e":
+		return tea.KeyMsg{Type: tea.KeyCtrlE}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
 }
@@ -454,5 +457,56 @@ func TestAgentsViewKeepsTheRowPicked(t *testing.T) {
 	m.row = 29
 	if v := screen(m.viewList(), m.h); !strings.Contains(v, "agent-00") {
 		t.Fatalf("a tall terminal dropped the top of the list:\n%s", v)
+	}
+}
+
+// ctrl+e on the profiles renames the one picked on a line holding its
+// name; what it holds stays, esc renames nothing, and a taken name is
+// refused with both kept (#2721).
+func TestProfileRename(t *testing.T) {
+	home(t)
+	for _, n := range []string{"base", "work"} {
+		if err := profile.Save(n, profile.Profile{Fields: map[string]string{"codex.model": n + "-model"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	names := func() []string {
+		ps, err := profile.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return profile.Names(ps)
+	}
+	m := press(t, model{w: 120, h: 40}, "p")
+	if !strings.Contains(m.View(), "ctrl+e rename") {
+		t.Fatalf("the profiles' footer names no rename:\n%s", m.View())
+	}
+	m = press(t, m, "down", "ctrl+e")
+	if m.mode != modeName || m.name.Value() != "work" || !strings.Contains(m.View(), "rename profile") {
+		t.Fatalf("mode %d, line %q:\n%s", m.mode, m.name.Value(), m.View())
+	}
+	m = press(t, m, "esc")
+	if got := names(); !slices.Equal(got, []string{"base", "work"}) {
+		t.Fatalf("esc renamed: %v", got)
+	}
+
+	m = press(t, m, "p", "down", "ctrl+e", "ctrl+u")
+	m = typeIn(m, "desk")
+	m = press(t, m, "enter")
+	wantFlash(t, m, true, "work renamed to desk")
+	ps, _ := profile.Load()
+	if got := names(); !slices.Equal(got, []string{"base", "desk"}) || ps["desk"].Fields["codex.model"] != "work-model" {
+		t.Fatalf("after the rename: %v %+v", got, ps["desk"])
+	}
+
+	m = press(t, m, "p", "down", "ctrl+e", "ctrl+u")
+	m = typeIn(m, "base")
+	m = press(t, m, "enter")
+	if m.mode != modeList {
+		t.Fatalf("mode %d:\n%s", m.mode, m.View())
+	}
+	wantFlash(t, m, false, `a profile named "base" already exists`)
+	if got := names(); !slices.Equal(got, []string{"base", "desk"}) {
+		t.Fatalf("a taken name: %v", got)
 	}
 }

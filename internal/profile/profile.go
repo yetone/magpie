@@ -210,6 +210,35 @@ func Delete(name string) error {
 	return store(ps)
 }
 
+// Rename moves what old held onto to, changing only its key in
+// profiles.json: nothing is snapshotted again, so a profile in use is still
+// in use under its new name (#2721). A name that differs only in case is a
+// rename too, and an unreadable profiles.json writes nothing, as Save and
+// Delete do.
+func Rename(old, to string) error {
+	old, to = strings.TrimSpace(old), strings.TrimSpace(to)
+	if to == "" {
+		return fmt.Errorf("profile name is empty")
+	}
+	ps, err := Load()
+	if err != nil {
+		return err
+	}
+	p, ok := ps[old]
+	if !ok {
+		return fmt.Errorf("no profile named %q", old)
+	}
+	if to == old {
+		return nil
+	}
+	if _, ok := ps[to]; ok {
+		return fmt.Errorf("a profile named %q already exists", to)
+	}
+	delete(ps, old)
+	ps[to] = p
+	return store(ps)
+}
+
 // Applied is what applying a profile did.
 type Applied struct {
 	Changed int // agent fields changed, and model lists

@@ -265,8 +265,20 @@ func TestSync(t *testing.T) {
 	if got := ids(); !slices.Equal(got, []string{"deepseek=k1", "kimi=k2"}) {
 		t.Fatalf("b after a added: %v", got)
 	}
+	// b renames a profile: a has it under the new name alone, what it
+	// held the same (#2721)
+	if err := profile.Rename("work", "desk"); err != nil {
+		t.Fatal(err)
+	}
+	now(t)
+	a.use(t)
+	now(t)
+	if ps, _ := profile.Load(); len(ps) != 1 || ps["desk"].Fields["claude.model"] != "x" {
+		t.Fatalf("a after b renamed: %v", ps)
+	}
+	b.use(t)
 	provider.Delete("deepseek")
-	profile.Delete("work")
+	profile.Delete("desk")
 	now(t)
 	a.use(t)
 	if v := now(t); v.Notice != nil {

@@ -2158,7 +2158,7 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 }
 .chip:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .chip .cur-tick { margin: 0 4px 0 -2px; font-size: 11px; font-weight: 600; color: var(--accent); flex: none; }
-.pd-cur { flex: none; font-size: 11.5px; color: var(--accent); }
+.pd-cur { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 11.5px; color: var(--accent); }
 .chip .lib { width: 5px; height: 5px; margin: 0 2px 0 4px; border-radius: 50%; background: var(--accent); opacity: .7; flex: none; }
 .chip .x { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; opacity: 0; transition: opacity .12s; }
 .chip:hover .x { opacity: .6; }
@@ -2176,7 +2176,9 @@ body.panel .foot { min-height: 0; padding: 5px 8px 7px 14px; border-top: 1px sol
 body.window .profiles.detailed { align-items: flex-start; }
 body.window .profiles.detailed > .label { line-height: 30px; }
 body.window .profiles.detailed > #save { margin-top: 4px; }
-.pd-name { flex: 1 1 auto; min-width: 0; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the name, or the field renaming it (#2721), keeps room beside its buttons */
+.pd-head > .chip-input { flex: 1 1 auto; min-width: 6em; width: auto; }
+.pd-name { flex: 1 1 auto; min-width: 3em; font-weight: 600; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pd-apply { flex: none; height: 24px; padding: 0 12px; }
 .pd-close { flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
 .pd-close:hover { color: var(--fg); background: rgba(127, 127, 127, .15); }

@@ -66,6 +66,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie save <name>              snapshot every agent's settings as a profile
   magpie use <name>               apply a profile
   magpie profiles                 list profiles
+  magpie rename <old> <new>       rename a profile
   magpie rm <name>                delete a profile
 
   magpie backup [--no-keys] [--no-library] [file]    providers, keys, settings, profiles, agent models and the library in one file, sealed with a passphrase
@@ -495,7 +496,7 @@ func run(args []string) error {
 		fmt.Println(green.Render("✓"), "catalog saved to", catalog.CachePath())
 		refreshLive(ctx)
 		return nil
-	case "save", "use", "rm", "profiles":
+	case "save", "use", "rm", "rename", "profiles":
 		return profiles(args)
 	case "import":
 		return importCmd(args[1:])
@@ -946,6 +947,17 @@ func profiles(args []string) error {
 			return err
 		}
 		fmt.Println(green.Render("✓"), "deleted profile", bold.Render(args[1]))
+		return nil
+	case "rename":
+		// a flag is never taken for a name to write (magpie snow --help
+		// wrote "--help" into a profile)
+		if len(args) != 3 || strings.HasPrefix(args[2], "-") {
+			return fmt.Errorf("usage: magpie rename <old> <new>")
+		}
+		if err := profile.Rename(args[1], args[2]); err != nil {
+			return err
+		}
+		fmt.Println(green.Render("✓"), "renamed profile", bold.Render(args[1]), "to", bold.Render(args[2]))
 		return nil
 	}
 	return nil
