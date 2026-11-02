@@ -27,7 +27,13 @@
 // there is as likely another app's or the user's own. Taking one showed a
 // user who had never asked for portable an empty magpie (#989), and wrote
 // magpie's files into a Downloads\data folder a Windows user's archiver
-// empties, so a provider just added was gone (tangle778 on X).
+// empties, so a provider just added was gone (tangle778 on X). Where the
+// system keeps Downloads, Desktop or Documents off home (moved to D:\ or
+// OneDrive on Windows, ~/下载 on Linux) only a data folder holding none of
+// magpie's files is passed over: before v0.1.2648 those folders weren't
+// judged at all, so a data folder there holding magpie's files is one this
+// user's magpie has been keeping its files in, and an update never moves
+// them back to an installed folder from long ago (jwaitq on Discord).
 //
 // The decision is made once, from the executable as it was when magpie
 // started: an update moving the running copy aside (into .magpie-update on
@@ -126,15 +132,26 @@ func Passed(exe string) string {
 // magpie portable there has its files in data and never ran it installed,
 // and keeps it portable; a ".portable" marker beside it makes it portable
 // whatever is there.
+//
+// A data folder in the place the system keeps a user folder moved off home
+// (movedFolder) is passed over only when it holds none of magpie's files.
+// Releases before v0.1.2648 took any data folder there, so one holding
+// magpie's files is where this magpie has kept them, maybe for months,
+// while an installed folder with files of its own is from before then:
+// judging it as in home\Downloads moved a user back to that old setup on
+// updating (jwaitq on Discord).
 func shared(dir, data string) bool {
-	if !sharedFolder(dir) {
-		return false
+	switch {
+	case sharedFolder(dir):
+		if !hasFiles(data) {
+			return true
+		}
+		in := installed()
+		return in != "" && hasFiles(in)
+	case movedFolder(dir):
+		return !hasFiles(data)
 	}
-	if !hasFiles(data) {
-		return true
-	}
-	in := installed()
-	return in != "" && hasFiles(in)
+	return false
 }
 
 // hasFiles says whether dir holds magpie's own files.
@@ -149,8 +166,7 @@ func hasFiles(dir string) bool {
 
 // sharedFolder says whether dir is a folder every app or download shares:
 // /Applications and ~/Applications on a Mac, and the home folder, its
-// Downloads, Desktop and Documents everywhere, under home and where the
-// system keeps them (UserFolder). Tests change it.
+// Downloads, Desktop and Documents everywhere, under home. Tests change it.
 var sharedFolder = func(dir string) bool {
 	var dirs []string
 	if runtime.GOOS == "darwin" {
@@ -160,14 +176,30 @@ var sharedFolder = func(dir string) bool {
 		dirs = append(dirs, h)
 		for _, d := range []string{DownloadsFolder, DesktopFolder, DocumentsFolder} {
 			dirs = append(dirs, filepath.Join(h, d))
-			if p := UserFolder(d); p != "" {
-				dirs = append(dirs, p) // where the system keeps it, moved or not
-			}
 		}
 		if runtime.GOOS == "darwin" {
 			dirs = append(dirs, filepath.Join(h, "Applications"))
 		}
 	}
+	return sameAny(dir, dirs)
+}
+
+// movedFolder says whether dir is where the system keeps the user's
+// Downloads, Desktop or Documents (userFolder), moved off home or not.
+var movedFolder = func(dir string) bool {
+	var dirs []string
+	for _, d := range []string{DownloadsFolder, DesktopFolder, DocumentsFolder} {
+		if p := userFolder(d); p != "" {
+			dirs = append(dirs, p)
+		}
+	}
+	return sameAny(dir, dirs)
+}
+
+// userFolder is UserFolder; tests change it.
+var userFolder = UserFolder
+
+func sameAny(dir string, dirs []string) bool {
 	for _, d := range dirs {
 		if strings.EqualFold(filepath.Clean(dir), filepath.Clean(d)) {
 			return true

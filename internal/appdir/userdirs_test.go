@@ -156,8 +156,8 @@ func TestUserFolderWindows(t *testing.T) {
 	}
 }
 
-// A data folder beside magpie in a moved Downloads isn't its portable one
-// either (tangle778's case, in the folder the system keeps).
+// The Downloads the system keeps, moved off home, is a moved folder, and
+// home's is still shared.
 func TestSharedFolderMovedDownloads(t *testing.T) {
 	h := userDirsHome(t, userDirsZH)
 	moved := filepath.Join(h, "下载")
@@ -170,13 +170,68 @@ func TestSharedFolderMovedDownloads(t *testing.T) {
 	if UserFolder(DownloadsFolder) == filepath.Join(h, "Downloads") {
 		t.Skip("this system's Downloads can't be moved")
 	}
-	if !sharedFolder(moved) {
-		t.Errorf("%s not shared", moved)
+	if !movedFolder(moved) {
+		t.Errorf("%s not a moved folder", moved)
+	}
+	if sharedFolder(moved) {
+		t.Errorf("%s shared as home's own", moved)
 	}
 	if !sharedFolder(filepath.Join(h, "Downloads")) {
 		t.Error("home's Downloads not shared")
 	}
-	if sharedFolder(filepath.Join(moved, "magpie")) {
+	if movedFolder(filepath.Join(moved, "magpie")) || sharedFolder(filepath.Join(moved, "magpie")) {
 		t.Error("a folder inside shared")
+	}
+}
+
+// jwaitq on Discord: updated from v0.1.2630 to v0.1.2670, magpie showed
+// the setup of long ago. A data folder beside magpie in a moved Downloads
+// (D:\Downloads, OneDrive, ~/下载) holding magpie's files is where every
+// release before v0.1.2648 kept them, an installed folder with files of
+// its own or not; one holding none of them (another app's, or emptied by
+// an archiver) isn't taken.
+func TestResolveMovedDownloadsKeepsData(t *testing.T) {
+	t.Setenv("APPIMAGE", "")
+	r, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := filepath.Join(r, "home")
+	t.Setenv("HOME", h)
+	t.Setenv("USERPROFILE", h)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	moved := filepath.Join(r, "D", "Downloads")
+	was := userFolder
+	userFolder = func(kind string) string {
+		if kind == DownloadsFolder {
+			return moved
+		}
+		return filepath.Join(h, kind)
+	}
+	t.Cleanup(func() { userFolder = was })
+
+	exe := filepath.Join(moved, "magpie.exe")
+	data := filepath.Join(moved, "data")
+	for _, p := range []string{exe, filepath.Join(data, "report.json")} {
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := Resolve(exe); got != "" {
+		t.Errorf("no magpie files in data: %q, want installed", got)
+	}
+	os.WriteFile(filepath.Join(data, "providers.json"), []byte("{}"), 0o600)
+	if got := Resolve(exe); got != data {
+		t.Errorf("nothing installed: %q, want %q", got, data)
+	}
+	// the setup of long ago, in the installed folder
+	os.MkdirAll(filepath.Join(h, ".config", "magpie"), 0o700)
+	os.WriteFile(filepath.Join(h, ".config", "magpie", "settings.json"), []byte("{}"), 0o600)
+	if got := Resolve(exe); got != data {
+		t.Errorf("installed has old files: %q, want the data folder %q", got, data)
+	}
+	if got := Passed(exe); got != "" {
+		t.Errorf("Passed %q, want none", got)
 	}
 }
