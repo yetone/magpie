@@ -144,6 +144,7 @@
     <ul>
       <li><b>点模型</b>打开选择列表。模型分组显示：Agent 自带的、你的路由组、再是你添加的每个供应商。输入可以筛选，也可以直接输入列表里没有的模型 ID。</li>
       <li><b>推理强度</b>：Agent 有这个选项时（Codex 的 <em>推理强度</em>、Pi 的 <em>思考</em>），列表下方会出现滑块。</li>
+      <li><b>快速模式</b>：有快速模式的模型，在列表里那一行的星标旁有一个闪电按钮，选中的那一行和鼠标指着的那一行会显示。包括 ChatGPT（Codex）账号的 GPT 模型、OpenAI Key 的 GPT 和 o 系列模型、有快速版本的 Cursor 模型、Anthropic Key 的 Claude Opus，以及插件或另一个 magpie 说明支持 priority 的模型。点一下，这个 Agent 发给这个模型的每个请求都会用服务商的快速模式，更快，价格更高：不管 Agent 用哪种 API，都加上 <code>service_tier: "priority"</code>（和 Codex 自己的 <code>/fast</code> 发的一样），Claude 则是 <code>speed: "fast"</code>。ChatGPT 账号在这个模型上提供 Ultrafast 时，再点一下是 Ultrafast，再点一下恢复普通速度。每个 Agent 分开设置，这个模型的备用模型照常发送。路由组里每个成员那一行也有同样的开关。</li>
       <li><b>Claude Code 通过 magpie 使用模型时</b>，opus、sonnet、haiku 各档还可以单独指定模型；默认跟随主模型。</li>
     </ul>
     <p>选好的模型会写进 Agent 自己的配置文件。只改 magpie 需要的那几个键；注释、顺序、缩进都保留，写入是原子的。</p>
