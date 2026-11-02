@@ -362,7 +362,13 @@ closed at the first result. Reading the plan's allowance (`/usage`,
 `claudeUsageTUI`) types `/usage` in the interactive mode too: the helper
 is told `{"type":"command","command":"/usage"}`, types it, waits for the
 panel's windows ("NN% used", `commandSettle` still) and closes it with
-Esc. Its result (`local_command: "usage"`) says each window as -p's lines
+Esc. A panel with no window (its words saying why) is taken as drawn only
+once its Settings tabs show and nothing is loading (`usageDrawn`), still
+for three `commandSettle`s: Claude Code draws its banner and folder again
+first, which stays still while a slow /usage loads, and taken as the
+panel it was read as an allowance's error (ikunbots on X, v0.1.2738).
+With no panel by `commandWait`, the result is an error saying what was
+last drawn (`TestShimWaitsPastTheBanner`, `TestUsageDrawn`). Its result (`local_command: "usage"`) says each window as -p's lines
 do, "Current session: 99% used · resets 7pm (Asia/Shanghai)" (`usageText`,
 tested on the bytes Claude Code 2.1.316 drew, `testdata/usage-2.1.316.bin`),
 for `provider.parseClaudeUsage`. Claude Code 2.1.316's `-p /usage`
