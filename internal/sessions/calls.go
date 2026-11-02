@@ -101,6 +101,8 @@ type callFile struct {
 	Pi *piCarry
 	// dsh
 	Dsh *dshCarry
+	// Grok Build
+	Grok *grokCallCarry
 }
 
 // cxRun is where a rollout's read stands: what its lines have said so far.
@@ -324,11 +326,11 @@ func callFileLists(codex []file) [][]file {
 // calls are rows of their database or their JSON files; and WorkBuddy's, whose usage lines repeat a reply's id as it
 // goes on, as CodeBuddy Code's do (#1779); and MiniMax Code's, whose messages
 // file a later generation of its history may replace (#1605). Kimi Code's
-// (#1607), Pi's and omp's (#1951) are lines of a file only appended to,
-// read on as callFiles' are; DeepSeek Harness's, a file only appended to
-// that may be packed in zstd frames, is read on from the frame it was
-// left in (readDshCalls). Every agent here needs an entry in
-// wholeCallReaders, lineCallReaders or resumeCallReaders.
+// (#1607), Pi's and omp's (#1951) and Grok Build's (#4423) are lines of a
+// file only appended to, read on as callFiles' are; DeepSeek Harness's, a
+// file only appended to that may be packed in zstd frames, is read on
+// from the frame it was left in (readDshCalls). Every agent here needs an
+// entry in wholeCallReaders, lineCallReaders or resumeCallReaders.
 func callSources() []file { return callSourcesWith(codexFiles()) }
 
 // callSourcesWith is callSources with codex the rollouts codexFiles found.
@@ -338,8 +340,8 @@ func callSourcesWith(codex []file) []file { return callSourcesInto(nil, codex) }
 func callSourcesInto(out []file, codex []file) []file {
 	lists := append(callFileLists(codex), openCodeCallFiles(), zcodeCallFiles(), dshCallFiles(),
 		minimaxCallFiles(), kimiCallFiles(), wslFiles("kimi"), piCallFiles(), codebuddyCallFiles(),
-		agyCallFiles(), // #2097
-		workbuddyCallFiles())
+		agyCallFiles(),                        // #2097
+		workbuddyCallFiles(), grokCallFiles()) // #4423
 	if out == nil {
 		return allowed(distinctOf(lists...))
 	}
@@ -442,6 +444,10 @@ func (st *callFile) cloneState() *callFile {
 			d.Tail = &t
 		}
 		c.Dsh = &d
+	}
+	if st.Grok != nil {
+		g := *st.Grok
+		c.Grok = &g
 	}
 	return &c
 }
