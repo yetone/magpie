@@ -4230,6 +4230,12 @@ body.panel .modal { padding: 16px 12px; }
 .editor .fname { flex: 1; min-width: 0; font-size: 12.5px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor.sync-form .done { grid-column: 1 / -1; font-size: 12.5px; color: var(--fg-2); user-select: text; -webkit-user-select: text; }
 .editor.sync-form .bar { grid-column: 1 / -1; }
+/* Back up by itself (autobackup.js): a control too wide for the row goes
+   under its name, at the right, as Agents' rows do */
+.prefs .row.pref.auto-backup { flex-wrap: wrap; row-gap: 8px; }
+.prefs .row.pref.auto-backup .who { flex: 1 1 200px; }
+.prefs .row.pref.auto-backup .sub { white-space: normal; }
+.prefs .row.pref.auto-backup .val { margin-left: auto; max-width: 100%; }
 
 /* the usual context windows under the field, one click each (#120) */
 .cxpicks { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }

@@ -235,6 +235,8 @@ var notYet = map[string]string{
 	"POST /api/usage/arrange":                    W,  // api.go
 	"POST /api/warm-now":                         A,  // api.go
 	"POST /api/window/{action}":                  W,  // api.go
+	"GET /api/autobackup":                        S2, // backup.go: Back up by itself
+	"POST /api/autobackup/{action}":              S2, // backup.go
 	"GET /api/archive":                           S2, // archive.go
 	"GET /api/archive/file":                      S2, // archive.go
 	"POST /api/archive/export":                   S2, // archive.go

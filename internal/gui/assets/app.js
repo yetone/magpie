@@ -20028,11 +20028,7 @@ async function renderSync(v) {
   // "Synced" in the same grey it read as part of a sync that went fine
   // (#1259)
   if (v.on && !v.error && v.usageError) sub.after(el("div", "sub bad wraps sync-usage-err", t("Couldn't share usage: {error}", { error: v.usageError })));
-  // subscriptions whose settings sync brought with no account here: sync
-  // carries no sign-in, and they are listed once signed in to here. It says
-  // the synced settings are why they are named, and that one not used here
-  // needs nothing (悠悠哥 on Discord asked why sync said ChatGPT wasn't
-  // signed in)
+  // subscriptions synced with no account here (悠悠哥 on Discord)
   if (v.on && v.signIn?.length) sub.after(el("div", "sub wraps sync-sign-in", t("Your synced settings use {names}, which isn't signed in on this computer. Sync carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })));
   // the server's file isn't a backup a sync can read, and is a file: this
   // computer's setup can go up in its place, the user choosing it
@@ -20086,6 +20082,9 @@ async function renderSync(v) {
   if (syncOpen === "export") box.append(exportForm());
   row(t("Import"), t("Bring in a file exported from magpie"), btn(t(syncOpen === "import" ? "Close" : "Import…"), toggle("import")));
   if (syncOpen === "import") box.append(importForm());
+  // Back up by itself (jwaitq), in autobackup.js
+  const ab = box.appendChild(el("div"));
+  if (window.autoBackupFill) autoBackupFill(ab); else import("./autobackup.js").then(() => autoBackupFill(ab), () => {});
 }
 
 // askRestore asks before the server's setup replaces this computer's

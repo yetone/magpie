@@ -15,6 +15,7 @@ import (
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/appdir"
+	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/browsermcp"
 	"github.com/yetone/magpie/internal/catalog"
 	"github.com/yetone/magpie/internal/claudebridge"
@@ -399,6 +400,8 @@ func run(args []string) error {
 	gateway.CodexDesktopChanged = agent.SyncCatalogSoon
 	// the setup kept the same on every computer, by whichever serves
 	gateway.WhileServing = append(gateway.WhileServing, davsync.Run)
+	// and the setup backed up into a folder here by itself (jwaitq)
+	gateway.WhileServing = append(gateway.WhileServing, backup.RunAuto)
 	// and dsh's patch lists, which dsh reads live: a route left behind by
 	// something else writing the file fails every session there until
 	// magpie writes its own list again

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -91,6 +92,81 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 		writeJSON(rw, res)
 	})
 
+	// backups made by themselves into a folder here, and putting one back
+	// (jwaitq on Discord)
+	mux.HandleFunc("GET /api/autobackup", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, autoView())
+	})
+	mux.HandleFunc("POST /api/autobackup/{action}", func(rw http.ResponseWriter, r *http.Request) {
+		var in struct {
+			On    *bool
+			Hours *int
+			Keep  *int
+			Dir   *string // "" is the default folder
+			Name  string
+		}
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
+			fail(rw, err)
+			return
+		}
+		set := func(f func(*backup.AutoConfig)) error {
+			c, err := backup.LoadAuto()
+			if err != nil {
+				return err
+			}
+			f(&c)
+			return backup.SaveAuto(c)
+		}
+		var err error
+		switch r.PathValue("action") {
+		case "set": // only what was sent: the rest stays as the user set it
+			err = set(func(c *backup.AutoConfig) {
+				if in.On != nil {
+					c.Off = !*in.On
+				}
+				if in.Hours != nil {
+					c.Hours = *in.Hours
+				}
+				if in.Keep != nil {
+					c.Keep = *in.Keep
+				}
+				if in.Dir != nil && *in.Dir == "" {
+					c.Dir = ""
+				}
+			})
+		case "choose": // a folder from the system's picker, checked writable
+			var dir string
+			if dir, err = w.ChooseFolder("Choose a folder for backups"); err == nil && dir != "" {
+				if err = writable(dir); err == nil {
+					err = set(func(c *backup.AutoConfig) { c.Dir = dir })
+				}
+			}
+		case "now":
+			_, err = backup.AutoNow(Version)
+		case "reveal":
+			dir := backup.AutoStatus().Dir
+			if err = os.MkdirAll(dir, 0o700); err == nil {
+				err = w.OpenFolder(dir)
+			}
+		case "restore": // what is here is backed up first, to undo it
+			res, before, err := backup.AutoRestore(in.Name, Version)
+			if err != nil {
+				fail(rw, err)
+				return
+			}
+			writeJSON(rw, map[string]any{"view": autoView(), "result": res, "before": before.Name})
+			return
+		default:
+			http.NotFound(rw, r)
+			return
+		}
+		if err != nil {
+			fail(rw, err)
+			return
+		}
+		writeJSON(rw, autoView())
+	})
+
 	mux.HandleFunc("GET /api/davsync", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, davsync.Status())
 	})
@@ -154,6 +230,23 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 		}
 		writeJSON(rw, v)
 	})
+}
+
+// autoView is backup.AutoStatus with the folder as the page shows it.
+func autoView() backup.AutoView {
+	v := backup.AutoStatus()
+	v.Dir = tilde(v.Dir)
+	return v
+}
+
+// writable says whether a file can be made in dir.
+func writable(dir string) error {
+	f, err := os.CreateTemp(dir, ".magpie-backup-*.tmp")
+	if err != nil {
+		return err
+	}
+	f.Close()
+	return os.Remove(f.Name())
 }
 
 // busy is what of a sync's failure the status doesn't hold: that it waited

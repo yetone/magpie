@@ -126,6 +126,40 @@ fields reuse a saved credential only for its matching account; GitHub
 restricts reuse to the same owner/repo. Branch or prefix changes within that
 repository can keep the token. The branch is part of the sync state key.
 
+## Backups by themselves
+
+[`auto.go`](../../internal/backup/auto.go) writes the setup into a folder on
+this computer on a schedule (jwaitq on Discord). `RunAuto` runs while the
+gateway serves (`gateway.WhileServing`, wired in `internal/cli/main.go`) and
+calls `AutoTick` every few minutes; tests call `AutoTick` with their own
+clock.
+
+- **Config:** `autobackup.json` beside the settings holds only what the user
+  set (`Off`, `Hours`, `Keep`, `Dir`). Missing means on, every 24 hours,
+  keeping 7, in `settings.Dir()/auto-backups` (not `backups`, which the
+  library prunes). A config that can't be read or parsed makes no backup and
+  shows the error; it is never read as the defaults.
+- **Content:** `Collect(false, app)`, the manual export without keys, with
+  the proxy settings blanked too, since nothing seals it: no passphrase is
+  there on a schedule. Files are 0600 in a 0700 folder.
+- **Format:** `magpie-YYYYMMDD-HHMMSS[-n]-{auto,restore}.json`, holding the
+  bundle and its sha256. Each is written to a `.magpie-backup-*.tmp` and
+  renamed into place. A file whose sum doesn't match, a temp file or a name
+  that doesn't match is never listed, restored or pruned.
+- **Schedule:** a backup is due `Hours` after the newest, so a restart
+  doesn't make one early; one whose bundle equals the newest's is not
+  written. After a write the oldest `-auto` files past `Keep` are removed
+  (and `-restore` ones past `Keep` after a restore), with its own temp files
+  over an hour old; other files in the folder are never touched.
+- **Restore:** `AutoRestore(name)` first writes a `-restore` backup of what
+  is here (and stops if that fails), then `Restore(bundle, All)`, which is
+  additive: providers added since stay, each keeps its local key. Restoring
+  the `-restore` file undoes it.
+- **API:** `GET /api/autobackup`; `POST /api/autobackup/{set,choose,now,
+  reveal,restore}`. `set` changes only the fields sent; `dir ""` is the
+  default folder. Settings draws it under Sync's Export and Import from the
+  lazy [`autobackup.js`](../../internal/gui/assets/autobackup.js).
+
 ## GitHub constraints and errors
 
 - The repository must exist and be private: `prepare` refuses one whose

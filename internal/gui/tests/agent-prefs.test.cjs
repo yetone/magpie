@@ -119,6 +119,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // none in Settings; its search says where they are
         await page.goto("http://magpie.test/?view=settings");
         await page.locator("#setQ").waitFor();
+        // #setQ is in the page before Settings is drawn, and Long
+        // conversations with it: wait for the drawing to take it out
+        await page.waitForFunction(() => !document.querySelector("#view-settings #fullContextRow")).catch(() => {});
         for (const id of CODEX) assert.equal(await page.locator(`#view-settings #${id}`).count(), 0, `${lang}: ${id} not in Settings`);
         assert.equal(await page.locator(".agent-pref-link").first().isVisible(), false, "no link rows till searching");
         await page.locator("#setQ").fill(w.titles);

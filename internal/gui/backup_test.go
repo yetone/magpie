@@ -125,3 +125,66 @@ func TestExportGoesToTheSystemsDownloads(t *testing.T) {
 		t.Errorf("saved in %s, want %s", got, want)
 	}
 }
+
+// pickFolder is the app's windows with the system's folder picker answering
+// dir.
+type pickFolder struct {
+	folderOnly
+	dir string
+}
+
+func (p pickFolder) ChooseFolder(string) (string, error) { return p.dir, nil }
+
+// Settings' Back up by itself (jwaitq on Discord): a change sends only what
+// it changes, so the rest stays as the user set it; Change… takes a folder
+// from the picker; a backup made now is listed, and restoring it says which
+// backup of what was here undoes it.
+func TestAutoBackupRoutes(t *testing.T) {
+	sandboxHome(t)
+	picked := t.TempDir()
+	mux := http.NewServeMux()
+	backupRoutes(mux, pickFolder{dir: picked})
+	call := func(path, body string) map[string]any {
+		t.Helper()
+		w := httptest.NewRecorder()
+		method := "POST"
+		if body == "-" {
+			method, body = "GET", ""
+		}
+		mux.ServeHTTP(w, httptest.NewRequest(method, path, strings.NewReader(body)))
+		if w.Code != 200 {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body)
+		}
+		var out map[string]any
+		json.Unmarshal(w.Body.Bytes(), &out)
+		return out
+	}
+	if v := call("/api/autobackup", "-"); v["on"] != true || v["hours"] != 24.0 || v["keep"] != 7.0 || v["custom"] != false {
+		t.Fatalf("the defaults: %v", v)
+	}
+	call("/api/autobackup/set", `{"hours":168}`)
+	call("/api/autobackup/set", `{"keep":14}`)
+	if v := call("/api/autobackup/set", `{"on":false}`); v["on"] != false || v["hours"] != 168.0 || v["keep"] != 14.0 {
+		t.Fatalf("off kept the rest? %v", v)
+	}
+	if v := call("/api/autobackup/choose", ""); v["custom"] != true || v["dir"] != tilde(picked) {
+		t.Fatalf("chosen: %v", v)
+	}
+	v := call("/api/autobackup/now", "")
+	list, _ := v["backups"].([]any)
+	if len(list) != 1 {
+		t.Fatalf("after Back up now: %v", v)
+	}
+	name := list[0].(map[string]any)["name"].(string)
+	if _, err := os.Stat(filepath.Join(picked, name)); err != nil {
+		t.Fatal(err)
+	}
+	r := call("/api/autobackup/restore", `{"name":"`+name+`"}`)
+	before, _ := r["before"].(string)
+	if !strings.HasSuffix(before, "-restore.json") || len(r["view"].(map[string]any)["backups"].([]any)) != 2 {
+		t.Fatalf("restore: %v", r)
+	}
+	if v := call("/api/autobackup/set", `{"dir":""}`); v["custom"] != false || v["hours"] != 168.0 {
+		t.Fatalf("back to the default folder: %v", v)
+	}
+}
