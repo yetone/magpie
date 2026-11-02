@@ -96,6 +96,14 @@ export const FakePlugin = async ({ client }) => ({
       cfg.provider[ID].models["sensenova-u1.5-lite"] = { name: "sensenova-u1.5-lite", limit: { context: 131072, output: 32768 } }
       cfg.provider[ID].models["flux-2"] = { name: "Flux 2", provider: { npm: "@ai-sdk/anthropic" }, limit: { context: 1000, output: 100 } }
     }
+    // $FAKE_LOOMY: iFlytek's Loomy gateway's three image generators as its
+    // /v1/models lists them (#4913), on the provider's openai-compatible;
+    // all three draw on its images API
+    if (process.env.FAKE_LOOMY) {
+      cfg.provider[ID].models["Hy-Image-3.5-preview"] = { name: "Hy-Image-3.5-preview", limit: { context: 131072, output: 32768 } }
+      cfg.provider[ID].models["doubao-seedream-5-lite"] = { name: "doubao-seedream-5-lite", limit: { context: 131072, output: 32768 } }
+      cfg.provider[ID].models["qwen-image-3.0-pro"] = { name: "qwen-image-3.0-pro", limit: { context: 131072, output: 32768 } }
+    }
     // $FAKE_GOOGLE: the provider's models are on Gemini's API, as XYenon's
     // Google AI Studio plugin gives them all (@ai-sdk/google), so it has
     // no OpenAI-compatible model

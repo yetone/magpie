@@ -1974,10 +1974,11 @@ func DrawsID(id string) bool {
 
 // ImagesAPI is whether a model draws on an images API rather than answering
 // in chat with pictures: gpt-image, dall-e, imagen, flux, seedream… — not
-// gemini-*-image or gpt-5-image, which chat.
+// gemini-*-image or gpt-5-image, which chat. iFlytek Loomy's Hy-Image
+// generators (Hy-Image-3.5-preview) draw on its images API too (#4913).
 func ImagesAPI(id string) bool {
 	id = strings.ToLower(id)
-	for _, w := range []string{"gpt-image", "chatgpt-image", "dall-e", "imagen", "imagine", "qwen-image", "wanx", "wan2", "seedream", "cogview", "flux", "stable-diffusion", "sdxl", "kolors", "hidream", "sensenova-u1"} {
+	for _, w := range []string{"gpt-image", "chatgpt-image", "dall-e", "imagen", "imagine", "qwen-image", "wanx", "wan2", "seedream", "cogview", "flux", "stable-diffusion", "sdxl", "kolors", "hidream", "sensenova-u1", "hy-image"} {
 		if strings.Contains(id, w) {
 			return true
 		}
