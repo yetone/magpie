@@ -301,6 +301,7 @@ func (h *host) zoomWindows() {
 // stays there, so what the pages kept isn't lost. The browser arguments
 // the user set in WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, which Wails' loader
 // blanks before WebView2 can read them, are merged into Wails' own (#2753).
+// Display changes are read with a callback made once (screens_windows.go).
 func windowsOptions() application.WindowsOptions {
 	disabled, enabled, other := webView2Args(webview2env.Args)
 	return application.WindowsOptions{
@@ -309,6 +310,7 @@ func windowsOptions() application.WindowsOptions {
 		DisabledFeatures:              disabled,
 		EnabledFeatures:               enabled,
 		AdditionalBrowserArgs:         other,
+		WndProcInterceptor:            screensWndProc,
 	}
 }
 
