@@ -19,7 +19,7 @@ func (server *Server) drawingModel(request *http.Request, id string) (provider.P
 				}
 			}
 			if drawsFamily(*matched, id) {
-				return *matched, id, true
+				return *matched, drawnAs(*matched, id), true
 			}
 		}
 	}
