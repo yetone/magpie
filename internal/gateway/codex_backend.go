@@ -972,6 +972,12 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		// is refused by the ChatGPT backend (#1270), as on an account's
 		body = provider.DeclareSearch(body, strings.EqualFold(r.Header.Get("X-OpenAI-Internal-Codex-Responses-Lite"), "true"))
 	}
+	if r.Method == http.MethodPost && base == provider.CodexBase {
+		// a call in the history by a name the backend refuses (another
+		// provider's model wrote it) turned every turn and compaction
+		// away, as on an account's (provider.CodexToolNames, wing3556)
+		body = provider.CodexToolNames(body)
+	}
 	u := base + rest
 	if r.URL.RawQuery != "" {
 		u += "?" + r.URL.RawQuery

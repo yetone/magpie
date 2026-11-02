@@ -71,8 +71,11 @@ func namespacedIn(body []byte) map[string]nsTool {
 // held whole and gone through at the end.
 type nsTidy struct {
 	named map[string]nsTool
-	sse   bool
-	buf   []byte
+	// back maps a declared tool's name a ChatGPT account was given in its
+	// place to the agent's own (codexRenamedIn)
+	back map[string]string
+	sse  bool
+	buf  []byte
 }
 
 func (t *nsTidy) write(b []byte) []byte {
@@ -102,7 +105,7 @@ func (t *nsTidy) flush() []byte {
 }
 
 func (t *nsTidy) lines(b []byte) []byte {
-	if !bytes.Contains(b, []byte(`"function_call"`)) {
+	if !t.carries(b) {
 		return append([]byte(nil), b...)
 	}
 	var out []byte
@@ -115,7 +118,7 @@ func (t *nsTidy) lines(b []byte) []byte {
 		}
 		body := bytes.TrimRight(line, "\r\n")
 		data, ok := bytes.CutPrefix(body, []byte("data:"))
-		if !ok || !bytes.Contains(data, []byte(`"function_call"`)) {
+		if !ok || !t.carries(data) {
 			out = append(out, line...)
 			continue
 		}
@@ -164,13 +167,27 @@ func (t *nsTidy) restore(data []byte) ([]byte, bool) {
 	return nb, true
 }
 
+// carries reports whether b may hold a call restore names again: a
+// function call, or a custom tool's to one renamed.
+func (t *nsTidy) carries(b []byte) bool {
+	return bytes.Contains(b, []byte(`"function_call"`)) || t.back != nil && bytes.Contains(b, []byte(`"custom_tool_call"`))
+}
+
 // call names a function_call to a namespaced function by its name and
-// namespace, and reports whether it was one.
+// namespace, or a call to a tool renamed for a ChatGPT account by the
+// agent's name, and reports whether it was one.
 func (t *nsTidy) call(it map[string]any) bool {
-	if it == nil || it["type"] != "function_call" || it["namespace"] != nil {
+	if it == nil || it["namespace"] != nil || it["type"] != "function_call" && it["type"] != "custom_tool_call" {
 		return false
 	}
 	name, _ := it["name"].(string)
+	if n, ok := t.back[name]; ok {
+		it["name"] = n
+		return true
+	}
+	if it["type"] != "function_call" {
+		return false
+	}
 	if _, ok := t.named[name]; !ok {
 		return false
 	}

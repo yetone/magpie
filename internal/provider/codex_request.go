@@ -330,6 +330,9 @@ func codexBody(body []byte) []byte {
 	m["stream"] = true
 	m["tool_choice"] = "auto"
 	declareSearch(m, false)
+	// a call's name the backend refuses, in a history another provider's
+	// model wrote, turned the whole request away (codex_names.go)
+	codexToolNames(m)
 	if _, ok := m["parallel_tool_calls"]; !ok {
 		m["parallel_tool_calls"] = true
 	}
