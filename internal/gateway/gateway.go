@@ -4863,6 +4863,13 @@ func (s *Server) forward(ctx context.Context, p provider.Provider, to provider.P
 	if err == nil {
 		res, err = s.retryTokenField(ctx, p, to, path, body, in, res)
 	}
+	if err == nil && s.refuseThinkingBack(p, to, body, res) {
+		// DeepSeek's model behind a name that doesn't say so, asking for
+		// a tool turn's thinking another model's turn didn't leave
+		// (thinking_back.go): asked once more with it filled in
+		res.Body.Close()
+		res, err = s.forwardOnce(ctx, p, to, path, body, in)
+	}
 	if err == nil && (res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusBadRequest) && p.Retries() {
 		// an account that can mend what the refusal names (a Factory org
 		// the server won't take; a model Copilot's Auto picked that the
@@ -4923,6 +4930,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 	body = kimiLockedSampling(p, to, body)
 	body = clinePin(p, to, body)
 	body = codexImagesFit(p, to, body)
+	// the tool turns' thinking a provider's model asked for before
+	// (thinking_back.go)
+	body = s.withThinkingBack(p, to, body)
 	// under the byte cap the provider refused a larger request over,
 	// its oldest images left out (body_cap.go)
 	body = s.withinCap(p, to, path, body)
