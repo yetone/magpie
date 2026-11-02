@@ -1717,7 +1717,7 @@ result for every request: who went first, and why.
    the conversation stays on its account, resting, spent or past its cap,
    and its errors go to the agent.
    With *Stays: Session* or *Strict* under Smart, Least used first or
-   Weekly pace, a new conversation goes to the account the fewest other
+   Use before expiry, a new conversation goes to the account the fewest other
    conversations of the last 30 minutes are on (of those not resting and
    under 90%), so sessions side by side each keep an account of their own;
    a Claude Code subagent goes with its session's account.
@@ -1726,9 +1726,9 @@ So routing decides who goes first only for a conversation nobody has
 answered yet. An account that has used 90% goes behind the others for new
 conversations, but a conversation already on it stays there until 98%.
 
-**The routings.** Smart, Least used first and Weekly pace go by the share
+**The routings.** Smart, Least used first and Use before expiry go by the share
 used of the fullest window that counts the model, the 5-hour window
-included. Smart and Weekly pace put an account behind the others once a
+included. Smart and Use before expiry put an account behind the others once a
 window is at 90% or more, and behind those once one is at 98% or more,
 each of these groups ordered by the share used.
 
@@ -1771,11 +1771,17 @@ each of these groups ordered by the share used.
 - **Least used first**: the lowest share used first; then the account
   magpie sent the fewest tokens lately (half of them stop counting after an
   hour). An account not known counts as unused.
-- **Weekly pace**: the account with the highest pace first. Pace is the
+- **Use before expiry**: the account with the highest pace first. Pace is the
   share of the week left divided by the hours until the week renews (at
   least 1): 60% left with 20 hours to go is 3 per hour. With two weekly
   windows that count the model (Opus's own and the general one), the lower
-  pace counts. An account with no week goes by its 5 hours. Accounts whose
+  pace counts. An account with no week goes by its 5 hours. Credits in a
+  window that expire before it renews (WorkBuddy's check-in credits) count
+  as lost then: their share of the window, divided by the hours until they
+  expire (at least 1), is the window's pace when it is the higher, so 70 of
+  500 credits expiring in 14 hours (1 per hour) beat a month's 100% over
+  28 days. When the vendor doesn't say how much expires, all that is left
+  counts. Accounts whose
   pace is within a tenth of the highest in their band count as alike, and
   among them the one magpie sent the fewest tokens lately goes first. A
   Claude account not known goes first once, as in Smart; another unknown
@@ -1829,7 +1835,7 @@ depends on the routing:
 | In turn | Where the rotation goes next. |
 | Smart | Only between accounts whose windows all renew in the same hours, or whose shares used are equal. |
 | Least used first | Only between accounts with the same share used and the same tokens sent lately. |
-| Weekly pace | Only between accounts in the same pace band that magpie sent the same tokens lately, in practice none since magpie started. |
+| Use before expiry | Only between accounts in the same pace band that magpie sent the same tokens lately, in practice none since magpie started. |
 | Speed first | Only between those within a tenth of each other's speed, and among those not measured lately. |
 | Cheapest first | Only between those that cost the same now, and among those with no known price. |
 

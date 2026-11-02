@@ -8,7 +8,7 @@ import (
 
 // An account that spends a Codex reset about to run out by itself has its
 // windows started again then, resetLead before the reset runs out:
-// Weekly pace goes by the hours until that, when it is sooner than the week
+// Use before expiry goes by the hours until that, when it is sooner than the week
 // renews, and Smart's renewals do too (#717, #718). A reset that runs out
 // after the week renews, or has run out, changes nothing.
 func TestPaceUntilAutoUsedReset(t *testing.T) {

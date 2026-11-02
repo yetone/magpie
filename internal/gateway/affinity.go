@@ -912,7 +912,7 @@ func withLead(key string, cs []candidate, pl planned) ([]candidate, planned) {
 // spreadsSessions says whether new conversations kept for the whole
 // session (Stays: Session or Strict) go to the key, account or member the
 // fewest others are on (leastHeld), under a routing that picks by what
-// each has left: Smart, Least used first, Weekly pace. Several sessions
+// each has left: Smart, Least used first, Use before expiry. Several sessions
 // started side by side then each keep an account of their own until its
 // allowance runs out, as a user picking the mode with several accounts
 // expects (connor_yang on Discord: three sessions on two of three

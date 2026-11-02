@@ -4,7 +4,7 @@
 // says what it has left, "750 积分 left", with no bar (a share it was
 // never told), in the live rows and in the accounts listed below; the
 // story says the first went first as its wallet has the most left,
-// naming both figures, under Smart, Least used and Weekly pace alike.
+// naming both figures, under Smart, Least used and Use before expiry alike.
 // Where it said "0% used" and "in the order given". Every language, at a
 // window's width and at 420px, in both engines.
 const assert = require("node:assert/strict");

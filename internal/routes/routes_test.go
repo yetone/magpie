@@ -165,7 +165,7 @@ func TestLeastUsedSeatsWithNoShare(t *testing.T) {
 	}
 }
 
-// Weekly pace: the most of a week left per hour first; one running low
+// Use before expiry: the most of a week left per hour first; one running low
 // after, whatever its pace.
 func TestPace(t *testing.T) {
 	s := []Seat{{Key: "slow", Pace: 1}, {Key: "low", Used: 95, Pace: 50}, {Key: "fast", Pace: 10}}
@@ -195,7 +195,7 @@ func TestWeighted(t *testing.T) {
 
 // Of those all but used up, one that goes on on its credits (a Codex
 // account holding them) goes before those with nothing left, though it
-// has used more, in Smart, Weekly pace and Least used alike; still after
+// has used more, in Smart, Use before expiry and Least used alike; still after
 // every one with room or running low, its allowance spent before its
 // credits are.
 func TestCreditsFirstOfTheSpent(t *testing.T) {

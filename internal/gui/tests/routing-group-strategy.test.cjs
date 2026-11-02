@@ -26,7 +26,7 @@ const base = { members: ["a/sol", "b/flash", "c/luna"], ready: true, memberInfo:
 
 const words = {
   en: { order: "In order", manual: "Manual", weight: "By weight", smart: "Smart", head: "Routing", edit: "Edit",
-    names: ["Smart", "In order", "Until used up", "In turn", "Least used", "Weekly pace", "Free first", "Speed first", "Cheapest first", "By weight", "Manual"],
+    names: ["Smart", "In order", "Until used up", "In turn", "Least used", "Use before expiry", "Free first", "Speed first", "Cheapest first", "By weight", "Manual"],
     tip: "How Auto routes: click to change it", saved: "Auto: Manual" },
   zh: { order: "按顺序", manual: "手动", weight: "按权重", smart: "智能", head: "路由", edit: "编辑",
     tip: "Auto 的路由方式：点击更改", saved: "Auto：手动" },

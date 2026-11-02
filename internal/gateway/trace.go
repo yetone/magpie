@@ -314,7 +314,9 @@ type Weighed struct {
 	// allowance (#3749)
 	Window int `json:"window,omitempty"`
 	// DueBy: "reset" when Due is when an auto-used Codex reset about to
-	// run out starts the windows again, sooner than they renew (#717)
+	// run out starts the windows again, sooner than they renew (#717);
+	// "expiry" when it is when credits in them expire, sooner than they
+	// renew (Allowance.Pace)
 	DueBy string `json:"dueBy,omitempty"`
 	// Restarts: when that reset starts them again, set when it is sooner
 	// than its biggest window renews — Smart goes by it then (#718)
@@ -531,8 +533,11 @@ func weighed(c candidate, p provider.Provider, wg weighing, fallback bool, from 
 		if !l.due.IsZero() {
 			due := l.due
 			w.Due = &due
-			if l.dueRestart {
+			switch {
+			case l.dueRestart:
 				w.DueBy = "reset"
+			case l.dueExpiry:
+				w.DueBy = "expiry"
 			}
 		}
 		if rs := l.restarts; !rs.IsZero() && len(l.soon) > 0 && rs.Equal(l.soon[0]) {

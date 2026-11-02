@@ -1995,9 +1995,10 @@ type left struct {
 	due     time.Time   // when the window that pace went by renews; zero when not known
 	// restarts: when an auto-used reset starts its windows again
 	// (Allowance.Restarts), zero when none will; dueRestart: due is that,
-	// sooner than the window renews by itself
-	restarts   time.Time
-	dueRestart bool
+	// sooner than the window renews by itself; dueExpiry: due is when
+	// credits in it expire, sooner than it renews (Allowance.Pace)
+	restarts              time.Time
+	dueRestart, dueExpiry bool
 	// the count used is the share of, when the vendor counts it so
 	// (Allowance.Count): amount of of, in unit
 	amount, of float64
@@ -2086,6 +2087,7 @@ func weighRouted(p provider.Provider, cs []candidate, model string, from provide
 			rs := a.Restarts(now)
 			l := left{used: u, renews: r, fullest: a.Fullest(c.model, now), soon: a.Renewal(c.model, now), lapse: a.Lapse(c.model, now), pace: pc, due: due, amount: amt, of: of, unit: unit,
 				restarts: rs, dueRestart: !rs.IsZero() && due.Equal(rs), credits: spendsCredits(c.p, a)} // one not known counts as unused
+			l.dueExpiry = !l.dueRestart && !l.lapse.IsZero() && due.Equal(l.lapse)
 			l.first = l.credits && provider.CodexCreditsFirst(c.p.Account.User)
 			if b, bu, has := a.Left(c.model); has {
 				// a wallet's figure is weighed only against the same

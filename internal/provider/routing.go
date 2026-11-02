@@ -258,6 +258,9 @@ type Limit struct {
 	// RunsOut is when the soonest of what the window has left is lost,
 	// apart from its reset (QuotaWindow.RunsOutAt): zero when not known.
 	RunsOut time.Time
+	// RunsOutLeft is how much, in Unit, is lost at RunsOut
+	// (QuotaWindow.RunsOut): zero when not told
+	RunsOutLeft float64
 	// Credits: the account goes on past this window on its credits
 	// (QuotaWindow.Credits)
 	Credits bool
@@ -295,7 +298,7 @@ func (a Allowance) WeekUsedUp(now time.Time) bool {
 // as the Codex reset about to run out is spent (expiringResetSpent):
 // resetLead before it runs out, or now when the account is held up
 // past then. What they have left then is lost, as at their own reset, so
-// Weekly pace and Smart take it for their renewal when it comes sooner
+// Use before expiry and Smart take it for their renewal when it comes sooner
 // (#717, #718). Zero when none will be.
 func (a Allowance) Restarts(now time.Time) time.Time {
 	for _, l := range a {
@@ -563,7 +566,14 @@ const FreshPace = 100 / (7 * 24.0)
 // go by what they have used, among the rest as the fresh are. An
 // account whose windows an auto-used reset starts again sooner than they
 // renew (Restarts) goes by that instead, and due is then that time: what
-// it has left is lost there.
+// it has left is lost there. Credits in a budget window that expire
+// before it renews (Limit.RunsOut) are lost sooner still: the window goes
+// by those that expire first, per hour until they do, when that is the
+// more — what expires as a share of the window (RunsOutLeft of Of), or
+// all it has left when the amount isn't told, as Renewal takes it. A
+// WorkBuddy account whose check-in credits expire tomorrow goes ahead of
+// one whose month has more left but nothing expiring (lcyksp on
+// Discord); due is then the expiry.
 func (a Allowance) Pace(model string, now time.Time) (pace float64, due time.Time) {
 	model = strings.ToLower(model)
 	restart := a.Restarts(now)
@@ -606,7 +616,11 @@ func (a Allowance) Pace(model string, now time.Time) (pace float64, due time.Tim
 			until, renews = l.Resets.Sub(now), l.Resets
 		}
 		until, renews = cut(until, renews)
-		if p := (100 - u) / max(until, time.Hour).Hours(); !any || p < pace {
+		p := (100 - u) / max(until, time.Hour).Hours()
+		if q, at, ok := l.expiring(u, now, now.Add(until)); ok && q > p {
+			p, renews = q, at
+		}
+		if !any || p < pace {
 			pace, due, any = p, renews, true
 		}
 	}
@@ -617,6 +631,21 @@ func (a Allowance) Pace(model string, now time.Time) (pace float64, due time.Tim
 		return (100 - used) / weekSpan.Hours(), time.Time{}
 	}
 	return pace, due
+}
+
+// expiring is the pace of what a window loses at RunsOut, when that
+// comes after now and before ends, the window's renewal: the share that
+// expires (RunsOutLeft of Of, at most all), else all it has left (100-u),
+// per hour until then, never fewer than one.
+func (l Limit) expiring(u float64, now, ends time.Time) (pace float64, at time.Time, ok bool) {
+	if !l.RunsOut.After(now) || !l.RunsOut.Before(ends) {
+		return 0, time.Time{}, false
+	}
+	share := 100 - u
+	if l.RunsOutLeft > 0 && l.Of > 0 {
+		share = min(100, 100*l.RunsOutLeft/l.Of)
+	}
+	return share / max(l.RunsOut.Sub(now), time.Hour).Hours(), l.RunsOut, true
 }
 
 // Allowances is each of an agent's accounts' allowance by user, as last
@@ -996,7 +1025,7 @@ func allowanceOf(ws []QuotaWindow, now time.Time) Allowance {
 			l.Resets = now.Add(time.Duration(w.ResetSecs) * time.Second)
 		}
 		if w.RunsOutAt != nil {
-			l.RunsOut = *w.RunsOutAt
+			l.RunsOut, l.RunsOutLeft = *w.RunsOutAt, w.RunsOut
 		}
 		if w.Balance != nil {
 			// a wallet is known by its balance, with no share invented:

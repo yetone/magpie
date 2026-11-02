@@ -1,6 +1,6 @@
 // Package rotation is the routings a provider or group can be set to
 // besides Smart: In order, Until used up, In turn, Least used first,
-// Weekly pace, By weight, Free first, Speed first and Cheapest first (a
+// Use before expiry, By weight, Free first, Speed first and Cheapest first (a
 // group's). While a provider or group is routed by one, it
 // stays on.
 //
@@ -19,7 +19,7 @@ import (
 func init() {
 	pluginrt.Register(pluginrt.Manifest{
 		ID: "rotation", API: "^1", Requires: []string{"providers", "gateway"}, Essential: true,
-		Name: "Routing strategies", Sub: "The routings besides Smart: In order, Until used up, In turn, Least used first, Weekly pace, By weight, Free first, Speed first and Cheapest first",
+		Name: "Routing strategies", Sub: "The routings besides Smart: In order, Until used up, In turn, Least used first, Use before expiry, By weight, Free first, Speed first and Cheapest first",
 		One: "1 provider or group routed so", Many: "{n} providers and groups routed so",
 		InUse: inUse,
 		Parts: []pluginrt.Part{{Slot: "part", Key: "rotation"}},

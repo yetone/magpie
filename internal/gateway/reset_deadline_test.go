@@ -10,7 +10,7 @@ import (
 
 // A Codex account that spends a reset about to run out by itself (auto-use
 // on, its windows used) loses what its week has left when that reset is
-// spent, resetLead (half an hour unless set) before it runs out: Weekly pace and Smart take
+// spent, resetLead (half an hour unless set) before it runs out: Use before expiry and Smart take
 // that for its deadline when it is sooner than the week renews (#717,
 // #718, thedavidweng: A with 80% left renewing in five days and a reset
 // running out that afternoon went behind B with 50% left renewing in two).

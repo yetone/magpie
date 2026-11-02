@@ -8,7 +8,7 @@ import (
 	"github.com/yetone/magpie/internal/provider"
 )
 
-// Weekly pace puts first the account with the most of its week left per
+// Use before expiry puts first the account with the most of its week left per
 // hour until it renews — the one with the most to lose at its reset — not
 // the one with the most left: 20% left and an hour to go beats 60% left
 // and five days. Alike within a tenth go by the tokens sent lately, then
