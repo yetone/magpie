@@ -1140,17 +1140,24 @@ func delistedWith(p Provider, was *Provider) []string {
 // left unpicked isn't new when the list that left it out for a while has it
 // again (an Our Free Model channel not read yet when the picks were saved).
 // A list short of no pick is taken as it is: what it left out and lists
-// again later is new (TestClaudePicksOfEveryModelTakeOnesListedSince).
+// again later is new (TestClaudePicksOfEveryModelTakeOnesListedSince). A
+// provider of keys saved before PickedFrom was kept is given it at its next
+// Save, the same picks too, as withNewlyListed serves those picks as they
+// are until it has one (TestLegacyPicksOfEveryModelGetPickedFromAtSave).
 func listedWith(p Provider, was *Provider) []string {
 	if len(p.Models) == 0 {
 		return nil
 	}
-	if was != nil && slices.Equal(normalModels(was.Models), normalModels(p.Models)) {
+	same := was != nil && slices.Equal(normalModels(was.Models), normalModels(p.Models))
+	if same && was.PickedFrom != nil {
 		return was.PickedFrom
 	}
 	from := p
 	if q, err := Find(p.ID); err == nil {
 		from = *q // with its account, whose list it is
+	}
+	if same && (from.Account != nil || p.Account != nil) {
+		return was.PickedFrom // a subscription keeps the date rule
 	}
 	var ids []string
 	for _, m := range from.Available() {
