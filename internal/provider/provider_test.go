@@ -110,3 +110,66 @@ func TestAddSecondOfPreset(t *testing.T) {
 		t.Fatalf("edit: %+v, %d providers", a, len(All()))
 	}
 }
+
+// One key a relay takes in both formats is added once for each: the
+// second, at the same host with the same key, is another API of it, not
+// the one already here (energetic_wolf_99424 on Discord: the Anthropic
+// one was refused as the key already used). The same API at the same
+// address again is still the one already here.
+func TestAddSameKeyOtherFormat(t *testing.T) {
+	isolate(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, ".cache"))
+	const key = "sk-both"
+	openai, err := Add(Provider{Name: "Relay", Chat: "https://api.relay.example/v1", Key: key, Models: []string{"gpt-5"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claude, err := Add(Provider{Name: "Relay Claude", Anthropic: "https://api.relay.example", Key: key, Models: []string{"claude-sonnet-4-5"}})
+	if err != nil {
+		t.Fatalf("the same key in the Anthropic format was refused: %v", err)
+	}
+	if openai == claude {
+		t.Fatalf("both saved as %q", openai)
+	}
+	if p, err := Find(claude); err != nil || p.Anthropic != "https://api.relay.example" || p.Key != key || p.Chat != "" {
+		t.Fatalf("anthropic one: %+v %v", p, err)
+	}
+	if p, err := Find(openai); err != nil || p.Chat != "https://api.relay.example/v1" || p.Anthropic != "" {
+		t.Fatalf("openai one changed: %+v %v", p, err)
+	}
+	// the same again, in either format, is the one already here
+	for _, dup := range []Provider{
+		{Name: "Relay again", Chat: "https://api.relay.example/v1/", Key: key},
+		{Name: "Claude again", Anthropic: "https://api.relay.example/v1", Key: key},
+	} {
+		if id, err := Add(dup); err == nil {
+			t.Fatalf("%s was added as %q", dup.Name, id)
+		}
+	}
+	if n := len(All()); n != 2 {
+		t.Fatalf("%d providers, want 2", n)
+	}
+	// two products of one vendor at one host, one account's key for both
+	// (#3388, ggbdpq's case): OpenCode Go beside OpenCode Zen
+	zen, _ := FromPreset("opencode-zen")
+	zen.Key = "sk-opencode"
+	if _, err := Add(zen); err != nil {
+		t.Fatal(err)
+	}
+	gop, _ := FromPreset("opencode-go")
+	gop.Key = "sk-opencode"
+	id, err := Add(gop)
+	if err != nil {
+		t.Fatalf("Go beside Zen, same key: %v", err)
+	}
+	if p, err := Find(id); err != nil || p.Chat != "https://opencode.ai/zen/go/v1" {
+		t.Fatalf("go: %+v %v", p, err)
+	}
+	if _, err := Add(gop); err == nil {
+		t.Fatal("a second Go with the same key was added")
+	}
+}

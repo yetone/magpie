@@ -1185,11 +1185,15 @@ func add(p Provider, once bool) (string, error) {
 		// nothing: the id is the site's instead
 		p.ID = hostID(p)
 	}
-	// the same key on the same host with the same headers is the one
-	// already here, not another: adding it twice would only split its usage.
-	// A copy the user asked for is taken (AddCopy).
+	// the same key on the same host with the same headers, at the same
+	// addresses, is the one already here, not another: adding it twice
+	// would only split its usage. One key a relay takes in both formats,
+	// added once for its OpenAI API and once for its Anthropic API, is two
+	// providers the user asked for (energetic_wolf_99424 on Discord: the
+	// second was refused as the key already used). A copy the user asked
+	// for is taken (AddCopy).
 	for _, h := range All() {
-		if once && h.Account == nil && sameProvider(h, normalize(p)) {
+		if once && h.Account == nil && sameProvider(h, normalize(p)) && servesAll(h, normalize(p)) {
 			return "", fmt.Errorf("%s is already added with that key (%s); magpie provider key %s <key> changes its key", h.Name, h.ID, h.ID)
 		}
 	}
@@ -1202,6 +1206,17 @@ func add(p Provider, once bool) (string, error) {
 		CountPartner(PartnerAdded, p.Preset)
 	}
 	return p.ID, nil
+}
+
+// servesAll says h is asked at every address p is added with, each for the
+// same API: p brings no API, and no address of one, that h lacks.
+func servesAll(h, p Provider) bool {
+	for _, u := range [][2]string{{h.Chat, p.Chat}, {h.Responses, p.Responses}, {h.Anthropic, p.Anthropic}, {h.Gemini, p.Gemini}} {
+		if u[1] != "" && u[0] != u[1] {
+			return false
+		}
+	}
+	return true
 }
 
 // AddCopy adds p, a copy the user made of the provider from (#268), beside
