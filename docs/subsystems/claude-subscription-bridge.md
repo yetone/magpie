@@ -746,9 +746,26 @@ after the last reply, with nothing in the log).
 A turn that finds no run under its own key takes one whose `behindKey` is
 its key, rewinds it to `behindTurn` (as `letGo` does) and tells it only
 the turn's messages ("taken back from the side question it answered
-since"). The run is marked `rewound`, so it isn't shelved. A run that
-can't be rewound is let go and the turn told whole to a new run, as
-before. Tried with the real 2.1.290 client in `-p --prompt-suggestions`
+since"). The run is marked `rewound`, so it isn't shelved until it has
+answered a whole turn since (`replied`, set as a turn ends with `stop`,
+cleared at each take-back): the session's lines after the rewind chain
+from the line before the side question, which is what `--resume` goes
+on from. A run that can't be rewound is let go and the turn told whole
+to a new run, as before.
+
+A run let go past `idleMost` while it waits at a side question's reply
+is shelved with its `behindKey` too (#4914, ggbdpq: with suggestions on,
+the next turn after a let-go read 19,844 from the cache and wrote 29,345;
+with them off, 49,560 read and 50 written). A turn that finds no session
+under its own key takes the newest one whose `behindKey` is its key, and
+the run that takes it resumes a copy cut before the side question
+(`cutBehind`): before the `-p` run's message `behindTurn`
+(`cutSessionBefore`), or after an interactive run's `behindLine`
+(`cutSession`). The shelved file is removed. Resumed whole, Claude Code
+would go on with the suggestion's exchange as the conversation's, which
+the client never had. A session that can't be cut is let go and the turn
+told whole, as before. `TestClaudeLetGoConversationAfterSuggestionResumesItsSession`
+holds it, with a stand-in for Claude Code; not tried with the real one. Tried with the real 2.1.290 client in `-p --prompt-suggestions`
 and the real 2.1.290 as the run, against a local mock of Anthropic: one
 run for the whole session, and the turn after each suggestion went on
 from the reply before it. Other side requests that go on from the

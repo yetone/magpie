@@ -77,13 +77,18 @@ echo '{"type":"system","subtype":"init","session_id":"'$sid'"}'
 while read -r line; do
   case $line in *'"type":"control_request"'*)
     echo "control $line" >> $log
-    # acknowledged as Claude Code does: initialize, a settings change
     id=$(printf '%s' "$line" | sed 's/.*"request_id":"\([^"]*\)".*/\1/')
-    echo '{"type":"control_response","response":{"subtype":"success","request_id":"'$id'"}}'
+    # acknowledged as Claude Code does: initialize, a settings change, a
+    # rewind of the conversation it was asked to take back
+    case "$line" in *rewind_conversation*)
+      echo '{"type":"result","subtype":"error_during_execution","is_error":true,"result":""}'
+      echo '{"type":"control_response","response":{"subtype":"success","request_id":"'$id'","response":{"rewound":true}}}';;
+    *) echo '{"type":"control_response","response":{"subtype":"success","request_id":"'$id'"}}';;
+    esac
     continue ;;
   esac
   echo "told $line" >> $log
-  if [ -n "$file" ]; then echo "$line" >> "$file"; fi
+  if [ -n "$file" ]; then printf '%s\n' "$line" >> "$file"; fi
   echo '{"type":"stream_event","event":{"type":"message_start","message":{"id":"m","model":"claude-sonnet-5","usage":{"input_tokens":1}}}}'
   echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":` + strconv.Quote(reply) + `}}}'
   echo '{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}}'
@@ -202,6 +207,84 @@ func TestClaudeLetGoConversationResumesItsSession(t *testing.T) {
 	h.ask("rules A", "a1", "a2", "a3")
 	if n := len(h.runs()); n != idleMost+2 {
 		t.Fatalf("runs: %d, want %d", n, idleMost+2)
+	}
+}
+
+// A run that answered the conversation's prompt suggestion since its last
+// turn, and was let go past idleMost, leaves its session where the
+// conversation's next turn comes by: that turn resumes a copy of it cut
+// before the suggestion, which the client's conversation never had, and
+// Claude Code goes on from it told the new message alone.
+// Before, the conversation's own turn had taken the run back from the
+// suggestion (#1638), its session marked taken back, and the shelf took
+// none of it: the next turn started a new Claude Code told the whole
+// conversation in one message, written to the prompt cache again (#4914).
+func TestClaudeLetGoConversationAfterSuggestionResumesItsSession(t *testing.T) {
+	h := newResumeHarness(t)
+	h.ask("rules A", "a1")
+	runs := h.runs()
+	if len(runs) != 1 {
+		t.Fatalf("runs: %v", runs)
+	}
+	var sidA string
+	for pid := range runs {
+		sidA = "s" + pid
+	}
+	// the prompt suggestion after each turn: the conversation and one
+	// message more
+	h.ask("rules A", "a1", suggestionMode)
+	h.ask("rules A", "a1", "a2")
+	h.ask("rules A", "a1", "a2", suggestionMode)
+	if n := len(h.runs()); n != 1 {
+		t.Fatalf("%d runs, the conversation's own all along", n)
+	}
+	// let go past idleMost, its session stays for its conversation's next
+	// turn, whatever suggestions it answered since
+	for i := range idleMost {
+		h.ask(fmt.Sprintf("rules %d", i), "x")
+	}
+	h.s.subscription.mu.Lock()
+	shelf := len(h.s.subscription.shelf)
+	h.s.subscription.mu.Unlock()
+	if shelf != 1 {
+		t.Fatalf("shelf: %d, the session was not kept for the conversation's next turn", shelf)
+	}
+	before := h.runs()
+	h.ask("rules A", "a1", "a2", "a3")
+	var resumed string
+	for pid, log := range h.runs() {
+		if _, ok := before[pid]; !ok {
+			resumed = log
+		}
+	}
+	_, after, ok := strings.Cut(resumed, "--resume ")
+	cut := ""
+	if f := strings.Fields(after); len(f) > 0 {
+		cut = f[0]
+	}
+	if !ok || cut == "" || cut == sidA {
+		t.Fatalf("the conversation's next turn did not resume a copy of its session cut before the suggestion:\n%s", resumed)
+	}
+	file := ""
+	dirs, _ := filepath.Glob(filepath.Join(h.config, "projects", "*"))
+	for _, dir := range dirs {
+		if b, err := os.ReadFile(filepath.Join(dir, cut+".jsonl")); err == nil {
+			file = string(b)
+		}
+		if _, err := os.Stat(filepath.Join(dir, sidA+".jsonl")); err == nil {
+			t.Errorf("the shelved session's own file is left beside its copy")
+		}
+	}
+	// the copy is the session as it stood before the second suggestion,
+	// a3 told after it; the first suggestion's exchange, taken back,
+	// sits above a2, off the line Claude Code resumes
+	lines := strings.Split(strings.TrimSpace(file), "\n")
+	if n := len(lines); n < 2 || !strings.Contains(lines[n-2], `"a2"`) || !strings.Contains(lines[n-1], `"a3"`) || strings.Count(file, "SUGGESTION") != 1 {
+		t.Fatalf("the resumed session wasn't cut before the second suggestion:\n%s", file)
+	}
+	told := resumed[strings.Index(resumed, "\ntold "):]
+	if !strings.Contains(told, `"a3"`) || strings.Contains(told, `"a1"`) || strings.Contains(told, `"a2"`) || strings.Contains(told, "SUGGESTION") {
+		t.Fatalf("the resumed run was told more than the turn:\n%s", told)
 	}
 }
 
