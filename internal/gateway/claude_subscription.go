@@ -211,10 +211,14 @@ type subscriptionRun struct {
 	safeguardBeta string
 	clientMarks   bool
 	lean          bool // started with leanSystem as its system prompt
-	tui           bool // Claude Code's interactive mode (claudeTUI)
-	cacheTail     string
-	cachePrefix   cachePrefix
-	timer         *time.Timer
+	// appended: started with the caller's instructions after Claude
+	// Code's own system prompt (req.appendPrompt), not in its first
+	// message; its session, resumed, would have none
+	appended    bool
+	tui         bool // Claude Code's interactive mode (claudeTUI)
+	cacheTail   string
+	cachePrefix cachePrefix
+	timer       *time.Timer
 
 	// Claude Code's input, kept open for the next turn; owner is the account
 	// it runs as (owned, named once in its life when it started unnamed:
@@ -924,6 +928,9 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		}
 		args = append(args, "--system-prompt-file", binary.file(systemPath))
 	}
+	// set below for a run that appends them: a request asked again
+	// starts anew, and a transcript replayed has them (replaySession)
+	req.appendPrompt = false
 	var sessions []string
 	switch {
 	case err != nil:
@@ -989,6 +996,23 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		// no run had the conversation: this one is told it whole, in one
 		// message, its earlier turns marked as such (renderClaudePrompt)
 		log.Printf("claude: a new Claude Code is told the whole conversation: %d messages, %d images, the last turn marked as the one to answer", len(req.Messages), countImages(req.Messages))
+	}
+	if from == nil && appendsPrompt(req, binary) {
+		// a one-off ask in the interactive mode, Claude Code's auto mode
+		// classifier above all: pasted, the caller's instructions lose
+		// their cache mark (the paste is one text), and every ask wrote
+		// them to the cache anew, 80k tokens an ask with 1,197 read
+		// (#2432). After Claude Code's own system prompt they are in the
+		// block it marks itself, and the next ask under the same
+		// instructions reads them; a file of the run's own, as a lean
+		// run's
+		appendPath := filepath.Join(tmp, "append.md")
+		req.appendPrompt = true
+		if err := os.WriteFile(appendPath, []byte(leanSystem(req)), 0o600); err != nil {
+			cleanup()
+			return nil, nil, err
+		}
+		args = append(args, "--append-system-prompt-file", binary.file(appendPath))
 	}
 	req.clientCache.selected(from == nil)
 	var prompt []map[string]any
@@ -1095,6 +1119,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 	run.safeguardBeta = req.SafeguardBeta
 	run.clientMarks = req.clientCache != nil
 	run.lean = req.leanPrompt
+	run.appended = req.appendPrompt
 	run.tui = tui
 	run.cachePrefix = prefix
 	if tuiBody != "" {
@@ -2088,7 +2113,7 @@ func (b *subscriptionBridge) shelve(run *subscriptionRun) {
 	run.mu.Lock()
 	sid, sessions, rewound, tools := run.sessionID, run.sessions, run.rewound, maps.Clone(run.tools)
 	run.mu.Unlock()
-	if sid == "" || len(sessions) == 0 || rewound || run.idleKey == "" {
+	if sid == "" || len(sessions) == 0 || rewound || run.idleKey == "" || run.appended {
 		return
 	}
 	key := run.idleKey
@@ -2249,7 +2274,7 @@ func (b *subscriptionBridge) branch(req *Request, owner string) *savedSession {
 			}
 		}
 		sid, sessions := run.sessionID, slices.Clone(run.sessions)
-		usable := !run.closed && !run.rewound && run.lean == req.leanPrompt && !run.clientMarks && (run.tui || !claudeTUIOn())
+		usable := !run.closed && !run.rewound && run.lean == req.leanPrompt && !run.appended && !run.clientMarks && (run.tui || !claudeTUIOn())
 		run.mu.Unlock()
 		if at == "" {
 			continue
@@ -3727,8 +3752,9 @@ func (u cliUsage) gateway() Usage {
 func renderClaudePrompt(req *Request) ([]map[string]any, error) {
 	var blocks []map[string]any
 	var text strings.Builder
-	// a lean run has them as its system prompt (leanSystem)
-	if !req.leanPrompt && (req.System != "" || req.ToolChoice == "required" || strings.HasPrefix(req.ToolChoice, "name:") || envNote(req) != "") {
+	// a lean run has them as its system prompt (leanSystem), an appending
+	// one after Claude Code's (appendsPrompt)
+	if !req.leanPrompt && !req.appendPrompt && (req.System != "" || req.ToolChoice == "required" || strings.HasPrefix(req.ToolChoice, "name:") || envNote(req) != "") {
 		text.WriteString("<external_system_instructions>\n")
 		system := withoutBillingHeader(req.System)
 		pos := 0
@@ -3886,7 +3912,7 @@ func envNote(req *Request) string {
 	switch {
 	case req.envElsewhere && req.envInTurns:
 		return envTurnsNote(req.envDir)
-	case req.envElsewhere && req.leanPrompt:
+	case req.envElsewhere && (req.leanPrompt || req.appendPrompt):
 		return envElsewhereLeanNote
 	case req.envElsewhere:
 		return envElsewhereNote
@@ -3904,6 +3930,18 @@ func toolChoiceAsk(req *Request) string {
 		return fmt.Sprintf("\nYou must call the %s tool.", bridgeName(strings.TrimPrefix(req.ToolChoice, "name:")))
 	}
 	return ""
+}
+
+// appendsPrompt: a new run for req gives the caller's instructions after
+// Claude Code's own system prompt (--append-system-prompt-file), not in
+// its first message. Only a one-off ask in the interactive mode, which
+// pastes its first message without the marks renderClaudePrompt puts on
+// it: such a run is let go after its reply (ended), never resumed, so no
+// later turn needs the instructions in its session. A lean run has them
+// as its system prompt already, and a client's own marks keep theirs.
+func appendsPrompt(req *Request, binary claudeCLI) bool {
+	return !req.leanPrompt && req.clientCache == nil && len(req.Tools) == 0 && !hasReply(req.Messages) &&
+		withoutBillingHeader(req.System)+envNote(req)+toolChoiceAsk(req) != "" && claudePrintWhy(req, binary) == ""
 }
 
 // leanSystem is a lean run's system prompt (ClaudeLeanPrompt): the

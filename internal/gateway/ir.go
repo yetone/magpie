@@ -178,6 +178,10 @@ type Request struct {
 	// leanPrompt has the Claude bridge give the caller's instructions as
 	// the run's system prompt, in place of Claude Code's (ClaudeLeanPrompt).
 	leanPrompt bool
+	// appendPrompt: the Claude bridge gives the caller's instructions
+	// after Claude Code's own system prompt (appendsPrompt), set as the
+	// run starts.
+	appendPrompt bool
 	// envElsewhere: the caller's instructions name a working directory the
 	// Claude bridge's run is not in (a client on another computer, or in
 	// Windows with Claude Code in WSL), so the run's own prompt describes

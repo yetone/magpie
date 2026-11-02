@@ -567,6 +567,23 @@ the conversation alone. Claude Code still sends its billing block and its
 identity line, so requests come from the real binary. They no longer carry
 Claude Code's prompt, and that is the ban risk the setting names.
 
+A one-off ask in the interactive mode (no tools, no reply before it, not
+lean, no client marks: `appendsPrompt`) gets its caller's instructions by
+`--append-system-prompt-file` instead (`append.md`, the same `leanSystem`
+text), after Claude Code's own prompt, and its first message holds the ask
+alone. The helper pastes a first message as one text without marks, so the
+instructions pasted there were written to the cache by every ask: Claude
+Code's auto mode classifier read 1,197 tokens and wrote 80k on every check
+of one conversation (#2432). Appended, they end the system block Claude
+Code marks itself, which is the same for every ask under the same
+instructions (only the unmarked billing line differs; recorded from Claude
+Code 2.1.316 on 2026-11-03). Such a run is let go after its reply
+(`ended`) and is never shelved or branched (`run.appended`), since a
+session resumed without the file would have no instructions. Every other
+run keeps them in the first message. Tested by
+`TestClaudeTUIOneOffAskAppendsInstructions` and
+`TestClaudeAppendOnlyForInteractiveOneOffs`.
+
 A request with client cache marks (#1717) is never lean: its system marks
 are placed in the first message. The mode is part of the run's identity
 (`cacheIdentity`, and the tool-results check in `serveSubscription`), so a
