@@ -162,6 +162,47 @@ func TestHubMCPListsAndRoutes(t *testing.T) {
 	}
 }
 
+// A tool name the agent listed before its server's list changed (Magpie
+// Browser's browser_tabs, now the browser tool's tabs action) or while
+// the server's list failed still goes to that server when it is switched
+// on for the agent, for the server to run or refuse; another agent's
+// server, or one no server's name starts, is still unknown.
+func TestHubMCPCallsAToolNoLongerListed(t *testing.T) {
+	fresh(t)
+	f := &fakeHub{on: true,
+		tools: map[string][]HubTool{
+			"claude": {{Server: "magpie-browser", Tool: "browser", Spec: hubSpec("browser")}},
+		},
+		servers: map[string][]HubServer{
+			"claude": {{Name: "magpie-browser"}, {Name: "my.fs"}},
+			"codex":  {{Name: "github"}},
+		},
+	}
+	withHub(t, f)
+	h := lanGuard(New().Handler())
+	for _, c := range []struct{ name, ran string }{
+		{"magpie-browser__browser_tabs", "ran magpie-browser browser_tabs"},
+		{"magpie-browser__browser", "ran magpie-browser browser"},
+		// listed nothing just now, and its name in the hub's characters
+		{"my-fs__read", "ran my.fs read"},
+	} {
+		m := readMCP(t, hubPost(h, "claude", here, toolsCall(c.name, `{"action":"tabs"}`)))
+		if m.Error != nil || m.Result.IsError || m.Result.Content[0].Text != c.ran {
+			t.Errorf("%s: %+v", c.name, m)
+		}
+	}
+	for _, c := range []struct{ agent, name string }{{"claude", "github__create_issue"}, {"claude", "magpie-browser__"}, {"codex", "magpie-browser__browser_tabs"}, {"claude", "nope__x"}} {
+		m := readMCP(t, hubPost(h, c.agent, here, toolsCall(c.name, `{}`)))
+		if m.Error == nil || m.Error.Code != -32602 || !strings.Contains(m.Error.Message, "unknown tool "+c.name) {
+			t.Errorf("%s's %s: %+v", c.agent, c.name, m)
+		}
+	}
+	want := `claude magpie-browser browser_tabs {"action":"tabs"}|claude magpie-browser browser {"action":"tabs"}|claude my.fs read {"action":"tabs"}`
+	if got := strings.Join(f.ran(), "|"); got != want {
+		t.Errorf("ran %q, want %q", got, want)
+	}
+}
+
 // HubMCPAll, the one address any other app is given, is the hub for agent
 // "": every server in the Library, with its own instructions and its own
 // word for a tool it doesn't have; an agent's path still lists only its own.

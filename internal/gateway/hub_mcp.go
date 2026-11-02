@@ -512,15 +512,15 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		if MCPHub == nil || !MCPHub.On() {
 			return toolResult(errHubOff, true), nil
 		}
-		for _, t := range hubTools(r.Context(), agent) {
-			if t.name == p.Name {
-				c := HubCaller{Session: hubSession(r, agent, p.Meta)}
-				if t.Roots {
-					c.Roots, c.Client = hubRoots(r, p.Meta), hubClient(r)
-				}
-				r = r.WithContext(WithHubCaller(r.Context(), c))
-				return s.hubMCPRun(r, agent, t, p.Arguments), nil
+		ts := hubTools(r.Context(), agent)
+		t, ok := hubToolNamed(ts, agent, p.Name)
+		if ok {
+			c := HubCaller{Session: hubSession(r, agent, p.Meta)}
+			if t.Roots {
+				c.Roots, c.Client = hubRoots(r, p.Meta), hubClient(r)
 			}
+			r = r.WithContext(WithHubCaller(r.Context(), c))
+			return s.hubMCPRun(r, agent, t, p.Arguments), nil
 		}
 		if agent == "" {
 			return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": no MCP server in magpie's Library gives it"}
@@ -528,6 +528,41 @@ func (s *Server) hubMCPCall(r *http.Request, agent string, m mcpMessage) (any, m
 		return nil, map[string]any{"code": -32602, "message": "unknown tool " + p.Name + ": no MCP server switched on for " + agent + " in magpie's Library gives it"}
 	}
 	return nil, map[string]any{"code": -32601, "message": "method not found: " + m.Method}
+}
+
+// hubToolNamed is the tool name calls: one ts lists, or else a tool of a
+// server switched on for agent that its name starts with, <server>__<tool>,
+// which the server itself is asked for. An agent lists the tools once, and
+// a server's list can change after: magpie updated, Magpie Browser's
+// browser_tabs became the browser tool's tabs action, and it still takes
+// the old name (7e201ce20). A server whose list failed just now is asked
+// the same way, and either says why it can't run the tool.
+func hubToolNamed(ts []hubTool, agent, name string) (hubTool, bool) {
+	for _, t := range ts {
+		if t.name == name {
+			return t, true
+		}
+	}
+	var found []hubTool
+	for _, sv := range MCPHub.Servers(agent) {
+		tool, ok := strings.CutPrefix(name, unsafeToolChars.ReplaceAllString(sv.Name, "-")+hubSep)
+		if !ok || tool == "" {
+			continue
+		}
+		t := hubTool{HubTool: HubTool{Server: sv.Name, Tool: tool}, name: name}
+		for _, l := range ts {
+			if l.Server == sv.Name {
+				t.Roots = l.Roots
+				break
+			}
+		}
+		found = append(found, t)
+	}
+	// two servers of one name in the hub's characters: which is meant isn't known
+	if len(found) != 1 {
+		return hubTool{}, false
+	}
+	return found[0], true
 }
 
 // hubMCPRun runs one tool on its server, held to the calling gateway key's
