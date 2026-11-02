@@ -5849,6 +5849,16 @@ func biliProxied(path string) bool {
 // written, when the provider serves the model on another of its endpoints
 // but not this one.
 func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.Provider, proto provider.Protocol, model string, body []byte, u *Usage) (status int, msg string, done bool) {
+	// the reply limit the client named, read before the body is rewritten:
+	// a reply cut at its length that said nothing is a void to fail at
+	// once, unless it was asked for little (#2972)
+	capped := 0
+	if proto == provider.Chat {
+		capped = int(gjson.GetBytes(body, "max_tokens").Int())
+		if capped == 0 {
+			capped = int(gjson.GetBytes(body, "max_completion_tokens").Int())
+		}
+	}
 	upstream := provider.UpstreamNameIn(wiresOf(r.Context()), p.ID, model)
 	body = rewriteModel(body, upstream)
 	if proto == provider.Responses {
@@ -6573,7 +6583,13 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		h.Set("Cache-Control", "no-cache")
 		h.Set("X-Accel-Buffering", "no")
 	}
-	w.WriteHeader(res.StatusCode)
+	// a Chat reply asked whole is written once it has ended: whether it
+	// was a void cut at its length (#2972) is told at its end, and the
+	// error said in its place wants the status too
+	wholeHold := proto == provider.Chat && !sse
+	if !wholeHold {
+		w.WriteHeader(res.StatusCode)
+	}
 	f, _ := w.(http.Flusher)
 	sniff := newSniffer(proto, res.Header.Get("Content-Type"))
 	defer func() { u.add(sniff.usage()) }()
@@ -6701,12 +6717,36 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 	// is appended, for no client can read it and the error is what there
 	// is left to say
 	var pending []byte
+	// a Chat stream's tail, from the read whose chunk says why the reply
+	// ended while nothing has been said in it: whether that end is a void
+	// to fail at once (#2972) is told when the stream is over, and the
+	// end itself goes out only then. And a Chat reply asked whole, held
+	// for the same verdict.
+	var heldTail []byte
+	holdTail := false
+	var heldBody []byte
 	write := func(b []byte) (int, error) {
+		if wholeHold {
+			if len(heldBody)+len(b) <= 8<<20 {
+				heldBody = append(heldBody, b...)
+				return len(b), nil
+			}
+			// more than we hold for a verdict: the reply goes as it came,
+			// and no void is failed in it
+			wholeHold = false
+			w.WriteHeader(res.StatusCode)
+			w.Write(heldBody)
+			heldBody = nil
+		}
 		if !sse {
 			if len(b) > 0 {
 				atLine = b[len(b)-1] == '\n'
 			}
 			return w.Write(b)
+		}
+		if holdTail {
+			heldTail = append(heldTail, b...)
+			return len(b), nil
 		}
 		pending = append(pending, b...)
 		i := bytes.LastIndexByte(pending, '\n')
@@ -6754,6 +6794,13 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 		n, err := rd.Read(buf)
 		if n > 0 {
 			sniff.write(buf[:n])
+			if proto == provider.Chat && sse && gather == nil && sniff.u.Stop != "" && !sniff.tail.said() {
+				// the reply's end is in this or a later read, and nothing
+				// has been said in it: hold what follows for the void's
+				// verdict (#2972). A reply that has said something is
+				// never held: its cut is the truncation it always was.
+				holdTail = true
+			}
 			out := buf[:n]
 			if tidy != nil {
 				out = tidy.write(out)
@@ -6994,6 +7041,51 @@ func (s *Server) passthrough(w http.ResponseWriter, r *http.Request, p provider.
 			}
 			return res.StatusCode, failed, true
 		}
+	}
+	if holdTail {
+		if cutVoid(sniff.u.Stop, !sniff.tail.said(), sniff.u.Output, capped) &&
+			replyCheck(r.Context()) == nil {
+			// a void cut at its length, and nothing the agent acts on in
+			// it: the held end is dropped, the error said in its place,
+			// [DONE] after — no reply that ended as it should with nothing
+			// in it, and no ask again for the budget to burn twice (#2972)
+			msg := cutVoidFailed(p.Name)
+			dropHalf()
+			w.Write(append(apart(), streamFailure(provider.Chat, msg)...))
+			w.Write([]byte("data: [DONE]\n\n"))
+			if f != nil {
+				f.Flush()
+			}
+			return res.StatusCode, msg, true
+		}
+		// not a void, or a short probe's answer: the end goes as it came
+		holdTail = false
+		if _, err := write(heldTail); err != nil {
+			return res.StatusCode, "", true
+		}
+		if f != nil {
+			f.Flush()
+		}
+		heldTail = nil
+	}
+	if wholeHold {
+		// the reply was held whole: its own words tell the verdict
+		sniff.tail.see(heldBody)
+		var v struct {
+			Usage *cUsage `json:"usage"`
+		}
+		spent := 0
+		if json.Unmarshal(heldBody, &v) == nil && v.Usage != nil {
+			spent = v.Usage.CompletionTokens
+		}
+		if cutVoid(upstreamStop(heldBody), !sniff.tail.said(), spent, capped) &&
+			replyCheck(r.Context()) == nil {
+			msg := cutVoidFailed(p.Name)
+			return writeError(w, proto, 502, msg), msg, true
+		}
+		w.WriteHeader(res.StatusCode)
+		w.Write(heldBody)
+		heldBody = nil
 	}
 	if sse {
 		unheld()
@@ -8330,6 +8422,14 @@ func (s *Server) translate(w http.ResponseWriter, r *http.Request, p provider.Pr
 		msg := p.Name + ": " + emptyReply
 		return writeError(w, from, 502, msg), msg
 	}
+	if cutVoidAt(actual) && replyCheck(r.Context()) == nil &&
+		cutVoid(col.res.Stop, !saidAnything(col.res.Parts), col.res.Usage.Output, request.MaxTokens) {
+		// at once, asked again nowhere: a void's budget is spent, and a
+		// second ask at the same max_tokens would mostly spend it twice
+		// over before the error (#2972, its review)
+		msg := cutVoidFailed(p.Name)
+		return writeError(w, from, 502, msg), msg
+	}
 	if zen != nil {
 		zen.end(col.add)
 	}
@@ -8379,6 +8479,46 @@ func uncounted(u Usage) bool {
 // safety filter (told as a refusal, #248).
 func answersNothing(stop string) bool {
 	return stop != "length" && stop != "filter"
+}
+
+// cutVoidTokens is a short probe's worth of output tokens. A reply capped
+// at, or cut having spent no more than, this said nothing because it was
+// asked for little — a title's, a probe's (probeTranslated asks 16) —
+// not because the model went void (#2972 review).
+const cutVoidTokens = 1024
+
+// cutVoidAt tells whether a reply in proto cut at its length that says
+// nothing is a void: a Chat upstream's is (#2972: qoder/dfmodel ended
+// four replies of one turn with 48,000 tokens each, every one of them
+// reasoning, and the agent, told the output limit was reached, went on
+// at the user's "continue" and burned the same void again). A Gemini's
+// and a Code Assist's goes as it came (#667), and a title, description
+// or prediction asked of the reply keeps the response.incomplete it was
+// (#1466): its cut is wanted, a small budget at a time.
+func cutVoidAt(proto provider.Protocol) bool {
+	return proto == provider.Chat
+}
+
+// cutVoid says whether this reply was one: cut at its length having said
+// nothing — no text and no call, only thinking, or nothing at all — and
+// no short probe's answer: the reply spent past a probe's worth, or the
+// request hadn't capped its reply small (#2972 review).
+func cutVoid(stop string, saidNothing bool, spent, cappedAt int) bool {
+	return saidNothing && stop == "length" &&
+		(spent > cutVoidTokens || cappedAt <= 0 || cappedAt > cutVoidTokens)
+}
+
+// cutVoidWords is what says a reply was cut at its length having said
+// nothing: the same failure every ask, so the same one is not asked again
+// after a moment for it (passing), though a group's next member still is.
+const cutVoidWords = "cut at its length, the whole output spent on reasoning"
+
+// cutVoidFailed is what a reply cut at its length that said nothing fails
+// with: the empty reply's error — a group asks its next member for one
+// and rests nobody (#1221) — said with why, for the agent to try again or
+// ask for less reasoning rather than go on (#2972).
+func cutVoidFailed(name string) string {
+	return name + ": " + emptyReply + " — " + cutVoidWords
 }
 
 // saysSomething tells whether an event is any of a reply an agent shows or

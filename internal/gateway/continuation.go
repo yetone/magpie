@@ -161,15 +161,21 @@ func saysItsEnd(p provider.Provider, proto provider.Protocol, model string) bool
 
 // chatTail follows a Chat stream's chunks for a Gemini OpenAI-compatible
 // reply that ended without its finish_reason (saysItsEnd): whether its
-// last chunk counted the usage and whether it made calls.
-type chatTail struct{ usage, calls bool }
+// last chunk counted the usage and whether it made calls. A reply asked
+// whole is read through it too, for whether it said anything (said).
+type chatTail struct{ usage, calls, text bool }
 
 func (t *chatTail) see(data []byte) {
 	var v struct {
 		Choices []struct {
 			Delta struct {
+				Content   string            `json:"content"`
 				ToolCalls []json.RawMessage `json:"tool_calls"`
 			} `json:"delta"`
+			Message struct {
+				Content   string            `json:"content"`
+				ToolCalls []json.RawMessage `json:"tool_calls"`
+			} `json:"message"`
 		} `json:"choices"`
 		Usage *cUsage `json:"usage"`
 	}
@@ -178,8 +184,16 @@ func (t *chatTail) see(data []byte) {
 	}
 	t.usage = v.Usage != nil && (v.Usage.PromptTokens > 0 || v.Usage.CompletionTokens > 0)
 	for _, c := range v.Choices {
-		t.calls = t.calls || len(c.Delta.ToolCalls) > 0
+		t.calls = t.calls || len(c.Delta.ToolCalls) > 0 || len(c.Message.ToolCalls) > 0
+		t.text = t.text || c.Delta.Content != "" || c.Message.Content != ""
 	}
+}
+
+// said tells whether the reply said anything an agent shows or acts on:
+// text or a call. Thinking is not said (#2972): a reply that spent its
+// whole budget on it said nothing.
+func (t chatTail) said() bool {
+	return t.text || t.calls
 }
 
 // finish is the finish_reason a reply that ended without one is given:
@@ -410,6 +424,9 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 	// counts: a reply in this protocol counts its tokens, and one that
 	// said nothing and counted none fails too (repliesCounted, #2086)
 	var counts bool
+	// voids: a reply in this protocol cut at its length that says nothing
+	// fails at once, asked again nowhere (cutVoid, #2972)
+	var voids bool
 	empties := 0 // the times such a reply was asked again here
 	said, stop := false, ""
 	var kept []Event       // the reply's end, while nothing is said in it
@@ -472,7 +489,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 		case KStop:
 			stop = ev.Stop
 		}
-		if (empty || counts) && !said {
+		if (empty || counts || voids) && !said {
 			switch {
 			case saysSomething(ev):
 				said = true
@@ -513,6 +530,7 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 			u.RequestID = requestID(res.Header)
 			summaryUpstream = actual == provider.Responses || actual == provider.Gemini || actual == provider.CodeAssist
 			empty, counts = emptyFails(actual), repliesCounted(actual)
+			voids = cutVoidAt(actual)
 		}
 		if err == nil && res.StatusCode >= 400 {
 			b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
@@ -669,6 +687,14 @@ func (s *Server) streamTranslated(w http.ResponseWriter, r *http.Request, p prov
 				// turn (#667); a reply that said nothing has nothing to
 				// go on from, so it isn't continued
 				failed = p.Name + ": " + emptyReply
+				break
+			}
+			if voids && replyCheck(r.Context()) == nil && cutVoid(stop, !said, this.Output, request.MaxTokens) {
+				// a void cut at its length fails at once, asked again
+				// nowhere: its budget is spent, and a second ask at the
+				// same max_tokens would mostly spend it twice over before
+				// the error (#2972, its review)
+				failed = cutVoidFailed(p.Name)
 				break
 			}
 			for _, ev := range kept {

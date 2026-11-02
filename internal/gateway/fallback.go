@@ -2039,7 +2039,11 @@ func passing(status int, header http.Header, body []byte, again int) (time.Durat
 	case wait > longestPause:
 		return 0, false
 	case busyStatus(status):
-		if bytes.Contains(body, []byte(didNotStream)) {
+		if bytes.Contains(body, []byte(didNotStream)) || bytes.Contains(body, []byte(cutVoidWords)) {
+			// a void cut at its length fails the same every ask: the
+			// budget went to reasoning, and mostly would again — the same
+			// one asked again would burn it twice over before the error
+			// (#2972). A group's next member still is.
 			return 0, false
 		}
 		return wait, again < lastRetries
