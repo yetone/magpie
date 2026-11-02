@@ -1,8 +1,10 @@
 package gateway
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -130,6 +132,53 @@ func TestArkKeyMakesSeedanceVideos(t *testing.T) {
 	}
 	if sent.Model != "doubao-seedance-2-0-260128" || sent.Dur != 5 || sent.Ratio != "16:9" || sent.Res != "720p" || len(sent.Content) != 2 ||
 		sent.Content[0]["text"] != "一只喜鹊飞过" || sent.Content[1]["role"] != "first_frame" {
+		t.Fatalf("sent %s", a.bodies[0])
+	}
+}
+
+// OpenAI's videos request, as its SDK sends it (a multipart form, the
+// first frame a file in input_reference), reaches Seedance as Ark's: the
+// last frame with role last_frame, and the fields OpenAI's API doesn't
+// have (Ark's generate_audio, seed) passed on, typed as Ark takes them.
+func TestArkVideoTakesLastFrameAndItsOwnFields(t *testing.T) {
+	fresh(t)
+	a := newArkKeyVideos(t)
+	was := isArk
+	isArk = func(p provider.Provider) bool { return p.ID == "ark" }
+	t.Cleanup(func() { isArk = was })
+	if err := provider.Save(provider.Provider{ID: "ark", Name: "Volcengine Ark", Chat: a.URL + "/api/v3", Key: "key",
+		Models: []string{"doubao-seedance-1-0-pro-250528"}}); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	mw.WriteField("model", "ark/doubao-seedance-1-0-pro-250528")
+	mw.WriteField("prompt", "花开")
+	mw.WriteField("seconds", "5")
+	mw.WriteField("generate_audio", "false")
+	mw.WriteField("seed", "42")
+	mw.WriteField("ratio", "adaptive")
+	for _, k := range []string{"input_reference", "last_frame"} {
+		part, _ := mw.CreateFormFile(k, k+".png")
+		part.Write(pngBytes)
+	}
+	mw.Close()
+	code, _, raw, _ := request(t, New(), http.MethodPost, "/v1/videos", mw.FormDataContentType(), buf.String())
+	if code != 200 {
+		t.Fatalf("create: %d %s", code, raw)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	var sent map[string]any
+	if err := json.Unmarshal([]byte(a.bodies[0]), &sent); err != nil {
+		t.Fatal(err)
+	}
+	content, _ := sent["content"].([]any)
+	var roles []string
+	for _, c := range content[1:] {
+		roles = append(roles, c.(map[string]any)["role"].(string))
+	}
+	if !slices.Equal(roles, []string{"first_frame", "last_frame"}) || sent["generate_audio"] != false || sent["seed"] != float64(42) || sent["ratio"] != "adaptive" || sent["duration"] != float64(5) {
 		t.Fatalf("sent %s", a.bodies[0])
 	}
 }

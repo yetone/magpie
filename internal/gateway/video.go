@@ -483,17 +483,42 @@ func pixelResolution(size string) string {
 }
 
 // volcengineVideoBody is f as Ark's content-generation API takes it: text
-// and images in content, with image roles distinguishing the first frame from
-// subject references, plus duration, ratio and resolution as separate fields.
+// and images in content, each image's role saying what it is (the first
+// frame, the last frame, a subject to draw from), duration, ratio and
+// resolution as fields of their own, and the request's other fields, which
+// OpenAI's API doesn't have, as the caller sent them: Ark's own
+// (generate_audio, seed, camera_fixed, watermark…), which a caller of
+// OpenAI's shape can only send that way.
 func volcengineVideoBody(model string, f filming) []byte {
 	content := []map[string]any{{"type": "text", "text": f.Prompt}}
+	frame := func(pic *picture, role string) {
+		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": pic.dataURL()}, "role": role})
+	}
 	if f.Start != nil {
-		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": f.Start.dataURL()}, "role": "first_frame"})
+		frame(f.Start, "first_frame")
 	}
-	for _, pic := range f.References {
-		content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": pic.dataURL()}, "role": "reference_image"})
+	if f.End != nil {
+		frame(f.End, "last_frame")
 	}
-	req := map[string]any{"model": model, "content": content}
+	for i := range f.References {
+		frame(&f.References[i], "reference_image")
+	}
+	req := map[string]any{}
+	for k, v := range f.Extra {
+		// a multipart form's fields are text: "false" and "42" are what
+		// Ark takes as false and 42
+		if str, ok := v.(string); ok {
+			var typed any
+			if json.Unmarshal([]byte(str), &typed) == nil {
+				switch typed.(type) {
+				case bool, float64:
+					v = typed
+				}
+			}
+		}
+		req[k] = v
+	}
+	req["model"], req["content"] = model, content
 	if f.Seconds != "" {
 		req["duration"], _ = strconv.Atoi(f.Seconds)
 	}

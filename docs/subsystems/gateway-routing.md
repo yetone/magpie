@@ -649,9 +649,13 @@ key's video id ends with the key's fingerprint, as a plan key's does, and
 its poll and download go on that key (`videoAsker` checks the calling key
 may use it). `volcengineVideoBody` turns OpenAI's request into Ark's: the
 prompt as a `text` item in `content`, `input_reference` as an `image_url`
-item with role `first_frame`, `reference_images` as `reference_image`,
-`seconds` as `duration`, and `size` (WIDTHxHEIGHT) as `ratio` and
-`resolution`. Ark's `succeeded`/`running`/`failed`/`expired` and its
+item with role `first_frame`, `last_frame` as `last_frame`,
+`reference_images` as `reference_image`, `seconds` as `duration`, and
+`size` (WIDTHxHEIGHT) as `ratio` and `resolution`. The request's fields
+OpenAI's API doesn't have (Ark's `generate_audio`, `seed`, `camera_fixed`,
+`watermark`, `ratio: "adaptive"`…) go to Ark as sent, masked as the prompt
+is; a multipart form's `"false"` or `"42"` goes as `false` or `42`
+(`TestArkVideoTakesLastFrameAndItsOwnFields`). Ark's `succeeded`/`running`/`failed`/`expired` and its
 `content.video_url` are read back into OpenAI's video object
 (`videoObject`), and `/content` fetches that URL (`vendorClient`).
 `TestArkKeyMakesSeedanceVideos`.
