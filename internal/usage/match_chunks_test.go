@@ -93,6 +93,21 @@ func TestMatchOpensAgyChunks(t *testing.T) {
 	}
 }
 
+// The Antigravity app's session-less gateway calls may be agy's, which
+// follows the app's gateway when it isn't connected on its own row: the agy
+// transcript is opened for them too.
+func TestMatchOpensAgyChunksForTheApp(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
+	gateway, agy := &rowChunk{}, &rowChunk{}
+	gateway.add(Row{Record: Record{Time: now, Agent: "antigravity", Provider: "relay", Input: 7, Output: 3, Millis: 1000}}, "", 0, false)
+	agy.add(Row{Record: Record{Time: now.Add(-time.Minute), Agent: "agy", Session: "agy-transcript", Input: 7, Output: 3}, Source: "log"}, "", 0, false)
+	agy.serial = nextChunkSerial()
+	got := refMap(matchedBlocks([]*rowChunk{gateway}, []*rowChunk{agy}, nil, nil, time.Time{}, false))
+	if !got[rowRef{agy, 0}] || len(got) != 1 {
+		t.Fatalf("matched %v; want the agy step", got)
+	}
+}
+
 // A request id's calls are a place in one slice, not a slice of their own
 // in two maps: over a year's calls a poll's matching allocated ~1.5 GB in
 // two minutes while an agent worked (#2278). It matches every call by its

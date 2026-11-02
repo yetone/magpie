@@ -1960,6 +1960,13 @@ func (s *matchScratch) release() {
 // their tokens and time alone (#2097).
 const agyMatchSession = "\x00agy"
 
+// agyGateway says a gateway record of agent a, naming no session, may be
+// an agy step's: agy's own, or the Antigravity app's. An agy not connected
+// on its own row follows the app's gateway with the app's key
+// (internal/agent/antigravity.go), so the gateway records its calls as the
+// app's, and its transcript counted them a second time (Chamberlain_zyz on X).
+func agyGateway(a string) bool { return a == "agy" || a == "antigravity" }
+
 // agyStepLongest is how long after an agy step began its gateway call may
 // have ended: a transcript's created_at is when the step began, to the
 // second, where every other session file's time is when its call ended.
@@ -2101,7 +2108,7 @@ func matchedBlocks(gateways []*rowChunk, chunks []*rowChunk, skip refSet, respon
 		if session == "" {
 			session = gateway.Strings[gateway.text(p, 13)]
 		}
-		if session == "" && gateway.Strings[gateway.text(p, 0)] == "agy" {
+		if session == "" && agyGateway(gateway.Strings[gateway.text(p, 0)]) {
 			session = agyMatchSession
 		}
 		if session == "" {

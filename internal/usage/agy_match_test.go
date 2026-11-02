@@ -43,3 +43,25 @@ func TestAgyStepThroughMagpieCountedOnce(t *testing.T) {
 		t.Error("an agy step matched another agent's record")
 	}
 }
+
+// An agy not connected on its own row follows the Antigravity app's
+// gateway, with the app's key, so the gateway records its calls as the
+// app's: Chamberlain_zyz on X saw each hour's tokens under both Antigravity
+// (39,104,506) and Antigravity CLI (38,562,861). Its steps are matched to
+// the app's records, which name no session, as to agy's own; an app record
+// that names a session is not one.
+func TestAgyStepThroughTheAppsGatewayCountedOnce(t *testing.T) {
+	began := time.Date(2026, 11, 2, 9, 0, 12, 0, time.UTC)
+	rec := Record{Time: began.Add(4 * time.Second), Agent: "antigravity", Provider: "deepseek", Model: "deepseek-v4.1-flash",
+		Input: 41210, CacheRead: 96000, Output: 812, Millis: 6_000, Status: 200}
+	step := sessions.Call{Time: began, Agent: "agy", Session: "5c1f0e1a-7b9d-4c51-9a8e-0d3b2f6a1e44",
+		Tokens: sessions.Tokens{Input: 41210, CacheRead: 96000, Output: 812}}
+	if !gatewayMatches([]Record{rec}, []sessions.Call{step})[0] {
+		t.Error("an agy step sent through the app's gateway is counted again as agy's own call")
+	}
+	named := rec
+	named.Session = "app-conversation"
+	if gatewayMatches([]Record{named}, []sessions.Call{step})[0] {
+		t.Error("an app record naming its own session was taken for an agy step")
+	}
+}

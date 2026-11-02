@@ -700,9 +700,9 @@ func codexEffortRows(p Period, now time.Time, reader func(time.Time) []sessions.
 
 // matchingRecords are the gateway's calls from since on that can be matched
 // to one of logs, in the log's order: the ones with a response id, a request
-// id or a session one of them has (an agy call by its agent: agy names no
-// session). Any other gateway call leaves gatewayMatchesDetails' answer for
-// logs as it is.
+// id or a session one of them has (an agy call by its agent, agy's or the
+// app's whose gateway it follows: agy names no session). Any other gateway
+// call leaves gatewayMatchesDetails' answer for logs as it is.
 func matchingRecords(since time.Time, logs []sessions.Call) []Record {
 	responses, requests, sessionIDs := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	agy := false
@@ -718,7 +718,7 @@ func matchingRecords(since time.Time, logs []sessions.Call) []Record {
 	var out []Record
 	Visit(since, func(r Record) {
 		if responses[r.ResponseID] || requests[r.RequestID] || sessionIDs[r.NativeSession] || sessionIDs[r.Session] ||
-			agy && ReportedAs(r.Agent) == "agy" {
+			agy && agyGateway(ReportedAs(r.Agent)) {
 			out = append(out, r)
 		}
 	})
