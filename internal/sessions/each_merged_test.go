@@ -86,3 +86,29 @@ func mergedIDs(list []Session) []string {
 	}
 	return out
 }
+
+// TestEachMergedMakesOnlyTheRowsItReaches: every gateway session was made
+// into a row before the merge, ~22 MB of each poll over ~15k sessions
+// while one of them grew, though the page stops at sessions.All rows.
+func TestEachMergedMakesOnlyTheRowsItReaches(t *testing.T) {
+	at := time.Now()
+	ext := make([]ExternalSession, 15000)
+	for i := range ext {
+		// oldest first, so the order is the merge's to make
+		ext[i] = ExternalSession{Agent: "opencode", ID: fmt.Sprint("g", i), Last: at.Add(time.Duration(i-len(ext)) * time.Second),
+			Models: []ExternalModel{{Model: "m"}}}
+	}
+	native := []Session{{Agent: "claude", ID: "c", Last: at.Add(-10 * time.Second)}}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	var got []Session
+	EachMerged(native, ext, func(s *Session) bool { got = append(got, *s); return len(got) < 20 })
+	runtime.ReadMemStats(&after)
+	if want := MergeExternal(native, ext)[:20]; !reflect.DeepEqual(got, want) {
+		t.Fatalf("rows\n got %v\nwant %v", mergedIDs(got), mergedIDs(want))
+	}
+	rows := uint64(len(ext)) * uint64(unsafe.Sizeof(Session{}))
+	if a := after.TotalAlloc - before.TotalAlloc; a > rows/10 {
+		t.Fatalf("20 rows of %d gateway sessions allocated %d bytes; every row is %d", len(ext), a, rows)
+	}
+}

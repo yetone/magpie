@@ -98,6 +98,20 @@ func GatewaySessions(since time.Time, nativeKeys map[string]bool) []GatewaySessi
 	return out
 }
 
+// EachGatewaySession calls each with every session
+// GatewaySessions(time.Time{}, nativeKeys) gives, in its order (newest
+// first, then by agent and id), until each returns false, without a copy
+// of them all: the Sessions list shows sessions.All rows at most, and each
+// of its polls while a session grew copied every one of ~10k more. A
+// session's Models and Daily are the projection's own, as there.
+func EachGatewaySession(nativeKeys map[string]bool, each func(GatewaySession) bool) {
+	for _, s := range gatewayProjection().sessions {
+		if !nativeKeys[s.Agent+"|"+s.ID] && !each(s) {
+			return
+		}
+	}
+}
+
 // localMidnight is since's local date when since is that date's start.
 func localMidnight(since time.Time) (string, bool) {
 	date := since.In(time.Local).Format(time.DateOnly)

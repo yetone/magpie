@@ -80,6 +80,31 @@ func gatewayListed(g usage.GatewaySession, title func(agent, id string) string) 
 	return e
 }
 
+// listedExternal are the gateway's sessions a list of n rows can show:
+// those native doesn't hold (nativeKeys), as listedGateway keeps them and
+// gatewayListed makes them, newest first as EachGatewaySession gives them,
+// and no more than n, as a merge with the natives shows the newest n at
+// most. Each of ~10k gateway sessions past the natives' cap was copied
+// three times on every poll while a session grew, ~20 MB of a poll's
+// ~150 MB, and each was looked for in the store of what was asked
+// (GatewayTitler).
+func listedExternal(nativeKeys map[string]bool, n int) []sessions.ExternalSession {
+	hidden := sessions.GatewayHidden()
+	title := sessions.GatewayTitler()
+	var ext []sessions.ExternalSession
+	usage.EachGatewaySession(nativeKeys, func(g usage.GatewaySession) bool {
+		if len(ext) == n {
+			return false
+		}
+		// one a list leaves out (externalSessions) takes no room
+		if g.Agent != "" && g.ID != "" && !hidden(g.Agent, g.ID, g.Last) {
+			ext = append(ext, gatewayListed(g, title))
+		}
+		return true
+	})
+	return ext
+}
+
 func gatewaySession(g usage.GatewaySession) sessions.Session {
 	return sessions.MergeExternal(nil, []sessions.ExternalSession{gatewayListed(g, sessions.GatewayTitle)})[0]
 }
@@ -140,12 +165,7 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 				nativeKeys[k] = true
 			}
 		}
-		gateway := listedGateway(usage.GatewaySessions(time.Time{}, nativeKeys))
-		ext := make([]sessions.ExternalSession, 0, len(gateway))
-		title := sessions.GatewayTitler()
-		for _, g := range gateway {
-			ext = append(ext, gatewayListed(g, title))
-		}
+		ext := listedExternal(nativeKeys, n)
 		// made to size: up to sessions.All rows, grown by append each poll
 		// was copied through every size on the way, ~140 MB of eight (#2278).
 		// The rows are made from the list and the gateway's sessions as

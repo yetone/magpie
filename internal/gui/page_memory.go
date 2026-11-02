@@ -9,8 +9,11 @@ import (
 )
 
 // A Sessions or Usage page's poll reads every session file's listing and
-// the request ledger again: ~330 MB allocated every 15 s to keep ~105 MB.
-// Go keeps the pages that freed, and its scavenger hands them back only
+// the request ledger again. That was ~330 MB allocated every 15 s to keep
+// ~105 MB; over 15k sessions and 400k calls (11-02) an unchanged poll is
+// ~12 MB of Sessions' and ~0.4 MB of Usage's, and one while a session
+// grows, which re-sums every session's stats, ~110 MB. Go keeps the pages
+// that freed, and its scavenger hands them back only
 // slowly, never while the next collection's goal covers them, so an open
 // window sat at ~340 MB in Activity Monitor between polls. The gateway
 // hands its requests' pages back once it rests (#3472), but the window's

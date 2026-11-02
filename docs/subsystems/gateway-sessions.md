@@ -106,7 +106,15 @@ is some. The overview's top summaries (`MergeExternalStats`) carry
 where a folder would be, with "(prompt not recorded)" when no text was kept,
 so it doesn't read as a native session with an empty prompt (#2285: a Pi
 subagent whose session file is in a temp folder). Verification:
-`TestTopSessionsMarkWhatOnlyTheGatewaySaw`, `sessions-overview.test.cjs`. Their
+`TestTopSessionsMarkWhatOnlyTheGatewaySaw`, `sessions-overview.test.cjs`.
+`/api/sessions` makes a row only of the gateway sessions its limit can
+show: `usage.EachGatewaySession` walks the projection newest first without
+a copy, `listedExternal` stops at the limit, and `sessions.EachMerged`
+makes each row when the merge reaches it. Every one of ~10k gateway
+sessions past the natives' cap was copied three times and made a row on
+each poll while a session grew. Verification:
+`TestSessionsListMakesOnlyTheGatewayRowsItShows`,
+`TestEachMergedMakesOnlyTheRowsItReaches`. Their
 models, token totals, start/last timestamps and effective prices come from the
 same usage records used by Usage and stats endpoints.
 
