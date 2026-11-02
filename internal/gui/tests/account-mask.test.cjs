@@ -7,7 +7,8 @@
 // stays, as do magpie's own labels for a nameless account ("API key") and
 // a name inside a longer word. The tray panel follows the
 // window's setting, as it is turned. English and Chinese; no backend, the
-// API is faked here.
+// API is faked here. A one-letter name (Shinji_Zl's WorkBuddy account 他)
+// is hidden too, where it stands apart, not the 他 of 其他.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -18,6 +19,7 @@ const assets = path.resolve(__dirname, "../assets");
 const quotas = () => [
   { provider: "workbuddy", name: "WorkBuddy", icon: "workbuddy-color", plan: "Free", user: "李雷", windows: [{ name: "Credits", used: 8.9, display: "500.52 / 5600" }] },
   { provider: "workbuddy", name: "WorkBuddy", icon: "workbuddy-color", plan: "Free", user: "138****5678", windows: [{ name: "Credits", used: 1, display: "56 / 5600" }] },
+  { provider: "workbuddy", name: "WorkBuddy", icon: "workbuddy-color", plan: "Free", user: "他", windows: [{ name: "Credits", used: 2, display: "112 / 5600" }] },
   { provider: "zcode", name: "ZCode", icon: "zcode", plan: "Start", user: "ZCode", windows: [{ name: "5 hours", used: 10 }] },
   { provider: "qoder", name: "Qoder", icon: "qoder", plan: "Pro", user: "Lee", windows: [{ name: "Credits", used: 3 }] },
   { provider: "codex", name: "Codex", icon: "openai", plan: "Plus", user: "dev.one@example.com", windows: [{ name: "5 hours", used: 20 }] },
@@ -80,7 +82,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.evaluate(() => {
         const d = document.createElement("div");
         d.id = "sample";
-        d.textContent = "李雷 checked in · Sleeper Lee · ZCode · or an API key · Signed in";
+        d.textContent = "李雷 checked in · Sleeper Lee · ZCode · or an API key · Signed in · 其他 · 他";
         d.title = "WorkBuddy · 138****5678";
         document.querySelector("#view-usage").append(d);
       });
@@ -88,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal((await btn.textContent()).trim(), w.hidden);
       assert.match(await btn.getAttribute("title"), w.back);
       assert.match(await page.locator("#rtMask").getAttribute("title"), w.back);
-      await page.waitForFunction(() => document.querySelectorAll("#sample .pii").length === 2);
+      await page.waitForFunction(() => document.querySelectorAll("#sample .pii").length === 3);
       const got = await page.evaluate(() => ({
         users: [...document.querySelectorAll(".subscription-account .user")].map((u) => ({ raw: u.querySelector(".pii")?.dataset.raw ?? null, text: u.textContent, title: u.title })),
         heads: [...document.querySelectorAll(".subscription-head b")].map((b) => b.textContent),
@@ -97,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         sampleTitle: document.querySelector("#sample").title,
       }));
       const byRaw = Object.fromEntries(got.users.map((u) => [u.raw, u]));
-      for (const name of ["李雷", "138****5678", "Lee", "dev.one@example.com"]) {
+      for (const name of ["李雷", "138****5678", "Lee", "dev.one@example.com", "他"]) {
         assert.ok(byRaw[name], `${name} is hidden: ${JSON.stringify(got.users)}`);
         assert.ok(!byRaw[name].text.includes(name), `${name} isn't in sight`);
         assert.ok(!byRaw[name].title.includes(name), `${name} isn't in its tooltip: ${byRaw[name].title}`);
@@ -106,10 +108,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       // ZCode signed in with no name of its own is the card's name: kept
       assert.ok(got.users.some((u) => u.raw === null && u.text === "ZCode"), "ZCode's own name stays");
       assert.ok(got.heads.includes("WorkBuddy") && got.heads.includes("ZCode"), got.heads.join());
-      assert.deepEqual(got.sampleRaws, ["李雷", "Lee"]);
+      assert.deepEqual(got.sampleRaws, ["李雷", "Lee", "他"]);
       // magpie's labels for a plugin's nameless accounts are words, kept
       // (outloudvi: Kiro's summary "…or an API key" was blurred)
-      assert.match(got.sample, /^\S+ checked in · Sleeper \S+ · ZCode · or an API key · Signed in$/);
+      assert.match(got.sample, /^\S+ checked in · Sleeper \S+ · ZCode · or an API key · Signed in · 其他 · \S+$/);
       assert.equal(got.sampleTitle, "WorkBuddy · •••••••••••");
 
       // Routing: a route's account, learnt from what the gateway answered
@@ -128,7 +130,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await panel.evaluate(() => setPanelTab("usage"));
       await panel.waitForFunction(() => [...document.querySelectorAll("#panelQuota .pq-user .pii")].some((e) => e.dataset.raw === "李雷"));
       const pq = await panel.evaluate(() => [...document.querySelectorAll("#panelQuota .pq-card")].map((c) => ({ text: c.querySelector(".pq-user").textContent, title: c.title })));
-      for (const c of pq) assert.ok(!/李雷|138\*|dev\.one|Lee\b/.test(c.text + c.title), JSON.stringify(c));
+      for (const c of pq) assert.ok(!/李雷|138\*|dev\.one|Lee\b|^他$/.test(c.text) && !/李雷|138\*|dev\.one|Lee\b|他/.test(c.title), JSON.stringify(c));
       // and its model picker, which sits outside the panel's view: a Codex
       // account's address beside its model (PaulT on Discord)
       await panel.evaluate(() => {
@@ -148,7 +150,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await panel.locator("#pickRow").textContent(), "GPT-6-Astra via magpie dev.one@example.com");
       assert.ok(await panel.evaluate(() => [...document.querySelectorAll("#panelQuota .pq-user")].some((e) => e.textContent === "李雷")));
       // and back as they were in the window
-      assert.equal(await page.locator("#sample").textContent(), "李雷 checked in · Sleeper Lee · ZCode · or an API key · Signed in");
+      assert.equal(await page.locator("#sample").textContent(), "李雷 checked in · Sleeper Lee · ZCode · or an API key · Signed in · 其他 · 他");
       assert.equal(await page.locator("#sample").getAttribute("title"), "WorkBuddy · 138****5678");
       assert.equal(await page.locator(".subscription-account .user", { hasText: "李雷" }).getAttribute("title"), "李雷");
       assert.deepEqual(errors, []);

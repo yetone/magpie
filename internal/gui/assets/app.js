@@ -24180,10 +24180,12 @@ const accountNames = new Set();
 // words no account is named, lest each is hidden: "api key", "signed in"
 // (and "(2)") name a plugin's nameless account (pluginLabels, outloudvi)
 const NOT_ACCOUNTS = new Set(["default", "own", "desktop", "account", "main", "local", "unknown", "none", "free", "pro", "api key", "signed in"]);
+// one letter is a name past ASCII only: 他 (Shinji_Zl), never "a"
+const nameLike = (s) => [...s].length > 1 || /^(?!\p{ASCII})\p{L}$/u.test(s);
 function noteAccount(s) {
   if (typeof s !== "string") return;
   s = s.trim();
-  if (s.length >= 2 && s.length <= 80 && !/[\n\r]/.test(s)) accountNames.add(s);
+  if (nameLike(s) && s.length <= 80 && !/[\n\r]/.test(s)) accountNames.add(s);
 }
 // noteAccounts: an answer's user, account, or route account (kind account)
 function noteAccounts(x, depth = 0) {
@@ -24207,14 +24209,11 @@ window.noteAccounts = noteAccounts;
   // an address a vendor has half masked itself (Zhipu's abc***gh@…) is one
   // address still, the letters before its stars hidden too
   const EMAIL = /[\w.+*•-]+@[\w*•-]+(?:\.[\w*•-]+)+/g, IS_EMAIL = new RegExp("^" + EMAIL.source + "$");
-  // stand-in letters of the account's shape, the same each time it's drawn:
-  // blurred, they read as a name without being one
+  // stand-in letters of its shape, the same each time: blurred, a name
   const dots = (s) => { let h = 7; return s.replace(/[^@.]/g, (c) => (h = (h * 31 + c.charCodeAt(0)) >>> 0, "aeiounrstlcmdh"[h % 14])); };
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // names: the accounts that aren't addresses, longest first so one inside
-  // another is hidden whole; a name that is a provider's, an agent's or a
-  // card's own (WorkBuddy's account with no nickname is "WorkBuddy") is not
-  // one to hide
+  // names: the accounts not addresses, longest first; a provider's, an
+  // agent's or a card's own name ("WorkBuddy") is not one to hide
   function names() {
     const all = new Set(accountNames), not = new Set(NOT_ACCOUNTS);
     for (const p of providers?.providers || []) {
@@ -24232,7 +24231,7 @@ window.noteAccounts = noteAccounts;
       if (q.alias && !q.named && q.alias !== q.seat) all.add(q.alias.trim());
     }
     for (const a of state?.agents || []) for (const n of [a.id, a.name]) if (n) not.add(String(n).toLowerCase());
-    return [...all].filter((n) => n.length >= 2 && !IS_EMAIL.test(n) && !not.has(n.toLowerCase().replace(/ \(\d+\)$/, ""))).sort((a, b) => b.length - a.length);
+    return [...all].filter((n) => nameLike(n) && !IS_EMAIL.test(n) && !not.has(n.toLowerCase().replace(/ \(\d+\)$/, ""))).sort((a, b) => b.length - a.length);
   }
   let findKey = null, find = EMAIL;
   // finder is the pattern of everything to hide now: an address, or a name
@@ -24252,10 +24251,10 @@ window.noteAccounts = noteAccounts;
   // an address always is
   const WORD = /[A-Za-z0-9_]/, JOIN = /[-.]/;
   const joined = (s, i, step) => WORD.test(s[i] || "") || (JOIN.test(s[i] || "") && WORD.test(s[i + step] || ""));
-  // accounts shown while the rest stay hidden (yogurt36), this page's
-  // only: the window and the tray panel are pages of their own, so one
-  // shown in either never shows in the other; kept by provider
-  // (outloudvi: one address on two services showed on both)
+  // a one-letter name stands apart: 他, not the 他 of 其他
+  const inWord = (s, i, end) => /[\p{L}\p{N}]$/u.test(s.slice(0, i)) || /^[\p{L}\p{N}]/u.test(s.slice(end));
+  // accounts shown while the rest hide (yogurt36), this page's only,
+  // kept by provider (outloudvi: one address on two services)
   const shown = new Set(), low = (x) => String(x).trim().toLowerCase(), sk = (p, k) => p + "\n" + low(k);
   // by an eye, its provider's only; elsewhere, shown under any
   const isShown = (k, e) => {
@@ -24269,6 +24268,7 @@ window.noteAccounts = noteAccounts;
       if (isShown(m[0], at)) continue;
       const name = !m[0].includes("@"), end = m.index + m[0].length;
       if (name && ((WORD.test(m[0][0]) && joined(s, m.index - 1, -1)) || (WORD.test(m[0].at(-1)) && joined(s, end, 1)))) continue;
+      if (name && [...m[0]].length < 2 && inWord(s, m.index, end)) continue;
       yield m;
     }
   }
@@ -24303,7 +24303,7 @@ window.noteAccounts = noteAccounts;
       const all = finder(), reOf = (e) => e?.closest(NAMELESS) || e?.closest?.(LABELS) ? EMAIL : all;
       const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), found = [];
       for (let n; (n = walk.nextNode());) {
-        if (n.data.length < 2 || SKIP.has(n.parentElement?.tagName) || n.parentElement?.closest(".pii, " + KEEP)) continue;
+        if (!n.data || SKIP.has(n.parentElement?.tagName) || n.parentElement?.closest(".pii, " + KEEP)) continue;
         const re = reOf(n.parentElement);
         re.lastIndex = 0;
         if (re.test(n.data)) found.push(n);
