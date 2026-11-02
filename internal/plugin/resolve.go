@@ -60,7 +60,10 @@ func resolve(ctx context.Context, spec string) (string, error) {
 	if key == "" {
 		return spec, nil
 	}
+	// the community's alone: an author's own listing is npm's name, as
+	// written
 	list, lerr := market(ctx)
+	list = Community(list)
 	var found []string
 	for _, l := range list {
 		if slices.Contains(callNames(l), key) && !slices.Contains(found, l.Package) {

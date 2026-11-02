@@ -64,12 +64,12 @@ func TestMarketSources(t *testing.T) {
 	ctx := context.Background()
 
 	reset()
-	if l := Market(ctx); len(l) != 1 || l[0].Name != "X" {
+	if l := Market(ctx); len(l) != 2 || l[0].Name != "X" || l[1].Package != "opencode-other-auth" || l[1].Community {
 		t.Fatalf("fetched: %+v", l)
 	}
 	up = false
 	reset()
-	if l := Market(ctx); len(l) != 1 || l[0].Package != "opencode-x-auth" {
+	if l := Market(ctx); len(l) != 2 || l[0].Package != "opencode-x-auth" {
 		t.Fatalf("down, the copy kept: %+v", l)
 	}
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
@@ -85,6 +85,58 @@ func TestMarketSources(t *testing.T) {
 		t.Fatalf("off: %d", len(l))
 	}
 	reset()
+}
+
+// An author's own package the list names, without "community": true, is
+// kept, marked as not the community's (the owner on
+// magpie-community/plugins#479: such a listing is right to leave the flag
+// out, and is shown under its publisher when someone searches). PinK as
+// registry.json had it before plugins#617, beside a community plugin:
+// it was dropped, so no search in magpie found it. Only the community's
+// are called by a short name.
+func TestMarketKeepsAuthorsOwnListings(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "registry-pink.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := parseMarket(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(l) != 2 {
+		t.Fatalf("%d listed, want River and PinK: %+v", len(l), l)
+	}
+	pink := l[1]
+	if pink.Package != "magpie-plugin-pink" || pink.Name != "PinK" || pink.Kind != "agent" || pink.Community {
+		t.Errorf("PinK: %+v", pink)
+	}
+	if pink.Summary["en"] == "" || !strings.HasPrefix(pink.Icon, "https://") {
+		t.Errorf("PinK lost its summary or icon: %+v", pink)
+	}
+	if c := Community(l); len(c) != 1 || c[0].Package != "@magpie-community/opencode-river-auth" {
+		t.Errorf("the community's: %+v", c)
+	}
+
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(b) }))
+	defer srv.Close()
+	t.Setenv("MAGPIE_PLUGIN_MARKET", srv.URL)
+	RefreshMarket()
+	marketMu.Lock()
+	marketList = nil
+	marketMu.Unlock()
+	t.Cleanup(func() { marketMu.Lock(); marketList = nil; marketMu.Unlock() })
+	ctx := context.Background()
+	if got, err := resolve(ctx, "river"); err != nil || got != "@magpie-community/opencode-river-auth" {
+		t.Errorf("river: %q %v", got, err)
+	}
+	// PinK's names aren't the community's: npm's package of that name
+	if got, err := resolve(ctx, "pink"); err != nil || got != "pink" {
+		t.Errorf("pink: %q %v", got, err)
+	}
+	if got, _ := resolve(ctx, "magpie-plugin-pink"); got != "magpie-plugin-pink" {
+		t.Errorf("magpie-plugin-pink: %q", got)
+	}
 }
 
 // A plugin's provider shows its vendor's icon: the one its package is

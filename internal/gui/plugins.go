@@ -466,7 +466,9 @@ func pluginAgents(ctx context.Context) []string {
 		have[plugin.Name(e.Spec)] = true
 	}
 	out := []string{}
-	for _, l := range plugin.Market(ctx) {
+	// the community's alone, as Discover's Agents: an author's own is
+	// found by a search
+	for _, l := range plugin.Community(plugin.Market(ctx)) {
 		if l.Kind == "agent" && !have[l.Package] {
 			out = append(out, l.Name)
 		}

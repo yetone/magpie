@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "plugins": [
+    { "package": "@magpie-community/opencode-river-auth", "name": "River", "providers": ["river"], "community": true,
+      "summary": { "en": "River (river.ai) pay-as-you-go inference with your API key: per-account models from /v1/models, documented reasoning efforts and live prices from River's public pricing endpoint.", "zh": "用你的 API key 接入 River (river.ai) 按量计费推理：按账号从 /v1/models 列出模型，带官方推理档位与实时价格。" } },
+    { "package": "magpie-plugin-pink", "name": "PinK", "kind": "agent",
+      "icon": "https://raw.githubusercontent.com/YuchenWell/magpie-plugin-pink/main/assets/pink.png",
+      "summary": { "en": "Connect PinK to Magpie's models from the Agents page and track gateway usage and cost. Disconnecting restores the managed configuration.", "zh": "在 Agent 页面连接 PinK，使用 Magpie 中配置的模型并查看调用用量与费用；断开时恢复插件管理的配置。" } }
+  ]
+}

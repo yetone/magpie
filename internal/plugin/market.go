@@ -43,13 +43,17 @@ var builtinParsed = sync.OnceValue(func() []Listing {
 // "off" keeps to the built-in copy.
 const MarketURL = "https://raw.githubusercontent.com/magpie-community/plugins/main/registry.json"
 
-// Listing is a plugin the market suggests.
+// Listing is a plugin the market suggests. One not Community is an
+// author's own package the list names, published from their repository
+// (the owner on magpie-community/plugins#479: PinK, WispTerm): the page
+// shows it to a search alone, under its publisher; it is never browsed,
+// suggested as an agent or called by a short name.
 type Listing struct {
 	Package   string            `json:"package"`
 	Name      string            `json:"name"`
 	Icon      string            `json:"icon,omitempty"`
 	Providers []string          `json:"providers,omitempty"` // OpenCode's ids of those it signs in to
-	Community bool              `json:"community,omitempty"` // written by magpie's community
+	Community bool              `json:"community,omitempty"` // written by magpie's community; see Listing
 	Replaces  string            `json:"replaces,omitempty"`  // the built-in subscription it does the work of
 	Kind      string            `json:"kind,omitempty"`      // "middleware" for gateway middleware, "agent" for an agent, "tools" for tools alone, "page" for a page alone; none for a provider
 	Summary   map[string]string `json:"summary,omitempty"`   // by language: en, zh
@@ -183,9 +187,11 @@ func parseMarket(b []byte) ([]Listing, error) {
 	}
 	out := r.Plugins[:0]
 	for _, l := range r.Plugins {
-		// magpie's community's alone: others' OpenCode plugins weren't
-		// written against magpie's sign-ins, and are found by a search
-		if l.Package != "" && pkgName.MatchString(l.Package) && l.Community {
+		// an author's own package is kept too, marked as not the
+		// community's (Community false): the page shows it to a search
+		// alone, and only the community's are browsed, suggested as
+		// agents or called by a short name (Community)
+		if l.Package != "" && pkgName.MatchString(l.Package) {
 			if l.Name == "" {
 				l.Name = l.Package
 			}
@@ -196,6 +202,17 @@ func parseMarket(b []byte) ([]Listing, error) {
 		return nil, errors.New("the list has no plugins")
 	}
 	return out, nil
+}
+
+// Community is the listings of l magpie's community wrote, in l's order.
+func Community(l []Listing) []Listing {
+	out := []Listing{}
+	for _, x := range l {
+		if x.Community {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // Market is the list of plugins magpie suggests: fetched at most every six
@@ -836,7 +853,7 @@ func Icon(spec, id string) string {
 	if ic, ok := otherIcons[pkg]; ok {
 		return ic
 	}
-	for _, x := range l {
+	for _, x := range Community(l) {
 		for _, p := range x.Providers {
 			if p == id && x.Icon != "" {
 				return x.Icon
