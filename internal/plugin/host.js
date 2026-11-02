@@ -2149,6 +2149,12 @@ function rowOf(id, a, keys, stored, p, own) {
   for (const q of own) for (const [k, m] of Object.entries(q?.models ?? {})) models[k] ??= m
   const ids = (q) => Object.values(q.models).filter((m) => m.status !== "deprecated").map((m) => m.id)
   const first = stored[keys[0]]
+  // the provider's list is its accounts' union, so it fell back only when
+  // no account told a list of its own: a lapsed account kept first beside
+  // a live one doesn't say the provider fell back, and its list goes on
+  // moving (the last one told is kept for a provider whose every account
+  // fell back) (#4917)
+  const fellBack = keys.length > 0 && !!p.fellBack && own.every((q) => !q || q.fellBack || q.failed)
   return {
     id,
     spec: a.spec,
@@ -2168,8 +2174,8 @@ function rowOf(id, a, keys, stored, p, own) {
     signedIn: keys.length > 0,
     authType: first?.type ?? "",
     accountId: whoOf(first),
-    fellBack: keys.length > 0 && !!p.fellBack,
-    listError: keys.length > 0 && p.fellBack ? p.listError ?? "" : "",
+    fellBack,
+    listError: fellBack ? p.listError ?? "" : "",
     accounts: keys.map((k, i) => ({
       key: k,
       type: stored[k]?.type ?? "",
