@@ -4706,10 +4706,8 @@ function placePop(anchor, w, h) {
   holdPop(pop, innerHeight - pad - y);
 }
 
-// holdPop keeps the pop to the room it was placed in: on a phone it may
-// grow to the window's height (body.web), more than the h it was placed
-// by, and a model picker opened upward ran off the top, its filter and
-// first rows out of reach.
+// holdPop keeps the pop to the room it was placed in: on a phone it grew
+// past h, and a picker opened upward ran off the top
 function holdPop(pop, room) {
   if (!(parseFloat(getComputedStyle(pop).maxHeight) <= room)) pop.style.maxHeight = room + "px";
 }
@@ -4788,11 +4786,8 @@ function openPicker(agent, field, anchor, ev, only) {
   if (again) return;
   const cur = field.value;
   let options = field.options.filter((o) => !only || only(o));
-  // routing groups come first, then each provider's, then the models the
-  // agent asks for itself, not through magpie: Claude Code's own list of
-  // Claude models above them hid every magpie model below the fold (abledo
-  // on Discord: "claudecode的magpie模型选不了"). Only the picker's own
-  // choices (Automatic, Off) above them all
+  // the picker's own choices, routing groups, each provider's, then the
+  // agent's own models, which hid magpie's below the fold (abledo)
   const rest = options.filter((o) => !o.reset && o.group !== ROUTING_GROUPS);
   options = [...options.filter((o) => o.reset), ...options.filter((o) => !o.reset && o.group === ROUTING_GROUPS), ...rest.filter((o) => !o.direct), ...rest.filter((o) => o.direct)];
   const effortPicker = !only && (field.key === "effort" || field.label === "effort" || field.label === "thinking" || field.label === SUB_EFFORT || roleLevel(field.label));
@@ -4802,12 +4797,8 @@ function openPicker(agent, field, anchor, ev, only) {
     const tells = modelTells(options.filter((o) => !o.reset && !o.run && !o.custom), (o) => o.label || "", (o) => o.value, (o) => o.group || "");
     if (tells.size) options = options.map((o) => tells.has(o.value) && !o.reset && !o.run && !o.custom ? { ...o, tell: tells.get(o.value) } : o);
   }
-  // Current model first, then the rest in catalog order. Effort levels keep
-  // their natural low → high order because their position is meaningful.
-  // The row keeps its group as `home`: a provider picked in the rail still
-  // shows its current model (#1229: gpt-6.1-sol missing under OpenAI), and
-  // the rail lists the providers in catalog order, the current one's among
-  // them where it was, even when its only listed model is the current one.
+  // the current model first, the rest in catalog order (effort keeps low →
+  // high); its group stays as `home` for the rail (#1229)
   const groups = [...new Set(options.map((o) => o.group).filter(Boolean))];
   const i = options.findIndex((o) => o.value === cur);
   if (!effortPicker && !field.menu && i > 0) { const [c] = options.splice(i, 1); options.unshift({ ...c, group: "", home: c.group }); }
@@ -4825,10 +4816,7 @@ function openPicker(agent, field, anchor, ev, only) {
     const main = agent.fields.find((f) => f.key === "model");
     options.unshift({ value: "", label: t(SAME_AS_LEAD), note: said.lead ? t("{model}, or another the lead picks for a subagent", { model: said.lead }) : t("the lead's model, or another the lead picks for a subagent"), icon: (main && optionFor(main, main.value)?.icon) || agent.icon, reset: true });
   } else if (!only && !field.menu && !field.onPick && !options.some((o) => o.value === "")) {
-    // Pi has no default model of its own: with none set it takes the first
-    // provider signed in, in its own order, so Default is no fixed model
-    // and a model picked in Pi's /model lasts the session only unless
-    // saved there with Ctrl+S (#709)
+    // Pi picks the first provider signed in when none is set (#709)
     const note = agent.id === "reasonix" && ["model", "planner"].includes(field.key) ? "restore the previous {field} selection"
       : PICKS_ITSELF.includes(agent.id) && field.key === "model" ? "clears the default model; {agent} picks one on its own"
       : field.label === MEMORIES ? MEMORIES_DEFAULT
@@ -4859,7 +4847,7 @@ function openPicker(agent, field, anchor, ev, only) {
   $("#effortControl").hidden = !effortPicker;
   pop.querySelector(".search").hidden = effortPicker;
   pop.querySelector(".picker-body").hidden = effortPicker;
-  placePop(anchor, effortPicker ? 232 : modelPicker ? Math.min(490, innerWidth - 16) : (options.some((o) => o.note && o.note !== o.value) ? 372 : 300), effortPicker ? 96 : modelPicker ? Math.min(420, innerHeight - 16) : 340);
+  placePop(anchor, ...pickSize(pick));
   if (effortPicker) {
     renderEffortPicker();
     $("#effortRange").focus();
@@ -4873,6 +4861,22 @@ function openPicker(agent, field, anchor, ev, only) {
   // so opening a model list leaves room to browse its choices.
   if (!web || !matchMedia("(pointer: coarse)").matches) q.focus();
 }
+
+function pickSize(p) {
+  return p.effortPicker ? [232, 96] : p.modelPicker ? [Math.min(490, innerWidth - 16), Math.min(420, innerHeight - 16)] : [p.options.some((o) => o.note && o.note !== o.value) ? 372 : 300, 340];
+}
+
+// a resize moves an open picker with its button, frame by frame while the
+// page settles, or closes it once the button is out of sight (#1134); a
+// touch keyboard only moves it
+function followPick(n, last) {
+  if (!pick) return;
+  const a = pick.anchor, r = a.getBoundingClientRect(), k = r.left + " " + r.bottom;
+  if (!a.isConnected || (!matchMedia("(pointer: coarse)").matches && (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth))) return closePicker();
+  if (k != last) { placePop(a, ...pickSize(pick)); n = 0; }
+  if (n < 9) followPick.f = requestAnimationFrame(() => followPick(n + 1, k));
+}
+addEventListener("resize", () => followPick(cancelAnimationFrame(followPick.f)));
 
 function effortName(option) {
   // the agent's default, with the level it takes then when the agent says
