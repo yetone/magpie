@@ -57,7 +57,7 @@ function server(lang, saves) {
 const L = {
   en: { field: "Endpoint", hint: /Settings → Network and sharing, under Share on local network.*the API the agent spoke/, needed: "The other magpie's address is needed", note: "another computer's magpie, shared on its network", add: "Add",
     decide: ["Jev endpoint", "System One endpoint"] },
-  zh: { field: "终结点", hint: /设置 → 网络与共享 → 局域网共享.*原样转发/, needed: "需要填写另一台 magpie 的地址", note: "远程：另一台电脑上的 magpie，局域网共享", add: "添加",
+  zh: { field: "接口地址", hint: /设置 → 网络与共享 → 局域网共享.*原样转发/, needed: "需要填写另一台 magpie 的地址", note: "远程：另一台电脑上的 magpie，局域网共享", add: "添加",
     decide: ["Jev 端点", "System One 端点"] },
 };
 

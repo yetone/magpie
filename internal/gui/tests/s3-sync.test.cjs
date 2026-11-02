@@ -101,7 +101,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForTimeout(250);
       assert.equal(await top(), before, "picking S3 must not scroll the page");
       assert.deepEqual(await labels(), zh
-        ? ["同步到", "终结点", "存储桶", "前缀", "区域", "Access Key", "Secret", "口令", "同时同步"]
+        ? ["同步到", "接口地址", "存储桶", "前缀", "区域", "Access Key", "Secret", "口令", "同时同步"]
         : ["Sync to", "Endpoint", "Bucket", "Prefix", "Region", "Access key", "Secret", "Passphrase", "Also sync"]);
       // every label fits its column
       for (const l of await form.locator(":scope > label:visible").all()) {
@@ -109,7 +109,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
 
       const box = (label) => form.locator(":scope > label:visible", { hasText: new RegExp("^" + label + "$") }).locator("xpath=following-sibling::div[1]").locator("input");
-      const L = zh ? { endpoint: "终结点", bucket: "存储桶", prefix: "前缀", region: "区域", key: "Access Key", secret: "Secret", phrase: "口令" }
+      const L = zh ? { endpoint: "接口地址", bucket: "存储桶", prefix: "前缀", region: "区域", key: "Access Key", secret: "Secret", phrase: "口令" }
         : { endpoint: "Endpoint", bucket: "Bucket", prefix: "Prefix", region: "Region", key: "Access key", secret: "Secret", phrase: "Passphrase" };
       await box(L.endpoint).fill("https://acct.r2.cloudflarestorage.com");
       await box(L.phrase).fill("correct horse");

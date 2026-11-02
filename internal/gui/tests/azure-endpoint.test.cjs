@@ -51,9 +51,13 @@ const L = {
   en: { field: "Endpoint", hint: /Keys and Endpoint in the Azure portal\. Once added, magpie asks the resource for its deployments with this key.*deployments' names are the model ids/, needed: "Your resource's endpoint is needed", add: "Add",
     models: "Models", modelsNote: /^No need to type them: once added, magpie lists the deployments this key can call/,
     asking: "Asking your resource for its deployments with this key…", none: /^No deployments came back for this key\..*deployment's name as a model id/, empty: "The vendor's list is empty. Fetch models again, or type a model id." },
-  zh: { field: "终结点", hint: /Azure 门户的「密钥和终结点」。添加后，magpie 会用这把 key.*查询该资源的部署；部署名称就是模型 ID/, needed: "需要填写你的资源终结点", add: "添加",
+  zh: { field: "接口地址", hint: /Azure 门户的「密钥和终结点」。添加后，magpie 会用这把 key.*查询该资源的部署；部署名称就是模型 ID/, needed: "需要填写你的资源接口地址", add: "添加",
     models: "模型", modelsNote: /^不用手填：添加后 magpie 会列出这把 key 能调用的部署/,
     asking: "正在用这把 key 查询该资源的部署…", none: /^这把 key 没有查到部署。.*部署名称当作模型 ID/, empty: "供应商列表为空。重新获取模型，或输入一个模型 ID。" },
+  // "Endpoints" is 端點 here, so the field is named apart from it
+  "zh-TW": { field: "端點位址", hint: /Azure 入口網站的「金鑰和端點」。新增後，magpie 會用這把 key.*查詢該資源的部署；部署名稱就是模型 ID/, needed: "需要填寫你的資源端點", add: "新增",
+    models: "模型", modelsNote: /^不用手動填寫：新增後 magpie 會列出這把 key 能呼叫的部署/,
+    asking: "正在用這把 key 查詢該資源的部署…", none: /^這把 key 沒有查到部署。.*部署名稱當作模型 ID/, empty: "供應商列表為空。重新取得模型，或輸入一個模型 ID。" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -61,7 +65,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or webkit");
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
-    for (const lang of ["en", "zh"]) {
+    for (const lang of ["en", "zh", "zh-TW"]) {
       await t.test(lang, async () => {
         const w = L[lang];
         const saves = [];
