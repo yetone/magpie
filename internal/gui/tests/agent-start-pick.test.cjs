@@ -26,7 +26,7 @@ const fresh = () => ({
 
 function server(lang, posts) {
   let cur = fresh();
-  const reply = (route) => route.fulfill({ json: { ...cur, settings: { lang, theme: "light" } } });
+  const reply = (route) => route.fulfill({ json: { ...cur, settings: { lang, theme: "light", guideHidden: true } } });
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
     const json = (data) => route.fulfill({ json: data });

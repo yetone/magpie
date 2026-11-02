@@ -29,7 +29,7 @@ const crew = (on) => ({
 
 function server(lang, answers) {
   let on = false;
-  const st = () => ({ agents: [crew(on)], profiles: [], settings: { lang, theme: "light" } });
+  const st = () => ({ agents: [crew(on)], profiles: [], settings: { lang, theme: "light", guideHidden: true } });
   return async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });

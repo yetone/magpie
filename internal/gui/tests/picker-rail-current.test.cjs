@@ -23,7 +23,7 @@ const options = [
 ];
 const state = (wired, value) => ({
   agents: [{ id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color", wired, fields: [{ key: "model", label: "model", value, options }] }],
-  profiles: [], settings: { lang: "en", theme: "light" },
+  profiles: [], settings: { lang: "en", theme: "light", guideHidden: true },
 });
 
 function serve(st) {

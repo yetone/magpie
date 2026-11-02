@@ -37,7 +37,7 @@ function serve(lang) {
     const url = new URL(route.request().url());
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:${JSON.stringify(lang)},theme:"light",web:true};` });
     if (url.pathname === "/wails/runtime.js") return route.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
-    if (url.pathname === "/api/state") return route.fulfill({ json: { agents: [{ id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color", wired: false, fields: [{ key: "model", label: "model", value: "kimi/k3", options }] }], profiles: [], settings: { lang, theme: "light" } } });
+    if (url.pathname === "/api/state") return route.fulfill({ json: { agents: [{ id: "codex", name: "Codex", path: "/test/config.toml", icon: "codex-color", wired: false, fields: [{ key: "model", label: "model", value: "kimi/k3", options }] }], profiles: [], settings: { lang, theme: "light", guideHidden: true } } });
     if (url.pathname === "/api/model-speeds") return route.fulfill({ json: speeds });
     if (url.pathname === "/api/agents/cli") return route.fulfill({ json: { agents: {}, pending: false } });
     if (url.pathname === "/api/groups") return route.fulfill({ json: { groups: [] } });

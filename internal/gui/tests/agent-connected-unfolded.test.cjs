@@ -35,7 +35,7 @@ const AGENTS = [
 ];
 
 function serve(lang, agents = AGENTS) {
-  const state = { agents, profiles: [], settings: { lang, theme: "light" } };
+  const state = { agents, profiles: [], settings: { lang, theme: "light", guideHidden: true } };
   return async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/boot.js") return route.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = {lang:"${lang}",theme:"light",web:true};` });

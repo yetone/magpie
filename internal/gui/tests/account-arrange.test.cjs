@@ -14,7 +14,8 @@ function fixture() {
     { ...base, id: "antigravity", name: "Antigravity", keyList: [], account: { agent: "antigravity", agentName: "Antigravity", user: logins[0].user, logins } },
     { ...base, id: "relay", name: "Relay", keyList: Array.from({ length: 5 }, (_, i) => ({ id: `key-${i + 1}`, name: `Key ${i + 1}`, masked: `test-key-${i + 1}`, active: i === 0, on: i !== 2 })) },
   ], presets: [], excluded: [], gateway: { running: false, window: true } };
-  const state = { agents: ["alpha", "beta", "gamma"].map(id => ({ id, name: id, icon: "generic", path: "/fixture", fields: [] })), profiles: [], settings: { lang: "en", theme: "light" } };
+  // Get started put away: under it a new user's agents are folded
+  const state = { agents: ["alpha", "beta", "gamma"].map(id => ({ id, name: id, icon: "generic", path: "/fixture", fields: [] })), profiles: [], settings: { lang: "en", theme: "light", guideHidden: true } };
   const f = { providers, state, posted: [], failNext: false };
   const items = p => p.account ? p.account.logins : p.keyList;
   const id = (p, item) => p.account ? item.user : item.id;
