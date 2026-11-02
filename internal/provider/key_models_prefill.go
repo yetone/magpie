@@ -61,7 +61,8 @@ func PrefillNewKeys(ctx context.Context, before map[string]map[string]bool, ids 
 		if len(ids) > 0 && !slices.Contains(ids, p.ID) {
 			continue
 		}
-		if p.Account != nil || p.IsPlugin() || !p.Ready() {
+		// one switched off is asked nothing
+		if p.Account != nil || p.IsPlugin() || !p.Ready() || p.Off {
 			continue
 		}
 		keys := p.KeysOn()

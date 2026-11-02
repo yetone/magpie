@@ -1326,13 +1326,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			fail(rw, err)
 			return
 		}
-		for _, p := range provider.All() {
-			if p.Ready() {
-				c, cancel := context.WithTimeout(ctx, 8*time.Second)
-				p.Fetch(c)
-				cancel()
-			}
-		}
+		provider.RefreshLists(ctx)
 		writeJSON(rw, state())
 	})
 	providerRoutes(mux, w)

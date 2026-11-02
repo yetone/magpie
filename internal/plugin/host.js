@@ -1768,7 +1768,9 @@ function fromModelsDev(p, m) {
 // info is what OpenCode knows of provider id, its models as the plugin
 // lists them for account key (the first when none); strict fails where the
 // plugin's list does, rather than keeping the list it was given.
-async function info(id, key, strict, limit) {
+// quiet asks no models hook (a provider switched off in magpie): the
+// list is told as fallen back, which keeps the one magpie had.
+async function info(id, key, strict, limit, quiet) {
   const md = mdev()[id]
   const cfg = config.provider?.[id]
   const out = {
@@ -1821,7 +1823,8 @@ async function info(id, key, strict, limit) {
     }
   }
   const server = auths().get(id)?.spec
-  for (const h of hooks) {
+  if (quiet) out.fellBack = true
+  for (const h of quiet ? [] : hooks) {
     const ph = h.hooks.provider
     if (ph?.id !== id || typeof ph.models !== "function") continue
     // a plugin that signs in to id too but doesn't serve it: its list
@@ -2105,14 +2108,22 @@ function tiersOf(v) {
 // providers lists each provider and its accounts' models, each asked
 // through its proxy (proxies[provider][key], "" the provider's own), as a
 // built-in fetches each account's list through the account's.
-async function providers({ proxies } = {}) {
+async function providers({ proxies, off } = {}) {
   const stored = readAuth()
+  // a provider switched off in magpie is asked nothing: its models hook
+  // (and the sign-in renewal before it) would reach its vendor. It is
+  // told as fallen back, so magpie keeps the list it had.
+  const quiet = new Set(Array.isArray(off) ? off : [])
   // every provider is listed side by side, each models hook given
   // listWait: one whose vendor is stuck holds up no other's row
   const row = async ([id, a]) => {
     const keys = accountsOf(stored, id)
     const through = (k) => proxies?.[id]?.[k ?? keys[0] ?? ""] ?? proxies?.[id]?.[""] ?? ""
     const gen = infoGen
+    if (quiet.has(id)) {
+      const p = await info(id, undefined, false, listWait, true)
+      return rowOf(id, a, keys, stored, p, [])
+    }
     // every account is listed side by side, each hook given listWait: a
     // second account no longer waits behind the first, where two
     // listWaits back to back took one provider past refreshDeadline twice
@@ -2125,86 +2136,92 @@ async function providers({ proxies } = {}) {
       // told to have, as a built-in account whose fetch failed keeps its own.
       Promise.all(keys.slice(1).map((k) => via.run(through(k), () => info(id, k, true, listWait)).then((q) => (keepInfo(k, q, gen), q)).catch((e) => ({ failed: true, listError: e?.message ?? String(e) })))),
     ])
-    const models = { ...p.models }
-    for (const q of own) for (const [k, m] of Object.entries(q?.models ?? {})) models[k] ??= m
-    const ids = (q) => Object.values(q.models).filter((m) => m.status !== "deprecated").map((m) => m.id)
-    const first = stored[keys[0]]
-    return {
-      id,
-      spec: a.spec,
-      name: p.name,
-      npm: p.npm ?? "",
-      api: p.api ?? "",
-      methods: methods(a.auth),
-      single: a.auth.single === true,
-      icon: iconOf(a),
-      usage: typeof a.auth.usage === "function",
-      checkin: typeof a.auth.checkin === "function",
-      options: optionsOf(a.auth),
-      decide: p.decide === true,
-      searches: p.searches === true,
-      maxConcurrency: concurrencyOf(a),
-      maxAccounts: atOnceOf(a),
-      signedIn: keys.length > 0,
-      authType: first?.type ?? "",
-      accountId: whoOf(first),
-      fellBack: keys.length > 0 && !!p.fellBack,
-      listError: keys.length > 0 && p.fellBack ? p.listError ?? "" : "",
-      accounts: keys.map((k, i) => ({
-        key: k,
-        type: stored[k]?.type ?? "",
-        accountId: whoOf(stored[k]),
-        hint: hintOf(stored[k]),
-        models: own.length === 0 ? undefined : i === 0 ? ids(p) : own[i - 1]?.models ? ids(own[i - 1]) : undefined,
-        fellBack: i === 0 ? !!p.fellBack : !!(own[i - 1]?.fellBack || own[i - 1]?.failed),
-        listError: (i === 0 ? p.fellBack && p.listError : own[i - 1]?.listError) || "",
-      })),
-      models: Object.values(models)
-        .filter((m) => m.status !== "deprecated")
-        .map((m) => ({
-          id: m.id,
-          name: m.name,
-          npm: m.api?.npm ?? p.npm ?? "",
-          url: m.api?.url ?? "",
-          apiId: m.api?.id ?? m.id,
-          context: m.limit?.context ?? 0,
-          input: m.limit?.input ?? 0,
-          output: m.limit?.output ?? 0,
-          reasoning: !!m.capabilities?.reasoning,
-          image: !!m.capabilities?.input?.image,
-          imageSaid: typeof m.capabilities?.input?.image === "boolean",
-          // every kind it takes and gives, not image alone (#1595)
-          inputs: kinds(m.capabilities?.input),
-          inputsSaid: inputSaid(m.capabilities?.input),
-          outputs: kinds(m.capabilities?.output),
-          outputsSaid: kindsSaid(m.capabilities?.output),
-          // whether the model takes temperature and top_p, where something
-          // said so (models.dev, the config, the models hook); unsaid goes
-          // to magpie as nothing, which keeps them (#2492)
-          ...(typeof m.temperature === "boolean" ? { temperature: m.temperature } : {}),
-          released: m.release_date ?? "",
-          cost: m.cost,
-          variants: Object.keys(m.variants ?? {}),
-          free: m.free === true,
-          // what a request costs of the plan's credits, as a multiple,
-          // and before a discount running now (Qoder's price_factor)
-          rate: rateOf(m.rate),
-          rateWas: rateOf(m.rateWas),
-          // run fast when the request's service_tier is priority (Cursor's)
-          fast: m.fast === true,
-          // the service tiers the vendor serves it at (service_tier
-          // "priority", "ultrafast"), which Codex then offers (#2514)
-          serviceTiers: tiersOf(m.serviceTiers),
-          // a decision model (System One's), hidden from agents and
-          // offered as a routing group's classifier
-          decides: m.decides === true,
-          // a model that searches the web by itself, asked in plain
-          // words, which magpie may search with for other models
-          searches: m.searches === true,
-        })),
-    }
+    return rowOf(id, a, keys, stored, p, own)
   }
   return Promise.all([...auths()].map(row))
+}
+
+// rowOf is the providers row of id (registered as a), its accounts keys
+// of stored, p its info and own the other accounts' infos.
+function rowOf(id, a, keys, stored, p, own) {
+  const models = { ...p.models }
+  for (const q of own) for (const [k, m] of Object.entries(q?.models ?? {})) models[k] ??= m
+  const ids = (q) => Object.values(q.models).filter((m) => m.status !== "deprecated").map((m) => m.id)
+  const first = stored[keys[0]]
+  return {
+    id,
+    spec: a.spec,
+    name: p.name,
+    npm: p.npm ?? "",
+    api: p.api ?? "",
+    methods: methods(a.auth),
+    single: a.auth.single === true,
+    icon: iconOf(a),
+    usage: typeof a.auth.usage === "function",
+    checkin: typeof a.auth.checkin === "function",
+    options: optionsOf(a.auth),
+    decide: p.decide === true,
+    searches: p.searches === true,
+    maxConcurrency: concurrencyOf(a),
+    maxAccounts: atOnceOf(a),
+    signedIn: keys.length > 0,
+    authType: first?.type ?? "",
+    accountId: whoOf(first),
+    fellBack: keys.length > 0 && !!p.fellBack,
+    listError: keys.length > 0 && p.fellBack ? p.listError ?? "" : "",
+    accounts: keys.map((k, i) => ({
+      key: k,
+      type: stored[k]?.type ?? "",
+      accountId: whoOf(stored[k]),
+      hint: hintOf(stored[k]),
+      models: own.length === 0 ? undefined : i === 0 ? ids(p) : own[i - 1]?.models ? ids(own[i - 1]) : undefined,
+      fellBack: i === 0 ? !!p.fellBack : !!(own[i - 1]?.fellBack || own[i - 1]?.failed),
+      listError: (i === 0 ? p.fellBack && p.listError : own[i - 1]?.listError) || "",
+    })),
+    models: Object.values(models)
+      .filter((m) => m.status !== "deprecated")
+      .map((m) => ({
+        id: m.id,
+        name: m.name,
+        npm: m.api?.npm ?? p.npm ?? "",
+        url: m.api?.url ?? "",
+        apiId: m.api?.id ?? m.id,
+        context: m.limit?.context ?? 0,
+        input: m.limit?.input ?? 0,
+        output: m.limit?.output ?? 0,
+        reasoning: !!m.capabilities?.reasoning,
+        image: !!m.capabilities?.input?.image,
+        imageSaid: typeof m.capabilities?.input?.image === "boolean",
+        // every kind it takes and gives, not image alone (#1595)
+        inputs: kinds(m.capabilities?.input),
+        inputsSaid: inputSaid(m.capabilities?.input),
+        outputs: kinds(m.capabilities?.output),
+        outputsSaid: kindsSaid(m.capabilities?.output),
+        // whether the model takes temperature and top_p, where something
+        // said so (models.dev, the config, the models hook); unsaid goes
+        // to magpie as nothing, which keeps them (#2492)
+        ...(typeof m.temperature === "boolean" ? { temperature: m.temperature } : {}),
+        released: m.release_date ?? "",
+        cost: m.cost,
+        variants: Object.keys(m.variants ?? {}),
+        free: m.free === true,
+        // what a request costs of the plan's credits, as a multiple,
+        // and before a discount running now (Qoder's price_factor)
+        rate: rateOf(m.rate),
+        rateWas: rateOf(m.rateWas),
+        // run fast when the request's service_tier is priority (Cursor's)
+        fast: m.fast === true,
+        // the service tiers the vendor serves it at (service_tier
+        // "priority", "ultrafast"), which Codex then offers (#2514)
+        serviceTiers: tiersOf(m.serviceTiers),
+        // a decision model (System One's), hidden from agents and
+        // offered as a routing group's classifier
+        decides: m.decides === true,
+        // a model that searches the web by itself, asked in plain
+        // words, which magpie may search with for other models
+        searches: m.searches === true,
+      })),
+  }
 }
 
 // ---- signing in --------------------------------------------------------------
