@@ -619,6 +619,44 @@ requests in flight (`counted` runs before `withCaller`, so `active.add` reads
 `callerFrom` itself). The label never changes access, limits or behaviour,
 which go by the key and the real sender (`agentOf`).
 
+### Images and video in OpenAI's shape
+
+A caller speaks OpenAI's images and videos APIs to the gateway, whichever
+vendor draws or films, and gets OpenAI's answers back
+([`draw.go`](../../internal/gateway/draw.go),
+[`video.go`](../../internal/gateway/video.go)). The `generate_image`,
+`generate_video` and `generation_result` tools of Magpie Image call these
+same handlers in process (`s.images`, `s.videosCreate`, `s.videosGet`), so
+the MCP and an HTTP caller go through one translation and one set of holds.
+
+| Route | Takes | Answers |
+| --- | --- | --- |
+| `POST /v1/images/generations` | JSON: `model`, `prompt`, `n`, `size`, `quality`, `background`, `output_format`, `response_format` | `{"created", "data": [{"b64_json"} or {"url"}]}` |
+| `POST /v1/images/edits` | OpenAI's multipart (`image` or `image[]` files, `mask`), or JSON with `image`/`images` (URL, data URL or `{"image_url": …}`) and `mask` | as generations |
+| `POST /v1/videos` | JSON or OpenAI's multipart: `model`, `prompt`, `seconds`, `size`, `input_reference` (first frame), plus `last_frame` and `reference_images` | OpenAI's video object, `status: "queued"`, an id that names the provider, the vendor's task and the key or account |
+| `GET /v1/videos/{id}` | | the video object: `queued`, `in_progress` (`progress`), `completed` or `failed` (`error`) |
+| `GET /v1/videos/{id}/content` | | the MP4, or 409 while it isn't made |
+
+Each vendor is sent its own request:
+
+| Vendor | Images | Edits | Videos |
+| --- | --- | --- | --- |
+| OpenAI-compatible images API (gpt-image, dall-e, a relay) | JSON `/images/generations` | multipart `/images/edits`, mask included; a URL image is downloaded first | at `<base>/videos` only when its list or the user marks a video model (below) |
+| ChatGPT account (Codex backend), SenseNova U1 | JSON | JSON `images: [{"image_url"}]`, `mask: {"image_url"}` | none |
+| Grok subscription | JSON with `aspect_ratio` | JSON `/images/edits`, `images: [{"url"}]` | `/videos/generations`: `duration`, `aspect_ratio`, `resolution`, `image`, `reference_images` |
+| Volcengine Ark (`isArk`) | `/images/generations`, `watermark: false`, one request per image, ratio as the doc's 2K size | the same endpoint, images as JSON `image` (URL or data URL); a mask is a 400 that says to describe it in the prompt | Seedance at `/contents/generations/tasks` (below) |
+| Gemini at Google, a Google sign-in | `generateContent` asking for images | the images as inline parts | a plugin's Veo through its fetch |
+| OpenRouter | `/images` for image-only models, chat with modalities for the others | `input_references` | none |
+| DashScope, ModelScope | their own asynchronous image APIs (`draw_dashscope.go`, `draw_modelscope.go`) | their image fields | none |
+| MiniMax API key | | | H3 at `/v2/video_generation` (below) |
+| Another magpie | its images API | its images API | its videos API, ids wrapped |
+
+Every one of these routes goes through `requestBody` (the body limit,
+key and origin checks every `/v1` route has), a gateway key's model and
+account holds (`keyHolds`, `accountHolds`, `videoAsker`,
+`videoModelHeld`), the user's switched-off models, routing groups in their
+order, prompt masking (fails closed), and usage records.
+
 A custom provider (no account, no preset plan's videos) makes videos the
 same OpenAI way (#1446, `customVideomakers`), but only with the models its
 own fetched list marks `"kind": "video"` (`catalog.LiveVideomakers`) or the
