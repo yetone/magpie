@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"os"
@@ -10,7 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/gwmw"
+	"github.com/yetone/magpie/internal/masking"
 	"github.com/yetone/magpie/internal/provider"
+	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/testenv"
 )
 
@@ -35,6 +39,18 @@ func claudeWorkDirsTold(t *testing.T, prepare func(work string), system func(hom
 // claudeWorkDirsFrom is claudeWorkDirsTold with the requests from the
 // address from ("" for httptest's, another computer's).
 func claudeWorkDirsFrom(t *testing.T, from string, prepare func(work string), system func(home string) string) (dirs []string, work string, s *Server, env, told string) {
+	t.Helper()
+	return claudeWorkDirsBody(t, from, prepare, func(home string) string {
+		rules, _ := json.Marshal(system(home))
+		return `{"model":"claude-sonnet-5","max_tokens":100,"system":` + string(rules) + `,"messages":[{"role":"user","content":"one"},{"role":"user","content":"two"}]}`
+	})
+}
+
+// claudeWorkDirsBody is claudeWorkDirsFrom with the whole request body
+// given: it is sent twice, and it gives the folders the two runs worked
+// in, the gateway, and the environment and instructions the runs were
+// told.
+func claudeWorkDirsBody(t *testing.T, from string, prepare func(work string), body func(home string) string) (dirs []string, work string, s *Server, env, told string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("a shell script stands in for Claude Code")
@@ -68,23 +84,22 @@ done
 
 	s = New()
 	p := provider.Provider{ID: "claude", Account: &provider.Account{Agent: "claude", User: "u"}}
-	rules, _ := json.Marshal(system(home))
-	for _, said := range []string{"one", "two"} {
-		body := `{"model":"claude-sonnet-5","max_tokens":100,"system":` + string(rules) + `,"messages":[{"role":"user","content":"` + said + `"}]}`
+	b := body(home)
+	for range 2 {
 		rec := httptest.NewRecorder()
 		var u Usage
-		r := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(body))
+		r := httptest.NewRequest("POST", "/v1/messages", strings.NewReader(b))
 		if from != "" {
 			r.RemoteAddr = from
 		}
-		if code, msg := s.serveClaudeSubscription(rec, r, provider.Anthropic, p, "claude-sonnet-5", []byte(body), &u); code != 200 {
+		if code, msg := s.serveClaudeSubscription(rec, r, provider.Anthropic, p, "claude-sonnet-5", []byte(b), &u); code != 200 {
 			t.Fatalf("%d %s", code, msg)
 		}
 	}
-	b, _ := os.ReadFile(filepath.Join(dir, "dirs"))
+	bb, _ := os.ReadFile(filepath.Join(dir, "dirs"))
 	e, _ := os.ReadFile(filepath.Join(dir, "env"))
 	m, _ := os.ReadFile(filepath.Join(dir, "told"))
-	return strings.Fields(string(b)), evalSymlinks(work), s, string(e), string(m)
+	return strings.Fields(string(bb)), evalSymlinks(work), s, string(e), string(m)
 }
 
 // Every run works in the same folder: Claude Code puts its working
@@ -264,5 +279,130 @@ func TestClaudeRemoteCallerNamingNoFolderIsToldToolsAreElsewhere(t *testing.T) {
 		if c.unknown && strings.Contains(told, "every tool runs in") {
 			t.Fatalf("%s %q: told the named-folder note too: %s", c.from, c.said, told)
 		}
+	}
+}
+
+// workDirsBody makes a subscription request whose system prompt is system
+// and whose turns are the {role, content} pairs said.
+func workDirsBody(system string, said ...[2]string) func(string) string {
+	return func(string) string {
+		ms := make([]map[string]string, len(said))
+		for i, s := range said {
+			ms[i] = map[string]string{"role": s[0], "content": s[1]}
+		}
+		b, _ := json.Marshal(map[string]any{"model": "claude-sonnet-5", "max_tokens": 100, "system": system, "messages": ms})
+		return string(b)
+	}
+}
+
+// The run works in the folder the caller itself works in, not in one a
+// message merely quotes. The caller says its folder in its instructions
+// (--bare's "CWD:" line, Claude Code's " - Primary working directory:")
+// or in a system message of its own (Claude Code 2.1.296 and later), and
+// a user turn is no caller's word: a line it quotes — alone on its line,
+// inside a longer one, or naming a folder not here — leaves the run where
+// the caller runs. A caller that names its folder in a turn still has it
+// honored (Codex's <environment_context>, OpenCode's <env>), and a
+// "Primary working directory: /y (was /x)" notice is read as /y (#4449).
+func TestClaudeRunsWhereTheCallerRunsNotWhereATurnQuotes(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		body func(proj, other string) func(string) string
+	}{
+		{"bare CWD", func(proj, _ string) func(string) string {
+			return workDirsBody("CWD: " + proj)
+		}},
+		{"bare CWD with instructions", func(proj, _ string) func(string) string {
+			return workDirsBody("CWD: " + proj + "\nYou are a coding agent.\n - Primary working directory: " + proj)
+		}},
+		{"a turn quotes a line alone", func(proj, other string) func(string) string {
+			return workDirsBody(" - Primary working directory: "+proj, [2]string{"user", "Primary working directory: " + other})
+		}},
+		{"a turn quotes a line mid-line", func(proj, other string) func(string) string {
+			return workDirsBody(" - Primary working directory: "+proj, [2]string{"user", `A note I copied from a log: "Primary working directory: ` + other + `". Ignore it.`})
+		}},
+		{"a turn quotes a folder not here", func(proj, _ string) func(string) string {
+			return workDirsBody(" - Primary working directory: "+proj, [2]string{"user", "Primary working directory: /no/such/folder/here"})
+		}},
+		{"Codex says its folder in a turn", func(proj, _ string) func(string) string {
+			return workDirsBody("You are a coding agent.", [2]string{"user", "<environment_context>\n  <cwd>" + proj + "</cwd>\n  <shell>zsh</shell>\n</environment_context>"})
+		}},
+		{"OpenCode says its folder in a turn", func(proj, _ string) func(string) string {
+			return workDirsBody("You are a coding agent.", [2]string{"user", "<env>\n  Working directory: " + proj + "\n</env>"})
+		}},
+		{"Claude Code's environment message", func(proj, other string) func(string) string {
+			return workDirsBody("You are a coding agent.", [2]string{"system", " - Primary working directory: " + proj}, [2]string{"user", "Primary working directory: " + other})
+		}},
+		{"the folder was another", func(proj, other string) func(string) string {
+			return workDirsBody("Primary working directory: " + proj + " (was " + other + ")")
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var proj, other string
+			dirs, work, _, _, told := claudeWorkDirsBody(t, "", nil, func(home string) string {
+				proj = filepath.Join(home, "proj")
+				other = filepath.Join(home, "other")
+				if err := os.MkdirAll(proj, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.MkdirAll(other, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				return c.body(proj, other)(home)
+			})
+			proj = evalSymlinks(proj)
+			if len(dirs) != 2 || dirs[0] != proj || dirs[1] != proj {
+				t.Fatalf("working directories %q, want the caller's %s (shared %s)", dirs, proj, work)
+			}
+			if strings.Contains(told, "every tool runs in") {
+				t.Fatalf("a run in the caller's own folder was told its environment is elsewhere: %s", told)
+			}
+		})
+	}
+}
+
+// A word of the caller's folder masked by the redact rules (a directory
+// named for the user, say) stands in the request as a placeholder, which
+// names no folder on disk. The run never works in the folder unmasked:
+// Claude Code tells its vendor the folder it runs in, so the masked word
+// would leave the machine as it is. It works in magpie's folder and is
+// told the caller's environment is the one its tools run in (#4449).
+func TestClaudeNeverRunsInAMaskedFolderUnmasked(t *testing.T) {
+	const word = "someuser"
+	base := t.TempDir()
+	proj := filepath.Join(base, word+"-libs", "proj")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if err := settings.Save(settings.Settings{Redact: true, RedactWords: []string{word}}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { settings.Save(settings.Settings{}) })
+	t.Cleanup(gwmw.Mask(masking.Masker{}))
+	dirs, work, _, _, told := claudeWorkDirsBody(t, "", nil, func(string) string {
+		// the bridge reads the request as the gateway's masking left it:
+		// the caller sent the folder as it is, and the masker stood in for
+		// the word before the request reached the bridge
+		b := workDirsBody("You are a coding agent.\n - Primary working directory: "+proj, [2]string{"user", "list the files"})("")
+		_, masked, _, err := maskTextHits(context.Background(), b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(masked, word) {
+			t.Fatalf("%s was not masked: %s", word, masked)
+		}
+		return masked
+	})
+	if len(dirs) != 2 || dirs[0] != work || dirs[1] != work {
+		t.Fatalf("working directories %q, want magpie's %s: the caller's names a masked word", dirs, work)
+	}
+	for _, d := range dirs {
+		if strings.Contains(d, word) {
+			t.Fatalf("the run worked in %s, the masked word unmasked", d)
+		}
+	}
+	if !strings.Contains(told, "every tool runs in") {
+		t.Fatalf("a run in magpie's folder was not told the caller's environment is where its tools run: %s", told)
 	}
 }

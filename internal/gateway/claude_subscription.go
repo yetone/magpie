@@ -496,12 +496,13 @@ func claudeWorkDir() (string, error) {
 	return dir, nil
 }
 
-// clientWorkDir is the working directory the caller's instructions name,
-// the last one they name, as Claude Code ("Primary working directory:"),
-// Codex (<cwd>), OpenCode ("Working directory:") and pi ("Current working
-// directory:") write it; "" when they name none, or one that isn't an
-// absolute path to a folder on this computer (a caller elsewhere). The
-// model's own words are not read: what it says is no caller's.
+// clientWorkDir is the working directory the caller names, the last one
+// it names, as Claude Code ("Primary working directory:", or just "CWD:"
+// on a --bare run), Codex (<cwd>), OpenCode ("Working directory:") and pi
+// ("Current working directory:") write it; "" when they name none, or one
+// that isn't an absolute path to a folder on this computer (a caller
+// elsewhere). The model's own words are not read: what it says is no
+// caller's.
 func clientWorkDir(req *Request) string {
 	dir := clientNamedWorkDir(req)
 	if dir == "" || !filepath.IsAbs(dir) {
@@ -509,6 +510,12 @@ func clientWorkDir(req *Request) string {
 	}
 	dir = filepath.Clean(dir)
 	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		// a folder the redact rules masked a word of names no folder on
+		// disk, and is never unmasked to run in: Claude Code tells its
+		// vendor the folder it runs in, so the masked word would go out
+		// as it is. The run works in magpie's folder, told the caller's
+		// (envElsewhere), and the model's paths are put back on the way
+		// to the caller's tools (#4449)
 		return ""
 	}
 	return dir
@@ -526,31 +533,71 @@ func clientNamedWorkDir(req *Request) string {
 // 2.1.296 and later give their environment as a {role: "system"} message
 // after the user's first, so the run is told it in the conversation,
 // after the caller's instructions (envTurnsNote).
+//
+// What the caller itself says wins over what a turn of the conversation
+// says: a user turn that quotes a working-directory line ("Primary
+// working directory: /x", alone on its line or inside a longer one) is no
+// caller's word. Only the forms a caller states in a turn are read there
+// (Codex's <environment_context> is one of the user's, OpenCode's <env> a
+// later message), and a line quoted from Claude Code's own words — its
+// instructions or a --bare run's "CWD:" — is never one of them.
 func clientNamedWorkPlace(req *Request) (dir string, inTurns bool) {
-	look := func(t string, turn bool) {
-		for _, m := range clientCwdPattern.FindAllStringSubmatch(t, -1) {
+	look := func(t string, turn bool, re *regexp.Regexp) {
+		for _, m := range re.FindAllStringSubmatch(t, -1) {
 			for _, g := range m[1:] {
-				if g = strings.Trim(strings.TrimSpace(g), "`'\""); g != "" {
+				g = strings.Trim(strings.TrimSpace(g), "`'\"")
+				if g = wasDir.ReplaceAllString(g, ""); g != "" {
 					dir, inTurns = g, turn
 				}
 			}
 		}
 	}
-	look(req.System, false)
+	// the caller's own: its instructions, then a system message of its
+	// own, which says so after
+	look(req.System, false, clientSaidWorkDir)
 	for _, m := range req.Messages {
-		if m.Role == "assistant" {
+		if m.Role != "system" {
 			continue
 		}
 		for _, p := range m.Parts {
 			if p.Kind == Text {
-				look(p.Text, true)
+				look(p.Text, true, clientSaidWorkDir)
+			}
+		}
+	}
+	if dir != "" {
+		return dir, inTurns
+	}
+	// what a caller states in a turn, which its own instructions and
+	// Claude Code's lines are never part of
+	for _, m := range req.Messages {
+		if m.Role == "assistant" || m.Role == "system" {
+			continue
+		}
+		for _, p := range m.Parts {
+			if p.Kind == Text {
+				look(p.Text, true, clientTurnWorkDir)
 			}
 		}
 	}
 	return dir, inTurns
 }
 
-var clientCwdPattern = regexp.MustCompile(`(?m)(?:Primary working directory|^\s*(?:-\s*)?Working directory|Current working directory): *([^\r\n]+)$|<cwd>([^<\r\n]+)</cwd>`)
+// clientSaidWorkDir is where the caller itself says its working directory
+// is, on a line of its own: Claude Code's, in its instructions (" - Primary
+// working directory: /x", a moved folder as "Primary working directory: /y
+// (was /x)"), on a --bare run just "CWD: /x"; OpenCode's, in its <env>;
+// pi's ("Current working directory:"); Codex's and pi's <cwd>.
+var clientSaidWorkDir = regexp.MustCompile(`(?m)^\s*(?:-\s*)?(?:Primary working directory|Working directory|Current working directory|CWD): *([^\r\n]+)$|<cwd>([^<\r\n]+)</cwd>`)
+
+// clientTurnWorkDir is where a caller says its working directory is in a
+// turn of the conversation, on a line of its own: Codex's
+// <environment_context> is one of the user's, OpenCode's <env> a later
+// message. Claude Code states its folder in its instructions or a system
+// message of its own, and --bare's "CWD:" is its whole system prompt, so
+// their forms are not read in a turn: a line a user message quotes —
+// Claude Code's or anyone's — is no caller's word.
+var clientTurnWorkDir = regexp.MustCompile(`(?m)^\s*(?:-\s*)?(?:Working directory|Current working directory): *([^\r\n]+)$|<cwd>([^<\r\n]+)</cwd>`)
 
 func evalSymlinks(path string) string {
 	if p, err := filepath.EvalSymlinks(path); err == nil {
