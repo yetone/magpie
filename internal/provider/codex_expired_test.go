@@ -184,7 +184,7 @@ func TestCodexUsageOther401NotRenewed(t *testing.T) {
 	}
 	_, refreshes, _ := codexExpiredFakes(t, other, false)
 	u := LoginUsage(context.Background(), "codex")
-	if u["me@example.com"].Error != "Unauthorized" || len(refreshes()) != 0 {
+	if u["me@example.com"].Error != "ChatGPT answered the usage read with HTTP 401 Unauthorized: Unauthorized" || len(refreshes()) != 0 {
 		t.Fatalf("%+v, refreshes %q", u, refreshes())
 	}
 }

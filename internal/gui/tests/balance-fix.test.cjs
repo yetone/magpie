@@ -133,15 +133,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     ]);
     assert.match(said[0], /set it to …\/api\/user\/self/);
     assert.match(said[1], /^Add the header New-Api-User = your user ID/);
-    assert.equal(said[2], "Allowance unavailable");
+    assert.equal(said[2], "Allowance unavailable — hover for why");
     // the card's own words for a ZCode account with nothing to spend, and
     // the action on the card itself (there is none in the error to hover for)
     for (const s of [said[3], said[4]]) {
       assert.match(s, /^ZCode: no GLM Coding Plan, and no free Start Plan/);
       assert.match(s, /subscribe to a GLM Coding Plan to use this account/);
     }
-    assert.equal(said[5], "Allowance unavailable", "a Start Plan that couldn't be read is not a plan that ended");
-    assert.equal(said[6], "Allowance unavailable", "a sign-in error names the address itself and is not the card's")
+    assert.equal(said[5], "Allowance unavailable — hover for why", "a Start Plan that couldn't be read is not a plan that ended");
+    assert.equal(said[6], "Allowance unavailable — hover for why", "a sign-in error names the address itself and is not the card's")
     const missing = await page.evaluate(() => [
       "…/api/usage/token takes the API key, not this token: for the account's balance, new-api uses /api/user/self; sub2api uses /api/v1/user/profile.",
       "The token needs a Balance URL: a new-api relay uses /api/user/self; a sub2api panel uses /api/v1/user/profile to read the account's balance.",

@@ -46,7 +46,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.route("**/*", server(lang));
       await page.goto("http://magpie.test/?view=providers");
       await page.waitForFunction(() => typeof quotaError === "function");
-      const generic = await page.evaluate(() => t("Allowance unavailable"));
+      const generic = await page.evaluate(() => t("Allowance unavailable — hover for why"));
       const want = await page.evaluate((w) => t("Allowance unavailable: {why}", { why: w }), why);
       assert.ok(want.includes(why), want);
       if (lang !== "en") assert.notEqual(want, `Allowance unavailable: ${why}`, `${lang} has its own words`);

@@ -456,3 +456,26 @@ func TestChatGPTAPIExplain(t *testing.T) {
 		}
 	}
 }
+
+// A ChatGPT API account's usage line says why there is none, and where it
+// is told, rather than a read that failed (danzi002 on Discord: accounts
+// added through the API show no allowance, ones signed in as ChatGPT do).
+// OpenAI's API is asked nothing for it.
+func TestChatGPTAPIUsageSaysWhere(t *testing.T) {
+	claudeHome(t)
+	f := newFakeOpenAI(t)
+	if st := signInVia(t, f, "oaiapp_9", same); st.State != "done" {
+		t.Fatalf("sign-in %+v", st)
+	}
+	n := len(f.forms)
+	q, ok := LoginUsage(context.Background(), ChatGPTAPIID)["me@example.com"]
+	if !ok || q.Error != siwcNoUsage || q.SeeAt != SIWCUsageURL || len(q.Windows) != 0 {
+		t.Fatalf("read %+v (%v)", q, ok)
+	}
+	if !strings.Contains(q.Error, "chatgpt.com/settings/usage") || !strings.Contains(q.Error, "added as ChatGPT") || strings.Contains(q.Error, "side by side") {
+		t.Fatalf("said %q", q.Error)
+	}
+	if len(f.forms) != n {
+		t.Errorf("OpenAI was asked %d times for it", len(f.forms)-n)
+	}
+}

@@ -99,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         panel: panelQuotaCard(q).querySelector(".pq-sub.err").textContent,
       }), state.cards[0]);
       for (const text of Object.values(siblings)) assert.ok(text.includes(want), text);
-      assert.equal(await page.evaluate(() => quotaError("network is unreachable")), await page.evaluate(() => t("Allowance unavailable")), "unrelated errors keep their classification");
+      assert.equal(await page.evaluate(() => quotaError("network is unreachable")), await page.evaluate(() => t("Allowance unavailable — hover for why")), "unrelated errors keep their classification");
       assert.equal(await page.evaluate(e => quotaError(e), olderError), want, "an older magpie's words are read too");
       // any other reason the helper gave, and a run that said none before
       // magpie stopped waiting, are said on the card, not "unavailable"
