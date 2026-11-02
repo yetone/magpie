@@ -4089,7 +4089,10 @@ function routingPage(part) {
     const sd = el("span", "said"), cut = how === "ok" || how === "moved" ? said.lastIndexOf(" · ") : -1;
     if (cut > 0) sd.classList.add("split"), sd.append(el("span", "who", said.slice(0, cut)), el("span", "mdl", said.slice(cut)));
     else sd.textContent = said;
-    to.append(el("i"), sd);
+    // the logo of who answered before its name, as the request's story
+    // has it (Jiabubu on Discord)
+    const by = tr && tried(r, tr);
+    to.append(el("i"), ...(by ? [icon(logoOf(by))] : []), sd);
     if (tr?.effort) {
       const ef = el("span", "ef" + (tr.picked ? " picked" : ""));
       const was = r.effort && r.effort !== tr.effort;

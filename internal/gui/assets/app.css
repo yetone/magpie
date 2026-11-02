@@ -1560,7 +1560,9 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led-tight { flex: 1 1 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11.5px; color: var(--muted); }
 .led-tight[hidden] { display: none; }
 .led .where { color: var(--fg-2); }
-.led .where-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.led .where-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.led .where-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.led .where-line > .ic { width: 14px; height: 14px; flex: none; }
 .led .source-badges { display: flex; flex-wrap: nowrap; gap: 4px; margin-top: 4px; }
 .led .price-reference { font-size: 10px; color: var(--muted); }
 .led .cost { color: var(--green); }

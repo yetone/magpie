@@ -2449,7 +2449,12 @@ function renderLedger() {
       : mcp ? [r.providerName && t(r.providerName), r.host].filter(Boolean).join(" · ") || "—"
       : search ? [r.providerName && t(r.providerName), r.host, r.providerKeyName].filter(Boolean).join(" · ") || "—"
       : t(r.providerName) + (r.host ? " · " + r.host : "");
-    const wc = td(el("div", "where-name", where), "where", where);
+    // the provider's logo before its name, as on the Routing page (Jiabubu
+    // on Discord); a session file's record names none for sure
+    const face = !local && providers.find((p) => p.id === r.provider);
+    const line = el("div", "where-line");
+    line.append(...(face ? [icon(face.icon || "generic")] : []), el("div", "where-name", where));
+    const wc = td(line, "where", where);
     const badges = el("div", "source-badges");
     if (local && r.session_account && r.session_official_login) {
       const badge = el("span", "src official", t("OFFICIAL"));

@@ -309,6 +309,7 @@
   :is(.rt-req, .rt-probe) .to .said .who { min-width: 40px; }
   :is(.rt-req, .rt-probe) .to .said .mdl { max-width: calc(100% - 40px); }
 }
+:is(.rt-req, .rt-probe) .to > .ic { width: 14px; height: 14px; }
 :is(.rt-req, .rt-probe) .to i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 :is(.rt-req, .rt-probe).moved .to i { background: var(--accent); }
 :is(.rt-req, .rt-probe).bad .to { color: var(--red); }
