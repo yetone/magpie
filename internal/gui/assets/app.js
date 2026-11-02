@@ -21604,24 +21604,43 @@ function sideEffortChip(val, levels, saved, now, cls, dflt, save) {
   val.append(b);
 }
 
-// renderReplies: whether a reply's model names the member of magpie's
-// that answered it (#822), for agents that count usage by it.
+// a reply's model (replyModel): asked for, the member (#822), or the vendor's (ZoeCats)
+const REPLY_MODELS = [
+  ["", "The model asked for", "The group, alias or provider/model the agent asked for. A reply the vendor named as asked keeps the vendor's name"],
+  ["member", "The member that answered", "magpie's provider/model that answered (workbuddy/glm-5.3-flash), for agents that count usage by it. Claude Code, Claude Desktop and Codex get the model asked for"],
+  ["vendor", "The vendor's own name", "As the vendor wrote it (glm-5.3-flash-202606), for every agent, groups included"],
+];
+function replyModelRow(s, keep) {
+  const r = el("div", "row pref"), who = el("div", "who"), val = el("div", "val"), n = t("Model name in replies");
+  r.id = "replyModelRow";
+  who.append(el("div", "name", n), el("div", "sub", t("What a reply's model says when the request went out under another name than the agent asked for. The X-Magpie-Model header names the member to every agent, and a request's X-Magpie-Response-Model (asked, member or vendor) picks for itself")));
+  const cur = REPLY_MODELS.find(([v]) => v === (s.replyModel || "")) || REPLY_MODELS[0], b = el("button", "sess-pick reply-model");
+  b.type = "button";
+  b.title = n;
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-expanded", "false");
+  b.append(el("span", "", t(cur[1])), svg(CHEV, 11, 1.6));
+  b.onclick = (e) => {
+    e.stopPropagation();
+    if (b.classList.contains("open")) return closeProtoMenu();
+    openProtoMenu(b, REPLY_MODELS.map(([v, name, note]) => ({ v, name, note })), cur[0], (v) => v !== cur[0] && savePrefs({ ...keep, replyModel: v }), "Model name in replies", "sess-menu", "right");
+  };
+  val.append(b);
+  r.append(who, val);
+  return r;
+}
+// renderReplies: a reply's model name, and how replies are kept going
 function renderReplies(s, keep) {
   const box = $("#replyList");
   box.replaceChildren();
   const onOff = [["off", t("Off")], ["on", t("On")]];
-  const r = segRow("memberModelRow", t("Name the member in replies"),
-    t("A reply's model says magpie's provider/model that answered (workbuddy/glm-5.3-flash), not the vendor's own name, for agents that count usage by it. Claude Code, Claude Desktop and Codex keep the vendor's; the X-Magpie-Model header says it to every agent"),
-    onOff, s.memberModel ? "on" : "off", (v) => savePrefs({ ...keep, memberModel: v === "on" }), "sub");
+  const r = replyModelRow(s, keep);
   // a reply stuck in a loop is ended with an error the agent can act on,
   // not let run to its output limit (#1359): on unless turned off
   const l = segRow("loopGuardRow", t("Stop looping replies"),
     t("A reply whose reasoning or text goes round the same few lines is ended with an error the agent can retry, not left to run to its output limit"),
     onOff, s.noLoopGuard ? "off" : "on", (v) => savePrefs({ ...keep, noLoopGuard: v === "off" }));
-  // how many more accounts or members a request the vendor's safety filter
-  // refused is asked of (#248): every one left unless set. Never hands the
-  // refusal back, which Claude Code answers with its own fallback model (DD
-  // on Discord)
+  // how many more are asked after a safety refusal (#248): every one unless set
   const counts = [["0", t("Never ask again")], ["1", "1"], ["2", "2"], ["3", "3"]];
   const n = s.refusalRetries == null || s.refusalRetries < 0 ? "" : String(s.refusalRetries);
   if (n && !counts.some(([id]) => id === n)) counts.push([n, n]); // set by hand in settings.json
@@ -21643,12 +21662,7 @@ function renderReplies(s, keep) {
   box.append(r, l, f, k, c, u);
 }
 
-// renderDisabledModels: the models the user turned off for every request
-// through magpie (#1867). Each pattern is a row with what it matches now and
-// Enable; Disable a model picks one from the list, or takes what is typed
-// (a glob such as *fable*). A disabled model is left out of magpie's lists
-// and refused by the gateway, so nothing reaches it through magpie; an agent
-// signed in to the vendor itself isn't covered, which the row says.
+// renderDisabledModels: models turned off for every request (#1867), a row per pattern
 function renderDisabledModels(s) {
   const box = $("#disabledModelsList");
   if (!box) return;
@@ -21713,11 +21727,7 @@ const REDACT_KINDS = [
   ["bucket", "Cloud storage buckets", "The bucket in s3://, gs://, oss://, cos:// and storage URLs; the path in it stays", false],
 ];
 
-// renderDiscovery: whether magpie reads the agents' own sign-ins —
-// Claude Code's and Codex's files, the Keychain, Copilot's, Cursor's and
-// the rest — and serves them as subscriptions (#1535). Set on its own:
-// saved, magpie forgets the accounts it read, and API-key providers go on.
-// MAGPIE_NO_ACCOUNTS keeps it off for that run whatever is saved.
+// renderDiscovery: whether magpie serves the agents' own sign-ins (#1535), set on its own
 function renderDiscovery(s, keep) {
   const box = $("#discoveryList");
   const r = el("div", "row pref");
@@ -21976,12 +21986,7 @@ function pmSub(m) {
 }
 
 // ---------- what masking swapped (maskrec) ----------
-// Settings › Privacy opens on what masking kept from vendors: how much, of
-// which kinds, found how, from which agents to which providers, over 7 or
-// 30 days (/api/masking/summary), and each request's record under it
-// (/api/masking/records). What a placeholder stood for is asked only while
-// the reader points at it (/api/masking/value): it is in this magpie's
-// memory alone, never on disk, so after a restart it is gone.
+// a placeholder's value is asked only while pointed at (/api/masking/value), in memory alone
 const MASK_KINDS = {
   API_KEY: "API keys", PRIVATE_KEY: "Private keys", TOKEN: "Tokens", PASSWORD: "Passwords", SECRET: "Secrets",
   EMAIL: "Emails", PHONE: "Phone numbers", ID_CARD: "ID numbers", BANK_CARD: "Bank cards",
@@ -22107,11 +22112,7 @@ function openMaskRecord(key) {
   show("masking").then((went) => { if (went !== false && key && view === "masking") magpie.call("masking", "focus", key); });
 }
 
-// renderRedactRules: the user's own rules for secrets magpie's don't know, a
-// gateway's oc_sk_… key say (#195) — one row each, and a row to add one by a
-// prefix or a regular expression. They are set on their own, all of them each
-// time, so one magpie can't use (a pattern that doesn't compile) is said in
-// the row, what was typed kept, and the rest stay as they were.
+// renderRedactRules: the user's own secret rules (#195), all set on their own each time
 let ruleDraft = { kind: "", by: "prefix", match: "", err: "" };
 function renderRedactRules(s, row) {
   const rules = s.redactRules || [];
@@ -22656,7 +22657,7 @@ function prefsKeep(s) {
     redact: !!s.redact, redactPersonal: !!s.redactPersonal, redactKinds: s.redactKinds || {}, redactWords: s.redactWords || [], redactWordsAnyCase: !!s.redactWordsAnyCase, redactWordsWhole: !!s.redactWordsWhole, redactShape: !!s.redactShape, codexWarmup: s.codexWarmup || "",
     claudeWarmup: s.claudeWarmup || "", codexWarmAt: s.codexWarmAt || "", claudeWarmAt: s.claudeWarmAt || "",
     codexWarmAts: warmTimes(s.codexWarmAts, s.codexWarmAt), claudeWarmAts: warmTimes(s.claudeWarmAts, s.claudeWarmAt), workbuddyCheckin: !!s.workbuddyCheckin, traeCheckin: !!s.traeCheckin, minimaxCheckin: !!s.minimaxCheckin, qoderCheckin: !!s.qoderCheckin, noStats: !!s.noStats, noUsageStats: !!s.noUsageStats, signInLinkOnly: !!s.signInLinkOnly,
-    memberModel: !!s.memberModel, noLoopGuard: !!s.noLoopGuard, claudeLeanPrompt: !!s.claudeLeanPrompt, claudePrintMode: !!s.claudePrintMode, refusalRetries: s.refusalRetries ?? null,
+    replyModel: s.replyModel || "", noLoopGuard: !!s.noLoopGuard, claudeLeanPrompt: !!s.claudeLeanPrompt, claudePrintMode: !!s.claudePrintMode, refusalRetries: s.refusalRetries ?? null,
     noUpdatePill: !!s.noUpdatePill, noAutoUpdate: !!s.noAutoUpdate, updateEvery: s.updateEvery || 360, autoRestart: !!s.autoRestart, noAutoDownload: !!s.noAutoDownload, updateChannel: s.updateChannel || "",
     trayUsage: s.trayUsage || "", trayUsageEvery: s.trayUsageEvery || 3, trayNoLogos: !!s.trayNoLogos, trayNoBird: !!s.trayNoBird, trayNoNumber: !!s.trayNoNumber, trayPace: !!s.trayPace, trayNoCost: !!s.trayNoCost, trayWindows: s.trayWindows || {}, vision: s.vision || "", visionEffort: s.visionEffort || "", searcherEffort: s.searcherEffort || "", imageGen: s.imageGen || "", imageTimeout: s.imageTimeout || 0, classifyTimeout: s.classifyTimeout || 0, searcher: s.searcher || "", searchFirst: s.searchFirst || "", currency: s.currency || "usd",
     chineseUnits: !!s.chineseUnits, usageAlert: s.usageAlert || 0, balanceAlert: s.balanceAlert || 0, resetReminder: s.resetReminder || 0,

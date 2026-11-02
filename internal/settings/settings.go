@@ -352,16 +352,24 @@ type Settings struct {
 	// "<provider>|<display name>", which provider.adoptLegacyPluginCheckins
 	// carries over).
 	CheckinOff []string `json:"checkinOff,omitempty"`
-	// MemberModel has a reply's model name the routing group's member
-	// that answered, as magpie's provider/model id (workbuddy/glm-5.3-flash),
-	// for agents that count usage by the reply's model (#822). Off, as by
-	// default, a reply sent under another name than the one asked for (a
-	// group's member, a model's own id, a provider/model id) names the
-	// model the agent asked for (issennknight on Discord: an agent warned
-	// that deepseek-v4.1-flash came back as deepseek-v4.1-flash-1017);
-	// one the vendor named as asked keeps the vendor's name, a dated one
-	// too. Claude Code, Claude Desktop and Codex never get the member's
-	// id: they read the name themselves (gateway's replyNamingOf).
+	// ReplyModel is what a reply's model name says when the request went
+	// out under another name than the one asked for (a group's member, a
+	// model's own id, a provider/model id): "" the model the agent asked
+	// for (issennknight on Discord: an agent warned that
+	// deepseek-v4.1-flash came back as deepseek-v4.1-flash-1017), "member"
+	// magpie's provider/model id of the member that answered
+	// (workbuddy/glm-5.3-flash), for agents that count usage by it (#822),
+	// "vendor" the vendor's own text, as every reply said before the
+	// asked-for name (ZoeCats on Discord). One the vendor named as asked
+	// keeps the vendor's name, a dated one too. Claude Code, Claude
+	// Desktop and Codex never get the member's id: they read the name
+	// themselves (gateway's replyNamingOf). A request's
+	// X-Magpie-Response-Model says it for that request alone. "asked" is
+	// read as "".
+	ReplyModel string `json:"replyModel,omitempty"`
+	// MemberModel is ReplyModel "member" as a magpie before ReplyModel
+	// kept it: read as that when ReplyModel isn't set, and written beside
+	// it for such a magpie (normal).
 	MemberModel bool `json:"memberModel,omitempty"`
 	// NoLoopGuard lets a streamed reply run on when its reasoning or text
 	// is stuck in a loop of the same few lines (#1359). Off, as by
@@ -1064,6 +1072,16 @@ const AnyProvider = "*/"
 // UpdateStable is UpdateChannel's Stable: a version a week, an urgent one
 // at once.
 const UpdateStable = "stable"
+
+// What a reply's model name says (ReplyModel): the model asked for is "".
+const (
+	ReplyAsked  = "asked" // read as ""
+	ReplyMember = "member"
+	ReplyVendor = "vendor"
+)
+
+// ReplyModels are ReplyModel's values besides its default "".
+var ReplyModels = []string{ReplyMember, ReplyVendor}
 
 // anArticle is the article a word takes where a message names it, so that an
 // input price is not "a input price".
@@ -2065,6 +2083,9 @@ func saveOwn(s Settings, recording, reads bool) error {
 	if math.IsNaN(s.BalanceAlert) || math.IsInf(s.BalanceAlert, 0) || s.BalanceAlert < 0 {
 		return fmt.Errorf("a balance alert is at an amount of 0 or more (0 for off), not %v", s.BalanceAlert)
 	}
+	if s.ReplyModel != "" && !slices.Contains(ReplyModels, s.ReplyModel) {
+		return fmt.Errorf("a reply's model names %q (the model asked for), %q or %q, not %q", ReplyAsked, ReplyMember, ReplyVendor, s.ReplyModel)
+	}
 	if s.QuotaReads != "" && s.QuotaReads != "asked" {
 		return fmt.Errorf(`allowances are read "" (whenever magpie needs them) or "asked" (only when asked), not %q`, s.QuotaReads)
 	}
@@ -2312,6 +2333,18 @@ func (s Settings) normal() Settings {
 			*w.at = (*w.ats)[0]
 		}
 	}
+	// a reply's model name: memberModel, as a magpie before replyModel
+	// kept it, when replyModel isn't set, and kept beside it for that
+	// magpie
+	switch s.ReplyModel {
+	case "":
+		if s.MemberModel {
+			s.ReplyModel = ReplyMember
+		}
+	case ReplyAsked:
+		s.ReplyModel = ""
+	}
+	s.MemberModel = s.ReplyModel == ReplyMember
 	// an account's own, by its name in lower case; one with none follows
 	// CodexWarmAt and isn't kept
 	if s.CodexWarmAtOf != nil {

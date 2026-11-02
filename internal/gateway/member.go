@@ -19,10 +19,12 @@ package gateway
 // counted it as a model of its own (#4667), so such a request keeps the
 // vendor's text, as every reply did before the asked-name rule. A request
 // that went out under the name it asked for keeps the vendor's text, a
-// dated name included. Settings' MemberModel, or a request's
-// X-Magpie-Response-Model: member, has the body's model say magpie's id
-// instead, except for the agents that read it themselves (vendorNamed);
-// X-Magpie-Response-Model: vendor keeps the vendor's text. The vendor's
+// dated name included. Settings' ReplyModel says what the body's model
+// is for every request: the model asked for (""), magpie's id ("member"),
+// except for the agents that read it themselves (vendorNamed), or the
+// vendor's text ("vendor", for every agent, as before the asked-for
+// name: ZoeCats on Discord). A request's X-Magpie-Response-Model (asked,
+// member or vendor) says it for that request alone. The vendor's
 // own name is still in the usage log (Record.Served) and on the Routing
 // page: the request's capture is inside this writer.
 
@@ -31,6 +33,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 
@@ -42,7 +45,7 @@ import (
 const (
 	providerHeader      = "X-Magpie-Provider"
 	modelHeader         = "X-Magpie-Model"
-	responseModelHeader = "X-Magpie-Response-Model" // a request's: member, or vendor
+	responseModelHeader = "X-Magpie-Response-Model" // a request's: asked, member or vendor
 )
 
 // vendorNamed are the agents whose replies never name the member: they
@@ -72,9 +75,10 @@ func noteMember(w http.ResponseWriter, r *http.Request, p provider.Provider, mod
 }
 
 // replyNaming is what the reply to r has its body's model say: the
-// member's id (namesMember), the vendor's own text (asked for with
-// X-Magpie-Response-Model: vendor), or else the model the agent asked
-// for, when the request went out under another name.
+// member's id (namesMember), the vendor's own text, or else the model
+// the agent asked for, when the request went out under another name.
+// The request's X-Magpie-Response-Model says which, else Settings'
+// ReplyModel.
 type replyNaming int
 
 const (
@@ -84,21 +88,27 @@ const (
 )
 
 func replyNamingOf(r *http.Request, agent string) replyNaming {
+	// a request's own ask is as it says, for every agent
 	switch strings.ToLower(strings.TrimSpace(r.Header.Get(responseModelHeader))) {
-	case "member":
+	case settings.ReplyAsked:
+		return nameAsked
+	case settings.ReplyMember:
 		return nameMember
-	case "vendor":
+	case settings.ReplyVendor:
 		return nameVendor
 	}
-	if !settings.Shared().MemberModel {
-		return nameAsked
-	}
-	for _, a := range vendorNamed {
-		if agent == a {
+	switch settings.Shared().ReplyModel {
+	case settings.ReplyVendor:
+		// the vendor's text, as every agent was sent before the asked-for
+		// name: the vendorNamed agents read it as they did then
+		return nameVendor
+	case settings.ReplyMember:
+		if slices.Contains(vendorNamed, agent) {
 			return nameAsked
 		}
+		return nameMember
 	}
-	return nameMember
+	return nameAsked
 }
 
 // namesMember is whether the reply to r has its body's model say the

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -21,10 +22,12 @@ import (
 // A reply from a group says which member answered it (#822): its
 // X-Magpie-Provider and X-Magpie-Model headers always, relayed or
 // translated, streamed or not, after a failover too; its body's model the
-// group the agent asked for, unless MemberModel (or the request's
+// group the agent asked for, unless ReplyModel member (or the request's
 // X-Magpie-Response-Model: member) asks for magpie's provider/model id
 // there — never for Claude Code or Codex, which read it themselves — or
-// X-Magpie-Response-Model: vendor for the vendor's own name.
+// ReplyModel or X-Magpie-Response-Model vendor for the vendor's own name,
+// for every agent. memberModel in a file from before ReplyModel still
+// names the member; X-Magpie-Response-Model: asked the model asked for.
 func TestReplyNamesMember(t *testing.T) {
 	bodies := map[string]string{
 		"/v1/messages":         `{"model":"group/auto","max_tokens":100,"messages":[{"role":"user","content":"hi"}]`,
@@ -48,18 +51,28 @@ func TestReplyNamesMember(t *testing.T) {
 		for _, stream := range []bool{false, true} {
 			for _, c := range []struct {
 				name   string
-				on     bool   // MemberModel
+				reply  string // Settings' ReplyModel; old: memberModel in a file from before it
 				header string // X-Magpie-Response-Model
 				token  string // the agent's key
 				want   string // the model the body names
 			}{
-				{"default", false, "", "", "group/auto"},
-				{"on", true, "", "", "b/glm-5.3-flash"},
-				{"asked", false, "member", "", "b/glm-5.3-flash"},
-				{"on, vendor asked", true, "vendor", "", served},
-				{"vendor asked", false, "vendor", "", served},
-				{"on, codex", true, "", TokenFor("codex"), "group/auto"},
-				{"on, claude code", true, "", TokenFor("claude"), "group/auto"},
+				{"default", "", "", "", "group/auto"},
+				{"on", "member", "", "", "b/glm-5.3-flash"},
+				{"old file on", "old", "", "", "b/glm-5.3-flash"},
+				{"asked", "", "member", "", "b/glm-5.3-flash"},
+				{"on, vendor asked", "member", "vendor", "", served},
+				{"vendor asked", "", "vendor", "", served},
+				{"on, codex", "member", "", TokenFor("codex"), "group/auto"},
+				{"on, claude code", "member", "", TokenFor("claude"), "group/auto"},
+				{"old file on, codex", "old", "", TokenFor("codex"), "group/auto"},
+				// ZoeCats on Discord: the vendor's own name, as before the
+				// asked-for name, for every agent and every request
+				{"vendor", "vendor", "", "", served},
+				{"vendor, codex", "vendor", "", TokenFor("codex"), served},
+				{"vendor, claude code", "vendor", "", TokenFor("claude"), served},
+				{"vendor, member asked", "vendor", "member", "", "b/glm-5.3-flash"},
+				{"vendor, name asked", "vendor", "asked", "", "group/auto"},
+				{"on, name asked", "member", "asked", "", "group/auto"},
 			} {
 				name := pa.name + "/" + c.name
 				if stream {
@@ -97,8 +110,17 @@ func TestReplyNamesMember(t *testing.T) {
 					if err := provider.SaveGroup(provider.Group{Name: "auto", Routing: provider.Ordered, Members: []string{"a/glm-5.3-flash", "b/glm-5.3-flash"}}); err != nil {
 						t.Fatal(err)
 					}
-					if c.on {
-						if err := settings.Save(settings.Settings{MemberModel: true}); err != nil {
+					switch c.reply {
+					case "":
+					case "old":
+						if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+							t.Fatal(err)
+						}
+						if err := os.WriteFile(settings.Path(), []byte(`{"memberModel":true}`), 0o600); err != nil {
+							t.Fatal(err)
+						}
+					default:
+						if err := settings.Save(settings.Settings{ReplyModel: c.reply}); err != nil {
 							t.Fatal(err)
 						}
 					}

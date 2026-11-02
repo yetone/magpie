@@ -93,7 +93,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 50 && !saved.length; i++) await page.waitForTimeout(50);
       assert.equal(saved.length, 1, "saved once");
       assert.equal(saved[0].noLoopGuard, true);
-      assert.equal(saved[0].memberModel, false, "the row beside it kept");
+      assert.equal(saved[0].replyModel, "", "the row beside it kept");
       assert.equal(saved[0].redact, true, "the rest kept");
       assert.equal(saved[0].lang, lang);
       assert.deepEqual(await page.evaluate(() => [scrollX, scrollY, document.scrollingElement.scrollTop]), before, "the click moved nothing");
