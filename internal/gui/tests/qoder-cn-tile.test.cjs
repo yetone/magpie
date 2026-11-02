@@ -1,5 +1,5 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// Qoder CN (#349): accounts made with an Alibaba Cloud account or a phone
+// Qoder CN (#349; 中国版 in Chinese, 小武 on Discord): accounts made with an Alibaba Cloud account or a phone
 // number live on qoder.cn and can't sign in on qoder.com, so the Add sheet has
 // a Qoder CN tile beside Qoder's, and Qoder's says it is the international
 // site's (qoder.com). Each tile's title says which accounts it is for; Qoder
@@ -39,15 +39,15 @@ function serve(lang, asked) {
 
 const L = {
   en: {
-    global: "Qoder", globalTitle: /^Qoder \(international\) subscription · Pro\nFor accounts on qoder\.com, the international site\.$/,
+    global: "Qoder", cn: "Qoder CN", globalTitle: /^Qoder \(international\) subscription · Pro\nFor accounts on qoder\.com, the international site\.$/,
     cnTitle: /^Qoder CN subscription · Pro\nFor accounts on qoder\.cn: signed in with an Alibaba Cloud account or a phone number\.$/,
     risk: "Qoder CN accounts can be suspended", hint: "For accounts on qoder.cn: signed in with an Alibaba Cloud account or a phone number.",
     note: /^Qoder has no public API for this/, anyway: "Sign in anyway",
   },
   zh: {
-    global: "Qoder 国际版", globalTitle: /^Qoder 国际版 \(qoder\.com\) 订阅 · Pro\n适用于 qoder\.com（国际站）的账号。$/,
-    cnTitle: /^Qoder CN 订阅 · Pro\n适用于 qoder\.cn 的账号：阿里云账号 \/ 手机号登录。$/,
-    risk: "Qoder CN 账号可能被封禁", hint: "适用于 qoder.cn 的账号：阿里云账号 / 手机号登录。",
+    global: "Qoder 国际版", cn: "Qoder 中国版", globalTitle: /^Qoder 国际版 \(qoder\.com\) 订阅 · Pro\n适用于 qoder\.com（国际站）的账号。$/,
+    cnTitle: /^Qoder 中国版 \(qoder\.cn\) 订阅 · Pro\n适用于 qoder\.cn 的账号：阿里云账号 \/ 手机号登录。$/,
+    risk: "Qoder 中国版 (qoder.cn) 账号可能被封禁", hint: "适用于 qoder.cn 的账号：阿里云账号 / 手机号登录。",
     note: /^Qoder 没有/, anyway: "仍然登录",
   },
 };
@@ -76,10 +76,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.goto("http://magpie.test/?view=providers");
       await page.locator("#addProvider").click();
       const sheet = page.locator("#addSheet");
-      const cn = sheet.locator('.tile[data-pick="Qoder CN"]');
+      const cn = sheet.locator(`.tile[data-pick="${w.cn}"]`);
       const global = sheet.locator(`.tile[data-pick="${w.global}"]`);
       await cn.waitFor();
-      assert.equal(await cn.locator(".n").textContent(), "Qoder CN");
+      assert.equal(await cn.locator(".n").textContent(), w.cn);
       assert.equal(await global.locator(".n").textContent(), w.global);
       assert.match(await cn.getAttribute("title"), w.cnTitle);
       assert.match(await global.getAttribute("title"), w.globalTitle);
@@ -102,7 +102,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(asked, [{ agent: "qoder-cn" }]);
 
       const missing = await page.evaluate(() => [
-        "Qoder (international)", "For accounts on qoder.com, the international site.",
+        "Qoder (international)", "Qoder CN", "For accounts on qoder.com, the international site.",
         "For accounts on qoder.cn: signed in with an Alibaba Cloud account or a phone number.",
       ].filter((k) => !I18N.zh[k]));
       assert.deepEqual(missing, [], "every string has its Chinese");

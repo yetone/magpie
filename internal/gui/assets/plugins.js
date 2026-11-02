@@ -85,6 +85,14 @@
   const gitBehind = (e) => isGit(e.spec) && !!e.commit && !!e.head && !sameCommit(e.commit, e.head);
   // the providers a plugin signs in to, as the add sheet knows them
   const subsOf = (pkg) => (providers?.plugins || []).filter((x) => name(x.spec) === pkg);
+  // as the Add sheet names it
+  const subName = (x) => SUBS.find((y) => y.agent === x.id)?.name || x.name;
+  // with several, the reader picks one by name
+  const signInTo = (b, outs, ev) => {
+    if (outs.length === 1) return pluginSignIn(outs[0].id, ev);
+    openProtoMenu(b, outs.map((x) => ({ v: x.id, name: subName(x), literalName: true, note: "" })), "",
+      (id, e) => pluginSignIn(id, e), "Sign in to which subscription", "", "right");
+  };
   // whether version a comes after b, in semver's order, the same as
   // update.Newer, which puts the dot on Plugins: a pre-release before its
   // release, numbers in it as numbers ("beta.10" after "beta.9"), a number
@@ -528,8 +536,8 @@
     if (out && !on) {
       b.classList.add("go");
       b.textContent = t("Sign in");
-      b.title = subs.length > 1 ? t("Sign in to {name}", { name: out.name }) : "";
-      b.onclick = (ev) => { ev.stopPropagation(); pluginSignIn(out.id, ev); };
+      b.title = subs.length > 1 ? t("Sign in to {name}", { name: subs.map(subName).join(t(", ")) }) : "";
+      b.onclick = (ev) => { ev.stopPropagation(); signInTo(b, subs, ev); };
       return b;
     }
     // an update out: the one button says so in place of Signed in or
@@ -641,14 +649,8 @@
     return box;
   }
 
-  // GitHub's repositories are many and of every kind (the owner: 这里
-  // 应该有分类以及搜索框方便用户筛选): the section has its own kinds, each
-  // counted, and, past a few, a field narrowing by name, author or
-  // description as typed (counted before the page's search). A second
-  // strip says what's installed (the owner: 加一个未安装), across the
-  // kinds; each strip counts what the other, the field and the search
-  // leave, and they narrow the grid together. Only the section is drawn
-  // again; it, its head and its field are kept, as the search is (#1055).
+  // GitHub's section: its own kinds, an installed strip and a field, each
+  // counting what the others leave; only the section redraws (#1055)
   let ghKind = "";       // "" (all) | "pv" | "mw" | "ag"
   let ghHave = "";       // "" (all) | "have" | "none"
   let ghQuery = "";
@@ -670,11 +672,7 @@
     return !f || [l.name, l.github.repo, l.github.owner, l.package, summary(l)].join(" ").toLowerCase().includes(f);
   };
   const ghTitle = () => [el("h3", "", t("Unofficial, on GitHub")), el("span", "", t("repositories their authors tagged {topic} — nobody has reviewed them; read the code before you install one", { topic }))];
-  // GitHub answers after the rest, seconds after on a slow line, and a
-  // section that wasn't there read as there being no such plugins (the
-  // owner: 网慢的用户以为没有非官方插件). Until it answers the section
-  // stands in its place with its head, a word that it is looking and
-  // cards still to come; its cards then come in where those were.
+  // until GitHub answers, its section stands in place, saying it is looking
   let ghArrive = false;
   function ghWaiting() {
     const look = el("span", "pm-ghlook");
@@ -1257,9 +1255,10 @@
         const s = el("span", "pm-sub" + (x.signedIn ? " in" : ""));
         // its built-in runs it, with its accounts: nothing to fix here
         const builtin = !x.signedIn && cands.some((c) => c.id === x.pid);
-        s.append(el("span", "dot"), el("span", "", x.signedIn ? t("{name}: signed in", { name: x.name }) : builtin ? t("{name}: on magpie's built-in", { name: x.name }) : t("{name}: not signed in", { name: x.name })));
-        if (builtin) s.title = t("{name} runs on magpie's built-in, with your accounts; Move {name} here runs it on this plugin", { name: x.name });
-        else if (!x.signedIn && subs.some((y) => y.signedIn)) s.title = t("{name} is a subscription of its own; {other} works without it", { name: x.name, other: subs.find((y) => y.signedIn).name });
+        const nx = subName(x);
+        s.append(el("span", "dot"), el("span", "", x.signedIn ? t("{name}: signed in", { name: nx }) : builtin ? t("{name}: on magpie's built-in", { name: nx }) : t("{name}: not signed in", { name: nx })));
+        if (builtin) s.title = t("{name} runs on magpie's built-in, with your accounts; Move {name} here runs it on this plugin", { name: nx });
+        else if (!x.signedIn && subs.some((y) => y.signedIn)) s.title = t("{name} is a subscription of its own; {other} works without it", { name: nx, other: subName(subs.find((y) => y.signedIn)) });
         sub.append(s);
       }
     } else if ((mw || ag || gw || e.isGateway || toolsOnly || (e.page || e.panels?.length) && e.inMagpieOnly) && !e.providers.length) {
@@ -1312,9 +1311,10 @@
       // signed in to one of its subscriptions already (Qoder, beside Qoder
       // CN; #556): a blue Sign in read as the plugin signed out, so the
       // button names the one it signs in to and stays quiet
-      const out = subs.find((x) => !x.signedIn), some = subs.some((x) => x.signedIn);
-      const s = el("button", "text" + (here || some ? "" : " primary"), some ? t("Sign in to {name}", { name: out.name }) : t("Sign in"));
-      s.onclick = (ev) => pluginSignIn(out.id, ev);
+      const outs = subs.filter((x) => !x.signedIn), some = subs.some((x) => x.signedIn);
+      const s = el("button", "text" + (here || some ? "" : " primary"), !some ? t("Sign in") : outs.length > 1 ? t("Sign in to another…") : t("Sign in to {name}", { name: subName(outs[0]) }));
+      if (outs.length > 1) s.setAttribute("aria-haspopup", "menu");
+      s.onclick = (ev) => { ev.stopPropagation(); signInTo(s, outs, ev); };
       val.append(s);
     }
     // switched on again: a built-in it can carry is offered its way, in

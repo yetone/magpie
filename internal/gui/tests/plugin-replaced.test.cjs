@@ -42,8 +42,8 @@ function server(lang, st) {
 }
 
 const L = {
-  en: { subs: "Subscriptions", plugins: "From plugins", intl: "Qoder" },
-  zh: { subs: "订阅", plugins: "来自插件", intl: "Qoder 国际版" },
+  en: { subs: "Subscriptions", plugins: "From plugins", intl: "Qoder", cn: "Qoder CN" },
+  zh: { subs: "订阅", plugins: "来自插件", intl: "Qoder 国际版", cn: "Qoder 中国版" },
 };
 
 async function open(browser, lang, st, view) {
@@ -89,7 +89,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // signed in to the built-in Qoder CN: its tile, deprecated, under
         // Subscriptions, to add another account
         ({ page, errors } = await open(browser, lang, { installed: false, signedIn: true }, "providers"));
-        assert.deepEqual(await qoderTiles(page), [[w.subs, "Qoder CN"]]);
+        assert.deepEqual(await qoderTiles(page), [[w.subs, w.cn]]);
         // the plugin installed: its tiles alone, not the built-ins' beside
         // them (ARNO's sheet had all four)
         ({ page, errors } = await open(browser, lang, { installed: true }, "providers"));

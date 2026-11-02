@@ -71,7 +71,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.locator("#providers .row").nth(9).waitFor();
         await page.locator("#addProvider").click();
         await page.waitForTimeout(900);
-        await page.locator("#addSheet .tiles button", { hasText: "Qoder CN" }).first().click();
+        await page.locator("#addSheet .tiles button", { hasText: lang === "zh" ? "Qoder 中国版" : "Qoder CN" }).first().click();
         // its risk said, the sign-in asked for
         await page.locator("#addSheet .signing button.primary").first().click();
         // done: the account's editor opens over the list, the sheet put away
