@@ -219,6 +219,10 @@ type Request struct {
 	// replayed: the run started was given the conversation as a
 	// transcript (replaySession)
 	replayed bool
+	// interactive, for the Claude bridge, is that the run answering this
+	// request is Claude Code's interactive mode, not claude -p: what a
+	// refusal it ends in is told with (thirdPartyRefused, #4503)
+	interactive bool
 	// hourMarks has the cache marks magpie adds on Anthropic's Messages
 	// (anthropicBody) last an hour: a Responses client's (Codex's), whose
 	// turns are often more than five minutes apart and whose own vendor
