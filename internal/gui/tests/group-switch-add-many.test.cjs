@@ -6,6 +6,9 @@
 //   groups/switch with on false, the card is dimmed but for the switch and
 //   says "switched off", and the keyboard stays on the switch; on again
 //   posts on true. A group magpie found has no switch (it is removed).
+// - justacati on X: a group switched off is listed after the ones on, and
+//   back in its place when it is on again; Move down on the last one on
+//   is not offered, as it would move it nowhere one can see.
 // - The editor's Add a model picker stays open: each model clicked is added
 //   and ticked, clicked again it is taken out; each says the other groups
 //   it is in. Saved, the members are the ones picked, in the order picked.
@@ -98,12 +101,22 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert((await card("g").locator(".tags").textContent()).includes(w.off), "the card says it is off");
       await page.waitForFunction((m) => document.querySelector("#status").textContent.includes(m), w.offSaid);
       assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("rt-gon")), true, "the keyboard left the switch");
+      const order = () => page.locator(".rt-group[data-id]").evaluateAll((rs) => rs.map((r) => r.dataset.id));
+      assert.deepEqual(await order(), ["other", "auto-one", "g"], "the group switched off is not listed after the ones on");
+      // the last one on can't be moved down into the ones off
+      await card("auto-one").locator(".rt-ghandle").click();
+      const down = page.locator(".menu-item, [role=menuitem]").filter({ hasText: lang === "en" ? "Move down" : "下移" });
+      await down.first().waitFor();
+      assert.equal(await down.first().evaluate((b) => b.disabled || b.getAttribute("aria-disabled") === "true" || b.classList.contains("off")), true, "Move down offered on the last group on");
+      await page.keyboard.press("Escape");
+      await sw().focus();
       const dim = await card("g").evaluate((r) => [...r.children].map((c) => [c.classList.contains("rt-gon"), getComputedStyle(c).opacity]));
       for (const [isSw, o] of dim) assert.equal(o, isSw ? "1" : "0.5");
       assert.equal(await page.locator(".rt-gedit").count(), 0, "the switch opened the editor");
       await sw().click();
       await page.waitForFunction(() => !document.querySelector('.rt-group[data-id="g"]')?.classList.contains("disabled"));
       assert.deepEqual(posts.at(-1), { path: "/api/groups/switch", body: { id: "g", on: true } });
+      assert.deepEqual(await order(), ["g", "other", "auto-one"], "switched on again, the group is not back in its place");
       assert.equal(await at(), before, "the switch moved the page");
 
       // Add a model: several in one go

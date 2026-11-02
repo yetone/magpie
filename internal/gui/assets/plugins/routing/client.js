@@ -5563,7 +5563,11 @@ function routingPage(part) {
   }
   function drawGroups() {
     groupsQuotas = typeof quotas === "undefined" ? undefined : quotas;
-    const all = groups.groups.filter((g) => !g.hidden), hidden = groups.groups.filter((g) => g.hidden);
+    // the ones switched off are listed after the ones on, each part in the
+    // order the user set (justacati on X); moving one still moves it in
+    // that order, which is the one agents' pickers show
+    const listed = groups.groups.filter((g) => !g.hidden);
+    const all = [...listed.filter((g) => !g.disabled), ...listed.filter((g) => g.disabled)], hidden = groups.groups.filter((g) => g.hidden);
     const words = gQ.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     // the group being changed stays, whatever the filter
     const shown = words.length ? all.filter((g) => gEdit?.id === g.id || groupMatches(g, words)) : all;
@@ -6214,7 +6218,7 @@ function routingPage(part) {
       // an editor open in the list is no row to move past: the rows
       // dragged among are the cards, and where one is let go is named by
       // the card it lands on
-      const rows = [...gList.children].filter((r) => r.classList.contains("rt-group"));
+      const rows = [...gList.children].filter((r) => r.classList.contains("rt-group") && r.classList.contains("disabled") === !!g.disabled);
       groupArranging = dragRows(e, b, row, gList, rows, (to) => moveGroup(g.id, shownGroups().indexOf(rows[to].dataset.id)), closeAgentMenu, arranged);
     };
     return b;
@@ -6240,7 +6244,9 @@ function routingPage(part) {
   // the place of the card listed next to it, so a filtered list moves it
   // past the one the reader sees; -1 at either end
   function nextTo(id, by) {
-    const seen = [...gList.querySelectorAll(".rt-group[data-id]")].map((r) => r.dataset.id);
+    // among the ones on, or among the ones off: they are listed apart
+    const off = !!groups.groups.find((g) => g.id === id)?.disabled;
+    const seen = [...gList.querySelectorAll(".rt-group[data-id]")].filter((r) => r.classList.contains("disabled") === off).map((r) => r.dataset.id);
     const n = seen[seen.indexOf(id) + by];
     return n === undefined || !seen.includes(id) ? -1 : shownGroups().indexOf(n);
   }
