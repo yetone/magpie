@@ -1,0 +1,2 @@
+# the bytes Claude Code drew, through a pty or Windows' pseudo console, CRLF and all
+*.bin -text

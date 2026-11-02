@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -314,5 +315,39 @@ func TestClaudeUsageUnavailableRecovers(t *testing.T) {
 	retryClaudeUsage()
 	if q := card(); q.Error != "" || q.AsOf == nil || !q.AsOf.After(at) || len(q.Windows) != 1 || q.Windows[0].Used != 25 {
 		t.Fatalf("next failure should keep the recovered reading: %+v", q)
+	}
+}
+
+// A /usage read that showed no figures is unknown, never an account with
+// no allowance. Seagull fries' Claude Code 2.1.316 on Windows told /usage's
+// panel while it still loaded its figures, and the card said "/usage told
+// no allowance". The helper now says when the panel couldn't load them,
+// and the card keeps the account's last reading then, as for Claude
+// Code's own "temporarily unavailable"; any other panel with no figures
+// is told as what it showed.
+func TestClaudeUsageWithoutFiguresIsUnknown(t *testing.T) {
+	at := time.Now().Add(-10 * time.Minute).Truncate(time.Second)
+	reset := time.Now().Add(time.Hour).Truncate(time.Second)
+	snapshot := lastQuota{At: at, Q: SubscriptionQuota{Provider: "claude", Plan: "pro", Windows: []QuotaWindow{
+		{Name: "5 hours", Used: 40, ResetsAt: &reset},
+	}}}
+	// the result the helper gave for the panel as the pseudo console drew it
+	chrome := "❯ /usage ──────────── Settin s Status Config Usage Stats Session Total cost: $0.0000 Total duration (API): 0s Total duration (wall): 1s Total code changes: 0 lines added, 0 lines removed Usage: 0 input, 0 output, 0 cache read, 0 cache write Loading usage data… Esc to cancel"
+	_, card := claudeUsageCards(t, chrome, nil)
+	if q := card(); !strings.HasPrefix(q.Error, "Claude Code's /usage showed no usage figures: ❯ /usage") || len(q.Windows) != 0 {
+		t.Fatalf("the panel's frame read as %+v", q)
+	}
+	for _, err := range []string{
+		"Claude Code: /usage couldn't load the plan's usage: ❯ /usage Error: Failed to load usage data r to retry · Esc to cancel",
+		"Claude Code: /usage couldn't load the plan's usage: ❯ /usage Loading usage data… Esc to cancel",
+	} {
+		t.Run(err, func(t *testing.T) {
+			_, card := claudeUsageCards(t, "", &snapshot)
+			UsageClaudeVia(func(context.Context, string) (string, error) { return "", errors.New(err) })
+			q := card()
+			if q.Error != "" || q.AsOf == nil || !q.AsOf.Equal(at) || len(q.Windows) != 1 || q.Windows[0].Used != 40 {
+				t.Fatalf("a panel that couldn't load its figures should keep this account's reading: %+v", q)
+			}
+		})
 	}
 }

@@ -373,6 +373,26 @@ do, "Current session: 99% used · resets 7pm (Asia/Shanghai)" (`usageText`,
 tested on the bytes Claude Code 2.1.316 drew, `testdata/usage-2.1.316.bin`),
 for `provider.parseClaudeUsage`. Claude Code 2.1.316's `-p /usage`
 printed only the session's cost there, no window, in a real run.
+The helper reads the screen as a terminal shows it (`grid`,
+[`screen.go`](../../internal/claudetui/screen.go), 200 by 50 on Windows
+as its pseudo console is made, 80 by 24 elsewhere), beside the stream:
+Windows' pseudo console sends only the cells that changed, skipping one
+that holds the same letter ("Settin\x1b[1Cs"), and a window drawn only
+for a moment is kept as it looked (`panel`). The panel is drawn before
+its figures, "Loading usage data…" while Claude Code asks for them: the
+helper waits that out (to `commandWait`), presses "r" once on "Error:
+Failed to load usage data", and a panel that still has no figure is an
+error result, "/usage couldn't load the plan's usage: …". Before, 3s
+still on "Loading usage data…" was taken as drawn, and the panel's frame
+was told as the figures, which the card read as an account with no
+allowance (Seagull fries, Windows 11; `TestShimWaitsForUsageFigures`, on
+the bytes the pseudo console passed on for a real 2.1.316,
+`testdata/usage-loading-win-2.1.316.bin`, `usage-failed-win-2.1.316.bin`).
+The provider keeps the account's last reading on that error
+(`claudeUsageUnknown`, as for Claude Code's own "temporarily
+unavailable"), and a panel with no figure otherwise is "Claude Code's
+/usage showed no usage figures: …", never "told no allowance", which is
+kept for an account Claude Code refuses (`claudeUsageDenied`).
 
 These one-off interactive runs (`askClaudeTUI`, `claudeUsageTUI`) work in
 magpie's shared work folder (`oneOffDir`: `claudeWorkDir`, a fresh temp

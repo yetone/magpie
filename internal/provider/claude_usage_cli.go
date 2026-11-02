@@ -66,6 +66,16 @@ var claudeUsageLineRE = regexp.MustCompile(`^Current (session|week(?: \(([^)]+)\
 // without an allowance. This says nothing about the account's limits.
 var errClaudeUsageUnavailable = errors.New("Claude Code's /usage is temporarily unavailable")
 
+// claudeUsageUnknown is a /usage read that told nothing of the account,
+// for a reason that passes: Claude Code's own "temporarily unavailable",
+// or a panel that couldn't load its figures (the helper's "/usage
+// couldn't load the plan's usage": still "Loading usage data…", or
+// "Failed to load usage data" after a retry). The card keeps the
+// account's last reading. Windows' pseudo console showed 2.1.316's panel
+// while it still loaded, and the card said the account had no allowance
+// (Seagull fries).
+var claudeUsageUnknown = regexp.MustCompile(`^(?:Claude Code: )?(?:` + regexp.QuoteMeta(errClaudeUsageUnavailable.Error()) + `|/usage couldn't load the plan's usage)`)
+
 var errClaudeCannotRun = errors.New("Claude Code can't be run from here")
 
 // An account error stays visible even when it also mentions a timeout or
@@ -153,8 +163,10 @@ func parseClaudeUsage(text string, now time.Time) ([]QuotaWindow, error) {
 		}) {
 			return out, errClaudeUsageUnavailable
 		}
+		// a panel with no figure says nothing of the account's allowance:
+		// unknown, its words told
 		first, _, _ := strings.Cut(text, "\n")
-		return out, errors.New("Claude Code's /usage told no allowance: " + clipLine(first))
+		return out, errors.New("Claude Code's /usage showed no usage figures: " + clipLine(first))
 	}
 	return out, nil
 }
