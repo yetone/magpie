@@ -40,7 +40,7 @@ async function serve(route) {
   if (url.pathname === "/api/gateway/trace") return json({ mine: false, now: date, totals: { requests: 0, rerouted: 0, errors: 0 } });
   if (url.pathname === "/api/plugins/updates") return json({ waiting: [] });
   if (url.pathname === "/api/usage/quotas" || url.pathname === "/api/usage/quotas/history" || url.pathname === "/api/agents/install" || url.pathname === "/api/plugins/agents") return json([]);
-  if (url.pathname === "/api/whatsnew" || url.pathname === "/api/model-speeds") return json({});
+  if (url.pathname === "/api/whatsnew" || url.pathname === "/api/model-speeds" || url.pathname === "/api/model-loads") return json({});
   if (url.pathname === "/api/upstream") return json({ vendors: [], providers: {} });
   // the sidebar's plugin pages, and plugin panels in magpie's pages: none
   if (url.pathname === "/api/plugin-pages" || url.pathname === "/api/plugin-panels") return json([]);

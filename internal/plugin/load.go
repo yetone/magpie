@@ -90,6 +90,30 @@ func ModelLoad(provider, model string, now time.Time) (pct float64, at time.Time
 	return l.pct, l.at, true
 }
 
+// FreshLoads is every load reported less than LoadFresh before now, by
+// plugin provider id and then the model id lowercased, as ModelLoad
+// answers each: nil when none is (a magpie with no plugin reporting).
+func FreshLoads(now time.Time) map[string]map[string]float64 {
+	loads.Lock()
+	defer loads.Unlock()
+	var out map[string]map[string]float64
+	for provider, m := range loads.m {
+		for k, l := range m {
+			if now.Sub(l.at) > LoadFresh {
+				continue
+			}
+			if out == nil {
+				out = map[string]map[string]float64{}
+			}
+			if out[provider] == nil {
+				out[provider] = map[string]float64{}
+			}
+			out[provider][k] = l.pct
+		}
+	}
+	return out
+}
+
 // NoteLoadsForTest is a "load" event's loads reported at at, for a test.
 func NoteLoadsForTest(provider string, got map[string]float64, at time.Time) {
 	noteLoads(provider, got, at)

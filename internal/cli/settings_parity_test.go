@@ -358,6 +358,7 @@ var notYet = map[string]string{
 	"POST /api/sessions/carry":                   U,  // sessions.go
 	"POST /api/sessions/export":                  U,  // sessions.go
 	"POST /api/sessions/terminal":                W,  // sessions.go
+	"GET /api/model-loads":                       U,  // speeds.go
 	"GET /api/model-speeds":                      U,  // speeds.go
 	"GET /api/gateway/held/{name}":               U,  // trace.go
 	"GET /api/gateway/history":                   U,  // trace.go

@@ -496,8 +496,7 @@ function renderAgents() {
     if (tiers) shownFields.push(tiers);
     const sorted = shownFields.sort((x, y) => wide(y) - wide(x) || extra(x) - extra(y));
     const plain = sorted.filter((f) => !extra(f)).length;
-    // the squares share one cell, side by side: two (Codex's subagents and
-    // sign-in) wrapped the second under the first
+    // the squares share one cell, side by side
     const extras = el("span", "extras-cell");
     const fieldBtn = (f, cls) => {
       const b = el("button", "field " + cls);
@@ -507,8 +506,7 @@ function renderAgents() {
       if (f.value && opt?.direct) b.title += "\n" + directSaid(a, opt);
       const effort = f.key === "effort" || f.label === "effort" || f.label === "thinking" || TIER_EFFORTS.includes(f.label) || f.label === SUB_EFFORT;
       if (opt?.icon || opt?.icons?.length) b.append(optionIcon(opt));
-      // a field with no logo of its own still leads with an icon: how much
-      // effort, or the agent's own for its default, as the picker shows it
+      // no logo of its own: effort's icon, or the agent's for its default
       else if (effort) b.append(effortIcon(f));
       else if (!f.value && !f.menu && a.icon) b.append(icon(a.icon));
       else if (!wide(f) || !f.value) b.append(el("span", "k", t(f.label)));
@@ -517,6 +515,7 @@ function renderAgents() {
       if (f.menu) b.title = f.options.map((o) => `${o.label}: ${o.note}`).join("\n");
       b.append(el("span", "v" + (f.value || f.custom ? "" : " empty"), shown));
       if (f.value && opt?.fast) b.append(fastTag(opt.ultra));
+      if (f.value && opt?.ref) { b.dataset.ref = opt.ref; const g = loadTag(loadOf(opt.ref)); if (g) b.append(g); }
       const c = el("span", "chev");
       c.append(svg(CHEV, 11, 1.7));
       b.append(c);
@@ -4338,6 +4337,7 @@ async function load(again) {
     tintPanel();
     tintTitleBar();
     renderAgents();
+    readLoads(true);
     redrawSuffix();
     redrawNoNames();
     // Update all's outcome stays until the agents are read again
@@ -4833,7 +4833,7 @@ function openPicker(agent, field, anchor, ev, only) {
   }
   const modelPicker = (["model", "small", "large", MEMORIES, SUB_MODEL, AUTO_MODE, "executor", "planner", ...ROLE_MODELS].includes(field.label) || hermesBot(field)) && !only;
   pick = { agent, field, options, groups, anchor, cursor: 0, free: !only && !field.menu, modelPicker, effortPicker, groupFilter: "all" };
-  if (modelPicker) readSpeeds();
+  if (modelPicker) { readSpeeds(); readLoads(); }
   anchor.classList.add("open");
   const pop = $("#pop");
   pop.classList.toggle("model-picker", modelPicker);
@@ -5263,7 +5263,7 @@ function rateTag(rate = 0, was = 0) {
 // loadTag: how busy its plugin says the model is now (magpie.load)
 function loadTag(n) {
   if (n == null) return null;
-  const g = el("span", "badge ctx", Math.round(n) + "%");
+  const g = el("span", "badge ctx load", Math.round(n) + "%");
   g.title = t("{n}% busy now, as its plugin says", { n: Math.round(n) });
   return g;
 }
@@ -5324,14 +5324,7 @@ function contextTag(n, name) {
   return tag;
 }
 
-// pathTag: an agent's model picker says by each model whether the agent
-// asks it through magpie or of its own vendor directly (Claude Code on its
-// own sign-in), and its Default, while it is connected, that it takes the
-// agent off magpie. Every agent's picker says it so, in one tag the note's
-// ellipsis can't cut off: the others' "· via magpie" ended their notes,
-// where Claude Code's was a tag (EZN7L2C3, #834). Codex's own models,
-// through magpie while it is routed, say so too (via); Codex's, Grok
-// Build's and Antigravity CLI's own said nothing at all
+// pathTag: magpie or the vendor direct, by a picker's model (#834)
 function pathTag(o) {
   if (!pick?.agent || o.custom || o.run) return null;
   let tag = null;
@@ -5348,10 +5341,7 @@ function pathTag(o) {
   return tag;
 }
 
-// modelSpeeds: each catalog ref's speed this week from the usage ledger
-// ({ttft ms, tps, n}, /api/model-speeds), read when a model picker opens,
-// at most once a minute; a model several providers serve shows which of
-// them answers it fastest (axuhere on X)
+// modelSpeeds: each ref's speed this week, read once a minute at most
 let modelSpeeds = {}, speedsRead = 0;
 function readSpeeds() {
   if (Date.now() - speedsRead < 60000) return;
@@ -5362,16 +5352,14 @@ function readSpeeds() {
   }).catch(() => { speedsRead = 0; });
 }
 
-// speedRank: about how long a 200-token reply takes on o's provider, in
-// seconds; Infinity when no reply was timed
+// speedRank: a 200-token reply's seconds
 function speedRank(o) {
   const s = o.ref && modelSpeeds[o.ref];
   if (!s || !(s.ttft || s.tps)) return Infinity;
   return (s.ttft || 0) / 1000 + (s.tps ? 200 / s.tps : 0);
 }
 
-// speedTag: the quiet speed by a picker's model, tokens a second, or the
-// first token's wait when only that was timed
+// speedTag: tok/s, else the first token's wait
 function speedTag(o) {
   const s = o.ref && modelSpeeds[o.ref];
   if (!s || !(s.ttft || s.tps)) return null;
@@ -5379,6 +5367,29 @@ function speedTag(o) {
   const tag = el("span", "badge ctx speed", s.tps ? t("{n} tok/s", { n: Math.round(s.tps) }) : secs + "s");
   tag.title = s.tps && s.ttft ? t("first token in {s}s, {n} tokens a second", { s: secs, n: Math.round(s.tps) }) : s.ttft ? t("first token in {s}s", { s: secs }) : t("{n} tok/s", { n: Math.round(s.tps) });
   return tag;
+}
+
+// modelLoads: by ref lowercased, read every 30s at most (axelburks)
+let modelLoads = {}, loadsRead = 0;
+function readLoads(rows) {
+  if (Date.now() - loadsRead < 3e4 || (rows && !$(".field[data-ref]"))) return;
+  loadsRead = Date.now();
+  api("model-loads").then((l) => {
+    l ||= {};
+    if (JSON.stringify(l) === JSON.stringify(modelLoads)) return;
+    modelLoads = l;
+    for (const b of $$(".field[data-ref]")) {
+      b.querySelector(".load")?.remove();
+      const g = loadTag(loadOf(b.dataset.ref));
+      if (g) b.insertBefore(g, b.querySelector(".chev"));
+    }
+    if (pick?.modelPicker) { const o = pick.items?.[pick.cursor]; filter(o && ((x) => x === o)); }
+  }).catch(() => { loadsRead = 0; });
+}
+// loadOf: ref's load, a model@size's its model's
+function loadOf(ref) {
+  const k = (ref || "").toLowerCase(), at = k.lastIndexOf("@");
+  return modelLoads[k] ?? (at > k.indexOf("/") + 1 ? modelLoads[k.slice(0, at)] : null);
 }
 
 function renderList() {
@@ -5408,18 +5419,15 @@ function renderList() {
     if (ctx) words.append(ctx);
     const speed = pick.modelPicker && speedTag(o);
     if (speed) words.append(speed);
-    // an Aside account's note is its e-mail, or Aside's "Local Account",
-    // then whether Aside has it active: the words are magpie's, the e-mail not
+    const busy = pick.modelPicker && loadTag(loadOf(o.ref));
+    if (busy) words.append(busy);
+    // an Aside account's note: its e-mail (as is), then magpie's words
     let note = o.note && o.note !== (o.label || o.value) ? (own ? t(o.note) : asideAccount(pick.agent, pick.field) ? o.note.split(" · ").map((w) => t(w)).join(" · ") : o.note) : "";
-    // which way the model goes, as a tag the note's ellipsis can't cut
-    // off: "· via magpie" ended a long note (an account's e-mail), and
-    // Claude Code's own models said nothing, so an Opus asked of Anthropic
-    // directly and a Sonnet through magpie looked alike (#726)
+    // which way the model goes, a tag the note's ellipsis can't cut (#726)
     const path = pathTag(o);
     if (path) { words.append(path); note = note.replace(/(^| · )via magpie$/, ""); }
     if (q && o.group && !note) note = o.group;
-    // a note cut off by its ellipsis (the other groups a model is in,
-    // #907) reads whole on hover
+    // a note cut off by its ellipsis reads whole on hover (#907)
     if (note) { const n = el("span", "n", note); n.title = note; words.append(n); }
     li.append(words);
     if (o.run) li.title = t(DISCONNECT_TIP, { agent: pick.agent.name });
@@ -24100,6 +24108,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) { lo
 // never under an open menu
 setInterval(async () => {
   if (document.hidden || !state?.agents || document.querySelector(".pop:not([hidden])")) return;
+  readLoads(true);
   let drift;
   try { drift = await api("drift"); } catch { return; }
   let changed = false;

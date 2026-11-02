@@ -2313,6 +2313,9 @@ body .foot .status.lift { white-space: normal; overflow-wrap: anywhere; text-ove
 .field .fast-tag { display: inline-flex; flex: none; color: var(--accent); }
 .field .fast-tag path { fill: currentColor; }
 .ag-open .field .fast-tag { order: 1; }
+/* a model's load by it, as its picker row says it (axelburks on Discord) */
+.field .badge.load { flex: none; padding: 0 4px; font-size: 9px; line-height: 14px; }
+.ag-open .field .badge.load { order: 1; }
 /* Ultrafast (#1954): two bolts, overlapped to fit the bolt's place */
 .bolts { display: inline-flex; align-items: center; }
 .bolts svg + svg { margin-left: -8px; }

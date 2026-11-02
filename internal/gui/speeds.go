@@ -2,7 +2,9 @@ package gui
 
 import (
 	"net/http"
+	"time"
 
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
 )
 
@@ -40,5 +42,13 @@ func modelSpeeds() map[string]speedJSON {
 func speedsAPI(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/model-speeds", func(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, modelSpeeds())
+	})
+	// how busy each model's plugin says it is now, by the same ref
+	// lowercased, for the Agents page's model and its picker (axelburks
+	// on Discord: only the provider editor showed it). Read when a picker
+	// opens and with the Agents page's drift check, each at most every
+	// 30s; with no plugin reporting it is an empty map at once.
+	mux.HandleFunc("GET /api/model-loads", func(rw http.ResponseWriter, r *http.Request) {
+		writeJSON(rw, provider.ModelLoads(time.Now()))
 	})
 }
