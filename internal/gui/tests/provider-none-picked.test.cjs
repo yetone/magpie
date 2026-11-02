@@ -14,7 +14,10 @@
 // none, as Select none does, not the vendor's list again (#1831, kchen0x).
 // None is the control's third option, Usage only, one click away, and the
 // card says it (#2068, keleus: it took Picked only, then Select none, then
-// Save); Picked only from there starts from what the vendor's list serves.
+// Save). Picked only from there picks nothing (yuancjun: it ticked the
+// first 24 the vendor's list serves, which read as Select all and was saved
+// as picks): it says to pick a model first, and a Save is refused until one
+// is picked; Select none from there is Usage only.
 // In every language, Chromium and WebKit, at 1100 and 420 wide.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -58,11 +61,11 @@ function serve(lang, saves) {
 // hint after Select none; groupsWhy, groupsHint: those kept for routing
 // groups alone
 const words = {
-  en: { save: "Save", selectNone: "Select none", list: "Vendor's list", picked: "Picked only", usage: "Usage only", card: "usage only", why: "Agents see it: none are picked", hint: "Vendor's list: agents see up to 24 of its models", none: "None selected: no agent or routing group uses its models", groupsWhy: "Routing groups use it: none are picked", groupsHint: "the routing groups its models are in use up to 24" },
-  zh: { save: "保存", selectNone: "全不选", list: "供应商列表", picked: "仅所选", usage: "仅看用量", card: "仅看用量", why: "Agent 能看到它：没有勾选任何模型时", hint: "供应商列表：Agent 看到最多 24 个模型", none: "全不选：Agent 和路由分组都不使用它的模型", groupsWhy: "路由分组会用到它", groupsHint: "模型所在的路由分组最多使用其中 24 个" },
-  "zh-TW": { save: "儲存", selectNone: "全不選", list: "供應商列表", picked: "僅所選", usage: "僅看用量", card: "僅看用量", why: "Agent 能看到它：沒有勾選任何模型時", hint: "供應商列表：Agent 看到最多 24 個模型", none: "全不選：Agent 和路由分組都不使用它的模型", groupsWhy: "路由分組會用到它", groupsHint: "模型所在的路由分組最多使用其中 24 個" },
-  ja: { save: "保存", selectNone: "選択をすべて解除", list: "ベンダーのリスト", picked: "選択したもののみ", usage: "使用量のみ", card: "使用量のみ", why: "エージェントに表示されます：何も選択されていない", hint: "エージェントにはモデルが最大 24 件", none: "選択なし：エージェントもルーティンググループも", groupsWhy: "ルーティンググループが使います", groupsHint: "ルーティンググループが最大 24 件" },
-  de: { save: "Speichern", selectNone: "Keine auswählen", list: "Liste des Anbieters", picked: "Nur gewählte", usage: "Nur Nutzung", card: "nur Nutzung", why: "Agenten sehen es: Nichts ist gewählt", hint: "Agenten sehen bis zu 24 seiner Modelle", none: "Keine ausgewählt: Weder Agenten noch Weiterleitungsgruppen", groupsWhy: "Weiterleitungsgruppen nutzen es", groupsHint: "Weiterleitungsgruppen seiner Modelle nutzen bis zu 24" },
+  en: { pickFirst: "Pick a model first.", save: "Save", selectNone: "Select none", list: "Vendor's list", picked: "Picked only", usage: "Usage only", card: "usage only", why: "Agents see it: none are picked", hint: "Vendor's list: agents see up to 24 of its models", none: "None selected: no agent or routing group uses its models", groupsWhy: "Routing groups use it: none are picked", groupsHint: "the routing groups its models are in use up to 24" },
+  zh: { pickFirst: "请先选择模型。", save: "保存", selectNone: "全不选", list: "供应商列表", picked: "仅所选", usage: "仅看用量", card: "仅看用量", why: "Agent 能看到它：没有勾选任何模型时", hint: "供应商列表：Agent 看到最多 24 个模型", none: "全不选：Agent 和路由分组都不使用它的模型", groupsWhy: "路由分组会用到它", groupsHint: "模型所在的路由分组最多使用其中 24 个" },
+  "zh-TW": { pickFirst: "請先選擇模型。", save: "儲存", selectNone: "全不選", list: "供應商列表", picked: "僅所選", usage: "僅看用量", card: "僅看用量", why: "Agent 能看到它：沒有勾選任何模型時", hint: "供應商列表：Agent 看到最多 24 個模型", none: "全不選：Agent 和路由分組都不使用它的模型", groupsWhy: "路由分組會用到它", groupsHint: "模型所在的路由分組最多使用其中 24 個" },
+  ja: { pickFirst: "先にモデルを選んでください。", save: "保存", selectNone: "選択をすべて解除", list: "ベンダーのリスト", picked: "選択したもののみ", usage: "使用量のみ", card: "使用量のみ", why: "エージェントに表示されます：何も選択されていない", hint: "エージェントにはモデルが最大 24 件", none: "選択なし：エージェントもルーティンググループも", groupsWhy: "ルーティンググループが使います", groupsHint: "ルーティンググループが最大 24 件" },
+  de: { pickFirst: "Wählen Sie zuerst ein Modell.", save: "Speichern", selectNone: "Keine auswählen", list: "Liste des Anbieters", picked: "Nur gewählte", usage: "Nur Nutzung", card: "nur Nutzung", why: "Agenten sehen es: Nichts ist gewählt", hint: "Agenten sehen bis zu 24 seiner Modelle", none: "Keine ausgewählt: Weder Agenten noch Weiterleitungsgruppen", groupsWhy: "Weiterleitungsgruppen nutzen es", groupsHint: "Weiterleitungsgruppen seiner Modelle nutzen bis zu 24" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -132,11 +135,20 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (const id of ["glm-5.3-free", "glm-5.2"]) assert.deepEqual(await cls(id), [false, false], id + " usage only");
       await editor.getByText(w.none, { exact: false }).waitFor();
       assert.equal(await serves(), w.usage);
-      // Picked only from there picks what the vendor's list serves
+      // Picked only from there picks nothing: the vendor's list served
+      // ticking them all, which read as Select all and was saved as picks
       await editor.locator(".mserves .opt[data-serves=picked]").click();
-      for (const id of ["glm-5.3-free", "glm-5.2"]) assert.deepEqual(await cls(id), [true, false], id + " picked from the vendor's list");
+      for (const id of ["glm-5.3-free", "glm-5.2"]) assert.deepEqual(await cls(id), [false, false], id + " not picked by Picked only");
       assert.equal(await serves(), w.picked);
-      await editor.locator(".mserves .opt[data-serves=none]").click();
+      await editor.getByText(w.pickFirst, { exact: true }).first().waitFor();
+      // and a Save is refused, rather than serving the vendor's list
+      await editor.locator(".bar").getByRole("button", { name: w.save, exact: true }).click();
+      await editor.locator(".editor-error", { hasText: w.pickFirst }).waitFor();
+      assert.equal(saves.length, 0, "nothing saved with nothing picked");
+      // Select none from there is Usage only
+      await editor.getByRole("button", { name: w.selectNone, exact: true }).click();
+      await editor.getByText(w.none, { exact: false }).waitFor();
+      assert.equal(await serves(), w.usage);
       await chip("glm-5.2").click();
       // and another clicked joins it
       await chip("glm-5.3-free").click();

@@ -121,7 +121,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await editor.getByText(w.hint, { exact: false }).waitFor();
         await editor.locator(".mserves .opt[data-serves=picked]").click();
         assert.equal(await serves(), w.picked);
-        for (const id of newest) assert.deepEqual(await cls(id), [true, false], id + " picked");
+        // nothing picked yet: Picked only ticks nothing, rather than the
+        // newest of each family the list serves
+        for (const id of newest) assert.deepEqual(await cls(id), [false, false], id + " not picked yet");
         // the older ones aren't picked (Picked only folds unpicked ones away)
         for (const id of older) assert.equal(await editor.locator(".mchips .mchip.on", { hasText: id }).count(), 0, id + " not picked");
         // Usage only, then Vendor's list: neither keeps it
