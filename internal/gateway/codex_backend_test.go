@@ -848,6 +848,92 @@ func TestCodexModelListKeepsOwnForGroups(t *testing.T) {
 	}
 }
 
+// A group listing alone (Group.Unlists, 成员模型不单独列出) keeps a signed-in
+// subscription's models out of /v1/models for an agent's key too, not only
+// for a client that is no agent (shaoyang. on Discord, 11-03: the list
+// fetched still had every model of the group). Codex keeps its own
+// ChatGPT models, by name too (/v1/models/{id}); with its models listed too
+// they are listed again.
+func TestGroupAloneKeepsSubscriptionModelsOffAgentsModelList(t *testing.T) {
+	codexSignedIn(t)
+	if err := provider.Save(provider.Provider{ID: "codex", Models: []string{"gpt-6-sol", "gpt-5.5"}}); err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	for _, e := range provider.Catalog() {
+		if provider.CodexOwn(e) {
+			refs = append(refs, e.ID)
+		}
+	}
+	if len(refs) != 2 {
+		t.Fatalf("the account's models: %v", refs)
+	}
+	h := New().Handler()
+	list := func(key string) map[string]bool {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/v1/models", nil)
+		if key != "" {
+			req.Header.Set("x-api-key", key)
+		}
+		h.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("%s: %d %s", key, rec.Code, rec.Body)
+		}
+		var got struct {
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
+		}
+		json.Unmarshal(rec.Body.Bytes(), &got)
+		out := map[string]bool{}
+		for _, m := range got.Data {
+			out[m.ID] = true
+		}
+		return out
+	}
+	found := func(key, id string) bool {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/v1/models/"+id, nil)
+		req.Header.Set("x-api-key", key)
+		h.ServeHTTP(rec, req)
+		return rec.Code == 200
+	}
+	g := provider.Group{ID: "mine", Name: "Mine", Members: refs, Unlists: true}
+	if err := provider.SaveGroup(g); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"", Token, Token + "-hermes", Token + "-claude", Token + "-opencode"} {
+		got := list(key)
+		if !got["group/mine"] {
+			t.Errorf("%q: the group isn't listed: %v", key, got)
+		}
+		for _, ref := range refs {
+			if got[ref] {
+				t.Errorf("%q: %s listed beside the group listing alone", key, ref)
+			}
+		}
+	}
+	if found(Token+"-hermes", refs[0]) {
+		t.Errorf("/v1/models/%s found for Hermes", refs[0])
+	}
+	if got := list(Token + "-codex"); !got[refs[0]] || !got[refs[1]] {
+		t.Errorf("Codex lost its own models: %v", got)
+	}
+	if !found(Token+"-codex", refs[0]) {
+		t.Errorf("/v1/models/%s not found for Codex", refs[0])
+	}
+	g.Unlists = false
+	if err := provider.SaveGroup(g); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"", Token + "-hermes"} {
+		if got := list(key); !got[refs[0]] || !got[refs[1]] || !got["group/mine"] {
+			t.Errorf("%q, its models too: %v", key, got)
+		}
+	}
+}
+
 // A reply's X-Models-Etag carries magpie's list too: Codex refetches its
 // model list on a new one, and only on the backend's it never would when a
 // provider was added.
