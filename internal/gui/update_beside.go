@@ -1,6 +1,9 @@
 package gui
 
 import (
+	"context"
+	"time"
+
 	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/update"
 )
@@ -19,6 +22,7 @@ func (u *updater) restartBeside(version string) gateway.RestartReply {
 	restart := u.autoRestart
 	in := u.replaced()
 	if in {
+		u.followed = true
 		// what the terminal put in is the version restarted into, as if
 		// this one had downloaded it: the feed isn't asked first
 		if version != "" && (u.latest == nil || update.Newer(version, u.latest.Version)) {
@@ -45,4 +49,41 @@ func (u *updater) restartBeside(version string) gateway.RestartReply {
 	b := restartBusy()
 	reply.State, reply.Busy = "waiting", &b
 	return reply
+}
+
+// replacedTick is how often followReplaced looks at what is on disk; tests
+// shorten it.
+var replacedTick = 5 * time.Second
+
+// followReplaced restarts this magpie into an update another magpie put in
+// where it runs from, as restartBeside does for magpie update's ask
+// (visamzh on X). The app and magpie web run from the same program (the
+// terminal's magpie is the app's, linked), and each had its own updater:
+// one restarting to update put the new version in, and the other ran on
+// as the old one, its Update still offering the version already in, its
+// page never reloaded. Neither tells the other, and the other may serve
+// no gateway to be asked on, so each looks for itself, a stat every
+// replacedTick, until ctx ends (the copy an update left draining looks no
+// more, #4938). Only once for a change, so a wait the user called off
+// isn't started again; never for what this one put in itself (installed),
+// nor in a build of its own, which a rebuild in place would restart.
+func (u *updater) followReplaced(ctx context.Context) {
+	t := time.NewTicker(replacedTick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		if !update.Released(Version) {
+			continue
+		}
+		u.mu.Lock()
+		due := u.autoRestart != nil && !u.installed && !u.followed && u.replaced()
+		u.mu.Unlock()
+		if due {
+			u.restartBeside("")
+		}
+	}
 }

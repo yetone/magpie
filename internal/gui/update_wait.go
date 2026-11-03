@@ -126,8 +126,14 @@ func (u *updater) waitFor(gen int) {
 		if !idleAt(b, time.Now()) {
 			continue
 		}
-		switch u.json().State {
-		case "ready":
+		u.mu.Lock()
+		// another magpie put the update in (restartBeside): that is what
+		// the restart goes into, whatever the feed answers now
+		in := u.replaced()
+		u.mu.Unlock()
+		switch st := u.json().State; {
+		case in:
+		case st == "ready":
 			// a newer version out since is downloaded first, and waited for
 			u.mu.Lock()
 			asked := u.waitAsked
@@ -136,7 +142,7 @@ func (u *updater) waitFor(gen int) {
 			if u.asking() || u.json().State != "ready" {
 				continue
 			}
-		case "checking", "downloading":
+		case st == "checking", st == "downloading":
 			continue
 		default:
 			// nothing left to restart into (a newer one failed to download)

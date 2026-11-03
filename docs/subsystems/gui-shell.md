@@ -836,6 +836,32 @@ while the new version starts (#4521). See `TestUpdateInATerminalRestartsTheAppWi
 [`restart_test.go`](../../internal/gateway/restart_test.go) and
 `TestUpdateAsksTheRunningMagpieToRestart`.
 
+The app and `magpie web` open together each have an updater of their own
+over the same program, and the gateway's ask reaches only the one serving
+the gateway (visamzh on X: one restarted to update, and the other ran on
+as the old version, its Update pill still offering the version already
+in). So every updater also looks at its binary every 5 s
+(`followReplaced` in [`update_beside.go`](../../internal/gui/update_beside.go),
+`replacedTick`) and, once another magpie replaced it, restarts into it
+through `restartBeside` once, whatever Settings' automatic restart says:
+an old version left running is what the user asked to leave behind. A
+gateway busy has it wait as above (`waitFor` restarts into what is on
+disk without asking the feed again), a process restarting into its own
+install (`installed`) or already following one (`followed`) doesn't, and
+a build that isn't a release (`update.Released`; `make dev`, `go build`)
+is never followed. A browser's page (`magpie web`, the app's page) learns
+the version that served it from boot.js (`bootPrefs.version`) and reloads
+when `/api/update`'s `current` names another (`servedAnew` in app.js), on
+the reads it already makes (load, focus, coming back into view) and once a
+minute while it is shown; the app's own windows come back with their new
+process. See `TestAnotherMagpiesUpdateRestartsThisOne`,
+`TestOwnUpdateIsNotFollowedAgain`, `TestOwnBuildRebuiltIsNotFollowed`,
+`TestAnotherMagpiesUpdateWaitsForTheGatewayThenRestarts`,
+`TestUpdateClickedOverAnothersIsNotFollowedAgain` and
+`TestBootNamesTheVersionThatServedThePage` in
+[`update_follow_test.go`](../../internal/gui/update_follow_test.go), and
+`update-served-anew.test.cjs`.
+
 See `TestRestartHandsTheGatewayOver` (the new version a second process,
 a stream across the restart finishing whole, requests during it answered,
 and the old one quitting only after its stream) and

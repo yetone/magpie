@@ -84,6 +84,12 @@ type updater struct {
 	autoRestart func() bool
 	autoSkip    string
 	waitAsked   bool // the restart waiting was a click's
+	// installed: this process put an update in (install), and is leaving
+	// for it; followed: it is restarting into one another magpie put in
+	// (restartBeside). Either way what is on disk is no longer another's
+	// for followReplaced to restart into.
+	installed bool
+	followed  bool
 }
 
 type updateJSON struct {
@@ -139,6 +145,7 @@ func updateDue(s settings.Settings, last, now time.Time) bool {
 func (u *updater) start() {
 	u.place(runtime.GOOS, update.GUI)
 	gateway.SetRestarter(u.restartBeside) // magpie update in a terminal
+	go u.followReplaced(backendCtx)       // the app's or magpie web's update (visamzh on X)
 	if u.bundle != "" {
 		go update.ForgetOldStaging(u.bundle) // #3965
 	}
@@ -504,7 +511,7 @@ func (u *updater) install(ask bool) bool {
 		// another magpie updated the binary after this one started: it is
 		// in, and swapping this one's download in would move it aside (the
 		// download is left: it may be the other's, staged at the same name)
-		u.staged = ""
+		u.staged, u.installed = "", true
 		return true
 	}
 	if u.staged == "" {
@@ -535,7 +542,7 @@ func (u *updater) install(ask bool) bool {
 		}
 		return false
 	}
-	u.staged = ""
+	u.staged, u.installed = "", true
 	return true
 }
 
@@ -550,6 +557,7 @@ func (u *updater) wontStart(err error) {
 	}
 	b := update.NoteBlocked(v, err)
 	u.blocked, u.state, u.aside = &b, "blocked", ""
+	u.installed = false // this one runs on, back in its place
 	u.err = err.Error()
 }
 

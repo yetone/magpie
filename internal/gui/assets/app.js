@@ -31,6 +31,9 @@ if (mode === "panel" && !document.body.classList.contains("linux")) $("header.to
 // `magpie web`: the page in a browser tab, with no window of the app's
 // around it — it opens links itself, and what is the desktop's is left out
 const web = !!window.bootPrefs?.web;
+// the version that served this page, which servedAnew compares the one
+// answering now with
+const pageVersion = window.bootPrefs?.version || "";
 // magpie web seen from another computer: localhost is the viewer's (curtinp118)
 const remotePage = web && !/^(localhost|127(\.\d+){3}|\[::1\]|::1)$/i.test(location.hostname);
 // layout.js applies the mode and platform before the header can paint.
@@ -4405,6 +4408,7 @@ function updatePath(p) {
 async function renderUpdateBadge() {
   const b = $("#update"), label = b.querySelector("span");
   const u = await api(updatePath("update")).catch(() => null);
+  if (servedAnew(u)) return;
   if (u) updateLast = u, u.at = Date.now();
   // pulling: a click is downloading it again, and restarts once it's in
   const pulling = !!u && !!b.dataset.pulling && ["checking", "downloading", "ready"].includes(u.state);
@@ -4533,6 +4537,19 @@ async function backAsNew(was) {
     const u = await fetch("/api/update").then((r) => (r.ok ? r.json() : null)).catch(() => null);
     if (u && u.current !== was) return location.reload();
   }
+}
+
+// servedAnew reloads a browser's page (magpie web, or the app's page)
+// that another version of magpie now answers for, and says whether it did.
+// The page restarted to update itself reloads in backAsNew; one whose
+// magpie restarted for another's update (the app's window put it in, and
+// magpie web followed, or the app restarted under its own page) ran on as
+// the old page, its Update pill still offering the version already in
+// (visamzh on X).
+function servedAnew(u) {
+  if (!web || !pageVersion || !u?.current || u.current === pageVersion) return false;
+  location.reload();
+  return true;
 }
 
 // updateStuck says why this magpie can't replace itself where it is: off
@@ -22300,6 +22317,7 @@ async function renderUpdate(r, u) {
     if (early) renderUpdate(r, updateLast);
     else if (bare) r.querySelector(".who").append(el("div", "sub say", "\u00a0"));
     u = await api(updatePath("update?fresh=1")).catch(() => null);
+    if (servedAnew(u)) return;
     if (!u || !r.isConnected || seqOf(r) !== seq) return;
     if (early) updateSeq.set(r, seq + 1); // stops timers
   } else if (!r.isConnected) return;
@@ -24112,6 +24130,10 @@ setInterval(async () => {
 }
 window.addEventListener("focus", () => loadBack());
 setInterval(renderUpdateBadge, 15 * 60 * 1000); // a window left open still hears of a new version
+// a browser's page on screen hears within a minute that its magpie
+// restarted into an update put in elsewhere (servedAnew), without a click
+// into it first
+if (web) setInterval(() => { if (!document.hidden) renderUpdateBadge(); }, 60e3);
 // renderPluginDot puts a dot on Plugins while a plugin's update waits for
 // the reader (someone else's plugin, or one pinned; the community's update
 // by themselves)
