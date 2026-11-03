@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -141,6 +143,13 @@ type Provider struct {
 	// Checkin says the plugin presses its vendor's daily check-in for each
 	// account (auth.checkin)
 	Checkin bool `json:"checkin,omitempty"`
+	// Renews says the plugin renews its accounts' sign-ins through magpie
+	// (auth.refresh) and lets the gateway's magpie do it in the background
+	// as each comes due (auth.keepAlive not false); RenewLead is how long
+	// before a token expires it is due, in milliseconds (auth.refreshLead,
+	// 5 minutes when not said), as the host reckons it (RenewAt).
+	Renews    bool  `json:"renews,omitempty"`
+	RenewLead int64 `json:"renewLead,omitempty"`
 	// Options are the switches the plugin declares for the provider
 	// (auth.options, #2038), as the host checked them
 	Options []Option `json:"options,omitempty"`
@@ -717,13 +726,72 @@ func Cached() []Provider {
 }
 
 type storedAuth struct {
-	Type      string `json:"type"`
-	AccountID string `json:"accountId"`
-	Email     string `json:"email"`
-	Key       string `json:"key"`
+	Type string `json:"type"`
+	// Expires is when an OAuth sign-in's token ends, in epoch
+	// milliseconds, as the host reads it (a number, or a string of one)
+	Expires   json.RawMessage `json:"expires"`
+	AccountID string          `json:"accountId"`
+	Email     string          `json:"email"`
+	Key       string          `json:"key"`
 	Metadata  struct {
 		Email string `json:"email"`
 	} `json:"metadata"`
+}
+
+// RenewAt is when the sign-in kept under key, an account of p, comes due
+// to be renewed in the background, as host.js's renewAt reckons it: an
+// OAuth sign-in's expires less p.RenewLead. False when it never does: p
+// doesn't renew in the background, the sign-in isn't OAuth, has no
+// expiry or isn't kept.
+func RenewAt(p Provider, key string) (time.Time, bool) {
+	if !p.Renews {
+		return time.Time{}, false
+	}
+	a, ok := readAuth()[key]
+	if !ok || a.Type != "oauth" {
+		return time.Time{}, false
+	}
+	exp, ok := expiresOf(a.Expires)
+	if !ok {
+		return time.Time{}, false
+	}
+	return time.UnixMilli(max(1, exp-p.RenewLead)), true
+}
+
+// expiresOf is a sign-in's expires as JavaScript's Number reads it, when
+// it is a time after the epoch.
+func expiresOf(raw json.RawMessage) (int64, bool) {
+	v := strings.TrimSpace(string(raw))
+	if s, err := strconv.Unquote(v); err == nil {
+		v = strings.TrimSpace(s)
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) || f <= 0 || f > math.MaxInt64/2 {
+		return 0, false
+	}
+	return int64(f), true
+}
+
+// KeptSignedIn is what came of KeepSignedIn: Due false, the sign-in
+// wasn't due (renewed meanwhile); Renewed, it is a new one; else Err is
+// why it couldn't be, Gone whether the vendor turned it away for good
+// (the host marks the account, as OnSignIn tells), and Waiting that a
+// renewal failed lately and isn't tried again yet.
+type KeptSignedIn struct {
+	Due     bool   `json:"due"`
+	Renewed bool   `json:"renewed"`
+	Waiting bool   `json:"waiting"`
+	Gone    bool   `json:"gone"`
+	Err     string `json:"error"`
+}
+
+// KeepSignedIn renews account's sign-in of provider if it is due, as a
+// request on it would, under the same once-at-a-time renewal and lock,
+// and waits for it.
+func KeepSignedIn(ctx context.Context, provider, account string) (KeptSignedIn, error) {
+	var k KeptSignedIn
+	err := Call(ctx, "keepSignedIn", map[string]any{"provider": provider, "account": account, "proxy": proxyOf(ctx)}, &k)
+	return k, err
 }
 
 // ProviderOf is the provider an account key is one of.

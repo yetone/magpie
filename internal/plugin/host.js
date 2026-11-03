@@ -340,7 +340,7 @@ function forgetAccount(key) {
 const sessions = new Map() // oauth sign-in in progress → its authorize result
 const inflight = new Map() // fetch id → its lifecycle and owned resources
 const renewing = new Map() // account → its sign-in's renewal under way
-const unrenewed = new Map() // account → its last renewal that failed: {at, secret, gone}
+const unrenewed = new Map() // account → its last renewal that failed: {at, secret, gone, error}
 let config = { provider: {} } // what the plugins' config hooks made of it
 
 // loadWait bounds one plugin's load (its import and its plugin function)
@@ -2181,6 +2181,10 @@ function rowOf(id, a, keys, stored, p, own) {
     icon: iconOf(a),
     usage: typeof a.auth.usage === "function",
     checkin: typeof a.auth.checkin === "function",
+    // its sign-ins are renewed in the background as they come due, so
+    // long before expires (keepSignedIn)
+    renews: keepsAlive(a.auth),
+    renewLead: keepsAlive(a.auth) ? leadOf(a.auth) : 0,
     options: optionsOf(a.auth),
     decide: p.decide === true,
     searches: p.searches === true,
@@ -2403,6 +2407,9 @@ async function apiKey({ provider, method, inputs, key, account, proxy }, signal)
 //     for good, and the account is marked.
 //   auth.refreshLead: how long (ms) before expires a token is renewed,
 //     5 minutes when not said.
+//   auth.keepAlive: false leaves an account nothing uses to lapse; any
+//     other value has the magpie serving the gateway renew it in the
+//     background as it comes due too (keepSignedIn, #5080).
 // An OAuth sign-in whose expires is that close is renewed before its
 // loader, models, usage or a request runs, once at a time per account: the
 // requests that find it due wait for the one renewal (a vendor that spends
@@ -2428,31 +2435,78 @@ function renewAt(a, stored) {
   return Number.isFinite(exp) && exp > 0 ? Math.max(1, exp - leadOf(a)) : 0
 }
 
+// renewal is the renewal of the sign-in at key under way, started now if
+// it is due and none is: null when it isn't due, or its last renewal
+// failed less than RENEW_RETRY ago (or for good). A request and the
+// background keep-alive (keepSignedIn) share it, so an account is renewed
+// once at a time whoever asks.
+function renewal(provider, key) {
+  const a = auths().get(provider)?.auth
+  const stored = readAuth()[key]
+  const at = renewAt(a, stored)
+  if (!at || Date.now() < at) return null
+  let r = renewing.get(key)
+  if (r) return r
+  const f = unrenewed.get(key)
+  if (f && f.secret === secretOf(stored) && (f.gone || Date.now() - f.at < RENEW_RETRY)) return null
+  pending++ // the host doesn't leave in the middle of it
+  r = renew(provider, key, a).finally(() => {
+    renewing.delete(key)
+    // nor does magpie stop it in the middle of one (host.go's stop)
+    send({ event: "renewing", count: renewing.size })
+    done()
+  })
+  renewing.set(key, r)
+  send({ event: "renewing", count: renewing.size })
+  return r
+}
+
 // fresh renews the sign-in at key when it is due, waiting at most
 // RENEW_WAIT for it: a renewal that takes longer goes on, and is kept when
 // it ends, but what waits for it goes on with the sign-in as it is.
 async function fresh(provider, key) {
-  const a = auths().get(provider)?.auth
-  const stored = readAuth()[key]
-  const at = renewAt(a, stored)
-  if (!at || Date.now() < at) return
-  const f = unrenewed.get(key)
-  if (f && f.secret === secretOf(stored) && (f.gone || Date.now() - f.at < RENEW_RETRY)) return
-  let r = renewing.get(key)
-  if (!r) {
-    pending++ // the host doesn't leave in the middle of it
-    r = renew(provider, key, a).finally(() => {
-      renewing.delete(key)
-      // nor does magpie stop it in the middle of one (host.go's stop)
-      send({ event: "renewing", count: renewing.size })
-      done()
-    })
-    renewing.set(key, r)
-    send({ event: "renewing", count: renewing.size })
-  }
+  const r = renewal(provider, key)
+  if (!r) return
   let t
   await Promise.race([r, new Promise((ok) => (t = setTimeout(ok, RENEW_WAIT)))])
   clearTimeout(t)
+}
+
+// keepSignedIn renews the sign-in at key if it is due, as a request would
+// (renewal), with nothing waiting on the account: the gateway's
+// keep-alive asks it of each account whose token comes due while nothing
+// uses it (#5080: OrcaTerm's WeChat token lives two hours and can't be
+// renewed once it ends). It waits for the renewal to end and says what
+// came of it: due false, it wasn't due (renewed meanwhile, no expiry, a
+// plugin that doesn't renew through magpie or said keepAlive false);
+// renewed, the sign-in is a new one; error, why it couldn't be, and gone
+// whether the vendor turned it away for good (the account is marked, as a
+// request's renewal marks it). A renewal that failed lately isn't tried
+// again here either: waiting says so.
+async function keepSignedIn({ provider, account, proxy }) {
+  return via.run(proxy ?? "", async () => {
+    const key = accountKey(provider, account)
+    const a = auths().get(provider)?.auth
+    const was = readAuth()[key]
+    if (!was) throw new Error("not signed in")
+    const at = keepsAlive(a) ? renewAt(a, was) : 0
+    if (!at || Date.now() < at) return { due: false, renewed: false, waiting: false, gone: false, error: "" }
+    const r = renewal(provider, key)
+    if (r) await r
+    const now = readAuthState().all[key]
+    if (now && changed(now, was)) return { due: true, renewed: true, waiting: false, gone: false, error: "" }
+    const f = unrenewed.get(key)
+    const failed = !!f && f.secret === secretOf(was)
+    return { due: true, renewed: false, waiting: !r && failed, gone: failed && !!f.gone, error: failed ? f.error ?? "" : "" }
+  })
+}
+
+// keepsAlive says the plugin's sign-ins are renewed in the background as
+// they come due (keepSignedIn): any that renews through magpie, unless
+// its auth hook says keepAlive: false (a renewal that costs the account
+// something, or a refresh token another client holds too).
+function keepsAlive(a) {
+  return typeof a?.refresh === "function" && a?.keepAlive !== false
 }
 
 // Each magpie process runs a host of its own (the gateway, a CLI's quota
@@ -2552,7 +2606,7 @@ async function renewLocked(provider, key, a, was) {
       forgetAccount(key)
       return
     }
-    unrenewed.set(key, { at: Date.now(), secret: secretOf(was), gone: e?.signIn === "expired" })
+    unrenewed.set(key, { at: Date.now(), secret: secretOf(was), gone: e?.signIn === "expired", error: String(e?.message ?? e) })
     if (e?.signIn === "expired") send({ event: "signIn", provider, account: key, said: "expired" })
     send({ event: "log", level: "error", message: `${auths().get(provider)?.spec ?? provider}: auth.refresh: ${e?.message ?? e}` })
     return
@@ -2937,6 +2991,7 @@ const handlers = {
   load,
   usage,
   checkin,
+  keepSignedIn,
   // setOptions takes the user's option values over, as init did: the
   // plugin reads them when it next asks (#2038)
   setProviderOptions(p) {
