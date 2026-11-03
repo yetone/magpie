@@ -786,10 +786,16 @@ const searchersInTurn = 3
 // modelSearch searches the web with the searcher's model; one magpie
 // picked that fails or finds nothing gives way to the next searcher magpie
 // would pick, all of them within searchWaitMost. One Settings names gives
-// way to none: the search APIs, when set up, search in its place
-// (webSearch), and Settings says it didn't search (SearcherFailed). Handed
-// on, a search for Grok, picked, went to Codex's gpt-6-astra, a pricier
-// model the user hadn't picked, on every search (Gearclickist on Discord).
+// way to those named after it (SearcherThen), and, when it can't serve at
+// all — out of its allowance, refused for its quota, credit or rate
+// (errCantServe) — to the searchers magpie would pick in turn: a Codex
+// account named to search for Cursor's models, used up, broke every
+// search of the turns Cursor took over from it (pedestrianz, plugins#635).
+// One that answered without searching or found nothing gives way to no
+// other: the search APIs, when set up, search in its place (webSearch),
+// and Settings says it didn't search (SearcherFailed). Handed on, a search
+// for Grok, picked, went to Codex's gpt-6-astra, a pricier model the user
+// hadn't picked, on every search (Gearclickist on Discord).
 func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, error) {
 	p, model, ok := searcher()
 	if !ok {
@@ -797,12 +803,12 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 	}
 	ctx, cancel := sideDeadline(context.WithValue(ctx, searchingKey{}, true), "search", searchTimeout, searchWaitMost)
 	defer cancel()
-	type pick struct{ id, model string }
-	tried := []pick{{p.ID, model}}
+	tried := []searchPick{{p.ID, model}}
 	var said string
 	var hits []Hit
 	// one magpie picked that is out of its allowance isn't asked: it
-	// would only be refused again (#1801); one the Settings name is
+	// would only be refused again (#1801); one the Settings name is, and
+	// its refusal, as one out of its allowance, hands it on (errCantServe)
 	err := searcherSpent(p, model)
 	cp, _, why := chosenSearcher()
 	named := why == "" && cp != nil && cp.ID == p.ID
@@ -814,7 +820,7 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 	}
 	if named {
 		// those Settings names after it, in their order (SearcherThen),
-		// and no other
+		// then, when it can't serve, those magpie would pick
 		instead, first := "", err
 		if err != nil && ctx.Err() == nil {
 			for _, v := range settings.Load().SearcherThen {
@@ -826,12 +832,23 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 					ctx = searchingInstead(ctx, p, model, first)
 				}
 				instead = searcherOf(*q, m)
+				tried = append(tried, searchPick{q.ID, m})
 				var next error
 				if said, hits, next = s.searchBy(ctx, *q, m, query, searchEffort(*q, m)); next == nil {
 					err = nil
 					break
 				}
 				err = errors.Join(err, next)
+			}
+			if err != nil && errors.Is(first, errCantServe) && ctx.Err() == nil {
+				if instead == "" {
+					ctx = searchingInstead(ctx, p, model, first)
+				}
+				var by string
+				said, hits, by, err = s.searchInTurn(ctx, query, tried, err, len(tried)+searchersInTurn-1)
+				if err == nil {
+					instead = by
+				}
 			}
 			if err == nil {
 				// what Settings says is the first's failure, and who
@@ -849,14 +866,32 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 			namedFailed(p, model, first, "")
 		}
 		if err != nil {
-			if len(settings.Load().SearcherThen) > 0 {
+			switch {
+			case errors.Is(first, errCantServe):
+				return "", nil, fmt.Errorf("%w (no other provider could search in its place)", err)
+			case len(settings.Load().SearcherThen) > 0:
 				return "", nil, fmt.Errorf("%w (the searchers picked in Settings › Web search, in their order: no other provider searches in their place)", err)
 			}
 			return "", nil, fmt.Errorf("%w (the searcher picked in Settings › Web search: no other provider searches in its place)", err)
 		}
 		return said, hits, nil
 	}
-	// the others in turn, those with allowance left first
+	if err != nil && ctx.Err() == nil {
+		ctx = searchingInstead(ctx, p, model, err)
+		said, hits, _, err = s.searchInTurn(ctx, query, tried, err, searchersInTurn)
+	}
+	return said, hits, err
+}
+
+// searchPick is a searcher a search was asked of.
+type searchPick struct{ id, model string }
+
+// searchInTurn asks the searchers magpie would pick (Searchers), those
+// with allowance left first, of a provider not tried yet, until one
+// searches or most have been tried in all: what it found, and which
+// searched (searcherOf). err is the failures so far, which the new ones
+// join.
+func (s *Server) searchInTurn(ctx context.Context, query string, tried []searchPick, err error, most int) (string, []Hit, string, error) {
 	var turn, spent []SearcherChoice
 	for _, c := range Searchers() {
 		if c.ManualOnly || c.Small == "" {
@@ -869,28 +904,37 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 		}
 	}
 	for _, c := range append(turn, spent...) {
-		if err == nil || ctx.Err() != nil || len(tried) >= searchersInTurn {
+		if ctx.Err() != nil || len(tried) >= most {
 			break
 		}
-		if slices.ContainsFunc(tried, func(t pick) bool { return t.id == c.Provider.ID }) {
+		if slices.ContainsFunc(tried, func(t searchPick) bool { return t.id == c.Provider.ID }) {
 			continue
 		}
-		if len(tried) == 1 {
-			ctx = searchingInstead(ctx, p, model, err)
-		}
-		tried = append(tried, pick{c.Provider.ID, c.Small})
+		tried = append(tried, searchPick{c.Provider.ID, c.Small})
 		next := searcherSpent(c.Provider, c.Small)
 		if next == nil {
-			said, hits, next = s.searchWith(ctx, c.Provider, c.Small, query, searchEffort(c.Provider, c.Small))
+			var said string
+			var hits []Hit
+			if said, hits, next = s.searchWith(ctx, c.Provider, c.Small, query, searchEffort(c.Provider, c.Small)); next == nil {
+				return said, hits, searcherOf(c.Provider, c.Small), nil
+			}
 		}
-		if next != nil {
-			err = errors.Join(err, next)
-		} else {
-			err = nil
-		}
+		err = errors.Join(err, next)
 	}
-	return said, hits, err
+	return "", nil, "", err
 }
+
+// errCantServe is a searcher that can't serve a search now: every account
+// or key of it out of its allowance (searcherSpent), or the search refused
+// for its quota, credit or rate (searchWith). It is the provider's state,
+// not what it does with a search, so another searches in its place.
+var errCantServe = errors.New("can't search now")
+
+// cantServe is err, a searcher's own error, said to be errCantServe
+// without changing what it says.
+type cantServe struct{ error }
+
+func (c cantServe) Unwrap() []error { return []error{c.error, errCantServe} }
 
 // lastNamedFail is the last search the searcher Settings names didn't
 // make, for Settings to say (SearcherFailed); cleared when it searches.
@@ -971,7 +1015,7 @@ func searcherSpent(p provider.Provider, model string) error {
 	if !back.IsZero() {
 		when = " until " + heldClock(back, time.Now())
 	}
-	return fmt.Errorf("%s/%s: out of its allowance%s, not asked", p.ID, model, when)
+	return cantServe{fmt.Errorf("%s/%s: out of its allowance%s, not asked", p.ID, model, when)}
 }
 
 // searchingInstead is ctx with its web search's CallFor saying that the
@@ -1051,7 +1095,12 @@ func (s *Server) searchWith(ctx context.Context, p provider.Provider, model, que
 		if t, ok := sideTimeout(ctx); ok {
 			msg = t.Error()
 		}
-		return "", nil, fmt.Errorf("%s/%s: %s", p.ID, model, msg)
+		err := fmt.Errorf("%s/%s: %s", p.ID, model, msg)
+		switch failure(w.Code, w.Body.Bytes()) {
+		case failQuota, failCredit, failRate:
+			err = cantServe{err}
+		}
+		return "", nil, err
 	}
 	var text strings.Builder
 	var sources []string

@@ -14,7 +14,8 @@ import (
 // pickedSearchSetup is a search for glm/glm-flash, which can't search, with
 // ds/deepseek-flash, on DeepSeek's Responses API, the first searcher: one
 // that answers without searching (blind), or one whose every search is
-// refused (failing). next is another searcher that would search.
+// refused for what it was sent, not for its allowance (failing). next is
+// another searcher that would search.
 func pickedSearchSetup(t *testing.T, failing bool, nextOn provider.Protocol) (ds, next *fakeDeepSeek, result func() string) {
 	t.Helper()
 	searchSandbox(t)
@@ -36,7 +37,7 @@ func pickedSearchSetup(t *testing.T, failing bool, nextOn provider.Protocol) (ds
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(`{"error":{"message":"search quota used up"}}`))
+			w.Write([]byte(`{"error":{"message":"invalid tools: web_search"}}`))
 		}))
 		t.Cleanup(broken.Close)
 		first = broken.URL
@@ -102,7 +103,7 @@ func TestPickedSearcherIsNotHandedOn(t *testing.T) {
 			if !ok || f.Searcher != "ds/deepseek-flash" || f.At.IsZero() {
 				t.Fatalf("SearcherFailed = %+v %v", f, ok)
 			}
-			if tc.failing && (f.NotSearched || f.NothingFound || !strings.Contains(f.Why, "search quota used up")) {
+			if tc.failing && (f.NotSearched || f.NothingFound || !strings.Contains(f.Why, "invalid tools: web_search")) {
 				t.Fatalf("SearcherFailed = %+v, want the picked searcher's error", f)
 			}
 			if !tc.failing && (!f.NotSearched || f.NothingFound || f.Why != "") {
@@ -180,7 +181,7 @@ func TestSearchInPlaceOfAutoSaysWhy(t *testing.T) {
 			if f.Instead != "ds/deepseek-flash" || f.Picked || f.Model != "glm/glm-flash" {
 				t.Fatalf("the answering search's row is for %+v", *f)
 			}
-			if tc.failing && (f.NothingFound || f.NotSearched || !strings.Contains(f.Why, "search quota used up")) {
+			if tc.failing && (f.NothingFound || f.NotSearched || !strings.Contains(f.Why, "invalid tools: web_search")) {
 				t.Fatalf("why %q nothing %v not searched %v, want the first searcher's error", f.Why, f.NothingFound, f.NotSearched)
 			}
 			if !tc.failing && (f.NothingFound || !f.NotSearched || f.Why != "") {

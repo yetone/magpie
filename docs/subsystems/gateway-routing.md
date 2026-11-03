@@ -1142,9 +1142,18 @@ after it, `SearcherThen` (Settings › Web search's "If it fails" row), in
 their order. One that can't search now, is the one named, or is the same
 model is skipped. The first that searches answers, and the row says why
 the named one didn't search (`searchingInstead`). No other provider
-searches in their place (axelburks on Discord asked for this list). When
-every one fails, their errors go back to the model together, and
-`webSearch` then asks the search APIs, when any are set up. Covered by
+searches in their place (axelburks on Discord asked for this list), unless
+the named one can't serve at all: every account or key of it out of its
+allowance (`searcherSpent`), or its search refused for quota, credit or
+rate (`failure`, in `searchWith`), both `errCantServe`. Then, after the
+ones named after it, the searchers magpie would pick search in its place
+in turn (`searchInTurn`, up to two more providers), and `namedFailed`
+names the one that did. pedestrianz (plugins#635) named Codex to search
+for Cursor's models; when Codex ran out and Cursor took the turns over,
+every search failed with it (`TestPickedSearcherThatCantServeGivesWay`).
+When every one fails, their errors go back to the model together, as a
+failed tool result, and the turn goes on; `webSearch` then asks the
+search APIs, when any are set up. Covered by
 `TestPickedSearchersInTheirOrder`; `TestSearcherThenSaved` and
 `TestSearcherThenFromSettings` cover how the list is saved. Settings only
 takes a provider `Searchers()` offers. A save without the list keeps it,
