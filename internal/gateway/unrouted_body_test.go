@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -106,7 +108,8 @@ func isClosedConn(err error) bool {
 // taken for a hold of magpie's own. Less of the body having come than
 // the request's own Content-Length says, once its read has begun, the
 // body is still arriving and the time is the client's, inside a read or
-// between two. Before its first read, in the wait for body room, the
+// between two; so is a chunked body's until a read meets its end. Before
+// its first read, in the wait for body room, the
 // time is magpie's own.
 func TestUnroutedBodyArrivingBetweenReads(t *testing.T) {
 	r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(strings.Repeat(" ", 400)))
@@ -131,8 +134,12 @@ func TestUnroutedBodyArrivingBetweenReads(t *testing.T) {
 	}
 	u.bodyRead.Store(19)
 	r.ContentLength = -1
+	if !u.bodyArriving() {
+		t.Fatal("a chunked body between two reads, its end not come, did not count as arriving")
+	}
+	u.bodyEnded.Store(true)
 	if u.bodyArriving() {
-		t.Fatal("a body of no said length counted as arriving between reads")
+		t.Fatal("a chunked body read to its end counted as arriving")
 	}
 }
 
@@ -175,5 +182,66 @@ func TestUnroutedBodyRoomWaitNot408(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode == http.StatusRequestTimeout || strings.Contains(string(b), "its body was still arriving") {
 		t.Fatalf("a request waiting for magpie's body room was answered %d %s", res.StatusCode, b)
+	}
+}
+
+// A chunked body is arriving until a read meets its end, so the other
+// side of that must hold: one read whole, through its decoder too, is not
+// arriving, and a hold of magpie's own after it (a lock routing needs) is
+// answered 504, not 408 "its body was still arriving".
+func TestUnroutedChunkedBodyReadWholeHeld504(t *testing.T) {
+	for _, encoding := range []string{"identity", "gzip", "zstd"} {
+		t.Run(encoding, func(t *testing.T) {
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			unroutedLimits(t, 20*time.Millisecond, 300*time.Millisecond)
+			unknownLimit(t, time.Hour)
+			s, up := slowEyed(t, 0)
+			srv := httptest.NewServer(s.Handler())
+			t.Cleanup(srv.Close)
+			sticks.Lock()
+			var once sync.Once
+			unlock := func() { once.Do(sticks.Unlock) }
+			t.Cleanup(unlock)
+
+			wire := encodedBody(t, []byte(unroutedHi), encoding)
+			// a reader of no known length is sent chunked
+			req, err := http.NewRequest("POST", srv.URL+"/v1/chat/completions", io.MultiReader(bytes.NewReader(wire)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			if encoding != "identity" {
+				req.Header.Set("Content-Encoding", encoding)
+			}
+			got := make(chan unroutedReply, 1)
+			go func() {
+				res, err := srv.Client().Do(req)
+				if err != nil {
+					got <- unroutedReply{err: err}
+					return
+				}
+				b, err := io.ReadAll(res.Body)
+				res.Body.Close()
+				got <- unroutedReply{res.StatusCode, string(b), err}
+			}()
+			u := watchedHold(t, s)
+			var r unroutedReply
+			select {
+			case r = <-got:
+			case <-time.After(20 * time.Second):
+				unlock()
+				t.Fatal("a hold after a chunked body was not answered")
+			}
+			unlock()
+			if r.err != nil || r.code != http.StatusGatewayTimeout || !strings.Contains(r.body, "without routing it to any provider") {
+				t.Fatalf("a hold after a chunked body read whole: %d %q %v", r.code, r.body, r.err)
+			}
+			if u.r.ContentLength != -1 || !u.bodyEnded.Load() {
+				t.Fatalf("the body was sent with length %d, its end read %v; the test needs it chunked and read whole", u.r.ContentLength, u.bodyEnded.Load())
+			}
+			if len(up.sent("text")) != 0 {
+				t.Fatal("a request held before routing reached the provider")
+			}
+		})
 	}
 }

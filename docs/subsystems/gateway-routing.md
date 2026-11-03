@@ -385,6 +385,12 @@ recorded as a prediction failure (`noPrediction`).
   byte count and advice to check the link or proxy, compact the conversation
   or reduce inline images. An internal hold remains a 504; waiting for
   body room is internal, including before the first read (#4511).
+  Between two reads a body is still arriving while less has come than
+  its Content-Length says or, chunked, until a read has met its end
+  (`bodyArriving`, `bodyEnded`): a decoder spends its time between reads
+  too, and a chunked gzip body ended there was answered 504 as magpie's
+  own hold (`TestUnroutedChunkedBodyReadWholeHeld504` holds the other
+  side).
   `TestUnroutedProgressingUploadOutlastsMost` covers TLS through `Front`
   with declared, chunked, gzip and zstd bodies;
   `TestUnroutedUploadCreditKeepsIdleDeadline`, `TestUnroutedUploadTimeIsBounded`,

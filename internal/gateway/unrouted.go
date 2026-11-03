@@ -219,10 +219,12 @@ type unroutedHold struct {
 	// for Settings → Privacy's local model, and its error says so
 	masking atomic.Int32
 	// the body as it arrives (waitedBody): the bytes read, when the last
-	// came (unix nanoseconds), and stopped once magpie answered for it
-	// while it was still arriving, so its handler reads no more of it
+	// came (unix nanoseconds), whether a read met its end (or an error),
+	// and stopped once magpie answered for it while it was still
+	// arriving, so its handler reads no more of it
 	bodyRead    atomic.Int64
 	bodyLast    atomic.Int64
+	bodyEnded   atomic.Bool
 	bodyStopped atomic.Bool
 
 	// the waits magpie knows it is in (noteWait), under wmu: how many are
@@ -480,6 +482,9 @@ func (b waitedBody) Read(p []byte) (int, error) {
 		b.u.bodyRead.Add(int64(n))
 		b.u.bodyLast.Store(time.Now().UnixNano())
 	}
+	if err != nil {
+		b.u.bodyEnded.Store(true)
+	}
 	return n, err
 }
 
@@ -500,18 +505,21 @@ func (u *unroutedHold) inBody() bool {
 }
 
 // bodyArriving is whether the handler has begun reading the body, is
-// between two of its reads, and less has come than the request's own
-// Content-Length says. The hold can run out in the gap between two reads
-// of a trickled body, and a read's absence alone answered such a request
-// 504, as if magpie held it of its own (a full run raced one out there,
-// #4511); a body short of its length is still arriving, and the time is
-// the client's. Not before its first read: a request waiting for body
+// between two of its reads, and its end hasn't come: less has come than
+// the request's own Content-Length says, or, for a body of no said
+// length (chunked), no read has met its end yet. The hold can run out in
+// the gap between two reads of a trickled body, and a read's absence
+// alone answered such a request 504, as if magpie held it of its own (a
+// full run raced one out there, #4511); a body short of its length is
+// still arriving, and the time is the client's. Not before its first read: a request waiting for body
 // room (bodyRoom.take) is held by magpie, whose 503 or 504 says so, and
-// its client may have sent the whole body already. A body read whole, a
-// length never said and an empty one are judged by the read alone.
+// its client may have sent the whole body already. A chunked body's
+// decoder spends its time between reads too (empty gzip members, #4775
+// review), and judged by the read alone it was answered 504 there, as
+// magpie's own hold. A body read whole and an empty one are not arriving.
 func (u *unroutedHold) bodyArriving() bool {
 	d := u.r.ContentLength
-	if d <= 0 || u.bodyRead.Load() >= d {
+	if d == 0 || u.bodyEnded.Load() || d > 0 && u.bodyRead.Load() >= d {
 		return false
 	}
 	u.wmu.Lock()
