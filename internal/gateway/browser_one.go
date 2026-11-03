@@ -52,10 +52,17 @@ var browserActions = map[string]browserAction{
 	"text":        {"browser_text", nil},
 	"console":     {"browser_console", nil},
 	"dialog":      {"browser_dialog", nil},
+	// the gateway's own: browserRecord
+	"record_start": {browserRecordTool, map[string]any{"action": "start"}},
+	"record_stop":  {browserRecordTool, map[string]any{"action": "stop"}},
 }
 
+// browserRecordTool is the record actions' tool, which the gateway answers
+// itself.
+const browserRecordTool = "record"
+
 // browserActionOrder is the order the schema lists them in.
-var browserActionOrder = []string{"tabs", "tab_new", "tab_select", "tab_close", "browsers", "use_browser", "navigate", "back", "forward", "reload", "snapshot", "click", "type", "press", "hover", "select", "scroll", "drag", "upload", "wait", "screenshot", "evaluate", "text", "console", "dialog"}
+var browserActionOrder = []string{"tabs", "tab_new", "tab_select", "tab_close", "browsers", "use_browser", "navigate", "back", "forward", "reload", "snapshot", "click", "type", "press", "hover", "select", "scroll", "drag", "upload", "wait", "screenshot", "evaluate", "text", "console", "dialog", "record_start", "record_stop"}
 
 func browserOneTool() map[string]any {
 	str := func(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
@@ -73,6 +80,7 @@ func browserOneTool() map[string]any {
 			"snapshot [interactive, ref, maxChars]: the page as an accessibility tree, a ref on each element you can act on.\n" +
 			"click [ref, double, button, modifiers]. type [ref, text, clear, submit, slowly]. press [key, ref]. hover [ref]. select [ref, values]. scroll [direction, amount, ref]. drag [from, to]. upload [ref, paths].\n" +
 			"wait [text, textGone, url, seconds, timeout]. screenshot [ref, fullPage, png]. evaluate [script, ref]. text [maxChars]: the visible text. console [level, limit]. dialog [accept, promptText].\n" +
+			"record_start: keep a picture of the window after each action that changes the page. record_stop: those pictures as a GIF, at a link to download, for the user to see what was done.\n" +
 			"Every action takes tab, and screenshot: true to add a small picture of the window to its answer.",
 		"inputSchema": map[string]any{
 			"type": "object",

@@ -31,6 +31,9 @@ func TestBrowserActionsCoverTheTools(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s is listed but unknown", name)
 		}
+		if a.tool == browserRecordTool {
+			continue // the gateway's own
+		}
 		if !strings.Contains(string(src), "  async "+a.tool+"(session, args) {") {
 			t.Errorf("%s's %s isn't in background.js", name, a.tool)
 		}
