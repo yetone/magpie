@@ -32,7 +32,14 @@ import (
 // A call made through magpie's own entry (provider "magpie", which
 // internal/agent's pi.go and omp.go write, "dial" before the rename) is the
 // gateway's to count: it logged the call itself, with the provider and
-// account that answered.
+// account that answered. Cindy's Pi names it otherwise: Cindy gives a
+// custom provider it imports the link's id and eight hex digits of a new
+// UUID (its import parser: `${id.slice(0,24)}-${randomUUID().slice(0,8)}`),
+// so magpie's link, id "magpie" (internal/agent's cindy.go), is
+// "magpie-beedee1a" there, and a call through it was counted twice: by the
+// gateway, and again here as Cindy's own (jealousy03888 on Discord, ZCode's
+// GLM-5.3 in Cindy listed once as a gateway request and once as a local
+// session).
 //
 // A fork (pi --fork, /fork) starts with a copy of its parent's entries, ids
 // and times kept: they are the parent's calls, left out of the fork as
@@ -47,8 +54,30 @@ func piCallFiles() []file {
 	return append(out, wslFiles("pi", "raft", "omp")...)
 }
 
-// piGateway is whether a provider is magpie's own entry.
-func piGateway(provider string) bool { return provider == "magpie" || provider == "dial" }
+// piGateway is whether a provider is magpie's own entry, in agent's files.
+func piGateway(agent, provider string) bool {
+	if provider == "magpie" || provider == "dial" {
+		return true
+	}
+	return agent == "cindy" && cindyGatewayProvider(provider)
+}
+
+// cindyGatewayProvider is whether a provider id is the one Cindy gives
+// magpie's import link: "magpie-" and eight lowercase hex digits. A
+// provider the user adds in Cindy by hand under the name Magpie is
+// "magpie", or "magpie-2" beside another (its slug), never this shape.
+func cindyGatewayProvider(id string) bool {
+	rest, ok := strings.CutPrefix(id, "magpie-")
+	if !ok || len(rest) != 8 {
+		return false
+	}
+	for _, r := range rest {
+		if !('0' <= r && r <= '9' || 'a' <= r && r <= 'f') {
+			return false
+		}
+	}
+	return true
+}
 
 type piCallLine struct {
 	Type      string   `json:"type"`
@@ -156,7 +185,7 @@ func piCall(st *callFile, agent string, l piCallLine, provider, model string) (C
 	default:
 		return Call{}, false
 	}
-	if u == nil || model == "" || piGateway(provider) {
+	if u == nil || model == "" || piGateway(agent, provider) {
 		return Call{}, false
 	}
 	if u.Input < 0 || u.Output < 0 || u.CacheRead < 0 || u.CacheWrite < 0 {

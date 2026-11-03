@@ -56,8 +56,9 @@ func TestCallParseVersionRaiseReadsThatAgentAlone(t *testing.T) {
 	}
 
 	unraised := CallCacheVersion()
+	kept := callParseVersions
 	callParseVersions = map[string]int{"claude": 1}
-	t.Cleanup(func() { callParseVersions = map[string]int{} })
+	t.Cleanup(func() { callParseVersions = kept })
 	if CallCacheVersion() == unraised || !strings.Contains(CallCacheVersion(), "claude=1") {
 		t.Fatalf("raised Claude's calls, and what is made of them is still %q", CallCacheVersion())
 	}
