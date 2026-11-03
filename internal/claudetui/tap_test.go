@@ -235,6 +235,13 @@ func TestTapEnv(t *testing.T) {
 	if want := []string{"BUN_OPTIONS=--preload /mnt/c/tap.js", tapEnv + "=/mnt/c/tap.jsonl"}; !slices.Equal(env, want) {
 		t.Fatalf("WSL env %q, want %q", env, want)
 	}
+	// the bridge's guard file, where Claude Code reads it (#4804)
+	t.Setenv(GuardEnv, filepath.Join(tmp, "guard.json"))
+	guarded, env := newTap(func(p string) string { return "/mnt/c/" + filepath.Base(p) })
+	defer guarded.drop()
+	if want := []string{"BUN_OPTIONS=--preload /mnt/c/tap.js", tapEnv + "=/mnt/c/tap.jsonl", GuardEnv + "=/mnt/c/guard.json"}; !slices.Equal(env, want) {
+		t.Fatalf("guarded env %q, want %q", env, want)
+	}
 	if runtime.GOOS != "windows" {
 		spaced := filepath.Join(tmp, "a b")
 		_ = os.Mkdir(spaced, 0o700)

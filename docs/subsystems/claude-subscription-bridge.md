@@ -342,24 +342,43 @@ over each turn. One that can't be had fails the request, saying which
 and why; no Claude Code runs it. With the bytes in, the request is an
 ordinary one with a pasted image (`TestClaudeTUIImageByURL`).
 
-Safeguards are taken: interactive Claude Code reads
-`CLAUDE_CODE_EXTRA_BODY` only as it starts (2.1.316: a later
-`apply_flag_settings` or a rewritten `--settings` file changes nothing it
-sends), so `startRun` puts them in its environment, and a turn whose
-safeguards changed in what the user allows starts a new run told the
-whole conversation (`setSafeguards`). Claude Code's classifier context
-also carries parts that change on nearly every request, the ones it
-names as variable and sheds over its 256KB budget: `prior_turn_context`,
-`system_reminders`, `artifacts`, `text_provenance`, `shed`, Chrome's
-tabs, and git's status, remotes and error. `safeguardsKept` leaves those
-out of the comparison (git keeps cwd, root, branch and default branch),
-and a run whose turn differs only there goes on with the context it
-started with. Restarting for them began a new run for every turn and
-tool round, each writing the whole conversation to the cache again, and
-one message drained a Pro account's 5-hour window (xybio;
-`TestClaudeTUISafeguardsVaryingPartsKeepTheRun`). The cost: the server
-classifier sees those parts as they were when the run started, not
-current. A rules, permission-mode, auto-mode, folder or branch change
+Safeguards are taken, each turn's in every request (#4804). Interactive
+Claude Code reads `CLAUDE_CODE_EXTRA_BODY` from its own environment as
+it builds each request, and nothing outside it changes that once it runs
+(2.1.316: a later `apply_flag_settings` or a rewritten `--settings` file
+changes nothing it sends). `startRun` puts them in its environment, and
+writes the same extra body to `guard.json` in the run's temp folder,
+named to the helper by `MAGPIE_CLAUDE_GUARD` (`claudetui.GuardEnv`). The
+helper hands it to Claude Code as WSL reads it, and takes it out of the
+environment otherwise. On each `/v1/messages` request whose body is a
+string with a `safeguards` key, `tap.js` reads the file, puts its
+`safeguards` there in place of Claude Code's, and sets
+`CLAUDE_CODE_EXTRA_BODY` in Claude Code's environment to it, so the
+requests after are built with it. A JSON parse and stringify of a
+2.1.316 body is byte for byte the same, so the request is what Claude
+Code sends with that variable. At the first such request it writes
+`guard.json.live`. `setSafeguards` replaces the file (temp file and
+rename) before the turn or tool results go to the run, and the run goes
+on, its cache too: an auto-mode tool loop's classifier context grows by
+a `prior_turn_context` entry each batch, and restarting for that began
+a new run for every tool round, each writing the whole conversation to
+the cache again (3 to 10 times the cost;
+`TestClaudeTUIToolLoopCarriesEachBatchsSafeguards`,
+`TestTapPutsTheGuardFilesSafeguards`). A changed safety beta, or
+safeguards appearing or going, still restarts.
+
+A run with no `.live` file (no tap, a Claude Code not on
+`FetchSession`, or no request yet) can't be given them. Its classifier
+context also carries parts that change on nearly every request, the
+ones Claude Code names as variable and sheds over its 256KB budget:
+`prior_turn_context`, `system_reminders`, `artifacts`,
+`text_provenance`, `shed`, Chrome's tabs, and git's status, remotes and
+error. `safeguardsKept` leaves those out of the comparison (git keeps
+cwd, root, branch and default branch), and such a run whose turn
+differs only there goes on with the context it started with
+(xybio; `TestClaudeTUISafeguardsVaryingPartsKeepTheRun`). The server
+classifier then sees those parts as they were when the run started. A
+rules, permission-mode, auto-mode, folder or branch change
 still restarts. The `-p` run takes every change in place
 (`apply_flag_settings`). Client cache marks are taken too, but not kept: the
 helper pastes the words without their marks, so the run keeps Claude
@@ -836,7 +855,12 @@ busy with another request, ended (how long ago, and why: `endWhy`, set by
 conversation. Tool results that find no run waiting add what became of
 the run that made the calls ("the run that made the calls ended …",
 `whyCallsLost`, from `b.lostCalls`, which `removeRun` fills with the calls
-the run waited on and the results it was last handed).
+the run waited on and the results it was last handed). Tool results a
+waiting run can't take (its safeguards can't be set, or it isn't
+waiting on those calls) end it with `abortFor`, and the log says why:
+"tool results process expired: <why>", where it said "process expired"
+alone and the run's end read "magpie ended it" (#4804,
+`TestClaudeTUIToolResultsLogWhyTheRunEnded`).
 
 ## A turn the client gives up on (`letGo`, #780, #1365)
 

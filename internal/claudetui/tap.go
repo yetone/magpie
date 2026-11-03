@@ -33,6 +33,14 @@ const tapPrefix = "magpie-claude-tap-"
 // tapEnv names the file tap.js writes to.
 const tapEnv = "MAGPIE_CLAUDE_TAP"
 
+// GuardEnv names, to the helper, a file of the bridge's that holds the
+// extra body (CLAUDE_CODE_EXTRA_BODY) of the client's latest turn: tap.js
+// puts its safeguards in each request Claude Code makes, which reads that
+// variable only from an environment nothing outside it can change. The
+// bridge rewrites the file as a turn brings new ones, and tap.js writes
+// <file>.live once it has seen a request it puts them in.
+const GuardEnv = "MAGPIE_CLAUDE_GUARD"
+
 // how long a message of the transcript waits for its stream, and a turn's
 // end for its streams to end; and how often the tap is read while one
 // goes on
@@ -102,7 +110,11 @@ func newTap(path func(string) string) (*tap, []string) {
 	if v := strings.TrimSpace(os.Getenv("BUN_OPTIONS")); v != "" && os.Getenv(WSLEnv) == "" {
 		opts = v + " " + opts
 	}
-	return t, []string{"BUN_OPTIONS=" + opts, tapEnv + "=" + path(out)}
+	env := []string{"BUN_OPTIONS=" + opts, tapEnv + "=" + path(out)}
+	if g := os.Getenv(GuardEnv); g != "" {
+		env = append(env, GuardEnv+"="+path(g))
+	}
+	return t, env
 }
 
 // drop removes the tap's folder.
