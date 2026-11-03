@@ -22,11 +22,19 @@ i.dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radiu
 i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 10%, transparent); }
 
 .ctx-card { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 14px; min-width: 0; font-variant-numeric: tabular-nums; }
-.ctx-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ctx-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+/* the route and the state, kept together at the end of the head: beside
+   the title while the whole model id fits there, else on a line of their
+   own, where the id ends in an ellipsis */
+.ctx-end { display: flex; flex: 1 1 auto; justify-content: flex-end; align-items: center; gap: 8px; min-width: 0; }
 .ctx-head .grow, .ctx-foot .grow, .ctx-contents-head .grow, .ctx-agent-head .grow, .ctx-agent-foot .grow, .ctx-sess-head .grow { flex: 1; }
-.ctx-title { font-size: 13px; font-weight: 600; color: var(--fg); white-space: nowrap; }
+.ctx-title { flex: none; font-size: 13px; font-weight: 600; color: var(--fg); white-space: nowrap; }
 .ctx-route, .ctx-who, .ctx-what { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
-.ctx-route { gap: 6px; font-size: 12px; }
+/* the title never gives way: the model id does, down to its ellipsis, and
+   past that the route is cut at its own edge, so nothing in it is drawn
+   over the title or the state (packinggoods on Discord: in a narrow window
+   the provider's icon sat on the end of "Context window") */
+.ctx-route { gap: 6px; font-size: 12px; overflow: hidden; }
 .ctx-who { flex: none; color: var(--fg-2); font-weight: 500; white-space: nowrap; }
 .ctx-who .ic { width: 14px; height: 14px; }
 .ctx-what .ic { flex: none; width: 12px; height: 12px; }
@@ -140,7 +148,7 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 /* Routing: the card under the story of the request */
 .rt-log .ctx-card { margin-top: 12px; }
 /* folded: its head alone, how full it is beside the title */
-.ctx-fold { display: inline-flex; align-items: center; gap: 6px; min-width: 0; height: 22px; margin: -2px 0 -2px -4px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.ctx-fold { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 22px; margin: -1px 0 -1px -4px; padding: 0 6px 0 4px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
 .ctx-fold:hover { background: var(--pill); }
 .ctx-fold .tw { display: inline-flex; width: 10px; flex: none; color: var(--faint); }
 .ctx-fold .tw svg { transition: transform .2s var(--ease, ease); }
@@ -152,11 +160,21 @@ i.dot.free { background: var(--k-free); box-shadow: inset 0 0 0 1px color-mix(in
 .ctx-card.shut > :not(.ctx-head) { display: none; }
 /* its head alone, the space under it is the space over it */
 .ctx-card.shut { padding-bottom: 14px; }
-:where(.ctx-card.shut.max420) .ctx-what { display: none; }
 /* folded, the head is one line of a fixed height whatever a live request
    puts in it, so nothing under it moves; a thin bar of what fills the
    window, a part each, takes the room between the figure and the model */
-.ctx-card.shut .ctx-head { height: 20px; white-space: nowrap; }
+.ctx-card.shut .ctx-head { height: 20px; white-space: nowrap; flex-wrap: nowrap; }
+/* folded, the bar takes the room and the model id gives it up first. A
+   narrower card keeps the agent's icon alone, a narrow one no route and
+   the state's dot without its word; only past that is the figure cut, so
+   nothing is drawn over another */
+.ctx-card.shut .ctx-end { flex: 0 1 auto; }
+.ctx-card.shut.max520 :is(.ctx-who-n, .ctx-sep, .ctx-what) { display: none; }
+.ctx-card.shut.max420 .ctx-route { display: none; }
+.ctx-card.shut.max420 .ctx-end { flex: none; }
+.ctx-card.shut.max420 .ctx-state { padding: 0 7px; }
+.ctx-card.shut.max420 .ctx-state-w { display: none; }
+.ctx-card.shut.max420 .ctx-short { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ctx-stack { display: none; flex: 1 1 0; min-width: 24px; max-width: 360px; height: 6px; border-radius: 3px; background: var(--k-free); overflow: hidden; }
 .ctx-card.shut .ctx-stack { display: flex; }
 .ctx-stack i { flex: none; height: 100%; background: var(--k); transition: width .3s var(--ease, ease); }

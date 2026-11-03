@@ -790,8 +790,13 @@
         if (r.agent) route.append(el("span", "ctx-sep", "›"));
         route.append(what);
       }
-      head.append(route);
-      head.append(st);
+      // the route and the state go together: where the title leaves them
+      // too little room they take a line of their own, the model id cut
+      // to fit there, and nothing is drawn over the title (packinggoods on
+      // Discord: in a narrow window the provider's icon sat on it)
+      const end = el("span", "ctx-end");
+      end.append(route, st);
+      head.append(end);
 
       // how full, and the cache
       const top = el("div", "ctx-top");
