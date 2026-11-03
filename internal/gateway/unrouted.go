@@ -66,10 +66,11 @@ var unroutedShow, unroutedUnknown, unroutedMost = 15 * time.Second, 30 * time.Se
 // socket's idle deadline and the decoded body size limit also still hold.
 // Even compressed input that produces no decoded bytes can earn no more
 // than eight minutes, bounding a non-masking hold to ten minutes overall.
-const (
-	unroutedUploadRate  = 32 << 10
-	unroutedUploadGrace = 8 * time.Minute
-)
+// The grace is a var only for tests, which scale it with unroutedMost; it
+// is counted in whole seconds.
+const unroutedUploadRate = 32 << 10
+
+var unroutedUploadGrace = 8 * time.Minute
 
 // unroutedWatched is whether a request to path is an agent's turn, which
 // is given a route once magpie knows where it goes: Chat, Responses,

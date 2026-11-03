@@ -394,7 +394,9 @@ recorded as a prediction failure (`noPrediction`).
   `TestUnroutedProgressingUploadOutlastsMost` covers TLS through `Front`
   with declared, chunked, gzip and zstd bodies;
   `TestUnroutedUploadCreditKeepsIdleDeadline`, `TestUnroutedUploadTimeIsBounded`,
-  `TestUnroutedUploadAllowanceHasCeiling`
+  `TestUnroutedUploadAllowanceHasCeiling`, `TestUnroutedFastUploadBanksNothing`,
+  `TestUnroutedEmptyEncodedStreamIsBounded` (empty gzip members, zstd
+  skippable frames)
   and `TestUnroutedTrickledBodyAnswered408` cover the remaining bounds.
   Masking's time, its wait for the local model's
   turn with it, counts toward neither (`masked`, `checkMost`): the model
