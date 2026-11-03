@@ -17,6 +17,12 @@ const (
 	zcodeFlashTrialEnded = `{"type":"error","error":{"type":"invalid_request_error","message":"ZCode has no active limited quota for GLM-5.3-Flash-Trial"}}`
 	zcodeTrialEnded      = `{"type":"error","error":{"type":"invalid_request_error","message":"ZCode has no active limited quota for GLM-5.3-Trial"}}`
 	zcodeTrialSpent      = `{"type":"error","error":{"type":"rate_limit_error","message":"ZCode's limited quota for glm-5.3 is exhausted or temporarily unavailable"}}`
+	// zcode 0.1.49's words for an entry it rests a minute after a quota
+	// answer: why goes in front, so the spent words stay last (Can4ry_ on
+	// X). 0.1.48 put "(ZCode answered 429 …)" after them, which these
+	// words didn't match, and the account rested whole.
+	zcodeTrialRested    = `{"type":"error","error":{"type":"rate_limit_error","message":"ZCode said the last request for GLM-5.3 was over its quota, so it is not asked again for a minute: ZCode's limited quota for GLM-5.3 is exhausted or temporarily unavailable"}}`
+	zcodeTrialRested048 = `{"type":"error","error":{"type":"rate_limit_error","message":"ZCode's limited quota for GLM-5.3 is exhausted or temporarily unavailable (ZCode answered 429 to the last request for it, so it is not asked again for a minute)"}}`
 	// zcode.z.ai's edge firewall's block page, as the plugin's startBlocked
 	// puts it (windy_66454 on Discord, 10-31: "405 Method Not Allowed — the
 	// provider's network firewall blocked …"), and ZCode's risk control
@@ -44,6 +50,8 @@ func TestZCodeTrialRefusalRestsTheTrialAlone(t *testing.T) {
 		{"trial ended", "zcode", "GLM-5.3-Trial", zcodeTrialEnded, 400, false, false},
 		{"trial ended, still listed", "zcode", "GLM-5.3-Trial", zcodeTrialEnded, 400, true, false},
 		{"trial spent", "zcode", "GLM-5.3-Trial", zcodeTrialSpent, 429, true, false},
+		{"trial rested", "zcode", "GLM-5.3-Trial", zcodeTrialRested, 429, true, false},
+		{"trial rested, 0.1.48's words", "zcode", "GLM-5.3-Trial", zcodeTrialRested048, 429, true, true},
 		{"account quota", "zcode", "GLM-5.3", `{"error":{"type":"rate_limit_error","message":"quota exhausted"}}`, 429, false, true},
 		{"account quota 400", "zcode", "GLM-5.3", `{"error":{"type":"invalid_request_error","message":"quota exhausted for this account"}}`, 400, false, true},
 		{"account key", "zcode", "GLM-5.3", `{"error":{"message":"invalid api key"}}`, 401, false, true},
