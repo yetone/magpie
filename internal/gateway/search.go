@@ -339,8 +339,9 @@ func searchRank(p provider.Provider) int {
 		return 4
 	case partSearcher(p) && slices.ContainsFunc(p.Available(), func(m catalog.Model) bool { return searchesAlone(p, m.ID) }):
 		return 4
-	case googleAccount(p):
-		// Gemini on a Google sign-in, by googleSearch (#757)
+	case googleAccount(p), geminiKeySearches(p):
+		// Gemini on a Google sign-in (#757) or an AI Studio key
+		// (cocoasoda on Discord), by googleSearch
 		return 5
 	case remoteSearchesAny(p):
 		// another magpie, with the models it searches natively for
@@ -473,7 +474,7 @@ func Searchers() []SearcherChoice {
 		if len(ms) == 0 {
 			continue
 		}
-		out = append(out, SearcherChoice{Provider: p, Small: searcherModel(p), Models: ms, rank: r, ManualOnly: manualOnly, Own: googleAccount(p)})
+		out = append(out, SearcherChoice{Provider: p, Small: searcherModel(p), Models: ms, rank: r, ManualOnly: manualOnly, Own: googleAccount(p) || geminiKeySearches(p)})
 	}
 	slices.SortStableFunc(out, func(a, b SearcherChoice) int { return cmp.Compare(a.rank, b.rank) })
 	return out
@@ -508,8 +509,8 @@ type SearcherChoice struct {
 	// Service is a Kimi Code plan, which searches by its search service,
 	// with no model (and no Small or Models)
 	Service bool
-	// Own is a Google sign-in, whose Gemini searches for the provider's
-	// own models first, whoever is named (ownSearcher)
+	// Own is a Google sign-in or an AI Studio key, whose Gemini searches
+	// for the provider's own models first, whoever is named (ownSearcher)
 	Own bool
 }
 

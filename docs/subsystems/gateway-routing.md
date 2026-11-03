@@ -1035,6 +1035,11 @@ only the hand-typed ones. Before, it was left out of the picker while
 the page listed it among the relays to pick by hand (axelburks on
 Discord). Covered by `TestSearcherRelayWithoutModelList` and
 `TestSearcherPickerOffersResponsesRelay`.
+A key at AI Studio's Gemini API (`geminiKeySearches`) ranks with a Google
+sign-in (5), by googleSearch, and like one is `Own`: its own models search
+first whoever is named. Before, it searched for its own models only and
+the picker never listed it (cocoasoda on Discord,
+`TestAIStudioKeySearchesForOthers`).
 Covered by `TestCommandCodeSearchesForOtherModels`,
 `TestPluginSearchModelIsASearcher` and `TestSearcherChosen`.
 

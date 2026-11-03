@@ -591,7 +591,8 @@ type searchChoiceJSON struct {
 	// Service is a Kimi Code plan, which searches by its search service:
 	// named by itself, with no model
 	Service bool `json:"service,omitempty"`
-	// Own is a Google sign-in, which searches for its own models first
+	// Own is a Google sign-in or an AI Studio key, which searches for its
+	// own models first
 	Own bool `json:"own,omitempty"`
 }
 

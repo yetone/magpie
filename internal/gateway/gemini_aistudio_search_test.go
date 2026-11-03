@@ -212,3 +212,48 @@ func TestGeminiKeySearchesScope(t *testing.T) {
 		t.Error("a Google sign-in is taken for an AI Studio key")
 	}
 }
+
+// An AI Studio key that searches by googleSearch is a searcher like a
+// Google sign-in (cocoasoda on Discord: 代搜索供应商 had no Gemini): Settings
+// lists it, its own models first (Own), and magpie picks it by itself to
+// search for another provider's model, which can't, on the user's key.
+func TestAIStudioKeySearchesForOthers(t *testing.T) {
+	s, calls := aiStudio(t, nil)
+	other := provider.Provider{ID: "plain", Name: "Plain", Chat: "https://plain.example/v1", Key: "k", Models: []string{"plain-1"}}
+	if err := provider.Save(other); err != nil {
+		t.Fatal(err)
+	}
+	google, err := provider.Find("google")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, manual := namedSearcherRank(*google); r != 5 || manual {
+		t.Fatalf("rank %d, by hand only %v", r, manual)
+	}
+	var found *SearcherChoice
+	for _, c := range Searchers() {
+		if c.Provider.ID == "google" {
+			found = &c
+		}
+		if c.Provider.ID == "plain" {
+			t.Error("a provider that can't search listed")
+		}
+	}
+	if found == nil || !found.Own || found.Small != "gemini-2.5-flash" || found.ManualOnly {
+		t.Fatalf("Searchers: %+v", found)
+	}
+	if p, m, ok := autoSearcher(); !ok || p.ID != "google" || m != "gemini-2.5-flash" {
+		t.Fatalf("autoSearcher: %q %q %v", p.ID, m, ok)
+	}
+	var said string
+	var hits []Hit
+	said, hits, err = s.webSearch(searchingOn(t.Context(), other), "who won euro 2024")
+	if err != nil || !strings.Contains(said, "Spain won Euro 2024") || len(hits) == 0 {
+		t.Fatalf("search for plain-1: %q %v %v", said, hits, err)
+	}
+	gem := geminiCalls(calls())
+	if len(gem) != 1 || len(calls()) != 1 {
+		t.Fatalf("calls %d, Gemini %d", len(calls()), len(gem))
+	}
+	checkGoogleSearch(t, "search for another", gem[0])
+}
