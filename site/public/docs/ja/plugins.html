@@ -411,6 +411,8 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li><code>key</code> を含む成功は API キーとして保存されます。</li>
       <li>結果に <code>provider: "other-id"</code> を付けると、そのプラグインがサインインする別のプロバイダにサインイン情報を保存します。</li>
       <li>失敗時の <code>error</code> は magpie 独自のフィールドで、ユーザーに理由（最大 500 文字）が表示されます。なければ、サインインに失敗したことだけが表示されます。</li>
+      <li><code>authorize</code> がサインインを始められないときは、エラーを投げるか、<code>callback</code> なしの <code>{type: "failed", error}</code> を返します。ユーザーにはその理由が表示されます。</li>
+      <li>ユーザーがキャンセルした、または時間切れになったサインインはそこで終わります。その後に <code>callback</code> が返したものは捨てられ、そのサインインのための fetch も失敗します。magpie はサインインの <code>AbortSignal</code> を <code>callback(code, { signal })</code>（と <code>authorize(inputs, { signal })</code>）で渡すので、長く待つ callback は中止されたときに止められます。</li>
       <li><code>inputs</code> は <code>prompts</code> を持つメソッドにだけ渡されます。prompts のないメソッドには、OpenCode の TUI が呼ぶときと同じく <code>undefined</code> が渡ります。空のオブジェクトは OpenCode の CLI の呼び方で、その場合ターミナルで質問するプラグインもあります。</li>
     </ul>
     <h3>サインイン前の質問</h3>

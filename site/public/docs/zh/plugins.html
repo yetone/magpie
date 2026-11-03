@@ -411,6 +411,8 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li>带 <code>key</code> 的成功结果保存为 API key。</li>
       <li>结果里写 <code>provider: "other-id"</code>，登录就保存到插件负责的另一个供应商下。</li>
       <li>失败结果里的 <code>error</code> 是 magpie 自己的字段：用户会看到原因（最多 500 字符）。不写的话，用户只能看到登录失败。</li>
+      <li><code>authorize</code> 无法开始登录时，可以抛出错误，或者返回不带 <code>callback</code> 的 <code>{type: "failed", error}</code>：用户会看到这条原因。</li>
+      <li>用户取消或超时的登录就此结束：之后 <code>callback</code> 返回什么都会被丢弃，它为这次登录发出的请求也会失败。magpie 还会把这次登录的 <code>AbortSignal</code> 传进去：<code>callback(code, { signal })</code>（以及 <code>authorize(inputs, { signal })</code>），等得久的 callback 可以在它中止时停下。</li>
       <li>只有带 <code>prompts</code> 的方式才会收到 <code>inputs</code>。没有 prompts 的方式收到 <code>undefined</code>，和 OpenCode 的 TUI 一样。OpenCode 的 CLI 传的是空对象，有些插件因此会在终端里自己提问。</li>
     </ul>
     <h3>登录前的提问</h3>

@@ -118,7 +118,7 @@ type call struct {
 	// the body's reader takes them: the host's reader queues them without
 	// ever waiting on one request's consumer (see push).
 	stream      bool
-	cancellable bool // a gateway request owns asynchronous I/O, without a stream slot
+	cancellable bool // a gateway request or sign-in step owns asynchronous I/O, without a stream slot
 	mu          sync.Mutex
 	queue       []message
 	queued      int           // the queued chunks' decoded bytes
@@ -1594,6 +1594,11 @@ func (h *host) releaseSlot(c *call) {
 	}
 }
 
+// cancellable are the methods whose work the host ends when their caller
+// gives up: a gateway request's I/O, and a sign-in's steps, so a sign-in
+// cancelled or timed out saves nothing the plugin answers after (#5016).
+var cancellable = map[string]bool{"gatewayRequest": true, "authorize": true, "callback": true, "apiKey": true}
+
 // call asks the host method with params and reads its answer into out.
 func (h *host) call(ctx context.Context, method string, params, out any) error {
 	id, c, err := h.begin(false)
@@ -1601,7 +1606,7 @@ func (h *host) call(ctx context.Context, method string, params, out any) error {
 		return err
 	}
 	c.mu.Lock()
-	c.cancellable = method == "gatewayRequest"
+	c.cancellable = cancellable[method]
 	c.mu.Unlock()
 	if err := h.enqueueCall(ctx, map[string]any{"id": id, "method": method, "params": params}, nil, c); err != nil {
 		c.settle(err)

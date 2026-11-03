@@ -411,6 +411,8 @@ magpie quota                             <span class="c"># acme · Pro · 5h 37%
       <li>A success with <code>key</code> is saved as an API key.</li>
       <li><code>provider: "other-id"</code> on the result saves the sign-in to another provider the plugin signs in to.</li>
       <li><code>error</code> on a failure is magpie’s own field: the user sees why (up to 500 characters). Without it, they see only that the sign-in failed.</li>
+      <li>When <code>authorize</code> can’t start the sign-in, throw, or return <code>{type: "failed", error}</code> with no <code>callback</code>: the user sees that reason.</li>
+      <li>A sign-in the user cancels, or that times out, is over: whatever <code>callback</code> returns after it is dropped, and the fetches it makes for it fail. magpie also passes the sign-in’s <code>AbortSignal</code> as <code>callback(code, { signal })</code> (and <code>authorize(inputs, { signal })</code>), so a callback that waits a long time can stop when it aborts.</li>
       <li><code>inputs</code> is passed only to a method with <code>prompts</code>. A method without prompts gets <code>undefined</code>, as OpenCode’s TUI calls it. An empty object is how OpenCode’s CLI calls, and some plugins then ask on the terminal.</li>
     </ul>
     <h3>Questions before signing in</h3>

@@ -887,10 +887,21 @@ const NewAccount = "new"
 // Authorize begins an OAuth sign-in to account (a key, or NewAccount),
 // through the proxy ctx names (netproxy.With): the plugin's requests for
 // it, there and in Finish, go through that one (#1663).
+// A plugin that can't start one says why ({ type: "failed", error }), and
+// that is the error (plugins#658).
 func Authorize(ctx context.Context, provider string, method int, inputs map[string]string, account string) (Authorization, error) {
-	var a Authorization
-	err := Call(ctx, "authorize", map[string]any{"provider": provider, "method": method, "inputs": inputs, "account": account, "proxy": proxyOf(ctx)}, &a)
-	return a, err
+	var r struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+		Authorization
+	}
+	if err := Call(ctx, "authorize", map[string]any{"provider": provider, "method": method, "inputs": inputs, "account": account, "proxy": proxyOf(ctx)}, &r); err != nil {
+		return Authorization{}, err
+	}
+	if !r.OK {
+		return Authorization{}, failure(r.Error)
+	}
+	return r.Authorization, nil
 }
 
 // Saved is where a sign-in was kept: the provider (a plugin may sign in
