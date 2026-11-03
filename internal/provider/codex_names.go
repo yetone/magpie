@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"regexp"
+	"unsafe"
 
 	"github.com/tidwall/gjson"
 )
@@ -109,7 +110,9 @@ func codexNamesBad(body []byte) bool {
 			return !bad
 		})
 	}
-	top := gjson.GetManyBytes(body, "tools", "input", "tool_choice")
+	// read in place: GetManyBytes copies each value it finds, the input
+	// whole, which is the body's size (hundreds of MB with Codex's images)
+	top := gjson.GetMany(unsafe.String(unsafe.SliceData(body), len(body)), "tools", "input", "tool_choice")
 	tools(top[0])
 	top[1].ForEach(func(_, it gjson.Result) bool {
 		switch it.Get("type").String() {

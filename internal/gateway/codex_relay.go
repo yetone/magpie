@@ -42,7 +42,7 @@ func CodexRelay() http.Handler {
 			return
 		}
 		rest := strings.TrimPrefix(r.URL.Path, CodexPath)
-		body, status, err := readBoundedRequestBody(w, r, requestLimits{})
+		body, status, err := readBoundedRequestBody(w, r, requestLimits{body: codexBodyLimit()})
 		if err != nil {
 			relayError(w, status, err.Error())
 			return

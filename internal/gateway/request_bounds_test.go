@@ -24,6 +24,9 @@ func TestRequestBodyTooLarge(t *testing.T) {
 			s := New()
 			r := httptest.NewRequest("POST", "/", strings.NewReader("{}"))
 			r.ContentLength = defaultBodyLimit + 1
+			if api == "codex" { // Codex's own turns are read to more
+				r.ContentLength = codexBodyLimit() + 1
+			}
 			w := httptest.NewRecorder()
 			switch api {
 			case "chat":

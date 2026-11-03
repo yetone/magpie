@@ -199,7 +199,12 @@ func (s *Server) serveResponsesSocket(w http.ResponseWriter, r *http.Request) bo
 		log.Printf("responses socket from %s: %v", r.RemoteAddr, err)
 		return true
 	}
-	c.SetReadLimit(defaultBodyLimit)
+	// a turn on a new socket is the conversation whole (codexBodyLimit)
+	most := int64(defaultBodyLimit)
+	if strings.HasPrefix(r.URL.Path, CodexPath+"/") {
+		most = s.codexLimitOf()
+	}
+	c.SetReadLimit(most)
 	sock := &responsesSocket{s: s, o: o, path: r.URL.Path, c: c, ctx: o.ctx}
 	if !s.sockets.add(sock) {
 		c.Close(websocket.StatusGoingAway, "magpie is restarting")

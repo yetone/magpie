@@ -7,11 +7,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -29,6 +31,61 @@ const (
 	defaultBodyLimit   = 512 << 20
 	defaultBodyTimeout = 60 * time.Second
 )
+
+// codexBodyMost bounds codexBodyLimit on any machine.
+const codexBodyMost = 2 << 30
+
+// codexBodyLimit is the decoded limit of a turn on Codex's own backend
+// path (CodexPath, the relay, its WebSocket): a sixteenth of what
+// magpie's processes may use (bodyRoomSize's memory), defaultBodyLimit at
+// least and codexBodyMost at most. Codex keeps every image it generated
+// in the conversation, a ~3 MB PNG as ~4 MB of base64 each, and over
+// HTTP sends the conversation whole every turn: a session that generated
+// and revised images for a while went past 512 MB and got magpie's 413,
+// while Codex signed in to OpenAI directly kept going (dallascao on
+// Discord). One of Codex's own models is sent on to its sign-in as it
+// came, at about four times the body's size in Go heap at its peak; a
+// turn for a magpie model is translated, at several times that, and keeps
+// defaultBodyLimit (codexBackend). The bound still holds a zstd bomb: no
+// body decodes past it.
+func codexBodyLimit() int64 {
+	codexLimit.Lock()
+	defer codexLimit.Unlock()
+	if codexLimit.goos != memGOOS || codexLimit.root != memRoot || codexLimit.n == 0 {
+		limit, _ := memLimit(memGOOS, memRoot)
+		if limit <= 0 && memGOOS == runtime.GOOS {
+			limit = proc.MemTotal()
+		}
+		codexLimit.goos, codexLimit.root = memGOOS, memRoot
+		codexLimit.n = min(max(limit/16, defaultBodyLimit), codexBodyMost)
+	}
+	return codexLimit.n
+}
+
+// codexLimit is codexBodyLimit as last read, for the memory it was read
+// from (memGOOS and memRoot change only in tests).
+var codexLimit struct {
+	sync.Mutex
+	goos, root string
+	n          int64
+}
+
+// codexLimitOf is the decoded limit of a request on Codex's own path to
+// s: its requestLimits' when set (a test's), else codexBodyLimit.
+func (s *Server) codexLimitOf() int64 {
+	if s.requestLimits.body > 0 {
+		return s.requestLimits.body
+	}
+	return codexBodyLimit()
+}
+
+// bodyLimitOf is s's decoded limit for every other request.
+func (s *Server) bodyLimitOf() int64 {
+	if s.requestLimits.body > 0 {
+		return s.requestLimits.body
+	}
+	return defaultBodyLimit
+}
 
 type requestLimits struct {
 	body        int64

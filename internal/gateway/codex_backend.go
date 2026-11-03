@@ -80,7 +80,9 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 	// newer: the backend serves a model only to a client that knows it
 	provider.SawCodexClient(r.Header)
 	rest := strings.TrimPrefix(r.URL.Path, CodexPath)
-	body, ok := s.readRequestBody(w, r, provider.Responses, 0)
+	// a turn of Codex's own is read to codexBodyLimit, one for a magpie
+	// model held to the limit of every other route once it is named
+	body, ok := s.readRequestBody(w, r, provider.Responses, s.codexLimitOf())
 	if !ok {
 		return
 	}
@@ -180,6 +182,11 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 		// The namespace owns the route even if a model is not in the catalog.
 		// Unknown providers/groups must fail locally, never fall through to OpenAI.
 		if strings.Contains(model, "/") {
+			if most := s.bodyLimitOf(); int64(len(body)) > most {
+				writeError(w, provider.Responses, http.StatusRequestEntityTooLarge, overLimit(most).Error()+
+					"; this limit is for a magpie model, and one of Codex's own models takes up to "+sizeWord(s.codexLimitOf()))
+				return
+			}
 			if rest == "/responses/compact" {
 				writeError(w, provider.Responses, 400, "/responses/compact is not supported for Magpie models; use a compaction_trigger on /responses")
 				return

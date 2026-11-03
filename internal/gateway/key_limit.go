@@ -48,7 +48,12 @@ func keyLimited(next http.Handler) http.Handler {
 		// a compressed body (#1223) is reserved at its decoded size and model
 		costCap := slices.ContainsFunc(limits, func(l *access.Limit) bool { return l.Cost > 0 })
 		if enc := r.Header.Get("Content-Encoding"); costCap || size < 0 || (enc != "" && !strings.EqualFold(enc, "identity")) {
-			b, status, err := readBoundedRequestBody(w, r, requestLimits{})
+			// a turn on Codex's own path reads to its own limit (codexBackend)
+			var most int64
+			if strings.HasPrefix(r.URL.Path, CodexPath+"/") {
+				most = codexBodyLimit()
+			}
+			b, status, err := readBoundedRequestBody(w, r, requestLimits{body: most})
 			if err != nil {
 				writeError(w, protoOfPath(r.URL.Path), status, err.Error())
 				return
