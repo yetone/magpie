@@ -321,7 +321,7 @@ function renderSearcher(s, keep, box) {
     const [pid, ...rest] = id.split("/");
     const c = choices.find((x) => x.id === pid);
     if (!c) return id;
-    if (c.service) return `${c.name} · ${t("its web search")}`;
+    if (c.service || (c.search && rest.join("/") === "@search")) return `${c.name} · ${t("its web search")}`;
     if (!rest.length) return `${c.name} · ${c.smallName || c.small}`;
     const m = c.models.find((x) => x.id === id);
     return `${m ? m.name : rest.join("/")} · ${c.name}`;
@@ -376,6 +376,9 @@ function renderSearcher(s, keep, box) {
       options.push({ value: c.id, label: t("its web search"), note: c.name, icon: c.icon, group: c.name });
       continue;
     }
+    // a ChatGPT account searches by its own web search, with no model's
+    // tokens spent (lucy_85908 on Discord); its models stay to be picked
+    if (c.search) options.push({ value: `${c.id}/@search`, label: t("its web search"), note: c.name, icon: c.icon, group: c.name });
     // its small model is offered once (Player on Discord): the model of the
     // same name below it searched just the same, "<provider>/<small>" being
     // that model named rather than magpie's pick, so a pick saved so is

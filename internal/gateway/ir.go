@@ -257,7 +257,12 @@ type Request struct {
 	ThinkOff  bool
 	Parallel  *bool // parallel tool calls allowed
 	WebSearch bool  // the client offered its provider's own web search
-	Fast      bool  // the client asked for priority processing: service_tier priority (Codex's Fast mode)
+	// WebAccess is the external_web_access of the client's web_search
+	// tool, as it sent it: Codex's web_search mode (false for "cached",
+	// true for "live"), which magpie's own search for a model that can't
+	// is made in (withWebAccess, #5018)
+	WebAccess json.RawMessage
+	Fast      bool // the client asked for priority processing: service_tier priority (Codex's Fast mode)
 	// Ultrafast is Codex's Ultrafast (service_tier "ultrafast"), which a
 	// ChatGPT account on a plan with it offers on its models; Fast is set
 	// with it, so where there is no Ultrafast the request goes fast

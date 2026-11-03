@@ -77,6 +77,9 @@ type rTool struct {
 	Tools       []rTool         `json:"tools,omitempty"` // a namespace's
 	Execution   string          `json:"execution,omitempty"`
 	Format      *rFormat        `json:"format,omitempty"` // a custom tool's
+	// ExternalWebAccess is a web_search tool's mode: false is Codex's
+	// "cached", true its "live"
+	ExternalWebAccess json.RawMessage `json:"external_web_access,omitempty"`
 }
 
 // rFormat is what a custom (freeform) tool's input is: "text", or a
@@ -523,6 +526,9 @@ func readResponsesFor(body []byte, facts, keepInstructions bool) (*Request, erro
 	for i, t := range append(q.Tools, found...) {
 		if strings.HasPrefix(t.Type, "web_search") {
 			r.WebSearch = true
+			if len(t.ExternalWebAccess) > 0 {
+				r.WebAccess = t.ExternalWebAccess
+			}
 		}
 		switch t.Type {
 		case "function":

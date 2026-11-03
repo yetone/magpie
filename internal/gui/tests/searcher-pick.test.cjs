@@ -10,7 +10,8 @@
 // one named that magpie can't use (turned off) is said in the row, magpie's pick shown instead;
 // relays said to search are manual-only, including during fallback; a Kimi Code plan, which
 // searches by its web search with no model, is offered by itself and said to search for its
-// own models first. Another setting saved
+// own models first; a ChatGPT account is offered by its web search ("<id>/@search", no
+// model's tokens spent, lucy_85908 on Discord) besides its small model and models. Another setting saved
 // keeps the pick (prefsKeep). No click moves the page. English and Chinese, Chromium and
 // WebKit, with the API faked. Search help covers costs for every provider and
 // explains current eligibility without claiming a provider can never search.
@@ -36,6 +37,9 @@ const choices = [
   { id: "relay", name: "MyRelay", icon: "generic", small: "claude-haiku-4-5", models: [
     { id: "relay/claude-haiku-4-5", name: "Claude Haiku 4.5", provider: "relay", providerName: "MyRelay" }] },
   { id: "kimi", name: "Kimi Code", icon: "kimi", small: "", models: [], service: true },
+  { id: "codex", name: "Codex (me@example.com)", icon: "openai", small: "gpt-6-luna", smallName: "GPT-6 Luna", search: true, models: [
+    { id: "codex/gpt-6-luna", name: "GPT-6 Luna", provider: "codex", providerName: "Codex (me@example.com)" },
+    { id: "codex/gpt-6.1-sol", name: "GPT-6.1 Sol", provider: "codex", providerName: "Codex (me@example.com)" }] },
   { id: "antigravity", name: "Antigravity", icon: "antigravity", small: "gemini-3-flash", own: true, models: [
     { id: "antigravity/gemini-3-flash", name: "Gemini 3 Flash", provider: "antigravity", providerName: "Antigravity" }] },
 ];
@@ -260,11 +264,24 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const kimi = (await page.locator("#list li:not(.group)").allInnerTexts()).filter((x) => x.includes("Kimi Code"));
       assert.equal(kimi.length, 1, "the plan is offered once, with no model");
       assert(kimi[0].includes(w.web));
-      const web = page.locator("#list li:not(.group)", { hasText: w.web });
+      const web = page.locator("#list li:not(.group)", { hasText: w.web }).filter({ hasText: "Kimi Code" });
       await web.scrollIntoViewIfNeeded();
       await click(web);
       await page.waitForFunction((want) => document.querySelector("#searchList button.searcher-pick")?.innerText === want, `Kimi Code · ${w.web}`);
       assert.equal(posted.at(-1).searcher, "kimi");
+
+      // a ChatGPT account, by its web search: its small model and models
+      // are still offered
+      await click(row.locator("button.searcher-pick"));
+      await page.locator("#pop").waitFor({ state: "visible" });
+      const codex = (await page.locator("#list li:not(.group)").allInnerTexts()).filter((x) => x.includes("Codex (me@example.com)"));
+      assert.equal(codex.filter((x) => x.includes(w.web)).length, 1, codex.join(" | "));
+      assert(codex.some((x) => x.includes("GPT-6 Luna")) && codex.some((x) => x.includes("GPT-6.1 Sol")), codex.join(" | "));
+      const cweb = page.locator("#list li:not(.group)", { hasText: w.web }).filter({ hasText: "Codex (me@example.com)" });
+      await cweb.scrollIntoViewIfNeeded();
+      await click(cweb);
+      await page.waitForFunction((want) => document.querySelector("#searchList button.searcher-pick")?.innerText === want, `Codex (me@example.com) · ${w.web}`);
+      assert.equal(posted.at(-1).searcher, "codex/@search");
 
       // back to a provider, by its small model
       await click(row.locator("button.searcher-pick"));

@@ -97,10 +97,14 @@ func (s *Server) ownSearch(ctx context.Context, p provider.Provider, query strin
 }
 
 // searchBy searches with one searcher: a Kimi Code plan by its search
-// service, any other by its model.
+// service, a ChatGPT account named with codexSearchModel by the backend's
+// search, any other by its model.
 func (s *Server) searchBy(ctx context.Context, p provider.Provider, model, query, effort string) (string, []Hit, error) {
 	if provider.KimiCodeSearch(p) != "" {
 		return s.kimiSearch(ctx, p, query)
+	}
+	if model == codexSearchModel && codexSearches(p) {
+		return s.codexSearchBy(ctx, p, query)
 	}
 	return s.searchWith(ctx, p, model, query, effort)
 }

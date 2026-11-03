@@ -80,7 +80,7 @@ func VisionEfforts() []string {
 // asked to search at: the one picked in Settings fitted to its levels,
 // or "" to send none.
 func searchEffort(p provider.Provider, model string) string {
-	if model == "" {
+	if model == "" || model == codexSearchModel {
 		return ""
 	}
 	return sideEffort(p.ID+"/"+model, settings.Load().SearcherEffort)
@@ -98,7 +98,7 @@ func SearchEffortNow() string {
 // SearchEfforts are the levels of the model that searches now: none for
 // a Kimi Code plan's search service, which has no model.
 func SearchEfforts() []string {
-	if p, m, ok := searcher(); ok && m != "" {
+	if p, m, ok := searcher(); ok && m != "" && m != codexSearchModel {
 		return ModelEfforts(p.ID + "/" + m)
 	}
 	return nil

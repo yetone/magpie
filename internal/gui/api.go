@@ -594,6 +594,9 @@ type searchChoiceJSON struct {
 	// Own is a Google sign-in or an AI Studio key, which searches for its
 	// own models first
 	Own bool `json:"own,omitempty"`
+	// Search is a ChatGPT account, which searches by the ChatGPT backend's
+	// search ("<id>/@search") besides its models
+	Search bool `json:"search,omitempty"`
 }
 
 type searchVendorJSON struct {
@@ -632,7 +635,7 @@ func searchState(s *settingsJSON) {
 	s.SearchChoices = []searchChoiceJSON{}
 	for _, c := range gateway.Searchers() {
 		p := c.Provider
-		j := searchChoiceJSON{ID: p.ID, Name: p.Name, Icon: p.Icon, Small: c.Small, SmallName: names[p.ID+"/"+c.Small], Models: []modelRef{}, Service: c.Service, Own: c.Own}
+		j := searchChoiceJSON{ID: p.ID, Name: p.Name, Icon: p.Icon, Small: c.Small, SmallName: names[p.ID+"/"+c.Small], Models: []modelRef{}, Service: c.Service, Own: c.Own, Search: c.Search}
 		for _, m := range c.Models {
 			id := p.ID + "/" + m.ID
 			j.Models = append(j.Models, modelRef{ID: id, Name: cmp.Or(names[id], m.Name, m.ID), Provider: p.ID, PName: p.Name, Icon: p.Icon})

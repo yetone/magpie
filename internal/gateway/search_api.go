@@ -66,9 +66,10 @@ func Searcher() string {
 }
 
 // searcherName is a searcher by its provider and model; a Kimi Code plan,
-// which searches with no model, by its name.
+// which searches with no model, and a ChatGPT account by the backend's
+// search, by its name.
 func searcherName(p provider.Provider, model string) string {
-	if model == "" {
+	if model == "" || model == codexSearchModel {
 		return p.Name
 	}
 	if e, ok := provider.ServedEntryOf(p.ID + "/" + model); ok && e.Name != "" {
@@ -94,7 +95,7 @@ func AutoSearcher() string {
 // searches with no model (a Kimi Code plan's search service).
 func NamedSearchModel() string {
 	p, m, why := chosenSearcher()
-	if p == nil || why != "" || m == "" {
+	if p == nil || why != "" || m == "" || m == codexSearchModel {
 		return ""
 	}
 	return p.ID + "/" + m

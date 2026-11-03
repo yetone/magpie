@@ -22,12 +22,14 @@ func TestCodexSearchesWithItsCheapModel(t *testing.T) {
 	if err := catalog.SaveLive("codex", provider.CodexBase, list); err != nil {
 		t.Fatal(err)
 	}
+	// magpie's own pick searches by the backend's search (search_codex.go);
+	// the cheap model is what it falls back on, and what "codex" names
 	pick := func() (string, string) {
 		p, m, ok := searcher()
-		if !ok {
-			t.Fatal("no searcher with a Codex account signed in")
+		if !ok || m != codexSearchModel {
+			t.Fatalf("searcher = %s/%s %v, want codex by its web search", p.ID, m, ok)
 		}
-		return p.ID, m
+		return p.ID, searcherModel(p)
 	}
 
 	// no catalog: by the name
@@ -61,7 +63,7 @@ func TestCodexSearchesWithItsCheapModel(t *testing.T) {
 	if err := settings.Save(st); err != nil {
 		t.Fatal(err)
 	}
-	if id, m := pick(); id != "codex" || m != "gpt-6.1-sol" {
-		t.Fatalf("searcher = %s/%s, want the one Settings names, codex/gpt-6.1-sol", id, m)
+	if p, m, _ := searcher(); p.ID != "codex" || m != "gpt-6.1-sol" {
+		t.Fatalf("searcher = %s/%s, want the one Settings names, codex/gpt-6.1-sol", p.ID, m)
 	}
 }

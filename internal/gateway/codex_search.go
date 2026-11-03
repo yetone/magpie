@@ -33,6 +33,10 @@ type alphaSearchRequest struct {
 		SearchQuery []alphaQuery `json:"search_query"`
 		ImageQuery  []alphaQuery `json:"image_query"`
 	} `json:"commands"`
+	Settings struct {
+		// Codex's web_search mode: false "cached", true "live"
+		ExternalWebAccess json.RawMessage `json:"external_web_access"`
+	} `json:"settings"`
 }
 
 type alphaQuery struct {
@@ -222,7 +226,7 @@ func (s *Server) alphaSearchHere(w http.ResponseWriter, r *http.Request, q alpha
 		writeJSON(w, http.StatusOK, alphaSearchReply{Output: note + "magpie can only search the web for " + q.Model + ": give web.run a search_query. Opening, clicking or finding in a page goes to the ChatGPT backend, for a ChatGPT account's model in magpie."})
 		return
 	}
-	ctx := context.WithValue(r.Context(), searchForKey{}, &CallFor{Agent: callerOf(r).agent, Model: q.Model})
+	ctx := withWebAccess(context.WithValue(r.Context(), searchForKey{}, &CallFor{Agent: callerOf(r).agent, Model: q.Model}), q.Settings.ExternalWebAccess)
 	var said []string
 	for _, query := range queries {
 		found, _, err := s.webSearch(ctx, query)

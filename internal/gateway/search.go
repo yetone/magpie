@@ -395,6 +395,10 @@ func autoSearcherReady() (provider.Provider, string, bool, bool) {
 		if m == "" || top >= 0 && (bestReady && !ready || ready == bestReady && r >= top) {
 			continue
 		}
+		if codexSearches(p) {
+			// by the backend's search, which spends no model's tokens
+			m = codexSearchModel
+		}
 		best, model, top, bestReady = p, m, r, ready
 	}
 	return best, model, bestReady, top >= 0
@@ -438,6 +442,9 @@ func namedSearcher(v string) (*provider.Provider, string, string) {
 	case provider.KimiCodeSearch(p) != "":
 		// it searches with no model
 		return &p, "", ""
+	case model == codexSearchModel && codexSearches(p):
+		// by the ChatGPT backend's search
+		return &p, codexSearchModel, ""
 	}
 	if model != "" && slices.ContainsFunc(searcherModels(p), func(m catalog.Model) bool { return m.ID == model }) && searchableModel(p, model) {
 		return &p, model, ""
@@ -474,7 +481,7 @@ func Searchers() []SearcherChoice {
 		if len(ms) == 0 {
 			continue
 		}
-		out = append(out, SearcherChoice{Provider: p, Small: searcherModel(p), Models: ms, rank: r, ManualOnly: manualOnly, Own: googleAccount(p) || geminiKeySearches(p)})
+		out = append(out, SearcherChoice{Provider: p, Small: searcherModel(p), Models: ms, rank: r, ManualOnly: manualOnly, Own: googleAccount(p) || geminiKeySearches(p), Search: codexSearches(p)})
 	}
 	slices.SortStableFunc(out, func(a, b SearcherChoice) int { return cmp.Compare(a.rank, b.rank) })
 	return out
@@ -512,6 +519,10 @@ type SearcherChoice struct {
 	// Own is a Google sign-in or an AI Studio key, whose Gemini searches
 	// for the provider's own models first, whoever is named (ownSearcher)
 	Own bool
+	// Search is a ChatGPT account, which searches by the ChatGPT backend's
+	// search besides its models ("<provider>/@search", codexSearchModel):
+	// magpie's own pick, and what it asks when another fails
+	Search bool
 }
 
 // RelaysSaidToSearch are the providers on that are said to search by
@@ -902,6 +913,15 @@ func (s *Server) modelSearch(ctx context.Context, query string) (string, []Hit, 
 	return said, hits, err
 }
 
+// turnModel is what c searches with when magpie picks it: a ChatGPT
+// account by the backend's search, another by its small model.
+func turnModel(c SearcherChoice) string {
+	if c.Search {
+		return codexSearchModel
+	}
+	return c.Small
+}
+
 // searchPick is a searcher a search was asked of.
 type searchPick struct{ id, model string }
 
@@ -916,7 +936,7 @@ func (s *Server) searchInTurn(ctx context.Context, query string, tried []searchP
 		if c.ManualOnly || c.Small == "" {
 			continue
 		}
-		if searcherSpent(c.Provider, c.Small) != nil {
+		if searcherSpent(c.Provider, turnModel(c)) != nil {
 			spent = append(spent, c)
 		} else {
 			turn = append(turn, c)
@@ -929,13 +949,14 @@ func (s *Server) searchInTurn(ctx context.Context, query string, tried []searchP
 		if slices.ContainsFunc(tried, func(t searchPick) bool { return t.id == c.Provider.ID }) {
 			continue
 		}
-		tried = append(tried, searchPick{c.Provider.ID, c.Small})
-		next := searcherSpent(c.Provider, c.Small)
+		m := turnModel(c)
+		tried = append(tried, searchPick{c.Provider.ID, m})
+		next := searcherSpent(c.Provider, m)
 		if next == nil {
 			var said string
 			var hits []Hit
-			if said, hits, next = s.searchWith(ctx, c.Provider, c.Small, query, searchEffort(c.Provider, c.Small)); next == nil {
-				return said, hits, searcherOf(c.Provider, c.Small), nil
+			if said, hits, next = s.searchBy(ctx, c.Provider, m, query, searchEffort(c.Provider, m)); next == nil {
+				return said, hits, searcherOf(c.Provider, m), nil
 			}
 		}
 		err = errors.Join(err, next)
@@ -1021,9 +1042,10 @@ func SearcherFailed() (SearchFailure, bool) {
 
 // searcherSpent is why a searcher's model isn't asked: every account or
 // key of it is out of its allowance (spentModel). nil when it has
-// allowance, or searches with no model (a Kimi Code plan's service).
+// allowance, or searches with no model (a Kimi Code plan's service, a
+// ChatGPT account by the backend's search).
 func searcherSpent(p provider.Provider, model string) error {
-	if model == "" || provider.KimiCodeSearch(p) != "" {
+	if model == "" || model == codexSearchModel || provider.KimiCodeSearch(p) != "" {
 		return nil
 	}
 	back, spent := spentModel(p, model, provider.Anthropic, time.Now())
@@ -1263,7 +1285,7 @@ func textCallRound(tools []Tool, ask round) round {
 // reply. The first round's failure is a status, as another provider may
 // take over.
 func (s *Server) searchReply(w http.ResponseWriter, r *http.Request, from provider.Protocol, name string, req *Request, usage *Usage, ask round) (int, string) {
-	ctx, cancel := context.WithCancel(context.WithValue(r.Context(), searchForKey{}, &CallFor{Agent: callerOf(r).agent, Model: unprefixed(req.Model)}))
+	ctx, cancel := context.WithCancel(withWebAccess(context.WithValue(r.Context(), searchForKey{}, &CallFor{Agent: callerOf(r).agent, Model: unprefixed(req.Model)}), req.WebAccess))
 	defer cancel()
 	q := *req
 	q.WebSearch = false
