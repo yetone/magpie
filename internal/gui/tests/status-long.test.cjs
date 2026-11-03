@@ -59,7 +59,7 @@ const look = (page) => page.locator("#status").evaluate((e) => {
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   const launch = () => engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" });
-  const open = async (t, lang, theme, width, name) => {
+  const open = async (t, lang, theme, width, name, clock = false) => {
     const browser = await launch();
     const page = await (await browser.newContext({ viewport: { width, height: 760 }, reducedMotion: "reduce" })).newPage();
     t.after(async () => {
@@ -73,6 +73,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     page.setDefaultNavigationTimeout(60000);
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
+    if (clock) await page.clock.install();
     await page.route("**/*", serve(lang, theme));
     await page.goto("http://magpie.test/?view=providers");
     return { page, errors };
@@ -163,5 +164,49 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.waitForFunction(() => document.querySelector("#status").textContent === "", null, { timeout: 5000 });
       assert.deepEqual(errors, []);
     });
+
+    // water5433 on Discord: a long error floated over the window for a
+    // minute and more (80ms a character). Its reading time stops at 15s,
+    // a line that takes less keeps all of it, and a time the caller gives
+    // (a damaged file's warning, 20s) is kept whole.
+    for (const [theme, width] of [["light", 900], ["dark", 390]]) {
+      test(`${engine} ${lang} ${theme} ${width}: a long line goes after its reading time, 15s at most`, async (t) => {
+        const { page, errors } = await open(t, lang, theme, width, "timeout", true);
+        await page.locator(".row.provider", { hasText: "OfficeAce" }).first().waitFor();
+        const text = () => page.locator("#status").textContent();
+        await page.mouse.move(5, 5);
+        // a very long error: 92s at 80ms a character
+        const long = Array(12).fill(said).join(" ");
+        await page.evaluate((s) => status(s, "err"), long);
+        await page.clock.fastForward(14500);
+        assert.equal(await text(), long, "still there before 15s");
+        await page.clock.fastForward(700);
+        assert.equal(await text(), "", "gone at 15s, not after its 80ms a character");
+        // Test models' failure, as littleHong read it: all of its reading time
+        const one = await page.evaluate(([s, m]) => t("{n} of {all} models didn't answer; {model}: {error}", { n: 10, all: 10, model: m, error: "400 · " + s }), [said, models[0]]);
+        const read = one.length * 80;
+        assert.ok(read > 10000 && read < 15000, `the reporter's line takes ${read}ms to read`);
+        await page.evaluate((s) => status(s, "err"), one);
+        await page.clock.fastForward(read - 300);
+        assert.equal(await text(), one, "kept for all of its reading time");
+        await page.clock.fastForward(600);
+        assert.equal(await text(), "", "gone after it");
+        // a caller's own time is kept whole
+        await page.evaluate((s) => status(s, "warn", 20000), long);
+        await page.clock.fastForward(19500);
+        assert.equal(await text(), long, "a caller's 20s is kept");
+        await page.clock.fastForward(700);
+        assert.equal(await text(), "");
+        // the pointer still holds it past 15s, and it goes 2s after it leaves
+        await page.evaluate((s) => status(s, "err"), long);
+        await page.locator("#status").hover();
+        await page.clock.fastForward(30000);
+        assert.equal(await text(), long, "held while the pointer is on it");
+        await page.mouse.move(5, 5);
+        await page.clock.fastForward(2200);
+        assert.equal(await text(), "");
+        assert.deepEqual(errors, []);
+      });
+    }
   }
 }
