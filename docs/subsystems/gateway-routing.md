@@ -494,7 +494,8 @@ and before `withCaller` and `keyLimited`, so nothing is read, reserved or
 sent first. It judges the pattern `ServeMux.Handler` routes the request to
 against `readOnlyRoutes` (`GET /`, `/v1`, the quotas, their history and
 cards, the usage summary and its requests, the key's limit, the key
-page and its data, and the concurrency) and refuses every other with 403 `gateway_key_read_only`:
+page and its data, the concurrency, and the route events' snapshot and
+stream) and refuses every other with 403 `gateway_key_read_only`:
 every model route, `count_tokens`, the Responses WebSocket's upgrade, every
 MCP server, Codex's and Gemini's backends, the catch-all and every write
 (`POST /v1/magpie/usage/requests`, the quotas' refresh). A route added later
@@ -866,6 +867,81 @@ told its own calls and limit alone:
 | `GET /v1/magpie/concurrency` | requests in flight per account |
 | `POST`/`GET /v1/magpie/keys`, `DELETE /v1/magpie/keys/{id}` | short-lived keys, above |
 | `POST /v1/magpie/keys/oidc` | an OIDC token traded for a short-lived key, above |
+
+### Route events for a display
+
+A display on the network (#3387, joe21_eee: an ESP32 screen) shows every
+agent's requests as they are routed, live, without knowing their sessions,
+which `/v1/magpie/route` asks for, and without the full trace
+(`/v1/magpie/trace`), which names accounts, folders and errors and stays
+loopback-only. [`route_events.go`](../../internal/gateway/route_events.go)
+serves two GETs:
+
+- `GET /v1/magpie/route-events/snapshot`: `cursor`, `active` and `routes`,
+  every request the trace has that is still going, read together with the
+  cursor under `trace.mu`.
+- `GET /v1/magpie/route-events?after=<cursor>` (or `Last-Event-ID`, which
+  wins): SSE. Each `route` event has an `id` equal to its JSON `cursor`, a
+  `kind`, the `active` count after the change and one `route`, which
+  replaces the display's route of that `id`. A display removes it when its
+  `phase` is `done` or `dropped`.
+
+A route is `routeActivity`, an allow list, never a `Route` with fields
+taken out: its id (the trace's, base 36, two requests of one session are
+two ids), start `time`, `agent` (the caller's label), the `provider` of the
+seat its last try went to (never the seat's id, which names an account or
+a key's fingerprint), `model` (the served one once the reply names it),
+`attempt` (from 1), `fallback` (a later attempt, a retry on the same
+provider included), `phase` (`started`, `attempt`, `responding`,
+`attempt_done`, `done`, `dropped`), `status`, `failed`, `ms` (the finished
+try's, or the request's once done) and `ttft_ms`. No session, account, key,
+folder, prompt, reply or error text. Kinds: `request_started`,
+`attempt_started`, `first_content`, `attempt_finished`, `request_finished`,
+`request_dropped`, `route_changed`.
+
+Changes are recorded in `trace.begin` and `trace.update` (a diff of
+`activityOf` before and after) into a ring of the last 512, under
+`trace.mu`; writes to the socket hold no lock. The first content is told as
+it comes: `firstToken.onFirst` (`s.trace.firstContent`, set per try in
+`serve` and for the ChatGPT backend's reads in
+[`codex_backend.go`](../../internal/gateway/codex_backend.go)) writes the
+try's unexported `firstMs`, so the full trace's `TTFT`, told once the try
+is done, is unchanged. A route that leaves the trace unfinished (`drop`: an
+unrouted request's stand-in once its own route begins; `trim` past twice
+`traceKeep`) is told `request_dropped` and marked `offFeed`, so later writes
+to it by the request holding it are told no more: without it a display
+showed a stand-in going forever.
+
+A cursor that isn't this process's (the ring's `epoch`), or older than the
+ring, is answered 409 `{"error":"snapshot_required"}`; a reader that falls
+behind mid-stream gets `event: reset` and the stream ends. Take a snapshot
+in either case. A heartbeat comes every 15 seconds; a write waits at most
+10. The stream ends when the client goes, when the gateway stops serving
+(`Server.streamsEnding`, closed first thing in `ListenAndServe`'s drain, so
+`Shutdown` doesn't wait its whole drain, 15 minutes on a handover, for a
+display), when the key it came with is turned off, removed or runs out
+(`access.On`, asked at most once a second when there are changes and at
+each heartbeat), and when magpie stops being shared with a reader on
+another machine (`remoteKeyed`). A key rotated keeps its id, so a stream
+open under the old secret goes on until it reconnects. Nothing is kept on
+disk.
+
+Who reads it is who reads the usage log (`routeEventsAllowed`, as
+`usageSummary`): this computer, and another machine with an enabled gateway
+key while magpie is shared; never a key held to a budget, models or
+accounts (`refuseHeld`), which is told no one else's requests. A read-only
+key reads it (`readOnlyRoutes`), so a display is given
+`magpie gateway-key add Screen --read-only`: it can spend nothing. Every
+route's guards come first (`lanGuard`, `corsGuard`): a page sending
+`Origin: null`, a `*.localhost` page, a rebound name and a proxy's client
+are refused it without a key. A separate key type, as the community patch
+had, was left out: the read-only key already reads more than this feed
+(every call's usage), and is the key for a display.
+`TestRouteEventsTold`, `TestRouteEventsReplayAndRevocation`,
+`TestRouteEventsDroppedRouteGoes`, `TestRouteEventsEndWithTheGateway`,
+`TestRouteEventsLiveFallback` in
+[`route_events_test.go`](../../internal/gateway/route_events_test.go), and
+`TestReadOnlyKeyEveryRoute`.
 
 ## Turning provider search off
 

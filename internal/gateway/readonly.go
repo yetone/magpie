@@ -19,10 +19,12 @@ import (
 // method or path spelling reaches them. TestReadOnlyKeyEveryRoute fails
 // when a route is neither here nor in its list of refused ones.
 //
-// What it reads is what a key held to nothing reads: the usage summary
-// and every account's quotas (it is no one else's to spend, so heldKey
+// What it reads is what a key held to nothing reads: the usage summary,
+// every account's quotas (it is no one else's to spend, so heldKey
 // leaves it alone unless it is held to a budget, models or accounts as
-// well). None of these routes tells a gateway key's secret.
+// well) and the routing as it happens, redacted (route_events.go,
+// joe21_eee's display, #3387). None of these routes tells a gateway
+// key's secret.
 var readOnlyRoutes = map[string]bool{
 	"GET /{$}":                        true,
 	"GET /v1":                         true,
@@ -34,6 +36,8 @@ var readOnlyRoutes = map[string]bool{
 	"GET /v1/magpie/usage/requests":   true,
 	"GET /v1/magpie/limit":            true,
 	"GET /v1/magpie/concurrency":      true,
+	"GET " + routeSnapshotPath:        true,
+	"GET " + routeEventsPath:          true,
 	"GET " + OwnMCPPath:               true,
 	"GET " + KeyPagePath:              true,
 	"GET " + keyPageData:              true,
@@ -64,7 +68,7 @@ func readOnlyGuard(mux *routeMux, next http.Handler) http.Handler {
 			if _, pattern := mux.Handler(r); !readOnlyRoutes[pattern] {
 				log.Printf("refused %s %s: gateway key %q is read-only", r.Method, r.URL.Path, who.KeyName)
 				writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{
-					"message": "this gateway key is read-only: it may read magpie's quotas and usage (GET /v1/magpie/quotas, /v1/magpie/quotas/history, /v1/magpie/usage, /v1/magpie/usage/requests, /v1/magpie/limit) and use no model, MCP server or write. Use a key with full access for that (Gateway → Gateway keys, or magpie gateway-key access <id> full)",
+					"message": "this gateway key is read-only: it may read magpie's quotas and usage (GET /v1/magpie/quotas, /v1/magpie/quotas/history, /v1/magpie/usage, /v1/magpie/usage/requests, /v1/magpie/limit, /v1/magpie/route-events) and use no model, MCP server or write. Use a key with full access for that (Gateway → Gateway keys, or magpie gateway-key access <id> full)",
 					"type":    "permission_error", "code": ReadOnlyCode}})
 				return
 			}

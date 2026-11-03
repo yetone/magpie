@@ -2411,6 +2411,23 @@ itself, so it can be polled every second. It answers as
 `/v1/magpie/quotas` does: this machine, another only with a gateway key,
 and never a held key.
 
+Each request as it is routed, live, for a display that shows them
+(#3387): `GET /v1/magpie/route-events/snapshot` answers `cursor`, `active`
+and `routes`, the requests going now; then
+`GET /v1/magpie/route-events?after=<cursor>` streams each change after that
+cursor as server-sent events, one `route` event a change (`id` is its
+cursor, `kind` what changed, `route` the request as it is now: `id`,
+`time`, `agent`, `provider`, `model`, `attempt`, `fallback`, `phase`,
+`status`, `failed`, `ms`, `ttft_ms`). A display replaces its request of
+that `id` and drops it once `phase` is `done` or `dropped`. A 409
+`snapshot_required`, an `event: reset`, a restart of magpie or a dropped
+connection means: take a snapshot again. No session, account, key, folder,
+prompt, reply or error text is in it. It answers as `/v1/magpie/usage`
+does: this machine, another only with a gateway key while magpie is
+shared, and never a held key. Give a display a read-only key,
+`magpie gateway-key add Screen --read-only`, which can spend nothing. See
+the [route event contract](subsystems/gateway-routing.md#route-events-for-a-display).
+
 An app that calls its vendor itself, not through magpie, can report those
 calls so the Usage page counts them: `POST /v1/magpie/usage/requests` with
 `Content-Type: application/json`. The body is one record or an array of up

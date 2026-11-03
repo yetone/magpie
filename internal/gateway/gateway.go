@@ -466,6 +466,13 @@ type Call struct {
 // Server is the gateway.
 type Server struct {
 	client *http.Client
+	// ending closes once the gateway stops serving, for a stream with no
+	// end of its own (routeEvents) to end before Shutdown, which would
+	// wait its whole drain for it (streamsEnding)
+	ending     chan struct{}
+	endingOnce sync.Once
+	endOnce    sync.Once
+
 	mu     sync.Mutex
 	recent []Call
 	calls  uint64 // the last Call.ID given
@@ -837,6 +844,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go func() {
 		defer close(drained)
 		<-ctx.Done()
+		s.endStreams()
 		c, cancel := context.WithTimeout(context.Background(), s.drainFor())
 		defer cancel()
 		if s.handingOver() {
@@ -929,6 +937,8 @@ func (s *Server) routes() *routeMux {
 	mux.HandleFunc("POST "+provider.RemoteRefreshPath, s.quotaCardsRefresh)
 	mux.HandleFunc("GET /v1/magpie/route", s.sessionRoute)
 	mux.HandleFunc("GET /v1/magpie/trace", s.gatewayTrace)
+	mux.HandleFunc("GET "+routeSnapshotPath, s.routeSnapshot)
+	mux.HandleFunc("GET "+routeEventsPath, s.routeEvents)
 	mux.HandleFunc("GET /v1/magpie/concurrency", s.concurrency)
 	mux.HandleFunc("GET /v1/magpie/limit", s.keyLimit)
 	mux.HandleFunc("GET "+OwnMCPPath, s.ownMCPList)
@@ -3098,6 +3108,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 			firstBegan = began
 		}
 		hw.first.start = began
+		hw.first.onFirst = s.trace.firstContent(tr)
 		// when the request that last went out began to (GetConn), and
 		// when its body was written
 		var asking, asked, wrote atomic.Int64

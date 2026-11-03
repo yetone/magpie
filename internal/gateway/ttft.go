@@ -22,6 +22,7 @@ const firstMost = 8 << 20
 // firstToken times a stream's first content and first text from start,
 // and when the rest of its content came (flowMs).
 type firstToken struct {
+	onFirst                  func(int64)
 	start                    time.Time
 	first                    time.Duration // to the first content; 0 until it comes
 	text                     time.Duration // to the first text
@@ -92,6 +93,9 @@ func (f *firstToken) see(b []byte) {
 		}
 		if f.first == 0 {
 			f.first = d
+			if f.onFirst != nil {
+				f.onFirst(d.Milliseconds())
+			}
 		}
 		f.mark(d, len(ev))
 		if text {

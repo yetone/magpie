@@ -55,8 +55,11 @@ type Route struct {
 	imageProvider string
 	// turn: a request of an agent's turn, for the notification that it is
 	// done (turns); dirOf, the folder its body says, read once as a turn
-	// starts; tools, whether its reply called a tool
+	// starts; tools, whether its reply called a tool; offFeed, it left
+	// the trace unfinished (drop, trim) and the route-events feed was
+	// told it went, so it hears no more of it
 	turn          bool
+	offFeed       bool
 	dirOf         func() string
 	tools         *toolScan
 	Seq           int64        `json:"seq"` // the trace's count when it last changed
@@ -405,6 +408,10 @@ type Try struct {
 	// first text, when it streamed any (#196)
 	TTFT      int64 `json:"ttft,omitempty"`
 	FirstText int64 `json:"firstText,omitempty"`
+	// firstMs: ms from Start to the first content, as it came, while the
+	// try still streams (firstContent); the route-events feed's alone,
+	// TTFT being told once the try is done
+	firstMs int64
 	// SentBy: what sent its request to the vendor when magpie's own
 	// client didn't, so it has no Net and the Routing page says why
 	// (sentBy)
@@ -572,6 +579,8 @@ type trace struct {
 	routes []*Route
 	wake   chan struct{}
 	totals Totals
+	// activity is the route-events feed's last changes (route_events.go)
+	activity routeActivityLog
 	// bodies are the last requests' masked bodies, for their prompts'
 	// text (PromptText): in memory only, never in the history
 	bodies []keptBody
@@ -675,6 +684,7 @@ func (t *trace) begin(r Route) *Route {
 	t.trim()
 	t.changed()
 	rp.Seq = t.seq
+	t.noteActivity(rp, "request_started")
 	return rp
 }
 
@@ -748,7 +758,13 @@ func (t *trace) trim() {
 			}
 			i = 0
 		}
+		gone := t.routes[i]
 		t.routes = slices.Delete(t.routes, i, i+1)
+		if !gone.Done {
+			// a request still going is dropped only past twice traceKeep:
+			// the route-events feed is told it went, as it hears of no end
+			t.noteDropped(gone)
+		}
 	}
 }
 
@@ -760,6 +776,9 @@ func (t *trace) drop(rt *Route) {
 	if i := slices.Index(t.routes, rt); i >= 0 {
 		t.routes = slices.Delete(t.routes, i, i+1)
 		t.changed()
+		if !rt.Done {
+			t.noteDropped(rt)
+		}
 	}
 }
 
@@ -781,6 +800,7 @@ func (t *trace) update(r *Route, f func(r *Route)) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	done := r.Done
+	before := activityOf(r)
 	f(r)
 	if r.Done && !done {
 		t.totals.Requests++
@@ -804,6 +824,9 @@ func (t *trace) update(r *Route, f func(r *Route)) {
 	}
 	t.changed()
 	r.Seq = t.seq
+	if after := activityOf(r); before != after {
+		t.noteActivity(r, activityChange(before, after))
+	}
 }
 
 // gatewayTrace tells this gateway's routing to another magpie on the same

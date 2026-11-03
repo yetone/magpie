@@ -1045,6 +1045,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		if m := noteMasked(r, "chat", maskedHits, sentOf(maskedHits, body), tr.ID, "openai", model); m != nil {
 			s.trace.update(tr, func(t *Route) { t.Masked = m })
 		}
+		first.onFirst = s.trace.firstContent(tr)
 		promptRead := s.inspectPrompt(tr, provider.Responses, body, body, sentWhole)
 		end = func(status int, msg string, tokens, out int) {
 			ms := time.Since(start).Milliseconds()
@@ -1153,7 +1154,7 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 			again := t.Tries[0]
 			t.Tries = append(t.Tries, Try{ID: again.ID, Model: again.Model, Effort: again.Effort, Start: began})
 		})
-		first, titleReply = firstToken{start: start}, capturedBody{}
+		first, titleReply = firstToken{start: start, onFirst: s.trace.firstContent(tr)}, capturedBody{}
 		return true
 	}
 	var sniff *usageSniffer
