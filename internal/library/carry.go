@@ -45,6 +45,8 @@ type CarriedSkill struct {
 	Left   []string          `json:"left,omitempty"` // files too big to carry
 	// Called is the name its SKILL.md gives, when that isn't Name
 	Called string `json:"called,omitempty"`
+	// Note is the user's note on it (Skill.Note)
+	Note string `json:"note,omitempty"`
 }
 
 // A skill's file bigger than maxCarried is left out, and so are the
@@ -104,7 +106,7 @@ func Collect() (*Bundle, error) {
 	}
 	for i, c := range readSkills(dirs) {
 		s := skills[i]
-		c.Name, c.Source, c.Agents, c.Called = s.Name, s.Source, orNone(slices.Sorted(slices.Values(s.Agents))), s.Called
+		c.Name, c.Source, c.Agents, c.Called, c.Note = s.Name, s.Source, orNone(slices.Sorted(slices.Values(s.Agents))), s.Called, s.Note
 		b.Skills = append(b.Skills, c)
 	}
 	subs := []*Subagent{}
@@ -416,7 +418,7 @@ func Put(b *Bundle) (*Result, error) {
 		for _, s := range b.Skills {
 			// turned off here stays off here: that is this computer's own
 			off := l.skill(s.Name) != nil && l.skill(s.Name).OffHere
-			skills = append(skills, &Skill{Name: s.Name, Source: s.Source, Agents: slices.Clone(orNone(s.Agents)), OffHere: off, Called: s.Called})
+			skills = append(skills, &Skill{Name: s.Name, Source: s.Source, Agents: slices.Clone(orNone(s.Agents)), OffHere: off, Called: s.Called, Note: s.Note})
 			if keep[s.Name] {
 				continue
 			}

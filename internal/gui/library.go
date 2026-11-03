@@ -458,7 +458,7 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			Subagent library.Subagent
 			Agent    string            // the agent whose own skill is in the library's way
 			App      string            // the app the MCP hub is added to (servers/hub-open)
-			Note     string            // what the MCP router says of itself (servers/hub-note)
+			Note     string            // what the MCP router says of itself (servers/hub-note), or a skill's note (skills/note)
 			ID       string            // a market server's, or a market skill's in its repository
 			Values   map[string]string // what a market server needs
 			Dir      string            // a project's folder
@@ -558,6 +558,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.SaveSkillFile(in.Name, in.File, in.Text, in.Was)
 		case "skills/here":
 			res, err = library.SkillHere(in.Name, in.On)
+		case "skills/note":
+			// the user's own note on it, which no agent is given
+			res, err = library.SkillNote(in.Name, in.Note)
 		case "skills/agents-all":
 			res, err = library.EverySkillAgents(in.Agents, in.On)
 		case "skills/agents-some":

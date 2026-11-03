@@ -424,8 +424,9 @@ func saveServer(old *library.Server, line string) tea.Cmd {
 		if old != nil {
 			was, done = old.Name, "saved "+s.Name
 			// and its OAuth app and startup timeout, which only the GUI edits
-			// and whether it is kept to this computer, and out of the hub
-			s.Agents, s.Env, s.Headers, s.OAuth, s.StartupTimeout, s.Local, s.Hub = old.Agents, old.Env, old.Headers, old.OAuth, old.StartupTimeout, old.Local, old.Hub
+			// and whether it is kept to this computer, and out of the hub,
+			// and the user's note on it
+			s.Agents, s.Env, s.Headers, s.OAuth, s.StartupTimeout, s.Local, s.Hub, s.Note = old.Agents, old.Env, old.Headers, old.OAuth, old.StartupTimeout, old.Local, old.Hub, old.Note
 		}
 		return libCmd(func() (*library.Result, error) { return library.SaveServer(was, s) }, done)()
 	}

@@ -5,8 +5,13 @@
 // too, and the editor shows the server as JSON as well, in Claude Code's
 // .mcp.json shape, to read whole and edit: an edit there is what is saved,
 // and JSON that isn't a server's keeps the dialog from saving or going
-// back to the form. Every language, Chromium and WebKit, 1100 and 390
-// wide; nothing scrolls sideways. No backend:
+// back to the form.
+// youyo.p_10001 on Discord: with many skills and servers, which is which.
+// Each takes a note, the library's own: saved with the server or by
+// itself for a skill, shown in the row in place of its command or
+// description (which the tooltip still gives), found by the skills'
+// filter, and asked about before it is lost. Every language, Chromium
+// and WebKit, 1100 and 390 wide; nothing scrolls sideways. No backend:
 // the API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -29,7 +34,12 @@ function server(lang, calls) {
     agents: [agent("claude", "Claude Code")],
     instructions: { agents: [], sets: [] }, foundServers: [], projects: [], foundSkills: [],
     servers: [{ name: "db", transport: "stdio", command: "npx", args: ARGS, env: { DB_TOKEN: "${DB_TOKEN}" }, agents: ["claude"] }],
-    skills: [],
+    skills: [
+      { name: "pdf", description: "Read and fill PDF files", kind: "folder", agents: ["claude"] },
+      { name: "weekly", description: "Write a report from the week's commits", kind: "folder", agents: ["claude"] },
+      // enough of them for the filter, which shows over eight
+      ...["docx", "xlsx", "pptx", "slides", "review", "deploy", "notes"].map((name) => ({ name, description: "Work with " + name, kind: "folder", agents: ["claude"] })),
+    ],
   };
   return async (route) => {
     const req = route.request(), url = new URL(req.url());
@@ -39,12 +49,23 @@ function server(lang, calls) {
     if (url.pathname === "/api/plugins") return route.fulfill({ json: { plugins: [] } });
     if (url.pathname === "/api/library") return route.fulfill({ json: lib });
     if (url.pathname === "/api/library/mcp/check") return route.fulfill({ json: { servers: {} } });
+    if (url.pathname === "/api/library/skill") {
+      const name = url.searchParams.get("name");
+      return route.fulfill({ json: { file: "SKILL.md", files: ["SKILL.md"], text: "---\nname: " + name + "\n---\n\nWrite it up.\n", path: `${HOME}/.magpie/library/skills/${name}` } });
+    }
     if (url.pathname === "/api/library/servers/save") {
       const { old, server: s } = req.postDataJSON();
       calls.push(["save", s]);
       const i = lib.servers.findIndex((x) => x.name === old);
       lib.servers[i] = { ...lib.servers[i], ...s };
       return route.fulfill({ json: { ...lib, result: { changed: ["claude"] } } });
+    }
+    if (url.pathname === "/api/library/skills/note") {
+      const b = req.postDataJSON();
+      calls.push(["note", b]);
+      const s = lib.skills.find((x) => x.name === b.name);
+      s.note = b.note.trim();
+      return route.fulfill({ json: { ...lib, result: {} } });
     }
     if (url.pathname === "/api/usage/quotas") return route.fulfill({ json: [] });
     if (url.pathname === "/api/groups") return route.fulfill({ json: { groups: [] } });
@@ -57,7 +78,7 @@ function server(lang, calls) {
 }
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
-  test(engine + ": an MCP server's command read whole, and as JSON", async (t) => {
+  test(engine + ": an MCP server's command read whole, as JSON, and notes", async (t) => {
     assert(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or webkit");
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || "chromium" }));
     const errors = [];
@@ -71,7 +92,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           const w = (s) => tr(lang, s);
           const calls = [];
           const ctx = await browser.newContext({ viewport: { width, height: 800 } });
-          await ctx.addInitScript(() => { try { localStorage.setItem("magpie.libTab", "mcp"); } catch {} });
+          // the MCP tab first; the skills' once the test has picked it
+          await ctx.addInitScript(() => { try { if (!localStorage.getItem("magpie.libTab")) localStorage.setItem("magpie.libTab", "mcp"); } catch {} });
           const page = await ctx.newPage();
           page.setDefaultTimeout(5000);
           page.setDefaultNavigationTimeout(60000);
@@ -134,6 +156,50 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert.deepEqual(calls.at(-1)[1].args, [...ARGS.slice(0, -1), "shop", "--readonly"]);
           assert.deepEqual(calls.at(-1)[1].env, { DB_TOKEN: "${DB_TOKEN}", MODE: "ro" });
 
+          // a note on the server: saved with it, shown in its row, its command in the tooltip
+          await open();
+          const note = ed.locator("textarea.lib-notein");
+          await note.fill("店里的库存数据库，只读");
+          await note.press("Enter");
+          await ed.waitFor({ state: "detached" });
+          assert.equal(calls.at(-1)[1].note, "店里的库存数据库，只读");
+          const sub = row.locator(".sub.lib-subnote");
+          await sub.waitFor();
+          assert.equal(await sub.textContent(), "店里的库存数据库，只读");
+          assert((await sub.getAttribute("title")).endsWith(LINE.replace("shop_inventory_reporting", "shop") + " --readonly"));
+          assert.equal(await row.locator(".sub.mono").count(), 0);
+
+          // a skill's note, over its SKILL.md
+          await page.evaluate(() => { try { localStorage.setItem("magpie.libTab", "skills"); } catch {} });
+          await page.reload();
+          await page.locator('button[data-view="library"]').click();
+          const skill = (name) => page.locator("#view-library .lib-skill", { has: page.locator(".name", { hasText: new RegExp("^" + name + "$") }) });
+          await skill("weekly").locator(".name").click();
+          await ed.waitFor();
+          const keep = ed.locator(":scope > .bar button.primary");
+          assert.equal(await keep.isVisible(), false, "Save shown with nothing changed");
+          await ed.locator("textarea.lib-notein").fill("周报用");
+          await keep.waitFor();
+          assert.equal(await keep.textContent(), w("Save"));
+          // asked before it's lost
+          await page.keyboard.press("Escape");
+          await page.locator("dialog.action-confirm button:not(.primary)").last().click();
+          assert.equal(await ed.count(), 1, "a changed note closed without asking");
+          // saved where it is, the skill's file still open; nothing then to ask about
+          await ed.locator("textarea.lib-notein").press("Enter");
+          await keep.waitFor({ state: "hidden" });
+          assert.deepEqual(calls.at(-1), ["note", { name: "weekly", note: "周报用" }]);
+          assert.equal(await ed.locator(".lib-skillbody").count(), 1);
+          await page.keyboard.press("Escape");
+          await ed.waitFor({ state: "detached" });
+          const ssub = skill("weekly").locator(".sub.lib-subnote");
+          await ssub.waitFor();
+          assert.equal(await ssub.textContent(), "周报用");
+          assert.equal(await ssub.getAttribute("title"), "周报用\n\nWrite a report from the week's commits");
+          // the filter finds it by its note
+          await page.locator("#view-library input.lib-skillq").fill("周报");
+          await page.waitForFunction(() => document.querySelectorAll("#view-library .lib-skill").length === 1);
+          assert.equal(await skill("weekly").count(), 1);
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, "no sideways scroll");
           await ctx.close();
         });

@@ -2076,6 +2076,17 @@ magpie.plugin("library", (ctx) => {
     openLib(ed);
   }
 
+  // a row's line under its name: the user's note when there is one, in
+  // the place of what it would say (a skill's description, a server's
+  // command), which its tooltip then gives after the note. A row keeps its
+  // height either way
+  function noteSub(note, sub, said) {
+    if (!note) return sub;
+    const n = el("div", "sub lib-subnote", note);
+    n.title = said ? note + "\n\n" + said : note;
+    return n;
+  }
+
   function serverRow(s, all) {
     const row = el("div", "row lib-row click lib-server");
     const who = el("div", "who");
@@ -2091,7 +2102,7 @@ magpie.plugin("library", (ctx) => {
     who.append(nm, healthEl(s.name));
     const sub = el("div", "sub mono", serverLine(s));
     sub.title = serverLine(s);
-    who.append(sub, toolsEl(s.name));
+    who.append(noteSub(s.note, sub, serverLine(s)), toolsEl(s.name));
     row.append(mark(s.icon, s.transport === "stdio" ? GLYPH.cmd : GLYPH.web), who, ...removeAct(() => confirmRemoveServer(s)),
       agentChips(withGone(all, s.agents), s.agents, chipsChange("servers/agents", s.name, "servers", (x) => serverRow(x, all)), { problems: s.problems, blocked: sseBlocked(s), all: true }));
     if (picking) return pickRow(row, s.name);
@@ -2743,6 +2754,24 @@ magpie.plugin("library", (ctx) => {
     return ta;
   }
 
+  // noteBox is the user's note on a server or a skill (youyo.p on Discord:
+  // with many, which is which and when to use it). One line of at most 200
+  // characters, as a hook's description (#2011); the library alone keeps
+  // it, and no agent is given it.
+  const NOTE_MAX = 200;
+  function noteBox(value, placeholder, onInput) {
+    const ta = el("textarea", "lib-text small lib-notein");
+    ta.rows = 1;
+    ta.value = value || "";
+    ta.placeholder = placeholder;
+    ta.maxLength = NOTE_MAX;
+    ta.oninput = () => onInput(ta.value);
+    ta.onkeydown = (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === "Escape") closeLibModal(); else if (e.key === "Enter" && modal?.save) { e.preventDefault(); modal.save(); } };
+    autosize(ta, 27);
+    return ta;
+  }
+  const noteHint = () => t("Optional: what it's for and when to use it, in any language. Only the library keeps it; no agent is given it");
+
   // refHint: how a value is read from a variable (#1250)
   const refHint = () => t("A value can name a variable, as {ref}: each agent is given it in its own way, so the token stays out of its settings", { ref: "${NAME}" });
 
@@ -2757,14 +2786,15 @@ magpie.plugin("library", (ctx) => {
     if (!d.env) d.env = {};
     if (!d.headers) d.headers = {};
     d.local = !!d.local;
+    d.note = d.note || "";
     const ed = el("div", "editor lib-editor");
     const head = el("div", "ehead lib-serverhead");
     head.append(mark(s?.icon, d.transport === "stdio" ? GLYPH.cmd : GLYPH.web), el("b", "", s ? s.name : t("New MCP server")));
     if (!s) head.append(el("span", "note", t("or paste its JSON anywhere here")));
     // the form, or the server as JSON (hema_17384 on Discord), in Claude
     // Code's .mcp.json shape, as Copy config gives it: read whole, edited,
-    // pasted over. The agents and sync are the library's own and stay in
-    // the form below it
+    // pasted over. The note, the agents and sync are the library's own and
+    // stay in the form below it
     let view = "form", jsonBad = "";
     const viewBox = el("div", "lib-viewpick");
     const viewSegs = () => segs([["form", t("Form")], ["json", "JSON"]], view, (v) => {
@@ -2829,6 +2859,8 @@ magpie.plugin("library", (ctx) => {
     const nameF = field(t("Name"), name, t("Letters, digits, - and _ — what the agents call it")), kindF = field(t("Runs as"), kindBox);
     const top = el("div", "lib-slot");
     ed.append(top);
+    const note = noteBox(d.note, t("e.g. The shop's database, read only"), (v) => { d.note = v; });
+    ed.append(...field(t("Note"), note, noteHint()));
     const slot = el("div", "lib-slot");
     ed.append(slot);
     const agentsBox = el("div");
@@ -2960,7 +2992,7 @@ magpie.plugin("library", (ctx) => {
     // send saves the form; s is then the server as saved, for a save after
     // a sign-in's to be of it
     const send = async () => {
-      const body = { old: s ? s.name : "", server: { name: d.name, transport: d.transport, agents: d.agents, startupTimeout: d.startupTimeout || 0, local: !!d.local, hub: d.hub || "" } };
+      const body = { old: s ? s.name : "", server: { name: d.name, transport: d.transport, agents: d.agents, startupTimeout: d.startupTimeout || 0, local: !!d.local, hub: d.hub || "", note: d.note || "" } };
       if (d.transport === "stdio") Object.assign(body.server, { command: d.command, args: d.args, env: d.env });
       else Object.assign(body.server, { url: d.url, headers: d.headers, oauth: d.transport === "http" && d.oauth?.clientId ? d.oauth : null });
       take(await api("library/servers/save", body));
@@ -3700,7 +3732,7 @@ magpie.plugin("library", (ctx) => {
     if (pick !== "source") {
       const skills = [...lib.skills].sort(byName(pick));
       const g = { key: "flat", repo: "", skills, parts: null,
-        text: new Map(skills.map((s) => [s, (s.name + " " + (s.description || "") + " " + skillRepo(s)).toLowerCase()])) };
+        text: new Map(skills.map((s) => [s, (s.name + " " + (s.note || "") + " " + (s.description || "") + " " + skillRepo(s)).toLowerCase()])) };
       grouped = { lib, pick, groups: [g] };
       return grouped.groups;
     }
@@ -3748,7 +3780,7 @@ magpie.plugin("library", (ctx) => {
       ...mine.filter((g) => g.skills.length && mineHere(g)), ...down.sort(byRepo), ...(by.has("local") ? [by.get("local")] : [])];
     for (const g of groups) {
       g.skills.sort((a, b) => a.name.localeCompare(b.name));
-      g.text = new Map(g.skills.map((s) => [s, (s.name + " " + (s.description || "") + " " + (g.mine || (g.owner ? skillRepo(s) : g.repo))).toLowerCase()]));
+      g.text = new Map(g.skills.map((s) => [s, (s.name + " " + (s.note || "") + " " + (s.description || "") + " " + (g.mine || (g.owner ? skillRepo(s) : g.repo))).toLowerCase()]));
       g.parts = g.mine ? null : partsOf(g);
     }
     grouped = { lib, pick, groups };
@@ -5441,7 +5473,7 @@ magpie.plugin("library", (ctx) => {
     if (hereLine) who.append(hereLine);
     const sub = el("div", "sub", s.missing ? t("Its folder is gone from the library") : s.description || "");
     sub.title = s.description || "";
-    who.append(sub);
+    who.append(s.missing ? sub : noteSub(s.note, sub, s.description || ""));
     if (s.source) {
       const src = el("div", "lib-src");
       if (s.kind === "github") {
@@ -5696,10 +5728,28 @@ magpie.plugin("library", (ctx) => {
     head.append(mark(s.icon, GLYPH.skill), el("b", "", s.name), pick, el("span", "grow"));
     const body = el("div", "lib-skillbody");
     const bar = el("div", "bar");
-    ed.append(head, body, bar);
+    // the user's note on it (youyo.p_10001 on Discord), over its files:
+    // the library's own, never in a file an agent reads. Save shows once
+    // it's changed, and saves the file being edited with it
+    let was = s.note || "", note = was;
+    const noteDirty = () => note.trim() !== was;
+    const keep = button(t("Save"), "primary", () => save());
+    keep.hidden = true;
+    const noteIn = noteBox(was, t("e.g. For the weekly report; the other PDF skill is for forms"), (v) => { note = v; keep.hidden = !!ta || !noteDirty(); });
+    const noteRow = el("div", "lib-skillnote");
+    noteRow.append(...field(t("Note"), noteIn, noteHint()));
+    ed.append(head, noteRow, body, bar);
     let cur = null, ta = null;
     const lf = (x) => x.replace(/\r\n?/g, "\n");
-    modal = { dirty: () => !!(ta && cur && ta.value !== lf(cur.text)) };
+    const fileDirty = () => !!(ta && cur && ta.value !== lf(cur.text));
+    modal = { save: () => save(), dirty: () => fileDirty() || noteDirty() };
+    const saveNote = async () => {
+      if (!noteDirty()) return true;
+      if (!(await change("skills/note", { name: s.name, note }, t("{name} saved", { name: s.name })))) return false;
+      was = note = note.trim();
+      keep.hidden = true;
+      return true;
+    };
     const read = async (f) => {
       body.replaceChildren(el("pre", "lib-md", "…"));
       try {
@@ -5711,7 +5761,7 @@ magpie.plugin("library", (ctx) => {
       }
     };
     const swap = async (f) => {
-      if (f === cur?.file || modal.dirty() && !(await confirmDiscard())) return;
+      if (f === cur?.file || fileDirty() && !(await confirmDiscard())) return;
       ta = null;
       read(f);
     };
@@ -5726,7 +5776,8 @@ magpie.plugin("library", (ctx) => {
       body.replaceChildren(rendered(cur));
       const where = el("span", "note");
       where.append(pathLink(cur.path));
-      bar.replaceChildren(where, el("span", "grow"), button(t("Edit"), "", edit), button(t("Close"), "", closeLibModal));
+      keep.hidden = !noteDirty();
+      bar.replaceChildren(where, el("span", "grow"), button(t("Edit"), "", edit), button(t("Close"), "", closeLibModal), keep);
     };
     const edit = () => {
       ta = el("textarea", "lib-text lib-skilltext");
@@ -5740,13 +5791,13 @@ magpie.plugin("library", (ctx) => {
       };
       body.replaceChildren(ta);
       const note = el("span", "note lib-reaches", t("Saved in the library: every agent given {name} gets it", { name: s.name }) + " · " + (/^Mac/.test(navigator.platform) ? "⌘S" : "Ctrl+S"));
-      bar.replaceChildren(note, el("span", "grow"), button(t("Cancel"), "", async () => { if (!modal.dirty() || await confirmDiscard()) show(); }), button(t("Save"), "primary", save));
+      bar.replaceChildren(note, el("span", "grow"), button(t("Cancel"), "", async () => { if (!fileDirty() || await confirmDiscard()) show(); }), button(t("Save"), "primary", save));
       ta.focus({ preventScroll: true });
       ta.setSelectionRange(0, 0);
     };
     const save = async () => {
-      if (!ta) return;
-      if (!modal.dirty()) return show();
+      if (!(await saveNote()) || !ta) return;
+      if (!fileDirty()) return show();
       const f = cur.file;
       if (await change("skills/save", { name: s.name, file: f, text: ta.value, was: cur.text }, t("{name} saved", { name: f }))) {
         ta = null;

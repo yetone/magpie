@@ -68,6 +68,10 @@ type Server struct {
 	// off, for a server that reads its project from the folder it is
 	// started in, or keeps a session's state (#4382, cuipengcx90).
 	Hub string `json:"hub,omitempty"`
+	// Note is the user's own word on what the server is for (youyo.p on
+	// Discord: with many of them, which is which). Only the library keeps
+	// it, and a sync carries it; no agent is given it (TestNoteNeverGiven).
+	Note string `json:"note,omitempty"`
 
 	// about is the hub entry's description, for an agent that shows a
 	// server by one before it has connected (Pi, hubServerFor)
@@ -153,6 +157,9 @@ func (s *Server) check() error {
 			}
 			s.OAuth = nil
 		}
+	}
+	if err := checkNote(&s.Note); err != nil {
+		return fmt.Errorf("%s: %w", s.Name, err)
 	}
 	if s.StartupTimeout < 0 || s.StartupTimeout > maxStartupTimeout {
 		return fmt.Errorf("%s: the startup timeout is between 0 (the agent's own) and %d seconds", s.Name, maxStartupTimeout)

@@ -475,6 +475,8 @@ type SkillView struct {
 	// OffHere is set when it is turned off on this computer alone: Agents
 	// are still the ones a sync carries to the others
 	OffHere bool `json:"offHere,omitempty"`
+	// Note is the user's own note on it (Skill.Note)
+	Note string `json:"note,omitempty"`
 }
 
 // View is the Library page.
@@ -667,7 +669,7 @@ func readView(problems []Problem, glance bool) (*View, error) {
 	v.Subagents, v.SubagentAgents = l.subagentsView(targets, asleep, of)
 	tr := &tracer{}
 	for _, s := range l.Skills {
-		sv := SkillView{Name: s.Name, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s), OffHere: s.OffHere}
+		sv := SkillView{Name: s.Name, Agents: append([]string{}, s.Agents...), Icon: skillIcon(s), Problems: of("skill:" + s.Name), Repo: tr.repoOf(s), OffHere: s.OffHere, Note: s.Note}
 		if s.Source != nil {
 			sv.Source, sv.Kind = s.Source.String(), s.Source.Kind
 		}

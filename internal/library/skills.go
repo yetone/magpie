@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/source"
@@ -59,6 +60,11 @@ type Skill struct {
 	// under another because a skill from elsewhere had that name first
 	// (skill_beside.go). Its SKILL.md is named as the library names it.
 	Called string `json:"called,omitempty"`
+	// Note is the user's own word on what the skill is for or when to
+	// use it, beside its SKILL.md's description (youyo.p on Discord).
+	// Only the library keeps it, and a sync carries it; no agent is
+	// given it: the skill's folder is the agents', and this isn't in it.
+	Note string `json:"note,omitempty"`
 }
 
 // gives reports whether the agent id gets the skill on this computer: it
@@ -76,6 +82,35 @@ func SkillHere(name string, on bool) (*Result, error) {
 			return fmt.Errorf("no skill called %s", name)
 		}
 		s.OffHere = !on
+		return nil
+	})
+}
+
+// maxNote is how long a note on a server or a skill can be, in
+// characters: a line that says what it is for, as a hook's description.
+const maxNote = 200
+
+// checkNote makes a note one line, as the page shows it, and holds it to
+// maxNote.
+func checkNote(n *string) error {
+	*n = strings.Join(strings.Fields(*n), " ")
+	if utf8.RuneCountInString(*n) > maxNote {
+		return fmt.Errorf("a note is at most %d characters", maxNote)
+	}
+	return nil
+}
+
+// SkillNote sets the user's note on a skill; "" takes it away.
+func SkillNote(name, note string) (*Result, error) {
+	if err := checkNote(&note); err != nil {
+		return nil, err
+	}
+	return change(func(l *Library) error {
+		s := l.skill(name)
+		if s == nil {
+			return fmt.Errorf("no skill called %s", name)
+		}
+		s.Note = note
 		return nil
 	})
 }
