@@ -161,3 +161,22 @@ func TestUnroutedUploadTimeIsBounded(t *testing.T) {
 		})
 	}
 }
+
+// Compressed bodies can carry arbitrarily many wire bytes with little
+// decoded output (empty gzip members or zstd skippable frames). They must
+// still exhaust the hold, even while making progress and never going idle.
+func TestUnroutedUploadAllowanceHasCeiling(t *testing.T) {
+	now := time.Now()
+	for _, read := range []int64{32 << 20, 1<<63 - 1} {
+		u := &unroutedHold{
+			f:     &inflight{start: now.Add(-11 * time.Minute)},
+			kinds: []*waitKind{{kind: "body", n: 1, since: now.Add(-10 * time.Minute)}},
+		}
+		u.bodyRead.Store(read)
+		// At most eight minutes of upload may be excused. Together
+		// with the two-minute base budget this bounds a non-masking hold.
+		if held := u.unmaskedLocked(now); held != 3*time.Minute {
+			t.Errorf("%d wire bytes: charged hold = %s, want 3m", read, held)
+		}
+	}
+}

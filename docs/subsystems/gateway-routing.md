@@ -371,7 +371,11 @@ recorded as a prediction failure (`noPrediction`).
   `unroutedMost` (2m) excluding masking and earned upload time
   (sharwowwow on X: two minutes of spinning before a 504). An upload
   earns one second per 32 KiB actually read from the wire, capped at the
-  time spent in body reads (`unmaskedLocked`, `unroutedUploadRate`). A
+  time spent in body reads and eight additional minutes
+  (`unmaskedLocked`, `unroutedUploadRate`, `unroutedUploadGrace`). Thus a
+  non-masking hold ends within ten minutes even for compressed input
+  with negligible decoded output. Wire bytes are clamped before duration
+  arithmetic so large encoded streams cannot overflow the allowance. A
   large conversation on a slow link can finish past two minutes (#4775);
   a trickle still exhausts the base budget. Declared length and decoded
   bytes earn nothing, and a fast upload cannot bank time for a later
@@ -383,7 +387,8 @@ recorded as a prediction failure (`noPrediction`).
   body room is internal, including before the first read (#4511).
   `TestUnroutedProgressingUploadOutlastsMost` covers TLS through `Front`
   with declared, chunked, gzip and zstd bodies;
-  `TestUnroutedUploadCreditKeepsIdleDeadline`, `TestUnroutedUploadTimeIsBounded`
+  `TestUnroutedUploadCreditKeepsIdleDeadline`, `TestUnroutedUploadTimeIsBounded`,
+  `TestUnroutedUploadAllowanceHasCeiling`
   and `TestUnroutedTrickledBodyAnswered408` cover the remaining bounds.
   Masking's time, its wait for the local model's
   turn with it, counts toward neither (`masked`, `checkMost`): the model

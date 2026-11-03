@@ -64,7 +64,12 @@ var unroutedShow, unroutedUnknown, unroutedMost = 15 * time.Second, 30 * time.Se
 // wire bytes. A large conversation over a slow link can finish (#4775),
 // while a trickle still runs out of the ordinary two-minute hold. The
 // socket's idle deadline and the decoded body size limit also still hold.
-const unroutedUploadRate = 32 << 10
+// Even compressed input that produces no decoded bytes can earn no more
+// than eight minutes, bounding a non-masking hold to ten minutes overall.
+const (
+	unroutedUploadRate  = 32 << 10
+	unroutedUploadGrace = 8 * time.Minute
+)
 
 // unroutedWatched is whether a request to path is an agent's turn, which
 // is given a route once magpie knows where it goes: Chat, Responses,
@@ -308,7 +313,10 @@ func (u *unroutedHold) unmaskedLocked(now time.Time) time.Duration {
 			if k.n > 0 {
 				spent += now.Sub(k.since)
 			}
-			earned := time.Duration(u.bodyRead.Load()) * time.Second / unroutedUploadRate
+			// Clamp before multiplying: compressed wire bytes need not
+			// be bounded by the decoded size cap, and may overflow time.
+			read := min(u.bodyRead.Load(), int64(unroutedUploadGrace/time.Second)*unroutedUploadRate)
+			earned := time.Duration(read) * time.Second / unroutedUploadRate
 			d -= min(spent, earned)
 			break
 		}
@@ -550,7 +558,7 @@ func byteWord(n int64) string {
 // when it had been held for held: the time went to the client sending it,
 // not to magpie, and it says so.
 func unroutedBodyMsg(held time.Duration, body string) string {
-	return fmt.Sprintf("magpie stopped this request after %s because its body was still arriving from the client (read: %s), before it could be routed to any provider. The upload exhausted its time allowance (32 KiB/s with a two-minute grace period). Check the connection or proxy to magpie, or compact the conversation and reduce inline images before retrying. "+heldSay, held, body, heldWhere())
+	return fmt.Sprintf("magpie stopped this request after %s because its body was still arriving from the client (read: %s), before it could be routed to any provider. The upload exhausted its time allowance (32 KiB/s with a two-minute grace period, at most eight additional minutes). Check the connection or proxy to magpie, or compact the conversation and reduce inline images before retrying. "+heldSay, held, body, heldWhere())
 }
 
 // watchUnrouted watches r, counted as f, until the func it answers is
