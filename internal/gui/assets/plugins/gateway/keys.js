@@ -356,6 +356,16 @@ function askGatewayKey(k, rotate) {
   ed.append(head, el("p", "lib-confirm", t(rotate
     ? "Clients using {name} will need the new key. Its name and usage history stay the same."
     : "Clients using {name} will lose access from other computers. Its usage history is kept.", { name: k.name })));
+  // a value of one's own in place of the one magpie makes (isaac_bai on
+  // Discord: one easy to remember and pass on)
+  let own = null;
+  if (rotate) {
+    own = input("", t("Your own key (optional)"), "password");
+    own.setAttribute("aria-label", t("Gateway key value"));
+    own.title = t("Leave empty and magpie makes a key. Or enter one your clients already send, from another gateway, so they keep working.");
+    own.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") go.click(); else if (e.key === "Escape") closeConfirmAsk(); };
+    ed.append(el("label", "", t("Gateway key")), own);
+  }
   const bar = el("div", "bar");
   const cancel = el("button", "text", t("Cancel"));
   cancel.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
@@ -364,10 +374,11 @@ function askGatewayKey(k, rotate) {
     e.stopPropagation();
     if (go.disabled) return;
     go.disabled = true;
-    const out = await gatewayKeyAction(rotate ? "rotate-key" : "remove-key", { key: k.id });
+    const mine = !!own?.value.trim();
+    const out = await gatewayKeyAction(rotate ? "rotate-key" : "remove-key", mine ? { key: k.id, secret: own.value } : { key: k.id });
     if (!out) { go.disabled = false; return; }
     closeConfirmAsk();
-    if (rotate) status(t("Gateway key rotated. Update clients on other computers."), "ok");
+    if (rotate) status(t(mine ? "Gateway key changed. Clients that send this key reach magpie now." : "Gateway key rotated. Update clients on other computers."), "ok");
   };
   bar.append(el("span", "grow"), cancel, go);
   ed.append(bar);

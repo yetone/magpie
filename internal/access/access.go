@@ -21,6 +21,7 @@ import (
 
 	"github.com/yetone/magpie/internal/edit"
 	"github.com/yetone/magpie/internal/filelock"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -105,7 +106,26 @@ func ownSecret(secret string, keys []Key) (string, error) {
 			return "", errors.New("Another gateway key already has this key")
 		}
 	}
+	if upstreamKey(secret) {
+		return "", errors.New("This is one of your providers' API keys: give the gateway key a value of its own")
+	}
 	return secret, nil
+}
+
+// upstreamKey: secret is a key magpie sends a provider, which a gateway
+// key handed to others must never be.
+func upstreamKey(secret string) bool {
+	for _, p := range provider.All() {
+		if p.Key != "" && subtle.ConstantTimeCompare([]byte(secret), []byte(p.Key)) == 1 {
+			return true
+		}
+		for _, k := range p.Keys {
+			if k.Key != "" && subtle.ConstantTimeCompare([]byte(secret), []byte(k.Key)) == 1 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type Key struct {
@@ -347,8 +367,8 @@ type Change struct {
 	// keys under itself (Key.Issues).
 	Issues bool `json:"issues,omitempty"`
 	// Secret is the value "add-key" gives the new key, one its clients
-	// already send (love1sbug on X: keys handed out from another gateway);
-	// "" for one magpie makes.
+	// already send (love1sbug on X: keys handed out from another gateway),
+	// or "rotate-key" gives the key; "" for one magpie makes.
 	Secret string `json:"secret,omitempty"`
 }
 
@@ -399,11 +419,20 @@ func Update(action string, in Change) (string, error) {
 		}
 		switch action {
 		case "rotate-key":
-			token, err := random(24)
-			if err != nil {
-				return "", err
+			// a value of the user's own (isaac_bai on Discord: one easy to
+			// remember and pass on), checked as add-key's is; none, a new
+			// one magpie makes
+			if in.Secret != "" {
+				if secret, err = ownSecret(in.Secret, slices.Delete(slices.Clone(keys), i, i+1)); err != nil {
+					return "", err
+				}
+			} else {
+				token, err := random(24)
+				if err != nil {
+					return "", err
+				}
+				secret = Prefix + token
 			}
-			secret = Prefix + token
 			keys[i].Secret = secret
 		case "rename-key":
 			keys[i].Name = name

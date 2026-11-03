@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yetone/magpie/internal/access"
+	"github.com/yetone/magpie/internal/budget"
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 	"github.com/yetone/magpie/internal/usage"
@@ -75,5 +76,55 @@ func TestOwnKeyValueIsTheKey(t *testing.T) {
 	}
 	if code := call("192.0.2.7:4000", own); code != http.StatusUnauthorized {
 		t.Fatal("a disabled key from another computer", code)
+	}
+}
+
+// A key magpie made, rotated to a value of the user's own (isaac_bai on
+// Discord), is still that key: from another computer and from this one
+// it is let in, counted as it and held to its limit, and its old value
+// is refused.
+func TestRotatedOwnValueKeepsTheKeysLimit(t *testing.T) {
+	fresh(t)
+	budget.Forget()
+	pinLimitClock(t)
+	calls := limitedUpstream(t, 0)
+	keys, secrets := newCaller(t, "Family")
+	setLimit(t, keys[0].ID, &access.Limit{Period: "day", Tokens: 700})
+	const own = "family-easy-to-share"
+	if _, err := access.Update("rotate-key", access.Change{Key: keys[0].ID, Secret: own}); err != nil {
+		t.Fatal(err)
+	}
+	h := lanGuard(New().Handler())
+	call := func(from, key string) int {
+		r := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(chatReq))
+		r.RemoteAddr = from
+		r.Header.Set("Authorization", "Bearer "+key)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	if code := call("192.0.2.7:4000", secrets[0]); code != http.StatusUnauthorized {
+		t.Fatal("the value it had", code)
+	}
+	if code := call("192.0.2.7:4000", own); code != 200 {
+		t.Fatal("from another computer", code)
+	}
+	if code := call("127.0.0.1:4000", own); code != 200 {
+		t.Fatal("from this computer", code)
+	}
+	// 700 tokens, 350 a call: the third is refused, from either computer
+	if code := call("192.0.2.7:4000", own); code != http.StatusTooManyRequests {
+		t.Fatal("past its limit from another computer", code)
+	}
+	if code := call("127.0.0.1:4000", own); code != http.StatusTooManyRequests {
+		t.Fatal("past its limit from this computer", code)
+	}
+	if calls.Load() != 2 {
+		t.Fatal("calls reached the provider:", calls.Load())
+	}
+	for _, rec := range usage.Load(time.Time{}) {
+		if rec.CallerKeyID != keys[0].ID {
+			t.Fatalf("not counted as the key: %+v", rec)
+		}
 	}
 }

@@ -620,8 +620,11 @@ starting with `sk-magpie-`, unlike any other key); left empty, magpie makes
 one. The list shows only its last four characters, and it is counted,
 limited and restricted as any other key, from this computer too.
 Rename, disable, rotate or remove keys independently; rotation and removal
-ask for confirmation. Rotation keeps the name, enabled state and usage
-history; other keys are unchanged. While sharing is on, **Gateway → Connect**
+ask for confirmation. Rotation keeps the name, enabled state, limits and usage
+history; other keys are unchanged. Its dialog takes an optional value of
+your own, checked as a new key's is (8–256 printable ASCII characters, no
+spaces, not starting with `sk-magpie-`, no other gateway key's and none of
+your providers' API keys); left empty, magpie makes one. While sharing is on, **Gateway → Connect**
 offers loopback and shared addresses, plus enabled gateway keys, for all
 connection examples. With sharing off, Connect keeps the original **API key**
 field and local `magpie` token, without a gateway-key picker. Its arbitrary
@@ -634,6 +637,7 @@ magpie gateway-key add "Remote laptop" # prints the new credential once
 magpie gateway-key add Family --key -  # keeps a key clients already send, read from stdin
 magpie gateway-key list                # ids, names, enabled state and masked keys
 magpie gateway-key rotate <id>         # prints the replacement; identity stays the same
+magpie gateway-key rotate <id> --key -  # gives it a value of your own instead, read from stdin
 magpie gateway-key remove <id>         # revokes remote access
 magpie gateway-key limit <id> week --tokens 2m --cost 5   # its own limit
 magpie gateway-key limit <id> list     # each limit, used, left and reset

@@ -140,10 +140,12 @@ function fixture(lang, theme, events, options = {}) {
       }
       if (action === "rename-key") k.name = body.name;
       if (action === "rotate-key") {
-        secret = "fixture-rotated-" + (++rotations);
+        // a value of the user's own, checked as access.ownSecret does
+        if (body.secret !== undefined && body.secret.trim().length < 8) return route.fulfill({ status: 400, json: { error: "Use a key between 8 and 256 characters" } });
+        secret = body.secret?.trim() || "fixture-rotated-" + (++rotations);
         secrets.set(k.id, secret);
         if (k.id === lanKeyID) lanSecret = secret;
-        k.masked = "sk-magpie-key-…" + secret.slice(-6);
+        k.masked = body.secret ? "…" + secret.slice(-4) : "sk-magpie-key-…" + secret.slice(-6);
       }
       if (action === "remove-key") keys = keys.filter((v) => v !== k);
       if (action === "on-key" || action === "off-key") k.off = action === "off-key";
