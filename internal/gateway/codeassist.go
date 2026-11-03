@@ -341,7 +341,13 @@ func buildCodeAssistSent(r *Request, sent, agent string) []byte {
 	}
 	names := map[string]string{}
 	var contents []map[string]any
-	for _, m := range dropSecondAnswers(r.Messages) {
+	msgs := dropSecondAnswers(r.Messages)
+	if ag {
+		// a model turn that carried its call written out in the text goes
+		// as the answer it repeated (dropPseudoCalls)
+		msgs = dropPseudoCalls(msgs, r.Tools)
+	}
+	for _, m := range msgs {
 		role := "user"
 		if m.Role == "assistant" {
 			role = "model"

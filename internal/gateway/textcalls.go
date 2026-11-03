@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync/atomic"
+	"unicode"
 )
 
 // A model deep into a long conversation may write its tool calls into its
@@ -135,6 +136,148 @@ func textCallNames(tools []Tool) map[string]bool {
 		}
 	}
 	return m
+}
+
+// dropPseudoCalls is a history's model turns with the call one of them
+// wrote out in its text gone, the answer after it staying (#5091).
+func dropPseudoCalls(msgs []Message, tools []Tool) []Message {
+	names := textCallNames(tools)
+	if names == nil {
+		return msgs
+	}
+	var out []Message
+	for i, m := range msgs {
+		kept, ok := withoutPseudoCall(m, names)
+		if ok && out == nil {
+			out = append(make([]Message, 0, len(msgs)), msgs[:i]...)
+		}
+		if out != nil {
+			out = append(out, kept)
+		}
+	}
+	if out == nil {
+		return msgs
+	}
+	return out
+}
+
+// withoutPseudoCall is m with the completion call it wrote out in its text
+// gone, and whether it was. A turn is rewritten only when nothing
+// structured is in it, the whole call written out is there — of a tool the
+// request offers, its arguments readable, closed — and the text after it
+// says the call's result again, up to punctuation and spaces; anything
+// less, a bare tool name or a JSON fragment, stays as it is (#5091, as
+// gemini-4-argon deep in a long session wrote its completion call into the
+// text and the answer after it, and every later turn read its own wrapper
+// back and wrote the next one the same way). The text's signatures go with
+// the turn it was: history a client sends back carries none.
+func withoutPseudoCall(m Message, names map[string]bool) (Message, bool) {
+	if m.Role != "assistant" {
+		return m, false
+	}
+	for _, p := range m.Parts {
+		if p.Kind != Text && p.Kind != Thinking {
+			// a real call, its result, a picture: they stand
+			return m, false
+		}
+	}
+	joined := false
+	for _, p := range m.Parts {
+		if p.Kind == Text && strings.Contains(p.Text, "<") {
+			joined = true
+			break
+		}
+	}
+	if !joined {
+		return m, false
+	}
+	var b strings.Builder
+	for _, p := range m.Parts {
+		if p.Kind == Text {
+			b.WriteString(p.Text)
+		}
+	}
+	said := b.String()
+	at, _ := textCallAt(said)
+	if at < 0 {
+		return m, false
+	}
+	c, n, good := historyCall(said[at:], names)
+	if !good {
+		return m, false
+	}
+	if block := strings.TrimRight(said[at:at+n], " \t\r\n"); !strings.HasSuffix(block, ">") {
+		// no close the model wrote: not a whole wrapper
+		return m, false
+	}
+	res, ok := callResult(c.Args)
+	if !ok || !saysAgain(said[at+n:], res) {
+		// no result to compare, or the answer says something else
+		return m, false
+	}
+	kept := strings.TrimLeft(said[:at]+said[at+n:], " \t\r\n")
+	return Message{Role: m.Role, Parts: []Part{{Kind: Text, Text: kept}}}, true
+}
+
+// historyCall reads one call written out at the start of s, the way
+// parseTextCalls reads a reply's: a <tool_call> block, Hermes' JSON, GLM's
+// pairs, an invoke — of one of names, with arguments that can be read. n is
+// how much of s the block took, its close included where it wrote one.
+func historyCall(s string, names map[string]bool) (c writtenCall, n int, good bool) {
+	if strings.HasPrefix(s, "<tool_call>") {
+		s = s[len("<tool_call>"):]
+		if c, n, good = paramCall(s, names); !good {
+			if c, n, good = hermesCall(s, names); !good && !strings.HasPrefix(strings.TrimLeft(s, " \t\r\n"), "{") {
+				c, n, good = glmCall(s, names)
+			}
+		}
+		return c, n + len("<tool_call>"), good
+	}
+	if d := dsmlInvoke.FindStringSubmatchIndex(s); d != nil {
+		c, n, good = dsmlCall(s, s[d[2]:d[3]], d[1]-d[0], names)
+		return c, n, good
+	}
+	return writtenCall{}, 0, false
+}
+
+// callResult is a written-out call's result: its result member, a string as
+// it stands, any other JSON as it marshals. The completion call of #5091
+// carries the answer it went on to repeat there.
+func callResult(args json.RawMessage) (string, bool) {
+	var a map[string]json.RawMessage
+	if decodeJSON(args, &a) != nil {
+		return "", false
+	}
+	r, ok := a["result"]
+	if !ok {
+		return "", false
+	}
+	var s string
+	if decodeJSON(r, &s) == nil {
+		return s, true
+	}
+	return string(r), true
+}
+
+// saysAgain says whether t says s again, up to the punctuation, spaces and
+// case the answer and its result may differ by (#5091).
+func saysAgain(t, s string) bool {
+	if w := plainWords(s); w != "" {
+		return strings.Contains(plainWords(t), w)
+	}
+	return false
+}
+
+// plainWords is s with its letters and digits kept, lowercased: everything
+// the model's punctuation and spacing may differ by goes.
+func plainWords(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
 }
 
 // chatToolNames are the function tools of a Chat Completions request.
