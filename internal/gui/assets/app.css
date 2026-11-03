@@ -1564,7 +1564,7 @@ body.masked :hover > .acct-eye, body.masked .pq-card:hover .acct-eye, body.maske
 .led .where-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .led .where-line > .ic { width: 14px; height: 14px; flex: none; }
 .led .source-badges { display: flex; flex-wrap: nowrap; gap: 4px; margin-top: 4px; }
-.led .price-reference { font-size: 10px; color: var(--muted); }
+.led .price-reference, .led .row-credits { font-size: 10px; color: var(--muted); }
 .led .cost { color: var(--green); }
 .led .cost.faint { color: var(--faint); }
 /* a block of its own, centred in the cell as the time and the model are: an

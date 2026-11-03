@@ -32,7 +32,9 @@ function ledger(period) {
   const all = [GEM, FREE, OTHER];
   const s = (k) => all.reduce((a, x) => a + (x[k] || 0), 0);
   return {
-    period, rows: [row(0, "gemini-3.5-flash", "workbuddy-ai"), row(1, "glm-5.2", "zai")], offset: 0, total: 2,
+    // a WorkBuddy reply that said 0.01 credits, one of another provider that
+    // said none, and a priced one whose reply said credits too
+    period, rows: [{ ...row(0, "gemini-3.5-flash", "workbuddy-ai"), credits: 0.01 }, row(1, "glm-5.2", "zai"), { ...row(2, "kimi-k2.6", "workbuddy-ai"), cost: 0.002, priced: true, credits: 2.5 }], offset: 0, total: 3,
     calls: s("calls"), errors: 0, input: s("input"), output: s("output"), cache_read: 0, cache_write: 0, cost: 0, unpriced: 74, credits: 0.7, credited: 71,
     by: { model: all }, bucket: "hour",
     series: [{ label: "", time: hour(0), calls: s("calls"), input: s("input"), output: s("output"), by: { model: Object.fromEntries(all.map((x) => [x.id, { calls: x.calls, tokens: x.input + x.output, cost: 0 }])) } }],
@@ -89,6 +91,15 @@ const L = {
   "zh-TW": ["0.7 積分", "0 積分", /積分/],
   ja: ["0.7 クレジット", "0 クレジット", /クレジット/],
   de: ["0,7 Credits", "0 Credits", /Credits/],
+};
+
+// each language's 0.01 and 2.5 credits, and the detail's Credits
+const R = {
+  en: ["0.01 credits", "2.5 credits", "Credits"],
+  zh: ["0.01 积分", "2.5 积分", "积分"],
+  "zh-TW": ["0.01 積分", "2.5 積分", "積分"],
+  ja: ["0.01 クレジット", "2.5 クレジット", "クレジット"],
+  de: ["0,01 Credits", "2,5 Credits", "Credits"],
 };
 
 // each language's 35, 2.25 and 37.25 credits
@@ -192,6 +203,59 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         if (process.env.ARTIFACT_DIR) {
           await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
           await p.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-plan-credits.png`) });
+        }
+        assert.deepEqual(errors, []);
+        await ctx.close();
+      });
+    }
+  });
+}
+
+// Each request's own row says what its reply said it cost in credits
+// (jiabubu on Discord: each request's line said its credits, and now
+// none does): in the cost column in place of a plan model's dash, or
+// under a price, and in the row's details; a row whose reply said none
+// keeps its dash.
+for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
+  test(engine + ": each request's row says the credits its reply said", async (t) => {
+    const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+    t.after(() => browser.close());
+    for (const [lang, [one, priced, dt]] of Object.entries(R)) {
+      await t.test(lang, async () => {
+        const errors = [];
+        const ctx = await browser.newContext({ viewport: { width: 1400, height: 800 }, reducedMotion: "reduce" });
+        const p = await ctx.newPage();
+        p.setDefaultTimeout(5000);
+        p.setDefaultNavigationTimeout(60000);
+        p.on("pageerror", (e) => errors.push(e.message));
+        await p.route("**/*", server(lang));
+        await p.goto("http://magpie.test/");
+        await p.locator('[data-view="usage"]').first().click();
+        await p.locator(":is(#usageTab .opt, .nav-s):visible").nth(1).click();
+        const rows = p.locator("#ledWrap .led tbody tr:not(.led-detail)");
+        await rows.nth(2).waitFor();
+        const cost = (i) => rows.nth(i).locator("td.cost");
+        const a = (await cost(0).innerText()).trim();
+        assert.equal(a, one, "the WorkBuddy row's cost cell");
+        assert(!(await cost(0).getAttribute("class")).includes("faint"), "said, not faint");
+        const tip = await cost(0).getAttribute("title");
+        assert(tip && tip.length > 0, "its title says what it is");
+        assert.equal((await cost(1).innerText()).trim(), "—", "a reply that said none keeps its dash");
+        const c = await cost(2).innerText();
+        assert(c.includes("$") && c.includes(priced), "a priced row says both: " + c);
+        // its details say it, at a narrow width too, where the row is cut
+        await rows.nth(0).click();
+        const det = p.locator("#ledWrap .led-detail").first();
+        await det.waitFor();
+        const text = await det.innerText();
+        assert(text.includes(dt) && text.includes(one), "the details: " + text);
+        await p.setViewportSize({ width: 420, height: 800 });
+        await p.waitForTimeout(200);
+        const fits = await det.locator(".led-dl").evaluate((d) => d.scrollWidth <= d.clientWidth + 1);
+        assert(fits, "the details fit a 420px window");
+        if (process.env.ARTIFACT_DIR) {
+          await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+          await p.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-${lang}-row-credits.png`) });
         }
         assert.deepEqual(errors, []);
         await ctx.close();
