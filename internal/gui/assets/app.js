@@ -6822,8 +6822,9 @@ function segsPlace(box) {
 // on a new button. Down and up were on two buttons, so the browser sent the
 // click to neither and nothing was picked. Let go on the same option of the
 // same control, the new one is clicked; let go anywhere else (dragged off
-// to another option), nothing is, as for any button. A tap is left to the
-// browser, which clicks what is under the finger as it lifts.
+// to another option), nothing is, as for any button. A touch tap is left to
+// the browser, which clicks what is under the finger as it lifts; a mouse or
+// trackpad tap that slid off its option within tapLike's bounds still picks it.
 let segsPress = null;
 const optAt = (b) => [...b.parentElement.querySelectorAll(":scope > .opt")].indexOf(b);
 // the same control is at the same place, among as many of its kind, in rows
@@ -6838,15 +6839,25 @@ function segsWho(box) {
 }
 addEventListener("pointerdown", (e) => {
   const b = e.isPrimary && e.button === 0 && e.pointerType !== "touch" && e.target.closest?.(".segs > .opt");
-  segsPress = b ? { b, who: segsWho(b.parentElement), i: optAt(b) } : null;
+  segsPress = b ? { b, who: segsWho(b.parentElement), i: optAt(b), t: performance.now(), x: e.clientX, y: e.clientY } : null;
 }, true);
 addEventListener("pointercancel", () => { segsPress = null; }, true);
 addEventListener("pointerup", (e) => {
   const p = segsPress;
   segsPress = null;
-  if (!p?.who || p.b.isConnected || !e.isPrimary) return;
-  const b = document.elementFromPoint(e.clientX, e.clientY)?.closest(".segs > .opt");
-  if (!b || segsWho(b.parentElement) !== p.who || optAt(b) !== p.i) return;
+  if (!p?.who || !e.isPrimary) return;
+  let b;
+  if (p.b.isConnected) {
+    // a tap that slid off its option (a trackpad's tap lifts a few pixels
+    // from where it came down, refeccd's first press of Form | JSON): the
+    // browser clicks neither, or their common holder. A tap is the press
+    // let go soon and near, as tapLike has it; a drag off it is not.
+    if (p.b.contains(e.target) || !tapLike(p.t, p.x, p.y, e)) return;
+    b = p.b;
+  } else {
+    b = document.elementFromPoint(e.clientX, e.clientY)?.closest(".segs > .opt");
+    if (!b || segsWho(b.parentElement) !== p.who || optAt(b) !== p.i) return;
+  }
   // after the browser's own click, should one come to it after all
   let clicked = false;
   const seen = (c) => { if (b.contains(c.target)) clicked = true; };
