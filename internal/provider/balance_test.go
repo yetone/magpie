@@ -308,6 +308,75 @@ func TestNamedBalanceWithAccessToken(t *testing.T) {
 	}
 }
 
+// zxc56823 on Discord typed their new-api user id into a header's name
+// box, value left empty, after magpie asked for "New-Api-User = your user
+// ID" in Headers. A relay answering as new-api v0.9's authHelper does (no
+// New-Api-User: 401 未提供) is asked with the digits as New-Api-User, on
+// the editor's check (the form's headers as they are) and once saved
+// (normalize), and the empty header is never sent.
+func TestNewAPIUserIDTypedAsHeaderName(t *testing.T) {
+	var asked []http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.Header.Clone())
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path != "/api/user/self" || r.Header.Get("Authorization") != "tok" {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"success":false,"message":"无权进行此操作，access token 无效"}`))
+			return
+		}
+		switch r.Header.Get("New-Api-User") {
+		case "":
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"success":false,"message":"无权进行此操作，未提供 New-Api-User"}`))
+		case "272298":
+			w.Write([]byte(`{"success":true,"message":"","data":{"id":272298,"username":"zxc","quota":2500000,"used_quota":120000,"group":"default"}}`))
+		default:
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"success":false,"message":"无权进行此操作，New-Api-User 与登录用户不匹配"}`))
+		}
+	}))
+	defer srv.Close()
+	base := Provider{ID: "relay", Chat: srv.URL + "/v1", Key: "sk-one", BalanceToken: "tok",
+		BalanceURL: srv.URL + "/api/user/self", BalancePath: "$data.quota / 500000"}
+	for _, c := range []struct {
+		name    string
+		headers map[string]string
+	}{
+		{"as typed", map[string]string{"272298": ""}},
+		{"with spaces", map[string]string{" 272298 ": "  "}},
+		{"saved", normalize(Provider{ID: "relay", Chat: srv.URL + "/v1", Headers: map[string]string{"272298": ""}}).Headers},
+	} {
+		asked = nil
+		p := base
+		p.Headers = c.headers
+		got, ok, err := Balance(context.Background(), p)
+		if err != nil || !ok || got != "$5.00" {
+			t.Fatalf("%s: balance = %q %v %v", c.name, got, ok, err)
+		}
+		for k := range asked[len(asked)-1] {
+			if strings.TrimSpace(k) == "272298" {
+				t.Errorf("%s: the empty header went too: %v", c.name, asked[len(asked)-1])
+			}
+		}
+	}
+	if h := normalize(Provider{ID: "relay", Chat: srv.URL + "/v1", Headers: map[string]string{"272298": ""}}).Headers; len(h) != 1 || h["New-Api-User"] != "272298" {
+		t.Fatalf("saved headers = %v", h)
+	}
+	// a New-Api-User of the user's own wins; the stray digits go
+	p := base
+	p.Headers = map[string]string{"New-Api-User": "272298", "1": ""}
+	if got, _, err := Balance(context.Background(), p); err != nil || got != "$5.00" {
+		t.Fatalf("own header: %q %v", got, err)
+	}
+	if h := cleanHeaders(map[string]string{"new-api-user": "7", "272298": ""}); len(h) != 1 || h["new-api-user"] != "7" {
+		t.Fatalf("own header kept: %v", h)
+	}
+	// a header of any other name, or digits with a value, is the user's
+	if h := cleanHeaders(map[string]string{"X-1": "", "42": "v"}); len(h) != 2 || h["X-1"] != "" || h["42"] != "v" {
+		t.Fatalf("other headers: %v", h)
+	}
+}
+
 // A sub2api panel tells the account's balance to its login JWT, as a bearer.
 func TestNamedBalanceWithSub2APIJWT(t *testing.T) {
 	const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln"
@@ -413,9 +482,9 @@ func TestNewAPIUserRefusal(t *testing.T) {
 		body   string
 		want   []string
 	}{
-		{401, `{"success":false,"message":"无权进行此操作，未提供 New-Api-User"}`, []string{"401 Unauthorized: ", "add the header New-Api-User = your user ID", "未提供 New-Api-User"}},
-		{200, `{"success":false,"message":"Unauthorized, New-Api-User header not provided"}`, []string{"add the header New-Api-User = your user ID", "header not provided"}},
-		{401, `{"success":false,"message":"无权进行此操作，New-Api-User 与登录用户不匹配"}`, []string{"add the header New-Api-User", "不匹配"}},
+		{401, `{"success":false,"message":"无权进行此操作，未提供 New-Api-User"}`, []string{"401 Unauthorized: ", "fill in your user ID", "under this provider's Account balance", "未提供 New-Api-User"}},
+		{200, `{"success":false,"message":"Unauthorized, New-Api-User header not provided"}`, []string{"fill in your user ID", "header not provided"}},
+		{401, `{"success":false,"message":"无权进行此操作，New-Api-User 与登录用户不匹配"}`, []string{"fill in your user ID", "不匹配"}},
 		{200, `{"success":false,"message":"无权进行此操作，access token 无效"}`, []string{"access token 无效"}},
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -437,8 +506,8 @@ func TestNewAPIUserRefusal(t *testing.T) {
 		if strings.Contains(err.Error(), "nothing at") {
 			t.Errorf("%s: read as a missing field: %v", c.body, err)
 		}
-		if !strings.Contains(c.body, "New-Api-User") && strings.Contains(err.Error(), "add the header") {
-			t.Errorf("%s: told to add the header: %v", c.body, err)
+		if !strings.Contains(c.body, "New-Api-User") && strings.Contains(err.Error(), "fill in your user ID") {
+			t.Errorf("%s: told to fill in the user ID: %v", c.body, err)
 		}
 	}
 }

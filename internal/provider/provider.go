@@ -1713,10 +1713,65 @@ func cleanHeaders(h map[string]string) map[string]string {
 			out[k] = strings.TrimSpace(v)
 		}
 	}
+	out = userIDHeader(out)
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+// userIDHeader is h with a header named by digits alone and no value
+// read as the new-api user id it is, New-Api-User: the user id typed in
+// a header's name box, where magpie's old hint asked for a header
+// (zxc56823 on Discord, "272298" with its value left empty). Sent as it
+// was, the relay is told a header it never reads and still no user. One
+// with a New-Api-User of its own already has it; the digits are dropped.
+// h itself when it has none.
+func userIDHeader(h map[string]string) map[string]string {
+	var out map[string]string
+	for k, v := range h {
+		if strings.TrimSpace(v) != "" || !allDigits(strings.TrimSpace(k)) {
+			continue
+		}
+		if out == nil {
+			out = maps.Clone(h)
+		}
+		delete(out, k)
+		has := false
+		for n, w := range out {
+			if strings.EqualFold(n, NewAPIUserHeader) && strings.TrimSpace(w) != "" {
+				has = true
+			}
+		}
+		if !has {
+			for n := range out {
+				if strings.EqualFold(n, NewAPIUserHeader) {
+					delete(out, n)
+				}
+			}
+			out[NewAPIUserHeader] = strings.TrimSpace(k)
+		}
+	}
+	if out == nil {
+		return h
+	}
+	return out
+}
+
+// NewAPIUserHeader is where a new-api relay's /api/user/self wants the
+// user's id, beside the access token.
+const NewAPIUserHeader = "New-Api-User"
+
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func contains(xs []string, x string) bool {

@@ -2811,17 +2811,8 @@ async function openPluginAgents(e) {
 let agentsGlide = null; // how the panel's edge moves after the next render
 let panelOpenAgent = null; // the one agent row the panel has opened
 
-// set up: a model, a provider, a role given one — what magpie is there for.
-// How the agent's own model is run (ultracode, an effort) is not: turning
-// Claude Code's ultracode on folded every other agent away under Show more.
-// One with 「接入」's switch is set up when it is connected, and only then
-// (#726): its fields are read from its own files. One magpie connected
-// that has come apart (drift) stays up
-// too, to be put right. One with no switch (Cursor, an app's own models)
-// goes by what is set on it, as before, though while an agent can be
-// connected it doesn't start the folding (arrangeAgents): its values are
-// its own files' too, and a Cursor on auto would fold every agent not
-// connected yet away on a fresh magpie.
+// set up: a model, a provider, a role given one, not an effort or ultracode;
+// one with 「接入」's switch only when connected or drifted (#726).
 const tweak = (f) => f.key === "ultracode" || f.key === "effort" || f.key.endsWith("_effort");
 const onMagpie = (a) => !!(a.added || a.wired || a.drift);
 // one whose only control is its launch command (Cursor Private Inference)
@@ -8074,9 +8065,15 @@ function headerRows(obj) {
 }
 function headersOf(rows) {
   const out = {};
+  const own = !!newAPIUserOf(rows, false);
   for (const [k, v] of rows || []) {
-    const name = (k || "").trim();
-    const val = (v || "").trim();
+    let name = (k || "").trim();
+    let val = (v || "").trim();
+    // a user id typed as a name (zxc56823): userIDHeader in provider.go
+    if (/^\d+$/.test(name) && !val) {
+      if (own) continue;
+      [name, val] = ["New-Api-User", name];
+    }
     if (!name || !val) continue;
     for (const had of Object.keys(out)) if (had.toLowerCase() === name.toLowerCase()) delete out[had];
     // minify only a JSON blob; a plain value like "2.0" must stay verbatim
@@ -8100,7 +8097,7 @@ function looksJSON(s) {
 // in the list yet is offered as a button that adds its row, value left empty.
 function headerEditor(hints = []) {
   const box = el("div", "headers");
-  const render = () => {
+  const render = box.render = () => {
     box.replaceChildren();
     draft.headers.forEach((row, i) => {
       const line = el("div", "pair");
@@ -8165,6 +8162,22 @@ function headerEditor(hints = []) {
   return box;
 }
 function parses(s) { try { JSON.parse(s); return true; } catch { return false; } }
+
+// a new-api user id: New-Api-User's value, or a name of digits with no value
+const nauRow = (r) => (r[0] || "").trim().toLowerCase() === "new-api-user";
+const digitRow = (r) => /^\d+$/.test((r[0] || "").trim()) && !(r[1] || "").trim();
+function newAPIUserOf(rows, typed = true) {
+  const r = (rows || []).find((r) => nauRow(r) && (r[1] || "").trim()) || (typed && (rows || []).find(digitRow));
+  return r ? (r[1] || r[0]).trim() : "";
+}
+function setNewAPIUser(rows, id) {
+  for (let i = rows.length; i--;) if (digitRow(rows[i])) rows.splice(i, 1);
+  let row = rows.find(nauRow);
+  if (!row && !id) return;
+  if (!row) row = rows.find((r) => !(r[0] || "").trim() && !(r[1] || "").trim()) || (rows.push(["", "", false]), rows.at(-1));
+  row[0] = row[0] || "New-Api-User";
+  row[1] = id;
+}
 
 // A provider's extra body fields (#1604): a JSON object the gateway merges
 // into the top of every request's body to the vendor, filling in what the
@@ -9689,9 +9702,8 @@ function drawEditor(p, presetID) {
     if (custom) {
       balFix = balanceFix(p);
       wrap.append(balFix);
-      // whatever is typed — the token, the Balance URL, a header — may
-      // make it or unmake it
-      ed.addEventListener("input", () => balFix.refresh());
+      // whatever is typed may make it or unmake it, but the User ID keeps its place
+      ed.addEventListener("input", (e) => { if (!e.target.closest?.(".bal-uid")) balFix.refresh(); });
     }
     advIn.append(label, wrap);
   }
@@ -10686,14 +10698,8 @@ function showRest(n, open) {
   return b;
 }
 
-// detectAPIs: which of magpie's APIs answer at the base URL typed
-// (01huadalang: 一键检测支持什么协议): each is sent the smallest request,
-// with the key typed (or saved) and a model typed or from the list; "Use
-// these" takes those that answered. A saved provider's typed model that
-// some APIs answer can be asked on one alone (staged as Names & levels).
-// "Each picked model" asks every pick on each API, a few at a time (有的仅
-// 支持 response 有的双协议); its "Use these" gives a model answered on
-// one API only that API.
+// detectAPIs: which APIs answer at the base URL typed, each sent the
+// smallest request (01huadalang); "Use these" takes those that answered.
 // DETECT_MAX: the most models one detection asks (provider.DetectMax)
 const DETECT_MAX = 30;
 // addFormModels: the add form's models, typed in (ex) or picked from the
@@ -13627,7 +13633,7 @@ function balanceFieldOf(raw) {
 function balanceError(err) {
   if (/takes the API key, not the access token/.test(err)) return t("The Balance URL …/api/usage/token takes the API key, not the access token — set it to …/api/user/self in the provider's settings");
   if (/takes the API key, not the login token/.test(err)) return t("The Balance URL …/v1/usage takes the API key, not the login token — set it to …/api/v1/user/profile in the provider's settings");
-  if (/New-Api-User/i.test(err)) return t("Add the header New-Api-User = your user ID (shown in the site's personal settings) to the provider's Headers");
+  if (/New-Api-User/i.test(err)) return t("Fill in your user ID (shown in the site's personal settings) under the provider's Account balance");
   // errOpenCodeNoBalance: not a reading that failed
   if (/^OpenCode tells no API key its balance/.test(err)) return t("OpenCode doesn't tell an API key its balance — see Zen's credits in the OpenCode console, Overview → Credits");
   return "";
@@ -13676,8 +13682,23 @@ function balanceFix(p) {
       }
       return;
     }
-    if (path === "/api/user/self" && !(draft.headers || []).some((h) => (h[0] || "").trim().toLowerCase() === "new-api-user" && (h[1] || "").trim())) {
-      box.append(el("span", "", t("A new-api relay also wants the header New-Api-User = your user ID (shown in the site's personal settings): add it under Headers.")));
+    // new-api wants the user's id in New-Api-User (zxc56823)
+    if (path === "/api/user/self") {
+      draft.headers = draft.headers || [];
+      const have = newAPIUserOf(draft.headers);
+      const row = el("label", "bal-uid");
+      const uid = input(have, t("in the site's personal settings"));
+      uid.inputMode = "numeric";
+      const bad = () => uid.classList.toggle("bad", !!uid.value.trim() && !/^\d+$/.test(uid.value.trim()));
+      bad();
+      uid.oninput = () => {
+        setNewAPIUser(draft.headers, uid.value.trim());
+        bad();
+        box.closest(".editor")?.querySelector(".headers")?.render?.();
+      };
+      row.append(el("span", "bal-uid-name", t("User ID")), uid);
+      box.append(row);
+      if (!have) box.append(el("span", "bal-uid-why", t("A new-api relay also asks for your user ID with the token. It is in the site's personal settings.")));
     }
   };
   box.refresh();
@@ -14186,14 +14207,9 @@ function quotaCount(w) {
   const amount = Math.max(0, w.amount || 0), n = quotaLeft ? Math.max(0, w.limit - amount) : amount;
   return (countFormat.format(n) + " / " + countFormat.format(w.limit) + (w.unit ? " " + t(w.unit) : "")).trim();
 }
-// familyWindows: an account's per-model windows as one a model family.
-// Antigravity reports each level of each model (Gemini 3.1 Pro (High), (Low),
-// Gemini 3.7 Flash (Low), (Medium), (High)…), which over several accounts
-// reads as a wall of meters (01huadalang on Discord); Gemini and Claude
-// first, then any other. A family's figure is its tightest window, the most
-// used, the soonest to start again of those; its windows go along as tiers
-// for its tooltip and for "Every model". Windows that name no family, or an
-// account with a window a family already, are as they were.
+// familyWindows: an account's per-model windows as one a model family
+// (Antigravity's levels, 01huadalang), its tightest window as the figure and
+// the rest as tiers.
 const FAMILY_FIRST = ["Gemini", "Claude"];
 function familyWindows(ws) {
   if (ws?.some(isPool)) return poolWindows(ws);
@@ -18597,9 +18613,7 @@ function ledGroupSpeed(x) {
   const vTitle = !v || !kv ? "" : f ? t(kv === 1 ? "Measured on {k} reply, from its first token to its end" : "Measured on {k} replies, from their first token to their end", { k: ledNum(kv) })
     : t(kv === 1 ? "Measured on {k} reply, from its first token to its end; the others tell no speed" : "Measured on {k} replies, from their first token to their end; the others tell no speed", { k: ledNum(kv) });
   const fTitle = !f || !kf ? "" : t(kf === 1 ? "At least: {k} reply read from a session file, which doesn't say when its answer began, so time before that is counted too" : "At least: {k} replies read from session files, which don't say when their answers began, so time before that is counted too", { k: ledNum(kf) });
-  // each figure as its speed and its count, kept apart so a narrow card can
-  // put the count under the speed rather than run past its edge (#1623); the
-  // card sets the count as a caption, with no "·" to lead a wrapped line
+  // speed and count kept apart for a narrow card (#1623)
   const measured = v ? { s: v, head: tok(v), count: count(kv, true), title: vTitle } : null;
   const floor = f ? { s: f, head: "≥" + tok(f), count: count(kf, false), title: fTitle } : null;
   // the larger sample first; a tie keeps the measured one first

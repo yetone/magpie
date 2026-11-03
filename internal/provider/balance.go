@@ -256,7 +256,7 @@ func newAPIUserHint(msg string) string {
 	if !strings.Contains(strings.ToLower(msg), "new-api-user") {
 		return msg
 	}
-	return "add the header New-Api-User = your user ID (shown in the site's personal settings) to this provider's Headers; the relay said: " + msg
+	return "fill in your user ID (shown in the site's personal settings) under this provider's Account balance, beside its access token; the relay said: " + msg
 }
 
 // TakesBalanceToken says the provider's vendor tells the account's balance
@@ -1214,6 +1214,9 @@ func Balance(ctx context.Context, p Provider) (amount string, ok bool, err error
 func balanceRead(ctx context.Context, p Provider) (amount string, parts, split []BalancePart, ws []QuotaWindow, wide, ok bool, err error) {
 	ctx = p.Via(ctx)
 	p = keyQueryOf(p)
+	// the editor's check asks with the form's headers as they are, a user
+	// id typed as a header's name among them (userIDHeader)
+	p.Headers = userIDHeader(p.Headers)
 	src, ok := balanceSourceOf(p)
 	if !ok && p.Account == nil && p.Key != "" && openCodeZen(p) {
 		// a balance the vendor keeps from the key: said so, not left out

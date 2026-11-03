@@ -2,8 +2,10 @@
 // A custom provider's balance token beside new-api's /api/usage/token, which
 // takes only the key, is said in the editor with the one click that moves it
 // to /api/user/self (and its field to the quota); the New-Api-User header
-// that wants is asked for until it is set, Check balance asks as the form
-// has it, and the Usage page says the fix for either refusal plainly.
+// that wants is asked for as a User ID field beside the token (zxc56823
+// typed the id as a header's name when it was asked for as a header), Check
+// balance asks as the form has it, and the Usage page says the fix for
+// either refusal plainly.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -37,7 +39,7 @@ function server(posted, { lang = "en", provider = relay } = {}) {
       if (url.pathname === "/api/provider/balance") {
         // new-api's /api/user/self: the quota once New-Api-User is there
         if (body.headers?.["New-Api-User"]) return json({ ok: true, amount: "$3.00" });
-        return json({ ok: true, amount: "", error: "401 Unauthorized: add the header New-Api-User = your user ID (shown in the site's personal settings) to this provider's Headers; the relay said: 无权进行此操作，未提供 New-Api-User" });
+        return json({ ok: true, amount: "", error: "401 Unauthorized: fill in your user ID (shown in the site's personal settings) under this provider's Account balance, beside its access token; the relay said: 无权进行此操作，未提供 New-Api-User" });
       }
       return json(testProviders);
     }
@@ -81,28 +83,44 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert.equal(await page.locator(".editor .bal-path").inputValue(), "$data.quota / 500000", "usage/token's field gives way to the quota");
     assert(await page.locator(".editor .bal-url").isVisible(), "what changed is in view");
     assert(!(await fix.evaluate((e) => e.classList.contains("warn"))));
-    assert.match(await fix.textContent(), /New-Api-User = your user ID/, "the header /api/user/self wants is asked for");
+    const uid = fix.locator(".bal-uid input");
+    assert.equal(await uid.inputValue(), "", "the user id /api/user/self wants is asked for");
+    assert.match(await fix.textContent(), /User ID/);
+    assert.match(await fix.textContent(), /asks for your user ID with the token/);
 
     // asked as the form has it, without the header: the fix said plainly
     const check = page.getByRole("button", { name: "Check balance" });
     const res = page.locator(".editor .bal-res");
     await check.click();
     await page.locator(".editor .bal-res.bad").waitFor();
-    assert.equal(await res.textContent(), "Add the header New-Api-User = your user ID (shown in the site's personal settings) to the provider's Headers");
+    assert.equal(await res.textContent(), "Fill in your user ID (shown in the site's personal settings) under the provider's Account balance");
     assert.match(await res.getAttribute("title"), /未提供 New-Api-User/, "the relay's own words on hover");
     let asked = posted.filter((p) => p.action === "balance").at(-1).body;
     assert.equal(asked.id, "relay");
     assert.equal(asked.balanceURL, "https://relay.example.com/api/user/self");
     assert.equal(asked.balancePath, "$data.quota / 500000");
 
-    // the header typed in, the hint goes and the balance reads
+    // the id typed as a header's name, value left empty, as zxc56823 did
+    // after the old hint: it is the user id, and it is what is asked with
     const row = page.locator(".editor .headers .pair").first();
-    await row.locator("input").nth(0).fill("New-Api-User");
-    await row.locator("input").nth(1).fill("42");
-    assert.equal(await fix.textContent(), "", "no hint once New-Api-User is set");
+    await row.locator("input").nth(0).fill("272298");
+    assert.equal(await uid.inputValue(), "272298", "the digits are read as the user id");
     await check.click();
     await page.locator(".editor .bal-res.ok").waitFor();
     assert.equal(await res.textContent(), "Balance $3.00");
+    asked = posted.filter((p) => p.action === "balance").at(-1).body;
+    assert.deepEqual(asked.headers, { "New-Api-User": "272298" });
+
+    // typed in the User ID field, it is New-Api-User's row, kept in focus
+    await uid.fill("42");
+    assert(await uid.evaluate((e) => e === document.activeElement), "the field keeps its focus while typed in");
+    assert.equal(await fix.locator(".bal-uid-why").count(), 0, "no hint once the id is there");
+    const rows = page.locator(".editor .headers .pair");
+    assert.equal(await rows.count(), 1, "one row: the digits' row gives way");
+    assert.equal(await rows.first().locator("input").nth(0).inputValue(), "New-Api-User");
+    assert.equal(await rows.first().locator("input").nth(1).inputValue(), "42");
+    await check.click();
+    await page.waitForFunction(() => document.querySelector(".editor .bal-res.ok"));
     asked = posted.filter((p) => p.action === "balance").at(-1).body;
     assert.deepEqual(asked.headers, { "New-Api-User": "42" });
 
@@ -117,7 +135,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     // the Usage page's card says either fix plainly, in English and Chinese
     const said = await page.evaluate(() => [
       quotaError("the Balance URL https://relay.example.com/api/usage/token takes the API key, not the access token: set it to https://relay.example.com/api/user/self (Balance field $data.quota / 500000) for the account's balance, or remove the token for the key's own"),
-      quotaError("401 Unauthorized: add the header New-Api-User = your user ID (shown in the site's personal settings) to this provider's Headers; the relay said: 无权进行此操作，未提供 New-Api-User"),
+      quotaError("401 Unauthorized: fill in your user ID (shown in the site's personal settings) under this provider's Account balance, beside its access token; the relay said: 无权进行此操作，未提供 New-Api-User"),
       quotaError("401 Unauthorized: something else"),
       // ZCode with nothing left to spend: the card gets either the
       // built-in's words (zcodeStartQuota, zcode_start.go) or the
@@ -132,7 +150,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       quotaError("this Z.ai account has no GLM Coding Plan, of its own or a team's, and ZCode's Start Plan could not be read: 502 Bad Gateway"),
     ]);
     assert.match(said[0], /set it to …\/api\/user\/self/);
-    assert.match(said[1], /^Add the header New-Api-User = your user ID/);
+    assert.match(said[1], /^Fill in your user ID .* under the provider's Account balance$/);
     assert.equal(said[2], "Allowance unavailable — hover for why");
     // the card's own words for a ZCode account with nothing to spend, and
     // the action on the card itself (there is none in the error to hover for)
@@ -146,9 +164,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       "…/api/usage/token takes the API key, not this token: for the account's balance, new-api uses /api/user/self; sub2api uses /api/v1/user/profile.",
       "The token needs a Balance URL: a new-api relay uses /api/user/self; a sub2api panel uses /api/v1/user/profile to read the account's balance.",
       "Use {url}", "Check balance", "Ask the Balance URL now, as the form has it", "No Balance URL to ask",
-      "A new-api relay also wants the header New-Api-User = your user ID (shown in the site's personal settings): add it under Headers.",
+      "User ID", "in the site's personal settings",
+      "A new-api relay also asks for your user ID with the token. It is in the site's personal settings.",
       "The Balance URL …/api/usage/token takes the API key, not the access token — set it to …/api/user/self in the provider's settings",
-      "Add the header New-Api-User = your user ID (shown in the site's personal settings) to the provider's Headers",
+      "Fill in your user ID (shown in the site's personal settings) under the provider's Account balance",
       "ZCode: no GLM Coding Plan, and no free Start Plan — subscribe to a GLM Coding Plan to use this account",
     ].filter((k) => !I18N.zh[k]));
     assert.deepEqual(missing, [], "every new string has its Chinese");
@@ -298,6 +317,63 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
             assert.deepEqual(errors, []);
           });
         }
+      });
+    }
+  }
+
+  // the User ID field beside a new-api token (zxc56823): in every
+  // language, at the editor's width and a phone's, it fits, reads the
+  // digits typed as a header's name, and saves as New-Api-User
+  for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
+    for (const width of [1100, 420]) {
+      test(`${engine}: new-api User ID beside the token (${lang}, ${width}px)`, async (t) => {
+        const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+        const context = await browser.newContext({ viewport: { width, height: 800 }, reducedMotion: "reduce" });
+        const page = await context.newPage();
+        page.setDefaultTimeout(5000);
+        page.setDefaultNavigationTimeout(60000);
+        const errors = [], posted = [];
+        page.on("pageerror", (e) => errors.push(e.message));
+        await page.route("**/*", server(posted, { lang, provider: { ...relay, balanceURL: "https://relay.example.com/api/user/self", balancePath: "$data.quota / 500000" } }));
+        t.after(async () => {
+          if (process.env.ARTIFACT_DIR) {
+            await fs.mkdir(process.env.ARTIFACT_DIR, { recursive: true });
+            await page.screenshot({ path: path.join(process.env.ARTIFACT_DIR, `${engine}-bal-uid-${lang}-${width}.png`) });
+          }
+          await browser.close();
+        });
+        await page.goto("http://magpie.test/?view=providers");
+        await page.locator(".row.provider", { hasText: "Relay" }).click();
+        const fix = page.locator(".editor .bal-fix");
+        const uid = fix.locator(".bal-uid input");
+        await uid.waitFor({ state: "attached" });
+        await page.evaluate(() => { for (const d of document.querySelectorAll(".editor details")) d.open = true; });
+        await uid.scrollIntoViewIfNeeded();
+        assert(await uid.isVisible());
+        const words = await page.evaluate(() => [t("User ID"), t("A new-api relay also asks for your user ID with the token. It is in the site's personal settings."), t("in the site's personal settings")]);
+        if (lang !== "en") assert.notEqual(words[0], "User ID", "translated");
+        assert.equal(await fix.locator(".bal-uid-name").textContent(), words[0]);
+        assert.equal(await fix.locator(".bal-uid-why").textContent(), words[1]);
+        assert.equal(await uid.getAttribute("placeholder"), words[2]);
+        const layout = await fix.evaluate((e) => {
+          const b = e.getBoundingClientRect();
+          const inside = [...e.querySelectorAll(".bal-uid, .bal-uid input, .bal-uid-why")].every((c) => {
+            const r = c.getBoundingClientRect();
+            return r.left >= b.left - 1 && r.right <= b.right + 1;
+          });
+          return { inside, pageFits: document.documentElement.scrollWidth <= innerWidth };
+        });
+        assert.deepEqual(layout, { inside: true, pageFits: true }, "the field fits without sideways scroll");
+
+        // the reporter's way: digits in a header's name box, value empty
+        await page.locator(".editor .headers .pair").first().locator("input").nth(0).fill("272298");
+        assert.equal(await uid.inputValue(), "272298");
+        const save = await page.evaluate(() => t("Save"));
+        let response = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/provider/save");
+        await page.locator(".editor .bar").getByRole("button", { name: save, exact: true }).click();
+        await response;
+        assert.deepEqual(posted.filter((p) => p.action === "save").at(-1).body.headers, { "New-Api-User": "272298" }, "saved as New-Api-User, not an empty header");
+        assert.deepEqual(errors, []);
       });
     }
   }
