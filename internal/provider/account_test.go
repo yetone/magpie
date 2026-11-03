@@ -76,6 +76,10 @@ func isolate(t testing.TB) {
 	oldDevin := DevinExecutable
 	claudeKeychain = false
 	claudeExecutable = func() string { return "" }
+	// a Claude sign-in with no Claude Code downloads one: never in a test
+	oldDownload := downloadClaudeCode
+	downloadClaudeCode = func(context.Context) error { return errors.New("no Claude Code download in tests") }
+	t.Cleanup(func() { downloadClaudeCode = oldDownload })
 	// the machine's own devin, if it has one, is no test's
 	DevinExecutable = func() string { return "" }
 	forgetClaudeCredential()

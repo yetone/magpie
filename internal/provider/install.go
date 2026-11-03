@@ -1,7 +1,7 @@
 package provider
 
-// Some subscriptions are used through the vendor's own CLI — Cursor's,
-// Grok's, Devin's — and signed in with it too. One that isn't installed is
+// Some subscriptions are used through the vendor's own CLI — Claude
+// Code, Cursor's, Grok's, Devin's — and signed in with it too. One that isn't installed is
 // installed with the vendor's own installer when its sign-in starts, as the
 // vendor's page tells a person to, rather than leaving the sign-in to fail
 // or, as Devin's did, to finish with nothing to show for it.
@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yetone/magpie/internal/claudecode"
 	"github.com/yetone/magpie/internal/netproxy"
 	"github.com/yetone/magpie/internal/proc"
 )
@@ -24,18 +25,34 @@ import (
 // when there is one, does what the shell one does without a shell, for a
 // magpie with none (its Docker image had no bash, curl or wget until #2834). setup: the
 // installer ends by running the CLI's own setup, which asks how to sign in;
-// magpie signs in itself once the CLI is there.
+// magpie signs in itself once the CLI is there. manual, when set, is how
+// a person installs it, told when the install fails, where a CLI with no
+// one-liner (Claude Code's, which magpie downloads itself) has native only.
 type agentCLI struct {
 	Name   string
 	find   func() string
 	sh     string
 	ps     string
 	native func(ctx context.Context) error
+	manual string
 	setup  bool
 }
 
 func cliFor(agent string) (agentCLI, bool) {
 	switch agent {
+	case "claude":
+		// Kabubu01 (X): the GUI's Claude sign-in failed with "install
+		// Claude Code first … or run `magpie claude-code install`". The
+		// sign-in now downloads it as that command does: Anthropic's own
+		// build, checked against its manifest, kept in magpie's cache and
+		// not put on PATH
+		return agentCLI{Name: "Claude Code", find: func() string {
+			c, ok := findClaudeCLI()
+			if ok && c.wsl != nil {
+				return "wsl:" + c.wsl.Distro
+			}
+			return c.path
+		}, native: downloadClaudeCode, manual: "magpie claude-code install"}, true
 	case "devin":
 		return agentCLI{Name: "Devin CLI", find: func() string { return DevinExecutable() },
 			sh:    "curl -fsSL https://cli.devin.ai/install.sh | bash",
@@ -68,7 +85,7 @@ var installTimeout = 10 * time.Minute
 
 // runInstaller runs a vendor's installer; a var so tests can fake it.
 var runInstaller = func(ctx context.Context, c agentCLI) ([]byte, error) {
-	if runtime.GOOS != "windows" && c.native != nil && !shellInstallerRuns() {
+	if c.native != nil && (c.sh == "" && c.ps == "" || runtime.GOOS != "windows" && !shellInstallerRuns()) {
 		return nil, c.native(ctx)
 	}
 	var cmd *exec.Cmd
@@ -144,6 +161,18 @@ func runUntilInstalled(ctx context.Context, cmd *exec.Cmd, c agentCLI) ([]byte, 
 	return out.Bytes(), err
 }
 
+// downloadClaudeCode downloads the newest Claude Code into magpie's cache
+// (claudecode.Install), where claudecode.Find, and so the sign-in, finds
+// it; a var so tests never reach the network.
+var downloadClaudeCode = func(ctx context.Context) error {
+	r, err := claudecode.Latest(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = claudecode.Install(ctx, r, nil)
+	return err
+}
+
 // shellInstallerRuns is whether a vendor's `curl … | bash` can run here:
 // bash, and curl, which every one-liner (and the scripts behind them)
 // downloads with. magpie's Docker image had none of them, and the install
@@ -173,6 +202,9 @@ func installCLI(ctx context.Context, c agentCLI) error {
 	manual := c.sh
 	if runtime.GOOS == "windows" {
 		manual = c.ps
+	}
+	if c.manual != "" {
+		manual = c.manual
 	}
 	if ctx.Err() == context.Canceled {
 		return ctx.Err()
