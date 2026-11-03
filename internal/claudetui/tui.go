@@ -30,7 +30,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -336,15 +335,20 @@ func (s *shim) clearScreen() {
 	s.screenMu.Unlock()
 }
 
-// screenSize is the size of Claude Code's terminal: Windows' pseudo
-// console is made 200 by 50 (child_windows.go); a pty here is given no
-// size, and Claude Code draws in 80 by 24.
-func screenSize() (cols, rows int) {
-	if runtime.GOOS == "windows" {
-		return 200, 50
-	}
-	return 80, 24
-}
+// screenCols and screenRows are the size of Claude Code's terminal, the
+// pseudo-terminal (child_unix.go) and Windows' pseudo console
+// (child_windows.go) made alike, and the grid the helper reads it on. A
+// grid of another size misreads the screen: an 80 by 24 one, on macOS and
+// Linux while their pseudo-terminal was 200 by 50, drew every row under
+// the 24th over the 24th, and /usage's panel, at the foot of the screen,
+// was told as one window or as a figure since drawn again (#4988, shinnqy
+// on X).
+const (
+	screenCols = 200
+	screenRows = 50
+)
+
+func screenSize() (cols, rows int) { return screenCols, screenRows }
 
 // looks is the screen as it is now, and the last look of it with a
 // usage window since it was cleared, while watched.

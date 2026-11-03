@@ -374,8 +374,10 @@ tested on the bytes Claude Code 2.1.316 drew, `testdata/usage-2.1.316.bin`),
 for `provider.parseClaudeUsage`. Claude Code 2.1.316's `-p /usage`
 printed only the session's cost there, no window, in a real run.
 The helper reads the screen as a terminal shows it (`grid`,
-[`screen.go`](../../internal/claudetui/screen.go), 200 by 50 on Windows
-as its pseudo console is made, 80 by 24 elsewhere), beside the stream:
+[`screen.go`](../../internal/claudetui/screen.go), 200 by 50, the size
+the pseudo-terminal and Windows' pseudo console are made, from one
+`screenCols`/`screenRows`; an 80 by 24 grid of the 200 by 50 Unix
+terminal drew the panel's rows over one another, #4988), beside the stream:
 Windows' pseudo console sends only the cells that changed, skipping one
 that holds the same letter ("Settin\x1b[1Cs"), and a window drawn only
 for a moment is kept as it looked (`panel`). The panel is drawn before

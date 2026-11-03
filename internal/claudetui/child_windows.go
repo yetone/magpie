@@ -55,7 +55,7 @@ func (s *shim) start(path string, args []string) error {
 	}
 	var console windows.Handle
 	// wide, so a line of Claude Code's screen is a line
-	err := windows.CreatePseudoConsole(windows.Coord{X: 200, Y: 50}, inR, outW, 0, &console)
+	err := windows.CreatePseudoConsole(windows.Coord{X: screenCols, Y: screenRows}, inR, outW, 0, &console)
 	// the console has its own of these
 	windows.CloseHandle(inR)
 	windows.CloseHandle(outW)

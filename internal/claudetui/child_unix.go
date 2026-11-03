@@ -29,7 +29,7 @@ func (s *shim) start(path string, args []string) error {
 		return err
 	}
 	// wide, so a line of Claude Code's screen is a line
-	_ = unix.IoctlSetWinsize(int(tty.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Row: 50, Col: 200})
+	_ = unix.IoctlSetWinsize(int(tty.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Row: screenRows, Col: screenCols})
 	cmd := proc.Command(path, args...)
 	cmd.Env = childEnv(s.env...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = tty, tty, tty

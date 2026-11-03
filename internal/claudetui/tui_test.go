@@ -339,20 +339,26 @@ func fakeClaude(args []string) {
 }
 
 // fakeFrames draws b a frame at a time, as Claude Code does: each frame
-// ends parking the cursor at the screen's foot (ESC[24;1H), and the next
-// comes a moment later. A terminal that renders what it is given (Windows'
-// pseudo console) passes on each frame, not only how the last one left
-// the screen.
+// ends parking the cursor at the screen's foot (ESC[24;1H in the 80 by 24
+// the captures were made in, ESC[50;1H in the helper's 200 by 50), and the
+// next comes a moment later. A terminal that renders what it is given
+// (Windows' pseudo console) passes on each frame, not only how the last
+// one left the screen.
 func fakeFrames(b []byte) {
-	park := []byte("\x1b[24;1H")
+	parks := [][]byte{[]byte("\x1b[24;1H"), []byte("\x1b[50;1H")}
 	for len(b) > 0 {
-		i := bytes.Index(b, park)
+		i, n := -1, 0
+		for _, park := range parks {
+			if j := bytes.Index(b, park); j >= 0 && (i < 0 || j < i) {
+				i, n = j, len(park)
+			}
+		}
 		if i < 0 {
 			_, _ = os.Stdout.Write(b)
 			return
 		}
-		_, _ = os.Stdout.Write(b[:i+len(park)])
-		b = b[i+len(park):]
+		_, _ = os.Stdout.Write(b[:i+n])
+		b = b[i+n:]
 		time.Sleep(50 * time.Millisecond)
 	}
 }
@@ -841,6 +847,40 @@ func TestShimReadsUsage(t *testing.T) {
 	out := runShim(t, []string{"FAKE_USAGE=" + panel}, append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/usage"}`}, 2)
 	want := "Current session: 0% used · resets 12am (Asia/Shanghai)\nCurrent week (all models): 81% used · resets Nov 4 at 6am (Asia/Shanghai)"
 	if r := out[1]; r["type"] != "result" || r["is_error"] != false || r["local_command"] != "usage" || r["result"] != want {
+		t.Fatalf("told %v", r)
+	}
+}
+
+// Claude Code draws in the terminal the helper gives it, 200 by 50 on
+// every system, so a panel with three windows sits below the 24th row.
+// Each is read: read on an 80 by 24 grid, the rows under the 24th were
+// drawn over one another, and only the last window drawn was told
+// (#4988, "7 days · Fable" alone on a Team plan; shinnqy on X).
+func TestShimReadsUsageBelowTheTwentyFourthRow(t *testing.T) {
+	// as 2.1.316 draws: from the top, down by rows (CR, ESC[nB), each
+	// figure placed at its column (ESC[55G)
+	var b strings.Builder
+	b.WriteString("\x1b[H\r\x1b[29B   Settings  Status   Config   Usage   Stats\x1b[K")
+	for _, w := range []struct{ name, used, reset string }{
+		{"Current session", "29%", "Resets 2pm (Asia/Shanghai)"},
+		{"Current week (all models)", "17%", "Resets Nov 8 at 4am (Asia/Shanghai)"},
+		{"Current week (Fable)", "0%", "Resets Nov 8 at 4am (Asia/Shanghai)"},
+	} {
+		b.WriteString("\r\x1b[2B   " + w.name + "\x1b[K")
+		b.WriteString("\r\x1b[1B   " + strings.Repeat("█", 10) + "\x1b[55G" + w.used + "\x1b[59Gused\x1b[K")
+		b.WriteString("\r\x1b[1B   " + w.reset + "\x1b[K")
+	}
+	b.WriteString("\r\x1b[2B   Esc to cancel\x1b[K\x1b[50;1H")
+	// a frame later the session's figure is drawn again, only the cells
+	// that changed, as Claude Code's renderer does
+	b.WriteString("\x1b[H\r\x1b[32B\x1b[55G30%\x1b[50;1H")
+	panel := filepath.Join(t.TempDir(), "usage-200x50.bin")
+	if err := os.WriteFile(panel, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := runShim(t, []string{"FAKE_USAGE=" + panel}, append([]string{fakePath(t)}, pArgs...), []string{`raw:{"type":"command","command":"/usage"}`}, 2)
+	want := "Current session: 30% used · resets 2pm (Asia/Shanghai)\nCurrent week (all models): 17% used · resets Nov 8 at 4am (Asia/Shanghai)\nCurrent week (Fable): 0% used · resets Nov 8 at 4am (Asia/Shanghai)"
+	if r := out[1]; r["type"] != "result" || r["is_error"] != false || r["result"] != want {
 		t.Fatalf("told %v", r)
 	}
 }
