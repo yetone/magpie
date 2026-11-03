@@ -127,7 +127,7 @@ func TestWSLMCPSiblings(t *testing.T) {
 			t.Errorf("%s isn't a target: %v", id, ids(Targets()))
 			continue
 		}
-		if tg.MCP == nil || tg.MCP.Path != filepath.Join(h, f) || !tg.MCP.WSL || tg.MCP.Distro != "Ubuntu" || !tg.Copy {
+		if tg.MCP == nil || tg.MCP.Path != filepath.Join(h, f) || !tg.MCP.WSL || tg.MCP.Distro != "Ubuntu" || tg.Copy || tg.Skills != "" && tg.Store == "" {
 			t.Errorf("%s: mcp %+v", id, tg.MCP)
 		}
 		// nothing it is given is this machine's

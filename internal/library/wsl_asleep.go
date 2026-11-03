@@ -115,9 +115,9 @@ func (l *Library) asleepView(a *agent.Agent) (AgentView, bool) {
 	av.MCP, av.Skills, av.SkillsAlso, av.MCPVia = sh.MCP, sh.Skills, sh.SkillsAlso, sh.MCPVia
 	av.NoSSE, av.NoRemote, av.NoEnvRefs, av.ToolsOff, av.Startup = sh.NoSSE, sh.NoRemote, sh.NoEnvRefs, sh.ToolsOff, sh.Startup
 	if sh.Skills != "" {
-		// a WSL agent takes copies only (Target.Copy)
+		// as a running one's: links to magpie's copy there, or copies
 		_, av.HowOwn = l.SkillHow[a.ID]
-		av.How, av.MustCopy = HowCopy, true
+		av.How = l.howOf(a.ID)
 	}
 	return av, true
 }

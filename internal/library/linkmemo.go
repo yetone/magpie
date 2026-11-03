@@ -18,6 +18,8 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+
+	"github.com/yetone/magpie/internal/agent"
 )
 
 // part is what one entry on the way to a path is: there or not, and
@@ -67,6 +69,9 @@ func lookPart(p string) part {
 	return e
 }
 
+// wslReadlink is agent.WSLReadlink; a var for tests.
+var wslReadlink = agent.WSLReadlink
+
 // lookAt is statPart; a test counts the looks
 var lookAt = statPart
 
@@ -83,6 +88,12 @@ func statPart(p string) (e part, sure bool) {
 	}
 	to, err := os.Readlink(p)
 	if err != nil || to == "" {
+		// a link a WSL distro has, which Windows can't read through
+		// \\wsl.localhost: the distro says where it leads
+		// (agent.WSLReadlink)
+		if w, ok := wslReadlink(p); ok {
+			return part{there: true, link: true, to: w}, true
+		}
 		// a link that can't be read is taken as an entry of its own, as
 		// before; but it isn't kept
 		return part{there: true}, false

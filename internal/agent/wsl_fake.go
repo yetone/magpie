@@ -2,6 +2,8 @@ package agent
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,7 +17,7 @@ import (
 // magpie remembers of WSL is forgotten, before and after; the returned
 // func puts everything back.
 func FakeWSL(probes, roots map[string]string) func() {
-	on, run, root := wslOn, wslRun, wslRoot
+	on, run, root, exec := wslOn, wslRun, wslRoot, wslExec
 	reset := func() {
 		wsl.Lock()
 		wsl.seen, wsl.at, wsl.runAt, wsl.names, wsl.running, wsl.probed, wsl.failed, wsl.dirty = nil, time.Time{}, time.Time{}, nil, nil, nil, nil, false
@@ -62,8 +64,20 @@ func FakeWSL(probes, roots map[string]string) func() {
 		return nil, errors.New("unexpected wsl.exe " + strings.Join(args, " "))
 	}
 	wslRoot = func(name string) string { return roots[name] }
+	wslExec = func(name string, argv ...string) ([]byte, error) {
+		fakeCalls.Lock()
+		fakeCalls.in[name]++
+		fakeCalls.Unlock()
+		return fakeLinks(roots[name], argv)
+	}
+	links.Lock()
+	links.m = nil
+	links.Unlock()
 	return func() {
-		wslOn, wslRun, wslRoot = on, run, root
+		wslOn, wslRun, wslRoot, wslExec = on, run, root, exec
+		links.Lock()
+		links.m = nil
+		links.Unlock()
 		fakeStop = nil
 		reset()
 	}
@@ -115,4 +129,65 @@ func FakeWSLDrives(roots map[string]string) func() {
 		return was(drive)
 	}
 	return func() { wslDrive = was }
+}
+
+// fakeLinks does what wsl_links.go's scripts do in a distro opened at
+// root, on this system's own links: a link the distro would lead to
+// /home/me/x leads to root's home/me/x here, which this system follows.
+func fakeLinks(root string, argv []string) ([]byte, error) {
+	if len(argv) < 5 || argv[0] != "sh" || argv[1] != "-c" {
+		return nil, errors.New("unexpected command in WSL: " + strings.Join(argv, " "))
+	}
+	at := func(linux string) string { return filepath.Join(root, filepath.FromSlash(linux)) }
+	args := argv[4:]
+	switch argv[2] {
+	case wslLinkScript:
+		to, link := at(args[0]), at(args[1])
+		if fi, err := os.Lstat(link); err == nil && fi.Mode()&os.ModeSymlink == 0 {
+			return []byte(args[1] + " is not a link"), errors.New("exit status 3")
+		}
+		if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+			return nil, err
+		}
+		os.Remove(link)
+		return nil, os.Symlink(to, link)
+	case wslUnlinkScript:
+		p := at(args[0])
+		fi, err := os.Lstat(p)
+		if err != nil {
+			return nil, nil
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			return []byte(args[0] + " is not a link"), errors.New("exit status 3")
+		}
+		return nil, os.Remove(p)
+	case wslLinksScript:
+		es, _ := os.ReadDir(at(args[0]))
+		var b strings.Builder
+		for _, e := range es {
+			if to, err := os.Readlink(filepath.Join(at(args[0]), e.Name())); err == nil {
+				// spelt as the distro spells it
+				if rel, ok := strings.CutPrefix(to, root); ok {
+					to = filepath.ToSlash(rel)
+				}
+				fmt.Fprintf(&b, "%s\t%s\n", e.Name(), to)
+			}
+		}
+		return []byte(b.String()), nil
+	}
+	return nil, errors.New("unexpected script in WSL: " + argv[2])
+}
+
+// realWSLRun is wsl.exe itself, for FakeWSLRealLinks.
+var realWSLRun = wslRun
+
+// FakeWSLRealLinks, for a test on Windows with a real distro behind
+// FakeWSL's root (\\wsl.localhost\<distro>), has the links in it made,
+// read and removed by the real wsl.exe, in that distro alone.
+func FakeWSLRealLinks() (restore func()) {
+	exec := wslExec
+	wslExec = func(distro string, argv ...string) ([]byte, error) {
+		return realWSLRun(30*time.Second, append([]string{"-d", distro, "--exec"}, argv...)...)
+	}
+	return func() { wslExec = exec }
 }

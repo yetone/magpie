@@ -155,7 +155,7 @@ func TestSkillCopySwapSurvivesAnUndeletableFile(t *testing.T) {
 	}
 }
 
-// An agent in WSL (a t.Copy target) gets its copy made again through the
+// An agent in WSL set to take copies gets its copy made again through the
 // same swap: with a file in its old copy that can't be removed, it still
 // gets the whole new copy, magpie still knows it for its own, and the
 // leftover is cleared by a later sync.
@@ -170,6 +170,7 @@ func TestWSLSkillCopySwapSurvivesAnUndeletableFile(t *testing.T) {
 	src := filepath.Join(home(), "src", "skills")
 	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
 	write(t, filepath.Join(src, "pdf/sub/forms.md"), "forms one")
+	ok(t)(SetSkillHow(wslCodex, HowCopy))
 	ok(t)(InstallSkills(src, []string{"pdf"}, []string{wslCodex}))
 	p := filepath.Join(h, ".codex/skills/pdf")
 	if linked(p) || !ours(p, "pdf") || read(t, filepath.Join(p, "sub/forms.md")) != "forms one" {

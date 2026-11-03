@@ -39,7 +39,7 @@ func TestWSLOwnFolderTargets(t *testing.T) {
 			t.Errorf("%s isn't a target: %v", id, ids(Targets()))
 			continue
 		}
-		if tg.MCP == nil || tg.MCP.Path != filepath.Join(h, w[0]) || !tg.MCP.WSL || tg.MCP.Distro != "Ubuntu" || tg.Skills != filepath.Join(h, w[1]) || !tg.Copy || tg.Agent.ID != id {
+		if tg.MCP == nil || tg.MCP.Path != filepath.Join(h, w[0]) || !tg.MCP.WSL || tg.MCP.Distro != "Ubuntu" || tg.Skills != filepath.Join(h, w[1]) || tg.Copy || tg.Store != filepath.Join(h, ".local/share/magpie/skills") || tg.Agent.ID != id {
 			t.Errorf("%s: %+v (mcp %+v)", id, tg, tg.MCP)
 		}
 	}
@@ -52,8 +52,8 @@ func TestWSLOwnFolderTargets(t *testing.T) {
 	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
 	ok(t)(InstallSkills(src, []string{"pdf"}, []string{hermes}))
 	p := filepath.Join(h, ".hermes", "skills", "pdf")
-	if fi, err := os.Lstat(p); err != nil || !fi.IsDir() || !ours(p, "pdf") {
-		t.Fatalf("hermes@wsl has no copy of the skill: %v", err)
+	if to, err := os.Readlink(p); err != nil || to != filepath.Join(h, ".local/share/magpie/skills/pdf") || !ours(p, "pdf") {
+		t.Fatalf("hermes@wsl has no link to the distro's copy of the skill: %q %v", to, err)
 	}
 	if _, err := os.Lstat(filepath.Join(home(), ".hermes", "skills", "pdf")); !os.IsNotExist(err) {
 		t.Errorf("this machine's Hermes got it: %v", err)

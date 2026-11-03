@@ -133,6 +133,8 @@ func syncSteps(all, gone []*Target, b *backups, res *Result) []func(*Library) {
 			}
 		}
 	}
+	// magpie's copies in a WSL distro no agent there is linked to any more
+	steps = append(steps, func(l *Library) { l.sweepWSLStores(append(slices.Clone(all), gone...), res) })
 	return append(steps, func(l *Library) { l.syncProjects(res) })
 }
 

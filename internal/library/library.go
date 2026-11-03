@@ -80,6 +80,9 @@ type Library struct {
 	// blockedSkills are copies takeEdits couldn't scan, kept in place for
 	// this sync rather than replaced or removed. Keys are physical paths.
 	blockedSkills map[string]bool
+	// stored are the skills this sync made sure of in a WSL distro's
+	// store, by path (storeSkill), with what went wrong
+	stored map[string]error
 }
 
 // Instructions are one shared text, and for each agent whether it gets it

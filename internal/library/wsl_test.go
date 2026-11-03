@@ -61,7 +61,7 @@ func TestWSLTargets(t *testing.T) {
 			}
 			return filepath.Join(h, rel)
 		}
-		if tg.Instructions != at(w[0]) || mcp != at(w[1]) || tg.Skills != at(w[2]) || !tg.Copy {
+		if tg.Instructions != at(w[0]) || mcp != at(w[1]) || tg.Skills != at(w[2]) || tg.Copy || tg.Store != at(".local/share/magpie/skills") {
 			t.Errorf("%s: %+v (mcp %s)", id, tg, mcp)
 		}
 	}
@@ -76,19 +76,25 @@ func TestWSLTargets(t *testing.T) {
 	}
 }
 
-// A skill reaches an agent in WSL as a copy — a link to a Windows folder
-// is nothing it can follow — which is copied again when the library's
-// changes, and taken away with the rest.
-func TestWSLSkillsCopied(t *testing.T) {
+// A skill reaches the agents in WSL as one copy in the distro, magpie's
+// (~/.local/share/magpie/skills) — a link to a Windows folder is nothing
+// they can follow — and each agent there a link the distro makes to it
+// (cutemmuu on X). The copy is made again when the library's changes,
+// and taken away once no agent there has it.
+func TestWSLSkillsLinked(t *testing.T) {
 	h := wslSandbox(t)
 	src := filepath.Join(home(), "src", "skills")
 	skill(t, filepath.Join(src, "pdf"), "pdf", "Read PDFs")
 	ok(t)(InstallSkills(src, []string{"pdf"}, []string{"claude", wslCodex, wslClaude, wslPi}))
+	store := filepath.Join(h, ".local/share/magpie/skills/pdf")
+	if fi, err := os.Lstat(store); err != nil || !fi.IsDir() || !ours(store, "pdf") || !strings.Contains(read(t, filepath.Join(store, "SKILL.md")), "Read PDFs") {
+		t.Fatalf("no copy of magpie's in the distro: %v %v", fi, err)
+	}
 	for _, d := range []string{".codex/skills/pdf", ".claude/skills/pdf", ".pi/agent/skills/pdf"} {
 		p := filepath.Join(h, d)
-		fi, err := os.Lstat(p)
-		if err != nil || !fi.IsDir() {
-			t.Fatalf("%s: not a folder: %v", d, err)
+		to, err := os.Readlink(p)
+		if err != nil || to != store {
+			t.Fatalf("%s: not a link to the distro's copy: %q %v", d, to, err)
 		}
 		if !strings.Contains(read(t, filepath.Join(p, "SKILL.md")), "Read PDFs") || read(t, filepath.Join(p, "scripts/run.sh")) != "echo hi\n" || !ours(p, "pdf") {
 			t.Errorf("%s isn't the library's skill", d)
@@ -123,8 +129,15 @@ func TestWSLSkillsCopied(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(h, ".codex/skills/pdf")); !os.IsNotExist(err) {
 		t.Errorf("codex@wsl still has it: %v", err)
 	}
-	if !ours(filepath.Join(h, ".claude/skills/pdf"), "pdf") {
+	if !ours(filepath.Join(h, ".claude/skills/pdf"), "pdf") || !ours(store, "pdf") {
 		t.Error("claude@wsl lost it")
+	}
+	// no agent in the distro given it: its copy there goes too
+	ok(t)(SkillAgents("pdf", []string{"claude"}))
+	for _, p := range []string{filepath.Join(h, ".claude/skills/pdf"), store} {
+		if _, err := os.Lstat(p); !os.IsNotExist(err) {
+			t.Errorf("%s is still there: %v", p, err)
+		}
 	}
 }
 
@@ -341,7 +354,7 @@ func TestWSLStoppedListedAndQueued(t *testing.T) {
 	if cx == nil {
 		t.Fatal("a stopped distro's Codex isn't listed")
 	}
-	if cx.Asleep != distro || cx.Unseen || cx.MCP != filepath.Join(h, ".codex", "config.toml") || cx.Skills != filepath.Join(h, ".codex", "skills") || !cx.NoSSE || !cx.MustCopy || cx.How != HowCopy {
+	if cx.Asleep != distro || cx.Unseen || cx.MCP != filepath.Join(h, ".codex", "config.toml") || cx.Skills != filepath.Join(h, ".codex", "skills") || !cx.NoSSE || cx.MustCopy || cx.How != HowLink {
 		t.Errorf("Codex while stopped: %+v", *cx)
 	}
 	if cl := viewOf(t, wslClaude); cl == nil || cl.Asleep != distro || cl.MCP != filepath.Join(h, ".claude.json") || cl.NoSSE {

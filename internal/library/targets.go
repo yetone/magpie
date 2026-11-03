@@ -38,9 +38,15 @@ type Target struct {
 	// Note is what the page says of the agent's instructions file.
 	Note string
 	// Copy is an agent that gets a copy of each skill, made again when
-	// the library's changes, rather than a link: one in a WSL distro,
-	// which can't follow a link to a Windows folder.
+	// the library's changes, rather than a link: one in a WSL distro whose
+	// skills folder is on a Windows drive (wslStored).
 	Copy bool
+	// Store, for an agent in a WSL distro, is magpie's folder there
+	// (wslStoreRel) holding one copy of each skill given to the distro's
+	// agents, as magpie opens it: each agent gets a link the distro makes
+	// to that copy, as it can't follow one to a Windows folder
+	// (wsl_skills.go).
+	Store string
 	// Desktop are Claude Desktop's skills-plugin folders, one for each
 	// account (desktop_skills.go): each gets a copy of the skills and their
 	// entries in its manifest.json. Skills is the first one's skills.
@@ -635,13 +641,14 @@ func pluginTarget(a *agent.Agent) *Target {
 // distro is stopped, which opening them would start (asked again here: the
 // agent may have been made before the user stopped it). What is written is
 // the same as for this machine's agent: nothing in it names a place on
-// Windows, and each skill is a copy.
+// Windows, and each skill is a link the distro makes to magpie's one copy
+// of it there (wsl_skills.go).
 func wslTargetOf(a *agent.Agent) *Target {
 	h := a.Home
 	if h == "" || !agent.WSLRunning(a.WSL) {
 		return nil
 	}
-	t := &Target{Agent: a, Copy: true}
+	t := &Target{Agent: a}
 	// a folder there that is a link is opened where it leads (#4502)
 	j := func(elem ...string) string { return wslOpen(t, filepath.Join(elem...)) }
 	id, _, _ := strings.Cut(a.ID, "@")
@@ -721,6 +728,7 @@ func wslTargetOf(a *agent.Agent) *Target {
 		return wslOwnFolder(a)
 	}
 	wslOpened(t)
+	wslStored(t, h)
 	if t.MCP != nil {
 		// a Windows program isn't given to it (mcpFile.side)
 		t.MCP.WSL, t.MCP.Distro, t.MCP.Home = true, a.WSL, linuxHome(h)
@@ -789,8 +797,9 @@ func wslOwnFolder(a *agent.Agent) *Target {
 	if t == nil {
 		return nil
 	}
-	t.Agent, t.Copy = a, true
+	t.Agent, t.Copy = a, false
 	wslOpened(t)
+	wslStored(t, a.Home)
 	if t.MCP != nil {
 		t.MCP.WSL, t.MCP.Distro, t.MCP.Home = true, a.WSL, linuxHome(a.Home)
 	}

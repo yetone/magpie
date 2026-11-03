@@ -22,6 +22,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/yetone/magpie/internal/agent"
 	"github.com/yetone/magpie/internal/source"
 	"gopkg.in/yaml.v3"
 )
@@ -203,13 +204,14 @@ const marker = ".magpie-library"
 // ours reports whether the entry at p is magpie's link (or copy) of the
 // library's skill by that name.
 func ours(p, name string) bool {
-	fi, err := os.Lstat(p)
-	if err != nil {
-		return false
+	// a link in a WSL distro is read there (linkTarget), Windows can't;
+	// one to magpie's copy in the distro is magpie's (wsl_skills.go)
+	if to, ok := linkTarget(p); ok {
+		return filepath.Clean(to) == filepath.Clean(skillDir(name)) || inWSLStore(to, name)
 	}
-	if linkEntry(fi) {
-		to, err := os.Readlink(p)
-		return err == nil && filepath.Clean(to) == filepath.Clean(skillDir(name))
+	fi, err := os.Lstat(p)
+	if err != nil || linkEntry(fi) {
+		return false
 	}
 	if fi.IsDir() {
 		_, err := os.Stat(filepath.Join(p, marker))
@@ -404,7 +406,15 @@ func unlink(p string) error {
 		return nil
 	}
 	if linkEntry(fi) {
-		return os.Remove(p)
+		err := os.Remove(p)
+		// a link a WSL distro has can't be removed from Windows: the
+		// distro removes it
+		if err != nil {
+			if _, ok := wslReadlink(p); ok {
+				return agent.WSLRemoveLink(p)
+			}
+		}
+		return err
 	}
 	return os.RemoveAll(p)
 }
@@ -628,6 +638,20 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			}
 			continue
 		}
+		// in a WSL distro, magpie's one copy there is what the agent's
+		// link leads to (wsl_skills.go): made, or made again, first
+		if t.Store != "" && !cp {
+			if made, err := l.storeSkill(t, s.Name); err != nil {
+				res.fail(id, "skill:"+s.Name, err)
+				if ours(p, s.Name) && !slices.Contains(mine, s.Name) {
+					mine = append(mine, s.Name)
+				}
+				continue
+			} else if made && ours(p, s.Name) && linked(p) {
+				// what its link leads to is new
+				res.changed(id)
+			}
+		}
 		// kept in ~/.agents/skills under another name (sharedEntry): the
 		// agent whose folder that is has it there already, and a link by
 		// this name too would be the skill twice for every reader of it
@@ -660,7 +684,11 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 			// (#896), unless no link can be made here (Windows without the
 			// right to), where the copy stays
 			if ours(p, s.Name) && !cp && !linked(p) {
-				if ok, err := relink(id, p, s.Name); err != nil {
+				rl := relink
+				if t.Store != "" {
+					rl = l.wslRelink(t)
+				}
+				if ok, err := rl(id, p, s.Name); err != nil {
 					res.fail(id, "skill:"+s.Name, err)
 					continue
 				} else if ok {
@@ -707,6 +735,8 @@ func (l *Library) syncSkills(t *Target, res *Result, all []*Target) {
 		put := link
 		if cp {
 			put = copyIn
+		} else if t.Store != "" {
+			put = func(p, name string) error { return agent.WSLSymlink(t.Agent, filepath.Join(t.Store, name), p) }
 		}
 		if err := put(p, s.Name); err != nil {
 			res.fail(id, "skill:"+s.Name, err)
