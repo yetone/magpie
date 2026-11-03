@@ -398,12 +398,13 @@ button.rt-session { cursor: pointer; }
 :where(.rt-col.max760) :is(.rt-req, .rt-probe) .to { grid-column: 2; grid-row: 2; }
 :where(.rt-col.max760) :is(.rt-req, .rt-probe) .meta { grid-column: 2; grid-row: 3; justify-content: flex-start; }
 .rt-acts { padding: 4px 0; }
-/* under the requests, as wide as the page, the accounts and keys sit
-   several to a line, each provider's heading across them: one to a line,
-   a page of many accounts ran on far below the requests (Jiabubu on
-   Discord). Beside the requests (min1150) the column holds one */
-:where(.rt-more:not(.min1150)) .rt-acts, .rt-cols.solo .rt-acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 168px), 1fr)); align-content: start; }
-:where(.rt-more:not(.min1150)) .rt-acts > :is(.rt-prov, .rt-keys.open), .rt-cols.solo .rt-acts > :is(.rt-prov, .rt-keys.open) { grid-column: 1 / -1; }
+/* under the requests, as wide as the page, the accounts and keys flow
+   in columns, each provider's heading over its own (in one block with
+   its first row, .rt-lead): one to a line, or a heading across each
+   line, a page of many providers ran on far below the requests (Jiabubu
+   on Discord, twice). Beside the requests (min1150) the column holds one */
+:where(.rt-more:not(.min1150)) .rt-acts, .rt-cols.solo .rt-acts { columns: 168px; column-gap: 0; }
+:where(.rt-more:not(.min1150)) .rt-acts > *, .rt-cols.solo .rt-acts > * { break-inside: avoid; }
 .rt-cols.solo { grid-template-columns: minmax(0, 1fr); }
 .rt-reqs.none { display: block; background: none; border-color: transparent; }
 .rt-reqs.none .empty-state { padding: 14px 12px 18px; font-size: 12px; line-height: 1.6; }
@@ -411,7 +412,7 @@ button.rt-session { cursor: pointer; }
 .rt-prov { display: flex; align-items: center; gap: 7px; padding: 8px 12px 4px; font-size: 12px; }
 .rt-prov .ic, .rt-prov .ic img, .rt-prov .ic svg { width: 14px; height: 14px; }
 .rt-prov > span:last-child { margin-left: auto; font-size: 10.5px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; }
-.rt-prov:not(:first-child) { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
+.rt-acts > :not(:first-child) > .rt-prov:first-child { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
 /* a routing named where it can be changed: a way to where it is set */
 .rt-go { cursor: pointer; }
 .rt-go::after { content: " ›"; }

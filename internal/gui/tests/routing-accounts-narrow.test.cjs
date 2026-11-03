@@ -1,9 +1,12 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
-// The Routing page in a narrow window (Jiabubu on Discord): the Requests and
-// the Accounts and keys go one under the other, and each account or key then
-// took a whole line, so a page of many accounts ran on far down. Under the
-// requests the accounts sit several to a line, each provider's heading across
-// them; beside the requests (1150px and wider) the column still holds one.
+// The Routing page in a narrow window (Jiabubu on Discord, twice): the
+// Requests and the Accounts and keys go one under the other, and each account
+// or key then took a whole line, so a page of many accounts ran on far down.
+// v0.1.2763 put a provider's accounts several to a line under a heading
+// across them, which left a page of many providers of one key each one to a
+// line still. Under the requests they flow in columns now, each provider's
+// heading over its own; beside the requests (1150px and wider) the column
+// still holds one.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -21,7 +24,10 @@ const mk = (i, w, model) => ({
   order: w.provider === "codex" ? codex : [w], done: true, status: 200, ms: 4000, tokens: 9000,
   tries: [{ id: w.id, model: w.model, start: at(i), done: true, status: 200, ms: 4000 }],
 });
-const routes = [...codex.map((w, i) => mk(i, w, "gpt-5.6-terra")), mk(4, ds, "deepseek-flash")];
+// providers of one key each, as Jiabubu's page has
+const ones = ["Kimi", "GLM", "MiniMax", "Qwen", "Doubao", "StepFun", "Hunyuan", "Baichuan"].map((name) =>
+  ({ id: name.toLowerCase(), provider: name.toLowerCase(), name, kind: "provider", model: name.toLowerCase() + "-1", icon: "generic", routing: "order" }));
+const routes = [...codex.map((w, i) => mk(i, w, "gpt-5.6-terra")), mk(4, ds, "deepseek-flash"), ...ones.map((w, i) => mk(5 + i, w, w.model))];
 
 function serve(lang) {
   const state = { agents: [{ id: "codex", name: "Codex", path: "/t", fields: [] }], profiles: [], settings: { lang, theme: "light" } };
@@ -48,7 +54,7 @@ function serve(lang) {
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
-    test(`${engine} ${lang}: narrow, the accounts sit several to a line`, async (t) => {
+    test(`${engine} ${lang}: narrow, the accounts and keys flow in columns`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       const page = await browser.newPage({ viewport: { width: 700, height: 1200 } });
       page.setDefaultTimeout(5000);
@@ -61,7 +67,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.locator(".rt-act", { hasText: "dan@example.com" }).waitFor();
 
       // the account rows' boxes: how many share the first one's line
-      const rows = () => page.locator(".rt-acts > .rt-act:not(.rt-keys)").evaluateAll((es) => es.map((e) => {
+      const rows = () => page.locator(".rt-acts .rt-act:not(.rt-keys)").evaluateAll((es) => es.map((e) => {
         const b = e.getBoundingClientRect();
         return { top: Math.round(b.top), left: b.left, right: b.right, text: e.textContent };
       }));
@@ -73,15 +79,19 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert(acts.y >= reqs.y + reqs.height - 1, `${width}px: the accounts under the requests`);
         const rs = (await rows()).filter((r) => r.text.includes("@example.com"));
         assert.equal(rs.length, 4, `${width}px: each Codex account drawn`);
-        const shared = rs.filter((r) => Math.abs(r.top - rs[0].top) <= 1);
-        assert(shared.length >= 2, `${width}px: two accounts share a line, not one each: ${JSON.stringify(rs.map((r) => [r.top, Math.round(r.left)]))}`);
-        assert(shared[1].left >= shared[0].right - 1, `${width}px: side by side`);
-        // the open "4 accounts" row heads them, across its line, as a provider's heading does
-        const sum = await page.locator(".rt-acts > .rt-keys.open").evaluate((e) => e.getBoundingClientRect().width / e.parentElement.clientWidth);
-        assert(sum > 0.95, `${width}px: the accounts' summary row across the list: ${sum}`);
-        // each provider's heading still across its own line
-        const heads = await page.locator(".rt-acts > .rt-prov").evaluateAll((es) => es.map((e) => e.getBoundingClientRect().width / e.parentElement.clientWidth));
-        assert(heads.length >= 2 && heads.every((f) => f > 0.95), `${width}px: headings across the list: ${heads}`);
+        // each heading, and the open "4 accounts" row, over what it heads,
+        // in the same column
+        const heads = await page.locator(".rt-acts :is(.rt-prov, .rt-keys.open)").evaluateAll((es) => es.map((e) => {
+          const b = e.getBoundingClientRect(), n = e.nextElementSibling.getBoundingClientRect();
+          return { text: e.textContent, left: b.left, nleft: n.left, gap: n.top - b.bottom };
+        }));
+        assert.equal(heads.length, 2 + ones.length + 1, `${width}px: every provider's heading drawn`);
+        for (const h of heads) assert(Math.abs(h.left - h.nleft) <= 1 && Math.abs(h.gap) <= 6, `${width}px: ${h.text} heads its own: ${JSON.stringify(h)}`);
+        // the providers in two columns or more, not a heading to a line
+        const cols = new Set(heads.map((h) => Math.round(h.left)));
+        assert(cols.size >= 2, `${width}px: the providers in columns: ${[...cols]}`);
+        const items = await page.locator(".rt-acts > *").evaluateAll((es) => es.reduce((x, e) => x + e.getBoundingClientRect().height, 0));
+        assert(acts.height < items * 0.7, `${width}px: the list shorter than its items one under the other: ${acts.height} vs ${items}`);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${width}px: no horizontal overflow`);
         const out = await page.locator(".rt-act .nm b").evaluateAll((es) => es.some((e) => e.getBoundingClientRect().right > e.closest(".rt-act").getBoundingClientRect().right + 1));
         assert.equal(out, false, `${width}px: names stay inside their account`);
@@ -91,6 +101,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await settle();
       const wide = (await rows()).filter((r) => r.text.includes("@example.com"));
       assert.equal(new Set(wide.map((r) => r.top)).size, 4, "wide: one account to a line");
+      const lefts = await page.locator(".rt-acts > *").evaluateAll((es) => new Set(es.map((e) => Math.round(e.getBoundingClientRect().left))).size);
+      assert.equal(lefts, 1, "wide: one column");
       assert.deepEqual(errors, []);
     });
   }

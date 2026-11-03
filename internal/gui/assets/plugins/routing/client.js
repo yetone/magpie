@@ -4229,7 +4229,18 @@ function routingPage(part) {
     }
     const n = now();
     let prov = "";
-    const out = [];
+    const out = [], lead = [];
+    // a heading, and a fold that is open, go in one block with the row
+    // after them: laid out in columns, a heading at a column's foot over
+    // nothing, its accounts at the next one's top, WebKit having no
+    // break-after: avoid (Jiabubu on Discord)
+    const put = (e, leads) => {
+      if (leads) return lead.push(e);
+      if (!lead.length) return out.push(e);
+      const b = el("div", "rt-lead");
+      b.append(...lead.splice(0), e);
+      out.push(b);
+    };
     // each provider's keys and accounts, gathered once: each of hundreds
     // of keys looked through the whole list for its own (#3164)
     const kin = new Map(), kinOf = (w) => w.provider + "\u0000" + w.kind;
@@ -4248,7 +4259,7 @@ function routingPage(part) {
           goTo(s, "pool:" + prov, w.name || w.provider);
           h.append(s);
         }
-        out.push(h);
+        put(h, true);
       }
       // a provider's keys, FOLD_AT or more, under one row that sums them
       // up (#1319), opened to each in place; its accounts too, folded
@@ -4257,7 +4268,7 @@ function routingPage(part) {
         const ks = kin.get(kinOf(w));
         if (ks.length >= FOLD_AT) {
           const pk = w.provider + (w.kind === "account" ? "/@" : "/*"), open = isOpen(pk, w.kind === "account" && ks.length < LONG);
-          if (ks[0] === a) out.push(keysRow(ks, pk, open, n, w.kind));
+          if (ks[0] === a) put(keysRow(ks, pk, open, n, w.kind), open);
           if (!open) continue;
         }
       }
@@ -4357,7 +4368,7 @@ function routingPage(part) {
         row.append(bar);
       }
       row.title = w.id;
-      out.push(row);
+      put(row);
     }
     patch(acts, out);
   }
