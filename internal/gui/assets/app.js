@@ -10949,16 +10949,14 @@ function detectAPIs(p, base, use) {
   return box;
 }
 
-// modelTestWhy: why a provider's models can't each be sent a test request
-// (the server's providerJSON.modelTest), in words, or "" when they can
+// modelTestWhy: why p's models can't be tested one by one (providerJSON.modelTest), or ""
 function modelTestWhy(p) {
   if (p.modelTest === "decide") return t("A classifier's models aren't sent test requests: Test under Endpoints asks Jev's endpoint for them.");
   if (p.modelTest === "own-api") return t("{name} is reached through its own API, which magpie translates each agent request for, so a test request can't be sent to it on its own. Ask the model from an agent to try it.", { name: p.name });
   return "";
 }
 
-// modelTests: what each provider's models answered Test models, by id; a
-// model still being asked is null
+// modelTests: each provider's Test models answers by id, null while asked
 const modelTests = {};
 
 // testsOn: a provider's tests under way, by run; Stop ends them on the server too (RIck)
@@ -11797,9 +11795,10 @@ function renderModels(p) {
       await loadProviders();
     } catch (e) { statusErr(e); refresh.classList.remove("busy"); }
   };
-  // each model the agents see gets a tiny request of its own: a vendor
-  // that answers can still have a model that doesn't
-  const testAll = testButton(p, t("Test models"), t("Send a tiny request to each model agents see, to find the ones that don't answer") + "\n" + t("Right-click a model to test just it"), async () => {
+  // a tiny request to each model agents see (a vendor that answers can have one that doesn't),
+  // with the first ticked key that serves it (keySeeing, water5433)
+  const byKey = p.keyList?.filter((k) => k.on)[1] ? "\n" + t("Each model is tested with the first ticked key that can serve it") : "";
+  const testAll = testButton(p, t("Test models"), t("Send a tiny request to each model agents see, to find the ones that don't answer") + byKey + "\n" + t("Right-click a model to test just it"), async () => {
     const ids = servedIds(p).filter((id) => p.decideTest || !decidesModel(p, id));
     if (!ids.length) { status(t("Pick a model first."), "err"); return; }
     const got = modelTests[p.id] = {};
@@ -11813,8 +11812,7 @@ function renderModels(p) {
     } catch (e) { delete modelTests[p.id]; testErr(e); }
     draw();
   });
-  // one model, its dot and title as Test models leaves them, the others'
-  // results kept
+  // one model, the others' results kept
   const testOne = async (id, as) => {
     const got = modelTests[p.id] = modelTests[p.id] || {};
     got[id] = null;
