@@ -29,6 +29,7 @@ package provider
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -134,11 +135,24 @@ func AccountCapsOf(id, user string) WindowCaps {
 // of the subscription id: 1–99, 100 for no cap on that window whatever the
 // account's cap, or 0 to have it follow the account's cap again.
 func SetWindowCap(id, ref, window string, cap int) error {
+	return SetWindowCaps(id, ref, []string{window}, cap)
+}
+
+// SetWindowCaps is SetWindowCap of several windows at once: a family's
+// models' own (Antigravity's Gemini 3.1 Pro (High) and (Low)), which the
+// GUI shows as one meter.
+func SetWindowCaps(id, ref string, windows []string, cap int) error {
 	if cap != 0 && (cap < MinCap || cap > 100) {
 		return fmt.Errorf("a window's cap is a share from %d%% to %d%%, or 100%% for none on it, not %d%%", MinCap, MaxCap, cap)
 	}
-	w := WindowCapID(window)
-	if w == "" {
+	var ws []string
+	for _, w := range windows {
+		if w = WindowCapID(w); w == "" {
+			return fmt.Errorf("name the usage window to cap")
+		}
+		ws = append(ws, w)
+	}
+	if len(ws) == 0 {
 		return fmt.Errorf("name the usage window to cap")
 	}
 	p, err := Find(id)
@@ -153,7 +167,7 @@ func SetWindowCap(id, ref, window string, cap int) error {
 		return fmt.Errorf("%s has no account %q", p.Name, ref)
 	}
 	k := accountKey(r)
-	if p.AccountWindowCaps[k][w] == cap {
+	if !slices.ContainsFunc(ws, func(w string) bool { return p.AccountWindowCaps[k][w] != cap }) {
 		return nil
 	}
 	all := map[string]map[string]int{}
@@ -163,10 +177,12 @@ func SetWindowCap(id, ref, window string, cap int) error {
 	if all[k] == nil {
 		all[k] = map[string]int{}
 	}
-	if cap == 0 {
-		delete(all[k], w)
-	} else {
-		all[k][w] = cap
+	for _, w := range ws {
+		if cap == 0 {
+			delete(all[k], w)
+		} else {
+			all[k][w] = cap
+		}
 	}
 	if len(all[k]) == 0 {
 		delete(all, k)
@@ -285,9 +301,9 @@ func (a Allowance) CapHeld(model string, caps WindowCaps, now time.Time) *CapHol
 	model = strings.ToLower(model)
 	var h *CapHold
 	unknown, byCap := false, false
-	for _, l := range a {
+	for _, l := range a.capLimits(model) {
 		share, credits := caps.Of(l.Name)
-		if share <= 0 || !l.applies(model) || l.Used < float64(share) {
+		if share <= 0 || l.Used < float64(share) {
 			continue
 		}
 		if !l.Resets.IsZero() && !l.Resets.After(now) {
@@ -326,9 +342,9 @@ func (a Allowance) NearCap(model string, caps WindowCaps, points float64, now ti
 		return false
 	}
 	model = strings.ToLower(model)
-	for _, l := range a {
+	for _, l := range a.capLimits(model) {
 		share, _ := caps.Of(l.Name)
-		if share <= 0 || !l.applies(model) || l.Used < float64(share)-points {
+		if share <= 0 || l.Used < float64(share)-points {
 			continue
 		}
 		if !l.Resets.IsZero() && !l.Resets.After(now) {
@@ -367,10 +383,15 @@ func WithCapped(m map[string]SubscriptionQuota) map[string]SubscriptionQuota {
 	for u, q := range m {
 		ws := make([]QuotaWindow, len(q.Windows))
 		for i, w := range q.Windows {
-			w.Capped = !w.Aside && !w.Unlimited
-			w.CapsSome = w.Capped && (w.Model != "" || w.matches != nil)
+			// a pool's own window holds its models (allowanceOf)
+			pool := w.PoolWindow() && len(PoolMembers(q.Windows, w)) > 0
+			w.Capped = (!w.Aside || pool) && !w.Unlimited
+			w.CapsSome = w.Capped && (w.Model != "" || w.matches != nil || pool)
 			if w.Capped {
 				w.CapID = WindowCapID(w.Name)
+			}
+			if pool {
+				w.CapID = WindowCapID(w.LineName())
 			}
 			ws[i] = w
 		}

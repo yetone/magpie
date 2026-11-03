@@ -250,6 +250,10 @@ type Limit struct {
 	matches    func(string) bool
 	partial    bool   // of a reading that may leave windows out (QuotaWindow.partial)
 	Name       string // QuotaWindow.Name: which window it is, one reading to the next (WindowCapID)
+	// pool is the windows of the pool a model's own window draws on
+	// (Antigravity's "Gemini · 7 days"), which hold the account at its
+	// caps only (capLimits): routing goes on by the model's own window
+	pool []Limit
 	// ResetRunsOut is when the reset the account spends by itself before
 	// it runs out does (resetRunsOut): spent then, it starts this window
 	// again — at Restarts, which routing takes for the window's renewal
@@ -1008,21 +1012,28 @@ func allowanceOf(ws []QuotaWindow, now time.Time) Allowance {
 			}
 		}
 	}
+	resets := func(w QuotaWindow) time.Time {
+		switch {
+		case w.ResetsAt != nil:
+			return *w.ResetsAt
+		case w.ResetSecs > 0:
+			return now.Add(time.Duration(w.ResetSecs) * time.Second)
+		}
+		return time.Time{}
+	}
 	var a Allowance
+	at := map[string]int{} // a model's own window, by its model
 	for _, w := range ws {
 		if w.Aside || w.Text {
 			continue
 		}
-		l := Limit{Used: w.Used, Span: w.Span, Model: w.Model, Amount: w.Amount, Of: w.Limit, Unit: w.Unit, matches: w.matches, partial: w.partial, Name: w.Name, Credits: w.Credits}
+		l := Limit{Used: w.Used, Span: w.Span, Model: w.Model, Amount: w.Amount, Of: w.Limit, Unit: w.Unit, matches: w.matches, partial: w.partial, Name: w.Name, Credits: w.Credits, Resets: resets(w)}
 		if ids := families[w.Model]; ids != nil && w.Family != "" && w.matches == nil {
 			l.Model = ""
 			l.matches = func(model string) bool { return ids[model] }
 		}
-		switch {
-		case w.ResetsAt != nil:
-			l.Resets = *w.ResetsAt
-		case w.ResetSecs > 0:
-			l.Resets = now.Add(time.Duration(w.ResetSecs) * time.Second)
+		if w.Family != "" && w.Model != "" {
+			at[w.Model] = len(a)
 		}
 		if w.RunsOutAt != nil {
 			l.RunsOut, l.RunsOutLeft = *w.RunsOutAt, w.RunsOut
@@ -1038,5 +1049,30 @@ func allowanceOf(ws []QuotaWindow, now time.Time) Allowance {
 		}
 		a = append(a, l)
 	}
+	// a pool's own windows, set aside for routing, hold its models at
+	// their caps (pluviophile714 on Discord), under their LineName
+	for _, w := range ws {
+		if !w.PoolWindow() || w.Text {
+			continue
+		}
+		pl := Limit{Used: w.Used, Span: w.Span, Name: w.LineName(), Resets: resets(w)}
+		for _, m := range PoolMembers(ws, w) {
+			if i, ok := at[m.Model]; ok {
+				a[i].pool = append(a[i].pool, pl)
+			}
+		}
+	}
 	return a
+}
+
+// capLimits are the windows of a that count model, each with the windows
+// of the pool it draws on, which hold it at caps only.
+func (a Allowance) capLimits(model string) []Limit {
+	var out []Limit
+	for _, l := range a {
+		if l.applies(model) {
+			out = append(append(out, l), l.pool...)
+		}
+	}
+	return out
 }

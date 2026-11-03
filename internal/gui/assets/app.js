@@ -13805,12 +13805,8 @@ function poolLine(line, ws, q, capFor = () => 0, settable = null) {
   return line;
 }
 
-// An account's usage cap (provider.AccountCaps): the share of each of its
-// windows it is used to at most — a new account kept to 70% of its five
-// hours and its week. At it, routing takes the account for used up and
-// goes on to the others until the window renews. The pill on its row says
-// the cap and opens the app's menu of shares; a mark on each meter the cap
-// counts shows where it is, and a note says when it holds the account.
+// An account's usage cap (provider.AccountCaps): the share of each window
+// it is used to at most; past it routing goes on to the others.
 const CAP_SHARES = [50, 60, 70, 80, 90];
 // An account's name of the user's own (#1515), kept by magpie
 // (provider.AccountNames), never in a sign-in; accountSeatOf, the key plan
@@ -13876,11 +13872,8 @@ function addRow(say, go) {
   return b;
 }
 function accountCapOf(p, user) { return p?.accountCaps?.[String(user).toLowerCase()] || 0; }
-// A window's own cap (provider.AccountWindowCaps, willz on Discord): a
-// friend's account stops at 50% of its five hours while its week may go to
-// 40%. Kept by the account and the window's capId, 1–99, or 100 for no cap
-// on that window; a window with none of its own takes the account's cap.
-// windowOwnCapOf is the window's own, 0 when it follows the account's.
+// A window's own cap (provider.AccountWindowCaps, willz on Discord), by
+// capId: 1–99, 100 for none, 0 when it follows the account's.
 function windowOwnCapOf(p, user, w) {
   return (w?.capId && p?.accountWindowCaps?.[String(user).toLowerCase()]?.[w.capId]) || 0;
 }
@@ -13910,7 +13903,8 @@ function capHeldOf(q, capFor) {
     const h = w.capsSome ? some : all;
     h.n++;
     if (w.used >= h.used) { h.used = w.used; h.cap = cap; }
-    if (w.capsSome && !some.names.includes(w.name)) some.names.push(w.name);
+    const nm = w.pool && !w.family ? w.pool + " · " + t(w.name) : w.name;
+    if (w.capsSome && !some.names.includes(nm)) some.names.push(nm);
     if (!r) h.unknown = true; else h.back = Math.max(h.back, r);
   }
   const h = all.n ? all : some.n ? some : null;
@@ -13978,10 +13972,11 @@ function pillNumber(at, val, ph, cls, label, parse, bad, own, set) {
 }
 
 // windowCapMeter: a window's meter on an account's row as the button that
-// sets the window's own cap; not a family's (tiers) or on-demand's.
+// sets the window's own cap, a family's its models' (tiers); not on-demand's.
 function windowCapMeter(m, p, user, w) {
-  if (!w.capId || w.tiers) return m;
-  const own = windowOwnCapOf(p, user, w), cap = accountCapOf(p, user);
+  const ids = (w.tiers || [w]).map((x) => x.capId), owns = ids.map((capId) => windowOwnCapOf(p, user, { capId }));
+  if (!ids.every(Boolean)) return m;
+  const own = new Set(owns).size > 1 ? 0 : owns[0], cap = accountCapOf(p, user);
   const name = t(w.name);
   const b = spanBtn(el("span", m.className + " aq-set" + (own ? " own" : "")));
   b.append(...m.childNodes);
@@ -13992,7 +13987,7 @@ function windowCapMeter(m, p, user, w) {
     : t("Click to give {window} a cap of its own, apart from this account's", { window: name })].filter(Boolean).join("\n");
   b.setAttribute("aria-haspopup", "menu");
   b.setAttribute("aria-expanded", "false");
-  const set = (v) => accountAction("provider/windowcap", { id: p.id, account: user, window: w.capId, cap: v },
+  const set = (v) => accountAction("provider/windowcap", { id: p.id, account: user, window: w.capId, ...w.tiers && { windows: ids }, cap: v },
     v === 0 ? t("{window} of {who} follows the account's cap", { window: name, who: user })
       : v >= 100 ? t("{window} of {who} has no cap", { window: name, who: user })
       : t("{who} stops at {n}% of {window}", { who: user, n: v, window: name }));

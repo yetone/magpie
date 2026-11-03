@@ -318,3 +318,80 @@ func TestCodexSwitchedAtCap(t *testing.T) {
 		t.Fatal("a cap set on an account it hasn't")
 	}
 }
+
+// An Antigravity account's pools each have a 5-hour and a 7-day window
+// of their own, set aside for routing, which reads the models' windows
+// (pluviophile714 on Discord: the Gemini 7 days' meter, clicked, did
+// nothing, though the cap's pill said a window can have its own). Each is
+// marked capped, by its pool's name and its own, as both pools have a "7
+// days"; a cap on it holds the pool's models only, and the account's cap
+// counts it like any window.
+func TestPoolWindowCapHeld(t *testing.T) {
+	now := time.Now()
+	five, week := now.Add(2*time.Hour), now.Add(4*24*time.Hour)
+	ws := []QuotaWindow{
+		{Name: "Gemini 3.1 Pro (High)", Model: "gemini-3.1-pro-high", Family: "Gemini", Pool: "Gemini", Used: 10, ResetsAt: &five},
+		{Name: "Gemini 3.1 Pro (Low)", Model: "gemini-3.1-pro-low", Family: "Gemini", Pool: "Gemini", Used: 10, ResetsAt: &five},
+		{Name: "Claude Sonnet 4.6", Model: "claude-sonnet-4-6", Family: "Claude", Pool: "Claude & GPT", Used: 5, ResetsAt: &five},
+		{Name: "7 days", Pool: "Gemini", Used: 60, ResetsAt: &week, Aside: true, Span: 7 * 24 * time.Hour},
+		{Name: "5 hours", Pool: "Gemini", Used: 10, ResetsAt: &five, Aside: true, Span: 5 * time.Hour},
+		{Name: "7 days", Pool: "Claude & GPT", Used: 2, ResetsAt: &week, Aside: true, Span: 7 * 24 * time.Hour},
+	}
+	got := WithCapped(map[string]SubscriptionQuota{"me@example.com": {Windows: ws}})["me@example.com"].Windows
+	if w := got[3]; !w.Capped || !w.CapsSome || w.CapID != "gemini · 7 days" {
+		t.Fatalf("the Gemini pool's week: capped %v, some %v, id %q", w.Capped, w.CapsSome, w.CapID)
+	}
+	if got[5].CapID != "claude & gpt · 7 days" {
+		t.Fatalf("the other pool's week: %q", got[5].CapID)
+	}
+	if got[0].CapID != "gemini 3.1 pro (high)" {
+		t.Fatalf("a model's own window's id changed: %q", got[0].CapID)
+	}
+	a := allowanceOf(ws, now)
+	if used, _ := a.For("gemini-3.1-pro-high", now); used != 10 {
+		t.Fatalf("routing went by the pool's window, set aside for it: %v", used)
+	}
+	gem := WindowCaps{Windows: map[string]int{"gemini · 7 days": 50}}
+	if h := a.CapHeld("gemini-3.1-pro-high", gem, now); h == nil || h.Used != 60 || h.Cap != 50 || !h.Back.Equal(week) {
+		t.Fatalf("the Gemini week at 60%% of 50%%: %+v", h)
+	}
+	if h := a.CapHeld("claude-sonnet-4-6", gem, now); h != nil {
+		t.Fatalf("the Gemini pool's cap held Claude: %+v", h)
+	}
+	if h := a.CapHeld("gemini-3.1-pro-high", WindowCaps{Windows: map[string]int{"gemini · 7 days": 70}}, now); h != nil {
+		t.Fatalf("held under its own 70%%: %+v", h)
+	}
+	if !a.NearCap("gemini-3.1-pro-high", gem, 15, now) {
+		t.Fatal("the Gemini week is not near its cap")
+	}
+	if h := a.CapHeld("gemini-3.1-pro-low", WindowCaps{All: 55}, now); h == nil || h.Cap != 55 {
+		t.Fatalf("the account's 55%% left the pool's week out: %+v", h)
+	}
+}
+
+// A family's meter (Antigravity's Gemini 3.1 Pro, High and Low) sets each
+// of its models' windows at once.
+func TestSetWindowCaps(t *testing.T) {
+	signIn(t) // me@example.com on codex
+	if err := SetWindowCaps("codex", "me@example.com", []string{"Gemini 3.1 Pro (High)", "gemini 3.1 pro (low)"}, 60); err != nil {
+		t.Fatal(err)
+	}
+	c := AccountCapsOf("codex", "me@example.com")
+	if a, _ := c.Of("gemini 3.1 pro (high)"); a != 60 {
+		t.Fatalf("high: %+v", c)
+	}
+	if b, _ := c.Of("Gemini 3.1 Pro (Low)"); b != 60 {
+		t.Fatalf("low: %+v", c)
+	}
+	for _, bad := range [][]string{nil, {"x", " "}} {
+		if err := SetWindowCaps("codex", "me@example.com", bad, 60); err == nil {
+			t.Errorf("%q taken", bad)
+		}
+	}
+	if err := SetWindowCaps("codex", "me@example.com", []string{"gemini 3.1 pro (high)", "gemini 3.1 pro (low)"}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if c := AccountCapsOf("codex", "me@example.com"); c.Windows != nil {
+		t.Fatalf("cleared, still %+v", c)
+	}
+}
