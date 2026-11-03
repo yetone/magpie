@@ -5104,6 +5104,9 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		conv.Thread = threadOf(in, body)
 	}
 	ctx = provider.WithConversation(ctx, conv)
+	// the agent's own headers the provider lists, which Sign passes on to
+	// it alone (PassHeaders)
+	ctx = provider.WithClientHeaders(ctx, p.ID, in)
 	if !countsTokens(path) {
 		// the user's own fields for the provider (#1604), last, so the
 		// body is as it goes out when they fill in what it lacks, and

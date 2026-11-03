@@ -44,7 +44,7 @@ function serve(lang, calls) {
 
 const words = {
   en: { label: "Reply headers", save: "Save", never: "is never passed on", name: "isn't a header name" },
-  zh: { label: "透传响应头", save: "保存", never: "永不透传", name: "不是有效的响应头名称" },
+  zh: { label: "透传响应头", save: "保存", never: "永不透传", name: "不是有效的头名称" },
   "zh-TW": { label: "透傳回應標頭", save: "儲存", never: "一律不透傳", name: "不是有效的標頭名稱" },
   ja: { label: "レスポンスヘッダー", save: "保存", never: "決して渡しません", name: "ヘッダー名ではありません" },
   de: { label: "Antwort-Header", save: "Speichern", never: "wird nie weitergegeben", name: "ist kein Header-Name" },

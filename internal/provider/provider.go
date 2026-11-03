@@ -274,6 +274,16 @@ type Provider struct {
 	// act on magpie's address, never is (ReplyHeaderPassable).
 	ReplyHeaders []string `json:"replyHeaders,omitempty"`
 
+	// PassHeaders are headers of the agent's request passed on to the
+	// vendor as it sent them, whatever their case (3jRzfF52Qx on X): a
+	// value that changes per request or per client, which a fixed Header
+	// can't give. The client's stands over a Header of the same name;
+	// with none sent the Header goes. Every API, count_tokens, a group's
+	// member, a plugin's fetch; a signed-in account's signing has the
+	// last word. One that carries magpie's key or the connection's own
+	// never is (RequestHeaderPassable).
+	PassHeaders []string `json:"passHeaders,omitempty"`
+
 	// Searches says the vendor answers a web search tool offered on its
 	// Anthropic or Responses API by itself (web_search_20250305,
 	// web_search): a relay in front of Anthropic's or OpenAI's API, which
@@ -775,6 +785,7 @@ func (p Provider) clone() Provider {
 	p.Headers = maps.Clone(p.Headers)
 	p.ExtraBody = maps.Clone(p.ExtraBody)
 	p.ReplyHeaders = slices.Clone(p.ReplyHeaders)
+	p.PassHeaders = slices.Clone(p.PassHeaders)
 	p.AccountProxies = maps.Clone(p.AccountProxies)
 	p.AccountCaps = maps.Clone(p.AccountCaps)
 	p.AccountNames = maps.Clone(p.AccountNames)
@@ -912,6 +923,8 @@ func accountSettings(a, pk Provider) Provider {
 	a.HiddenDrawers = pk.HiddenDrawers
 	// and the headers of its replies passed on (#4145)
 	a.ReplyHeaders = pk.ReplyHeaders
+	// and the headers of the agent's requests passed on
+	a.PassHeaders = pk.PassHeaders
 	return a
 }
 
@@ -1656,6 +1669,7 @@ func normalize(p Provider) Provider {
 	p.Headers = cleanHeaders(p.Headers)
 	p.ExtraBody = cleanExtraBody(p.ExtraBody)
 	p.ReplyHeaders = cleanReplyHeaders(p.ReplyHeaders)
+	p.PassHeaders = cleanRequestHeaders(p.PassHeaders)
 	if pr := Preset(p.Preset); pr != nil {
 		if p.Icon == "" {
 			p.Icon = pr.Icon
