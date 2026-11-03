@@ -15,6 +15,10 @@
   if (!web && /^Mac/.test(navigator.platform)) document.body.classList.add("mac");
   if (!web && /^Linux/.test(navigator.platform)) document.body.classList.add("linux");
   if (/^Win/.test(navigator.platform)) document.documentElement.classList.add("win");
+  // the panel opens the main window from the edge nearest the tray: its
+  // foot over Windows' bottom taskbar, its header elsewhere, until the app
+  // says where the panel was placed (panelside.go, magpiePanelOpenAt)
+  if (mode === "panel") document.body.dataset.openAt = /^Win/.test(navigator.platform) ? "foot" : "head";
   // --bar: see app.css, .view
   function bar() { var p = document.createElement("div"); p.className = "view"; p.style.cssText = "position:absolute;visibility:hidden;height:9px"; document.body.appendChild(p); document.documentElement.style.setProperty("--bar", p.offsetWidth - p.clientWidth + "px"); p.remove(); }
   bar();

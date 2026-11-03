@@ -23365,12 +23365,18 @@ $("#sync").onclick = async () => {
   }
 };
 $("#open").onclick = () => api("window/main", {});
+$("#openMain").onclick = () => api("window/main", {});
+// the app says which edge of the placed panel is nearest the tray
+// (panelside.go); that edge alone opens the main window
+window.magpiePanelOpenAt = (side) => {
+  if (mode === "panel" && (side === "head" || side === "foot")) document.body.dataset.openAt = side;
+};
 $("#quit").onclick = () => api("window/quit", {});
 $("#winclose").onclick = () => winRuntime.then((w) => w?.Window.Close()); // hides it: the tray stays
 $(".top").addEventListener("dblclick", (e) => {
   if (document.body.classList.contains("linux") && !e.target.closest("button, nav")) winRuntime.then((w) => w?.Window.ToggleMaximise());
 });
-if (mode === "window") { $("#open").remove(); $("#quit").remove(); }
+if (mode === "window") { $("#open").remove(); $("#openMain").remove(); $("#quit").remove(); }
 else { $("#nav").remove(); $("#side").remove(); }
 if (mode !== "window" || !document.body.classList.contains("linux")) $("#winclose").remove();
 

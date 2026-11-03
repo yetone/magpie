@@ -924,9 +924,29 @@ func (h *host) togglePanelNow() {
 		}
 		_ = h.tray.PositionWindow(h.panel, 6)
 		showWebview(h.panel).Focus()
+		h.tellPanelSide()
 		return
 	}
 	h.tray.ToggleWindow()
+	if h.panel.IsVisible() {
+		h.tellPanelSide()
+	}
+}
+
+// tellPanelSide tells the panel, just placed, which of its edges opens the
+// main window: the one nearest the tray (panelOpenAt). Wayland doesn't say
+// where the compositor put a window, so there it goes by the system.
+func (h *host) tellPanelSide() {
+	b := h.panel.Bounds()
+	panel := panelRect{b.X, b.Y, b.Width, b.Height}
+	var screen panelRect
+	known := !waylandSession(runtime.GOOS, os.Getenv)
+	if s, err := h.panel.GetScreen(); err == nil && s != nil {
+		screen = panelRect{s.Bounds.X, s.Bounds.Y, s.Bounds.Width, s.Bounds.Height}
+	} else {
+		known = false
+	}
+	h.panel.ExecJS(panelOpenAtJS(panelOpenAt(runtime.GOOS, panel, screen, known)))
 }
 
 // placePanel puts the panel, about to open, under Hyprland's bar at the

@@ -212,7 +212,11 @@ body.window.mac .seg { top: calc(50% + 1px / var(--zoom, 1)); } /* 50% centres i
 .brand { display: flex; align-items: center; gap: 6px; font-weight: 600; letter-spacing: .01em; }
 body.window:not(.mac):not(.linux):not(.web) .brand { display: none; } /* Windows' title bar above already shows the icon and the name; a browser tab has no title bar of the app's */
 /* app.js removes these controls later; keep them out of the first paint too. */
-body.window :is(#open, #quit),
+body.window :is(#open, #openMain, #quit),
+/* one control opens the main window, on the panel's edge nearest the tray
+   (panelside.go): the header's icon, or the foot's button left of Quit */
+body.panel[data-open-at="foot"] .top #open,
+body:not([data-open-at="foot"]) #openMain,
 body:not(.window.linux) #winclose { display: none; }
 /* Linux: the header is the title bar, so it closes the window too — round,
    as GNOME draws its close button, and set a little apart from the icons */
