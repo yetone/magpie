@@ -252,3 +252,28 @@ func TestCanceledWhileDescribingKeepsItsRoute(t *testing.T) {
 		t.Fatalf("the canceled request's routes: %+v", rs)
 	}
 }
+
+// A gateway restart must not describe a conversation's images all over
+// again. The description cache lives in the same config directory as the
+// gateway, so the next Server starts with every completed description.
+func TestDescriptionSurvivesGatewayRestart(t *testing.T) {
+	s, u := eyed(t)
+	body := imagesBody(1)
+	if code, got := postAs(t, s, "", body); code != 200 {
+		t.Fatalf("before restart: %d %s", code, got)
+	}
+	if n := len(u.sent("eye")); n != 1 {
+		t.Fatalf("before restart: %d descriptions, want 1", n)
+	}
+
+	restarted := New()
+	if code, got := postAs(t, restarted, "", body); code != 200 {
+		t.Fatalf("after restart: %d %s", code, got)
+	}
+	if n := len(u.sent("eye")); n != 1 {
+		t.Fatalf("after restart: %d descriptions, want the original 1", n)
+	}
+	if got := u.sent("text"); len(got) != 2 || !strings.Contains(got[1], "A red square with the word HELLO") || !strings.Contains(got[1], "probe/eye describes it") {
+		t.Fatalf("the restored description/by wasn't sent to the text model: %v", got)
+	}
+}

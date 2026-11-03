@@ -1680,6 +1680,23 @@ asks no other.
   pick that failed once is not given up for good. The same bytes sent on
   another protocol, or under another media type, are described once
   (`seenBody` dedupes by the key too). A failure is still not kept.
+- Completed descriptions of inline images are also appended to
+  `vision-cache.jsonl` in magpie's config directory before their waiters
+  are released (`saveSight`), and restored by `New`. A restart or update
+  therefore doesn't describe a conversation's history again. Only inline
+  images are persisted: their keys come from their bytes, while a URL can
+  later name different bytes and stays process-local. The private (0600)
+  file keeps the same 2048-entry LRU on reload; a JSON-malformed or
+  crash-truncated record is skipped without hiding the other records, and
+  is copied to a private `.broken-*` file before a later compaction drops
+  it. An inline description is counted from its creation until it has saved
+  or failed; gateway shutdown waits for that count to reach zero, so a
+  canceled request's completed description isn't lost on exit. Appends and compaction
+  are serialized across gateway processes by `vision-cache.jsonl.lock`;
+  compaction rereads the latest file under that lock before atomically
+  replacing it, so a handover can't overwrite another gateway's new record.
+  A lock or disk-write failure only loses the persistence optimization,
+  never a description that already succeeded.
 
 This differs from a searcher named in Settings, which gives way to no other
 provider: a failed search still leaves the search APIs and the model's own
@@ -1706,6 +1723,9 @@ its cancel failed the description for every other request waiting on it
 with "context canceled", and took it out of the cache, so the next turn
 read the image again. A reply that came whole is kept though its asker
 ended as it came (`askVisionWith` reads the reply before the context).
+Once the model has answered, `sight.answered` also keeps cancellation from
+stopping the save: a completed inline description is written before its
+waiters are released, even if the last waiter left during that write.
 
 In `seenBody`, an image waiting for one of the `visionParallel` slots
 when its request ends is asked of no one: before, each queued image went
@@ -1726,6 +1746,10 @@ Covered by `TestSameImageDescribedOnceWhateverDescribesIt`,
 `TestCanceledRequestAsksNoMoreDescriptions` and
 `TestCanceledWhileDescribingKeepsItsRoute`
 ([`vision_dedupe_test.go`](../../internal/gateway/vision_dedupe_test.go)).
+Restart reuse, cancellation during a save, failed writes, truncated records,
+cross-Server compaction, duplicate records, the LRU and URL behavior are
+covered by `TestDescriptionSurvivesGatewayRestart` and
+[`vision_cache_test.go`](../../internal/gateway/vision_cache_test.go).
 
 ## Image recognition as an MCP server
 
