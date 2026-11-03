@@ -128,7 +128,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await view.getByRole("button", { name: words[lang].addServer, exact: true }).click();
         const ed = page.locator(".lib-editor");
         await ed.locator('input[placeholder="e.g. github"], input[placeholder="例如 github"]').fill("fetch");
-        await ed.locator('input[placeholder="npx -y @modelcontextprotocol/server-github"]').fill("uvx mcp-server-fetch");
+        await ed.locator("textarea.lib-cmd").fill("uvx mcp-server-fetch");
         const market = answered("servers");
         await ed.getByRole("button", { name: words[lang].add, exact: true }).click();
         await market;

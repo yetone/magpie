@@ -99,7 +99,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         // the editor's field shows the same line, and saving it unchanged
         // keeps every argument as it was
         const ed = page.locator("#modal .lib-editor");
-        const field = ed.locator("input.mono").first();
+        const field = ed.locator("textarea.lib-cmd");
         const row = (name) => page.locator("#view-library .lib-server", { has: page.locator(`.lib-health[data-server="${name}"]`) });
         const edit = async (name, line) => {
           await row(name).locator(".name").click();

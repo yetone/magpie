@@ -820,3 +820,17 @@ body.window .lib-list .lib-row { --lib-indent: 38px; }
 .lib-browserask-pick { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px 0 6px; font-size: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg); }
 .lib-browserask-pick:hover { background: var(--accent-soft); }
 .lib-browserask-pick .ic { width: 14px; height: 14px; }
+
+/* an MCP server's command wraps, read whole (hema_17384 on Discord): it
+   starts as tall as an input beside it */
+.lib-editor .lib-cmd { min-height: 0; height: 27px; padding: 4px 9px; border-radius: 7px; line-height: 17px; overflow: hidden; }
+.lib-editor .lib-cmd { font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* the server as JSON: wrapped, so a long argument never scrolls sideways */
+.lib-editor .lib-json { min-height: 160px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lib-editor .lib-json[aria-invalid="true"], .lib-editor .lib-json[aria-invalid="true"]:focus { border-color: var(--red); }
+.lib-serverhead { flex-wrap: wrap; row-gap: 6px; }
+.lib-serverhead .lib-viewpick { margin-left: auto; flex: none; }
+.lib-serverhead .note + .lib-viewpick { margin-left: 0; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+  body.web .lib-editor .lib-cmd { min-height: 44px; font-size: 16px; line-height: 22px; padding: 10px 9px; }
+}

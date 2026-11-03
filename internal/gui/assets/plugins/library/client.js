@@ -2725,6 +2725,24 @@ magpie.plugin("library", (ctx) => {
     return i;
   }
 
+  // lineBox is a command line in a box that wraps, so a long one (npx
+  // with a database's host, user, password and name, hema_17384 on
+  // Discord) is read and edited whole. It is still one line: Enter saves,
+  // and a line break is a space between words, a shell's \ before it too.
+  function lineBox(value, placeholder, onInput) {
+    const ta = el("textarea", "lib-text small mono lib-cmd");
+    ta.rows = 1;
+    ta.value = value || "";
+    ta.placeholder = placeholder || "";
+    ta.spellcheck = false;
+    ta.setAttribute("autocapitalize", "off");
+    ta.setAttribute("autocorrect", "off");
+    ta.oninput = () => onInput(WIN_LINE ? ta.value : ta.value.replace(/\\\r?\n/g, " "));
+    ta.onkeydown = (e) => { e.stopPropagation(); if (e.isComposing || e.keyCode === 229) return; if (e.key === "Escape") closeLibModal(); else if (e.key === "Enter" && modal?.save) { e.preventDefault(); modal.save(); } };
+    autosize(ta, 27);
+    return ta;
+  }
+
   // refHint: how a value is read from a variable (#1250)
   const refHint = () => t("A value can name a variable, as {ref}: each agent is given it in its own way, so the token stays out of its settings", { ref: "${NAME}" });
 
@@ -2740,9 +2758,24 @@ magpie.plugin("library", (ctx) => {
     if (!d.headers) d.headers = {};
     d.local = !!d.local;
     const ed = el("div", "editor lib-editor");
-    const head = el("div", "ehead");
+    const head = el("div", "ehead lib-serverhead");
     head.append(mark(s?.icon, d.transport === "stdio" ? GLYPH.cmd : GLYPH.web), el("b", "", s ? s.name : t("New MCP server")));
     if (!s) head.append(el("span", "note", t("or paste its JSON anywhere here")));
+    // the form, or the server as JSON (hema_17384 on Discord), in Claude
+    // Code's .mcp.json shape, as Copy config gives it: read whole, edited,
+    // pasted over. The agents and sync are the library's own and stay in
+    // the form below it
+    let view = "form", jsonBad = "";
+    const viewBox = el("div", "lib-viewpick");
+    const viewSegs = () => segs([["form", t("Form")], ["json", "JSON"]], view, (v) => {
+      if (v === "form" && jsonBad) { err.textContent = jsonBad; viewBox.replaceChildren(viewSegs()); return; }
+      view = v;
+      err.textContent = "";
+      draw();
+      (view === "json" ? top.querySelector(".lib-json") : name).focus();
+    });
+    viewBox.append(viewSegs());
+    head.append(viewBox);
     ed.append(head);
     const err = el("div", "editor-error");
 
@@ -2790,11 +2823,12 @@ magpie.plugin("library", (ctx) => {
     }
     const callback = () => t("Made with its vendor (GitHub's under Settings › Developer settings › OAuth Apps), with {url} as its callback URL", { url: "http://localhost" + (d.oauth?.callbackPort ? ":" + d.oauth.callbackPort : "") + "/callback" });
     const name = field2(d.name, t("e.g. github"), (v) => { d.name = v.trim(); signBox?.redraw(); });
-    ed.append(...field(t("Name"), name, t("Letters, digits, - and _ — what the agents call it")));
     const kindOf = () => segs([["stdio", t("Command")], ["http", "HTTP"], ["sse", "SSE"]], d.transport, (v) => { d.transport = v; draw(); });
     const kindBox = el("div");
     kindBox.append(kindOf());
-    ed.append(...field(t("Runs as"), kindBox));
+    const nameF = field(t("Name"), name, t("Letters, digits, - and _ — what the agents call it")), kindF = field(t("Runs as"), kindBox);
+    const top = el("div", "lib-slot");
+    ed.append(top);
     const slot = el("div", "lib-slot");
     ed.append(slot);
     const agentsBox = el("div");
@@ -2823,12 +2857,59 @@ magpie.plugin("library", (ctx) => {
     function drawAgents() {
       agentsBox.replaceChildren(agentChips(all, d.agents, (next) => { d.agents = next; drawAgents(); }, { names: true, blocked: sseBlocked(d), all: true }));
     }
+    // the server as Copy config's Claude Code entry has it (fmtClaude)
+    function jsonOf() {
+      const e = d.transport === "stdio"
+        ? { type: "stdio", command: d.command || "", args: d.args || [], env: d.env || {} }
+        : { type: d.transport, url: d.url || "", ...(Object.keys(d.headers || {}).length ? { headers: d.headers } : {}) };
+      return JSON.stringify({ mcpServers: { [d.name]: e } }, null, 2);
+    }
+    // what is typed is read as a paste is (serversIn): each valid edit is
+    // the form's at once; one that isn't keeps the dialog from saving or
+    // going back to the form until it is
+    function jsonBox() {
+      const ta = el("textarea", "lib-text small mono lib-json");
+      ta.value = jsonOf();
+      ta.spellcheck = false;
+      ta.setAttribute("autocapitalize", "off");
+      ta.setAttribute("autocorrect", "off");
+      ta.oninput = () => {
+        const found = serversIn(ta.value);
+        jsonBad = !found?.length ? t("This isn't an MCP server's JSON") : found.length > 1 ? t("Only one server here; paste several outside this box to add them") : "";
+        ta.setAttribute("aria-invalid", String(!!jsonBad));
+        err.textContent = jsonBad;
+        if (jsonBad) return;
+        const f = found[0];
+        Object.assign(d, { transport: f.transport, command: f.command || "", args: f.args || [], env: f.env || {}, url: f.url || "", headers: f.headers || {} });
+        if (f.name) d.name = f.name;
+        name.value = d.name;
+        kindBox.replaceChildren(kindOf());
+        drawAgents();
+      };
+      // a newline is the box's; ⌘/Ctrl-Enter saves, Escape closes
+      ta.onkeydown = (e) => {
+        e.stopPropagation();
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "Escape") closeLibModal();
+        else if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && modal?.save) { e.preventDefault(); modal.save(); }
+      };
+      autosize(ta, 160);
+      return ta;
+    }
     function draw() {
       slot.replaceChildren();
+      if (view === "json") {
+        signBox = appBox = null;
+        top.replaceChildren(...field("JSON", jsonBox(), t("As Claude Code's .mcp.json has it. A value naming a variable, as {ref}, stays a name here", { ref: "${NAME}" })));
+        head.firstChild.replaceWith(mark(s && d.transport === s.transport ? s.icon : "", d.transport === "stdio" ? GLYPH.cmd : GLYPH.web));
+        drawAgents();
+        return;
+      }
+      top.replaceChildren(...nameF);
+      slot.append(...kindF);
       const g = el("div", "lib-grid");
       if (d.transport === "stdio") {
-        const line = field2([d.command, ...(d.args || [])].filter((x, i) => i > 0 || x).map(quote).join(" "), "npx -y @modelcontextprotocol/server-github", (v) => { const w = words(v); d.command = w[0] || ""; d.args = w.slice(1); });
-        line.classList.add("mono");
+        const line = lineBox([d.command, ...(d.args || [])].filter((x, i) => i > 0 || x).map(quote).join(" "), "npx -y @modelcontextprotocol/server-github", (v) => { const w = words(v); d.command = w[0] || ""; d.args = w.slice(1); });
         g.append(...field(t("Command"), line, t("The command and its arguments, as you'd type them")));
         g.append(...field(t("Environment"), pairs(d.env, "GITHUB_TOKEN", t("value"), (v) => { d.env = v; drawAgents(); }), refHint()));
       } else {
@@ -2888,6 +2969,7 @@ magpie.plugin("library", (ctx) => {
       return was;
     };
     const save = async () => {
+      if (jsonBad) { err.textContent = jsonBad; return; }
       err.textContent = "";
       try {
         const was = await send();
@@ -2918,6 +3000,7 @@ magpie.plugin("library", (ctx) => {
 
     // a README's JSON pasted anywhere in the dialog fills it in
     ed.addEventListener("paste", (e) => {
+      if (e.target.closest?.(".lib-json")) return; // the JSON box's own
       const text = e.clipboardData?.getData("text") || "";
       if (!/[{]/.test(text)) return;
       const found = serversIn(text);
@@ -2934,7 +3017,7 @@ magpie.plugin("library", (ctx) => {
       } else pasteMany(found, d.agents);
     });
     let original = JSON.stringify(d);
-    modal = { save, dirty: () => JSON.stringify(d) !== original };
+    modal = { save, dirty: () => !!jsonBad || JSON.stringify(d) !== original };
     openLib(ed);
     if (!s) requestAnimationFrame(() => name.focus());
   }
