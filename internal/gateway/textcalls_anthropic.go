@@ -18,6 +18,11 @@ import (
 // reply stops for tool_use. Held text that isn't calls goes on as it came.
 // A reply that came whole (no stream) is read as wholeTextCalls reads a
 // Chat one.
+//
+// A reply carrying auto mode's review (safeguard_results, automode.go)
+// goes as it came: Anthropic judged the calls it made by their ids, and a
+// call made here would have an id it never judged, which Claude Code
+// can't match to a verdict (xybio on Discord). Its text goes as text.
 type anthropicTextCalls struct {
 	names map[string]bool
 	sse   bool
@@ -166,7 +171,7 @@ func (t *anthropicTextCalls) event(ev []byte) []byte {
 		return append(out, ev...)
 	case "message_delta":
 		var pre []byte
-		if t.holding && !t.native {
+		if t.holding && !t.native && !hasReview(m["delta"]) {
 			if calls, rest, ok := parseTextCalls(t.held, t.names); ok {
 				t.held, t.holding = "", false
 				rest = t.pending + rest
@@ -248,6 +253,9 @@ func (t *anthropicTextCalls) whole(b []byte) []byte {
 	if decodeJSON(b, &reply) != nil || reply == nil {
 		return b
 	}
+	if _, ok := reply["safeguard_results"]; ok {
+		return b
+	}
 	var content []map[string]json.RawMessage
 	if decodeJSON(reply["content"], &content) != nil || len(content) == 0 {
 		return b
@@ -292,6 +300,17 @@ func (t *anthropicTextCalls) whole(b []byte) []byte {
 		return b
 	}
 	return nb
+}
+
+// hasReview reports whether a stream's message_delta delta carries auto
+// mode's review results.
+func hasReview(delta json.RawMessage) bool {
+	var d map[string]json.RawMessage
+	if decodeJSON(delta, &d) != nil {
+		return false
+	}
+	_, ok := d["safeguard_results"]
+	return ok
 }
 
 func mustPlain(v any) json.RawMessage {
