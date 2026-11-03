@@ -72,12 +72,12 @@ const quotas = () => [
   { provider: "codex", name: "Codex", icon: "openai", plan: "Plus", windows: [{ name: "5 hours", used: 20 }] },
 ];
 
-function serve(lang, asked) {
+function serve(lang, asked, more = []) {
   const settings = { theme: "light", lang, quotaLeft: false, currency: "usd", pluginCheckins: { fakeco: false },
     checkinPlugins: [{ id: "fakeco", name: "FakeCo", on: false, checkins: [
       { user: "ann", by: "plugin:fakeco", vendor: "FakeCo", day: today, outcome: "claimed", credit: 50, streak: 3 },
       { user: "bob", by: "plugin:fakeco", vendor: "FakeCo", day: today, outcome: "captcha" },
-    ] }] };
+    ] }, ...more] };
   return async (route) => {
     const url = new URL(route.request().url());
     const json = (data) => route.fulfill({ json: data });
@@ -173,6 +173,26 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.deepEqual(errors, []);
     });
 
+    test(`${engine} ${lang}: two plugins checking in share one Plugins tab`, async (t) => {
+      const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
+      t.after(() => browser.close());
+      const page = await (await browser.newContext({ viewport: { width: 900, height: 900 }, reducedMotion: "reduce" })).newPage();
+      page.setDefaultTimeout(5000);
+      page.setDefaultNavigationTimeout(60000);
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.route("**/*", serve(lang, [], [{ id: "otherco", name: "OtherCo", on: true, checkins: [] }]));
+      await watchSettingsReads(page);
+      await page.goto("http://magpie.test/?view=settings&tab=usage");
+      await settingsDrawn(page);
+      const tab = page.locator("#warmTab-plugins");
+      await tab.waitFor();
+      assert.equal((await tab.textContent()).trim(), w.tab);
+      await tab.click();
+      for (const id of ["fakeco", "otherco"]) await page.locator(`#pluginCheckinList .row[data-provider="${id}"]`).waitFor();
+      assert.deepEqual(errors, []);
+    });
+
     test(`${engine} ${lang}: Settings has a Plugins check-in tab at 440px`, async (t) => {
       const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
       t.after(() => browser.close());
@@ -188,7 +208,8 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const tab = page.locator("#warmTab-plugins");
       await tab.waitFor();
       assert.equal(await tab.isHidden(), false);
-      assert.equal((await tab.textContent()).trim(), w.tab);
+      // one plugin checks in: the tab is its name (WorkBuddy's users looked for "WorkBuddy")
+      assert.equal((await tab.textContent()).trim(), "FakeCo");
       assert.equal(await page.locator("#warmTab-qoder").isHidden(), true, "Qoder's tab with no Qoder account");
       // at 440x900 the tabs are below the fold: the reader scrolls to them
       await page.mouse.move(220, 400);

@@ -22457,8 +22457,11 @@ async function renderUpdate(r, u) {
 
 // a Daily check-in row per plugin that checks in itself (auth.checkin)
 function renderPluginCheckins(s) {
-  const ps = s.checkinPlugins || [];
-  $("#warmTab-plugins").hidden = !ps.length;
+  const ps = s.checkinPlugins || [], tab = $("#warmTab-plugins");
+  tab.hidden = !ps.length;
+  // one plugin checking in: its tab is its name, as a built-in's is
+  tab.dataset.en = ps.length === 1 ? ps[0].name || ps[0].id : "Plugins";
+  tab.textContent = t(tab.dataset.en);
   setWarmTab(warmTab);
   $("#pluginCheckinList").replaceChildren(...ps.map((p) => {
     const row = el("div", "row pref");
