@@ -253,6 +253,7 @@ var notYet = map[string]string{
 	"POST /api/config/repair":                    A,  // config_repair.go
 	"GET /api/context":                           U,  // context.go
 	"GET /api/context/text":                      W,  // context.go
+	"GET /api/context/reply":                     W,  // context_archive.go: the reply half of the same detail view
 	"GET /api/dev/wait":                          W,  // dev_on.go
 	"POST /api/dev/import":                       W,  // dev_on.go
 	"GET /api/fonts":                             W,  // fonts.go
