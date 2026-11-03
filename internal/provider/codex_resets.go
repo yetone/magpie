@@ -249,6 +249,26 @@ func UseCodexResetCard(ctx context.Context, user, credit string) (ResetOutcome, 
 	return spendCodexReset(ctx, user, credit, ResetUsedByHand)
 }
 
+// SpendCodexReset is a reset used by hand wherever it is asked: the Usage
+// page's "Use a reset" and the gateway's RemoteCodexResetPath, for another
+// magpie's card or an app holding a gateway key (#3850, prgrmrwy). It is
+// UseCodexResetCard, then, when the windows started again, a wait of up
+// to 10s for routing and the Providers page to know so (#1491).
+func SpendCodexReset(ctx context.Context, user, credit string) (ResetOutcome, error) {
+	out, err := UseCodexResetCard(ctx, user, credit)
+	if err != nil || out.Code != "reset" {
+		return out, err
+	}
+	who := user
+	if who == "" {
+		who, _ = CodexSignedIn()
+	}
+	wait, done := context.WithTimeout(ctx, 10*time.Second)
+	AwaitAllowance(wait, "codex", who)
+	done()
+	return out, nil
+}
+
 // useCodexReset is UseCodexReset, the use kept as made for why.
 func useCodexReset(ctx context.Context, user, why string) (ResetOutcome, error) {
 	return spendCodexReset(ctx, user, "", why)

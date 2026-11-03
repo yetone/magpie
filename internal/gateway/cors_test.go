@@ -246,6 +246,7 @@ func TestForeignPagesRefused(t *testing.T) {
 		{"POST", "/mcp/notes", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`},
 		{"POST", "/_magpie/claude-mcp/tok", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`},
 		{"POST", provider.RemoteRefreshPath, ""},
+		{"POST", provider.RemoteCodexResetPath + "?user=me@example.com", ""},
 		{"GET", "/v1/magpie/quotas", ""},
 		{"GET", "/v1/models", ""},
 		{"OPTIONS", "/v1/chat/completions", ""},

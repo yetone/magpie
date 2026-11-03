@@ -37,6 +37,19 @@ const RemoteCardsPath = "/v1/magpie/quotas/cards"
 // RemoteCardsPath.
 const RemoteRefreshPath = "/v1/magpie/quotas/refresh"
 
+// RemoteCodexResetPath has the gateway spend one of its Codex account's
+// rate-limit resets (?user=, the account always named; &credit=, one of
+// its resets.each, else the one that runs out first), as its Usage page's
+// "Use a reset" does (#3850, prgrmrwy): a reset shown on another magpie's
+// card, or in an app reading the cards, can be used from there too. It
+// can't be undone, so the gateway takes it only with a gateway key of full
+// access, never from a page or app it lets in without one.
+const RemoteCodexResetPath = "/v1/magpie/quotas/codex-reset"
+
+// RemoteResetWait is how long a remote magpie is waited for to spend a
+// reset: its use (20s at most) and its wait for routing to know (10s).
+const RemoteResetWait = 35 * time.Second
+
 // remoteCardsFor is how long another magpie's cards are kept here before
 // they are asked for again: reading its cache costs it nothing from the
 // vendors, but the menu bar and alerts ask often.
@@ -58,6 +71,14 @@ const errRemoteNotShared = "remote magpie isn't shared; turn on Share on local n
 
 // errRemoteKey is a remote magpie that didn't take this provider's key (401).
 const errRemoteKey = "remote magpie didn't take this key; use one of its enabled gateway keys"
+
+// KeyReadOnlyCode is the error code a gateway answers a read-only key
+// with on a route that uses or changes anything.
+const KeyReadOnlyCode = "gateway_key_read_only"
+
+// errRemoteReadOnly is a remote magpie whose key here is read-only: it
+// shows the cards, and spends nothing.
+const errRemoteReadOnly = "this key is read-only on the remote magpie; give the provider a key with full access to use a reset from here"
 
 // KeyHeldCode is the error code a gateway answers a key held to a budget,
 // models or accounts with, where its own accounts would be told (#1981):
@@ -238,8 +259,13 @@ func remoteCards(ctx context.Context, p Provider, fresh bool) []SubscriptionQuot
 		q.Name += " · " + name
 		q.From = name
 		// what is pressed on a card acts on this computer's accounts:
-		// a Codex reset or a check-in is the other magpie's to do
-		q.Resets, q.Checkins, q.CheckinBy, q.Checkin, q.CheckinOff = nil, false, "", nil, false
+		// a check-in is the other magpie's to do. A Codex reset is
+		// spent there when pressed here (UseRemoteCodexReset, #3850);
+		// a GLM team's (byWindow) is spent on the vendor's page
+		if q.Provider != p.ID+"/codex" || q.Resets != nil && q.Resets.ByWindow {
+			q.Resets = nil
+		}
+		q.Checkins, q.CheckinBy, q.Checkin, q.CheckinOff = false, "", nil, false
 		if q.Windows == nil {
 			q.Windows = []QuotaWindow{}
 		}
@@ -393,45 +419,9 @@ func remoteKey(h http.Header, key string) {
 
 // remoteJSON asks p's gateway, with its key, for a {"data": …} list.
 func remoteJSON(ctx context.Context, p Provider, method, path string, dst any) error {
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, method, p.Anthropic+path, nil)
+	b, err := remoteBody(ctx, p, method, path, 8*time.Second)
 	if err != nil {
 		return err
-	}
-	req.Header.Set("Accept", "application/json")
-	p.signRemote(req, p.Key)
-	res, err := p.Do(http.DefaultClient, req)
-	if err != nil {
-		return fmt.Errorf("%s %s: %w", errRemoteUnreachable, remoteName(p), err)
-	}
-	defer res.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(res.Body, 8<<20))
-	switch {
-	case res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusMethodNotAllowed:
-		return fmt.Errorf("%s", errRemoteNoShare)
-	case res.StatusCode == http.StatusForbidden:
-		var e struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(b, &e) == nil && e.Error.Code == KeyHeldCode {
-			return errKeyHeld
-		}
-		return fmt.Errorf("%s", errRemoteNotShared)
-	case res.StatusCode == http.StatusUnauthorized:
-		return fmt.Errorf("%s", errRemoteKey)
-	case res.StatusCode < 200 || res.StatusCode >= 300:
-		var e struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(b, &e) == nil && e.Error.Message != "" {
-			return fmt.Errorf("%s: %s", remoteName(p), e.Error.Message)
-		}
-		return fmt.Errorf("%s answered %s", remoteName(p), res.Status)
 	}
 	var list struct {
 		Data json.RawMessage `json:"data"`
@@ -443,4 +433,98 @@ func remoteJSON(ctx context.Context, p Provider, method, path string, dst any) e
 		return nil
 	}
 	return json.Unmarshal(list.Data, dst)
+}
+
+// remoteBody asks p's gateway, with its key, waiting wait at most, and
+// gives back the body of a 2xx answer; any other is an error that says
+// what to do about it.
+func remoteBody(ctx context.Context, p Provider, method, path string, wait time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, p.Anthropic+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	p.signRemote(req, p.Key)
+	res, err := p.Do(http.DefaultClient, req)
+	if err != nil {
+		return nil, fmt.Errorf("%s %s: %w", errRemoteUnreachable, remoteName(p), err)
+	}
+	defer res.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(res.Body, 8<<20))
+	if err != nil && ctx.Err() != nil {
+		return nil, fmt.Errorf("%s %s: %w", errRemoteUnreachable, remoteName(p), ctx.Err())
+	}
+	var e struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	switch {
+	case res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusMethodNotAllowed:
+		return nil, fmt.Errorf("%s", errRemoteNoShare)
+	case res.StatusCode == http.StatusForbidden:
+		json.Unmarshal(b, &e)
+		switch e.Error.Code {
+		case KeyHeldCode:
+			return nil, errKeyHeld
+		case KeyReadOnlyCode:
+			return nil, fmt.Errorf("%s", errRemoteReadOnly)
+		}
+		return nil, fmt.Errorf("%s", errRemoteNotShared)
+	case res.StatusCode == http.StatusUnauthorized:
+		return nil, fmt.Errorf("%s", errRemoteKey)
+	case res.StatusCode < 200 || res.StatusCode >= 300:
+		if json.Unmarshal(b, &e) == nil && e.Error.Message != "" {
+			return nil, fmt.Errorf("%s: %s", remoteName(p), e.Error.Message)
+		}
+		return nil, fmt.Errorf("%s answered %s", remoteName(p), res.Status)
+	}
+	return b, nil
+}
+
+// errRemoteResetUnknown is a reset asked of a remote magpie that didn't
+// answer in time: it may have been spent there, so it isn't asked again.
+const errRemoteResetUnknown = "%s didn't say in time whether the reset was used; it may have been. Refresh the card to see before asking again"
+
+// UseRemoteCodexReset has the remote magpie whose card id is (its Codex
+// card, "office/codex") spend one of user's resets there, as its own
+// Usage page would (#3850, prgrmrwy: the card here said "1 reset", and
+// using it took a walk to the other computer). credit is one of the
+// card's resets.each, "" for the one that runs out first. The account is
+// always named: which one the remote is signed in to isn't known here,
+// and a reset can't be undone. The remote's cards are read afresh after,
+// so the card shows its windows started again.
+func UseRemoteCodexReset(ctx context.Context, id, user, credit string) (ResetOutcome, error) {
+	p, card, ok := remoteOf(id)
+	if !ok || card != "codex" {
+		return ResetOutcome{}, fmt.Errorf("%s is no remote magpie's Codex card", id)
+	}
+	if user == "" {
+		return ResetOutcome{}, errors.New("name the Codex account whose reset is used")
+	}
+	q := url.Values{"user": {user}}
+	if credit != "" {
+		q.Set("credit", credit)
+	}
+	b, err := remoteBody(ctx, p, http.MethodPost, RemoteCodexResetPath+"?"+q.Encode(), RemoteResetWait)
+	if err != nil {
+		// no answer: the remote may have spent it all the same
+		if errors.Is(err, context.DeadlineExceeded) {
+			return ResetOutcome{}, fmt.Errorf(errRemoteResetUnknown, remoteName(p))
+		}
+		return ResetOutcome{}, err
+	}
+	var out ResetOutcome
+	if err := json.Unmarshal(b, &out); err != nil || out.Code == "" {
+		return ResetOutcome{}, fmt.Errorf(errRemoteResetUnknown, remoteName(p))
+	}
+	// the remote read the card again after the reset; what it has now
+	read, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	remoteCards(read, p, true)
+	cancel()
+	toldUsage()
+	return out, nil
 }

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -106,7 +107,8 @@ func TestRemoteMagpieCards(t *testing.T) {
 	peer := &fakePeer{cards: []SubscriptionQuota{
 		{Provider: "codex", Name: "Codex", Icon: "codex", User: "a@x.com", Kind: "subscription", Windows: []QuotaWindow{{Name: "5h", Used: 40}},
 			Resets: &ResetCredits{Count: 1}, Checkins: true},
-		{Provider: "zhipu", Name: "GLM Coding", Kind: "plan", Windows: []QuotaWindow{{Name: "5h", Used: 10}}},
+		{Provider: "zhipu", Name: "GLM Coding", Kind: "plan", Windows: []QuotaWindow{{Name: "5h", Used: 10}},
+			Resets: &ResetCredits{Count: 2, ByWindow: true}},
 		{Provider: "deepseek", Name: "DeepSeek", Kind: "balance", Balance: "¥12.00"},
 		{Provider: "home/codex", Name: "Codex · Home", Kind: "subscription", From: "Home"},
 	}}
@@ -125,10 +127,12 @@ func TestRemoteMagpieCards(t *testing.T) {
 	if c == nil || c.Name != "Codex · Office" || c.From != "Office" || c.User != "a@x.com" || c.Icon != "codex" || len(c.Windows) != 1 || c.Windows[0].Used != 40 {
 		t.Fatalf("subscription card: %+v", c)
 	}
-	if c.Resets != nil || c.Checkins {
-		t.Errorf("a remote card's buttons are kept: %+v", c)
+	// a Codex reset is used there when pressed here (#3850); a check-in
+	// isn't asked of another computer
+	if c.Checkins || c.Resets == nil || c.Resets.Count != 1 {
+		t.Errorf("a remote Codex card's buttons: %+v", c)
 	}
-	if p := find(plans, "office/zhipu"); p == nil || p.Name != "GLM Coding · Office" {
+	if p := find(plans, "office/zhipu"); p == nil || p.Name != "GLM Coding · Office" || p.Resets != nil {
 		t.Errorf("plan: %+v", plans)
 	}
 	if b := find(balances, "office/deepseek"); b == nil || b.Balance != "¥12.00" {
@@ -472,5 +476,73 @@ func TestRemoteMagpieCardsKeptByKey(t *testing.T) {
 		if q.User == "boss@x.com" {
 			t.Errorf("another key shows the first key's card: %+v", q)
 		}
+	}
+}
+
+// #3850: a reset asked of a remote magpie that is too old to spend one,
+// or that doesn't answer in time, says what it means for the card: update
+// magpie there, or the reset may have been used there, so read the card
+// before asking again (never asked again by itself).
+func TestRemoteCodexResetAnswers(t *testing.T) {
+	var asks atomic.Int32
+	stall := make(chan struct{})
+	t.Cleanup(func() { close(stall) })
+	var mode atomic.Value
+	mode.Store("old")
+	remoteQuotaHome(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != RemoteCodexResetPath {
+			w.Write([]byte(`{"data":[]}`))
+			return
+		}
+		asks.Add(1)
+		if r.Method != http.MethodPost || r.URL.Query().Get("user") != "a@x.com" || r.URL.Query().Get("credit") != "c-2" || r.Header.Get("Authorization") != "Bearer sk-magpie-office" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		switch mode.Load() {
+		case "old":
+			w.WriteHeader(http.StatusNotFound)
+		case "stall":
+			select {
+			case <-stall:
+			case <-r.Context().Done():
+			}
+		case "readonly":
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":{"message":"read-only","code":"` + KeyReadOnlyCode + `"}}`))
+		case "ok":
+			w.Write([]byte(`{"code":"reset","windows":2}`))
+		}
+	}))
+	ctx := context.Background()
+	if _, err := UseRemoteCodexReset(ctx, "office/codex", "a@x.com", "c-2"); err == nil || !strings.HasPrefix(err.Error(), "remote magpie doesn't share its quotas") {
+		t.Fatalf("an old remote: %v", err)
+	}
+	mode.Store("readonly")
+	if _, err := UseRemoteCodexReset(ctx, "office/codex", "a@x.com", "c-2"); err == nil || !strings.HasPrefix(err.Error(), "this key is read-only on the remote magpie") {
+		t.Fatalf("a read-only key: %v", err)
+	}
+	mode.Store("stall")
+	short, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	_, err := UseRemoteCodexReset(short, "office/codex", "a@x.com", "c-2")
+	cancel()
+	if err == nil || !strings.Contains(err.Error(), "may have been") {
+		t.Fatalf("no answer in time: %v", err)
+	}
+	mode.Store("ok")
+	out, err := UseRemoteCodexReset(ctx, "office/codex", "a@x.com", "c-2")
+	if err != nil || out.Code != "reset" || out.Windows != 2 {
+		t.Fatalf("spent: %+v %v", out, err)
+	}
+	if n := asks.Load(); n != 4 {
+		t.Fatalf("asked %d times, want once each", n)
+	}
+	for _, id := range []string{"office/zhipu", "office", "codex", "nowhere/codex"} {
+		if _, err := UseRemoteCodexReset(ctx, id, "a@x.com", ""); err == nil {
+			t.Errorf("%s was asked", id)
+		}
+	}
+	if n := asks.Load(); n != 4 {
+		t.Fatalf("a card not a remote's Codex card asked the remote (%d)", n)
 	}
 }

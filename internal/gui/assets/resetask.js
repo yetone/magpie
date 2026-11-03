@@ -12,6 +12,10 @@ window.askResetSheet = function (q) {
   ed.append(el("p", "lib-confirm", t(q.resets.count === 1
     ? "{who} has 1 reset. Using it starts its windows again at once, as if none of them had been used. It can't be undone."
     : "{who} has {n} resets. Using one starts its windows again at once, as if none of them had been used. It can't be undone.", { who, n: q.resets.count })));
+  // a remote magpie's card (office/codex, #3850): that magpie spends it,
+  // on the account signed in there
+  const remote = q.provider !== "codex" && q.from;
+  if (remote) ed.append(el("p", "lib-confirm reset-remote", t("The magpie on {computer}, where this account is signed in, uses it.", { computer: q.from })));
   // which of them is used: the one that runs out first unless the user
   // picks another of those listed one by one (01huadalang on Discord),
   // and the dialog names the one it spends
@@ -72,7 +76,10 @@ window.askResetSheet = function (q) {
     go.disabled = true;
     go.classList.add("busy");
     try {
-      const out = await api("usage/codex-reset", chosen ? { user: q.user || "", credit: cards[chosen].id } : { user: q.user || "" });
+      const ask = { user: q.user || "" };
+      if (remote) ask.provider = q.provider;
+      if (chosen) ask.credit = cards[chosen].id;
+      const out = await api("usage/codex-reset", ask);
       // the providers' editor and Settings read the account's windows
       // and resets on their own, kept a minute: read again, as Usage is
       // (#1491); asked from the editor, closing goes back to it
@@ -85,7 +92,7 @@ window.askResetSheet = function (q) {
     } catch (err) {
       go.disabled = false;
       go.classList.remove("busy");
-      statusErr(err);
+      status(remote ? remoteResetError(err.message) : err.message, "err");
     }
   };
   const cancel = el("button", "text", t("Cancel"));
@@ -99,3 +106,32 @@ window.askResetSheet = function (q) {
   $("#modal").classList.add("lib");
   go.focus();
 };
+
+// remoteResetError says why a remote magpie used no reset (remote_quotas.go)
+function remoteResetError(err) {
+  if (/^this key is read-only on the remote magpie/.test(err)) return t("This key is read-only on that computer's magpie — give this provider a key with full access to use a reset from here");
+  if (/didn't say in time whether the reset was used/.test(err)) return t("That computer didn't say in time whether the reset was used — it may have been. Refresh the card before asking again");
+  if (/^remote magpie doesn't share its quotas/.test(err)) return t("That computer's magpie can't use a reset from here yet — update magpie there");
+  if (/^remote magpie holds this key/.test(err)) return t("That computer's magpie holds this key to a budget, models or accounts, so it uses none of its resets — give this provider a key with full access");
+  if (/^remote magpie isn't shared/.test(err)) return t("That computer's magpie isn't shared — turn on Settings → Network and sharing → Share on local network there");
+  if (/^remote magpie didn't take this key/.test(err)) return t("That computer's magpie didn't take this key — use one of its gateway keys in this provider");
+  if (/^couldn't reach the remote magpie/.test(err)) return t("Couldn't reach that computer's magpie — check that it is running and its address");
+  return err;
+}
+
+// what a reset came to, in words (moved here from app.js; only this sheet says it)
+function resetOutcome(out) {
+  switch (out.code) {
+    case "reset": return t(out.windows === 1 ? "1 window started again" : "{n} windows started again", { n: out.windows });
+    case "nothing_to_reset": return t("nothing to start again — no window has been used, and the reset is kept");
+    case "no_credit": return t("no reset left on the account");
+    case "already_redeemed":
+    case "already_used": return t("that reset was already used");
+    // Anthropic's
+    case "not_limited": return t("nothing to reset — no window is used up yet, and the reset is kept");
+    case "cooldown": return t("a reset was used a short while ago — try again later");
+    case "ineligible": return t("the account can't use a reset");
+    case "unavailable": return t("resets can't be used right now — try again later");
+  }
+  return out.code;
+}

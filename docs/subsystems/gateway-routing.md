@@ -535,7 +535,7 @@ page and its data, the concurrency, and the route events' snapshot and
 stream) and refuses every other with 403 `gateway_key_read_only`:
 every model route, `count_tokens`, the Responses WebSocket's upgrade, every
 MCP server, Codex's and Gemini's backends, the catch-all and every write
-(`POST /v1/magpie/usage/requests`, the quotas' refresh). A route added later
+(`POST /v1/magpie/usage/requests`, the quotas' refresh, a Codex reset). A route added later
 is refused it until it is put in that list. A read-only key is held to
 nothing else, so `heldKey` leaves it alone and it reads the usage summary
 and every account's quotas as a key held to nothing does; none of those
@@ -546,6 +546,25 @@ reads such a key as a full one. `TestReadOnlyKeyEveryRoute` in
 route the router has is in neither `readOnlyRoutes` nor its refused list,
 and sends each refused pattern, by each method it takes, from loopback and
 from the network.
+
+`POST /v1/magpie/quotas/codex-reset` (`Server.codexReset` in
+[`gateway.go`](../../internal/gateway/gateway.go), #3850) spends one of a
+Codex account's resets, which can't be undone, so its admission is
+stricter than the quotas': a key is required from loopback too. Every
+origin exemption `corsGuard` makes without a key (app schemes, `null`,
+loopback page names, a request with no Origin) reaches the handler with
+an empty `access.Caller(ctx).KeyID`, and is refused 401 there. A
+read-only key is refused by `readOnlyGuard` (and again in the handler),
+and a held key (`heldKey`) 403 `gateway_key_held` even when it is told
+quotas. The account is named in `?user=`, and `codexResetsAsked` lets one
+ask per account run at a time (409). It calls `provider.SpendCodexReset`,
+the Usage page's own code, then `RefreshUsage` of that card.
+`TestCodexResetNeedsAFullKey` in
+[`codex_reset_api_test.go`](../../internal/gateway/codex_reset_api_test.go)
+sends it without a key from loopback, `Origin: null`, an app scheme, a
+`*.localhost` page, a rebound Host and a foreign page, then with a wrong,
+read-only and held key, and expects nothing spent until the full key
+asks.
 
 A remote provider serves the conversation, token-counting, System One,
 embeddings, rerank, speech-to-text, image generation/edit and video

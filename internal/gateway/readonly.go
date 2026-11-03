@@ -44,7 +44,7 @@ var readOnlyRoutes = map[string]bool{
 }
 
 // ReadOnlyCode is the error code a read-only key is refused a route with.
-const ReadOnlyCode = "gateway_key_read_only"
+const ReadOnlyCode = provider.KeyReadOnlyCode
 
 // routeMux is a ServeMux that keeps the patterns it was given.
 type routeMux struct {
