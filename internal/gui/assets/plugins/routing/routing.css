@@ -464,7 +464,7 @@ button.rt-session { cursor: pointer; }
 .rt-livedot.on { animation: rtlive 1.8s infinite; }
 @media (prefers-reduced-motion: reduce) { .rt-livedot.on { animation: none; } }
 /* routing groups, and the providers routing over several of their own */
-.rt-gsec { display: grid; gap: 6px; margin-top: 16px; }
+.rt-gsec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin-top: 16px; }
 .rt-gsec .row-head .note { margin-right: 6px; }
 /* the groups filtered by name and model, beside Select and New group */
 .rt-gsec .rt-gfilter { width: 190px; min-width: 0; flex: 0 1 190px; height: 24px; margin: 0 6px 0 4px; }
