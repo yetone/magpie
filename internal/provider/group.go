@@ -948,10 +948,29 @@ func GroupFinder() func(id string) (Group, []Member, bool) {
 			all, find = groupsIn(entries), entriesBy(entries)
 		}
 		if g, ok := groupOf(all, gid); ok && !g.Disabled {
-			return g, membersFound(entries, find, all, g, disabledNow()), true
+			return g, membersFound(entries, find, all, g, disabledNow(), nil), true
 		}
 		return Group{}, nil, false
 	}
+}
+
+// FindDrawingGroup is FindGroup for a drawing (the gateway's images API):
+// a member that is one of its provider's image models, as draws says, is
+// the group's even where the provider's picks leave it out (unpicked).
+// Picks are of chat models, and an image model is offered to a group
+// beside them (jzw690 on X), so a group of image models draws on its
+// members without any of them being a model agents are offered.
+func FindDrawingGroup(id string, draws func(p Provider, model string) bool) (Group, []Member, bool) {
+	gid, ok := GroupIDOf(id)
+	if !ok {
+		return Group{}, nil, false
+	}
+	entries := providerEntries()
+	all := groupsIn(entries)
+	if g, ok := groupOf(all, gid); ok && !g.Disabled {
+		return g, membersFound(entries, entriesBy(entries), all, g, disabledNow(), draws), true
+	}
+	return Group{}, nil, false
 }
 
 // groupOf is the group of an id among all, unless it was removed.
@@ -975,13 +994,14 @@ func membersIn(entries []Entry, all []Group, g Group) []Member {
 
 // membersOff is membersIn less the models off reports.
 func membersOff(entries []Entry, all []Group, g Group, off func(pid, model string) bool) []Member {
-	return membersFound(entries, entriesBy(entries), all, g, off)
+	return membersFound(entries, entriesBy(entries), all, g, off, nil)
 }
 
 // membersFound is membersOff with entries' index made already: GroupFinder
 // looks up every group in one list, and indexing it again for each was
-// most of what the Providers page spent on groups.
-func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(pid, model string) bool) []Member {
+// most of what the Providers page spent on groups. A model also says is
+// the group's whatever p's picks are (FindDrawingGroup); nil for none.
+func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(pid, model string) bool, also func(p Provider, model string) bool) []Member {
 	var out []Member
 	seen := map[string]int{} // where in out
 	at := 0
@@ -1001,7 +1021,7 @@ func membersFound(entries []Entry, find entryOf, all []Group, g Group, off func(
 			model, effort := memberEffortIn(entries, id)
 			p, m, ok := resolveIn(entries, model)
 			key := WithMemberEffort(p.ID+"/"+m, effort)
-			if !ok || unpicked(find, p, m) {
+			if !ok || unpicked(find, p, m) && (also == nil || !also(p, m)) {
 				continue // none serves it, or the user unchecked it (#3911)
 			}
 			fixed, levels := MemberLevels(effort)

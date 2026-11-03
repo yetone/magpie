@@ -838,10 +838,19 @@ func settingsState() settingsJSON {
 		}
 	}
 	// the routing groups with a member that draws (7up6666 on X): a
-	// group picked here draws on its members in its routing's order
+	// group picked here draws on its members in its routing's order. One
+	// of image models only isn't served to agents (jzw690 on X), so it is
+	// listed from the groups themselves
+	listed := map[string]bool{}
 	for _, e := range provider.Served() {
 		if e.Group != "" && gateway.GroupDraws(e.ID) {
+			listed[e.ID] = true
 			s.ImageGenModels = append(s.ImageGenModels, modelRef{ID: e.ID, Name: e.Name, PName: e.Group})
+		}
+	}
+	for _, g := range provider.Groups() {
+		if ref := g.Ref(); !g.Hidden && !g.Disabled && !listed[ref] && gateway.GroupDraws(ref) {
+			s.ImageGenModels = append(s.ImageGenModels, modelRef{ID: ref, Name: cmp.Or(g.Name, g.ID), PName: g.ID})
 		}
 	}
 	if v := gateway.ListedDrawer(s.ImageGen); v != s.ImageGen {

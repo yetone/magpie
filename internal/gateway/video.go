@@ -842,7 +842,7 @@ func (s *Server) videosCreate(w http.ResponseWriter, r *http.Request) {
 		fail(404, fmt.Sprintf("magpie knows no model %q to make videos with", f.Model))
 		return
 	}
-	g, ms, isGroup := drawingGroup(f.Model, p, model)
+	g, ms, isGroup := groupToMake(f.Model, p, model, provider.FindGroup)
 	if isGroup {
 		r = heldByGroup(r, g) // held to the group's accounts, if it is
 	}

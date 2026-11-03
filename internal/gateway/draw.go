@@ -115,9 +115,11 @@ func DrawerMissing() string { return drawerMissing(settings.Load().ImageGen) }
 // with it: pickedMissing's, and a routing group ("group/<id>", 7up6666 on
 // X) none of whose members draws any more.
 func drawerMissing(v string) string {
-	if m := pickedMissing(v); m != "" || !provider.IsGroupRef(v) {
-		return m
+	if !provider.IsGroupRef(v) {
+		return pickedMissing(v)
 	}
+	// a group of image models only is no model agents are offered, so
+	// Resolve doesn't take it: it is missing when none of it draws
 	if !GroupDraws(v) {
 		return v
 	}
@@ -129,7 +131,7 @@ func drawerMissing(v string) string {
 // picked in Settings › Images, and draws on those members in its routing's
 // order, moving on while one fails (drawingGroup, #2005).
 func GroupDraws(ref string) bool {
-	_, ms, ok := provider.FindGroup(ref)
+	_, ms, ok := drawingMembers(ref)
 	if !ok {
 		return false
 	}
@@ -141,6 +143,14 @@ func GroupDraws(ref string) bool {
 	return false
 }
 
+// drawingMembers is the routing group ref with its members ready now to
+// draw on: FindGroup's, and also an image model of a provider whose picks
+// leave it out among them, as the group's editor offers one beside the
+// chat models (jzw690 on X).
+func drawingMembers(ref string) (provider.Group, []provider.Member, bool) {
+	return provider.FindDrawingGroup(ref, drawsModel)
+}
+
 // drawsModel is whether model is one of p's Drawers, a ChatGPT account's
 // other GPT Image names as its one (ListedDrawer).
 func drawsModel(p provider.Provider, model string) bool {
@@ -149,6 +159,18 @@ func drawsModel(p provider.Provider, model string) bool {
 }
 
 func resolveDrawing(id string) (provider.Provider, string, bool) {
+	if provider.IsGroupRef(id) {
+		// its first member that draws: a group of image models only
+		// isn't among the models agents are offered, which Resolve reads
+		if _, ms, ok := drawingMembers(id); ok {
+			for _, m := range ms {
+				if drawsModel(m.Provider, m.Model) {
+					return m.Provider, m.Model, true
+				}
+			}
+		}
+		return provider.Resolve(id)
+	}
 	if strings.Contains(id, "/") {
 		return provider.Resolve(id)
 	}
@@ -693,6 +715,13 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 // goes by (provider.GroupFor) that resolved to one of its members. Any
 // other names a model on its own.
 func drawingGroup(asked string, p provider.Provider, model string) (provider.Group, []provider.Member, bool) {
+	return groupToMake(asked, p, model, drawingMembers)
+}
+
+// groupToMake is drawingGroup with the group's members found by find:
+// a drawing's take its image models in (drawingMembers), a video's are
+// FindGroup's.
+func groupToMake(asked string, p provider.Provider, model string, find func(ref string) (provider.Group, []provider.Member, bool)) (provider.Group, []provider.Member, bool) {
 	ref := asked
 	if !provider.IsGroupRef(ref) {
 		gid, ok := provider.GroupFor(ref)
@@ -701,7 +730,7 @@ func drawingGroup(asked string, p provider.Provider, model string) (provider.Gro
 		}
 		ref = gid
 	}
-	g, ms, ok := provider.FindGroup(ref)
+	g, ms, ok := find(ref)
 	if !ok || len(ms) == 0 {
 		return provider.Group{}, nil, false
 	}
