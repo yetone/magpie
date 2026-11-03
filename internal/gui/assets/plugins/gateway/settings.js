@@ -273,24 +273,44 @@ let lanSelectedURL = "", lanProtocol = "openai";
 // the address picked under Share on local network is kept like Connect's
 let lanWant = "";
 try { lanWant = localStorage.getItem("magpie.lanAddress") || ""; } catch {}
-// lanShown: the local network addresses the gateway is offered at, and a
-// line on them when magpie runs in a container, for Settings and Gateway
-// alike. In a container magpie finds only the container's own addresses;
-// the page opened over the network was reached at the host's, so the
-// gateway is offered there, on its port.
-function lanShown(urls, container) {
-  if (!container) return { urls, sub: "" };
-  const host = location.hostname, port = urls.length ? new URL(urls[0]).port : "";
-  if (web && host && port && !/^(localhost|127\.|\[::1\]$)/.test(host))
-    return { urls: ["http://" + host + ":" + port], // an IPv6 hostname comes bracketed
-      sub: t("Where this page was opened, on the gateway’s port; MAGPIE_PUBLIC_URL sets another") };
-  return { urls, sub: t("The container’s own addresses, which other devices can’t reach: set MAGPIE_PUBLIC_URL to the host’s") };
+// lanShown: the addresses the gateway is offered at beyond this computer,
+// those of them for other containers on this host, and a line on them
+// when magpie runs in a container, for Settings, Gateway, Connect, the
+// sidebar and the key page alike. In a container magpie finds only its
+// own addresses; the page opened over the network was reached at the
+// host's, so the gateway is offered there, on its port. Other containers
+// on the host reach it at the host's Docker bridge address, the
+// container's default route (jiezhengj on Discord: other containers on a
+// NAS needed http://172.17.0.1:3425), which follows, said to be theirs.
+function lanShown(urls, container, bridge) {
+  const others = bridge ? [bridge] : [];
+  if (!container) return { urls: [...urls, ...others.filter((u) => !urls.includes(u))], others, sub: "" };
+  const host = location.hostname, at = urls[0] || bridge ? new URL(urls[0] || bridge) : null;
+  if (web && host && at?.port && !/^(localhost|127\.|\[::1\]$)/.test(host))
+    return { urls: [at.protocol + "//" + host + ":" + at.port, ...others], others, // an IPv6 hostname comes bracketed
+      sub: others.length ? t("Other devices use the host’s address this page was opened at, and other containers on this host the host’s Docker bridge address, both on the gateway’s port; MAGPIE_PUBLIC_URL sets another")
+        : t("Where this page was opened, on the gateway’s port; MAGPIE_PUBLIC_URL sets another") };
+  if (others.length) return { urls: others, others,
+    sub: t("Other containers on this host use the host’s Docker bridge address, on the gateway’s port; other devices use the host’s own, which MAGPIE_PUBLIC_URL puts here") };
+  return { urls, others, sub: t("The container’s own addresses, which other devices can’t reach: set MAGPIE_PUBLIC_URL to the host’s") };
+}
+// gwLAN: lanShown for the gateway's read (providers', or boot.js's line),
+// which says whether its addresses are a container's and where other
+// containers reach it
+function gwLAN(g) {
+  return lanShown(g?.lan && g.lanURLs || [], !!g?.container, g?.lan && g.containerHost || "");
+}
+// gwFar: where other machines reach the gateway, for the sidebar and the
+// key page: other containers' address only when there is no other
+function gwFar(g) {
+  const { urls, others } = gwLAN(g), far = urls.filter((u) => !others.includes(u));
+  return far.length ? far : urls;
 }
 // sideLAN: where other machines reach the gateway while it is shared, for
 // the sidebar's line (coeo91 on Discord): MAGPIE_PUBLIC_URL, else the
 // address picked here, else the first
 function sideLAN(g) {
-  const u = g.lan && g.lanURLs || [];
+  const u = gwFar(g);
   return u[0] && (g.publicURL || (u.includes(lanWant) ? lanWant : u[0]));
 }
 // the line was drawn from boot.js before this script came
@@ -320,7 +340,7 @@ function renderLAN(s) {
   row(t("Share on local network"), t("Agents on other computers on this network, or through a tunnel to this one such as Cloudflare Tunnel, can use magpie’s models with a gateway key from Gateway"), "",
     segs([["off", t("Off")], ["on", t("On")]], s.lan ? "on" : "off", (v) => set({ on: v === "on" })));
   if (!s.lan) return;
-  const { urls, sub } = lanShown(s.lanURLs || [], s.lanContainer);
+  const { urls, others, sub } = lanShown(s.lanURLs || [], s.lanContainer, s.lanContainerHost);
   if (!urls.length) row(t("Address"), t("This computer has no local network address right now"), "");
   else {
     lanSelectedURL = urls.includes(lanWant) ? lanWant : urls[0];
@@ -337,7 +357,7 @@ function renderLAN(s) {
         e.stopPropagation();
         if (address.classList.contains("open")) return closeProtoMenu();
         const suffix = lanProtocol === "openai" ? "/v1" : "";
-        openProtoMenu(address, urls.map((u) => ({ v: u, name: u + suffix, note: far.has(u) ? t("On the internet") : "" })), lanSelectedURL,
+        openProtoMenu(address, urls.map((u) => ({ v: u, name: u + suffix, note: far.has(u) ? t("On the internet") : others.includes(u) ? t("Other containers on this host") : "" })), lanSelectedURL,
           (v) => { lanSelectedURL = lanWant = v; keepPick("magpie.lanAddress", v); update(); renderSideGw(); }, "Address", "lan-address-menu");
       };
     }

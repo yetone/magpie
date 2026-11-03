@@ -511,6 +511,9 @@ type settingsJSON struct {
 	// LANURLs are a container's own addresses, not the host's: the page
 	// offers the one it was opened at instead, or says how to set it
 	LANContainer bool `json:"lanContainer,omitempty"`
+	// where other containers on this host reach the gateway while magpie
+	// runs in one (gateway.ContainerHostURL)
+	LANContainerHost string `json:"lanContainerHost,omitempty"`
 	// those of LANURLs at an internet address, which anyone online can
 	// reach, not only this network
 	LANPublic []string `json:"lanPublic,omitempty"`
@@ -771,6 +774,7 @@ func settingsState() settingsJSON {
 	s.Login, s.LoginAllow = login != autostart.Off, login == autostart.NeedsAllowing
 	if s.LAN {
 		s.LANURLs, s.LANContainer = gateway.LANURLs(), gateway.ContainerAddrs()
+		s.LANContainerHost = gateway.ContainerHostURL()
 		s.LANPublic = gateway.PublicURLs(s.LANURLs)
 	}
 	s.CodexWarmed, s.ClaudeWarmed = latest(provider.CodexWarmed()), latest(provider.ClaudeWarmed())
@@ -1031,6 +1035,13 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 			// window's line names from the first paint (coeo91 on Discord)
 			if s.LAN || gateway.OnNetwork() {
 				side["lan"], side["lanURLs"] = true, gateway.LANURLs()
+				// in a container they are its own: the line names the host's
+				if gateway.ContainerAddrs() {
+					side["container"] = true
+				}
+				if u := gateway.ContainerHostURL(); u != "" {
+					side["containerHost"] = u
+				}
 				if u := gateway.PublicURL(); u != "" {
 					side["publicURL"] = u
 				}

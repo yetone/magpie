@@ -119,6 +119,7 @@ docker logs magpie</pre>
       <pre>● magpie web on http://127.0.0.1:3430/?k=0f3c9a1e…
   on the network http://172.17.0.2:3430/?k=0f3c9a1e…
   these are the container's own addresses: other machines use the host's, and MAGPIE_PUBLIC_URL=http://&lt;host&gt;:&lt;port&gt; puts it here
+  other containers on this host http://172.17.0.1:3425
 ! anyone with the link can change magpie and see its keys, and the network carries it unencrypted
   the link carries MAGPIE_WEB_KEY · gateway http://127.0.0.1:3425 · Ctrl-C to stop</pre>
     </div>
@@ -176,6 +177,7 @@ docker logs magpie</pre>
       <li><b>ポートを公開する</b><code>-p 3425:3425</code>（または NAS の LAN や VPN のアドレスに限定して <code>-p 192.168.1.20:3425:3425</code>）と <code>-e MAGPIE_PUBLIC_URL=http://192.168.1.20:3425</code> を付けてコンテナを作り直します。</li>
     </ol>
     <p>ほかのコンピューターでは、エージェントをゲートウェイに向け、そのキーのどれかを API キーにします：OpenAI クライアントなら <code>http://192.168.1.20:3425/v1</code>、Anthropic や Gemini なら <code>http://192.168.1.20:3425</code>。モデル ID は <code>provider/model</code> かルーティンググループの名前で、<code>GET /v1/models</code> が一覧を返します。そのコンピューターでも magpie を動かしているなら、コンテナを<a href="/docs/ja/remote">リモート magpie</a> として追加すれば、magpie がエージェントを設定します。</p>
+    <p id="containers"><b>同じホストのほかのコンテナ。</b>NAS 上のほかのコンテナは、Docker の bridge のゲートウェイと公開ポートを通して、ホスト上の magpie に到達します：Docker 既定の bridge では <code>http://172.17.0.1:3425</code> です。コンテナ自身の <code>172.17.x</code> アドレスはそのコンテナには使えず、ホストの LAN アドレスも、NAS のファイアウォールがコンテナからの接続を止めることがあるので、使えない場合があります。<code>host.docker.internal</code> は Docker Desktop では同じアドレスで、Linux では <code>extra_hosts: ["host.docker.internal:host-gateway"]</code> を付けたコンテナにだけあります。magpie と同じ compose ネットワークや自分で作ったネットワークのコンテナは、名前で到達できます：<code>http://magpie:3425</code>。どちらの場合もゲートウェイキーを送ります。ログとブラウザ UI は、このアドレスを <span class="ui">同じホストのほかのコンテナ</span> として、ページを開いたホストのアドレスの後に表示します。</p>
     <p>コンテナでは <span class="ui">設定</span> → <span class="ui">ネットワークと共有</span> → <span class="ui">ローカルネットワークで共有</span> は不要です。オンにすると <span class="ui">Magpie</span> という名前のゲートウェイキーも作られますが、ゲートウェイはどちらでもコンテナの外からのリクエストにキーを求めます。</p>
     <p><b>以前のイメージからの更新。</b>コンテナの外から <code>magpie</code> や、有効なゲートウェイキーではないキーを送るエージェントは、401（“the API key sent is not an enabled magpie gateway key”）を受け取るようになります。上の手順でキーを作り、エージェントの設定に入れてください。すでにゲートウェイキーを送っているエージェントや、ゲートウェイキーで追加したリモート magpie はそのまま動きます。</p>
     <p id="allow"><b>許可するアドレス。</b>公開ホストでは <code>-e MAGPIE_ALLOW_IPS=203.0.113.7,10.0.0.0/8</code> にクライアントのアドレスを書きます。ほかのアドレスからのリクエストはキーを見る前に 403 で拒否されるので、漏れたキーもよそからは使えません。拒否のメッセージとコンテナのログには、リクエスト元のアドレスが出ます。magpie が見るのは接続そのもののアドレスで、<code>X-Forwarded-For</code> ヘッダーは信用しません。書き間違えた項目は、すべてを通すのではなく、何も通しません。Docker 既定の bridge ネットワークはクライアント自身のアドレスをコンテナに渡しますが、ホスト自身からのリクエストは bridge のゲートウェイ（<code>172.17.0.1</code>）から届き、Docker Desktop や rootless Docker ではすべてのクライアントがそれ自身のひとつのアドレスに見えます。それを追加するか、403 に書かれたアドレスを確かめてください。リバースプロキシやトンネルの後ろでは、すべてのリクエストがプロキシのアドレスから届くので、接続できる人はプロキシで制限してください。デスクトップ版では同じリストが <span class="ui">設定</span> → <span class="ui">ネットワークと共有</span> → <span class="ui">許可するアドレス</span> にあります。</p>

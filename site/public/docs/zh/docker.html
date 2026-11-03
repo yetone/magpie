@@ -119,6 +119,7 @@ docker logs magpie</pre>
       <pre>● magpie web on http://127.0.0.1:3430/?k=0f3c9a1e…
   on the network http://172.17.0.2:3430/?k=0f3c9a1e…
   these are the container's own addresses: other machines use the host's, and MAGPIE_PUBLIC_URL=http://&lt;host&gt;:&lt;port&gt; puts it here
+  other containers on this host http://172.17.0.1:3425
 ! anyone with the link can change magpie and see its keys, and the network carries it unencrypted
   the link carries MAGPIE_WEB_KEY · gateway http://127.0.0.1:3425 · Ctrl-C to stop</pre>
     </div>
@@ -176,6 +177,7 @@ docker logs magpie</pre>
       <li><b>发布端口</b>用 <code>-p 3425:3425</code>（或绑定到 NAS 的局域网或 VPN 地址，<code>-p 192.168.1.20:3425:3425</code>）并加上 <code>-e MAGPIE_PUBLIC_URL=http://192.168.1.20:3425</code> 重新创建容器。</li>
     </ol>
     <p>在其他电脑上，把 Agent 指向这个网关，用其中一个密钥作为 API key：OpenAI 客户端用 <code>http://192.168.1.20:3425/v1</code>，Anthropic 或 Gemini 客户端用 <code>http://192.168.1.20:3425</code>。模型 id 是 <code>provider/model</code> 或路由组的名字，<code>GET /v1/models</code> 会列出它们。如果那台电脑自己也运行 magpie，就把容器添加为<a href="/docs/zh/remote">远程 magpie</a>，由 magpie 替你配置 Agent。</p>
+    <p id="containers"><b>同一宿主机上的其他容器。</b>NAS 上的其他容器通过 Docker bridge 的网关和发布的端口访问宿主机上的 magpie：Docker 默认 bridge 网络上是 <code>http://172.17.0.1:3425</code>。容器自己的 <code>172.17.x</code> 地址对它们没用，宿主机的局域网地址也可能不行，因为 NAS 的防火墙可能挡住来自容器的访问。<code>host.docker.internal</code> 在 Docker Desktop 上是同一个地址，在 Linux 上只有加了 <code>extra_hosts: ["host.docker.internal:host-gateway"]</code> 的容器里才有。和 magpie 在同一个 compose 网络或你自己建的网络里的容器，可以按名字访问：<code>http://magpie:3425</code>。无论哪种都要带网关密钥。日志和 Web 界面把这个地址列为 <span class="ui">同一主机上的其他容器</span>，排在打开页面所用的宿主机地址之后。</p>
     <p>容器里不需要打开 <span class="ui">设置</span> → <span class="ui">网络与共享</span> → <span class="ui">局域网共享</span>：打开它会另外生成一个名为 <span class="ui">Magpie</span> 的网关密钥，而不论开关如何，网关都会向容器外的请求要密钥。</p>
     <p><b>从旧镜像升级。</b>容器外发送 <code>magpie</code> 或其他非启用网关密钥的 Agent，现在会收到 401（“the API key sent is not an enabled magpie gateway key”）。按上面的步骤给它生成一个密钥，填进 Agent 的设置。已经发送网关密钥的 Agent，以及用网关密钥添加的远程 magpie，照常工作。</p>
     <p id="allow"><b>允许的地址。</b>在公网主机上，用 <code>-e MAGPIE_ALLOW_IPS=203.0.113.7,10.0.0.0/8</code> 写上你的客户端所在的地址。来自其他地址的请求在看密钥之前就被拒绝（403），所以泄露的密钥从别处也用不了；拒绝信息和容器日志都会写出请求来自的地址。magpie 判断的是连接本身的地址，从不采信 <code>X-Forwarded-For</code> 头；写错的条目不会放行任何地址，而不是放行所有地址。Docker 默认的 bridge 网络会把客户端自己的地址传进容器，但宿主机自己发出的请求来自 bridge 的网关（<code>172.17.0.1</code>），Docker Desktop 和 rootless Docker 则把所有客户端显示成它们自己的一个地址：把它加上，或看 403 里写的是哪个。在反向代理或隧道后面时，所有请求都来自代理的地址，请在代理那里限制谁能访问。桌面版里同一个列表在 <span class="ui">设置</span> → <span class="ui">网络与共享</span> → <span class="ui">允许的地址</span>。</p>

@@ -512,6 +512,13 @@ type gatewayJSON struct {
 	// LANPublic are those of LANURLs at an internet address, which anyone
 	// online reaches, not only this network
 	LANPublic []string `json:"lanPublic,omitempty"`
+	// Container: LANURLs are a container's own addresses, which other
+	// devices, and containers on other Docker networks, can't reach: the
+	// page offers the host's it was opened at first (lanShown)
+	Container bool `json:"container,omitempty"`
+	// ContainerHost: where other containers on this host reach the
+	// gateway while magpie runs in one (gateway.ContainerHostURL)
+	ContainerHost string `json:"containerHost,omitempty"`
 	// OnNetwork: MAGPIE_ADDR puts it beyond loopback (a server, a Docker
 	// image), so every caller is shown a gateway key, and LAN is true too:
 	// callers from elsewhere, a container's host among them, need one
@@ -1135,6 +1142,7 @@ func providersState() providersJSON {
 	if s.Gateway.LAN {
 		s.Gateway.LANURLs = gateway.LANURLs()
 		s.Gateway.LANPublic = gateway.PublicURLs(s.Gateway.LANURLs)
+		s.Gateway.Container, s.Gateway.ContainerHost = gateway.ContainerAddrs(), gateway.ContainerHostURL()
 		if u := gateway.PublicURL(); slices.Contains(s.Gateway.LANURLs, u) {
 			s.Gateway.PublicURL = u
 		}

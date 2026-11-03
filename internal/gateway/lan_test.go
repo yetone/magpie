@@ -201,6 +201,36 @@ func TestInContainer(t *testing.T) {
 	}
 }
 
+// A container on the host's network (network_mode: host, as NAS panels
+// offer) sees the host's interfaces, Docker's bridges among them, and its
+// addresses are the host's: they aren't said to be a container's own. A
+// container on a bridge network has its eth0 alone (jiezhengj on Discord:
+// magpie in Docker on a NAS).
+func TestHostNetwork(t *testing.T) {
+	for _, c := range []struct {
+		names []string
+		want  bool
+	}{
+		{[]string{"lo", "eth0"}, false},
+		{[]string{"lo", "eth0", "eth1"}, false},
+		{[]string{"lo", "eth0", "docker0", "br-3f1c2a9b0d4e", "veth1a2b3c4"}, true},
+		{[]string{"lo", "ovs_eth0", "docker0"}, true},
+		{[]string{"lo", "enp3s0", "cni-podman0"}, true},
+		{[]string{"lo", "eth0", "podman0"}, true},
+	} {
+		if got := hostNetwork(c.names); got != c.want {
+			t.Errorf("%v: %v, want %v", c.names, got, c.want)
+		}
+	}
+	was := ifaceNames
+	t.Cleanup(func() { ifaceNames = was })
+	t.Setenv("MAGPIE_PUBLIC_URL", "")
+	ifaceNames = func() []string { return []string{"lo", "eth0", "docker0"} }
+	if ContainerAddrs() {
+		t.Error("on the host's network, the addresses are said to be a container's")
+	}
+}
+
 // Another computer lists the models with the key it was given whatever
 // else its client sends beside it: an empty or placeholder Authorization
 // with the key in x-api-key, a stale token there, "bearer" in lower case
@@ -387,5 +417,45 @@ func TestNetworkGatewayGuardsEveryRoute(t *testing.T) {
 	}
 	if c, b := call("GET", "/v1/models", "127.0.0.1:5000", "Authorization", "Bearer magpie"); c != 200 {
 		t.Fatal("loopback:", c, b)
+	}
+}
+
+// TestDefaultGateway reads the bridge's gateway from a container's
+// /proc/net/route, as Docker's default bridge writes it (jiezhengj's NAS:
+// other containers reach the host at 172.17.0.1).
+func TestDefaultGateway(t *testing.T) {
+	const docker = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
+		"eth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n" +
+		"eth0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n"
+	for _, c := range []struct{ name, table, want string }{
+		{"docker's default bridge", docker, "172.17.0.1"},
+		{"a compose network", "Iface\tDestination\tGateway\tFlags\neth0\t000013AC\t00000000\t0001\neth0\t00000000\t010013AC\t0003\n", "172.19.0.1"},
+		{"no default route", "Iface\tDestination\tGateway\tFlags\neth0\t000011AC\t00000000\t0001\n", ""},
+		{"a default route without a gateway", "Iface\tDestination\tGateway\tFlags\neth0\t00000000\t00000000\t0001\n", ""},
+		{"no table (not Linux)", "", ""},
+	} {
+		if got := defaultGateway(c.table); got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+	// in a container it is offered on the gateway's port; on the host's
+	// network, where the addresses are the host's own, it is not
+	t.Cleanup(func(rt func() string, ifn func() []string, in func() bool) func() {
+		return func() { routeTable, ifaceNames, inThisContainer = rt, ifn, in }
+	}(routeTable, ifaceNames, inThisContainer))
+	routeTable = func() string { return docker }
+	ifaceNames = func() []string { return []string{"lo", "eth0"} }
+	inThisContainer = func() bool { return true }
+	if got, want := ContainerHostURL(), Scheme()+"://172.17.0.1:"+Port(); got != want {
+		t.Errorf("in a container: %q, want %q", got, want)
+	}
+	ifaceNames = func() []string { return []string{"lo", "eth0", "docker0"} }
+	if got := ContainerHostURL(); got != "" {
+		t.Errorf("on the host's network: %q, want none", got)
+	}
+	ifaceNames = func() []string { return []string{"lo", "eth0"} }
+	inThisContainer = func() bool { return false }
+	if got := ContainerHostURL(); got != "" {
+		t.Errorf("not in a container: %q, want none", got)
 	}
 }

@@ -138,6 +138,9 @@ func printWeb(w *gui.Web) {
 		if gateway.ContainerAddrs() {
 			fmt.Println(muted.Render("  " + containerNote))
 		}
+		if l := containerLine(); l != "" {
+			fmt.Println(l)
+		}
 		fmt.Println(amber.Render("!"), lanWarning())
 	} else if l := proxyLink(key); l != "" {
 		fmt.Println(muted.Render("  through your proxy"), l)

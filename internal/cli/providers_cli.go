@@ -1372,8 +1372,19 @@ func keyNote() string {
 }
 
 // containerNote follows the addresses magpie finds for itself in a
-// container, which are the container's own.
+// container, which are the container's own: other machines reach it at
+// the host's, and other containers on the host at the bridge's gateway
+// (jiezhengj on Discord: 172.17.0.1 on a NAS), containerLine's.
 const containerNote = "these are the container's own addresses: other machines use the host's, and MAGPIE_PUBLIC_URL=http://<host>:<port> puts it here"
+
+// containerLine is where other containers on this host reach the gateway
+// while magpie runs in one, "" when that isn't known.
+func containerLine() string {
+	if u := gateway.ContainerHostURL(); u != "" {
+		return muted.Render("  other containers on this host ") + u
+	}
+	return ""
+}
 
 // shareLines are where other machines reach the gateway while it is shared
 // from Settings, for the banner.
@@ -1387,6 +1398,9 @@ func shareLines() []string {
 	}
 	if gateway.ContainerAddrs() {
 		out = append(out, muted.Render("  "+containerNote))
+	}
+	if l := containerLine(); l != "" {
+		out = append(out, l)
 	}
 	return out
 }

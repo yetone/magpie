@@ -297,7 +297,7 @@ function gatewayKeysArrange(list, rows) {
 // (zytszone on X: a department shares one magpie, whose app its people
 // can't be given). Its address is the one other machines reach.
 function gatewayKeyPage() {
-  const g = providers?.gateway, lan = g?.lanURLs || [];
+  const g = providers?.gateway, lan = gwFar(g);
   const at = g?.publicURL || (lan.includes(connectURL) ? connectURL : lan[0]);
   if (!at || !gatewayKeys?.length) return null;
   const url = at.replace(/\/+$/, "") + "/me";

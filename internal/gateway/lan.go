@@ -131,8 +131,95 @@ func PublicHost() string {
 
 // ContainerAddrs: the addresses magpie finds for itself are a container's,
 // which other machines can't reach, and MAGPIE_PUBLIC_URL doesn't say the
-// host's.
-func ContainerAddrs() bool { return publicURL() == "" && inContainer("/") }
+// host's. A container on the host's network (network_mode: host, which
+// NAS panels offer) has the host's own addresses, and they are said as
+// they are.
+func ContainerAddrs() bool {
+	return publicURL() == "" && inContainer("/") && !hostNetwork(ifaceNames())
+}
+
+// hostNetwork: the interfaces names are the host's, not a container's own:
+// a host running containers has their bridges and veth pairs (docker0,
+// br-…, veth…, Podman's cni-podman0 or podman0), which a container on a
+// bridge network never sees; it has its eth0 alone.
+func hostNetwork(names []string) bool {
+	for _, n := range names {
+		for _, p := range []string{"docker0", "br-", "veth", "cni-podman", "podman"} {
+			if strings.HasPrefix(n, p) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ifaceNames are this system's network interfaces' names; a variable for
+// the tests.
+var ifaceNames = func() []string {
+	ifs, _ := net.Interfaces()
+	out := make([]string, 0, len(ifs))
+	for _, i := range ifs {
+		out = append(out, i.Name)
+	}
+	return out
+}
+
+// ContainerHostURL is where other containers on this host reach the
+// gateway while magpie runs in a container on a bridge network: the host
+// at the container's default route, the bridge's gateway (Docker's
+// 172.17.0.1), on the gateway's port as published. The container's own
+// address is reached only from its own Docker network, and the host's LAN
+// address may not be reached from a container through the NAS's firewall
+// (jiezhengj on Discord: 192.168.31.218 worked from other devices, and
+// other containers on the NAS needed 172.17.0.1); host.docker.internal is
+// not there on Linux unless a container is given it. "" when magpie is
+// not in a container, is on the host's network, or has no default route.
+func ContainerHostURL() string {
+	if !inThisContainer() || hostNetwork(ifaceNames()) {
+		return ""
+	}
+	gw := defaultGateway(routeTable())
+	if gw == "" {
+		return ""
+	}
+	return Scheme() + "://" + net.JoinHostPort(gw, Port())
+}
+
+// inThisContainer is inContainer("/"); a variable for the tests.
+var inThisContainer = func() bool { return inContainer("/") }
+
+// routeTable is Linux's IPv4 routing table; a variable for the tests.
+var routeTable = func() string {
+	b, _ := os.ReadFile("/proc/net/route")
+	return string(b)
+}
+
+// defaultGateway is the gateway of /proc/net/route's default route: its
+// Destination 00000000 with RTF_GATEWAY (0x2) set, the address in the
+// kernel's byte order, little-endian on every machine Docker images are
+// built for here (amd64, arm64). "" when there is none.
+func defaultGateway(table string) string {
+	for _, line := range strings.Split(table, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 4 || f[1] != "00000000" {
+			continue
+		}
+		flags, err := strconv.ParseUint(f[3], 16, 16)
+		if err != nil || flags&0x2 == 0 {
+			continue
+		}
+		v, err := strconv.ParseUint(f[2], 16, 32)
+		if err != nil || v == 0 {
+			continue
+		}
+		ip := netip.AddrFrom4([4]byte{byte(v), byte(v >> 8), byte(v >> 16), byte(v >> 24)})
+		if ip.IsLoopback() || ip.IsUnspecified() {
+			continue
+		}
+		return ip.String()
+	}
+	return ""
+}
 
 // InContainer: this magpie runs in a container (Docker, Podman, a
 // Kubernetes pod), whose image is what gets updated, not its binary.

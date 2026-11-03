@@ -2926,6 +2926,12 @@ published on the host) for the address it shows and prints to be the one
 other machines use; behind a reverse proxy, set it to that external base URL
 and follow the [authentication requirements above](#connecting-anything-else),
 especially when the proxy reaches magpie over loopback.
+Other containers on the same host reach the gateway at the host's Docker
+bridge address on the published port, `http://172.17.0.1:3425` on the default
+bridge; magpie reads it from the container's default route and lists it as
+"Other containers on this host" (in the browser UI and in `magpie web`'s log).
+On Linux `host.docker.internal` is there only for a container given
+`extra_hosts: ["host.docker.internal:host-gateway"]`.
 
 For the browser UI run the image with `magpie web --addr 0.0.0.0:3430 --no-open`
 in place of the default `serve`, and open

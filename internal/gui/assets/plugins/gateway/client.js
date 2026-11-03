@@ -278,12 +278,15 @@ function renderGatewayLan() {
   const shown = web && g.publicURL || g.url;
   line(t(shown === g.url ? "This computer" : "Public address"), shown);
   if (g.lan) {
-    const { urls, sub } = lanShown(g.lanURLs || [], prefs?.lanContainer);
+    const { urls, others, sub } = gwLAN(g);
     // an internet address on an interface (an ISP's static one) is said
-    // to be one, not listed as this network's
+    // to be one, not listed as this network's, and the one other
+    // containers on this host use (the host's Docker bridge address) is
+    // said to be theirs
     const far = new Set(g.lanPublic || []), rest = urls.filter((u) => u !== shown);
-    rest.filter((u) => !far.has(u)).forEach((u, i) => line(i ? "" : t("Local network"), u));
-    rest.filter((u) => far.has(u)).forEach((u, i) => line(i ? "" : t("On the internet"), u));
+    rest.filter((u) => !far.has(u) && !others.includes(u)).forEach((u, i) => line(i ? "" : t("Local network"), u));
+    rest.filter((u) => others.includes(u)).forEach((u, i) => line(i ? "" : t("Other containers on this host"), u));
+    rest.filter((u) => far.has(u) && !others.includes(u)).forEach((u, i) => line(i ? "" : t("On the internet"), u));
     if (!urls.length) list.append(el("div", "gw-url-none", t("This computer has no local network address right now")));
     if (sub) list.append(el("div", "gw-url-none", sub));
   }
@@ -504,7 +507,7 @@ function renderConnect() {
   // no SDK speaks System One, so it has no shell variables to set
   const langs = f.baseEnv ? langs4() : langs4().filter(([id]) => id !== "shell");
   const snipLang = langs.some(([id]) => id === lang) ? lang : "curl";
-  const urls = [g.url, ...(g.lanURLs || [])];
+  const urls = [g.url, ...gwLAN(g).urls];
   // the address picked is kept (coeo91): an address not offered right now
   // (the network not up yet after a start) shows this computer's, and the
   // pick comes back with it. With none picked, MAGPIE_PUBLIC_URL is where

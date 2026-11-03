@@ -60,7 +60,7 @@ func TestPublicURL(t *testing.T) {
 				if got := PublicHost(); got != "" {
 					t.Errorf("invalid public host: %q", got)
 				}
-				if got := ContainerAddrs(); got != inContainer("/") {
+				if got := ContainerAddrs(); got != (inContainer("/") && !hostNetwork(ifaceNames())) {
 					t.Errorf("invalid URL must be treated as unset in a container: %v", got)
 				}
 				for _, got := range LANURLs() {
