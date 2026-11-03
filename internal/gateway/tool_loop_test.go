@@ -350,3 +350,44 @@ func TestTailOfReadsInPlace(t *testing.T) {
 		t.Fatalf("%d bytes allocated for a %d byte tail of a %d byte body", n, len(want), len(body))
 	}
 }
+
+// A wait asked again with the same arguments gets the same answer by
+// design (xiaozhi09400: clock__sleep {"duration_ms":60000} while CI ran).
+// Any other call, however it is named, is still a loop.
+func TestToolLoopLetsWaitsBy(t *testing.T) {
+	loopOf := func(name, args string) bool {
+		var msgs []Message
+		for i := range toolLoopRepeats + 2 {
+			id := fmt.Sprintf("call_%d", i)
+			msgs = append(msgs,
+				Message{Role: "assistant", Parts: []Part{{Kind: ToolCall, ID: id, Name: name, Args: json.RawMessage(args)}}},
+				Message{Role: "user", Parts: []Part{{Kind: ToolResult, CallID: id, Text: "ok"}}})
+		}
+		_, ok := toolLoopOf(msgs)
+		return ok
+	}
+	for _, c := range []struct{ name, args string }{
+		{"clock__sleep", `{"duration_ms":60000}`},
+		{"mcp__clock__sleep", `{"duration_ms":60000}`},
+		{"clock.sleep", `{}`},
+		{"wait_for_ci", `{"run":"123"}`},
+		{"waitForBuild", `{"id":"b1"}`},
+		{"delay", `{"ms":500}`},
+		{"pause", `{}`},
+		{"timer__start", `{"seconds":30}`},
+	} {
+		if loopOf(c.name, c.args) {
+			t.Errorf("%s %s was stopped as a loop", c.name, c.args)
+		}
+	}
+	for _, c := range []struct{ name, args string }{
+		{"exec_command", `{"cmd":"sed -n 1,200p src/parser.rs"}`},
+		{"wait__read_file", `{"path":"a.rs"}`}, // a server named wait
+		{"clock__now", `{"tz":"UTC"}`},
+		{"timer__start", `{"seconds":30,"label":"x"}`},
+	} {
+		if !loopOf(c.name, c.args) {
+			t.Errorf("%s %s was let by as a wait", c.name, c.args)
+		}
+	}
+}
