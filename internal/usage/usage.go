@@ -665,6 +665,16 @@ func DecodeWindow(out int, ms, ttft int64) int64 {
 //     reasoning hidden from the stream (OpenAI's, Claude's omitted) comes
 //     before the first content and leaves this time short; one that
 //     streams comes at the pace its answer does.
+//   - a window under HeldWindowMs after a wait HeldShare times longer: the
+//     reply came whole in a moment after a long silence, and what it was
+//     written over is not seen (pluviophile714 on Discord: gpt-6.1-sol,
+//     392 tokens 0.25 s after an 8.2 s first token, read 1,539 tok/s where
+//     the vendor writes ~70). Its content can come spread over that moment
+//     (a relay replaying a held reply, OpenAI's answer let go after its
+//     hidden reasoning), so flow doesn't tell it. A stream as it is written
+//     takes a second or more to write a few hundred tokens; one that takes
+//     under a second is too short a sample to tell a speed by against such
+//     a wait, so a short answer after a long think tells none either.
 func DecodeOf(out, reasoning int, ms, ttft, firstText, flow int64, firstReasoning ...int64) (tokens int, w int64) {
 	start := ttft
 	if reasoning > 0 {
@@ -685,19 +695,24 @@ func DecodeOf(out, reasoning int, ms, ttft, firstText, flow int64, firstReasonin
 	if flow > 0 && flow*HeldShare < w {
 		return 0, 0
 	}
+	if w < HeldWindowMs && start > HeldShare*w {
+		return 0, 0
+	}
 	if reasoning > 0 && firstText > 0 && int64(out)*(firstText-ttft) > ThinkPace*int64(reasoning)*w {
 		return 0, 0
 	}
 	return out, w
 }
 
-// HeldShare and ThinkPace tell a reply held back and let go in a burst
-// (DecodeOf): its content came in under a quarter of its window, or its
-// answer at over 20 times the pace its reasoning came. routing/client.js's
-// decodeOf and app.js's ledDecode have the same.
+// HeldShare, ThinkPace and HeldWindowMs tell a reply held back and let go
+// in a burst (DecodeOf): its content came in under a quarter of its window,
+// its answer at over 20 times the pace its reasoning came, or its window
+// was under a second and under a quarter of the wait before it.
+// routing/client.js's decodeOf and usage/page.js's ledDecode have the same.
 const (
-	HeldShare = 4
-	ThinkPace = 20
+	HeldShare    = 4
+	ThinkPace    = 20
+	HeldWindowMs = 1000
 )
 
 // Decode is the record's DecodeOf.

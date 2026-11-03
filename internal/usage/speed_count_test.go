@@ -152,7 +152,8 @@ func TestCodexWholeTurnFloorNeedsAThousandTokens(t *testing.T) {
 // body 100 tokens or more; else it tells the least it wrote at over the
 // whole turn, when that is 1,000 tokens or more over a second or more, as
 // Claude Code's whole-time floor is. The gateway's own rows, and other
-// agents', keep their speed.
+// agents', keep their speed after a short wait, and tell none 0.2 s after a
+// long one (HeldWindowMs).
 func TestCodexTurnMeasuredOnlyOverASecondAndAHundredTokens(t *testing.T) {
 	row := func(out int, ms, ttft int64) Row {
 		return Row{Source: "log", Record: Record{Agent: "codex", Model: "gpt-6.1-sol", Output: out, Millis: ms, TTFT: ttft}}
@@ -181,13 +182,20 @@ func TestCodexTurnMeasuredOnlyOverASecondAndAHundredTokens(t *testing.T) {
 			t.Errorf("%s: floor %d/%d ms, want %d/%d", c.name, n, ms, c.floorN, c.floorMs)
 		}
 	}
-	// the same reply through the gateway, or Claude Code's, keeps its speed
+	// the same reply through the gateway, or Claude Code's, tells none
+	// either: 0.2 s after a 6.8 s wait is a reply let go whole
+	// (HeldWindowMs, pluviophile714 on Discord); after a 0.3 s first token,
+	// they keep their speed
 	for _, r := range []Row{
 		{Record: Record{Agent: "codex", Output: 380, Millis: 7000, TTFT: 6800}},
 		{Source: "log", Record: Record{Agent: "claude", Output: 380, Millis: 7000, TTFT: 6800}},
 	} {
+		if n, w := r.Decode(); n != 0 || w != 0 {
+			t.Errorf("%s/%q: measured %d/%d ms, want none", r.Agent, r.Source, n, w)
+		}
+		r.Millis, r.TTFT = 500, 300
 		if n, w := r.Decode(); n != 380 || w != 200 {
-			t.Errorf("%s/%q: measured %d/%d ms, want 380/200", r.Agent, r.Source, n, w)
+			t.Errorf("%s/%q after a short wait: measured %d/%d ms, want 380/200", r.Agent, r.Source, n, w)
 		}
 	}
 	// a group and the ledger's sum count it as a floor, not 1,900 tok/s

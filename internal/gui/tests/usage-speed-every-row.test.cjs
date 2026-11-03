@@ -43,7 +43,19 @@ const ROWS = [
   { ...GW, route_id: 8, t: at(7), out: 41, reasoning: 41, ms: 6000, ttft_ms: 5000, reasoning_hidden: true, flow_ms: 1 },
   // 8: measured: 500 tokens in the 5 s after its first
   { ...GW, route_id: 9, t: at(8), out: 500, ms: 7000, ttft_ms: 2000, first_text_ms: 2000, flow_ms: 5000 },
+  // 9: pluviophile714 on Discord: gpt-6.1-sol, 392 tokens 255 ms after an
+  // 8.2 s first token, spread over most of that (flow 230 ms), read 1,539
+  // tok/s: under a second after a wait over four times longer tells none
+  { ...GW, route_id: 10, t: at(9), req: "codex/gpt-6.1-sol", model: "gpt-6.1-sol", served: "gpt-6.1-sol", in: 21617, cache_read: 0, out: 392, ms: 8455, ttft_ms: 8200, first_text_ms: 8200, flow_ms: 230 },
 ];
+// row 9's tooltip in every language its words are in
+const HELD = {
+  en: "It came in under a second after a wait of 8.2 s: it may have been written during the wait and let go at once, so how fast it was written isn't seen",
+  zh: "等了 8.2 秒 后不到一秒就全部到达：可能是在等待中写完再一次性发出，看不出写得多快",
+  "zh-TW": "等了 8.2 秒 後不到一秒就全部到達：可能是在等待中寫完再一次性送出，看不出寫得多快",
+  ja: "8.2 秒 待った後、1 秒足らずで全部届きました。待つ間に書かれて一度に送られたかもしれないため、書く速さはわかりません",
+  de: "Sie kam nach einer Wartezeit von 8.2 s in weniger als einer Sekunde: Sie wurde womöglich während des Wartens geschrieben und auf einmal losgelassen, also ist nicht zu sehen, wie schnell sie geschrieben wurde",
+};
 
 function ledger(period) {
   return {
@@ -111,7 +123,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     assert(["chromium", "webkit"].includes(engine), "BROWSER must be chromium or webkit");
     const browser = await (engine === "webkit" ? webkit.launch() : chromium.launch({ channel: "chromium" }));
     t.after(() => browser.close());
-    for (const lang of ["en", "zh"]) {
+    for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
       const w = L[lang];
       await t.test(lang, async () => {
         const errors = [];
@@ -137,6 +149,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
           assert(s, "row " + i + " has a speed or a dash");
           if (s === "—") assert((await tip(i)).length > 0, "row " + i + "'s dash says why");
         }
+        // the report: no 1,539 tok/s, and why
+        assert.equal(await text(9), "—");
+        assert.equal(await tip(9), HELD[lang]);
+        if (!w) { assert.deepEqual(errors, []); await ctx.close(); return; }
 
         // not streamed, long enough: the least it wrote at, and why it's a floor
         assert.equal(await text(0), w.whole);

@@ -373,7 +373,16 @@ func TestLiveVisibleReasoningFixture(t *testing.T) {
 	if f.reasoningMs(provider.Chat) != sample.Events[0].At {
 		t.Fatalf("live reasoning fixture lost its start: %d/%d", f.reasoningMs(provider.Chat), sample.Events[0].At)
 	}
-	n, ms := usage.DecodeOf(sample.Record.Out, sample.Record.Reasoning, sample.Record.Ms, sample.Record.TTFT, 0, sample.Record.Flow, sample.First)
+	// its 731 ms came after a 6.8 s wait, which tells no speed: under a
+	// second after a wait over four times longer reads as a reply let go
+	// whole (HeldWindowMs, pluviophile714 on Discord), though this one was
+	// streamed. The same turn after a short wait tells it from its first
+	// reasoning.
+	rec, d := sample.Record, int64(6500)
+	if n, ms := usage.DecodeOf(rec.Out, rec.Reasoning, rec.Ms, rec.TTFT, 0, rec.Flow, sample.First); n != 0 || ms != 0 {
+		t.Fatalf("live tool turn after a 6.8 s wait: speed %d/%d; want none", n, ms)
+	}
+	n, ms := usage.DecodeOf(rec.Out, rec.Reasoning, rec.Ms-d, rec.TTFT-d, 0, rec.Flow, sample.First-d)
 	if n != 76 || ms != 731 {
 		t.Fatalf("live tool turn speed %d/%d; want 76/731", n, ms)
 	}

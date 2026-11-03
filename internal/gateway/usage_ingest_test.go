@@ -348,7 +348,10 @@ func TestUsageIngestConcurrent(t *testing.T) {
 // grok-4.7 reply that reasoned, tells its answer's speed from its first
 // text; without first_text_ms it told none. A reply let go in a burst
 // tells none, whether its flow_ms says so (HeldShare) or its answer came
-// over 20 times faster than its reasoning before it (ThinkPace).
+// over 20 times faster than its reasoning before it (ThinkPace). The
+// reporter's own record, all of it 403 ms after a 4.6 s first token, now
+// tells none either (HeldWindowMs, pluviophile714 on Discord); the same
+// record after a 0.3 s first token tells its answer's.
 func TestUsageIngestTellsSpeed(t *testing.T) {
 	do := ingestServer(t)
 	repro := `{
@@ -357,13 +360,14 @@ func TestUsageIngestTellsSpeed(t *testing.T) {
 	at := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
 	// a reply that didn't reason, its 601 tokens let go in the last 109 ms
 	// (its flow, scaled as the gateway scales it, 136 ms) of a 4 s window
+	quick := strings.NewReplacer(`"ttft_ms":4632,"first_text_ms":4700`, `"ttft_ms":232,"first_text_ms":300`, `"ms":5035`, `"ms":635`, "repro-1", "quick-1").Replace(repro)
 	burst := `{"t":"` + at + `","agent":"my-app","provider":"xai","model":"grok-4.7","rid":"burst-1","in":1000,"out":601,"ms":5035,"ttft_ms":1000,"flow_ms":136,"status":200}`
 	// the same reply, streamed as it was written
 	even := strings.Replace(strings.Replace(burst, `"flow_ms":136`, `"flow_ms":4000`, 1), "burst-1", "even-1", 1)
 	// 22 reasoning tokens over 4.4 s, then 528 answer tokens in 335 ms
 	held := `{"t":"` + at + `","agent":"my-app","provider":"xai","model":"grok-4.7","rid":"held-1","in":1000,"out":550,"reasoning":22,"ms":5035,"ttft_ms":300,"first_text_ms":4700,"status":200}`
-	c, out, b := do("127.0.0.1:5000", "["+repro+","+burst+","+even+","+held+"]")
-	if c != 200 || out.Accepted != 4 {
+	c, out, b := do("127.0.0.1:5000", "["+repro+","+quick+","+burst+","+even+","+held+"]")
+	if c != 200 || out.Accepted != 5 {
 		t.Fatal(c, b)
 	}
 
@@ -382,8 +386,9 @@ func TestUsageIngestTellsSpeed(t *testing.T) {
 		speed[row.RequestID] = [2]int64{int64(n), w}
 	}
 	want := map[string][2]int64{
-		"repro-1": {307 - 129, 5035 - 4700}, // its answer, from its first text
-		"burst-1": {0, 0},                   // held: its content came in under a quarter of its window
+		"repro-1": {0, 0},                 // held: all of it under half a second after 4.6 s
+		"quick-1": {307 - 129, 635 - 300}, // its answer, from its first text
+		"burst-1": {0, 0},                 // held: its content came in under a quarter of its window
 		"even-1":  {601, 5035 - 1000},
 		"held-1":  {0, 0}, // held: its answer came over 20 times its reasoning's pace
 	}

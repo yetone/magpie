@@ -447,8 +447,10 @@ its end, however long the burst took to come: one whose content came in under
 a quarter of its window (`flow_ms`, from a tenth of its bytes to nine tenths,
 scaled to the whole), or that reasoned and whose answer would have come over
 20 times faster than its reasoning came before its first text (its text came
-with the burst). The time a burst takes to come is not the time it took to
-write, and that time isn't seen. History is read the same way, as it keeps the
+with the burst), or whose window was under a second after a wait over four
+times longer (`usage.HeldWindowMs`: 392 tokens 0.25 s after an 8.2 s first
+token read 1,539 tok/s from gpt-6.1-sol). The time a burst takes to come is
+not the time it took to write, and that time isn't seen. History is read the same way, as it keeps the
 reasoning, the first text and the flow; a record from before the flow was kept
 is told by its reasoning's pace alone.
 
@@ -2459,7 +2461,8 @@ curl -s http://127.0.0.1:3425/v1/magpie/usage/requests \
   be before `ttft_ms` or after `ms`. `flow_ms` is how long the content
   took to come, from where the speed is timed: the time from a tenth of
   it to nine tenths, times 10/8 (at most `ms` × 10/8). A reply whose
-  content came in under a quarter of its window was held and let go in a
+  content came in under a quarter of its window, or whose window was under
+  a second after a wait over four times longer, was held and let go in a
   burst, and tells no speed. Leave out what you don't know.
 - **Pricing:** a record without `cost` is priced at magpie's prices for
   its provider and model.

@@ -410,7 +410,10 @@ function routingPage(part) {
   // A reply held back and let go in a burst at its end tells no speed
   // (usage.DecodeOf, John on Discord: Kimi Code at 2,237 tok/s): its
   // content came in under a quarter of its window (flow), or its answer
-  // at over 20 times the pace its reasoning came before its first text.
+  // at over 20 times the pace its reasoning came before its first text, or
+  // it came in under a second after a wait four times longer
+  // (pluviophile714 on Discord: gpt-6.1-sol, 392 tokens 0.25 s after an
+  // 8.2 s first token, read 1,539 tok/s; usage.HeldWindowMs).
   function decodeOf(r, ms, ttft, firstText, flow = r.flow, firstReasoning = r.firstReasoning, reasoningHidden = r.reasoningHidden) {
     if (reasoningHidden && !(firstText > 0)) return null;
     const think = reasoningOf(r), visible = think > 0 && !(firstText > 0) && firstReasoning >= ttft && flow > 0 && think <= r.out;
@@ -418,6 +421,7 @@ function routingPage(part) {
     const w = ms - from;
     if (!(n > 0 && ttft > 0 && from > 0 && w >= 100 && n * 1000 <= 10000 * w)) return null;
     if (flow > 0 && flow * 4 < w) return null;
+    if (w < 1000 && from > 4 * w) return null;
     if (think > 0 && firstText > 0 && n * (firstText - ttft) > 20 * think * w) return null;
     return { n, w };
   }

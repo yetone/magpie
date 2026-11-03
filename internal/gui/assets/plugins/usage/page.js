@@ -2028,13 +2028,19 @@ const LED_COLS = [
   ["In", "n"], ["Out", "n"], ["Cache write", "n", true], ["Cache read", "n", true], ["Cost", "n"], ["TTFT", "n", 2, "Time to first token"], ["Duration", "n"], ["Speed", "n"], ["Status"],
 ];
 
+// a window under a second after a wait over four times longer: the reply came
+// whole in a moment after a long silence, and what it was written over isn't
+// seen (pluviophile714 on Discord: gpt-6.1-sol, 392 tokens 0.25 s after an
+// 8.2 s first token, read 1,539 tok/s; usage.HeldWindowMs)
+const ledHeldShort_ = (w, from) => w < 1000 && from > 4 * w;
 // the tokens a reply was seen to write and the ms it took, as
 // usage.DecodeOf and routing/client.js's decodeOf tell them: one that reasoned
 // counts its answer from its first text, its reasoning written before
 // the stream showed any (tony on Discord); null when it tells no speed.
 // A reply held back and let go in a burst at its end tells none (John on
 // Discord): its content came in under a quarter of its window (flow_ms),
-// or its answer at over 20 times the pace its reasoning came before it
+// or its answer at over 20 times the pace its reasoning came before it,
+// or it came in under a second after a wait four times longer (ledHeldShort_)
 const ledDecode = (r) => {
   if (ledFailed_(r) || r.reasoning_hidden && !(r.first_text_ms > 0) || !(r.ttft_ms > 0)) return null;
   const think = r.reasoning > 0, visible = think && !(r.first_text_ms > 0) && r.first_reasoning_ms >= r.ttft_ms && r.flow_ms > 0 && r.reasoning <= r.out;
@@ -2042,6 +2048,7 @@ const ledDecode = (r) => {
   const w = r.ms - from;
   if (!(n > 0 && from > 0 && w >= 100 && n * 1000 <= 10000 * w)) return null;
   if (r.flow_ms > 0 && r.flow_ms * 4 < w) return null;
+  if (ledHeldShort_(w, from)) return null;
   if (think && r.first_text_ms > 0 && n * (r.first_text_ms - r.ttft_ms) > 20 * r.reasoning * w) return null;
   if (ledCodexTurn(r) && (w < LED_CODEX_WINDOW_MS || n < LED_CODEX_BODY)) return null;
   return { n, w };
@@ -2114,6 +2121,7 @@ const ledNoSpeed_ = (r) => {
   const from = visible ? r.first_reasoning_ms : think && r.first_text_ms > 0 ? r.first_text_ms : r.ttft_ms, w = r.ms - from;
   const little = t("Too little came after the first token to time a speed by: {n} tokens in {ms}", { n: ledNum(n), ms: ledTook(Math.max(0, w)) });
   if (w < 100) return little;
+  if (ledHeldShort_(w, from) && !(n * 1000 > 10000 * w || r.flow_ms > 0 && r.flow_ms * 4 < w)) return t("It came in under a second after a wait of {wait}: it may have been written during the wait and let go at once, so how fast it was written isn't seen", { wait: ledTook(from) });
   if (n * 1000 > 10000 * w || r.flow_ms > 0 && r.flow_ms * 4 < w || think && r.first_text_ms > 0 && n * (r.first_text_ms - r.ttft_ms) > 20 * r.reasoning * w) return t("It came in one burst at its end, not as it was written, so how fast it was written isn't seen");
   return little;
 };

@@ -24,10 +24,14 @@ const key = { id: "antigravity", provider: "antigravity", name: "Antigravity", k
 // a burst let go over 236 ms and 196 ms: 550 tokens, 22 of them reasoning,
 // in 16 s with the first content at 5.2 s, its text early (5.4 s) and
 // with the burst (15.764 s); 395 tokens in 19 s. And a steady 50 tok/s
-// answer after the same reasoning, which keeps its speed.
+// answer after the same reasoning, which keeps its speed. Last,
+// pluviophile714's row (gpt-6.1-sol on Discord: 1,539 tok/s): 392 tokens
+// 255 ms after an 8.2 s first token, spread over most of that (flow 230 ms).
+// Under a second after a wait over four times longer tells no speed.
 // [out, ms, ttft, flow, reasoning, firstText]
 const timing = [[8264, 24360, 24359], [8264, 1500, 1000], [1200, 15000, 3000], [100, 3000, 1000], [100, 3000, 1000], [100, 3000, 1000], [2187, 6700, 5100, 2],
-  [550, 16000, 5200, 236, 22, 5400], [550, 16000, 5200, 236, 22, 15764], [395, 19000, 5200, 196], [552, 16000, 5200, 10600, 22, 5400]];
+  [550, 16000, 5200, 236, 22, 5400], [550, 16000, 5200, 236, 22, 15764], [395, 19000, 5200, 196], [552, 16000, 5200, 10600, 22, 5400],
+  [392, 8455, 8200, 230, 0, 8200]];
 const routes = timing.map(([out, ms, ttft, flow, reasoning, firstText], i) => ({
   id: 100 - i, seq: 100 - i, time: at(i), agent: "codex", model: "antigravity/gemini-3.8-flash", provider: "antigravity",
   order: [key], tries: [{ id: key.id, model: key.model, start: at(i), done: true, status: 200, ms, ttft, flow, firstText }],
@@ -60,8 +64,8 @@ function serve(lang) {
 }
 
 const want = {
-  en: { first: /first token in 24 s/, speed: /tok\/s/, normal: /· 100 tok\/s/, slow: /· 50 tok\/s/ },
-  zh: { first: /24 秒 后出首字/, speed: /token\/秒/, normal: /· 100 token\/秒/, slow: /· 50 token\/秒/ },
+  en: { first: /first token in 24 s/, late: /first token in 8\.2 s/, speed: /tok\/s/, normal: /· 100 tok\/s/, slow: /· 50 tok\/s/ },
+  zh: { first: /24 秒 后出首字/, late: /8\.2 秒 后出首字/, speed: /token\/秒/, normal: /· 100 token\/秒/, slow: /· 50 token\/秒/ },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -144,6 +148,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       }
       // a steady answer after the same reasoning keeps its 50 tok/s
       assert.match(await story(10), want[lang].slow);
+      // the report: its first token, and no 1,539 tok/s
+      const late = await story(11);
+      assert.match(late, want[lang].late);
+      assert.doesNotMatch(late, want[lang].speed);
+      assert.doesNotMatch(late, /1539|1,539/);
       assert.deepEqual(errors, []);
     });
   }
