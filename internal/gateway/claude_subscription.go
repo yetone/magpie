@@ -213,7 +213,7 @@ type subscriptionRun struct {
 	lean          bool // started with leanSystem as its system prompt
 	// appended: started with the caller's instructions after Claude
 	// Code's own system prompt (req.appendPrompt), not in its first
-	// message; its session, resumed, would have none
+	// message; its session, resumed, is given them so again
 	appended    bool
 	tui         bool // Claude Code's interactive mode (claudeTUI)
 	cacheTail   string
@@ -986,7 +986,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		args = append(args, "--system-prompt-file", binary.file(systemPath))
 	}
 	// set below for a run that appends them: a request asked again
-	// starts anew, and a transcript replayed has them (replaySession)
+	// starts anew
 	req.appendPrompt = false
 	var sessions []string
 	switch {
@@ -1038,6 +1038,16 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 			from.mu.Unlock()
 		}
 	}
+	// The interactive mode's caller instructions go after Claude Code's own
+	// system prompt (appendsPrompt), in the block Claude Code marks for the
+	// cache itself, for every run of a conversation: a session resumed
+	// (saved, branched or a replayed transcript) has them as its run did,
+	// the file given again, since a session keeps no system prompt.
+	if from != nil {
+		req.appendPrompt = from.appended && !req.leanPrompt && req.clientCache == nil
+	} else {
+		req.appendPrompt = appendsPrompt(req, binary)
+	}
 	req.replayed = false
 	if from == nil && !req.told && sessions != nil && claudePrintWhy(req, binary) == "" {
 		// the interactive mode is given the conversation as Claude Code's
@@ -1054,15 +1064,16 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		// message, its earlier turns marked as such (renderClaudePrompt)
 		log.Printf("claude: a new Claude Code is told the whole conversation: %d messages, %d images, the last turn marked as the one to answer", len(req.Messages), countImages(req.Messages))
 	}
-	if from == nil && appendsPrompt(req, binary) {
-		// a one-off ask in the interactive mode, Claude Code's auto mode
-		// classifier above all: pasted, the caller's instructions lose
-		// their cache mark (the paste is one text), and every ask wrote
-		// them to the cache anew, 80k tokens an ask with 1,197 read
-		// (#2432). After Claude Code's own system prompt they are in the
-		// block it marks itself, and the next ask under the same
-		// instructions reads them; a file of the run's own, as a lean
-		// run's
+	if req.appendPrompt {
+		// pasted, the caller's instructions lose their cache mark (the
+		// paste is one text), and every new run wrote them to the cache
+		// anew: Claude Code's auto mode classifier, 80k tokens an ask with
+		// 1,197 read (#2432), and a conversation's turn after a one-off
+		// first one, or after a client changed a reply, 7,290 written and
+		// 1,273 read of 8,565 (m4rs0n on Discord). After Claude Code's
+		// own system prompt they are in the block it marks itself, which
+		// every run under the same instructions sends the same; a file of
+		// the run's own, as a lean run's
 		appendPath := filepath.Join(tmp, "append.md")
 		req.appendPrompt = true
 		if err := os.WriteFile(appendPath, []byte(leanSystem(req)), 0o600); err != nil {
@@ -2190,6 +2201,10 @@ type savedSession struct {
 	// tui: the session was made by Claude Code's interactive mode; a
 	// branch of it is too, where it can be (claudePrint)
 	tui bool
+	// appended: its run had the caller's instructions after Claude Code's
+	// system prompt (appendsPrompt), which the session doesn't keep: the
+	// run that resumes it is given them so again
+	appended bool
 
 	cachePrefix cachePrefix
 
@@ -2204,11 +2219,11 @@ func (b *subscriptionBridge) shelve(run *subscriptionRun) {
 	run.mu.Lock()
 	sid, sessions, rewound, replied, tools := run.sessionID, run.sessions, run.rewound, run.replied, maps.Clone(run.tools)
 	run.mu.Unlock()
-	if sid == "" || len(sessions) == 0 || rewound && !replied || run.idleKey == "" || run.appended {
+	if sid == "" || len(sessions) == 0 || rewound && !replied || run.idleKey == "" {
 		return
 	}
 	key := run.idleKey
-	s := &savedSession{session: sid, sessions: sessions, owner: run.owned(), conv: run.convKey, key: key, behind: run.behindKey, loose: run.loose, tools: tools, at: run.idleAt, cachePrefix: run.cachePrefix}
+	s := &savedSession{session: sid, sessions: sessions, owner: run.owned(), conv: run.convKey, key: key, behind: run.behindKey, loose: run.loose, tools: tools, at: run.idleAt, cachePrefix: run.cachePrefix, appended: run.appended}
 	if run.tui {
 		s.behindLine = run.behindLine
 	} else {
@@ -2413,7 +2428,7 @@ func (b *subscriptionBridge) branch(req *Request, owner string) *savedSession {
 			}
 		}
 		sid, sessions := run.sessionID, slices.Clone(run.sessions)
-		usable := !run.closed && !run.rewound && run.lean == req.leanPrompt && !run.appended && !run.clientMarks && (run.tui || !claudeTUIOn())
+		usable := !run.closed && !run.rewound && run.lean == req.leanPrompt && !run.clientMarks && (run.tui || !claudeTUIOn())
 		run.mu.Unlock()
 		if at == "" {
 			continue
@@ -2424,7 +2439,7 @@ func (b *subscriptionBridge) branch(req *Request, owner string) *savedSession {
 		if !usable || sid == "" || len(sessions) == 0 || said != told {
 			return nil
 		}
-		return &savedSession{session: sid, sessions: sessions, owner: owner, at: time.Now(), since: msgs[i:], cut: at, tui: run.tui, gone: true}
+		return &savedSession{session: sid, sessions: sessions, owner: owner, at: time.Now(), since: msgs[i:], cut: at, tui: run.tui, appended: run.appended, gone: true}
 	}
 	return nil
 }
@@ -2446,7 +2461,7 @@ func (r *subscriptionRun) branchAt(at, owner string, since []Message) *savedSess
 		return nil
 	}
 	log.Printf("claude: the conversation's next turn goes on in a branch of its interactive run's session, cut before the side question it answered since")
-	return &savedSession{session: cut, sessions: sessions, owner: owner, at: time.Now(), since: since, tui: true}
+	return &savedSession{session: cut, sessions: sessions, owner: owner, at: time.Now(), since: since, tui: true, appended: r.appended}
 }
 
 // cutWait is how long cutSession waits for the line it cuts after to be
@@ -4126,13 +4141,17 @@ func toolChoiceAsk(req *Request) string {
 
 // appendsPrompt: a new run for req gives the caller's instructions after
 // Claude Code's own system prompt (--append-system-prompt-file), not in
-// its first message. Only a one-off ask in the interactive mode, which
-// pastes its first message without the marks renderClaudePrompt puts on
-// it: such a run is let go after its reply (ended), never resumed, so no
-// later turn needs the instructions in its session. A lean run has them
-// as its system prompt already, and a client's own marks keep theirs.
+// its first message. Every run in the interactive mode, which pastes its
+// first message as one text, without the mark renderClaudePrompt puts on
+// the instructions' block: there, a run started anew for the same
+// instructions (the next one-off ask, a conversation's turn after a
+// one-off first one, a turn whose run was lost) read nothing past Claude
+// Code's own prompt. A run resuming a session is given them as the
+// session's run was (savedSession.appended). A lean run has them as its
+// system prompt already, a client's own marks keep theirs, and -p keeps
+// the mark.
 func appendsPrompt(req *Request, binary claudeCLI) bool {
-	return !req.leanPrompt && req.clientCache == nil && len(req.Tools) == 0 && !hasReply(req.Messages) &&
+	return !req.leanPrompt && req.clientCache == nil &&
 		withoutBillingHeader(req.System)+envNote(req)+toolChoiceAsk(req) != "" && claudePrintWhy(req, binary) == ""
 }
 

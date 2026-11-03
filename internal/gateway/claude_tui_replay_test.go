@@ -82,8 +82,14 @@ func TestClaudeTUIReplayGoesInATranscript(t *testing.T) {
 		t.Fatalf("the transcript:\n%s", b)
 	}
 	user, _ := json.Marshal(lines[0].Message.Content)
-	if !strings.Contains(string(user), `"data":"`+img+`"`) || !strings.Contains(string(user), "what is it") || !strings.Contains(string(user), "rules") || strings.Contains(string(user), "cache_control") {
+	if !strings.Contains(string(user), `"data":"`+img+`"`) || !strings.Contains(string(user), "what is it") || strings.Contains(string(user), "rules") || strings.Contains(string(user), "cache_control") {
 		t.Fatalf("the transcript's user line: %s", user)
+	}
+	// the caller's instructions are after Claude Code's system prompt, as
+	// a first run of the conversation had them (appendsPrompt), not in the
+	// transcript's user line
+	if !strings.Contains(args, "--append-system-prompt-file") {
+		t.Fatalf("the run wasn't given the caller's instructions after Claude Code's prompt: %s", args)
 	}
 	reply, _ := json.Marshal(lines[1].Message.Content)
 	if string(reply) != `[{"text":"a red square","type":"text"}]` {

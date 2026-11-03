@@ -23,7 +23,9 @@ import (
 // The session is two lines, the ones a run started at the reply's turn
 // would have written: the user's, the conversation before the reply as
 // renderClaudePrompt tells it (the reply's turn marked as the one to
-// answer), and the assistant's, the reply's words. nil when there is no
+// answer; the caller's instructions not in it when the run has them after
+// Claude Code's system prompt, req.appendPrompt), and the assistant's, the
+// reply's words. nil when there is no
 // such reply (none that calls no tool, or one with no words), or the file
 // can't be written; the run is then told the conversation whole.
 func replaySession(dirs []string, work, model string, req *Request) *savedSession {
@@ -87,7 +89,7 @@ func replaySession(dirs []string, work, model string, req *Request) *savedSessio
 		return nil
 	}
 	log.Printf("claude: a new Claude Code goes on with the conversation from a transcript of it (%d messages, %d images), typed the last turn's %d", split, countImages(req.Messages[:split]), len(req.Messages)-split)
-	return &savedSession{session: sid, sessions: dirs, since: req.Messages[split:], tui: true}
+	return &savedSession{session: sid, sessions: dirs, since: req.Messages[split:], tui: true, appended: req.appendPrompt}
 }
 
 // replyWords is what a reply says, its thinking left out.
