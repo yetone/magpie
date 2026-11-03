@@ -3133,8 +3133,7 @@ function dragAgent(e, handle, row) {
     });
 }
 
-// dragScroll: the box a drag in list scrolls, where it was, and how fast a
-// pointer at y scrolls it (near its top or foot)
+// dragScroll: the box a drag scrolls, and how fast a pointer at y scrolls it
 function dragScroll(list) {
   let scroll = list.parentElement;
   while (scroll && !/(auto|scroll)/.test(getComputedStyle(scroll).overflowY)) scroll = scroll.parentElement;
@@ -3143,8 +3142,7 @@ function dragScroll(list) {
   return { scroll, scroll0: scroll.scrollTop, speedAt: (y) => y < bounds.top + edge ? -Math.min(1, (bounds.top + edge - y) / edge)
     : y > bounds.bottom - edge ? Math.min(1, (y - bounds.bottom + edge) / edge) : 0 };
 }
-// dragListen: a drag's listeners (letting go saves, Escape, a lost capture,
-// blur or resize cancels), and what takes them off
+// dragListen: a drag's listeners (letting go saves; Escape, blur, resize cancel)
 function dragListen(handle, move, finish) {
   const cancel = (ev) => finish(false, ev);
   const on = [[document, "pointermove", move, { passive: false }], [document, "pointerup", (ev) => finish(true, ev)],
@@ -3154,29 +3152,28 @@ function dragListen(handle, move, finish) {
   return () => { for (const [t, n, f, o] of on) t.removeEventListener(n, f, o); };
 }
 
-// Shared pointer sorter. Measure once, move only transforms on animation frames,
-// and commit once on release. No DOM rebuilds or network calls during a drag.
-// The same primitive serves agent handles and handle-free account rows.
+// Shared pointer sorter: transforms each frame, one commit on release. Rows are
+// placed each frame by the list's top, as what's above it changes (yuancjun)
 function dragRows(e, handle, row, list, rows, commit, start = () => {}, idle = () => {}) {
   if (e.button !== 0 || e.isPrimary === false || rows.length < 2) return false;
   const from = rows.indexOf(row);
   if (from < 0) return false;
-  const rects = rows.map((r) => r.getBoundingClientRect());
-  const tops = rects.map((r) => r.top), heights = rects.map((r) => r.height), h = heights[from];
-  const { scroll, scroll0, speedAt } = dragScroll(list);
+  const base = () => list.getBoundingClientRect().top - list.scrollTop - rows[0].offsetTop;
+  const lift = rows[0].getBoundingClientRect().top - base() - rows[0].offsetTop, grab = e.clientY - row.getBoundingClientRect().top;
+  const { scroll, speedAt } = dragScroll(list);
   let dragging = false, ended = false, to = from, y = e.clientY, frame = 0, lastTime = 0;
   const y0 = y, pointer = e.pointerId;
   const paint = (time) => {
     frame = 0;
-    if (!row.isConnected) return finish(false);
+    if (!rows.every((r) => r.isConnected)) return finish(false);
     if (!dragging) return;
     const dt = Math.min(32, lastTime ? time - lastTime : 16);
     lastTime = time;
     const speed = speedAt(y);
     if (speed) scroll.scrollTop += speed * dt * .6;
-    const dy = y - y0 + scroll.scrollTop - scroll0;
+    const b = base() + lift, tops = rows.map((r) => b + r.offsetTop), heights = rows.map((r) => r.offsetHeight), h = heights[from];
     const lo = tops[0] - tops[from], hi = tops.at(-1) + heights.at(-1) - h - tops[from];
-    const d = Math.max(lo, Math.min(hi, dy));
+    const d = Math.max(lo, Math.min(hi, y - grab - tops[from]));
     row.style.transform = `translateY(${d}px)`;
     const mid = tops[from] + d + h / 2;
     to = from;
@@ -3192,7 +3189,7 @@ function dragRows(e, handle, row, list, rows, commit, start = () => {}, idle = (
       const shift = i > from && i <= to ? -h : i < from && i >= to ? h : 0;
       r.style.transform = shift ? `translateY(${shift}px)` : "";
     });
-    if (speed) frame = requestAnimationFrame(paint);
+    frame = requestAnimationFrame(paint);
   };
   const move = (ev) => {
     if (ev.pointerId !== pointer) return;

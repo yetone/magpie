@@ -6113,6 +6113,11 @@ function routingPage(part) {
   // only on hover (routing.css), as on the Agents page. The order is the
   // one /v1/models lists the groups in too, which agents' pickers show.
   let groupArranging = false, groupRenderPending = false, groupArrangeSeq = 0;
+  // a drag let go: the groups drawn as they came in under it
+  const arranged = () => {
+    groupArranging = false;
+    if (groupRenderPending) { groupRenderPending = false; renderGroups(); }
+  };
   const shownGroups = () => groups.groups.filter((g) => !g.hidden).map((g) => g.id);
   function groupHandle(g, row) {
     const b = el("button", "ics ag-handle rt-ghandle");
@@ -6136,10 +6141,7 @@ function routingPage(part) {
       // dragged among are the cards, and where one is let go is named by
       // the card it lands on
       const rows = [...gList.children].filter((r) => r.classList.contains("rt-group"));
-      groupArranging = dragRows(e, b, row, gList, rows, (to) => moveGroup(g.id, shownGroups().indexOf(rows[to].dataset.id)), closeAgentMenu, () => {
-        groupArranging = false;
-        if (groupRenderPending) { groupRenderPending = false; renderGroups(); }
-      });
+      groupArranging = dragRows(e, b, row, gList, rows, (to) => moveGroup(g.id, shownGroups().indexOf(rows[to].dataset.id)), closeAgentMenu, arranged);
     };
     return b;
   }
@@ -6365,8 +6367,10 @@ function routingPage(part) {
       };
       b.onclick = (e) => { e.stopPropagation(); delete b.dataset.dragged; };
       b.onpointerdown = (e) => {
+        // the groups aren't drawn again under it, the editor with them (yuancjun)
+        if (groupArranging) return;
         const rows = [...list.children].filter((r) => r.querySelector(".rt-mhandle"));
-        dragRows(e, b, row, list, rows, (to) => moveMember(i, to));
+        groupArranging = dragRows(e, b, row, list, rows, (to) => moveMember(i, to), () => {}, arranged);
       };
       return b;
     };
@@ -6933,8 +6937,9 @@ function routingPage(part) {
       };
       b.onclick = (e) => { e.stopPropagation(); delete b.dataset.dragged; };
       b.onpointerdown = (e) => {
+        if (groupArranging) return;
         const rows = [...rlist.children].filter((r) => r.classList.contains("rt-rule"));
-        dragRows(e, b, row, rlist, rows, (to) => moveRule(i, to));
+        groupArranging = dragRows(e, b, row, rlist, rows, (to) => moveRule(i, to), () => {}, arranged);
       };
       return b;
     };
