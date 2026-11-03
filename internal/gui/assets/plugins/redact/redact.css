@@ -362,3 +362,6 @@ body.window .msk-onebar::before { inset: -6px calc(var(--bar, 0px) - 16px) -6px 
 .xq-steps button.on { background: var(--accent-soft); font-weight: 600; color: var(--accent); }
 .xq-steps button.done { color: var(--fg-2); }
 @container (max-width: 560px) { .xq-steps { display: none; } .md-len { display: none; } }
+/* Masked words as dots until Show (plugins/redact/settings.js) */
+#redactList input.words.words-hidden { -webkit-text-security: disc; }
+#redactList .redact-eye { flex: none; }

@@ -1,6 +1,7 @@
-// Settings › Privacy's Instead of masking, send to (the redact plugin's part
-// of Settings). Run after app.js, whose helpers it shares (el, icon,
-// openPicker, modelOpt, prefWrite, api), and before start.js draws
+// Settings › Privacy's Instead of masking, send to, and Masked words kept
+// as dots until Show (the redact plugin's part of Settings). Run after
+// app.js, whose helpers it shares (el, icon, openPicker, modelOpt,
+// prefWrite, api), and before start.js draws
 // Settings. It wraps renderRedact, so app.js carries none of it: the row
 // shows while anything is masked, after the masked-words rows.
 
@@ -38,10 +39,34 @@ function redactRouteRow(s) {
   const after = $("#redactWordsWholeRow");
   if (after) after.after(r); else $("#redactList").append(r);
 }
+// redactWordsHidden: Masked words drawn as dots until Show, as a key is
+// (noahhrreion on Discord: a screen share showed the words kept from
+// vendors). Still a text box, so an IME writes 百度; a password box only
+// where the engine has no text security. Show holds until the window
+// reloads.
+let redactWordsShown = false;
+function redactWordsHidden() {
+  const r = [...$("#redactList").children].find((r) => r.querySelector(".who .name")?.textContent === t("Masked words"));
+  const i = r?.querySelector("input.words");
+  if (!i) return;
+  const dots = CSS.supports("-webkit-text-security", "disc");
+  const eye = el("button", "text redact-eye");
+  eye.type = "button";
+  const set = () => {
+    if (dots) i.classList.toggle("words-hidden", !redactWordsShown);
+    else i.type = redactWordsShown ? "text" : "password";
+    eye.textContent = t(redactWordsShown ? "Hide" : "Show");
+    eye.setAttribute("aria-pressed", String(redactWordsShown));
+  };
+  eye.onclick = () => { redactWordsShown = !redactWordsShown; set(); };
+  set();
+  i.after(eye);
+}
 {
   const draw = renderRedact;
   renderRedact = function (s, keep) {
     draw(s, keep);
+    redactWordsHidden();
     if (s.redact || s.redactPersonal || (s.redactWords || []).length) redactRouteRow(s);
   };
 }
