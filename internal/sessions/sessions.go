@@ -1120,7 +1120,10 @@ const cacheVersion = 29
 //
 // codex 1, zcode 1: a fork's copies of its parent's usage are the
 // parent's (codex_fork.go, zcDB.copied).
-var parseVersions = map[string]int{"codex": 1, "zcode": 1}
+//
+// codex 2: only a fork's copies are; its own calls after them are its own,
+// whatever their numbers.
+var parseVersions = map[string]int{"codex": 2, "zcode": 1}
 
 type cacheFile struct {
 	Version int    `json:"version"`

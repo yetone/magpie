@@ -581,7 +581,11 @@ first, token_count events included, stamped at the fork's time; its
 session_meta names the parent (`forked_from_id`), and a checkpoint the
 parent's rollout holds (its total and last call alike) is the parent's,
 on Usage and Sessions both (`codexRolloutOf`, `codexCheckpointsOf` in
-[`codex_fork.go`](../../internal/sessions/codex_fork.go)). The parent is
+[`codex_fork.go`](../../internal/sessions/codex_fork.go)). The copies
+are the head of the fork only: its first turn the parent never had (a
+`turn_id` of its own) ends them, so a call of the fork's own is counted
+even when its numbers are those of one the parent made after the fork.
+The parent is
 looked for in the same Codex home, by the UUIDv7 day of its id, then
 every day, then `archived_sessions`; one not found leaves the fork read
 as before. A ZCode side chat, fork or restored checkpoint copies its
@@ -589,11 +593,18 @@ session's messages with new ids and the originals' times and tokens,
 each naming its original in `metadata.forkOrigin.messageId`; a copy
 whose original is still in the database is not counted (`zcDB.copied`
 in [`zcode.go`](../../internal/sessions/zcode.go)), one whose original
-is gone is. Both came from Sky (skyhuang1994): a ZCode side chat put a
+is gone is. The message without a `forkOrigin` is the session's own and
+is counted: copies are marked by row, since a row's id is in its own
+column and not in its data (v0.1.2847 marked them by that empty id and
+left out every call of a fork that held one copy). Both came from Sky
+(skyhuang1994): a ZCode side chat put a
 10-31 session's 0.42B tokens on 10-31 again, and a week of gpt-5.4 read
-5.1B tokens. Verification: `TestCodexForkCountsOnlyItsOwnCalls`,
+5.1B tokens; then a ZCode fork's 11,409 calls of its own (3.49B tokens)
+went missing. Verification: `TestCodexForkCountsOnlyItsOwnCalls`,
 `TestCodexForkWithoutItsParentCountsTheCopies`,
-`TestZCodeCopiesCountedOnce`. OpenCode's fork copies the same way with
+`TestCodexForkThatWentOnWorkingKeepsItsOwnCalls`,
+`TestZCodeCopiesCountedOnce`,
+`TestZCodeForkThatWentOnWorkingKeepsItsOwnCalls`. OpenCode's fork copies the same way with
 no pointer to the original, and is still counted twice (#5072).
 The other agents the Sessions page reads (Cline,
 Qoder, Grok, Droid, Cursor, Hermes, Alma) have no reader yet (#1607). The
