@@ -2306,6 +2306,15 @@ function routingPage(part) {
     if (w.fallback) b.append(el("small", "fb", t("fallback")));
     const st = el("em"), bar = el("div", "bar"), bi = el("i"), tg = el("span", "tag");
     bar.append(bi);
+    // what the row says, cut short beside the model (routing.css), is read
+    // whole over it (yi_time on Discord). Measured as the pointer comes,
+    // not on each render: hundreds of rows (#3164)
+    st.onpointerenter = () => {
+      const cut = st.scrollWidth > st.clientWidth + 1;
+      if (cut) st.dataset.cut = "1"; else delete st.dataset.cut;
+      if (cut && !st.title) st.title = st.textContent;
+    };
+    st.onpointerleave = () => delete st.dataset.cut;
     li.append(el("i", "dot"), b, st, bar, tg);
     li.title = w.id;
     return { li, wire: path(), st, bi, tg, w };
@@ -2711,7 +2720,7 @@ function routingPage(part) {
       }
       // the intent and a session's title are the user's own words, of any
       // length: cut short on the row (routing.css), read whole over it
-      const full = said && s.includes(said) || named ? line + named : resting && !w.unlisted ? restTip(rest) : "";
+      const full = said && s.includes(said) || named ? line + named : resting && !w.unlisted ? restTip(rest) : row.st.dataset.cut ? s : "";
       if (row.st.title !== full) { if (full) row.st.title = full; else row.st.removeAttribute("title"); } // an empty title would hide the row's own
       // an account's windows each, with when they reset, in its tooltip
       // (#1835): the row says the fullest one while idle and what it is

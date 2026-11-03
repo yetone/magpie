@@ -64,7 +64,12 @@
    "No request yet" held the page as wide as a wider window had it, a
    scrollbar under it (young02036 on Discord) */
 .rt-accts { position: relative; z-index: 1; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; min-width: 0; }
-.rt-accts li { position: relative; display: grid; grid-template-columns: 10px minmax(0, 1fr) fit-content(60%); align-items: center; column-gap: 10px; row-gap: 6px; padding: 9px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; transition: opacity .3s, border-color .3s, transform .5s cubic-bezier(.2, .8, .2, 1); }
+/* a row's name, plan and model as wide as they are, and what it says the
+   rest: a long status (an intent smart routing picked it for) is what is
+   cut short, never the model, which says what answered (yi_time on
+   Discord). It keeps at least min(14em, 40%) of the row, where the name
+   and plan are cut first (b below) */
+.rt-accts li { position: relative; display: grid; grid-template-columns: 10px minmax(0, max-content) minmax(min(14em, 40%), 1fr); align-items: center; column-gap: 10px; row-gap: 6px; padding: 9px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; transition: opacity .3s, border-color .3s, transform .5s cubic-bezier(.2, .8, .2, 1); }
 .rt-accts li { margin-left: calc(var(--depth, 0) * 18px); }
 /* a key off screen is not laid out or painted (#3164): with hundreds of
    keys open, WebKit painted every row again on each frame a magpie flew.
@@ -97,6 +102,14 @@
 .rt-accts li.rt-sub:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .rt-accts li.idle { display: block; color: var(--muted); border-style: dashed; text-align: center; }
 .rt-accts b { font-weight: 560; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a row's and a fold's head: the name and the plan give up their room
+   before the model's chip and its tags do, each cut short on its own */
+.rt-accts li:not(.rt-sub) > b { display: flex; align-items: baseline; min-width: 0; }
+.rt-accts li:not(.rt-sub) > b > * { flex: none; }
+.rt-accts li:not(.rt-sub) > b > span:not(.ic) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rt-accts li:not(.rt-sub) > b > span.who { flex-shrink: 100; } /* the name first, the plan after it */
+.rt-accts li:not(.rt-sub) > b > span:not(.ic):not(.who):not(:empty) { margin-left: .3em; }
+.rt-accts li:not(.rt-sub) > b > .ic { align-self: center; }
 .rt-accts b > span:not(.ic) { font-weight: 450; color: var(--muted); }
 .rt-accts b > span.who { color: var(--fg); font-weight: 560; }
 .rt-accts b .ic { display: inline-flex; width: 16px; height: 16px; margin-right: 7px; vertical-align: -3px; }
@@ -108,7 +121,7 @@
 /* what a row says has at most its column: a long one (an intent smart
    routing picked it for) is cut short, its name kept, never run off the
    row's edge (penershu on X) */
-.rt-accts li > em { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rt-accts li > em { min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 /* the session an account answers (connor_yang on Discord): one line cut
    short, also where a narrow stage lets the status wrap */
 .rt-accts em .ses { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
@@ -135,7 +148,7 @@
 .rt-accts li.tagged .tag { opacity: 1; transform: none; }
 /* a provider's keys for one model, folded into one row (#1319): it opens
    to head them, as a group in the group heads its models */
-.rt-accts li.rt-fold { grid-template-columns: 10px minmax(0, 1fr) auto auto; cursor: pointer; user-select: none; }
+.rt-accts li.rt-fold { grid-template-columns: 10px minmax(0, max-content) minmax(min(14em, 40%), 1fr) auto; cursor: pointer; user-select: none; }
 .rt-accts li.rt-fold em { white-space: normal; text-align: right; }
 .rt-accts li.rt-fold .chev { display: inline-flex; color: var(--muted); transition: transform .2s; }
 .rt-accts li.rt-fold:hover .chev { color: var(--fg); }
@@ -223,6 +236,8 @@
 .rt-accts:where(.max560) li { grid-template-columns: 10px minmax(0, 1fr); }
 .rt-accts:where(.max560) em { grid-column: 2; white-space: normal; }
 .rt-accts:where(.max560) .bar { grid-column: 2; }
+/* under the name, what a row says starts where the name does */
+.rt-accts:where(.max460, .max560) li > em { text-align: left; }
 :where(.rt.max560) .rt-stats { gap: 14px; }
 /* the Routing view */
 #view-routing .row-head { margin: 14px 0 6px; padding: 0 2px; gap: 0; }
