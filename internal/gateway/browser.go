@@ -276,6 +276,15 @@ func (s *Server) browserExtension(w http.ResponseWriter, r *http.Request) {
 				added = true
 				log.Printf("Magpie Browser %s connected", m.Version)
 			}
+			if browserext.Older(m.Version, browserext.Version()) {
+				// an older extension: its folder gets this magpie's, which
+				// the browser reads when it starts again (or the extension's
+				// reload on chrome://extensions). The extension isn't told
+				// to reload itself: an unpacked one that calls
+				// chrome.runtime.reload() doesn't come back (Chrome for
+				// Testing 1234, headless and not, loaded either way).
+				browserext.Refresh(URL())
+			}
 		case m.Type == "ping":
 			c.send(ctx, map[string]string{"type": "pong"})
 		case m.ID != "":

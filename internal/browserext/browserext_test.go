@@ -47,3 +47,37 @@ func TestWritePointsAtTheGateway(t *testing.T) {
 		t.Fatal("took an address that isn't http")
 	}
 }
+
+// An extension is told to reload only into a newer version than its own.
+func TestOlder(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"0.1.3", "0.1.4", true}, {"0.1.9", "0.1.10", true}, {"0.1.4", "0.1.4", false}, {"0.1.5", "0.1.4", false}, {"", "0.1.4", true}, {"0.2", "0.1.9", false}} {
+		if got := Older(c.a, c.b); got != c.want {
+			t.Errorf("Older(%q, %q) = %v", c.a, c.b, got)
+		}
+	}
+}
+
+// Refresh writes over the folders an older magpie wrote, and no other.
+func TestRefreshWritesOnlyWrittenFolders(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	if Refresh("http://127.0.0.1:3425") {
+		t.Fatal("wrote a folder no one had")
+	}
+	if _, err := os.Stat(Dir()); !os.IsNotExist(err) {
+		t.Fatalf("made %s: %v", Dir(), err)
+	}
+	os.MkdirAll(Dir(), 0o755)
+	os.WriteFile(filepath.Join(Dir(), "manifest.json"), []byte(`{"version": "0.1.0"}`), 0o644)
+	if !Refresh("http://127.0.0.1:3425") {
+		t.Fatal("didn't write the written folder")
+	}
+	b, _ := os.ReadFile(filepath.Join(Dir(), "manifest.json"))
+	if !strings.Contains(string(b), `"version": "`+Version()+`"`) {
+		t.Fatalf("manifest: %s", b)
+	}
+}

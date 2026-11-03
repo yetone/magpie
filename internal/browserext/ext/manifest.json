@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Magpie Browser",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Lets the agents you run through Magpie use this browser: your tabs, signed in to the sites you use.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwjVk++2N/+l0PX53QSgXvBmDiyIOFXPDRTSo6l7HfM633QbDes2FXjS09l6hY33gsVX9eXE9O+94jQD2SVKSBn8V/EsL3f7mbNfkBqsZ4hYF3ogYxHUjJD6wjKHMFZQi54ArMZBI/psMUBbIjVTeuU9EGwnxoYU5umC8UHvEwkb4ZO0lprP3PGbHDjxrNi5fdFI8azVjyX0zlYlSw2wv0bCAZdkWuRoZWWgKdQwpdtRHrDQMnulWXT5DmNLYDpHgCreDrVaVLXzIAblSLOkZFo/T5xBiicmEbkWPbb8d3iE0OQStm1HYLdp4LLeKnnU6B7Kj/woOFt1uGIwoMqPzswIDAQAB",
   "minimum_chrome_version": "116",

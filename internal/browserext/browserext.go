@@ -12,7 +12,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/yetone/magpie/internal/settings"
 )
 
 // ID is the extension's ID in every Chromium browser, fixed by the public
@@ -74,4 +77,50 @@ func Write(dir, gatewayURL string) error {
 		}
 		return os.Rename(tmp, to)
 	})
+}
+
+// Dir is where the extension is written: in the home folder, where Finder
+// and Explorer show it, to drag from or choose.
+func Dir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return OldDir()
+	}
+	return filepath.Join(home, "Magpie Browser Extension")
+}
+
+// OldDir is where v0.1.2442 wrote it, a hidden folder no one could find;
+// a browser that loaded it from there keeps it.
+func OldDir() string { return filepath.Join(settings.Dir(), "browser-extension") }
+
+// Refresh writes this magpie's extension over every folder an older one
+// was written to, so a browser that reloads it gets this version. A folder
+// never written stays unwritten. It says whether any folder has it.
+func Refresh(gatewayURL string) bool {
+	written := false
+	for _, dir := range []string{Dir(), OldDir()} {
+		if _, err := os.Stat(filepath.Join(dir, "manifest.json")); err == nil {
+			written = Write(dir, gatewayURL) == nil || written
+		}
+	}
+	return written
+}
+
+// Older says whether version a (0.1.3) is before b: a newer extension's
+// folder is never written over with an older magpie's.
+func Older(a, b string) bool {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) || i < len(bs); i++ {
+		var x, y int
+		if i < len(as) {
+			x, _ = strconv.Atoi(as[i])
+		}
+		if i < len(bs) {
+			y, _ = strconv.Atoi(bs[i])
+		}
+		if x != y {
+			return x < y
+		}
+	}
+	return false
 }

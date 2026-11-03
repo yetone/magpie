@@ -240,13 +240,27 @@ func TestBrowserToolsInARealBrowser(t *testing.T) {
 // for it to connect; site serves browserFixture (and /two).
 func realBrowser(t *testing.T) (srv, site *httptest.Server) {
 	t.Helper()
+	srv, site, _ = realBrowserFrom(t, func(srv *httptest.Server) string {
+		ext := t.TempDir()
+		if err := browserext.Write(ext, srv.URL); err != nil {
+			t.Fatal(err)
+		}
+		return ext
+	})
+	return srv, site
+}
+
+// realBrowserFrom is realBrowser with the extension loaded from the folder
+// ext writes, and the gateway's Server too.
+func realBrowserFrom(t *testing.T, ext func(*httptest.Server) string) (srv, site *httptest.Server, s *Server) {
+	t.Helper()
 	chrome := os.Getenv("MAGPIE_BROWSER_CHROME")
 	if chrome == "" {
 		t.Skip("MAGPIE_BROWSER_CHROME names no Chromium")
 	}
 	fresh(t)
 
-	s := New()
+	s = New()
 	srv = httptest.NewServer(lanGuard(s.Handler()))
 	t.Cleanup(srv.Close)
 	site = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -267,13 +281,10 @@ func realBrowser(t *testing.T) (srv, site *httptest.Server) {
 	}))
 	t.Cleanup(site.Close)
 
-	ext := t.TempDir()
-	if err := browserext.Write(ext, srv.URL); err != nil {
-		t.Fatal(err)
-	}
+	dir := ext(srv)
 	profile := t.TempDir()
 	cmd := exec.Command(chrome, "--headless=new", "--user-data-dir="+profile,
-		"--disable-extensions-except="+ext, "--load-extension="+ext,
+		"--disable-extensions-except="+dir, "--load-extension="+dir,
 		"--no-first-run", "--no-default-browser-check", "--disable-gpu", "--remote-debugging-port=0",
 		// with the test's own HOME there is no keychain (macOS) or keyring
 		// (Linux), and Chrome waits on it before the extension's storage
@@ -305,7 +316,7 @@ func realBrowser(t *testing.T) (srv, site *httptest.Server) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return srv, site
+	return srv, site, s
 }
 
 // browserCaller calls the browser's tools as the agent session session:
@@ -352,9 +363,8 @@ func browserCaller(t *testing.T, srv *httptest.Server, session string) (call fun
 }
 
 // Two agent sessions at once in a real Chromium (packinggoodsllc_07668 on
-// Discord: two agents behind one router took one tab): the first works in
-// the tab the user is looking at, the second, finding that tab another's,
-// in a new tab of its own; each opens its tabs in a group of its own
+// Discord: two agents behind one router took one tab): each works in a
+// new tab of its own; each opens its tabs in a group of its own
 // ("Magpie", "Magpie 2"), and each sees the other's tab marked ~.
 func TestBrowserSessionsApartInARealBrowser(t *testing.T) {
 	srv, site := realBrowser(t)
@@ -432,4 +442,82 @@ func TestBrowserToolActionsInARealBrowser(t *testing.T) {
 		t.Fatalf("an answer names the eighteen:\n%s", out)
 	}
 	ok("browser", map[string]any{"action": "tab_close"}, "Closed t")
+}
+
+// Agents leave the user's tab alone (the owner, 11-03: Magpie Browser
+// "老是会代替掉用户正在浏览的网页"): a call that names no tab works in a
+// new one, behind the tab the user is looking at, in the session's Magpie
+// group; a link that opens a tab, and tab_new, open behind it too, and a
+// screenshot gives the window its shown tab back.
+func TestBrowserLeavesTheUsersTabAlone(t *testing.T) {
+	srv, site := realBrowser(t)
+	call, ok := browserCaller(t, srv, "quiet")
+	users := regexp.MustCompile(`(?m)^\+ (t\d+) .*about:blank$`).FindStringSubmatch(ok("browser_tabs", nil))
+	if users == nil {
+		t.Fatal("no shown about:blank tab to start with")
+	}
+	shown := func(when string) {
+		t.Helper()
+		list := ok("browser_tabs", nil)
+		if !regexp.MustCompile(`(?m)^\+ ` + users[1] + ` .*about:blank$`).MatchString(list) {
+			t.Fatalf("%s, the user's tab %s isn't shown and unchanged:\n%s", when, users[1], list)
+		}
+	}
+	page := ok("browser_navigate", map[string]any{"url": site.URL}, "Magpie fixture")
+	if strings.Contains(page, users[1]+":") {
+		t.Fatalf("navigated the user's tab:\n%s", page)
+	}
+	shown("after a navigate")
+	if list := ok("browser_tabs", nil); !regexp.MustCompile(`(?m)^\* t\d+ \[Magpie\] "Fixture"`).MatchString(list) {
+		t.Fatalf("the agent's tab isn't in its Magpie group:\n%s", list)
+	}
+	link := regexp.MustCompile(`- link "Open two"(?: \[[a-z=, ]+\])? \[ref=(e\d+)\]`).FindStringSubmatch(page)
+	if link == nil {
+		t.Fatalf("no link Open two in:\n%s", page)
+	}
+	ok("browser_click", map[string]any{"ref": link[1]}, "opened a new tab", "Page two")
+	shown("after a link opened a tab")
+	if list := ok("browser_tabs", nil); !regexp.MustCompile(`(?m)^\* t\d+ \[Magpie\] "Two"`).MatchString(list) {
+		t.Fatalf("the tab the link opened isn't the agent's, in its group:\n%s", list)
+	}
+	ok("browser_tabs", map[string]any{"action": "new", "url": site.URL + "/two"}, "Page two")
+	shown("after tab new")
+	if m := call("browser_screenshot", nil); m.Result.IsError || m.Result.Content[0].Type != "image" {
+		t.Fatalf("screenshot: %+v", m.Result.Content)
+	}
+	shown("after a screenshot")
+	ok("browser", map[string]any{"action": "tab_new", "url": site.URL}, "Opened t")
+	shown("after the one tool's tab_new")
+}
+
+// An older extension, loaded from the folder magpie writes, has the folder
+// written with this magpie's when it connects, for the browser to read
+// when it starts again.
+func TestBrowserOlderExtensionsFolderWritten(t *testing.T) {
+	var man string
+	realBrowserFrom(t, func(srv *httptest.Server) string {
+		t.Setenv("MAGPIE_ADDR", srv.Listener.Addr().String())
+		dir := browserext.Dir()
+		if err := browserext.Write(dir, srv.URL); err != nil {
+			t.Fatal(err)
+		}
+		man = filepath.Join(dir, "manifest.json")
+		b, _ := os.ReadFile(man)
+		old := bytes.Replace(b, []byte(`"version": "`+browserext.Version()+`"`), []byte(`"version": "0.0.1"`), 1)
+		if bytes.Equal(old, b) {
+			t.Fatalf("no version in %s", b)
+		}
+		os.WriteFile(man, old, 0o644)
+		return dir
+	})
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		if b, _ := os.ReadFile(man); bytes.Contains(b, []byte(`"version": "`+browserext.Version()+`"`)) {
+			break
+		}
+		if time.Now().After(deadline) {
+			b, _ := os.ReadFile(man)
+			t.Fatalf("the folder still has:\n%s", b)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

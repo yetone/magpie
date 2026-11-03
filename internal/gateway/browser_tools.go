@@ -16,7 +16,7 @@ How to work:
 - This is the user's browser: don't close tabs you didn't open, don't change their settings, and ask before sending, buying, posting or deleting anything on their behalf. When a site wants a sign-in, a captcha or a 2FA code, ask the user to do it in the tab, then go on.`
 
 func browserTabArg() map[string]any {
-	return map[string]any{"type": "string", "description": "The tab to act in (t123, from browser_tabs). Without it: the tab this session works in, or the user's current tab."}
+	return map[string]any{"type": "string", "description": "The tab to act in (t123, from browser_tabs). Without it: the tab this session works in, or a new one of its own behind the tab the user is looking at."}
 }
 
 func browserRefArg(what string) map[string]any {
@@ -47,10 +47,10 @@ func browserTools() []any {
 	}
 	return []any{
 		browserTool("browser_tabs", "Tabs", "List the browser's tabs, open a new one (in this session's Magpie tab group), switch the tab calls go to, or close one. With more than one browser connected: list them (browsers), or pick the one calls go to (use).", false, map[string]any{
-			"action":     enum("list (default), new, select, close, browsers or use", "list", "new", "select", "close", "browsers", "use"),
-			"url":        str("For new: the page to open in it."),
-			"background": boolean("For new: open it without bringing it to the front."),
-			"browser":    str("For use: the browser, by its id from browsers (b2) or its name (Edge)."),
+			"action":  enum("list (default), new, select, close, browsers or use", "list", "new", "select", "close", "browsers", "use"),
+			"url":     str("For new: the page to open in it."),
+			"front":   boolean("For new: show it to the user, only when they asked to see it; it opens behind their tab otherwise."),
+			"browser": str("For use: the browser, by its id from browsers (b2) or its name (Edge)."),
 		}),
 		browserTool("browser_navigate", "Navigate", "Open a URL in the tab, or go back, forward or reload. Answers with the page once it has loaded.", false, map[string]any{
 			"url": str("The address to open (https:// is added when it has no scheme)."),

@@ -67,8 +67,8 @@ func browserOneTool() map[string]any {
 	return map[string]any{
 		"name":  "browser",
 		"title": "Browser",
-		"description": "Act in the user's own browser. Actions, with the arguments each takes:\n" +
-			"tabs: list them. tab_new [url, background]. tab_select [tab]. tab_close [tab]. browsers: the connected ones. use_browser [browser].\n" +
+		"description": "Act in the user's own browser, in tabs of your own opened behind the one they are looking at, in your Magpie tab group; their own tabs only when you name one. Actions, with the arguments each takes:\n" +
+			"tabs: list them. tab_new [url, front]. tab_select [tab]. tab_close [tab]. browsers: the connected ones. use_browser [browser].\n" +
 			"navigate [url]. back. forward. reload.\n" +
 			"snapshot [interactive, ref, maxChars]: the page as an accessibility tree, a ref on each element you can act on.\n" +
 			"click [ref, double, button, modifiers]. type [ref, text, clear, submit, slowly]. press [key, ref]. hover [ref]. select [ref, values]. scroll [direction, amount, ref]. drag [from, to]. upload [ref, paths].\n" +
@@ -78,11 +78,11 @@ func browserOneTool() map[string]any {
 			"type": "object",
 			"properties": map[string]any{
 				"action":      map[string]any{"type": "string", "enum": browserActionOrder},
-				"tab":         str("t123, from tabs. Default: this session's tab, else the user's current one."),
+				"tab":         str("t123, from tabs. Default: this session's own tab, else a new one behind the user's."),
 				"ref":         str("An element's ref from the latest snapshot (e12)."),
 				"url":         str("navigate, tab_new: the address; wait: until the address contains this."),
 				"text":        str("type: what to type; wait: until the page shows this."),
-				"background":  boolean("tab_new: don't bring it to the front."),
+				"front":       boolean("tab_new: show it to the user, only when they asked to see it."),
 				"browser":     str("use_browser: its id from browsers (b2) or name (Edge)."),
 				"interactive": boolean("snapshot: only what you can act on, and headings."),
 				"maxChars":    num("snapshot, text: the most characters back."),
