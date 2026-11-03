@@ -148,7 +148,7 @@ func TestQuotaCell(t *testing.T) {
 		t.Fatalf("text: %q", got)
 	}
 	// and the status line's cell too
-	if got := statuslineCard(provider.Quota{Provider: "autoclaw-plugin", Windows: []provider.QuotaSpan{{Name: "积分余额", Display: "1,234 积分", Text: true}, {Name: "5 hours", Used: 40}}}, now); got != "autoclaw-plugin 积分余额 1,234 积分 5h 40%" {
+	if got := provider.StatuslineCard(provider.Quota{Provider: "autoclaw-plugin", Windows: []provider.QuotaSpan{{Name: "积分余额", Display: "1,234 积分", Text: true}, {Name: "5 hours", Used: 40}}}, now); got != "autoclaw-plugin 积分余额 1,234 积分 5h 40%" {
 		t.Fatalf("status line: %q", got)
 	}
 	// a wallet's balance is its figure in its unit, not 0% (#3950)
@@ -156,7 +156,7 @@ func TestQuotaCell(t *testing.T) {
 	if got := quotaCell(quotaSpan{Name: "积分", Balance: &bal, Unit: "积分"}, now); got != "积分 6,291 积分 left" {
 		t.Fatalf("balance: %q", got)
 	}
-	if got := statuslineCard(provider.Quota{Provider: "magicrew-plugin", Windows: []provider.QuotaSpan{{Name: "Wallet", Balance: &bal, Unit: "积分"}}}, now); got != "magicrew-plugin Wallet 6,291 积分 left" {
+	if got := provider.StatuslineCard(provider.Quota{Provider: "magicrew-plugin", Windows: []provider.QuotaSpan{{Name: "Wallet", Balance: &bal, Unit: "积分"}}}, now); got != "magicrew-plugin Wallet 6,291 积分 left" {
 		t.Fatalf("status line balance: %q", got)
 	}
 	for b, want := range map[float64]string{0: "0 pts left", 1234567.5: "1,234,567.5 pts left", 12.345: "12.35 pts left"} {

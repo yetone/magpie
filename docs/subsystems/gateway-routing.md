@@ -537,8 +537,8 @@ and before `withCaller` and `keyLimited`, so nothing is read, reserved or
 sent first. It judges the pattern `ServeMux.Handler` routes the request to
 against `readOnlyRoutes` (`GET /`, `/v1`, the quotas, their history and
 cards, the usage summary and its requests, the key's limit, the key
-page and its data, the concurrency, and the route events' snapshot and
-stream) and refuses every other with 403 `gateway_key_read_only`:
+page and its data, the concurrency, the route events' snapshot and
+stream, and the status line's `/v1/magpie/statusline`) and refuses every other with 403 `gateway_key_read_only`:
 every model route, `count_tokens`, the Responses WebSocket's upgrade, every
 MCP server, Codex's and Gemini's backends, the catch-all and every write
 (`POST /v1/magpie/usage/requests`, the quotas' refresh, a Codex reset). A route added later

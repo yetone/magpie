@@ -2283,6 +2283,20 @@ refused. Claude Code runs a changed status line in its open sessions too,
 so nothing needs a restart. It is offered for Claude Code on this computer,
 not in a WSL distro. With the gateway not running it prints an empty line.
 
+Claude Code on another computer than magpie (magpie in Docker, on a server)
+can't be switched on from the square: magpie can't write that computer's
+settings.json, and the command would name a binary inside the container.
+`GET` or `POST /v1/magpie/statusline` answers the same line as plain text, so
+that computer needs only curl. The optional `?session=<id>` (or, in a POST,
+the `session_id` of the JSON Claude Code sends on stdin) adds the model like
+`/v1/magpie/route`, and `?only=` (comma separated, repeatable) keeps the
+accounts as `magpie statusline claude` does. A caller that isn't this
+computer needs a gateway key, a read-only one included (it gets the windows
+without the model); a key held to a budget, models or accounts sees only
+what it may. On the computer Claude Code runs on:
+`"statusLine": {"type": "command", "command": "curl -fsS -m 1 -H 'Authorization: Bearer <gateway key>' --data-binary @- http://<host>:3425/v1/magpie/statusline || true"}`.
+`magpie web` shows this command with its own address under Settings → About.
+
 `magpie heap [<file>]` is for a report of magpie holding too much memory: a
 macOS `sample` of the app shows Go's frames as `???`. It asks the running
 magpie that serves the gateway (the app, the menu bar, `magpie serve` or

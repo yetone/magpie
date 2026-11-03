@@ -1,13 +1,19 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/yetone/magpie/internal/gateway"
 	"github.com/yetone/magpie/internal/provider"
 )
 
@@ -94,5 +100,69 @@ func TestStatuslineGatewayOff(t *testing.T) {
 	}
 	if d := time.Since(start); d > 30*time.Second {
 		t.Fatalf("statusline took %s with the gateway off", d)
+	}
+}
+
+// A Claude Code on another computer than the gateway asks the gateway for
+// the line (curl, steven_4422's Docker): the real gateway's answer is the
+// line `magpie statusline` prints from the same gateway, every account and
+// with one named.
+func TestStatuslineEndpointIsTheCLIsLine(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("MAGPIE_ADDR", "")
+	// plan cards are the keys of a provider with a plan source (Ollama
+	// Cloud's base); nothing here is called
+	for _, p := range []provider.Provider{
+		{ID: "alpha", Name: "Alpha", Key: "alpha-one", Chat: "http://127.0.0.1:1/v1", Anthropic: "https://ollama.com", Models: []string{"m1"}},
+		{ID: "beta", Name: "Beta", Key: "beta-one", Chat: "http://127.0.0.1:1/v1", Anthropic: "https://ollama.com", Models: []string{"m1"}},
+	} {
+		if err := provider.Save(p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	kept := map[string]any{}
+	for i, k := range []struct{ id, key string }{{"alpha", "alpha-one"}, {"beta", "beta-one"}} {
+		sum := sha256.Sum256([]byte(k.key))
+		reset := time.Now().Add(2 * time.Hour)
+		kept[k.id+"/plan "+hex.EncodeToString(sum[:8])] = map[string]any{"at": time.Now().Add(-time.Minute), "quota": provider.SubscriptionQuota{
+			Provider: k.id, Windows: []provider.QuotaWindow{{Name: "5 hours", Used: float64(62 - 20*i), ResetsAt: &reset}, {Name: "7 days", Used: float64(41 + i), ResetsAt: &reset}}}}
+	}
+	b, _ := json.Marshal(kept)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(provider.Path()), "quotas.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	provider.ForgetKeptCardsForTest()
+	provider.ForgetBalances()
+	provider.ForgetPlanQuotas()
+	t.Cleanup(func() {
+		provider.ForgetKeptCardsForTest()
+		provider.ForgetBalances()
+		provider.ForgetPlanQuotas()
+	})
+
+	gw := httptest.NewServer(gateway.New().Handler())
+	t.Cleanup(gw.Close)
+	for _, only := range [][]string{nil, {"beta"}} {
+		want := statusline(strings.NewReader(""), only, gw.URL, time.Now())
+		if want == "" || (only == nil && !strings.Contains(want, "alpha") && !strings.Contains(want, "beta")) {
+			t.Fatalf("magpie statusline %v printed %q: the fixture shows no account", only, want)
+		}
+		target := gw.URL + gateway.StatuslinePath
+		if len(only) > 0 {
+			target += "?only=" + strings.Join(only, ",")
+		}
+		res, err := http.Post(target, "application/json", strings.NewReader(""))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if res.StatusCode != 200 || strings.TrimSuffix(string(got), "\n") != want {
+			t.Errorf("%s: %d %q, `magpie statusline %v` prints %q", target, res.StatusCode, got, only, want)
+		}
 	}
 }

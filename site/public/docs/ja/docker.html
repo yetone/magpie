@@ -183,6 +183,8 @@ docker logs magpie</pre>
     <p id="allow"><b>許可するアドレス。</b>公開ホストでは <code>-e MAGPIE_ALLOW_IPS=203.0.113.7,10.0.0.0/8</code> にクライアントのアドレスを書きます。ほかのアドレスからのリクエストはキーを見る前に 403 で拒否されるので、漏れたキーもよそからは使えません。拒否のメッセージとコンテナのログには、リクエスト元のアドレスが出ます。magpie が見るのは接続そのもののアドレスで、<code>X-Forwarded-For</code> ヘッダーは信用しません。書き間違えた項目は、すべてを通すのではなく、何も通しません。Docker 既定の bridge ネットワークはクライアント自身のアドレスをコンテナに渡しますが、ホスト自身からのリクエストは bridge のゲートウェイ（<code>172.17.0.1</code>）から届き、Docker Desktop や rootless Docker ではすべてのクライアントがそれ自身のひとつのアドレスに見えます。それを追加するか、403 に書かれたアドレスを確かめてください。リバースプロキシやトンネルの後ろでは、すべてのリクエストがプロキシのアドレスから届くので、接続できる人はプロキシで制限してください。デスクトップ版では同じリストが <span class="ui">設定</span> → <span class="ui">ネットワークと共有</span> → <span class="ui">許可するアドレス</span> にあります。</p>
     <div class="callout"><b>インターネット越しなら VPN を</b>（Tailscale や WireGuard など）。3425 を開けるより安全です。コンテナの前に置くリバースプロキシやトンネルもネットワークです。そのクライアントにも、ほかのマシンと同じくゲートウェイキーが必要です。</div>
 
+    <p id="statusline"><b>Claude Code がコンテナの外にあるときのステータスライン。</b>ステータスラインのスイッチは別のマシンの <code>~/.claude/settings.json</code> に書けず、書かれるコマンドもコンテナ内のプログラムを指します。ゲートウェイが同じ行を返します。Claude Code が動くマシンで、<code>~/.claude/settings.json</code> の <code>statusLine</code> を <code>{"type": "command", "command": "curl -fsS -m 1 -H 'Authorization: Bearer sk-magpie-key-…' --data-binary @- http://&lt;host&gt;:3425/v1/magpie/statusline || true"}</code> に設定し、アドレスをコンテナに届くホストに替え、ゲートウェイキー（読み取り専用で可）を付けます。Claude Code は毎回これを実行し、stdin でセッションを渡すので、そのセッションが向かったモデルも付きます。ブラウザ UI の<span class="ui">設定</span> → <span class="ui">概要</span>にも同じコマンドが表示されます。</p>
+
     <h2 id="compose"><a class="anchor" href="#compose">NAS で Docker Compose</a></h2>
     <div class="code">
       <span class="lang">compose.yaml</span>
