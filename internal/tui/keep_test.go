@@ -55,13 +55,19 @@ func TestKeepGatewayAsTheTerminalQuits(t *testing.T) {
 		goos      string
 		auto, con bool
 	}{
-		"mac":          {"darwin", false, true},
-		"nothing on":   {"linux", false, false},
-		"app at login": {"linux", true, true},
+		"mac":        {"darwin", false, true},
+		"nothing on": {"linux", false, false},
 	} {
 		d = setup(c.goos, c.auto, false, false, nil)
 		if msg := keepGateway(c.con); msg != gone || d.installed || d.bg || d.started {
 			t.Errorf("%s: %+v %q", name, *d, msg)
 		}
+	}
+	// magpie opens at login: the gateway is left to the app, and the
+	// note says how to have it handed on where no desktop logs in, as
+	// with a package's entry on NixOS-WSL (#3756)
+	d = setup("linux", true, false, false, nil)
+	if msg := keepGateway(true); d.installed || d.bg || d.started || !strings.HasPrefix(msg, gone) || !strings.Contains(msg, "magpie autostart off") {
+		t.Errorf("app at login: %+v %q", *d, msg)
 	}
 }

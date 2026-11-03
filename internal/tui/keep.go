@@ -52,8 +52,11 @@ var keep = keeper{
 // (see above), and is what to say of it.
 func keepGateway(connected bool) string {
 	k := keep
-	if k.goos != "linux" || !connected || k.autostartOn() {
+	if k.goos != "linux" || !connected {
 		return gatewayGoneNote()
+	}
+	if k.autostartOn() {
+		return atLoginNote()
 	}
 	st, err := k.status()
 	switch {
@@ -81,6 +84,15 @@ func keepGateway(connected bool) string {
 		msg += "; magpie daemon install starts it with the system"
 	}
 	return msg
+}
+
+// atLoginNote is said where magpie opens at login, so the terminal left
+// the gateway to the app. On Linux that can be a package's own autostart
+// entry on a box no desktop logs into (NixOS-WSL, a server over SSH),
+// which nothing ever starts (#3756): the note says the switch that has the
+// terminal hand the gateway on instead.
+func atLoginNote() string {
+	return gatewayGoneNote() + "; magpie opens at login and serves it then. Where no desktop logs in here, `magpie autostart off` has magpie tui hand it on as it quits"
 }
 
 // BackgroundLog is the log of a magpie serve that magpie tui left
