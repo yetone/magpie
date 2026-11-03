@@ -414,6 +414,9 @@ func sessionRoutes(mux *http.ServeMux, w Windows) {
 		}
 		s, ok := sessions.Find(in.Agent, in.ID)
 		run := s.Resume
+		if ok && in.In == "" {
+			run = sessions.ResumeNow(s)
+		}
 		if in.In != "" {
 			run = ""
 			for _, c := range s.Carry {

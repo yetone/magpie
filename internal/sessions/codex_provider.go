@@ -102,6 +102,8 @@ type codexConfig struct {
 	Profiles   map[string]struct {
 		Provider string `toml:"model_provider"`
 	} `toml:"profiles"`
+	// the ids of its [model_providers] tables
+	Providers map[string]any `toml:"model_providers"`
 }
 
 // readCodexConfig is the folder's codexConfig, parsed again only when

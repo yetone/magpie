@@ -149,9 +149,10 @@ func resumeSession(s sessions.Session) tea.Cmd {
 	if fi, err := os.Stat(s.Cwd); s.Cwd != "" && (err != nil || !fi.IsDir()) {
 		return func() tea.Msg { return flashMsg{text: "its folder " + tildePath(s.Cwd) + " isn't there any more"} }
 	}
-	c := proc.Command("sh", "-c", s.Resume)
+	run := sessions.ResumeNow(s)
+	c := proc.Command("sh", "-c", run)
 	if runtime.GOOS == "windows" {
-		c = proc.Command("powershell", "-NoProfile", "-Command", s.Resume)
+		c = proc.Command("powershell", "-NoProfile", "-Command", run)
 	}
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		if err != nil {
