@@ -28,7 +28,7 @@ func TestTrayNoCost(t *testing.T) {
 	if err := settings.Save(settings.Settings{TrayUsages: ids}); err != nil {
 		t.Fatal(err)
 	}
-	_, label, _ := trayUsageView(trayUsageCards(context.Background(), ids), time.Now(), false, false)
+	_, label, _ := trayUsageView(trayUsageCards(context.Background(), "en", ids), time.Now(), false, false)
 	if label != "Σ47M · $128 | Σ6.3M · $3.40+" {
 		t.Errorf("cost on: label %q", label)
 	}
@@ -36,7 +36,7 @@ func TestTrayNoCost(t *testing.T) {
 	if err := settings.Save(settings.Settings{TrayUsages: ids, TrayNoCost: true}); err != nil {
 		t.Fatal(err)
 	}
-	cells, label, tip := trayUsageView(trayUsageCards(context.Background(), ids), time.Now(), false, false)
+	cells, label, tip := trayUsageView(trayUsageCards(context.Background(), "en", ids), time.Now(), false, false)
 	if label != "Σ47M | Σ6.3M" {
 		t.Errorf("cost off: label %q, want the tokens alone", label)
 	}
@@ -50,10 +50,10 @@ func TestTrayNoCost(t *testing.T) {
 		t.Errorf("cost off: tooltip %q\nwant %q", tip, want)
 	}
 	// the tooltip with no cards, as the watch loop makes it
-	if got := trayIdleTip(trayMoney(sums[usage.Today], true), "usd", 0); got != "magpie\nToday: 6.3M tokens (912K in · 318K out · 5.1M cached)\n152 requests" {
+	if got := trayIdleTip("en", trayMoney(sums[usage.Today], true), "usd", 0); got != "magpie\nToday: 6.3M tokens (912K in · 318K out · 5.1M cached)\n152 requests" {
 		t.Errorf("cost off: idle tooltip %q", got)
 	}
-	if got := trayIdleTip(trayMoney(sums[usage.Today], false), "usd", 0); !strings.Contains(got, "≈$3.40+") {
+	if got := trayIdleTip("en", trayMoney(sums[usage.Today], false), "usd", 0); !strings.Contains(got, "≈$3.40+") {
 		t.Errorf("cost on: idle tooltip %q", got)
 	}
 }

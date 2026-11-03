@@ -46,7 +46,7 @@ func antigravityStarter() provider.SubscriptionQuota {
 func TestTrayAntigravityPools(t *testing.T) {
 	now := time.Date(2026, 10, 31, 3, 0, 0, 0, time.UTC)
 	q := antigravityStarter()
-	cells, label, tip := trayCardsView([]provider.SubscriptionQuota{q}, now, true, false, nil)
+	cells, label, tip := trayCardsView("en", []provider.SubscriptionQuota{q}, now, true, false, nil)
 	if len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"94%", "0%"}) || cells[0].ID != "antigravity|someone@gmail.com" {
 		t.Fatalf("cells %+v", cells)
 	}
@@ -76,7 +76,7 @@ func TestTrayAntigravityPools(t *testing.T) {
 		t.Fatalf("kinds %q", kinds)
 	}
 	// the Gemini pool alone
-	if cells, _, _ := trayCardsView([]provider.SubscriptionQuota{q}, now, true, false, map[string][]string{"antigravity": {"7d:gemini · 7 days"}}); !slices.Equal(cells[0].Rows, []string{"94%"}) {
+	if cells, _, _ := trayCardsView("en", []provider.SubscriptionQuota{q}, now, true, false, map[string][]string{"antigravity": {"7d:gemini · 7 days"}}); !slices.Equal(cells[0].Rows, []string{"94%"}) {
 		t.Fatalf("the Gemini pool alone: %q", cells[0].Rows)
 	}
 	if q.Windows[6].Name != "7 days" || q.Windows[6].TrayKind != "" {
@@ -92,7 +92,7 @@ func TestTrayModelWindows(t *testing.T) {
 	q := antigravityStarter()
 	q.Windows = slices.DeleteFunc(q.Windows, func(w provider.QuotaWindow) bool { return w.Pool != "" })
 	q.Windows[3].Used = 40 // Gemini 3 Flash, the family's tightest
-	cells, _, tip := trayCardsView([]provider.SubscriptionQuota{q}, now, false, false, nil)
+	cells, _, tip := trayCardsView("en", []provider.SubscriptionQuota{q}, now, false, false, nil)
 	if len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"100%", "100%"}) {
 		t.Fatalf("cells %+v", cells)
 	}
@@ -115,7 +115,7 @@ func TestTrayModelWindows(t *testing.T) {
 		{Name: "gemini-2.5-pro", Model: "gemini-2.5-pro", Used: 12},
 		{Name: "gemini-2.5-flash", Model: "gemini-2.5-flash", Used: 30},
 	}}
-	if cells, _, _ := trayCardsView([]provider.SubscriptionQuota{gemini}, now, false, false, nil); len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"30%", "12%"}) {
+	if cells, _, _ := trayCardsView("en", []provider.SubscriptionQuota{gemini}, now, false, false, nil); len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"30%", "12%"}) {
 		t.Fatalf("gemini %+v", cells)
 	}
 }
@@ -129,14 +129,14 @@ func TestTraySetAsideWindows(t *testing.T) {
 		{Name: "Weekly", Used: 30, Span: 7 * 24 * time.Hour, Aside: true},
 		{Name: "Session limit", Used: 10, Aside: true},
 	}}
-	if cells, _, _ := trayCardsView([]provider.SubscriptionQuota{ollama}, now, false, false, nil); len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"30%", "10%"}) {
+	if cells, _, _ := trayCardsView("en", []provider.SubscriptionQuota{ollama}, now, false, false, nil); len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"30%", "10%"}) {
 		t.Fatalf("ollama %+v", cells)
 	}
 	text := provider.SubscriptionQuota{Provider: "autoclaw", Name: "AutoClaw", Windows: []provider.QuotaWindow{
 		{Name: "积分余额", Display: "120", Text: true, Aside: true},
 		{Name: "Extra usage", Display: "$3.00", Aside: true},
 	}}
-	if cells, _, tip := trayCardsView([]provider.SubscriptionQuota{text}, now, false, false, nil); len(cells) != 0 || tip != "" {
+	if cells, _, tip := trayCardsView("en", []provider.SubscriptionQuota{text}, now, false, false, nil); len(cells) != 0 || tip != "" {
 		t.Fatalf("text rows made a cell: %+v %q", cells, tip)
 	}
 	claude := provider.SubscriptionQuota{Provider: "claude", Name: "Claude", Windows: []provider.QuotaWindow{
@@ -144,7 +144,7 @@ func TestTraySetAsideWindows(t *testing.T) {
 		{Name: "Extra", Used: 90, Span: 30 * 24 * time.Hour, Aside: true},
 		{Name: "Opus", Used: 80, Span: 7 * 24 * time.Hour, Model: "opus"},
 	}}
-	if cells, _, _ := trayCardsView([]provider.SubscriptionQuota{claude}, now, false, false, nil); len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"42%"}) {
+	if cells, _, _ := trayCardsView("en", []provider.SubscriptionQuota{claude}, now, false, false, nil); len(cells) != 1 || !slices.Equal(cells[0].Rows, []string{"42%"}) {
 		t.Fatalf("claude %+v", cells)
 	}
 }

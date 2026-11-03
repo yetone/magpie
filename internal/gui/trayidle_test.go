@@ -22,12 +22,12 @@ func TestTrayIdleTip(t *testing.T) {
 			"magpie\nToday: 1.0K tokens (950 in · 50 out)\n1 request"},
 		{usage.Totals{}, "magpie\nToday: no requests yet"},
 	} {
-		if got := trayIdleTip(c.t, "usd", 0); got != c.want {
+		if got := trayIdleTip("en", c.t, "usd", 0); got != c.want {
 			t.Errorf("trayIdleTip(%+v) =\n%q, want\n%q", c.t, got, c.want)
 		}
 	}
 	// waybar reads the title as Pango markup: still safe after sniTip
-	if got := sniTip(trayIdleTip(usage.Totals{Calls: 3, Input: 10, Cost: 2}, "usd", 0)); got != "magpie\nToday: 10 tokens (10 in · 0 out)\n≈$2.00 · 3 requests" {
+	if got := sniTip(trayIdleTip("en", usage.Totals{Calls: 3, Input: 10, Cost: 2}, "usd", 0)); got != "magpie\nToday: 10 tokens (10 in · 0 out)\n≈$2.00 · 3 requests" {
 		t.Errorf("sniTip: %q", got)
 	}
 }

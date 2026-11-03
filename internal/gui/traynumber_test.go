@@ -19,7 +19,7 @@ func TestTrayIconFigure(t *testing.T) {
 	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 	cards := trayCards()
 	view := func(ids []string, left bool, pick map[string][]string) []trayCell {
-		cells, _, _ := trayCardsView(trayPick(cards, ids, now), now, left, false, pick)
+		cells, _, _ := trayCardsView("en", trayPick(cards, ids, now), now, left, false, pick)
 		return cells
 	}
 	for _, tc := range []struct {

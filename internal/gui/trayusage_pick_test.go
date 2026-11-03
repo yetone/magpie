@@ -28,7 +28,7 @@ func TestTrayWindowsPicked(t *testing.T) {
 	}}
 	cards := []provider.SubscriptionQuota{claude, codex}
 	rows := func(pick map[string][]string) ([][]string, string) {
-		cells, _, tip := trayCardsView(cards, now, false, false, pick)
+		cells, _, tip := trayCardsView("en", cards, now, false, false, pick)
 		var out [][]string
 		for _, c := range cells {
 			out = append(out, c.Rows)
@@ -57,7 +57,7 @@ func TestTrayWindowsPicked(t *testing.T) {
 		t.Fatalf("gone: %q", got)
 	}
 	// the Linux tray's text follows it too
-	if _, label, _ := trayCardsView(cards, now, true, false, map[string][]string{"claude": {"5h"}}); label != "58% | 90% · 80%" {
+	if _, label, _ := trayCardsView("en", cards, now, true, false, map[string][]string{"claude": {"5h"}}); label != "58% | 90% · 80%" {
 		t.Fatalf("text: %q", label)
 	}
 }
@@ -134,7 +134,7 @@ func TestTrayWindowsPickAside(t *testing.T) {
 		t.Fatalf("kinds: %+v", out)
 	}
 	rows := func(pick []string) []string {
-		cells, _, _ := trayCardsView([]provider.SubscriptionQuota{cursor}, now, false, false, map[string][]string{"cursor": pick})
+		cells, _, _ := trayCardsView("en", []provider.SubscriptionQuota{cursor}, now, false, false, map[string][]string{"cursor": pick})
 		return cells[0].Rows
 	}
 	if got := rows(nil); !slices.Equal(got, []string{"30%"}) {
@@ -149,7 +149,7 @@ func TestTrayWindowsPickAside(t *testing.T) {
 	if got := rows([]string{"7d", "7d:grok bot"}); !slices.Equal(got, []string{"30%", "64%"}) {
 		t.Fatalf("both: %q", got)
 	}
-	_, _, tip := trayCardsView([]provider.SubscriptionQuota{cursor}, now, false, false, map[string][]string{"cursor": {"7d:grok bot"}})
+	_, _, tip := trayCardsView("en", []provider.SubscriptionQuota{cursor}, now, false, false, map[string][]string{"cursor": {"7d:grok bot"}})
 	if !strings.Contains(tip, "Grok Bot 64%") {
 		t.Fatalf("tooltip: %q", tip)
 	}
@@ -162,7 +162,7 @@ func TestTrayWindowsPickAside(t *testing.T) {
 	if ws := withTrayKinds([]provider.SubscriptionQuota{two})[0].Windows; ws[0].TrayKind != "7d:requests" || ws[1].TrayKind != "7d:tokens" {
 		t.Fatalf("one span twice: %+v", ws)
 	}
-	cells, _, _ := trayCardsView([]provider.SubscriptionQuota{two}, now, false, false, map[string][]string{"x": {"7d:tokens"}})
+	cells, _, _ := trayCardsView("en", []provider.SubscriptionQuota{two}, now, false, false, map[string][]string{"x": {"7d:tokens"}})
 	if !slices.Equal(cells[0].Rows, []string{"20%"}) {
 		t.Fatalf("Tokens alone: %q", cells[0].Rows)
 	}

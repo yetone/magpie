@@ -20,8 +20,8 @@ func TestTrayImageOneWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	cards := trayCards()[:2]
-	both, _, _ := trayCardsView(cards, time.Now(), false, false, nil)
-	one, _, _ := trayCardsView(cards, time.Now(), false, false, map[string][]string{"claude": {"5h"}})
+	both, _, _ := trayCardsView("en", cards, time.Now(), false, false, nil)
+	one, _, _ := trayCardsView("en", cards, time.Now(), false, false, map[string][]string{"claude": {"5h"}})
 	if len(both[0].Rows) != 2 || len(one[0].Rows) != 1 || one[0].Rows[0] != "42%" || len(one[1].Rows) != 2 {
 		t.Fatalf("both %q %q, one %q %q", both[0].Rows, both[1].Rows, one[0].Rows, one[1].Rows)
 	}

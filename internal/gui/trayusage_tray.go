@@ -47,14 +47,16 @@ func (h *host) watchTrayUsage() {
 		for {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			s := settings.Load()
-			cells, label, tip := trayCardsView(trayUsageCards(ctx, s.TrayUsages), time.Now(), s.QuotaLeft, s.TrayPace, s.TrayWindows)
+			// in magpie's language, as the tray menu is (yi_time)
+			lang := trayLang(s.Lang, systemLang)
+			cells, label, tip := trayCardsView(lang, trayUsageCards(ctx, lang, s.TrayUsages), time.Now(), s.QuotaLeft, s.TrayPace, s.TrayWindows)
 			cancel()
 			if s.TrayNoLogos {
 				cells = trayPlain(cells)
 			}
 			if tip == "" {
 				currency, rate := trayCurrency()
-				tip = trayIdleTip(trayMoney(trayTotalSum(usage.Today), s.TrayNoCost), currency, rate)
+				tip = trayIdleTip(lang, trayMoney(trayTotalSum(usage.Today), s.TrayNoCost), currency, rate)
 			}
 			// Windows' tray shows no text: the first card's figure is its
 			// icon instead (traynumber.go), drawn for the taskbar's size and

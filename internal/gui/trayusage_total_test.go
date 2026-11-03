@@ -26,7 +26,7 @@ func TestTrayTotals(t *testing.T) {
 
 	// a period the Usage page has no window for, or no total at all, is
 	// left out, as a card no longer there is
-	cards := trayUsageCards(context.Background(), []string{"usage:7d", "usage:3d", "usage:", "usage:today"})
+	cards := trayUsageCards(context.Background(), "en", []string{"usage:7d", "usage:3d", "usage:", "usage:today"})
 	if !slices.Equal(asked, []usage.Period{usage.Week, usage.Today}) {
 		t.Fatalf("summed %v, want 7d then today", asked)
 	}
@@ -57,14 +57,14 @@ func TestTrayTotals(t *testing.T) {
 
 	// nothing priced: the tokens alone; nothing at all: still a 0, so the
 	// menu bar doesn't look broken first thing in the morning
-	if q := trayTotalCard("usage:today", usage.Totals{Calls: 3, Input: 950, Unpriced: 3}, "usd", 0); q.Balance != "Σ950" {
+	if q := trayTotalCard("en", "usage:today", usage.Totals{Calls: 3, Input: 950, Unpriced: 3}, "usd", 0); q.Balance != "Σ950" {
 		t.Errorf("unpriced: %q", q.Balance)
 	}
-	if q := trayTotalCard("usage:today", usage.Totals{}, "usd", 0); q.Balance != "Σ0" {
+	if q := trayTotalCard("en", "usage:today", usage.Totals{}, "usd", 0); q.Balance != "Σ0" {
 		t.Errorf("none: %q", q.Balance)
 	}
 	// in the currency Settings says
-	if q := trayTotalCard("usage:today", usage.Totals{Input: 1000, Cost: 2}, "cny", 7.1); q.Balance != "Σ1.0K · ¥14.20" {
+	if q := trayTotalCard("en", "usage:today", usage.Totals{Input: 1000, Cost: 2}, "cny", 7.1); q.Balance != "Σ1.0K · ¥14.20" {
 		t.Errorf("cny: %q", q.Balance)
 	}
 
@@ -86,7 +86,7 @@ func TestTrayTotalsBesideCards(t *testing.T) {
 	old := trayTotalSum
 	trayTotalSum = func(usage.Period) usage.Totals { return usage.Totals{Input: 5000, Output: 1000, Cost: 0.12} }
 	t.Cleanup(func() { trayTotalSum = old })
-	cards := append(trayCards(), trayTotalCard("usage:today", trayTotalSum(usage.Today), "usd", 0))
+	cards := append(trayCards(), trayTotalCard("en", "usage:today", trayTotalSum(usage.Today), "usd", 0))
 	now := time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)
 	cells, label, _ := trayUsageView(trayPick(cards, []string{"usage:today", "claude|a@b.c"}, now), now, false, false)
 	if label != "Σ6.0K · $0.120 | 42% · 18%" {
@@ -123,7 +123,7 @@ func TestTrayTotalIsTheLedgers(t *testing.T) {
 	if sum != ledgerPage(usage.Today, usage.Filter{}, 0, 1).Totals {
 		t.Fatalf("menu bar %+v, ledger %+v", sum, ledgerPage(usage.Today, usage.Filter{}, 0, 1).Totals)
 	}
-	if q := trayTotalCard("usage:today", sum, "usd", 0); !strings.HasPrefix(q.Balance, "Σ9.2K") || !strings.Contains(q.Name, "9.2K tokens (1.0K in · 200 out · 8.0K cached)") {
+	if q := trayTotalCard("en", "usage:today", sum, "usd", 0); !strings.HasPrefix(q.Balance, "Σ9.2K") || !strings.Contains(q.Name, "9.2K tokens (1.0K in · 200 out · 8.0K cached)") {
 		t.Fatalf("%q %q", q.Balance, q.Name)
 	}
 }
