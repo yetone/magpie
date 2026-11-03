@@ -78,6 +78,51 @@ func TestClaudeTUISafeguardsInEnv(t *testing.T) {
 	}
 }
 
+// Claude Code's auto-mode context changes on nearly every request in parts
+// of its own: the tool ids of the turns before, git's status, the
+// system-reminder ids. A turn whose safeguards differ only there goes on in
+// the interactive run; restarting for them began a new run for every turn
+// and tool round, each writing the whole conversation to the cache again,
+// and one message spent a Pro account's 5-hour window (xybio). A change to
+// what the user allows (the rules here) still starts a new run.
+func TestClaudeTUISafeguardsVaryingPartsKeepTheRun(t *testing.T) {
+	h := tuiScriptHarness(t, `echo "extra ${CLAUDE_CODE_EXTRA_BODY-unset}" >> $log`)
+	varied := func(n int, deny string) string {
+		g := strings.Replace(reviewAsked, `"toolu_01Capture001"`, fmt.Sprintf(`"toolu_01Capture%03d"`, n), 1)
+		g = strings.Replace(g, `"error":"not_a_repo"}`, fmt.Sprintf(`"error":null,"status":{"clean":false,"counts":{"modified":%d},"porcelain":" M f%d.go","truncated":false},"visibility":null,"truncated":false}`, n, n), 1)
+		g = strings.Replace(g, `"prior_turn_context":[`, fmt.Sprintf(`"system_reminders":[{"id":"r%d"}],"shed":[],"prior_turn_context":[`, n), 1)
+		g = strings.Replace(g, `"deny":[]`, `"deny":[`+deny+`]`, 1)
+		return `"safeguards":` + g + `,`
+	}
+	said := []string{"a1"}
+	for n := 1; n <= 4; n++ {
+		h.extra = varied(n, "")
+		h.ask("rules", said...)
+		said = append(said, fmt.Sprintf("a%d", n+1))
+	}
+	if runs := h.runs(); len(runs) != 1 {
+		t.Fatalf("4 turns whose safeguards differ only in Claude Code's varying parts started %d runs, want 1", len(runs))
+	}
+	h.extra = varied(5, `"Bash(rm:*)"`)
+	h.ask("rules", said...)
+	runs := h.runs()
+	if len(runs) != 2 {
+		t.Fatalf("a changed rule went on in %d runs, want a second", len(runs))
+	}
+	seen := false
+	for _, log := range runs {
+		if strings.Contains(log, `Bash(rm:*)`) {
+			seen = true
+			if !strings.Contains(log, "--resume ") {
+				t.Fatalf("the new run wasn't given the whole conversation: %s", log)
+			}
+		}
+	}
+	if !seen {
+		t.Fatalf("no run has the changed rule: %v", runs)
+	}
+}
+
 // A client's own cache marks are taken with the interactive mode on: its
 // words are pasted without them (claudetui's userPieces), so Claude Code
 // keeps its own prompt caching, not turned off for marks it never sends,

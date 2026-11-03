@@ -346,8 +346,22 @@ Safeguards are taken: interactive Claude Code reads
 `CLAUDE_CODE_EXTRA_BODY` only as it starts (2.1.316: a later
 `apply_flag_settings` or a rewritten `--settings` file changes nothing it
 sends), so `startRun` puts them in its environment, and a turn whose
-safeguards changed starts a new run told the whole conversation
-(`setSafeguards`). Client cache marks are taken too, but not kept: the
+safeguards changed in what the user allows starts a new run told the
+whole conversation (`setSafeguards`). Claude Code's classifier context
+also carries parts that change on nearly every request, the ones it
+names as variable and sheds over its 256KB budget: `prior_turn_context`,
+`system_reminders`, `artifacts`, `text_provenance`, `shed`, Chrome's
+tabs, and git's status, remotes and error. `safeguardsKept` leaves those
+out of the comparison (git keeps cwd, root, branch and default branch),
+and a run whose turn differs only there goes on with the context it
+started with. Restarting for them began a new run for every turn and
+tool round, each writing the whole conversation to the cache again, and
+one message drained a Pro account's 5-hour window (xybio;
+`TestClaudeTUISafeguardsVaryingPartsKeepTheRun`). The cost: the server
+classifier sees those parts as they were when the run started, not
+current. A rules, permission-mode, auto-mode, folder or branch change
+still restarts. The `-p` run takes every change in place
+(`apply_flag_settings`). Client cache marks are taken too, but not kept: the
 helper pastes the words without their marks, so the run keeps Claude
 Code's own prompt caching (no `DISABLE_PROMPT_CACHING`, no client tail)
 and the reply reports every client mark as dropped
