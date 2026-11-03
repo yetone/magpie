@@ -193,7 +193,7 @@ func claudeDesktop(home string) *Agent {
 				return []Option{{Value: magpieID, Label: "magpie", Icon: "magpie",
 					Note: "Desktop's third-party gateway: Code and Cowork on magpie's models, no Anthropic sign-in (restart Desktop)"}}
 			},
-		}}, append(desktopTierFields(ps), desktopSubagentField(ps), desktopSubagentEffortField(ps))...),
+		}}, append(desktopTierFields(home, ps), desktopSubagentField(ps), desktopSubagentEffortField(ps))...),
 		// a Desktop already on magpie gets the import policy too
 		// (desktopSeedImport), and a profile for magpie's gateway it
 		// applies a key the gateway takes (desktopKeyApplied)
@@ -205,6 +205,11 @@ func claudeDesktop(home string) *Agent {
 						errs = append(errs, err)
 					}
 					if err := desktopKeyApplied(p); err != nil {
+						errs = append(errs, err)
+					}
+					// the models and picks as they are now (a provider
+					// saved or removed reaches it through SyncCatalog)
+					if err := desktopSyncModels(p); err != nil {
 						errs = append(errs, err)
 					}
 					// a Desktop on magpie from before the servers were
@@ -361,8 +366,9 @@ func desktopKeyApplied(p desktopPaths) error {
 // on a Claude model, its provider's model of the tier: another provider's
 // Claude model, or a Claude model beside a chat on another vendor's, is
 // never used unpicked. Desktop reads them from the
-// gateway's /v1/models when it starts.
-func desktopTierFields(ps []desktopPaths) []Field {
+// gateway's /v1/models when it starts, and a pick's behavesAs from its
+// profile's inferenceModels (desktopSyncModels), also at start-up.
+func desktopTierFields(home string, ps []desktopPaths) []Field {
 	var fields []Field
 	for _, tier := range gateway.DesktopTierNames {
 		fields = append(fields, Field{
@@ -373,7 +379,22 @@ func desktopTierFields(ps []desktopPaths) []Field {
 				if v != "" && !isMagpie(v) {
 					return fmt.Errorf("%s: %q is not a model magpie serves", tier, v)
 				}
-				return gateway.SetDesktopTier(tier, v)
+				if err := gateway.SetDesktopTier(tier, v); err != nil {
+					return err
+				}
+				// the profile's list of models, whose behavesAs a pick
+				// has, and the window the Code tab's Claude Code holds it
+				// to (claudeBudget's behaves)
+				var errs []error
+				for _, p := range ps {
+					if err := desktopSyncModels(p); err != nil {
+						errs = append(errs, err)
+					}
+				}
+				if desktopWiredAny(ps) {
+					_ = claude(home).Sync()
+				}
+				return joinErrs(errs)
 			},
 			Options: func(map[string]string) []Option {
 				if !desktopWiredAny(ps) {
@@ -525,7 +546,7 @@ const (
 	desktopMCPSeen = "claude-desktop.mcp-seen"
 )
 
-var desktopStashKeys = []string{desktopStashed, desktopMode, desktopMode3p, desktopApplied, desktopMade, desktopProfile, desktopLocale, desktopImport, desktopMCP, desktopMCPSeen}
+var desktopStashKeys = []string{desktopStashed, desktopMode, desktopMode3p, desktopApplied, desktopMade, desktopProfile, desktopLocale, desktopImport, desktopMCP, desktopMCPSeen, desktopModelsMark}
 
 // desktopAdoptStash moves the stash a packaged Desktop's folders got
 // before they had keys of their own (when magpie wrote only one set) onto
@@ -649,6 +670,10 @@ func desktopOn(p desktopPaths) error {
 
 	desktopCarryLocale(p)
 	if err := desktopCarryMCP(p); err != nil {
+		return err
+	}
+	// a pick for a tier: the list its behavesAs goes in
+	if err := desktopSyncModels(p); err != nil {
 		return err
 	}
 

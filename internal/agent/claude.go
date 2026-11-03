@@ -1231,9 +1231,10 @@ func claudeIn(at place) *Agent {
 		var models []claudeBudget
 		if desktopOn() {
 			shown, _ := provider.CatalogFor("claude-desktop")
+			behaves, _ := gateway.DesktopBehavesAs()
 			for _, e := range shown {
 				if id := gateway.DesktopID(e); claudeName(id) == "" {
-					models = append(models, claudeBudget{id: id, window: e.Context, long: gateway.DesktopListed1M(e), compact: work(e.ID)})
+					models = append(models, claudeBudget{id: id, window: e.Context, long: gateway.DesktopListed1M(e), compact: work(e.ID), behaves: behaves[id] != ""})
 				}
 			}
 		}

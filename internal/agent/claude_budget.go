@@ -29,6 +29,10 @@ type claudeBudget struct {
 	// the auto-compact window magpie gives it: 0 for the top-level one
 	// (base), below 0 for none, its whole window
 	compact int
+	// Claude Code runs it as a Claude model it knows (a Desktop tier's
+	// pick, behavesAs: gateway.DesktopBehavesAs), and so at that model's
+	// window, not at the one it is told: it always gets its own entry
+	behaves bool
 }
 
 // claudeLong is the window Claude Code takes a "[1m]" model for.
@@ -109,7 +113,7 @@ func claudePlan(models []claudeBudget, base int, theirs map[string]string) (top 
 		if base > 0 {
 			had = min(base, assumed)
 		}
-		if want == had {
+		if want == had && !m.behaves {
 			continue
 		}
 		id := strings.TrimSuffix(m.id, "[1m]")

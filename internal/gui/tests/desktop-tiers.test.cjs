@@ -4,7 +4,10 @@
 // no model field here for them to follow: the tiers' square says what an
 // unset one runs on instead, and its picker's reset entry is "Not set", not
 // "Same as model". Connected to magpie, the square is in the row opened from
-// its link. In English and Chinese. No backend: the API is faked here.
+// its link. Desktop reads the tiers (and magpie's list of its models, a
+// pick's behavesAs with it, moer2831) only as it starts, so the tiers' menu
+// ends with one line saying so. In English and Chinese. No backend: the
+// API is faked here.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -52,8 +55,8 @@ function server(lang, sets) {
 }
 
 const W = {
-  en: { unset: "the chat's model; for a Claude chat, its provider's model of the tier", reset: "Not set", summary: "tiers: haiku" },
-  zh: { unset: "对话的模型；对话用 Claude 模型时，用其供应商的该档位模型", reset: "未设置", summary: "分档：haiku" },
+  en: { unset: "the chat's model; for a Claude chat, its provider's model of the tier", reset: "Not set", summary: "tiers: haiku", foot: "Claude Desktop reads the tiers as it starts: restart it after a change." },
+  zh: { unset: "对话的模型；对话用 Claude 模型时，用其供应商的该档位模型", reset: "未设置", summary: "分档：haiku", foot: "Claude Desktop 在启动时读取分档：改动后请重启它。" },
 };
 
 const cd = '.row.agent[data-id="claude-desktop"]';
@@ -80,10 +83,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const y = await page.evaluate(() => scrollY);
       await square.click();
       await page.locator("#pop:not([hidden]) #list li").first().waitFor();
-      const rows = await page.locator("#list li").evaluateAll((es) => es.map((e) => [e.querySelector(".v")?.textContent, e.querySelector(".n")?.textContent || ""]));
+      const rows = await page.locator("#list li[data-i]").evaluateAll((es) => es.map((e) => [e.querySelector(".v")?.textContent, e.querySelector(".n")?.textContent || ""]));
       assert.deepEqual(rows.map((r) => r[0]), tiers);
       assert.equal(rows[0][1], w.unset);
       assert.equal(rows[2][1], "Flash");
+      // the restart line, last, whole and not a choice
+      const foot = await page.locator("#list li").last().evaluate((e) => ({ cls: e.className, text: e.textContent, i: e.dataset.i, cut: e.scrollWidth > e.clientWidth }));
+      assert.deepEqual(foot, { cls: "menu-foot", text: w.foot, i: undefined, cut: false });
 
       // sonnet's picker: the reset entry, then magpie's models; GLM picked
       await page.locator("#list li").nth(1).click();

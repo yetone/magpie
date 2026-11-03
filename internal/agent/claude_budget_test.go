@@ -61,6 +61,13 @@ func TestClaudePlan(t *testing.T) {
 	if top != 1000000 || !reflect.DeepEqual(entries, map[string]int{"g": 272000}) {
 		t.Fatalf("[1m] beside 272K: %d %v", top, entries)
 	}
+	// a Desktop tier's pick Claude Code runs as a Claude model
+	// (behavesAs, moer2831) would run at that model's window: it is told
+	// its own, even where it is the largest
+	top, entries = claudePlan([]claudeBudget{{id: "a", window: 1000000}, {id: "b", window: 1000000, behaves: true}, {id: "c", window: 400000, behaves: true}}, 0, nil)
+	if top != 1000000 || !reflect.DeepEqual(entries, map[string]int{"b": 1000000, "c": 400000}) {
+		t.Fatalf("behavesAs: %d %v", top, entries)
+	}
 	// an id magpie's editor can't put in a key path gets no entry
 	if _, entries = claudePlan([]claudeBudget{{id: "a", window: 400000}, {id: "b*", window: 100000}}, 0, nil); len(entries) != 0 {
 		t.Fatalf("b*: %v", entries)

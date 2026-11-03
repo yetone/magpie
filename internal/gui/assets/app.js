@@ -4162,6 +4162,9 @@ function tierMenu(a) {
   const name = (f) => optionFor(f, f.value)?.label || f.value;
   return {
     key: "tiers", label: omp ? "roles" : "tiers", value: "", menu: true, custom: custom.length > 0,
+    // Desktop reads magpie's list of its models, a pick's prompt with it,
+    // only as it starts
+    foot: a.id === "claude-desktop" ? DESKTOP_TIERS_FOOT : "",
     summary: custom.length ? custom.map((f) => level(effortOf(f)) ? `${t(f.label)} (${level(effortOf(f))})` : t(f.label)).join(", ") : main ? t("same as model") : t("not set"),
     options: tiers.flatMap((f) => {
       const model = {
@@ -4173,6 +4176,8 @@ function tierMenu(a) {
     }),
   };
 }
+
+const DESKTOP_TIERS_FOOT = "Claude Desktop reads the tiers as it starts: restart it after a change.";
 
 // levelUnset: what a role's level is when none is set
 const levelUnset = (a) => ompAgent(a) ? t("the session's thinking level") : t("the effort Claude Code asks for");
@@ -5454,6 +5459,7 @@ function renderList() {
     list.append(li);
   });
   for (const m of pick.kept || []) list.append(keptNote(m));
+  if (pick.field.foot) list.append(el("li", "menu-foot", t(pick.field.foot)));
   list.querySelector(`li[data-i="${pick.cursor}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
