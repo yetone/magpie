@@ -31,6 +31,8 @@ if (mode === "panel" && !document.body.classList.contains("linux")) $("header.to
 // `magpie web`: the page in a browser tab, with no window of the app's
 // around it — it opens links itself, and what is the desktop's is left out
 const web = !!window.bootPrefs?.web;
+// magpie web seen from another computer: localhost is the viewer's (curtinp118)
+const remotePage = web && !/^(localhost|127(\.\d+){3}|\[::1\]|::1)$/i.test(location.hostname);
 // layout.js applies the mode and platform before the header can paint.
 // Gateway mode (gatewaymode.go): magpie web on a server that is only the
 // gateway for other computers' agents leaves out this computer's agents'
@@ -12278,6 +12280,7 @@ async function startSignIn(agent, risky, site, o = {}) {
     renderProviders();
     return;
   }
+  if (agent === "codex" && !site && remotePage) site = "device";
   // one on more than one site says which first
   if (subOf(agent)?.sites && !site) {
     signing = { agent, state: "site", forUser: o.user, picked: o.proxy };
@@ -12308,12 +12311,8 @@ async function startSignIn(agent, risky, site, o = {}) {
   }
 }
 
-// openSignInPage opens a sign-in's page for the window. In a browser tab
-// (magpie web: a server, Docker) that's a new tab the viewer's browser may
-// block, as it was asked for after the sign-in started, not on the click:
-// then it says so, and the page opens from Open again, a click
-// (treeMan on Discord). A tab opened without noopener is the one way to
-// learn it was blocked, so the page it opens is cut from this one at once.
+// openSignInPage: in magpie web a new tab the browser may block, then Open
+// again (treeMan); no noopener, the one way to learn it, cut at once.
 const openBlocked = "\u0000blocked";
 function openSignInPage(url) {
   if (!web) return api("open", { url });
@@ -12347,9 +12346,7 @@ async function followSignIn(id) {
   }
 }
 
-// signingKept: what a sign-in under way keeps across its updates, for Try
-// again and a proxy picked for it — its site and way, the account signed
-// in to again, the proxy picked
+// signingKept: a sign-in's site, way, account and proxy across updates
 function signingKept() {
   return { site: signing.site, method: signing.method, inputs: signing.inputs, forUser: signing.forUser, picked: signing.picked, askProxy: signing.askProxy, customProxy: signing.customProxy, openError: signing.openError, linkOnly: signing.linkOnly };
 }
@@ -12384,9 +12381,8 @@ async function signedIn(st) {
   setTimeout(() => { justAdded = ""; }, 2000);
 }
 
-// startPluginSignIn: a plugin's provider signed in to as OpenCode's
-// `auth login` does — the way to sign in, the questions that way asks,
-// then the browser (and the code its page shows, pasted back) or a key.
+// startPluginSignIn: as OpenCode's `auth login`: way, questions, then the
+// browser (its code pasted back) or a key.
 async function startPluginSignIn(sub, method, inputs = {}, o = {}) {
   const ms = sub.plugin.methods || [];
   if (!ms.length) {
@@ -12535,9 +12531,7 @@ function renderPluginAsk(sub) {
   return box;
 }
 
-// renderStepPlan: a StepFun provider's platform sign-in, which the user
-// makes in their own browser and brings here with magpie's bookmarklet,
-// kept for the provider id alone: two on one site can be two accounts
+// renderStepPlan: StepFun's platform sign-in by bookmarklet, per provider id
 function renderStepPlan(sp, id) {
   const box = el("div", "stepplan");
   if (sp.signedIn) {
@@ -12600,11 +12594,8 @@ function cancelSignIn() {
   renderProviders();
 }
 
-// A sign-in goes through the proxy its account's requests will go through,
-// so the vendor sees the account come from one place (#1663,
-// demystify0137): the sheet says which, and another can be picked, which
-// starts it again through that one and is kept as the account's proxy.
-// proxyShown is a proxy's address without the name and password in it.
+// A sign-in goes through its account's proxy (#1663); another can be
+// picked. proxyShown hides the name and password.
 function proxyShown(u) {
   return String(u || "").replace(/^([a-z][a-z0-9+.-]*:\/\/)[^@/]*@/i, "$1");
 }
@@ -12621,11 +12612,8 @@ function signInThrough(sub, v) {
   startPluginSignIn(sub, f?.method, f?.inputs || {}, o);
 }
 
-// signInProxyChoices: the proxies a sign-in can go through — the global
-// one, none, the subscription's, the ones its other accounts go through,
-// or one typed in. The global one is left out while the subscription has
-// a proxy of its own and other accounts: an account can't be kept on the
-// global proxy then.
+// signInProxyChoices: global, none, the subscription's, its accounts', or
+// typed; no global while the subscription has its own and accounts.
 function signInProxyChoices(sub) {
   const p = providers?.providers?.find((x) => x.account?.agent === sub.agent);
   const own = (p?.proxy || "").trim();
@@ -12696,9 +12684,7 @@ function signInProxyForm(sub) {
   return form;
 }
 
-// A Copilot account on GitHub Enterprise Cloud with data residency signs in
-// at its enterprise's <name>.ghe.com, not github.com (#723): the device
-// code's panel offers that, and the host is asked in place of the code.
+// A Copilot account with data residency signs in at <name>.ghe.com (#723).
 const GHE_HOST = /^(https?:\/\/)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.ghe\.com\/?$/i;
 
 // copilotHostSwitch: the link from a Copilot sign-in to the other place it
@@ -12726,10 +12712,8 @@ async function signAsk(flow) {
 }
 const startClaudeToken = () => signAsk({ agent: "claude", state: "token", token: "" });
 
-// dropSigningIn: the editor of provider id closing (Cancel, Save, Remove)
-// leaves no sign-in of its account waiting behind it, to come back with the
-// editor (#526: 无论我点击底部的移除、取消、保存都没办法); an import being
-// read is left to finish.
+// dropSigningIn: an editor closing leaves no sign-in waiting (#526); an
+// import being read finishes.
 function dropSigningIn(id) {
   const p = typeof id === "string" && providers?.providers?.find((x) => x.id === id);
   if (!p?.account || !signing || signing.agent !== p.account.agent || signing.state === "importing") return;
@@ -12739,6 +12723,14 @@ function dropSigningIn(id) {
 
 // renderSigning: where a sign-in stands, in place of the button that
 // started it — waiting on the browser, or what went wrong.
+// ChatGPT's other way in: the browser's, or a code on its device page (codex_device_signin.go)
+function codexWay(sub, device, o) {
+  const b = el("button", "link codex-way", device ? t("Sign in in the browser instead") : t("Sign in with a code instead"));
+  b.dataset.way = device ? "browser" : "device";
+  if (!device) b.title = t("For magpie on a server or in Docker: enter a code on ChatGPT's page, with no address to copy back");
+  b.onclick = () => startSignIn(sub.agent, true, b.dataset.way, o);
+  return b;
+}
 function renderSigning(sub) {
   const box = el("div", "signing" + (signing.state === "failed" ? " failed" : ""));
   const tt = el("span", "tt");
@@ -12816,6 +12808,7 @@ function renderSigning(sub) {
     const acts = el("span", "acts");
     const ghe = copilotHostSwitch(sub);
     if (ghe) acts.append(ghe);
+    if (sub.agent === "codex" && !sub.plugin && signing.site === "device") acts.append(codexWay(sub, true, o));
     acts.append(signInProxyLink(sub));
     tt.append(acts);
     if (signing.askProxy) tt.append(signInProxyForm(sub));
@@ -12839,6 +12832,7 @@ function renderSigning(sub) {
       : signing.openError ? t("magpie couldn't open your browser: {error}. Open the sign-in link below in a browser yourself.", { error: signing.openError })
       : sub.plugin ? (signing.instructions || (signing.pasteCode ? t("magpie opened the sign-in page. Paste the code it shows below.") : t("magpie opened the sign-in page. The account shows up here as soon as you're done.")))
       : signing.pasteCode ? t("magpie opened the sign-in page. Paste the code it shows below.")
+      : signing.code && sub.agent === "codex" ? t("magpie opened ChatGPT's device page. Enter this code there; the account shows up here as soon as you're done.")
       : signing.code && sub.agent === "factory" ? t("magpie opened Factory's sign-in page. Check it shows this code and confirm it; the account shows up here as soon as you're done.")
       : signing.code ? t("magpie opened GitHub's device page. Enter this code there; the account shows up here as soon as you're done.") : t("magpie opened the sign-in page. The account shows up here as soon as you're done.")));
   if (signing.code) {
@@ -12968,6 +12962,8 @@ function renderSigning(sub) {
     };
     acts.append(other);
   }
+  if (sub.agent === "codex" && !sub.plugin && signing.state === "waiting")
+    (tt.querySelector(".acts") || tt.appendChild(el("span", "acts"))).append(codexWay(sub, signing.site === "device", { user: signing.forUser, proxy: signing.picked }));
   if (sub.importable) {
     // an account another tool is signed in to comes in from its file
     const imp = el("button", "link", importSay(sub.agent).instead || t("Import from a file instead…"));
