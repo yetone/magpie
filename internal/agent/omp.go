@@ -822,7 +822,7 @@ func ompOwnOptions(modelsFile, cur string) []Option {
 		}
 		for _, m := range f.Providers[p].Models {
 			if m.ID != "" {
-				opts = append(opts, Option{Value: p + "/" + m.ID, Note: m.Name, Icon: modelIcon(p, m.ID), Group: name, GroupIcon: providerIcon(p)})
+				opts = append(opts, Option{Value: p + "/" + m.ID, Note: m.Name, Icon: modelIcon(p, m.ID), Group: name, GroupIcon: providerIcon(p), Direct: name})
 			}
 		}
 	}

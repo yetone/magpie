@@ -484,10 +484,14 @@ func ownProvider(native func(p string) []catalog.Model, p string) []Option {
 		ms = codexServed(p)
 	}
 	opts := group(name, options(ms, p+"/"))
-	if ic := providerIcon(p); ic != "" {
-		for i := range opts {
-			opts[i].GroupIcon = ic
-		}
+	ic := providerIcon(p)
+	for i := range opts {
+		opts[i].GroupIcon = ic
+		// asked of the vendor on the agent's own sign-in or key: picked on
+		// a connected agent it takes the agent off magpie, which the
+		// picker says and asks first (maxleebeta: Pi's own OpenCode Go
+		// model turned 「接入」 off, with nothing said)
+		opts[i].Direct = name
 	}
 	return opts
 }
