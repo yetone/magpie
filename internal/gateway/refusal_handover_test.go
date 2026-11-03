@@ -203,9 +203,13 @@ func TestRefusalAfterShownThinkingWithNoOneElse(t *testing.T) {
 	}
 }
 
-// A refusal once the answer's text began is the agent's: what was said
-// can't be taken back, and nobody else is asked.
-func TestRefusalAfterThinkingAndTextStays(t *testing.T) {
+// A vendor's finish code for its filter once the answer's text began is
+// still its word that the turn was never answered (#5075): the next
+// member answers in the same stream, what went out first staying as the
+// reasoning of a handed-over try does. Before, the reply ended on the
+// vendor's finish code, and a client that reads finish reasons failed
+// the whole turn on it.
+func TestRefusalAfterThinkingAndTextFailsOver(t *testing.T) {
 	fresh(t)
 	late := sse(
 		`data: {"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"first thought"}}]}`,
@@ -219,11 +223,15 @@ func TestRefusalAfterThinkingAndTextStays(t *testing.T) {
 	refusalGroup(t, "a/m", "b/m")
 	s := New()
 	code, body := sendTo(s, "/v1/chat/completions", chatStreamAsk)
-	if code != 200 || body != late || b.n != 0 {
-		t.Fatalf("%d (b %d): %s", code, b.n, body)
+	if code != 200 || a.n != 1 || b.n != 1 || !strings.Contains(body, "first thought") || !strings.Contains(body, "half") || !strings.Contains(body, "from b") || strings.Contains(body, "sensitive") {
+		t.Fatalf("%d (a %d, b %d): %s", code, a.n, b.n, body)
 	}
-	if r := lastRoute(s); len(r.Tries) != 1 || r.Tries[0].Rest != nil {
+	checkChatSpliced(t, body)
+	if r := lastRoute(s); len(r.Tries) != 2 || r.Tries[0].Fail != failRefused || r.Tries[0].Rest != nil {
 		t.Fatalf("tries: %+v", r.Tries)
+	}
+	if s.resting("a") {
+		t.Fatal("the member that answered before its filter's code was set aside")
 	}
 }
 

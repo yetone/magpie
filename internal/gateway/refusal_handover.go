@@ -119,7 +119,9 @@ func (h *holdWriter) passOver(b []byte) {
 		rest := o.pending
 		o.pending = nil
 		h.refusalAfter(rest)
-		h.out(rest)
+		if !h.handedOver { // the refusal in it handed the try over (handOffAfter)
+			h.out(rest)
+		}
 	}
 	h.flush()
 }
@@ -131,6 +133,43 @@ func (h *holdWriter) out(b []byte) {
 	}
 	h.sent(b)
 	h.w.Write(b)
+}
+
+// handsOff says whether a refusal that is the vendor's own finish code,
+// once its answer has gone out (refusalAfter), may hand the try over: the
+// reply is passing — what is still held goes through the scan, whose own
+// refusal paths (flow, handOver) ask the next candidate without it — a
+// candidate stands behind it reading Chat chunks, whose pieces carry no
+// index for the next stream's to collide with, and no call of the reply
+// has gone by, for the agent to be left holding beside the next member's.
+// An Anthropic or Responses client's stream is numbered, and what of it
+// has gone by untracked would number the next one's blocks wrong; its
+// refusal goes as it came, as before.
+func (h *holdWriter) handsOff() bool {
+	return h.passing && h.over != nil && h.over.proto == provider.Chat && !h.calls
+}
+
+// handOffAfter ends a passing try at the vendor's finish code saying the
+// turn it had begun was filtered (#5075): whatever it said first — the
+// canned line a word-list filter answers with — the code says the turn
+// was never answered, and a client that reads finish reasons fails the
+// whole turn on it, so the members left are asked in the same stream, as
+// a refusal after reasoning is (handOver). What went out first stays, as
+// that reasoning does; the refusal's own end (the finish chunk, usage,
+// [DONE]) isn't sent, and the next one's chunks follow without a second
+// 200. Its account doesn't rest: the request was refused, not the
+// account (#248).
+func (h *holdWriter) handOffAfter(status int, msg string) {
+	h.flush()
+	h.handedOver, h.passing = true, false
+	h.refused, h.failure, h.failMsg = true, status, msg
+	h.ended, h.tail = false, nil
+	if h.alive != nil {
+		h.alive.sent = true
+	}
+	if h.stop != nil {
+		h.stop()
+	}
 }
 
 // handOver ends a passing try at its refusal (passOver): the agent has

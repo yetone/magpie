@@ -2314,6 +2314,10 @@ type holdWriter struct {
 	// through as it comes. A refusal isn't a failure of the account, so
 	// nobody rests for it, whatever its timing (#248)
 	refusedAfter bool
+	// calls: a tool call of some kind has gone by in the reply, so a
+	// refusal after it is not handed over (handsOff): the call the agent
+	// has would sit beside the next member's, broken or doubled
+	calls bool
 	// after is what came of the reply once it began, for a refusal in it
 	// to be read event by event
 	after []byte
@@ -3067,35 +3071,71 @@ func (h *holdWriter) sent(b []byte) {
 // the scan that reads a stream held for its first content never sees an
 // event that comes after it, and the filter refusing a turn it had begun
 // is no failure of the account, as one it refuses before any of it is said
-// is not (#248). What is read is kept only as far as the event it is in is
-// whole, as a write may end in the middle of one.
+// is not (#248). A refusal that is the vendor's own finish code — Chat
+// Completions' content_filter, Anthropic's stop_reason refusal — on a
+// client reading Chat chunks hands the try over (#5075, handOffAfter):
+// the line the vendor put out first stays, as the reasoning of a
+// handed-over try does. What is read is kept only as far as the event it
+// is in is whole, as a write may end in the middle of one.
 func (h *holdWriter) refusalAfter(b []byte) {
 	// Every write is read, not only one that looks like a refusal: an
 	// event's name may come in one write and its data in the next (#2400).
 	// Only an unfinished event's bytes are kept.
+	if !h.calls {
+		h.calls = mayCall(b)
+	}
 	buf := b
 	if len(h.after) > 0 {
 		h.after = append(h.after, b...)
 		buf = h.after
 	}
+	at := len(buf) - len(b) // where this write's bytes begin in buf
+	gone := 0               // how much of buf whole events have taken
 	for {
-		end := eventEnd(buf)
+		end := eventEnd(buf[gone:])
 		if end < 0 {
 			break
 		}
-		ev := buf[:end]
-		buf = buf[end:]
+		ev := buf[gone : gone+end]
+		gone += end
 		if mayRefuse(ev) {
-			if kind, _, _ := streamEvent(ev); kind == eventRefusal || kind == eventRefusalError {
+			if kind, status, msg := streamEvent(ev); kind == eventRefusal || kind == eventRefusalError {
 				h.refusedAfter = true
+				// an error event mid-reply is a stream's accident, kept as
+				// it came (#733); the finish code is the vendor's word that
+				// the turn it had begun was never answered (#5075)
+				if kind == eventRefusal && h.handsOff() {
+					// what of this write went by before the code — the
+					// reply's last words — goes out with the rest; the
+					// code, and what came with it, does not
+					if start := gone - len(ev); start > at {
+						pre := buf[at:start]
+						h.sent(pre)
+						h.w.Write(pre)
+					}
+					h.handOffAfter(status, msg)
+					return
+				}
 			}
 		}
 	}
+	buf = buf[gone:]
 	if len(buf) == 0 || len(buf) > holdMost {
 		h.after = nil
 		return
 	}
 	h.after = append([]byte(nil), buf...)
+}
+
+// mayCall says whether a write of the reply carries a tool call of some
+// kind: Chat's delta.tool_calls or its legacy function_call, Anthropic's
+// tool_use, Responses' function_call. A word of it in plain text counts
+// too — the cost of missing one, a call the agent would run beside the
+// next member's, is the greater.
+func mayCall(b []byte) bool {
+	return bytes.Contains(b, []byte(`"tool_calls"`)) ||
+		bytes.Contains(b, []byte(`"tool_use"`)) ||
+		bytes.Contains(b, []byte(`"function_call"`))
 }
 
 // mayRefuse is whether an event may be the safety filter's refusal, by the
