@@ -619,9 +619,22 @@ func Run(version string, showMain bool, link string) error {
 	h.setTrayInBar(barIcon(h)["on"])
 	go h.lighten()
 	h.watchAlerts()
+	// a double-click opens the main window where the tray tells one apart
+	// (trayDoubleClicks: Windows); its first click opened the panel, which
+	// openMain hides, and its last release is no click of its own
+	var double trayDouble
+	if trayDoubleClicks(runtime.GOOS) {
+		h.tray.OnDoubleClick(func() {
+			double.doubled(time.Now())
+			h.ShowMain("")
+		})
+	}
 	// the quick panel by the icon, or the main window if the user would
 	// rather (Settings → Click the tray icon to)
 	h.tray.OnClick(func() {
+		if double.swallow(time.Now()) {
+			return
+		}
 		if cmdClick() {
 			return // Command-drag moves the icon; the system handles it
 		}

@@ -2,7 +2,9 @@
 // The tray panel opens the main window from one place: the header's
 // open-as-a-window icon. Its foot had an "Open magpie" button too, which did
 // the same (yogurt36 on Discord); the foot keeps Profiles, the status line
-// and Quit, which are its own.
+// and Quit, which are its own. The icon is named for what it opens, the main
+// window: isaac_bai on Discord looked for the foot's button and took the
+// icon's "Open as a window" for this panel in a window.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -46,6 +48,11 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.route("**/*", handler(lang, calls));
       await page.goto("http://magpie.test/?mode=panel");
       await page.locator("#agents .row.agent").first().waitFor();
+
+      // the header's icon is named for what it opens, in the panel's language
+      const name = { en: "Open the main window", zh: "打开主窗口", "zh-TW": "開啟主視窗", ja: "メインウィンドウを開く", de: "Hauptfenster öffnen" }[lang];
+      assert.equal(await page.locator(".top #open").getAttribute("title"), name, "the header icon's name");
+      assert.equal(await page.locator(".top").getByRole("button", { name, exact: true }).count(), 1, "found by its name");
 
       // the header's icon opens the window
       await page.locator(".top #open").click();
