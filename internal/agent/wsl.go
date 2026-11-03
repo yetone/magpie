@@ -510,8 +510,9 @@ var wslKinds = []wslKind{
 				return func(cur map[string]string) []Option {
 					return joinedVia(group("Claude Code", claudeOwn(cur["model"], nil, catalog.Provider("anthropic"))), claudeViaShared(false), [2]string{"\x00claude-via", "\x00asleep"})
 				}
-			case "effort", "ultracode":
-				// their own options read only what was last seen
+			case "effort", "ultracode", "statusline":
+				// their own options read only what was last seen; magpie's
+				// status line isn't offered in a distro
 				return nil
 			case "login":
 				// its sign-in, while the model last seen is magpie's

@@ -2171,6 +2171,9 @@ func claudeIn(at place) *Agent {
 			return claudeSignIns()
 		},
 	})
+	// magpie's status line, offered where the user has none (claude_statusline.go)
+	statusField := claudeStatusField(at, path, func() { stale = "" })
+	fields = append(fields, statusField)
 	// a write asks a proxy in front of magpie first (claudeAsk): each
 	// field's Set, Sync and Unwire. Follow writes only once routed, so a
 	// first look there leaves it for the next one, as reads do.
@@ -2199,6 +2202,10 @@ func claudeIn(at place) *Agent {
 			forget(at.key("claude.model"), at.key("claude.base_url"), at.key("claude.auth_token"), mainKey, wroteAt, aboutKey)
 			for _, k := range claudeOwnEnv {
 				forget(at.key("claude.env." + k))
+			}
+			// magpie's status line goes with it; one of the user's own stays
+			if err := statusField.Set(""); err != nil {
+				return err
 			}
 			// magpie's level in the env goes alone: the effortLevel under
 			// it is the user's own, which Claude Code is back on

@@ -30,9 +30,10 @@ const statuslineUsage = `usage: magpie statusline [<provider|account>…]
   windows' use ("5h 62% 7d 41%"), * on the one that answered last. Accounts that
   answered through magpie in the last 30 days are shown, all of them when none has;
   a provider or an account's email, login or name keeps only those.
-  Claude Code runs it on every message with the session's JSON on stdin; put it in
-  ~/.claude/settings.json yourself (magpie doesn't write it, a status line such as
-  claude-hud may hold it):
+  Claude Code runs it on every message with the session's JSON on stdin. Turn it on
+  with the status line square on Claude Code's row in the Agents page (or
+  magpie claude statusline on), which writes ~/.claude/settings.json's statusLine
+  unless a status line of your own (claude-hud, a script) is there; or add it yourself:
     "statusLine": {"type": "command", "command": "magpie statusline"}
   It asks the gateway on this computer (the port in Settings' Gateway address, or MAGPIE_ADDR), never
   a vendor, and prints nothing when the gateway isn't running.`
