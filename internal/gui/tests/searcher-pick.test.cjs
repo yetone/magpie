@@ -85,6 +85,8 @@ function serve(lang, posted, st) {
     const json = (data, status = 200) => r.fulfill({ status, json: data });
     if (url.pathname === "/boot.js") return r.fulfill({ contentType: "text/javascript", body: `window.bootPrefs = ${JSON.stringify({ lang, theme: st.theme || "light", web: true })};` });
     if (url.pathname === "/wails/runtime.js") return r.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
+    // reads slower than the first drawing of the page, as on a busy machine
+    if (st.slowRead && (url.pathname === "/api/state" || url.pathname === "/api/settings") && r.request().method() === "GET") await new Promise((ok) => setTimeout(ok, st.slowRead));
     if (url.pathname === "/api/state") return json({ agents: [], profiles: [], settings: settings() });
     if (url.pathname === "/api/settings") {
       if (r.request().method() === "POST") {
@@ -317,9 +319,17 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(posted.at(-1).searcher, "off");
       await page.evaluate(() => savePrefs({ ...prefsKeep(prefs), noStats: true }));
       assert.equal(posted.at(-1).searcher, "off");
+      // The row is drawn when the page opens and again when the state and
+      // the settings come; the one scrolled to is the one that stays (#1745).
+      st.slowRead = 400;
       await page.reload();
+      await settingsDrawn(page);
       await row.waitFor();
       await row.scrollIntoViewIfNeeded();
+      await row.evaluate((r) => { r.dataset.scrolled = "1"; });
+      await settingsDrawn(page);
+      assert.equal(await page.evaluate(() => document.querySelector("#searchList .row.searcher-row")?.dataset.scrolled), "1", "the row scrolled to was drawn again after it");
+      st.slowRead = 0;
       assert.equal(await row.locator("button.searcher-pick").innerText(), w.off);
       assert.equal(await row.locator(".searcher-own, .searcher-unused, .searcher-relays, .searcher-left-out").count(), 0);
       assert.equal(await page.locator("#searchFirstRow").count(), 0);
