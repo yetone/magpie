@@ -1224,7 +1224,12 @@ func SwitchLogin(agent, user string) error {
 	return nil
 }
 
-func switchLogin(agent, user string) error {
+func switchLogin(agent, user string) error { return switchLoginBy(agent, user, false) }
+
+// switchLoginBy is switchLogin, byMagpie saying magpie made the switch by
+// itself (SwitchWhenSpent) rather than the user: the Codex app is then
+// restarted to follow it only when the user asked for that (RestartApp).
+func switchLoginBy(agent, user string, byMagpie bool) error {
 	if pp, ok := pluginOfAgent(agent); ok {
 		return switchPluginLogin(pp, user)
 	}
@@ -1238,7 +1243,7 @@ func switchLogin(agent, user string) error {
 	}
 	from, err := switchSavedLogin(agent, user)
 	if err == nil && agent == "codex" && from != "" {
-		noteCodexSwitch(from, user)
+		noteCodexSwitchBy(from, user, byMagpie)
 	}
 	if err == nil && agent == "claude" {
 		// the account's own way out goes with it (#1807)

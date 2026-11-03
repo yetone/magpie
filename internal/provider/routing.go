@@ -162,6 +162,38 @@ func SetSwitchOnly(id string, on bool) error {
 	return Save(*p)
 }
 
+// SetRestartApp has magpie restart the Codex app's app-server when it
+// changes Codex's account by itself, or leave the app on its account till
+// it is restarted (Provider.RestartApp).
+func SetRestartApp(id string, on bool) error {
+	p, err := Find(id)
+	if err != nil {
+		return err
+	}
+	if p.ID != "codex" || p.Account == nil || p.Account.Agent != p.ID {
+		return fmt.Errorf("magpie restarts no app of %s's", p.Name)
+	}
+	p.RestartApp = on
+	return Save(*p)
+}
+
+// codexRestartsApp is whether the user had magpie restart the Codex app's
+// app-server for a change it makes by itself (Provider.RestartApp). While
+// providers.json can't be read it is unknown, and the app is left be: a
+// restart missed is the user's to make, one made shows as a crash.
+var codexRestartsApp = func() bool {
+	f, err := read()
+	if err != nil {
+		return false
+	}
+	for _, p := range f.Providers {
+		if p.ID == "codex" {
+			return p.RestartApp
+		}
+	}
+	return false
+}
+
 // SwitchOnly reports whether magpie only moves agent's own sign-in between
 // its accounts, sending none of its requests through the gateway for
 // account failover (Provider.SwitchOnly). While providers.json can't be

@@ -13064,9 +13064,7 @@ function renderAccounts(a, p) {
   const list = el("div", "accts");
   const ls = loginsInOrder(a, p);
   if (p) list.dataset.provider = p.id, list.classList.toggle("weighted", (draft?.routing ?? (p.routing || "")) === "weight");
-  // a Claude account whose sign-in Anthropic refused, or that has none,
-  // can't be used till it is signed in again; another subscription's lapse
-  // shows on its quota line only, as before
+  // a Claude account refused or with no sign-in waits to sign in again
   const unusable = (l) => a.agent === "claude" && !!l.lapsed;
   // one whose sign-in its vendor refused (a plugin's, #1363; Copilot's
   // revoked token; #1793's token_revoked) keeps Sign in again and Remove
@@ -13185,10 +13183,7 @@ function renderAccounts(a, p) {
         out.onclick = () => askSignOutLogin(a, l);
         line.append(out);
       } else if (a.agent === "codex" || a.agent === "claude" && ls.some((o) => o !== l && !o.token)) {
-        // the agent is signed in to another of its accounts first, then
-        // this one goes (ForgetLogin), rather than Codex signed out or the
-        // removal refused (#4532); Claude Code's only one it can be signed
-        // in to has no Remove: magpie never signs it out
+        // switched to another first, then removed (ForgetLogin, #4532)
         line.append(forgetOf(t("{agent} is signed in to another of its accounts, and magpie forgets this one; the account itself is untouched", { agent: a.agentName })));
       }
     } else {
@@ -13239,15 +13234,11 @@ function renderAccounts(a, p) {
     if (amBox) row.append(amBox);
     list.append(row);
   }
-  // magpie signs Codex or Claude Code in to the next account when the
-  // first runs low (#209, #408); this keeps it on the first instead, or on
-  // an account of the user's choosing, the gateway still spreading requests
-  // over the ticked ones in their order (#524)
+  // one account (#209, #408, #524)
   if ((a.agent === "codex" || a.agent === "claude") && several && p && !p.switchOnly) {
     const box = el("div", "keep-login");
     const [keep, cb] = tick(t("Keep {agent} signed in to", { agent: a.agentName }), !!p.keepLogin);
     keep.title = t("magpie won't sign {agent} in to another account when the first runs low; requests through magpie still go to the other ticked accounts as Routing says", { agent: a.agentName });
-    // the app's own menu, as every other pick in it, not a native select
     let keepAs = kept;
     const opts = [{ v: "", name: t("the first account"), note: "", literalName: true }];
     for (const l of ls) if (!l.lapsed) opts.push({ v: l.user, name: l.user, note: "", literalName: true });
@@ -13265,7 +13256,6 @@ function renderAccounts(a, p) {
         : keepAs ? t("{agent} stays signed in to {user}", { agent: a.agentName, user: keepAs }) : t("{agent} stays signed in to the first account", { agent: a.agentName }));
     };
     cb.onchange = () => post(cb.checked);
-    // picking one keeps it so, ticked or not
     as.onclick = (e) => {
       e.stopPropagation();
       if (as.classList.contains("open")) return closeProtoMenu();
@@ -13290,6 +13280,12 @@ function renderAccounts(a, p) {
     only.title = tip;
     cb.onchange = () => accountAction("provider/switchonly", { id: p.id, switchOnly: cb.checked }, cb.checked ? on : off);
     list.append(el("div", "switch-only", only));
+  }
+  if (p && cx && (several || p.restartApp)) {
+    const [re, cb] = tick(t("Restart the {agent} app when magpie switches its account", ag), !!p.restartApp);
+    re.title = t("Off, the {agent} app stays on its account until you restart it.", ag);
+    cb.onchange = () => accountAction("provider/restartapp", { id: p.id, restartApp: cb.checked }, t(cb.checked ? "magpie restarts the {agent} app when it switches accounts" : "magpie leaves the {agent} app running when it switches accounts", ag));
+    list.append(el("div", "restart-app", re));
   }
   // how a pool ends at its caps (plugins#349)
   const capped = (l) => accountCapOf(p, l.user) || windowCapsOf(p, l.user);

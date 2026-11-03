@@ -164,7 +164,11 @@ const codexDaemonRecheck = 5 * time.Second
 
 // noteCodexSwitch remembers, when Codex's account changes from one to
 // another, the app-server left running on the one before.
-func noteCodexSwitch(from, to string) {
+func noteCodexSwitch(from, to string) { noteCodexSwitchBy(from, to, false) }
+
+// noteCodexSwitchBy is noteCodexSwitch, byMagpie saying magpie made the
+// switch by itself (switchLoginBy).
+func noteCodexSwitchBy(from, to string, byMagpie bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	// the Codex app's app-servers are found and restarted on
@@ -172,11 +176,7 @@ func noteCodexSwitch(from, to string) {
 	// A switch by hand off an account known held is one off a used-up
 	// account, as SwitchWhenSpent's is: a turn left open on it when quota
 	// ran out mid-turn is restarted past once quiet (xiaoq6285 on Discord)
-	if codexHeldKnown(from) {
-		codexAppSpentSwitch()
-	} else {
-		codexAppAccountSwitched()
-	}
+	codexAppSwitched(codexHeldKnown(from), byMagpie)
 	ps, err := listProcesses(ctx)
 	known := err == nil
 	codexDaemonMu.Lock()

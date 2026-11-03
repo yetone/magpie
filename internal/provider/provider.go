@@ -166,6 +166,16 @@ type Provider struct {
 	// Code's own sign-in, which magpie still moves: the gateway serves no
 	// request on them (KeptToAgent; myduso on Discord).
 	SwitchOnly bool `json:"switchOnly,omitempty"`
+	// RestartApp, on Codex's subscription, has magpie restart the Codex
+	// app's own app-server when it changes Codex's account by itself: a
+	// switch off an account running out (SwitchWhenSpent) or back, and
+	// becoming Codex's provider for a used-up account or giving it back.
+	// The ChatGPT app shows an ended app-server as an error and relaunches
+	// (#4550), so it is off unless the user turns it on (atom0964 on
+	// Discord); the app then stays on its account until it is restarted,
+	// from the switch notice or by hand. A switch the user makes, and a
+	// Connect or Disconnect, restart it either way.
+	RestartApp bool `json:"restartApp,omitempty"`
 
 	// MaxConcurrency is how many requests may be out at the vendor at once
 	// on each of its keys or accounts (Discord, Lemon: a Codex account is
@@ -890,7 +900,7 @@ func withPicks(a, pk Provider) Provider {
 func accountSettings(a, pk Provider) Provider {
 	a.PickedFrom, a.Delisted, a.DelistedAt = pk.PickedFrom, pk.Delisted, pk.DelistedAt
 	a.Models, a.Unlisted, a.Off, a.Fallback, a.Routing, a.Affinity, a.KeepLogin, a.KeepLoginAs, a.Contexts, a.Family = pk.Models, pk.Unlisted, pk.Off, pk.Fallback, pk.Routing, pk.Affinity, pk.KeepLogin, pk.KeepLoginAs, pk.Contexts, pk.Family
-	a.SwitchOnly = pk.SwitchOnly
+	a.SwitchOnly, a.RestartApp = pk.SwitchOnly, pk.RestartApp
 	a.Sink, a.NoModels, a.BestInFamily = pk.Sink, pk.NoModels, pk.BestInFamily
 	a.NativeCompaction = pk.NativeCompaction
 	a.PromptAsWritten = pk.PromptAsWritten

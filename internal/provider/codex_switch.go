@@ -464,7 +464,7 @@ func SwitchWhenSpent(ctx context.Context, agent string) (string, error) {
 	}
 	// the first moved off, not one moved to on the way
 	r, _ := loginReturnOf(agent, from)
-	if err := switchLogin(agent, to); err != nil {
+	if err := switchLoginBy(agent, to, true); err != nil {
 		return "", err
 	}
 	if back {
@@ -483,12 +483,16 @@ func SwitchWhenSpent(ctx context.Context, agent string) (string, error) {
 		share, _ := loginSwitching(agent)
 		log.Printf("%s: %s has used %g%% or more of its allowance; signed it in to %s", agent, from, share, to)
 		if agent == "codex" {
-			codexAppSpentSwitch()
+			codexAppSwitched(true, true)
 		}
 	}
 	if agent == "codex" {
 		if was := CodexAppStale(); was != "" {
-			log.Printf("codex: the Codex app is still signed in to %s, and shows its limits, until its app-server is restarted once no Codex turn runs", was)
+			if codexRestartsApp() {
+				log.Printf("codex: the Codex app is still signed in to %s, and shows its limits, until its app-server is restarted once no Codex turn runs", was)
+			} else {
+				log.Printf("codex: the Codex app is still signed in to %s, and shows its limits, until it is restarted: magpie restarts it for a switch of its own only with \"Restart the Codex app to follow\" on", was)
+			}
 		}
 	}
 	// the models the agent is offered are the new account's plan's

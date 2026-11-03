@@ -2728,8 +2728,8 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .acc + .acc, .accts .signing { border-top: 1px solid var(--line-2); }
 /* every row of the box ruled off from the one above it, a setting's too
    (the owner, 10-29: Add another sat unruled under Only switch) */
-.accts > :is(.keep-login, .switch-only, .pool-ends) + .acc { border-top: 1px solid var(--line-2); }
-.editor .accts .keep-login, .editor .accts .switch-only, .editor .accts .pool-ends { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 34px; padding: 6px 11px; font-size: 12px; border-top: 1px solid var(--line-2); }
+.accts > :is(.keep-login, .switch-only, .restart-app, .pool-ends) + .acc { border-top: 1px solid var(--line-2); }
+.editor .accts .keep-login, .editor .accts .switch-only, .editor .accts .restart-app, .editor .accts .pool-ends { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 34px; padding: 6px 11px; font-size: 12px; border-top: 1px solid var(--line-2); }
 .editor .accts .keep-login .keep-as { max-width: 240px; }
 /* Claude Code's interactive mode or -p, with why (claudeModeRow) */
 .claude-mode { display: contents; }
