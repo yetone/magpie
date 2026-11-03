@@ -18,21 +18,23 @@ import (
 
 // backupCmd writes every provider, setting, profile and agent model, and
 // the library, to one file sealed with a passphrase:
-// magpie backup [--no-keys] [--no-library] [file].
+// magpie backup [--no-keys] [--no-library] [--sign-ins] [file].
 func backupCmd(args []string) error {
-	keys, lib, file := true, true, ""
+	keys, lib, signIns, file := true, true, false, ""
 	for _, a := range args {
 		switch {
 		case a == "--no-keys":
 			keys = false
 		case a == "--no-library":
 			lib = false
+		case a == "--sign-ins":
+			signIns = true
 		case strings.HasPrefix(a, "-"):
-			return fmt.Errorf("unknown flag %s (magpie backup [--no-keys] [--no-library] [file])", a)
+			return fmt.Errorf("unknown flag %s (magpie backup [--no-keys] [--no-library] [--sign-ins] [file])", a)
 		case file == "":
 			file = a
 		default:
-			return errors.New("usage: magpie backup [--no-keys] [--no-library] [file]")
+			return errors.New("usage: magpie backup [--no-keys] [--no-library] [--sign-ins] [file]")
 		}
 	}
 	if file == "" {
@@ -44,6 +46,11 @@ func backupCmd(args []string) error {
 	}
 	if !lib {
 		b.Library = nil
+	}
+	if signIns {
+		if err := backup.WithSignIns(&b); err != nil {
+			return fmt.Errorf("the sign-ins couldn't be read, so no backup was made: %w", err)
+		}
 	}
 	pass, err := passphrase("Passphrase for the backup: ", true)
 	if err != nil {
@@ -69,12 +76,19 @@ func backupCmd(args []string) error {
 			fmt.Printf(", %d subagents", len(*l.Subagents))
 		}
 	}
+	if s := b.SignIns; s != nil {
+		fmt.Printf("; %d sign-ins", len(s.Logins)+len(s.Plugins))
+	}
 	fmt.Println()
-	fmt.Println(muted.Render("Subscriptions are not in it: sign in to them on the other machine. Keep the passphrase: without it the file can't be opened."))
+	if b.SignIns != nil {
+		fmt.Println(muted.Render("The subscriptions' and plugins' sign-ins are in it, sealed with the passphrase: anyone with the file and the passphrase can use those accounts. Keep the passphrase: without it the file can't be opened."))
+	} else {
+		fmt.Println(muted.Render("Subscriptions are not in it: sign in to them on the other machine (or back up with --sign-ins). Keep the passphrase: without it the file can't be opened."))
+	}
 	return nil
 }
 
-// restoreCmd puts a backup in: magpie restore [--no-agents] [--no-library] <file>.
+// restoreCmd puts a backup in: magpie restore [--no-agents] [--no-library] [--no-sign-ins] <file>.
 func restoreCmd(args []string) error {
 	parts, file := backup.All, ""
 	for _, a := range args {
@@ -83,16 +97,18 @@ func restoreCmd(args []string) error {
 			parts.Agents = false
 		case a == "--no-library":
 			parts.Library = false
+		case a == "--no-sign-ins":
+			parts.SignIns = false
 		case strings.HasPrefix(a, "-"):
-			return fmt.Errorf("unknown flag %s (magpie restore [--no-agents] [--no-library] <file>)", a)
+			return fmt.Errorf("unknown flag %s (magpie restore [--no-agents] [--no-library] [--no-sign-ins] <file>)", a)
 		case file == "":
 			file = a
 		default:
-			return errors.New("usage: magpie restore [--no-agents] [--no-library] <file>")
+			return errors.New("usage: magpie restore [--no-agents] [--no-library] [--no-sign-ins] <file>")
 		}
 	}
 	if file == "" {
-		return errors.New("usage: magpie restore [--no-agents] [--no-library] <file>")
+		return errors.New("usage: magpie restore [--no-agents] [--no-library] [--no-sign-ins] <file>")
 	}
 	data, err := os.ReadFile(file)
 	if err != nil {
@@ -117,6 +133,12 @@ func restoreCmd(args []string) error {
 	fmt.Printf("; %d profiles; %d agent settings changed", r.Profiles, r.Agents)
 	if r.Library {
 		fmt.Print("; library")
+	}
+	if s := r.SignIns; s != nil {
+		fmt.Printf("; sign-ins: %d added, %d updated, %d kept as they are here", s.Added, s.Updated, s.Kept)
+		if s.Codex {
+			fmt.Print(" (Codex signed in)")
+		}
 	}
 	fmt.Println()
 	if len(r.NeedKey) > 0 {

@@ -2,9 +2,10 @@
 // with a passphrase, to carry to another machine: the providers (their keys
 // too, unless left out), the pictures picked for them, the settings, the
 // profiles, every agent's model and the library (the instructions, MCP
-// servers and skills magpie gives the agents). Subscriptions are not in it: each is
-// the sign-in of an agent on this machine, so each machine signs in on its
-// own.
+// servers and skills magpie gives the agents). Sign-ins (subscription
+// accounts and the plugins') are in it only when the user asks for them
+// (WithSignIns): each is the sign-in of an agent on this machine, and
+// without them each machine signs in on its own.
 //
 // The file is JSON: a header naming how it is sealed, and the bundle
 // encrypted with AES-256-GCM under a key derived from the passphrase with
@@ -94,6 +95,21 @@ type Bundle struct {
 	ProvidersKeys *bool `json:"providersKeys,omitempty"`
 	SettingsKeys  *bool `json:"settingsKeys,omitempty"`
 	LibraryKeys   *bool `json:"libraryKeys,omitempty"`
+	// SignIns are the subscription accounts and the plugins' sign-ins,
+	// with their credentials: only when the user asked for them
+	// (WithSignIns). Nil otherwise, and from a magpie before them.
+	SignIns *provider.SignIns `json:"signIns,omitempty"`
+}
+
+// WithSignIns puts this computer's sign-ins in b. One that can't be read
+// is an error, never none.
+func WithSignIns(b *Bundle) error {
+	s, err := provider.CollectSignIns()
+	if err != nil {
+		return err
+	}
+	b.SignIns = s
+	return nil
 }
 
 type envelope struct {
@@ -354,10 +370,13 @@ func gcmOf(key []byte) (cipher.AEAD, error) {
 // Parts picks what a restore puts back.
 type Parts struct {
 	Providers, Settings, Profiles, Agents, Library bool
+	// SignIns puts the backup's sign-ins in, when it has them
+	// (provider.RestoreSignIns: nothing renewed later here is written over).
+	SignIns bool
 }
 
 // All is every part.
-var All = Parts{true, true, true, true, true}
+var All = Parts{Providers: true, Settings: true, Profiles: true, Agents: true, Library: true, SignIns: true}
 
 // Result says what a restore did.
 type Result struct {
@@ -376,6 +395,12 @@ type Result struct {
 	Skipped         []string          // agent fields left alone: the agent is not on this machine, or the value failed
 	Library         bool              // the library was put in
 	LibraryProblems []library.Problem `json:",omitempty"` // what of it couldn't be given to an agent
+	// SignIns is what putting the backup's sign-ins in did; nil when it
+	// had none, or they weren't asked for.
+	SignIns *provider.SignInsResult `json:",omitempty"`
+	// SignInsLocked: the backup has sign-ins sealed with a passphrase
+	// other than the one set now, so they were left out.
+	SignInsLocked bool `json:",omitempty"`
 }
 
 // Restore puts the chosen parts of the bundle in. Providers come first, so
@@ -383,6 +408,15 @@ type Result struct {
 // machine are set.
 func Restore(b Bundle, parts Parts) (Result, error) {
 	var r Result
+	// the sign-ins first: the subscriptions the providers name are signed
+	// in to then, and aren't listed as not signed in (SignIn)
+	if parts.SignIns && b.SignIns != nil {
+		res, err := provider.RestoreSignIns(b.SignIns)
+		if err != nil {
+			return r, fmt.Errorf("putting the sign-ins in: %w", err)
+		}
+		r.SignIns = &res
+	}
 	if parts.Providers {
 		for name, data := range b.Icons {
 			if f := provider.IconFile(name); f != "" && len(data) <= provider.MaxIcon {

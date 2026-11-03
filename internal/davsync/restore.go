@@ -12,6 +12,7 @@ import (
 
 	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/provider"
 )
 
 // ErrOff is a Restore, Undo or SetAuto asked for with sync off.
@@ -114,6 +115,17 @@ func Restore(ctx context.Context) ([]string, error) {
 			}
 			st.Undo = kept
 			st.Notice = &Notice{At: time.Now(), Here: brought, Saved: filepath.Dir(kept), Restored: true}
+		}
+		// the server's sign-ins, when they go: put in as a backup's are,
+		// nothing renewed later here written over
+		if c.SignIns && remote.SignIns != nil {
+			if _, err := provider.RestoreSignIns(remote.SignIns); err != nil {
+				return fmt.Errorf("bringing in the sign-ins: %w", err)
+			}
+			if local, err = collect(c); err != nil {
+				return err
+			}
+			st.SignIns = nil
 		}
 		// as a sync that brought them in leaves it: the next one has
 		// nothing to push back

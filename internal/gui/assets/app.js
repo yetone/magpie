@@ -19969,7 +19969,7 @@ async function renderSync(v) {
   };
   const btn = (label, fn, cls = "text") => { const b = el("button", cls, label); b.onclick = fn; return b; };
   const toggle = (id) => () => { syncOpen = syncOpen === id ? "" : id; renderSync(); };
-  const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", usage: "usage" }[p])).join(t(", "));
+  const parts = (ps) => ps.map((p) => t({ providers: "providers", settings: "settings", profiles: "profiles", agents: "agents' models", library: "library", usage: "usage", signins: "sign-ins" }[p])).join(t(", "));
 
   // WebDAV, S3 or GitHub
   // off: what it would keep the same, named from the view's toggles as the
@@ -19980,6 +19980,7 @@ async function renderSync(v) {
   if (v.agents !== false) goes.push("agents");
   if (v.library !== false) goes.push("library");
   if (v.usage) goes.push("usage");
+  if (v.signIns) goes.push("signins");
   let line = t("Keeps {parts} the same on every computer", {
     parts: t(v.keys === false ? "providers without their API keys" : "providers with their API keys") + t(", ") + parts(goes) });
   const s3 = v.on && v.kind === "s3";
@@ -20008,7 +20009,10 @@ async function renderSync(v) {
   // (#1259)
   if (v.on && !v.error && v.usageError) sub.after(el("div", "sub bad wraps sync-usage-err", t("Couldn't share usage: {error}", { error: v.usageError })));
   // subscriptions synced with no account here (悠悠哥 on Discord)
-  if (v.on && v.signIn?.length) sub.after(el("div", "sub wraps sync-sign-in", t("Your synced settings use {names}, which isn't signed in on this computer. Sync carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })));
+  // with sign-ins synced, it is one no other computer shared
+  if (v.on && v.signIn?.length) sub.after(el("div", "sub wraps sync-sign-in", v.signIns
+    ? t("Your synced settings use {names}, which isn't signed in on this computer, and no other computer synced its sign-in. To use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })
+    : t("Your synced settings use {names}, which isn't signed in on this computer. Sync carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(v.signIn) })));
   // the server's file isn't a backup a sync can read, and is a file: this
   // computer's setup can go up in its place, the user choosing it
   if (v.on && v.error && v.serverFile?.replace) {
@@ -20058,12 +20062,20 @@ async function renderSync(v) {
 
   // export and import
   row(t("Export"), t("Everything above in one file, sealed with a passphrase, to carry to another computer"), btn(t(syncOpen === "export" ? "Close" : "Export…"), toggle("export")));
-  if (syncOpen === "export") box.append(exportForm());
+  if (syncOpen === "export") box.append(syncFile("exportForm"));
   row(t("Import"), t("Bring in a file exported from magpie"), btn(t(syncOpen === "import" ? "Close" : "Import…"), toggle("import")));
-  if (syncOpen === "import") box.append(importForm());
+  if (syncOpen === "import") box.append(syncFile("importForm"));
   // Back up by itself (jwaitq), in autobackup.js
   const ab = box.appendChild(el("div"));
   if (window.autoBackupFill) autoBackupFill(ab); else import("./autobackup.js").then(() => autoBackupFill(ab), () => {});
+}
+
+// syncFile draws Export's or Import's form, from syncfiles.js once loaded
+function syncFile(f) {
+  if (window[f]) return window[f]();
+  const at = el("div");
+  import("./syncfiles.js").then(() => at.replaceWith(window[f]()), () => {});
+  return at;
 }
 
 // askRestore asks before the server's setup replaces this computer's
@@ -20273,8 +20285,14 @@ function davForm(v) {
   const [libL, lib] = tick(t("Library: instructions, MCP servers, skills and subagents"), v.library !== false);
   // usage: off unless picked, each computer its own (#542)
   const [useL, use] = tick(t("Usage: this computer's calls, for the Usage page on the others"), !!v.usage);
+  // sign-ins: off unless picked, sealed with the passphrase like the rest
+  // (qianxunji, curtinp118 on Discord); what it lets in is said beside it
+  const [siL, si] = tick(t("Sign-ins: subscription accounts and plugin sign-ins"), !!v.signIns);
+  const siSay = el("div", "hint sync-signins-say", t("Another computer that syncs is signed in without signing in again. Anyone with the passphrase and the server's file can use these accounts. An account used on two computers can be signed out on one when the other renews it."));
+  siSay.hidden = !si.checked;
+  si.onchange = () => { siSay.hidden = !si.checked; };
   const what = el("div", "stack");
-  what.append(keysL, agentsL, libL, useL);
+  what.append(keysL, agentsL, libL, useL, siL, siSay);
   const davFields = [...field(t("Address"), url, t("A folder named magpie is made in it.")),
     ...field(t("User"), user),
     ...field(t("Password"), pass)];
@@ -20329,97 +20347,13 @@ function davForm(v) {
       ? { url: "s3://" + b + (p ? "/" + p : ""), user: keyID.value.trim(), password: secret.value, endpoint: endpoint.value.trim(), region: region.value.trim(), pathStyle: pathStyle.checked }
       : { url: url.value.trim(), user: user.value.trim(), password: pass.value };
     try {
-      const r = await api("davsync/save", { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, ...(use.checked || v.usage ? { usage: use.checked } : {}) });
+      const r = await api("davsync/save", { ...where, passphrase: phrase.value, keys: keys.checked, agents: agents.checked, library: lib.checked, ...(use.checked || v.usage ? { usage: use.checked } : {}), ...(si.checked || v.signIns ? { signIns: si.checked } : {}) });
       if (!r.error) syncOpen = "";
       renderSync(r);
       if (r.error) return;
       refreshAfterSync();
     } catch (e) {
       save.classList.remove("busy");
-      say(e.message);
-    }
-  };
-  return ed;
-}
-
-function exportForm() {
-  const ed = el("div", "editor sync-form");
-  const p1 = input("", t("passphrase"), "password");
-  const p2 = input("", t("again"), "password");
-  const [keysL, keys] = tick(t("With the providers' API keys"), true);
-  const [libL, lib] = tick(t("With the library: instructions, MCP servers, skills and subagents"), true);
-  const what = el("div", "stack");
-  what.append(keysL, libL);
-  ed.append(...field(t("Passphrase"), p1, t("Needed to open the file. Subscriptions aren't in it: sign in to them on the other computer.")),
-    ...field("", p2), ...field("", what));
-  const go = el("button", "text primary", t("Export"));
-  const cancel = el("button", "text", t("Cancel"));
-  const say = syncBar(ed, "", el("span", "grow"), cancel, go);
-  cancel.onclick = () => { syncOpen = ""; renderSync(); };
-  go.onclick = async () => {
-    if (!p1.value) return say(t("Pick a passphrase: the file is sealed with it"));
-    if (p1.value !== p2.value) return say(t("The two passphrases differ"));
-    go.classList.add("busy");
-    try {
-      const r = await api("backup/export", { pass: p1.value, keys: keys.checked, library: lib.checked });
-      ed.replaceChildren(el("div", "done", t("Saved to {path}", { path: r.path })));
-    } catch (e) {
-      go.classList.remove("busy");
-      say(e.message);
-    }
-  };
-  return ed;
-}
-
-function importForm() {
-  const ed = el("div", "editor sync-form");
-  let data = "";
-  const file = el("input");
-  file.type = "file";
-  file.accept = ".magpie-backup";
-  file.hidden = true;
-  const name = el("span", "fname", t("No file chosen"));
-  const pick = el("button", "text", t("Choose…"));
-  pick.onclick = () => file.click();
-  file.onchange = async () => {
-    const f = file.files[0];
-    if (!f) return;
-    // as base64 in JSON: the app's web view drops a File sent as the body
-    const bytes = new Uint8Array(await f.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    data = btoa(bin);
-    name.textContent = f.name;
-  };
-  const pf = el("div", "pair");
-  pf.append(name, pick, file);
-  const pass = input("", t("passphrase"), "password");
-  const [agentsL, agents] = tick(t("Set the agents' models too"), true);
-  const [libL, lib] = tick(t("Bring in the library too: instructions, MCP servers, skills and subagents"), true);
-  const what = el("div", "stack");
-  what.append(agentsL, libL);
-  ed.append(...field(t("File"), pf), ...field(t("Passphrase"), pass), ...field("", what, t("Providers with the same id are replaced; one that came without a key keeps the key it has here. The library replaces the one here, which is kept with its backups.")));
-  const go = el("button", "text primary", t("Import"));
-  const cancel = el("button", "text", t("Cancel"));
-  const say = syncBar(ed, "", el("span", "grow"), cancel, go);
-  cancel.onclick = () => { syncOpen = ""; renderSync(); };
-  go.onclick = async () => {
-    if (!data) return say(t("Choose a file first"));
-    go.classList.add("busy");
-    try {
-      const r = await api("backup/import", { data, pass: pass.value, agents: agents.checked, library: lib.checked });
-      const lines = [t("Providers: {added} added, {replaced} replaced; {profiles} profiles; {agents} agent settings changed", { added: r.Added, replaced: r.Replaced, profiles: r.Profiles, agents: r.Agents })];
-      if (r.NeedKey?.length) lines.push(t("Needs a key: {names}", { names: r.NeedKey.join(", ") }));
-      // a backup carries a subscription's settings, never its sign-in
-      if (r.SignIn?.length) lines.push(t("This backup's settings use {names}, which isn't signed in on this computer. A backup carries settings, not sign-ins: to use it here, sign in in Providers → Add a provider; if you don't, nothing needs doing.", { names: subNames(r.SignIn) }));
-      if (r.Plugins?.length) lines.push(t("Plugins added: {names}", { names: r.Plugins.join(", ") }));
-      for (const [spec, error] of Object.entries(r.PluginErrors || {})) lines.push(t("Couldn't add the plugin {spec}: {error}", { spec, error }));
-      if (r.Library) lines.push(t("Library brought in and written into the agents"));
-      for (const p of r.LibraryProblems || []) lines.push(t("{agent} couldn't get {what}: {error}", { agent: p.agent, what: p.what, error: p.error }));
-      ed.replaceChildren(...lines.map((l) => el("div", "done", l)));
-      refreshAfterSync();
-    } catch (e) {
-      go.classList.remove("busy");
       say(e.message);
     }
   };

@@ -1,9 +1,11 @@
 package backup
 
-// What a backup must never carry: a subscription's sign-in. #880 asked for
-// one and was closed as intentional — a subscription is the sign-in of an
-// agent on one machine, so each machine signs in on its own, and a bundle
-// that carried one would sign the agent in on the machine it was put on.
+// What a backup carries by default: never a subscription's sign-in. #880
+// asked for one and was closed as intentional — a subscription is the
+// sign-in of an agent on one machine, so each machine signs in on its own.
+// Carrying them is now a choice the user makes (WithSignIns, Parts.SignIns;
+// qianxunji and curtinp118 on Discord), tested in signins_carry_test.go;
+// nothing here asks for it, so these pin the default.
 //
 // The policy has two sides. A subscription the user has moved onto its
 // plugin still has a row in providers.json, and that row travels, so the

@@ -178,6 +178,62 @@ clock.
   reveal,restore}`. `set` changes only the fields sent; `dir ""` is the
   default folder. Settings draws it under Sync's Export and Import from the
   lazy [`autobackup.js`](../../internal/gui/assets/autobackup.js).
+- **Sign-ins:** off unless picked (`SignIns`, with `Passphrase`); see
+  [Sign-ins, when picked](#sign-ins-when-picked).
+
+## Sign-ins, when picked
+
+A sign-in (a subscription account in logins.json, Codex's auth.json, a
+plugin's sign-in in plugin-auth.json) stays on its computer unless the user
+picks it, in each place on its own: Sync's **Sign-ins** tick, Export's
+**With the sign-ins**, and Back up by itself's **Sign-ins in backups**. All
+three are off by default, so an upgrade carries nothing new (qianxunji and
+curtinp118 on Discord: a VPS restored from a backup had to sign in to every
+subscription again). Import's **Bring in the sign-ins too** is on, since a
+file has them only when it was made with them. Each place says beside the
+switch that anyone with the file and the passphrase can use those accounts.
+
+- **What goes:** [`provider.CollectSignIns`](../../internal/provider/signins_carry.go)
+  takes magpie's own copies only (`carried`): not an agent's own account
+  (`own`), not one in an agent's own home (`Home`), not a hidden row, not a
+  `plugin:` row, not a retired built-in. Codex's live auth.json goes as its
+  own record. Plugins' sign-ins come from [`plugin.CarriedAuth`](../../internal/plugin/carry.go).
+  Each record has an id that names the account (agent, lower-case email and
+  organisation; or the account key), its time of renewal and a hash; ids two
+  rows share are left out on both sides, as no one can tell which is which.
+- **Sealed:** a backup or export seals them with the rest of the file. An
+  automatic backup, which has no passphrase on a schedule, seals them
+  alone (`SealData`) with the passphrase asked for as they are turned on,
+  kept in autobackup.json (0600) beside the settings and never sent in the
+  view (`Passphrase` says only that one is set). A backup whose sign-ins
+  another passphrase sealed restores without them (`SignInsLocked`). Sync's
+  file is sealed with sync's passphrase; nothing reaches the server in the
+  clear (`TestSyncSignIns`, `TestExportCarriesSignInsWhenAskedSealed`,
+  `TestAutoBackupSignInsSealedAndDeduped`).
+- **Restore and import** ([`RestoreSignIns`](../../internal/provider/signins_carry.go))
+  add an account missing here and update one only when the incoming copy
+  was renewed later. Nothing here is removed. Before writing over a row it
+  finds every row that could be the same account (same login, same refresh
+  token, same id): with none it adds, with more than one it keeps them all,
+  and with one it keeps it when it isn't magpie's own copy, is held, or is
+  the account the agent itself is signed in with. Codex's auth.json is
+  written (temp and rename, 0600) only where Codex is signed out
+  (`TestRestoreSignInsNeverWritesAnOlderTokenOver`,
+  `TestRestoreSignInsLeavesAnAmbiguousAccount`,
+  `TestRestoreSignInsSignsCodexInOnlyWhereSignedOut`).
+- **Sync** merges per record against the hashes of the last sync
+  (`SyncState.SignIns`, [`MergeSignIns`](../../internal/provider/signins_carry.go)):
+  the later renewal wins; a record one side removed is removed on the other
+  only when that side still has it as of the last sync; otherwise the side
+  that changed since wins, this computer when both did. `ApplySignIns`
+  checks each row's hash again before it writes, so a renewal in between
+  is kept. A computer with the tick off sends no sign-ins, so the others
+  remove nothing for it; turning it off, a Restore or a replaced server
+  file clears the record of the last sync. An account used on two computers
+  can be signed out on one when the other renews its refresh token, and the
+  form says so (`TestMergeSignInsTheLaterRenewedStays`,
+  `TestMergeSignInsRemovedOnlyWhenTheOtherSideRemovedIt`,
+  `TestApplySignInsKeepsWhatChangedSinceTheMerge`, `sync-signins.test.cjs`).
 
 ## GitHub constraints and errors
 

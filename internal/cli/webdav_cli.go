@@ -25,7 +25,7 @@ const webdavUsage = `usage:
                                           the same on every computer through a WebDAV folder (a folder named
                                           magpie is made in it), and sync at once; asks for the password
                                           (with a user) and the passphrase
-  magpie webdav set k=v…                  change it: address, user, keys, agents, library, usage (yes|no);
+  magpie webdav set k=v…                  change it: address, user, keys, agents, library, usage, sign-ins (yes|no);
                                           password= and passphrase= ask for a new one
   magpie webdav now                       sync now (the gateway also syncs by itself while it runs: see auto)
   magpie webdav auto off|3|15|30|60       how often the gateway syncs by itself, in minutes; off: only when asked
@@ -46,6 +46,10 @@ const webdavUsage = `usage:
   keys        no: providers go without their API keys, and each computer keeps its own
   usage       yes: this computer's usage goes up too, a file a day, sealed, and the Usage page counts
               the other computers' that share theirs, each named
+  sign-ins    yes: the subscriptions' accounts and the plugins' sign-ins go too, sealed with the
+              passphrase, so a computer that syncs is signed in without signing in again. Off unless
+              set. Anyone with the passphrase and the server's file can use those accounts. An account
+              used on two computers may be signed out on one when the other renews it
   first sync  on a computer that had its own setup, each part that differs becomes the server's; what
               was here is kept in the sync folder beside magpie's files, and magpie webdav says so
   moving      magpie webdav on with S3 sync on moves sync to the folder; the bucket, endpoint, access key
@@ -67,8 +71,8 @@ const s3Usage = `usage:
                                           Cloudflare R2, Backblaze B2, MinIO, a NAS…), in <prefix>/magpie/,
                                           and sync at once; asks for the secret and the passphrase
   magpie s3 set k=v…                      change it: address, bucket, prefix, endpoint, region, access-key-id,
-                                          path-style, keys, agents, library, usage (yes|no); secret= and passphrase=
-                                          ask for a new one
+                                          path-style, keys, agents, library, usage, sign-ins (yes|no); secret= and
+                                          passphrase= ask for a new one
   magpie s3 now                           sync now (the gateway also syncs by itself while it runs: see auto)
   magpie s3 auto off|3|15|30|60           how often the gateway syncs by itself, in minutes; off: only when asked
   magpie s3 restore                       make this computer's setup the server's; what is here is kept first
@@ -90,6 +94,10 @@ const s3Usage = `usage:
   keys        no: providers go without their API keys, and each computer keeps its own
   usage       yes: this computer's usage goes up too, a file a day, sealed, and the Usage page counts
               the other computers' that share theirs, each named
+  sign-ins    yes: the subscriptions' accounts and the plugins' sign-ins go too, sealed with the
+              passphrase, so a computer that syncs is signed in without signing in again. Off unless
+              set. Anyone with the passphrase and the server's file can use those accounts. An account
+              used on two computers may be signed out on one when the other renews it
   moving      magpie s3 on with WebDAV sync on moves sync to the bucket; the WebDAV address, user and
               password are kept, and magpie webdav on alone moves back to them
 
@@ -104,7 +112,7 @@ const githubUsage = `usage:
   magpie github                           whether sync is on, where to, and how the last sync went
   magpie github on github://owner/repo[/folder] [branch=…] [keys=no] [agents=no] [library=no]
                                           keep the encrypted setup in an existing GitHub repository; asks for a token and passphrase
-  magpie github set k=v…                  change it: address, branch, keys, agents, library, usage (yes|no)
+  magpie github set k=v…                  change it: address, branch, keys, agents, library, usage, sign-ins (yes|no)
   magpie github now                       sync now
   magpie github auto off|3|15|30|60       how often the gateway syncs by itself, in minutes
   magpie github restore                   make this computer's setup the repository's; what is here is kept first
@@ -119,6 +127,8 @@ const githubUsage = `usage:
              The first sync initializes an empty repository's default branch;
              other branches must already exist.
   passphrase the same on every computer; GitHub only ever receives the sealed file.
+  sign-ins   yes: the subscriptions' accounts and the plugins' sign-ins go too, sealed with the
+             passphrase. Off unless set
 `
 
 // syncKind is magpie webdav's, magpie s3's or magpie github's server.
@@ -245,7 +255,7 @@ func syncSet(k syncKind, args []string, on bool) error {
 		if !on {
 			return fmt.Errorf("%s sync is on, not %s: magpie %s set changes it; %s", c.Kind(), k.name, strings.ToLower(c.Kind()), k.turnOn())
 		}
-		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library, Usage: c.Usage}
+		next := davsync.Config{Passphrase: c.Passphrase, Keys: c.Keys, Agents: c.Agents, Library: c.Library, Usage: c.Usage, SignIns: c.SignIns}
 		if o, ok := c.Kept(k.name); ok { // its server, as it was kept when sync moved from it
 			next.URL, next.User, next.Endpoint, next.Region, next.PathStyle, next.Branch = o.URL, o.User, o.Endpoint, o.Region, o.PathStyle, o.Branch
 		}
@@ -298,7 +308,7 @@ func syncSet(k syncKind, args []string, on bool) error {
 			} else {
 				askPhrase = true
 			}
-		case key == "keys", key == "agents", key == "library", key == "usage", key == "path-style" && k.cmd == "s3":
+		case key == "keys", key == "agents", key == "library", key == "usage", key == "sign-ins", key == "path-style" && k.cmd == "s3":
 			if v != "yes" && v != "no" {
 				return fmt.Errorf("%s=yes|no, not %q", key, v)
 			}
@@ -312,15 +322,17 @@ func syncSet(k syncKind, args []string, on bool) error {
 				c.PathStyle = yes
 			case "usage":
 				c.Usage = yes
+			case "sign-ins":
+				c.SignIns = yes
 			default:
 				c.Library = &yes
 			}
 		case k.cmd == "s3":
-			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, keys, agents, library, usage)", key)
+			return fmt.Errorf("unknown field %q (address, bucket, prefix, endpoint, region, access-key-id, secret, passphrase, path-style, keys, agents, library, usage, sign-ins)", key)
 		case k.cmd == "github":
-			return fmt.Errorf("unknown field %q (address, branch, token, passphrase, keys, agents, library, usage)", key)
+			return fmt.Errorf("unknown field %q (address, branch, token, passphrase, keys, agents, library, usage, sign-ins)", key)
 		default:
-			return fmt.Errorf("unknown field %q (address, user, password, passphrase, keys, agents, library, usage)", key)
+			return fmt.Errorf("unknown field %q (address, user, password, passphrase, keys, agents, library, usage, sign-ins)", key)
 		}
 	}
 	if bucket != nil || prefix != nil {
@@ -489,6 +501,9 @@ func syncShow(k syncKind) error {
 	if v.Usage {
 		what = append(what, "usage")
 	}
+	if v.SignIns {
+		what = append(what, "sign-ins")
+	}
 	fmt.Println("  syncs", strings.Join(what, ", "))
 	if o := v.Other; o != nil {
 		if o.Kind == "s3" {
@@ -512,7 +527,7 @@ func syncShow(k syncKind) error {
 		fmt.Println("  couldn't share usage:", v.UsageError)
 	}
 	if len(v.SignIn) > 0 {
-		fmt.Println("  synced settings use these, not signed in on this computer (sync carries settings, not sign-ins; to use one here: magpie accounts add <id>):", strings.Join(v.SignIn, ", "))
+		fmt.Println("  synced settings use these, not signed in on this computer (sync carries settings, not sign-ins, unless sign-ins=yes; to use one here: magpie accounts add <id>):", strings.Join(v.SignIn, ", "))
 	}
 	if n := v.Notice; n != nil && n.Restored {
 		fmt.Println("  Restored from the server:", partNames(n.Here))

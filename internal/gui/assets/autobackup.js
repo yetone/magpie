@@ -12,6 +12,8 @@ let autoBackupView = null;
 let autoBackupAt = 0;
 let autoBackupLoad = null;
 let autoBackupSaid = null;
+// the passphrase asked for as the sign-ins are turned on, when none is set
+let autoBackupPhrase = false;
 
 // autoBackupFill puts the rows in place of at, the empty element renderSync
 // leaves at the end of Sync's list: rows, so the list's lines run between
@@ -63,13 +65,25 @@ function autoBackupRows(v) {
   const btn = (label, fn) => { const b = el("button", "text", label); b.type = "button"; b.onclick = (e) => fn(b, e); return b; };
   const on = !!v.on;
   const head = row(t("Back up by itself"), v.error ? t("Couldn't back up: {error}", { error: v.error })
-    : on ? t("Your providers, settings and profiles, without API keys or sign-ins, into a folder on this computer") : t("Off: no backups are made by themselves"),
+    : on ? (v.signIns ? t("Your providers, settings and profiles, without API keys, and the sign-ins sealed with a passphrase, into a folder on this computer")
+      : t("Your providers, settings and profiles, without API keys or sign-ins, into a folder on this computer")) : t("Off: no backups are made by themselves"),
   segs([[0, t("Off")], [1, t("1 hour")], [6, t("6 hours")], [24, t("1 day")], [168, t("1 week")]], on ? v.hours : 0,
     (h) => autoBackupDo("set", h ? { on: true, hours: h } : { on: false })));
   if (v.error) head.querySelector(".sub").classList.add("bad", "wraps");
   if (on) {
     row(t("Versions kept"), t("The oldest is removed when a new one is made; one is made only when something changed"),
       segs([3, 7, 14, 30].map((n) => [n, String(n)]), v.keep, (n) => autoBackupDo("set", { keep: n })));
+    // the sign-ins (qianxunji, curtinp118 on Discord): off unless picked,
+    // and sealed with a passphrase asked for the first time
+    const asking = autoBackupPhrase && !v.signIns;
+    row(t("Sign-ins in backups"), v.signIns ? t("Subscription accounts and plugin sign-ins, sealed with the passphrase set here")
+      : t("Off: after a restore on another computer, sign in again"),
+    segs([["off", t("Off")], ["on", t("On")]], v.signIns || asking ? "on" : "off", (x) => {
+      if (x === "on" && !v.passphrase) { autoBackupPhrase = true; renderSync(); return; }
+      autoBackupPhrase = false;
+      autoBackupDo("set", { signIns: x === "on" });
+    }));
+    if (asking) rows.push(autoBackupPhraseForm());
   }
   if (on || v.backups?.length) {
     const tools = [btn(t("Change…"), (b) => autoBackupDo("choose", {}, b)), btn(t("Show"), () => api("autobackup/reveal", {}).catch(statusErr))];
@@ -87,6 +101,7 @@ function autoBackupRows(v) {
     const when = autoBackupWhen(b.made);
     const what = [t(b.providers === 1 ? "1 provider" : "{n} providers", { n: b.providers })];
     if (b.reason === "restore") what.unshift(t("What was here before a restore"));
+    if (b.signIns) what.push(t("sign-ins"));
     row(when, what.join(" · "), btn(t("Restore…"), () => autoBackupAsk(b, when))).classList.add("auto-backup-version");
   }
   return rows;
@@ -103,6 +118,7 @@ function autoBackupAsk(b, when) {
   head.append(el("b", "", t("Restore the backup of {when}?", { when })));
   ed.append(head);
   ed.append(el("p", "lib-confirm", t("Your providers, settings, profiles and agents' models become this backup's. Providers added since are kept, and each keeps its API keys here.")));
+  if (b.signIns) ed.append(el("p", "lib-confirm", t("Its sign-ins are put in where they were renewed later than the ones here; none here is removed.")));
   ed.append(el("p", "lib-confirm", t("What is here now is backed up first: restore that one to undo this.")));
   const err = el("p", "editor-error", "");
   ed.append(err);
@@ -120,6 +136,8 @@ function autoBackupAsk(b, when) {
       const x = r.result || {};
       const lines = [t("Restored the backup of {when}", { when }) + " · " + t("Providers: {added} added, {replaced} replaced; {profiles} profiles; {agents} agent settings changed", { added: x.Added, replaced: x.Replaced, profiles: x.Profiles, agents: x.Agents })];
       if (x.NeedKey?.length) lines.push(t("Needs a key: {names}", { names: x.NeedKey.join(", ") }));
+      if (x.SignIns) { await import("./syncfiles.js"); lines.push(...signInsSaid(x.SignIns)); }
+      if (x.SignInsLocked) lines.push(t("This backup's sign-ins are sealed with another passphrase, so they were left out."));
       const before = r.view?.backups?.find((k) => k.name === r.before);
       if (before) lines.push(t("What was here before is the version of {when}: restore it to undo.", { when: autoBackupWhen(before.made) }));
       autoBackupSaid = lines;
@@ -139,4 +157,25 @@ function autoBackupAsk(b, when) {
   openModal(ed);
   $("#modal").classList.add("lib");
   cancel.focus(NO_SCROLL);
+}
+
+// autoBackupPhraseForm asks for the passphrase the backups' sign-ins are
+// sealed with, as they are turned on
+function autoBackupPhraseForm() {
+  const ed = el("div", "editor sync-form auto-backup-phrase");
+  const p1 = input("", t("passphrase"), "password");
+  const p2 = input("", t("again"), "password");
+  ed.append(...field(t("Passphrase"), p1, t("The sign-ins in each backup are sealed with it. Anyone with a backup and the passphrase can use those accounts. Keep it: without it a backup's sign-ins can't be opened.")),
+    ...field("", p2));
+  const go = el("button", "text primary", t("Turn on"));
+  const cancel = el("button", "text", t("Cancel"));
+  const say = syncBar(ed, "", el("span", "grow"), cancel, go);
+  cancel.onclick = () => { autoBackupPhrase = false; renderSync(); };
+  go.onclick = async () => {
+    if (!p1.value) return say(t("Pick a passphrase: the file is sealed with it"));
+    if (p1.value !== p2.value) return say(t("The two passphrases differ"));
+    autoBackupPhrase = false;
+    await autoBackupDo("set", { signIns: true, passphrase: p1.value }, go);
+  };
+  return ed;
 }

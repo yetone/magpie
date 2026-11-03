@@ -15,6 +15,7 @@ import (
 	"github.com/yetone/magpie/internal/backup"
 	"github.com/yetone/magpie/internal/davsync"
 	"github.com/yetone/magpie/internal/edit"
+	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -26,6 +27,7 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			Pass    string
 			Keys    bool
 			Library *bool // nil is yes
+			SignIns bool  // the subscriptions' and plugins' sign-ins too
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -38,6 +40,12 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 		}
 		if in.Library != nil && !*in.Library {
 			b.Library = nil
+		}
+		if in.SignIns {
+			if err := backup.WithSignIns(&b); err != nil {
+				fail(rw, fmt.Errorf("the sign-ins couldn't be read, so no backup was made: %w", err))
+				return
+			}
 		}
 		data, err := backup.Seal(b, in.Pass)
 		if err != nil {
@@ -58,7 +66,7 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 		}
 		os.Chmod(name, 0o600)
 		_ = w.OpenFolder(dir) // saved either way; the path is in the answer
-		writeJSON(rw, map[string]any{"path": tilde(name), "providers": len(b.Providers), "profiles": len(b.Profiles), "agents": len(b.Agents), "library": b.Library != nil})
+		writeJSON(rw, map[string]any{"path": tilde(name), "providers": len(b.Providers), "profiles": len(b.Profiles), "agents": len(b.Agents), "library": b.Library != nil, "signIns": signInCount(b.SignIns)})
 	})
 	mux.HandleFunc("POST /api/backup/import", func(rw http.ResponseWriter, r *http.Request) {
 		var in struct {
@@ -66,6 +74,7 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			Pass    string
 			Agents  bool
 			Library *bool // nil is yes
+			SignIns *bool // nil is yes: the backup's sign-ins, when it has them
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			fail(rw, err)
@@ -84,6 +93,7 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 		parts := backup.All
 		parts.Agents = in.Agents
 		parts.Library = in.Library == nil || *in.Library
+		parts.SignIns = in.SignIns == nil || *in.SignIns
 		res, err := backup.Restore(b, parts)
 		if err != nil {
 			fail(rw, err)
@@ -104,6 +114,10 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 			Keep  *int
 			Dir   *string // "" is the default folder
 			Name  string
+			// SignIns puts the sign-ins in the backups, sealed with
+			// Passphrase ("" keeps the one set)
+			SignIns    *bool
+			Passphrase string
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil && !errors.Is(err, io.EOF) {
 			fail(rw, err)
@@ -132,6 +146,12 @@ func backupRoutes(mux *http.ServeMux, w Windows) {
 				}
 				if in.Dir != nil && *in.Dir == "" {
 					c.Dir = ""
+				}
+				if in.Passphrase != "" {
+					c.Passphrase = in.Passphrase
+				}
+				if in.SignIns != nil {
+					c.SignIns = *in.SignIns
 				}
 			})
 		case "choose": // a folder from the system's picker, checked writable
@@ -275,4 +295,12 @@ func downloads() string {
 func isDir(p string) bool {
 	fi, err := os.Stat(p)
 	return err == nil && fi.IsDir()
+}
+
+// signInCount is how many sign-ins a backup carries.
+func signInCount(s *provider.SignIns) int {
+	if s == nil {
+		return 0
+	}
+	return len(s.Logins) + len(s.Plugins)
 }
