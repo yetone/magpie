@@ -6,7 +6,12 @@
 .rt-what { font-size: 13px; color: var(--muted); }
 .rt-what b { color: var(--fg); font-weight: 600; }
 .rt-mode { margin: 0; font-size: 12.5px; color: var(--fg-2); line-height: 1.45; }
-.rt-stage { position: relative; display: grid; grid-template-columns: 124px 124px minmax(0, 1fr); column-gap: 56px; align-items: center; padding: 22px 2px; }
+/* the agents' and magpie's columns at least 124px, and as wide as their
+   words up to 15% of the stage: at 124px a full-screen window cut an agent
+   to "Claude Desk…" while its keys' rows ran on across the rest (refeccd
+   on Discord) */
+.rt-stage { position: relative; display: grid; grid-template-columns: fit-content(max(124px, 15%)) fit-content(max(124px, 15%)) minmax(0, 1fr); column-gap: 56px; align-items: center; padding: 22px 2px; }
+.rt-stage > :is(.rt-srcs, .rt-hub) { min-width: 124px; }
 .rt-wires { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .rt-wires path { fill: none; stroke: var(--line); stroke-width: 1.5; transition: opacity .3s; }
 .rt-wires path.live { stroke: var(--agent, var(--muted)); stroke-dasharray: 3 5; animation: rtflow .7s linear infinite; }
@@ -232,6 +237,7 @@
 /* narrow (the tray panel): magpie and the agent side by side, the
    accounts under them, on a lane down their left */
 :where(.rt.max560) .rt-stage { grid-template-columns: 1fr 1fr; column-gap: 28px; row-gap: 26px; padding: 16px 0; }
+:where(.rt.max560) .rt-stage > :is(.rt-srcs, .rt-hub) { min-width: 0; }
 :where(.rt.max560) .rt-accts { grid-column: 1 / -1; padding-left: 22px; }
 .rt-accts:where(.max560) li { grid-template-columns: 10px minmax(0, 1fr); }
 .rt-accts:where(.max560) em { grid-column: 2; white-space: normal; }

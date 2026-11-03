@@ -8112,7 +8112,10 @@ function routingPage(part) {
   // sight change #rt's height a fraction of a pixel, which WebKit reports
   // as a ResizeObserver loop (#3164)
   let stageAsked = 0;
-  new ResizeObserver(() => { if (!stageAsked) stageAsked = requestAnimationFrame(() => { stageAsked = 0; layout(); }); }).observe(stage);
+  // The agents' and magpie's columns are as wide as their words (routing.css),
+  // so a new name or address can move the cards while the stage keeps its size
+  const stageSeen = new ResizeObserver(() => { if (!stageAsked) stageAsked = requestAnimationFrame(() => { stageAsked = 0; layout(); }); });
+  for (const e of [stage, srcs, hub]) stageSeen.observe(e);
   // the list is as tall as leaves the stage in sight above it: the reader
   // scrolls the list, not the page, and a request picked plays in view.
   // Its top stays where it is as it is sized, so a row just clicked does too
