@@ -37,7 +37,7 @@ const mediaEnumMost = 40
 // first, and the default itself: "" when image generation is off or
 // nothing makes them. Image models are each provider's OfferedDrawers (one
 // the user unticked is left out, as Automatic leaves it), videos its
-// Videomakers.
+// OfferedVideomakers (one unticked left out the same way).
 func mediaModels(video bool) (all []string, def string) {
 	if video {
 		def, _ = videomaker()
@@ -52,7 +52,7 @@ func mediaModels(video bool) (all []string, def string) {
 		if !p.On() || p.DecideOnly() {
 			continue
 		}
-		ms := Videomakers(p)
+		ms := OfferedVideomakers(p)
 		if !video {
 			ms = OfferedDrawers(p)
 		}

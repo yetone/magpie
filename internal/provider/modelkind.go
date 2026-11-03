@@ -132,3 +132,11 @@ func setModelKind(ref, kind string) (bool, error) {
 func (p Provider) DrawerHidden(model string) bool {
 	return slices.Contains(p.HiddenDrawers, model)
 }
+
+// VideomakerHidden is whether the user unticked p's video model in its
+// editor (HiddenVideomakers): it is left out of the lists a video model is
+// picked from and of Automatic's choice, and still makes videos when
+// named.
+func (p Provider) VideomakerHidden(model string) bool {
+	return slices.Contains(p.HiddenVideomakers, model)
+}

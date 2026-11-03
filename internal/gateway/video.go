@@ -68,7 +68,12 @@ const videoTimeout = 5 * time.Minute
 // implements that vendor's video API, a MiniMax API key's H3 models
 // (video_minimax.go), and those a provider's own model list marks as video
 // models (customVideomakers).
-func Videomakers(p provider.Provider) []catalog.Model {
+func Videomakers(p provider.Provider) []catalog.Model { return VideomakersOf(p, p.Available) }
+
+// VideomakersOf is Videomakers with p's model list from avail, called only
+// when it is wanted, as DrawersOf is: the Providers page has each
+// provider's list at hand. What avail gives is only read.
+func VideomakersOf(p provider.Provider, avail func() []catalog.Model) []catalog.Model {
 	if p.IsRemoteMagpie() {
 		out := catalog.LiveVideomakers(p.ID)
 		for i := range out {
@@ -83,13 +88,26 @@ func Videomakers(p provider.Provider) []catalog.Model {
 		return minimaxVideomakers(p)
 	}
 	if !drawsGrok(p) {
-		return customVideomakers(p)
+		return customVideomakersOf(p, avail)
 	}
 	out := slices.Clone(grokVideoModels)
 	for i := range out {
 		out[i].Provider = p.ID
 	}
 	return out
+}
+
+// OfferedVideomakers are Videomakers less those the user unticked in p's
+// editor (provider.HiddenVideomakers, axelburks on Discord), as
+// OfferedDrawers are of its image models: the video models a list offers to
+// pick from and Automatic picks among. A request that names a hidden one
+// still makes its video (bareVideomaker and videosCreate read Videomakers).
+func OfferedVideomakers(p provider.Provider) []catalog.Model {
+	ms := Videomakers(p)
+	if len(p.HiddenVideomakers) == 0 {
+		return ms
+	}
+	return slices.DeleteFunc(slices.Clone(ms), func(m catalog.Model) bool { return p.VideomakerHidden(m.ID) })
 }
 
 // customVideomakers are the video models of a provider set up with a base
@@ -103,9 +121,13 @@ func Videomakers(p provider.Provider) []catalog.Model {
 // are the models it says give video (capabilities.output.video), asked
 // through its fetch on the account (XYenon's Google AI Studio plugin, Veo).
 func customVideomakers(p provider.Provider) []catalog.Model {
+	return customVideomakersOf(p, p.Available)
+}
+
+func customVideomakersOf(p provider.Provider, avail func() []catalog.Model) []catalog.Model {
 	if p.IsPlugin() && !drawsGrok(p) {
 		var out []catalog.Model
-		for _, m := range p.Available() {
+		for _, m := range avail() {
 			if slices.Contains(m.OutputModalities, "video") {
 				m.Provider = p.ID
 				out = append(out, m)
@@ -123,9 +145,12 @@ func customVideomakers(p provider.Provider) []catalog.Model {
 	if isArk(p) {
 		// a Volcengine Ark key's Seedance models (pay-as-you-go, or one
 		// added by hand), those its list has and those the user picked, as
-		// Drawers takes a Seedream: its list marks no kind, and Ark makes
-		// them at its own content-generation tasks (arkFilms)
-		ms := p.Available()
+		// Drawers takes a Seedream; Ark makes them at its own
+		// content-generation tasks (arkFilms). A list fetched now has them
+		// as LiveVideomakers already (its domain VideoGeneration); one
+		// fetched before has them among its chat models, until the next
+		// fetch
+		ms := slices.Clone(avail())
 		for _, id := range p.Models {
 			ms = append(ms, catalog.Model{ID: id, Name: id})
 		}
@@ -255,7 +280,7 @@ func AutoVideomaker() string {
 		if !p.On() || p.DecideOnly() {
 			continue
 		}
-		if ms := Videomakers(p); len(ms) > 0 {
+		if ms := OfferedVideomakers(p); len(ms) > 0 {
 			if filmsMiniMax(p) {
 				if paid == "" {
 					paid = p.ID + "/" + ms[0].ID

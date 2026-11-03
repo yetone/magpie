@@ -1423,7 +1423,7 @@ func videomakerObjects(r *http.Request) []map[string]any {
 		if !p.On() || p.DecideOnly() {
 			continue
 		}
-		for _, m := range Videomakers(p) {
+		for _, m := range OfferedVideomakers(p) {
 			if held && (!modelAllowed(who, p, m.ID) || !accountServes(who, p, m.ID)) {
 				continue
 			}

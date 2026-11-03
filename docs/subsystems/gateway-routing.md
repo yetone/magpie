@@ -718,7 +718,9 @@ order, prompt masking (fails closed), and usage records.
 
 A custom provider (no account, no preset plan's videos) makes videos the
 same OpenAI way (#1446, `customVideomakers`), but only with the models its
-own fetched list marks `"kind": "video"` (`catalog.LiveVideomakers`) or the
+own fetched list marks `"kind": "video"`, or, with no `kind`, `domain`
+`VideoGeneration` or video out without text in `output_modalities`, as
+Volcengine Ark's list does (`catalog.LiveVideomakers`), or the
 user marks a video model (settings' `ModelKinds`, `provider.SetModelKind`,
 a model chip's right-click *Makes…* in the editor, #1399); a name alone
 never makes a model a video maker. A plugin's provider makes videos with the
@@ -1739,7 +1741,8 @@ project. Settings › Models shows the address (`#imageMcpRow`, below
 Discord), in [`image_mcp_models.go`](../../internal/gateway/image_mcp_models.go).
 `mediaModels` lists what may be asked, as provider/model: Settings' default
 first (`Drawer`, `videomaker`), then each provider's `OfferedDrawers` (a
-model the user unticked is left out) or `Videomakers`, from providers that
+model the user unticked is left out) or `OfferedVideomakers` (likewise),
+from providers that
 are on and not decide-only. `mediaModelsFor` keeps only those the calling
 key may use (`refAllowed`: `allows`, or `groupAllowed` for a group ref). The
 schema's `model` is an `enum` of them, or, past 40 (`mediaEnumMost`), a
@@ -1848,11 +1851,31 @@ and `drawingModel` read `Drawers`, so a request that names one, or a
 Settings › Images pick made before it was hidden, draws as before. That
 pick stays listed as picked, and `imageGenHidden` puts a line under the
 row that it is unticked and leaves the list once another is picked.
-Refusing a model outright is Disabled models, below. Video models aren't
-listed in the editor, so there is nothing to hide there.
+Refusing a model outright is Disabled models, below.
+
+Video models are listed the same way, under Video models (axelburks on
+Discord: an Ark key's Seedance had nowhere to be ticked). The editor's
+`filmIds` are `gateway.VideomakersOf` the listing it already has, and an
+unticked one is saved in `provider.HiddenVideomakers`, kept and cleared as
+`hiddenDrawers` is. `gateway.OfferedVideomakers` is `Videomakers` less the
+hidden ones, read by `AutoVideomaker`, `videomakerObjects` and
+`mediaModels(true)`. A hidden one still makes its video when named:
+`bareVideomaker`, `videosCreate` and `arkFilms` read `Videomakers`.
+
+An Ark key's list marks its video and image models by `domain`
+(`VideoGeneration`, `ImageGeneration`) and
+`modalities.output_modalities`, with no `kind`; `catalog`'s live parse
+reads both, so Seedance is a video model there and no longer a chat
+model, and 3D, embedding and other models that give no text are left out
+(`TestFetchArkMarksVideoModels`, on a captured list). An Ark list fetched
+before has Seedance among its chat models until the next fetch;
+`customVideomakers` still counts any Seedance id an Ark key lists or
+picks as a video model.
 
 Covered by `TestHiddenDrawerLeavesListsButStillDraws`,
-`TestImageModelsHidden` and `internal/gui/tests/image-models-hide.test.cjs`.
+`TestImageModelsHidden`, `internal/gui/tests/image-models-hide.test.cjs`,
+`TestHiddenVideomakerLeavesListsButStillFilms`, `TestVideoModelsHidden`
+and `internal/gui/tests/video-models-hide.test.cjs`.
 
 ## Disabled models
 

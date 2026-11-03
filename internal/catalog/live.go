@@ -637,9 +637,24 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		// its retrieval models too; a vendor's general list still leaves
 		// out models agents can't chat with.
 		decision := r.Kind == "decision"
-		films := r.Kind == "video"
-		drawer := !films && !decision && (DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research") || r.Kind == "image")
-		if !drawer && !films && !decision && headers["X-Magpie-Drawers"] == "" && !textModel(mdModel{ID: id}) {
+		ins, outs := Kinds(r.Modalities.Input), Kinds(r.Modalities.Output)
+		if ins == nil && outs == nil {
+			// Volcengine Ark's names: {"input_modalities": […],
+			// "output_modalities": ["video"]}
+			ins, outs = Kinds(r.Modalities.InputModalities), Kinds(r.Modalities.OutputModalities)
+		}
+		// a model the list says makes videos: another magpie's kind, or,
+		// where the list marks no kind, Ark's domain "VideoGeneration" or
+		// an output of video without text (doubao-seedance-*, wan2-1-*),
+		// which is no model to chat with (axelburks on Discord: Ark's
+		// Seedance sat among its chat models, not under Video models)
+		films := r.Kind == "video" || r.Kind == "" && (r.Domain == "VideoGeneration" || slices.Contains(outs, "video") && !slices.Contains(outs, "text"))
+		drawer := !films && !decision && (DrawsID(id) && !strings.Contains(strings.ToLower(id), "deep-research") || r.Kind == "image" ||
+			r.Kind == "" && (r.Domain == "ImageGeneration" || slices.Contains(outs, "image") && !slices.Contains(outs, "text")))
+		// and none the list says answers without text (Ark's 3D models)
+		md := mdModel{ID: id}
+		md.Modalities.Output = outs
+		if !drawer && !films && !decision && headers["X-Magpie-Drawers"] == "" && !textModel(md) {
 			continue
 		}
 		name, plain := r.DisplayName, ""
@@ -657,7 +672,6 @@ func fetchPage(ctx context.Context, url, key string, anthropic bool, headers map
 		if name == "" {
 			name = id
 		}
-		ins, outs := Kinds(r.Modalities.Input), Kinds(r.Modalities.Output)
 		input := imageInput(ins)
 		apis := EndpointAPIs(r.Endpoints)
 		if native := EndpointAPIs(r.Native); len(native) > 0 {
@@ -729,7 +743,13 @@ type liveModel struct {
 	Modalities  struct {
 		Input  []string `json:"input"`
 		Output []string `json:"output"`
+		// Volcengine Ark's
+		InputModalities  []string `json:"input_modalities"`
+		OutputModalities []string `json:"output_modalities"`
 	} `json:"modalities"`
+	// what Volcengine Ark's list says a model is for: "LLM",
+	// "VideoGeneration", "ImageGeneration"…
+	Domain string `json:"domain"`
 	// the paths the model is served on, where the vendor says: Command
 	// Code's Claude models on /messages alone, its open ones on
 	// /chat/completions and /responses

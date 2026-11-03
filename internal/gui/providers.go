@@ -293,8 +293,13 @@ type providerJSON struct {
 	DrawIDs   []string    `json:"drawIds,omitempty"` // those models' ids, listed apart in its editor
 	// those of them unticked in its editor (provider.HiddenDrawers)
 	HiddenDrawers []string `json:"hiddenDrawers,omitempty"`
-	Unlisted      bool     `json:"unlisted"` // its models serve only through routing groups
-	NoModels      bool     `json:"noModels"` // Select none: none of its models served (#1818)
+	// its video models (gateway.Videomakers), listed apart in its editor
+	// as its image models are, and those unticked there
+	// (provider.HiddenVideomakers)
+	FilmIDs           []string `json:"filmIds,omitempty"`
+	HiddenVideomakers []string `json:"hiddenVideomakers,omitempty"`
+	Unlisted          bool     `json:"unlisted"` // its models serve only through routing groups
+	NoModels          bool     `json:"noModels"` // Select none: none of its models served (#1818)
 	// Best in family: with nothing picked, only the newest model of each
 	// family it lists is served (provider.Provider.BestInFamily)
 	BestInFamily bool `json:"bestInFamily"`
@@ -1001,6 +1006,14 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 			out.HiddenDrawers = append(out.HiddenDrawers, id)
 		}
 	}
+	// its video models likewise (axelburks on Discord: an Ark key's
+	// Seedance had nowhere to be ticked)
+	for _, m := range gateway.VideomakersOf(p, func() []catalog.Model { return ls.Available }) {
+		out.FilmIDs = append(out.FilmIDs, m.ID)
+		if p.VideomakerHidden(m.ID) {
+			out.HiddenVideomakers = append(out.HiddenVideomakers, m.ID)
+		}
+	}
 	if t, ok := p.Listed(); ok {
 		out.Fetched = &t
 	}
@@ -1663,6 +1676,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				pr.Routing, pr.Affinity, pr.Sink = in.Routing, in.Affinity, in.Sink
 				pr.Unlisted = in.Unlisted
 				pr.HiddenDrawers = in.HiddenDrawers
+				pr.HiddenVideomakers = in.HiddenVideomakers
 				pr.AccountProxies = in.AccountProxies
 				if in.Name != "" {
 					pr.Name = in.Name
@@ -1904,6 +1918,9 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 				// shows them all (321sssrt on X)
 				if in.HiddenDrawers == nil && old != nil {
 					in.HiddenDrawers = old.HiddenDrawers
+				}
+				if in.HiddenVideomakers == nil && old != nil {
+					in.HiddenVideomakers = old.HiddenVideomakers
 				}
 				// a Zhipu key's team likewise: {} clears it
 				if in.ZhipuTeam == nil && old != nil {

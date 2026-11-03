@@ -1,0 +1,338 @@
+{
+ "object": "list",
+ "data": [
+  {
+   "created": 1744343828,
+   "domain": "",
+   "features": {
+    "structured_outputs": {
+     "json_object": false,
+     "json_schema": false
+    }
+   },
+   "id": "wan2-1-14b-t2v-250225",
+   "modalities": {
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "video"
+    ]
+   },
+   "name": "wan2-1-14b",
+   "object": "model",
+   "status": "Shutdown",
+   "task_type": [
+    "TextToVideo"
+   ],
+   "token_limits": {},
+   "version": "t2v-250225"
+  },
+  {
+   "created": 1749465881,
+   "domain": "VideoGeneration",
+   "features": {
+    "structured_outputs": {
+     "json_object": false,
+     "json_schema": false
+    }
+   },
+   "id": "doubao-seedance-1-0-pro-250528",
+   "modalities": {
+    "input_modalities": [
+     "text",
+     "first_frame",
+     "first_last_frame"
+    ],
+    "output_modalities": [
+     "video"
+    ]
+   },
+   "name": "doubao-seedance-1-0-pro",
+   "object": "model",
+   "status": "Retiring",
+   "task_type": [
+    "ImageToVideo",
+    "TextToVideo"
+   ],
+   "token_limits": {},
+   "version": "250528"
+  },
+  {
+   "created": 1760414492,
+   "domain": "VideoGeneration",
+   "features": {
+    "structured_outputs": {
+     "json_object": false,
+     "json_schema": false
+    }
+   },
+   "id": "doubao-seedance-1-0-pro-fast-251015",
+   "modalities": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "video"
+    ]
+   },
+   "name": "doubao-seedance-1-0-pro-fast",
+   "object": "model",
+   "task_type": [
+    "ImageToVideo",
+    "TextToVideo"
+   ],
+   "token_limits": {},
+   "version": "251015"
+  },
+  {
+   "created": 1764645281,
+   "domain": "",
+   "features": {
+    "structured_outputs": {
+     "json_object": false,
+     "json_schema": false
+    }
+   },
+   "id": "doubao-embedding-vision-251215",
+   "modalities": {
+    "input_modalities": [
+     "text",
+     "image",
+     "video"
+    ]
+   },
+   "name": "doubao-embedding-vision",
+   "object": "model",
+   "task_type": [
+    "ImageEmbedding"
+   ],
+   "token_limits": {
+    "context_window": 131072,
+    "max_input_token_length": 131072
+   },
+   "version": "251215"
+  },
+  {
+   "created": 1770189126,
+   "domain": "VideoGeneration",
+   "features": {
+    "structured_outputs": {
+     "json_object": false,
+     "json_schema": false
+    }
+   },
+   "id": "doubao-seedance-2-0-260128",
+   "modalities": {
+    "input_modalities": [
+     "text",
+     "image",
+     "video",
+     "audio"
+    ],
+    "output_modalities": [
+     "video"
+    ]
+   },
+   "name": "doubao-seedance-2-0",
+   "object": "model",
+   "task_type": [
+    "MultimodalToVideo",
+    "VideoExtension",
+    "VideoEditing"
+   ],
+   "token_limits": {},
+   "version": "260128"
+  },
+  {
+   "created": 1775281921,
+   "domain": "3DGeneration",
+   "features": {
+    "structured_outputs": {
+     "json_object": false,
+     "json_schema": false
+    }
+   },
+   "id": "doubao-seed3d-2-0-260328",
+   "modalities": {
+    "input_modalities": [
+     "image"
+    ],
+    "output_modalities": [
+     "three_d"
+    ]
+   },
+   "name": "doubao-seed3d-2-0",
+   "object": "model",
+   "task_type": [
+    "ImageTo3D"
+   ],
+   "token_limits": {},
+   "version": "260328"
+  },
+  {
+   "created": 1782821774,
+   "domain": "ImageGeneration",
+   "features": {
+    "structured_outputs": {
+     "json_object": false,
+     "json_schema": false
+    }
+   },
+   "id": "doubao-seedream-5-0-pro-260628",
+   "modalities": {
+    "input_modalities": [
+     "text",
+     "image"
+    ],
+    "output_modalities": [
+     "image"
+    ]
+   },
+   "name": "doubao-seedream-5-0-pro",
+   "object": "model",
+   "task_type": [
+    "ImageToImage",
+    "TextToImage"
+   ],
+   "token_limits": {},
+   "version": "260628"
+  },
+  {
+   "created": 1789472816,
+   "domain": "VLM",
+   "features": {
+    "batch": {
+     "batch_chat": false,
+     "batch_job": false
+    },
+    "cache": {
+     "prefix_cache": false,
+     "session_cache": false
+    },
+    "structured_outputs": {
+     "json_object": true,
+     "json_schema": true
+    },
+    "tools": {
+     "function_calling": true
+    }
+   },
+   "id": "doubao-seed-2-1-pro-260915",
+   "modalities": {
+    "input_modalities": [
+     "text",
+     "image",
+     "video"
+    ],
+    "output_modalities": [
+     "text"
+    ]
+   },
+   "name": "doubao-seed-2-1-pro",
+   "object": "model",
+   "task_type": [
+    "VisualQuestionAnswering",
+    "TextGeneration"
+   ],
+   "token_limits": {
+    "context_window": 1048576,
+    "max_input_token_length": 1048576,
+    "max_output_token_length": 262144,
+    "max_reasoning_token_length": 262144
+   },
+   "version": "260915"
+  },
+  {
+   "created": 1789531767,
+   "domain": "ImageGeneration",
+   "features": {
+    "tools": {
+     "function_calling": false
+    }
+   },
+   "id": "doubao-seedream-5-0-flash-260915",
+   "name": "doubao-seedream-5-0-flash",
+   "object": "model",
+   "version": "260915"
+  },
+  {
+   "created": 1792808954,
+   "domain": "LLM",
+   "features": {
+    "batch": {
+     "batch_chat": false,
+     "batch_job": false
+    },
+    "cache": {
+     "prefix_cache": true,
+     "session_cache": true
+    },
+    "structured_outputs": {
+     "json_object": true,
+     "json_schema": true
+    },
+    "tools": {
+     "function_calling": true
+    }
+   },
+   "id": "kimi-k3-1-pro-261024",
+   "modalities": {
+    "input_modalities": [
+     "text",
+     "image",
+     "video"
+    ],
+    "output_modalities": [
+     "text"
+    ]
+   },
+   "name": "kimi-k3-1-pro",
+   "object": "model",
+   "task_type": [
+    "TextGeneration"
+   ],
+   "token_limits": {
+    "context_window": 1048576,
+    "max_input_token_length": 1048576,
+    "max_output_token_length": 131072,
+    "max_reasoning_token_length": 131072
+   },
+   "version": "261024"
+  },
+  {
+   "created": 1758007209,
+   "domain": "LLM",
+   "features": {
+    "structured_outputs": {
+     "json_object": false,
+     "json_schema": false
+    },
+    "tools": {
+     "function_calling": false
+    }
+   },
+   "id": "doubao-seed-translation-250915",
+   "modalities": {
+    "input_modalities": [
+     "text"
+    ],
+    "output_modalities": [
+     "text"
+    ]
+   },
+   "name": "doubao-seed-translation",
+   "object": "model",
+   "task_type": [
+    "TextGeneration"
+   ],
+   "token_limits": {
+    "context_window": 4096,
+    "max_input_token_length": 1024,
+    "max_output_token_length": 3072
+   },
+   "version": "250915"
+  }
+ ]
+}

@@ -9006,11 +9006,7 @@ const modelAPIs = (p) => {
   return urls.length < 2 ? [] : PROTOS.filter(([k]) => urls.includes(k));
 };
 
-// pickedOf: the models the user picked for p, as its editor starts them.
-// Only the picks: with none, agents are served the vendor's list (its
-// first 24), which the models list marks on too; taking those as picks
-// drew them ticked on opening and the next Save wrote them as picks, so
-// Select none and Save came back as 24 ticked (#614).
+// pickedOf: the models the user picked for p, only the picks (#614).
 function pickedOf(p) {
   const on = p.models.filter((m) => m.on);
   if (!Array.isArray(p.chosen)) return on.map((m) => m.id); // no picks said: those served, as before
@@ -9020,11 +9016,7 @@ function pickedOf(p) {
   return p.models.filter((m) => (m.on || m.noAPI) && picks.has(m.id)).map((m) => m.id);
 }
 
-// baseAPIOf is the API a saved provider's Base URL is shown as: the one the
-// user picked and saved (baseAPI), while it has a URL, else the first that
-// has one. Without the pick, a provider with a chat URL beside its Responses
-// one came back as OpenAI compatible after Responses was picked and saved
-// (01huadalang).
+// baseAPIOf: the API a saved Base URL is shown as, the saved pick first (01huadalang).
 function baseAPIOf(p) {
   const picked = p.baseAPI === "chat" ? "openai" : p.baseAPI;
   if (picked && p[apiField[picked]]) return picked;
@@ -9033,13 +9025,10 @@ function baseAPIOf(p) {
 
 // draftOf is a saved provider as its editor's form holds it.
 function draftOf(p) {
-  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), passHeaders: (p.passHeaders || []).join(", "), icon: p.icon || "", iconFrom: p.iconFrom || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, insecureTLS: !!p.insecureTLS, limitRestOff: !!p.limitRestOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
+  return { id: p.id, name: p.name, preset: p.preset, chat: p.chat, responses: p.responses, anthropic: p.anthropic, gemini: p.gemini || "", catalog: p.catalog, decide: p.decide || "", key: "", api: baseAPIOf(p), chosen: pickedOf(p), none: !!p.noModels, best: !!p.bestInFamily, extra: [], headers: headerRows(p.headers), extraBody: extraBodyText(p.extraBody), replyHeaders: (p.replyHeaders || []).join(", "), passHeaders: (p.passHeaders || []).join(", "), icon: p.icon || "", iconFrom: p.iconFrom || "", fallback: [...(p.fallback || [])], unlisted: !!p.unlisted, hiddenDrawers: [...(p.hiddenDrawers || [])], hiddenVideomakers: [...(p.hiddenVideomakers || [])], searches: !!p.searches, unredacted: !!p.unredacted, countFree: !!p.countFree, insecureTLS: !!p.insecureTLS, limitRestOff: !!p.limitRestOff, nativeCompaction: !!p.nativeCompaction, passUserAgent: !!p.passUserAgent, pinUpstream: !!p.pinUpstream, authHeader: p.authHeader || "", balanceURL: p.balanceURL || "", balancePath: p.balancePath || "", balanceMethod: p.balanceMethod || "", modelsURL: p.modelsURL || "", contexts: contextsText(p.contexts), outputs: contextsText(p.outputs), compacts: contextsText(p.compacts), keysUrl: p.keysUrl || "", ...proxyDraft(p), ...concurrencyDraft(p), rateWindows: (p.rateWindows || []).map((w) => ({ ...w })) };
 }
 
-// duplicateProvider opens the Add form on a copy of p (#268): its URLs,
-// headers, models, balance and proxy, under a name of its own. The key is
-// p's unless another is pasted: the Add takes it from p, with its other
-// keys (copyOf). A signed-in account has no copy.
+// duplicateProvider opens the Add form on a copy of p, its key p's unless another is pasted (#268).
 function duplicateProvider(p) {
   const name = t("{name} copy", { name: p.name });
   editing = p.preset && providers.presets.some((x) => x.id === p.preset) ? { preset: p.preset } : { custom: true };
@@ -9336,6 +9325,7 @@ function drawEditor(p, presetID) {
     }
     ed.append(...field(t("Models"), renderModels(p), pluginFilterNote(subOf(a.agent))));
     if (p.drawIds?.length) ed.append(...renderDrawers(p));
+    if (p.filmIds?.length) ed.append(...renderVideomakers(p));
     // a subscription's window too: Codex's backend says 272K for models
     // that take 872K (#120)
     const cx = input(draft.contexts || "", t("e.g. 128k · or gpt-6=1m, comma separated"));
@@ -9397,7 +9387,7 @@ function drawEditor(p, presetID) {
       if (priceTypedError(ed)) return;
       const picked = accountModelsDraft(p);
       if (picked === false) return pickError();
-      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), bestInFamily: bestChosen(), unlisted: draft.unlisted, hiddenDrawers: draft.hiddenDrawers, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, maxAccounts, ...queue, priceRate, rateWindows, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, unredacted: !!draft.unredacted, countFree: !!draft.countFree, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
+      const body = { id: p.id, models: chosenIds(), noModels: noneChosen(), bestInFamily: bestChosen(), unlisted: draft.unlisted, hiddenDrawers: draft.hiddenDrawers, hiddenVideomakers: draft.hiddenVideomakers, fallback: draft.fallback, contexts: cx.map, outputs: ox.map, compacts: cpx.map, proxy, accountProxies: own.map, maxConcurrency, maxAccounts, ...queue, priceRate, rateWindows, modelPrefs: modelPrefsOfDraft(), pinUpstream: !!draft.pinUpstream, unredacted: !!draft.unredacted, countFree: !!draft.countFree, ...(p.carriesCompaction ? { nativeCompaction: !!draft.nativeCompaction } : {}), ...routingOfDraft(p) };
       saving(saveBtn, t("Saving…"));
       saveAccountModelsDraft(picked).then(() => savePluginOptions(subOf(a.agent))).then(() => providerAction("save", body, t("{name} saved", { name: p.name })), (e) => { doneSaving(saveBtn); editorError(e.message || String(e)); }); };
     bar.append(cancel, saveBtn);
@@ -9782,6 +9772,7 @@ function drawEditor(p, presetID) {
   // add page for one where they must type them
   else if (pr?.id === "azure") ed.append(...field(t("Models"), el("div", "hint azure-models", t("No need to type them: once added, magpie lists the deployments this key can call. Type a deployment's name as a model id only if that list can't be fetched.")), ""));
   if (p?.drawIds?.length) ed.append(...renderDrawers(p));
+  if (p?.filmIds?.length) ed.append(...renderVideomakers(p));
   {
     // the window agents are told a model has, over what the vendor or
     // models.dev says: one for all of them, and model=size for one
@@ -9990,7 +9981,7 @@ function drawEditor(p, presetID) {
       body.baseAPI = draft.api === "openai" ? "chat" : draft.api;
     }
     if (custom) { body.icon = draft.icon || "generic"; body.iconFrom = draft.iconFrom || ""; body.balanceURL = (draft.balanceURL || "").trim(); body.balancePath = (draft.balancePath || "").trim(); body.balanceMethod = draft.balanceMethod || ""; body.modelsURL = (draft.modelsURL || "").trim(); }
-    if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.hiddenDrawers = draft.hiddenDrawers; body.noModels = noneChosen(); body.bestInFamily = bestChosen(); body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
+    if (p) { body.fallback = draft.fallback; body.unlisted = draft.unlisted; body.hiddenDrawers = draft.hiddenDrawers; body.hiddenVideomakers = draft.hiddenVideomakers; body.noModels = noneChosen(); body.bestInFamily = bestChosen(); body.modelPrefs = modelPrefsOfDraft(); Object.assign(body, routingOfDraft(p)); }
     body.searches = !!draft.searches && searchable();
     body.pinUpstream = !!draft.pinUpstream;
     if (twoKeyHeaders()) body.authHeader = draft.authHeader || "";
@@ -11835,26 +11826,32 @@ function renderModels(p) {
   return box;
 }
 
-// renderDrawers: the provider's image models. Agents don't chat with them,
-// so they aren't among its Models; one is picked in Settings → Images,
-// which lists the ticked ones. A click unticks one there, staged in the
-// draft until Save as a model's tick is (321sssrt on X: OpenAI's dozen).
+// renderDrawers: its image models, ticked for Settings → Images (321sssrt on X)
 function renderDrawers(p) {
-  const chips = el("div", "mchips drawers");
-  draft.hiddenDrawers ||= [...(p.hiddenDrawers || [])];
-  for (const id of p.drawIds) {
+  return field(t("Image models"), mediaChips("mchips drawers", p.drawIds, "hiddenDrawers", p), t("Settings → Images lists the ticked ones. Agents don't chat with these, so they aren't among its models."));
+}
+
+// renderVideomakers: its video models, ticked to be offered (axelburks on Discord)
+function renderVideomakers(p) {
+  return field(t("Video models"), mediaChips("mchips videomakers", p.filmIds, "hiddenVideomakers", p), t("Only the ticked ones are offered when making a video. Agents don't chat with these, so they aren't among its models."));
+}
+
+function mediaChips(cls, ids, key, p) {
+  const chips = el("div", cls);
+  draft[key] ||= [...(p[key] || [])];
+  for (const id of ids) {
     const c = el("button", "mchip pick");
     c.type = "button";
     c.append(el("span", "", id));
-    const show = () => { const on = !draft.hiddenDrawers.includes(id); c.classList.toggle("on", on); c.setAttribute("aria-pressed", on); };
+    const show = () => { const on = !draft[key].includes(id); c.classList.toggle("on", on); c.setAttribute("aria-pressed", on); };
     c.onclick = () => {
-      draft.hiddenDrawers = draft.hiddenDrawers.includes(id) ? draft.hiddenDrawers.filter((x) => x !== id) : [...draft.hiddenDrawers, id];
+      draft[key] = draft[key].includes(id) ? draft[key].filter((x) => x !== id) : [...draft[key], id];
       show();
     };
     show();
     chips.append(c);
   }
-  return field(t("Image models"), chips, t("Settings → Images lists the ticked ones. Agents don't chat with these, so they aren't among its models."));
+  return chips;
 }
 
 // renderRouting: how the gateway spreads requests over the keys or
