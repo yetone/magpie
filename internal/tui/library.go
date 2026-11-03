@@ -65,7 +65,7 @@ func (m *model) reloadLibrary() {
 			what = strings.TrimSpace(s.Command + " " + strings.Join(s.Args, " "))
 		}
 		if s.Local {
-			what = "this computer only · " + what
+			what = "not synced · " + what
 		}
 		m.lib = append(m.lib, libRow{kind: "mcp", name: s.Name, about: what, on: s.Agents, bad: len(s.Problems)})
 	}

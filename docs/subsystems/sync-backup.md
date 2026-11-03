@@ -80,8 +80,10 @@ three maps survive a change of server (`TestOwnModelStaysOnEachComputer`,
 `TestNewPicksStillGoBothWays`, `sync-own-fields.test.cjs`).
 
 A whole agent's picks can be kept to one computer on purpose, as an MCP
-server can (chenxiang0010 on Discord): the Agents row's menu has **This
-computer only** (`POST /api/agents/here`), which adds the agent's id to
+server can (chenxiang0010 on Discord): the Agents row's menu has **Don't sync
+picks to your other computers** (`POST /api/agents/here`; the row says
+"Not synced"; it said "This computer only", which read as sharing, bin.90
+on Discord), which adds the agent's id to
 `Settings.AgentsHere`, a computer's own kept by `KeepOwn` and by a save of
 the Settings page (`settingsapi.Apply`). It is off by default, so an upgrade
 changes no pick anywhere. For each such agent, `withHere` adds `<id>.*` to

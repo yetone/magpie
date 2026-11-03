@@ -1,8 +1,10 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // An agent's picks can be kept to this computer, as an MCP server can
 // (chenxiang0010 on Discord: 「agent当前选择的模型可不可以像mcp那样 只对当前设备生效」).
-// The row's menu has This computer only: it posts agents/here, is ticked
-// once on, and the window's row says it beside the version, in every
+// The row's menu has "Don't sync picks to your other computers" (said as
+// sync, not "This computer only", which read as sharing: bin.90 on
+// Discord): it posts agents/here, is ticked once on, and the window's row
+// says "Not synced" beside the version, in every
 // language, in Chromium and WebKit, in the window and the tray panel.
 // Off again, the tick and the words go. No backend: faked here.
 const assert = require("node:assert/strict");
@@ -68,8 +70,10 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await page.route("**/*", fixture(lang, posts).serve);
         await page.goto("http://magpie.test/" + (where === "panel" ? "?mode=panel" : ""));
         await page.locator(row).waitFor();
-        const name = await page.evaluate(() => t("This computer only"));
-        if (lang !== "en") assert.notEqual(name, "This computer only", "not translated");
+        const name = await page.evaluate(() => t("Don't sync picks to your other computers"));
+        const word = await page.evaluate(() => t("Not synced"));
+        if (lang !== "en") assert.notEqual(name, "Don't sync picks to your other computers", "not translated");
+        if (lang !== "en") assert.notEqual(word, "Not synced", "not translated");
         const item = () => page.locator(".row-menu .rm-item", { hasText: name });
         const open = async () => {
           await page.locator(row).click({ button: "right" });
@@ -86,7 +90,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         if (where === "panel") assert.equal(await tag.count(), 0, "the panel's row has no room for it");
         else {
           await tag.waitFor();
-          assert.equal(await tag.textContent(), name);
+          assert.equal(await tag.textContent(), word);
           // the row keeps its width and the name stays whole
           const fit = await page.locator(row).evaluate((r) => {
             const n = r.querySelector(".who .name");
