@@ -21841,8 +21841,8 @@ function renderRedact(s, keep) {
   privacyModelRow(find, masking ? "" : why);
   const always = el("span", "static-pill" + (masking ? " on" : ""), masking ? t("Always on") : t("Off"));
   rowIn(find, t("Rules"), masking ? t("Keys, tokens, emails and numbers whose checksum adds up: patterns that are certain, checked on every request") : why, always).id = "maskRulesRow";
-  // Routing's and Usage's Hide accounts, here too, where privacy is looked for
-  if (window.hideAccounts) rowIn(share, t("Hide accounts"), t("Email addresses and account names on Usage and Routing are blurred, for a screenshot to share"),
+  // the pages' Hide accounts, here too, where privacy is looked for
+  if (window.hideAccounts) rowIn(share, t("Hide accounts"), t("Email addresses and account names on every page are blurred, for a screenshot to share"),
     onOff(window.hideAccounts.on(), (on) => { window.hideAccounts.set(on); renderSettings(); }));
   rowIn(share, t("Count me as a user"), t("Once a day, a random id for this computer with magpie's version and system"),
     onOff(!s.noStats, (on) => savePrefs({ ...keep, noStats: !on })));
@@ -24284,17 +24284,22 @@ window.noteAccounts = noteAccounts;
   // address only, not "Google" of "Google AI Pro" (#3656); TIPS, tooltips
   const LABELS = ".own-name, .plan, .acct-plan, .model-value, .subscription-head > b", TIPS = ".plan, .acct-plan, .model-value";
   // A switch's chosen is the choice made here; till then accounts hide
-  // while Privacy masks personal data (inaction). The whole window
-  // follows the switch of the page in sight: Routing's and Usage's, or
-  // Providers' own (#feedback). The tray panel follows the first.
-  const sw = [["magpie.maskEmails", ["#rtMask", "#usageMask"]], ["magpie.maskProviders", ["#pvMask"]]].map(([k, bs]) => {
-    let c = null;
-    try { c = localStorage.getItem(k); } catch {}
+  // while Privacy masks personal data (inaction). One switch for the whole
+  // window and the tray panel: Routing's, Usage's and Providers' buttons
+  // are the same switch, turned on any page and shown on all (paultian,
+  // #feedback: Providers' was its own, masked while Routing's was not).
+  const sw = [["magpie.maskEmails", ["#rtMask", "#usageMask", "#pvMask"]]].map(([k, bs]) => {
+    let c = null, p = null;
+    try { c = localStorage.getItem(k); p = localStorage.getItem("magpie.maskProviders"); } catch {}
+    // Providers' own switch, from the versions that had one: hidden on
+    // either page then is hidden on every page now
+    if (p !== null) {
+      c = c === "1" || p === "1" ? "1" : "0";
+      try { localStorage.setItem(k, c); localStorage.removeItem("magpie.maskProviders"); } catch {}
+    }
     return { k, c, on: c === "1", btns: mode === "panel" ? [] : bs.map((b) => $(b)).filter(Boolean) };
   });
-  // one who chose before Providers had its own keeps that choice there
-  if (sw[1].c === null && sw[0].c !== null) { Object.assign(sw[1], { c: sw[0].c, on: sw[0].on }); try { localStorage.setItem(sw[1].k, sw[1].c); } catch {} }
-  const cur = () => sw[+(mode !== "panel" && view === "providers")];
+  const cur = () => sw[0];
   let masked = false;
   const page = (() => {
     const view = document.body;
@@ -24377,7 +24382,7 @@ window.noteAccounts = noteAccounts;
       label.textContent = t(label.dataset.en);
       // and how to have them back, for one who never turned it on (#653)
       btn.dataset.enTitle = on ? "Accounts are masked for a screenshot — click to show them"
-        : "Mask the accounts on this page — email addresses and account names — for a screenshot to share";
+        : "Mask the accounts on every page — email addresses and account names — for a screenshot to share";
       btn.title = t(btn.dataset.enTitle);
     }
     page(cur().on);
@@ -24428,9 +24433,9 @@ window.noteAccounts = noteAccounts;
     closed: () => { if (shown.size) { shown.clear(); redraw(); } },
     on: () => sw[0].on,
     // all: personal data masked from now, so every page's switch too
-    set: (on, all) => { for (const s of all ? sw : [sw[0]]) setMasked(s, on); },
+    set: (on) => { for (const s of sw) setMasked(s, on); },
     follow: (personal) => { for (const s of sw) if (s.c === null && personal !== s.on) setMasked(s, personal, true); },
-    // another page in sight: its own switch
+    // another page in sight: masked as the one switch says
     page: () => { if (cur().on !== masked) page(cur().on); },
   };
   // turned in the window: the tray panel (or another window) follows
