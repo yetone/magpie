@@ -7482,7 +7482,7 @@ function routingPage(part) {
     drawLevels();
     ed.append(el("label", "", t("Levels")), lw);
 
-    const bar = el("div", "bar");
+    const bar = el("div", "bar view-foot");
     if (g) {
       const del = el("button", "text danger", t("Remove"));
       del.onclick = () => groupAction("delete", { id: g.id }, t("{name} removed", { name: g.name }));

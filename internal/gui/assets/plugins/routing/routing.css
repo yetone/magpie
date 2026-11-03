@@ -586,7 +586,12 @@ button.rt-session { cursor: pointer; }
 .rt-groups > .rt-gedit:last-child { border-radius: 0 0 11px 11px; }
 .rt-groups > .rt-gedit:only-child { border-radius: 11px; }
 .rt-groups > .rt-gedit + * { border-top-color: transparent; }
-.rt-gedit > .bar { position: sticky; bottom: 0; z-index: 3; background: var(--ged-bg, var(--card)); padding-bottom: 10px; margin-bottom: -10px; }
+/* the editor's Cancel and Add stay in sight, the bar's ground down to the
+   window's edge: the view's own foot padding (.view, body.window and the
+   phone page's in app.css) under it had shown as a gap (Jiabubu on Discord) */
+.rt-gedit > .bar { position: sticky; bottom: calc(-1 * var(--vfoot, 4px)); z-index: 3; background: var(--ged-bg, var(--card)); padding-bottom: calc(10px + var(--safe, 0px)); margin-bottom: calc(-10px - var(--safe, 0px)); }
+body.window .rt-gedit > .bar { --vfoot: 8px; }
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) { body.web .rt-gedit > .bar { --vfoot: max(12px, env(safe-area-inset-bottom)); --safe: env(safe-area-inset-bottom, 0px); } }
 .rt-gedit > .bar > button.text:not(.danger) { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 13px; }
 .rt-gedit .ehead.folds { cursor: pointer; }
 .rt-gedit .ehead.folds:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

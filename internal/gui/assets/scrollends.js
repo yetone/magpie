@@ -36,9 +36,12 @@
     if (!gutter && v.scrollHeight - v.clientHeight - v.scrollTop < box.offsetHeight + 24) on = false;
     box.classList.toggle("on", on || held);
     let bottom = innerHeight - r.bottom + 16;
-    // above a page's own sticky foot (Providers' Add buttons)
-    const foot = v.querySelector(":scope > .after-list:not(.away)");
-    if (foot && getComputedStyle(foot).position === "sticky") bottom = Math.max(bottom, innerHeight - foot.getBoundingClientRect().top + 8);
+    // above a page's own sticky foot under it (Providers' Add buttons, a
+    // Routing group editor's Cancel and Add: Jiabubu on Discord)
+    for (const foot of v.querySelectorAll(":scope > .after-list:not(.away), .view-foot")) {
+      const f = foot.getBoundingClientRect();
+      if (getComputedStyle(foot).position === "sticky" && f.bottom > innerHeight - bottom - box.offsetHeight && f.top < innerHeight - bottom) bottom = Math.max(bottom, innerHeight - f.top + 8);
+    }
     box.style.right = Math.max(8, innerWidth - r.right + bar + (gutter ? (pad - box.offsetWidth) / 2 : 10)) + "px";
     box.style.bottom = bottom + "px";
     up.setAttribute("aria-disabled", v.scrollTop < 1);
