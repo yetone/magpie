@@ -11391,7 +11391,10 @@ function renderModels(p) {
       };
       name.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") name.blur(); else if (e.key === "Escape") { name.value = nameNow(); name.blur(); } };
       const who = el("div", "mwho");
-      who.append(name, el("code", "", m.id));
+      // its own id, the one its provider is asked for, even once it is
+      // listed by another here (axelburks on Discord: the box after the
+      // name showed the Listed as id, and the model's own was gone)
+      who.append(name, el("code", "", m.vendor || m.id));
       row.append(who);
       // the model of other providers' it is, for the routing groups magpie
       // finds, when its id is one no rule matches up with theirs

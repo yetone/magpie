@@ -70,6 +70,9 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await box("deepseek-v4.1-flash-1017").getAttribute("placeholder"), "deepseek-v4.1-flash-1017");
       assert.equal(await box("grok-4.6").inputValue(), "grok-4.6");
       assert.equal(await box("grok-4.6").getAttribute("placeholder"), "grok-4.6@500k");
+      // the id beside its name is its own, not the one it is listed by
+      // (axelburks on Discord)
+      assert.deepEqual(await page.locator(".mname .mwho code").allTextContents(), ["deepseek-v4.1-flash-1017", "grok-4.6@500k"]);
       const list = await page.locator(".mnames:not([hidden])").elementHandle();
       const y = await page.evaluate(() => scrollY);
       await box("deepseek-v4.1-flash-1017").fill("deepseek-v4.1-flash");
