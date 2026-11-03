@@ -1,19 +1,28 @@
 // The text of a part of the context window card (context.js): what the
 // request sent there, opened from the card. context.js imports this when a
-// part is first opened, so it weighs nothing on the core.
+// part is first opened, so it weighs nothing on the core. A request whose
+// body has left memory is read from the request archive, when it kept one,
+// and the reply beside it (wangbinyq on Discord).
 const TEXT_STEP = 20000, ITEM_STEP = 100;
 const ROLE_NAMES = {
   system: "System prompt", user: "You", assistant: "Assistant", thinking: "Thinking",
   call: "Tool call", result: "Tool result", tool: "Tool definition", image: "Image", sealed: "Sealed",
 };
-async function readText(id, kind, item) {
-  const q = "id=" + encodeURIComponent(id) + "&kind=" + encodeURIComponent(kind) + (item === undefined ? "" : "&item=" + item);
+// read: /api/context/<what>; a 404 is {archive: why}, why it is gone
+async function read(what, q) {
   // fetched, not api(): the text isn't looked through for accounts
-  const res = await fetch("/api/context/text?" + q);
-  if (res.status === 404) return null;
+  const res = await fetch("/api/context/" + what + "?" + new URLSearchParams(q));
+  if (res.status === 404) return { gone: (await res.json().catch(() => ({}))).archive || "off" };
   if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
   return res.json();
 }
+const GONE = {
+  off: "This request's text is no longer kept: magpie keeps the text of the last {n} requests, in memory only, while it runs.",
+  missing: "Not in the request archive: it is saved just after the call, the oldest are removed past the archive's size, or the save failed (magpie's log says why)",
+  cut: "The request archive kept only the start of this request, so it can't be read",
+  unread: "The request archive's copy couldn't be read or masked, so none of it is shown",
+};
+const gone = (why, n) => el("p", "ctx-view-gone", t(GONE[why] || GONE.off, { n }));
 // a stretch of text, and a button for the next
 function longText(text) {
   const box = el("div", "ctx-text-box");
@@ -77,9 +86,13 @@ function pieceView(pc) {
   }
   return box;
 }
-export async function open(kit, id, kind, pick) {
+export async function open(kit, route, kind, pick) {
   const { fmtK, partName, itemName, itemLabel, tagOf } = kit;
+  const id = route?.id;
   if (!id) return;
+  // the day the history keeps it under, for one the gateway no longer holds
+  const day = String(route.time || "").slice(0, 10);
+  const readText = (kind, item) => read("text", { id, kind, day, ...(item === undefined ? {} : { item }) });
   const ed = el("div", "editor ctx-view wide");
   const head = el("div", "ehead");
   const title = el("b", "", partName(kind));
@@ -90,19 +103,50 @@ export async function open(kit, id, kind, pick) {
   const bar = el("div", "bar");
   const close = el("button", "text primary", t("Close"));
   close.onclick = (e) => { e.stopPropagation(); closeConfirmAsk(); };
-  bar.append(el("span", "grow"), close);
+  // the reply beside it: what the model answered, from memory or the archive
+  const reply = el("button", "text", t("Reply"));
+  reply.type = "button";
+  let view = null;
+  reply.onclick = async (e) => {
+    e.stopPropagation();
+    if (reply.classList.toggle("on")) {
+      reply.textContent = partName(kind);
+      title.textContent = t("Reply");
+      total.textContent = "";
+      body.replaceChildren(el("div", "ctx-view-wait", t("Reading…")));
+      let r;
+      try { r = await read("reply", { id, day }); } catch (err) { r = { err }; }
+      if (confirmAsk !== ed || !reply.classList.contains("on")) return;
+      if (r.err) return body.replaceChildren(el("p", "ctx-view-gone", r.err.message));
+      if (r.gone) return body.replaceChildren(gone(r.gone, 10));
+      const note = el("p", "ctx-view-note", t(r.from === "archive" ? "The reply as the agent got it, read from the request archive, masked where masking is on." : "The reply as the agent got it, masked where masking is on."));
+      body.replaceChildren(note, ...r.pieces.map(pieceView));
+      if (r.cut) body.append(el("p", "ctx-view-note", t("Only the start of the reply was kept")));
+    } else {
+      reply.textContent = t("Reply");
+      title.textContent = partName(kind);
+      if (view) view(); else body.replaceChildren(el("div", "ctx-view-wait", t("Reading…")));
+    }
+  };
+  bar.append(reply, el("span", "grow"), close);
   ed.append(head, body, bar);
   confirmAsk = ed;
   openModal(ed);
   $("#modal").classList.add("lib");
-  const gone = (n) => el("p", "ctx-view-gone", t("This request's text is no longer kept: magpie keeps the text of the last {n} requests, in memory only, while it runs.", { n }));
   let list;
-  try { list = await readText(id, kind); } catch (err) { body.replaceChildren(el("p", "ctx-view-gone", err.message)); return; }
+  const failed = (err) => { view = () => body.replaceChildren(el("p", "ctx-view-gone", err.message)); };
+  try { list = await readText(kind); } catch (err) { failed(err); }
   if (confirmAsk !== ed) return;
-  if (!list) return body.replaceChildren(gone(10));
+  if (!list) return reply.classList.contains("on") || view();
+  if (list.gone) {
+    view = () => body.replaceChildren(gone(list.gone, 10));
+    return reply.classList.contains("on") || view();
+  }
   const items = list.items || [];
-  total.textContent = fmtK(items.reduce((s, it) => s + it.tokens, 0)) + " " + t("tokens");
-  const note = el("p", "ctx-view-note", t("As magpie sent it, masked where masking is on. Kept in memory for the last {n} requests only.", { n: list.kept }));
+  const sum = () => fmtK(items.reduce((s, it) => s + it.tokens, 0)) + " " + t("tokens");
+  const note = el("p", "ctx-view-note", list.from === "archive"
+    ? t("As magpie sent it, read from the request archive, masked where masking is on.")
+    : t("As magpie sent it, masked where masking is on. Kept in memory for the last {n} requests only.", { n: list.kept }));
   // an item: its text alone; "N more" or the earlier turns: the part's list
   const at = pick && pick.tag !== "more" && pick.tag !== "turns"
     ? items.findIndex((it) => it.name === pick.name && (it.tag || "") === (pick.tag || "")) : -1;
@@ -127,9 +171,9 @@ export async function open(kit, id, kind, pick) {
       box.classList.toggle("open", on);
       if (!on || read) return;
       text.replaceChildren(el("div", "ctx-view-wait", t("Reading…")));
-      read = readText(id, kind, i).then((one) => {
+      read = readText(kind, i).then((one) => {
         const pieces = one?.items?.[i]?.pieces;
-        if (!pieces) { read = null; text.replaceChildren(gone(list.kept)); return; }
+        if (!pieces) { read = null; text.replaceChildren(gone(one?.gone, list.kept)); return; }
         text.replaceChildren(...(pieces.length ? pieces.map(pieceView) : [el("div", "ctx-piece-note", t("Empty"))]));
       }).catch((err) => { read = null; text.replaceChildren(el("p", "ctx-view-gone", err.message)); });
     };
@@ -139,7 +183,9 @@ export async function open(kit, id, kind, pick) {
     return box;
   };
   const showAll = () => {
+    view = showAll;
     title.textContent = partName(kind);
+    total.textContent = sum();
     const rows = el("div", "ctx-vi-list");
     let shown = 0;
     const more = el("button", "text ctx-text-more");
@@ -155,18 +201,23 @@ export async function open(kit, id, kind, pick) {
     step();
     body.replaceChildren(note, items.length ? rows : el("div", "ctx-empty", t("Nothing in it")), more);
   };
-  if (at < 0) return showAll();
-  // the item alone, the part's other items a click away
-  title.textContent = partName(kind) + " · " + itemName(items[at]);
-  total.textContent = fmtK(items[at].tokens) + " " + t("tokens");
-  const all = el("button", "text ctx-view-all", t("All of {part} · {n}", { part: partName(kind), n: items.length }));
-  all.type = "button";
-  all.onclick = (e) => {
-    e.stopPropagation();
-    all.remove();
-    total.textContent = fmtK(items.reduce((s, it) => s + it.tokens, 0)) + " " + t("tokens");
-    showAll();
-  };
-  if (items.length > 1) bar.prepend(all);
-  body.replaceChildren(note, entry(items[at], at, true));
+  if (at < 0) view = showAll;
+  else {
+    // the item alone, the part's other items a click away
+    const all = el("button", "text ctx-view-all", t("All of {part} · {n}", { part: partName(kind), n: items.length }));
+    all.type = "button";
+    all.onclick = (e) => {
+      e.stopPropagation();
+      all.remove();
+      if (reply.classList.contains("on")) reply.click();
+      showAll();
+    };
+    if (items.length > 1) bar.prepend(all);
+    view = () => {
+      title.textContent = partName(kind) + " · " + itemName(items[at]);
+      total.textContent = fmtK(items[at].tokens) + " " + t("tokens");
+      body.replaceChildren(note, entry(items[at], at, true));
+    };
+  }
+  if (!reply.classList.contains("on")) view();
 }

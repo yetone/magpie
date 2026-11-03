@@ -3,7 +3,10 @@
 // the request sent there. A part of the legend opens its items, each
 // opened to its text; a row or a cell opens its item alone, the part's
 // other items a click away; a long text comes a stretch at a time; a
-// request whose text is no longer kept says so. Nothing moves the page,
+// request whose text is no longer kept says so. wangbinyq on Discord: with
+// the request archive on, an older request's text is read from it, and a
+// request's reply opens beside its text, from memory or the archive; one
+// the archive has no copy of says why. Nothing moves the page,
 // the keyboard opens it too, in every language, at a desk and a phone's
 // width.
 const assert = require("node:assert/strict");
@@ -62,11 +65,22 @@ const texts = {
   chat: [{ name: "1", tag: "turn", tokens: 300, pieces: [{ role: "user", text: "port the parser" }, { role: "thinking", text: "", size: 900 }, { role: "call", name: "exec_command", text: "{\"cmd\": \"ls\"}" }] },
     { name: "2", tag: "turn", tokens: 500, pieces: [{ role: "image" }, { role: "assistant", text: "Done." }] }],
 };
+// 19's in memory, 31's read from the archive; 30's the archive never
+// kept, 32's it named and doesn't have
 function text(url, r) {
-  if (url.searchParams.get("id") !== "19") return r.fulfill({ status: 404, body: "not kept" });
+  const id = url.searchParams.get("id");
+  if (id === "30") return r.fulfill({ status: 404, json: { archive: "off" } });
+  if (id === "32") return r.fulfill({ status: 404, json: { archive: "missing" } });
+  if (id !== "19" && id !== "31") return r.fulfill({ status: 404, body: "not kept" });
   const kind = url.searchParams.get("kind"), item = url.searchParams.get("item");
   const items = (texts[kind] || []).map((it, i) => item !== null && +item === i ? it : { ...it, pieces: undefined });
-  return r.fulfill({ json: { id: 19, kind, items, kept: 10 } });
+  return r.fulfill({ json: { id: +id, kind, items, kept: 10, ...(id === "31" ? { from: "archive" } : {}) } });
+}
+function reply(url, r) {
+  const id = url.searchParams.get("id");
+  if (id === "30") return r.fulfill({ status: 404, json: { archive: "off" } });
+  const pieces = [{ role: "thinking", text: "Look first." }, { role: "assistant", text: "Ported, call me at [PHONE_1]." }, { role: "call", name: "exec_command", text: "{\"cmd\": \"go test\"}" }];
+  return r.fulfill({ json: { id: +id, pieces, cut: id === "31", from: id === "31" ? "archive" : "memory" } });
 }
 
 function serve(lang, asked) {
@@ -78,12 +92,13 @@ function serve(lang, asked) {
     if (url.pathname === "/wails/runtime.js") return r.fulfill({ contentType: "text/javascript", body: "export const Window = {};" });
     if (url.pathname === "/api/state") return json(state);
     if (url.pathname === "/api/context") {
-      asked.push(url.searchParams.get("days"));
+      asked.push("days=" + url.searchParams.get("days"));
       return json(context(+url.searchParams.get("days")));
     }
     // the text comes a moment after it is asked, as it does under load:
     // the dialog says "Reading…" first, and the test waits past it
-    if (url.pathname === "/api/context/text") { await new Promise((ok) => setTimeout(ok, 200)); return text(url, r); }
+    if (url.pathname === "/api/context/text") { asked.push("text?" + url.searchParams); await new Promise((ok) => setTimeout(ok, 200)); return text(url, r); }
+    if (url.pathname === "/api/context/reply") { await new Promise((ok) => setTimeout(ok, 200)); return reply(url, r); }
     if (url.pathname === "/api/gateway/trace") {
       if (url.searchParams.get("wait")) return new Promise(() => {});
       return json({ mine: true, now: new Date().toISOString(), seq: 0, totals: { requests: 0, rerouted: 0, errors: 0 }, routes: [] });
@@ -125,11 +140,11 @@ async function wheelTo(page, l) {
 }
 
 const words = {
-  en: { tools: "Tools", files: "Files", close: "Close", sys: "System prompt", all: "All of" },
-  zh: { tools: "工具", files: "文件", close: "关闭", sys: "系统提示词", all: "全部" },
-  "zh-TW": { tools: "工具", files: "檔案", close: "關閉", sys: "系統提示詞", all: "全部" },
-  ja: { tools: "ツール", files: "ファイル", close: "閉じる", sys: "システムプロンプト", all: "すべて" },
-  de: { tools: "Tools", files: "Dateien", close: "Schließen", sys: "Systemprompt", all: "Alle" },
+  en: { tools: "Tools", files: "Files", close: "Close", sys: "System prompt", all: "All of", reply: "Reply", archive: "request archive" },
+  zh: { tools: "工具", files: "文件", close: "关闭", sys: "系统提示词", all: "全部", reply: "回复", archive: "请求存档" },
+  "zh-TW": { tools: "工具", files: "檔案", close: "關閉", sys: "系統提示詞", all: "全部", reply: "回覆", archive: "請求存檔" },
+  ja: { tools: "ツール", files: "ファイル", close: "閉じる", sys: "システムプロンプト", all: "すべて", reply: "返信", archive: "リクエストアーカイブ" },
+  de: { tools: "Tools", files: "Dateien", close: "Schließen", sys: "Systemprompt", all: "Alle", reply: "Antwort", archive: "Anfragearchiv" },
 };
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
@@ -219,10 +234,49 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         assert.equal(await view.locator(".ctx-vi.open .ctx-piece-note").count(), 1, "the sealed reasoning is named");
         await close();
 
-        // a request whose text is no longer kept says so
-        await page.evaluate(() => window.openCtxText(30, "tools"));
+        // the text asks for the request's day, for the archive to find it
+        assert.ok(asked.some((q) => /^text\?id=19&kind=\w+&day=\d{4}-\d\d-\d\d/.test(q)), asked.join(" "));
+
+        // a request's reply beside its text, and back
+        const replyBtn = () => view.locator(".bar button", { hasText: w.reply });
+        await leg.click();
+        await view.locator(".ctx-vi-head").first().waitFor();
+        await replyBtn().click();
+        await view.locator(".ctx-text", { hasText: "Ported, call me at [PHONE_1]." }).waitFor();
+        assert.equal(await view.locator(".ctx-piece").count(), 3);
+        assert.match(await view.locator(".ehead b").innerText(), new RegExp(w.reply));
+        assert.doesNotMatch(await view.locator(".ctx-view-note").first().innerText(), new RegExp(w.archive));
+        await view.locator(".bar button", { hasText: w.tools }).click();
+        await view.locator(".ctx-vi-head", { hasText: "exec_command" }).waitFor();
+        assert.match(await view.locator(".ehead b").innerText(), new RegExp(w.tools));
+        await close();
+
+        // an older request's text from the archive, its reply too, cut short
+        const old = { id: 31, time: ago(60 * 30) };
+        await page.evaluate((r) => window.openCtxText(r, "tools"), old);
+        await view.locator(".ctx-vi-head", { hasText: "exec_command" }).waitFor();
+        assert.match(await view.locator(".ctx-view-note").innerText(), new RegExp(w.archive));
+        await replyBtn().click();
+        await view.locator(".ctx-text", { hasText: "Ported" }).waitFor();
+        assert.equal(await view.locator(".ctx-view-note").count(), 2, "the reply says it is read from the archive, and cut short");
+        assert.match(await view.locator(".ctx-view-note").first().innerText(), new RegExp(w.archive));
+        await close();
+
+        // a request whose text is no longer kept says so, its reply too
+        await page.evaluate(() => window.openCtxText({ id: 30, time: new Date().toISOString() }, "tools"));
         await view.locator(".ctx-view-gone").waitFor();
         assert.match(await view.locator(".ctx-view-gone").innerText(), /10/);
+        await replyBtn().click();
+        await view.locator(".ctx-view-gone").waitFor();
+        assert.match(await view.locator(".ctx-view-gone").innerText(), /10/);
+        await close();
+
+        // one the archive named and doesn't have says the archive lost it
+        await page.evaluate(() => window.openCtxText({ id: 32, time: new Date().toISOString() }, "tools"));
+        await view.locator(".ctx-view-gone").waitFor();
+        const lost = await view.locator(".ctx-view-gone").innerText();
+        assert.match(lost, new RegExp(w.archive));
+        assert.doesNotMatch(lost, /10/);
         await close();
 
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "the page scrolls sideways");

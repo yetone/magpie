@@ -14,10 +14,12 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/yetone/magpie/internal/provider"
 )
@@ -104,6 +106,10 @@ type PromptText struct {
 	Items []PromptEntry `json:"items"`
 	// Kept is how many requests' text is kept, for the GUI to say so
 	Kept int `json:"kept"`
+	// From is "archive" when the text was read from the request archive's
+	// copy, the body having left memory (wangbinyq on Discord); "" from
+	// memory
+	From string `json:"from,omitempty"`
 }
 
 // PromptKept is how many requests' text the trace keeps.
@@ -126,7 +132,74 @@ func (s *Server) PromptText(id int64, kind string, withText bool) (PromptText, b
 		}
 		s.trace.maskedBody(id, kb.body)
 	}
-	b, ok := promptPieces(kb.from, kb.body)
+	tokens := 0
+	s.trace.mu.Lock()
+	for _, r := range s.trace.routes {
+		if r.ID == id && r.Prompt != nil {
+			tokens = r.Prompt.Tokens
+		}
+	}
+	s.trace.mu.Unlock()
+	return promptTextOf(kb.from, kb.body, id, kind, withText, tokens)
+}
+
+// ArchivedPromptText is PromptText read from the request archive's copy of
+// request id's body, for a request whose body has left memory (wangbinyq
+// on Discord: the card said the text was gone with the archive on). The
+// archive keeps the body as the agent sent it, its secrets taken out; it
+// is masked here as the body in memory is, so the card shows no more from
+// the archive than from memory. tokens is the route's prompt as counted,
+// to scale the sizes as the card does. One masked body is kept, in memory,
+// for the item clicked next. False when the body can't be read: the
+// archive kept only its start, or masking failed.
+func ArchivedPromptText(from provider.Protocol, body []byte, id int64, kind string, withText bool, tokens int) (PromptText, bool) {
+	if !slices.Contains(partOrder, kind) {
+		return PromptText{}, false
+	}
+	body, ok := archivedMasked(id, body)
+	if !ok {
+		return PromptText{}, false
+	}
+	pt, ok := promptTextOf(from, body, id, kind, withText, tokens)
+	pt.From = "archive"
+	return pt, ok
+}
+
+// lastArchived is the archived body last masked for the card, so opening
+// its items one by one masks it once
+var lastArchived struct {
+	sync.Mutex
+	id   int64
+	sum  [32]byte
+	body []byte
+}
+
+func archivedMasked(id int64, body []byte) ([]byte, bool) {
+	if len(body) == 0 || len(body) > promptBodyMax {
+		return nil, false
+	}
+	sum := sha256.Sum256(body)
+	lastArchived.Lock()
+	if lastArchived.id == id && lastArchived.sum == sum {
+		b := lastArchived.body
+		lastArchived.Unlock()
+		return b, true
+	}
+	lastArchived.Unlock()
+	masked := maskedCopy(context.Background(), body)
+	if masked == nil {
+		return nil, false
+	}
+	lastArchived.Lock()
+	lastArchived.id, lastArchived.sum, lastArchived.body = id, sum, masked
+	lastArchived.Unlock()
+	return masked, true
+}
+
+// promptTextOf is the part kind of a prompt read from body, its sizes
+// scaled to tokens, the prompt as the vendor counted it.
+func promptTextOf(from provider.Protocol, body []byte, id int64, kind string, withText bool, tokens int) (PromptText, bool) {
+	b, ok := promptPieces(from, body)
 	if !ok {
 		return PromptText{}, false
 	}
@@ -138,13 +211,9 @@ func (s *Server) PromptText(id int64, kind string, withText bool) (PromptText, b
 		}
 	}
 	scale := 1.0
-	s.trace.mu.Lock()
-	for _, r := range s.trace.routes {
-		if r.ID == id && r.Prompt != nil && r.Prompt.Tokens > 0 && est > 0 {
-			scale = float64(r.Prompt.Tokens) / float64(est)
-		}
+	if tokens > 0 && est > 0 {
+		scale = float64(tokens) / float64(est)
 	}
-	s.trace.mu.Unlock()
 	out := PromptText{ID: id, Kind: kind, Items: []PromptEntry{}, Kept: promptBodies}
 	for key, it := range b.parts[kind] {
 		e := PromptEntry{Name: it.Name, Tag: it.Tag, Tokens: int(float64(it.Tokens)*scale + 0.5)}

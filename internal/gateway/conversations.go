@@ -140,6 +140,20 @@ func conversationTurn(proto provider.Protocol, input, output []byte) sessions.Ga
 			t.Input = append(t.Input, conversationParts(m.Role, m.Parts)...)
 		}
 	}
+	var cut bool
+	t.Output, cut = conversationOutput(proto, output)
+	t.Cut = t.Cut || cut
+	return t
+}
+
+// conversationOutput reads a reply, a whole JSON body or a stream, into
+// parts; cut when it couldn't all be read or ended before it was whole.
+func conversationOutput(proto provider.Protocol, output []byte) ([]sessions.Part, bool) {
+	t := struct {
+		Output []sessions.Part
+		Cut    bool
+	}{Output: []sessions.Part{}}
+	var err error
 	trim := bytes.TrimSpace(output)
 	if json.Valid(trim) {
 		t.Output, err = conversationJSON(proto, trim)
@@ -197,7 +211,7 @@ func conversationTurn(proto provider.Protocol, input, output []byte) sessions.Ga
 	} else if len(trim) > 0 {
 		t.Cut = true
 	}
-	return t
+	return t.Output, t.Cut
 }
 
 // Reuse the request readers for whole replies by placing the actual output in

@@ -724,7 +724,7 @@
         parts = cur = null;
         return;
       }
-      rid = r.id;
+      rid = r;
       const window = p.window || 0;
       const full = window ? p.tokens / window : 0;
       const live = !r.done;
@@ -971,11 +971,7 @@
 
   // A part of the card clicked opens what the request sent there, read
   // from the request's body: an item alone (a tool, a file, a turn), or
-  // the part's items, each opened to its text. magpie keeps the last few
-  // requests' bodies, masked, in memory only, so an older one's text is
-  // gone. A long text comes a stretch at a time, so a prompt of megabytes
-  // doesn't hold the window up.
-  // in ctxtext.js, loaded when a part is first opened
+  // the part's items, each opened to its text (ctxtext.js, loaded then)
   const openCtxText = (...a) => import("./ctxtext.js").then((m) => m.open({ fmtK, partName, itemName, itemLabel, tagOf }, ...a)).catch(statusErr);
   window.openCtxText = openCtxText;
   window.ctxFmt = fmtK;

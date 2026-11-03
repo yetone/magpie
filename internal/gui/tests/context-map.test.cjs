@@ -230,7 +230,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
 
         // an image the request sent inline is shown in its turn; one it
         // didn't send that way is named
-        await page.evaluate(() => window.openCtxText(19, "chat"));
+        await page.evaluate(() => window.openCtxText({ id: 19 }, "chat"));
         await view.locator(".ctx-vi-head").nth(1).click();
         const pic = view.locator(".ctx-vi.open .ctx-pic");
         await pic.locator("img").waitFor();
