@@ -3,6 +3,7 @@ package library
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -157,5 +158,19 @@ func TestNpxBinPicks(t *testing.T) {
 		if want == "" && got != "" || want != "" && !strings.HasSuffix(filepath.ToSlash(got), name+"/"+want) {
 			t.Errorf("%s: bin %q, want %q", name, got, want)
 		}
+	}
+}
+
+// No package's tests install a server's package or end the machine's
+// own processes: the library's defaults are off in any test binary, not
+// only under this package's TestMain. internal/cli's TestLibraryMCPHub
+// had npm install `npx -y fs` under its temp HOME after it ended, and
+// ended the user's own running fs server (#4140).
+func TestTestsLeaveTheMachineAlone(t *testing.T) {
+	if npxInstall != nil {
+		t.Error("npxInstall is set in a test binary: a test adding an npx server runs npm install")
+	}
+	if reflect.ValueOf(ending).Pointer() == reflect.ValueOf(endDropped).Pointer() {
+		t.Error("ending is endDropped in a test binary: a test taking a server out ends the machine's processes of it")
 	}
 }

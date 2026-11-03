@@ -23,6 +23,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/yetone/magpie/internal/proc"
@@ -220,8 +221,8 @@ func npxStart(r npxRun, npx, dir string, new bool) {
 	}()
 }
 
-// npxInstall installs spec in dir with the npm beside npx; nil in tests,
-// which never reach the registry.
+// npxInstall installs spec in dir with the npm beside npx; nil in every
+// test binary (testsLeaveTheMachine), which never reaches the registry.
 var npxInstall = realInstall
 
 func realInstall(spec, npx, dir string) error {
@@ -272,7 +273,22 @@ func (e *npmError) Error() string {
 // a program; a var for tests.
 var npxSynced func()
 
+// testsLeaveTheMachine keeps every package's tests, not the library's
+// alone, from installing a server's package or ending the machine's own
+// processes: a test that adds a server run with `npx -y` and takes it out
+// again, as internal/cli's TestLibraryMCPHub does, had npm install it
+// under its temp HOME after it ended, which failed its cleanup, and ended
+// the user's own running `npx -y` server of that name (#4140). A test
+// that is about either sets its own.
+func testsLeaveTheMachine() {
+	if testing.Testing() {
+		npxInstall = nil
+		ending = func([]*Server) {}
+	}
+}
+
 func init() {
+	testsLeaveTheMachine()
 	npxSynced = func() {
 		if _, err := Sync(); err != nil {
 			log.Printf("library: syncing after an MCP package install: %v", err)
