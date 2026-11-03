@@ -2667,17 +2667,5 @@ func sameFile(a, b string) (same, sure bool) {
 	}
 }
 
-// SkillText is a library skill's SKILL.md, for the page to show.
-func SkillText(name string) (string, error) {
-	if err := checkName("skill", name); err != nil {
-		return "", err
-	}
-	b, err := os.ReadFile(filepath.Join(skillDir(name), "SKILL.md"))
-	if err != nil {
-		return "", fmt.Errorf("%s has no SKILL.md in the library", name)
-	}
-	return string(b), nil
-}
-
 // SkillPath is where a library skill's folder is.
 func SkillPath(name string) string { return skillDir(name) }

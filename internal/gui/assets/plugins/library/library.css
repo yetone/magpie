@@ -481,10 +481,24 @@ input.lib-setname:focus { border-color: var(--accent); box-shadow: 0 0 0 3px col
 .lib-reader { grid-template-columns: minmax(0, 1fr); }
 .lib-md { margin: 0; max-height: min(60vh, 520px); overflow: auto; font: var(--code-style, normal) var(--code-weight, 400) 12px/1.6 var(--code-font, var(--code)); font-stretch: var(--code-stretch, 100%); color: var(--fg-2); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--card-2); border-radius: 8px; padding: 12px 14px; user-select: text; -webkit-user-select: text; }
 .lib-reader .bar .lib-path { max-width: 70%; }
+/* a skill's files: Markdown as it reads, its front matter as rows, edited in place */
+.lib-skillfile .ehead { min-width: 0; }
+.lib-filepick { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 50%; height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--fg-2); font: inherit; font-size: 12px; cursor: pointer; }
+.lib-filepick span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-filepick:hover { color: var(--fg); border-color: var(--line-2); }
+.lib-mdview { max-height: min(60vh, 520px); overflow: auto; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); user-select: text; -webkit-user-select: text; }
+.lib-fm { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 12px; margin: 0 0 12px; padding: 0 0 10px; border-bottom: 1px solid var(--line-2); font-size: 12px; line-height: 1.5; }
+.lib-fm dt { color: var(--faint); }
+.lib-fm dd { margin: 0; color: var(--fg-2); overflow-wrap: anywhere; }
+.lib-text.lib-skilltext { height: min(60vh, 520px); min-height: 200px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+.lib-text.lib-skilltext:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+.lib-skillfile .bar .lib-reaches { min-width: 0; flex: 0 1 auto; font-size: 11.5px; }
 .editor .editor-error:empty { display: none; }
 
 @media (max-width: 560px) {
   .lib-list .row { flex-wrap: wrap; }
+  .lib-skillfile .bar { flex-wrap: wrap; }
+  .lib-skillfile .bar .lib-reaches { flex-basis: 100%; }
   .lib-agents { max-width: 100%; }
 }
 

@@ -10,6 +10,7 @@
 (() => {
   const page = $("#view-plugins");
   if (!page) return;
+  window.mdRender = markdown;
 
   let mine = null;       // /api/plugins: what's installed
   let listings = null;   // /api/plugins/listings: the plugins suggested

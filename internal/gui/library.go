@@ -152,12 +152,12 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 		writeJSON(rw, v)
 	})
 	mux.HandleFunc("GET /api/library/skill", func(rw http.ResponseWriter, r *http.Request) {
-		text, err := library.SkillText(r.URL.Query().Get("name"))
+		f, err := library.ReadSkillFile(r.URL.Query().Get("name"), r.URL.Query().Get("file"))
 		if err != nil {
 			fail(rw, err)
 			return
 		}
-		writeJSON(rw, map[string]string{"text": text, "path": library.SkillPath(r.URL.Query().Get("name"))})
+		writeJSON(rw, f)
 	})
 	// the market: what it offers for a search, and each skill's description
 	// once asked for, which skills.sh gives one at a time
@@ -469,6 +469,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			// Replace updates a skill changed here all the same, its
 			// changed version kept with the backups (#1449)
 			Replace bool
+			// a skill's file saved: its place in the skill, its new text,
+			// and what it held when the page opened it
+			File, Text, Was string
 			library.InstructionsChange
 		}
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -550,6 +553,9 @@ func libraryRoutes(mux *http.ServeMux, w Windows) {
 			res, err = library.UpdateSomeSkills(in.Names)
 		case "skills/agents":
 			res, err = library.SkillAgents(in.Name, in.Agents)
+		case "skills/save":
+			// a skill's file edited in the page, given to its agents again
+			res, err = library.SaveSkillFile(in.Name, in.File, in.Text, in.Was)
 		case "skills/here":
 			res, err = library.SkillHere(in.Name, in.On)
 		case "skills/agents-all":

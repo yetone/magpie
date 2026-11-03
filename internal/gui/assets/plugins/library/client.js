@@ -5558,24 +5558,101 @@ magpie.plugin("library", (ctx) => {
     openLib(ed);
   }
 
-  async function viewSkill(s) {
-    const ed = el("div", "editor lib-editor lib-reader");
+  // A skill's files, read and edited here (refeccd on Discord: skills
+  // handed over from ~/.agents/skills had no other place to be edited).
+  // Markdown is shown as it reads, its front matter as rows; Save writes
+  // the library's folder, so every agent given the skill gets it.
+  async function viewSkill(s, file = "") {
+    const ed = el("div", "editor lib-editor lib-reader lib-skillfile");
     const head = el("div", "ehead");
-    head.append(mark(s.icon, GLYPH.skill), el("b", "", s.name), el("span", "grow"));
-    const pre = el("pre", "lib-md", "…");
-    ed.append(head, pre);
+    const pick = el("button", "lib-filepick");
+    pick.type = "button";
+    pick.hidden = true;
+    head.append(mark(s.icon, GLYPH.skill), el("b", "", s.name), pick, el("span", "grow"));
+    const body = el("div", "lib-skillbody");
     const bar = el("div", "bar");
-    const where = el("span", "note");
-    bar.append(where, el("span", "grow"), button(t("Close"), "", closeLibModal));
-    ed.append(bar);
-    modal = {};
+    ed.append(head, body, bar);
+    let cur = null, ta = null;
+    const lf = (x) => x.replace(/\r\n?/g, "\n");
+    modal = { dirty: () => !!(ta && cur && ta.value !== lf(cur.text)) };
+    const read = async (f) => {
+      body.replaceChildren(el("pre", "lib-md", "…"));
+      try {
+        cur = await api("library/skill?name=" + encodeURIComponent(s.name) + (f ? "&file=" + encodeURIComponent(f) : ""));
+        show();
+      } catch (e) {
+        body.replaceChildren(el("pre", "lib-md", e.message));
+        bar.replaceChildren(el("span", "grow"), button(t("Close"), "", closeLibModal));
+      }
+    };
+    const swap = async (f) => {
+      if (f === cur?.file || modal.dirty() && !(await confirmDiscard())) return;
+      ta = null;
+      read(f);
+    };
+    pick.onclick = (e) => {
+      e.stopPropagation();
+      openProtoMenu(pick, cur.files.map((f) => ({ v: f, name: f, literalName: true, note: "" })), cur.file, swap, "Files");
+    };
+    const show = () => {
+      ta = null;
+      pick.hidden = !(cur.files?.length > 1);
+      pick.replaceChildren(el("span", "", cur.file), svg(CHEV, 10, 1.7));
+      body.replaceChildren(rendered(cur));
+      const where = el("span", "note");
+      where.append(pathLink(cur.path));
+      bar.replaceChildren(where, el("span", "grow"), button(t("Edit"), "", edit), button(t("Close"), "", closeLibModal));
+    };
+    const edit = () => {
+      ta = el("textarea", "lib-text lib-skilltext");
+      ta.spellcheck = false;
+      ta.value = lf(cur.text);
+      ta.onkeydown = (e) => {
+        if (e.isComposing || e.keyCode === 229) return;
+        if (e.key === "Escape") return;
+        e.stopPropagation();
+        if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
+      };
+      body.replaceChildren(ta);
+      const note = el("span", "note lib-reaches", t("Saved in the library: every agent given {name} gets it", { name: s.name }) + " · " + (/^Mac/.test(navigator.platform) ? "⌘S" : "Ctrl+S"));
+      bar.replaceChildren(note, el("span", "grow"), button(t("Cancel"), "", async () => { if (!modal.dirty() || await confirmDiscard()) show(); }), button(t("Save"), "primary", save));
+      ta.focus({ preventScroll: true });
+      ta.setSelectionRange(0, 0);
+    };
+    const save = async () => {
+      if (!ta) return;
+      if (!modal.dirty()) return show();
+      const f = cur.file;
+      if (await change("skills/save", { name: s.name, file: f, text: ta.value, was: cur.text }, t("{name} saved", { name: f }))) {
+        ta = null;
+        read(f);
+      }
+    };
     openLib(ed);
-    try {
-      const r = await api("library/skill?name=" + encodeURIComponent(s.name));
-      pre.textContent = r.text;
-      where.replaceChildren(pathLink(r.path));
-    } catch (e) { pre.textContent = e.message; }
+    read(file);
   }
+  // a skill's file as it reads: Markdown drawn, front matter as rows
+  // (name, description), anything else as its text
+  function rendered(f) {
+    if (!/\.(md|markdown)$/i.test(f.file) || !window.mdRender) return el("pre", "lib-md", f.text);
+    const text = f.text.replace(/\r\n?/g, "\n");
+    const box = el("div", "lib-mdview");
+    const m = text.match(/^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
+    if (m) {
+      const meta = [];
+      for (const line of m[1].split("\n")) {
+        const kv = line.match(/^([\w.-]+):\s*(.*)$/);
+        if (kv) meta.push([kv[1], kv[2]]);
+        else if (meta.length && line.trim()) meta[meta.length - 1][1] += " " + line.trim();
+      }
+      const dl = el("dl", "lib-fm");
+      for (const [k, v] of meta) dl.append(el("dt", "", k), el("dd", "", v.replace(/^[>|][-+]?\s*/, "").trim().replace(/^(["'])(.*)\1$/, "$2")));
+      if (meta.length) box.append(dl);
+    }
+    box.append(window.mdRender(m ? text.slice(m[0].length) : text));
+    return box;
+  }
+
 
   function foundSkillRow(f) {
     const row = el("div", "row lib-row lib-found");
