@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -198,5 +200,67 @@ func TestCodexDesktopCatalogFollowsTheSignIn(t *testing.T) {
 	}
 	if b, ok := CodexDesktopCatalog(); !ok || !has(b, "gpt-6.1-sol") {
 		t.Fatalf("the Pro account's list: %v\n%s", ok, b)
+	}
+}
+
+// A model the vendor lists after the picks were saved (OpenAI listed
+// GPT-6.1 Terra to ChatGPT accounts on 10-26) stays in the account's own
+// list: the picks it is narrowed by are the picks with those listed since
+// (provider.Picks), as magpie's catalog serves them — or the file and the
+// list Codex reads froze at what was listed when the user picked, while
+// /v1/models had the model (wenzijie2002: codex/gpt-6.1-terra picked in
+// magpie, the Codex app's picker without it, the log "fetched its list
+// again, 8 models" and 7 in the file).
+func TestCodexDesktopCatalogKeepsNewlyListedBesidePicks(t *testing.T) {
+	codexSignedIn(t)
+	codexDeskReset(t)
+	list := `{"models":[{"slug":"gpt-6-sol","priority":1,"visibility":"list"}]}`
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, list)
+	}))
+	defer up.Close()
+	was := provider.CodexBase
+	provider.CodexBase = up.URL + "/backend-api/codex"
+	defer func() { provider.CodexBase = was }()
+
+	// picks saved while the account listed gpt-6-sol alone
+	p, err := provider.Find("codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.Save(provider.Provider{ID: "codex", Models: []string{"gpt-6-sol"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// gpt-6.1-terra listed since; the account's list asked for again
+	list = `{"models":[{"slug":"gpt-6-sol","priority":1,"visibility":"list"},` +
+		`{"slug":"gpt-6.1-terra","priority":2,"visibility":"list","base_instructions":"You are Codex, based on GPT-6.1 Terra."}]}`
+	if _, err := p.Fetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	CodexDesktopCatalog()
+	codexDeskAsked(t)
+	b, ok := CodexDesktopCatalog()
+	if !ok {
+		t.Fatal("not known after the backend answered")
+	}
+	var got struct {
+		Models []map[string]any `json:"models"`
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	var own []string
+	for _, m := range got.Models {
+		if s, _ := m["slug"].(string); slices.Contains([]string{"gpt-6-sol", "gpt-6.1-terra"}, s) {
+			own = append(own, s)
+		}
+	}
+	if !slices.Equal(own, []string{"gpt-6-sol", "gpt-6.1-terra"}) {
+		t.Errorf("the account's own models beside the picks: %v\n%s", own, b)
 	}
 }

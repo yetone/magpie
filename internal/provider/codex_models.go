@@ -672,7 +672,10 @@ func buildCodexListTag(kind string) string {
 // user kept, and whether they narrowed that list at all. The backend lists
 // every model the account can reach; when the user has picked among them on
 // the codex provider, the gateway keeps its /models answer to those (see
-// codexModels). Not narrowed — the account's list is left whole.
+// codexModels). Not narrowed — the account's list is left whole. The picks
+// are Picks: a model the vendor listed since they were saved is kept, as
+// magpie's catalog serves it, or the account's own list froze at what was
+// listed when the user picked (#5062).
 //
 // A provider switched off picks nothing, as it serves no agent anything
 // (Provider.Off): its picks are kept for when it is switched on again and
@@ -699,8 +702,9 @@ func CodexNativePicked() (map[string]bool, bool) {
 	if len(p.Models) == 0 {
 		return nil, false
 	}
-	keep := make(map[string]bool, len(p.Models))
-	for _, id := range p.Models {
+	picks := p.Picks()
+	keep := make(map[string]bool, len(picks))
+	for _, id := range picks {
 		keep[id] = true
 	}
 	return keep, true
