@@ -184,9 +184,10 @@ func TestCodexOneAccountOverloadFallsBack(t *testing.T) {
 	}
 }
 
-// A usage limit isn't an overload: with one account it still goes to
-// Codex as the backend said it, asked once (TestCodexOwnModelOneAccountRelayed),
-// and so does a refusal of the request.
+// A usage limit isn't an overload: it isn't asked again, and with no
+// fallback it goes to Codex as the backend said it, asked once
+// (TestCodexOwnModelOneAccountRelayed; with a fallback,
+// TestCodexOneAccountSpentFallsBack). So does a refusal of the request.
 func TestCodexOneAccountRefusalNotAskedAgain(t *testing.T) {
 	o := &overloadedBackend{replies: []reply{{400, "application/json", `{"error":{"type":"invalid_request_error","message":"Unsupported parameter: foo"}}`}}}
 	oneCodexAccount(t, o)
