@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"encoding/json"
 	"strings"
 )
@@ -27,7 +26,6 @@ type anthropicTextCalls struct {
 	names map[string]bool
 	sse   bool
 	buf   []byte
-	ev    []byte // the lines of the event being read
 
 	idx       int    // the open text block's index
 	text      bool   // a text block is being read
@@ -45,45 +43,22 @@ func (t *anthropicTextCalls) write(b []byte) []byte {
 	if !t.sse {
 		return nil
 	}
-	i := bytes.LastIndexByte(t.buf, '\n')
-	if i < 0 {
-		return nil
-	}
-	var out []byte
-	for _, line := range bytes.SplitAfter(t.buf[:i+1], []byte("\n")) {
-		out = append(out, t.line(line)...)
-	}
-	t.buf = append(t.buf[:0], t.buf[i+1:]...)
+	out, rest := tidyEvents(t.buf, t.event)
+	t.buf = rest
 	return out
 }
 
 func (t *anthropicTextCalls) flush() []byte {
+	b := t.buf
+	t.buf = nil
 	if !t.sse {
-		b := t.buf
-		t.buf = nil
 		return t.whole(b)
 	}
 	var out []byte
-	if len(t.buf) > 0 {
-		out = t.line(t.buf)
-		t.buf = nil
-	}
-	if len(t.ev) > 0 {
-		out = append(out, t.event(t.ev)...)
-		t.ev = nil
+	if len(b) > 0 {
+		out = t.event(b)
 	}
 	return append(out, t.release()...)
-}
-
-// line gathers an event's lines; a blank one ends it.
-func (t *anthropicTextCalls) line(line []byte) []byte {
-	t.ev = append(t.ev, line...)
-	if len(bytes.TrimSpace(line)) > 0 {
-		return nil
-	}
-	ev := t.ev
-	t.ev = nil
-	return t.event(ev)
 }
 
 // messagesEvent is a Messages stream event of v.
@@ -99,12 +74,7 @@ func (t *anthropicTextCalls) textDelta(s string) []byte {
 
 // event is one whole event, given on, held or made into others.
 func (t *anthropicTextCalls) event(ev []byte) []byte {
-	var data []byte
-	for _, l := range bytes.Split(ev, []byte("\n")) {
-		if d, ok := bytes.CutPrefix(bytes.TrimRight(l, "\r"), []byte("data:")); ok {
-			data = bytes.TrimSpace(d)
-		}
-	}
+	data := eventData(ev)
 	var m map[string]json.RawMessage
 	if len(data) == 0 || decodeJSON(data, &m) != nil || m == nil {
 		return ev
@@ -126,7 +96,7 @@ func (t *anthropicTextCalls) event(ev []byte) []byte {
 			t.native = true
 		}
 		if cb.Type == "text" && cb.Text == "" {
-			t.idx, t.text, t.startHeld = index, true, ev
+			t.idx, t.text, t.startHeld = index, true, append([]byte(nil), ev...)
 			return pre
 		}
 		t.text = false
@@ -163,7 +133,7 @@ func (t *anthropicTextCalls) event(ev []byte) []byte {
 			return ev
 		}
 		if t.holding || t.pending != "" {
-			t.stopHeld = ev
+			t.stopHeld = append([]byte(nil), ev...)
 			return nil
 		}
 		out := t.startHeld
