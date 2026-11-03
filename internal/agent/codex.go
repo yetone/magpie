@@ -294,7 +294,15 @@ func codexIn(at place) *Agent {
 		if c == catalogRef || c == at.native(catalogPath) {
 			return true
 		}
-		return at.spell == nil && !filepath.IsAbs(c) && filepath.Clean(filepath.Join(dir, c)) == filepath.Clean(catalogPath)
+		if at.spell != nil {
+			return false
+		}
+		// an absolute c spelled with / on Windows: Clean turns its slashes
+		// into \, so it still names the catalog there (#4785)
+		if !filepath.IsAbs(c) {
+			c = filepath.Join(dir, c)
+		}
+		return filepath.Clean(c) == filepath.Clean(catalogPath)
 	}
 	// ownList is magpie's model list for Codex as written to catalogPath:
 	// what the user added by hand to the list there (a key magpie doesn't
