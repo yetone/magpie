@@ -410,6 +410,9 @@ func (s *shim) lastScreen() string {
 var (
 	trustNo  = regexp.MustCompile(`❯\s*No,\s*exit`)
 	trustYes = regexp.MustCompile(`❯\s*Yes,\s*I trust`)
+	// the Bypass Permissions disclaimer's Yes (#5042): the disclaimer
+	// pairs the same "No, exit" with it as the trust question does
+	bypassYes = regexp.MustCompile(`❯\s*Yes,\s*I accept`)
 	// how long a Yes stays drawn before Enter is pressed on it
 	trustSettle = 300 * time.Millisecond
 )
@@ -471,7 +474,11 @@ var (
 const onboardTries = 3
 
 // ready waits for Claude Code's prompt. Asked whether to trust the folder
-// it runs in, it is told yes, as a person would, when TrustEnv says so.
+// it runs in, it is told yes, as a person would, when TrustEnv says so,
+// and so is the Bypass Permissions disclaimer, asked where the claude
+// magpie spawns runs with --dangerously-skip-permissions (a wrapper's own
+// flag, or the account's default mode, #5042), when BypassEnv says so;
+// otherwise each is its user's to answer, and the run ends, saying so.
 func (s *shim) ready() error {
 	deadline := time.After(readyWait)
 	answered := 0
@@ -490,6 +497,7 @@ func (s *shim) ready() error {
 		folder = "the folder it runs in"
 	}
 	asking := "asked whether to trust " + folder + ", not answered"
+	bypassAsking := "asked to accept running in Bypass Permissions mode, not answered"
 	onboard := func(screen, key string) error {
 		if shownAt[screen].IsZero() {
 			shownAt[screen] = time.Now()
@@ -512,11 +520,15 @@ func (s *shim) ready() error {
 		doing := "showed no prompt"
 		if strings.Contains(p, "trust this folder") {
 			doing = asking
+		} else if strings.Contains(words, "Bypass Permissions mode") {
+			doing = bypassAsking
 		}
 		s.doing.Store(doing)
 		switch {
 		case strings.Contains(p, "trust this folder") && os.Getenv(TrustEnv) != "1":
 			return errUntrusted
+		case strings.Contains(words, "Bypass Permissions mode") && os.Getenv(BypassEnv) != "1":
+			return fmt.Errorf("Claude Code's interactive mode runs in Bypass Permissions mode and asks to accept it, which only its user answers: %s", s.lastScreen())
 		case signIn.MatchString(p):
 			return fmt.Errorf("Claude Code's interactive mode asks to sign in: %s", s.lastScreen())
 		case firstRun.MatchString(words):
@@ -527,12 +539,15 @@ func (s *shim) ready() error {
 			if err := onboard("terminal", "\x1b"); err != nil {
 				return err
 			}
-		case strings.Contains(p, "trust this folder") && answered < 3:
+		case (strings.Contains(p, "trust this folder") || strings.Contains(words, "Bypass Permissions mode")) && answered < 3:
 			// the choice is the last one drawn after ❯, "No, exit" at
 			// first. A key sent as the question is first drawn can be lost
 			// to its being drawn again on No, so Enter goes only to a Yes
 			// drawn trustSettle ago and not drawn over since.
 			no, yes := lastAt(trustNo, p), lastAt(trustYes, p)
+			if b := lastAt(bypassYes, p); b > yes {
+				yes = b
+			}
 			switch {
 			case yes > no:
 				if yesAt.IsZero() {

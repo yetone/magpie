@@ -10,6 +10,16 @@ const Command = "claude-tui-helper"
 // answer in their own Claude Code, and the run ends, saying so.
 const TrustEnv = "MAGPIE_CLAUDE_TUI_TRUST"
 
+// BypassEnv, "1", has the shim tell Claude Code yes when it asks to accept
+// running in Bypass Permissions mode (a user's claude that is a wrapper
+// adding --dangerously-skip-permissions, or an account whose default mode
+// it is; #5042). Claude Code records the acceptance in its config folder's
+// settings.json, for every run after, so the bridge sets it only for an
+// account folder of magpie's, whose Claude Code no one else runs. In the
+// account Claude Code is signed in to the acceptance is its user's to give,
+// and the run ends at once, saying so.
+const BypassEnv = "MAGPIE_CLAUDE_TUI_BYPASS"
+
 // DeadlineEnv holds, in Unix milliseconds, when a one-off run's caller
 // (a /usage read, a test's "hi") stops waiting for it. The helper ends
 // then on its own, saying on its stderr what Claude Code hadn't done and

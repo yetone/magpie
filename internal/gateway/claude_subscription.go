@@ -1189,6 +1189,7 @@ func (b *subscriptionBridge) startRun(ctx context.Context, req *Request, model, 
 		// (startTrusted)
 		env = append(env, claudetui.TrustEnv+"=1")
 	}
+	env = append(env, claudeBypassEnv(tui, configDir)...)
 	if tui && !client {
 		// a saved account's run in magpie's folder is never asked (#4830)
 		trustWork(binary, configDir, work)
