@@ -3591,6 +3591,10 @@ var filterReasons = map[string]string{
 	// agent took it for a failed sign-in (sweanng on Discord, ZCode:
 	// "Provider authentication failed", reason=auth_failed status=403)
 	"content_policy_rejected": "content_policy_rejected",
+	// StepFun's error type, its filter refusing with an HTTP 451 (#5089):
+	// read from the error object, the refusal is the request's, and the
+	// group's next member is asked rather than the 451 handed on
+	"censorship_blocked": "censorship_blocked",
 	// Zhipu's finish_reason when its filter stops GLM's reply, and
 	// DashScope's error code when Alibaba's stops Qwen's: both after the
 	// reasoning went to the agent, which had it end there (yhwangl on X)
