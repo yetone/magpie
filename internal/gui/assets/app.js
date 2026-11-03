@@ -3119,6 +3119,11 @@ function dragListen(handle, move, finish) {
   return () => { for (const [t, n, f, o] of on) t.removeEventListener(n, f, o); };
 }
 
+// A tap-to-click on a trackpad can slide a few pixels between the press and
+// the lift. A press let go within 300ms and under 12px from where it came down
+// is a click, not a drag, though it crossed the 4px that lifts a row.
+const tapLike = (t0, x0, y0, ev) => ev?.type === "pointerup" && performance.now() - t0 < 300 && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 12;
+
 // Shared pointer sorter: transforms each frame, one commit on release. Rows are
 // placed each frame by the list's top, as what's above it changes (yuancjun)
 function dragRows(e, handle, row, list, rows, commit, start = () => {}, idle = () => {}) {
@@ -3129,7 +3134,7 @@ function dragRows(e, handle, row, list, rows, commit, start = () => {}, idle = (
   const lift = rows[0].getBoundingClientRect().top - base() - rows[0].offsetTop, grab = e.clientY - row.getBoundingClientRect().top;
   const { scroll, speedAt } = dragScroll(list);
   let dragging = false, ended = false, to = from, y = e.clientY, frame = 0, lastTime = 0;
-  const y0 = y, pointer = e.pointerId;
+  const y0 = y, x0 = e.clientX, t0 = performance.now(), pointer = e.pointerId;
   const paint = (time) => {
     frame = 0;
     if (!rows.every((r) => r.isConnected)) return finish(false);
@@ -3177,6 +3182,7 @@ function dragRows(e, handle, row, list, rows, commit, start = () => {}, idle = (
   };
   const finish = (save, ev) => {
     if (ended || (ev?.pointerId != null && ev.pointerId !== pointer)) return;
+    if (save && dragging && tapLike(t0, x0, y0, ev)) { save = false; delete handle.dataset.dragged; }
     if (save && dragging && ev) {
       y = ev.clientY;
       cancelAnimationFrame(frame);
@@ -3192,7 +3198,8 @@ function dragRows(e, handle, row, list, rows, commit, start = () => {}, idle = (
     rows.forEach((r) => { r.style.transform = ""; });
     if (save && dragging && to !== from) commit(to);
     idle();
-    // The click dispatched after pointerup must not rename, toggle or remove.
+    // The click dispatched after pointerup must not rename, toggle or remove
+    // (a tap-like press lets it through).
     setTimeout(() => delete handle.dataset.dragged, 0);
   };
   const off = dragListen(handle, move, finish);
@@ -3209,7 +3216,7 @@ function dragCards(e, handle, card, list, cards, commit, idle = () => {}) {
   const rects = cards.map((c) => c.getBoundingClientRect());
   const { scroll, scroll0, speedAt } = dragScroll(list);
   let dragging = false, ended = false, to = from, x = e.clientX, y = e.clientY, frame = 0, lastTime = 0;
-  const x0 = x, y0 = y, pointer = e.pointerId;
+  const x0 = x, y0 = y, t0 = performance.now(), pointer = e.pointerId;
   const r0 = rects[from];
   const paint = (time) => {
     frame = 0;
@@ -3253,6 +3260,7 @@ function dragCards(e, handle, card, list, cards, commit, idle = () => {}) {
   };
   const finish = (save, ev) => {
     if (ended || (ev?.pointerId != null && ev.pointerId !== pointer)) return;
+    if (save && dragging && tapLike(t0, x0, y0, ev)) { save = false; delete handle.dataset.dragged; }
     if (save && dragging && ev) {
       x = ev.clientX;
       y = ev.clientY;
