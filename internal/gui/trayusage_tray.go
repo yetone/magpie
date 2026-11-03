@@ -123,6 +123,10 @@ func (h *host) watchTrayUsage() {
 			select {
 			case <-wake:
 			case <-time.After(next):
+			case <-backendCtx.Done():
+				// handed the gateway to the new version, whose icon
+				// shows the usage now: this one's is hidden (#4938)
+				return
 			}
 		}
 	}()

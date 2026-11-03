@@ -65,7 +65,13 @@ func handoverSandbox(t *testing.T, up string) *gateway.Server {
 	}
 	startExe = exe
 	handoverHost.Store(true)
+	oldExit := exitNow
+	exitNow = func(int) { t.Error("the magpie that handed over was made to exit before its deadline") }
 	t.Cleanup(func() {
+		if d := quitDeadline.Swap(nil); d != nil {
+			d.Stop()
+		}
+		exitNow = oldExit
 		endBackend()
 		serving.Wait()
 		backendCtx, endBackend = context.WithCancel(context.Background())
@@ -215,6 +221,10 @@ func TestRestartHandsTheGatewayOver(t *testing.T) {
 	if !handedOver.Load() {
 		t.Fatal("the new one serves, and this one doesn't know it handed over")
 	}
+	// and is gone by the end of its drain, whatever holds its quit up (#4938)
+	if quitDeadline.Load() == nil {
+		t.Fatal("the magpie that handed over has no deadline to quit by")
+	}
 	// the old one keeps its stream past the 2s an ordinary end gives
 	// requests (gateway.shortDrain), and so doesn't quit yet
 	select {
@@ -323,4 +333,29 @@ func eventually2(t *testing.T, most time.Duration, what string, ok func() bool) 
 		}
 	}
 	t.Fatal(what)
+}
+
+// #4938: the copy an update left, hidden, lived on for three hours
+// beside the new version, its loops writing and fetching, because its
+// quit waited on something that never came. Past its drain and a little
+// more it exits, whatever holds the quit up.
+func TestHandedOverQuitsByItsDeadline(t *testing.T) {
+	oldExit := exitNow
+	exited := make(chan int, 1)
+	exitNow = func(code int) { exited <- code }
+	t.Cleanup(func() {
+		if d := quitDeadline.Swap(nil); d != nil {
+			d.Stop()
+		}
+		exitNow = oldExit
+	})
+	quitBy(20 * time.Millisecond)
+	select {
+	case code := <-exited:
+		if code != 0 {
+			t.Fatalf("exited %d, want 0", code)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the magpie that handed over never exited")
+	}
 }

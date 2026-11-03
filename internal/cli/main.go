@@ -372,6 +372,12 @@ func run(args []string) error {
 			}
 		}
 	}
+	// magpie serve beside another magpie serving the gateway (the app, a
+	// service, the copy an update left) waits for the port before it moves
+	// or starts anything, rather than doing it all to fail to bind (#4938)
+	if len(args) > 0 && args[0] == "serve" && plainServe(args[1:]) {
+		awaitGatewayFree(gatewayFreeEvery)
+	}
 	startUp()
 	// a provider added, edited or removed, or a list fetched anew, reaches
 	// the model lists agents keep in files of their own, behind the save

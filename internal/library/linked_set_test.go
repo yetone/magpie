@@ -1,10 +1,12 @@
 package library
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A set can be kept in a file of the user's own, ~/.agents/AGENTS.md that
@@ -162,5 +164,43 @@ func TestLinkedSetCarried(t *testing.T) {
 	}
 	if l, _ := load(); l.instrSet("agents").File != shared {
 		t.Errorf("a carried file was taken: %q", l.instrSet("agents").File)
+	}
+}
+
+// #4938: the copy of the app an update left finishing its requests went
+// on syncing the linked sets into the agents' files every 30s, beside the
+// new version, for hours. KeepLinked keeps the agents up with the linked
+// file while its context lasts, and returns once it ends.
+func TestKeepLinkedEndsWithItsContext(t *testing.T) {
+	h := sandbox(t)
+	cx := filepath.Join(h, ".codex/AGENTS.md")
+	shared := filepath.Join(h, ".agents/AGENTS.md")
+	write(t, shared, "Shared rules.\n")
+	ok(t)(SaveInstructions(InstructionsChange{Agents: []string{"codex"}}))
+	ok(t)(SaveInstructions(InstructionsChange{Create: &InstrSet{ID: "agents", Name: "Everyone", File: "~/.agents/AGENTS.md"}}))
+	// the file as it is now, for the loop's first look to tell a change
+	if _, err := SyncLinked(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		KeepLinked(ctx, 10*time.Millisecond)
+	}()
+	// a change made in the file reaches the agents while it runs
+	write(t, shared, "Shared rules, changed.\n")
+	for deadline := time.Now().Add(30 * time.Second); !strings.Contains(read(t, cx), "changed"); {
+		if time.Now().After(deadline) {
+			t.Fatal("the linked file's change never reached codex")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("KeepLinked went on after its context ended")
 	}
 }

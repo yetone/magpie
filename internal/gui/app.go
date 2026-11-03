@@ -563,8 +563,9 @@ func Run(version string, showMain bool, link string) error {
 			}
 		}
 		// a set kept in a file of the user's (~/.agents/AGENTS.md) is
-		// edited outside magpie: the agents get each change
-		library.KeepLinked(30 * time.Second)
+		// edited outside magpie: the agents get each change, until this
+		// one has handed the gateway to the new version (#4938)
+		library.KeepLinked(backendCtx, 30*time.Second)
 	}()
 
 	// before the item is made, which starts as hidden as AppKit kept it

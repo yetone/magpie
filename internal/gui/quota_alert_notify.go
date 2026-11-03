@@ -190,7 +190,9 @@ func (h *host) watchAlerts() {
 			title, body := turnDoneText(trayLang(settings.Load().Lang, systemLang), agentName(t.Agent), t)
 			n.sendAs(turnNotice, title, body)
 		}
-		provider.WatchQuotas(context.Background(), wake, func(a provider.QuotaAlert) {
+		// until this one has handed the gateway to the new version,
+		// which alerts from then on (#4938)
+		provider.WatchQuotas(backendCtx, wake, func(a provider.QuotaAlert) {
 			s := settings.Load()
 			title, body := alertText(trayLang(s.Lang, systemLang), a, s.BalanceAlert, s.QuotaLeft, time.Now())
 			n.send(title, body)

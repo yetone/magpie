@@ -1,6 +1,7 @@
 package library
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -693,10 +694,15 @@ func SyncLinked() (*Result, error) {
 	return changeInstructions(func(*Library) error { return nil })
 }
 
-// KeepLinked runs SyncLinked, and Woken, every interval, for as long as
-// the app runs.
-func KeepLinked(interval time.Duration) {
-	for {
+// KeepLinked runs SyncLinked, and Woken, every interval, until ctx ends:
+// the app's backend, which ends once it has handed the gateway to the
+// new version (gui/handover.go). Before, it ran for as long as the
+// process did, and the copy an update left finishing its requests went
+// on writing the agents' files beside the new one (#4938).
+func KeepLinked(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for ctx.Err() == nil {
 		if res, err := SyncLinked(); err != nil {
 			log.Println("library: linked instructions:", err)
 		} else if res != nil {
@@ -706,6 +712,9 @@ func KeepLinked(interval time.Duration) {
 		}
 		// what was ticked for a stopped WSL distro's agents, once it runs
 		keepWoken()
-		time.Sleep(interval)
+		select {
+		case <-ctx.Done():
+		case <-t.C:
+		}
 	}
 }

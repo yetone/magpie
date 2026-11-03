@@ -27,6 +27,10 @@ import (
 // been seen to keep, as `make dev`'s handover waits.
 var handedOffDrain = 15 * time.Minute
 
+// HandedOffDrain is handedOffDrain: the app that handed the gateway over
+// quits by then and a little after, whatever holds it up (gui.quitBy).
+func HandedOffDrain() time.Duration { return handedOffDrain }
+
 // shortDrain is how long the gateway's end waits for its requests when
 // nothing serves the port after it: a quit, or a restart that waits.
 var shortDrain = 2 * time.Second

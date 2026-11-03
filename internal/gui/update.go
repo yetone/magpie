@@ -144,7 +144,10 @@ func (u *updater) start() {
 	}
 	go func() {
 		time.Sleep(5 * time.Second) // let the app settle first
-		for {
+		// until this one has handed the gateway to the new version: the
+		// copy an update left finishing its requests checks for, and
+		// restarts into, nothing (#4938)
+		for backendCtx.Err() == nil {
 			u.mu.Lock()
 			last := u.asked
 			u.mu.Unlock()
