@@ -11,7 +11,8 @@
           "name" : "magpie",
           "fill-specializations" : [
             { "value" : { "solid" : "srgb:0.08627,0.08627,0.08627,1.00000" } },
-            { "appearance" : "dark", "value" : { "solid" : "srgb:0.95686,0.95686,0.95686,1.00000" } }
+            { "appearance" : "dark", "value" : { "solid" : "srgb:0.95686,0.95686,0.95686,1.00000" } },
+            { "appearance" : "tinted", "value" : { "solid" : "srgb:1.00000,1.00000,1.00000,1.00000" } }
           ]
         }
       ],

@@ -84,7 +84,8 @@ icons:
 		go run build/icon/gen.go app $$((s*2)) build/darwin/magpie.iconset/icon_$${s}x$${s}@2x.png; \
 	done
 	@iconutil -c icns build/darwin/magpie.iconset -o build/darwin/magpie.icns && rm -rf build/darwin/magpie.iconset
-	@# macOS 26 draws the Dock icon from AppIcon.icon, light and dark (Xcode 26's actool);
+	@# macOS 26 draws the Dock icon from AppIcon.icon (Xcode 26's actool) in every icon
+	@# style: light, dark, and clear or tinted, where the bird's luminance takes the tint;
 	@# the compiled Assets.car is kept in the tree so a release needn't have it
 	@go run build/icon/gen.go glyph 1024 build/darwin/AppIcon.icon/Assets/magpie.png
 	@rm -rf build/darwin/actool && mkdir -p build/darwin/actool
