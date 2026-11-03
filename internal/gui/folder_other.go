@@ -1,4 +1,4 @@
-//go:build !windows && !nogui
+//go:build !windows && !linux && !nogui
 
 package gui
 
