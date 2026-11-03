@@ -550,7 +550,12 @@ are read (`sessions.Calls`, from `callSources` in
 Code's, Claude Desktop's and Cowork's, Codex's (and both in WSL), and,
 read a file at a time (`wholeCallReaders` in
 [`call_cache.go`](../../internal/sessions/call_cache.go)), OpenCode's
-(#680), ZCode's, DeepSeek Harness's (`dsh`), WorkBuddy's, CodeBuddy
+(#680), ZCode's, DeepSeek Harness's (`dsh`), WorkBuddy's, WorkBuddy
+AI's (the international build's own `~/.workbuddy-ai`, read as
+WorkBuddy's with its own models.json, listed and deletable under its own
+name, and read once as WorkBuddy's when it is a link to `~/.workbuddy`:
+`TestWorkBuddyAI`, `TestWorkBuddyAIGatewayIsItsOwn`,
+`TestWorkBuddyAISessionsListedUnderTheirName`), CodeBuddy
 Code's (#1779; its sessions are on the Sessions page too, from the same
 `projects/<cwd>/<id>.jsonl` files read as WorkBuddy's, resumed with
 `codebuddy --resume <id>` and deletable, #2657: `TestCodeBuddy`,

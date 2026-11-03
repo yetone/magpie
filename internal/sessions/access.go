@@ -207,6 +207,7 @@ func Found() []string {
 	add("qoder-cn", filepath.Join(QoderDir("qoder-cn"), "projects"))
 	add("grok", filepath.Join(GrokDir(), "sessions"))
 	add("workbuddy", filepath.Join(WorkBuddyDir(), "projects"))
+	add("workbuddy-ai", filepath.Join(WorkBuddyAIDir(), "projects"))
 	add("codebuddy", filepath.Join(CodeBuddyDir(), "projects"))
 	add("omp", filepath.Join(OmpDir(), "sessions"))
 	add("droid", filepath.Join(FactoryDir(), "sessions"))

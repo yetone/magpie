@@ -120,7 +120,7 @@ type Session struct {
 	// Gateway: seen only through magpie's gateway, with no file of the
 	// agent's on this computer (external.go)
 	Gateway       bool          `json:"gateway,omitempty"`
-	Agent         string        `json:"agent"` // magpie agent id: claude, codex, opencode, pi, omp, zcode, dsh, cline, qoder, qoder-cn, grok, workbuddy, codebuddy, droid, cursor, hermes, alma, kimi, agy
+	Agent         string        `json:"agent"` // magpie agent id: claude, codex, opencode, pi, omp, zcode, dsh, cline, qoder, qoder-cn, grok, workbuddy, workbuddy-ai, codebuddy, droid, cursor, hermes, alma, kimi, agy
 	ID            string        `json:"id"`
 	Cwd           string        `json:"cwd"`
 	Title         string        `json:"title"` // the name it was given, else the agent's own title, else the first prompt
@@ -698,7 +698,7 @@ func allFiles() []file {
 	// agent's name is held to that agent too
 	return allowed(distinctOf(append(callFileLists(codexFiles()), openCodeFiles(), piFiles(), raftFiles(), cindyFiles(),
 		wslFiles("pi", "raft", "omp", "kimi"), zcodeFiles(), dshFiles(), clineFiles(), ccFiles("qoder", QoderDir("qoder")), ccFiles("qoder-cn", QoderDir("qoder-cn")),
-		grokFiles(), workbuddyFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles())...))
+		grokFiles(), workbuddyFiles(), workbuddyAIFiles(), codebuddyFiles(), droidFiles(), ompFiles(), cursorFiles(), hermesFiles(), almaFiles(), kimiFiles(), agyFiles())...))
 }
 
 // distinctOf is lists one after another with each path kept once, the
@@ -785,6 +785,7 @@ func Dirs() []string {
 		{QoderDir("qoder-cn"), filepath.Join(QoderDir("qoder-cn"), "projects")},
 		{GrokDir(), filepath.Join(GrokDir(), "sessions")},
 		{WorkBuddyDir(), filepath.Join(WorkBuddyDir(), "projects")},
+		{WorkBuddyAIDir(), filepath.Join(WorkBuddyAIDir(), "projects")},
 		{CodeBuddyDir(), filepath.Join(CodeBuddyDir(), "projects")},
 		{OmpDir(), filepath.Join(OmpDir(), "sessions")},
 		{FactoryDir(), filepath.Join(FactoryDir(), "sessions")},
@@ -1918,7 +1919,7 @@ func parserFor(agent string) sessionParser {
 		return sessionParser{line: codexBody}
 	case "pi", "raft", "cindy", "omp":
 		return sessionParser{line: piParse}
-	case "workbuddy", "codebuddy":
+	case "workbuddy", "workbuddy-ai", "codebuddy":
 		return sessionParser{line: workbuddyLine}
 	default:
 		return sessionParser{line: claudeLine, claude: true}

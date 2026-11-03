@@ -242,10 +242,11 @@ func keepCalls(path string, st *callFile) {
 // in callFiles needs an entry here, in lineCallReaders or in
 // resumeCallReaders, or its calls are never read.
 var wholeCallReaders = map[string]func(file) (*callFile, bool){
-	"opencode":  readOpenCodeCalls,
-	"zcode":     readZCodeCalls,
-	"workbuddy": readWorkBuddyCalls,
-	"codebuddy": readWorkBuddyCalls, // #1779
+	"opencode":     readOpenCodeCalls,
+	"zcode":        readZCodeCalls,
+	"workbuddy":    readWorkBuddyCalls,
+	"workbuddy-ai": readWorkBuddyCalls,
+	"codebuddy":    readWorkBuddyCalls, // #1779
 	// #1605
 	"minimax-code": readMiniMaxCalls,
 	"agy":          readAgyCalls, // #2097

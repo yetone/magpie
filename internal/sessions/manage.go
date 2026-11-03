@@ -75,7 +75,7 @@ type AgentCount struct {
 // those kept as files of their own, in a layout magpie knows whole.
 func Deletable(agent string) bool {
 	switch agent {
-	case "claude", "qoder", "qoder-cn", "workbuddy", "codebuddy", "codex", "pi", "raft", "cindy", "omp", "cursor", "dsh", "droid", "agy":
+	case "claude", "qoder", "qoder-cn", "workbuddy", "workbuddy-ai", "codebuddy", "codex", "pi", "raft", "cindy", "omp", "cursor", "dsh", "droid", "agy":
 		return true
 	}
 	return false

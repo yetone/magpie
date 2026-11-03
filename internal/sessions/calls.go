@@ -339,7 +339,7 @@ func callSourcesWith(codex []file) []file { return callSourcesInto(nil, codex) }
 // callSourcesInto is callSourcesWith appended to out.
 func callSourcesInto(out []file, codex []file) []file {
 	lists := append(callFileLists(codex), openCodeCallFiles(), zcodeCallFiles(), dshCallFiles(),
-		minimaxCallFiles(), kimiCallFiles(), wslFiles("kimi"), piCallFiles(), codebuddyCallFiles(),
+		minimaxCallFiles(), kimiCallFiles(), wslFiles("kimi"), piCallFiles(), codebuddyCallFiles(), workbuddyAIFiles(),
 		agyCallFiles(),                        // #2097
 		workbuddyCallFiles(), grokCallFiles()) // #4423
 	if out == nil {

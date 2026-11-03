@@ -59,8 +59,11 @@ func CodeBuddyDir() string {
 
 // buddyDir is the folder an agent read here keeps its models.json in.
 func buddyDir(agent string) string {
-	if agent == "codebuddy" {
+	switch agent {
+	case "codebuddy":
 		return CodeBuddyDir()
+	case "workbuddy-ai":
+		return WorkBuddyAIDir()
 	}
 	return WorkBuddyDir()
 }
