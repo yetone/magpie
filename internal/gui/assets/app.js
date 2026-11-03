@@ -13281,9 +13281,9 @@ function renderAccounts(a, p) {
     list.append(el("div", "switch-only", only));
   }
   if (p && cx && (several || p.restartApp)) {
-    const [re, cb] = tick(t("Restart the {agent} app when magpie switches its account", ag), !!p.restartApp);
-    re.title = t("Off, the {agent} app stays on its account until you restart it.", ag);
-    cb.onchange = () => accountAction("provider/restartapp", { id: p.id, restartApp: cb.checked }, t(cb.checked ? "magpie restarts the {agent} app when it switches accounts" : "magpie leaves the {agent} app running when it switches accounts", ag));
+    const [re, cb] = tick(t("Restart the {agent} app when magpie switches its account back", ag), !!p.restartApp);
+    re.title = t("Off, the {agent} app stays on its account until you restart it. A used-up account restarts it anyway.", ag);
+    cb.onchange = () => accountAction("provider/restartapp", { id: p.id, restartApp: cb.checked }, t(cb.checked ? "magpie restarts the {agent} app when it switches accounts back" : "magpie leaves the {agent} app running when it switches accounts back", ag));
     list.append(el("div", "restart-app", re));
   }
   // how a pool ends at its caps (plugins#349)

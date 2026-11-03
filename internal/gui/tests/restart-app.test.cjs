@@ -53,16 +53,16 @@ function serve(lang, first, posts) {
 }
 
 const label = {
-  en: "Restart the Codex app when magpie switches its account",
-  zh: "magpie 切换账号时自动重启 Codex 应用",
-  ja: "magpie がアカウントを切り替えたら Codex アプリを再起動する",
-  de: "Codex-App neu starten, wenn magpie das Konto wechselt",
+  en: "Restart the Codex app when magpie switches its account back",
+  zh: "magpie 切回原账号时自动重启 Codex 应用",
+  ja: "magpie が元のアカウントに戻したら Codex アプリを再起動する",
+  de: "Codex-App neu starten, wenn magpie zum Konto zurückwechselt",
 };
 const strings = [
-  "Restart the {agent} app when magpie switches its account",
-  "Off, the {agent} app stays on its account until you restart it.",
-  "magpie restarts the {agent} app when it switches accounts",
-  "magpie leaves the {agent} app running when it switches accounts",
+  "Restart the {agent} app when magpie switches its account back",
+  "Off, the {agent} app stays on its account until you restart it. A used-up account restarts it anyway.",
+  "magpie restarts the {agent} app when it switches accounts back",
+  "magpie leaves the {agent} app running when it switches accounts back",
 ];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {

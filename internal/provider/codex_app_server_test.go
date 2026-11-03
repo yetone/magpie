@@ -1079,12 +1079,16 @@ func TestCodexSessionsQuietFor(t *testing.T) {
 }
 
 // With both of Codex's sign-in ticks off magpie switches Codex's ChatGPT
-// account by itself (SwitchWhenSpent, and back at the reset), and becomes
-// Codex's provider for a used-up account and gives it back. Ending the
-// Codex app's app-server for any of them makes the ChatGPT app show an
-// error and relaunch (#4550), which atom0964 on Discord could not turn
-// off. Those leave the app running unless the user ticked RestartApp. A
-// switch the user makes, and a Connect or Disconnect, still restart it.
+// account by itself (SwitchWhenSpent, and back once the first has room),
+// and becomes Codex's provider for a used-up account and gives it back.
+// Ending the Codex app's app-server makes the ChatGPT app show an error
+// and relaunch (#4550), which atom0964 on Discord could not turn off. The
+// changes the app works without (the switch back, the account given back
+// at the reset) leave it running unless the user ticked RestartApp. Those
+// that leave it on a used-up account restart it either way: the app
+// greys Send there for every model and reads the account only as its
+// app-server starts (8b0132b3d), so magpie's fallback could not serve it.
+// A switch the user makes, and a Connect or Disconnect, restart it too.
 func TestCodexAppLeftRunningForMagpiesOwnChanges(t *testing.T) {
 	signIn(t)
 	s := stubCodexApp(t)
@@ -1101,61 +1105,60 @@ func TestCodexAppLeftRunningForMagpiesOwnChanges(t *testing.T) {
 			}
 		}
 	}
+	ends := func(what string, want int) {
+		t.Helper()
+		if got := step(); !slices.Equal(got, []int{want}) {
+			t.Fatalf("%s: ended %v, want [%d]", what, got, want)
+		}
+		none("after " + what)
+	}
 
 	s.running = []int{60}
 	none("nothing changed")
 	codexAppSwitched(true, true)
-	none("magpie switched off the used-up account")
+	ends("magpie switched off the used-up account", 60)
 	codexAppSwitched(false, true)
-	none("magpie switched back at the reset")
+	none("magpie switched back once the account had room")
 	s.on = true
-	none("magpie became Codex's provider for the used-up account")
+	ends("magpie became Codex's provider for the used-up account", 100)
 	s.on = false
-	none("magpie gave Codex back its account")
+	none("magpie gave Codex back its account at the reset")
 
 	// a switch the user made, alone or after one of magpie's
 	codexAppSwitched(false, true)
 	codexAppAccountSwitched()
-	if got := step(); !slices.Equal(got, []int{60}) {
-		t.Fatalf("switched by the user after magpie: ended %v, want [60]", got)
-	}
-	none("the new app-server read the account as it started")
+	ends("switched by the user after magpie", 101)
 	codexAppAccountSwitched()
 	codexAppSwitched(false, true)
-	if got := step(); !slices.Equal(got, []int{100}) {
-		t.Fatalf("switched by the user, then magpie: ended %v, want [100]", got)
-	}
+	ends("switched by the user, then magpie", 102)
 	// a Connect: where Codex's config sends it changed, not by the takeover
 	s.route = "connected"
-	if got := step(); !slices.Equal(got, []int{101}) {
-		t.Fatalf("connected: ended %v, want [101]", got)
-	}
-	none("after the connect")
+	ends("connected", 103)
 
-	// ticked: magpie's own changes restart it as before
+	// ticked: magpie's changes the app works without restart it as well
 	restarts = true
-	codexAppSwitched(true, true)
-	if got := step(); !slices.Equal(got, []int{102}) {
-		t.Fatalf("RestartApp on, magpie switched: ended %v, want [102]", got)
-	}
+	codexAppSwitched(false, true)
+	ends("RestartApp on, magpie switched back", 104)
 	s.on = true
-	if got := step(); !slices.Equal(got, []int{103}) {
-		t.Fatalf("RestartApp on, magpie took over: ended %v, want [103]", got)
-	}
+	ends("RestartApp on, magpie took over", 105)
+	s.on = false
+	ends("RestartApp on, magpie gave the account back", 106)
 }
 
-// At magpie's first look, an app opened before it on a used-up account
-// was restarted at once; that is magpie's own change too, and waits for
-// RestartApp.
-func TestCodexAppFirstLookLeftRunning(t *testing.T) {
+// At magpie's first look, an app opened before it on a used-up account is
+// restarted at once with RestartApp off too: left on that account it greys
+// Send for every model, magpie's included.
+func TestCodexAppFirstLookOnAUsedUpAccountRestarts(t *testing.T) {
 	signIn(t)
 	s := stubCodexApp(t)
 	codexRestartsApp = func() bool { return false }
 	now := time.Now()
 	s.running, s.on = []int{60}, true
-	for range 2 {
-		if got := codexAppStep(context.Background(), now, func() (int, time.Time) { return 0, now.Add(-time.Minute) }); got != nil {
-			t.Fatalf("first look on the used-up account: ended %v", got)
-		}
+	idle := func() (int, time.Time) { return 0, now.Add(-time.Minute) }
+	if got := codexAppStep(context.Background(), now, idle); !slices.Equal(got, []int{60}) {
+		t.Fatalf("first look on the used-up account: ended %v, want [60]", got)
+	}
+	if got := codexAppStep(context.Background(), now, idle); got != nil {
+		t.Fatalf("after the first look: ended %v", got)
 	}
 }

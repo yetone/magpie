@@ -167,14 +167,16 @@ type Provider struct {
 	// request on them (KeptToAgent; myduso on Discord).
 	SwitchOnly bool `json:"switchOnly,omitempty"`
 	// RestartApp, on Codex's subscription, has magpie restart the Codex
-	// app's own app-server when it changes Codex's account by itself: a
-	// switch off an account running out (SwitchWhenSpent) or back, and
-	// becoming Codex's provider for a used-up account or giving it back.
-	// The ChatGPT app shows an ended app-server as an error and relaunches
-	// (#4550), so it is off unless the user turns it on (atom0964 on
-	// Discord); the app then stays on its account until it is restarted,
-	// from the switch notice or by hand. A switch the user makes, and a
-	// Connect or Disconnect, restart it either way.
+	// app's own app-server for a change it makes by itself that the app
+	// works without: the switch back once the account it moved off has
+	// room (SwitchWhenSpent), and giving Codex its account back at the
+	// reset. The ChatGPT app shows an ended app-server as an error and
+	// relaunches (#4550), so it is off unless the user turns it on
+	// (atom0964 on Discord); the app then stays on its account until it
+	// is restarted, from the switch notice or by hand. A switch the user
+	// makes, a Connect or Disconnect, and whatever leaves the app on a
+	// used-up account (a switch off it, becoming its provider for it)
+	// restart it either way: the app greys Send there (8b0132b3d).
 	RestartApp bool `json:"restartApp,omitempty"`
 
 	// MaxConcurrency is how many requests may be out at the vendor at once

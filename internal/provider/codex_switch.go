@@ -488,10 +488,12 @@ func SwitchWhenSpent(ctx context.Context, agent string) (string, error) {
 	}
 	if agent == "codex" {
 		if was := CodexAppStale(); was != "" {
-			if codexRestartsApp() {
+			// a switch off a spent account restarts it either way: left on
+			// that account, the app greys Send for every model
+			if codexRestartsApp() || !back {
 				log.Printf("codex: the Codex app is still signed in to %s, and shows its limits, until its app-server is restarted once no Codex turn runs", was)
 			} else {
-				log.Printf("codex: the Codex app is still signed in to %s, and shows its limits, until it is restarted: magpie restarts it for a switch of its own only with \"Restart the Codex app to follow\" on", was)
+				log.Printf("codex: the Codex app is still signed in to %s, and shows its limits, until it is restarted: magpie restarts it for a switch back only with \"Restart the Codex app to follow\" on", was)
 			}
 		}
 	}
