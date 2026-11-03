@@ -87,6 +87,13 @@ func TestClaudeDesktopModelsList(t *testing.T) {
 	if e := entry("v/b"); e["behavesAs"] != nil {
 		t.Fatalf("b unpicked: %v", e)
 	}
+	// Desktop reads no /v1/models beside such a list: each entry is
+	// named in it, not by its id (chengming0v0 on Discord)
+	for _, e := range list() {
+		if l, _ := e["labelOverride"].(string); l == "" || l == e["name"] {
+			t.Fatalf("named by its id: %v", e)
+		}
+	}
 	if v, _ := edit.GetJSON(cc, budgetPath(id("v/a"))); v != "272000" {
 		t.Fatalf("a's window in Claude Code's settings: %q\n%s", v, readFile(cc))
 	}

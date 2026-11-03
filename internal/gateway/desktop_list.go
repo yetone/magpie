@@ -18,12 +18,13 @@ import (
 // of a profile (models.list in its app.asar, 4.4212: z3t hands Claude Code
 // modelPicker.options with each entry's behavesAs; the gateway's
 // behaves_as feeds Desktop's own effort profile only). A list there
-// replaces the gateway's /v1/models in Desktop's menu (pzn: a discovered
-// row gives only its name and description, by id), so the list magpie
-// writes is the whole of what /v1/models gives Desktop, in its order, by
-// its ids, each with what Desktop would have read off the row: supports1m
-// for a window of 1M and up (and prefer1m for a model listed by its 1M id
-// alone), the tier of a pick. Older builds take the entries' names and
+// replaces the gateway's /v1/models in Desktop's menu, and while none of
+// its names is a bare tier word Desktop doesn't read /v1/models at all
+// (adminListObviatesDiscovery), so the list magpie writes is the whole of
+// what /v1/models gives Desktop, in its order, by its ids, each with what
+// Desktop would have read off the row: its display_name as labelOverride,
+// supports1m for a window of 1M and up (and prefer1m for a model listed by
+// its 1M id alone), the tier of a pick. Older builds take the entries' names and
 // drop the rest (2.7032's entry is a zod object, which strips unknown
 // keys).
 
@@ -73,14 +74,18 @@ func DesktopInferenceModels() (list []map[string]any, ok bool) {
 		e := shown[i]
 		id, _ := m["id"].(string)
 		name, long := strings.CutSuffix(id, "[1m]")
-		entry := map[string]any{"name": name}
+		// Desktop reads /v1/models no more once a profile lists models
+		// whose names aren't bare tier words (adminListObviatesDiscovery
+		// in its app.asar, 4.4212), and names an entry by its
+		// labelOverride, else its catalog's name, else the discovered
+		// row's, else the id itself (pzn, ngn): every mythos-magpie-<n>
+		// read as that id (chengming0v0 on Discord). Each entry is
+		// labelled as /v1/models labels its row, a catalog-named Claude
+		// model too, whose provider the skipped description said
+		// (desktopSaidBy).
+		entry := map[string]any{"name": name, "labelOverride": m["display_name"]}
 		if long {
 			entry["supports1m"], entry["prefer1m"] = true, true
-			// Desktop names it by the id it looks up (name), which
-			// /v1/models lists with "[1m]": the label it had there
-			if DesktopNumber(e) == "" {
-				entry["labelOverride"] = m["display_name"]
-			}
 		} else if e.Context >= desktop1M {
 			entry["supports1m"] = true
 		}

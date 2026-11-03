@@ -151,3 +151,82 @@ func TestDesktopInferenceModels(t *testing.T) {
 		t.Fatal("unreadable picks read as known")
 	}
 }
+
+// chengming0v0 on Discord (v0.1.2806, Claude Desktop): once a tier was
+// picked, the models of an API-key provider read "mythos-magpie-0167851852"
+// and the like in Desktop's menu. A profile's inferenceModels whose names
+// aren't bare tier words makes Desktop skip /v1/models
+// (adminListObviatesDiscovery, 4.4212), so an entry with no labelOverride
+// is named by its id. Every entry carries the name /v1/models gives its
+// row: a model listed by its effort alias, a catalog-named Claude model
+// and a plain one alike.
+func TestDesktopInferenceModelsNamed(t *testing.T) {
+	setup(t, provider.Anthropic, &fake{})
+	if err := provider.Save(provider.Provider{ID: "ds", Name: "寄吧鲁东", Key: "k", Anthropic: "https://ds.example",
+		Models: []string{"deepseek-v4.1-flash", "gpt-6.1-sol", "glm-5.3", "claude-opus-5-5", "plain"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{"ds/deepseek-v4.1-flash", "ds/gpt-6.1-sol", "ds/glm-5.3", "ds/claude-opus-5-5"} {
+		if err := provider.SetModelEfforts(ref, []string{"low", "high", "max"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// the reporter's GPT model at 400K read as its id, at 1M by its name
+	// (only a [1m] row had a labelOverride): both windows are listed
+	p, err := provider.Find("ds")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetContext(*p, "gpt-6.1-sol", 400_000); err != nil {
+		t.Fatal(err)
+	}
+	if err := provider.SetContext(*p, "deepseek-v4.1-flash", 1_000_000); err != nil {
+		t.Fatal(err)
+	}
+	s := settings.Load()
+	s.DesktopLongest = true
+	if err := settings.Save(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetDesktopTier("sonnet", "ds/glm-5.3"); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("GET", "/v1/models?limit=1000", nil)
+	req.Header.Set("x-api-key", Token+"-claude-desktop")
+	req.Header.Set("User-Agent", "Mozilla/5.0 Claude/4.4212.0 Chrome/140")
+	rec := httptest.NewRecorder()
+	New().Handler().ServeHTTP(rec, req)
+	var served struct {
+		Data []map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &served); err != nil {
+		t.Fatal(err)
+	}
+	list, ok := DesktopInferenceModels()
+	if !ok || len(list) != len(served.Data) {
+		t.Fatalf("%d entries (%v) for %d rows", len(list), ok, len(served.Data))
+	}
+	mythos := 0
+	for i, r := range served.Data {
+		name, _ := list[i]["name"].(string)
+		if strings.HasPrefix(name, desktopEffortAlias) {
+			mythos++
+		}
+		shown, _ := r["display_name"].(string)
+		if shown == "" || list[i]["labelOverride"] != shown {
+			t.Errorf("%s is labelled %v, /v1/models names it %q", name, list[i]["labelOverride"], shown)
+		}
+	}
+	gpt := ""
+	for _, e := range provider.Catalog() {
+		if e.ID == "ds/gpt-6.1-sol" {
+			gpt = DesktopID(e)
+		}
+	}
+	if !strings.HasPrefix(gpt, desktopEffortAlias) {
+		t.Fatalf("the 400K GPT model is listed as %q", gpt)
+	}
+	if mythos < 2 {
+		t.Fatalf("the reporter's shape needs models listed as %s<n>: %v", desktopEffortAlias, list)
+	}
+}
