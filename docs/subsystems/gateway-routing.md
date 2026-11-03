@@ -704,7 +704,7 @@ Each vendor is sent its own request:
 | OpenAI-compatible images API (gpt-image, dall-e, a relay) | JSON `/images/generations` | multipart `/images/edits`, mask included; a URL image is downloaded first | at `<base>/videos` only when its list or the user marks a video model (below) |
 | ChatGPT account (Codex backend), SenseNova U1 | JSON | JSON `images: [{"image_url"}]`, `mask: {"image_url"}` | none |
 | Grok subscription | JSON with `aspect_ratio` | JSON `/images/edits`, `images: [{"url"}]` | `/videos/generations`: `duration`, `aspect_ratio`, `resolution`, `image`, `reference_images` |
-| Volcengine Ark (`isArk`) | `/images/generations`, `watermark: false`, one request per image, ratio as the doc's 2K size | the same endpoint, images as JSON `image` (URL or data URL); a mask is a 400 that says to describe it in the prompt | Seedance at `/contents/generations/tasks` (below) |
+| Volcengine Ark (`isArk`) | `/images/generations`, `watermark: false` unless sent, one request per image, ratio as the doc's 2K size, the caller's other fields as sent (`stream: true` is a 400 pointing to the native route) | the same endpoint, images as JSON `image` (URL or data URL); a mask is a 400 that says to describe it in the prompt | Seedance at `/contents/generations/tasks` (below) |
 | Gemini at Google, a Google sign-in | `generateContent` asking for images | the images as inline parts | a plugin's Veo through its fetch |
 | OpenRouter | `/images` for image-only models, chat with modalities for the others | `input_references` | none |
 | DashScope, ModelScope | their own asynchronous image APIs (`draw_dashscope.go`, `draw_modelscope.go`) | their image fields | none |
@@ -782,6 +782,15 @@ that URL (`vendorClient`) and serves a MOV as `video/quicktime`
 `TestArkVideoKeepsCallersContent`, `TestArkVideoFromImageNeedsNoPrompt`,
 `TestOnlyArkTakesItsOwnVideoAsks`, `TestArkVideoSize`,
 `TestArkVideoAnswersItsOwnFields`, `TestVideoType`.
+
+Ark's images get the same: the request's fields magpie doesn't read
+(`drawingRead`) are `drawing.Extra`, masked as the prompt is and sent to
+Ark as they came (`sequential_image_generation` and its options for a
+group of images, `optimize_prompt_options`, `tools`,
+`layer_decomposition`, which needs no prompt, and `watermark` over
+magpie's `false`). `n` stays OpenAI's: that many requests, each one image
+or one group. `response_format: "url"` asks Ark for its URL and answers
+it; anything else asks for `b64_json`. `TestArkImagesPassOnTheirOwnFields`.
 
 #### The native route
 

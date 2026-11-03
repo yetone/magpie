@@ -9,16 +9,20 @@ package gateway
 //   - reference images go in the same JSON body, as image (a string, or an
 //     array for several), each a URL or a data:image/<fmt>;base64 URL; there
 //     is no edits endpoint and no multipart;
-//   - there is no n: a request draws one image (or a group the model sizes
-//     itself, which magpie doesn't ask for);
+//   - there is no n: a request draws one image, or a group of up to 15
+//     with sequential_image_generation "auto" (Seedream 4.x, 5.0 lite);
 //   - size is a tier ("1K", "2K", "4K"…) or WIDTHxHEIGHT, never a ratio:
 //     the doc says to give a ratio in the prompt, and lists the WxH each
 //     ratio maps to at 2K;
 //   - there is no quality and no mask.
 //
-// So magpie draws there as the doc says: watermark false, the images as
-// JSON, one request per image asked for, and a ratio sent as the doc's 2K
-// size for it, or turned away with what to do instead (JL on Discord).
+// So magpie draws there as the doc says: watermark false unless the caller
+// sends its own, the images as JSON, one request per image n asks for (each
+// a group when the caller sends sequential_image_generation), and a ratio
+// sent as the doc's 2K size for it, or turned away with what to do instead
+// (JL on Discord). The caller's other fields of Ark's own go as they came,
+// and response_format url is asked of Ark as url, its link answered
+// (axelburks on Discord); stream is turned away, its events being Ark's.
 
 import (
 	"context"
@@ -68,7 +72,11 @@ func arkSize(size string) (string, error) {
 	return size, nil
 }
 
-// arkBody is d as Ark's images API takes it, for one image.
+// arkImageTextFields are Ark's images fields that are text, kept as text
+// from a multipart form.
+var arkImageTextFields = []string{"model", "prompt", "size", "sequential_image_generation", "output_format", "background", "response_format"}
+
+// arkBody is d as Ark's images API takes it, for one request.
 func arkBody(model string, d drawing) ([]byte, error) {
 	if d.Mask != nil {
 		return nil, errors.New("Volcengine's images API takes no mask: say in the prompt which part of the image to change")
@@ -77,7 +85,30 @@ func arkBody(model string, d drawing) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req := map[string]any{"model": model, "prompt": d.Prompt, "watermark": false, "response_format": "b64_json"}
+	// the caller's own fields of Ark's first (watermark,
+	// sequential_image_generation and its options, optimize_prompt_options,
+	// tools, layer_decomposition…; axelburks on Discord), then what magpie
+	// reads of OpenAI's: a watermark is off unless the caller asks for
+	// one, and the image comes as Ark's URL when the caller asks for url
+	req := map[string]any{"watermark": false}
+	for k, v := range d.Extra {
+		if d.Form {
+			v = formValue(k, v, arkImageTextFields)
+		}
+		req[k] = v
+	}
+	if on, _ := req["stream"].(bool); on {
+		return nil, errors.New("Volcengine's images API streams its images in events of its own, which /v1/images/generations doesn't give: leave stream out, or ask Ark's own API through magpie at /v1/magpie/native/<provider>/images/generations")
+	}
+	delete(req, "stream")
+	req["model"] = model
+	if d.Prompt != "" {
+		req["prompt"] = d.Prompt
+	}
+	req["response_format"] = "b64_json"
+	if strings.EqualFold(d.Want, "url") {
+		req["response_format"] = "url"
+	}
 	if size != "" {
 		req["size"] = size
 	}

@@ -504,6 +504,27 @@ type drawing struct {
 	N      int
 	Images []picture // to edit, or draw from
 	Mask   *picture
+	// Extra are the request's fields magpie doesn't read, which a
+	// vendor's own images API that takes them is sent as they came
+	// (Ark's sequential_image_generation, optimize_prompt_options,
+	// watermark…; drawingRead). Form: they came in a multipart form, as
+	// text.
+	Extra map[string]any
+	Form  bool
+}
+
+// drawingRead are the fields of an images request magpie reads itself.
+var drawingRead = []string{"model", "prompt", "size", "quality", "background", "output_format", "response_format", "n", "image", "image[]", "images", "mask", "user"}
+
+// extraOf keeps v as one of d's Extra under k, unless magpie reads k.
+func (d *drawing) extraOf(k string, v any) {
+	if slices.Contains(drawingRead, k) {
+		return
+	}
+	if d.Extra == nil {
+		d.Extra = map[string]any{}
+	}
+	d.Extra[k] = v
 }
 
 // drawn is what a vendor gave back.
@@ -610,6 +631,13 @@ func (s *Server) images(edit bool) http.HandlerFunc {
 		var hits maskHits
 		w, d.Prompt, unmask, hits, err = redactedPromptHits(r.Context(), w, d.Prompt)
 		defer unmask()
+		// the fields passed on as they came are masked as the prompt is,
+		// as a video's are
+		if err == nil {
+			var extra maskHits
+			err = maskStrings(r.Context(), d.Extra, &extra)
+			hits.add(extra)
+		}
 		if err != nil {
 			fail(maskStatus(err), err.Error())
 			return
@@ -801,6 +829,10 @@ func readDrawing(r *http.Request) (drawing, error) {
 		}
 		d.Model, d.Prompt, d.Size, d.Quality, d.Background, d.Format, d.Want = get("model"), get("prompt"), get("size"), get("quality"), get("background"), get("output_format"), get("response_format")
 		d.N, _ = strconv.Atoi(get("n"))
+		d.Form = true
+		for k := range f.Value {
+			d.extraOf(k, get(k))
+		}
 		for _, k := range []string{"image", "image[]"} {
 			for _, fh := range f.File[k] {
 				pic, err := readPart(fh)
@@ -839,6 +871,11 @@ func readDrawing(r *http.Request) (drawing, error) {
 			return d, fmt.Errorf("the request isn't JSON: %v", err)
 		}
 		d = drawing{Model: in.Model, Prompt: in.Prompt, Size: in.Size, Quality: in.Quality, Background: in.Background, Format: in.Format, Want: strings.TrimSpace(in.ResponseFormat), N: in.N}
+		var all map[string]any
+		json.Unmarshal(body, &all)
+		for k, v := range all {
+			d.extraOf(k, v)
+		}
 		for _, raw := range []json.RawMessage{in.Image, in.Images} {
 			for _, src := range imageSources(raw) {
 				pic, err := pictureOf(src)
@@ -857,7 +894,9 @@ func readDrawing(r *http.Request) (drawing, error) {
 		}
 	}
 	d.Model = strings.TrimSpace(d.Model)
-	if strings.TrimSpace(d.Prompt) == "" {
+	// Ark's layer_decomposition splits the image it is given into layers,
+	// and takes no prompt
+	if strings.TrimSpace(d.Prompt) == "" && (d.Extra["layer_decomposition"] == nil || len(d.Images) == 0) {
 		return d, errors.New("say what to draw in prompt")
 	}
 	if d.N <= 0 {
