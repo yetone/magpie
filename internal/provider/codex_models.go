@@ -208,6 +208,21 @@ func SawCodexClient(h http.Header) {
 	codexSeen.saw(v)
 }
 
+// ForgetCodexClientsForTest forgets the Codex version the gateway saw a
+// client say it was and the one it found installed, for a test that asks
+// what the pool says it is: both are kept for the process's life (the
+// installed one for ten minutes, read in whichever test's HOME asked
+// first), so an earlier test's Codex 0.165.0 spoke for the next test's
+// 0.161.0 (#4807).
+func ForgetCodexClientsForTest() {
+	codexSeen.Lock()
+	codexSeen.v = ""
+	codexSeen.Unlock()
+	codexVersionCache.Lock()
+	codexVersionCache.v, codexVersionCache.at = "", time.Time{}
+	codexVersionCache.Unlock()
+}
+
 // codexExecutable finds the codex CLI; a var so tests can fake it. Beyond
 // PATH it looks where npm, nvm, bun, volta, pnpm, mise and the standalone
 // installer put it, which a desktop app's PATH lacks.
