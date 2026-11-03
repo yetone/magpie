@@ -1120,11 +1120,7 @@ const REAPPLY = "M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3.25h-3.25";
 const UNPLUG = "M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3M2 2l12 12";
 const DISCONNECT_TIP = "Take out everything magpie wrote into {agent}'s config and put back what it had before";
 
-// An agent is connected to magpie with a switch (the owner: the Agents page
-// connects an agent, and its models are picked in the agent): on, magpie is
-// its provider and its own model list has magpie's models (agent.Connect);
-// off, magpie takes out what it wrote (askDisconnect). An agent with none of
-// magpie's models to offer (Cursor, Copilot) has no switch.
+// an agent is connected with a switch (agent.Connect), off takes out what magpie wrote
 // the field magpie is picked in: the first, or Gemini CLI's model, its
 // first being how it signs in
 const connectField = (a) => a.fields.find((f) => f.options.some((o) => o.ref)) || a.fields.find((f) => f.options.some((o) => o.value === "magpie"));
@@ -1213,13 +1209,7 @@ function connectSwitch(a) {
   return s;
 }
 
-// ---------- 「接入」 in the window (the owner's design boards) ----------
-// A row there answers one thing: does the agent go through magpie. Its
-// switch stands where the model and effort pickers stood, a line under the
-// name says what it runs on and where it picks a model, and a connected
-// one opens to what else there is: when it takes effect, which models it
-// lists, what a new session starts on, the files magpie changed, and the
-// way back.
+// ---------- 「接入」 in the window: does the agent go through magpie ----------
 
 // agents with no way onto magpie: no switch, the reason instead, and that
 // it is why (@G_Z_Y on X read "Only Cursor's own models" beside "Can't
@@ -1243,12 +1233,7 @@ const MENU_FROM_LIST = new Set(["claude-desktop", "cursor-local"]);
 const listsMenu = (a) => MENU_FROM_LIST.has(a.id) || !!a.menu;
 const menuFromList = (a) => listsMenu(a) && a.wired && !!a.models;
 
-// menuSaid: the models such an agent lists, as its list's ticks are. Every
-// one ticked is said as all of them, a few picked by their names, and more
-// as how many of how many. Its first two names and +N (routing groups come
-// first) read as a pick of a group and a model while every model was on
-// (NG_shiyu on X: 「路由组，模型+数字」 here, one 「路由」 on the row above,
-// and every model in the list opened)
+// menuSaid: the models such an agent lists, as its list's ticks are (NG_shiyu on X)
 function menuSaid(c) {
   if (!c.shown) return t("No models");
   if (c.shown >= c.listed) return t("All {n} models", { n: c.listed });
@@ -1500,24 +1485,12 @@ function sheet(box, open, done) {
   run.oncancel = run.onfinish;
 }
 
-// startField: the field an agent's model is picked in (Gemini CLI's model,
-// not how it signs in). Its model is that field whatever the providers
-// on: one switched off changes only what it lists, so Codex's model with
-// none of magpie's left isn't traded for its subagent model, which still
-// has a ChatGPT account's (#1582). A model with nothing to list (Ante's,
-// magpie's only) leaves the field it connects through.
+// startField: the field an agent's model is picked in (#1582)
 function startField(a) {
   return a.fields.find((f) => f.key === "model" && f.options.length) || connectField(a);
 }
 
-// startButton picks the model an agent starts on, from the row. It says
-// what the agent is on, connected or not, its Default or a model, and
-// lists every choice: the agent's own models with magpie's. A magpie model
-// picked while it isn't connected connects it and starts it on it. Not
-// connected, only Claude Code said its model, the others Pick a model
-// beside it (EZN7L2C3, #834: 这里似乎需要统一); and Claude Code's list had
-// lost the one picked. A field that isn't a model (a provider) still
-// offers magpie's models alone.
+// startButton picks the model an agent starts on, from the row (#834)
 function startButton(a, f, fieldBtn) {
   const b = fieldBtn(f, "ag-start");
   if (!a.wired && !a.native && f.key !== "model" && !f.options.some((o) => o.direct)) {
@@ -1720,15 +1693,7 @@ function agentsLead(list) {
   }
 }
 
-// ---------- Get started (wangye1644294 on X) ----------
-// A new user is shown three steps above the agents: add a model source,
-// connect an agent (those magpie found here listed, each connected in a
-// click), and, optionally, a routing group made of their own models in a
-// click (provider.Templates). Each step is ticked from what is so — the
-// models magpie serves (state.served), an agent wired, a group of the
-// user's own — never from having been seen. The card goes once the first
-// two are done, or when put away (settings.GuideHidden, saved on the
-// server so the panel and the window agree).
+// ---------- Get started (wangye1644294 on X): three steps, each ticked from what is so ----------
 
 // the templates offered as a starter, most harmless first: each behind
 // the other changes no model the agent asked for until one fails
@@ -2089,6 +2054,19 @@ function appRestart(a) {
   return go;
 }
 
+// Air's own Codex and Claude Agent: the IDE plugin's run this computer's codex and claude, the app's never go through magpie (jumy_18634)
+const AIR_KINDS = new Set(["air", "air-ide"]);
+function airSaid(a, line) {
+  const warn = (s) => { const w = line(el("span", "ag-dot"), el("span", "", s)); w.classList.add("ag-warn", "ag-air-own"); return w; };
+  const out = [line(t("In Air's agent menu, pick Magpie: the model here is Magpie's, and magpie's models are in its model menu."))];
+  if (kindOf(a) === "air") return [...out, warn(t("Air's own agents (Codex, Claude Agent…) run on Air's own sign-in and settings, not through magpie: only Magpie in its agent menu takes magpie's models."))];
+  out.push(line(t("Air's own Codex and Claude Agent don't take the model here: they run the Codex and Claude Code on this computer, with those agents' own settings.")));
+  const on = (id) => state.agents.find((x) => x.id === id + a.id.slice(7))?.wired;
+  out.push(on("codex") ? line(t("Codex is connected here, so Air's Codex lists magpie's models too: pick one in its model menu, in a new Codex task.")) : warn(t("Codex isn't connected here, so Air's Codex doesn't go through magpie: connect Codex here to put magpie's models in its model menu.")));
+  out.push(on("claude") ? line(t("Claude Code is connected here, so Air's Claude Agent goes through magpie, on the models picked for Claude Code.")) : warn(t("Claude Code isn't connected here, so Air's Claude Agent doesn't go through magpie.")));
+  return out;
+}
+
 // connectPanel: a connected agent's row, opened
 function connectPanel(a, { fields, fieldBtn }) {
   const box = el("div", "ag-exp");
@@ -2160,7 +2138,7 @@ function connectPanel(a, { fields, fieldBtn }) {
     // its 3p window has no Chinese (GZXYMH on X)
     if (a.id === "claude-desktop" && /^zh/.test(locale)) p.push(el("div", "ag-vl ag-warn ag-desktop-lang")), p[1].append(el("span", "ag-dot"), el("span", "", t("On magpie, Desktop shows Anthropic's gateway window, which has no Chinese; disconnect it for Chinese.")));
     kv(t("In {agent}", { agent: a.name }), ...p);
-  }
+  } else if (AIR_KINDS.has(kindOf(a))) kv(t("In {agent}", { agent: a.name }), ...airSaid(a, line));
   // Hermes' other profiles, each on its own model
   const bots = a.fields.filter(hermesBot);
   if (bots.length) kv(t("Other profiles"), ...bots.map((f) => line(el("span", "ag-tier", f.label), fieldBtn(f, "ag-pick"), el("span", "ag-hint", "hermes -p " + f.label))));

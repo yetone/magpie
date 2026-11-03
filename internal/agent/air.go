@@ -156,11 +156,17 @@ func air(home, cfg string) *Agent {
 // config folder. An entry takes command, args, env, use_idea_mcp and
 // use_custom_mcp. Its own agents (Claude Agent, Codex, Junie, …) run on
 // JetBrains AI, the agent's own login, or an Anthropic, OpenAI, Gemini or
-// OpenRouter key under AI › Air › Accounts, none with a base URL (an
-// installed agent on its own login runs on its existing configuration, as
-// JetBrains' docs say, so a Codex there would read the ~/.codex magpie's
-// Codex wires; not tried in an IDE). So magpie adds the same Magpie agent
-// as the app's, with its OpenCode config beside acp.json.
+// OpenRouter key under AI › Air › Accounts, none with a base URL. On its
+// own login its Codex runs this computer's codex (the terminal's PATH, else
+// the @openai/codex it installs) as `codex app-server`, with the user's
+// CODEX_HOME or ~/.codex and no model_provider or CODEX_HOME of its own
+// (CodexAppServerProcessKt, CodexCliUtils), its model menu Codex's
+// model/list and its default config/read's model; its Claude Agent runs
+// claude with only Air's hooks in --settings. So both are on magpie while
+// Codex and Claude Code are connected here, and the model picked on Air's
+// row is the Magpie agent's alone (jumy_18634 on Discord), which the row
+// says (airSaid in app.js). magpie adds the same Magpie agent as the
+// app's, with its OpenCode config beside acp.json.
 func airIDE(home, cfg string) *Agent {
 	dir := filepath.Join(home, ".jetbrains")
 	path := filepath.Join(dir, "acp.json")
