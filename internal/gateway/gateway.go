@@ -2318,7 +2318,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 	// model it was
 	subagent := subagentPickOf(r)
 	if subagent == nil {
-		subagent = codexSubagentPick(r, agent, call.Kind, call.Model, body)
+		subagent = s.codexSubagentPick(r, agent, call.Kind, call.Model, body, false)
 	}
 	var desktopPick *SubagentPick
 	if subagent == nil {

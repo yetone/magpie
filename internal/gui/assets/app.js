@@ -3987,10 +3987,18 @@ const codexOwnSub = (a, f) => f.label === "subagents" && codexSub(a);
 // named rows in Codex's settings: no square too (the owner, 10-25)
 const hermesBot = (f) => f.key.startsWith("profile:");
 const codexRowed = (a, f) => a.id === "codex" && !gatewayMode && (f.label === SUB_MODEL || f.label === MEMORIES);
+// Lead's pick ("") leaves each subagent on the model the lead names for it,
+// one of Codex's own as well; Same as the lead (CODEX_SUB_LEAD) holds every
+// subagent to the lead's own model, whatever it names (cleverpigo on X: a
+// lead on DeepSeek named gpt-5.6-sol under what read "same as the lead")
+const CODEX_SUB_LEAD = "lead";
+const LEADS_PICK = "Lead's pick";
 const SAME_AS_LEAD = "Same as the lead";
-const SUB_MODEL_UNSET = "The lead picks each subagent's model; one it names none for runs on the lead's model ({model}). A resumed subagent stays on the model it started on. A model picked here holds every subagent to it, even when the lead names another.";
-const SUB_MODEL_UNSET_PLAIN = "The lead picks each subagent's model; one it names none for runs on the lead's model. A resumed subagent stays on the model it started on. A model picked here holds every subagent to it, even when the lead names another.";
-const SUB_MODEL_SET = "Every subagent runs on this model, even when the lead names another. Same as the lead gives the pick back to the lead.";
+const SUB_MODEL_UNSET = "The lead picks each subagent's model, one of Codex's own too; one it names none for runs on the lead's model ({model}). A resumed subagent stays on the model it started on. Same as the lead, or a model picked here, holds every subagent to it, even when the lead names another.";
+const SUB_MODEL_UNSET_PLAIN = "The lead picks each subagent's model, one of Codex's own too; one it names none for runs on the lead's model. A resumed subagent stays on the model it started on. Same as the lead, or a model picked here, holds every subagent to it, even when the lead names another.";
+const SUB_MODEL_LEAD = "Every subagent runs on the lead's model ({model}), even when the lead names another. Lead's pick lets the lead choose again.";
+const SUB_MODEL_LEAD_PLAIN = "Every subagent runs on the lead's model, even when the lead names another. Lead's pick lets the lead choose again.";
+const SUB_MODEL_SET = "Every subagent runs on this model, even when the lead names another. Lead's pick lets the lead choose again.";
 const SUB_MODEL_OLD = "Codex's config still starts subagents on {model} when the lead names none; picking here replaces it.";
 // codexSubSaid: the subagent model's name, what it does
 function codexSubSaid(a, f) {
@@ -3998,8 +4006,9 @@ function codexSubSaid(a, f) {
   const main = a.fields.find((x) => x.key === "model");
   const lead = main && (optionFor(main, main.value)?.label || main.value);
   const old = a.fields.find((x) => x.label === "subagents")?.value;
-  const name = f.value ? opt?.label || f.value : t(SAME_AS_LEAD);
-  const line = f.value ? t(SUB_MODEL_SET) : (lead ? t(SUB_MODEL_UNSET, { model: lead }) : t(SUB_MODEL_UNSET_PLAIN)) + (old ? "\n" + t(SUB_MODEL_OLD, { model: optionFor(a.fields.find((x) => x.label === "subagents"), old)?.label || old }) : "");
+  const name = f.value === CODEX_SUB_LEAD ? t(SAME_AS_LEAD) : f.value ? opt?.label || f.value : t(LEADS_PICK);
+  const line = f.value === CODEX_SUB_LEAD ? (lead ? t(SUB_MODEL_LEAD, { model: lead }) : t(SUB_MODEL_LEAD_PLAIN))
+    : f.value ? t(SUB_MODEL_SET) : (lead ? t(SUB_MODEL_UNSET, { model: lead }) : t(SUB_MODEL_UNSET_PLAIN)) + (old ? "\n" + t(SUB_MODEL_OLD, { model: optionFor(a.fields.find((x) => x.label === "subagents"), old)?.label || old }) : "");
   return { name, line, old, lead };
 }
 const extra = (f) => f.key === "tiers" || FOLLOWS_MODEL.includes(f.label) || f.label === "sign-in" || toggled(f) || f.label === SUB_EFFORT || f.label === SUB_MODEL || f.label === AUTO_MODE || f.label === MEMORIES;
@@ -4781,7 +4790,9 @@ function openPicker(agent, field, anchor, ev, only) {
   } else if (field.label === SUB_MODEL && codexSub(agent) && !options.some((o) => o.value === "")) {
     const said = codexSubSaid(agent, { ...field, value: "" });
     const main = agent.fields.find((f) => f.key === "model");
-    options.unshift({ value: "", label: t(SAME_AS_LEAD), note: said.lead ? t("{model}, or another the lead picks for a subagent", { model: said.lead }) : t("the lead's model, or another the lead picks for a subagent"), icon: (main && optionFor(main, main.value)?.icon) || agent.icon, reset: true });
+    const leadIcon = (main && optionFor(main, main.value)?.icon) || agent.icon;
+    options.unshift({ value: "", label: t(LEADS_PICK), note: said.lead ? t("{model} unless the lead names another", { model: said.lead }) : t("the lead's model unless it names another"), icon: leadIcon, reset: true },
+      { value: CODEX_SUB_LEAD, label: t(SAME_AS_LEAD), note: said.lead ? t("{model}, for every subagent", { model: said.lead }) : t("the lead's model, for every subagent"), icon: leadIcon, reset: true });
   } else if (!only && !field.menu && !field.onPick && !options.some((o) => o.value === "")) {
     // Pi picks the first provider signed in when none is set (#709)
     const note = agent.id === "reasonix" && ["model", "planner"].includes(field.key) ? "restore the previous {field} selection"
@@ -21311,7 +21322,8 @@ function renderCodexSubagentModel() {
   const b = el("button", "rt-cond on");
   b.type = "button";
   b.setAttribute("aria-label", t("Codex subagent model"));
-  b.append(icon((f.value ? optionFor(f, f.value)?.icon : main && optionFor(main, main.value)?.icon) || "generic"), el("span", "", f.value ? optNamed(optionFor(f, f.value), f.value) : said.name));
+  const own = f.value && f.value !== CODEX_SUB_LEAD;
+  b.append(icon((own ? optionFor(f, f.value)?.icon : main && optionFor(main, main.value)?.icon) || "generic"), el("span", "", own ? optNamed(optionFor(f, f.value), f.value) : said.name));
   b.onclick = (ev) => openPicker(a, f, b, ev);
   $("#codexSubagentModelPick").replaceChildren(b);
   b.title = said.line;

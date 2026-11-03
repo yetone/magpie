@@ -39,6 +39,11 @@ import (
 // auto-review on the session's own model.
 const CodexAutoReviewSession = "session"
 
+// CodexSubagentLead is CodexSubagentModel's value that puts every Codex
+// subagent on the model its lead's own turns go on, whatever the lead
+// names for it in spawn_agent.
+const CodexSubagentLead = "lead"
+
 // Settings is what the user chose. "" and "system" both mean "follow the OS".
 type Settings struct {
 	Theme string `json:"theme,omitempty"` // system | light | dark
@@ -694,7 +699,8 @@ type Settings struct {
 	// whatever model its lead asked for in spawn_agent: a model a ChatGPT
 	// account in magpie serves (provider/model), since a subagent's task
 	// is sealed for one (willz on Discord). "" leaves each on the model its
-	// lead asked for.
+	// lead asked for; CodexSubagentLead puts each on the model its lead's
+	// own turns go on, even when the lead names another.
 	CodexSubagentModel string `json:"codexSubagentModel,omitempty"`
 	// DesktopSubagentModel is the model the gateway puts Claude Desktop's
 	// subagent tool turns on. "" leaves them on the model their lead asks
@@ -2126,7 +2132,7 @@ func saveOwn(s Settings, recording, reads bool) error {
 		return fmt.Errorf("the model for Codex's auto-review must be a model's id such as openai/gpt-5-mini, not %q", s.CodexAutoReview)
 	}
 	s.CodexSubagentModel = strings.TrimSpace(s.CodexSubagentModel)
-	if s.CodexSubagentModel != "" && !strings.Contains(s.CodexSubagentModel, "/") {
+	if s.CodexSubagentModel != "" && s.CodexSubagentModel != CodexSubagentLead && !strings.Contains(s.CodexSubagentModel, "/") {
 		return fmt.Errorf("the model for Codex's subagents must be a model's id such as codex/gpt-5.5, not %q", s.CodexSubagentModel)
 	}
 	s.RedactRouteTo = strings.TrimSpace(s.RedactRouteTo)

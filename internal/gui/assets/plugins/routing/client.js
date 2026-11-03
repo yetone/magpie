@@ -3337,9 +3337,14 @@ function routingPage(part) {
   // or why the lead's pick stood
   function subagentWhy(r) {
     const agent = agentName(r.agent);
+    const said = { agent, model: r.subagent.asked, to: r.subagent.to, why: r.subagent.kept ? t(r.subagent.kept) : "" };
+    // set to follow the lead (cleverpigo on X): To is the lead's model
+    if (r.subagent.lead) return r.subagent.kept
+      ? t("{agent} requested a subagent on {model} and it stayed there: its subagents follow their lead, on {to}, but {why}.", said)
+      : t("{agent} requested a subagent on {model}; magpie put it on {to}, the model its lead is on.", said);
     return r.subagent.kept
-      ? t("{agent} requested a subagent on {model} and it stayed there: its subagents are set to {to}, but {why}.", { agent, model: r.subagent.asked, to: r.subagent.to, why: t(r.subagent.kept) })
-      : t("{agent} requested a subagent on {model}; magpie put it on {to}, the model set for its subagents.", { agent, model: r.subagent.asked, to: r.subagent.to });
+      ? t("{agent} requested a subagent on {model} and it stayed there: its subagents are set to {to}, but {why}.", said)
+      : t("{agent} requested a subagent on {model}; magpie put it on {to}, the model set for its subagents.", said);
   }
   // a request a stand-in of magpie's put on another model than it named
   // (Route.Moved): why, on its row's tag, its title and its story. Neo on

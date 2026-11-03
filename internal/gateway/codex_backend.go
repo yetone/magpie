@@ -155,9 +155,11 @@ func (s *Server) codexBackend(w http.ResponseWriter, r *http.Request) {
 			// it stays on the model it was named (codexFollowTo). A
 			// memory call with nothing set for it goes on the model its
 			// conversation is on when that is one of magpie's, not on
-			// the ChatGPT sign-in (codexFollowTo)
-			if !strings.Contains(model, "/") {
-				pick := codexSubagentPick(r, agentOf(r), kind, model, body)
+			// the ChatGPT sign-in (codexFollowTo). Set to the lead's model,
+			// a subagent asking for any model goes on the lead's, one of
+			// Codex's own through its sign-in too (codexSubagentPick)
+			if !strings.Contains(model, "/") || provider.CodexSubagentModel() == provider.CodexSubagentLead {
+				pick := s.codexSubagentPick(r, agentOf(r), kind, model, body, true)
 				if to := s.codexFollowTo(r, agentOf(r), kind, model, body); to != "" {
 					body, model = withModel(body, to), to
 				}

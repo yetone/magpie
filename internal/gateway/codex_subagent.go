@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/yetone/magpie/internal/provider"
 	"github.com/yetone/magpie/internal/usage"
@@ -12,11 +13,13 @@ import (
 // its agent's subagents, in place of the one its lead asked for: Codex's
 // (provider.CodexSubagentModel, willz on Discord) or Claude Desktop's
 // (provider.DesktopSubagentModel). Kept says why it went on the model
-// asked for instead, "" when it was put on To.
+// asked for instead, "" when it was put on To. Lead says To is the model
+// the lead's own turns go on (provider.CodexSubagentLead).
 type SubagentPick struct {
 	Asked string `json:"asked"`
 	To    string `json:"to"`
 	Kept  string `json:"kept,omitempty"`
+	Lead  bool   `json:"lead,omitempty"`
 }
 
 // Moved says the request went on To.
@@ -49,17 +52,38 @@ func subagentPickOf(r *http.Request) *SubagentPick {
 // no model set, so setting one is never worse than leaving it unset. A
 // relay that sealed the lead's task (#1109) is reached that way too: the
 // lead names it.
-func codexSubagentPick(r *http.Request, agent, kind, asked string, body []byte) *SubagentPick {
+//
+// Set to the lead's model (provider.CodexSubagentLead), the subagent goes
+// on the model its lead's own turns last went on (codexLeads), even when
+// the lead named another in spawn_agent (cleverpigo on X: a lead on
+// WorkBuddy's DeepSeek named gpt-5.6-sol, and the subagent went to
+// ChatGPT). native says the request can go to Codex's own ChatGPT sign-in
+// (its backend's route), where a lead on one of Codex's own models is
+// followed too; elsewhere such a lead leaves the request as asked.
+func (s *Server) codexSubagentPick(r *http.Request, agent, kind, asked string, body []byte, native bool) *SubagentPick {
 	// Codex by its token or by its User-Agent (fromCodex: its CLI, exec,
 	// the IDE extension, the desktop app)
 	if agent != "codex" && !fromCodex(r.Header) || usage.PurposeOf(kind) != "kind:collab_spawn" {
 		return nil
 	}
-	to := provider.CodexSubagentModel()
+	to, lead := provider.CodexSubagentModel(), false
+	if to == provider.CodexSubagentLead {
+		to, _, _ = s.codexLeads.lookup(r, body)
+		lead = true
+	}
 	if to == "" || to == asked {
 		return nil
 	}
-	pick := &SubagentPick{Asked: asked, To: to}
+	pick := &SubagentPick{Asked: asked, To: to, Lead: lead}
+	if lead && !strings.Contains(to, "/") {
+		// the lead on one of Codex's own models: the subagent goes to
+		// the ChatGPT sign-in on it, where a model the user disabled is
+		// refused (codexNativeOff)
+		if !native {
+			return nil
+		}
+		return pick
+	}
 	if _, off := idOff(to); off {
 		// the user disabled it (#1867): the subagent stays on its lead's
 		// model, itself refused when it is disabled too

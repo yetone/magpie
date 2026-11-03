@@ -64,13 +64,18 @@ func codexSubagentSetup(t *testing.T) *chatgptSeen {
 // codexAsks is a request of Codex's, a subagent's when kind is
 // collab_spawn, a lead's when it is "".
 func codexAsks(s *Server, model, kind, input string) *httptest.ResponseRecorder {
+	return codexAsksIn(s, "worker-1", model, kind, input)
+}
+
+// codexAsksIn is codexAsks from the thread session.
+func codexAsksIn(s *Server, session, model, kind, input string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	body := `{"model":"` + model + `","stream":true,"input":[` + input + `]}`
 	req := httptest.NewRequest("POST", CodexPath+"/responses", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer chatgpt-token")
 	req.Header.Set("chatgpt-account-id", "acct-1")
 	req.Header.Set("User-Agent", "codex_cli_rs/0.159.0 (Mac OS 26.2.0; arm64)")
-	req.Header.Set("session_id", "worker-1")
+	req.Header.Set("session_id", session)
 	if kind != "" {
 		req.Header.Set("x-openai-subagent", kind)
 		req.Header.Set("x-codex-parent-thread-id", "lead-1")

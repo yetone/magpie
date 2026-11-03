@@ -1926,7 +1926,10 @@ func codexIn(at place) *Agent {
 				// and nobody could tell them apart (the owner). So a pick
 				// here, Default too, takes away [agents]
 				// default_subagent_model, and Default is then the lead's
-				// model or the one it names, as it says
+				// model or the one it names, as it says. "lead"
+				// (provider.CodexSubagentLead, the GUI's Same as the lead)
+				// puts every subagent on the lead's own model, whatever it
+				// names (cleverpigo on X)
 				Key: "subagent_model", Label: "subagent model", Quiet: true,
 				Get: provider.CodexSubagentModel,
 				Set: func(v string) error {
