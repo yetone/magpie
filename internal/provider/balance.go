@@ -1,13 +1,16 @@
 package provider
 
 // What is left on an API key, as the vendor's own balance endpoint tells
-// it: DeepSeek, Kimi, OpenRouter, SiliconFlow, StepFun, Command Code, Ollama Cloud and AiHubMix are known by their hosts
-// (AiHubMix tells the whole account's to its access token, BalanceToken);
+// it: DeepSeek, Kimi, OpenRouter, StepFun, Command Code, Ollama Cloud,
+// AiHubMix and Zhipu/Z.ai pay-as-you-go keys are known by their hosts
+// (AiHubMix tells the whole account's to its access token, BalanceToken;
+// SiliconFlow's query is gone, siliconFlowRetired);
 // any other provider can name an endpoint and where the amount sits in its
 // reply (BalanceURL, BalancePath), the way a relay's own usage query does,
 // with {key} where it wants the key in the URL (withBalanceKey).
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -52,6 +55,9 @@ func balanceSourceOf(p Provider) (balanceSource, bool) {
 		// instead of the key
 		return balanceSource{p.BalanceURL, func(b []byte) (string, error) { return readBalancePath(b, path) }, p.BalanceToken, nil, nil}, true
 	}
+	if src, ok := zhipuBalanceSource(p); ok {
+		return src, true
+	}
 	hosts := []string{hostOf(p.Chat), hostOf(p.Responses), hostOf(p.Anthropic)}
 	for _, h := range hosts {
 		switch h {
@@ -64,9 +70,9 @@ func balanceSourceOf(p Provider) (balanceSource, bool) {
 		case "openrouter.ai":
 			return balanceSource{"https://openrouter.ai/api/v1/credits", readOpenRouter, "", nil, nil}, true
 		case "api.siliconflow.cn":
-			return balanceSource{"https://api.siliconflow.cn/v1/user/info", readSiliconFlow("¥"), "", siliconFlowGone("https://cloud.siliconflow.cn (余额充值 → 代金券)"), nil}, true
+			return balanceSource{"https://api.siliconflow.cn/v1/user/info", readSiliconFlow("¥"), "", siliconFlowGone("https://cloud.siliconflow.cn", " (余额充值 → 代金券)"), nil}, true
 		case "api.siliconflow.com":
-			return balanceSource{"https://api.siliconflow.com/v1/user/info", readSiliconFlow("$"), "", siliconFlowGone("https://cloud.siliconflow.com"), nil}, true
+			return balanceSource{"https://api.siliconflow.com/v1/user/info", readSiliconFlow("$"), "", siliconFlowGone("https://cloud.siliconflow.com", ""), nil}, true
 		case "api.stepfun.com":
 			return balanceSource{"https://api.stepfun.com/v1/accounts", readStepFun("¥"), "", nil, nil}, true
 		case "api.stepfun.ai":
@@ -471,10 +477,13 @@ func readSiliconFlow(sign string) func([]byte) (string, error) {
 // siliconFlowGone words SiliconFlow's answer to /v1/user/info since it
 // retired the query on 2026-08-14 (410, {"code":20092,"message":"This
 // endpoint is deprecated and is no longer available.","data":null}, #1094):
-// it has no API for the balance in its place yet, and the balance given
-// before 2025-12 is a voucher now, so both are read on the console. A key
-// refused for itself (401 30014) is still said as it came.
-func siliconFlowGone(console string) func(int, []byte) error {
+// it has no API for the balance in its place yet (its release notes of
+// 2026-08-11 promise an account-level one "in due course", and none is
+// listed up to 2026-11), and the balance given before 2025-12 is a voucher
+// now, so both are read on the console, where the card's button opens
+// (siliconFlowRetired). A key refused for itself (401 30014) is still
+// said as it came.
+func siliconFlowGone(console, where string) func(int, []byte) error {
 	return func(status int, b []byte) error {
 		var r struct {
 			Code int `json:"code"`
@@ -483,8 +492,120 @@ func siliconFlowGone(console string) func(int, []byte) error {
 		if status != http.StatusGone && r.Code != 20092 {
 			return nil
 		}
-		return fmt.Errorf("SiliconFlow retired its balance query (/v1/user/info) and has no API for it in its place yet; the balance and vouchers are on %s", console)
+		return siliconFlowRetired{console, where}
 	}
+}
+
+// siliconFlowRetired is SiliconFlow's retired balance query: not a read
+// that failed for now, so its card says where the balance is shown and
+// opens that console (SeeAt), and keeps no balance read before the query
+// went (nam.haid on Discord: every SiliconFlow card said only
+// "Allowance unavailable").
+type siliconFlowRetired struct{ console, where string }
+
+func (e siliconFlowRetired) Error() string {
+	return "SiliconFlow retired its balance query (/v1/user/info) and has no API for it in its place yet; the balance and vouchers are on " + e.console + e.where
+}
+
+// zhipuBalanceSource is Zhipu's (BigModel's) and Z.ai's account report,
+// /api/biz/account/query-customer-account-report on the API's own host,
+// which their consoles read and which takes the API key as a Bearer: it
+// is not in docs.bigmodel.cn, so a reply in another shape is said as
+// unread, never as a balance. Asked with a GLM Coding Plan's endpoints it
+// isn't: the plan's windows are that key's card (planQuotaSourceOf), and
+// its cash balance, ¥0 for most, would be noise beside them. nam.haid on
+// Discord: a Zhipu key had no card at all.
+func zhipuBalanceSource(p Provider) (balanceSource, bool) {
+	host, payg := "", false
+	for _, base := range []string{p.Chat, p.Responses, p.Anthropic} {
+		h := hostOf(base)
+		if !zhipuHost(h) {
+			continue
+		}
+		if strings.Contains(base, "/api/coding/") {
+			return balanceSource{}, false
+		}
+		host = strings.ToLower(h)
+		payg = payg || basePath(strings.TrimRight(strings.TrimSpace(base), "/")) == zhipuPaygPath
+	}
+	if host == "" {
+		return balanceSource{}, false
+	}
+	sign := "¥"
+	if host == "api.z.ai" {
+		sign = "$"
+	}
+	u := "https://" + host + zhipuAccountReport
+	return balanceSource{u, readZhipuBalance(u, sign, payg), "", nil, nil}, true
+}
+
+// zhipuAccountReport is the account report's path on both hosts.
+const zhipuAccountReport = "/api/biz/account/query-customer-account-report"
+
+// readZhipuBalance reads the account report, as BigModel and Z.ai answer
+// it to a key (asked 2026-11-03):
+//
+//	{"code":200,"msg":"操作成功","data":{"balance":0E-9,"rechargeAmount":0.000000,
+//	  "giveAmount":0.000000,"totalSpendAmount":0E-9,"todaySpendAmount":null,
+//	  "availableBalance":0E-9,"frozenBalance":0E-9,"creditBalance":null,
+//	  "availableCreditBalance":null,"creditStatus":"NOT_OPEN",…},"success":true}
+//
+// availableBalance being what is left to spend, the frozen part taken
+// out. A refusal comes 200 too, in the platform's envelope ({"code":1000,
+// "msg":"身份验证失败。","success":false}): a refused key is said as one
+// (zhipuRefused), any other code with its words. Asked at only the
+// Anthropic endpoint, which a Coding Plan's key shares, an account that
+// was never paid or given anything has no card (errNoBalance); at the
+// pay-as-you-go endpoint its ¥0.00 is the balance it has.
+func readZhipuBalance(u, sign string, payg bool) func([]byte) (string, error) {
+	return func(b []byte) (string, error) {
+		if code, msg, ok := zhipuEnvelope(b); ok {
+			if ZhipuKeyRefused(code) {
+				return "", zhipuRefused(u, zhipuKeyRefusal{msg})
+			}
+			if msg == "" {
+				msg = "refused"
+			}
+			return "", fmt.Errorf("%s answered the balance read with code %d: %s", zhipuVendor(u), code, msg)
+		}
+		var r struct {
+			Data *struct {
+				Available any `json:"availableBalance"`
+				Balance   any `json:"balance"`
+				Recharged any `json:"rechargeAmount"`
+				Given     any `json:"giveAmount"`
+			} `json:"data"`
+		}
+		d := json.NewDecoder(bytes.NewReader(b))
+		d.UseNumber()
+		if err := d.Decode(&r); err != nil {
+			return "", err
+		}
+		if r.Data == nil {
+			return "", fmt.Errorf("%s's account report has no data in it", zhipuVendor(u))
+		}
+		v, ok := number(r.Data.Available)
+		if !ok {
+			return "", fmt.Errorf("%s's account report has no availableBalance in it", zhipuVendor(u))
+		}
+		if !payg {
+			bal, _ := number(r.Data.Balance)
+			paid, _ := number(r.Data.Recharged)
+			given, _ := number(r.Data.Given)
+			if v == 0 && bal == 0 && paid == 0 && given == 0 {
+				return "", errNoBalance
+			}
+		}
+		return money(sign, v), nil
+	}
+}
+
+// zhipuVendor names the vendor of a Zhipu or Z.ai URL.
+func zhipuVendor(u string) string {
+	if hostOf(u) == "api.z.ai" {
+		return "Z.ai"
+	}
+	return "Zhipu"
 }
 
 // readStepFun: {"object":"account","type":"prepaid","balance":26.00,
@@ -1493,8 +1614,14 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 				others++
 			}
 		}
+		// a key on a plan with no balance query of its own (a GLM Coding
+		// Plan's, whose windows are its card) has no balance card; a
+		// provider read some other way (ClinePass) keeps its card
+		keyCard := func(q Provider) bool { return !ok || hasBalanceSource(q) }
 		if others == 0 {
-			jobs = append(jobs, job{p, ""})
+			if keyCard(p.atKeyPlan(p.KeyPlan)) {
+				jobs = append(jobs, job{p, ""})
+			}
 			continue
 		}
 		first := p.KeyName
@@ -1503,13 +1630,18 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		}
 		// each key asked at its own plan's host (KeyAccount.Plan):
 		// SiliconFlow's China key and its international one
-		jobs = append(jobs, job{p.atKeyPlan(p.KeyPlan), first})
+		if q := p.atKeyPlan(p.KeyPlan); keyCard(q) {
+			jobs = append(jobs, job{q, first})
+		}
 		for _, k := range p.Keys {
 			if k.Off || k.Key == "" || k.Key == p.Key {
 				continue
 			}
 			q := p.atKeyPlan(k.Plan)
 			q.Key = k.Key
+			if !keyCard(q) {
+				continue
+			}
 			name := k.Name
 			if name == "" {
 				name = Mask(k.Key)
@@ -1550,6 +1682,13 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 			if errors.Is(err, errOpenCodeNoBalance) {
 				// nothing to read or keep: where the balance is shown
 				q.Error, q.SeeAt = err.Error(), OpenCodeConsole
+				out[i] = q
+				return
+			}
+			var gone siliconFlowRetired
+			if errors.As(err, &gone) {
+				// the same: a balance read before the query went is stale
+				q.Error, q.SeeAt = err.Error(), gone.console
 				out[i] = q
 				return
 			}
@@ -1596,6 +1735,12 @@ func KeyBalances(ctx context.Context) []SubscriptionQuota {
 		c.Unlock()
 	}
 	return out
+}
+
+// hasBalanceSource says magpie knows where p's balance is asked.
+func hasBalanceSource(p Provider) bool {
+	_, ok := balanceSourceOf(p)
+	return ok
 }
 
 // cardParts are the amounts a balance's card shows each apart, the
