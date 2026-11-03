@@ -1673,7 +1673,29 @@ func cursor(home string) *Agent {
 
 func copilot(home string) *Agent {
 	dir := filepath.Join(home, ".copilot")
+	// COPILOT_HOME moves the whole folder, settings.json and providers.json
+	// with it (Copilot's `copilot help environment`)
+	if d := appdir.Getenv("COPILOT_HOME"); d != "" {
+		dir = d
+	}
 	path := filepath.Join(dir, "settings.json")
+	// Copilot CLI's own multi-provider file (BYOK): $COPILOT_PROVIDERS_CONFIG,
+	// else providers.json beside settings.json. It needs no GitHub sign-in.
+	provs := filepath.Join(dir, "providers.json")
+	if p := appdir.Getenv("COPILOT_PROVIDERS_CONFIG"); p != "" {
+		provs = p
+	}
+	own := func() []Option {
+		// "auto" is Copilot's own choice, not a model it lists; the rest
+		// come from the list magpie last fetched from Copilot.
+		out := []Option{{Value: "auto", Note: "let Copilot pick", Icon: "githubcopilot"}}
+		if live, _, ok := catalog.Live("copilot"); ok {
+			// magpie's list has Auto too, offered above
+			live = slices.DeleteFunc(slices.Clone(live), func(m catalog.Model) bool { return m.ID == "auto" })
+			out = append(out, options(live, "")...)
+		}
+		return out
+	}
 	return &Agent{
 		ID: "copilot", Name: "Copilot CLI", Icon: "githubcopilot", Aliases: []string{"gh-copilot"},
 		UA:  []string{"copilot", "github-copilot"},
@@ -1688,20 +1710,37 @@ func copilot(home string) *Agent {
 		// PATH, and running it only asks for the CLI to be installed
 		// (#3269): a command of the editor's is not the CLI
 		binNot: editorLauncher,
+		// magpie/<model> is a model of the provider named magpie in providers.json
+		Spelled:  prefixed,
+		ListOnly: true,
+		Check: func() string {
+			if v, _ := edit.GetJSON(path, "model"); !prefixed(v) {
+				return ""
+			}
+			p := copilotProvider(provs)
+			return wiringOff("Copilot CLI", provs, func(k string) (string, bool) { v, ok := p[k].(string); return v, ok },
+				"baseUrl", gateway.URL()+"/v1", "apiKey", agentKey("copilot"))
+		},
+		Sync: func() error { return copilotSync(provs, gateway.URL()+"/v1", agentKey("copilot")) },
 		Fields: []Field{{
 			Key: "model", Label: "model",
 			Get: jsonGet(path, "model"),
-			Set: jsonSet(path, "model"),
-			Options: func(map[string]string) []Option {
-				// "auto" is Copilot's own choice, not a model it lists; the rest
-				// come from the list magpie last fetched from Copilot.
-				out := []Option{{Value: "auto", Note: "let Copilot pick", Icon: "githubcopilot"}}
-				if live, _, ok := catalog.Live("copilot"); ok {
-					// magpie's list has Auto too, offered above
-					live = slices.DeleteFunc(slices.Clone(live), func(m catalog.Model) bool { return m.ID == "auto" })
-					out = append(out, options(live, "")...)
+			Set: func(v string) error {
+				if ref, ok := strings.CutPrefix(v, magpieID+"/"); ok && isMagpie(ref) {
+					if err := copilotWrite(provs, gateway.URL()+"/v1", agentKey("copilot")); err != nil {
+						return err
+					}
 				}
-				return out
+				if v == "" {
+					if err := edit.DelJSON(path, "model"); err != nil {
+						return err
+					}
+					return copilotUnwrite(provs)
+				}
+				return edit.SetJSON(path, edit.KV{Path: "model", Value: v})
+			},
+			Options: func(cur map[string]string) []Option {
+				return withVia(own(), "copilot", magpieID+"/")
 			},
 		}, {
 			// effortLevel, which Copilot saves beside the model and clears

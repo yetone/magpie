@@ -29,7 +29,7 @@ package agentenv
 // of them, and sets back the ones its own fixtures need.
 var Vars = []string{
 	// Claude Code, Codex and Copilot CLI
-	"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME",
+	"CLAUDE_CONFIG_DIR", "CODEX_HOME", "COPILOT_HOME", "COPILOT_PROVIDERS_CONFIG",
 	// Claude Code's temp folder, the images its sessions were given
 	"CLAUDE_CODE_TMPDIR",
 	// Zed, or a fork of it that keeps its settings (ZedG)
