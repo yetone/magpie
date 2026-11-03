@@ -123,3 +123,58 @@ func TestClaudePromptSaysWhoseImageNotesAre(t *testing.T) {
 		t.Fatalf("a history with no image:\n%s", now)
 	}
 }
+
+// A tool that returns images (seven photos, as sinsoul1647 on Discord,
+// v0.1.2862) leaves Claude Code's notes after the message with paths in the
+// gateway's temp folder ("[Image: source: …/images/1.jpg]"). With no history
+// before the turn there was nothing to say what they are: the model took the
+// paths for the images, said it could not see them and quoted them as on
+// another computer. The turn says the images are in it, in a run told the
+// whole conversation and in a turn told to a saved session.
+func TestClaudePromptSaysToolResultImagesAreAttached(t *testing.T) {
+	img := Part{MediaType: "image/png", Data: "iVBORw0KGgo="}
+	calls := make([]Part, 7)
+	results := make([]Part, 7)
+	for i := range calls {
+		id := "call_" + string(rune('a'+i))
+		calls[i] = Part{Kind: ToolCall, ID: id, Name: "view", Args: json.RawMessage(`{}`)}
+		results[i] = Part{Kind: ToolResult, CallID: id, Text: "Read image file [image/png]", Images: []Part{img}}
+	}
+	msgs := []Message{
+		{Role: "user", Parts: []Part{{Kind: Text, Text: "look at the seven pictures"}}},
+		{Role: "assistant", Parts: calls},
+		{Role: "user", Parts: results},
+	}
+	text := func(blocks []map[string]any) string {
+		var all strings.Builder
+		images := 0
+		for _, b := range blocks {
+			if b["type"] == "image" {
+				images++
+				continue
+			}
+			s, _ := b["text"].(string)
+			all.WriteString(s)
+		}
+		if images != 7 {
+			t.Fatalf("%d image blocks, want 7", images)
+		}
+		return all.String()
+	}
+	tools := []Tool{{Name: "view"}}
+	blocks, err := renderClaudePrompt(&Request{Messages: msgs, Tools: tools})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := text(blocks); !strings.Contains(got, imageNotesNote) {
+		t.Fatalf("the prompt doesn't say the images are attached:\n%s", got)
+	}
+	if got := text(renderClaudeTurn(msgs[2:], tools)); !strings.Contains(got, imageNotesNote) {
+		t.Fatalf("the saved session's turn doesn't say the images are attached:\n%s", got)
+	}
+	// no image, no note
+	blocks, _ = renderClaudePrompt(&Request{Messages: msgs[:1]})
+	if got, _ := json.Marshal(blocks); strings.Contains(string(got), "image content") {
+		t.Fatalf("a turn with no image has the note: %s", got)
+	}
+}

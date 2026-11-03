@@ -724,6 +724,13 @@ history to the 1h cache at 2×.
    are the history's, or the history's first and then the turn's
    (`currentTurnOpen`, #1751). Told nothing, the model said a text-only
    turn had an image attached and offered to open the path.
+   When the images are all the turn's, as a tool's seven photos in a
+   first turn (no history to open the notes' owner), `imageNotesNote` ends
+   the turn: the images, tool results' too, are in the message, and the
+   notes are Claude Code's record of where it keeps them. Told nothing,
+   the model took the paths for the images and said it could not see them
+   (a Discord report, v0.1.2862). A turn told to a saved session says the
+   same (`renderClaudeTurn`).
 
 A Claude Code that ends before it answers a control request
 (`cliControl`: `initialize`, the safety context) is reported with its

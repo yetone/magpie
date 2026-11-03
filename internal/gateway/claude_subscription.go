@@ -4093,6 +4093,9 @@ func renderClaudePrompt(req *Request) ([]map[string]any, error) {
 			chunk = len(blocks) - 1
 		}
 	}
+	if countImages(req.Messages[split:]) > 0 && (split == 0 || countImages(req.Messages[:split]) == 0) {
+		text.WriteString(imageNotesNote + "\n\n")
+	}
 	if slices.ContainsFunc(req.Messages, callsTool) {
 		text.WriteString(pastCallsNote + "\n\n")
 	}
@@ -4261,6 +4264,17 @@ func currentTurnOpen(msgs []Message, split int) string {
 	return "</conversation_history>\n\n<current_turn>\nThe turn to answer now. Any \"[Image: …]\" notes after it are about " +
 		"the images above in their order: the conversation history's first, then this turn's.\n\n"
 }
+
+// imageNotesNote ends a turn whose images (a tool result's among them) all
+// belong to it, where currentTurnOpen has no history to say whose the notes
+// are. Claude Code notes each image it is given ("[Image: source:
+// …/images/3.jpg]") in a note after the message, with a path in the
+// gateway's temp folder. Told nothing of them, the model took the notes for
+// the images, said it could not see them and quoted the paths as on
+// another computer (a Discord report, v0.1.2862).
+const imageNotesNote = "(The images above, those in tool results too, are attached to this message as image content you can see. " +
+	"Any \"[Image: …]\" notes after it are Claude Code's record of where it keeps them, on its own computer: " +
+	"a path in one is not something to open, and the image itself is in the message.)"
 
 // countImages is how many images msgs carry, their tool results' among them.
 func countImages(msgs []Message) int {
@@ -4492,6 +4506,9 @@ func renderClaudeTurn(msgs []Message, tools []Tool) []map[string]any {
 			text.WriteString(label + ": ")
 		}
 		blocks = renderParts(blocks, &text, m.Parts, offered)
+	}
+	if countImages(msgs) > 0 {
+		text.WriteString("\n\n" + imageNotesNote)
 	}
 	if slices.ContainsFunc(msgs, callsTool) {
 		text.WriteString("\n\n" + pastCallsNote)
