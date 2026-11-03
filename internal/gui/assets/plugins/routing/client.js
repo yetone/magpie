@@ -338,6 +338,7 @@ function routingPage(part) {
     e.classList.add(cls);
   };
   const tick = (e) => rerun(e, "tick", "rttick");
+  const tagFor = new WeakMap(); // a row's failure tag: the timer that takes it down
 
   // ---------- words ----------
 
@@ -4598,9 +4599,18 @@ function routingPage(part) {
           tick(A.node);
           break;
         }
-        rerun(row.li, "hit", "rthit"); row.li.classList.add("tagged");
+        // the tag stands over the row's top edge, so the row is drawn whole
+        // (lift, routing.css) while it shows and as it fades: the shake's
+        // .hit ends at .45s, and with it the tag's top was cut for the rest
+        // of its 1.8s (yuancjun on Discord). A failure again on the row
+        // starts the 1.8s over
+        rerun(row.li, "hit", "rthit"); row.li.classList.add("tagged", "lift");
         row.tg.textContent = `${tr.status} · ${failWord(tr.fail)}`;
-        setTimeout(() => row.li.classList.remove("tagged"), 1800);
+        clearTimeout(tagFor.get(row.li));
+        tagFor.set(row.li, setTimeout(() => {
+          row.li.classList.remove("tagged");
+          tagFor.set(row.li, setTimeout(() => row.li.classList.remove("lift"), 300));
+        }, 1800));
         say(tryWhy(r, i));
         renderAll();
         dot.classList.add("back", "err");

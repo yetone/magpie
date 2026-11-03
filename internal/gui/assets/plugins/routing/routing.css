@@ -69,9 +69,10 @@
 /* a key off screen is not laid out or painted (#3164): with hundreds of
    keys open, WebKit painted every row again on each frame a magpie flew.
    One not drawn yet is as tall as a key drawn is (--rt-row, client.js's
-   layout). A row a 429 hit keeps its tag up over its top edge, which this
-   would cut, so it is drawn whole */
-.rt-accts li:not(.hit) { content-visibility: auto; contain-intrinsic-size: auto var(--rt-row, 38px); }
+   layout). A row a failure tagged keeps its tag up over its top edge,
+   which this would cut, so it is drawn whole until the tag has faded
+   (lift, client.js) */
+.rt-accts li:not(.lift) { content-visibility: auto; contain-intrinsic-size: auto var(--rt-row, 38px); }
 /* a run of keys far from sight, out of the list (client.js place, #3164) */
 .rt-accts li.rt-gap { display: block; padding: 0; border: 0; background: none; content-visibility: visible; contain: strict; pointer-events: none; }
 /* a group in the group: a heading its models hang from, set in under it */
