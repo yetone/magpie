@@ -254,3 +254,87 @@ func TestRelayPicksComeBackWithTheirList(t *testing.T) {
 		t.Fatalf("listed again: picks %v, set aside %v", p.Models, p.Delisted)
 	}
 }
+
+// A model its vendor takes off for good leaves the list for good: WorkBuddy
+// AI's /v3/config of 2026-11-03 lists hy3 at x0.00 and no longer lists
+// deepseek-v4.1-flash, its free model before. A Free-plan account whose
+// one pick was that model had every pick set aside and was served none, so
+// the agents' model picker had none of its models and its Providers row
+// read "1 image model", its plan's drawer (maxleebeta on Discord). The
+// picks are waited for a while (pickWait), as a list short for a restart
+// gives them back within minutes; after that the list is served as if
+// none were picked, and the picks still come back with a list that has
+// them.
+func TestPicksGoneForGoodServeTheList(t *testing.T) {
+	claudeHome(t)
+	t.Setenv("MAGPIE_BUN", "")
+	if err := os.MkdirAll(settings.Dir(), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, v := range map[string]any{
+		"plugins.json":     map[string]any{"plugins": []map[string]any{{"spec": "magpie-our-free-model"}}},
+		"plugin-auth.json": map[string]any{"our-free-model": map[string]any{"type": "api", "key": "managed"}},
+	} {
+		b, _ := json.Marshal(v)
+		if err := os.WriteFile(filepath.Join(settings.Dir(), name), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := ourFree("deepseek-v4.1-flash", "deepseek-v4.1-flash-sg", "glm-5.3-flash")
+	plugin.UseCached(before)
+	t.Cleanup(func() { plugin.UseCached(nil) })
+	if err := Save(Provider{ID: "our-free-model", Models: []string{"deepseek-v4.1-flash"}}); err != nil {
+		t.Fatal(err)
+	}
+	now := ourFree("hy3", "deepseek-v4.1-flash-sg", "glm-5.3-flash")
+	plugin.UseCached(now)
+	if got := dropGonePluginPicks(before, now)["our-free-model"]; !slices.Equal(got, []string{"deepseek-v4.1-flash"}) {
+		t.Fatalf("dropped %v", got)
+	}
+	p, _ := Find("our-free-model")
+	if since := time.Since(p.DelistedAt); since < 0 || since > time.Minute {
+		t.Fatalf("every pick set aside at %v, not now", p.DelistedAt)
+	}
+	if got := servedIDs(t, "our-free-model"); len(got) != 0 {
+		t.Fatalf("served at once with every pick set aside: %v", got)
+	}
+	whole := []string{"hy3", "deepseek-v4.1-flash-sg", "glm-5.3-flash"}
+	// waited past pickWait, another setting saved on the way
+	p.DelistedAt = time.Now().Add(-pickWait - time.Minute)
+	if err := Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	p.MaxRPM = 10
+	p.DelistedAt = time.Time{}
+	if err := Save(*p); err != nil {
+		t.Fatal(err)
+	}
+	if got := servedIDs(t, "our-free-model"); !slices.Equal(got, whole) {
+		t.Fatalf("served %v after pickWait, want the list %v", got, whole)
+	}
+	// set aside by a magpie before this one, with no time kept
+	f, err := read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range f.Providers {
+		f.Providers[i].DelistedAt = time.Time{}
+	}
+	if err := store(f); err != nil {
+		t.Fatal(err)
+	}
+	if got := servedIDs(t, "our-free-model"); !slices.Equal(got, whole) {
+		t.Fatalf("served %v with the picks set aside before, want the list %v", got, whole)
+	}
+	// the list has the pick again: it is the pick again, the wait forgotten
+	again := ourFree("hy3", "deepseek-v4.1-flash", "glm-5.3-flash")
+	plugin.UseCached(again)
+	dropGonePluginPicks(now, again)
+	p, _ = Find("our-free-model")
+	if !slices.Equal(p.Models, []string{"deepseek-v4.1-flash"}) || len(p.Delisted) != 0 || !p.DelistedAt.IsZero() {
+		t.Fatalf("listed again: picks %v, set aside %v at %v", p.Models, p.Delisted, p.DelistedAt)
+	}
+	if got := servedIDs(t, "our-free-model"); !slices.Equal(got, []string{"deepseek-v4.1-flash"}) {
+		t.Fatalf("served %v once the pick is listed again", got)
+	}
+}
