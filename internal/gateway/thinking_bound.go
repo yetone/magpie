@@ -179,7 +179,7 @@ func (s *Server) refuseBoundThinking(p provider.Provider, errBody, body []byte) 
 	if !boundRefusal.Match(errBody) {
 		return false
 	}
-	sent := s.withoutRefusedThinking(p, body)
+	sent := withoutForeignThinking(p, s.withoutRefusedThinking(p, body))
 	msgs := gjson.GetBytes(sent, "messages").Array()
 	// from the block named, or from the start when it names none, or one
 	// that isn't a thinking block in what was sent
@@ -211,3 +211,33 @@ func (s *Server) refuseBoundThinking(p provider.Provider, errBody, body []byte) 
 	s.refuseThinking(owner, keys)
 	return true
 }
+
+// A conversation that ran on DeepSeek's Anthropic endpoint first (a
+// routing group with DeepSeek unticked, then Claude: GgbondHi6930 on X)
+// holds thinking blocks DeepSeek signed with its reply's id, a UUID.
+// Claude refuses each one, 400 "messages.1.content.0: Invalid `signature`
+// in `thinking` block" (checked on 2026-11-03), which forward mends only
+// where the refusal reaches it as Claude's own 400, and with a request
+// spent. withoutForeignThinking leaves those blocks out of a request to an
+// upstream serving Claude before it sees them: Claude's own signatures are
+// base64 (3,000 of Claude Code's, 800 characters and longer), never a
+// UUID. A block with no signature Claude takes (checked the same day), so
+// it goes as it was, and so does every other vendor's signature, which
+// refuseBoundThinking still mends. Every other upstream, DeepSeek's among
+// them, gets the body byte for byte.
+func withoutForeignThinking(p provider.Provider, body []byte) []byte {
+	if !bytes.Contains(body, []byte(`"signature"`)) {
+		return body
+	}
+	model := modelOf(body)
+	if anthropicReplaysThinking(p.Host(), model) || p.Host() != "api.anthropic.com" && !anthropicModel.MatchString(model) {
+		return body
+	}
+	return withoutThinkingBlocks(body, func(_, _ int, b gjson.Result) bool {
+		return b.Get("type").String() == "thinking" && deepseekSignature.MatchString(b.Get("signature").String())
+	})
+}
+
+// deepseekSignature is the signature DeepSeek's Anthropic endpoint gives
+// its thinking: the reply's id, a UUID.
+var deepseekSignature = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)

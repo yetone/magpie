@@ -5076,6 +5076,8 @@ func (s *Server) forwardOnce(ctx context.Context, p provider.Provider, to provid
 		// the thinking blocks it refused as another conversation's
 		// (thinking_bound.go), every route to it alike
 		body = s.withoutRefusedThinking(p, body)
+		// and those another vendor signed, to Claude (thinking_bound.go)
+		body = withoutForeignThinking(p, body)
 		if isKimi(p, to) || p.IsOpenCode() && strings.Contains(strings.ToLower(modelOf(body)), "deepseek") {
 			// Claude Code's deferred-tool blocks, for which Kimi's
 			// Anthropic endpoint turns the whole request away with a 400
