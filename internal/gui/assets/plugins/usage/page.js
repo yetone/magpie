@@ -1962,6 +1962,24 @@ function ledHeatShow(cell) {
   tip.style.left = left + "px";
   tip.style.top = top + "px";
 }
+// Each follows the other, and the scroll a follow sets off is its own echo,
+// never a move to pass back: WebKit tells it a frame later, and on a phone
+// the finger has moved the table on by then, so the bar's echo wrote the
+// table back a frame, every other frame of a swipe (Pluviophile on
+// Discord: 左右滑动震颤, 粘滞卡顿)
+const ledEcho = new WeakMap();
+function ledFollow(to, from) {
+  const was = to.scrollLeft;
+  if (was === from.scrollLeft) return;
+  to.scrollLeft = from.scrollLeft;
+  // one held where it was (no room yet) tells no scroll
+  if (to.scrollLeft !== was) ledEcho.set(to, to.scrollLeft);
+}
+function ledFollowed(e, other) {
+  const box = e.currentTarget, echo = ledEcho.get(box);
+  ledEcho.delete(box);
+  if (box.scrollLeft !== echo) ledFollow(other(), box);
+}
 // the table's scrollbar, kept in view at the window's foot (#799): as wide
 // as the table can go sideways, and moving it as the table moves it
 function ledHScroll() {
@@ -1970,7 +1988,7 @@ function ledHScroll() {
   bar.hidden = !over;
   if (!over) return;
   bar.firstElementChild.style.width = wrap.scrollWidth - wrap.clientWidth + bar.clientWidth + "px";
-  bar.scrollLeft = wrap.scrollLeft;
+  ledFollow(bar, wrap);
   // a sticky box keeps clear of its scroller's padding, so at bottom 0 it
   // stood the view's bottom padding above the window's foot, the table
   // showing through the strip under it: it goes down over that padding
@@ -1978,8 +1996,8 @@ function ledHScroll() {
   const pad = view ? parseFloat(getComputedStyle(view).paddingBottom) || 0 : 0;
   bar.style.bottom = -pad + "px";
 }
-$("#ledWrap").addEventListener("scroll", () => { const bar = $("#ledHScroll"); if (bar.scrollLeft !== $("#ledWrap").scrollLeft) bar.scrollLeft = $("#ledWrap").scrollLeft; }, { passive: true });
-$("#ledHScroll").addEventListener("scroll", () => { const wrap = $("#ledWrap"); if (wrap.scrollLeft !== $("#ledHScroll").scrollLeft) wrap.scrollLeft = $("#ledHScroll").scrollLeft; }, { passive: true });
+$("#ledWrap").addEventListener("scroll", (e) => ledFollowed(e, () => $("#ledHScroll")), { passive: true });
+$("#ledHScroll").addEventListener("scroll", (e) => ledFollowed(e, () => $("#ledWrap")), { passive: true });
 // a window that changes size redraws the chart at its new width
 // a new width fits the table again, on the next frame, and so do the
 // details' width (--ledw) and the scrollbar: each changes the table's or the
