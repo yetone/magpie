@@ -2,6 +2,7 @@
 // kernel adds them to i18n.js's (magpie.strings).
 magpie.strings({
   zh: {
+    "sign-in refused (answered since)": "登录曾被拒（之后已应答）",
     "Free first uses it before paid ones, and Cheapest first counts it as costing nothing": "免费优先会先用它再用付费的，最便宜优先把它算作不花钱",
     "{name}, {n} accounts: {windows}": "{name}（{n} 个账号）：{windows}",
     "What is left of this provider's accounts the group can use, together: amounts of one unit added up, a share the mean of the accounts on one plan. Each account is on the Usage page.": "本组可用的这家供应商账号合起来还剩多少：同一单位的额度相加，百分比取同一套餐账号的平均值。各账号详情在用量页。",
@@ -656,6 +657,7 @@ magpie.strings({
     "This group may spend every account of {provider}": "这个组可以消耗 {provider} 的每个账号",
   },
   "zh-TW": {
+    "sign-in refused (answered since)": "登入曾被拒（之後已應答）",
     "Free first uses it before paid ones, and Cheapest first counts it as costing nothing": "免費優先會先用它再用付費的，最便宜優先把它算作不花錢",
     "{name}, {n} accounts: {windows}": "{name}（{n} 個帳號）：{windows}",
     "What is left of this provider's accounts the group can use, together: amounts of one unit added up, a share the mean of the accounts on one plan. Each account is on the Usage page.": "本組可用的這家供應商帳號合起來還剩多少：同一單位的額度相加，百分比取同一方案帳號的平均值。各帳號詳情在用量頁。",
@@ -1310,6 +1312,7 @@ magpie.strings({
     "This group may spend every account of {provider}": "這個組可以消耗 {provider} 的每個帳號",
   },
   ja: {
+    "sign-in refused (answered since)": "サインイン拒否（その後は応答あり）",
     "Free first uses it before paid ones, and Cheapest first counts it as costing nothing": "無料優先は有料より先にこれを使い、最安優先はこれを費用ゼロとして数えます",
     "{name}, {n} accounts: {windows}": "{name}（{n} アカウント）：{windows}",
     "What is left of this provider's accounts the group can use, together: amounts of one unit added up, a share the mean of the accounts on one plan. Each account is on the Usage page.": "このグループが使えるこのプロバイダーのアカウントの残りの合計：同じ単位の量は足し合わせ、割合は同じプランのアカウントの平均。各アカウントは使用量ページにあります。",
@@ -1964,6 +1967,7 @@ magpie.strings({
     "This group may spend every account of {provider}": "このグループは {provider} のすべてのアカウントを使えます",
   },
   de: {
+    "sign-in refused (answered since)": "Anmeldung abgelehnt (seitdem beantwortet)",
     "Free first uses it before paid ones, and Cheapest first counts it as costing nothing": "„Kostenlos zuerst“ nutzt es vor bezahlten, „Günstigste zuerst“ zählt es als kostenlos",
     "{name}, {n} accounts: {windows}": "{name}, {n} Konten: {windows}",
     "What is left of this provider's accounts the group can use, together: amounts of one unit added up, a share the mean of the accounts on one plan. Each account is on the Usage page.": "Was von den Konten dieses Anbieters, die die Gruppe nutzen kann, zusammen übrig ist: Mengen derselben Einheit addiert, ein Anteil als Mittelwert der Konten mit demselben Tarif. Die einzelnen Konten stehen auf der Seite Nutzung.",

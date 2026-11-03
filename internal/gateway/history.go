@@ -508,7 +508,8 @@ type Tally struct {
 	Tried    int            `json:"tried"`
 	OK       int            `json:"ok"`
 	Fails    map[string]int `json:"fails,omitempty"`
-	Last     int64          `json:"last,omitempty"` // ms, of its latest answer
+	Last     int64          `json:"last,omitempty"`   // ms, of its latest answer
+	AuthAt   int64          `json:"authAt,omitempty"` // ms, of its latest try refused for its sign-in (failAuth)
 	Models   []string       `json:"models,omitempty"`
 	Rest     *Rest          `json:"rest,omitempty"`   // how its latest try left it
 	RestAt   int64          `json:"restAt,omitempty"` // ms, of when it did
@@ -681,6 +682,9 @@ func foldTally(tallies map[string]*Tally, line []byte) {
 				a.Fails = map[string]int{}
 			}
 			a.Fails[f]++
+			if f == failAuth {
+				a.AuthAt = max(a.AuthAt, end)
+			}
 		}
 		if tr.Rest != nil && tr.Rest.Model == "" && end >= a.RestAt {
 			rest := *tr.Rest

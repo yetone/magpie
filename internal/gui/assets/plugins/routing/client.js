@@ -4167,14 +4167,14 @@ function routingPage(part) {
     // picked, counts its own list as before.
     const seed = !day && !purpose.length && tallies && Object.keys(tallies).length ? tallies : null;
     if (seed) for (const [k, x] of Object.entries(seed)) {
-      by.set(k, { w: x, tried: x.tried, ok: x.ok, fails: { ...x.fails }, last: x.last || 0,
+      by.set(k, { w: x, tried: x.tried, ok: x.ok, fails: { ...x.fails }, last: x.last || 0, authAt: x.authAt || 0,
         rest: x.rest || null, restAt: x.restAt || 0, seen: 0, pos: 0, at: 0, models: new Set(x.models || []), mrests: new Map() });
     }
     for (const r of [...rs].reverse()) { // oldest first, so the latest wins
       const candidates = new Map();
       r.order.forEach((w, i) => {
         const key = keyOf(w);
-        const a = by.get(key) || { w, tried: 0, ok: 0, fails: {}, last: 0, rest: null, restAt: 0, seen: 0, pos: 0, models: new Set(), mrests: new Map() };
+        const a = by.get(key) || { w, tried: 0, ok: 0, fails: {}, last: 0, authAt: 0, rest: null, restAt: 0, seen: 0, pos: 0, models: new Set(), mrests: new Map() };
         a.w = w; a.seen++; a.pos = i; a.at = r.time;
         // a later request found it resting, or not: the account as a
         // whole, or one of its models alone (#1960), which leaves the
@@ -4190,6 +4190,9 @@ function routingPage(part) {
         const a = candidates.get(tr.id);
         if (!a || !tr.done || tr.fail === "canceled") continue; // the agent's doing, not its
         const end = at(tr.start) + (tr.ms || 0);
+        // refused for its sign-in: asked to sign in again until it answers
+        // after that (adorable_piglet on Discord)
+        if (tr.fail === "auth" && !tryOk(tr)) a.authAt = Math.max(a.authAt, end);
         if (seed) { // counted from the day already; when it last answered is news all the same
           if (tryOk(tr)) a.last = Math.max(a.last, end);
         } else {
@@ -4279,7 +4282,12 @@ function routingPage(part) {
       } else if (w.kind === "account") st = t("what's left not known yet");
       else st = "";
       const tally = el("div", "tally");
-      const fails = Object.entries(a.fails).map(([k, v]) => `${v} ${failWord(k)}`);
+      // refused for its sign-in, and not answered since: it is to be signed
+      // in again, here where the card says so. Answered since, the
+      // refusals are the day's past, not what it needs now (adorable_piglet
+      // on Discord: "2 需要重新登录" on an account the editor showed in use)
+      const signIn = w.kind === "account" && a.authAt > a.last;
+      const fails = Object.entries(a.fails).map(([k, v]) => `${v} ${k === "auth" && a.authAt && !signIn ? t("sign-in refused (answered since)") : failWord(k)}`);
       tally.append(
         el("span", "", t("tried {n}", { n: a.tried })),
         el("span", "ok", t("answered {n}", { n: a.ok })),
@@ -4335,6 +4343,13 @@ function routingPage(part) {
         fix.append(go);
         row.append(fix);
       }
+      if (signIn && !day) {
+        let fix = row.querySelector(".fix");
+        if (!fix) row.append(fix = el("div", "fix"));
+        const again = el("button", "link rt-signin", t("Sign in again"));
+        again.onclick = () => signInAgain(w);
+        fix.append(again);
+      }
       if (w.known && w.balance == null) {
         const bar = el("div", "bar"), bi = el("i");
         bi.style.width = fill(w);
@@ -4345,6 +4360,16 @@ function routingPage(part) {
       out.push(row);
     }
     patch(acts, out);
+  }
+
+  // signInAgain signs the account of seat w in again, in its provider's
+  // editor on the Providers page, where the sign-in's steps are drawn: as
+  // the editor's own Sign in again does. Codex's own sign-in (relayed as
+  // Codex sent it) is Codex's provider's, its account the one signed in.
+  async function signInAgain(w) {
+    const own = w.provider === "openai" && w.agent === "codex";
+    await openProvider(own ? "codex" : w.provider);
+    startSignIn(own ? "codex" : w.agent || w.provider, false, undefined, own ? {} : { user: w.who });
   }
 
   // keysRow sums a provider's keys up over the requests listed: how many,
