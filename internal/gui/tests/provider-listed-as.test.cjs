@@ -1,8 +1,8 @@
 // A relay's model can be listed by an id of the user's (zeewell on X:
 // deepseek-v4.1-flash-1017 as deepseek-v4.1-flash), in the provider
-// editor's Names & levels beside Same as: magpie lists, routes and counts
+// editor's Names, prices & levels beside Same as: magpie lists, routes and counts
 // it by that id, and the relay is still asked for its own. It is staged
-// and made with the editor's Save, as the rest of Names & levels is;
+// and made with the editor's Save, as the rest of Names, prices & levels is;
 // Restore default and an emptied box list it by its own id again. A
 // signed-in account's models (ids false) have no such box.
 const assert = require("node:assert/strict");
@@ -41,7 +41,7 @@ function serve(lang, posts) {
   };
 }
 
-const keys = ["Names & levels", "Listed as", "unsaved", "Save", "Restore default"];
+const keys = ["Names, prices & levels", "Listed as", "unsaved", "Save", "Restore default"];
 
 for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium", "webkit"])) {
   for (const lang of ["en", "zh", "zh-TW", "ja", "de"]) {
@@ -60,7 +60,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (const k of keys) assert(L[k], `${lang} has ${k}`);
       const open = async (id) => {
         await page.locator(`.row.provider[data-id="${id}"]`).click();
-        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: L["Names & levels"], exact: true }).click();
+        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: L["Names, prices & levels"], exact: true }).click();
       };
       const row = (id) => page.locator(".mname", { has: page.locator("code", { hasText: id }) });
       const box = (id) => row(id).getByRole("textbox", { name: L["Listed as"], exact: true });

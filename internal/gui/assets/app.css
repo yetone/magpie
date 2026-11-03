@@ -3564,7 +3564,7 @@ body.window .ag-sk-icon { width: 22px; height: 22px; border-radius: 6px; }
 .msuffix { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 2px 8px 4px; font-size: 12px; }
 .msuffix .hint { font-size: 11px; color: var(--faint); overflow-wrap: anywhere; }
 .msuffix .where { font-size: 11px; color: var(--faint); overflow-wrap: anywhere; }
-/* a provider's Names & levels: what the lists show, where that is set, and
+/* a provider's Names, prices & levels: what the lists show, where that is set, and
    the way there, a line each: the list is laid out again a scrollbar's width
    narrower after a change, and a shared line wrapped then, which moved the
    list (provider-levels-scroll) */

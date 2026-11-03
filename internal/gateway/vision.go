@@ -167,16 +167,16 @@ func missingSeerNote() string {
 // none of its members is marked as taking images.
 func textOnlyNote(p provider.Provider, model string, group string) string {
 	if group != "" {
-		return fmt.Sprintf("; no model in the group %s is marked as taking images: turn on Accepts images for one that does, in its provider's Names & levels in magpie", group)
+		return fmt.Sprintf("; no model in the group %s is marked as taking images: turn on Accepts images for one that does, in its provider's Names, prices & levels in magpie", group)
 	}
 	name := p.Name
 	if name == "" {
 		name = p.ID
 	}
 	if v, ok := provider.ImageOverride(p.ID, model); ok && !v {
-		return fmt.Sprintf("; Accepts images is turned off for it in magpie, in Providers → %s → Names & levels", name)
+		return fmt.Sprintf("; Accepts images is turned off for it in magpie, in Providers → %s → Names, prices & levels", name)
 	}
-	return fmt.Sprintf("; %s's model list marks it as not taking images: if it does, turn on Accepts images for it in magpie, in Providers → %s → Names & levels", name, name)
+	return fmt.Sprintf("; %s's model list marks it as not taking images: if it does, turn on Accepts images for it in magpie, in Providers → %s → Names, prices & levels", name, name)
 }
 
 // noSeerNote is what a request turned away for an image says of why no

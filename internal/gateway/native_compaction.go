@@ -453,7 +453,7 @@ func checkpointGone(model, what string, cp checkpointWriter) (why, fix string) {
 			case !k.On:
 				return fmt.Sprintf("that key of %s is switched off", p.ID), "switch it on again in the provider's keys"
 			case !p.AccountServes(kid, served):
-				return fmt.Sprintf("that key is set not to serve %s (Names & levels)", served), fmt.Sprintf("let it serve %s again", served)
+				return fmt.Sprintf("that key is set not to serve %s (Names, prices & levels)", served), fmt.Sprintf("let it serve %s again", served)
 			}
 			return checkpointNotRouted(model, served)
 		}
@@ -476,7 +476,7 @@ func checkpointGone(model, what string, cp checkpointWriter) (why, fix string) {
 		case !l.On:
 			return "it is switched off in magpie", fmt.Sprintf("switch %s on again: the others can stay on beside it, and only this conversation is held to it", l.User)
 		case !p.AccountServes(l.User, served):
-			return fmt.Sprintf("it is set not to serve %s (Names & levels)", served), fmt.Sprintf("let %s serve %s again", l.User, served)
+			return fmt.Sprintf("it is set not to serve %s (Names, prices & levels)", served), fmt.Sprintf("let %s serve %s again", l.User, served)
 		}
 		return checkpointNotRouted(model, served)
 	}

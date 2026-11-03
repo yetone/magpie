@@ -5,9 +5,9 @@
 // A model chip's right-click has "Asked on: Auto…" beside its test, for a
 // provider with more than one API: it opens the app's menu (never a native
 // <select>), Auto saying what the vendor's list says, and the pick is
-// staged as Names & levels stages it — the chip tagged with it, the page
+// staged as Names, prices & levels stages it — the chip tagged with it, the page
 // not moved — and sent with the Save as modelPrefs. A subscription's model
-// gets the same, and Names & levels' API row too. A provider with one API
+// gets the same, and Names, prices & levels' API row too. A provider with one API
 // has nothing to pick. In English and Chinese.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
@@ -128,7 +128,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       assert.equal(await top(), before, "the page didn't move");
       assert.equal(await page.locator(".editor .mchips .mchip.on").count(), picked, "nothing picked or unpicked");
       assert.equal(posts.length, 0, "staged, not saved");
-      // the menu now says it, and Names & levels shows it too
+      // the menu now says it, and Names, prices & levels shows it too
       await rclick(chip("DeepSeek V4.1 Flash"));
       await rowMenu.getByRole("menuitem", { name: w.resp }).waitFor();
       await page.keyboard.press("Escape");
@@ -136,13 +136,13 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       for (let i = 0; i < 40 && !posts.length; i++) await page.waitForTimeout(50);
       assert.deepEqual(posts[0]?.modelPrefs, { "deepseek-v4.1-flash": { api: "responses" } });
 
-      // a subscription's model: its pick shown, and Names & levels has the row
+      // a subscription's model: its pick shown, and Names, prices & levels has the row
       await open("GitHub Copilot");
       assert.equal(await chip("GPT-9").locator(".mapi-tag").textContent(), "Responses");
       await rclick(chip("GPT-9"));
       await rowMenu.getByRole("menuitem", { name: w.resp }).waitFor();
       await page.keyboard.press("Escape");
-      await page.locator(".editor").getByRole("button", { name: lang === "en" ? "Names & levels" : /名称/ }).click();
+      await page.locator(".editor").getByRole("button", { name: lang === "en" ? "Names, prices & levels" : /名称/ }).click();
       await page.locator(".editor .mnames .mapi").waitFor();
 
       // one API: nothing to pick

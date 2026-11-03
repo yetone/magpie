@@ -1454,7 +1454,7 @@ func providerRoutes(mux *http.ServeMux, w Windows) {
 			// gives the vendor's answer back.
 			Images *bool `json:"images"`
 			// ModelPrefs, for save: the names, levels and images the
-			// editor's Names & levels changed, by model id, made with the
+			// editor's Names, prices & levels changed, by model id, made with the
 			// rest of the Save and not a click at a time
 			ModelPrefs map[string]provider.ModelPref `json:"modelPrefs"`
 			// Outputs, for save: the reply limits the editor's Max output

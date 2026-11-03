@@ -11,7 +11,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// A provider's Save carries what its editor's Names & levels changed
+// A provider's Save carries what its editor's Names, prices & levels changed
 // (modelPrefs), and makes it with the rest (ARNO on Discord: each level
 // ticked was applied on its own, before the Save).
 func TestProviderSaveModelPrefs(t *testing.T) {

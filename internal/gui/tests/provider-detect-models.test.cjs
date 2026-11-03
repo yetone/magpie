@@ -4,7 +4,7 @@
 // Detect APIs' "Each picked model" posts provider/detect with every model
 // picked (detectModels) and shows model by API, ✓ or ✗ with why. Its
 // "Use these" sets the URLs that answered and gives each model that
-// answered on one API only that API, staged in Names & levels (unsaved)
+// answered on one API only that API, staged in Names, prices & levels (unsaved)
 // and sent with the Save as modelPrefs — nothing before. A chip's
 // right-click Test says the API it was asked on. No click moves the page,
 // and nothing has a left-border accent. In English and Chinese, Chromium
@@ -95,7 +95,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         each: zh ? "逐个检测已选模型" : "Each picked model", use: zh ? "使用检测结果" : "Use these", taken: zh ? "已填入 · 保存后生效" : "Taken · save to keep",
         only: zh ? "m-resp：仅 Responses · m-chat：仅 OpenAI" : "m-resp: Responses only · m-chat: OpenAI only",
         said: zh ? "保存后 2 个模型将只使用各自唯一可用的协议" : "2 models are asked on the one API that answered them once saved",
-        names: zh ? "名称与推理档位" : "Names & levels", unsaved: zh ? "未保存" : "unsaved", save: zh ? "保存" : "Save",
+        names: zh ? "名称、价格与推理档位" : "Names, prices & levels", unsaved: zh ? "未保存" : "unsaved", save: zh ? "保存" : "Save",
         item: zh ? "测试此模型" : "Test this model",
         via: zh ? "m-both 通过 Responses 协议在 123 毫秒内响应" : "m-both answered via Responses in 123 ms",
         viaTitle: zh ? "通过 Responses 协议在 123 毫秒内响应" : "Answered via Responses in 123 ms",
@@ -176,7 +176,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const missing = await page.evaluate(() => [
         "Each picked model", "Ask every model picked below on each API, to see which API serves which model (up to {n}, a few at a time)",
         "Pick models first, or type one and press Detect APIs", "Only the first {n} of {all} models were asked", "Model",
-        "Set the URLs of the APIs that answered, and give each model that answered on one API only that API (staged in Names & levels, made with the Save)",
+        "Set the URLs of the APIs that answered, and give each model that answered on one API only that API (staged in Names, prices & levels, made with the Save)",
         "{n} models are asked on the one API that answered them once saved", "{model}: {api} only",
         "an image model: asked on the images API, not here", "not asked: out of time",
         "Answered via {api} in {took}", "{model} answered via {api} in {took}", "{model} didn't answer via {api}: {error}",

@@ -57,7 +57,7 @@ func TestKnownTextOnlyModelRejectsImagesBeforeUpstream(t *testing.T) {
 		}
 		// it says why magpie takes it for text-only, and where that is
 		// changed (KimYx0207 on X)
-		if b := rec.Body.String(); !strings.Contains(b, "Probe's model list marks it as not taking images") || !strings.Contains(b, "Providers → Probe → Names & levels") {
+		if b := rec.Body.String(); !strings.Contains(b, "Probe's model list marks it as not taking images") || !strings.Contains(b, "Providers → Probe → Names, prices & levels") {
 			t.Errorf("%s: doesn't say why or where: %s", tc.path, b)
 		}
 	}
@@ -521,7 +521,7 @@ func TestTextOnlyRefusalSaysWhyAndWhere(t *testing.T) {
 	s := New()
 	body := `{"model":"MODEL","messages":[{"role":"user","content":[{"type":"text","text":"read"},{"type":"image_url","image_url":{"url":"data:image/png;base64,aGVsbG8="}}]}]}`
 	for model, want := range map[string]string{
-		"probe/sol":   "Accepts images is turned off for it in magpie, in Providers → Probe → Names & levels",
+		"probe/sol":   "Accepts images is turned off for it in magpie, in Providers → Probe → Names, prices & levels",
 		"group/words": "no model in the group Words is marked as taking images",
 	} {
 		rec := httptest.NewRecorder()

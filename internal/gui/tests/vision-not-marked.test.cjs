@@ -2,7 +2,7 @@
 // nexnull on Discord: a custom provider's model that nobody has said takes
 // images is not among Image recognition's models, and nothing said why or
 // where to change it. Under the row a line now names those providers and
-// says the model is marked in its provider's Names & levels › Accepts
+// says the model is marked in its provider's Names, prices & levels › Accepts
 // images, in the editor's own words. None such, or Image recognition off,
 // no line. Every language; wide and at a phone's width, nothing running
 // off to the side; no backend, the API is faked here.
@@ -72,15 +72,15 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         await t.test(`${lang} at ${width}px: the providers are named, with where to mark a model`, async () => {
           const page = await open(lang, settingsPayload(lang, { visionNotMarked: ["My Relay", "Local vLLM"] }), width);
           const tr = (k, vars = {}) => page.evaluate(([k, vars]) => t(k, vars), [k, vars]);
-          const names = await tr("Names & levels"), images = await tr("Accepts images");
+          const names = await tr("Names, prices & levels"), images = await tr("Accepts images");
           const line = page.locator("#imagesList .row").nth(0).locator(".vision-not-marked");
           assert.equal(await line.isVisible(), true);
           const text = await line.textContent();
           assert.match(text, /My Relay, Local vLLM/);
           // the checkbox and the section by the words the editor shows
           assert.ok(text.includes(names) && text.includes(images), text);
-          if (lang !== "en") assert.ok(!/Names & levels|Accepts images|aren’t listed/.test(text), "untranslated: " + text);
-          if (lang === "zh") assert.ok(text.includes("名称与推理档位") && text.includes("支持图片输入"), text);
+          if (lang !== "en") assert.ok(!/Names, prices & levels|Accepts images|aren’t listed/.test(text), "untranslated: " + text);
+          if (lang === "zh") assert.ok(text.includes("名称、价格与推理档位") && text.includes("支持图片输入"), text);
           const fit = await page.evaluate(() => {
             const l = document.querySelector("#imagesList .vision-not-marked"), row = l.closest(".row").getBoundingClientRect(), r = l.getBoundingClientRect();
             return { inRow: r.left >= row.left - 1 && r.right <= row.right + 1, scroll: document.documentElement.scrollWidth - document.documentElement.clientWidth,

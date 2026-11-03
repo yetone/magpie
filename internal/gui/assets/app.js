@@ -7611,7 +7611,7 @@ function priceTypedError(ed) {
 }
 
 // modelPrefsOfDraft: the names, levels and images staged in the editor's
-// Names & levels, for its Save, or nothing when none changed.
+// Names, prices & levels, for its Save, or nothing when none changed.
 function modelPrefsOfDraft() {
   const x = draft?.modelPrefs;
   return x && Object.keys(x).length ? x : undefined;
@@ -8745,7 +8745,7 @@ function openModal(content, quiet) {
   const m = $("#modal"), d = m.firstElementChild;
   const fresh = m.hidden || m.classList.contains("out");
   const top = m.hidden ? 0 : d.querySelector(".ebody")?.scrollTop || 0;
-  // Names & levels scrolls inside the body: keep its place.
+  // Names, prices & levels scrolls inside the body: keep its place.
   const names = !fresh && d.querySelector(".mnames:not([hidden])");
   const namesAt = names && { provider: names.dataset.provider, top: names.scrollTop };
   m.classList.remove("out");
@@ -9070,7 +9070,7 @@ function drawEditor(p, presetID) {
   // a preset already added is added again only through "Add another": one
   // more provider of it, under a name and id of its own
   const another = isNew && !!pr?.added;
-  // an editor opened afresh has Names & levels folded: it stayed open in
+  // an editor opened afresh has Names, prices & levels folded: it stayed open in
   // every editor after, until magpie was restarted (Hu9956, #868)
   if (!draft) naming = unpickedShown = picksLeft = null;
   draft = draft || (p
@@ -10835,7 +10835,7 @@ function detectAPIs(p, base, use) {
         for (const x of ok) {
           const label = apiLabel(x.protocol);
           const b = el("button", "text action", t("Ask {model} on {api} only", { model: m, api: label }));
-          b.title = t("Staged in Names & levels and made with the Save; Auto there gives it back");
+          b.title = t("Staged in Names, prices & levels and made with the Save; Auto there gives it back");
           b.onclick = () => {
             stageAPI(pm, x.protocol);
             if (!draft[x.protocol]) use(r.results);
@@ -10850,7 +10850,7 @@ function detectAPIs(p, base, use) {
     }
     out.append(acts);
   };
-  // a model's API staged in Names & levels: the one it has saved stages nothing
+  // a model's API staged in Names, prices & levels: the one it has saved stages nothing
   const stageAPI = (pm, proto) => {
     const prefs = draft.modelPrefs = draft.modelPrefs || {};
     const id = pm.id;
@@ -10899,9 +10899,9 @@ function detectAPIs(p, base, use) {
     else {
       const take = el("button", "text action", t("Use these"));
       // only a saved provider's models are given an API; a new one's, in
-      // Names & levels once it is saved
+      // Names, prices & levels once it is saved
       const give = p ? Object.entries(only).map(([id, a]) => [p.models.find((x) => x.id === id), a]).filter(([pm]) => pm) : [];
-      take.title = give.length ? t("Set the URLs of the APIs that answered, and give each model that answered on one API only that API (staged in Names & levels, made with the Save)")
+      take.title = give.length ? t("Set the URLs of the APIs that answered, and give each model that answered on one API only that API (staged in Names, prices & levels, made with the Save)")
         : t("Set the URLs of the APIs that answered; one not found there is cleared");
       take.onclick = () => {
         for (const [pm, a] of give) stageAPI(pm, a);
@@ -11020,7 +11020,7 @@ function renderModels(p) {
   const noTest = modelTestWhy(p);
   // the API a model is asked on, set beside its test (01huadalang: a
   // preset's or a subscription's model, not only a custom provider's):
-  // staged as Names & levels stages it, and made with the Save
+  // staged as Names, prices & levels stages it, and made with the Save
   const apis = modelAPIs(p);
   const apiNow = (id) => draft.modelPrefs?.[id]?.api ?? p.models.find((m) => m.id === id)?.api ?? "";
   // a model listed on none of the APIs the provider has a URL for (#2094: a
@@ -11193,7 +11193,7 @@ function renderModels(p) {
       if (m.default) c.title = `${m.id} · ${m.default}`;
       else if (m.name && m.name !== m.id) c.title = m.id;
       if (free) c.title = (c.title || m.id) + " · " + t(m.free ? "free: it doesn't use the plan's credits" : "free: so its name says");
-      if (noAPI(m)) c.title = (c.title || m.id) + "\n" + t("{p} has no URL for the API its list serves it on ({apis}), so agents aren't offered it. Add that URL, or set the API it is asked on in Names & levels.", { p: p.name, apis: (apiNow(m.id) ? [apiNow(m.id)] : m.auto || []).map(apiLabel).join(" · ") });
+      if (noAPI(m)) c.title = (c.title || m.id) + "\n" + t("{p} has no URL for the API its list serves it on ({apis}), so agents aren't offered it. Add that URL, or set the API it is asked on in Names, prices & levels.", { p: p.name, apis: (apiNow(m.id) ? [apiNow(m.id)] : m.auto || []).map(apiLabel).join(" · ") });
       if (served.has(m.id)) c.title = (c.title || m.id) + "\n" + t(draft.unlisted ? "Routing groups use it: none are picked, so the vendor's list is used" : "Agents see it: none are picked, so the vendor's list is used") + "\n" + t("Click to pick just this model");
       else if (on && draft.unlisted && !decideOnly(p)) c.title = (c.title || m.id) + "\n" + t("Picked: the routing groups it is in use it. Agents don't see it.");
       // an agent's own list can leave a pick out (Kylin_Cloud on X)
@@ -11296,7 +11296,7 @@ function renderModels(p) {
     // once it was open, and the editor read as one long run of settings)
     const head = el("div", "mnhead");
     const fold = el("button", "text action", t("Fold"));
-    fold.title = t("Fold Names & levels");
+    fold.title = t("Fold Names, prices & levels");
     fold.onclick = (e) => {
       e.stopPropagation();
       naming = null;
@@ -11304,7 +11304,7 @@ function renderModels(p) {
       drawNames();
       rename.focus(NO_SCROLL);
     };
-    head.append(el("b", "", t("Names & levels")), fold);
+    head.append(el("b", "", t("Names, prices & levels")), fold);
     names.append(head);
     const ids = servedIds(p);
     if (!ids.length) { names.append(el("span", "hint", t("Pick a model first."))); return; }
@@ -11404,12 +11404,8 @@ function renderModels(p) {
         idBox.append(el("span", "", t("Listed as")), idInput);
         row.append(idBox);
       }
-      // its cost to the user, $ per million tokens, as Usage counts it
-      // (#819): a box empty is its list price. The 1-hour cache write,
-      // empty, is 2× input as Anthropic bills it, and only a Claude model
-      // (or one priced with one) has it (PAMI on Discord). A long-context
-      // price (OpenAI's over 272K) is the whole request's when its input
-      // is over that size, empty parts its list's
+      // its cost, $ / 1M tokens, as Usage counts it (#819); empty: the
+      // list's. 1h cache write: Claude's, empty 2× input (PAMI)
       const parts = [["input", "Input"], ["output", "Output"], ["cache_read", "Cache read"], ["cache_write", "Cache write"], ["cache_write_1h", "Cache write 1h"]];
       const tierParts = parts.slice(0, 4);
       const priceNow = () => prefs[id]?.ownPrice ? null : prefs[id]?.price ?? m.price ?? null;
@@ -11799,8 +11795,8 @@ function renderModels(p) {
     } catch (e) { delete got[id]; testErr(e); }
     draw();
   };
-  const rename = el("button", "text action" + (naming === p.id ? " on" : ""), t("Names & levels"));
-  rename.title = t("Rename the models agents see, or offer fewer of their reasoning levels");
+  const rename = el("button", "text action" + (naming === p.id ? " on" : ""), t("Names, prices & levels"));
+  rename.title = t("Rename the models agents see, set what each costs at this provider, or offer fewer of their reasoning levels");
   rename.onclick = () => { naming = naming === p.id ? null : p.id; rename.classList.toggle("on", naming === p.id); drawNames(); };
   foot.append(add, addOne, refresh);
   if (noTest) { testAll.disabled = true; testAll.title = testAll.dataset.tip = noTest; }
@@ -20452,7 +20448,7 @@ const IN_USE = "|*";
 // suffixSegs: how the agents' lists name a model — with its provider's
 // (or "routing group") after it, all but the user's own names (#92), or
 // none (#335). Set on its own, so the agents are told. Offered on Settings,
-// the provider's Names & levels and over Routing's groups (#868);
+// the provider's Names, prices & levels and over Routing's groups (#868);
 // drawn(mode) redraws the place it was picked in. The mode is read from
 // the state's settings, read before any page is drawn, not Settings' own
 // read (#1433).
@@ -20460,7 +20456,7 @@ function suffixMode(s = state.settings || {}) { return s.plainNames ? "off" : s.
 function suffixSegs(drawn) {
   const mode = suffixMode();
   const seg = segs([["off", t("Off")], ["own", t("Not on names I set")], ["on", t("On")]], mode, (v) =>
-    // every place that says it follows (Names & levels behind Settings)
+    // every place that says it follows (Names, prices & levels behind Settings)
     writingPrefs(api("settings/plain-names", { mode: v })).then((ns) => { prefs = state.settings = ns; seg.dataset.mode = v; renderSettings(); drawn?.(v); redrawSuffix(); })
       .catch((e) => { statusTErr(e); renderSettings(); drawn?.(suffixMode()); }));
   seg.classList.add("suffix-segs");
@@ -20504,7 +20500,7 @@ function sayNoNamesInSettings() {
 // settings that came in say another mode than it was drawn with: a page
 // drawn before the state's first read (Routing's groups can come back
 // first) showed the default, On (#1433). A line that only says what the
-// lists show (.suffix-said, a provider's Names & levels) is said again.
+// lists show (.suffix-said, a provider's Names, prices & levels) is said again.
 function redrawSuffix() {
   const mode = suffixMode();
   for (const seg of document.querySelectorAll(".suffix-segs, .suffix-said")) {
@@ -21434,7 +21430,7 @@ function renderImages(s, keep) {
   const notMarked = s.visionNotMarked || [];
   if (v !== "off") who.append(...libWay("magpie-vision", t("Give agents Magpie Image Recognition…"), "vision-mcp-lib"));
   if (notMarked.length && v !== "off") who.append(el("div", "sub vision-not-marked", t("Models of {providers} aren’t listed until marked in their provider’s {names} › {images}",
-    { providers: notMarked.join(", "), names: t("Names & levels"), images: t("Accepts images") })));
+    { providers: notMarked.join(", "), names: t("Names, prices & levels"), images: t("Accepts images") })));
   b.onclick = (ev) => openPicker({ id: "", name: "", fields: [] }, { key: "vision", label: "model", value: v, options: [
     { value: "", label: t("Automatic"), note: s.visionAuto ? named(s.visionAuto) : t("no model that sees"), reset: true },
     { value: "off", label: t("Off"), note: t("images turned away"), reset: true },

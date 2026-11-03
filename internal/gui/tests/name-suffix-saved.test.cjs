@@ -4,7 +4,7 @@
 // "Names in agents' lists" as On. The choice was read from Settings' own
 // read of the settings, which only opening Settings makes, though startup
 // had already read them with the state. Opening Settings put it right, and
-// the next restart brought On back. The provider editor's Names & levels
+// the next restart brought On back. The provider editor's Names, prices & levels
 // read the same thing. Here each page is opened first, with Off or "Not on
 // names I set" saved, and the choice and the label beside it must say what
 // is saved from the first drawing on: when the state comes in before the
@@ -134,7 +134,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const { page, errors, tr } = await launch(t, engine, lang, width, OFF, { stateDelay: 600 }, posts);
         await page.goto("http://magpie.test/?view=providers");
         await page.locator(".row.provider").click();
-        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: await tr("Names & levels"), exact: true }).click();
+        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: await tr("Names, prices & levels"), exact: true }).click();
         const sfx = page.locator(".mnames:not([hidden]) .msuffix");
         await sfx.waitFor();
         await says(sfx.locator(".hint"), await tr("Agents’ lists show “{label}”", { label: "My Sol" }));

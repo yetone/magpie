@@ -2,7 +2,7 @@
 // deepseek-v4-1-flash-260910) can be said, in the provider editor's Names &
 // levels, to be the same as another vendor's model, so the routing groups
 // magpie finds merge them (kyzhouxu, #583). It is staged and made with the
-// editor's Save, as the rest of Names & levels is; Cancel drops it.
+// editor's Save, as the rest of Names, prices & levels is; Cancel drops it.
 const assert = require("node:assert/strict");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -51,7 +51,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       await page.route("**/*", serve(lang, posts));
       await page.goto("http://magpie.test/?view=providers");
       const zh = lang === "zh";
-      const L = { names: zh ? "名称与推理档位" : "Names & levels", same: zh ? "等同于" : "Same as", unsaved: zh ? "未保存" : "unsaved", save: zh ? "保存" : "Save", cancel: zh ? "取消" : "Cancel", reset: zh ? "恢复默认" : "Restore default" };
+      const L = { names: zh ? "名称、价格与推理档位" : "Names, prices & levels", same: zh ? "等同于" : "Same as", unsaved: zh ? "未保存" : "unsaved", save: zh ? "保存" : "Save", cancel: zh ? "取消" : "Cancel", reset: zh ? "恢复默认" : "Restore default" };
       const open = async () => {
         await page.locator('.row.provider[data-id="relay"]').click();
         if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: L.names, exact: true }).click();

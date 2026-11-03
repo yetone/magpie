@@ -48,7 +48,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
     await page.route("**/*", serve(posts));
     await page.goto("http://magpie.test/?view=providers");
     await page.locator(".row.provider").click();
-    await page.getByRole("button", { name: "Names & levels" }).click();
+    await page.getByRole("button", { name: "Names, prices & levels" }).click();
     const list = page.locator(".mnames:not([hidden])");
     assert(await list.evaluate((e) => e.scrollHeight > e.clientHeight), "fixture must overflow");
     // the list scrolled by hand so a row's levels are in sight, mid-list: a

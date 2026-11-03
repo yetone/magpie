@@ -516,7 +516,7 @@ func modelAPI(proto Protocol) bool {
 	return slices.Contains(Protocols, proto) || proto == Gemini
 }
 
-// ModelPref is what the provider editor's Names & levels changed of one
+// ModelPref is what the provider editor's Names, prices & levels changed of one
 // model, sent with its Save: each part left nil is as it was. Name "" gives
 // the model its own name back, Efforts [] all its levels, OwnImages the
 // vendor's answer for whether it sees images, API "" every API the

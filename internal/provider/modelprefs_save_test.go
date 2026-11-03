@@ -9,7 +9,7 @@ import (
 	"github.com/yetone/magpie/internal/settings"
 )
 
-// The provider editor's Names & levels are made with its Save, all at
+// The provider editor's Names, prices & levels are made with its Save, all at
 // once: each is made as SetModelName, SetModelEfforts and SetModelImage
 // make it, and the agents' files are rewritten once, not once a change
 // (ARNO on Discord: every reasoning level ticked was applied on its own,

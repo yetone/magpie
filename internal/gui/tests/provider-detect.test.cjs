@@ -4,7 +4,7 @@
 // 还有每个模型自定义协议): the custom provider editor's Detect APIs posts
 // provider/detect with the URL and the model typed, shows what each API
 // answered, and "Use these" sets the URLs of those that answered. A model
-// served on one API only is given it in Names & levels (or from the
+// served on one API only is given it in Names, prices & levels (or from the
 // detection), staged and sent with the Save as modelPrefs.api; Auto gives
 // it back. No click moves the page, and nothing has a left-border accent.
 // In English and Chinese, Chromium and WebKit.
@@ -71,7 +71,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
       const L = {
         detect: zh ? "检测协议" : "Detect APIs", use: zh ? "使用检测结果" : "Use these", taken: zh ? "已填入 · 保存后生效" : "Taken · save to keep",
         only: zh ? "m-mixed 只用 Anthropic 协议" : "Ask m-mixed on Anthropic only", said: zh ? "保存后 m-mixed 将使用 Anthropic 协议" : "m-mixed is asked on Anthropic once saved",
-        names: zh ? "名称与推理档位" : "Names & levels", auto: zh ? "自动" : "Auto", unsaved: zh ? "未保存" : "unsaved", save: zh ? "保存" : "Save",
+        names: zh ? "名称、价格与推理档位" : "Names, prices & levels", auto: zh ? "自动" : "Auto", unsaved: zh ? "未保存" : "unsaved", save: zh ? "保存" : "Save",
         ms: zh ? "321 毫秒" : "321 ms",
       };
       await page.locator(".row.provider").click();
@@ -148,7 +148,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         "Detect APIs", "Send the smallest request to each API (OpenAI chat completions, Responses, Anthropic messages, Gemini generateContent) at this URL, to see which answer",
         "model to try · empty picks one from the vendor's list", "Type the base URL first", "Asking each API…", "model {model}",
         "None answered: check the URL and the key, or type a model the vendor serves", "Use these", "Set the URLs of the APIs that answered; one not found there is cleared",
-        "Taken · save to keep", "Ask {model} on {api} only", "Staged in Names & levels and made with the Save; Auto there gives it back", "{model} is asked on {api} once saved",
+        "Taken · save to keep", "Ask {model} on {api} only", "Staged in Names, prices & levels and made with the Save; Auto there gives it back", "{model} is asked on {api} once saved",
         "no URL to ask", "no model to try: type one the vendor serves", "no key is on for this endpoint",
         "The API {id} is asked on. Auto: as the vendor's list says, else each URL the provider has; pick one when the vendor serves it on that one only",
         "Its own name, every reasoning level it has, whether it sees images, the API it is asked on, the model it is the same as, its own id, and its list price",

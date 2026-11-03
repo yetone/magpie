@@ -205,7 +205,7 @@ never priced. `TestUserSameGivesTheSpecs`, `TestTaggedIDHasTheModelsSpecs`,
 A model can also be listed by an id the user gives it at its provider
 (zeewell on X: a relay's `deepseek-v4.1-flash-1017` as
 `deepseek-v4.1-flash`, `grok-4.6@500k` as `grok-4.6`): the editor's
-Names & levels "Listed as" box beside Same as, `magpie model id
+Names, prices & levels "Listed as" box beside Same as, `magpie model id
 <provider/model> <id>` (`--reset` takes it back, `magpie model ids` lists
 them), settings' `ModelIDs` (`"<pid>/<id>": "<own id>"`,
 `provider.SetModelID`, [`localid.go`](../../internal/provider/localid.go)).

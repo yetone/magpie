@@ -1,7 +1,7 @@
 // Run with Node's test runner and Playwright on the module path; see README.md.
 // yuexian7 on Discord: models.dev lists their model as reasoning, and the
 // vendor answers any reasoning parameter with 422 while the request
-// without it works. In the provider editor's Names & levels, a model's
+// without it works. In the provider editor's Names, prices & levels, a model's
 // levels can all be unticked: magpie then sends it no reasoning field, said
 // beside the levels, and the Save sends {reasonless: true}. A model saved
 // so shows none ticked, and ticking one takes it back. Every language,
@@ -71,7 +71,7 @@ for (const engine of (process.env.BROWSER ? [process.env.BROWSER] : ["chromium",
         const tr = (k, v = {}) => page.evaluate(([k, v]) => t(k, v), [k, v]);
         await page.locator(".row.provider").click();
 
-        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: await tr("Names & levels"), exact: true }).click();
+        if (!(await page.locator(".mnames:not([hidden])").count())) await page.getByRole("button", { name: await tr("Names, prices & levels"), exact: true }).click();
         const row = (id) => page.locator(".mname", { has: page.locator("code", { hasText: id }) });
         const boxes = (id) => row(id).locator(".mlevels input[type=checkbox]");
         const hint = (id) => row(id).locator(".mlevels .mnone");
