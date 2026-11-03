@@ -48,11 +48,22 @@ func notAnAPIReply(res *http.Response, name string) *http.Response {
 	switch {
 	case htmlStart.Match(head) && !strings.Contains(ct, "xml"):
 		return asBadGateway(res, name, webPage(res, ct))
-	case strings.Contains(ct, "json") && len(head) > 0 && head[0] != '{' && head[0] != '[':
+	case strings.Contains(ct, "json") && len(head) > 0 && head[0] != '{' && head[0] != '[' && !eventsStart(head):
 		b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<10))
 		return asBadGateway(res, name, "answered "+res.Status+" with a reply that isn't JSON, not an API reply: "+clipRunes(string(bytes.TrimSpace(b)), 200))
 	}
 	return res
+}
+
+// eventsStart tells whether a body begins as server-sent events: a stream
+// a vendor labels JSON is still its answer (eventStream reads it so).
+func eventsStart(head []byte) bool {
+	for _, pfx := range []string{"event:", "data:", ":"} {
+		if bytes.HasPrefix(head, []byte(pfx)) {
+			return true
+		}
+	}
+	return false
 }
 
 // htmlStart is how a web page begins.

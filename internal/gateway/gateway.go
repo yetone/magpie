@@ -6609,24 +6609,23 @@ func streamFailure(proto provider.Protocol, msg string) []byte {
 }
 
 // eventStream reports whether a reply is server-sent events. The header
-// says so for most vendors; the ChatGPT backend sends none, so the body's
-// first bytes decide, and the header is filled in for whoever reads it.
+// says so for most vendors; where it doesn't, the body's first bytes
+// decide, and the header is set right for whoever reads it. The ChatGPT
+// backend sends no type at all, and a vendor's stream may come under
+// another one (application/octet-stream, application/json): read as a
+// whole reply, it reached the agent only at its end, its thinking all at
+// once (uk.jent on Discord: MiniMax Code to Grok Build, "Thought for
+// 0.0s"). A JSON or binary body never begins with a line of an event
+// stream.
 func eventStream(res *http.Response) (io.Reader, bool) {
-	ct := res.Header.Get("Content-Type")
-	if strings.HasPrefix(ct, "text/event-stream") {
+	if strings.HasPrefix(res.Header.Get("Content-Type"), "text/event-stream") {
 		return res.Body, true
-	}
-	if ct != "" && !strings.HasPrefix(ct, "text/plain") {
-		return res.Body, false
 	}
 	br := bufio.NewReaderSize(res.Body, 4<<10)
 	head, _ := br.Peek(16)
-	head = bytes.TrimLeft(head, " \t\r\n")
-	for _, pfx := range []string{"event:", "data:", ":"} {
-		if bytes.HasPrefix(head, []byte(pfx)) {
-			res.Header.Set("Content-Type", "text/event-stream")
-			return br, true
-		}
+	if eventsStart(bytes.TrimLeft(head, " \t\r\n")) {
+		res.Header.Set("Content-Type", "text/event-stream")
+		return br, true
 	}
 	return br, false
 }
