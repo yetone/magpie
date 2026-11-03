@@ -29,6 +29,7 @@ import (
 	"github.com/yetone/magpie/internal/filememo"
 	"github.com/yetone/magpie/internal/lastgood"
 	"github.com/yetone/magpie/internal/netproxy"
+	"github.com/yetone/magpie/internal/proc"
 	"github.com/yetone/magpie/internal/settings"
 )
 
@@ -491,6 +492,40 @@ type host struct {
 	proxyAt time.Time
 	// addr is the gateway's address the host was told (hostAddr)
 	addr string
+	// output is the child's stdout and stderr, read apart from its Wait,
+	// and waited gives what that Wait said; both are nil in the tests'
+	// fake hosts, which have no child
+	output *proc.Output
+	waited func() error
+}
+
+// wait is the child's end: what Wait said, once it has ended and the
+// reader is done with its stdout.
+func (h *host) wait() error {
+	if h.waited == nil {
+		return h.cmd.Wait()
+	}
+	return h.waited()
+}
+
+// reap ends the host the moment its child ends, not once its stdout
+// does. A program the host started that kept the host's stdout (a
+// plugin's Bun.spawn given a copy of fd 1, a daemon it left behind) held
+// the pipe open past the host's end, so the reader never reached EOF,
+// the child was never waited for, and every host stopped left a
+// <defunct> magpie-bun behind until magpie quit (acezan on Discord: 57
+// after 47 hours as a systemd service). proc.Output waits for the child
+// at once and closes the pipe a moment later, which ends the reader too.
+func (h *host) reap() {
+	h.fail(quitErr(h.wait()))
+}
+
+// quitErr is the error of a host whose child ended with err.
+func quitErr(err error) error {
+	if err == nil {
+		err = errors.New("the plugin host quit")
+	}
+	return fmt.Errorf("the plugin host quit: %v", err)
 }
 
 // lineLimit is the longest line this host reads from the child.
@@ -999,15 +1034,14 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
-	out, err := cmd.StdoutPipe()
+	// stdout and stderr are read apart from Wait (proc.Output), so the
+	// child is reaped when it ends, whatever holds a copy of them
+	output, err := proc.NewOutput(cmd)
 	if err != nil {
 		return nil, false, err
 	}
-	stderr, err := cmd.StderrPipe()
+	waited, err := output.Start(cmd)
 	if err != nil {
-		return nil, false, err
-	}
-	if err := cmd.Start(); err != nil {
 		return nil, false, err
 	}
 	hctx, hcancel := context.WithCancel(context.Background())
@@ -1025,10 +1059,16 @@ func startOn(ctx context.Context, bun string) (*host, bool, error) {
 		proxy:    proxy,
 		proxyAt:  time.Now(),
 		addr:     addr,
+		output:   output,
+		waited:   waited,
 	}
-	go drainStderr(stderr)
+	go func() {
+		drainStderr(output.Err)
+		output.ErrRead()
+	}()
 
-	go h.read(out)
+	go h.read(output.Out)
+	go h.reap()
 	go h.writerLoop()
 	go h.ctrlLoop()
 	generation.Add(1)
@@ -1132,11 +1172,10 @@ func (h *host) read(out io.Reader) {
 			break
 		}
 	}
-	err := h.cmd.Wait()
-	if err == nil {
-		err = errors.New("the plugin host quit")
+	if h.output != nil {
+		h.output.OutRead()
 	}
-	h.fail(fmt.Errorf("the plugin host quit: %v", err))
+	h.fail(quitErr(h.wait()))
 }
 
 var (

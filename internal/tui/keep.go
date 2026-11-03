@@ -106,12 +106,12 @@ func serveInBackground() (int, string, error) {
 	cmd := proc.Command(exe, "serve")
 	cmd.Stdout, cmd.Stderr = f, f
 	detach(cmd)
-	if err := cmd.Start(); err != nil {
+	// reaped if it ends while this process runs: a released one stayed
+	// <defunct> until it quit
+	if err := proc.StartReaped(cmd); err != nil {
 		return 0, "", err
 	}
-	pid := cmd.Process.Pid
-	cmd.Process.Release()
-	return pid, log, nil
+	return cmd.Process.Pid, log, nil
 }
 
 // wslHere: this Linux is a WSL distro.

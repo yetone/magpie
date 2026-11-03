@@ -45,10 +45,7 @@ func Reexec(exe string, args, env []string) error {
 	cmd := proc.Command(exe, args...)
 	cmd.Env = env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	return cmd.Process.Release()
+	return proc.StartReaped(cmd)
 }
 
 // trialStart starts path suspended and ends it at once: Windows checks a

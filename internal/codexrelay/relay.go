@@ -84,10 +84,9 @@ func Start(addr string, pids []int) error {
 	}
 	cmd := proc.Command(exe, Command, "--addr", addr, "--pids", strings.Join(ids, ","))
 	detach(cmd)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	return cmd.Process.Release()
+	// reaped when it ends while magpie runs: a released one stayed
+	// <defunct> until magpie quit
+	return proc.StartReaped(cmd)
 }
 
 // Main is `magpie codex-relay --addr host:port --pids 1,2`, serving h.

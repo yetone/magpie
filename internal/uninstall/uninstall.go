@@ -299,10 +299,7 @@ func AfterExit(pid int, wait time.Duration) *Report {
 var startAfter = func(cmd *exec.Cmd) error {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	detach(cmd)
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	return cmd.Process.Release()
+	return proc.StartReaped(cmd)
 }
 
 // DataAfterExit starts `magpie uninstall --data-after <this pid>`, which
