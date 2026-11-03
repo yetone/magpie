@@ -51,6 +51,7 @@ type modelJSON struct {
 	Listed     int     `json:"listed,omitempty"`    // its window before the user's: its vendor's list's, else models.dev's
 	Max        int     `json:"max,omitempty"`       // the most its context may be set to, above Listed
 	Free       bool    `json:"free,omitempty"`      // costs the subscription nothing
+	Zero       bool    `json:"zero,omitempty"`      // listed at $0 on this provider (provider.PricedFree), where Free is the vendor's word
 	Rate       float64 `json:"rate,omitempty"`      // the credits a request costs the subscription, as a multiple
 	RateWas    float64 `json:"rateWas,omitempty"`   // the rate before a discount running now
 	// Load is how busy its plugin last said the model is, a percent, when
@@ -889,6 +890,7 @@ func providerInfoWith(p provider.Provider, ls provider.Listing, agents []agentUs
 		}
 		window := p.WindowOf(m)
 		j := modelJSON{ID: m.ID, Name: m.Name, Efforts: provider.EffortsOf(m), On: on, Context: window, Output: provider.OutputWithin(window, p.ReplyLimitIn(m, set)), Listed: provider.ListedWindow(m), Max: m.MaxContext, Free: m.Free, Rate: m.Rate, RateWas: m.RateWas, Images: images, ImageSet: imageSet, Own: own, Best: newest[m.ID]}
+		j.Zero = !m.Free && p.PricedFree(set, m.ID)
 		// a plugin reports a model's load by its own id, not one the user
 		// lists it by (axelburks on Discord)
 		ownID := p.OwnModelID(m.ID)

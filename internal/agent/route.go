@@ -90,7 +90,7 @@ func sameList(a, b []Option) bool {
 func sameOption(a, b Option) bool {
 	return a.Value == b.Value && a.Label == b.Label && a.Note == b.Note && a.Icon == b.Icon &&
 		slices.Equal(a.Icons, b.Icons) && a.Group == b.Group && a.GroupIcon == b.GroupIcon &&
-		a.Ref == b.Ref && a.Free == b.Free && a.Rate == b.Rate && a.RateWas == b.RateWas &&
+		a.Ref == b.Ref && a.Free == b.Free && a.Zero == b.Zero && a.Rate == b.Rate && a.RateWas == b.RateWas &&
 		a.Context == b.Context && a.Takes == b.Takes && a.Direct == b.Direct && a.Via == b.Via &&
 		a.Same == b.Same && a.Served == b.Served && a.Alias == b.Alias && a.FastFor == b.FastFor &&
 		a.Fast == b.Fast && a.OwnFast == b.OwnFast && a.UltraOK == b.UltraOK && a.Ultra == b.Ultra &&
@@ -148,6 +148,7 @@ func buildVia(agent, prefix string) []Option {
 		return u
 	}
 	fast, ultra := provider.FastPicks(agent), provider.UltraPicks(agent)
+	set := settings.Shared()   // the prices the user set, read once for the list
 	var tiered map[string]bool // provider.UltraModels, read at the first fast model
 	for _, e := range shown {
 		if e.Group != "" {
@@ -162,6 +163,9 @@ func buildVia(agent, prefix string) []Option {
 		o := Option{Value: prefix + e.ID, Label: e.Name, Note: note,
 			Icon: e.Provider.Icon, Group: e.Provider.Name, Ref: e.ID, Free: e.Free, Rate: e.Rate, RateWas: e.RateWas, Context: e.Context, own: own[e.Provider.ID],
 			sub: e.Provider.Account != nil && (e.Provider.Account.Agent != "claude" || agent == "claude")}
+		if !e.Free {
+			o.Zero = e.Provider.PricedFree(set, e.Model)
+		}
 		// a model with a fast mode is switched fast in the picker (#954)
 		if provider.CanFast(e.Provider, e.Model) {
 			o.FastFor, o.Fast = agent, slices.Contains(fast, e.ID)
