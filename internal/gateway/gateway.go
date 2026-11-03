@@ -3443,9 +3443,14 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, from provider.Pro
 				attemptBody, updated = b, true
 			}
 		}
+		window := windowOf(c.p, c.model) // as the route's end reads it
 		s.trace.update(tr, func(t *Route) {
 			t.imageProvider = c.p.ID
 			t.Tries = append(t.Tries, Try{ID: c.rest, Model: c.model, Effort: sent, Picked: picked, Fixed: fixed, RuleEffort: ruled, Fast: fast, Start: began})
+			t.window = window
+			if t.Prompt != nil && !t.Done {
+				t.Prompt = livePrompt(t.Prompt, window)
+			}
 		})
 		held := false          // answered as its vendor did a moment ago, without asking
 		var heldBack time.Time // when the first of those held out of their allowance is back

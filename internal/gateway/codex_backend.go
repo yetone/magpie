@@ -1047,7 +1047,16 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 		captureTitle = link != nil && isTitleKind(kind)
 		turn, scan := agentTurnOf(r, kind)
 		tools = scan
-		tr = s.trace.beginFor(r, Route{turn: turn, dirOf: dirOf(provider.Responses, body), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: callerOf(r).agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Tier: bodyTier(provider.Responses, body), Provider: "openai", Subagent: subagentPickOf(r),
+		// the window Codex holds the conversation to, not models.dev's
+		// for the id, which is OpenAI's API's (netube on Discord: 922K
+		// on Routing for a Codex Plus account's 272K), known as the turn
+		// goes out (livePrompt)
+		user := ""
+		if on != nil && on.Account != nil {
+			user = on.Account.User
+		}
+		window := cmp.Or(provider.CodexWindow(user, model), catalog.ContextOf(model))
+		tr = s.trace.beginFor(r, Route{turn: turn, window: window, dirOf: dirOf(provider.Responses, body), tools: tools, imageTurn: drawingTurnID(metadata.Turn), imageCaller: codexTurnKey(r, callerOf(r).agent), imageProvider: imageProvider, TitleLink: link, Time: start, Agent: callerOf(r).agent, Session: sessionOf(r.Header), Conv: convOf(r.Header, body), ParentSession: titleParentSession(r.Header, metadata, kind), Kind: kind, Model: model, Effort: effort, Tier: bodyTier(provider.Responses, body), Provider: "openai", Subagent: subagentPickOf(r),
 			Order: []Weighed{seat}, Tries: []Try{{ID: seat.ID, Model: model, Effort: effort, Start: start}}})
 		if m := noteMasked(r, "chat", maskedHits, sentOf(maskedHits, body), tr.ID, "openai", model); m != nil {
 			s.trace.update(tr, func(t *Route) { t.Masked = m })
@@ -1062,17 +1071,6 @@ func (s *Server) codexUpstreamOn(w http.ResponseWriter, r *http.Request, rest st
 				replyDigest = titleReplyDigest(titleReply.buf.Bytes(), nil)
 			}
 			prompt := promptRead() // outside the trace's lock, which reading it takes
-			// the window Codex holds the conversation to, not models.dev's
-			// for the id, which is OpenAI's API's (netube on Discord: 922K
-			// on Routing for a Codex Plus account's 272K)
-			window := 0
-			if prompt != nil {
-				user := ""
-				if on != nil && on.Account != nil {
-					user = on.Account.User
-				}
-				window = cmp.Or(provider.CodexWindow(user, model), catalog.ContextOf(model))
-			}
 			s.trace.update(tr, func(t *Route) {
 				// what masking took: magpie's own time isn't split here
 				t.Masking = maskingMs(r.Context(), 0)

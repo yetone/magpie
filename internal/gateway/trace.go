@@ -58,10 +58,14 @@ type Route struct {
 	// starts; tools, whether its reply called a tool; offFeed, it left
 	// the trace unfinished (drop, trim) and the route-events feed was
 	// told it went, so it hears no more of it
-	turn          bool
-	offFeed       bool
-	dirOf         func() string
-	tools         *toolScan
+	turn    bool
+	offFeed bool
+	dirOf   func() string
+	tools   *toolScan
+	// window: the context window of the model the try under way went to,
+	// known as it goes out, so a request still answering shows how full
+	// its window is (livePrompt) and not only once it is done
+	window        int
 	Seq           int64        `json:"seq"` // the trace's count when it last changed
 	ID            int64        `json:"id"`
 	Time          time.Time    `json:"time"`
