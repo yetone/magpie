@@ -3414,6 +3414,7 @@ const I18N = {
     "{n} calls": "{n} 次调用",
     "{n} credits": "{n} 积分",
     "What {n} of these requests cost in their plan's credits, as the replies said": "其中 {n} 次请求按回复所说消耗的套餐积分",
+    "What it cost in its plan's credits, as the reply said": "按回复所说，这次请求消耗的套餐积分",
     "{n} cached": "缓存 {n}",
 
     // sync
@@ -7960,6 +7961,7 @@ const I18N = {
     "{n} calls": "{n} 次呼叫",
     "{n} credits": "{n} 積分",
     "What {n} of these requests cost in their plan's credits, as the replies said": "其中 {n} 次請求依回覆所述消耗的方案積分",
+    "What it cost in its plan's credits, as the reply said": "依回覆所述，這次請求消耗的方案積分",
     "{n} cached": "快取 {n}",
     "Model lists refreshed": "模型列表已重新整理",
     "Sync failed: {e}": "同步失敗：{e}",
@@ -12512,6 +12514,7 @@ const I18N = {
     "{n} calls": "{n} 回の呼び出し",
     "{n} credits": "{n} クレジット",
     "What {n} of these requests cost in their plan's credits, as the replies said": "うち {n} 件のリクエストが消費したプランのクレジット（応答の申告どおり）",
+    "What it cost in its plan's credits, as the reply said": "このリクエストが消費したプランのクレジット（応答の申告どおり）",
     "{n} cached": "キャッシュ {n}",
     "Model lists refreshed": "モデル一覧を更新しました",
     "Sync failed: {e}": "同期に失敗しました：{e}",
@@ -17075,6 +17078,7 @@ const I18N = {
     "{n} calls": "{n} Aufrufe",
     "{n} credits": "{n} Credits",
     "What {n} of these requests cost in their plan's credits, as the replies said": "Was {n} dieser Anfragen laut Antwort an Credits des Plans gekostet haben",
+    "What it cost in its plan's credits, as the reply said": "Was die Anfrage laut Antwort an Credits des Tarifs gekostet hat",
     "{n} cached": "{n} im Cache",
     "Model lists refreshed": "Modelllisten aktualisiert",
     "Sync failed: {e}": "Synchronisierung fehlgeschlagen: {e}",

@@ -7,7 +7,8 @@ import (
 // WorkBuddy served by its plugin keeps the credits a reply said on its
 // row, however the agent asked: chat, Messages or Responses, streamed or
 // whole, translated to WorkBuddy's chat stream (jiabubu on Discord: a
-// request's credits should be said on its row). TestPlanCreditsReachTheLedger
+// request's credits should be said on its row, the Usage page's and the
+// Routing page's request list too). TestPlanCreditsReachTheLedger
 // holds a provider of its own to it; this is the plugin host's way.
 func TestPluginPlanCreditsReachTheLedger(t *testing.T) {
 	stream := sse(`data: {"id":"c","model":"fake-1","choices":[{"index":0,"delta":{"content":"hi"}}]}`,
@@ -23,13 +24,19 @@ func TestPluginPlanCreditsReachTheLedger(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			f := &fake{t: t, reply: stream}
 			movedFake(t, "workbuddy-ai", f)
-			code, body := postTo(t, New(), c.path, c.body)
+			s := New()
+			code, body := postTo(t, s, c.path, c.body)
 			if code != 200 {
 				t.Fatalf("%d %s", code, body)
 			}
 			r := lastUsage(t)
 			if r.Credits == nil || *r.Credits != 0.01 {
 				t.Fatalf("%s %s: credits %v, want 0.01", r.Provider, r.Endpoint, r.Credits)
+			}
+			// the Routing page's row: its trace's usage says them too
+			rt := lastRoute(s)
+			if n := len(rt.Usage); n == 0 || rt.Usage[n-1].Credits == nil || *rt.Usage[n-1].Credits != 0.01 {
+				t.Fatalf("the route's usage: %+v, want credits 0.01 on the last", rt.Usage)
 			}
 		})
 	}

@@ -191,6 +191,10 @@ type RouteUsage struct {
 	// CacheUnknown: the vendor counted no cache tokens, so the Routing
 	// page shows no hit rate rather than 0% (Kiro, zeewell on X)
 	CacheUnknown bool `json:"cache_unknown,omitempty"`
+	// Credits is what the reply said the request cost in its plan's
+	// credits (WorkBuddy's usage.credit, #2512), the Routing page's as
+	// the Usage page's; nil when it said none (jiabubu on Discord)
+	Credits *float64 `json:"credits,omitempty"`
 }
 
 // PricingRecord lets the routing view reuse the ledger's effective prices.
@@ -1045,5 +1049,5 @@ func routeUsage(id, model string, u Usage) []RouteUsage {
 	}
 	return append(out, RouteUsage{Provider: id, Model: model, Input: u.Input, Output: u.Output,
 		CacheRead: u.CacheRead, CacheWrite: u.CacheWrite, Reasoning: u.Reasoning,
-		CacheUnknown: u.cacheNotCounted()})
+		CacheUnknown: u.cacheNotCounted(), Credits: u.Credits})
 }

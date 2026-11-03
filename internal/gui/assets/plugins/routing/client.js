@@ -477,7 +477,7 @@ function routingPage(part) {
         t("Cache hit rate") + ": " + t("The share of the prompt read from the cache")],
       speed: ["speed", "Speed", speed ? t("{n} tok/s", { n: Math.round(speed) }) : "—",
         t("Output tokens a second after the first, over the streamed replies") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it") + ". " + t("No answer text: speed includes reasoning only when visible reasoning streamed; hidden reasoning has no speed")],
-      cost: ["cost", "Cost", routeCost(r), r.priced ? costNote() : t("No known price or token counts for this request")],
+      cost: ["cost", "Cost", routeCost(r), [r.priced ? costNote() : routeCredits([r]) ? "" : t("No known price or token counts for this request"), routeCredits([r]) ? creditsNote() : ""].filter(Boolean).join("\n")],
     };
     return visibleMetrics.map((key) => values[key]).filter((metric) => metric[2] !== "—");
   }
@@ -3650,9 +3650,19 @@ function routingPage(part) {
   setInterval(refreshSessionNames, 15000);
   window.addEventListener("focus", refreshSessionNames);
   const costNote = () => t("Estimated at effective model prices, including cache reads and writes; subscription billing may differ. Totals cover only the requests listed here.");
+  // what the requests cost in their plan's credits, as their replies said
+  // (WorkBuddy's usage.credit, as the Usage page says it; jiabubu on
+  // Discord): "" when no reply said any
+  function routeCredits(rs) {
+    let n = 0, said = 0;
+    for (const r of rs) for (const u of r.usage || []) if (u.credits != null) { n += u.credits; said++; }
+    return said ? ledCredits({ credits: n, credited: said }).textContent : "";
+  }
+  const creditsNote = () => t("What it cost in its plan's credits, as the reply said");
   function routeCost(r) {
-    if (!r.priced) return "—";
-    return "≈" + fmtCost({ cost: r.cost || 0, unpriced: 0 }) + (r.unpriced ? "+" : "");
+    const credits = routeCredits([r]);
+    if (!r.priced) return credits || "—";
+    return "≈" + fmtCost({ cost: r.cost || 0, unpriced: 0 }) + (r.unpriced ? "+" : "") + (credits ? " · " + credits : "");
   }
   function groupedRows(rs, rowEls) {
     askUnnamed(rs);
@@ -3723,9 +3733,10 @@ function routingPage(part) {
         t("Total output tokens divided by total decode time; excludes waiting and replies without usable timing") + ". " + t("A reply that reasoned counts only its answer, from its first text: the reasoning was written before the stream showed it") + ". " + t("No answer text: speed includes reasoning only when visible reasoning streamed; hidden reasoning has no speed") + "\n" + coverage(total.timed)]));
       const metaSig = JSON.stringify([bits, tokenHelp, meta.map((e) => [e.textContent, e.title])]);
       if (x.meta.dataset.sig !== metaSig) { x.meta.replaceChildren(...meta); x.meta.dataset.sig = metaSig; }
-      setText(x.cost, total.priced ? "≈" + fmtCost({ cost: total.cost, unpriced: 0 }) + (total.unpriced ? "+" : "") : "");
-      x.cost.hidden = !visibleMetrics.includes("cost") || !total.priced;
-      x.cost.title = costNote();
+      const credits = routeCredits(g.rows);
+      setText(x.cost, [total.priced ? "≈" + fmtCost({ cost: total.cost, unpriced: 0 }) + (total.unpriced ? "+" : "") : "", credits].filter(Boolean).join(" · "));
+      x.cost.hidden = !visibleMetrics.includes("cost") || !total.priced && !credits;
+      x.cost.title = [total.priced ? costNote() : "", credits ? t("What {n} of these requests cost in their plan's credits, as the replies said", { n: g.rows.filter((r) => routeCredits([r])).length }) : ""].filter(Boolean).join("\n");
       if (g.key) x.b.setAttribute("aria-expanded", String(open));
       els.push(x.b);
       if (open) els.push(...g.els);
