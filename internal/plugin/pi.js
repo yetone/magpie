@@ -536,7 +536,7 @@ export async function load(h, list) {
         const was = h.readAuth()[key]
         const next = await fn(toPi(was))
         if (next === undefined) return toPi(was)
-        h.changeAuth((all) => {
+        await h.changeAuth((all) => {
           all[key] = fromPi(next, all[key])
         })
         h.send({ event: "auth", provider: key.split("#")[0], account: key })
@@ -548,7 +548,7 @@ export async function load(h, list) {
     },
     async delete(id) {
       const key = h.keyFor(id)
-      h.changeAuth((all) => {
+      await h.changeAuth((all) => {
         if (!(key in all)) return false
         delete all[key]
       })

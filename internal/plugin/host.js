@@ -764,16 +764,30 @@ function parseAuth(text) {
   }
 }
 
+// readFileSteady reads p; a read the OS refuses for a moment (Windows,
+// while the file is being renamed over) is tried again at once and then
+// thrown, never read as none: the next setAuth would write the others'
+// accounts away. It never waits: the event loop is every plugin's (#5112),
+// so a caller that can wait uses readFileSteadyAsync.
 function readFileSteady(p) {
   for (let i = 0; ; i++) {
     try {
       return fs.readFileSync(p)
     } catch (e) {
       if (e?.code === "ENOENT") return null
-      // Windows refuses a file being renamed over for a moment: read as
-      // none, the next setAuth would write the others' accounts away
+      if (i >= 2) throw e
+    }
+  }
+}
+
+async function readFileSteadyAsync(p) {
+  for (let i = 0; ; i++) {
+    try {
+      return fs.readFileSync(p)
+    } catch (e) {
+      if (e?.code === "ENOENT") return null
       if (i >= 50) throw e
-      pause(10)
+      await sleep(10)
     }
   }
 }
@@ -792,6 +806,14 @@ let authUnread = false
 // there is none, known; one that doesn't read is its .bak's, known, or
 // none, unknown.
 function readAuthState(buf = readFileSteady(authPath)) {
+  return authStateOf(buf)
+}
+
+async function readAuthStateAsync() {
+  return authStateOf(await readFileSteadyAsync(authPath))
+}
+
+function authStateOf(buf) {
   if (buf === null) return { all: {}, known: true }
   const v = parseAuth(buf.toString("utf8"))
   if (v) return { all: v, known: true, own: true }
@@ -834,7 +856,14 @@ function readAuth() {
   const e = authSeen
   const same = st && e && e.mtimeMs === st.mtimeMs && e.size === st.size && e.ino === st.ino
   if (same && !e.raw) return e.all
-  const buf = readFileSteady(authPath)
+  let buf
+  try {
+    buf = readFileSteady(authPath)
+  } catch (err) {
+    // refused for a moment: the last good read stands, not none
+    if (e) return e.all
+    throw err
+  }
   if (same && buf && buf.equals(e.raw)) {
     if (Date.now() - e.mtimeMs > AUTH_SETTLED) e.raw = null
     return e.all
@@ -857,7 +886,7 @@ function authCopy(key) {
 // schedule, the data behind it later, and a machine that went down between
 // the two left plugin-auth.json all zero (#1505). A write or flush that
 // fails leaves p as it was.
-function writeDurable(p, data) {
+async function writeDurable(p, data) {
   const tmp = p + ".tmp-" + process.pid
   try {
     const f = fs.openSync(tmp, "w", 0o600)
@@ -873,7 +902,7 @@ function writeDurable(p, data) {
         return fs.renameSync(tmp, p)
       } catch (e) {
         if (i >= 50 || !["EPERM", "EACCES", "EBUSY"].includes(e?.code)) throw e
-        pause(10)
+        await sleep(10)
       }
     }
   } catch (e) {
@@ -929,8 +958,8 @@ function keepBad(buf) {
 // keepAuth is called before plugin-auth.json is replaced: the file there
 // now becomes plugin-auth.json.bak when it reads, or is copied aside when
 // it doesn't. A failure stops the write.
-function keepAuth() {
-  const buf = readFileSteady(authPath)
+async function keepAuth() {
+  const buf = await readFileSteadyAsync(authPath)
   if (buf === null) return
   if (!parseAuth(buf.toString("utf8"))) {
     keepBad(buf)
@@ -941,30 +970,35 @@ function keepAuth() {
   try {
     old = fs.readFileSync(bak)
   } catch {}
-  if (!old || !old.equals(buf)) writeDurable(bak, buf)
+  if (!old || !old.equals(buf)) await writeDurable(bak, buf)
 }
 
-function writeAuth(all) {
+async function writeAuth(all) {
   fs.mkdirSync(path.dirname(authPath), { recursive: true })
-  keepAuth()
-  writeDurable(authPath, Buffer.from(JSON.stringify(all, null, 2) + "\n"))
+  await keepAuth()
+  await writeDurable(authPath, Buffer.from(JSON.stringify(all, null, 2) + "\n"))
 }
 
-function pause(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
-}
+// sleep waits ms without holding the event loop. Nothing in the host waits
+// any other way: Atomics.wait here froze every plugin's requests, model
+// lists and check-ins for as long as one of them spun on the lock (#5112).
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // Two hosts run at once while one is restarted (the old one finishing its
 // calls), and magpie writes the file when no host runs: each change to it
 // is made under plugin-auth.json.lock, read afresh and written back with
 // only its own accounts changed, so a host never writes another's newer
-// token away with what it read before. Nothing awaits under the lock; one
-// held longer than AUTH_LOCK_STALE was left by a host that died.
+// token away with what it read before. The change itself is synchronous;
+// the lock is waited for, and the write made, without holding the event
+// loop. A lock held longer than AUTH_LOCK_STALE was left by a host that
+// died. Changes within this host take the file lock one at a time
+// (authQueue), so they don't poll against each other.
 const AUTH_LOCK_STALE = 10 * 1000
 
-function lockAuth() {
+async function lockAuth() {
   const lock = authPath + ".lock"
   fs.mkdirSync(path.dirname(authPath), { recursive: true })
+  let tries = 0
   for (const start = Date.now(); ; ) {
     try {
       fs.closeSync(fs.openSync(lock, "wx", 0o600))
@@ -985,36 +1019,44 @@ function lockAuth() {
         fs.unlinkSync(lock)
       } catch {}
     }
-    pause(5)
+    await sleep(Math.min(50, 5 + 5 * tries++))
   }
 }
 
 // changeAuth runs change on the file as it is now, under the lock, and
 // writes it back when change says it changed it.
+let authQueue = Promise.resolve()
 function changeAuth(change) {
-  const unlock = lockAuth()
-  try {
-    const { all, known } = readAuthState()
-    const out = change(all)
-    // sign-ins that don't read are never written over with none: a
-    // sign-out of one of them waits for the file to be put right
-    if (out !== false && (known || Object.keys(all).length > 0)) writeAuth(all)
-    return out
-  } finally {
-    unlock()
-  }
+  const run = authQueue.then(async () => {
+    const unlock = await lockAuth()
+    try {
+      const { all, known } = await readAuthStateAsync()
+      const out = change(all)
+      // sign-ins that don't read are never written over with none: a
+      // sign-out of one of them waits for the file to be put right
+      if (out !== false && (known || Object.keys(all).length > 0)) await writeAuth(all)
+      return out
+    } finally {
+      unlock()
+    }
+  })
+  authQueue = run.then(
+    () => {},
+    () => {},
+  )
+  return run
 }
 
-function setAuth(key, info) {
-  changeAuth((all) => {
+async function setAuth(key, info) {
+  await changeAuth((all) => {
     all[key] = info
   })
   forgetAccount(key)
   send({ event: "auth", provider: providerOf(key), account: key })
 }
 
-function removeAuth(key) {
-  changeAuth((all) => {
+async function removeAuth(key) {
+  await changeAuth((all) => {
     delete all[key]
   })
   forgetAccount(key)
@@ -1101,8 +1143,8 @@ function renamedBy(now, was) {
 // replaces that one's and goes. It gives where it is kept. An account
 // named another way before keeps its account id, which the user's name
 // for it, its proxy and gateway keys are kept by.
-function settle(provider, key) {
-  const k = changeAuth((all) => {
+async function settle(provider, key) {
+  const k = await changeAuth((all) => {
     const now = all[key]
     if (!now) return false
     const who = whoOf(now)
@@ -1155,7 +1197,7 @@ function makeClient() {
           // tokens over the old; nothing is merged. It goes to the
           // account the request is for.
           const key = keyFor(id)
-          const kept = changeAuth((all) => {
+          const kept = await changeAuth((all) => {
             if (JSON.stringify(all[key]) === JSON.stringify(body)) return false
             all[key] = body
           })
@@ -1168,7 +1210,7 @@ function makeClient() {
       },
       remove: async (opts) => {
         const id = opts?.path?.id ?? opts?.id
-        if (typeof id === "string") removeAuth(keyFor(id))
+        if (typeof id === "string") await removeAuth(keyFor(id))
         return { data: true }
       },
     },
@@ -2294,17 +2336,17 @@ function validate(provider, index, key, value) {
 // save keeps a successful sign-in as OpenCode's CLI does, at key (or, for
 // a sign-in the plugin says is another provider's, a new account of
 // that one). It gives the provider and where the account is kept.
-function save(provider, key, result, inputs, apiKey) {
+async function save(provider, key, result, inputs, apiKey) {
   const id = result.provider ?? provider
   if (id !== provider) key = freshKey(id)
   if ("refresh" in result) {
     const { type: _t, provider: _p, refresh, access, expires, ...extra } = result
-    setAuth(key, { type: "oauth", refresh, access, expires, ...extra })
+    await setAuth(key, { type: "oauth", refresh, access, expires, ...extra })
   } else if ("key" in result || apiKey) {
     const md = { ...(inputs && Object.keys(inputs).length ? inputs : {}), ...(result.metadata ?? {}) }
-    setAuth(key, { type: "api", key: result.key ?? apiKey, ...(Object.keys(md).length ? { metadata: md } : {}) })
+    await setAuth(key, { type: "api", key: result.key ?? apiKey, ...(Object.keys(md).length ? { metadata: md } : {}) })
   }
-  return { provider: id, account: settle(id, key) }
+  return { provider: id, account: await settle(id, key) }
 }
 
 // signInKey is where a sign-in goes: the account named, else a new one.
@@ -2378,7 +2420,7 @@ async function callback({ session, code }, signal) {
   const r = await signingIn(signal, s.proxy, s.provider, s.key, () => (s.a.method === "code" ? s.a.callback(code ?? "", { signal }) : s.a.callback(undefined, { signal })))
   if (signal?.aborted) throw abortedSignIn()
   if (!r || r.type !== "success") return failed(r)
-  return { ok: true, ...save(s.provider, s.key, r, undefined) }
+  return { ok: true, ...(await save(s.provider, s.key, r, undefined)) }
 }
 
 async function apiKey({ provider, method, inputs, key, account, proxy }, signal) {
@@ -2387,13 +2429,13 @@ async function apiKey({ provider, method, inputs, key, account, proxy }, signal)
   const at = signInKey(provider, account)
   if (typeof m.authorize !== "function") {
     const md = inputs && Object.keys(inputs).length ? { metadata: inputs } : {}
-    setAuth(at, { type: "api", key, ...md })
-    return { ok: true, provider, account: settle(provider, at) }
+    await setAuth(at, { type: "api", key, ...md })
+    return { ok: true, provider, account: await settle(provider, at) }
   }
   const r = await signingIn(signal, proxy ?? "", provider, at, () => m.authorize(inputs ?? {}, { signal }))
   if (signal?.aborted) throw abortedSignIn()
   if (!r || r.type !== "success") return failed(r)
-  return { ok: true, ...save(provider, at, r, inputs, key) }
+  return { ok: true, ...(await save(provider, at, r, inputs, key)) }
 }
 
 // ---- renewing a sign-in ------------------------------------------------------
@@ -2616,7 +2658,7 @@ async function renewLocked(provider, key, a, was) {
   // that one stands. Checked under the lock the save is made under, so
   // nothing comes between the two.
   const { type: _t, ...fields } = got
-  const kept = changeAuth((all) => {
+  const kept = await changeAuth((all) => {
     if (changed(all[key], was)) return false
     all[key] = { ...was, ...fields, type: "oauth" }
   })
@@ -2834,7 +2876,7 @@ async function doFetch(id, record, params) {
 // still turned away, or was due and the plugin didn't renew it; a
 // refresh the vendor refuses says so itself (signIn "expired"). A
 // sign-in that can't be read now is unknown: kept, not marked.
-function staleAccess(key, before) {
+async function staleAccess(key, before) {
   const now = readAuthState()
   if (!now.known) return "kept"
   if (before?.type !== "oauth" || !before.refresh) return ""
@@ -2842,7 +2884,7 @@ function staleAccess(key, before) {
   if (cur?.type !== "oauth" || cur.refresh !== before.refresh || cur.access !== before.access) return ""
   const exp = Number(before.expires)
   if (!Number.isFinite(exp) || exp <= Date.now()) return ""
-  changeAuth((all) => {
+  await changeAuth((all) => {
     const a = all[key]
     if (a?.type !== "oauth" || a.access !== before.access || a.refresh !== before.refresh) return false
     all[key] = { ...a, expires: 1 }
@@ -2911,7 +2953,7 @@ async function fetchAs(id, record, key, params) {
     const rh = {}
     res.headers.forEach((v, k) => (rh[k] = v))
     if (res.status === 401 && !("x-magpie-sign-in" in rh) && key) {
-      const said = staleAccess(key, before)
+      const said = await staleAccess(key, before)
       if (said) rh["x-magpie-sign-in"] = said
     }
     const head = headCost(rh)
@@ -3022,20 +3064,20 @@ const handlers = {
   // onto its plugin) as one more account, or as the account it already is
   // import keeps a sign-in made elsewhere as one of provider's accounts;
   // with a key, as that account again (one taken back)
-  import(p) {
+  async import(p) {
     if (p.key && providerOf(p.key) === p.provider) {
-      setAuth(p.key, p.auth)
+      await setAuth(p.key, p.auth)
       return { account: p.key }
     }
     const key = freshKey(p.provider)
-    setAuth(key, p.auth)
-    return { account: settle(p.provider, key) }
+    await setAuth(key, p.auth)
+    return { account: await settle(p.provider, key) }
   },
   // take gives the accounts named (else every account of the provider) and
   // forgets them in one step: nothing renews a token between the two
-  take(p) {
+  async take(p) {
     const out = {}
-    changeAuth((all) => {
+    await changeAuth((all) => {
       for (const k of p.accounts?.length ? p.accounts : accountsOf(all, p.provider)) {
         if (!(k in all)) continue
         out[k] = all[k]
@@ -3050,9 +3092,9 @@ const handlers = {
     return { auths: out }
   },
   // signOut forgets the account named, else every account of the provider
-  signOut(p) {
+  async signOut(p) {
     const keys = p.account ? [p.account] : accountsOf(readAuth(), p.provider)
-    for (const k of keys) removeAuth(k)
+    for (const k of keys) await removeAuth(k)
     return null
   },
   reload(p) {
