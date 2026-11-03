@@ -602,6 +602,21 @@ func smallCands(p provider.Provider, keep func(catalog.Model) bool) []smallCand 
 				continue
 			}
 		}
+		if m.ID == provider.CodexAutoReview {
+			// Codex's reviewer, priced free for the reviews it runs, not
+			// a model to ask anything else of
+			continue
+		}
+		if m.Price == nil {
+			// a subscription's list carries no prices: Codex's starts
+			// with its flagship, gpt-6.1-sol, which every search and
+			// every image was asked of while gpt-6-luna sat below it
+			// (lucy_85908 on Discord). Its list price, as the Usage
+			// page counts it, says which is the cheap one
+			if pr, ok := p.ListPrice(m.ID); ok {
+				m.Price = &pr
+			}
+		}
 		ms = append(ms, m)
 	}
 	return rankSmall(ms)
@@ -628,6 +643,10 @@ func keptSmallCands(p provider.Provider, kind string, keep func(catalog.Model) b
 	return smallKept.get(k, func() []smallCand { return smallCands(p, keep) })
 }
 
+// smallWords name a vendor's small tier: GPT-6's is Luna, the list has
+// no mini (#604).
+var smallWords = []string{"haiku", "mini", "flash", "luna"}
+
 // rankSmall is ms in the order smallModel picks them, each one's pick of
 // those after it: on a router, a model of the big vendors first; then a
 // small one; then the cheaper; then the one listed first.
@@ -648,7 +667,7 @@ func rankSmall(ms []catalog.Model) []smallCand {
 		}
 		rs[i] = ranked{smallCand{m.ID, cost},
 			ok && !slices.Contains([]string{"anthropic", "openai", "google", "x-ai"}, v),
-			!strings.Contains(l, "haiku") && !strings.Contains(l, "mini") && !strings.Contains(l, "flash")}
+			!slices.ContainsFunc(smallWords, func(w string) bool { return strings.Contains(l, w) })}
 	}
 	slices.SortStableFunc(rs, func(a, b ranked) int {
 		if c := falseFirst(a.router, b.router); c != 0 {

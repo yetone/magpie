@@ -276,7 +276,7 @@ func TestRankSmallIsPickSmall(t *testing.T) {
 		}
 		small := slices.DeleteFunc(slices.Clone(ms), func(m catalog.Model) bool {
 			l := strings.ReplaceAll(strings.ToLower(m.ID), "gemini", "")
-			return !strings.Contains(l, "haiku") && !strings.Contains(l, "mini") && !strings.Contains(l, "flash")
+			return !strings.Contains(l, "haiku") && !strings.Contains(l, "mini") && !strings.Contains(l, "flash") && !strings.Contains(l, "luna")
 		})
 		if id := cheapest(small); id != "" {
 			return id
@@ -285,7 +285,7 @@ func TestRankSmallIsPickSmall(t *testing.T) {
 	}
 	r := rand.New(rand.NewPCG(1, 2))
 	vendors := []string{"", "anthropic/", "openai/", "google/", "x-ai/", "meta/", "qwen/"}
-	names := []string{"claude-haiku-5", "gpt-6-mini", "gemini-3-flash", "gemini-3-pro", "big", "o9", "llama"}
+	names := []string{"claude-haiku-5", "gpt-6-mini", "gemini-3-flash", "gemini-3-pro", "gpt-6-luna", "big", "o9", "llama"}
 	for range 2000 {
 		var ms []catalog.Model
 		for i := range r.IntN(8) + 1 {
